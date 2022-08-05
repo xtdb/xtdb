@@ -148,70 +148,61 @@
     (t/is (= [] (c2/sql-query n "select a.a from a a" {})))))
 
 (t/deftest test-basic-sql-dml
-  (let [!tx1 (c2/submit-tx *node* [[:sql (pt/plan-sql "INSERT INTO users (id, first_name, last_name, application_time_start) VALUES (?, ?, ?, ?)")
-                                    [["dave", "Dave", "Davis", #inst "2018"]
-                                     ["claire", "Claire", "Cooper", #inst "2019"]
-                                     ["alan", "Alan", "Andrews", #inst "2020"]
-                                     ["susan", "Susan", "Smith", #inst "2021"]]]])]
+  (letfn [(all-users [!tx]
+            (->> (c2/sql-query *node* "SELECT u.first_name, u.last_name, u.application_time_start, u.application_time_end FROM users u"
+                               {:basis {:tx !tx}})
+                 (into #{} (map (juxt :first_name :last_name :application_time_start :application_time_end)))))]
 
-    (t/is (= (c2/map->TransactionInstant {:tx-id 0, :sys-time (util/->instant #inst "2020-01-01")}) @!tx1))
+    (let [!tx1 (c2/submit-tx *node* [[:sql (pt/plan-sql "INSERT INTO users (id, first_name, last_name, application_time_start) VALUES (?, ?, ?, ?)")
+                                      [["dave", "Dave", "Davis", #inst "2018"]
+                                       ["claire", "Claire", "Cooper", #inst "2019"]
+                                       ["alan", "Alan", "Andrews", #inst "2020"]
+                                       ["susan", "Susan", "Smith", #inst "2021"]]]])
+          tx1-expected #{["Dave" "Davis", (util/->zdt #inst "2018"), (util/->zdt util/end-of-time)]
+                         ["Claire" "Cooper", (util/->zdt #inst "2019"), (util/->zdt util/end-of-time)]
+                         ["Alan" "Andrews", (util/->zdt #inst "2020"), (util/->zdt util/end-of-time)]
+                         ["Susan" "Smith", (util/->zdt #inst "2021") (util/->zdt util/end-of-time)]}]
 
-    (t/is (= [{:first_name "Dave"} {:first_name "Claire"}]
-             (c2/sql-query *node* "SELECT u.first_name FROM users u WHERE u.APP_TIME CONTAINS TIMESTAMP '2019-06-01 00:00:00'"
-                           {:basis {:tx !tx1}})))
+      (t/is (= (c2/map->TransactionInstant {:tx-id 0, :sys-time (util/->instant #inst "2020-01-01")}) @!tx1))
 
-    (t/is (= [{:first_name "Dave"} {:first_name "Claire"} {:first_name "Alan"}]
-             (c2/sql-query *node* "SELECT u.first_name FROM users u WHERE u.APP_TIME CONTAINS TIMESTAMP '2020-06-01 00:00:00'"
-                           {:basis {:tx !tx1}})))
+      (t/is (= tx1-expected (all-users !tx1)))
 
-    (let [!tx2 (c2/submit-tx *node* [[:sql '[:delete {:table "users"
-                                                      :app-time-start #inst "2020-05-01"}
-                                             [:scan [_iid
-                                                     {_table (= _table "users")}
-                                                     {id (= id ?_0)}
-                                                     application_time_start
-                                                     {application_time_end (>= application_time_end #inst "2020-05-01")}]]]
-                                      [["dave"]]]])]
+      (let [!tx2 (c2/submit-tx *node* [[:sql '[:delete {:table "users"
+                                                        :app-time-start #inst "2020-05-01"}
+                                               [:scan [_iid
+                                                       {_table (= _table "users")}
+                                                       {id (= id ?_0)}
+                                                       application_time_start
+                                                       {application_time_end (>= application_time_end #inst "2020-05-01")}]]]
+                                        [["dave"]]]])
+            tx2-expected #{["Dave" "Davis", (util/->zdt #inst "2018"), (util/->zdt #inst "2020-05-01")]
+                           ["Claire" "Cooper", (util/->zdt #inst "2019"), (util/->zdt util/end-of-time)]
+                           ["Alan" "Andrews", (util/->zdt #inst "2020"), (util/->zdt util/end-of-time)]
+                           ["Susan" "Smith", (util/->zdt #inst "2021") (util/->zdt util/end-of-time)]}]
 
-      (t/is (= [{:first_name "Claire"} {:first_name "Alan"}]
-               (c2/sql-query *node* "SELECT u.first_name FROM users u WHERE u.APP_TIME CONTAINS TIMESTAMP '2020-06-01 00:00:00'"
-                             {:basis {:tx !tx2}})))
+        (t/is (= tx2-expected (all-users !tx2)))
+        (t/is (= tx1-expected (all-users !tx1)))
 
-      (t/is (= [{:first_name "Dave"} {:first_name "Claire"} {:first_name "Alan"}]
-               (c2/sql-query *node* "SELECT users.first_name FROM users WHERE users.APP_TIME CONTAINS TIMESTAMP '2020-06-01 00:00:00'"
-                             {:basis {:tx !tx1}})))
+        (let [!tx3 (c2/submit-tx *node* [[:sql '[:update {:table "users"
+                                                          :app-time-start #inst "2021-07-01"}
+                                                 [:map [{first_name "Sue"}]
+                                                  [:scan [_iid
+                                                          _row-id
+                                                          {id (= id ?_0)}
+                                                          {_table (= _table "users")}
+                                                          application_time_start
+                                                          {application_time_end (>= application_time_end #inst "2021-07-01")}]]]]
+                                          [["susan"]]]])
 
-      (t/is (= [{:first_name "Dave"} {:first_name "Claire"}]
-               (c2/sql-query *node* "SELECT u.first_name FROM users u WHERE u.APP_TIME CONTAINS TIMESTAMP '2019-06-01 00:00:00'"
-                             {:basis {:tx !tx2}}))))
+              tx3-expected #{["Dave" "Davis", (util/->zdt #inst "2018"), (util/->zdt #inst "2020-05-01")]
+                             ["Claire" "Cooper", (util/->zdt #inst "2019"), (util/->zdt util/end-of-time)]
+                             ["Alan" "Andrews", (util/->zdt #inst "2020"), (util/->zdt util/end-of-time)]
+                             ["Susan" "Smith", (util/->zdt #inst "2021") (util/->zdt #inst "2021-07-01")]
+                             ["Sue" "Smith", (util/->zdt #inst "2021-07-01") (util/->zdt util/end-of-time)]}]
 
-    (let [!tx3 (c2/submit-tx *node* [[:sql '[:update {:table "users"
-                                                      :app-time-start #inst "2021-07-01"}
-                                             [:map [{first_name "Sue"}]
-                                              [:scan [_iid
-                                                      _row-id
-                                                      {id (= id ?_0)}
-                                                      {_table (= _table "users")}
-                                                      application_time_start
-                                                      {application_time_end (>= application_time_end #inst "2021-07-01")}]]]]
-                                      [["susan"]]]])]
-
-      ;; TODO when we can return `application_time_start` etc from `:scan` without errors we can probably coalesce these tests
-      (t/is (= [{:first_name "Susan", :last_name "Smith"} {:first_name "Sue", :last_name "Smith"}]
-               (c2/sql-query *node* "SELECT u.first_name, u.last_name FROM users u WHERE u.first_name IN ('Susan', 'Sue')"
-                             {:basis {:tx !tx3}})))
-
-      (t/is (= [{:first_name "Susan", :last_name "Smith"}]
-               (c2/sql-query *node* "SELECT u.first_name, u.last_name FROM users u WHERE u.first_name IN ('Susan', 'Sue') AND u.APP_TIME CONTAINS TIMESTAMP '2021-05-01 00:00:00'"
-                             {:basis {:tx !tx3}})))
-
-      (t/is (= [{:first_name "Susan", :last_name "Smith"}]
-               (c2/sql-query *node* "SELECT u.first_name, u.last_name FROM users u WHERE u.first_name IN ('Susan', 'Sue') AND u.APP_TIME CONTAINS TIMESTAMP '2021-08-01 00:00:00'"
-                             {:basis {:tx !tx1}})))
-
-      (t/is (= [{:first_name "Sue", :last_name "Smith"}]
-               (c2/sql-query *node* "SELECT u.first_name, u.last_name FROM users u WHERE u.first_name IN ('Susan', 'Sue') AND u.APP_TIME CONTAINS TIMESTAMP '2021-08-01 00:00:00'"
-                             {:basis {:tx !tx3}}))))))
+          (t/is (= tx3-expected (all-users !tx3)))
+          (t/is (= tx2-expected (all-users !tx2)))
+          (t/is (= tx1-expected (all-users !tx1))))))))
 
 (deftest test-sql-insert
   (let [!tx1 (c2/submit-tx *node*
@@ -223,8 +214,8 @@
 
         !tx2 (c2/submit-tx *node*
                            [[:sql (pt/plan-sql "INSERT INTO people (id, renamed_name, application_time_start)
-                                               SELECT users.id, users.name, users.application_time_start FROM users
-                                               WHERE users.APP_TIME CONTAINS TIMESTAMP '2019-06-01 00:00:00' AND users.name = 'Dave'")]])]
+                                                SELECT users.id, users.name, users.application_time_start FROM users
+                                                WHERE users.APP_TIME CONTAINS TIMESTAMP '2019-06-01 00:00:00' AND users.name = 'Dave'")]])]
 
     (t/is (= [{:renamed_name "Dave"}]
              (c2/sql-query *node* "SELECT people.renamed_name FROM people
