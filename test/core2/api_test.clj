@@ -149,10 +149,10 @@
 (t/deftest test-basic-sql-dml
   (let [!tx1 (c2/submit-tx *node* [[:sql '[:insert {:table "users"}
                                            [:table [{:id ?_0, :name ?_1, :application_time_start ?_2}]]]
-                                    [[:dave, "Dave", #inst "2018"]
-                                     [:claire, "Claire", #inst "2019"]
-                                     [:alan, "Alan", #inst "2020"]
-                                     [:susan, "Susan", #inst "2021"]]]])]
+                                    [["dave", "Dave", #inst "2018"]
+                                     ["claire", "Claire", #inst "2019"]
+                                     ["alan", "Alan", #inst "2020"]
+                                     ["susan", "Susan", #inst "2021"]]]])]
 
     (t/is (= (c2/map->TransactionInstant {:tx-id 0, :sys-time (util/->instant #inst "2020-01-01")}) @!tx1))
 
@@ -171,7 +171,7 @@
                                                      {id (= id ?_0)}
                                                      application_time_start
                                                      {application_time_end (>= application_time_end #inst "2020-05-01")}]]]
-                                      [[:dave]]]])]
+                                      [["dave"]]]])]
 
       (t/is (= [{:name "Claire"} {:name "Alan"}]
                (c2/sql-query *node* "SELECT u.name FROM users u WHERE u.APP_TIME CONTAINS TIMESTAMP '2020-06-01 00:00:00'"
@@ -193,7 +193,8 @@
                                                       {_table (= _table "users")}
                                                       application_time_start
                                                       {application_time_end (>= application_time_end #inst "2021-07-01")}]]]]
-                                      [[:susan]]]])]
+                                      [["susan"]]]])]
+
       ;; TODO when we can return `application_time_start` etc from `:scan` without errors we can probably coalesce these tests
       (t/is (= [{:name "Susan"} {:name "Sue"}]
                (c2/sql-query *node* "SELECT u.name FROM users u WHERE u.name IN ('Susan', 'Sue')"
