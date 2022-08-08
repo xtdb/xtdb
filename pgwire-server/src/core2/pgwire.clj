@@ -1076,11 +1076,17 @@
      (.write @(:out conn) arr))))
 
 (defn cmd-send-ready
-  "Sends a msg-ready with the given status - eg (cmd-send-ready conn :idle)."
-  [conn status]
-  (when (not= status (:ready @(:conn-state conn)))
-    (swap! (:conn-state conn) assoc :ready status)
-    (cmd-write-msg conn msg-ready {:status status})))
+  "Sends a msg-ready with the given status - eg (cmd-send-ready conn :idle).
+  If the status is omitted, the status is determined from whether a transaction is currently open."
+  ([conn]
+   ;; it would be good to look at ready status being automatically driven by pure conn state, this is a bit messy.
+   (if (:transaction @(:conn-state conn))
+     (cmd-send-ready conn :transaction)
+     (cmd-send-ready conn :idle)))
+  ([conn status]
+   (when (not= status (:ready @(:conn-state conn)))
+     (swap! (:conn-state conn) assoc :ready status)
+     (cmd-write-msg conn msg-ready {:status status}))))
 
 (defn cmd-send-error
   "Sends an error back to the client (e.g (cmd-send-error conn (err-protocol \"oops!\")).
@@ -1507,7 +1513,7 @@
 
   (when (and (= :simple (:protocol @conn-state))
              (not= :query statement-type))
-    (cmd-send-ready conn :idle)))
+    (cmd-send-ready conn)))
 
 (defn cmd-simple-query [{:keys [conn-state] :as conn} {:keys [query]}]
   (let [{:keys [err] :as stmt} (interpret-sql query)]
@@ -1520,11 +1526,8 @@
   "Sync commands are sent by the client to commit transactions (we do not do anything here yet),
   and to clear the error state of a :extended mode series of commands (e.g the parse/bind/execute dance)"
   [{:keys [conn-state] :as conn}]
-  (let [{:keys [transaction]} @conn-state]
-    (swap! conn-state dissoc :skip-until-sync, :protocol)
-    (if transaction
-      (cmd-send-ready conn :transaction)
-      (cmd-send-ready conn :idle))))
+  (swap! conn-state dissoc :skip-until-sync, :protocol)
+  (cmd-send-ready conn))
 
 (defn cmd-flush
   "Flushes any pending output to the client."
