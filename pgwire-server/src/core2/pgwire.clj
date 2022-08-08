@@ -33,9 +33,6 @@
 ;; https://www.postgresql.org/docs/current/protocol-flow.html
 ;; https://www.postgresql.org/docs/current/protocol-message-formats.html
 
-;; important to not worry until we've measured!
-(set! *warn-on-reflection* false)
-
 ;; unchecked math is unnecessary (and perhaps dangerous) for this ns
 (set! *unchecked-math* false)
 
@@ -463,7 +460,8 @@
 
     ;; represent period duration as an iso8601 duration string (includes period components)
     (instance? PeriodDuration obj)
-    (let [period (.getPeriod obj)
+    (let [^PeriodDuration obj obj
+          period (.getPeriod obj)
           duration (.getDuration obj)]
       (cond
         ;; if either component is zero (likely in sql), we can just print the objects
@@ -641,7 +639,7 @@
       ;; set a socket timeout so we can interrupt the accept-thread
       ;; can be set to nil as an option if you want to allow no timeout
       (when accept-so-timeout
-        (.setSoTimeout @accept-socket accept-so-timeout))
+        (.setSoTimeout ^ServerSocket @accept-socket accept-so-timeout))
 
       ;; lets register ourselves now we have acquired a global resource (port).
       (->> (reify BiFunction
@@ -665,7 +663,7 @@
                  (deliver is-running true)))
              (add-watch server-status [:accept-watch port]))
 
-        (.start accept-thread)
+        (.start ^Thread accept-thread)
 
         ;; wait for a small amount of time for a :running state
         (when (= :timeout (deref is-running (* 5 1000) :timeout))
@@ -745,13 +743,13 @@
 
     (when (realized? out)
       (try
-        (.close @out)
+        (.close ^OutputStream @out)
         (catch Throwable e
           (log/error e "Exception caught closing socket out" {:port port, :cid cid}))))
 
     (when (realized? in)
       (try
-        (.close @in)
+        (.close ^InputStream @in)
         (catch Throwable e
           (log/error e "Exception caught closing socket in" {:port port, :cid cid}))))
 
@@ -788,18 +786,18 @@
 
 (def ^:private io-char8
   "A single byte character"
-  {:read #(char (.readUnsignedByte %))
-   :write #(.writeByte %1 (byte %2))})
+  {:read #(char (.readUnsignedByte ^DataInputStream %))
+   :write #(.writeByte ^DataOutputStream %1 (byte %2))})
 
 (def ^:private io-uint16
   "An unsigned short integer"
-  {:read #(.readUnsignedShort %)
-   :write #(.writeShort %1 (short %2))})
+  {:read #(.readUnsignedShort ^DataInputStream %)
+   :write #(.writeShort ^DataOutputStream %1 (short %2))})
 
 (def ^:private io-uint32
   "An unsigned 32bit integer"
-  {:read #(.readInt %)
-   :write #(.writeInt %1 (int %2))})
+  {:read #(.readInt ^DataInputStream %)
+   :write #(.writeInt ^DataOutputStream %1 (int %2))})
 
 (def ^:private io-string
   "A postgres null-terminated utf8 string"
@@ -825,8 +823,8 @@
   1 (:binary)
 
   On read returns a keyword :text or :binary, write of these keywords will be transformed into the correct integer."
-  {:read (fn [in] ({0 :text, 1 :binary} (.readUnsignedShort in)))
-   :write (fn [out v] (.writeShort out ({:text 0, :binary 1} v)))})
+  {:read (fn [^DataInputStream in] ({0 :text, 1 :binary} (.readUnsignedShort in)))
+   :write (fn [^DataOutputStream out v] (.writeShort out ({:text 0, :binary 1} v)))})
 
 (def ^:private io-format-codes
   "A list of format codes of max len len(uint16). This is the format used by the msg-bind."
@@ -878,7 +876,7 @@
   to the client."
   [io-len]
   (let [len-rdr (:read io-len)]
-    {:read (fn read-bytes-or-null [in]
+    {:read (fn read-bytes-or-null [^DataInputStream in]
              (let [len (len-rdr in)]
                (when (not= -1 len)
                  (let [arr (byte-array len)]
@@ -996,7 +994,7 @@
 
 (def-msg msg-bind-complete :server \2
   :result {:read no-read
-           :write (fn [out _] (.writeInt out 4))})
+           :write (fn [^DataOutputStream out _] (.writeInt out 4))})
 
 (def-msg msg-close-complete :server \3)
 
@@ -1034,7 +1032,7 @@
 
 (def-msg msg-ready :server \Z
   :status {:read no-read
-           :write (fn [out status]
+           :write (fn [^DataOutputStream out status]
                     (.writeByte out (byte ({:idle \I
                                             :transaction \T
                                             :failed-transaction \E}
@@ -1063,17 +1061,19 @@
   "Writes out a single message given a definition (msg-def) and optional data record."
   ([conn msg-def]
    (log/debug "Writing server message" (select-keys msg-def [:char8 :name]))
-   (.writeByte @(:out conn) (byte (:char8 msg-def)))
-   (.writeInt @(:out conn) 4))
+   (let [^DataOutputStream out @(:out conn)]
+     (.writeByte out (byte (:char8 msg-def)))
+     (.writeInt out 4)))
   ([conn msg-def data]
    (log/debug "Writing server message (with body)" (select-keys msg-def [:char8 :name]))
-   (.writeByte @(:out conn) (byte (:char8 msg-def)))
-   (let [bytes-out (ByteArrayOutputStream.)
+   (let [^DataOutputStream out @(:out conn)
+         bytes-out (ByteArrayOutputStream.)
          msg-out (DataOutputStream. bytes-out)
          _ ((:write msg-def) msg-out data)
          arr (.toByteArray bytes-out)]
-     (.writeInt @(:out conn) (+ 4 (alength arr)))
-     (.write @(:out conn) arr))))
+     (.writeByte out (byte (:char8 msg-def)))
+     (.writeInt out (+ 4 (alength arr)))
+     (.write out arr))))
 
 (defn cmd-send-ready
   "Sends a msg-ready with the given status - eg (cmd-send-ready conn :idle).
@@ -1191,10 +1191,10 @@
 
 (defn cmd-startup
   "A command that negotiates startup with the client, including ssl negotiation, and sending the state of the servers
-  :server-parameters."
+  :parameters."
   [conn]
   (let [in @(:in conn)
-        out @(:out conn)
+        ^DataOutputStream out @(:out conn)
 
         {:keys [version] :as msg} (read-version in)
 
@@ -1302,7 +1302,7 @@
     (swap! conn-state update :executing disj fut)
     (catch Throwable e
       (log/fatal e "Exception caught closing result set, resources may have been leaked - please restart XTDB")
-      (.close conn))))
+      (.close ^Closeable conn))))
 
 (defn cmd-await-query-result
   "This command allows us to pre-empt running queries and cancel them."
@@ -1532,7 +1532,7 @@
 (defn cmd-flush
   "Flushes any pending output to the client."
   [conn]
-  (.flush @(:out conn)))
+  (.flush ^OutputStream @(:out conn)))
 
 (defn cmd-parse
   "Responds to a msg-parse message that creates a prepared-statement."
@@ -1707,7 +1707,7 @@
   freed at the end of this function. So the connections lifecycle should be totally enclosed over the lifetime of a connect call.
 
   See comment 'Connection lifecycle'."
-  [server conn-socket]
+  [server ^Socket conn-socket]
   (let [{:keys [node, server-state, port]} server
         cid (:next-cid (swap! server-state update :next-cid (fnil inc 0)))
         in (delay (DataInputStream. (.getInputStream conn-socket)))
@@ -1797,7 +1797,7 @@
         (cond
           (.isInterrupted (Thread/currentThread)) nil
 
-          (.isClosed @accept-socket)
+          (.isClosed ^ServerSocket @accept-socket)
           (log/debug "Accept socket closed, exiting accept loop")
 
           (#{:draining :running} @server-status)
@@ -1807,10 +1807,10 @@
 
               ;; set a low timeout to leave accept early if needed
               (when (= :draining @server-status)
-                (.setSoTimeout @accept-socket 10))
+                (.setSoTimeout ^ServerSocket @accept-socket 10))
 
               ;; accept next connection (blocks until interrupt (with so-timeout) or close)
-              (let [conn-socket (.accept @accept-socket)]
+              (let [conn-socket (.accept ^ServerSocket @accept-socket)]
                 (when-some [exc (:injected-accept-exc @server-state)]
                   (swap! server-state dissoc :injected-accept-exc)
                   (.close conn-socket)
@@ -1824,7 +1824,7 @@
                     (err-cannot-connect-now "server shutting down")
                     (.close conn-socket))))
               (catch SocketException e
-                (when (and (not (.isClosed @accept-socket))
+                (when (and (not (.isClosed ^ServerSocket @accept-socket))
                            (not= "Socket closed" (.getMessage e)))
                   (log/warn e "Accept socket exception" {:port port})))
               (catch java.net.SocketTimeoutException e
@@ -1916,7 +1916,7 @@
     srv))
 
 (defmethod ig/halt-key! :core2/pgwire [_ pgwire]
-  (.close pgwire)
+  (.close ^Closeable pgwire)
   (log/info "PGWire server stopped"))
 
 (comment
