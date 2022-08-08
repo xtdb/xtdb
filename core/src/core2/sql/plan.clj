@@ -1602,7 +1602,6 @@
      (plan dsds)
 
      [:insert_statement "INSERT" "INTO" [:regular_identifier table] ^:z from-subquery]
-
      [:insert {:table table}
       (plan from-subquery)]
 
@@ -2761,99 +2760,99 @@
            [:anti-join join-condition inner-rhs rhs]])))
 
 
-(def push-correlated-selection-down-past-join (partial push-selection-down-past-join true))
-(def push-correlated-selection-down-past-rename (partial push-selection-down-past-rename true))
-(def push-correlated-selection-down-past-project (partial push-selection-down-past-project true))
-(def push-correlated-selection-down-past-group-by (partial push-selection-down-past-group-by true))
-(def push-correlated-selections-with-fewer-variables-down (partial push-selections-with-fewer-variables-down true))
+(def ^:private push-correlated-selection-down-past-join (partial push-selection-down-past-join true))
+(def ^:private push-correlated-selection-down-past-rename (partial push-selection-down-past-rename true))
+(def ^:private push-correlated-selection-down-past-project (partial push-selection-down-past-project true))
+(def ^:private push-correlated-selection-down-past-group-by (partial push-selection-down-past-group-by true))
+(def ^:private push-correlated-selections-with-fewer-variables-down (partial push-selections-with-fewer-variables-down true))
 
-(def push-decorrelated-selection-down-past-join (partial push-selection-down-past-join false))
-(def push-decorrelated-selection-down-past-rename (partial push-selection-down-past-rename false))
-(def push-decorrelated-selection-down-past-project (partial push-selection-down-past-project false))
-(def push-decorrelated-selection-down-past-group-by (partial push-selection-down-past-group-by false))
-(def push-decorrelated-selections-with-fewer-variables-down (partial push-selections-with-fewer-variables-down false))
+(def ^:private push-decorrelated-selection-down-past-join (partial push-selection-down-past-join false))
+(def ^:private push-decorrelated-selection-down-past-rename (partial push-selection-down-past-rename false))
+(def ^:private push-decorrelated-selection-down-past-project (partial push-selection-down-past-project false))
+(def ^:private push-decorrelated-selection-down-past-group-by (partial push-selection-down-past-group-by false))
+(def ^:private push-decorrelated-selections-with-fewer-variables-down (partial push-selections-with-fewer-variables-down false))
 
 ;; Logical plan API
 
+(def ^:private optimise-plan-rules
+  [#'promote-selection-cross-join-to-join
+   #'promote-selection-to-join
+   #'push-selection-down-past-apply
+   #'push-correlated-selection-down-past-join
+   #'push-correlated-selection-down-past-rename
+   #'push-correlated-selection-down-past-project
+   #'push-correlated-selection-down-past-group-by
+   #'push-correlated-selections-with-fewer-variables-down
+   #'remove-superseded-projects
+   #'merge-selections-around-scan
+   #'push-semi-and-anti-joins-down
+   #'add-selection-to-scan-predicate])
+
+(def ^:private decorrelate-plan-rules
+  [#'pull-correlated-selection-up-towards-apply
+   #'remove-redundant-projects
+   #'push-selection-down-past-apply
+   #'push-decorrelated-selection-down-past-join
+   #'push-decorrelated-selection-down-past-rename
+   #'push-decorrelated-selection-down-past-project
+   #'push-decorrelated-selection-down-past-group-by
+   #'push-decorrelated-selections-with-fewer-variables-down
+   #'squash-correlated-selects
+   #'decorrelate-apply-rule-1
+   #'apply-mark-join->mark-join
+   #'decorrelate-apply-rule-2
+   #'decorrelate-apply-rule-3
+   #'decorrelate-apply-rule-4
+   #'decorrelate-apply-rule-8
+   #'decorrelate-apply-rule-9])
+
+(defn- rewrite-plan [plan {:keys [decorrelate? instrument-rules?], :or {decorrelate? true, instrument-rules? false}, :as opts}]
+  (let [plan (remove-names plan opts)
+        {:keys [add-projection-fn]} (meta plan)
+        !fired-rules (atom [])]
+    (letfn [(instrument-rule [f]
+              (fn [z]
+                (when-let [successful-rewrite (f z)]
+                  (swap! !fired-rules conj
+                         [(name (.toSymbol ^Var f))
+                          (r/znode z)
+                          successful-rewrite
+                          "=================="])
+                  successful-rewrite)))
+            (instrument-rules [rules]
+              (->> rules
+                   (mapv (if instrument-rules? instrument-rule deref))
+                   (apply some-fn)))]
+      (-> (->> plan
+               (r/vector-zip)
+               (#(if decorrelate?
+                   (r/innermost (r/mono-tp (instrument-rules decorrelate-plan-rules)) %)
+                   %))
+               (r/innermost (r/mono-tp (instrument-rules optimise-plan-rules)))
+               (r/topdown (r/adhoc-tp r/id-tp (instrument-rules [#'rewrite-equals-predicates-in-join-as-equi-join-map])))
+               (r/node)
+               (add-projection-fn))
+
+          (vary-meta assoc :fired-rules @!fired-rules)))))
+
 (defn plan-query
-  ([query] (plan-query query {:decorrelate? true
-                              :validate-plan? false
-                              :instrument-rules? false}))
-  ([query {:keys [decorrelate? validate-plan? instrument-rules?] :as opts}]
+  ([query] (plan-query query {}))
+  ([query {:keys [validate-plan?], :or {validate-plan? false} :as opts}]
    (if (p/failure? query)
      {:errs [(p/failure->str query)]}
      (binding [r/*memo* (HashMap.)]
        (let [ag (r/vector-zip query)]
          (if-let [errs (not-empty (sem/errs ag))]
            {:errs errs}
-           (let [fired-rules (atom [])
-                 instrument-rules (fn [rules]
-                                    (apply
-                                      some-fn
-                                      (if instrument-rules?
-                                        (mapv (fn [f]
-                                                (fn [z]
-                                                  (when-let [successful-rewrite (f z)]
-                                                    (swap!
-                                                      fired-rules
-                                                      #(conj
-                                                         %
-                                                         [(name (.toSymbol ^Var f))
-                                                          (r/znode z)
-                                                          successful-rewrite
-                                                          "=================="]))
-                                                    successful-rewrite)))
-                                              rules)
-                                        (mapv deref rules))))
-                 optimize-plan [#'promote-selection-cross-join-to-join
-                                #'promote-selection-to-join
-                                #'push-selection-down-past-apply
-                                #'push-correlated-selection-down-past-join
-                                #'push-correlated-selection-down-past-rename
-                                #'push-correlated-selection-down-past-project
-                                #'push-correlated-selection-down-past-group-by
-                                #'push-correlated-selections-with-fewer-variables-down
-                                #'remove-superseded-projects
-                                #'merge-selections-around-scan
-                                #'push-semi-and-anti-joins-down
-                                #'add-selection-to-scan-predicate]
-                 decorrelate-plan [#'pull-correlated-selection-up-towards-apply
-                                   #'remove-redundant-projects
-                                   #'push-selection-down-past-apply
-                                   #'push-decorrelated-selection-down-past-join
-                                   #'push-decorrelated-selection-down-past-rename
-                                   #'push-decorrelated-selection-down-past-project
-                                   #'push-decorrelated-selection-down-past-group-by
-                                   #'push-decorrelated-selections-with-fewer-variables-down
-                                   #'squash-correlated-selects
-                                   #'decorrelate-apply-rule-1
-                                   #'apply-mark-join->mark-join
-                                   #'decorrelate-apply-rule-2
-                                   #'decorrelate-apply-rule-3
-                                   #'decorrelate-apply-rule-4
-                                   #'decorrelate-apply-rule-8
-                                   #'decorrelate-apply-rule-9]
-                 plan (plan ag)
-                 rewrite (fn [plan]
-                           (let [plan (remove-names plan opts)
-                                 add-projection-fn (:add-projection-fn (meta plan))]
-                             plan (->> plan
-                                       (r/vector-zip)
-                                       (#(if decorrelate?
-                                           (r/innermost (r/mono-tp (instrument-rules decorrelate-plan)) %)
-                                           %))
-                                       (r/innermost (r/mono-tp (instrument-rules optimize-plan)))
-                                       (r/topdown (r/adhoc-tp r/id-tp (instrument-rules [#'rewrite-equals-predicates-in-join-as-equi-join-map])))
-                                       (r/node)
-                                       (add-projection-fn))))
-                 validate-plan  (fn [plan]
-                                  (if (and validate-plan? (not (s/valid? ::lp/logical-plan plan)))
-                                    (throw (IllegalArgumentException. (s/explain-str ::lp/logical-plan plan)))
-                                    plan))
-                 plan (if (#{:insert} (first plan))
-                        (let [[dml-op dml-op-opts plan] plan]
-                          [dml-op dml-op-opts
-                           (validate-plan (rewrite plan))])
-                        (validate-plan (rewrite plan)))]
-               {:plan plan
-                :fired-rules @fired-rules})))))))
+           (let [plan (plan ag)
+                 {:keys [fired-rules]} (meta plan)
+                 validate-plan (fn [plan]
+                                 (if (and validate-plan? (not (s/valid? ::lp/logical-plan plan)))
+                                   (throw (IllegalArgumentException. (s/explain-str ::lp/logical-plan plan)))
+                                   plan))]
+             {:plan (if (#{:insert} (first plan))
+                      (let [[dml-op dml-op-opts plan] plan]
+                        [dml-op dml-op-opts
+                         (validate-plan (rewrite-plan plan opts))])
+                      (validate-plan (rewrite-plan plan opts)))
+              :fired-rules fired-rules})))))))

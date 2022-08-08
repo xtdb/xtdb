@@ -3,7 +3,6 @@
             [clojure.java.io :as io]
             core2.edn ; Enables data literals
             [core2.sql.parser :as p]
-            [core2.rewrite :as r]
             [core2.sql.plan :as plan]))
 
 (defn plan-sql
