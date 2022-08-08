@@ -74,22 +74,22 @@
         [:table_primary
          [:regular_identifier table]
          "AS"
-         [:regular_identifier table_alias]]
+         [:correlation_name [:regular_identifier table_alias]]]
         ;;=>
         [:table_primary
          [:regular_identifier table]
          "AS"
-         [:regular_identifier table_alias]
+         [:correlation_name [:regular_identifier table_alias]]
          (build-column-name-list table tables)]
 
         [:table_primary
          [:regular_identifier table]
-         [:regular_identifier table_alias]]
+         [:correlation_name [:regular_identifier table_alias]]]
         ;;=>
         [:table_primary
          [:regular_identifier table]
          "AS"
-         [:regular_identifier table_alias]
+         [:correlation_name [:regular_identifier table_alias]]
          (build-column-name-list table tables)]
 
         [:table_primary
@@ -98,7 +98,7 @@
         [:table_primary
          [:regular_identifier table]
          "AS"
-         [:regular_identifier table]
+         [:correlation_name [:regular_identifier table]]
          (build-column-name-list table tables)]))))
 
 (defn- top-level-query-table->correlation-name [query]
@@ -109,11 +109,11 @@
             ;;=>
             [table table]
 
-            [:table_primary [:regular_identifier table] "AS" [:regular_identifier correlation-name]]
+            [:table_primary [:regular_identifier table] "AS" [:correlation_name [:regular_identifier correlation-name]]]
             ;;=>
             [table correlation-name]
 
-            [:table_primary [:regular_identifier table] [:regular_identifier correlation-name]]
+            [:table_primary [:regular_identifier table] [:correlation_name [:regular_identifier correlation-name]]]
             ;;=>
             [table correlation-name]
 

@@ -351,6 +351,10 @@
      ;;=>
      (subs lexeme 1 (dec (count lexeme)))
 
+     [:point_in_time ^:z dte]
+     ;;=>
+     (expr dte)
+
      [:timestamp_literal _
       [:timestamp_string
        [:unquoted_timestamp_string
@@ -815,6 +819,10 @@
      [:period_predicand "PERIOD" start end]
      ;;=>
      {:start (expr start) :end (expr end)}
+
+     [:search_condition ^:z bve]
+     ;;=>
+     (expr bve)
 
      (expr-varargs z))))
 

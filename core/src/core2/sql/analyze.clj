@@ -121,6 +121,9 @@
     :regular_identifier
     (r/lexeme ag 1)
 
+    :correlation_name
+    (identifier (r/$ ag 1))
+
     nil))
 
 (defn- table-or-query-name [ag]
@@ -140,7 +143,7 @@
     (or (correlation-name (r/$ ag -1))
         (correlation-name (r/$ ag -2)))
 
-    :regular_identifier
+    :correlation_name
     (identifier ag)
 
     nil))

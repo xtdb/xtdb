@@ -1760,10 +1760,7 @@
   ({:tag :nt, :keyword :quote, :hide true}
    {:tag :nt, :keyword :unquoted_time_string}
    {:tag :nt, :keyword :quote, :hide true})},
- :point_in_time
- {:tag :nt,
-  :keyword :datetime_value_expression,
-  :red {:reduction-type :raw}},
+ :point_in_time {:tag :nt, :keyword :datetime_value_expression},
  :update_source
  {:tag :alt,
   :parsers
@@ -2422,8 +2419,7 @@
   ({:tag :string, :string "TRUE"}
    {:tag :string, :string "FALSE"}
    {:tag :string, :string "UNKNOWN"})},
- :application_time_period_name
- {:tag :nt, :keyword :identifier, :red {:reduction-type :raw}},
+ :application_time_period_name {:tag :nt, :keyword :identifier},
  :contextually_typed_row_value_constructor_element
  {:tag :alt,
   :parsers
@@ -2724,8 +2720,7 @@
    {:tag :nt, :keyword :row_value_constructor_predicand}),
   :red {:reduction-type :raw}},
  :separator {:tag :regexp, :regexp #"(?<=\s)"},
- :correlation_name
- {:tag :nt, :keyword :identifier, :red {:reduction-type :raw}},
+ :correlation_name {:tag :nt, :keyword :identifier},
  :period_overlaps_predicate_part_2
  {:tag :cat,
   :parsers
@@ -2947,10 +2942,7 @@
  {:tag :nt,
   :keyword :interval_absolute_value_function,
   :red {:reduction-type :raw}},
- :search_condition
- {:tag :nt,
-  :keyword :boolean_value_expression,
-  :red {:reduction-type :raw}},
+ :search_condition {:tag :nt, :keyword :boolean_value_expression},
  :period_precedes_predicate
  {:tag :cat,
   :parsers
