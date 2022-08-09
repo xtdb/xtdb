@@ -14,7 +14,7 @@
                          d [:union #{:null [:timestamp-tz :micro "UTC"]}]
                          e [:union #{:bool :i64}]
                          f [:duration :micro]}}
-           (-> (op/query-ra '[:table #{a b c d e f} ?table]
+           (-> (op/query-ra '[:table [a b c d e f] ?table]
                              {'?table [{:a 12, :b "foo" :c 1.2 :d nil :e true :f (Duration/ofHours 1)}
                                        {:a 100, :b "bar", :c 3.14, :d #inst "2020", :e 10, :f (Duration/ofMinutes 1)}]})
                (tu/raising-col-types))))
@@ -46,7 +46,7 @@
 
   (t/is (= {:res [{:a 12}]
             :col-types '{a :i64}}
-           (-> (op/query-ra '[:table #{a} ?table]
+           (-> (op/query-ra '[:table [a] ?table]
                              {'?table [{:a 12, :b "foo"}]})
                (tu/raising-col-types)))
         "restricts to provided col-names")

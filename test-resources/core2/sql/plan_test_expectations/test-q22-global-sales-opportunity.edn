@@ -18,6 +18,7 @@
          {c_phone x1, c_acctbal x2, c_custkey x3}
          [:scan [c_phone c_acctbal c_custkey]]]
         [:table
+         [x5]
          [{x5 "13"}
           {x5 "31"}
           {x5 "23"}
@@ -35,6 +36,7 @@
           {c_acctbal x8, c_phone x9}
           [:scan [{c_acctbal (> c_acctbal 0.0)} c_phone]]]
          [:table
+          [x11]
           [{x11 "13"}
            {x11 "31"}
            {x11 "23"}

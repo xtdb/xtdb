@@ -95,7 +95,7 @@
     (t/is (= [{:y 0, :a nil, :b nil}]
              (op/query-ra '[:apply :single-join {}
                             [:table [{:y 0}]]
-                            [:table #{a b} ?x]]
+                            [:table [a b] ?x]]
                           '{?x []})))))
 
 (t/deftest test-apply-empty-rel-bug-237

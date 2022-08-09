@@ -7,5 +7,5 @@
    [:semi-join
     [{x1 x4}]
     [:rename {a x1, b x2} [:scan [{a (= a 42)} b]]]
-    [:table [{x4 1} {x4 2}]]]
-   [:table [{x7 3} {x7 4}]]]]]
+    [:table [x4] [{x4 1} {x4 2}]]]
+   [:table [x7] [{x7 3} {x7 4}]]]]]

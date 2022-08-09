@@ -977,17 +977,23 @@
                 AND foo.APP_TIME OVERLAPS PERIOD (DATE '2000-01-01', DATE '2004-01-01')"))))
 
 (deftest test-sql-insert-plan
-  (t/is
-    (=
-     '[:insert {:table "users"}
-       [:rename
-        {x1 id, x2 name, x3 application_time_start}
-        [:table [{x1 ?_0, x2 ?_1, x3 ?_2}]]]]
-     (plan-sql "INSERT INTO users (id, name, application_time_start) VALUES (?, ?, ?)")
-     (plan-sql
-       "INSERT INTO users SELECT bar.id, bar.name, bar.application_time_start
-       FROM (VALUES (?, ?, ?)) AS bar(id, name, application_time_start)")
-     (plan-sql
-       "INSERT INTO users (id, name, application_time_start)
-       SELECT bar.id, bar.name, bar.application_time_start
-       FROM (VALUES (?, ?, ?)) AS bar(id, name, application_time_start)"))))
+  (t/is (= '[:insert {:table "users"}
+             [:rename {x1 id, x2 name, x3 application_time_start}
+              [:table [x1 x2 x3]
+               [{x1 ?_0, x2 ?_1, x3 ?_2}]]]]
+           (plan-sql "INSERT INTO users (id, name, application_time_start) VALUES (?, ?, ?)")
+           (plan-sql
+            "INSERT INTO users
+             SELECT bar.id, bar.name, bar.application_time_start
+             FROM (VALUES (?, ?, ?)) AS bar(id, name, application_time_start)")
+           (plan-sql
+            "INSERT INTO users (id, name, application_time_start)
+             SELECT bar.id, bar.name, bar.application_time_start
+             FROM (VALUES (?, ?, ?)) AS bar(id, name, application_time_start)")))
+
+  (t/is (= '[:insert {:table "customer"}
+             [:rename {x1 id, x8 c_mktsegment, x2 c_custkey, x5 c_nationkey, x9 c_comment, x4 c_address, x6 c_phone, x7 c_acctbal, x3 c_name}
+              [:table [x1 x2 x3 x4 x5 x6 x7 x8 x9]
+               [{x1 ?_0, x8 ?_7, x2 ?_1, x5 ?_4, x9 ?_8, x4 ?_3, x6 ?_5, x7 ?_6, x3 ?_2}]]]]
+           (plan-sql "INSERT INTO customer (id, c_custkey, c_name, c_address, c_nationkey, c_phone, c_acctbal, c_mktsegment, c_comment) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"))
+        "#309"))

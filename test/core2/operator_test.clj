@@ -301,7 +301,7 @@
                           '{?x []})))
 
     (t/is (= [{:a nil, :b nil}]
-             (op/query-ra '[:max-1-row [:table #{a b} ?x]]
+             (op/query-ra '[:max-1-row [:table [a b] ?x]]
                           '{?x []})))))
 
 (t/deftest test-project-row-number

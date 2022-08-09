@@ -16,7 +16,7 @@
 
 (defmethod lp/ra-expr :table [_]
   (s/cat :op #{:table}
-         :explicit-col-names (s/? (s/coll-of ::lp/column :kind set?))
+         :explicit-col-names (s/? (s/coll-of ::lp/column :kind vector?))
          :table (s/or :rows (s/coll-of (s/map-of simple-ident? any?))
                       :param ::lp/param)))
 

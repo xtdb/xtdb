@@ -29,6 +29,7 @@
         p_size
         p_partkey]]]
      [:table
+      [x9]
       [{x9 49}
        {x9 14}
        {x9 23}

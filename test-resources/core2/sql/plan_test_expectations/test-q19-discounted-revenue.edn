@@ -60,20 +60,23 @@
             {p_partkey x8, p_brand x9, p_container x10, p_size x11}
             [:scan [p_partkey p_brand p_container p_size]]]]
           [:table
+           [x13]
            [{x13 "SM CASE"}
             {x13 "SM BOX"}
             {x13 "SM PACK"}
             {x13 "SM PKG"}]]]
-         [:table [{x17 "AIR"} {x17 "AIR REG"}]]]
+         [:table [x17] [{x17 "AIR"} {x17 "AIR REG"}]]]
         [:table
+         [x21]
          [{x21 "MED BAG"}
           {x21 "MED BOX"}
           {x21 "MED PKG"}
           {x21 "MED PACK"}]]]
-       [:table [{x25 "AIR"} {x25 "AIR REG"}]]]
+       [:table [x25] [{x25 "AIR"} {x25 "AIR REG"}]]]
       [:table
+       [x29]
        [{x29 "LG CASE"}
         {x29 "LG BOX"}
         {x29 "LG PACK"}
         {x29 "LG PKG"}]]]
-     [:table [{x33 "AIR"} {x33 "AIR REG"}]]]]]]]
+     [:table [x33] [{x33 "AIR"} {x33 "AIR REG"}]]]]]]]

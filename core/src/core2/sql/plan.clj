@@ -1461,33 +1461,34 @@
 
 (defn- build-values-list [z]
   (let [ks (mapv unqualified-projection-symbol (first (sem/projected-columns z)))]
-    [:table (r/collect-stop
-             (fn [z]
-               (r/zcase z
-                 (:row_value_expression_list
-                  :contextually_typed_row_value_expression_list
-                  :in_value_list)
-                 nil
+    [:table ks
+     (r/collect-stop
+      (fn [z]
+        (r/zcase z
+          (:row_value_expression_list
+           :contextually_typed_row_value_expression_list
+           :in_value_list)
+          nil
 
-                 (:explicit_row_value_constructor
-                  :contextually_typed_row_value_constructor)
-                 (let [vs (r/collect-stop
-                           (fn [z]
-                             (r/zcase z
-                               (:row_value_constructor_element
-                                :contextually_typed_row_value_constructor_element)
-                               [(expr (r/$ z 1))]
+          (:explicit_row_value_constructor
+           :contextually_typed_row_value_constructor)
+          (let [vs (r/collect-stop
+                    (fn [z]
+                      (r/zcase z
+                        (:row_value_constructor_element
+                         :contextually_typed_row_value_constructor_element)
+                        [(expr (r/$ z 1))]
 
-                               :subquery
-                               [(expr z)]
+                        :subquery
+                        [(expr z)]
 
-                               nil))
-                           z)]
-                   [(zipmap ks vs)])
+                        nil))
+                    z)]
+            [(zipmap ks vs)])
 
-                 (when (r/ctor z)
-                   [{(first ks) (expr z)}])))
-             z)]))
+          (when (r/ctor z)
+            [{(first ks) (expr z)}])))
+      z)]))
 
 (defn- extend-projection? [column-or-expr]
   (map? column-or-expr))
