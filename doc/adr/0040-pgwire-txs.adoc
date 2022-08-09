@@ -53,11 +53,9 @@ If it is not supplied, this defaults to the latest completed transaction (as opp
 
 The adoption of some kind of transaction semantics is in service of solving one or more of the following problems:
 
-  There exists in pgwire no means to provide a stable read basis across some sequence of queries, such that you can avoid data races with concurrent writers
-
-  There exists no support in pgwire for DML statements (inserts, updates and deletes)
-
-  Given the asynchronous nature of the tx-log, it is unclear how to map traditional SQL transaction semantics to core2 in a way that is well-defined, reliable and performant. e.g traditional read-after-write, multi-statement atomicity, interactive transactions.
+* There exists in pgwire no means to provide a stable read basis across some sequence of queries, such that you can avoid data races with concurrent writers
+* There exists no support in pgwire for DML statements (inserts, updates and deletes)
+* Given the asynchronous nature of the tx-log, it is unclear how to map traditional SQL transaction semantics to core2 in a way that is well-defined, reliable and performant. e.g traditional read-after-write, multi-statement atomicity, interactive transactions.
 
 == SQL spec
 
