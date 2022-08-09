@@ -92,7 +92,21 @@ I would not put too much weight at this stage on meeting postgres, but as sessio
 
 === A: single statements
 
-We only support single statements for now, ignore `BEGIN`/`COMMIT`/etc, and behave as if auto-commit is enabled.
+One path which allows us to avoid making certain decisions right away is to say that transactions may or may not establish a read basis at some point, and be extended to read-write or async batching. but we will not permit any kind of DML within a transaction for now - i.e so we can leave transaction behaviour undefined for the time being.
+
+To motivate this, if we pull apart the problem statement we see that there are a few dimensions to consider, all with their own challenges.
+
+- repeatable read
+- dml support even in principle given our constraints (tx-log, async, atomic only for single put)
+- read-after-write support, given our constraints
+- desire for a mechanism for submitting multiple dml ops that is sympathetic to the constraints of our atomicity model (async put to tx-log)
+
+There is the so far unmentioned but perhaps relevant desire to see interactive read-write transactions at some point. Though this is certainly out of scope for now.
+
+One intrinsic issue is the friction caused by our constraints around asynchronicity and atomicity being in conflict with typical expectations of a SQL database (such as what is imposed upon our postgres server). It might be wise to buy as much time as possible to improve our chances of a successful and clear fitting of core2's semantics to our postgres server. (If pgwire sticks around!)
+
+
+So given no transactions, we only support single statements for now, ignore `BEGIN`/`COMMIT`/etc, and behave as if auto-commit is enabled (like postgres).
 
 * If the driver detects that any one of the statements is a write, it will submit the transaction, and synchronously await it before returning to the user.
   If none of the statements are writes, it will execute the query synchronously, as it does currently.
