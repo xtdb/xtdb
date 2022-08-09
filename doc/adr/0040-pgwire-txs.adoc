@@ -92,9 +92,9 @@ I would not put too much weight at this stage on meeting postgres, but as sessio
 
 === A: single statements
 
-One path which allows us to avoid making certain decisions right away is to say that transactions may or may not establish a read basis at some point, and be extended to read-write or async batching. but we will not permit any kind of DML within a transaction for now - i.e so we can leave transaction behaviour undefined for the time being.
+One path which allows us to avoid making certain decisions right away is to say that transactions may or may not establish a read basis at some point, and be extended to read-write or async batching. but we will not permit any kind of DML within a transaction for now - i.e. so we can leave transaction behaviour undefined for the time being.
 
-To motivate this, if we pull apart the problem statement we see that there are a few dimensions to consider, all with their own challenges.
+An argument for leaving transactions undefined is simply the difficulty in finding appropriate semantics, If we pull apart the problem statement we see that there are a few dimensions to consider, all with their own challenges.
 
 - repeatable read
 - dml support even in principle given our constraints (tx-log, async, atomic only for single put)
@@ -103,8 +103,9 @@ To motivate this, if we pull apart the problem statement we see that there are a
 
 There is the so far unmentioned but perhaps relevant desire to see interactive read-write transactions at some point. Though this is certainly out of scope for now.
 
-One intrinsic issue is the friction caused by our constraints around asynchronicity and atomicity being in conflict with typical expectations of a SQL database (such as what is imposed upon our postgres server). It might be wise to buy as much time as possible to improve our chances of a successful and clear fitting of core2's semantics to our postgres server. (If pgwire sticks around!)
+Another issue is the friction caused by our constraints around asynchronicity and atomicity being in conflict with typical expectations of a SQL database (such as what is imposed upon our postgres server).
 
+Given the challenge, it might be wise to buy as much time as possible to improve our chances of a successful and clear fitting of core2's semantics to our postgres server (If pgwire sticks around!).
 
 So given no transactions, we only support single statements for now, ignore `BEGIN`/`COMMIT`/etc, and behave as if auto-commit is enabled (like postgres).
 
