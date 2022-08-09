@@ -91,9 +91,9 @@
   (->instant [odt] (.toInstant odt)))
 
 (defn sql-temporal->instant
-  "Given some temporal value (such as a Date, LocalDateTime, OffsetDateTime and so on) will return the corresponding
-  instant given the SQL sessions zone. The SQL spec requires ambiguous timestamps to be resolved to the session zone at runtime
-  in this way."
+  "Given some temporal value (such as a Date, LocalDateTime, OffsetDateTime and so on) will return the corresponding Instant.
+
+   To do this for LocalDate and LocalDateTime, the provided SQL session time zone is assumed to be the implied time zone of the date/time."
   ^Instant [temporal ^ZoneId session-zone]
   (condp instance? temporal
     LocalDate (sql-temporal->instant (.atTime ^LocalDate temporal (LocalTime/of 0 0)) session-zone)
