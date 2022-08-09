@@ -494,6 +494,13 @@
               (->> (.put memo k)))))
         v))))
 
+(defn find-first [f z]
+  (loop [z (zdown z)]
+    (when z
+      (if (f z)
+        z
+        (recur (zright z))))))
+
 ;; Strategic Zippers based on Ztrategic
 
 ;; https://arxiv.org/pdf/2110.07902.pdf
