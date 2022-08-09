@@ -26,11 +26,6 @@
 
 (declare expr)
 
-(defn- maybe-add-ref [z x]
-  (if (instance? IObj x)
-    (vary-meta x assoc :ref z)
-    x))
-
 (defn- id-symbol [table table-id column]
   (symbol (str table relation-id-delimiter table-id relation-prefix-delimiter column)))
 
@@ -254,221 +249,151 @@
                     (int (seconds-fraction->nanos seconds-fraction))))
 
 (defn expr [z]
-  (maybe-add-ref
-   z
-   (r/zmatch z
-     [:column_reference _]
-     ;;=>
-     (column-reference-symbol (sem/column-reference z))
+  (r/zmatch z
+    [:column_reference _]
+    ;;=>
+    (column-reference-symbol (sem/column-reference z))
 
-     [:cast_specification _ ^:z e _ cast-spec]
-     (cast-expr (expr e) cast-spec)
+    [:cast_specification _ ^:z e _ cast-spec]
+    (cast-expr (expr e) cast-spec)
 
-     [:boolean_value_expression ^:z bve _ ^:z bt]
-     ;;=>
-     (list 'or (expr bve) (expr bt))
+    [:boolean_value_expression ^:z bve _ ^:z bt]
+    ;;=>
+    (list 'or (expr bve) (expr bt))
 
-     [:boolean_term ^:z bt _ ^:z bf]
-     ;;=>
-     (list 'and (expr bt) (expr bf))
+    [:boolean_term ^:z bt _ ^:z bf]
+    ;;=>
+    (list 'and (expr bt) (expr bf))
 
-     [:boolean_factor "NOT" ^:z bt]
-     ;;=>
-     (list 'not (expr bt))
+    [:boolean_factor "NOT" ^:z bt]
+    ;;=>
+    (list 'not (expr bt))
 
-     [:boolean_test ^:z bp]
-     ;;=>
-     (expr bp)
+    [:boolean_test ^:z bp]
+    ;;=>
+    (expr bp)
 
-     [:boolean_test ^:z bp "IS" [:truth_value truth-value]]
-     ;; =>
-     (case truth-value
-       "TRUE" (list 'true? (expr bp))
-       "FALSE" (list 'false? (expr bp))
-       "UNKNOWN" (list 'nil? (expr bp)))
+    [:boolean_test ^:z bp "IS" [:truth_value truth-value]]
+    ;; =>
+    (case truth-value
+      "TRUE" (list 'true? (expr bp))
+      "FALSE" (list 'false? (expr bp))
+      "UNKNOWN" (list 'nil? (expr bp)))
 
-     [:boolean_test ^:z bp "IS" "NOT" [:truth_value truth-value]]
-     ;; =>
-     (case truth-value
-       "TRUE" (list 'not (list 'true? (expr bp)))
-       "FALSE" (list 'not (list 'false? (expr bp)))
-       "UNKNOWN" (list 'not (list 'nil? (expr bp))))
+    [:boolean_test ^:z bp "IS" "NOT" [:truth_value truth-value]]
+    ;; =>
+    (case truth-value
+      "TRUE" (list 'not (list 'true? (expr bp)))
+      "FALSE" (list 'not (list 'false? (expr bp)))
+      "UNKNOWN" (list 'not (list 'nil? (expr bp))))
 
-     [:boolean_literal bl]
-     (case bl
-       "TRUE" true
-       "FALSE" false
-       "UNKNOWN" nil)
+    [:boolean_literal bl]
+    (case bl
+      "TRUE" true
+      "FALSE" false
+      "UNKNOWN" nil)
 
-     [:null_specification _]
-     nil
+    [:null_specification _]
+    nil
 
-     [:comparison_predicate ^:z rvp-1 [:comparison_predicate_part_2 [_ co] ^:z rvp-2]]
-     ;;=>
-     (list (symbol co) (expr rvp-1) (expr rvp-2))
+    [:comparison_predicate ^:z rvp-1 [:comparison_predicate_part_2 [_ co] ^:z rvp-2]]
+    ;;=>
+    (list (symbol co) (expr rvp-1) (expr rvp-2))
 
-     [:null_predicate ^:z rvp [:null_predicate_part_2 "IS" "NULL"]]
-     ;;=>
-     (list 'nil? (expr rvp))
+    [:null_predicate ^:z rvp [:null_predicate_part_2 "IS" "NULL"]]
+    ;;=>
+    (list 'nil? (expr rvp))
 
-     [:null_predicate ^:z rvp [:null_predicate_part_2 "IS" "NOT" "NULL"]]
-     ;;=>
-     (list 'not (list 'nil? (expr rvp)))
+    [:null_predicate ^:z rvp [:null_predicate_part_2 "IS" "NOT" "NULL"]]
+    ;;=>
+    (list 'not (list 'nil? (expr rvp)))
 
-     [:numeric_value_expression ^:z nve [_ op] ^:z t]
-     ;;=>
-     (list (symbol op) (expr nve) (expr t))
+    [:numeric_value_expression ^:z nve [_ op] ^:z t]
+    ;;=>
+    (list (symbol op) (expr nve) (expr t))
 
-     [:term ^:z t [_ op] ^:z f]
-     ;;=>
-     (list (symbol op) (expr t) (expr f))
+    [:term ^:z t [_ op] ^:z f]
+    ;;=>
+    (list (symbol op) (expr t) (expr f))
 
-     [:signed_numeric_literal ^:z unl]
-     ;;=>
-     (expr unl)
+    [:signed_numeric_literal ^:z unl]
+    ;;=>
+    (expr unl)
 
-     [:exact_numeric_literal lexeme]
-     ;;=>
-     (if (str/includes? lexeme ".")
-       (Double/parseDouble lexeme)
-       (Long/parseLong lexeme))
+    [:exact_numeric_literal lexeme]
+    ;;=>
+    (if (str/includes? lexeme ".")
+      (Double/parseDouble lexeme)
+      (Long/parseLong lexeme))
 
-     [:unsigned_integer lexeme]
-     ;;=>
-     (Long/parseLong lexeme)
+    [:unsigned_integer lexeme]
+    ;;=>
+    (Long/parseLong lexeme)
 
-     [:factor [:minus_sign "-"] ^:z np]
-     (let [np-expr (expr np)]
-       (if (number? np-expr)
-         (- np-expr)
-         (list '- np-expr)))
+    [:factor [:minus_sign "-"] ^:z np]
+    (let [np-expr (expr np)]
+      (if (number? np-expr)
+        (- np-expr)
+        (list '- np-expr)))
 
-     [:factor [:plus_sign "+"] ^:z np]
-     ;;=>
-     (expr np)
+    [:factor [:plus_sign "+"] ^:z np]
+    ;;=>
+    (expr np)
 
-     [:character_string_literal lexeme]
-     ;;=>
-     (subs lexeme 1 (dec (count lexeme)))
+    [:character_string_literal lexeme]
+    ;;=>
+    (subs lexeme 1 (dec (count lexeme)))
 
-     [:point_in_time ^:z dte]
-     ;;=>
-     (expr dte)
+    [:point_in_time ^:z dte]
+    ;;=>
+    (expr dte)
 
-     [:timestamp_literal _
-      [:timestamp_string
-       [:unquoted_timestamp_string
-        [:date_value
-          [:unsigned_integer year]
-          [:minus_sign "-"]
-          [:unsigned_integer month]
-          [:minus_sign "-"]
-          [:unsigned_integer day]]
-        [:unquoted_time_string
-         [:time_value
-          [:unsigned_integer hours]
-          [:unsigned_integer minutes]
-          [:seconds_value
-           [:unsigned_integer seconds]]]]]]]
-     ;;=>
-     (create-local-date-time year month day hours minutes seconds "0")
-
-     [:timestamp_literal _
-      [:timestamp_string
-       [:unquoted_timestamp_string
-        [:date_value
-          [:unsigned_integer year]
-          [:minus_sign "-"]
-          [:unsigned_integer month]
-          [:minus_sign "-"]
-          [:unsigned_integer day]]
-        [:unquoted_time_string
-         [:time_value
-          [:unsigned_integer hours]
-          [:unsigned_integer minutes]
-          [:seconds_value
-           [:unsigned_integer seconds]
-           [:unsigned_integer seconds-fraction]]]]]]]
-     ;;=>
-     (create-local-date-time year month day hours minutes seconds seconds-fraction)
-
-     [:timestamp_literal _
-      [:timestamp_string
-       [:unquoted_timestamp_string
-        [:date_value
-         [:unsigned_integer year]
-         [:minus_sign "-"]
-         [:unsigned_integer month]
-         [:minus_sign "-"]
-         [:unsigned_integer day]]
-        [:unquoted_time_string
-         [:time_value
-          [:unsigned_integer hours]
-          [:unsigned_integer minutes]
-          [:seconds_value
-           [:unsigned_integer seconds]]]
-         [:time_zone_interval
-          [_ sign]
-          [:unsigned_integer offset-hours]
-          [:unsigned_integer offset-minutes]]]]]]
-     ;;=>
-     (create-offset-date-time
-       year month day hours minutes seconds "0" (str sign offset-hours) (str sign offset-minutes))
-
-     [:timestamp_literal _
-      [:timestamp_string
-       [:unquoted_timestamp_string
-        [:date_value
-         [:unsigned_integer year]
-         [:minus_sign "-"]
-         [:unsigned_integer month]
-         [:minus_sign "-"]
-         [:unsigned_integer day]]
-        [:unquoted_time_string
-         [:time_value
-          [:unsigned_integer hours]
-          [:unsigned_integer minutes]
-          [:seconds_value
-           [:unsigned_integer seconds]
-           [:unsigned_integer seconds-fraction]]]
-         [:time_zone_interval
-          [_ sign]
-          [:unsigned_integer offset-hours]
-          [:unsigned_integer offset-minutes]]]]]]
-     ;;=>
-     (create-offset-date-time
-       year month day hours minutes seconds seconds-fraction (str sign offset-hours) (str sign offset-minutes))
-
-     [:date_literal _
-      [:date_string [:date_value [:unsigned_integer year] _ [:unsigned_integer month] _ [:unsigned_integer day]]]]
-     ;;=>
-     (LocalDate/of (Long/parseLong year) (Long/parseLong month) (Long/parseLong day))
-
-     [:time_literal _
-      [:time_string
+    [:timestamp_literal _
+     [:timestamp_string
+      [:unquoted_timestamp_string
+       [:date_value
+        [:unsigned_integer year]
+        [:minus_sign "-"]
+        [:unsigned_integer month]
+        [:minus_sign "-"]
+        [:unsigned_integer day]]
        [:unquoted_time_string
         [:time_value
          [:unsigned_integer hours]
          [:unsigned_integer minutes]
          [:seconds_value
-          [:unsigned_integer seconds]]]]]]
-     ;;=>
-     (create-offset-time hours minutes seconds "0" "0" "0")
+          [:unsigned_integer seconds]]]]]]]
+    ;;=>
+    (create-local-date-time year month day hours minutes seconds "0")
 
-     [:time_literal _
-      [:time_string
+    [:timestamp_literal _
+     [:timestamp_string
+      [:unquoted_timestamp_string
+       [:date_value
+        [:unsigned_integer year]
+        [:minus_sign "-"]
+        [:unsigned_integer month]
+        [:minus_sign "-"]
+        [:unsigned_integer day]]
        [:unquoted_time_string
         [:time_value
          [:unsigned_integer hours]
          [:unsigned_integer minutes]
          [:seconds_value
           [:unsigned_integer seconds]
-          [:unsigned_integer seconds-fraction]]]]]]
-     ;;=>
-     (create-offset-time hours minutes seconds seconds-fraction "0" "0")
+          [:unsigned_integer seconds-fraction]]]]]]]
+    ;;=>
+    (create-local-date-time year month day hours minutes seconds seconds-fraction)
 
-     [:time_literal _
-      [:time_string
+    [:timestamp_literal _
+     [:timestamp_string
+      [:unquoted_timestamp_string
+       [:date_value
+        [:unsigned_integer year]
+        [:minus_sign "-"]
+        [:unsigned_integer month]
+        [:minus_sign "-"]
+        [:unsigned_integer day]]
        [:unquoted_time_string
         [:time_value
          [:unsigned_integer hours]
@@ -478,13 +403,20 @@
         [:time_zone_interval
          [_ sign]
          [:unsigned_integer offset-hours]
-         [:unsigned_integer offset-minutes]]]]]
-     ;;=>
-     (create-offset-time
-       hours minutes seconds "0" (str sign offset-hours) (str sign offset-minutes))
+         [:unsigned_integer offset-minutes]]]]]]
+    ;;=>
+    (create-offset-date-time
+     year month day hours minutes seconds "0" (str sign offset-hours) (str sign offset-minutes))
 
-     [:time_literal _
-      [:time_string
+    [:timestamp_literal _
+     [:timestamp_string
+      [:unquoted_timestamp_string
+       [:date_value
+        [:unsigned_integer year]
+        [:minus_sign "-"]
+        [:unsigned_integer month]
+        [:minus_sign "-"]
+        [:unsigned_integer day]]
        [:unquoted_time_string
         [:time_value
          [:unsigned_integer hours]
@@ -495,336 +427,397 @@
         [:time_zone_interval
          [_ sign]
          [:unsigned_integer offset-hours]
-         [:unsigned_integer offset-minutes]]]]]
-     ;;=>
-     (create-offset-time
-       hours minutes seconds seconds-fraction (str sign offset-hours) (str sign offset-minutes))
-
-     [:interval_literal _
-      [:interval_string [:unquoted_interval_string s]] q]
-     ;;=>
-     (interval-expr s q)
-
-     [:interval_primary ^:z n q]
-     ;; =>
-     (interval-expr (expr n) q)
-
-     [:interval_term ^:z i [:asterisk "*"] ^:z n]
-     ;; =>
-     (list '* (expr i) (expr n))
-
-     [:interval_term ^:z i [:solidus "/"] ^:z n]
-     ;; =>
-     (list '/ (expr i) (expr n))
-
-     [:interval_factor [:minus_sign "-"] ^:z i]
-     ;; =>
-     (list '- (expr i))
-
-     [:interval_factor [:plus_sign "+"] ^:z i]
-     ;; =>
-     (expr i)
-
-     [:interval_value_expression ^:z i1 [:plus_sign "+"] ^:z i2]
-     ;; =>
-     (list '+ (expr i1) (expr i2))
-
-     [:interval_absolute_value_function "ABS" ^:z i]
-     (list 'abs (expr i))
-
-     [:datetime_value_expression ^:z i1 [:plus_sign "+"] ^:z i2]
-     ;; =>
-     (list '+ (expr i1) (expr i2))
-
-     [:interval_value_expression ^:z i1 [:minus_sign "-"] ^:z i2]
-     ;; =>
-     (list '- (expr i1) (expr i2))
-
-     [:datetime_value_expression ^:z i1 [:minus_sign "-"] ^:z i2]
-     ;; =>
-     (list '- (expr i1) (expr i2))
-
-     [:current_date_value_function _] '(current-date)
-     [:current_time_value_function _] '(current-time)
-     [:current_time_value_function _ ^:z tp] (list 'current-time (expr tp))
-     [:current_timestamp_value_function _] '(current-timestamp)
-     [:current_timestamp_value_function _ ^:z tp] (list 'current-timestamp (expr tp))
-     [:current_local_time_value_function _] '(local-time)
-     [:current_local_time_value_function _ ^:z tp] (list 'local-time (expr tp))
-     [:current_local_timestamp_value_function _] '(local-timestamp)
-     [:current_local_timestamp_value_function _ ^:z tp] (list 'local-timestamp (expr tp))
-
-     [:character_like_predicate ^:z rvp [:character_like_predicate_part_2 "LIKE" ^:z cp]]
-     ;;=>
-     (list 'like (expr rvp) (expr cp))
-
-     [:character_like_predicate ^:z rvp [:character_like_predicate_part_2 "NOT" "LIKE" ^:z cp]]
-     ;;=>
-     (list 'not (list 'like (expr rvp) (expr cp)))
-
-     [:regex_like_predicate ^:z rvp [:regex_like_predicate_part_2 "LIKE_REGEX" ^:z cp]]
-     (list 'like-regex (expr rvp) (expr cp) "")
-
-     [:regex_like_predicate ^:z rvp [:regex_like_predicate_part_2 "NOT" "LIKE_REGEX" ^:z cp]]
-     (list 'not (list 'like-regex (expr rvp) (expr cp) ""))
-
-     [:regex_like_predicate ^:z rvp [:regex_like_predicate_part_2 "LIKE_REGEX" ^:z cp "FLAG" ^:z flag]]
-     (list 'like-regex (expr rvp) (expr cp) (expr flag))
-
-     [:regex_like_predicate ^:z rvp [:regex_like_predicate_part_2 "NOT" "LIKE_REGEX" ^:z cp "FLAG" ^:z flag]]
-     (list 'not (list 'like-regex (expr rvp) (expr cp) (expr flag)))
-
-     [:character_substring_function "SUBSTRING" ^:z cve "FROM" ^:z sp "FOR" ^:z sl]
-     ;;=>
-     (list 'substring (expr cve) (expr sp) (expr sl) true)
-
-     [:character_substring_function "SUBSTRING" ^:z cve "FROM" ^:z sp]
-     ;;=>
-     (list 'substring (expr cve) (expr sp) -1 false)
-
-     [:between_predicate ^:z rvp-1 [:between_predicate_part_2 "BETWEEN" ^:z rvp-2 "AND" ^:z rvp-3]]
-     ;;=>
-     (list 'between (expr rvp-1) (expr rvp-2) (expr rvp-3))
-
-     [:between_predicate ^:z rvp-1 [:between_predicate_part_2 "NOT" "BETWEEN" ^:z rvp-2 "AND" ^:z rvp-3]]
-     ;;=>
-     (list 'not (list 'between (expr rvp-1) (expr rvp-2) (expr rvp-3)))
-
-     [:between_predicate ^:z rvp-1 [:between_predicate_part_2 "BETWEEN" mode ^:z rvp-2 "AND" ^:z rvp-3]]
-     ;;=>
-     (let [f (case mode
-               "SYMMETRIC" 'between-symmetric
-               "ASYMMETRIC" 'between)]
-       (list f (expr rvp-1) (expr rvp-2) (expr rvp-3))
-       (list f (expr rvp-1) (expr rvp-2) (expr rvp-3)))
-
-     [:between_predicate ^:z rvp-1 [:between_predicate_part_2 "NOT" "BETWEEN" mode ^:z rvp-2 "AND" ^:z rvp-3]]
-     ;;=>
-     (let [f (case mode
-               "SYMMETRIC" 'between-symmetric
-               "ASYMMETRIC" 'between)]
-       (list 'not (list f (expr rvp-1) (expr rvp-2) (expr rvp-3)))
-       (list 'not (list f (expr rvp-1) (expr rvp-2) (expr rvp-3))))
-
-     [:extract_expression "EXTRACT"
-      [:primary_datetime_field [:non_second_primary_datetime_field extract-field]] "FROM" ^:z es]
-     ;;=>
-     (list 'extract extract-field (expr es))
-
-     [:modulus_expression _ ^:z nve-1 ^:z nve-2]
-     ;;=>
-     (list 'mod (expr nve-1) (expr nve-2))
-
-     [:power_function _ ^:z nve-1 ^:z nve-2]
-     ;;=>
-     (list 'power (expr nve-1) (expr nve-2))
-
-     [:absolute_value_expression _ ^:z nve]
-     ;;=>
-     (list 'abs (expr nve))
-
-     [:ceiling_function _ ^:z nve]
-     ;;=>
-     (list 'ceil (expr nve))
-
-     [:floor_function _ ^:z nve]
-     ;;=>
-     (list 'floor (expr nve))
-
-     [:natural_logarithm _ ^:z nve]
-     ;;=>
-     (list 'ln (expr nve))
-
-     [:exponential_function _ ^:z nve]
-     ;;=>
-     (list 'exp (expr nve))
-
-     [:common_logarithm _ ^:z nve]
-     ;;=>
-     (list 'log10 (expr nve))
-
-     [:general_logarithm_function _ ^:z nve-1 ^:z nve-2]
-     ;;=>
-     (list 'log (expr nve-1) (expr nve-2))
-
-     [:trigonometric_function [:trigonometric_function_name tfn] ^:z nve]
-     ;;=>
-     (list (symbol (str/lower-case tfn)) (expr nve))
-
-     [:trim_function _ [:trim_operands [:trim_specification trim-spec] ^:z trim-char _ ^:z nve]]
-     (list 'trim (expr nve) trim-spec (expr trim-char))
-
-     [:trim_function _ [:trim_operands [:trim_specification trim-spec] _ ^:z nve]]
-     (list 'trim (expr nve) trim-spec " ")
-
-     [:trim_function _ [:trim_operands ^:z nve]]
-     (list 'trim (expr nve) "BOTH" " ")
-
-     [:fold mode ^:z nve]
-     (case mode
-       "LOWER" (list 'lower (expr nve))
-       "UPPER" (list 'upper (expr nve)))
-
-     [:concatenation ^:z nve1 _ ^:z nve2]
-     (list 'concat (expr nve1) (expr nve2))
-
-     [:character_position_expression _ ^:z needle _ ^:z haystack]
-     (list 'position (expr needle) (expr haystack) "CHARACTERS")
-
-     [:character_position_expression _ ^:z needle _ ^:z haystack _ [:char_length_units unit]]
-     (list 'position (expr needle) (expr haystack) unit)
-
-     [:char_length_expression _ ^:z nve]
-     (list 'character-length (expr nve) "CHARACTERS")
-
-     [:char_length_expression _ ^:z nve _ [:char_length_units unit]]
-     (list 'character-length (expr nve) unit)
-
-     [:octet_length_expression _ ^:z nve]
-     (list 'octet-length (expr nve))
-
-     [:character_overlay_function _ ^:z target _ ^:z placing _ ^:z pos _ ^:z len]
-     (list 'overlay (expr target) (expr placing) (expr pos) (expr len))
-
-     [:character_overlay_function _ ^:z target _ ^:z placing _ ^:z pos]
-     ;; assuming common sub expression & constant folding optimisations should make their way in at some point
-     ;; calculating the default length like this should not be a problem.
-     (list 'overlay (expr target) (expr placing) (expr pos) (list 'default-overlay-length (expr placing)))
-
-     [:named_columns_join _ _]
-     ;;=>
-     (reduce
-      (fn [acc expr]
-        (list 'and acc expr))
-      (let [{:keys [join-columns] :as env} (sem/named-columns-join-env z)]
-        (for [column join-columns]
-          (->> (for [side [:lhs :rhs]]
-                 (qualified-projection-symbol (first (get-in env [side column]))))
-               (apply list '=)))))
-
-     [:aggregate_function _]
-     ;;=>
-     (aggregate-symbol "agg_out" z)
-
-     [:aggregate_function "COUNT" [:asterisk "*"]]
-     ;;=>
-     (aggregate-symbol "agg_out" z)
-
-     [:aggregate_function _ _]
-     ;;=>
-     (aggregate-symbol "agg_out" z)
-
-     [:subquery ^:z qe]
-     ;;=>
-     (let [subquery-type (sem/subquery-type z)]
-       (case (:type subquery-type)
-         :scalar_subquery (first (subquery-projection-symbols qe))))
-
-     [:exists_predicate _
-      [:subquery ^:z qe]]
-     ;;=>
-     (exists-symbol qe)
-
-     [:in_predicate _ [:in_predicate_part_2 _ [:in_predicate_value [:subquery ^:z qe]]]]
-     ;;=>
-     (exists-symbol qe)
-
-     [:in_predicate _ [:in_predicate_part_2 _ [:in_predicate_value ^:z ivl]]]
-     ;;=>
-     (exists-symbol ivl)
-
-     [:in_predicate _ [:in_predicate_part_2 "NOT" _ [:in_predicate_value [:subquery ^:z qe]]]]
-     ;;=>
-     (exists-symbol qe)
-
-     [:in_predicate _ [:in_predicate_part_2 "NOT" _ [:in_predicate_value ^:z ivl]]]
-     ;;=>
-     (exists-symbol ivl)
-
-     [:quantified_comparison_predicate _ [:quantified_comparison_predicate_part_2 _ [:some _] [:subquery ^:z qe]]]
-     ;;=>
-     (exists-symbol qe)
-
-     [:quantified_comparison_predicate _ [:quantified_comparison_predicate_part_2 _ [:all _] [:subquery ^:z qe]]]
-     ;;=>
-     (exists-symbol qe)
-
-     [:array_value_constructor_by_enumeration _ ^:z list]
-     ;; =>
-     (vec (expr list))
-
-     [:array_value_constructor_by_query _ [:subquery ^:z qe]]
-     ;; =>
-     (subquery-array-symbol qe)
-
-     [:array_element_reference ^:z ave ^:z nve]
-     ;;=>
-     (list 'nth (expr ave) (expr nve))
-
-     [:trim_array_function _ ^:z a, ^:z n]
-     (list 'trim-array (expr a) (expr n))
-
-     [:dynamic_parameter_specification _]
-     ;;=>
-     (symbol (str "?_" (sem/dynamic-param-idx z)))
-
-     [:period_contains_predicate ^:z p1_predicand [:period_contains_predicate_part_2 _ ^:z p2_predicand]]
-     ;;=>
-     (let [p1 (expr p1_predicand)
-           p2 (expr p2_predicand)]
-       (list 'and (list '<= (:start p1) (or (:start p2) p2)) (list '>= (:end p1) (or (:end p2) p2))))
-
-     [:period_overlaps_predicate ^:z p1_predicand [:period_overlaps_predicate_part_2 _ ^:z p2_predicand]]
-     ;;=>
-     (let [p1 (expr p1_predicand)
-           p2 (expr p2_predicand)]
-       (list 'and (list '< (:start p1) (:end p2)) (list '> (:end p1) (:start p2))))
-
-     [:period_equals_predicate ^:z p1_predicand [:period_equals_predicate_part_2 _ ^:z p2_predicand]]
-     ;;=>
-     (let [p1 (expr p1_predicand)
-           p2 (expr p2_predicand)]
-       (list 'and (list '= (:start p1) (:start p2)) (list '= (:end p1) (:end p2))))
-
-     [:period_precedes_predicate ^:z p1_predicand [:period_precedes_predicate_part_2 _ ^:z p2_predicand]]
-     ;;=>
-     (let [p1 (expr p1_predicand)
-           p2 (expr p2_predicand)]
-       (list '<= (:end p1) (:start p2)))
-
-     [:period_succeeds_predicate ^:z p1_predicand [:period_succeeds_predicate_part_2 _ ^:z p2_predicand]]
-     ;;=>
-     (let [p1 (expr p1_predicand)
-           p2 (expr p2_predicand)]
-       (list '>= (:start p1) (:end p2)))
-
-     [:period_immediately_precedes_predicate ^:z p1_predicand [:period_immediately_precedes_predicate_part_2 _ _ ^:z p2_predicand]]
-     ;;=>
-     (let [p1 (expr p1_predicand)
-           p2 (expr p2_predicand)]
-       (list '= (:end p1) (:start p2)))
-
-     [:period_immediately_succeeds_predicate ^:z p1_predicand [:period_immediately_succeeds_predicate_part_2 _ _ ^:z p2_predicand]]
-     ;;=>
-     (let [p1 (expr p1_predicand)
-           p2 (expr p2_predicand)]
-       (list '= (:start p1) (:end p2)))
-
-     [:period_predicand ^:z col]
-     ;;=>
-     (let [app-time-symbol (str (expr col))]
-       {:start (symbol (str/replace app-time-symbol "APP_TIME" "application_time_start"))
-        :end (symbol (str/replace app-time-symbol "APP_TIME" "application_time_end"))})
-
-     [:period_predicand "PERIOD" start end]
-     ;;=>
-     {:start (expr start) :end (expr end)}
-
-     [:search_condition ^:z bve]
-     ;;=>
-     (expr bve)
-
-     (expr-varargs z))))
+         [:unsigned_integer offset-minutes]]]]]]
+    ;;=>
+    (create-offset-date-time
+     year month day hours minutes seconds seconds-fraction (str sign offset-hours) (str sign offset-minutes))
+
+    [:date_literal _
+     [:date_string [:date_value [:unsigned_integer year] _ [:unsigned_integer month] _ [:unsigned_integer day]]]]
+    ;;=>
+    (LocalDate/of (Long/parseLong year) (Long/parseLong month) (Long/parseLong day))
+
+    [:time_literal _
+     [:time_string
+      [:unquoted_time_string
+       [:time_value
+        [:unsigned_integer hours]
+        [:unsigned_integer minutes]
+        [:seconds_value
+         [:unsigned_integer seconds]]]]]]
+    ;;=>
+    (create-offset-time hours minutes seconds "0" "0" "0")
+
+    [:time_literal _
+     [:time_string
+      [:unquoted_time_string
+       [:time_value
+        [:unsigned_integer hours]
+        [:unsigned_integer minutes]
+        [:seconds_value
+         [:unsigned_integer seconds]
+         [:unsigned_integer seconds-fraction]]]]]]
+    ;;=>
+    (create-offset-time hours minutes seconds seconds-fraction "0" "0")
+
+    [:time_literal _
+     [:time_string
+      [:unquoted_time_string
+       [:time_value
+        [:unsigned_integer hours]
+        [:unsigned_integer minutes]
+        [:seconds_value
+         [:unsigned_integer seconds]]]
+       [:time_zone_interval
+        [_ sign]
+        [:unsigned_integer offset-hours]
+        [:unsigned_integer offset-minutes]]]]]
+    ;;=>
+    (create-offset-time
+     hours minutes seconds "0" (str sign offset-hours) (str sign offset-minutes))
+
+    [:time_literal _
+     [:time_string
+      [:unquoted_time_string
+       [:time_value
+        [:unsigned_integer hours]
+        [:unsigned_integer minutes]
+        [:seconds_value
+         [:unsigned_integer seconds]
+         [:unsigned_integer seconds-fraction]]]
+       [:time_zone_interval
+        [_ sign]
+        [:unsigned_integer offset-hours]
+        [:unsigned_integer offset-minutes]]]]]
+    ;;=>
+    (create-offset-time
+     hours minutes seconds seconds-fraction (str sign offset-hours) (str sign offset-minutes))
+
+    [:interval_literal _
+     [:interval_string [:unquoted_interval_string s]] q]
+    ;;=>
+    (interval-expr s q)
+
+    [:interval_primary ^:z n q]
+    ;; =>
+    (interval-expr (expr n) q)
+
+    [:interval_term ^:z i [:asterisk "*"] ^:z n]
+    ;; =>
+    (list '* (expr i) (expr n))
+
+    [:interval_term ^:z i [:solidus "/"] ^:z n]
+    ;; =>
+    (list '/ (expr i) (expr n))
+
+    [:interval_factor [:minus_sign "-"] ^:z i]
+    ;; =>
+    (list '- (expr i))
+
+    [:interval_factor [:plus_sign "+"] ^:z i]
+    ;; =>
+    (expr i)
+
+    [:interval_value_expression ^:z i1 [:plus_sign "+"] ^:z i2]
+    ;; =>
+    (list '+ (expr i1) (expr i2))
+
+    [:interval_absolute_value_function "ABS" ^:z i]
+    (list 'abs (expr i))
+
+    [:datetime_value_expression ^:z i1 [:plus_sign "+"] ^:z i2]
+    ;; =>
+    (list '+ (expr i1) (expr i2))
+
+    [:interval_value_expression ^:z i1 [:minus_sign "-"] ^:z i2]
+    ;; =>
+    (list '- (expr i1) (expr i2))
+
+    [:datetime_value_expression ^:z i1 [:minus_sign "-"] ^:z i2]
+    ;; =>
+    (list '- (expr i1) (expr i2))
+
+    [:current_date_value_function _] '(current-date)
+    [:current_time_value_function _] '(current-time)
+    [:current_time_value_function _ ^:z tp] (list 'current-time (expr tp))
+    [:current_timestamp_value_function _] '(current-timestamp)
+    [:current_timestamp_value_function _ ^:z tp] (list 'current-timestamp (expr tp))
+    [:current_local_time_value_function _] '(local-time)
+    [:current_local_time_value_function _ ^:z tp] (list 'local-time (expr tp))
+    [:current_local_timestamp_value_function _] '(local-timestamp)
+    [:current_local_timestamp_value_function _ ^:z tp] (list 'local-timestamp (expr tp))
+
+    [:character_like_predicate ^:z rvp [:character_like_predicate_part_2 "LIKE" ^:z cp]]
+    ;;=>
+    (list 'like (expr rvp) (expr cp))
+
+    [:character_like_predicate ^:z rvp [:character_like_predicate_part_2 "NOT" "LIKE" ^:z cp]]
+    ;;=>
+    (list 'not (list 'like (expr rvp) (expr cp)))
+
+    [:regex_like_predicate ^:z rvp [:regex_like_predicate_part_2 "LIKE_REGEX" ^:z cp]]
+    (list 'like-regex (expr rvp) (expr cp) "")
+
+    [:regex_like_predicate ^:z rvp [:regex_like_predicate_part_2 "NOT" "LIKE_REGEX" ^:z cp]]
+    (list 'not (list 'like-regex (expr rvp) (expr cp) ""))
+
+    [:regex_like_predicate ^:z rvp [:regex_like_predicate_part_2 "LIKE_REGEX" ^:z cp "FLAG" ^:z flag]]
+    (list 'like-regex (expr rvp) (expr cp) (expr flag))
+
+    [:regex_like_predicate ^:z rvp [:regex_like_predicate_part_2 "NOT" "LIKE_REGEX" ^:z cp "FLAG" ^:z flag]]
+    (list 'not (list 'like-regex (expr rvp) (expr cp) (expr flag)))
+
+    [:character_substring_function "SUBSTRING" ^:z cve "FROM" ^:z sp "FOR" ^:z sl]
+    ;;=>
+    (list 'substring (expr cve) (expr sp) (expr sl) true)
+
+    [:character_substring_function "SUBSTRING" ^:z cve "FROM" ^:z sp]
+    ;;=>
+    (list 'substring (expr cve) (expr sp) -1 false)
+
+    [:between_predicate ^:z rvp-1 [:between_predicate_part_2 "BETWEEN" ^:z rvp-2 "AND" ^:z rvp-3]]
+    ;;=>
+    (list 'between (expr rvp-1) (expr rvp-2) (expr rvp-3))
+
+    [:between_predicate ^:z rvp-1 [:between_predicate_part_2 "NOT" "BETWEEN" ^:z rvp-2 "AND" ^:z rvp-3]]
+    ;;=>
+    (list 'not (list 'between (expr rvp-1) (expr rvp-2) (expr rvp-3)))
+
+    [:between_predicate ^:z rvp-1 [:between_predicate_part_2 "BETWEEN" mode ^:z rvp-2 "AND" ^:z rvp-3]]
+    ;;=>
+    (let [f (case mode
+              "SYMMETRIC" 'between-symmetric
+              "ASYMMETRIC" 'between)]
+      (list f (expr rvp-1) (expr rvp-2) (expr rvp-3))
+      (list f (expr rvp-1) (expr rvp-2) (expr rvp-3)))
+
+    [:between_predicate ^:z rvp-1 [:between_predicate_part_2 "NOT" "BETWEEN" mode ^:z rvp-2 "AND" ^:z rvp-3]]
+    ;;=>
+    (let [f (case mode
+              "SYMMETRIC" 'between-symmetric
+              "ASYMMETRIC" 'between)]
+      (list 'not (list f (expr rvp-1) (expr rvp-2) (expr rvp-3)))
+      (list 'not (list f (expr rvp-1) (expr rvp-2) (expr rvp-3))))
+
+    [:extract_expression "EXTRACT"
+     [:primary_datetime_field [:non_second_primary_datetime_field extract-field]] "FROM" ^:z es]
+    ;;=>
+    (list 'extract extract-field (expr es))
+
+    [:modulus_expression _ ^:z nve-1 ^:z nve-2]
+    ;;=>
+    (list 'mod (expr nve-1) (expr nve-2))
+
+    [:power_function _ ^:z nve-1 ^:z nve-2]
+    ;;=>
+    (list 'power (expr nve-1) (expr nve-2))
+
+    [:absolute_value_expression _ ^:z nve]
+    ;;=>
+    (list 'abs (expr nve))
+
+    [:ceiling_function _ ^:z nve]
+    ;;=>
+    (list 'ceil (expr nve))
+
+    [:floor_function _ ^:z nve]
+    ;;=>
+    (list 'floor (expr nve))
+
+    [:natural_logarithm _ ^:z nve]
+    ;;=>
+    (list 'ln (expr nve))
+
+    [:exponential_function _ ^:z nve]
+    ;;=>
+    (list 'exp (expr nve))
+
+    [:common_logarithm _ ^:z nve]
+    ;;=>
+    (list 'log10 (expr nve))
+
+    [:general_logarithm_function _ ^:z nve-1 ^:z nve-2]
+    ;;=>
+    (list 'log (expr nve-1) (expr nve-2))
+
+    [:trigonometric_function [:trigonometric_function_name tfn] ^:z nve]
+    ;;=>
+    (list (symbol (str/lower-case tfn)) (expr nve))
+
+    [:trim_function _ [:trim_operands [:trim_specification trim-spec] ^:z trim-char _ ^:z nve]]
+    (list 'trim (expr nve) trim-spec (expr trim-char))
+
+    [:trim_function _ [:trim_operands [:trim_specification trim-spec] _ ^:z nve]]
+    (list 'trim (expr nve) trim-spec " ")
+
+    [:trim_function _ [:trim_operands ^:z nve]]
+    (list 'trim (expr nve) "BOTH" " ")
+
+    [:fold mode ^:z nve]
+    (case mode
+      "LOWER" (list 'lower (expr nve))
+      "UPPER" (list 'upper (expr nve)))
+
+    [:concatenation ^:z nve1 _ ^:z nve2]
+    (list 'concat (expr nve1) (expr nve2))
+
+    [:character_position_expression _ ^:z needle _ ^:z haystack]
+    (list 'position (expr needle) (expr haystack) "CHARACTERS")
+
+    [:character_position_expression _ ^:z needle _ ^:z haystack _ [:char_length_units unit]]
+    (list 'position (expr needle) (expr haystack) unit)
+
+    [:char_length_expression _ ^:z nve]
+    (list 'character-length (expr nve) "CHARACTERS")
+
+    [:char_length_expression _ ^:z nve _ [:char_length_units unit]]
+    (list 'character-length (expr nve) unit)
+
+    [:octet_length_expression _ ^:z nve]
+    (list 'octet-length (expr nve))
+
+    [:character_overlay_function _ ^:z target _ ^:z placing _ ^:z pos _ ^:z len]
+    (list 'overlay (expr target) (expr placing) (expr pos) (expr len))
+
+    [:character_overlay_function _ ^:z target _ ^:z placing _ ^:z pos]
+    ;; assuming common sub expression & constant folding optimisations should make their way in at some point
+    ;; calculating the default length like this should not be a problem.
+    (list 'overlay (expr target) (expr placing) (expr pos) (list 'default-overlay-length (expr placing)))
+
+    [:named_columns_join _ _]
+    ;;=>
+    (reduce
+     (fn [acc expr]
+       (list 'and acc expr))
+     (let [{:keys [join-columns] :as env} (sem/named-columns-join-env z)]
+       (for [column join-columns]
+         (->> (for [side [:lhs :rhs]]
+                (qualified-projection-symbol (first (get-in env [side column]))))
+              (apply list '=)))))
+
+    [:aggregate_function _]
+    ;;=>
+    (aggregate-symbol "agg_out" z)
+
+    [:aggregate_function "COUNT" [:asterisk "*"]]
+    ;;=>
+    (aggregate-symbol "agg_out" z)
+
+    [:aggregate_function _ _]
+    ;;=>
+    (aggregate-symbol "agg_out" z)
+
+    [:subquery ^:z qe]
+    ;;=>
+    (let [subquery-type (sem/subquery-type z)]
+      (case (:type subquery-type)
+        :scalar_subquery (first (subquery-projection-symbols qe))))
+
+    [:exists_predicate _
+     [:subquery ^:z qe]]
+    ;;=>
+    (exists-symbol qe)
+
+    [:in_predicate _ [:in_predicate_part_2 _ [:in_predicate_value [:subquery ^:z qe]]]]
+    ;;=>
+    (exists-symbol qe)
+
+    [:in_predicate _ [:in_predicate_part_2 _ [:in_predicate_value ^:z ivl]]]
+    ;;=>
+    (exists-symbol ivl)
+
+    [:in_predicate _ [:in_predicate_part_2 "NOT" _ [:in_predicate_value [:subquery ^:z qe]]]]
+    ;;=>
+    (exists-symbol qe)
+
+    [:in_predicate _ [:in_predicate_part_2 "NOT" _ [:in_predicate_value ^:z ivl]]]
+    ;;=>
+    (exists-symbol ivl)
+
+    [:quantified_comparison_predicate _ [:quantified_comparison_predicate_part_2 _ [:some _] [:subquery ^:z qe]]]
+    ;;=>
+    (exists-symbol qe)
+
+    [:quantified_comparison_predicate _ [:quantified_comparison_predicate_part_2 _ [:all _] [:subquery ^:z qe]]]
+    ;;=>
+    (exists-symbol qe)
+
+    [:array_value_constructor_by_enumeration _ ^:z list]
+    ;; =>
+    (vec (expr list))
+
+    [:array_value_constructor_by_query _ [:subquery ^:z qe]]
+    ;; =>
+    (subquery-array-symbol qe)
+
+    [:array_element_reference ^:z ave ^:z nve]
+    ;;=>
+    (list 'nth (expr ave) (expr nve))
+
+    [:trim_array_function _ ^:z a, ^:z n]
+    (list 'trim-array (expr a) (expr n))
+
+    [:dynamic_parameter_specification _]
+    ;;=>
+    (symbol (str "?_" (sem/dynamic-param-idx z)))
+
+    [:period_contains_predicate ^:z p1_predicand [:period_contains_predicate_part_2 _ ^:z p2_predicand]]
+    ;;=>
+    (let [p1 (expr p1_predicand)
+          p2 (expr p2_predicand)]
+      (list 'and (list '<= (:start p1) (or (:start p2) p2)) (list '>= (:end p1) (or (:end p2) p2))))
+
+    [:period_overlaps_predicate ^:z p1_predicand [:period_overlaps_predicate_part_2 _ ^:z p2_predicand]]
+    ;;=>
+    (let [p1 (expr p1_predicand)
+          p2 (expr p2_predicand)]
+      (list 'and (list '< (:start p1) (:end p2)) (list '> (:end p1) (:start p2))))
+
+    [:period_equals_predicate ^:z p1_predicand [:period_equals_predicate_part_2 _ ^:z p2_predicand]]
+    ;;=>
+    (let [p1 (expr p1_predicand)
+          p2 (expr p2_predicand)]
+      (list 'and (list '= (:start p1) (:start p2)) (list '= (:end p1) (:end p2))))
+
+    [:period_precedes_predicate ^:z p1_predicand [:period_precedes_predicate_part_2 _ ^:z p2_predicand]]
+    ;;=>
+    (let [p1 (expr p1_predicand)
+          p2 (expr p2_predicand)]
+      (list '<= (:end p1) (:start p2)))
+
+    [:period_succeeds_predicate ^:z p1_predicand [:period_succeeds_predicate_part_2 _ ^:z p2_predicand]]
+    ;;=>
+    (let [p1 (expr p1_predicand)
+          p2 (expr p2_predicand)]
+      (list '>= (:start p1) (:end p2)))
+
+    [:period_immediately_precedes_predicate ^:z p1_predicand [:period_immediately_precedes_predicate_part_2 _ _ ^:z p2_predicand]]
+    ;;=>
+    (let [p1 (expr p1_predicand)
+          p2 (expr p2_predicand)]
+      (list '= (:end p1) (:start p2)))
+
+    [:period_immediately_succeeds_predicate ^:z p1_predicand [:period_immediately_succeeds_predicate_part_2 _ _ ^:z p2_predicand]]
+    ;;=>
+    (let [p1 (expr p1_predicand)
+          p2 (expr p2_predicand)]
+      (list '= (:start p1) (:end p2)))
+
+    [:period_predicand ^:z col]
+    ;;=>
+    (let [app-time-symbol (str (expr col))]
+      {:start (symbol (str/replace app-time-symbol "APP_TIME" "application_time_start"))
+       :end (symbol (str/replace app-time-symbol "APP_TIME" "application_time_end"))})
+
+    [:period_predicand "PERIOD" start end]
+    ;;=>
+    {:start (expr start) :end (expr end)}
+
+    [:search_condition ^:z bve]
+    ;;=>
+    (expr bve)
+
+    (expr-varargs z)))
 
 ;; Logical plan.
 
@@ -1608,192 +1601,190 @@
     (throw (IllegalArgumentException. (str "cannot calculate columns for: " (pr-str relation-in))))))
 
 (defn plan [z]
-  (maybe-add-ref
-   z
-   (r/zmatch z
-     [:directly_executable_statement ^:z dsds]
-     (plan dsds)
+  (r/zmatch z
+    [:directly_executable_statement ^:z dsds]
+    (plan dsds)
 
-     [:insert_statement "INSERT" "INTO" [:regular_identifier table] ^:z from-subquery]
-     [:insert {:table table}
-      (plan from-subquery)]
+    [:insert_statement "INSERT" "INTO" [:regular_identifier table] ^:z from-subquery]
+    [:insert {:table table}
+     (plan from-subquery)]
 
-     [:from_subquery column-list ^:z query-expression]
-     (let [columns (mapv (comp symbol second) (rest column-list))
-           qe-plan (plan query-expression)
-           rename-map (zipmap (relation-columns qe-plan) columns)]
-       [:rename rename-map qe-plan])
+    [:from_subquery column-list ^:z query-expression]
+    (let [columns (mapv (comp symbol second) (rest column-list))
+          qe-plan (plan query-expression)
+          rename-map (zipmap (relation-columns qe-plan) columns)]
+      [:rename rename-map qe-plan])
 
-     [:from_subquery ^:z query-expression]
-     (plan query-expression)
+    [:from_subquery ^:z query-expression]
+    (plan query-expression)
 
-     [:query_expression ^:z qeb]
-     (plan qeb)
+    [:query_expression ^:z qeb]
+    (plan qeb)
 
-     [:query_expression ^:z qeb [:order_by_clause _ _ ^:z ssl]]
-     (wrap-with-order-by ssl (plan qeb))
+    [:query_expression ^:z qeb [:order_by_clause _ _ ^:z ssl]]
+    (wrap-with-order-by ssl (plan qeb))
 
-     ;; TODO: Deal properly with WITH?
-     [:query_expression [:with_clause "WITH" _] ^:z qeb [:order_by_clause _ _ ^:z ssl]]
-     (wrap-with-order-by ssl (plan qeb))
+    ;; TODO: Deal properly with WITH?
+    [:query_expression [:with_clause "WITH" _] ^:z qeb [:order_by_clause _ _ ^:z ssl]]
+    (wrap-with-order-by ssl (plan qeb))
 
-     [:query_expression ^:z qeb [:result_offset_clause _ rorc _]]
-     [:top {:skip (expr rorc)} (plan qeb)]
+    [:query_expression ^:z qeb [:result_offset_clause _ rorc _]]
+    [:top {:skip (expr rorc)} (plan qeb)]
 
-     [:query_expression ^:z qeb [:order_by_clause _ _ ^:z ssl] [:result_offset_clause _ rorc _]]
-     [:top {:skip (expr rorc)} (wrap-with-order-by ssl (plan qeb))]
+    [:query_expression ^:z qeb [:order_by_clause _ _ ^:z ssl] [:result_offset_clause _ rorc _]]
+    [:top {:skip (expr rorc)} (wrap-with-order-by ssl (plan qeb))]
 
-     [:query_expression ^:z qeb [:fetch_first_clause _ _ ffrc _ _]]
-     [:top {:limit (expr ffrc)} (plan qeb)]
+    [:query_expression ^:z qeb [:fetch_first_clause _ _ ffrc _ _]]
+    [:top {:limit (expr ffrc)} (plan qeb)]
 
-     [:query_expression ^:z qeb [:order_by_clause _ _ ^:z ssl] [:fetch_first_clause _ _ ffrc _ _]]
-     [:top {:limit (expr ffrc)} (wrap-with-order-by ssl (plan qeb))]
+    [:query_expression ^:z qeb [:order_by_clause _ _ ^:z ssl] [:fetch_first_clause _ _ ffrc _ _]]
+    [:top {:limit (expr ffrc)} (wrap-with-order-by ssl (plan qeb))]
 
-     [:query_expression ^:z qeb [:result_offset_clause _ rorc _] [:fetch_first_clause _ _ ffrc _ _]]
-     [:top {:skip (expr rorc) :limit (expr ffrc)} (plan qeb)]
+    [:query_expression ^:z qeb [:result_offset_clause _ rorc _] [:fetch_first_clause _ _ ffrc _ _]]
+    [:top {:skip (expr rorc) :limit (expr ffrc)} (plan qeb)]
 
-     [:query_expression ^:z qeb [:order_by_clause _ _ ^:z ssl] [:result_offset_clause _ rorc _] [:fetch_first_clause _ _ ffrc _ _]]
-     [:top {:skip (expr rorc) :limit (expr ffrc)} (wrap-with-order-by ssl (plan qeb))]
+    [:query_expression ^:z qeb [:order_by_clause _ _ ^:z ssl] [:result_offset_clause _ rorc _] [:fetch_first_clause _ _ ffrc _ _]]
+    [:top {:skip (expr rorc) :limit (expr ffrc)} (wrap-with-order-by ssl (plan qeb))]
 
-     [:query_specification _ ^:z sl ^:z te]
-     ;;=>
-     (build-query-specification sl te)
+    [:query_specification _ ^:z sl ^:z te]
+    ;;=>
+    (build-query-specification sl te)
 
-     [:query_specification _ [:set_quantifier "ALL"] ^:z sl ^:z te]
-     ;;=>
-     (build-query-specification sl te)
+    [:query_specification _ [:set_quantifier "ALL"] ^:z sl ^:z te]
+    ;;=>
+    (build-query-specification sl te)
 
-     [:query_specification _ [:set_quantifier "DISTINCT"] ^:z sl ^:z te]
-     ;;=>
-     [:distinct (build-query-specification sl te)]
+    [:query_specification _ [:set_quantifier "DISTINCT"] ^:z sl ^:z te]
+    ;;=>
+    [:distinct (build-query-specification sl te)]
 
-     [:query_expression_body ^:z qeb "UNION" ^:z qt]
-     [:distinct (build-set-op :union-all qeb qt)]
+    [:query_expression_body ^:z qeb "UNION" ^:z qt]
+    [:distinct (build-set-op :union-all qeb qt)]
 
-     [:query_expression_body ^:z qeb "UNION" "ALL" ^:z qt]
-     (build-set-op :union-all qeb qt)
+    [:query_expression_body ^:z qeb "UNION" "ALL" ^:z qt]
+    (build-set-op :union-all qeb qt)
 
-     [:query_expression_body ^:z qeb "EXCEPT" ^:z qt]
-     [:distinct (build-set-op :difference qeb qt)]
+    [:query_expression_body ^:z qeb "EXCEPT" ^:z qt]
+    [:distinct (build-set-op :difference qeb qt)]
 
-     [:query_expression_body ^:z qeb "EXCEPT" "ALL" ^:z qt]
-     (build-set-op :difference qeb qt)
+    [:query_expression_body ^:z qeb "EXCEPT" "ALL" ^:z qt]
+    (build-set-op :difference qeb qt)
 
-     [:query_term ^:z qt "INTERSECT" ^:z qp]
-     [:distinct (build-set-op :intersect qt qp)]
+    [:query_term ^:z qt "INTERSECT" ^:z qp]
+    [:distinct (build-set-op :intersect qt qp)]
 
-     [:query_term ^:z qt "INTERSECT" "ALL" ^:z qp]
-     (build-set-op :intersect qt qp)
+    [:query_term ^:z qt "INTERSECT" "ALL" ^:z qp]
+    (build-set-op :intersect qt qp)
 
-     [:table_expression ^:z fc]
-     ;;=>
-     (cond->> (plan fc)
-       (needs-group-by? z) (wrap-with-group-by z))
+    [:table_expression ^:z fc]
+    ;;=>
+    (cond->> (plan fc)
+      (needs-group-by? z) (wrap-with-group-by z))
 
-     [:table_expression ^:z fc [:group_by_clause _ _ _]]
-     ;;=>
-     (wrap-with-group-by z (plan fc))
+    [:table_expression ^:z fc [:group_by_clause _ _ _]]
+    ;;=>
+    (wrap-with-group-by z (plan fc))
 
-     [:table_expression ^:z fc [:where_clause _ ^:z sc]]
-     ;;=>
-     (cond->> (wrap-with-select sc (plan fc))
-       (needs-group-by? z) (wrap-with-group-by z))
+    [:table_expression ^:z fc [:where_clause _ ^:z sc]]
+    ;;=>
+    (cond->> (wrap-with-select sc (plan fc))
+      (needs-group-by? z) (wrap-with-group-by z))
 
-     [:table_expression ^:z fc [:where_clause _ ^:z sc] [:group_by_clause _ _ _]]
-     ;;=>
-     (->> (wrap-with-select sc (plan fc))
-          (wrap-with-group-by z))
+    [:table_expression ^:z fc [:where_clause _ ^:z sc] [:group_by_clause _ _ _]]
+    ;;=>
+    (->> (wrap-with-select sc (plan fc))
+         (wrap-with-group-by z))
 
-     [:table_expression ^:z fc [:where_clause _ ^:z sc] [:group_by_clause _ _ _] [:having_clause _ ^:z hsc]]
-     ;;=>
-     (->> (wrap-with-select sc (plan fc))
-          (wrap-with-group-by z)
-          (wrap-with-select hsc))
+    [:table_expression ^:z fc [:where_clause _ ^:z sc] [:group_by_clause _ _ _] [:having_clause _ ^:z hsc]]
+    ;;=>
+    (->> (wrap-with-select sc (plan fc))
+         (wrap-with-group-by z)
+         (wrap-with-select hsc))
 
-     [:table_expression ^:z fc [:where_clause _ ^:z sc] [:having_clause _ ^:z hsc]]
-     ;;=>
-     (->> (wrap-with-select sc (plan fc))
-          (wrap-with-group-by z)
-          (wrap-with-select hsc))
+    [:table_expression ^:z fc [:where_clause _ ^:z sc] [:having_clause _ ^:z hsc]]
+    ;;=>
+    (->> (wrap-with-select sc (plan fc))
+         (wrap-with-group-by z)
+         (wrap-with-select hsc))
 
-     [:table_expression ^:z fc [:group_by_clause _ _ _] [:having_clause _ ^:z hsc]]
-     ;;=>
-     (->> (wrap-with-group-by z (plan fc))
-          (wrap-with-select hsc))
+    [:table_expression ^:z fc [:group_by_clause _ _ _] [:having_clause _ ^:z hsc]]
+    ;;=>
+    (->> (wrap-with-group-by z (plan fc))
+         (wrap-with-select hsc))
 
-     [:table_expression ^:z fc [:having_clause _ ^:z hsc]]
-     ;;=>
-     (->> (wrap-with-group-by z (plan fc))
-          (wrap-with-select hsc))
+    [:table_expression ^:z fc [:having_clause _ ^:z hsc]]
+    ;;=>
+    (->> (wrap-with-group-by z (plan fc))
+         (wrap-with-select hsc))
 
-     [:table_primary [:collection_derived_table _ _] _ _]
-     ;;=>
-     (build-collection-derived-table z)
+    [:table_primary [:collection_derived_table _ _] _ _]
+    ;;=>
+    (build-collection-derived-table z)
 
-     [:table_primary [:collection_derived_table _ _] _ _ _]
-     (build-collection-derived-table z)
+    [:table_primary [:collection_derived_table _ _] _ _ _]
+    (build-collection-derived-table z)
 
-     [:table_primary [:collection_derived_table _ _ _ _] _ _]
-     ;;=>
-     (build-collection-derived-table z)
+    [:table_primary [:collection_derived_table _ _ _ _] _ _]
+    ;;=>
+    (build-collection-derived-table z)
 
-     [:table_primary [:collection_derived_table _ _ _ _] _ _ _]
-     (build-collection-derived-table z)
+    [:table_primary [:collection_derived_table _ _ _ _] _ _ _]
+    (build-collection-derived-table z)
 
-     [:table_primary [:lateral_derived_table _ [:subquery ^:z qe]] _ _]
-     (build-lateral-derived-table z qe)
+    [:table_primary [:lateral_derived_table _ [:subquery ^:z qe]] _ _]
+    (build-lateral-derived-table z qe)
 
-     [:table_primary _]
-     ;;=>
-     (build-table-primary z)
+    [:table_primary _]
+    ;;=>
+    (build-table-primary z)
 
-     [:table_primary _ _]
-     ;;=>
-     (build-table-primary z)
+    [:table_primary _ _]
+    ;;=>
+    (build-table-primary z)
 
-     [:table_primary _ _ _]
-     ;;=>
-     (build-table-primary z)
+    [:table_primary _ _ _]
+    ;;=>
+    (build-table-primary z)
 
-     [:table_primary _ _ _ _]
-     ;;=>
-     (build-table-primary z)
+    [:table_primary _ _ _ _]
+    ;;=>
+    (build-table-primary z)
 
-     [:qualified_join ^:z lhs _ ^:z rhs [:join_condition _ ^:z sc]]
-     ;;=>
-     (wrap-with-select sc [:join [] (plan lhs) (plan rhs)])
+    [:qualified_join ^:z lhs _ ^:z rhs [:join_condition _ ^:z sc]]
+    ;;=>
+    (wrap-with-select sc [:join [] (plan lhs) (plan rhs)])
 
-     [:qualified_join ^:z lhs ^:z jt _ ^:z rhs [:join_condition _ ^:z sc]]
-     ;;=>
-     (wrap-with-select sc (case (sem/join-type jt)
+    [:qualified_join ^:z lhs ^:z jt _ ^:z rhs [:join_condition _ ^:z sc]]
+    ;;=>
+    (wrap-with-select sc (case (sem/join-type jt)
+                           "LEFT" [:left-outer-join [] (plan lhs) (plan rhs)]
+                           "RIGHT" [:left-outer-join [] (plan rhs) (plan lhs)]
+                           "INNER" [:join [] (plan lhs) (plan rhs)]))
+
+    [:qualified_join ^:z lhs _ ^:z rhs ^:z ncj]
+    ;;=>
+    (wrap-with-select ncj [:join [] (plan lhs) (plan rhs)])
+
+    [:qualified_join ^:z lhs ^:z jt _ ^:z rhs ^:z ncj]
+    ;;=>
+    (wrap-with-select ncj (case (sem/join-type jt)
                             "LEFT" [:left-outer-join [] (plan lhs) (plan rhs)]
                             "RIGHT" [:left-outer-join [] (plan rhs) (plan lhs)]
                             "INNER" [:join [] (plan lhs) (plan rhs)]))
 
-     [:qualified_join ^:z lhs _ ^:z rhs ^:z ncj]
-     ;;=>
-     (wrap-with-select ncj [:join [] (plan lhs) (plan rhs)])
+    [:from_clause _ ^:z trl]
+    ;;=>
+    (build-table-reference-list trl)
 
-     [:qualified_join ^:z lhs ^:z jt _ ^:z rhs ^:z ncj]
-     ;;=>
-     (wrap-with-select ncj (case (sem/join-type jt)
-                             "LEFT" [:left-outer-join [] (plan lhs) (plan rhs)]
-                             "RIGHT" [:left-outer-join [] (plan rhs) (plan lhs)]
-                             "INNER" [:join [] (plan lhs) (plan rhs)]))
+    [:table_value_constructor _ ^:z rvel]
+    (build-values-list rvel)
 
-     [:from_clause _ ^:z trl]
-     ;;=>
-     (build-table-reference-list trl)
+    [:contextually_typed_table_value_constructor _ ^:z cttvl]
+    (build-values-list cttvl)
 
-     [:table_value_constructor _ ^:z rvel]
-     (build-values-list rvel)
-
-     [:contextually_typed_table_value_constructor _ ^:z cttvl]
-     (build-values-list cttvl)
-
-     (r/zcase z
-       :in_value_list (build-values-list z)
-       (throw (IllegalArgumentException. (str "Cannot build plan for: "  (pr-str (r/node z)))))))))
+    (r/zcase z
+      :in_value_list (build-values-list z)
+      (throw (IllegalArgumentException. (str "Cannot build plan for: "  (pr-str (r/node z))))))))
 
 
 ;; Rewriting of logical plan.
