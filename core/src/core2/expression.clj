@@ -16,7 +16,7 @@
            core2.vector.PolyValueBox
            (java.nio ByteBuffer)
            (java.nio.charset StandardCharsets)
-           (java.time Clock Duration Instant LocalDate Period ZoneId ZoneOffset ZonedDateTime OffsetDateTime)
+           (java.time Clock Duration Instant LocalDate Period ZoneId ZoneOffset ZonedDateTime OffsetDateTime LocalDateTime)
            (java.time.temporal ChronoField ChronoUnit)
            (java.util Arrays Date HashMap LinkedList)
            (java.util.function IntUnaryOperator)
@@ -224,6 +224,7 @@
 (defmethod write-value-code :extension-type [[_ _ underlying-type _] & args]
   (apply write-value-code underlying-type args))
 
+(def ^:dynamic ^java.time.Clock *clock* (Clock/systemDefaultZone))
 
 #_{:clj-kondo/ignore [:unused-binding]}
 (defmulti emit-value
@@ -235,6 +236,7 @@
 (defmethod emit-value Instant [_ code] `(util/instant->micros ~code))
 (defmethod emit-value ZonedDateTime [_ code] `(util/instant->micros (util/->instant ~code)))
 (defmethod emit-value OffsetDateTime [_ code] `(util/instant->micros (util/->instant ~code)))
+(defmethod emit-value LocalDateTime [_ code] `(util/instant->micros (util/sql-temporal->instant ~code (.getZone *clock*))))
 (defmethod emit-value Duration [_ code] `(quot (.toNanos ~code) 1000))
 
 ;; consider whether a bound hash map for literal parameters would be better
@@ -1285,8 +1287,6 @@
                     "DAY" epoch-day-code
                     "HOUR" epoch-day-code
                     "MINUTE" epoch-day-code))})
-
-(def ^:dynamic ^java.time.Clock *clock* (Clock/systemDefaultZone))
 
 (defn- bound-precision ^long [^long precision]
   (-> precision (max 0) (min 9)))

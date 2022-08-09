@@ -301,9 +301,10 @@
                 (let [{:keys [f param-expr]} expr]
                   (apply-constraint min-range max-range
                                     f col-name
-                                    (util/->instant (some-> (or (find param-expr :literal)
-                                                                (find params (get param-expr :param)))
-                                                            val))))
+                                    (util/sql-temporal->instant (some-> (or (find param-expr :literal)
+                                                                            (find params (get param-expr :param)))
+                                                                        val)
+                                                                (.getZone expr/*clock*))))
 
                 expr)))))
     [min-range max-range]))

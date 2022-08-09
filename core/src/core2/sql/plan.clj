@@ -11,7 +11,7 @@
             [core2.sql.parser :as p]
             [core2.types :as types])
   (:import (clojure.lang IObj Var)
-           (java.time LocalDate Period Duration OffsetDateTime ZoneOffset OffsetTime)
+           (java.time LocalDate Period Duration OffsetDateTime ZoneOffset OffsetTime LocalDateTime)
            java.util.HashMap
            (org.apache.arrow.vector PeriodDuration)))
 
@@ -247,6 +247,12 @@
     (seconds-fraction->nanos seconds-fraction)
     (ZoneOffset/ofHoursMinutes (Long/parseLong offset-hours) (Long/parseLong offset-minutes))))
 
+(defn create-local-date-time
+  [year month day hours minutes seconds seconds-fraction]
+  (LocalDateTime/of (Long/parseLong year) (Long/parseLong month) (Long/parseLong day)
+                    (Long/parseLong hours) (Long/parseLong minutes) (Long/parseLong seconds)
+                    (int (seconds-fraction->nanos seconds-fraction))))
+
 (defn expr [z]
   (maybe-add-ref
    z
@@ -361,8 +367,7 @@
           [:seconds_value
            [:unsigned_integer seconds]]]]]]]
      ;;=>
-     ;; TODO TIMESTAMP without TZ should be modelled as LocalDateTime see #280
-     (create-offset-date-time year month day hours minutes seconds "0" "0" "0")
+     (create-local-date-time year month day hours minutes seconds "0")
 
      [:timestamp_literal _
       [:timestamp_string
@@ -381,8 +386,7 @@
            [:unsigned_integer seconds]
            [:unsigned_integer seconds-fraction]]]]]]]
      ;;=>
-     ;; TODO TIMESTAMP without TZ should be modelled as LocalDateTime see #280
-     (create-offset-date-time year month day hours minutes seconds seconds-fraction "0" "0")
+     (create-local-date-time year month day hours minutes seconds seconds-fraction)
 
      [:timestamp_literal _
       [:timestamp_string

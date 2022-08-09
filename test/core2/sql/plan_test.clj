@@ -3,7 +3,8 @@
             [clojure.java.io :as io]
             core2.edn ; Enables data literals
             [core2.sql.parser :as p]
-            [core2.sql.plan :as plan]))
+            [core2.sql.plan :as plan])
+  (:import (java.time LocalDateTime)))
 
 (defn plan-sql
   ([sql] (plan-sql sql {:decorrelate? true :validate-plan? true :instrument-rules? true}))
@@ -752,18 +753,20 @@
               z.baz = y.biz
               )"))))
 
+(defn- ldt [s] (LocalDateTime/parse s))
+
 (deftest test-timestamp-literal
   (t/are
     [sql expected]
     (= expected (plan-expr sql))
-    "TIMESTAMP '3000-03-15 20:40:31'" #time/offset-date-time "3000-03-15T20:40:31Z"
-    "TIMESTAMP '3000-03-15 20:40:31.11'" #time/offset-date-time "3000-03-15T20:40:31.11Z"
-    "TIMESTAMP '3000-03-15 20:40:31.2222'" #time/offset-date-time "3000-03-15T20:40:31.2222Z"
-    "TIMESTAMP '3000-03-15 20:40:31.44444444'" #time/offset-date-time "3000-03-15T20:40:31.44444444Z"
+    "TIMESTAMP '3000-03-15 20:40:31'" (ldt "3000-03-15T20:40:31")
+    "TIMESTAMP '3000-03-15 20:40:31.11'" (ldt "3000-03-15T20:40:31.11")
+    "TIMESTAMP '3000-03-15 20:40:31.2222'" (ldt "3000-03-15T20:40:31.2222")
+    "TIMESTAMP '3000-03-15 20:40:31.44444444'" (ldt "3000-03-15T20:40:31.44444444")
     "TIMESTAMP '3000-03-15 20:40:31+03:44'" #time/offset-date-time "3000-03-15T20:40:31+03:44"
     "TIMESTAMP '3000-03-15 20:40:31.12345678+13:12'" #time/offset-date-time "3000-03-15T20:40:31.123456780+13:12"
-    "TIMESTAMP '3000-03-15 20:40:31.12345678-14:00'" #time/offset-date-time "3000-03-15T20:40:31.123456780-14:00"
-    "TIMESTAMP '3000-03-15 20:40:31.12345678+14:00'" #time/offset-date-time "3000-03-15T20:40:31.123456780+14:00"
+    "TIMESTAMP '3000-03-15 20:40:31.12345678-14:00'" #time/offset-date-time"3000-03-15T20:40:31.123456780-14:00"
+    "TIMESTAMP '3000-03-15 20:40:31.12345678+14:00'" #time/offset-date-time"3000-03-15T20:40:31.123456780+14:00"
     "TIMESTAMP '3000-03-15 20:40:31-11:44'" #time/offset-date-time "3000-03-15T20:40:31-11:44"))
 
 (deftest test-time-literal

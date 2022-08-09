@@ -14,7 +14,7 @@
            java.nio.charset.StandardCharsets
            [java.nio.file CopyOption FileVisitResult Files LinkOption OpenOption Path Paths SimpleFileVisitor StandardCopyOption StandardOpenOption]
            java.nio.file.attribute.FileAttribute
-           [java.time Duration Instant OffsetDateTime ZoneId ZonedDateTime LocalDate OffsetTime ZoneOffset]
+           [java.time Duration Instant OffsetDateTime ZoneId ZonedDateTime LocalDate OffsetTime ZoneOffset LocalDateTime LocalTime]
            java.time.temporal.ChronoUnit
            [java.util ArrayList Collections Date IdentityHashMap LinkedHashMap LinkedList Map Queue UUID WeakHashMap]
            [java.util.concurrent CompletableFuture ExecutorService Executors ThreadFactory TimeUnit]
@@ -88,14 +88,17 @@
   (->zdt [zdt] zdt)
 
   OffsetDateTime
-  (->instant [odt] (.toInstant odt))
+  (->instant [odt] (.toInstant odt)))
 
-  LocalDate
-  (->instant [ld]
-    (.toInstant
-      (.atTime
-        ld
-        (OffsetTime/of 0 0 0 0 (ZoneOffset/of "Z")))))) ;; TODO needs to take into account SQL session default time zone displacement see #280
+(defn sql-temporal->instant
+  "Given some temporal value (such as a Date, LocalDateTime, OffsetDateTime and so on) will return the corresponding
+  instant given the SQL sessions zone. The SQL spec requires ambiguous timestamps to be resolved to the session zone at runtime
+  in this way."
+  ^Instant [temporal ^ZoneId session-zone]
+  (condp instance? temporal
+    LocalDate (sql-temporal->instant (.atTime ^LocalDate temporal (LocalTime/of 0 0)) session-zone)
+    LocalDateTime (.toInstant (.atZone ^LocalDateTime temporal session-zone))
+    (->instant temporal)))
 
 (defn instant->micros ^long [^Instant inst]
   (-> (Math/multiplyExact (.getEpochSecond inst) 1000000)

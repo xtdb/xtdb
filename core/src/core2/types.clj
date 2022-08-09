@@ -8,7 +8,7 @@
            java.net.URI
            (java.nio ByteBuffer CharBuffer)
            java.nio.charset.StandardCharsets
-           (java.time Duration Instant OffsetDateTime ZonedDateTime ZoneId LocalDate LocalTime Period)
+           (java.time Duration Instant OffsetDateTime ZonedDateTime ZoneId LocalDate LocalTime Period LocalDateTime ZoneOffset)
            (java.util Date List Map UUID)
            java.util.concurrent.ConcurrentHashMap
            java.util.function.Function
@@ -93,6 +93,11 @@
   (value->col-type [v] [:timestamp-tz :micro (.getId (.getOffset v))])
   (write-value! [v ^IVectorWriter writer]
     (write-value! (.toInstant v) writer))
+
+  LocalDateTime
+  (value->col-type [_] [:timestamp-local :micro])
+  (write-value! [v ^IVectorWriter writer]
+    (write-value! (.toInstant v ZoneOffset/UTC) writer))
 
   Duration
   (value->col-type [_] [:duration :micro])
