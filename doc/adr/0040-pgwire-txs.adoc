@@ -114,9 +114,9 @@ So given no transactions, we only support single statements for now, ignore `BEG
 * Initially, we might decide to not support specifying the co-effect arguments, as the defaults would be quite reasonable if the connection synchronously awaited write transactions.
 * Later, we might decide to use session parameters to specify these arguments, although their extent may not be clear without a transaction scope - would the user expect them to apply to just the next query, or to the rest of the session (or until they were changed again)?
 
-=== B: scoped transactions
+=== B: scoped transactions with buffered writes
 
-We use session parameters to specify bases, which are then naturally scoped to the transaction block.
+We use session parameters to specify bases, which are then naturally scoped to the transaction block. Writes are buffered for write transactions, being committed to the tx-log as a single operation on `COMMIT`.
 
 * `START TRANSACTION` (SQL:2011 §17.1, p1035) optionally accepts a `<transaction access mode> ::= READ ONLY | READ WRITE` characteristic.
   In the SQL:2011 spec, the `<transaction access mode>` defaults to `READ WRITE`; however, in Postgres, it defaults to the `default_transaction_read_only` configuration parameter.
@@ -125,6 +125,8 @@ We use session parameters to specify bases, which are then naturally scoped to t
 Because postgres and the spec default to `READ WRITE`, and due to the assumptions and behaviour of typical postgres clients, it may be somewhat unreliable and brittle to depend on client libraries sending session characteristics hints to the server as required to get the correct semantics described.
 
 The recommendation is to require users to explicitly denote the READ WRITE status of the transaction in SQL. The statement `SET TRANSACTION` (SQL:2011 $17.2, p1037) may be useful for this, as it explicitly changes the access mode of the next transaction only (avoiding issues where you must remember to 'reset' the session characteristics after each transaction).
+
+To be clear a READ WRITE transaction in this world would imply that DML is buffered until commit, each DML op would not execute until committed, to preserve atomicity of the transaction. This implies novel behaviour of our postgres server and as such may itself cause some surprise. Though it is important to stress again the sense in which there needs to be a compromise in the sympathy to and transparency toward core2's actual TX model and the expectations of SQL clients & users.
 
 In https://github.com/seancorfield/next-jdbc[next.jdbc] it would look like this:
 
@@ -151,6 +153,21 @@ conn.commit();
 ----
 
 The intention is by this transaction will only allow DML statements, and they will be executed asynchronously as a single tx-log transaction on `commit`. In that way the desired atomicity of update operations can be achieved.
+
+==== B addendum: flipped defaults
+
+A variation on this approach has been discussed which chooses a `READ WRITE` default for the transaction access mode, but otherwise behaves the same way.
+
+- One advantage of this is that it would mean you do not necessarily need to send a `SET TRANSACTION READ WRITE` to write to the database.
+- It also aligns with the spec and postgres default policy, which means configuration defaults are more likely to work out of the box.
+
+However, it does raise questions about query permissibility
+
+- Queries perhaps outside of transactions can be permitted regardless of the access mode policy, to me this provides a pain-free read UX outside repeatable reads
+- One option inside transactions is that queries are only permitted in a READ ONLY transaction
+- Another could be that reads are permitted until one makes a single write, at which point the transaction refuses any more reads, this although perhaps practical but of course comes with clarity concerns, makes things a little more implicit and even more contextual.
+- Another option is the wild west of simply allowing mixed read and writes and being clear in docs of the semantics until there is some interactive transaction support.
+
 
 == Decision
 
