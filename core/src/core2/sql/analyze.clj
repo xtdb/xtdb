@@ -129,11 +129,15 @@
 (defn- table-or-query-name [ag]
   (r/zcase ag
     (:table_primary
-     :with_list_element)
+     :with_list_element
+     :target_table)
     (table-or-query-name (r/$ ag 1))
 
     :regular_identifier
     (identifier ag)
+
+    (:delete_statement__searched :update_statement__searched)
+    (table-or-query-name (r/find-first (partial r/ctor? :target_table) ag))
 
     nil))
 
@@ -145,6 +149,13 @@
 
     :correlation_name
     (identifier ag)
+
+    :target_table
+    (correlation-name (r/parent ag))
+
+    (:delete_statement__searched :update_statement__searched)
+    (some-> (r/find-first (partial r/ctor? :correlation_name) ag)
+            (identifier))
 
     nil))
 
@@ -250,12 +261,26 @@
           (cond-> {:ref ag}
             sq-element (assoc :subquery-ref sq-element)
             cte (assoc :cte cte
-                       :subquery-ref (subquery-element (r/$ (:ref (meta cte)) -1)))))))))
+                       :subquery-ref (subquery-element (r/$ (:ref (meta cte)) -1)))))))
+
+    :target_table
+    (let [table-name (table-or-query-name ag)]
+      (-> {:correlation-name (or (correlation-name ag) table-name)
+           :id (id ag)
+           :scope-id (id (scope-element ag))
+           :table-or-query-name table-name}
+          (with-meta {:ref ag})))
+
+    (:delete_statement__searched :update_statement__searched)
+    (table (r/find-first (partial r/ctor? :target_table) ag))))
 
 (defn local-tables [ag]
   (r/collect-stop
    (fn [ag]
      (r/zcase ag
+       :target_table
+       [(table ag)]
+
        :table_primary
        (if (r/ctor? :qualified_join (r/$ ag 1))
          (local-tables (r/$ ag 1))
@@ -315,11 +340,10 @@
 ;; Inherited
 (defn dcli [ag]
   (r/zcase ag
-    :query_specification
+    (:query_specification :delete_statement__searched :update_statement__searched)
     (enter-env-scope (env (r/parent ag)))
 
-    (:table_primary
-     :qualified_join)
+    (:table_primary :qualified_join :target_table)
     (reduce (fn [acc {:keys [correlation-name] :as table}]
               (extend-env acc correlation-name table))
             (dcli (r/left-or-parent ag))
@@ -333,6 +357,9 @@
     :query_specification
     (dclo (r/$ ag -1))
 
+    (:delete_statement__searched :update_statement__searched)
+    (dclo (r/find-first (partial r/ctor? :target_table) ag))
+
     :table_expression
     (dclo (r/$ ag 1))
 
@@ -340,11 +367,14 @@
     (dclo (r/$ ag 2))
 
     :table_reference_list
-    (dcli (r/$ ag -1))))
+    (dcli (r/$ ag -1))
+
+    :target_table
+    (dcli ag)))
 
 (defn env [ag]
   (r/zcase ag
-    :query_specification
+    (:query_specification :delete_statement__searched :update_statement__searched)
     (dclo ag)
 
     :from_clause
@@ -432,6 +462,12 @@
 
     nil))
 
+(defn dml-app-time-extents [ag]
+  (when-let [atpn (r/find-first (partial r/ctor? :application_time_period_name) ag)]
+    (let [from (-> atpn r/right r/right)]
+      {:from from
+       :to (-> from r/right r/right)})))
+
 (declare column-reference)
 
 (defn all-column-references [ag]
@@ -445,9 +481,7 @@
   (r/zcase ag
     :table_primary
     (when-not (r/ctor? :qualified_join (r/$ ag 1))
-      (let [{:keys [correlation-name
-                    derived-columns] :as table
-             table-id :id} (table ag)
+      (let [{:keys [correlation-name derived-columns], table-id :id, :as table} (table ag)
             projections (if-let [derived-columns (not-empty derived-columns)]
                           (for [identifier derived-columns]
                             {:identifier identifier})
@@ -464,7 +498,7 @@
                                    (concat named-join-columns)
                                    (distinct)))))]
         [(reduce
-          (fn [acc {:keys [identifier index] :as projection}]
+          (fn [acc {:keys [identifier index]}]
             (conj acc (cond-> (with-meta {:index (count acc)} {:table table})
                         identifier (assoc :identifier identifier)
                         (and index (nil? identifier)) (assoc :original-index index)
@@ -533,6 +567,45 @@
       (vec (for [projections (projected-columns query-expression-body)]
              (vec (for [projection projections]
                     (select-keys projection keys-to-keep))))))
+
+    :target_table
+    [(let [{:keys [correlation-name], table-id :id, :as table} (table ag)
+           column-references (all-column-references (r/parent ag))]
+       (->> (concat (for [{:keys [identifiers], column-table-id :table-id} column-references
+                          :when (= table-id column-table-id)
+                          :let [identifier (last identifiers)]]
+                      {:identifier identifier
+                       :qualified-column [correlation-name identifier]})
+                    [{:identifier "_iid"
+                      :qualified-column [correlation-name "_iid"]}
+                     {:identifier "_row-id"
+                      :qualified-column [correlation-name "_row-id"]}
+                     {:identifier "application_time_start"
+                      :qualified-column [correlation-name "application_time_start"]}
+                     {:identifier "application_time_end"
+                      :qualified-column [correlation-name "application_time_end"]}])
+            (into [] (comp (distinct)
+                           (map #(vary-meta % assoc :table table))))))]
+
+    (:update_statement__searched :delete_statement__searched)
+    [(let [{:keys [correlation-name], :as table} (table ag)]
+       (vec
+        (concat (->> [{:identifier "_iid"
+                       :qualified-column [correlation-name "_iid"]}
+                      {:identifier "_row-id"
+                       :qualified-column [correlation-name "_row-id"]}
+                      {:identifier "application_time_start"
+                       :qualified-column [correlation-name "application_time_start"]}
+                      {:identifier "application_time_end"
+                       :qualified-column [correlation-name "application_time_end"]}]
+                     (into [] (map #(vary-meta % assoc :table table))))
+                (some->> (r/find-first (partial r/ctor? :set_clause_list) ag)
+                         (r/collect-stop
+                          (fn [ag]
+                            (r/zmatch ag
+                              [:set_clause [:update_target ^:z id] _ ^:z us]
+                              [(-> {:identifier (identifier id)}
+                                   (vary-meta assoc :ref us))])))))))]
 
     :collection_derived_table
     (if (= "ORDINALITY" (r/lexeme ag -1))
@@ -675,7 +748,7 @@
 
 ;; Errors
 
-(defn- local-names [[s :as env] k]
+(defn- local-names [[s :as _env] k]
   (->> (mapcat val s)
        (map k)))
 
@@ -919,7 +992,9 @@
 (defn scope-element [ag]
   (r/zcase ag
     (:query_expression
-     :query_specification)
+     :query_specification
+     :delete_statement__searched
+     :update_statement__searched)
     ag
 
     ::r/inherit))
@@ -975,6 +1050,8 @@
 
     ::r/inherit))
 
+;; Analysis API, might be deprecated.
+
 (defn- scopes [ag]
   (r/collect
    (fn [ag]
@@ -985,8 +1062,6 @@
 
        []))
    ag))
-
-;; Analysis API, might be deprecated.
 
 (doseq [[_ v] (ns-publics *ns*)
         :let [{:keys [arglists private]} (meta v)]

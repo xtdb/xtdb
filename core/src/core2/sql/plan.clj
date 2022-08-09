@@ -1427,6 +1427,13 @@
          (= (first system-time-predicates) :invalid-points-in-time)
          (vector :select 'false)))]))
 
+(defn- build-target-table [tt]
+  (let [{:keys [id correlation-name]} (sem/table tt)
+        projection (first (sem/projected-columns tt))]
+    [:rename (table-reference-symbol correlation-name id)
+     [:scan (vec (for [{:keys [identifier]} projection]
+                   (symbol identifier)))]]))
+
 (defn- build-lateral-derived-table [tp qe]
   (let [scope-id (sem/id (sem/scope-element tp))
         column->param (correlated-column->param qe scope-id)
@@ -1599,6 +1606,48 @@
     (relation-columns relation)
 
     (throw (IllegalArgumentException. (str "cannot calculate columns for: " (pr-str relation-in))))))
+
+(defn- plan-dml [dml-op z]
+  (let [tt (r/find-first (partial r/ctor? :target_table) z)
+        {:keys [table-or-query-name correlation-name] :as table} (sem/table tt)
+        rel (build-target-table tt)
+        rel (if-let [sc (r/find-first (partial r/ctor? :search_condition) z)]
+              (wrap-with-select sc rel)
+              rel)]
+
+    (letfn [(->qps [sym]
+              (qualified-projection-symbol
+               (-> {:identifier (name sym)
+                    :qualified-column [correlation-name (name sym)]}
+                   (vary-meta assoc :table table))))]
+
+      (let [{app-from :from, app-to :to, :as app-time-extents} (sem/dml-app-time-extents z)
+            app-from-expr (some-> app-from (expr))
+            app-to-expr (some-> app-to (expr))
+            app-start-sym (->qps 'application_time_start)
+            app-end-sym (->qps 'application_time_end)]
+
+        [dml-op {:table table-or-query-name}
+         [:project (vec
+                    (concat (for [{:keys [identifier] :as col} (first (sem/projected-columns z))
+                                  :when (not (#{"application_time_start" "application_time_end"} identifier))]
+                              {(symbol identifier)
+                               (if-let [derived-expr (:ref (meta col))]
+                                 (expr derived-expr)
+                                 (qualified-projection-symbol col))})
+
+                            [{'application_time_start (if app-from-expr
+                                                        `(~'max ~app-start-sym ~app-from-expr)
+                                                        app-start-sym)}
+                             {'application_time_end (if app-to-expr
+                                                      `(~'min ~app-end-sym ~app-to-expr)
+                                                      app-end-sym)}]))
+          (if app-time-extents
+            [:select `(~'and
+                       (~'<= ~app-start-sym ~app-to-expr)
+                       (~'>= ~app-end-sym ~app-from-expr))
+             rel]
+            rel)]]))))
 
 (defn plan [z]
   (r/zmatch z
@@ -1784,12 +1833,12 @@
 
     (r/zcase z
       :in_value_list (build-values-list z)
+      :delete_statement__searched (plan-dml :delete z)
+      :update_statement__searched (plan-dml :update z)
+
       (throw (IllegalArgumentException. (str "Cannot build plan for: "  (pr-str (r/node z))))))))
 
-
-;; Rewriting of logical plan.
-
-
+;;;; Rewriting of logical plan.
 
 ;; Attempt to clean up tree, removing names internally and only add
 ;; them back at the top. Scan still needs explicit names to access the
@@ -2854,7 +2903,7 @@
                                  (if (and validate-plan? (not (s/valid? ::lp/logical-plan plan)))
                                    (throw (IllegalArgumentException. (s/explain-str ::lp/logical-plan plan)))
                                    plan))]
-             {:plan (if (#{:insert} (first plan))
+             {:plan (if (#{:insert :delete :update} (first plan))
                       (let [[dml-op dml-op-opts plan] plan]
                         [dml-op dml-op-opts
                          (validate-plan (rewrite-plan plan opts))])

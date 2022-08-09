@@ -997,3 +997,29 @@
                [{x1 ?_0, x8 ?_7, x2 ?_1, x5 ?_4, x9 ?_8, x4 ?_3, x6 ?_5, x7 ?_6, x3 ?_2}]]]]
            (plan-sql "INSERT INTO customer (id, c_custkey, c_name, c_address, c_nationkey, c_phone, c_acctbal, c_mktsegment, c_comment) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"))
         "#309"))
+
+(deftest test-sql-delete-plan
+  (t/is (= '[:delete {:table "users"}
+             [:rename {x2 _iid, x3 _row-id, x7 application_time_start, x8 application_time_end}
+              [:project [x2 x3
+                         {x7 (max x4 #time/date "2020-05-01")}
+                         {x8 (min x5 #time/date "9999-12-31")}]
+               [:rename {id x1, _iid x2, _row-id x3, application_time_start x4, application_time_end x5}
+                [:scan [{id (= id ?_0)}, _iid, _row-id
+                        {application_time_start (<= application_time_start #time/date "9999-12-31")}
+                        {application_time_end (>= application_time_end #time/date "2020-05-01")}]]]]]]
+
+           (plan-sql "DELETE FROM users FOR PORTION OF APP_TIME FROM DATE '2020-05-01' TO DATE '9999-12-31' AS u WHERE u.id = ?"))))
+
+(deftest test-sql-update-plan
+  (t/is (= '[:update {:table "users"}
+             [:rename {x2 _iid, x3 _row-id, x7 first_name, x8 application_time_start, x9 application_time_end}
+              [:project [x2, x3, {x7 "Sue"}
+                         {x8 (max x4 #time/date "2021-07-01")}
+                         {x9 (min x5 #time/date "9999-12-31")}]
+               [:rename {id x1, _iid x2, _row-id x3, application_time_start x4, application_time_end x5}
+                [:scan [{id (= id ?_0)}, _iid, _row-id
+                        {application_time_start (<= application_time_start #time/date "9999-12-31")}
+                        {application_time_end (>= application_time_end #time/date "2021-07-01")}]]]]]]
+
+           (plan-sql "UPDATE users FOR PORTION OF APP_TIME FROM DATE '2021-07-01' TO DATE '9999-12-31' AS u SET first_name = 'Sue' WHERE u.id = ?"))))

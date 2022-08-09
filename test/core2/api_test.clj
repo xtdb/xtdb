@@ -167,17 +167,9 @@
 
       (t/is (= tx1-expected (all-users !tx1)))
 
-      ;; HACK: we're passing `util/end-of-time` as a param here (and re-using it :/), in practice the user'll likely want a built-in literal?
-      (let [!tx2 (c2/submit-tx *node* [[:sql '[:delete {:table "users"}
-                                               [:project [_iid _table id
-                                                          {application_time_start (max application_time_start #inst "2020-05-01")}
-                                                          {application_time_end (min application_time_end ?_1)}]
-                                                [:scan [_iid
-                                                        {_table (= _table "users")}
-                                                        {id (= id ?_0)}
-                                                        {application_time_start (<= application_time_start ?_1)}
-                                                        {application_time_end (>= application_time_end #inst "2020-05-01")}]]]]
-                                        [["dave" util/end-of-time]]]])
+      ;; HACK: we're passing `util/end-of-time` as a param here - in practice the user'll likely want a built-in literal?
+      (let [!tx2 (c2/submit-tx *node* [[:sql (pt/plan-sql "DELETE FROM users FOR PORTION OF APP_TIME FROM ? TO ? AS u WHERE u.id = ?")
+                                        [[#inst "2020-05-01", util/end-of-time, "dave"]]]])
             tx2-expected #{["Dave" "Davis", (util/->zdt #inst "2018"), (util/->zdt #inst "2020-05-01")]
                            ["Claire" "Cooper", (util/->zdt #inst "2019"), (util/->zdt util/end-of-time)]
                            ["Alan" "Andrews", (util/->zdt #inst "2020"), (util/->zdt util/end-of-time)]
@@ -186,17 +178,8 @@
         (t/is (= tx2-expected (all-users !tx2)))
         (t/is (= tx1-expected (all-users !tx1)))
 
-        (let [!tx3 (c2/submit-tx *node* [[:sql '[:update {:table "users"}
-                                                 [:project [_iid _row-id {first_name "Sue"}
-                                                            {application_time_start (max application_time_start #inst "2021-07-01")}
-                                                            {application_time_end (min application_time_end ?_1)}]
-                                                  [:scan [_iid
-                                                          _row-id
-                                                          {id (= id ?_0)}
-                                                          {_table (= _table "users")}
-                                                          {application_time_start (<= application_time_start ?_1)}
-                                                          {application_time_end (>= application_time_end #inst "2021-07-01")}]]]]
-                                          [["susan" util/end-of-time]]]])
+        (let [!tx3 (c2/submit-tx *node* [[:sql (pt/plan-sql "UPDATE users FOR PORTION OF APP_TIME FROM ? TO ? AS u SET first_name = 'Sue' WHERE u.id = ?")
+                                          [[#inst "2021-07-01", util/end-of-time, "susan"]]]])
 
               tx3-expected #{["Dave" "Davis", (util/->zdt #inst "2018"), (util/->zdt #inst "2020-05-01")]
                              ["Claire" "Cooper", (util/->zdt #inst "2019"), (util/->zdt util/end-of-time)]
