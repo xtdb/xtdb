@@ -54,13 +54,14 @@
                    @!last-tx))
                nil)))
 
-(defn- tpch-table->dml-plan [^TpchTable table]
-  [:insert {:table (.getTableName table)}
-   [:table [(into '{:id ?_0}
-                  (map-indexed (fn [idx ^TpchColumn col]
-                                 (let [col-name (.getColumnName col)]
-                                   [(keyword col-name) (symbol (str "?_" (inc idx)))])))
-                  (.getColumns table))]]])
+(defn- tpch-table->dml [^TpchTable table]
+  (format "INSERT INTO %s (%s) VALUES (%s)"
+          (.getTableName table)
+          (->> (cons "id" (for [^TpchColumn col (.getColumns table)]
+                            (.getColumnName col)))
+               (str/join ", "))
+          (->> (repeat (inc (count (.getColumns table))) "?")
+               (str/join ", "))))
 
 (defn- tpch-table->dml-params [^TpchTable table, scale-factor]
   (let [table-name (.getTableName table)]
@@ -76,12 +77,12 @@
   (log/debug "Transacting TPC-H tables...")
   (->> (TpchTable/getTables)
        (reduce (fn [_last-tx ^TpchTable table]
-                 (let [dml-plan (tpch-table->dml-plan table)
+                 (let [dml (tpch-table->dml table)
                        [!last-tx doc-count] (->> (tpch-table->dml-params table scale-factor)
                                                  (partition-all 1000)
                                                  (reduce (fn [[_!last-tx last-doc-count] param-batch]
                                                            [(c2/submit-tx tx-producer
-                                                                          [[:sql dml-plan param-batch]])
+                                                                          [[:sql dml param-batch]])
                                                             (+ last-doc-count (count param-batch))])
                                                          [nil 0]))]
                    (log/debug "Transacted" doc-count (.getTableName table))

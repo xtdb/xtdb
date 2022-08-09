@@ -435,7 +435,7 @@
               "type" : {
                 "name" : "union",
                 "mode" : "Dense",
-                "typeIds" : [0]
+                "typeIds" : [0,1]
               },
               "children" : [{
                 "name" : "struct0",
@@ -501,6 +501,31 @@
                     },
                     "children" : [ ]
                   },{
+                    "name" : "i64",
+                    "nullable" : false,
+                    "type" : {
+                      "name" : "int",
+                      "bitWidth" : 64,
+                      "isSigned" : true
+                    },
+                    "children" : [ ]
+                  }]
+                }]
+              },{
+                "name" : "struct1",
+                "nullable" : false,
+                "type" : {
+                  "name" : "struct"
+                },
+                "children" : [{
+                  "name" : "?_0",
+                  "nullable" : false,
+                  "type" : {
+                    "name" : "union",
+                    "mode" : "Dense",
+                    "typeIds" : [0]
+                  },
+                  "children" : [{
                     "name" : "i64",
                     "nullable" : false,
                     "type" : {
@@ -824,18 +849,18 @@
             "name" : "query",
             "count" : 3,
             "VALIDITY" : [1,1,1],
-            "OFFSET" : [0,66,528,957],
-            "DATA" : ["[:insert {:table \"foo\"} [:table [{:foo ?_0, :bar ?_1, :baz ?_2}]]]","[:update {:table \"foo\"} [:project [_iid _row-id id {bar \"world\"} {application_time_start (max application_time_start #inst \"2021-01-01T00:00:00.000-00:00\")} {application_time_end (min application_time_end #inst \"2024-01-01T00:00:00.000-00:00\")}] [:scan [_iid _row-id {id (= id 1)} {application_time_start (<= application_time_start #inst \"2024-01-01T00:00:00.000-00:00\")} {application_time_end (>= application_time_end #inst \"2021-01-01T00:00:00.000-00:00\")}]]]]","[:delete {:table \"foo\"} [:project [_iid {application_time_start (max application_time_start #inst \"2021-01-01T00:00:00.000-00:00\")} {application_time_end (min application_time_end #inst \"2024-01-01T00:00:00.000-00:00\")}] [:scan [_iid {id (= id 1)} {application_time_start (<= application_time_start #inst \"2024-01-01T00:00:00.000-00:00\")} {application_time_end (>= application_time_end #inst \"2021-01-01T00:00:00.000-00:00\")}]]]]"]
+            "OFFSET" : [0,48,161,249],
+            "DATA" : ["INSERT INTO foo (foo, bar, baz) VALUES (?, ?, ?)","UPDATE foo FOR PORTION OF APP_TIME FROM DATE '2021-01-01' TO DATE '2024-01-01' SET bar = 'world' WHERE foo.id = ?","DELETE FROM foo FOR PORTION OF APP_TIME FROM DATE '2023' TO DATE '2025' WHERE foo.id = ?"]
           },{
             "name" : "param-rows",
             "count" : 3,
             "VALIDITY" : [1,1,1],
-            "OFFSET" : [0,2,2,2],
+            "OFFSET" : [0,2,3,4],
             "children" : [{
               "name" : "$data$",
-              "count" : 2,
-              "TYPE_ID" : [0,0],
-              "OFFSET" : [0,1],
+              "count" : 4,
+              "TYPE_ID" : [0,0,1,1],
+              "OFFSET" : [0,1,0,1],
               "children" : [{
                 "name" : "struct0",
                 "count" : 2,
@@ -881,6 +906,22 @@
                     "count" : 1,
                     "VALIDITY" : [1],
                     "DATA" : ["12"]
+                  }]
+                }]
+              },{
+                "name" : "struct1",
+                "count" : 2,
+                "VALIDITY" : [1,1],
+                "children" : [{
+                  "name" : "?_0",
+                  "count" : 2,
+                  "TYPE_ID" : [0,0],
+                  "OFFSET" : [0,1],
+                  "children" : [{
+                    "name" : "i64",
+                    "count" : 2,
+                    "VALIDITY" : [1,1],
+                    "DATA" : ["1","1"]
                   }]
                 }]
               }]

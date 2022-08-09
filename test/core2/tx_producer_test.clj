@@ -33,24 +33,13 @@
                           :cpu-avg-1min 24.81,
                           :mem-free 4.10011078E8,
                           :mem-used 5.89988922E8}]
-                   [:sql '[:insert {:table "foo"}
-                           [:table [{:foo ?_0, :bar ?_1, :baz ?_2}]]]
+                   [:sql "INSERT INTO foo (foo, bar, baz) VALUES (?, ?, ?)"
                     [[1 nil 3.3]
                      [2 "hello" 12]]]
-                   [:sql '[:update {:table "foo"}
-                           [:project [_iid _row-id id {bar "world"}
-                                      {application_time_start (max application_time_start #inst "2021")}
-                                      {application_time_end (min application_time_end #inst "2024")}]
-                            [:scan [_iid _row-id {id (= id 1)}
-                                    {application_time_start (<= application_time_start #inst "2024")}
-                                    {application_time_end (>= application_time_end #inst "2021")}]]]]]
-                   [:sql '[:delete {:table "foo"}
-                           [:project [_iid
-                                      {application_time_start (max application_time_start #inst "2021")}
-                                      {application_time_end (min application_time_end #inst "2024")}]
-                            [:scan [_iid {id (= id 1)}
-                                    {application_time_start (<= application_time_start #inst "2024")}
-                                    {application_time_end (>= application_time_end #inst "2021")}]]]]]]
+                   [:sql "UPDATE foo FOR PORTION OF APP_TIME FROM DATE '2021-01-01' TO DATE '2024-01-01' SET bar = 'world' WHERE foo.id = ?"
+                    [[1]]]
+                   [:sql "DELETE FROM foo FOR PORTION OF APP_TIME FROM DATE '2023' TO DATE '2025' WHERE foo.id = ?"
+                    [[1]]]]
                   {:sys-time (util/->instant #inst "2021")
                    :current-time (util/->instant #inst "2021")})
                  (c2-json/arrow-streaming->json)

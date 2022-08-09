@@ -9,6 +9,8 @@
             [core2.operator :as op]
             core2.operator.scan
             [core2.rewrite :refer [zmatch]]
+            [core2.sql.parser :as p]
+            [core2.sql.plan :as plan]
             [core2.temporal :as temporal]
             [core2.types :as t]
             [core2.util :as util]
@@ -37,8 +39,8 @@
            [org.apache.arrow.vector BigIntVector BitVector TimeStampMicroTZVector TimeStampVector VarCharVector VectorLoader VectorSchemaRoot VectorUnloader]
            [org.apache.arrow.vector.complex DenseUnionVector ListVector StructVector]
            [org.apache.arrow.vector.types.pojo Schema]
-           org.roaringbitmap.RoaringBitmap
-           org.roaringbitmap.longlong.Roaring64Bitmap))
+           org.roaringbitmap.longlong.Roaring64Bitmap
+           org.roaringbitmap.RoaringBitmap))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -541,11 +543,17 @@
     (reify OpIndexer
       (indexOp [_ tx-op-idx]
         (let [sql-offset (.getOffset tx-ops-vec tx-op-idx)
-              query (read-string (t/get-object query-vec sql-offset))
               param-rows (if-not (.isEmpty param-rows-vec sql-offset)
                            (t/get-object param-rows-vec sql-offset)
-                           [{}])]
-          (zmatch query
+                           [{}])
+
+              query-str (t/get-object query-vec sql-offset)
+              {:keys [errs plan]} (-> (p/parse query-str :directly_executable_statement)
+                                      (plan/plan-query))]
+
+          (assert (empty? errs) errs) ; TODO handle error
+
+          (zmatch plan
             [:insert opts inner-query]
             (.indexOp insert-idxer inner-query param-rows opts)
 

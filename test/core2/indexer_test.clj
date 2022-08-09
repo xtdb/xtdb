@@ -596,8 +596,7 @@
 
         (let [last-tx-key (c2/map->TransactionInstant {:tx-id 0, :sys-time (util/->instant #inst "2020-01-01")})]
           (t/is (= last-tx-key
-                   @(c2/submit-tx node [[:sql '[:insert {:table "table"}
-                                                [:table [{:id ?_0, :foo ?_1, :bar ?_2, :baz ?_3}]]]
+                   @(c2/submit-tx node [[:sql "INSERT INTO table (id, foo, bar, baz) VALUES (?, ?, ?, ?)"
                                          '[[0, 2, "hello", 12]
                                            [1, 1, "world", 3.3]]]])))
 

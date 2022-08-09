@@ -44,7 +44,7 @@
 
 (t/deftest test-param-metadata-error-310
   (let [!tx1 (c2/submit-tx tu/*node*
-                           [[:sql (pt/plan-sql "INSERT INTO users (id, name, application_time_start) VALUES (?, ?, ?)")
+                           [[:sql "INSERT INTO users (id, name, application_time_start) VALUES (?, ?, ?)"
                              [["dave", "Dave", #inst "2018"]
                               ["claire", "Claire", #inst "2019"]]]])]
 

@@ -45,7 +45,7 @@
 
 (defmethod tx-op-spec :sql [_]
   (s/cat :op #{:sql}
-         :plan vector?
+         :query string?
          :param-rows (s/? (s/coll-of (s/coll-of any? :kind sequential?) :kind sequential?))))
 
 (s/def ::tx-op
@@ -148,12 +148,12 @@
 
 (defn- ->sql-writer [^IDenseUnionWriter tx-ops-writer]
   (let [sql-writer (.asStruct (.writerForTypeId tx-ops-writer 3))
-        plan-writer (.writerForName sql-writer "query")
+        query-writer (.writerForName sql-writer "query")
         param-rows-writer (.writerForName sql-writer "param-rows")]
-    (fn write-sql! [{:keys [plan param-rows]}]
+    (fn write-sql! [{:keys [query param-rows]}]
       (.startValue sql-writer)
 
-      (types/write-value! (pr-str plan) plan-writer)
+      (types/write-value! query query-writer)
       (types/write-value! (vec (for [param-row param-rows]
                                  (zipmap (map #(keyword (str "?_" %)) (range)) param-row)))
                           param-rows-writer)

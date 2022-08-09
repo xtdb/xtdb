@@ -153,7 +153,7 @@
                                {:basis {:tx !tx}})
                  (into #{} (map (juxt :first_name :last_name :application_time_start :application_time_end)))))]
 
-    (let [!tx1 (c2/submit-tx *node* [[:sql (pt/plan-sql "INSERT INTO users (id, first_name, last_name, application_time_start) VALUES (?, ?, ?, ?)")
+    (let [!tx1 (c2/submit-tx *node* [[:sql "INSERT INTO users (id, first_name, last_name, application_time_start) VALUES (?, ?, ?, ?)"
                                       [["dave", "Dave", "Davis", #inst "2018"]
                                        ["claire", "Claire", "Cooper", #inst "2019"]
                                        ["alan", "Alan", "Andrews", #inst "2020"]
@@ -168,7 +168,7 @@
       (t/is (= tx1-expected (all-users !tx1)))
 
       ;; HACK: we're passing `util/end-of-time` as a param here - in practice the user'll likely want a built-in literal?
-      (let [!tx2 (c2/submit-tx *node* [[:sql (pt/plan-sql "DELETE FROM users FOR PORTION OF APP_TIME FROM ? TO ? AS u WHERE u.id = ?")
+      (let [!tx2 (c2/submit-tx *node* [[:sql "DELETE FROM users FOR PORTION OF APP_TIME FROM ? TO ? AS u WHERE u.id = ?"
                                         [[#inst "2020-05-01", util/end-of-time, "dave"]]]])
             tx2-expected #{["Dave" "Davis", (util/->zdt #inst "2018"), (util/->zdt #inst "2020-05-01")]
                            ["Claire" "Cooper", (util/->zdt #inst "2019"), (util/->zdt util/end-of-time)]
@@ -178,7 +178,7 @@
         (t/is (= tx2-expected (all-users !tx2)))
         (t/is (= tx1-expected (all-users !tx1)))
 
-        (let [!tx3 (c2/submit-tx *node* [[:sql (pt/plan-sql "UPDATE users FOR PORTION OF APP_TIME FROM ? TO ? AS u SET first_name = 'Sue' WHERE u.id = ?")
+        (let [!tx3 (c2/submit-tx *node* [[:sql "UPDATE users FOR PORTION OF APP_TIME FROM ? TO ? AS u SET first_name = 'Sue' WHERE u.id = ?"
                                           [[#inst "2021-07-01", util/end-of-time, "susan"]]]])
 
               tx3-expected #{["Dave" "Davis", (util/->zdt #inst "2018"), (util/->zdt #inst "2020-05-01")]
@@ -193,18 +193,18 @@
 
 (deftest test-sql-insert
   (let [!tx1 (c2/submit-tx *node*
-                           [[:sql (pt/plan-sql "INSERT INTO users (id, name, application_time_start) VALUES (?, ?, ?)")
+                           [[:sql "INSERT INTO users (id, name, application_time_start) VALUES (?, ?, ?)"
                              [["dave", "Dave", #inst "2018"]
                               ["claire", "Claire", #inst "2019"]]]])
 
         _ (t/is (= (c2/map->TransactionInstant {:tx-id 0, :sys-time (util/->instant #inst "2020-01-01")}) @!tx1))
 
         !tx2 (c2/submit-tx *node*
-                           [[:sql (pt/plan-sql "INSERT INTO people (id, renamed_name, application_time_start)
-                                                SELECT users.id, users.name, users.application_time_start FROM users
-                                                WHERE users.APP_TIME CONTAINS TIMESTAMP '2019-06-01 00:00:00' AND users.name = 'Dave'")]])]
+                           [[:sql "INSERT INTO people (id, renamed_name, application_time_start)
+                                   SELECT users.id, users.name, users.application_time_start FROM users
+                                   WHERE users.APP_TIME CONTAINS TIMESTAMP '2019-06-01 00:00:00' AND users.name = 'Dave'"]])]
 
     (t/is (= [{:renamed_name "Dave"}]
              (c2/sql-query *node* "SELECT people.renamed_name FROM people
-                                  WHERE people.APP_TIME CONTAINS TIMESTAMP '2019-06-01 00:00:00'"
+                                   WHERE people.APP_TIME CONTAINS TIMESTAMP '2019-06-01 00:00:00'"
                            {:basis {:tx !tx2}})))))
