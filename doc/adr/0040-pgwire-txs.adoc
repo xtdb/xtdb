@@ -49,6 +49,45 @@ This also provides a lower bound on the visible transactions, so that a user can
 +
 If it is not supplied, this defaults to the latest completed transaction (as opposed to the current time, because of the above note regarding asynchronous consumption of the tx-log).
 
+== Problem statements
+
+The adoption of some kind of transaction semantics is in service of solving one or more of the following problems:
+
+  There exists in pgwire no means to provide a stable read basis across some sequence of queries, such that you can avoid data races with concurrent writers
+
+  There exists no support in pgwire for DML statements (inserts, updates and deletes)
+
+  Given the asynchronous nature of the tx-log, it is unclear how to map traditional SQL transaction semantics to core2 in a way that is well-defined, reliable and performant. e.g traditional read-after-write, multi-statement atomicity, interactive transactions.
+
+== SQL spec
+
+Much of the SQL spec is not necessarily in scope here such as save points, local transactions and co-operation with external transaction managers, multi-server transactions and so on. So we will ignore those for now (hopefully this is a reasonable core)
+
+=== Transaction isolation
+
+It is important to note the traditional isolation levels are not necessarily meaningful to core2, and may be misleading to try and approximate, as they apply to a totally different target architecture which has room for different policies. In core2, the log architecture seemingly prescribes the concurrency semantics across the board, and so it may not make sense for users to change or specify an isolation level.
+
+=== Transaction access mode (e.g `READ ONLY`)
+
+The access mode parameter is intended to reflect whether certain classes of statement are permitted within a session or transaction.
+
+Like with many of the transactional behaviour parameters, access mode can be defined for a single transaction, or as a default for all subsequent transactions on the session (e.g `SET SESSION CHARACTERISTICS`).
+
+Its default value in the spec is `READ WRITE`.
+
+== PGWire concerns
+
+The pgwire server represents an experimental interface to XT, as such we need not necessarily bend to meet it at the expense of clarity or quality of the core, however it is also important to not burn our bridges with it - as there is a non-zero probability that we do end up supporting it in the long term.
+
+There are then a couple of concerns one should keep in mind as we explore options for solving the above problems
+
+- Postgres clients have expectations on how postgres behaves, some provide helpers for transactions for example that write the SQL for you.
+- There seems to be assumptions made by postgres clients of the transaction defaults on the server (such as default access mode) in some cases.
+- Transaction access mode is often set on `BEGIN`, so session variables such as READ ONLY are often simulated by client i.e no session `SET` statement is issued to the postgres server when the variable changes.
+- Some (most likely at a higher level) may have expectations on read-after-write or postgres specific dml semantics that we cannot reasonably meet (e.g insert returning ids).
+
+I would not put too much weight at this stage on meeting postgres, but as session / transactional semantics are likely to be accessible only via pgwire early on, we should keep this in mind.
+
 == Options
 
 === A: single statements
@@ -67,13 +106,18 @@ We use session parameters to specify bases, which are then naturally scoped to t
 
 * `START TRANSACTION` (SQL:2011 §17.1, p1035) optionally accepts a `<transaction access mode> ::= READ ONLY | READ WRITE` characteristic.
   In the SQL:2011 spec, the `<transaction access mode>` defaults to `READ WRITE`; however, in Postgres, it defaults to the `default_transaction_read_only` configuration parameter.
-  We could consider defaulting to `READ ONLY`, which would then require users to explicitly `START TRANSACTION READ WRITE` in order to mutate the database.
+  We could consider defaulting to `READ ONLY`, which would then require users to explicitly specify `READ WRITE` in order to mutate the database.
+
+Because postgres and the spec default to `READ WRITE`, and due to the assumptions and behaviour of typical postgres clients, it may be somewhat unreliable and brittle to depend on client libraries sending session characteristics hints to the server as required to get the correct semantics described.
+
+The recommendation is to require users to explicitly denote the READ WRITE status of the transaction in SQL. The statement `SET TRANSACTION` (SQL:2011 $17.2, p1037) may be useful for this, as it explicitly changes the access mode of the next transaction only (avoiding issues where you must remember to 'reset' the session characteristics after each transaction).
 
 In https://github.com/seancorfield/next-jdbc[next.jdbc] it would look like this:
 
 [source,clojure]
 ----
-(jdbc/with-transaction [tx conn {:read-only false}]
+(jdbc/execute! conn ["SET TRANSACTION READ WRITE"])
+(jdbc/with-transaction [tx conn]
   ...)
 ----
 
@@ -84,26 +128,17 @@ In Java:
 // pretty standard Java SQL connection transaction shenanigans, AFAICT.
 Connection conn = ...;
 boolean oldReadOnly = conn.getReadOnly();
-conn.setReadOnly(true|false);
-conn.setAutoCommit(false);
-try {
-    ...
-    conn.commit();
-} finally {
-    conn.setReadOnly(oldReadOnly);
+try (Statement stmt = conn.createStatement()) {
+    stmt.executeQuery("SET TRANSACTION READ WRITE");
 }
+conn.setAutoCommit(false);
+...
+conn.commit();
 ----
 
-Risks:
-
-* There is a risk here that the Postgres JDBC driver doesn't behave as we need to - we'll want to verify this.
-* In `next.jdbc`, the `-transact` implementation seems to https://github.com/seancorfield/next-jdbc/blob/bb4bea7d49b66a21cdca424dfda0e536fb745543/src/next/jdbc/transaction.clj#L68-L69[only set read-only if it's true].
-  If this is an issue, it's likely a quick PR, and in the meantime users can manually set/unset read-only on the `Connection`.
-* My initial internet searching suggests that Hibernate et al should all behave reasonably - but again, worth a check.
+The intention is by this transaction will only allow DML statements, and they will be executed asynchronously as a single tx-log transaction on `commit`. In that way the desired atomicity of update operations can be achieved.
 
 == Decision
-
-We will investigate the risks in option B to see whether any are show-stoppers, and check what's actually sent over the pgwire.
 
 For ease of implementation, we will initially lean towards implementing option B.
 
