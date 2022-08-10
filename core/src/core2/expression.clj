@@ -1010,6 +1010,63 @@
   {:return-type :i32
    :->call-code #(do `(.remaining (resolve-buf ~@%)))})
 
+(def ^:private ts-unit-second-scale
+  {:second 1
+   :milli 1000
+   :micro 1000000
+   :nano 1000000000})
+
+(defn- ts-offset-zone-seconds-form [form unit offset-secs]
+  (if (= 0 offset-secs)
+    form
+    (case unit
+      :second `(Math/subtractExact ~form ~offset-secs)
+      :milli `(Math/subtractExact ~form (Math/multiplyExact 1000 ~offset-secs))
+      :micro `(Math/subtractExact ~form (Math/multiplyExact 1000000 ~offset-secs))
+      :nano `(Math/subtractExact ~form (Math/multiplyExact 1000000000 ~offset-secs)))))
+
+(defn- ts-scale-factors-for-comparison [unit1 unit2]
+  (let [biggest-unit (max-key ts-unit-second-scale unit1 unit2)]
+    (if (= biggest-unit unit1)
+      [1 (/ (long (ts-unit-second-scale biggest-unit)) (long (ts-unit-second-scale unit2)))]
+      [(/ (long (ts-unit-second-scale biggest-unit)) (long (ts-unit-second-scale unit2))) 1])))
+
+(defn- ts-eq-form [col-type1 col-type2]
+  ;; much of this logic is common with CAST later, so expect it to be ported out, and = may be implemented in terms of CAST.
+  ;; the same scaling and offset rules ought to apply to ord comparison too
+  (let [[_ unit1 tz-id1] col-type1
+        [_ unit2 tz-id2] col-type2
+
+        offset-tz1 (when-not tz-id1 (.getZone *clock*))
+        offset-tz2 (when-not tz-id2 (.getZone *clock*))
+
+        ;; TODO these casts to ZoneOffset are actually unsafe
+        ;; there needs to be a slow path here probably deferring to java.time math
+        ;; in the case the zones are not resolvable to offsets
+        ;; though I'm not sure you can even do arithemtic with them in that case (needs investigation!)
+        offset-secs1 (when offset-tz1 (.getTotalSeconds ^ZoneOffset (.normalized offset-tz1)))
+        offset-secs2 (when offset-tz2 (.getTotalSeconds ^ZoneOffset (.normalized offset-tz2)))
+
+        unscaled1 (if offset-secs1 #(ts-offset-zone-seconds-form % unit1 offset-secs1) identity)
+        unscaled2 (if offset-secs2 #(ts-offset-zone-seconds-form % unit2 offset-secs2) identity)
+
+        ;; we use the smallest possible scaling param to avoid overflow where possible, overflow behaviour will currently
+        ;; be to crash - this may change.
+        [scale-factor1 scale-factor2] (ts-scale-factors-for-comparison unit1 unit2)
+
+        form1 (if (= 1 scale-factor1) unscaled1 #(do `(Math/multiplyExact ~(unscaled1 %) scale-factor1)))
+        form2 (if (= 1 scale-factor2) unscaled2 #(do `(Math/multiplyExact ~(unscaled2 %) scale-factor2)))]
+    {:return-type :bool
+     :->call-code (fn [[a b]] `(== ~(form1 a) ~(form2 b)))}))
+
+(defmethod codegen-mono-call [:= :timestamp-tz :timestamp-local]
+  [{:keys [arg-types]}]
+  (apply ts-eq-form arg-types))
+
+(defmethod codegen-mono-call [:= :timestamp-local :timestamp-tz]
+  [{:keys [arg-types]}]
+  (apply ts-eq-form arg-types))
+
 (defn interval-eq
   "Override equality for intervals as we want 1 year to = 12 months, and this is not true by for Period.equals."
   ;; we might be able to enforce this differently (e.g all constructs, reads and calcs only use the month component).

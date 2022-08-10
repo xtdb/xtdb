@@ -14,7 +14,7 @@
             [clojure.string :as str]
             [core2.edn :as edn])
   (:import core2.vector.IIndirectVector
-           (java.time Clock Duration Instant LocalDate ZonedDateTime ZoneId Period)
+           (java.time Clock Duration Instant LocalDate ZonedDateTime ZoneId Period LocalDateTime)
            (java.time.temporal ChronoUnit)
            (org.apache.arrow.vector DurationVector TimeStampVector ValueVector PeriodDuration)
            (org.apache.arrow.vector.types.pojo ArrowType$Duration ArrowType$Timestamp)
@@ -1935,3 +1935,31 @@
     42.0 (list 'cast 42 :f64) {}
 
     42 (list 'cast 'a :i32) {:a 42.0}))
+
+(defn- ldt ^LocalDateTime [s] (LocalDateTime/parse s))
+
+;; the goal of this test is simply to demonstrate clock affects the computation
+;; equality may well remain incorrect for now, it is not the goal
+(t/deftest clock-influences-equality-of-ambiguous-datetimes-test
+  (t/are [expected a b clock]
+    (= expected (binding [expr/*clock* (Clock/fixed Instant/EPOCH (ZoneId/of clock))] (project1 '(= sa sb) {:sa a, :sb b})))
+    ;; identity
+    true (ldt "2021-08-09T15:43:23") (ldt "2021-08-09T15:43:23") "UTC"
+
+    ;; obvious inequality
+    false (ldt "2022-08-09T15:43:23") (ldt "2021-08-09T15:43:23") "UTC"
+
+    ;; added fraction
+    false (ldt "2021-08-09T15:43:23") (ldt "2021-08-09T15:43:23.3") "UTC"
+
+    ;; trailing zero ok
+    true (ldt "2021-08-09T15:43:23") (ldt "2021-08-09T15:43:23.0") "UTC"
+
+    ;; equality preserved across tz
+    true (ldt "2021-08-09T15:43:23") (ldt "2021-08-09T15:43:23") "UTC+2"
+
+    ;; offset equiv
+    true #time/offset-date-time "2021-08-09T15:43:23+02:00" (ldt "2021-08-09T15:43:23") "UTC+2"
+
+    ;; offset inequality
+    false #time/offset-date-time "2021-08-09T15:43:23+02:00" (ldt "2021-08-09T15:43:23") "UTC+3"))
