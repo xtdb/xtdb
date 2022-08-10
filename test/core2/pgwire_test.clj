@@ -916,3 +916,31 @@
       (testing "TO syntax can be used"
         (q conn ["SET a TO 43"])
         (is (= {"a" "43"} (params ["a"])))))))
+
+(deftest dml-is-not-permitted-by-default-test
+  (require-node)
+  (with-open [conn (jdbc-conn)]
+    (is (thrown-with-msg?
+          PSQLException
+          #"ERROR\: DML is unsupported in a READ ONLY transaction"
+          (q conn ["insert into foo(a) values (42)"])))))
+
+(deftest db-queryable-after-transaction-error-test
+  (require-node)
+  (with-open [conn (jdbc-conn)]
+    (try
+      (jdbc/with-transaction [db conn]
+        (is (= [] (q db ["select a.a from a a"])))
+        (throw (Exception. "Oh no!")))
+      (catch Throwable _))
+    (is (= [] (q conn ["select a.a from a a"])))))
+
+(deftest transactions-are-read-only-by-default-test
+  (require-node)
+  (with-open [conn (jdbc-conn)]
+    (jdbc/with-transaction [db conn]
+      (is (thrown-with-msg?
+            PSQLException
+            #"ERROR\: DML is unsupported in a READ ONLY transaction"
+            (q db ["insert into foo(a) values (42)"]))))
+    (is (= [] (q conn ["select foo.a from foo foo"])))))

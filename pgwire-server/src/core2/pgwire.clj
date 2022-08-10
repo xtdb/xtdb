@@ -1080,29 +1080,36 @@
   If the status is omitted, the status is determined from whether a transaction is currently open."
   ([conn]
    ;; it would be good to look at ready status being automatically driven by pure conn state, this is a bit messy.
-   (if (:transaction @(:conn-state conn))
-     (cmd-send-ready conn :transaction)
+   (if-some [transaction (:transaction @(:conn-state conn))]
+     (if (:failed transaction)
+       (cmd-send-ready conn :failed-transaction)
+       (cmd-send-ready conn :transaction))
      (cmd-send-ready conn :idle)))
   ([conn status]
    (when (not= status (:ready @(:conn-state conn)))
      (swap! (:conn-state conn) assoc :ready status)
      (cmd-write-msg conn msg-ready {:status status}))))
 
+(defn- update-if-present [m k f & args]
+  (if (contains? m k)
+    (apply update m k f args)
+    m))
+
 (defn cmd-send-error
   "Sends an error back to the client (e.g (cmd-send-error conn (err-protocol \"oops!\")).
 
   If the connection is operating in the :extended protocol mode, any error causes the connection to skip
   messages until a msg-sync is received."
-  [{:keys [conn-status, conn-state] :as conn} err]
+  [{:keys [conn-state] :as conn} err]
 
   ;; error seen while in :extended mode, start skipping messages until sync received
   (when (= :extended (:protocol @conn-state))
     (swap! conn-state assoc :skip-until-sync true))
 
-  (cmd-write-msg conn msg-error-response {:error-fields err})
+  ;; mark a transaction (if open as failed), for now we will consider all errors to do this
+  (swap! conn-state update-if-present :transaction assoc :failed true)
 
-  (when (= :running @conn-status)
-    (cmd-send-ready conn :idle)))
+  (cmd-write-msg conn msg-error-response {:error-fields err}))
 
 (defn cmd-write-canned-response [conn canned-response]
   (let [{:keys [q, rows]} canned-response]
@@ -1114,33 +1121,33 @@
   "Closes a prepared statement or portal that was opened with bind / parse."
   [{:keys [conn-state, cid] :as conn} {:keys [close-type, close-name]}]
 
-    (case close-type
-      :prepared-stmt
-      (do
-        (log/debug "Closing prepared statement" {:cid cid, :stmt close-name})
-        (when-some [stmt (get-in @conn-state [:prepared-statements close-name])]
+  (case close-type
+    :prepared-stmt
+    (do
+      (log/debug "Closing prepared statement" {:cid cid, :stmt close-name})
+      (when-some [stmt (get-in @conn-state [:prepared-statements close-name])]
 
-          ;; dissoc associated portals from root (they are addressed there by execute)
-          (doseq [portal (:portals stmt)]
-            (swap! conn-state update :portals dissoc portal))
+        ;; dissoc associated portals from root (they are addressed there by execute)
+        (doseq [portal (:portals stmt)]
+          (swap! conn-state update :portals dissoc portal))
 
-          ;; remove from root
-          (swap! conn-state update :prepared-statements dissoc close-name)))
+        ;; remove from root
+        (swap! conn-state update :prepared-statements dissoc close-name)))
 
-      :portal
-      (do
-        (log/debug "Closing portal" {:cid cid, :portal close-name})
-        (when-some [portal (get-in @conn-state [:portals close-name])]
+    :portal
+    (do
+      (log/debug "Closing portal" {:cid cid, :portal close-name})
+      (when-some [portal (get-in @conn-state [:portals close-name])]
 
-          ;; remove portal from stmt
-          (swap! conn-state update-in [:prepared-statements (:stmt-name portal) :portals] disj close-name)
+        ;; remove portal from stmt
+        (swap! conn-state update-in [:prepared-statements (:stmt-name portal) :portals] disj close-name)
 
-          ;; remove from root
-          (swap! conn-state update :portals dissoc close-name)))
+        ;; remove from root
+        (swap! conn-state update :portals dissoc close-name)))
 
-      nil)
+    nil)
 
-    (cmd-write-msg conn msg-close-complete))
+  (cmd-write-msg conn msg-close-complete))
 
 (defn cmd-terminate
   "Causes the connection to start closing."
@@ -1285,7 +1292,8 @@
                 ;; (ideally) unexpected (e.g bug in operator)
                 (catch Throwable e
                   (log/debug e "An exception was caught during query result set iteration")
-                  (cmd-send-error conn (err-internal "unexpected server error during query execution"))))]
+                  (cmd-send-error conn (err-internal "unexpected server error during query execution"))
+                  (cmd-send-ready conn)))]
           (when continue
             (recur (inc n-rows-out))))
 
@@ -1360,7 +1368,8 @@
       ;; we log the ex on the completion handler of the fut, sending the message
       ;; needs to be done serially as part of the cmd queue so we do it here.
       (.isCompletedExceptionally fut)
-      (cmd-send-error conn (err-internal "unexpected server error during query execution"))
+      (do (cmd-send-error conn (err-internal "unexpected server error during query execution"))
+          (cmd-send-ready conn))
 
       ;; otherwise, come back around and wait again
       ;; by using the buffer we check socket state / draining etc as normal.
@@ -1368,6 +1377,22 @@
 
 (def supported-param-oids
   (set (map (comp oids :pg) type-mappings)))
+
+;; perhaps temporary, but we need to know if a query is DML to determine permissibility for different access modes
+(defn- ast-executable-statement-root-tag [ast] (when (vector? ast) (-> ast second first)))
+(defn- query? [ast] (= :query_expression (ast-executable-statement-root-tag ast)))
+(defn- dml? [ast]  (contains? #{:insert_statement} (ast-executable-statement-root-tag ast)))
+
+(defn current-access-mode
+  "Returns the current access mode of the connection, either :read-only or :read-write.
+
+  Transaction setting is prefferred to the session setting, and the default for XT is READ ONLY (so default is different to the spec)."
+  [conn]
+  (let [{:keys [conn-state]} conn
+        {:keys [transaction, session]} @conn-state]
+    (or (:access-mode transaction)
+        (:access-mode session)
+        :read-only)))
 
 (defn cmd-exec-query
   "Given a statement of type :query will execute it against the servers :node and send the results."
@@ -1388,7 +1413,7 @@
                 param-format (or param-format (nth param-format param-idx :text))
                 pg-type (oid->kw param-oid)
                 mapping (some #(when (= pg-type (:pg %)) %) type-mappings)
-                _ (when-not mapping  (throw (Exception. "Unsupported param type provided for read")))
+                _ (when-not mapping (throw (Exception. "Unsupported param type provided for read")))
                 {:keys [pg-read-binary, pg-read-text]} mapping]
             (if (= :binary param-format)
               (pg-read-binary param)
@@ -1412,7 +1437,7 @@
           query-fut
           (reify BiConsumer
             (accept [_ _ ex]
-              (when ex (log/debug ex "error during query open-sql-async"))
+              (when ex (log/debug ex "Error during query open-sql-async"))
               (swap! conn-state update :executing disj query-fut)
               nil)))]
 
@@ -1485,6 +1510,23 @@
   (set-session-parameter conn parameter value)
   (cmd-write-msg conn msg-command-complete {:command "SET"}))
 
+(defn permissibility-err [conn stmt]
+  (let [{:keys [ast]} stmt
+        access-mode (current-access-mode conn)]
+    (cond
+      ;; ignore for now
+      (nil? ast) nil
+
+      (dml? ast)
+      (when (= :read-only access-mode)
+        (err-protocol-violation "DML is unsupported in a READ ONLY transaction"))
+
+      (query? ast)
+      (when (= :read-write access-mode)
+        (err-protocol-violation "queries are unsupported in a READ WRITE tranaction."))
+
+      :else (err-protocol-violation "sql was parsed but unexpected statement encountered (report as an xtdb core2 bug)"))))
+
 (defn cmd-exec-stmt
   "Given some kind of statement (from interpret-sql), will execute it. For some statements, this does not mean
   the xt node gets hit - e.g SET some_session_parameter = 42 modifies the connection, not the database."
@@ -1495,31 +1537,34 @@
            parameter
            value]
     :as stmt}]
+  (if-some [err (permissibility-err conn stmt)]
+    (cmd-send-error conn err)
+    (do
+      (when (= :simple (:protocol @conn-state))
+        (case statement-type
+          :canned-response (cmd-describe-canned-response conn canned-response)
+          :query (cmd-describe-query conn ast)
+          nil))
 
-  (when (= :simple (:protocol @conn-state))
-    (case statement-type
-      :canned-response (cmd-describe-canned-response conn canned-response)
-      :query (cmd-describe-query conn ast)
-      nil))
+      (case statement-type
+        :empty-query (cmd-write-msg conn msg-empty-query)
+        :canned-response (cmd-write-canned-response conn canned-response)
+        :set-session-parameter (cmd-set-session-parameter conn parameter value)
+        :begin (cmd-begin conn)
+        :rollback (cmd-rollback conn)
+        :commit (cmd-commit conn)
+        :query (cmd-exec-query conn stmt))
 
-  (case statement-type
-    :empty-query (cmd-write-msg conn msg-empty-query)
-    :canned-response (cmd-write-canned-response conn canned-response)
-    :set-session-parameter (cmd-set-session-parameter conn parameter value)
-    :begin (cmd-begin conn)
-    :rollback (cmd-rollback conn)
-    :commit (cmd-commit conn)
-    :query (cmd-exec-query conn stmt))
-
-  (when (and (= :simple (:protocol @conn-state))
-             (not= :query statement-type))
-    (cmd-send-ready conn)))
+      (when (and (= :simple (:protocol @conn-state))
+                 (not= :query statement-type))
+        (cmd-send-ready conn)))))
 
 (defn cmd-simple-query [{:keys [conn-state] :as conn} {:keys [query]}]
   (let [{:keys [err] :as stmt} (interpret-sql query)]
     (swap! conn-state assoc :protocol :simple)
     (if err
-      (cmd-send-error conn err)
+      (do (cmd-send-error conn err)
+          (cmd-send-ready conn))
       (cmd-exec-stmt conn stmt))))
 
 (defn cmd-sync
@@ -1555,10 +1600,14 @@
         unsupported-arg-types (remove supported-param-oids arg-types)
         stmt (when-not err (assoc stmt :arg-types arg-types))
         err (or err (when-some [oid (first unsupported-arg-types)]
-                      (err-protocol-violation (format "parameter type (%s) currently unsupported by xt" (name (oid->kw oid (str oid)))))))
-        _ (when err (cmd-send-error conn err))
-        _ (when-not err (swap! conn-state assoc-in [:prepared-statements stmt-name] stmt))
-        _ (when-not err (cmd-write-msg conn msg-parse-complete))]))
+                      (err-protocol-violation (format "parameter type (%s) currently unsupported by xt" (name (oid->kw oid (str oid)))))))]
+    (if err
+      (do
+        (cmd-send-error conn err)
+        (cmd-send-ready conn))
+      (do
+        (swap! conn-state assoc-in [:prepared-statements stmt-name] stmt)
+        (cmd-write-msg conn msg-parse-complete)))))
 
 (defn cmd-bind [{:keys [conn-state] :as conn}
                 {:keys [portal-name
