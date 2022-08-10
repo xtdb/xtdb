@@ -1029,7 +1029,7 @@
   (let [biggest-unit (max-key ts-unit-second-scale unit1 unit2)]
     (if (= biggest-unit unit1)
       [1 (/ (long (ts-unit-second-scale biggest-unit)) (long (ts-unit-second-scale unit2)))]
-      [(/ (long (ts-unit-second-scale biggest-unit)) (long (ts-unit-second-scale unit2))) 1])))
+      [(/ (long (ts-unit-second-scale biggest-unit)) (long (ts-unit-second-scale unit1))) 1])))
 
 (defn- ts-eq-form [col-type1 col-type2]
   ;; much of this logic is common with CAST later, so expect it to be ported out, and = may be implemented in terms of CAST.
