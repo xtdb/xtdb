@@ -51,7 +51,8 @@
                         :core2.buffer-pool/buffer-pool {:cache-path (io/file dev-node-dir "buffers")}
                         :core2.object-store/file-system-object-store {:root-path (io/file dev-node-dir "objects")}
                         :core2/server {}
-                        :core2/pgwire {:port 5433}}}})
+                        :core2/pgwire {:port 5433}
+                        :core2.flight-sql/server {:port 52358}}}})
 
 (ir/set-prep! (fn [] standalone-config))
 
