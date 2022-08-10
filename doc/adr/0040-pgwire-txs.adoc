@@ -59,7 +59,7 @@ The adoption of some kind of transaction semantics is in service of solving one 
 
 == SQL spec
 
-Much of the SQL spec is not necessarily in scope here such as save points, local transactions and co-operation with external transaction managers, multi-server transactions and so on. So we will ignore those for now (hopefully this is a reasonable core)
+Much of the SQL spec is not necessarily in scope here such as save points, local transactions and co-operation with external transaction managers, multi-server transactions and so on. So we will ignore those for now (hopefully this is a reasonable choice)
 
 === Transaction isolation
 
@@ -121,7 +121,7 @@ We use session parameters to specify bases, which are then naturally scoped to t
   In the SQL:2011 spec, the `<transaction access mode>` defaults to `READ WRITE`; however, in Postgres, it defaults to the `default_transaction_read_only` configuration parameter.
   We could consider defaulting to `READ ONLY`, which would then require users to explicitly specify `READ WRITE` in order to mutate the database.
 
-Because postgres and the spec default to `READ WRITE`, and due to the assumptions and behaviour of typical postgres clients, it may be somewhat unreliable and brittle to depend on client libraries sending session characteristics hints to the server as required to get the correct semantics described.
+Because postgres and the spec default to `READ WRITE`, and due to the assumptions and behaviour of typical postgres clients, it may be somewhat unreliable and brittle to depend on client libraries sending session characteristics hints to the server as required to get the described behaviour.
 
 The recommendation is to require users to explicitly denote the READ WRITE status of the transaction in SQL. The statement `SET TRANSACTION` (SQL:2011 $17.2, p1037) may be useful for this, as it explicitly changes the access mode of the next transaction only (avoiding issues where you must remember to 'reset' the session characteristics after each transaction).
 
@@ -164,9 +164,8 @@ However, it does raise questions about query permissibility
 
 - Queries perhaps outside of transactions can be permitted regardless of the access mode policy, to me this provides a pain-free read UX outside repeatable reads
 - One option inside transactions is that queries are only permitted in a READ ONLY transaction
-- Another could be that reads are permitted until one makes a single write, at which point the transaction refuses any more reads, this although perhaps practical but of course comes with clarity concerns, makes things a little more implicit and even more contextual.
+- Another could be that reads are permitted until one makes a single write, at which point the transaction refuses any more reads, this although perhaps convenient in a way comes with least-surprise concerns, makes things a little more implicit and even more contextual.
 - Another option is the wild west of simply allowing mixed read and writes and being clear in docs of the semantics until there is some interactive transaction support.
-
 
 == Decision
 
