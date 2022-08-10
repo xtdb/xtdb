@@ -96,7 +96,7 @@
    cid
    ;; atom to mediate lifecycle transitions (see Connection lifecycle comment)
    conn-status
-   ;; atom to hold a map of session / connection state, such as :prepared-statements and :session-parameters
+   ;; atom to hold a map of session / connection state, such as :prepared-statements, :session, :transaction.
    conn-state
    ;; io
    ^DataInputStream in
@@ -364,6 +364,21 @@
 (defn- statement-head [s]
   (-> s (str/split #"\s+") first str/upper-case))
 
+(defn- interpret-xt-query
+  "Takes some sql string that is intended for the XT itself (rather than being some pg specific thing) and returns some data about it.
+
+  Returns a statement of type :query, see (doc interpret-sql) for more info."
+  [sql]
+  (let [transformed-query (transform-query sql)
+        num-placeholders (count (re-seq #"\?" transformed-query))
+        parse-result (parser/parse transformed-query)]
+    {:statement-type :query
+     :query sql
+     :transformed-query transformed-query
+     :ast parse-result
+     :err (when (parser/failure? parse-result) (err-parse parse-result))
+     :num-placeholders num-placeholders}))
+
 (defn- interpret-sql
   "Takes a sql string and returns a map of data about it.
 
@@ -376,7 +391,10 @@
   :parameter (the param name)
   :value (the value)
 
-  if :begin or :commit or :rollback (nothing more to say, unparameterized tx controls)
+  if :set-transaction
+  :access-mode (:read-only, :read-write)
+
+  if :begin or :commit or :rollback (nothing more to say so far, unparameterized tx controls)
 
   if :empty-query (nothing more to say!)
 
@@ -393,10 +411,21 @@
      :canned-response (get-canned-response sql)}
 
     (= "SET" (statement-head sql))
-    (let [[_ k _ v] (re-find #"SET\s+(\w+)\s*(=|TO)\s*(.*)" sql)]
-      {:statement-type :set-session-parameter
-       :parameter k
-       :value v})
+    (or
+        ;; will likely look at moving this into parser as they are spec defined
+        ;; thought execution behaviour will likely remain in pgwire (due to stateful nature of these commands)
+        (when (.equalsIgnoreCase "SET TRANSACTION READ ONLY" (str/trim sql))
+          {:statement-type :set-transaction
+           :access-mode :read-only})
+        (when (.equalsIgnoreCase "SET TRANSACTION READ WRITE" (str/trim sql))
+          {:statement-type :set-transaction
+           :access-mode :read-write})
+
+        ;; this as a fallback currently means anything that starts with SET is accepted, needs tightening up
+        (let [[_ k _ v] (re-find #"SET\s+(\w+)\s*(=|TO)\s*(.*)" sql)]
+          {:statement-type :set-session-parameter
+           :parameter k
+           :value v}))
 
     (= "BEGIN" (statement-head sql))
     {:statement-type :begin}
@@ -410,16 +439,7 @@
     (str/blank? sql)
     {:statement-type :empty-query}
 
-    :else
-    (let [transformed-query (transform-query sql)
-          num-placeholders (count (re-seq #"\?" transformed-query))
-          parse-result (parser/parse transformed-query)]
-      {:statement-type :query
-       :query sql
-       :transformed-query transformed-query
-       :ast parse-result
-       :err (when (parser/failure? parse-result) (err-parse parse-result))
-       :num-placeholders num-placeholders})))
+    :else (interpret-xt-query sql)))
 
 (defn- query-projection
   "Returns a vec of column names returned by the query (ast)."
@@ -733,7 +753,7 @@
       (log/fatal "Server resources could not be freed, please restart xtdb" port))))
 
 (defn- set-session-parameter [conn parameter value]
-  (swap! (:conn-state conn) assoc-in [:session-parameters parameter] value))
+  (swap! (:conn-state conn) assoc-in [:session :parameters parameter] value))
 
 (defn- cleanup-connection-resources [conn]
   (let [{:keys [cid, server, in, out, ^Socket socket, conn-status]} conn
@@ -1391,8 +1411,7 @@
   (let [{:keys [conn-state]} conn
         {:keys [transaction, session]} @conn-state]
     (or (:access-mode transaction)
-        (:access-mode session)
-        :read-only)))
+        (:access-mode session))))
 
 (defn cmd-exec-query
   "Given a statement of type :query will execute it against the servers :node and send the results."
@@ -1469,7 +1488,9 @@
 
 (defn cmd-begin [{:keys [server, conn-state] :as conn}]
   (let [{:keys [node]} server]
-    (swap! conn-state assoc :transaction {:basis {:tx (:latest-completed-tx (c2/status node))}}))
+    (swap! conn-state assoc :transaction {:basis {:tx (:latest-completed-tx (c2/status node))}})
+    ;; clear :next-transaction variables for now
+    (swap! conn-state update :session dissoc :next-transaction))
   (cmd-write-msg conn msg-command-complete {:command "BEGIN"}))
 
 (defn cmd-commit [{:keys [conn-state] :as conn}]
@@ -1500,14 +1521,18 @@
       :empty-query (cmd-write-msg conn msg-no-data)
       :canned-response (cmd-describe-canned-response conn canned-response)
 
-      (:set-session-parameter :begin :commit :rollback)
-      (cmd-write-msg conn msg-no-data)
+      (:set-session-parameter :set-transaction :begin :commit :rollback) (cmd-write-msg conn msg-no-data)
 
       :query (cmd-describe-query conn ast)
       (cmd-send-error conn (err-protocol-violation "no such description possible")))))
 
 (defn cmd-set-session-parameter [conn parameter value]
   (set-session-parameter conn parameter value)
+  (cmd-write-msg conn msg-command-complete {:command "SET"}))
+
+(defn cmd-set-transaction [{:keys [conn-state] :as conn} {:keys [access-mode]}]
+  ;; set the access mode for the next transaction
+  (when access-mode (swap! conn-state assoc-in [:session :next-transaction :access-mode] access-mode))
   (cmd-write-msg conn msg-command-complete {:command "SET"}))
 
 (defn permissibility-err [conn stmt]
@@ -1534,6 +1559,7 @@
    {:keys [ast
            statement-type
            canned-response
+           access-mode
            parameter
            value]
     :as stmt}]
@@ -1550,6 +1576,7 @@
         :empty-query (cmd-write-msg conn msg-empty-query)
         :canned-response (cmd-write-canned-response conn canned-response)
         :set-session-parameter (cmd-set-session-parameter conn parameter value)
+        :set-transaction (cmd-set-transaction conn {:access-mode access-mode})
         :begin (cmd-begin conn)
         :rollback (cmd-rollback conn)
         :commit (cmd-commit conn)
@@ -1762,7 +1789,8 @@
         in (delay (DataInputStream. (.getInputStream conn-socket)))
         out (delay (DataOutputStream. (.getOutputStream conn-socket)))
         conn-status (atom :new)
-        conn-state (atom {:close-promise (promise)})
+        conn-state (atom {:close-promise (promise)
+                          :session {:access-mode :read-only}})
         conn
         (map->Connection
           {:server server,

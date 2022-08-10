@@ -900,7 +900,7 @@
 
 ;; SET is not supported properly at the moment, so this ensure we do not really do anything too embarrassing (like crash)
 (deftest set-statement-test
-  (let [params #(-> (get-last-conn) :conn-state deref :session-parameters (select-keys %))]
+  (let [params #(-> (get-last-conn) :conn-state deref :session :parameters (select-keys %))]
     (with-open [conn (jdbc-conn)]
 
       (testing "literals saved as is (no parser hooked up yet)"
@@ -944,3 +944,29 @@
             #"ERROR\: DML is unsupported in a READ ONLY transaction"
             (q db ["insert into foo(a) values (42)"]))))
     (is (= [] (q conn ["select foo.a from foo foo"])))))
+
+(defn- session-variables [server-conn ks]
+  (-> server-conn :conn-state deref :session (select-keys ks)))
+
+(defn- next-transaction-variables [server-conn ks]
+  (-> server-conn :conn-state deref :session :next-transaction (select-keys ks)))
+
+(deftest session-access-mode-default-test
+  (require-node)
+  (with-open [_ (jdbc-conn)]
+    (is (= {:access-mode :read-only} (session-variables (get-last-conn) [:access-mode])))))
+
+(deftest set-transaction-test
+  (require-node)
+  (with-open [conn (jdbc-conn)]
+    (testing "SET TRANSACTION overwrites variables for the next transaction"
+      (q conn ["SET TRANSACTION READ ONLY"])
+      (is (= {:access-mode :read-only} (next-transaction-variables (get-last-conn) [:access-mode])))
+      (q conn ["SET TRANSACTION READ WRITE"])
+      (is (= {:access-mode :read-write} (next-transaction-variables (get-last-conn) [:access-mode]))))
+
+    (testing "opening and closing a transaction clears this state"
+      (q conn ["SET TRANSACTION READ ONLY"])
+      (jdbc/with-transaction [tx conn] (ping tx))
+      (is (= {} (next-transaction-variables (get-last-conn) [:access-mode])))
+      (is (= {:access-mode :read-only} (session-variables (get-last-conn) [:access-mode]))))))
