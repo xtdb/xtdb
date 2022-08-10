@@ -1490,6 +1490,8 @@
   (let [{:keys [node]} server]
     (swap! conn-state assoc :transaction {:basis {:tx (:latest-completed-tx (c2/status node))}})
     ;; clear :next-transaction variables for now
+    ;; aware right now this may not be spec compliant depending on interplay between START TRANSACTION and SET TRANSACTION
+    ;; thus TODO check spec for correct 'clear' behaviour of SET TRANSACTION vars
     (swap! conn-state update :session dissoc :next-transaction))
   (cmd-write-msg conn msg-command-complete {:command "BEGIN"}))
 
@@ -1532,6 +1534,7 @@
 
 (defn cmd-set-transaction [{:keys [conn-state] :as conn} {:keys [access-mode]}]
   ;; set the access mode for the next transaction
+  ;; intention is BEGIN then can take these parameters as a preference to those in the session
   (when access-mode (swap! conn-state assoc-in [:session :next-transaction :access-mode] access-mode))
   (cmd-write-msg conn msg-command-complete {:command "SET"}))
 
@@ -1539,7 +1542,8 @@
   (let [{:keys [ast]} stmt
         access-mode (current-access-mode conn)]
     (cond
-      ;; ignore for now
+      ;; assume no ast is ok for now, this is sort accidently works and I'm not sure what I want to do
+      ;; about pg canned/specific access checks
       (nil? ast) nil
 
       (dml? ast)
