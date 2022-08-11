@@ -923,7 +923,7 @@
           PSQLException #"ERROR\: DML is unsupported in a READ ONLY transaction"
           (q conn ["insert into foo(a) values (42)"])))
     (->> "can query after auto-commit write is refused"
-         (is (= "pong" (ping conn))))))
+         (is (= [] (q conn ["select foo.a from foo"]))))))
 
 (deftest db-queryable-after-transaction-error-test
   (with-open [conn (jdbc-conn)]
