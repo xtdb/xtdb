@@ -1449,7 +1449,7 @@
     ;; dml currently takes a different execution path
     (if (dml? ast)
       ;; in the case of dml, we simply buffer the statement in the transaction (to be flushed with COMMIT)
-      (do (swap! conn-state update-in [:transaction :dml-buf] (fnil conj []) {:ast ast, :params xt-params})
+      (do (swap! conn-state update-in [:transaction :dml-buf] (fnil conj []) {:query query, :ast ast, :params xt-params})
           ;; this stuff is all temporary waiting on core2 to support pg so I need to know less about incoming SQL
           (->> {:command (case (ast-executable-statement-root-tag ast)
                            ;; insert <oid> <rows>
@@ -1529,7 +1529,7 @@
         (when (= :simple (:protocol @conn-state))
           (cmd-send-ready conn)))
       (do
-        (let [tx-ops (mapv (fn [{:keys [ast]}] [:sql (:plan (plan/plan-query ast))]) dml-buf)
+        (let [tx-ops (mapv (fn [{:keys [query]}] [:sql query]) dml-buf)
               tx (when (seq tx-ops) (c2/submit-tx node tx-ops))]
           ;; todo consider blocking policy
           (when tx @(node/await-tx-async node tx))
