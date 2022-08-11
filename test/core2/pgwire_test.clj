@@ -9,7 +9,9 @@
             [clojure.tools.logging :as log]
             [clojure.java.shell :as sh]
             [core2.util :as util]
-            [core2.api :as c2])
+            [core2.api :as c2]
+            [clojure.test.check.generators :as tcg]
+            [clojure.test.check.generators :as gen])
   (:import (java.sql Connection)
            (org.postgresql.util PGobject PSQLException)
            (com.fasterxml.jackson.databind.node JsonNodeType)
@@ -652,6 +654,51 @@
   []
   (try (= 0 (:exit (sh/sh "command" "-v" "psql"))) (catch Throwable _ false)))
 
+(defn psql-session
+  "Takes a function of two args (send, read).
+
+  Send puts a string in to psql stdin, reads the next string from psql stdout. You can use (read :err) if you wish to read from stderr instead."
+  [f]
+  (require-server)
+  ;; there are other ways to do this, but its a straightforward factoring that removes some boilerplate for now.
+  (let [pb (ProcessBuilder. ["psql" "-h" "localhost" "-p" (str *port*)])
+        p (.start pb)
+        in (delay (.getInputStream p))
+        err (delay (.getErrorStream p))
+        out (delay (.getOutputStream p))
+
+        send
+        (fn [s]
+          (.write @out (.getBytes s "utf-8"))
+          (.flush @out))
+
+        read
+        (fn read
+          ([] (read @in))
+          ([stream]
+           (let [stream (case stream :err @err stream)]
+             (loop [wait-until (+ (System/currentTimeMillis) 1000)]
+               (cond
+                 (pos? (.available stream))
+                 (let [barr (byte-array (.available stream))]
+                   (.read stream barr)
+                   (String. barr))
+
+                 (< wait-until (System/currentTimeMillis)) :timeout
+                 :else (recur wait-until))))))]
+    (try
+      (f send read)
+      (finally
+        (when (.isAlive p)
+          (.destroy p))
+
+        (is (.waitFor p 1000 TimeUnit/MILLISECONDS))
+        (is (#{143, 0} (.exitValue p)))
+
+        (when (realized? in) (util/try-close @in))
+        (when (realized? out) (util/try-close @out))
+        (when (realized? err) (util/try-close @err))))))
+
 ;; define psql tests if psql is available on path
 ;; (will probably move to a selector)
 (when (psql-available?)
@@ -663,34 +710,8 @@
       (is (str/includes? out " pong\n(1 row)"))))
 
   (deftest psql-interactive-test
-    (require-server)
-    (let [pb (ProcessBuilder. ["psql" "-h" "localhost" "-p" (str *port*)])
-          p (.start pb)
-          in (delay (.getInputStream p))
-          err (delay (.getErrorStream p))
-          out (delay (.getOutputStream p))
-
-          send
-          (fn [s]
-            (.write @out (.getBytes s "utf-8"))
-            (.flush @out))
-
-          read
-          (fn read
-            ([] (read @in))
-            ([stream]
-             (loop [wait-until (+ (System/currentTimeMillis) 1000)]
-               (cond
-                 (pos? (.available stream))
-                 (let [barr (byte-array (.available stream))]
-                   (.read stream barr)
-                   (String. barr))
-
-                 (< wait-until (System/currentTimeMillis)) :timeout
-                 :else (recur wait-until)))))]
-
-      (try
-
+    (psql-session
+      (fn [send read]
         (testing "ping"
           (send "select ping;\n")
           (let [s (read)]
@@ -715,7 +736,7 @@
 
         (testing "parse error"
           (send "not really sql;\n")
-          (is (str/includes? (read @err) "ERROR"))
+          (is (str/includes? (read :err) "ERROR"))
 
           (testing "parse error allows session to continue"
             (send "select ping;\n")
@@ -725,7 +746,7 @@
           (with-redefs [clojure.tools.logging/logf (constantly nil)
                         c2/open-sql-async (fn [& _] (CompletableFuture/failedFuture (Throwable. "oops")))]
             (send "select a.a from (values (42)) a (a);\n")
-            (is (str/includes? (read @err) "unexpected server error during query execution")))
+            (is (str/includes? (read :err) "unexpected server error during query execution")))
 
           (testing "internal query error allows session to continue"
             (send "select ping;\n")
@@ -739,25 +760,11 @@
                                                         (next [_] (throw (Throwable. "oops")))
                                                         (close [_]))))]
             (send "select a.a from (values (42)) a (a);\n")
-            (is (str/includes? (read @err) "unexpected server error during query execution")))
+            (is (str/includes? (read :err) "unexpected server error during query execution")))
 
           (testing "internal query error allows session to continue"
             (send "select ping;\n")
-            (is (str/includes? (read) "pong"))))
-
-        ;; I would like to test cancellation in psql, but I cannot without a pseudo terminal (pty), not going do that now
-
-        (finally
-
-          (when (.isAlive p)
-            (.destroy p))
-
-          (is (.waitFor p 1000 TimeUnit/MILLISECONDS))
-          (is (#{143, 0} (.exitValue p)))
-
-          (when (realized? in) (util/try-close @in))
-          (when (realized? out) (util/try-close @out))
-          (when (realized? err) (util/try-close @err)))))))
+            (is (str/includes? (read) "pong"))))))))
 
 (def pg-param-representation-examples
   "A library of examples to test pg parameter oid handling.
@@ -998,33 +1005,8 @@
 
 (when (psql-available?)
   (deftest psql-dml-test
-    (let [pb (ProcessBuilder. ["psql" "-h" "localhost" "-p" (str *port*)])
-          p (.start pb)
-          in (delay (.getInputStream p))
-          err (delay (.getErrorStream p))
-          out (delay (.getOutputStream p))
-
-          send
-          (fn [s]
-            (.write @out (.getBytes s "utf-8"))
-            (.flush @out))
-
-          read
-          (fn read
-            ([] (read @in))
-            ([stream]
-             (loop [wait-until (+ (System/currentTimeMillis) 1000)]
-               (cond
-                 (pos? (.available stream))
-                 (let [barr (byte-array (.available stream))]
-                   (.read stream barr)
-                   (String. barr))
-
-                 (< wait-until (System/currentTimeMillis)) :timeout
-                 :else (recur wait-until)))))]
-
-      (try
-
+    (psql-session
+      (fn [send read]
         (testing "set transaction"
           (send "SET TRANSACTION READ WRITE;\n")
           (is (str/includes? (read) "SET TRANSACTION")))
@@ -1049,16 +1031,4 @@
           (send "SELECT foo.a FROM foo;\n")
           (let [s (read)]
             (is (str/includes? s "42"))
-            (is (str/includes? s "366"))))
-
-        (finally
-
-          (when (.isAlive p)
-            (.destroy p))
-
-          (is (.waitFor p 1000 TimeUnit/MILLISECONDS))
-          (is (#{143, 0} (.exitValue p)))
-
-          (when (realized? in) (util/try-close @in))
-          (when (realized? out) (util/try-close @out))
-          (when (realized? err) (util/try-close @err)))))))
+            (is (str/includes? s "366"))))))))
