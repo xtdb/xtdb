@@ -964,7 +964,15 @@
       (q conn ["SET TRANSACTION READ ONLY"])
       (jdbc/with-transaction [tx conn] (ping tx))
       (is (= {} (next-transaction-variables (get-last-conn) [:access-mode])))
-      (is (= {:access-mode :read-only} (session-variables (get-last-conn) [:access-mode]))))))
+      (is (= {:access-mode :read-only} (session-variables (get-last-conn) [:access-mode]))))
+
+    (testing "rolling back a transaction clears this state"
+      (q conn ["SET TRANSACTION READ WRITE"])
+      (.setAutoCommit conn false)
+      ;; explicitly send rollback .rollback doesn't necessarily do it if you haven't issued a query
+      (q conn ["ROLLBACK"])
+      (.setAutoCommit conn true)
+      (is (= {} (next-transaction-variables (get-last-conn) [:access-mode]))))))
 
 (defn tx! [conn & sql]
   (q conn ["SET TRANSACTION READ WRITE"])
