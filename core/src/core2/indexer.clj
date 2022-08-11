@@ -631,8 +631,8 @@
           ;; TODO create work item
           ))
 
-      (set! (.-latest-completed-tx this) tx-key)
       (.setWatermark watermark-mgr chunk-idx tx-key (snapshot-live-cols live-columns) (.getTemporalWatermark temporal-mgr))
+      (set! (.-latest-completed-tx this) tx-key)
 
       (when (>= chunk-row-count max-rows-per-chunk)
         (.finishChunk this))
