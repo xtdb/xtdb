@@ -13,12 +13,10 @@
 (defn- print-time-to-string [t o]
   (str "#time/" t " \"" (str o) "\""))
 
-(when-not (System/getenv "CORE2_DISABLE_EDN_PRINT_METHODS")
+(time-literals/print-time-literals-clj!)
 
-  (time-literals/print-time-literals-clj!)
+(defmethod print-dup PeriodDuration [c ^Writer w]
+  (.write w ^String (print-time-to-string "period-duration" c)))
 
-  (defmethod print-dup PeriodDuration [c ^Writer w]
-    (.write w ^String (print-time-to-string "period-duration" c)))
-
-  (defmethod print-method PeriodDuration [c ^Writer w]
-    (print-dup c w)))
+(defmethod print-method PeriodDuration [c ^Writer w]
+  (print-dup c w))

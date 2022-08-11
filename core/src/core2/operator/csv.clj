@@ -6,11 +6,11 @@
             [core2.types :as types]
             [core2.util :as util]
             [core2.vector.indirect :as iv]
-            [core2.vector.writer :as vw]
-            [time-literals.data-readers :as time-literals.dr])
+            [core2.vector.writer :as vw])
   (:import core2.ICursor
            java.lang.AutoCloseable
            [java.nio.file Files]
+           java.time.Duration
            [java.util Base64 Iterator]
            org.apache.arrow.memory.BufferAllocator
            [org.apache.arrow.vector ValueVector VectorSchemaRoot]
@@ -72,7 +72,7 @@
          :utf8 identity
          :bool #(or (= "1" %) (= "true" %))
          :timestamp-tz inst/read-instant-date
-         :duration time-literals.dr/duration}
+         :duration #(Duration/parse %)}
         types/col-type-head))
 
 (def ^:private csv-col-type-overrides
