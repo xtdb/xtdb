@@ -361,8 +361,10 @@
   [sql-str]
   (when sql-str (first (filter #(probably-same-query? sql-str (:q %)) canned-responses))))
 
+(defn- strip-semi-colon [s] (if (str/ends-with? s ";") (subs s 0 (dec (count s))) s))
+
 (defn- statement-head [s]
-  (-> s (str/split #"\s+") first str/upper-case))
+  (-> s (str/split #"\s+") first str/upper-case strip-semi-colon))
 
 (defn- interpret-xt-query
   "Takes some sql string that is intended for the XT itself (rather than being some pg specific thing) and returns some data about it.
@@ -412,20 +414,20 @@
 
     (= "SET" (statement-head sql))
     (or
-        ;; will likely look at moving this into parser as they are spec defined
-        ;; thought execution behaviour will likely remain in pgwire (due to stateful nature of these commands)
-        (when (.equalsIgnoreCase "SET TRANSACTION READ ONLY" (str/trim sql))
-          {:statement-type :set-transaction
-           :access-mode :read-only})
-        (when (.equalsIgnoreCase "SET TRANSACTION READ WRITE" (str/trim sql))
-          {:statement-type :set-transaction
-           :access-mode :read-write})
+      ;; will likely look at moving this into parser as they are spec defined
+      ;; thought execution behaviour will likely remain in pgwire (due to stateful nature of these commands)
+      (when (.equalsIgnoreCase "SET TRANSACTION READ ONLY" (transform-query sql))
+        {:statement-type :set-transaction
+         :access-mode :read-only})
+      (when (.equalsIgnoreCase "SET TRANSACTION READ WRITE" (transform-query sql))
+        {:statement-type :set-transaction
+         :access-mode :read-write})
 
-        ;; this as a fallback currently means anything that starts with SET is accepted, needs tightening up
-        (let [[_ k _ v] (re-find #"SET\s+(\w+)\s*(=|TO)\s*(.*)" sql)]
-          {:statement-type :set-session-parameter
-           :parameter k
-           :value v}))
+      ;; this as a fallback currently means anything that starts with SET is accepted, needs tightening up
+      (let [[_ k _ v] (re-find #"SET\s+(\w+)\s*(=|TO)\s*(.*)" sql)]
+        {:statement-type :set-session-parameter
+         :parameter k
+         :value v}))
 
     (= "BEGIN" (statement-head sql))
     {:statement-type :begin}
@@ -1127,7 +1129,7 @@
     (swap! conn-state assoc :skip-until-sync true))
 
   ;; mark a transaction (if open as failed), for now we will consider all errors to do this
-  (swap! conn-state update-if-present :transaction assoc :failed true)
+  (swap! conn-state update-if-present :transaction assoc :failed true, :err err)
 
   (cmd-write-msg conn msg-error-response {:error-fields err}))
 
@@ -1320,7 +1322,7 @@
         :else
         (do (cmd-write-msg conn msg-command-complete {:command (str (statement-head query) " " n-rows-out)})
             (when (= :simple (:protocol @conn-state))
-              (cmd-send-ready conn :idle)))))))
+              (cmd-send-ready conn)))))))
 
 (defn- close-result-set [{:keys [conn-state] :as conn} fut ^IResultSet rs]
   (try
@@ -1363,7 +1365,8 @@
       cancelled
       (do
         (log/debug "query cancelled during execution" {:cid (:cid conn), :port (:port (:server conn))})
-        (cmd-send-error conn (err-query-cancelled "query cancelled during execution")))
+        (cmd-send-error conn (err-query-cancelled "query cancelled during execution"))
+        (cmd-send-ready conn))
 
       ;; if interrupted exit now, this will happen if conn threadpool needs to be shutdown immediately
       interrupted
@@ -1401,7 +1404,7 @@
 ;; perhaps temporary, but we need to know if a query is DML to determine permissibility for different access modes
 (defn- ast-executable-statement-root-tag [ast] (when (vector? ast) (-> ast second first)))
 (defn- query? [ast] (= :query_expression (ast-executable-statement-root-tag ast)))
-(defn- dml? [ast]  (contains? #{:insert_statement} (ast-executable-statement-root-tag ast)))
+(defn- dml? [ast] (contains? #{:insert_statement} (ast-executable-statement-root-tag ast)))
 
 (defn current-access-mode
   "Returns the current access mode of the connection, either :read-only or :read-write.
@@ -1442,26 +1445,39 @@
 
         query-opts
         {:basis (:basis (:transaction @conn-state))
-         :? xt-params}
+         :? xt-params}]
+    ;; dml currently takes a different execution path
+    (if (dml? ast)
+      ;; in the case of dml, we simply buffer the statement in the transaction (to be flushed with COMMIT)
+      (do (swap! conn-state update-in [:transaction :dml-buf] (fnil conj []) {:ast ast, :params xt-params})
+          ;; this stuff is all temporary waiting on core2 to support pg so I need to know less about incoming SQL
+          (->> {:command (case (ast-executable-statement-root-tag ast)
+                           ;; insert <oid> <rows>
+                           ;; oid is always 0 these days, its legacy thing in the pg protocol
+                           ;; rows is 0 for us cus async
+                           :insert_statement "INSERT 0 0"
+                           ;; otherwise head <rows>
+                           (str (statement-head query) " 0"))}
+               (cmd-write-msg conn msg-command-complete))
+          ;; todo these ready states really need to be automatic I think
+          (when (= :simple (:protocol @conn-state))
+            (cmd-send-ready conn)))
+      (let [;; execute the query asynchronously (to enable later enable cancellation mid query)
+            query-fut (c2/open-sql-async node transformed-query query-opts)
 
-        ;; execute the query asynchronously (to enable later enable cancellation mid query)
-        query-fut (c2/open-sql-async node transformed-query query-opts)
+            ;; keep the fut around in case of interrupt exc (for cleanup)
+            _ (swap! conn-state update :executing (fnil conj #{}) query-fut)
 
-        ;; keep the fut around in case of interrupt exc (for cleanup)
-        _ (swap! conn-state update :executing (fnil conj #{}) query-fut)
-
-        ;; log and de-reg when done (however that happens)
-        _
-        (.whenComplete
-          query-fut
-          (reify BiConsumer
-            (accept [_ _ ex]
-              (when ex (log/debug ex "Error during query open-sql-async"))
-              (swap! conn-state update :executing disj query-fut)
-              nil)))]
-
-    ;; start waiting for result
-    (cmd-await-query-result conn {:ast ast, :query query, :iteration 0, :fut query-fut})))
+            ;; log and de-reg when done (however that happens)
+            _
+            (.whenComplete
+              query-fut
+              (reify BiConsumer
+                (accept [_ _ ex]
+                  (when ex (log/debug ex "Error during query open-sql-async"))
+                  (swap! conn-state update :executing disj query-fut)
+                  nil)))]
+        (cmd-await-query-result conn {:ast ast, :query query, :iteration 0, :fut query-fut})))))
 
 (defn- cmd-send-row-description [conn cols]
   (let [defaults {:column-name ""
@@ -1488,16 +1504,37 @@
 
 (defn cmd-begin [{:keys [server, conn-state] :as conn}]
   (let [{:keys [node]} server]
-    (swap! conn-state assoc :transaction {:basis {:tx (:latest-completed-tx (c2/status node))}})
+    (->> (fn [{:keys [session] :as st}]
+           (->> {:basis {:tx (:latest-completed-tx (c2/status node))}
+                 :access-mode
+                 (or (:access-mode (:next-transaction session))
+                     (:access-mode session)
+                     :read-only)}
+                (assoc st :transaction)))
+         (swap! conn-state))
     ;; clear :next-transaction variables for now
     ;; aware right now this may not be spec compliant depending on interplay between START TRANSACTION and SET TRANSACTION
     ;; thus TODO check spec for correct 'clear' behaviour of SET TRANSACTION vars
     (swap! conn-state update :session dissoc :next-transaction))
   (cmd-write-msg conn msg-command-complete {:command "BEGIN"}))
 
-(defn cmd-commit [{:keys [conn-state] :as conn}]
-  (swap! conn-state dissoc :transaction)
-  (cmd-write-msg conn msg-command-complete {:command "COMMIT"}))
+(defn cmd-commit [{:keys [server, conn-state] :as conn}]
+  (let [{:keys [node]} server
+        {:keys [failed err dml-buf]} (:transaction @conn-state)]
+    (if failed
+      (do
+        ;; todo better err
+        (cmd-send-error conn (or err (err-protocol-violation "transaction failed")))
+        ;; todo clean up
+        (when (= :simple (:protocol @conn-state))
+          (cmd-send-ready conn)))
+      (do
+        (let [tx-ops (mapv (fn [{:keys [ast]}] [:sql (:plan (plan/plan-query ast))]) dml-buf)
+              tx (when (seq tx-ops) (c2/submit-tx node tx-ops))]
+          ;; todo consider blocking policy
+          (when tx @(node/await-tx-async node tx))
+          (swap! conn-state dissoc :transaction)
+          (cmd-write-msg conn msg-command-complete {:command "COMMIT"}))))))
 
 (defn cmd-rollback [{:keys [conn-state] :as conn}]
   (swap! conn-state dissoc :transaction)
@@ -1536,10 +1573,44 @@
   ;; set the access mode for the next transaction
   ;; intention is BEGIN then can take these parameters as a preference to those in the session
   (when access-mode (swap! conn-state assoc-in [:session :next-transaction :access-mode] access-mode))
-  (cmd-write-msg conn msg-command-complete {:command "SET"}))
+  (cmd-write-msg conn msg-command-complete {:command "SET TRANSACTION"}))
 
-(defn permissibility-err [conn stmt]
-  (let [{:keys [ast]} stmt
+(defn cmd-exec-stmt
+  "Given some kind of statement (from interpret-sql), will execute it. For some statements, this does not mean
+  the xt node gets hit - e.g SET some_session_parameter = 42 modifies the connection, not the database."
+  [{:keys [conn-state] :as conn}
+   {:keys [ast
+           statement-type
+           canned-response
+           access-mode
+           parameter
+           value]
+    :as stmt}]
+
+  (when (= :simple (:protocol @conn-state))
+    (case statement-type
+      :canned-response (cmd-describe-canned-response conn canned-response)
+      :query (cmd-describe-query conn ast)
+      nil))
+
+  (case statement-type
+    :empty-query (cmd-write-msg conn msg-empty-query)
+    :canned-response (cmd-write-canned-response conn canned-response)
+    :set-session-parameter (cmd-set-session-parameter conn parameter value)
+    :set-transaction (cmd-set-transaction conn {:access-mode access-mode})
+    :begin (cmd-begin conn)
+    :rollback (cmd-rollback conn)
+    :commit (cmd-commit conn)
+    :query (cmd-exec-query conn stmt))
+
+  (when (and (= :simple (:protocol @conn-state))
+             (not= :query statement-type))
+    (cmd-send-ready conn)))
+
+(defn- permissibility-err
+  "Returns an error if the given statement is not permitted (say due to the access mode)."
+  [conn stmt]
+  (let [{:keys [ast, query]} stmt
         access-mode (current-access-mode conn)]
     (cond
       ;; assume no ast is ok for now, this is sort accidently works and I'm not sure what I want to do
@@ -1554,46 +1625,14 @@
       (when (= :read-write access-mode)
         (err-protocol-violation "queries are unsupported in a READ WRITE tranaction."))
 
-      :else (err-protocol-violation "sql was parsed but unexpected statement encountered (report as an xtdb core2 bug)"))))
-
-(defn cmd-exec-stmt
-  "Given some kind of statement (from interpret-sql), will execute it. For some statements, this does not mean
-  the xt node gets hit - e.g SET some_session_parameter = 42 modifies the connection, not the database."
-  [{:keys [conn-state] :as conn}
-   {:keys [ast
-           statement-type
-           canned-response
-           access-mode
-           parameter
-           value]
-    :as stmt}]
-  (if-some [err (permissibility-err conn stmt)]
-    (cmd-send-error conn err)
-    (do
-      (when (= :simple (:protocol @conn-state))
-        (case statement-type
-          :canned-response (cmd-describe-canned-response conn canned-response)
-          :query (cmd-describe-query conn ast)
-          nil))
-
-      (case statement-type
-        :empty-query (cmd-write-msg conn msg-empty-query)
-        :canned-response (cmd-write-canned-response conn canned-response)
-        :set-session-parameter (cmd-set-session-parameter conn parameter value)
-        :set-transaction (cmd-set-transaction conn {:access-mode access-mode})
-        :begin (cmd-begin conn)
-        :rollback (cmd-rollback conn)
-        :commit (cmd-commit conn)
-        :query (cmd-exec-query conn stmt))
-
-      (when (and (= :simple (:protocol @conn-state))
-                 (not= :query statement-type))
-        (cmd-send-ready conn)))))
+      :else (do
+              (log/debug "Unexpected statement" (or (some-> ast ast-executable-statement-root-tag) (statement-head query)))
+              (err-protocol-violation "sql was parsed but unexpected statement encountered (report as an xtdb core2 bug)")))))
 
 (defn cmd-simple-query [{:keys [conn-state] :as conn} {:keys [query]}]
   (let [{:keys [err] :as stmt} (interpret-sql query)]
     (swap! conn-state assoc :protocol :simple)
-    (if err
+    (if-some [err (or err (permissibility-err conn stmt))]
       (do (cmd-send-error conn err)
           (cmd-send-ready conn))
       (cmd-exec-stmt conn stmt))))
@@ -1630,12 +1669,12 @@
   (let [{:keys [err] :as stmt} (interpret-sql query)
         unsupported-arg-types (remove supported-param-oids arg-types)
         stmt (when-not err (assoc stmt :arg-types arg-types))
-        err (or err (when-some [oid (first unsupported-arg-types)]
-                      (err-protocol-violation (format "parameter type (%s) currently unsupported by xt" (name (oid->kw oid (str oid)))))))]
+        err (or err
+                (when-some [oid (first unsupported-arg-types)]
+                  (err-protocol-violation (format "parameter type (%s) currently unsupported by xt" (name (oid->kw oid (str oid))))))
+                (permissibility-err conn stmt))]
     (if err
-      (do
-        (cmd-send-error conn err)
-        (cmd-send-ready conn))
+      (cmd-send-error conn err)
       (do
         (swap! conn-state assoc-in [:prepared-statements stmt-name] stmt)
         (cmd-write-msg conn msg-parse-complete)))))

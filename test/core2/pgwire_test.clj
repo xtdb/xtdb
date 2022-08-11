@@ -938,11 +938,9 @@
 (deftest transactions-are-read-only-by-default-test
   (require-node)
   (with-open [conn (jdbc-conn)]
-    (jdbc/with-transaction [db conn]
-      (is (thrown-with-msg?
-            PSQLException
-            #"ERROR\: DML is unsupported in a READ ONLY transaction"
-            (q db ["insert into foo(a) values (42)"]))))
+1    (is (thrown-with-msg?
+          PSQLException #"ERROR\: DML is unsupported in a READ ONLY transaction"
+          (jdbc/with-transaction [db conn] (q db ["insert into foo(a) values (42)"]))))
     (is (= [] (q conn ["select foo.a from foo foo"])))))
 
 (defn- session-variables [server-conn ks]
@@ -970,3 +968,26 @@
       (jdbc/with-transaction [tx conn] (ping tx))
       (is (= {} (next-transaction-variables (get-last-conn) [:access-mode])))
       (is (= {:access-mode :read-only} (session-variables (get-last-conn) [:access-mode]))))))
+
+(defn tx! [conn & sql]
+  (q conn ["SET TRANSACTION READ WRITE"])
+  (jdbc/with-transaction [tx conn]
+    (run! #(q tx %) sql)))
+
+(deftest dml-test
+  (require-node)
+  (with-open [conn (jdbc-conn)]
+    (testing "mixing a read causes rollback"
+      (q conn ["SET TRANSACTION READ WRITE"])
+      (is (thrown-with-msg? PSQLException #"queries are unsupported in a READ WRITE tranaction"
+                            (jdbc/with-transaction [tx conn]
+                              (q tx ["INSERT INTO foo(id, a) values(42, 42)"])
+                              (q conn ["SELECT foo.a FROM bar"]))))
+      (is (= [] (q conn ["SELECT foo.a FROM foo"]))))
+
+    (testing "insert it"
+      (q conn ["SET TRANSACTION READ WRITE"])
+      (jdbc/with-transaction [tx conn]
+        (q tx ["INSERT INTO foo(id, a) values(42, 42)"]))
+      (testing "read after write"
+        (is (= [{:a 42}] (q conn ["SELECT foo.a FROM foo"])))))))
