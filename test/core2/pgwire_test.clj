@@ -920,9 +920,10 @@
 (deftest dml-is-not-permitted-by-default-test
   (with-open [conn (jdbc-conn)]
     (is (thrown-with-msg?
-          PSQLException
-          #"ERROR\: DML is unsupported in a READ ONLY transaction"
-          (q conn ["insert into foo(a) values (42)"])))))
+          PSQLException #"ERROR\: DML is unsupported in a READ ONLY transaction"
+          (q conn ["insert into foo(a) values (42)"])))
+    (->> "can query after auto-commit write is refused"
+         (is (= "pong" (ping conn))))))
 
 (deftest db-queryable-after-transaction-error-test
   (with-open [conn (jdbc-conn)]
@@ -935,7 +936,7 @@
 
 (deftest transactions-are-read-only-by-default-test
   (with-open [conn (jdbc-conn)]
-1    (is (thrown-with-msg?
+    (is (thrown-with-msg?
           PSQLException #"ERROR\: DML is unsupported in a READ ONLY transaction"
           (jdbc/with-transaction [db conn] (q db ["insert into foo(a) values (42)"]))))
     (is (= [] (q conn ["select foo.a from foo foo"])))))
