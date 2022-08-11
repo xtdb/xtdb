@@ -31,10 +31,10 @@
           ingester (tu/component node :core2/ingester)]
       (letfn [(test-query-ivan [expected db]
                 (t/is (= expected
-                         (set (op/query-ra '[:scan [id {name (> name "Ivan")}]] db))))
+                         (set (tu/query-ra '[:scan [id {name (> name "Ivan")}]] db))))
 
                 (t/is (= expected
-                         (set (op/query-ra '[:scan [id {name (> name ?name)}]]
+                         (set (tu/query-ra '[:scan [id {name (> name ?name)}]]
                                            {'$ db, '?name "Ivan"})))))]
 
         (let [db (ingest/snapshot ingester)]
@@ -95,10 +95,10 @@
               "only needs to scan chunk 0, block 0"))
 
       (t/is (= #{{:name "Ivan"}}
-               (set (op/query-ra '[:scan [{name (= name "Ivan")}]] db))))
+               (set (tu/query-ra '[:scan [{name (= name "Ivan")}]] db))))
 
       (t/is (= #{{:name "Ivan"}}
-               (set (op/query-ra '[:scan [{name (= name ?name)}]]
+               (set (tu/query-ra '[:scan [{name (= name ?name)}]]
                                  {'$ db, '?name "Ivan"})))))))
 
 (t/deftest test-temporal-bounds
@@ -108,7 +108,7 @@
           {tt2 :sys-time, :as tx2} @(c2/submit-tx node [[:put {:id :my-doc, :last-updated "tx2"}]])
           db (ingest/snapshot (tu/component node :core2/ingester) tx2)]
       (letfn [(q [& temporal-constraints]
-                (->> (op/query-ra [:scan (into '[last-updated]
+                (->> (tu/query-ra [:scan (into '[last-updated]
                                                temporal-constraints)]
                                   {'$ db, '?sys-time1 tt1, '?sys-time2 tt2})
                      (into #{} (map :last-updated))))]
@@ -185,7 +185,7 @@
               {:a 6, :b 720}
               {:a 7, :b 5040}
               {:a 8, :b 40320}]
-             (op/query-ra '[:fixpoint Fact
+             (tu/query-ra '[:fixpoint Fact
                             [:table ?table]
                             [:select
                              (<= a 8)
@@ -213,7 +213,7 @@
               {:x "c", :y "c"}
               {:x "d", :y "d"}
               {:x "a", :y "a"}]
-             (op/query-ra '[:fixpoint Path
+             (tu/query-ra '[:fixpoint Path
                             [:table ?table]
                             [:project [x y]
                              [:join [{z z}]
@@ -227,7 +227,7 @@
 
 (t/deftest test-assignment-operator
   (t/is (= [{:a 1 :b 1}]
-           (op/query-ra '[:assign [X [:table ?x]
+           (tu/query-ra '[:assign [X [:table ?x]
                                    Y [:table ?y]]
                           [:join [{a b}] X Y]]
                         '{?x [{:a 1}]
@@ -235,7 +235,7 @@
 
   (t/testing "can see earlier assignments"
     (t/is (= [{:a 1 :b 1}]
-             (op/query-ra '[:assign [X [:table ?x]
+             (tu/query-ra '[:assign [X [:table ?x]
                                      Y [:join [{a b}] X [:table ?y]]
                                      X Y]
                             X]
@@ -248,26 +248,26 @@
             {:a 2, :b [3 4 5], :b* 3}
             {:a 2, :b [3 4 5], :b* 4}
             {:a 2, :b [3 4 5], :b* 5}]
-           (op/query-ra '[:unwind {b* b}
+           (tu/query-ra '[:unwind {b* b}
                           [:table ?x]]
                         '{?x [{:a 1, :b [1 2]} {:a 2, :b [3 4 5]}]})))
 
   (t/is (= [{:a 1, :b* 1} {:a 1, :b* 2}]
-           (op/query-ra '[:project [a b*]
+           (tu/query-ra '[:project [a b*]
                           [:unwind {b* b}
                            [:table ?x]]]
                         '{?x [{:a 1, :b [1 2]} {:a 2, :b []}]}))
         "skips rows with empty lists")
 
   (t/is (= [{:a 1, :b* 1} {:a 1, :b* 2}]
-           (op/query-ra '[:project [a b*]
+           (tu/query-ra '[:project [a b*]
                           [:unwind {b* b}
                            [:table ?x]]]
                         '{?x [{:a 2, :b 1} {:a 1, :b [1 2]}]}))
         "skips rows with non-list unwind column")
 
   (t/is (= [{:a 1, :b* 1} {:a 1, :b* "foo"}]
-           (op/query-ra '[:project [a b*]
+           (tu/query-ra '[:project [a b*]
                           [:unwind {b* b}
                            [:table ?x]]]
                         '{?x [{:a 1, :b [1 "foo"]}]}))
@@ -278,7 +278,7 @@
             {:a 2, :b* 3, :$ordinal 1}
             {:a 2, :b* 4, :$ordinal 2}
             {:a 2, :b* 5, :$ordinal 3}]
-           (op/query-ra '[:project [a b* $ordinal]
+           (tu/query-ra '[:project [a b* $ordinal]
                           [:unwind {b* b} {:ordinality-column $ordinal}
                            [:table ?x]]]
                         '{?x [{:a 1 :b [1 2]} {:a 2 :b [3 4 5]}]}))
@@ -286,34 +286,34 @@
 
 (t/deftest test-max-1-row-operator
   (t/is (= [{:a 1, :b 2}]
-           (op/query-ra '[:max-1-row [:table ?x]]
+           (tu/query-ra '[:max-1-row [:table ?x]]
                         '{?x [{:a 1, :b 2}]})))
 
   (t/is (thrown-with-msg? RuntimeException
                           #"cardinality violation"
-                          (op/query-ra '[:max-1-row [:table ?x]]
+                          (tu/query-ra '[:max-1-row [:table ?x]]
                                        '{?x [{:a 1, :b 2} {:a 3, :b 4}]}))
         "throws on cardinality > 1")
 
   (t/testing "returns null on empty"
     (t/is (= [{}]
-             (op/query-ra '[:max-1-row [:table ?x]]
+             (tu/query-ra '[:max-1-row [:table ?x]]
                           '{?x []})))
 
     (t/is (= [{:a nil, :b nil}]
-             (op/query-ra '[:max-1-row [:table [a b] ?x]]
+             (tu/query-ra '[:max-1-row [:table [a b] ?x]]
                           '{?x []})))))
 
 (t/deftest test-project-row-number
   (t/is (= [{:a 12, :$row-num 1}, {:a 0, :$row-num 2}, {:a 100, :$row-num 3}]
-           (op/query-ra '[:project [a {$row-num (row-number)}]
+           (tu/query-ra '[:project [a {$row-num (row-number)}]
                           [:table ?a]]
 
                         {'?a [{:a 12} {:a 0} {:a 100}]}))))
 
 (t/deftest test-project-append-columns
   (t/is (= [{:a 12, :$row-num 1}, {:a 0, :$row-num 2}, {:a 100, :$row-num 3}]
-           (op/query-ra '[:project {:append-columns? true} [{$row-num (row-number)}]
+           (tu/query-ra '[:project {:append-columns? true} [{$row-num (row-number)}]
                           [:table ?a]]
 
                         {'?a [{:a 12} {:a 0} {:a 100}]}))))
@@ -322,7 +322,7 @@
   (t/is (= [{:a 1, :bs [1 3 6]}
             {:a 2, :bs [2 4]}
             {:a 3, :bs [5]}]
-           (op/query-ra '[:group-by [a {bs (array-agg b)}]
+           (tu/query-ra '[:group-by [a {bs (array-agg b)}]
                           [:table ?ab]]
                         {'?ab [{:a 1, :b 1}
                                {:a 2, :b 2}
@@ -338,7 +338,7 @@
             [false false] [false false]
             [true true] [false true]]
            (map (juxt :b :bs)
-                (op/query-ra '[:project [{b (between x l r)}
+                (tu/query-ra '[:project [{b (between x l r)}
                                          {bs (between-symmetric x l r)}]
                                [:table ?xlr]]
                              {'?xlr (map #(zipmap [:x :l :r] %)
@@ -350,25 +350,25 @@
 
 (t/deftest test-join-theta
   (t/is (= [{:x3 "31" :x4 "13"} {:x3 "31" :x4 "31"}]
-           (op/query-ra '[:join [(= x3 "31")]
+           (tu/query-ra '[:join [(= x3 "31")]
                           [:table [{x3 "13"} {x3 "31"}]]
                           [:table [{x4 "13"} {x4 "31"}]]]
                         {})))
 
   (t/is (= [{:x3 "31"}]
-           (op/query-ra '[:join [{x3 x3} (= x3 "31")]
+           (tu/query-ra '[:join [{x3 x3} (= x3 "31")]
                           [:table [{x3 "13"} {x3 "31"}]]
                           [:table [{x3 "13"} {x3 "31"}]]]
                         {})))
 
   (t/is (= []
-           (op/query-ra '[:join [false]
+           (tu/query-ra '[:join [false]
                           [:table [{x3 "13"} {x3 "31"}]]
                           [:table [{x4 "13"} {x4 "31"}]]]
                         {})))
 
   (t/is (= []
-           (op/query-ra '[:join
+           (tu/query-ra '[:join
                           [(= x1 x3)]
                           [:join [false]
                            [:table [{x1 1}]]
@@ -378,13 +378,13 @@
 
 (t/deftest test-current-times-111
   (t/is (= 1
-           (->> (op/query-ra '[:project [{ts (current-timestamp)}]
+           (->> (tu/query-ra '[:project [{ts (current-timestamp)}]
                                [:table [{} {} {}]]]
                              {})
                 (into #{} (map :ts))
                 count)))
 
-  (let [times (->> (op/query-ra '[:project [{ts (local-time 1)}]
+  (let [times (->> (tu/query-ra '[:project [{ts (local-time 1)}]
                                   [:table [{}]]]
                                 {})
                    (into #{} (map :ts)))]
@@ -398,6 +398,6 @@
 (t/deftest test-empty-rel-still-throws-149
   (t/is (thrown-with-msg? IllegalArgumentException
                           #"Unknown symbol: '\?x13'"
-                          (op/query-ra '[:select (= ?x13 x4)
+                          (tu/query-ra '[:select (= ?x13 x4)
                                          [:table []]]
                                        {}))))

@@ -17,7 +17,7 @@
                                  [:put {:id :foo, :col2 "baz2"}]])
           ingester (tu/component node :core2/ingester)]
       (t/is (= [{:id :bar, :col1 "bar1", :col2 "bar2"}]
-               (op/query-ra '[:scan [id col1 col2]]
+               (tu/query-ra '[:scan [id col1 col2]]
                             (ingest/snapshot ingester tx)))))))
 
 (t/deftest multiple-sources
@@ -28,7 +28,7 @@
           tx2 (c2/submit-tx node2 [[:put {:id :foo, :col2 "col2"}]])
           db2 (ingest/snapshot (tu/component node2 :core2/ingester) tx2)]
       (t/is (= [{:id :foo, :col1 "col1", :col2 "col2"}]
-               (op/query-ra '[:join [{id id}]
+               (tu/query-ra '[:join [{id id}]
                               [:scan $db1 [id col1]]
                               [:scan $db2 [id col2]]]
                             {'$db1 db1, '$db2 db2}))))))
@@ -38,7 +38,7 @@
     (let [ingester (tu/component node :core2/ingester)
           tx (c2/submit-tx node [[:put {:id :foo}]])]
       (t/is (= [{:id :foo}]
-               (op/query-ra '[:scan [id id]]
+               (tu/query-ra '[:scan [id id]]
                             (ingest/snapshot ingester tx)))))))
 
 (t/deftest test-scanning-temporal-cols
@@ -48,7 +48,7 @@
                                    {:app-time-start #inst "2021"
                                     :app-time-end #inst "3000"}]])]
 
-      (let [res (first (op/query-ra '[:scan [id
+      (let [res (first (tu/query-ra '[:scan [id
                                              application_time_start application_time_end
                                              system_time_start system_time_end]]
                                     (ingest/snapshot ingester tx)))]
@@ -59,7 +59,7 @@
                  (dissoc res :system_time_start :system_time_end))))
 
       (t/is (= {:id :doc, :app-time-start (util/->zdt #inst "2021"), :app-time-end (util/->zdt #inst "3000")}
-               (-> (first (op/query-ra '[:project [id
+               (-> (first (tu/query-ra '[:project [id
                                                    {app-time-start application_time_start}
                                                    {app-time-end application_time_end}]
                                          [:scan [id application_time_start application_time_end]]]
@@ -72,7 +72,7 @@
     (let [ingester (tu/component node :core2/ingester)
           tx @(c2/submit-tx node [[:put {:id :doc}]])]
 
-      (t/is (op/query-ra '[:scan [application_time_start application_time_end
+      (t/is (tu/query-ra '[:scan [application_time_start application_time_end
                                   system_time_start system_time_end]]
                          (ingest/snapshot ingester tx))))))
 

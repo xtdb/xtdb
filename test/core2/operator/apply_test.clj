@@ -5,7 +5,7 @@
 
 (t/deftest test-apply-operator
   (letfn [(q [mode]
-            (op/query-ra [:apply mode '{c-id ?c-id}
+            (tu/query-ra [:apply mode '{c-id ?c-id}
                           [::tu/blocks
                            [[{:c-id "c1", :c-name "Alan"}
                              {:c-id "c2", :c-name "Bob"}
@@ -42,7 +42,7 @@
                   {:c-id "c2", :c-name "Bob", :match true}
                   {:c-id "c3", :c-name "Charlie", :match false}]
             :col-types '{c-id :utf8, c-name :utf8, match [:union #{:null :bool}]}}
-           (-> (op/query-ra [:apply '{:mark-join {match (= ?c-id o-customer-id)}} '{c-id ?c-id}
+           (-> (tu/query-ra [:apply '{:mark-join {match (= ?c-id o-customer-id)}} '{c-id ?c-id}
                              [::tu/blocks
                               [[{:c-id "c1", :c-name "Alan"}
                                 {:c-id "c2", :c-name "Bob"}
@@ -56,14 +56,14 @@
 
   (t/is (= {:res [{:x 0, :match nil}]
             :col-types '{x :i64, match [:union #{:null :bool}]}}
-           (-> (op/query-ra '[:apply {:mark-join {match (= 4 y)}} {}
+           (-> (tu/query-ra '[:apply {:mark-join {match (= 4 y)}} {}
                               [:table [{x 0}]]
                               [:table [{y nil}]]])
                (tu/raising-col-types)))
         "nil in RHS")
 
   (t/is (= [{:x 0, :match false} {:x 1, :match false}]
-           (op/query-ra '[:apply {:mark-join {match (= nil z)}} {}
+           (tu/query-ra '[:apply {:mark-join {match (= nil z)}} {}
                           [:table [{:x 0}, {:x 1}]]
                           [:project [{z 1}]
                            [:select false
@@ -72,14 +72,14 @@
 
 (t/deftest test-apply-single
   (t/is (= [{:y 0, :a 1, :b 2}]
-           (op/query-ra '[:apply :single-join {}
+           (tu/query-ra '[:apply :single-join {}
                           [:table [{:y 0}]]
                           [:table ?x]]
                         '{?x [{:a 1, :b 2}]})))
 
   (t/is (thrown-with-msg? RuntimeException
                           #"cardinality violation"
-                          (op/query-ra '[:apply :single-join {}
+                          (tu/query-ra '[:apply :single-join {}
                                          [:table [{:y 0}]]
                                          [:table ?x]]
                                        '{?x [{:a 1, :b 2} {:a 3, :b 4}]}))
@@ -87,20 +87,20 @@
 
   (t/testing "returns null on empty"
     (t/is (= [{:y 0}]
-             (op/query-ra '[:apply :single-join {}
+             (tu/query-ra '[:apply :single-join {}
                             [:table [{:y 0}]]
                             [:table ?x]]
                           '{?x []})))
 
     (t/is (= [{:y 0, :a nil, :b nil}]
-             (op/query-ra '[:apply :single-join {}
+             (tu/query-ra '[:apply :single-join {}
                             [:table [{:y 0}]]
                             [:table [a b] ?x]]
                           '{?x []})))))
 
 (t/deftest test-apply-empty-rel-bug-237
   (t/is (= {:res [{:x3 nil}], :col-types '{x3 [:union #{:null :i64}]}}
-           (-> (op/query-ra
+           (-> (tu/query-ra
                 '[:group-by [{x3 (sum x2)}]
                   [:apply :cross-join {}
                    [:table [{x1 15}]]
@@ -109,7 +109,7 @@
                (tu/raising-col-types))))
 
   (t/is (= {:res [], :col-types '{x1 :i64, x2 :i64}}
-           (-> (op/query-ra '[:project [x1 x2]
+           (-> (tu/query-ra '[:project [x1 x2]
                               [:apply :cross-join {}
                                [:table [{x1 15}]]
                                [:select false

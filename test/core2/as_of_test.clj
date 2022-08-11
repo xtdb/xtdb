@@ -35,7 +35,7 @@
         !tx2 (c2/submit-tx tu/*node* [[:put {:id :my-doc, :last-updated "tx2"}]])]
 
     (t/is (= #{{:last-updated "tx1"} {:last-updated "tx2"}}
-             (set (op/query-ra '[:scan [last-updated]]
+             (set (tu/query-ra '[:scan [last-updated]]
                                (ingest/snapshot ingester !tx2)))))
 
     (t/is (= #{{:last-updated "tx1"} {:last-updated "tx2"}}
@@ -47,7 +47,7 @@
 
     (t/testing "at tx1"
       (t/is (= #{{:last-updated "tx1"}}
-               (set (op/query-ra '[:scan [last-updated]]
+               (set (tu/query-ra '[:scan [last-updated]]
                                  (ingest/snapshot ingester !tx1)))))
 
       (t/is (= #{{:last-updated "tx1"}}
@@ -79,7 +79,7 @@
                                   :application_time_end end-of-time-zdt
                                   :system_time_start sys-time
                                   :system_time_end end-of-time-zdt}}
-             (->> (op/query-ra '[:scan [id
+             (->> (tu/query-ra '[:scan [id
                                         application_time_start application_time_end
                                         system_time_start system_time_end]]
                                db)
@@ -112,7 +112,7 @@
                 :system_time_end end-of-time-zdt}]
 
     (t/is (= [replaced-v0-doc v1-doc]
-             (op/query-ra '[:scan [id version
+             (tu/query-ra '[:scan [id version
                                    application_time_start application_time_end
                                    system_time_start system_time_end]]
                           db))
@@ -120,7 +120,7 @@
 
     #_ ; FIXME
     (t/is (= [original-v0-doc replaced-v0-doc v1-doc]
-             (op/query-ra '[:scan [id version
+             (tu/query-ra '[:scan [id version
                                    application_time_start application_time_end
                                    system_time_start {system_time_end (<= system_time_end ?eot)}]]
                           {'$ db, '?eot util/end-of-time}))
@@ -129,7 +129,7 @@
 (t/deftest test-evict
   (let [ingester (tu/component :core2/ingester)]
     (letfn [(all-time-docs [db]
-              (->> (op/query-ra '[:scan [id
+              (->> (tu/query-ra '[:scan [id
                                          application_time_start {application_time_end (<= application_time_end ?eot)}
                                          system_time_start {system_time_end (<= system_time_end ?eot)}]]
                                 {'$ db, '?eot util/end-of-time})

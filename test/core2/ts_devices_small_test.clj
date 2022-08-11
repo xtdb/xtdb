@@ -67,16 +67,16 @@
               {:time #inst "2016-11-15T18:39:00.000-00:00",
                :device-id "demo000009",
                :battery-temperature 91.1}]
-             (op/query-ra tsd/query-recent-battery-temperatures db)))))
+             (tu/query-ra tsd/query-recent-battery-temperatures db)))))
 
 (t/deftest ^:timescale test-busiest-low-battery-devices
   (let [db (ingest/snapshot (tu/component :core2/ingester))]
     #_ ; TODO will fill these in once we've resolved issues in ts-devices ingest
     (t/is (= []
-             (op/query-ra tsd/query-busiest-low-battery-devices db)))))
+             (tu/query-ra tsd/query-busiest-low-battery-devices db)))))
 
 (t/deftest ^:timescale test-min-max-battery-levels-per-hour
   (let [db (ingest/snapshot (tu/component :core2/ingester))]
     #_ ; TODO will fill these in once we've resolved issues in ts-devices ingest
     (t/is (= []
-             (op/query-ra tsd/query-min-max-battery-levels-per-hour db)))))
+             (tu/query-ra tsd/query-min-max-battery-levels-per-hour db)))))

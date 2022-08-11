@@ -148,7 +148,7 @@
   [expr docs]
   (let [docs (map-indexed #(assoc %2 :id %1) docs)
         lp [:project [{'ret expr}] [:table docs]]]
-    (mapv :ret (op/query-ra lp {}))))
+    (mapv :ret (tu/query-ra lp {}))))
 
 (defn project1 [expr doc] (first (project expr [doc])))
 

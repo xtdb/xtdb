@@ -10,7 +10,7 @@
 
 (t/deftest test-group-by
   (letfn [(run-test [group-by-spec blocks]
-            (-> (op/query-ra [:group-by group-by-spec
+            (-> (tu/query-ra [:group-by group-by-spec
                               [::tu/blocks '{a :i64, b :i64} blocks]])
                 (tu/raising-col-types)
                 (update :res set)))]
@@ -114,112 +114,112 @@
 
 (t/deftest test-count-star
   (t/is (= [{:n 0}]
-           (op/query-ra '[:group-by [{n (count-star)}]
+           (tu/query-ra '[:group-by [{n (count-star)}]
                           [::tu/blocks {a [:union #{:null :i64}]}
                            []]])))
 
   (t/is (= [{:n 1}]
-           (op/query-ra '[:group-by [{n (count-star)}]
+           (tu/query-ra '[:group-by [{n (count-star)}]
                           [::tu/blocks {a [:union #{:null :i64}]}
                            [[{:a nil}]]]])))
 
   (t/is (= [{:n 2}]
-           (op/query-ra '[:group-by [{n (count-star)}]
+           (tu/query-ra '[:group-by [{n (count-star)}]
                           [::tu/blocks {a [:union #{:null :i64}]}
                            [[{:a nil}
                              {:a 1}]]]])))
 
   (t/is (= [{:a 1, :n 1}, {:a 2, :n 2}]
-           (op/query-ra '[:group-by [a {n (count-star)}]
+           (tu/query-ra '[:group-by [a {n (count-star)}]
                           [::tu/blocks {a :i64, b [:union #{:null :i64}]}
                            [[{:a 1, :b nil}
                              {:a 2, :b 1}
                              {:a 2, :b nil}]]]])))
 
   (t/is (= []
-           (op/query-ra '[:group-by [a {bs (count-star)}]
+           (tu/query-ra '[:group-by [a {bs (count-star)}]
                           [::tu/blocks {a :i64, b [:union #{:null :i64}]}
                            []]]))
         "empty if there's a grouping key"))
 
 (t/deftest test-count-empty-null-behaviour
   (t/is (= [{:n 0}]
-           (op/query-ra '[:group-by [{n (count a)}]
+           (tu/query-ra '[:group-by [{n (count a)}]
                           [::tu/blocks {a [:union #{:null :i64}]}
                            []]])))
 
   (t/is (= [{:n 0}]
-           (op/query-ra '[:group-by [{n (count a)}]
+           (tu/query-ra '[:group-by [{n (count a)}]
                           [::tu/blocks {a [:union #{:null :i64}]}
                            [[{:a nil}]]]])))
 
   (t/is (= [{:n 1}]
-           (op/query-ra '[:group-by [{n (count a)}]
+           (tu/query-ra '[:group-by [{n (count a)}]
                           [::tu/blocks {a [:union #{:null :i64}]}
                            [[{:a nil}
                              {:a 1}]]]])))
 
   (t/is (= [{:a 1, :n 0}, {:a 2, :n 1}]
-           (op/query-ra '[:group-by [a {n (count b)}]
+           (tu/query-ra '[:group-by [a {n (count b)}]
                           [::tu/blocks
                            [[{:a 1, :b nil}
                              {:a 2, :b 1}
                              {:a 2, :b nil}]]]])))
 
   (t/is (= []
-           (op/query-ra '[:group-by [a {bs (count b)}]
+           (tu/query-ra '[:group-by [a {bs (count b)}]
                           [::tu/blocks {a :i64, b [:union #{:null :i64}]}
                            []]]))
         "empty if there's a grouping key"))
 
 (t/deftest test-sum-empty-null-behaviour
   (t/is (= [{:n nil}]
-           (op/query-ra '[:group-by [{n (sum a)}]
+           (tu/query-ra '[:group-by [{n (sum a)}]
                           [:table []]]))
         "sum empty returns null")
 
   (t/is (= []
-           (op/query-ra '[:group-by [b {n (sum a)}]
+           (tu/query-ra '[:group-by [b {n (sum a)}]
                           [:table []]]))
         "sum empty returns empty when there are groups")
 
   (t/is (= [{:n nil}]
-           (op/query-ra '[:group-by [{n (sum a)}]
+           (tu/query-ra '[:group-by [{n (sum a)}]
                           [:table [{:a nil}]]]))
         "sum all nulls returns null")
 
   (t/testing "summed group all null"
     (t/is (= [{:a 42, :n nil}]
-             (op/query-ra '[:group-by [a {n (sum b)}]
+             (tu/query-ra '[:group-by [a {n (sum b)}]
                             [:table [{:a 42, :b nil}]]])))
 
     (t/is (= [{:a 42, :n nil} {:a 45, :n 1}]
-             (op/query-ra '[:group-by [a {n (sum b)}]
+             (tu/query-ra '[:group-by [a {n (sum b)}]
                             [:table [{:a 42, :b nil} {:a 45, :b 1}]]])))))
 
 (t/deftest test-min-of-empty-rel-returns-nil
   (t/is (= [{:n nil}]
-           (op/query-ra '[:group-by [{n (min a)}]
+           (tu/query-ra '[:group-by [{n (min a)}]
                           [:table []]]))
         "min empty returns null")
 
   (t/is (= []
-           (op/query-ra '[:group-by [b {n (min a)}]
+           (tu/query-ra '[:group-by [b {n (min a)}]
                           [:table []]]))
         "min empty returns empty when there are groups")
 
   (t/is (= [{:n nil}]
-           (op/query-ra '[:group-by [{n (min a)}]
+           (tu/query-ra '[:group-by [{n (min a)}]
                           [:table [{:a nil}]]]))
         "min all nulls returns null")
 
   (t/testing "min'd group all null"
     (t/is (= [{:a 42, :n nil}]
-             (op/query-ra '[:group-by [a {n (min b)}]
+             (tu/query-ra '[:group-by [a {n (min b)}]
                             [:table [{:a 42, :b nil}]]])))
 
     (t/is (= [{:a 42, :n nil} {:a 45, :n 1}]
-             (op/query-ra '[:group-by [a {n (min b)}]
+             (tu/query-ra '[:group-by [a {n (min b)}]
                             [:table [{:a 42, :b nil} {:a 45, :b 1}]]])))))
 
 (t/deftest test-array-agg
@@ -250,7 +250,7 @@
                    {:k "tfn", :all-vs false, :any-vs true}}
             :col-types '{k :utf8, all-vs [:union #{:null :bool}], any-vs [:union #{:null :bool}]}}
 
-           (-> (op/query-ra [:group-by '[k {all-vs (all v)} {any-vs (any v)}]
+           (-> (tu/query-ra [:group-by '[k {all-vs (all v)} {any-vs (any v)}]
                              [::tu/blocks
                               [[{:k "t", :v true} {:k "f", :v false} {:k "n", :v nil}
                                 {:k "t", :v true} {:k "f", :v false} {:k "n", :v nil}
@@ -262,17 +262,17 @@
                (update :res set))))
 
   (t/is (= []
-           (op/query-ra [:group-by '[k {all-vs (all v)} {any-vs (any v)}]
+           (tu/query-ra [:group-by '[k {all-vs (all v)} {any-vs (any v)}]
                          [::tu/blocks '{k :utf8, v [:union #{:bool :null}]}
                           []]])))
 
   (t/is (= [{:all-vs nil, :any-vs nil}]
-           (op/query-ra [:group-by '[{all-vs (all v)} {any-vs (any v)}]
+           (tu/query-ra [:group-by '[{all-vs (all v)} {any-vs (any v)}]
                          [::tu/blocks '{v [:union #{:bool :null}]}
                           []]])))
 
   (t/is (= [{:n nil}]
-           (op/query-ra '[:group-by [{n (all b)}]
+           (tu/query-ra '[:group-by [{n (all b)}]
                           [::tu/blocks
                            [[{:b nil}]]]]))))
 
@@ -295,7 +295,7 @@
                          array-agg [:list :i64],
                          array-agg-distinct [:list :i64]}}
 
-           (-> (op/query-ra [:group-by '[k
+           (-> (tu/query-ra [:group-by '[k
                                          {cnt (count v)}
                                          {cnt-distinct (count-distinct v)}
                                          {sum (sum v)}
@@ -318,7 +318,7 @@
 (t/deftest test-group-by-with-nils-coerce-to-boolean-npe-regress
   (t/is (= {:res #{{:a 42} {:a nil}}
             :col-types '{a [:union #{:i64 :null}]}}
-           (-> (op/query-ra '[:group-by [a]
+           (-> (tu/query-ra '[:group-by [a]
                               [:table [{:a 42, :b 42}, {:a nil, :b 42}, {:a nil, :b 42}]]])
                (tu/raising-col-types)
                (update :res set)))))
@@ -326,7 +326,7 @@
 (t/deftest test-group-by-groups-nils
   (t/is (= {:res #{{:a nil, :b 1, :n 85}}
             :col-types '{a :null, b :i64, n [:union #{:null :i64}]}}
-           (-> (op/query-ra '[:group-by [a b {n (sum c)}]
+           (-> (tu/query-ra '[:group-by [a b {n (sum c)}]
                               [:table [{:a nil, :b 1, :c 42}
                                        {:a nil, :b 1, :c 43}]]])
                (tu/raising-col-types)

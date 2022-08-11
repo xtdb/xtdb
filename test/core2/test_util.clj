@@ -1,32 +1,33 @@
 (ns core2.test-util
   (:require [cheshire.core :as json]
+            [clojure.spec.alpha :as s]
             [clojure.test :as t]
             [core2.api :as c2]
             [core2.json :as c2-json]
             [core2.local-node :as node]
+            [core2.logical-plan :as lp]
             core2.object-store
+            [core2.operator :as op]
             [core2.temporal :as temporal]
             [core2.types :as types]
             [core2.util :as util]
             [core2.vector.indirect :as iv]
-            [core2.vector.writer :as vw]
-            [core2.logical-plan :as lp]
-            [clojure.spec.alpha :as s])
+            [core2.vector.writer :as vw])
   (:import core2.ICursor
            core2.local_node.Node
            core2.object_store.FileSystemObjectStore
            core2.vector.IIndirectVector
            java.net.ServerSocket
-           [java.nio.file Files Path]
+           (java.nio.file Files Path)
            java.nio.file.attribute.FileAttribute
-           [java.time Clock Duration Instant Period ZoneId]
-           [java.util ArrayList LinkedList List]
+           (java.time Clock Duration Instant Period)
+           (java.util LinkedList)
            java.util.concurrent.TimeUnit
            java.util.function.Consumer
            (org.apache.arrow.memory BufferAllocator RootAllocator)
-           [org.apache.arrow.vector FieldVector ValueVector VectorSchemaRoot]
+           (org.apache.arrow.vector FieldVector ValueVector VectorSchemaRoot)
            org.apache.arrow.vector.complex.DenseUnionVector
-           [org.apache.arrow.vector.types.pojo Schema]))
+           (org.apache.arrow.vector.types.pojo Schema)))
 
 (def ^:dynamic ^org.apache.arrow.memory.BufferAllocator *allocator*)
 
@@ -169,6 +170,14 @@
     {:col-types col-types
      :->cursor (fn [{:keys [allocator]}]
                  (->cursor allocator schema blocks))}))
+
+(defn query-ra
+  ([query] (query-ra query {}))
+  ([query inputs] (query-ra query inputs {}))
+  ([query inputs query-opts]
+   (with-open [res (op/cursor->result-set (op/open-ra query inputs query-opts))]
+     (-> (vec (iterator-seq res))
+         (vary-meta assoc :col-types (.columnTypes res))))))
 
 (defn raising-col-types [query-ra-res]
   {:res query-ra-res

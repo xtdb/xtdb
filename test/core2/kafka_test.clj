@@ -14,4 +14,4 @@
       (let [tx (c2/submit-tx node [[:put {:id :foo}]])
             db (ingest/snapshot (tu/component node :core2/ingester) tx)]
         (t/is (= [{:id :foo}]
-                 (op/query-ra '[:scan [id]] db)))))))
+                 (tu/query-ra '[:scan [id]] db)))))))

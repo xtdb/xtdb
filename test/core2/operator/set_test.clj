@@ -126,7 +126,7 @@
 
   (t/testing "distinct null"
     (t/is (= [{:a nil}]
-             (op/query-ra [:distinct
+             (tu/query-ra [:distinct
                            [::tu/blocks '{a :null}
                             [{:a nil}, {:a nil}, {:a nil}]]])))))
 
@@ -151,7 +151,7 @@
 (t/deftest first-tuple-in-rhs-is-taken-into-account-test
   (t/is
    (= [{:x1 2}]
-      (op/query-ra
+      (tu/query-ra
        '[:difference
          [:table [{x1 1} {x1 2}]]
          [:table [{x1 1}]]] {}))))

@@ -83,7 +83,7 @@
 (defn run-query
   ([q] (run-query q {}))
   ([q args]
-   (op/query-ra q (merge {'$ *db*}
+   (tu/query-ra q (merge {'$ *db*}
                          (::tpch/params (meta q))
                          args))))
 

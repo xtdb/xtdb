@@ -39,7 +39,7 @@
                           (let [db (ingest/snapshot (util/component node :core2/ingester)
                                                   last-tx (Duration/ofHours 1))]
                             (log/info "rows:"
-                                      (count (op/query-ra query (merge {'$ db} (::tpch/params (meta query))))))))]
+                                      (count (tu/query-ra query (merge {'$ db} (::tpch/params (meta query))))))))]
                   (doseq [[k node] {:primary primary-node
                                     :secondary1 secondary-node1
                                     :secondary2 secondary-node2

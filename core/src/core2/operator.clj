@@ -160,11 +160,3 @@
 
 (defn cursor->result-set ^core2.IResultSet [^ICursor cursor]
   (CursorResultSet. cursor nil))
-
-(defn query-ra
-  ([query] (query-ra query {}))
-  ([query inputs] (query-ra query inputs {}))
-  ([query inputs query-opts]
-   (with-open [res (cursor->result-set (open-ra query inputs query-opts))]
-     (-> (vec (iterator-seq res))
-         (vary-meta assoc :col-types (.columnTypes res))))))

@@ -139,4 +139,4 @@
 
   (time
    (let [db (ingest/snapshot (tu/component dev/node :core2/ingester))]
-     (op/query-ra query-recent-battery-temperatures db))))
+     (tu/query-ra query-recent-battery-temperatures db))))

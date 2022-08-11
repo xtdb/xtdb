@@ -119,4 +119,4 @@
                 #'tpch/tpch-q9-product-type-profit-measure]]
       (prn !q)
       (let [db (ingest/snapshot (tu/component node :core2/ingester))]
-        (time (op/query-ra @!q db))))))
+        (time (tu/query-ra @!q db))))))

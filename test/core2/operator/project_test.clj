@@ -41,7 +41,7 @@
 
 (t/deftest test-identity-projection-not-closed
   (t/is (= [{:a nil, :b 12} {:a nil, :b 2} {:a 12, :b nil} {:a 0, :b nil}]
-           (op/query-ra
+           (tu/query-ra
              '[:project [a b]
                [:full-outer-join [false]
                 [:table [{:a 12}, {:a 0}]]
