@@ -1004,6 +1004,7 @@
         (is (= [{:a 42}] (q conn ["SELECT foo.a FROM foo"])))))))
 
 (when (psql-available?)
+
   (deftest psql-dml-test
     (psql-session
       (fn [send read]
@@ -1031,4 +1032,10 @@
           (send "SELECT foo.a FROM foo;\n")
           (let [s (read)]
             (is (str/includes? s "42"))
-            (is (str/includes? s "366"))))))))
+            (is (str/includes? s "366")))))))
+
+  (deftest psql-dml-at-prompt-test
+    (psql-session
+      (fn [send read]
+        (send "INSERT INTO foo(id, a) VALUES (42, 42);\n")
+        (is (str/starts-with? (read :err) "ERROR:  DML is unsupported in a READ ONLY transaction"))))))
