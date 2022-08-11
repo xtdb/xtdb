@@ -7,7 +7,6 @@
             [core2.sql.analyze :as sem]
             [core2.sql.plan :as plan]
             [core2.sql.logic-test.runner :as slt]
-            [core2.operator :as op]
             [core2.test-util :as tu])
   (:import [java.util HashMap UUID]
            core2.local_node.Node))
@@ -165,7 +164,7 @@
             column->anonymous-col (:column->name (meta plan))]
         (if-let [err (first errs)]
           (throw (IllegalArgumentException. ^String err))
-          (vec (for [row (tu/query-ra plan {'$ db})]
+          (vec (for [row (tu/query-ra plan {:srcs {'$ db}})]
                  (mapv #(-> (get column->anonymous-col %) name keyword row) projection))))))))
 
 (defn insert->docs [{:keys [tables] :as node} insert-statement]

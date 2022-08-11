@@ -4,8 +4,7 @@
             [core2.ingester :as ingest]
             [core2.kafka :as k]
             [core2.local-node :as node]
-            [core2.test-util :as tu]
-            [core2.operator :as op])
+            [core2.test-util :as tu])
   (:import java.util.UUID))
 
 (t/deftest ^:requires-docker ^:kafka test-kafka
@@ -14,4 +13,5 @@
       (let [tx (c2/submit-tx node [[:put {:id :foo}]])
             db (ingest/snapshot (tu/component node :core2/ingester) tx)]
         (t/is (= [{:id :foo}]
-                 (tu/query-ra '[:scan [id]] db)))))))
+                 (tu/query-ra '[:scan [id]]
+                              {:srcs {'$ db}})))))))

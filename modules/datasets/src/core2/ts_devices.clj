@@ -4,8 +4,7 @@
             [clojure.java.io :as io]
             [clojure.string :as str]
             [core2.api :as c2]
-            [core2.ingester :as ingest]
-            [core2.operator :as op])
+            [core2.ingester :as ingest])
   (:import java.util.zip.GZIPInputStream))
 
 (defn device-info-csv->doc [[device-id api-version manufacturer model os-name]]
@@ -139,4 +138,4 @@
 
   (time
    (let [db (ingest/snapshot (tu/component dev/node :core2/ingester))]
-     (tu/query-ra query-recent-battery-temperatures db))))
+     (tu/query-ra query-recent-battery-temperatures {:srcs {'$ db}}))))

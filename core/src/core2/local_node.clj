@@ -9,59 +9,136 @@
             [core2.sql.plan :as sql.plan]
             [core2.tx-producer :as txp]
             [core2.util :as util]
+            [core2.vector.indirect :as iv]
             [juxt.clojars-mirrors.integrant.core :as ig])
-  (:import core2.ingester.Ingester
+  (:import (core2 IResultCursor IResultSet)
+           core2.ingester.Ingester
            (core2.tx_producer ITxProducer)
            (java.io Closeable Writer)
            (java.lang AutoCloseable)
            (java.time Duration Instant)
            (java.util.concurrent CompletableFuture TimeUnit)
+           (java.util.function Consumer Function)
+           java.util.Iterator
            (org.apache.arrow.memory BufferAllocator RootAllocator)))
 
 (set! *unchecked-math* :warn-on-boxed)
 
+(definterface PreparedQueryAsync
+  (^java.util.concurrent.CompletableFuture openQueryAsync #_<IResultCursor> [queryOpts])
+  (close []))
+
 (defprotocol PNode
+  (prepare-ra ^core2.local_node.PreparedQueryAsync [_ query])
+  (prepare-sql ^core2.local_node.PreparedQueryAsync [_ query])
+  ;; TODO to do `-prepare-datalog` we need `d/compile-query` to not take the actual args
+
   ;; TODO in theory we shouldn't need this, but it's still used in tests
   (await-tx-async
     ^java.util.concurrent.CompletableFuture #_<TransactionInstant> [node tx]))
+
+(deftype CursorResultSet [^IResultCursor cursor
+                          ^AutoCloseable maybe-pq
+                          ^:unsynchronized-mutable ^Iterator next-values]
+  IResultSet
+  (columnTypes [_] (.columnTypes cursor))
+
+  (hasNext [res]
+    (boolean
+     (or (and next-values (.hasNext next-values))
+         ;; need to call rel->rows eagerly - the rel may have been reused/closed after
+         ;; the tryAdvance returns.
+         (do
+           (while (and (.tryAdvance cursor
+                                    (reify Consumer
+                                      (accept [_ rel]
+                                        (set! (.-next-values res)
+                                              (.iterator (iv/rel->rows rel))))))
+                       (not (and next-values (.hasNext next-values)))))
+           (and next-values (.hasNext next-values))))))
+
+  (next [_] (.next next-values))
+  (close [_]
+    (.close cursor)
+    (util/try-close maybe-pq)))
+
+(defn cursor->result-set
+  (^core2.IResultSet [^IResultCursor cursor]
+   (cursor->result-set cursor nil))
+  (^core2.IResultSet [^IResultCursor cursor, ^AutoCloseable maybe-pq]
+   (CursorResultSet. cursor maybe-pq nil)))
 
 (defrecord Node [^Ingester ingester
                  ^ITxProducer tx-producer
                  !system
                  close-fn]
   api/PClient
-  (-open-datalog-async [_ query args]
-    (let [{:keys [basis ^Duration basis-timeout]} query
-          {:keys [current-time tx], :or {current-time (Instant/now)}} basis]
-      (-> (ingest/snapshot-async ingester tx)
-          (cond-> basis-timeout (.orTimeout (.toMillis basis-timeout) TimeUnit/MILLISECONDS))
-          (util/then-apply
-            (fn [db]
-              (let [{:keys [query args]} (-> (dissoc query :basis :basis-timeout)
-                                             (d/compile-query args))]
-                (-> (op/open-ra query (merge args {'$ db}) {:current-time current-time})
-                    (op/cursor->result-set))))))))
+  (-open-datalog-async [this query args]
+    (let [{ra-query :query, :keys [args]} (-> (dissoc query :basis :basis-timeout)
+                                              (d/compile-query args))
+          pq (prepare-ra this ra-query)]
+      (try
+        (-> (.openQueryAsync pq (merge {:params args}
+                                       (select-keys query [:basis :basis-timeout])))
+            (.thenApply (reify Function
+                          (apply [_ res-cursor]
+                            (try
+                              (cursor->result-set res-cursor pq)
+                              (catch Throwable e
+                                (util/try-close res-cursor)
+                                (throw e)))))))
+        (catch Throwable e
+          (.close pq)
+          (throw e)))))
 
-  (-open-sql-async [_ query {:keys [basis ^Duration basis-timeout] :as query-opts}]
-    (let [{:keys [current-time tx], :or {current-time (Instant/now)}} basis]
-      (-> (ingest/snapshot-async ingester tx)
-          (cond-> basis-timeout (.orTimeout (.toMillis basis-timeout) TimeUnit/MILLISECONDS))
-          (util/then-apply
-            (fn [db]
-              (let [{:keys [errs plan]} (-> (p/parse query)
-                                            (sql.plan/plan-query))]
-                (if errs
-                  (throw (err/illegal-arg :invalid-sql-query
-                                          {::err/message "Invalid SQL query:"
-                                           :errs errs}))
-                  (-> (op/open-ra plan
-                                  (into {'$ db}
-                                        (zipmap (map #(symbol (str "?_" %)) (range))
-                                                (:? query-opts)))
-                                  {:current-time current-time})
-                      (op/cursor->result-set)))))))))
+  (-open-sql-async [this query query-opts]
+    (let [pq (prepare-sql this query)]
+      (try
+        (-> (.openQueryAsync pq query-opts)
+            (.thenApply (reify Function
+                          (apply [_ res-cursor]
+                            (try
+                              (cursor->result-set res-cursor pq)
+                              (catch Throwable e
+                                (util/try-close res-cursor)
+                                (throw e)))))))
+        (catch Throwable e
+          (.close pq)
+          (throw e)))))
 
   PNode
+  (prepare-ra [_ query]
+    (let [pq (op/open-prepared-ra query)]
+      (reify PreparedQueryAsync
+        (openQueryAsync [_ {:keys [basis ^Duration basis-timeout] :as query-opts}]
+          (let [{:keys [current-time tx], :or {current-time (Instant/now)}} basis]
+            (-> (ingest/snapshot-async ingester tx)
+                (cond-> basis-timeout (.orTimeout (.toMillis basis-timeout) TimeUnit/MILLISECONDS))
+                (util/then-apply
+                  (fn [db]
+                    (.openCursor pq (-> query-opts
+                                        (dissoc :basis :basis-timeout)
+                                        (assoc :current-time current-time
+                                               :srcs {'$ db}))))))))
+        AutoCloseable
+        (close [_] (.close pq)))))
+
+  (prepare-sql [this query]
+    (let [{:keys [errs plan]} (-> (p/parse query)
+                                  (sql.plan/plan-query))]
+      (when errs
+        (throw (err/illegal-arg :invalid-sql-query
+                                {::err/message "Invalid SQL query:"
+                                 :errs errs})))
+
+      (let [pq (prepare-ra this plan)]
+        (reify PreparedQueryAsync
+          (openQueryAsync [_ query-opts]
+            (.openQueryAsync pq (-> (dissoc query-opts :?)
+                                    (assoc :params (zipmap (map #(symbol (str "?_" %)) (range))
+                                                           (:? query-opts))))))
+          (close [_] (.close pq))))))
+
   (await-tx-async [_ tx]
     (-> (if-not (instance? CompletableFuture tx)
           (CompletableFuture/completedFuture tx)

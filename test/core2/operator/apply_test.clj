@@ -1,6 +1,5 @@
 (ns core2.operator.apply-test
   (:require [clojure.test :as t]
-            [core2.operator :as op]
             [core2.test-util :as tu]))
 
 (t/deftest test-apply-operator
@@ -51,15 +50,15 @@
                               [[{:o-customer-id "c1"}
                                 {:o-customer-id "c1"}
                                 {:o-customer-id "c2"}
-                                {:o-customer-id "c4"}]]]])
-               (tu/raising-col-types))))
+                                {:o-customer-id "c4"}]]]]
+                            {:with-col-types? true}))))
 
   (t/is (= {:res [{:x 0, :match nil}]
             :col-types '{x :i64, match [:union #{:null :bool}]}}
            (-> (tu/query-ra '[:apply {:mark-join {match (= 4 y)}} {}
                               [:table [{x 0}]]
-                              [:table [{y nil}]]])
-               (tu/raising-col-types)))
+                              [:table [{y nil}]]]
+                            {:with-col-types? true})))
         "nil in RHS")
 
   (t/is (= [{:x 0, :match false} {:x 1, :match false}]
@@ -75,14 +74,14 @@
            (tu/query-ra '[:apply :single-join {}
                           [:table [{:y 0}]]
                           [:table ?x]]
-                        '{?x [{:a 1, :b 2}]})))
+                        {:params '{?x [{:a 1, :b 2}]}})))
 
   (t/is (thrown-with-msg? RuntimeException
                           #"cardinality violation"
                           (tu/query-ra '[:apply :single-join {}
                                          [:table [{:y 0}]]
                                          [:table ?x]]
-                                       '{?x [{:a 1, :b 2} {:a 3, :b 4}]}))
+                                       {:params '{?x [{:a 1, :b 2} {:a 3, :b 4}]}}))
         "throws on cardinality > 1")
 
   (t/testing "returns null on empty"
@@ -90,13 +89,13 @@
              (tu/query-ra '[:apply :single-join {}
                             [:table [{:y 0}]]
                             [:table ?x]]
-                          '{?x []})))
+                          {:params '{?x []}})))
 
     (t/is (= [{:y 0, :a nil, :b nil}]
              (tu/query-ra '[:apply :single-join {}
                             [:table [{:y 0}]]
                             [:table [a b] ?x]]
-                          '{?x []})))))
+                          {:params '{?x []}})))))
 
 (t/deftest test-apply-empty-rel-bug-237
   (t/is (= {:res [{:x3 nil}], :col-types '{x3 [:union #{:null :i64}]}}
@@ -105,13 +104,13 @@
                   [:apply :cross-join {}
                    [:table [{x1 15}]]
                    [:select false
-                    [:table [{x2 20}]]]]])
-               (tu/raising-col-types))))
+                    [:table [{x2 20}]]]]]
+                {:with-col-types? true}))))
 
   (t/is (= {:res [], :col-types '{x1 :i64, x2 :i64}}
            (-> (tu/query-ra '[:project [x1 x2]
                               [:apply :cross-join {}
                                [:table [{x1 15}]]
                                [:select false
-                                [:table [{x2 20}]]]]])
-               (tu/raising-col-types)))))
+                                [:table [{x2 20}]]]]]
+                            {:with-col-types? true})))))

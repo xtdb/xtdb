@@ -8,7 +8,6 @@
             [core2.util :as util]
             [integrant.core :as i]
             [integrant.repl :as ir]
-            [core2.operator :as op]
             [clj-async-profiler.core :as clj-async-profiler])
   (:import [ch.qos.logback.classic Level Logger]
            java.time.Duration

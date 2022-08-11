@@ -1,22 +1,14 @@
 (ns core2.sql.temporal-test
   (:require [clojure.test :refer [deftest is use-fixtures testing]]
-            [clojure.string :as str]
-            [core2.sql.plan-test :as pt]
             [core2.api :as c2]
-            [core2.ingester :as ingest]
-            [core2.operator :as op]
             [core2.test-util :as tu]))
 
 (use-fixtures :each tu/with-node)
 
 (defn query-at-tx [query tx]
-  (c2/sql-query
-    tu/*node*
-    query
-    {:basis {:tx tx}}))
+  (c2/sql-query tu/*node* query {:basis {:tx tx}}))
 
 (deftest system-time-as-of
-
   (let [!tx (c2/submit-tx tu/*node* [[:put {:id :my-doc, :last_updated "tx1"}]] {:sys-time #inst "3000"})
         !tx2 (c2/submit-tx tu/*node* [[:put {:id :my-doc, :last_updated "tx2"}]] {:sys-time #inst "3001"})]
 
@@ -36,7 +28,6 @@
              !tx2)))))
 
 (deftest system-time-from-a-to-b
-
   (let [!tx (c2/submit-tx tu/*node* [[:put {:id :my-doc, :last_updated "tx1"}]] {:sys-time #inst "3000"})
         !tx2 (c2/submit-tx tu/*node* [[:put {:id :my-doc, :last_updated "tx2"}]] {:sys-time #inst "3001"})]
 

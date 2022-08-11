@@ -171,18 +171,6 @@
      :->cursor (fn [{:keys [allocator]}]
                  (->cursor allocator schema blocks))}))
 
-(defn query-ra
-  ([query] (query-ra query {}))
-  ([query inputs] (query-ra query inputs {}))
-  ([query inputs query-opts]
-   (with-open [res (op/cursor->result-set (op/open-ra query inputs query-opts))]
-     (-> (vec (iterator-seq res))
-         (vary-meta assoc :col-types (.columnTypes res))))))
-
-(defn raising-col-types [query-ra-res]
-  {:res query-ra-res
-   :col-types (:col-types (meta query-ra-res))})
-
 (defn <-column [^IIndirectVector col]
   (mapv (fn [idx]
           (types/get-object (.getVector col) (.getIndex col idx)))
@@ -195,6 +183,20 @@
                          (accept [_ rel]
                            (vswap! !res conj! (iv/rel->rows rel)))))
     (persistent! @!res)))
+
+(defn query-ra
+  ([query] (query-ra query {}))
+  ([query {:keys [srcs params preserve-blocks? with-col-types?] :as query-opts}]
+   (with-open [pq (op/open-prepared-ra query)
+               res (.openCursor pq (-> query-opts
+                                       (dissoc :preserve-blocks? :with-col-types?)
+                                       (assoc :srcs srcs, :params params)))]
+
+     (let [rows (-> (<-cursor res)
+                   (cond->> (not preserve-blocks?) (into [] cat)))]
+       (if with-col-types?
+         {:res rows, :col-types (.columnTypes res)}
+         rows)))))
 
 (t/deftest round-trip-cursor
   (with-allocator

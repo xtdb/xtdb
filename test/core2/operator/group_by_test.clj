@@ -1,6 +1,5 @@
 (ns core2.operator.group-by-test
   (:require [clojure.test :as t]
-            [core2.operator :as op]
             [core2.operator.group-by :as group-by]
             [core2.test-util :as tu]
             [core2.util :as util]
@@ -11,8 +10,8 @@
 (t/deftest test-group-by
   (letfn [(run-test [group-by-spec blocks]
             (-> (tu/query-ra [:group-by group-by-spec
-                              [::tu/blocks '{a :i64, b :i64} blocks]])
-                (tu/raising-col-types)
+                              [::tu/blocks '{a :i64, b :i64} blocks]]
+                             {:with-col-types? true})
                 (update :res set)))]
 
     (let [agg-specs '[{sum (sum b)}
@@ -257,8 +256,8 @@
                                 {:k "tn", :v true} {:k "tn", :v nil} {:k "tn", :v true}
                                 {:k "fn", :v false} {:k "fn", :v nil} {:k "fn", :v false}
                                 {:k "tf", :v true} {:k "tf", :v false} {:k "tf", :v true}
-                                {:k "tfn", :v true} {:k "tfn", :v false} {:k "tfn", :v nil}]]]])
-               (tu/raising-col-types)
+                                {:k "tfn", :v true} {:k "tfn", :v false} {:k "tfn", :v nil}]]]]
+                            {:with-col-types? true})
                (update :res set))))
 
   (t/is (= []
@@ -311,16 +310,16 @@
                                 {:k :b, :v 15}
                                 {:k :b, :v 10}]
                                [{:k :a, :v 12}
-                                {:k :a, :v 10}]]]])
-               (tu/raising-col-types)
+                                {:k :a, :v 10}]]]]
+                            {:with-col-types? true})
                (update :res set)))))
 
 (t/deftest test-group-by-with-nils-coerce-to-boolean-npe-regress
   (t/is (= {:res #{{:a 42} {:a nil}}
             :col-types '{a [:union #{:i64 :null}]}}
            (-> (tu/query-ra '[:group-by [a]
-                              [:table [{:a 42, :b 42}, {:a nil, :b 42}, {:a nil, :b 42}]]])
-               (tu/raising-col-types)
+                              [:table [{:a 42, :b 42}, {:a nil, :b 42}, {:a nil, :b 42}]]]
+                            {:with-col-types? true})
                (update :res set)))))
 
 (t/deftest test-group-by-groups-nils
@@ -328,6 +327,6 @@
             :col-types '{a :null, b :i64, n [:union #{:null :i64}]}}
            (-> (tu/query-ra '[:group-by [a b {n (sum c)}]
                               [:table [{:a nil, :b 1, :c 42}
-                                       {:a nil, :b 1, :c 43}]]])
-               (tu/raising-col-types)
+                                       {:a nil, :b 1, :c 43}]]]
+                            {:with-col-types? true})
                (update :res set)))))

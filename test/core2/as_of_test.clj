@@ -2,7 +2,6 @@
   (:require [clojure.test :as t]
             [core2.api :as c2]
             [core2.ingester :as ingest]
-            [core2.operator :as op]
             [core2.test-util :as tu]
             [core2.util :as util])
   (:import (java.time Clock Duration)
@@ -36,7 +35,7 @@
 
     (t/is (= #{{:last-updated "tx1"} {:last-updated "tx2"}}
              (set (tu/query-ra '[:scan [last-updated]]
-                               (ingest/snapshot ingester !tx2)))))
+                               {:srcs {'$ (ingest/snapshot ingester !tx2)}}))))
 
     (t/is (= #{{:last-updated "tx1"} {:last-updated "tx2"}}
              (->> (c2/plan-datalog tu/*node*
@@ -48,7 +47,7 @@
     (t/testing "at tx1"
       (t/is (= #{{:last-updated "tx1"}}
                (set (tu/query-ra '[:scan [last-updated]]
-                                 (ingest/snapshot ingester !tx1)))))
+                                 {:srcs {'$ (ingest/snapshot ingester !tx1)}}))))
 
       (t/is (= #{{:last-updated "tx1"}}
                (->> (c2/plan-datalog tu/*node*
@@ -65,9 +64,7 @@
                                                               {:app-time-start #inst "2021"}]])
         sys-time (util/->zdt sys-time)
 
-        start-app-time (util/->zdt (first *app-times*))
-
-        db (ingest/snapshot ingester tx1)]
+        start-app-time (util/->zdt (first *app-times*))]
 
     (t/is (= {:doc {:id :doc,
                     :application_time_start start-app-time
@@ -82,7 +79,7 @@
              (->> (tu/query-ra '[:scan [id
                                         application_time_start application_time_end
                                         system_time_start system_time_end]]
-                               db)
+                               {:srcs {'$ (ingest/snapshot ingester tx1)}})
                   (into {} (map (juxt :id identity))))))))
 
 (t/deftest test-sys-time
@@ -115,7 +112,7 @@
              (tu/query-ra '[:scan [id version
                                    application_time_start application_time_end
                                    system_time_start system_time_end]]
-                          db))
+                          {:srcs {'$ db}}))
           "all app-time")
 
     #_ ; FIXME
@@ -123,7 +120,8 @@
              (tu/query-ra '[:scan [id version
                                    application_time_start application_time_end
                                    system_time_start {system_time_end (<= system_time_end ?eot)}]]
-                          {'$ db, '?eot util/end-of-time}))
+                          {:srcs {'$ db}
+                           :params {'?eot util/end-of-time}}))
           "all app, all sys")))
 
 (t/deftest test-evict
@@ -132,7 +130,8 @@
               (->> (tu/query-ra '[:scan [id
                                          application_time_start {application_time_end (<= application_time_end ?eot)}
                                          system_time_start {system_time_end (<= system_time_end ?eot)}]]
-                                {'$ db, '?eot util/end-of-time})
+                                {:srcs {'$ db}
+                                 :params {'?eot util/end-of-time}})
                    (map :id)
                    frequencies))]
 

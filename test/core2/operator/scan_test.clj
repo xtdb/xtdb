@@ -3,7 +3,6 @@
             [core2.api :as c2]
             [core2.ingester :as ingest]
             [core2.local-node :as node]
-            [core2.operator :as op]
             [core2.test-util :as tu]
             [core2.util :as util])
   (:import (core2 IResultCursor)))
@@ -18,20 +17,19 @@
           ingester (tu/component node :core2/ingester)]
       (t/is (= [{:id :bar, :col1 "bar1", :col2 "bar2"}]
                (tu/query-ra '[:scan [id col1 col2]]
-                            (ingest/snapshot ingester tx)))))))
+                            {:srcs {'$ (ingest/snapshot ingester tx)}}))))))
 
 (t/deftest multiple-sources
   (with-open [node1 (node/start-node {})
               node2 (node/start-node {})]
     (let [tx1 (c2/submit-tx node1 [[:put {:id :foo, :col1 "col1"}]])
-          db1 (ingest/snapshot (tu/component node1 :core2/ingester) tx1)
-          tx2 (c2/submit-tx node2 [[:put {:id :foo, :col2 "col2"}]])
-          db2 (ingest/snapshot (tu/component node2 :core2/ingester) tx2)]
+          tx2 (c2/submit-tx node2 [[:put {:id :foo, :col2 "col2"}]])]
       (t/is (= [{:id :foo, :col1 "col1", :col2 "col2"}]
                (tu/query-ra '[:join [{id id}]
                               [:scan $db1 [id col1]]
                               [:scan $db2 [id col2]]]
-                            {'$db1 db1, '$db2 db2}))))))
+                            {:srcs {'$db1 (ingest/snapshot (tu/component node1 :core2/ingester) tx1),
+                                    '$db2 (ingest/snapshot (tu/component node2 :core2/ingester) tx2)}}))))))
 
 (t/deftest test-duplicates-in-scan-1
   (with-open [node (node/start-node {})]
@@ -39,7 +37,7 @@
           tx (c2/submit-tx node [[:put {:id :foo}]])]
       (t/is (= [{:id :foo}]
                (tu/query-ra '[:scan [id id]]
-                            (ingest/snapshot ingester tx)))))))
+                            {:srcs {'$ (ingest/snapshot ingester tx)}}))))))
 
 (t/deftest test-scanning-temporal-cols
   (with-open [node (node/start-node {})]
@@ -51,7 +49,7 @@
       (let [res (first (tu/query-ra '[:scan [id
                                              application_time_start application_time_end
                                              system_time_start system_time_end]]
-                                    (ingest/snapshot ingester tx)))]
+                                    {:srcs {'$ (ingest/snapshot ingester tx)}}))]
         (t/is (= #{:id :application_time_start :application_time_end :system_time_end :system_time_start}
                  (-> res keys set)))
 
@@ -63,7 +61,7 @@
                                                    {app-time-start application_time_start}
                                                    {app-time-end application_time_end}]
                                          [:scan [id application_time_start application_time_end]]]
-                                       (ingest/snapshot ingester tx)))
+                                       {:srcs {'$ (ingest/snapshot ingester tx)}}))
                    (dissoc :system_time_start :system_time_end)))))))
 
 #_ ; FIXME hangs
@@ -78,21 +76,20 @@
 
 (t/deftest test-scan-col-types
   (with-open [node (node/start-node {})]
-    (let [ingester (tu/component node :core2/ingester)]
-      (letfn [(->col-types [tx]
-                (let [snap (ingest/snapshot ingester tx)]
-                  (with-open [^IResultCursor rs (op/open-ra '[:scan [id]] snap {})]
-                    (.columnTypes rs))))]
+    (letfn [(->col-types [tx]
+              (with-open [pq (node/prepare-ra node '[:scan [id]])
+                          ^IResultCursor res @(.openQueryAsync pq {:basis {:tx tx}})]
+                (.columnTypes res)))]
 
-        (let [tx (-> (c2/submit-tx node [[:put {:id :doc}]])
-                     (tu/then-await-tx node))]
-          (tu/finish-chunk node)
+      (let [tx (-> (c2/submit-tx node [[:put {:id :doc}]])
+                   (tu/then-await-tx node))]
+        (tu/finish-chunk node)
 
-          (t/is (= '{id [:extension-type :keyword :utf8 ""]}
-                   (->col-types tx))))
+        (t/is (= '{id [:extension-type :keyword :utf8 ""]}
+                 (->col-types tx))))
 
-        (let [tx (-> (c2/submit-tx node [[:put {:id "foo"}]])
-                     (tu/then-await-tx node))]
+      (let [tx (-> (c2/submit-tx node [[:put {:id "foo"}]])
+                   (tu/then-await-tx node))]
 
-          (t/is (= '{id [:union #{[:extension-type :keyword :utf8 ""] :utf8}]}
-                   (->col-types tx))))))))
+        (t/is (= '{id [:union #{[:extension-type :keyword :utf8 ""] :utf8}]}
+                 (->col-types tx)))))))

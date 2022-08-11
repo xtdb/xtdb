@@ -1,6 +1,5 @@
 (ns core2.operator.top-test
   (:require [clojure.test :as t]
-            [core2.operator :as op]
             [core2.operator.top :as top]
             [core2.test-util :as tu]))
 
@@ -48,10 +47,10 @@
   (let [blocks [[{:idx 0}, {:idx 1}]
                 [{:idx 2}, {:idx 3}]]]
     (letfn [(top [offset length]
-              (with-open [q (op/open-ra [:top (->> {:skip offset, :limit length}
-                                                   (into {} (filter (comp some? val))))
-                                         [::tu/blocks '{idx :i64} blocks]])]
-                (tu/<-cursor q)))]
+              (tu/query-ra [:top (->> {:skip offset, :limit length}
+                                      (into {} (filter (comp some? val))))
+                            [::tu/blocks '{idx :i64} blocks]]
+                           {:preserve-blocks? true}))]
       (t/is (= blocks (top nil nil)))
 
       (t/is (= [[{:idx 0}, {:idx 1}]

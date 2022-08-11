@@ -3,8 +3,7 @@
             [clojure.test :as t]
             [core2.test-util :as tu]
             [core2.types :as types]
-            [core2.util :as util]
-            [core2.operator :as op])
+            [core2.util :as util])
   (:import org.apache.arrow.memory.RootAllocator
            org.apache.arrow.vector.types.pojo.Schema
            org.apache.arrow.vector.VectorSchemaRoot))
@@ -19,17 +18,18 @@
     {:id "foo5", :a-long 53, :a-double 10.0, :an-inst (util/->zdt #inst "2022")}]])
 
 (t/deftest test-csv-cursor
-  (with-open [res (op/open-ra [:csv (-> (io/resource "core2/operator/csv-cursor-test.csv")
-                                        .toURI
-                                        util/->path)
-                               '{id :utf8
-                                 a-long :i64
-                                 a-double :f64
-                                 an-inst :timestamp}
-                               {:batch-size 3}])]
-    (t/is (= {"id" :utf8, "a-long" :i64, "a-double" :f64, "an-inst" [:timestamp-tz :micro "UTC"]}
-             (.columnTypes res)))
-    (t/is (= example-data (into [] (tu/<-cursor res))))))
+  (t/is (= {:col-types {"id" :utf8, "a-long" :i64, "a-double" :f64, "an-inst" [:timestamp-tz :micro "UTC"]}
+            :res example-data}
+           (tu/query-ra [:csv (-> (io/resource "core2/operator/csv-cursor-test.csv")
+                                  .toURI
+                                  util/->path)
+                         '{id :utf8
+                           a-long :i64
+                           a-double :f64
+                           an-inst :timestamp}
+                         {:batch-size 3}]
+                        {:preserve-blocks? true
+                         :with-col-types? true}))))
 
 (def ^:private arrow-path
   (-> (io/resource "core2/operator/arrow-cursor-test.arrow")
@@ -37,10 +37,10 @@
       util/->path))
 
 (t/deftest test-arrow-cursor
-  (with-open [res (op/open-ra [:arrow arrow-path])]
-    (t/is (= {"id" :utf8, "a-long" :i64, "a-double" :f64, "an-inst" [:timestamp-tz :micro "UTC"]}
-             (.columnTypes res)))
-    (t/is (= example-data (tu/<-cursor res)))))
+  (t/is (= {:col-types {"id" :utf8, "a-long" :i64, "a-double" :f64, "an-inst" [:timestamp-tz :micro "UTC"]}
+            :res example-data}
+           (tu/query-ra [:arrow arrow-path]
+                        {:preserve-blocks? true, :with-col-types? true}))))
 
 (comment
   (with-open [al (RootAllocator.)

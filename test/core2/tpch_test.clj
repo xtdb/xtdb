@@ -5,8 +5,7 @@
             [core2.json :as c2-json]
             [core2.test-util :as tu]
             [core2.tpch :as tpch]
-            [core2.util :as util]
-            [core2.operator :as op])
+            [core2.util :as util])
   (:import [java.nio.file Files LinkOption Path]
            [java.time Clock Duration ZoneId]))
 
@@ -83,8 +82,8 @@
 (defn run-query
   ([q] (run-query q {}))
   ([q args]
-   (tu/query-ra q (merge {'$ *db*}
-                         (::tpch/params (meta q))
+   (tu/query-ra q (merge {:srcs {'$ *db*}
+                          :params (::tpch/params (meta q))}
                          args))))
 
 (defn slurp-query [query-no]
