@@ -9,9 +9,7 @@
             [clojure.tools.logging :as log]
             [clojure.java.shell :as sh]
             [core2.util :as util]
-            [core2.api :as c2]
-            [clojure.test.check.generators :as tcg]
-            [clojure.test.check.generators :as gen])
+            [core2.api :as c2])
   (:import (java.sql Connection)
            (org.postgresql.util PGobject PSQLException)
            (com.fasterxml.jackson.databind.node JsonNodeType)
