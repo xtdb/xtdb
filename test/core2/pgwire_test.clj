@@ -986,3 +986,70 @@
         (q tx ["INSERT INTO foo(id, a) values(42, 42)"]))
       (testing "read after write"
         (is (= [{:a 42}] (q conn ["SELECT foo.a FROM foo"])))))))
+
+(when (psql-available?)
+  (deftest psql-dml-test
+    (let [pb (ProcessBuilder. ["psql" "-h" "localhost" "-p" (str *port*)])
+          p (.start pb)
+          in (delay (.getInputStream p))
+          err (delay (.getErrorStream p))
+          out (delay (.getOutputStream p))
+
+          send
+          (fn [s]
+            (.write @out (.getBytes s "utf-8"))
+            (.flush @out))
+
+          read
+          (fn read
+            ([] (read @in))
+            ([stream]
+             (loop [wait-until (+ (System/currentTimeMillis) 1000)]
+               (cond
+                 (pos? (.available stream))
+                 (let [barr (byte-array (.available stream))]
+                   (.read stream barr)
+                   (String. barr))
+
+                 (< wait-until (System/currentTimeMillis)) :timeout
+                 :else (recur wait-until)))))]
+
+      (try
+
+        (testing "set transaction"
+          (send "SET TRANSACTION READ WRITE;\n")
+          (is (str/includes? (read) "SET TRANSACTION")))
+
+        (testing "begin"
+          (send "BEGIN;\n")
+          (is (str/includes? (read) "BEGIN")))
+
+        (testing "insert"
+          (send "INSERT INTO foo (id, a) values (42, 42);\n")
+          (is (str/includes? (read) "INSERT 0 0")))
+
+        (testing "insert 2"
+          (send "INSERT INTO foo (id, a) values (366, 366);\n")
+          (is (str/includes? (read) "INSERT 0 0")))
+
+        (testing "commit"
+          (send "COMMIT;\n")
+          (is (= (str/includes? (read) "COMMIT"))))
+
+        (testing "read your own writes"
+          (send "SELECT foo.a FROM foo;\n")
+          (let [s (read)]
+            (is (str/includes? s "42"))
+            (is (str/includes? s "366"))))
+
+        (finally
+
+          (when (.isAlive p)
+            (.destroy p))
+
+          (is (.waitFor p 1000 TimeUnit/MILLISECONDS))
+          (is (#{143, 0} (.exitValue p)))
+
+          (when (realized? in) (util/try-close @in))
+          (when (realized? out) (util/try-close @out))
+          (when (realized? err) (util/try-close @err)))))))
