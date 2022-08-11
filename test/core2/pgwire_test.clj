@@ -974,7 +974,7 @@
   (with-open [conn (jdbc-conn)]
     (testing "mixing a read causes rollback"
       (q conn ["SET TRANSACTION READ WRITE"])
-      (is (thrown-with-msg? PSQLException #"queries are unsupported in a READ WRITE tranaction"
+      (is (thrown-with-msg? PSQLException #"queries are unsupported in a READ WRITE transaction"
                             (jdbc/with-transaction [tx conn]
                               (q tx ["INSERT INTO foo(id, a) values(42, 42)"])
                               (q conn ["SELECT foo.a FROM bar"]))))

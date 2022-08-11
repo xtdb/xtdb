@@ -1623,7 +1623,7 @@
 
       (query? ast)
       (when (= :read-write access-mode)
-        (err-protocol-violation "queries are unsupported in a READ WRITE tranaction."))
+        (err-protocol-violation "queries are unsupported in a READ WRITE transaction."))
 
       :else (do
               (log/debug "Unexpected statement" (or (some-> ast ast-executable-statement-root-tag) (statement-head query)))
