@@ -29,16 +29,8 @@
 
 #_{:clj-kondo/ignore [:unused-binding]}
 (definterface PreparedQuery
-  (^core2.IResultCursor openCursor [])
   (^core2.IResultCursor openCursor [queryArgs])
-  (^core2.IResultCursor openCursor [queryArgs queryOpts])
   (^void close []))
-
-(defn- args->srcs+params [args]
-  (if-not (map? args)
-    (recur {'$ args})
-    (-> (group-by #(if (lp/source-sym? (key %)) :srcs :params) args)
-        (update-vals #(into {} %)))))
 
 (deftype ResultCursor [^BufferAllocator allocator, ^ICursor cursor, col-types]
   IResultCursor
@@ -68,12 +60,8 @@
                                          (mapcat scan/->scan-cols))))
           cache (HashMap.)]
       (reify PreparedQuery
-        (openCursor [this] (.openCursor this {}))
-        (openCursor [this query-args] (.openCursor this query-args {}))
-
-        (openCursor [_ args {:keys [current-time default-tz] :as query-opts}]
-          (let [{:keys [srcs params]} (args->srcs+params args)
-                {:keys [col-types ->cursor]} (.computeIfAbsent cache
+        (openCursor [_ {:keys [srcs params current-time default-tz] :as query-opts}]
+          (let [{:keys [col-types ->cursor]} (.computeIfAbsent cache
                                                                {:scan-col-types (scan/->scan-col-types srcs scan-cols)
                                                                 :param-types (expr/->param-types params)}
                                                                (reify Function
@@ -96,6 +84,12 @@
         AutoCloseable
         (close [_]
           (.clear cache))))))
+
+(defn- args->srcs+params [args]
+  (if-not (map? args)
+    (recur {'$ args})
+    (-> (group-by #(if (lp/source-sym? (key %)) :srcs :params) args)
+        (update-vals #(into {} %)))))
 
 (defn open-ra
   ;; TODO duplicated from above. do we want to keep this as an API? we could go for 'either open a PS or get eager results'?

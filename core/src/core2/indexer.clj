@@ -412,7 +412,7 @@
           (doseq [param-row param-rows
                   :let [param-row (->> param-row
                                        (into {} (map (juxt (comp symbol key) val))))]]
-            (with-open [res (.openCursor pq (into {'$ scan-src} param-row) {:current-time current-time})]
+            (with-open [res (.openCursor pq {:srcs {'$ scan-src}, :params param-row, :current-time current-time})]
               (.forEachRemaining res
                                  (reify Consumer
                                    (accept [_ in-rel]
@@ -453,7 +453,7 @@
         (doseq [param-row param-rows
                 :let [param-row (->> param-row
                                      (into {} (map (juxt (comp symbol key) val))))]]
-          (with-open [res (.openCursor pq (into {'$ scan-src} param-row) {:current-time current-time})]
+          (with-open [res (.openCursor pq {:srcs {'$ scan-src}, :params param-row, :current-time current-time})]
             (.forEachRemaining res
                                (reify Consumer
                                  (accept [_ in-rel]
@@ -514,7 +514,7 @@
         (doseq [param-row param-rows
                 :let [param-row (->> param-row
                                      (into {} (map (juxt (comp symbol key) val))))]]
-          (with-open [res (.openCursor pq (into {'$ scan-src} param-row) {:current-time current-time})]
+          (with-open [res (.openCursor pq {:srcs {'$ scan-src}, :params param-row, :current-time current-time})]
             (.forEachRemaining res
                                (reify Consumer
                                  (accept [_ in-rel]
