@@ -36,10 +36,7 @@ explained under _Running_.
   {:git/url "ssh://git@github.com/xtdb/core2"
    ;; update this to the latest SHA:
    :git/sha "28ea1ee464101aa49432a57a222f58baf46c76ad"
-   :deps/root "core"}
-
-  ;; TODO: users shouldn't have to specify this manually
-  com.widdindustries/time-literals {:mvn/version "0.1.6"}}}
+   :deps/root "core"}}}
 
 ;; duplicate for other modules, setting their `:deps/root`.
 ;; S3/JDBC/Kafka etc are under `"modules/*"`
