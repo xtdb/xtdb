@@ -24,8 +24,7 @@
             [reitit.ring :as r.ring]
             [reitit.swagger :as r.swagger]
             [ring.adapter.jetty9 :as j]
-            [spec-tools.core :as st]
-            [clojure.java.io :as io])
+            [spec-tools.core :as st])
   (:import core2.api.TransactionInstant
            core2.IResultSet
            java.io.OutputStream
@@ -34,7 +33,7 @@
 
 (def ^:private muuntaja-opts
   (-> m/default-options
-      (m/select-formats #{"application/transit+json" "application/edn"})
+      (m/select-formats #{"application/transit+json"})
       (assoc-in [:formats "application/transit+json" :decoder-opts :handlers]
                 c2.transit/tj-read-handlers)
       (assoc-in [:formats "application/transit+json" :encoder-opts :handlers]
@@ -72,19 +71,6 @@
           :parameters {:body (s/keys :req-un [::tx-ops]
                                      :opt-un [::opts])}}})
 
-(defn- ->edn-resultset-encoder [_]
-  (reify
-    mf/EncodeToBytes
-    ;; we're required to be a sub-type of ETB but don't need to implement its fn.
-
-    mf/EncodeToOutputStream
-    (encode-to-output-stream [_ res _]
-      (fn [^OutputStream out]
-        (with-open [^IResultSet res res
-                    writer (io/writer out)]
-          (doseq [el (iterator-seq res)]
-            (print-method el writer)))))))
-
 (defn- ->tj-resultset-encoder [opts]
   (reify
     mf/EncodeToBytes
@@ -119,9 +105,7 @@
                            (assoc :return :output-stream)
 
                            (assoc-in [:formats "application/transit+json" :encoder]
-                                     [->tj-resultset-encoder {:handlers c2.transit/tj-write-handlers}])
-                           (assoc-in [:formats "application/edn" :encoder]
-                                     [->edn-resultset-encoder])))
+                                     [->tj-resultset-encoder {:handlers c2.transit/tj-write-handlers}])))
 
    :post {:handler (fn [{:keys [node parameters]}]
                      (let [{{:keys [query params]} :body} parameters]
@@ -144,9 +128,7 @@
                            (assoc :return :output-stream)
 
                            (assoc-in [:formats "application/transit+json" :encoder]
-                                     [->tj-resultset-encoder {:handlers c2.transit/tj-write-handlers}])
-                           (assoc-in [:formats "application/edn" :encoder]
-                                     [->edn-resultset-encoder])))
+                                     [->tj-resultset-encoder {:handlers c2.transit/tj-write-handlers}])))
 
    :post {:handler (fn [{:keys [node parameters]}]
                      (let [{{:keys [query] :as query-opts} :body} parameters]
