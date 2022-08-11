@@ -918,7 +918,6 @@
         (is (= {"a" "43"} (params ["a"])))))))
 
 (deftest dml-is-not-permitted-by-default-test
-  (require-node)
   (with-open [conn (jdbc-conn)]
     (is (thrown-with-msg?
           PSQLException
@@ -926,7 +925,6 @@
           (q conn ["insert into foo(a) values (42)"])))))
 
 (deftest db-queryable-after-transaction-error-test
-  (require-node)
   (with-open [conn (jdbc-conn)]
     (try
       (jdbc/with-transaction [db conn]
@@ -936,7 +934,6 @@
     (is (= [] (q conn ["select a.a from a a"])))))
 
 (deftest transactions-are-read-only-by-default-test
-  (require-node)
   (with-open [conn (jdbc-conn)]
 1    (is (thrown-with-msg?
           PSQLException #"ERROR\: DML is unsupported in a READ ONLY transaction"
@@ -955,7 +952,6 @@
     (is (= {:access-mode :read-only} (session-variables (get-last-conn) [:access-mode])))))
 
 (deftest set-transaction-test
-  (require-node)
   (with-open [conn (jdbc-conn)]
     (testing "SET TRANSACTION overwrites variables for the next transaction"
       (q conn ["SET TRANSACTION READ ONLY"])
@@ -975,7 +971,6 @@
     (run! #(q tx %) sql)))
 
 (deftest dml-test
-  (require-node)
   (with-open [conn (jdbc-conn)]
     (testing "mixing a read causes rollback"
       (q conn ["SET TRANSACTION READ WRITE"])
