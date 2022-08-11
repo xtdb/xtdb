@@ -5,7 +5,6 @@
             [core2.ts-devices :as tsd]
             [core2.util :as util]
             [clojure.tools.logging :as log]
-            [core2.operator :as op]
             [core2.indexer :as idx]
             [core2.object-store :as os]
             [core2.buffer-pool :as bp])

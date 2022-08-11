@@ -3,8 +3,8 @@
             [core2.bench :as bench]
             [core2.ingester :as ingest]
             [core2.local-node :as node]
+            [core2.test-util :as tu]
             [core2.tpch :as tpch]
-            [core2.operator :as op]
             [core2.util :as util])
   (:import core2.local_node.Node
            java.util.concurrent.TimeUnit))

@@ -5,7 +5,7 @@
             [core2.local-node :as node]
             [core2.tpch :as tpch]
             [core2.temporal :as temporal]
-            [core2.operator :as op]
+            [core2.test-util :as tu]
             [core2.util :as util])
   (:import java.nio.file.attribute.FileAttribute
            java.nio.file.Files
