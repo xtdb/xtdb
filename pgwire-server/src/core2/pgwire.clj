@@ -1533,7 +1533,7 @@
         (when (= :simple (:protocol @conn-state))
           (cmd-send-ready conn)))
       (do
-        (let [tx-ops (mapv (fn [{:keys [transformed-query]}] [:sql transformed-query]) dml-buf)
+        (let [tx-ops (mapv (fn [{:keys [transformed-query params]}] [:sql transformed-query [params]]) dml-buf)
               tx (when (seq tx-ops) (c2/submit-tx node tx-ops))]
           ;; todo consider blocking policy
           (when tx @(node/await-tx-async node tx))

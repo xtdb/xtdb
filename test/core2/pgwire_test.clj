@@ -1041,3 +1041,8 @@
       (fn [send read]
         (send "INSERT INTO foo(id, a) VALUES (42, 42);\n")
         (is (str/starts-with? (read :err) "ERROR:  DML is unsupported in a READ ONLY transaction"))))))
+
+(deftest dml-param-test
+  (with-open [conn (jdbc-conn)]
+    (tx! conn ["INSERT INTO foo (id, a) VALUES (?, ?)" 42 "hello, world"])
+    (is (= [{:a "hello, world"}] (q conn ["SELECT foo.a FROM foo where foo.id = 42"])))))
