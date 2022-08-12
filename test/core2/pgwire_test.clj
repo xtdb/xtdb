@@ -977,6 +977,13 @@
       ;; explicitly send rollback .rollback doesn't necessarily do it if you haven't issued a query
       (q conn ["ROLLBACK"])
       (.setAutoCommit conn true)
+      (is (= {} (next-transaction-variables (get-last-conn) [:access-mode]))))
+
+    (testing "implicit transaction clears this state"
+      (q conn ["SELECT a.a FROM a"])
+      (is (= {} (next-transaction-variables (get-last-conn) [:access-mode])))
+      (q conn ["SET TRANSACTION READ WRITE"])
+      (q conn ["SELECT a.a FROM a"])
       (is (= {} (next-transaction-variables (get-last-conn) [:access-mode]))))))
 
 (defn tx! [conn & sql]

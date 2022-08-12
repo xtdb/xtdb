@@ -1436,6 +1436,14 @@
         query-opts
         {:basis (:basis (:transaction @conn-state))
          :? xt-params}]
+
+    ;; Simulate SQL2011 'directly executed sql' rules
+    ;; clear :next-transaction (via SET TRANSACTION) variables if the query is running in an implicit transaction
+    ;; this may be better provided (later) as true implicit transactions around execution, as I think that will make it easier
+    ;; to remain compliant as transaction control becomes ever more sophisticated. Going to wait and see a bit first
+    (when-not (:transaction @conn-state)
+      (swap! conn-state update :session dissoc :next-transaction))
+
     ;; dml currently takes a different execution path
     (if (dml? ast)
       ;; in the case of dml, we simply buffer the statement in the transaction (to be flushed with COMMIT)
