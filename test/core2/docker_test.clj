@@ -76,6 +76,9 @@
   (assert (expected-working-dir?) "working dir should be core2 root (with Dockerfile)")
   (assert (docker-available?) "docker must be on path to run docker tests")
   (try
+    ;; currently unsafe to assume a clean build - so, build the jar. Not SUT but necessary as it stands.
+    (assert (= 0 (:exit (sh/sh "bin/re-prep.sh"))))
+    (assert (= 0 (:exit (sh/sh "clj" "-X:uberjar"))))
     (f)
     (finally (prune-images))))
 
