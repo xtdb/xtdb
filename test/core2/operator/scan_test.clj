@@ -72,7 +72,7 @@
 
       (t/is (tu/query-ra '[:scan [application_time_start application_time_end
                                   system_time_start system_time_end]]
-                         (ingest/snapshot ingester tx))))))
+                         {:srcs {'$ (ingest/snapshot ingester tx)}})))))
 
 (t/deftest test-scan-col-types
   (with-open [node (node/start-node {})]

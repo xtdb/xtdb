@@ -201,7 +201,8 @@
 
 (def ^:private compile-meta-expr
   (-> (fn [expr opts]
-        (let [expr (meta-expr (expr/prepare-expr expr))
+        (let [expr (or (meta-expr (expr/prepare-expr expr))
+                       (expr/prepare-expr {:op :literal, :literal true}))
               {:keys [continue] :as emitted-expr} (expr/codegen-expr expr opts)]
           {:expr expr
            :f (-> `(fn [chunk-idx#
