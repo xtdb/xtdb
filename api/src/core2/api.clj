@@ -1,5 +1,4 @@
 (ns core2.api
-  (:require core2.edn)
   (:import clojure.lang.IReduceInit
            core2.IResultSet
            java.io.Writer
