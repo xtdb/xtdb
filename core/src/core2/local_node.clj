@@ -26,7 +26,7 @@
 
 (definterface PreparedQueryAsync
   (^java.util.concurrent.CompletableFuture openQueryAsync #_<IResultCursor> [queryOpts])
-  (close []))
+  (^void close []))
 
 (defprotocol PNode
   (prepare-ra ^core2.local_node.PreparedQueryAsync [_ query])
