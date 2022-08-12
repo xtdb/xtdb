@@ -1602,7 +1602,7 @@
     (cmd-send-ready conn)))
 
 (defn- permissibility-err
-  "Returns an error if the given statement is not permitted (say due to the access mode)."
+  "Returns an error if the given statement, which is otherwise valid - is not permitted (say due to the access mode, transaction state)."
   [conn stmt]
   (let [{:keys [conn-state]} conn
         {:keys [statement-type, ast, query]} stmt
