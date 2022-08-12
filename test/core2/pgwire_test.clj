@@ -1046,3 +1046,12 @@
   (with-open [conn (jdbc-conn)]
     (tx! conn ["INSERT INTO foo (id, a) VALUES (?, ?)" 42 "hello, world"])
     (is (= [{:a "hello, world"}] (q conn ["SELECT foo.a FROM foo where foo.id = 42"])))))
+
+;; SQL:2011 p1037 1,a,i
+(deftest set-transaction-in-transaction-error-test
+  (with-open [conn (jdbc-conn)]
+    (q conn ["BEGIN"])
+    (is (thrown-with-msg?
+          PSQLException
+          #"ERROR\: invalid transaction state \-\- active SQL\-transaction"
+          (q conn ["SET TRANSACTION READ WRITE"])))))

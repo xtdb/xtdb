@@ -1406,16 +1406,6 @@
 (defn- query? [ast] (= :query_expression (ast-executable-statement-root-tag ast)))
 (defn- dml? [ast] (contains? #{:insert_statement :delete_statement__searched} (ast-executable-statement-root-tag ast)))
 
-(defn current-access-mode
-  "Returns the current access mode of the connection, either :read-only or :read-write.
-
-  Transaction setting is prefferred to the session setting, and the default for XT is READ ONLY (so default is different to the spec)."
-  [conn]
-  (let [{:keys [conn-state]} conn
-        {:keys [transaction, session]} @conn-state]
-    (or (:access-mode transaction)
-        (:access-mode session))))
-
 (defn cmd-exec-query
   "Given a statement of type :query will execute it against the servers :node and send the results."
   [{:keys [server, conn-state] :as conn}
@@ -1614,9 +1604,14 @@
 (defn- permissibility-err
   "Returns an error if the given statement is not permitted (say due to the access mode)."
   [conn stmt]
-  (let [{:keys [ast, query]} stmt
-        access-mode (current-access-mode conn)]
+  (let [{:keys [conn-state]} conn
+        {:keys [statement-type, ast, query]} stmt
+        {:keys [transaction, session]} @conn-state
+        access-mode (or (:access-mode transaction) (:access-mode session))]
     (cond
+      (and (= :set-transaction statement-type) transaction)
+      (err-protocol-violation "invalid transaction state -- active SQL-transaction")
+
       ;; assume no ast is ok for now, this is sort accidently works and I'm not sure what I want to do
       ;; about pg canned/specific access checks
       (nil? ast) nil
