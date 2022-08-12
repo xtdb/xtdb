@@ -1796,7 +1796,7 @@
                     :cid cid,
                     :msg (or msg-var msg-char8)
                     :char8 msg-char8}
-                   (log/warn "Skipping msg until next sync due to error in extended protocol"))))
+                   (log/debug "Skipping msg until next sync due to error in extended protocol"))))
 
           (when-not msg-var
             (cmd-send-error conn (err-protocol-violation "unknown client message")))
