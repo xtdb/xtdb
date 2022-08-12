@@ -999,7 +999,11 @@
       (jdbc/with-transaction [tx conn]
         (q tx ["INSERT INTO foo(id, a) values(42, 42)"]))
       (testing "read after write"
-        (is (= [{:a 42}] (q conn ["SELECT foo.a FROM foo"])))))))
+        (is (= [{:a 42}] (q conn ["SELECT foo.a FROM foo"])))))
+
+    (testing "delete it"
+      (tx! conn ["DELETE FROM foo WHERE foo.id = 42"])
+      (is (= [] (q conn ["SELECT foo.a FROM foo"]))))))
 
 (when (psql-available?)
 

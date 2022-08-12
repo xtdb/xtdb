@@ -1404,7 +1404,7 @@
 ;; perhaps temporary, but we need to know if a query is DML to determine permissibility for different access modes
 (defn- ast-executable-statement-root-tag [ast] (when (vector? ast) (-> ast second first)))
 (defn- query? [ast] (= :query_expression (ast-executable-statement-root-tag ast)))
-(defn- dml? [ast] (contains? #{:insert_statement} (ast-executable-statement-root-tag ast)))
+(defn- dml? [ast] (contains? #{:insert_statement :delete_statement__searched} (ast-executable-statement-root-tag ast)))
 
 (defn current-access-mode
   "Returns the current access mode of the connection, either :read-only or :read-write.
