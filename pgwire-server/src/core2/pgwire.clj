@@ -1465,7 +1465,11 @@
           (when (= :simple (:protocol @conn-state))
             (cmd-send-ready conn)))
       (let [;; execute the query asynchronously (to enable later enable cancellation mid query)
-            query-fut (c2/open-sql-async node transformed-query query-opts)
+            ^CompletableFuture
+            query-fut
+            (try
+              (c2/open-sql-async node transformed-query query-opts)
+              (catch Throwable e (CompletableFuture/failedFuture e)))
 
             ;; keep the fut around in case of interrupt exc (for cleanup)
             _ (swap! conn-state update :executing (fnil conj #{}) query-fut)
