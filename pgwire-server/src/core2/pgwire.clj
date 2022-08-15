@@ -22,7 +22,7 @@
            (java.util.concurrent Executors ExecutorService ConcurrentHashMap RejectedExecutionException TimeUnit CompletableFuture Future)
            (java.util HashMap List Map)
            (org.apache.arrow.vector PeriodDuration)
-           (java.time LocalDate)
+           (java.time LocalDate LocalDateTime OffsetDateTime ZonedDateTime)
            (java.nio ByteBuffer)
            (java.util.function Function BiFunction BiConsumer)
            (java.lang Thread$State)
@@ -477,8 +477,11 @@
     ;; bigdec cast gets us consistent exponent notation E with a sign for doubles, floats and bigdecs.
     (float? obj) (bigdec obj)
 
-    ;; localdate toString is already iso8601
+    ;; java.time datetime-ish toString is already iso8601
     (instance? LocalDate obj) (str obj)
+    (instance? LocalDateTime obj) (str obj)
+    (instance? OffsetDateTime obj) (str obj)
+    (instance? ZonedDateTime obj) (str obj)
 
     ;; represent period duration as an iso8601 duration string (includes period components)
     (instance? PeriodDuration obj)

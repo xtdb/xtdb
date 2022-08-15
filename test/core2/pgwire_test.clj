@@ -242,6 +242,13 @@
      {:sql "DATE '2021-12-24'"
       :json-type JsonNodeType/STRING
       :clj "2021-12-24"}
+     {:sql "TIMESTAMP '2021-03-04 03:04:11'"
+      :json-type JsonNodeType/STRING
+      :clj "2021-03-04T03:04:11"}
+     {:sql "TIMESTAMP '2021-03-04 03:04:11+02:00'"
+      :json-type JsonNodeType/STRING
+      :clj "2021-03-04T03:04:11+02:00"}
+
 
      ;; does not work, no timestamp literals
      #_
