@@ -1604,6 +1604,9 @@
       (and (= :set-transaction statement-type) transaction)
       (err-protocol-violation "invalid transaction state -- active SQL-transaction")
 
+      (and (= :begin statement-type) transaction)
+      (err-protocol-violation "invalid transaction state -- active SQL-transaction")
+
       ;; assume no ast is ok for now, this is sort accidently works and I'm not sure what I want to do
       ;; about pg canned/specific access checks
       (nil? ast) nil

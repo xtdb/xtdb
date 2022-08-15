@@ -1062,3 +1062,11 @@
           PSQLException
           #"ERROR\: invalid transaction state \-\- active SQL\-transaction"
           (q conn ["SET TRANSACTION READ WRITE"])))))
+
+(deftest begin-in-a-transaction-error-test
+  (with-open [conn (jdbc-conn)]
+    (q conn ["BEGIN"])
+    (is (thrown-with-msg?
+          PSQLException
+          #"ERROR\: invalid transaction state \-\- active SQL\-transaction"
+          (q conn ["BEGIN"])))))
