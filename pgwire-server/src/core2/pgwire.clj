@@ -1108,9 +1108,7 @@
        (cmd-send-ready conn :transaction))
      (cmd-send-ready conn :idle)))
   ([conn status]
-   (when (not= status (:ready @(:conn-state conn)))
-     (swap! (:conn-state conn) assoc :ready status)
-     (cmd-write-msg conn msg-ready {:status status}))))
+   (cmd-write-msg conn msg-ready {:status status})))
 
 (defn- update-if-present [m k f & args]
   (if (contains? m k)
@@ -1190,9 +1188,7 @@
 
     ;; backend key data (used to identify conn for cancellation)
     (cmd-write-msg conn msg-backend-key-data {:process-id (:cid conn), :secret-key 0})
-
-    ;; ready for query
-    (cmd-send-ready conn :idle)))
+    (cmd-send-ready conn)))
 
 (defn cmd-cancel
   "Tells the connection to stop doing what its doing and return to idle"
@@ -1314,15 +1310,12 @@
                 ;; (ideally) unexpected (e.g bug in operator)
                 (catch Throwable e
                   (log/debug e "An exception was caught during query result set iteration")
-                  (cmd-send-error conn (err-internal "unexpected server error during query execution"))
-                  (cmd-send-ready conn)))]
+                  (cmd-send-error conn (err-internal "unexpected server error during query execution"))))]
           (when continue
             (recur (inc n-rows-out))))
 
         :else
-        (do (cmd-write-msg conn msg-command-complete {:command (str (statement-head query) " " n-rows-out)})
-            (when (= :simple (:protocol @conn-state))
-              (cmd-send-ready conn)))))))
+        (cmd-write-msg conn msg-command-complete {:command (str (statement-head query) " " n-rows-out)})))))
 
 (defn- close-result-set [{:keys [conn-state] :as conn} fut ^IResultSet rs]
   (try
@@ -1365,8 +1358,7 @@
       cancelled
       (do
         (log/debug "query cancelled during execution" {:cid (:cid conn), :port (:port (:server conn))})
-        (cmd-send-error conn (err-query-cancelled "query cancelled during execution"))
-        (cmd-send-ready conn))
+        (cmd-send-error conn (err-query-cancelled "query cancelled during execution")))
 
       ;; if interrupted exit now, this will happen if conn threadpool needs to be shutdown immediately
       interrupted
@@ -1391,8 +1383,7 @@
       ;; we log the ex on the completion handler of the fut, sending the message
       ;; needs to be done serially as part of the cmd queue so we do it here.
       (.isCompletedExceptionally fut)
-      (do (cmd-send-error conn (err-internal "unexpected server error during query execution"))
-          (cmd-send-ready conn))
+      (cmd-send-error conn (err-internal "unexpected server error during query execution"))
 
       ;; otherwise, come back around and wait again
       ;; by using the buffer we check socket state / draining etc as normal.
@@ -1460,10 +1451,7 @@
                            :insert_statement "INSERT 0 0"
                            ;; otherwise head <rows>
                            (str (statement-head query) " 0"))}
-               (cmd-write-msg conn msg-command-complete))
-          ;; todo these ready states really need to be automatic I think
-          (when (= :simple (:protocol @conn-state))
-            (cmd-send-ready conn)))
+               (cmd-write-msg conn msg-command-complete)))
       (let [;; execute the query asynchronously (to enable later enable cancellation mid query)
             ^CompletableFuture
             query-fut
@@ -1528,12 +1516,8 @@
   (let [{:keys [node]} server
         {:keys [failed err dml-buf]} (:transaction @conn-state)]
     (if failed
-      (do
-        ;; todo better err
-        (cmd-send-error conn (or err (err-protocol-violation "transaction failed")))
-        ;; todo clean up
-        (when (= :simple (:protocol @conn-state))
-          (cmd-send-ready conn)))
+      ;; todo better err
+      (cmd-send-error conn (or err (err-protocol-violation "transaction failed")))
       (do
         (let [tx-ops (mapv (fn [{:keys [transformed-query params]}] [:sql transformed-query [params]]) dml-buf)
               tx (when (seq tx-ops) (c2/submit-tx node tx-ops))]
@@ -1607,11 +1591,7 @@
     :begin (cmd-begin conn)
     :rollback (cmd-rollback conn)
     :commit (cmd-commit conn)
-    :query (cmd-exec-query conn stmt))
-
-  (when (and (= :simple (:protocol @conn-state))
-             (not= :query statement-type))
-    (cmd-send-ready conn)))
+    :query (cmd-exec-query conn stmt)))
 
 (defn- permissibility-err
   "Returns an error if the given statement, which is otherwise valid - is not permitted (say due to the access mode, transaction state)."
@@ -1644,16 +1624,17 @@
   (let [{:keys [err] :as stmt} (interpret-sql query)]
     (swap! conn-state assoc :protocol :simple)
     (if-some [err (or err (permissibility-err conn stmt))]
-      (do (cmd-send-error conn err)
-          (cmd-send-ready conn))
-      (cmd-exec-stmt conn stmt))))
+      (cmd-send-error conn err)
+      (cmd-exec-stmt conn stmt))
+    (cmd-send-ready conn)))
 
 (defn cmd-sync
   "Sync commands are sent by the client to commit transactions (we do not do anything here yet),
   and to clear the error state of a :extended mode series of commands (e.g the parse/bind/execute dance)"
   [{:keys [conn-state] :as conn}]
-  (swap! conn-state dissoc :skip-until-sync, :protocol)
-  (cmd-send-ready conn))
+  ;; todo commit / rollback should be used here if not in an explicit tx?
+  (cmd-send-ready conn)
+  (swap! conn-state dissoc :skip-until-sync, :protocol))
 
 (defn cmd-flush
   "Flushes any pending output to the client."
@@ -1807,8 +1788,6 @@
 
           (when-not msg-var
             (cmd-send-error conn (err-protocol-violation "unknown client message")))
-
-          (swap! conn-state dissoc :ready)
 
           (when (and msg-var (not (:skip-until-sync @conn-state)))
             (let [msg-data ((:read @msg-var) msg-in)]
