@@ -1398,32 +1398,34 @@
           (plan subquery-ref)]
          (plan subquery-ref))
        (cond->>
-         [:scan (let [columns (for [{:keys [identifier]} projection]
-                                (symbol identifier))
-                      columns-with-system-time-predicates
-                      (cond
-                        (= (first system-time-predicates) :invalid-points-in-time)
-                        columns
+         [:scan (vec
+                  (let [columns (vec (for [{:keys [identifier]} projection]
+                                       (symbol identifier)))
+                        columns-with-system-time-predicates
+                        (cond
+                          (= (first system-time-predicates) :invalid-points-in-time)
+                          columns
 
-                        system-time-predicates
-                        (concat
                           system-time-predicates
-                          (remove #(contains? (set (mapcat keys system-time-predicates)) %) columns))
+                          (vec
+                            (concat
+                              system-time-predicates
+                              (remove #(contains? (set (mapcat keys system-time-predicates)) %) columns)))
 
-                        :else
-                        columns)
-                      columns-with-app-time-cols
-                      (if (contains? (set columns-with-system-time-predicates) 'APP_TIME)
-                        (->> columns-with-system-time-predicates
-                             (remove #{'application_time_start 'application_time_end 'APP_TIME})
-                             (concat ['application_time_start 'application_time_end])
-                             vec)
-                        columns-with-system-time-predicates)]
-                  (if *include-table-column-in-scan?*
-                    (conj
-                      columns-with-app-time-cols
-                      {'_table (list '=  '_table table-or-query-name)})
-                    columns-with-app-time-cols))]
+                          :else
+                          columns)
+                        columns-with-app-time-cols
+                        (if (contains? (set columns-with-system-time-predicates) 'APP_TIME)
+                          (->> columns-with-system-time-predicates
+                               (remove #{'application_time_start 'application_time_end 'APP_TIME})
+                               (concat ['application_time_start 'application_time_end])
+                               vec)
+                          columns-with-system-time-predicates)]
+                    (if *include-table-column-in-scan?*
+                      (conj
+                        columns-with-app-time-cols
+                        {'_table (list '=  '_table table-or-query-name)})
+                      columns-with-app-time-cols)))]
          (= (first system-time-predicates) :invalid-points-in-time)
          (vector :select 'false)))]))
 
