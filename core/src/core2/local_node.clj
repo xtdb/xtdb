@@ -16,7 +16,7 @@
            (core2.tx_producer ITxProducer)
            (java.io Closeable Writer)
            (java.lang AutoCloseable)
-           (java.time Duration Instant)
+           (java.time Duration Instant ZoneId)
            (java.util.concurrent CompletableFuture TimeUnit)
            (java.util.function Consumer Function)
            java.util.Iterator
@@ -111,7 +111,8 @@
     (let [pq (op/open-prepared-ra query)]
       (reify PreparedQueryAsync
         (openQueryAsync [_ {:keys [basis ^Duration basis-timeout] :as query-opts}]
-          (let [{:keys [current-time tx], :or {current-time (Instant/now)}} basis]
+          (let [{:keys [current-time default-tz, tx], :or {current-time (Instant/now)
+                                                           default-tz (ZoneId/systemDefault)}} basis]
             (-> (ingest/snapshot-async ingester tx)
                 (cond-> basis-timeout (.orTimeout (.toMillis basis-timeout) TimeUnit/MILLISECONDS))
                 (util/then-apply
@@ -119,6 +120,7 @@
                     (.openCursor pq (-> query-opts
                                         (dissoc :basis :basis-timeout)
                                         (assoc :current-time current-time
+                                               :default-tz default-tz
                                                :srcs {'$ db}))))))))
         AutoCloseable
         (close [_] (.close pq)))))
