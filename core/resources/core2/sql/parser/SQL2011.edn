@@ -2082,10 +2082,16 @@
       {:tag :nt, :keyword :point_in_time_2})}}
    {:tag :opt,
     :parser
-    {:tag :cat,
+    {:tag :alt,
      :parsers
-     ({:tag :opt, :parser {:tag :string, :string "AS"}}
-      {:tag :nt, :keyword :correlation_name})}}
+     ({:tag :cat,
+       :parsers
+       ({:tag :string, :string "AS"}
+        {:tag :nt, :keyword :correlation_name})}
+      {:tag :cat,
+       :parsers
+       ({:tag :neg, :parser {:tag :regexp, :regexp #"(?i)(\bSET\b)"}}
+        {:tag :nt, :keyword :correlation_name})})}}
    {:tag :string, :string "SET"}
    {:tag :nt, :keyword :set_clause_list}
    {:tag :opt,

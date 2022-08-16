@@ -1023,3 +1023,15 @@
                         {application_time_end (>= application_time_end #time/date "2021-07-01")}]]]]]]
 
            (plan-sql "UPDATE users FOR PORTION OF APP_TIME FROM DATE '2021-07-01' TO DATE '9999-12-31' AS u SET first_name = 'Sue' WHERE u.id = ?"))))
+
+(deftest dml-target-table-alises
+  (t/is (= (plan-sql "UPDATE t1 AS u SET col1 = 30")
+           (plan-sql "UPDATE t1 AS SET SET col1 = 30")
+           (plan-sql "UPDATE t1 u SET col1 = 30")
+           (plan-sql "UPDATE t1 SET col1 = 30"))
+        "UPDATE")
+
+  (t/is (= (plan-sql "DELETE FROM t1 AS u WHERE u.col1 = 30")
+           (plan-sql "DELETE FROM t1 u WHERE u.col1 = 30")
+           (plan-sql "DELETE FROM t1 WHERE t1.col1 = 30"))
+        "DELETE"))
