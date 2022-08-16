@@ -62,7 +62,8 @@
         (openCursor [_ {:keys [srcs params current-time default-tz] :as query-opts}]
           (let [{:keys [col-types ->cursor]} (.computeIfAbsent cache
                                                                {:scan-col-types (scan/->scan-col-types srcs scan-cols)
-                                                                :param-types (expr/->param-types params)}
+                                                                :param-types (expr/->param-types params)
+                                                                :default-tz default-tz}
                                                                (reify Function
                                                                  (apply [_ emit-opts]
                                                                    (lp/emit-expr conformed-query emit-opts))))
