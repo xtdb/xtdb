@@ -2,6 +2,7 @@
   (:require [clojure.spec.alpha :as s]
             [core2.error :as err]
             [core2.expression :as expr]
+            core2.expression.temporal
             [core2.logical-plan :as lp]
             core2.operator.apply
             core2.operator.arrow
