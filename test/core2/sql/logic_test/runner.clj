@@ -312,6 +312,7 @@
 (def cli-options
   [[nil "--verify"]
    [nil "--dirs"]
+   [nil "--direct-sql"]
    [nil "--limit LIMIT" :parse-fn #(Long/parseLong %)]
    [nil "--max-errors COUNT" :parse-fn #(Long/parseLong %)]
    [nil "--max-failures COUNT" :parse-fn #(Long/parseLong %)]
@@ -320,7 +321,7 @@
                                                    (str/starts-with? x "jdbc:"))) "Unknown db."]]])
 (defn -main [& args]
   (let [{:keys [options arguments errors]} (cli/parse-opts args cli-options)
-        {:keys [verify db max-failures max-errors dirs]} options
+        {:keys [verify db max-failures max-errors dirs direct-sql]} options
         results (atom {})]
     (if (seq errors)
       (binding [*out* *err*]
@@ -330,7 +331,8 @@
       (binding [*opts* {:script-mode (if verify
                                        :validation
                                        :completion)
-                        :query-limit (:limit options)}
+                        :query-limit (:limit options)
+                        :direct-sql direct-sql}
                 plan/*include-table-column-in-scan?* true]
         (doseq [script-name (if dirs
                               (->> arguments
@@ -379,7 +381,7 @@
 
   (time (-main "--verify" "--db" "sqlite" "test/core2/sql/logic_test/sqlite_test/select4.test"))
 
-  (time (-main "--verify" "--db" "xtdb" "test/core2/sql/logic_test/sqlite_test/select3.test"))
+  (time (-main "--verify" "--direct-sql" "--db" "xtdb" "test/core2/sql/logic_test/direct-sql/dml.test"))
 
   (= (time
       (with-out-str

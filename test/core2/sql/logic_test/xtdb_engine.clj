@@ -194,6 +194,18 @@
     (case (first direct-sql-data-statement)
       :insert_statement (insert-statement node direct-sql-data-statement))))
 
+(defn- execute-sql-statement [node sql-statement]
+   (binding [r/*memo* (HashMap.)]
+    (-> (c2/submit-tx node [[:sql sql-statement [[]]]])
+        (tu/then-await-tx node))
+    node))
+
+(defn- execute-sql-query [node sql-statement]
+  ;; relies on order of cols in map, see fix in execute-query-expression for current best approach
+  ;; chosing not to re impl it here as I hope we can solve it on a lower level.
+  (binding [r/*memo* (HashMap.)]
+    (->> (c2/sql-query node sql-statement {})
+         (mapv vals))))
 
 (defn parse-create-table [^String x]
   (when-let [[_ table-name columns] (re-find #"(?is)^\s*CREATE\s+TABLE\s+(\w+)\s*\((.+)\)\s*$" x)]
@@ -224,18 +236,22 @@
   (execute-statement [this statement]
     (if (skip-statement? statement)
       this
-      (let [tree (p/parse statement :directly_executable_statement)]
-        (if (p/failure? tree)
-          (if-let [record (or (parse-create-table statement)
-                              (parse-create-view statement))]
-            (execute-record this record)
-            (throw (IllegalArgumentException. (p/failure->str tree))))
-          (let [direct-sql-data-statement-tree (second tree)]
-            (execute-statement this direct-sql-data-statement-tree))))))
+      (if (:direct-sql slt/*opts*)
+        (execute-sql-statement this statement)
+        (let [tree (p/parse statement :directly_executable_statement)]
+          (if (p/failure? tree)
+            (if-let [record (or (parse-create-table statement)
+                                (parse-create-view statement))]
+              (execute-record this record)
+              (throw (IllegalArgumentException. (p/failure->str tree))))
+            (let [direct-sql-data-statement-tree (second tree)]
+              (execute-statement this direct-sql-data-statement-tree)))))))
 
   (execute-query [this query]
     (let [edited-query (preprocess-query query)
           tree (p/parse edited-query :query_expression)]
       (when (p/failure? tree)
         (throw (IllegalArgumentException. (p/failure->str tree))))
-      (execute-query-expression this tree))))
+      (if (:direct-sql slt/*opts*)
+        (execute-sql-query this query)
+        (execute-query-expression this tree)))))

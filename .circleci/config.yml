@@ -137,6 +137,16 @@ jobs:
 
       - run: 'clojure -Srepro -M:core2:4gb:slt-test-dirs << parameters.dirs >>'
 
+  slt-direct-sql:
+    executor: clojure
+    resource_class: medium
+
+    steps:
+      - attach_workspace:
+          at: ~/
+
+      - run: 'clojure -Srepro -M:core2:4gb:slt-direct-sql'
+
 workflows:
   build:
     jobs:
@@ -157,6 +167,9 @@ workflows:
           requires:
             - setup
       - slt-test-2:
+          requires:
+            - setup
+      - slt-direct-sql:
           requires:
             - setup
       - slt-test-dirs:
