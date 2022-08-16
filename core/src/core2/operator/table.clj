@@ -12,7 +12,8 @@
            (core2.vector IIndirectRelation)
            (java.util ArrayList HashSet HashMap Set)
            java.util.function.Function
-           (org.apache.arrow.vector.complex DenseUnionVector)))
+           (org.apache.arrow.vector.complex DenseUnionVector)
+           (java.time Clock)))
 
 (defmethod lp/ra-expr :table [_]
   (s/cat :op #{:table}
@@ -41,45 +42,47 @@
     explicit-col-names (-> (->> (merge (zipmap explicit-col-names (repeat :null))))
                            (select-keys explicit-col-names))))
 
-(defn- ->out-rel [{:keys [allocator] :as opts} col-types rows ->v]
+(defn- ->out-rel [{:keys [allocator clock] :as opts} col-types rows ->v]
   (let [row-count (count rows)]
     (when (pos? row-count)
-      (let [out-cols (ArrayList. (count col-types))]
-        (try
-          (doseq [[col-name col-type] col-types
-                  :let [col-kw (keyword col-name)
-                        out-vec (-> (types/col-type->field col-name col-type)
-                                    (.createVector allocator))
-                        duv? (instance? DenseUnionVector out-vec)
-                        out-writer (vw/vec->writer out-vec)]]
+      (binding [expr/*clock* clock]
+        (let [out-cols (ArrayList. (count col-types))]
+          (try
+            (doseq [[col-name col-type] col-types
+                    :let [col-kw (keyword col-name)
+                          out-vec (-> (types/col-type->field col-name col-type)
+                                      (.createVector allocator))
+                          duv? (instance? DenseUnionVector out-vec)
+                          out-writer (vw/vec->writer out-vec)]]
 
-            (.setInitialCapacity out-vec row-count)
-            (.allocateNew out-vec)
-            (.add out-cols (iv/->direct-vec out-vec))
+              (.setInitialCapacity out-vec row-count)
+              (.allocateNew out-vec)
+              (.add out-cols (iv/->direct-vec out-vec))
 
-            (dotimes [idx row-count]
-              (let [row (nth rows idx)
-                    v (-> (get row col-kw) (->v opts))]
-                (.startValue out-writer)
-                (if duv?
-                  (doto (.writerForType (.asDenseUnion out-writer) (types/value->col-type v))
-                    (.startValue)
-                    (->> (types/write-value! v))
-                    (.endValue))
-                  (types/write-value! v out-writer))
-                (.endValue out-writer)))
+              (dotimes [idx row-count]
+                (let [row (nth rows idx)
+                      v (-> (get row col-kw) (->v opts))]
+                  (.startValue out-writer)
+                  (if duv?
+                    (doto (.writerForType (.asDenseUnion out-writer) (types/value->col-type v))
+                      (.startValue)
+                      (->> (types/write-value! v))
+                      (.endValue))
+                    (types/write-value! v out-writer))
+                  (.endValue out-writer)))
 
-            (.setValueCount out-vec row-count))
+              (.setValueCount out-vec row-count))
 
-          (iv/->indirect-rel out-cols row-count)
-          (catch Throwable e
-            (run! util/try-close out-cols)
-            (throw e)))))))
+            (iv/->indirect-rel out-cols row-count)
+            (catch Throwable e
+              (run! util/try-close out-cols)
+              (throw e))))))))
 
-(defn- emit-rows-table [rows table-expr {:keys [param-types] :as opts}]
+(defn- emit-rows-table [rows table-expr {:keys [param-types default-tz] :as opts}]
   (let [col-type-sets (HashMap.)
         row-count (count rows)
-        out-rows (ArrayList. row-count)]
+        out-rows (ArrayList. row-count)
+        clock (if default-tz (Clock/fixed (.instant expr/*clock*) default-tz) expr/*clock*)]
     (doseq [row rows]
       (let [out-row (HashMap.)]
         (doseq [[k v] row
@@ -97,13 +100,14 @@
                        (.put out-row k-kw (fn [{:keys [params]}]
                                             (get params param))))
 
-              ;; HACK: this is quite heavyweight to calculate a single value -
-              ;; the EE doesn't yet have an efficient means to do so...
-              (let [projection-spec (expr/->expression-projection-spec "_scalar" v opts)]
-                (.add col-type-set (.getColumnType projection-spec))
-                (.put out-row k-kw (fn [{:keys [allocator params]}]
-                                     (with-open [out-vec (.project projection-spec allocator (iv/->indirect-rel [] 1) params)]
-                                       (types/get-object (.getVector out-vec) (.getIndex out-vec 0)))))))))
+              (binding [expr/*clock* clock]
+                ;; HACK: this is quite heavyweight to calculate a single value -
+                ;; the EE doesn't yet have an efficient means to do so...
+                (let [projection-spec (expr/->expression-projection-spec "_scalar" v opts)]
+                  (.add col-type-set (.getColumnType projection-spec))
+                  (.put out-row k-kw (fn [{:keys [allocator params]}]
+                                       (with-open [out-vec (.project projection-spec allocator (iv/->indirect-rel [] 1) params)]
+                                         (types/get-object (.getVector out-vec) (.getIndex out-vec 0))))))))))
         (.add out-rows out-row)))
 
     (let [col-types (-> col-type-sets
