@@ -5,8 +5,8 @@
             [core2.rewrite :refer [zmatch]]
             [core2.types :as types]
             [core2.util :as util]
-            [core2.vector.indirect :as iv]
             [core2.vector :as vec]
+            [core2.vector.indirect :as iv]
             [core2.vector.writer :as vw])
   (:import (clojure.lang Keyword MapEntry)
            (core2 StringUtil)
@@ -15,7 +15,7 @@
            core2.vector.PolyValueBox
            (java.nio ByteBuffer)
            (java.nio.charset StandardCharsets)
-           (java.time Clock Duration Instant LocalDate Period ZonedDateTime OffsetDateTime LocalDateTime)
+           (java.time Clock Duration Instant LocalDate LocalDateTime OffsetDateTime Period ZoneOffset ZonedDateTime)
            (java.util Arrays Date HashMap LinkedList)
            (java.util.function IntUnaryOperator)
            (java.util.regex Pattern)
@@ -138,11 +138,11 @@
    :args [(form->expr arr env)
           (form->expr n env)]})
 
-(defmethod parse-list-form 'cast [[_ expr cast-type] env]
+(defmethod parse-list-form 'cast [[_ expr target-type] env]
   {:op :call
    :f :cast
    :args [(form->expr expr env)]
-   :cast-type cast-type})
+   :target-type target-type})
 
 (defmethod parse-list-form ::default [[f & args] env]
   {:op :call
@@ -234,7 +234,7 @@
 (defmethod emit-value Instant [_ code] `(util/instant->micros ~code))
 (defmethod emit-value ZonedDateTime [_ code] `(util/instant->micros (util/->instant ~code)))
 (defmethod emit-value OffsetDateTime [_ code] `(util/instant->micros (util/->instant ~code)))
-(defmethod emit-value LocalDateTime [_ code] `(util/instant->micros (util/sql-temporal->instant ~code (.getZone *clock*))))
+(defmethod emit-value LocalDateTime [_ code] `(util/instant->micros (.toInstant ~code ZoneOffset/UTC)))
 (defmethod emit-value Duration [_ code] `(quot (.toNanos ~code) 1000))
 
 ;; consider whether a bound hash map for literal parameters would be better
@@ -1027,9 +1027,18 @@
     {:return-type :f64
      :->call-code #(do `(~math-method ~@%))}))
 
-(defmethod codegen-mono-call [:cast :num] [{:keys [cast-type]}]
-  {:return-type cast-type
-   :->call-code #(do `(~(type->cast cast-type) ~@%))})
+(defmulti codegen-cast
+  (fn [{:keys [source-type target-type]}]
+    [(types/col-type-head source-type) (types/col-type-head target-type)])
+  :default ::default
+  :hierarchy #'types/col-type-hierarchy)
+
+(defmethod codegen-cast [:num :num] [{:keys [target-type]}]
+  {:return-type target-type
+   :->call-code #(do `(~(type->cast target-type) ~@%))})
+
+(defmethod codegen-mono-call [:cast :any] [{[source-type] :arg-types, :keys [target-type] :as expr}]
+  (codegen-cast {:source-type source-type, :target-type target-type}))
 
 #_{:clj-kondo/ignore [:unused-binding]}
 (defmulti emit-expr

@@ -6,7 +6,7 @@
             [core2.temporal :as temporal]
             [core2.types :as types]
             [core2.util :as util])
-  (:import (java.time Duration Instant LocalDate Period ZoneId ZoneOffset ZonedDateTime)
+  (:import (java.time Duration Instant LocalDate LocalDateTime Period ZoneId ZoneOffset ZonedDateTime)
            (java.time.temporal ChronoField ChronoUnit)
            (org.apache.arrow.vector PeriodDuration)
            (org.apache.arrow.vector.types.pojo ArrowType$Date ArrowType$Interval)))
@@ -56,6 +56,123 @@
                 expr)))))
     [min-range max-range]))
 
+;;;; units
+
+(defn- units-per-second ^long [time-unit]
+  (case time-unit
+    :second 1
+    :milli #=(long 1e3)
+    :micro #=(long 1e6)
+    :nano #=(long 1e9)))
+
+(defn- smallest-unit [x-unit y-unit]
+  (if (> (units-per-second x-unit) (units-per-second y-unit))
+    x-unit
+    y-unit))
+
+(defn- with-conversion [form from-unit to-unit]
+  (if (= from-unit to-unit)
+    form
+    (let [from-hz (units-per-second from-unit)
+          to-hz (units-per-second to-unit)]
+      (if (> to-hz from-hz)
+        `(Math/multiplyExact ~form ~(quot (units-per-second to-unit) (units-per-second from-unit)))
+        `(quot ~form ~(quot (units-per-second from-unit) (units-per-second to-unit)))))))
+
+(defn- ts->inst [form ts-unit]
+  (case ts-unit
+    :second `(Instant/ofEpochSecond ~form)
+    :milli `(Instant/ofEpochMilli ~form)
+    :micro `(util/micros->instant ~form)
+    :nano `(util/nanos->instant ~form)))
+
+(defn- inst->ts [form ts-unit]
+  (case ts-unit
+    :second `(.getEpochSecond ~form)
+    :milli `(.toEpochMilli ~form)
+    :micro `(util/instant->micros ~form)
+    :nano `(util/instant->nanos ~form)))
+
+(defn- ldt->ts [form ts-unit]
+  (if (= ts-unit :second)
+    `(.toEpochSecond ~form ZoneOffset/UTC)
+    `(let [form# ~form]
+       (Math/addExact (Math/multiplyExact (.toEpochSecond form# ZoneOffset/UTC) ~(units-per-second ts-unit))
+                      (quot (.getNano form#) ~(quot (units-per-second :nano) (units-per-second ts-unit)))))))
+
+(defn- ts->ldt [form ts-unit]
+  `(let [form# ~form]
+     (LocalDateTime/ofEpochSecond (quot form# ~(units-per-second ts-unit))
+                                  (* (mod form# ~(units-per-second ts-unit))
+                                     ~(quot (units-per-second :nano) (units-per-second ts-unit)))
+                                  ZoneOffset/UTC)))
+
+;;;; `CAST`
+
+(defmethod expr/codegen-cast [:date :date] [{:keys [target-type]}]
+  ;; date-days and date-millis are both just represented as days throughout the EE,
+  ;; conversion is done when we read from/write to the vector.
+  {:return-type target-type, :->call-code first})
+
+(defmethod expr/codegen-cast [:timestamp-local :timestamp-local] [{[_ src-tsunit] :source-type, [_ tgt-tsunit :as target-type] :target-type}]
+  {:return-type target-type, :->call-code (comp #(with-conversion % src-tsunit tgt-tsunit) first)})
+
+(defmethod expr/codegen-cast [:timestamp-tz :timestamp-tz] [{[_ src-tsunit _] :source-type, [_ tgt-tsunit _ :as target-type] :target-type}]
+  {:return-type target-type, :->call-code (comp #(with-conversion % src-tsunit tgt-tsunit) first)})
+
+(defmethod expr/codegen-cast [:timestamp-tz :timestamp-local] [{[_ src-tsunit src-tz] :source-type, [_ tgt-tsunit :as target-type] :target-type}]
+  (let [src-tz-sym (gensym 'src-tz)]
+    {:return-type target-type,
+     :batch-bindings [[src-tz-sym `(ZoneId/of ~src-tz)]]
+     :->call-code (fn [[tstz]]
+                    (-> `(-> ~(ts->inst tstz src-tsunit)
+                             (ZonedDateTime/ofInstant ~src-tz-sym)
+                             (.withZoneSameInstant (.getZone expr/*clock*))
+                             (.toLocalDateTime))
+                        (ldt->ts tgt-tsunit)))}))
+
+(defmethod expr/codegen-cast [:timestamp-local :timestamp-tz] [{[_ src-tsunit] :source-type, [_ tgt-tsunit _tgt-tz :as target-type] :target-type}]
+  {:return-type target-type,
+   :->call-code (fn [[ts]]
+                  (-> `(-> ~(ts->ldt ts src-tsunit)
+                           (.atZone (.getZone expr/*clock*))
+                           (.toInstant))
+                      (inst->ts tgt-tsunit)))})
+
+(defmethod expr/codegen-cast [:date :timestamp-local] [{[_ tgt-tsunit :as target-type] :target-type}]
+  {:return-type target-type
+   :->call-code (fn [[dt]]
+                  `(-> (LocalDate/ofEpochDay ~dt)
+                       (.atStartOfDay (.getZone expr/*clock*))
+                       (.toEpochSecond)
+                       (Math/multiplyExact ~(units-per-second tgt-tsunit))))})
+
+(defmethod expr/codegen-cast [:timestamp-local :date] [{[_ src-tsunit] :source-type, :keys [target-type]}]
+  {:return-type target-type
+   :->call-code (fn [[ts]]
+                  `(-> ~(ts->ldt ts src-tsunit)
+                       (.toLocalDate)
+                       (.toEpochDay)))})
+
+(defmethod expr/codegen-cast [:timestamp-tz :date] [{[_ src-tsunit src-tz] :source-type, :keys [target-type]}]
+  (let [src-tz-sym (gensym 'src-tz)]
+    {:return-type target-type,
+     :batch-bindings [[src-tz-sym `(ZoneId/of ~src-tz)]]
+     :->call-code (fn [[tstz]]
+                    `(-> ~(ts->inst tstz src-tsunit)
+                         (ZonedDateTime/ofInstant ~src-tz-sym)
+                         (.withZoneSameInstant (.getZone expr/*clock*))
+                         (.toLocalDate)
+                         (.toEpochDay)))}))
+
+(defmethod expr/codegen-cast [:date :timestamp-tz] [{[_ tgt-tsunit _tgt-tz :as target-type] :target-type}]
+  {:return-type target-type
+   :->call-code (fn [[dt]]
+                  (-> `(-> (LocalDate/ofEpochDay ~dt)
+                           (.atStartOfDay (.getZone expr/*clock*))
+                           (.toInstant))
+                      (inst->ts tgt-tsunit)))})
+
 ;; SQL:2011 Time-related-predicates
 ;; FIXME: these don't take different granularities of timestamp into account
 
@@ -97,23 +214,6 @@
 
 ;; SQL:2011 Operations involving datetimes and intervals
 
-(defn- units-per-second ^long [time-unit]
-  (case time-unit
-    :second 1
-    :milli 1000
-    :micro 1000000
-    :nano 1000000000))
-
-(defn- smallest-unit [x-unit y-unit]
-  (if (> (units-per-second x-unit) (units-per-second y-unit))
-    x-unit
-    y-unit))
-
-(defn- with-conversion [form from-unit to-unit]
-  (if (= from-unit to-unit)
-    form
-    `(Math/multiplyExact ~form ~(quot (units-per-second to-unit) (units-per-second from-unit)))))
-
 (defmethod expr/codegen-mono-call [:+ :timestamp-tz :duration] [{[[_ts ts-time-unit tz], [_dur dur-time-unit]] :arg-types}]
   (let [res-unit (smallest-unit ts-time-unit dur-time-unit)]
     {:return-type [:timestamp-tz res-unit tz]
@@ -135,7 +235,7 @@
                     `(Math/addExact ~(-> x-arg (with-conversion x-unit res-unit))
                                     ~(-> y-arg (with-conversion y-unit res-unit))))}))
 
-(defmethod expr/codegen-mono-call [:+ :date :interval] [{[^ArrowType$Date x-type, ^ArrowType$Interval y-type] :arg-types}]
+(defmethod expr/codegen-mono-call [:+ :date :interval] [{[^ArrowType$Date x-type, ^ArrowType$Interval _y-type] :arg-types}]
   {:return-type x-type
    :->call-code (fn [[x-arg y-arg]]
                   `(.toEpochDay (.plus (LocalDate/ofEpochDay ~x-arg) (.getPeriod ~y-arg))))})
@@ -310,62 +410,19 @@
                   :day-time #(do `(interval-abs-dt ~@%))
                   (throw (UnsupportedOperationException. "Can only ABS YEAR_MONTH / DAY_TIME intervals")))})
 
-(defn- ts-offset-zone-seconds-form [form unit offset-secs]
-  (if (= 0 offset-secs)
-    form
-    (case unit
-      :second `(Math/subtractExact ~form ~offset-secs)
-      :milli `(Math/subtractExact ~form (Math/multiplyExact 1000 ~offset-secs))
-      :micro `(Math/subtractExact ~form (Math/multiplyExact 1000000 ~offset-secs))
-      :nano `(Math/subtractExact ~form (Math/multiplyExact 1000000000 ~offset-secs)))))
-
-(def ^:private ts-unit-second-scale
-  {:second 1
-   :milli 1000
-   :micro 1000000
-   :nano 1000000000})
-
-(defn- ts-scale-factors-for-comparison [unit1 unit2]
-  (let [biggest-unit (max-key ts-unit-second-scale unit1 unit2)]
-    (if (= biggest-unit unit1)
-      [1 (/ (long (ts-unit-second-scale biggest-unit)) (long (ts-unit-second-scale unit2)))]
-      [(/ (long (ts-unit-second-scale biggest-unit)) (long (ts-unit-second-scale unit1))) 1])))
-
-(defn- ts-eq-form [col-type1 col-type2]
-  ;; much of this logic is common with CAST later, so expect it to be ported out, and = may be implemented in terms of CAST.
-  ;; the same scaling and offset rules ought to apply to ord comparison too
-  (let [[_ unit1 tz-id1] col-type1
-        [_ unit2 tz-id2] col-type2
-
-        offset-tz1 (when-not tz-id1 (.getZone expr/*clock*))
-        offset-tz2 (when-not tz-id2 (.getZone expr/*clock*))
-
-        ;; TODO these casts to ZoneOffset are actually unsafe
-        ;; there needs to be a slow path here probably deferring to java.time math
-        ;; in the case the zones are not resolvable to offsets
-        ;; though I'm not sure you can even do arithemtic with them in that case (needs investigation!)
-        offset-secs1 (when offset-tz1 (.getTotalSeconds ^ZoneOffset (.normalized offset-tz1)))
-        offset-secs2 (when offset-tz2 (.getTotalSeconds ^ZoneOffset (.normalized offset-tz2)))
-
-        unscaled1 (if offset-secs1 #(ts-offset-zone-seconds-form % unit1 offset-secs1) identity)
-        unscaled2 (if offset-secs2 #(ts-offset-zone-seconds-form % unit2 offset-secs2) identity)
-
-        ;; we use the smallest possible scaling param to avoid overflow where possible, overflow behaviour will currently
-        ;; be to crash - this may change.
-        [scale-factor1 scale-factor2] (ts-scale-factors-for-comparison unit1 unit2)
-
-        form1 (if (= 1 scale-factor1) unscaled1 #(do `(Math/multiplyExact ~(unscaled1 %) scale-factor1)))
-        form2 (if (= 1 scale-factor2) unscaled2 #(do `(Math/multiplyExact ~(unscaled2 %) scale-factor2)))]
+(defmethod expr/codegen-mono-call [:= :timestamp-tz :timestamp-local] [{[tstz-type ts-type] :arg-types}]
+  (let [{tstz->ts-code :->call-code, :as cast-expr} (expr/codegen-cast {:source-type tstz-type, :target-type ts-type})]
     {:return-type :bool
-     :->call-code (fn [[a b]] `(== ~(form1 a) ~(form2 b)))}))
+     :batch-bindings (:batch-bindings cast-expr)
+     :->call-code (fn [[tstz tz]]
+                    `(== ~(tstz->ts-code [tstz]) ~tz))}))
 
-(defmethod expr/codegen-mono-call [:= :timestamp-tz :timestamp-local]
-  [{:keys [arg-types]}]
-  (apply ts-eq-form arg-types))
-
-(defmethod expr/codegen-mono-call [:= :timestamp-local :timestamp-tz]
-  [{:keys [arg-types]}]
-  (apply ts-eq-form arg-types))
+(defmethod expr/codegen-mono-call [:= :timestamp-local :timestamp-tz] [{[ts-type tstz-type] :arg-types}]
+  (let [{tstz->ts-code :->call-code, :as cast-expr} (expr/codegen-cast {:source-type tstz-type, :target-type ts-type})]
+    {:return-type :bool
+     :batch-bindings (:batch-bindings cast-expr)
+     :->call-code (fn [[tz tstz]]
+                    `(== ~tz ~(tstz->ts-code [tstz])))}))
 
 (defn interval-eq
   "Override equality for intervals as we want 1 year to = 12 months, and this is not true by for Period.equals."

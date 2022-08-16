@@ -96,16 +96,23 @@
    To do this for LocalDate and LocalDateTime, the provided SQL session time zone is assumed to be the implied time zone of the date/time."
   ^Instant [temporal ^ZoneId session-zone]
   (condp instance? temporal
-    LocalDate (sql-temporal->instant (.atTime ^LocalDate temporal (LocalTime/of 0 0)) session-zone)
+    LocalDate (sql-temporal->instant (.atTime ^LocalDate temporal LocalTime/MIDNIGHT) session-zone)
     LocalDateTime (.toInstant (.atZone ^LocalDateTime temporal session-zone))
     (->instant temporal)))
 
 (defn instant->micros ^long [^Instant inst]
-  (-> (Math/multiplyExact (.getEpochSecond inst) 1000000)
+  (-> (Math/multiplyExact (.getEpochSecond inst) #=(long 1e6))
       (Math/addExact (quot (.getNano inst) 1000))))
+
+(defn instant->nanos ^long [^Instant inst]
+  (-> (Math/multiplyExact (.getEpochSecond inst) #=(long 1e9))
+      (Math/addExact (long (.getNano inst)))))
 
 (defn micros->instant ^java.time.Instant [^long μs]
   (.plus Instant/EPOCH μs ChronoUnit/MICROS))
+
+(defn nanos->instant ^java.time.Instant [^long ns]
+  (.plus Instant/EPOCH ns ChronoUnit/NANOS))
 
 (def ^java.time.Instant end-of-time
   (Instant/parse "9999-12-31T23:59:59.999999Z"))
