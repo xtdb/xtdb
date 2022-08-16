@@ -22,7 +22,7 @@
            (java.util.concurrent Executors ExecutorService ConcurrentHashMap RejectedExecutionException TimeUnit CompletableFuture Future)
            (java.util HashMap List Map)
            (org.apache.arrow.vector PeriodDuration)
-           (java.time LocalDate LocalDateTime OffsetDateTime ZonedDateTime)
+           (java.time LocalDate LocalDateTime OffsetDateTime ZonedDateTime Instant Clock ZoneOffset)
            (java.nio ByteBuffer)
            (java.util.function Function BiFunction BiConsumer)
            (java.lang Thread$State)
@@ -477,7 +477,9 @@
     ;; bigdec cast gets us consistent exponent notation E with a sign for doubles, floats and bigdecs.
     (float? obj) (bigdec obj)
 
-    ;; java.time datetime-ish toString is already iso8601
+    ;; java.time datetime-ish toString is already iso8601, we may want to tweak this later
+    ;; as the string format often omits redundant components (like trailing seconds) which may make parsing harder
+    ;; for clients, doesn't matter for now - json probably gonna die anyway
     (instance? LocalDate obj) (str obj)
     (instance? LocalDateTime obj) (str obj)
     (instance? OffsetDateTime obj) (str obj)
@@ -1182,8 +1184,14 @@
         {:keys [server-state]} server]
     ;; send server parameters
     (cmd-write-msg conn msg-auth {:result 0})
-    (doseq [[k v] (:parameters @server-state)]
+
+    (doseq [[k v] (merge
+                    ;; TimeZone derived from the servers :clock for now
+                    ;; this may change
+                    {"TimeZone" (str (.getZone ^Clock (:clock @server-state)))}
+                    (:parameters @server-state))]
       (cmd-write-msg conn msg-parameter-status {:parameter k, :value v}))
+
     ;; set initial session parameters specified by client
     (let [{:keys [startup-parameters]} (read-startup-parameters msg-in)]
       (doseq [[k v] startup-parameters]
@@ -1427,8 +1435,16 @@
 
         xt-params (vec (map-indexed xtify-param params))
 
+        {:keys [transaction, session]} @conn-state
+        {:keys [basis]} transaction
+
+        ^Clock clock (:clock session)
+
         query-opts
-        {:basis (:basis (:transaction @conn-state))
+        {:basis (merge {;; basis / session current time is used only for reads right now
+                        ;; dml currently will use the node clock
+                        :current-time (.instant clock)
+                        :default-tz (.getZone clock)} basis)
          :? xt-params}]
 
     ;; Simulate SQL2011 'directly executed sql' rules
@@ -1502,12 +1518,23 @@
 (defn cmd-begin [{:keys [server, conn-state] :as conn}]
   (let [{:keys [node]} server]
     (->> (fn [{:keys [session] :as st}]
-           (->> {:basis {:tx (:latest-completed-tx (c2/status node))}
-                 :access-mode
-                 (or (:access-mode (:next-transaction session))
-                     (:access-mode session)
-                     :read-only)}
-                (assoc st :transaction)))
+           (let [{:keys [^Clock clock]} session]
+             (->> {:basis
+                   {:tx (:latest-completed-tx (c2/status node))
+
+                    ;; fixing current-time for all reads in a tx...
+                    ;; going off perceived intent of adr-40 here:
+                    ;; Separately, we value referentially transparent, 'repeatable' queries - the same query,
+                    ;; executed with exactly the same parameters, should return the same resultset regardless of when it's executed.
+                    ;; Specifically, it shouldn't matter how many subsequent transactions the queried node has indexed,
+                    ;; nor the current wall-clock time of the querying or queried node.
+                    :current-time (.instant clock)}
+
+                   :access-mode
+                   (or (:access-mode (:next-transaction session))
+                       (:access-mode session)
+                       :read-only)}
+                  (assoc st :transaction))))
          (swap! conn-state))
     ;; clear :next-transaction variables for now
     ;; aware right now this may not be spec compliant depending on interplay between START TRANSACTION and SET TRANSACTION
@@ -1829,7 +1856,8 @@
         out (delay (DataOutputStream. (.getOutputStream conn-socket)))
         conn-status (atom :new)
         conn-state (atom {:close-promise (promise)
-                          :session {:access-mode :read-only}})
+                          :session {:access-mode :read-only
+                                    :clock (:clock @server-state)}})
         conn
         (map->Connection
           {:server server,
@@ -1972,6 +2000,13 @@
                               unsafe-init-state]}]
   (assert node ":node is required")
   (let [self (atom nil)
+        clock (Clock/systemDefaultZone)
+        default-state
+        {:clock clock
+         :drain-wait drain-wait
+         :parameters {"server_version" "14"
+                      "server_encoding" "UTF8"
+                      "client_encoding" "UTF8"}}
         srvr (map->Server
                {:port port
                 :node node
@@ -1979,11 +2014,7 @@
                 :accept-thread (Thread. ^Runnable (fn [] (accept-loop @self)) (str "pgwire-server-accept-" port))
                 :thread-pool (Executors/newFixedThreadPool num-threads (util/->prefix-thread-factory "pgwire-connection-"))
                 :server-status (atom :new)
-                :server-state (atom (merge unsafe-init-state {:drain-wait drain-wait
-                                                              :parameters {"server_version" "14"
-                                                                           "server_encoding" "UTF8"
-                                                                           "client_encoding" "UTF8"
-                                                                           "TimeZone" "UTC"}}))})]
+                :server-state (atom (merge unsafe-init-state default-state))})]
     (reset! self srvr)
     srvr))
 

@@ -17,7 +17,8 @@
            (java.lang Thread$State)
            (java.net SocketException)
            (java.util.concurrent CountDownLatch TimeUnit CompletableFuture)
-           (core2 IResultSet)))
+           (core2 IResultSet)
+           (java.time Clock Instant ZoneOffset)))
 
 (set! *warn-on-reflection* false)
 (set! *unchecked-math* false)
@@ -1077,3 +1078,39 @@
           PSQLException
           #"ERROR\: invalid transaction state \-\- active SQL\-transaction"
           (q conn ["BEGIN"])))))
+
+(deftest half-baked-clock-test
+  ;; goal is to test time basis params are sent with queries
+  ;; no support yet for SET/SHOW TIME ZONE so testing with internals to
+  ;; provoke some clock specialised behaviour and make sure something not totally wrong happens
+  (require-server)
+  (let [server *server*
+        custom-clock (Clock/fixed (Instant/parse "2022-08-16T11:08:03Z") (ZoneOffset/ofHoursMinutes 3 12))
+        ts #(:a (first (q % ["select current_timestamp a from (values (42)) a (b)"])))]
+
+    (swap! (:server-state server) assoc :clock custom-clock)
+
+    (testing "server zone is inherited by conn session"
+      (with-open [conn (jdbc-conn)]
+        (is (= {:clock custom-clock} (session-variables (get-last-conn) [:clock])))
+        (is (= "2022-08-16T14:20:03+03:12" (ts conn)))))
+
+    (swap! (:server-state server) assoc :clock (Clock/systemDefaultZone))
+
+    ;; I am not 100% this is the behaviour we actually want as it stands
+    ;; going off repeatable-read steer from ADR-40
+    (testing "current ts instant is pinned during a tx, regardless of what happens to the session clock"
+      (with-open [conn (jdbc-conn)]
+        (let [{:keys [conn-state]} (get-last-conn)]
+          (swap! conn-state assoc-in [:session :clock] (Clock/fixed Instant/EPOCH ZoneOffset/UTC)))
+
+        (jdbc/with-transaction [tx conn]
+          (is (= "1970-01-01T00:00Z" (ts tx)))
+          (Thread/sleep 10)
+          (is (= "1970-01-01T00:00Z" (ts tx)))
+          (testing "inside a transaction, changing the zone is permitted, but the instant is fixed, regardless of the session clock"
+            (let [{:keys [conn-state]} (get-last-conn)]
+              (swap! conn-state assoc-in [:session :clock] custom-clock))
+            (is (= "1970-01-01T03:12+03:12" (ts tx)))))
+
+        (is (= "2022-08-16T14:20:03+03:12" (ts conn)))))))
