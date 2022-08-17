@@ -158,7 +158,7 @@
                                (pos? (.applyAsInt max-comparator values-idx types-vec-idx))))
                   (.copyFromSafe max-vec values-idx types-vec-idx content-vec))))))))))
 
-(doseq [type-head #{:int :float :utf8 :varbinary :timestamp-tz :timestamp-local :date :interval :time}]
+(doseq [type-head #{:int :float :utf8 :varbinary :timestamp-tz :timestamp-local :date :interval :time-local}]
   (defmethod type->metadata-writer type-head [_write-col-meta! metadata-root col-type] (->min-max-type-handler metadata-root col-type)))
 
 (defmethod col-type->type-metadata :fixed-size-binary [[type-head byte-width]]
@@ -185,10 +185,10 @@
 (defmethod type-metadata->col-type :date [type-metadata]
   [(get type-metadata "type-head"), (keyword (get type-metadata "date-unit"))])
 
-(defmethod col-type->type-metadata :time [[type-head time-unit]]
+(defmethod col-type->type-metadata :time-local [[type-head time-unit]]
   {"type-head" (name type-head), "time-unit" (name time-unit)})
 
-(defmethod type-metadata->col-type :time [type-metadata]
+(defmethod type-metadata->col-type :time-local [type-metadata]
   [(get type-metadata "type-head"), (keyword (get type-metadata "time-unit"))])
 
 (defmethod col-type->type-metadata :interval [[type-head interval-unit]]

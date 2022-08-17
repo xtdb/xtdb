@@ -1476,12 +1476,12 @@
                 "current-date")
 
           (t/is (= {:res [(.toLocalTime utc-zdt-micros)]
-                    :res-type [:time :micro]}
+                    :res-type [:time-local :micro]}
                    (project-fn '(current-time)))
                 "current-time")
 
           (t/is (= {:res [(.toLocalTime utc-zdt-micros)]
-                    :res-type [:time :micro]}
+                    :res-type [:time-local :micro]}
                    (project-fn '(local-time)))
                 "local-time")
 
@@ -1505,12 +1505,12 @@
                 "current-date")
 
           (t/is (= {:res [(.toLocalTime utc-zdt-micros)]
-                    :res-type [:time :micro]}
+                    :res-type [:time-local :micro]}
                    (project-fn '(current-time)))
                 "current-time")
 
           (t/is (= {:res [(.toLocalTime la-zdt-micros)]
-                    :res-type [:time :micro]}
+                    :res-type [:time-local :micro]}
                    (project-fn '(local-time)))
                 "local-time")
 
@@ -1533,12 +1533,12 @@
 
         (t/testing "time precision"
           (t/is (= {:res [(-> utc-zdt (.truncatedTo ChronoUnit/MILLIS) (.toLocalTime))]
-                    :res-type [:time :milli]}
+                    :res-type [:time-local :milli]}
                    (project-fn '(current-time 3)))
                 "current-time")
 
           (t/is (= {:res [(-> la-zdt (.truncatedTo ChronoUnit/MILLIS) (.minusNanos 8e6) (.toLocalTime))]
-                    :res-type [:time :milli]}
+                    :res-type [:time-local :milli]}
                    (project-fn '(local-time 2)))
                 "local-time"))))))
 
@@ -1914,51 +1914,24 @@
 (t/deftest test-trim-array-offset-over-trim-exception
   (t/is (thrown-with-msg? IllegalArgumentException #"Data exception - array element error\." (project1 '(trim-array [1 2 3] 4) {}))))
 
-(t/deftest test-cast
-  (t/are [expected expr variables]
-    (= expected (project1 expr variables))
+(t/deftest test-cast-numerics
+  (letfn [(test-cast
+            ([src tgt-type] (test-cast src tgt-type {}))
+            ([src tgt-type params] (project1 (list 'cast src tgt-type) params)))]
+    (t/is (= nil (test-cast nil :i32)))
 
-    nil (list 'cast nil :i32) {}
-    nil (list 'cast nil :i64) {}
-    nil (list 'cast nil :i16) {}
-    nil (list 'cast nil :f32) {}
-    nil (list 'cast nil :f64) {}
+    (t/is (= nil (test-cast nil :i64)))
+    (t/is (= nil (test-cast nil :i16)))
+    (t/is (= nil (test-cast nil :f32)))
+    (t/is (= nil (test-cast nil :f64)))
 
-    42 (list 'cast 42 :i32) {}
+    (t/is (= 42 (test-cast 42 :i32)))
 
-    42 (list 'cast 42.0 :i32) {}
-    42 (list 'cast 42.0 :i16) {}
-    42 (list 'cast 42.0 :i64) {}
+    (t/is (= 42 (test-cast 42.0 :i32)))
+    (t/is (= 42 (test-cast 42.0 :i16)))
+    (t/is (= 42 (test-cast 42.0 :i64)))
 
-    42.0 (list 'cast 42 :f32) {}
-    42.0 (list 'cast 42 :f64) {}
+    (t/is (= 42.0 (test-cast 42 :f32)))
+    (t/is (= 42.0 (test-cast 42 :f64)))
 
-    42 (list 'cast 'a :i32) {:a 42.0}))
-
-(defn- ldt ^LocalDateTime [s] (LocalDateTime/parse s))
-
-;; the goal of this test is simply to demonstrate clock affects the computation
-;; equality may well remain incorrect for now, it is not the goal
-(t/deftest clock-influences-equality-of-ambiguous-datetimes-test
-  (t/are [expected a b clock]
-    (= expected (binding [expr/*clock* (Clock/fixed Instant/EPOCH (ZoneId/of clock))] (project1 '(= sa sb) {:sa a, :sb b})))
-    ;; identity
-    true (ldt "2021-08-09T15:43:23") (ldt "2021-08-09T15:43:23") "UTC"
-
-    ;; obvious inequality
-    false (ldt "2022-08-09T15:43:23") (ldt "2021-08-09T15:43:23") "UTC"
-
-    ;; added fraction
-    false (ldt "2021-08-09T15:43:23") (ldt "2021-08-09T15:43:23.3") "UTC"
-
-    ;; trailing zero ok
-    true (ldt "2021-08-09T15:43:23") (ldt "2021-08-09T15:43:23.0") "UTC"
-
-    ;; equality preserved across tz
-    true (ldt "2021-08-09T15:43:23") (ldt "2021-08-09T15:43:23") "UTC+2"
-
-    ;; offset equiv
-    true #time/offset-date-time "2021-08-09T15:43:23+02:00" (ldt "2021-08-09T15:43:23") "UTC+2"
-
-    ;; offset inequality
-    false #time/offset-date-time "2021-08-09T15:43:23+02:00" (ldt "2021-08-09T15:43:23") "UTC+3"))
+    (t/is (= 42 (test-cast 'a :i32 {:a 42.0})))))
