@@ -18,7 +18,7 @@
            (java.net SocketException)
            (java.util.concurrent CountDownLatch TimeUnit CompletableFuture)
            (core2 IResultSet)
-           (java.time Clock Instant ZoneOffset)))
+           (java.time Clock Instant ZoneOffset ZoneId)))
 
 (set! *warn-on-reflection* false)
 (set! *unchecked-math* false)
@@ -1155,3 +1155,12 @@
 
       (testing "SET is a session operator, so the tz still applied to the session"
         (is (= "2022-08-16T11:08:03Z" (current-ts conn)))))))
+
+(deftest zoned-dt-printing-test
+  (require-server)
+  (let [custom-clock (Clock/fixed (Instant/parse "2022-08-16T11:08:03Z")
+                                  ;; lets hope we do not print zone prefix!
+                                  (ZoneId/ofOffset "GMT" (ZoneOffset/ofHoursMinutes 3 12)))]
+    (swap! (:server-state *server*) assoc :clock custom-clock)
+    (with-open [conn (jdbc-conn)]
+      (is (= "2022-08-16T14:20:03+03:12" (current-ts conn))))))

@@ -488,7 +488,9 @@
     (instance? LocalDate obj) (str obj)
     (instance? LocalDateTime obj) (str obj)
     (instance? OffsetDateTime obj) (str obj)
-    (instance? ZonedDateTime obj) (str obj)
+    ;; print offset instead of zoneprefix  otherwise printed representation may change depending on client
+    ;; we might later revisit this if json printing remains
+    (instance? ZonedDateTime obj) (recur (.toOffsetDateTime ^ZonedDateTime obj))
 
     ;; represent period duration as an iso8601 duration string (includes period components)
     (instance? PeriodDuration obj)
