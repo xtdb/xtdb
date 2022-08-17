@@ -1424,7 +1424,7 @@
                     (if *include-table-column-in-scan?*
                       (conj
                         columns-with-app-time-cols
-                        {'_table (list '=  '_table table-or-query-name)})
+                        {'_table (list '= '_table table-or-query-name)})
                       columns-with-app-time-cols)))]
          (= (first system-time-predicates) :invalid-points-in-time)
          (vector :select 'false)))]))
@@ -1889,7 +1889,7 @@
                              (fn [acc p]
                                (if (extend-projection? p)
                                  (let [[k v] (first p)]
-                                   (if (symbol? v)
+                                   (if (and (symbol? v) (not (str/starts-with? (name v) "?_")))
                                      (assoc acc k (smap v))
                                      (assoc acc k (next-name))))
                                  (assoc acc p (smap p))))

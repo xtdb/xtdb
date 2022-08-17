@@ -1,0 +1,1 @@
+[:rename {x1 foo} [:table [x1] [{x1 ?_0}]]]

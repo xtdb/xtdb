@@ -400,7 +400,27 @@
           "test-dynamic-parameters-103-2"
           (plan-sql "SELECT foo.a
                     FROM foo, (SELECT bar.b FROM bar WHERE bar.c = ?) bar (b)
-                    WHERE foo.b = ? AND foo.c = ?"))))
+                    WHERE foo.b = ? AND foo.c = ?")))
+
+  (t/is (=plan-file
+          "test-dynamic-parameters-103-subquery-project"
+          (plan-sql "SELECT t1.col1, (SELECT ? FROM bar WHERE bar.col1 = 4) FROM t1")))
+
+  (t/is (=plan-file
+          "test-dynamic-parameters-103-top-level-project"
+          (plan-sql "SELECT t1.col1, ? FROM t1")))
+
+  (t/is (=plan-file
+          "test-dynamic-parameters-103-update-set-value"
+          (plan-sql "UPDATE t1 SET col1 = ?")))
+
+  (t/is (=plan-file
+          "test-dynamic-parameters-103-table-values"
+          (plan-sql "SELECT bar.foo FROM (VALUES (?)) AS bar(foo)")))
+
+  (t/is (=plan-file
+          "test-dynamic-parameters-103-update-app-time"
+          (plan-sql "UPDATE users FOR PORTION OF APP_TIME FROM ? TO ? AS u SET first_name = ? WHERE u.id = ?"))))
 
 (t/deftest test-order-by-null-handling-159
   (t/is (=plan-file

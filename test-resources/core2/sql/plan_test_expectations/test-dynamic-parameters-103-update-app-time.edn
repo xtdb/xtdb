@@ -1,0 +1,22 @@
+[:update
+ {:table "users"}
+ [:rename
+  {x2 _iid,
+   x3 _row-id,
+   x7 first_name,
+   x8 application_time_start,
+   x9 application_time_end}
+  [:project
+   [x2 x3 {x7 ?_2} {x8 (max x4 ?_0)} {x9 (min x5 ?_1)}]
+   [:rename
+    {id x1,
+     _iid x2,
+     _row-id x3,
+     application_time_start x4,
+     application_time_end x5}
+    [:scan
+     [{id (= id ?_3)}
+      _iid
+      _row-id
+      {application_time_start (<= application_time_start ?_1)}
+      {application_time_end (>= application_time_end ?_0)}]]]]]]
