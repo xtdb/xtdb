@@ -1079,23 +1079,24 @@
           #"ERROR\: invalid transaction state \-\- active SQL\-transaction"
           (q conn ["BEGIN"])))))
 
+(defn- current-ts [conn]
+  (:a (first (q conn ["select current_timestamp a from (values (0)) a (b)"]))))
+
 (deftest half-baked-clock-test
   ;; goal is to test time basis params are sent with queries
   ;; no support yet for SET/SHOW TIME ZONE so testing with internals to
   ;; provoke some clock specialised behaviour and make sure something not totally wrong happens
   (require-server)
-  (let [server *server*
-        custom-clock (Clock/fixed (Instant/parse "2022-08-16T11:08:03Z") (ZoneOffset/ofHoursMinutes 3 12))
-        ts #(:a (first (q % ["select current_timestamp a from (values (42)) a (b)"])))]
+  (let [custom-clock (Clock/fixed (Instant/parse "2022-08-16T11:08:03Z") (ZoneOffset/ofHoursMinutes 3 12))]
 
-    (swap! (:server-state server) assoc :clock custom-clock)
+    (swap! (:server-state *server*) assoc :clock custom-clock)
 
     (testing "server zone is inherited by conn session"
       (with-open [conn (jdbc-conn)]
         (is (= {:clock custom-clock} (session-variables (get-last-conn) [:clock])))
-        (is (= "2022-08-16T14:20:03+03:12" (ts conn)))))
+        (is (= "2022-08-16T14:20:03+03:12" (current-ts conn)))))
 
-    (swap! (:server-state server) assoc :clock (Clock/systemDefaultZone))
+    (swap! (:server-state *server*) assoc :clock (Clock/systemDefaultZone))
 
     ;; I am not 100% this is the behaviour we actually want as it stands
     ;; going off repeatable-read steer from ADR-40
@@ -1105,12 +1106,40 @@
           (swap! conn-state assoc-in [:session :clock] (Clock/fixed Instant/EPOCH ZoneOffset/UTC)))
 
         (jdbc/with-transaction [tx conn]
-          (is (= "1970-01-01T00:00Z" (ts tx)))
+          (is (= "1970-01-01T00:00Z" (current-ts tx)))
           (Thread/sleep 10)
-          (is (= "1970-01-01T00:00Z" (ts tx)))
+          (is (= "1970-01-01T00:00Z" (current-ts tx)))
           (testing "inside a transaction, changing the zone is permitted, but the instant is fixed, regardless of the session clock"
             (let [{:keys [conn-state]} (get-last-conn)]
               (swap! conn-state assoc-in [:session :clock] custom-clock))
-            (is (= "1970-01-01T03:12+03:12" (ts tx)))))
+            (is (= "1970-01-01T03:12+03:12" (current-ts tx)))))
 
-        (is (= "2022-08-16T14:20:03+03:12" (ts conn)))))))
+        (is (= "2022-08-16T14:20:03+03:12" (current-ts conn)))))))
+
+(deftest set-time-zone-test
+  (require-server)
+  (let [server-clock (Clock/fixed (Instant/parse "2022-08-16T11:08:03Z") ZoneOffset/UTC)]
+    (swap! (:server-state *server*) assoc :clock server-clock)
+    (with-open [conn (jdbc-conn)]
+      (testing "utc"
+        (q conn ["SET TIME ZONE '00:00'"])
+        (is (= "2022-08-16T11:08:03Z" (current-ts conn))))
+
+      (testing "postive sign"
+        (q conn ["SET TIME ZONE '+01:34'"])
+        (is (= "2022-08-16T12:42:03+01:34" (current-ts conn))))
+
+      (testing "negative sign"
+        (q conn ["SET TIME ZONE '-01:04'"])
+        (is (= "2022-08-16T10:04:03-01:04" (current-ts conn))))
+
+      (jdbc/with-transaction [tx conn]
+        (testing "in a transaction, inherits session tz"
+          (is (= "2022-08-16T10:04:03-01:04" (current-ts tx))))
+
+        (testing "tz can be modified in a transaction"
+          (q conn ["SET TIME ZONE '+00:00'"])
+          (is (= "2022-08-16T11:08:03Z" (current-ts conn)))))
+
+      (testing "SET is a session operator, so the tz still applied to the session"
+        (is (= "2022-08-16T11:08:03Z" (current-ts conn)))))))

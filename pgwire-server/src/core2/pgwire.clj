@@ -22,7 +22,7 @@
            (java.util.concurrent Executors ExecutorService ConcurrentHashMap RejectedExecutionException TimeUnit CompletableFuture Future)
            (java.util HashMap List Map)
            (org.apache.arrow.vector PeriodDuration)
-           (java.time LocalDate LocalDateTime OffsetDateTime ZonedDateTime Instant Clock ZoneOffset)
+           (java.time LocalDate LocalDateTime OffsetDateTime ZonedDateTime Instant Clock ZoneOffset ZoneId)
            (java.nio ByteBuffer)
            (java.util.function Function BiFunction BiConsumer)
            (java.lang Thread$State)
@@ -415,14 +415,19 @@
     (= "SET" (statement-head sql))
     (or
       ;; will likely look at moving this into parser as they are spec defined
-      ;; thought execution behaviour will likely remain in pgwire (due to stateful nature of these commands)
+      ;; though execution behaviour will likely remain in pgwire (due to stateful nature of these commands)
       (when (.equalsIgnoreCase "SET TRANSACTION READ ONLY" (transform-query sql))
         {:statement-type :set-transaction
          :access-mode :read-only})
       (when (.equalsIgnoreCase "SET TRANSACTION READ WRITE" (transform-query sql))
         {:statement-type :set-transaction
          :access-mode :read-write})
-
+      ;; see issue #324, scrappy and temporary solution for basic interval HOUR MINUTE expr
+      (when-some [[_ sign hh mm] (re-find #"(?i)SET\s+TIME\s*ZONE\s+\'(\+|\-|)(\d{1,2})\:(\d{1,2})\'" sql)]
+        {:statement-type :set-time-zone
+         :tz (ZoneOffset/ofHoursMinutes
+               ((case sign "-" - +) (parse-long hh))
+               ((case sign "-" - +) (parse-long mm)))})
       ;; this as a fallback currently means anything that starts with SET is accepted, needs tightening up
       (let [[_ k _ v] (re-find #"SET\s+(\w+)\s*(=|TO)\s*(.*)" sql)]
         {:statement-type :set-session-parameter
@@ -1562,14 +1567,14 @@
 
 (defn cmd-describe
   "Sends description messages (e.g msg-row-description) to the client for a prepared statement or portal."
-  [{:keys [conn-state] :as conn} {:keys [describe-type, describe-name] :as msg}]
+  [{:keys [conn-state] :as conn} {:keys [describe-type, describe-name]}]
   (let [coll-k (case describe-type
                  :portal :portals
                  :prepared-stmt :prepared-statements
                  (Object.))
         {:keys [statement-type
                 ast
-                canned-response] :as stmt}
+                canned-response]}
         (get-in @conn-state [coll-k describe-name])]
 
     (when (= :prepared-statements describe-type)
@@ -1579,11 +1584,8 @@
     (case statement-type
       :empty-query (cmd-write-msg conn msg-no-data)
       :canned-response (cmd-describe-canned-response conn canned-response)
-
-      (:set-session-parameter :set-transaction :begin :commit :rollback) (cmd-write-msg conn msg-no-data)
-
       :query (cmd-describe-query conn ast)
-      (cmd-send-error conn (err-protocol-violation "no such description possible")))))
+      (cmd-write-msg conn msg-no-data))))
 
 (defn cmd-set-session-parameter [conn parameter value]
   (set-session-parameter conn parameter value)
@@ -1595,6 +1597,10 @@
   (when access-mode (swap! conn-state assoc-in [:session :next-transaction :access-mode] access-mode))
   (cmd-write-msg conn msg-command-complete {:command "SET TRANSACTION"}))
 
+(defn cmd-set-time-zone [{:keys [conn-state] :as conn} ^ZoneId tz]
+  (swap! conn-state update-in [:session :clock] (fn [^Clock clock] (.withZone clock tz)))
+  (cmd-write-msg conn msg-command-complete {:command "SET TIME ZONE"}))
+
 (defn cmd-exec-stmt
   "Given some kind of statement (from interpret-sql), will execute it. For some statements, this does not mean
   the xt node gets hit - e.g SET some_session_parameter = 42 modifies the connection, not the database."
@@ -1604,6 +1610,7 @@
            canned-response
            access-mode
            parameter
+           tz
            value]
     :as stmt}]
 
@@ -1618,6 +1625,7 @@
     :canned-response (cmd-write-canned-response conn canned-response)
     :set-session-parameter (cmd-set-session-parameter conn parameter value)
     :set-transaction (cmd-set-transaction conn {:access-mode access-mode})
+    :set-time-zone (cmd-set-time-zone conn tz)
     :begin (cmd-begin conn)
     :rollback (cmd-rollback conn)
     :commit (cmd-commit conn)
