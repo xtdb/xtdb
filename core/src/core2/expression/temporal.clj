@@ -6,7 +6,7 @@
             [core2.temporal :as temporal]
             [core2.types :as types]
             [core2.util :as util])
-  (:import (java.time Duration Instant LocalDate LocalDateTime Period ZoneId ZoneOffset ZonedDateTime)
+  (:import (java.time Duration Instant LocalDate LocalDateTime LocalTime Period ZoneId ZoneOffset ZonedDateTime)
            (java.time.temporal ChronoField ChronoUnit)
            (org.apache.arrow.vector PeriodDuration)
            (org.apache.arrow.vector.types.pojo ArrowType$Date ArrowType$Interval)))
@@ -114,30 +114,14 @@
   ;; conversion is done when we read from/write to the vector.
   {:return-type target-type, :->call-code first})
 
+(defmethod expr/codegen-cast [:time-local :time-local] [{[_ src-tsunit] :source-type, [_ tgt-tsunit :as target-type] :target-type}]
+  {:return-type target-type, :->call-code (comp #(with-conversion % src-tsunit tgt-tsunit) first)})
+
 (defmethod expr/codegen-cast [:timestamp-local :timestamp-local] [{[_ src-tsunit] :source-type, [_ tgt-tsunit :as target-type] :target-type}]
   {:return-type target-type, :->call-code (comp #(with-conversion % src-tsunit tgt-tsunit) first)})
 
 (defmethod expr/codegen-cast [:timestamp-tz :timestamp-tz] [{[_ src-tsunit _] :source-type, [_ tgt-tsunit _ :as target-type] :target-type}]
   {:return-type target-type, :->call-code (comp #(with-conversion % src-tsunit tgt-tsunit) first)})
-
-(defmethod expr/codegen-cast [:timestamp-tz :timestamp-local] [{[_ src-tsunit src-tz] :source-type, [_ tgt-tsunit :as target-type] :target-type}]
-  (let [src-tz-sym (gensym 'src-tz)]
-    {:return-type target-type,
-     :batch-bindings [[src-tz-sym `(ZoneId/of ~src-tz)]]
-     :->call-code (fn [[tstz]]
-                    (-> `(-> ~(ts->inst tstz src-tsunit)
-                             (ZonedDateTime/ofInstant ~src-tz-sym)
-                             (.withZoneSameInstant (.getZone expr/*clock*))
-                             (.toLocalDateTime))
-                        (ldt->ts tgt-tsunit)))}))
-
-(defmethod expr/codegen-cast [:timestamp-local :timestamp-tz] [{[_ src-tsunit] :source-type, [_ tgt-tsunit _tgt-tz :as target-type] :target-type}]
-  {:return-type target-type,
-   :->call-code (fn [[ts]]
-                  (-> `(-> ~(ts->ldt ts src-tsunit)
-                           (.atZone (.getZone expr/*clock*))
-                           (.toInstant))
-                      (inst->ts tgt-tsunit)))})
 
 (defmethod expr/codegen-cast [:date :timestamp-local] [{[_ tgt-tsunit :as target-type] :target-type}]
   {:return-type target-type
@@ -147,12 +131,52 @@
                        (.toEpochSecond)
                        (Math/multiplyExact ~(units-per-second tgt-tsunit))))})
 
+(defmethod expr/codegen-cast [:date :timestamp-tz] [{[_ tgt-tsunit _tgt-tz :as target-type] :target-type}]
+  {:return-type target-type
+   :->call-code (fn [[dt]]
+                  (-> `(-> (LocalDate/ofEpochDay ~dt)
+                           (.atStartOfDay (.getZone expr/*clock*))
+                           (.toInstant))
+                      (inst->ts tgt-tsunit)))})
+
+(defmethod expr/codegen-cast [:time-local :timestamp-local] [{[_ src-tsunit] :source-type, [_ tgt-tsunit :as target-type] :target-type}]
+  {:return-type target-type
+   :->call-code (fn [[tm]]
+                  (-> `(LocalDateTime/of (LocalDate/ofInstant (.instant expr/*clock*) (.getZone expr/*clock*))
+                                         (LocalTime/ofNanoOfDay ~(with-conversion tm src-tsunit :nano)))
+                      (ldt->ts tgt-tsunit)))})
+
+(defmethod expr/codegen-cast [:time-local :timestamp-tz] [{[_ src-tsunit] :source-type, [_ tgt-tsunit _tgt-tz :as target-type] :target-type}]
+  {:return-type target-type
+   :->call-code (fn [[tm]]
+                  (-> `(-> (ZonedDateTime/of (LocalDate/ofInstant (.instant expr/*clock*) (.getZone expr/*clock*))
+                                             (LocalTime/ofNanoOfDay ~(with-conversion tm src-tsunit :nano))
+                                             (.getZone expr/*clock*))
+                           (.toInstant))
+                      (inst->ts tgt-tsunit)))})
+
 (defmethod expr/codegen-cast [:timestamp-local :date] [{[_ src-tsunit] :source-type, :keys [target-type]}]
   {:return-type target-type
    :->call-code (fn [[ts]]
                   `(-> ~(ts->ldt ts src-tsunit)
                        (.toLocalDate)
                        (.toEpochDay)))})
+
+(defmethod expr/codegen-cast [:timestamp-local :time-local] [{[_ src-tsunit _] :source-type, [_ tgt-tsunit _ :as target-type] :target-type}]
+  {:return-type target-type,
+   :->call-code (fn [[ts]]
+                  (-> `(-> ~(ts->ldt ts src-tsunit)
+                           (.toLocalTime)
+                           (.toNanoOfDay))
+                      (with-conversion :nano tgt-tsunit)))})
+
+(defmethod expr/codegen-cast [:timestamp-local :timestamp-tz] [{[_ src-tsunit] :source-type, [_ tgt-tsunit _tgt-tz :as target-type] :target-type}]
+  {:return-type target-type,
+   :->call-code (fn [[ts]]
+                  (-> `(-> ~(ts->ldt ts src-tsunit)
+                           (.atZone (.getZone expr/*clock*))
+                           (.toInstant))
+                      (inst->ts tgt-tsunit)))})
 
 (defmethod expr/codegen-cast [:timestamp-tz :date] [{[_ src-tsunit src-tz] :source-type, :keys [target-type]}]
   (let [src-tz-sym (gensym 'src-tz)]
@@ -165,13 +189,28 @@
                          (.toLocalDate)
                          (.toEpochDay)))}))
 
-(defmethod expr/codegen-cast [:date :timestamp-tz] [{[_ tgt-tsunit _tgt-tz :as target-type] :target-type}]
-  {:return-type target-type
-   :->call-code (fn [[dt]]
-                  (-> `(-> (LocalDate/ofEpochDay ~dt)
-                           (.atStartOfDay (.getZone expr/*clock*))
-                           (.toInstant))
-                      (inst->ts tgt-tsunit)))})
+(defmethod expr/codegen-cast [:timestamp-tz :time-local] [{[_ src-tsunit src-tz] :source-type, [_ tgt-tsunit _ :as target-type] :target-type}]
+  (let [src-tz-sym (gensym 'src-tz)]
+    {:return-type target-type,
+     :batch-bindings [[src-tz-sym `(ZoneId/of ~src-tz)]]
+     :->call-code (fn [[tstz]]
+                    (-> `(-> ~(ts->inst tstz src-tsunit)
+                             (ZonedDateTime/ofInstant ~src-tz-sym)
+                             (.withZoneSameInstant (.getZone expr/*clock*))
+                             (.toLocalTime)
+                             (.toNanoOfDay))
+                        (with-conversion :nano tgt-tsunit)))}))
+
+(defmethod expr/codegen-cast [:timestamp-tz :timestamp-local] [{[_ src-tsunit src-tz] :source-type, [_ tgt-tsunit :as target-type] :target-type}]
+  (let [src-tz-sym (gensym 'src-tz)]
+    {:return-type target-type,
+     :batch-bindings [[src-tz-sym `(ZoneId/of ~src-tz)]]
+     :->call-code (fn [[tstz]]
+                    (-> `(-> ~(ts->inst tstz src-tsunit)
+                             (ZonedDateTime/ofInstant ~src-tz-sym)
+                             (.withZoneSameInstant (.getZone expr/*clock*))
+                             (.toLocalDateTime))
+                        (ldt->ts tgt-tsunit)))}))
 
 ;; SQL:2011 Time-related-predicates
 ;; FIXME: these don't take different granularities of timestamp into account
@@ -755,7 +794,7 @@
   ;; but Arrow expects Times to be in UTC.
   ;; we then turn times into LocalTimes, which confuses things further.
   (let [precision (bound-precision precision)]
-    {:return-type [:time (precision-timeunits precision)]
+    {:return-type [:time-local (precision-timeunits precision)]
      :->call-code (fn [_]
                     (-> `(long (-> (ZonedDateTime/ofInstant (.instant expr/*clock*) ZoneOffset/UTC)
                                    (.toLocalTime)
@@ -790,7 +829,7 @@
 (defn- local-time [^long precision]
   (let [precision (bound-precision precision)
         time-unit (precision-timeunits precision)]
-    {:return-type [:time time-unit]
+    {:return-type [:time-local time-unit]
      :->call-code (fn [_]
                     (-> `(long (-> (ZonedDateTime/ofInstant (.instant expr/*clock*) (.getZone expr/*clock*))
                                    (.toLocalTime)
