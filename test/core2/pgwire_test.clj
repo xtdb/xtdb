@@ -1117,13 +1117,25 @@
         (is (= "2022-08-16T14:20:03+03:12" (current-ts conn)))))))
 
 (deftest set-time-zone-test
-  (require-server)
-  (let [server-clock (Clock/fixed (Instant/parse "2022-08-16T11:08:03Z") ZoneOffset/UTC)]
+  (require-server {:num-threads 2})
+  (let [server-clock (Clock/fixed (Instant/parse "2022-08-16T11:08:03Z") (ZoneOffset/ofHoursMinutes 3 12))]
     (swap! (:server-state *server*) assoc :clock server-clock)
     (with-open [conn (jdbc-conn)]
+      ;; for sanity
+      (testing "expect server clock"
+        (is (= "2022-08-16T14:20:03+03:12" (current-ts conn))))
+
       (testing "utc"
         (q conn ["SET TIME ZONE '00:00'"])
         (is (= "2022-08-16T11:08:03Z" (current-ts conn))))
+
+      (testing "tz is session scoped"
+        (with-open [conn2 (jdbc-conn)]
+          (is (= "2022-08-16T14:20:03+03:12" (current-ts conn2)))
+          (is (= "2022-08-16T11:08:03Z" (current-ts conn)))
+          (q conn2 ["SET TIME ZONE '00:01'"])
+          (is (= "2022-08-16T11:09:03+00:01" (current-ts conn2)))
+          (is (= "2022-08-16T11:08:03Z" (current-ts conn)))))
 
       (testing "postive sign"
         (q conn ["SET TIME ZONE '+01:34'"])
