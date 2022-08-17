@@ -15,7 +15,7 @@
            core2.vector.PolyValueBox
            (java.nio ByteBuffer)
            (java.nio.charset StandardCharsets)
-           (java.time Clock Duration Instant LocalDate LocalDateTime OffsetDateTime Period ZoneOffset ZonedDateTime)
+           (java.time Clock Duration Instant LocalDate LocalDateTime LocalTime OffsetDateTime Period ZoneOffset ZonedDateTime)
            (java.util Arrays Date HashMap LinkedList)
            (java.util.function IntUnaryOperator)
            (java.util.regex Pattern)
@@ -211,7 +211,7 @@
 (defmethod write-value-code :null [_ & args] `(.writeNull ~@args))
 
 (doseq [[k sym] '{:bool Boolean, :i8 Byte, :i16 Short, :i32 Int, :i64 Long, :f32 Float, :f64 Double
-                  :date Int, :time Long, :timestamp-tz Long, :timestamp-local Long, :duration Long, :interval Object
+                  :date Int, :time-local Long, :timestamp-tz Long, :timestamp-local Long, :duration Long, :interval Object
                   :utf8 Buffer, :varbinary Buffer}]
   (defmethod read-value-code k [_ & args] `(~(symbol (str ".read" sym)) ~@args))
   (defmethod write-value-code k [_ & args] `(~(symbol (str ".write" sym)) ~@args)))
@@ -235,6 +235,7 @@
 (defmethod emit-value ZonedDateTime [_ code] `(util/instant->micros (util/->instant ~code)))
 (defmethod emit-value OffsetDateTime [_ code] `(util/instant->micros (util/->instant ~code)))
 (defmethod emit-value LocalDateTime [_ code] `(util/instant->micros (.toInstant ~code ZoneOffset/UTC)))
+(defmethod emit-value LocalTime [_ code] `(.toNanoOfDay ~code))
 (defmethod emit-value Duration [_ code] `(quot (.toNanos ~code) 1000))
 
 ;; consider whether a bound hash map for literal parameters would be better

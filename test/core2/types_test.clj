@@ -104,21 +104,21 @@
                   (test-round-trip all))))
 
     (->> "LocalTime can be read from SECOND time vectors"
-         (t/is (= secs (:vs (test-read (constantly [:time :second])
+         (t/is (= secs (:vs (test-read (constantly [:time-local :second])
                                        (fn [^IVectorWriter w, ^LocalTime v]
                                          (.setSafe ^TimeSecVector (.getVector w) (.getPosition w) (.toSecondOfDay v)))
                                        secs)))))
 
     (let [millis+ (concat millis secs)]
       (->> "LocalTime can be read from MILLI time vectors"
-           (t/is (= millis+ (:vs (test-read (constantly [:time :milli])
+           (t/is (= millis+ (:vs (test-read (constantly [:time-local :milli])
                                             (fn [^IVectorWriter w, ^LocalTime v]
                                               (.setSafe ^TimeMilliVector (.getVector w) (.getPosition w) (int (quot (.toNanoOfDay v) 1e6))))
                                             millis+))))))
 
     (let [micros+ (concat micros millis secs)]
       (->> "LocalTime can be read from MICRO time vectors"
-           (t/is (= micros+ (:vs (test-read (constantly [:time :micro])
+           (t/is (= micros+ (:vs (test-read (constantly [:time-local :micro])
                                             (fn [^IVectorWriter w, ^LocalTime v]
                                               (.setSafe ^TimeMicroVector (.getVector w) (.getPosition w) (long (quot (.toNanoOfDay v) 1e3))))
                                             micros+))))))))

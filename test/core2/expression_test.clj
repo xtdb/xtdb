@@ -1476,12 +1476,12 @@
                 "current-date")
 
           (t/is (= {:res [(.toLocalTime utc-zdt-micros)]
-                    :res-type [:time :micro]}
+                    :res-type [:time-local :micro]}
                    (project-fn '(current-time)))
                 "current-time")
 
           (t/is (= {:res [(.toLocalTime utc-zdt-micros)]
-                    :res-type [:time :micro]}
+                    :res-type [:time-local :micro]}
                    (project-fn '(local-time)))
                 "local-time")
 
@@ -1505,12 +1505,12 @@
                 "current-date")
 
           (t/is (= {:res [(.toLocalTime utc-zdt-micros)]
-                    :res-type [:time :micro]}
+                    :res-type [:time-local :micro]}
                    (project-fn '(current-time)))
                 "current-time")
 
           (t/is (= {:res [(.toLocalTime la-zdt-micros)]
-                    :res-type [:time :micro]}
+                    :res-type [:time-local :micro]}
                    (project-fn '(local-time)))
                 "local-time")
 
@@ -1533,12 +1533,12 @@
 
         (t/testing "time precision"
           (t/is (= {:res [(-> utc-zdt (.truncatedTo ChronoUnit/MILLIS) (.toLocalTime))]
-                    :res-type [:time :milli]}
+                    :res-type [:time-local :milli]}
                    (project-fn '(current-time 3)))
                 "current-time")
 
           (t/is (= {:res [(-> la-zdt (.truncatedTo ChronoUnit/MILLIS) (.minusNanos 8e6) (.toLocalTime))]
-                    :res-type [:time :milli]}
+                    :res-type [:time-local :milli]}
                    (project-fn '(local-time 2)))
                 "local-time"))))))
 

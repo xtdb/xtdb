@@ -3,7 +3,6 @@
             [core2.api :as c2]
             [core2.client :as client]
             [core2.test-util :as tu :refer [*node*]]
-            [core2.sql.plan-test :as pt]
             [core2.util :as util]
             [juxt.clojars-mirrors.integrant.core :as ig]
             [core2.local-node :as node])
@@ -96,6 +95,21 @@
                                           :where [[?id :struct ?struct]]}
                                         (assoc :basis {:tx !tx}
                                                :basis-timeout (Duration/ofSeconds 1)))))))))
+
+(t/deftest round-trips-temporal
+  (let [vs {:id "foo"
+            :dt #time/date "2022-08-01"
+            :ts #time/date-time "2022-08-01T14:34"
+            :tstz #time/zoned-date-time "2022-08-01T14:34+01:00[Europe/London]"
+            :tm #time/time "13:21:14.932254"
+            ;; :tmtz #time/offset-time "11:21:14.932254-08:00" ; TODO #323
+            }
+        !tx (c2/submit-tx *node* [[:sql "INSERT INTO foo (id, dt, ts, tstz, tm) VALUES (?, ?, ?, ?, ?)"
+                                   [(mapv vs [:id :dt :ts :tstz :tm])]]])]
+
+    (t/is (= [vs]
+             (c2/sql-query *node* "SELECT f.id, f.dt, f.ts, f.tstz, f.tm FROM foo f"
+                           {:basis {:tx !tx}, :basis-timeout (Duration/ofMillis 100)})))))
 
 (t/deftest can-manually-specify-sys-time-47
   (let [tx1 @(c2/submit-tx *node* [[:put {:id :foo}]]

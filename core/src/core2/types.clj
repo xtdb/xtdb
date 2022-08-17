@@ -111,7 +111,7 @@
     (.setSafe ^DateDayVector (.getVector writer) (.getPosition writer) (.toEpochDay v)))
 
   LocalTime
-  (value->col-type [_] [:time :nano])
+  (value->col-type [_] [:time-local :nano])
   (write-value! [v ^IVectorWriter writer]
     (.setSafe ^TimeNanoVector (.getVector writer) (.getPosition writer) (.toNanoOfDay v)))
 
@@ -435,7 +435,7 @@
       (derive :num :any)
 
       (derive :timestamp-tz :any) (derive :timestamp-local :any)
-      (derive :date :any) (derive :time :any) (derive :interval :any) (derive :duration :any)
+      (derive :date :any) (derive :time-local :any) (derive :interval :any) (derive :duration :any)
       (derive :varbinary :any) (derive :utf8 :any)
       (derive :extension-type :any)))
 
@@ -663,17 +663,17 @@
 
 ;;; time
 
-(defmethod col-type->field-name :time [[type-head time-unit]]
+(defmethod col-type->field-name :time-local [[type-head time-unit]]
   (str (name type-head) "-" (name time-unit)))
 
-(defmethod col-type->field* :time [col-name nullable? [_type-head time-unit]]
+(defmethod col-type->field* :time-local [col-name nullable? [_type-head time-unit]]
   (->field col-name
            (ArrowType$Time. (kw->time-unit time-unit)
                             (case time-unit (:second :milli) 32, (:micro :nano) 64))
            nullable?))
 
 (defmethod arrow-type->col-type ArrowType$Time [^ArrowType$Time arrow-type]
-  [:time (time-unit->kw (.getUnit arrow-type))])
+  [:time-local (time-unit->kw (.getUnit arrow-type))])
 
 ;;; duration
 
