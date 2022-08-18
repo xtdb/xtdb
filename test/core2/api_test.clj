@@ -6,7 +6,7 @@
             [core2.util :as util]
             [juxt.clojars-mirrors.integrant.core :as ig]
             [core2.local-node :as node])
-  (:import java.time.Duration
+  (:import (java.time Duration ZoneId)
            java.util.concurrent.ExecutionException))
 
 (defn- with-mock-clocks [f]
@@ -106,19 +106,34 @@
                                                :basis-timeout (Duration/ofSeconds 1)))))))))
 
 (t/deftest round-trips-temporal
-  (let [vs {:id "foo"
-            :dt #time/date "2022-08-01"
+  (let [vs {:dt #time/date "2022-08-01"
             :ts #time/date-time "2022-08-01T14:34"
             :tstz #time/zoned-date-time "2022-08-01T14:34+01:00[Europe/London]"
             :tm #time/time "13:21:14.932254"
             ;; :tmtz #time/offset-time "11:21:14.932254-08:00" ; TODO #323
             }
-        !tx (c2/submit-tx *node* [[:sql "INSERT INTO foo (id, dt, ts, tstz, tm) VALUES (?, ?, ?, ?, ?)"
-                                   [(mapv vs [:id :dt :ts :tstz :tm])]]])]
+        !tx (c2/submit-tx *node* [[:sql "INSERT INTO foo (id, dt, ts, tstz, tm) VALUES ('foo', ?, ?, ?, ?)"
+                                   [(mapv vs [:dt :ts :tstz :tm])]]])]
 
-    (t/is (= [vs]
+    (t/is (= [(assoc vs :id "foo")]
              (c2/sql-query *node* "SELECT f.id, f.dt, f.ts, f.tstz, f.tm FROM foo f"
-                           {:basis {:tx !tx}, :basis-timeout (Duration/ofMillis 100)})))))
+                           {:basis {:tx !tx}, :basis-timeout (Duration/ofMillis 100)
+                            :default-tz (ZoneId/of "Europe/London")})))
+
+    (let [lits [[:dt "DATE '2022-08-01'"]
+                [:ts "TIMESTAMP '2022-08-01 14:34:00'"]
+                #_ ; FIXME #332 returns an ODT, test expects ZDT (test may be wrong)
+                [tstz "TIMESTAMP '2022-08-01 14:34:00+01:00'"]
+                #_ ; FIXME #333 tries to return `OffsetTime` and fails (it should return `LocalTime`)
+                [:tm "TIME '13:21:14.932254'"]]
+          !tx (c2/submit-tx *node* (vec (for [[t lit] lits]
+                                          [:sql (format "INSERT INTO bar (id, v) VALUES (?, %s)" lit)
+                                           [[(name t)]]])))]
+      (t/is (= (set (for [[t _lit] lits]
+                      {:id (name t), :v (get vs t)}))
+               (set (c2/sql-query *node* "SELECT b.id, b.v FROM bar b"
+                                  {:basis {:tx !tx}, :basis-timeout (Duration/ofMillis 100)
+                                   :default-tz (ZoneId/of "Europe/London")})))))))
 
 (t/deftest can-manually-specify-sys-time-47
   (let [tx1 @(c2/submit-tx *node* [[:put {:id :foo}]]
