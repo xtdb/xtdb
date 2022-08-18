@@ -72,16 +72,25 @@
                      (throw (.getCause e)))))))
 
 (t/deftest round-trips-lists
-  (let [!tx (c2/submit-tx *node* [[:put {:id :foo, :list [1 2 ["foo" "bar"]]}]])]
+  (let [!tx (c2/submit-tx *node* [[:put {:id :foo, :list [1 2 ["foo" "bar"]]}]
+                                  [:sql "INSERT INTO bar (id, list) VALUES ('bar', ARRAY[?, 2, 3 + 5])"
+                                   [[4]]]])]
     (t/is (= (c2/map->TransactionInstant {:tx-id 0, :sys-time (util/->instant #inst "2020-01-01")}) @!tx))
 
-    (t/is (= [{:id :foo
-               :list [1 2 ["foo" "bar"]]}]
+    (t/is (= [{:id :foo, :list [1 2 ["foo" "bar"]]}
+              {:id "bar", :list [4 2 8]}]
              (c2/datalog-query *node*
                                (-> '{:find [?id ?list]
                                      :where [[?id :list ?list]]}
                                    (assoc :basis {:tx !tx}
-                                          :basis-timeout (Duration/ofSeconds 1))))))))
+                                          :basis-timeout (Duration/ofSeconds 1))))))
+
+    (t/is (= [{:id :foo, :list [1 2 ["foo" "bar"]]}
+              {:id "bar", :list [4 2 8]}]
+             (c2/sql-query *node*
+                           "SELECT b.id, b.list FROM bar b"
+                           {:basis {:tx !tx}
+                            :basis-timeout (Duration/ofSeconds 1)})))))
 
 (t/deftest round-trips-structs
   (let [!tx (c2/submit-tx *node* [[:put {:id :foo, :struct {:a 1, :b {:c "bar"}}}]
