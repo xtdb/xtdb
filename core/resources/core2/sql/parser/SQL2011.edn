@@ -1051,7 +1051,8 @@
  {:tag :alt,
   :parsers
   ({:tag :nt, :keyword :host_parameter_specification}
-   {:tag :nt, :keyword :dynamic_parameter_specification}),
+   {:tag :nt, :keyword :dynamic_parameter_specification}
+   {:tag :nt, :keyword :postgres_parameter_specification}),
   :red {:reduction-type :raw}},
  :array_value_function
  {:tag :nt,
@@ -1156,6 +1157,7 @@
    {:tag :nt, :keyword :comma, :hide true}
    {:tag :nt, :keyword :numeric_value_expression}
    {:tag :nt, :keyword :right_paren, :hide true})},
+ :postgres_parameter_specification {:tag :regexp, :regexp #"\$\d+"},
  :period_precedes_predicate_part_2
  {:tag :cat,
   :parsers

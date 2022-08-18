@@ -341,15 +341,8 @@
     :cols [{:column-name "ping", :column-oid oid-varchar}]
     :rows [["pong"]]}])
 
-;; this is hopefully temporary
-;; I would like to use some custom parse rules for this (and actually canned responses too)
-(defn- transform-query
-  "Pre-processes a sql string to remove semi-colons and replaces the parameter convention to
-  that which XT supports."
-  [s]
-  (-> s
-      (str/replace #"\$\d+" "?")
-      (str/replace #";\s*$" "")))
+(defn- remove-trailing-ws-and-semi-colons [s]
+  (-> s (str/replace #";\s*$" "")))
 
 ;; yagni, is everything upper'd anyway by drivers / server?
 (defn- probably-same-query? [s substr]
@@ -371,7 +364,7 @@
 
   Returns a statement of type :query, see (doc interpret-sql) for more info."
   [sql]
-  (let [transformed-query (transform-query sql)
+  (let [transformed-query (remove-trailing-ws-and-semi-colons sql)
         num-placeholders (count (re-seq #"\?" transformed-query))
         parse-result (parser/parse transformed-query)]
     {:statement-type :query
@@ -416,10 +409,10 @@
     (or
       ;; will likely look at moving this into parser as they are spec defined
       ;; though execution behaviour will likely remain in pgwire (due to stateful nature of these commands)
-      (when (.equalsIgnoreCase "SET TRANSACTION READ ONLY" (transform-query sql))
+      (when (.equalsIgnoreCase "SET TRANSACTION READ ONLY" (remove-trailing-ws-and-semi-colons sql))
         {:statement-type :set-transaction
          :access-mode :read-only})
-      (when (.equalsIgnoreCase "SET TRANSACTION READ WRITE" (transform-query sql))
+      (when (.equalsIgnoreCase "SET TRANSACTION READ WRITE" (remove-trailing-ws-and-semi-colons sql))
         {:statement-type :set-transaction
          :access-mode :read-write})
       ;; see issue #324, scrappy and temporary solution for basic interval HOUR MINUTE expr
