@@ -1,21 +1,23 @@
 [:rename
- {x7 c_count, x10 custdist}
+ {x9 c_count, x12 custdist}
  [:order-by
-  [[x10 {:direction :desc, :null-ordering :nulls-last}]
-   [x7 {:direction :desc, :null-ordering :nulls-last}]]
+  [[x12 {:direction :desc, :null-ordering :nulls-last}]
+   [x9 {:direction :desc, :null-ordering :nulls-last}]]
   [:group-by
-   [x7 {x10 (count x9)}]
+   [x9 {x12 (count x11)}]
    [:map
-    [{x9 1}]
+    [{x11 1}]
     [:group-by
-     [x1 {x7 (count x3)}]
+     [x1 {x9 (count x4)}]
      [:left-outer-join
-      [{x1 x4}]
-      [:rename {c_custkey x1} [:scan [c_custkey]]]
+      [{x1 x5}]
       [:rename
-       {o_orderkey x3, o_custkey x4, o_comment x5}
+       {c_custkey x1, _table x2}
+       [:scan [c_custkey {_table (= _table "customer")}]]]
+      [:rename
+       {o_orderkey x4, o_custkey x5, o_comment x6, _table x7}
        [:scan
         [o_orderkey
          o_custkey
-         {o_comment
-          (not (like o_comment "%special%requests%"))}]]]]]]]]]
+         {o_comment (not (like o_comment "%special%requests%"))}
+         {_table (= _table "orders")}]]]]]]]]]

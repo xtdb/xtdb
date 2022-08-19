@@ -729,28 +729,14 @@
     "CAST(42.0 AS INT)" (list 'cast 42.0 :i32)))
 
 (t/deftest test-expr-in-equi-join
-  (t/are [sql expected]
-    (= expected (plan-sql sql))
-
-    "SELECT a.a FROM a JOIN bar b ON a.a+1 = b.b+1"
-    '[:rename
-      {x1 a}
-      [:project
-       [x1]
-       [:join
-        [{(+ x1 1) (+ x3 1)}]
-        [:rename {a x1} [:scan [a]]]
-        [:rename {b x3} [:scan [b]]]]]]
-
-    "SELECT a.a FROM a JOIN bar b ON a.a = b.b+1"
-    '[:rename
-      {x1 a}
-      [:project
-       [x1]
-       [:join
-        [{x1 (+ x3 1)}]
-        [:rename {a x1} [:scan [a]]]
-        [:rename {b x3} [:scan [b]]]]]]))
+  (t/is
+    (=plan-file
+      "test-expr-in-equi-join-1"
+      (plan-sql "SELECT a.a FROM a JOIN bar b ON a.a+1 = b.b+1")))
+  (t/is
+    (=plan-file
+      "test-expr-in-equi-join-2"
+      (plan-sql "SELECT a.a FROM a JOIN bar b ON a.a = b.b+1"))))
 
 (deftest push-semi-and-anti-joins-down-test
 ;;semi-join was previously been pushed down below the cross join

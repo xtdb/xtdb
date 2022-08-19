@@ -2,5 +2,13 @@
  {x1 movieTitle}
  [:distinct
   [:union-all
-   [:rename {movieTitle x1} [:scan [movieTitle]]]
-   [:rename {name x1} [:scan [name]]]]]]
+   [:project
+    [x1]
+    [:rename
+     {movieTitle x1, _table x2}
+     [:scan [movieTitle {_table (= _table "StarsIn")}]]]]
+   [:project
+    [x1]
+    [:rename
+     {name x1, _table x5}
+     [:scan [name {_table (= _table "StarsIn")}]]]]]]]

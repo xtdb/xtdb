@@ -3,9 +3,11 @@
  [:project
   [x1]
   [:semi-join
-   [{x2 x7}]
+   [{x2 x8}]
    [:semi-join
-    [{x1 x4}]
-    [:rename {a x1, b x2} [:scan [{a (= a 42)} b]]]
-    [:table [x4] [{x4 1} {x4 2}]]]
-   [:table [x7] [{x7 3} {x7 4}]]]]]
+    [{x1 x5}]
+    [:rename
+     {a x1, b x2, _table x3}
+     [:scan [{a (= a 42)} b {_table (= _table "foo")}]]]
+    [:table [x5] [{x5 1} {x5 2}]]]
+   [:table [x8] [{x8 3} {x8 4}]]]]]

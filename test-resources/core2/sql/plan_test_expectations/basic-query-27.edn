@@ -4,4 +4,8 @@
   [x1]
   [:order-by
    [[x2 {:direction :asc, :null-ordering :nulls-last}]]
-   [:rename {movieTitle x1, year x2} [:scan [movieTitle year]]]]]]
+   [:project
+    [x1 x2]
+    [:rename
+     {movieTitle x1, year x2, _table x3}
+     [:scan [movieTitle year {_table (= _table "StarsIn")}]]]]]]]

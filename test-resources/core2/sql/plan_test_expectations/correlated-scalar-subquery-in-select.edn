@@ -1,10 +1,16 @@
 [:rename
- {x7 some_column}
+ {x9 some_column}
  [:project
-  [{x7 (= 1 x5)}]
+  [{x9 (= 1 x7)}]
   [:apply
    :cross-join
-   {x1 ?x6}
-   [:rename {y x1} [:scan [{y (= y 1)}]]]
+   {x1 ?x8}
+   [:rename
+    {y x1, _table x2}
+    [:scan [{y (= y 1)} {_table (= _table "x")}]]]
    [:max-1-row
-    [:project [{x5 (= x3 ?x6)}] [:rename {bar x3} [:scan [bar]]]]]]]]
+    [:project
+     [{x7 (= x4 ?x8)}]
+     [:rename
+      {bar x4, _table x5}
+      [:scan [bar {_table (= _table "foo")}]]]]]]]]

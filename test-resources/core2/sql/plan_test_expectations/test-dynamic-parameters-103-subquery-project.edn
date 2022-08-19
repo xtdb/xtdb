@@ -1,8 +1,14 @@
 [:rename
- {x1 col1, x5 $column_2$}
- [:cross-join
-  [:rename {col1 x1} [:scan [col1]]]
-  [:max-1-row
-   [:project
-    [{x5 ?_0}]
-    [:rename {col1 x3} [:scan [{col1 (= col1 4)}]]]]]]]
+ {x1 col1, x7 $column_2$}
+ [:project
+  [x1 x7]
+  [:cross-join
+   [:rename
+    {col1 x1, _table x2}
+    [:scan [col1 {_table (= _table "t1")}]]]
+   [:max-1-row
+    [:project
+     [{x7 ?_0}]
+     [:rename
+      {col1 x4, _table x5}
+      [:scan [{col1 (= col1 4)} {_table (= _table "bar")}]]]]]]]]

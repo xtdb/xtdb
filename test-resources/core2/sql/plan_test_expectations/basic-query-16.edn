@@ -1,5 +1,13 @@
 [:rename
  {x1 name}
  [:union-all
-  [:rename {name x1} [:scan [name]]]
-  [:rename {name x1} [:scan [name]]]]]
+  [:project
+   [x1]
+   [:rename
+    {name x1, _table x2}
+    [:scan [name {_table (= _table "StarsIn")}]]]]
+  [:project
+   [x1]
+   [:rename
+    {name x1, _table x5}
+    [:scan [name {_table (= _table "StarsIn")}]]]]]]

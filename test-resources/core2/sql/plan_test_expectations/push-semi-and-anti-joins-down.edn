@@ -3,8 +3,12 @@
  [:project
   [x1]
   [:semi-join
-   [{x1 x5} {x3 x6}]
+   [{x1 x7} {x4 x8}]
    [:cross-join
-    [:rename {foo x1} [:scan [foo]]]
-    [:rename {biz x3} [:scan [biz]]]]
-   [:rename {bar x5, baz x6} [:scan [bar baz]]]]]]
+    [:rename {foo x1, _table x2} [:scan [foo {_table (= _table "x")}]]]
+    [:rename
+     {biz x4, _table x5}
+     [:scan [biz {_table (= _table "y")}]]]]
+   [:rename
+    {bar x7, baz x8, _table x9}
+    [:scan [bar baz {_table (= _table "z")}]]]]]]

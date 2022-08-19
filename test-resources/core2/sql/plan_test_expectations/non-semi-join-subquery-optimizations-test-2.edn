@@ -3,11 +3,15 @@
  [:project
   [x1]
   [:cross-join
-   [:rename {a x1} [:scan [a]]]
+   [:rename {a x1, _table x2} [:scan [a {_table (= _table "foo")}]]]
    [:select
-    (= true x5)
+    (= true x7)
     [:top
      {:limit 1}
      [:union-all
-      [:project [{x5 true}] [:rename {c x3} [:scan [c]]]]
-      [:table [{x5 false}]]]]]]]]
+      [:project
+       [{x7 true}]
+       [:rename
+        {c x4, _table x5}
+        [:scan [c {_table (= _table "foo")}]]]]
+      [:table [{x7 false}]]]]]]]]

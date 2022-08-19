@@ -1,46 +1,55 @@
 [:rename
- {x19 cntrycode, x21 numcust, x22 totacctbal}
+ {x22 cntrycode, x24 numcust, x25 totacctbal}
  [:order-by
-  [[x19 {:direction :asc, :null-ordering :nulls-last}]]
+  [[x22 {:direction :asc, :null-ordering :nulls-last}]]
   [:group-by
-   [x19 {x21 (count x20)} {x22 (sum x2)}]
+   [x22 {x24 (count x23)} {x25 (sum x2)}]
    [:map
-    [{x20 1}]
+    [{x23 1}]
     [:project
-     [{x19 (substring x1 1 2 true)} x2]
+     [{x22 (substring x1 1 2 true)} x2]
      [:join
-      [(> x2 x14)]
+      [(> x2 x16)]
       [:anti-join
-       [{x3 x16}]
+       [{x3 x18}]
        [:semi-join
-        [{(substring x1 1 2 true) x5}]
+        [{(substring x1 1 2 true) x6}]
         [:rename
-         {c_phone x1, c_acctbal x2, c_custkey x3}
-         [:scan [c_phone c_acctbal c_custkey]]]
+         {c_phone x1, c_acctbal x2, c_custkey x3, _table x4}
+         [:scan
+          [c_phone
+           c_acctbal
+           c_custkey
+           {_table (= _table "customer")}]]]
         [:table
-         [x5]
-         [{x5 "13"}
-          {x5 "31"}
-          {x5 "23"}
-          {x5 "29"}
-          {x5 "30"}
-          {x5 "18"}
-          {x5 "17"}]]]
-       [:rename {o_custkey x16} [:scan [o_custkey]]]]
+         [x6]
+         [{x6 "13"}
+          {x6 "31"}
+          {x6 "23"}
+          {x6 "29"}
+          {x6 "30"}
+          {x6 "18"}
+          {x6 "17"}]]]
+       [:rename
+        {o_custkey x18, _table x19}
+        [:scan [o_custkey {_table (= _table "orders")}]]]]
       [:max-1-row
        [:group-by
-        [{x14 (avg x8)}]
+        [{x16 (avg x9)}]
         [:semi-join
-         [{(substring x9 1 2 true) x11}]
+         [{(substring x10 1 2 true) x13}]
          [:rename
-          {c_acctbal x8, c_phone x9}
-          [:scan [{c_acctbal (> c_acctbal 0.0)} c_phone]]]
+          {c_acctbal x9, c_phone x10, _table x11}
+          [:scan
+           [{c_acctbal (> c_acctbal 0.0)}
+            c_phone
+            {_table (= _table "customer")}]]]
          [:table
-          [x11]
-          [{x11 "13"}
-           {x11 "31"}
-           {x11 "23"}
-           {x11 "29"}
-           {x11 "30"}
-           {x11 "18"}
-           {x11 "17"}]]]]]]]]]]]
+          [x13]
+          [{x13 "13"}
+           {x13 "31"}
+           {x13 "23"}
+           {x13 "29"}
+           {x13 "30"}
+           {x13 "18"}
+           {x13 "17"}]]]]]]]]]]]

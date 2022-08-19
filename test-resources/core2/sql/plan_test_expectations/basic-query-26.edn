@@ -3,10 +3,12 @@
  [:project
   [x1]
   [:order-by
-   [[x4 {:direction :desc, :null-ordering :nulls-last}]
+   [[x5 {:direction :desc, :null-ordering :nulls-last}]
     [x1 {:direction :asc, :null-ordering :nulls-last}]]
    [:project
-    [x1 x4]
+    [x1 x5]
     [:map
-     [{x4 (= x2 "foo")}]
-     [:rename {movieTitle x1, year x2} [:scan [movieTitle year]]]]]]]]
+     [{x5 (= x2 "foo")}]
+     [:rename
+      {movieTitle x1, year x2, _table x3}
+      [:scan [movieTitle year {_table (= _table "StarsIn")}]]]]]]]]

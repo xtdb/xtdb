@@ -1,30 +1,30 @@
 [:rename
  {x1 l_returnflag,
-  x13 sum_base_price,
+  x13 sum_qty,
   x2 l_linestatus,
-  x12 sum_qty,
-  x14 sum_disc_price,
-  x17 avg_price,
-  x15 sum_charge,
-  x16 avg_qty,
-  x18 avg_disc,
-  x19 count_order}
+  x20 count_order,
+  x14 sum_base_price,
+  x17 avg_qty,
+  x15 sum_disc_price,
+  x16 sum_charge,
+  x18 avg_price,
+  x19 avg_disc}
  [:order-by
   [[x1 {:direction :asc, :null-ordering :nulls-last}]
    [x2 {:direction :asc, :null-ordering :nulls-last}]]
   [:group-by
    [x1
     x2
-    {x12 (sum x3)}
-    {x13 (sum x4)}
-    {x14 (sum x9)}
+    {x13 (sum x3)}
+    {x14 (sum x4)}
     {x15 (sum x10)}
-    {x16 (avg x3)}
-    {x17 (avg x4)}
-    {x18 (avg x5)}
-    {x19 (count x11)}]
+    {x16 (sum x11)}
+    {x17 (avg x3)}
+    {x18 (avg x4)}
+    {x19 (avg x5)}
+    {x20 (count x12)}]
    [:map
-    [{x9 (* x4 (- 1 x5))} {x10 (* (* x4 (- 1 x5)) (+ 1 x6))} {x11 1}]
+    [{x10 (* x4 (- 1 x5))} {x11 (* (* x4 (- 1 x5)) (+ 1 x6))} {x12 1}]
     [:rename
      {l_returnflag x1,
       l_linestatus x2,
@@ -32,7 +32,8 @@
       l_extendedprice x4,
       l_discount x5,
       l_tax x6,
-      l_shipdate x7}
+      l_shipdate x7,
+      _table x8}
      [:scan
       [l_returnflag
        l_linestatus
@@ -45,4 +46,5 @@
          l_shipdate
          (-
           #time/date "1998-12-01"
-          (single-field-interval "90" "DAY" 2 0)))}]]]]]]]
+          (single-field-interval "90" "DAY" 2 0)))}
+       {_table (= _table "lineitem")}]]]]]]]

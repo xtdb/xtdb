@@ -1,1 +1,7 @@
-[:select false [:scan [bar]]]
+[:rename
+ {x1 bar}
+ [:project
+  [x1]
+  [:rename
+   {bar x1, _table x2}
+   [:select false [:scan [bar {_table (= _table "foo")}]]]]]]

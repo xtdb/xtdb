@@ -1,48 +1,69 @@
 [:rename
- {x1 ps_partkey, x14 value}
+ {x1 ps_partkey, x17 value}
  [:order-by
-  [[x14 {:direction :desc, :null-ordering :nulls-last}]]
+  [[x17 {:direction :desc, :null-ordering :nulls-last}]]
   [:project
-   [x1 x14]
+   [x1 x17]
    [:join
-    [(> x15 x30)]
+    [(> x18 x36)]
     [:group-by
-     [x1 {x14 (sum x12)} {x15 (sum x13)}]
+     [x1 {x17 (sum x15)} {x18 (sum x16)}]
      [:map
-      [{x12 (* x2 x3)} {x13 (* x2 x3)}]
+      [{x15 (* x2 x3)} {x16 (* x2 x3)}]
       [:join
-       [{x7 x9}]
+       [{x8 x11}]
        [:join
-        [{x4 x6}]
+        [{x4 x7}]
         [:rename
          {ps_partkey x1,
           ps_supplycost x2,
           ps_availqty x3,
-          ps_suppkey x4}
-         [:scan [ps_partkey ps_supplycost ps_availqty ps_suppkey]]]
+          ps_suppkey x4,
+          _table x5}
+         [:scan
+          [ps_partkey
+           ps_supplycost
+           ps_availqty
+           ps_suppkey
+           {_table (= _table "partsupp")}]]]
         [:rename
-         {s_suppkey x6, s_nationkey x7}
-         [:scan [s_suppkey s_nationkey]]]]
+         {s_suppkey x7, s_nationkey x8, _table x9}
+         [:scan
+          [s_suppkey s_nationkey {_table (= _table "supplier")}]]]]
        [:rename
-        {n_nationkey x9, n_name x10}
-        [:scan [n_nationkey {n_name (= n_name "GERMANY")}]]]]]]
+        {n_nationkey x11, n_name x12, _table x13}
+        [:scan
+         [n_nationkey
+          {n_name (= n_name "GERMANY")}
+          {_table (= _table "nation")}]]]]]]
     [:max-1-row
      [:project
-      [{x30 (* x28 1.0E-4)}]
+      [{x36 (* x34 1.0E-4)}]
       [:group-by
-       [{x28 (sum x27)}]
+       [{x34 (sum x33)}]
        [:map
-        [{x27 (* x17 x18)}]
+        [{x33 (* x20 x21)}]
         [:join
-         [{x22 x24}]
+         [{x26 x29}]
          [:join
-          [{x19 x21}]
+          [{x22 x25}]
           [:rename
-           {ps_supplycost x17, ps_availqty x18, ps_suppkey x19}
-           [:scan [ps_supplycost ps_availqty ps_suppkey]]]
+           {ps_supplycost x20,
+            ps_availqty x21,
+            ps_suppkey x22,
+            _table x23}
+           [:scan
+            [ps_supplycost
+             ps_availqty
+             ps_suppkey
+             {_table (= _table "partsupp")}]]]
           [:rename
-           {s_suppkey x21, s_nationkey x22}
-           [:scan [s_suppkey s_nationkey]]]]
+           {s_suppkey x25, s_nationkey x26, _table x27}
+           [:scan
+            [s_suppkey s_nationkey {_table (= _table "supplier")}]]]]
          [:rename
-          {n_nationkey x24, n_name x25}
-          [:scan [n_nationkey {n_name (= n_name "GERMANY")}]]]]]]]]]]]]
+          {n_nationkey x29, n_name x30, _table x31}
+          [:scan
+           [n_nationkey
+            {n_name (= n_name "GERMANY")}
+            {_table (= _table "nation")}]]]]]]]]]]]]

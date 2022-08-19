@@ -1,1 +1,9 @@
-[:select (= name lastname) [:scan [name lastname]]]
+[:rename
+ {x1 name, x2 lastname}
+ [:project
+  [x1 x2]
+  [:rename
+   {name x1, lastname x2, _table x3}
+   [:select
+    (= name lastname)
+    [:scan [name lastname {_table (= _table "StarsIn")}]]]]]]

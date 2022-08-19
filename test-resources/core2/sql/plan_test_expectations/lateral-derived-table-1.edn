@@ -1,6 +1,10 @@
 [:rename
- {x1 y, x3 z}
- [:join
-  [{x1 x3}]
-  [:rename {y x1} [:scan [y]]]
-  [:rename {z x3} [:scan [z]]]]]
+ {x1 y, x4 z}
+ [:project
+  [x1 x4]
+  [:join
+   [{x1 x4}]
+   [:rename {y x1, _table x2} [:scan [y {_table (= _table "x")}]]]
+   [:project
+    [x4]
+    [:rename {z x4, _table x5} [:scan [z {_table (= _table "z")}]]]]]]]

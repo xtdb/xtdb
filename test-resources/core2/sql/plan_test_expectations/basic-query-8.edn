@@ -3,6 +3,10 @@
  [:project
   [x1]
   [:left-outer-join
-   [{x1 x3}]
-   [:rename {title x1} [:scan [title]]]
-   [:rename {title x3} [:scan [title]]]]]]
+   [{x1 x4}]
+   [:rename
+    {title x1, _table x2}
+    [:scan [title {_table (= _table "StarsIn")}]]]
+   [:rename
+    {title x4, _table x5}
+    [:scan [title {_table (= _table "Movie")}]]]]]]

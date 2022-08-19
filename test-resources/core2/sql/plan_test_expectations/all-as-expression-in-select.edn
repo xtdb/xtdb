@@ -1,10 +1,14 @@
 [:rename
- {x7 $column_1$}
+ {x9 $column_1$}
  [:project
-  [x7]
+  [x9]
   [:map
-   [{x7 (not x6)}]
+   [{x9 (not x8)}]
    [:mark-join
-    {x6 [(> x1 x3)]}
-    [:rename {z x1} [:scan [z]]]
-    [:rename {z x3} [:scan [z]]]]]]]
+    {x8 [(> x1 x4)]}
+    [:rename {z x1, _table x2} [:scan [z {_table (= _table "x")}]]]
+    [:project
+     [x4]
+     [:rename
+      {z x4, _table x5}
+      [:scan [z {_table (= _table "y")}]]]]]]]]

@@ -1,8 +1,10 @@
 [:rename
- {x7 $column_1$, x8 $column_2$, x9 $column_3$}
+ {x8 $column_1$, x9 $column_2$, x10 $column_3$}
  [:project
-  [{x7 (case (+ x1 1) x2 111 x3 222 x4 333 x5 444 555)}
-   {x8
+  [{x8 (case (+ x1 1) x2 111 x3 222 x4 333 x5 444 555)}
+   {x9
     (cond (< x1 (- x2 3)) 111 (<= x1 x2) 222 (< x1 (+ x2 3)) 333 444)}
-   {x9 (case (+ x1 1) x2 222 x3 222 x4 444 (+ x5 1) 444 555)}]
-  [:rename {a x1, b x2, c x3, d x4, e x5} [:scan [a b c d e]]]]]
+   {x10 (case (+ x1 1) x2 222 x3 222 x4 444 (+ x5 1) 444 555)}]
+  [:rename
+   {a x1, b x2, c x3, d x4, e x5, _table x6}
+   [:scan [a b c d e {_table (= _table "t1")}]]]]]

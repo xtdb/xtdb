@@ -1,3 +1,8 @@
 [:rename
  {x1 movieTitle}
- [:distinct [:rename {movieTitle x1} [:scan [movieTitle]]]]]
+ [:distinct
+  [:project
+   [x1]
+   [:rename
+    {movieTitle x1, _table x2}
+    [:scan [movieTitle {_table (= _table "StarsIn")}]]]]]]

@@ -1,25 +1,27 @@
 [:rename
- {x4 l_shipmode, x15 high_line_count, x16 low_line_count}
+ {x5 l_shipmode, x17 high_line_count, x18 low_line_count}
  [:order-by
-  [[x4 {:direction :asc, :null-ordering :nulls-last}]]
+  [[x5 {:direction :asc, :null-ordering :nulls-last}]]
   [:group-by
-   [x4 {x15 (sum x13)} {x16 (sum x14)}]
+   [x5 {x17 (sum x15)} {x18 (sum x16)}]
    [:map
-    [{x13 (cond (or (= x1 "1-URGENT") (= x1 "2-HIGH")) 1 0)}
-     {x14 (cond (and (<> x1 "1-URGENT") (<> x1 "2-HIGH")) 1 0)}]
+    [{x15 (cond (or (= x1 "1-URGENT") (= x1 "2-HIGH")) 1 0)}
+     {x16 (cond (and (<> x1 "1-URGENT") (<> x1 "2-HIGH")) 1 0)}]
     [:join
-     [{x2 x5}]
+     [{x2 x6}]
      [:rename
-      {o_orderpriority x1, o_orderkey x2}
-      [:scan [o_orderpriority o_orderkey]]]
+      {o_orderpriority x1, o_orderkey x2, _table x3}
+      [:scan
+       [o_orderpriority o_orderkey {_table (= _table "orders")}]]]
      [:semi-join
-      [{x4 x10}]
+      [{x5 x12}]
       [:rename
-       {l_shipmode x4,
-        l_orderkey x5,
-        l_commitdate x6,
-        l_receiptdate x7,
-        l_shipdate x8}
+       {l_shipmode x5,
+        l_orderkey x6,
+        l_commitdate x7,
+        l_receiptdate x8,
+        l_shipdate x9,
+        _table x10}
        [:select
         (and
          (< l_commitdate l_receiptdate)
@@ -36,5 +38,6 @@
               #time/date "1994-01-01"
               (single-field-interval "1" "YEAR" 2 0)))
             (>= l_receiptdate #time/date "1994-01-01"))}
-          l_shipdate]]]]
-      [:table [x10] [{x10 "MAIL"} {x10 "SHIP"}]]]]]]]]
+          l_shipdate
+          {_table (= _table "lineitem")}]]]]
+      [:table [x12] [{x12 "MAIL"} {x12 "SHIP"}]]]]]]]]

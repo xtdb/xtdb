@@ -49,7 +49,7 @@
                               ["claire", "Claire", #inst "2019"]]]])]
 
     (t/is (= [{:name "Dave"}]
-             (c2/sql-query tu/*node* "SELECT people.name FROM people WHERE people.id = ?"
+             (c2/sql-query tu/*node* "SELECT users.name FROM users WHERE users.id = ?"
                            {:basis {:tx !tx1}
                             :? ["dave"]}))
           "#310")))

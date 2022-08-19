@@ -3,15 +3,19 @@
  [:project
   [x1]
   [:select
-   (= x3 x6)
+   (= x4 x8)
    [:apply
     :cross-join
-    {x4 ?x9}
+    {x5 ?x12}
     [:join
      []
-     [:rename {a x1} [:scan [a]]]
-     [:rename {c x3, b x4} [:scan [c b]]]]
+     [:rename {a x1, _table x2} [:scan [a {_table (= _table "foo")}]]]
+     [:rename
+      {c x4, b x5, _table x6}
+      [:scan [c b {_table (= _table "bar")}]]]]
     [:max-1-row
      [:project
-      [x6]
-      [:rename {b x6, a x7} [:scan [b {a (= a ?x9)}]]]]]]]]]
+      [x8]
+      [:rename
+       {b x8, a x9, _table x10}
+       [:scan [b {a (= a ?x12)} {_table (= _table "foo")}]]]]]]]]]

@@ -1427,11 +1427,9 @@
                                (concat ['application_time_start 'application_time_end])
                                vec)
                           columns-with-system-time-predicates)]
-                    (if *include-table-column-in-scan?*
-                      (conj
-                        columns-with-app-time-cols
-                        {'_table (list '= '_table table-or-query-name)})
-                      columns-with-app-time-cols)))]
+                    (conj
+                      columns-with-app-time-cols
+                      {'_table (list '= '_table table-or-query-name)})))]
          (= (first system-time-predicates) :invalid-points-in-time)
          (vector :select 'false)))]))
 

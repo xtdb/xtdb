@@ -1,1 +1,7 @@
-[:scan [{z (= z 1)}]]
+[:rename
+ {x1 z}
+ [:project
+  [x1]
+  [:rename
+   {z x1, _table x2}
+   [:scan [{z (= z 1)} {_table (= _table "z")}]]]]]

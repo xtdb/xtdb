@@ -1,29 +1,31 @@
 [:rename
- {x1 name, x6 course}
+ {x1 name, x7 course}
  [:project
-  [x1 x6]
+  [x1 x7]
   [:select
-   (>= x8 x17)
+   (>= x9 x20)
    [:map
-    [{x17 (+ x15 1)}]
+    [{x20 (+ x18 1)}]
     [:group-by
-     [x1 x2 x3 x4 x6 x7 x8 $row_number$ {x15 (avg x10)}]
+     [x1 x2 x3 x4 x5 x7 x8 x9 x10 $row_number$ {x18 (avg x12)}]
      [:left-outer-join
-      [(or (= x2 x11) (and (= x12 x3) (> x4 x13)))]
+      [(or (= x2 x13) (and (= x14 x3) (> x4 x15)))]
       [:map
        [{$row_number$ (row-number)}]
        [:join
-        [{x2 x7}]
+        [{x2 x8}]
         [:rename
-         {name x1, id x2, major x3, year x4}
+         {name x1, id x2, major x3, year x4, _table x5}
          [:scan
           [name
            id
            {major (or (= major "CS") (= major "Games Eng"))}
-           year]]]
+           year
+           {_table (= _table "students")}]]]
         [:rename
-         {course x6, sid x7, grade x8}
-         [:scan [course sid grade]]]]]
+         {course x7, sid x8, grade x9, _table x10}
+         [:scan [course sid grade {_table (= _table "exams")}]]]]]
       [:rename
-       {grade x10, sid x11, curriculum x12, date x13}
-       [:scan [grade sid curriculum date]]]]]]]]]
+       {grade x12, sid x13, curriculum x14, date x15, _table x16}
+       [:scan
+        [grade sid curriculum date {_table (= _table "exams")}]]]]]]]]]

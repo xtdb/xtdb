@@ -1,8 +1,15 @@
 [:rename
  {x1 country, x2 custno}
- [:semi-join
-  [{x2 x4}]
-  [:rename
-   {country x1, custno x2}
-   [:scan [{country (= country "Mexico")} custno]]]
-  [:rename {custno x4} [:scan [custno]]]]]
+ [:project
+  [x1 x2]
+  [:semi-join
+   [{x2 x5}]
+   [:rename
+    {country x1, custno x2, _table x3}
+    [:scan
+     [{country (= country "Mexico")}
+      custno
+      {_table (= _table "customers")}]]]
+   [:rename
+    {custno x5, _table x6}
+    [:scan [custno {_table (= _table "orders")}]]]]]]

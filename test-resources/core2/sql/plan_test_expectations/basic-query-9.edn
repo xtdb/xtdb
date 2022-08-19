@@ -1,14 +1,16 @@
 [:rename
- {x1 name, x8 $column_2$}
+ {x1 name, x10 $column_2$}
  [:project
-  [x1 x8]
+  [x1 x10]
   [:select
-   (< x9 1930)
+   (< x11 1930)
    [:group-by
-    [x1 {x8 (sum x4)} {x9 (min x6)}]
+    [x1 {x10 (sum x5)} {x11 (min x7)}]
     [:join
-     [{x2 x5}]
-     [:rename {name x1, cert x2} [:scan [name cert]]]
+     [{x2 x6}]
      [:rename
-      {length x4, producer x5, year x6}
-      [:scan [length producer year]]]]]]]]
+      {name x1, cert x2, _table x3}
+      [:scan [name cert {_table (= _table "MovieExec")}]]]
+     [:rename
+      {length x5, producer x6, year x7, _table x8}
+      [:scan [length producer year {_table (= _table "Movie")}]]]]]]]]

@@ -3,7 +3,11 @@
  [:project
   [x1]
   [:join
-   [{x1 x5}]
-   [:rename {y x1} [:scan [y]]]
+   [{x1 x7}]
+   [:rename {y x1, _table x2} [:scan [y {_table (= _table "x")}]]]
    [:max-1-row
-    [:group-by [{x5 (max x3)}] [:rename {bar x3} [:scan [bar]]]]]]]]
+    [:group-by
+     [{x7 (max x4)}]
+     [:rename
+      {bar x4, _table x5}
+      [:scan [bar {_table (= _table "foo")}]]]]]]]]

@@ -1,82 +1,92 @@
 [:rename
- {x38 revenue}
+ {x40 revenue}
  [:group-by
-  [{x38 (sum x37)}]
+  [{x40 (sum x39)}]
   [:map
-   [{x37 (* x1 (- 1 x2))}]
+   [{x39 (* x1 (- 1 x2))}]
    [:select
     (or
      (and
-      (= x9 "Brand#12")
-      x16
+      (= x10 "Brand#12")
+      x18
       (>= x4 1)
       (<= x4 (+ 1 10))
-      (between x11 1 5)
-      x20)
+      (between x12 1 5)
+      x22)
      (and
-      (= x9 "Brand#23")
-      x24
+      (= x10 "Brand#23")
+      x26
       (>= x4 10)
       (<= x4 (+ 10 10))
-      (between x11 1 10)
-      x28)
+      (between x12 1 10)
+      x30)
      (and
-      (= x9 "Brand#34")
-      x32
+      (= x10 "Brand#34")
+      x34
       (>= x4 20)
       (<= x4 (+ 20 10))
-      (between x11 1 15)
-      x36))
+      (between x12 1 15)
+      x38))
     [:mark-join
-     {x36 [(= x5 x33)]}
+     {x38 [(= x5 x35)]}
      [:mark-join
-      {x32 [(= x10 x29)]}
+      {x34 [(= x11 x31)]}
       [:mark-join
-       {x28 [(= x5 x25)]}
+       {x30 [(= x5 x27)]}
        [:mark-join
-        {x24 [(= x10 x21)]}
+        {x26 [(= x11 x23)]}
         [:mark-join
-         {x20 [(= x5 x17)]}
+         {x22 [(= x5 x19)]}
          [:mark-join
-          {x16 [(= x10 x13)]}
+          {x18 [(= x11 x15)]}
           [:join
-           [{x3 x8}]
+           [{x3 x9}]
            [:rename
             {l_extendedprice x1,
              l_discount x2,
              l_partkey x3,
              l_quantity x4,
              l_shipmode x5,
-             l_shipinstruct x6}
+             l_shipinstruct x6,
+             _table x7}
             [:scan
              [l_extendedprice
               l_discount
               l_partkey
               l_quantity
               l_shipmode
-              {l_shipinstruct
-               (= l_shipinstruct "DELIVER IN PERSON")}]]]
+              {l_shipinstruct (= l_shipinstruct "DELIVER IN PERSON")}
+              {_table (= _table "lineitem")}]]]
            [:rename
-            {p_partkey x8, p_brand x9, p_container x10, p_size x11}
-            [:scan [p_partkey p_brand p_container p_size]]]]
+            {p_partkey x9,
+             p_brand x10,
+             p_container x11,
+             p_size x12,
+             _table x13}
+            [:scan
+             [p_partkey
+              p_brand
+              p_container
+              p_size
+              {_table (= _table "part")}]]]]
           [:table
-           [x13]
-           [{x13 "SM CASE"}
-            {x13 "SM BOX"}
-            {x13 "SM PACK"}
-            {x13 "SM PKG"}]]]
-         [:table [x17] [{x17 "AIR"} {x17 "AIR REG"}]]]
+           [x15]
+           [{x15 "SM CASE"}
+            {x15 "SM BOX"}
+            {x15 "SM PACK"}
+            {x15 "SM PKG"}]]]
+         [:table [x19] [{x19 "AIR"} {x19 "AIR REG"}]]]
         [:table
-         [x21]
-         [{x21 "MED BAG"}
-          {x21 "MED BOX"}
-          {x21 "MED PKG"}
-          {x21 "MED PACK"}]]]
-       [:table [x25] [{x25 "AIR"} {x25 "AIR REG"}]]]
+         [x23]
+         [{x23 "MED BAG"}
+          {x23 "MED BOX"}
+          {x23 "MED PKG"}
+          {x23 "MED PACK"}]]]
+       [:table [x27] [{x27 "AIR"} {x27 "AIR REG"}]]]
       [:table
-       [x29]
-       [{x29 "LG CASE"}
-        {x29 "LG BOX"}
-        {x29 "LG PACK"}
-        {x29 "LG PKG"}]]]
-     [:table [x33] [{x33 "AIR"} {x33 "AIR REG"}]]]]]]]
+       [x31]
+       [{x31 "LG CASE"}
+        {x31 "LG BOX"}
+        {x31 "LG PACK"}
+        {x31 "LG PKG"}]]]
+     [:table [x35] [{x35 "AIR"} {x35 "AIR REG"}]]]]]]]

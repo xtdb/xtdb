@@ -1,41 +1,47 @@
 [:rename
- {x9 l_orderkey, x15 revenue, x4 o_orderdate, x5 o_shippriority}
+ {x11 l_orderkey, x18 revenue, x5 o_orderdate, x6 o_shippriority}
  [:project
-  [x9 x15 x4 x5]
+  [x11 x18 x5 x6]
   [:top
    {:limit 10}
    [:order-by
-    [[x15 {:direction :desc, :null-ordering :nulls-last}]
-     [x4 {:direction :asc, :null-ordering :nulls-last}]]
+    [[x18 {:direction :desc, :null-ordering :nulls-last}]
+     [x5 {:direction :asc, :null-ordering :nulls-last}]]
     [:group-by
-     [x9 x4 x5 {x15 (sum x14)}]
+     [x11 x5 x6 {x18 (sum x17)}]
      [:map
-      [{x14 (* x10 (- 1 x11))}]
+      [{x17 (* x12 (- 1 x13))}]
       [:join
-       [{x7 x9}]
+       [{x8 x11}]
        [:join
-        [{x2 x6}]
+        [{x2 x7}]
         [:rename
-         {c_mktsegment x1, c_custkey x2}
+         {c_mktsegment x1, c_custkey x2, _table x3}
          [:scan
-          [{c_mktsegment (= c_mktsegment "BUILDING")} c_custkey]]]
+          [{c_mktsegment (= c_mktsegment "BUILDING")}
+           c_custkey
+           {_table (= _table "customer")}]]]
         [:rename
-         {o_orderdate x4,
-          o_shippriority x5,
-          o_custkey x6,
-          o_orderkey x7}
+         {o_orderdate x5,
+          o_shippriority x6,
+          o_custkey x7,
+          o_orderkey x8,
+          _table x9}
          [:scan
           [{o_orderdate (< o_orderdate #time/date "1995-03-15")}
            o_shippriority
            o_custkey
-           o_orderkey]]]]
+           o_orderkey
+           {_table (= _table "orders")}]]]]
        [:rename
-        {l_orderkey x9,
-         l_extendedprice x10,
-         l_discount x11,
-         l_shipdate x12}
+        {l_orderkey x11,
+         l_extendedprice x12,
+         l_discount x13,
+         l_shipdate x14,
+         _table x15}
         [:scan
          [l_orderkey
           l_extendedprice
           l_discount
-          {l_shipdate (> l_shipdate #time/date "1995-03-15")}]]]]]]]]]]
+          {l_shipdate (> l_shipdate #time/date "1995-03-15")}
+          {_table (= _table "lineitem")}]]]]]]]]]]

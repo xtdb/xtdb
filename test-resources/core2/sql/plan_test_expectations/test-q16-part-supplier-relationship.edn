@@ -1,40 +1,42 @@
 [:rename
- {x4 p_brand, x5 p_type, x6 p_size, x16 supplier_cnt}
+ {x5 p_brand, x6 p_type, x7 p_size, x19 supplier_cnt}
  [:order-by
-  [[x16 {:direction :desc, :null-ordering :nulls-last}]
-   [x4 {:direction :asc, :null-ordering :nulls-last}]
+  [[x19 {:direction :desc, :null-ordering :nulls-last}]
    [x5 {:direction :asc, :null-ordering :nulls-last}]
-   [x6 {:direction :asc, :null-ordering :nulls-last}]]
+   [x6 {:direction :asc, :null-ordering :nulls-last}]
+   [x7 {:direction :asc, :null-ordering :nulls-last}]]
   [:group-by
-   [x4 x5 x6 {x16 (count-distinct x1)}]
+   [x5 x6 x7 {x19 (count-distinct x1)}]
    [:join
-    [{x2 x7}]
+    [{x2 x8}]
     [:anti-join
-     [(or (= x1 x12) (nil? x1) (nil? x12))]
+     [(or (= x1 x14) (nil? x1) (nil? x14))]
      [:rename
-      {ps_suppkey x1, ps_partkey x2}
-      [:scan [ps_suppkey ps_partkey]]]
+      {ps_suppkey x1, ps_partkey x2, _table x3}
+      [:scan [ps_suppkey ps_partkey {_table (= _table "partsupp")}]]]
      [:rename
-      {s_suppkey x12, s_comment x13}
+      {s_suppkey x14, s_comment x15, _table x16}
       [:scan
        [s_suppkey
-        {s_comment (like s_comment "%Customer%Complaints%")}]]]]
+        {s_comment (like s_comment "%Customer%Complaints%")}
+        {_table (= _table "supplier")}]]]]
     [:semi-join
-     [{x6 x9}]
+     [{x7 x11}]
      [:rename
-      {p_brand x4, p_type x5, p_size x6, p_partkey x7}
+      {p_brand x5, p_type x6, p_size x7, p_partkey x8, _table x9}
       [:scan
        [{p_brand (<> p_brand "Brand#45")}
         {p_type (not (like p_type "MEDIUM POLISHED%"))}
         p_size
-        p_partkey]]]
+        p_partkey
+        {_table (= _table "part")}]]]
      [:table
-      [x9]
-      [{x9 49}
-       {x9 14}
-       {x9 23}
-       {x9 45}
-       {x9 19}
-       {x9 3}
-       {x9 36}
-       {x9 9}]]]]]]]
+      [x11]
+      [{x11 49}
+       {x11 14}
+       {x11 23}
+       {x11 45}
+       {x11 19}
+       {x11 3}
+       {x11 36}
+       {x11 9}]]]]]]]

@@ -3,14 +3,16 @@
  [:project
   [x1]
   [:select
-   (< 1000000 x6)
+   (< 1000000 x8)
    [:group-by
-    [x1 $row_number$ {x6 (sum x3)}]
+    [x1 x2 $row_number$ {x8 (sum x4)}]
     [:left-outer-join
-     [{x1 x4}]
+     [{x1 x5}]
      [:map
       [{$row_number$ (row-number)}]
-      [:rename {custkey x1} [:scan [custkey]]]]
+      [:rename
+       {custkey x1, _table x2}
+       [:scan [custkey {_table (= _table "customer")}]]]]
      [:rename
-      {totalprice x3, custkey x4}
-      [:scan [totalprice custkey]]]]]]]]
+      {totalprice x4, custkey x5, _table x6}
+      [:scan [totalprice custkey {_table (= _table "orders")}]]]]]]]]

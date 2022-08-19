@@ -1,1 +1,7 @@
-[:scan [{a (not (nil? a))}]]
+[:rename
+ {x1 a}
+ [:project
+  [x1]
+  [:rename
+   {a x1, _table x2}
+   [:scan [{a (not (nil? a))} {_table (= _table "t1")}]]]]]
