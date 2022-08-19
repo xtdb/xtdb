@@ -11,7 +11,7 @@ We use https://github.com/ptaoussanis/encore/blob/master/BREAK-VERSIONING.md[Bre
 
 . find/replace `<previous-version>` -> `<next-version>`, commit
 . `git tag --annotate --sign <next-version>` (magit `t -a -s t`), add release notes to tag.
-. `git push origin main <next-version>`
+. `git push origin master <next-version>`
 
 ## CircleCI
 
@@ -20,11 +20,13 @@ We use https://github.com/ptaoussanis/encore/blob/master/BREAK-VERSIONING.md[Bre
 
 If you're building XTDB locally, run:
 
+. `java -version` -> java-8-openjdk
 . `git clean -dXf`
 . `export XTDB_VERSION=1.21.0` (`set -x XTDB_VERSION=1.21.0` for the fish people)
 . `./lein-sub install && ./lein-sub do check, test`
 . `./lein-sub deploy`
 . (in `labs/corda`): `./gradlew clean publish`
+. (in `labs/kotlin-dsl`): `./gradlew clean publish`
 
 ## JARs:
 
