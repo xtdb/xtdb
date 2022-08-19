@@ -342,8 +342,8 @@
     :cols [{:column-name "ping", :column-oid oid-varchar}]
     :rows [["pong"]]}])
 
-(defn- remove-trailing-ws-and-semi-colons [s]
-  (-> s (str/replace #";\s*$" "")))
+(defn- trim-sql [s]
+  (-> s (str/triml) (str/replace #";\s*$" "")))
 
 ;; yagni, is everything upper'd anyway by drivers / server?
 (defn- probably-same-query? [s substr]
@@ -365,7 +365,7 @@
 
   Returns a statement of type :query, see (doc interpret-sql) for more info."
   [sql]
-  (let [transformed-query (remove-trailing-ws-and-semi-colons sql)
+  (let [transformed-query (trim-sql sql)
         num-placeholders (count (re-seq #"\?" transformed-query))
         parse-result (parser/parse transformed-query)]
     {:statement-type :query
@@ -394,6 +394,9 @@
 
   if :empty-query (nothing more to say!)
 
+  if :ignore (queries that are accepted but have no defined behaviour)
+  :query (the original sql string)
+
   if :query
   :query (the original sql string)
   :transformed-query (the pre-processed for xt sql string)
@@ -401,46 +404,63 @@
   :ast (the result of parse, possibly a parse failure)
   :err (if there was a parse failure, the pgwire error to send)"
   [sql]
-  (cond
-    (get-canned-response sql)
-    {:statement-type :canned-response
-     :canned-response (get-canned-response sql)}
-
-    (= "SET" (statement-head sql))
+  (let [sql-trimmed (trim-sql sql)]
     (or
+      (when-some [canned-response (get-canned-response sql-trimmed)]
+        {:statement-type :canned-response
+         :canned-response canned-response})
+
       ;; will likely look at moving this into parser as they are spec defined
       ;; though execution behaviour will likely remain in pgwire (due to stateful nature of these commands)
-      (when (.equalsIgnoreCase "SET TRANSACTION READ ONLY" (remove-trailing-ws-and-semi-colons sql))
+      (when (.equalsIgnoreCase "SET TRANSACTION READ ONLY" sql-trimmed)
         {:statement-type :set-transaction
          :access-mode :read-only})
-      (when (.equalsIgnoreCase "SET TRANSACTION READ WRITE" (remove-trailing-ws-and-semi-colons sql))
+
+      (when (.equalsIgnoreCase "SET TRANSACTION READ WRITE" sql-trimmed)
         {:statement-type :set-transaction
          :access-mode :read-write})
+
       ;; see issue #324, scrappy and temporary solution for basic interval HOUR MINUTE expr
-      (when-some [[_ sign hh mm] (re-find #"(?i)SET\s+TIME\s*ZONE\s+\'(\+|\-|)(\d{1,2})\:(\d{1,2})\'" sql)]
+      (when-some [[_ sign hh mm] (re-find #"(?i)SET\s+TIME\s*ZONE\s+\'(\+|\-|)(\d{1,2})\:(\d{1,2})\'" sql-trimmed)]
         {:statement-type :set-time-zone
          :tz (ZoneOffset/ofHoursMinutes
                ((case sign "-" - +) (parse-long hh))
                ((case sign "-" - +) (parse-long mm)))})
-      ;; this as a fallback currently means anything that starts with SET is accepted, needs tightening up
-      (let [[_ k _ v] (re-find #"SET\s+(\w+)\s*(=|TO)\s*(.*)" sql)]
+
+      ;; SET x = 42
+      ;; SET x to 42
+      ;; general SET statements have undefined behaviour at the moment, but permitted while working
+      ;; on client compatibility - many will become canned responses
+      (when-some [[_ k _ v] (re-find #"(?i)SET\s+(\w+)\s*(=|TO)\s*(.*)" sql-trimmed)]
         {:statement-type :set-session-parameter
          :parameter k
-         :value v}))
+         :value v})
 
-    (= "BEGIN" (statement-head sql))
-    {:statement-type :begin}
+      ;; for now arbitrary SET commands are accepted but ignored, e.g SET TRANSACTION ISOLATION level
+      (when (re-find #"(?i)^SET" sql-trimmed)
+        {:statement-type :ignore
+         :sql sql})
 
-    (= "COMMIT" (statement-head sql))
-    {:statement-type :commit}
+      ;; We allow (alongside BEGIN) BEGIN READ ONLY and BEGIN READ WRITE for compatibility with clients that
+      ;; send these commands by default or according to readOnly flags held client side.
+      (when (re-find #"(?i)^BEGIN" sql-trimmed)
+        (if-some [[_ _ ro rw] (re-find #"(?i)BEGIN((\s+READ\s+ONLY)|(\s+READ\s+WRITE)|)$" sql-trimmed)]
+          {:statement-type :begin
+           :access-mode (cond ro :read-only rw :read-write :else nil)}
+          {:statement-type :begin
+           ;; todo better error
+           :err (err-protocol-violation "Provided BEGIN syntax not supported by XTDB.\nOnly (BEGIN, BEGIN READ WRITE and BEGIN READ ONLY) are supported by XTDB")}))
 
-    (= "ROLLBACK" (statement-head sql))
-    {:statement-type :rollback}
+      (when (re-find #"(?i)^COMMIT$" sql-trimmed)
+        {:statement-type :commit})
 
-    (str/blank? sql)
-    {:statement-type :empty-query}
+      (when (re-find #"(?i)^ROLLBACK$" sql-trimmed)
+        {:statement-type :rollback})
 
-    :else (interpret-xt-query sql)))
+      (when (str/blank? sql-trimmed)
+        {:statement-type :empty-query})
+
+      (interpret-xt-query sql))))
 
 (defn- query-projection
   "Returns a vec of column names returned by the query (ast)."
@@ -1516,7 +1536,7 @@
 (defn cmd-describe-query [conn ast]
   (cmd-send-row-description conn (query-projection ast)))
 
-(defn cmd-begin [{:keys [server, conn-state] :as conn}]
+(defn cmd-begin [{:keys [server, conn-state] :as conn} access-mode]
   (let [{:keys [node]} server]
     (->> (fn [{:keys [session] :as st}]
            (let [{:keys [^Clock clock]} session]
@@ -1532,9 +1552,14 @@
                     :current-time (.instant clock)}
 
                    :access-mode
-                   (or (:access-mode (:next-transaction session))
-                       (:access-mode session)
-                       :read-only)}
+                   (or
+                     ;; access mode of a transaction is determined in order of precedence:
+                     ;; 1. BEGIN <access mode>
+                     access-mode
+                     ;; 2. SET TRANSACTION <access mode>
+                     (:access-mode (:next-transaction session))
+                     ;; 3. session variable (read only by default)
+                     (:access-mode session))}
                   (assoc st :transaction))))
          (swap! conn-state))
     ;; clear :next-transaction variables for now
@@ -1622,7 +1647,8 @@
     :set-session-parameter (cmd-set-session-parameter conn parameter value)
     :set-transaction (cmd-set-transaction conn {:access-mode access-mode})
     :set-time-zone (cmd-set-time-zone conn tz)
-    :begin (cmd-begin conn)
+    :ignore (cmd-write-msg conn msg-command-complete {:command "IGNORED"})
+    :begin (cmd-begin conn access-mode)
     :rollback (cmd-rollback conn)
     :commit (cmd-commit conn)
     :query (cmd-exec-query conn stmt)))

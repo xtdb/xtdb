@@ -1164,3 +1164,28 @@
     (swap! (:server-state *server*) assoc :clock custom-clock)
     (with-open [conn (jdbc-conn)]
       (is (= "2022-08-16T14:20:03+03:12" (current-ts conn))))))
+
+(deftest pg-begin-unsupported-syntax-error-test
+  (with-open [conn (jdbc-conn "autocommit" "false")]
+    (is (thrown-with-msg? PSQLException #"Provided BEGIN syntax not supported by XTDB" (q conn ["BEGIN not valid sql!"])))
+    (is (thrown-with-msg? PSQLException #"Provided BEGIN syntax not supported by XTDB" (q conn ["BEGIN SERIALIZABLE"])))))
+
+(deftest begin-with-access-mode-test
+  (with-open [conn (jdbc-conn "autocommit" "false")]
+    (testing "DML enabled with BEGIN READ WRITE"
+      (q conn ["BEGIN READ WRITE"])
+      (q conn ["INSERT INTO foo (id) VALUES (42)"])
+      (q conn ["COMMIT"])
+      (is (= [{:id 42}] (q conn ["SELECT foo.id from foo"]))))
+
+    (testing "after COMMIT we pop the access mode, we are read only again"
+      (is (thrown-with-msg? PSQLException #"DML is unsupported in a READ ONLY transaction" (q conn ["INSERT INTO foo (id) VALUES (42)"]))))
+
+    (testing "BEGIN access mode overrides SET TRANSACTION"
+      (q conn ["SET TRANSACTION READ WRITE"])
+      (is (= {:access-mode :read-write} (next-transaction-variables (get-last-conn) [:access-mode])))
+      (q conn ["BEGIN READ ONLY"])
+      (testing "next-transaction cleared on begin"
+        (is (= {} (next-transaction-variables (get-last-conn) [:access-mode]))))
+      (is (thrown-with-msg? PSQLException #"DML is unsupported in a READ ONLY transaction" (q conn ["INSERT INTO foo (id) VALUES (43)"])))
+      (q conn ["ROLLBACK"]))))
