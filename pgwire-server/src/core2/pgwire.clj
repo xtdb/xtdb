@@ -269,12 +269,13 @@
    :message msg})
 
 (defn- err-parse [parse-failure]
-  {:severity "ERROR"
-   :localized-severity "ERROR"
-   :sql-state "42601"
-   :message (first (str/split-lines (pr-str parse-failure)))
-   :detail (parser/failure->str parse-failure)
-   :position (str (inc (:idx parse-failure)))})
+  (let [lines (str/split-lines (parser/failure->str parse-failure))]
+    {:severity "ERROR"
+     :localized-severity "ERROR"
+     :sql-state "42601"
+     :message (first lines)
+     :detail (str/join "\n" (rest lines))
+     :position (str (inc (:idx parse-failure)))}))
 
 (defn- err-internal [msg]
   {:severity "ERROR"
