@@ -151,7 +151,16 @@
 
   (commit-doc-store-tx [_]
     (when-let [docs (not-empty @!docs)]
-      (db/submit-docs doc-store docs))))
+      (let [{arg-fn-docs true, non-arg-fn-docs false}
+            (->> docs
+                 (group-by (fn [[_ doc]]
+                             (or (contains? doc :crux.db.fn/tx-events)
+                                 (contains? doc :crux.db.fn/failed?)))))]
+
+        ;; we need to ensure that nobody can ever read a replaced tx-fn arg-doc
+        ;; without the resulting docs also having being written beforehand
+        (db/submit-docs doc-store non-arg-fn-docs)
+        (db/submit-docs doc-store arg-fn-docs)))))
 
 (defn begin-document-store-tx [doc-store]
   (->ForkedDocumentStore doc-store (atom {})))
