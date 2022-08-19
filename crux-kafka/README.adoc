@@ -5,7 +5,7 @@ This Crux module allows you to use Apache's https://kafka.apache.org[Kafka] as C
 .deps.edn
 [source,clojure]
 ----
-pro.juxt.crux/crux-kafka {:mvn/version "1.18.1"}
+pro.juxt.crux/crux-kafka {:mvn/version "1.18.2"}
 ----
 
 .pom.xml
@@ -14,7 +14,7 @@ pro.juxt.crux/crux-kafka {:mvn/version "1.18.1"}
 <dependency>
     <groupId>pro.juxt.crux</groupId>
     <artifactId>crux-kafka</artifactId>
-    <version>1.18.1</version>
+    <version>1.18.2</version>
 </dependency>
 ----
 

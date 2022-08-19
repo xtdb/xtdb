@@ -6,4 +6,4 @@ nav:
   - modules/ROOT/nav.adoc
 asciidoc:
   attributes:
-    crux_version: 1.18.1
+    crux_version: 1.18.2

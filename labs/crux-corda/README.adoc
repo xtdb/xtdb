@@ -6,10 +6,10 @@ A https://opencrux.com[Crux] module that allows you to pipe verified https://www
 [source,kotlin]
 ----
 // Main library
-implementation("pro.juxt.crux-labs", "crux-corda", "1.18.1")
+implementation("pro.juxt.crux-labs", "crux-corda", "1.18.2")
 
 // Library for inclusion in contract JARs
-implementation("pro.juxt.crux-labs", "crux-corda-state", "1.18.1")
+implementation("pro.juxt.crux-labs", "crux-corda-state", "1.18.2")
 ----
 
 .pom.xml
@@ -18,14 +18,14 @@ implementation("pro.juxt.crux-labs", "crux-corda-state", "1.18.1")
 <dependency>
     <groupId>pro.juxt.crux-labs</groupId>
     <artifactId>crux-corda</artifactId>
-    <version>1.18.1</version>
+    <version>1.18.2</version>
 </dependency>
 
 <!-- Library for inclusion in contract JARs -->
 <dependency>
     <groupId>pro.juxt.crux-labs</groupId>
     <artifactId>crux-corda-state</artifactId>
-    <version>1.18.1</version>
+    <version>1.18.2</version>
 </dependency>
 ----
 
