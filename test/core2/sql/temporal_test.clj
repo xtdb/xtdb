@@ -186,5 +186,5 @@
            (query-at-tx
              "SELECT foo.name, bar.also_name
              FROM foo, bar
-             WHERE foo.APP_TIME OVERLAPS bar.APP_TIME"
+             WHERE foo.APPLICATION_TIME OVERLAPS bar.APP_TIME"
              !tx)))))

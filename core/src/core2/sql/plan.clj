@@ -811,9 +811,10 @@
 
     [:period_predicand ^:z col]
     ;;=>
-    (let [app-time-symbol (str (expr col))]
-      {:start (symbol (str/replace app-time-symbol "APP_TIME" "application_time_start"))
-       :end (symbol (str/replace app-time-symbol "APP_TIME" "application_time_end"))})
+    (let [app-time-symbol (str (expr col))
+          coerced-app-time-symbol (str/replace app-time-symbol "APP_TIME" "APPLICATION_TIME")]
+      {:start (symbol (str/replace coerced-app-time-symbol "APPLICATION_TIME" "application_time_start"))
+       :end (symbol (str/replace coerced-app-time-symbol "APPLICATION_TIME" "application_time_end"))})
 
     [:period_predicand "PERIOD" start end]
     ;;=>
@@ -1421,9 +1422,9 @@
                           :else
                           columns)
                         columns-with-app-time-cols
-                        (if (contains? (set columns-with-system-time-predicates) 'APP_TIME)
+                        (if (seq (set/intersection (set columns-with-system-time-predicates) #{'APP_TIME 'APPLICATION_TIME}))
                           (->> columns-with-system-time-predicates
-                               (remove #{'application_time_start 'application_time_end 'APP_TIME})
+                               (remove #{'application_time_start 'application_time_end 'APP_TIME 'APPLICATION_TIME})
                                (concat ['application_time_start 'application_time_end])
                                vec)
                           columns-with-system-time-predicates)]

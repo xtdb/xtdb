@@ -2427,7 +2427,11 @@
   ({:tag :string, :string "TRUE"}
    {:tag :string, :string "FALSE"}
    {:tag :string, :string "UNKNOWN"})},
- :application_time_period_name {:tag :nt, :keyword :identifier},
+ :application_time_period_name
+ {:tag :alt,
+  :parsers
+  ({:tag :string, :string "APPLICATION_TIME"}
+   {:tag :string, :string "APP_TIME"})},
  :contextually_typed_row_value_constructor_element
  {:tag :alt,
   :parsers

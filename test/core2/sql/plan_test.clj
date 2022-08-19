@@ -1041,3 +1041,27 @@
            (plan-sql "DELETE FROM t1 u WHERE u.col1 = 30")
            (plan-sql "DELETE FROM t1 WHERE t1.col1 = 30"))
         "DELETE"))
+
+(deftest test-app-and-application-time-plan-equally
+  (t/is
+    (= (plan-sql "UPDATE users FOR PORTION OF APP_TIME FROM DATE '2021-07-01' TO DATE '9999-12-31' SET first_name = 'Sue'")
+       (plan-sql "UPDATE users FOR PORTION OF APPLICATION_TIME FROM DATE '2021-07-01' TO DATE '9999-12-31' SET first_name = 'Sue'"))
+    "UPDATE")
+
+  (t/is
+    (= (plan-sql "DELETE FROM users FOR PORTION OF APP_TIME FROM DATE '2021-07-01' TO DATE '9999-12-31'")
+       (plan-sql "DELETE FROM users FOR PORTION OF APPLICATION_TIME FROM DATE '2021-07-01' TO DATE '9999-12-31'"))
+    "DELETE")
+
+  (t/is
+    (= (plan-sql
+         "SELECT foo.name, bar.also_name
+         FROM foo, bar
+         WHERE foo.APP_TIME OVERLAPS bar.APP_TIME")
+       (plan-sql
+         "SELECT foo.name, bar.also_name
+         FROM foo, bar
+         WHERE foo.APPLICATION_TIME OVERLAPS bar.APPLICATION_TIME"))
+    "SELECT"))
+
+

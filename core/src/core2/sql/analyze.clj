@@ -927,6 +927,17 @@
              (conj (format "%s side contains ambiguous join columns: %s %s"
                            label (->src-str ag) (->line-info-str ag)))))
          (reduce into))))
+(defn- check-period-predicand [ag]
+  (let [period-predicand (r/znode ag)]
+    (when (= (first (second period-predicand)) :column_reference)
+      (let [[identifier-chain-keyword _ regular_identifier] (second (second period-predicand))]
+        (when-not (and (= identifier-chain-keyword :identifier_chain)
+                       (#{[:regular_identifier "APP_TIME"]
+                          [:regular_identifier "APPLICATION_TIME"]}
+                         regular_identifier))
+          [(format "%s is not a valid period. Please use a qualified reference to APPLICATION_TIME: %s"
+                   (->src-str ag)
+                   (->line-info-str ag))])))))
 
 (defn errs [ag]
   (r/collect
@@ -983,7 +994,9 @@
 
        :named_columns_join
        (check-named-columns-join ag)
-
+       
+       :period_predicand
+       (check-period-predicand ag)
        []))
    ag))
 

@@ -216,7 +216,7 @@
         (t/is (= tx2-expected (all-users !tx2)))
         (t/is (= tx1-expected (all-users !tx1)))
 
-        (let [!tx3 (c2/submit-tx *node* [[:sql "UPDATE users FOR PORTION OF APP_TIME FROM ? TO ? AS u SET first_name = 'Sue' WHERE u.id = ?"
+        (let [!tx3 (c2/submit-tx *node* [[:sql "UPDATE users FOR PORTION OF APPLICATION_TIME FROM ? TO ? AS u SET first_name = 'Sue' WHERE u.id = ?"
                                           [[#inst "2021-07-01", util/end-of-time, "susan"]]]])
 
               tx3-expected #{["Dave" "Davis", (util/->zdt #inst "2018"), (util/->zdt #inst "2020-05-01")]
