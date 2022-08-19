@@ -1016,6 +1016,10 @@
       (testing "read after write"
         (is (= [{:a 42}] (q conn ["SELECT foo.a FROM foo"])))))
 
+    (testing "update it"
+      (tx! conn ["UPDATE foo SET a = foo.a + 1 WHERE foo.id = 42"])
+      (is (= [{:a 43}] (q conn ["SELECT foo.a FROM foo"]))))
+
     (testing "delete it"
       (tx! conn ["DELETE FROM foo WHERE foo.id = 42"])
       (is (= [] (q conn ["SELECT foo.a FROM foo"]))))))

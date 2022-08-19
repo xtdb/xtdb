@@ -421,7 +421,7 @@
          :access-mode :read-write})
 
       ;; see issue #324, scrappy and temporary solution for basic interval HOUR MINUTE expr
-      (when-some [[_ sign hh mm] (re-find #"(?i)SET\s+TIME\s*ZONE\s+\'(\+|\-|)(\d{1,2})\:(\d{1,2})\'" sql-trimmed)]
+      (when-some [[_ sign hh mm] (re-find #"(?i)^SET\s+TIME\s*ZONE\s+\'(\+|\-|)(\d{1,2})\:(\d{1,2})\'" sql-trimmed)]
         {:statement-type :set-time-zone
          :tz (ZoneOffset/ofHoursMinutes
                ((case sign "-" - +) (parse-long hh))
@@ -431,7 +431,7 @@
       ;; SET x to 42
       ;; general SET statements have undefined behaviour at the moment, but permitted while working
       ;; on client compatibility - many will become canned responses
-      (when-some [[_ k _ v] (re-find #"(?i)SET\s+(\w+)\s*(=|TO)\s*(.*)" sql-trimmed)]
+      (when-some [[_ k _ v] (re-find #"(?i)^SET\s+(\w+)\s*(=|TO)\s*(.*)" sql-trimmed)]
         {:statement-type :set-session-parameter
          :parameter k
          :value v})
@@ -1427,7 +1427,11 @@
 ;; perhaps temporary, but we need to know if a query is DML to determine permissibility for different access modes
 (defn- ast-executable-statement-root-tag [ast] (when (vector? ast) (-> ast second first)))
 (defn- query? [ast] (= :query_expression (ast-executable-statement-root-tag ast)))
-(defn- dml? [ast] (contains? #{:insert_statement :delete_statement__searched} (ast-executable-statement-root-tag ast)))
+(defn- dml? [ast]
+  (contains? #{:insert_statement
+               :update_statement__searched
+               :delete_statement__searched}
+             (ast-executable-statement-root-tag ast)))
 
 (defn cmd-exec-query
   "Given a statement of type :query will execute it against the servers :node and send the results."
