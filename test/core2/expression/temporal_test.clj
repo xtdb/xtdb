@@ -272,3 +272,139 @@
                           :current-time now
                           :default-tz default-tz})
             first :res))))
+
+(t/deftest test-temporal-arithmetic
+  (letfn [(test-arithmetic
+            ([f x y] (test-arithmetic f x y {}))
+            ([f x y {:keys [default-tz], :or {default-tz #time/zone "America/Los_Angeles"}}]
+             (-> (tu/query-ra [:project [{'res `(~f ~'x ~'y)}]
+                               [:table [{}]]]
+                              {:default-tz default-tz
+                               :params {'x x, 'y y}})
+                 first :res)))]
+
+    (t/testing "(- datetime duration)"
+      (t/is (= #time/date-time "2022-08-01T01:15:43.342"
+               (test-arithmetic '+ #time/date "2022-08-01" #time/duration "PT1H15M43.342S")))
+
+      (t/is (= #time/date-time "2022-08-01T02:31:26.684"
+               (test-arithmetic '+ #time/date-time "2022-08-01T01:15:43.342" #time/duration "PT1H15M43.342S")))
+
+      (t/is (= #time/date-time "2022-08-01T02:31:26.684"
+               (test-arithmetic '+ #time/date-time "2022-08-01T01:15:43.342" #time/time "01:15:43.342")))
+
+      (t/is (= #time/zoned-date-time "2022-08-01T02:31:26.684+01:00[Europe/London]"
+               (test-arithmetic '+ #time/zoned-date-time "2022-08-01T01:15:43.342+01:00[Europe/London]" #time/duration "PT1H15M43.342S"))))
+
+    (t/testing "(- datetime duration)"
+      (t/is (= #time/date-time "2022-07-31T22:44:16.658"
+               (test-arithmetic '- #time/date "2022-08-01" #time/duration "PT1H15M43.342S")))
+
+      (t/is (= #time/date-time "2022-08-01T01:15:43.342"
+               (test-arithmetic '- #time/date-time "2022-08-01T02:31:26.684" #time/duration "PT1H15M43.342S")))
+
+      (t/is (= #time/date-time "2022-08-01T01:15:43.342"
+               (test-arithmetic '- #time/date-time "2022-08-01T02:31:26.684" #time/time "01:15:43.342")))
+
+      (t/is (= #time/zoned-date-time "2022-08-01T01:15:43.342+01:00[Europe/London]"
+               (test-arithmetic '- #time/zoned-date-time "2022-08-01T02:31:26.684+01:00[Europe/London]" #time/duration "PT1H15M43.342S"))))
+
+    (t/testing "(- datetime datetime)"
+      (t/is (= #time/duration "PT1H15M43.342S"
+               (test-arithmetic '- #time/date "2022-08-01" #time/date-time "2022-07-31T22:44:16.658")))
+
+      (t/is (= #time/duration "PT1H15M43.342S"
+               (test-arithmetic '- #time/date-time "2022-08-01T02:31:26.684" #time/date-time "2022-08-01T01:15:43.342")))
+
+      (t/is (= #time/duration "PT1H15M43.342S"
+               (test-arithmetic '- #time/zoned-date-time "2022-08-01T02:31:26.684+01:00[Europe/London]" #time/zoned-date-time "2022-08-01T01:15:43.342+01:00[Europe/London]")))
+
+      (t/is (= #time/duration "PT6H44M16.658S"
+               (test-arithmetic '- #time/date "2022-08-01" #time/zoned-date-time "2022-08-01T01:15:43.342+01:00[Europe/London]")))
+
+      (t/is (= #time/duration "PT-9H-15M-43.342S"
+               (test-arithmetic '- #time/zoned-date-time "2022-08-01T01:15:43.342+01:00[Europe/London]" #time/date-time "2022-08-01T02:31:26.684"))))))
+
+(tct/defspec test-lt
+  (tcp/for-all [t1 (tcg/one-of [ldt-gen ld-gen zdt-gen])
+                t2 (tcg/one-of [ldt-gen ld-gen zdt-gen])
+                default-tz zone-id-gen
+                now instant-gen]
+    (= (neg? (compare (->inst t1 now default-tz)
+                      (->inst t2 now default-tz)))
+       (->> (tu/query-ra [:project [{'res '(< ?t1 ?t2)}]
+                          [:table [{}]]]
+                         {:params {'?t1 t1, '?t2 t2}
+                          :current-time now
+                          :default-tz default-tz})
+            first :res))))
+
+(tct/defspec test-lte
+  (tcp/for-all [t1 (tcg/one-of [ldt-gen ld-gen zdt-gen])
+                t2 (tcg/one-of [ldt-gen ld-gen zdt-gen])
+                default-tz zone-id-gen
+                now instant-gen]
+    (= (not (pos? (compare (->inst t1 now default-tz)
+                           (->inst t2 now default-tz))))
+       (->> (tu/query-ra [:project [{'res '(<= ?t1 ?t2)}]
+                          [:table [{}]]]
+                         {:params {'?t1 t1, '?t2 t2}
+                          :current-time now
+                          :default-tz default-tz})
+            first :res))))
+
+(tct/defspec test-eq
+  (tcp/for-all [t1 (tcg/one-of [ldt-gen ld-gen zdt-gen])
+                t2 (tcg/one-of [ldt-gen ld-gen zdt-gen])
+                default-tz zone-id-gen
+                now instant-gen]
+    (= (= (->inst t1 now default-tz)
+          (->inst t2 now default-tz))
+       (->> (tu/query-ra [:project [{'res '(= ?t1 ?t2)}]
+                          [:table [{}]]]
+                         {:params {'?t1 t1, '?t2 t2}
+                          :current-time now
+                          :default-tz default-tz})
+            first :res))))
+
+(tct/defspec test-neq
+  (tcp/for-all [t1 (tcg/one-of [ldt-gen ld-gen zdt-gen])
+                t2 (tcg/one-of [ldt-gen ld-gen zdt-gen])
+                default-tz zone-id-gen
+                now instant-gen]
+    (= (not= (->inst t1 now default-tz)
+             (->inst t2 now default-tz))
+       (->> (tu/query-ra [:project [{'res '(<> ?t1 ?t2)}]
+                          [:table [{}]]]
+                         {:params {'?t1 t1, '?t2 t2}
+                          :current-time now
+                          :default-tz default-tz})
+            first :res))))
+
+(tct/defspec test-gte
+  (tcp/for-all [t1 (tcg/one-of [ldt-gen ld-gen zdt-gen])
+                t2 (tcg/one-of [ldt-gen ld-gen zdt-gen])
+                default-tz zone-id-gen
+                now instant-gen]
+    (= (not (neg? (compare (->inst t1 now default-tz)
+                           (->inst t2 now default-tz))))
+       (->> (tu/query-ra [:project [{'res '(>= ?t1 ?t2)}]
+                          [:table [{}]]]
+                         {:params {'?t1 t1, '?t2 t2}
+                          :current-time now
+                          :default-tz default-tz})
+            first :res))))
+
+(tct/defspec test-gt
+  (tcp/for-all [t1 (tcg/one-of [ldt-gen ld-gen zdt-gen])
+                t2 (tcg/one-of [ldt-gen ld-gen zdt-gen])
+                default-tz zone-id-gen
+                now instant-gen]
+    (= (pos? (compare (->inst t1 now default-tz)
+                      (->inst t2 now default-tz)))
+       (->> (tu/query-ra [:project [{'res '(> ?t1 ?t2)}]
+                          [:table [{}]]]
+                         {:params {'?t1 t1, '?t2 t2}
+                          :current-time now
+                          :default-tz default-tz})
+            first :res))))

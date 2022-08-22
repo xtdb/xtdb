@@ -76,8 +76,18 @@
     (let [from-hz (units-per-second from-unit)
           to-hz (units-per-second to-unit)]
       (if (> to-hz from-hz)
-        `(Math/multiplyExact ~form ~(quot (units-per-second to-unit) (units-per-second from-unit)))
-        `(quot ~form ~(quot (units-per-second from-unit) (units-per-second to-unit)))))))
+        `(Math/multiplyExact ~form ~(quot to-hz from-hz))
+        `(quot ~form ~(quot from-hz to-hz))))))
+
+(defn- with-arg-unit-conversion [unit1 unit2 ->ret-type ->call-code]
+  (if (= unit1 unit2)
+    {:return-type (->ret-type unit1), :->call-code ->call-code}
+
+    (let [res-unit (smallest-unit unit1 unit2)]
+      {:return-type (->ret-type res-unit),
+       :->call-code (fn [[arg1 arg2]]
+                      (->call-code [(with-conversion arg1 unit1 res-unit)
+                                    (with-conversion arg2 unit2 res-unit)]))})))
 
 (defn- ts->inst [form ts-unit]
   (case ts-unit
@@ -121,6 +131,9 @@
   {:return-type target-type, :->call-code (comp #(with-conversion % src-tsunit tgt-tsunit) first)})
 
 (defmethod expr/codegen-cast [:timestamp-tz :timestamp-tz] [{[_ src-tsunit _] :source-type, [_ tgt-tsunit _ :as target-type] :target-type}]
+  {:return-type target-type, :->call-code (comp #(with-conversion % src-tsunit tgt-tsunit) first)})
+
+(defmethod expr/codegen-cast [:duration :duration] [{[_ src-tsunit] :source-type, [_ tgt-tsunit :as target-type] :target-type}]
   {:return-type target-type, :->call-code (comp #(with-conversion % src-tsunit tgt-tsunit) first)})
 
 (defmethod expr/codegen-cast [:date :timestamp-local] [{[_ tgt-tsunit :as target-type] :target-type}]
@@ -212,8 +225,12 @@
                              (.toLocalDateTime))
                         (ldt->ts tgt-tsunit)))}))
 
+(defmethod expr/codegen-cast [:time-local :duration] [{[_ src-tsunit] :source-type, [_ tgt-tsunit :as target-type] :target-type}]
+  {:return-type target-type, :->call-code (comp #(with-conversion % src-tsunit tgt-tsunit) first)})
+
 ;; SQL:2011 Time-related-predicates
 ;; FIXME: these don't take different granularities of timestamp into account
+;; TODO: I think these may best live as planner macros so that the resulting `>`/`<` etc can take part in plan optimisation
 
 (defmethod expr/codegen-mono-call [:overlaps :timestamp-tz :timestamp-tz :timestamp-tz :timestamp-tz] [_]
   {:return-type :bool
@@ -251,59 +268,121 @@
    :->call-code (fn [[x-start _x-end _y-start y-end]]
                   `(= ~x-start ~y-end))})
 
-;; SQL:2011 Operations involving datetimes and intervals
+;;;; SQL:2011 Operations involving datetimes and intervals
 
-(defmethod expr/codegen-mono-call [:+ :timestamp-tz :duration] [{[[_ts ts-time-unit tz], [_dur dur-time-unit]] :arg-types}]
-  (let [res-unit (smallest-unit ts-time-unit dur-time-unit)]
-    {:return-type [:timestamp-tz res-unit tz]
-     :->call-code (fn [[ts-arg dur-arg]]
-                    `(Math/addExact ~(-> ts-arg (with-conversion ts-time-unit res-unit))
-                                    ~(-> dur-arg (with-conversion dur-time-unit res-unit))))}))
+(defn- recall-with-cast
+  ([expr cast1 cast2] (recall-with-cast expr cast1 cast2 expr/codegen-mono-call))
 
-(defmethod expr/codegen-mono-call [:+ :duration :timestamp-tz] [{[[_dur dur-time-unit], [_ts ts-time-unit tz]] :arg-types}]
-  (let [res-unit (smallest-unit ts-time-unit dur-time-unit)]
-    {:return-type [:timestamp-tz res-unit tz]
-     :->call-code (fn [[dur-arg ts-arg]]
-                    `(Math/addExact ~(-> dur-arg (with-conversion dur-time-unit res-unit))
-                                    ~(-> ts-arg (with-conversion ts-time-unit res-unit))))}))
+  ([{[t1 t2] :arg-types, :as expr} cast1 cast2 f]
+   (let [{ret1 :return-type, bb1 :batch-bindings, ->cc1 :->call-code} (expr/codegen-cast {:source-type t1, :target-type cast1})
+         {ret2 :return-type, bb2 :batch-bindings, ->cc2 :->call-code} (expr/codegen-cast {:source-type t2, :target-type cast2})
+         {ret :return-type, bb :batch-bindings, ->cc :->call-code} (f (assoc expr :arg-types [ret1 ret2]))]
+     {:return-type ret
+      :batch-bindings (concat bb1 bb2 bb)
+      :->call-code (fn [[a1 a2]]
+                     (->cc [(->cc1 [a1]) (->cc2 [a2])]))})))
 
-(defmethod expr/codegen-mono-call [:+ :duration :duration] [{[[_x x-unit] [_y y-unit]] :arg-types}]
-  (let [res-unit (smallest-unit x-unit y-unit)]
-    {:return-type [:duration res-unit]
-     :->call-code (fn [[x-arg y-arg]]
-                    `(Math/addExact ~(-> x-arg (with-conversion x-unit res-unit))
-                                    ~(-> y-arg (with-conversion y-unit res-unit))))}))
+(defn- recall-with-flipped-args [expr]
+  (let [{ret :return-type, bb :batch-bindings, ->cc :->call-code} (expr/codegen-mono-call (update expr :arg-types (comp vec rseq)))]
+    {:return-type ret, :batch-bindings bb, :->call-code (comp ->cc vec rseq)}))
+
+;;; addition
+
+(defmethod expr/codegen-mono-call [:+ :date :time-local] [{[_ [_ time-unit :as arg2]] :arg-types, :as expr}]
+  (-> expr (recall-with-cast [:timestamp-local time-unit] arg2)))
+
+(defmethod expr/codegen-mono-call [:+ :timestamp-local :time-local] [{[[_ ts-unit], [_ time-unit]] :arg-types}]
+  (with-arg-unit-conversion ts-unit time-unit
+    #(do [:timestamp-local %]) #(do `(Math/addExact ~@%))))
+
+(defmethod expr/codegen-mono-call [:+ :timestamp-tz :time-local] [{[[_ ts-unit tz], [_time time-unit]] :arg-types}]
+  (with-arg-unit-conversion ts-unit time-unit
+    #(do [:timestamp-tz % tz]) #(do `(Math/addExact ~@%))))
+
+(defmethod expr/codegen-mono-call [:+ :date :duration] [{[_ [_ dur-unit :as arg2]] :arg-types, :as expr}]
+  (-> expr (recall-with-cast [:timestamp-local dur-unit] arg2)))
+
+(defmethod expr/codegen-mono-call [:+ :timestamp-local :duration] [{[[_ ts-unit], [_ dur-unit]] :arg-types}]
+  (with-arg-unit-conversion ts-unit dur-unit
+    #(do [:timestamp-local %]) #(do `(Math/addExact ~@%))))
+
+(defmethod expr/codegen-mono-call [:+ :timestamp-tz :duration] [{[[_ ts-unit tz], [_ dur-unit]] :arg-types}]
+  (with-arg-unit-conversion ts-unit dur-unit
+    #(do [:timestamp-tz % tz]) #(do `(Math/addExact ~@%))))
+
+(defmethod expr/codegen-mono-call [:+ :duration :duration] [{[[_ x-unit] [_ y-unit]] :arg-types}]
+  (with-arg-unit-conversion x-unit y-unit
+    #(do [:duration %]) #(do `(Math/addExact ~@%))))
 
 (defmethod expr/codegen-mono-call [:+ :date :interval] [{[^ArrowType$Date x-type, ^ArrowType$Interval _y-type] :arg-types}]
   {:return-type x-type
    :->call-code (fn [[x-arg y-arg]]
                   `(.toEpochDay (.plus (LocalDate/ofEpochDay ~x-arg) (.getPeriod ~y-arg))))})
 
-(defmethod expr/codegen-mono-call [:- :timestamp-tz :timestamp-tz] [{[[_x-ts x-unit _x-tz], [_y-ts y-unit _y-tz]] :arg-types}]
-  (let [res-unit (smallest-unit x-unit y-unit)]
-    {:return-type [:duration res-unit]
-     :->call-code (fn [[x-arg y-arg]]
-                    `(Math/subtractExact ~(-> x-arg (with-conversion x-unit res-unit))
-                                         ~(-> y-arg (with-conversion y-unit res-unit))))}))
+(doseq [[t1 t2] [[:duration :timestamp-tz]
+                 [:duration :timestamp-local]
+                 [:duration :date]
+                 [:time-local :date]
+                 [:time-local :timestamp-local]
+                 [:time-local :timestamp-tz]
+                 [:interval :date]]]
+  (defmethod expr/codegen-mono-call [:+ t1 t2] [expr]
+    (recall-with-flipped-args expr)))
 
-(defmethod expr/codegen-mono-call [:- :timestamp-tz :duration] [{[[_ts ts-time-unit tz], [_dur dur-time-unit]] :arg-types}]
-  (let [res-unit (smallest-unit ts-time-unit dur-time-unit)]
-    {:return-type [:timestamp-tz res-unit tz]
-     :->call-code (fn [[ts-arg dur-arg]]
-                    `(Math/subtractExact ~(-> ts-arg (with-conversion ts-time-unit res-unit))
-                                         ~(-> dur-arg (with-conversion dur-time-unit res-unit))))}))
+;;; subtract
+
+(defmethod expr/codegen-mono-call [:- :timestamp-tz :timestamp-tz] [{[[_ x-unit _], [_ y-unit _]] :arg-types}]
+  (with-arg-unit-conversion x-unit y-unit
+    #(do [:duration %]) #(do `(Math/subtractExact ~@%))))
+
+(defmethod expr/codegen-mono-call [:- :timestamp-local :timestamp-local] [{[[_ x-unit], [_ y-unit]] :arg-types}]
+  (with-arg-unit-conversion x-unit y-unit
+    #(do [:duration %]) #(do `(Math/subtractExact ~@%))))
+
+(defmethod expr/codegen-mono-call [:- :timestamp-local :timestamp-tz] [{[x [_ y-unit _]] :arg-types, :as expr}]
+  (-> expr (recall-with-cast x [:timestamp-local y-unit])))
+
+(defmethod expr/codegen-mono-call [:- :timestamp-tz :timestamp-local] [{[[_ x-unit] y] :arg-types, :as expr}]
+  (-> expr (recall-with-cast [:timestamp-local x-unit] y)))
+
+(defmethod expr/codegen-mono-call [:- :date :date] [expr]
+  (-> expr (recall-with-cast [:timestamp-local :second] [:timestamp-local :second])))
+
+(doseq [t [:timestamp-tz :timestamp-local]]
+  (defmethod expr/codegen-mono-call [:- :date t] [{[_ t2] :arg-types, :as expr}]
+    (-> expr (recall-with-cast [:timestamp-local :second] t2)))
+
+  (defmethod expr/codegen-mono-call [:- t :date] [{[t1 _] :arg-types, :as expr}]
+    (-> expr (recall-with-cast t1 [:timestamp-local :second]))))
+
+(defmethod expr/codegen-mono-call [:- :time-local :time-local] [{[[_ time-unit1] [[_ time-unit2]]] :arg-types, :as expr}]
+  (-> expr (recall-with-cast [:duration time-unit1] [:duration time-unit2])))
+
+(doseq [th [:date :timestamp-tz :timestamp-local]]
+  (defmethod expr/codegen-mono-call [:- th :time-local] [{[t [_ time-unit]] :arg-types, :as expr}]
+    (-> expr (recall-with-cast t [:duration time-unit]))))
+
+(defmethod expr/codegen-mono-call [:- :timestamp-tz :duration] [{[[_ts ts-unit tz], [_dur dur-unit]] :arg-types}]
+  (with-arg-unit-conversion ts-unit dur-unit
+    #(do [:timestamp-tz % tz]) #(do `(Math/subtractExact ~@%))))
+
+(defmethod expr/codegen-mono-call [:- :date :duration] [{[_ [_dur dur-unit :as arg2]] :arg-types, :as expr}]
+  (-> expr (recall-with-cast [:timestamp-local dur-unit] arg2)))
+
+(defmethod expr/codegen-mono-call [:- :timestamp-local :duration] [{[[_ts ts-unit], [_dur dur-unit]] :arg-types}]
+ (with-arg-unit-conversion ts-unit dur-unit
+    #(do [:timestamp-local %]) #(do `(Math/subtractExact ~@%))))
 
 (defmethod expr/codegen-mono-call [:- :duration :duration] [{[[_x x-unit] [_y y-unit]] :arg-types}]
-  (let [res-unit (smallest-unit x-unit y-unit)]
-    {:return-type [:duration res-unit]
-     :->call-code (fn [[x-arg y-arg]]
-                    `(Math/subtractExact ~(-> x-arg (with-conversion x-unit res-unit))
-                                         ~(-> y-arg (with-conversion y-unit res-unit))))}))
+  (with-arg-unit-conversion x-unit y-unit
+    #(do [:duration %]) #(do `(Math/subtractExact ~@%))))
 
 (defmethod expr/codegen-mono-call [:- :date :interval] [{[dt-type, _i-type] :arg-types}]
   {:return-type dt-type
    :->call-code (fn [[x-arg y-arg]]
                   `(.toEpochDay (.minus (LocalDate/ofEpochDay ~x-arg) (.getPeriod ~y-arg))))})
+
+;;; multiply, divide
 
 (defmethod expr/codegen-mono-call [:* :duration :int] [{[x-type _y-type] :arg-types}]
   {:return-type x-type
@@ -329,6 +408,30 @@
   {:return-type x-type
    :->call-code (fn [emitted-args]
                   `(quot ~@emitted-args))})
+
+;;;; Boolean operations
+
+(doseq [[f cmp] [[:= #(do `(zero? ~%))]
+                 [:< #(do `(neg? ~%))]
+                 [:<= #(do `(not (pos? ~%)))]
+                 [:> #(do `(pos? ~%))]
+                 [:>= #(do `(not (neg? ~%)))]]]
+  (doseq [x [:date :timestamp-local :timestamp-tz]
+          y [:date :timestamp-local :timestamp-tz]]
+    (defmethod expr/codegen-mono-call [f x y] [expr]
+      (let [{:keys [batch-bindings ->call-code]} (expr/codegen-mono-call (assoc expr :f :-))]
+        {:return-type :bool,
+         :batch-bindings batch-bindings
+         :->call-code (comp cmp ->call-code)})))
+
+  (doseq [x [:time-local :duration]]
+    (defmethod expr/codegen-mono-call [f x x] [expr]
+      (let [{:keys [batch-bindings ->call-code]} (expr/codegen-mono-call (assoc expr :f :-))]
+        {:return-type :bool,
+         :batch-bindings batch-bindings
+         :->call-code (comp cmp ->call-code)}))))
+
+;;;; Intervals
 
 (defn pd-add ^PeriodDuration [^PeriodDuration pd1 ^PeriodDuration pd2]
   (let [p1 (.getPeriod pd1)
