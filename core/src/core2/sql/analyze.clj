@@ -994,7 +994,7 @@
 
        :named_columns_join
        (check-named-columns-join ag)
-       
+
        :period_predicand
        (check-period-predicand ag)
        []))

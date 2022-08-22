@@ -356,6 +356,18 @@ SELECT t1.d-t1.e AS a, SUM(t1.a) AS b
   (valid? "SELECT 1 FROM t1 OFFSET 1 ROWS")
   (valid? "SELECT 1 FROM t1 OFFSET :foo ROWS"))
 
+(t/deftest test-check-period-predicand
+  (invalid?
+    #"Please use a qualified reference to APPLICATION_TIME"
+    "SELECT foo.name, bar.also_name
+    FROM foo, bar
+    WHERE foo.random_col OVERLAPS bar.APPLICATION_TIME")
+  (invalid?
+    #"Please use a qualified reference to APPLICATION_TIME"
+    "SELECT foo.name, bar.also_name
+    FROM foo, bar
+    WHERE foo.APP_TIME OVERLAPS bar.fooble"))
+
 (t/deftest test-projection
   (t/is (= [[{:index 0, :identifier "b"}]
             [{:index 0, :identifier "b", :qualified-column ["t1" "b"]}]

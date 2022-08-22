@@ -1061,6 +1061,12 @@
          "SELECT foo.name, bar.also_name
          FROM foo, bar
          WHERE foo.APPLICATION_TIME OVERLAPS bar.APPLICATION_TIME"))
-    "SELECT"))
+    "SELECT")
 
-
+  (t/is
+    (=plan-file
+     "test-application-and-app-time-from-same-table"
+     (plan-sql
+         "SELECT foo.name
+         FROM foo
+         WHERE foo.APP_TIME OVERLAPS foo.APPLICATION_TIME"))))
