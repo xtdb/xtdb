@@ -1053,7 +1053,16 @@
           (send "SELECT foo.a FROM foo;\n")
           (let [s (read)]
             (is (str/includes? s "42"))
-            (is (str/includes? s "366")))))))
+            (is (str/includes? s "366"))))
+
+        (testing "delete"
+          (send "BEGIN READ WRITE;\n")
+          (read)
+          (send "DELETE FROM foo;\n")
+          (let [s (read)]
+            (is (str/includes? s "DELETE 0"))
+            (testing "no description sent"
+              (is (not (str/includes? s "_iid")))))))))
 
   (deftest psql-dml-at-prompt-test
     (psql-session

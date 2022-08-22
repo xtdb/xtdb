@@ -1642,7 +1642,7 @@
   (when (= :simple (:protocol @conn-state))
     (case statement-type
       :canned-response (cmd-describe-canned-response conn canned-response)
-      :query (cmd-describe-query conn ast)
+      :query (when (and ast (query? ast)) (cmd-describe-query conn ast))
       nil))
 
   (case statement-type
