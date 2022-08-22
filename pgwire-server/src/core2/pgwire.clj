@@ -391,6 +391,9 @@
   :parameter (the param name)
   :value (the value)
 
+  if :set-session-characteristics
+  :access-mode (:read-only, :read-write)
+
   if :set-transaction
   :access-mode (:read-only, :read-write)
 
@@ -463,6 +466,14 @@
          :tz (ZoneOffset/ofHoursMinutes
                ((case sign "-" - +) (parse-long hh))
                ((case sign "-" - +) (parse-long mm)))})
+
+      (when (re-find #"(?i)^SET SESSION CHARACTERISTICS AS TRANSACTION READ WRITE$" sql-trimmed)
+        {:statement-type :set-session-characteristics
+         :access-mode :read-write})
+
+      (when (re-find #"(?i)^SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY$" sql-trimmed)
+        {:statement-type :set-session-characteristics
+         :access-mode :read-only})
 
       ;; SET x = 42
       ;; SET x to 42
@@ -1645,6 +1656,11 @@
   (swap! conn-state update-in [:session :clock] (fn [^Clock clock] (.withZone clock tz)))
   (cmd-write-msg conn msg-command-complete {:command "SET TIME ZONE"}))
 
+(defn cmd-set-session-characteristics [{:keys [conn-state] :as conn} {:keys [access-mode]}]
+  (assert access-mode ":access-mode required for set-session-characteristics")
+  (swap! conn-state assoc-in [:session :access-mode] access-mode)
+  (cmd-write-msg conn msg-command-complete {:command "SET SESSION CHARACTERISTICS"}))
+
 (defn cmd-exec-stmt
   "Given some kind of statement (from interpret-sql), will execute it. For some statements, this does not mean
   the xt node gets hit - e.g SET some_session_parameter = 42 modifies the connection, not the database."
@@ -1667,6 +1683,7 @@
   (case statement-type
     :empty-query (cmd-write-msg conn msg-empty-query)
     :canned-response (cmd-write-canned-response conn canned-response)
+    :set-session-characteristics (cmd-set-session-characteristics conn {:access-mode access-mode})
     :set-session-parameter (cmd-set-session-parameter conn parameter value)
     :set-transaction (cmd-set-transaction conn {:access-mode access-mode})
     :set-time-zone (cmd-set-time-zone conn tz)

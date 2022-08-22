@@ -1226,3 +1226,18 @@
         (sql "START TRANSACTION")
         (is (thrown-with-msg? PSQLException #"DML is unsupported in a READ ONLY transaction" (sql "INSERT INTO foo (id) VALUES (42)")))
         (sql "ROLLBACK")))))
+
+(deftest set-session-characteristics-test
+  (with-open [conn (jdbc-conn "autocommit" "false")]
+    (let [sql #(q conn [%])]
+
+      (sql "SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY")
+      (is (thrown-with-msg? PSQLException #"DML is unsupported in a READ ONLY transaction" (sql "INSERT INTO foo (id) VALUES (42)")))
+
+      (sql "SET SESSION CHARACTERISTICS AS TRANSACTION READ WRITE")
+      (sql "START TRANSACTION")
+      (sql "INSERT INTO foo (id) VALUES (42)")
+      (sql "COMMIT")
+
+      (sql "SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY")
+      (is (= [{:id 42}] (q conn ["SELECT foo.id from foo"]))))))
