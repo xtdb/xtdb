@@ -165,7 +165,7 @@ Core2 artifacts are deployed to Maven Central.
 
 * Make sure your Docker daemon is running
 * `./bin/docker-build.sh [--clean]` will build and tag as `core2:latest`, and load it into your images list. The `--clean` flag can be used to ensure the core2 uberjar is rebuilt.
-* To run: `docker run core2` (with no `xtdb:` organization prefix)
+* To run: `docker run -p 5432:5432 core2` (with no `xtdb/` organization prefix)
 
 ==== Building and pushing a multi-arch image to dockerhub
 
