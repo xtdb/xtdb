@@ -1,6 +1,7 @@
 (ns user
   (:require [clojure.tools.namespace.repl :as ctn]
-            [clojure.java.io :as io])
+            [clojure.java.io :as io]
+            [time-literals.read-write :as time-literals])
   (:import java.io.File))
 
 (alter-var-root #'*warn-on-reflection* (constantly true))
@@ -14,9 +15,13 @@
                                         sub-dir #{"src" "test"}]
                                     (io/file dir sub-dir))))
 
+#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (defn reset []
   (ctn/refresh))
 
+#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (defn dev []
   (require 'dev)
   (in-ns 'dev))
+
+(time-literals/print-time-literals-clj!)

@@ -15,4 +15,5 @@
         metosin/reitit-swagger {:mvn/version "0.5.15"}
         metosin/reitit-spec {:mvn/version "0.5.15"}
 
-        com.cognitect/transit-clj {:mvn/version "1.0.324"}}}
+        com.cognitect/transit-clj {:mvn/version "1.0.324"}
+        com.widdindustries/time-literals {:mvn/version "0.1.6"}}}

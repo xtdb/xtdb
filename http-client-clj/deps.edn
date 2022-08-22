@@ -1,3 +1,4 @@
 {:deps {pro.juxt.clojars-mirrors.hato/hato {:mvn/version "0.8.2"}
         pro.juxt.clojars-mirrors.metosin/reitit-core {:mvn/version "0.5.15"}
-        com.cognitect/transit-clj {:mvn/version "1.0.324"}}}
+        com.cognitect/transit-clj {:mvn/version "1.0.324"}
+        com.widdindustries/time-literals {:mvn/version "0.1.6"}}}

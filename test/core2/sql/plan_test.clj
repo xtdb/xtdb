@@ -1,7 +1,6 @@
 (ns core2.sql.plan-test
   (:require [clojure.test :as t :refer [deftest]]
             [clojure.java.io :as io]
-            core2.edn ; Enables data literals
             [core2.sql.parser :as p]
             [core2.sql.plan :as plan])
   (:import (java.time LocalDateTime)))
