@@ -2658,10 +2658,7 @@
  :character_string_literal
  {:tag :plus, :parser {:tag :regexp, :regexp #"'(''|[^'])*'"}},
  :table_or_query_name
- {:tag :alt,
-  :parsers
-  ({:tag :nt, :keyword :table_name} {:tag :nt, :keyword :query_name}),
-  :red {:reduction-type :raw}},
+ {:tag :nt, :keyword :table_name, :red {:reduction-type :raw}},
  :column_name
  {:tag :nt, :keyword :identifier, :red {:reduction-type :raw}},
  :default_specification {:tag :string, :string "DEFAULT"},
@@ -2702,7 +2699,14 @@
   :parsers
   ({:tag :string, :string "ROW"} {:tag :nt, :keyword :row_type_body})},
  :table_name
- {:tag :nt, :keyword :identifier, :red {:reduction-type :raw}},
+ {:tag :cat,
+  :parsers
+  ({:tag :neg,
+    :parser
+    {:tag :regexp,
+     :regexp #"(?i)(\b(SYSTEM_TIME|APP_TIME|APPLICATION_TIME)\b)"}}
+   {:tag :nt, :keyword :identifier}),
+  :red {:reduction-type :raw}},
  :datetime_value_function
  {:tag :alt,
   :parsers

@@ -368,6 +368,20 @@ SELECT t1.d-t1.e AS a, SUM(t1.a) AS b
     FROM foo, bar
     WHERE foo.APP_TIME OVERLAPS bar.fooble"))
 
+(t/deftest test-invalid-table-names
+  (invalid?
+    #"Unexpected:\nAPPLICATION_TIME"
+    "SELECT APPLICATION_TIME.foo FROM APPLICATION_TIME")
+  (invalid?
+    #"Unexpected:\nSYSTEM_TIME"
+    "SELECT bar.foo FROM SYSTEM_TIME AS bar")
+  (invalid?
+    #"Unexpected:\nSYSTEM_TIME"
+    "INSERT INTO SYSTEM_TIME SELECT 4 FROM foo")
+  (invalid?
+    #"Unexpected:\nAPP_TIME"
+    "UPDATE APP_TIME SET foo = 4"))
+
 (t/deftest test-projection
   (t/is (= [[{:index 0, :identifier "b"}]
             [{:index 0, :identifier "b", :qualified-column ["t1" "b"]}]
