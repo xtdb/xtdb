@@ -1934,4 +1934,13 @@
     (t/is (= 42.0 (test-cast 42 :f32)))
     (t/is (= 42.0 (test-cast 42 :f64)))
 
-    (t/is (= 42 (test-cast 'a :i32 {:a 42.0})))))
+    (t/is (= 42 (test-cast 'a :i32 {:a 42.0})))
+
+    (t/is (= "42" (test-cast 42 :utf8)))
+
+    (t/is (= (byte 42) (test-cast "42" :i8)))
+    (t/is (= (short 42) (test-cast "42" :i16)))
+    (t/is (= (int 42) (test-cast "42" :i32)))
+    (t/is (= (long 42) (test-cast "42" :i64)))
+    (t/is (= (float 42) (test-cast "42" :f32)))
+    (t/is (= (double 42) (test-cast "42" :f64)))))

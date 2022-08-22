@@ -1038,6 +1038,25 @@
   {:return-type target-type
    :->call-code #(do `(~(type->cast target-type) ~@%))})
 
+(defmethod codegen-cast [:num :utf8] [_]
+  {:return-type :utf8, :->call-code #(do `(resolve-utf8-buf (str ~@%)))})
+
+(defn buf->str ^String [^ByteBuffer buf]
+  (let [bs (byte-array (.remaining buf))
+        pos (.position buf)]
+    (.get buf bs)
+    (.position buf pos)
+    (String. bs)))
+
+(doseq [[col-type parse-sym] [[:i8 `Byte/parseByte]
+                              [:i16 `Short/parseShort]
+                              [:i32 `Integer/parseInt]
+                              [:i64 `Long/parseLong]
+                              [:f32 `Float/parseFloat]
+                              [:f64 `Double/parseDouble]]]
+  (defmethod codegen-cast [:utf8 col-type] [_]
+    {:return-type col-type, :->call-code #(do `(~parse-sym (buf->str ~@%)))}))
+
 (defmethod codegen-mono-call [:cast :any] [{[source-type] :arg-types, :keys [target-type] :as expr}]
   (codegen-cast {:source-type source-type, :target-type target-type}))
 
