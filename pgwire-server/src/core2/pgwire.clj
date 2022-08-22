@@ -378,6 +378,10 @@
 (defn- interpret-sql
   "Takes a sql string and returns a map of data about it.
 
+  pgwire extends the sql core with pg-specific canned responses and session/transaction control, these need special handling - hence this function.
+
+  Usage: (interpret-sql \"select a.a from a a\")
+
   :statement-type determines the rest of the data.
 
   if :canned-response
@@ -390,7 +394,13 @@
   if :set-transaction
   :access-mode (:read-only, :read-write)
 
-  if :begin or :commit or :rollback (nothing more to say so far, unparameterized tx controls)
+  if :start-transaction
+  :access-mode (:read-only, :read-write, nil)
+
+  if :begin
+  :access-mode (:read-only, :read-write, nil)
+
+  if :commit or :rollback (nothing more to say so far, unparameterized tx controls)
 
   if :empty-query (nothing more to say!)
 
@@ -406,20 +416,47 @@
   [sql]
   (let [sql-trimmed (trim-sql sql)]
     (or
+      (when (str/blank? sql-trimmed)
+        {:statement-type :empty-query})
+
       (when-some [canned-response (get-canned-response sql-trimmed)]
         {:statement-type :canned-response
          :canned-response canned-response})
 
+      ;; transaction control
+      ;
       ;; will likely look at moving this into parser as they are spec defined
       ;; though execution behaviour will likely remain in pgwire (due to stateful nature of these commands)
-      (when (.equalsIgnoreCase "SET TRANSACTION READ ONLY" sql-trimmed)
+      (when (re-find #"(?i)^SET\s+TRANSACTION\s+READ\s+ONLY$" sql-trimmed)
         {:statement-type :set-transaction
          :access-mode :read-only})
 
-      (when (.equalsIgnoreCase "SET TRANSACTION READ WRITE" sql-trimmed)
+      (when (re-find #"(?i)^SET\s+TRANSACTION\s+READ\s+WRITE$" sql-trimmed)
         {:statement-type :set-transaction
          :access-mode :read-write})
 
+      (when (re-find #"(?i)^START\s+TRANSACTION" sql-trimmed)
+        (if-some [[_ _ ro rw] (re-find #"(?i)START\s+TRANSACTION((\s+READ\s+ONLY)|(\s+READ\s+WRITE)|)$" sql-trimmed)]
+          {:statement-type :begin
+           :access-mode (cond ro :read-only rw :read-write :else nil)}
+          {:statement-type :begin
+           :err (err-protocol-violation "Provided START TRANSACTION syntax not supported by XTDB.\nOnly (START TRANSACTION, START TRANSACTION READ WRITE and START TRANSACTION READ ONLY) are supported by XTDB")}))
+
+      (when (re-find #"(?i)^BEGIN" sql-trimmed)
+        (if-some [[_ _ ro rw] (re-find #"(?i)BEGIN((\s+READ\s+ONLY)|(\s+READ\s+WRITE)|)$" sql-trimmed)]
+          {:statement-type :begin
+           :access-mode (cond ro :read-only rw :read-write :else nil)}
+          {:statement-type :begin
+           :err (err-protocol-violation "Provided BEGIN syntax not supported by XTDB.\nOnly (BEGIN, BEGIN READ WRITE and BEGIN READ ONLY) are supported by XTDB")}))
+
+      (when (re-find #"(?i)^COMMIT$" sql-trimmed)
+        {:statement-type :commit})
+
+      (when (re-find #"(?i)^ROLLBACK$" sql-trimmed)
+        {:statement-type :rollback})
+
+      ;; session control
+      ;
       ;; see issue #324, scrappy and temporary solution for basic interval HOUR MINUTE expr
       (when-some [[_ sign hh mm] (re-find #"(?i)^SET\s+TIME\s*ZONE\s+\'(\+|\-|)(\d{1,2})\:(\d{1,2})\'" sql-trimmed)]
         {:statement-type :set-time-zone
@@ -441,25 +478,7 @@
         {:statement-type :ignore
          :sql sql})
 
-      ;; We allow (alongside BEGIN) BEGIN READ ONLY and BEGIN READ WRITE for compatibility with clients that
-      ;; send these commands by default or according to readOnly flags held client side.
-      (when (re-find #"(?i)^BEGIN" sql-trimmed)
-        (if-some [[_ _ ro rw] (re-find #"(?i)BEGIN((\s+READ\s+ONLY)|(\s+READ\s+WRITE)|)$" sql-trimmed)]
-          {:statement-type :begin
-           :access-mode (cond ro :read-only rw :read-write :else nil)}
-          {:statement-type :begin
-           ;; todo better error
-           :err (err-protocol-violation "Provided BEGIN syntax not supported by XTDB.\nOnly (BEGIN, BEGIN READ WRITE and BEGIN READ ONLY) are supported by XTDB")}))
-
-      (when (re-find #"(?i)^COMMIT$" sql-trimmed)
-        {:statement-type :commit})
-
-      (when (re-find #"(?i)^ROLLBACK$" sql-trimmed)
-        {:statement-type :rollback})
-
-      (when (str/blank? sql-trimmed)
-        {:statement-type :empty-query})
-
+      ;; interpret as xt core sql query (not pg specific)
       (interpret-xt-query sql))))
 
 (defn- query-projection

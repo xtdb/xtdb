@@ -1202,3 +1202,27 @@
         (is (= {} (next-transaction-variables (get-last-conn) [:access-mode]))))
       (is (thrown-with-msg? PSQLException #"DML is unsupported in a READ ONLY transaction" (q conn ["INSERT INTO foo (id) VALUES (43)"])))
       (q conn ["ROLLBACK"]))))
+
+(deftest start-transaction-test
+  (with-open [conn (jdbc-conn "autocommit" "false")]
+    (let [sql #(q conn [%])]
+
+      (sql "START TRANSACTION")
+      (is (thrown-with-msg? PSQLException #"DML is unsupported in a READ ONLY transaction" (sql "INSERT INTO foo (id) VALUES (42)")))
+      (sql "ROLLBACK")
+
+      (sql "START TRANSACTION READ WRITE")
+      (sql "INSERT INTO foo (id) VALUES (42)")
+      (sql "COMMIT")
+      (is (= [{:id 42}] (q conn ["SELECT foo.id from foo"])))
+
+      (testing "access mode overrides SET TRANSACTION"
+        (sql "SET TRANSACTION READ WRITE")
+        (sql "START TRANSACTION READ ONLY")
+        (is (thrown-with-msg? PSQLException #"DML is unsupported in a READ ONLY transaction" (sql "INSERT INTO foo (id) VALUES (42)")))
+        (sql "ROLLBACK"))
+
+      (testing "set transaction cleared"
+        (sql "START TRANSACTION")
+        (is (thrown-with-msg? PSQLException #"DML is unsupported in a READ ONLY transaction" (sql "INSERT INTO foo (id) VALUES (42)")))
+        (sql "ROLLBACK")))))
