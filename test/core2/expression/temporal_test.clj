@@ -1,7 +1,10 @@
 (ns core2.expression.temporal-test
   (:require [clojure.test :as t]
+            [clojure.test.check.clojure-test :as tct]
+            [clojure.test.check.properties :as tcp]
+            [clojure.test.check.generators :as tcg]
             [core2.test-util :as tu])
-  (:import (java.time Instant ZoneId ZoneOffset)))
+  (:import (java.time Instant LocalDate LocalDateTime LocalTime ZonedDateTime ZoneId ZoneOffset)))
 
 (t/use-fixtures :each tu/with-allocator)
 
@@ -57,7 +60,8 @@
         (t/testing "ts"
           (t/is (= #time/date-time "2022-08-01T00:00:00"
                    (test-cast #time/date "2022-08-01"
-                              [:timestamp-local :milli]))))
+                              [:timestamp-local :milli]
+                              {:default-tz (ZoneId/of "Europe/London")}))))
 
         (t/testing "tstz"
           (t/is (= #time/zoned-date-time "2022-07-31T16:00-07:00[America/Los_Angeles]"
@@ -166,3 +170,105 @@
                    (test-cast #time/time "12:34:56.789012345"
                               [:timestamp-tz :micro "America/Los_Angeles"]
                               {:default-tz (ZoneId/of "Europe/London")}))))))))
+
+(def ^:private instant-gen
+  (->> (tcg/tuple (tcg/choose (.getEpochSecond #time/instant "2020-01-01T00:00:00Z")
+                              (.getEpochSecond #time/instant "2040-01-01T00:00:00Z"))
+                  (->> (tcg/choose 0 #=(long 1e6))
+                       (tcg/fmap #(* % 1000))))
+       (tcg/fmap (fn [[s ns]]
+                   (Instant/ofEpochSecond s ns)))))
+
+(def ^:private ldt-gen
+  (->> instant-gen
+       (tcg/fmap (fn [^Instant inst]
+                   (LocalDateTime/ofInstant inst ZoneOffset/UTC)))))
+
+(def ^:private ld-gen
+  (->> instant-gen
+       (tcg/fmap (fn [^Instant inst]
+                   (LocalDate/ofInstant inst ZoneOffset/UTC)))))
+
+(def ^:private lt-gen
+  (->> instant-gen
+       (tcg/fmap (fn [^Instant inst]
+                   (LocalTime/ofInstant inst ZoneOffset/UTC)))))
+
+(def ^:private zone-id-gen
+  (->> (tcg/elements (ZoneId/getAvailableZoneIds))
+       (tcg/fmap #(ZoneId/of %))))
+
+(def ^:private zdt-gen
+  (->> (tcg/tuple instant-gen zone-id-gen)
+       (tcg/fmap (fn [[inst zone-id]]
+                   (ZonedDateTime/ofInstant inst zone-id)))))
+
+(defprotocol BackToInstant (->inst [t current-timestamp zone-id]))
+
+(extend-protocol BackToInstant
+  ZonedDateTime
+  (->inst [zdt _now _zone-id]
+    (.toInstant zdt))
+
+  LocalDateTime
+  (->inst [ldt now ^ZoneId zone-id]
+    (-> (.atZone ldt zone-id)
+        (->inst now zone-id)))
+
+  LocalDate
+  (->inst [ld now zone-id]
+    (-> (.atTime ld LocalTime/MIDNIGHT)
+        (->inst now zone-id)))
+
+  LocalTime
+  (->inst [lt now zone-id]
+    (-> (LocalDateTime/of (LocalDate/ofInstant now zone-id) lt)
+        (->inst now zone-id))))
+
+(tct/defspec test-cast-to-date
+  (tcp/for-all [t1 (tcg/one-of [ldt-gen ld-gen zdt-gen])
+                default-tz zone-id-gen
+                now instant-gen]
+    (= (LocalDate/ofInstant (->inst t1 now default-tz) default-tz)
+       (->> (tu/query-ra [:project [{'res (list 'cast '?t1 [:date :day])}]
+                          [:table [{}]]]
+                         {:params {'?t1 t1}
+                          :default-tz default-tz})
+            first :res))))
+
+(tct/defspec test-cast-to-time
+  (tcp/for-all [t1 (tcg/one-of [ldt-gen lt-gen zdt-gen])
+                default-tz zone-id-gen
+                now instant-gen]
+    (= (LocalTime/ofInstant (->inst t1 now default-tz) default-tz)
+       (->> (tu/query-ra [:project [{'res (list 'cast '?t1 [:time-local :micro])}]
+                          [:table [{}]]]
+                         {:params {'?t1 t1}
+                          :current-time now
+                          :default-tz default-tz})
+            first :res))))
+
+(tct/defspec test-cast-to-ts
+  (tcp/for-all [t1 (tcg/one-of [ldt-gen ld-gen lt-gen zdt-gen])
+                default-tz zone-id-gen
+                now instant-gen]
+    (= (LocalDateTime/ofInstant (->inst t1 now default-tz) default-tz)
+       (->> (tu/query-ra [:project [{'res (list 'cast '?t1 [:timestamp-local :micro])}]
+                          [:table [{}]]]
+                         {:params {'?t1 t1}
+                          :current-time now
+                          :default-tz default-tz})
+            first :res))))
+
+(tct/defspec test-cast-to-tstz
+  (tcp/for-all [t1 (tcg/one-of [ldt-gen ld-gen lt-gen zdt-gen])
+                default-tz zone-id-gen
+                zdt-tz zone-id-gen
+                now instant-gen]
+    (= (ZonedDateTime/ofInstant (->inst t1 now default-tz) zdt-tz)
+       (->> (tu/query-ra [:project [{'res (list 'cast '?t1 [:timestamp-tz :micro (str zdt-tz)])}]
+                          [:table [{}]]]
+                         {:params {'?t1 t1}
+                          :current-time now
+                          :default-tz default-tz})
+            first :res))))

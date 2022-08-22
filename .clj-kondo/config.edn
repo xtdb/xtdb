@@ -1,8 +1,8 @@
 {:lint-as {core2.object-store-test/def-obj-store-tests clojure.core/defn
            core2.rewrite/zmatch clojure.core.match/match
            core2.rewrite/zcase clojure.core/case
-           clojure.test.check.clojure-test/defspec clojure.core/def
-           clojure.test.check.properties/for-all clojure.core/let}
+           clojure.test.check.clojure-test/defspec clojure.test/deftest
+           clojure.test.check.properties/for-all clojure.core/for}
  :linters {:not-empty? {:level :off}
            :unresolved-symbol {:level :error
                                :exclude [(clojure.test/is [=plan-file])]}}}

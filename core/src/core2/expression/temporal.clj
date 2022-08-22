@@ -127,7 +127,7 @@
   {:return-type target-type
    :->call-code (fn [[dt]]
                   `(-> (LocalDate/ofEpochDay ~dt)
-                       (.atStartOfDay (.getZone expr/*clock*))
+                       (.atStartOfDay ZoneOffset/UTC)
                        (.toEpochSecond)
                        (Math/multiplyExact ~(units-per-second tgt-tsunit))))})
 
