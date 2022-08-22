@@ -1,0 +1,22 @@
+= SQL Queries
+
+[#select]
+== Basic SELECT
+
+Assuming the `insert` statement from the
+xref:language-reference::sql-transactions.adoc[SQL Transactions] documentation, you will see:
+
+[source,sql]
+----
+select users.name from users;
+----
+
+returns:
+
+[source,text]
+----
+ name
+-------
+ "Matt"
+(1 row)
+----

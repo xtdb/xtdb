@@ -1,0 +1,7 @@
+= XTDB Core2 Docs
+
+== Docs
+
+* xref:administration::index.adoc[Administration]
+* xref:language-reference::index.adoc[Language Reference]
+* xref:clients::index.adoc[Clients]

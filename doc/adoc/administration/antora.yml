@@ -1,0 +1,11 @@
+name: administration
+title: Administration
+version: master
+prerelease: indeed
+display_version: master
+start_page: ROOT:index.adoc
+nav:
+  - modules/ROOT/nav.adoc
+asciidoc:
+  attributes:
+    xtdb_version: master

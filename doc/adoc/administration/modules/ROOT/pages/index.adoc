@@ -1,0 +1,3 @@
+= Administration
+
+* xref:installing.adoc[Installing]

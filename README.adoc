@@ -4,6 +4,24 @@ Welcome to the XTDB research repository!
 
 XTDB '`Core2`' is an experimental, SQL-first, immutable database concept.
 
+== Quickstart
+
+[source,sh]
+----
+docker pull xtdb/core2
+docker run -p 5432:5432 xtdb/core2
+----
+
+Core2 supports the Postgres Wire Protocol.
+Connect to Core2 using any Postgres client:
+
+[source,sh]
+----
+psql -h localhost
+----
+
+More examples are available in the https://github.com/xtdb/core2-playground[Core2 Playground] and https://github.com/xtdb/core2/tree/master/doc/adoc[preliminary documentation exists].
+
 
 == Vision
 

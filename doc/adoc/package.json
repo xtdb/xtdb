@@ -1,0 +1,21 @@
+{
+  "name": "core2-docs",
+  "version": "1.0.0",
+  "description": "XTDB Core2 Documentation",
+  "author": "XTDB",
+
+  "scripts": {
+    "build": "antora antora-playbook.yml --fetch",
+    "serve": "serve build/site"
+  },
+
+  "dependencies": {
+    "@antora/cli": "3.0.0",
+    "@antora/site-generator-default": "3.0.0",
+    "serve": "^12.0.1"
+  },
+
+  "devDependencies": {
+    "marky": "^1.2.2"
+  }
+}

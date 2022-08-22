@@ -1,0 +1,19 @@
+= Installation
+
+Ensure you have Docker 20.10.10 (or later) installed and running.
+
+[source,sh]
+----
+docker pull xtdb/core2
+docker run -p 5432:5432 xtdb/core2
+----
+
+== Mounting a Volume
+
+You can use the standard Docker flags to mount a volume and persist your XTDB Core2 data between restarts.
+While Core2 is experimental, we recommend persisting data to `/tmp` so it is easy to destroy:
+
+[source,sh]
+----
+docker run -p 5432:5432 -v /tmp/xtdb:/var/lib/xtdb xtdb/core2
+----

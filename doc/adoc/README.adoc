@@ -1,0 +1,17 @@
+= XTDB Core2 Documentation
+
+We use https://docs.antora.org/antora/2.3/[Antora] to build the XTDB documentation.
+
+This documentation is not yet deployed to https://xtdb.com/[xtdb.com].
+From here, though, you can build the documentation in isolation.
+
+== Install:
+
+* Requires Node/NPM installed.
+
+== Build:
+
+* `./bin/build.sh`
+** Troubleshooting: `npm install`
+* `./bin/open-local-site.sh` to open up the built version of the site in your browser.
+* `./bin/run-local-server.sh` to open the site if you require plugins (like Dark Reader) which work poorly with `file://` URLs.

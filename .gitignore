@@ -20,4 +20,4 @@ build
 .cpcache/
 .lsp/.cache/
 /_manifest
-
+.DS_Store

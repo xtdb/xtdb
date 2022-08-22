@@ -1,0 +1,46 @@
+site:
+  title: XTDB Core2 Docs
+  start_page: main::index.adoc
+  # url: https://docs.xtdb.com
+  # homeUrl: &home_url /xyz/5.2/index.html
+  keys:
+    mainSiteUrl: "https://xtdb.com/"
+    mainSiteTitle: XTDB Core2 - Home
+    #matomoUrl: "//bunseki.juxt.pro/"
+    #matomoSiteId: "4"
+    #typesenseHost: xtagzc25w84ufq37p-1.a1.typesense.net
+    #typesenseApiKey: 0zVHpGQFDUhgP9hazp1laLklfy00AlGD
+    #typesenseCollectionName: xtdb-website-ts-index
+    hiddenComponent: main
+
+content:
+  sources:
+    - url: ../../
+      start_path: doc/adoc/main # index - Only necessary to read self-hosted docs.
+      branches: master
+    - url: ../../
+      start_path: doc/adoc/language-reference
+      branches:
+        - master
+    - url: ../../
+      start_path: doc/adoc/clients
+      branches:
+        - master
+    - url: ../../
+      start_path: doc/adoc/administration
+      branches:
+        - master
+
+urls:
+  html_extension_style: indexify
+
+ui:
+  bundle:
+    url: https://xtdb-ui-bundle.s3.eu-west-1.amazonaws.com/xtdb-docs-ui-v2-bundle.zip
+    snapshot: true
+
+asciidoc:
+  attributes:
+    page-pagination: true
+  extensions:
+    - ./antora-extensions/code-tabs.js

@@ -1,0 +1,69 @@
+= SQL Transactions
+
+XTDB Core2 is a schemaless document database.
+There is no DDL and you can add any record without static table definitions.
+
+
+[#readwrite-mode]
+== `READ WRITE` Mode
+
+XTDB is an asynchronous database.
+By default, XTDB is in `READ ONLY` mode.
+To commit a transaction, you will need to enter `READ WRITE` mode explicitly:
+
+[source,sql]
+----
+start transaction READ WRITE;
+-- your DML here
+commit;
+----
+
+
+[#insert]
+== INSERT / UPSERT
+
+For now, `insert` behaves like `upsert`.
+You are permitted to run the following statements twice in a row and the second will not be rejected.
+By default, `select` will query across all of `APPLICATION_TIME`, so you will see two rows returned as well.
+
+[source,sql]
+----
+start transaction READ WRITE;
+insert into users (id,name) values (1234,'Matt');
+commit;
+----
+
+The result of the `insert` statement might be surprising:
+
+----
+--
+(0 rows)
+INSERT 0 0
+----
+
+This is because XTDB is asynchronous.
+Your data has reached the Transaction Log but isn't fully committed to the Object Store until `commit`.
+
+
+[#update]
+== UPDATE
+
+[source,sh]
+----
+start transaction READ WRITE;
+update users set name='James' where users.id=1234;
+commit;
+----
+
+Be aware that the `where` clause requires fully-qualified columns, like `select`.
+
+
+[#delete]
+== DELETE
+
+[source,sh]
+----
+start transaction READ WRITE;
+delete from users where users.id=1234;
+commit;
+----
