@@ -616,6 +616,10 @@
     ;;=>
     (list 'power (expr nve-1) (expr nve-2))
 
+    [:square_root _ ^:z nve]
+    ;;=>
+    (list 'sqrt (expr nve))
+
     [:absolute_value_expression _ ^:z nve]
     ;;=>
     (list 'abs (expr nve))
