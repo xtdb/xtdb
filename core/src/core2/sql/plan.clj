@@ -224,9 +224,8 @@
     (throw (IllegalArgumentException. (str "Cannot build expression for: "  (pr-str (r/node z)))))))
 
 (defn seconds-fraction->nanos [seconds-fraction]
-  (* (* (Long/parseLong seconds-fraction)
-        (Math/pow 10 (- (count seconds-fraction))))
-     (Math/pow 10 9)))
+  (* (Long/parseLong seconds-fraction)
+     (long (Math/pow 10 (- 9 (count seconds-fraction))))))
 
 (defn create-offset-date-time
   [year month day hours minutes seconds seconds-fraction offset-hours offset-minutes]
