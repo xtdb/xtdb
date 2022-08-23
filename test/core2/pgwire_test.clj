@@ -1282,3 +1282,19 @@
         (sql "SET TRANSACTION READ WRITE")
         (is (= [{:id 42}] (sql "select foo.id from foo")))
         (is (= {:access-mode :read-write} (next-transaction-variables (get-last-conn) [:access-mode])))))))
+
+(when (psql-available?)
+  (deftest psql-exc-on-commit-test
+    (psql-session
+      (fn [send read]
+
+        (send "BEGIN READ WRITE;\n")
+        (read)
+        ;; no-id
+        (send "INSERT INTO foo (x) values (42);\n")
+
+        (send "COMMIT;\n")
+
+        (let [s (read :err)]
+          (is (not= :timeout s))
+          (is (re-find #"internal error on commit" s)))))))

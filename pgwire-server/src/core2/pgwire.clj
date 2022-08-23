@@ -1600,11 +1600,39 @@
       (cmd-send-error conn (or err (err-protocol-violation "transaction failed")))
       (do
         (let [tx-ops (mapv (fn [{:keys [transformed-query params]}] [:sql transformed-query [params]]) dml-buf)
-              tx (when (seq tx-ops) (c2/submit-tx node tx-ops))]
-          ;; todo consider blocking policy
-          (when tx @(node/await-tx-async node tx))
-          (swap! conn-state dissoc :transaction)
-          (cmd-write-msg conn msg-command-complete {:command "COMMIT"}))))))
+
+              ;; todo review err log policy
+              [tx submit-ex]
+              (try
+                [(c2/submit-tx node tx-ops)]
+                (catch Throwable e
+                  (log/debug e "Error on submit-tx")
+                  [nil e]))
+
+              await-ex
+              (when tx
+                (try
+                  ;; todo consider blocking policy
+                  @(node/await-tx-async node tx)
+                  nil
+                  (catch Throwable e
+                    (log/debug e "Error on await-tx")
+                    e)))
+
+              err
+              (cond
+                ;; todo err msgs, we need to classify, bad code (bug in xt) vs bad env (IO)
+                ;; bad sql / params should be caught when sending the DML not on COMMIT
+                submit-ex (err-protocol-violation "internal error on commit (report as a bug)")
+                await-ex (err-protocol-violation "internal error on commit (report as a bug)"))]
+
+          (if (or submit-ex await-ex)
+            (do
+              (swap! conn-state update :transaction assoc :failed true, :err err)
+              (cmd-send-error conn err))
+            (do
+              (swap! conn-state dissoc :transaction)
+              (cmd-write-msg conn msg-command-complete {:command "COMMIT"}))))))))
 
 (defn cmd-rollback [{:keys [conn-state] :as conn}]
   (swap! conn-state dissoc :transaction)
