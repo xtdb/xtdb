@@ -8,7 +8,7 @@
     [{system_time_start
       (<=
        system_time_start
-       #time/offset-date-time "3000-01-01T00:00Z")}
+       #time/zoned-date-time "3000-01-01T00:00Z")}
      {system_time_end (> system_time_end #time/date "3000-01-01")}
      bar
      {_table (= _table "foo")}]]]]]

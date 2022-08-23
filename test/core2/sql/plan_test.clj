@@ -768,11 +768,11 @@
     "TIMESTAMP '3000-03-15 20:40:31.11'" (ldt "3000-03-15T20:40:31.11")
     "TIMESTAMP '3000-03-15 20:40:31.2222'" (ldt "3000-03-15T20:40:31.2222")
     "TIMESTAMP '3000-03-15 20:40:31.44444444'" (ldt "3000-03-15T20:40:31.44444444")
-    "TIMESTAMP '3000-03-15 20:40:31+03:44'" #time/offset-date-time "3000-03-15T20:40:31+03:44"
-    "TIMESTAMP '3000-03-15 20:40:31.12345678+13:12'" #time/offset-date-time "3000-03-15T20:40:31.123456780+13:12"
-    "TIMESTAMP '3000-03-15 20:40:31.12345678-14:00'" #time/offset-date-time"3000-03-15T20:40:31.123456780-14:00"
-    "TIMESTAMP '3000-03-15 20:40:31.12345678+14:00'" #time/offset-date-time"3000-03-15T20:40:31.123456780+14:00"
-    "TIMESTAMP '3000-03-15 20:40:31-11:44'" #time/offset-date-time "3000-03-15T20:40:31-11:44"))
+    "TIMESTAMP '3000-03-15 20:40:31+03:44'" #time/zoned-date-time "3000-03-15T20:40:31+03:44"
+    "TIMESTAMP '3000-03-15 20:40:31.12345678+13:12'" #time/zoned-date-time "3000-03-15T20:40:31.123456780+13:12"
+    "TIMESTAMP '3000-03-15 20:40:31.12345678-14:00'" #time/zoned-date-time"3000-03-15T20:40:31.123456780-14:00"
+    "TIMESTAMP '3000-03-15 20:40:31.12345678+14:00'" #time/zoned-date-time"3000-03-15T20:40:31.123456780+14:00"
+    "TIMESTAMP '3000-03-15 20:40:31-11:44'" #time/zoned-date-time "3000-03-15T20:40:31-11:44"))
 
 (deftest test-time-literal
   (t/are
@@ -793,18 +793,18 @@
     "localdate localdate")
 
   (t/is
-    (= [#time/offset-date-time "3000-03-15T00:00:00Z" #time/offset-date-time "3000-03-15T20:40:31Z"]
-       (plan/coerce-points-in-time #time/date "3000-03-15" #time/offset-date-time "3000-03-15T20:40:31Z"))
+    (= [#time/zoned-date-time "3000-03-15T00:00:00Z" #time/zoned-date-time "3000-03-15T20:40:31Z"]
+       (plan/coerce-points-in-time #time/date "3000-03-15" #time/zoned-date-time "3000-03-15T20:40:31Z"))
     "localdate offsetdate")
 
   (t/is
-    (= [#time/offset-date-time "3000-03-15T20:40:31Z" #time/offset-date-time "3000-03-15T00:00:00Z"]
-       (plan/coerce-points-in-time #time/offset-date-time "3000-03-15T20:40:31Z" #time/date "3000-03-15"))
+    (= [#time/zoned-date-time "3000-03-15T20:40:31Z" #time/zoned-date-time "3000-03-15T00:00:00Z"]
+       (plan/coerce-points-in-time #time/zoned-date-time "3000-03-15T20:40:31Z" #time/date "3000-03-15"))
     "localdate offsetdate")
 
   (t/is
-    (= [#time/offset-date-time "2000-03-15T20:40:31Z" #time/offset-date-time "3000-03-15T20:40:31Z"]
-       (plan/coerce-points-in-time #time/offset-date-time "2000-03-15T20:40:31Z" #time/offset-date-time "3000-03-15T20:40:31Z"))
+    (= [#time/zoned-date-time "2000-03-15T20:40:31Z" #time/zoned-date-time "3000-03-15T20:40:31Z"]
+       (plan/coerce-points-in-time #time/zoned-date-time "2000-03-15T20:40:31Z" #time/zoned-date-time "3000-03-15T20:40:31Z"))
     "offsetdate offsetdate"))
 
 (deftest test-system-time-queries
@@ -907,13 +907,13 @@
     (= expected (plan-expr sql))
     "foo.APP_TIME CONTAINS PERIOD (TIMESTAMP '2000-01-01 00:00:00+00:00', TIMESTAMP '2001-01-01 00:00:00+00:00')"
     '(and
-      (<= x1 #time/offset-date-time "2000-01-01T00:00Z")
-      (>= x2 #time/offset-date-time "2001-01-01T00:00Z"))
+      (<= x1 #time/zoned-date-time "2000-01-01T00:00Z")
+      (>= x2 #time/zoned-date-time "2001-01-01T00:00Z"))
 
     "foo.APP_TIME CONTAINS TIMESTAMP '2000-01-01 00:00:00+00:00'"
     '(and
-      (<= x1 #time/offset-date-time "2000-01-01T00:00Z")
-      (>= x2 #time/offset-date-time "2000-01-01T00:00Z"))))
+      (<= x1 #time/zoned-date-time "2000-01-01T00:00Z")
+      (>= x2 #time/zoned-date-time "2000-01-01T00:00Z"))))
 
 (deftest test-period-overlaps-predicate
   ;; also testing all period-predicate permutations
@@ -922,8 +922,8 @@
     (= expected (plan-expr sql))
     "foo.APP_TIME OVERLAPS PERIOD (TIMESTAMP '2000-01-01 00:00:00+00:00', TIMESTAMP '2001-01-01 00:00:00+00:00')"
     '(and
-       (< x1 #time/offset-date-time "2001-01-01T00:00Z")
-       (> x2 #time/offset-date-time "2000-01-01T00:00Z"))
+       (< x1 #time/zoned-date-time "2001-01-01T00:00Z")
+       (> x2 #time/zoned-date-time "2000-01-01T00:00Z"))
 
     "foo.APP_TIME OVERLAPS foo.APP_TIME"
     '(and
@@ -932,8 +932,8 @@
     "PERIOD (TIMESTAMP '2000-01-01 00:00:00+00:00', TIMESTAMP '2001-01-01 00:00:00+00:00')
     OVERLAPS PERIOD (TIMESTAMP '2002-01-01 00:00:00+00:00', TIMESTAMP '2003-01-01 00:00:00+00:00')"
     '(and
-       (< #time/offset-date-time "2000-01-01T00:00Z" #time/offset-date-time "2003-01-01T00:00Z")
-       (> #time/offset-date-time "2001-01-01T00:00Z" #time/offset-date-time "2002-01-01T00:00Z"))))
+       (< #time/zoned-date-time "2000-01-01T00:00Z" #time/zoned-date-time "2003-01-01T00:00Z")
+       (> #time/zoned-date-time "2001-01-01T00:00Z" #time/zoned-date-time "2002-01-01T00:00Z"))))
 
 (deftest test-period-equals-predicate
   (t/are
@@ -941,36 +941,36 @@
     (= expected (plan-expr sql))
     "foo.APP_TIME EQUALS PERIOD (TIMESTAMP '2000-01-01 00:00:00+00:00', TIMESTAMP '2001-01-01 00:00:00+00:00')"
     '(and
-       (= x1 #time/offset-date-time "2000-01-01T00:00Z")
-       (= x2 #time/offset-date-time "2001-01-01T00:00Z"))))
+       (= x1 #time/zoned-date-time "2000-01-01T00:00Z")
+       (= x2 #time/zoned-date-time "2001-01-01T00:00Z"))))
 
 (deftest test-period-precedes-predicate
   (t/are
     [sql expected]
     (= expected (plan-expr sql))
     "foo.APP_TIME PRECEDES PERIOD (TIMESTAMP '2000-01-01 00:00:00+00:00', TIMESTAMP '2001-01-01 00:00:00+00:00')"
-    '(<= x2 #time/offset-date-time "2000-01-01T00:00Z")))
+    '(<= x2 #time/zoned-date-time "2000-01-01T00:00Z")))
 
 (deftest test-period-succeeds-predicate
   (t/are
     [sql expected]
     (= expected (plan-expr sql))
     "foo.APP_TIME SUCCEEDS PERIOD (TIMESTAMP '2000-01-01 00:00:00+00:00', TIMESTAMP '2001-01-01 00:00:00+00:00')"
-    '(>= x1 #time/offset-date-time "2001-01-01T00:00Z")))
+    '(>= x1 #time/zoned-date-time "2001-01-01T00:00Z")))
 
 (deftest test-period-immediately-precedes-predicate
   (t/are
     [sql expected]
     (= expected (plan-expr sql))
     "foo.APP_TIME IMMEDIATELY PRECEDES PERIOD (TIMESTAMP '2000-01-01 00:00:00+00:00', TIMESTAMP '2001-01-01 00:00:00+00:00')"
-    '(= x2 #time/offset-date-time "2000-01-01T00:00Z")))
+    '(= x2 #time/zoned-date-time "2000-01-01T00:00Z")))
 
 (deftest test-period-immediately-succeeds-predicate
   (t/are
     [sql expected]
     (= expected (plan-expr sql))
     "foo.APP_TIME IMMEDIATELY SUCCEEDS PERIOD (TIMESTAMP '2000-01-01 00:00:00+00:00', TIMESTAMP '2001-01-01 00:00:00+00:00')"
-    '(= x1 #time/offset-date-time "2001-01-01T00:00Z")))
+    '(= x1 #time/zoned-date-time "2001-01-01T00:00Z")))
 
 (deftest test-multiple-references-to-temporal-cols
   (t/is

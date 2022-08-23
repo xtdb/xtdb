@@ -34,10 +34,10 @@
     true #time/date-time "2021-08-09T15:43:23" #time/date-time "2021-08-09T15:43:23" "+02:00"
 
     ;; offset equiv
-    true #time/offset-date-time "2021-08-09T15:43:23+02:00" #time/date-time "2021-08-09T15:43:23" "+02:00"
+    true #time/zoned-date-time "2021-08-09T15:43:23+02:00" #time/date-time "2021-08-09T15:43:23" "+02:00"
 
     ;; offset inequality
-    false #time/offset-date-time "2021-08-09T15:43:23+02:00" #time/date-time "2021-08-09T15:43:23" "+03:00"))
+    false #time/zoned-date-time "2021-08-09T15:43:23+02:00" #time/date-time "2021-08-09T15:43:23" "+03:00"))
 
 (t/deftest test-cast-temporal
   (let [current-time #time/instant "2022-08-16T20:04:14.423452Z"]

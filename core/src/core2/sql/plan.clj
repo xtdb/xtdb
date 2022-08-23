@@ -1,19 +1,17 @@
 (ns core2.sql.plan
-  (:require [clojure.set :as set]
-            [clojure.main]
+  (:require [clojure.main]
+            [clojure.set :as set]
+            [clojure.spec.alpha :as s]
             [clojure.string :as str]
             [clojure.walk :as w]
-            [clojure.spec.alpha :as s]
             [core2.logical-plan :as lp]
             core2.operator ;; Adds impls logical plan spec
             [core2.rewrite :as r]
             [core2.sql.analyze :as sem]
-            [core2.sql.parser :as p]
-            [core2.types :as types])
-  (:import (clojure.lang IObj Var)
-           (java.time LocalDate Period Duration OffsetDateTime ZoneOffset OffsetTime LocalDateTime)
-           java.util.HashMap
-           (org.apache.arrow.vector PeriodDuration)))
+            [core2.sql.parser :as p])
+  (:import (clojure.lang Var)
+           (java.time LocalDate LocalDateTime OffsetTime ZoneOffset ZonedDateTime)
+           java.util.HashMap))
 
 ;; Attribute grammar for transformation into logical plan.
 
@@ -29,7 +27,7 @@
 (defn- id-symbol [table table-id column]
   (symbol (str table relation-id-delimiter table-id relation-prefix-delimiter column)))
 
-(defn unqualified-projection-symbol [{:keys [identifier ^long index] :as projection}]
+(defn unqualified-projection-symbol [{:keys [identifier ^long index] :as _projection}]
   (symbol (or identifier (str "$column_" (inc index) "$"))))
 
 (defn qualified-projection-symbol [{:keys [qualified-column original-index] :as projection}]
@@ -42,7 +40,7 @@
                   (cond-> projection
                     original-index (assoc :index original-index)))))))
 
-(defn- column-reference-symbol [{:keys [table-id identifiers] :as column-reference}]
+(defn- column-reference-symbol [{:keys [table-id identifiers] :as _column-reference}]
   (let [[table column] identifiers]
     (id-symbol table table-id column)))
 
@@ -227,12 +225,12 @@
   (* (Long/parseLong seconds-fraction)
      (long (Math/pow 10 (- 9 (count seconds-fraction))))))
 
-(defn create-offset-date-time
+(defn create-zoned-date-time
   [year month day hours minutes seconds seconds-fraction offset-hours offset-minutes]
-  (OffsetDateTime/of (Long/parseLong year) (Long/parseLong month) (Long/parseLong day)
-                     (Long/parseLong hours) (Long/parseLong minutes) (Long/parseLong seconds)
-                     (seconds-fraction->nanos seconds-fraction)
-                     (ZoneOffset/ofHoursMinutes (Long/parseLong offset-hours) (Long/parseLong offset-minutes))))
+  (ZonedDateTime/of (Long/parseLong year) (Long/parseLong month) (Long/parseLong day)
+                    (Long/parseLong hours) (Long/parseLong minutes) (Long/parseLong seconds)
+                    (seconds-fraction->nanos seconds-fraction)
+                    (ZoneOffset/ofHoursMinutes (Long/parseLong offset-hours) (Long/parseLong offset-minutes))))
 
 (defn create-offset-time
   [hours minutes seconds seconds-fraction offset-hours offset-minutes]
@@ -404,8 +402,9 @@
          [:unsigned_integer offset-hours]
          [:unsigned_integer offset-minutes]]]]]]
     ;;=>
-    (create-offset-date-time
-     year month day hours minutes seconds "0" (str sign offset-hours) (str sign offset-minutes))
+    (create-zoned-date-time year month day
+                            hours minutes seconds "0"
+                            (str sign offset-hours) (str sign offset-minutes))
 
     [:timestamp_literal _
      [:timestamp_string
@@ -428,8 +427,9 @@
          [:unsigned_integer offset-hours]
          [:unsigned_integer offset-minutes]]]]]]
     ;;=>
-    (create-offset-date-time
-     year month day hours minutes seconds seconds-fraction (str sign offset-hours) (str sign offset-minutes))
+    (create-zoned-date-time year month day
+                            hours minutes seconds seconds-fraction
+                            (str sign offset-hours) (str sign offset-minutes))
 
     [:date_literal _
      [:date_string [:date_value [:unsigned_integer year] _ [:unsigned_integer month] _ [:unsigned_integer day]]]]
@@ -1297,17 +1297,15 @@
          (instance? java.time.LocalDate pit2))
     [pit1 pit2]
     (and (instance? java.time.LocalDate pit1)
-         (instance? java.time.OffsetDateTime pit2))
-    [(.atTime ^java.time.LocalDate pit1 ^java.time.OffsetTime (create-offset-time "0" "0" "0" "0" "0" "0"))
-     pit2]
+         (instance? java.time.ZonedDateTime pit2))
+    [(.atStartOfDay ^java.time.LocalDate pit1 ZoneOffset/UTC) pit2]
 
-    (and (instance? java.time.OffsetDateTime pit1)
+    (and (instance? java.time.ZonedDateTime pit1)
          (instance? java.time.LocalDate pit2))
-    [pit1
-     (.atTime ^java.time.LocalDate pit2 ^java.time.OffsetTime (create-offset-time "0" "0" "0" "0" "0" "0"))]
+    [pit1 (.atStartOfDay ^java.time.LocalDate pit2 ZoneOffset/UTC)]
 
-    (and (instance? java.time.OffsetDateTime pit1)
-         (instance? java.time.OffsetDateTime pit2))
+    (and (instance? java.time.ZonedDateTime pit1)
+         (instance? java.time.ZonedDateTime pit2))
     [pit1 pit2]))
 
 (defn pit-less-than [pit1 pit2]

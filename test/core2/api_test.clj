@@ -108,7 +108,7 @@
 (t/deftest round-trips-temporal
   (let [vs {:dt #time/date "2022-08-01"
             :ts #time/date-time "2022-08-01T14:34"
-            :tstz #time/zoned-date-time "2022-08-01T14:34+01:00[Europe/London]"
+            :tstz #time/zoned-date-time "2022-08-01T14:34+01:00"
             :tm #time/time "13:21:14.932254"
             ;; :tmtz #time/offset-time "11:21:14.932254-08:00" ; TODO #323
             }
@@ -122,10 +122,12 @@
 
     (let [lits [[:dt "DATE '2022-08-01'"]
                 [:ts "TIMESTAMP '2022-08-01 14:34:00'"]
-                #_ ; FIXME #332 returns an ODT, test expects ZDT (test may be wrong)
-                [tstz "TIMESTAMP '2022-08-01 14:34:00+01:00'"]
+                [:tstz "TIMESTAMP '2022-08-01 14:34:00+01:00'"]
                 #_ ; FIXME #333 tries to return `OffsetTime` and fails (it should return `LocalTime`)
-                [:tm "TIME '13:21:14.932254'"]]
+                [:tm "TIME '13:21:14.932254'"]
+
+                #_ ; FIXME #323
+                [:tmtz "TIME '11:21:14.932254-08:00'"]]
           !tx (c2/submit-tx *node* (vec (for [[t lit] lits]
                                           [:sql (format "INSERT INTO bar (id, v) VALUES (?, %s)" lit)
                                            [[(name t)]]])))]
