@@ -10,7 +10,7 @@
             [core2.sql.analyze :as sem]
             [core2.sql.parser :as p])
   (:import (clojure.lang Var)
-           (java.time LocalDate LocalDateTime OffsetTime ZoneOffset ZonedDateTime)
+           (java.time LocalDate LocalDateTime LocalTime OffsetTime ZoneOffset ZonedDateTime)
            java.util.HashMap))
 
 ;; Attribute grammar for transformation into logical plan.
@@ -245,6 +245,11 @@
                     (Long/parseLong hours) (Long/parseLong minutes) (Long/parseLong seconds)
                     (int (seconds-fraction->nanos seconds-fraction))))
 
+(defn create-local-time
+  [hours minutes seconds seconds-fraction]
+  (LocalTime/of (Long/parseLong hours) (Long/parseLong minutes) (Long/parseLong seconds)
+                (seconds-fraction->nanos seconds-fraction)))
+
 (defn expr [z]
   (r/zmatch z
     [:column_reference _]
@@ -445,7 +450,7 @@
         [:seconds_value
          [:unsigned_integer seconds]]]]]]
     ;;=>
-    (create-offset-time hours minutes seconds "0" "0" "0")
+    (create-local-time hours minutes seconds "0")
 
     [:time_literal _
      [:time_string
@@ -457,7 +462,7 @@
          [:unsigned_integer seconds]
          [:unsigned_integer seconds-fraction]]]]]]
     ;;=>
-    (create-offset-time hours minutes seconds seconds-fraction "0" "0")
+    (create-local-time hours minutes seconds seconds-fraction)
 
     [:time_literal _
      [:time_string
@@ -472,8 +477,8 @@
         [:unsigned_integer offset-hours]
         [:unsigned_integer offset-minutes]]]]]
     ;;=>
-    (create-offset-time
-     hours minutes seconds "0" (str sign offset-hours) (str sign offset-minutes))
+    (create-offset-time hours minutes seconds "0"
+                        (str sign offset-hours) (str sign offset-minutes))
 
     [:time_literal _
      [:time_string
@@ -489,8 +494,8 @@
         [:unsigned_integer offset-hours]
         [:unsigned_integer offset-minutes]]]]]
     ;;=>
-    (create-offset-time
-     hours minutes seconds seconds-fraction (str sign offset-hours) (str sign offset-minutes))
+    (create-offset-time hours minutes seconds seconds-fraction
+                        (str sign offset-hours) (str sign offset-minutes))
 
     [:interval_literal _
      [:interval_string [:unquoted_interval_string s]] q]

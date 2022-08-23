@@ -778,9 +778,9 @@
   (t/are
     [sql expected]
     (= expected (plan-expr sql))
-    "TIME '20:40:31'" #time/offset-time "20:40:31Z"
-    "TIME '20:40:31.467'" #time/offset-time "20:40:31.467Z"
-    "TIME '20:40:31.932254'" #time/offset-time "20:40:31.932254Z"
+    "TIME '20:40:31'" #time/time "20:40:31"
+    "TIME '20:40:31.467'" #time/time "20:40:31.467"
+    "TIME '20:40:31.932254'" #time/time "20:40:31.932254"
     "TIME '20:40:31-03:44'" #time/offset-time "20:40:31-03:44"
     "TIME '20:40:31+03:44'" #time/offset-time "20:40:31+03:44"
     "TIME '20:40:31.467+14:00'" #time/offset-time "20:40:31.467+14:00"))

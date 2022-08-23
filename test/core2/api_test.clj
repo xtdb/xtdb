@@ -123,7 +123,6 @@
     (let [lits [[:dt "DATE '2022-08-01'"]
                 [:ts "TIMESTAMP '2022-08-01 14:34:00'"]
                 [:tstz "TIMESTAMP '2022-08-01 14:34:00+01:00'"]
-                #_ ; FIXME #333 tries to return `OffsetTime` and fails (it should return `LocalTime`)
                 [:tm "TIME '13:21:14.932254'"]
 
                 #_ ; FIXME #323
