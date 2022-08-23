@@ -397,9 +397,6 @@
   if :set-transaction
   :access-mode (:read-only, :read-write)
 
-  if :start-transaction
-  :access-mode (:read-only, :read-write, nil)
-
   if :begin
   :access-mode (:read-only, :read-write, nil)
 
@@ -1502,14 +1499,7 @@
                         :default-tz (.getZone clock)} basis)
          :? xt-params}]
 
-    ;; Simulate SQL2011 'directly executed sql' rules
-    ;; clear :next-transaction (via SET TRANSACTION) variables if the query is running in an implicit transaction
-    ;; this may be better provided (later) as true implicit transactions around execution, as I think that will make it easier
-    ;; to remain compliant as transaction control becomes ever more sophisticated. Going to wait and see a bit first
-    (when-not (:transaction @conn-state)
-      (swap! conn-state update :session dissoc :next-transaction))
-
-    ;; dml currently takes a different execution path
+    ;; dml currently takes a different execution path, requiring COMMIT to flush.
     (if (dml? ast)
       ;; in the case of dml, we simply buffer the statement in the transaction (to be flushed with COMMIT)
       (do (->> {:query query,
@@ -1698,8 +1688,10 @@
   [conn stmt]
   (let [{:keys [conn-state]} conn
         {:keys [statement-type, ast, query]} stmt
-        {:keys [transaction, session]} @conn-state
-        access-mode (or (:access-mode transaction) (:access-mode session))]
+        {:keys [transaction]} @conn-state
+
+        ;; session access mode is ignored for now (wait for implicit transactions)
+        access-mode (:access-mode transaction :read-only)]
     (cond
       (and (= :set-transaction statement-type) transaction)
       (err-protocol-violation "invalid transaction state -- active SQL-transaction")
@@ -1711,17 +1703,26 @@
       ;; about pg canned/specific access checks
       (nil? ast) nil
 
+      ;; we currently only simulate partially direct sql opening transactions (spec behaviour)
+      ;; that somewhat works as it should for reads, writes however are more difficult and its not clear
+      ;; if we should follow spec (i.e autocommit blocking writes)
+      ;; so we will to refuse DML unless we are in an explicit transaction
       (dml? ast)
-      (when (= :read-only access-mode)
+      (cond
+        (not transaction)
+        (err-protocol-violation "DML is only supported in an explicit READ WRITE transaction")
+
+        (= :read-only access-mode)
         (err-protocol-violation "DML is unsupported in a READ ONLY transaction"))
 
       (query? ast)
       (when (= :read-write access-mode)
-        (err-protocol-violation "queries are unsupported in a READ WRITE transaction."))
+        (err-protocol-violation "queries are unsupported in a READ WRITE transaction"))
 
-      :else (do
-              (log/debug "Unexpected statement" (or (some-> ast ast-executable-statement-root-tag) (statement-head query)))
-              (err-protocol-violation "sql was parsed but unexpected statement encountered (report as an xtdb core2 bug)")))))
+      :else
+      (do
+        (log/debug "Unexpected statement" (or (some-> ast ast-executable-statement-root-tag) (statement-head query)))
+        (err-protocol-violation "sql was parsed but unexpected statement encountered (report as an xtdb core2 bug)")))))
 
 (defn cmd-simple-query [{:keys [conn-state] :as conn} {:keys [query]}]
   (let [{:keys [err] :as stmt} (interpret-sql query)]

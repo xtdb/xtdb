@@ -933,7 +933,7 @@
 (deftest dml-is-not-permitted-by-default-test
   (with-open [conn (jdbc-conn)]
     (is (thrown-with-msg?
-          PSQLException #"ERROR\: DML is unsupported in a READ ONLY transaction"
+          PSQLException #"DML is only supported in an explicit READ WRITE transaction"
           (q conn ["insert into foo(a) values (42)"])))
     (->> "can query after auto-commit write is refused"
          (is (= [] (q conn ["select foo.a from foo"]))))))
@@ -985,13 +985,6 @@
       ;; explicitly send rollback .rollback doesn't necessarily do it if you haven't issued a query
       (q conn ["ROLLBACK"])
       (.setAutoCommit conn true)
-      (is (= {} (next-transaction-variables (get-last-conn) [:access-mode]))))
-
-    (testing "implicit transaction clears this state"
-      (q conn ["SELECT a.a FROM a"])
-      (is (= {} (next-transaction-variables (get-last-conn) [:access-mode])))
-      (q conn ["SET TRANSACTION READ WRITE"])
-      (q conn ["SELECT a.a FROM a"])
       (is (= {} (next-transaction-variables (get-last-conn) [:access-mode]))))))
 
 (defn tx! [conn & sql]
@@ -1068,7 +1061,7 @@
     (psql-session
       (fn [send read]
         (send "INSERT INTO foo(id, a) VALUES (42, 42);\n")
-        (is (str/starts-with? (read :err) "ERROR:  DML is unsupported in a READ ONLY transaction"))))))
+        (is (str/starts-with? (read :err) "ERROR:  DML is only supported in an explicit READ WRITE transaction"))))))
 
 (deftest dml-param-test
   (with-open [conn (jdbc-conn)]
@@ -1192,7 +1185,7 @@
       (is (= [{:id 42}] (q conn ["SELECT foo.id from foo"]))))
 
     (testing "after COMMIT we pop the access mode, we are read only again"
-      (is (thrown-with-msg? PSQLException #"DML is unsupported in a READ ONLY transaction" (q conn ["INSERT INTO foo (id) VALUES (42)"]))))
+      (is (thrown-with-msg? PSQLException #"DML is only supported in an explicit READ WRITE transaction" (q conn ["INSERT INTO foo (id) VALUES (42)"]))))
 
     (testing "BEGIN access mode overrides SET TRANSACTION"
       (q conn ["SET TRANSACTION READ WRITE"])
@@ -1232,7 +1225,7 @@
     (let [sql #(q conn [%])]
 
       (sql "SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY")
-      (is (thrown-with-msg? PSQLException #"DML is unsupported in a READ ONLY transaction" (sql "INSERT INTO foo (id) VALUES (42)")))
+      (is (thrown-with-msg? PSQLException #"DML is only supported in an explicit READ WRITE transaction" (sql "INSERT INTO foo (id) VALUES (42)")))
 
       (sql "SET SESSION CHARACTERISTICS AS TRANSACTION READ WRITE")
       (sql "START TRANSACTION")
@@ -1240,4 +1233,52 @@
       (sql "COMMIT")
 
       (sql "SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY")
-      (is (= [{:id 42}] (q conn ["SELECT foo.id from foo"]))))))
+      (is (= [{:id 42}] (q conn ["SELECT foo.id from foo"])))
+
+      (sql "SET SESSION CHARACTERISTICS AS TRANSACTION READ WRITE")
+      (is (thrown-with-msg? PSQLException #"DML is only supported in an explicit READ WRITE transaction" (sql "INSERT INTO foo (id) values (43)")))
+      (sql "START TRANSACTION")
+      (sql "INSERT INTO foo (id) VALUES (43)")
+      (sql "COMMIT")
+
+      (sql "SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY")
+      (is (= [{:id 42}, {:id 43}] (q conn ["SELECT foo.id from foo"]))))))
+
+;; currently direct statements opening transactions as per-spec is not supported
+;; there are no transactional semantics for statements outside a tx
+;; this demonstrates that session / set variables do not change the next statement
+;; its undefined - but we can say what it is _not_.
+(deftest implicit-transaction-stop-gap-test
+  (with-open [conn (jdbc-conn "autocommit" "false")]
+    (let [sql #(q conn [%])]
+
+      (testing "read write"
+        (sql "SET SESSION CHARACTERISTICS AS TRANSACTION READ WRITE")
+        (is (thrown-with-msg? PSQLException #"DML is only supported in an explicit READ WRITE transaction" (sql "INSERT INTO foo (id) values (43)")))
+        (is (= [] (sql "select foo.id from foo"))))
+
+      (testing "read only"
+        (sql "SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY")
+        (is (thrown-with-msg? PSQLException #"DML is only supported in an explicit READ WRITE transaction" (sql "INSERT INTO foo (id) values (43)")))
+        (is (= [] (sql "select foo.id from foo"))))
+
+      (sql "SET SESSION CHARACTERISTICS AS TRANSACTION READ WRITE")
+
+      (testing "session access mode inherited"
+        (sql "BEGIN")
+        (sql "INSERT INTO foo (id) values (42)")
+        (sql "COMMIT")
+        (testing "despite read write setting read remains available outside tx"
+          (is (= [{:id 42}] (sql "select foo.id from foo")))))
+
+      (testing "override session to start a read only transaction"
+        (sql "BEGIN READ ONLY")
+        (is (thrown-with-msg? PSQLException #"DML is unsupported in a READ ONLY transaction" (sql "INSERT INTO foo (id) values (43)")))
+        (sql "ROLLBACK")
+        (testing "despite read write setting read remains available outside tx"
+          (is (= [{:id 42}] (sql "select foo.id from foo")))))
+
+      (testing "set transaction is not cleared by read, as it starts no transaction"
+        (sql "SET TRANSACTION READ WRITE")
+        (is (= [{:id 42}] (sql "select foo.id from foo")))
+        (is (= {:access-mode :read-write} (next-transaction-variables (get-last-conn) [:access-mode])))))))
