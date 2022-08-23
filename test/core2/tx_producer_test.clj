@@ -33,6 +33,10 @@
                           :cpu-avg-1min 24.81,
                           :mem-free 4.10011078E8,
                           :mem-used 5.89988922E8}]
+
+                   [:delete "xt_docs" "device-info-demo000000"]
+                   [:delete "reading-demo000000"]
+
                    [:sql "INSERT INTO foo (foo, bar, baz) VALUES (?, ?, ?)"
                     [[1 nil 3.3]
                      [2 "hello" 12]]]

@@ -173,7 +173,8 @@
                   (.get ^Map (.roots temporal-roots) col-name)
                   (.get in-roots col-name)))
         row-id->repeat-count (->row-id->repeat-count temporal-roots row-id-bitmap)]
-    (align/align-vectors roots row-id-bitmap row-id->repeat-count)))
+    (align/align-vectors roots row-id-bitmap
+                         {:row-id->repeat-count row-id->repeat-count})))
 
 (defn- filter-pushdown-bloom-block-idxs [^IMetadataManager metadata-manager ^long chunk-idx ^String col-name ^RoaringBitmap block-idxs]
   (if-let [^MutableRoaringBitmap pushdown-bloom (get *column->pushdown-bloom* (symbol col-name))]

@@ -35,12 +35,14 @@
 
 (defmethod tx-op-spec :delete [_]
   (s/cat :op #{:delete}
+         :table (s/? string?)
          :id ::id
          :app-time-opts (s/? (s/keys :opt-un [::app-time-start ::app-time-end]))))
 
 (defmethod tx-op-spec :evict [_]
   ;; eventually this could have app-time/sys start/end?
   (s/cat :op #{:evict}
+         :table (s/? string?)
          :id ::id))
 
 (defmethod tx-op-spec :sql [_]
@@ -72,14 +74,15 @@
                                                          (types/col-type->field 'application_time_start app-time-type)
                                                          (types/col-type->field 'application_time_end app-time-type))
                                           (types/->field "delete" types/struct-type false
+                                                         (types/col-type->field '_table [:union #{:null :utf8}])
                                                          (types/->field "id" types/dense-union-type false)
                                                          (types/col-type->field 'application_time_start app-time-type)
                                                          (types/col-type->field 'application_time_end app-time-type))
                                           (types/->field "evict" types/struct-type false
+                                                         (types/col-type->field '_table [:union #{:null :utf8}])
                                                          (types/->field "id" types/dense-union-type false))
 
                                           (types/->field "sql" types/struct-type false
-                                                         ;; TODO currently EDN, will eventually be the raw SQL.
                                                          (types/col-type->field 'query :utf8)
                                                          (types/->field "param-rows" types/list-type true
                                                                         (types/->field "param-row" types/dense-union-type false)))))
@@ -93,19 +96,20 @@
         app-time-start-writer (.writerForName put-writer "application_time_start")
         app-time-end-writer (.writerForName put-writer "application_time_end")]
     (fn write-put! [{:keys [doc app-time-opts]}]
-      (let [put-idx (.startValue put-writer)]
+      (let [doc (into {:_table "xt_docs"} doc)
+            put-idx (.startValue put-writer)]
         (doto (.writerForType doc-writer (types/value->col-type doc))
           (.startValue)
           (->> (types/write-value! doc))
           (.endValue))
 
         (let [^Instant app-time-start (or (some-> (:app-time-start app-time-opts) util/->instant)
-                                    current-time)]
+                                          current-time)]
           (.set ^TimeStampMicroTZVector (.getVector app-time-start-writer)
                 put-idx (util/instant->micros app-time-start)))
 
         (let [^Instant app-time-end (or (some-> (:app-time-end app-time-opts) util/->instant)
-                                  util/end-of-time)]
+                                        util/end-of-time)]
           (.set ^TimeStampMicroTZVector (.getVector app-time-end-writer)
                 put-idx (util/instant->micros app-time-end)))
 
@@ -113,11 +117,14 @@
 
 (defn- ->delete-writer [^IDenseUnionWriter tx-ops-writer {:keys [current-time]}]
   (let [delete-writer (.asStruct (.writerForTypeId tx-ops-writer 1))
+        table-writer (.writerForName delete-writer "_table")
         id-writer (.asDenseUnion (.writerForName delete-writer "id"))
         app-time-start-writer (.writerForName delete-writer "application_time_start")
         app-time-end-writer (.writerForName delete-writer "application_time_end")]
-    (fn write-delete! [{:keys [id app-time-opts]}]
+    (fn write-delete! [{:keys [id table app-time-opts]}]
       (let [delete-idx (.startValue delete-writer)]
+        (some-> table (types/write-value! table-writer))
+
         (doto (-> id-writer
                   (.writerForType (types/value->col-type id)))
           (.startValue)
@@ -125,20 +132,23 @@
           (.endValue))
 
         (let [^Instant app-time-start (or (some-> (:app-time-start app-time-opts) util/->instant)
-                                    current-time)]
+                                          current-time)]
           (.set ^TimeStampMicroTZVector (.getVector app-time-start-writer)
                 delete-idx (util/instant->micros app-time-start)))
 
         (let [^Instant app-time-end (or (some-> (:app-time-end app-time-opts) util/->instant)
-                                  util/end-of-time)]
+                                        util/end-of-time)]
           (.set ^TimeStampMicroTZVector (.getVector app-time-end-writer)
-                delete-idx (util/instant->micros app-time-end)))))))
+                delete-idx (util/instant->micros app-time-end)))
+        (.endValue delete-writer)))))
 
 (defn- ->evict-writer [^IDenseUnionWriter tx-ops-writer]
   (let [evict-writer (.asStruct (.writerForTypeId tx-ops-writer 2))
+        table-writer (.writerForName evict-writer "_table")
         id-writer (.asDenseUnion (.writerForName evict-writer "id"))]
-    (fn [{:keys [id]}]
+    (fn [{:keys [table id]}]
       (.startValue evict-writer)
+      (some-> table (types/write-value! table-writer))
       (doto (-> id-writer
                 (.writerForType (types/value->col-type id)))
         (.startValue)
@@ -207,8 +217,8 @@
 
   (submitTx [_ tx-ops opts]
     (let [{:keys [sys-time] :as opts} (-> opts
-                                         (assoc :current-time (.instant clock))
-                                         (some-> (update :sys-time util/->instant)))]
+                                          (assoc :current-time (.instant clock))
+                                          (some-> (update :sys-time util/->instant)))]
       (-> (.appendRecord log (serialize-tx-ops allocator tx-ops opts))
           (util/then-apply
             (fn [^LogRecord result]

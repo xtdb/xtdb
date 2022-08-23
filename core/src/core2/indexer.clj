@@ -1,5 +1,6 @@
 (ns core2.indexer
   (:require [clojure.tools.logging :as log]
+            [core2.align :as align]
             [core2.api :as c2]
             [core2.blocks :as blocks]
             [core2.bloom :as bloom]
@@ -32,7 +33,7 @@
            java.lang.AutoCloseable
            java.nio.ByteBuffer
            java.time.Instant
-           [java.util Collections Map TreeMap]
+           [java.util Collections HashMap Map TreeMap]
            [java.util.concurrent CompletableFuture ConcurrentHashMap ConcurrentSkipListMap]
            [java.util.function Consumer Function]
            [org.apache.arrow.memory ArrowBuf BufferAllocator]
@@ -61,8 +62,8 @@
 
 #_{:clj-kondo/ignore [:unused-binding]}
 (definterface IInternalIdManager
-  (^long getOrCreateInternalId [^Object id ^long row-id])
-  (^boolean isKnownId [^Object id]))
+  (^long getOrCreateInternalId [^String table, ^Object id, ^long row-id])
+  (^boolean isKnownId [^String table, ^Object id]))
 
 (defn- normalize-id [id]
   (cond-> id
@@ -75,16 +76,16 @@
 
 (deftype InternalIdManager [^Map id->internal-id]
   IInternalIdManager
-  (getOrCreateInternalId [_ id row-id]
+  (getOrCreateInternalId [_ table id row-id]
     (.computeIfAbsent id->internal-id
-                      (normalize-id id)
+                      [table (normalize-id id)]
                       (reify Function
                         (apply [_ _]
                           ;; big endian for index distribution
                           (Long/reverseBytes row-id)))))
 
-  (isKnownId [_ id]
-    (.containsKey id->internal-id (normalize-id id)))
+  (isKnownId [_ table id]
+    (.containsKey id->internal-id [table (normalize-id id)]))
 
   Closeable
   (close [_]
@@ -92,23 +93,39 @@
 
 (defmethod ig/init-key ::internal-id-manager [_ {:keys [^IBufferPool buffer-pool, ^IMetadataManager metadata-mgr]}]
   (let [iid-mgr (InternalIdManager. (ConcurrentHashMap.))
-        known-chunks (.knownChunks metadata-mgr)
-        futs (for [chunk-idx known-chunks]
-               (-> (.getBuffer buffer-pool (meta/->chunk-obj-key chunk-idx "id"))
-                   (util/then-apply util/try-close)))]
-    @(CompletableFuture/allOf (into-array CompletableFuture futs))
-
+        known-chunks (.knownChunks metadata-mgr)]
     (doseq [chunk-idx known-chunks]
-      (with-open [^ArrowBuf id-buffer @(.getBuffer buffer-pool (meta/->chunk-obj-key chunk-idx "id"))
-                  id-chunks (util/->chunks id-buffer)]
-        (.forEachRemaining id-chunks
-                           (reify Consumer
-                             (accept [_ id-root]
-                               (let [^VectorSchemaRoot id-root id-root
-                                     ^BigIntVector row-id-vec (.getVector id-root 0)
-                                     id-vec (.getVector id-root 1)]
-                                 (dotimes [n (.getRowCount id-root)]
-                                   (.getOrCreateInternalId iid-mgr (t/get-object id-vec n) (.get row-id-vec n)))))))))
+      ;; once we have split storage per-table this should get a lot simpler/faster
+      ;; HACK I could probably be a better async citizen here, but it's at startup,
+      ;; and hopefully the above should make this easier anyway
+      (with-open [id-chunks (-> @(.getBuffer buffer-pool (meta/->chunk-obj-key chunk-idx "id"))
+                                (util/->chunks {:close-buffer? true}))
+                  table-chunks (-> @(.getBuffer buffer-pool (meta/->chunk-obj-key chunk-idx "_table"))
+                                   (util/->chunks {:close-buffer? true}))]
+        (let [roots (HashMap.)]
+          (when (and (.tryAdvance id-chunks
+                                  (reify Consumer
+                                    (accept [_ id-root] (.put roots :id id-root))))
+                     (.tryAdvance table-chunks
+                                  (reify Consumer
+                                    (accept [_ table-root] (.put roots :table table-root)))))
+            (let [^VectorSchemaRoot id-root (.get roots :id)
+                  ^VectorSchemaRoot table-root (.get roots :table)
+                  aligned-roots (align/align-vectors (.values roots)
+                                                     (doto (align/->row-id-bitmap (.getVector id-root 0))
+                                                       (.and (align/->row-id-bitmap (.getVector table-root 0))))
+                                                     {:with-row-id-vec? true})
+                  id-col (.vectorForName aligned-roots "id")
+                  id-vec (.getVector id-col)
+                  table-col (.vectorForName aligned-roots "_table")
+                  table-vec (.getVector table-col)
+                  row-id-col (.vectorForName aligned-roots "_row-id")
+                  ^BigIntVector row-id-vec (.getVector row-id-col)]
+              (dotimes [idx (.rowCount aligned-roots)]
+                (.getOrCreateInternalId iid-mgr
+                                        (t/get-object table-vec (.getIndex id-col idx))
+                                        (t/get-object id-vec (.getIndex id-col idx))
+                                        (.get row-id-vec (.getIndex row-id-col idx)))))))))
     iid-mgr))
 
 (deftype LiveColumn [^VectorSchemaRoot live-root, ^Roaring64Bitmap row-id-bitmap]
@@ -336,9 +353,12 @@
               leg-offset (.getOffset doc-duv put-offset)
               id-vec (-> ^StructVector (.getVectorByType doc-duv leg-type-id)
                          (.getChild "id"))
+              ^VarCharVector table-vec (-> ^StructVector (.getVectorByType doc-duv leg-type-id)
+                                           (.getChild "_table"))
+              table (or (some-> table-vec (t/get-object leg-offset)) "xt_docs")
               eid (t/get-object id-vec leg-offset)
-              new-entity? (not (.isKnownId iid-mgr eid))
-              iid (.getOrCreateInternalId iid-mgr eid row-id)
+              new-entity? (not (.isKnownId iid-mgr table eid))
+              iid (.getOrCreateInternalId iid-mgr table eid row-id)
               start-app-time (.get app-time-start-vec put-offset)
               end-app-time (.get app-time-end-vec put-offset)]
           (.copyDocRow doc-copier row-id put-offset)
@@ -349,6 +369,7 @@
                                                   ^ILogOpIndexer log-op-idxer, ^ITemporalTxIndexer temporal-idxer,
                                                   ^DenseUnionVector tx-ops-vec]
   (let [delete-vec (.getStruct tx-ops-vec 1)
+        ^VarCharVector table-vec (.getChild delete-vec "_table" VarCharVector)
         ^DenseUnionVector id-vec (.getChild delete-vec "id" DenseUnionVector)
         ^TimeStampVector app-time-start-vec (.getChild delete-vec "application_time_start")
         ^TimeStampVector app-time-end-vec (.getChild delete-vec "application_time_end")]
@@ -356,9 +377,10 @@
       (indexOp [_ tx-op-idx]
         (let [row-id (.nextRowId indexer)
               delete-offset (.getOffset tx-ops-vec tx-op-idx)
+              table (or (t/get-object table-vec delete-offset) "xt_docs")
               eid (t/get-object id-vec delete-offset)
-              new-entity? (not (.isKnownId iid-mgr eid))
-              iid (.getOrCreateInternalId iid-mgr eid row-id)
+              new-entity? (not (.isKnownId iid-mgr table eid))
+              iid (.getOrCreateInternalId iid-mgr table eid row-id)
               start-app-time (.get app-time-start-vec delete-offset)
               end-app-time (.get app-time-end-vec delete-offset)]
           (.logDelete log-op-idxer iid start-app-time end-app-time)
@@ -368,12 +390,15 @@
                                                  ^ILogOpIndexer log-op-idxer, ^ITemporalTxIndexer temporal-idxer
                                                  ^DenseUnionVector tx-ops-vec]
   (let [evict-vec (.getStruct tx-ops-vec 2)
+        ^VarCharVector table-vec (.getChild evict-vec "_table" VarCharVector)
         ^DenseUnionVector id-vec (.getChild evict-vec "id" DenseUnionVector)]
     (reify OpIndexer
       (indexOp [_ tx-op-idx]
         (let [row-id (.nextRowId indexer)
               evict-offset (.getOffset tx-ops-vec tx-op-idx)
-              iid (.getOrCreateInternalId iid-mgr (t/get-object id-vec evict-offset) row-id)]
+              table (or (t/get-object table-vec evict-offset) "xt_docs")
+              eid (t/get-object id-vec evict-offset)
+              iid (.getOrCreateInternalId iid-mgr table eid row-id)]
           (.logEvict log-op-idxer iid)
           (.indexEvict temporal-idxer iid))))))
 
@@ -432,8 +457,8 @@
                                              (.copyDocRow doc-row-copier row-id idx))
 
                                            (let [eid (t/get-object (.getVector id-col) (.getIndex id-col idx))
-                                                 new-entity? (.isKnownId iid-mgr eid)
-                                                 iid (.getOrCreateInternalId iid-mgr eid row-id)
+                                                 new-entity? (.isKnownId iid-mgr table eid)
+                                                 iid (.getOrCreateInternalId iid-mgr table eid row-id)
                                                  start-app-time (if app-time-start-rdr
                                                                   (.readLong app-time-start-rdr idx)
                                                                   current-time-µs)

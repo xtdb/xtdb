@@ -36,15 +36,18 @@
             (.add res idx)))))
     (int-array res)))
 
-(defn align-vectors ^core2.vector.IIndirectRelation [^List roots, ^Roaring64Bitmap row-id-bitmap ^Map row-id->repeat-count]
+(defn align-vectors ^core2.vector.IIndirectRelation [^List roots, ^Roaring64Bitmap row-id-bitmap
+                                                     {:keys [^Map row-id->repeat-count, with-row-id-vec?]}]
   (let [read-cols (LinkedList.)]
     (doseq [^VectorSchemaRoot root roots
             :let [row-id-vec (.getVector root 0)
-                  in-vec (.getVector root 1)]]
-      (.add read-cols
-            (iv/->indirect-vec in-vec
-                               (if row-id->repeat-count
-                                 (<-row-id-bitmap-with-repetitions row-id->repeat-count row-id-vec)
-                                 (<-row-id-bitmap row-id-bitmap row-id-vec)))))
+                  in-vec (.getVector root 1)
+                  idxs (if row-id->repeat-count
+                         (<-row-id-bitmap-with-repetitions row-id->repeat-count row-id-vec)
+                         (<-row-id-bitmap row-id-bitmap row-id-vec))]]
+      (when (and with-row-id-vec? (empty? read-cols))
+        (.add read-cols (iv/->indirect-vec row-id-vec idxs)))
+
+      (.add read-cols (iv/->indirect-vec in-vec idxs)))
 
     (iv/->indirect-rel read-cols)))
