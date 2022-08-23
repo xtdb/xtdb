@@ -1,0 +1,51 @@
+hash-threshold 100
+
+statement ok
+INSERT INTO t1(id) VALUES(1)
+
+query R nosort
+SELECT SQRT(72.0) FROM t1
+----
+8.485
+
+query RR nosort
+SELECT LN(72.0), EXP(4.2) FROM t1
+----
+4.277
+66.686
+
+query RRRR nosort
+SELECT POWER(3.3, 2.5), POWER(3, 3), POWER(9, 0.5), POWER(3, -2) FROM t1
+----
+19.783
+27.000
+3.000
+0.111
+
+query RR nosort
+SELECT ABS(23.4), ABS(-25.82) FROM t1
+----
+23.400
+25.820
+
+query IIII nosort
+SELECT MOD(3, 2), MOD(-5, -3), MOD(-5, 3), MOD(3, -5) FROM t1
+----
+1
+-2
+1
+-2
+
+query RR nosort
+SELECT FLOOR(83.6), FLOOR(83.0) FROM t1
+----
+83.000
+83.000
+
+query RRRI nosort
+SELECT CEIL(83.6), CEILING(83.6), CEILING(83.0), CEIL(83) FROM t1
+----
+84.000
+84.000
+83.000
+83
