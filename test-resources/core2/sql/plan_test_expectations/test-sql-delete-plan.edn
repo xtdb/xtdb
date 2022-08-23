@@ -1,0 +1,28 @@
+[:delete
+ {:table "users"}
+ [:rename
+  {x3 _iid,
+   x4 _row-id,
+   x8 application_time_start,
+   x9 application_time_end}
+  [:project
+   [x3
+    x4
+    {x8 (max x5 #time/date "2020-05-01")}
+    {x9 (min x6 #time/date "9999-12-31")}]
+   [:rename
+    {_table x1,
+     id x2,
+     _iid x3,
+     _row-id x4,
+     application_time_start x5,
+     application_time_end x6}
+    [:scan
+     [{_table (= _table "users")}
+      {id (= id ?_0)}
+      _iid
+      _row-id
+      {application_time_start
+       (<= application_time_start #time/date "9999-12-31")}
+      {application_time_end
+       (>= application_time_end #time/date "2020-05-01")}]]]]]]

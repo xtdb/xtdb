@@ -1435,11 +1435,14 @@
          (vector :select 'false)))]))
 
 (defn- build-target-table [tt]
-  (let [{:keys [id correlation-name]} (sem/table tt)
+  (let [{:keys [id correlation-name table-or-query-name]} (sem/table tt)
         projection (first (sem/projected-columns tt))]
     [:rename (table-reference-symbol correlation-name id)
-     [:scan (vec (for [{:keys [identifier]} projection]
-                   (symbol identifier)))]]))
+     [:scan (vec (conj (for [{:keys [identifier]} projection
+                             :let [identifier (symbol identifier)]
+                             :when (not= '_table identifier)]
+                         identifier)
+                       {'_table (list '= '_table table-or-query-name)}))]]))
 
 (defn- build-lateral-derived-table [tp qe]
   (let [scope-id (sem/id (sem/scope-element tp))

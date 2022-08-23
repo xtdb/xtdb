@@ -1,17 +1,22 @@
 [:update
  {:table "t1"}
  [:rename
-  {x1 _iid,
-   x2 _row-id,
-   x6 col1,
-   x3 application_time_start,
-   x4 application_time_end}
+  {x2 _iid,
+   x3 _row-id,
+   x7 col1,
+   x4 application_time_start,
+   x5 application_time_end}
   [:project
-   [x1 x2 {x6 ?_0} x3 x4]
+   [x2 x3 {x7 ?_0} x4 x5]
    [:rename
-    {_iid x1,
-     _row-id x2,
-     application_time_start x3,
-     application_time_end x4}
+    {_table x1,
+     _iid x2,
+     _row-id x3,
+     application_time_start x4,
+     application_time_end x5}
     [:scan
-     [_iid _row-id application_time_start application_time_end]]]]]]
+     [{_table (= _table "t1")}
+      _iid
+      _row-id
+      application_time_start
+      application_time_end]]]]]]
