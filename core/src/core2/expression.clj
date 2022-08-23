@@ -132,6 +132,14 @@
        :args [(form->expr coll-form env)
               (form->expr n-form env)]})))
 
+(defmethod parse-list-form 'cardinality [[_ & args :as form] env]
+  (when-not (= 1 (count args))
+    (throw (IllegalArgumentException. (str "'cardinality' expects 1 arg: " (pr-str form)))))
+
+  {:op :vectorised-call
+   :f :cardinality
+   :args [(form->expr (first args) env)]})
+
 (defmethod parse-list-form 'trim-array [[_ arr n] env]
   {:op :vectorised-call
    :f :trim-array
@@ -1272,6 +1280,22 @@
                (.endValue))
              (.copyElement copier idx (.applyAsInt ->n idx)))
            (.endValue out-writer)))))})
+
+(defmethod emit-call-expr :cardinality [_]
+  {:return-type [:union #{:i32 :null}]
+   :eval-call-expr
+   (fn [[^ValueVector coll-res] ^IntVector out-vec _params]
+     (let [list-rdr (.listReader (iv/->direct-vec coll-res))
+           coll-count (.getValueCount coll-res)]
+
+       (.allocateNew out-vec coll-count)
+
+       (dotimes [idx coll-count]
+         (when (.isPresent list-rdr idx)
+           (.set out-vec idx (- (.getElementEndIndex list-rdr idx)
+                                (.getElementStartIndex list-rdr idx)))))
+
+       (.setValueCount out-vec coll-count)))})
 
 (defmethod emit-call-expr :trim-array [{[{array-type :return-type}] :emitted-args}]
   {:return-type [:list (->list-el-type array-type {:nullable? false})]

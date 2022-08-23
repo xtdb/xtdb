@@ -762,6 +762,10 @@
     ;;=>
     (list 'nth (expr ave) (list '- (expr nve) 1))
 
+    [:cardinality_expression _ ^:z ave]
+    ;;=>
+    (list 'cardinality (expr ave))
+
     [:trim_array_function _ ^:z a, ^:z n]
     (list 'trim-array (expr a) (expr n))
 
