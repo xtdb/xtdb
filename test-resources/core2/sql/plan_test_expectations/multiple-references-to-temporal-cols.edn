@@ -11,21 +11,23 @@
     system_time_start x3,
     system_time_end x4,
     _table x5}
-   [:scan
-    [{application_time_start
-      (and
-       (< application_time_start #time/date "2004-01-01")
-       (= application_time_start 4))}
-     {application_time_end
-      (and
-       (> application_time_end #time/date "2000-01-01")
-       (> application_time_end 10))}
-     {system_time_start
-      (and
-       (< system_time_start #time/date "2002-01-01")
-       (= system_time_start 20))}
-     {system_time_end
-      (and
-       (<= system_time_end 23)
-       (> system_time_end #time/date "2001-01-01"))}
-     {_table (= _table "foo")}]]]]]
+   [:select
+    (< #time/date "2001-01-01" #time/date "2002-01-01")
+    [:scan
+     [{application_time_start
+       (and
+        (< application_time_start #time/date "2004-01-01")
+        (= application_time_start 4))}
+      {application_time_end
+       (and
+        (> application_time_end #time/date "2000-01-01")
+        (> application_time_end 10))}
+      {system_time_start
+       (and
+        (< system_time_start #time/date "2002-01-01")
+        (= system_time_start 20))}
+      {system_time_end
+       (and
+        (<= system_time_end 23)
+        (> system_time_end #time/date "2001-01-01"))}
+      {_table (= _table "foo")}]]]]]]

@@ -84,9 +84,21 @@
 
     (is (= [{:last_updated "tx1"} {:last_updated "tx2"}]
            (query-at-tx
+             "SELECT foo.last_updated FROM foo FOR SYSTEM_TIME BETWEEN ASYMMETRIC DATE '3001-01-01' AND TIMESTAMP '3002-01-01 00:00:00+00:00'"
+             !tx2))
+        "ASYMMTERIC behaves like default")
+
+    (is (= [{:last_updated "tx1"} {:last_updated "tx2"}]
+           (query-at-tx
              "SELECT foo.last_updated FROM foo FOR SYSTEM_TIME BETWEEN SYMMETRIC TIMESTAMP '3002-01-01 00:00:00+00:00' AND DATE '3001-01-01'"
              !tx2))
-        "SYMMETRIC flips POT1 and 2")))
+        "SYMMETRIC flips POT1 and 2")
+
+    (is (= [{:last_updated "tx1"} {:last_updated "tx2"}]
+           (query-at-tx
+             "SELECT foo.last_updated FROM foo FOR SYSTEM_TIME BETWEEN SYMMETRIC DATE '3001-01-01' AND TIMESTAMP '3002-01-01 00:00:00+00:00'"
+             !tx2))
+        "SYMMETRIC flips POT1 and 2 only if PIT1 > PIT2")))
 
 (deftest app-time-period-predicates
 

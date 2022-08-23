@@ -1,0 +1,27 @@
+[:rename
+ {x7 $column_1$}
+ [:project
+  [{x7 4}]
+  [:rename
+   {system_time_start x1,
+    system_time_end x2,
+    start x3,
+    end x4,
+    _table x5}
+   [:select
+    (if
+     (> start end)
+     (and
+      (<= end start)
+      (<= system_time_start start)
+      (> system_time_end end))
+     (and
+      (<= start end)
+      (<= system_time_start end)
+      (> system_time_end start)))
+    [:scan
+     [system_time_start
+      system_time_end
+      start
+      end
+      {_table (= _table "t1")}]]]]]]

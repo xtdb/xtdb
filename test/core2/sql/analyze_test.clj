@@ -299,7 +299,17 @@ SELECT t1.d-t1.e AS a, SUM(t1.a) AS b
   (invalid? #"Column not in scope: foo.a"
             "SELECT foo.a FROM bar AS foo (b)")
   (invalid? #"Column not in scope: foo.a"
-            "SELECT foo.a FROM (SELECT x.b FROM x) AS foo"))
+            "SELECT foo.a FROM (SELECT x.b FROM x) AS foo")
+
+  (t/testing "SYSTEM_TIME periods"
+
+    (valid? "SELECT 4 FROM t1 FOR SYSTEM_TIME BETWEEN t1.start AND t1.end")
+
+    (valid?  "SELECT (SELECT 4 FROM t1 FOR SYSTEM_TIME BETWEEN t1.start AND t2.end) FROM t2")
+
+    (invalid?
+      #"Table not in scope: t2"
+      "SELECT 4 FROM t1 FOR SYSTEM_TIME BETWEEN t1.start AND t2.end")))
 
 (t/deftest test-variable-duplication
   (invalid? #"Table variable duplicated: baz"

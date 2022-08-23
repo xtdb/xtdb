@@ -1,0 +1,34 @@
+[:rename
+ {x3 y, x10 z}
+ [:project
+  [x3 x10]
+  [:join
+   [(< x11 x5) (< x8 x5)]
+   [:rename
+    {system_time_start x1,
+     system_time_end x2,
+     y x3,
+     start x4,
+     end x5,
+     _table x6}
+    [:select
+     (and (<= system_time_start start) (> system_time_end start))
+     [:scan
+      [system_time_start
+       system_time_end
+       y
+       start
+       end
+       {_table (= _table "x")}]]]]
+   [:rename
+    {system_time_start x8,
+     system_time_end x9,
+     z x10,
+     start x11,
+     _table x12}
+    [:scan
+     [system_time_start
+      system_time_end
+      z
+      start
+      {_table (= _table "z")}]]]]]]

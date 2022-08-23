@@ -1303,110 +1303,102 @@
        ordinality-column (assoc :ordinality-column ordinality-column))
      [:map [{unwind-symbol (expr cve)}] nil]]))
 
-(defn coerce-points-in-time [pit1 pit2]
-  ;; TODO Needs to support LocalDateTime and take into account session timezone see #280
-  (cond
-    (and (instance? java.time.LocalDate pit1)
-         (instance? java.time.LocalDate pit2))
-    [pit1 pit2]
-    (and (instance? java.time.LocalDate pit1)
-         (instance? java.time.ZonedDateTime pit2))
-    [(.atStartOfDay ^java.time.LocalDate pit1 ZoneOffset/UTC) pit2]
+(defn- system-time-col-symbol [tp local-col-name]
+  (let [[table [{:keys [id]}]] (first (first (sem/env tp)))]
+    (id-symbol table id local-col-name)))
 
-    (and (instance? java.time.ZonedDateTime pit1)
-         (instance? java.time.LocalDate pit2))
-    [pit1 (.atStartOfDay ^java.time.LocalDate pit2 ZoneOffset/UTC)]
+(defn- wrap-with-system-time-select [table-primary-ast table-primary-plan]
+  (let [system-time-predicates
+        (first
+          (r/collect-stop
+            (fn [tp]
+              (r/zmatch
+                tp
+                [:query_system_time_period_specification
+                 "FOR"
+                 "SYSTEM_TIME"
+                 "AS"
+                 "OF"
+                 ^:z point-in-time]
+                ;;=>
+                [(list
+                   'and
+                   (list '<= (system-time-col-symbol tp 'system_time_start) (expr point-in-time))
+                   (list '> (system-time-col-symbol tp 'system_time_end) (expr point-in-time)))]
 
-    (and (instance? java.time.ZonedDateTime pit1)
-         (instance? java.time.ZonedDateTime pit2))
-    [pit1 pit2]))
+                [:query_system_time_period_specification
+                 "FOR"
+                 "SYSTEM_TIME"
+                 "FROM"
+                 ^:z point-in-time-1
+                 "TO"
+                 ^:z point-in-time-2]
+                ;;=>
+                (let [pit1 (expr point-in-time-1)
+                      pit2 (expr point-in-time-2)]
+                  [(list
+                     'and
+                     (list '< pit1 pit2)
+                     (list '< (system-time-col-symbol tp 'system_time_start) pit2)
+                     (list '> (system-time-col-symbol tp 'system_time_end) pit1))])
 
-(defn pit-less-than [pit1 pit2]
-  (let [[pit-1 pit-2] (coerce-points-in-time pit1 pit2)]
-    (neg? (compare pit-1 pit-2))))
+                [:query_system_time_period_specification
+                 "FOR"
+                 "SYSTEM_TIME"
+                 "BETWEEN"
+                 ^:z point-in-time-1
+                 "AND"
+                 ^:z point-in-time-2]
+                ;;=>
+                (let
+                  [pit1 (expr point-in-time-1)
+                   pit2 (expr point-in-time-2)]
+                  [(list
+                     'and
+                     (list '<= pit1 pit2)
+                     (list '<= (system-time-col-symbol tp 'system_time_start) pit2)
+                     (list '> (system-time-col-symbol tp 'system_time_end) pit1))])
 
-(defn pit-less-than-or-equal [pit1 pit2]
-  (let [[pit-1 pit-2] (coerce-points-in-time pit1 pit2)
-        res (compare pit-1 pit-2)]
-    (or (neg? res) (= res 0))))
-
-(defn pit-greater-than [pit1 pit2]
-  (let [[pit-1 pit-2] (coerce-points-in-time pit1 pit2)]
-    (pos? (compare pit-1 pit-2))))
-
-(defn find-system-time-predicates [tp]
-  (r/collect-stop
-    (fn [tp]
-      (r/zmatch tp
-        [:query_system_time_period_specification
-         "FOR"
-         "SYSTEM_TIME"
-         "AS"
-         "OF"
-         point-in-time]
-        ;;=>
-        [{'system_time_start (list '<= 'system_time_start (expr point-in-time))}
-         {'system_time_end (list '> 'system_time_end (expr point-in-time))}]
-
-        [:query_system_time_period_specification
-         "FOR"
-         "SYSTEM_TIME"
-         "FROM"
-         point-in-time-1
-         "TO"
-         point-in-time-2]
-        ;;=>
-        (let [pit1 (expr point-in-time-1)
-              pit2 (expr point-in-time-2)]
-          (if (pit-less-than pit1 pit2)
-            [{'system_time_start (list '< 'system_time_start pit2)}
-             {'system_time_end (list '> 'system_time_end pit1)}]
-            [:invalid-points-in-time]))
-
-        [:query_system_time_period_specification
-         "FOR"
-         "SYSTEM_TIME"
-         "BETWEEN"
-         point-in-time-1
-         "AND"
-         point-in-time-2]
-        ;;=>
-        (let
-          [pit1 (expr point-in-time-1)
-           pit2 (expr point-in-time-2)]
-          (if (pit-less-than-or-equal pit1 pit2)
-            [{'system_time_start (list '<= 'system_time_start pit2)}
-             {'system_time_end (list '> 'system_time_end pit1)}]
-            [:invalid-points-in-time]))
-
-        [:query_system_time_period_specification
-         "FOR"
-         "SYSTEM_TIME"
-         "BETWEEN"
-         mode
-         point-in-time-1
-         "AND"
-         point-in-time-2]
-        ;;=>
-        (let [pit1 (expr point-in-time-1)
-              pit2 (expr point-in-time-2)
-              [start end] (case mode
-                            "SYMMETRIC"
-                            (if (pit-greater-than pit1 pit2)
-                              [pit2 pit1]
-                              [pit1 pit2])
-                            "ASYMMETRIC"
-                            [pit1 pit2])]
-          (if (pit-less-than-or-equal start end)
-            [{'system_time_start (list '<= 'system_time_start end)}
-             {'system_time_end (list '> 'system_time_end start)}]
-            [:invalid-points-in-time]))))
-    tp))
+                [:query_system_time_period_specification
+                 "FOR"
+                 "SYSTEM_TIME"
+                 "BETWEEN"
+                 mode
+                 ^:z point-in-time-1
+                 "AND"
+                 ^:z point-in-time-2]
+                ;;=>
+                (let [pit1 (expr point-in-time-1)
+                      pit2 (expr point-in-time-2)]
+                  [(if (= mode "SYMMETRIC")
+                     (list
+                       'if
+                       (list '> pit1 pit2)
+                       (list
+                         'and
+                         (list '<= pit2 pit1)
+                         (list '<= (system-time-col-symbol tp 'system_time_start) pit1)
+                         (list '> (system-time-col-symbol tp 'system_time_end) pit2))
+                       (list
+                         'and
+                         (list '<= pit1 pit2)
+                         (list '<= (system-time-col-symbol tp 'system_time_start) pit2)
+                         (list '> (system-time-col-symbol tp 'system_time_end) pit1)))
+                     (list
+                       'and
+                       (list '<= pit1 pit2)
+                       (list '<= (system-time-col-symbol tp 'system_time_start) pit2)
+                       (list '> (system-time-col-symbol tp 'system_time_end) pit1)))])))
+            table-primary-ast))]
+    (if system-time-predicates
+      [:select
+       system-time-predicates
+       table-primary-plan]
+      table-primary-plan)))
 
 (defn- build-table-primary [tp]
   (let [{:keys [id correlation-name table-or-query-name] :as table} (sem/table tp)
-        projection (first (sem/projected-columns tp))
-        system-time-predicates (find-system-time-predicates tp)]
+        projection (first (sem/projected-columns tp))]
     [:rename (table-reference-symbol correlation-name id)
      (if-let [subquery-ref (:subquery-ref (meta table))]
        (if-let [derived-columns (sem/derived-columns tp)]
@@ -1414,35 +1406,19 @@
                           (map symbol derived-columns))
           (plan subquery-ref)]
          (plan subquery-ref))
-       (cond->>
-         [:scan (vec
-                  (let [columns (vec (for [{:keys [identifier]} projection]
-                                       (symbol identifier)))
-                        columns-with-system-time-predicates
-                        (cond
-                          (= (first system-time-predicates) :invalid-points-in-time)
-                          columns
-
-                          system-time-predicates
-                          (vec
-                            (concat
-                              system-time-predicates
-                              (remove #(contains? (set (mapcat keys system-time-predicates)) %) columns)))
-
-                          :else
-                          columns)
-                        columns-with-app-time-cols
-                        (if (seq (set/intersection (set columns-with-system-time-predicates) #{'APP_TIME 'APPLICATION_TIME}))
-                          (->> columns-with-system-time-predicates
-                               (remove #{'application_time_start 'application_time_end 'APP_TIME 'APPLICATION_TIME})
-                               (concat ['application_time_start 'application_time_end])
-                               vec)
-                          columns-with-system-time-predicates)]
-                    (conj
+       [:scan (vec
+                (let [columns (vec (for [{:keys [identifier]} projection]
+                                     (symbol identifier)))
                       columns-with-app-time-cols
-                      {'_table (list '= '_table table-or-query-name)})))]
-         (= (first system-time-predicates) :invalid-points-in-time)
-         (vector :select 'false)))]))
+                      (if (seq (set/intersection (set columns) #{'APP_TIME 'APPLICATION_TIME}))
+                        (->> columns
+                             (remove #{'application_time_start 'application_time_end 'APP_TIME 'APPLICATION_TIME})
+                             (concat ['application_time_start 'application_time_end])
+                             vec)
+                        columns)]
+                  (conj
+                    columns-with-app-time-cols
+                    {'_table (list '= '_table table-or-query-name)})))])]))
 
 (defn- build-target-table [tt]
   (let [{:keys [id correlation-name table-or-query-name]} (sem/table tt)
@@ -1818,15 +1794,21 @@
 
     [:table_primary _ _]
     ;;=>
-    (build-table-primary z)
+    (wrap-with-system-time-select
+      z
+      (build-table-primary z))
 
     [:table_primary _ _ _]
     ;;=>
-    (build-table-primary z)
+    (wrap-with-system-time-select
+      z
+      (build-table-primary z))
 
     [:table_primary _ _ _ _]
     ;;=>
-    (build-table-primary z)
+    (wrap-with-system-time-select
+      z
+      (build-table-primary z))
 
     [:qualified_join ^:z lhs _ ^:z rhs [:join_condition _ ^:z sc]]
     ;;=>

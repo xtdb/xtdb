@@ -1,0 +1,20 @@
+[:rename
+ {x9 $column_1$}
+ [:project
+  [x9]
+  [:apply
+   :cross-join
+   {x1 ?x10}
+   [:rename {end x1, _table x2} [:scan [end {_table (= _table "t2")}]]]
+   [:max-1-row
+    [:project
+     [{x9 4}]
+     [:rename
+      {system_time_start x4, system_time_end x5, start x6, _table x7}
+      [:select
+       (> system_time_end start)
+       [:scan
+        [{system_time_start (<= system_time_start ?x10)}
+         system_time_end
+         {start (<= start ?x10)}
+         {_table (= _table "t1")}]]]]]]]]]
