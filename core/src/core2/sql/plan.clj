@@ -816,7 +816,7 @@
       {:start (symbol (str/replace coerced-app-time-symbol "APPLICATION_TIME" "application_time_start"))
        :end (symbol (str/replace coerced-app-time-symbol "APPLICATION_TIME" "application_time_end"))})
 
-    [:period_predicand "PERIOD" start end]
+    [:period_predicand "PERIOD" ^:z start ^:z end]
     ;;=>
     {:start (expr start) :end (expr end)}
 
