@@ -87,3 +87,9 @@
     (let [!tx3 (c2/submit-tx tu/*node* [[:delete "explicit_table1" :foo]])]
       (t/is (= {:xt #{}, :t1 #{}, :t2 #{"explicit table 2"}}
                (foos !tx3))))))
+
+(t/deftest test-array-element-reference-is-one-based-336
+  (let [!tx (c2/submit-tx tu/*node* [[:sql "INSERT INTO foo (id, arr) VALUES ('foo', ARRAY[9, 8, 7, 6])"]])]
+    (t/is (= [{:id "foo", :arr [9 8 7 6], :fst 9, :snd 8, :lst 6}]
+             (c2/sql-query tu/*node* "SELECT foo.id, foo.arr, foo.arr[1] AS fst, foo.arr[2] AS snd, foo.arr[4] AS lst FROM foo"
+                           {:basis {:tx !tx}})))))

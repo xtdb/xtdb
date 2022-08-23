@@ -1,7 +1,7 @@
 [:rename
  {x5 dyn_idx}
  [:project
-  [{x5 (nth x1 (nth x2 0))}]
+  [{x5 (nth x1 (- (nth x2 (- 1 1)) 1))}]
   [:rename
    {b x1, a x2, _table x3}
    [:scan [b a {_table (= _table "u")}]]]]]

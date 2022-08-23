@@ -756,7 +756,7 @@
 
     [:array_element_reference ^:z ave ^:z nve]
     ;;=>
-    (list 'nth (expr ave) (expr nve))
+    (list 'nth (expr ave) (list '- (expr nve) 1))
 
     [:trim_array_function _ ^:z a, ^:z n]
     (list 'trim-array (expr a) (expr n))

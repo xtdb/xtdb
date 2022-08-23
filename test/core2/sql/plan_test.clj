@@ -372,11 +372,11 @@
 (t/deftest test-array-element-reference-107
   (t/is (=plan-file
           "test-array-element-reference-107-1"
-          (plan-sql "SELECT u.a[0] AS first_el FROM u")))
+          (plan-sql "SELECT u.a[1] AS first_el FROM u")))
 
   (t/is (=plan-file
           "test-array-element-reference-107-2"
-          (plan-sql "SELECT u.b[u.a[0]] AS dyn_idx FROM u"))))
+          (plan-sql "SELECT u.b[u.a[1]] AS dyn_idx FROM u"))))
 
 (t/deftest test-current-time-111
   (t/is (=plan-file
