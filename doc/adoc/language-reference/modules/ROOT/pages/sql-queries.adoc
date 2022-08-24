@@ -1,5 +1,15 @@
 = SQL Queries
 
+[#gotchas]
+== Gotchas
+
+Before discussing basic queries, it's worth being aware of a few "gotchas" present in XTDB Core2:
+
+* TODO: row types
+* TODO: type equality semantics
+* TODO: cast / overflow / BigDecimal
+
+
 [#select]
 == Basic SELECT
 
