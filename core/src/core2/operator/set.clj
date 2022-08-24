@@ -8,12 +8,11 @@
             [core2.vector.indirect :as iv])
   (:import core2.expression.map.IRelationMap
            core2.ICursor
-           [core2.vector IIndirectRelation IIndirectVector]
-           [java.util ArrayList HashSet LinkedList List Set]
+           (core2.vector IIndirectRelation)
+           (java.util LinkedList)
            java.util.function.Consumer
            java.util.stream.IntStream
-           org.apache.arrow.memory.BufferAllocator
-           org.apache.arrow.memory.util.ArrowBufPointer))
+           org.apache.arrow.memory.BufferAllocator))
 
 (defmethod lp/ra-expr :distinct [_]
   (s/cat :op #{:δ :distinct}

@@ -1733,17 +1733,26 @@
     [:query_expression_body ^:z qeb "UNION" "ALL" ^:z qt]
     (build-set-op :union-all qeb qt)
 
+    [:query_expression_body ^:z qeb "UNION" "DISTINCT" ^:z qt]
+    [:distinct (build-set-op :union-all qeb qt)]
+
     [:query_expression_body ^:z qeb "EXCEPT" ^:z qt]
     [:distinct (build-set-op :difference qeb qt)]
 
     [:query_expression_body ^:z qeb "EXCEPT" "ALL" ^:z qt]
     (build-set-op :difference qeb qt)
 
+    [:query_expression_body ^:z qeb "EXCEPT" "DISTINCT" ^:z qt]
+    [:distinct (build-set-op :difference qeb qt)]
+
     [:query_term ^:z qt "INTERSECT" ^:z qp]
     [:distinct (build-set-op :intersect qt qp)]
 
     [:query_term ^:z qt "INTERSECT" "ALL" ^:z qp]
     (build-set-op :intersect qt qp)
+
+    [:query_term ^:z qt "INTERSECT" "DISTINCT" ^:z qp]
+    [:distinct (build-set-op :intersect qt qp)]
 
     [:table_expression ^:z fc]
     ;;=>

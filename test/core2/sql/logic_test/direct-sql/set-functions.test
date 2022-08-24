@@ -1,0 +1,91 @@
+hash-threshold 100
+
+statement ok
+INSERT INTO t1(id) VALUES (1)
+
+statement ok
+INSERT INTO t1(id) VALUES (2)
+
+statement ok
+INSERT INTO t1(id) VALUES (2)
+
+statement ok
+INSERT INTO t1(id) VALUES (3)
+
+statement ok
+INSERT INTO t1(id) VALUES (3)
+
+statement ok
+INSERT INTO t2(id) VALUES (1)
+
+statement ok
+INSERT INTO t2(id) VALUES (2)
+
+statement ok
+INSERT INTO t2(id) VALUES (4)
+
+query I rowsort
+SELECT t1.id FROM t1 UNION ALL SELECT t2.id FROM t2
+----
+1
+1
+2
+2
+2
+3
+3
+4
+
+query I rowsort
+SELECT t1.id FROM t1 UNION DISTINCT SELECT t2.id FROM t2
+----
+1
+2
+3
+4
+
+query I rowsort
+SELECT t1.id FROM t1 UNION SELECT t2.id FROM t2
+----
+1
+2
+3
+4
+
+skipif xtdb # FIXME
+query I rowsort
+SELECT t1.id FROM t1 INTERSECT ALL SELECT t2.id FROM t2
+----
+1
+2
+2
+
+query I rowsort
+SELECT t1.id FROM t1 INTERSECT DISTINCT SELECT t2.id FROM t2
+----
+1
+2
+
+query I rowsort
+SELECT t1.id FROM t1 INTERSECT SELECT t2.id FROM t2
+----
+1
+2
+
+skipif xtdb # FIXME
+query I rowsort
+SELECT t1.id FROM t1 EXCEPT ALL SELECT t2.id FROM t2
+----
+2
+3
+3
+
+query I rowsort
+SELECT t1.id FROM t1 EXCEPT DISTINCT SELECT t2.id FROM t2
+----
+3
+
+query I rowsort
+SELECT t1.id FROM t1 EXCEPT SELECT t2.id FROM t2
+----
+3
