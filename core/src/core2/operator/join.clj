@@ -2,6 +2,7 @@
   (:require [clojure.set :as set]
             [clojure.spec.alpha :as s]
             [core2.bloom :as bloom]
+            [core2.error :as err]
             [core2.expression :as expr]
             [core2.expression.map :as emap]
             [core2.logical-plan :as lp]
@@ -19,8 +20,8 @@
            (java.util.stream IntStream)
            (org.apache.arrow.memory BufferAllocator)
            org.apache.arrow.vector.BitVector
-           org.roaringbitmap.RoaringBitmap
-           (org.roaringbitmap.buffer MutableRoaringBitmap)))
+           (org.roaringbitmap.buffer MutableRoaringBitmap)
+           org.roaringbitmap.RoaringBitmap))
 
 (defmethod lp/ra-expr :cross-join [_]
   (s/cat :op #{:⨯ :cross-join}
@@ -295,7 +296,8 @@
                                (aset !matched 0 true)
                                (.add matching-build-idxs build-idx)
                                (.add matching-probe-idxs probe-idx))
-                             (throw (RuntimeException. "cardinality violation"))))))
+                             (throw (err/runtime-err :core2.single-join/cardinality-violation
+                                                     {::err/message "cardinality violation"}))))))
         (when-not (aget !matched 0)
           (.add matching-probe-idxs probe-idx)
           (.add matching-build-idxs emap/nil-row-idx))))

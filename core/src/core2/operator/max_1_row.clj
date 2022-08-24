@@ -2,7 +2,8 @@
   (:require [clojure.spec.alpha :as s]
             [core2.logical-plan :as lp]
             [core2.types :as types]
-            [core2.vector.indirect :as iv])
+            [core2.vector.indirect :as iv]
+            [core2.error :as err])
   (:import (core2 ICursor)
            (core2.vector IIndirectRelation)
            (java.util Set)
@@ -27,7 +28,8 @@
                          (let [^IIndirectRelation in-rel in-rel
                                seen-rows (+ sent-rows (.rowCount in-rel))]
                            (if (> seen-rows 1)
-                             (throw (RuntimeException. "cardinality violation"))
+                             (throw (err/runtime-err :core2.single-join/cardinality-violation
+                                                     {::err/message "cardinality violation"}))
                              (do
                                (set! (.sent-rows this) seen-rows)
                                (.accept c in-rel)))))))

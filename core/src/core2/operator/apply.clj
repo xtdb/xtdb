@@ -1,5 +1,6 @@
 (ns core2.operator.apply
   (:require [clojure.spec.alpha :as s]
+            [core2.error :as err]
             [core2.expression :as expr]
             [core2.logical-plan :as lp]
             [core2.rewrite :refer [zmatch]]
@@ -144,7 +145,8 @@
                                        (zero? row-count) nil
 
                                        (> (+ row-count (if (aget match? 0) 1 0)) 1)
-                                       (throw (RuntimeException. "cardinality violation"))
+                                       (throw (err/runtime-err :core2.single-join/cardinality-violation
+                                                               {::err/message "cardinality violation"}))
 
                                        :else
                                        (do

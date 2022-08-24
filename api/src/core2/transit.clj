@@ -12,7 +12,8 @@
              (update-keys str)
              (update-vals transit/read-handler))
          {"core2/tx-key" (transit/read-handler c2/map->TransactionInstant)
-          "core2/illegal-arg" (transit/read-handler err/-iae-reader)}))
+          "core2/illegal-arg" (transit/read-handler err/-iae-reader)
+          "core2/runtime-err" (transit/read-handler err/-runtime-err-reader)}))
 
 (def tj-write-handlers
   (merge (-> {Period "time/period"
@@ -32,4 +33,5 @@
               MonthDay "time/month-day"}
              (update-vals #(transit/write-handler % str)))
          {TransactionInstant (transit/write-handler "core2/tx-key" #(select-keys % [:tx-id :sys-time]))
-          core2.IllegalArgumentException (transit/write-handler "core2/illegal-arg" ex-data)}))
+          core2.IllegalArgumentException (transit/write-handler "core2/illegal-arg" ex-data)
+          core2.RuntimeException (transit/write-handler "core2/runtime-err" ex-data)}))
