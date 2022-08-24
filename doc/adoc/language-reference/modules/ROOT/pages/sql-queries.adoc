@@ -8,7 +8,8 @@ Before discussing basic queries, it's worth being aware of a few "gotchas" prese
 * TODO: row types
 * TODO: type equality semantics
 * TODO: cast / overflow / BigDecimal
-
+* TODO: select *
+** jagged rows / missing
 
 [#select]
 == Basic SELECT
