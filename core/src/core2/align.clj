@@ -1,5 +1,6 @@
 (ns core2.align
-  (:require [core2.vector.indirect :as iv])
+  (:require [core2.temporal :as temporal]
+            [core2.vector.indirect :as iv])
   (:import [java.util ArrayList LinkedList List Map]
            [org.apache.arrow.vector BigIntVector VectorSchemaRoot]
            org.roaringbitmap.longlong.Roaring64Bitmap
@@ -42,7 +43,8 @@
     (doseq [^VectorSchemaRoot root roots
             :let [row-id-vec (.getVector root 0)
                   in-vec (.getVector root 1)
-                  idxs (if row-id->repeat-count
+                  idxs (if (and row-id->repeat-count
+                                (not (temporal/temporal-column? (.getName in-vec))))
                          (<-row-id-bitmap-with-repetitions row-id->repeat-count row-id-vec)
                          (<-row-id-bitmap row-id-bitmap row-id-vec))]]
       (when (and with-row-id-vec? (empty? read-cols))
