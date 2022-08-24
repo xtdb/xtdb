@@ -20,7 +20,16 @@ Connect to Core2 using any Postgres client:
 psql -h localhost
 ----
 
-More examples are available in the https://github.com/xtdb/core2-playground[Core2 Playground] and https://github.com/xtdb/core2/tree/master/doc/adoc[preliminary documentation exists].
+More examples are available in the https://github.com/xtdb/core2-playground[Core2 Playground].
+
+
+== Documentation
+
+https://github.com/xtdb/core2/tree/master/doc/adoc[Preliminary documentation] exists.
+This documentation is (intentionally) not published yet, but you can
+https://github.com/xtdb/core2/tree/master/doc/adoc#build[build the documentation yourself].
+
+Please do not open issues on this repository with documentation-related questions at this stage.
 
 
 == Vision
@@ -91,31 +100,6 @@ Core2's initial objective is to take the key principles embodied in XTDB 1.x -- 
 |===
 
 
-== Quickstart
-
-[source,sh]
-----
-docker pull xtdb/core2
-docker run -p 5432:5432 xtdb/core2
-----
-
-You should see `hh:mm:ss | PGWire server started on port: 5432`.
-You can now access that port from outside the Docker container:
-
-[source,sh]
-----
-psql -h localhost
-# as of this writing, DML is not supported over pgwire yet
-----
-
-If you would like to retain your data when the container reboots,
-mount a volume to your running Docker image like so:
-
-[source,sh]
-----
-docker run -p 5432:5432 -v /tmp/xtdb:/var/lib/xtdb xtdb/core2
-----
-
 === Troubleshooting
 
 Certain older versions of Docker (< 20.10.10) struggle with newer Linux images.
@@ -128,10 +112,6 @@ When that happens, you will see this error:
 ----
 
 To resolve this, upgrade to the latest version of Docker.
-
-== Documentation
-
-There is currently no official documentation for Core2 outside of the tests and source code in this repository. Please do not open issues on this repository with documentation-related questions at this stage.
 
 
 == Questions, Thoughts & Feedback
