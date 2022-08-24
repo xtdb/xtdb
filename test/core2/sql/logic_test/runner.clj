@@ -288,15 +288,6 @@
                       #_(throw t))))))
             ctx))))
 
-(defn- ns-relative-path ^java.io.File [ns file]
-  (str (str/replace (namespace-munge (ns-name ns)) "." "/") "/" file))
-
-(defn with-opts
-  ([opts] (partial with-opts opts))
-  ([opts f]
-   (binding [*opts* opts]
-     (f))))
-
 (defn with-xtdb [f]
   (require 'core2.sql.logic-test.xtdb-engine)
   (binding [*db-engine* tu/*node*]
