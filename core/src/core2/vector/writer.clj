@@ -1,7 +1,7 @@
 (ns core2.vector.writer
-  (:require [core2.rewrite :refer [zmatch]]
+  (:require [core2.error :as err]
+            [core2.rewrite :refer [zmatch]]
             [core2.types :as types]
-            [core2.util :as util]
             [core2.vector.indirect :as iv])
   (:import (core2.vector IDenseUnionWriter IExtensionWriter IIndirectRelation IIndirectVector IListWriter IRelationWriter IRowCopier IStructWriter IVectorWriter IWriterPosition)
            (java.lang AutoCloseable)
@@ -159,7 +159,7 @@
     (or (aget writers-by-type-id type-id)
         (let [^ValueVector
               inner-vec (or (.getVectorByType dest-duv type-id)
-                            (throw (IllegalArgumentException.)))
+                            (throw (err/illegal-arg ::invalid-duv-type-id)))
               inner-writer (vec->writer inner-vec)
               writer (DuvChildWriter. this type-id inner-writer)]
           (aset writers-by-type-id type-id writer)

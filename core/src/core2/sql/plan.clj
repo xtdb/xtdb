@@ -4,6 +4,7 @@
             [clojure.spec.alpha :as s]
             [clojure.string :as str]
             [clojure.walk :as w]
+            [core2.error :as err]
             [core2.logical-plan :as lp]
             core2.operator ;; Adds impls logical plan spec
             [core2.rewrite :as r]
@@ -140,7 +141,9 @@
      [:end_field "SECOND" [:unsigned_integer fractional-precision]]]
     ;; =>
     (list 'multi-field-interval e leading-field 2 "SECOND" (parse-long fractional-precision))
-    (throw (IllegalArgumentException. (str "Cannot build interval for: "  (pr-str qualifier))))))
+    (throw (err/illegal-arg :core2.sql/parse-error
+                            {::err/message (str "Cannot build interval for: "  (pr-str qualifier))
+                             :qualifier qualifier}))))
 
 (defn cast-expr [e cast-spec]
   (r/zmatch cast-spec
@@ -160,7 +163,9 @@
     [:approximate_numeric_type "DOUBLE" "PRECISION"]
     (list 'cast e :f64)
 
-    (throw (IllegalArgumentException. (str "Cannot build cast for: " (pr-str cast-spec))))))
+    (throw (err/illegal-arg :core2.sql/parse-error
+                            {::err/message (str "Cannot build cast for: " (pr-str cast-spec))
+                             :cast-spec cast-spec}))))
 
 (defn- expr-varargs [z]
   (r/zcase z
@@ -219,7 +224,9 @@
           z)
          (cons 'case))
 
-    (throw (IllegalArgumentException. (str "Cannot build expression for: "  (pr-str (r/node z)))))))
+    (throw (err/illegal-arg :core2.sql/parse-error
+                            {::err/message (str "Cannot build expression for: "  (pr-str (r/node z)))
+                             :node (r/node z)}))))
 
 (defn seconds-fraction->nanos [seconds-fraction]
   (* (Long/parseLong seconds-fraction)
@@ -977,7 +984,9 @@
                       [:in_predicate_part_2 "NOT" _ [:in_predicate_value ^:z ivl]]
                       [ivl '<>]
 
-                      (throw (IllegalArgumentException. "unknown in type")))
+                      (throw (err/illegal-arg :core2.sql/parse-error
+                                              {::err/message "unknown in type"
+                                               :node (r/znode ipp2)})))
             exists-symbol (exists-symbol qe)
             predicate (list co (expr rvp) (first (subquery-projection-symbols qe)))
             in-value-list-plan (plan qe)
@@ -1014,12 +1023,15 @@
       (let [subquery-plan [:rename (subquery-reference-symbol qe) (plan qe)]
             column->param (correlated-column->param qe scope-id)
             projected-columns (set (subquery-projection-symbols qe))]
-        (when-not (= 1 (count projected-columns)) (throw (IllegalArgumentException. "ARRAY subquery must return exactly 1 column/")))
+        (when-not (= 1 (count projected-columns)) (throw (err/illegal-arg :core2.sql/parse-error
+                                                                          {::err/message "ARRAY subquery must return exactly 1 column"
+                                                                           :columns projected-columns})))
         {:type :array
          :plan [:group-by [{(subquery-array-symbol qe) (list 'array-agg (first projected-columns))}] subquery-plan]
          :column->param column->param})
 
-      (throw (IllegalArgumentException. "unknown subquery type")))))
+      (throw (err/illegal-arg :core2.sql/parse-error
+                              {::err/message "unknown subquery type"})))))
 
 (defn- apply-subquery
   "Ensures the subquery projection is available on the outer relation. Used in the general case when we are using
@@ -1205,7 +1217,8 @@
                       :out {(aggregate-symbol "agg_out" aggregate)
                             (list 'count (aggregate-symbol "agg_in" aggregate))}}
 
-                     (throw (IllegalArgumentException. "unknown aggregation function"))))]
+                     (throw (err/illegal-arg :core2.sql/parse-error
+                                             {::err/message "unknown aggregation function"}))))]
     [:group-by (->> (map :out group-by)
                     (into grouping-columns))
      [:map (mapv :in group-by) relation]]))
@@ -1601,7 +1614,9 @@
     [:max-1-row relation]
     (relation-columns relation)
 
-    (throw (IllegalArgumentException. (str "cannot calculate columns for: " (pr-str relation-in))))))
+    (throw (err/illegal-arg ::cannot-calculate-relation-cols
+                            {::err/message (str "cannot calculate columns for: " (pr-str relation-in))
+                             :relation relation-in}))))
 
 (defn- plan-dml [dml-op z]
   (let [tt (r/find-first (partial r/ctor? :target_table) z)
@@ -1847,7 +1862,9 @@
       :delete_statement__searched (plan-dml :delete z)
       :update_statement__searched (plan-dml :update z)
 
-      (throw (IllegalArgumentException. (str "Cannot build plan for: "  (pr-str (r/node z))))))))
+      (throw (err/illegal-arg ::cannot-build-plan
+                              {::err/message (str "Cannot build plan for: "  (pr-str (r/node z)))
+                               :node (r/node z)})))))
 
 ;;;; Rewriting of logical plan.
 
@@ -2073,7 +2090,9 @@
 
       (when (and (vector? (r/node relation-in))
                  (keyword? (r/ctor relation-in)))
-        (throw (IllegalArgumentException. (str "cannot remove names for: " (pr-str (r/node relation-in)))))))))
+        (throw (err/illegal-arg ::cannot-remove-names
+                                {::err/message (str "cannot remove names for: " (pr-str (r/node relation-in)))
+                                 :node (r/node relation-in)}))))))
 
 (defn- remove-names [relation {:keys [project-anonymous-columns?]}]
   (let [projection (relation-columns relation)
@@ -2912,7 +2931,10 @@
                  {:keys [fired-rules]} (meta plan)
                  validate-plan (fn [plan]
                                  (if (and validate-plan? (not (s/valid? ::lp/logical-plan plan)))
-                                   (throw (IllegalArgumentException. (s/explain-str ::lp/logical-plan plan)))
+                                   (throw (err/illegal-arg ::invalid-plan
+                                                           {::err/message (s/explain-str ::lp/logical-plan plan)
+                                                            :plan plan
+                                                            :explain-data (s/explain-data ::lp/logical-plan plan)}))
                                    plan))]
              {:plan (if (#{:insert :delete :update} (first plan))
                       (let [[dml-op dml-op-opts plan] plan]

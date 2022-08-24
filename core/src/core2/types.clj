@@ -1,5 +1,6 @@
 (ns core2.types
   (:require [clojure.string :as str]
+            [core2.error :as err]
             [core2.rewrite :refer [zmatch]]
             [core2.util :as util])
   (:import (clojure.lang Keyword MapEntry)
@@ -8,17 +9,15 @@
            java.net.URI
            (java.nio ByteBuffer CharBuffer)
            java.nio.charset.StandardCharsets
-           (java.time Duration Instant OffsetDateTime ZonedDateTime ZoneId LocalDate LocalTime Period LocalDateTime ZoneOffset)
+           (java.time Duration Instant LocalDate LocalDateTime LocalTime OffsetDateTime Period ZoneId ZoneOffset ZonedDateTime)
            (java.util Date List Map UUID)
            java.util.concurrent.ConcurrentHashMap
            java.util.function.Function
-           (org.apache.arrow.vector BigIntVector BitVector DurationVector FixedSizeBinaryVector Float4Vector Float8Vector IntVector NullVector SmallIntVector TimeStampMicroTZVector TimeStampMilliTZVector TimeStampNanoTZVector TimeStampSecTZVector TinyIntVector ValueVector VarBinaryVector VarCharVector DateDayVector DateMilliVector TimeNanoVector TimeMilliVector TimeMicroVector TimeSecVector TimeStampSecVector TimeStampMilliVector TimeStampMicroVector TimeStampNanoVector IntervalMonthDayNanoVector IntervalDayVector IntervalYearVector PeriodDuration)
+           (org.apache.arrow.vector BigIntVector BitVector DateDayVector DateMilliVector DurationVector FixedSizeBinaryVector Float4Vector Float8Vector IntVector IntervalDayVector IntervalMonthDayNanoVector IntervalYearVector NullVector PeriodDuration SmallIntVector TimeMicroVector TimeMilliVector TimeNanoVector TimeSecVector TimeStampMicroTZVector TimeStampMicroVector TimeStampMilliTZVector TimeStampMilliVector TimeStampNanoTZVector TimeStampNanoVector TimeStampSecTZVector TimeStampSecVector TinyIntVector ValueVector VarBinaryVector VarCharVector)
            (org.apache.arrow.vector.complex DenseUnionVector ListVector StructVector)
            (org.apache.arrow.vector.holders NullableIntervalDayHolder)
-           (org.apache.arrow.vector.types FloatingPointPrecision TimeUnit Types$MinorType UnionMode DateUnit IntervalUnit)
-           (org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Duration ArrowType$ExtensionType ArrowType$FixedSizeBinary ArrowType$FixedSizeList ArrowType$FloatingPoint ArrowType$Int
-                                               ArrowType$List ArrowType$Null ArrowType$Struct ArrowType$Time ArrowType$Timestamp ArrowType$Union ArrowType$Utf8
-                                               ExtensionTypeRegistry Field FieldType ArrowType$Date ArrowType$Time ArrowType$Interval)
+           (org.apache.arrow.vector.types DateUnit FloatingPointPrecision IntervalUnit TimeUnit Types$MinorType UnionMode)
+           (org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Date ArrowType$Duration ArrowType$ExtensionType ArrowType$FixedSizeBinary ArrowType$FixedSizeList ArrowType$FloatingPoint ArrowType$Int ArrowType$Interval ArrowType$List ArrowType$Null ArrowType$Struct ArrowType$Time ArrowType$Time ArrowType$Timestamp ArrowType$Union ArrowType$Utf8 ExtensionTypeRegistry Field FieldType)
            org.apache.arrow.vector.util.Text))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -745,7 +744,9 @@
   (cond
     (isa? widening-hierarchy x-type y-type) y-type
     (isa? widening-hierarchy y-type x-type) x-type
-    :else (throw (IllegalArgumentException. (format "can't LUB: %s ⊔ %s" x-type y-type)))))
+    :else (throw (err/illegal-arg :core2.types/incompatible-types
+                                  {::err/message (format "can't LUB: %s ⊔ %s" x-type y-type)
+                                   :x-type x-type, :y-type y-type}))))
 
 (defmethod least-upper-bound2 :default [_ _] :any)
 

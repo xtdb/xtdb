@@ -1,8 +1,9 @@
 (ns core2.rewrite
-  (:require [clojure.walk :as w])
-  (:import java.util.regex.Pattern
-           [java.util ArrayList HashMap List Map Objects]
-           [clojure.lang Box ILookup Indexed IObj IPersistentVector MapEntry]))
+  (:require [clojure.walk :as w]
+            [core2.error :as err])
+  (:import [clojure.lang Box ILookup IObj IPersistentVector Indexed MapEntry]
+           [java.util ArrayList List Map Objects]
+           java.util.regex.Pattern))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -319,7 +320,8 @@
    (generate-match-tree clauses false))
   ([clauses zip?]
    (if (empty? clauses)
-     (throw (IllegalArgumentException. "Non-exhaustive pattern"))
+     (throw (err/illegal-arg ::non-exhaustive-pattern
+                             {::err/message "Non-exhaustive pattern"}))
      (let [[[patterns body] :as clauses] (for [clause clauses]
                                            (add-bindings clause zip?))]
        (if (empty? patterns)
@@ -386,7 +388,9 @@
         zip-matches? (some (comp :z meta) variables)
         shadowed-locals (filter (set variables) (keys &env))]
     (when-not (empty? shadowed-locals)
-      (throw (IllegalArgumentException. (str "Match variables shadow locals: " (set shadowed-locals)))))
+      (throw (err/illegal-arg ::shadowed-locals
+                              {::err/message (str "Match variables shadow locals: " (set shadowed-locals))
+                               :shadowed-locals shadowed-locals})))
     (if-not zip-matches?
       `(let [z# ~z
              node# (if (zip? z#)

@@ -1,15 +1,16 @@
 (ns core2.sql.logic-test.xtdb-engine
   (:require [clojure.string :as str]
             [core2.api :as c2]
+            [core2.error :as err]
             [core2.ingester :as ingest]
             [core2.rewrite :as r]
-            [core2.sql.parser :as p]
             [core2.sql.analyze :as sem]
-            [core2.sql.plan :as plan]
             [core2.sql.logic-test.runner :as slt]
+            [core2.sql.parser :as p]
+            [core2.sql.plan :as plan]
             [core2.test-util :as tu])
-  (:import [java.util HashMap UUID]
-           core2.local_node.Node))
+  (:import core2.local_node.Node
+           [java.util HashMap UUID]))
 
 ;; TODO:
 ;; - needs cleanup.
@@ -163,7 +164,8 @@
                                                        :project-anonymous-columns? true})
             column->anonymous-col (:column->name (meta plan))]
         (if-let [err (first errs)]
-          (throw (IllegalArgumentException. ^String err))
+          (throw (err/illegal-arg :core2.sql/parse-error
+                                  {::err/message ^String err}))
           (vec (for [row (tu/query-ra plan {:srcs {'$ db}})]
                  (mapv #(-> (get column->anonymous-col %) name keyword row) projection))))))))
 
@@ -243,7 +245,9 @@
             (if-let [record (or (parse-create-table statement)
                                 (parse-create-view statement))]
               (execute-record this record)
-              (throw (IllegalArgumentException. (p/failure->str tree))))
+              (throw (err/illegal-arg :core2.sql/parse-error
+                                      {::err/message (p/failure->str tree)
+                                       :statement statement})))
             (let [direct-sql-data-statement-tree (second tree)]
               (execute-statement this direct-sql-data-statement-tree)))))))
 
@@ -251,7 +255,9 @@
     (let [edited-query (preprocess-query query)
           tree (p/parse edited-query :query_expression)]
       (when (p/failure? tree)
-        (throw (IllegalArgumentException. (p/failure->str tree))))
+        (throw (err/illegal-arg :core2.sql/parse-error
+                                {::err/message (p/failure->str tree)
+                                 :query query})))
       (if (:direct-sql slt/*opts*)
         (execute-sql-query this query)
         (execute-query-expression this tree)))))

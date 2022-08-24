@@ -5,7 +5,8 @@
             [core2.expression.walk :as ewalk]
             [core2.temporal :as temporal]
             [core2.types :as types]
-            [core2.util :as util])
+            [core2.util :as util]
+            [core2.error :as err])
   (:import (java.time Duration Instant LocalDate LocalDateTime LocalTime Period ZoneId ZoneOffset ZonedDateTime)
            (java.time.temporal ChronoField ChronoUnit)
            (org.apache.arrow.vector PeriodDuration)
@@ -583,18 +584,26 @@
 (defn- ensure-interval-precision-valid [^long precision]
   (cond
     (< precision 1)
-    (throw (IllegalArgumentException. "The minimum leading field precision is 1."))
+    (throw (err/illegal-arg :core2.expression/invalid-interval-precision
+                            {::err/message "The minimum leading field precision is 1."
+                             :precision precision}))
 
     (< 8 precision)
-    (throw (IllegalArgumentException. "The maximum leading field precision is 8."))))
+    (throw (err/illegal-arg :core2.expression/invalid-interval-precision
+                            {::err/message "The maximum leading field precision is 8."
+                             :precision precision}))))
 
 (defn- ensure-interval-fractional-precision-valid [^long fractional-precision]
   (cond
     (< fractional-precision 0)
-    (throw (IllegalArgumentException. "The minimum fractional seconds precision is 0."))
+    (throw (err/illegal-arg :core2.expression/invalid-interval-fractional-precision
+                            {::err/message "The minimum fractional seconds precision is 0."
+                             :fractional-precision fractional-precision}))
 
     (< 9 fractional-precision)
-    (throw (IllegalArgumentException. "The maximum fractional seconds precision is 9."))))
+    (throw (err/illegal-arg :core2.expression/invalid-interval-fractional-precision
+                            {::err/message "The maximum fractional seconds precision is 9."
+                             :fractional-precision fractional-precision}))))
 
 (defmethod expr/codegen-mono-call [:single-field-interval :int :utf8 :int :int] [{:keys [args]}]
   (let [[_ unit precision fractional-precision] (map :literal args)]
@@ -621,10 +630,13 @@
 
   This is used to parse INTERVAL literal strings, e.g INTERVAL '3' DAY, as the grammar has been overriden to emit a plain string."
   [string-or-buf]
-  (try
-    (Integer/valueOf (expr/resolve-string string-or-buf))
-    (catch NumberFormatException _
-      (throw (IllegalArgumentException. "Parse error. Single field INTERVAL string must contain a positive or negative integer.")))))
+  (let [interval-str (expr/resolve-string string-or-buf)]
+    (try
+      (Integer/valueOf interval-str)
+      (catch NumberFormatException _
+        (throw (err/illegal-arg :core2.expression/invalid-interval
+                                {::err/message "Parse error. Single field INTERVAL string must contain a positive or negative integer."
+                                 :interval interval-str}))))))
 
 (defn second-interval-fractional-duration
   "Takes a string or UTF8 ByteBuffer and returns Duration for a fractional seconds INTERVAL literal.
@@ -633,15 +645,17 @@
 
   Throws a parse error if the string does not contain an integer / decimal. Throws on overflow."
   ^Duration [string-or-buf]
-  (try
-    (let [s (expr/resolve-string string-or-buf)
-          bd (bigdec s)
-          ;; will throw on overflow, is a custom error message needed?
-          secs (.setScale bd 0 BigDecimal/ROUND_DOWN)
-          nanos (.longValueExact (.setScale (.multiply (.subtract bd secs) 1e9M) 0 BigDecimal/ROUND_DOWN))]
-      (Duration/ofSeconds (.longValueExact secs) nanos))
-    (catch NumberFormatException _
-      (throw (IllegalArgumentException. "Parse error. SECOND INTERVAL string must contain a positive or negative integer or decimal.")))))
+  (let [interval-str (expr/resolve-string string-or-buf)]
+    (try
+      (let [bd (bigdec interval-str)
+            ;; will throw on overflow, is a custom error message needed?
+            secs (.setScale bd 0 BigDecimal/ROUND_DOWN)
+            nanos (.longValueExact (.setScale (.multiply (.subtract bd secs) 1e9M) 0 BigDecimal/ROUND_DOWN))]
+        (Duration/ofSeconds (.longValueExact secs) nanos))
+      (catch NumberFormatException _
+        (throw (err/illegal-arg :core2.expression/invalid-interval
+                                {::err/message "Parse error. SECOND INTERVAL string must contain a positive or negative integer or decimal."
+                                 :interval interval-str}))))))
 
 (defmethod expr/codegen-mono-call [:single-field-interval :utf8 :utf8 :int :int] [{:keys [args]}]
   (let [[_ unit precision fractional-precision] (map :literal args)]
@@ -753,30 +767,31 @@
 (defn parse-multi-field-interval
   "This function is used to parse a 2 field interval literal into a PeriodDuration, e.g '12-03' YEAR TO MONTH."
   ^PeriodDuration [s unit1 unit2]
-  ; This function overwhelming likely to be applied as a const-expr so not concerned about vectorized perf.
+  ;; This function overwhelming likely to be applied as a const-expr so not concerned about vectorized perf.
+  ;; these rules are not strictly necessary but are specified by SQL2011
 
-  ;; these rules are not strictly necessary
-  ;; be are specified by SQL2011
-  ;; if year, end field must be month.
-  (when (= unit1 "YEAR")
-    (when-not (= unit2 "MONTH")
-      (throw (IllegalArgumentException. "If YEAR specified as the interval start field, MONTH must be the end field."))))
+  (letfn [(->iae [msg]
+            (err/illegal-arg :core2.expression/invalid-interval-units
+                             {::err/message msg
+                              :start-unit unit1
+                              :end-unit unit2}))]
+    (when (and (= unit1 "YEAR") (not= unit2 "MONTH"))
+      (throw (->iae "If YEAR specified as the interval start field, MONTH must be the end field.")))
 
-  ;; start cannot = month rule.
-  (when (= unit1 "MONTH")
-    (throw (IllegalArgumentException. "MONTH is not permitted as the interval start field.")))
+    (when (= unit1 "MONTH")
+      (throw (->iae "MONTH is not permitted as the interval start field.")))
 
-  ;; less significance rule.
-  (when-not (or (= unit1 "YEAR")
-                (and (= unit1 "DAY") (#{"HOUR" "MINUTE" "SECOND"} unit2))
-                (and (= unit1 "HOUR") (#{"MINUTE" "SECOND"} unit2))
-                (and (= unit1 "MINUTE") (#{"SECOND"} unit2)))
-    (throw (IllegalArgumentException. "Interval end field must have less significance than the start field.")))
+    ;; less significance rule.
+    (when-not (or (= unit1 "YEAR")
+                  (and (= unit1 "DAY") (#{"HOUR" "MINUTE" "SECOND"} unit2))
+                  (and (= unit1 "HOUR") (#{"MINUTE" "SECOND"} unit2))
+                  (and (= unit1 "MINUTE") (#{"SECOND"} unit2)))
+      (throw (->iae "Interval end field must have less significance than the start field.")))
 
-  (or (if (= "YEAR" unit1)
-        (parse-year-month-literal s)
-        (parse-day-to-second-literal s unit1 unit2))
-      (throw (IllegalArgumentException. "Cannot parse interval, incorrect format."))))
+    (or (if (= "YEAR" unit1)
+          (parse-year-month-literal s)
+          (parse-day-to-second-literal s unit1 unit2))
+        (throw (->iae "Cannot parse interval, incorrect format.")))))
 
 (defmethod expr/codegen-mono-call [:multi-field-interval :utf8 :utf8 :int :utf8 :int] [{:keys [args]}]
   (let [[_ unit1 precision unit2 fractional-precision] (map :literal args)]

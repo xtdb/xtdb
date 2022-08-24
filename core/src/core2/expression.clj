@@ -38,13 +38,15 @@
                      (contains? locals form) {:op :local, :local form}
                      (contains? param-types form) {:op :param, :param form, :param-type (get param-types form)}
                      (contains? col-types form) {:op :variable, :variable form, :var-type (get col-types form)}
-                     :else (throw (err/illegal-arg :unknown-symbol
+                     :else (throw (err/illegal-arg :core2.expression/unknown-symbol
                                                    {::err/message (format "Unknown symbol: '%s'" form)
                                                     :symbol form})))
 
     (map? form) (do
                   (when-not (every? keyword? (keys form))
-                    (throw (IllegalArgumentException. (str "keys to struct must be keywords: " (pr-str form)))))
+                    (throw (err/illegal-arg :core2.expression/parse-error
+                                            {::err/message (str "keys to struct must be keywords: " (pr-str form))
+                                             :form form})))
                   {:op :struct,
                    :entries (->> (for [[k v-form] form]
                                    (MapEntry/create k (form->expr v-form env)))
@@ -59,7 +61,9 @@
 
 (defmethod parse-list-form 'if [[_ & args :as form] env]
   (when-not (= 3 (count args))
-    (throw (IllegalArgumentException. (str "'if' expects 3 args: " (pr-str form)))))
+    (throw (err/illegal-arg :core2.expression/arity-error
+                            {::err/message (str "'if' expects 3 args: " (pr-str form))
+                             :form form})))
 
   (let [[pred then else] args]
     {:op :if,
@@ -69,19 +73,25 @@
 
 (defmethod parse-list-form 'let [[_ & args :as form] env]
   (when-not (= 2 (count args))
-    (throw (IllegalArgumentException. (str "'let' expects 2 args - bindings + body"
-                                           (pr-str form)))))
+    (throw (err/illegal-arg :core2.expression/arity-error
+                            {::err/message (str "'let' expects 2 args - bindings + body"
+                                                 (pr-str form))
+                             :form form})))
 
   (let [[bindings body] args]
     (when-not (or (nil? bindings) (sequential? bindings))
-      (throw (IllegalArgumentException. (str "'let' expects a sequence of bindings: "
-                                             (pr-str form)))))
+      (throw (err/illegal-arg :core2.expression/parse-error
+                              {::err/message (str "'let' expects a sequence of bindings: "
+                                                   (pr-str form))
+                               :form form})))
 
     (if-let [[local expr-form & more-bindings] (seq bindings)]
       (do
         (when-not (symbol? local)
-          (throw (IllegalArgumentException. (str "bindings in `let` should be symbols: "
-                                                 (pr-str local)))))
+          (throw (err/illegal-arg :core2.expression/parse-error
+                                  {::err/message (str "bindings in `let` should be symbols: "
+                                                       (pr-str local))
+                                   :binding local})))
         {:op :let
          :local local
          :expr (form->expr expr-form env)
@@ -92,11 +102,15 @@
 
 (defmethod parse-list-form '. [[_ & args :as form] env]
   (when-not (= 2 (count args))
-    (throw (IllegalArgumentException. (str "'.' expects 2 args: " (pr-str form)))))
+    (throw (err/illegal-arg :core2.expression/arity-error
+                            {::err/message (str "'.' expects 2 args: " (pr-str form))
+                             :form form})))
 
   (let [[struct field] args]
     (when-not (symbol? field)
-      (throw (IllegalArgumentException. (str "'.' expects symbol fields: " (pr-str form)))))
+      (throw (err/illegal-arg :core2.expression/arity-error
+                              {::err/message (str "'.' expects symbol fields: " (pr-str form))
+                               :form form})))
 
     {:op :vectorised-call
      :f :get-field
@@ -106,9 +120,13 @@
 (defmethod parse-list-form '.. [[_ & args :as form] env]
   (let [[struct & fields] args]
     (when-not (seq fields)
-      (throw (IllegalArgumentException. (str "'..' expects at least 2 args: " (pr-str form)))))
+      (throw (err/illegal-arg :core2.expression/arity-error
+                              {::err/message (str "'..' expects at least 2 args: " (pr-str form))
+                               :form form})))
     (when-not (every? symbol? fields)
-      (throw (IllegalArgumentException. (str "'..' expects symbol fields: " (pr-str form)))))
+      (throw (err/illegal-arg :core2.expression/parse-error
+                              {::err/message (str "'..' expects symbol fields: " (pr-str form))
+                               :form form})))
     (reduce (fn [struct-expr field]
               {:op :vectorised-call
                :f :get-field
@@ -119,7 +137,9 @@
 
 (defmethod parse-list-form 'nth [[_ & args :as form] env]
   (when-not (= 2 (count args))
-    (throw (IllegalArgumentException. (str "'nth' expects 2 args: " (pr-str form)))))
+    (throw (err/illegal-arg :core2.expression/arity-error
+                            {::err/message (str "'nth' expects 2 args: " (pr-str form))
+                             :form form})))
 
   (let [[coll-form n-form] args]
     (if (integer? n-form)
@@ -134,7 +154,9 @@
 
 (defmethod parse-list-form 'cardinality [[_ & args :as form] env]
   (when-not (= 1 (count args))
-    (throw (IllegalArgumentException. (str "'cardinality' expects 1 arg: " (pr-str form)))))
+    (throw (err/illegal-arg :core2.expression/arity-error
+                            {::err/message (str "'cardinality' expects 1 arg: " (pr-str form))
+                             :form form})))
 
   {:op :vectorised-call
    :f :cardinality
@@ -354,14 +376,16 @@
        :continue (fn [f]
                    (f col-type (read-value-code col-type variable idx)))})))
 
-(defmethod codegen-expr :if [{:keys [pred then else]} opts]
+(defmethod codegen-expr :if [{:keys [pred then else] :as expr} opts]
   (let [{p-ret :return-type, p-cont :continue, :as emitted-p} (codegen-expr pred opts)
         {t-ret :return-type, t-cont :continue, :as emitted-t} (codegen-expr then opts)
         {e-ret :return-type, e-cont :continue, :as emitted-e} (codegen-expr else opts)
         return-type (types/merge-col-types t-ret e-ret)]
     (when-not (= :bool p-ret)
-      (throw (IllegalArgumentException. (str "pred expression doesn't return boolean "
-                                             (pr-str p-ret)))))
+      (throw (err/illegal-arg :core2.expression/type-error
+                              {::err/message (str "pred expression doesn't return boolean "
+                                                   (pr-str p-ret))
+                               :expr expr, :return-type return-type})))
 
     (-> {:return-type return-type
          :children [emitted-p emitted-t emitted-e]
@@ -836,7 +860,8 @@
 
   See also sql-trim-leading, sql-trim-trailing"
   ^String [^String s ^String trim-spec ^String trim-char]
-  (when-not (trim-char-conforms? trim-char) (throw (IllegalArgumentException. "Data Exception - trim error.")))
+  (when-not (trim-char-conforms? trim-char) (throw (err/runtime-err :core2.expression/data-exception
+                                                                    {::err/message "Data Exception - trim error."})))
   (case trim-spec
     "LEADING" (sql-trim-leading s trim-char)
     "TRAILING" (sql-trim-trailing s trim-char)
@@ -937,12 +962,16 @@
     (ByteBuffer/wrap (.getBytes ^String s-or-buf StandardCharsets/UTF_8))))
 
 ;; concat is not a simple mono-call, as it permits a variable number of arguments so we can avoid intermediate alloc
-(defmethod codegen-call :concat [{:keys [emitted-args]}]
+(defmethod codegen-call :concat [{:keys [emitted-args] :as expr}]
   (when (< (count emitted-args) 2)
-    (throw (IllegalArgumentException. "Arity error, concat requires at least two arguments")))
+    (throw (err/illegal-arg :core2.expression/arity-error
+                            {::err/message "Arity error, concat requires at least two arguments"
+                             :expr (dissoc expr :emitted-args :arg-types)})))
   (let [possible-types (into #{} (mapcat (comp types/flatten-union-types :return-type)) emitted-args)
         value-types (disj possible-types :null)
-        _ (when (< 1 (count value-types)) (throw (IllegalArgumentException. "All arguments to concat must be of the same type.")))
+        _ (when (< 1 (count value-types)) (throw (err/illegal-arg :core2.expression/type-error
+                                                                  {::err/message "All arguments to `concat` must be of the same type."
+                                                                   :types value-types})))
         value-type (first value-types)
         ->concat-code (case value-type
                         :utf8 #(do `(buf-concat (mapv resolve-utf8-buf [~@%])))
@@ -1163,7 +1192,11 @@
 
 (defmethod emit-expr :variable [{:keys [variable]} col-name {:keys [var->col-type]}]
   (let [out-type (or (get var->col-type variable)
-                     (throw (IllegalArgumentException. (str "missing variable: " variable ", available " (pr-str (set (keys var->col-type)))))))]
+                     (throw (err/illegal-arg :core2.expression/parse-error
+                                             (let [available-vars (set (keys var->col-type))]
+                                               {::err/message (str "missing variable: " variable ", available " (pr-str available-vars))
+                                                :missing-variable :variable
+                                                :available-variables available-vars}))))]
     {:return-type out-type
      :eval-expr
      (fn [^IIndirectRelation in-rel al _params]
@@ -1319,7 +1352,9 @@
                  start (.getElementStartIndex list-rdr idx)
                  nlen (- end start element-count)]
              ;; this exception is required by spec, but it would be sensible to just return an empty array
-             (when (< nlen 0) (throw (IllegalArgumentException. "Data exception - array element error.")))
+             (when (< nlen 0) (throw (err/runtime-err :core2.expression/array-element-error
+                                                      {::err/message "Data exception - array element error."
+                                                       :nlen nlen})))
              (dotimes [n nlen]
                (.startValue out-data-writer)
                (.copyElement copier idx n)
