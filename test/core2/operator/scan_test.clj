@@ -93,3 +93,16 @@
 
         (t/is (= '{id [:union #{[:extension-type :keyword :utf8 ""] :utf8}]}
                  (->col-types tx)))))))
+
+#_ ; FIXME #363
+(t/deftest sys-time-test-363
+  (with-open [node (node/start-node {})]
+    (c2/submit-tx node [[:put {:id :my-doc, :last_updated "tx1" :_table "foo"}]] {:sys-time #inst "3000"})
+    (let [!tx (c2/submit-tx node [[:put {:id :my-doc, :last_updated "tx2" :_table "foo"}]] {:sys-time #inst "3001"})
+          ingester (tu/component node :core2/ingester)]
+      (t/is (= [{:last_updated "tx1"} {:last_updated "tx1"} {:last_updated "tx2"}]
+               (tu/query-ra '[:scan [{system_time_start (< system_time_start #time/zoned-date-time "3002-01-01T00:00Z")}
+                                     {system_time_end (> system_time_end #time/zoned-date-time "2999-01-01T00:00Z")}
+                                     last_updated
+                                     {_table (= _table "foo")}]]
+                            {:srcs {'$ (ingest/snapshot ingester !tx)}}))))))
