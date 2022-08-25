@@ -6,9 +6,9 @@
             [clojure.string :as str]
             [clojure.tools.cli :as cli]
             [clojure.tools.logging :as log]
-            [core2.sql.plan :as plan]
             [core2.test-util :as tu])
-  (:import java.nio.charset.StandardCharsets
+  (:import java.io.OutputStream
+           java.nio.charset.StandardCharsets
            java.security.MessageDigest
            [java.sql Connection DriverManager]))
 
@@ -225,21 +225,25 @@
                             (dissoc :result-set))
                         (-> (assoc record :result-set result-str)
                             (dissoc :result-set-md5sum)))))
-      (let [report-success #(update-in ctx [:results :success] (fnil inc 0))
-            report-failure (fn [expected actual]
-                             (log/warn
-                               (format
-                                 "Failure\n<File>\n%s\n\n<Line>\n%s\n\n<Query>\n%s\n\n<Expected>\n%s\n\n<Actual>\n%s\n\n"
-                                 file line query expected actual))
-                             (update-in ctx [:results :failure] (fnil inc 0)))
-            updated-ctx (if result-set-md5sum
-                          (if (= result-set-md5sum (md5 result-str))
-                            (report-success)
-                            (report-failure result-set-md5sum (md5 result-str)))
-                          (if (= result-set result-str)
-                            (report-success)
-                            (report-failure result-set result-str)))]
-        updated-ctx))))
+      (letfn [(report-success []
+                (t/do-report {:type :pass, :file file, :line line})
+                (update-in ctx [:results :success] (fnil inc 0)))
+
+              (report-failure [expected actual]
+                (t/do-report {:type :fail, :expected expected, :actual actual, :file file, :line line})
+                (log/warn
+                 (format
+                  "Failure\n<File>\n%s\n\n<Line>\n%s\n\n<Query>\n%s\n\n<Expected>\n%s\n\n<Actual>\n%s\n\n"
+                  file line query expected actual))
+                (update-in ctx [:results :failure] (fnil inc 0)))]
+
+        (if result-set-md5sum
+          (if (= result-set-md5sum (md5 result-str))
+            (report-success)
+            (report-failure result-set-md5sum (md5 result-str)))
+          (if (= result-set result-str)
+            (report-success)
+            (report-failure result-set result-str)))))))
 
 (def ^:dynamic *db-engine*)
 
@@ -252,40 +256,40 @@
   (let [ctx (merge {:db-engine db-engine :queries-run 0 :results {}} *opts*)]
       (->> records
            (reduce
-            (fn [{:keys [queries-run query-limit] :as ctx} record]
+            (fn [{:keys [queries-run query-limit] :as ctx} {:keys [file line] :as record}]
               (binding [*current-record* record]
-                (if (= queries-run query-limit)
-                  (reduced ctx)
-                  (try
-                    (-> (execute-record ctx record)
-                        (update :queries-run + (if (= :query (:type record))
-                                                 1
-                                                 0)))
-                    (catch Throwable t
-                      #_(swap!
-                          error-counts-by-message
-                          (fn [acc]
-                            (-> acc
-                                (update-in
+                (t/testing (format "%s L%d" file line)
+                  (if (= queries-run query-limit)
+                    (reduced ctx)
+                    (try
+                      (-> (execute-record ctx record)
+                          (update :queries-run + (if (= :query (:type record))
+                                                   1
+                                                   0)))
+                      (catch Throwable t
+                        #_(swap!
+                           error-counts-by-message
+                           (fn [acc]
+                             (-> acc
+                                 (update-in
                                   [(ex-message t) :count]
                                   (fnil inc 0))
-                                (update-in
+                                 (update-in
                                   [(ex-message t) :lines]
                                   #(conj % (:line record))))))
-                      (if (and (str/starts-with? (or (ex-message t) "") "Column reference is not a grouping column")
-                               (contains? (set (:skipif record)) "postgresql"))
-                        ;; Reporting here commented out as its still quite noisy.
-                        (do #_(log/warn "Ignored <Column reference is not a grouping column> Error as XTDB doesn't support" record)
-                              (update ctx :queries-run + (if (= :query (:type record))
-                                                           1
-                                                           0)))
-                        (do (log/error t "Error Executing Record" record)
-                            (-> ctx
-                                (update-in [:results :error] (fnil inc 0))
-                                (update :queries-run + (if (= :query (:type record))
-                                                         1
-                                                         0)))))
-                      #_(throw t))))))
+                        (-> ctx
+                            (update :queries-run + (if (= :query (:type record))
+                                                     1
+                                                     0)))
+                        (t/do-report {:type :error, :expected nil, :actual t, :file file, :line line})
+                        (if (and (str/starts-with? (or (ex-message t) "") "Column reference is not a grouping column")
+                                 (contains? (set (:skipif record)) "postgresql"))
+                          ;; Reporting here commented out as its still quite noisy.
+                          (do #_(log/warn "Ignored <Column reference is not a grouping column> Error as XTDB doesn't support" record)
+                              )
+                          (log/error t "Error Executing Record" record))
+
+                        #_(throw t)))))))
             ctx))))
 
 (defn with-xtdb [f]
@@ -300,6 +304,33 @@
 
 (def with-sqlite (partial with-jdbc "jdbc:sqlite::memory:"))
 
+(defn run-slt-script [script-name {:keys [db]
+                                   :or {db "xtdb"}
+                                   :as opts}]
+  (binding [*opts* opts]
+    (let [script-file (io/file (io/resource "core2/sql/logic_test") script-name)
+          script (parse-script script-name (slurp script-file))]
+      (letfn [(f []
+                (execute-records *db-engine* script))]
+        (case db
+          "xtdb" (tu/with-node
+                   #(with-xtdb f))
+          "sqlite" (with-sqlite f)
+          (with-jdbc db f))))))
+
+(defmacro def-slt-test
+  ([nm] `(def-slt-test ~nm {}))
+  ([nm opts]
+   (let [script-name (str (str/replace (str nm) "--" "/") ".test")]
+     `(letfn [(run-slt-script#
+                ([] (run-slt-script# {}))
+                ([opts#] (run-slt-script ~script-name (merge ~opts opts#))))]
+        (doto (defn ~nm
+                ([] (t/test-var (var ~nm)))
+                ([opts#] (t/test-var (-> #(run-slt-script# opts#)
+                                         (vary-meta into (meta (var ~nm)))))))
+          (alter-meta! assoc :test run-slt-script#, :arglists '([] [~'opts])))))))
+
 (def cli-options
   [[nil "--verify"]
    [nil "--dirs"]
@@ -310,6 +341,7 @@
    [nil "--db DB" :default "xtdb" :validate [(fn [x]
                                                (or (contains? #{"xtdb" "sqlite"} x)
                                                    (str/starts-with? x "jdbc:"))) "Unknown db."]]])
+
 (defn -main [& args]
   (let [{:keys [options arguments errors]} (cli/parse-opts args cli-options)
         {:keys [verify db max-failures max-errors dirs direct-sql]} options
@@ -323,7 +355,8 @@
                                        :validation
                                        :completion)
                         :query-limit (:limit options)
-                        :direct-sql direct-sql}]
+                        :direct-sql direct-sql}
+                t/*test-out* (io/writer (OutputStream/nullOutputStream))]
         (doseq [script-name (if dirs
                               (->> arguments
                                    (mapcat #(file-seq (io/file %)))
