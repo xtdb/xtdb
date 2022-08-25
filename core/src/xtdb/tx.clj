@@ -464,13 +464,16 @@
       :else
       true)))
 
-(defn ->tx-ingester {::sys/deps {:tx-indexer :xtdb/tx-indexer
+(defn ->tx-ingester {::sys/args {:batch-preferred-doc-count
+                                 {:default 1024
+                                  :spec ::sys/pos-int}}
+                     ::sys/deps {:tx-indexer :xtdb/tx-indexer
                                  :index-store :xtdb/index-store
                                  :document-store :xtdb/document-store
                                  :tx-log :xtdb/tx-log
                                  :bus :xtdb/bus
                                  :secondary-indices :xtdb/secondary-indices}}
-  [{:keys [tx-log tx-indexer document-store bus index-store secondary-indices]}]
+  [{:keys [tx-log tx-indexer document-store bus index-store secondary-indices batch-preferred-doc-count]}]
   (log/info "Started tx-ingester")
 
   (let [!error (atom nil)
@@ -489,7 +492,25 @@
               (when (compare-and-set! !error nil t)
                 (when-not (instance? InterruptedException t)
                   (log/fatal t "Ingester error occurred"))
-                (bus/send bus {::xt/event-type ::ingester-error, :ingester-error t})))]
+                (bus/send bus {::xt/event-type ::ingester-error, :ingester-error t})))
+
+            ;; See https://github.com/xtdb/xtdb/pull/1808
+            (batch-transactions [txs]
+              (lazy-seq
+                (loop [batch []
+                       doc-hashes #{}
+                       txs txs]
+                  (if-not (seq txs)
+                    (when (seq batch) [{:batch batch, :doc-hashes doc-hashes}])
+                    (let [tx (first txs)
+                          new-batch (conj batch tx)
+                          new-doc-hashes (txc/tx-events->doc-hashes (::txe/tx-events tx))
+                          unioned-doc-hashes (into doc-hashes new-doc-hashes)]
+                      (if (<= (long batch-preferred-doc-count) (count unioned-doc-hashes))
+                        (if (seq batch)
+                          (cons {:batch batch, :doc-hashes doc-hashes} (batch-transactions txs))
+                          (cons {:batch new-batch, :doc-hashes unioned-doc-hashes} (batch-transactions (rest txs))))
+                        (recur new-batch unioned-doc-hashes (rest txs))))))))]
 
       ;; catching all the secondary indices up to where XTDB is
       (when (and latest-xtdb-tx-id (seq secondary-indices))
@@ -553,12 +574,8 @@
                                               (db/index-tx-docs in-flight-tx docs)
                                               (submit-job! txs-index-executor txs-index-fn (assoc m :tx tx :in-flight-tx in-flight-tx)))))
 
-                                        (txs-doc-fetch-fn [txs]
-                                          (let [docs (strict-fetch-docs document-store
-                                                                        (->> txs
-                                                                             (into #{}
-                                                                                   (comp (map ::txe/tx-events)
-                                                                                         (mapcat txc/tx-events->doc-hashes)))))
+                                        (txs-doc-fetch-fn [txs doc-hashes]
+                                          (let [docs (strict-fetch-docs document-store doc-hashes)
                                                 txs (doall
                                                      (for [tx txs]
                                                        {:tx tx
@@ -569,7 +586,8 @@
                                     (when (Thread/interrupted)
                                       (throw (InterruptedException.)))
 
-                                    (submit-job! txs-docs-fetch-executor txs-doc-fetch-fn txs)
+                                    (doseq [{:keys [batch doc-hashes]} (batch-transactions txs)]
+                                      (submit-job! txs-docs-fetch-executor txs-doc-fetch-fn batch doc-hashes))
 
                                     (catch Throwable t
                                       (set-ingester-error! t)
