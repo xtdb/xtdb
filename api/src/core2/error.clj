@@ -32,9 +32,9 @@
    (runtime-err k data nil))
 
   ([k {::keys [^String message] :as data} cause]
-   (let [message (or message (format "Illegal argument: '%s'" k))]
+   (let [message (or message (format "Runtime error: '%s'" k))]
      (core2.RuntimeException. message
-                              (merge {::error-type :illegal-argument
+                              (merge {::error-type :runtime-error
                                       ::error-key k
                                       ::message message}
                                      data)
