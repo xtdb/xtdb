@@ -306,40 +306,57 @@
               (util/try-close sum-agg)
               (util/try-close count-agg))))))))
 
-(defmethod ->aggregate-factory :variance [{:keys [from-name from-type to-name zero-row?]}]
-  (let [avgx-agg (->aggregate-factory {:f :avg, :from-name from-name, :from-type from-type
-                                       :to-name 'avgx, :zero-row? zero-row?})
+(defn- ->variance-agg-factory [variance-op {:keys [from-name from-type to-name zero-row?]}]
+  (let [countx-agg (->aggregate-factory {:f :count, :from-name from-name, :from-type from-type
+                                         :to-name 'countx, :zero-row? zero-row?})
+
+        sumx-agg (->aggregate-factory {:f :sum, :from-name from-name, :from-type from-type
+                                       :to-name 'sumx, :zero-row? zero-row?})
 
         x2-projecter (expr/->expression-projection-spec 'x2 (list '* from-name from-name)
                                                         {:col-types {from-name from-type}})
 
-        avgx2-agg (->aggregate-factory {:f :avg, :from-name 'x2, :from-type (.getColumnType x2-projecter)
-                                        :to-name 'avgx2, :zero-row? zero-row?})
+        sumx2-agg (->aggregate-factory {:f :sum, :from-name 'x2, :from-type (.getColumnType x2-projecter)
+                                        :to-name 'sumx2, :zero-row? zero-row?})
 
-        finish-projecter (expr/->expression-projection-spec to-name '(- avgx2 (* avgx avgx))
-                                                            {:col-types {'avgx (.getToColumnType avgx-agg)
-                                                                         'avgx2 (.getToColumnType avgx2-agg)}})]
+        finish-projecter (expr/->expression-projection-spec to-name (case variance-op
+                                                                      :var_pop '(if (> countx 0)
+                                                                                  (/ (- sumx2
+                                                                                        (/ (* sumx sumx) (double countx)))
+                                                                                     (double countx))
+                                                                                  nil)
+                                                                      :var_samp '(if (> countx 1)
+                                                                                   (/ (- sumx2
+                                                                                         (/ (* sumx sumx) (double countx)))
+                                                                                      (double (- countx 1)))
+                                                                                   nil))
+                                                            {:col-types {'sumx (.getToColumnType sumx-agg)
+                                                                         'sumx2 (.getToColumnType sumx2-agg)
+                                                                         'countx (.getToColumnType countx-agg)}})]
 
     (reify IAggregateSpecFactory
       (getToColumnName [_] to-name)
       (getToColumnType [_] (.getColumnType finish-projecter))
 
       (build [_ al]
-        (let [avgx-agg (.build avgx-agg al)
-              avgx2-agg (.build avgx2-agg al)
+        (let [sumx-agg (.build sumx-agg al)
+              sumx2-agg (.build sumx2-agg al)
+              countx-agg (.build countx-agg al)
               res-vec (Float8Vector. (name to-name) al)]
           (reify
             IAggregateSpec
             (aggregate [_ in-rel group-mapping]
               (let [in-vec (.vectorForName in-rel (name from-name))]
                 (with-open [x2 (.project x2-projecter al (iv/->indirect-rel [in-vec]) {})]
-                  (.aggregate avgx-agg in-rel group-mapping)
-                  (.aggregate avgx2-agg (iv/->indirect-rel [x2]) group-mapping))))
+                  (.aggregate sumx-agg in-rel group-mapping)
+                  (.aggregate sumx2-agg (iv/->indirect-rel [x2]) group-mapping)
+                  (.aggregate countx-agg in-rel group-mapping))))
 
             (finish [_]
-              (let [avgx-ivec (.finish avgx-agg)
-                    avgx2-ivec (.finish avgx2-agg)
-                    out-ivec (.project finish-projecter al (iv/->indirect-rel [avgx-ivec avgx2-ivec]) {})]
+              (let [sumx-ivec (.finish sumx-agg)
+                    sumx2-ivec (.finish sumx2-agg)
+                    countx-ivec (.finish countx-agg)
+                    out-ivec (.project finish-projecter al (iv/->indirect-rel [countx-ivec sumx-ivec sumx2-ivec]) {})]
                 (if (instance? NullVector (.getVector out-ivec))
                   out-ivec
                   (do
@@ -350,11 +367,15 @@
             Closeable
             (close [_]
               (util/try-close res-vec)
-              (util/try-close avgx-agg)
-              (util/try-close avgx2-agg))))))))
+              (util/try-close sumx-agg)
+              (util/try-close sumx2-agg)
+              (util/try-close countx-agg))))))))
 
-(defmethod ->aggregate-factory :std-dev [{:keys [from-name from-type to-name zero-row?]}]
-  (let [variance-agg (->aggregate-factory {:f :variance, :from-name from-name, :from-type from-type
+(defmethod ->aggregate-factory :var_pop [agg-opts] (->variance-agg-factory :var_pop agg-opts))
+(defmethod ->aggregate-factory :var_samp [agg-opts] (->variance-agg-factory :var_samp agg-opts))
+
+(defn- ->stddev-agg-factory [variance-op {:keys [from-name from-type to-name zero-row?]}]
+  (let [variance-agg (->aggregate-factory {:f variance-op, :from-name from-name, :from-type from-type
                                            :to-name 'variance, :zero-row? zero-row?})
         finish-projecter (expr/->expression-projection-spec to-name '(sqrt variance)
                                                             {:col-types {'variance (.getToColumnType variance-agg)}})]
@@ -384,6 +405,12 @@
             (close [_]
               (util/try-close res-vec)
               (util/try-close variance-agg))))))))
+
+(defmethod ->aggregate-factory :stddev_pop [agg-opts]
+  (->stddev-agg-factory :var_pop agg-opts))
+
+(defmethod ->aggregate-factory :stddev_samp [agg-opts]
+  (->stddev-agg-factory :var_samp agg-opts))
 
 (defn- min-max-factory
   "compare-kw: update the accumulated value if `(compare-kw el acc)`"

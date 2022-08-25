@@ -1,0 +1,70 @@
+hash-threshold 100
+# yay, I can still do GCSE statistics (with much help from the SQL spec and Google)
+
+statement ok
+INSERT INTO t (id, x) VALUES (1, 10)
+
+statement ok
+INSERT INTO t (id, x) VALUES (1, 20)
+
+statement ok
+INSERT INTO t (id, x) VALUES (2, 30)
+
+statement ok
+INSERT INTO t (id, x) VALUES (2, 40)
+
+statement ok
+INSERT INTO t (id, x) VALUES (1, 50)
+
+statement ok
+INSERT INTO t (id, x) VALUES (1, 60)
+
+statement ok
+INSERT INTO t (id, x) VALUES (2, 70)
+
+statement ok
+INSERT INTO t (id, x) VALUES (3, 80)
+
+statement ok
+INSERT INTO t (id, x) VALUES (3, 90)
+
+query IIIIIR rowsort
+SELECT t.id, COUNT(t.x), MIN(t.x), MAX(t.x), SUM(t.x), AVG(t.x) FROM t GROUP BY t.id
+----
+1
+4
+10
+60
+140
+35.000
+2
+3
+30
+70
+140
+46.667
+3
+2
+80
+90
+170
+85.000
+
+query IRRRR rowsort
+SELECT t.id, VAR_POP(t.x), STDDEV_POP(t.x), VAR_SAMP(t.x), STDDEV_SAMP(t.x) FROM t GROUP BY t.id
+----
+1
+425.000
+20.616
+566.667
+23.805
+2
+288.889
+16.997
+433.333
+20.817
+3
+25.000
+5.000
+50.000
+7.071

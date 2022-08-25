@@ -19,19 +19,25 @@
                       {cnt (count b)}
                       {min (min b)}
                       {max (max b)}
-                      {variance (variance b)}
-                      {std-dev (std-dev b)}]
+                      {var-pop (var_pop b)}
+                      {var-samp (var_samp b)}
+                      {stddev-pop (stddev_pop b)}
+                      {stddev-samp (stddev_samp b)}]
           expected-col-types '{a :i64, cnt :i64
                                sum [:union #{:null :i64}], avg [:union #{:null :f64}]
                                min [:union #{:null :i64}], max [:union #{:null :i64}]
-                               variance [:union #{:null :f64}], std-dev [:union #{:null :f64}]}]
+                               var-pop [:union #{:null :f64}], stddev-pop [:union #{:null :f64}]
+                               var-samp [:union #{:null :f64}], stddev-samp [:union #{:null :f64}]}]
 
       (t/is (= {:res #{{:a 1, :sum 140, :avg 35.0, :cnt 4 :min 10 :max 60,
-                        :variance 425.0, :std-dev 20.615528128088304}
+                        :var-pop 425.0, :stddev-pop 20.615528128088304
+                        :var-samp 566.6666666666666, :stddev-samp 23.804761428476166}
                        {:a 2, :sum 140, :avg 46.666666666666664, :cnt 3 :min 30 :max 70
-                        :variance 288.88888888888914, :std-dev 16.996731711975958}
+                        :var-pop 288.88888888888897, :stddev-pop 16.99673171197595
+                        :var-samp 433.3333333333335, :stddev-samp 20.816659994661332}
                        {:a 3, :sum 170, :avg 85.0, :cnt 2 :min 80 :max 90,
-                        :variance 25.0, :std-dev 5.0}}
+                        :var-pop 25.0, :stddev-pop 5.0
+                        :var-samp 50.0, :stddev-samp 7.0710678118654755}}
                 :col-types expected-col-types}
 
                (run-test (cons 'a agg-specs)
@@ -48,6 +54,20 @@
       (t/is {:res (run-test (cons 'a agg-specs) [])
              :col-types expected-col-types}
             "empty input"))
+
+    (t/is (= #{{:a 1, :var-pop 25.0, :var-samp 50.0, :stddev-pop 5.0, :stddev-samp 7.0710678118654755}
+               {:a 2, :var-pop 0.0, :var-samp nil, :stddev-pop 0.0, :stddev-samp nil}
+               {:a 3, :var-pop nil, :var-samp nil, :stddev-pop nil, :stddev-samp nil}}
+             (-> (run-test '[a
+                             {var-pop (var_pop b)}
+                             {var-samp (var_samp b)}
+                             {stddev-pop (stddev_pop b)}
+                             {stddev-samp (stddev_samp b)}]
+                           [[{:a 1 :b 20}
+                             {:a 1 :b 10}
+                             {:a 2 :b 30}
+                             {:a 3 :b nil}]])
+                 (:res))))
 
     (t/is (= {:res #{{:a 1} {:a 2} {:a 3}}
               :col-types '{a :i64}}
