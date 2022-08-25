@@ -1519,3 +1519,23 @@
 
     (t/is (= #{[:foo]}
              (xt/q db '{:find [e], :where [[e :xt/id]]})))))
+
+;; https://github.com/xtdb/xtdb/pull/1808 (try to catch batching regression)
+(t/deftest mix-sized-transaction-test
+  (fix/with-tmp-dirs #{db-dir}
+    (let [ctr (atom 0)
+          cfg {:xtdb/tx-log {:kv-store {:xtdb/module 'xtdb.rocksdb/->kv-store
+                                        :db-dir (io/file db-dir "txs")}}
+               :xtdb/document-store {:kv-store {:xtdb/module 'xtdb.rocksdb/->kv-store
+                                                :db-dir (io/file db-dir "docs")}}}]
+      (with-open [node (xt/start-node cfg)]
+        (doseq [tx-doc-count (concat
+                               (range 1 10)
+                               (range 1 100)
+                               (take 10 (cycle [42 100 42 1000 2000])))
+                :let [puts (map (fn [n] [::xt/put {:xt/id n ::n n}]) (range @ctr (+ @ctr tx-doc-count)))]]
+          (xt/submit-tx node puts)
+          (swap! ctr + tx-doc-count)))
+      (with-open [node (xt/start-node cfg)]
+        (xt/sync node)
+        (t/is (= #{[@ctr]} (xt/q (xt/db node) '{:find [(count e)] :where [[e ::n]]})))))))
