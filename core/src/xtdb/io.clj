@@ -362,4 +362,5 @@
         (cond
           (vector? entry) {:xtdb.tx.event/tx-events entry}
           (map? entry) entry
-          :else (throw (IllegalStateException. (format "unexpected value on tx-log: '%s'" (pr-str entry)))))))
+          (instance? clojure.lang.PersistentVector$ChunkedSeq entry) {:xtdb.tx.event/tx-events entry}
+          :else (throw (IllegalStateException. (format "unexpected value on tx-log: '%s' of type '%s'" (pr-str entry) (pr-str (type entry))))))))
