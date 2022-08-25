@@ -54,8 +54,13 @@
     f))
 
 (def ^:private jdbc-dialects
-  #{:h2 :sqlite :embedded-postgres
-    #_:postgres #_:mysql #_:mssql})
+  (cond->
+    #{:h2 :sqlite #_:postgres #_:mysql #_:mssql}
+
+    ;; current :embedded-postgres dep does not support m1 (amd64)
+    ;; we can upgrade to get support via docker, but it changes the lib significantly (native tarball vs docker)
+    ;; so skipping tests for now
+    (not= "aarch64" (System/getProperty "os.arch")) (conj :embedded-postgres)))
 
 ;; Optional:
 ;; in `xtdb-jdbc`: `docker-compose up` (`docker-compose up -d` for background)
