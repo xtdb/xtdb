@@ -22,7 +22,7 @@
                  ;; JDBC
                  [com.h2database/h2 "1.4.200"]
                  [com.opentable.components/otj-pg-embedded "0.13.3"]
-                 [org.xerial/sqlite-jdbc "3.28.0"]
+                 [org.xerial/sqlite-jdbc "3.36.0.3"]
                  [mysql/mysql-connector-java "8.0.23"]
                  [com.microsoft.sqlserver/mssql-jdbc "8.2.2.jre8"]
 

@@ -23,7 +23,7 @@
                  [org.postgresql/postgresql "42.2.18" :scope "provided"]
                  [com.oracle.ojdbc/ojdbc8 "19.3.0.0" :scope "provided"]
                  [com.h2database/h2 "1.4.200" :scope "provided"]
-                 [org.xerial/sqlite-jdbc "3.28.0" :scope "provided"]
+                 [org.xerial/sqlite-jdbc "3.36.0.3" :scope "provided"]
                  [mysql/mysql-connector-java "8.0.23" :scope "provided"]
                  [com.microsoft.sqlserver/mssql-jdbc "8.2.2.jre8" :scope "provided"]]
 
