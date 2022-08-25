@@ -21,8 +21,6 @@
 (def ^:private ^:const ^String relation-id-delimiter "__")
 (def ^:private ^:const ^String relation-prefix-delimiter "_")
 
-(def ^:dynamic *include-table-column-in-scan?* false)
-
 (declare expr)
 
 (defn- id-symbol [table table-id column]

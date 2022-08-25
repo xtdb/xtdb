@@ -323,8 +323,7 @@
                                        :validation
                                        :completion)
                         :query-limit (:limit options)
-                        :direct-sql direct-sql}
-                plan/*include-table-column-in-scan?* true]
+                        :direct-sql direct-sql}]
         (doseq [script-name (if dirs
                               (->> arguments
                                    (mapcat #(file-seq (io/file %)))
