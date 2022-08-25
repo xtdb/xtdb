@@ -984,3 +984,14 @@
          "SELECT foo.name
          FROM foo
          WHERE foo.APP_TIME OVERLAPS foo.APPLICATION_TIME"))))
+
+(deftest test-remove-names-359
+  (t/is
+    (=plan-file
+      "test-remove-names-359-single-ref"
+      (plan-sql "SELECT (SELECT x.bar FROM z) FROM x")))
+
+  (t/is
+    (=plan-file
+      "test-remove-names-359-multiple-ref"
+      (plan-sql "SELECT (SELECT x.bar FROM (SELECT x.bar FROM z) AS y) FROM x"))))

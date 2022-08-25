@@ -1,0 +1,17 @@
+hash-threshold 100
+
+statement ok
+INSERT INTO x (id, bar) VALUES(1,'fish')
+
+statement ok
+INSERT INTO z (id) VALUES(2)
+
+query T rowsort
+SELECT (SELECT x.bar FROM z) FROM x
+----
+fish
+
+query T rowsort
+SELECT (SELECT x.bar FROM (SELECT x.bar FROM z) AS y) FROM x
+----
+fish

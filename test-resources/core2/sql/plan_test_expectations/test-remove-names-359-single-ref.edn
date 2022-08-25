@@ -1,0 +1,12 @@
+[:rename
+ {x6 $column_1$}
+ [:project
+  [x6]
+  [:apply
+   :cross-join
+   {x1 ?x7}
+   [:rename {bar x1, _table x2} [:scan [bar {_table (= _table "x")}]]]
+   [:max-1-row
+    [:project
+     [{x6 ?x7}]
+     [:rename {_table x4} [:scan [{_table (= _table "z")}]]]]]]]]

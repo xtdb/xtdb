@@ -1915,8 +1915,8 @@
                              (fn [acc p]
                                (if (extend-projection? p)
                                  (let [[k v] (first p)]
-                                   (if (and (symbol? v) (not (str/starts-with? (name v) "?_")))
-                                     (assoc acc k (smap v))
+                                   (if-let [existing-name (smap v)]
+                                     (assoc acc k existing-name)
                                      (assoc acc k (next-name))))
                                  (assoc acc p (smap p))))
                              (if (= op :map)

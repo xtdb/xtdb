@@ -1,7 +1,7 @@
 [:rename
- {x10 $column_1$}
+ {x8 $column_1$}
  [:project
-  [{x10 x8}]
+  [x8]
   [:cross-join
    [:rename
     {a x1, _table x2}
