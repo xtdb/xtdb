@@ -604,8 +604,8 @@
 
 ;; null-eq is an internal function used in situations where two nulls should compare equal,
 ;; e.g when grouping rows in group-by.
-(defmethod codegen-mono-call [:null-eq :any :any] [_]
-  {:return-type :bool, :->call-code #(do `(= ~@%))})
+(defmethod codegen-mono-call [:null-eq :any :any] [call]
+  (codegen-mono-call (assoc call :f :=)))
 
 (defmethod codegen-mono-call [:null-eq :null :any] [_]
   {:return-type :bool, :->call-code (constantly false)})
