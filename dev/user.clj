@@ -1,6 +1,7 @@
 (ns user
   (:require [clojure.tools.namespace.repl :as ctn]
             [clojure.java.io :as io]
+            core2.edn
             [time-literals.read-write :as time-literals])
   (:import java.io.File))
 
