@@ -15,7 +15,9 @@
   :dependencies [[org.clojure/clojure]
                  [org.clojure/tools.logging]
                  [com.xtdb/xtdb-core]
-                 [org.apache.kafka/kafka-clients "2.6.1" :exclusions [org.lz4/lz4-java]]
+                 [org.apache.kafka/kafka-clients "2.6.1" :exclusions [org.lz4/lz4-java
+                                                                      org.xerial.snappy/snappy-java]]
+                 [org.xerial.snappy/snappy-java "1.1.8.4"]
                  [pro.juxt.clojars-mirrors.cheshire/cheshire]
                  [com.cognitect/transit-clj nil :exclusions [org.msgpack/msgpack]]]
 
