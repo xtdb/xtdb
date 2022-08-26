@@ -240,7 +240,9 @@
   (tcp/for-all [t1 (tcg/one-of [ldt-gen lt-gen zdt-gen])
                 default-tz zone-id-gen
                 now instant-gen]
-    (= (LocalTime/ofInstant (->inst t1 now default-tz) default-tz)
+    (= (if (instance? LocalTime t1) ; see #372
+         t1
+         (LocalTime/ofInstant (->inst t1 now default-tz) default-tz))
        (->> (tu/query-ra [:project [{'res (list 'cast '?t1 [:time-local :micro])}]
                           [:table [{}]]]
                          {:params {'?t1 t1}
