@@ -1,0 +1,85 @@
+= Bases
+
+XT footnote:[Most of this applies to Core1 and Core2 - I'll explicitly differentiate between them where applicable.] queries and transactions are run against a 'basis'.
+This is required by the following constraints, in particular:
+
+* We'd like to preserve a strong 'referential integrity' - if a user runs the same query with the same arguments/options, no matter when or which node it hits, it should return the same results (unexpected errors aside) - often referred to as 'repeatable queries'.
+* XT nodes ingest transactions serially but asynchronously from a transaction log - a node may be up-to-date with the head of the log, it may be a few transactions behind, or it may be a _long_ way behind (e.g. if it's reindexing).
+  Users should still be able to 'read their writes' though - to see the effects of a transaction they've submitted in a subsequent query.
+* XT ingestion must be deterministic, because it is run independently, without inter-node communication, on multiple nodes - we cannot have two nodes in a different (observable) end state having indexed the same transactions.
+* Clocks on different nodes aren't assumed to be completely in sync - even that there is an upper bound on clock skew.
+  footnote:cockroach[aside: CockroachDB https://www.cockroachlabs.com/docs/stable/operational-faqs.html#what-happens-when-node-clocks-are-not-properly-synchronized[does assume] that all clocks in a cluster are within 500ms of each other]
+
+To achieve repeatable queries, it's necessary that the query execution doesn't have any 'co-effects' - anything that can affect the results must be bundled up as an argument submitted with the query.
+
+In practice, for Core2
+footnote:[In Core1, we don't have `CURRENT_TIMESTAMP` and friends, but we  do run queries 'as of' a valid-time. We also don't have TZs]
+, this means:
+
+* the current time - e.g. for functions like `CURRENT_TIMESTAMP`, used explicitly or implicitly
+* how many transactions to take into account - 'current sys-time'.
+* a default timezone - in SQL, there are a lot of functions/type-casts whose behaviour depends on the 'session timezone'
+  footnote:utc[yes, I know, we could just make everyone use UTC]
+
+== Impact on queries
+
+If a user specifies values for all of these parameters, they should get the same results every time.
+That said, from a UX point-of-view we don't want to burden the user with supplying all of these parameters to every query.
+What should their defaults be?
+
+Generally speaking, even though we love repeatable queries, we'd like the default behaviour to mirror a traditional database - the same query (without explicit basis parameters), run multiple times, should include new results as they come in.
+
+Right, so, as a first pass, it seems like 'current app-time' and 'current sys-time' should both just default to 'now'.
+
+Here's where it gets fun:
+
+* Reading your writes: if the node you happen to query hasn't indexed your transaction yet, you won't see its effects.
++
+Here, we ask the user to submit a lower-bound for the transaction basis if they want to read their writes - when they submit a transaction, they get a 'receipt'; when they query, they pass this receipt back to XT.
+Then, the queried node waits until it's indexed at least that transaction (or hits the user-provided timeout) before it runs the query.
+* "Do we need a basis at all? Couldn't we just get users to use SQL:2011's system-time syntax if they want repeatable queries?"
++
+Unfortunately this isn't sufficient for truly repeatable queries - the query will still depend on how many transactions the node's ingested.
+Consider a query like `SELECT ... FROM ... FOR SYSTEM_TIME AS AT <Friday 5pm>` - if there were transactions at 4pm and 4:30pm, a node that's only indexed one of these may still return different results to a node that's indexed both (or neither!).
++
+The basis therefore upper-bounds any system-time constraints in the query - the above query executed with a basis of 3pm should not return any data from transactions after 3pm, even though the in-query constraint specifies 5pm.
+* Rather than 'now', we default the 'current sys-time' to the latest indexed tx at the time the query's run.
++
+This is again because of the asynchronous ingestion - if latest-indexed tx is 16:30, and we default the basis to now (17:00, say), we will get different results for the same arguments once the transaction at 16:45 is indexed.
+If we instead default to latest-indexed-tx, this issue goes away.
++
+This is more of an issue in Core1, because it has separate `await` and `db` APIs - we have to validate that the tx-time passed to `db` has been correctly awaited.
+In Core2, it's one API call, so we await the transaction and then run the query.
++
+(It _is_ an issue in Core2 if the user explicitly supplies 'now', because the node then has to wait (possibly indefinitely, if there are no more transactions) for a later transaction to be indexed.
+It may also become an issue in Core2 if we were to allow the user to retrieve the effective basis of a query as metadata on the results - this would allow a user to query the latest results now but store the basis to repeat the query later.)
+* For app-time, SQL:2011 doesn't add any filters here by default, so we'll likely be recommending liberal use of `WHERE APP_TIME CONTAINS CURRENT_TIMESTAMP`.
+footnote:[or https://github.com/xtdb/core2/issues/339[introducing a flag that does this for them]]
+Without fixing `CURRENT_TIMESTAMP` to the basis value, these queries wouldn't be repeatable.
+(Indeed, the SQL:2011 spec says to fix the value of `CURRENT_TIMESTAMP` within a transaction, exactly for this reason).
+* We should use the current time as per the Core2 client for the basis (rather than the Core2 server) - see below.
+
+== Impact on ingestion
+
+This also broadly applies to transaction ingestion, because of the requirement that XT ingestion is deterministic, even between non-communicating nodes.
+
+* Regarding 'how many transactions to take into account' - because transaction ingestion is http://jepsen.io/consistency/models/strict-serializable[strict serializable], the value for this must always be 'all of the preceding transactions please'.
+  Nodes _do_ agree on the order of transactions, thanks to the tx-log.
+  We also use the transaction time as decided by the log.
+* We have to assume that ingesting nodes are indexing the transactions at different times - so the 'current time' for a given transaction has to be consistent across the cluster.
+This is achieved by including the current time of the submitting node as part of the tx.
++
+--
+Why shouldn't we just set 'current-time' to be the same as the tx-log's transaction time (as we do in Core1)?
+
+Let's say we did, and that the submitting node's clock was sufficiently far behind the tx-log's clock.
+footnote:[yes, this https://github.com/xtdb/xtdb/issues/1665[actually happened]]
+
+* We submit a transaction at 16:00 tx-log time, 15:59 submitting node time.
+* The transaction inserts a doc, valid from `CURRENT_TIMESTAMP` (i.e. 16:00, because we've defaulted it to be the same as tx-log time)
+* The submitting node awaits the transaction, and wants to read its write, so it submits a query with sys-time basis 16:00, app-time defaulting to node clock of 15:59:30.
+* It doesn't see the doc, because it's not valid yet.
+--
++
+Defaulting the in-tx app-time to use the submitting node's clock ensures a 'happens-before' relationship between these two events, so they're guaranteed to see it.
+* The ingesting nodes may not share a TZ footnote:utc[] - so this is also set by the submitting node, and goes on the tx-log.
