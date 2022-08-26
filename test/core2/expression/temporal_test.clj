@@ -217,7 +217,7 @@
 
   LocalDate
   (->inst [ld now zone-id]
-    (-> (.atTime ld LocalTime/MIDNIGHT)
+    (-> (.atStartOfDay ld)
         (->inst now zone-id)))
 
   LocalTime
@@ -252,7 +252,9 @@
   (tcp/for-all [t1 (tcg/one-of [ldt-gen ld-gen lt-gen zdt-gen])
                 default-tz zone-id-gen
                 now instant-gen]
-    (= (LocalDateTime/ofInstant (->inst t1 now default-tz) default-tz)
+    (= (if (instance? LocalDate t1) ; see fix for #371
+         (.atStartOfDay ^LocalDate t1)
+         (LocalDateTime/ofInstant (->inst t1 now default-tz) default-tz))
        (->> (tu/query-ra [:project [{'res (list 'cast '?t1 [:timestamp-local :micro])}]
                           [:table [{}]]]
                          {:params {'?t1 t1}
