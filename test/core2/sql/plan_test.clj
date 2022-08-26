@@ -135,7 +135,7 @@
 
   (t/is (=plan-file
           "basic-query-22"
-          (plan-sql "SELECT si.movieTitle FROM StarsIn AS si OFFSET 5 ROWS FETCH FIRST 10 ROWS ONLY")))
+          (plan-sql "SELECT si.movieTitle FROM StarsIn AS si OFFSET 5 LIMIT 10")))
 
   (t/is (=plan-file
           "basic-query-23"
@@ -387,7 +387,8 @@
                     CURRENT_DATE,
                     CURRENT_TIMESTAMP, CURRENT_TIMESTAMP(4),
                     LOCALTIME, LOCALTIME(6),
-                    LOCALTIMESTAMP, LOCALTIMESTAMP(9)
+                    LOCALTIMESTAMP, LOCALTIMESTAMP(9),
+                    END_OF_TIME, END_OF_TIME()
                     FROM u"))))
 
 (t/deftest test-dynamic-parameters-103
@@ -429,6 +430,15 @@
   (t/is (=plan-file
           "test-order-by-null-handling-159-2"
           (plan-sql "SELECT foo.a FROM foo ORDER BY foo.a NULLS LAST"))))
+
+(t/deftest test-arrow-table
+  (t/is (=plan-file
+          "test-arrow-table-1"
+          (plan-sql "SELECT foo.a FROM ARROW_TABLE('test.arrow') AS foo")))
+
+  (t/is (=plan-file
+          "test-arrow-table-2"
+          (plan-sql "SELECT * FROM ARROW_TABLE('test.arrow') AS foo (a, b)"))))
 
 (defn- plan-expr [sql]
   (let [plan (plan-sql (format "SELECT %s t FROM foo WHERE foo.a = 42" sql))
@@ -682,8 +692,6 @@
   (t/are [sql expected]
     (= expected (plan-expr sql))
 
-    ;; todo I think this should work (<empty specification>)
-    #_#_
     "ARRAY []" []
 
     "ARRAY [1]" [1]
@@ -694,7 +702,46 @@
 
     "ARRAY [1, 42]" [1 42]
     "ARRAY [1, NULL]" [1 nil]
-    "ARRAY [1, 1.2, '42!']" [1 1.2 "42!"]))
+    "ARRAY [1, 1.2, '42!']" [1 1.2 "42!"]
+
+    "[]" []
+
+    "[1]" [1]
+    "[NULL]" [nil]
+    "[[1]]" [[1]]
+
+    "[foo.x, foo.y + 1]" '[x1 (+ x2 1)]
+
+    "[1, 42]" [1 42]
+    "[1, NULL]" [1 nil]
+    "[1, 1.2, '42!']" [1 1.2 "42!"]))
+
+(deftest test-object-construction
+  (t/are [sql expected]
+    (= expected (plan-expr sql))
+
+    "OBJECT ()" {}
+    "OBJECT ('foo': 2)" {:foo 2}
+    "OBJECT ('foo': 2, 'bar': true)" {:foo 2 :bar true}
+    "OBJECT ('foo': 2, 'bar': ARRAY [true, 1])" {:foo 2 :bar [true 1]}
+    "OBJECT ('foo': 2, 'bar': OBJECT('baz': ARRAY [true, 1]))" {:foo 2 :bar {:baz [true 1]}}
+
+    "{}" {}
+    "{'foo': 2}" {:foo 2}
+    "{'foo': 2, 'bar': true}" {:foo 2 :bar true}
+    "{'foo': 2, 'bar': [true, 1]}" {:foo 2 :bar [true 1]}
+    "{'foo': 2, 'bar': {'baz': [true, 1]}}" {:foo 2 :bar {:baz [true 1]}}))
+
+(deftest test-object-field-access
+  (t/are [sql expected]
+    (= expected (plan-expr sql))
+
+    "OBJECT('foo': 2).foo" '(. {:foo 2} foo)
+    "{'foo': 2}.foo" '(. {:foo 2} foo)
+    "{'foo': 2}.foo.bar" '(. (. {:foo 2} foo) bar)
+
+    "foo.a.b" '(. x1 b)
+    "foo.a.b.c" '(. (. x1 b) c)))
 
 (deftest test-array-subqueries
   (t/are [file q]

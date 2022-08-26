@@ -52,6 +52,17 @@
    {:tag :nt, :keyword :left_paren, :hide true}
    {:tag :nt, :keyword :numeric_value_expression}
    {:tag :nt, :keyword :right_paren, :hide true})},
+ :arrow_table
+ {:tag :cat,
+  :parsers
+  ({:tag :string, :string "ARROW_TABLE"}
+   {:tag :opt,
+    :parser
+    {:tag :cat,
+     :parsers
+     ({:tag :nt, :keyword :left_paren, :hide true}
+      {:tag :nt, :keyword :character_string_literal}
+      {:tag :nt, :keyword :right_paren, :hide true})}})},
  :greater_than_operator {:tag :string, :string ">"},
  :character_like_predicate
  {:tag :cat,
@@ -63,23 +74,29 @@
   :keyword :exact_numeric_literal,
   :red {:reduction-type :raw}},
  :fetch_first_clause
- {:tag :cat,
+ {:tag :alt,
   :parsers
-  ({:tag :string, :string "FETCH"}
-   {:tag :alt,
+  ({:tag :cat,
     :parsers
-    ({:tag :string, :string "FIRST"} {:tag :string, :string "NEXT"})}
-   {:tag :opt, :parser {:tag :nt, :keyword :fetch_first_quantity}}
-   {:tag :alt,
-    :parsers
-    ({:tag :string, :string "ROW"} {:tag :string, :string "ROWS"})}
-   {:tag :alt,
-    :parsers
-    ({:tag :string, :string "ONLY"}
-     {:tag :cat,
+    ({:tag :string, :string "FETCH"}
+     {:tag :alt,
       :parsers
-      ({:tag :string, :string "WITH"}
-       {:tag :string, :string "TIES"})})})},
+      ({:tag :string, :string "FIRST"} {:tag :string, :string "NEXT"})}
+     {:tag :opt, :parser {:tag :nt, :keyword :fetch_first_quantity}}
+     {:tag :alt,
+      :parsers
+      ({:tag :string, :string "ROW"} {:tag :string, :string "ROWS"})}
+     {:tag :alt,
+      :parsers
+      ({:tag :string, :string "ONLY"}
+       {:tag :cat,
+        :parsers
+        ({:tag :string, :string "WITH"}
+         {:tag :string, :string "TIES"})})})}
+   {:tag :cat,
+    :parsers
+    ({:tag :string, :string "LIMIT"}
+     {:tag :nt, :keyword :fetch_first_quantity})})},
  :binary_large_object_string_type
  {:tag :alt,
   :parsers
@@ -109,6 +126,12 @@
  {:tag :nt,
   :keyword :character_value_expression,
   :red {:reduction-type :raw}},
+ :object_name_and_value
+ {:tag :cat,
+  :parsers
+  ({:tag :nt, :keyword :object_name}
+   {:tag :nt, :keyword :colon, :hide true}
+   {:tag :nt, :keyword :value_expression})},
  :boolean_factor
  {:tag :cat,
   :parsers
@@ -155,6 +178,10 @@
     :parsers
     ({:tag :nt, :keyword :collection_derived_table}
      {:tag :nt, :keyword :correlation_or_recognition})}
+   {:tag :cat,
+    :parsers
+    ({:tag :nt, :keyword :arrow_table}
+     {:tag :nt, :keyword :correlation_or_recognition})}
    {:tag :nt, :keyword :parenthesized_joined_table})},
  :parenthesized_joined_table
  {:tag :alt,
@@ -175,9 +202,12 @@
   :parsers
   ({:tag :string, :string "OFFSET"}
    {:tag :nt, :keyword :offset_row_count}
-   {:tag :alt,
-    :parsers
-    ({:tag :string, :string "ROW"} {:tag :string, :string "ROWS"})})},
+   {:tag :opt,
+    :parser
+    {:tag :alt,
+     :parsers
+     ({:tag :string, :string "ROW"}
+      {:tag :string, :string "ROWS"})}})},
  :predefined_type
  {:tag :alt,
   :parsers
@@ -591,12 +621,10 @@
   ({:tag :nt, :keyword :identifier}
    {:tag :opt,
     :parser
-    {:tag :plus,
-     :parser
-     {:tag :cat,
-      :parsers
-      ({:tag :nt, :keyword :period, :hide true}
-       {:tag :nt, :keyword :identifier})}}})},
+    {:tag :cat,
+     :parsers
+     ({:tag :nt, :keyword :period, :hide true}
+      {:tag :nt, :keyword :identifier})}})},
  :less_than_operator {:tag :string, :string "<"},
  :start_field
  {:tag :cat,
@@ -904,7 +932,7 @@
     :parser
     {:tag :regexp,
      :regexp
-     #"(?i)(\b(NULL|WITH|SELECT|FROM|WHERE|GROUP|HAVING|ORDER|OFFSET|FETCH|UNION|EXCEPT|INTERSECT|CURRENT_TIME|CURRENT_TIMESTAMP|CURRENT_DATE|LOCALTIME|LOCALTIMESTAMP)\b)"}}
+     #"(?i)(\b(NULL|WITH|SELECT|FROM|WHERE|GROUP|HAVING|ORDER|OFFSET|FETCH|LIMIT|UNION|EXCEPT|INTERSECT|CURRENT_TIME|CURRENT_TIMESTAMP|CURRENT_DATE|LOCALTIME|LOCALTIMESTAMP|END_OF_TIME)\b)"}}
    {:tag :regexp, :regexp #"[a-zA-Z][a-zA-Z0-9_]*"})},
  :contextually_typed_row_value_expression
  {:tag :alt,
@@ -977,6 +1005,7 @@
        ({:tag :string, :string "ALL"}
         {:tag :string, :string "DISTINCT"})}}
      {:tag :nt, :keyword :query_primary})})},
+ :object_name {:tag :nt, :keyword :character_string_literal},
  :array_aggregate_function
  {:tag :cat,
   :parsers
@@ -1306,17 +1335,7 @@
       {:tag :nt, :keyword :string_length})}}
    {:tag :nt, :keyword :right_paren, :hide true})},
  :asterisked_identifier_chain
- {:tag :cat,
-  :parsers
-  ({:tag :nt, :keyword :asterisked_identifier}
-   {:tag :opt,
-    :parser
-    {:tag :plus,
-     :parser
-     {:tag :cat,
-      :parsers
-      ({:tag :nt, :keyword :period, :hide true}
-       {:tag :nt, :keyword :asterisked_identifier})}}})},
+ {:tag :nt, :keyword :asterisked_identifier},
  :array_concatenation
  {:tag :cat,
   :parsers
@@ -1349,6 +1368,40 @@
   ({:tag :string, :string "IS"}
    {:tag :opt, :parser {:tag :string, :string "NOT"}}
    {:tag :string, :string "NULL"})},
+ :object_constructor
+ {:tag :alt,
+  :parsers
+  ({:tag :cat,
+    :parsers
+    ({:tag :string, :string "OBJECT"}
+     {:tag :nt, :keyword :left_paren, :hide true}
+     {:tag :opt,
+      :parser
+      {:tag :cat,
+       :parsers
+       ({:tag :nt, :keyword :object_name_and_value}
+        {:tag :star,
+         :parser
+         {:tag :cat,
+          :parsers
+          ({:tag :nt, :keyword :comma, :hide true}
+           {:tag :nt, :keyword :object_name_and_value})}})}}
+     {:tag :nt, :keyword :right_paren, :hide true})}
+   {:tag :cat,
+    :parsers
+    ({:tag :nt, :keyword :left_brace, :hide true}
+     {:tag :opt,
+      :parser
+      {:tag :cat,
+       :parsers
+       ({:tag :nt, :keyword :object_name_and_value}
+        {:tag :star,
+         :parser
+         {:tag :cat,
+          :parsers
+          ({:tag :nt, :keyword :comma, :hide true}
+           {:tag :nt, :keyword :object_name_and_value})}})}}
+     {:tag :nt, :keyword :right_brace, :hide true})})},
  :left_bracket_or_trigraph
  {:tag :alt,
   :parsers
@@ -1554,7 +1607,7 @@
  :empty_specification
  {:tag :cat,
   :parsers
-  ({:tag :string, :string "ARRAY"}
+  ({:tag :opt, :parser {:tag :string, :string "ARRAY"}}
    {:tag :nt, :keyword :left_bracket_or_trigraph}
    {:tag :nt, :keyword :right_bracket_or_trigraph})},
  :in_value_list
@@ -2714,7 +2767,8 @@
    {:tag :nt, :keyword :current_timestamp_value_function}
    {:tag :nt, :keyword :current_time_value_function}
    {:tag :nt, :keyword :current_local_timestamp_value_function}
-   {:tag :nt, :keyword :current_local_time_value_function}),
+   {:tag :nt, :keyword :current_local_time_value_function}
+   {:tag :nt, :keyword :end_of_time_value_function}),
   :red {:reduction-type :raw}},
  :aggregate_function
  {:tag :alt,
@@ -2812,9 +2866,9 @@
  :array_value_constructor_by_enumeration
  {:tag :cat,
   :parsers
-  ({:tag :string, :string "ARRAY"}
+  ({:tag :opt, :parser {:tag :string, :string "ARRAY"}}
    {:tag :nt, :keyword :left_bracket_or_trigraph}
-   {:tag :nt, :keyword :array_element_list}
+   {:tag :opt, :parser {:tag :nt, :keyword :array_element_list}}
    {:tag :nt, :keyword :right_bracket_or_trigraph})},
  :large_object_length
  {:tag :alt,
@@ -2841,6 +2895,16 @@
    {:tag :opt, :parser {:tag :nt, :keyword :order_by_clause}}
    {:tag :opt, :parser {:tag :nt, :keyword :result_offset_clause}}
    {:tag :opt, :parser {:tag :nt, :keyword :fetch_first_clause}})},
+ :end_of_time_value_function
+ {:tag :cat,
+  :parsers
+  ({:tag :string, :string "END_OF_TIME"}
+   {:tag :opt,
+    :parser
+    {:tag :cat,
+     :parsers
+     ({:tag :nt, :keyword :left_paren, :hide true}
+      {:tag :nt, :keyword :right_paren, :hide true})}})},
  :character_position_expression
  {:tag :cat,
   :parsers
@@ -3001,8 +3065,10 @@
    {:tag :nt, :keyword :string_value_expression}
    {:tag :nt, :keyword :right_paren, :hide true})},
  :collection_value_constructor
- {:tag :nt,
-  :keyword :array_value_constructor,
+ {:tag :alt,
+  :parsers
+  ({:tag :nt, :keyword :array_value_constructor}
+   {:tag :nt, :keyword :object_constructor}),
   :red {:reduction-type :raw}},
  :natural_logarithm
  {:tag :cat,

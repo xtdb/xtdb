@@ -1,0 +1,5 @@
+[:rename
+ {x1 a x2 b}
+ [:project
+  [x1 x2]
+  [:rename {a x1 b x2} [:arrow "test.arrow"]]]]

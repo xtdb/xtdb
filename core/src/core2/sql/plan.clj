@@ -9,7 +9,8 @@
             core2.operator ;; Adds impls logical plan spec
             [core2.rewrite :as r]
             [core2.sql.analyze :as sem]
-            [core2.sql.parser :as p])
+            [core2.sql.parser :as p]
+            [core2.util :as u])
   (:import (clojure.lang Var)
            (java.time LocalDate LocalDateTime LocalTime OffsetTime ZoneOffset ZonedDateTime)
            java.util.HashMap))
@@ -174,6 +175,14 @@
          (:array_element_list nil) nil
          [(expr z)]))
      z)
+
+    :object_constructor
+    (into {} (r/collect-stop
+              (fn [z]
+                (r/zmatch z
+                  [:object_name_and_value ^:z on ^:z ve]
+                  [[(expr on) (expr ve)]]))
+              z))
 
     :case_abbreviation
     (->> (r/collect-stop
@@ -555,6 +564,7 @@
     [:current_local_time_value_function _ ^:z tp] (list 'local-time (expr tp))
     [:current_local_timestamp_value_function _] '(local-timestamp)
     [:current_local_timestamp_value_function _ ^:z tp] (list 'local-timestamp (expr tp))
+    [:end_of_time_value_function _] u/end-of-time
 
     [:character_like_predicate ^:z rvp [:character_like_predicate_part_2 "LIKE" ^:z cp]]
     ;;=>
@@ -754,6 +764,35 @@
     [:quantified_comparison_predicate _ [:quantified_comparison_predicate_part_2 _ [:all _] [:subquery ^:z qe]]]
     ;;=>
     (exists-symbol qe)
+
+    ;; TODO: this will eventually be resolved at runtime.
+    [:object_name ^:z n]
+    ;; =>
+    (keyword (expr n))
+
+    ;; Does not work for column references, see above.
+    [:field_reference ^:z vep [:regular_identifier fn]]
+    (list '. (expr vep) (symbol fn))
+
+    [:array_value_constructor_by_enumeration]
+    ;; =>
+    []
+
+    [:array_value_constructor_by_enumeration "ARRAY"]
+    ;; =>
+    []
+
+    [:empty_specification]
+    ;; =>
+    []
+
+    [:empty_specification "ARRAY"]
+    ;; =>
+    []
+
+    [:array_value_constructor_by_enumeration ^:z list]
+    ;; =>
+    (vec (expr list))
 
     [:array_value_constructor_by_enumeration _ ^:z list]
     ;; =>
@@ -1449,6 +1488,14 @@
       relation
       (build-apply :cross-join column->param nil relation))))
 
+(defn- build-arrow-table [tp]
+  (let [{:keys [id correlation-name] :as table} (sem/table tp)
+        projection (first (sem/projected-columns tp))
+        url (r/$ (r/$ tp 1) -1)]
+    [:rename (table-reference-symbol correlation-name id)
+     [:project (mapv unqualified-projection-symbol projection)
+      [:arrow (expr url)]]]))
+
 ;; TODO: both UNNEST and LATERAL are only dealt with on top-level in
 ;; FROM. UNNEST also needs to take potential subqueries in cve into
 ;; account.
@@ -1612,6 +1659,9 @@
     [:max-1-row relation]
     (relation-columns relation)
 
+    [:arrow path]
+    []
+
     (throw (err/illegal-arg ::cannot-calculate-relation-cols
                             {::err/message (str "cannot calculate columns for: " (pr-str relation-in))
                              :relation relation-in}))))
@@ -1686,23 +1736,35 @@
     [:query_expression [:with_clause "WITH" _] ^:z qeb [:order_by_clause _ _ ^:z ssl]]
     (wrap-with-order-by ssl (plan qeb))
 
-    [:query_expression ^:z qeb [:result_offset_clause _ rorc _]]
-    [:top {:skip (expr rorc)} (plan qeb)]
-
-    [:query_expression ^:z qeb [:order_by_clause _ _ ^:z ssl] [:result_offset_clause _ rorc _]]
-    [:top {:skip (expr rorc)} (wrap-with-order-by ssl (plan qeb))]
+    [:query_expression ^:z qeb [:fetch_first_clause "LIMIT" ^:z ffrc]]
+    [:top {:limit (expr ffrc)} (plan qeb)]
 
     [:query_expression ^:z qeb [:fetch_first_clause _ _ ffrc _ _]]
     [:top {:limit (expr ffrc)} (plan qeb)]
 
-    [:query_expression ^:z qeb [:order_by_clause _ _ ^:z ssl] [:fetch_first_clause _ _ ffrc _ _]]
+    [:query_expression ^:z qeb [:order_by_clause _ _ ^:z ssl] [:fetch_first_clause "LIMIT" ^:z ffrc]]
     [:top {:limit (expr ffrc)} (wrap-with-order-by ssl (plan qeb))]
 
-    [:query_expression ^:z qeb [:result_offset_clause _ rorc _] [:fetch_first_clause _ _ ffrc _ _]]
-    [:top {:skip (expr rorc) :limit (expr ffrc)} (plan qeb)]
+    [:query_expression ^:z qeb [:order_by_clause _ _ ^:z ssl] [:fetch_first_clause _ _ ^:z ffrc _ _]]
+    [:top {:limit (expr ffrc)} (wrap-with-order-by ssl (plan qeb))]
 
-    [:query_expression ^:z qeb [:order_by_clause _ _ ^:z ssl] [:result_offset_clause _ rorc _] [:fetch_first_clause _ _ ffrc _ _]]
-    [:top {:skip (expr rorc) :limit (expr ffrc)} (wrap-with-order-by ssl (plan qeb))]
+    [:query_expression ^:z qeb [:order_by_clause _ _ ^:z ssl] ^:z roc]
+    [:top {:skip (expr (r/$ roc 2))} (wrap-with-order-by ssl (plan qeb))]
+
+    [:query_expression ^:z qeb [:order_by_clause _ _ ^:z ssl] ^:z roc [:fetch_first_clause "LIMIT" ^:z ffrc]]
+    [:top {:skip (expr (r/$ roc 2)) :limit (expr ffrc)} (wrap-with-order-by ssl (plan qeb))]
+
+    [:query_expression ^:z qeb [:order_by_clause _ _ ^:z ssl] ^:z roc [:fetch_first_clause _ _ ^:z ffrc _ _]]
+    [:top {:skip (expr (r/$ roc 2)) :limit (expr ffrc)} (wrap-with-order-by ssl (plan qeb))]
+
+    [:query_expression ^:z qeb ^:z roc]
+    [:top {:skip (expr (r/$ roc 2))} (plan qeb)]
+
+    [:query_expression ^:z qeb ^:z roc [:fetch_first_clause "LIMIT" ^:z ffrc]]
+    [:top {:skip (expr (r/$ roc 2)) :limit (expr ffrc)} (plan qeb)]
+
+    [:query_expression ^:z qeb ^:z roc [:fetch_first_clause _ _ ffrc _ _]]
+    [:top {:skip (expr (r/$ roc 2)) :limit (expr ffrc)} (plan qeb)]
 
     [:query_specification _ ^:z sl ^:z te]
     ;;=>
@@ -1784,11 +1846,19 @@
     (->> (wrap-with-group-by z (plan fc))
          (wrap-with-select hsc))
 
+    [:table_primary [:collection_derived_table _ _] _]
+    ;;=>
+    (build-collection-derived-table z)
+
     [:table_primary [:collection_derived_table _ _] _ _]
     ;;=>
     (build-collection-derived-table z)
 
     [:table_primary [:collection_derived_table _ _] _ _ _]
+    (build-collection-derived-table z)
+
+    [:table_primary [:collection_derived_table _ _ _ _] _]
+    ;;=>
     (build-collection-derived-table z)
 
     [:table_primary [:collection_derived_table _ _ _ _] _ _]
@@ -1798,8 +1868,25 @@
     [:table_primary [:collection_derived_table _ _ _ _] _ _ _]
     (build-collection-derived-table z)
 
+    [:table_primary [:lateral_derived_table _ [:subquery ^:z qe]] _]
+    (build-lateral-derived-table z qe)
+
     [:table_primary [:lateral_derived_table _ [:subquery ^:z qe]] _ _]
     (build-lateral-derived-table z qe)
+
+    [:table_primary [:lateral_derived_table _ [:subquery ^:z qe]] _ _ _]
+    (build-lateral-derived-table z qe)
+
+    [:table_primary [:arrow_table _ _] _]
+    ;;=>
+    (build-arrow-table z)
+
+    [:table_primary [:arrow_table _ _] _ _]
+    ;;=>
+    (build-arrow-table z)
+
+    [:table_primary [:arrow_table _ _] _ _ _]
+    (build-arrow-table z)
 
     [:table_primary _]
     ;;=>
@@ -1999,6 +2086,11 @@
                                  (symbol (str prefix-or-columns relation-prefix-delimiter %))))
             (set/rename-keys smap prefix-or-columns))))
 
+      [:project columns [:arrow path]]
+      (let [smap (zipmap (map ->projected-column columns)
+                         (repeatedly next-name))]
+        (with-smap [:rename smap [:arrow path]] smap))
+
       [:project projection relation]
       (remove-projection-names :project projection relation)
 
@@ -2085,6 +2177,9 @@
 
       [:max-1-row relation]
       (with-smap [:max-1-row relation] (->smap relation))
+
+      [:arrow path]
+      (with-smap [:arrow path] {})
 
       (when (and (vector? (r/node relation-in))
                  (keyword? (r/ctor relation-in)))

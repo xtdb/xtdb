@@ -361,10 +361,20 @@ SELECT t1.d-t1.e AS a, SUM(t1.a) AS b
   (valid? "SELECT 1 FROM t1 FETCH FIRST 1 ROWS ONLY")
   (valid? "SELECT 1 FROM t1 FETCH FIRST :foo ROWS ONLY")
 
+  (invalid? #"Fetch first row count must be an integer"
+            "SELECT 1 FROM t1 LIMIT 'foo'")
+  (valid? "SELECT 1 FROM t1 LIMIT 1")
+  (valid? "SELECT 1 FROM t1 LIMIT :foo")
+
   (invalid? #"Offset row count must be an integer"
             "SELECT 1 FROM t1 OFFSET 'foo' ROWS")
   (valid? "SELECT 1 FROM t1 OFFSET 1 ROWS")
-  (valid? "SELECT 1 FROM t1 OFFSET :foo ROWS"))
+  (valid? "SELECT 1 FROM t1 OFFSET :foo ROWS")
+
+  (invalid? #"Offset row count must be an integer"
+            "SELECT 1 FROM t1 OFFSET 'foo'")
+  (valid? "SELECT 1 FROM t1 OFFSET 1")
+  (valid? "SELECT 1 FROM t1 OFFSET :foo"))
 
 (t/deftest test-check-period-predicand
   (invalid?
@@ -610,6 +620,50 @@ SELECT t1.d-t1.e AS a, SUM(t1.a) AS b
             [{:identifier "a", :qualified-column ["foo" "a"], :index 0}]]
            (->> (valid? "SELECT a.a FROM (SELECT foo.a a FROM foo) a")
                 (map :projected-columns))))
+
+  (t/is (= [[{:index 0, :identifier "c"}]
+            [{:index 0, :identifier "c"}]]
+           (->> (valid? "SELECT t1.b.c FROM t1")
+                (map :projected-columns))))
+
+  (t/is (= [[{:index 0, :identifier "bar"}]
+            [{:index 0, :identifier "bar", :qualified-column ["x" "bar"]}]]
+           (->> (valid? "SELECT x.bar FROM x")
+                (map :projected-columns))))
+
+  (t/is (= [[{:index 0, :identifier "bar"}]
+            [{:index 0, :identifier "bar"}]
+            [{:index 0, :identifier "bar"}]
+            [{:index 0, :identifier "bar", :qualified-column ["x" "bar"]}]]
+           (->> (valid? "SELECT (SELECT x.bar FROM y) FROM x")
+                (map :projected-columns))))
+
+  (t/is (=  [[{:index 0, :identifier "y"}]
+             [{:index 0, :identifier "y", :qualified-column ["x" "y"]}]]
+            (->> (valid? "SELECT x.y FROM ARROW_TABLE('test.arrow') AS x")
+                 (map :projected-columns))))
+
+  (t/is (=  [[{:index 0, :identifier "y"}
+              {:index 1, :identifier "z"}]
+             [{:index 0, :identifier "y", :qualified-column ["x" "y"]}
+              {:index 1, :identifier "z", :qualified-column ["x" "z"]}]]
+            (->> (valid? "SELECT * FROM ARROW_TABLE('test.arrow') AS x (y, z)")
+                 (map :projected-columns))))
+
+
+  (valid? "INSERT INTO users (id, name) VALUES (?, ?)")
+
+  (invalid? #"INSERT requires query to have same degree as column list"
+            "INSERT INTO users (id, name) VALUES (?, ?, ?)")
+
+  (invalid? #"INSERT does not contain mandatory id column"
+            "INSERT INTO users (name, application_time_start) VALUES (?, ?)")
+
+  (invalid? #"Non-deterministic ARROW_TABLE is not allowed in DML statements"
+            "INSERT INTO users (id, name) SELECT x.id, x.name FROM ARROW_TABLE('test.arrow') AS x")
+
+  (invalid? #"Subquery does not select single column"
+            "SELECT (SELECT x.bar, y.foo FROM y) FROM x")
 
   (invalid? #"Derived columns has to have same degree as table"
             "SELECT * FROM x, UNNEST(x.a) WITH ORDINALITY AS foo (a)")

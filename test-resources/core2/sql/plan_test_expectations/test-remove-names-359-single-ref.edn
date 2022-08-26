@@ -1,5 +1,5 @@
 [:rename
- {x6 $column_1$}
+ {x6 bar}
  [:project
   [x6]
   [:apply

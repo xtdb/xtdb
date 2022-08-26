@@ -111,6 +111,16 @@
       column
 
       [:derived_column
+       [:field_reference _ [:regular_identifier column]]]
+      ;;=>
+      column
+
+      [:derived_column
+       [:subquery ^:z sq]]
+      ;;=>
+      (:identifier (ffirst (projected-columns sq)))
+
+      [:derived_column
        [:host_parameter_name column]]
       ;;=>
       column)
@@ -910,6 +920,26 @@
       [(format "Subquery does not select single column: %s %s"
                (->src-str ag) (->line-info-str ag))])))
 
+(defn- check-from-subquery [ag]
+  (r/zmatch ag
+    [:from_subquery cl ^:z qe]
+    (let [selected-columns (first (projected-columns (r/$ ag -1)))
+          inserted-columns (mapv second (rest cl))]
+      (cond-> []
+        (not= (count inserted-columns) (count selected-columns))
+        (conj (format "INSERT requires query to have same degree as column list: %s"
+                      (->line-info-str ag)))
+
+        (not (some #{"id"} inserted-columns))
+        (conj (format "INSERT does not contain mandatory id column: %s"
+                      (->line-info-str ag)))))
+
+    [:from_subquery ^:z qe]
+    (let [selected-columns (first (projected-columns (r/$ ag -1)))]
+      (when-not (some #{"id"} (map :identifier selected-columns))
+        [(format "INSERT does not contain mandatory id column: %s"
+                 (->line-info-str ag))]))))
+
 (defn- check-select-list [ag]
   (when (= [[]] (projected-columns ag))
     [(format "Query does not select any columns: %s"
@@ -934,6 +964,7 @@
              (conj (format "%s side contains ambiguous join columns: %s %s"
                            label (->src-str ag) (->line-info-str ag)))))
          (reduce into))))
+
 (defn- check-period-predicand [ag]
   (let [period-predicand (r/znode ag)]
     (when (= (first (second period-predicand)) :column_reference)
@@ -946,66 +977,88 @@
                    (->src-str ag)
                    (->line-info-str ag))])))))
 
+(defn- check-dml-non-determinsm [ag]
+  (r/zcase ag
+    :arrow_table
+    [(format "Non-deterministic ARROW_TABLE is not allowed in DML statements: %s"
+             (->line-info-str ag))]
+
+    []))
+
+(defn- dml-statement? [ag]
+  (and (= :directly_executable_statement (r/ctor ag))
+       (contains? #{:insert_statement :delete_statement__searched :update_statement__searched}
+                  (r/ctor (r/$ ag -1)))))
+
 (defn errs [ag]
-  (r/collect
-   (fn [ag]
-     (r/zcase ag
-       :table_reference_list
-       (check-duplicates "Table variable" ag
-                         (local-names (dclo ag) :correlation-name))
+  (let [dml? (dml-statement? ag)]
+    (r/collect
+     (fn [ag]
+       (r/zcase ag
+         :table_reference_list
+         (check-duplicates "Table variable" ag
+                           (local-names (dclo ag) :correlation-name))
 
-       :with_list
-       (check-duplicates "CTE query name" ag
-                         (local-names (cteo ag) :query-name))
+         :with_list
+         (check-duplicates "CTE query name" ag
+                           (local-names (cteo ag) :query-name))
 
-       (:query_expression_body
-        :query_term)
-       (check-set-operator ag)
+         (:query_expression_body
+          :query_term)
+         (check-set-operator ag)
 
-       :select_list
-       (check-select-list ag)
+         :select_list
+         (check-select-list ag)
 
-       :asterisked_identifier_chain
-       (check-asterisked-identifier-chain ag)
+         :asterisked_identifier_chain
+         (check-asterisked-identifier-chain ag)
 
-       :table_value_constructor
-       (check-values ag)
+         :table_value_constructor
+         (check-values ag)
 
-       :table_primary
-       (check-derived-columns ag)
+         :table_primary
+         (check-derived-columns ag)
 
-       :column_name_list
-       (check-duplicates "Column name" ag (identifiers ag))
+         :column_name_list
+         (check-duplicates "Column name" ag (identifiers ag))
 
-       :column_reference
-       (check-column-reference ag)
+         :column_reference
+         (check-column-reference ag)
 
-       (:general_set_function
-        :array_aggregate_function)
-       (check-aggregate-or-subquery "Aggregate functions" ag)
+         (:general_set_function
+          :array_aggregate_function)
+         (check-aggregate-or-subquery "Aggregate functions" ag)
 
-       :sort_specification
-       (check-aggregate-or-subquery "Sort specifications" ag)
+         :sort_specification
+         (check-aggregate-or-subquery "Sort specifications" ag)
 
-       :where_clause
-       (check-where-clause ag)
+         :where_clause
+         (check-where-clause ag)
 
-       :fetch_first_clause
-       (check-unsigned-integer "Fetch first row count" (r/$ ag 3))
+         :fetch_first_clause
+         (if (= "LIMIT" (r/lexeme ag 1))
+           (check-unsigned-integer "Fetch first row count" (r/$ ag 2))
+           (check-unsigned-integer "Fetch first row count" (r/$ ag 3)))
 
-       :result_offset_clause
-       (check-unsigned-integer "Offset row count" (r/$ ag 2))
+         :result_offset_clause
+         (check-unsigned-integer "Offset row count" (r/$ ag 2))
 
-       :subquery
-       (check-subquery ag)
+         :subquery
+         (check-subquery ag)
 
-       :named_columns_join
-       (check-named-columns-join ag)
+         :named_columns_join
+         (check-named-columns-join ag)
 
-       :period_predicand
-       (check-period-predicand ag)
-       []))
-   ag))
+         :period_predicand
+         (check-period-predicand ag)
+
+         :from_subquery
+         (check-from-subquery ag)
+
+         (if dml?
+           (check-dml-non-determinsm ag)
+           [])))
+     ag)))
 
 ;; Scopes
 

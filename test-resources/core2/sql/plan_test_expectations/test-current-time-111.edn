@@ -1,9 +1,11 @@
 [:rename
  {x1 a,
   x8 $column_6$,
+  x13 $column_11$,
   x5 $column_3$,
   x9 $column_7$,
   x12 $column_10$,
+  x14 $column_12$,
   x10 $column_8$,
   x4 $column_2$,
   x6 $column_4$,
@@ -19,5 +21,7 @@
    {x9 (local-time)}
    {x10 (local-time 6)}
    {x11 (local-timestamp)}
-   {x12 (local-timestamp 9)}]
+   {x12 (local-timestamp 9)}
+   {x13 #time/instant "9999-12-31T23:59:59.999999Z"}
+   {x14 #time/instant "9999-12-31T23:59:59.999999Z"}]
   [:rename {a x1, _table x2} [:scan [a {_table (= _table "u")}]]]]]
