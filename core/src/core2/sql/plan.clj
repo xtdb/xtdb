@@ -346,6 +346,9 @@
     ;;=>
     (Long/parseLong lexeme)
 
+    [:factor [:minus_sign "-"] [:exact_numeric_literal "9223372036854775808"]]
+    Long/MIN_VALUE
+
     [:factor [:minus_sign "-"] ^:z np]
     (let [np-expr (expr np)]
       (if (number? np-expr)

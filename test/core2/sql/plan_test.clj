@@ -950,6 +950,9 @@
     "foo.APP_TIME IMMEDIATELY SUCCEEDS PERIOD (TIMESTAMP '2000-01-01 00:00:00+00:00', TIMESTAMP '2001-01-01 00:00:00+00:00')"
     '(= x1 #time/zoned-date-time "2001-01-01T00:00Z")))
 
+(deftest test-min-long-value-275
+  (t/is (= Long/MIN_VALUE (plan-expr "-9223372036854775808"))))
+
 (deftest test-multiple-references-to-temporal-cols
   (t/is
     (=plan-file
