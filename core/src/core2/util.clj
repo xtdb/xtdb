@@ -1,6 +1,7 @@
 (ns core2.util
   (:require [clojure.spec.alpha :as s]
             [clojure.tools.logging :as log]
+            [clojure.java.io :as io]
             core2.api
             [core2.error :as err])
   (:import clojure.lang.MapEntry
@@ -8,7 +9,7 @@
            [java.io ByteArrayOutputStream File]
            java.lang.AutoCloseable
            java.lang.reflect.Method
-           java.net.URI
+           [java.net URI URL MalformedURLException]
            java.nio.ByteBuffer
            [java.nio.channels Channels FileChannel FileChannel$MapMode SeekableByteChannel]
            java.nio.charset.StandardCharsets
@@ -51,6 +52,15 @@
 
 (s/def ::path
   (s/and (s/conformer ->path) #(instance? Path %)))
+
+(defn ->url [url-ish]
+  (try
+    (io/as-url url-ish)
+    (catch MalformedURLException _
+      (.toURL (.toUri (->path url-ish))))))
+
+(s/def ::url
+  (s/and (s/conformer ->url) #(instance? URL %)))
 
 (s/def ::string-map (s/map-of string? string?))
 

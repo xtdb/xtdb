@@ -31,27 +31,33 @@
                         {:preserve-blocks? true
                          :with-col-types? true}))))
 
-(def ^:private arrow-path
-  (-> (io/resource "core2/operator/arrow-cursor-test.arrow")
-      .toURI
-      util/->path))
+(def ^:private arrow-stream-url
+  (io/resource "core2/operator/arrow-cursor-test.arrows"))
+
+(def ^:private arrow-file-url
+  (io/resource "core2/operator/arrow-cursor-test.arrow"))
 
 (t/deftest test-arrow-cursor
-  (t/is (= {:col-types {"id" :utf8, "a-long" :i64, "a-double" :f64, "an-inst" [:timestamp-tz :micro "UTC"]}
-            :res example-data}
-           (tu/query-ra [:arrow arrow-path]
-                        {:preserve-blocks? true, :with-col-types? true}))))
+  (let [expected {:col-types {"id" :utf8, "a-long" :i64, "a-double" :f64, "an-inst" [:timestamp-tz :micro "UTC"]}
+                  :res example-data}]
+    (t/is (= expected (tu/query-ra [:arrow arrow-file-url]
+                                   {:preserve-blocks? true, :with-col-types? true})))
+    (t/is (= expected (tu/query-ra [:arrow arrow-stream-url]
+                                   {:preserve-blocks? true, :with-col-types? true})))))
 
 (comment
-  (with-open [al (RootAllocator.)
-              root (VectorSchemaRoot/create (Schema. [(types/col-type->field "id" :utf8)
-                                                      (types/col-type->field "a-long" :i64)
-                                                      (types/col-type->field "a-double" :f64)
-                                                      (types/col-type->field "an-inst" [:timestamp-tz :micro "UTC"])])
-                                            al)]
-    (doto (util/build-arrow-ipc-byte-buffer root :file
-            (fn [write-batch!]
-              (doseq [block example-data]
-                (tu/populate-root root block)
-                (write-batch!))))
-      (util/write-buffer-to-path arrow-path))))
+  (let  [arrow-path (-> (io/resource "core2/operator/arrow-cursor-test.arrows")
+                        .toURI
+                        util/->path)]
+    (with-open [al (RootAllocator.)
+                root (VectorSchemaRoot/create (Schema. [(types/col-type->field "id" :utf8)
+                                                        (types/col-type->field "a-long" :i64)
+                                                        (types/col-type->field "a-double" :f64)
+                                                        (types/col-type->field "an-inst" [:timestamp-tz :micro "UTC"])])
+                                              al)]
+      (doto (util/build-arrow-ipc-byte-buffer root :stream
+              (fn [write-batch!]
+                (doseq [block example-data]
+                  (tu/populate-root root block)
+                  (write-batch!))))
+        (util/write-buffer-to-path arrow-path)))))
