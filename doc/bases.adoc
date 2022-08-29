@@ -57,7 +57,11 @@ It may also become an issue in Core2 if we were to allow the user to retrieve th
 footnote:[or https://github.com/xtdb/core2/issues/339[introducing a flag that does this for them]]
 Without fixing `CURRENT_TIMESTAMP` to the basis value, these queries wouldn't be repeatable.
 (Indeed, the SQL:2011 spec says to fix the value of `CURRENT_TIMESTAMP` within a transaction, exactly for this reason).
-* We should use the current time as per the Core2 client for the basis (rather than the Core2 server) - see below.
+* Data inserted into the future should 'become visible' at the appropriate time.
+  e.g. if I insert a document to become valid at 4pm, the app-time default should behave such that I don't see the document if I query at 15:59, but I should if I query after 16:00.
++
+(This should apply even if there aren't any transactions flowing through the system at the time.
+For example, at one JUXT client they have a very low write throughput - they make the bulk of their writes first thing in the morning, in the app-time future, to take effect throughout the day.)
 
 == Impact on ingestion
 
