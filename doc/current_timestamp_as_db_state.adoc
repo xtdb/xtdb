@@ -1,6 +1,6 @@
 = CURRENT_TIMESTAMP as DB State
 
-This document is written in response to [[basis.adoc][basis.adoc]] and to make some of my thinking explicit as we reach the next phase, during we will start looking at resolving this in earnest.
+This document is written in response to link:bases.adoc[bases.adoc] and to make some of my thinking explicit as we reach the next phase, during we will start looking at resolving this in earnest.
 
 Since the inception of Core2, my idea and plan has been that LogAppendTime should be the only canonical source of time. The main argument is that it should be easy to reason about what's happening, and to never introduce any implicit sources of time anywhere in the system.
 
