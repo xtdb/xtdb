@@ -2,7 +2,7 @@
 
 This document is written in response to link:bases.adoc[bases.adoc] and to make some of my thinking explicit as we reach the next phase, during we will start looking at resolving this in earnest.
 
-Since the inception of Core2, my idea and plan has been that LogAppendTime should be the only canonical source of time. The main argument is that it should be easy to reason about what's happening, and to never introduce any implicit sources of time anywhere in the system.
+Since the inception of Core2, my idea and plan has been that LogAppendTime should be the only canonical source of time. The main argument is that it should be easy to reason about what's happening, and to never introduce any implicit sources of time anywhere in the system. Unless I'm mistaken the key difference is that the Bases proposal implicitly uses the local node's clock to advance observable APPLICATION_TIME.
 
 1. CURRENT_TIMESTAMP, CURRENT_TIME and CURRENT_DATE are derived from LogAppendTime, called CURRENT_SYSTEM_TIMESTAMP here.
 2. The CURRENT_SYSTEM_TIMESTAMP session variable is necessary to set for repeatable reads, as this provides an upper hard limit on what can be seen. Repeatable reads are not expected to be a massive use-case, but should be possible. This sits below the FOR SYSTEM_TIME AS OF family of predicates in SQL:2011 itself. (Drivers will usually guarantee read-your-own-writes within the current session implicitly by waiting for their submitted transactions to be processed, which doesn't require repeatable reads as such, just that the log has advanced enough.)
@@ -19,6 +19,6 @@ Since the inception of Core2, my idea and plan has been that LogAppendTime shoul
 
 == UTC Original Time Zone
 
-All processing has a "original time zone" (as per spec) which is set to UTC. The user can on a per-session basis change this, and of course also insert timestamps with different time zones. CURRENT_DATE, CURRENT_TIME, LOCALTIME and LOCALDATE should be used with care, and with the session time zone set, we may even consider removing these, and only allow literals and explicit casts from CURRENT_TIMESTAMP. Literals are again of course allowed.
+All processing has an "original time zone" (as per spec) which is set to UTC. The user can on a per-session basis change this, and of course also insert timestamps with different time zones. CURRENT_DATE, CURRENT_TIME, LOCALTIME and LOCALDATE should be used with care, and with the session time zone set, we may even consider removing these, and only allow literals and explicit casts from CURRENT_TIMESTAMP. Literals are again of course allowed.
 
 The reason for this is that the timezone of the system doesn't represent the timezone(s) that the application operates within. Hence, there's no safe default timezone to assume at the database level. One could of course support system-wide configuration of a different time zone that UTC if this was deemed. In AWS EC2 nodes are set to UTC by default, and this is a bit similar. Without care one can easily get the timezone from the local machine, via the JVM. This choice should always be explicit. Another risk is that different nodes may not have the same timezone, though this is would be very rare in practice.
