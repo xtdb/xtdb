@@ -102,3 +102,24 @@
 
 ;; end::history-range[]
 )
+
+(defn example-history-predicates [node]
+;; tag::history-predicates[]
+(xt/submit-tx node [[::xt/put
+                     {:xt/id 1 :hello :world}
+                     #inst "1900-08-29T15:05:31.530-00:00"
+                     #inst "2100-08-29T15:05:31.530-00:00"]])
+
+(xt/q (xt/db node)
+      '{:find [e start-time end-time]
+        :where [[e :hello :world]
+                [(get-start-valid-time e) start-time]
+                [(get-end-valid-time e) end-time]]})
+
+;yields
+#{[1
+   #inst "1900-08-29T15:05:31.530-00:00"
+   #inst "2100-08-29T15:05:31.530-00:00"]}
+
+;; end::history-predicates[]
+)

@@ -221,6 +221,16 @@
          :args (s/spec (s/cat :e-var logic-var?, :attr literal?, :not-found (s/? any?)))
          :return (s/? ::binding)))
 
+(defmethod pred-args-spec 'get-start-valid-time [_]
+  (s/cat :pred-fn #{'get-start-valid-time}
+         :args (s/spec (s/cat :e-var logic-var?))
+         :return logic-var?))
+
+(defmethod pred-args-spec 'get-end-valid-time [_]
+  (s/cat :pred-fn #{'get-end-valid-time}
+         :args (s/spec (s/cat :e-var logic-var?, :not-found (s/? any?)))
+         :return logic-var?))
+
 (defmethod pred-args-spec '== [_]
   (s/cat :pred-fn #{'==} :args (s/tuple some? some?)))
 
@@ -946,6 +956,41 @@
                          [not-found]
                          (mapv #(db/decode-value value-serde %) vs))]
             (bind-binding return-type value-serde tuple-idxs-in-join-order (get idx-id->idx idx-id) (not-empty values))))))))
+
+(defmethod pred-constraint 'get-start-valid-time [_ {:keys [idx-id arg-bindings tuple-idxs-in-join-order]}]
+  (let [e-var (second arg-bindings)
+        e-result-index (.result-index ^VarBinding e-var)]
+    (fn pred-get-valid-start-time [{:keys [value-serde index-snapshot valid-time tx-id]} idx-id->idx ^List join-keys]
+      (let [e (->> (.get join-keys e-result-index)
+                   (db/decode-value value-serde))
+            history (db/entity-history index-snapshot e :desc
+                                       {:start-valid-time valid-time, :start-tx {::xt/tx-id tx-id}})
+            ch (some-> ^EntityTx (first history) (.content-hash))
+            value (some-> ^EntityTx (last (take-while #(= ch (.content-hash ^EntityTx %)) history))
+                          (.vt))]
+        (bind-binding :scalar value-serde tuple-idxs-in-join-order (get idx-id->idx idx-id) value)))))
+
+(defmethod pred-constraint 'get-end-valid-time [_ {:keys [idx-id arg-bindings tuple-idxs-in-join-order]}]
+  (let [arg-bindings (rest arg-bindings)
+        [e-var not-found] arg-bindings
+        not-found? (= 2 (count arg-bindings))
+        e-result-index (.result-index ^VarBinding e-var)]
+    (fn pred-get-end-valid-time [{:keys [value-serde index-snapshot valid-time ^long tx-id]} idx-id->idx ^List join-keys]
+      (let [e (->> (.get join-keys e-result-index)
+                   (db/decode-value value-serde))
+            etx-before (first (db/entity-history index-snapshot e :desc
+                                                 {:start-valid-time valid-time
+                                                  :start-tx {::xt/tx-id tx-id}}))
+            vs (cond->> (db/entity-history index-snapshot e :asc
+                                           {:start-valid-time (Date. (inc (.getTime ^Date valid-time)))
+                                            :end-tx {::xt/tx-id (inc tx-id)}})
+                 etx-before (remove #(= (.content-hash ^EntityTx etx-before) (.content-hash ^EntityTx %)))
+                 true (map #(.vt ^EntityTx %)))
+            is-empty? (or (nil? vs) (.isEmpty ^Collection vs))
+            value (if (and is-empty? not-found?)
+                    not-found
+                    (first vs))]
+        (bind-binding :scalar value-serde tuple-idxs-in-join-order (get idx-id->idx idx-id) value)))))
 
 (defmethod pred-constraint 'q [_ {:keys [idx-id arg-bindings rule-name->rules return-type tuple-idxs-in-join-order]}]
   (let [parent-rules (:rules (meta rule-name->rules))

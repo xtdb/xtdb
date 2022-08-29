@@ -1161,6 +1161,134 @@
                                    :where [[e :name "Ivan"]
                                            [(get-attr e :email nil) [email ...]]]})))))
 
+(t/deftest test-get-valid-time
+  (let [now #inst "2000"
+        later1 #inst "2050"
+        later2 #inst "2100"
+        later3 #inst "2150"
+        tx0 (fix/submit+await-tx [[::xt/put {:xt/id :foo, :v 0} now]
+                                  [::xt/put {:xt/id :bar, :v 0} now later2]])]
+
+    (t/testing "tx0"
+      (t/testing "existing start date at the edge"
+        (t/is (= #{[:foo now nil]}
+                 (xt/q (xt/db *api* now)
+                       '{:find [?e ?start-time ?end-time]
+                         :where [[?e :xt/id :foo]
+                                 [(get-start-valid-time ?e) ?start-time]
+                                 [(get-end-valid-time ?e) ?end-time]]}))))
+
+      (t/testing "existing end date at the edge"
+        (t/is (= #{[:bar later2]}
+                 (xt/q (xt/db *api* now)
+                       '{:find [?e ?end-time]
+                         :where [[?e :xt/id :bar]
+                                 [(get-end-valid-time ?e) ?end-time]]}))))
+
+      (t/testing "existing end date"
+        (t/is (= #{[:bar now later2]}
+                 (xt/q (xt/db *api* #inst "2025") ;; in-between
+                       '{:find [?e ?start-time ?end-time]
+                         :where [[?e :xt/id :bar]
+                                 [(get-start-valid-time ?e) ?start-time]
+                                 [(get-end-valid-time ?e) ?end-time]]}))))
+
+      (t/testing "existing and non-exisiting end dates"
+        (t/is (= #{[:foo now nil] [:bar now later2]}
+                 (xt/q (xt/db *api* now)
+                       '{:find [?e ?start-time ?end-time]
+                         :where [[?e :xt/id]
+                                 [(get-start-valid-time ?e) ?start-time]
+                                 [(get-end-valid-time ?e) ?end-time]]}))))
+
+      (t/testing "non-existing entity"
+        (t/is (= #{}
+                 (xt/q (xt/db *api* now)
+                       '{:find [?e ?start-time ?end-time]
+                         :where [[?e :xt/id :non-existing]
+                                 [(get-start-valid-time ?e) ?start-time]
+                                 [(get-end-valid-time ?e) ?end-time]]}))))
+
+      (t/testing "testing default value"
+        (t/is (= #{[:foo :the/default]}
+                 (xt/q (xt/db *api* now)
+                       '{:find [?e ?end-time]
+                         :where [[?e :xt/id :foo]
+                                 [(get-end-valid-time ?e :the/default) ?end-time]]})))))
+
+    (fix/submit+await-tx [[::xt/put {:xt/id :foo, :v 1} later2 later3]
+                          [::xt/put {:xt/id :bar, :v 1} later1 later2]])
+    (xt/sync *api*)
+
+    (t/testing "entity change"
+      (t/is (= #{[:bar now later1]}
+               (xt/q (xt/db *api* now)
+                     '{:find [?e ?start-time ?end-time]
+                       :where [[?e :xt/id :bar]
+                               [(get-start-valid-time ?e) ?start-time]
+                               [(get-end-valid-time ?e) ?end-time]]})))
+
+      (t/is (= #{[:bar later1 later2]}
+               (xt/q (xt/db *api* later1)
+                     '{:find [?e ?start-time ?end-time]
+                       :where [[?e :xt/id :bar]
+                               [(get-start-valid-time ?e) ?start-time]
+                               [(get-end-valid-time ?e) ?end-time]]})))
+
+      (t/is (= #{[:bar later1 later2]}
+               (xt/q (xt/db *api* #inst "2075")
+                     '{:find [?e ?start-time ?end-time]
+                       :where [[?e :xt/id :bar]
+                               [(get-start-valid-time ?e) ?start-time]
+                               [(get-end-valid-time ?e) ?end-time]]}))))
+
+    (t/testing "back in tx-time"
+      (t/is (= #{[:foo 0 now nil]}
+               (xt/q (xt/db *api* {::xt/tx tx0})
+                     '{:find [?e ?v ?start-time ?end-time]
+                       :where [[?e :xt/id :foo]
+                               [?e :v ?v]
+                               [(get-start-valid-time ?e) ?start-time]
+                               [(get-end-valid-time ?e) ?end-time]]})))
+
+      (t/is (= #{[:foo 0 now nil]}
+               (xt/q (xt/db *api* {::xt/valid-time #inst "2175", ::xt/tx tx0})
+                     '{:find [?e ?v ?start-time ?end-time]
+                       :where [[?e :xt/id :foo]
+                               [?e :v ?v]
+                               [(get-start-valid-time ?e) ?start-time]
+                               [(get-end-valid-time ?e) ?end-time]]})))
+
+      (let [tx0 (fix/submit+await-tx [[::xt/put {:xt/id :baz, :v 0} later1 later2]])
+            tx1 (fix/submit+await-tx [[::xt/put {:xt/id :baz, :v 1} now later3]])]
+        (t/is (= #{[:baz 0 later1 later2]}
+                 (xt/q (xt/db *api* {::xt/valid-time #inst "2075", ::xt/tx tx0})
+                       '{:find [?e ?v ?start-time ?end-time]
+                         :where [[?e :xt/id :baz]
+                                 [?e :v ?v]
+                                 [(get-start-valid-time ?e) ?start-time]
+                                 [(get-end-valid-time ?e) ?end-time]]})))
+
+        (t/is (= #{[:baz 1 now later3]}
+                 (xt/q (xt/db *api* {::xt/valid-time #inst "2025", ::xt/tx tx1})
+                       '{:find [?e ?v ?start-time ?end-time]
+                         :where [[?e :xt/id :baz]
+                                 [?e :v ?v]
+                                 [(get-start-valid-time ?e) ?start-time]
+                                 [(get-end-valid-time ?e) ?end-time]]})))))
+
+    (fix/submit+await-tx [[::xt/put {:xt/id :toto, :v 0} now later1]])
+
+    (t/testing "unification"
+      (t/is (= #{[:bar :toto] [:toto :bar]}
+               (xt/q (xt/db *api* now)
+                     '{:find [?e1 ?e2]
+                       :where [[?e1 :xt/id]
+                               [?e2 :xt/id]
+                               [(!= ?e1 ?e2)]
+                               [(get-end-valid-time ?e1) ?end-time]
+                               [(get-end-valid-time ?e2) ?end-time]]}))))))
+
 (t/deftest test-byte-array-values
   (fix/transact! *api* (fix/people [{:xt/id :ivan :name "Ivan" :photo (byte-array [0 1 2])}
                                     {:xt/id :petr :name "Petr" :photo (byte-array [3 4 5])}

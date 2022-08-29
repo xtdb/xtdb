@@ -857,6 +857,16 @@ include::example$test/xtdb/docs/examples_test.clj[tags=history-range,indent=0]
 === Lazy Iteration
 See the `open-entity-history` (Clojure) and `openEntityHistory` (Java) APIs.
 
+=== History predicates
+There also exists the predicates `get-start-valid-time` and `get-end-valid-time` to access
+the history of an entity inside a query. These allow to get the start `valid-time` and
+`end-valid` time of an entity with respect to the snapshot view of the given db.
+
+[source,clj]
+----
+include::example$test/xtdb/docs/examples_test.clj[tags=history-predicates,indent=0]
+----
+
 [#clojure-tips]
 == Clojure Tips
 
