@@ -1,0 +1,24 @@
+[:update
+ {:table "foo"}
+ [:rename
+  {x3 _iid,
+   x4 _row-id,
+   x2 bar,
+   x5 application_time_start,
+   x6 application_time_end}
+  [:project
+   [x3 x4 x2 x5 x6]
+   [:rename
+    {_table x1,
+     baz x2,
+     _iid x3,
+     _row-id x4,
+     application_time_start x5,
+     application_time_end x6}
+    [:scan
+     [{_table (= _table "foo")}
+      baz
+      _iid
+      _row-id
+      application_time_start
+      application_time_end]]]]]]

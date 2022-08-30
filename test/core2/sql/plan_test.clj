@@ -991,7 +991,13 @@
 
 (deftest test-sql-update-plan
   (t/is (=plan-file "test-sql-update-plan"
-                    (plan-sql "UPDATE users FOR PORTION OF APP_TIME FROM DATE '2021-07-01' TO DATE '9999-12-31' AS u SET first_name = 'Sue' WHERE u.id = ?"))))
+                    (plan-sql "UPDATE users FOR PORTION OF APP_TIME FROM DATE '2021-07-01' TO DATE '9999-12-31' AS u SET first_name = 'Sue' WHERE u.id = ?")))
+
+  (t/is (=plan-file "test-sql-update-plan-with-column-references"
+                    (plan-sql "UPDATE foo SET bar = foo.baz")))
+
+  (t/is (=plan-file "test-sql-update-plan-with-period-references"
+                    (plan-sql "UPDATE foo SET bar = (foo.SYSTEM_TIME OVERLAPS foo.APPLICATION_TIME)"))))
 
 (deftest dml-target-table-alises
   (t/is (= (plan-sql "UPDATE t1 AS u SET col1 = 30")
@@ -1055,12 +1061,18 @@
         FROM foo, bar
         WHERE foo.SYSTEM_TIME OVERLAPS bar.SYSTEM_TIME"))))
 
-#_ ; FIXME #376
 (deftest test-app-time-correlated-subquery
   (t/is
     (=plan-file
-      "test-app-time-correlated-subquery"
+      "test-app-time-correlated-subquery-where"
       (plan-sql
         "SELECT (SELECT foo.name
         FROM foo
-        WHERE foo.APP_TIME OVERLAPS bar.APPLICATION_TIME) FROM bar"))))
+        WHERE foo.APP_TIME OVERLAPS bar.APPLICATION_TIME) FROM bar")))
+
+  (t/is
+    (=plan-file
+      "test-app-time-correlated-subquery-projection"
+      (plan-sql
+        "SELECT (SELECT (foo.APP_TIME OVERLAPS bar.APPLICATION_TIME) FROM foo)
+        FROM bar"))))

@@ -485,15 +485,6 @@
       {:from from
        :to (-> from r/right r/right)})))
 
-(declare column-reference)
-
-(defn all-column-references [ag]
-  (r/collect
-   (fn [ag]
-     (when (r/ctor? :column_reference ag)
-       [(column-reference ag)]))
-   ag))
-
 (defn expand-underlying-column-references [col-ref]
   (case (:type col-ref)
     :system-time-period-reference
@@ -503,6 +494,16 @@
     [(update col-ref :identifiers #(vector (first %) "application_time_start"))
      (update col-ref :identifiers #(vector (first %) "application_time_end"))]
     [col-ref]))
+
+(declare column-reference)
+
+(defn all-column-references [ag]
+  (->> (r/collect
+         (fn [ag]
+           (when (r/ctor? :column_reference ag)
+             [(column-reference ag)]))
+         ag)
+       (mapcat expand-underlying-column-references)))
 
 (defn projected-columns [ag]
   (r/zcase ag
@@ -518,11 +519,8 @@
                                   query-expression (scope-element (r/parent query-specification))
                                   named-join-columns (for [identifier (named-columns-join-columns (r/parent ag))]
                                                        {:identifier identifier})
-                                  column-references (all-column-references query-expression)
-                                  underlying-column-references (mapcat
-                                                                 expand-underlying-column-references
-                                                                 column-references)]
-                              (->> (for [{:keys [identifiers] column-table-id :table-id} underlying-column-references
+                                  column-references (all-column-references query-expression)]
+                              (->> (for [{:keys [identifiers] column-table-id :table-id} column-references
                                          :when (= table-id column-table-id)]
                                      {:identifier (last identifiers)})
                                    (concat named-join-columns (system-time-columns ag))

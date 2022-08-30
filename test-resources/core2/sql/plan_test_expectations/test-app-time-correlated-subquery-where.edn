@@ -1,0 +1,26 @@
+[:rename
+ {x5 name}
+ [:project
+  [x5]
+  [:apply
+   :cross-join
+   {x1 ?x10, x2 ?x11}
+   [:rename
+    {application_time_start x1, application_time_end x2, _table x3}
+    [:scan
+     [application_time_start
+      application_time_end
+      {_table (= _table "bar")}]]]
+   [:max-1-row
+    [:project
+     [x5]
+     [:rename
+      {name x5,
+       application_time_start x6,
+       application_time_end x7,
+       _table x8}
+      [:scan
+       [name
+        {application_time_start (< application_time_start ?x11)}
+        {application_time_end (> application_time_end ?x10)}
+        {_table (= _table "foo")}]]]]]]]]

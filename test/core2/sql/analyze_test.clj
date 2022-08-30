@@ -420,7 +420,10 @@ SELECT t1.d-t1.e AS a, SUM(t1.a) AS b
     FROM foo
     WHERE foo.SYSTEM_TIME = 20")
 
-)
+(invalid?
+    #"References to periods may only appear within period predicates: foo.SYSTEM_TIME"
+    "UPDATE foo SET bar = foo.SYSTEM_TIME"))
+
 (t/deftest test-projection
   (t/is (= [[{:index 0, :identifier "b"}]
             [{:index 0, :identifier "b", :qualified-column ["t1" "b"]}]
