@@ -41,7 +41,7 @@ Generally speaking, even though we love repeatable queries, we'd like the defaul
 *** current-time: current time on the receiving node.
 * If the user does provide basis params, we ensure repeatable reads.
 * For a user to 'read their writes', they receive a receipt from `submit-tx`, which they then pass back as a query argument.
-** The main difference from Core1 here is that the receipt from `submit-tx` should contain _both_ basis params, so that both are set on the query:
+** The receipt from `submit-tx` should contain _both_ basis params footnote:[it currently just contains sys-time, in Core1 and Core2], so that both are set on the query:
 +
 [source,clojure]
 ----
@@ -86,12 +86,11 @@ The basis therefore upper-bounds any system-time constraints in the query - the 
 +
 This is again because of the asynchronous ingestion - if latest-indexed tx is 16:30, and we default the basis to now (17:00, say), we will get different results for the same arguments once the transaction at 16:45 is indexed.
 If we instead default to latest-indexed-tx, this issue goes away.
+footnote:[This is more of an issue in Core1, because it has separate `await` and `db` APIs - we have to validate that the tx-time passed to `db` has been correctly awaited.
+In Core2, it's one API call, so we await the transaction and then run the query.]
 +
-This is more of an issue in Core1, because it has separate `await` and `db` APIs - we have to validate that the tx-time passed to `db` has been correctly awaited.
-In Core2, it's one API call, so we await the transaction and then run the query.
-+
-(It _is_ an issue in Core2 if the user explicitly supplies 'now', because the node then has to wait (possibly indefinitely, if there are no more transactions) for a later transaction to be indexed.
-It may also become an issue in Core2 if we were to allow the user to retrieve the effective basis of a query as metadata on the results - this would allow a user to query the latest results now but store the basis to repeat the query later.)
+If the user explicitly supplies 'now', the node then has to wait (possibly indefinitely, if there are no more transactions) for a later transaction to be indexed.
+It may also become an issue if we were to allow the user to retrieve the effective basis of a query as metadata on the results - this would allow a user to query the latest results now but store the basis to repeat the query later.
 * For app-time, SQL:2011 doesn't add any filters here by default, so we'll likely be recommending liberal use of `WHERE APP_TIME CONTAINS CURRENT_TIMESTAMP`.
 footnote:[or https://github.com/xtdb/core2/issues/339[introducing a flag that does this for them]]
 Without fixing `CURRENT_TIMESTAMP` to the basis value, these queries wouldn't be repeatable.
