@@ -22,6 +22,8 @@
 (def ^:private ^:const ^String relation-id-delimiter "__")
 (def ^:private ^:const ^String relation-prefix-delimiter "_")
 
+(def ^:dynamic ^:private *opts* {})
+
 (declare expr)
 
 (defn- id-symbol [table table-id column]
@@ -1668,7 +1670,8 @@
                              :relation relation-in}))))
 
 (defn- plan-dml [dml-op z]
-  (let [tt (r/find-first (partial r/ctor? :target_table) z)
+  (let [{:keys [app-time-as-of-now?]} *opts*
+        tt (r/find-first (partial r/ctor? :target_table) z)
         {:keys [table-or-query-name correlation-name] :as table} (sem/table tt)
         rel (build-target-table tt)
         rel (if-let [sc (r/find-first (partial r/ctor? :search_condition) z)]
@@ -1696,12 +1699,14 @@
                                  (expr derived-expr)
                                  (qualified-projection-symbol col))})
 
-                            [{'application_time_start (if app-from-expr
-                                                        `(~'max ~app-start-sym ~app-from-expr)
-                                                        app-start-sym)}
-                             {'application_time_end (if app-to-expr
-                                                      `(~'min ~app-end-sym ~app-to-expr)
-                                                      app-end-sym)}]))
+                            [{'application_time_start (cond
+                                                        app-from-expr `(~'max ~app-start-sym ~app-from-expr)
+                                                        app-time-as-of-now? `(~'max ~app-start-sym (~'current-timestamp))
+                                                        :else app-start-sym)}
+                             {'application_time_end (cond
+                                                      app-to-expr `(~'min ~app-end-sym ~app-to-expr)
+                                                      app-time-as-of-now? `(~'min ~app-end-sym ~'core2/end-of-time)
+                                                      :else app-end-sym)}]))
           (if app-time-extents
             [:select `(~'and
                        (~'<= ~app-start-sym ~app-to-expr)
@@ -3017,7 +3022,8 @@
   ([query {:keys [validate-plan?], :or {validate-plan? false} :as opts}]
    (if (p/failure? query)
      {:errs [(p/failure->str query)]}
-     (binding [r/*memo* (HashMap.)]
+     (binding [r/*memo* (HashMap.)
+               *opts* opts]
        (let [ag (r/vector-zip query)]
          (if-let [errs (not-empty (sem/errs ag))]
            {:errs errs}

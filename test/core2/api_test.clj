@@ -246,3 +246,61 @@
              (c2/sql-query *node* "SELECT people.renamed_name FROM people
                                    WHERE people.APP_TIME CONTAINS TIMESTAMP '2019-06-01 00:00:00'"
                            {:basis {:tx !tx2}})))))
+
+(deftest test-dml-as-of-now-flag-339
+  (let [tt1 (util/->zdt #inst "2020-01-01")
+        tt2 (util/->zdt #inst "2020-01-02")
+        tt3 (util/->zdt #inst "2020-01-03")
+        tt4 (util/->zdt #inst "2020-01-04")
+        tt5 (util/->zdt #inst "2020-01-05")
+        eot (util/->zdt util/end-of-time)]
+    (letfn [(q [!tx]
+              (set (c2/sql-query *node*
+                                 "SELECT foo.version, foo.application_time_start, foo.application_time_end FROM foo"
+                                 {:basis {:tx !tx}})))]
+      (let [!tx (c2/submit-tx *node*
+                              [[:sql "INSERT INTO foo (id, version) VALUES (?, ?)"
+                                [["foo", 0]]]])]
+        (t/is (= #{{:version 0, :application_time_start tt1, :application_time_end eot}}
+                 (q !tx))))
+
+      (let [!tx (c2/submit-tx *node*
+                              [[:sql "UPDATE foo SET version = 1 WHERE foo.id = 'foo'"
+                                [[]]]]
+                              {:app-time-as-of-now? true})]
+        (t/is (= #{{:version 0, :application_time_start tt1, :application_time_end tt2}
+                   {:version 1, :application_time_start tt2, :application_time_end eot}}
+                 (q !tx))))
+
+      (t/testing "`FOR PORTION OF` means flag is ignored"
+        (let [!tx (c2/submit-tx *node*
+                                [[:sql (str "UPDATE foo "
+                                            "FOR PORTION OF APP_TIME FROM ? TO ? "
+                                            "SET version = 2 WHERE foo.id = 'foo'")
+                                  [[tt1 tt2]]]]
+                                {:app-time-as-of-now? true})]
+          (t/is (= #{{:version 2, :application_time_start tt1, :application_time_end tt2}
+                     {:version 2, :application_time_start tt2, :application_time_end tt2} ; hmm...
+                     {:version 1, :application_time_start tt2, :application_time_end eot}}
+                   (q !tx)))))
+
+      (let [!tx (c2/submit-tx *node*
+                              [[:sql "UPDATE foo SET version = 3 WHERE foo.id = 'foo'"
+                                [[]]]])]
+
+        (t/is (= #{{:version 3, :application_time_start tt1, :application_time_end tt2}
+                   {:version 2, :application_time_start tt2, :application_time_end tt2} ; hmm...
+                   {:version 3, :application_time_start tt2, :application_time_end tt2} ; hmm...
+                   {:version 3, :application_time_start tt2, :application_time_end eot}}
+                 (q !tx))))
+
+      (let [!tx (c2/submit-tx *node*
+                              [[:sql "DELETE FROM foo WHERE foo.id = 'foo'"
+                                [[]]]]
+                              {:app-time-as-of-now? true})]
+
+        (t/is (= #{{:version 3, :application_time_start tt1, :application_time_end tt2}
+                   {:version 2, :application_time_start tt2, :application_time_end tt2} ; hmm...
+                   {:version 3, :application_time_start tt2, :application_time_end tt2} ; hmm...
+                   {:version 3, :application_time_start tt2, :application_time_end tt5}}
+                 (q !tx)))))))

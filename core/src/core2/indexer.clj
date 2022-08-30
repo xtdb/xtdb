@@ -439,7 +439,7 @@
 
 (defn- ->sql-insert-indexer ^core2.indexer.SqlOpIndexer [^TransactionIndexer indexer, ^IInternalIdManager iid-mgr
                                                          ^ILogOpIndexer log-op-idxer, ^ITemporalTxIndexer temporal-idxer
-                                                         ^Instant current-time, ^ScanSource scan-src]
+                                                         ^ScanSource scan-src, {:keys [^Instant current-time]}]
   (let [current-time-µs (util/instant->micros current-time)]
     (reify SqlOpIndexer
       (indexOp [_ inner-query param-rows {:keys [table]}]
@@ -481,7 +481,7 @@
 
 (defn- ->sql-update-indexer ^core2.indexer.SqlOpIndexer [^TransactionIndexer indexer, ^IMetadataManager metadata-mgr, ^IBufferPool buffer-pool
                                                          ^ILogOpIndexer log-op-idxer, ^ITemporalTxIndexer temporal-idxer
-                                                         ^Instant current-time, ^ScanSource scan-src]
+                                                         ^ScanSource scan-src, {:keys [^Instant current-time]}]
   (reify SqlOpIndexer
     (indexOp [_ inner-query param-rows _opts]
       (with-open [pq (op/open-prepared-ra inner-query)]
@@ -542,7 +542,7 @@
                                          (.indexPut temporal-idxer iid new-row-id start-app-time end-app-time false)))))))))))))
 
 (defn- ->sql-delete-indexer ^core2.indexer.SqlOpIndexer [^TransactionIndexer indexer, ^ILogOpIndexer log-op-idxer, ^ITemporalTxIndexer temporal-idxer
-                                                         ^Instant current-time, ^ScanSource scan-src]
+                                                         ^ScanSource scan-src, {:keys [^Instant current-time]}]
   (reify SqlOpIndexer
     (indexOp [_ inner-query param-rows _opts]
       (with-open [pq (op/open-prepared-ra inner-query)]
@@ -568,13 +568,14 @@
 
 (defn- ->sql-indexer ^core2.indexer.OpIndexer [^TransactionIndexer indexer, ^IMetadataManager metadata-mgr, ^IBufferPool buffer-pool, ^IInternalIdManager iid-mgr
                                                ^ILogOpIndexer log-op-idxer, ^ITemporalTxIndexer temporal-idxer
-                                               ^DenseUnionVector tx-ops-vec, ^Instant current-time, ^ScanSource scan-src]
+                                               ^DenseUnionVector tx-ops-vec, ^ScanSource scan-src
+                                               {:keys [^Instant current-time, app-time-as-of-now?] :as tx-opts}]
   (let [sql-vec (.getStruct tx-ops-vec 3)
         ^VarCharVector query-vec (.getChild sql-vec "query" VarCharVector)
         ^ListVector param-rows-vec (.getChild sql-vec "param-rows" ListVector)
-        insert-idxer (->sql-insert-indexer indexer iid-mgr log-op-idxer temporal-idxer current-time scan-src)
-        update-idxer (->sql-update-indexer indexer metadata-mgr buffer-pool log-op-idxer temporal-idxer current-time scan-src)
-        delete-idxer (->sql-delete-indexer indexer log-op-idxer temporal-idxer current-time scan-src)]
+        insert-idxer (->sql-insert-indexer indexer iid-mgr log-op-idxer temporal-idxer scan-src tx-opts)
+        update-idxer (->sql-update-indexer indexer metadata-mgr buffer-pool log-op-idxer temporal-idxer scan-src tx-opts)
+        delete-idxer (->sql-delete-indexer indexer log-op-idxer temporal-idxer scan-src tx-opts)]
     (reify OpIndexer
       (indexOp [_ tx-op-idx]
         (let [sql-offset (.getOffset tx-ops-vec tx-op-idx)
@@ -584,7 +585,7 @@
 
               query-str (t/get-object query-vec sql-offset)
               {:keys [errs plan]} (-> (p/parse query-str :directly_executable_statement)
-                                      (plan/plan-query))]
+                                      (plan/plan-query {:app-time-as-of-now? app-time-as-of-now?}))]
 
           (assert (empty? errs) errs) ; TODO handle error
 
@@ -641,13 +642,17 @@
   (indexTx [this {:keys [sys-time] :as tx-key} tx-root]
     (let [^DenseUnionVector tx-ops-vec (-> ^ListVector (.getVector tx-root "tx-ops")
                                            (.getDataVector))
+          app-time-as-of-now? (== 1 (-> ^BitVector (.getVector tx-root "application-time-as-of-now?")
+                                        (.get 0)))
+
           log-op-idxer (.startTx log-indexer tx-key)
           temporal-idxer (.startTx temporal-mgr tx-key)
           put-idxer (->put-indexer this iid-mgr log-op-idxer temporal-idxer tx-ops-vec sys-time)
           delete-idxer (->delete-indexer this iid-mgr log-op-idxer temporal-idxer tx-ops-vec sys-time)
           evict-idxer (->evict-indexer this iid-mgr log-op-idxer temporal-idxer tx-ops-vec)
           sql-idxer (->sql-indexer this metadata-mgr buffer-pool iid-mgr log-op-idxer temporal-idxer
-                                   tx-ops-vec sys-time (.scanSource this tx-key))]
+                                   tx-ops-vec (.scanSource this tx-key)
+                                   {:current-time sys-time, :app-time-as-of-now? app-time-as-of-now?})]
 
       (dotimes [tx-op-idx (.getValueCount tx-ops-vec)]
         (case (.getTypeId tx-ops-vec tx-op-idx)

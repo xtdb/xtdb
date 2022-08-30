@@ -53,7 +53,9 @@
                                (inst? s) s
                                (string? s) (inst/read-instant-date s)))}))
 
-(s/def ::opts (s/keys :opt-un [::sys-time]))
+(s/def ::app-time-as-of-now? boolean?)
+
+(s/def ::opts (s/keys :opt-un [::sys-time ::app-time-as-of-now?]))
 
 (defmethod route-handler :status [_]
   {:get (fn [{:keys [node] :as _req}]

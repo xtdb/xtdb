@@ -603,6 +603,13 @@
         "timezone" : "UTC"
       },
       "children" : [ ]
+    },{
+      "name" : "application-time-as-of-now?",
+      "nullable" : false,
+      "type" : {
+        "name" : "bool"
+      },
+      "children" : [ ]
     }]
   },
   "batches" : [{
@@ -1021,6 +1028,11 @@
       "count" : 1,
       "VALIDITY" : [1],
       "DATA" : [1609459200000000]
+    },{
+      "name" : "application-time-as-of-now?",
+      "count" : 1,
+      "VALIDITY" : [1],
+      "DATA" : [1]
     }]
   }]
 }

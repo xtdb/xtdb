@@ -27,6 +27,9 @@
 (s/def ::app-time-start inst?)
 (s/def ::app-time-end inst?)
 
+#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
+(s/def ::app-time-as-of-now? boolean)
+
 (defmulti tx-op-spec first)
 
 (defmethod tx-op-spec :put [_]
@@ -88,7 +91,8 @@
                                                          (types/->field "param-rows" types/list-type true
                                                                         (types/->field "param-row" types/dense-union-type false)))))
 
-            (types/col-type->field "system-time" nullable-inst-type)]))
+            (types/col-type->field "system-time" nullable-inst-type)
+            (types/col-type->field "application-time-as-of-now?" :bool)]))
 
 (defn- ->put-writer [^IDenseUnionWriter tx-ops-writer]
   (let [put-writer (.asStruct (.writerForTypeId tx-ops-writer 0))
@@ -157,11 +161,12 @@
 
       (.endValue sql-writer))))
 
-(defn serialize-tx-ops ^java.nio.ByteBuffer [^BufferAllocator allocator tx-ops {:keys [^Instant sys-time] :as opts}]
+(defn serialize-tx-ops ^java.nio.ByteBuffer [^BufferAllocator allocator tx-ops {:keys [^Instant sys-time, app-time-as-of-now?] :as opts}]
   (let [tx-ops (conform-tx-ops tx-ops)
         op-count (count tx-ops)]
     (with-open [root (VectorSchemaRoot/create tx-schema allocator)]
       (let [ops-list-writer (.asList (vw/vec->writer (.getVector root "tx-ops")))
+            app-time-behaviour-writer (vw/vec->writer (.getVector root "application-time-as-of-now?"))
             tx-ops-writer (.asDenseUnion (.getDataWriter ops-list-writer))
 
             write-put! (->put-writer tx-ops-writer)
@@ -172,6 +177,8 @@
         (when sys-time
           (doto ^TimeStampMicroTZVector (.getVector root "system-time")
             (.setSafe 0 (util/instant->micros sys-time))))
+
+        (types/write-value! (boolean app-time-as-of-now?) app-time-behaviour-writer)
 
         (.startValue ops-list-writer)
 

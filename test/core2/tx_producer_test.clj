@@ -51,7 +51,8 @@
                    [:sql "DELETE FROM foo FOR PORTION OF APP_TIME FROM DATE '2023' TO DATE '2025' WHERE foo.id = ?"
                     [[1]]]]
 
-                  {:sys-time (util/->instant #inst "2021")})
+                  {:sys-time (util/->instant #inst "2021")
+                   :app-time-as-of-now? true})
 
                  (c2-json/arrow-streaming->json)
                  #_(doto (->> (spit expected-file)))
