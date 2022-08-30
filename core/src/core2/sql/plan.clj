@@ -3022,17 +3022,17 @@
          (if-let [errs (not-empty (sem/errs ag))]
            {:errs errs}
            (let [plan (plan ag)
-                 {:keys [fired-rules]} (meta plan)
                  validate-plan (fn [plan]
                                  (if (and validate-plan? (not (s/valid? ::lp/logical-plan plan)))
                                    (throw (err/illegal-arg ::invalid-plan
                                                            {::err/message (s/explain-str ::lp/logical-plan plan)
                                                             :plan plan
                                                             :explain-data (s/explain-data ::lp/logical-plan plan)}))
-                                   plan))]
-             {:plan (if (#{:insert :delete :update} (first plan))
-                      (let [[dml-op dml-op-opts plan] plan]
-                        [dml-op dml-op-opts
-                         (validate-plan (rewrite-plan plan opts))])
-                      (validate-plan (rewrite-plan plan opts)))
-              :fired-rules fired-rules})))))))
+                                   plan))
+                 plan (if (#{:insert :delete :update} (first plan))
+                        (let [[dml-op dml-op-opts plan] plan]
+                          [dml-op dml-op-opts
+                           (validate-plan (rewrite-plan plan opts))])
+                        (validate-plan (rewrite-plan plan opts)))]
+             {:plan plan
+              :fired-rules (:fired-rules (meta plan))})))))))
