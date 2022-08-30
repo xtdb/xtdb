@@ -402,6 +402,25 @@ SELECT t1.d-t1.e AS a, SUM(t1.a) AS b
     #"Unexpected:\nAPP_TIME"
     "UPDATE APP_TIME SET foo = 4"))
 
+(t/deftest test-period-references
+
+  (invalid?
+    #"Table not in scope: bar"
+    "SELECT bar.APPLICATION_TIME
+    FROM foo")
+
+  (invalid?
+    #"References to periods may only appear within period predicates: foo.APPLICATION_TIME"
+    "SELECT foo.APPLICATION_TIME
+    FROM foo")
+
+  (invalid?
+    #"References to periods may only appear within period predicates: foo.SYSTEM_TIME"
+    "SELECT foo.bar
+    FROM foo
+    WHERE foo.SYSTEM_TIME = 20")
+
+)
 (t/deftest test-projection
   (t/is (= [[{:index 0, :identifier "b"}]
             [{:index 0, :identifier "b", :qualified-column ["t1" "b"]}]

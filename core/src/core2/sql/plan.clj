@@ -264,6 +264,22 @@
   (LocalTime/of (Long/parseLong hours) (Long/parseLong minutes) (Long/parseLong seconds)
                 (seconds-fraction->nanos seconds-fraction)))
 
+(defn- plan-period-predicand [period-predicand]
+  (r/zmatch
+    period-predicand
+    [:period_predicand ^:z col]
+    ;;=>
+    (let [[start end] (sem/expand-underlying-column-references (sem/column-reference col))]
+      {:start (column-reference-symbol start)
+       :end (column-reference-symbol end)})
+
+    [:period_predicand "PERIOD" ^:z start ^:z end]
+    ;;=>
+    {:start (expr start) :end (expr end)}
+
+    ;; handles CONTAINS period_or_point_in_time_predicand
+    (expr period-predicand)))
+
 (defn expr [z]
   (r/zmatch z
     [:column_reference _]
@@ -828,56 +844,45 @@
 
     [:period_contains_predicate ^:z p1_predicand [:period_contains_predicate_part_2 _ ^:z p2_predicand]]
     ;;=>
-    (let [p1 (expr p1_predicand)
-          p2 (expr p2_predicand)]
+    (let [p1 (plan-period-predicand p1_predicand)
+          p2 (plan-period-predicand p2_predicand)]
       (list 'and (list '<= (:start p1) (or (:start p2) p2)) (list '>= (:end p1) (or (:end p2) p2))))
 
     [:period_overlaps_predicate ^:z p1_predicand [:period_overlaps_predicate_part_2 _ ^:z p2_predicand]]
     ;;=>
-    (let [p1 (expr p1_predicand)
-          p2 (expr p2_predicand)]
+    (let [p1 (plan-period-predicand p1_predicand)
+          p2 (plan-period-predicand p2_predicand)]
       (list 'and (list '< (:start p1) (:end p2)) (list '> (:end p1) (:start p2))))
 
     [:period_equals_predicate ^:z p1_predicand [:period_equals_predicate_part_2 _ ^:z p2_predicand]]
     ;;=>
-    (let [p1 (expr p1_predicand)
-          p2 (expr p2_predicand)]
+    (let [p1 (plan-period-predicand p1_predicand)
+          p2 (plan-period-predicand p2_predicand)]
       (list 'and (list '= (:start p1) (:start p2)) (list '= (:end p1) (:end p2))))
 
     [:period_precedes_predicate ^:z p1_predicand [:period_precedes_predicate_part_2 _ ^:z p2_predicand]]
     ;;=>
-    (let [p1 (expr p1_predicand)
-          p2 (expr p2_predicand)]
+    (let [p1 (plan-period-predicand p1_predicand)
+          p2 (plan-period-predicand p2_predicand)]
       (list '<= (:end p1) (:start p2)))
 
     [:period_succeeds_predicate ^:z p1_predicand [:period_succeeds_predicate_part_2 _ ^:z p2_predicand]]
     ;;=>
-    (let [p1 (expr p1_predicand)
-          p2 (expr p2_predicand)]
+    (let [p1 (plan-period-predicand p1_predicand)
+          p2 (plan-period-predicand p2_predicand)]
       (list '>= (:start p1) (:end p2)))
 
     [:period_immediately_precedes_predicate ^:z p1_predicand [:period_immediately_precedes_predicate_part_2 _ _ ^:z p2_predicand]]
     ;;=>
-    (let [p1 (expr p1_predicand)
-          p2 (expr p2_predicand)]
+    (let [p1 (plan-period-predicand p1_predicand)
+          p2 (plan-period-predicand p2_predicand)]
       (list '= (:end p1) (:start p2)))
 
     [:period_immediately_succeeds_predicate ^:z p1_predicand [:period_immediately_succeeds_predicate_part_2 _ _ ^:z p2_predicand]]
     ;;=>
-    (let [p1 (expr p1_predicand)
-          p2 (expr p2_predicand)]
+    (let [p1 (plan-period-predicand p1_predicand)
+          p2 (plan-period-predicand p2_predicand)]
       (list '= (:start p1) (:end p2)))
-
-    [:period_predicand ^:z col]
-    ;;=>
-    (let [app-time-symbol (str (expr col))
-          coerced-app-time-symbol (str/replace app-time-symbol "APP_TIME" "APPLICATION_TIME")]
-      {:start (symbol (str/replace coerced-app-time-symbol "APPLICATION_TIME" "application_time_start"))
-       :end (symbol (str/replace coerced-app-time-symbol "APPLICATION_TIME" "application_time_end"))})
-
-    [:period_predicand "PERIOD" ^:z start ^:z end]
-    ;;=>
-    {:start (expr start) :end (expr end)}
 
     [:search_condition ^:z bve]
     ;;=>
@@ -1461,16 +1466,9 @@
          (plan subquery-ref))
        [:scan (vec
                 (let [columns (vec (for [{:keys [identifier]} projection]
-                                     (symbol identifier)))
-                      columns-with-app-time-cols
-                      (if (seq (set/intersection (set columns) #{'APP_TIME 'APPLICATION_TIME}))
-                        (->> columns
-                             (remove #{'application_time_start 'application_time_end 'APP_TIME 'APPLICATION_TIME})
-                             (concat ['application_time_start 'application_time_end])
-                             vec)
-                        columns)]
+                                     (symbol identifier)))]
                   (conj
-                    columns-with-app-time-cols
+                    columns
                     {'_table (list '= '_table table-or-query-name)})))])]))
 
 (defn- build-target-table [tt]

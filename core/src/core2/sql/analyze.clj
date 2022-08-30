@@ -494,6 +494,16 @@
        [(column-reference ag)]))
    ag))
 
+(defn expand-underlying-column-references [col-ref]
+  (case (:type col-ref)
+    :system-time-period-reference
+    [(update col-ref :identifiers #(vector (first %) "system_time_start"))
+     (update col-ref :identifiers #(vector (first %) "system_time_end"))]
+    :application-time-period-reference
+    [(update col-ref :identifiers #(vector (first %) "application_time_start"))
+     (update col-ref :identifiers #(vector (first %) "application_time_end"))]
+    [col-ref]))
+
 (defn projected-columns [ag]
   (r/zcase ag
     :table_primary
@@ -508,8 +518,11 @@
                                   query-expression (scope-element (r/parent query-specification))
                                   named-join-columns (for [identifier (named-columns-join-columns (r/parent ag))]
                                                        {:identifier identifier})
-                                  column-references (all-column-references query-expression)]
-                              (->> (for [{:keys [identifiers] column-table-id :table-id} column-references
+                                  column-references (all-column-references query-expression)
+                                  underlying-column-references (mapcat
+                                                                 expand-underlying-column-references
+                                                                 column-references)]
+                              (->> (for [{:keys [identifiers] column-table-id :table-id} underlying-column-references
                                          :when (= table-id column-table-id)]
                                      {:identifier (last identifiers)})
                                    (concat named-join-columns (system-time-columns ag))
@@ -740,6 +753,13 @@
                                  (get (local-env group-env) :column-reference-type :ordinary)
                                  group-env)
           column-reference-type (cond
+
+                                  (#{"SYSTEM_TIME"} (second identifiers))
+                                  :system-time-period-reference
+
+                                  (#{"APP_TIME" "APPLICATION_TIME"} (second identifiers))
+                                  :application-time-period-reference
+
                                   outer-reference?
                                   (case column-reference-type
                                     :ordinary :outer
@@ -858,6 +878,18 @@
             :else
             [])))
 
+      (:application-time-period-reference :system-time-period-reference)
+      (cond (not table-id)
+            [(format "Table not in scope: %s %s"
+                     (first identifiers) (->line-info-str ag))]
+
+            (not (r/ctor? :period_predicand (r/parent ag)))
+            [(format "References to periods may only appear within period predicates: %s %s"
+                     (str/join "." identifiers) (->line-info-str ag))]
+
+            :else
+            [])
+
       :resolved-in-sort-key
       []
 
@@ -966,16 +998,43 @@
          (reduce into))))
 
 (defn- check-period-predicand [ag]
-  (let [period-predicand (r/znode ag)]
-    (when (= (first (second period-predicand)) :column_reference)
-      (let [[identifier-chain-keyword _ regular_identifier] (second (second period-predicand))]
-        (when-not (and (= identifier-chain-keyword :identifier_chain)
-                       (#{[:regular_identifier "APP_TIME"]
-                          [:regular_identifier "APPLICATION_TIME"]}
-                         regular_identifier))
-          [(format "%s is not a valid period. Please use a qualified reference to APPLICATION_TIME: %s"
-                   (->src-str ag)
-                   (->line-info-str ag))])))))
+  (if-not (r/zmatch
+            ag
+            [:period_predicand
+             [:column_reference
+              [:identifier_chain
+               [:regular_identifier _]
+               [:regular_identifier "APP_TIME"]]]]
+            ;;=>
+            true
+
+            [:period_predicand
+             [:column_reference
+              [:identifier_chain
+               [:regular_identifier _]
+               [:regular_identifier "APPLICATION_TIME"]]]]
+            ;;=>
+            true
+
+            [:period_predicand
+             [:column_reference
+              [:identifier_chain
+               [:regular_identifier _]
+               [:regular_identifier "SYSTEM_TIME"]]]]
+            ;;=>
+            true
+
+            [:period_predicand
+             "PERIOD"
+             _
+             _]
+            ;;=>
+            true)
+
+    [(format "%s is not a valid period. Please use a qualified reference to APPLICATION_TIME or SYSTEM_TIME: %s"
+            (->src-str ag)
+            (->line-info-str ag))]
+    []))
 
 (defn- check-dml-non-determinsm [ag]
   (r/zcase ag

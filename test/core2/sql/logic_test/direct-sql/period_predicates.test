@@ -35,3 +35,21 @@ SELECT t1.id, t1.start, t1.end FROM t1 WHERE PERIOD (t1.start, t1.end) PRECEDES 
 3
 2000-01-01
 2020-01-01
+
+query ITT nosort
+SELECT t1.id, t1.start, t1.end FROM t1 WHERE t1.SYSTEM_TIME CONTAINS PERIOD (t1.start, t1.end)
+----
+2
+2100-01-01
+3000-01-01
+
+query ITT nosort
+SELECT t1.id, t1.start, t1.end FROM t1 WHERE PERIOD (t1.start, t1.end) PRECEDES t1.SYSTEM_TIME
+----
+3
+2000-01-01
+2020-01-01
+
+query ITT nosort
+SELECT t1.id, t1.start, t1.end FROM t1 WHERE t1.SYSTEM_TIME OVERLAPS PERIOD (DATE '2000-01-01', DATE '2020-01-01')
+----

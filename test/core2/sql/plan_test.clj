@@ -917,7 +917,7 @@
   (t/are
     [sql expected]
     (= expected (plan-expr sql))
-    "foo.APP_TIME EQUALS PERIOD (TIMESTAMP '2000-01-01 00:00:00+00:00', TIMESTAMP '2001-01-01 00:00:00+00:00')"
+    "foo.SYSTEM_TIME EQUALS PERIOD (TIMESTAMP '2000-01-01 00:00:00+00:00', TIMESTAMP '2001-01-01 00:00:00+00:00')"
     '(and
        (= x1 #time/zoned-date-time "2000-01-01T00:00Z")
        (= x2 #time/zoned-date-time "2001-01-01T00:00Z"))))
@@ -933,14 +933,14 @@
   (t/are
     [sql expected]
     (= expected (plan-expr sql))
-    "foo.APP_TIME SUCCEEDS PERIOD (TIMESTAMP '2000-01-01 00:00:00+00:00', TIMESTAMP '2001-01-01 00:00:00+00:00')"
+    "foo.SYSTEM_TIME SUCCEEDS PERIOD (TIMESTAMP '2000-01-01 00:00:00+00:00', TIMESTAMP '2001-01-01 00:00:00+00:00')"
     '(>= x1 #time/zoned-date-time "2001-01-01T00:00Z")))
 
 (deftest test-period-immediately-precedes-predicate
   (t/are
     [sql expected]
     (= expected (plan-expr sql))
-    "foo.APP_TIME IMMEDIATELY PRECEDES PERIOD (TIMESTAMP '2000-01-01 00:00:00+00:00', TIMESTAMP '2001-01-01 00:00:00+00:00')"
+    "foo.APPLICATION_TIME IMMEDIATELY PRECEDES PERIOD (TIMESTAMP '2000-01-01 00:00:00+00:00', TIMESTAMP '2001-01-01 00:00:00+00:00')"
     '(= x2 #time/zoned-date-time "2000-01-01T00:00Z")))
 
 (deftest test-period-immediately-succeeds-predicate
@@ -1045,3 +1045,22 @@
     (=plan-file
       "test-remove-names-359-multiple-ref"
       (plan-sql "SELECT (SELECT x.bar FROM (SELECT x.bar FROM z) AS y) FROM x"))))
+
+(deftest test-system-time-period-predicate
+  (t/is
+    (=plan-file
+      "test-system-time-period-predicate-full-plan"
+      (plan-sql
+        "SELECT foo.name, bar.name
+        FROM foo, bar
+        WHERE foo.SYSTEM_TIME OVERLAPS bar.SYSTEM_TIME"))))
+
+#_ ; FIXME #376
+(deftest test-app-time-correlated-subquery
+  (t/is
+    (=plan-file
+      "test-app-time-correlated-subquery"
+      (plan-sql
+        "SELECT (SELECT foo.name
+        FROM foo
+        WHERE foo.APP_TIME OVERLAPS bar.APPLICATION_TIME) FROM bar"))))

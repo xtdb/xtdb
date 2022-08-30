@@ -1,0 +1,20 @@
+[:rename
+ {x1 name, x6 name_1}
+ [:project
+  [x1 x6]
+  [:join
+   [(< x2 x8) (> x3 x7)]
+   [:rename
+    {name x1, system_time_start x2, system_time_end x3, _table x4}
+    [:scan
+     [name
+      system_time_start
+      system_time_end
+      {_table (= _table "foo")}]]]
+   [:rename
+    {name x6, system_time_start x7, system_time_end x8, _table x9}
+    [:scan
+     [name
+      system_time_start
+      system_time_end
+      {_table (= _table "bar")}]]]]]]

@@ -1,28 +1,20 @@
 [:rename
- {x1 application_time_start,
-  x2 application_time_end,
-  x3 system_time_start,
-  x4 system_time_end}
+ {x3 application_time_start,
+  x4 application_time_end,
+  x1 system_time_start,
+  x2 system_time_end}
  [:project
-  [x1 x2 x3 x4]
+  [x3 x4 x1 x2]
   [:rename
-   {application_time_start x1,
-    application_time_end x2,
-    system_time_start x3,
-    system_time_end x4,
+   {system_time_start x1,
+    system_time_end x2,
+    application_time_start x3,
+    application_time_end x4,
     _table x5}
    [:select
     (< #time/date "2001-01-01" #time/date "2002-01-01")
     [:scan
-     [{application_time_start
-       (and
-        (< application_time_start #time/date "2004-01-01")
-        (= application_time_start 4))}
-      {application_time_end
-       (and
-        (> application_time_end #time/date "2000-01-01")
-        (> application_time_end 10))}
-      {system_time_start
+     [{system_time_start
        (and
         (< system_time_start #time/date "2002-01-01")
         (= system_time_start 20))}
@@ -30,4 +22,12 @@
        (and
         (<= system_time_end 23)
         (> system_time_end #time/date "2001-01-01"))}
+      {application_time_start
+       (and
+        (< application_time_start #time/date "2004-01-01")
+        (= application_time_start 4))}
+      {application_time_end
+       (and
+        (> application_time_end #time/date "2000-01-01")
+        (> application_time_end 10))}
       {_table (= _table "foo")}]]]]]]
