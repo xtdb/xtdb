@@ -9,9 +9,8 @@
   (:import (java.time Duration ZoneId)
            java.util.concurrent.ExecutionException))
 
-(defn- with-mock-clocks [f]
-  (tu/with-opts {:core2.log/memory-log {:instant-src (tu/->mock-clock)}
-                 :core2.tx-producer/tx-producer {:instant-src (tu/->mock-clock)}}
+(defn- with-mock-clock [f]
+  (tu/with-opts {:core2.log/memory-log {:instant-src (tu/->mock-clock)}}
     f))
 
 (defn- with-client [f]
@@ -27,8 +26,8 @@
         (ig/halt! sys)))))
 
 (def api-implementations
-  (-> {:in-memory (t/join-fixtures [with-mock-clocks tu/with-node])
-       :remote (t/join-fixtures [with-mock-clocks tu/with-node with-client])}
+  (-> {:in-memory (t/join-fixtures [with-mock-clock tu/with-node])
+       :remote (t/join-fixtures [with-mock-clock tu/with-node with-client])}
 
       #_(select-keys [:in-memory])
       #_(select-keys [:remote])))

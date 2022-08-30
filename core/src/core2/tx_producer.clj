@@ -65,20 +65,20 @@
                                :explain-data (s/explain-data ::tx-ops tx-ops)})))
     parsed-tx-ops))
 
-(def ^:private app-time-type [:timestamp-tz :micro "UTC"])
+(def ^:private nullable-inst-type [:union #{:null [:timestamp-tz :micro "UTC"]}])
 
 (def ^:private ^org.apache.arrow.vector.types.pojo.Schema tx-schema
   (Schema. [(types/->field "tx-ops" types/list-type false
                            (types/->field "tx-ops" (ArrowType$Union. UnionMode/Dense (int-array (range 6))) false
                                           (types/->field "put" types/struct-type false
                                                          (types/->field "document" types/dense-union-type false)
-                                                         (types/col-type->field 'application_time_start app-time-type)
-                                                         (types/col-type->field 'application_time_end app-time-type))
+                                                         (types/col-type->field 'application_time_start nullable-inst-type)
+                                                         (types/col-type->field 'application_time_end nullable-inst-type))
                                           (types/->field "delete" types/struct-type false
                                                          (types/col-type->field '_table [:union #{:null :utf8}])
                                                          (types/->field "id" types/dense-union-type false)
-                                                         (types/col-type->field 'application_time_start app-time-type)
-                                                         (types/col-type->field 'application_time_end app-time-type))
+                                                         (types/col-type->field 'application_time_start nullable-inst-type)
+                                                         (types/col-type->field 'application_time_end nullable-inst-type))
                                           (types/->field "evict" types/struct-type false
                                                          (types/col-type->field '_table [:union #{:null :utf8}])
                                                          (types/->field "id" types/dense-union-type false))
@@ -88,15 +88,14 @@
                                                          (types/->field "param-rows" types/list-type true
                                                                         (types/->field "param-row" types/dense-union-type false)))))
 
-            (types/col-type->field "current-time" [:timestamp-tz :micro "UTC"])
-            (types/col-type->field "system-time" [:union #{:null [:timestamp-tz :micro "UTC"]}])]))
+            (types/col-type->field "system-time" nullable-inst-type)]))
 
-(defn- ->put-writer [^IDenseUnionWriter tx-ops-writer {:keys [current-time]}]
+(defn- ->put-writer [^IDenseUnionWriter tx-ops-writer]
   (let [put-writer (.asStruct (.writerForTypeId tx-ops-writer 0))
         doc-writer (.asDenseUnion (.writerForName put-writer "document"))
         app-time-start-writer (.writerForName put-writer "application_time_start")
         app-time-end-writer (.writerForName put-writer "application_time_end")]
-    (fn write-put! [{:keys [doc app-time-opts]}]
+    (fn write-put! [{:keys [doc], {:keys [app-time-start app-time-end]} :app-time-opts}]
       (let [doc (into {:_table "xt_docs"} doc)
             put-idx (.startValue put-writer)]
         (doto (.writerForType doc-writer (types/value->col-type doc))
@@ -104,25 +103,18 @@
           (->> (types/write-value! doc))
           (.endValue))
 
-        (let [^Instant app-time-start (or (some-> (:app-time-start app-time-opts) util/->instant)
-                                          current-time)]
-          (.set ^TimeStampMicroTZVector (.getVector app-time-start-writer)
-                put-idx (util/instant->micros app-time-start)))
-
-        (let [^Instant app-time-end (or (some-> (:app-time-end app-time-opts) util/->instant)
-                                        util/end-of-time)]
-          (.set ^TimeStampMicroTZVector (.getVector app-time-end-writer)
-                put-idx (util/instant->micros app-time-end)))
+        (types/write-value! app-time-start app-time-start-writer)
+        (types/write-value! app-time-end app-time-end-writer)
 
         (.endValue put-writer)))))
 
-(defn- ->delete-writer [^IDenseUnionWriter tx-ops-writer {:keys [current-time]}]
+(defn- ->delete-writer [^IDenseUnionWriter tx-ops-writer]
   (let [delete-writer (.asStruct (.writerForTypeId tx-ops-writer 1))
         table-writer (.writerForName delete-writer "_table")
         id-writer (.asDenseUnion (.writerForName delete-writer "id"))
         app-time-start-writer (.writerForName delete-writer "application_time_start")
         app-time-end-writer (.writerForName delete-writer "application_time_end")]
-    (fn write-delete! [{:keys [id table app-time-opts]}]
+    (fn write-delete! [{:keys [id table], {:keys [app-time-start app-time-end]} :app-time-opts}]
       (let [delete-idx (.startValue delete-writer)]
         (some-> table (types/write-value! table-writer))
 
@@ -132,15 +124,9 @@
           (->> (types/write-value! id))
           (.endValue))
 
-        (let [^Instant app-time-start (or (some-> (:app-time-start app-time-opts) util/->instant)
-                                          current-time)]
-          (.set ^TimeStampMicroTZVector (.getVector app-time-start-writer)
-                delete-idx (util/instant->micros app-time-start)))
+        (types/write-value! app-time-start app-time-start-writer)
+        (types/write-value! app-time-end app-time-end-writer)
 
-        (let [^Instant app-time-end (or (some-> (:app-time-end app-time-opts) util/->instant)
-                                        util/end-of-time)]
-          (.set ^TimeStampMicroTZVector (.getVector app-time-end-writer)
-                delete-idx (util/instant->micros app-time-end)))
         (.endValue delete-writer)))))
 
 (defn- ->evict-writer [^IDenseUnionWriter tx-ops-writer]
@@ -171,24 +157,21 @@
 
       (.endValue sql-writer))))
 
-(defn serialize-tx-ops ^java.nio.ByteBuffer [^BufferAllocator allocator tx-ops {:keys [^Instant sys-time, ^Instant current-time] :as opts}]
+(defn serialize-tx-ops ^java.nio.ByteBuffer [^BufferAllocator allocator tx-ops {:keys [^Instant sys-time] :as opts}]
   (let [tx-ops (conform-tx-ops tx-ops)
         op-count (count tx-ops)]
     (with-open [root (VectorSchemaRoot/create tx-schema allocator)]
       (let [ops-list-writer (.asList (vw/vec->writer (.getVector root "tx-ops")))
             tx-ops-writer (.asDenseUnion (.getDataWriter ops-list-writer))
 
-            write-put! (->put-writer tx-ops-writer opts)
-            write-delete! (->delete-writer tx-ops-writer opts)
+            write-put! (->put-writer tx-ops-writer)
+            write-delete! (->delete-writer tx-ops-writer)
             write-evict! (->evict-writer tx-ops-writer)
             write-sql! (->sql-writer tx-ops-writer)]
 
         (when sys-time
           (doto ^TimeStampMicroTZVector (.getVector root "system-time")
             (.setSafe 0 (util/instant->micros sys-time))))
-
-        (doto ^TimeStampMicroTZVector (.getVector root "current-time")
-          (.setSafe 0 (util/instant->micros current-time)))
 
         (.startValue ops-list-writer)
 
@@ -211,14 +194,13 @@
 
         (util/root->arrow-ipc-byte-buffer root :stream)))))
 
-(deftype TxProducer [^BufferAllocator allocator, ^Log log, ^InstantSource instant-src]
+(deftype TxProducer [^BufferAllocator allocator, ^Log log]
   ITxProducer
   (submitTx [this tx-ops]
     (.submitTx this tx-ops {}))
 
   (submitTx [_ tx-ops opts]
     (let [{:keys [sys-time] :as opts} (-> opts
-                                          (assoc :current-time (.instant instant-src))
                                           (some-> (update :sys-time util/->instant)))]
       (-> (.appendRecord log (serialize-tx-ops allocator tx-ops opts))
           (util/then-apply
@@ -227,10 +209,9 @@
                 sys-time (assoc :sys-time sys-time))))))))
 
 (defmethod ig/prep-key ::tx-producer [_ opts]
-  (merge {:instant-src InstantSource/SYSTEM
-          :log (ig/ref :core2/log)
+  (merge {:log (ig/ref :core2/log)
           :allocator (ig/ref :core2/allocator)}
          opts))
 
-(defmethod ig/init-key ::tx-producer [_ {:keys [instant-src log allocator]}]
-  (TxProducer. allocator log instant-src))
+(defmethod ig/init-key ::tx-producer [_ {:keys [log allocator]}]
+  (TxProducer. allocator log))

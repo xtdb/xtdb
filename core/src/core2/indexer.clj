@@ -339,12 +339,13 @@
 
 (defn- ->put-indexer ^core2.indexer.OpIndexer [^TransactionIndexer indexer, ^IInternalIdManager iid-mgr
                                                ^ILogOpIndexer log-op-idxer, ^ITemporalTxIndexer temporal-idxer
-                                               ^DenseUnionVector tx-ops-vec]
+                                               ^DenseUnionVector tx-ops-vec, ^Instant current-time]
   (let [put-vec (.getStruct tx-ops-vec 0)
         ^DenseUnionVector doc-duv (.getChild put-vec "document" DenseUnionVector)
         ^TimeStampVector app-time-start-vec (.getChild put-vec "application_time_start")
         ^TimeStampVector app-time-end-vec (.getChild put-vec "application_time_end")
-        doc-copier (put-doc-copier indexer tx-ops-vec)]
+        doc-copier (put-doc-copier indexer tx-ops-vec)
+        current-time-µs (util/instant->micros current-time)]
     (reify OpIndexer
       (indexOp [_ tx-op-idx]
         (let [row-id (.nextRowId indexer)
@@ -359,20 +360,25 @@
               eid (t/get-object id-vec leg-offset)
               new-entity? (not (.isKnownId iid-mgr table eid))
               iid (.getOrCreateInternalId iid-mgr table eid row-id)
-              start-app-time (.get app-time-start-vec put-offset)
-              end-app-time (.get app-time-end-vec put-offset)]
+              start-app-time (if (.isNull app-time-start-vec put-offset)
+                               current-time-µs
+                               (.get app-time-start-vec put-offset))
+              end-app-time (if (.isNull app-time-end-vec put-offset)
+                             util/end-of-time-μs
+                             (.get app-time-end-vec put-offset))]
           (.copyDocRow doc-copier row-id put-offset)
           (.logPut log-op-idxer iid row-id start-app-time end-app-time)
           (.indexPut temporal-idxer iid row-id start-app-time end-app-time new-entity?))))))
 
 (defn- ->delete-indexer ^core2.indexer.OpIndexer [^TransactionIndexer indexer, ^IInternalIdManager iid-mgr
                                                   ^ILogOpIndexer log-op-idxer, ^ITemporalTxIndexer temporal-idxer,
-                                                  ^DenseUnionVector tx-ops-vec]
+                                                  ^DenseUnionVector tx-ops-vec, ^Instant current-time]
   (let [delete-vec (.getStruct tx-ops-vec 1)
         ^VarCharVector table-vec (.getChild delete-vec "_table" VarCharVector)
         ^DenseUnionVector id-vec (.getChild delete-vec "id" DenseUnionVector)
         ^TimeStampVector app-time-start-vec (.getChild delete-vec "application_time_start")
-        ^TimeStampVector app-time-end-vec (.getChild delete-vec "application_time_end")]
+        ^TimeStampVector app-time-end-vec (.getChild delete-vec "application_time_end")
+        current-time-µs (util/instant->micros current-time)]
     (reify OpIndexer
       (indexOp [_ tx-op-idx]
         (let [row-id (.nextRowId indexer)
@@ -381,8 +387,12 @@
               eid (t/get-object id-vec delete-offset)
               new-entity? (not (.isKnownId iid-mgr table eid))
               iid (.getOrCreateInternalId iid-mgr table eid row-id)
-              start-app-time (.get app-time-start-vec delete-offset)
-              end-app-time (.get app-time-end-vec delete-offset)]
+              start-app-time (if (.isNull app-time-start-vec delete-offset)
+                               current-time-µs
+                               (.get app-time-start-vec delete-offset))
+              end-app-time (if (.isNull app-time-end-vec delete-offset)
+                             util/end-of-time-μs
+                             (.get app-time-end-vec delete-offset))]
           (.logDelete log-op-idxer iid start-app-time end-app-time)
           (.indexDelete temporal-idxer iid row-id start-app-time end-app-time new-entity?))))))
 
@@ -628,18 +638,16 @@
       (set! (.chunk-row-count this) (inc chunk-row-count))
       row-id))
 
-  (indexTx [this tx-key tx-root]
+  (indexTx [this {:keys [sys-time] :as tx-key} tx-root]
     (let [^DenseUnionVector tx-ops-vec (-> ^ListVector (.getVector tx-root "tx-ops")
                                            (.getDataVector))
-          current-time (-> (.get ^TimeStampMicroTZVector (.getVector tx-root "current-time") 0)
-                           (util/micros->instant))
           log-op-idxer (.startTx log-indexer tx-key)
           temporal-idxer (.startTx temporal-mgr tx-key)
-          put-idxer (->put-indexer this iid-mgr log-op-idxer temporal-idxer tx-ops-vec)
-          delete-idxer (->delete-indexer this iid-mgr log-op-idxer temporal-idxer tx-ops-vec)
+          put-idxer (->put-indexer this iid-mgr log-op-idxer temporal-idxer tx-ops-vec sys-time)
+          delete-idxer (->delete-indexer this iid-mgr log-op-idxer temporal-idxer tx-ops-vec sys-time)
           evict-idxer (->evict-indexer this iid-mgr log-op-idxer temporal-idxer tx-ops-vec)
           sql-idxer (->sql-indexer this metadata-mgr buffer-pool iid-mgr log-op-idxer temporal-idxer
-                                   tx-ops-vec current-time (.scanSource this tx-key))]
+                                   tx-ops-vec sys-time (.scanSource this tx-key))]
 
       (dotimes [tx-op-idx (.getValueCount tx-ops-vec)]
         (case (.getTypeId tx-ops-vec tx-op-idx)

@@ -19,7 +19,9 @@
                           :api-version "23",
                           :manufacturer "iobeam",
                           :model "pinto",
-                          :os-name "6.0.1"}]
+                          :os-name "6.0.1"}
+                    {:app-time-start #inst "2022", :app-time-end #inst "2025"}]
+
                    [:put {:id "reading-demo000000",
                           :cpu-avg-15min 8.654,
                           :rssi -50.0,
@@ -34,18 +36,23 @@
                           :mem-free 4.10011078E8,
                           :mem-used 5.89988922E8}]
 
-                   [:delete "xt_docs" "device-info-demo000000"]
+                   [:delete "xt_docs" "device-info-demo000000"
+                    {:app-time-start #inst "2024", :app-time-end #inst "2025"}]
+
                    [:delete "reading-demo000000"]
 
                    [:sql "INSERT INTO foo (foo, bar, baz) VALUES (?, ?, ?)"
                     [[1 nil 3.3]
                      [2 "hello" 12]]]
+
                    [:sql "UPDATE foo FOR PORTION OF APP_TIME FROM DATE '2021-01-01' TO DATE '2024-01-01' SET bar = 'world' WHERE foo.id = ?"
                     [[1]]]
+
                    [:sql "DELETE FROM foo FOR PORTION OF APP_TIME FROM DATE '2023' TO DATE '2025' WHERE foo.id = ?"
                     [[1]]]]
-                  {:sys-time (util/->instant #inst "2021")
-                   :current-time (util/->instant #inst "2021")})
+
+                  {:sys-time (util/->instant #inst "2021")})
+
                  (c2-json/arrow-streaming->json)
                  #_(doto (->> (spit expected-file)))
                  (json/parse-string))))))

@@ -1,7 +1,6 @@
 package core2;
 
 import java.time.Instant;
-import java.util.Iterator;
 
 /**
  * @see java.time.InstantSource - polyfill until we have Java 17 as a minimum reqmt.

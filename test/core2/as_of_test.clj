@@ -8,22 +8,7 @@
            (java.time Clock Duration)
            (java.util List ArrayList)))
 
-(def ^:dynamic ^List *app-times*)
-
-(t/use-fixtures :each
-  (fn with-recording-clock [f]
-    (binding [*app-times* (ArrayList.)]
-      (let [clock (-> (Clock/systemUTC)
-                      (Clock/tick (Duration/ofNanos 1000)))
-            instant-src (reify InstantSource
-                          (instant [_]
-                            (let [i (.instant clock)]
-                              (.add *app-times* i)
-                              i)))]
-        (tu/with-opts {:core2.tx-producer/tx-producer {:instant-src instant-src}}
-          f))))
-
-  tu/with-node)
+(t/use-fixtures :each tu/with-node)
 
 (def end-of-time-zdt (util/->zdt util/end-of-time))
 
@@ -63,12 +48,10 @@
         {:keys [sys-time] :as tx1} @(c2/submit-tx tu/*node* [[:put {:id :doc, :version 1}]
                                                              [:put {:id :doc-with-app-time}
                                                               {:app-time-start #inst "2021"}]])
-        sys-time (util/->zdt sys-time)
-
-        start-app-time (util/->zdt (first *app-times*))]
+        sys-time (util/->zdt sys-time)]
 
     (t/is (= {:doc {:id :doc,
-                    :application_time_start start-app-time
+                    :application_time_start sys-time
                     :application_time_end end-of-time-zdt
                     :system_time_start sys-time
                     :system_time_end end-of-time-zdt}
@@ -86,7 +69,8 @@
 (t/deftest test-sys-time
   (let [ingester (tu/component :core2/ingester)
 
-        _ @(c2/submit-tx tu/*node* [[:put {:id :doc, :version 0}]])
+        tx1 @(c2/submit-tx tu/*node* [[:put {:id :doc, :version 0}]])
+        tt1 (util/->zdt (:sys-time tx1))
 
         _ (Thread/sleep 10) ; prevent same-ms transactions
 
@@ -95,16 +79,14 @@
 
         db (ingest/snapshot ingester tx2)
 
-        [app-time1 app-time2] (map util/->zdt *app-times*)
-
         replaced-v0-doc {:id :doc, :version 0
-                         :application_time_start app-time1
-                         :application_time_end app-time2
+                         :application_time_start tt1
+                         :application_time_end tt2
                          :system_time_start tt2
                          :system_time_end end-of-time-zdt}
 
         v1-doc {:id :doc, :version 1
-                :application_time_start app-time2
+                :application_time_start tt2
                 :application_time_end end-of-time-zdt
                 :system_time_start tt2
                 :system_time_end end-of-time-zdt}]

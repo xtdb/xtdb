@@ -375,7 +375,7 @@
             }]
           },{
             "name" : "application_time_start",
-            "nullable" : false,
+            "nullable" : true,
             "type" : {
               "name" : "timestamp",
               "unit" : "MICROSECOND",
@@ -384,7 +384,7 @@
             "children" : [ ]
           },{
             "name" : "application_time_end",
-            "nullable" : false,
+            "nullable" : true,
             "type" : {
               "name" : "timestamp",
               "unit" : "MICROSECOND",
@@ -423,7 +423,7 @@
             }]
           },{
             "name" : "application_time_start",
-            "nullable" : false,
+            "nullable" : true,
             "type" : {
               "name" : "timestamp",
               "unit" : "MICROSECOND",
@@ -432,7 +432,7 @@
             "children" : [ ]
           },{
             "name" : "application_time_end",
-            "nullable" : false,
+            "nullable" : true,
             "type" : {
               "name" : "timestamp",
               "unit" : "MICROSECOND",
@@ -594,15 +594,6 @@
           }]
         }]
       }]
-    },{
-      "name" : "current-time",
-      "nullable" : false,
-      "type" : {
-        "name" : "timestamp",
-        "unit" : "MICROSECOND",
-        "timezone" : "UTC"
-      },
-      "children" : [ ]
     },{
       "name" : "system-time",
       "nullable" : true,
@@ -880,13 +871,13 @@
           },{
             "name" : "application_time_start",
             "count" : 2,
-            "VALIDITY" : [1,1],
-            "DATA" : [1609459200000000,1609459200000000]
+            "VALIDITY" : [1,0],
+            "DATA" : [1640995200000000,0]
           },{
             "name" : "application_time_end",
             "count" : 2,
-            "VALIDITY" : [1,1],
-            "DATA" : [253402300799999999,253402300799999999]
+            "VALIDITY" : [1,0],
+            "DATA" : [1735689600000000,0]
           }]
         },{
           "name" : "delete",
@@ -913,13 +904,13 @@
           },{
             "name" : "application_time_start",
             "count" : 2,
-            "VALIDITY" : [1,1],
-            "DATA" : [1609459200000000,1609459200000000]
+            "VALIDITY" : [1,0],
+            "DATA" : [1704067200000000,0]
           },{
             "name" : "application_time_end",
             "count" : 2,
-            "VALIDITY" : [1,1],
-            "DATA" : [253402300799999999,253402300799999999]
+            "VALIDITY" : [1,0],
+            "DATA" : [1735689600000000,0]
           }]
         },{
           "name" : "evict",
@@ -1025,11 +1016,6 @@
           }]
         }]
       }]
-    },{
-      "name" : "current-time",
-      "count" : 1,
-      "VALIDITY" : [1],
-      "DATA" : [1609459200000000]
     },{
       "name" : "system-time",
       "count" : 1,
