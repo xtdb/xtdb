@@ -6,12 +6,13 @@
             [core2.util :as util]
             [core2.vector.writer :as vw]
             [juxt.clojars-mirrors.integrant.core :as ig])
-  (:import [core2.log Log LogRecord]
+  (:import core2.InstantSource
+           (core2.log Log LogRecord)
            core2.vector.IDenseUnionWriter
-           (java.time Clock Instant)
+           (java.time Instant)
            org.apache.arrow.memory.BufferAllocator
-           [org.apache.arrow.vector TimeStampMicroTZVector VectorSchemaRoot]
-           [org.apache.arrow.vector.types.pojo ArrowType$Union Schema]
+           (org.apache.arrow.vector TimeStampMicroTZVector VectorSchemaRoot)
+           (org.apache.arrow.vector.types.pojo ArrowType$Union Schema)
            org.apache.arrow.vector.types.UnionMode))
 
 #_{:clj-kondo/ignore [:unused-binding]}
@@ -210,14 +211,14 @@
 
         (util/root->arrow-ipc-byte-buffer root :stream)))))
 
-(deftype TxProducer [^BufferAllocator allocator, ^Log log, ^Clock clock]
+(deftype TxProducer [^BufferAllocator allocator, ^Log log, ^InstantSource instant-src]
   ITxProducer
   (submitTx [this tx-ops]
     (.submitTx this tx-ops {}))
 
   (submitTx [_ tx-ops opts]
     (let [{:keys [sys-time] :as opts} (-> opts
-                                          (assoc :current-time (.instant clock))
+                                          (assoc :current-time (.instant instant-src))
                                           (some-> (update :sys-time util/->instant)))]
       (-> (.appendRecord log (serialize-tx-ops allocator tx-ops opts))
           (util/then-apply
@@ -226,10 +227,10 @@
                 sys-time (assoc :sys-time sys-time))))))))
 
 (defmethod ig/prep-key ::tx-producer [_ opts]
-  (merge {:clock (Clock/systemDefaultZone)
+  (merge {:instant-src InstantSource/SYSTEM
           :log (ig/ref :core2/log)
           :allocator (ig/ref :core2/allocator)}
          opts))
 
-(defmethod ig/init-key ::tx-producer [_ {:keys [clock log allocator]}]
-  (TxProducer. allocator log clock))
+(defmethod ig/init-key ::tx-producer [_ {:keys [instant-src log allocator]}]
+  (TxProducer. allocator log instant-src))

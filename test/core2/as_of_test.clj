@@ -4,7 +4,8 @@
             [core2.ingester :as ingest]
             [core2.test-util :as tu]
             [core2.util :as util])
-  (:import (java.time Clock Duration)
+  (:import core2.InstantSource
+           (java.time Clock Duration)
            (java.util List ArrayList)))
 
 (def ^:dynamic ^List *app-times*)
@@ -14,12 +15,12 @@
     (binding [*app-times* (ArrayList.)]
       (let [clock (-> (Clock/systemUTC)
                       (Clock/tick (Duration/ofNanos 1000)))
-            clock (proxy [Clock] []
-                    (instant []
-                      (let [i (.instant clock)]
-                        (.add *app-times* i)
-                        i)))]
-        (tu/with-opts {:core2.tx-producer/tx-producer {:clock clock}}
+            instant-src (reify InstantSource
+                          (instant [_]
+                            (let [i (.instant clock)]
+                              (.add *app-times* i)
+                              i)))]
+        (tu/with-opts {:core2.tx-producer/tx-producer {:instant-src instant-src}}
           f))))
 
   tu/with-node)

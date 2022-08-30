@@ -5,8 +5,8 @@
             [core2.util :as util]))
 
 (defn- with-mock-clocks [f]
-  (tu/with-opts {:core2.log/memory-log {:clock (tu/->mock-clock)}
-                 :core2.tx-producer/tx-producer {:clock (tu/->mock-clock)}}
+  (tu/with-opts {:core2.log/memory-log {:instant-src (tu/->mock-clock)}
+                 :core2.tx-producer/tx-producer {:instant-src (tu/->mock-clock)}}
     f))
 
 (t/use-fixtures :each with-mock-clocks tu/with-node)

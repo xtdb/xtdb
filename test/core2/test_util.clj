@@ -13,14 +13,14 @@
             [core2.util :as util]
             [core2.vector.indirect :as iv]
             [core2.vector.writer :as vw])
-  (:import core2.ICursor
+  (:import (core2 ICursor InstantSource)
            core2.local_node.Node
            core2.object_store.FileSystemObjectStore
            core2.vector.IIndirectVector
            java.net.ServerSocket
            (java.nio.file Files Path)
            java.nio.file.attribute.FileAttribute
-           (java.time Clock Duration Instant Period)
+           (java.time Duration Instant Period)
            (java.util LinkedList)
            java.util.concurrent.TimeUnit
            java.util.function.Consumer
@@ -66,17 +66,11 @@
   (:latest-completed-tx (c2/status node)))
 
 (defn ->mock-clock
-  (^java.time.Clock []
+  (^core2.InstantSource []
    (->mock-clock (iterate #(.plus ^Instant % (Period/ofDays 1))
                           (.toInstant #inst "2020-01-01"))))
 
-  (^java.time.Clock [^Iterable insts]
-   (let [times-iterator (.iterator insts)]
-     (proxy [Clock] []
-       (instant []
-         (if (.hasNext times-iterator)
-           ^Instant (.next times-iterator)
-           (throw (IllegalStateException. "out of time"))))))))
+  (^core2.InstantSource [^Iterable insts] (InstantSource/mock insts)))
 
 (defn await-temporal-snapshot-build [^Node node]
   (.awaitSnapshotBuild ^core2.temporal.TemporalManagerPrivate (::temporal/temporal-manager @(:!system node))))
@@ -232,8 +226,8 @@
                                                    max-rows-per-block max-rows-per-chunk]
                                             :or {buffers-dir "buffers"}}]
   (node/start-node {:core2.log/local-directory-log {:root-path (.resolve node-dir "log")
-                                                    :clock (->mock-clock)}
-                    :core2.tx-producer/tx-producer {:clock (->mock-clock)}
+                                                    :instant-src (->mock-clock)}
+                    :core2.tx-producer/tx-producer {:instant-src (->mock-clock)}
                     :core2.buffer-pool/buffer-pool {:cache-path (.resolve node-dir buffers-dir)}
                     :core2.object-store/file-system-object-store {:root-path (.resolve node-dir "objects")}
                     :core2/row-counts (->> {:max-rows-per-block max-rows-per-block

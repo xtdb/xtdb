@@ -7,18 +7,17 @@
             [core2.tpch :as tpch]
             [core2.util :as util])
   (:import [java.nio.file Files LinkOption Path]
-           [java.time Clock Duration ZoneId]))
+           [java.time Duration ZoneId]))
 
 (def ^:dynamic *node* nil)
 (def ^:dynamic *db* nil)
 
 ;; (slurp (io/resource (format "io/airlift/tpch/queries/q%d.sql" 1)))
 
-(defn with-tpch-data [{:keys [method ^Path node-dir scale-factor clock]} f]
+(defn with-tpch-data [{:keys [method ^Path node-dir scale-factor]} f]
   (util/delete-dir node-dir)
 
-  (with-open [node (tu/->local-node {:node-dir node-dir,
-                                     :clock clock})]
+  (with-open [node (tu/->local-node {:node-dir node-dir})]
     (let [last-tx (-> (case method
                         :docs (tpch/submit-docs! node scale-factor)
                         :dml (tpch/submit-dml! node scale-factor))
@@ -57,8 +56,7 @@
         test-dir (.resolve tpch-test-dir sub-dir)]
     (with-tpch-data {:method method
                      :node-dir node-dir
-                     :scale-factor scale-factor
-                     :clock (Clock/fixed (util/->instant #inst "2021-04-01") (ZoneId/of "UTC"))}
+                     :scale-factor scale-factor}
       (fn []
         (t/is (= expected-objects (count (object-files node-dir))))
         (c2-json/write-arrow-json-files (.toFile (.resolve node-dir "objects")))

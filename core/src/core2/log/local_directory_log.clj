@@ -6,12 +6,13 @@
             [juxt.clojars-mirrors.integrant.core :as ig]
             [core2.api :as c2])
   (:import clojure.lang.MapEntry
+           core2.InstantSource
            [core2.log Log LogRecord]
            [java.io BufferedInputStream BufferedOutputStream Closeable DataInputStream DataOutputStream EOFException]
            java.nio.ByteBuffer
            [java.nio.channels Channels ClosedByInterruptException FileChannel]
            [java.nio.file Path StandardOpenOption]
-           [java.time Clock Duration]
+           [java.time Duration]
            java.time.temporal.ChronoUnit
            java.util.ArrayList
            [java.util.concurrent ArrayBlockingQueue BlockingQueue CompletableFuture Executors ExecutorService Future]))
@@ -86,7 +87,7 @@
               (.cancel f true))
             (recur)))))))
 
-(defn- writer-append-loop [^Path root-path ^BlockingQueue queue ^Clock clock ^long buffer-size]
+(defn- writer-append-loop [^Path root-path, ^BlockingQueue queue, ^InstantSource instant-src, ^long buffer-size]
   (with-open [log-channel (util/->file-channel (.resolve root-path "LOG")
                                                #{StandardOpenOption/CREATE
                                                  StandardOpenOption/WRITE})]
@@ -104,7 +105,7 @@
                        offset previous-offset]
                   (when-not (= n (.size elements))
                     (let [[f ^ByteBuffer record] (.get elements n)
-                          sys-time (-> (.instant clock) (.truncatedTo ChronoUnit/MICROS))
+                          sys-time (-> (.instant instant-src) (.truncatedTo ChronoUnit/MICROS))
                           size (.remaining record)
                           written-record (.duplicate record)]
                       (.write log-out ^byte record-separator)
@@ -146,18 +147,18 @@
 
 (defmethod ig/prep-key :core2.log/local-directory-log [_ opts]
   (-> (merge {:buffer-size 4096
-              :clock (Clock/systemDefaultZone)
+              :instant-src InstantSource/SYSTEM
               :poll-sleep-duration "PT0.1S"}
              opts)
       (util/maybe-update :root-path util/->path)
       (util/maybe-update :poll-sleep-duration util/->duration)))
 
-(defmethod ig/init-key :core2.log/local-directory-log [_ {:keys [root-path poll-sleep-duration buffer-size clock]}]
+(defmethod ig/init-key :core2.log/local-directory-log [_ {:keys [root-path poll-sleep-duration buffer-size instant-src]}]
   (util/mkdirs root-path)
 
   (let [pool (Executors/newSingleThreadExecutor (util/->prefix-thread-factory "local-directory-log-writer-"))
         queue (ArrayBlockingQueue. buffer-size)
-        append-loop-future (.submit pool ^Runnable #(writer-append-loop root-path queue clock buffer-size))]
+        append-loop-future (.submit pool ^Runnable #(writer-append-loop root-path queue instant-src buffer-size))]
     (->LocalDirectoryLog root-path poll-sleep-duration pool queue append-loop-future nil)))
 
 (defmethod ig/halt-key! :core2.log/local-directory-log [_ log]
