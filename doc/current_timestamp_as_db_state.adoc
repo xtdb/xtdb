@@ -8,7 +8,7 @@ Since the inception of Core2, my idea and plan has been that LogAppendTime shoul
 
 Must haves:
 
-1. a single source of time derived from LogAppendTime -> SYSTEM_TIME / CURRENT_TIMESTAMP -> APPLICATION_TIME (unless provided as constraints).
+1. a single source of time derived from LogAppendTime -> CURRENT_TIMESTAMP -> SYSTEM_TIME / APPLICATION_TIME (unless provided as constraints).
 2. monotonically increasing clocks within a session, across reads and writes.
 3. read your own writes.
 4. no implicit dependencies on the local nodes state, including the clock.
