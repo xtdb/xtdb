@@ -35,14 +35,12 @@
 ;; unchecked math is unnecessary (and perhaps dangerous) for this ns
 (set! *unchecked-math* false)
 
-;; Server
-;
+;;; Server
 ;; Represents a single postgres server on a particular port
 ;; the server currently is a blocking IO server (no nio / netty)
 ;; the server does not own the lifecycle of its associated node
 
-;; Server lifecycle
-;
+;;; Server lifecycle
 ;; new -> starting        -> running -> draining -> cleaning-up -> cleaned-up
 ;;     -> error-on-start  -> error                              -> error-on-cleanup
 ;;
@@ -71,15 +69,13 @@
   Closeable
   (close [this] (stop-server this)))
 
-;; Connection
-;
+;;; Connection
 ;; Represents a single client connection to the server
 ;; identified by an integer 'cid'
 ;; each connection holds some state under :conn-state (such as prepared statements, session params and such)
 ;; and is registered under the :connections map under the servers :server-state.
 
-;; Connection lifecycle
-;
+;;; Connection lifecycle
 ;; new -> running        -> closing -> cleaning-up -> cleaned-up
 ;;     -> error-on-start
 ;;
@@ -212,7 +208,6 @@
     :pg-read-text (fn [barr] (Boolean/parseBoolean (read-utf8 barr)))}
 
    ;; ints
-   ;
    ;; not sure if bit should be mapped to bool?
    {:pg :bit
     :pg-read-binary (fn [barr] (-> barr ByteBuffer/wrap .get))
@@ -228,7 +223,6 @@
     :pg-read-text (fn [barr] (-> barr read-ascii Long/parseLong))}
 
    ;; floats
-   ;
    {:pg :float4
     :pg-read-binary (fn [barr] (-> barr ByteBuffer/wrap .getFloat))
     :pg-read-text (fn [barr] (-> barr read-ascii Float/parseFloat))}
@@ -237,7 +231,6 @@
     :pg-read-text (fn [barr] (-> barr read-ascii Double/parseDouble))}
 
    ;; strings
-   ;
    {:pg :varchar
     :pg-read-binary read-utf8
     :pg-read-text read-utf8}
@@ -258,8 +251,7 @@
     (assoc (read-untyped-msg in)
       :msg-char8 (char type-byte))))
 
-;; errors
-;
+;;; errors
 
 (defn- err-protocol-violation [msg]
   {:severity "ERROR"
@@ -300,8 +292,7 @@
    :sql-state "57014"
    :message msg})
 
-;; sql processing
-;
+;;; sql processing
 ;; because we are talking to postgres clients, we cannot simply fling sql at xt (shame!)
 ;; so these functions provide some utility on top of xt to figure out where we can 'fake it til we make it' as a pg server.
 
@@ -423,7 +414,6 @@
          :canned-response canned-response})
 
       ;; transaction control
-      ;
       ;; will likely look at moving this into parser as they are spec defined
       ;; though execution behaviour will likely remain in pgwire (due to stateful nature of these commands)
       (when (re-find #"(?i)^SET\s+TRANSACTION\s+READ\s+ONLY$" sql-trimmed)
@@ -455,7 +445,6 @@
         {:statement-type :rollback})
 
       ;; session control
-      ;
       ;; see issue #324, scrappy and temporary solution for basic interval HOUR MINUTE expr
       (when-some [[_ sign hh mm] (re-find #"(?i)^SET\s+TIME\s*ZONE\s+\'(\+|\-|)(\d{1,2})\:(\d{1,2})\'" sql-trimmed)]
         {:statement-type :set-time-zone
@@ -625,8 +614,7 @@
         ;; timed out
         :else true))))
 
-;; server impl
-;
+;;; server impl
 
 (defn- cleanup-server-resources [server]
   (let [{:keys [port
@@ -844,8 +832,7 @@
     ;; TODO wait for close?
     (cleanup-connection-resources conn)))
 
-;; pg i/o shared data types
-;
+;;; pg i/o shared data types
 ;; our io maps just capture a paired :read fn (data-in)
 ;; and :write fn (data-out, val)
 ;; the goal is to describe the data layout of various pg messages, so they can be read and written from in/out streams
@@ -984,9 +971,8 @@
   (io-record :process-id io-uint32
              :secret-key io-uint32))
 
-;; msg definition
+;;; msg definition
 
-;
 (def ^:private ^:redef client-msgs {})
 (def ^:private ^:redef server-msgs {})
 
@@ -1057,8 +1043,7 @@
 
 (def-msg msg-terminate :client \X)
 
-;; server messages
-;
+;;; server messages
 
 (def-msg msg-error-response :server \E
   :error-fields (io-null-terminated-list io-error-field))
@@ -1120,8 +1105,7 @@
                   :format-code io-format-code)
                 (io-list io-uint16)))
 
-;; server commands
-;
+;;; server commands
 ;; the commands represent actions the connection may take in response to some message
 ;; they are simple functions that can call each other directly, though they can also be enqueued
 ;; through the connections :cmd-buf queue (in :conn-state) this will later be useful
