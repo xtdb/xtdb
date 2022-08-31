@@ -3,7 +3,8 @@
            core2.rewrite/zcase clojure.core/case
            core2.sql.logic-test.runner/def-slt-test clojure.test/deftest
            clojure.test.check.clojure-test/defspec clojure.test/deftest
-           clojure.test.check.properties/for-all clojure.core/for}
+           clojure.test.check.properties/for-all clojure.core/for
+           juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc/with-transaction next.jdbc/with-transaction}
  :hooks {:analyze-call {core2.pgwire/def-msg hooks/pgwire-def-msg}}
  :linters {:not-empty? {:level :off}
            :unresolved-symbol {:level :error

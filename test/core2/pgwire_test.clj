@@ -1,24 +1,24 @@
 (ns core2.pgwire-test
-  (:require [core2.pgwire :as pgwire]
-            [clojure.test :refer [deftest is testing] :as t]
-            [core2.local-node :as node]
-            [core2.test-util :as tu]
-            [clojure.data.json :as json]
-            [juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc :as jdbc]
-            [clojure.string :as str]
-            [clojure.tools.logging :as log]
+  (:require [clojure.data.json :as json]
             [clojure.java.shell :as sh]
+            [clojure.string :as str]
+            [clojure.test :refer [deftest is testing] :as t]
+            [clojure.tools.logging :as log]
+            [core2.api :as c2]
+            [core2.local-node :as node]
+            [core2.pgwire :as pgwire]
+            [core2.test-util :as tu]
             [core2.util :as util]
-            [core2.api :as c2])
-  (:import (java.sql Connection)
-           (org.postgresql.util PGobject PSQLException)
+            [juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc :as jdbc])
+  (:import (com.fasterxml.jackson.databind JsonNode ObjectMapper)
            (com.fasterxml.jackson.databind.node JsonNodeType)
-           (com.fasterxml.jackson.databind ObjectMapper JsonNode)
+           (core2 IResultSet)
            (java.lang Thread$State)
            (java.net SocketException)
-           (java.util.concurrent CountDownLatch TimeUnit CompletableFuture)
-           (core2 IResultSet)
-           (java.time Clock Instant ZoneOffset ZoneId)))
+           (java.sql Connection)
+           (java.time Clock Instant ZoneId ZoneOffset)
+           (java.util.concurrent CompletableFuture CountDownLatch TimeUnit)
+           (org.postgresql.util PGobject PSQLException)))
 
 (set! *warn-on-reflection* false)
 (set! *unchecked-math* false)
@@ -420,7 +420,7 @@
 (deftest accept-thread-socket-closed-exc-does-not-stop-later-accepts-test
   (inject-accept-exc (SocketException. "Socket closed"))
   (connect-and-throwaway)
-  (is (with-open [conn (jdbc-conn)] true)))
+  (is (with-open [_conn (jdbc-conn)] true)))
 
 (deftest accept-thread-interrupt-closes-thread-test
   (require-server {:accept-so-timeout 10})
@@ -571,8 +571,7 @@
                         (when (< (System/currentTimeMillis) query-til)
                           (recur query-til))))
                     ;; we expect an ex here, whether or not draining
-                    (catch PSQLException e
-                      ))))
+                    (catch PSQLException _))))
 
         futs (mapv spawn (range 10))]
 
@@ -628,7 +627,7 @@
             (with-open [stmt (.prepareStatement conn "select a.a from a")]
               (try
                 (with-redefs [c2/open-sql-async (fn [& _] (deliver stmt-promise stmt) (CompletableFuture.))]
-                  (with-open [rs (.executeQuery stmt)]
+                  (with-open [_rs (.executeQuery stmt)]
                     :not-cancelled))
                 (catch PSQLException e
                   (.getMessage e))))))
@@ -1040,7 +1039,7 @@
 
         (testing "commit"
           (send "COMMIT;\n")
-          (is (= (str/includes? (read) "COMMIT"))))
+          (is (str/includes? (read) "COMMIT")))
 
         (testing "read your own writes"
           (send "SELECT foo.a FROM foo;\n")
