@@ -277,18 +277,21 @@
                                  (update-in
                                   [(ex-message t) :lines]
                                   #(conj % (:line record))))))
-                        (-> ctx
-                            (update :queries-run + (if (= :query (:type record))
-                                                     1
-                                                     0)))
-                        (t/do-report {:type :error, :expected nil, :actual t, :file file, :line line})
-                        (if (and (str/starts-with? (or (ex-message t) "") "Column reference is not a grouping column")
-                                 (contains? (set (:skipif record)) "postgresql"))
-                          ;; Reporting here commented out as its still quite noisy.
-                          (do #_(log/warn "Ignored <Column reference is not a grouping column> Error as XTDB doesn't support" record)
-                              )
-                          (log/error t "Error Executing Record" record))
 
+                      (if (and (str/starts-with? (or (ex-message t) "") "Column reference is not a grouping column")
+                               (contains? (set (:skipif record)) "postgresql"))
+                        ;; Reporting here commented out as its still quite noisy.
+                        (do #_(log/warn "Ignored <Column reference is not a grouping column> Error as XTDB doesn't support" record)
+                              (update ctx :queries-run + (if (= :query (:type record))
+                                                           1
+                                                           0)))
+                        (do (log/error t "Error Executing Record" record)
+                            (t/do-report {:type :error, :expected nil, :actual t, :file file, :line line})
+                            (-> ctx
+                                (update-in [:results :error] (fnil inc 0))
+                                (update :queries-run + (if (= :query (:type record))
+                                                         1
+                                                         0)))))
                         #_(throw t)))))))
             ctx))))
 
@@ -404,7 +407,7 @@
 
   (time (-main "--verify" "--db" "sqlite" "test/core2/sql/logic_test/sqlite_test/select4.test"))
 
-  (time (-main "--verify" "--direct-sql" "--db" "xtdb" "test/core2/sql/logic_test/direct-sql/dml.test"))
+  (time (-main "--verify" "--direct-sql" "--db" "xtdb" "test/core2/sql/logic_test/direct-sql/system_time.test"))
 
   (= (time
       (with-out-str
