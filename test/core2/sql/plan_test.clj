@@ -859,8 +859,7 @@
     (t/is
       (=plan-file
         "system-time-between-symmetric-local-table-literals"
-        (plan-sql "SELECT 4 FROM t1 FOR SYSTEM_TIME BETWEEN SYMMETRIC TIMESTAMP '3002-01-01 00:00:00+00:00' AND DATE '3001-01-01'"))
-      "SYMMETRIC with literals to test predicate pushdown/folding")
+        (plan-sql "SELECT 4 FROM t1 FOR SYSTEM_TIME BETWEEN SYMMETRIC TIMESTAMP '3002-01-01 00:00:00+00:00' AND DATE '3001-01-01'")))
 
     (t/is
       (=plan-file

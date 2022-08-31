@@ -1363,12 +1363,54 @@
        ordinality-column (assoc :ordinality-column ordinality-column))
      [:map [{unwind-symbol (expr cve)}] nil]]))
 
-(defn- system-time-col-symbol [tp local-col-name]
- (let [{:keys [correlation-name id]} (sem/table (r/parent tp))]
+(defn- period-specification-col-symbol [tp local-col-name]
+  (let [{:keys [correlation-name id]} (sem/table (r/parent tp))]
     (id-symbol correlation-name id local-col-name)))
 
+(defn as-of-predicate [tp point-in-time start-sym end-sym]
+  (let [pit (expr point-in-time)]
+    (list
+      'and
+      (list '<= (period-specification-col-symbol tp start-sym) pit)
+      (list '> (period-specification-col-symbol tp end-sym) pit))))
+
+(defn from-to-predicate [tp point-in-time-1 point-in-time-2 start-sym end-sym]
+  (let [pit1 (expr point-in-time-1)
+        pit2 (expr point-in-time-2)]
+    (list
+      'and
+      (list '< pit1 pit2)
+      (list '< (period-specification-col-symbol tp start-sym) pit2)
+      (list '> (period-specification-col-symbol tp end-sym) pit1))))
+
+(defn raw-between-predicate [tp pit1 pit2 start-sym end-sym]
+  (list
+    'and
+    (list '<= pit1 pit2)
+    (list '<= (period-specification-col-symbol tp start-sym) pit2)
+    (list '> (period-specification-col-symbol tp end-sym) pit1)))
+
+
+(defn between-predicate [tp point-in-time-1 point-in-time-2 start-sym end-sym]
+  (let [pit1 (expr point-in-time-1)
+        pit2 (expr point-in-time-2)]
+    (raw-between-predicate tp pit1 pit2 start-sym end-sym)))
+
+(defn explicit-between-predicate [tp mode point-in-time-1 point-in-time-2 start-sym end-sym]
+  (let [pit1 (expr point-in-time-1)
+        pit2 (expr point-in-time-2)]
+    (if (= mode "SYMMETRIC")
+      (list
+        'if
+        (list '> pit1 pit2)
+        (raw-between-predicate tp pit2 pit1 start-sym end-sym)
+        (raw-between-predicate tp pit1 pit2 start-sym end-sym))
+      (raw-between-predicate tp pit1 pit2 start-sym end-sym))))
+
 (defn- wrap-with-system-time-select [table-primary-ast table-primary-plan]
-  (let [system-time-predicates
+  (let [start-sym 'system_time_start
+        end-sym 'system_time_end
+        system-time-predicates
         (first
           (r/collect-stop
             (fn [tp]
@@ -1381,10 +1423,7 @@
                  "OF"
                  ^:z point-in-time]
                 ;;=>
-                [(list
-                   'and
-                   (list '<= (system-time-col-symbol tp 'system_time_start) (expr point-in-time))
-                   (list '> (system-time-col-symbol tp 'system_time_end) (expr point-in-time)))]
+                [(as-of-predicate tp point-in-time start-sym end-sym)]
 
                 [:query_system_time_period_specification
                  "FOR"
@@ -1394,13 +1433,7 @@
                  "TO"
                  ^:z point-in-time-2]
                 ;;=>
-                (let [pit1 (expr point-in-time-1)
-                      pit2 (expr point-in-time-2)]
-                  [(list
-                     'and
-                     (list '< pit1 pit2)
-                     (list '< (system-time-col-symbol tp 'system_time_start) pit2)
-                     (list '> (system-time-col-symbol tp 'system_time_end) pit1))])
+                [(from-to-predicate tp point-in-time-1 point-in-time-2 start-sym end-sym)]
 
                 [:query_system_time_period_specification
                  "FOR"
@@ -1410,14 +1443,7 @@
                  "AND"
                  ^:z point-in-time-2]
                 ;;=>
-                (let
-                  [pit1 (expr point-in-time-1)
-                   pit2 (expr point-in-time-2)]
-                  [(list
-                     'and
-                     (list '<= pit1 pit2)
-                     (list '<= (system-time-col-symbol tp 'system_time_start) pit2)
-                     (list '> (system-time-col-symbol tp 'system_time_end) pit1))])
+                [(between-predicate tp point-in-time-1 point-in-time-2 start-sym end-sym)]
 
                 [:query_system_time_period_specification
                  "FOR"
@@ -1428,27 +1454,7 @@
                  "AND"
                  ^:z point-in-time-2]
                 ;;=>
-                (let [pit1 (expr point-in-time-1)
-                      pit2 (expr point-in-time-2)]
-                  [(if (= mode "SYMMETRIC")
-                     (list
-                       'if
-                       (list '> pit1 pit2)
-                       (list
-                         'and
-                         (list '<= pit2 pit1)
-                         (list '<= (system-time-col-symbol tp 'system_time_start) pit1)
-                         (list '> (system-time-col-symbol tp 'system_time_end) pit2))
-                       (list
-                         'and
-                         (list '<= pit1 pit2)
-                         (list '<= (system-time-col-symbol tp 'system_time_start) pit2)
-                         (list '> (system-time-col-symbol tp 'system_time_end) pit1)))
-                     (list
-                       'and
-                       (list '<= pit1 pit2)
-                       (list '<= (system-time-col-symbol tp 'system_time_start) pit2)
-                       (list '> (system-time-col-symbol tp 'system_time_end) pit1)))])))
+                [(explicit-between-predicate tp mode point-in-time-1 point-in-time-2 start-sym end-sym) ]))
             table-primary-ast))]
     (if system-time-predicates
       [:select
