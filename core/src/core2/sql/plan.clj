@@ -1364,8 +1364,8 @@
      [:map [{unwind-symbol (expr cve)}] nil]]))
 
 (defn- system-time-col-symbol [tp local-col-name]
-  (let [[table [{:keys [id]}]] (first (first (sem/env tp)))]
-    (id-symbol table id local-col-name)))
+ (let [{:keys [correlation-name id]} (sem/table (r/parent tp))]
+    (id-symbol correlation-name id local-col-name)))
 
 (defn- wrap-with-system-time-select [table-primary-ast table-primary-plan]
   (let [system-time-predicates

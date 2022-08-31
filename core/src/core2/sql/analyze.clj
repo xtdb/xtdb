@@ -394,9 +394,6 @@
     :from_clause
     (parent-env (dclo ag))
 
-    :query_system_time_period_specification
-    (dcli (r/parent ag))
-
     (:collection_derived_table
       :join_condition
       :lateral_derived_table)
@@ -1047,6 +1044,17 @@
        (contains? #{:insert_statement :delete_statement__searched :update_statement__searched}
                   (r/ctor (r/$ ag -1)))))
 
+(defn check-period-specification [ag]
+  (if-let [errors (not-empty (r/collect
+                               (fn [ag]
+                                 (when (r/ctor? :column_reference ag)
+                                   [(format "Columns are not valid within period specifications: %s %s"
+                                            (->src-str ag)
+                                            (->line-info-str ag))]))
+                               ag))]
+    errors
+    []))
+
 (defn errs [ag]
   (let [dml? (dml-statement? ag)]
     (r/collect
@@ -1111,6 +1119,9 @@
 
          :from_subquery
          (check-from-subquery ag)
+
+         :query_system_time_period_specification
+         (check-period-specification ag)
 
          (if dml?
            (check-dml-non-determinsm ag)

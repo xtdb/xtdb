@@ -1,34 +1,28 @@
 [:rename
- {x3 y, x10 z}
+ {x3 y, x8 z}
  [:project
-  [x3 x10]
+  [x3 x8]
   [:join
-   [(< x11 x5) (< x8 x5)]
+   [{x3 x8}]
    [:rename
-    {system_time_start x1,
-     system_time_end x2,
-     y x3,
-     start x4,
-     end x5,
-     _table x6}
-    [:select
-     (and (<= system_time_start start) (> system_time_end start))
-     [:scan
-      [system_time_start
-       system_time_end
-       y
-       start
-       end
-       {_table (= _table "x")}]]]]
-   [:rename
-    {system_time_start x8,
-     system_time_end x9,
-     z x10,
-     start x11,
-     _table x12}
+    {system_time_start x1, system_time_end x2, y x3, _table x4}
     [:scan
-     [system_time_start
-      system_time_end
-      z
-      start
-      {_table (= _table "z")}]]]]]]
+     [{system_time_start
+       (<= system_time_start #time/date "3001-01-01")}
+      {system_time_end (> system_time_end #time/date "3001-01-01")}
+      y
+      {_table (= _table "x")}]]]
+   [:project
+    [x8]
+    [:rename
+     {system_time_start x6, system_time_end x7, z x8, _table x9}
+     [:select
+      (< "3001-01-01" #time/zoned-date-time "3002-01-01T00:00Z")
+      [:scan
+       [{system_time_start
+         (<
+          system_time_start
+          #time/zoned-date-time "3002-01-01T00:00Z")}
+        {system_time_end (> system_time_end "3001-01-01")}
+        z
+        {_table (= _table "z")}]]]]]]]]

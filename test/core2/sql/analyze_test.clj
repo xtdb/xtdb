@@ -216,7 +216,17 @@ SELECT t1.d-t1.e AS a, SUM(t1.a) AS b
   `(let [[err# :as errs#] (:errs (sem/analyze-query (p/parse ~q)))
          err# (or err# "")]
      (t/is (= 1 (count errs#)) (pr-str errs#))
-     (t/is (re-find ~re err#))))
+     (t/is (re-find ~re err#) (pr-str errs#))))
+
+(defmacro ^:private invalid-multi? [re q]
+  `(let [errs# (:errs (sem/analyze-query (p/parse ~q)))]
+     (t/is (= ~(count re) (count errs#)) (pr-str errs#))
+     (t/is
+       (every?
+         (fn [regex#]
+           (some
+             #(re-find regex# %) errs#)) ~re)
+        (pr-str errs#))))
 
 (defmacro ^:private valid? [q]
   `(let [{errs# :errs scopes# :scopes} (sem/analyze-query (p/parse ~q))]
@@ -299,17 +309,7 @@ SELECT t1.d-t1.e AS a, SUM(t1.a) AS b
   (invalid? #"Column not in scope: foo.a"
             "SELECT foo.a FROM bar AS foo (b)")
   (invalid? #"Column not in scope: foo.a"
-            "SELECT foo.a FROM (SELECT x.b FROM x) AS foo")
-
-  (t/testing "SYSTEM_TIME periods"
-
-    (valid? "SELECT 4 FROM t1 FOR SYSTEM_TIME BETWEEN t1.start AND t1.end")
-
-    (valid?  "SELECT (SELECT 4 FROM t1 FOR SYSTEM_TIME BETWEEN t1.start AND t2.end) FROM t2")
-
-    (invalid?
-      #"Table not in scope: t2"
-      "SELECT 4 FROM t1 FOR SYSTEM_TIME BETWEEN t1.start AND t2.end")))
+            "SELECT foo.a FROM (SELECT x.b FROM x) AS foo"))
 
 (t/deftest test-variable-duplication
   (invalid? #"Table variable duplicated: baz"
@@ -423,6 +423,23 @@ SELECT t1.d-t1.e AS a, SUM(t1.a) AS b
 (invalid?
     #"References to periods may only appear within period predicates: foo.SYSTEM_TIME"
     "UPDATE foo SET bar = foo.SYSTEM_TIME"))
+
+(t/deftest check-period-specifications
+
+  (invalid-multi?
+    [#"Columns are not valid within period specifications: foo.baz"
+     #"Columns are not valid within period specifications: foo.biz"
+     #"Table not in scope: foo"
+     #"Table not in scope: foo"]
+    "SELECT foo.application_time_start
+    FROM foo FOR SYSTEM_TIME FROM foo.baz TO foo.biz")
+
+  (invalid-multi?
+    [#"Columns are not valid within period specifications: t1.start"
+     #"Columns are not valid within period specifications: t1.end"]
+    "SELECT t1.id,
+    (SELECT t2.id FROM t2 FOR SYSTEM_TIME BETWEEN t1.start AND t1.end)
+    FROM t1"))
 
 (t/deftest test-projection
   (t/is (= [[{:index 0, :identifier "b"}]

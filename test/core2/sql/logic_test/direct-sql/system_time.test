@@ -1,97 +1,34 @@
 hash-threshold 100
 
 statement ok
-INSERT INTO t1(id, start, end) VALUES(1, DATE '2000-01-01', DATE '3000-01-01')
+INSERT INTO t1(id) VALUES(1)
 
 statement ok
-INSERT INTO t1(id, start, end) VALUES(2, DATE '2100-01-01', DATE '3000-01-01')
-
-statement ok
-INSERT INTO t1(id, start, end) VALUES(3, DATE '2000-01-01', DATE '2020-01-01')
-
-statement ok
-INSERT INTO t2(id, start, end) VALUES(4, DATE '2000-01-01', DATE '3000-01-01')
+INSERT INTO t2(id) VALUES(2)
 
 query ITT nosort
-SELECT t1.id, t1.start, t1.end FROM t1
+SELECT t1.id FROM t1
 ----
 1
-2000-01-01
-3000-01-01
-2
-2100-01-01
-3000-01-01
-3
-2000-01-01
-2020-01-01
-
-query ITT nosort
-SELECT t1.id, t1.start, t1.end FROM t1 FOR SYSTEM_TIME AS OF t1.start
-----
-2
-2100-01-01
-3000-01-01
-
-query ITT nosort
-SELECT t1.id, t1.start, t1.end FROM t1 FOR SYSTEM_TIME FROM t1.end to t1.start
-----
-
-query ITT nosort
-SELECT t1.id, t1.start, t1.end FROM t1 FOR SYSTEM_TIME FROM t1.start to t1.end
-----
-1
-2000-01-01
-3000-01-01
-2
-2100-01-01
-3000-01-01
-
-query ITT nosort
-SELECT t1.id, t1.start, t1.end FROM t1 FOR SYSTEM_TIME BETWEEN t1.start AND t1.end
-----
-1
-2000-01-01
-3000-01-01
-2
-2100-01-01
-3000-01-01
-
-query ITT nosort
-SELECT t1.id, t1.start, t1.end FROM t1 FOR SYSTEM_TIME BETWEEN ASYMMETRIC t1.start AND t1.end
-----
-1
-2000-01-01
-3000-01-01
-2
-2100-01-01
-3000-01-01
-
-query ITT nosort
-SELECT t1.id, t1.start, t1.end FROM t1 FOR SYSTEM_TIME BETWEEN SYMMETRIC t1.start AND t1.end
-----
-1
-2000-01-01
-3000-01-01
-2
-2100-01-01
-3000-01-01
-
-query ITT nosort
-SELECT t1.id, t1.start, t1.end FROM t1 FOR SYSTEM_TIME BETWEEN SYMMETRIC t1.end AND t1.start
-----
-1
-2000-01-01
-3000-01-01
-2
-2100-01-01
-3000-01-01
 
 query II nosort
-SELECT t1.id, (SELECT t2.id FROM t2 FOR SYSTEM_TIME BETWEEN t2.start AND t1.end) FROM t1
+SELECT t1.id, (SELECT t2.id FROM t2 FOR SYSTEM_TIME BETWEEN DATE '2000-01-01' AND DATE '3000-01-01') FROM t1
 ----
 1
-4
 2
-4
-3
+
+query II nosort
+SELECT t1.id, (SELECT t2.id FROM t2 FOR SYSTEM_TIME BETWEEN DATE '2000-01-01' AND DATE '2010-01-01') FROM t1
+----
+1
 NULL
+
+query II nosort
+SELECT t1.id, (SELECT t2.id FROM t2 FOR SYSTEM_TIME BETWEEN DATE '2000-01-01' AND DATE '2010-01-01') FROM t1 FOR SYSTEM_TIME AS OF DATE '2100-01-01'
+----
+1
+NULL
+
+query II nosort
+SELECT t1.id, (SELECT t2.id FROM t2 FOR SYSTEM_TIME BETWEEN DATE '2000-01-01' AND DATE '2010-01-01') FROM t1 FOR SYSTEM_TIME AS OF DATE '2000-01-01'
+----

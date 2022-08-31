@@ -864,18 +864,14 @@
 
     (t/is
       (=plan-file
-        "system-time-between-symmetric-local-table"
-        (plan-sql "SELECT 4 FROM t1 FOR SYSTEM_TIME BETWEEN SYMMETRIC t1.start AND t1.end")))
-
-    (t/is
-      (=plan-file
         "system-time-between-asymmetric-subquery"
-        (plan-sql "SELECT (SELECT 4 FROM t1 FOR SYSTEM_TIME BETWEEN ASYMMETRIC t1.start AND t2.end) FROM t2")))
+        (plan-sql "SELECT (SELECT 4 FROM t1 FOR SYSTEM_TIME BETWEEN ASYMMETRIC DATE '3001-01-01' AND TIMESTAMP '3002-01-01 00:00:00+00:00') FROM t2")))
 
     (t/is
       (=plan-file
         "system-time-between-lateraly-derived-table"
-        (plan-sql "SELECT x.y, y.z FROM x FOR SYSTEM_TIME AS OF x.start, LATERAL (SELECT z.z FROM z FOR SYSTEM_TIME FROM z.start TO x.end WHERE z.z = x.y) AS y")))))
+        (plan-sql "SELECT x.y, y.z FROM x FOR SYSTEM_TIME AS OF DATE '3001-01-01',
+                  LATERAL (SELECT z.z FROM z FOR SYSTEM_TIME FROM '3001-01-01' TO TIMESTAMP '3002-01-01 00:00:00+00:00' WHERE z.z = x.y) AS y")))))
 
 ;; x1 = app-time-start x2 = app-time-end
 
