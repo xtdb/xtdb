@@ -22,6 +22,6 @@
    {x10 (local-time 6)}
    {x11 (local-timestamp)}
    {x12 (local-timestamp 9)}
-   {x13 #time/instant "9999-12-31T23:59:59.999999Z"}
-   {x14 #time/instant "9999-12-31T23:59:59.999999Z"}]
+   {x13 core2/end-of-time}
+   {x14 core2/end-of-time}]
   [:rename {a x1, _table x2} [:scan [a {_table (= _table "u")}]]]]]

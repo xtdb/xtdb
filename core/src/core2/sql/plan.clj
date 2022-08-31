@@ -583,7 +583,7 @@
     [:current_local_time_value_function _ ^:z tp] (list 'local-time (expr tp))
     [:current_local_timestamp_value_function _] '(local-timestamp)
     [:current_local_timestamp_value_function _ ^:z tp] (list 'local-timestamp (expr tp))
-    [:end_of_time_value_function _] u/end-of-time
+    [:end_of_time_value_function _] 'core2/end-of-time
 
     [:character_like_predicate ^:z rvp [:character_like_predicate_part_2 "LIKE" ^:z cp]]
     ;;=>
