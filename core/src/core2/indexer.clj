@@ -566,16 +566,37 @@
                                          (.logDelete log-op-idxer iid start-app-time end-app-time)
                                          (.indexDelete temporal-idxer iid row-id start-app-time end-app-time false)))))))))))))
 
+(defn- ->sql-erase-indexer ^core2.indexer.SqlOpIndexer [^ILogOpIndexer log-op-idxer, ^ITemporalTxIndexer temporal-idxer
+                                                        ^ScanSource scan-src, {:keys [^Instant current-time]}]
+  (reify SqlOpIndexer
+    (indexOp [_ inner-query param-rows _opts]
+      (with-open [pq (op/open-prepared-ra inner-query)]
+        (doseq [param-row param-rows
+                :let [param-row (->> param-row
+                                     (into {} (map (juxt (comp symbol key) val))))]]
+          (with-open [res (.openCursor pq {:srcs {'$ scan-src}, :params param-row, :current-time current-time})]
+            (.forEachRemaining res
+                               (reify Consumer
+                                 (accept [_ in-rel]
+                                   (let [^IIndirectRelation in-rel in-rel
+                                         row-count (.rowCount in-rel)
+                                         iid-rdr (.monoReader (.vectorForName in-rel "_iid"))]
+                                     (dotimes [idx row-count]
+                                       (let [iid (.readLong iid-rdr idx)]
+                                         (.logEvict log-op-idxer iid)
+                                         (.indexEvict temporal-idxer iid)))))))))))))
+
 (defn- ->sql-indexer ^core2.indexer.OpIndexer [^TransactionIndexer indexer, ^IMetadataManager metadata-mgr, ^IBufferPool buffer-pool, ^IInternalIdManager iid-mgr
                                                ^ILogOpIndexer log-op-idxer, ^ITemporalTxIndexer temporal-idxer
                                                ^DenseUnionVector tx-ops-vec, ^ScanSource scan-src
-                                               {:keys [^Instant current-time, app-time-as-of-now?] :as tx-opts}]
+                                               {:keys [app-time-as-of-now?] :as tx-opts}]
   (let [sql-vec (.getStruct tx-ops-vec 3)
         ^VarCharVector query-vec (.getChild sql-vec "query" VarCharVector)
         ^ListVector param-rows-vec (.getChild sql-vec "param-rows" ListVector)
         insert-idxer (->sql-insert-indexer indexer iid-mgr log-op-idxer temporal-idxer scan-src tx-opts)
         update-idxer (->sql-update-indexer indexer metadata-mgr buffer-pool log-op-idxer temporal-idxer scan-src tx-opts)
-        delete-idxer (->sql-delete-indexer indexer log-op-idxer temporal-idxer scan-src tx-opts)]
+        delete-idxer (->sql-delete-indexer indexer log-op-idxer temporal-idxer scan-src tx-opts)
+        erase-idxer (->sql-erase-indexer log-op-idxer temporal-idxer scan-src tx-opts)]
     (reify OpIndexer
       (indexOp [_ tx-op-idx]
         (let [sql-offset (.getOffset tx-ops-vec tx-op-idx)
@@ -598,6 +619,9 @@
 
             [:delete opts inner-query]
             (.indexOp delete-idxer inner-query param-rows opts)
+
+            [:erase opts inner-query]
+            (.indexOp erase-idxer inner-query param-rows opts)
 
             (throw (UnsupportedOperationException. "sql query"))))))))
 

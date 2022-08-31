@@ -1445,7 +1445,8 @@
 (defn- dml? [ast]
   (contains? #{:insert_statement
                :update_statement__searched
-               :delete_statement__searched}
+               :delete_statement__searched
+               :erase_statement__searched}
              (ast-executable-statement-root-tag ast)))
 
 (defn cmd-exec-query

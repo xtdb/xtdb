@@ -3,20 +3,26 @@
  [:rename
   {x3 _iid,
    x4 _row-id,
-   x8 application_time_start,
-   x9 application_time_end}
+   x7 system_time_start,
+   x8 system_time_end,
+   x10 application_time_start,
+   x11 application_time_end}
   [:project
    [x3
     x4
-    {x8 (max x5 #time/date "2020-05-01")}
-    {x9 (min x6 #time/date "9999-12-31")}]
+    x7
+    x8
+    {x10 (max x5 #time/date "2020-05-01")}
+    {x11 (min x6 #time/date "9999-12-31")}]
    [:rename
     {_table x1,
      id x2,
      _iid x3,
      _row-id x4,
      application_time_start x5,
-     application_time_end x6}
+     application_time_end x6,
+     system_time_start x7,
+     system_time_end x8}
     [:scan
      [{_table (= _table "users")}
       {id (= id ?_0)}
@@ -25,4 +31,6 @@
       {application_time_start
        (<= application_time_start #time/date "9999-12-31")}
       {application_time_end
-       (>= application_time_end #time/date "2020-05-01")}]]]]]]
+       (>= application_time_end #time/date "2020-05-01")}
+      system_time_start
+      system_time_end]]]]]]

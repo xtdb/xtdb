@@ -146,7 +146,7 @@
     :regular_identifier
     (identifier ag)
 
-    (:delete_statement__searched :update_statement__searched)
+    (:delete_statement__searched :update_statement__searched :erase_statement__searched)
     (table-or-query-name (r/find-first (partial r/ctor? :target_table) ag))
 
     nil))
@@ -163,7 +163,7 @@
     :target_table
     (correlation-name (r/parent ag))
 
-    (:delete_statement__searched :update_statement__searched)
+    (:delete_statement__searched :update_statement__searched :erase_statement__searched)
     (some-> (r/find-first (partial r/ctor? :correlation_name) ag)
             (identifier))
 
@@ -281,7 +281,7 @@
            :table-or-query-name table-name}
           (with-meta {:ref ag})))
 
-    (:delete_statement__searched :update_statement__searched)
+    (:delete_statement__searched :update_statement__searched :erase_statement__searched)
     (table (r/find-first (partial r/ctor? :target_table) ag))))
 
 (defn local-tables [ag]
@@ -358,7 +358,7 @@
 ;; Inherited
 (defn dcli [ag]
   (r/zcase ag
-    (:query_specification :delete_statement__searched :update_statement__searched)
+    (:query_specification :delete_statement__searched :update_statement__searched :erase_statement__searched)
     (enter-env-scope (env (r/parent ag)))
 
     (:table_primary :qualified_join :target_table)
@@ -375,7 +375,7 @@
     :query_specification
     (dclo (r/$ ag -1))
 
-    (:delete_statement__searched :update_statement__searched)
+    (:delete_statement__searched :update_statement__searched :erase_statement__searched)
     (dclo (r/find-first (partial r/ctor? :target_table) ag))
 
     :table_expression
@@ -392,15 +392,13 @@
 
 (defn env [ag]
   (r/zcase ag
-    (:query_specification :delete_statement__searched :update_statement__searched)
+    (:query_specification :delete_statement__searched :update_statement__searched :erase_statement__searched)
     (dclo ag)
 
     :from_clause
     (parent-env (dclo ag))
 
-    (:collection_derived_table
-      :join_condition
-      :lateral_derived_table)
+    (:collection_derived_table :join_condition :lateral_derived_table)
     (dcli (r/parent ag))
 
     :order_by_clause
@@ -607,28 +605,22 @@
                           :let [identifier (last identifiers)]]
                       {:identifier identifier
                        :qualified-column [correlation-name identifier]})
-                    [{:identifier "_iid"
-                      :qualified-column [correlation-name "_iid"]}
-                     {:identifier "_row-id"
-                      :qualified-column [correlation-name "_row-id"]}
-                     {:identifier "application_time_start"
-                      :qualified-column [correlation-name "application_time_start"]}
-                     {:identifier "application_time_end"
-                      :qualified-column [correlation-name "application_time_end"]}])
+                    (for [col-name ["_iid" "_row-id"
+                                    "application_time_start" "application_time_end"
+                                    "system_time_start" "system_time_end"]]
+                      {:identifier col-name
+                       :qualified-column [correlation-name col-name]}))
             (into [] (comp (distinct)
                            (map #(vary-meta % assoc :table table))))))]
 
     (:update_statement__searched :delete_statement__searched)
     [(let [{:keys [correlation-name], :as table} (table ag)]
        (vec
-        (concat (->> [{:identifier "_iid"
-                       :qualified-column [correlation-name "_iid"]}
-                      {:identifier "_row-id"
-                       :qualified-column [correlation-name "_row-id"]}
-                      {:identifier "application_time_start"
-                       :qualified-column [correlation-name "application_time_start"]}
-                      {:identifier "application_time_end"
-                       :qualified-column [correlation-name "application_time_end"]}]
+        (concat (->> (for [col-name ["_iid" "_row-id"
+                                     "application_time_start" "application_time_end"
+                                     "system_time_start" "system_time_end"]]
+                       {:identifier col-name
+                        :qualified-column [correlation-name col-name]})
                      (into [] (map #(vary-meta % assoc :table table))))
                 (some->> (r/find-first (partial r/ctor? :set_clause_list) ag)
                          (r/collect-stop
@@ -637,6 +629,15 @@
                               [:set_clause [:update_target ^:z id] _ ^:z us]
                               [(-> {:identifier (identifier id)}
                                    (vary-meta assoc :ref us))])))))))]
+
+    :erase_statement__searched
+    [(let [{:keys [correlation-name], :as table} (table ag)]
+       (->> (for [col-name ["_iid" "_row-id"
+                            "application_time_start" "application_time_end"
+                            "system_time_start" "system_time_end"]]
+              {:identifier col-name
+               :qualified-column [correlation-name col-name]})
+            (into [] (map #(vary-meta % assoc :table table)))))]
 
     :collection_derived_table
     (if (= "ORDINALITY" (r/lexeme ag -1))
@@ -1047,7 +1048,7 @@
 
 (defn- dml-statement? [ag]
   (and (= :directly_executable_statement (r/ctor ag))
-       (contains? #{:insert_statement :delete_statement__searched :update_statement__searched}
+       (contains? #{:insert_statement :delete_statement__searched :update_statement__searched :erase_statement__searched}
                   (r/ctor (r/$ ag -1)))))
 
 (defn check-period-specification [ag]
@@ -1141,7 +1142,8 @@
     (:query_expression
      :query_specification
      :delete_statement__searched
-     :update_statement__searched)
+     :update_statement__searched
+     :erase_statement__searched)
     ag
 
     ::r/inherit))

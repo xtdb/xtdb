@@ -3,20 +3,26 @@
  [:rename
   {x2 _iid,
    x3 _row-id,
-   x7 col1,
+   x6 system_time_start,
+   x7 system_time_end,
+   x9 col1,
    x4 application_time_start,
    x5 application_time_end}
   [:project
-   [x2 x3 {x7 ?_0} x4 x5]
+   [x2 x3 x6 x7 {x9 ?_0} x4 x5]
    [:rename
     {_table x1,
      _iid x2,
      _row-id x3,
      application_time_start x4,
-     application_time_end x5}
+     application_time_end x5,
+     system_time_start x6,
+     system_time_end x7}
     [:scan
      [{_table (= _table "t1")}
       _iid
       _row-id
       application_time_start
-      application_time_end]]]]]]
+      application_time_end
+      system_time_start
+      system_time_end]]]]]]

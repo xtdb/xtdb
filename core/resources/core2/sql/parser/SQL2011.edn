@@ -9,6 +9,24 @@
       {:tag :opt, :parser {:tag :nt, :keyword :trim_character}}
       {:tag :string, :string "FROM"})}}
    {:tag :nt, :keyword :trim_source})},
+ :erase_statement__searched
+ {:tag :cat,
+  :parsers
+  ({:tag :string, :string "ERASE"}
+   {:tag :string, :string "FROM"}
+   {:tag :nt, :keyword :target_table}
+   {:tag :opt,
+    :parser
+    {:tag :cat,
+     :parsers
+     ({:tag :opt, :parser {:tag :string, :string "AS"}}
+      {:tag :nt, :keyword :correlation_name})}}
+   {:tag :opt,
+    :parser
+    {:tag :cat,
+     :parsers
+     ({:tag :string, :string "WHERE"}
+      {:tag :nt, :keyword :search_condition})}})},
  :character_value_expression_2
  {:tag :nt,
   :keyword :character_value_expression,
@@ -1305,7 +1323,8 @@
   ({:tag :nt, :keyword :delete_statement__searched}
    {:tag :nt, :keyword :direct_select_statement__multiple_rows}
    {:tag :nt, :keyword :insert_statement}
-   {:tag :nt, :keyword :update_statement__searched}),
+   {:tag :nt, :keyword :update_statement__searched}
+   {:tag :nt, :keyword :erase_statement__searched}),
   :red {:reduction-type :raw}},
  :array_primary
  {:tag :alt,

@@ -250,8 +250,6 @@
 (deftest test-dml-as-of-now-flag-339
   (let [tt1 (util/->zdt #inst "2020-01-01")
         tt2 (util/->zdt #inst "2020-01-02")
-        tt3 (util/->zdt #inst "2020-01-03")
-        tt4 (util/->zdt #inst "2020-01-04")
         tt5 (util/->zdt #inst "2020-01-05")
         eot (util/->zdt util/end-of-time)]
     (letfn [(q [!tx]
@@ -304,3 +302,49 @@
                    {:version 3, :application_time_start tt2, :application_time_end tt2} ; hmm...
                    {:version 3, :application_time_start tt2, :application_time_end tt5}}
                  (q !tx)))))))
+
+(t/deftest test-erase
+  (letfn [(q [tx]
+            (set (c2/sql-query *node*
+                               "SELECT foo.id, foo.version, foo.application_time_start, foo.application_time_end FROM foo"
+                               {:basis {:tx tx}})))]
+    (let [tx1 @(c2/submit-tx *node*
+                             [[:sql "INSERT INTO foo (id, version) VALUES (?, ?)"
+                               [["foo", 0]
+                                ["bar", 0]]]])
+          tx2 @(c2/submit-tx *node*
+                             [[:sql "UPDATE foo SET version = 1"
+                               [[]]]]
+                             {:app-time-as-of-now? true})
+          v0 {:version 0,
+              :application_time_start (util/->zdt #inst "2020-01-01"),
+              :application_time_end (util/->zdt #inst "2020-01-02")}
+
+          v1 {:version 1,
+              :application_time_start (util/->zdt #inst "2020-01-02"),
+              :application_time_end (util/->zdt util/end-of-time)}]
+
+      (t/is (= #{{:id "foo", :version 0,
+                  :application_time_start (util/->zdt #inst "2020-01-01")
+                  :application_time_end (util/->zdt util/end-of-time)}
+                 {:id "bar", :version 0,
+                  :application_time_start (util/->zdt #inst "2020-01-01")
+                  :application_time_end (util/->zdt util/end-of-time)}}
+               (q tx1)))
+
+      (t/is (= #{(assoc v0 :id "foo")
+                 (assoc v0 :id "bar")
+                 (assoc v1 :id "foo")
+                 (assoc v1 :id "bar")}
+               (q tx2)))
+
+      (let [tx3 @(c2/submit-tx *node*
+                               [[:sql "ERASE FROM foo WHERE foo.id = 'foo'"
+                                 [[]]]])]
+        (t/is (= #{(assoc v0 :id "bar") (assoc v1 :id "bar")} (q tx3)))
+        (t/is (= #{(assoc v0 :id "bar") (assoc v1 :id "bar")} (q tx2)))
+
+        (t/is (= #{{:id "bar", :version 0,
+                    :application_time_start (util/->zdt #inst "2020-01-01")
+                    :application_time_end (util/->zdt util/end-of-time)}}
+                 (q tx1)))))))

@@ -1774,6 +1774,27 @@
              rel]
             rel)]]))))
 
+(defn- plan-erase [z]
+  (let [tt (r/find-first (partial r/ctor? :target_table) z)
+        {:keys [table-or-query-name correlation-name] :as table} (sem/table tt)]
+    [:erase {:table table-or-query-name}
+     [:project (vec
+                (for [{:keys [identifier] :as col} (first (sem/projected-columns z))]
+                  {(symbol identifier)
+                   (if-let [derived-expr (:ref (meta col))]
+                     (expr derived-expr)
+                     (qualified-projection-symbol col))}))
+      [:select `(~'<=
+                 ~(qualified-projection-symbol
+                   (-> {:identifier "system_time_end"
+                        :qualified-column [correlation-name "system_time_end"]}
+                       (vary-meta assoc :table table)))
+                 ~'core2/end-of-time)
+       (as-> (build-target-table tt) rel
+         (if-let [sc (r/find-first (partial r/ctor? :search_condition) z)]
+           (wrap-with-select sc rel)
+           rel))]]]))
+
 (defn plan [z]
   (r/zmatch z
     [:directly_executable_statement ^:z dsds]
@@ -2026,6 +2047,7 @@
       :in_value_list (build-values-list z)
       :delete_statement__searched (plan-dml :delete z)
       :update_statement__searched (plan-dml :update z)
+      :erase_statement__searched (plan-erase z)
 
       (throw (err/illegal-arg ::cannot-build-plan
                               {::err/message (str "Cannot build plan for: "  (pr-str (r/node z)))
@@ -3109,7 +3131,7 @@
                                                             :plan plan
                                                             :explain-data (s/explain-data ::lp/logical-plan plan)}))
                                    plan))
-                 plan (if (#{:insert :delete :update} (first plan))
+                 plan (if (#{:insert :delete :update :erase} (first plan))
                         (let [[dml-op dml-op-opts plan] plan]
                           [dml-op dml-op-opts
                            (validate-plan (rewrite-plan plan opts))])

@@ -3,11 +3,13 @@
  [:rename
   {x6 _iid,
    x7 _row-id,
+   x2 system_time_start,
+   x3 system_time_end,
    x9 bar,
    x4 application_time_start,
    x5 application_time_end}
   [:project
-   [x6 x7 {x9 (and (< x2 x5) (> x3 x4))} x4 x5]
+   [x6 x7 x2 x3 {x9 (and (< x2 x5) (> x3 x4))} x4 x5]
    [:rename
     {_table x1,
      system_time_start x2,
