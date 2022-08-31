@@ -61,7 +61,15 @@
 
 (defprotocol TxLog
   (submit-tx [this tx-events] [this tx-events opts])
-  (open-tx-log ^xtdb.api.ICursor [this after-tx-id])
+  (open-tx-log ^xtdb.api.ICursor [this after-tx-id]
+   "Returns a serialized iterator (cursor) over transactions (see spec ::xtdb.api/tx) in the log after the given tx id.
+
+   The cursor:
+
+   - is free to return log entries introduced after the creation of the cursor.
+   - does not necessarily block when it runs out of entries, the sequence can just end. Do not expect it to be infinite or blocking.
+   - it can appear infinite regardless of any blocking or polling behaviour, given frequent enough writes to the log.
+   - should be closed with .close to free any resources such as threads or connections held by the cursor.")
   (latest-submitted-tx [this])
   (^java.util.concurrent.CompletableFuture subscribe [_ after-tx-id f]
    "f takes Future + txs - complete the future to stop the subscription.
