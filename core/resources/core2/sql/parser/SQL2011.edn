@@ -165,6 +165,10 @@
       :parser
       {:tag :nt, :keyword :query_system_time_period_specification}}
      {:tag :opt,
+      :parser
+      {:tag :nt,
+       :keyword :query_application_time_period_specification}}
+     {:tag :opt,
       :parser {:tag :nt, :keyword :correlation_or_recognition}})}
    {:tag :cat,
     :parsers
@@ -2637,6 +2641,38 @@
    {:tag :nt, :keyword :contextually_typed_table_value_constructor})},
  :row_subquery
  {:tag :nt, :keyword :subquery, :red {:reduction-type :raw}},
+ :query_application_time_period_specification
+ {:tag :alt,
+  :parsers
+  ({:tag :cat,
+    :parsers
+    ({:tag :string, :string "FOR"}
+     {:tag :nt, :keyword :application_time_period_name}
+     {:tag :string, :string "AS"}
+     {:tag :string, :string "OF"}
+     {:tag :nt, :keyword :point_in_time_1})}
+   {:tag :cat,
+    :parsers
+    ({:tag :string, :string "FOR"}
+     {:tag :nt, :keyword :application_time_period_name}
+     {:tag :string, :string "BETWEEN"}
+     {:tag :opt,
+      :parser
+      {:tag :alt,
+       :parsers
+       ({:tag :string, :string "ASYMMETRIC"}
+        {:tag :string, :string "SYMMETRIC"})}}
+     {:tag :nt, :keyword :point_in_time_1}
+     {:tag :string, :string "AND"}
+     {:tag :nt, :keyword :point_in_time_2})}
+   {:tag :cat,
+    :parsers
+    ({:tag :string, :string "FOR"}
+     {:tag :nt, :keyword :application_time_period_name}
+     {:tag :string, :string "FROM"}
+     {:tag :nt, :keyword :point_in_time_1}
+     {:tag :string, :string "TO"}
+     {:tag :nt, :keyword :point_in_time_2})})},
  :octet_like_predicate
  {:tag :cat,
   :parsers

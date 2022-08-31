@@ -426,6 +426,13 @@ SELECT t1.d-t1.e AS a, SUM(t1.a) AS b
 
 (t/deftest check-period-specifications
 
+  (invalid?
+    #"Parse error at line 4"
+    "SELECT foo.bar
+    FROM foo
+    FOR APPLICATION_TIME BETWEEN SYMMETRIC TIMESTAMP '3001-01-01 00:00:00+00:00' AND DATE '3000-01-01'
+    FOR SYSTEM_TIME BETWEEN DATE '2000-01-01' AND DATE '2001-01-01'")
+
   (invalid-multi?
     [#"Columns are not valid within period specifications: foo.baz"
      #"Columns are not valid within period specifications: foo.biz"

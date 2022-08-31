@@ -325,6 +325,10 @@
   (when (r/find-first (partial r/ctor? :query_system_time_period_specification) ag)
     [{:identifier "system_time_start"} {:identifier "system_time_end"}]))
 
+(defn- application-time-columns [ag]
+  (when (r/find-first (partial r/ctor? :query_application_time_period_specification) ag)
+    [{:identifier "application_time_start"} {:identifier "application_time_end"}]))
+
 (defn named-columns-join-env [ag]
   (r/zcase ag
     :qualified_join
@@ -520,7 +524,9 @@
                               (->> (for [{:keys [identifiers] column-table-id :table-id} column-references
                                          :when (= table-id column-table-id)]
                                      {:identifier (last identifiers)})
-                                   (concat named-join-columns (system-time-columns ag))
+                                   (concat named-join-columns
+                                           (system-time-columns ag)
+                                           (application-time-columns ag))
                                    (distinct)))))]
         [(reduce
           (fn [acc {:keys [identifier index]}]

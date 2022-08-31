@@ -252,12 +252,12 @@
               (execute-statement this direct-sql-data-statement-tree)))))))
 
   (execute-query [this query]
-    (let [edited-query (preprocess-query query)
-          tree (p/parse edited-query :query_expression)]
-      (when (p/failure? tree)
-        (throw (err/illegal-arg :core2.sql/parse-error
-                                {::err/message (p/failure->str tree)
-                                 :query query})))
-      (if (:direct-sql slt/*opts*)
-        (execute-sql-query this query)
+    (if (:direct-sql slt/*opts*)
+      (execute-sql-query this query)
+      (let [edited-query (preprocess-query query)
+            tree (p/parse edited-query :query_expression)]
+        (when (p/failure? tree)
+          (throw (err/illegal-arg :core2.sql/parse-error
+                                  {::err/message (p/failure->str tree)
+                                   :query query})))
         (execute-query-expression this tree)))))

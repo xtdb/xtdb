@@ -1,0 +1,22 @@
+[:rename
+ {x3 bar}
+ [:project
+  [x3]
+  [:rename
+   {application_time_start x1,
+    application_time_end x2,
+    bar x3,
+    _table x4}
+   [:select
+    (<
+     #time/date "2999-01-01"
+     #time/zoned-date-time "3000-01-01T00:00Z")
+    [:scan
+     [{application_time_start
+       (<
+        application_time_start
+        #time/zoned-date-time "3000-01-01T00:00Z")}
+      {application_time_end
+       (> application_time_end #time/date "2999-01-01")}
+      bar
+      {_table (= _table "foo")}]]]]]]
