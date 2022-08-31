@@ -3,31 +3,30 @@
 
   Start with (serve node)
   Stop with (.close server) or (stop-all)"
-  (:require [core2.api :as c2]
-            [core2.sql.plan :as plan]
+  (:require [clojure.data.json :as json]
+            [clojure.set :as set]
+            [clojure.string :as str]
+            [clojure.tools.logging :as log]
+            [core2.api :as c2]
+            [core2.local-node :as node]
+            [core2.rewrite :as r]
             [core2.sql.analyze :as sem]
             [core2.sql.parser :as parser]
-            [core2.rewrite :as r]
-            [core2.local-node :as node]
+            [core2.sql.plan :as plan]
             [core2.util :as util]
-            [clojure.string :as str]
-            [core2.api :as api]
-            [clojure.tools.logging :as log]
-            [clojure.set :as set]
-            [clojure.data.json :as json]
             [juxt.clojars-mirrors.integrant.core :as ig])
-  (:import (java.nio.charset StandardCharsets)
-           (java.io Closeable ByteArrayOutputStream DataInputStream DataOutputStream InputStream IOException OutputStream PushbackInputStream EOFException ByteArrayInputStream)
-           (java.net Socket ServerSocket SocketTimeoutException SocketException)
-           (java.util.concurrent Executors ExecutorService ConcurrentHashMap RejectedExecutionException TimeUnit CompletableFuture Future)
-           (java.util HashMap List Map)
-           (org.apache.arrow.vector PeriodDuration)
-           (java.time LocalDate LocalDateTime OffsetDateTime ZonedDateTime Instant Clock ZoneOffset ZoneId)
-           (java.nio ByteBuffer)
-           (java.util.function Function BiFunction BiConsumer)
+  (:import (clojure.lang PersistentQueue)
+           (core2 IResultSet)
+           (java.io ByteArrayInputStream ByteArrayOutputStream Closeable DataInputStream DataOutputStream EOFException IOException InputStream OutputStream PushbackInputStream)
            (java.lang Thread$State)
-           (clojure.lang PersistentQueue)
-           (core2 IResultSet)))
+           (java.net ServerSocket Socket SocketException SocketTimeoutException)
+           (java.nio ByteBuffer)
+           (java.nio.charset StandardCharsets)
+           (java.time Clock LocalDate LocalDateTime OffsetDateTime ZoneId ZoneOffset ZonedDateTime)
+           (java.util HashMap List Map)
+           (java.util.concurrent CompletableFuture ConcurrentHashMap ExecutorService Executors TimeUnit)
+           (java.util.function BiConsumer BiFunction)
+           (org.apache.arrow.vector PeriodDuration)))
 
 ;; references
 ;; https://www.postgresql.org/docs/current/protocol-flow.html
@@ -347,7 +346,7 @@
 
 ;; yagni, is everything upper'd anyway by drivers / server?
 (defn- probably-same-query? [s substr]
-  ;; todo I bet this may cause some amusement. Not sure what to do about non-parsed query matching, it'll do for now.
+  ;; TODO I bet this may cause some amusement. Not sure what to do about non-parsed query matching, it'll do for now.
   (str/starts-with? (str/lower-case s) (str/lower-case substr)))
 
 (defn get-canned-response
@@ -608,26 +607,23 @@
   For now, we timeout after 1 second if we do not receive a follow up to the ssl msg."
   [^DataInputStream in]
   (let [wait-until (+ (System/currentTimeMillis) 1000)]
-    (try
-      (loop []
-        (cond
-          ;; at least 4 bytes available
-          (<= 4 (.available in))
-          (do
-            false)
+    (loop []
+      (cond
+        ;; at least 4 bytes available
+        (<= 4 (.available in))
+        false
 
-          ;; time left
-          (< (System/currentTimeMillis) wait-until)
-          (do
-            ;; one nice thing about sleep is if we are interrupted
-            ;; (as we've been asked to close)
-            ;; we get an exception here
-            (if (try (Thread/sleep 1) true (catch InterruptedException _ false))
-              (recur)
-              true))
+        ;; time left
+        (< (System/currentTimeMillis) wait-until)
+        ;; one nice thing about sleep is if we are interrupted
+        ;; (as we've been asked to close)
+        ;; we get an exception here
+        (if (try (Thread/sleep 1) true (catch InterruptedException _ false))
+          (recur)
+          true)
 
-          ;; timed out
-          :else true)))))
+        ;; timed out
+        :else true))))
 
 ;; server impl
 ;
@@ -640,7 +636,7 @@
                 server-state
                 server-status]} server]
 
-    ;; todo revisit these transitions
+    ;; TODO revisit these transitions
     (or (compare-and-set! server-status :draining :cleaning-up)
         (compare-and-set! server-status :running :cleaning-up)
         (compare-and-set! server-status :error :cleaning-up)
@@ -704,7 +700,7 @@
 
     ;; sanity check its a new server
     (when-not (compare-and-set! server-status :new :starting)
-      (throw (Exception. (format "Server must be :new to start" port))))
+      (throw (Exception. (format "Server must be :new to start, port %d" port))))
 
     (try
 
@@ -845,7 +841,7 @@
 (defn stop-connection [conn]
   (let [{:keys [conn-status]} conn]
     (reset! conn-status :closing)
-    ;; todo wait for close?
+    ;; TODO wait for close?
     (cleanup-connection-resources conn)))
 
 ;; pg i/o shared data types
@@ -856,8 +852,8 @@
 ;; by generalizing a bit here, we gain a terser language for describing wire data types, and leverage
 ;; (e.g later we might decide to compile unboxed reader/writers using these)
 
-(def ^:private no-read (fn [in] (throw (UnsupportedOperationException.))))
-(def ^:private no-write (fn [out _] (throw (UnsupportedOperationException.))))
+(def ^:private no-read (fn [_in] (throw (UnsupportedOperationException.))))
+(def ^:private no-write (fn [_out _] (throw (UnsupportedOperationException.))))
 
 (def ^:private io-char8
   "A single byte character"
@@ -1325,7 +1321,7 @@
   [{:keys [conn-status, conn-state] :as conn} {:keys [query, ast, ^IResultSet result-set]}]
   (let [projection (mapv keyword (query-projection ast))
         json-bytes (comp utf8 json/json-str json-clj)
-        ;; todo result format
+        ;; TODO result format
         tuplefn (if (seq projection) (apply juxt (map (partial comp json-bytes) projection)) (constantly []))
 
         ;; this query has been cancelled!
@@ -1596,43 +1592,42 @@
   (let [{:keys [node]} server
         {:keys [failed err dml-buf]} (:transaction @conn-state)]
     (if failed
-      ;; todo better err
+      ;; TODO better err
       (cmd-send-error conn (or err (err-protocol-violation "transaction failed")))
-      (do
-        (let [tx-ops (mapv (fn [{:keys [transformed-query params]}] [:sql transformed-query [params]]) dml-buf)
+      (let [tx-ops (mapv (fn [{:keys [transformed-query params]}] [:sql transformed-query [params]]) dml-buf)
 
-              ;; todo review err log policy
-              [tx submit-ex]
+            ;; TODO review err log policy
+            [tx submit-ex]
+            (try
+              [(c2/submit-tx node tx-ops)]
+              (catch Throwable e
+                (log/debug e "Error on submit-tx")
+                [nil e]))
+
+            await-ex
+            (when tx
               (try
-                [(c2/submit-tx node tx-ops)]
+                ;; TODO consider blocking policy
+                @(node/await-tx-async node tx)
+                nil
                 (catch Throwable e
-                  (log/debug e "Error on submit-tx")
-                  [nil e]))
+                  (log/debug e "Error on await-tx")
+                  e)))
 
-              await-ex
-              (when tx
-                (try
-                  ;; todo consider blocking policy
-                  @(node/await-tx-async node tx)
-                  nil
-                  (catch Throwable e
-                    (log/debug e "Error on await-tx")
-                    e)))
+            err
+            (cond
+              ;; TODO err msgs, we need to classify, bad code (bug in xt) vs bad env (IO)
+              ;; bad sql / params should be caught when sending the DML not on COMMIT
+              submit-ex (err-protocol-violation "internal error on commit (report as a bug)")
+              await-ex (err-protocol-violation "internal error on commit (report as a bug)"))]
 
-              err
-              (cond
-                ;; todo err msgs, we need to classify, bad code (bug in xt) vs bad env (IO)
-                ;; bad sql / params should be caught when sending the DML not on COMMIT
-                submit-ex (err-protocol-violation "internal error on commit (report as a bug)")
-                await-ex (err-protocol-violation "internal error on commit (report as a bug)"))]
-
-          (if (or submit-ex await-ex)
-            (do
-              (swap! conn-state update :transaction assoc :failed true, :err err)
-              (cmd-send-error conn err))
-            (do
-              (swap! conn-state dissoc :transaction)
-              (cmd-write-msg conn msg-command-complete {:command "COMMIT"}))))))))
+        (if (or submit-ex await-ex)
+          (do
+            (swap! conn-state update :transaction assoc :failed true, :err err)
+            (cmd-send-error conn err))
+          (do
+            (swap! conn-state dissoc :transaction)
+            (cmd-write-msg conn msg-command-complete {:command "COMMIT"})))))))
 
 (defn cmd-rollback [{:keys [conn-state] :as conn}]
   (swap! conn-state dissoc :transaction)
@@ -1651,7 +1646,7 @@
         (get-in @conn-state [coll-k describe-name])]
 
     (when (= :prepared-statements describe-type)
-      ;; todo send param desc
+      ;; TODO send param desc
       )
 
     (case statement-type
@@ -1764,7 +1759,7 @@
   "Sync commands are sent by the client to commit transactions (we do not do anything here yet),
   and to clear the error state of a :extended mode series of commands (e.g the parse/bind/execute dance)"
   [{:keys [conn-state] :as conn}]
-  ;; todo commit / rollback should be used here if not in an explicit tx?
+  ;; TODO commit / rollback should be used here if not in an explicit tx?
   (cmd-send-ready conn)
   (swap! conn-state dissoc :skip-until-sync, :protocol))
 
@@ -2061,7 +2056,7 @@
 
                 (.setTcpNoDelay conn-socket true)
                 (if (= :running @server-status)
-                  ;; todo fix buffer on tp? q gonna be infinite right now
+                  ;; TODO fix buffer on tp? q gonna be infinite right now
                   (.submit thread-pool ^Runnable (fn [] (connect server conn-socket)))
                   (do
                     (err-cannot-connect-now "server shutting down")
@@ -2181,7 +2176,7 @@
       (->> (for [row rows
                  :let [auto-id (str "pgwire-" (random-uuid))]]
              [:put (merge {:id auto-id} row)])
-           (api/submit-tx (:node server))
+           (c2/submit-tx (:node server))
            deref))
 
     (defn read-xtdb [o]
