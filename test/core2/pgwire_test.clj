@@ -29,7 +29,7 @@
 
 (defn require-node []
   (when-not *node*
-    (set! *node* (node/start-node {}))))
+    (set! *node* (node/start-node {:core2.log/memory-log {:instant-src (tu/->mock-clock)}}))))
 
 (defn require-server
   ([] (require-server {}))
@@ -1242,6 +1242,29 @@
 
       (sql "SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY")
       (is (= [{:id 42}, {:id 43}] (q conn ["SELECT foo.id from foo"]))))))
+
+(deftest set-app-time-defaults-test
+  (with-open [conn (jdbc-conn)]
+    (let [sql #(q conn [%])]
+      (sql "SET SESSION CHARACTERISTICS AS APPLICATION_TIME_DEFAULTS AS_OF_NOW")
+
+      (sql "START TRANSACTION READ WRITE")
+      (sql "INSERT INTO foo (id, version) VALUES ('foo', 0)")
+      (sql "COMMIT")
+
+      (sql "START TRANSACTION READ WRITE")
+      (sql "UPDATE foo SET version = 1 WHERE foo.id = 'foo'")
+      (sql "COMMIT")
+
+      ;; TODO drop version 0 from this one once queries accept the flag
+      (is (= [{:version 0, :application_time_start "2020-01-01T00:00Z", :application_time_end "2020-01-02T00:00Z"}
+              {:version 1, :application_time_start "2020-01-02T00:00Z", :application_time_end "9999-12-31T23:59:59.999999Z"}]
+             (q conn ["SELECT foo.version, foo.application_time_start, foo.application_time_end FROM foo"])))
+
+      (sql "SET SESSION CHARACTERISTICS AS APPLICATION_TIME_DEFAULTS ISO_STANDARD")
+      (is (= [{:version 0, :application_time_start "2020-01-01T00:00Z", :application_time_end "2020-01-02T00:00Z"}
+              {:version 1, :application_time_start "2020-01-02T00:00Z", :application_time_end "9999-12-31T23:59:59.999999Z"}]
+             (q conn ["SELECT foo.version, foo.application_time_start, foo.application_time_end FROM foo"]))))))
 
 ;; currently direct statements opening transactions as per-spec is not supported
 ;; there are no transactional semantics for statements outside a tx

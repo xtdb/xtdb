@@ -460,6 +460,14 @@
         {:statement-type :set-session-characteristics
          :access-mode :read-only})
 
+      (when (re-find #"(?i)^SET SESSION CHARACTERISTICS AS APPLICATION_TIME_DEFAULTS ISO_STANDARD$" sql-trimmed)
+        {:statement-type :set-session-characteristics
+         :app-time-defaults :iso-standard})
+
+      (when (re-find #"(?i)^SET SESSION CHARACTERISTICS AS APPLICATION_TIME_DEFAULTS AS_OF_NOW$" sql-trimmed)
+        {:statement-type :set-session-characteristics
+         :app-time-defaults :as-of-now})
+
       ;; SET x = 42
       ;; SET x to 42
       ;; general SET statements have undefined behaviour at the moment, but permitted while working
@@ -1574,7 +1582,7 @@
 
 (defn cmd-commit [{:keys [server, conn-state] :as conn}]
   (let [{:keys [node]} server
-        {:keys [failed err dml-buf]} (:transaction @conn-state)]
+        {{:keys [failed err dml-buf]} :transaction, {:keys [app-time-defaults]} :session} @conn-state]
     (if failed
       ;; TODO better err
       (cmd-send-error conn (or err (err-protocol-violation "transaction failed")))
@@ -1583,7 +1591,7 @@
             ;; TODO review err log policy
             [tx submit-ex]
             (try
-              [(c2/submit-tx node tx-ops)]
+              [(c2/submit-tx node tx-ops {:app-time-as-of-now? (= app-time-defaults :as-of-now)})]
               (catch Throwable e
                 (log/debug e "Error on submit-tx")
                 [nil e]))
@@ -1653,9 +1661,8 @@
   (swap! conn-state update-in [:session :clock] (fn [^Clock clock] (.withZone clock tz)))
   (cmd-write-msg conn msg-command-complete {:command "SET TIME ZONE"}))
 
-(defn cmd-set-session-characteristics [{:keys [conn-state] :as conn} {:keys [access-mode]}]
-  (assert access-mode ":access-mode required for set-session-characteristics")
-  (swap! conn-state assoc-in [:session :access-mode] access-mode)
+(defn cmd-set-session-characteristics [{:keys [conn-state] :as conn} [k v]]
+  (swap! conn-state assoc-in [:session k] v)
   (cmd-write-msg conn msg-command-complete {:command "SET SESSION CHARACTERISTICS"}))
 
 (defn cmd-exec-stmt
@@ -1680,7 +1687,7 @@
   (case statement-type
     :empty-query (cmd-write-msg conn msg-empty-query)
     :canned-response (cmd-write-canned-response conn canned-response)
-    :set-session-characteristics (cmd-set-session-characteristics conn {:access-mode access-mode})
+    :set-session-characteristics (cmd-set-session-characteristics conn (first (dissoc stmt :statement-type)))
     :set-session-parameter (cmd-set-session-parameter conn parameter value)
     :set-transaction (cmd-set-transaction conn {:access-mode access-mode})
     :set-time-zone (cmd-set-time-zone conn tz)
