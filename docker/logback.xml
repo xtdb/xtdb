@@ -1,18 +1,17 @@
 <configuration>
-    <appender name="info" class="ch.qos.logback.core.ConsoleAppender">
+    <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
         <encoder>
-            <pattern>%d{HH:mm:ss} | %msg%n</pattern>
+            <pattern>%d{HH:mm:ss} | %-5level %logger{36} | %msg%n</pattern>
         </encoder>
     </appender>
-    <appender name="warn" class="ch.qos.logback.core.ConsoleAppender">
-        <encoder>
-            <pattern>%d{HH:mm:ss} | %-5level %logger{36} %msg%n</pattern>
-        </encoder>
-    </appender>
-    <root level="WARN">
-        <appender-ref ref="warn" />
+    <root level="INFO">
+        <appender-ref ref="STDOUT" />
     </root>
-    <logger name="core2.pgwire" level="INFO" additivity="false">
-        <appender-ref ref="info"/>
-    </logger>
+
+    <logger name="core2" level="DEBUG" />
+    <logger name="org.apache.kafka" level="ERROR" />
+    <logger name="org.apache.zookeeper" level="ERROR" />
+    <logger name="kafka" level="ERROR" />
+    <logger name="org.apache.arrow" level="WARN" />
+    <logger name="org.eclipse.jetty" level="WARN" />
 </configuration>
