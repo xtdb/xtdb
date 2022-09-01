@@ -46,7 +46,7 @@
   (let [stamp (acquire-write-lock mapsize-lock)]
     (try
       (with-open [stack (MemoryStack/stackPush)]
-        (let [info (MDBEnvInfo/mallocStack stack)]
+        (let [info (MDBEnvInfo/malloc stack)]
           (success? (LMDB/mdb_env_info env info))
           (let [new-mapsize (* factor (.me_mapsize info))]
             (log/debug "Increasing mapsize to:" new-mapsize)
@@ -137,8 +137,8 @@
               tx (new-transaction mapsize-lock env 0)
               cursor (new-cursor dbi (:txn tx))]
     (let [{:keys [cursor]} cursor
-          kv (MDBVal/mallocStack stack)
-          dv (MDBVal/mallocStack stack)
+          kv (MDBVal/malloc stack)
+          dv (MDBVal/malloc stack)
           kb (ExpandableDirectByteBuffer.)
           vb (ExpandableDirectByteBuffer.)]
       (doseq [[k v] kvs]
@@ -158,10 +158,10 @@
 (defn- tx-get [dbi ^LMDBTransaction tx k]
   (with-open [stack (MemoryStack/stackPush)]
     (let [k (mem/->off-heap k)
-          kv (-> (MDBVal/mallocStack stack)
+          kv (-> (MDBVal/malloc stack)
                  (.mv_data (MemoryUtil/memByteBuffer (.addressOffset k) (.capacity k)))
                  (.mv_size (.capacity k)))
-          dv (MDBVal/mallocStack stack)
+          dv (MDBVal/malloc stack)
           rc (LMDB/mdb_get (.txn tx) dbi kv dv)]
       (when-not (= LMDB/MDB_NOTFOUND rc)
         (success? rc)
@@ -242,7 +242,7 @@
   (count-keys [_]
     (with-open [stack (MemoryStack/stackPush)
                 tx (new-transaction mapsize-lock env LMDB/MDB_RDONLY)]
-      (let [stat (MDBStat/mallocStack stack)]
+      (let [stat (MDBStat/malloc stack)]
         (LMDB/mdb_stat (.txn tx) dbi stat)
         (.ms_entries stat))))
 
