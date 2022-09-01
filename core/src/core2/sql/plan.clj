@@ -9,8 +9,7 @@
             core2.operator ;; Adds impls logical plan spec
             [core2.rewrite :as r]
             [core2.sql.analyze :as sem]
-            [core2.sql.parser :as p]
-            [core2.util :as u])
+            [core2.sql.parser :as p])
   (:import (clojure.lang Var)
            (java.time LocalDate LocalDateTime LocalTime OffsetTime ZoneOffset ZonedDateTime)
            java.util.HashMap))
@@ -21,8 +20,6 @@
 
 (def ^:private ^:const ^String relation-id-delimiter "__")
 (def ^:private ^:const ^String relation-prefix-delimiter "_")
-
-(def ^:dynamic ^:private *opts* {})
 
 (declare expr)
 
@@ -1363,48 +1360,47 @@
        ordinality-column (assoc :ordinality-column ordinality-column))
      [:map [{unwind-symbol (expr cve)}] nil]]))
 
-(defn- period-specification-col-symbol [tp local-col-name]
-  (let [{:keys [correlation-name id]} (sem/table (r/parent tp))]
+(defn- period-specification-col-symbol [z local-col-name]
+  (let [{:keys [correlation-name id]} (sem/table z)]
     (id-symbol correlation-name id local-col-name)))
 
-(defn as-of-predicate [tp point-in-time start-sym end-sym]
-  (let [pit (expr point-in-time)]
-    (list
-      'and
-      (list '<= (period-specification-col-symbol tp start-sym) pit)
-      (list '> (period-specification-col-symbol tp end-sym) pit))))
+(defn as-of-predicate [z pit start-sym end-sym]
+  (list
+   'and
+   (list '<= (period-specification-col-symbol z start-sym) pit)
+   (list '> (period-specification-col-symbol z end-sym) pit)))
 
-(defn from-to-predicate [tp point-in-time-1 point-in-time-2 start-sym end-sym]
+(defn from-to-predicate [z point-in-time-1 point-in-time-2 start-sym end-sym]
   (let [pit1 (expr point-in-time-1)
         pit2 (expr point-in-time-2)]
     (list
       'and
       (list '< pit1 pit2)
-      (list '< (period-specification-col-symbol tp start-sym) pit2)
-      (list '> (period-specification-col-symbol tp end-sym) pit1))))
+      (list '< (period-specification-col-symbol z start-sym) pit2)
+      (list '> (period-specification-col-symbol z end-sym) pit1))))
 
-(defn raw-between-predicate [tp pit1 pit2 start-sym end-sym]
+(defn raw-between-predicate [z pit1 pit2 start-sym end-sym]
   (list
     'and
     (list '<= pit1 pit2)
-    (list '<= (period-specification-col-symbol tp start-sym) pit2)
-    (list '> (period-specification-col-symbol tp end-sym) pit1)))
+    (list '<= (period-specification-col-symbol z start-sym) pit2)
+    (list '> (period-specification-col-symbol z end-sym) pit1)))
 
-(defn between-predicate [tp point-in-time-1 point-in-time-2 start-sym end-sym]
+(defn between-predicate [z point-in-time-1 point-in-time-2 start-sym end-sym]
   (let [pit1 (expr point-in-time-1)
         pit2 (expr point-in-time-2)]
-    (raw-between-predicate tp pit1 pit2 start-sym end-sym)))
+    (raw-between-predicate z pit1 pit2 start-sym end-sym)))
 
-(defn explicit-between-predicate [tp mode point-in-time-1 point-in-time-2 start-sym end-sym]
+(defn explicit-between-predicate [z mode point-in-time-1 point-in-time-2 start-sym end-sym]
   (let [pit1 (expr point-in-time-1)
         pit2 (expr point-in-time-2)]
     (if (= mode "SYMMETRIC")
       (list
         'if
         (list '> pit1 pit2)
-        (raw-between-predicate tp pit2 pit1 start-sym end-sym)
-        (raw-between-predicate tp pit1 pit2 start-sym end-sym))
-      (raw-between-predicate tp pit1 pit2 start-sym end-sym))))
+        (raw-between-predicate z pit2 pit1 start-sym end-sym)
+        (raw-between-predicate z pit1 pit2 start-sym end-sym))
+      (raw-between-predicate z pit1 pit2 start-sym end-sym))))
 
 (defn- wrap-with-system-time-select [table-primary-ast table-primary-plan]
   (let [start-sym 'system_time_start
@@ -1422,7 +1418,7 @@
                  "OF"
                  ^:z point-in-time]
                 ;;=>
-                [(as-of-predicate tp point-in-time start-sym end-sym)]
+                [(as-of-predicate tp (expr point-in-time) start-sym end-sym)]
 
                 [:query_system_time_period_specification
                  "FOR"
@@ -1467,54 +1463,34 @@
         app-time-predicates
         (first
           (r/collect-stop
-            (fn [tp]
-              (r/zmatch
-                tp
-                [:query_application_time_period_specification
-                 "FOR"
-                 _
-                 "AS"
-                 "OF"
-                 ^:z point-in-time]
+            (fn [z]
+              (r/zmatch z
+                [:query_application_time_period_specification "FOR" _ "AS" "OF" ^:z point-in-time]
                 ;;=>
-                [(as-of-predicate tp point-in-time start-sym end-sym)]
+                [(as-of-predicate z (expr point-in-time) start-sym end-sym)]
 
-                [:query_application_time_period_specification
-                 "FOR"
-                 _
-                 "FROM"
-                 ^:z point-in-time-1
-                 "TO"
-                 ^:z point-in-time-2]
+                [:query_application_time_period_specification "FOR" _ "FROM" ^:z point-in-time-1 "TO" ^:z point-in-time-2]
                 ;;=>
-                [(from-to-predicate tp point-in-time-1 point-in-time-2 start-sym end-sym)]
+                [(from-to-predicate z point-in-time-1 point-in-time-2 start-sym end-sym)]
 
-                [:query_application_time_period_specification
-                 "FOR"
-                 _
-                 "BETWEEN"
-                 ^:z point-in-time-1
-                 "AND"
-                 ^:z point-in-time-2]
+                [:query_application_time_period_specification "FOR" _ "BETWEEN" ^:z point-in-time-1 "AND" ^:z point-in-time-2]
                 ;;=>
-                [(between-predicate tp point-in-time-1 point-in-time-2 start-sym end-sym)]
+                [(between-predicate z point-in-time-1 point-in-time-2 start-sym end-sym)]
 
-                [:query_application_time_period_specification
-                 "FOR"
-                 _
-                 "BETWEEN"
-                 mode
-                 ^:z point-in-time-1
-                 "AND"
-                 ^:z point-in-time-2]
+                [:query_application_time_period_specification "FOR" _ "BETWEEN" mode ^:z point-in-time-1 "AND" ^:z point-in-time-2]
                 ;;=>
-                [(explicit-between-predicate tp mode point-in-time-1 point-in-time-2 start-sym end-sym) ]))
+                [(explicit-between-predicate z mode point-in-time-1 point-in-time-2 start-sym end-sym) ]))
             table-primary-ast))]
-    (if app-time-predicates
-      [:select
-       app-time-predicates
+    (cond
+      app-time-predicates
+      [:select app-time-predicates
        table-primary-plan]
-      table-primary-plan)))
+
+      (:app-time-as-of-now? sem/*opts*)
+      [:select (as-of-predicate table-primary-ast '(current-timestamp) start-sym end-sym)
+       table-primary-plan]
+
+      :else table-primary-plan)))
 
 (defn- build-table-primary [tp]
   (let [{:keys [id correlation-name table-or-query-name] :as table} (sem/table tp)
@@ -1730,7 +1706,7 @@
                              :relation relation-in}))))
 
 (defn- plan-dml [dml-op z]
-  (let [{:keys [app-time-as-of-now?]} *opts*
+  (let [{:keys [app-time-as-of-now?]} sem/*opts*
         tt (r/find-first (partial r/ctor? :target_table) z)
         {:keys [table-or-query-name correlation-name] :as table} (sem/table tt)
         rel (build-target-table tt)
@@ -1977,39 +1953,33 @@
 
     [:table_primary _]
     ;;=>
-    (build-table-primary z)
+    (->> (build-table-primary z)
+         (wrap-with-system-time-select z)
+         (wrap-with-application-time-select z))
 
     [:table_primary _ _]
     ;;=>
-    (wrap-with-application-time-select
-      z
-      (wrap-with-system-time-select
-        z
-        (build-table-primary z)))
+    (->> (build-table-primary z)
+         (wrap-with-system-time-select z)
+         (wrap-with-application-time-select z))
 
     [:table_primary _ _ _]
     ;;=>
-    (wrap-with-application-time-select
-      z
-      (wrap-with-system-time-select
-        z
-        (build-table-primary z)))
+    (->> (build-table-primary z)
+         (wrap-with-system-time-select z)
+         (wrap-with-application-time-select z))
 
     [:table_primary _ _ _ _]
     ;;=>
-    (wrap-with-application-time-select
-      z
-      (wrap-with-system-time-select
-        z
-        (build-table-primary z)))
+    (->> (build-table-primary z)
+         (wrap-with-system-time-select z)
+         (wrap-with-application-time-select z))
 
     [:table_primary _ _ _ _ _]
     ;;=>
-    (wrap-with-application-time-select
-      z
-      (wrap-with-system-time-select
-        z
-        (build-table-primary z)))
+    (->> (build-table-primary z)
+         (wrap-with-system-time-select z)
+         (wrap-with-application-time-select z))
 
     [:qualified_join ^:z lhs _ ^:z rhs [:join_condition _ ^:z sc]]
     ;;=>
@@ -3115,11 +3085,11 @@
 
 (defn plan-query
   ([query] (plan-query query {}))
-  ([query {:keys [validate-plan?], :or {validate-plan? false} :as opts}]
+  ([query {:keys [validate-plan?], :or {validate-plan? false}, :as opts}]
    (if (p/failure? query)
      {:errs [(p/failure->str query)]}
      (binding [r/*memo* (HashMap.)
-               *opts* opts]
+               sem/*opts* opts]
        (let [ag (r/vector-zip query)]
          (if-let [errs (not-empty (sem/errs ag))]
            {:errs errs}

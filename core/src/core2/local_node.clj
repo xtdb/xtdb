@@ -30,7 +30,8 @@
 
 (defprotocol PNode
   (prepare-ra ^core2.local_node.PreparedQueryAsync [_ query])
-  (prepare-sql ^core2.local_node.PreparedQueryAsync [_ query])
+  (prepare-sql ^core2.local_node.PreparedQueryAsync [_ query query-opts])
+
   ;; TODO to do `-prepare-datalog` we need `d/compile-query` to not take the actual args
 
   ;; TODO in theory we shouldn't need this, but it's still used in tests
@@ -92,7 +93,7 @@
           (throw e)))))
 
   (-open-sql-async [this query query-opts]
-    (let [pq (prepare-sql this query)]
+    (let [pq (prepare-sql this query (select-keys query-opts [:app-time-as-of-now?]))]
       (try
         (-> (.openQueryAsync pq query-opts)
             (.thenApply (reify Function
@@ -111,8 +112,7 @@
     (let [pq (op/open-prepared-ra query)]
       (reify PreparedQueryAsync
         (openQueryAsync [_ {:keys [basis ^Duration basis-timeout] :as query-opts}]
-          (let [{:keys [current-time default-tz, tx], :or {current-time (Instant/now)
-                                                           default-tz (ZoneId/systemDefault)}} basis]
+          (let [{:keys [current-time default-tz, tx], :or {current-time (Instant/now), default-tz (ZoneId/systemDefault)}} basis]
             (-> (ingest/snapshot-async ingester tx)
                 (cond-> basis-timeout (.orTimeout (.toMillis basis-timeout) TimeUnit/MILLISECONDS))
                 (util/then-apply
@@ -125,9 +125,9 @@
         AutoCloseable
         (close [_] (.close pq)))))
 
-  (prepare-sql [this query]
+  (prepare-sql [this query query-opts]
     (let [{:keys [errs plan]} (-> (p/parse query)
-                                  (sql.plan/plan-query))]
+                                  (sql.plan/plan-query query-opts))]
       (when errs
         (throw (err/illegal-arg :invalid-sql-query
                                 {::err/message "Invalid SQL query:"

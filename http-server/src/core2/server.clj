@@ -120,10 +120,11 @@
 (s/def :core2.server.sql/query string?)
 
 (s/def ::? (s/nilable (s/coll-of any? :kind vector?)))
+(s/def ::app-time-as-of-now? boolean?)
 
 (s/def :core2.server.sql/query-body
   (s/keys :req-un [:core2.server.sql/query],
-          :opt-un [::basis ::basis-timeout ::?]))
+          :opt-un [::basis ::basis-timeout ::? ::app-time-as-of-now?]))
 
 (defmethod route-handler :sql-query [_]
   {:muuntaja (m/create (-> muuntaja-opts

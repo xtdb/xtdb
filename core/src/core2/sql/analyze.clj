@@ -4,6 +4,8 @@
             [core2.sql.parser :as p])
   (:import java.util.HashMap))
 
+(def ^:dynamic *opts* {})
+
 (defn- ->line-info-str [loc]
   (let [{:keys [sql]} (meta (r/root loc))
         {:keys [start-idx]} (meta (r/node loc))
@@ -282,7 +284,10 @@
           (with-meta {:ref ag})))
 
     (:delete_statement__searched :update_statement__searched :erase_statement__searched)
-    (table (r/find-first (partial r/ctor? :target_table) ag))))
+    (table (r/find-first (partial r/ctor? :target_table) ag))
+
+    (:query_application_time_period_specification :query_system_time_period_specification)
+    (table (r/parent ag))))
 
 (defn local-tables [ag]
   (r/collect-stop
@@ -326,7 +331,8 @@
     [{:identifier "system_time_start"} {:identifier "system_time_end"}]))
 
 (defn- application-time-columns [ag]
-  (when (r/find-first (partial r/ctor? :query_application_time_period_specification) ag)
+  (when (or (r/find-first (partial r/ctor? :query_application_time_period_specification) ag)
+            (:app-time-as-of-now? *opts*))
     [{:identifier "application_time_start"} {:identifier "application_time_end"}]))
 
 (defn named-columns-join-env [ag]

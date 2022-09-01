@@ -303,6 +303,48 @@
                    {:version 3, :application_time_start tt2, :application_time_end tt5}}
                  (q !tx)))))))
 
+(deftest test-dql-as-of-now-flag-339
+  (let [tt1 (util/->zdt #inst "2020-01-01")
+        tt2 (util/->zdt #inst "2020-01-02")
+        eot (util/->zdt util/end-of-time)]
+
+    (let [!tx (c2/submit-tx *node*
+                            [[:sql "INSERT INTO foo (id, version) VALUES (?, ?)"
+                              [["foo", 0]]]])]
+      (t/is (= [{:version 0, :application_time_start tt1, :application_time_end eot}]
+               (c2/sql-query *node*
+                             "SELECT foo.version, foo.application_time_start, foo.application_time_end FROM foo"
+                             {:basis {:tx !tx}, :app-time-as-of-now? true})))
+
+      (t/is (= [{:version 0, :application_time_start tt1, :application_time_end eot}]
+               (c2/sql-query *node*
+                             "SELECT foo.version, foo.application_time_start, foo.application_time_end FROM foo"
+                             {:basis {:tx !tx}}))))
+
+    (let [!tx (c2/submit-tx *node*
+                            [[:sql "UPDATE foo SET version = 1 WHERE foo.id = 'foo'"
+                              [[]]]]
+                            {:app-time-as-of-now? true})]
+
+      (t/is (= [{:version 1, :application_time_start tt2, :application_time_end eot}]
+               (c2/sql-query *node*
+                             "SELECT foo.version, foo.application_time_start, foo.application_time_end FROM foo"
+                             {:basis {:tx !tx}, :app-time-as-of-now? true})))
+
+      (t/is (= [{:version 0, :application_time_start tt1, :application_time_end tt2}
+                {:version 1, :application_time_start tt2, :application_time_end eot}]
+               (c2/sql-query *node*
+                             "SELECT foo.version, foo.application_time_start, foo.application_time_end FROM foo"
+                             {:basis {:tx !tx}}))
+            "without flag it returns all app-time")
+
+      (t/is (= [{:version 0, :application_time_start tt1, :application_time_end tt2}]
+               (c2/sql-query *node*
+                             (str "SELECT foo.version, foo.application_time_start, foo.application_time_end "
+                                  "FROM foo FOR APPLICATION_TIME AS OF ?")
+                             {:basis {:tx !tx}, :app-time-as-of-now? true, :? [tt1]}))
+            "`FOR APPLICATION_TIME AS OF` overrides flag"))))
+
 (t/deftest test-erase
   (letfn [(q [tx]
             (set (c2/sql-query *node*

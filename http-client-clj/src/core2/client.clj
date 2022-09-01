@@ -104,9 +104,9 @@
                           (apply [_ basis-tx]
                             (request client :post :sql-query
                                      {:content-type :transit+json
-                                      :form-params {:query query
-                                                    :basis {:tx basis-tx}
-                                                    :? (:? query-opts)}
+                                      :form-params (into {:query query
+                                                          :basis {:tx basis-tx}}
+                                                         (dissoc query-opts :basis))
                                       :as ::transit+json->resultset}))))
           (.thenApply (reify Function
                         (apply [_ resp]
