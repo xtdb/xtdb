@@ -1256,9 +1256,7 @@
       (sql "UPDATE foo SET version = 1 WHERE foo.id = 'foo'")
       (sql "COMMIT")
 
-      ;; TODO drop version 0 from this one once queries accept the flag
-      (is (= [{:version 0, :application_time_start "2020-01-01T00:00Z", :application_time_end "2020-01-02T00:00Z"}
-              {:version 1, :application_time_start "2020-01-02T00:00Z", :application_time_end "9999-12-31T23:59:59.999999Z"}]
+      (is (= [{:version 1, :application_time_start "2020-01-02T00:00Z", :application_time_end "9999-12-31T23:59:59.999999Z"}]
              (q conn ["SELECT foo.version, foo.application_time_start, foo.application_time_end FROM foo"])))
 
       (sql "SET SESSION CHARACTERISTICS AS APPLICATION_TIME_DEFAULTS ISO_STANDARD")

@@ -19,7 +19,7 @@
            (core2 IResultSet)
            (java.io ByteArrayInputStream ByteArrayOutputStream Closeable DataInputStream DataOutputStream EOFException IOException InputStream OutputStream PushbackInputStream)
            (java.lang Thread$State)
-           (java.net ServerSocket Socket SocketException SocketTimeoutException)
+           (java.net ServerSocket Socket SocketException)
            (java.nio ByteBuffer)
            (java.nio.charset StandardCharsets)
            (java.time Clock LocalDate LocalDateTime OffsetDateTime ZoneId ZoneOffset ZonedDateTime)
@@ -1476,17 +1476,14 @@
 
         xt-params (vec (map-indexed xtify-param params))
 
-        {:keys [transaction, session]} @conn-state
-        {:keys [basis]} transaction
-
-        ^Clock clock (:clock session)
+        {{:keys [basis]} :transaction
+         {:keys [^Clock clock, app-time-defaults]} :session} @conn-state
 
         query-opts
-        {:basis (merge {;; basis / session current time is used only for reads right now
-                        ;; dml currently will use the node clock
-                        :current-time (.instant clock)
-                        :default-tz (.getZone clock)} basis)
-         :? xt-params}]
+        {:basis (into {:current-time (.instant clock), :default-tz (.getZone clock)}
+                      basis)
+         :? xt-params
+         :app-time-as-of-now? (= app-time-defaults :as-of-now)}]
 
     ;; dml currently takes a different execution path, requiring COMMIT to flush.
     (if (dml? ast)
@@ -2177,7 +2174,7 @@
         o))
 
     (defn try-connect []
-      (with-open [c (jdbc/get-connection "jdbc:postgresql://:5432/test?user=test&password=test")]
+      (with-open [_c (jdbc/get-connection "jdbc:postgresql://:5432/test?user=test&password=test")]
         :ok))
 
     (defn q [sql]
