@@ -203,7 +203,7 @@
   (let [rel-map-prober (.probeFromRelation rel-map probe-rel)
         matching-probe-idxs (IntStream/builder)]
     (dotimes [probe-idx (.rowCount probe-rel)]
-      (when-not (neg? (.indexOf rel-map-prober probe-idx))
+      (when-not (neg? (.indexOf rel-map-prober probe-idx false))
         (.add matching-probe-idxs probe-idx)))
     (.toArray (.build matching-probe-idxs))))
 

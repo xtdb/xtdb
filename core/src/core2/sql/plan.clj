@@ -1340,14 +1340,21 @@
         relation (wrap-with-apply sl (plan te))]
     [:project qualified-projection relation]))
 
-(defn- build-set-op [set-op lhs rhs]
-  (let [lhs-unqualified-project (mapv unqualified-projection-symbol (first (sem/projected-columns lhs)))
-        rhs-unqualified-project (mapv unqualified-projection-symbol (first (sem/projected-columns rhs)))]
-    [set-op (plan lhs)
-     (if (= lhs-unqualified-project rhs-unqualified-project)
-       (plan rhs)
-       [:rename (zipmap rhs-unqualified-project lhs-unqualified-project)
-        (plan rhs)])]))
+(defn- build-set-op
+  ([set-op lhs rhs] (build-set-op set-op lhs rhs false))
+
+  ([set-op lhs rhs wrap-distinct?]
+   (letfn [(wrap-distinct [pln]
+             (if wrap-distinct?
+               [:distinct pln]
+               pln))]
+     (let [lhs-unqualified-project (mapv unqualified-projection-symbol (first (sem/projected-columns lhs)))
+           rhs-unqualified-project (mapv unqualified-projection-symbol (first (sem/projected-columns rhs)))]
+       [set-op (-> (plan lhs) (wrap-distinct))
+        (if (= lhs-unqualified-project rhs-unqualified-project)
+          (-> (plan rhs) (wrap-distinct))
+          [:rename (zipmap rhs-unqualified-project lhs-unqualified-project)
+           (-> (plan rhs) (wrap-distinct))])]))))
 
 (defn- build-collection-derived-table [tp]
   (let [{:keys [id]} (sem/table tp)
@@ -1851,13 +1858,13 @@
     [:distinct (build-set-op :union-all qeb qt)]
 
     [:query_expression_body ^:z qeb "EXCEPT" ^:z qt]
-    [:distinct (build-set-op :difference qeb qt)]
+    (build-set-op :difference qeb qt true)
 
     [:query_expression_body ^:z qeb "EXCEPT" "ALL" ^:z qt]
     (build-set-op :difference qeb qt)
 
     [:query_expression_body ^:z qeb "EXCEPT" "DISTINCT" ^:z qt]
-    [:distinct (build-set-op :difference qeb qt)]
+    (build-set-op :difference qeb qt true)
 
     [:query_term ^:z qt "INTERSECT" ^:z qp]
     [:distinct (build-set-op :intersect qt qp)]

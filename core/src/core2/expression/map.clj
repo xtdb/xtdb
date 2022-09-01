@@ -47,7 +47,7 @@
 
 #_{:clj-kondo/ignore [:unused-binding]}
 (definterface IRelationMapProber
-  (^int indexOf [^int inIdx])
+  (^int indexOf [^int inIdx, ^boolean removeOnMatch])
   (^void forEachMatch [^int inIdx, ^java.util.function.IntConsumer c])
   (^int matches [^int inIdx]))
 
@@ -130,7 +130,7 @@
                             {:var->col-type col-types, :param-types param-types})]
     (f probe-rel build-rel params)))
 
-(defn- find-in-hash-bitmap ^long [^RoaringBitmap hash-bitmap, ^IntBinaryOperator comparator, ^long idx]
+(defn- find-in-hash-bitmap ^long [^RoaringBitmap hash-bitmap, ^IntBinaryOperator comparator, ^long idx, remove-on-match?]
   (if-not hash-bitmap
     -1
     (let [it (.getIntIterator hash-bitmap)]
@@ -139,7 +139,10 @@
           -1
           (let [test-idx (.next it)]
             (if (= 1 (.applyAsInt comparator idx test-idx))
-              test-idx
+              (do
+                (when remove-on-match?
+                  (.remove hash-bitmap test-idx))
+                test-idx)
               (recur))))))))
 
 (defn returned-idx ^long [^long inserted-idx]
@@ -234,7 +237,7 @@
 
                   (addIfNotPresent [_ idx]
                     (let [^RoaringBitmap hash-bitmap (compute-hash-bitmap (.hashCode hasher idx))
-                          out-idx (find-in-hash-bitmap hash-bitmap @!comparator idx)]
+                          out-idx (find-in-hash-bitmap hash-bitmap @!comparator idx false)]
                       (if-not (neg? out-idx)
                         out-idx
                         (add hash-bitmap idx))))))))
@@ -264,9 +267,9 @@
                   hasher (->hasher probe-key-cols)]
 
               (reify IRelationMapProber
-                (indexOf [_ idx]
+                (indexOf [_ idx remove-on-match?]
                   (-> ^RoaringBitmap (.get hash->bitmap (.hashCode hasher idx))
-                      (find-in-hash-bitmap comparator idx)))
+                      (find-in-hash-bitmap comparator idx remove-on-match?)))
 
                 (forEachMatch [_ idx c]
                   (some-> ^RoaringBitmap (.get hash->bitmap (.hashCode hasher idx))

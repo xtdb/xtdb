@@ -39,6 +39,13 @@
                         {:preserve-blocks? true
                          :with-col-types? true})))
 
+  (t/is (= {{:a 1} 2, {:a 2} 2}
+           (-> (tu/query-ra [:intersect
+                             [::tu/blocks [[{:a 1} {:a 1} {:a 1} {:a 2} {:a 2}]]]
+                             [::tu/blocks [[{:a 1} {:a 1} {:a 2} {:a 2} {:a 2}]]]])
+               (frequencies)))
+        "cardinalities - minimum of the cardinalities in each side")
+
   (t/testing "empty input and output"
     (t/is (empty? (tu/query-ra [:intersect
                                 [::tu/blocks '{a :i64} []]
@@ -70,6 +77,13 @@
                             {:preserve-blocks? true
                              :with-col-types? true})
                (update :res (partial mapv set)))))
+
+  (t/is (= {{:a 1} 1}
+           (-> (tu/query-ra [:difference
+                             [::tu/blocks [[{:a 1} {:a 1} {:a 1} {:a 2} {:a 2}]]]
+                             [::tu/blocks [[{:a 1} {:a 1} {:a 2} {:a 2} {:a 2}]]]])
+               (frequencies)))
+        "cardinalities - difference of the cardinalities in each side")
 
   (t/testing "empty input and output"
     (t/is (empty? (tu/query-ra [:difference

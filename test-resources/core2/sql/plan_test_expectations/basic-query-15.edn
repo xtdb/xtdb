@@ -1,12 +1,13 @@
 [:rename
  {x1 name}
- [:distinct
-  [:difference
+ [:difference
+  [:distinct
    [:project
     [x1]
     [:rename
      {name x1, _table x2}
-     [:scan [name {_table (= _table "StarsIn")}]]]]
+     [:scan [name {_table (= _table "StarsIn")}]]]]]
+  [:distinct
    [:project
     [x1]
     [:rename

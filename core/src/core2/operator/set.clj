@@ -110,7 +110,7 @@
                            (let [^IIndirectRelation in-rel in-rel
                                  builder (.buildFromRelation rel-map in-rel)]
                              (dotimes [idx (.rowCount in-rel)]
-                               (.addIfNotPresent builder idx))))))
+                               (.add builder idx))))))
 
     (boolean
      (let [advanced? (boolean-array 1)]
@@ -125,7 +125,7 @@
                                       (when (pos? row-count)
                                         (let [idxs (IntStream/builder)]
                                           (dotimes [idx row-count]
-                                            (when (cond-> (not= -1 (.indexOf prober idx))
+                                            (when (cond-> (not= -1 (.indexOf prober idx true))
                                                     difference? not)
                                               (.add idxs idx)))
 

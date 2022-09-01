@@ -52,12 +52,10 @@ SELECT t1.id FROM t1 UNION SELECT t2.id FROM t2
 3
 4
 
-skipif xtdb # FIXME
 query I rowsort
 SELECT t1.id FROM t1 INTERSECT ALL SELECT t2.id FROM t2
 ----
 1
-2
 2
 
 query I rowsort
@@ -72,7 +70,6 @@ SELECT t1.id FROM t1 INTERSECT SELECT t2.id FROM t2
 1
 2
 
-skipif xtdb # FIXME
 query I rowsort
 SELECT t1.id FROM t1 EXCEPT ALL SELECT t2.id FROM t2
 ----
