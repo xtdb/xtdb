@@ -1,46 +1,18 @@
 (ns core2.api-test
   (:require [clojure.test :as t :refer [deftest]]
             [core2.api :as c2]
-            [core2.client :as client]
+            [core2.local-node :as node]
             [core2.test-util :as tu :refer [*node*]]
-            [core2.util :as util]
-            [juxt.clojars-mirrors.integrant.core :as ig]
-            [core2.local-node :as node])
+            [core2.util :as util])
   (:import (java.time Duration ZoneId)
            java.util.concurrent.ExecutionException))
 
-(defn- with-mock-clock [f]
-  (tu/with-opts {:core2.log/memory-log {:instant-src (tu/->mock-clock)}}
-    f))
-
-(defn- with-client [f]
-  (let [port (tu/free-port)
-        sys (-> {:core2/server {:node *node*, :port port}}
-                ig/prep
-                (doto ig/load-namespaces)
-                ig/init)]
-    (try
-      (binding [*node* (client/start-client (str "http://localhost:" port))]
-        (f))
-      (finally
-        (ig/halt! sys)))))
-
-(def api-implementations
-  (-> {:in-memory (t/join-fixtures [with-mock-clock tu/with-node])
-       :remote (t/join-fixtures [with-mock-clock tu/with-node with-client])}
-
-      #_(select-keys [:in-memory])
-      #_(select-keys [:remote])))
-
-(def ^:dynamic *node-type*)
-
-(defn with-each-api-implementation [f]
-  (doseq [[node-type run-tests] api-implementations]
-    (binding [*node-type* node-type]
-      (t/testing (str node-type)
-        (run-tests f)))))
-
-(t/use-fixtures :each with-each-api-implementation)
+(t/use-fixtures :each
+  (tu/with-each-api-implementation
+    (-> {:in-memory (t/join-fixtures [tu/with-mock-clock tu/with-node]),
+         :remote (t/join-fixtures [tu/with-mock-clock tu/with-http-client-node])}
+        #_(select-keys [:in-memory])
+        #_(select-keys [:remote]))))
 
 (t/deftest test-status
   (t/is (map? (c2/status *node*))))
@@ -390,3 +362,6 @@
                     :application_time_start (util/->zdt #inst "2020-01-01")
                     :application_time_end (util/->zdt util/end-of-time)}}
                  (q tx1)))))))
+
+(t/deftest can-specify-default-tz-396
+  )

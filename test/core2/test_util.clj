@@ -3,6 +3,7 @@
             [clojure.spec.alpha :as s]
             [clojure.test :as t]
             [core2.api :as c2]
+            [core2.client :as client]
             [core2.json :as c2-json]
             [core2.local-node :as node]
             [core2.logical-plan :as lp]
@@ -50,6 +51,26 @@
     (binding [*node* node]
       (f))))
 
+(defn free-port ^long []
+  (with-open [s (ServerSocket. 0)]
+    (.getLocalPort s)))
+
+(defn with-http-client-node [f]
+  (let [port (free-port)]
+    (with-open [_ (node/start-node (-> *node-opts*
+                                       (assoc-in [:core2/server :port] port)))]
+      (binding [*node* (client/start-client (str "http://localhost:" port))]
+        (f)))))
+
+(def ^:dynamic *node-type*)
+
+(defn with-each-api-implementation [api-implementations]
+  (fn [f]
+    (doseq [[node-type run-tests] api-implementations]
+      (binding [*node-type* node-type]
+        (t/testing (str node-type)
+          (run-tests f))))))
+
 (defn component
   ([k] (component *node* k))
   ([node k] (util/component node k)))
@@ -71,6 +92,9 @@
                           (.toInstant #inst "2020-01-01"))))
 
   (^core2.InstantSource [^Iterable insts] (InstantSource/mock insts)))
+
+(defn with-mock-clock [f]
+  (with-opts {:core2.log/memory-log {:instant-src (->mock-clock)}} f))
 
 (defn await-temporal-snapshot-build [^Node node]
   (.awaitSnapshotBuild ^core2.temporal.TemporalManagerPrivate (::temporal/temporal-manager @(:!system node))))
@@ -257,7 +281,3 @@
          (with-tmp-dirs #{~@more-bindings}
            ~@body)))
     `(do ~@body)))
-
-(defn free-port ^long []
-  (with-open [s (ServerSocket. 0)]
-    (.getLocalPort s)))
