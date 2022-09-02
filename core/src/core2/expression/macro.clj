@@ -1,7 +1,8 @@
 (ns core2.expression.macro
   (:require [core2.expression.walk :as walk]
-            [core2.types :as types]))
+            [core2.error :as err]))
 
+#_{:clj-kondo/ignore [:unused-binding]}
 (defmulti macroexpand1-call
   (fn [{:keys [f] :as call-expr}]
     (keyword (name f)))
@@ -23,8 +24,31 @@
             (update expr :args rest)]}
     expr))
 
-(doseq [f #{:+ :- :* :/ :min :max}]
+(doseq [f #{:+ :- :* :/}]
   (defmethod macroexpand1-call f [expr] (macroexpand1l-call expr)))
+
+(doseq [[f cmp-f] [[:max :>] [:min :<]]]
+  (defmethod macroexpand1-call f [{:keys [f args] :as expr}]
+    (case (count args)
+      0 {:op :literal, :literal nil}
+      1 (first args)
+      2 (let [[l-expr r-expr] args
+              l-sym (gensym 'l)
+              r-sym (gensym 'r)]
+          {:op :if-some, :local l-sym, :expr l-expr
+           :then {:op :if-some, :local r-sym, :expr r-expr
+                  :then {:op :if
+                         :pred {:op :call, :f cmp-f,
+                                :args [{:op :local, :local l-sym}
+                                       {:op :local, :local r-sym}]}
+                         :then {:op :local, :local l-sym}
+                         :else {:op :local, :local r-sym}}
+                  :else {:op :literal, :literal nil}}
+           :else {:op :literal, :literal nil}})
+
+      {:op :call, :f f
+       :args [(update expr :args butlast)
+              (last args)]})))
 
 (doseq [[f id] #{[:and true] [:or false]}]
   (defmethod macroexpand1-call f [{:keys [args] :as expr}]

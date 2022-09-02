@@ -512,16 +512,6 @@
                :->call-code (fn [[a b]] `(pd-day-time-div ~a ~b))}
     (throw (UnsupportedOperationException. "Cannot divide mixed period / duration intervals"))))
 
-(defmethod expr/codegen-mono-call [:min :timestamp-tz :timestamp-tz] [{[[_ x-unit x-tz] [_ y-unit _y-tz]] :arg-types}]
-  (with-arg-unit-conversion x-unit y-unit
-    ;; HACK we just pick the LHS TZ here
-    #(do [:timestamp-tz % x-tz]) #(do `(Math/min ~@%))))
-
-(defmethod expr/codegen-mono-call [:max :timestamp-tz :timestamp-tz] [{[[_ x-unit x-tz] [_ y-unit _y-tz]] :arg-types}]
-  (with-arg-unit-conversion x-unit y-unit
-    ;; HACK we just pick the LHS TZ here
-    #(do [:timestamp-tz % x-tz]) #(do `(Math/max ~@%))))
-
 (defn interval-abs-ym
   "In SQL the ABS function can be applied to intervals, negating them if they are below some definition of 'zero' for the components
   of the intervals.
