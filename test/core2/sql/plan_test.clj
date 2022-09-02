@@ -1120,3 +1120,13 @@
       (plan-sql
         "SELECT (SELECT (foo.APP_TIME OVERLAPS bar.APPLICATION_TIME) FROM foo)
         FROM bar"))))
+
+(deftest test-derived-columns-with-periods
+  (t/is
+    (=plan-file
+      "test-derived-columns-with-periods-period-predicate"
+      (plan-sql
+        "SELECT f.APP_TIME OVERLAPS f.SYSTEM_TIME
+        FROM foo
+        AS f (system_time_start, system_time_end, application_time_start, application_time_end)"))))
+

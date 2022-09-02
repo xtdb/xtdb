@@ -409,6 +409,17 @@ SELECT t1.d-t1.e AS a, SUM(t1.a) AS b
     "SELECT bar.APPLICATION_TIME
     FROM foo")
 
+  (invalid-multi?
+    [#"Period not in scope: f.APPLICATION_TIME"
+     #"Period not in scope: f.SYSTEM_TIME"]
+    "SELECT f.APPLICATION_TIME OVERLAPS f.SYSTEM_TIME
+    FROM foo AS f (a)")
+
+  (valid?
+    "SELECT f.APP_TIME OVERLAPS f.SYSTEM_TIME
+    FROM foo
+    AS f (system_time_start, system_time_end, application_time_start, application_time_end)")
+
   (invalid?
     #"References to periods may only appear within period predicates: foo.APPLICATION_TIME"
     "SELECT foo.APPLICATION_TIME
@@ -420,7 +431,7 @@ SELECT t1.d-t1.e AS a, SUM(t1.a) AS b
     FROM foo
     WHERE foo.SYSTEM_TIME = 20")
 
-(invalid?
+  (invalid?
     #"References to periods may only appear within period predicates: foo.SYSTEM_TIME"
     "UPDATE foo SET bar = foo.SYSTEM_TIME"))
 

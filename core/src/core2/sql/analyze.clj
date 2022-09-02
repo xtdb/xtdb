@@ -517,7 +517,7 @@
       (let [{:keys [correlation-name derived-columns], table-id :id, :as table} (table ag)
             projections (if-let [derived-columns (not-empty derived-columns)]
                           (for [identifier derived-columns]
-                            {:identifier identifier})
+                                 {:identifier identifier})
                           (if-let [subquery-ref (:subquery-ref (meta table))]
                             (first (projected-columns subquery-ref))
                             (let [query-specification (scope-element ag)
@@ -887,16 +887,22 @@
             [])))
 
       (:application-time-period-reference :system-time-period-reference)
-      (cond (not table-id)
-            [(format "Table not in scope: %s %s"
-                     (first identifiers) (->line-info-str ag))]
+      (if-not table-id
+        [(format "Table not in scope: %s %s"
+                 (first identifiers) (->line-info-str ag))]
+
+        (let [projection (first (projected-columns (:ref (meta (:table (meta column-reference))))))]
+          (cond
+            (not-every? (set (map :qualified-column projection))
+                          (map :identifiers (expand-underlying-column-references column-reference)))
+            [(format "Period not in scope: %s %s"
+                     (str/join "." identifiers) (->line-info-str ag))]
 
             (not (r/ctor? :period_predicand (r/parent ag)))
             [(format "References to periods may only appear within period predicates: %s %s"
                      (str/join "." identifiers) (->line-info-str ag))]
-
             :else
-            [])
+            [])))
 
       :resolved-in-sort-key
       []

@@ -1,0 +1,16 @@
+[:rename
+ {x7 $column_1$}
+ [:project
+  [{x7 (and (< x3 x2) (> x4 x1))}]
+  [:rename
+   {system_time_start x1,
+    system_time_end x2,
+    application_time_start x3,
+    application_time_end x4,
+    _table x5}
+   [:scan
+    [system_time_start
+     system_time_end
+     application_time_start
+     application_time_end
+     {_table (= _table "foo")}]]]]]
