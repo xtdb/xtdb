@@ -14,11 +14,11 @@
             [xtdb.system :as sys]
             [xtdb.tx.event :as txe]
             [xtdb.tx.subscribe :as tx-sub]
-            [xtdb.tx :as tx])
+            [clojure.tools.logging :as log])
   (:import (clojure.lang MapEntry)
            (com.zaxxer.hikari HikariConfig HikariDataSource)
            (java.io Closeable)
-           (java.sql Timestamp)
+           (java.sql Timestamp ResultSet)
            (java.time Duration)
            (java.util Date)))
 
@@ -146,7 +146,7 @@
           :document-cache document-cache
           :document-store (->JdbcDocumentStore pool dialect))))
 
-(defrecord JdbcTxLog [pool dialect ^Closeable tx-consumer]
+(defrecord JdbcTxLog [pool dialect fetch-size ^Closeable tx-consumer]
   db/TxLog
   (submit-tx [this tx-events] (db/submit-tx this tx-events {}))
 
@@ -161,12 +161,21 @@
                             (::xt/tx-time tx-data))}))))
 
   (open-tx-log [_ after-tx-id]
+    ;; see https://github.com/xtdb/xtdb/pull/1815 for detail on fetch policy
     (let [conn (jdbc/get-connection pool)
-          stmt (jdbc/prepare conn
-                             ["SELECT EVENT_OFFSET, TX_TIME, V, TOPIC FROM tx_events WHERE TOPIC = 'txs' and EVENT_OFFSET > ? ORDER BY EVENT_OFFSET"
-                              (or after-tx-id 0)])
+          require-rollback (when (= :postgresql (db-type dialect)) (.setAutoCommit conn false) true)
+          sql "SELECT EVENT_OFFSET, TX_TIME, V, TOPIC FROM tx_events WHERE TOPIC = 'txs' and EVENT_OFFSET > ? ORDER BY EVENT_OFFSET"
+          stmt (doto (.prepareStatement conn sql ResultSet/TYPE_FORWARD_ONLY ResultSet/CONCUR_READ_ONLY)
+                 (.setFetchSize (if (= :mysql (db-type dialect))
+                                  Integer/MIN_VALUE
+                                  fetch-size))
+                 (.setObject 1 (or after-tx-id 0)))
           rs (.executeQuery stmt)]
-      (xio/->cursor #(run! xio/try-close [rs stmt conn])
+      (xio/->cursor (fn []
+                      (try
+                        (when require-rollback (.rollback conn))
+                        (finally
+                          (run! xio/try-close [rs stmt conn]))))
                     (->> (resultset-seq rs)
                          (map #(row->log-entry % dialect))))))
 
@@ -183,6 +192,8 @@
   (close [_]
     (xio/try-close tx-consumer)))
 
-(defn ->tx-log {::sys/deps {:connection-pool `->connection-pool}}
-  [{{:keys [pool dialect]} :connection-pool}]
-  (map->JdbcTxLog {:pool pool, :dialect dialect}))
+(defn ->tx-log {::sys/args {:fetch-size {:default 1024, :spec ::sys/pos-int}}
+                ::sys/deps {:connection-pool `->connection-pool}}
+  [{:keys [connection-pool, fetch-size]}]
+  (let [{:keys [pool dialect]} connection-pool]
+    (map->JdbcTxLog {:pool pool, :dialect dialect, :fetch-size fetch-size})))
