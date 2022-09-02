@@ -350,3 +350,9 @@
                                        {:a nil, :b 1, :c 43}]]]
                             {:with-col-types? true})
                (update :res set)))))
+
+(t/deftest test-throws-for-variable-width-minmax-340
+  ;; HACK only for now, until we support it properly
+  (t/is (thrown-with-msg? RuntimeException #"Unsupported types in min/max aggregate"
+                          (tu/query-ra '[:group-by [{min (min a)}]
+                                         [:table [{:a 32} {:a "foo"}]]]))))

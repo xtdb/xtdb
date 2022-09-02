@@ -8,7 +8,8 @@
             [core2.util :as util]
             [core2.vector.indirect :as iv]
             [core2.vector :as vec]
-            [core2.vector.writer :as vw])
+            [core2.vector.writer :as vw]
+            [core2.error :as err])
   (:import (core2 ICursor)
            (core2.expression.map IRelationMap IRelationMapBuilder)
            (core2.vector IIndirectRelation IIndirectVector IVectorWriter)
@@ -412,15 +413,23 @@
 (defmethod ->aggregate-factory :stddev_samp [agg-opts]
   (->stddev-agg-factory :var_samp agg-opts))
 
+(defn- assert-supported-min-max-types [types]
+  ;; TODO handle fixed-width non-num types, if appropriate? (durations? various date-time types?)
+  ;; TODO variable-width types - it's reasonable to want (e.g.) `(min <string-col>)`
+  (when-let [unsupported-types (not-empty (->> types
+                                               (into #{} (remove #(isa? types/col-type-hierarchy % :num)))))]
+    (throw (err/runtime-err :core2.group-by/unsupported-min-max-types
+                            {::err/message "Unsupported types in min/max aggregate"
+                             :unsupported-types unsupported-types}))))
+
 (defn- min-max-factory
   "compare-kw: update the accumulated value if `(compare-kw el acc)`"
   [compare-kw {:keys [from-name from-type] :as agg-opts}]
 
-  ;; TODO handle fixed-width non-num types, if appropriate? (durations? various date-time types?)
-  ;; TODO variable-width types - it's reasonable to want (e.g.) `(min <string-col>)`
-  (let [to-type (->> (types/flatten-union-types from-type)
-                     (filter (comp #(isa? types/col-type-hierarchy % :num) types/col-type-head))
-                     (types/least-upper-bound))]
+  (let [to-type (-> (types/flatten-union-types from-type)
+                    (disj :null)
+                    (doto (assert-supported-min-max-types))
+                    (types/least-upper-bound))]
     (reducing-agg-factory (into agg-opts
                                 {:to-type to-type
                                  :val-expr {:op :call, :f :cast, :target-type to-type
@@ -635,7 +644,7 @@
                                                              (let [{:keys [f from-column]} agg-opts]
                                                                {:f f
                                                                 :from-name from-column
-                                                                :from-type (get col-types from-column)}))))))]
+                                                                :from-type (get col-types from-column :null)}))))))]
           {:col-types (-> (into (->> group-cols
                                      (into {} (map (juxt identity col-types))))
                                 (->> agg-factories
