@@ -2,6 +2,7 @@
   (:require [clojure.data.csv :as csv]
             [clojure.java.io :as io]
             [clojure.spec.alpha :as s]
+            [clojure.tools.logging :as log]
             [xtdb.api :as xt]
             [xtdb.codec :as c]
             [xtdb.error :as err]
@@ -194,16 +195,21 @@
 
 (defn data-browser-query [options]
   (fn [req]
-    (let [{query-params :query body-params :body} (get-in req [:parameters])
-          {:keys [valid-time tx-time tx-id query-edn in-args-edn in-args-json]} query-params
-          query (or query-edn (get body-params :query))
-          in-args (or in-args-edn in-args-json (get body-params :in-args))]
-      (-> (if (nil? query)
-            (assoc options :no-query? true)
-            (run-query (transform-req query req)
-                       in-args
-                       (assoc options
-                              :valid-time valid-time
-                              :tx-time tx-time
-                              :tx-id tx-id)))
-          (transform-query-resp req)))))
+    (try
+      (let [{query-params :query body-params :body} (get-in req [:parameters])
+            {:keys [valid-time tx-time tx-id query-edn in-args-edn in-args-json]} query-params
+            query (or query-edn (get body-params :query))
+            in-args (or in-args-edn in-args-json (get body-params :in-args))]
+        (-> (if (nil? query)
+              (assoc options :no-query? true)
+              (run-query (transform-req query req)
+                         in-args
+                         (assoc options
+                                :valid-time valid-time
+                                :tx-time tx-time
+                                :tx-id tx-id)))
+            (transform-query-resp req)))
+
+      (catch java.lang.AssertionError e
+        (log/debug e)
+        (throw e)))))
