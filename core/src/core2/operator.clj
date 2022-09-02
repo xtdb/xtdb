@@ -61,21 +61,22 @@
           cache (HashMap.)]
       (reify PreparedQuery
         (openCursor [_ {:keys [srcs params current-time default-tz] :as query-opts}]
-          (let [{:keys [col-types ->cursor]} (.computeIfAbsent cache
+          (let [clock (Clock/fixed (or current-time (.instant expr/*clock*))
+                                   (or default-tz (.getZone expr/*clock*)))
+                {:keys [col-types ->cursor]} (.computeIfAbsent cache
                                                                {:scan-col-types (scan/->scan-col-types srcs scan-cols)
                                                                 :param-types (expr/->param-types params)
                                                                 :default-tz default-tz}
                                                                (reify Function
                                                                  (apply [_ emit-opts]
-                                                                   (lp/emit-expr conformed-query emit-opts))))
+                                                                   (binding [expr/*clock* clock]
+                                                                     (lp/emit-expr conformed-query emit-opts)))))
                 allocator (RootAllocator.)]
             (try
               (let [cursor (->cursor (into query-opts
                                            {:allocator allocator
                                             :srcs srcs, :params params
-                                            :clock (Clock/fixed (or current-time (.instant expr/*clock*))
-                                                                ;; will later be provided as part of the 'SQL session' (see §6.32)
-                                                                (or default-tz (.getZone expr/*clock*)))}))]
+                                            :clock clock}))]
 
                 (ResultCursor. allocator cursor col-types))
               (catch Throwable t

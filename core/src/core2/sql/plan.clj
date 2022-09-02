@@ -161,6 +161,9 @@
     [:approximate_numeric_type "DOUBLE" "PRECISION"]
     (list 'cast e :f64)
 
+    [:datetime_type "TIMESTAMP" [:with_or_without_time_zone "WITH" "TIME" "ZONE"]]
+    (list 'cast-tstz e)
+
     (throw (err/illegal-arg :core2.sql/parse-error
                             {::err/message (str "Cannot build cast for: " (pr-str cast-spec))
                              :cast-spec cast-spec}))))

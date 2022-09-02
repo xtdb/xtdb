@@ -1095,7 +1095,7 @@
   (defmethod codegen-cast [:utf8 col-type] [_]
     {:return-type col-type, :->call-code #(do `(~parse-sym (buf->str ~@%)))}))
 
-(defmethod codegen-mono-call [:cast :any] [{[source-type] :arg-types, :keys [target-type] :as expr}]
+(defmethod codegen-mono-call [:cast :any] [{[source-type] :arg-types, :keys [target-type]}]
   (codegen-cast {:source-type source-type, :target-type target-type}))
 
 #_{:clj-kondo/ignore [:unused-binding]}

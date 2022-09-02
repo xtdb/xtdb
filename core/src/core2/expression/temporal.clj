@@ -202,7 +202,7 @@
                          (.toLocalDate)
                          (.toEpochDay)))}))
 
-(defmethod expr/codegen-cast [:timestamp-tz :time-local] [{[_ src-tsunit src-tz] :source-type, [_ tgt-tsunit _ :as target-type] :target-type}]
+(defmethod expr/codegen-cast [:timestamp-tz :time-local] [{[_ src-tsunit src-tz] :source-type, [_ tgt-tsunit :as target-type] :target-type}]
   (let [src-tz-sym (gensym 'src-tz)]
     {:return-type target-type,
      :batch-bindings [[src-tz-sym `(ZoneId/of ~src-tz)]]
@@ -227,6 +227,9 @@
 
 (defmethod expr/codegen-cast [:time-local :duration] [{[_ src-tsunit] :source-type, [_ tgt-tsunit :as target-type] :target-type}]
   {:return-type target-type, :->call-code (comp #(with-conversion % src-tsunit tgt-tsunit) first)})
+
+(defmethod expr/codegen-mono-call [:cast-tstz :any] [expr]
+  (expr/codegen-mono-call (assoc expr :f :cast, :target-type [:timestamp-tz :micro (str (.getZone expr/*clock*))])))
 
 ;; SQL:2011 Time-related-predicates
 ;; FIXME: these don't take different granularities of timestamp into account
