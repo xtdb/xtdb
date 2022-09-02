@@ -553,20 +553,6 @@
                   :day-time #(do `(interval-abs-dt ~@%))
                   (throw (UnsupportedOperationException. "Can only ABS YEAR_MONTH / DAY_TIME intervals")))})
 
-(defmethod expr/codegen-mono-call [:= :timestamp-tz :timestamp-local] [{[tstz-type ts-type] :arg-types}]
-  (let [{tstz->ts-code :->call-code, :as cast-expr} (expr/codegen-cast {:source-type tstz-type, :target-type ts-type})]
-    {:return-type :bool
-     :batch-bindings (:batch-bindings cast-expr)
-     :->call-code (fn [[tstz tz]]
-                    `(== ~(tstz->ts-code [tstz]) ~tz))}))
-
-(defmethod expr/codegen-mono-call [:= :timestamp-local :timestamp-tz] [{[ts-type tstz-type] :arg-types}]
-  (let [{tstz->ts-code :->call-code, :as cast-expr} (expr/codegen-cast {:source-type tstz-type, :target-type ts-type})]
-    {:return-type :bool
-     :batch-bindings (:batch-bindings cast-expr)
-     :->call-code (fn [[tz tstz]]
-                    `(== ~tz ~(tstz->ts-code [tstz])))}))
-
 (defn interval-eq
   "Override equality for intervals as we want 1 year to = 12 months, and this is not true by for Period.equals."
   ;; we might be able to enforce this differently (e.g all constructs, reads and calcs only use the month component).
