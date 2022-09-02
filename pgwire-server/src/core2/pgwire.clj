@@ -1151,11 +1151,6 @@
   ([conn status]
    (cmd-write-msg conn msg-ready {:status status})))
 
-(defn- update-if-present [m k f & args]
-  (if (contains? m k)
-    (apply update m k f args)
-    m))
-
 (defn cmd-send-error
   "Sends an error back to the client (e.g (cmd-send-error conn (err-protocol \"oops!\")).
 
@@ -1168,7 +1163,7 @@
     (swap! conn-state assoc :skip-until-sync true))
 
   ;; mark a transaction (if open as failed), for now we will consider all errors to do this
-  (swap! conn-state update-if-present :transaction assoc :failed true, :err err)
+  (swap! conn-state util/maybe-update :transaction assoc :failed true, :err err)
 
   (cmd-write-msg conn msg-error-response {:error-fields err}))
 
