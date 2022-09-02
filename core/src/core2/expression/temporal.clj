@@ -4,7 +4,6 @@
             [core2.expression.metadata :as expr.meta]
             [core2.expression.walk :as ewalk]
             [core2.temporal :as temporal]
-            [core2.types :as types]
             [core2.util :as util]
             [core2.error :as err])
   (:import (java.time Duration Instant LocalDate LocalDateTime LocalTime Period ZoneId ZoneOffset ZonedDateTime)
@@ -476,12 +475,12 @@
         d (.getDuration pd)]
     (PeriodDuration. (.multipliedBy p factor) (.multipliedBy d factor))))
 
-(defmethod expr/codegen-mono-call [:* :interval :int] [_]
-  {:return-type [:interval :month-day-nano]
+(defmethod expr/codegen-mono-call [:* :interval :int] [{[l-type _] :arg-types}]
+  {:return-type l-type
    :->call-code (fn [[a b]] `(pd-scale ~a ~b))})
 
-(defmethod expr/codegen-mono-call [:* :int :interval] [_]
-  {:return-type [:interval :month-day-nano]
+(defmethod expr/codegen-mono-call [:* :int :interval] [{[_ r-type] :arg-types}]
+  {:return-type r-type
    :->call-code (fn [[a b]] `(pd-scale ~b ~a))})
 
 ;; numeric division for intervals

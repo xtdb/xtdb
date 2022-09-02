@@ -4,6 +4,7 @@
             [core2.rewrite :refer [zmatch]]
             [core2.util :as util])
   (:import (clojure.lang Keyword MapEntry)
+           (core2.types IntervalDayTime IntervalMonthDayNano IntervalYearMonth)
            (core2.vector IDenseUnionWriter IVectorWriter)
            (core2.vector.extensions KeywordType KeywordVector UriType UriVector UuidType UuidVector)
            java.net.URI
@@ -15,7 +16,7 @@
            java.util.function.Function
            (org.apache.arrow.vector BigIntVector BitVector DateDayVector DateMilliVector DurationVector FixedSizeBinaryVector Float4Vector Float8Vector IntVector IntervalDayVector IntervalMonthDayNanoVector IntervalYearVector NullVector PeriodDuration SmallIntVector TimeMicroVector TimeMilliVector TimeNanoVector TimeSecVector TimeStampMicroTZVector TimeStampMicroVector TimeStampMilliTZVector TimeStampMilliVector TimeStampNanoTZVector TimeStampNanoVector TimeStampSecTZVector TimeStampSecVector TinyIntVector ValueVector VarBinaryVector VarCharVector)
            (org.apache.arrow.vector.complex DenseUnionVector ListVector StructVector)
-           (org.apache.arrow.vector.holders NullableIntervalDayHolder)
+           (org.apache.arrow.vector.holders NullableIntervalDayHolder NullableIntervalMonthDayNanoHolder)
            (org.apache.arrow.vector.types DateUnit FloatingPointPrecision IntervalUnit TimeUnit Types$MinorType UnionMode)
            (org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Date ArrowType$Duration ArrowType$ExtensionType ArrowType$FixedSizeBinary ArrowType$FixedSizeList ArrowType$FloatingPoint ArrowType$Int ArrowType$Interval ArrowType$List ArrowType$Null ArrowType$Struct ArrowType$Time ArrowType$Time ArrowType$Timestamp ArrowType$Union ArrowType$Utf8 ExtensionTypeRegistry Field FieldType)
            org.apache.arrow.vector.util.Text))
@@ -113,6 +114,26 @@
   (value->col-type [_] [:time-local :nano])
   (write-value! [v ^IVectorWriter writer]
     (.setSafe ^TimeNanoVector (.getVector writer) (.getPosition writer) (.toNanoOfDay v)))
+
+  IntervalYearMonth
+  (value->col-type [_] [:interval :year-month])
+  (write-value! [v ^IVectorWriter writer]
+    (.setSafe ^IntervalYearVector (.getVector writer) (.getPosition writer) (.toTotalMonths (.-period v))))
+
+  IntervalDayTime
+  (value->col-type [_] [:interval :day-time])
+  (write-value! [v ^IVectorWriter writer]
+    (.setSafe ^IntervalDayVector (.getVector writer) (.getPosition writer)
+              (.getDays (.-period v))
+              (.toMillis (.-duration v))))
+
+  IntervalMonthDayNano
+  (value->col-type [_] [:interval :month-day-nano])
+  (write-value! [v ^IVectorWriter writer]
+    (.setSafe ^IntervalMonthDayNanoVector (.getVector writer) (.getPosition writer)
+              (.toTotalMonths (.-period v))
+              (.getDays (.-period v))
+              (.toNanos (.-duration v))))
 
   ;; allow the use of PeriodDuration for more precision
   PeriodDuration
@@ -369,16 +390,25 @@
 (extend-protocol ArrowReadable
   ;; we are going to override the get-object function
   ;; to unify the representation on read for non nanovectors
+  IntervalYearVector
+  (get-object [this idx]
+    (IntervalYearMonth. (Period/ofMonths (.get this idx))))
+
   IntervalDayVector
   (get-object [this idx]
     (let [holder (NullableIntervalDayHolder.)
           _ (.get this idx holder)
           period (Period/ofDays (.-days holder))
           duration (Duration/ofMillis (.-milliseconds holder))]
-      (PeriodDuration. period duration)))
-  IntervalYearVector
+      (IntervalDayTime. period duration)))
+
+  IntervalMonthDayNanoVector
   (get-object [this idx]
-    (PeriodDuration. (Period/ofMonths (.get this idx)) Duration/ZERO)))
+    (let [holder (NullableIntervalMonthDayNanoHolder.)
+          _ (.get this idx holder)
+          period (Period/of 0 (.-months holder) (.-days holder))
+          duration (Duration/ofNanos (.-nanoseconds holder))]
+      (IntervalMonthDayNano. period duration))))
 
 (extend-protocol ArrowReadable
   ListVector

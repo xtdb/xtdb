@@ -1,6 +1,8 @@
 (ns core2.vector
   (:require [core2.types :as types])
-  (:import (core2.vector IMonoVectorWriter IMonoVectorReader IPolyVectorWriter IPolyVectorReader IWriterPosition)
+  (:import (core2.types IntervalDayTime IntervalMonthDayNano)
+           (core2.vector IMonoVectorWriter IMonoVectorReader IPolyVectorWriter IPolyVectorReader IWriterPosition)
+           (java.time Duration Period)
            java.util.List
            (org.apache.arrow.vector BaseFixedWidthVector BaseVariableWidthVector BitVectorHelper DateMilliVector ExtensionTypeVector FixedSizeBinaryVector IntervalDayVector IntervalMonthDayNanoVector IntervalYearVector NullVector PeriodDuration TimeMicroVector TimeMilliVector TimeNanoVector TimeSecVector ValueVector)
            (org.apache.arrow.vector.complex DenseUnionVector)))
@@ -187,13 +189,15 @@
         (writeNull [_ _] (.setNull arrow-vec (.getPositionAndIncrement wp)))
         (writeLong [_ v] (.set arrow-vec (.getPositionAndIncrement wp) v))))))
 
-;; the Interval vectors just return PeriodDuration objects for now.
-;; eventually (see discussion on #112) we may want these to have their own box objects.
+;; the EE uses PDs internally for all types of intervals for now.
+;; we could migrate it to use `core2.types.Interval*`
 (extend-protocol MonoFactory
   IntervalYearVector
   (->mono-reader [arrow-vec]
     (reify IMonoVectorReader
-      (readObject [_ idx] (.getObject arrow-vec idx))))
+      (readObject [_ idx]
+        (PeriodDuration. (Period/ofMonths (.get arrow-vec idx)) Duration/ZERO))))
+
   (->mono-writer [arrow-vec]
     (let [wp (IWriterPosition/build)]
       (reify IMonoVectorWriter
@@ -207,7 +211,10 @@
   IntervalDayVector
   (->mono-reader [arrow-vec]
     (reify IMonoVectorReader
-      (readObject [_ idx] (.getObject arrow-vec idx))))
+      (readObject [_ idx]
+        (let [^IntervalDayTime idt (types/get-object arrow-vec idx)]
+          (PeriodDuration. (.-period idt) (.-duration idt))))))
+
   (->mono-writer [arrow-vec]
     (let [wp (IWriterPosition/build)]
       (reify IMonoVectorWriter
@@ -226,7 +233,9 @@
   IntervalMonthDayNanoVector
   (->mono-reader [arrow-vec]
     (reify IMonoVectorReader
-      (readObject [_ idx] (.getObject arrow-vec idx))))
+      (readObject [_ idx]
+        (let [^IntervalMonthDayNano imdn (types/get-object arrow-vec idx)]
+          (PeriodDuration. (.-period imdn) (.-duration imdn))))))
 
   (->mono-writer [arrow-vec]
     (let [wp (IWriterPosition/build)]

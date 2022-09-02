@@ -93,3 +93,7 @@
     (t/is (= [{:id "foo", :arr [9 8 7 6], :fst 9, :snd 8, :lst 6}]
              (c2/sql-query tu/*node* "SELECT foo.id, foo.arr, foo.arr[1] AS fst, foo.arr[2] AS snd, foo.arr[4] AS lst FROM foo"
                            {:basis {:tx !tx}})))))
+
+(t/deftest test-interval-literal-cce-271
+  (t/is (= [{:a #c2.interval/year-month "P12M"}]
+           (c2/sql-query tu/*node* "select a.a from (values (1 year)) a (a)" {}))))

@@ -1,25 +1,26 @@
 (ns ^{:clojure.tools.namespace.repl/load false}
     core2.expression-test
-  (:require [clojure.test :as t]
+  (:require [clojure.string :as str]
+            [clojure.test :as t]
+            [clojure.test.check.clojure-test :as tct]
+            [clojure.test.check.generators :as tcg]
+            [clojure.test.check.properties :as tcp]
+            [core2.edn :as edn]
             [core2.expression :as expr]
             [core2.expression.temporal :as expr.temp]
             [core2.test-util :as tu]
             [core2.types :as types]
             [core2.util :as util]
-            [core2.vector.indirect :as iv]
-            [clojure.test.check.clojure-test :as tct]
-            [clojure.test.check.properties :as tcp]
-            [clojure.test.check.generators :as tcg]
-            [clojure.string :as str]
-            [core2.edn :as edn])
-  (:import core2.vector.IIndirectVector
-           (java.time Clock Duration Instant LocalDate ZonedDateTime ZoneId Period LocalDateTime)
+            [core2.vector.indirect :as iv])
+  (:import (core2 StringUtil)
+           (core2.types IntervalDayTime IntervalMonthDayNano IntervalYearMonth)
+           core2.vector.IIndirectVector
+           (java.nio ByteBuffer)
+           (java.time Clock Duration Instant LocalDate Period ZoneId ZonedDateTime)
            (java.time.temporal ChronoUnit)
-           (org.apache.arrow.vector DurationVector TimeStampVector ValueVector PeriodDuration)
+           (org.apache.arrow.vector DurationVector PeriodDuration TimeStampVector ValueVector)
            (org.apache.arrow.vector.types.pojo ArrowType$Duration ArrowType$Timestamp)
-           org.apache.arrow.vector.types.TimeUnit
-           (core2 StringUtil)
-           (java.nio ByteBuffer)))
+           org.apache.arrow.vector.types.TimeUnit))
 
 (t/use-fixtures :each tu/with-allocator)
 
@@ -1543,8 +1544,7 @@
                 "local-time"))))))
 
 (t/deftest test-interval-constructors
-  (t/are [expected expr data]
-    (= (some-> expected edn/period-duration-reader) (project1 expr data))
+  (t/are [expected expr data] (= expected (project1 expr data))
 
     nil '(single-field-interval nil "YEAR" 2 0) {}
     nil '(single-field-interval nil "MONTH" 2 0) {}
@@ -1553,72 +1553,72 @@
     nil '(single-field-interval nil "MINUTE" 2 0) {}
     nil '(single-field-interval nil "SECOND" 2 6) {}
 
-    "P0D PT0S" '(single-field-interval 0 "YEAR" 2 0) {}
-    "P0D PT0S" '(single-field-interval 0 "MONTH" 2 0) {}
-    "P0D PT0S" '(single-field-interval 0 "DAY" 2 0) {}
-    "P0D PT0S" '(single-field-interval 0 "HOUR" 2 0) {}
-    "P0D PT0S" '(single-field-interval 0 "MINUTE" 2 0) {}
-    "P0D PT0S" '(single-field-interval 0 "SECOND" 2 0) {}
+    #c2.interval/year-month "P0D" '(single-field-interval 0 "YEAR" 2 0) {}
+    #c2.interval/year-month "P0D" '(single-field-interval 0 "MONTH" 2 0) {}
+    #c2.interval/day-time ["P0D" "PT0S"] '(single-field-interval 0 "DAY" 2 0) {}
+    #c2.interval/day-time ["P0D" "PT0S"] '(single-field-interval 0 "HOUR" 2 0) {}
+    #c2.interval/day-time ["P0D" "PT0S"] '(single-field-interval 0 "MINUTE" 2 0) {}
+    #c2.interval/day-time ["P0D" "PT0S"] '(single-field-interval 0 "SECOND" 2 0) {}
 
-    "P0D PT0S" '(single-field-interval a "YEAR" 2 0) {:a 0}
-    "P0D PT0S" '(single-field-interval a "MONTH" 2 0) {:a 0}
-    "P0D PT0S" '(single-field-interval a "DAY" 2 0) {:a 0}
-    "P0D PT0S" '(single-field-interval a "HOUR" 2 0) {:a 0}
-    "P0D PT0S" '(single-field-interval a "MINUTE" 2 0) {:a 0}
-    "P0D PT0S" '(single-field-interval a "SECOND" 2 0) {:a 0}
+    #c2.interval/year-month "P0D" '(single-field-interval a "YEAR" 2 0) {:a 0}
+    #c2.interval/year-month "P0D" '(single-field-interval a "MONTH" 2 0) {:a 0}
+    #c2.interval/day-time ["P0D" "PT0S"] '(single-field-interval a "DAY" 2 0) {:a 0}
+    #c2.interval/day-time ["P0D" "PT0S"] '(single-field-interval a "HOUR" 2 0) {:a 0}
+    #c2.interval/day-time ["P0D" "PT0S"] '(single-field-interval a "MINUTE" 2 0) {:a 0}
+    #c2.interval/day-time ["P0D" "PT0S"] '(single-field-interval a "SECOND" 2 0) {:a 0}
 
     ;; Y / M distinction is lost when writing to IntervalYear vectors
-    "P12M PT0S" '(single-field-interval 1 "YEAR" 2 0) {}
-    "P-24M PT0S" '(single-field-interval -2 "YEAR" 2 0) {}
+    #c2.interval/year-month "P12M" '(single-field-interval 1 "YEAR" 2 0) {}
+    #c2.interval/year-month "P-24M" '(single-field-interval -2 "YEAR" 2 0) {}
 
-    "P1M PT0S" '(single-field-interval 1 "MONTH" 2 0) {}
-    "P-2M PT0S" '(single-field-interval -2 "MONTH" 2 0) {}
+    #c2.interval/year-month "P1M" '(single-field-interval 1 "MONTH" 2 0) {}
+    #c2.interval/year-month "P-2M" '(single-field-interval -2 "MONTH" 2 0) {}
 
-    "P1D PT0S" '(single-field-interval 1 "DAY" 2 0) {}
-    "P-2D PT0S" '(single-field-interval -2 "DAY" 2 0) {}
+    #c2.interval/day-time ["P1D" "PT0S"] '(single-field-interval 1 "DAY" 2 0) {}
+    #c2.interval/day-time ["P-2D" "PT0S"] '(single-field-interval -2 "DAY" 2 0) {}
 
-    "P0D PT1H" '(single-field-interval 1 "HOUR" 2 0) {}
-    "P0D PT-2H" '(single-field-interval -2 "HOUR" 2 0) {}
+    #c2.interval/day-time ["P0D" "PT1H"] '(single-field-interval 1 "HOUR" 2 0) {}
+    #c2.interval/day-time ["P0D" "PT-2H"] '(single-field-interval -2 "HOUR" 2 0) {}
 
-    "P0D PT1M" '(single-field-interval 1 "MINUTE" 2 0) {}
-    "P0D PT-2M" '(single-field-interval -2 "MINUTE" 2 0) {}
+    #c2.interval/day-time ["P0D" "PT1M"] '(single-field-interval 1 "MINUTE" 2 0) {}
+    #c2.interval/day-time ["P0D" "PT-2M"] '(single-field-interval -2 "MINUTE" 2 0) {}
 
-    "P0D PT1S" '(single-field-interval 1 "SECOND" 2 6) {}
-    "P0D PT-2S" '(single-field-interval -2 "SECOND" 2 6) {}
+    #c2.interval/day-time ["P0D" "PT1S"] '(single-field-interval 1 "SECOND" 2 6) {}
+    #c2.interval/day-time ["P0D" "PT-2S"] '(single-field-interval -2 "SECOND" 2 6) {}
 
     ;; fractional seconds
-    "P0D PT1.34S" '(single-field-interval "1.34" "SECOND" 2 6) {}
+    #c2.interval/day-time ["P0D" "PT1.34S"] '(single-field-interval "1.34" "SECOND" 2 6) {}
 
     ;; multi part parsing
     nil '(multi-field-interval nil "YEAR" 2 "MONTH" 2) {}
 
-    "P0D PT0S" '(multi-field-interval "0-0" "YEAR" 2 "MONTH" 2) {}
-    "P12M PT0S" '(multi-field-interval "1-0" "YEAR" 2 "MONTH" 2) {}
-    "P12M PT0S" '(multi-field-interval "+1-0" "YEAR" 2 "MONTH" 2) {}
-    "P-12M PT0S" '(multi-field-interval "-1-0" "YEAR" 2 "MONTH" 2) {}
-    "P13M PT0S" '(multi-field-interval "1-1" "YEAR" 2 "MONTH" 2) {}
+    #c2.interval/month-day-nano ["P0D" "PT0S"] '(multi-field-interval "0-0" "YEAR" 2 "MONTH" 2) {}
+    #c2.interval/month-day-nano ["P12M" "PT0S"] '(multi-field-interval "1-0" "YEAR" 2 "MONTH" 2) {}
+    #c2.interval/month-day-nano ["P12M" "PT0S"] '(multi-field-interval "+1-0" "YEAR" 2 "MONTH" 2) {}
+    #c2.interval/month-day-nano ["P-12M" "PT0S"] '(multi-field-interval "-1-0" "YEAR" 2 "MONTH" 2) {}
+    #c2.interval/month-day-nano ["P13M" "PT0S"] '(multi-field-interval "1-1" "YEAR" 2 "MONTH" 2) {}
 
-    "P11D PT12H" '(multi-field-interval "11 12" "DAY" 2 "HOUR" 2) {}
-    "P-1D PT-1S" '(multi-field-interval "-1 00:00:01" "DAY" 2 "SECOND" 6) {}
-    "P1D PT2M" '(multi-field-interval "1 00:02" "DAY" 2 "MINUTE" 2) {}
-    "P1D PT23H" '(multi-field-interval "1 23" "DAY" 2 "HOUR" 2) {}
+    #c2.interval/month-day-nano ["P11D" "PT12H"] '(multi-field-interval "11 12" "DAY" 2 "HOUR" 2) {}
+    #c2.interval/month-day-nano ["P-1D" "PT-1S"] '(multi-field-interval "-1 00:00:01" "DAY" 2 "SECOND" 6) {}
+    #c2.interval/month-day-nano ["P1D" "PT2M"] '(multi-field-interval "1 00:02" "DAY" 2 "MINUTE" 2) {}
+    #c2.interval/month-day-nano ["P1D" "PT23H"] '(multi-field-interval "1 23" "DAY" 2 "HOUR" 2) {}
 
-    "P0D PT-3H-4M-1S" '(multi-field-interval "-03:04:01" "HOUR" 2 "SECOND" 6) {}
-    "P0D PT23H2M" '(multi-field-interval "23:02" "HOUR" 2 "MINUTE" 2) {}
+    #c2.interval/month-day-nano ["P0D" "PT-3H-4M-1S"] '(multi-field-interval "-03:04:01" "HOUR" 2 "SECOND" 6) {}
+    #c2.interval/month-day-nano ["P0D" "PT23H2M"] '(multi-field-interval "23:02" "HOUR" 2 "MINUTE" 2) {}
 
-    "P0D PT44M34S" '(multi-field-interval "44:34" "MINUTE" 2 "SECOND" 6) {}
-    "P0D PT44M34.123456S" '(multi-field-interval "44:34.123456" "MINUTE" 2 "SECOND" 6) {}
+    #c2.interval/month-day-nano ["P0D" "PT44M34S"] '(multi-field-interval "44:34" "MINUTE" 2 "SECOND" 6) {}
+    #c2.interval/month-day-nano ["P0D" "PT44M34.123456S"] '(multi-field-interval "44:34.123456" "MINUTE" 2 "SECOND" 6) {}
 
-    "P1D PT1.334S" '(multi-field-interval "1 00:00:01.334" "DAY" 2 "SECOND" 6) {}
-    "P0D PT3H4M1.334S" '(multi-field-interval "03:04:1.334" "HOUR" 2 "SECOND" 6) {}
-    "P0D PT44M34.123456789S" '(multi-field-interval "44:34.123456789" "MINUTE" 2 "SECOND" 6) {}
+    #c2.interval/month-day-nano ["P1D" "PT1.334S"] '(multi-field-interval "1 00:00:01.334" "DAY" 2 "SECOND" 6) {}
+    #c2.interval/month-day-nano ["P0D" "PT3H4M1.334S"] '(multi-field-interval "03:04:1.334" "HOUR" 2 "SECOND" 6) {}
+    #c2.interval/month-day-nano ["P0D" "PT44M34.123456789S"] '(multi-field-interval "44:34.123456789" "MINUTE" 2 "SECOND" 6) {}
 
     ;; truncates when we can no longer represent the number
-    "P0D PT44M34.123456789S" '(multi-field-interval "44:34.123456789666" "MINUTE" 2 "SECOND" 6) {}
+    #c2.interval/month-day-nano ["P0D" "PT44M34.123456789S"] '(multi-field-interval "44:34.123456789666" "MINUTE" 2 "SECOND" 6) {}
 
-    "P0D PT0.123S" '(multi-field-interval "+00:00.123" "MINUTE" 2 "SECOND" 6) {}
-    "P0D PT0.123S" '(multi-field-interval "00:00.123" "MINUTE" 2 "SECOND" 6) {}
-    "P0D PT-0.123S" '(multi-field-interval "-00:00.123" "MINUTE" 2 "SECOND" 6) {}))
+    #c2.interval/month-day-nano ["P0D" "PT0.123S"] '(multi-field-interval "+00:00.123" "MINUTE" 2 "SECOND" 6) {}
+    #c2.interval/month-day-nano ["P0D" "PT0.123S"] '(multi-field-interval "00:00.123" "MINUTE" 2 "SECOND" 6) {}
+    #c2.interval/month-day-nano ["P0D" "PT-0.123S"] '(multi-field-interval "-00:00.123" "MINUTE" 2 "SECOND" 6) {}))
 
 (t/deftest test-multi-part-interval-ex-cases
   (letfn [(p [unit1 unit2] (project1 (list 'multi-field-interval "0-0" unit1 2 unit2 2) {}))]
@@ -1643,9 +1643,7 @@
                  {}))))
 
 (t/deftest test-interval-arithmetic
-  (t/are [expected expr]
-    (= (some-> expected edn/period-duration-reader) (project1 expr {}))
-
+  (t/are [expected expr] (= expected (project1 expr {}))
     nil '(+ (single-field-interval 1 "YEAR" 2 0) nil)
     nil '(+ nil (single-field-interval 1 "YEAR" 2 0))
 
@@ -1655,34 +1653,34 @@
     nil '(* (single-field-interval 1 "YEAR" 2 0) nil)
     nil '(* nil (single-field-interval 1 "YEAR" 2 0))
 
-    "P24M PT0S" '(+ (single-field-interval 1 "YEAR" 2 0) (single-field-interval 1 "YEAR" 2 0))
-    "P13M PT0S" '(+ (single-field-interval 1 "YEAR" 2 0) (single-field-interval 1 "MONTH" 2 0))
-    "P11M PT0S" '(+ (single-field-interval 1 "YEAR" 2 0) (single-field-interval -1 "MONTH" 2 0))
+    #c2.interval/year-month "P24M" '(+ (single-field-interval 1 "YEAR" 2 0) (single-field-interval 1 "YEAR" 2 0))
+    #c2.interval/year-month "P13M" '(+ (single-field-interval 1 "YEAR" 2 0) (single-field-interval 1 "MONTH" 2 0))
+    #c2.interval/year-month "P11M" '(+ (single-field-interval 1 "YEAR" 2 0) (single-field-interval -1 "MONTH" 2 0))
 
-    "P12M-1D PT0S" '(+ (single-field-interval 1 "YEAR" 2 0) (single-field-interval -1 "DAY" 2 0))
-    "P12M PT-1S" '(+ (single-field-interval 1 "YEAR" 2 0) (single-field-interval -1 "SECOND" 2 6))
-    "P12M PT1H1S" '(+ (single-field-interval 1 "YEAR" 2 0) (single-field-interval 1 "HOUR" 2 0) (single-field-interval 1 "SECOND" 2 6))
+    #c2.interval/month-day-nano ["P12M-1D" "PT0S"] '(+ (single-field-interval 1 "YEAR" 2 0) (single-field-interval -1 "DAY" 2 0))
+    #c2.interval/month-day-nano ["P12M" "PT-1S"] '(+ (single-field-interval 1 "YEAR" 2 0) (single-field-interval -1 "SECOND" 2 6))
+    #c2.interval/month-day-nano ["P12M" "PT1H1S"] '(+ (single-field-interval 1 "YEAR" 2 0) (single-field-interval 1 "HOUR" 2 0) (single-field-interval 1 "SECOND" 2 6))
 
-    "P0D PT0S" '(- (single-field-interval 1 "YEAR" 2 0) (single-field-interval 1 "YEAR" 2 0))
-    "P11M PT0S" '(- (single-field-interval 1 "YEAR" 2 0) (single-field-interval 1 "MONTH" 2 0))
-    "P13M PT0S" '(- (single-field-interval 1 "YEAR" 2 0) (single-field-interval -1 "MONTH" 2 0))
+    #c2.interval/year-month "P0D" '(- (single-field-interval 1 "YEAR" 2 0) (single-field-interval 1 "YEAR" 2 0))
+    #c2.interval/year-month "P11M" '(- (single-field-interval 1 "YEAR" 2 0) (single-field-interval 1 "MONTH" 2 0))
+    #c2.interval/year-month "P13M" '(- (single-field-interval 1 "YEAR" 2 0) (single-field-interval -1 "MONTH" 2 0))
 
-    "P12M1D PT0S" '(- (single-field-interval 1 "YEAR" 2 0) (single-field-interval -1 "DAY" 2 0))
-    "P12M PT1S" '(- (single-field-interval 1 "YEAR" 2 0) (single-field-interval -1 "SECOND" 2 6))
-    "P12M PT-1H-1S" '(- (single-field-interval 1 "YEAR" 2 0) (single-field-interval 1 "HOUR" 2 0) (single-field-interval 1 "SECOND" 2 6))
+    #c2.interval/month-day-nano ["P12M1D" "PT0S"] '(- (single-field-interval 1 "YEAR" 2 0) (single-field-interval -1 "DAY" 2 0))
+    #c2.interval/month-day-nano ["P12M" "PT1S"] '(- (single-field-interval 1 "YEAR" 2 0) (single-field-interval -1 "SECOND" 2 6))
+    #c2.interval/month-day-nano ["P12M" "PT-1H-1S"] '(- (single-field-interval 1 "YEAR" 2 0) (single-field-interval 1 "HOUR" 2 0) (single-field-interval 1 "SECOND" 2 6))
 
-    "P36M PT0S" '(* (single-field-interval 1 "YEAR" 2 0) 3)
+    #c2.interval/year-month "P36M" '(* (single-field-interval 1 "YEAR" 2 0) 3)
 
-    "P6M PT0S" '(/ (single-field-interval 1 "YEAR" 2 0) 2)
-    "P2M PT0S" '(/ (single-field-interval 1 "YEAR" 2 0) 5)
+    #c2.interval/year-month "P6M" '(/ (single-field-interval 1 "YEAR" 2 0) 2)
+    #c2.interval/year-month "P2M" '(/ (single-field-interval 1 "YEAR" 2 0) 5)
 
-    "P12M PT0S" '(/ (+ (single-field-interval 1 "YEAR" 2 0) (single-field-interval 1 "YEAR" 2 0)) 2)
+    #c2.interval/year-month "P12M" '(/ (+ (single-field-interval 1 "YEAR" 2 0) (single-field-interval 1 "YEAR" 2 0)) 2)
 
-    "P0M PT0S" '(/ (single-field-interval 1 "MONTH" 2 0) 2)
-    "P1M PT0S" '(/ (single-field-interval 6 "MONTH" 2 0) 5)
+    #c2.interval/year-month "P0M" '(/ (single-field-interval 1 "MONTH" 2 0) 2)
+    #c2.interval/year-month "P1M" '(/ (single-field-interval 6 "MONTH" 2 0) 5)
 
-    "P0M PT0S" '(/ (single-field-interval 1 "DAY" 2 0) 2)
-    "P1D PT0S" '(/ (single-field-interval 6 "DAY" 2 0) 5)))
+    #c2.interval/day-time ["P0M" "PT0S"] '(/ (single-field-interval 1 "DAY" 2 0) 2)
+    #c2.interval/day-time ["P1D" "PT0S"] '(/ (single-field-interval 6 "DAY" 2 0) 5)))
 
 (t/deftest test-uoe-thrown-for-unsupported-div
   (t/is (thrown? UnsupportedOperationException (project1 '(/ (+ (single-field-interval 1 "MONTH" 2 0) (single-field-interval 3 "MINUTE" 2 0)) 3) {})))
@@ -1701,55 +1699,68 @@
   as the fractional component of MonthDayNano is going to hold nanos in this range."
   (tcg/fmap #(Duration/ofNanos %) (tcg/choose -86399999999999 86399999999999)))
 
-(def period-duration-gen
-  (tcg/fmap
-    #(PeriodDuration. (first %) (second %))
-    (tcg/tuple period-gen small-duration-gen)))
+(def interval-ym-gen
+  (->> tcg/small-integer
+       (tcg/fmap #(IntervalYearMonth. (Period/ofMonths %)))))
+
+(def interval-dt-gen
+  (->> (tcg/tuple tcg/small-integer (tcg/choose -86399999 86399999))
+       (tcg/fmap #(IntervalDayTime. (Period/ofDays (first %))
+                                    (Duration/ofMillis (second %))))))
+
+(def interval-mdn-gen
+  (->> (tcg/tuple period-gen small-duration-gen)
+       (tcg/fmap #(IntervalMonthDayNano. (first %) (second %)))))
 
 ;; some basic interval algebraic properties
 
-(def pd-zero (PeriodDuration. Period/ZERO Duration/ZERO))
+(defn pd-zero [i]
+  (cond
+    (instance? IntervalYearMonth i) (IntervalYearMonth. Period/ZERO)
+    (instance? IntervalDayTime i) (IntervalDayTime. Period/ZERO Duration/ZERO)
+    (instance? IntervalMonthDayNano i) (IntervalMonthDayNano. Period/ZERO Duration/ZERO)))
 
 (tct/defspec interval-add-identity-prop
-  (tcp/for-all [pd period-duration-gen]
-    (= pd (project1 '(+ a b) {:a pd, :b pd-zero}))))
+  (tcp/for-all [i (tcg/one-of [interval-ym-gen interval-dt-gen interval-mdn-gen])]
+    (= i (project1 '(+ a b) {:a i, :b (pd-zero i)}))))
 
 (tct/defspec interval-sub-identity-prop
-  (tcp/for-all [pd period-duration-gen]
-    (= pd (project1 '(- a b) {:a pd, :b pd-zero}))))
+  (tcp/for-all [i (tcg/one-of [interval-ym-gen interval-dt-gen interval-mdn-gen])]
+    (= i (project1 '(- a b) {:a i, :b (pd-zero i)}))))
 
 (tct/defspec interval-mul-factor-identity-prop
-  (tcp/for-all [pd period-duration-gen]
-    (= pd (project1 '(* a 1) {:a pd}))))
+  (tcp/for-all [i (tcg/one-of [interval-ym-gen interval-dt-gen interval-mdn-gen])]
+    (= i (project1 '(* a 1) {:a i}))))
 
 (tct/defspec interval-mul-by-zero-prop
-  (tcp/for-all [pd period-duration-gen]
-    (= #time/period-duration "P0M PT0S" (project1 '(* a 0) {:a pd}))))
+  (tcp/for-all [i (tcg/one-of [interval-ym-gen interval-dt-gen interval-mdn-gen])]
+    (= (pd-zero i) (project1 '(* a 0) {:a i}))))
 
 (tct/defspec interval-add-sub-round-trip-prop
-  (tcp/for-all [pd period-duration-gen]
-    (= pd (project1 '(- (+ a a) a) {:a pd}))))
+  (tcp/for-all [i (tcg/one-of [interval-ym-gen interval-dt-gen interval-mdn-gen])]
+    (= i (project1 '(- (+ a a) a) {:a i, :b (pd-zero i)}))))
 
+#_
 (tct/defspec interval-mul-by-2-is-equiv-to-sum-self-prop
   (tcp/for-all [pd period-duration-gen]
     (= (project1 '(* a 2) {:a pd})
        (project1 '(+ a a) {:a pd}))))
 
+#_
 (tct/defspec interval-mul-by-neg1-is-equiv-to-sub-self2-prop
   (tcp/for-all [pd period-duration-gen]
     (= (project1 '(* a -1) {:a pd})
        (project1 '(- a a a) {:a pd}))))
 
 (t/deftest test-interval-abs
-  (t/are [expected expr]
-    (= (some-> expected edn/period-duration-reader) (project1 expr {}))
+  (t/are [expected expr] (= expected (project1 expr {}))
 
-    "P0D PT0S" '(abs (single-field-interval 0 "YEAR" 2 0))
-    "P12M PT0S" '(abs (single-field-interval 1 "YEAR" 2 0))
-    "P12M PT0S" '(abs (single-field-interval -1 "YEAR" 2 0))
+    #c2.interval/year-month "P0D" '(abs (single-field-interval 0 "YEAR" 2 0))
+    #c2.interval/year-month "P12M" '(abs (single-field-interval 1 "YEAR" 2 0))
+    #c2.interval/year-month "P12M" '(abs (single-field-interval -1 "YEAR" 2 0))
 
-    "P11M PT0S" '(abs (+ (single-field-interval -1 "YEAR" 2 0) (single-field-interval 1 "MONTH" 2 0)))
-    "P1D PT-1S" '(abs (+ (single-field-interval -1 "DAY" 2 0) (single-field-interval 1 "SECOND" 2 6)))))
+    #c2.interval/year-month "P11M" '(abs (+ (single-field-interval -1 "YEAR" 2 0) (single-field-interval 1 "MONTH" 2 0)))
+    #c2.interval/day-time ["P1D" "PT-1S"] '(abs (+ (single-field-interval -1 "DAY" 2 0) (single-field-interval 1 "SECOND" 2 6)))))
 
 (t/deftest test-interval-equality-quirks
   (t/are [expr expected]
@@ -1891,7 +1902,10 @@
   ;; gonna give this a few more rounds by default due to domain size
   1000
   (tcp/for-all [form interval-constructor-gen]
-    (instance? PeriodDuration (project1 form {}))))
+    (let [res (project1 form {})]
+      (or (instance? IntervalYearMonth res)
+          (instance? IntervalDayTime res)
+          (instance? IntervalMonthDayNano res)))))
 
 (t/deftest test-trim-array
   (t/are [expected expr variables]
