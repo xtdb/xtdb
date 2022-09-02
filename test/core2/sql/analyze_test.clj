@@ -457,7 +457,24 @@ SELECT t1.d-t1.e AS a, SUM(t1.a) AS b
      #"Columns are not valid within period specifications: t1.end"]
     "SELECT t1.id,
     (SELECT t2.id FROM t2 FOR SYSTEM_TIME BETWEEN t1.start AND t1.end)
-    FROM t1"))
+    FROM t1")
+
+  (invalid?
+    #"Column not in scope: f.system_time_start"
+    "SELECT f.system_time_start
+    FROM foo
+    FOR SYSTEM_TIME AS OF CURRENT_TIMESTAMP
+    FOR APPLICATION_TIME AS OF CURRENT_TIMESTAMP
+    AS f (bar)")
+
+  (invalid-multi?
+    [#"Period not in scope: f.APPLICATION_TIME"
+     #"Period not in scope: f.SYSTEM_TIME"]
+    "SELECT f.APPLICATION_TIME OVERLAPS f.SYSTEM_TIME
+    FROM foo
+    FOR SYSTEM_TIME AS OF CURRENT_TIMESTAMP
+    FOR APPLICATION_TIME AS OF CURRENT_TIMESTAMP
+    AS f (bar)"))
 
 (t/deftest test-projection
   (t/is (= [[{:index 0, :identifier "b"}]

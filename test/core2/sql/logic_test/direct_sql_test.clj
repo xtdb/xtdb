@@ -9,3 +9,4 @@
 (slt/def-slt-test direct-sql--set-functions {:direct-sql true})
 (slt/def-slt-test direct-sql--system_time {:direct-sql true})
 (slt/def-slt-test direct-sql--period_specifications {:direct-sql true})
+(slt/def-slt-test direct-sql--periods-and-derived-cols {:direct-sql true})

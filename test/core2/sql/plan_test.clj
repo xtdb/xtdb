@@ -1128,5 +1128,14 @@
       (plan-sql
         "SELECT f.APP_TIME OVERLAPS f.SYSTEM_TIME
         FROM foo
-        AS f (system_time_start, system_time_end, application_time_start, application_time_end)"))))
+        AS f (system_time_start, system_time_end, application_time_start, application_time_end)")))
 
+  (t/is
+    (=plan-file
+      "test-derived-columns-with-periods-period-specs"
+      (plan-sql
+        "SELECT f.bar
+        FROM foo
+        FOR SYSTEM_TIME AS OF CURRENT_TIMESTAMP
+        FOR APPLICATION_TIME AS OF CURRENT_TIMESTAMP
+        AS f (bar)"))))

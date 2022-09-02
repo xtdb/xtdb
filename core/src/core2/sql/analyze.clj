@@ -326,14 +326,14 @@
 
     nil))
 
-(defn- system-time-columns [ag]
+(defn system-time-columns [ag]
   (when (r/find-first (partial r/ctor? :query_system_time_period_specification) ag)
-    [{:identifier "system_time_start"} {:identifier "system_time_end"}]))
+    ['system_time_start 'system_time_end]))
 
-(defn- application-time-columns [ag]
+(defn application-time-columns [ag]
   (when (or (r/find-first (partial r/ctor? :query_application_time_period_specification) ag)
             (:app-time-as-of-now? *opts*))
-    [{:identifier "application_time_start"} {:identifier "application_time_end"}]))
+    ['application_time_start 'application_time_end]))
 
 (defn named-columns-join-env [ag]
   (r/zcase ag
@@ -517,7 +517,7 @@
       (let [{:keys [correlation-name derived-columns], table-id :id, :as table} (table ag)
             projections (if-let [derived-columns (not-empty derived-columns)]
                           (for [identifier derived-columns]
-                                 {:identifier identifier})
+                            {:identifier identifier})
                           (if-let [subquery-ref (:subquery-ref (meta table))]
                             (first (projected-columns subquery-ref))
                             (let [query-specification (scope-element ag)
@@ -528,9 +528,7 @@
                               (->> (for [{:keys [identifiers] column-table-id :table-id} column-references
                                          :when (= table-id column-table-id)]
                                      {:identifier (last identifiers)})
-                                   (concat named-join-columns
-                                           (system-time-columns ag)
-                                           (application-time-columns ag))
+                                   (concat named-join-columns)
                                    (distinct)))))]
         [(reduce
           (fn [acc {:keys [identifier index]}]

@@ -1,0 +1,13 @@
+hash-threshold 100
+
+statement ok
+INSERT INTO foo(id, bar) VALUES(1, 'sheep')
+
+query T nosort
+SELECT f.bar
+FROM foo
+FOR SYSTEM_TIME AS OF CURRENT_TIMESTAMP
+FOR APPLICATION_TIME AS OF CURRENT_TIMESTAMP
+AS f (bar)
+----
+sheep

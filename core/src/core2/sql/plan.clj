@@ -1510,8 +1510,13 @@
           (plan subquery-ref)]
          (plan subquery-ref))
        [:scan (vec
-                (let [columns (vec (for [{:keys [identifier]} projection]
-                                     (symbol identifier)))]
+                (let [columns (->> (for [{:keys [identifier]} projection]
+                                     (symbol identifier))
+                                   (concat
+                                     (sem/system-time-columns tp)
+                                     (sem/application-time-columns tp))
+                                   (distinct)
+                                   (vec))]
                   (conj
                     columns
                     {'_table (list '= '_table table-or-query-name)})))])]))
@@ -1983,6 +1988,12 @@
          (wrap-with-application-time-select z))
 
     [:table_primary _ _ _ _ _]
+    ;;=>
+    (->> (build-table-primary z)
+         (wrap-with-system-time-select z)
+         (wrap-with-application-time-select z))
+
+    [:table_primary _ _ _ _ _ _]
     ;;=>
     (->> (build-table-primary z)
          (wrap-with-system-time-select z)

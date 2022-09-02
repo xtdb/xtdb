@@ -1,0 +1,20 @@
+[:rename
+ {x5 bar}
+ [:project
+  [x5]
+  [:rename
+   {system_time_start x1,
+    system_time_end x2,
+    application_time_start x3,
+    application_time_end x4,
+    bar x5,
+    _table x6}
+   [:scan
+    [{system_time_start (<= system_time_start (current-timestamp))}
+     {system_time_end (> system_time_end (current-timestamp))}
+     {application_time_start
+      (<= application_time_start (current-timestamp))}
+     {application_time_end
+      (> application_time_end (current-timestamp))}
+     bar
+     {_table (= _table "foo")}]]]]]
