@@ -52,7 +52,8 @@
                     [[1]]]]
 
                   {:sys-time (util/->instant #inst "2021")
-                   :app-time-as-of-now? true})
+                   :app-time-as-of-now? true
+                   :default-tz #time/zone "Europe/London"})
 
                  (c2-json/arrow-streaming->json)
                  #_(doto (->> (spit expected-file)))

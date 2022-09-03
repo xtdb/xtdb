@@ -24,6 +24,17 @@
 
 (set! *unchecked-math* :warn-on-boxed)
 
+(defmethod ig/init-key :core2/allocator [_ _] (RootAllocator.))
+(defmethod ig/halt-key! :core2/allocator [_ ^BufferAllocator a] (.close a))
+
+(defmethod ig/prep-key :core2/default-tz [_ default-tz]
+  (cond
+    (instance? ZoneId default-tz) default-tz
+    (string? default-tz) (ZoneId/of default-tz)
+    :else util/utc))
+
+(defmethod ig/init-key :core2/default-tz [_ default-tz] default-tz)
+
 (definterface PreparedQueryAsync
   (^java.util.concurrent.CompletableFuture openQueryAsync #_<IResultCursor> [queryOpts])
   (^void close []))
@@ -71,16 +82,18 @@
 
 (defrecord Node [^Ingester ingester
                  ^ITxProducer tx-producer
+                 default-tz
                  !system
                  close-fn]
   api/PClient
   (-open-datalog-async [this query args]
-    (let [{ra-query :query, :keys [args]} (-> (dissoc query :basis :basis-timeout)
+    (let [query (into {:default-tz default-tz} query)
+          {ra-query :query, :keys [args]} (-> (dissoc query :basis :basis-timeout :default-tz)
                                               (d/compile-query args))
           pq (prepare-ra this ra-query)]
       (try
-        (-> (.openQueryAsync pq (merge {:params args}
-                                       (select-keys query [:basis :basis-timeout])))
+        (-> (.openQueryAsync pq (into {:params args}
+                                      (select-keys query [:basis :basis-timeout :default-tz])))
             (.thenApply (reify Function
                           (apply [_ res-cursor]
                             (try
@@ -93,7 +106,8 @@
           (throw e)))))
 
   (-open-sql-async [this query query-opts]
-    (let [pq (prepare-sql this query (select-keys query-opts [:app-time-as-of-now?]))]
+    (let [query-opts (into {:default-tz default-tz} query-opts)
+          pq (prepare-sql this query (select-keys query-opts [:app-time-as-of-now? :default-tz]))]
       (try
         (-> (.openQueryAsync pq query-opts)
             (.thenApply (reify Function
@@ -111,8 +125,8 @@
   (prepare-ra [_ query]
     (let [pq (op/open-prepared-ra query)]
       (reify PreparedQueryAsync
-        (openQueryAsync [_ {:keys [basis ^Duration basis-timeout] :as query-opts}]
-          (let [{:keys [current-time default-tz, tx], :or {current-time (Instant/now), default-tz (ZoneId/systemDefault)}} basis]
+        (openQueryAsync [_ {:keys [basis ^Duration basis-timeout, default-tz], :or {default-tz default-tz} :as query-opts}]
+          (let [{:keys [current-time tx], :or {current-time (Instant/now)}} basis]
             (-> (ingest/snapshot-async ingester tx)
                 (cond-> basis-timeout (.orTimeout (.toMillis basis-timeout) TimeUnit/MILLISECONDS))
                 (util/then-apply
@@ -126,7 +140,8 @@
         (close [_] (.close pq)))))
 
   (prepare-sql [this query query-opts]
-    (let [{:keys [errs plan]} (-> (p/parse query)
+    (let [query-opts (into {:default-tz default-tz} query-opts)
+          {:keys [errs plan]} (-> (p/parse query)
                                   (sql.plan/plan-query query-opts))]
       (when errs
         (throw (err/illegal-arg :invalid-sql-query
@@ -168,7 +183,8 @@
 
 (defmethod ig/prep-key ::node [_ opts]
   (merge {:ingester (ig/ref :core2/ingester)
-          :tx-producer (ig/ref ::txp/tx-producer)}
+          :tx-producer (ig/ref ::txp/tx-producer)
+          :default-tz (ig/ref :core2/default-tz)}
          opts))
 
 (defmethod ig/init-key ::node [_ deps]
@@ -177,9 +193,6 @@
 (defmethod ig/halt-key! ::node [_ ^Node node]
   (.close node))
 
-(defmethod ig/init-key :core2/allocator [_ _] (RootAllocator.))
-(defmethod ig/halt-key! :core2/allocator [_ ^BufferAllocator a] (.close a))
-
 (defn- with-default-impl [opts parent-k impl-k]
   (cond-> opts
     (not (ig/find-derived opts parent-k)) (assoc impl-k {})))
@@ -187,6 +200,7 @@
 (defn start-node ^core2.local_node.Node [opts]
   (let [system (-> (into {::node {}
                           :core2/allocator {}
+                          :core2/default-tz nil
                           :core2/row-counts {}
                           :core2.indexer/indexer {}
                           :core2.indexer/internal-id-manager {}
@@ -238,7 +252,8 @@
 (defn start-submit-node ^core2.local_node.SubmitNode [opts]
   (let [system (-> (into {::submit-node {}
                           :core2.tx-producer/tx-producer {}
-                          :core2/allocator {}}
+                          :core2/allocator {}
+                          :core2/default-tz nil}
                          opts)
                    ig/prep
                    (doto ig/load-namespaces)

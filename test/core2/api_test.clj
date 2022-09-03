@@ -362,6 +362,3 @@
                     :application_time_start (util/->zdt #inst "2020-01-01")
                     :application_time_end (util/->zdt util/end-of-time)}}
                  (q tx1)))))))
-
-(t/deftest can-specify-default-tz-396
-  )

@@ -604,6 +604,13 @@
       },
       "children" : [ ]
     },{
+      "name" : "default-tz",
+      "nullable" : false,
+      "type" : {
+        "name" : "utf8"
+      },
+      "children" : [ ]
+    },{
       "name" : "application-time-as-of-now?",
       "nullable" : false,
       "type" : {
@@ -1028,6 +1035,12 @@
       "count" : 1,
       "VALIDITY" : [1],
       "DATA" : [1609459200000000]
+    },{
+      "name" : "default-tz",
+      "count" : 1,
+      "VALIDITY" : [1],
+      "OFFSET" : [0,13],
+      "DATA" : ["Europe/London"]
     },{
       "name" : "application-time-as-of-now?",
       "count" : 1,

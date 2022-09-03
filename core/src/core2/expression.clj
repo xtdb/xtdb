@@ -253,7 +253,7 @@
 (defmethod write-value-code :extension-type [[_ _ underlying-type _] & args]
   (apply write-value-code underlying-type args))
 
-(def ^:dynamic ^java.time.Clock *clock* (Clock/systemDefaultZone))
+(def ^:dynamic ^java.time.Clock *clock* (Clock/systemUTC))
 
 #_{:clj-kondo/ignore [:unused-binding]}
 (defmulti emit-value

@@ -28,7 +28,7 @@
   (:import core2.api.TransactionInstant
            core2.IResultSet
            java.io.OutputStream
-           java.time.Duration
+           (java.time Duration ZoneId)
            org.eclipse.jetty.server.Server))
 
 (def ^:private muuntaja-opts
@@ -54,8 +54,9 @@
                                (string? s) (inst/read-instant-date s)))}))
 
 (s/def ::app-time-as-of-now? boolean?)
+(s/def ::default-tz #(instance? ZoneId %))
 
-(s/def ::opts (s/keys :opt-un [::sys-time ::app-time-as-of-now?]))
+(s/def ::opts (s/keys :opt-un [::sys-time ::app-time-as-of-now? ::default-tz]))
 
 (defmethod route-handler :status [_]
   {:get (fn [{:keys [node] :as _req}]
@@ -120,11 +121,10 @@
 (s/def :core2.server.sql/query string?)
 
 (s/def ::? (s/nilable (s/coll-of any? :kind vector?)))
-(s/def ::app-time-as-of-now? boolean?)
 
 (s/def :core2.server.sql/query-body
   (s/keys :req-un [:core2.server.sql/query],
-          :opt-un [::basis ::basis-timeout ::? ::app-time-as-of-now?]))
+          :opt-un [::basis ::basis-timeout ::? ::app-time-as-of-now? ::default-tz]))
 
 (defmethod route-handler :sql-query [_]
   {:muuntaja (m/create (-> muuntaja-opts

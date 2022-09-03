@@ -6,10 +6,9 @@
             [core2.util :as util]
             [core2.vector.writer :as vw]
             [juxt.clojars-mirrors.integrant.core :as ig])
-  (:import core2.InstantSource
-           (core2.log Log LogRecord)
+  (:import (core2.log Log LogRecord)
            core2.vector.IDenseUnionWriter
-           (java.time Instant)
+           (java.time Instant ZoneId ZoneOffset)
            org.apache.arrow.memory.BufferAllocator
            (org.apache.arrow.vector TimeStampMicroTZVector VectorSchemaRoot)
            (org.apache.arrow.vector.types.pojo ArrowType$Union Schema)
@@ -92,6 +91,7 @@
                                                                         (types/->field "param-row" types/dense-union-type false)))))
 
             (types/col-type->field "system-time" nullable-inst-type)
+            (types/col-type->field "default-tz" :utf8)
             (types/col-type->field "application-time-as-of-now?" :bool)]))
 
 (defn- ->put-writer [^IDenseUnionWriter tx-ops-writer]
@@ -100,8 +100,8 @@
         app-time-start-writer (.writerForName put-writer "application_time_start")
         app-time-end-writer (.writerForName put-writer "application_time_end")]
     (fn write-put! [{:keys [doc], {:keys [app-time-start app-time-end]} :app-time-opts}]
-      (let [doc (into {:_table "xt_docs"} doc)
-            put-idx (.startValue put-writer)]
+      (let [doc (into {:_table "xt_docs"} doc)]
+        (.startValue put-writer)
         (doto (.writerForType doc-writer (types/value->col-type doc))
           (.startValue)
           (->> (types/write-value! doc))
@@ -119,19 +119,20 @@
         app-time-start-writer (.writerForName delete-writer "application_time_start")
         app-time-end-writer (.writerForName delete-writer "application_time_end")]
     (fn write-delete! [{:keys [id table], {:keys [app-time-start app-time-end]} :app-time-opts}]
-      (let [delete-idx (.startValue delete-writer)]
-        (some-> table (types/write-value! table-writer))
+      (.startValue delete-writer)
 
-        (doto (-> id-writer
-                  (.writerForType (types/value->col-type id)))
-          (.startValue)
-          (->> (types/write-value! id))
-          (.endValue))
+      (some-> table (types/write-value! table-writer))
 
-        (types/write-value! app-time-start app-time-start-writer)
-        (types/write-value! app-time-end app-time-end-writer)
+      (doto (-> id-writer
+                (.writerForType (types/value->col-type id)))
+        (.startValue)
+        (->> (types/write-value! id))
+        (.endValue))
 
-        (.endValue delete-writer)))))
+      (types/write-value! app-time-start app-time-start-writer)
+      (types/write-value! app-time-end app-time-end-writer)
+
+      (.endValue delete-writer))))
 
 (defn- ->evict-writer [^IDenseUnionWriter tx-ops-writer]
   (let [evict-writer (.asStruct (.writerForTypeId tx-ops-writer 2))
@@ -161,11 +162,12 @@
 
       (.endValue sql-writer))))
 
-(defn serialize-tx-ops ^java.nio.ByteBuffer [^BufferAllocator allocator tx-ops {:keys [^Instant sys-time, app-time-as-of-now?] :as opts}]
+(defn serialize-tx-ops ^java.nio.ByteBuffer [^BufferAllocator allocator tx-ops {:keys [^Instant sys-time, default-tz, app-time-as-of-now?]}]
   (let [tx-ops (conform-tx-ops tx-ops)
         op-count (count tx-ops)]
     (with-open [root (VectorSchemaRoot/create tx-schema allocator)]
       (let [ops-list-writer (.asList (vw/vec->writer (.getVector root "tx-ops")))
+            default-tz-writer (vw/vec->writer (.getVector root "default-tz"))
             app-time-behaviour-writer (vw/vec->writer (.getVector root "application-time-as-of-now?"))
             tx-ops-writer (.asDenseUnion (.getDataWriter ops-list-writer))
 
@@ -178,6 +180,7 @@
           (doto ^TimeStampMicroTZVector (.getVector root "system-time")
             (.setSafe 0 (util/instant->micros sys-time))))
 
+        (types/write-value! (str default-tz) default-tz-writer)
         (types/write-value! (boolean app-time-as-of-now?) app-time-behaviour-writer)
 
         (.startValue ops-list-writer)
@@ -201,14 +204,14 @@
 
         (util/root->arrow-ipc-byte-buffer root :stream)))))
 
-(deftype TxProducer [^BufferAllocator allocator, ^Log log]
+(deftype TxProducer [^BufferAllocator allocator, ^Log log, ^ZoneId default-tz]
   ITxProducer
   (submitTx [this tx-ops]
     (.submitTx this tx-ops {}))
 
   (submitTx [_ tx-ops opts]
-    (let [{:keys [sys-time] :as opts} (-> opts
-                                          (some-> (update :sys-time util/->instant)))]
+    (let [{:keys [sys-time] :as opts} (-> (into {:default-tz default-tz} opts)
+                                          (util/maybe-update :sys-time util/->instant))]
       (-> (.appendRecord log (serialize-tx-ops allocator tx-ops opts))
           (util/then-apply
             (fn [^LogRecord result]
@@ -217,8 +220,9 @@
 
 (defmethod ig/prep-key ::tx-producer [_ opts]
   (merge {:log (ig/ref :core2/log)
-          :allocator (ig/ref :core2/allocator)}
+          :allocator (ig/ref :core2/allocator)
+          :default-tz (ig/ref :core2/default-tz)}
          opts))
 
-(defmethod ig/init-key ::tx-producer [_ {:keys [log allocator]}]
-  (TxProducer. allocator log))
+(defmethod ig/init-key ::tx-producer [_ {:keys [log allocator default-tz]}]
+  (TxProducer. allocator log default-tz))

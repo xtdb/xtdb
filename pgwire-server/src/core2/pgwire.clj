@@ -1475,8 +1475,8 @@
          {:keys [^Clock clock, app-time-defaults]} :session} @conn-state
 
         query-opts
-        {:basis (into {:current-time (.instant clock), :default-tz (.getZone clock)}
-                      basis)
+        {:basis (into {:current-time (.instant clock)} basis)
+         :default-tz (.getZone clock)
          :? xt-params
          :app-time-as-of-now? (= app-time-defaults :as-of-now)}]
 

@@ -3,6 +3,7 @@
             [core2.api :as c2]
             [core2.error :as err]
             [core2.transit :as c2.transit]
+            [core2.util :as util]
             [juxt.clojars-mirrors.hato.v0v8v2.hato.client :as hato]
             [juxt.clojars-mirrors.hato.v0v8v2.hato.middleware :as hato.middleware]
             [juxt.clojars-mirrors.reitit-core.v0v5v15.reitit.core :as r])
@@ -104,8 +105,8 @@
                           (apply [_ basis-tx]
                             (request client :post :sql-query
                                      {:content-type :transit+json
-                                      :form-params (into {:query query
-                                                          :basis {:tx basis-tx}}
+                                      :form-params (into (cond-> {:query query}
+                                                           basis-tx (assoc-in [:basis :tx] basis-tx))
                                                          (dissoc query-opts :basis))
                                       :as ::transit+json->resultset}))))
           (.thenApply (reify Function

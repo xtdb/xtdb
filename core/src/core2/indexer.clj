@@ -32,7 +32,7 @@
            java.io.Closeable
            java.lang.AutoCloseable
            java.nio.ByteBuffer
-           java.time.Instant
+           (java.time Instant ZoneId)
            [java.util Collections HashMap Map TreeMap]
            [java.util.concurrent CompletableFuture ConcurrentHashMap ConcurrentSkipListMap]
            [java.util.function Consumer Function]
@@ -439,7 +439,7 @@
 
 (defn- ->sql-insert-indexer ^core2.indexer.SqlOpIndexer [^TransactionIndexer indexer, ^IInternalIdManager iid-mgr
                                                          ^ILogOpIndexer log-op-idxer, ^ITemporalTxIndexer temporal-idxer
-                                                         ^ScanSource scan-src, {:keys [^Instant current-time]}]
+                                                         ^ScanSource scan-src, {:keys [^Instant current-time, default-tz]}]
   (let [current-time-µs (util/instant->micros current-time)]
     (reify SqlOpIndexer
       (indexOp [_ inner-query param-rows {:keys [table]}]
@@ -447,7 +447,7 @@
           (doseq [param-row param-rows
                   :let [param-row (->> param-row
                                        (into {} (map (juxt (comp symbol key) val))))]]
-            (with-open [res (.openCursor pq {:srcs {'$ scan-src}, :params param-row, :current-time current-time})]
+            (with-open [res (.openCursor pq {:srcs {'$ scan-src}, :params param-row, :current-time current-time, :default-tz default-tz})]
               (.forEachRemaining res
                                  (reify Consumer
                                    (accept [_ in-rel]
@@ -481,14 +481,14 @@
 
 (defn- ->sql-update-indexer ^core2.indexer.SqlOpIndexer [^TransactionIndexer indexer, ^IMetadataManager metadata-mgr, ^IBufferPool buffer-pool
                                                          ^ILogOpIndexer log-op-idxer, ^ITemporalTxIndexer temporal-idxer
-                                                         ^ScanSource scan-src, {:keys [^Instant current-time]}]
+                                                         ^ScanSource scan-src, {:keys [^Instant current-time, default-tz]}]
   (reify SqlOpIndexer
     (indexOp [_ inner-query param-rows _opts]
       (with-open [pq (op/open-prepared-ra inner-query)]
         (doseq [param-row param-rows
                 :let [param-row (->> param-row
                                      (into {} (map (juxt (comp symbol key) val))))]]
-          (with-open [res (.openCursor pq {:srcs {'$ scan-src}, :params param-row, :current-time current-time})]
+          (with-open [res (.openCursor pq {:srcs {'$ scan-src}, :params param-row, :current-time current-time, :default-tz default-tz})]
             (.forEachRemaining res
                                (reify Consumer
                                  (accept [_ in-rel]
@@ -542,14 +542,14 @@
                                          (.indexPut temporal-idxer iid new-row-id start-app-time end-app-time false)))))))))))))
 
 (defn- ->sql-delete-indexer ^core2.indexer.SqlOpIndexer [^TransactionIndexer indexer, ^ILogOpIndexer log-op-idxer, ^ITemporalTxIndexer temporal-idxer
-                                                         ^ScanSource scan-src, {:keys [^Instant current-time]}]
+                                                         ^ScanSource scan-src, {:keys [^Instant current-time, default-tz]}]
   (reify SqlOpIndexer
     (indexOp [_ inner-query param-rows _opts]
       (with-open [pq (op/open-prepared-ra inner-query)]
         (doseq [param-row param-rows
                 :let [param-row (->> param-row
                                      (into {} (map (juxt (comp symbol key) val))))]]
-          (with-open [res (.openCursor pq {:srcs {'$ scan-src}, :params param-row, :current-time current-time})]
+          (with-open [res (.openCursor pq {:srcs {'$ scan-src}, :params param-row, :current-time current-time, :default-tz default-tz})]
             (.forEachRemaining res
                                (reify Consumer
                                  (accept [_ in-rel]
@@ -567,14 +567,14 @@
                                          (.indexDelete temporal-idxer iid row-id start-app-time end-app-time false)))))))))))))
 
 (defn- ->sql-erase-indexer ^core2.indexer.SqlOpIndexer [^ILogOpIndexer log-op-idxer, ^ITemporalTxIndexer temporal-idxer
-                                                        ^ScanSource scan-src, {:keys [^Instant current-time]}]
+                                                        ^ScanSource scan-src, {:keys [^Instant current-time, default-tz]}]
   (reify SqlOpIndexer
     (indexOp [_ inner-query param-rows _opts]
       (with-open [pq (op/open-prepared-ra inner-query)]
         (doseq [param-row param-rows
                 :let [param-row (->> param-row
                                      (into {} (map (juxt (comp symbol key) val))))]]
-          (with-open [res (.openCursor pq {:srcs {'$ scan-src}, :params param-row, :current-time current-time})]
+          (with-open [res (.openCursor pq {:srcs {'$ scan-src}, :params param-row, :current-time current-time, :default-tz default-tz})]
             (.forEachRemaining res
                                (reify Consumer
                                  (accept [_ in-rel]
@@ -666,6 +666,8 @@
   (indexTx [this {:keys [sys-time] :as tx-key} tx-root]
     (let [^DenseUnionVector tx-ops-vec (-> ^ListVector (.getVector tx-root "tx-ops")
                                            (.getDataVector))
+          default-tz (ZoneId/of (str (-> (.getVector tx-root "default-tz")
+                                         (.getObject 0))))
           app-time-as-of-now? (== 1 (-> ^BitVector (.getVector tx-root "application-time-as-of-now?")
                                         (.get 0)))
 
@@ -676,7 +678,7 @@
           evict-idxer (->evict-indexer this iid-mgr log-op-idxer temporal-idxer tx-ops-vec)
           sql-idxer (->sql-indexer this metadata-mgr buffer-pool iid-mgr log-op-idxer temporal-idxer
                                    tx-ops-vec (.scanSource this tx-key)
-                                   {:current-time sys-time, :app-time-as-of-now? app-time-as-of-now?})]
+                                   {:current-time sys-time, :app-time-as-of-now? app-time-as-of-now?, :default-tz default-tz})]
 
       (dotimes [tx-op-idx (.getValueCount tx-ops-vec)]
         (case (.getTypeId tx-ops-vec tx-op-idx)
