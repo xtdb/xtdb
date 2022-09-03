@@ -11,7 +11,7 @@
   (tu/with-each-api-implementation
     (-> {:in-memory (t/join-fixtures [tu/with-mock-clock tu/with-node]),
          :remote (t/join-fixtures [tu/with-mock-clock tu/with-http-client-node])}
-        #_(select-keys [:in-memory])
+        (select-keys [:in-memory])
         #_(select-keys [:remote]))))
 
 (t/deftest test-status
@@ -177,9 +177,8 @@
 
       (t/is (= tx1-expected (all-users !tx1)))
 
-      ;; HACK: we're passing `util/end-of-time` as a param here - in practice the user'll likely want a built-in literal?
-      (let [!tx2 (c2/submit-tx *node* [[:sql "DELETE FROM users FOR PORTION OF APP_TIME FROM ? TO ? AS u WHERE u.id = ?"
-                                        [[#inst "2020-05-01", util/end-of-time, "dave"]]]])
+      (let [!tx2 (c2/submit-tx *node* [[:sql "DELETE FROM users FOR PORTION OF APP_TIME FROM DATE '2020-05-01' TO END_OF_TIME AS u WHERE u.id = ?"
+                                        [["dave"]]]])
             tx2-expected #{["Dave" "Davis", (util/->zdt #inst "2018"), (util/->zdt #inst "2020-05-01")]
                            ["Claire" "Cooper", (util/->zdt #inst "2019"), (util/->zdt util/end-of-time)]
                            ["Alan" "Andrews", (util/->zdt #inst "2020"), (util/->zdt util/end-of-time)]
@@ -188,8 +187,8 @@
         (t/is (= tx2-expected (all-users !tx2)))
         (t/is (= tx1-expected (all-users !tx1)))
 
-        (let [!tx3 (c2/submit-tx *node* [[:sql "UPDATE users FOR PORTION OF APPLICATION_TIME FROM ? TO ? AS u SET first_name = 'Sue' WHERE u.id = ?"
-                                          [[#inst "2021-07-01", util/end-of-time, "susan"]]]])
+        (let [!tx3 (c2/submit-tx *node* [[:sql "UPDATE users FOR PORTION OF APPLICATION_TIME FROM DATE '2021-07-01' TO END_OF_TIME AS u SET first_name = 'Sue' WHERE u.id = ?"
+                                          [["susan"]]]])
 
               tx3-expected #{["Dave" "Davis", (util/->zdt #inst "2018"), (util/->zdt #inst "2020-05-01")]
                              ["Claire" "Cooper", (util/->zdt #inst "2019"), (util/->zdt util/end-of-time)]

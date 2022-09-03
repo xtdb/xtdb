@@ -6,10 +6,16 @@
    x7 system_time_start,
    x8 system_time_end,
    x2 bar,
-   x5 application_time_start,
-   x6 application_time_end}
+   x10 application_time_start,
+   x11 application_time_end}
   [:project
-   [x3 x4 x7 x8 x2 x5 x6]
+   [x3
+    x4
+    x7
+    x8
+    x2
+    {x10 (cast x5 [:timestamp-tz :micro "UTC"])}
+    {x11 (cast x6 [:timestamp-tz :micro "UTC"])}]
    [:rename
     {_table x1,
      baz x2,

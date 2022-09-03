@@ -1750,14 +1750,18 @@
                                  (expr derived-expr)
                                  (qualified-projection-symbol col))})
 
-                            [{'application_time_start (cond
-                                                        app-from-expr `(~'max ~app-start-sym ~app-from-expr)
-                                                        app-time-as-of-now? `(~'max ~app-start-sym (~'current-timestamp))
-                                                        :else app-start-sym)}
-                             {'application_time_end (cond
-                                                      app-to-expr `(~'min ~app-end-sym ~app-to-expr)
-                                                      app-time-as-of-now? `(~'min ~app-end-sym ~'core2/end-of-time)
-                                                      :else app-end-sym)}]))
+                            [{'application_time_start `(~'cast
+                                                        ~(cond
+                                                           app-from-expr `(~'max ~app-start-sym ~app-from-expr)
+                                                           app-time-as-of-now? `(~'max ~app-start-sym (~'current-timestamp))
+                                                           :else app-start-sym)
+                                                        [:timestamp-tz :micro "UTC"])}
+                             {'application_time_end `(~'cast
+                                                      ~(cond
+                                                         app-to-expr `(~'min ~app-end-sym ~app-to-expr)
+                                                         app-time-as-of-now? `(~'min ~app-end-sym ~'core2/end-of-time)
+                                                         :else app-end-sym)
+                                                      [:timestamp-tz :micro "UTC"])}]))
           (if app-time-extents
             [:select `(~'and
                        (~'<= ~app-start-sym ~app-to-expr)

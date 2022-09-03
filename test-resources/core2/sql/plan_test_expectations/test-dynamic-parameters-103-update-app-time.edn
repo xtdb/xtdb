@@ -9,7 +9,13 @@
    x11 application_time_start,
    x12 application_time_end}
   [:project
-   [x3 x4 x7 x8 {x10 ?_2} {x11 (max x5 ?_0)} {x12 (min x6 ?_1)}]
+   [x3
+    x4
+    x7
+    x8
+    {x10 ?_2}
+    {x11 (cast (max x5 ?_0) [:timestamp-tz :micro "UTC"])}
+    {x12 (cast (min x6 ?_1) [:timestamp-tz :micro "UTC"])}]
    [:rename
     {_table x1,
      id x2,
