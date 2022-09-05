@@ -3105,30 +3105,31 @@
           (vary-meta assoc :fired-rules @!fired-rules)))))
 
 (defn plan-query
-  ([query] (plan-query query {}))
-  ([query {:keys [validate-plan?], :or {validate-plan? false}, :as opts}]
-   (if (p/failure? query)
-     {:errs [(p/failure->str query)]}
+  ([ast] (plan-query ast {}))
+  ([ast {:keys [validate-plan?], :or {validate-plan? false}, :as opts}]
+   (binding [r/*memo* (HashMap.)
+             sem/*opts* opts]
+     (let [ag (r/vector-zip ast)]
+       (if-let [errs (not-empty (sem/errs ag))]
+         {:errs errs}
 
-     (binding [r/*memo* (HashMap.)
-               sem/*opts* opts]
-       (let [ag (r/vector-zip query)]
-         (if-let [errs (not-empty (sem/errs ag))]
-           {:errs errs}
-
-           (letfn [(validate-plan [plan]
-                     (when (and validate-plan? (not (s/valid? ::lp/logical-plan plan)))
-                       (throw (err/illegal-arg ::invalid-plan
-                                               {::err/message (s/explain-str ::lp/logical-plan plan)
-                                                :plan plan
-                                                :explain-data (s/explain-data ::lp/logical-plan plan)}))))]
-             (let [plan (plan ag)
-                   plan (if (#{:insert :delete :update :erase} (first plan))
+         (letfn [(validate-plan [plan]
+                   (when (and validate-plan? (not (s/valid? ::lp/logical-plan plan)))
+                     (throw (err/illegal-arg ::invalid-plan
+                                             {::err/message (s/explain-str ::lp/logical-plan plan)
+                                              :plan plan
+                                              :explain-data (s/explain-data ::lp/logical-plan plan)}))))]
+           {:plan (let [plan (plan ag)]
+                    (-> (if (#{:insert :delete :update :erase} (first plan))
                           (let [[dml-op dml-op-opts plan] plan]
                             [dml-op dml-op-opts
                              (doto (rewrite-plan plan opts)
                                (validate-plan))])
                           (doto (rewrite-plan plan opts)
-                            (validate-plan)))]
-               {:plan plan
-                :fired-rules (:fired-rules (meta plan))}))))))))
+                            (validate-plan)))
+                        (vary-meta assoc :ast ast)))}))))))
+
+(defn or-throw [{:keys [errs plan]}]
+  (if errs
+    (throw (err/illegal-arg :core2.sql/plan-error {::err/message "Invalid SQL query:", :errs errs}))
+    plan))

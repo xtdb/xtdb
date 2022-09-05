@@ -1,20 +1,13 @@
-(ns core2.sql.plan-test
+(ns core2.sql-test
   (:require [clojure.test :as t :refer [deftest]]
             [clojure.java.io :as io]
-            [core2.sql.parser :as p]
-            [core2.sql.plan :as plan])
+            [core2.sql.plan :as plan]
+            [core2.sql :as sql])
   (:import (java.time LocalDateTime)))
 
 (defn plan-sql
-  ([sql] (plan-sql sql {:decorrelate? true :validate-plan? true :instrument-rules? true}))
-  ([sql opts]
-   (let [tree (p/parse sql :directly_executable_statement)
-         {errs :errs :as plan} (plan/plan-query tree opts)]
-     (when (seq errs)
-       (println sql))
-     (assert (empty? errs) errs)
-     #_(assoc (select-keys plan [:fired-rules :plan]) :tree tree) ;; Debug Tool
-     (:plan plan))))
+  ([sql] (plan-sql sql {:decorrelate? true, :validate-plan? true, :instrument-rules? true}))
+  ([sql opts] (sql/compile-query sql opts)))
 
 (def regen-expected-files? false)
 

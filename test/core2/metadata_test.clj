@@ -2,7 +2,6 @@
   (:require [clojure.test :as t]
             [core2.api :as c2]
             [core2.metadata :as meta]
-            [core2.sql.plan-test :as pt]
             [core2.test-util :as tu]
             [core2.tpch :as tpch]))
 

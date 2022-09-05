@@ -2,7 +2,7 @@
   (:require [clojure.test :as t]
             [core2.util :as util]
             [core2.tpch-test :as tpch-test]
-            [core2.sql.plan-test :as pt])
+            [core2.sql :as sql])
   (:import [java.time LocalDate]))
 
 (def scaffold
@@ -14,7 +14,7 @@
 
 (defn q [sql-str]
   (if tpch-test/*db*
-    (tpch-test/run-query (pt/plan-sql sql-str))
+    (tpch-test/run-query (sql/compile-query sql-str))
     (scaffold (fn [] (q sql-str)))))
 
 (t/deftest ^:integration test-q1-pricing-summary-report

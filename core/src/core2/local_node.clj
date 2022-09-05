@@ -2,11 +2,9 @@
   (:require [clojure.pprint :as pp]
             [core2.api :as api]
             [core2.datalog :as d]
-            [core2.error :as err]
             [core2.ingester :as ingest]
             [core2.operator :as op]
-            [core2.sql.parser :as p]
-            [core2.sql.plan :as sql.plan]
+            [core2.sql :as sql]
             [core2.tx-producer :as txp]
             [core2.util :as util]
             [core2.vector.indirect :as iv]
@@ -141,20 +139,14 @@
 
   (prepare-sql [this query query-opts]
     (let [query-opts (into {:default-tz default-tz} query-opts)
-          {:keys [errs plan]} (-> (p/parse query)
-                                  (sql.plan/plan-query query-opts))]
-      (when errs
-        (throw (err/illegal-arg :invalid-sql-query
-                                {::err/message "Invalid SQL query:"
-                                 :errs errs})))
-
-      (let [pq (prepare-ra this plan)]
+          plan (sql/compile-query query query-opts)
+          pq (prepare-ra this plan)]
         (reify PreparedQueryAsync
           (openQueryAsync [_ query-opts]
             (.openQueryAsync pq (-> (dissoc query-opts :?)
                                     (assoc :params (zipmap (map #(symbol (str "?_" %)) (range))
                                                            (:? query-opts))))))
-          (close [_] (.close pq))))))
+          (close [_] (.close pq)))))
 
   (await-tx-async [_ tx]
     (-> (if-not (instance? CompletableFuture tx)

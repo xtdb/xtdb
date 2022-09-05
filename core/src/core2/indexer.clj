@@ -10,8 +10,7 @@
             [core2.operator :as op]
             core2.operator.scan
             [core2.rewrite :refer [zmatch]]
-            [core2.sql.parser :as p]
-            [core2.sql.plan :as plan]
+            [core2.sql :as sql]
             [core2.temporal :as temporal]
             [core2.types :as t]
             [core2.util :as util]
@@ -605,10 +604,9 @@
                            [{}])
 
               query-str (t/get-object query-vec sql-offset)
-              {:keys [errs plan]} (-> (p/parse query-str :directly_executable_statement)
-                                      (plan/plan-query {:app-time-as-of-now? app-time-as-of-now?}))]
 
-          (assert (empty? errs) errs) ; TODO handle error
+              ;; TODO handle error
+              plan (sql/compile-query query-str {:app-time-as-of-now? app-time-as-of-now?})]
 
           (zmatch plan
             [:insert opts inner-query]

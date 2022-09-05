@@ -8,7 +8,7 @@
             [juxt.clojars-mirrors.integrant.core :as ig])
   (:import (core2.log Log LogRecord)
            core2.vector.IDenseUnionWriter
-           (java.time Instant ZoneId ZoneOffset)
+           (java.time Instant ZoneId)
            org.apache.arrow.memory.BufferAllocator
            (org.apache.arrow.vector TimeStampMicroTZVector VectorSchemaRoot)
            (org.apache.arrow.vector.types.pojo ArrowType$Union Schema)
@@ -65,6 +65,7 @@
                               {::err/message (s/explain ::tx-ops tx-ops)
                                :tx-ops tx-ops
                                :explain-data (s/explain-data ::tx-ops tx-ops)})))
+
     parsed-tx-ops))
 
 (def ^:private nullable-inst-type [:union #{:null [:timestamp-tz :micro "UTC"]}])

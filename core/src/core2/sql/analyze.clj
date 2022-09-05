@@ -1,7 +1,8 @@
 (ns core2.sql.analyze
   (:require [clojure.string :as str]
             [core2.rewrite :as r]
-            [core2.sql.parser :as p])
+            [core2.sql.parser :as p]
+            [core2.error :as err])
   (:import java.util.HashMap))
 
 (def ^:dynamic *opts* {})
@@ -1231,29 +1232,8 @@
 
 ;; Analysis API, might be deprecated.
 
-(defn- scopes [ag]
-  (r/collect
-   (fn [ag]
-     (r/zcase ag
-       (:query_expression
-        :query_specification)
-       [(scope ag)]
-
-       []))
-   ag))
-
 (doseq [[_ v] (ns-publics *ns*)
         :let [{:keys [arglists private]} (meta v)]
         :when (and (= arglists '([ag]))
                    (not private))]
   (alter-var-root v r/zmemoize))
-
-(defn analyze-query [query]
-  (if (p/failure? query)
-    {:errs [(p/failure->str query)]}
-    (binding [r/*memo* (HashMap.)]
-      (let [ag (r/vector-zip query)]
-        (if-let [errs (not-empty (errs ag))]
-          {:errs errs}
-          {:scopes (scopes ag)
-           :errs []})))))

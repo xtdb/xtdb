@@ -1,15 +1,13 @@
 (ns core2.sql.parser
   (:require [clojure.java.io :as io]
-            [clojure.string :as str]
             [clojure.set :as set]
+            [clojure.string :as str]
+            [core2.error :as err]
             [core2.util :as util])
-  (:import [java.util ArrayDeque HashSet Map Set]
-           [java.util.regex Matcher Pattern]
+  (:import [core2.sql.parser Parser Parser$AParser Parser$AltParser Parser$CatParser Parser$EpsilonParser Parser$HideParser Parser$MemoTable Parser$MemoizeLeftRecParser Parser$MemoizeParser Parser$NegParser Parser$NonTerminalParser Parser$OptParser Parser$OrdParser Parser$ParseErrors Parser$RegexpParser Parser$RepeatParser Parser$RuleParser Parser$StringParser]
+           [java.util ArrayDeque HashSet Map Set]
            java.util.function.Function
-           [core2.sql.parser Parser$ParseErrors Parser$AParser
-            Parser$EpsilonParser Parser$RuleParser Parser$MemoizeParser Parser$MemoizeLeftRecParser Parser$NonTerminalParser
-            Parser$HideParser Parser$OptParser Parser$NegParser Parser$RepeatParser Parser$CatParser Parser$AltParser Parser$OrdParser
-            Parser$RegexpParser Parser$StringParser Parser Parser$MemoTable]))
+           [java.util.regex Matcher Pattern]))
 
 ;; https://arxiv.org/pdf/1509.02439v1.pdf
 ;; https://medium.com/@gvanrossum_83706/left-recursive-peg-grammars-65dab3c580e1
@@ -139,7 +137,7 @@
 
 (defn build-ebnf-parser
   ([grammar ws-pattern]
-   (build-ebnf-parser grammar ws-pattern (fn [rule-name]
+   (build-ebnf-parser grammar ws-pattern (fn [_rule-name]
                                            Parser/NEVER_RAW)))
   ([^Map grammar ws-pattern ->raw?]
    (let [^Map rule->id (zipmap (keys grammar) (range))
@@ -208,26 +206,34 @@
                (.parse parser in 0 memos errors true)
                (ParseFailure. in (.getErrors errors) (.getIndex errors))))))))))
 
-(def sql-cfg (read-string (slurp (io/resource "core2/sql/parser/SQL2011.edn"))))
+(defn or-throw [{:keys [errs] :as res}]
+  (if errs
+    (throw (err/illegal-arg :core2.sql/parse-error
+                            {::err/message "Invalid SQL query:"
+                             :errs [(failure->str res)]}))
+    res))
+
+(def sql-cfg
+  (read-string (slurp (io/resource "core2/sql/parser/SQL2011.edn"))))
 
 ;; API
 
-(def sql-parser (build-ebnf-parser sql-cfg
-                                   #"(?:\s+|(?<=\p{Punct}|\s)|\b|\s*--[^\r\n]*\s*|\s*/[*].*?(?:[*]/\s*|$))"
-                                   (fn [rule-name]
-                                     (if (and (not (contains? #{:table_primary :query_expression :table_expression} rule-name))
-                                              (re-find #"(^|_)(term|factor|primary|expression|query_expression_body|boolean_test)$" (name rule-name)))
-                                       Parser/SINGLE_CHILD
-                                       Parser/NEVER_RAW))))
+(def sql-parser
+  (build-ebnf-parser sql-cfg
+                     #"(?:\s+|(?<=\p{Punct}|\s)|\b|\s*--[^\r\n]*\s*|\s*/[*].*?(?:[*]/\s*|$))"
+                     (fn [rule-name]
+                       (if (and (not (contains? #{:table_primary :query_expression :table_expression} rule-name))
+                                (re-find #"(^|_)(term|factor|primary|expression|query_expression_body|boolean_test)$" (name rule-name)))
+                         Parser/SINGLE_CHILD
+                         Parser/NEVER_RAW))))
 
-(def parse (util/lru-memoize
-            (fn self
-              ([in]
-               (self in :directly_executable_statement))
-              ([in start-rule]
-               (vary-meta
-                (sql-parser in start-rule)
-                assoc :sql in)))))
+(def parse
+  (-> (fn self
+        ([in] (self in :directly_executable_statement))
+        ([in start-rule]
+         (-> (sql-parser in start-rule)
+             (vary-meta assoc :sql in))))
+      (util/lru-memoize)))
 
 (comment
   (sql-parser "SELECT * FROMfoo" :directly_executable_statement)
