@@ -2089,8 +2089,10 @@
 (defn- remove-names-step [relation-in]
   (letfn [(with-smap [relation smap]
             (vary-meta relation assoc :smap smap))
+
           (->smap [relation]
             (:smap (meta relation)))
+
           (remove-projection-names [op projection relation]
             (let [smap (->smap relation)
                   new-smap (reduce
@@ -2107,7 +2109,12 @@
                                     (filter #(str/starts-with? (name (key %)) "?"))
                                     (into {})))
                              projection)
-                  projection (w/postwalk-replace smap projection)
+
+                  projection (vec (for [p projection]
+                                    (if (extend-projection? p)
+                                      (let [[k v] (first p)]
+                                        {k (w/postwalk-replace smap v)})
+                                      (w/postwalk-replace smap p))))
 
                   projection (vec (for [p (w/postwalk-replace new-smap projection)]
                                     (if (extend-projection? p)
@@ -2299,8 +2306,7 @@
                                   smap-inv (set/map-invert rename-map)
                                   relation (if project-anonymous-columns?
                                              relation
-                                             (or (r/zmatch
-                                                   relation
+                                             (or (r/zmatch relation
                                                    [:rename rename-map-2 relation-2]
                                                    ;;=>
                                                    (when (= smap-inv (set/map-invert rename-map-2))
@@ -2309,23 +2315,6 @@
                               (with-meta relation {:column->name smap})))]
     (with-meta relation {:column->name smap
                          :add-projection-fn add-projection-fn})))
-
-(defn reconstruct-names [relation]
-  (let [smap (:column->name (meta relation))
-        relation (w/postwalk-replace (set/map-invert smap) relation)]
-    (or (r/zmatch relation
-          [:rename rename-map relation-2]
-          ;;=>
-          (when-let [rename-map (and (map? rename-map)
-                                     (->> (for [[k v] rename-map
-                                                :when (not= k v)]
-                                            [k v])
-                                          (into {})))]
-            (if (empty? rename-map)
-              relation-2
-              [:rename rename-map relation-2])))
-
-        relation)))
 
 (defn expr-symbols [expr]
   (set (for [x (flatten (if (coll? expr)
