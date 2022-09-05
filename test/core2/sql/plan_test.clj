@@ -1009,9 +1009,10 @@
 
 (deftest test-sql-insert-plan
   (t/is (= '[:insert {:table "users"}
-             [:rename {x1 id, x2 name, x3 application_time_start}
-              [:table [x1 x2 x3]
-               [{x1 ?_0, x2 ?_1, x3 ?_2}]]]]
+             [:rename {x1 id, x2 name, x5 application_time_start}
+              [:project [x1 x2 {x5 (cast-tstz x3)}]
+               [:table [x1 x2 x3]
+                [{x1 ?_0, x2 ?_1, x3 ?_2}]]]]]
            (plan-sql "INSERT INTO users (id, name, application_time_start) VALUES (?, ?, ?)")
            (plan-sql
             "INSERT INTO users
@@ -1022,12 +1023,12 @@
              SELECT bar.id, bar.name, bar.application_time_start
              FROM (VALUES (?, ?, ?)) AS bar(id, name, application_time_start)")))
 
-  (t/is (= '[:insert {:table "customer"}
-             [:rename {x1 id, x8 c_mktsegment, x2 c_custkey, x5 c_nationkey, x9 c_comment, x4 c_address, x6 c_phone, x7 c_acctbal, x3 c_name}
-              [:table [x1 x2 x3 x4 x5 x6 x7 x8 x9]
-               [{x1 ?_0, x8 ?_7, x2 ?_1, x5 ?_4, x9 ?_8, x4 ?_3, x6 ?_5, x7 ?_6, x3 ?_2}]]]]
-           (plan-sql "INSERT INTO customer (id, c_custkey, c_name, c_address, c_nationkey, c_phone, c_acctbal, c_mktsegment, c_comment) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"))
-        "#309"))
+  (t/is (=plan-file "test-sql-insert-plan-309"
+                    (plan-sql "INSERT INTO customer (id, c_custkey, c_name, c_address, c_nationkey, c_phone, c_acctbal, c_mktsegment, c_comment) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"))
+        "#309")
+
+  (t/is (=plan-file "test-sql-insert-plan-398"
+                    (plan-sql "INSERT INTO foo (id, application_time_start) VALUES ('foo', DATE '2018-01-01')"))))
 
 (deftest test-sql-delete-plan
   (t/is (=plan-file "test-sql-delete-plan"

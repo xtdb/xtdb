@@ -14,8 +14,8 @@
     x2
     x3
     {x9 (and (< x2 x5) (> x3 x4))}
-    {x10 (cast x4 [:timestamp-tz :micro "UTC"])}
-    {x11 (cast x5 [:timestamp-tz :micro "UTC"])}]
+    {x10 (cast-tstz x4)}
+    {x11 (cast-tstz x5)}]
    [:rename
     {_table x1,
      system_time_start x2,

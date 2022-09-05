@@ -210,13 +210,24 @@
 
         !tx2 (c2/submit-tx *node*
                            [[:sql "INSERT INTO people (id, renamed_name, application_time_start)
-                                   SELECT users.id, users.name, users.application_time_start FROM users
-                                   WHERE users.APP_TIME CONTAINS TIMESTAMP '2019-06-01 00:00:00' AND users.name = 'Dave'"]])]
+                                   SELECT users.id, users.name, users.application_time_start
+                                   FROM users FOR APPLICATION_TIME AS OF DATE '2019-06-01'
+                                   WHERE users.name = 'Dave'"]])]
 
     (t/is (= [{:renamed_name "Dave"}]
-             (c2/sql-query *node* "SELECT people.renamed_name FROM people
-                                   WHERE people.APP_TIME CONTAINS TIMESTAMP '2019-06-01 00:00:00'"
+             (c2/sql-query *node* "SELECT people.renamed_name FROM people FOR APPLICATION_TIME AS OF DATE '2019-06-01'"
                            {:basis {:tx !tx2}})))))
+
+(deftest test-sql-insert-app-time-date-398
+  (let [!tx (c2/submit-tx *node*
+                          [[:sql "INSERT INTO foo (id, application_time_start) VALUES ('foo', DATE '2018-01-01')"
+                             [[]]]])]
+
+    (t/is (= (c2/map->TransactionInstant {:tx-id 0, :sys-time (util/->instant #inst "2020-01-01")}) @!tx))
+
+    (t/is (= [{:id "foo", :application_time_start (util/->zdt #inst "2018"), :application_time_end (util/->zdt util/end-of-time)}]
+             (c2/sql-query *node* "SELECT foo.id, foo.application_time_start, foo.application_time_end FROM foo"
+                           {:basis {:tx !tx}})))))
 
 (deftest test-dml-as-of-now-flag-339
   (let [tt1 (util/->zdt #inst "2020-01-01")

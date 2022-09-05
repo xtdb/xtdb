@@ -1750,18 +1750,14 @@
                                  (expr derived-expr)
                                  (qualified-projection-symbol col))})
 
-                            [{'application_time_start `(~'cast
-                                                        ~(cond
-                                                           app-from-expr `(~'max ~app-start-sym ~app-from-expr)
-                                                           app-time-as-of-now? `(~'max ~app-start-sym (~'current-timestamp))
-                                                           :else app-start-sym)
-                                                        [:timestamp-tz :micro "UTC"])}
-                             {'application_time_end `(~'cast
-                                                      ~(cond
-                                                         app-to-expr `(~'min ~app-end-sym ~app-to-expr)
-                                                         app-time-as-of-now? `(~'min ~app-end-sym ~'core2/end-of-time)
-                                                         :else app-end-sym)
-                                                      [:timestamp-tz :micro "UTC"])}]))
+                            [{'application_time_start `(~'cast-tstz ~(cond
+                                                                       app-from-expr `(~'max ~app-start-sym ~app-from-expr)
+                                                                       app-time-as-of-now? `(~'max ~app-start-sym (~'current-timestamp))
+                                                                       :else app-start-sym))}
+                             {'application_time_end `(~'cast-tstz ~(cond
+                                                                     app-to-expr `(~'min ~app-end-sym ~app-to-expr)
+                                                                     app-time-as-of-now? `(~'min ~app-end-sym ~'core2/end-of-time)
+                                                                     :else app-end-sym))}]))
           (if app-time-extents
             [:select `(~'and
                        (~'<= ~app-start-sym ~app-to-expr)
@@ -1790,6 +1786,8 @@
            (wrap-with-select sc rel)
            rel))]]]))
 
+(def app-time-col? (comp #{"application_time_start" "application_time_end"} :identifier))
+
 (defn plan [z]
   (r/zmatch z
     [:directly_executable_statement ^:z dsds]
@@ -1797,7 +1795,16 @@
 
     [:insert_statement "INSERT" "INTO" [:regular_identifier table] ^:z from-subquery]
     [:insert {:table table}
-     (plan from-subquery)]
+     (let [inner-plan (plan from-subquery)
+           projection (first (sem/projected-columns z))]
+       (if (some app-time-col? projection)
+         [:project (vec (for [col projection]
+                          (let [col-sym (unqualified-projection-symbol col)]
+                            (if (app-time-col? col)
+                              {col-sym `(~'cast-tstz ~col-sym)}
+                              col-sym))))
+          inner-plan]
+         inner-plan))]
 
     [:from_subquery column-list ^:z query-expression]
     (let [columns (mapv (comp symbol second) (rest column-list))
@@ -3102,23 +3109,26 @@
   ([query {:keys [validate-plan?], :or {validate-plan? false}, :as opts}]
    (if (p/failure? query)
      {:errs [(p/failure->str query)]}
+
      (binding [r/*memo* (HashMap.)
                sem/*opts* opts]
        (let [ag (r/vector-zip query)]
          (if-let [errs (not-empty (sem/errs ag))]
            {:errs errs}
-           (let [plan (plan ag)
-                 validate-plan (fn [plan]
-                                 (if (and validate-plan? (not (s/valid? ::lp/logical-plan plan)))
-                                   (throw (err/illegal-arg ::invalid-plan
-                                                           {::err/message (s/explain-str ::lp/logical-plan plan)
-                                                            :plan plan
-                                                            :explain-data (s/explain-data ::lp/logical-plan plan)}))
-                                   plan))
-                 plan (if (#{:insert :delete :update :erase} (first plan))
-                        (let [[dml-op dml-op-opts plan] plan]
-                          [dml-op dml-op-opts
-                           (validate-plan (rewrite-plan plan opts))])
-                        (validate-plan (rewrite-plan plan opts)))]
-             {:plan plan
-              :fired-rules (:fired-rules (meta plan))})))))))
+
+           (letfn [(validate-plan [plan]
+                     (when (and validate-plan? (not (s/valid? ::lp/logical-plan plan)))
+                       (throw (err/illegal-arg ::invalid-plan
+                                               {::err/message (s/explain-str ::lp/logical-plan plan)
+                                                :plan plan
+                                                :explain-data (s/explain-data ::lp/logical-plan plan)}))))]
+             (let [plan (plan ag)
+                   plan (if (#{:insert :delete :update :erase} (first plan))
+                          (let [[dml-op dml-op-opts plan] plan]
+                            [dml-op dml-op-opts
+                             (doto (rewrite-plan plan opts)
+                               (validate-plan))])
+                          (doto (rewrite-plan plan opts)
+                            (validate-plan)))]
+               {:plan plan
+                :fired-rules (:fired-rules (meta plan))}))))))))

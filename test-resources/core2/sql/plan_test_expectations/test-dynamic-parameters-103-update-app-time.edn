@@ -14,8 +14,8 @@
     x7
     x8
     {x10 ?_2}
-    {x11 (cast (max x5 ?_0) [:timestamp-tz :micro "UTC"])}
-    {x12 (cast (min x6 ?_1) [:timestamp-tz :micro "UTC"])}]
+    {x11 (cast-tstz (max x5 ?_0))}
+    {x12 (cast-tstz (min x6 ?_1))}]
    [:rename
     {_table x1,
      id x2,

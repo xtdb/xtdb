@@ -12,14 +12,8 @@
     x4
     x7
     x8
-    {x10
-     (cast
-      (max x5 #time/date "2020-05-01")
-      [:timestamp-tz :micro "UTC"])}
-    {x11
-     (cast
-      (min x6 #time/date "9999-12-31")
-      [:timestamp-tz :micro "UTC"])}]
+    {x10 (cast-tstz (max x5 #time/date "2020-05-01"))}
+    {x11 (cast-tstz (min x6 #time/date "9999-12-31"))}]
    [:rename
     {_table x1,
      id x2,

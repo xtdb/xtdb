@@ -622,6 +622,21 @@
             (into [] (comp (distinct)
                            (map #(vary-meta % assoc :table table))))))]
 
+    :insert_statement
+    (projected-columns (r/$ ag -1))
+
+    :from_subquery
+    (r/zmatch ag
+      [:from_subquery ^:z query-expression]
+      (projected-columns query-expression)
+
+      [:from_subquery ^:z column-name-list _qe]
+      (projected-columns column-name-list))
+
+    :column_name_list
+    [(vec (for [ident (identifiers ag)]
+            {:identifier ident}))]
+
     (:update_statement__searched :delete_statement__searched)
     [(let [{:keys [correlation-name], :as table} (table ag)]
        (vec
