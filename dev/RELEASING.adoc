@@ -76,3 +76,13 @@ If you're building XTDB locally, run:
 * Clojurians' Slack
 * Discourse
 * Twitter, if appropriate
+
+## Building locally and releasing JAR snapshots:
+
+.  (none of the above sections are required)
+.  `java -version` → java-8-openjdk
+.  `git clean -dXf`
+.  `./lein-sub install && ./lein-sub do check, test`
+.  `./lein-sub deploy`
+.  (nothing to be done in Sonatype!)
+.  Confirm snapshot is live at https://s01.oss.sonatype.org/content/repositories/snapshots/com/xtdb/xtdb-core/dev-SNAPSHOT/
