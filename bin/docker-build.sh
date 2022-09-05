@@ -10,6 +10,6 @@ set -e
     fi
 
     echo Building Docker image ...
-    docker build -t core2:latest .
+    docker build -t core2:latest --build-arg GIT_SHA=$(git rev-parse HEAD) .
     echo Done
 )

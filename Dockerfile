@@ -2,6 +2,10 @@ FROM eclipse-temurin:17
 
 WORKDIR /usr/local/lib/xtdb
 
+ARG GIT_SHA
+
+ENV GIT_SHA=${GIT_SHA}
+
 ENTRYPOINT ["java", \
     "-Dclojure.main.report=stderr", \
     "-Dlogback.configurationFile=logback.xml", \
