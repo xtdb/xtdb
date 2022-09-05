@@ -406,3 +406,37 @@
                     :application_time_start (util/->zdt #inst "2020-01-01")
                     :application_time_end (util/->zdt util/end-of-time)}}
                  (q tx1)))))))
+
+(t/deftest throws-static-tx-op-errors-on-submit-346
+  (t/is (thrown-with-msg?
+         core2.IllegalArgumentException
+         #"failed: sequential?"
+         (c2/submit-tx tu/*node* "INSERT ")))
+
+  (t/is (thrown-with-msg?
+         core2.IllegalArgumentException
+         #"Invalid SQL query: Parse error at line 1, column 45"
+         (c2/submit-tx tu/*node* [[:sql "INSERT INTO foo (id, dt) VALUES ('id', DATE \"2020-01-01\")"]]))
+        "parse error - date with double quotes")
+
+  (t/testing "semantic errors"
+    (t/is (thrown-with-msg?
+           core2.IllegalArgumentException
+           #"XTDB requires fully-qualified columns"
+           (c2/submit-tx tu/*node* [[:sql "UPDATE foo SET bar = 'bar' WHERE id = 'foo'"]])))
+
+    (t/is (thrown-with-msg?
+           core2.IllegalArgumentException
+           #"INSERT does not contain mandatory id column"
+           (c2/submit-tx tu/*node* [[:sql "INSERT INTO users (foo, bar) VALUES ('foo', 'bar')"]])))
+
+    (t/is (thrown-with-msg?
+           core2.IllegalArgumentException
+           #"Column name duplicated"
+           (c2/submit-tx tu/*node* [[:sql "INSERT INTO users (id, foo, foo) VALUES ('foo', 'foo', 'foo')"]]))))
+
+  (t/testing "still an active node"
+    (let [!tx (c2/submit-tx tu/*node* [[:sql "INSERT INTO users (id, name) VALUES ('dave', 'Dave')"]])]
+      (t/is (= [{:name "Dave"}]
+               (c2/sql-query tu/*node* "SELECT users.name FROM users"
+                             {:basis {:tx !tx}}))))))

@@ -1,29 +1,19 @@
 (ns core2.sql.analyze-test
   (:require [clojure.test :as t]
-            [core2.error :as err]
             [core2.rewrite :as r]
             [core2.sql.analyze :as sem]
             [core2.sql.parser :as p])
   (:import java.util.HashMap))
 
-(defn- scopes [ag]
-  (r/collect
-   (fn [ag]
-     (r/zcase ag
-       (:query_expression :query_specification)
-       [(sem/scope ag)]
+(defn- scopes [ast]
+  (->> (r/vector-zip ast)
+       (r/collect
+        (fn [ag]
+          (r/zcase ag
+            (:query_expression :query_specification)
+            [(sem/scope ag)]
 
-       []))
-   ag))
-
-(defn- analyze-query [ast]
-  (binding [r/*memo* (HashMap.)]
-    (let [ag (r/vector-zip ast)]
-      (if-let [errs (not-empty (sem/errs ag))]
-        (throw (err/illegal-arg :core2.sql/analyze-error
-                                {::err/message "Invalid SQL query:"
-                                 :errs errs}))
-        (scopes ag)))))
+            [])))))
 
 (defn- errs-match? [regexes errs]
   (and (= (count regexes) (count errs))
@@ -32,14 +22,11 @@
                regexes)))
 
 (defmethod t/assert-expr 'core2.sql.analyze-test/errs-match? [msg form]
-  ;; `(t/is (c2.sem/errs-match? [#"..." #"..."] "query"))`
-  ;; Asserts that evaluating expr throws an exception of class c.
-  ;; Returns the exception thrown.
   (let [[_ regexs q] form
         errs (gensym 'errs)]
     `(try
-       (-> (p/parse ~q) p/or-throw
-           (analyze-query))
+       (-> (p/parse ~q) (p/or-throw)
+           (sem/analyze-query) (sem/or-throw))
        (t/is nil ~(or msg (format "thrown-with-errs: '%s'" q)))
        (catch core2.IllegalArgumentException e#
          (let [~errs (:errs (ex-data e#))]
@@ -47,22 +34,23 @@
          e#))))
 
 (defmacro ^:private invalid? [re q]
-  `(t/is (~'core2.sql.analyze-test/errs-match? ~re ~q)))
+  `(binding [r/*memo* (HashMap.)]
+     (t/is (~'core2.sql.analyze-test/errs-match? ~re ~q))))
 
 (defmacro ^:private valid? [q]
-  `(let [scopes# (t/is (-> (p/parse ~q) (p/or-throw)
-                           (analyze-query)))]
-     (t/is scopes#)
-     scopes#))
+  `(binding [r/*memo* (HashMap.)]
+     (let [ag# (-> (p/parse ~q) (p/or-throw)
+                   (sem/analyze-query) (sem/or-throw))]
+       (t/is (scopes ag#)))))
 
 (t/deftest test-annotate-query-scopes
-  (let [tree (p/parse "WITH RECURSIVE foo AS (SELECT 1 FROM foo AS bar)
+  (let [q "WITH RECURSIVE foo AS (SELECT 1 FROM foo AS bar)
 SELECT t1.d-t1.e AS a, SUM(t1.a) AS b
   FROM t1, foo AS baz
  WHERE EXISTS (SELECT 1 FROM t1 AS x WHERE x.b < t1.c AND x.b > (SELECT t1.b FROM (SELECT 1 AS b FROM boz) AS t2 WHERE t1.b = t2.b))
    AND t1.a > t1.b
  GROUP BY t1.d, t1.e
- ORDER BY b, t1.c")]
+ ORDER BY b, t1.c"]
     (t/is (= [{:id 2,
                :dependent-columns #{},
                :projected-columns
@@ -260,7 +248,7 @@ SELECT t1.d-t1.e AS a, SUM(t1.a) AS b
                  :used-columns #{}}},
                :columns #{},
                :type :query-specification}],
-             (analyze-query tree)))))
+             (valid? q)))))
 
 (t/deftest test-parsing-errors-are-reported
   (invalid? [#"Parse error at line 1, column 1:\nSELEC\n"]

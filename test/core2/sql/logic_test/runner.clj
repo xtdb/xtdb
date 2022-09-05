@@ -278,7 +278,7 @@
                                   [(ex-message t) :lines]
                                   #(conj % (:line record))))))
 
-                      (if (and (str/starts-with? (or (ex-message t) "") "Column reference is not a grouping column")
+                      (if (and (str/includes? (or (ex-message t) "") "Column reference is not a grouping column")
                                (contains? (set (:skipif record)) "postgresql"))
                         ;; Reporting here commented out as its still quite noisy.
                         (do #_(log/warn "Ignored <Column reference is not a grouping column> Error as XTDB doesn't support" record)

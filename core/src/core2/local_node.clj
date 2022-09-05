@@ -1,5 +1,6 @@
 (ns core2.local-node
   (:require [clojure.pprint :as pp]
+            [clojure.spec.alpha :as s]
             [core2.api :as api]
             [core2.datalog :as d]
             [core2.ingester :as ingest]
@@ -8,7 +9,8 @@
             [core2.tx-producer :as txp]
             [core2.util :as util]
             [core2.vector.indirect :as iv]
-            [juxt.clojars-mirrors.integrant.core :as ig])
+            [juxt.clojars-mirrors.integrant.core :as ig]
+            [core2.error :as err])
   (:import (core2 IResultCursor IResultSet)
            core2.ingester.Ingester
            (core2.tx_producer ITxProducer)
@@ -72,11 +74,17 @@
     (.close cursor)
     (util/try-close maybe-pq)))
 
-(defn cursor->result-set
+(defn- cursor->result-set
   (^core2.IResultSet [^IResultCursor cursor]
    (cursor->result-set cursor nil))
   (^core2.IResultSet [^IResultCursor cursor, ^AutoCloseable maybe-pq]
    (CursorResultSet. cursor maybe-pq nil)))
+
+(defn- validate-tx-ops [tx-ops]
+  (doseq [{:keys [op] :as tx-op} (txp/conform-tx-ops tx-ops)
+          :when (= :sql op)
+          :let [{:keys [query]} tx-op]]
+    (sql/compile-query query)))
 
 (defrecord Node [^Ingester ingester
                  ^ITxProducer tx-producer
@@ -160,9 +168,11 @@
 
   api/PSubmitNode
   (submit-tx [_ tx-ops]
+    (validate-tx-ops tx-ops)
     (.submitTx tx-producer tx-ops))
 
   (submit-tx [_ tx-ops opts]
+    (validate-tx-ops tx-ops)
     (.submitTx tx-producer tx-ops opts))
 
   Closeable

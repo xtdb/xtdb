@@ -160,14 +160,12 @@
                             (first)
                             (mapv plan/unqualified-projection-symbol)
                             (plan/generate-unique-column-names))
-            {:keys [errs plan]} (plan/plan-query tree {:decorrelate? true
-                                                       :project-anonymous-columns? true})
+            plan (-> tree
+                     (sem/analyze-query) sem/or-throw
+                     (plan/plan-query {:decorrelate? true, :project-anonymous-columns? true}))
             column->anonymous-col (:column->name (meta plan))]
-        (if-let [err (first errs)]
-          (throw (err/illegal-arg :core2.sql/parse-error
-                                  {::err/message ^String err}))
-          (vec (for [row (tu/query-ra plan {:srcs {'$ db}})]
-                 (mapv #(-> (get column->anonymous-col %) name keyword row) projection))))))))
+        (vec (for [row (tu/query-ra plan {:srcs {'$ db}})]
+               (mapv #(-> (get column->anonymous-col %) name keyword row) projection)))))))
 
 (defn insert->docs [{:keys [tables] :as node} insert-statement]
   (let [[_ _ _ insertion-target insert-columns-and-source] insert-statement

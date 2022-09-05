@@ -208,9 +208,10 @@
 
 (defn or-throw [{:keys [errs] :as res}]
   (if errs
-    (throw (err/illegal-arg :core2.sql/parse-error
-                            {::err/message "Invalid SQL query:"
-                             :errs [(failure->str res)]}))
+    (let [failure-str (failure->str res)]
+      (throw (err/illegal-arg :core2.sql/parse-error
+                              {::err/message (str "Invalid SQL query: " failure-str)
+                               :errs [failure-str]})))
     res))
 
 (def sql-cfg

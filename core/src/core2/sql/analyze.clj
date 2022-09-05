@@ -1223,10 +1223,20 @@
 
     ::r/inherit))
 
-;; Analysis API, might be deprecated.
-
 (doseq [[_ v] (ns-publics *ns*)
         :let [{:keys [arglists private]} (meta v)]
         :when (and (= arglists '([ag]))
                    (not private))]
   (alter-var-root v r/zmemoize))
+
+(defn analyze-query [ast]
+  (let [ag (r/vector-zip ast)]
+    {:errs (errs ag), :ag ag}))
+
+(defn or-throw [{:keys [errs ag]}]
+  (if (seq errs)
+    (throw (err/illegal-arg :core2.sql/analyze-error
+                            {::err/message (str "Invalid SQL query:\n  - "
+                                                (str/join "\n  - " errs))
+                             :errs errs}))
+    ag))

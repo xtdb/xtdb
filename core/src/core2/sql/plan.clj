@@ -3134,31 +3134,21 @@
           (vary-meta assoc :fired-rules @!fired-rules)))))
 
 (defn plan-query
-  ([ast] (plan-query ast {}))
-  ([ast {:keys [validate-plan?], :or {validate-plan? false}, :as opts}]
-   (binding [r/*memo* (HashMap.)
-             sem/*opts* opts]
-     (let [ag (r/vector-zip ast)]
-       (if-let [errs (not-empty (sem/errs ag))]
-         {:errs errs}
+  ([ag] (plan-query ag {}))
 
-         (letfn [(validate-plan [plan]
-                   (when (and validate-plan? (not (s/valid? ::lp/logical-plan plan)))
-                     (throw (err/illegal-arg ::invalid-plan
-                                             {::err/message (s/explain-str ::lp/logical-plan plan)
-                                              :plan plan
-                                              :explain-data (s/explain-data ::lp/logical-plan plan)}))))]
-           {:plan (let [plan (plan ag)]
-                    (-> (if (#{:insert :delete :update :erase} (first plan))
-                          (let [[dml-op dml-op-opts plan] plan]
-                            [dml-op dml-op-opts
-                             (doto (rewrite-plan plan opts)
-                               (validate-plan))])
-                          (doto (rewrite-plan plan opts)
-                            (validate-plan)))
-                        (vary-meta assoc :ast ast)))}))))))
+  ([ag {:keys [validate-plan?], :or {validate-plan? false}, :as opts}]
+   (letfn [(validate-plan [plan]
+             (when (and validate-plan? (not (s/valid? ::lp/logical-plan plan)))
+               (throw (err/illegal-arg ::invalid-plan
+                                       {::err/message (s/explain-str ::lp/logical-plan plan)
+                                        :plan plan
+                                        :explain-data (s/explain-data ::lp/logical-plan plan)}))))]
 
-(defn or-throw [{:keys [errs plan]}]
-  (if errs
-    (throw (err/illegal-arg :core2.sql/plan-error {::err/message "Invalid SQL query:", :errs errs}))
-    plan))
+     (let [plan (plan ag)]
+       (if (#{:insert :delete :update :erase} (first plan))
+         (let [[dml-op dml-op-opts plan] plan]
+           [dml-op dml-op-opts
+            (doto (rewrite-plan plan opts)
+              (validate-plan))])
+         (doto (rewrite-plan plan opts)
+           (validate-plan)))))))

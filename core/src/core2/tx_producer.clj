@@ -58,11 +58,11 @@
 
 (s/def ::tx-ops (s/coll-of ::tx-op :kind sequential?))
 
-(defn- conform-tx-ops [tx-ops]
+(defn conform-tx-ops [tx-ops]
   (let [parsed-tx-ops (s/conform ::tx-ops tx-ops)]
     (when (s/invalid? parsed-tx-ops)
-      (throw (err/illegal-arg :invalid-tx-ops
-                              {::err/message (s/explain ::tx-ops tx-ops)
+      (throw (err/illegal-arg :core2/invalid-tx-ops
+                              {::err/message (str "Invalid tx ops: " (s/explain-str ::tx-ops tx-ops))
                                :tx-ops tx-ops
                                :explain-data (s/explain-data ::tx-ops tx-ops)})))
 
