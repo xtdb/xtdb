@@ -510,7 +510,12 @@
          ag)
        (mapcat expand-underlying-column-references)))
 
-(defn projected-columns [ag]
+(defn projected-columns
+  "Returns a vector of candidates for the projected-cols of an expression.
+
+   Most of the time, this is a singleton vector (hence `(first (sem/projected-columns z))` everywhere)
+   but there are multiple candidates in set operators."
+  [ag]
   (r/zcase ag
     :table_primary
     (when-not (r/ctor? :qualified_join (r/$ ag 1))
