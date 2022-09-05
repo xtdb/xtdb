@@ -1,0 +1,7 @@
+[:rename
+ {x1 bar}
+ [:project
+  [x1]
+  [:rename
+   {bar x1, _table x2}
+   [:scan [bar {_table (= _table "foo")}]]]]]

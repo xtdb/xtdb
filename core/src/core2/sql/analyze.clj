@@ -327,15 +327,6 @@
 
     nil))
 
-(defn system-time-columns [ag]
-  (when (r/find-first (partial r/ctor? :query_system_time_period_specification) ag)
-    ['system_time_start 'system_time_end]))
-
-(defn application-time-columns [ag]
-  (when (or (r/find-first (partial r/ctor? :query_application_time_period_specification) ag)
-            (:app-time-as-of-now? *opts*))
-    ['application_time_start 'application_time_end]))
-
 (defn named-columns-join-env [ag]
   (r/zcase ag
     :qualified_join
@@ -487,9 +478,11 @@
 
 (defn dml-app-time-extents [ag]
   (when-let [atpn (r/find-first (partial r/ctor? :application_time_period_name) ag)]
-    (let [from (-> atpn r/right r/right)]
-      {:from from
-       :to (-> from r/right r/right)})))
+    (if (= (r/znode (r/left atpn)) "ALL")
+      :all-application-time
+      (let [from (-> atpn r/right r/right)]
+        {:from from
+         :to (-> from r/right r/right)}))))
 
 (defn expand-underlying-column-references [col-ref]
   (case (:type col-ref)

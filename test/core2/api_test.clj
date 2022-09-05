@@ -283,7 +283,33 @@
                    {:version 2, :application_time_start tt2, :application_time_end tt2} ; hmm...
                    {:version 3, :application_time_start tt2, :application_time_end tt2} ; hmm...
                    {:version 3, :application_time_start tt2, :application_time_end tt5}}
-                 (q !tx)))))))
+                 (q !tx))))
+
+      (let [!tx (c2/submit-tx *node*
+                              [[:sql "UPDATE foo FOR ALL APPLICATION_TIME
+                                     SET version = 4 WHERE foo.id = 'foo'"
+                                [[]]]]
+                              {:app-time-as-of-now? true})]
+        (t/is (=
+               #{{:version 4, :application_time_start tt1, :application_time_end tt2}
+                 {:version 4, :application_time_start tt2, :application_time_end tt5}
+                 {:version 2, :application_time_start tt2, :application_time_end tt2}
+                 {:version 3, :application_time_start tt2, :application_time_end tt2}
+                 {:version 4, :application_time_start tt2, :application_time_end tt2}}
+               (q !tx))
+              "UPDATE FOR ALL APPLICATION_TIME"))
+
+      (let [!tx (c2/submit-tx *node*
+                              [[:sql "DELETE FROM foo FOR ALL APPLICATION_TIME
+                                     WHERE foo.id = 'foo'"
+                                [[]]]]
+                              {:app-time-as-of-now? true})]
+        (t/is (=
+               #{{:version 2, :application_time_start tt2, :application_time_end tt2}
+                 {:version 3, :application_time_start tt2, :application_time_end tt2}
+                 {:version 4, :application_time_start tt2, :application_time_end tt2}}
+               (q !tx))
+              "DELETE FOR ALL APPLICATION_TIME")))))
 
 (deftest test-dql-as-of-now-flag-339
   (let [tt1 (util/->zdt #inst "2020-01-01")
@@ -325,7 +351,15 @@
                              (str "SELECT foo.version, foo.application_time_start, foo.application_time_end "
                                   "FROM foo FOR APPLICATION_TIME AS OF ?")
                              {:basis {:tx !tx}, :app-time-as-of-now? true, :? [tt1]}))
-            "`FOR APPLICATION_TIME AS OF` overrides flag"))))
+            "`FOR APPLICATION_TIME AS OF` overrides flag")
+
+      (t/is (= [{:version 0, :application_time_start tt1, :application_time_end tt2}
+                {:version 1, :application_time_start tt2, :application_time_end eot}]
+               (c2/sql-query *node*
+                             "SELECT foo.version, foo.application_time_start, foo.application_time_end
+                             FROM foo FOR ALL APPLICATION_TIME"
+                             {:basis {:tx !tx} :app-time-as-of-now? true}))
+            "FOR ALL APPLICATION_TIME ignores flag and returns all app-time"))))
 
 (t/deftest test-erase
   (letfn [(q [tx]

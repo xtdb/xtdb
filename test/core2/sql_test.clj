@@ -1133,3 +1133,54 @@
         FOR SYSTEM_TIME AS OF CURRENT_TIMESTAMP
         FOR APPLICATION_TIME AS OF CURRENT_TIMESTAMP
         AS f (bar)"))))
+
+(deftest test-for-all-application-time-387
+  (t/is
+    (=plan-file
+      "test-for-all-application-time-387-query"
+      (plan-sql
+        "SELECT foo.bar
+        FROM foo
+        FOR ALL APPLICATION_TIME"
+        {:app-time-as-of-now? true})))
+
+  (t/is (= (plan-sql
+             "SELECT foo.bar
+             FROM foo")
+           (plan-sql
+             "SELECT foo.bar
+             FROM foo
+             FOR ALL APPLICATION_TIME"
+             {:app-time-as-of-now? true}))
+        "query: FOR ALL APPLICATION_TIME")
+
+  (t/is
+    (=plan-file
+      "test-for-all-application-time-387-update"
+      (plan-sql
+        "UPDATE users FOR ALL APP_TIME SET first_name = 'Sue'"
+        {:app-time-as-of-now? true})))
+
+  (t/is
+    (=
+     (plan-sql
+       "UPDATE users SET first_name = 'Sue'")
+     (plan-sql
+       "UPDATE users FOR ALL APP_TIME SET first_name = 'Sue'"
+       {:app-time-as-of-now? true}))
+    "UPDATE: FOR ALL APPLICATION_TIME")
+
+    (t/is
+    (=plan-file
+      "test-for-all-application-time-387-delete"
+      (plan-sql
+        "DELETE FROM users FOR ALL APPLICATION_TIME"
+        {:app-time-as-of-now? true})))
+
+  (t/is
+    (=
+     (plan-sql "DELETE FROM users")
+     (plan-sql
+       "DELETE FROM users FOR ALL APPLICATION_TIME"
+       {:app-time-as-of-now? true}))
+    "DELETE: FOR ALL APPLICATION_TIME"))

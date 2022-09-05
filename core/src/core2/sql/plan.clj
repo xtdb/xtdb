@@ -1467,14 +1467,17 @@
        table-primary-plan]
       table-primary-plan)))
 
-(defn- wrap-with-application-time-select [table-primary-ast table-primary-plan]
+(defn- intepret-application-time-period-spec [table-primary-ast]
   (let [start-sym 'application_time_start
-        end-sym 'application_time_end
-        app-time-predicates
+        end-sym 'application_time_end]
         (first
           (r/collect-stop
             (fn [z]
               (r/zmatch z
+                [:query_application_time_period_specification "FOR" "ALL" _]
+                ;;=>
+                [:all-application-time]
+
                 [:query_application_time_period_specification "FOR" _ "AS" "OF" ^:z point-in-time]
                 ;;=>
                 [(as-of-predicate z (expr point-in-time) start-sym end-sym)]
@@ -1489,15 +1492,39 @@
 
                 [:query_application_time_period_specification "FOR" _ "BETWEEN" mode ^:z point-in-time-1 "AND" ^:z point-in-time-2]
                 ;;=>
-                [(explicit-between-predicate z mode point-in-time-1 point-in-time-2 start-sym end-sym) ]))
-            table-primary-ast))]
+                [(explicit-between-predicate z mode point-in-time-1 point-in-time-2 start-sym end-sym)]))
+            table-primary-ast))))
+
+(defn system-time-columns [ag]
+  (when (r/find-first (partial r/ctor? :query_system_time_period_specification) ag)
+    ['system_time_start 'system_time_end]))
+
+(defn application-time-columns [ag]
+  (let [app-time-predicates (intepret-application-time-period-spec ag)]
     (cond
+      (= app-time-predicates :all-application-time)
+      nil
+
+      (or app-time-predicates (:app-time-as-of-now? sem/*opts*))
+      ['application_time_start 'application_time_end]
+      :else
+
+      nil)))
+
+(defn- wrap-with-application-time-select [table-primary-ast table-primary-plan]
+  (let [app-time-predicates
+        (intepret-application-time-period-spec table-primary-ast)]
+
+    (cond
+      (= app-time-predicates :all-application-time)
+      table-primary-plan
+
       app-time-predicates
       [:select app-time-predicates
        table-primary-plan]
 
       (:app-time-as-of-now? sem/*opts*)
-      [:select (as-of-predicate table-primary-ast '(current-timestamp) start-sym end-sym)
+      [:select (as-of-predicate table-primary-ast '(current-timestamp)  'application_time_start  'application_time_end)
        table-primary-plan]
 
       :else table-primary-plan)))
@@ -1516,8 +1543,8 @@
                 (let [columns (->> (for [{:keys [identifier]} projection]
                                      (symbol identifier))
                                    (concat
-                                     (sem/system-time-columns tp)
-                                     (sem/application-time-columns tp))
+                                     (system-time-columns tp)
+                                     (application-time-columns tp))
                                    (distinct)
                                    (vec))]
                   (conj
@@ -1751,14 +1778,16 @@
                                  (qualified-projection-symbol col))})
 
                             [{'application_time_start `(~'cast-tstz ~(cond
+                                                                       (= :all-application-time app-time-extents) app-start-sym
                                                                        app-from-expr `(~'max ~app-start-sym ~app-from-expr)
                                                                        app-time-as-of-now? `(~'max ~app-start-sym (~'current-timestamp))
                                                                        :else app-start-sym))}
                              {'application_time_end `(~'cast-tstz ~(cond
+                                                                     (= :all-application-time app-time-extents) app-end-sym
                                                                      app-to-expr `(~'min ~app-end-sym ~app-to-expr)
                                                                      app-time-as-of-now? `(~'min ~app-end-sym ~'core2/end-of-time)
                                                                      :else app-end-sym))}]))
-          (if app-time-extents
+          (if (and app-to app-from)
             [:select `(~'and
                        (~'<= ~app-start-sym ~app-to-expr)
                        (~'>= ~app-end-sym ~app-from-expr))

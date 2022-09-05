@@ -305,16 +305,23 @@
    {:tag :nt, :keyword :target_table}
    {:tag :opt,
     :parser
-    {:tag :cat,
+    {:tag :alt,
      :parsers
-     ({:tag :string, :string "FOR"}
-      {:tag :string, :string "PORTION"}
-      {:tag :string, :string "OF"}
-      {:tag :nt, :keyword :application_time_period_name}
-      {:tag :string, :string "FROM"}
-      {:tag :nt, :keyword :point_in_time_1}
-      {:tag :string, :string "TO"}
-      {:tag :nt, :keyword :point_in_time_2})}}
+     ({:tag :cat,
+       :parsers
+       ({:tag :string, :string "FOR"}
+        {:tag :string, :string "PORTION"}
+        {:tag :string, :string "OF"}
+        {:tag :nt, :keyword :application_time_period_name}
+        {:tag :string, :string "FROM"}
+        {:tag :nt, :keyword :point_in_time_1}
+        {:tag :string, :string "TO"}
+        {:tag :nt, :keyword :point_in_time_2})}
+      {:tag :cat,
+       :parsers
+       ({:tag :string, :string "FOR"}
+        {:tag :string, :string "ALL"}
+        {:tag :nt, :keyword :application_time_period_name})})}}
    {:tag :opt,
     :parser
     {:tag :cat,
@@ -2148,16 +2155,23 @@
    {:tag :nt, :keyword :target_table}
    {:tag :opt,
     :parser
-    {:tag :cat,
+    {:tag :alt,
      :parsers
-     ({:tag :string, :string "FOR"}
-      {:tag :string, :string "PORTION"}
-      {:tag :string, :string "OF"}
-      {:tag :nt, :keyword :application_time_period_name}
-      {:tag :string, :string "FROM"}
-      {:tag :nt, :keyword :point_in_time_1}
-      {:tag :string, :string "TO"}
-      {:tag :nt, :keyword :point_in_time_2})}}
+     ({:tag :cat,
+       :parsers
+       ({:tag :string, :string "FOR"}
+        {:tag :string, :string "PORTION"}
+        {:tag :string, :string "OF"}
+        {:tag :nt, :keyword :application_time_period_name}
+        {:tag :string, :string "FROM"}
+        {:tag :nt, :keyword :point_in_time_1}
+        {:tag :string, :string "TO"}
+        {:tag :nt, :keyword :point_in_time_2})}
+      {:tag :cat,
+       :parsers
+       ({:tag :string, :string "FOR"}
+        {:tag :string, :string "ALL"}
+        {:tag :nt, :keyword :application_time_period_name})})}}
    {:tag :opt,
     :parser
     {:tag :alt,
@@ -2691,7 +2705,12 @@
      {:tag :string, :string "FROM"}
      {:tag :nt, :keyword :point_in_time_1}
      {:tag :string, :string "TO"}
-     {:tag :nt, :keyword :point_in_time_2})})},
+     {:tag :nt, :keyword :point_in_time_2})}
+   {:tag :cat,
+    :parsers
+    ({:tag :string, :string "FOR"}
+     {:tag :string, :string "ALL"}
+     {:tag :nt, :keyword :application_time_period_name})})},
  :octet_like_predicate
  {:tag :cat,
   :parsers
