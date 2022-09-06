@@ -11,7 +11,7 @@
   (tu/with-each-api-implementation
     (-> {:in-memory (t/join-fixtures [tu/with-mock-clock tu/with-node]),
          :remote (t/join-fixtures [tu/with-mock-clock tu/with-http-client-node])}
-        (select-keys [:in-memory])
+        #_(select-keys [:in-memory])
         #_(select-keys [:remote]))))
 
 (t/deftest test-status
@@ -407,33 +407,38 @@
                     :application_time_end (util/->zdt util/end-of-time)}}
                  (q tx1)))))))
 
+(defmacro with-unwrapped-execution-exception [& body]
+  `(try
+     ~@body
+     (catch ExecutionException e#
+       (throw (.getCause e#)))))
+
 (t/deftest throws-static-tx-op-errors-on-submit-346
   (t/is (thrown-with-msg?
          core2.IllegalArgumentException
-         #"failed: sequential?"
-         (c2/submit-tx tu/*node* "INSERT ")))
-
-  (t/is (thrown-with-msg?
-         core2.IllegalArgumentException
          #"Invalid SQL query: Parse error at line 1, column 45"
-         (c2/submit-tx tu/*node* [[:sql "INSERT INTO foo (id, dt) VALUES ('id', DATE \"2020-01-01\")"]]))
+         (-> @(c2/submit-tx tu/*node* [[:sql "INSERT INTO foo (id, dt) VALUES ('id', DATE \"2020-01-01\")"]])
+             (with-unwrapped-execution-exception)))
         "parse error - date with double quotes")
 
   (t/testing "semantic errors"
     (t/is (thrown-with-msg?
            core2.IllegalArgumentException
            #"XTDB requires fully-qualified columns"
-           (c2/submit-tx tu/*node* [[:sql "UPDATE foo SET bar = 'bar' WHERE id = 'foo'"]])))
+           (-> @(c2/submit-tx tu/*node* [[:sql "UPDATE foo SET bar = 'bar' WHERE id = 'foo'"]])
+               (with-unwrapped-execution-exception))))
 
     (t/is (thrown-with-msg?
            core2.IllegalArgumentException
            #"INSERT does not contain mandatory id column"
-           (c2/submit-tx tu/*node* [[:sql "INSERT INTO users (foo, bar) VALUES ('foo', 'bar')"]])))
+           (-> @(c2/submit-tx tu/*node* [[:sql "INSERT INTO users (foo, bar) VALUES ('foo', 'bar')"]])
+               (with-unwrapped-execution-exception))))
 
     (t/is (thrown-with-msg?
            core2.IllegalArgumentException
            #"Column name duplicated"
-           (c2/submit-tx tu/*node* [[:sql "INSERT INTO users (id, foo, foo) VALUES ('foo', 'foo', 'foo')"]]))))
+           (-> @(c2/submit-tx tu/*node* [[:sql "INSERT INTO users (id, foo, foo) VALUES ('foo', 'foo', 'foo')"]])
+               (with-unwrapped-execution-exception)))))
 
   (t/testing "still an active node"
     (let [!tx (c2/submit-tx tu/*node* [[:sql "INSERT INTO users (id, name) VALUES ('dave', 'Dave')"]])]

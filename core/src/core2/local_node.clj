@@ -81,10 +81,13 @@
    (CursorResultSet. cursor maybe-pq nil)))
 
 (defn- validate-tx-ops [tx-ops]
-  (doseq [{:keys [op] :as tx-op} (txp/conform-tx-ops tx-ops)
-          :when (= :sql op)
-          :let [{:keys [query]} tx-op]]
-    (sql/compile-query query)))
+  (try
+    (doseq [{:keys [op] :as tx-op} (txp/conform-tx-ops tx-ops)
+            :when (= :sql op)
+            :let [{:keys [query]} tx-op]]
+      (sql/compile-query query))
+    (catch Throwable e
+      (CompletableFuture/failedFuture e))))
 
 (defrecord Node [^Ingester ingester
                  ^ITxProducer tx-producer
@@ -168,12 +171,12 @@
 
   api/PSubmitNode
   (submit-tx [_ tx-ops]
-    (validate-tx-ops tx-ops)
-    (.submitTx tx-producer tx-ops))
+    (or (validate-tx-ops tx-ops)
+        (.submitTx tx-producer tx-ops)))
 
   (submit-tx [_ tx-ops opts]
-    (validate-tx-ops tx-ops)
-    (.submitTx tx-producer tx-ops opts))
+    (or (validate-tx-ops tx-ops)
+        (.submitTx tx-producer tx-ops opts)))
 
   Closeable
   (close [_]
@@ -228,10 +231,12 @@
 (defrecord SubmitNode [^ITxProducer tx-producer, !system, close-fn]
   api/PSubmitNode
   (submit-tx [_ tx-ops]
-    (.submitTx tx-producer tx-ops))
+    (or (validate-tx-ops tx-ops)
+        (.submitTx tx-producer tx-ops)))
 
   (submit-tx [_ tx-ops opts]
-    (.submitTx tx-producer tx-ops opts))
+    (or (validate-tx-ops tx-ops)
+        (.submitTx tx-producer tx-ops opts)))
 
   AutoCloseable
   (close [_]
