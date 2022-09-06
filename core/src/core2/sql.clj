@@ -10,7 +10,7 @@
 
   ([query query-opts]
    (binding [r/*memo* (HashMap.)
-             sem/*opts* query-opts]
+             plan/*opts* query-opts]
      (-> (parser/parse query) parser/or-throw
          (sem/analyze-query) sem/or-throw
          (plan/plan-query query-opts)))))

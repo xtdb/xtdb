@@ -1184,3 +1184,12 @@
        "DELETE FROM users FOR ALL APPLICATION_TIME"
        {:app-time-as-of-now? true}))
     "DELETE: FOR ALL APPLICATION_TIME"))
+
+(deftest test-for-all-system-time-404
+  (t/is
+    (=plan-file
+      "test-for-all-application-time-404"
+      (plan-sql
+        "SELECT foo.bar
+        FROM foo
+        FOR ALL SYSTEM_TIME"))))

@@ -18,6 +18,8 @@
 
 ;; See https://cs.ulb.ac.be/public/_media/teaching/infoh417/sql2alg_eng.pdf
 
+(def ^:dynamic *opts* {})
+
 (def ^:private ^:const ^String relation-id-delimiter "__")
 (def ^:private ^:const ^String relation-prefix-delimiter "_")
 
@@ -1412,62 +1414,46 @@
         (raw-between-predicate z pit1 pit2 start-sym end-sym))
       (raw-between-predicate z pit1 pit2 start-sym end-sym))))
 
-(defn- wrap-with-system-time-select [table-primary-ast table-primary-plan]
+(defn- interpret-system-time-period-spec [table-primary-ast]
   (let [start-sym 'system_time_start
-        end-sym 'system_time_end
-        system-time-predicates
-        (first
-          (r/collect-stop
-            (fn [tp]
-              (r/zmatch
-                tp
-                [:query_system_time_period_specification
-                 "FOR"
-                 _
-                 "AS"
-                 "OF"
-                 ^:z point-in-time]
-                ;;=>
-                [(as-of-predicate tp (expr point-in-time) start-sym end-sym)]
+        end-sym 'system_time_end]
+    (first
+      (r/collect-stop
+        (fn [z]
+          (r/zmatch
+            z
+            [:query_system_time_period_specification "FOR" "ALL" _]
+            ;;=> dummy constraint to prevent defaults in core2.operator.scan/apply-src-tx! being applied
+            [(list '<= (period-specification-col-symbol z start-sym) 'core2/end-of-time)]
 
-                [:query_system_time_period_specification
-                 "FOR"
-                 _
-                 "FROM"
-                 ^:z point-in-time-1
-                 "TO"
-                 ^:z point-in-time-2]
-                ;;=>
-                [(from-to-predicate tp point-in-time-1 point-in-time-2 start-sym end-sym)]
+            [:query_system_time_period_specification "FOR" _ "AS" "OF" ^:z point-in-time]
+            ;;=>
+            [(as-of-predicate z (expr point-in-time) start-sym end-sym)]
 
-                [:query_system_time_period_specification
-                 "FOR"
-                 _
-                 "BETWEEN"
-                 ^:z point-in-time-1
-                 "AND"
-                 ^:z point-in-time-2]
-                ;;=>
-                [(between-predicate tp point-in-time-1 point-in-time-2 start-sym end-sym)]
+            [:query_system_time_period_specification "FOR" _ "FROM" ^:z point-in-time-1 "TO" ^:z point-in-time-2]
+            ;;=>
+            [(from-to-predicate z point-in-time-1 point-in-time-2 start-sym end-sym)]
 
-                [:query_system_time_period_specification
-                 "FOR"
-                 _
-                 "BETWEEN"
-                 mode
-                 ^:z point-in-time-1
-                 "AND"
-                 ^:z point-in-time-2]
-                ;;=>
-                [(explicit-between-predicate tp mode point-in-time-1 point-in-time-2 start-sym end-sym) ]))
-            table-primary-ast))]
-    (if system-time-predicates
-      [:select
-       system-time-predicates
-       table-primary-plan]
-      table-primary-plan)))
+            [:query_system_time_period_specification "FOR" _ "BETWEEN" ^:z point-in-time-1 "AND" ^:z point-in-time-2]
+            ;;=>
+            [(between-predicate z point-in-time-1 point-in-time-2 start-sym end-sym)]
 
-(defn- intepret-application-time-period-spec [table-primary-ast]
+            [:query_system_time_period_specification "FOR" _ "BETWEEN" mode ^:z point-in-time-1 "AND" ^:z point-in-time-2]
+            ;;=>
+            [(explicit-between-predicate z mode point-in-time-1 point-in-time-2 start-sym end-sym) ]))
+        table-primary-ast))))
+
+(defn- wrap-with-system-time-select [table-primary-ast table-primary-plan]
+  (if-let [system-time-predicates (interpret-system-time-period-spec table-primary-ast)]
+    [:select system-time-predicates
+     table-primary-plan]
+    table-primary-plan))
+
+(defn system-time-columns [ag]
+  (when (interpret-system-time-period-spec ag)
+    ['system_time_start 'system_time_end]))
+
+(defn- interpret-application-time-period-spec [table-primary-ast]
   (let [start-sym 'application_time_start
         end-sym 'application_time_end]
         (first
@@ -1495,25 +1481,9 @@
                 [(explicit-between-predicate z mode point-in-time-1 point-in-time-2 start-sym end-sym)]))
             table-primary-ast))))
 
-(defn system-time-columns [ag]
-  (when (r/find-first (partial r/ctor? :query_system_time_period_specification) ag)
-    ['system_time_start 'system_time_end]))
-
-(defn application-time-columns [ag]
-  (let [app-time-predicates (intepret-application-time-period-spec ag)]
-    (cond
-      (= app-time-predicates :all-application-time)
-      nil
-
-      (or app-time-predicates (:app-time-as-of-now? sem/*opts*))
-      ['application_time_start 'application_time_end]
-      :else
-
-      nil)))
-
 (defn- wrap-with-application-time-select [table-primary-ast table-primary-plan]
   (let [app-time-predicates
-        (intepret-application-time-period-spec table-primary-ast)]
+        (interpret-application-time-period-spec table-primary-ast)]
 
     (cond
       (= app-time-predicates :all-application-time)
@@ -1523,11 +1493,23 @@
       [:select app-time-predicates
        table-primary-plan]
 
-      (:app-time-as-of-now? sem/*opts*)
-      [:select (as-of-predicate table-primary-ast '(current-timestamp)  'application_time_start  'application_time_end)
+      (:app-time-as-of-now? *opts*)
+      [:select (as-of-predicate table-primary-ast '(current-timestamp) 'application_time_start 'application_time_end)
        table-primary-plan]
 
       :else table-primary-plan)))
+
+(defn application-time-columns [ag]
+  (let [app-time-predicates (interpret-application-time-period-spec ag)]
+    (cond
+      (= app-time-predicates :all-application-time)
+      nil
+
+      (or app-time-predicates (:app-time-as-of-now? *opts*))
+      ['application_time_start 'application_time_end]
+
+      :else
+      nil)))
 
 (defn- build-table-primary [tp]
   (let [{:keys [id correlation-name table-or-query-name] :as table} (sem/table tp)
@@ -1748,7 +1730,7 @@
                              :relation relation-in}))))
 
 (defn- plan-dml [dml-op z]
-  (let [{:keys [app-time-as-of-now?]} sem/*opts*
+  (let [{:keys [app-time-as-of-now?]} *opts*
         tt (r/find-first (partial r/ctor? :target_table) z)
         {:keys [table-or-query-name correlation-name] :as table} (sem/table tt)
         rel (build-target-table tt)

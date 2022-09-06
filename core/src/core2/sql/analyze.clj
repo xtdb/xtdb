@@ -5,8 +5,6 @@
             [core2.error :as err])
   (:import java.util.HashMap))
 
-(def ^:dynamic *opts* {})
-
 (defn- ->line-info-str [loc]
   (let [{:keys [sql]} (meta (r/root loc))
         {:keys [start-idx]} (meta (r/node loc))

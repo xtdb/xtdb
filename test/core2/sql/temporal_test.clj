@@ -8,6 +8,20 @@
 (defn query-at-tx [query tx]
   (c2/sql-query tu/*node* query {:basis {:tx tx}}))
 
+(deftest all-system-time
+  (let [_!tx (c2/submit-tx tu/*node* [[:put {:id :my-doc, :last_updated "tx1" :_table "foo"}]] {:sys-time #inst "3000"})
+        !tx2 (c2/submit-tx tu/*node* [[:put {:id :my-doc, :last_updated "tx2" :_table "foo"}]] {:sys-time #inst "3001"})]
+
+    (is (= [{:last_updated "tx1"} {:last_updated "tx2"}]
+           (query-at-tx
+             "SELECT foo.last_updated FROM foo"
+             !tx2)))
+
+    (is (= [{:last_updated "tx1"} {:last_updated "tx1"} {:last_updated "tx2"}]
+           (query-at-tx
+             "SELECT foo.last_updated FROM foo FOR ALL SYSTEM_TIME"
+             !tx2)))))
+
 (deftest system-time-as-of
   (let [!tx (c2/submit-tx tu/*node* [[:put {:id :my-doc, :last_updated "tx1" :_table "foo"}]] {:sys-time #inst "3000"})
         !tx2 (c2/submit-tx tu/*node* [[:put {:id :my-doc, :last_updated "tx2" :_table "foo"}]] {:sys-time #inst "3001"})]

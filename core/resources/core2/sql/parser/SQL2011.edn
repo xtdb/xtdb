@@ -739,7 +739,12 @@
      {:tag :string, :string "FROM"}
      {:tag :nt, :keyword :point_in_time_1}
      {:tag :string, :string "TO"}
-     {:tag :nt, :keyword :point_in_time_2})})},
+     {:tag :nt, :keyword :point_in_time_2})}
+   {:tag :cat,
+    :parsers
+    ({:tag :string, :string "FOR"}
+     {:tag :string, :string "ALL"}
+     {:tag :string, :string "SYSTEM_TIME"})})},
  :character_large_object_type
  {:tag :alt,
   :parsers
