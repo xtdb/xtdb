@@ -1966,3 +1966,16 @@
     (t/is (= (long 42) (test-cast "42" :i64)))
     (t/is (= (float 42) (test-cast "42" :f32)))
     (t/is (= (double 42) (test-cast "42" :f64)))))
+
+(t/deftest test-cast-null
+  (letfn [(test-null-cast [tgt-type]
+            (let [{:keys [res col-types]} (tu/query-ra [:project [{'res (list 'cast nil tgt-type)}]
+                                                        [:table [{}]]]
+                                                       {:with-col-types? true})]
+              {:res (:res (first res))
+               :col-type (get col-types 'res)}))]
+    (let [exp {:res nil, :col-type :null}]
+      (t/is (= exp (test-null-cast :i32)))
+      (t/is (= exp (test-null-cast :i64)))
+      (t/is (= exp (test-null-cast :utf8)))
+      (t/is (= exp (test-null-cast [:timestamp-local :milli]))))))
