@@ -376,22 +376,18 @@ SELECT t1.d-t1.e AS a, SUM(t1.a) AS b
   (invalid? [#"Fetch first row count must be an integer"]
             "SELECT 1 FROM t1 FETCH FIRST 'foo' ROWS ONLY")
   (valid? "SELECT 1 FROM t1 FETCH FIRST 1 ROWS ONLY")
-  (valid? "SELECT 1 FROM t1 FETCH FIRST :foo ROWS ONLY")
 
   (invalid? [#"Fetch first row count must be an integer"]
             "SELECT 1 FROM t1 LIMIT 'foo'")
   (valid? "SELECT 1 FROM t1 LIMIT 1")
-  (valid? "SELECT 1 FROM t1 LIMIT :foo")
 
   (invalid? [#"Offset row count must be an integer"]
             "SELECT 1 FROM t1 OFFSET 'foo' ROWS")
   (valid? "SELECT 1 FROM t1 OFFSET 1 ROWS")
-  (valid? "SELECT 1 FROM t1 OFFSET :foo ROWS")
 
   (invalid? [#"Offset row count must be an integer"]
             "SELECT 1 FROM t1 OFFSET 'foo'")
-  (valid? "SELECT 1 FROM t1 OFFSET 1")
-  (valid? "SELECT 1 FROM t1 OFFSET :foo"))
+  (valid? "SELECT 1 FROM t1 OFFSET 1"))
 
 (t/deftest test-check-period-predicand
   (invalid? [#"Please use a qualified reference to APPLICATION_TIME"]
@@ -540,10 +536,6 @@ SELECT t1.d-t1.e AS a, SUM(t1.a) AS b
             [{:index 0 :identifier "a" :qualified-column ["x" "a"]}]
             [{:index 0}]]
            (->> (valid? "SELECT x.a FROM (VALUES (1)) AS x (a)")
-                (map :projected-columns))))
-  (t/is (= [[{:index 0 :identifier "a"}]
-            [{:index 0 :identifier "a"}]]
-           (->> (valid? "SELECT :a FROM x")
                 (map :projected-columns))))
 
   (invalid? [#"Derived columns has to have same degree as table"]

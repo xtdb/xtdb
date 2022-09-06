@@ -41,15 +41,6 @@
    {:tag :nt, :keyword :seconds_value})},
  :insertion_target
  {:tag :nt, :keyword :table_name, :red {:reduction-type :raw}},
- :time_zone_specifier
- {:tag :alt,
-  :parsers
-  ({:tag :string, :string "LOCAL"}
-   {:tag :cat,
-    :parsers
-    ({:tag :string, :string "TIME"}
-     {:tag :string, :string "ZONE"}
-     {:tag :nt, :keyword :interval_primary})})},
  :interval_absolute_value_function
  {:tag :cat,
   :parsers
@@ -104,13 +95,7 @@
      {:tag :alt,
       :parsers
       ({:tag :string, :string "ROW"} {:tag :string, :string "ROWS"})}
-     {:tag :alt,
-      :parsers
-      ({:tag :string, :string "ONLY"}
-       {:tag :cat,
-        :parsers
-        ({:tag :string, :string "WITH"}
-         {:tag :string, :string "TIES"})})})}
+     {:tag :string, :string "ONLY"})}
    {:tag :cat,
     :parsers
     ({:tag :string, :string "LIMIT"}
@@ -233,9 +218,7 @@
  :predefined_type
  {:tag :alt,
   :parsers
-  ({:tag :nt, :keyword :character_string_type}
-   {:tag :nt, :keyword :binary_string_type}
-   {:tag :nt, :keyword :numeric_type}
+  ({:tag :nt, :keyword :numeric_type}
    {:tag :nt, :keyword :boolean_type}
    {:tag :nt, :keyword :datetime_type}
    {:tag :nt, :keyword :interval_type}),
@@ -263,10 +246,8 @@
    {:tag :string, :string "T"}
    {:tag :string, :string "P"})},
  :contextually_typed_value_specification
- {:tag :alt,
-  :parsers
-  ({:tag :nt, :keyword :implicitly_typed_value_specification}
-   {:tag :nt, :keyword :default_specification}),
+ {:tag :nt,
+  :keyword :implicitly_typed_value_specification,
   :red {:reduction-type :raw}},
  :trim_specification
  {:tag :alt,
@@ -701,12 +682,6 @@
   ({:tag :nt, :keyword :sort_key}
    {:tag :opt, :parser {:tag :nt, :keyword :ordering_specification}}
    {:tag :opt, :parser {:tag :nt, :keyword :null_ordering}})},
- :multiple_column_assignment
- {:tag :cat,
-  :parsers
-  ({:tag :nt, :keyword :set_target_list}
-   {:tag :nt, :keyword :equals_operator}
-   {:tag :nt, :keyword :assigned_row})},
  :general_logarithm_function
  {:tag :cat,
   :parsers
@@ -940,10 +915,6 @@
   :red {:reduction-type :raw}},
  :basic_identifier_chain
  {:tag :nt, :keyword :identifier_chain, :red {:reduction-type :raw}},
- :host_parameter_specification
- {:tag :nt,
-  :keyword :host_parameter_name,
-  :red {:reduction-type :raw}},
  :sort_key
  {:tag :nt, :keyword :value_expression, :red {:reduction-type :raw}},
  :general_logarithm_argument
@@ -1056,7 +1027,6 @@
    {:tag :nt, :keyword :extract_expression}
    {:tag :nt, :keyword :length_expression}
    {:tag :nt, :keyword :cardinality_expression}
-   {:tag :nt, :keyword :max_cardinality_expression}
    {:tag :nt, :keyword :absolute_value_expression}
    {:tag :nt, :keyword :modulus_expression}
    {:tag :nt, :keyword :trigonometric_function}
@@ -1108,8 +1078,7 @@
  :general_value_specification
  {:tag :alt,
   :parsers
-  ({:tag :nt, :keyword :host_parameter_specification}
-   {:tag :nt, :keyword :dynamic_parameter_specification}
+  ({:tag :nt, :keyword :dynamic_parameter_specification}
    {:tag :nt, :keyword :postgres_parameter_specification}),
   :red {:reduction-type :raw}},
  :array_value_function
@@ -1658,11 +1627,7 @@
  :interval_fractional_seconds_precision
  {:tag :nt, :keyword :unsigned_integer, :red {:reduction-type :raw}},
  :all {:tag :string, :string "ALL"},
- :datetime_factor
- {:tag :cat,
-  :parsers
-  ({:tag :nt, :keyword :datetime_primary}
-   {:tag :opt, :parser {:tag :nt, :keyword :time_zone}})},
+ :datetime_factor {:tag :nt, :keyword :datetime_primary},
  :ceiling_function
  {:tag :cat,
   :parsers
@@ -1986,11 +1951,7 @@
    {:tag :string, :string "IN"}
    {:tag :nt, :keyword :in_predicate_value})},
  :simple_value_specification
- {:tag :alt,
-  :parsers
-  ({:tag :nt, :keyword :literal}
-   {:tag :nt, :keyword :host_parameter_name}),
-  :red {:reduction-type :raw}},
+ {:tag :nt, :keyword :literal, :red {:reduction-type :raw}},
  :concatenation
  {:tag :cat,
   :parsers
@@ -2496,11 +2457,6 @@
   ({:tag :nt, :keyword :primary_datetime_field}
    {:tag :nt, :keyword :time_zone_field}),
   :red {:reduction-type :raw}},
- :time_zone
- {:tag :cat,
-  :parsers
-  ({:tag :string, :string "AT"}
-   {:tag :nt, :keyword :time_zone_specifier})},
  :interval_string
  {:tag :cat,
   :parsers
@@ -2768,11 +2724,6 @@
      ({:tag :nt, :keyword :left_paren, :hide true}
       {:tag :nt, :keyword :time_precision}
       {:tag :nt, :keyword :right_paren, :hide true})}})},
- :host_parameter_name
- {:tag :cat,
-  :parsers
-  ({:tag :nt, :keyword :colon, :hide true}
-   {:tag :regexp, :regexp #"[a-zA-Z][a-zA-Z0-9_]*"})},
  :interval_qualifier
  {:tag :alt,
   :parsers
@@ -2788,7 +2739,6 @@
  {:tag :nt, :keyword :table_name, :red {:reduction-type :raw}},
  :column_name
  {:tag :nt, :keyword :identifier, :red {:reduction-type :raw}},
- :default_specification {:tag :string, :string "DEFAULT"},
  :computational_operation
  {:tag :alt,
   :parsers
@@ -3027,10 +2977,6 @@
  {:tag :nt,
   :keyword :array_value_expression,
   :red {:reduction-type :raw}},
- :assigned_row
- {:tag :nt,
-  :keyword :contextually_typed_row_value_expression,
-  :red {:reduction-type :raw}},
  :binary_trim_operands
  {:tag :cat,
   :parsers
@@ -3123,14 +3069,11 @@
      {:tag :nt, :keyword :minus_sign}
      {:tag :nt, :keyword :interval_term})})},
  :set_clause
- {:tag :alt,
+ {:tag :cat,
   :parsers
-  ({:tag :nt, :keyword :multiple_column_assignment}
-   {:tag :cat,
-    :parsers
-    ({:tag :nt, :keyword :set_target}
-     {:tag :nt, :keyword :equals_operator}
-     {:tag :nt, :keyword :update_source})})},
+  ({:tag :nt, :keyword :set_target}
+   {:tag :nt, :keyword :equals_operator}
+   {:tag :nt, :keyword :update_source})},
  :octet_length_expression
  {:tag :cat,
   :parsers
