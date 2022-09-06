@@ -19,7 +19,8 @@
            org.agrona.concurrent.UnsafeBuffer
            org.agrona.ExpandableDirectByteBuffer
            [org.lwjgl.system MemoryStack MemoryUtil]
-           [org.lwjgl.util.lmdb LMDB MDBEnvInfo MDBStat MDBVal]))
+           [org.lwjgl.util.lmdb LMDB MDBEnvInfo MDBStat MDBVal]
+           (java.util.concurrent.atomic AtomicInteger)))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -215,19 +216,28 @@
 (def ^:dynamic ^{:tag 'long} *mapsize-increase-factor* 1)
 (def ^:const max-mapsize-increase-factor 32)
 
-(defrecord LMDBKv [db-dir env env-flags dbi ^StampedLock mapsize-lock sync? cp-job]
+(defn- cursor-put-if-map-not-full [mapsize-lock env dbi kvs]
+  (try
+    (cursor-put mapsize-lock env dbi kvs)
+    true
+    (catch ExceptionInfo e
+      (if (= LMDB/MDB_MAP_FULL (:error (ex-data e)))
+        false
+        (throw e)))))
+
+(defrecord LMDBKv [db-dir env env-flags dbi ^StampedLock mapsize-lock sync? cp-job mapsize-increase-lock]
   kv/KvStore
   (store [this kvs]
-    (try
-      (cursor-put mapsize-lock env dbi kvs)
-      (catch ExceptionInfo e
-        (if (= LMDB/MDB_MAP_FULL (:error (ex-data e)))
+    (when-not (cursor-put-if-map-not-full mapsize-lock env dbi kvs)
+      ;; normal monitor lock, would like to use the StampedLock but would require substantial refactoring
+      (locking mapsize-increase-lock
+        (when-not (cursor-put-if-map-not-full mapsize-lock env dbi kvs)
           (binding [*mapsize-increase-factor* (* 2 *mapsize-increase-factor*)]
             (when (> *mapsize-increase-factor* max-mapsize-increase-factor)
               (throw (IllegalStateException. "Too large size of key values to store at once.")))
             (increase-mapsize mapsize-lock env *mapsize-increase-factor*)
-            (kv/store this kvs))
-          (throw e)))))
+            ;; non-tail recur to carry binding for max-mapsize-increase error
+            (kv/store this kvs))))))
 
   (new-snapshot [_]
     (let [tx (new-transaction mapsize-lock env LMDB/MDB_RDONLY)]
@@ -307,7 +317,8 @@
                                    :env-flags env-flags
                                    :dbi (dbi-open mapsize-lock env)
                                    :mapsize-lock mapsize-lock
-                                   :sync? sync?})]
+                                   :sync? sync?
+                                   :mapsize-increase-lock (Object.)})]
         (cond-> kv-store
           checkpointer (assoc :cp-job (cp/start checkpointer kv-store {::cp/cp-format cp-format}))))
       (catch Throwable t
