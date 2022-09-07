@@ -291,6 +291,8 @@
       (let [r-fs (for [_ (range 128)]
                    (future
                      (String. ^bytes (value kv-store (long->bytes 1)))))]
+        (doall w-fs)
+        (doall r-fs)
         (mapv deref w-fs)
         (doseq [r-f r-fs]
           (t/is (= "XTDB" @r-f)))))))
