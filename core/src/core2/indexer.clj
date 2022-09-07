@@ -466,7 +466,7 @@
                                              (.copyDocRow doc-row-copier row-id idx))
 
                                            (let [eid (t/get-object (.getVector id-col) (.getIndex id-col idx))
-                                                 new-entity? (.isKnownId iid-mgr table eid)
+                                                 new-entity? (not (.isKnownId iid-mgr table eid))
                                                  iid (.getOrCreateInternalId iid-mgr table eid row-id)
                                                  start-app-time (if app-time-start-rdr
                                                                   (.readLong app-time-start-rdr idx)

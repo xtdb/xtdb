@@ -97,3 +97,30 @@
 (t/deftest test-interval-literal-cce-271
   (t/is (= [{:a #c2.interval/year-month "P12M"}]
            (c2/sql-query tu/*node* "select a.a from (values (1 year)) a (a)" {}))))
+
+(t/deftest test-overrides-range
+  @(c2/submit-tx tu/*node* [[:sql "
+INSERT INTO foo (id, v, application_time_start, application_time_end)
+VALUES (1, 1, DATE '1998-01-01', DATE '2000-01-01')"]])
+
+  (let [tx @(c2/submit-tx tu/*node* [[:sql "
+INSERT INTO foo (id, v, application_time_start, application_time_end)
+VALUES (1, 2, DATE '1997-01-01', DATE '2001-01-01')"]])]
+
+    (t/is (= [{:id 1, :v 1,
+               :application_time_start (util/->zdt #inst "1998")
+               :application_time_end (util/->zdt #inst "2000")
+               :system_time_start (util/->zdt #inst "2020-01-01")
+               :system_time_end (util/->zdt #inst "2020-01-02")}
+              {:id 1, :v 2,
+               :application_time_start (util/->zdt #inst "1997")
+               :application_time_end (util/->zdt #inst "2001")
+               :system_time_start (util/->zdt #inst "2020-01-02")
+               :system_time_end (util/->zdt util/end-of-time)}]
+
+             (c2/sql-query tu/*node* "
+SELECT foo.id, foo.v,
+       foo.application_time_start, foo.application_time_end,
+       foo.system_time_start, foo.system_time_end
+FROM foo FOR ALL SYSTEM_TIME FOR ALL APPLICATION_TIME"
+                           {:basis {:tx tx}})))))
