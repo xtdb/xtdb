@@ -1417,31 +1417,28 @@
 (defn- interpret-system-time-period-spec [table-primary-ast]
   (let [start-sym 'system_time_start
         end-sym 'system_time_end]
-    (first
-      (r/collect-stop
-        (fn [z]
-          (r/zmatch
-            z
-            [:query_system_time_period_specification "FOR" "ALL" _]
-            ;;=> dummy constraint to prevent defaults in core2.operator.scan/apply-src-tx! being applied
-            [(list '<= (period-specification-col-symbol z start-sym) 'core2/end-of-time)]
+    (when-let [z (r/find-first (partial r/ctor? :query_system_time_period_specification) table-primary-ast)]
+      (r/zmatch
+        z
+        [:query_system_time_period_specification "FOR" "ALL" _]
+        ;;=> dummy constraint to prevent defaults in core2.operator.scan/apply-src-tx! being applied
+        (list '<= (period-specification-col-symbol z start-sym) 'core2/end-of-time)
 
-            [:query_system_time_period_specification "FOR" _ "AS" "OF" ^:z point-in-time]
-            ;;=>
-            [(as-of-predicate z (expr point-in-time) start-sym end-sym)]
+        [:query_system_time_period_specification "FOR" _ "AS" "OF" ^:z point-in-time]
+        ;;=>
+        (as-of-predicate z (expr point-in-time) start-sym end-sym)
 
-            [:query_system_time_period_specification "FOR" _ "FROM" ^:z point-in-time-1 "TO" ^:z point-in-time-2]
-            ;;=>
-            [(from-to-predicate z point-in-time-1 point-in-time-2 start-sym end-sym)]
+        [:query_system_time_period_specification "FOR" _ "FROM" ^:z point-in-time-1 "TO" ^:z point-in-time-2]
+        ;;=>
+        (from-to-predicate z point-in-time-1 point-in-time-2 start-sym end-sym)
 
-            [:query_system_time_period_specification "FOR" _ "BETWEEN" ^:z point-in-time-1 "AND" ^:z point-in-time-2]
-            ;;=>
-            [(between-predicate z point-in-time-1 point-in-time-2 start-sym end-sym)]
+        [:query_system_time_period_specification "FOR" _ "BETWEEN" ^:z point-in-time-1 "AND" ^:z point-in-time-2]
+        ;;=>
+        (between-predicate z point-in-time-1 point-in-time-2 start-sym end-sym)
 
-            [:query_system_time_period_specification "FOR" _ "BETWEEN" mode ^:z point-in-time-1 "AND" ^:z point-in-time-2]
-            ;;=>
-            [(explicit-between-predicate z mode point-in-time-1 point-in-time-2 start-sym end-sym) ]))
-        table-primary-ast))))
+        [:query_system_time_period_specification "FOR" _ "BETWEEN" mode ^:z point-in-time-1 "AND" ^:z point-in-time-2]
+        ;;=>
+        (explicit-between-predicate z mode point-in-time-1 point-in-time-2 start-sym end-sym)))))
 
 (defn- wrap-with-system-time-select [table-primary-ast table-primary-plan]
   (if-let [system-time-predicates (interpret-system-time-period-spec table-primary-ast)]
@@ -1456,30 +1453,28 @@
 (defn- interpret-application-time-period-spec [table-primary-ast]
   (let [start-sym 'application_time_start
         end-sym 'application_time_end]
-        (first
-          (r/collect-stop
-            (fn [z]
-              (r/zmatch z
-                [:query_application_time_period_specification "FOR" "ALL" _]
-                ;;=>
-                [:all-application-time]
+    (when-let [z (r/find-first (partial r/ctor? :query_application_time_period_specification) table-primary-ast)]
+      (r/zmatch
+        z
+        [:query_application_time_period_specification "FOR" "ALL" _]
+        ;;=>
+        :all-application-time
 
-                [:query_application_time_period_specification "FOR" _ "AS" "OF" ^:z point-in-time]
-                ;;=>
-                [(as-of-predicate z (expr point-in-time) start-sym end-sym)]
+        [:query_application_time_period_specification "FOR" _ "AS" "OF" ^:z point-in-time]
+        ;;=>
+        (as-of-predicate z (expr point-in-time) start-sym end-sym)
 
-                [:query_application_time_period_specification "FOR" _ "FROM" ^:z point-in-time-1 "TO" ^:z point-in-time-2]
-                ;;=>
-                [(from-to-predicate z point-in-time-1 point-in-time-2 start-sym end-sym)]
+        [:query_application_time_period_specification "FOR" _ "FROM" ^:z point-in-time-1 "TO" ^:z point-in-time-2]
+        ;;=>
+        (from-to-predicate z point-in-time-1 point-in-time-2 start-sym end-sym)
 
-                [:query_application_time_period_specification "FOR" _ "BETWEEN" ^:z point-in-time-1 "AND" ^:z point-in-time-2]
-                ;;=>
-                [(between-predicate z point-in-time-1 point-in-time-2 start-sym end-sym)]
+        [:query_application_time_period_specification "FOR" _ "BETWEEN" ^:z point-in-time-1 "AND" ^:z point-in-time-2]
+        ;;=>
+        (between-predicate z point-in-time-1 point-in-time-2 start-sym end-sym)
 
-                [:query_application_time_period_specification "FOR" _ "BETWEEN" mode ^:z point-in-time-1 "AND" ^:z point-in-time-2]
-                ;;=>
-                [(explicit-between-predicate z mode point-in-time-1 point-in-time-2 start-sym end-sym)]))
-            table-primary-ast))))
+        [:query_application_time_period_specification "FOR" _ "BETWEEN" mode ^:z point-in-time-1 "AND" ^:z point-in-time-2]
+        ;;=>
+        (explicit-between-predicate z mode point-in-time-1 point-in-time-2 start-sym end-sym)))))
 
 (defn- wrap-with-application-time-select [table-primary-ast table-primary-plan]
   (let [app-time-predicates

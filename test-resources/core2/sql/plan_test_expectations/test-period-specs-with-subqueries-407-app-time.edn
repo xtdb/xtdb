@@ -1,0 +1,16 @@
+[:rename
+ {x6 $column_1$}
+ [:project
+  [{x6 1}]
+  [:rename
+   {application_time_start x1,
+    application_time_end x2,
+    bar x3,
+    _table x4}
+   [:scan
+    [{application_time_start
+      (<= application_time_start (current-timestamp))}
+     {application_time_end
+      (> application_time_end (current-timestamp))}
+     bar
+     {_table (= _table "foo")}]]]]]

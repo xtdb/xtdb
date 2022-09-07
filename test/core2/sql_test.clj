@@ -1193,3 +1193,17 @@
         "SELECT foo.bar
         FROM foo
         FOR ALL SYSTEM_TIME"))))
+
+(deftest test-period-specs-with-subqueries-407
+
+  (t/is
+    (=plan-file
+      "test-period-specs-with-subqueries-407-sys-time"
+      (plan-sql
+        "SELECT 1 FROM (select foo.bar from foo FOR ALL SYSTEM_TIME) as tmp")))
+
+  (t/is
+    (=plan-file
+      "test-period-specs-with-subqueries-407-app-time"
+      (plan-sql
+        "SELECT 1 FROM (select foo.bar from foo FOR APPLICATION_TIME AS OF CURRENT_TIMESTAMP) as tmp"))))
