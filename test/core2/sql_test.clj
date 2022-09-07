@@ -460,7 +460,9 @@
     "TRIM(BOTH '$' FROM foo.a)" '(trim x1 "BOTH" "$")
     "TRIM(BOTH foo.b FROM foo.a)" '(trim x2 "BOTH" x1)
 
-    "TRIM(BOTH '😎' FROM foo.a)" '(trim x1 "BOTH" "😎")))
+    "TRIM(BOTH '😎' FROM foo.a)" '(trim x1 "BOTH" "😎")
+
+    "TRIM('$' FROM foo.a)" '(trim x1 "BOTH" "$")))
 
 (t/deftest test-like-expr
   (t/are [sql expected]

@@ -699,6 +699,9 @@
     [:trim_function _ [:trim_operands ^:z nve]]
     (list 'trim (expr nve) "BOTH" " ")
 
+    [:trim_function _ [:trim_operands ^:z trim-char _ ^:z nve]]
+    (list 'trim (expr nve) "BOTH" (expr trim-char))
+
     [:fold mode ^:z nve]
     (case mode
       "LOWER" (list 'lower (expr nve))
