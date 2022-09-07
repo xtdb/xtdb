@@ -1304,7 +1304,6 @@
         (is (= {:access-mode :read-write} (next-transaction-variables (get-last-conn) [:access-mode])))))))
 
 (deftest analyzer-error-returned-test
-  (require-server)
   (testing "Query"
     (with-open [conn (jdbc-conn)]
       (is (thrown-with-msg? PSQLException #"Query does not select any columns" (q conn ["SELECT * FROM foo"])))))
@@ -1335,3 +1334,13 @@
         (let [s (read :err)]
           (is (not= :timeout s))
           (is (re-find #"INSERT does not contain mandatory id column" s)))))))
+
+(deftest runtime-error-query-test
+  (with-open [conn (jdbc-conn)]
+    (is (thrown? PSQLException #"Data error - trim error" (q conn ["SELECT TRIM(LEADING 'abc' FROM a.a) FROM (VALUES ('')) a (a)"])))))
+
+(deftest runtime-error-commit-test
+  (with-open [conn (jdbc-conn)]
+    (q conn ["START TRANSACTION READ WRITE"])
+    (q conn ["INSERT INTO foo (id) VALUES (TRIM(LEADING 'abc' FROM ''))"])
+    (is (thrown? PSQLException #"Data error - trim error" (q conn ["COMMIT"])))))

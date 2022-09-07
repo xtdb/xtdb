@@ -1378,6 +1378,13 @@
       (log/fatal e "Exception caught closing result set, resources may have been leaked - please restart XTDB")
       (.close ^Closeable conn))))
 
+(defn err-execution-exception
+  "Returns a pg specific error for some execution-time error, such as a bad function call, or divide by zero."
+  [^Throwable ex generic-msg]
+  (if (instance? core2.RuntimeException ex)
+    (err-protocol-violation (.getMessage ex))
+    (err-internal generic-msg)))
+
 (defn cmd-await-query-result
   "This command allows us to pre-empt running queries and cancel them."
   [{:keys [conn-state
@@ -1426,7 +1433,7 @@
         (try
           (cmd-send-query-result conn {:query query, :ast ast, :result-set rs})
           (catch Throwable e
-            (log/error e "Unexpected exception sending query results, please report as a bug - you may need reconnect or restart XTDB"))
+            (cmd-send-error conn (err-execution-exception e "unexpected server error during query execution")))
           (finally
             ;; try and close the result set (to warn on leak!)
             (close-result-set conn fut rs))))
@@ -1434,7 +1441,10 @@
       ;; we log the ex on the completion handler of the fut, sending the message
       ;; needs to be done serially as part of the cmd queue so we do it here.
       (.isCompletedExceptionally fut)
-      (cmd-send-error conn (err-internal "unexpected server error during query execution"))
+      (try
+        @fut
+        (catch Throwable ex
+          (cmd-send-error conn (err-execution-exception ex "unexpected server error during query execution"))))
 
       ;; otherwise, come back around and wait again
       ;; by using the buffer we check socket state / draining etc as normal.
@@ -1610,10 +1620,8 @@
 
             err
             (cond
-              ;; TODO err msgs, we need to classify, bad code (bug in xt) vs bad env (IO)
-              ;; bad sql / params should be caught when sending the DML not on COMMIT
-              submit-ex (err-protocol-violation "internal error on commit (report as a bug)")
-              await-ex (err-protocol-violation "internal error on commit (report as a bug)"))]
+              submit-ex (err-execution-exception submit-ex "unexpected error on tx submit (report as a bug)")
+              await-ex (err-execution-exception await-ex "unexpected error on tx await (report as a bug)"))]
 
         (if (or submit-ex await-ex)
           (do
