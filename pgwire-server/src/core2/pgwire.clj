@@ -1704,10 +1704,20 @@
   [conn stmt]
   (let [{:keys [conn-state]} conn
         {:keys [statement-type, ast, query]} stmt
-        {:keys [transaction]} @conn-state
+        {:keys [transaction, session]} @conn-state
 
         ;; session access mode is ignored for now (wait for implicit transactions)
-        access-mode (:access-mode transaction :read-only)]
+        access-mode (:access-mode transaction :read-only)
+
+        access-mode-error
+        (fn [msg wanted]
+          (-> (with-out-str
+                (println msg)
+                (when (= :read-write wanted)
+                  (println "READ WRITE transaction required for INSERT, UPDATE, and DELETE statements")
+                  (when transaction (println "  - rollback the transaction: ROLLBACK"))
+                  (println "  - start a transaction: START TRANSACTION READ WRITE")))
+              err-protocol-violation))]
     (cond
       (and (= :set-transaction statement-type) transaction)
       (err-protocol-violation "invalid transaction state -- active SQL-transaction")
@@ -1726,14 +1736,14 @@
       (dml? ast)
       (cond
         (not transaction)
-        (err-protocol-violation "DML is only supported in an explicit READ WRITE transaction")
+        (access-mode-error "DML is only supported in an explicit READ WRITE transaction" :read-write)
 
         (= :read-only access-mode)
-        (err-protocol-violation "DML is unsupported in a READ ONLY transaction"))
+        (access-mode-error "DML is unsupported in a READ ONLY transaction" :read-write))
 
       (query? ast)
       (when (= :read-write access-mode)
-        (err-protocol-violation "queries are unsupported in a READ WRITE transaction"))
+        (access-mode-error "queries are unsupported in a READ WRITE transaction" :read-only))
 
       :else
       (do
