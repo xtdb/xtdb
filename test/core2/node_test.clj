@@ -124,3 +124,26 @@ SELECT foo.id, foo.v,
        foo.system_time_start, foo.system_time_end
 FROM foo FOR ALL SYSTEM_TIME FOR ALL APPLICATION_TIME"
                            {:basis {:tx tx}})))))
+
+(t/deftest test-current-timestamp-in-temporal-constraint-409
+  (let [!tx (c2/submit-tx tu/*node* [[:sql "
+INSERT INTO foo (id, v)
+VALUES (1, 1)"]])]
+
+    (t/is (= [{:id 1, :v 1,
+               :application_time_start (util/->zdt #inst "2020")
+               :application_time_end (util/->zdt util/end-of-time)}]
+             (c2/sql-query tu/*node* "SELECT foo.id, foo.v, foo.application_time_start, foo.application_time_end FROM foo"
+                           {:basis {:tx !tx}})))
+
+    (t/is (= []
+             (c2/sql-query tu/*node* "
+SELECT foo.id, foo.v, foo.application_time_start, foo.application_time_end
+FROM foo FOR APPLICATION_TIME AS OF DATE '1999-01-01'"
+                           {:basis {:tx !tx, :current-time (util/->instant #inst "1999")}})))
+
+    (t/is (= []
+             (c2/sql-query tu/*node* "
+SELECT foo.id, foo.v, foo.application_time_start, foo.application_time_end
+FROM foo FOR APPLICATION_TIME AS OF CURRENT_TIMESTAMP"
+                           {:basis {:tx !tx, :current-time (util/->instant #inst "1999")}})))))

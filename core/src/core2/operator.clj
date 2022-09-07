@@ -32,10 +32,12 @@
   (^core2.IResultCursor openCursor [queryArgs])
   (^void close []))
 
-(deftype ResultCursor [^BufferAllocator allocator, ^ICursor cursor, col-types]
+(deftype ResultCursor [^BufferAllocator allocator, ^ICursor cursor, ^Clock clock, col-types]
   IResultCursor
   (columnTypes [_] col-types)
-  (tryAdvance [_ c] (.tryAdvance cursor c))
+  (tryAdvance [_ c]
+    (binding [expr/*clock* clock]
+      (.tryAdvance cursor c)))
 
   (characteristics [_] (.characteristics cursor))
   (estimateSize [_] (.estimateSize cursor))
@@ -62,26 +64,26 @@
       (reify PreparedQuery
         (openCursor [_ {:keys [srcs params current-time default-tz] :as query-opts}]
           (let [clock (Clock/fixed (or current-time (.instant expr/*clock*))
-                                   (or default-tz (.getZone expr/*clock*)))
-                {:keys [col-types ->cursor]} (.computeIfAbsent cache
-                                                               {:scan-col-types (scan/->scan-col-types srcs scan-cols)
-                                                                :param-types (expr/->param-types params)
-                                                                :default-tz default-tz}
-                                                               (reify Function
-                                                                 (apply [_ emit-opts]
-                                                                   (binding [expr/*clock* clock]
-                                                                     (lp/emit-expr conformed-query emit-opts)))))
-                allocator (RootAllocator.)]
-            (try
-              (let [cursor (->cursor (into query-opts
-                                           {:allocator allocator
-                                            :srcs srcs, :params params
-                                            :clock clock}))]
+                                   (or default-tz (.getZone expr/*clock*)))]
+            (binding [expr/*clock* clock]
+              (let [{:keys [col-types ->cursor]} (.computeIfAbsent cache
+                                                                   {:scan-col-types (scan/->scan-col-types srcs scan-cols)
+                                                                    :param-types (expr/->param-types params)
+                                                                    :default-tz default-tz}
+                                                                   (reify Function
+                                                                     (apply [_ emit-opts]
+                                                                       (lp/emit-expr conformed-query emit-opts))))
+                    allocator (RootAllocator.)]
+                (try
+                  (let [cursor (->cursor (into query-opts
+                                               {:allocator allocator
+                                                :srcs srcs, :params params
+                                                :clock clock}))]
 
-                (ResultCursor. allocator cursor col-types))
-              (catch Throwable t
-                (util/try-close allocator)
-                (throw t)))))
+                    (ResultCursor. allocator cursor clock col-types))
+                  (catch Throwable t
+                    (util/try-close allocator)
+                    (throw t)))))))
 
         AutoCloseable
         (close [_]
