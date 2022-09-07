@@ -933,7 +933,7 @@
   (with-open [conn (jdbc-conn)]
     (is (thrown-with-msg?
           PSQLException #"DML is only supported in an explicit READ WRITE transaction"
-          (q conn ["insert into foo(a) values (42)"])))
+          (q conn ["insert into foo(id) values (42)"])))
     (->> "can query after auto-commit write is refused"
          (is (= [] (q conn ["select foo.a from foo"]))))))
 
@@ -950,7 +950,7 @@
   (with-open [conn (jdbc-conn)]
     (is (thrown-with-msg?
           PSQLException #"ERROR\: DML is unsupported in a READ ONLY transaction"
-          (jdbc/with-transaction [db conn] (q db ["insert into foo(a) values (42)"]))))
+          (jdbc/with-transaction [db conn] (q db ["insert into foo(id) values (42)"]))))
     (is (= [] (q conn ["select foo.a from foo foo"])))))
 
 (defn- session-variables [server-conn ks]
@@ -998,7 +998,7 @@
       (is (thrown-with-msg? PSQLException #"queries are unsupported in a READ WRITE transaction"
                             (jdbc/with-transaction [tx conn]
                               (q tx ["INSERT INTO foo(id, a) values(42, 42)"])
-                              (q conn ["SELECT foo.a FROM bar"]))))
+                              (q conn ["SELECT foo.a FROM foo"]))))
       (is (= [] (q conn ["SELECT foo.a FROM foo"]))))
 
     (testing "insert it"
@@ -1303,18 +1303,35 @@
         (is (= [{:id 42}] (sql "select foo.id from foo")))
         (is (= {:access-mode :read-write} (next-transaction-variables (get-last-conn) [:access-mode])))))))
 
+(deftest analyzer-error-returned-test
+  (require-server)
+  (testing "Query"
+    (with-open [conn (jdbc-conn)]
+      (is (thrown-with-msg? PSQLException #"Query does not select any columns" (q conn ["SELECT * FROM foo"])))))
+  (testing "DML"
+    (with-open [conn (jdbc-conn)]
+      (q conn ["BEGIN READ WRITE"])
+      (is (thrown-with-msg? PSQLException #"INSERT does not contain mandatory id column" (q conn ["INSERT INTO foo (a) values (42)"])))
+      (is (thrown-with-msg? PSQLException #"INSERT does not contain mandatory id column" (q conn ["COMMIT"]))))))
+
 (when (psql-available?)
-  (deftest psql-exc-on-commit-test
+  (deftest psql-analyzer-error-test
     (psql-session
       (fn [send read]
+        (send "SELECT * FROM foo;\n")
+        (let [s (read :err)]
+          (is (not= :timeout s))
+          (is (re-find #"Query does not select any columns" s)))
 
         (send "BEGIN READ WRITE;\n")
         (read)
         ;; no-id
         (send "INSERT INTO foo (x) values (42);\n")
-
-        (send "COMMIT;\n")
-
         (let [s (read :err)]
           (is (not= :timeout s))
-          (is (re-find #"internal error on commit" s)))))))
+          (is (re-find #"INSERT does not contain mandatory id column" s)))
+
+        (send "COMMIT;\n")
+        (let [s (read :err)]
+          (is (not= :timeout s))
+          (is (re-find #"INSERT does not contain mandatory id column" s)))))))

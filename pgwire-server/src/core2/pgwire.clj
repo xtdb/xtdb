@@ -14,7 +14,8 @@
             [core2.sql.parser :as parser]
             [core2.sql.plan :as plan]
             [core2.util :as util]
-            [juxt.clojars-mirrors.integrant.core :as ig])
+            [juxt.clojars-mirrors.integrant.core :as ig]
+            [core2.sql :as sql])
   (:import (clojure.lang PersistentQueue)
            (core2 IResultSet)
            (java.io ByteArrayInputStream ByteArrayOutputStream Closeable DataInputStream DataOutputStream EOFException IOException InputStream OutputStream PushbackInputStream)
@@ -357,12 +358,20 @@
   [sql]
   (let [transformed-query (trim-sql sql)
         num-placeholders (count (re-seq #"\?" transformed-query))
-        parse-result (parser/parse transformed-query)]
+        parse-result (parser/parse transformed-query)
+        parse-err (when (parser/failure? parse-result) (err-parse parse-result))
+        plan-err
+        (when-not parse-err
+          (try
+            (sql/compile-query transformed-query)
+            nil
+            (catch core2.IllegalArgumentException e
+              (err-protocol-violation (.getMessage e)))))]
     {:statement-type :query
      :query sql
      :transformed-query transformed-query
      :ast parse-result
-     :err (when (parser/failure? parse-result) (err-parse parse-result))
+     :err (or parse-err plan-err)
      :num-placeholders num-placeholders}))
 
 (defn- interpret-sql
