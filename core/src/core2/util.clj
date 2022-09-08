@@ -1,7 +1,7 @@
 (ns core2.util
-  (:require [clojure.spec.alpha :as s]
+  (:require [clojure.java.io :as io]
+            [clojure.spec.alpha :as s]
             [clojure.tools.logging :as log]
-            [clojure.java.io :as io]
             core2.api
             [core2.error :as err])
   (:import clojure.lang.MapEntry
@@ -9,7 +9,7 @@
            [java.io ByteArrayOutputStream File]
            java.lang.AutoCloseable
            java.lang.reflect.Method
-           [java.net URI URL MalformedURLException]
+           [java.net MalformedURLException URI URL]
            java.nio.ByteBuffer
            [java.nio.channels Channels FileChannel FileChannel$MapMode SeekableByteChannel]
            java.nio.charset.StandardCharsets
@@ -25,7 +25,7 @@
            [org.apache.arrow.flatbuf Footer Message RecordBatch]
            [org.apache.arrow.memory AllocationManager ArrowBuf BufferAllocator]
            [org.apache.arrow.memory.util ByteFunctionHelpers MemoryUtil]
-           [org.apache.arrow.vector VectorLoader VectorSchemaRoot]
+           [org.apache.arrow.vector BigIntVector VectorLoader VectorSchemaRoot]
            [org.apache.arrow.vector.ipc ArrowFileWriter ArrowStreamWriter ArrowWriter]
            [org.apache.arrow.vector.ipc.message ArrowBlock ArrowFooter ArrowRecordBatch MessageSerializer]
            org.roaringbitmap.RoaringBitmap))
@@ -292,6 +292,23 @@
      (log/warn "pool did not terminate" pool))))
 
 ;;; Arrow
+
+(defn open-bigint-vec ^org.apache.arrow.vector.BigIntVector [^BufferAllocator allocator, ^String col-name, ^longs vs]
+  (let [v-count (alength vs)
+        out-vec (BigIntVector. col-name allocator)]
+
+    (try
+      (.allocateNew out-vec v-count)
+
+      (dotimes [n v-count]
+        (.set out-vec n (aget vs n)))
+
+      (.setValueCount out-vec v-count)
+
+      out-vec
+      (catch Throwable e
+        (try-close out-vec)
+        (throw e)))))
 
 (defn root-field-count ^long [^VectorSchemaRoot root]
   (.size (.getFields (.getSchema root))))

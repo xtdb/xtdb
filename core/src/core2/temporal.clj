@@ -3,22 +3,22 @@
             [core2.metadata :as meta]
             [core2.temporal.grid :as grid]
             [core2.temporal.kd-tree :as kd]
-            [core2.types :as t]
             [core2.util :as util]
             [core2.vector :as vec]
-            [juxt.clojars-mirrors.integrant.core :as ig])
+            [core2.vector.indirect :as iv]
+            [juxt.clojars-mirrors.integrant.core :as ig]
+            [core2.types :as types])
   (:import core2.buffer_pool.IBufferPool
            core2.metadata.IMetadataManager
            core2.object_store.ObjectStore
            [core2.temporal.kd_tree IKdTreePointAccess MergedKdTree]
            java.io.Closeable
-           [java.util Arrays Collections Comparator HashMap Map TreeMap]
+           [java.util ArrayList Arrays Comparator Map]
            [java.util.concurrent CompletableFuture ExecutorService Executors]
-           [java.util.function LongConsumer LongFunction Predicate ToLongFunction]
+           [java.util.function LongFunction Predicate ToLongFunction]
            java.util.stream.LongStream
            [org.apache.arrow.memory ArrowBuf BufferAllocator]
-           [org.apache.arrow.vector BigIntVector VectorSchemaRoot]
-           org.apache.arrow.vector.types.pojo.Schema
+           org.apache.arrow.vector.BaseFixedWidthVector
            org.roaringbitmap.longlong.Roaring64Bitmap))
 
 ;; Temporal proof-of-concept plan:
@@ -89,18 +89,13 @@
 (defn ->copy-range ^longs [^longs range]
   (some-> range (Arrays/copyOf (alength range))))
 
-(defrecord TemporalRoots [^Roaring64Bitmap row-id-bitmap ^Map roots]
-  Closeable
-  (close [_]
-    (doseq [root (vals roots)]
-      (util/try-close root))))
-
 #_{:clj-kondo/ignore [:unused-binding]}
-(definterface ITemporalRootsSource
-  (^core2.temporal.TemporalRoots createTemporalRoots [^java.util.List columns
-                                                      ^longs temporal-min-range
-                                                      ^longs temporal-max-range
-                                                      ^org.roaringbitmap.longlong.Roaring64Bitmap row-id-bitmap]))
+(definterface ITemporalRelationSource
+  (^core2.vector.IIndirectRelation createTemporalRelation [^org.apache.arrow.memory.BufferAllocator allocator
+                                                           ^java.util.List columns
+                                                           ^longs temporalMinRange
+                                                           ^longs temporalMaxRange
+                                                           ^org.roaringbitmap.longlong.Roaring64Bitmap rowIdBitmap]))
 
 #_{:clj-kondo/ignore [:unused-binding]}
 (definterface ITemporalTxIndexer
@@ -111,13 +106,14 @@
 
 #_{:clj-kondo/ignore [:unused-binding]}
 (definterface ITemporalManager
-  (^core2.temporal.ITemporalRootsSource getTemporalWatermark [])
-  (^core2.temporal.TemporalRoots createTemporalRoots [^java.util.List columns
-                                                      ^longs temporal-min-range
-                                                      ^longs temporal-max-range
-                                                      ^org.roaringbitmap.longlong.Roaring64Bitmap row-id-bitmap])
-  (^void registerNewChunk [^long chunk-idx])
-  (^core2.temporal.ITemporalTxIndexer startTx [^core2.api.TransactionInstant tx-key]))
+  (^core2.temporal.ITemporalRelationSource getTemporalWatermark [])
+  (^core2.vector.IIndirectRelation createTemporalRelation [^org.apache.arrow.memory.BufferAllocator allocator
+                                                           ^java.util.List columns
+                                                           ^longs temporalMinRange
+                                                           ^longs temporalMaxRange
+                                                           ^org.roaringbitmap.longlong.Roaring64Bitmap rowIdBitmap])
+  (^void registerNewChunk [^long chunkIdx])
+  (^core2.temporal.ITemporalTxIndexer startTx [^core2.api.TransactionInstant txKey]))
 
 #_{:clj-kondo/ignore [:unused-binding]}
 (definterface TemporalManagerPrivate
@@ -135,17 +131,13 @@
 
 (def temporal-col-type [:timestamp-tz :micro "UTC"])
 
-(def temporal-fields
-  (->> (for [col-name ["system_time_start" "system_time_end" "application_time_start" "application_time_end"]]
-         [col-name (t/col-type->field col-name temporal-col-type)])
-       (into {"_iid" (t/col-type->field "_iid" :i64)
-              "_row-id" (t/col-type->field "_row-id" :i64)})))
+(def temporal-col-types
+  {"_iid" :i64, "_row-id" :i64
+   "system_time_start" temporal-col-type, "system_time_end" temporal-col-type
+   "application_time_start" temporal-col-type, "application_time_end" temporal-col-type})
 
 (defn temporal-column? [col-name]
-  (contains? temporal-fields (name col-name)))
-
-(defn ->temporal-root-schema ^org.apache.arrow.vector.types.pojo.Schema [col-name]
-  (Schema. [t/row-id-field (get temporal-fields (name col-name))]))
+  (contains? temporal-col-types (name col-name)))
 
 (def ^:const ^int sys-time-end-idx 0)
 (def ^:const ^int id-idx 1)
@@ -258,50 +250,43 @@
 (defn- temporal-snapshot-obj-key->chunk-idx ^long [obj-key]
   (Long/parseLong (second (re-find #"temporal-snapshot-(\p{XDigit}{16})\.arrow" obj-key)) 16))
 
-(defn- ->temporal-roots [^BufferAllocator allocator, kd-tree columns temporal-min-range temporal-max-range ^Roaring64Bitmap row-id-bitmap]
-  (let [row-id-bitmap-out (Roaring64Bitmap.)
-        ^IKdTreePointAccess point-access (kd/kd-tree-point-access kd-tree)
+(defn- ->temporal-rel ^core2.vector.IIndirectRelation [^BufferAllocator allocator, kd-tree columns temporal-min-range temporal-max-range ^Roaring64Bitmap row-id-bitmap]
+  (let [^IKdTreePointAccess point-access (kd/kd-tree-point-access kd-tree)
         ^LongStream kd-tree-idxs (if (.isEmpty row-id-bitmap)
                                    (LongStream/empty)
-                                   (kd/kd-tree-range-search kd-tree temporal-min-range temporal-max-range))]
-    (if (empty? columns)
-      (do (.forEach kd-tree-idxs
-                    (reify LongConsumer
-                      (accept [_ x]
-                        (.addLong row-id-bitmap-out (.getCoordinate point-access x row-id-idx)))))
-          (->TemporalRoots (doto row-id-bitmap-out
-                             (.and row-id-bitmap))
-                           (Collections/emptyMap)))
-      (let [roots (HashMap.)
-            coordinates (-> kd-tree-idxs
-                            (.mapToObj (reify LongFunction
-                                         (apply [_ x]
-                                           (.getArrayPoint point-access x))))
-                            (.filter (reify Predicate
-                                       (test [_ x]
-                                         (.contains row-id-bitmap (aget ^longs x row-id-idx)))))
-                            (.sorted (Comparator/comparingLong (reify ToLongFunction
-                                                                 (applyAsLong [_ x]
-                                                                   (aget ^longs x row-id-idx)))))
-                            (.toArray))
-            value-count (alength coordinates)]
-        (doseq [col-name columns]
-          (let [col-idx (->temporal-column-idx col-name)
-                out-root (VectorSchemaRoot/create (->temporal-root-schema col-name) allocator)
-                ^BigIntVector row-id-vec (.getVector out-root 0)
-                temporal-vec (.getVector out-root 1)
-                temporal-vec-wtr (vec/->mono-writer temporal-vec)]
-            (.setRowCount out-root value-count)
-            (dotimes [n value-count]
-              (let [^longs coordinate (aget coordinates n)
-                    row-id (aget coordinate row-id-idx)]
-                (.addLong row-id-bitmap-out row-id)
-                (.set row-id-vec n row-id)
-                (.writeLong temporal-vec-wtr (aget coordinate col-idx))))
-            (.put roots col-name out-root)))
-        (->TemporalRoots (doto row-id-bitmap-out
-                           (.and row-id-bitmap))
-                         roots)))))
+                                   (kd/kd-tree-range-search kd-tree temporal-min-range temporal-max-range))
+        coordinates (-> kd-tree-idxs
+                        (.mapToObj (reify LongFunction
+                                     (apply [_ x]
+                                       (.getArrayPoint point-access x))))
+                        (.filter (reify Predicate
+                                   (test [_ x]
+                                     (.contains row-id-bitmap (aget ^longs x row-id-idx)))))
+                        (.sorted (Comparator/comparingLong (reify ToLongFunction
+                                                             (applyAsLong [_ x]
+                                                               (aget ^longs x row-id-idx)))))
+                        (.toArray))
+        value-count (alength coordinates)
+
+        cols (ArrayList. (count columns))]
+    (try
+      (doseq [col-name columns]
+        (let [col-idx (->temporal-column-idx col-name)
+              ^BaseFixedWidthVector temporal-vec (-> (types/col-type->field col-name (get temporal-col-types col-name))
+                                                     (.createVector allocator))
+              temporal-vec-wtr (vec/->mono-writer temporal-vec)]
+          (.allocateNew temporal-vec value-count)
+          (dotimes [n value-count]
+            (let [^longs coordinate (aget coordinates n)]
+              (.writeLong temporal-vec-wtr (aget coordinate col-idx))))
+          (.setValueCount temporal-vec value-count)
+          (.add cols (iv/->direct-vec temporal-vec))))
+
+      (iv/->indirect-rel cols value-count)
+
+      (catch Throwable e
+        (run! util/try-close cols)
+        (throw e)))))
 
 (deftype TemporalManager [^BufferAllocator allocator
                           ^ObjectStore object-store
@@ -389,9 +374,9 @@
   (getTemporalWatermark [_]
     (let [kd-tree (some-> kd-tree (kd/kd-tree-retain allocator))]
       (reify
-        ITemporalRootsSource
-        (createTemporalRoots [_ columns temporal-min-range temporal-max-range row-id-bitmap]
-          (->temporal-roots allocator kd-tree columns temporal-min-range temporal-max-range row-id-bitmap))
+        ITemporalRelationSource
+        (createTemporalRelation [_ allocator columns temporal-min-range temporal-max-range row-id-bitmap]
+          (->temporal-rel allocator kd-tree columns temporal-min-range temporal-max-range row-id-bitmap))
 
         Closeable
         (close [_]
@@ -451,9 +436,9 @@
         (endTx [_]
           evicted-row-ids))))
 
-  ITemporalRootsSource
-  (createTemporalRoots [_ columns temporal-min-range temporal-max-range row-id-bitmap]
-    (->temporal-roots allocator kd-tree columns temporal-min-range temporal-max-range row-id-bitmap))
+  ITemporalRelationSource
+  (createTemporalRelation [_ allocator columns temporal-min-range temporal-max-range row-id-bitmap]
+    (->temporal-rel allocator kd-tree columns temporal-min-range temporal-max-range row-id-bitmap))
 
   Closeable
   (close [this]

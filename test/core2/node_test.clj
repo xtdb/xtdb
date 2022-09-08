@@ -147,3 +147,64 @@ FROM foo FOR APPLICATION_TIME AS OF DATE '1999-01-01'"
 SELECT foo.id, foo.v, foo.application_time_start, foo.application_time_end
 FROM foo FOR APPLICATION_TIME AS OF CURRENT_TIMESTAMP"
                            {:basis {:tx !tx, :current-time (util/->instant #inst "1999")}})))))
+
+(t/deftest test-repeated-row-id-scan-bug-also-409
+  @(c2/submit-tx tu/*node* [[:sql "INSERT INTO foo (id, v) VALUES (1, 1)"]])
+
+  (let [tx1 @(c2/submit-tx tu/*node* [[:sql "
+UPDATE foo
+FOR PORTION OF APP_TIME FROM DATE '2022-01-01' TO DATE '2024-01-01'
+SET v = 2
+WHERE foo.id = 1"]])
+
+        tx2 @(c2/submit-tx tu/*node* [[:sql "
+DELETE FROM foo
+FOR PORTION OF APP_TIME FROM DATE '2023-01-01' TO DATE '2025-01-01'
+WHERE foo.id = 1"]])]
+
+    (letfn [(q1 [opts]
+              (c2/sql-query tu/*node* "
+SELECT foo.id, foo.v, foo.application_time_start, foo.application_time_end
+FROM foo
+ORDER BY foo.application_time_start"
+                            opts))
+            (q2 [opts]
+              (frequencies
+               (c2/sql-query tu/*node* "SELECT foo.id, foo.v FROM foo" opts)))]
+
+      (t/is (= [{:id 1, :v 1
+                 :application_time_start (util/->zdt #inst "2020")
+                 :application_time_end (util/->zdt #inst "2022")}
+                {:id 1, :v 2
+                 :application_time_start (util/->zdt #inst "2022")
+                 :application_time_end (util/->zdt #inst "2024")}
+                {:id 1, :v 1
+                 :application_time_start (util/->zdt #inst "2024")
+                 :application_time_end (util/->zdt util/end-of-time)}]
+
+               (q1 {:basis {:tx tx1}})))
+
+      (t/is (= {{:id 1, :v 1} 2, {:id 1, :v 2} 1}
+               (q2 {:basis {:tx tx1}})))
+
+      (t/is (= [{:id 1, :v 1
+                 :application_time_start (util/->zdt #inst "2020")
+                 :application_time_end (util/->zdt #inst "2022")}
+                {:id 1, :v 2
+                 :application_time_start (util/->zdt #inst "2022")
+                 :application_time_end (util/->zdt #inst "2023")}
+                {:id 1, :v 1
+                 :application_time_start (util/->zdt #inst "2025")
+                 :application_time_end (util/->zdt util/end-of-time)}]
+
+               (q1 {:basis {:tx tx2}})))
+
+      (t/is (= [{:id 1, :v 1
+                 :application_time_start (util/->zdt #inst "2025")
+                 :application_time_end (util/->zdt util/end-of-time)}]
+
+               (q1 {:basis {:tx tx2, :current-time (util/->instant #inst "2026")}
+                    :app-time-as-of-now? true})))
+
+      (t/is (= {{:id 1, :v 1} 2, {:id 1, :v 2} 1}
+               (q2 {:basis {:tx tx2}}))))))

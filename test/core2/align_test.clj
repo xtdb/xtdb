@@ -26,7 +26,9 @@
               name-root (let [^List vecs [name-row-id-vec name-vec]]
                           (VectorSchemaRoot. vecs))]
 
-    (let [row-ids (doto (align/->row-id-bitmap (.select (expr/->expression-relation-selector '(<= age 30) {:col-types {'age :i64}})
+    (let [roots [name-root age-root]
+
+          row-ids (doto (align/->row-id-bitmap (.select (expr/->expression-relation-selector '(<= age 30) {:col-types {'age :i64}})
                                                         tu/*allocator*
                                                         (iv/->indirect-rel [(iv/->direct-vec age-vec)])
                                                         {})
@@ -35,11 +37,13 @@
                                                           tu/*allocator*
                                                           (iv/->indirect-rel [(iv/->direct-vec name-vec)])
                                                           {})
-                                                 name-row-id-vec)))
-          roots [name-root age-root]]
-      (t/is (= [{:name "Dave", :age 12}
-                {:name "Bob", :age 15}]
-               (iv/rel->rows (align/align-vectors roots row-ids nil)))))))
+                                                 name-row-id-vec)))]
+
+      (with-open [row-id-col (tu/open-vec "_row-id" (vec (.toArray row-ids)))]
+        (let [temporal-rel (iv/->indirect-rel [(iv/->direct-vec row-id-col)])]
+          (t/is (= [{:name "Dave", :age 12, :_row-id 2}
+                    {:name "Bob", :age 15, :_row-id 9}]
+                   (iv/rel->rows (align/align-vectors roots temporal-rel)))))))))
 
 (t/deftest test-aligns-temporal-columns-correctly-363
   (with-open [node (node/start-node {})]

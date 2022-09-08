@@ -8,7 +8,7 @@
             [juxt.clojars-mirrors.integrant.core :as ig])
   (:import clojure.lang.MapEntry
            core2.api.TransactionInstant
-           core2.temporal.ITemporalRootsSource
+           core2.temporal.ITemporalRelationSource
            java.lang.AutoCloseable
            [java.util Collections Map Set]
            java.util.function.Function
@@ -24,10 +24,11 @@
   (liveSlices [^Iterable columnNames])
 
   ;; this is a lot of duplication - I guess we'd extend interfaces here if we were in Java
-  (^core2.temporal.TemporalRoots createTemporalRoots [^java.util.List columns
-                                                      ^longs temporal-min-range
-                                                      ^longs temporal-max-range
-                                                      ^org.roaringbitmap.longlong.Roaring64Bitmap row-id-bitmap]))
+  (^core2.vector.IIndirectRelation createTemporalRelation [^org.apache.arrow.memory.BufferAllocator allocator
+                                                           ^java.util.List columns
+                                                           ^longs temporalMinRange
+                                                           ^longs temporalMaxRange
+                                                           ^org.roaringbitmap.longlong.Roaring64Bitmap rowIdBitmap]))
 
 #_{:clj-kondo/ignore [:unused-binding]}
 (definterface IWatermarkManager
@@ -35,9 +36,9 @@
   (^void setWatermark [^long chunkIdx,
                        ^core2.api.TransactionInstant txKey,
                        ^java.util.Map liveRoots,
-                       ^core2.temporal.ITemporalRootsSource temporalWatermark]))
+                       ^core2.temporal.ITemporalRelationSource temporalWatermark]))
 
-(defrecord Watermark [^TransactionInstant tx-key, ^Map live-roots, ^ITemporalRootsSource temporal-roots-src
+(defrecord Watermark [^TransactionInstant tx-key, ^Map live-roots, ^ITemporalRelationSource temporal-roots-src
                       ^long chunk-idx, ^int max-rows-per-block]
   IWatermark
   (columnType [_ col-name]
@@ -54,18 +55,18 @@
                       (MapEntry/create col-name (blocks/->slices root row-counts))))))
           col-names))
 
-  (createTemporalRoots [_ columns temporal-min-range temporal-max-range row-id-bitmap]
-    (.createTemporalRoots temporal-roots-src columns
-                          temporal-min-range temporal-max-range
-                          row-id-bitmap)))
+  (createTemporalRelation [_ allocator columns temporal-min-range temporal-max-range row-id-bitmap]
+    (.createTemporalRelation temporal-roots-src allocator columns
+                             temporal-min-range temporal-max-range
+                             row-id-bitmap)))
 
 (defrecord ReferenceCountingWatermark [^Watermark watermark, ^AtomicInteger ref-count, ^Map thread->count]
   IWatermark
   (columnType [_ col-name] (.columnType watermark col-name))
   (liveSlices [_ col-names] (.liveSlices watermark col-names))
 
-  (createTemporalRoots [_ columns temporal-min-range temporal-max-range row-id-bitmap]
-    (.createTemporalRoots watermark columns temporal-min-range temporal-max-range row-id-bitmap))
+  (createTemporalRelation [_ allocator columns temporal-min-range temporal-max-range row-id-bitmap]
+    (.createTemporalRelation watermark allocator columns temporal-min-range temporal-max-range row-id-bitmap))
 
   AutoCloseable
   (close [_]

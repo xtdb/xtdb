@@ -13,4 +13,5 @@
              plan/*opts* query-opts]
      (-> (parser/parse query) parser/or-throw
          (sem/analyze-query) sem/or-throw
-         (plan/plan-query query-opts)))))
+         (plan/plan-query query-opts)
+         #_(doto clojure.pprint/pprint)))))

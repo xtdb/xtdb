@@ -31,7 +31,7 @@
 (defn ->temporal-min-max-range [selects params]
   (let [min-range (temporal/->min-range)
         max-range (temporal/->max-range)
-        col-types (zipmap (map symbol (keys temporal/temporal-fields))
+        col-types (zipmap (map symbol (keys temporal/temporal-col-types))
                           (repeat temporal/temporal-col-type))]
     (doseq [[col-name select-form] selects
             :when (temporal/temporal-column? col-name)]

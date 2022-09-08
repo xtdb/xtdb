@@ -70,7 +70,8 @@
 
 (defmethod ig/prep-key ::internal-id-manager [_ opts]
   (merge {:metadata-mgr (ig/ref ::meta/metadata-manager)
-          :buffer-pool (ig/ref :core2.buffer-pool/buffer-pool)}
+          :buffer-pool (ig/ref :core2.buffer-pool/buffer-pool)
+          :allocator (ig/ref :core2/allocator)}
          opts))
 
 (deftype InternalIdManager [^Map id->internal-id]
@@ -90,7 +91,7 @@
   (close [_]
     (.clear id->internal-id)))
 
-(defmethod ig/init-key ::internal-id-manager [_ {:keys [^IBufferPool buffer-pool, ^IMetadataManager metadata-mgr]}]
+(defmethod ig/init-key ::internal-id-manager [_ {:keys [allocator ^IBufferPool buffer-pool, ^IMetadataManager metadata-mgr]}]
   (let [iid-mgr (InternalIdManager. (ConcurrentHashMap.))
         known-chunks (.knownChunks metadata-mgr)]
     (doseq [chunk-idx known-chunks]
@@ -102,29 +103,32 @@
                   table-chunks (-> @(.getBuffer buffer-pool (meta/->chunk-obj-key chunk-idx "_table"))
                                    (util/->chunks {:close-buffer? true}))]
         (let [roots (HashMap.)]
-          (when (and (.tryAdvance id-chunks
-                                  (reify Consumer
-                                    (accept [_ id-root] (.put roots :id id-root))))
-                     (.tryAdvance table-chunks
-                                  (reify Consumer
-                                    (accept [_ table-root] (.put roots :table table-root)))))
-            (let [^VectorSchemaRoot id-root (.get roots :id)
-                  ^VectorSchemaRoot table-root (.get roots :table)
-                  aligned-roots (align/align-vectors (.values roots)
-                                                     (doto (align/->row-id-bitmap (.getVector id-root 0))
-                                                       (.and (align/->row-id-bitmap (.getVector table-root 0))))
-                                                     {:with-row-id-vec? true})
-                  id-col (.vectorForName aligned-roots "id")
-                  id-vec (.getVector id-col)
-                  table-col (.vectorForName aligned-roots "_table")
-                  table-vec (.getVector table-col)
-                  row-id-col (.vectorForName aligned-roots "_row-id")
-                  ^BigIntVector row-id-vec (.getVector row-id-col)]
-              (dotimes [idx (.rowCount aligned-roots)]
-                (.getOrCreateInternalId iid-mgr
-                                        (t/get-object table-vec (.getIndex id-col idx))
-                                        (t/get-object id-vec (.getIndex id-col idx))
-                                        (.get row-id-vec (.getIndex row-id-col idx)))))))))
+          (while (and (.tryAdvance id-chunks
+                                   (reify Consumer
+                                     (accept [_ id-root] (.put roots :id id-root))))
+                      (.tryAdvance table-chunks
+                                   (reify Consumer
+                                     (accept [_ table-root] (.put roots :table table-root)))))
+            (let [row-ids (->> (for [^VectorSchemaRoot root (.values roots)]
+                                 (align/->row-id-bitmap (.getVector root 0)))
+
+                               ^Roaring64Bitmap
+                               (reduce (fn [^Roaring64Bitmap l, ^Roaring64Bitmap r]
+                                         (doto l (.and r))))
+                               (.toArray))]
+              (with-open [row-id-vec (util/open-bigint-vec allocator "_row-id" row-ids)]
+                (let [aligned-roots (align/align-vectors (.values roots) (iv/->indirect-rel [(iv/->direct-vec row-id-vec)]))
+                      id-col (.vectorForName aligned-roots "id")
+                      id-vec (.getVector id-col)
+                      table-col (.vectorForName aligned-roots "_table")
+                      table-vec (.getVector table-col)
+                      row-id-col (.vectorForName aligned-roots "_row-id")
+                      ^BigIntVector row-id-vec (.getVector row-id-col)]
+                  (dotimes [idx (.rowCount aligned-roots)]
+                    (.getOrCreateInternalId iid-mgr
+                                            (t/get-object table-vec (.getIndex id-col idx))
+                                            (t/get-object id-vec (.getIndex id-col idx))
+                                            (.get row-id-vec (.getIndex row-id-col idx)))))))))))
     iid-mgr))
 
 (deftype LiveColumn [^VectorSchemaRoot live-root, ^Roaring64Bitmap row-id-bitmap]
