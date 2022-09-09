@@ -172,7 +172,7 @@ Core2 artifacts are deployed to Maven Central.
 Pushing core2 images requires a login to docker with permission to push to the xtdb docker hub org, ask @refset or @jarohen if you do not have this.
 
 * install https://github.com/docker/buildx[buildx] if it is not already (docker desktop, recent docker versions have it bundled). This will enable multi-arch builds support.
-
+* `docker buildx install` to https://github.com/docker/buildx#set-buildx-as-the-default-builder[set buildx as your default Docker builder]
 * `./bin/docker-build-and-push.sh [--clean] [--latest]` will build and push the image as `xtdb/core2:"$sha"` as well as `xtdb/core2:latest` if `--latest` is supplied.
 
 As with a local build, the `--clean` flag can ensure a the core2 uberjar is built afresh.
