@@ -44,7 +44,7 @@
   {:col-types (with-open [al (RootAllocator.)
                           ^ArrowReader rdr (path->arrow-reader (util/->file-channel path) al)]
                 (->> (.getFields (.getSchema (.getVectorSchemaRoot rdr)))
-                     (into {} (map (juxt #(.getName ^Field %) types/field->col-type)))))
+                     (into {} (map (juxt #(symbol (.getName ^Field %)) types/field->col-type)))))
    :->cursor (fn [{:keys [^BufferAllocator allocator]}]
                (ArrowCursor. (path->arrow-reader (util/->file-channel path) allocator) on-close-fn))})
 

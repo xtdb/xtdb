@@ -38,7 +38,7 @@
   (io/resource "core2/operator/arrow-cursor-test.arrow"))
 
 (t/deftest test-arrow-cursor
-  (let [expected {:col-types {"id" :utf8, "a-long" :i64, "a-double" :f64, "an-inst" [:timestamp-tz :micro "UTC"]}
+  (let [expected {:col-types '{id :utf8, a-long :i64, a-double :f64, an-inst [:timestamp-tz :micro "UTC"]}
                   :res example-data}]
     (t/is (= expected (tu/query-ra [:arrow arrow-file-url]
                                    {:preserve-blocks? true, :with-col-types? true})))
