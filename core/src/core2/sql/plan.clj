@@ -3124,11 +3124,16 @@
                                         :plan plan
                                         :explain-data (s/explain-data ::lp/logical-plan plan)}))))]
 
-     (let [plan (plan ag)]
-       (if (#{:insert :delete :update :erase} (first plan))
-         (let [[dml-op dml-op-opts plan] plan]
-           [dml-op dml-op-opts
-            (doto (rewrite-plan plan opts)
-              (validate-plan))])
-         (doto (rewrite-plan plan opts)
-           (validate-plan)))))))
+     (try
+       (let [plan (plan ag)]
+         (if (#{:insert :delete :update :erase} (first plan))
+           (let [[dml-op dml-op-opts plan] plan]
+             [dml-op dml-op-opts
+              (doto (rewrite-plan plan opts)
+                (validate-plan))])
+           (doto (rewrite-plan plan opts)
+             (validate-plan))))
+       (catch Throwable t
+         (throw (err/illegal-arg ;;might not be a bad query but IAE returns errors via pg-wire
+                  ::plan-error
+                  {::err/message (format "Error Planning SQL: %s" (ex-message t))})))))))
