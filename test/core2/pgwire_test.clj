@@ -929,14 +929,6 @@
         (q conn ["SET a TO 43"])
         (is (= {"a" "43"} (params ["a"])))))))
 
-(deftest dml-is-not-permitted-by-default-test
-  (with-open [conn (jdbc-conn)]
-    (is (thrown-with-msg?
-          PSQLException #"DML is only supported in an explicit READ WRITE transaction"
-          (q conn ["insert into foo(id) values (42)"])))
-    (->> "can query after auto-commit write is refused"
-         (is (= [] (q conn ["select foo.a from foo"]))))))
-
 (deftest db-queryable-after-transaction-error-test
   (with-open [conn (jdbc-conn)]
     (try
@@ -949,7 +941,7 @@
 (deftest transactions-are-read-only-by-default-test
   (with-open [conn (jdbc-conn)]
     (is (thrown-with-msg?
-          PSQLException #"ERROR\: DML is unsupported in a READ ONLY transaction"
+          PSQLException #"ERROR\: DML is not allowed in a READ ONLY transaction"
           (jdbc/with-transaction [db conn] (q db ["insert into foo(id) values (42)"]))))
     (is (= [] (q conn ["select foo.a from foo foo"])))))
 
@@ -1183,16 +1175,13 @@
       (q conn ["COMMIT"])
       (is (= [{:id 42}] (q conn ["SELECT foo.id from foo"]))))
 
-    (testing "after COMMIT we pop the access mode, we are read only again"
-      (is (thrown-with-msg? PSQLException #"DML is only supported in an explicit READ WRITE transaction" (q conn ["INSERT INTO foo (id) VALUES (42)"]))))
-
     (testing "BEGIN access mode overrides SET TRANSACTION"
       (q conn ["SET TRANSACTION READ WRITE"])
       (is (= {:access-mode :read-write} (next-transaction-variables (get-last-conn) [:access-mode])))
       (q conn ["BEGIN READ ONLY"])
       (testing "next-transaction cleared on begin"
         (is (= {} (next-transaction-variables (get-last-conn) [:access-mode]))))
-      (is (thrown-with-msg? PSQLException #"DML is unsupported in a READ ONLY transaction" (q conn ["INSERT INTO foo (id) VALUES (43)"])))
+      (is (thrown-with-msg? PSQLException #"DML is not allowed in a READ ONLY transaction" (q conn ["INSERT INTO foo (id) VALUES (43)"])))
       (q conn ["ROLLBACK"]))))
 
 (deftest start-transaction-test
@@ -1200,7 +1189,7 @@
     (let [sql #(q conn [%])]
 
       (sql "START TRANSACTION")
-      (is (thrown-with-msg? PSQLException #"DML is unsupported in a READ ONLY transaction" (sql "INSERT INTO foo (id) VALUES (42)")))
+      (is (thrown-with-msg? PSQLException #"DML is not allowed in a READ ONLY transaction" (sql "INSERT INTO foo (id) VALUES (42)")))
       (sql "ROLLBACK")
 
       (sql "START TRANSACTION READ WRITE")
@@ -1211,21 +1200,17 @@
       (testing "access mode overrides SET TRANSACTION"
         (sql "SET TRANSACTION READ WRITE")
         (sql "START TRANSACTION READ ONLY")
-        (is (thrown-with-msg? PSQLException #"DML is unsupported in a READ ONLY transaction" (sql "INSERT INTO foo (id) VALUES (42)")))
+        (is (thrown-with-msg? PSQLException #"DML is not allowed in a READ ONLY transaction" (sql "INSERT INTO foo (id) VALUES (42)")))
         (sql "ROLLBACK"))
 
       (testing "set transaction cleared"
         (sql "START TRANSACTION")
-        (is (thrown-with-msg? PSQLException #"DML is unsupported in a READ ONLY transaction" (sql "INSERT INTO foo (id) VALUES (42)")))
+        (is (thrown-with-msg? PSQLException #"DML is not allowed in a READ ONLY transaction" (sql "INSERT INTO foo (id) VALUES (42)")))
         (sql "ROLLBACK")))))
 
 (deftest set-session-characteristics-test
   (with-open [conn (jdbc-conn "autocommit" "false")]
     (let [sql #(q conn [%])]
-
-      (sql "SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY")
-      (is (thrown-with-msg? PSQLException #"DML is only supported in an explicit READ WRITE transaction" (sql "INSERT INTO foo (id) VALUES (42)")))
-
       (sql "SET SESSION CHARACTERISTICS AS TRANSACTION READ WRITE")
       (sql "START TRANSACTION")
       (sql "INSERT INTO foo (id) VALUES (42)")
@@ -1235,7 +1220,6 @@
       (is (= [{:id 42}] (q conn ["SELECT foo.id from foo"])))
 
       (sql "SET SESSION CHARACTERISTICS AS TRANSACTION READ WRITE")
-      (is (thrown-with-msg? PSQLException #"DML is only supported in an explicit READ WRITE transaction" (sql "INSERT INTO foo (id) values (43)")))
       (sql "START TRANSACTION")
       (sql "INSERT INTO foo (id) VALUES (43)")
       (sql "COMMIT")
@@ -1264,22 +1248,17 @@
               {:version 1, :application_time_start "2020-01-02T00:00Z", :application_time_end "9999-12-31T23:59:59.999999Z"}]
              (q conn ["SELECT foo.version, foo.application_time_start, foo.application_time_end FROM foo"]))))))
 
-;; currently direct statements opening transactions as per-spec is not supported
-;; there are no transactional semantics for statements outside a tx
 ;; this demonstrates that session / set variables do not change the next statement
 ;; its undefined - but we can say what it is _not_.
 (deftest implicit-transaction-stop-gap-test
   (with-open [conn (jdbc-conn "autocommit" "false")]
     (let [sql #(q conn [%])]
 
-      (testing "read write"
-        (sql "SET SESSION CHARACTERISTICS AS TRANSACTION READ WRITE")
-        (is (thrown-with-msg? PSQLException #"DML is only supported in an explicit READ WRITE transaction" (sql "INSERT INTO foo (id) values (43)")))
-        (is (= [] (sql "select foo.id from foo"))))
-
       (testing "read only"
         (sql "SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY")
-        (is (thrown-with-msg? PSQLException #"DML is only supported in an explicit READ WRITE transaction" (sql "INSERT INTO foo (id) values (43)")))
+        (sql "BEGIN")
+        (is (thrown-with-msg? PSQLException #"DML is not allowed in a READ ONLY transaction" (sql "INSERT INTO foo (id) values (43)")))
+        (sql "ROLLBACK")
         (is (= [] (sql "select foo.id from foo"))))
 
       (sql "SET SESSION CHARACTERISTICS AS TRANSACTION READ WRITE")
@@ -1293,14 +1272,16 @@
 
       (testing "override session to start a read only transaction"
         (sql "BEGIN READ ONLY")
-        (is (thrown-with-msg? PSQLException #"DML is unsupported in a READ ONLY transaction" (sql "INSERT INTO foo (id) values (43)")))
+        (is (thrown-with-msg? PSQLException #"DML is not allowed in a READ ONLY transaction" (sql "INSERT INTO foo (id) values (43)")))
         (sql "ROLLBACK")
         (testing "despite read write setting read remains available outside tx"
           (is (= [{:id 42}] (sql "select foo.id from foo")))))
 
-      (testing "set transaction is not cleared by read, as it starts no transaction"
+      (testing "set transaction is not cleared by read/autocommit DML, as they don't start a transaction"
         (sql "SET TRANSACTION READ WRITE")
         (is (= [{:id 42}] (sql "select foo.id from foo")))
+        (sql "INSERT INTO foo (id) values (43)")
+        (is (= [{:id 42} {:id 43}] (sql "select foo.id from foo")))
         (is (= {:access-mode :read-write} (next-transaction-variables (get-last-conn) [:access-mode])))))))
 
 (deftest analyzer-error-returned-test

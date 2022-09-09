@@ -1463,6 +1463,30 @@
                :erase_statement__searched}
              (ast-executable-statement-root-tag ast)))
 
+(defn- submit-tx [node dml-buf {:keys [app-time-as-of-now?]}]
+  (let [tx-ops (mapv (fn [{:keys [transformed-query params]}]
+                       [:sql transformed-query [params]])
+                     dml-buf)
+
+        ;; TODO review err log policy
+        [tx submit-ex] (try
+                         [(c2/submit-tx node tx-ops {:app-time-as-of-now? app-time-as-of-now?})]
+                         (catch Throwable e
+                           (log/debug e "Error on submit-tx")
+                           [nil e]))
+
+        await-ex (when tx
+                   (try
+                     ;; TODO consider blocking policy
+                     @(node/await-tx-async node tx)
+                     nil
+                     (catch Throwable e
+                       (log/debug e "Error on await-tx")
+                       e)))]
+    (cond
+      submit-ex (err-execution-exception submit-ex "unexpected error on tx submit (report as a bug)")
+      await-ex (err-execution-exception await-ex "unexpected error on tx await (report as a bug)"))))
+
 (defn cmd-exec-query
   "Given a statement of type :query will execute it against the servers :node and send the results."
   [{:keys [server, conn-state] :as conn}
@@ -1490,7 +1514,7 @@
 
         xt-params (vec (map-indexed xtify-param params))
 
-        {{:keys [basis]} :transaction
+        {{:keys [basis] :as transaction} :transaction
          {:keys [^Clock clock, app-time-defaults]} :session} @conn-state
 
         query-opts
@@ -1499,23 +1523,27 @@
          :? xt-params
          :app-time-as-of-now? (= app-time-defaults :as-of-now)}]
 
-    ;; dml currently takes a different execution path, requiring COMMIT to flush.
+    ;; DML currently takes a different execution path, requiring COMMIT to flush.
     (if (dml? ast)
-      ;; in the case of dml, we simply buffer the statement in the transaction (to be flushed with COMMIT)
-      (do (->> {:query query,
-                :transformed-query transformed-query
-                :ast ast,
-                :params xt-params}
-               (swap! conn-state update-in [:transaction :dml-buf] (fnil conj [])))
-          ;; this stuff is all temporary waiting on core2 to support pg so I need to know less about incoming SQL
-          (->> {:command (case (ast-executable-statement-root-tag ast)
-                           ;; insert <oid> <rows>
-                           ;; oid is always 0 these days, its legacy thing in the pg protocol
-                           ;; rows is 0 for us cus async
-                           :insert_statement "INSERT 0 0"
-                           ;; otherwise head <rows>
-                           (str (statement-head query) " 0"))}
-               (cmd-write-msg conn msg-command-complete)))
+      (let [stmt {:query query,
+                  :transformed-query transformed-query
+                  :ast ast,
+                  :params xt-params}]
+        (if transaction
+          ;; we buffer the statement in the transaction (to be flushed with COMMIT)
+          (swap! conn-state update-in [:transaction :dml-buf] (fnil conj []) stmt)
+
+          (submit-tx node [stmt] {:app-time-as-of-now? (= app-time-defaults :as-of-now)}))
+
+        (cmd-write-msg conn msg-command-complete
+                       {:command (case (ast-executable-statement-root-tag ast)
+                                   ;; insert <oid> <rows>
+                                   ;; oid is always 0 these days, its legacy thing in the pg protocol
+                                   ;; rows is 0 for us cus async
+                                   :insert_statement "INSERT 0 0"
+                                   ;; otherwise head <rows>
+                                   (str (statement-head query) " 0"))}))
+
       (let [;; execute the query asynchronously (to enable later enable cancellation mid query)
             ^CompletableFuture
             query-fut
@@ -1562,30 +1590,28 @@
 
 (defn cmd-begin [{:keys [server, conn-state] :as conn} access-mode]
   (let [{:keys [node]} server]
-    (->> (fn [{:keys [session] :as st}]
-           (let [{:keys [^Clock clock]} session]
-             (->> {:basis
-                   {:tx (:latest-completed-tx (c2/status node))
+    (swap! conn-state (fn [{:keys [session] :as st}]
+                        (let [{:keys [^Clock clock]} session
+                              tx-opts {:basis {:tx (:latest-completed-tx (c2/status node))
 
-                    ;; fixing current-time for all reads in a tx...
-                    ;; going off perceived intent of adr-40 here:
-                    ;; Separately, we value referentially transparent, 'repeatable' queries - the same query,
-                    ;; executed with exactly the same parameters, should return the same resultset regardless of when it's executed.
-                    ;; Specifically, it shouldn't matter how many subsequent transactions the queried node has indexed,
-                    ;; nor the current wall-clock time of the querying or queried node.
-                    :current-time (.instant clock)}
+                                               ;; fixing current-time for all reads in a tx...
+                                               ;; going off perceived intent of adr-40 here:
+                                               ;; Separately, we value referentially transparent, 'repeatable' queries - the same query,
+                                               ;; executed with exactly the same parameters, should return the same resultset regardless of when it's executed.
+                                               ;; Specifically, it shouldn't matter how many subsequent transactions the queried node has indexed,
+                                               ;; nor the current wall-clock time of the querying or queried node.
+                                               :current-time (.instant clock)}
 
-                   :access-mode
-                   (or
-                     ;; access mode of a transaction is determined in order of precedence:
-                     ;; 1. BEGIN <access mode>
-                     access-mode
-                     ;; 2. SET TRANSACTION <access mode>
-                     (:access-mode (:next-transaction session))
-                     ;; 3. session variable (read only by default)
-                     (:access-mode session))}
-                  (assoc st :transaction))))
-         (swap! conn-state))
+                                       :access-mode (or
+                                                     ;; access mode of a transaction is determined in order of precedence:
+                                                     ;; 1. BEGIN <access mode>
+                                                     access-mode
+                                                     ;; 2. SET TRANSACTION <access mode>
+                                                     (:access-mode (:next-transaction session))
+                                                     ;; 3. session variable (read only by default)
+                                                     (:access-mode session))}]
+                          (-> st
+                              (assoc :transaction tx-opts)))))
     ;; clear :next-transaction variables for now
     ;; aware right now this may not be spec compliant depending on interplay between START TRANSACTION and SET TRANSACTION
     ;; thus TODO check spec for correct 'clear' behaviour of SET TRANSACTION vars
@@ -1598,38 +1624,14 @@
     (if failed
       ;; TODO better err
       (cmd-send-error conn (or err (err-protocol-violation "transaction failed")))
-      (let [tx-ops (mapv (fn [{:keys [transformed-query params]}] [:sql transformed-query [params]]) dml-buf)
 
-            ;; TODO review err log policy
-            [tx submit-ex]
-            (try
-              [(c2/submit-tx node tx-ops {:app-time-as-of-now? (= app-time-defaults :as-of-now)})]
-              (catch Throwable e
-                (log/debug e "Error on submit-tx")
-                [nil e]))
-
-            await-ex
-            (when tx
-              (try
-                ;; TODO consider blocking policy
-                @(node/await-tx-async node tx)
-                nil
-                (catch Throwable e
-                  (log/debug e "Error on await-tx")
-                  e)))
-
-            err
-            (cond
-              submit-ex (err-execution-exception submit-ex "unexpected error on tx submit (report as a bug)")
-              await-ex (err-execution-exception await-ex "unexpected error on tx await (report as a bug)"))]
-
-        (if (or submit-ex await-ex)
-          (do
-            (swap! conn-state update :transaction assoc :failed true, :err err)
-            (cmd-send-error conn err))
-          (do
-            (swap! conn-state dissoc :transaction)
-            (cmd-write-msg conn msg-command-complete {:command "COMMIT"})))))))
+      (if-let [err (submit-tx node dml-buf {:app-time-as-of-now? (= app-time-defaults :as-of-now)})]
+        (do
+          (swap! conn-state update :transaction assoc :failed true, :err err)
+          (cmd-send-error conn err))
+        (do
+          (swap! conn-state dissoc :transaction)
+          (cmd-write-msg conn msg-command-complete {:command "COMMIT"}))))))
 
 (defn cmd-rollback [{:keys [conn-state] :as conn}]
   (swap! conn-state dissoc :transaction)
@@ -1712,7 +1714,7 @@
   [conn stmt]
   (let [{:keys [conn-state]} conn
         {:keys [statement-type, ast, query]} stmt
-        {:keys [transaction, session]} @conn-state
+        {:keys [transaction]} @conn-state
 
         ;; session access mode is ignored for now (wait for implicit transactions)
         access-mode (:access-mode transaction :read-only)
@@ -1742,15 +1744,11 @@
       ;; if we should follow spec (i.e autocommit blocking writes)
       ;; so we will to refuse DML unless we are in an explicit transaction
       (dml? ast)
-      (cond
-        (not transaction)
-        (access-mode-error "DML is only supported in an explicit READ WRITE transaction" :read-write)
-
-        (= :read-only access-mode)
-        (access-mode-error "DML is unsupported in a READ ONLY transaction" :read-write))
+      (when (and transaction (= :read-only access-mode))
+        (access-mode-error "DML is not allowed in a READ ONLY transaction" :read-write))
 
       (query? ast)
-      (when (= :read-write access-mode)
+      (when (and transaction (= :read-write access-mode))
         (access-mode-error "queries are unsupported in a READ WRITE transaction" :read-only))
 
       :else
