@@ -545,7 +545,7 @@
       (let [^IMetadataManager mm1 (tu/component node1 ::meta/metadata-manager)]
 
         (-> (c2/submit-tx node1 [[:put {:id "foo"}]])
-            (tu/then-await-tx node1 (Duration/ofMillis 200)))
+            (tu/then-await-tx node1 (Duration/ofSeconds 1)))
 
         (tu/finish-chunk node1)
 
