@@ -81,7 +81,7 @@ Core2's initial objective is to take the key principles embodied in XTDB 1.x -- 
 | Status | Stable | Experimental (pre-alpha)
 | Initial Stable Release | 2019 | TBD
 | Primary Interface | Java + 'https://github.com/edn-format/edn[edn] Datalog' | SQL (https://github.com/xtdb/core2/blob/2d8791c653f58a3eb24c650967e781204dd22975/doc/adr/0038-pgwire.adoc[Postgres] native drivers, JDBC, https://github.com/xtdb/core2/blob/859baec8289289545aca842d320a5adc17f3c67b/doc/adr/0008-sql-support.adoc#protocols[etc.])
-| Secondary Interface | OpenAPI, Calcite SQL (read-only) | 'edn Datalog' (https://github.com/xtdb/core2/blob/master/test/core2/datalog/datalog_test.clj[planned] once SQL is ~complete)
+| Secondary Interface | OpenAPI, Calcite SQL (read-only) | Many secondary languages (Datalog, SPARQL, Gremlin, etc.) are possible
 | Execution Model | Tuple-at-a-Time Sort-Merge Joins | Vectorized Relational Algebra
 | Storage & Compute | Coupled (nodes are full replicas) | Separated (cost-effective scale out)
 | Primary Storage Format | Custom Key-Value encodings | Columnar Apache Arrow
