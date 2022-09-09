@@ -505,6 +505,20 @@
     (-> (transduce (comp (remove nil?) (distinct)) (completing merge-col-type*) {} col-types)
         (map->col-type))))
 
+;;; time units
+
+(defn ts-units-per-second ^long [time-unit]
+  (case time-unit
+    :second 1
+    :milli #=(long 1e3)
+    :micro #=(long 1e6)
+    :nano #=(long 1e9)))
+
+(defn smallest-ts-unit [x-unit y-unit]
+  (if (> (ts-units-per-second x-unit) (ts-units-per-second y-unit))
+    x-unit
+    y-unit))
+
 ;;; multis
 
 ;; HACK not ideal that end-users would need to extend all of these
@@ -653,6 +667,7 @@
   (str (name type-head) "-" (name time-unit) "-" (-> (str/lower-case tz) (str/replace #"[/:]" "_"))))
 
 (defmethod col-type->field* :timestamp-tz [col-name nullable? [_type-head time-unit tz]]
+  (assert (string? tz) )
   (->field col-name (ArrowType$Timestamp. (kw->time-unit time-unit) tz) nullable?))
 
 (defmethod col-type->field-name :timestamp-local [[type-head time-unit]]
@@ -774,9 +789,21 @@
   (cond
     (isa? widening-hierarchy x-type y-type) y-type
     (isa? widening-hierarchy y-type x-type) x-type
-    :else (throw (err/illegal-arg :core2.types/incompatible-types
-                                  {::err/message (format "can't LUB: %s ⊔ %s" x-type y-type)
-                                   :x-type x-type, :y-type y-type}))))
+    :else :any))
+
+(defmethod least-upper-bound2 [:duration :duration] [[_ x-unit] [_ y-unit]]
+  [:duration (smallest-ts-unit x-unit y-unit)])
+
+(defmethod least-upper-bound2 [:date :date] [_ _] [:date :day])
+
+(defmethod least-upper-bound2 [:timestamp-local :timestamp-local] [[_ x-unit] [_ y-unit]]
+  [:timestamp-local (smallest-ts-unit x-unit y-unit)])
+
+(defmethod least-upper-bound2 [:time-local :time-local] [[_ x-unit] [_ y-unit]]
+  [:time-local (smallest-ts-unit x-unit y-unit)])
+
+(defmethod least-upper-bound2 [:timestamp-tz :timestamp-tz] [[_ x-unit x-tz] [_ y-unit y-tz]]
+  [:timestamp-tz (smallest-ts-unit x-unit y-unit) (if (= x-tz y-tz) x-tz "Z")])
 
 (defmethod least-upper-bound2 :default [_ _] :any)
 

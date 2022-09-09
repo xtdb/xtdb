@@ -1,11 +1,12 @@
 (ns core2.expression.temporal
   (:require [clojure.string :as str]
+            [core2.error :as err]
             [core2.expression :as expr]
             [core2.expression.metadata :as expr.meta]
             [core2.expression.walk :as ewalk]
             [core2.temporal :as temporal]
-            [core2.util :as util]
-            [core2.error :as err])
+            [core2.types :as types]
+            [core2.util :as util])
   (:import (java.time Duration Instant LocalDate LocalDateTime LocalTime Period ZoneId ZoneOffset ZonedDateTime)
            (java.time.temporal ChronoField ChronoUnit)
            (org.apache.arrow.vector PeriodDuration)
@@ -58,23 +59,11 @@
 
 ;;;; units
 
-(defn- units-per-second ^long [time-unit]
-  (case time-unit
-    :second 1
-    :milli #=(long 1e3)
-    :micro #=(long 1e6)
-    :nano #=(long 1e9)))
-
-(defn- smallest-unit [x-unit y-unit]
-  (if (> (units-per-second x-unit) (units-per-second y-unit))
-    x-unit
-    y-unit))
-
 (defn- with-conversion [form from-unit to-unit]
   (if (= from-unit to-unit)
     form
-    (let [from-hz (units-per-second from-unit)
-          to-hz (units-per-second to-unit)]
+    (let [from-hz (types/ts-units-per-second from-unit)
+          to-hz (types/ts-units-per-second to-unit)]
       (if (> to-hz from-hz)
         `(Math/multiplyExact ~form ~(quot to-hz from-hz))
         `(quot ~form ~(quot from-hz to-hz))))))
@@ -83,7 +72,7 @@
   (if (= unit1 unit2)
     {:return-type (->ret-type unit1), :->call-code ->call-code}
 
-    (let [res-unit (smallest-unit unit1 unit2)]
+    (let [res-unit (types/smallest-ts-unit unit1 unit2)]
       {:return-type (->ret-type res-unit),
        :->call-code (fn [[arg1 arg2]]
                       (->call-code [(with-conversion arg1 unit1 res-unit)
@@ -107,14 +96,14 @@
   (if (= ts-unit :second)
     `(.toEpochSecond ~form ZoneOffset/UTC)
     `(let [form# ~form]
-       (Math/addExact (Math/multiplyExact (.toEpochSecond form# ZoneOffset/UTC) ~(units-per-second ts-unit))
-                      (quot (.getNano form#) ~(quot (units-per-second :nano) (units-per-second ts-unit)))))))
+       (Math/addExact (Math/multiplyExact (.toEpochSecond form# ZoneOffset/UTC) ~(types/ts-units-per-second ts-unit))
+                      (quot (.getNano form#) ~(quot (types/ts-units-per-second :nano) (types/ts-units-per-second ts-unit)))))))
 
 (defn- ts->ldt [form ts-unit]
   `(let [form# ~form]
-     (LocalDateTime/ofEpochSecond (quot form# ~(units-per-second ts-unit))
-                                  (* (mod form# ~(units-per-second ts-unit))
-                                     ~(quot (units-per-second :nano) (units-per-second ts-unit)))
+     (LocalDateTime/ofEpochSecond (quot form# ~(types/ts-units-per-second ts-unit))
+                                  (* (mod form# ~(types/ts-units-per-second ts-unit))
+                                     ~(quot (types/ts-units-per-second :nano) (types/ts-units-per-second ts-unit)))
                                   ZoneOffset/UTC)))
 
 ;;;; `CAST`
@@ -142,7 +131,7 @@
                   `(-> (LocalDate/ofEpochDay ~dt)
                        (.atStartOfDay ZoneOffset/UTC)
                        (.toEpochSecond)
-                       (Math/multiplyExact ~(units-per-second tgt-tsunit))))})
+                       (Math/multiplyExact ~(types/ts-units-per-second tgt-tsunit))))})
 
 (defmethod expr/codegen-cast [:date :timestamp-tz] [{[_ tgt-tsunit _tgt-tz :as target-type] :target-type}]
   {:return-type target-type

@@ -413,23 +413,29 @@
 (defmethod ->aggregate-factory :stddev_samp [agg-opts]
   (->stddev-agg-factory :var_samp agg-opts))
 
-(defn- assert-supported-min-max-types [types]
-  ;; TODO handle fixed-width non-num types, if appropriate? (durations? various date-time types?)
+(defn- assert-supported-min-max-types [from-types to-type]
   ;; TODO variable-width types - it's reasonable to want (e.g.) `(min <string-col>)`
-  (when-let [unsupported-types (not-empty (->> types
-                                               (into #{} (remove #(isa? types/col-type-hierarchy % :num)))))]
+  (when-let [unsupported-types (not-empty (->> from-types
+                                               (into #{} (remove (comp (some-fn #(isa? types/col-type-hierarchy % :num)
+                                                                                #{:duration :date :timestamp-local :timestamp-tz :time-local})
+                                                                       types/col-type-head)))))]
     (throw (err/runtime-err :core2.group-by/unsupported-min-max-types
                             {::err/message "Unsupported types in min/max aggregate"
-                             :unsupported-types unsupported-types}))))
+                             :unsupported-types unsupported-types})))
+
+  (when (= :any to-type)
+    (throw (err/runtime-err :core2.group-by/incomparable-min-max-types
+                            {::err/message "Incomparable types in min/max aggregate"
+                             :types from-types}))))
 
 (defn- min-max-factory
   "compare-kw: update the accumulated value if `(compare-kw el acc)`"
   [compare-kw {:keys [from-name from-type] :as agg-opts}]
 
-  (let [to-type (-> (types/flatten-union-types from-type)
-                    (disj :null)
-                    (doto (assert-supported-min-max-types))
-                    (types/least-upper-bound))]
+  (let [from-types (-> (types/flatten-union-types from-type)
+                       (disj :null))
+        to-type (types/least-upper-bound from-types)]
+    (assert-supported-min-max-types from-types to-type)
     (reducing-agg-factory (into agg-opts
                                 {:to-type to-type
                                  :val-expr {:op :call, :f :cast, :target-type to-type
