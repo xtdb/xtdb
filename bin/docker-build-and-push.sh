@@ -35,9 +35,9 @@ set -e
     echo Building Docker image...
 
     if [ "$latest" -eq "1" ]; then
-      docker buildx build --push --platform linux/arm/v7,linux/arm64/v8,linux/amd64 --tag xtdb/core2:"$sha" --tag xtdb/core2:latest .
+      docker buildx build --push --platform linux/arm/v7,linux/arm64/v8,linux/amd64 --tag xtdb/core2:"$sha" --tag xtdb/core2:latest --build-arg GIT_SHA="$sha" .
     else
-      docker buildx build --push --platform linux/arm/v7,linux/arm64/v8,linux/amd64 --tag xtdb/core2:"$sha" .
+      docker buildx build --push --platform linux/arm/v7,linux/arm64/v8,linux/amd64 --tag xtdb/core2:"$sha" --build-arg GIT_SHA="$sha" .
     fi
     echo Done
 )

@@ -9,7 +9,9 @@ set -e
         clojure -Xuberjar
     fi
 
+    sha=$(git rev-parse --short HEAD)
+
     echo Building Docker image ...
-    docker build -t core2:latest --build-arg GIT_SHA=$(git rev-parse HEAD) .
+    docker build -t core2:latest --build-arg GIT_SHA="$sha" .
     echo Done
 )
