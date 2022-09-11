@@ -432,6 +432,7 @@
         (.startValue vec-writer)
         (.startValue vec-str-writer)
         (t/write-value! table-name vec-str-writer)
+        (.endValue vec-str-writer)
         (.endValue vec-writer)
 
         (.setRowCount live-root (inc (.getRowCount live-root)))

@@ -11,6 +11,55 @@
 
 (t/use-fixtures :each with-mock-clocks tu/with-node)
 
+(t/deftest test-multi-value-insert-423
+  (letfn [(expected [tt]
+            {[(util/->zdt #inst "2024-01-01") (util/->zdt util/end-of-time), tt tt]
+             "Happy 2024!",
+
+             ;; weird? zero-width sys-time so won't normally show up
+             [(util/->zdt #inst "2024-01-01") (util/->zdt #inst "2026-01-01"), tt tt]
+             "Happy 2024!",
+
+             [(util/->zdt #inst "2024-01-01") (util/->zdt #inst "2025-01-01"), tt (util/->zdt util/end-of-time)]
+             "Happy 2024!"
+
+             [(util/->zdt #inst "2025-01-01") (util/->zdt util/end-of-time), tt tt]
+             "Happy 2025!",
+
+             [(util/->zdt #inst "2025-01-01") (util/->zdt #inst "2026-01-01"), tt (util/->zdt util/end-of-time)]
+             "Happy 2025!",
+
+             [(util/->zdt #inst "2026-01-01") (util/->zdt util/end-of-time), tt (util/->zdt util/end-of-time)]
+             "Happy 2026!"})
+
+          (q [table tx]
+            (->> (c2/sql-query tu/*node* (format "
+SELECT p.id, p.text,
+       p.application_time_start, p.application_time_end,
+       p.system_time_start, p.system_time_end
+FROM %s FOR ALL SYSTEM_TIME AS p"
+                                                 table)
+                               {:basis {:tx tx}})
+                 (into {} (map (juxt (juxt :application_time_start :application_time_end
+                                           :system_time_start :system_time_end)
+                                     :text)))))]
+
+    (let [!tx (c2/submit-tx tu/*node* [[:sql "
+INSERT INTO posts (id, text, application_time_start)
+VALUES (1, 'Happy 2024!', DATE '2024-01-01'),
+       (1, 'Happy 2025!', DATE '2025-01-01'),
+       (1, 'Happy 2026!', DATE '2026-01-01')"]])]
+
+      (t/is (= (expected (util/->zdt #inst "2020-01-01"))
+               (q "posts" !tx))))
+
+    (let [!tx (c2/submit-tx tu/*node* [[:sql "INSERT INTO posts2 (id, text, application_time_start) VALUES (1, 'Happy 2024!', DATE '2024-01-01')"]
+                                       [:sql "INSERT INTO posts2 (id, text, application_time_start) VALUES (1, 'Happy 2025!', DATE '2025-01-01')"]
+                                       [:sql "INSERT INTO posts2 (id, text, application_time_start) VALUES (1, 'Happy 2026!', DATE '2026-01-01')"]])]
+
+      (t/is (= (expected (util/->zdt #inst "2020-01-02"))
+               (q "posts2" !tx))))))
+
 (t/deftest test-delete-without-search-315
   (let [!tx1 (c2/submit-tx tu/*node* [[:sql "INSERT INTO foo (id) VALUES ('foo')"]])]
     (t/is (= [{:id "foo",
