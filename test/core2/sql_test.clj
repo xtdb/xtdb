@@ -1208,4 +1208,19 @@
     (=plan-file
       "test-period-specs-with-subqueries-407-app-time"
       (plan-sql
-        "SELECT 1 FROM (select foo.bar from foo FOR APPLICATION_TIME AS OF CURRENT_TIMESTAMP) as tmp"))))
+        "SELECT 1 FROM (select foo.bar from foo FOR APPLICATION_TIME AS OF CURRENT_TIMESTAMP) as tmp")))
+
+  (t/is
+    (=plan-file
+      "test-period-specs-with-dml-subqueries-and-defaults-407" ;;also #424
+      (plan-sql "INSERT INTO prop_owner (id, customer_number, property_number, application_time_start, application_time_end)
+                SELECT 1,
+                145,
+                7797, DATE '1998-01-03', tmp.app_start
+                FROM
+                (SELECT MIN(Prop_Owner.system_time_start) AS app_start
+                FROM Prop_Owner
+                FOR ALL SYSTEM_TIME
+                WHERE Prop_Owner.id = 1) AS tmp"
+                {:app-time-as-of-now? true}))))
+

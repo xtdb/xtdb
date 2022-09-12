@@ -1480,7 +1480,7 @@
         (explicit-between-predicate z mode point-in-time-1 point-in-time-2 start-sym end-sym)))))
 
 (defn- wrap-with-application-time-select [table-primary-ast table-primary-plan]
-  (let [app-time-predicates
+ (let [app-time-predicates
         (interpret-application-time-period-spec table-primary-ast)]
 
     (cond
@@ -1986,37 +1986,57 @@
     [:table_primary [:arrow_table _ _] _ _ _]
     (build-arrow-table z)
 
-    [:table_primary _]
+    [:table_primary [:subquery _]]
+    ;;=>
+    (build-table-primary z)
+
+    [:table_primary [:subquery _] _]
+    ;;=>
+    (build-table-primary z)
+
+    [:table_primary [:subquery _] _ _]
+    ;;=>
+    (build-table-primary z)
+
+    [:table_primary [:subquery _] _ _ _]
+    ;;=>
+    (build-table-primary z)
+
+    ;; ident as first child indicates real table for now
+    ;; if and when query_name becomes a valid child of table_or_query_name
+    ;; this needs changing to specifically match on the table case
+
+    [:table_primary [:regular_identifier _]]
     ;;=>
     (->> (build-table-primary z)
          (wrap-with-system-time-select z)
          (wrap-with-application-time-select z))
 
-    [:table_primary _ _]
+    [:table_primary [:regular_identifier _] _]
     ;;=>
     (->> (build-table-primary z)
          (wrap-with-system-time-select z)
          (wrap-with-application-time-select z))
 
-    [:table_primary _ _ _]
+    [:table_primary [:regular_identifier _] _ _]
     ;;=>
     (->> (build-table-primary z)
          (wrap-with-system-time-select z)
          (wrap-with-application-time-select z))
 
-    [:table_primary _ _ _ _]
+    [:table_primary [:regular_identifier _] _ _ _]
     ;;=>
     (->> (build-table-primary z)
          (wrap-with-system-time-select z)
          (wrap-with-application-time-select z))
 
-    [:table_primary _ _ _ _ _]
+    [:table_primary [:regular_identifier _] _ _ _ _]
     ;;=>
     (->> (build-table-primary z)
          (wrap-with-system-time-select z)
          (wrap-with-application-time-select z))
 
-    [:table_primary _ _ _ _ _ _]
+    [:table_primary [:regular_identifier _] _ _ _ _ _]
     ;;=>
     (->> (build-table-primary z)
          (wrap-with-system-time-select z)
