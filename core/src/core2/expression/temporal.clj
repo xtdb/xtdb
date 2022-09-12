@@ -337,14 +337,14 @@
   (-> expr (recall-with-cast [:timestamp-local x-unit] y)))
 
 (defmethod expr/codegen-mono-call [:- :date :date] [expr]
-  (-> expr (recall-with-cast [:timestamp-local :second] [:timestamp-local :second])))
+  (-> expr (recall-with-cast [:timestamp-local :micro] [:timestamp-local :micro])))
 
 (doseq [t [:timestamp-tz :timestamp-local]]
   (defmethod expr/codegen-mono-call [:- :date t] [{[_ t2] :arg-types, :as expr}]
-    (-> expr (recall-with-cast [:timestamp-local :second] t2)))
+    (-> expr (recall-with-cast [:timestamp-local :micro] t2)))
 
   (defmethod expr/codegen-mono-call [:- t :date] [{[t1 _] :arg-types, :as expr}]
-    (-> expr (recall-with-cast t1 [:timestamp-local :second]))))
+    (-> expr (recall-with-cast t1 [:timestamp-local :micro]))))
 
 (defmethod expr/codegen-mono-call [:- :time-local :time-local] [{[[_ time-unit1] [[_ time-unit2]]] :arg-types, :as expr}]
   (-> expr (recall-with-cast [:duration time-unit1] [:duration time-unit2])))

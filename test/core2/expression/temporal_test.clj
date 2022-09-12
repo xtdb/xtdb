@@ -314,6 +314,9 @@
                (test-arithmetic '- #time/zoned-date-time "2022-08-01T02:31:26.684+01:00[Europe/London]" #time/duration "PT1H15M43.342S"))))
 
     (t/testing "(- datetime datetime)"
+      (t/is (= #time/duration "PT24H"
+               (test-arithmetic '- #time/date "2022-08-01" #time/date "2022-07-31")))
+
       (t/is (= #time/duration "PT1H15M43.342S"
                (test-arithmetic '- #time/date "2022-08-01" #time/date-time "2022-07-31T22:44:16.658")))
 

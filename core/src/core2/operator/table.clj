@@ -42,7 +42,7 @@
     explicit-col-names (-> (->> (merge (zipmap explicit-col-names (repeat :null))))
                            (select-keys explicit-col-names))))
 
-(defn- ->out-rel [{:keys [allocator clock] :as opts} col-types rows ->v]
+(defn- ->out-rel [{:keys [allocator] :as opts} col-types rows ->v]
   (let [row-count (count rows)]
     (when (pos? row-count)
       (let [out-cols (ArrayList. (count col-types))]
