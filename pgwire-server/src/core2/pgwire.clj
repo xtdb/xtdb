@@ -469,19 +469,11 @@
         {:statement-type :set-session-characteristics
          :access-mode :read-only})
 
-      (when (re-find #"(?i)^SET SESSION CHARACTERISTICS AS APPLICATION_TIME_DEFAULTS ISO_STANDARD$" sql-trimmed)
-        {:statement-type :set-session-characteristics
-         :app-time-defaults :iso-standard})
-
-      (when (re-find #"(?i)^SET SESSION CHARACTERISTICS AS APPLICATION_TIME_DEFAULTS AS_OF_NOW$" sql-trimmed)
-        {:statement-type :set-session-characteristics
-         :app-time-defaults :as-of-now})
-
       ;; SET x = 42
       ;; SET x to 42
       ;; general SET statements have undefined behaviour at the moment, but permitted while working
       ;; on client compatibility - many will become canned responses
-      (when-some [[_ k _ v] (re-find #"(?i)^SET\s+(\w+)\s*(=|TO)\s*(.*)" sql-trimmed)]
+      (when-some [[_ k v] (re-find #"(?i)^SET\s+(\w+)\s+(?:= |TO )?\s*(.*)" sql-trimmed)]
         {:statement-type :set-session-parameter
          :parameter k
          :value v})
@@ -809,7 +801,11 @@
       (log/fatal "Server resources could not be freed, please restart xtdb" port))))
 
 (defn- set-session-parameter [conn parameter value]
-  (swap! (:conn-state conn) assoc-in [:session :parameters parameter] value))
+  (let [parameter (util/->kebab-case-kw parameter)]
+    (swap! (:conn-state conn)
+           assoc-in [:session :parameters parameter]
+           (cond-> value
+             (= parameter :application-time-defaults) util/->kebab-case-kw))))
 
 (defn- cleanup-connection-resources [conn]
   (let [{:keys [cid, server, in, out, ^Socket socket, conn-status]} conn
@@ -1515,13 +1511,15 @@
         xt-params (vec (map-indexed xtify-param params))
 
         {{:keys [basis] :as transaction} :transaction
-         {:keys [^Clock clock, app-time-defaults]} :session} @conn-state
+         {:keys [^Clock clock] :as session} :session} @conn-state
+
+        app-time-as-of-now? (= :as-of-now (get-in session [:parameters :application-time-defaults]))
 
         query-opts
         {:basis (into {:current-time (.instant clock)} basis)
          :default-tz (.getZone clock)
          :? xt-params
-         :app-time-as-of-now? (= app-time-defaults :as-of-now)}]
+         :app-time-as-of-now? app-time-as-of-now?}]
 
     ;; DML currently takes a different execution path, requiring COMMIT to flush.
     (if (dml? ast)
@@ -1533,7 +1531,7 @@
           ;; we buffer the statement in the transaction (to be flushed with COMMIT)
           (swap! conn-state update-in [:transaction :dml-buf] (fnil conj []) stmt)
 
-          (submit-tx node [stmt] {:app-time-as-of-now? (= app-time-defaults :as-of-now)}))
+          (submit-tx node [stmt] {:app-time-as-of-now? app-time-as-of-now?}))
 
         (cmd-write-msg conn msg-command-complete
                        {:command (case (ast-executable-statement-root-tag ast)
@@ -1620,12 +1618,12 @@
 
 (defn cmd-commit [{:keys [server, conn-state] :as conn}]
   (let [{:keys [node]} server
-        {{:keys [failed err dml-buf]} :transaction, {:keys [app-time-defaults]} :session} @conn-state]
+        {{:keys [failed err dml-buf]} :transaction, :keys [session]} @conn-state]
     (if failed
       ;; TODO better err
       (cmd-send-error conn (or err (err-protocol-violation "transaction failed")))
 
-      (if-let [err (submit-tx node dml-buf {:app-time-as-of-now? (= app-time-defaults :as-of-now)})]
+      (if-let [err (submit-tx node dml-buf {:app-time-as-of-now? (= :as-of-now (get-in session [:parameters :application-time-defaults]))})]
         (do
           (swap! conn-state update :transaction assoc :failed true, :err err)
           (cmd-send-error conn err))

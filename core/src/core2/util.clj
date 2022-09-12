@@ -3,7 +3,8 @@
             [clojure.spec.alpha :as s]
             [clojure.tools.logging :as log]
             core2.api
-            [core2.error :as err])
+            [core2.error :as err]
+            [clojure.string :as str])
   (:import clojure.lang.MapEntry
            core2.ICursor
            [java.io ByteArrayOutputStream File]
@@ -611,3 +612,6 @@
 (defn clear-known-lru-memo-tables! []
   (doseq [[_ ^Map table] known-memo-tables]
     (.clear table)))
+
+(defn ->kebab-case-kw [s]
+  (-> s str/lower-case (str/replace "_" "-") keyword))

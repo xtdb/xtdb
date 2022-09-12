@@ -917,17 +917,17 @@
 
       (testing "literals saved as is (no parser hooked up yet)"
         (is (q conn ["SET a = 'b'"]))
-        (is (= {"a" "'b'"} (params ["a"])))
+        (is (= {:a "'b'"} (params [:a])))
         (is (q conn ["SET b = 42"]))
-        (is (= {"a" "'b'", "b" "42"} (params ["a" "b"]))))
+        (is (= {:a "'b'", :b "42"} (params [:a :b]))))
 
       (testing "properties can be overwritten"
         (q conn ["SET a = 42"])
-        (is (= {"a" "42"} (params ["a"]))))
+        (is (= {:a "42"} (params [:a]))))
 
       (testing "TO syntax can be used"
         (q conn ["SET a TO 43"])
-        (is (= {"a" "43"} (params ["a"])))))))
+        (is (= {:a "43"} (params [:a])))))))
 
 (deftest db-queryable-after-transaction-error-test
   (with-open [conn (jdbc-conn)]
@@ -1230,7 +1230,7 @@
 (deftest set-app-time-defaults-test
   (with-open [conn (jdbc-conn)]
     (let [sql #(q conn [%])]
-      (sql "SET SESSION CHARACTERISTICS AS APPLICATION_TIME_DEFAULTS AS_OF_NOW")
+      (sql "SET application_time_defaults TO as_of_now")
 
       (sql "START TRANSACTION READ WRITE")
       (sql "INSERT INTO foo (id, version) VALUES ('foo', 0)")
@@ -1243,7 +1243,7 @@
       (is (= [{:version 1, :application_time_start "2020-01-02T00:00Z", :application_time_end "9999-12-31T23:59:59.999999Z"}]
              (q conn ["SELECT foo.version, foo.application_time_start, foo.application_time_end FROM foo"])))
 
-      (sql "SET SESSION CHARACTERISTICS AS APPLICATION_TIME_DEFAULTS ISO_STANDARD")
+      (sql "SET application_time_defaults iso_standard")
       (is (= [{:version 0, :application_time_start "2020-01-01T00:00Z", :application_time_end "2020-01-02T00:00Z"}
               {:version 1, :application_time_start "2020-01-02T00:00Z", :application_time_end "9999-12-31T23:59:59.999999Z"}]
              (q conn ["SELECT foo.version, foo.application_time_start, foo.application_time_end FROM foo"]))))))
