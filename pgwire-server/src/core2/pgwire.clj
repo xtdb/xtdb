@@ -801,11 +801,12 @@
       (log/fatal "Server resources could not be freed, please restart xtdb" port))))
 
 (defn- set-session-parameter [conn parameter value]
-  (let [parameter (util/->kebab-case-kw parameter)]
+  (let [parameter (-> (util/->kebab-case-kw parameter)
+                      ((some-fn {:application-time-defaults :app-time-defaults} identity)))]
     (swap! (:conn-state conn)
            assoc-in [:session :parameters parameter]
            (cond-> value
-             (= parameter :application-time-defaults) util/->kebab-case-kw))))
+             (= parameter :app-time-defaults) util/->kebab-case-kw))))
 
 (defn- cleanup-connection-resources [conn]
   (let [{:keys [cid, server, in, out, ^Socket socket, conn-status]} conn
@@ -1513,7 +1514,7 @@
         {{:keys [basis] :as transaction} :transaction
          {:keys [^Clock clock] :as session} :session} @conn-state
 
-        app-time-as-of-now? (= :as-of-now (get-in session [:parameters :application-time-defaults]))
+        app-time-as-of-now? (= :as-of-now (get-in session [:parameters :app-time-defaults]))
 
         query-opts
         {:basis (into {:current-time (.instant clock)} basis)
@@ -1623,7 +1624,7 @@
       ;; TODO better err
       (cmd-send-error conn (or err (err-protocol-violation "transaction failed")))
 
-      (if-let [err (submit-tx node dml-buf {:app-time-as-of-now? (= :as-of-now (get-in session [:parameters :application-time-defaults]))})]
+      (if-let [err (submit-tx node dml-buf {:app-time-as-of-now? (= :as-of-now (get-in session [:parameters :app-time-defaults]))})]
         (do
           (swap! conn-state update :transaction assoc :failed true, :err err)
           (cmd-send-error conn err))

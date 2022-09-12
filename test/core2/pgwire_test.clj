@@ -1230,7 +1230,7 @@
 (deftest set-app-time-defaults-test
   (with-open [conn (jdbc-conn)]
     (let [sql #(q conn [%])]
-      (sql "SET application_time_defaults TO as_of_now")
+      (sql "SET app_time_defaults TO as_of_now")
 
       (sql "START TRANSACTION READ WRITE")
       (sql "INSERT INTO foo (id, version) VALUES ('foo', 0)")
