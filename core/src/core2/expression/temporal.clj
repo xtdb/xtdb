@@ -47,12 +47,11 @@
 
                 :metadata-vp-call
                 (let [{:keys [f param-expr]} expr]
-                  (apply-constraint min-range max-range
-                                    f col-name
-                                    (util/sql-temporal->instant (some-> (or (find param-expr :literal)
-                                                                            (find params (get param-expr :param)))
-                                                                        val)
-                                                                (.getZone expr/*clock*))))
+                  (when-let [v (util/sql-temporal->instant (some-> (or (find param-expr :literal)
+                                                                       (find params (get param-expr :param)))
+                                                                   val)
+                                                           (.getZone expr/*clock*))]
+                    (apply-constraint min-range max-range f col-name v)))
 
                 expr)))))
     [min-range max-range]))

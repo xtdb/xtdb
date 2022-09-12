@@ -129,6 +129,13 @@
                                                        (= application_time_start #inst "2020"))}
                              {})))))
 
+      (t/testing "ignores non-ts literals"
+        (t/is (= {:app-time-start [μs-2019 μs-2019]}
+                 (transpose (expr.temp/->temporal-min-max-range
+                             {"application_time_start" '(and (= application_time_start #inst "2019")
+                                                             (= application_time_end nil))}
+                             {})))))
+
       (t/testing "parameters"
         (t/is (= {:app-time-start [μs-2018 Long/MAX_VALUE]
                   :app-time-end [Long/MIN_VALUE (dec μs-2018)]
