@@ -215,18 +215,13 @@
      (string "2022-01-03")
 
      ;; numbers
-     ;
 
      (integer 0)
      (integer -0)
      (integer 42)
      (integer Long/MAX_VALUE)
 
-     ;; does not work
-     ;; MAX 9223372036854775807
-     ;; MIN -9223372036854775808
-     ;; min > max if you remove the sign
-     #_(integer Long/MIN_VALUE)
+     (integer Long/MIN_VALUE)
 
      (decimal 0.0)
      (decimal -0.0)
@@ -238,7 +233,6 @@
      (decimal Double/MAX_VALUE :add-zero true)
 
      ;; dates / times
-     ;
 
      {:sql "DATE '2021-12-24'"
       :json-type JsonNodeType/STRING
@@ -249,29 +243,24 @@
      {:sql "TIMESTAMP '2021-03-04 03:04:11+02:00'"
       :json-type JsonNodeType/STRING
       :clj "2021-03-04T03:04:11+02:00"}
-
-
-     ;; does not work, no timestamp literals
-     #_
      {:sql "TIMESTAMP '2021-12-24 11:23:44.003'"
       :json-type JsonNodeType/STRING
-      :clj "2021-12-24T11:23:44.003Z"}
+      :clj "2021-12-24T11:23:44.003"}
 
-     ;; does not work
-     ;; java.lang.ClassCastException: class org.apache.arrow.vector.IntervalYearVector cannot be cast to class org.apache.arrow.vector.IntervalMonthDayNanoVector
-     #_{:sql "1 YEAR"
-        :json-type JsonNodeType/STRING
-        :clj "P1Y"}
-     #_
+     {:sql "1 YEAR"
+      :json-type JsonNodeType/STRING
+      :clj "P12M"}
      {:sql "1 MONTH"
       :json-type JsonNodeType/STRING
       :clj "P1M"}
 
-     ;; arrays
-     ;
+     ;; HACK to return durations, see #431
+     {:sql "DATE '2021-12-24' - DATE '2021-12-23'"
+      :json-type JsonNodeType/STRING
+      :clj "PT24H"}
 
-     ;; does not work (cannot parse empty array)
-     #_
+     ;; arrays
+
      {:sql "ARRAY []"
       :json-type JsonNodeType/ARRAY
       :clj []}
@@ -285,8 +274,7 @@
       :json "[\"2022-01-02\"]"
       :clj ["2022-01-02"]}
 
-     ;; issue #245
-     #_
+     #_ ; FIXME #245
      {:sql "ARRAY [ARRAY ['42'], 42, '42']"
       :json-type JsonNodeType/ARRAY
       :clj [["42"] 42 "42"]}]))
@@ -295,7 +283,7 @@
   (with-open [conn (jdbc-conn)]
     (doseq [{:keys [json-type, json, sql, clj, clj-pred] :as example} json-representation-examples]
       (testing (str "SQL expression " sql " should parse to " clj " (" (when json (str json ", ")) json-type ")")
-        (with-open [stmt (.prepareStatement conn (format "SELECT a.a FROM (VALUES (%s)) a (a)" sql))]
+        (with-open [stmt (.prepareStatement conn (format "SELECT %s FROM (VALUES (1)) a (a)" sql))]
           (with-open [rs (.executeQuery stmt)]
             ;; one row in result set
             (.next rs)

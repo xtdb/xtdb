@@ -28,6 +28,6 @@ public final class IntervalDayTime {
 
     @Override
     public String toString() {
-        return String.format("(IntervalDayTime %s %s)", period, duration);
+        return period.toString() + duration.toString().substring(1);
     }
 }

@@ -18,12 +18,13 @@
             [core2.sql :as sql])
   (:import (clojure.lang PersistentQueue)
            (core2 IResultSet)
+           (core2.types IntervalDayTime IntervalMonthDayNano IntervalYearMonth)
            (java.io ByteArrayInputStream ByteArrayOutputStream Closeable DataInputStream DataOutputStream EOFException IOException InputStream OutputStream PushbackInputStream)
            (java.lang Thread$State)
            (java.net ServerSocket Socket SocketException)
            (java.nio ByteBuffer)
            (java.nio.charset StandardCharsets)
-           (java.time Clock LocalDate LocalDateTime OffsetDateTime ZoneId ZoneOffset ZonedDateTime)
+           (java.time Clock Duration LocalDate LocalDateTime OffsetDateTime Period ZoneId ZoneOffset ZonedDateTime)
            (java.util HashMap List Map)
            (java.util.concurrent CompletableFuture ConcurrentHashMap ExecutorService Executors TimeUnit)
            (java.util.function BiConsumer BiFunction)
@@ -508,7 +509,6 @@
   ;; we lean on data.json for now for encoding, quote/escape, json compat floats etc
 
   (cond
-    ;; no ambiguity, as-is!
     (nil? obj) nil
     (boolean? obj) obj
     (int? obj) obj
@@ -529,6 +529,12 @@
     ;; print offset instead of zoneprefix  otherwise printed representation may change depending on client
     ;; we might later revisit this if json printing remains
     (instance? ZonedDateTime obj) (recur (.toOffsetDateTime ^ZonedDateTime obj))
+    (instance? Duration obj) (str obj)
+    (instance? Period obj) (str obj)
+
+    (instance? IntervalYearMonth obj) (str obj)
+    (instance? IntervalDayTime obj) (str obj)
+    (instance? IntervalMonthDayNano obj) (str obj)
 
     ;; represent period duration as an iso8601 duration string (includes period components)
     (instance? PeriodDuration obj)
@@ -1357,7 +1363,7 @@
 
                 ;; (ideally) unexpected (e.g bug in operator)
                 (catch Throwable e
-                  (log/debug e "An exception was caught during query result set iteration")
+                  (log/warn e "An exception was caught during query result set iteration")
                   (cmd-send-error conn (err-internal "unexpected server error during query execution"))))]
           (when continue
             (recur (inc n-rows-out))))

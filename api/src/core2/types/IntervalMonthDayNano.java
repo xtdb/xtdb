@@ -28,6 +28,6 @@ public final class IntervalMonthDayNano {
 
     @Override
     public String toString() {
-        return String.format("(IntervalMonthDayNano %s %s)", period, duration);
+        return period.toString() + duration.toString().substring(1);
     }
 }

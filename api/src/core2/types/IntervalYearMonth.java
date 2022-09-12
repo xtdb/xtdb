@@ -25,6 +25,6 @@ public final class IntervalYearMonth {
 
     @Override
     public String toString() {
-        return String.format("(IntervalYearMonth %s)", period);
+        return period.toString();
     }
 }
