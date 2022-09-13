@@ -48,9 +48,22 @@ comment
 
 INSERT INTO foo (a, b) VALUES /* and a comment inline */ (1, 2);
 
+-- SELECT 1 FROM x; -- commented out line
+
+/* SELECT 'foo
+
+bar'
+
+FROM x;
+*/
+
+SELECT 'foo
+bar' FROM x;
+
 "
         actual (p/sql-parser sql-statements  :direct_sql_statements)]
     (t/is (= [:query_expression
-              :insert_statement]
+              :insert_statement
+              :query_expression]
              (for [[_ [_ [x]]] (rest actual)]
                x)))))
