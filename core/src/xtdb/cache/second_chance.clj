@@ -144,26 +144,6 @@
                      (.offer cooling vp))
             (.unswizzle vp (.getKey e))))))))
 
-(def ^:private ^AtomicReference free-memory-ratio (AtomicReference. 1.0))
-(def ^:private ^:const free-memory-check-interval-ms 1000)
-
-(defn- free-memory-loop []
-  (try
-    (while true
-      (let [max-memory (.maxMemory (Runtime/getRuntime))
-            used-memory (- (.totalMemory (Runtime/getRuntime))
-                           (.freeMemory (Runtime/getRuntime)))
-            free-memory (- max-memory used-memory)]
-        (.set free-memory-ratio (double (/ free-memory max-memory))))
-      (Thread/sleep free-memory-check-interval-ms))
-    (catch InterruptedException _)))
-
-(def ^:private ^Thread free-memory-thread
-  (do (when (and (bound? #'free-memory-thread) free-memory-thread)
-        (.interrupt ^Thread free-memory-thread))
-      (doto (Thread. ^Runnable free-memory-loop "xtdb.cache.second-chance.free-memory-thread")
-        (.setDaemon true))))
-
 (defn- move-to-cold-state [^SecondChanceCache cache]
   (let [cooling ^Queue (.cooling cache)
         cold ^ICache (.cold cache)
