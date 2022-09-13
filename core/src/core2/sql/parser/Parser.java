@@ -84,7 +84,7 @@ public final class Parser {
     private static final IPersistentVector WS_ERROR = RT.vector(Keyword.intern("expected"), "<WS>");
 
     private static int skipWhitespace(final Pattern pattern, final String in, final int idx, final IParseErrors errors) {
-        final Matcher m = pattern.matcher(in).region(idx, in.length()).useTransparentBounds(true);
+        final Matcher m = pattern.matcher(in).region(idx, in.length()).useTransparentBounds(true).useAnchoringBounds(false);
         if (m.lookingAt()) {
             return m.end();
         } else if (0 == idx) {
@@ -683,7 +683,7 @@ public final class Parser {
         }
 
         public ParseState parse(final String in, int idx, final MemoTable memos, final IParseErrors errors, final boolean hide) {
-            final Matcher m = pattern.matcher(in).region(idx, in.length()).useTransparentBounds(true);
+            final Matcher m = pattern.matcher(in).region(idx, in.length()).useTransparentBounds(true).useAnchoringBounds(false);
             if (m.lookingAt()) {
                 idx = skipWhitespace(wsPattern, in, m.end(), errors);
                 if (idx != -1) {

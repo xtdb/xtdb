@@ -135,6 +135,8 @@
   ({:tag :nt, :keyword :object_name}
    {:tag :nt, :keyword :colon, :hide true}
    {:tag :nt, :keyword :value_expression})},
+ :direct_sql_statements
+ {:tag :plus, :parser {:tag :nt, :keyword :direct_sql_statement}},
  :boolean_factor
  {:tag :cat,
   :parsers

@@ -217,11 +217,46 @@
 (def sql-cfg
   (read-string (slurp (io/resource "core2/sql/parser/SQL2011.edn"))))
 
+(def sql-regular-ws-pattern
+  #"\s+")
+
+(def sql-single-line-comment-pattern
+  #"\s*--.*")
+
+(def sql-multi-line-comment-pattern
+  #"(?s)/[*].*?(?:[*]/|$)(?-s)")
+
+;; TODO: I think this should be plus and not star, as the idea is that
+;; it should match mandatory whitespace, but detect boundaries and
+;; punctuation as well. Most of that is really handled by the parsing
+;; of the keywords themselves, enforcing them to be at word
+;; boundaries. Identifiers may bleed over into keywords if there's no
+;; boundary, like fooASbar is a single identifier.
+
+;; NOTE, the following are currently not used.
+
+(def sql-after-punctuation-pattern
+  #"(?<=\p{Punct})")
+
+(def sql-word-boundary-pattern
+  #"\b")
+
+
+(def sql-ws-pattern
+  (Pattern/compile
+   (str "(?:"
+        (->> (for [^Pattern p [sql-regular-ws-pattern
+                               sql-single-line-comment-pattern
+                               sql-multi-line-comment-pattern]]
+               (.pattern p))
+             (str/join "|"))
+        ")*")))
+
 ;; API
 
 (def sql-parser
   (build-ebnf-parser sql-cfg
-                     #"(?:\s+|(?<=\p{Punct}|\s)|\b|\s*--[^\r\n]*\s*|\s*/[*].*?(?:[*]/\s*|$))"
+                     sql-ws-pattern
                      (fn [rule-name]
                        (if (and (not (contains? #{:table_primary :query_expression :table_expression} rule-name))
                                 (re-find #"(^|_)(term|factor|primary|expression|query_expression_body|boolean_test)$" (name rule-name)))
