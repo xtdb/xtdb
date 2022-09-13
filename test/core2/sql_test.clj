@@ -731,12 +731,12 @@
   (t/are [sql expected]
     (= expected (plan-expr sql))
 
-    "OBJECT('foo': 2).foo" '(. {:foo 2} foo)
-    "{'foo': 2}.foo" '(. {:foo 2} foo)
-    "{'foo': 2}.foo.bar" '(. (. {:foo 2} foo) bar)
+    "OBJECT('foo': 2).foo" '(. {:foo 2} :foo)
+    "{'foo': 2}.foo" '(. {:foo 2} :foo)
+    "{'foo': 2}.foo.bar" '(. (. {:foo 2} :foo) :bar)
 
-    "foo.a.b" '(. x1 b)
-    "foo.a.b.c" '(. (. x1 b) c)))
+    "foo.a.b" '(. x1 :b)
+    "foo.a.b.c" '(. (. x1 :b) :c)))
 
 (deftest test-array-subqueries
   (t/are [file q]

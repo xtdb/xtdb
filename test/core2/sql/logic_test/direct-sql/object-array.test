@@ -1,0 +1,136 @@
+hash-threshold 100
+
+statement ok
+INSERT INTO t1(id) VALUES(1)
+
+# testing projection/construction
+
+query T rowsort
+SELECT OBJECT('id': 1) FROM t1
+----
+{:id 1}
+
+query T rowsort
+SELECT OBJECT ('foo': 2, 'bar': OBJECT('baz': 'biff')) FROM t1
+----
+{:foo 2, :bar {:baz "biff"}}
+
+query T rowsort
+SELECT OBJECT ('foo': OBJECT('bibble': true),
+			   'bar': OBJECT('baz': -4113466,
+							 'flib': OBJECT('true': false)))
+FROM t1
+----
+{:foo {:bibble true}, :bar {:baz -4113466, :flib {:true false}}}
+
+query T rowsort
+SELECT ARRAY ['foo', 'bar'] FROM t1
+----
+["foo","bar"]
+
+query T rowsort
+SELECT ARRAY [1, 5, -23] FROM t1
+----
+[1,5,-23]
+
+query T rowsort
+SELECT ARRAY [true, FALSE, true, TRUE, false] FROM t1
+----
+[true,false,true,true,false]
+
+query T rowsort
+SELECT OBJECT ('foo': 5, 'bar': OBJECT('baz': ARRAY [-45, 1, 24])) FROM t1
+----
+{:foo 5, :bar {:baz [-45 1 24]}}
+
+query T rowsort
+SELECT ARRAY [OBJECT('foo': 5), OBJECT('foo': 5)] FROM t1
+----
+[{"foo":5},{"foo":5}]
+
+statement ok
+INSERT INTO t1(id) VALUES(2)
+
+# testing more than one row
+
+query T rowsort
+SELECT OBJECT ('foo': OBJECT('bibble': true),
+			   'bar': OBJECT('baz': -4113466,
+							 'flib': OBJECT('true': false)))
+FROM t1
+----
+{:foo {:bibble true}, :bar {:baz -4113466, :flib {:true false}}}
+{:foo {:bibble true}, :bar {:baz -4113466, :flib {:true false}}}
+
+# testing field refs
+
+query T nosort
+SELECT foo.a.b
+FROM (VALUES ({'b': 42}),
+			 ({'d': 100})) AS foo(a)
+----
+42
+NULL
+
+query T nosort
+SELECT foo.a.b.c
+FROM (VALUES ({'b': {'c': 'cat'}}),
+ 			 ({'d': 100})) AS foo(a)
+----
+cat
+NULL
+
+# testing OBJECT round trip
+
+statement ok
+INSERT INTO t2(id, data)
+VALUES(1, OBJECT ('foo': OBJECT('bibble': true),
+				  'bar': OBJECT('baz': -4113466,
+				        		'flib': OBJECT('true': false))))
+
+statement ok
+INSERT INTO t2(id, data)
+VALUES(2, {'foo': {'bibble': true},
+		   'bar': {'baz': 1001}})
+
+query T rowsort
+SELECT t2.data FROM t2
+----
+{:foo {:bibble true}, :bar {:baz -4113466, :flib {:true false}}}
+{:foo {:bibble true}, :bar {:baz 1001}}
+
+# SEE 440
+#query T rowsort
+#SELECT t2.data.foo FROM t2
+#----
+#{:bibble true}
+#{:bibble true}
+
+#query T nosort
+#SELECT t2.data.foo.bibble FROM t2
+#----
+#true
+#true
+
+# SEE #244
+#SELECT t2.data, t1.data FROM t2, t2 AS t1
+
+# testing ARRAY round trip
+
+statement ok
+INSERT INTO t3(id, data) VALUES (1, [2, 3])
+
+statement ok
+INSERT INTO t3(id, data) VALUES (2, [6, 7])
+
+query T nosort
+SELECT t3.data FROM t3
+----
+[2,3]
+[6,7]
+
+query T nosort
+SELECT t3.data[2] FROM t3
+----
+3
+7

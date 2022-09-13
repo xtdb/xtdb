@@ -798,7 +798,7 @@
 
     ;; Does not work for column references, see above.
     [:field_reference ^:z vep [:regular_identifier fn]]
-    (list '. (expr vep) (symbol fn))
+    (list '. (expr vep) (keyword fn))
 
     [:array_value_constructor_by_enumeration]
     ;; =>

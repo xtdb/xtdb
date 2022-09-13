@@ -108,15 +108,15 @@
                              :form form})))
 
   (let [[struct field] args]
-    (when-not (symbol? field)
+    (when-not (or (symbol? field) (keyword? field))
       (throw (err/illegal-arg :core2.expression/arity-error
-                              {::err/message (str "'.' expects symbol fields: " (pr-str form))
+                              {::err/message (str "'.' expects symbol or keyword fields: " (pr-str form))
                                :form form})))
 
     {:op :vectorised-call
      :f :get-field
      :args [(form->expr struct env)]
-     :field field}))
+     :field (symbol field)}))
 
 (defmethod parse-list-form '.. [[_ & args :as form] env]
   (let [[struct & fields] args]
@@ -124,15 +124,15 @@
       (throw (err/illegal-arg :core2.expression/arity-error
                               {::err/message (str "'..' expects at least 2 args: " (pr-str form))
                                :form form})))
-    (when-not (every? symbol? fields)
+    (when-not (every? #(or (symbol? %) (keyword? %)) fields)
       (throw (err/illegal-arg :core2.expression/parse-error
-                              {::err/message (str "'..' expects symbol fields: " (pr-str form))
+                              {::err/message (str "'..' expects symbol or keyword fields: " (pr-str form))
                                :form form})))
     (reduce (fn [struct-expr field]
               {:op :vectorised-call
                :f :get-field
                :args [struct-expr]
-               :field field})
+               :field (symbol field)})
             (form->expr struct env)
             (rest args))))
 
