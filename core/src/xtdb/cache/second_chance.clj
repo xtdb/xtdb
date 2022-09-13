@@ -113,15 +113,16 @@
 (def ^:private ^:const free-memory-check-interval-ms 1000)
 
 (defn- free-memory-loop []
-  (try
-    (while true
-      (let [max-memory (.maxMemory (Runtime/getRuntime))
-            used-memory (- (.totalMemory (Runtime/getRuntime))
-                           (.freeMemory (Runtime/getRuntime)))
-            free-memory (- max-memory used-memory)]
-        (.set free-memory-ratio (double (/ free-memory max-memory))))
-      (Thread/sleep free-memory-check-interval-ms))
-    (catch InterruptedException _)))
+  (let [runtime (Runtime/getRuntime)]
+    (try
+      (while true
+        (let [max-memory (.maxMemory runtime)
+              used-memory (-  (.totalMemory runtime)
+                              (.freeMemory runtime))
+              free-memory (- max-memory used-memory)]
+          (.set free-memory-ratio  (/ (double free-memory) (double max-memory))))
+        (Thread/sleep free-memory-check-interval-ms))
+      (catch InterruptedException _))))
 
 (def ^:private ^Thread free-memory-thread
   (do (when (and (bound? #'free-memory-thread) free-memory-thread)
