@@ -221,7 +221,7 @@
   #"\s+")
 
 (def sql-single-line-comment-pattern
-  #"\s*--.*")
+  #"--.*")
 
 (def sql-multi-line-comment-pattern
   #"(?s)/[*].*?(?:[*]/|$)(?-s)")

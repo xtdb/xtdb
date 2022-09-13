@@ -3,8 +3,8 @@
             [core2.sql.parser :as p]))
 
 (t/deftest test-sql-comments
-  (t/is (= " -- single line comment" (re-find p/sql-single-line-comment-pattern "'1\n2' -- single line comment")))
-  (t/is (= " -- single line comment" (re-find p/sql-single-line-comment-pattern " -- single line comment\n '1\n2'")))
+  (t/is (= "-- single line comment" (re-find p/sql-single-line-comment-pattern "'1\n2' -- single line comment")))
+  (t/is (= "-- single line comment" (re-find p/sql-single-line-comment-pattern " -- single line comment\n '1\n2'")))
   (t/is (= "/* multi line\ncomment */" (re-find p/sql-multi-line-comment-pattern "/* multi line\ncomment */ '1\n2'")))
   (t/is (= "/* multi line\ncomment */" (re-find p/sql-multi-line-comment-pattern "'1\n2' /* multi line\ncomment */ ")))
   (t/is (= "/* multi line\ncomment" (re-find p/sql-multi-line-comment-pattern "'1\n2' /* multi line\ncomment")))
