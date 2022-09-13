@@ -1841,7 +1841,7 @@
 
   (let [db (xt/db *api*)
         ;; Much higher than needed, but catches the bug without flakiness.
-        range-slowdown-factor 10
+        range-slowdown-factor 100
         entity-time (let [start-time (System/nanoTime)]
                       (t/testing "entity id lookup"
                         (t/is (= 250 (ffirst (xt/q db '{:find [e]
