@@ -1834,20 +1834,21 @@
 (t/deftest test-optimise-range-constraints-bug-505
   (let [tx (vec (for [i (range 5000)]
                   [::xt/put
-                   {:xt/id (keyword (str "id-" i))
+                   {:xt/id i
                     :offer i}]))
         submitted-tx (doto (xt/submit-tx *api* tx)
                        (->> (xt/await-tx *api*)))])
 
   (let [db (xt/db *api*)
         ;; Much higher than needed, but catches the bug without flakiness.
-        range-slowdown-factor 100
+        range-slowdown-factor 10
         entity-time (let [start-time (System/nanoTime)]
                       (t/testing "entity id lookup"
-                        (t/is (= :id-0 (:xt/id (xt/entity db :id-0)))))
+                        (t/is (= 250 (ffirst (xt/q db '{:find [e]
+                                                        :where [[250 :xt/id e]]})))))
                       (- (System/nanoTime) start-time))
-        base-query '{:find [i]
-                     :where [[_ :offer i]
+        base-query '{:find [e]
+                     :where [[e :offer i]
                              [(test-pred i test-val)]]
                      :limit 1}
         inputs '[[[[2]] = 2]
