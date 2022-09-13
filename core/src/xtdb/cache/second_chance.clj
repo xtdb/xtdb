@@ -34,6 +34,29 @@
               (when-not (and (= next start) wrapped-around)
                 (recur next (if last true wrapped-around))))))))))
 
+(defn- adaptive-cache-max-size ^long [^long size ^double adaptive-break-even-level ^double free-memory-ratio]
+  (long (Math/pow size (+ adaptive-break-even-level free-memory-ratio))))
+
+(def ^:private ^AtomicReference free-memory-ratio (AtomicReference. 1.0))
+(def ^:private ^:const free-memory-check-interval-ms 1000)
+
+(defn- free-memory-loop []
+  (try
+    (while true
+      (let [max-memory (.maxMemory (Runtime/getRuntime))
+            used-memory (- (.totalMemory (Runtime/getRuntime))
+                           (.freeMemory (Runtime/getRuntime)))
+            free-memory (- max-memory used-memory)]
+        (.set free-memory-ratio (double (/ free-memory max-memory))))
+      (Thread/sleep free-memory-check-interval-ms))
+    (catch InterruptedException _)))
+
+(def ^:private ^Thread free-memory-thread
+  (do (when (and (bound? #'free-memory-thread) free-memory-thread)
+        (.interrupt ^Thread free-memory-thread))
+      (doto (Thread. ^Runnable free-memory-loop "xtdb.cache.second-chance.free-memory-thread")
+        (.setDaemon true))))
+
 (declare resize-cache)
 
 (definterface SecondChanceCachePrivate
@@ -60,16 +83,28 @@
 
   ICache
   (computeIfAbsent [this k stored-key-fn f]
-    (let [^ValuePointer vp (or (.get hot (KeyWrapper. k))
-                               (let [stored-key (stored-key-fn k)
-                                     wrapped-key (KeyWrapper. stored-key)
-                                     v (if-some [v (.valAt cold wrapped-key)]
-                                         v
-                                         (f stored-key))
-                                     vp (.computeIfAbsent hot wrapped-key (reify Function
-                                                                            (apply [_ k]
-                                                                              (ValuePointer. v))))]
-                                 (resize-cache this)
+    (let [^ValuePointer vp
+          (or (.get hot (KeyWrapper. k))
+              (let [max-size
+                    (if adaptive-sizing?
+                      (adaptive-cache-max-size size adaptive-break-even-level (.get free-memory-ratio))
+                      size)
+
+                    ;; when size of the hot cache exceeds target max (with a small buff), await any concurrent resize operation
+                    _
+                    (when (< (+ max-size 1024) (.size hot))
+                      (.acquire resize-semaphore)
+                      (.release resize-semaphore))
+
+                    stored-key (stored-key-fn k)
+                    wrapped-key (KeyWrapper. stored-key)
+                    v (if-some [v (.valAt cold wrapped-key)]
+                        v
+                        (f stored-key))
+                    vp (.computeIfAbsent hot wrapped-key (reify Function
+                                                           (apply [_ k]
+                                                             (ValuePointer. v))))]
+                (resize-cache this)
                                  vp))
           v (.swizzle vp)]
       v))
@@ -133,9 +168,7 @@
   (let [cooling ^Queue (.cooling cache)
         cold ^ICache (.cold cache)
         hot-target-size (if (.adaptive-sizing? cache)
-                          (long (Math/pow (.size cache)
-                                          (+ (.adaptive-break-even-level cache)
-                                             (double (.get free-memory-ratio)))))
+                          (adaptive-cache-max-size (.-size cache) (.-adaptive_break_even_level cache) (.get free-memory-ratio))
                           (.size cache))]
     (while (> (.size (.getHot cache)) hot-target-size)
       (when-let [vp ^ValuePointer (.poll cooling)]
