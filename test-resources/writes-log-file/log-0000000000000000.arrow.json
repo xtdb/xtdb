@@ -20,7 +20,7 @@
       "children" : [ ]
     },{
       "name" : "ops",
-      "nullable" : false,
+      "nullable" : true,
       "type" : {
         "name" : "list"
       },
@@ -78,22 +78,22 @@
     }]
   },
   "batches" : [{
-    "count" : 2,
+    "count" : 3,
     "columns" : [{
       "name" : "tx-id",
-      "count" : 2,
-      "VALIDITY" : [1,1],
-      "DATA" : ["0","3405"]
+      "count" : 3,
+      "VALIDITY" : [1,1,1],
+      "DATA" : ["0","3405","6234"]
     },{
       "name" : "system-time",
-      "count" : 2,
-      "VALIDITY" : [1,1],
-      "DATA" : [1577836800000000,1577923200000000]
+      "count" : 3,
+      "VALIDITY" : [1,1,1],
+      "DATA" : [1577836800000000,1577923200000000,1578009600000000]
     },{
       "name" : "ops",
-      "count" : 2,
-      "VALIDITY" : [1,1],
-      "OFFSET" : [0,2,4],
+      "count" : 3,
+      "VALIDITY" : [1,0,1],
+      "OFFSET" : [0,2,2,4],
       "children" : [{
         "name" : "$data$",
         "count" : 4,
@@ -102,17 +102,17 @@
           "name" : "iid",
           "count" : 4,
           "VALIDITY" : [1,1,1,1],
-          "DATA" : ["0","72057594037927936","144115188075855872","72057594037927936"]
+          "DATA" : ["0","72057594037927936","216172782113783808","72057594037927936"]
         },{
           "name" : "row-id",
           "count" : 4,
           "VALIDITY" : [1,1,0,1],
-          "DATA" : ["0","1","0","3"]
+          "DATA" : ["0","1","0","4"]
         },{
           "name" : "application-time-start",
           "count" : 4,
           "VALIDITY" : [1,1,1,1],
-          "DATA" : [1577836800000000,1577836800000000,1577923200000000,1585699200000000]
+          "DATA" : [1577836800000000,1577836800000000,1578009600000000,1585699200000000]
         },{
           "name" : "application-time-end",
           "count" : 4,

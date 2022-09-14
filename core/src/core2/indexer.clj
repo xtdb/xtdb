@@ -5,6 +5,7 @@
             [core2.blocks :as blocks]
             [core2.bloom :as bloom]
             [core2.buffer-pool :as bp]
+            [core2.error :as err]
             [core2.metadata :as meta]
             core2.object-store
             [core2.operator :as op]
@@ -147,7 +148,6 @@
 
 #_{:clj-kondo/ignore [:unused-binding]}
 (definterface IndexerPrivate
-  (^core2.operator.scan.ScanSource scanSource [^core2.api.TransactionInstant tx])
   (^java.nio.ByteBuffer writeColumn [^core2.indexer.LiveColumn live-column])
   (^void closeCols [])
   (^void finishChunk []))
@@ -164,21 +164,22 @@
               (TreeMap.)
               live-columns)))
 
-(def ^:private log-schema
-  (Schema. [(t/col-type->field "tx-id" :i64)
-            (t/col-type->field "system-time" [:timestamp-tz :micro "UTC"])
-            (t/col-type->field "ops" '[:list [:struct {iid :i64
-                                                       row-id [:union #{:null :i64}]
-                                                       application-time-start [:union #{:null [:timestamp-tz :micro "UTC"]}]
-                                                       application-time-end [:union #{:null [:timestamp-tz :micro "UTC"]}]
-                                                       evict? :bool}]])]))
+(def ^:private log-ops-col-type
+  '[:union #{:null
+             [:list
+              [:struct {iid :i64
+                        row-id [:union #{:null :i64}]
+                        application-time-start [:union #{:null [:timestamp-tz :micro "UTC"]}]
+                        application-time-end [:union #{:null [:timestamp-tz :micro "UTC"]}]
+                        evict? :bool}]]}])
 
 #_{:clj-kondo/ignore [:unused-binding]}
 (definterface ILogOpIndexer
   (^void logPut [^long iid, ^long rowId, ^long app-timeStart, ^long app-timeEnd])
   (^void logDelete [^long iid, ^long app-timeStart, ^long app-timeEnd])
   (^void logEvict [^long iid])
-  (^void endTx []))
+  (^void commit [])
+  (^void abort []))
 
 (definterface ILogIndexer
   (^core2.indexer.ILogOpIndexer startTx [^core2.api.TransactionInstant txKey])
@@ -187,12 +188,18 @@
   (^void close []))
 
 (defn- ->log-indexer [^BufferAllocator allocator, ^long max-rows-per-block]
-  (let [log-root (VectorSchemaRoot/create log-schema allocator)
-        ^BigIntVector tx-id-vec (.getVector log-root "tx-id")
-        ^TimeStampMicroTZVector sys-time-vec (.getVector log-root "system-time")
+  (let [log-writer (vw/->rel-writer allocator)
+        transient-log-writer (vw/->rel-writer allocator)
 
-        ops-vec (.getVector log-root "ops")
-        ops-writer (.asList (vw/vec->writer ops-vec))
+        ;; we're ignoring the writers for tx-id and sys-time, because they're simple primitive vecs and we're only writing to idx 0
+        ^BigIntVector tx-id-vec (-> (.writerForName transient-log-writer "tx-id" :i64)
+                                    (.getVector))
+
+        ^TimeStampMicroTZVector sys-time-vec (-> (.writerForName transient-log-writer "system-time" [:timestamp-tz :micro "UTC"])
+                                                 (.getVector))
+
+        ops-writer (.asList (.writerForName transient-log-writer "ops" log-ops-col-type))
+        ^ListVector ops-vec (.getVector ops-writer)
         ops-data-writer (.asStruct (.getDataWriter ops-writer))
 
         row-id-writer (.writerForName ops-data-writer "row-id")
@@ -210,68 +217,84 @@
 
     (reify ILogIndexer
       (startTx [_ tx-key]
-        (let [tx-idx (.getRowCount log-root)]
-          (.startValue ops-writer)
-          (.setSafe tx-id-vec tx-idx (.tx-id tx-key))
-          (.setSafe sys-time-vec tx-idx (util/instant->micros (.sys-time tx-key)))
+        (.startValue ops-writer)
+        (doto tx-id-vec
+          (.setSafe 0 (.tx-id tx-key))
+          (.setValueCount 1))
+        (doto sys-time-vec
+          (.setSafe 0 (util/instant->micros (.sys-time tx-key)))
+          (.setValueCount 1))
 
-          (reify ILogOpIndexer
-            (logPut [_ iid row-id app-time-start app-time-end]
-              (let [op-idx (.startValue ops-data-writer)]
-                (.setSafe row-id-vec op-idx row-id)
-                (.setSafe iid-vec op-idx iid)
-                (.setSafe app-time-start-vec op-idx app-time-start)
-                (.setSafe app-time-end-vec op-idx app-time-end)
-                (.setSafe evict-vec op-idx 0)
+        (reify ILogOpIndexer
+          (logPut [_ iid row-id app-time-start app-time-end]
+            (let [op-idx (.startValue ops-data-writer)]
+              (.setSafe row-id-vec op-idx row-id)
+              (.setSafe iid-vec op-idx iid)
+              (.setSafe app-time-start-vec op-idx app-time-start)
+              (.setSafe app-time-end-vec op-idx app-time-end)
+              (.setSafe evict-vec op-idx 0)
 
-                (.endValue ops-data-writer)))
+              (.endValue ops-data-writer)))
 
-            (logDelete [_ iid app-time-start app-time-end]
-              (let [op-idx (.startValue ops-data-writer)]
-                (.setSafe iid-vec op-idx iid)
-                (.setNull row-id-vec op-idx)
-                (.setSafe app-time-start-vec op-idx app-time-start)
-                (.setSafe app-time-end-vec op-idx app-time-end)
-                (.setSafe evict-vec op-idx 0)
+          (logDelete [_ iid app-time-start app-time-end]
+            (let [op-idx (.startValue ops-data-writer)]
+              (.setSafe iid-vec op-idx iid)
+              (.setNull row-id-vec op-idx)
+              (.setSafe app-time-start-vec op-idx app-time-start)
+              (.setSafe app-time-end-vec op-idx app-time-end)
+              (.setSafe evict-vec op-idx 0)
 
-                (.endValue ops-data-writer)))
+              (.endValue ops-data-writer)))
 
-            (logEvict [_ iid]
-              (let [op-idx (.startValue ops-data-writer)]
-                (.setSafe iid-vec op-idx iid)
-                (.setNull row-id-vec op-idx)
-                (.setNull app-time-start-vec op-idx)
-                (.setNull app-time-end-vec op-idx)
-                (.setSafe evict-vec op-idx 1))
+          (logEvict [_ iid]
+            (let [op-idx (.startValue ops-data-writer)]
+              (.setSafe iid-vec op-idx iid)
+              (.setNull row-id-vec op-idx)
+              (.setNull app-time-start-vec op-idx)
+              (.setNull app-time-end-vec op-idx)
+              (.setSafe evict-vec op-idx 1))
 
-              (.endValue ops-data-writer))
+            (.endValue ops-data-writer))
 
-            (endTx [_]
-              (.endValue ops-writer)
-              (.setRowCount log-root (inc tx-idx))))))
+          (commit [_]
+            (.endValue ops-writer)
+            (.setValueCount ops-vec 1)
+            (vw/append-rel log-writer (vw/rel-writer->reader transient-log-writer))
+
+            (.clear transient-log-writer))
+
+          (abort [_]
+            (.clear ops-vec)
+            (.setNull ops-vec 0)
+            (.setValueCount ops-vec 1)
+            (vw/append-rel log-writer (vw/rel-writer->reader transient-log-writer))
+
+            (.clear transient-log-writer))))
 
       (writeLog [_]
-        (.syncSchema log-root)
-        (with-open [write-root (VectorSchemaRoot/create (.getSchema log-root) allocator)]
-          (let [loader (VectorLoader. write-root)
-                row-counts (blocks/list-count-blocks ops-vec max-rows-per-block)]
-            (with-open [^ICursor slices (blocks/->slices log-root row-counts)]
-              (util/build-arrow-ipc-byte-buffer write-root :file
-                (fn [write-batch!]
-                  (.forEachRemaining slices
-                                     (reify Consumer
-                                       (accept [_ sliced-root]
-                                         (with-open [arb (.getRecordBatch (VectorUnloader. sliced-root))]
-                                           (.load loader arb)
-                                           (write-batch!)))))))))))
+        (let [log-root (let [^Iterable vecs (for [^IVectorWriter w (seq log-writer)]
+                                              (.getVector w))]
+                         (VectorSchemaRoot. vecs))]
+          (with-open [write-root (VectorSchemaRoot/create (.getSchema log-root) allocator)]
+            (let [loader (VectorLoader. write-root)
+                  row-counts (blocks/list-count-blocks (.getVector log-root "ops") max-rows-per-block)]
+              (with-open [^ICursor slices (blocks/->slices log-root row-counts)]
+                (util/build-arrow-ipc-byte-buffer write-root :file
+                  (fn [write-batch!]
+                    (.forEachRemaining slices
+                                       (reify Consumer
+                                         (accept [_ sliced-root]
+                                           (with-open [arb (.getRecordBatch (VectorUnloader. sliced-root))]
+                                             (.load loader arb)
+                                             (write-batch!))))))))))))
 
       (clear [_]
-        (.clear ops-writer)
-        (.clear log-root))
+        (.clear log-writer))
 
       Closeable
       (close [_]
-        (.close log-root)))))
+        (.close transient-log-writer)
+        (.close log-writer)))))
 
 (defn- with-latest-log-chunk [{:keys [^ObjectStore object-store ^IBufferPool buffer-pool]} f]
   (when-let [latest-log-k (last (.listObjects object-store "log-"))]
@@ -479,6 +502,10 @@
                                                  end-app-time (if app-time-end-rdr
                                                                 (.readLong app-time-end-rdr idx)
                                                                 util/end-of-time-μs)]
+                                             (when (> start-app-time end-app-time)
+                                               (throw (err/runtime-err :core2.indexer/invalid-app-times
+                                                                       {:app-time-start (util/micros->instant start-app-time)
+                                                                        :app-time-end (util/micros->instant end-app-time)})))
 
                                              (.logPut log-op-idxer iid row-id start-app-time end-app-time)
                                              (.indexPut temporal-idxer iid row-id start-app-time end-app-time new-entity?)))))))))))))))
@@ -680,23 +707,38 @@
           delete-idxer (->delete-indexer this iid-mgr log-op-idxer temporal-idxer tx-ops-vec sys-time)
           evict-idxer (->evict-indexer this iid-mgr log-op-idxer temporal-idxer tx-ops-vec)
           sql-idxer (->sql-indexer this metadata-mgr buffer-pool iid-mgr log-op-idxer temporal-idxer
-                                   tx-ops-vec (.scanSource this tx-key)
+                                   tx-ops-vec
+                                   (reify ScanSource
+                                     (metadataManager [_] metadata-mgr)
+                                     (bufferPool [_] buffer-pool)
+                                     (txBasis [_] tx-key)
+                                     (openWatermark [_]
+                                       (wm/->Watermark nil (live-cols->live-roots live-columns) temporal-idxer
+                                                       chunk-idx max-rows-per-block)))
                                    {:current-time sys-time, :app-time-as-of-now? app-time-as-of-now?, :default-tz default-tz})]
 
-      (dotimes [tx-op-idx (.getValueCount tx-ops-vec)]
-        (case (.getTypeId tx-ops-vec tx-op-idx)
-          0 (.indexOp put-idxer tx-op-idx)
-          1 (.indexOp delete-idxer tx-op-idx)
-          2 (.indexOp evict-idxer tx-op-idx)
-          3 (.indexOp sql-idxer tx-op-idx)))
+      (if-let [e (try
+                   (dotimes [tx-op-idx (.getValueCount tx-ops-vec)]
+                     (case (.getTypeId tx-ops-vec tx-op-idx)
+                       0 (.indexOp put-idxer tx-op-idx)
+                       1 (.indexOp delete-idxer tx-op-idx)
+                       2 (.indexOp evict-idxer tx-op-idx)
+                       3 (.indexOp sql-idxer tx-op-idx)))
+                   nil
+                   (catch core2.RuntimeException e e)
+                   (catch core2.IllegalArgumentException e e))]
+        (do
+          (log/debug e "aborted tx")
+          (.abort log-op-idxer)
+          (.abort temporal-idxer))
 
-      (.endTx log-op-idxer)
-
-      (let [evicted-row-ids (.endTx temporal-idxer)]
-        #_{:clj-kondo/ignore [:missing-body-in-when]}
-        (when-not (.isEmpty evicted-row-ids)
-          ;; TODO create work item
-          ))
+        (do
+          (.commit log-op-idxer)
+          (let [evicted-row-ids (.commit temporal-idxer)]
+            #_{:clj-kondo/ignore [:missing-body-in-when]}
+            (when-not (.isEmpty evicted-row-ids)
+              ;; TODO create work item
+              ))))
 
       (.setWatermark watermark-mgr chunk-idx tx-key (snapshot-live-cols live-columns) (.getTemporalWatermark temporal-mgr))
       (set! (.-latest-completed-tx this) tx-key)
@@ -709,15 +751,6 @@
   (latestCompletedTx [_] latest-completed-tx)
 
   IndexerPrivate
-  (scanSource [_ tx]
-    (reify ScanSource
-      (metadataManager [_] metadata-mgr)
-      (bufferPool [_] buffer-pool)
-      (txBasis [_] tx)
-      (openWatermark [_]
-        (wm/->Watermark nil (live-cols->live-roots live-columns) temporal-mgr
-                        chunk-idx max-rows-per-block))))
-
   (writeColumn [_this live-column]
     (let [^VectorSchemaRoot live-root (.live-root live-column)]
       (with-open [write-root (VectorSchemaRoot/create (.getSchema live-root) allocator)]

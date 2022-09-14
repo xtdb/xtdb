@@ -102,7 +102,8 @@
   (^void indexPut [^long iid, ^long rowId, ^long startValidTime, ^long endValidTime, ^boolean newEntity])
   (^void indexDelete [^long iid, ^long rowId, ^long startValidTime, ^long endValidTime, ^boolean newEntity])
   (^void indexEvict [^long iid])
-  (^org.roaringbitmap.longlong.Roaring64Bitmap endTx []))
+  (^org.roaringbitmap.longlong.Roaring64Bitmap commit [])
+  (^void abort []))
 
 #_{:clj-kondo/ignore [:unused-binding]}
 (definterface ITemporalManager
@@ -411,30 +412,36 @@
 
   (startTx [this-tm tx-key]
     (let [sys-time-μs (util/instant->micros (.sys-time tx-key))
-          evicted-row-ids (Roaring64Bitmap.)]
-      (reify ITemporalTxIndexer
+          evicted-row-ids (Roaring64Bitmap.)
+          !kd-tree (volatile! kd-tree)]
+      (reify
+        ITemporalTxIndexer
         (indexPut [_ iid row-id start-app-time end-app-time new-entity?]
-          (set! (.kd-tree this-tm)
-                (insert-coordinates (.kd-tree this-tm) allocator
-                                    (TemporalCoordinates. row-id iid
-                                                          sys-time-μs util/end-of-time-μs
-                                                          start-app-time end-app-time
-                                                          new-entity? false))))
+          (vswap! !kd-tree
+                  insert-coordinates allocator (TemporalCoordinates. row-id iid
+                                                                     sys-time-μs util/end-of-time-μs
+                                                                     start-app-time end-app-time
+                                                                     new-entity? false)))
 
         (indexDelete [_ iid row-id start-app-time end-app-time new-entity?]
-          (set! (.kd-tree this-tm)
-                (insert-coordinates (.kd-tree this-tm) allocator
-                                    (TemporalCoordinates. row-id iid
-                                                          sys-time-μs util/end-of-time-μs
-                                                          start-app-time end-app-time
-                                                          new-entity? true))))
+          (vswap! !kd-tree
+                  insert-coordinates allocator (TemporalCoordinates. row-id iid
+                                                                     sys-time-μs util/end-of-time-μs
+                                                                     start-app-time end-app-time
+                                                                     new-entity? true)))
 
         (indexEvict [_ iid]
-          (set! (.kd-tree this-tm)
-                (evict-id (.kd-tree this-tm) allocator iid evicted-row-ids)))
+          (vswap! !kd-tree evict-id allocator iid evicted-row-ids))
 
-        (endTx [_]
-          evicted-row-ids))))
+        (commit [_]
+          (set! (.kd-tree this-tm) @!kd-tree)
+          evicted-row-ids)
+
+        (abort [_])
+
+        ITemporalRelationSource
+        (createTemporalRelation [_ allocator columns temporal-min-range temporal-max-range row-id-bitmap]
+          (->temporal-rel allocator @!kd-tree columns temporal-min-range temporal-max-range row-id-bitmap)))))
 
   ITemporalRelationSource
   (createTemporalRelation [_ allocator columns temporal-min-range temporal-max-range row-id-bitmap]

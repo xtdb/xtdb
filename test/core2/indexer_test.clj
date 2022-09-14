@@ -285,6 +285,10 @@
                                 [:put {:id "bar"}]])
             (tu/then-await-tx node))
 
+        ;; aborted tx shows up in log
+        (-> (c2/submit-tx node [[:sql "INSERT INTO foo (id, application_time_start, application_time_end) VALUES (1, DATE '2020-01-01', DATE '2019-01-01')"]])
+            (tu/then-await-tx node))
+
         (-> (c2/submit-tx node [[:delete "foo" {:app-time-start #inst "2020-04-01"}]
                                 [:put {:id "bar", :month "april"},
                                  {:app-time-start #inst "2020-04-01"
