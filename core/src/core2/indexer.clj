@@ -147,7 +147,6 @@
 
 #_{:clj-kondo/ignore [:unused-binding]}
 (definterface IndexerPrivate
-  (^core2.operator.scan.ScanSource scanSource [^core2.api.TransactionInstant tx])
   (^java.nio.ByteBuffer writeColumn [^core2.indexer.LiveColumn live-column])
   (^void closeCols [])
   (^void finishChunk []))
@@ -694,7 +693,14 @@
           delete-idxer (->delete-indexer this iid-mgr log-op-idxer temporal-idxer tx-ops-vec sys-time)
           evict-idxer (->evict-indexer this iid-mgr log-op-idxer temporal-idxer tx-ops-vec)
           sql-idxer (->sql-indexer this metadata-mgr buffer-pool iid-mgr log-op-idxer temporal-idxer
-                                   tx-ops-vec (.scanSource this tx-key)
+                                   tx-ops-vec
+                                   (reify ScanSource
+                                     (metadataManager [_] metadata-mgr)
+                                     (bufferPool [_] buffer-pool)
+                                     (txBasis [_] tx-key)
+                                     (openWatermark [_]
+                                       (wm/->Watermark nil (live-cols->live-roots live-columns) temporal-idxer
+                                                       chunk-idx max-rows-per-block)))
                                    {:current-time sys-time, :app-time-as-of-now? app-time-as-of-now?, :default-tz default-tz})]
 
       (dotimes [tx-op-idx (.getValueCount tx-ops-vec)]
@@ -706,7 +712,7 @@
 
       (.commit log-op-idxer)
 
-      (let [evicted-row-ids (.endTx temporal-idxer)]
+      (let [evicted-row-ids (.commit temporal-idxer)]
         #_{:clj-kondo/ignore [:missing-body-in-when]}
         (when-not (.isEmpty evicted-row-ids)
           ;; TODO create work item
@@ -723,15 +729,6 @@
   (latestCompletedTx [_] latest-completed-tx)
 
   IndexerPrivate
-  (scanSource [_ tx]
-    (reify ScanSource
-      (metadataManager [_] metadata-mgr)
-      (bufferPool [_] buffer-pool)
-      (txBasis [_] tx)
-      (openWatermark [_]
-        (wm/->Watermark nil (live-cols->live-roots live-columns) temporal-mgr
-                        chunk-idx max-rows-per-block))))
-
   (writeColumn [_this live-column]
     (let [^VectorSchemaRoot live-root (.live-root live-column)]
       (with-open [write-root (VectorSchemaRoot/create (.getSchema live-root) allocator)]
