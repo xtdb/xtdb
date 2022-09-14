@@ -16,6 +16,8 @@ The checkpoint store is a pluggable module - there are a number of officially su
 XTDB nodes in a cluster don't explicitly communicate regarding which one is responsible for creating a checkpoint - instead, they check at random intervals to see whether any other node has recently created a checkpoint, and create one if necessary.
 The desired frequency of checkpoints can be set using `approx-frequency`.
 
+The default lifecycle of checkpoints is unbounded - XTDB will not attempt to clean up old checkpoints. Users will typically want to define a retention policy that best fits their requirements and create means of implementing that policy that is external to XTDB.
+
 == Setting up
 
 You can enable checkpoints on your index-store by adding a `:checkpointer` dependency to the underlying KV store:

@@ -228,6 +228,12 @@ They are conceptually similar to "stored procedures" in traditional databases, e
 
 Transaction functions can be used, for example, to safely check the current database state before applying a transaction, for integrity checks, or to patch an entity.
 
+It is critical that transaction functions are "pure" - as in they only use the information passed to them via explicit arguments.
+This is essential for deterministic operation.
+Actions like generating UUIDs or accessing the system clock would be examples of impurity that can easily lead to non-determinism and break the transactional guarantees that XTDB offers.
+XTDB will not attempt to analyse a transaction function for purity, and instead relies on users to take sufficient care to avoid all forms of impurity.
+Side-effects should also be avoided unless strictly needed (e.g. debug logging).
+
 [#transaction-functions-anatomy]
 ==== Anatomy
 [source,clojure]
@@ -243,6 +249,8 @@ If a list of transaction operations is returned, these are indexed as part of th
 If `false` is returned, or an exception is thrown, the whole transaction will roll back.
 
 The `context` reflects the speculative accumulation of all transaction operations applied up to the current point in the processing.
+
+There is a `xtdb.api/indexing-tx` API available which can be passed the `context` to return information about the current, in-flight transaction (such as the new `tx-time` and `tx-id`).
 
 ==== Creating / Updating
 
@@ -346,7 +354,7 @@ A document is a map from keywords to values.
 
 All documents must contain the `:xt/id` key.
 
-Persistence of Clojure metadata is not supported (although is not currently rejected either) - we strongly recommended that all metadata should be removed from each document prior to submission to XTDB, to avoid potential equality checking issues (see https://github.com/xtdb/xtdb/issues/1510[here] for more details).
+Persistence of Clojure metadata is not supported (although is not currently rejected either) - we strongly recommend that all metadata should be removed from each document prior to submission to XTDB, to avoid potential equality checking issues (see https://github.com/xtdb/xtdb/issues/1510[here] for more details).
 --
 ====
 

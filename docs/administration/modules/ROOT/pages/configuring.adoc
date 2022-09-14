@@ -249,6 +249,10 @@ If not, XTDB will work fine until you restart the node, at which point some will
 XTDB tends to get rather confused in this situation!
 
 Likewise, if you persist the query indices, you'll need to persist both the golden stores.
+
+"Backup" for XTDB relies entirely on the golden store data itself being backed-up using whatever functionality (if any) that is provided by the underlying implementation technology, which is necessarily outside of the scope of XTDB's awareness & control, and should be configured accordingly. For example, if you are using Postgres as the tx-log and document-store, you should refer to Postgres backup documentation and tooling.
+
+It is also important that a backed up version of the tx-log be older (or equal to) the `tx-id` age of the backed up document-store version, otherwise a complete point-in-time recovery is not possible.
 ====
 
 === Sharing modules - references

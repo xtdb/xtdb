@@ -4,6 +4,11 @@
 When using XTDB at scale it is recommended to use multiple XTDB nodes connected via a Kafka cluster. Use of multiple nodes provides availability and Kafka itself provides strong fault-tolerance guarantees.
 Kafka can be used for XTDB's transaction log and document store components.
 
+[IMPORTANT]
+====
+Each XTDB node must be assigned a unique `groupId` for correct operation.
+====
+
 image::local-cluster-mode.svg[Local Cluster Mode,450,150,align="center"]
 
 [NOTE]

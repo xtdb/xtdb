@@ -278,9 +278,6 @@ The `:where` section of a query limits the combinations of possible results by s
 |<<#clause-rule, defined rule>>| Restrict with a user-defined rule
 |===
 
-// TODO
-// get-attr ?
-
 [#clause-inputs]
 === Clause Inputs
 
@@ -311,6 +308,8 @@ include::example$test/xtdb/docs/examples/query_test.clj[tags=triple-3,indent=0]
 Note that the keyword attribute must always be specified and therefore you cannot use a logic variable in the attribute position.
 You can however enumerate combinations of known attributes using rules, or execute independent queries efficiently using `openDB` (`open-db`).
 A list of all known attributes is available via the `attributeStats` (`attribute-stats`) API.
+
+Where fine-grained query join ordering control is desired, and in particularly the `e` should always be resolved before the `v`, the built-in (see https://github.com/xtdb/xtdb/blob/e2f51ed99fc2716faa8ad254c0b18166c937b134/test/test/xtdb/query_test.clj#L1054[`get-attr`]) lookup function may be a useful substitute to consider instead of a triple clause.
 
 [#clause-pred]
 === Predicates
@@ -890,14 +889,14 @@ Say you have a document like so and you want to add it to an XTDB db:
  :pockets {:left ["lint" "change"]
            :right ["phone"]}}
 ----
-
-XTDB breaks down vectors into individual components so the query engine is able
-see all elements on the base level. As a result of this the query engine is not
-required to traverse any structures or any other types of search algorithm
-which would slow the query down. The same thing should apply for maps so
-instead of doing `:pocket {:left thing :right thing}` you should put them under
-a namespace, instead structuring the data as `:pocket/left thing :pocket/right
-thing` to put the data all on the base level. Like so:
+XTDB decomposes top-level sets and vectors as a collection of into triples
+(which are fully indexed) so the query engine is able see all elements on the
+base level. As a result of this the query engine is not required to traverse any
+structures or any other types of search algorithm which would slow the query
+down. The same thing should apply for maps so instead of doing `:pocket {:left
+thing :right thing}` you should put them under a namespace, instead structuring
+the data as `:pocket/left thing :pocket/right thing` to put the data all on the
+base level. Like so:
 
 [source,clj]
 ----
@@ -978,5 +977,31 @@ include::example$test/xtdb/docs/examples/query_test.clj[tags=get-in-r,indent=0]
 <4> Result
 
 Be aware during development that query compilation internalizes function definitions and this means that subsequent re-definitions of your custom functions may not be reflected until the query is modified and therefore re-compiled. During development, you can introduce a dummy predicate clause like `[(any? 1)]` (which always evaluates to `true` and has no effect on the query) and increment the integer when needed to bypass the effects of query caching.
+
+The full range of XTDB APIs are available:
+
+[source,clojure]
+----
+(defn get-vt-created [db eid]
+  (with-open [h (xt/open-entity-history db eid :asc)]
+    (-> (iterator-seq h)
+        first
+        ::xt/valid-time)))
+
+(defn get-vt-last-updated [db eid]
+  (with-open [h (xt/open-entity-history db eid :desc)]
+    (-> (iterator-seq h)
+        first
+        ::xt/valid-time)))
+
+(xt/q (xt/db my-node)
+      '{:find [e vt-created vt-last-updated]
+        :limit 1
+        :where [[e :xt/id]
+                [(dev/get-vt-created $ e) vt-created]
+                [(dev/get-vt-last-updated $ e) vt-last-updated]]})
+
+;;=> [[-219 #inst "2021-10-15T12:01:06.289-00:00" #inst "2021-10-15T12:15:11.020-00:00"]]
+----
 
 Many examples of advanced queries are showcased across the https://github.com/xtdb/xtdb/blob/main/test/test/xtdb/query_test.clj[query tests] and the suite of benchmarks maintained in the `bench` sub-project.
