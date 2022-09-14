@@ -77,7 +77,9 @@ The find clause of a query specifies what values to be returned. These will be r
 [#find-logic-variable]
 === Logic Variable
 
-You can directly specify a logic variable from your query.
+You can specify logic variables within your query without first declaring them elsewhere.
+Logic variables are commonly prefix with a `?` (question mark) as a stylistic convention but it is not necessary and can simply be considered part of the variable's identifier. For example, `foo` or `?foo` can be used equivalently, but they are not equal and will be treated as independent logic variables.
+
 The following will return all last names bound to the logic variable `n`.
 
 [source,clojure]
@@ -843,7 +845,10 @@ Retrievable entity versions can be bounded by four time coordinates:
 * valid-time-end
 * tx-time-end
 
-All coordinates are inclusive. All coordinates can be null.
+All coordinates are inclusive. All coordinates can be null. The specified sort-order direction will be relative to the actual order of the start/end times provided.
+
+The returned order is always sorted by valid-time first, and then tx-time second as the tie-break (e.g. when `with-corrections? true` is specified).
+
 [source,clj]
 ----
 include::example$test/xtdb/docs/examples_test.clj[tags=history-range,indent=0]

@@ -186,6 +186,8 @@ include::example$test/xtdb/docs/examples/configuration/config_override.edn[inden
 ----
 ====
 
+When using Clojure, be careful to double-check that you are quoting the module's symbol name appropriately.
+
 === Nested modules
 
 Modules in XTDB form an arbitrarily nested tree - parent modules depend on child modules.
