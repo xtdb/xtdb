@@ -1,0 +1,6 @@
+hash-threshold 100
+
+query T nosort
+SELECT more_posts.text FROM ARROW_TABLE('https://xtdb.com/more_posts.arrow') AS more_posts
+----
+We love strangeloop
