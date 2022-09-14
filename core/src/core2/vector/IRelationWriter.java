@@ -9,4 +9,10 @@ public interface IRelationWriter extends AutoCloseable, Iterable<IVectorWriter<?
     IVectorWriter<?> writerForName(String name, Object colType);
 
     IRowCopier rowCopier(IIndirectRelation relation);
+
+    default void clear() {
+        for (IVectorWriter<?> writer: this) {
+            writer.clear();
+        }
+    }
 }

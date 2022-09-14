@@ -142,6 +142,7 @@
     (set! (.pos this) (inc pos)))
 
   (clear [this]
+    (.clear dest-duv)
     (doseq [^IVectorWriter writer writers-by-type-id
             :when writer]
       (.clear writer))
@@ -207,6 +208,7 @@
     (set! (.pos this) (inc pos)))
 
   (clear [this]
+    (.clear dest-vec)
     (doseq [^IVectorWriter writer (vals writers)]
       (.clear writer))
     (set! (.pos this) 0))
@@ -251,6 +253,7 @@
 
   (clear [this]
     (.clear data-writer)
+    (.clear dest-vec)
     (set! (.pos this) 0))
 
   (rowCopier [_ src-vec]
@@ -284,6 +287,7 @@
 
   (clear [this]
     (.clear data-writer)
+    (.clear dest-vec)
     (set! (.pos this) 0))
 
   (rowCopier [_ src-vec]
@@ -309,7 +313,9 @@
   (startValue [_] (.startValue underlying-writer))
   (endValue [_] (.endValue underlying-writer))
 
-  (clear [_] (.clear underlying-writer))
+  (clear [_]
+    (.clear underlying-writer)
+    (.clear dest-vec))
 
   (rowCopier [this src-vec]
     (if (instance? DenseUnionVector src-vec)
@@ -329,7 +335,9 @@
   (startValue [_] pos)
   (endValue [this] (set! (.pos this) (inc pos)))
 
-  (clear [this] (set! (.pos this) 0))
+  (clear [this]
+    (.clear dest-vec)
+    (set! (.pos this) 0))
 
   (rowCopier [this-writer src-vec]
     (cond
@@ -461,11 +469,16 @@
                        (iv/->direct-vec (.getVector vec-writer)))))
 
 (defn append-vec [^IVectorWriter vec-writer, ^IIndirectVector in-col]
-  (let [row-copier (->row-copier vec-writer in-col)]
-    (dotimes [src-idx (.getValueCount in-col)]
-      (.copyRow row-copier src-idx))))
+  (let [row-copier (->row-copier vec-writer in-col)
+        v (.getVector vec-writer)
+        init-value-count (.getValueCount v)
+        src-value-count (.getValueCount in-col)]
+    (dotimes [src-idx src-value-count]
+      (.copyRow row-copier src-idx))
+    (.setValueCount v (+ init-value-count src-value-count))))
 
 (defn append-rel [^IRelationWriter dest-rel, ^IIndirectRelation src-rel]
   (doseq [^IIndirectVector src-col src-rel
-          :let [^IVectorWriter vec-writer (.writerForName dest-rel (.getName src-col))]]
+          :let [col-type (types/field->col-type (.getField (.getVector src-col)))
+                ^IVectorWriter vec-writer (.writerForName dest-rel (.getName src-col) col-type)]]
     (append-vec vec-writer src-col)))

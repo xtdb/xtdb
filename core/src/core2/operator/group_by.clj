@@ -64,14 +64,16 @@
                       ^IntVector group-mapping]
   IGroupMapper
   (groupMapping [_ in-rel]
-    (.clear group-mapping)
-    (.setValueCount group-mapping (.rowCount in-rel))
+    (let [row-count (.rowCount in-rel)]
+      (.allocateNew group-mapping row-count)
 
-    (let [builder (.buildFromRelation rel-map in-rel)]
-      (dotimes [idx (.rowCount in-rel)]
-        (.set group-mapping idx (emap/inserted-idx (.addIfNotPresent builder idx)))))
+      (let [builder (.buildFromRelation rel-map in-rel)]
+        (dotimes [idx row-count]
+          (.set group-mapping idx (emap/inserted-idx (.addIfNotPresent builder idx)))))
 
-    group-mapping)
+      (.setValueCount group-mapping row-count)
+
+      group-mapping))
 
   (finish [_]
     (seq (.getBuiltRelation rel-map)))
