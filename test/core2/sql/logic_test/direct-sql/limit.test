@@ -1,0 +1,97 @@
+hash-threshold 100
+
+statement ok
+INSERT INTO t1(id, data) VALUES(1, 'foo'), (2, 'foo'), (3, 'foo'), (4, 'foo'), (5, 'foo'), (6, 'foo'), (7, 'foo'), (8, 'foo'), (9, 'foo'), (10, 'foo'), (11, 'foo'), (12, 'foo')
+
+statement ok
+UPDATE t1 SET data = [1000] WHERE t1.id > 7
+
+query IT nosort
+SELECT t1.id, t1.data FROM t1
+----
+1
+foo
+2
+foo
+3
+foo
+4
+foo
+5
+foo
+6
+foo
+7
+foo
+8
+[1000]
+9
+[1000]
+10
+[1000]
+11
+[1000]
+12
+[1000]
+
+query IT nosort
+SELECT t1.id, t1.data FROM t1 LIMIT 5
+----
+1
+foo
+2
+foo
+3
+foo
+4
+foo
+5
+foo
+
+query IT nosort
+SELECT t1.id, t1.data FROM t1 WHERE t1.id > 9 LIMIT 10
+----
+10
+[1000]
+11
+[1000]
+12
+[1000]
+
+query IT nosort
+SELECT t1.id, t1.data FROM t1 ORDER BY t1.id ASC LIMIT 8
+----
+1
+foo
+2
+foo
+3
+foo
+4
+foo
+5
+foo
+6
+foo
+7
+foo
+8
+[1000]
+
+query IT nosort
+SELECT t1.id, t1.data FROM t1 ORDER BY t1.id DESC LIMIT 7
+----
+12
+[1000]
+11
+[1000]
+10
+[1000]
+9
+[1000]
+8
+[1000]
+7
+foo
+6
+foo
