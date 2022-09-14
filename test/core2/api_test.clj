@@ -445,3 +445,23 @@
       (t/is (= [{:name "Dave"}]
                (c2/sql-query tu/*node* "SELECT users.name FROM users"
                              {:basis {:tx !tx}}))))))
+
+(t/deftest aborts-insert-if-end-lt-start-401-425
+  (letfn [(q-all [tx]
+            (->> (c2/sql-query tu/*node* "SELECT foo.id, foo.application_time_start, foo.application_time_end FROM foo"
+                               {:basis {:tx tx}})
+                 (into {} (map (juxt :id (juxt :application_time_start :application_time_end))))))]
+    @(c2/submit-tx tu/*node* [[:sql "INSERT INTO foo (id) VALUES (1)"]])
+
+    (let [!tx (c2/submit-tx tu/*node* [[:sql "
+INSERT INTO foo (id, application_time_start, application_time_end)
+VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"]])]
+
+      (t/is (= {1 [(util/->zdt #inst "2020-01-01") (util/->zdt util/end-of-time)]}
+               (q-all !tx))))
+
+    (t/testing "continues indexing after abort"
+      (let [!tx (c2/submit-tx tu/*node* [[:sql "INSERT INTO foo (id) VALUES (3)"]])]
+        (t/is (= {1 [(util/->zdt #inst "2020-01-01") (util/->zdt util/end-of-time)]
+                  3 [(util/->zdt #inst "2020-01-03") (util/->zdt util/end-of-time)]}
+                 (q-all !tx)))))))

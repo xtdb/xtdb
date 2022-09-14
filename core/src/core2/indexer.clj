@@ -5,6 +5,7 @@
             [core2.blocks :as blocks]
             [core2.bloom :as bloom]
             [core2.buffer-pool :as bp]
+            [core2.error :as err]
             [core2.metadata :as meta]
             core2.object-store
             [core2.operator :as op]
@@ -36,7 +37,7 @@
            [java.util.concurrent CompletableFuture ConcurrentHashMap ConcurrentSkipListMap]
            [java.util.function Consumer Function]
            [org.apache.arrow.memory ArrowBuf BufferAllocator]
-           [org.apache.arrow.vector BigIntVector BitVector TimeStampMicroTZVector TimeStampVector VarCharVector VectorLoader VectorSchemaRoot VectorUnloader ValueVector]
+           [org.apache.arrow.vector BigIntVector BitVector TimeStampMicroTZVector TimeStampVector VarCharVector VectorLoader VectorSchemaRoot VectorUnloader]
            [org.apache.arrow.vector.complex DenseUnionVector ListVector StructVector]
            [org.apache.arrow.vector.types.pojo Schema]
            org.roaringbitmap.longlong.Roaring64Bitmap
@@ -164,11 +165,13 @@
               live-columns)))
 
 (def ^:private log-ops-col-type
-  '[:list [:struct {iid :i64
-                    row-id [:union #{:null :i64}]
-                    application-time-start [:union #{:null [:timestamp-tz :micro "UTC"]}]
-                    application-time-end [:union #{:null [:timestamp-tz :micro "UTC"]}]
-                    evict? :bool}]])
+  '[:union #{:null
+             [:list
+              [:struct {iid :i64
+                        row-id [:union #{:null :i64}]
+                        application-time-start [:union #{:null [:timestamp-tz :micro "UTC"]}]
+                        application-time-end [:union #{:null [:timestamp-tz :micro "UTC"]}]
+                        evict? :bool}]]}])
 
 #_{:clj-kondo/ignore [:unused-binding]}
 (definterface ILogOpIndexer
@@ -196,7 +199,7 @@
                                                  (.getVector))
 
         ops-writer (.asList (.writerForName transient-log-writer "ops" log-ops-col-type))
-        ops-vec (.getVector ops-writer)
+        ^ListVector ops-vec (.getVector ops-writer)
         ops-data-writer (.asStruct (.getDataWriter ops-writer))
 
         row-id-writer (.writerForName ops-data-writer "row-id")
@@ -215,8 +218,12 @@
     (reify ILogIndexer
       (startTx [_ tx-key]
         (.startValue ops-writer)
-        (.setSafe tx-id-vec 0 (.tx-id tx-key))
-        (.setSafe sys-time-vec 0 (util/instant->micros (.sys-time tx-key)))
+        (doto tx-id-vec
+          (.setSafe 0 (.tx-id tx-key))
+          (.setValueCount 1))
+        (doto sys-time-vec
+          (.setSafe 0 (util/instant->micros (.sys-time tx-key)))
+          (.setValueCount 1))
 
         (reify ILogOpIndexer
           (logPut [_ iid row-id app-time-start app-time-end]
@@ -251,14 +258,17 @@
 
           (commit [_]
             (.endValue ops-writer)
-            (.setValueCount tx-id-vec 1)
-            (.setValueCount sys-time-vec 1)
             (.setValueCount ops-vec 1)
             (vw/append-rel log-writer (vw/rel-writer->reader transient-log-writer))
 
             (.clear transient-log-writer))
 
           (abort [_]
+            (.clear ops-vec)
+            (.setNull ops-vec 0)
+            (.setValueCount ops-vec 1)
+            (vw/append-rel log-writer (vw/rel-writer->reader transient-log-writer))
+
             (.clear transient-log-writer))))
 
       (writeLog [_]
@@ -492,6 +502,10 @@
                                                  end-app-time (if app-time-end-rdr
                                                                 (.readLong app-time-end-rdr idx)
                                                                 util/end-of-time-μs)]
+                                             (when (> start-app-time end-app-time)
+                                               (throw (err/runtime-err :core2.indexer/invalid-app-times
+                                                                       {:app-time-start (util/micros->instant start-app-time)
+                                                                        :app-time-end (util/micros->instant end-app-time)})))
 
                                              (.logPut log-op-idxer iid row-id start-app-time end-app-time)
                                              (.indexPut temporal-idxer iid row-id start-app-time end-app-time new-entity?)))))))))))))))
@@ -703,20 +717,28 @@
                                                        chunk-idx max-rows-per-block)))
                                    {:current-time sys-time, :app-time-as-of-now? app-time-as-of-now?, :default-tz default-tz})]
 
-      (dotimes [tx-op-idx (.getValueCount tx-ops-vec)]
-        (case (.getTypeId tx-ops-vec tx-op-idx)
-          0 (.indexOp put-idxer tx-op-idx)
-          1 (.indexOp delete-idxer tx-op-idx)
-          2 (.indexOp evict-idxer tx-op-idx)
-          3 (.indexOp sql-idxer tx-op-idx)))
+      (if-let [e (try
+                   (dotimes [tx-op-idx (.getValueCount tx-ops-vec)]
+                     (case (.getTypeId tx-ops-vec tx-op-idx)
+                       0 (.indexOp put-idxer tx-op-idx)
+                       1 (.indexOp delete-idxer tx-op-idx)
+                       2 (.indexOp evict-idxer tx-op-idx)
+                       3 (.indexOp sql-idxer tx-op-idx)))
+                   nil
+                   (catch core2.RuntimeException e e)
+                   (catch core2.IllegalArgumentException e e))]
+        (do
+          (log/debug e "aborted tx")
+          (.abort log-op-idxer)
+          (.abort temporal-idxer))
 
-      (.commit log-op-idxer)
-
-      (let [evicted-row-ids (.commit temporal-idxer)]
-        #_{:clj-kondo/ignore [:missing-body-in-when]}
-        (when-not (.isEmpty evicted-row-ids)
-          ;; TODO create work item
-          ))
+        (do
+          (.commit log-op-idxer)
+          (let [evicted-row-ids (.commit temporal-idxer)]
+            #_{:clj-kondo/ignore [:missing-body-in-when]}
+            (when-not (.isEmpty evicted-row-ids)
+              ;; TODO create work item
+              ))))
 
       (.setWatermark watermark-mgr chunk-idx tx-key (snapshot-live-cols live-columns) (.getTemporalWatermark temporal-mgr))
       (set! (.-latest-completed-tx this) tx-key)

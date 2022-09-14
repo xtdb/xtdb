@@ -20,7 +20,7 @@
       "children" : [ ]
     },{
       "name" : "ops",
-      "nullable" : false,
+      "nullable" : true,
       "type" : {
         "name" : "list"
       },

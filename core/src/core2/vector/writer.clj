@@ -262,11 +262,15 @@
           inner-copier (.rowCopier data-writer src-data-vec)]
       (reify IRowCopier
         (copyRow [_ src-idx]
-          (let [start-idx (.getElementStartIndex src-vec src-idx)]
-            (dotimes [el-idx (- (.getElementEndIndex src-vec src-idx) start-idx)]
-              (.startValue data-writer)
-              (.copyRow inner-copier (+ start-idx el-idx))
-              (.endValue data-writer)))
+          (if (.isNull src-vec src-idx)
+            (.setNull dest-vec pos)
+            (do
+              (.setNotNull dest-vec pos)
+              (let [start-idx (.getElementStartIndex src-vec src-idx)]
+                (dotimes [el-idx (- (.getElementEndIndex src-vec src-idx) start-idx)]
+                  (.startValue data-writer)
+                  (.copyRow inner-copier (+ start-idx el-idx))
+                  (.endValue data-writer)))))
           pos))))
 
   IListWriter
@@ -296,11 +300,15 @@
           inner-copier (.rowCopier data-writer src-data-vec)]
       (reify IRowCopier
         (copyRow [_ src-idx]
-          (let [start-idx (.getElementStartIndex src-vec src-idx)]
-            (dotimes [el-idx (- (.getElementEndIndex src-vec src-idx) start-idx)]
-              (.startValue data-writer)
-              (.copyRow inner-copier (+ start-idx el-idx))
-              (.endValue data-writer)))
+          (if (.isNull src-vec src-idx)
+            (.setNull dest-vec pos)
+            (do
+              (.setNotNull dest-vec pos)
+              (let [start-idx (.getElementStartIndex src-vec src-idx)]
+                (dotimes [el-idx (- (.getElementEndIndex src-vec src-idx) start-idx)]
+                  (.startValue data-writer)
+                  (.copyRow inner-copier (+ start-idx el-idx))
+                  (.endValue data-writer)))))
           pos))))
 
   IListWriter
