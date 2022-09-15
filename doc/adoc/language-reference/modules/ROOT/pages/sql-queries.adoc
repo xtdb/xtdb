@@ -3,13 +3,9 @@
 [#gotchas]
 == Gotchas
 
-Before discussing basic queries, it's worth being aware of a few "gotchas" present in XTDB Core2:
+Before discussing basic queries, it's worth reading about XTDB Core2's
+xref:getting-started::gotchas.adoc["gotchas"].
 
-* TODO: row types
-* TODO: type equality semantics
-* TODO: cast / overflow / BigDecimal
-* TODO: select *
-** jagged rows / missing
 
 [#select]
 == Basic SELECT

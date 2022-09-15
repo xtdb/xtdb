@@ -48,9 +48,12 @@ However, it may be initially surprising to find that even scalar values are retu
 
 [source,sql]
 ----
-INSERT INTO posts (id, user_id, text)
-  VALUES (1234, 5678, 'Hello World!');
+INSERT INTO posts (id, user_id, text, updated_at)
+  VALUES (1234, 5678, 'Hello World!', TIMESTAMP '2022-08-14 12:30:59');
 
--- over pgwire, 'posts.text' is a JSON string, not a SQL string
+-- over pgwire, this returns "2022-08-14T12:30:59"
+select posts.updated_at from posts;
+
+-- more surprisingly, 'posts.text' is a JSON string, not a SQL string
 SELECT posts.text from posts;
 ----

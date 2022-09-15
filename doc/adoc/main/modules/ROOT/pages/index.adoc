@@ -5,6 +5,6 @@ Please note that a number of features are still missing or incomplete.
 
 == Docs
 
-* xref:administration::index.adoc[Administration]
+* xref:getting-started::index.adoc[Getting Started]
 * xref:clients::index.adoc[Clients]
 * xref:language-reference::index.adoc[Language Reference]

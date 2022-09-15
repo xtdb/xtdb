@@ -1,0 +1,75 @@
+= Gotchas
+
+There are two major categories of surprising behaviour in XTDB Core2 to watch out for.
+
+1. Core2 is an immutable, bitemporal, schemaless database. If you are accustomed to other SQL dialects already, our SQL dialect will have some surprising quirks. We hope some of those quirks are a pleasant surprise, though.
+2. Since XTDB Core2 is an experimental pre-alpha, many features are missing or incomplete.
+
+
+== XTDB SQL Dialect
+
+=== No Table Definitions
+
+The first quirk you are likely to notice is that you can simply execute `INSERT` statements without executing any DDL.
+XTDB is schemaless and does not require table definitions.
+
+=== `SELECT *`
+
+The second quirk you will notice is closely related to the first.
+Because XTDB is schemaless, `SELECT *` is not straightforward to implement.
+Clarifying
+https://github.com/xtdb/core2/blob/master/doc/adr/0030-sql-missing-attributes.adoc[ADR 030]
+is a high priority for us, after which we can implement `SELECT *`.
+However, this dialect note will remain, as XTDB's `SELECT *` behaviour (once it exists) is bound to feel unfamiliar to some.
+
+=== Jagged Rows
+
+As you might expect from a schemaless database, the following is perfectly valid:
+
+[source,sql]
+----
+INSERT INTO people (id, name) VALUES (1, 'Floh');
+INSERT INTO people (id, first_name, last_name) VALUES (2, 'Martha', 'Joseph');
+----
+
+Deciding what to do about missing attributes is, again, discussed in
+https://github.com/xtdb/core2/blob/master/doc/adr/0030-sql-missing-attributes.adoc[ADR 030].
+
+=== Type Equality Semantics
+
+* TODO: type equality semantics
+
+=== Type Casts
+
+* TODO: cast
+
+=== Integer Overflow
+
+* TODO: overflow / BigDecimal
+
+
+== Missing and Incomplete
+
+=== `SELECT *`
+
+Because XTDB is schemaless, `SELECT *` presents some difficulties.
+While we fully intend to implement `SELECT *`, it requires the addition of `MISSING` semantics which are still under discussion.
+See https://github.com/xtdb/core2/blob/master/doc/adr/0030-sql-missing-attributes.adoc[ADR 030] for more details.
+
+=== Erasure
+
+Although the `ERASE` statement currently works, erased documents are only hidden from view.
+The XTDB process which will ultimately perform the erasure has not been written yet.
+Erasure adds the inherent complexity of mutation to an otherwise immutable system and must be approached carefully.
+
+=== `pgwire`
+
+Not all Postgres Wire Protocol features are completely implemented yet.
+
+=== Arrays and Objects
+
+Support for Arrays and Objects (nested data) was added quite recently and probably still has quite a few bugs.
+
+=== Row Types
+
+Row Types (`ROW ()`) and User-Defined Types (`CREATE TYPE`) are not implemented yet.

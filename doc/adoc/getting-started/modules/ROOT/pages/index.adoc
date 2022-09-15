@@ -1,0 +1,4 @@
+= Getting Started
+
+* xref:installation.adoc[Installation]
+* xref:gotchas.adoc[Gotchas]

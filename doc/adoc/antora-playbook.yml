@@ -27,7 +27,7 @@ content:
       branches:
         - master
     - url: ../../
-      start_path: doc/adoc/administration
+      start_path: doc/adoc/getting-started
       branches:
         - master
 

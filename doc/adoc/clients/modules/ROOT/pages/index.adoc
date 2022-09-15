@@ -1,6 +1,6 @@
 = Clients
 
-== PostgreSQL Wire Protocol
+== Postgres Wire Protocol
 
 * xref:pg.adoc[Postgres Wire Protocol Overview]
 * xref:pg-psql.adoc[`psql`]
