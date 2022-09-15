@@ -51,14 +51,16 @@ If you're building XTDB locally, run:
     c. Replace `version: master` to `version: <next-release>`
     d. Commit
 . For each `docs/**/*.adoc`: (Page Aliases Option 1)
-    a. Replace `:page-alias: foo` with `:page-alias: <new-version>@foo`
+    a. Replace `:page-aliases: foo` with `:page-aliases: <new-version>@foo`
 . Alternatively: (Page Aliases Option 2)
-    . Cherry pick the 'versioning page aliases' commit from the previous version's docs branch
-    . Another version find/replace
-    . Amend commit
+    a. Cherry pick the 'versioning page aliases' commit from the previous version's docs branch
+    b. Another version find/replace
+    c. Amend commit
 . Commit, push branch to https://github.com/xtdb/xtdb
-. Run `./bin/build.sh`. You should not get any errors.
-. Run `./bin/deploy.sh`. You will need AWS credentials.
+. Run `./bin/build.sh` from `master`. You should not get any errors.
+. Run `./bin/deploy.sh` from `master`. You will need AWS credentials.
+
+Troubleshooting `error: Duplicate nav in ... nav.adoc`: https://gitlab.com/antora/antora/-/issues/496
 
 ## Github release:
 
