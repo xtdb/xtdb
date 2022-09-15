@@ -1,5 +1,5 @@
 = What is XTDB?
-:page-aliases: about::what-is-crux.adoc, articles::what-is-crux.adoc
+:page-aliases: 1.22.0@about::what-is-crux.adoc, articles::what-is-crux.adoc
 
 XTDB—to use Martin Kleppmann’s phrase—is an _unbundled_ database.
 

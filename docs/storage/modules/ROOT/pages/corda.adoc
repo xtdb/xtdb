@@ -1,5 +1,5 @@
 = Corda
-:page-aliases: reference::corda.adoc
+:page-aliases: 1.22.0@reference::corda.adoc
 
 Development Status: Alpha
 
