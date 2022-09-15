@@ -18,6 +18,7 @@ target/
 docs/build/
 .calva/
 .lsp/.cache
+.lsp/
 
 xtdb-javadoc/
 
