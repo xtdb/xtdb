@@ -5,7 +5,7 @@ This module offers an HTTP server that allows you to send transactions and run q
 .deps.edn
 [source,clojure]
 ----
-com.xtdb/xtdb-http-server {:mvn/version "1.21.0"}
+com.xtdb/xtdb-http-server {:mvn/version "1.22.0"}
 ----
 
 .pom.xml
@@ -14,7 +14,7 @@ com.xtdb/xtdb-http-server {:mvn/version "1.21.0"}
 <dependency>
     <groupId>com.xtdb</groupId>
     <artifactId>xtdb-http-server</artifactId>
-    <version>1.21.0</version>
+    <version>1.22.0</version>
 </dependency>
 ----
 

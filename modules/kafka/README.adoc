@@ -5,7 +5,7 @@ This XTDB module allows you to use Apache's https://kafka.apache.org[Kafka] as X
 .deps.edn
 [source,clojure]
 ----
-com.xtdb/xtdb-kafka {:mvn/version "1.21.0"}
+com.xtdb/xtdb-kafka {:mvn/version "1.22.0"}
 ----
 
 .pom.xml
@@ -14,7 +14,7 @@ com.xtdb/xtdb-kafka {:mvn/version "1.21.0"}
 <dependency>
     <groupId>com.xtdb</groupId>
     <artifactId>xtdb-kafka</artifactId>
-    <version>1.21.0</version>
+    <version>1.22.0</version>
 </dependency>
 ----
 

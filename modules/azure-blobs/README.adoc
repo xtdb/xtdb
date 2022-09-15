@@ -5,7 +5,7 @@ This XTDB module allows you to use Azure's Blob Storage as XTDB's 'document stor
 .deps.edn
 [source,clojure]
 ----
-com.xtdb/xtdb-azure-blobs {:mvn/version "1.21.0"}
+com.xtdb/xtdb-azure-blobs {:mvn/version "1.22.0"}
 ----
 
 .pom.xml
@@ -14,7 +14,7 @@ com.xtdb/xtdb-azure-blobs {:mvn/version "1.21.0"}
 <dependency>
     <groupId>com.xtdb</groupId>
     <artifactId>xtdb-azure-blobs</artifactId>
-    <version>1.21.0</version>
+    <version>1.22.0</version>
 </dependency>
 ----
 
