@@ -18,7 +18,7 @@ target/
 docs/build/
 .calva/
 .lsp/.cache
-.lsp/
+.lsp/sqlite.db
 
 xtdb-javadoc/
 
