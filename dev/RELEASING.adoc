@@ -58,7 +58,7 @@ If you're building XTDB locally, run:
     c. Amend commit
 . Commit, push branch to https://github.com/xtdb/xtdb
 . Run `./bin/build.sh` from `master`. You should not get any errors.
-. Run `./bin/deploy.sh` from `master`. You will need AWS credentials.
+. Run `AWS_PROFILE=xtdb-site ./bin/deploy.sh` from `master`. You will need AWS credentials.
 
 Troubleshooting `error: Duplicate nav in ... nav.adoc`: https://gitlab.com/antora/antora/-/issues/496
 
