@@ -1,5 +1,8 @@
 = Clients
 
-* xref:pg-psql.adoc[`psql` (pgwire)]
-* xref:pg-python.adoc[Python (pgwire)]
-* xref:pg-java.adoc[Java (pgwire)]
+== PostgreSQL Wire Protocol
+
+* xref:pg.adoc[Postgres Wire Protocol Overview]
+* xref:pg-psql.adoc[`psql`]
+* xref:pg-python.adoc[Python]
+* xref:pg-java.adoc[Java (JDBC)]

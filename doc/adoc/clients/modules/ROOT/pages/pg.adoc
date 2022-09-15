@@ -1,0 +1,56 @@
+= Postgres Wire Protocol Overview
+
+XTDB Core2 permits connections over the
+https://www.postgresql.org/docs/14/protocol.html[Postgres Wire Protocol, v3] ("pgwire").
+
+The Postgres SQL _dialect_, however, is not supported. See the notes below.
+
+== Clients
+
+* xref:pg-psql.adoc[`psql` -- Standard Postgres command line client]
+* xref:pg-python.adoc[Python -- Python native drivers]
+* xref:pg-java.adoc[Java -- JDBC]
+
+== Semantics
+
+=== Schemaless
+
+XTDB is schemaless.
+For now, it is not possible to inspect the schema of XTDB tables using a tool like https://www.quest.com/toad/[Toad].
+In the future, XTDB may support discoverable schemas, even without up-front table definitions.
+
+=== XTDB SQL Dialect
+
+XTDB supports real SQL.
+Where possible, the XTDB SQL dialect conforms to the
+https://www.iso.org/standard/53681.html[ISO SQL:2011] specification.
+Some features of the https://www.iso.org/standard/63555.html[SQL:2016] specification have also been adopted.
+
+Although XTDB permits connections through the Postgres Wire Protocol,
+it does _not_ support the Postgres SQL dialect.
+
+=== Return Values
+
+All values returned from an XTDB SQL query over the Postgres Wire Protocol are encoded as JSON.
+Since XTDB is schemaless and supports nested data, JSON is natural:
+
+[source,sql]
+----
+INSERT INTO people (id, name, friends)
+  VALUES (5678, 'Sarah',
+          [{'user': 'Dan'},
+           {'user': 'Kath'}]);
+
+SELECT people.friends[2] from people;
+----
+
+However, it may be initially surprising to find that even scalar values are returned as JSON:
+
+[source,sql]
+----
+INSERT INTO posts (id, user_id, text)
+  VALUES (1234, 5678, 'Hello World!');
+
+-- over pgwire, 'posts.text' is a JSON string, not a SQL string
+SELECT posts.text from posts;
+----
