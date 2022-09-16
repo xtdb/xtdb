@@ -755,3 +755,10 @@ SELECT t1.d-t1.e AS a, SUM(t1.a) AS b
   (invalid? [#"Right side contains ambiguous join columns"]
             "SELECT x.x FROM x INNER JOIN (SELECT t1.x, t1.x FROM t1) AS y USING(x)")
   (valid? "SELECT x.x, y.x, x.y, y.y FROM (SELECT t1.x, t1.y FROM t1) AS x INNER JOIN (SELECT t1.x, t1.y FROM t1) AS y USING(x, y)"))
+
+(t/deftest test-set-temporal-cols-err-454
+  (invalid? [#"Updating app-time columns outside of `FOR PERIOD OF` is not supported:"]
+            "UPDATE foo SET application_time_start = DATE '2020-01-01'")
+
+  (invalid? [#"Updating sys-time columns is not supported:"]
+            "UPDATE foo SET system_time_start = DATE '2020-01-01'"))

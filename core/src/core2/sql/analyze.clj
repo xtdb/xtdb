@@ -1,9 +1,9 @@
 (ns core2.sql.analyze
   (:require [clojure.string :as str]
+            [core2.temporal :as temporal]
             [core2.rewrite :as r]
             [core2.sql.parser :as p]
-            [core2.error :as err])
-  (:import java.util.HashMap))
+            [core2.error :as err]))
 
 (defn- ->line-info-str [loc]
   (let [{:keys [sql]} (meta (r/root loc))
@@ -1060,7 +1060,7 @@
             (->line-info-str ag))]
     []))
 
-(defn- check-dml-non-determinsm [ag]
+(defn- check-dml-non-determinism [ag]
   (r/zcase ag
     :arrow_table
     [(format "Non-deterministic ARROW_TABLE is not allowed in DML statements: %s"
@@ -1083,6 +1083,19 @@
                                ag))]
     errors
     []))
+
+(defn- check-set-clause [ag]
+  (r/zmatch ag
+    [:set_clause [:update_target ^:z id] _ _]
+    (concat (when (contains? #{"application_time_start" "application_time_end"} (identifier id))
+              [(format "Updating app-time columns outside of `FOR PERIOD OF` is not supported: %s %s"
+                       (->src-str ag)
+                       (->line-info-str ag))])
+
+            (when (contains? #{"system_time_start" "system_time_end"} (identifier id))
+              [(format "Updating sys-time columns is not supported: %s %s"
+                       (->src-str ag)
+                       (->line-info-str ag))]))))
 
 (defn errs [ag]
   (let [dml? (dml-statement? ag)]
@@ -1152,8 +1165,11 @@
          :query_system_time_period_specification
          (check-period-specification ag)
 
+         :set_clause
+         (check-set-clause ag)
+
          (if dml?
-           (check-dml-non-determinsm ag)
+           (check-dml-non-determinism ag)
            [])))
      ag)))
 
