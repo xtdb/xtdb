@@ -4,58 +4,62 @@ XTDB Core2 is a schemaless document database.
 There is no DDL and you can add any record without static table definitions.
 
 
-[#readwrite-mode]
-== `READ WRITE` Mode
-
-XTDB is an asynchronous database.
-By default, XTDB is in `READ ONLY` mode.
-To commit a transaction, you will need to enter `READ WRITE` mode explicitly:
-
-[source,sql]
-----
-start transaction READ WRITE;
--- your DML here
-commit;
-----
-
-
 [#insert]
 == INSERT / UPSERT
 
-For now, `insert` behaves like `upsert`.
-You are permitted to run the following statements twice in a row and the second will not be rejected.
-By default, `select` will query across all of `APPLICATION_TIME`, so you will see two rows returned as well.
+For now, `INSERT` behaves like `UPSERT`.
+You are permitted to run the following statement twice in a row and the second will not be rejected.
+By default, `SELECT` will query across all of `APPLICATION_TIME`, so you will see two rows returned as well.
 
 [source,sql]
 ----
-start transaction READ WRITE;
-insert into users (id,name) values (1234,'Matt');
-commit;
+INSERT INTO users (id, name) VALUES (1234, 'Matt');
 ----
 
-The result of the `insert` statement might be surprising:
+NOTE: If `INSERT` is altered to prevent repeated execution against the same `id`, a true `UPSERT` statement may be added to duplicate this behaviour. However, `UPSERT` (and `REPLACE`) are not a part of the SQL Specification.
 
+=== Async
+
+The result of `INSERT` statement might be surprising:
+
+[source,sh]
 ----
---
-(0 rows)
 INSERT 0 0
 ----
 
 This is because XTDB is asynchronous.
-Your data has reached the Transaction Log but isn't fully committed to the Object Store until `commit`.
+Your data has reached the Transaction Log but isn't fully committed to the Object Store yet.
+
+=== Time-Travel
+
+By default, an `INSERT` occurs "as of now".
+Inserted data can be forced to live in the past or future by setting `APPLICATION_TIME_START` and/or `APPLICATION_TIME_END`:
+
+[source,sql]
+----
+INSERT INTO users (id, name, application_time_start) VALUES (5678, 'Kath', DATE '2027-01-06');
+----
 
 
 [#update]
 == UPDATE
 
+By default, updates only affect an entity on the `SYSTEM_TIME` and `APPLICATION_TIME` timelines from the point in time when the `UPDATE` statement occurred.
+
 [source,sh]
 ----
-start transaction READ WRITE;
-update users set name='James' where users.id=1234;
-commit;
+UPDATE users SET name='James' WHERE users.id=1234;
 ----
 
-Be aware that the `where` clause requires fully-qualified columns, like `select`.
+Be aware that the `WHERE` clause requires fully-qualified columns, like `SELECT`.
+
+////
+Updates can be forced to occur in the past or future by setting `APPLICATION_TIME_START` and/or `APPLICATION_TIME_END`:
+[source,sh]
+----
+UPDATE users SET name='James', application_time_start=DATE '1998-01-05' WHERE users.id=1234;
+----
+////
 
 
 [#delete]
@@ -63,7 +67,39 @@ Be aware that the `where` clause requires fully-qualified columns, like `select`
 
 [source,sh]
 ----
-start transaction READ WRITE;
-delete from users where users.id=1234;
-commit;
+DELETE FROM users WHERE users.id=1234;
 ----
+
+
+[#erase]
+== ERASE
+
+Because XTDB is immutable, it requires a method of _erasure_.
+Unlike `DELETE`, when a record is erased it is not just hidden from that point in the timeline, onward.
+And erased record is completely removed from disk.
+`ERASE` should be used sparingly, to comply with international laws like
+the EU's https://gdpr.eu/[GDPR] and Canada's
+https://laws-lois.justice.gc.ca/eng/acts/P-8.6/[PIPEDA].
+
+[source,sh]
+----
+ERASE FROM users WHERE users.id=1234;
+----
+
+
+[#readwrite-mode]
+== `READ WRITE` Mode
+
+XTDB is an asynchronous database.
+By default, XTDB is in `READ ONLY` mode.
+To commit a transaction, it must enter `READ WRITE` mode:
+
+[source,sql]
+----
+START TRANSACTION READ WRITE;
+-- your DML here
+COMMIT;
+----
+
+DML statements (`INSERT`, `UPDATE`, etc.),
+will be wrapped in a `READ WRITE` transaction automatically.
