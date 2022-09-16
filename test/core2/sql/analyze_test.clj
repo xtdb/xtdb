@@ -44,6 +44,7 @@
        (t/is (scopes ag#)))))
 
 (t/deftest test-annotate-query-scopes
+  #_ ; FIXME disabling WITH RECURSIVE, #123, #337
   (let [q "WITH RECURSIVE foo AS (SELECT 1 FROM foo AS bar)
 SELECT t1.d-t1.e AS a, SUM(t1.a) AS b
   FROM t1, foo AS baz
