@@ -4,6 +4,13 @@ XTDB Core2 is a schemaless document database.
 There is no DDL and you can add any record without static table definitions.
 
 
+[#gotchas]
+== Gotchas
+
+Before discussing basic transactions, it's worth reading about XTDB Core2's
+xref:getting-started::gotchas.adoc["gotchas"].
+
+
 [#insert]
 == INSERT / UPSERT
 
@@ -33,7 +40,7 @@ Your data has reached the Transaction Log but isn't fully committed to the Objec
 === Time-Travel
 
 By default, an `INSERT` occurs "as of now".
-Inserted data can be forced to live in the past or future by setting `APPLICATION_TIME_START` and/or `APPLICATION_TIME_END`:
+Inserted data can be forced to live in the past or future by setting `application_time_start` and/or `application_time_end`:
 
 [source,sql]
 ----

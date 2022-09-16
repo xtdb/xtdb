@@ -35,6 +35,28 @@ INSERT INTO people (id, first_name, last_name) VALUES (2, 'Martha', 'Joseph');
 Deciding what to do about missing attributes is, again, discussed in
 https://github.com/xtdb/core2/blob/master/doc/adr/0030-sql-missing-attributes.adoc[ADR 030].
 
+=== Case Sensitivity
+
+Currently, XTDB's SQL identifiers are case-sensitive.
+This will be corrected in https://github.com/xtdb/core2/issues/416[Issue #416].
+
+The place this is most likely to cause confusion is between `SYSTEM_TIME` / `APPLICATION_TIME` (which are reserved words) and `system_time_start` / `system_time_end` / `application_time_start` / `application_time_end`, which are built-in column names.
+
+In general, it is safe to assume reserved words are either uppercase or case-insensitive and column names should be lower-case.
+
+=== Identifiers
+
+XTDB only permits one identifier: a column named `id`.
+Compound ids are not possible.
+
+=== Uniqueness Constraints
+
+XTDB does not (currently) support uniqueness constraints.
+
+=== Triggers
+
+XTDB does not (currently) support triggers.
+
 === Type Equality Semantics
 
 * TODO: type equality semantics
@@ -73,3 +95,7 @@ Support for Arrays and Objects (nested data) was added quite recently and probab
 === Row Types
 
 Row Types (`ROW ()`) and User-Defined Types (`CREATE TYPE`) are not implemented yet.
+
+=== Other Missing SQL Features
+
+A query which attempts to use a SQL feature Core2 hasn't implemented yet should return an explicit error, as per https://github.com/xtdb/core2/issues/337[Issue #337].

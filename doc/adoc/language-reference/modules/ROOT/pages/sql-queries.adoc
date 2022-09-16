@@ -10,12 +10,10 @@ xref:getting-started::gotchas.adoc["gotchas"].
 [#select]
 == Basic SELECT
 
-Assuming the `insert` statement from the
-xref:language-reference::sql-transactions.adoc[SQL Transactions] documentation, you will see:
-
 [source,sql]
 ----
-select users.name from users;
+INSERT INTO users (id, name) VALUES (1234, 'Matt');
+SELECT users.name FROM users;
 ----
 
 returns:
@@ -27,3 +25,127 @@ returns:
  "Matt"
 (1 row)
 ----
+
+
+[#joins]
+== Joins
+
+Joins in XTDB are ad-hoc.
+Foreign keys are not required and any table can join on any other table, as long as their columns contain the same value.
+
+[source,sql]
+----
+INSERT INTO posts (id, user_id, text)
+  VALUES (1234, 5678, 'Hello World!');
+INSERT INTO posts (id, user_id, text)
+  VALUES (2345, 5678, 'Summer Reading: George Copeland');
+
+INSERT INTO people (id, name, friends)
+  VALUES (5678, 'Sarah',
+          [{'user': 'Dan'},
+           {'user': 'Kath'}]);
+
+SELECT posts.text, people.name
+  FROM posts JOIN people ON posts.user_id = people.id;
+----
+
+
+[#asofnow]
+== Enhanced SQL:2011
+
+XTDB defaults to SQL:2011 behaviour but alternative temporal defaults are offered.
+The following command will switch XTDB's Application Time semantics to "as of now",
+which will feel more natural to most users.
+
+[source,sql]
+----
+SET APPLICATION_TIME_DEFAULTS TO AS_OF_NOW;
+----
+
+With "as of now" Application Time semantics, the following inserted record is only visible
+when time-travelling (`FOR APPLICATION_TIME AS OF`) to the year 2027 or when viewing the
+entire timeline at once (`FOR ALL APPLICATION_TIME`):
+
+[source,sql]
+----
+INSERT INTO posts (id, user_id, text, application_time_start)
+  VALUES (9012, 5678, 'Happy 2027!', DATE '2027-01-01');
+
+SELECT posts.text FROM posts
+  FOR APPLICATION_TIME AS OF DATE '2027-01-02';
+
+-- data from 2027 is not visible by default
+SELECT posts.text FROM posts;
+
+-- data from 2027 becomes visible when viewing the entire timeline
+SELECT posts.text FROM posts FOR ALL APPLICATION_TIME;
+----
+
+
+[#sql2011]
+== ISO Standard SQL:2011
+
+Although XTDB defaults to SQL:2011 behaviour, you can explicitly set this behaviour
+to switch away from the "as of now" defaults, if you've set them:
+
+[source,sql]
+----
+SET APPLICATION_TIME_DEFAULTS TO ISO_STANDARD;
+----
+
+When XTDB is in ISO Standard mode, queries will return records visible to all of Application Time:
+
+[source,sql]
+----
+INSERT INTO posts (id, user_id, text, application_time_start)
+  VALUES (9012, 5678, 'Happy 2027!', DATE '2027-01-01');
+
+-- data from 2027 is visible by default
+SELECT posts.text, posts.application_time_start FROM posts;
+----
+
+While using ISO Standard mode, it is often helpful to orient oneself
+by querying all 4 built-in time columns:
+
+[source,sql]
+----
+SELECT posts.text,
+       posts.system_time_start,
+       posts.system_time_end,
+       posts.application_time_start,
+       posts.application_time_end FROM posts;
+----
+
+
+[#inspectthetimeline]
+== Inspect The Timeline
+
+Whether you are in `AS_OF_NOW` or `ISO_STANDARD` mode, you can inspect the entire timeline.
+
+To inspect all of System Time:
+
+[source,sql]
+----
+SELECT posts.text,
+       posts.system_time_start,
+       posts.system_time_end,
+       posts.application_time_start,
+       posts.application_time_end
+       FROM posts
+       FOR ALL SYSTEM_TIME;
+----
+
+To inspect all of Application Time:
+
+[source,sql]
+----
+SELECT posts.text,
+       posts.system_time_start,
+       posts.system_time_end,
+       posts.application_time_start,
+       posts.application_time_end
+       FROM posts
+       FOR ALL APPLICATION_TIME;
+----
+
+These two clauses can be combined to inspect the entire time plane (both timelines).
