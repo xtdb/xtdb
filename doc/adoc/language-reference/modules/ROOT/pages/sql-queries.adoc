@@ -50,7 +50,7 @@ SELECT posts.text, people.name
 ----
 
 
-[#asofnow]
+[#enhancedsql2011]
 == Enhanced SQL:2011
 
 XTDB defaults to SQL:2011 behaviour but alternative temporal defaults are offered.
@@ -82,8 +82,8 @@ SELECT posts.text FROM posts FOR ALL APPLICATION_TIME;
 ----
 
 
-[#sql2011]
-== ISO Standard SQL:2011
+[#isosql2011]
+== ISO SQL:2011
 
 Although XTDB defaults to SQL:2011 behaviour, you can explicitly set this behaviour
 to switch away from the "as of now" defaults, if you've set them:
@@ -149,3 +149,120 @@ SELECT posts.text,
 ----
 
 These two clauses can be combined to inspect the entire time plane (both timelines).
+
+
+[#arrowtable]
+== ARROW_TABLE
+
+Queries can access correctly-formatted Apache Arrow files directly from the web.
+
+[source,sql]
+----
+INSERT INTO users (id, post_id, name) VALUES (555, 'foo1', 'Jamie');
+
+SELECT more_posts.id, more_posts.text, users.name
+  FROM ARROW_TABLE('https://xtdb.com/more_posts.arrow')
+  AS more_posts JOIN users ON more_posts.id = users.post_id;
+----
+
+NOTE: `ARROW_TABLE` is not permitted in DML (`INSERT`, `UPDATE`, etc.)
+because transactions in XTDB must be deterministic.
+Determinism is broken if the contents of the external `.arrow` file change.
+
+
+[#typeequality]
+== Type Equality
+
+=== Numeric Types
+
+For now, numerics are equal if they are equal in Clojure.
+See https://github.com/xtdb/core2/issues/214[Issue #214] for an example of an exception to this rule.
+
+=== Strings and Byte Arrays
+
+Equality cannot be compared between a String and a Byte Array.
+
+=== Dates and Timestamps
+
+Dates/Timestamps are equal as per the SQL:2011 specification.
+Dates/Timestamps without a TZ are assumed to be the TZ of the session before being compared.
+
+If you have a copy of the ISO/ANSI SQL:2011 specification
+(_Information technology — Database languages — SQL — Part 2: Foundation (SQL/Foundation)_),
+you will find a helpful table on Page 37 (_Table 3 — Datetime data type conversions_).
+
+NOTE: For simplicity, we _highly_ recommend writing date/time data as Timestamps with a UTC Timezone whenever possible.
+
+
+== Type Casts
+
+=== Numeric Types
+
+Most numeric types will cast as expected
+
+Type casts are a work-in-progress, but most numeric-to-numeric casts will work as expected.
+Casts between numerics and non-numeric types may not work yet.
+
+[source,sql]
+----
+insert into t1 (id) values (1);
+select (2 + CAST(3.0 AS INT)) from t1; -- returns 5
+select (2 + CAST("3" AS INT)) from t1; -- fails as of 2022-09-16
+----
+
+=== Dates and Timestamps
+
+Similar to date/time type equality, Dates/Timestamps without a TZ are assumed to be the TZ of the session before being compared.
+
+
+== Math
+
+=== Overflow
+
+Overflow is strictly checked. Internally, this is implemented with
+https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/Math.html[`*Exact()` methods from `java.lang.Math`].
+
+=== BigDecimal
+
+`BigDecimal` is not yet supported.
+
+
+== Temporal Data Patterns
+
+=== Move a record into the past/future
+
+To retroactively "move" a record into the past or future, use the "upsert" functionality of the `INSERT` statement:
+
+[source,sql]
+----
+INSERT INTO products (id,name,application_time_start)
+  VALUES (1,'iPhone',DATE '2009-01-01');
+SELECT products.name,products.application_time_start
+  FROM products; -- returns 2009
+
+INSERT INTO products (id,name,application_time_start)
+  VALUES (1,'iPhone',DATE '2007-06-29');
+SELECT products.name,products.application_time_start
+  FROM products; -- returns correct 2007 date
+----
+
+It is not possible to use an `UPDATE` statement to change a record's `APPLICATION_TIME`.
+
+=== Change a record for a portion of (its) time
+
+`UPDATE ... FOR PORTION OF APPLICATION_TIME` can be used for exactly this purpose:
+
+[source,sql]
+----
+INSERT INTO employee (id, name, title, application_time_start)
+  VALUES (4, 'Deepa', 'Developer', DATE '2013-07-31');
+
+UPDATE employee FOR PORTION OF APPLICATION_TIME
+  FROM DATE '2018-01-01' TO DATE '2021-01-01'
+  SET title = 'CEO'
+  WHERE employee.id = 4;
+
+SELECT employee.title, employee.application_time_start
+  FROM employee FOR ALL APPLICATION_TIME
+  WHERE employee.id=4;
+----

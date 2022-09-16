@@ -44,7 +44,8 @@ Inserted data can be forced to live in the past or future by setting `applicatio
 
 [source,sql]
 ----
-INSERT INTO users (id, name, application_time_start) VALUES (5678, 'Kath', DATE '2027-01-06');
+INSERT INTO users (id, name, application_time_start)
+  VALUES (5678, 'Kath', DATE '2027-01-06');
 ----
 
 
@@ -110,3 +111,67 @@ COMMIT;
 
 DML statements (`INSERT`, `UPDATE`, etc.),
 will be wrapped in a `READ WRITE` transaction automatically.
+
+
+[#objectsandarrays]
+== Objects and Arrays
+
+Nested data is supported in the form of objects and arrays.
+
+=== Objects
+
+Construct an Object with `OBJECT`:
+
+[source,sql]
+----
+INSERT INTO posts (id, text, social)
+  VALUES (444, 'XTDB has nested data!',
+          OBJECT ('twitter': '@xtdb_com', 'visible': true));
+SELECT posts.social FROM posts;
+----
+
+For convenience, `OBJECT` has a shorthand literal syntax:
+
+[source,sql]
+----
+INSERT INTO posts (id, text, social)
+  VALUES (555, 'XTDB has object literals!',
+          {'twitter': '@xtdb_com', 'visible': true});
+SELECT posts.social FROM posts;
+----
+
+=== Arrays
+
+Construct an Array with `ARRAY`:
+
+[source,sql]
+----
+INSERT INTO toots (id, text, likes)
+  VALUES (777, 'Did you know XTDB has arrays?',
+          ARRAY ['Kath', 'Joe', 'Holly']);
+SELECT toots.likes from toots;
+----
+
+For convenience, the `ARRAY` keyword can be elided for the shorthand literal syntax:
+
+[source,sql]
+----
+INSERT INTO toots (id, text, likes)
+  VALUES (888, 'Did you know XTDB has array literals?',
+          ['Kath', 'Joe', 'Holly']);
+SELECT toots.likes[1] from toots;
+----
+
+=== Deep Nesting
+
+Deeper nesting is permitted. Arrays and Objects can be combined. For example:
+
+[source,sql]
+----
+INSERT INTO toots_deep (id, text, likes)
+  VALUES (999, 'Did you know XTDB supports deep nesting?',
+          [{'name': 'Kath', 'count': 5},
+           {'name': 'Joe', 'count': 10},
+           {'name': 'Holly', 'count': 3}]);
+SELECT toots_deep.likes from toots_deep;
+----

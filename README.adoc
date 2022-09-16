@@ -25,10 +25,9 @@ More examples are available in the https://github.com/xtdb/core2-playground[Core
 
 == Documentation
 
-https://github.com/xtdb/core2/tree/master/doc/adoc[Preliminary documentation] exists.
-This documentation is (intentionally) not published yet, but you can
-https://github.com/xtdb/core2/tree/master/doc/adoc#build[build the documentation yourself].
+Preliminary documentation is available at https://core2docs.xtdb.com/[core2docs.xtdb.com].
 
+This documentation is still an early work-in-progress.
 Please do not open issues on this repository with documentation-related questions at this stage.
 
 
