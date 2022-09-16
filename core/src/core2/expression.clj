@@ -1072,6 +1072,13 @@
   :default ::default
   :hierarchy #'types/col-type-hierarchy)
 
+(defmethod codegen-cast ::default [{:keys [source-type target-type]}]
+  (throw (err/illegal-arg :core2.expression/cast-error
+                          {::err/message (format "Unsupported cast: '%s' -> '%s'"
+                                                 (pr-str source-type) (pr-str target-type))
+                           :source-type source-type
+                           :target-type target-type})))
+
 (defmethod codegen-cast [:num :num] [{:keys [target-type]}]
   {:return-type target-type
    :->call-code #(do `(~(type->cast target-type) ~@%))})

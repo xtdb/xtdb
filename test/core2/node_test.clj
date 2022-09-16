@@ -257,3 +257,8 @@ ORDER BY foo.application_time_start"
 
       (t/is (= {{:id 1, :v 1} 2, {:id 1, :v 2} 1}
                (q2 {:basis {:tx tx2}}))))))
+
+(t/deftest test-error-handling-inserting-strings-into-app-time-cols-397
+  (let [!tx (c2/submit-tx tu/*node* [[:sql "INSERT INTO foo (id, application_time_start) VALUES (1, '2018-01-01')"]])]
+    ;; TODO check the rollback error when it's available, #401
+    (t/is (= [] (c2/sql-query tu/*node* "SELECT foo.id FROM foo" {:basis {:tx !tx}})))))
