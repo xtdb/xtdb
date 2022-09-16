@@ -1051,7 +1051,9 @@
    {:tag :nt, :keyword :power_function}
    {:tag :nt, :keyword :square_root}
    {:tag :nt, :keyword :floor_function}
-   {:tag :nt, :keyword :ceiling_function}),
+   {:tag :nt, :keyword :ceiling_function}
+   {:tag :nt, :keyword :least_function}
+   {:tag :nt, :keyword :greatest_function}),
   :red {:reduction-type :raw}},
  :group_by_clause
  {:tag :cat,
@@ -2931,6 +2933,19 @@
    {:tag :string, :string "IN"}
    {:tag :nt, :keyword :binary_value_expression}
    {:tag :nt, :keyword :right_paren, :hide true})},
+ :greatest_function
+ {:tag :cat,
+  :parsers
+  ({:tag :string, :string "GREATEST"}
+   {:tag :nt, :keyword :left_paren, :hide true}
+   {:tag :nt, :keyword :numeric_value_expression}
+   {:tag :star,
+    :parser
+    {:tag :cat,
+     :parsers
+     ({:tag :nt, :keyword :comma, :hide true}
+      {:tag :nt, :keyword :numeric_value_expression})}}
+   {:tag :nt, :keyword :right_paren, :hide true})},
  :query_expression
  {:tag :cat,
   :parsers
@@ -3039,6 +3054,19 @@
   :parsers
   ({:tag :nt, :keyword :row_value_predicand}
    {:tag :nt, :keyword :quantified_comparison_predicate_part_2})},
+ :least_function
+ {:tag :cat,
+  :parsers
+  ({:tag :string, :string "LEAST"}
+   {:tag :nt, :keyword :left_paren, :hide true}
+   {:tag :nt, :keyword :numeric_value_expression}
+   {:tag :star,
+    :parser
+    {:tag :cat,
+     :parsers
+     ({:tag :nt, :keyword :comma, :hide true}
+      {:tag :nt, :keyword :numeric_value_expression})}}
+   {:tag :nt, :keyword :right_paren, :hide true})},
  :common_logarithm
  {:tag :cat,
   :parsers

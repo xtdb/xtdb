@@ -54,3 +54,9 @@ query I nosort
 SELECT CARDINALITY(t.arr) FROM (VALUES (ARRAY[1, 2, 3])) t (arr)
 ----
 3
+
+query II nosort
+SELECT LEAST(5, t1.id, 12, 8), GREATEST(5, t1.id, 12, 8) FROM t1
+----
+1
+12

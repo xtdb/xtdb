@@ -505,6 +505,12 @@
         z
         (recur (zright z))))))
 
+(defn right-zips
+  "returns a seq of zips for this node and all of its right-hand siblings"
+  [z]
+  (->> (iterate #(zright %) z)
+       (take-while some?)))
+
 ;; Strategic Zippers based on Ztrategic
 
 ;; https://arxiv.org/pdf/2110.07902.pdf

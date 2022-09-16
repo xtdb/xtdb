@@ -233,6 +233,12 @@
           z)
          (cons 'case))
 
+    :least_function
+    (list* 'min (map expr (r/right-zips (r/$ z 2))))
+
+    :greatest_function
+    (list* 'max (map expr (r/right-zips (r/$ z 2))))
+
     (throw (err/illegal-arg :core2.sql/parse-error
                             {::err/message (str "Cannot build expression for: "  (pr-str (r/node z)))
                              :node (r/node z)}))))
@@ -3100,4 +3106,5 @@
        (catch Throwable t
          (throw (err/illegal-arg ;;might not be a bad query but IAE returns errors via pg-wire
                   ::plan-error
-                  {::err/message (format "Error Planning SQL: %s" (ex-message t))})))))))
+                  {::err/message (format "Error Planning SQL: %s" (ex-message t))}
+                  t)))))))
