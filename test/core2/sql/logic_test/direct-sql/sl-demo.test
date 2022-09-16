@@ -1,0 +1,822 @@
+hash-threshold 100
+
+variable SET APP_TIME_DEFAULTS TO AS_OF_NOW
+
+statement ok
+INSERT INTO Prop_Owner (id, customer_number, property_number, application_time_start)
+VALUES (1, 145, 7797, DATE '1998-01-10')
+
+query IIITTTT nosort
+SELECT *
+  FROM Prop_Owner AS x (id,
+                        customer_number,
+                        property_number,
+                        application_time_start,
+                        application_time_end,
+                        system_time_start,
+                        system_time_end)
+----
+1
+145
+7797
+1998-01-10T00:00Z[UTC]
+9999-12-31T23:59:59.999999Z[UTC]
+2020-01-01T00:00Z[UTC]
+9999-12-31T23:59:59.999999Z[UTC]
+
+statement ok
+INSERT INTO Prop_Owner (id, customer_number, property_number, application_time_start)
+VALUES (1, 827, 7797, DATE '1998-01-15')
+
+query IIITTTT nosort
+SELECT *
+  FROM Prop_Owner AS x (id,
+                        customer_number,
+                        property_number,
+                        application_time_start,
+                        application_time_end,
+                        system_time_start,
+                        system_time_end)
+----
+1
+827
+7797
+1998-01-15T00:00Z[UTC]
+9999-12-31T23:59:59.999999Z[UTC]
+2020-01-02T00:00Z[UTC]
+9999-12-31T23:59:59.999999Z[UTC]
+
+query IIITTTT nosort
+SELECT *
+  FROM Prop_Owner
+         FOR ALL SYSTEM_TIME
+         FOR ALL APPLICATION_TIME
+         AS x (id,
+               customer_number,
+               property_number,
+               application_time_start,
+               application_time_end,
+               system_time_start,
+               system_time_end)
+----
+1
+145
+7797
+1998-01-10T00:00Z[UTC]
+9999-12-31T23:59:59.999999Z[UTC]
+2020-01-01T00:00Z[UTC]
+2020-01-02T00:00Z[UTC]
+1
+145
+7797
+1998-01-10T00:00Z[UTC]
+1998-01-15T00:00Z[UTC]
+2020-01-02T00:00Z[UTC]
+9999-12-31T23:59:59.999999Z[UTC]
+1
+827
+7797
+1998-01-15T00:00Z[UTC]
+9999-12-31T23:59:59.999999Z[UTC]
+2020-01-02T00:00Z[UTC]
+9999-12-31T23:59:59.999999Z[UTC]
+
+statement ok
+DELETE
+FROM Prop_Owner
+     FOR PORTION OF APPLICATION_TIME FROM DATE '1998-01-20' TO END_OF_TIME
+WHERE Prop_Owner.property_number = 7797
+
+query IIITTTT nosort
+SELECT *
+  FROM Prop_Owner
+         AS x (id,
+               customer_number,
+               property_number,
+               application_time_start,
+               application_time_end,
+               system_time_start,
+               system_time_end)
+----
+
+query IIITTTT nosort
+SELECT *
+  FROM Prop_Owner
+         FOR ALL SYSTEM_TIME
+         FOR ALL APPLICATION_TIME
+         AS x (id,
+               customer_number,
+               property_number,
+               application_time_start,
+               application_time_end,
+               system_time_start,
+               system_time_end)
+----
+1
+145
+7797
+1998-01-10T00:00Z[UTC]
+9999-12-31T23:59:59.999999Z[UTC]
+2020-01-01T00:00Z[UTC]
+2020-01-02T00:00Z[UTC]
+1
+145
+7797
+1998-01-10T00:00Z[UTC]
+1998-01-15T00:00Z[UTC]
+2020-01-02T00:00Z[UTC]
+9999-12-31T23:59:59.999999Z[UTC]
+1
+827
+7797
+1998-01-15T00:00Z[UTC]
+9999-12-31T23:59:59.999999Z[UTC]
+2020-01-02T00:00Z[UTC]
+2020-01-03T00:00Z[UTC]
+1
+827
+7797
+1998-01-15T00:00Z[UTC]
+1998-01-20T00:00Z[UTC]
+2020-01-03T00:00Z[UTC]
+9999-12-31T23:59:59.999999Z[UTC]
+
+statement ok
+INSERT INTO Prop_Owner (id, customer_number, property_number, application_time_start, application_time_end)
+VALUES (1, 145, 7797, DATE '1998-01-03', DATE '1998-01-10')
+
+query IIITTTT nosort
+SELECT *
+  FROM Prop_Owner
+         FOR ALL SYSTEM_TIME
+         FOR ALL APPLICATION_TIME
+         AS x (id,
+               customer_number,
+               property_number,
+               application_time_start,
+               application_time_end,
+               system_time_start,
+               system_time_end)
+----
+1
+145
+7797
+1998-01-10T00:00Z[UTC]
+9999-12-31T23:59:59.999999Z[UTC]
+2020-01-01T00:00Z[UTC]
+2020-01-02T00:00Z[UTC]
+1
+145
+7797
+1998-01-10T00:00Z[UTC]
+1998-01-15T00:00Z[UTC]
+2020-01-02T00:00Z[UTC]
+9999-12-31T23:59:59.999999Z[UTC]
+1
+827
+7797
+1998-01-15T00:00Z[UTC]
+9999-12-31T23:59:59.999999Z[UTC]
+2020-01-02T00:00Z[UTC]
+2020-01-03T00:00Z[UTC]
+1
+827
+7797
+1998-01-15T00:00Z[UTC]
+1998-01-20T00:00Z[UTC]
+2020-01-03T00:00Z[UTC]
+9999-12-31T23:59:59.999999Z[UTC]
+1
+145
+7797
+1998-01-03T00:00Z[UTC]
+1998-01-10T00:00Z[UTC]
+2020-01-04T00:00Z[UTC]
+9999-12-31T23:59:59.999999Z[UTC]
+
+statement ok
+DELETE
+FROM Prop_Owner
+FOR PORTION OF APPLICATION_TIME
+FROM DATE '1998-01-03' TO DATE '1998-01-05'
+
+query IIITTTT nosort
+SELECT *
+  FROM Prop_Owner
+         FOR ALL SYSTEM_TIME
+         FOR ALL APPLICATION_TIME
+         AS x (id,
+               customer_number,
+               property_number,
+               application_time_start,
+               application_time_end,
+               system_time_start,
+               system_time_end)
+----
+1
+145
+7797
+1998-01-10T00:00Z[UTC]
+9999-12-31T23:59:59.999999Z[UTC]
+2020-01-01T00:00Z[UTC]
+2020-01-02T00:00Z[UTC]
+1
+145
+7797
+1998-01-10T00:00Z[UTC]
+1998-01-15T00:00Z[UTC]
+2020-01-02T00:00Z[UTC]
+9999-12-31T23:59:59.999999Z[UTC]
+1
+827
+7797
+1998-01-15T00:00Z[UTC]
+9999-12-31T23:59:59.999999Z[UTC]
+2020-01-02T00:00Z[UTC]
+2020-01-03T00:00Z[UTC]
+1
+827
+7797
+1998-01-15T00:00Z[UTC]
+1998-01-20T00:00Z[UTC]
+2020-01-03T00:00Z[UTC]
+9999-12-31T23:59:59.999999Z[UTC]
+1
+145
+7797
+1998-01-03T00:00Z[UTC]
+1998-01-10T00:00Z[UTC]
+2020-01-04T00:00Z[UTC]
+2020-01-05T00:00Z[UTC]
+1
+145
+7797
+1998-01-05T00:00Z[UTC]
+1998-01-10T00:00Z[UTC]
+2020-01-05T00:00Z[UTC]
+9999-12-31T23:59:59.999999Z[UTC]
+
+statement ok
+INSERT INTO Prop_Owner (id,
+                        customer_number,
+                        property_number,
+                        application_time_start,
+                        application_time_end)
+VALUES (1, 145, 7797, DATE '1998-01-05', DATE '1998-01-12'),
+       (1, 827, 7797, DATE '1998-01-12', DATE '1998-01-20')
+
+query IIITTTT nosort
+SELECT *
+  FROM Prop_Owner
+         FOR ALL SYSTEM_TIME
+         FOR ALL APPLICATION_TIME
+         AS x (id,
+               customer_number,
+               property_number,
+               application_time_start,
+               application_time_end,
+               system_time_start,
+               system_time_end)
+----
+1
+145
+7797
+1998-01-10T00:00Z[UTC]
+9999-12-31T23:59:59.999999Z[UTC]
+2020-01-01T00:00Z[UTC]
+2020-01-02T00:00Z[UTC]
+1
+145
+7797
+1998-01-10T00:00Z[UTC]
+1998-01-15T00:00Z[UTC]
+2020-01-02T00:00Z[UTC]
+2020-01-06T00:00Z[UTC]
+1
+145
+7797
+1998-01-10T00:00Z[UTC]
+1998-01-12T00:00Z[UTC]
+2020-01-06T00:00Z[UTC]
+2020-01-06T00:00Z[UTC]
+1
+145
+7797
+1998-01-12T00:00Z[UTC]
+1998-01-15T00:00Z[UTC]
+2020-01-06T00:00Z[UTC]
+2020-01-06T00:00Z[UTC]
+1
+827
+7797
+1998-01-15T00:00Z[UTC]
+9999-12-31T23:59:59.999999Z[UTC]
+2020-01-02T00:00Z[UTC]
+2020-01-03T00:00Z[UTC]
+1
+827
+7797
+1998-01-15T00:00Z[UTC]
+1998-01-20T00:00Z[UTC]
+2020-01-03T00:00Z[UTC]
+2020-01-06T00:00Z[UTC]
+1
+145
+7797
+1998-01-03T00:00Z[UTC]
+1998-01-10T00:00Z[UTC]
+2020-01-04T00:00Z[UTC]
+2020-01-05T00:00Z[UTC]
+1
+145
+7797
+1998-01-05T00:00Z[UTC]
+1998-01-10T00:00Z[UTC]
+2020-01-05T00:00Z[UTC]
+2020-01-06T00:00Z[UTC]
+1
+145
+7797
+1998-01-05T00:00Z[UTC]
+1998-01-12T00:00Z[UTC]
+2020-01-06T00:00Z[UTC]
+9999-12-31T23:59:59.999999Z[UTC]
+1
+827
+7797
+1998-01-12T00:00Z[UTC]
+1998-01-20T00:00Z[UTC]
+2020-01-06T00:00Z[UTC]
+9999-12-31T23:59:59.999999Z[UTC]
+
+query IIITTTT nosort
+SELECT *
+  FROM Prop_Owner
+         FOR ALL APPLICATION_TIME
+         AS x (id,
+               customer_number,
+               property_number,
+               application_time_start,
+               application_time_end,
+               system_time_start,
+               system_time_end)
+ WHERE (x.application_time_end - x.application_time_start) = (DATE '1970-01-08' - DATE '1970-01-01')
+----
+1
+145
+7797
+1998-01-05T00:00Z[UTC]
+1998-01-12T00:00Z[UTC]
+2020-01-06T00:00Z[UTC]
+9999-12-31T23:59:59.999999Z[UTC]
+
+statement ok
+DELETE
+FROM Prop_Owner
+FOR ALL APPLICATION_TIME AS x
+WHERE (x.application_time_end - x.application_time_start) = (DATE '1970-01-08' - DATE '1970-01-01')
+
+query IIITTTT nosort
+SELECT *
+  FROM Prop_Owner
+         FOR ALL SYSTEM_TIME
+         FOR ALL APPLICATION_TIME
+         AS x (id,
+               customer_number,
+               property_number,
+               application_time_start,
+               application_time_end,
+               system_time_start,
+               system_time_end)
+----
+1
+145
+7797
+1998-01-10T00:00Z[UTC]
+9999-12-31T23:59:59.999999Z[UTC]
+2020-01-01T00:00Z[UTC]
+2020-01-02T00:00Z[UTC]
+1
+145
+7797
+1998-01-10T00:00Z[UTC]
+1998-01-15T00:00Z[UTC]
+2020-01-02T00:00Z[UTC]
+2020-01-06T00:00Z[UTC]
+1
+145
+7797
+1998-01-10T00:00Z[UTC]
+1998-01-12T00:00Z[UTC]
+2020-01-06T00:00Z[UTC]
+2020-01-06T00:00Z[UTC]
+1
+145
+7797
+1998-01-12T00:00Z[UTC]
+1998-01-15T00:00Z[UTC]
+2020-01-06T00:00Z[UTC]
+2020-01-06T00:00Z[UTC]
+1
+827
+7797
+1998-01-15T00:00Z[UTC]
+9999-12-31T23:59:59.999999Z[UTC]
+2020-01-02T00:00Z[UTC]
+2020-01-03T00:00Z[UTC]
+1
+827
+7797
+1998-01-15T00:00Z[UTC]
+1998-01-20T00:00Z[UTC]
+2020-01-03T00:00Z[UTC]
+2020-01-06T00:00Z[UTC]
+1
+145
+7797
+1998-01-03T00:00Z[UTC]
+1998-01-10T00:00Z[UTC]
+2020-01-04T00:00Z[UTC]
+2020-01-05T00:00Z[UTC]
+1
+145
+7797
+1998-01-05T00:00Z[UTC]
+1998-01-10T00:00Z[UTC]
+2020-01-05T00:00Z[UTC]
+2020-01-06T00:00Z[UTC]
+1
+145
+7797
+1998-01-05T00:00Z[UTC]
+1998-01-12T00:00Z[UTC]
+2020-01-06T00:00Z[UTC]
+2020-01-07T00:00Z[UTC]
+1
+827
+7797
+1998-01-12T00:00Z[UTC]
+1998-01-20T00:00Z[UTC]
+2020-01-06T00:00Z[UTC]
+9999-12-31T23:59:59.999999Z[UTC]
+
+query T nosort
+SELECT DISTINCT x.system_time_start
+  FROM Prop_Owner
+         FOR ALL SYSTEM_TIME
+         FOR ALL APPLICATION_TIME AS x
+ ORDER BY x.system_time_start ASC
+----
+2020-01-01T00:00Z[UTC]
+2020-01-02T00:00Z[UTC]
+2020-01-03T00:00Z[UTC]
+2020-01-04T00:00Z[UTC]
+2020-01-05T00:00Z[UTC]
+2020-01-06T00:00Z[UTC]
+
+query ITT nosort
+SELECT *
+  FROM Prop_Owner
+         FOR SYSTEM_TIME AS OF TIMESTAMP '2019-01-01T00:00:00Z'
+         FOR ALL APPLICATION_TIME
+         AS x (customer_number, application_time_start, application_time_end)
+----
+
+query ITT nosort
+SELECT *
+  FROM Prop_Owner
+         FOR SYSTEM_TIME AS OF TIMESTAMP '2020-01-01T12:00:00Z'
+         FOR ALL APPLICATION_TIME
+         AS x (customer_number, application_time_start, application_time_end)
+----
+145
+1998-01-10T00:00Z[UTC]
+9999-12-31T23:59:59.999999Z[UTC]
+
+query ITT nosort
+SELECT *
+  FROM Prop_Owner
+         FOR SYSTEM_TIME AS OF TIMESTAMP '2020-01-02T12:00:00Z'
+         FOR ALL APPLICATION_TIME
+         AS x (customer_number, application_time_start, application_time_end)
+----
+145
+1998-01-10T00:00Z[UTC]
+1998-01-15T00:00Z[UTC]
+827
+1998-01-15T00:00Z[UTC]
+9999-12-31T23:59:59.999999Z[UTC]
+
+
+query ITT nosort
+SELECT *
+  FROM Prop_Owner
+         FOR SYSTEM_TIME AS OF TIMESTAMP '2020-01-05T12:00:00Z'
+         FOR ALL APPLICATION_TIME
+         AS x (customer_number, application_time_start, application_time_end)
+----
+145
+1998-01-10T00:00Z[UTC]
+1998-01-15T00:00Z[UTC]
+827
+1998-01-15T00:00Z[UTC]
+1998-01-20T00:00Z[UTC]
+145
+1998-01-05T00:00Z[UTC]
+1998-01-10T00:00Z[UTC]
+
+
+query ITT nosort
+SELECT *
+  FROM Prop_Owner
+         FOR ALL APPLICATION_TIME
+         AS x (customer_number, application_time_start, application_time_end)
+----
+827
+1998-01-12T00:00Z[UTC]
+1998-01-20T00:00Z[UTC]
+
+query ITT nosort
+SELECT *
+  FROM Prop_Owner
+         FOR ALL SYSTEM_TIME
+         FOR APPLICATION_TIME AS OF DATE '1998-01-04'
+         AS x (customer_number, system_time_start, system_time_end)
+----
+145
+2020-01-04T00:00Z[UTC]
+2020-01-05T00:00Z[UTC]
+
+query ITT nosort
+SELECT *
+  FROM Prop_Owner
+         FOR ALL SYSTEM_TIME
+         FOR APPLICATION_TIME AS OF DATE '1998-01-13'
+         AS x (customer_number, system_time_start, system_time_end)
+----
+145
+2020-01-01T00:00Z[UTC]
+2020-01-02T00:00Z[UTC]
+145
+2020-01-02T00:00Z[UTC]
+2020-01-06T00:00Z[UTC]
+145
+2020-01-06T00:00Z[UTC]
+2020-01-06T00:00Z[UTC]
+827
+2020-01-06T00:00Z[UTC]
+9999-12-31T23:59:59.999999Z[UTC]
+
+query ITT nosort
+SELECT *
+  FROM Prop_Owner
+         FOR SYSTEM_TIME AS OF TIMESTAMP '2022-09-11 15:14:01+00:00'
+         FOR APPLICATION_TIME AS OF DATE '1998-01-13'
+         AS x (customer_number, system_time_start, system_time_end)
+----
+827
+2020-01-06T00:00Z[UTC]
+9999-12-31T23:59:59.999999Z[UTC]
+
+statement ok
+INSERT INTO Prop_Owner (id, customer_number, property_number, application_time_start)
+VALUES (2, 827, 3621, DATE '1998-01-15')
+----
+
+query IIITTTT nosort
+SELECT *
+  FROM Prop_Owner
+         FOR ALL SYSTEM_TIME
+         FOR ALL APPLICATION_TIME
+         AS x (id,
+               customer_number,
+               property_number,
+               application_time_start,
+               application_time_end,
+               system_time_start,
+               system_time_end)
+----
+1
+145
+7797
+1998-01-10T00:00Z[UTC]
+9999-12-31T23:59:59.999999Z[UTC]
+2020-01-01T00:00Z[UTC]
+2020-01-02T00:00Z[UTC]
+1
+145
+7797
+1998-01-10T00:00Z[UTC]
+1998-01-15T00:00Z[UTC]
+2020-01-02T00:00Z[UTC]
+2020-01-06T00:00Z[UTC]
+1
+145
+7797
+1998-01-10T00:00Z[UTC]
+1998-01-12T00:00Z[UTC]
+2020-01-06T00:00Z[UTC]
+2020-01-06T00:00Z[UTC]
+1
+145
+7797
+1998-01-12T00:00Z[UTC]
+1998-01-15T00:00Z[UTC]
+2020-01-06T00:00Z[UTC]
+2020-01-06T00:00Z[UTC]
+1
+827
+7797
+1998-01-15T00:00Z[UTC]
+9999-12-31T23:59:59.999999Z[UTC]
+2020-01-02T00:00Z[UTC]
+2020-01-03T00:00Z[UTC]
+1
+827
+7797
+1998-01-15T00:00Z[UTC]
+1998-01-20T00:00Z[UTC]
+2020-01-03T00:00Z[UTC]
+2020-01-06T00:00Z[UTC]
+1
+145
+7797
+1998-01-03T00:00Z[UTC]
+1998-01-10T00:00Z[UTC]
+2020-01-04T00:00Z[UTC]
+2020-01-05T00:00Z[UTC]
+1
+145
+7797
+1998-01-05T00:00Z[UTC]
+1998-01-10T00:00Z[UTC]
+2020-01-05T00:00Z[UTC]
+2020-01-06T00:00Z[UTC]
+1
+145
+7797
+1998-01-05T00:00Z[UTC]
+1998-01-12T00:00Z[UTC]
+2020-01-06T00:00Z[UTC]
+2020-01-07T00:00Z[UTC]
+1
+827
+7797
+1998-01-12T00:00Z[UTC]
+1998-01-20T00:00Z[UTC]
+2020-01-06T00:00Z[UTC]
+9999-12-31T23:59:59.999999Z[UTC]
+2
+827
+3621
+1998-01-15T00:00Z[UTC]
+9999-12-31T23:59:59.999999Z[UTC]
+2020-01-08T00:00Z[UTC]
+9999-12-31T23:59:59.999999Z[UTC]
+
+query I nosort
+SELECT P2.property_number
+  FROM Prop_Owner
+         FOR ALL SYSTEM_TIME
+         FOR ALL APPLICATION_TIME
+         AS P1,
+       Prop_Owner
+         FOR ALL SYSTEM_TIME
+         FOR ALL APPLICATION_TIME
+         AS P2
+ WHERE P1.property_number = 7797
+   AND P2.property_number <> P1.property_number
+   AND P1.customer_number = P2.customer_number
+----
+3621
+3621
+3621
+
+query I nosort
+SELECT P2.property_number
+FROM Prop_Owner AS P1,
+     Prop_Owner AS P2
+WHERE P1.property_number = 7797
+  AND P2.property_number <> P1.property_number
+  AND P1.customer_number = P2.customer_number
+----
+
+query ITT nosort
+SELECT P2.property_number,
+       GREATEST(P1.application_time_start, P2.application_time_start) AS VT_Begin,
+       LEAST(P1.application_time_end, P2.application_time_end) AS VT_End
+FROM Prop_Owner
+FOR ALL APPLICATION_TIME AS P1,
+        Prop_Owner
+FOR ALL APPLICATION_TIME AS P2
+WHERE P1.property_number = 7797
+  AND P2.property_number <> P1.property_number
+  AND P1.customer_number = P2.customer_number
+  AND P1.APPLICATION_TIME OVERLAPS P2.APPLICATION_TIME
+----
+3621
+1998-01-15T00:00Z[UTC]
+1998-01-20T00:00Z[UTC]
+
+query I nosort
+SELECT P2.property_number
+  FROM Prop_Owner FOR ALL APPLICATION_TIME AS P1, Prop_Owner FOR ALL APPLICATION_TIME AS P2
+ WHERE P1.property_number = 7797
+   AND P2.property_number <> P1.property_number
+   AND P1.customer_number = P2.customer_number
+----
+3621
+
+query ITT nosort
+SELECT P2.property_number,
+       GREATEST(P1.system_time_start, P2.system_time_start) AS Recorded_Start,
+       LEAST(P1.system_time_end, P2.system_time_end) AS Recorded_Stop
+FROM Prop_Owner FOR ALL SYSTEM_TIME AS P1,
+     Prop_Owner FOR ALL SYSTEM_TIME AS P2
+WHERE P1.property_number = 7797
+  AND P2.property_number <> P1.property_number
+  AND P1.customer_number = P2.customer_number
+  AND P1.SYSTEM_TIME OVERLAPS P2.SYSTEM_TIME
+----
+
+query ITTTT nosort
+SELECT P2.property_number,
+       GREATEST(P1.application_time_start, P2.application_time_start) AS VT_Begin,
+       LEAST(P1.application_time_end, P2.application_time_end) AS VT_End,
+       GREATEST(P1.system_time_start, P2.system_time_start) AS Recorded_Start,
+       LEAST(P1.system_time_end, P2.system_time_end) AS Recorded_Stop
+FROM Prop_Owner FOR ALL SYSTEM_TIME FOR ALL APPLICATION_TIME AS P1,
+     Prop_Owner FOR ALL SYSTEM_TIME FOR ALL APPLICATION_TIME AS P2
+WHERE P1.property_number = 7797
+  AND P2.property_number <> P1.property_number
+  AND P1.customer_number = P2.customer_number
+  AND P1.APPLICATION_TIME OVERLAPS P2.APPLICATION_TIME
+  AND P1.SYSTEM_TIME OVERLAPS P2.SYSTEM_TIME
+----
+3621
+1998-01-15T00:00Z[UTC]
+1998-01-20T00:00Z[UTC]
+2020-01-08T00:00Z[UTC]
+9999-12-31T23:59:59.999999Z[UTC]
+
+query ITT nosort
+SELECT P2.property_number,
+       GREATEST(P1.system_time_start, P2.system_time_start) AS Recorded_Start,
+       LEAST(P1.system_time_end, P2.system_time_end) AS Recorded_Stop
+FROM Prop_Owner
+FOR ALL SYSTEM_TIME
+FOR ALL APPLICATION_TIME AS P1,
+        Prop_Owner
+FOR ALL SYSTEM_TIME
+FOR ALL APPLICATION_TIME AS P2
+WHERE P1.property_number = 7797
+  AND P2.property_number <> P1.property_number
+  AND P1.customer_number = P2.customer_number
+  AND P1.SYSTEM_TIME OVERLAPS P2.SYSTEM_TIME
+----
+3621
+2020-01-08T00:00Z[UTC]
+9999-12-31T23:59:59.999999Z[UTC]
+
+query IT nosort
+SELECT P2.property_number,
+       P2.system_time_start AS Recorded_Start
+FROM Prop_Owner
+FOR ALL SYSTEM_TIME AS P1,
+        Prop_Owner
+FOR ALL SYSTEM_TIME AS P2
+WHERE P1.property_number = 7797
+  AND P2.property_number <> P1.property_number
+  AND P1.customer_number = P2.customer_number
+  AND P1.SYSTEM_TIME CONTAINS PERIOD(P2.system_time_start, P2.system_time_start)
+----
+
+query ITTT nosort
+SELECT P2.property_number,
+       GREATEST(P1.application_time_start, P2.application_time_start) AS VT_Begin,
+       LEAST(P1.application_time_end, P2.application_time_end) AS VT_End,
+       P2.system_time_start AS Recorded_Start
+FROM Prop_Owner FOR ALL SYSTEM_TIME FOR ALL APPLICATION_TIME AS P1,
+     Prop_Owner FOR ALL SYSTEM_TIME FOR ALL APPLICATION_TIME AS P2
+WHERE P1.property_number = 7797
+  AND P2.property_number <> P1.property_number
+  AND P1.customer_number = P2.customer_number
+  AND P1.APPLICATION_TIME OVERLAPS P2.APPLICATION_TIME
+  AND P1.SYSTEM_TIME CONTAINS PERIOD(P2.system_time_start, P2.system_time_start)
+----
+3621
+1998-01-15T00:00Z[UTC]
+1998-01-20T00:00Z[UTC]
+2020-01-08T00:00Z[UTC]
+
+query IT nosort
+SELECT P2.property_number, P2.system_time_start AS Recorded_Start
+  FROM Prop_Owner FOR ALL SYSTEM_TIME FOR ALL APPLICATION_TIME AS P1,
+       Prop_Owner FOR ALL SYSTEM_TIME FOR ALL APPLICATION_TIME AS P2
+ WHERE P1.property_number = 7797
+   AND P2.property_number <> P1.property_number
+   AND P1.customer_number = P2.customer_number
+   AND P1.SYSTEM_TIME CONTAINS PERIOD(P2.system_time_start, P2.system_time_start)
+----
+3621
+2020-01-08T00:00Z[UTC]

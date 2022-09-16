@@ -10,7 +10,8 @@
             [core2.sql.plan :as plan]
             [core2.test-util :as tu])
   (:import core2.local_node.Node
-           [java.util HashMap UUID]))
+           [java.util HashMap UUID]
+           [java.time Instant]))
 
 ;; TODO:
 ;; - needs cleanup.
@@ -199,9 +200,12 @@
      (-> (c2/submit-tx
            node
            [[:sql sql-statement [[]]]]
-           (if (= (get variables "APP_TIME_DEFAULTS") "AS_OF_NOW")
-             {:app-time-as-of-now? true}
-             {}))
+           (cond-> {}
+             (= (get variables "APP_TIME_DEFAULTS") "AS_OF_NOW")
+             (assoc :app-time-as-of-now? true)
+
+             (get variables "CURRENT_TIMESTAMP")
+             (assoc-in [:basis :current-time] (Instant/parse (get variables "CURRENT_TIMESTAMP")))))
         (tu/then-await-tx node))
     node))
 
@@ -210,9 +214,12 @@
   ;; chosing not to re impl it here as I hope we can solve it on a lower level.
   (binding [r/*memo* (HashMap.)]
     (->> (c2/sql-query node sql-statement
-                       (if (= (get variables "APP_TIME_DEFAULTS") "AS_OF_NOW")
-                         {:app-time-as-of-now? true}
-                         {}))
+                       (cond-> {}
+                          (= (get variables "APP_TIME_DEFAULTS") "AS_OF_NOW")
+                          (assoc :app-time-as-of-now? true)
+
+                          (get variables "CURRENT_TIMESTAMP")
+                          (assoc-in [:basis :current-time] (Instant/parse (get variables "CURRENT_TIMESTAMP")))))
          (mapv vals))))
 
 (defn parse-create-table [^String x]
