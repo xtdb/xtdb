@@ -8,11 +8,9 @@
             [core2.logical-plan :as lp]
             core2.operator ;; Adds impls logical plan spec
             [core2.rewrite :as r]
-            [core2.sql.analyze :as sem]
-            [core2.sql.parser :as p])
+            [core2.sql.analyze :as sem])
   (:import (clojure.lang Var)
-           (java.time LocalDate LocalDateTime LocalTime OffsetTime ZoneOffset ZonedDateTime)
-           java.util.HashMap))
+           (java.time LocalDate LocalDateTime LocalTime OffsetTime ZoneOffset ZonedDateTime ZoneId)))
 
 ;; Attribute grammar for transformation into logical plan.
 
@@ -243,13 +241,6 @@
   (* (Long/parseLong seconds-fraction)
      (long (Math/pow 10 (- 9 (count seconds-fraction))))))
 
-(defn create-zoned-date-time
-  [year month day hours minutes seconds seconds-fraction offset-hours offset-minutes]
-  (ZonedDateTime/of (Long/parseLong year) (Long/parseLong month) (Long/parseLong day)
-                    (Long/parseLong hours) (Long/parseLong minutes) (Long/parseLong seconds)
-                    (seconds-fraction->nanos seconds-fraction)
-                    (ZoneOffset/ofHoursMinutes (Long/parseLong offset-hours) (Long/parseLong offset-minutes))))
-
 (defn create-offset-time
   [hours minutes seconds seconds-fraction offset-hours offset-minutes]
   (OffsetTime/of
@@ -257,14 +248,7 @@
     (seconds-fraction->nanos seconds-fraction)
     (ZoneOffset/ofHoursMinutes (Long/parseLong offset-hours) (Long/parseLong offset-minutes))))
 
-(defn create-local-date-time
-  [year month day hours minutes seconds seconds-fraction]
-  (LocalDateTime/of (Long/parseLong year) (Long/parseLong month) (Long/parseLong day)
-                    (Long/parseLong hours) (Long/parseLong minutes) (Long/parseLong seconds)
-                    (int (seconds-fraction->nanos seconds-fraction))))
-
-(defn create-local-time
-  [hours minutes seconds seconds-fraction]
+(defn create-local-time ^java.time.LocalTime [hours minutes seconds seconds-fraction]
   (LocalTime/of (Long/parseLong hours) (Long/parseLong minutes) (Long/parseLong seconds)
                 (seconds-fraction->nanos seconds-fraction)))
 
@@ -396,82 +380,42 @@
         [:unsigned_integer month]
         [:minus_sign "-"]
         [:unsigned_integer day]]
-       [:unquoted_time_string
-        [:time_value
-         [:unsigned_integer hours]
-         [:unsigned_integer minutes]
-         [:seconds_value
-          [:unsigned_integer seconds]]]]]]]
+       ^:z uts]]]
     ;;=>
-    (create-local-date-time year month day hours minutes seconds "0")
+    (let [ld (LocalDate/of (Long/parseLong year) (Long/parseLong month) (Long/parseLong day))]
+      (letfn [(->lt [tv]
+                (r/zmatch tv
+                  [:time_value [:unsigned_integer hours] [:unsigned_integer minutes] [:seconds_value [:unsigned_integer seconds]]]
+                  (create-local-time hours minutes seconds "0")
 
-    [:timestamp_literal _
-     [:timestamp_string
-      [:unquoted_timestamp_string
-       [:date_value
-        [:unsigned_integer year]
-        [:minus_sign "-"]
-        [:unsigned_integer month]
-        [:minus_sign "-"]
-        [:unsigned_integer day]]
-       [:unquoted_time_string
-        [:time_value
-         [:unsigned_integer hours]
-         [:unsigned_integer minutes]
-         [:seconds_value
-          [:unsigned_integer seconds]
-          [:unsigned_integer seconds-fraction]]]]]]]
-    ;;=>
-    (create-local-date-time year month day hours minutes seconds seconds-fraction)
+                  [:time_value [:unsigned_integer hours] [:unsigned_integer minutes]
+                   [:seconds_value [:unsigned_integer seconds] [:unsigned_integer seconds-fraction]]]
+                  (create-local-time hours minutes seconds seconds-fraction)))
 
-    [:timestamp_literal _
-     [:timestamp_string
-      [:unquoted_timestamp_string
-       [:date_value
-        [:unsigned_integer year]
-        [:minus_sign "-"]
-        [:unsigned_integer month]
-        [:minus_sign "-"]
-        [:unsigned_integer day]]
-       [:unquoted_time_string
-        [:time_value
-         [:unsigned_integer hours]
-         [:unsigned_integer minutes]
-         [:seconds_value
-          [:unsigned_integer seconds]]]
-        [:time_zone_interval
-         [_ sign]
-         [:unsigned_integer offset-hours]
-         [:unsigned_integer offset-minutes]]]]]]
-    ;;=>
-    (create-zoned-date-time year month day
-                            hours minutes seconds "0"
-                            (str sign offset-hours) (str sign offset-minutes))
+              (->zo ^java.time.ZoneOffset [sign offset-hours offset-mins]
+                (ZoneOffset/of (str sign offset-hours ":" offset-mins)))
 
-    [:timestamp_literal _
-     [:timestamp_string
-      [:unquoted_timestamp_string
-       [:date_value
-        [:unsigned_integer year]
-        [:minus_sign "-"]
-        [:unsigned_integer month]
-        [:minus_sign "-"]
-        [:unsigned_integer day]]
-       [:unquoted_time_string
-        [:time_value
-         [:unsigned_integer hours]
-         [:unsigned_integer minutes]
-         [:seconds_value
-          [:unsigned_integer seconds]
-          [:unsigned_integer seconds-fraction]]]
-        [:time_zone_interval
-         [_ sign]
-         [:unsigned_integer offset-hours]
-         [:unsigned_integer offset-minutes]]]]]]
-    ;;=>
-    (create-zoned-date-time year month day
-                            hours minutes seconds seconds-fraction
-                            (str sign offset-hours) (str sign offset-minutes))
+              (->zdt [^LocalDate ld, ^LocalTime lt, tzi]
+                (r/zmatch tzi
+                  [:time_zone_interval "Z"]
+                  (ZonedDateTime/of ld lt (ZoneId/of "Z"))
+
+                  [:time_zone_interval [_ sign]
+                   [:unsigned_integer offset-hours]
+                   [:unsigned_integer offset-mins]]
+                  (ZonedDateTime/of ld lt (->zo sign offset-hours offset-mins))
+
+                  [:time_zone_interval [_ sign]
+                   [:unsigned_integer offset-hours]
+                   [:unsigned_integer offset-mins]
+                   [:time_zone_region _ region _]]
+                  (ZonedDateTime/ofLocal (LocalDateTime/of ld lt)
+                                         (ZoneId/of region)
+                                         (->zo sign offset-hours offset-mins))))]
+
+        (r/zmatch uts
+          [:unquoted_time_string ^:z tv] (LocalDateTime/of ld (->lt tv))
+          [:unquoted_time_string ^:z tv ^:z tzi] (->zdt ld (->lt tv) tzi))))
 
     [:date_literal _
      [:date_string [:date_value [:unsigned_integer year] _ [:unsigned_integer month] _ [:unsigned_integer day]]]]

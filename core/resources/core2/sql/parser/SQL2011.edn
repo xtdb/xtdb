@@ -431,7 +431,10 @@
  {:tag :cat,
   :parsers
   ({:tag :nt, :keyword :unquoted_date_string}
-   {:tag :nt, :keyword :space, :hide true}
+   {:tag :alt,
+    :parsers
+    ({:tag :nt, :keyword :space} {:tag :regexp, :regexp #"T"}),
+    :hide true}
    {:tag :nt, :keyword :unquoted_time_string})},
  :character_representation {:tag :regexp, :regexp #"(''|[^'])*"},
  :fetch_first_row_count
@@ -983,12 +986,16 @@
   :red {:reduction-type :raw}},
  :less_than_or_equals_operator {:tag :string, :string "<="},
  :time_zone_interval
- {:tag :cat,
+ {:tag :alt,
   :parsers
-  ({:tag :nt, :keyword :sign}
-   {:tag :nt, :keyword :hours_value}
-   {:tag :nt, :keyword :colon, :hide true}
-   {:tag :nt, :keyword :minutes_value})},
+  ({:tag :cat,
+    :parsers
+    ({:tag :nt, :keyword :sign}
+     {:tag :nt, :keyword :hours_value}
+     {:tag :nt, :keyword :colon, :hide true}
+     {:tag :nt, :keyword :minutes_value}
+     {:tag :opt, :parser {:tag :nt, :keyword :time_zone_region}})}
+   {:tag :regexp, :regexp #"Z"})},
  :insert_statement
  {:tag :cat,
   :parsers
@@ -1886,6 +1893,12 @@
   ({:tag :nt, :keyword :row_value_special_case}
    {:tag :nt, :keyword :row_value_constructor}),
   :red {:reduction-type :raw}},
+ :time_zone_region
+ {:tag :cat,
+  :parsers
+  ({:tag :string, :string "["}
+   {:tag :regexp, :regexp #"([\w\/]+)"}
+   {:tag :string, :string "]"})},
  :exact_numeric_literal
  {:tag :regexp, :regexp #"(\d*\.\d+|\d+\.\d*|\d+)"},
  :non_second_primary_datetime_field
