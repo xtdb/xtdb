@@ -194,17 +194,25 @@
     (case (first direct-sql-data-statement)
       :insert_statement (insert-statement node direct-sql-data-statement))))
 
-(defn- execute-sql-statement [node sql-statement]
+(defn- execute-sql-statement [node sql-statement variables]
    (binding [r/*memo* (HashMap.)]
-    (-> (c2/submit-tx node [[:sql sql-statement [[]]]])
+     (-> (c2/submit-tx
+           node
+           [[:sql sql-statement [[]]]]
+           (if (= (get variables "APP_TIME_DEFAULTS") "AS_OF_NOW")
+             {:app-time-as-of-now? true}
+             {}))
         (tu/then-await-tx node))
     node))
 
-(defn- execute-sql-query [node sql-statement]
+(defn- execute-sql-query [node sql-statement variables]
   ;; relies on order of cols in map, see fix in execute-query-expression for current best approach
   ;; chosing not to re impl it here as I hope we can solve it on a lower level.
   (binding [r/*memo* (HashMap.)]
-    (->> (c2/sql-query node sql-statement {})
+    (->> (c2/sql-query node sql-statement
+                       (if (= (get variables "APP_TIME_DEFAULTS") "AS_OF_NOW")
+                         {:app-time-as-of-now? true}
+                         {}))
          (mapv vals))))
 
 (defn parse-create-table [^String x]
@@ -233,11 +241,11 @@
   Node
   (get-engine-name [_] "xtdb")
 
-  (execute-statement [this statement]
+  (execute-statement [this statement variables]
     (if (skip-statement? statement)
       this
       (if (:direct-sql slt/*opts*)
-        (execute-sql-statement this statement)
+        (execute-sql-statement this statement variables)
         (let [tree (p/parse statement :directly_executable_statement)]
           (if (p/failure? tree)
             (if-let [record (or (parse-create-table statement)
@@ -249,9 +257,9 @@
             (let [direct-sql-data-statement-tree (second tree)]
               (execute-statement this direct-sql-data-statement-tree)))))))
 
-  (execute-query [this query]
+  (execute-query [this query variables]
     (if (:direct-sql slt/*opts*)
-      (execute-sql-query this query)
+      (execute-sql-query this query variables)
       (let [edited-query (preprocess-query query)
             tree (p/parse edited-query :query_expression)]
         (when (p/failure? tree)

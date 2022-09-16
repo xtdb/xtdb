@@ -17,20 +17,20 @@
 
 (defprotocol DbEngine
   (get-engine-name [_])
-  (execute-statement [_ statement])
-  (execute-query [_ query]))
+  (execute-statement [_ statement variables])
+  (execute-query [_ query variables]))
 
 (extend-protocol DbEngine
   Connection
   (get-engine-name [this]
     (str/lower-case (.getDatabaseProductName (.getMetaData this))))
 
-  (execute-statement [this statement]
+  (execute-statement [this statement _variables]
     (with-open [stmt (.createStatement this)]
       (.execute stmt statement))
     this)
 
-  (execute-query [this query]
+  (execute-query [this query _variables]
     (with-open [stmt (.createStatement this)
                 rs (.executeQuery stmt query)]
       (let [column-count (.getColumnCount (.getMetaData rs))]
@@ -95,6 +95,13 @@
   (let [[_ max-result-set-size] (str/split x #"\s+")]
     {:type :hash-threshold
      :max-result-set-size (Long/parseLong max-result-set-size)}))
+
+(defmethod parse-record :variable [[x]]
+  (let [[_ _ variable _ value] (str/split x #"\s+")]
+    {:type :variable
+     :variable variable
+     :value value}))
+
 
 (defn parse-script
   ([script] (parse-script "" script))
@@ -166,22 +173,27 @@
     (print-record record))
   (assoc ctx :max-result-set-size max-result-set-size))
 
-(defmethod execute-record :statement [{:keys [db-engine script-mode] :as ctx} {:keys [mode statement] :as record}]
+(defmethod execute-record :variable [{:keys [script-mode] :as ctx} {:keys [variable value] :as record}]
+  (when (= :completion script-mode)
+    (print-record record))
+  (assoc-in ctx [:variables variable] value))
+
+(defmethod execute-record :statement [{:keys [db-engine script-mode variables] :as ctx} {:keys [mode statement] :as record}]
   (if (skip-record? (get-engine-name db-engine) record)
     (do (when (= :completion script-mode)
           (print-record record))
         ctx)
     (if (= :completion script-mode)
       (try
-        (let [ctx (update ctx :db-engine execute-statement statement)]
+        (let [ctx (update ctx :db-engine execute-statement statement variables)]
           (print-record (assoc record :mode :ok))
           ctx)
         (catch Exception e
           (print-record (assoc record :mode :error))
           ctx))
       (case mode
-        :ok (update ctx :db-engine execute-statement statement)
-        :error (do (t/is (thrown? Exception (execute-statement db-engine statement))) ;;TODO shouldn't rely on t/is anymore
+        :ok (update ctx :db-engine execute-statement statement variables)
+        :error (do (t/is (thrown? Exception (execute-statement db-engine statement variables))) ;;TODO shouldn't rely on t/is anymore
                    ctx)))))
 
 (defn- format-result-str [sort-mode type-string result]
@@ -209,7 +221,7 @@
        (BigInteger. 1)
        (format "%032x")))
 
-(defmethod execute-record :query [{:keys [db-engine max-result-set-size script-mode] :as ctx}
+(defmethod execute-record :query [{:keys [db-engine max-result-set-size script-mode variables] :as ctx}
                                   {:keys [query type-string sort-mode line
                                           result-set result-set-md5sum file]
                                    :as record}]
@@ -217,7 +229,7 @@
     (do (when (= :completion script-mode)
           (print-record record))
         ctx)
-    (let [result (execute-query db-engine query)
+    (let [result (execute-query db-engine query variables)
           result-str (format-result-str sort-mode type-string result)]
       (when (= :completion script-mode)
         (print-record (if (and max-result-set-size (> (count (flatten result)) max-result-set-size))
@@ -257,6 +269,7 @@
       (->> records
            (reduce
             (fn [{:keys [queries-run query-limit] :as ctx} {:keys [file line] :as record}]
+
               (binding [*current-record* record]
                 (t/testing (format "%s L%d" file line)
                   (if (= queries-run query-limit)
@@ -407,7 +420,7 @@
 
   (time (-main "--verify" "--db" "sqlite" "test/core2/sql/logic_test/sqlite_test/select4.test"))
 
-  (time (-main "--verify" "--direct-sql" "--db" "xtdb" "test/core2/sql/logic_test/direct-sql/object-array.test"))
+  (time (-main "--verify" "--direct-sql" "--db" "xtdb" "test/core2/sql/logic_test/direct-sql/sl-a5.test"))
 
   (= (time
       (with-out-str
