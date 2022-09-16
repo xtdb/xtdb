@@ -1677,6 +1677,26 @@
                             {::err/message (str "cannot calculate columns for: " (pr-str relation-in))
                              :relation relation-in}))))
 
+(defn- plan-query-expr [z]
+  (let [qeb (if-not (r/ctor? :with_clause (r/$ z 1))
+              (r/$ z 1)
+              (r/$ z 2))
+        obc (r/find-first (partial r/ctor? :order_by_clause) z)
+        roc (r/find-first (partial r/ctor? :result_offset_clause) z)
+        ffc (r/find-first (partial r/ctor? :fetch_first_clause) z)]
+    (letfn [(wrap-with-top [rel]
+              (if (or roc ffc)
+                [:top (cond-> {}
+                        roc (assoc :skip (expr (r/$ roc 2)))
+                        ffc (assoc :limit (r/zmatch ffc
+                                            [:fetch_first_clause "LIMIT" ^:z ffrc] (expr ffrc)
+                                            [:fetch_first_clause _ _ ^:z ffrc _ _] (expr ffrc))))
+                 rel]
+                rel))]
+      (-> (plan qeb)
+          (cond->> obc (wrap-with-order-by (r/$ obc -1)))
+          (->> (wrap-with-top))))))
+
 (defn- plan-dml [dml-op z]
   (let [{:keys [app-time-as-of-now?]} *opts*
         tt (r/find-first (partial r/ctor? :target_table) z)
@@ -1773,46 +1793,6 @@
 
     [:from_subquery ^:z query-expression]
     (plan query-expression)
-
-    [:query_expression ^:z qeb]
-    (plan qeb)
-
-    [:query_expression ^:z qeb [:order_by_clause _ _ ^:z ssl]]
-    (wrap-with-order-by ssl (plan qeb))
-
-    ;; TODO: Deal properly with WITH?
-    [:query_expression [:with_clause "WITH" _] ^:z qeb [:order_by_clause _ _ ^:z ssl]]
-    (wrap-with-order-by ssl (plan qeb))
-
-    [:query_expression ^:z qeb [:fetch_first_clause "LIMIT" ^:z ffrc]]
-    [:top {:limit (expr ffrc)} (plan qeb)]
-
-    [:query_expression ^:z qeb [:fetch_first_clause _ _ ffrc _ _]]
-    [:top {:limit (expr ffrc)} (plan qeb)]
-
-    [:query_expression ^:z qeb [:order_by_clause _ _ ^:z ssl] [:fetch_first_clause "LIMIT" ^:z ffrc]]
-    [:top {:limit (expr ffrc)} (wrap-with-order-by ssl (plan qeb))]
-
-    [:query_expression ^:z qeb [:order_by_clause _ _ ^:z ssl] [:fetch_first_clause _ _ ^:z ffrc _ _]]
-    [:top {:limit (expr ffrc)} (wrap-with-order-by ssl (plan qeb))]
-
-    [:query_expression ^:z qeb [:order_by_clause _ _ ^:z ssl] ^:z roc]
-    [:top {:skip (expr (r/$ roc 2))} (wrap-with-order-by ssl (plan qeb))]
-
-    [:query_expression ^:z qeb [:order_by_clause _ _ ^:z ssl] ^:z roc [:fetch_first_clause "LIMIT" ^:z ffrc]]
-    [:top {:skip (expr (r/$ roc 2)) :limit (expr ffrc)} (wrap-with-order-by ssl (plan qeb))]
-
-    [:query_expression ^:z qeb [:order_by_clause _ _ ^:z ssl] ^:z roc [:fetch_first_clause _ _ ^:z ffrc _ _]]
-    [:top {:skip (expr (r/$ roc 2)) :limit (expr ffrc)} (wrap-with-order-by ssl (plan qeb))]
-
-    [:query_expression ^:z qeb ^:z roc]
-    [:top {:skip (expr (r/$ roc 2))} (plan qeb)]
-
-    [:query_expression ^:z qeb ^:z roc [:fetch_first_clause "LIMIT" ^:z ffrc]]
-    [:top {:skip (expr (r/$ roc 2)) :limit (expr ffrc)} (plan qeb)]
-
-    [:query_expression ^:z qeb ^:z roc [:fetch_first_clause _ _ ffrc _ _]]
-    [:top {:skip (expr (r/$ roc 2)) :limit (expr ffrc)} (plan qeb)]
 
     [:query_specification _ ^:z sl ^:z te]
     ;;=>
@@ -2025,6 +2005,7 @@
     (build-values-list cttvl)
 
     (r/zcase z
+      :query_expression (plan-query-expr z)
       :in_value_list (build-values-list z)
       :delete_statement__searched (plan-dml :delete z)
       :update_statement__searched (plan-dml :update z)
