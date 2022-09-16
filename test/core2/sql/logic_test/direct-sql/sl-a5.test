@@ -1,6 +1,77 @@
 hash-threshold 100
 
+# Natural Defaults
+
+variable SET APP_TIME_DEFAULTS TO AS_OF_NOW
+
+
+# Native Apache Arrow
+
 query T nosort
 SELECT more_posts.text FROM ARROW_TABLE('https://xtdb.com/more_posts.arrow') AS more_posts
 ----
 We love strangeloop
+
+
+# Time Travel
+
+statement ok
+INSERT INTO posts (id, user_id, text, application_time_start)
+	VALUES (9012, 5678, 'Happy 2025!', DATE '2025-01-01')
+
+query T nosort
+SELECT posts.text FROM posts FOR APPLICATION_TIME AS OF DATE '2025-01-02'
+----
+Happy 2025!
+
+query T nosort
+SELECT posts.text FROM posts
+----
+
+
+# Instant Schemaless Writes
+
+statement ok
+INSERT INTO posts_2 (id, user_id, text)
+	VALUES (1234, 5678, 'Hello World!')
+
+query IT nosort
+SELECT posts_2.id, posts_2.text FROM posts_2
+----
+1234
+Hello World!
+
+
+# First-Class Arrays and Objects
+
+statement ok
+INSERT INTO people (id, name, friends)
+	VALUES (5678, 'Sarah',
+			[{'user': 'Dan'},
+			 {'user': 'Kath'}])
+
+query T nosort
+SELECT people.friends FROM people
+----
+[{"user":"Dan"},{"user":"Kath"}]
+
+query T nosort
+SELECT people.friends[2] FROM people
+----
+{:user "Kath"}
+
+#Field Access works here but not in the general case, not on the a5
+query T nosort
+SELECT people.friends[2].user FROM people
+----
+Kath
+
+
+# Erasing for Privacy
+
+statement ok
+ERASE FROM people WHERE people.id=5678
+
+query T nosort
+SELECT people.friends FROM people
+----
