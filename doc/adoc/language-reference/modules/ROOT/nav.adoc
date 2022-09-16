@@ -1,2 +1,3 @@
 * xref:sql-transactions.adoc[SQL Transactions]
 * xref:sql-queries.adoc[SQL Queries]
+* xref:sql-data-types.adoc[SQL Data Types]

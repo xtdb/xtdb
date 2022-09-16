@@ -1,0 +1,32 @@
+= SQL Data Types
+
+[cols="1,1,1,1"]
+|===
+|SQL Type |Arrow Type |Description |Example
+
+|`VARCHAR`
+|`VarCharVector`
+|Variable-Length String
+|`'Hello'`
+
+|`BIGINT`
+|`BigIntVector`
+|Integer
+|`1234`
+
+|`UUID`
+|`UuidVector`
+|Universally Unique Identifier
+|97a392d5-5e3f-406f-9651-a828ee79b156
+
+|`URI`
+|`UriVector`
+|Universal Resource Identifier
+|'https://xtdb.com'
+
+|TODO: The rest
+|
+|
+|
+
+|===
