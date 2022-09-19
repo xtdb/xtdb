@@ -1,16 +1,16 @@
 site:
   title: XTDB Core2 Docs
   start_page: main::index.adoc
-  # url: https://docs.xtdb.com
+  url: https://core2docs.xtdb.com
   # homeUrl: &home_url /xyz/5.2/index.html
   keys:
     mainSiteUrl: "https://xtdb.com/"
     mainSiteTitle: XTDB Core2 - Home
     #matomoUrl: "//bunseki.juxt.pro/"
     #matomoSiteId: "4"
-    #typesenseHost: xtagzc25w84ufq37p-1.a1.typesense.net
-    #typesenseApiKey: 0zVHpGQFDUhgP9hazp1laLklfy00AlGD
-    #typesenseCollectionName: xtdb-website-ts-index
+    typesenseHost: xtagzc25w84ufq37p-1.a1.typesense.net
+    typesenseApiKey: 0zVHpGQFDUhgP9hazp1laLklfy00AlGD
+    typesenseCollectionName: xtdb-website-ts-index
     hiddenComponent: main
 
 content:

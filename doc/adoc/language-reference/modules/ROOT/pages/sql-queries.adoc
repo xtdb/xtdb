@@ -10,6 +10,8 @@ xref:getting-started::gotchas.adoc["gotchas"].
 [#select]
 == Basic SELECT
 
+Columns must be fully qualified, such as `users.name`:
+
 [source,sql]
 ----
 INSERT INTO users (id, name) VALUES (1234, 'Matt');

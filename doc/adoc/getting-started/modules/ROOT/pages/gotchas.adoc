@@ -22,6 +22,16 @@ https://github.com/xtdb/core2/blob/master/doc/adr/0030-sql-missing-attributes.ad
 is a high priority for us, after which we can implement `SELECT *`.
 However, this dialect note will remain, as XTDB's `SELECT *` behaviour (once it exists) is bound to feel unfamiliar to some.
 
+=== No Schema Discovery
+
+Although records do have their own schema, and it is possible to produce discoverable schemas in XTDB,
+this has not been implemented yet.
+
+=== Typos
+
+No schema means a small typo in a column name may return nothing, we would in practice recommend using a text editor/linter
+capable of spotting your typos.
+
 === Jagged Rows
 
 As you might expect from a schemaless database, the following is perfectly valid:
