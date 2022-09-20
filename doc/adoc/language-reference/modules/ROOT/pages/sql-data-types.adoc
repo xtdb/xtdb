@@ -23,11 +23,11 @@ a|[source,sql]
 |3-Value Boolean: true (1), false (0), or null
 a|[source,sql]
 ----
-1
+TRUE
 ----
 
 |`DATE`
-|https://arrow.apache.org/docs/java/reference/org/apache/arrow/vector/TimeStampMicroTZVector.html[`TimeStampMicroTZVector`]
+|https://arrow.apache.org/docs/java/reference/org/apache/arrow/vector/DateDayVector.html[`DateDayVector`]
 |Date Without Time
 a|[source,sql]
 ----
@@ -66,7 +66,6 @@ a|[source,sql]
 INTERVAL '163 12'
 DAY TO HOUR
 ----
-// is the above ^ the correct syntax? or is it `INTERVAL '-14:00'`? or both?
 
 |`INTERVAL`
 |https://arrow.apache.org/docs/java/reference/org/apache/arrow/vector/IntervalYearVector.html[`IntervalYearVector`]
@@ -78,7 +77,7 @@ YEAR TO MONTH
 ----
 
 |`PERIOD`
-|https://arrow.apache.org/docs/java/reference/org/apache/arrow/vector/IntervalMonthDayNanoVector.html[`IntervalMonthDayNanoVector`]
+|
 |Time Period (for use in Temporal Predicates; not usable as a column type)
 a|[source,sql]
 ----
@@ -98,7 +97,7 @@ a|[source,sql]
 |`TIMESTAMP +
 [WITHOUT +
 TIMEZONE]`
-|https://arrow.apache.org/docs/java/reference/org/apache/arrow/vector/TimeStampMicroTZVector.html[`TimeStampMicroTZVector`]
+|https://arrow.apache.org/docs/java/reference/org/apache/arrow/vector/TimeStampMicroVector.html[`TimeStampMicroVector`]
 |Timestamp without a Timezone offset
 a|[source,sql]
 ----
@@ -195,7 +194,7 @@ XTDB supports arbitrarily nested data.
 |SQL Type |Arrow Vector Type |Description |SQL Example
 
 |`ARRAY`
-|`N/A`
+|https://arrow.apache.org/docs/java/reference/org/apache/arrow/vector/complex/ListVector.html[`ListVector`]
 |Array/List/Vector of Values
 a|[source,sql]
 ----
@@ -203,7 +202,7 @@ a|[source,sql]
 ----
 
 |`OBJECT`
-|`N/A`
+|https://arrow.apache.org/docs/java/reference/org/apache/arrow/vector/complex/StructVector.html[`StructVector`]
 |Object/Struct/Map of key-value pairs
 a|[source,sql]
 ----
