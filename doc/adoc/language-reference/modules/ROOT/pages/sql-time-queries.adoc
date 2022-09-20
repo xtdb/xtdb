@@ -1,0 +1,32 @@
+= SQL Time Queries
+
+https://github.com/xtdb/core2-playground/blob/main/bitemporal/snodgrass-99.sql[Some examples from the `core2-playground` repo].
+
+== Time Columns
+
+* `SYSTEM_TIME`
+* `APPLICATION_TIME`
+
+== Time Travel
+
+* `FOR SYSTEM_TIME AS OF`
+* `FOR APPLICATION_TIME AS OF`
+
+== Ignoring Time
+
+* `FOR ALL SYSTEM_TIME`
+* `FOR ALL APPLICATION_TIME`
+
+== Periods
+
+Intentionally duplicated from Data Types doc:
+
+* `PERIOD(x,y)`
+
+== Temporal Predicates
+
+* `CONTAINS, OVERLAPS, EQUALS, PRECEDES, SUCCEEDS, IMMEDIATELY PRECEDES, and IMMEDIATELY SUCCEEDS`
+
+== Automatic (Application) Time Period Splitting
+
+* Probably just mention that this happens on `UPDATE` / `DELETE`?
