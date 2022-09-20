@@ -7,100 +7,155 @@
 |SQL Type |Arrow Vector Type |Description |SQL Example
 
 |`BIGINT`
-|`BigIntVector`
+|https://arrow.apache.org/docs/java/reference/org/apache/arrow/vector/BigIntVector.html[`BigIntVector`]
 |64-bit Signed Integer
-|`9223372036854775807`
+a|[source,sql]
+----
+9223372036854775807
+----
 
 |`BOOLEAN`
-|`BitVector`
+|https://arrow.apache.org/docs/java/reference/org/apache/arrow/vector/BitVector.html[`BitVector`]
 |3-Value Boolean: true (1), false (0), or null
-|`1`
+a|[source,sql]
+----
+1
+----
 
 |`DATE`
-|`TimeStampMicroTZVector`
+|https://arrow.apache.org/docs/java/reference/org/apache/arrow/vector/TimeStampMicroTZVector.html[`TimeStampMicroTZVector`]
 |Date Without Time
-|`DATE '2007-06-29'`
+a|[source,sql]
+----
+DATE '2007-06-29'
+----
 
 |`DOUBLE`
-|`Float8Vector`
+|https://arrow.apache.org/docs/java/reference/org/apache/arrow/vector/Float8Vector.html[`Float8Vector`]
 |64-bit Floating Point Number
-|`1.0`
+a|[source,sql]
+----
+1.0
+----
 
 |`FLOAT`
-|`Float4Vector`
+|https://arrow.apache.org/docs/java/reference/org/apache/arrow/vector/Float4Vector.html[`Float4Vector`]
 |32-bit Floating Point Number
-|`1.0`
+a|[source,sql]
+----
+1.0
+----
 
 |`INTEGER`
-|`IntVector`
+|https://arrow.apache.org/docs/java/reference/org/apache/arrow/vector/IntVector.html[`IntVector`]
 |32-bit Signed Integer
-|`2147483647`
+a|[source,sql]
+----
+2147483647
+----
 
 |`INTERVAL`
-|`IntervalDayVector`
+|https://arrow.apache.org/docs/java/reference/org/apache/arrow/vector/IntervalDayVector.html[`IntervalDayVector`]
 |Day/Time Interval
-|`INTERVAL '163 12' +
-DAY TO HOUR`
+a|[source,sql]
+----
+INTERVAL '163 12'
+DAY TO HOUR
+----
 // is the above ^ the correct syntax? or is it `INTERVAL '-14:00'`? or both?
 
 |`INTERVAL`
-|`IntervalYearVector`
+|https://arrow.apache.org/docs/java/reference/org/apache/arrow/vector/IntervalYearVector.html[`IntervalYearVector`]
 |Year/Month Interval
-|`INTERVAL '163-11' +
-YEAR TO MONTH`
+a|[source,sql]
+----
+INTERVAL '163-11'
+YEAR TO MONTH
+----
 
 |`PERIOD`
-|`IntervalMonthDayNanoVector`
+|https://arrow.apache.org/docs/java/reference/org/apache/arrow/vector/IntervalMonthDayNanoVector.html[`IntervalMonthDayNanoVector`]
 |Time Period (for use in Temporal Predicates; not usable as a column type)
-|`PERIOD(DATE '1998-01-05', DATE '1998-01-12')`
+a|[source,sql]
+----
+PERIOD(
+DATE '1998-01-05',
+DATE '1998-01-12')
+----
 
 |`SMALLINT`
-|`SmallIntVector`
+|https://arrow.apache.org/docs/java/reference/org/apache/arrow/vector/SmallIntVector.html[`SmallIntVector`]
 |16-bit Signed Integer
-|`32767`
+a|[source,sql]
+----
+32767
+----
 
 |`TIMESTAMP +
 [WITHOUT +
 TIMEZONE]`
-|`TimeStampMicroTZVector`
+|https://arrow.apache.org/docs/java/reference/org/apache/arrow/vector/TimeStampMicroTZVector.html[`TimeStampMicroTZVector`]
 |Timestamp without a Timezone offset
-|`TIMESTAMP +
-'2007-06-29 16:00:00'`
+a|[source,sql]
+----
+TIMESTAMP
+'2007-06-29
+ 16:00:00'
+----
 
 |`TIMESTAMP +
 WITH +
 TIMEZONE`
-|`TimeStampMicroTZVector`
+|https://arrow.apache.org/docs/java/reference/org/apache/arrow/vector/TimeStampMicroTZVector.html[`TimeStampMicroTZVector`]
 |Timestamp with a Timezone offset
-|`TIMESTAMP +
-'2007-06-29 +
-16:00:00+04:00'`
+a|[source,sql]
+----
+TIMESTAMP
+'2007-06-29
+ 16:00:00+04:00'
+----
 
 |`TIME +
 [WITHOUT +
 TIMEZONE]`
-|`TimeNanoVector`
+|https://arrow.apache.org/docs/java/reference/org/apache/arrow/vector/TimeNanoVector.html[`TimeNanoVector`]
 |Time of day with nanosecond precision
-|`TIME '22:15:04.1237'`
+a|[source,sql]
+----
+TIME '22:15:04.1237'
+----
 
 |`UUID`
-|`UuidVector` *
+|https://github.com/xtdb/core2/blob/master/core/src/core2/vector/extensions/UuidVector.java[`UuidVector *`]
 |Universally Unique Identifier
-|`'97a392d5-5e3f-406f-9651-a828ee79b156'`
+a|[source,sql]
+----
+'97a392d5-5e3f-406f-9651-a828ee79b156'
+----
 
 |`URI`
-|`UriVector` *
+|https://github.com/xtdb/core2/blob/master/core/src/core2/vector/extensions/UriVector.java[`UriVector *`]
 |Universal Resource Identifier
-|'https://xtdb.com'
+a|[source,sql]
+----
+'https://xtdb.com'
+----
 
 |`VARBINARY`
-|`VarBinaryVector`
+|https://arrow.apache.org/docs/java/reference/org/apache/arrow/vector/VarBinaryVector.html[`VarBinaryVector`]
 |Variable-Length Binary String (Byte Array)
+a|[source,sql]
+----
+0x41424344
+----
 
 |`VARCHAR`
-|`VarCharVector`
+|https://arrow.apache.org/docs/java/reference/org/apache/arrow/vector/VarCharVector.html[`VarCharVector`]
 |Variable-Length String with UTF8 character encoding
-|`'Hello'`
+a|[source,sql]
+----
+'Hello'
+----
 
 |===
 
@@ -111,7 +166,7 @@ Undocumented / Unsupported:
 
 * Keyword / :keyword
 * TinyInt / :i8 -- the SQL Spec seems to have no direct support for TinyInt / Byte
-* Date/Time types with no spec equivalent:
+* Date/Time types with (seemingly?) no spec equivalent:
 ** Instant
 ** ZonedDateTime
 ** OffsetDateTime
@@ -129,19 +184,27 @@ Unsupported, but exists in spec:
 
 == Collection Types
 
-[cols="1,1,1,1"]
+XTDB supports arbitrarily nested data.
+
+[cols="3,5,5,6"]
 |===
 |SQL Type |Arrow Vector Type |Description |SQL Example
 
 |`ARRAY`
 |`N/A`
-|List of Values
-|`[1, 2, 3]`
+|Array/List/Vector of Values
+a|[source,sql]
+----
+[1, 2, 3]
+----
 
 |`OBJECT`
 |`N/A`
-|Object/Struct/Map
-|`{'name':'Lucy', +
- 'age':'38'}`
+|Object/Struct/Map of key-value pairs
+a|[source,sql]
+----
+{'name':'Lucy',
+ 'age':'38'}
+----
 
 |===
