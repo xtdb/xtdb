@@ -67,24 +67,12 @@ XTDB does not (currently) support uniqueness constraints.
 
 XTDB does not (currently) support triggers.
 
-=== Type Equality Semantics
-
-* TODO: type equality semantics
-
-=== Type Casts
-
-* TODO: cast
-
-=== Integer Overflow
-
-* TODO: overflow / BigDecimal
-
 
 == Missing and Incomplete
 
 === `SELECT *`
 
-Because XTDB is schemaless, `SELECT *` presents some difficulties.
+ Because XTDB is schemaless, `SELECT *` presents some difficulties.
 While we fully intend to implement `SELECT *`, it requires the addition of `MISSING` semantics which are still under discussion.
 See https://github.com/xtdb/core2/blob/master/doc/adr/0030-sql-missing-attributes.adoc[ADR 030] for more details.
 
@@ -101,6 +89,13 @@ Not all Postgres Wire Protocol features are completely implemented yet.
 === Arrays and Objects
 
 Support for Arrays and Objects (nested data) was added quite recently and probably still has quite a few bugs.
+
+Due to https://github.com/xtdb/core2/issues/440[Issue #440], referring to a field from an indexed array does not work yet:
+
+[source,sql]
+----
+user.friends[2].name -- fails
+----
 
 === Row Types
 
