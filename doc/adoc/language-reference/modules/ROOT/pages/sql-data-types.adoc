@@ -1,32 +1,147 @@
 = SQL Data Types
 
-[cols="1,1,1,1"]
-|===
-|SQL Type |Arrow Type |Description |Example
+== Scalar Types
 
-|`VARCHAR`
-|`VarCharVector`
-|Variable-Length String
-|`'Hello'`
+[cols="3,5,5,6"]
+|===
+|SQL Type |Arrow Vector Type |Description |SQL Example
 
 |`BIGINT`
 |`BigIntVector`
-|Integer
-|`1234`
+|64-bit Signed Integer
+|`9223372036854775807`
+
+|`BOOLEAN`
+|`BitVector`
+|3-Value Boolean: true (1), false (0), or null
+|`1`
+
+|`DATE`
+|`TimeStampMicroTZVector`
+|Date Without Time
+|`DATE '2007-06-29'`
+
+|`DOUBLE`
+|`Float8Vector`
+|64-bit Floating Point Number
+|`1.0`
+
+|`FLOAT`
+|`Float4Vector`
+|32-bit Floating Point Number
+|`1.0`
+
+|`INTEGER`
+|`IntVector`
+|32-bit Signed Integer
+|`2147483647`
+
+|`INTERVAL`
+|`IntervalDayVector`
+|Day/Time Interval
+|`INTERVAL '163 12' +
+DAY TO HOUR`
+// is the above ^ the correct syntax? or is it `INTERVAL '-14:00'`? or both?
+
+|`INTERVAL`
+|`IntervalYearVector`
+|Year/Month Interval
+|`INTERVAL '163-11' +
+YEAR TO MONTH`
+
+|`PERIOD`
+|`IntervalMonthDayNanoVector`
+|Time Period (for use in Temporal Predicates; not usable as a column type)
+|`PERIOD(DATE '1998-01-05', DATE '1998-01-12')`
+
+|`SMALLINT`
+|`SmallIntVector`
+|16-bit Signed Integer
+|`32767`
+
+|`TIMESTAMP +
+[WITHOUT +
+TIMEZONE]`
+|`TimeStampMicroTZVector`
+|Timestamp without a Timezone offset
+|`TIMESTAMP +
+'2007-06-29 16:00:00'`
+
+|`TIMESTAMP +
+WITH +
+TIMEZONE`
+|`TimeStampMicroTZVector`
+|Timestamp with a Timezone offset
+|`TIMESTAMP +
+'2007-06-29 +
+16:00:00+04:00'`
+
+|`TIME +
+[WITHOUT +
+TIMEZONE]`
+|`TimeNanoVector`
+|Time of day with nanosecond precision
+|`TIME '22:15:04.1237'`
 
 |`UUID`
-|`UuidVector`
+|`UuidVector` *
 |Universally Unique Identifier
-|97a392d5-5e3f-406f-9651-a828ee79b156
+|`'97a392d5-5e3f-406f-9651-a828ee79b156'`
 
 |`URI`
-|`UriVector`
+|`UriVector` *
 |Universal Resource Identifier
 |'https://xtdb.com'
 
-|TODO: The rest
-|
-|
-|
+|`VARBINARY`
+|`VarBinaryVector`
+|Variable-Length Binary String (Byte Array)
+
+|`VARCHAR`
+|`VarCharVector`
+|Variable-Length String with UTF8 character encoding
+|`'Hello'`
+
+|===
+
+NOTE: The types marked with an asterisk (`UuidVector`, `UriVector`) are Apache Arrow extension types.
+
+////
+Undocumented / Unsupported:
+
+* Keyword / :keyword
+* TinyInt / :i8 -- the SQL Spec seems to have no direct support for TinyInt / Byte
+* Date/Time types with no spec equivalent:
+** Instant
+** ZonedDateTime
+** OffsetDateTime
+** LocalDateTime
+** Duration
+** LocalDate
+
+Unsupported, but exists in spec:
+|`TIME WITH TIME ZONE`
+|`?`
+|Time of day with nanosecond precision
+|`TIME WITH TIME ZONE '22:15:04.1237'`
+
+////
+
+== Collection Types
+
+[cols="1,1,1,1"]
+|===
+|SQL Type |Arrow Vector Type |Description |SQL Example
+
+|`ARRAY`
+|`N/A`
+|List of Values
+|`[1, 2, 3]`
+
+|`OBJECT`
+|`N/A`
+|Object/Struct/Map
+|`{'name':'Lucy', +
+ 'age':'38'}`
 
 |===
