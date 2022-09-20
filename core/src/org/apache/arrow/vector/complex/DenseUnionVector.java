@@ -1012,10 +1012,11 @@ public class DenseUnionVector extends AbstractContainerVector implements FieldVe
 
     FieldType fieldType;
     if (this.fieldType == null) {
-      fieldType = FieldType.notNullable(new ArrowType.Union(Dense, typeIds));
+      fieldType = FieldType.notNullable(new ArrowType.Union(Dense, null));
     } else {
       final UnionMode mode = UnionMode.Dense;
-      fieldType = new FieldType(false, new ArrowType.Union(mode, typeIds),
+      var indirectTypeIds = ((Union) this.fieldType.getType()).getTypeIds() != null;
+      fieldType = new FieldType(false, new ArrowType.Union(mode, indirectTypeIds ? typeIds : null),
               this.fieldType.getDictionary(), this.fieldType.getMetadata());
     }
 

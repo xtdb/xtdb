@@ -1,6 +1,5 @@
 (ns core2.types
   (:require [clojure.string :as str]
-            [core2.error :as err]
             [core2.rewrite :refer [zmatch]]
             [core2.util :as util])
   (:import (clojure.lang Keyword MapEntry)
@@ -15,7 +14,7 @@
            java.util.concurrent.ConcurrentHashMap
            java.util.function.Function
            (org.apache.arrow.vector BigIntVector BitVector DateDayVector DateMilliVector DurationVector FixedSizeBinaryVector Float4Vector Float8Vector IntVector IntervalDayVector IntervalMonthDayNanoVector IntervalYearVector NullVector PeriodDuration SmallIntVector TimeMicroVector TimeMilliVector TimeNanoVector TimeSecVector TimeStampMicroTZVector TimeStampMicroVector TimeStampMilliTZVector TimeStampMilliVector TimeStampNanoTZVector TimeStampNanoVector TimeStampSecTZVector TimeStampSecVector TinyIntVector ValueVector VarBinaryVector VarCharVector)
-           (org.apache.arrow.vector.complex DenseUnionVector ListVector StructVector)
+           (org.apache.arrow.vector.complex DenseUnionVector FixedSizeListVector ListVector StructVector)
            (org.apache.arrow.vector.holders NullableIntervalDayHolder NullableIntervalMonthDayNanoHolder)
            (org.apache.arrow.vector.types DateUnit FloatingPointPrecision IntervalUnit TimeUnit Types$MinorType UnionMode)
            (org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Date ArrowType$Duration ArrowType$ExtensionType ArrowType$FixedSizeBinary ArrowType$FixedSizeList ArrowType$FloatingPoint ArrowType$Int ArrowType$Interval ArrowType$List ArrowType$Null ArrowType$Struct ArrowType$Time ArrowType$Time ArrowType$Timestamp ArrowType$Union ArrowType$Utf8 ExtensionTypeRegistry Field FieldType)
@@ -412,6 +411,17 @@
 
 (extend-protocol ArrowReadable
   ListVector
+  (get-object [this idx]
+    (let [data-vec (.getDataVector this)
+          x (loop [element-idx (.getElementStartIndex this idx)
+                   acc (transient [])]
+              (if (= (.getElementEndIndex this idx) element-idx)
+                acc
+                (recur (inc element-idx)
+                       (conj! acc (get-object data-vec element-idx)))))]
+      (persistent! x)))
+
+  FixedSizeListVector
   (get-object [this idx]
     (let [data-vec (.getDataVector this)
           x (loop [element-idx (.getElementStartIndex this idx)

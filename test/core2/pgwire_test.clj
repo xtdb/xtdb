@@ -274,7 +274,6 @@
       :json "[\"2022-01-02\"]"
       :clj ["2022-01-02"]}
 
-     #_ ; FIXME #245
      {:sql "ARRAY [ARRAY ['42'], 42, '42']"
       :json-type JsonNodeType/ARRAY
       :clj [["42"] 42 "42"]}]))

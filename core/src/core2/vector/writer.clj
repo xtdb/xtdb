@@ -80,12 +80,14 @@
   (let [src-field (.getField src-vec)
         src-type (.getType src-field)
         type-ids (.getTypeIds ^ArrowType$Union src-type)
-        type-id-count (inc (apply max -1 type-ids))
-        copier-mapping (object-array type-id-count)]
+        child-fields (.getChildren src-field)
+        child-count (count child-fields)
+        copier-mapping (object-array child-count)]
 
-    (dotimes [n (alength type-ids)]
-      (let [src-type-id (aget type-ids n)
-            col-type (types/field->col-type (.get (.getChildren src-field) n))]
+    (dotimes [n child-count]
+      (let [src-type-id (or (when type-ids (aget type-ids n))
+                            n)
+            col-type (types/field->col-type (.get child-fields n))]
         (aset copier-mapping src-type-id (.rowCopier (.writerForType dest-col col-type)
                                                      (.getVectorByType src-vec src-type-id)))))
 

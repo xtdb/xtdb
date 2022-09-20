@@ -262,3 +262,10 @@ ORDER BY foo.application_time_start"
   (let [!tx (c2/submit-tx tu/*node* [[:sql "INSERT INTO foo (id, application_time_start) VALUES (1, '2018-01-01')"]])]
     ;; TODO check the rollback error when it's available, #401
     (t/is (= [] (c2/sql-query tu/*node* "SELECT foo.id FROM foo" {:basis {:tx !tx}})))))
+
+(t/deftest test-vector-type-mismatch-245
+  (t/is (= [{:a [4 "2"]}]
+           (c2/sql-query tu/*node* "SELECT a.a FROM (VALUES (ARRAY [4, '2'])) a (a)" {})))
+
+  (t/is (= [{:a [["hello"] "world"]}]
+           (c2/sql-query tu/*node* "SELECT a.a FROM (VALUES (ARRAY [['hello'], 'world'])) a (a)" {}))))

@@ -53,7 +53,7 @@ INSERT INTO people (id, name, friends)
 query T nosort
 SELECT people.friends FROM people
 ----
-[{"user":"Dan"},{"user":"Kath"}]
+[{:user "Dan"} {:user "Kath"}]
 
 query T nosort
 SELECT people.friends[2] FROM people
