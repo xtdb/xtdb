@@ -21,6 +21,8 @@ brew install postgresql
 psql -h localhost
 ----
 
+Press `CTRL+D` to quit.
+
 == Troubleshooting: Docker Desktop
 
 You should see a prompt ending in `=&gt;`.

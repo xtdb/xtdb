@@ -8,6 +8,10 @@ docker pull xtdb/core2
 docker run -p 5432:5432 xtdb/core2
 ----
 
+== Connecting
+
+Once XTDB is running, connect with any of the https://core2docs.xtdb.com/clients/[supported clients].
+
 == Mounting a Volume
 
 You can use the standard Docker flags to mount a volume and persist your XTDB Core2 data between restarts.
