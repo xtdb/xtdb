@@ -36,7 +36,7 @@ urls:
 
 ui:
   bundle:
-    url: https://xtdb-ui-bundle.s3.eu-west-1.amazonaws.com/xtdb-docs-ui-v2-bundle.zip
+    url: https://xtdb-core2-ui-bundle.s3.eu-west-1.amazonaws.com/xtdb-core2docs-ui-v2-bundle.zip
     snapshot: true
 
 asciidoc:
