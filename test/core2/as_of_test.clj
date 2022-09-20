@@ -3,10 +3,7 @@
             [core2.api :as c2]
             [core2.ingester :as ingest]
             [core2.test-util :as tu]
-            [core2.util :as util])
-  (:import core2.InstantSource
-           (java.time Clock Duration)
-           (java.util List ArrayList)))
+            [core2.util :as util]))
 
 (t/use-fixtures :each tu/with-node)
 
@@ -23,7 +20,7 @@
              (set (tu/query-ra '[:scan [last-updated]]
                                {:srcs {'$ (ingest/snapshot ingester !tx2)}}))))
 
-    (t/is (= #{{:last-updated "tx1"} {:last-updated "tx2"}}
+    (t/is (= #{{:last-updated "tx2"}}
              (->> (c2/plan-datalog tu/*node*
                                    (-> '{:find [?last-updated]
                                          :where [[?e :last-updated ?last-updated]]}

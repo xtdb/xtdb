@@ -140,7 +140,7 @@ Unlike Datomic, `$` shouldn't be included in `:in` - if/when we reinstate multip
 `plan-datalog-query-async` is the same, except it runs entirely asynchronously and returns a `CompletableFuture` of the query plan.
 (In fact, `plan-datalog-query` just calls `plan-datalog-query-async` and deref's it.)
 
-The basis map can also contain a `:current-time` option, which applies to any entities that don't specify other app-time constraints (TODO: see #285).
+The basis map can also contain a `:current-time` option, which applies to any entities that don't specify other app-time constraints.
 This is for repeatable queries - it defaults to 'now' if not provided.
 
 [source,clojure]

@@ -195,10 +195,12 @@
          [:rename (->> cols
                        (into {} (comp (filter :value-arg)
                                       (map (juxt :col-name :value-arg)))))
-          [:scan src (vec (for [{:keys [col-name col-pred]} cols]
-                            (if col-pred
-                              {col-name col-pred}
-                              col-name)))]]]
+          [:scan src (-> (vec (for [{:keys [col-name col-pred]} cols]
+                                (if col-pred
+                                  {col-name col-pred}
+                                  col-name)))
+                         (conj '{application_time_start (<= application_time_start (current-timestamp))}
+                               '{application_time_end (> application_time_end (current-timestamp))}))]]]
         (with-meta {::vars vars}))))
 
 (defn- join-exprs [left-expr right-expr]
