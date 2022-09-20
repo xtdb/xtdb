@@ -106,14 +106,28 @@ Casts between numerics and non-numeric types may not work yet.
 
 [source,sql]
 ----
-insert into t1 (id) values (1);
-select (2 + CAST(3.0 AS INT)) from t1; -- returns 5
-select (2 + CAST("3" AS INT)) from t1; -- fails as of 2022-09-16
+INSERT INTO t1 (id) VALUES (1);
+SELECT (2 + CAST(3.0 AS INT)) FROM t1; -- returns 5
+SELECT (2 + CAST("3" AS INT)) FROM t1; -- fails as of 2022-09-16
 ----
 
 === Dates and Timestamps
 
 Similar to date/time type equality, Dates/Timestamps without a TZ are assumed to be the TZ of the session before being compared.
+
+
+== 3-Value Logic
+
+In SQL, `UNKNOWN` is a legal value for `BOOLEAN` data types, which results in "3-value logic".
+The other two values available are, naturally, `TRUE`, and `FALSE`.
+
+Booleans can be combined with the `AND`, `OR`, `NOT`, and `IS` keywords. Rather than equality checks,
+SQL booleans are compared with `IS`:
+
+[source,sql]
+----
+SELECT t1.a FROM t1 WHERE t1.a IS NOT NULL;
+----
 
 
 == Math
