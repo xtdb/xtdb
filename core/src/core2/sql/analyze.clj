@@ -81,40 +81,28 @@
 
 ;; Identifiers
 
-(defn- identifiers [ag]
-  (r/zcase ag
-    (:column_name_list
-     :column_reference
-     :asterisked_identifier_chain
-     :identifier_chain)
-    (r/collect
-     (fn [ag]
-       (when (r/ctor? :regular_identifier ag)
-         [(r/lexeme ag 1)]))
-     ag)))
-
 (defn- identifier [ag]
   (r/zcase ag
     :derived_column
     (r/zmatch ag
-      [:derived_column _ [:as_clause _ [:regular_identifier as]]]
+      [:derived_column _ [:as_clause _ ^:z ident]]
       ;;=>
-      as
+      (identifier ident)
 
-      [:derived_column _ [:as_clause [:regular_identifier as]]]
+      [:derived_column _ [:as_clause ^:z ident]]
       ;;=>
-      as
+      (identifier ident)
 
       [:derived_column
        [:column_reference
-        [:identifier_chain _ [:regular_identifier column]]]]
+        [:identifier_chain _ ^:z ident]]]
       ;;=>
-      column
+      (identifier ident)
 
       [:derived_column
-       [:field_reference _ [:regular_identifier column]]]
+       [:field_reference _ ^:z ident]]
       ;;=>
-      column
+      (identifier ident)
 
       [:derived_column
        [:subquery ^:z sq]]
@@ -132,10 +120,27 @@
     :regular_identifier
     (r/lexeme ag 1)
 
+    :delimited_identifier
+    (let [lexeme (r/lexeme ag 1)]
+      (subs lexeme 1 (dec (count lexeme))))
+
     :correlation_name
     (identifier (r/$ ag 1))
 
     nil))
+
+(defn identifiers [ag]
+  (r/zcase ag
+    (:column_name_list
+     :column_reference
+     :asterisked_identifier_chain
+     :identifier_chain)
+    (r/collect
+     (fn [ag]
+       (r/zcase ag
+         (:regular_identifier :delimited_identifier) [(identifier ag)]
+         nil))
+     ag)))
 
 (defn- table-or-query-name [ag]
   (r/zcase ag

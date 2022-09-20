@@ -1785,8 +1785,8 @@
           inner-plan]
          inner-plan))]
 
-    [:from_subquery column-list ^:z query-expression]
-    (let [columns (mapv (comp symbol second) (rest column-list))
+    [:from_subquery ^:z column-list ^:z query-expression]
+    (let [columns (mapv symbol (sem/identifiers column-list))
           qe-plan (plan query-expression)
           rename-map (zipmap (relation-columns qe-plan) columns)]
       [:rename rename-map qe-plan])

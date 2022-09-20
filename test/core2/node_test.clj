@@ -269,3 +269,9 @@ ORDER BY foo.application_time_start"
 
   (t/is (= [{:a [["hello"] "world"]}]
            (c2/sql-query tu/*node* "SELECT a.a FROM (VALUES (ARRAY [['hello'], 'world'])) a (a)" {}))))
+
+(t/deftest test-double-quoted-col-refs
+  (let [!tx (c2/submit-tx tu/*node* [[:sql "INSERT INTO foo (id, \"kebab-case-col\") VALUES (1, 'kebab-case-value')"]])]
+    (t/is (= [{:id 1, :kebab-case-col "kebab-case-value"}]
+             (c2/sql-query tu/*node* "SELECT foo.id, foo.\"kebab-case-col\" FROM foo WHERE foo.\"kebab-case-col\" = 'kebab-case-value'"
+                           {:basis {:tx !tx}})))))
