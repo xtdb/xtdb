@@ -1,5 +1,9 @@
 = SQL Data Types
 
+XTDB data types are implemented using Apache Arrow.
+Each SQL data type has its corresponding Arrow vector type listed in the same row.
+
+
 == Scalar Types
 
 [cols="3,5,5,6"]
