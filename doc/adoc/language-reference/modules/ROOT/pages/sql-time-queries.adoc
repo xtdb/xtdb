@@ -1,6 +1,7 @@
 = SQL Time Queries
 
-https://github.com/xtdb/core2-playground/blob/main/bitemporal/snodgrass-99.sql[Some examples from the `core2-playground` repo].
+In addition to this documentation, there are a number of
+https://github.com/xtdb/core2-playground/blob/main/bitemporal/snodgrass-99.sql[examples in the `core2-playground` repo].
 
 
 [#enhancedsql2011]
@@ -24,14 +25,15 @@ entire timeline at once (`FOR ALL APPLICATION_TIME`):
 INSERT INTO posts (id, user_id, text, application_time_start)
   VALUES (9012, 5678, 'Happy 2027!', DATE '2027-01-01');
 
-SELECT posts.text FROM posts
-  FOR APPLICATION_TIME AS OF DATE '2027-01-02';
-
 -- data from 2027 is not visible by default
 SELECT posts.text FROM posts;
 
+SELECT posts.text FROM posts
+  FOR APPLICATION_TIME AS OF DATE '2027-01-02';
+
 -- data from 2027 becomes visible when viewing the entire timeline
-SELECT posts.text FROM posts FOR ALL APPLICATION_TIME;
+SELECT posts.text FROM posts
+  FOR ALL APPLICATION_TIME;
 ----
 
 
@@ -46,7 +48,7 @@ to switch away from the "as of now" defaults, if you've set them:
 SET APPLICATION_TIME_DEFAULTS TO ISO_STANDARD;
 ----
 
-When XTDB is in ISO Standard mode, queries will return records visible to all of Application Time:
+When XTDB is in ISO Standard mode, queries will return records visible to all of Application Time by default:
 
 [source,sql]
 ----
@@ -54,10 +56,14 @@ INSERT INTO posts (id, user_id, text, application_time_start)
   VALUES (9012, 5678, 'Happy 2027!', DATE '2027-01-01');
 
 -- data from 2027 is visible by default
-SELECT posts.text, posts.application_time_start FROM posts;
+SELECT posts.text FROM posts;
 ----
 
-While using ISO Standard mode, it is often helpful to orient oneself
+
+[#troubleshooting]
+== Troubleshooting
+
+Particularly while using ISO Standard mode, it is often helpful to orient oneself
 by querying all 4 built-in time columns:
 
 [source,sql]
@@ -70,34 +76,275 @@ SELECT posts.text,
 ----
 
 
+[#timecolumns]
 == Time Columns
 
-* `SYSTEM_TIME`
-* `APPLICATION_TIME`
+All tables in XTDB contain the two logical temporal columns.
+These "columns" are not real and cannot be queried directly.
+Instead, they are `PERIOD`s, comprised of two `TIMESTAMP` columns each.
+These four timestamp columns _can_ be inserted into and queried directly.
 
+_System Time_ represents the immutable timeline of data, as it is recorded.
+_Application Time_ represents the validity (sometimes called "effectivity") of data
+-- it is what allows users to correct data in the past or insert data into the future.
+
+* `SYSTEM_TIME` is comprised of:
+** system_time_start
+** system_time_end
+* `APPLICATION_TIME` is comprised of:
+** application_time_start
+** application_time_end
+
+[#timetravel]
 == Time Travel
 
-* `FOR SYSTEM_TIME AS OF`
-* `FOR APPLICATION_TIME AS OF`
+XTDB permits point-in-time queries across both timelines.
+To time travel, specify an `AS OF` clause with a `DATE` or `TIMESTAMP` suffix.
 
+=== `FOR SYSTEM_TIME AS OF`
+
+For point-in-time queries on the System Timeline:
+
+[source,sql]
+----
+INSERT INTO posts (id,title)
+  VALUES (99,'That Time I Attended RubyConf 2005');
+
+SELECT posts.title FROM posts
+  FOR SYSTEM_TIME AS OF DATE '2022-09-20';
+----
+
+=== `FOR APPLICATION_TIME AS OF`
+
+For point-in-time queries on the Application Timeline:
+
+[source,sql]
+----
+INSERT INTO posts (id,title,application_time_start)
+  VALUES (199,'That Time I Attended Strange Loop 2022',
+          DATE '2025-09-21');
+
+SELECT posts.title FROM posts
+  FOR APPLICATION_TIME AS OF DATE '2025-09-21';
+----
+
+
+[#ignoringtime]
 == Ignoring Time
 
-* `FOR ALL SYSTEM_TIME`
-* `FOR ALL APPLICATION_TIME`
+You can temporarily suspend point-in-time queries by querying the entire timeline at once:
 
+=== `FOR ALL SYSTEM_TIME`
+
+[source,sql]
+----
+SELECT posts.title FROM posts
+  FOR ALL SYSTEM_TIME;
+----
+
+=== `FOR ALL APPLICATION_TIME`
+
+[source,sql]
+----
+SELECT posts.title FROM posts
+  FOR ALL APPLICATION_TIME;
+----
+
+=== Ignore the entire timeplane
+
+[source,sql]
+----
+SELECT posts.title FROM posts
+  FOR ALL SYSTEM_TIME
+  FOR ALL APPLICATION_TIME;
+----
+
+
+[#periods]
 == Periods
 
-Intentionally duplicated from Data Types doc:
+A period is not a reified data type -- in the sense that you cannot insert it into a column -- but
+periods are essential for _Temporal Predicates_. To create a `PERIOD`:
 
-* `PERIOD(x,y)`
+[source,sql]
+----
+PERIOD(start_time, end_time)
+----
 
+SQL Periods have _closed-open semantics_.
+The `start_time` is inclusive.
+The `end_time` includes all time up-to-but-not-including that time.
+
+
+[#temporalpredicates]
 == Temporal Predicates
 
-* `CONTAINS, OVERLAPS, EQUALS, PRECEDES, SUCCEEDS, IMMEDIATELY PRECEDES, and IMMEDIATELY SUCCEEDS`
+Records on the System Timeline and Application Timeline exist as time ranges.
+_Temporal Predicates_ are SQL:2011 operators which bear close resemblance to
+https://en.wikipedia.org/wiki/Allen%27s_interval_algebra#Relations[Allens' Interval Relations].
 
+=== `CONTAINS`
+
+`x CONTAINS y` returns `TRUE` if x contains every time point in y,
+i.e., if xs ≤ ys and xe ≥ ye.
+
+In the case where `y` is a DateTime value expression (`DATE` or `TIMESTAMP`),
+`x CONTAINS y` returns `TRUE` if x contains y, i.e., if xs ≤ y and xe > y.
+
+[source,sql]
+----
+INSERT INTO posts (id,title)
+  VALUES (99,'That Time I Attended RubyConf 2005');
+
+SELECT posts.title FROM posts
+  WHERE posts.SYSTEM_TIME
+  CONTAINS PERIOD(DATE '2027-01-01', DATE '2028-01-01');
+----
+
+=== `OVERLAPS`
+
+`x OVERLAPS y` returns `TRUE` if the two periods have at least one time point in common,
+i.e, if xs < ye and xe > ys.
+
+[source,sql]
+----
+INSERT INTO posts (id,title,application_time_start)
+  VALUES (299,'Overlapping',DATE '2027-01-01');
+
+SELECT posts.title FROM posts
+  WHERE posts.APPLICATION_TIME
+  OVERLAPS PERIOD(DATE '2026-01-01', DATE '2027-01-02');
+----
+
+=== `EQUALS`
+
+`x EQUALS y` returns `TRUE` if the two periods have every time point in common,
+i.e., if `xs = ys` and `xe = ye`.
+
+[source,sql]
+----
+INSERT INTO posts (id,title,application_time_start,application_time_end)
+  VALUES (399,'Equals?',DATE '2027-01-01',DATE '2027-01-02');
+
+SELECT posts.title FROM posts
+  WHERE posts.APPLICATION_TIME
+  EQUALS PERIOD(DATE '2027-01-01', DATE '2027-01-02');
+----
+
+=== `PRECEDES`
+
+`x PRECEDES y` returns `TRUE` if the end value of x is less than or equal to the start value of y,
+i.e., if xe ≤ ys.
+
+[source,sql]
+----
+INSERT INTO posts (id,title,application_time_start,application_time_end)
+  VALUES (499,'Precedes?',DATE '2007-01-01',DATE '2007-01-02');
+
+SELECT posts.title FROM posts
+  WHERE posts.APPLICATION_TIME
+  PRECEDES PERIOD(DATE '2007-01-03', DATE '2026-12-31');
+----
+
+=== `SUCCEEDS`
+
+`x SUCCEEDS y` returns `TRUE` if the start value of x is greater than or equal to the end value of y,
+i.e., if xs ≥ ye.
+
+[source,sql]
+----
+INSERT INTO posts (id,title,application_time_start,application_time_end)
+  VALUES (599,'Succeeds?',DATE '2037-01-01',DATE '2037-01-02');
+
+SELECT posts.title FROM posts
+  WHERE posts.APPLICATION_TIME
+  SUCCEEDS PERIOD(DATE '2036-12-30', DATE '2036-12-31');
+----
+
+=== `IMMEDIATELY PRECEDES`
+
+`x IMMEDIATELY PRECEDES y` returns `TRUE` if the end value of x is equal to the start value
+of y, i.e., if xe = ys.
+
+[source,sql]
+----
+INSERT INTO posts (id,title,application_time_start,application_time_end)
+  VALUES (699,'Immediately Precedes?',DATE '2007-01-01',
+          TIMESTAMP '2007-01-02 12:34:56');
+
+SELECT posts.title FROM posts
+  WHERE posts.APPLICATION_TIME
+  IMMEDIATELY PRECEDES PERIOD(TIMESTAMP '2007-01-02 12:34:56', DATE '2026-12-31');
+----
+
+=== `IMMEDIATELY SUCCEEDS`
+
+`x IMMEDIATELY SUCCEEDS y` returns `TRUE` if the start value of x is equal to the end value
+of y, i.e., if xs = ye.
+
+[source,sql]
+----
+INSERT INTO posts (id,title,application_time_start,application_time_end)
+  VALUES (799,'Immediately Succeeds?',TIMESTAMP '2036-12-31 12:34:56',
+          DATE '2037-01-02');
+
+SELECT posts.title FROM posts
+  WHERE posts.APPLICATION_TIME
+  IMMEDIATELY SUCCEEDS PERIOD(DATE '2036-12-30',
+                              TIMESTAMP '2036-12-31 12:34:56');
+----
+
+
+[#automaticsplitting]
 == Automatic (Application) Time Period Splitting
 
-* Probably just mention that this happens on `UPDATE` / `DELETE`?
+Whenever an `UPDATE` or `DELETE` operation is performed on an existing record,
+the old Application Time is "split".
+
+[source,sql]
+----
+INSERT INTO posts (id,title,application_time_start)
+  VALUES (899,'Will I be split?',DATE '1997-02-02');
+
+UPDATE posts
+  FOR PORTION OF APPLICATION_TIME
+  FROM DATE '1998-01-20' TO DATE '1999-01-30'
+  SET title='Split!';
+
+SELECT posts.title,
+       posts.system_time_start,
+       posts.system_time_end,
+       posts.application_time_start,
+       posts.application_time_end
+       FROM posts
+       FOR ALL APPLICATION_TIME;
+----
+
+
+[#endoftime]
+== End of Time
+
+For convenience, XTDB adds the reserved word `END_OF_TIME` which can be used in place of
+a hard-coded end-of-time value. It can be used like so:
+
+[source,sql]
+----
+INSERT INTO posts (id,title,application_time_start)
+  VALUES (999,'Delete from 1995 to the end of time?',DATE '1990-02-02');
+
+DELETE FROM posts
+  FOR PORTION OF APPLICATION_TIME
+  FROM DATE '1995-01-01' TO END_OF_TIME
+  WHERE posts.id = 999;
+
+SELECT posts.title,
+       posts.system_time_start,
+       posts.system_time_end,
+       posts.application_time_start,
+       posts.application_time_end
+       FROM posts
+       FOR ALL APPLICATION_TIME;
+----
 
 
 [#inspectthetimeline]
@@ -109,7 +356,7 @@ To inspect all of System Time:
 
 [source,sql]
 ----
-SELECT posts.text,
+SELECT posts.title,
        posts.system_time_start,
        posts.system_time_end,
        posts.application_time_start,
@@ -122,7 +369,7 @@ To inspect all of Application Time:
 
 [source,sql]
 ----
-SELECT posts.text,
+SELECT posts.title,
        posts.system_time_start,
        posts.system_time_end,
        posts.application_time_start,
@@ -131,9 +378,22 @@ SELECT posts.text,
        FOR ALL APPLICATION_TIME;
 ----
 
-These two clauses can be combined to inspect the entire time plane (both timelines).
+These two clauses can be combined to inspect the entire time plane (both timelines):
+
+[source,sql]
+----
+SELECT posts.title,
+       posts.system_time_start,
+       posts.system_time_end,
+       posts.application_time_start,
+       posts.application_time_end
+       FROM posts
+       FOR ALL SYSTEM_TIME
+       FOR ALL APPLICATION_TIME;
+----
 
 
+[#patterns]
 == Temporal Data Patterns
 
 === Move a record into the past/future
