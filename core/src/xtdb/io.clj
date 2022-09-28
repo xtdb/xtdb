@@ -147,7 +147,7 @@
    (->> (new-merge-sort-priority-queue comp sorted-seqs)
         (merge-sort-priority-queue->seq))))
 
-(def ^:const default-external-sort-part-size (* 1024 1024))
+(def default-external-sort-part-size (* 1024 1024))
 
 (defn with-nippy-thaw-all* [f]
   (binding [nippy/*thaw-serializable-allowlist* #{"*"}]
