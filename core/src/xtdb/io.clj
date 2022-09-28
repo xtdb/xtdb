@@ -123,11 +123,11 @@
 
 ;; External Merge Sort
 
-(defn- new-merge-sort-priority-queue ^PriorityQueue [comp sorted-seqs]
+(defn- new-merge-sort-priority-queue ^PriorityQueue [^Comparator comp sorted-seqs]
   (let [sorted-seqs (remove empty? sorted-seqs)
         pq-comp (reify Comparator
                   (compare [_ [a] [b]]
-                    (comp a b)))]
+                    (.compare comp a b)))]
     (doto (PriorityQueue. (max 1 (count sorted-seqs)) pq-comp)
       (.addAll sorted-seqs))))
 
