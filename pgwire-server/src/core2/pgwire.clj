@@ -352,148 +352,105 @@
 (defn- statement-head [s]
   (-> s (str/split #"\s+") first str/upper-case strip-semi-colon))
 
-(defn- interpret-xt-query
-  "Takes some sql string that is intended for the XT itself (rather than being some pg specific thing) and returns some data about it.
+(defn- parse-tx-access-mode [tam]
+  (r/zmatch tam
+    [:transaction_access_mode "READ" "ONLY"] :read-only
+    [:transaction_access_mode "READ" "WRITE"] :read-write))
 
-  Returns a statement of type :query, see (doc interpret-sql) for more info."
-  [sql]
-  (let [transformed-query (trim-sql sql)
-        num-placeholders (count (re-seq #"\?" transformed-query))
-        parse-result (parser/parse transformed-query)
-        parse-err (when (parser/failure? parse-result) (err-parse parse-result))
-        plan-err
-        (when-not parse-err
-          (try
-            (sql/compile-query transformed-query)
-            nil
-            (catch core2.IllegalArgumentException e
-              (err-protocol-violation (.getMessage e)))))]
-    {:statement-type :query
-     :query sql
-     :transformed-query transformed-query
-     :ast parse-result
-     :err (or parse-err plan-err)
-     :num-placeholders num-placeholders}))
+(defn- parse-tx-characteristics [tcs]
+  ;; TODO `:transaction_characteristics` is supposedly variadic with many different options
+  ;; we only support a single access-mode for now.
+  {:access-mode
+   (r/zmatch tcs
+     [:transaction_characteristics ^:z tam] (parse-tx-access-mode tam)
+     [:transaction_characteristics] nil
 
-(defn- interpret-sql
-  "Takes a sql string and returns a map of data about it.
+     nil)})
 
-  pgwire extends the sql core with pg-specific canned responses and session/transaction control, these need special handling - hence this function.
-
-  Usage: (interpret-sql \"select a.a from a a\")
-
-  :statement-type determines the rest of the data.
-
-  if :canned-response
-  :canned-response (the map from the canned-responses)
-
-  if :set-session-parameter
-  :parameter (the param name)
-  :value (the value)
-
-  if :set-session-characteristics
-  :access-mode (:read-only, :read-write)
-
-  if :set-transaction
-  :access-mode (:read-only, :read-write)
-
-  if :begin
-  :access-mode (:read-only, :read-write, nil)
-
-  if :commit or :rollback (nothing more to say so far, unparameterized tx controls)
-
-  if :empty-query (nothing more to say!)
-
-  if :ignore (queries that are accepted but have no defined behaviour)
-  :query (the original sql string)
-
-  if :query
-  :query (the original sql string)
-  :transformed-query (the pre-processed for xt sql string)
-  :num-placeholders (the number of parameter placeholders in the query)
-  :ast (the result of parse, possibly a parse failure)
-  :err (if there was a parse failure, the pgwire error to send)"
-  [sql]
+(defn- interpret-sql [sql]
   (let [sql-trimmed (trim-sql sql)]
-    (or
-      (when (str/blank? sql-trimmed)
-        {:statement-type :empty-query})
+    (or (when (str/blank? sql-trimmed)
+          {:statement-type :empty-query})
 
-      (when-some [canned-response (get-canned-response sql-trimmed)]
-        {:statement-type :canned-response
-         :canned-response canned-response})
+        (when-some [canned-response (get-canned-response sql-trimmed)]
+          {:statement-type :canned-response, :canned-response canned-response})
 
-      ;; transaction control
-      ;; will likely look at moving this into parser as they are spec defined
-      ;; though execution behaviour will likely remain in pgwire (due to stateful nature of these commands)
-      (when (re-find #"(?i)^SET\s+TRANSACTION\s+READ\s+ONLY$" sql-trimmed)
-        {:statement-type :set-transaction
-         :access-mode :read-only})
+        (try
+          (binding [r/*memo* (HashMap.)]
+            (let [z (-> (parser/parse sql-trimmed :directly_executable_statement)
+                        parser/or-throw (r/vector-zip))
+                  zq (r/$ z 1)]
+              (r/zcase zq
+                :query_expression
+                (do
+                  (-> (sem/analyze-query (r/znode z)) sem/or-throw plan/plan-query)
+                  {:statement-type :query
+                   :query sql
+                   :transformed-query sql-trimmed
+                   :projection (->> (sem/projected-columns zq)
+                                    (first)
+                                    (mapv (comp name plan/unqualified-projection-symbol)))})
 
-      (when (re-find #"(?i)^SET\s+TRANSACTION\s+READ\s+WRITE$" sql-trimmed)
-        {:statement-type :set-transaction
-         :access-mode :read-write})
+                (:insert_statement :delete_statement__searched :update_statement__searched :erase_statement__searched)
+                (do
+                  (-> (sem/analyze-query (r/znode z)) sem/or-throw plan/plan-query)
+                  {:statement-type :dml, :dml-type (r/ctor zq)
+                   :query sql, :transformed-query sql-trimmed})
 
-      (when (re-find #"(?i)^START\s+TRANSACTION" sql-trimmed)
-        (if-some [[_ _ ro rw] (re-find #"(?i)START\s+TRANSACTION((\s+READ\s+ONLY)|(\s+READ\s+WRITE)|)$" sql-trimmed)]
-          {:statement-type :begin
-           :access-mode (cond ro :read-only rw :read-write :else nil)}
-          {:statement-type :begin
-           :err (err-protocol-violation "Provided START TRANSACTION syntax not supported by XTDB.\nOnly (START TRANSACTION, START TRANSACTION READ WRITE and START TRANSACTION READ ONLY) are supported by XTDB")}))
+                :commit_statement {:statement-type :commit}
+                :rollback_statement {:statement-type :rollback}
 
-      (when (re-find #"(?i)^BEGIN" sql-trimmed)
-        (if-some [[_ _ ro rw] (re-find #"(?i)BEGIN((\s+READ\s+ONLY)|(\s+READ\s+WRITE)|)$" sql-trimmed)]
-          {:statement-type :begin
-           :access-mode (cond ro :read-only rw :read-write :else nil)}
-          {:statement-type :begin
-           :err (err-protocol-violation "Provided BEGIN syntax not supported by XTDB.\nOnly (BEGIN, BEGIN READ WRITE and BEGIN READ ONLY) are supported by XTDB")}))
+                (r/zmatch (r/$ z 1)
+                  [:set_transaction_statement _ _ ^:z tcs]
+                  (into {:statement-type :set-transaction}
+                        (parse-tx-characteristics tcs))
 
-      (when (re-find #"(?i)^COMMIT$" sql-trimmed)
-        {:statement-type :commit})
+                  [:set_session_variable_statement ^:z ident ^:z lit]
+                  {:statement-type :set-session-parameter
+                   :parameter (sem/identifier ident)
+                   :value (plan/expr lit)}
 
-      (when (re-find #"(?i)^ROLLBACK$" sql-trimmed)
-        {:statement-type :rollback})
+                  [:start_transaction_statement ^:z tcs]
+                  (into {:statement-type :begin} (parse-tx-characteristics tcs))
 
-      ;; session control
-      ;; see issue #324, scrappy and temporary solution for basic interval HOUR MINUTE expr
-      (when-some [[_ sign hh mm] (re-find #"(?i)^SET\s+TIME\s*ZONE\s+\'(\+|\-|)(\d{1,2})\:(\d{1,2})\'" sql-trimmed)]
-        {:statement-type :set-time-zone
-         :tz (ZoneOffset/ofHoursMinutes
-               ((case sign "-" - +) (parse-long hh))
-               ((case sign "-" - +) (parse-long mm)))})
+                  [:sql_session_statement
+                   [:set_local_time_zone_statement _ _ _ ^:z tz]]
+                  {:statement-type :set-time-zone
+                   :tz (r/zmatch tz
+                         [:time_zone_interval [_ sign]
+                          [:unsigned_integer offset-hours]
+                          [:unsigned_integer offset-mins]]
+                         (ZoneOffset/ofHoursMinutes (cond-> (parse-long offset-hours)
+                                                      (= sign "-") -)
+                                                    (cond-> (parse-long offset-mins)
+                                                      (= sign "-") -))
 
-      (when (re-find #"(?i)^SET SESSION CHARACTERISTICS AS TRANSACTION READ WRITE$" sql-trimmed)
-        {:statement-type :set-session-characteristics
-         :access-mode :read-write})
+                         [:time_zone_region region]
+                         (ZoneId/of region))}
 
-      (when (re-find #"(?i)^SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY$" sql-trimmed)
-        {:statement-type :set-session-characteristics
-         :access-mode :read-only})
+                  [:sql_session_statement
+                   [:set_session_characteristics_statement _ _ _ _
+                    [:session_characteristic_list
+                     [:session_transaction_characteristics _ ^:z tam]]]]
+                  ;; =>
+                  {:statement-type :set-session-characteristics
+                   :access-mode (parse-tx-access-mode tam)}
 
-      ;; SET x = 42
-      ;; SET x to 42
-      ;; general SET statements have undefined behaviour at the moment, but permitted while working
-      ;; on client compatibility - many will become canned responses
-      (when-some [[_ k v] (re-find #"(?i)^SET\s+(\w+)\s+(?:= |TO )?\s*(.*)" sql-trimmed)]
-        {:statement-type :set-session-parameter
-         :parameter k
-         :value v})
+                  [:set_app_time_defaults "AS_OF_NOW"]
+                  ;; =>
+                  {:statement-type :set-session-parameter
+                   :parameter :app-time-defaults, :value :as-of-now}
 
-      ;; for now arbitrary SET commands are accepted but ignored, e.g SET TRANSACTION ISOLATION level
-      (when (re-find #"(?i)^SET" sql-trimmed)
-        {:statement-type :ignore
-         :sql sql})
+                  [:set_app_time_defaults "ISO_STANDARD"]
+                  ;; =>
+                  {:statement-type :set-session-parameter
+                   :parameter :app-time-defaults, :value :iso-standard}
 
-      ;; interpret as xt core sql query (not pg specific)
-      (interpret-xt-query sql))))
+                  (throw (UnsupportedOperationException. (pr-str {:unhandled (r/znode z)})))))))
 
-(defn- query-projection
-  "Returns a vec of column names returned by the query (ast)."
-  [ast]
-  (binding [r/*memo* (HashMap.)]
-    (->> (sem/projected-columns (r/$ (r/vector-zip ast) 1))
-         (first)
-         (mapv (comp name plan/unqualified-projection-symbol)))))
+          (catch core2.IllegalArgumentException e
+            {:statement-type :error
+             :err (err-protocol-violation (.getMessage e))})))))
 
 (defn- json-clj
   "This function is temporary, the long term goal will be to walk arrow directly to generate the json (and later monomorphic
@@ -577,7 +534,6 @@
         {:startup-parameters acc}
         (do (.unread in (byte x))
             (recur in (assoc acc (read-c-string in) (read-c-string in))))))))
-
 
 ;; startup negotiation utilities (see cmd-startup)
 
@@ -809,10 +765,7 @@
 (defn- set-session-parameter [conn parameter value]
   (let [parameter (-> (util/->kebab-case-kw parameter)
                       ((some-fn {:application-time-defaults :app-time-defaults} identity)))]
-    (swap! (:conn-state conn)
-           assoc-in [:session :parameters parameter]
-           (cond-> value
-             (= parameter :app-time-defaults) util/->kebab-case-kw))))
+    (swap! (:conn-state conn) assoc-in [:session :parameters parameter] value)))
 
 (defn- cleanup-connection-resources [conn]
   (let [{:keys [cid, server, in, out, ^Socket socket, conn-status]} conn
@@ -1179,11 +1132,11 @@
 
   (cmd-write-msg conn msg-error-response {:error-fields err}))
 
-(defn cmd-write-canned-response [conn canned-response]
-  (let [{:keys [q, rows]} canned-response]
-    (doseq [row rows]
-      (cmd-write-msg conn msg-data-row {:vals (mapv (fn [v] (if (bytes? v) v (utf8 v))) row)}))
-    (cmd-write-msg conn msg-command-complete {:command (str (statement-head q) " " (count rows))})))
+(defn cmd-write-canned-response [conn {:keys [q rows] :as _canned-resp}]
+  (doseq [row rows]
+    (cmd-write-msg conn msg-data-row {:vals (mapv (fn [v] (if (bytes? v) v (utf8 v))) row)}))
+
+  (cmd-write-msg conn msg-command-complete {:command (str (statement-head q) " " (count rows))}))
 
 (defn cmd-close
   "Closes a prepared statement or portal that was opened with bind / parse."
@@ -1316,12 +1269,11 @@
   [{:keys [conn-state]} & cmds]
   (swap! conn-state update :cmd-buf (fnil into PersistentQueue/EMPTY) cmds))
 
-(defn cmd-send-query-result
-  [{:keys [conn-status, conn-state] :as conn} {:keys [query, ast, ^IResultSet result-set]}]
-  (let [projection (mapv keyword (query-projection ast))
-        json-bytes (comp utf8 json/json-str json-clj)
+(defn cmd-send-query-result [{:keys [conn-status, conn-state] :as conn}
+                             {:keys [query, projection, ^IResultSet result-set]}]
+  (let [json-bytes (comp utf8 json/json-str json-clj)
         ;; TODO result format
-        tuplefn (if (seq projection) (apply juxt (map (partial comp json-bytes) projection)) (constantly []))
+        tuplefn (if (seq projection) (apply juxt (map (comp (partial comp json-bytes) keyword) projection)) (constantly []))
 
         ;; this query has been cancelled!
         cancelled-by-client? #(:cancel @conn-state)
@@ -1390,13 +1342,9 @@
 
 (defn cmd-await-query-result
   "This command allows us to pre-empt running queries and cancel them."
-  [{:keys [conn-state
-           conn-status] :as conn}
-   {:keys [^CompletableFuture fut,
-           query,
-           ast
-           iteration]
-    :as cmd}]
+  [{:keys [conn-state conn-status] :as conn}
+   {:keys [^CompletableFuture fut, query, iteration, projection], :as cmd}]
+
   (let [cancelled (:cancel @conn-state)
         ;; how many times have we awaited
         iteration (or iteration 0)
@@ -1434,7 +1382,7 @@
       (and (.isDone fut) (not (.isCompletedExceptionally fut)))
       (let [rs @fut]
         (try
-          (cmd-send-query-result conn {:query query, :ast ast, :result-set rs})
+          (cmd-send-query-result conn {:query query, :projection projection :result-set rs})
           (catch Throwable e
             (cmd-send-error conn (err-execution-exception e "unexpected server error during query execution")))
           (finally
@@ -1455,16 +1403,6 @@
 
 (def supported-param-oids
   (set (map (comp oids :pg) type-mappings)))
-
-;; perhaps temporary, but we need to know if a query is DML to determine permissibility for different access modes
-(defn- ast-executable-statement-root-tag [ast] (when (vector? ast) (-> ast second first)))
-(defn- query? [ast] (= :query_expression (ast-executable-statement-root-tag ast)))
-(defn- dml? [ast]
-  (contains? #{:insert_statement
-               :update_statement__searched
-               :delete_statement__searched
-               :erase_statement__searched}
-             (ast-executable-statement-root-tag ast)))
 
 (defn- submit-tx [node dml-buf {:keys [app-time-as-of-now?]}]
   (let [tx-ops (mapv (fn [{:keys [transformed-query params]}]
@@ -1490,85 +1428,84 @@
       submit-ex (err-execution-exception submit-ex "unexpected error on tx submit (report as a bug)")
       await-ex (err-execution-exception await-ex "unexpected error on tx await (report as a bug)"))))
 
-(defn cmd-exec-query
-  "Given a statement of type :query will execute it against the servers :node and send the results."
-  [{:keys [server, conn-state] :as conn}
-   {:keys [ast
-           query
-           transformed-query
-           arg-types
-           params
-           param-format
-           _result-format]}]
+(defn- ->xtify-param [{:keys [arg-types param-format]}]
+  (fn xtify-param [param-idx param]
+    (let [param-oid (nth arg-types param-idx nil)
+          param-format (nth param-format param-idx nil)
+          param-format (or param-format (nth param-format param-idx :text))
+          pg-type (oid->kw param-oid)
+          mapping (some #(when (= pg-type (:pg %)) %) type-mappings)
+          _ (when-not mapping (throw (Exception. "Unsupported param type provided for read")))
+          {:keys [pg-read-binary, pg-read-text]} mapping]
+      (if (= :binary param-format)
+        (pg-read-binary param)
+        (pg-read-text param)))))
+
+(defn- cmd-exec-dml [{:keys [server, conn-state] :as conn} {:keys [dml-type query transformed-query params] :as stmt}]
   (let [node (:node server)
-
-        xtify-param
-        (fn xtify-param [param-idx param]
-          (let [param-oid (nth arg-types param-idx nil)
-                param-format (nth param-format param-idx nil)
-                param-format (or param-format (nth param-format param-idx :text))
-                pg-type (oid->kw param-oid)
-                mapping (some #(when (= pg-type (:pg %)) %) type-mappings)
-                _ (when-not mapping (throw (Exception. "Unsupported param type provided for read")))
-                {:keys [pg-read-binary, pg-read-text]} mapping]
-            (if (= :binary param-format)
-              (pg-read-binary param)
-              (pg-read-text param))))
-
+        xtify-param (->xtify-param stmt)
         xt-params (vec (map-indexed xtify-param params))
 
-        {{:keys [basis] :as transaction} :transaction
-         {:keys [^Clock clock] :as session} :session} @conn-state
+        {:keys [transaction], {:keys [^Clock clock] :as session} :session} @conn-state
 
         app-time-as-of-now? (= :as-of-now (get-in session [:parameters :app-time-defaults]))
 
-        query-opts
-        {:basis (into {:current-time (.instant clock)} basis)
-         :default-tz (.getZone clock)
-         :? xt-params
-         :app-time-as-of-now? app-time-as-of-now?}]
+        stmt {:query query,
+              :transformed-query transformed-query
+              :params xt-params}]
 
-    ;; DML currently takes a different execution path, requiring COMMIT to flush.
-    (if (dml? ast)
-      (let [stmt {:query query,
-                  :transformed-query transformed-query
-                  :ast ast,
-                  :params xt-params}]
-        (if transaction
-          ;; we buffer the statement in the transaction (to be flushed with COMMIT)
-          (swap! conn-state update-in [:transaction :dml-buf] (fnil conj []) stmt)
+    (if transaction
+      ;; we buffer the statement in the transaction (to be flushed with COMMIT)
+      (swap! conn-state update-in [:transaction :dml-buf] (fnil conj []) stmt)
 
-          (submit-tx node [stmt] {:app-time-as-of-now? app-time-as-of-now?}))
+      (submit-tx node [stmt] {:app-time-as-of-now? app-time-as-of-now?
+                              :default-tz (.getZone clock)}))
 
-        (cmd-write-msg conn msg-command-complete
-                       {:command (case (ast-executable-statement-root-tag ast)
-                                   ;; insert <oid> <rows>
-                                   ;; oid is always 0 these days, its legacy thing in the pg protocol
-                                   ;; rows is 0 for us cus async
-                                   :insert_statement "INSERT 0 0"
-                                   ;; otherwise head <rows>
-                                   (str (statement-head query) " 0"))}))
+    (cmd-write-msg conn msg-command-complete
+                   {:command (case dml-type
+                               ;; insert <oid> <rows>
+                               ;; oid is always 0 these days, its legacy thing in the pg protocol
+                               ;; rows is 0 for us cus async
+                               :insert_statement "INSERT 0 0"
+                               ;; otherwise head <rows>
+                               :delete_statement__searched "DELETE 0"
+                               :update_statement__searched "UPDATE 0"
+                               :erase_statement__searched "ERASE 0")})))
 
-      (let [;; execute the query asynchronously (to enable later enable cancellation mid query)
-            ^CompletableFuture
-            query-fut
-            (try
-              (c2/open-sql-async node transformed-query query-opts)
-              (catch Throwable e (CompletableFuture/failedFuture e)))
+(defn cmd-exec-query
+  "Given a statement of type :query will execute it against the servers :node and send the results."
+  [{:keys [server, conn-state] :as conn}
+   {:keys [query transformed-query projection params] :as stmt}]
+  (let [node (:node server)
+        xtify-param (->xtify-param stmt)
+        xt-params (vec (map-indexed xtify-param params))
 
-            ;; keep the fut around in case of interrupt exc (for cleanup)
-            _ (swap! conn-state update :executing (fnil conj #{}) query-fut)
+        {{:keys [basis]} :transaction, {:keys [^Clock clock] :as session} :session} @conn-state
 
-            ;; log and de-reg when done (however that happens)
-            _
-            (.whenComplete
-              query-fut
-              (reify BiConsumer
-                (accept [_ _ ex]
-                  (when ex (log/debug ex "Error during query open-sql-async"))
-                  (swap! conn-state update :executing disj query-fut)
-                  nil)))]
-        (cmd-await-query-result conn {:ast ast, :query query, :iteration 0, :fut query-fut})))))
+        app-time-as-of-now? (= :as-of-now (get-in session [:parameters :app-time-defaults]))
+
+        query-opts {:basis (into {:current-time (.instant clock)} basis)
+                    :default-tz (.getZone clock)
+                    :? xt-params
+                    :app-time-as-of-now? app-time-as-of-now?}
+
+        ;; execute the query asynchronously (to enable later enable cancellation mid query)
+        ^CompletableFuture
+        query-fut (try
+                    (c2/open-sql-async node transformed-query query-opts)
+                    (catch Throwable e (CompletableFuture/failedFuture e)))]
+
+    ;; keep the fut around in case of interrupt exc (for cleanup)
+    (swap! conn-state update :executing (fnil conj #{}) query-fut)
+
+    ;; log and de-reg when done (however that happens)
+    (.whenComplete query-fut
+                   (reify BiConsumer
+                     (accept [_ _ ex]
+                       (when ex (log/debug ex "Error during query open-sql-async"))
+                       (swap! conn-state update :executing disj query-fut))))
+
+    (cmd-await-query-result conn {:projection projection, :query query, :iteration 0, :fut query-fut})))
 
 (defn- cmd-send-row-description [conn cols]
   (let [defaults {:column-name ""
@@ -1590,40 +1527,31 @@
   (let [{:keys [cols]} canned-response]
     (cmd-send-row-description conn cols)))
 
-(defn cmd-describe-query [conn ast]
-  (cmd-send-row-description conn (query-projection ast)))
+(defn cmd-describe-query [conn {:keys [projection]}]
+  (cmd-send-row-description conn projection))
 
-(defn cmd-begin [{:keys [server, conn-state] :as conn} access-mode]
+(defn cmd-begin [{:keys [server conn-state] :as conn} access-mode]
   (let [{:keys [node]} server]
-    (swap! conn-state (fn [{:keys [session] :as st}]
-                        (let [{:keys [^Clock clock]} session
-                              tx-opts {:basis {:tx (:latest-completed-tx (c2/status node))
+    (swap! conn-state
+           (fn [{:keys [session] :as st}]
+             (let [{:keys [^Clock clock]} session]
+               (-> st
+                   (assoc :transaction
+                          {:basis {:tx (:latest-completed-tx (c2/status node))
+                                   :current-time (.instant clock)}
 
-                                               ;; fixing current-time for all reads in a tx...
-                                               ;; going off perceived intent of adr-40 here:
-                                               ;; Separately, we value referentially transparent, 'repeatable' queries - the same query,
-                                               ;; executed with exactly the same parameters, should return the same resultset regardless of when it's executed.
-                                               ;; Specifically, it shouldn't matter how many subsequent transactions the queried node has indexed,
-                                               ;; nor the current wall-clock time of the querying or queried node.
-                                               :current-time (.instant clock)}
+                           :access-mode (or access-mode
+                                            (:access-mode (:next-transaction session))
+                                            (:access-mode session))})
 
-                                       :access-mode (or
-                                                     ;; access mode of a transaction is determined in order of precedence:
-                                                     ;; 1. BEGIN <access mode>
-                                                     access-mode
-                                                     ;; 2. SET TRANSACTION <access mode>
-                                                     (:access-mode (:next-transaction session))
-                                                     ;; 3. session variable (read only by default)
-                                                     (:access-mode session))}]
-                          (-> st
-                              (assoc :transaction tx-opts)))))
-    ;; clear :next-transaction variables for now
-    ;; aware right now this may not be spec compliant depending on interplay between START TRANSACTION and SET TRANSACTION
-    ;; thus TODO check spec for correct 'clear' behaviour of SET TRANSACTION vars
-    (swap! conn-state update :session dissoc :next-transaction))
+                   ;; clear :next-transaction variables for now
+                   ;; aware right now this may not be spec compliant depending on interplay between START TRANSACTION and SET TRANSACTION
+                   ;; thus TODO check spec for correct 'clear' behaviour of SET TRANSACTION vars
+                   (update :session dissoc :next-transaction))))))
+
   (cmd-write-msg conn msg-command-complete {:command "BEGIN"}))
 
-(defn cmd-commit [{:keys [server, conn-state] :as conn}]
+(defn cmd-commit [{:keys [server conn-state] :as conn}]
   (let [{:keys [node]} server
         {{:keys [failed err dml-buf]} :transaction, :keys [session]} @conn-state]
     (if failed
@@ -1649,10 +1577,7 @@
                  :portal :portals
                  :prepared-stmt :prepared-statements
                  (Object.))
-        {:keys [statement-type
-                ast
-                canned-response]}
-        (get-in @conn-state [coll-k describe-name])]
+        {:keys [statement-type canned-response] :as stmt} (get-in @conn-state [coll-k describe-name])]
 
     (when (= :prepared-statements describe-type)
       ;; TODO send param desc
@@ -1661,7 +1586,7 @@
     (case statement-type
       :empty-query (cmd-write-msg conn msg-no-data)
       :canned-response (cmd-describe-canned-response conn canned-response)
-      :query (cmd-describe-query conn ast)
+      :query (cmd-describe-query conn stmt)
       (cmd-write-msg conn msg-no-data))))
 
 (defn cmd-set-session-parameter [conn parameter value]
@@ -1686,19 +1611,12 @@
   "Given some kind of statement (from interpret-sql), will execute it. For some statements, this does not mean
   the xt node gets hit - e.g SET some_session_parameter = 42 modifies the connection, not the database."
   [{:keys [conn-state] :as conn}
-   {:keys [ast
-           statement-type
-           canned-response
-           access-mode
-           parameter
-           tz
-           value]
-    :as stmt}]
+   {:keys [statement-type canned-response access-mode parameter tz value] :as stmt}]
 
   (when (= :simple (:protocol @conn-state))
     (case statement-type
       :canned-response (cmd-describe-canned-response conn canned-response)
-      :query (when (and ast (query? ast)) (cmd-describe-query conn ast))
+      :query (cmd-describe-query conn stmt)
       nil))
 
   (case statement-type
@@ -1712,14 +1630,15 @@
     :begin (cmd-begin conn access-mode)
     :rollback (cmd-rollback conn)
     :commit (cmd-commit conn)
-    :query (cmd-exec-query conn stmt)))
+    :query (cmd-exec-query conn stmt)
+    :dml (cmd-exec-dml conn stmt)
+
+    (throw (UnsupportedOperationException. (pr-str {:stmt stmt})))))
 
 (defn- permissibility-err
   "Returns an error if the given statement, which is otherwise valid - is not permitted (say due to the access mode, transaction state)."
-  [conn stmt]
-  (let [{:keys [conn-state]} conn
-        {:keys [statement-type, ast, query]} stmt
-        {:keys [transaction]} @conn-state
+  [{:keys [conn-state]} {:keys [statement-type] :as stmt}]
+  (let [{:keys [transaction]} @conn-state
 
         ;; session access mode is ignored for now (wait for implicit transactions)
         access-mode (:access-mode transaction :read-only)
@@ -1740,26 +1659,17 @@
       (and (= :begin statement-type) transaction)
       (err-protocol-violation "invalid transaction state -- active SQL-transaction")
 
-      ;; assume no ast is ok for now, this is sort accidently works and I'm not sure what I want to do
-      ;; about pg canned/specific access checks
-      (nil? ast) nil
-
       ;; we currently only simulate partially direct sql opening transactions (spec behaviour)
       ;; that somewhat works as it should for reads, writes however are more difficult and its not clear
       ;; if we should follow spec (i.e autocommit blocking writes)
       ;; so we will to refuse DML unless we are in an explicit transaction
-      (dml? ast)
+      (= :dml statement-type)
       (when (and transaction (= :read-only access-mode))
         (access-mode-error "DML is not allowed in a READ ONLY transaction" :read-write))
 
-      (query? ast)
+      (= :query statement-type)
       (when (and transaction (= :read-write access-mode))
-        (access-mode-error "queries are unsupported in a READ WRITE transaction" :read-only))
-
-      :else
-      (do
-        (log/debug "Unexpected statement" (or (some-> ast ast-executable-statement-root-tag) (statement-head query)))
-        (err-protocol-violation "sql was parsed but unexpected statement encountered (report as an xtdb core2 bug)")))))
+        (access-mode-error "queries are unsupported in a READ WRITE transaction" :read-only)))))
 
 (defn cmd-simple-query [{:keys [conn-state] :as conn} {:keys [query]}]
   (let [{:keys [err] :as stmt} (interpret-sql query)]
@@ -1784,12 +1694,8 @@
 
 (defn cmd-parse
   "Responds to a msg-parse message that creates a prepared-statement."
-  [{:keys [conn-state
-           cid
-           server] :as conn}
-   {:keys [stmt-name
-           query
-           arg-types]}]
+  [{:keys [conn-state cid server] :as conn}
+   {:keys [stmt-name query arg-types]}]
 
   ;; put the conn in the extend protocol
   (swap! conn-state assoc :protocol :extended)
@@ -1856,7 +1762,7 @@
 
 (defn- conn-loop [conn]
   (let [{:keys [cid, server, ^Socket socket, in, conn-status, conn-state]} conn
-        {:keys [port, server-status]} server]
+        {:keys [port server-status]} server]
 
     (when-not (compare-and-set! conn-status :new :running)
       (log/error "Connect loop requires a newly initialised connection" {:cid cid, :port port}))
@@ -2032,97 +1938,89 @@
 
   While the server is running, tries to .accept connections on its :accept-socket. Once accepted,
   a connection is created on the servers :thread-pool via the (connect) function."
-  [server]
-  (let [{:keys [^ServerSocket accept-socket,
-                server-status,
-                server-state
-                ^ExecutorService thread-pool,
-                port]} server]
-    (when-not (compare-and-set! server-status :starting :running)
-      (throw (Exception. "Accept loop requires a newly initialised server")))
+  [{:keys [^ServerSocket accept-socket,
+           server-status,
+           server-state
+           ^ExecutorService thread-pool,
+           port]
+    :as server}]
+  (when-not (compare-and-set! server-status :starting :running)
+    (throw (Exception. "Accept loop requires a newly initialised server")))
 
-    (log/debug "Pgwire server listening on" port)
+  (log/debug "Pgwire server listening on" port)
 
-    (try
-      (loop []
+  (try
+    (loop []
+      (cond
+        (.isInterrupted (Thread/currentThread)) nil
 
-        (cond
-          (.isInterrupted (Thread/currentThread)) nil
+        (.isClosed ^ServerSocket @accept-socket)
+        (log/debug "Accept socket closed, exiting accept loop")
 
-          (.isClosed ^ServerSocket @accept-socket)
-          (log/debug "Accept socket closed, exiting accept loop")
+        (#{:draining :running} @server-status)
+        (do
+          (try
 
-          (#{:draining :running} @server-status)
-          (do
+            ;; set a low timeout to leave accept early if needed
+            (when (= :draining @server-status)
+              (.setSoTimeout ^ServerSocket @accept-socket 10))
 
-            (try
+            ;; accept next connection (blocks until interrupt (with so-timeout) or close)
+            (let [conn-socket (.accept ^ServerSocket @accept-socket)]
+              (when-some [exc (:injected-accept-exc @server-state)]
+                (swap! server-state dissoc :injected-accept-exc)
+                (.close conn-socket)
+                (throw exc))
 
-              ;; set a low timeout to leave accept early if needed
-              (when (= :draining @server-status)
-                (.setSoTimeout ^ServerSocket @accept-socket 10))
+              (.setTcpNoDelay conn-socket true)
+              (if (= :running @server-status)
+                ;; TODO fix buffer on tp? q gonna be infinite right now
+                (.submit thread-pool ^Runnable (fn [] (connect server conn-socket)))
+                (do
+                  (err-cannot-connect-now "server shutting down")
+                  (.close conn-socket))))
+            (catch SocketException e
+              (when (and (not (.isClosed ^ServerSocket @accept-socket))
+                         (not= "Socket closed" (.getMessage e)))
+                (log/warn e "Accept socket exception" {:port port})))
+            (catch java.net.SocketTimeoutException e
+              (when (not= "Accept timed out" (.getMessage e))
+                (log/warn e "Accept time out" {:port port})))
+            (catch IOException e
+              (log/warn e "Accept IO exception" {:port port})))
+          (recur))
 
-              ;; accept next connection (blocks until interrupt (with so-timeout) or close)
-              (let [conn-socket (.accept ^ServerSocket @accept-socket)]
-                (when-some [exc (:injected-accept-exc @server-state)]
-                  (swap! server-state dissoc :injected-accept-exc)
-                  (.close conn-socket)
-                  (throw exc))
+        :else nil))
+    ;; should already be stopping if interrupted
+    (catch InterruptedException _ (.interrupt (Thread/currentThread)))
+    ;; for the unknowns, do not stop - leave in an error state
+    ;; so it can be inspected.
+    (catch Throwable e
+      (compare-and-set! server-status :running :error)
+      (util/try-close @accept-socket)
+      (when-not (:silent-accept @server-state)
+        (log/error e "Exception caught on accept thread" {:port port}))))
 
-                (.setTcpNoDelay conn-socket true)
-                (if (= :running @server-status)
-                  ;; TODO fix buffer on tp? q gonna be infinite right now
-                  (.submit thread-pool ^Runnable (fn [] (connect server conn-socket)))
-                  (do
-                    (err-cannot-connect-now "server shutting down")
-                    (.close conn-socket))))
-              (catch SocketException e
-                (when (and (not (.isClosed ^ServerSocket @accept-socket))
-                           (not= "Socket closed" (.getMessage e)))
-                  (log/warn e "Accept socket exception" {:port port})))
-              (catch java.net.SocketTimeoutException e
-                (when (not= "Accept timed out" (.getMessage e))
-                  (log/warn e "Accept time out" {:port port})))
-              (catch IOException e
-                (log/warn e "Accept IO exception" {:port port})))
-            (recur))
+  (when (.isInterrupted (Thread/currentThread))
+    (swap! server-state assoc :accept-interrupted true)
+    (log/debug "Accept loop interrupted, exiting accept loop")))
 
-          :else nil))
-      ;; should already be stopping if interrupted
-      (catch InterruptedException _ (.interrupt (Thread/currentThread)))
-      ;; for the unknowns, do not stop - leave in an error state
-      ;; so it can be inspected.
-      (catch Throwable e
-        (compare-and-set! server-status :running :error)
-        (util/try-close @accept-socket)
-        (when-not (:silent-accept @server-state)
-          (log/error e "Exception caught on accept thread" {:port port}))))
-
-    (when (.isInterrupted (Thread/currentThread))
-      (swap! server-state assoc :accept-interrupted true)
-      (log/debug "Accept loop interrupted, exiting accept loop"))))
-
-(defn- create-server [{:keys [node,
-                              port,
-                              num-threads,
-                              drain-wait
-                              unsafe-init-state]}]
+(defn- create-server [{:keys [node port num-threads drain-wait unsafe-init-state]}]
   (assert node ":node is required")
   (let [self (atom nil)
         clock (Clock/systemDefaultZone)
-        default-state
-        {:clock clock
-         :drain-wait drain-wait
-         :parameters {"server_version" "14"
-                      "server_encoding" "UTF8"
-                      "client_encoding" "UTF8"}}
-        srvr (map->Server
-               {:port port
-                :node node
-                :accept-socket (delay (ServerSocket. port))
-                :accept-thread (Thread. ^Runnable (fn [] (accept-loop @self)) (str "pgwire-server-accept-" port))
-                :thread-pool (Executors/newFixedThreadPool num-threads (util/->prefix-thread-factory "pgwire-connection-"))
-                :server-status (atom :new)
-                :server-state (atom (merge unsafe-init-state default-state))})]
+        default-state {:clock clock
+                       :drain-wait drain-wait
+                       :parameters {"server_version" "14"
+                                    "server_encoding" "UTF8"
+                                    "client_encoding" "UTF8"}}
+        srvr (map->Server {:port port
+                           :node node
+                           :accept-socket (delay (ServerSocket. port))
+                           :accept-thread (Thread. ^Runnable (fn [] (accept-loop @self)) (str "pgwire-server-accept-" port))
+                           :thread-pool (Executors/newFixedThreadPool num-threads (util/->prefix-thread-factory "pgwire-connection-"))
+                           :server-status (atom :new)
+                           :server-state (atom (merge unsafe-init-state default-state))})]
     (reset! self srvr)
     srvr))
 

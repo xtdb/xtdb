@@ -399,29 +399,29 @@
                   (create-local-time hours minutes seconds seconds-fraction)))
 
               (->zo ^java.time.ZoneOffset [sign offset-hours offset-mins]
-                (ZoneOffset/of (str sign offset-hours ":" offset-mins)))
-
-              (->zdt [^LocalDate ld, ^LocalTime lt, tzi]
-                (r/zmatch tzi
-                  [:time_zone_interval "Z"]
-                  (ZonedDateTime/of ld lt (ZoneId/of "Z"))
-
-                  [:time_zone_interval [_ sign]
-                   [:unsigned_integer offset-hours]
-                   [:unsigned_integer offset-mins]]
-                  (ZonedDateTime/of ld lt (->zo sign offset-hours offset-mins))
-
-                  [:time_zone_interval [_ sign]
-                   [:unsigned_integer offset-hours]
-                   [:unsigned_integer offset-mins]
-                   [:time_zone_region _ region _]]
-                  (ZonedDateTime/ofLocal (LocalDateTime/of ld lt)
-                                         (ZoneId/of region)
-                                         (->zo sign offset-hours offset-mins))))]
+                (ZoneOffset/of (str sign offset-hours ":" offset-mins)))]
 
         (r/zmatch uts
-          [:unquoted_time_string ^:z tv] (LocalDateTime/of ld (->lt tv))
-          [:unquoted_time_string ^:z tv ^:z tzi] (->zdt ld (->lt tv) tzi))))
+          [:unquoted_time_string ^:z tv]
+          (LocalDateTime/of ld (->lt tv))
+
+          [:unquoted_time_string ^:z tv "Z"]
+          (ZonedDateTime/of ld (->lt tv) (ZoneId/of "Z"))
+
+          [:unquoted_time_string ^:z tv
+           [:time_zone_interval [_ sign]
+            [:unsigned_integer offset-hours]
+            [:unsigned_integer offset-mins]]]
+          (ZonedDateTime/of ld (->lt tv) (->zo sign offset-hours offset-mins))
+
+          [:unquoted_time_string ^:z tv
+           [:time_zone_interval [_ sign]
+            [:unsigned_integer offset-hours]
+            [:unsigned_integer offset-mins]]
+           [:time_zone_region region]]
+          (ZonedDateTime/ofLocal (LocalDateTime/of ld (->lt tv))
+                                 (ZoneId/of region)
+                                 (->zo sign offset-hours offset-mins)))))
 
     [:date_literal _
      [:date_string [:date_value [:unsigned_integer year] _ [:unsigned_integer month] _ [:unsigned_integer day]]]]

@@ -902,19 +902,19 @@
   (let [params #(-> (get-last-conn) :conn-state deref :session :parameters (select-keys %))]
     (with-open [conn (jdbc-conn)]
 
-      (testing "literals saved as is (no parser hooked up yet)"
+      (testing "literals saved as is"
         (is (q conn ["SET a = 'b'"]))
-        (is (= {:a "'b'"} (params [:a])))
+        (is (= {:a "b"} (params [:a])))
         (is (q conn ["SET b = 42"]))
-        (is (= {:a "'b'", :b "42"} (params [:a :b]))))
+        (is (= {:a "b", :b 42} (params [:a :b]))))
 
       (testing "properties can be overwritten"
         (q conn ["SET a = 42"])
-        (is (= {:a "42"} (params [:a]))))
+        (is (= {:a 42} (params [:a]))))
 
       (testing "TO syntax can be used"
         (q conn ["SET a TO 43"])
-        (is (= {:a "43"} (params [:a])))))))
+        (is (= {:a 43} (params [:a])))))))
 
 (deftest db-queryable-after-transaction-error-test
   (with-open [conn (jdbc-conn)]
@@ -996,7 +996,6 @@
       (is (= [] (q conn ["SELECT foo.a FROM foo"]))))))
 
 (when (psql-available?)
-
   (deftest psql-dml-test
     (psql-session
       (fn [send read]
@@ -1110,14 +1109,14 @@
         (is (= "2022-08-16T14:20:03+03:12" (current-ts conn))))
 
       (testing "utc"
-        (q conn ["SET TIME ZONE '00:00'"])
+        (q conn ["SET TIME ZONE '+00:00'"])
         (is (= "2022-08-16T11:08:03Z" (current-ts conn))))
 
       (testing "tz is session scoped"
         (with-open [conn2 (jdbc-conn)]
           (is (= "2022-08-16T14:20:03+03:12" (current-ts conn2)))
           (is (= "2022-08-16T11:08:03Z" (current-ts conn)))
-          (q conn2 ["SET TIME ZONE '00:01'"])
+          (q conn2 ["SET TIME ZONE '+00:01'"])
           (is (= "2022-08-16T11:09:03+00:01" (current-ts conn2)))
           (is (= "2022-08-16T11:08:03Z" (current-ts conn)))))
 
@@ -1151,8 +1150,8 @@
 
 (deftest pg-begin-unsupported-syntax-error-test
   (with-open [conn (jdbc-conn "autocommit" "false")]
-    (is (thrown-with-msg? PSQLException #"Provided BEGIN syntax not supported by XTDB" (q conn ["BEGIN not valid sql!"])))
-    (is (thrown-with-msg? PSQLException #"Provided BEGIN syntax not supported by XTDB" (q conn ["BEGIN SERIALIZABLE"])))))
+    (is (thrown-with-msg? PSQLException #"ERROR: Invalid SQL query: Parse error at line 1, column 7:" (q conn ["BEGIN not valid sql!"])))
+    (is (thrown-with-msg? PSQLException #"ERROR: Invalid SQL query: Parse error at line 1, column 7:" (q conn ["BEGIN SERIALIZABLE"])))))
 
 (deftest begin-with-access-mode-test
   (with-open [conn (jdbc-conn "autocommit" "false")]

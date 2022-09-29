@@ -81,7 +81,7 @@
 
 ;; Identifiers
 
-(defn- identifier [ag]
+(defn identifier [ag]
   (r/zcase ag
     :derived_column
     (r/zmatch ag

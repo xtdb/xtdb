@@ -1,4 +1,10 @@
-{:trim_operands
+{:direct_implementation_defined_statement
+ {:tag :alt,
+  :parsers
+  ({:tag :nt, :keyword :set_session_variable_statement}
+   {:tag :nt, :keyword :set_app_time_defaults}),
+  :red {:reduction-type :raw}},
+ :trim_operands
  {:tag :cat,
   :parsers
   ({:tag :opt,
@@ -27,10 +33,26 @@
      :parsers
      ({:tag :string, :string "WHERE"}
       {:tag :nt, :keyword :search_condition})}})},
+ :transaction_mode
+ {:tag :alt,
+  :parsers
+  ({:tag :nt, :keyword :isolation_level}
+   {:tag :nt, :keyword :transaction_access_mode}),
+  :red {:reduction-type :raw}},
  :character_value_expression_2
  {:tag :nt,
   :keyword :character_value_expression,
   :red {:reduction-type :raw}},
+ :transaction_access_mode
+ {:tag :alt,
+  :parsers
+  ({:tag :cat,
+    :parsers
+    ({:tag :string, :string "READ"} {:tag :string, :string "ONLY"})}
+   {:tag :cat,
+    :parsers
+    ({:tag :string, :string "READ"}
+     {:tag :string, :string "WRITE"})})},
  :time_value
  {:tag :cat,
   :parsers
@@ -137,6 +159,13 @@
    {:tag :nt, :keyword :value_expression})},
  :direct_sql_statements
  {:tag :plus, :parser {:tag :nt, :keyword :direct_sql_statement}},
+ :set_transaction_statement
+ {:tag :cat,
+  :parsers
+  ({:tag :string, :string "SET"}
+   {:tag :opt, :parser {:tag :string, :string "LOCAL"}}
+   {:tag :string, :string "TRANSACTION"}
+   {:tag :nt, :keyword :transaction_characteristics})},
  :boolean_factor
  {:tag :cat,
   :parsers
@@ -160,6 +189,19 @@
   :parsers
   ({:tag :string, :string "ARRAY"}
    {:tag :nt, :keyword :table_subquery})},
+ :session_transaction_characteristics
+ {:tag :cat,
+  :parsers
+  ({:tag :string, :string "TRANSACTION"}
+   {:tag :nt, :keyword :transaction_mode}
+   {:tag :opt,
+    :parser
+    {:tag :plus,
+     :parser
+     {:tag :cat,
+      :parsers
+      ({:tag :nt, :keyword :comma, :hide true}
+       {:tag :nt, :keyword :transaction_mode})}}})},
  :table_primary
  {:tag :alt,
   :parsers
@@ -260,6 +302,18 @@
  :left_bracket
  {:tag :string, :string "[", :red {:reduction-type :raw}},
  :asterisk {:tag :string, :string "*"},
+ :session_characteristic_list
+ {:tag :cat,
+  :parsers
+  ({:tag :nt, :keyword :session_characteristic}
+   {:tag :opt,
+    :parser
+    {:tag :plus,
+     :parser
+     {:tag :cat,
+      :parsers
+      ({:tag :nt, :keyword :comma, :hide true}
+       {:tag :nt, :keyword :session_characteristic})}}})},
  :value_expression
  {:tag :alt,
   :parsers
@@ -387,6 +441,7 @@
    {:tag :nt, :keyword :right_paren, :hide true})},
  :table_subquery
  {:tag :nt, :keyword :subquery, :red {:reduction-type :raw}},
+ :commit_statement {:tag :string, :string "COMMIT"},
  :sign
  {:tag :alt,
   :parsers
@@ -523,6 +578,7 @@
    {:tag :nt, :keyword :less_than_or_equals_operator}
    {:tag :nt, :keyword :greater_than_or_equals_operator}),
   :red {:reduction-type :raw}},
+ :rollback_statement {:tag :string, :string "ROLLBACK"},
  :right_paren {:tag :string, :string ")", :red {:reduction-type :raw}},
  :implicitly_typed_value_specification
  {:tag :alt,
@@ -616,7 +672,12 @@
    {:tag :opt, :parser {:tag :nt, :keyword :group_by_clause}}
    {:tag :opt, :parser {:tag :nt, :keyword :having_clause}})},
  :directly_executable_statement
- {:tag :nt, :keyword :direct_sql_data_statement},
+ {:tag :alt,
+  :parsers
+  ({:tag :nt, :keyword :direct_sql_data_statement}
+   {:tag :nt, :keyword :sql_transaction_statement}
+   {:tag :nt, :keyword :sql_session_statement}
+   {:tag :nt, :keyword :direct_implementation_defined_statement})},
  :quantified_comparison_predicate_part_2
  {:tag :cat,
   :parsers
@@ -792,6 +853,25 @@
   :parsers
   ({:tag :nt, :keyword :left_paren, :hide true}
    {:tag :nt, :keyword :right_paren, :hide true})},
+ :set_app_time_defaults
+ {:tag :cat,
+  :parsers
+  ({:tag :string, :string "SET", :hide true}
+   {:tag :alt,
+    :parsers
+    ({:tag :string, :string "APP_TIME_DEFAULTS"}
+     {:tag :string, :string "APPLICATION_TIME_DEFAULTS"}),
+    :hide true}
+   {:tag :opt,
+    :parser
+    {:tag :alt,
+     :parsers
+     ({:tag :string, :string "TO"} {:tag :string, :string "="})},
+    :hide true}
+   {:tag :alt,
+    :parsers
+    ({:tag :string, :string "AS_OF_NOW"}
+     {:tag :string, :string "ISO_STANDARD"})})},
  :general_logarithm_base
  {:tag :nt,
   :keyword :numeric_value_expression,
@@ -819,6 +899,14 @@
   :parsers
   ({:tag :nt, :keyword :row_value_predicand}
    {:tag :nt, :keyword :between_predicate_part_2})},
+ :set_session_characteristics_statement
+ {:tag :cat,
+  :parsers
+  ({:tag :string, :string "SET"}
+   {:tag :string, :string "SESSION"}
+   {:tag :string, :string "CHARACTERISTICS"}
+   {:tag :string, :string "AS"}
+   {:tag :nt, :keyword :session_characteristic_list})},
  :like_predicate
  {:tag :alt,
   :parsers
@@ -925,6 +1013,13 @@
   :red {:reduction-type :raw}},
  :basic_identifier_chain
  {:tag :nt, :keyword :identifier_chain, :red {:reduction-type :raw}},
+ :set_local_time_zone_statement
+ {:tag :cat,
+  :parsers
+  ({:tag :string, :string "SET"}
+   {:tag :string, :string "TIME"}
+   {:tag :string, :string "ZONE"}
+   {:tag :nt, :keyword :set_time_zone_value})},
  :sort_key
  {:tag :nt, :keyword :value_expression, :red {:reduction-type :raw}},
  :general_logarithm_argument
@@ -964,6 +1059,11 @@
   ({:tag :nt, :keyword :asterisked_identifier_chain}
    {:tag :nt, :keyword :period, :hide true}
    {:tag :nt, :keyword :asterisk})},
+ :sql_session_statement
+ {:tag :alt,
+  :parsers
+  ({:tag :nt, :keyword :set_session_characteristics_statement}
+   {:tag :nt, :keyword :set_local_time_zone_statement})},
  :period_immediately_precedes_predicate_part_2
  {:tag :cat,
   :parsers
@@ -986,16 +1086,12 @@
   :red {:reduction-type :raw}},
  :less_than_or_equals_operator {:tag :string, :string "<="},
  :time_zone_interval
- {:tag :alt,
+ {:tag :cat,
   :parsers
-  ({:tag :cat,
-    :parsers
-    ({:tag :nt, :keyword :sign}
-     {:tag :nt, :keyword :hours_value}
-     {:tag :nt, :keyword :colon, :hide true}
-     {:tag :nt, :keyword :minutes_value}
-     {:tag :opt, :parser {:tag :nt, :keyword :time_zone_region}})}
-   {:tag :regexp, :regexp #"Z"})},
+  ({:tag :nt, :keyword :sign}
+   {:tag :nt, :keyword :hours_value}
+   {:tag :nt, :keyword :colon, :hide true}
+   {:tag :nt, :keyword :minutes_value})},
  :insert_statement
  {:tag :cat,
   :parsers
@@ -1326,6 +1422,20 @@
   :red {:reduction-type :raw}},
  :field_name
  {:tag :nt, :keyword :identifier, :red {:reduction-type :raw}},
+ :transaction_characteristics
+ {:tag :opt,
+  :parser
+  {:tag :cat,
+   :parsers
+   ({:tag :nt, :keyword :transaction_mode}
+    {:tag :opt,
+     :parser
+     {:tag :plus,
+      :parser
+      {:tag :cat,
+       :parsers
+       ({:tag :nt, :keyword :comma, :hide true}
+        {:tag :nt, :keyword :transaction_mode})}}})}},
  :approximate_numeric_literal
  {:tag :cat,
   :parsers
@@ -1572,6 +1682,19 @@
      :parsers
      ({:tag :string, :string "ESCAPE"}
       {:tag :nt, :keyword :escape_character})}})},
+ :start_transaction_statement
+ {:tag :cat,
+  :parsers
+  ({:tag :alt,
+    :parsers
+    ({:tag :cat,
+      :parsers
+      ({:tag :string, :string "START"}
+       {:tag :string, :string "TRANSACTION"})}
+     {:tag :string, :string "BEGIN"}),
+    :hide true}
+   {:tag :opt,
+    :parser {:tag :nt, :keyword :transaction_characteristics}})},
  :ordering_specification
  {:tag :alt,
   :parsers
@@ -1893,12 +2016,7 @@
   ({:tag :nt, :keyword :row_value_special_case}
    {:tag :nt, :keyword :row_value_constructor}),
   :red {:reduction-type :raw}},
- :time_zone_region
- {:tag :cat,
-  :parsers
-  ({:tag :string, :string "["}
-   {:tag :regexp, :regexp #"([\w\/]+)"}
-   {:tag :string, :string "]"})},
+ :time_zone_region {:tag :regexp, :regexp #"([\w\/]+)"},
  :exact_numeric_literal
  {:tag :regexp, :regexp #"(\d*\.\d+|\d+\.\d*|\d+)"},
  :non_second_primary_datetime_field
@@ -2074,9 +2192,35 @@
  {:tag :cat,
   :parsers
   ({:tag :nt, :keyword :time_value}
-   {:tag :opt, :parser {:tag :nt, :keyword :time_zone_interval}})},
+   {:tag :opt,
+    :parser
+    {:tag :alt,
+     :parsers
+     ({:tag :regexp, :regexp #"Z"}
+      {:tag :cat,
+       :parsers
+       ({:tag :nt, :keyword :time_zone_interval}
+        {:tag :opt,
+         :parser
+         {:tag :cat,
+          :parsers
+          ({:tag :regexp, :regexp #"\[", :hide true}
+           {:tag :nt, :keyword :time_zone_region}
+           {:tag :regexp, :regexp #"\]", :hide true})}})})}})},
  :grouping_column_reference
  {:tag :nt, :keyword :column_reference, :red {:reduction-type :raw}},
+ :set_session_variable_statement
+ {:tag :cat,
+  :parsers
+  ({:tag :string, :string "SET", :hide true}
+   {:tag :nt, :keyword :identifier}
+   {:tag :opt,
+    :parser
+    {:tag :alt,
+     :parsers
+     ({:tag :string, :string "TO"} {:tag :string, :string "="})},
+    :hide true}
+   {:tag :nt, :keyword :literal})},
  :xquery_option_flag
  {:tag :nt,
   :keyword :character_value_expression,
@@ -2548,6 +2692,16 @@
     ({:tag :string, :string "DOUBLE"}
      {:tag :string, :string "PRECISION"})})},
  :dynamic_parameter_specification {:tag :nt, :keyword :question_mark},
+ :set_time_zone_value
+ {:tag :cat,
+  :parsers
+  ({:tag :regexp, :regexp #"'", :hide true}
+   {:tag :alt,
+    :parsers
+    ({:tag :nt, :keyword :time_zone_interval}
+     {:tag :nt, :keyword :time_zone_region})}
+   {:tag :regexp, :regexp #"'", :hide true}),
+  :red {:reduction-type :raw}},
  :character_factor
  {:tag :nt, :keyword :character_primary, :red {:reduction-type :raw}},
  :collection_type
@@ -2755,6 +2909,10 @@
    {:tag :nt, :keyword :single_datetime_field})},
  :character_string_literal
  {:tag :plus, :parser {:tag :regexp, :regexp #"'(''|[^'])*'"}},
+ :session_characteristic
+ {:tag :nt,
+  :keyword :session_transaction_characteristics,
+  :red {:reduction-type :raw}},
  :table_or_query_name
  {:tag :nt, :keyword :table_name, :red {:reduction-type :raw}},
  :column_name
@@ -2986,6 +3144,12 @@
     ({:tag :nt, :keyword :left_paren, :hide true}
      {:tag :nt, :keyword :query_expression_body}
      {:tag :nt, :keyword :right_paren, :hide true})})},
+ :isolation_level
+ {:tag :cat,
+  :parsers
+  ({:tag :string, :string "ISOLATION"}
+   {:tag :string, :string "LEVEL"}
+   {:tag :nt, :keyword :level_of_isolation})},
  :binary_value_function
  {:tag :alt,
   :parsers
@@ -3089,6 +3253,22 @@
   :keyword :interval_absolute_value_function,
   :red {:reduction-type :raw}},
  :search_condition {:tag :nt, :keyword :boolean_value_expression},
+ :level_of_isolation
+ {:tag :alt,
+  :parsers
+  ({:tag :cat,
+    :parsers
+    ({:tag :string, :string "READ"}
+     {:tag :string, :string "UNCOMMITTED"})}
+   {:tag :cat,
+    :parsers
+    ({:tag :string, :string "READ"}
+     {:tag :string, :string "COMMITTED"})}
+   {:tag :cat,
+    :parsers
+    ({:tag :string, :string "REPEATABLE"}
+     {:tag :string, :string "READ"})}
+   {:tag :string, :string "SERIALIZABLE"})},
  :period_precedes_predicate
  {:tag :cat,
   :parsers
@@ -3120,6 +3300,14 @@
   ({:tag :nt, :keyword :set_target}
    {:tag :nt, :keyword :equals_operator}
    {:tag :nt, :keyword :update_source})},
+ :sql_transaction_statement
+ {:tag :alt,
+  :parsers
+  ({:tag :nt, :keyword :start_transaction_statement}
+   {:tag :nt, :keyword :set_transaction_statement}
+   {:tag :nt, :keyword :commit_statement}
+   {:tag :nt, :keyword :rollback_statement}),
+  :red {:reduction-type :raw}},
  :octet_length_expression
  {:tag :cat,
   :parsers
