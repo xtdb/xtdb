@@ -314,19 +314,19 @@
 
       (->> "uncorrelated subquery"
            (t/is (=plan-file
-                   "subquery-in-join-uncorellated-subquery"
+                   "subquery-in-join-uncorrelated-subquery"
                    (plan-sql "select foo.a from foo join bar on bar.c = (select foo.b from foo)"))))
 
       (->> "correlated subquery"
            (t/is (=plan-file
-                   "subquery-in-join-corellated-subquery"
+                   "subquery-in-join-correlated-subquery"
                    (plan-sql "select foo.a from foo join bar on bar.c in (select foo.b from foo where foo.a = bar.b)"))))
 
       ;; TODO unable to decorr, need to be able to pull the select over the max-1-row
       ;; TODO (JH) should be able to do this now
       (->> "correlated equalty subquery"
            (t/is (=plan-file
-                   "subquery-in-join-corellated-equality-subquery"
+                   "subquery-in-join-correlated-equality-subquery"
                     (plan-sql "select foo.a from foo join bar on bar.c = (select foo.b from foo where foo.a = bar.b)")))))))
 
 (t/deftest parameters-referenced-in-relation-test
