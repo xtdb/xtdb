@@ -151,8 +151,8 @@
                                        :else
                                        (do
                                          (aset match? 0 true)
-                                         (vw/append-rel dep-out-writer dep-rel)
-                                         (.add idxs 0)))))))
+                                         (.add idxs in-idx)
+                                         (vw/append-rel dep-out-writer dep-rel)))))))
 
             (when-not (aget match? 0)
               (.add idxs in-idx)

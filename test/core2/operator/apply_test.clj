@@ -70,10 +70,12 @@
         "NULL IN {}"))
 
 (t/deftest test-apply-single
-  (t/is (= [{:y 0, :a 1, :b 2}]
-           (tu/query-ra '[:apply :single-join {}
-                          [:table [{:y 0}]]
-                          [:table ?x]]
+  (t/is (= [{:y 0, :a nil, :b nil}
+            {:y 1, :a 1, :b 2}]
+           (tu/query-ra '[:apply :single-join {y ?y}
+                          [:table [{:y 0} {:y 1}]]
+                          [:select (= ?y a)
+                           [:table ?x]]]
                         {:params '{?x [{:a 1, :b 2}]}})))
 
   (t/is (thrown-with-msg? RuntimeException
