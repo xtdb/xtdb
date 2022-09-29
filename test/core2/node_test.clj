@@ -275,3 +275,15 @@ ORDER BY foo.application_time_start"
     (t/is (= [{:id 1, :kebab-case-col "kebab-case-value"}]
              (c2/sql-query tu/*node* "SELECT foo.id, foo.\"kebab-case-col\" FROM foo WHERE foo.\"kebab-case-col\" = 'kebab-case-value'"
                            {:basis {:tx !tx}})))))
+
+(t/deftest test-select-left-join-471
+  (let [!tx (c2/submit-tx tu/*node* [[:sql "INSERT INTO foo (id, x) VALUES (1, 1), (2, 2)"]
+                                     [:sql "INSERT INTO bar (id, x) VALUES (1, 1), (2, 3)"]])]
+    (t/is (= [{:foo 1, :x 1}, {:foo 2, :x 2}]
+             (c2/sql-query tu/*node* "SELECT foo.id foo, foo.x FROM foo LEFT JOIN bar USING (id, x)"
+                           {:basis {:tx !tx}})))
+
+    #_ ; FIXME #471
+    (t/is (= []
+             (c2/sql-query tu/*node* "SELECT foo.id foo, foo.x FROM foo LEFT JOIN bar USING (id) WHERE foo.x = bar.x"
+                           {:basis {:tx !tx}})))))
