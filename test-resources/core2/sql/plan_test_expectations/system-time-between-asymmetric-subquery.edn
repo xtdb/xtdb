@@ -2,21 +2,21 @@
  {x7 $column_1$}
  [:project
   [x7]
-  [:cross-join
+  [:single-join
+   []
    [:rename {_table x1} [:scan [{_table (= _table "t2")}]]]
-   [:max-1-row
-    [:project
-     [{x7 4}]
-     [:rename
-      {system_time_start x3, system_time_end x4, _table x5}
-      [:select
-       (<=
-        #time/date "3001-01-01"
-        #time/zoned-date-time "3002-01-01T00:00Z")
-       [:scan
-        [{system_time_start
-          (<=
-           system_time_start
-           #time/zoned-date-time "3002-01-01T00:00Z")}
-         {system_time_end (> system_time_end #time/date "3001-01-01")}
-         {_table (= _table "t1")}]]]]]]]]]
+   [:project
+    [{x7 4}]
+    [:rename
+     {system_time_start x3, system_time_end x4, _table x5}
+     [:select
+      (<=
+       #time/date "3001-01-01"
+       #time/zoned-date-time "3002-01-01T00:00Z")
+      [:scan
+       [{system_time_start
+         (<=
+          system_time_start
+          #time/zoned-date-time "3002-01-01T00:00Z")}
+        {system_time_end (> system_time_end #time/date "3001-01-01")}
+        {_table (= _table "t1")}]]]]]]]]

@@ -8,48 +8,49 @@
     [{x23 1}]
     [:project
      [{x22 (substring x1 1 2 true)} x2]
-     [:join
-      [(> x2 x16)]
-      [:anti-join
-       [{x3 x18}]
-       [:semi-join
-        [{(substring x1 1 2 true) x6}]
-        [:rename
-         {c_phone x1, c_acctbal x2, c_custkey x3, _table x4}
-         [:scan
-          [c_phone
-           c_acctbal
-           c_custkey
-           {_table (= _table "customer")}]]]
-        [:table
-         [x6]
-         [{x6 "13"}
-          {x6 "31"}
-          {x6 "23"}
-          {x6 "29"}
-          {x6 "30"}
-          {x6 "18"}
-          {x6 "17"}]]]
-       [:rename
-        {o_custkey x18, _table x19}
-        [:scan [o_custkey {_table (= _table "orders")}]]]]
-      [:max-1-row
-       [:group-by
-        [{x16 (avg x9)}]
+     [:anti-join
+      [{x3 x18}]
+      [:select
+       (> x2 x16)
+       [:single-join
+        []
         [:semi-join
-         [{(substring x10 1 2 true) x13}]
+         [{(substring x1 1 2 true) x6}]
          [:rename
-          {c_acctbal x9, c_phone x10, _table x11}
+          {c_phone x1, c_acctbal x2, c_custkey x3, _table x4}
           [:scan
-           [{c_acctbal (> c_acctbal 0.0)}
-            c_phone
+           [c_phone
+            c_acctbal
+            c_custkey
             {_table (= _table "customer")}]]]
          [:table
-          [x13]
-          [{x13 "13"}
-           {x13 "31"}
-           {x13 "23"}
-           {x13 "29"}
-           {x13 "30"}
-           {x13 "18"}
-           {x13 "17"}]]]]]]]]]]]
+          [x6]
+          [{x6 "13"}
+           {x6 "31"}
+           {x6 "23"}
+           {x6 "29"}
+           {x6 "30"}
+           {x6 "18"}
+           {x6 "17"}]]]
+        [:group-by
+         [{x16 (avg x9)}]
+         [:semi-join
+          [{(substring x10 1 2 true) x13}]
+          [:rename
+           {c_acctbal x9, c_phone x10, _table x11}
+           [:scan
+            [{c_acctbal (> c_acctbal 0.0)}
+             c_phone
+             {_table (= _table "customer")}]]]
+          [:table
+           [x13]
+           [{x13 "13"}
+            {x13 "31"}
+            {x13 "23"}
+            {x13 "29"}
+            {x13 "30"}
+            {x13 "18"}
+            {x13 "17"}]]]]]]
+      [:rename
+       {o_custkey x18, _table x19}
+       [:scan [o_custkey {_table (= _table "orders")}]]]]]]]]]

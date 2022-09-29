@@ -953,13 +953,10 @@
     (r/zmatch sq
       [:subquery ^:z qe]
       (let [subquery-plan [:rename (subquery-reference-symbol qe) (plan qe)]
-            column->param (correlated-column->param qe scope-id)
-            subquery-type (sem/subquery-type sq)]
+            column->param (correlated-column->param qe scope-id)]
         {:type :subquery
-         :plan (case (:type subquery-type)
-                 (:scalar_subquery
-                   :row_subquery) [:max-1-row subquery-plan]
-                 subquery-plan)
+         :subquery-type (:type (sem/subquery-type sq))
+         :plan subquery-plan
          :column->param column->param})
 
       [:exists_predicate _
@@ -1043,7 +1040,7 @@
 
    See (interpret-subquery) for 'subquery info'."
   [relation subquery-info]
-  (let [{:keys [type plan column->param sym predicate quantifier]} subquery-info]
+  (let [{:keys [type subquery-type plan column->param sym predicate quantifier]} subquery-info]
     (case type
       :quantified-comparison (if (= quantifier :some)
                                (build-apply
@@ -1064,6 +1061,11 @@
                                     relation plan)]))
 
       :exists (build-apply :cross-join column->param relation (wrap-with-exists sym plan))
+
+      :subquery (build-apply (case subquery-type
+                               (:scalar_subquery :row_subquery) :single-join
+                               :cross-join)
+                             column->param relation plan)
 
       (build-apply :cross-join column->param relation plan))))
 
@@ -1611,6 +1613,9 @@
       (relation-columns lhs)
       (->projected-column projection))
 
+    [:single-join _ lhs rhs]
+    (vec (mapcat relation-columns [lhs rhs]))
+
     [:rename prefix-or-columns relation]
     (if (symbol? prefix-or-columns)
       (vec (for [c (relation-columns relation)]
@@ -1666,9 +1671,6 @@
             (:cross-join :left-outer-join) (relation-columns dependent-relation)
             []))
         (vec))
-
-    [:max-1-row relation]
-    (relation-columns relation)
 
     [:arrow path]
     []
@@ -2223,16 +2225,16 @@
             mark-join-mode-projection-smap (when-let [[column _expr] (first (:mark-join mode))]
                                              {column (next-name)})
             new-smap (merge smap params mark-join-mode-projection-smap)]
-        (with-smap [:apply
-                    (w/postwalk-replace new-smap mode)
-                    (w/postwalk-replace new-smap columns)
-                    independent-relation
-                    (rename-walk new-smap dependent-relation)]
-          (if mark-join-mode-projection-smap
-            (merge (->smap independent-relation) mark-join-mode-projection-smap params)
-            (case mode
-              (:cross-join :left-outer-join) new-smap
-              (:semi-join :anti-join) (merge (->smap independent-relation) params)))))
+        (-> [:apply
+             (w/postwalk-replace new-smap mode)
+             (w/postwalk-replace new-smap columns)
+             independent-relation
+             (rename-walk new-smap dependent-relation)]
+            (with-smap (if mark-join-mode-projection-smap
+                         (merge (->smap independent-relation) mark-join-mode-projection-smap params)
+                         (case mode
+                           (:cross-join :left-outer-join :single-join) new-smap
+                           (:semi-join :anti-join) (merge (->smap independent-relation) params))))))
 
       [:unwind columns opts relation]
       (let [smap (->smap relation)
@@ -2245,9 +2247,6 @@
                             [smap {:ordinality-column (get smap ordinality-column)}])
                           [smap {}])]
         (with-smap [:unwind columns opts relation] smap))
-
-      [:max-1-row relation]
-      (with-smap [:max-1-row relation] (->smap relation))
 
       [:arrow path]
       (with-smap [:arrow path] {})
@@ -2361,6 +2360,8 @@
     (when (columns-in-both-relations? predicate lhs rhs)
       [:join (conj join-condition predicate) lhs rhs])
 
+    ;; TODO are we allowed to do this? seems like it'll move the selection before the
+    ;; outer-join null introductions
     [:select predicate
      [:left-outer-join join-condition lhs rhs]]
     ;;=>
@@ -2377,7 +2378,17 @@
      [:semi-join join-condition lhs rhs]]
     ;;=>
     (when (columns-in-both-relations? predicate lhs rhs)
-      [:semi-join (conj join-condition predicate) lhs rhs])))
+      [:semi-join (conj join-condition predicate) lhs rhs])
+
+    ;; TODO we'd like to move this select inside the single-join,
+    ;; but single-join is essentially an outer-join - so is this even allowed?
+
+    ;; [:select predicate
+    ;;  [:single-join join-condition lhs rhs]]
+    ;; ;;=>
+    ;; (when (columns-in-both-relations? predicate lhs rhs)
+    ;;   [:single-join (conj join-condition predicate) lhs rhs])
+    ))
 
 (defn columns-in-predicate-present-in-relation? [relation predicate]
   (set/superset? (set (relation-columns relation)) (expr-symbols predicate)))
@@ -2829,19 +2840,19 @@
   "R A× (G F1 E) = G columns(R),F' (R A⟕ E)"
   [z]
   (r/zmatch z
-    [:apply :cross-join columns independent-relation
-     [:max-1-row
-      [:project post-group-by-projection
-       [:group-by group-by-columns
-        dependent-relation]]]]
+    [:apply :single-join columns
+     independent-relation
+     [:project post-group-by-projection
+      [:group-by group-by-columns
+       dependent-relation]]]
     ;;=>
     (decorrelate-group-by-apply post-group-by-projection group-by-columns
                                 :left-outer-join columns independent-relation dependent-relation)
 
-    [:apply :cross-join columns independent-relation
-     [:max-1-row
-      [:group-by group-by-columns
-       dependent-relation]]]
+    [:apply :single-join columns
+     independent-relation
+     [:group-by group-by-columns
+      dependent-relation]]
     ;;=>
     (decorrelate-group-by-apply nil group-by-columns
                                 :left-outer-join columns independent-relation dependent-relation)))
@@ -2869,32 +2880,15 @@
          (mapv (fn [join-clause] (or (as-equi-condition join-clause lhs rhs) join-clause))))))
 
 (defn- rewrite-equals-predicates-in-join-as-equi-join-map [z]
-  (r/zmatch z
-    [:join join-expressions lhs rhs]
-    ;;=>
-    (let [new-join-expressions (optimize-join-expression join-expressions lhs rhs)]
-      (when (not= new-join-expressions join-expressions)
-        [:join new-join-expressions lhs rhs]))
+  (r/zcase z
+    (:join :semi-join :anti-join :left-outer-join :single-join)
+    (r/zmatch z
+      [join-type join-expressions lhs rhs]
+      (let [new-join-expressions (optimize-join-expression join-expressions lhs rhs)]
+        (when (not= new-join-expressions join-expressions)
+          [join-type new-join-expressions lhs rhs])))
 
-    [:semi-join join-expressions lhs rhs]
-    ;;=>
-    (let [new-join-expressions (optimize-join-expression join-expressions lhs rhs)]
-      (when (not= new-join-expressions join-expressions)
-        [:semi-join new-join-expressions lhs rhs]))
-
-
-    [:anti-join join-expressions lhs rhs]
-    ;;=>
-    (let [new-join-expressions (optimize-join-expression join-expressions lhs rhs)]
-      (when (not= new-join-expressions join-expressions)
-        [:anti-join new-join-expressions lhs rhs]))
-
-
-    [:left-outer-join join-expressions lhs rhs]
-    ;;=>
-    (let [new-join-expressions (optimize-join-expression join-expressions lhs rhs)]
-      (when (not= new-join-expressions join-expressions)
-        [:left-outer-join new-join-expressions lhs rhs]))))
+    nil))
 
 (defn remove-redundant-projects [z]
   ;; assumes you wont ever have a project like [] whos job is to return an empty rel

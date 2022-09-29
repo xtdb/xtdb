@@ -5,7 +5,7 @@
   [:select
    (= x4 x8)
    [:apply
-    :cross-join
+    :single-join
     {x5 ?x12}
     [:join
      []
@@ -13,9 +13,8 @@
      [:rename
       {c x4, b x5, _table x6}
       [:scan [c b {_table (= _table "bar")}]]]]
-    [:max-1-row
-     [:project
-      [x8]
-      [:rename
-       {b x8, a x9, _table x10}
-       [:scan [b {a (= a ?x12)} {_table (= _table "foo")}]]]]]]]]]
+    [:project
+     [x8]
+     [:rename
+      {b x8, a x9, _table x10}
+      [:scan [b {a (= a ?x12)} {_table (= _table "foo")}]]]]]]]]

@@ -2,10 +2,11 @@
  {x1 some_column}
  [:project
   [x1]
-  [:join
-   [{x1 x7}]
-   [:rename {y x1, _table x2} [:scan [y {_table (= _table "x")}]]]
-   [:max-1-row
+  [:select
+   (= x1 x7)
+   [:single-join
+    []
+    [:rename {y x1, _table x2} [:scan [y {_table (= _table "x")}]]]
     [:group-by
      [{x7 (max x4)}]
      [:rename

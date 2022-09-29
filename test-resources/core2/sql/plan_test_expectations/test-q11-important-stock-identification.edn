@@ -4,39 +4,40 @@
   [[x17 {:direction :desc, :null-ordering :nulls-last}]]
   [:project
    [x1 x17]
-   [:join
-    [(> x18 x36)]
-    [:group-by
-     [x1 {x17 (sum x15)} {x18 (sum x16)}]
-     [:map
-      [{x15 (* x2 x3)} {x16 (* x2 x3)}]
-      [:join
-       [{x8 x11}]
+   [:select
+    (> x18 x36)
+    [:single-join
+     []
+     [:group-by
+      [x1 {x17 (sum x15)} {x18 (sum x16)}]
+      [:map
+       [{x15 (* x2 x3)} {x16 (* x2 x3)}]
        [:join
-        [{x4 x7}]
+        [{x8 x11}]
+        [:join
+         [{x4 x7}]
+         [:rename
+          {ps_partkey x1,
+           ps_supplycost x2,
+           ps_availqty x3,
+           ps_suppkey x4,
+           _table x5}
+          [:scan
+           [ps_partkey
+            ps_supplycost
+            ps_availqty
+            ps_suppkey
+            {_table (= _table "partsupp")}]]]
+         [:rename
+          {s_suppkey x7, s_nationkey x8, _table x9}
+          [:scan
+           [s_suppkey s_nationkey {_table (= _table "supplier")}]]]]
         [:rename
-         {ps_partkey x1,
-          ps_supplycost x2,
-          ps_availqty x3,
-          ps_suppkey x4,
-          _table x5}
+         {n_nationkey x11, n_name x12, _table x13}
          [:scan
-          [ps_partkey
-           ps_supplycost
-           ps_availqty
-           ps_suppkey
-           {_table (= _table "partsupp")}]]]
-        [:rename
-         {s_suppkey x7, s_nationkey x8, _table x9}
-         [:scan
-          [s_suppkey s_nationkey {_table (= _table "supplier")}]]]]
-       [:rename
-        {n_nationkey x11, n_name x12, _table x13}
-        [:scan
-         [n_nationkey
-          {n_name (= n_name "GERMANY")}
-          {_table (= _table "nation")}]]]]]]
-    [:max-1-row
+          [n_nationkey
+           {n_name (= n_name "GERMANY")}
+           {_table (= _table "nation")}]]]]]]
      [:project
       [{x36 (* x34 1.0E-4)}]
       [:group-by

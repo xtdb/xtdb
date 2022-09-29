@@ -322,7 +322,9 @@
                    "subquery-in-join-corellated-subquery"
                    (plan-sql "select foo.a from foo join bar on bar.c in (select foo.b from foo where foo.a = bar.b)"))))
 
-      (->> "correlated equalty subquery" ;;TODO unable to decorr, need to be able to pull the select over the max-1-row
+      ;; TODO unable to decorr, need to be able to pull the select over the max-1-row
+      ;; TODO (JH) should be able to do this now
+      (->> "correlated equalty subquery"
            (t/is (=plan-file
                    "subquery-in-join-corellated-equality-subquery"
                     (plan-sql "select foo.a from foo join bar on bar.c = (select foo.b from foo where foo.a = bar.b)")))))))

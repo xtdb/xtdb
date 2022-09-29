@@ -2,13 +2,14 @@
  {x1 a}
  [:project
   [x1]
-  [:join
-   [{x4 x7}]
-   [:join
+  [:select
+   (= x4 x7)
+   [:single-join
     []
-    [:rename {a x1, _table x2} [:scan [a {_table (= _table "foo")}]]]
-    [:rename {c x4, _table x5} [:scan [c {_table (= _table "bar")}]]]]
-   [:max-1-row
+    [:join
+     []
+     [:rename {a x1, _table x2} [:scan [a {_table (= _table "foo")}]]]
+     [:rename {c x4, _table x5} [:scan [c {_table (= _table "bar")}]]]]
     [:project
      [x7]
      [:rename

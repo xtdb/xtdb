@@ -2,13 +2,13 @@
  {x9 some_column}
  [:project
   [{x9 (= 1 x7)}]
-  [:cross-join
+  [:single-join
+   []
    [:rename
     {y x1, _table x2}
     [:scan [{y (= y 1)} {_table (= _table "x")}]]]
-   [:max-1-row
-    [:group-by
-     [{x7 (max x4)}]
-     [:rename
-      {bar x4, _table x5}
-      [:scan [bar {_table (= _table "foo")}]]]]]]]]
+   [:group-by
+    [{x7 (max x4)}]
+    [:rename
+     {bar x4, _table x5}
+     [:scan [bar {_table (= _table "foo")}]]]]]]]

@@ -9,7 +9,6 @@
             core2.operator.csv
             core2.operator.group-by
             core2.operator.join
-            core2.operator.max-1-row
             core2.operator.order-by
             core2.operator.project
             core2.operator.rename

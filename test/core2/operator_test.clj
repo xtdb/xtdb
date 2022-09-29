@@ -284,26 +284,6 @@
                         {:params '{?x [{:a 1 :b [1 2]} {:a 2 :b [3 4 5]}]}}))
         "with ordinality"))
 
-(t/deftest test-max-1-row-operator
-  (t/is (= [{:a 1, :b 2}]
-           (tu/query-ra '[:max-1-row [:table ?x]]
-                        {:params '{?x [{:a 1, :b 2}]}})))
-
-  (t/is (thrown-with-msg? RuntimeException
-                          #"cardinality violation"
-                          (tu/query-ra '[:max-1-row [:table ?x]]
-                                       {:params '{?x [{:a 1, :b 2} {:a 3, :b 4}]}}))
-        "throws on cardinality > 1")
-
-  (t/testing "returns null on empty"
-    (t/is (= [{}]
-             (tu/query-ra '[:max-1-row [:table ?x]]
-                          {:params '{?x []}})))
-
-    (t/is (= [{:a nil, :b nil}]
-             (tu/query-ra '[:max-1-row [:table [a b] ?x]]
-                          {:params '{?x []}})))))
-
 (t/deftest test-project-row-number
   (t/is (= [{:a 12, :$row-num 1}, {:a 0, :$row-num 2}, {:a 100, :$row-num 3}]
            (tu/query-ra '[:project [a {$row-num (row-number)}]
