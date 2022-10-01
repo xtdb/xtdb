@@ -58,7 +58,7 @@
       (future-cancel fut))
 
     (cond
-      ingester-error (throw (Exception. "Transaction ingester aborted." ingester-error))
+      ingester-error (throw (Exception. (str "Transaction ingester aborted on tx " (pr-str awaited-tx)) ingester-error))
       timeout? (throw (TimeoutException. (str "Timed out waiting for: " (pr-str awaited-tx)
                                               ", index has: " (pr-str (db/latest-completed-tx tx-ingester)))))
       node-closing? (throw (InterruptedException. "Node closed."))
