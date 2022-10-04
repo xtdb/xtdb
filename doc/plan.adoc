@@ -1,6 +1,6 @@
 = Core2 Plan
 
-== Must, 2022 Q4, The Core
+== Must, 2022 Q4, Solidify the Core for Single Node PoC Deployment.
 
 * Full nested SQL and Arrow type support in expression engine.
 * Strict SQL: all comparisons, casts and operations needs to make sense, but can throw clear errors (UX).
@@ -14,7 +14,7 @@
 * Keep pgwire working, but we make clear it's not the supported driver.
 * Documentation and web.
 
-== Should, 2023 Q1, DBaaS
+== Should, 2023 Q1, DBaaS, Scaling and Separate Storage and Compute.
 
 * DBaaS on AWS. Exactly what this means is out-of-scope for this core plan, but relies on capabilities listed here.
 * HTAP benchmarks to guide work.
@@ -32,7 +32,7 @@
 * ARROW_TABLE extended to support Parquet, JSON etc.
 * HTTP API.
 
-== Could, 2023 Q2, SQL features
+== Could, 2023 Q2, Continuous Delivery of (SQL) Features to DBaaS.
 
 * Data migration from Core1. Can mainly be grown via existing Core1 projects. Build up helper repo.
 * Bespoke consoles and dashboards. Needs analysis before embarking on, work sits under DBaaS team.
