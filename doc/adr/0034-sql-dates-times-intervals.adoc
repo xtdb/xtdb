@@ -1,0 +1,203 @@
+= 34. Of Dates, Times and Intervals
+
+Date: 2022-05-16, expanded 2022-10-04
+
+== Status
+
+Proposed
+
+== Context
+
+SQL, Arrow (Java) and Java itself all have different ways of representing dates/intervals.
+We need to support SQL as an external API, but store/manipulate values in Arrow, and (realistically) use Java's time APIs for non-trivial calculations.
+
+In practice, in part due to our decision to initially go with a PGwire driver, in part just because of our relative familiarity with it, we often use Postgres as a source of inspiration - but we're aware that Postgres may differ from the spec here.
+Where possible, we'll stick to the SQL:2011 spec, but if it is pragmatic to deviate slightly, we may well want to deviate towards what Postgres does rather than try to forge our own path.
+
+We also want to support as much external Arrow as is reasonably practicable.
+
+=== SQL (/Postgres)
+
+See the following areas in the spec:
+
+* §4.6 Datetimes & Intervals (p34)
+* §6.13 Casts (p234)
+* §6.33 Interval value expressions (p313)
+* §8.2 Comparison predicate (p433)
+
+Postgres support is defined here:
+
+* https://www.postgresql.org/docs/current/datatype-datetime.html[data types]
+* https://www.postgresql.org/docs/current/functions-datetime.html[functions]
+
+There are three date-time types in SQL:2011:
+
+* Date
+* Time (with/without TZ)
+* Timestamp (w/wo TZ)
+
+TZs in vanilla SQL are just offsets: `±HH:MM`.
+Postgres https://www.postgresql.org/docs/current/datatype-datetime.html#DATATYPE-TIMEZONES[additionally supports] zone regions, and explicitly notes the reasons for adding to the spec.
+
+Regarding conversion, from p36:
+
+* Whenever a time w/ TZ is to be implicitly derived from one without, SQL assumes the one without is expressed local to the session's current TZ.
+* Conversely, whenever a datetime value w/o TZ is to be implicitly derived from one with, SQL assumes the value with time zone to be UTC, adds the time zone displacement to it to give local time, and the result, without any time zone displacement, is local.
+
+Times/timestamps also have a 'second precision' parameter, which determines how many fractional digits the seconds field should contain.
+
+The SQL spec defines INTERVAL types which denote both calendar periods of time (like `java.time.Period`) and something like an absolute duration of time, such as a quantity of seconds in other instances.
+There are two classes of INTERVAL in SQL:
+
+* 'year-month': which can have fields for years and months
+* 'day-time': which can contain days, hours, minutes and seconds with a fractional component.
+
+* You cannot compare a 'year-month' interval to a 'day-time' interval - they behave as if different types.
+* Comparisons of year-month intervals assume 1y = 12m
+* Comparisons of day-time intervals assume 1d = 24h
+
+Postgres https://www.postgresql.org/docs/current/datatype-datetime.html#DATATYPE-INTERVAL-INPUT[additionally supports] intervals which span both - these can be input using ISO8601 standard `P1M2DT3H4M5S` syntax.
+Internally, it stores intervals as months, days and microseconds.
+
+Operations (p40):
+
+* Datetime – Datetime -> Interval
+** Syntax: `(date1 - date2) interval_qualifier`
+*** NB: yes, both the parens and the IQ are mandatory in the spec.
+*** `interval_qualifier` (IQ) specified in §10.1, p565.
+It either has one or two parts: `YEAR`, `MONTH`, but also `YEAR TO MONTH`, `DAY TO SECOND` etc.
+You can't cross the month -> day boundary, in order to preserve the year-month and day-time distinction - i.e. the above two are permitted; `YEAR TO DAY` isn't.
+** Behaviour specified in §6.33 (interval value expression), general rule 7, p316.
+Roughly speaking:
+*** Convert date-times w/ TZ to date-times w/o TZ (using session-local TZ).
+*** Convert date-times to a number using the least significant field from the interval qualifier - e.g. if it's `DAY TO MINUTE` then convert it to minutes since the epoch.
+*** Then convert to an interval using the specified interval qualifier (cast, §6.13, general rule 19, p247) - using 1d=24h etc normalisation rules.
+*** So, in `Europe/London`, `(TIMESTAMPTZ '2022-10-31' - TIMESTAMPTZ '2022-10-29') HOUR` should be `PT49H`, in theory, `DAY TO HOUR` would be `P2D1H` (because of the clocks going back).
+*** Adding these back on to '2022-10-29' give `2022-10-31T00:00:00+00:00` and `2022-10-31T01:00:00+00:00` respectively, because addition is done field-wise.
++
+In theory, this is up to the user - maybe they'll pick the IQ based on their desired semantics.
++
+Open question: do we want to preserve the `y = x + (y - x)` equivalence?
+** This also forms the basis of the date-time boolean comparisons (`=`, `<` etc) in §8.2 (general rule #6, p439) - e.g. `dt1 = dt2` iff `dt1 - dt2 = INTERVAL '0'`; `dt1 < dt2` iff `dt1 - dt2 < INTERVAL '0'`, etc.
+* Datetime + | – Interval -> Datetime
+** Specified in §6.31, p308
+** Arithmetic is performed field-wise from the interval - e.g. `P1DT4H` should first add one day, then 4 hours.
+* Interval + Datetime -> Datetime
+* Interval + | – Interval -> Interval
+** Similarly to date-time, interval subtraction determines comparisons - again §8.2, this time general rule #7.
+* Interval * | / Numeric -> Interval
+* Numeric * Interval -> Interval
+
+In Postgres:
+
+* They seem to not mandate the parens in `datetime - datetime`, nor does it even _allow_ the IQ - instead returning a day-time interval.
+* `date - date` returns an integer, not an interval
+* `timestamp - timestamp` returns a day-time interval, converting 24h to 1d
+* `justify_interval` and friends treat 1m=30d - so 1y=360d. Fun.
+* They also have an `age` built-in function which returns years, months, days, time.
+
+=== Arrow
+
+Arrow has the following types for date-times, specified in https://github.com/apache/arrow/blob/master/format/Schema.fbs[Schema.fbs]:
+
+* Date: local, parameterised by storage granularity ('day' or 'milli').
+** No extra information in 'millis' - it's defined to be a multiple of 86400.
+* Time: local, parameterised by storage granularity (seconds through nanos)
+** N.B.: no equivalent to SQL's `time w/ tz` - see https://github.com/xtdb/core2/issues/323[#323]
+* Timestamp: w/ and w/o tz, with storage granularity (seconds through nanos)
+** TZ is a nullable param on the type: if null, it's assumed to be local.
+** Value is units-since-epoch regardless of the TZ value.
+** Schema.fbs has guidance for mapping from other libraries to Arrow.
+  particularly, 'instants' should be modelled as TS with TZ 'UTC': 'there is some ambiguity between an instant and a zoned date-time with the UTC timezone - both of these are stored the same in Arrow.'
+
+Regarding intervals: Arrow has 'Interval' and 'Duration' types.
+
+'Durations' are only parameterised by storage granularity (seconds through nanos), whereas intervals have three sub-types:
+
+* `YEAR_MONTH`: an int32 containing months
+* `DAY_TIME`: an int32 containing days, and an int32 containing millis.
+** 'Support for this IntervalUnit is not required for full Arrow compatibility'
+* `MONTH_DAY_NANO`: an int32 for months, int32 for days and int64 for nanos.
+** This one was added more recently - hence the note on `DAY_TIME`, I suspect?
+
+=== Java
+
+I don't think it's too controversial to say that Java 8's `java.time` package introduced _vastly_ superior time support to what had existed in Java for the ~20 years prior :P.
+
+The below is simplified - partly intentionally, because it's complex; partly because no doubt I've missed a nuance or two.
+
+* Date-times (amongst others): `Instant`; `LocalDate`, `LocalTime`, and `LocalDateTime`; `ZonedDateTime` and `OffsetDateTime`; and also `OffsetTime`.
+** ZDT and ODT both keep an LDT, but differ in their TZs - Java has `ZoneId`, `ZoneOffset` and `ZoneRegion`.
+`ZoneOffset` is `±HH:MM`, `ZoneRegion` is (e.g.) `Europe/London`, `ZoneId` is the supertype of the two.
+(Confusingly, `ZoneId` also supports zones like `BST`, which are then resolved to an offset.)
++
+ODT/OT keep a `ZoneOffset`; ZDT keeps both a `ZoneId` and a `ZoneOffset` - this is because `ZoneId` carries more information than a `ZoneOffset`, but `ZoneId` alone may be ambiguous (during clock changes, for example).
++
+(Thankfully, constructing a ZDT from an Instant and a ZoneId is unambiguous - 'thankfully' because this is what Arrow happens to store.)
+* Intervals: `Period` (years, months + days) and `Duration` (seconds + nanos) - these are not comparable.
+** Periods are not equivalent unless all three fields match exactly - i.e. there's no implicit conversion between years, months and days.
+** Postgres have a specific `PGInterval` class in JDBC which can handle both
+
+== Decisions
+
+Right, so nothing quite maps nicely between SQL, Arrow and Java.
+The scope of our decisions should consider:
+
+* We have to parse and plan a SQL query down to our logical plan operators
+* Those operators are then 'typed' according to our type-system.
+The type-system is Arrow-oriented - it aims to reflect what's possible in Arrow vectors, but also takes our own requirements into account (e.g. that equality between structs shouldn't depend on the ordering of their keys, nor should equality between unions depend on the ordering of its legs - which meant we couldn't use Arrow's `Field` out of the box.)
+* That logical plan contains expressions that are executed by the expression engine - these are polymorphic, but must statically define a single (XT) return type for a given array of (XT) parameter types.
+
+So, broadly speaking:
+
+* By the time we're in our backend, we're talking Arrow rather than SQL or Java at runtime - so the SQL will need to compile to something expressible in Arrow.
+* We can convert from Arrow to Java and back again in the expression engine if required to do so (e.g. for operations that need to take TZ rules into account)
+* Parameters are input as Java primitives/objects, and results returned as the same - so there's a conversion to/from Arrow at the boundary.
+
+Decisions, then:
+
+* We'll use micros by default, where no other precision is specified - this gives a good tradeoff between resolution and range (292 million years in 64 bits).
+
+=== SQL/Arrow
+
+
+* We'll respect the 'timestamps w/o TZ are assumed to be in the session-local TZ on conversion' rule in the SQL spec - in casts, operations, and comparisons.
+* SQL timestamp w/ TZ literals are represented as `[:timestamp-tz :micro "<session-tz>"]` in Arrow if they do not have an explicit TZ.
+* We'll additionally support ISO8601 timestamp formats (e.g. `2022-10-04T14:00:00Z`)
+* We'll additionally support TZ regions (e.g. `Europe/London`)
+* SQL interval literals become Arrow intervals - either YearMonth or MonthDayNano (the latter to preserve microsecond precision)
+** We could consider additionally supporting intervals with longer ranges (e.g. `YEAR TO SECOND`) which would return MonthDayNano intervals
+* If a user does request a date subtraction with an interval qualifier, we will return YearMonth or MonthDayNano as appropriate, depending on the lower bound of the qualifier.
+* We could consider additionally supporting built-in functions to convert between interval types/intervals + durations using approximate conversions - this would make it an explicit choice of the user.
+
+==== Consequences
+
+* We currently return an Arrow Duration from various `dt - dt` - to err on the side of SQL compatibility, this should return an Interval instead.
+* The 'timestamps w/o TZ are interpreted as session-local TZ' assumption means that queries may return different results depending on the session TZ - this means that the session TZ should be thought of as a parameter to the query for referential transparency purposes.
+
+=== Arrow
+
+* If we are asked to operate on date-times/intervals/durations with different granularities, we will return the most granular of the input units, throwing on overflow, to not lose precision.
+* Arrow durations are trivially comparable with each other.
+* Arrow intervals are comparable under the following rules:
+** YearMonth intervals should be comparable within their types, using `1y = 12m`
+** DayTime and MonthDayNano intervals are not comparable - either with themselves or other intervals.
+In doing so, we are deciding not to introduce approximations like 1d=24h, 30d=1m etc.
+* YearMonth and DayTime intervals can both be converted to MonthDayNano, but not the inverse.
+
+==== Consequences
+
+* To use intervals like `1 YEAR` in comparisons, users will need to adapt their queries: instead of `dt2 - dt1 > 1 YEAR` (from https://github.com/xtdb/core2/issues/430[#430]), they should instead use `dt1 + 1 YEAR < dt2`.
+* It won't be possible to create DayTime intervals in XT - we'll still support operations using them, but this is only for the purpose of better supporting external Arrow data.
+
+=== Arrow/Java
+
+* `j.t.Period` params should become Arrow's Interval MonthDayNano (1y=12m, zero nanos)
+* `j.t.Duration` params become Arrow Durations.
+* Arrow timestamps w/ TZ become ZDTs (not ODTs).
+* `j.t.Instant` params become Arrow timestamps w/ TZ 'UTC' - these are then roundtripped back to Java as UTC ZDTs.
+* Arrow's Interval DayTime and MonthDayNano are returned as `org.apache.arrow.vector.PeriodDuration` objects.
+
+==== Consequences
+
+* If users supply a `Period` object as a parameter (converted to Arrow Interval MonthDayNano) they will likely need to (e.g.) add it to a datetime to do anything useful with it.
