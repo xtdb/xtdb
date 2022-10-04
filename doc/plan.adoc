@@ -12,6 +12,7 @@
 * Minimal authentication via SSL, AWS-level network access etc. Nothing we directly build. No authorisation or roles.
 * Basic INFORMATION_SCHEMA support (FlightSQL overlap), can be done as objects and not introduce SQL schema.
 * Keep pgwire working, but we make clear it's not the supported driver.
+* Documentation and web.
 
 == Should, 2023 Q1, DBaaS
 
