@@ -46,7 +46,7 @@
 * Light and Adaptive Indexing. Good caching is step one, this is the next step.
 * More planner work, will be incremental and on-going.
 * Add non-Kafka transaction logs.
-* Object store eviction.
+* Object store erasure.
 * "CREATE ROLE" - may not use SQL standard, but authorisation inside the DB. Needs RnD.
 
 == Won't, 2023 Q3 and beyond
