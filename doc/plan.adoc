@@ -51,6 +51,7 @@
 
 == Won't, 2023 Q3 and beyond
 
+* Views with gradual schema to interface with tooling.
 * Consensus-based transaction log, removing the need for all nodes to redo all work.
 * SQL:2023/PGQ: property graph queries.
 * Distributed queries.
