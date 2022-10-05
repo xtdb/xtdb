@@ -305,8 +305,7 @@
         env (env-create)
         mapsize-lock (StampedLock.)]
     (try
-      (when env-set-maxreaders
-        (env-set-maxreaders env env-maxreaders))
+      (env-set-maxreaders env env-maxreaders)
       (env-open env db-dir env-flags)
       (when env-mapsize
         (env-set-mapsize env env-mapsize))
