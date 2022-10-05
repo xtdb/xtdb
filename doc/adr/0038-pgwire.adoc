@@ -4,7 +4,7 @@ Date: 2022-06-14
 
 == Status
 
-Proposed
+Accepted
 
 == Context
 
@@ -134,3 +134,9 @@ You can imagine constructing a 'tagged box' object, who supplies a type descript
 Such an object can be unpacked by a library function into an appropriate native representation of the value.
 
 The main issue with this approach seems to be that for a good beginner experience, somebody is going to have to write extensions for all major platforms and frameworks to work with our custom type. This is particularly disappointing as pgwire itself is desirable precisely because it gives us out-of-the-box reach to many platforms with only a small amount of work ourselves (if any) to support them.
+
+== Decision
+
+We went with option B in the end.
+
+We are currently in the process of discussing the future of the PGwire driver - it may well be superseded by Arrow Flight SQL

@@ -4,7 +4,7 @@ Date: 2021-10-06
 
 == Status
 
-Proposed
+Superseded - see https://github.com/xtdb/core2/issues/127[#127].
 
 == Context
 

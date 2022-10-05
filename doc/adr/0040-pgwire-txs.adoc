@@ -4,7 +4,7 @@ Date: 2022-08-01
 
 == Status
 
-Proposed
+Accepted
 
 == Context
 
