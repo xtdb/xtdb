@@ -11,6 +11,13 @@
 
   :scm {:dir "../.."}
 
+  :java-source-paths ["src"]
+  :javac-options ["-source" "8" "-target" "8"
+                  "-XDignore.symbol.file"
+                  "-Xlint:all,-options,-path"
+                  "-Werror"
+                  "-proc:none"]
+
   :dependencies [[org.clojure/clojure]
                  [org.clojure/tools.logging]
                  [com.xtdb/xtdb-core]
