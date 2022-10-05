@@ -14,13 +14,12 @@
            java.io.Closeable
            [java.nio.file Files Path]
            java.nio.file.attribute.FileAttribute
-           java.util.concurrent.locks.StampedLock
-           java.util.concurrent.TimeUnit
            org.agrona.concurrent.UnsafeBuffer
            org.agrona.ExpandableDirectByteBuffer
            [org.lwjgl.system MemoryStack MemoryUtil]
            [org.lwjgl.util.lmdb LMDB MDBEnvInfo MDBStat MDBVal]
-           (clojure.lang IDeref)))
+           (clojure.lang IDeref)
+           (xtdb MapResizeSync)))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -34,10 +33,29 @@
 (defn- env-set-mapsize [^long env ^long size]
   (success? (LMDB/mdb_env_set_mapsize env size)))
 
-(defn- acquire-write-lock ^long [^StampedLock mapsize-lock]
-  (let [stamp (.tryWriteLock mapsize-lock 120 TimeUnit/SECONDS)]
-    (assert (pos? stamp) "LMDB write lock timeout")
-    stamp))
+(defn new-mapsize-sync
+  "Provides concurrency control to LMDB access to avoid races/segfault when map resizes are required.
+
+  Occasionally writes to LMDB will encounter a 'MDB_MAP_FULL' error, xtdb responds by increasing the size of the lmdb map, retrying the write.
+  This can only be done if there are no open transactions, otherwise the JVM will segfault.
+
+  We track open transactions by acquiring/releasing 'open transaction permits' via (acquire-open-transaction-permit sync), (release-open-transaction-permit sync).
+
+  When a resize is needed the (kv/store) call will acquire an exclusive (resize) lock, ensuring no concurrent transactions,
+  new transactions must wait (block) for the resize to finish. See calls of (acquire-map-resize-permit sync), (release-map-resize-permit sync)
+
+  The reason over StampedLock (the original control mechanism) is to provide a fairness/barging policy so that writers are prioritised over readers, and that older readers get a chance to run if under high contention.
+  We cannot use a ReentrantReadWriteLock as open transactions lifetimes are not tied to any particular thread.
+
+  NOTE: resize permits must be released on acquiring thread, transaction permits can be released on any thread."
+  ^MapResizeSync []
+  (MapResizeSync.))
+
+;; see new-mapsize-sync def above
+(defn- acquire-map-resize-permit [^MapResizeSync mapsize-sync] (.acquireInterruptibly mapsize-sync -1))
+(defn- release-map-resize-permit [^MapResizeSync mapsize-sync] (.release mapsize-sync -1))
+(defn- acquire-open-transaction-permit [^MapResizeSync mapsize-sync] (.acquireSharedInterruptibly mapsize-sync 1))
+(defn- release-open-transaction-permit [^MapResizeSync mapsize-sync] (.releaseShared mapsize-sync 1))
 
 ;; TODO: Note, this has to be done when there are no open
 ;; transactions. Also, when file reached 4Gb it crashed. MDB_WRITEMAP
@@ -76,13 +94,13 @@
 (defn- new-transaction-no-lock ^Closeable [env flags]
   (closeable (txn-begin env flags) txn-close))
 
-(defn- new-transaction-owning-lock ^Closeable [^StampedLock mapsize-lock env flags]
-  (let [stamp (.readLock mapsize-lock)]
-    (try
-      (closeable (txn-begin env flags) #(try (txn-close %) (finally (.unlock mapsize-lock stamp))))
-      (catch Throwable t
-        (.unlock mapsize-lock stamp)
-        (throw t)))))
+(defn- new-transaction-owning-lock ^Closeable [mapsize-sync env flags]
+  (acquire-open-transaction-permit mapsize-sync)
+  (try
+    (closeable (txn-begin env flags) #(try (txn-close %) (finally (release-open-transaction-permit mapsize-sync))))
+    (catch Throwable t
+      (release-open-transaction-permit mapsize-sync)
+      (throw t))))
 
 (defn- env-create []
   (with-open [stack (MemoryStack/stackPush)]
@@ -112,9 +130,9 @@
     (.mkdirs file)
     (success? (LMDB/mdb_env_copy env (.getAbsolutePath file)))))
 
-(defn- dbi-open [mapsize-lock ^long env]
+(defn- dbi-open [mapsize-sync ^long env]
   (with-open [stack (MemoryStack/stackPush)
-              tx (new-transaction-owning-lock mapsize-lock env LMDB/MDB_RDONLY)]
+              tx (new-transaction-owning-lock mapsize-sync env LMDB/MDB_RDONLY)]
     (let [^long txn @tx
           ip (.mallocInt stack 1)
           ^CharSequence name nil]
@@ -135,9 +153,12 @@
       (success? rc)
       (UnsafeBuffer. (.mv_data kv) 0 (.mv_size kv)))))
 
-(defn- cursor-put [env dbi kvs]
+(defn- cursor-put [env dbi mapsize-sync kvs]
   (with-open [stack (MemoryStack/stackPush)
-              tx (new-transaction-no-lock env 0)
+              ;; if we are writing under an exclusive lock during a map resize, mapsize-sync is nil.
+              tx (if mapsize-sync
+                   (new-transaction-owning-lock mapsize-sync env 0)
+                   (new-transaction-no-lock env 0))
               cursor (closeable (cursor-open dbi @tx) cursor-close)]
     (let [kv (MDBVal/malloc stack)
           dv (MDBVal/malloc stack)
@@ -214,9 +235,9 @@
 (def ^:dynamic ^{:tag 'long} *mapsize-increase-factor* 1)
 (def ^:const max-mapsize-increase-factor 32)
 
-(defn- put-if-map-not-full [env dbi kvs]
+(defn- put-if-map-not-full [env dbi mapsize-sync kvs]
   (try
-    (cursor-put env dbi kvs)
+    (cursor-put env dbi mapsize-sync kvs)
     true
     (catch ExceptionInfo e
       (if (= LMDB/MDB_MAP_FULL (:error (ex-data e)))
@@ -224,7 +245,8 @@
         (throw e)))))
 
 (defn- put-resizing-if-map-full [env dbi kvs]
-  (when-not (put-if-map-not-full env dbi kvs)
+  ;; assume we have exclusive access if resizing, nil signals to the (put-if-map-not-full) to use no lock.
+  (when-not (put-if-map-not-full env dbi nil kvs)
     (binding [*mapsize-increase-factor* (* 2 *mapsize-increase-factor*)]
       (when (> *mapsize-increase-factor* max-mapsize-increase-factor)
         (throw (IllegalStateException. "Too large size of key values to store at once.")))
@@ -232,14 +254,19 @@
       ;; non-tail recur to carry binding for max-mapsize-increase error
       (put-resizing-if-map-full env dbi kvs))))
 
-(defrecord LMDBKv [db-dir env env-flags dbi ^StampedLock mapsize-lock sync? cp-job]
+(defrecord LMDBKv [db-dir env env-flags dbi mapsize-sync sync? cp-job]
   kv/KvStore
   (store [this kvs]
-    (with-open [_ (closeable (acquire-write-lock mapsize-lock) #(.unlock mapsize-lock %))]
-      (put-resizing-if-map-full env dbi kvs)))
+    (when-not (put-if-map-not-full env dbi mapsize-sync kvs)
+      ;; on MDB_MAP_FULL we must ensure no open transactions to resize, or segfault - see (new-mapsize-sync)
+      (acquire-map-resize-permit mapsize-sync)
+      (try
+        (put-resizing-if-map-full env dbi kvs)
+        (finally
+          (release-map-resize-permit mapsize-sync)))))
 
   (new-snapshot [_]
-    (->LMDBKvSnapshot env dbi (new-transaction-owning-lock mapsize-lock env LMDB/MDB_RDONLY)))
+    (->LMDBKvSnapshot env dbi (new-transaction-owning-lock mapsize-sync env LMDB/MDB_RDONLY)))
 
   (compact [_])
 
@@ -249,7 +276,7 @@
 
   (count-keys [_]
     (with-open [stack (MemoryStack/stackPush)
-                tx (new-transaction-owning-lock mapsize-lock env LMDB/MDB_RDONLY)]
+                tx (new-transaction-owning-lock mapsize-sync env LMDB/MDB_RDONLY)]
       (let [stat (MDBStat/malloc stack)]
         (LMDB/mdb_stat @tx dbi stat)
         (.ms_entries stat))))
@@ -268,11 +295,11 @@
 
   Closeable
   (close [_]
-    (let [stamp (acquire-write-lock mapsize-lock)]
-      (try
-        (env-close env)
-        (finally
-          (.unlock mapsize-lock stamp))))
+    (acquire-map-resize-permit mapsize-sync)
+    (try
+      (env-close env)
+      (finally
+        (release-map-resize-permit mapsize-sync)))
     (xio/try-close cp-job)))
 
 (def ^:private cp-format
@@ -303,7 +330,7 @@
                                 0
                                 no-sync-env-flags)))
         env (env-create)
-        mapsize-lock (StampedLock.)]
+        mapsize-sync (new-mapsize-sync)]
     (try
       (env-set-maxreaders env env-maxreaders)
       (env-open env db-dir env-flags)
@@ -312,11 +339,11 @@
       (let [kv-store (map->LMDBKv {:db-dir db-dir
                                    :env env
                                    :env-flags env-flags
-                                   :dbi (dbi-open mapsize-lock env)
-                                   :mapsize-lock mapsize-lock
+                                   :dbi (dbi-open mapsize-sync env)
+                                   :mapsize-sync mapsize-sync
                                    :sync? sync?})]
         (cond-> kv-store
-          checkpointer (assoc :cp-job (cp/start checkpointer kv-store {::cp/cp-format cp-format}))))
+                checkpointer (assoc :cp-job (cp/start checkpointer kv-store {::cp/cp-format cp-format}))))
       (catch Throwable t
         (env-close env)
         (throw t)))))
