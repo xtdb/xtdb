@@ -922,76 +922,44 @@
 
 ;; x1 = app-time-start x2 = app-time-end
 
-(deftest test-period-contains-predicate
-  (t/are
-    [sql expected]
-    (= expected (plan-expr sql))
-    "foo.APP_TIME CONTAINS PERIOD (TIMESTAMP '2000-01-01 00:00:00+00:00', TIMESTAMP '2001-01-01 00:00:00+00:00')"
-    '(and
-      (<= x1 #time/zoned-date-time "2000-01-01T00:00Z")
+(deftest test-period-predicates
+  (t/are [expected sql] (= expected (plan-expr sql))
+    '(and (<= x1 #time/zoned-date-time "2000-01-01T00:00Z")
       (>= x2 #time/zoned-date-time "2001-01-01T00:00Z"))
+    "foo.APP_TIME CONTAINS PERIOD (TIMESTAMP '2000-01-01 00:00:00+00:00', TIMESTAMP '2001-01-01 00:00:00+00:00')"
 
+    '(and (<= x1 #time/zoned-date-time "2000-01-01T00:00Z")
+          (>= x2 #time/zoned-date-time "2000-01-01T00:00Z"))
     "foo.APP_TIME CONTAINS TIMESTAMP '2000-01-01 00:00:00+00:00'"
-    '(and
-      (<= x1 #time/zoned-date-time "2000-01-01T00:00Z")
-      (>= x2 #time/zoned-date-time "2000-01-01T00:00Z"))))
 
-(deftest test-period-overlaps-predicate
   ;; also testing all period-predicate permutations
-  (t/are
-    [sql expected]
-    (= expected (plan-expr sql))
-    "foo.APP_TIME OVERLAPS PERIOD (TIMESTAMP '2000-01-01 00:00:00+00:00', TIMESTAMP '2001-01-01 00:00:00+00:00')"
-    '(and
-       (< x1 #time/zoned-date-time "2001-01-01T00:00Z")
+    '(and (< x1 #time/zoned-date-time "2001-01-01T00:00Z")
        (> x2 #time/zoned-date-time "2000-01-01T00:00Z"))
+    "foo.APP_TIME OVERLAPS PERIOD (TIMESTAMP '2000-01-01 00:00:00+00:00', TIMESTAMP '2001-01-01 00:00:00+00:00')"
 
+    '(and (< x1 x2) (> x2 x1))
     "foo.APP_TIME OVERLAPS foo.APP_TIME"
-    '(and
-       (< x1 x2)
-       (> x2 x1))
+
+    '(and (< #time/zoned-date-time "2000-01-01T00:00Z" #time/zoned-date-time "2003-01-01T00:00Z")
+          (> #time/zoned-date-time "2001-01-01T00:00Z" #time/zoned-date-time "2002-01-01T00:00Z"))
     "PERIOD (TIMESTAMP '2000-01-01 00:00:00+00:00', TIMESTAMP '2001-01-01 00:00:00+00:00')
     OVERLAPS PERIOD (TIMESTAMP '2002-01-01 00:00:00+00:00', TIMESTAMP '2003-01-01 00:00:00+00:00')"
-    '(and
-       (< #time/zoned-date-time "2000-01-01T00:00Z" #time/zoned-date-time "2003-01-01T00:00Z")
-       (> #time/zoned-date-time "2001-01-01T00:00Z" #time/zoned-date-time "2002-01-01T00:00Z"))))
 
-(deftest test-period-equals-predicate
-  (t/are
-    [sql expected]
-    (= expected (plan-expr sql))
+    '(and (= x1 #time/zoned-date-time "2000-01-01T00:00Z")
+          (= x2 #time/zoned-date-time "2001-01-01T00:00Z"))
     "foo.SYSTEM_TIME EQUALS PERIOD (TIMESTAMP '2000-01-01 00:00:00+00:00', TIMESTAMP '2001-01-01 00:00:00+00:00')"
-    '(and
-       (= x1 #time/zoned-date-time "2000-01-01T00:00Z")
-       (= x2 #time/zoned-date-time "2001-01-01T00:00Z"))))
 
-(deftest test-period-precedes-predicate
-  (t/are
-    [sql expected]
-    (= expected (plan-expr sql))
+    '(<= x2 #time/zoned-date-time "2000-01-01T00:00Z")
     "foo.APP_TIME PRECEDES PERIOD (TIMESTAMP '2000-01-01 00:00:00+00:00', TIMESTAMP '2001-01-01 00:00:00+00:00')"
-    '(<= x2 #time/zoned-date-time "2000-01-01T00:00Z")))
 
-(deftest test-period-succeeds-predicate
-  (t/are
-    [sql expected]
-    (= expected (plan-expr sql))
+    '(>= x1 #time/zoned-date-time "2001-01-01T00:00Z")
     "foo.SYSTEM_TIME SUCCEEDS PERIOD (TIMESTAMP '2000-01-01 00:00:00+00:00', TIMESTAMP '2001-01-01 00:00:00+00:00')"
-    '(>= x1 #time/zoned-date-time "2001-01-01T00:00Z")))
 
-(deftest test-period-immediately-precedes-predicate
-  (t/are
-    [sql expected]
-    (= expected (plan-expr sql))
+    '(= x2 #time/zoned-date-time "2000-01-01T00:00Z")
     "foo.APPLICATION_TIME IMMEDIATELY PRECEDES PERIOD (TIMESTAMP '2000-01-01 00:00:00+00:00', TIMESTAMP '2001-01-01 00:00:00+00:00')"
-    '(= x2 #time/zoned-date-time "2000-01-01T00:00Z")))
 
-(deftest test-period-immediately-succeeds-predicate
-  (t/are
-    [sql expected]
-    (= expected (plan-expr sql))
-    "foo.APP_TIME IMMEDIATELY SUCCEEDS PERIOD (TIMESTAMP '2000-01-01 00:00:00+00:00', TIMESTAMP '2001-01-01 00:00:00+00:00')"
-    '(= x1 #time/zoned-date-time "2001-01-01T00:00Z")))
+    '(= x1 #time/zoned-date-time "2001-01-01T00:00Z")
+    "foo.APP_TIME IMMEDIATELY SUCCEEDS PERIOD (TIMESTAMP '2000-01-01 00:00:00+00:00', TIMESTAMP '2001-01-01 00:00:00+00:00')"))
 
 (deftest test-min-long-value-275
   (t/is (= Long/MIN_VALUE (plan-expr "-9223372036854775808"))))

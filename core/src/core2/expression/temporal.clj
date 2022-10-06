@@ -219,46 +219,6 @@
 (defmethod expr/codegen-mono-call [:cast-tstz :any] [expr]
   (expr/codegen-mono-call (assoc expr :f :cast, :target-type [:timestamp-tz :micro (str (.getZone expr/*clock*))])))
 
-;; SQL:2011 Time-related-predicates
-;; FIXME: these don't take different granularities of timestamp into account
-;; TODO: I think these may best live as planner macros so that the resulting `>`/`<` etc can take part in plan optimisation
-
-(defmethod expr/codegen-mono-call [:overlaps :timestamp-tz :timestamp-tz :timestamp-tz :timestamp-tz] [_]
-  {:return-type :bool
-   :->call-code (fn [[x-start x-end y-start y-end]]
-                  `(and (< ~x-start ~y-end) (> ~x-end ~y-start)))})
-
-(defmethod expr/codegen-mono-call [:contains :timestamp-tz :timestamp-tz :timestamp-tz] [_]
-  {:return-type :bool
-   :->call-code (fn [[x-start x-end y]]
-                  `(let [y# ~y]
-                     (and (<= ~x-start y#) (> ~x-end y#))))})
-
-(defmethod expr/codegen-mono-call [:contains :timestamp-tz :timestamp-tz :timestamp-tz :timestamp-tz] [_]
-  {:return-type :bool
-   :->call-code (fn [[x-start x-end y-start y-end]]
-                  `(and (<= ~x-start ~y-start) (>= ~x-end ~y-end)))})
-
-(defmethod expr/codegen-mono-call [:precedes :timestamp-tz :timestamp-tz :timestamp-tz :timestamp-tz] [_]
-  {:return-type :bool
-   :->call-code (fn [[_x-start x-end y-start _y-end]]
-                  `(<= ~x-end ~y-start))})
-
-(defmethod expr/codegen-mono-call [:succeeds :timestamp-tz :timestamp-tz :timestamp-tz :timestamp-tz] [_]
-  {:return-type :bool
-   :->call-code (fn [[x-start _x-end _y-start y-end]]
-                  `(>= ~x-start ~y-end))})
-
-(defmethod expr/codegen-mono-call [:immediately-precedes :timestamp-tz :timestamp-tz :timestamp-tz :timestamp-tz] [_]
-  {:return-type :bool
-   :->call-code (fn [[_x-start x-end y-start _y-end]]
-                  `(= ~x-end ~y-start))})
-
-(defmethod expr/codegen-mono-call [:immediately-succeeds :timestamp-tz :timestamp-tz :timestamp-tz :timestamp-tz] [_]
-  {:return-type :bool
-   :->call-code (fn [[x-start _x-end _y-start y-end]]
-                  `(= ~x-start ~y-end))})
-
 ;;;; SQL:2011 Operations involving datetimes and intervals
 
 (defn- recall-with-cast
