@@ -6,7 +6,7 @@
             [clojure.test.check.properties :as tcp]
             [core2.expression-test :as et]
             [core2.test-util :as tu])
-  (:import (java.time Instant LocalDate LocalDateTime LocalTime Period ZoneId ZoneOffset ZonedDateTime)
+  (:import (java.time Duration Instant LocalDate LocalDateTime LocalTime Period ZoneId ZoneOffset ZonedDateTime)
            (core2.types IntervalDayTime IntervalMonthDayNano IntervalYearMonth)))
 
 (t/use-fixtures :each tu/with-allocator)
@@ -468,11 +468,11 @@
     ;; multi part parsing
     nil '(multi-field-interval nil "YEAR" 2 "MONTH" 2) {}
 
-    #c2.interval/month-day-nano ["P0D" "PT0S"] '(multi-field-interval "0-0" "YEAR" 2 "MONTH" 2) {}
-    #c2.interval/month-day-nano ["P12M" "PT0S"] '(multi-field-interval "1-0" "YEAR" 2 "MONTH" 2) {}
-    #c2.interval/month-day-nano ["P12M" "PT0S"] '(multi-field-interval "+1-0" "YEAR" 2 "MONTH" 2) {}
-    #c2.interval/month-day-nano ["P-12M" "PT0S"] '(multi-field-interval "-1-0" "YEAR" 2 "MONTH" 2) {}
-    #c2.interval/month-day-nano ["P13M" "PT0S"] '(multi-field-interval "1-1" "YEAR" 2 "MONTH" 2) {}
+    #c2.interval/year-month "P0D" '(multi-field-interval "0-0" "YEAR" 2 "MONTH" 2) {}
+    #c2.interval/year-month "P12M" '(multi-field-interval "1-0" "YEAR" 2 "MONTH" 2) {}
+    #c2.interval/year-month "P12M" '(multi-field-interval "+1-0" "YEAR" 2 "MONTH" 2) {}
+    #c2.interval/year-month "P-12M" '(multi-field-interval "-1-0" "YEAR" 2 "MONTH" 2) {}
+    #c2.interval/year-month "P13M" '(multi-field-interval "1-1" "YEAR" 2 "MONTH" 2) {}
 
     #c2.interval/month-day-nano ["P11D" "PT12H"] '(multi-field-interval "11 12" "DAY" 2 "HOUR" 2) {}
     #c2.interval/month-day-nano ["P-1D" "PT-1S"] '(multi-field-interval "-1 00:00:01" "DAY" 2 "SECOND" 6) {}

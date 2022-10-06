@@ -438,6 +438,9 @@
         d2 (.getDuration pd2)]
     (PeriodDuration. (.minus p1 p2) (.minus d1 d2))))
 
+(defn pd-neg ^PeriodDuration [^PeriodDuration pd]
+  (PeriodDuration. (.negated (.getPeriod pd)) (.negated (.getDuration pd))))
+
 (defn- choose-interval-arith-return
   "Given two interval types, return an interval type that can represent the result of an binary arithmetic expression
   over those types, i.e + or -.
@@ -460,6 +463,10 @@
   (let [return-type (choose-interval-arith-return l-type r-type)]
     {:return-type [:interval return-type]
      :->call-code (fn [[l r]] `(pd-sub ~l ~r))}))
+
+(defmethod expr/codegen-mono-call [:- :interval] [{[interval-type] :arg-types}]
+  {:return-type interval-type
+   :->call-code (fn [[i]] `(pd-neg ~i))})
 
 (defn pd-scale ^PeriodDuration [^PeriodDuration pd ^long factor]
   (let [p (.getPeriod pd)
@@ -767,7 +774,9 @@
       (ensure-interval-fractional-precision-valid fractional-precision))
 
     ;; TODO choose a more specific representation when possible
-    {:return-type [:interval :month-day-nano]
+    {:return-type (case [unit1 unit2]
+                    ["YEAR" "MONTH"] [:interval :year-month]
+                    [:interval :month-day-nano])
      :->call-code (fn [[s & _]]
                     `(parse-multi-field-interval (expr/resolve-string ~s) ~unit1 ~unit2))}))
 
