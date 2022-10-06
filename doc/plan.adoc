@@ -17,7 +17,7 @@
 
 * Deployment to AWS with basic monitoring, ie. Cloud Watch. (AWS marketplace?)
 * DBaaS on AWS. Exactly what this means is out-of-scope for this core plan, but relies on capabilities listed here.
-* HTAP benchmarks to guide work.
+* HTAP benchmarks to guide work. https://github.com/cmu-db/benchbase
 * Rudimentary planner that deals with join orders, like collapsing neighbouring joins into the multi-join operator. Needs RnD.
 * Predictive caching, doesn't need to be any fancy ML. Needs RnD.
 * New temporal index that scales, non-monolithic, could be per table as well. Needs RnD.
