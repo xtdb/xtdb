@@ -126,21 +126,21 @@
 
 (t/deftest interval-vector-test
   ;; for years/months we lose the years as a separate component, it has to be folded into months.
-  (let [iym #c2.interval/year-month "P35M"]
+  (let [iym #c2/interval-ym "P35M"]
     (t/is (= [iym]
              (:vs (test-read (constantly [:interval :year-month])
                              (fn [^IVectorWriter w, ^IntervalYearMonth v]
                                (.setSafe ^IntervalYearVector (.getVector w) (.getPosition w) (.toTotalMonths (.-period v))))
                              [iym])))))
 
-  (let [idt #c2.interval/day-time ["P1434D" "PT0.023S"]]
+  (let [idt #c2/interval-dt ["P1434D" "PT0.023S"]]
     (t/is (= [idt]
              (:vs (test-read (constantly [:interval :day-time])
                              (fn [^IVectorWriter w, ^IntervalDayTime v]
                                (.setSafe ^IntervalDayVector (.getVector w) (.getPosition w) (.getDays (.-period v)) (.toMillis (.-duration v))))
                              [idt])))))
 
-  (let [imdn #c2.interval/month-day-nano ["P33M244D" "PT0.003444443S"]]
+  (let [imdn #c2/interval-mdn ["P33M244D" "PT0.003444443S"]]
     (t/is (= {:vs [imdn]
               :vec-types [IntervalMonthDayNanoVector]}
              (test-round-trip [imdn])))))

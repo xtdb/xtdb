@@ -18,7 +18,7 @@
   (IntervalYearMonth. (Period/parse p)))
 
 (defmethod print-dup IntervalYearMonth [^IntervalYearMonth i, ^Writer w]
-  (.write w (format "#c2.interval/year-month %s" (pr-str (str (.-period i))))))
+  (.write w (format "#c2/interval-ym %s" (pr-str (str (.-period i))))))
 
 (defmethod print-method IntervalYearMonth [i ^Writer w]
   (print-dup i w))
@@ -27,7 +27,7 @@
   (IntervalDayTime. (Period/parse p) (Duration/parse d)))
 
 (defmethod print-dup IntervalDayTime [^IntervalDayTime i, ^Writer w]
-  (.write w (format "#c2.interval/day-time %s" (pr-str [(str (.-period i)) (str (.-duration i))]))))
+  (.write w (format "#c2/interval-dt %s" (pr-str [(str (.-period i)) (str (.-duration i))]))))
 
 (defmethod print-method IntervalDayTime [i ^Writer w]
   (print-dup i w))
@@ -36,7 +36,7 @@
   (IntervalMonthDayNano. (Period/parse p) (Duration/parse d)))
 
 (defmethod print-dup IntervalMonthDayNano [^IntervalMonthDayNano i, ^Writer w]
-  (.write w (format "#c2.interval/month-day-nano %s" (pr-str [(str (.-period i)) (str (.-duration i))]))))
+  (.write w (format "#c2/interval-mdn %s" (pr-str [(str (.-period i)) (str (.-duration i))]))))
 
 (defmethod print-method IntervalMonthDayNano [i ^Writer w]
   (print-dup i w))

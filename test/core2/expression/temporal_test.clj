@@ -429,72 +429,72 @@
     nil '(single-field-interval nil "MINUTE" 2 0) {}
     nil '(single-field-interval nil "SECOND" 2 6) {}
 
-    #c2.interval/year-month "P0D" '(single-field-interval 0 "YEAR" 2 0) {}
-    #c2.interval/year-month "P0D" '(single-field-interval 0 "MONTH" 2 0) {}
-    #c2.interval/day-time ["P0D" "PT0S"] '(single-field-interval 0 "DAY" 2 0) {}
-    #c2.interval/day-time ["P0D" "PT0S"] '(single-field-interval 0 "HOUR" 2 0) {}
-    #c2.interval/day-time ["P0D" "PT0S"] '(single-field-interval 0 "MINUTE" 2 0) {}
-    #c2.interval/day-time ["P0D" "PT0S"] '(single-field-interval 0 "SECOND" 2 0) {}
+    #c2/interval-ym "P0D" '(single-field-interval 0 "YEAR" 2 0) {}
+    #c2/interval-ym "P0D" '(single-field-interval 0 "MONTH" 2 0) {}
+    #c2/interval-dt ["P0D" "PT0S"] '(single-field-interval 0 "DAY" 2 0) {}
+    #c2/interval-dt ["P0D" "PT0S"] '(single-field-interval 0 "HOUR" 2 0) {}
+    #c2/interval-dt ["P0D" "PT0S"] '(single-field-interval 0 "MINUTE" 2 0) {}
+    #c2/interval-dt ["P0D" "PT0S"] '(single-field-interval 0 "SECOND" 2 0) {}
 
-    #c2.interval/year-month "P0D" '(single-field-interval a "YEAR" 2 0) {:a 0}
-    #c2.interval/year-month "P0D" '(single-field-interval a "MONTH" 2 0) {:a 0}
-    #c2.interval/day-time ["P0D" "PT0S"] '(single-field-interval a "DAY" 2 0) {:a 0}
-    #c2.interval/day-time ["P0D" "PT0S"] '(single-field-interval a "HOUR" 2 0) {:a 0}
-    #c2.interval/day-time ["P0D" "PT0S"] '(single-field-interval a "MINUTE" 2 0) {:a 0}
-    #c2.interval/day-time ["P0D" "PT0S"] '(single-field-interval a "SECOND" 2 0) {:a 0}
+    #c2/interval-ym "P0D" '(single-field-interval a "YEAR" 2 0) {:a 0}
+    #c2/interval-ym "P0D" '(single-field-interval a "MONTH" 2 0) {:a 0}
+    #c2/interval-dt ["P0D" "PT0S"] '(single-field-interval a "DAY" 2 0) {:a 0}
+    #c2/interval-dt ["P0D" "PT0S"] '(single-field-interval a "HOUR" 2 0) {:a 0}
+    #c2/interval-dt ["P0D" "PT0S"] '(single-field-interval a "MINUTE" 2 0) {:a 0}
+    #c2/interval-dt ["P0D" "PT0S"] '(single-field-interval a "SECOND" 2 0) {:a 0}
 
     ;; Y / M distinction is lost when writing to IntervalYear vectors
-    #c2.interval/year-month "P12M" '(single-field-interval 1 "YEAR" 2 0) {}
-    #c2.interval/year-month "P-24M" '(single-field-interval -2 "YEAR" 2 0) {}
+    #c2/interval-ym "P12M" '(single-field-interval 1 "YEAR" 2 0) {}
+    #c2/interval-ym "P-24M" '(single-field-interval -2 "YEAR" 2 0) {}
 
-    #c2.interval/year-month "P1M" '(single-field-interval 1 "MONTH" 2 0) {}
-    #c2.interval/year-month "P-2M" '(single-field-interval -2 "MONTH" 2 0) {}
+    #c2/interval-ym "P1M" '(single-field-interval 1 "MONTH" 2 0) {}
+    #c2/interval-ym "P-2M" '(single-field-interval -2 "MONTH" 2 0) {}
 
-    #c2.interval/day-time ["P1D" "PT0S"] '(single-field-interval 1 "DAY" 2 0) {}
-    #c2.interval/day-time ["P-2D" "PT0S"] '(single-field-interval -2 "DAY" 2 0) {}
+    #c2/interval-dt ["P1D" "PT0S"] '(single-field-interval 1 "DAY" 2 0) {}
+    #c2/interval-dt ["P-2D" "PT0S"] '(single-field-interval -2 "DAY" 2 0) {}
 
-    #c2.interval/day-time ["P0D" "PT1H"] '(single-field-interval 1 "HOUR" 2 0) {}
-    #c2.interval/day-time ["P0D" "PT-2H"] '(single-field-interval -2 "HOUR" 2 0) {}
+    #c2/interval-dt ["P0D" "PT1H"] '(single-field-interval 1 "HOUR" 2 0) {}
+    #c2/interval-dt ["P0D" "PT-2H"] '(single-field-interval -2 "HOUR" 2 0) {}
 
-    #c2.interval/day-time ["P0D" "PT1M"] '(single-field-interval 1 "MINUTE" 2 0) {}
-    #c2.interval/day-time ["P0D" "PT-2M"] '(single-field-interval -2 "MINUTE" 2 0) {}
+    #c2/interval-dt ["P0D" "PT1M"] '(single-field-interval 1 "MINUTE" 2 0) {}
+    #c2/interval-dt ["P0D" "PT-2M"] '(single-field-interval -2 "MINUTE" 2 0) {}
 
-    #c2.interval/day-time ["P0D" "PT1S"] '(single-field-interval 1 "SECOND" 2 6) {}
-    #c2.interval/day-time ["P0D" "PT-2S"] '(single-field-interval -2 "SECOND" 2 6) {}
+    #c2/interval-dt ["P0D" "PT1S"] '(single-field-interval 1 "SECOND" 2 6) {}
+    #c2/interval-dt ["P0D" "PT-2S"] '(single-field-interval -2 "SECOND" 2 6) {}
 
     ;; fractional seconds
-    #c2.interval/day-time ["P0D" "PT1.34S"] '(single-field-interval "1.34" "SECOND" 2 6) {}
+    #c2/interval-dt ["P0D" "PT1.34S"] '(single-field-interval "1.34" "SECOND" 2 6) {}
 
     ;; multi part parsing
     nil '(multi-field-interval nil "YEAR" 2 "MONTH" 2) {}
 
-    #c2.interval/year-month "P0D" '(multi-field-interval "0-0" "YEAR" 2 "MONTH" 2) {}
-    #c2.interval/year-month "P12M" '(multi-field-interval "1-0" "YEAR" 2 "MONTH" 2) {}
-    #c2.interval/year-month "P12M" '(multi-field-interval "+1-0" "YEAR" 2 "MONTH" 2) {}
-    #c2.interval/year-month "P-12M" '(multi-field-interval "-1-0" "YEAR" 2 "MONTH" 2) {}
-    #c2.interval/year-month "P13M" '(multi-field-interval "1-1" "YEAR" 2 "MONTH" 2) {}
+    #c2/interval-ym "P0D" '(multi-field-interval "0-0" "YEAR" 2 "MONTH" 2) {}
+    #c2/interval-ym "P12M" '(multi-field-interval "1-0" "YEAR" 2 "MONTH" 2) {}
+    #c2/interval-ym "P12M" '(multi-field-interval "+1-0" "YEAR" 2 "MONTH" 2) {}
+    #c2/interval-ym "P-12M" '(multi-field-interval "-1-0" "YEAR" 2 "MONTH" 2) {}
+    #c2/interval-ym "P13M" '(multi-field-interval "1-1" "YEAR" 2 "MONTH" 2) {}
 
-    #c2.interval/month-day-nano ["P11D" "PT12H"] '(multi-field-interval "11 12" "DAY" 2 "HOUR" 2) {}
-    #c2.interval/month-day-nano ["P-1D" "PT-1S"] '(multi-field-interval "-1 00:00:01" "DAY" 2 "SECOND" 6) {}
-    #c2.interval/month-day-nano ["P1D" "PT2M"] '(multi-field-interval "1 00:02" "DAY" 2 "MINUTE" 2) {}
-    #c2.interval/month-day-nano ["P1D" "PT23H"] '(multi-field-interval "1 23" "DAY" 2 "HOUR" 2) {}
+    #c2/interval-mdn ["P11D" "PT12H"] '(multi-field-interval "11 12" "DAY" 2 "HOUR" 2) {}
+    #c2/interval-mdn ["P-1D" "PT-1S"] '(multi-field-interval "-1 00:00:01" "DAY" 2 "SECOND" 6) {}
+    #c2/interval-mdn ["P1D" "PT2M"] '(multi-field-interval "1 00:02" "DAY" 2 "MINUTE" 2) {}
+    #c2/interval-mdn ["P1D" "PT23H"] '(multi-field-interval "1 23" "DAY" 2 "HOUR" 2) {}
 
-    #c2.interval/month-day-nano ["P0D" "PT-3H-4M-1S"] '(multi-field-interval "-03:04:01" "HOUR" 2 "SECOND" 6) {}
-    #c2.interval/month-day-nano ["P0D" "PT23H2M"] '(multi-field-interval "23:02" "HOUR" 2 "MINUTE" 2) {}
+    #c2/interval-mdn ["P0D" "PT-3H-4M-1S"] '(multi-field-interval "-03:04:01" "HOUR" 2 "SECOND" 6) {}
+    #c2/interval-mdn ["P0D" "PT23H2M"] '(multi-field-interval "23:02" "HOUR" 2 "MINUTE" 2) {}
 
-    #c2.interval/month-day-nano ["P0D" "PT44M34S"] '(multi-field-interval "44:34" "MINUTE" 2 "SECOND" 6) {}
-    #c2.interval/month-day-nano ["P0D" "PT44M34.123456S"] '(multi-field-interval "44:34.123456" "MINUTE" 2 "SECOND" 6) {}
+    #c2/interval-mdn ["P0D" "PT44M34S"] '(multi-field-interval "44:34" "MINUTE" 2 "SECOND" 6) {}
+    #c2/interval-mdn ["P0D" "PT44M34.123456S"] '(multi-field-interval "44:34.123456" "MINUTE" 2 "SECOND" 6) {}
 
-    #c2.interval/month-day-nano ["P1D" "PT1.334S"] '(multi-field-interval "1 00:00:01.334" "DAY" 2 "SECOND" 6) {}
-    #c2.interval/month-day-nano ["P0D" "PT3H4M1.334S"] '(multi-field-interval "03:04:1.334" "HOUR" 2 "SECOND" 6) {}
-    #c2.interval/month-day-nano ["P0D" "PT44M34.123456789S"] '(multi-field-interval "44:34.123456789" "MINUTE" 2 "SECOND" 6) {}
+    #c2/interval-mdn ["P1D" "PT1.334S"] '(multi-field-interval "1 00:00:01.334" "DAY" 2 "SECOND" 6) {}
+    #c2/interval-mdn ["P0D" "PT3H4M1.334S"] '(multi-field-interval "03:04:1.334" "HOUR" 2 "SECOND" 6) {}
+    #c2/interval-mdn ["P0D" "PT44M34.123456789S"] '(multi-field-interval "44:34.123456789" "MINUTE" 2 "SECOND" 6) {}
 
     ;; truncates when we can no longer represent the number
-    #c2.interval/month-day-nano ["P0D" "PT44M34.123456789S"] '(multi-field-interval "44:34.123456789666" "MINUTE" 2 "SECOND" 6) {}
+    #c2/interval-mdn ["P0D" "PT44M34.123456789S"] '(multi-field-interval "44:34.123456789666" "MINUTE" 2 "SECOND" 6) {}
 
-    #c2.interval/month-day-nano ["P0D" "PT0.123S"] '(multi-field-interval "+00:00.123" "MINUTE" 2 "SECOND" 6) {}
-    #c2.interval/month-day-nano ["P0D" "PT0.123S"] '(multi-field-interval "00:00.123" "MINUTE" 2 "SECOND" 6) {}
-    #c2.interval/month-day-nano ["P0D" "PT-0.123S"] '(multi-field-interval "-00:00.123" "MINUTE" 2 "SECOND" 6) {}))
+    #c2/interval-mdn ["P0D" "PT0.123S"] '(multi-field-interval "+00:00.123" "MINUTE" 2 "SECOND" 6) {}
+    #c2/interval-mdn ["P0D" "PT0.123S"] '(multi-field-interval "00:00.123" "MINUTE" 2 "SECOND" 6) {}
+    #c2/interval-mdn ["P0D" "PT-0.123S"] '(multi-field-interval "-00:00.123" "MINUTE" 2 "SECOND" 6) {}))
 
 (t/deftest test-multi-part-interval-ex-cases
   (letfn [(p [unit1 unit2] (et/project1 (list 'multi-field-interval "0-0" unit1 2 unit2 2) {}))]
@@ -529,34 +529,34 @@
     nil '(* (single-field-interval 1 "YEAR" 2 0) nil)
     nil '(* nil (single-field-interval 1 "YEAR" 2 0))
 
-    #c2.interval/year-month "P24M" '(+ (single-field-interval 1 "YEAR" 2 0) (single-field-interval 1 "YEAR" 2 0))
-    #c2.interval/year-month "P13M" '(+ (single-field-interval 1 "YEAR" 2 0) (single-field-interval 1 "MONTH" 2 0))
-    #c2.interval/year-month "P11M" '(+ (single-field-interval 1 "YEAR" 2 0) (single-field-interval -1 "MONTH" 2 0))
+    #c2/interval-ym "P24M" '(+ (single-field-interval 1 "YEAR" 2 0) (single-field-interval 1 "YEAR" 2 0))
+    #c2/interval-ym "P13M" '(+ (single-field-interval 1 "YEAR" 2 0) (single-field-interval 1 "MONTH" 2 0))
+    #c2/interval-ym "P11M" '(+ (single-field-interval 1 "YEAR" 2 0) (single-field-interval -1 "MONTH" 2 0))
 
-    #c2.interval/month-day-nano ["P12M-1D" "PT0S"] '(+ (single-field-interval 1 "YEAR" 2 0) (single-field-interval -1 "DAY" 2 0))
-    #c2.interval/month-day-nano ["P12M" "PT-1S"] '(+ (single-field-interval 1 "YEAR" 2 0) (single-field-interval -1 "SECOND" 2 6))
-    #c2.interval/month-day-nano ["P12M" "PT1H1S"] '(+ (single-field-interval 1 "YEAR" 2 0) (single-field-interval 1 "HOUR" 2 0) (single-field-interval 1 "SECOND" 2 6))
+    #c2/interval-mdn ["P12M-1D" "PT0S"] '(+ (single-field-interval 1 "YEAR" 2 0) (single-field-interval -1 "DAY" 2 0))
+    #c2/interval-mdn ["P12M" "PT-1S"] '(+ (single-field-interval 1 "YEAR" 2 0) (single-field-interval -1 "SECOND" 2 6))
+    #c2/interval-mdn ["P12M" "PT1H1S"] '(+ (single-field-interval 1 "YEAR" 2 0) (single-field-interval 1 "HOUR" 2 0) (single-field-interval 1 "SECOND" 2 6))
 
-    #c2.interval/year-month "P0D" '(- (single-field-interval 1 "YEAR" 2 0) (single-field-interval 1 "YEAR" 2 0))
-    #c2.interval/year-month "P11M" '(- (single-field-interval 1 "YEAR" 2 0) (single-field-interval 1 "MONTH" 2 0))
-    #c2.interval/year-month "P13M" '(- (single-field-interval 1 "YEAR" 2 0) (single-field-interval -1 "MONTH" 2 0))
+    #c2/interval-ym "P0D" '(- (single-field-interval 1 "YEAR" 2 0) (single-field-interval 1 "YEAR" 2 0))
+    #c2/interval-ym "P11M" '(- (single-field-interval 1 "YEAR" 2 0) (single-field-interval 1 "MONTH" 2 0))
+    #c2/interval-ym "P13M" '(- (single-field-interval 1 "YEAR" 2 0) (single-field-interval -1 "MONTH" 2 0))
 
-    #c2.interval/month-day-nano ["P12M1D" "PT0S"] '(- (single-field-interval 1 "YEAR" 2 0) (single-field-interval -1 "DAY" 2 0))
-    #c2.interval/month-day-nano ["P12M" "PT1S"] '(- (single-field-interval 1 "YEAR" 2 0) (single-field-interval -1 "SECOND" 2 6))
-    #c2.interval/month-day-nano ["P12M" "PT-1H-1S"] '(- (single-field-interval 1 "YEAR" 2 0) (single-field-interval 1 "HOUR" 2 0) (single-field-interval 1 "SECOND" 2 6))
+    #c2/interval-mdn ["P12M1D" "PT0S"] '(- (single-field-interval 1 "YEAR" 2 0) (single-field-interval -1 "DAY" 2 0))
+    #c2/interval-mdn ["P12M" "PT1S"] '(- (single-field-interval 1 "YEAR" 2 0) (single-field-interval -1 "SECOND" 2 6))
+    #c2/interval-mdn ["P12M" "PT-1H-1S"] '(- (single-field-interval 1 "YEAR" 2 0) (single-field-interval 1 "HOUR" 2 0) (single-field-interval 1 "SECOND" 2 6))
 
-    #c2.interval/year-month "P36M" '(* (single-field-interval 1 "YEAR" 2 0) 3)
+    #c2/interval-ym "P36M" '(* (single-field-interval 1 "YEAR" 2 0) 3)
 
-    #c2.interval/year-month "P6M" '(/ (single-field-interval 1 "YEAR" 2 0) 2)
-    #c2.interval/year-month "P2M" '(/ (single-field-interval 1 "YEAR" 2 0) 5)
+    #c2/interval-ym "P6M" '(/ (single-field-interval 1 "YEAR" 2 0) 2)
+    #c2/interval-ym "P2M" '(/ (single-field-interval 1 "YEAR" 2 0) 5)
 
-    #c2.interval/year-month "P12M" '(/ (+ (single-field-interval 1 "YEAR" 2 0) (single-field-interval 1 "YEAR" 2 0)) 2)
+    #c2/interval-ym "P12M" '(/ (+ (single-field-interval 1 "YEAR" 2 0) (single-field-interval 1 "YEAR" 2 0)) 2)
 
-    #c2.interval/year-month "P0M" '(/ (single-field-interval 1 "MONTH" 2 0) 2)
-    #c2.interval/year-month "P1M" '(/ (single-field-interval 6 "MONTH" 2 0) 5)
+    #c2/interval-ym "P0M" '(/ (single-field-interval 1 "MONTH" 2 0) 2)
+    #c2/interval-ym "P1M" '(/ (single-field-interval 6 "MONTH" 2 0) 5)
 
-    #c2.interval/day-time ["P0M" "PT0S"] '(/ (single-field-interval 1 "DAY" 2 0) 2)
-    #c2.interval/day-time ["P1D" "PT0S"] '(/ (single-field-interval 6 "DAY" 2 0) 5)))
+    #c2/interval-dt ["P0M" "PT0S"] '(/ (single-field-interval 1 "DAY" 2 0) 2)
+    #c2/interval-dt ["P1D" "PT0S"] '(/ (single-field-interval 6 "DAY" 2 0) 5)))
 
 (t/deftest test-uoe-thrown-for-unsupported-div
   (t/is (thrown? UnsupportedOperationException (et/project1 '(/ (+ (single-field-interval 1 "MONTH" 2 0) (single-field-interval 3 "MINUTE" 2 0)) 3) {})))
@@ -631,12 +631,12 @@
 (t/deftest test-interval-abs
   (t/are [expected expr] (= expected (et/project1 expr {}))
 
-    #c2.interval/year-month "P0D" '(abs (single-field-interval 0 "YEAR" 2 0))
-    #c2.interval/year-month "P12M" '(abs (single-field-interval 1 "YEAR" 2 0))
-    #c2.interval/year-month "P12M" '(abs (single-field-interval -1 "YEAR" 2 0))
+    #c2/interval-ym "P0D" '(abs (single-field-interval 0 "YEAR" 2 0))
+    #c2/interval-ym "P12M" '(abs (single-field-interval 1 "YEAR" 2 0))
+    #c2/interval-ym "P12M" '(abs (single-field-interval -1 "YEAR" 2 0))
 
-    #c2.interval/year-month "P11M" '(abs (+ (single-field-interval -1 "YEAR" 2 0) (single-field-interval 1 "MONTH" 2 0)))
-    #c2.interval/day-time ["P1D" "PT-1S"] '(abs (+ (single-field-interval -1 "DAY" 2 0) (single-field-interval 1 "SECOND" 2 6)))))
+    #c2/interval-ym "P11M" '(abs (+ (single-field-interval -1 "YEAR" 2 0) (single-field-interval 1 "MONTH" 2 0)))
+    #c2/interval-dt ["P1D" "PT-1S"] '(abs (+ (single-field-interval -1 "DAY" 2 0) (single-field-interval 1 "SECOND" 2 6)))))
 
 (t/deftest test-interval-equality-quirks
   (t/are [expr expected]

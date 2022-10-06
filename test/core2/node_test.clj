@@ -144,7 +144,7 @@ VALUES (1, 'Happy 2024!', DATE '2024-01-01'),
                            {:basis {:tx !tx}})))))
 
 (t/deftest test-interval-literal-cce-271
-  (t/is (= [{:a #c2.interval/year-month "P12M"}]
+  (t/is (= [{:a #c2/interval-ym "P12M"}]
            (c2/sql-query tu/*node* "select a.a from (values (1 year)) a (a)" {}))))
 
 (t/deftest test-overrides-range
