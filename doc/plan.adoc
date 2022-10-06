@@ -7,6 +7,7 @@
 * Time-as-state, single source of time with microsecond precision, see current_timestamp_as_db_state.adoc document.
 * Arrow-native driver with full type system, ie. FlightSQL with JDBC/ADBC/ODBC.
 * Better SQL UX and error messages tying back to documentation, think Rust.
+* Boot up DBaaS team and analysis in parallel.
 * Baseline of production logging and metrics.
 * Minimal authentication via SSL.
 * Basic INFORMATION_SCHEMA support (FlightSQL overlap), can be done as objects and not introduce SQL schema.
@@ -33,8 +34,9 @@
 == Could, 2023 Q2, Continuous Delivery of (SQL) Features to DBaaS.
 
 * Controlled scaling of compute, different categories of compute and caches, protecting OLTP from OLAP (if needed).
-* Data migration from Core1. Can mainly be grown via existing Core1 projects. Build up helper repo.
+* Deterministic transaction budgets.
 * Azure and GCP object stores.
+* Data migration from Core1. Can mainly be grown via existing Core1 projects. Build up helper repo.
 * Bespoke consoles and dashboards. Needs analysis before embarking on, work sits under DBaaS team.
 * CREATE VIEW.
 * CREATE ASSERTION.
