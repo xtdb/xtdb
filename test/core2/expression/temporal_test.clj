@@ -290,7 +290,7 @@
                                :params {'x x, 'y y}})
                  first :res)))]
 
-    (t/testing "(- datetime duration)"
+    (t/testing "(+ datetime duration)"
       (t/is (= #time/date-time "2022-08-01T01:15:43.342"
                (test-arithmetic '+ #time/date "2022-08-01" #time/duration "PT1H15M43.342S")))
 
@@ -302,6 +302,23 @@
 
       (t/is (= #time/zoned-date-time "2022-08-01T02:31:26.684+01:00[Europe/London]"
                (test-arithmetic '+ #time/zoned-date-time "2022-08-01T01:15:43.342+01:00[Europe/London]" #time/duration "PT1H15M43.342S"))))
+
+    (t/testing "(+ datetime interval)"
+      (t/is (= #time/date "2023-08-01"
+               (test-arithmetic '+ #time/date "2022-08-01" #c2/interval-ym "P1Y")))
+
+      (t/is (= #time/date-time "2022-08-04T01:15:43.342"
+               (test-arithmetic '+ #time/date "2022-08-01" #c2/interval-dt ["P3D" "PT1H15M43.342S"])))
+
+      (t/is (= #time/date-time "2022-09-04T02:31:26.684"
+               (test-arithmetic '+ #time/date-time "2022-08-01T01:15:43.342" #c2/interval-mdn ["P1M3D" "PT1H15M43.342S"])))
+
+      (t/is (= #time/zoned-date-time "2022-08-01T02:31:26.684+01:00[Europe/London]"
+               (test-arithmetic '+ #c2/interval-mdn ["P0D" "PT1H15M43.342S"] #time/zoned-date-time "2022-08-01T01:15:43.342+01:00[Europe/London]")))
+
+      (t/is (= #time/zoned-date-time "2022-10-31T12:00+00:00[Europe/London]"
+               (test-arithmetic '+ #c2/interval-mdn ["P2D" "PT1H"] #time/zoned-date-time "2022-10-29T11:00+01:00[Europe/London]"))
+            "clock change"))
 
     (t/testing "(- datetime duration)"
       (t/is (= #time/date-time "2022-07-31T22:44:16.658"
@@ -315,6 +332,23 @@
 
       (t/is (= #time/zoned-date-time "2022-08-01T01:15:43.342+01:00[Europe/London]"
                (test-arithmetic '- #time/zoned-date-time "2022-08-01T02:31:26.684+01:00[Europe/London]" #time/duration "PT1H15M43.342S"))))
+
+    (t/testing "(- datetime interval)"
+      (t/is (= #time/date "2021-05-01"
+               (test-arithmetic '- #time/date "2022-08-01" #c2/interval-ym "P1Y3M")))
+
+      (t/is (= #time/date-time "2022-07-28T22:44:16.658"
+               (test-arithmetic '- #time/date "2022-08-01" #c2/interval-dt ["P3D" "PT1H15M43.342S"])))
+
+      (t/is (= #time/date-time "2022-07-29T01:15:43.342"
+               (test-arithmetic '- #time/date-time "2022-08-01T02:31:26.684" #c2/interval-mdn ["P3D" "PT1H15M43.342S"])))
+
+      (t/is (= #time/zoned-date-time "2022-08-01T01:15:43.342+01:00[Europe/London]"
+               (test-arithmetic '- #time/zoned-date-time "2022-08-01T02:31:26.684+01:00[Europe/London]" #c2/interval-mdn ["P0D" "PT1H15M43.342S"])))
+
+      (t/is (= #time/zoned-date-time "2022-10-29T11:00+01:00[Europe/London]"
+               (test-arithmetic '- #time/zoned-date-time "2022-10-31T12:00+00:00[Europe/London]" #c2/interval-mdn ["P2D" "PT1H"] ))
+            "clock change"))
 
     (t/testing "(- datetime datetime)"
       (t/is (= #time/duration "PT24H"

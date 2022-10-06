@@ -12,10 +12,11 @@
            (core2 StringUtil)
            (core2.operator IProjectionSpec IRelationSelector)
            (core2.vector IIndirectRelation IIndirectVector IRowCopier)
+           (core2.types IntervalDayTime IntervalMonthDayNano IntervalYearMonth)
            core2.vector.PolyValueBox
            (java.nio ByteBuffer)
            (java.nio.charset StandardCharsets)
-           (java.time Clock Duration Instant LocalDate LocalDateTime LocalTime OffsetDateTime Period ZoneOffset ZonedDateTime)
+           (java.time Clock Duration Instant LocalDate LocalDateTime LocalTime OffsetDateTime ZoneOffset ZonedDateTime)
            (java.util Arrays Date HashMap LinkedList)
            (java.util.function IntUnaryOperator)
            (java.util.regex Pattern)
@@ -284,9 +285,17 @@
     (.toEpochDay ^LocalDate code)
     `(.toEpochDay ~code)))
 
-(defmethod emit-value PeriodDuration [_ code]
-  `(PeriodDuration. (Period/parse ~(str (.getPeriod ^PeriodDuration code)))
-                    (Duration/ofNanos ~(.toNanos (.getDuration ^PeriodDuration code)))))
+;; we emit these to PDs until the EE uses these types directly
+(defmethod emit-value IntervalYearMonth [_ code]
+  `(PeriodDuration. (.-period ~code) Duration/ZERO))
+
+(defmethod emit-value IntervalDayTime [_ code]
+  `(let [idt# ~code]
+     (PeriodDuration. (.-period idt#) (.-duration idt#))))
+
+(defmethod emit-value IntervalMonthDayNano [_ code]
+  `(let [imdn# ~code]
+     (PeriodDuration. (.-period imdn#) (.-duration imdn#))))
 
 (defmethod codegen-expr :literal [{:keys [literal]} _]
   (let [return-type (types/value->col-type literal)

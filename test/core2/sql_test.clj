@@ -925,16 +925,16 @@
 (deftest test-period-predicates
   (t/are [expected sql] (= expected (plan-expr sql))
     '(and (<= x1 #time/zoned-date-time "2000-01-01T00:00Z")
-      (>= x2 #time/zoned-date-time "2001-01-01T00:00Z"))
+          (>= x2 #time/zoned-date-time "2001-01-01T00:00Z"))
     "foo.APP_TIME CONTAINS PERIOD (TIMESTAMP '2000-01-01 00:00:00+00:00', TIMESTAMP '2001-01-01 00:00:00+00:00')"
 
     '(and (<= x1 #time/zoned-date-time "2000-01-01T00:00Z")
           (>= x2 #time/zoned-date-time "2000-01-01T00:00Z"))
     "foo.APP_TIME CONTAINS TIMESTAMP '2000-01-01 00:00:00+00:00'"
 
-  ;; also testing all period-predicate permutations
+    ;; also testing all period-predicate permutations
     '(and (< x1 #time/zoned-date-time "2001-01-01T00:00Z")
-       (> x2 #time/zoned-date-time "2000-01-01T00:00Z"))
+          (> x2 #time/zoned-date-time "2000-01-01T00:00Z"))
     "foo.APP_TIME OVERLAPS PERIOD (TIMESTAMP '2000-01-01 00:00:00+00:00', TIMESTAMP '2001-01-01 00:00:00+00:00')"
 
     '(and (< x1 x2) (> x2 x1))
@@ -966,9 +966,9 @@
 
 (deftest test-multiple-references-to-temporal-cols
   (t/is
-    (=plan-file
-      "multiple-references-to-temporal-cols"
-      (plan-sql "SELECT foo.application_time_start, foo.application_time_end, foo.system_time_start, foo.system_time_end
+   (=plan-file
+    "multiple-references-to-temporal-cols"
+    (plan-sql "SELECT foo.application_time_start, foo.application_time_end, foo.system_time_start, foo.system_time_end
                 FROM foo FOR SYSTEM_TIME FROM DATE '2001-01-01' TO DATE '2002-01-01'
                 WHERE foo.application_time_start = 4 AND foo.application_time_end > 10
                 AND foo.system_time_start = 20 AND foo.system_time_end <= 23

@@ -8,9 +8,8 @@
             [core2.types :as types]
             [core2.util :as util])
   (:import (java.time Duration Instant LocalDate LocalDateTime LocalTime Period ZoneId ZoneOffset ZonedDateTime)
-           (java.time.temporal ChronoField ChronoUnit)
-           (org.apache.arrow.vector PeriodDuration)
-           (org.apache.arrow.vector.types.pojo ArrowType$Date ArrowType$Interval)))
+           (java.time.temporal ChronoField ChronoUnit Temporal)
+           (org.apache.arrow.vector PeriodDuration)))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -74,8 +73,17 @@
     (let [res-unit (types/smallest-ts-unit unit1 unit2)]
       {:return-type (->ret-type res-unit),
        :->call-code (fn [[arg1 arg2]]
-                      (->call-code [(with-conversion arg1 unit1 res-unit)
-                                    (with-conversion arg2 unit2 res-unit)]))})))
+                      (->call-code [(with-conversion arg1 unit1 res-unit) (with-conversion arg2 unit2 res-unit)]))})))
+
+(defn- with-first-arg-unit-conversion [arg-unit unit-lower-bound ->ret-type ->call-code]
+  (if (= arg-unit unit-lower-bound)
+    {:return-type (->ret-type arg-unit),
+     :->call-code #(->call-code arg-unit %)}
+
+    (let [res-unit (types/smallest-ts-unit arg-unit unit-lower-bound)]
+      {:return-type (->ret-type res-unit),
+       :->call-code (fn [[arg1 & args]]
+                      (->call-code res-unit (into [(with-conversion arg1 arg-unit res-unit)] args)))})))
 
 (defn- ts->inst [form ts-unit]
   (case ts-unit
@@ -90,6 +98,16 @@
     :milli `(.toEpochMilli ~form)
     :micro `(util/instant->micros ~form)
     :nano `(util/instant->nanos ~form)))
+
+(defn- ts->zdt [form ts-unit tz-sym]
+  `(ZonedDateTime/ofInstant ~(ts->inst form ts-unit) ~tz-sym))
+
+(defn- zdt->ts [form ts-unit]
+  (if (= ts-unit :second)
+    `(.toEpochSecond ~form)
+    `(let [form# ~form]
+       (Math/addExact (Math/multiplyExact (.toEpochSecond form#) ~(types/ts-units-per-second ts-unit))
+                      (quot (.getNano form#) ~(quot (types/ts-units-per-second :nano) (types/ts-units-per-second ts-unit)))))))
 
 (defn- ldt->ts [form ts-unit]
   (if (= ts-unit :second)
@@ -184,8 +202,7 @@
     {:return-type target-type,
      :batch-bindings [[src-tz-sym `(ZoneId/of ~src-tz)]]
      :->call-code (fn [[tstz]]
-                    `(-> ~(ts->inst tstz src-tsunit)
-                         (ZonedDateTime/ofInstant ~src-tz-sym)
+                    `(-> ~(ts->zdt tstz src-tsunit src-tz-sym)
                          (.withZoneSameInstant (.getZone expr/*clock*))
                          (.toLocalDate)
                          (.toEpochDay)))}))
@@ -195,8 +212,7 @@
     {:return-type target-type,
      :batch-bindings [[src-tz-sym `(ZoneId/of ~src-tz)]]
      :->call-code (fn [[tstz]]
-                    (-> `(-> ~(ts->inst tstz src-tsunit)
-                             (ZonedDateTime/ofInstant ~src-tz-sym)
+                    (-> `(-> ~(ts->zdt tstz src-tsunit src-tz-sym)
                              (.withZoneSameInstant (.getZone expr/*clock*))
                              (.toLocalTime)
                              (.toNanoOfDay))
@@ -207,8 +223,7 @@
     {:return-type target-type,
      :batch-bindings [[src-tz-sym `(ZoneId/of ~src-tz)]]
      :->call-code (fn [[tstz]]
-                    (-> `(-> ~(ts->inst tstz src-tsunit)
-                             (ZonedDateTime/ofInstant ~src-tz-sym)
+                    (-> `(-> ~(ts->zdt tstz src-tsunit src-tz-sym)
                              (.withZoneSameInstant (.getZone expr/*clock*))
                              (.toLocalDateTime))
                         (ldt->ts tgt-tsunit)))}))
@@ -218,6 +233,10 @@
 
 (defmethod expr/codegen-mono-call [:cast-tstz :any] [expr]
   (expr/codegen-mono-call (assoc expr :f :cast, :target-type [:timestamp-tz :micro (str (.getZone expr/*clock*))])))
+
+(defmethod expr/codegen-cast [:interval :interval] [{:keys [source-type target-type]}]
+  (assert (= source-type target-type) "TODO #478")
+  {:return-type target-type, :->call-code first})
 
 ;;;; SQL:2011 Operations involving datetimes and intervals
 
@@ -265,10 +284,61 @@
   (with-arg-unit-conversion x-unit y-unit
     #(do [:duration %]) #(do `(Math/addExact ~@%))))
 
-(defmethod expr/codegen-mono-call [:+ :date :interval] [{[^ArrowType$Date x-type, ^ArrowType$Interval _y-type] :arg-types}]
-  {:return-type x-type
-   :->call-code (fn [[x-arg y-arg]]
-                  `(.toEpochDay (.plus (LocalDate/ofEpochDay ~x-arg) (.getPeriod ~y-arg))))})
+(doseq [[f-kw method-sym] [[:+ '.plus]
+                           [:- '.minus]]]
+  (defmethod expr/codegen-mono-call [f-kw :date :interval] [{[dt-type, [_ iunit :as itype]] :arg-types, :as expr}]
+    (case iunit
+      :year-month {:return-type dt-type
+                   :->call-code (fn [[x-arg y-arg]]
+                                  `(.toEpochDay (~method-sym (LocalDate/ofEpochDay ~x-arg) (.getPeriod ~y-arg))))}
+      :day-time (recall-with-cast expr [:timestamp-local :milli] itype)
+      :month-day-nano (recall-with-cast expr [:timestamp-local :nano] itype)))
+
+  (defmethod expr/codegen-mono-call [f-kw :timestamp-local :interval] [{[[_ ts-unit :as ts-type], [_ iunit]] :arg-types}]
+    (letfn [(codegen-call [unit-lower-bound]
+              (with-first-arg-unit-conversion ts-unit unit-lower-bound
+                #(do [:timestamp-local %])
+                (fn [ts-unit [ts-arg i-arg]]
+                  (-> `(let [i# ~i-arg]
+                         (-> ~(ts->ldt ts-arg ts-unit)
+                             (~method-sym (.getPeriod i#))
+                             (~method-sym (.getDuration i#))))
+                      (ldt->ts ts-unit)))))]
+      (case iunit
+        :year-month {:return-type ts-type
+                     :->call-code (fn [[x-arg y-arg]]
+                                    (-> `(let [i# ~y-arg]
+                                           (-> ~(ts->ldt x-arg ts-unit)
+                                               (~method-sym (.getPeriod i#))
+                                               (~method-sym (.getDuration i#))))
+                                        (ldt->ts ts-unit)))}
+
+        :day-time (codegen-call :milli)
+        :month-day-nano (codegen-call :nano))))
+
+  (defmethod expr/codegen-mono-call [f-kw :timestamp-tz :interval] [{[[_ ts-unit tz :as ts-type], [_ iunit]] :arg-types}]
+    (let [zone-id-sym (gensym 'zone-id)]
+      (letfn [(codegen-call [unit-lower-bound]
+                (with-first-arg-unit-conversion ts-unit unit-lower-bound
+                  #(do [:timestamp-tz % tz])
+                  (fn [ts-unit [ts-arg i-arg]]
+                    (-> `(let [i# ~i-arg]
+                           (-> ~(ts->zdt ts-arg ts-unit zone-id-sym)
+                               (~method-sym (.getPeriod i#))
+                               (~method-sym (.getDuration i#))))
+                        (zdt->ts ts-unit)))))]
+        (-> (case iunit
+              :year-month {:return-type ts-type
+                           :->call-code (fn [[x-arg y-arg]]
+                                          (-> `(let [y# ~y-arg]
+                                                 (-> ~(ts->zdt x-arg ts-unit zone-id-sym)
+                                                     (~method-sym (.getPeriod y#))
+                                                     (~method-sym (.getDuration y#))))
+                                              (zdt->ts ts-unit)))}
+
+              :day-time (codegen-call :milli)
+              :month-day-nano (codegen-call :nano))
+            (update :batch-bindings (fnil conj []) [zone-id-sym `(ZoneId/of ~(str tz))]))))))
 
 (doseq [[t1 t2] [[:duration :timestamp-tz]
                  [:duration :timestamp-local]
@@ -276,7 +346,9 @@
                  [:time-local :date]
                  [:time-local :timestamp-local]
                  [:time-local :timestamp-tz]
-                 [:interval :date]]]
+                 [:interval :date]
+                 [:interval :timestamp-local]
+                 [:interval :timestamp-tz]]]
   (defmethod expr/codegen-mono-call [:+ t1 t2] [expr]
     (recall-with-flipped-args expr)))
 
@@ -321,17 +393,20 @@
   (-> expr (recall-with-cast [:timestamp-local dur-unit] arg2)))
 
 (defmethod expr/codegen-mono-call [:- :timestamp-local :duration] [{[[_ts ts-unit], [_dur dur-unit]] :arg-types}]
- (with-arg-unit-conversion ts-unit dur-unit
+  (with-arg-unit-conversion ts-unit dur-unit
     #(do [:timestamp-local %]) #(do `(Math/subtractExact ~@%))))
 
 (defmethod expr/codegen-mono-call [:- :duration :duration] [{[[_x x-unit] [_y y-unit]] :arg-types}]
   (with-arg-unit-conversion x-unit y-unit
     #(do [:duration %]) #(do `(Math/subtractExact ~@%))))
 
-(defmethod expr/codegen-mono-call [:- :date :interval] [{[dt-type, _i-type] :arg-types}]
-  {:return-type dt-type
-   :->call-code (fn [[x-arg y-arg]]
-                  `(.toEpochDay (.minus (LocalDate/ofEpochDay ~x-arg) (.getPeriod ~y-arg))))})
+(defmethod expr/codegen-mono-call [:- :date :interval] [{[dt-type, [_ iunit :as itype]] :arg-types, :as expr}]
+  (case iunit
+    :year-month {:return-type dt-type
+                 :->call-code (fn [[x-arg y-arg]]
+                                `(.toEpochDay (.minus (LocalDate/ofEpochDay ~x-arg) (.getPeriod ~y-arg))))}
+    :day-time (recall-with-cast expr [:timestamp-local :milli] itype)
+    :month-day-nano (recall-with-cast expr [:timestamp-local :nano] itype)))
 
 ;;; multiply, divide
 
@@ -763,25 +838,39 @@
                     "HOUR" `(int 0)
                     "MINUTE" `(int 0)))})
 
-(defmethod expr/codegen-mono-call [:date-trunc :utf8 :timestamp-tz] [{[{field :literal} _] :args, [_ [_tstz _time-unit tz :as ts-type]] :arg-types}]
-  ;; FIXME this assumes micros
+(defmethod expr/codegen-mono-call [:date-trunc :utf8 :timestamp-local] [{[{field :literal} _] :args, [_ [_ts ts-unit :as ts-type]] :arg-types}]
+  {:return-type ts-type
+   :->call-code (fn [[_ x]]
+                  (-> `(-> ~(ts->ldt x ts-unit)
+                           ~(case field
+                              "YEAR" `(-> (.truncatedTo ChronoUnit/DAYS) (.withDayOfYear 1))
+                              "MONTH" `(-> (.truncatedTo ChronoUnit/DAYS) (.withDayOfMonth 1))
+                              `(.truncatedTo ~(case field
+                                                "DAY" `ChronoUnit/DAYS
+                                                "HOUR" `ChronoUnit/HOURS
+                                                "MINUTE" `ChronoUnit/MINUTES
+                                                "SECOND" `ChronoUnit/SECONDS
+                                                "MILLISECOND" `ChronoUnit/MILLIS
+                                                "MICROSECOND" `ChronoUnit/MICROS))))
+                      (ldt->ts ts-unit)))})
+
+(defmethod expr/codegen-mono-call [:date-trunc :utf8 :timestamp-tz] [{[{field :literal} _] :args, [_ [_tstz ts-unit tz :as ts-type]] :arg-types}]
   (let [zone-id-sym (gensym 'zone-id)]
     {:return-type ts-type
      :batch-bindings [[zone-id-sym `(ZoneId/of ~tz)]]
      :->call-code (fn [[_ x]]
-                    `(util/instant->micros (-> (util/micros->instant ~x)
-                                               (ZonedDateTime/ofInstant ~zone-id-sym)
-                                               ~(case field
-                                                  "YEAR" `(-> (.truncatedTo ChronoUnit/DAYS) (.withDayOfYear 1))
-                                                  "MONTH" `(-> (.truncatedTo ChronoUnit/DAYS) (.withDayOfMonth 1))
-                                                  `(.truncatedTo ~(case field
-                                                                    "DAY" `ChronoUnit/DAYS
-                                                                    "HOUR" `ChronoUnit/HOURS
-                                                                    "MINUTE" `ChronoUnit/MINUTES
-                                                                    "SECOND" `ChronoUnit/SECONDS
-                                                                    "MILLISECOND" `ChronoUnit/MILLIS
-                                                                    "MICROSECOND" `ChronoUnit/MICROS)))
-                                               (.toInstant))))}))
+                    (-> `(-> ~(ts->zdt x ts-unit zone-id-sym)
+                             ~(case field
+                                "YEAR" `(-> (.truncatedTo ChronoUnit/DAYS) (.withDayOfYear 1))
+                                "MONTH" `(-> (.truncatedTo ChronoUnit/DAYS) (.withDayOfMonth 1))
+                                `(.truncatedTo ~(case field
+                                                  "DAY" `ChronoUnit/DAYS
+                                                  "HOUR" `ChronoUnit/HOURS
+                                                  "MINUTE" `ChronoUnit/MINUTES
+                                                  "SECOND" `ChronoUnit/SECONDS
+                                                  "MILLISECOND" `ChronoUnit/MILLIS
+                                                  "MICROSECOND" `ChronoUnit/MICROS))))
+                        (zdt->ts ts-unit)))}))
 
 (defmethod expr/codegen-mono-call [:date-trunc :utf8 :date] [{[{field :literal} _] :args, [_ [_date _date-unit :as date-type]] :arg-types}]
   ;; FIXME this assumes epoch-day
