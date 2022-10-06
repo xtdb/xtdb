@@ -44,7 +44,9 @@
   When a resize is needed the (kv/store) call will acquire an exclusive (resize) lock, ensuring no concurrent transactions,
   new transactions must wait (block) for the resize to finish. See calls of (acquire-map-resize-permit sync), (release-map-resize-permit sync)
 
-  The reason over StampedLock (the original control mechanism) is to provide a fairness/barging policy so that writers are prioritised over readers, and that older readers get a chance to run if under high contention.
+  The reason over StampedLock (the original control mechanism) is to provide a fairness/barging policy for readers if under high contention, writes are probabilistically
+  preferred to readers, but there is no fairness between writers. This approach avoids deadlocks when reads nest while a resize acquire is spinning.
+
   We cannot use a ReentrantReadWriteLock as open transactions lifetimes are not tied to any particular thread.
 
   NOTE: resize permits must be released on acquiring thread, transaction permits can be released on any thread."

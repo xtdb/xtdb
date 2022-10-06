@@ -23,9 +23,9 @@ public class MapResizeSync extends AbstractQueuedSynchronizer {
     // Notes:
     // I wanted to avoid the .java, but couldn't easily use (proxy) in clj because protected methods cannot be called.
 
-    // Reason for queued synchronizer to get fairness policy and platform blocking for LMDB locks without implementing our own spin.
+    // Reason for queued synchronizer to get fairness policy and platform blocking for LMDB read locks without implementing our own spin.
     // originally the stamped lock that was in use did not enforce fairness / write priority which could cause ingestion to wait too long
-    // to get lock.
+    // to get the lock.
     public MapResizeSync() {
         super();
     }
@@ -33,28 +33,23 @@ public class MapResizeSync extends AbstractQueuedSynchronizer {
     @Override
     protected boolean tryAcquire(int signal) {
         // note: not re-entrant, not yet necessary
-        assert signal == -1;
-        if (compareAndSetState(0, -1)) {
-            setExclusiveOwnerThread(Thread.currentThread());
-            return true;
+        // instead of queuing, writes always spin
+        // they will then probabilistically barge ahead of writes, if they go on the queue it will cause deadlocks
+        // when reads nest on another thread.
+        for(;;) {
+            if (compareAndSetState(0, -1)) {
+                return true;
+            }
         }
-        return false;
     }
 
     @Override
     protected boolean tryRelease(int signal) {
         assert signal == -1;
-        if (!isHeldExclusively()) {
-            throw new IllegalMonitorStateException("Map lock released on-non owner thread");
+        if (compareAndSetState(-1, 0)) {
+            return true;
         }
-        setState(0);
-        setExclusiveOwnerThread(null);
-        return true;
-    }
-
-    @Override
-    protected boolean isHeldExclusively() {
-        return getExclusiveOwnerThread() == Thread.currentThread();
+        throw new IllegalMonitorStateException("Map lock not acquired");
     }
     @Override
     protected int tryAcquireShared(int signal) {
