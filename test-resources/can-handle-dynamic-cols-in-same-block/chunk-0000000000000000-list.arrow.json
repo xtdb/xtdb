@@ -83,12 +83,12 @@
         "name" : "list",
         "count" : 2,
         "VALIDITY" : [1,1],
-        "OFFSET" : [0,2,2],
+        "OFFSET" : [0,2,4],
         "children" : [{
           "name" : "$data$",
-          "count" : 2,
-          "TYPE_ID" : [0,1],
-          "OFFSET" : [0,0],
+          "count" : 4,
+          "TYPE_ID" : [0,1,2,3],
+          "OFFSET" : [0,0,0,0],
           "children" : [{
             "name" : "f64",
             "count" : 1,
@@ -102,14 +102,14 @@
             "DATA" : ["foo"]
           },{
             "name" : "timestamp-tz-micro-utc",
-            "count" : 0,
-            "VALIDITY" : [ ],
-            "DATA" : [ ]
+            "count" : 1,
+            "VALIDITY" : [1],
+            "DATA" : [1577836800000000]
           },{
             "name" : "bool",
-            "count" : 0,
-            "VALIDITY" : [ ],
-            "DATA" : [ ]
+            "count" : 1,
+            "VALIDITY" : [1],
+            "DATA" : [0]
           }]
         }]
       }]
