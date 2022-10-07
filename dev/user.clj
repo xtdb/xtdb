@@ -1,12 +1,15 @@
 (ns user
-  (:require [clojure.tools.namespace.repl :as ctn]
-            [clojure.java.io :as io]
+  (:require [clojure.java.io :as io]
+            [clojure.tools.namespace.repl :as ctn]
             core2.edn
+            [core2.util :as util]
             [time-literals.read-write :as time-literals])
   (:import java.io.File))
 
 (alter-var-root #'*warn-on-reflection* (constantly true))
+
 (ctn/disable-reload!)
+(util/install-uncaught-exception-handler!)
 
 (apply ctn/set-refresh-dirs (cons (io/file "test")
                                   (for [^File dir (concat (.listFiles (io/file "."))

@@ -38,6 +38,13 @@
     (apply update m k f args)
     m))
 
+(defn try-close [c]
+  (try
+    (when (instance? AutoCloseable c)
+      (.close ^AutoCloseable c))
+    (catch Exception e
+      (log/warn e "could not close"))))
+
 ;;; Common specs
 
 (defn ->path ^Path [path-ish]
@@ -260,21 +267,6 @@
 (defmacro completable-future {:style/indent 1} [pool & body]
   `(CompletableFuture/supplyAsync (->supplier (fn [] ~@body)) ~pool))
 
-(defn ->prefix-thread-factory ^java.util.concurrent.ThreadFactory [^String prefix]
-  (let [default-thread-factory (Executors/defaultThreadFactory)]
-    (reify ThreadFactory
-      (newThread [_ r]
-        (let [t (.newThread default-thread-factory r)]
-          (.setName t (str prefix (.getName t)))
-          t)))))
-
-(defn try-close [c]
-  (try
-    (when (instance? AutoCloseable c)
-      (.close ^AutoCloseable c))
-    (catch Exception e
-      (log/warn e "could not close"))))
-
 (def uncaught-exception-handler
   (reify Thread$UncaughtExceptionHandler
     (uncaughtException [_ _thread throwable]
@@ -283,6 +275,15 @@
 (defn install-uncaught-exception-handler! []
   (when-not (Thread/getDefaultUncaughtExceptionHandler)
     (Thread/setDefaultUncaughtExceptionHandler uncaught-exception-handler)))
+
+(defn ->prefix-thread-factory ^java.util.concurrent.ThreadFactory [^String prefix]
+  (let [default-thread-factory (Executors/defaultThreadFactory)]
+    (reify ThreadFactory
+      (newThread [_ r]
+        (let [t (.newThread default-thread-factory r)]
+          (doto t
+            (.setName (str prefix "-" (.getName t)))
+            (.setUncaughtExceptionHandler uncaught-exception-handler)))))))
 
 (defn shutdown-pool
   ([^ExecutorService pool]
