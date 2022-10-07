@@ -60,6 +60,13 @@ VALUES (1, 'Happy 2024!', DATE '2024-01-01'),
       (t/is (= (expected (util/->zdt #inst "2020-01-02"))
                (q "posts2" !tx))))))
 
+(t/deftest test-dml-sees-in-tx-docs
+  (let [!tx (c2/submit-tx tu/*node* [[:sql "INSERT INTO foo (id, v) VALUES ('foo', 0)"]
+                                     [:sql "UPDATE foo SET v = 1"]])]
+    (t/is (= [{:id "foo", :v 1}]
+             (c2/sql-query tu/*node* "SELECT foo.id, foo.v FROM foo"
+                           {:basis {:tx !tx}})))))
+
 (t/deftest test-delete-without-search-315
   (let [!tx1 (c2/submit-tx tu/*node* [[:sql "INSERT INTO foo (id) VALUES ('foo')"]])]
     (t/is (= [{:id "foo",

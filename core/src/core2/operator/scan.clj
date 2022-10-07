@@ -22,7 +22,7 @@
            core2.operator.IRelationSelector
            (core2.vector IIndirectRelation IIndirectVector)
            core2.watermark.IWatermark
-           [java.util HashMap LinkedList List Map Queue]
+           [java.util HashMap Iterator LinkedList List Map Queue]
            [java.util.function Consumer Function]
            org.apache.arrow.memory.BufferAllocator
            [org.apache.arrow.vector VarBinaryVector VectorSchemaRoot]
@@ -181,23 +181,23 @@
                      ^IBufferPool buffer-pool
                      ^IMetadataManager metadata-manager
                      ^IWatermark watermark
-                     ^Queue #_<ChunkMatch> matching-chunks
-                     ^List col-names
+                     ^List content-col-names
+                     ^List temporal-col-names
                      ^Map col-preds
                      ^longs temporal-min-range
                      ^longs temporal-max-range
+                     ^Queue #_<ChunkMatch> matching-chunks
+                     ^Iterator live-slices
                      params
-                     ^:unsynchronized-mutable ^Map #_#_<String, ICursor> chunks
-                     ^:unsynchronized-mutable ^boolean live-chunk-done?]
+                     ^:unsynchronized-mutable ^Map #_#_<String, ICursor> chunks]
   ICursor
   (tryAdvance [this c]
-    (let [real-col-names (remove temporal/temporal-column? col-names)
-          keep-row-id-col? (contains? (set col-names) "_row-id")]
+    (let [keep-row-id-col? (contains? (set temporal-col-names) "_row-id")]
       (letfn [(next-block [chunks]
                 (loop []
-                  (if-let [^Map in-roots (next-roots real-col-names chunks)]
-                    (let [atemporal-row-id-bitmap (->atemporal-row-id-bitmap allocator col-names col-preds in-roots params)
-                          temporal-rel (->temporal-rel watermark allocator col-names temporal-min-range temporal-max-range atemporal-row-id-bitmap)]
+                  (if-let [^Map in-roots (next-roots content-col-names chunks)]
+                    (let [atemporal-row-id-bitmap (->atemporal-row-id-bitmap allocator content-col-names col-preds in-roots params)
+                          temporal-rel (->temporal-rel watermark allocator temporal-col-names temporal-min-range temporal-max-range atemporal-row-id-bitmap)]
                       (or (try
                             (let [temporal-rel (-> temporal-rel (apply-temporal-preds allocator col-preds params))
                                   read-rel (cond-> (align/align-vectors (.values in-roots) temporal-rel)
@@ -219,9 +219,12 @@
                       false))))
 
               (live-chunk []
-                (let [chunks (.liveSlices watermark real-col-names)]
-                  (set! (.chunks this) chunks)
-                  (next-block chunks)))
+                (loop []
+                  (when (.hasNext live-slices)
+                    (let [chunks (.next live-slices)]
+                      (set! (.chunks this) chunks)
+                      (or (next-block chunks)
+                          (recur))))))
 
               (next-chunk []
                 (loop []
@@ -231,8 +234,8 @@
                                                                  (filter-pushdown-bloom-block-idxs metadata-manager chunk-idx col-name))
                                                             (reduced nil)))
                                                       block-idxs
-                                                      real-col-names)]
-                          (let [chunks (->> (for [col-name real-col-names]
+                                                      content-col-names)]
+                          (let [chunks (->> (for [col-name content-col-names]
                                               (-> (.getBuffer buffer-pool (meta/->chunk-obj-key chunk-idx col-name))
                                                   (util/then-apply
                                                     (fn [buf]
@@ -251,9 +254,7 @@
 
             (next-chunk)
 
-            (when-not live-chunk-done?
-              (set! (.live-chunk-done? this) true)
-              (live-chunk))
+            (live-chunk)
 
             false))))
 
@@ -281,6 +282,10 @@
                                                :select (key (first arg)))))
                                       (distinct))))
 
+        {content-col-names false, temporal-col-names true} (->> col-names
+                                                                (mapv name)
+                                                                (group-by temporal/temporal-column?))
+
         col-types (->> col-names
                        (into {} (map (juxt identity
                                            (fn [col-name]
@@ -297,9 +302,8 @@
                                           (expr/->expression-relation-selector select-form {:col-types col-types, :param-types param-types})))
                        (into {}))
 
-        metadata-args (vec (concat (for [col-name col-names
-                                         :when (and (not (contains? col-preds (name col-name)))
-                                                    (not (temporal/temporal-column? (name col-name))))]
+        metadata-args (vec (concat (for [col-name content-col-names
+                                         :when (not (contains? col-preds (name col-name)))]
                                      col-name)
                                    (for [[col-name select] selects
                                          :when (not (temporal/temporal-column? (name col-name)))]
@@ -317,9 +321,10 @@
                                                                      (apply-src-tx! src col-preds))
                            matching-chunks (LinkedList. (or (meta/matching-chunks metadata-mgr metadata-pred) []))]
                        (-> (ScanCursor. allocator buffer-pool metadata-mgr watermark
-                                        matching-chunks (mapv name col-names) col-preds
-                                        temporal-min-range temporal-max-range params
-                                        #_chunks nil #_live-chunk-done? false)
+                                        content-col-names temporal-col-names col-preds
+                                        temporal-min-range temporal-max-range
+                                        matching-chunks (.iterator (.liveSlices watermark content-col-names))
+                                        params #_chunks nil)
                            (coalesce/->coalescing-cursor allocator)
                            (util/and-also-close watermark)))
                      (catch Throwable t

@@ -21,7 +21,7 @@
 #_{:clj-kondo/ignore [:unused-binding]}
 (definterface IWatermark
   (columnType [^String columnName])
-  (liveSlices [^Iterable columnNames])
+  (^Iterable liveSlices [^Iterable columnNames])
 
   ;; this is a lot of duplication - I guess we'd extend interfaces here if we were in Java
   (^core2.vector.IIndirectRelation createTemporalRelation [^org.apache.arrow.memory.BufferAllocator allocator
@@ -36,9 +36,11 @@
   (^void setWatermark [^long chunkIdx,
                        ^core2.api.TransactionInstant txKey,
                        ^java.util.Map liveRoots,
+                       ^java.util.Map txLiveRoots,
                        ^core2.temporal.ITemporalRelationSource temporalWatermark]))
 
-(defrecord Watermark [^TransactionInstant tx-key, ^Map live-roots, ^ITemporalRelationSource temporal-roots-src
+(defrecord Watermark [^TransactionInstant tx-key, ^Map live-roots, ^Map tx-live-roots,
+                      ^ITemporalRelationSource temporal-roots-src
                       ^long chunk-idx, ^int max-rows-per-block]
   IWatermark
   (columnType [_ col-name]
@@ -48,12 +50,16 @@
           (types/field->col-type))))
 
   (liveSlices [_ col-names]
-    (into {}
-          (keep (fn [col-name]
-                  (when-let [root (.get live-roots col-name)]
-                    (let [row-counts (blocks/row-id-aligned-blocks root chunk-idx max-rows-per-block)]
-                      (MapEntry/create col-name (blocks/->slices root row-counts))))))
-          col-names))
+    (for [^Map roots [live-roots tx-live-roots]
+          :when roots
+          :let [slices (into {}
+                             (keep (fn [col-name]
+                                     (when-let [root (.get roots col-name)]
+                                       (let [row-counts (blocks/row-id-aligned-blocks root chunk-idx max-rows-per-block)]
+                                         (MapEntry/create col-name (blocks/->slices root row-counts))))))
+                             col-names)]
+          :when (= (count col-names) (count slices))]
+      slices))
 
   (createTemporalRelation [_ allocator columns temporal-min-range temporal-max-range row-id-bitmap]
     (.createTemporalRelation temporal-roots-src allocator columns
@@ -128,10 +134,14 @@
                 (.unlock open-watermarks-lock stamp))))
           (recur)))))
 
-  (setWatermark [this chunk-idx tx-key live-roots temporal-watermark]
+  (setWatermark [this chunk-idx tx-key live-roots tx-live-roots temporal-watermark]
     (let [old-wm watermark]
       (try
-        (let [wm (-> (->Watermark tx-key (or live-roots (Collections/emptySortedMap)) temporal-watermark chunk-idx max-rows-per-block)
+        (let [wm (-> (->Watermark tx-key
+                                  (or live-roots (Collections/emptySortedMap))
+                                  (or tx-live-roots (Collections/emptySortedMap))
+                                  temporal-watermark
+                                  chunk-idx max-rows-per-block)
                      (->ReferenceCountingWatermark (AtomicInteger. 1) (ConcurrentHashMap.)))]
           (remove-closed-watermarks open-watermarks-lock open-watermarks)
           (set! (.watermark this) wm)

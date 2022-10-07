@@ -37,17 +37,17 @@
     }]
   },
   "batches" : [{
-    "count" : 4,
+    "count" : 3,
     "columns" : [{
       "name" : "_row-id",
-      "count" : 4,
-      "VALIDITY" : [1,1,1,1],
-      "DATA" : ["0","1","2","4"]
+      "count" : 3,
+      "VALIDITY" : [1,1,1],
+      "DATA" : ["0","1","3"]
     },{
       "name" : "id",
-      "count" : 4,
-      "TYPE_ID" : [0,0,1,0],
-      "OFFSET" : [0,1,0,2],
+      "count" : 3,
+      "TYPE_ID" : [0,0,0],
+      "OFFSET" : [0,1,2],
       "children" : [{
         "name" : "utf8",
         "count" : 3,
@@ -56,9 +56,9 @@
         "DATA" : ["foo","bar","bar"]
       },{
         "name" : "i64",
-        "count" : 1,
-        "VALIDITY" : [1],
-        "DATA" : ["1"]
+        "count" : 0,
+        "VALIDITY" : [ ],
+        "DATA" : [ ]
       }]
     }]
   }]
