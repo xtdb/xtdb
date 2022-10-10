@@ -77,7 +77,7 @@
 
 (defprotocol InFlightTx
   (index-tx-docs [in-flight-tx docs])
-  (index-tx-events [in-flight-tx tx])
+  (index-tx-events [in-flight-tx tx] "Returns a map of :committing? (true/false) representing whether the transactions were indexed, :indexed-docs (any new docs indexed during the expansion of tx fns)")
   (commit [in-flight-tx tx])
   (abort [in-flight-tx tx]))
 

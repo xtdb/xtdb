@@ -144,5 +144,5 @@
 
     (db/submit-docs in-flight-tx docs)
     (db/index-tx-docs in-flight-tx docs)
-    (when (db/index-tx-events in-flight-tx tx)
+    (when (:committing? (db/index-tx-events in-flight-tx tx))
       (xt/db in-flight-tx valid-time))))
