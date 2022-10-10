@@ -35,6 +35,7 @@
 
 * Controlled scaling of compute, different categories of compute and caches, protecting OLTP from OLAP (if needed).
 * Deterministic transaction budgets.
+* External sort and join so large intermediate results can spill to disk.
 * Azure and GCP object stores.
 * Data migration from Core1. Can mainly be grown via existing Core1 projects. Build up helper repo.
 * Bespoke consoles and dashboards. Needs analysis before embarking on, work sits under DBaaS team.
