@@ -310,39 +310,44 @@
       (with-open [index-snapshot (db/open-index-snapshot index-store-tx)]
         (let [deps (assoc this :index-snapshot index-snapshot)
               {::txe/keys [tx-events]} tx
-              abort? (loop [[tx-event & more-tx-events] tx-events]
-                       (when tx-event
-                         (let [{:keys [docs abort? evict-eids etxs], new-tx-events :tx-events}
-                               (index-tx-event tx-event tx deps)
-                               docs (->> docs (xio/map-vals c/xt->crux))]
-                           (if abort?
-                             (do
-                               (when-let [docs (seq (concat docs (arg-docs-to-replace document-store-tx more-tx-events)))]
-                                 (db/submit-docs document-store-tx docs))
-                               true)
+              [abort? indexed-docs]
+              (loop [[tx-event & more-tx-events] tx-events
+                     indexed-docs []]
+                (if-not tx-event
+                  [false indexed-docs]
+                  (let [{:keys [docs abort? evict-eids etxs], new-tx-events :tx-events}
+                        (index-tx-event tx-event tx deps)
+                        docs (->> docs (xio/map-vals c/xt->crux))]
+                    (if abort?
+                      (let [new-docs (seq (concat docs (arg-docs-to-replace document-store-tx more-tx-events)))]
+                        (when new-docs (db/submit-docs document-store-tx new-docs))
+                        [true indexed-docs])
 
-                             (do
-                               (let [docs (-> docs without-tx-fn-docs)]
-                                 (when (seq docs)
-                                   (when-let [missing-ids (seq (remove :crux.db/id (vals docs)))]
-                                     (throw (err/illegal-arg :missing-eid {::err/message "Missing required attribute :crux.db/id"
-                                                                           :docs missing-ids})))
+                      (do
+                        (let [docs-to-index (-> docs without-tx-fn-docs)]
 
-                                   (db/index-tx-docs this docs)))
+                          (when (seq docs-to-index)
+                            (when-let [missing-ids (seq (remove :crux.db/id (vals docs-to-index)))]
+                              (throw (err/illegal-arg :missing-eid {::err/message "Missing required attribute :crux.db/id"
+                                                                    :docs missing-ids})))
 
-                               (db/index-entity-txs index-store-tx etxs)
-                               (let [{:keys [tombstones]} (when (seq evict-eids)
-                                                            (db/unindex-eids index-store-tx nil evict-eids))]
-                                 (when-let [docs (seq (concat docs tombstones))]
-                                   (db/submit-docs document-store-tx docs)))
+                            (db/index-tx-docs this docs-to-index))
 
-                               (if (Thread/interrupted)
-                                 (throw (InterruptedException.))
-                                 (recur (concat new-tx-events more-tx-events))))))))]
+                          (db/index-entity-txs index-store-tx etxs)
+                          (let [{:keys [tombstones]} (when (seq evict-eids)
+                                                       (db/unindex-eids index-store-tx nil evict-eids))]
+                            (when-let [docs (seq (concat docs tombstones))]
+                              (db/submit-docs document-store-tx docs)))
+
+                            (if (Thread/interrupted)
+                              (throw (InterruptedException.))
+                              (recur (concat new-tx-events more-tx-events)
+                                     (into indexed-docs docs-to-index)))))))))]
           (when abort?
             (reset! !tx-state :abort-only))
 
-          (not abort?)))
+          {:committing? (not abort?)
+           :indexed-docs indexed-docs}))
 
       (catch Throwable e
         (reset! !tx-state :abort-only)
@@ -558,14 +563,14 @@
                                                                 [tx true])
                                                               [tx false])
                                                 _ (reset! latest-tx! tx)
-                                                committing? (and (not abort?) (db/index-tx-events in-flight-tx tx))]
+                                                {:keys [committing?, indexed-docs]} (when-not abort? (db/index-tx-events in-flight-tx tx))]
 
                                             (process-tx-f in-flight-tx (assoc tx :committing? committing?))
 
                                             (if committing?
                                               (do
                                                 (db/commit in-flight-tx tx)
-                                                (submit-job! stats-executor stats-fn docs))
+                                                (submit-job! stats-executor stats-fn (into docs indexed-docs)))
                                               (db/abort in-flight-tx tx))))
 
                                         (txs-doc-encoder-fn [txs]

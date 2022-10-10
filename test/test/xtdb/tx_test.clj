@@ -1539,3 +1539,18 @@
       (with-open [node (xt/start-node cfg)]
         (xt/sync node)
         (t/is (= #{[@ctr]} (xt/q (xt/db node) '{:find [(count e)] :where [[e ::n]]})))))))
+
+(defn- try-until-true [ms pred]
+  (loop [wait-until (+ ms (System/currentTimeMillis))]
+    (if (< wait-until (System/currentTimeMillis))
+      false
+      (or (pred) (recur wait-until)))))
+
+(t/deftest tx-fn-expansion-stats-1825
+  (let [node *api*]
+    (xt/submit-tx node
+                  [[::xt/put {:xt/id :put-foo,
+                              :xt/fn '(fn [_ n] [[::xt/put {:xt/id :foo, :answer n}]])}]
+                   [::xt/fn :put-foo 42]])
+    (xt/sync node)
+    (t/is (try-until-true 1000 #(= 1 (:answer (xt/attribute-stats node)))))))
