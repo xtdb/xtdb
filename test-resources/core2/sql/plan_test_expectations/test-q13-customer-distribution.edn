@@ -1,14 +1,14 @@
 [:rename
- {x9 c_count, x12 custdist}
+ {x10 c_count, x13 custdist}
  [:order-by
-  [[x12 {:direction :desc, :null-ordering :nulls-last}]
-   [x9 {:direction :desc, :null-ordering :nulls-last}]]
+  [[x13 {:direction :desc, :null-ordering :nulls-last}]
+   [x10 {:direction :desc, :null-ordering :nulls-last}]]
   [:group-by
-   [x9 {x12 (count x11)}]
+   [x10 {x13 (count x12)}]
    [:map
-    [{x11 1}]
+    [{x12 1}]
     [:group-by
-     [x1 {x9 (count x4)}]
+     [x1 {x10 (count x4)}]
      [:left-outer-join
       [{x1 x5}]
       [:rename

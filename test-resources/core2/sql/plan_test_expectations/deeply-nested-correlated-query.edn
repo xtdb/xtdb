@@ -4,7 +4,7 @@
   [x1 x2]
   [:apply
    :semi-join
-   {x2 ?x18, x5 ?x17}
+   {x2 ?x17, x5 ?x18}
    [:cross-join
     [:rename
      {A x1, B x2, _table x3}
@@ -13,10 +13,10 @@
    [:project
     [x8 x9]
     [:semi-join
-     [{x9 x12} {?x17 x13}]
+     [{x9 x12} (= x13 ?x18)]
      [:rename
       {A x8, B x9, _table x10}
-      [:scan [{A (= A ?x18)} B {_table (= _table "R")}]]]
+      [:scan [{A (= A ?x17)} B {_table (= _table "R")}]]]
      [:rename
       {A x12, B x13, _table x14}
       [:scan [A B {_table (= _table "R")}]]]]]]]]

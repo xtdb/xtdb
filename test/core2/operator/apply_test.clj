@@ -116,3 +116,16 @@
                                [:select false
                                 [:table [{x2 20}]]]]]
                             {:with-col-types? true})))))
+
+(t/deftest test-nested-apply
+  (t/is (= [{:z 0, :x 0, :y 0}
+            {:z 0, :x 1, :y 0}
+            {:z 1, :x 0, :y 1}
+            {:z 1, :x 1, :y 1}]
+          (tu/query-ra
+              '[:apply :cross-join {z ?x2}
+                [:table [{:z 0}, {:z 1}]]
+                [:apply :cross-join {}
+                 [:table [{:x 0}, {:x 1}]]
+                 [:select (= ?x2 y)
+                  [:table [{:y 0}, {:y 1}]]]]] {}))))

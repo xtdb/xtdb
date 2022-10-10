@@ -2,18 +2,17 @@
  {x1 a}
  [:project
   [x1]
-  [:apply
-   :semi-join
-   {x5 ?x12, x4 ?x13}
-   [:join
-    []
-    [:rename {a x1, _table x2} [:scan [a {_table (= _table "foo")}]]]
+  [:cross-join
+   [:rename {a x1, _table x2} [:scan [a {_table (= _table "foo")}]]]
+   [:apply
+    :semi-join
+    {x5 ?x12, x4 ?x13}
     [:rename
      {c x4, b x5, _table x6}
-     [:scan [c b {_table (= _table "bar")}]]]]
-   [:project
-    [x8]
-    [:rename
-     {b x8, a x9, _table x10}
-     [:scan
-      [{b (= ?x13 b)} {a (= a ?x12)} {_table (= _table "foo")}]]]]]]]
+     [:scan [c b {_table (= _table "bar")}]]]
+    [:project
+     [x8]
+     [:rename
+      {b x8, a x9, _table x10}
+      [:scan
+       [{b (= ?x13 b)} {a (= a ?x12)} {_table (= _table "foo")}]]]]]]]]
