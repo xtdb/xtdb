@@ -3,14 +3,15 @@
 == Must, 2022 Q4, Solidify the Core for Single Node PoC Deployment.
 
 * Full nested SQL and Arrow type support in expression engine.
+* Basic INFORMATION_SCHEMA support (FlightSQL overlap), tracking uni-temporal growing set of columns per table. No general SQL schema support.
+* Support for MISSING vs NULL, and select star based on INFORMATION_SCHEMA.
+* Better SQL UX and error messages tying back to documentation, think Rust.
 * Strict SQL: all comparisons, casts and operations needs to make sense, but can throw clear errors (UX).
 * Time-as-state, single source of time with microsecond precision, see current_timestamp_as_db_state.adoc document.
 * Arrow-native driver with full type system, ie. FlightSQL with JDBC/ADBC/ODBC.
-* Better SQL UX and error messages tying back to documentation, think Rust.
 * Boot up DBaaS team and analysis in parallel.
 * Baseline of production logging and metrics.
 * Minimal authentication via SSL.
-* Basic INFORMATION_SCHEMA support (FlightSQL overlap), can be done as objects and not introduce SQL schema.
 * Keep pgwire working, but we make clear it's not the supported driver.
 * Documentation and web.
 
@@ -24,8 +25,8 @@
 * New temporal index that scales, non-monolithic, could be per table as well. Needs RnD.
 * Ability to split tables physically in storage.
 * Lax SQL: reasonable coercion for operators instead of throwing errors.
-* Minimum discoverability, like row access to mitigate select star: SELECT u FROM users u. Needs RnD.
-* Support for MISSING vs NULL, related to select star. Needs RnD.
+* Struct and row isomorphism? SELECT u FROM users u, supported in PostgreSQL.
+* Support for planning unqualified columns? Possible due to INFORMATION_SCHEMA.
 * Distributed in-memory caches to avoid object store access.
 * Basic ability to feed metrics from the running clusters back to allow tuning across all clients.
 * ARROW_TABLE extended to support Parquet, JSON etc.
