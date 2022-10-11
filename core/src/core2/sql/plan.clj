@@ -2380,14 +2380,6 @@
     (when (columns-in-both-relations? predicate lhs rhs)
       [:join (conj join-condition predicate) lhs rhs])
 
-    ;; TODO are we allowed to do this? seems like it'll move the selection before the
-    ;; outer-join null introductions
-    #_#_[:select predicate
-     [:left-outer-join join-condition lhs rhs]]
-    ;;=>
-    (when (columns-in-both-relations? predicate lhs rhs)
-      [:left-outer-join (conj join-condition predicate) lhs rhs])
-
     [:select predicate
      [:anti-join join-condition lhs rhs]]
     ;;=>
@@ -2398,17 +2390,7 @@
      [:semi-join join-condition lhs rhs]]
     ;;=>
     (when (columns-in-both-relations? predicate lhs rhs)
-      [:semi-join (conj join-condition predicate) lhs rhs])
-
-    ;; TODO we'd like to move this select inside the single-join,
-    ;; but single-join is essentially an outer-join - so is this even allowed?
-
-    ;; [:select predicate
-    ;;  [:single-join join-condition lhs rhs]]
-    ;; ;;=>
-    ;; (when (columns-in-both-relations? predicate lhs rhs)
-    ;;   [:single-join (conj join-condition predicate) lhs rhs])
-    ))
+      [:semi-join (conj join-condition predicate) lhs rhs])))
 
 (defn columns-in-predicate-present-in-relation? [relation predicate]
   (set/superset? (set (relation-columns relation)) (expr-symbols predicate)))
