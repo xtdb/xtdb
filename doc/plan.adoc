@@ -24,6 +24,7 @@
 * Predictive caching, doesn't need to be any fancy ML. Needs RnD.
 * New temporal index that scales, non-monolithic, could be per table as well. Needs RnD.
 * Ability to split tables physically in storage.
+* Double-buffered live roots, non-blocking chunk uploads via background thread.
 * Lax SQL: reasonable coercion for operators instead of throwing errors.
 * Struct and row isomorphism? SELECT u FROM users u, supported in PostgreSQL.
 * Support for planning unqualified columns? Possible due to INFORMATION_SCHEMA.
