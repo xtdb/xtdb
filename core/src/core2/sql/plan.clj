@@ -2899,9 +2899,7 @@
           [join-type new-join-expressions lhs rhs])))
 
     nil))
-(let [x {1 2}]
-  {(first (keys x))
-   (first (vals x))})
+
 (defn remove-redundant-projects [z]
   ;; assumes you wont ever have a project like [] whos job is to return an empty rel
   (r/zmatch z
