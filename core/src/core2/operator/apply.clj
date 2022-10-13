@@ -172,6 +172,7 @@
                    (accept [_ in-rel]
                      (let [^IIndirectRelation in-rel in-rel
                            idxs (IntStream/builder)]
+
                        (with-open [dep-out-writer (vw/->rel-writer allocator)]
                          (dotimes [in-idx (.rowCount in-rel)]
                            (with-open [dep-cursor (.openDependentCursor dependent-cursor-factory
@@ -192,6 +193,7 @@
     (util/try-close independent-cursor)))
 
 (defmethod lp/emit-expr :apply [{:keys [mode columns independent-relation dependent-relation]} args]
+
   ;; TODO: decodes/re-encodes row values - can we pass these directly to the sub-query?
 
   (lp/unary-expr independent-relation args
@@ -202,23 +204,24 @@
                                                                  (map (fn [[ik dk]]
                                                                         [dk (get independent-col-types ik)]))
                                                                  columns))
-            {dependent-col-types :col-types, ->dependent-cursor :->cursor} (lp/emit-expr dependent-relation dependent-args)]
+            {dependent-col-types :col-types, ->dependent-cursor :->cursor} (lp/emit-expr dependent-relation dependent-args)
+            out-dependent-col-types (zmatch mode
+                                      [:mark-join mark-spec]
+                                      (let [[col-name _expr] (first (:mark-join mark-spec))]
+                                        {col-name [:union #{:null :bool}]})
 
-        {:col-types (zmatch mode
-                      [:mark-join mark-spec]
-                      (let [[col-name _expr] (first (:mark-join mark-spec))]
-                        (assoc independent-col-types col-name [:union #{:null :bool}]))
+                                      [:otherwise simple-mode]
+                                      (case simple-mode
+                                        :cross-join dependent-col-types
 
-                      [:otherwise simple-mode]
-                      (case simple-mode
-                        :cross-join (merge-with types/merge-col-types independent-col-types dependent-col-types)
+                                        (:left-outer-join :single-join)
+                                        (-> dependent-col-types types/with-nullable-cols)
 
-                        (:left-outer-join :single-join)
-                        (merge-with types/merge-col-types independent-col-types (-> dependent-col-types types/with-nullable-cols))
+                                        (:semi-join :anti-join) {}))]
 
-                        (:semi-join :anti-join) independent-col-types))
+        {:col-types (merge-with types/merge-col-types independent-col-types out-dependent-col-types)
 
-         :->cursor (let [mode-strat (->mode-strategy mode dependent-col-types)
+         :->cursor (let [mode-strat (->mode-strategy mode out-dependent-col-types)
 
                          open-dependent-cursor
                          (zmatch mode
