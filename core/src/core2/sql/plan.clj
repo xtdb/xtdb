@@ -2883,15 +2883,25 @@
 
 (defn- rewrite-equals-predicates-in-join-as-equi-join-map [z]
   (r/zcase z
-    (:join :semi-join :anti-join :left-outer-join :single-join)
-    (r/zmatch z
+    (:join :semi-join :anti-join :left-outer-join :single-join :mark-join)
+    (r/zmatch
+      z
+      [:mark-join projection lhs rhs]
+      (let [projected-col (first (keys projection))
+            join-expressions (first (vals projection))
+            new-join-expressions (optimize-join-expression join-expressions lhs rhs)]
+        (when (not= new-join-expressions join-expressions)
+          [:mark-join {projected-col new-join-expressions} lhs rhs]))
+
       [join-type join-expressions lhs rhs]
       (let [new-join-expressions (optimize-join-expression join-expressions lhs rhs)]
         (when (not= new-join-expressions join-expressions)
           [join-type new-join-expressions lhs rhs])))
 
     nil))
-
+(let [x {1 2}]
+  {(first (keys x))
+   (first (vals x))})
 (defn remove-redundant-projects [z]
   ;; assumes you wont ever have a project like [] whos job is to return an empty rel
   (r/zmatch z

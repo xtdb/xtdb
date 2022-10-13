@@ -5,7 +5,7 @@
   [:select
    (or x8 (= x2 42))
    [:mark-join
-    {x8 [(= x1 x5)]}
+    {x8 [{x1 x5}]}
     [:rename
      {a x1, b x2, _table x3}
      [:scan [a b {_table (= _table "foo")}]]]

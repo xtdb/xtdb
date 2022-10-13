@@ -28,17 +28,17 @@
       (between x12 1 15)
       x38))
     [:mark-join
-     {x38 [(= x5 x35)]}
+     {x38 [{x5 x35}]}
      [:mark-join
-      {x34 [(= x11 x31)]}
+      {x34 [{x11 x31}]}
       [:mark-join
-       {x30 [(= x5 x27)]}
+       {x30 [{x5 x27}]}
        [:mark-join
-        {x26 [(= x11 x23)]}
+        {x26 [{x11 x23}]}
         [:mark-join
-         {x22 [(= x5 x19)]}
+         {x22 [{x5 x19}]}
          [:mark-join
-          {x18 [(= x11 x15)]}
+          {x18 [{x11 x15}]}
           [:join
            [{x3 x9}]
            [:rename
