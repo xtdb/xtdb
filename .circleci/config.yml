@@ -10,6 +10,11 @@ executors:
 orbs:
   slack: circleci/slack@4.1
 
+parameters:
+  run-slt:
+    type: boolean
+    default: false
+
 jobs:
   setup:
     executor: clojure
@@ -37,12 +42,16 @@ jobs:
       # can remove `-Sthreads 1` when the Docker image updates to 1.11.0.1100 or later.
       - run: 'clojure -P -Sthreads 1'
 
+      - run: 'mkdir ~/slt-results'
+
+
       - persist_to_workspace:
           root: ~/
           paths:
             - .m2
             - .gitlibs
             - core2
+            - slt-results
 
       - save_cache:
           paths:
@@ -137,8 +146,25 @@ jobs:
 
       - run: 'clojure -Srepro -M:core2:4gb:slt-test-dirs << parameters.dirs >>'
 
+      - persist_to_workspace:
+          root: ~/
+          paths: slt-results
+
+  store-test-results:
+
+    executor: clojure
+    resource_class: medium
+
+    steps:
+      - attach_workspace:
+          at: ~/
+
+      - run: 'clojure -Srepro -X:slt-print-results'
+
 workflows:
   build:
+    when:
+      not: << pipeline.parameters.run-slt >>
     jobs:
       - setup:
           context: slack-bot
@@ -155,25 +181,35 @@ workflows:
             - setup
       - slt-test:
           requires:
-            - setup
+           - setup
       - slt-test-2:
           requires:
             - setup
+
+  slt-nightly:
+    when: << pipeline.parameters.run-slt >>
+    jobs:
+      - setup:
+          context: slack-bot
       - slt-test-dirs:
           requires:
             - setup
           matrix:
             parameters:
               dirs:
-                # - "test/core2/sql/logic_test/sqlite_test/random/expr/"
-                # - "test/core2/sql/logic_test/sqlite_test/random/aggregates/"
-                  # - "test/core2/sql/logic_test/sqlite_test/random/groupby/"
-                  # - "test/core2/sql/logic_test/sqlite_test/random/select/"
-                  #  - "test/core2/sql/logic_test/sqlite_test/index/between/"
-                  #  - "test/core2/sql/logic_test/sqlite_test/index/commute/"
-                  #  - "test/core2/sql/logic_test/sqlite_test/index/orderby/"
-                  #  - "test/core2/sql/logic_test/sqlite_test/index/orderby_nosort/"
-                  #  - "test/core2/sql/logic_test/sqlite_test/index/in/"
-                  #  - "test/core2/sql/logic_test/sqlite_test/index/random/"
+                - "test/core2/sql/logic_test/sqlite_test/random/expr/"
+                - "test/core2/sql/logic_test/sqlite_test/random/aggregates/"
+                - "test/core2/sql/logic_test/sqlite_test/random/groupby/"
+                - "test/core2/sql/logic_test/sqlite_test/random/select/"
+                - "test/core2/sql/logic_test/sqlite_test/index/between/"
+                - "test/core2/sql/logic_test/sqlite_test/index/commute/"
+                - "test/core2/sql/logic_test/sqlite_test/index/orderby/"
+                - "test/core2/sql/logic_test/sqlite_test/index/orderby_nosort/"
+                - "test/core2/sql/logic_test/sqlite_test/index/in/"
+                - "test/core2/sql/logic_test/sqlite_test/index/random/"
                   #  - "test/core2/sql/logic_test/sqlite_test/index/delete/"
-                  #  - "test/core2/sql/logic_test/sqlite_test/index/view/"
+                - "test/core2/sql/logic_test/sqlite_test/index/view/"
+      - store-test-results:
+          requires:
+            - slt-test-dirs
+            - setup

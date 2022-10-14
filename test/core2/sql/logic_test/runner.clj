@@ -6,6 +6,7 @@
             [clojure.string :as str]
             [clojure.tools.cli :as cli]
             [clojure.tools.logging :as log]
+            [cheshire.core :as json]
             [core2.test-util :as tu])
   (:import java.io.OutputStream
            java.nio.charset.StandardCharsets
@@ -349,6 +350,34 @@
                                          (vary-meta into (meta (var ~nm)))))))
           (alter-meta! assoc :test run-slt-script#, :arglists '([] [~'opts])))))))
 
+(defn write-results-to-file [arguments total-results]
+  (let [file-name (->> arguments
+                       (map #(str/join "-" (take-last 2 (str/split % #"/"))))
+                       (str/join "-and-")
+                       (str (System/getProperty "user.home") "/slt-results/"))]
+    (json/generate-stream total-results (io/writer (str file-name ".json")))))
+
+(defn print-results-table [& args]
+  (let [result-files (->>
+                       (file-seq (io/file (str (System/getProperty "user.home") "/slt-results/")))
+                       (filter #(.isFile ^java.io.File %))
+                       (map str)
+                       (sort))
+        results (map #(assoc (json/parse-stream (clojure.java.io/reader %) true) :name (last (str/split % #"/"))) result-files)
+        total-results (reduce (partial merge-with +) (map #(dissoc % :name) results))]
+
+    (pprint/print-table
+      [:name :success :failure :error :time]
+      (mapv
+        #(update %
+                 :time
+                 (fn [t]
+                   (->
+                     (math/round (/ t 1000))
+                     (str "s"))))
+        (conj (vec results)
+              (assoc total-results :name "Total"))))))
+
 (def cli-options
   [[nil "--verify"]
    [nil "--dirs"]
@@ -403,10 +432,15 @@
           #(update % :time (fn [t] (str t "ms")))
           (conj (vec (sort-by :name (map (fn [[k v]] (assoc v :name k)) @results)))
                 (assoc total-results :name "Total"))))
+
+      (when (and (System/getenv "CIRCLECI") dirs)
+        (write-results-to-file arguments total-results))
+
       (when max-failures
         (when (> failure max-failures)
           (println "Failure count (" failure ") above expected (" max-failures ")")
           (System/exit 1)))
+
       (when max-errors
         (when (> error max-errors)
           (println "Error count (" error ") above expected (" max-errors ")")
@@ -424,7 +458,7 @@
 
   (time (-main "--verify" "--db" "sqlite" "test/core2/sql/logic_test/sqlite_test/select4.test"))
 
-  (time (-main "--verify" "--direct-sql" "--db" "xtdb" "test/core2/sql/logic_test/direct-sql/sl-demo.test"))
+  (time (-main "--verify" "--direct-sql" "--dirs" "--db" "xtdb" "test/core2/sql/logic_test/direct-sql/"))
 
  (= (time
       (with-out-str

@@ -108,15 +108,7 @@
                             "--max-failures" "0"
                             "--max-errors" "0"]}
 
-           :slt-direct-sql {:main-opts
-                            ["-m" "core2.sql.logic-test.runner"
-                             "--verify"
-                             "--dirs"
-                             "--direct-sql"
-                             "--db" "xtdb"
-                             "--max-failures" "0"
-                             "--max-errors" "0"
-                             "test/core2/sql/logic_test/direct-sql"]}
+           :slt-print-results {:exec-fn core2.sql.logic-test.runner/print-results-table}
 
            :s3-test {:exec-fn cognitect.test-runner.api/test
                      :exec-args {:includes [:s3]}}
