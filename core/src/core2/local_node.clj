@@ -116,7 +116,7 @@
 
   (-open-sql-async [this query query-opts]
     (let [query-opts (into {:default-tz default-tz} query-opts)
-          pq (prepare-sql this query (select-keys query-opts [:app-time-as-of-now? :default-tz]))]
+          pq (prepare-sql this query (select-keys query-opts [:app-time-as-of-now? :default-tz :decorrelate?]))]
       (try
         (-> (.openQueryAsync pq query-opts)
             (.thenApply (reify Function

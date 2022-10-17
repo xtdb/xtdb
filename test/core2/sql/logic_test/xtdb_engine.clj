@@ -195,12 +195,12 @@
     (case (first direct-sql-data-statement)
       :insert_statement (insert-statement node direct-sql-data-statement))))
 
-(defn- execute-sql-statement [node sql-statement variables]
+(defn- execute-sql-statement [node sql-statement variables opts]
    (binding [r/*memo* (HashMap.)]
      (-> (c2/submit-tx
            node
            [[:sql sql-statement [[]]]]
-           (cond-> {}
+           (cond-> opts
              (= (get variables "APP_TIME_DEFAULTS") "AS_OF_NOW")
              (assoc :app-time-as-of-now? true)
 
@@ -209,12 +209,12 @@
         (tu/then-await-tx node))
     node))
 
-(defn- execute-sql-query [node sql-statement variables]
+(defn- execute-sql-query [node sql-statement variables opts]
   ;; relies on order of cols in map, see fix in execute-query-expression for current best approach
   ;; chosing not to re impl it here as I hope we can solve it on a lower level.
   (binding [r/*memo* (HashMap.)]
     (->> (c2/sql-query node sql-statement
-                       (cond-> {}
+                       (cond-> opts
                           (= (get variables "APP_TIME_DEFAULTS") "AS_OF_NOW")
                           (assoc :app-time-as-of-now? true)
 
@@ -252,7 +252,7 @@
     (if (skip-statement? statement)
       this
       (if (:direct-sql slt/*opts*)
-        (execute-sql-statement this statement variables)
+        (execute-sql-statement this statement variables (select-keys slt/*opts* [:decorrelate?]))
         (let [tree (p/parse statement :directly_executable_statement)]
           (if (p/failure? tree)
             (if-let [record (or (parse-create-table statement)
@@ -266,7 +266,7 @@
 
   (execute-query [this query variables]
     (if (:direct-sql slt/*opts*)
-      (execute-sql-query this query variables)
+      (execute-sql-query this query variables (select-keys slt/*opts* [:decorrelate?]))
       (let [edited-query (preprocess-query query)
             tree (p/parse edited-query :query_expression)]
         (when (p/failure? tree)

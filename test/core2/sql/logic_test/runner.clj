@@ -339,15 +339,16 @@
 
 (defmacro def-slt-test
   ([nm] `(def-slt-test ~nm {}))
-  ([nm opts]
+  ([nm opts] `(def-slt-test ~nm ~opts ~nm))
+  ([nm opts test-var]
    (let [script-name (str (str/replace (str nm) "--" "/") ".test")]
      `(letfn [(run-slt-script#
                 ([] (run-slt-script# {}))
                 ([opts#] (run-slt-script ~script-name (merge ~opts opts#))))]
-        (doto (defn ~nm
-                ([] (t/test-var (var ~nm)))
+        (doto (defn ~test-var
+                ([] (t/test-var (var ~test-var)))
                 ([opts#] (t/test-var (-> #(run-slt-script# opts#)
-                                         (vary-meta into (meta (var ~nm)))))))
+                                         (vary-meta into (meta (var ~test-var)))))))
           (alter-meta! assoc :test run-slt-script#, :arglists '([] [~'opts])))))))
 
 (defn write-results-to-file [arguments total-results]
