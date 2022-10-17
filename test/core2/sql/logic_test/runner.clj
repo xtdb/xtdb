@@ -358,13 +358,14 @@
     (json/generate-stream total-results (io/writer (str file-name ".json")))))
 
 (defn print-results-table [& args]
-  (let [result-files (->>
+  (let [{:keys [max-failures max-errors]} (first args)
+        result-files (->>
                        (file-seq (io/file (str (System/getProperty "user.home") "/slt-results/")))
                        (filter #(.isFile ^java.io.File %))
                        (map str)
                        (sort))
         results (map #(assoc (json/parse-stream (clojure.java.io/reader %) true) :name (last (str/split % #"/"))) result-files)
-        total-results (reduce (partial merge-with +) (map #(dissoc % :name) results))]
+        {:keys [failure error] :or {failure 0 error 0} :as total-results} (reduce (partial merge-with +) (map #(dissoc % :name) results))]
 
     (pprint/print-table
       [:name :success :failure :error :time]
@@ -376,7 +377,15 @@
                      (math/round (/ t 1000))
                      (str "s"))))
         (conj (vec results)
-              (assoc total-results :name "Total"))))))
+              (assoc total-results :name "Total"))))
+
+    (when (> failure max-failures)
+      (println "Failure count (" failure ") above expected (" max-failures ")")
+      (System/exit 1))
+
+    (when (> error max-errors)
+      (println "Error count (" error ") above expected (" max-errors ")")
+      (System/exit 1))))
 
 (def cli-options
   [[nil "--verify"]

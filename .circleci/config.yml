@@ -208,7 +208,7 @@ workflows:
                 - "test/core2/sql/logic_test/sqlite_test/index/in/"
                 - "test/core2/sql/logic_test/sqlite_test/index/random/"
                   #  - "test/core2/sql/logic_test/sqlite_test/index/delete/"
-                - "test/core2/sql/logic_test/sqlite_test/index/view/"
+                  #  - "test/core2/sql/logic_test/sqlite_test/index/view/"
       - store-test-results:
           requires:
             - slt-test-dirs
