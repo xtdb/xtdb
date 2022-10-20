@@ -61,6 +61,11 @@
                             "-XX:MaxDirectMemorySize=2g"
                             "-XX:MaxMetaspaceSize=512m"]}
 
+           :6gb {:jvm-opts ["-Xmx2g"
+                            "-Xms2g"
+                            "-XX:MaxDirectMemorySize=3g"
+                            "-XX:MaxMetaspaceSize=1g"]}
+
            :test {:exec-fn cognitect.test-runner.api/test
                   :exec-args {:excludes [:integration :timescale :s3 :kafka :jdbc :slt :docker]}}
 

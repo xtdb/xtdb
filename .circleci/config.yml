@@ -135,7 +135,7 @@ jobs:
 
   slt-test-dirs:
     executor: clojure
-    resource_class: medium
+    resource_class: medium+
     parameters:
       dirs:
         type: string
@@ -144,7 +144,7 @@ jobs:
       - attach_workspace:
           at: ~/
 
-      - run: 'clojure -Srepro -M:core2:4gb:slt-test-dirs << parameters.dirs >>'
+      - run: 'clojure -Srepro -M:core2:6gb:slt-test-dirs << parameters.dirs >>'
 
       - persist_to_workspace:
           root: ~/
