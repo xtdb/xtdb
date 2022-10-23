@@ -113,7 +113,7 @@
 
            :slt-print-results {:exec-fn core2.sql.logic-test.runner/print-results-table
                                :exec-args {:max-failures 45
-                                           :max-errors 170}}
+                                           :max-errors 160}}
 
            :s3-test {:exec-fn cognitect.test-runner.api/test
                      :exec-args {:includes [:s3]}}
