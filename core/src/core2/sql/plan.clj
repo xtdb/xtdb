@@ -1011,8 +1011,13 @@
             projection-symbol (first (subquery-projection-symbols qe))
             predicate (list (symbol co) (expr rvp) projection-symbol)
             subquery-plan [:rename (subquery-reference-symbol qe) (plan qe)]
-            column->param (merge (correlated-column->param qe scope-id join-table)
-                                 (correlated-column->param rvp scope-id join-table))]
+            column->param (merge
+                            (build-column->param (find-aggr-out-column-refs predicate))
+                            (build-column->param
+                              (find-aggr-out-column-refs
+                                (find-table-operators subquery-plan)))
+                            (correlated-column->param qe scope-id join-table)
+                            (correlated-column->param rvp scope-id join-table))]
         {:type :quantified-comparison
          :quantifier quantifier
          :plan subquery-plan
