@@ -852,11 +852,12 @@
 (declare plan)
 
 (defn- correlated-column->param [qe scope-id join-table]
-  (->> (for [{:keys [^long table-scope-id table-id] :as column-reference} (sem/all-column-references qe)
+  (->> (for [{:keys [^long table-scope-id table-id type] :as column-reference} (sem/all-column-references qe)
              :when (and (= table-scope-id scope-id)
                         (if-let [id (:id join-table)]
                           (= id table-id)
-                          true))
+                          true)
+                        (not= type :within-group-varying))
              :let [column-reference-symbol (column-reference-symbol column-reference)
                    param-symbol (symbol (str "?" column-reference-symbol))]]
 
