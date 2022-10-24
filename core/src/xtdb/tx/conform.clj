@@ -145,12 +145,12 @@
 
 (defmethod ->tx-event ::xt/put [{:keys [eid doc-id start-valid-time end-valid-time]}]
   (cond-> [:crux.tx/put (c/new-id eid) doc-id]
-    start-valid-time (conj start-valid-time)
+    (or start-valid-time end-valid-time) (conj start-valid-time)
     end-valid-time (conj end-valid-time)))
 
 (defmethod ->tx-event ::xt/delete [{:keys [eid start-valid-time end-valid-time]}]
   (cond-> [:crux.tx/delete (c/new-id eid)]
-    start-valid-time (conj start-valid-time)
+    (or start-valid-time end-valid-time) (conj start-valid-time)
     end-valid-time (conj end-valid-time)))
 
 (defmethod ->tx-event ::xt/match [{:keys [eid doc-id at-valid-time]}]

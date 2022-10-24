@@ -4294,3 +4294,55 @@
                    '{:find [i]
                      :where [[?e :some/data i]]
                      :order-by [[i :asc]]})))))
+
+(t/deftest nil-valid-times
+  (t/testing "nil valid-time and end-valid-time"
+    (fix/submit+await-tx [[::xt/put {:xt/id :foo, :v 0} nil nil]])
+    (t/is (= #{[:foo]}
+             (xt/q (xt/db *api*)
+                   '{:find [?e]
+                     :where [[?e :xt/id :foo]]})))
+
+    (fix/submit+await-tx [[::xt/delete :foo nil nil]])
+    (t/is (= #{}
+             (xt/q (xt/db *api*)
+                   '{:find [?e]
+                     :where [[?e :xt/id :foo]]}))))
+
+  (t/testing "nil end-valid-time"
+    (fix/submit+await-tx [[::xt/put {:xt/id :bar, :v 0} #inst "2500" nil]])
+    (t/is (= #{}
+             (xt/q (xt/db *api*)
+                   '{:find [?e]
+                     :where [[?e :xt/id :bar]]})))
+    (t/is (= #{[:bar]}
+             (xt/q (xt/db *api* #inst "2500")
+                   '{:find [?e]
+                     :where [[?e :xt/id :bar]]})))
+
+    (fix/submit+await-tx [[::xt/delete :bar #inst "2400" nil]])
+    (t/is (= #{}
+             (xt/q (xt/db *api* #inst "2400")
+                   '{:find [?e]
+                     :where [[?e :xt/id :bar]]}))))
+
+  (t/testing "nil end-valid-time"
+    (fix/submit+await-tx [[::xt/put {:xt/id :baz, :v 0} nil #inst "2500"]])
+    (t/is (= #{[:baz]}
+             (xt/q (xt/db *api*)
+                   '{:find [?e]
+                     :where [[?e :xt/id :baz]]})))
+    (t/is (= #{}
+             (xt/q (xt/db *api* #inst "2500")
+                   '{:find [?e]
+                     :where [[?e :xt/id :baz]]})))
+
+    (fix/submit+await-tx [[::xt/delete :baz nil #inst "2400"]])
+    (t/is (= #{}
+             (xt/q (xt/db *api* #inst "2300")
+                   '{:find [?e]
+                     :where [[?e :xt/id :baz]]})))
+    (t/is (= #{[:baz]}
+             (xt/q (xt/db *api* #inst "2400")
+                   '{:find [?e]
+                     :where [[?e :xt/id :baz]]})))))

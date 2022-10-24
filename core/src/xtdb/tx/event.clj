@@ -12,13 +12,13 @@
   (s/cat :op #{:crux.tx/put}
          :id id?
          :doc id?
-         :start-valid-time (s/? date?)
+         :start-valid-time (s/? (s/nilable date?))
          :end-valid-time (s/? date?)))
 
 (defmethod tx-event :crux.tx/delete [_]
   (s/cat :op #{:crux.tx/delete}
          :id id?
-         :start-valid-time (s/? date?)
+         :start-valid-time (s/? (s/nilable date?))
          :end-valid-time (s/? date?)))
 
 (defmethod tx-event :crux.tx/cas [_]
@@ -40,7 +40,7 @@
 (defmethod tx-event :crux.tx/evict [_]
   (s/cat :op #{:crux.tx/evict}
          :id id?
-         :start-valid-time (s/? date?)
+         :start-valid-time (s/? (s/nilable date?))
          :end-valid-time (s/? date?)
          :keep-latest? (s/? boolean?)
          :keep-earliest? (s/? boolean?)))
