@@ -188,14 +188,13 @@
 
     :case_abbreviation
     (->> (r/collect-stop
-          (fn [z]
-            (r/zcase z
-              (:case_abbreviation nil) nil
-              [(expr z)]))
-          z)
+           (fn [z]
+             (r/zcase z
+               (:case_abbreviation nil) nil
+               [(expr z)]))
+           z)
          (cons (case (r/lexeme z 1)
-                 "COALESCE" 'coalesce
-                 "NULLIF" 'nullif)))
+                 "COALESCE" 'coalesce)))
 
     :searched_case
     (->> (r/collect-stop
@@ -840,6 +839,10 @@
     (let [p1 (plan-period-predicand p1_predicand)
           p2 (plan-period-predicand p2_predicand)]
       (list '= (:start p1) (:end p2)))
+
+    [:case_abbreviation "NULLIF" ^:z v1 ^:z v2]
+    ;;=>
+    (list 'nullif (expr v1) (expr v2))
 
     [:search_condition ^:z bve]
     ;;=>
