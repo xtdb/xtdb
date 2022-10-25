@@ -1195,3 +1195,7 @@
                 FOR ALL SYSTEM_TIME
                 WHERE Prop_Owner.id = 1) AS tmp"
                 {:app-time-as-of-now? true}))))
+
+(deftest parenthesized-joined-tables-are-unboxed-502
+  (t/is (= (plan-sql "SELECT 1 FROM ( tab0 JOIN tab2 ON TRUE )")
+           (plan-sql "SELECT 1 FROM tab0 JOIN tab2 ON TRUE"))))

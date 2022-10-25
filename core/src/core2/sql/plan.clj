@@ -1539,9 +1539,13 @@
        [:cross-join acc table]))
    (r/collect-stop
     (fn [z]
-      (r/zcase z
-        (:table_primary
-         :qualified_join) [(plan z)]
+      (r/zcase
+        z
+        :table_primary [(plan
+                          (if-let [qualified-join (r/find-first (partial r/ctor? :qualified_join) z)]
+                            qualified-join
+                            z))]
+        :qualified_join [(plan z)]
         :subquery []
         nil))
     trl)))
