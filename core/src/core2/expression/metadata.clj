@@ -24,15 +24,17 @@
 
 (defn- meta-fallback-expr [{:keys [op] :as expr}]
   (case op
-    (:literal :param :local) nil
+    (:literal :param :local) nil ;; expected to be filtered out by the caller, using simplify-and-or-expr
     :variable {:op :metadata-field-present, :field (:variable expr)}
 
     :if (let [{:keys [pred then else]} expr]
-          {:op :call, :f :and
-           :args [(meta-fallback-expr pred)
-                  {:op :call, :f :or
-                   :args [(meta-fallback-expr then)
-                          (meta-fallback-expr else)]}]})
+          (-> {:op :call, :f :and
+               :args [(meta-fallback-expr pred)
+                      (-> {:op :call, :f :or
+                           :args [(meta-fallback-expr then)
+                                  (meta-fallback-expr else)]}
+                          simplify-and-or-expr)]}
+              simplify-and-or-expr))
 
     :if-some (let [{:keys [local expr then else]} expr]
                (recur {:op :let, :local local, :expr expr,
@@ -110,16 +112,17 @@
 
 (defn meta-expr [{:keys [op] :as expr}]
   (case op
-    (:literal :param :let) nil
+    (:literal :param :let) nil ;; expected to be filtered out by the caller, using simplify-and-or-expr
     :variable (meta-fallback-expr expr)
-    :if {:op :call
-         :f :and
-         :args [(meta-fallback-expr (:pred expr))
-                (-> {:op :call
-                     :f :or
-                     :args [(meta-expr (:then expr))
-                            (meta-expr (:else expr))]}
-                    simplify-and-or-expr)]}
+    :if (-> {:op :call
+             :f :and
+             :args [(meta-fallback-expr (:pred expr))
+                    (-> {:op :call
+                         :f :or
+                         :args [(meta-expr (:then expr))
+                                (meta-expr (:else expr))]}
+                        simplify-and-or-expr)]}
+            simplify-and-or-expr)
     :call (call-meta-expr expr)))
 
 (defn- ->bloom-hashes [expr params]
