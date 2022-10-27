@@ -1,5 +1,5 @@
 = Installation
-:page-aliases: reference::installation.adoc
+:page-aliases: 1.22.1@reference::installation.adoc
 
 XTDB nodes can be xref:#embedded[embedded within your JVM application], or they can be started standalone through a xref:#uberjar[pre-built XTDB JAR], via xref:#docker[Docker], or using xref:#clojure-cli[Clojure CLI tooling].
 
