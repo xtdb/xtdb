@@ -46,6 +46,7 @@ It may be sensible to update `dev-SNAPSHOT` in response to the release, unless i
 ## Docs:
 
 . Await CircleCI.
+. Ensure you have fetched all remote doc-v* branches e.g `git fetch origin 'refs/heads/docs-v*:refs/remotes/origin/docs-v*'`
 . Create a `docs-v<next-release>` branch
 . For each `docs/**/antora.yml`:
     a. Delete `prerelease: indeed`
