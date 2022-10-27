@@ -1015,7 +1015,7 @@ public class DenseUnionVector extends AbstractContainerVector implements FieldVe
       fieldType = FieldType.notNullable(new ArrowType.Union(Dense, null));
     } else {
       final UnionMode mode = UnionMode.Dense;
-      var indirectTypeIds = ((Union) this.fieldType.getType()).getTypeIds() != null;
+      boolean indirectTypeIds = ((Union) this.fieldType.getType()).getTypeIds() != null;
       fieldType = new FieldType(false, new ArrowType.Union(mode, indirectTypeIds ? typeIds : null),
               this.fieldType.getDictionary(), this.fieldType.getMetadata());
     }
@@ -1877,5 +1877,17 @@ public class DenseUnionVector extends AbstractContainerVector implements FieldVe
         vector.setInitialCapacity(valueCount);
       }
     }
+  }
+
+  /**
+   * Set the element at the given index to null. For DenseUnionVector, it throws an UnsupportedOperationException
+   * as nulls are not supported at the top level and isNull() always returns false.
+   *
+   * @param index position of element
+   * @throws UnsupportedOperationException whenever invoked
+   */
+  @Override
+  public void setNull(int index) {
+    throw new UnsupportedOperationException("The method setNull() is not supported on DenseUnionVector.");
   }
 }

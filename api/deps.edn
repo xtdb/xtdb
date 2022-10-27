@@ -7,5 +7,4 @@
                  :fn build/prep}
 
  :aliases {:build {:deps {io.github.clojure/tools.build {:git/tag "v0.7.7" :git/sha "1474ad6"}}
-
                    :ns-default build}}}
