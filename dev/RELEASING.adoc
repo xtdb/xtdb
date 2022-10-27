@@ -16,9 +16,13 @@ We use https://github.com/ptaoussanis/encore/blob/master/BREAK-VERSIONING.md[Bre
 ## CircleCI
 
 . Await https://app.circleci.com/pipelines/github/xtdb/xtdb[CircleCI build]
-. Manually approve hold - this kicks off the Maven deploy, building the API docs, deploying Docker images etc.
+. Manually approve hold - this kicks off building the API docs, deploying Docker images etc.
 
-If you're building XTDB locally, run:
+## Jars
+
+To build the xtdb release artifacts locally and deploy them to sonatype, run:
+
+Build and deploy release jars
 
 . `java -version` -> java-8-openjdk
 . `git clean -dXf`
@@ -28,18 +32,16 @@ If you're building XTDB locally, run:
 . (in `labs/corda`): `./gradlew clean publish`
 . (in `labs/kotlin-dsl`): `./gradlew clean publish`
 
-## JARs:
+Release the artifacts to central
 
 . Head over to https://s01.oss.sonatype.org, 'Log in', 'Staging Repositories'
 . 'Close' the repo (performs validations)
 . 'Release' the repo
 . Check https://repo1.maven.org/maven2/com/xtdb to see when the artifacts have been mirrored across Maven Central.
 
-## Artifacts:
+It may be sensible to update `dev-SNAPSHOT` in response to the release, unless it is already ahead.
 
-. Await CircleCI.
-. Await JAR upload (above) - required for Docker images.
-. Retrieve artifacts from build: xtdb-builder.tar.gz, xtdb-in-memory.jar
+. `unset XTDB_VERSION` and deploy the new release as link:#_building_locally_and_releasing_jar_snapshots[dev-SNAPSHOT]
 
 ## Docs:
 
@@ -61,6 +63,12 @@ If you're building XTDB locally, run:
 . Run `AWS_PROFILE=xtdb-site ./bin/deploy.sh` from `master`. You will need AWS credentials.
 
 Troubleshooting `error: Duplicate nav in ... nav.adoc`: https://gitlab.com/antora/antora/-/issues/496
+
+## Github release artifacts:
+
+. Await CircleCI.
+. Await JAR upload (above) - required for Docker images.
+. Retrieve artifacts from build: xtdb-builder.tar.gz, xtdb-in-memory.jar
 
 ## Github release:
 

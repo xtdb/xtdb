@@ -92,19 +92,6 @@ jobs:
             - ~/.m2
           key: v1-dependencies-{{ checksum ".circleci-cache-key" }}
 
-  mvn-deploy:
-    docker:
-      - image: circleci/clojure:openjdk-8-lein
-
-    working_directory: ~/xtdb
-    steps:
-      - checkout
-      - attach_workspace:
-          at: ~/
-      - run:
-          command: |
-            ./lein-sub deploy
-
   test:
     docker:
       - image: circleci/clojure:openjdk-8-lein
@@ -280,14 +267,6 @@ workflows:
              only: /.*/
            branches:
              ignore: /.*/
-      - mvn-deploy:
-          requires:
-            - hold
-          filters:
-            tags:
-              only: /.*/
-            branches:
-              ignore: /.*/
       - xtdb-build-artifacts:
           requires:
             - hold
