@@ -45,6 +45,12 @@
     (catch Exception e
       (log/warn e "could not close"))))
 
+(defn uuid->bytes ^bytes [^UUID uuid]
+  (let [bb (doto (ByteBuffer/allocate 16)
+             (.putLong (.getMostSignificantBits uuid))
+             (.putLong (.getLeastSignificantBits uuid)))]
+    (.array bb)))
+
 ;;; Common specs
 
 (defn ->path ^Path [path-ish]
