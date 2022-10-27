@@ -27,7 +27,8 @@ set -e
     --include "*.ico"   \
     --cache-control "max-age=172800,public"  # 2 days
 
-    aws s3 sync --delete $DEPLOY_PATH s3://$S3_BUCKET \
+    # use cp to avoid sync flake with timestamps/same-sized items (see https://github.com/aws/aws-cli/issues/3273)
+    aws s3 cp --recursive $DEPLOY_PATH s3://$S3_BUCKET \
     --exclude "*.jpg"   \
     --exclude "*.jpeg"  \
     --exclude "*.svg"   \
