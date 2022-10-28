@@ -189,12 +189,14 @@
     :case_abbreviation
     (->> (r/collect-stop
            (fn [z]
-             (r/zcase z
-               (:case_abbreviation nil) nil
+             (if (or
+                   (not (r/ctor z))
+                   (and (r/ctor? :case_abbreviation z)
+                        (= (r/lexeme z 1) "COALESCE")))
+               nil
                [(expr z)]))
            z)
-         (cons (case (r/lexeme z 1)
-                 "COALESCE" 'coalesce)))
+         (cons 'coalesce))
 
     :searched_case
     (->> (r/collect-stop
