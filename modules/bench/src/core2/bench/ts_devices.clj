@@ -2,8 +2,8 @@
   (:require [clojure.tools.logging :as log]
             [core2.bench :as bench]
             [core2.ts-devices :as tsd]
-            [core2.local-node :as node])
-  (:import java.util.concurrent.TimeUnit))
+            [core2.node :as node])
+  (:import java.time.Duration))
 
 (def cli-arg-spec
   [[nil "--size <small|med|big>" "Size of ts-devices files to use"
@@ -24,8 +24,7 @@
              (tsd/submit-ts-devices node {:device-info-file device-info-file
                                           :readings-file readings-file}))]
     (bench/with-timing :await-tx
-      @(-> (node/await-tx-async node tx)
-           (.orTimeout 5 TimeUnit/HOURS)))
+      @(node/snapshot-async node tx (Duration/ofHours 5)))
 
     (bench/with-timing :finish-chunk
       (bench/finish-chunk node))))

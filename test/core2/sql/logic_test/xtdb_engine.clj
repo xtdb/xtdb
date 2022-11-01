@@ -9,7 +9,7 @@
             [core2.sql.parser :as p]
             [core2.sql.plan :as plan]
             [core2.test-util :as tu])
-  (:import core2.local_node.Node
+  (:import core2.node.Node
            [java.util HashMap UUID]
            [java.time Instant]))
 

@@ -2,8 +2,7 @@
   (:require [clojure.test :as t]
             [core2.api :as c2]
             [core2.expression.metadata :as expr.meta]
-            [core2.ingester :as ingest]
-            [core2.local-node :as node]
+            [core2.node :as node]
             [core2.metadata :as meta]
             [core2.test-util :as tu])
   (:import (core2.metadata IMetadataManager)
@@ -26,8 +25,7 @@
 
     (tu/finish-chunk node)
 
-    (let [^IMetadataManager metadata-mgr (tu/component node ::meta/metadata-manager)
-          ingester (tu/component node :core2/ingester)]
+    (let [^IMetadataManager metadata-mgr (tu/component node ::meta/metadata-manager)]
       (letfn [(test-query-ivan [expected db]
                 (t/is (= expected
                          (set (tu/query-ra '[:scan [id {name (> name "Ivan")}]]
@@ -37,7 +35,7 @@
                          (set (tu/query-ra '[:scan [id {name (> name ?name)}]]
                                            {:srcs {'$ db}, :params {'?name "Ivan"}})))))]
 
-        (let [db (ingest/snapshot ingester)]
+        (let [db @(node/snapshot-async node)]
           (t/is (= #{0 1} (.knownChunks metadata-mgr)))
 
           (let [expected-match [(meta/map->ChunkMatch
@@ -58,7 +56,7 @@
                              {:id :jon, :name "Jon"}}
                            db))
 
-        (let [db (ingest/snapshot ingester)]
+        (let [db @(node/snapshot-async node)]
           (test-query-ivan #{{:id :jms, :name "James"}
                              {:id :jon, :name "Jon"}
                              {:id :jdt, :name "Jeremy"}}
@@ -79,8 +77,7 @@
 
     (tu/finish-chunk node)
     (let [^IMetadataManager metadata-mgr (tu/component node ::meta/metadata-manager)
-          ingester (tu/component node :core2/ingester)
-          db (ingest/snapshot ingester)]
+          db @(node/snapshot-async node)]
       (t/is (= #{0 3} (.knownChunks metadata-mgr)))
       (let [expected-match [(meta/map->ChunkMatch
                              {:chunk-idx 0, :block-idxs (doto (RoaringBitmap.) (.add 0))})]]
@@ -107,7 +104,7 @@
     (let [{tt1 :sys-time} @(c2/submit-tx node [[:put {:id :my-doc, :last-updated "tx1"}]])
           _ (Thread/sleep 10) ; to prevent same-ms transactions
           {tt2 :sys-time, :as tx2} @(c2/submit-tx node [[:put {:id :my-doc, :last-updated "tx2"}]])
-          db (ingest/snapshot (tu/component node :core2/ingester) tx2)]
+          db @(node/snapshot-async node tx2)]
       (letfn [(q [& temporal-constraints]
                 (->> (tu/query-ra [:scan (into '[last-updated]
                                                temporal-constraints)]

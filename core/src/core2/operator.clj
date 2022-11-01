@@ -19,37 +19,43 @@
             core2.operator.top
             core2.operator.unwind
             [core2.util :as util])
-  (:import (core2 ICursor IResultCursor)
-           java.lang.AutoCloseable
+  (:import core2.ICursor
            java.time.Clock
            (java.util HashMap)
            (java.util.function Function)
            (org.apache.arrow.memory BufferAllocator RootAllocator)))
 
 #_{:clj-kondo/ignore [:unused-binding]}
+(definterface BoundQuery
+  (columnTypes [])
+  (^core2.ICursor openCursor []))
+
+#_{:clj-kondo/ignore [:unused-binding]}
 (definterface PreparedQuery
-  (^core2.IResultCursor openCursor [queryArgs])
-  (^void close []))
+  ;; NOTE we could arguably take the actual params here rather than param-types
+  ;; but if we were to make params a VSR this would then make BoundQuery a closeable resource
+  ;; ... or at least raise questions about who then owns the params
+  (^core2.operator.BoundQuery bind [queryOpts]
+   "queryOpts :: {:srcs, :params, :current-time, :default-tz}"))
 
-(deftype ResultCursor [^BufferAllocator allocator, ^ICursor cursor, ^Clock clock, col-types]
-  IResultCursor
-  (columnTypes [_] col-types)
-  (tryAdvance [_ c]
-    (binding [expr/*clock* clock]
-      (.tryAdvance cursor c)))
+(defn- wrap-cursor ^core2.ICursor [^ICursor cursor, ^BufferAllocator al, ^Clock clock]
+  (reify ICursor
+    (tryAdvance [_ c]
+      (binding [expr/*clock* clock]
+        (.tryAdvance cursor c)))
 
-  (characteristics [_] (.characteristics cursor))
-  (estimateSize [_] (.estimateSize cursor))
-  (getComparator [_] (.getComparator cursor))
-  (getExactSizeIfKnown [_] (.getExactSizeIfKnown cursor))
-  (hasCharacteristics [_ c] (.hasCharacteristics cursor c))
-  (trySplit [_] (.trySplit cursor))
+    (characteristics [_] (.characteristics cursor))
+    (estimateSize [_] (.estimateSize cursor))
+    (getComparator [_] (.getComparator cursor))
+    (getExactSizeIfKnown [_] (.getExactSizeIfKnown cursor))
+    (hasCharacteristics [_ c] (.hasCharacteristics cursor c))
+    (trySplit [_] (.trySplit cursor))
 
-  (close [_]
-    (.close cursor)
-    (.close allocator)))
+    (close [_]
+      (util/try-close cursor)
+      (util/try-close al))))
 
-(defn open-prepared-ra ^core2.operator.PreparedQuery [query]
+(defn prepare-ra ^core2.operator.PreparedQuery [query]
   (let [conformed-query (s/conform ::lp/logical-plan query)]
     (when (s/invalid? conformed-query)
       (throw (err/illegal-arg :malformed-query
@@ -61,29 +67,28 @@
                                          (mapcat scan/->scan-cols))))
           cache (HashMap.)]
       (reify PreparedQuery
-        (openCursor [_ {:keys [srcs params current-time default-tz] :as query-opts}]
+        (bind [_ {:keys [srcs params current-time default-tz]}]
           (let [clock (Clock/fixed (or current-time (.instant expr/*clock*))
-                                   (or default-tz (.getZone expr/*clock*)))]
-            (binding [expr/*clock* clock]
-              (let [{:keys [col-types ->cursor]} (.computeIfAbsent cache
-                                                                   {:scan-col-types (scan/->scan-col-types srcs scan-cols)
-                                                                    :param-types (expr/->param-types params)
-                                                                    :default-tz default-tz}
-                                                                   (reify Function
-                                                                     (apply [_ emit-opts]
-                                                                       (lp/emit-expr conformed-query emit-opts))))
-                    allocator (RootAllocator.)]
-                (try
-                  (let [cursor (->cursor (into query-opts
-                                               {:allocator allocator
-                                                :srcs srcs, :params params
-                                                :clock clock}))]
+                                   (or default-tz (.getZone expr/*clock*)))
 
-                    (ResultCursor. allocator cursor clock col-types))
-                  (catch Throwable t
-                    (util/try-close allocator)
-                    (throw t)))))))
+                {:keys [col-types ->cursor]} (.computeIfAbsent cache
+                                                               {:scan-col-types (scan/->scan-col-types srcs scan-cols)
+                                                                :param-types (expr/->param-types params)
+                                                                :default-tz default-tz}
+                                                               (reify Function
+                                                                 (apply [_ emit-opts]
+                                                                   (binding [expr/*clock* clock]
+                                                                     (lp/emit-expr conformed-query emit-opts)))))]
+            (reify BoundQuery
+              (columnTypes [_] col-types)
 
-        AutoCloseable
-        (close [_]
-          (.clear cache))))))
+              (openCursor [_]
+                (let [allocator (RootAllocator.)]
+                  (try
+                    (binding [expr/*clock* clock]
+                      (-> (->cursor {:allocator allocator, :clock clock, :srcs srcs, :params params})
+                          (wrap-cursor allocator clock)))
+
+                    (catch Throwable t
+                      (util/try-close allocator)
+                      (throw t))))))))))))

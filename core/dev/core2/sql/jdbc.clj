@@ -3,7 +3,7 @@
             [core2.sql.analyze :as sem]
             [core2.sql.parser :as parser]
             [core2.api :as c2]
-            [core2.local-node :as node]
+            [core2.node :as node]
             [core2.rewrite :as r])
   (:import [java.sql Connection Driver DriverManager DriverPropertyInfo
                      ResultSet ResultSetMetaData PreparedStatement SQLException SQLFeatureNotSupportedException]

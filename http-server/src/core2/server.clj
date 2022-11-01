@@ -6,7 +6,7 @@
             [core2.api :as c2]
             [core2.datalog :as d]
             [core2.error :as err]
-            [core2.local-node :as node]
+            [core2.node :as node]
             [core2.transit :as c2.transit]
             [core2.util :as util]
             [juxt.clojars-mirrors.integrant.core :as ig]

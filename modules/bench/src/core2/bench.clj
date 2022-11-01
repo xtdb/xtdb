@@ -3,11 +3,11 @@
             [clojure.tools.logging :as log]
             core2.indexer
             [core2.kafka :as k]
-            [core2.local-node :as node]
+            [core2.node :as node]
             [core2.s3 :as s3]
             [core2.util :as util])
   (:import core2.indexer.Indexer
-           core2.local_node.Node
+           core2.node.Node
            [java.nio.file Files Path]
            java.nio.file.attribute.FileAttribute
            java.util.UUID
@@ -38,7 +38,7 @@
 (defn finish-chunk [^Node node]
   (.finishChunk ^Indexer (util/component node :core2.indexer/indexer)))
 
-(defn ^core2.local_node.Node start-node
+(defn ^core2.node.Node start-node
   ([] (start-node (str (UUID/randomUUID))))
 
   ([node-id]

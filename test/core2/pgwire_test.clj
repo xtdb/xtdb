@@ -5,7 +5,7 @@
             [clojure.test :refer [deftest is testing] :as t]
             [clojure.tools.logging :as log]
             [core2.api :as c2]
-            [core2.local-node :as node]
+            [core2.node :as node]
             [core2.pgwire :as pgwire]
             [core2.test-util :as tu]
             [core2.util :as util]
@@ -886,13 +886,14 @@
 ;; right now all isolation levels have the same defined behaviour
 (deftest transaction-by-default-pins-the-basis-too-last-tx-test
   (require-node)
-  (let [insert #(future (-> (c2/submit-tx *node* [[:put %]]) (tu/then-await-tx *node*)))]
-    @(insert {:id :fred, :name "Fred" :_table "a"})
+  (let [insert #(-> (c2/submit-tx *node* [[:put %]])
+                    (tu/then-await-tx *node*))]
+    (insert {:id :fred, :name "Fred" :_table "a"})
     (with-open [conn (jdbc-conn)]
 
       (jdbc/with-transaction [db conn]
         (is (= [{:name "Fred"}] (q db ["select a.name from a"])))
-        @(insert {:id :bob, :name "Bob" :_table "a"})
+        (insert {:id :bob, :name "Bob" :_table "a"})
         (is (= [{:name "Fred"}] (q db ["select a.name from a"]))))
 
       (is (= [{:name "Fred"}, {:name "Bob"}] (q conn ["select a.name from a"]))))))

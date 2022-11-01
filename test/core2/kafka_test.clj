@@ -3,7 +3,7 @@
             [core2.api :as c2]
             [core2.ingester :as ingest]
             [core2.kafka :as k]
-            [core2.local-node :as node]
+            [core2.node :as node]
             [core2.test-util :as tu])
   (:import java.util.UUID))
 

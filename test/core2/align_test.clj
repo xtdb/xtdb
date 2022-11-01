@@ -4,7 +4,7 @@
             [core2.api :as c2]
             [core2.expression :as expr]
             [core2.ingester :as ingest]
-            [core2.local-node :as node]
+            [core2.node :as node]
             [core2.test-util :as tu]
             [core2.util :as util]
             [core2.vector.indirect :as iv])

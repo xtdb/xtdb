@@ -33,7 +33,7 @@ Main require: `[core2.api :as c2]`
 
 Configuration uses https://github.com/weavejester/integrant[Integrant].
 
-You can still start a completely in-memory node using `(core2.local-node/start-node {})`.
+You can still start a completely in-memory node using `(core2.node/start-node {})`.
 For a Kafka/JDBC node:
 
 [source,clojure]
