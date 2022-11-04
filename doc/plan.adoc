@@ -9,38 +9,30 @@
 * Strict SQL: all comparisons, casts and operations needs to make sense, but can throw clear errors (UX).
 * Time-as-state, single source of time with microsecond precision, see current_timestamp_as_db_state.adoc document.
 * Arrow-native driver with full type system, ie. FlightSQL with JDBC/ADBC/ODBC.
-* Boot up DBaaS team and analysis in parallel.
-* Baseline of production logging and metrics.
-* Minimal authentication via SSL.
 * Keep pgwire working, but we make clear it's not the supported driver.
 * Documentation and web.
 
-== Should, 2023 Q1, DBaaS, Scaling and Separate Storage and Compute.
+== Should, 2023 Q1, UX, Scaling and Separate Storage and Compute.
 
-* Deployment to AWS with basic monitoring, ie. Cloud Watch. (AWS marketplace?)
-* DBaaS on AWS. Exactly what this means is out-of-scope for this core plan, but relies on capabilities listed here.
 * HTAP benchmarks to guide work. https://github.com/cmu-db/benchbase
 * Rudimentary planner that deals with join orders, like collapsing neighbouring joins into the multi-join operator. Needs RnD.
-* Predictive caching, doesn't need to be any fancy ML. Needs RnD.
 * New temporal index that scales, non-monolithic, could be per table as well. Needs RnD.
 * Ability to split tables physically in storage.
 * Double-buffered live roots, non-blocking chunk uploads via background thread.
 * Lax SQL: reasonable coercion for operators instead of throwing errors.
-* Struct and row isomorphism? SELECT u FROM users u, supported in PostgreSQL.
+* Better support for building trees of objects/arrays via queries, see SQL:2016 JSON. (UX).
 * Support for planning unqualified columns? Possible due to INFORMATION_SCHEMA.
 * Distributed in-memory caches to avoid object store access.
-* Basic ability to feed metrics from the running clusters back to allow tuning across all clients.
 * ARROW_TABLE extended to support Parquet, JSON etc.
-* HTTP API.
 
-== Could, 2023 Q2, Continuous Delivery of (SQL) Features to DBaaS.
+== Could, 2023 Q2, Continuous Delivery of (SQL) Features.
 
+* Predictive caching, doesn't need to be any fancy ML. Needs RnD.
 * Controlled scaling of compute, different categories of compute and caches, protecting OLTP from OLAP (if needed).
 * Deterministic transaction budgets.
 * External sort and join so large intermediate results can spill to disk.
 * Azure and GCP object stores.
-* Data migration from Core1. Can mainly be grown via existing Core1 projects. Build up helper repo.
-* Bespoke consoles and dashboards. Needs analysis before embarking on, work sits under DBaaS team.
+* Struct and row isomorphism? SELECT u FROM users u, supported in PostgreSQL.
 * CREATE VIEW.
 * CREATE ASSERTION.
 * CREATE TRIGGER.
@@ -53,13 +45,28 @@
 * Add non-Kafka transaction logs.
 * Object store erasure.
 * "CREATE ROLE" - may not use SQL standard, but authorisation inside the DB. Needs RnD.
+* HTTP API.
 
 == Won't, 2023 Q3 and beyond
 
-* Deployment to GCP and Azure with their basic "native" monitoring.
 * Views with gradual schema to interface with tooling.
 * CREATE FUNCTION.
 * Consensus-based transaction log, removing the need for all nodes to redo all work.
 * SQL:2023/PGQ: property graph queries.
 * Distributed queries.
 * Other query languages, ie. Datalog.
+
+== DBaaS, probably on a different timeline outside the core team.
+
+* Boot up DBaaS team and analysis in parallel.
+* Deployment to AWS with basic monitoring, ie. Cloud Watch. (AWS marketplace?)
+* DBaaS on AWS. Exactly what this means is out-of-scope for this core plan, but relies on capabilities listed here.
+* Baseline of production logging and metrics.
+* Minimal authentication via SSL.
+* Basic ability to feed metrics from the running clusters back to allow tuning across all clients.
+* Bespoke consoles and dashboards. Needs analysis before embarking on, work sits under DBaaS team.
+* Deployment to GCP and Azure with their basic "native" monitoring.
+
+== Core1
+
+* Data migration from Core1. Can mainly be grown via existing Core1 projects. Build up helper repo.
