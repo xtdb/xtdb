@@ -28,6 +28,7 @@
 
 == Could, 2023 Q2, Continuous Delivery of (SQL) Features.
 
+* Baseline of production logging and metrics.
 * Predictive caching, doesn't need to be any fancy ML. Needs RnD.
 * Controlled scaling of compute, different categories of compute and caches, protecting OLTP from OLAP (if needed).
 * Deterministic transaction budgets.
@@ -62,7 +63,6 @@
 * Boot up DBaaS team and analysis in parallel.
 * Deployment to AWS with basic monitoring, ie. Cloud Watch. (AWS marketplace?)
 * DBaaS on AWS. Exactly what this means is out-of-scope for this core plan, but relies on capabilities listed here.
-* Baseline of production logging and metrics.
 * Minimal authentication via SSL.
 * Basic ability to feed metrics from the running clusters back to allow tuning across all clients.
 * Bespoke consoles and dashboards. Needs analysis before embarking on, work sits under DBaaS team.
