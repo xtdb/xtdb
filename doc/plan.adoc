@@ -24,6 +24,7 @@
 * Support for planning unqualified columns? Possible due to INFORMATION_SCHEMA.
 * Distributed in-memory caches to avoid object store access.
 * ARROW_TABLE extended to support Parquet, JSON etc.
+* Wrappers (Java, Clojure, Kotlin, Go, JavaScript) for driver to help with types?
 
 == Could, 2023 Q2, Continuous Delivery of (SQL) Features.
 
