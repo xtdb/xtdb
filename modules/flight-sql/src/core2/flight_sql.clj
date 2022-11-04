@@ -212,6 +212,7 @@
         (let [ps-id (new-id)
               sql (.toStringUtf8 (.getQueryBytes req))
               plan (sql/compile-query sql)
+              {:keys [param-count]} (meta plan)
               ps (cond-> {:id ps-id, :sql sql
                           :fsql-tx-id (when (.hasTransactionId req)
                                         (.getTransactionId req))}
@@ -220,7 +221,11 @@
 
           (.onNext listener
                    (pack-result (-> (doto (FlightSql$ActionCreatePreparedStatementResult/newBuilder)
-                                      (.setPreparedStatementHandle ps-id))
+                                      (.setPreparedStatementHandle ps-id)
+                                      (.setParameterSchema (-> (Schema. (for [idx (range param-count)]
+                                                                          (types/->field (str "?_" idx) types/dense-union-type false)))
+                                                               (.toByteArray)
+                                                               (ByteString/copyFrom))))
                                     (.build))))
 
           (.onCompleted listener)))
