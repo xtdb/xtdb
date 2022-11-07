@@ -118,7 +118,7 @@
     (identifier (r/$ ag -1))
 
     :regular_identifier
-    (r/lexeme ag 1)
+    (str/lower-case (r/lexeme ag 1))
 
     :delimited_identifier
     (let [lexeme (r/lexeme ag 1)]
@@ -150,6 +150,9 @@
     (table-or-query-name (r/$ ag 1))
 
     :regular_identifier
+    (identifier ag)
+
+    :delimited_identifier
     (identifier ag)
 
     (:delete_statement__searched :update_statement__searched :erase_statement__searched)
@@ -777,10 +780,10 @@
                                  group-env)
           column-reference-type (cond
 
-                                  (#{"SYSTEM_TIME"} (second identifiers))
+                                  (#{"system_time"} (second identifiers))
                                   :system-time-period-reference
 
-                                  (#{"APP_TIME" "APPLICATION_TIME"} (second identifiers))
+                                  (#{"app_time" "application_time"} (second identifiers))
                                   :application-time-period-reference
 
                                   outer-reference?
@@ -1027,40 +1030,21 @@
          (reduce into))))
 
 (defn- check-period-predicand [ag]
+  []
   (if-not (r/zmatch
             ag
-            [:period_predicand
-             [:column_reference
-              [:identifier_chain
-               [:regular_identifier _]
-               [:regular_identifier "APP_TIME"]]]]
+            [:period_predicand "PERIOD" _ _]
             ;;=>
             true
 
-            [:period_predicand
-             [:column_reference
-              [:identifier_chain
-               [:regular_identifier _]
-               [:regular_identifier "APPLICATION_TIME"]]]]
+            [:period_predicand ^:z col-ref]
             ;;=>
-            true
+            (let [identifiers (identifiers col-ref)]
+              (and
+                (= 2 (count identifiers))
+                (#{"application_time" "app_time" "system_time"} (second identifiers)))))
 
-            [:period_predicand
-             [:column_reference
-              [:identifier_chain
-               [:regular_identifier _]
-               [:regular_identifier "SYSTEM_TIME"]]]]
-            ;;=>
-            true
-
-            [:period_predicand
-             "PERIOD"
-             _
-             _]
-            ;;=>
-            true)
-
-    [(format "%s is not a valid period. Please use a qualified reference to APPLICATION_TIME or SYSTEM_TIME: %s"
+    [(format "%s is not a valid period. Please use a qualified reference to application_time or system_time: %s"
             (->src-str ag)
             (->line-info-str ag))]
     []))

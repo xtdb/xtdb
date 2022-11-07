@@ -25,4 +25,5 @@
   direct-sql--sl-a5
   direct-sql--slt-variables
   direct-sql--sl-demo
-  direct-sql--qualified_joins)
+  direct-sql--qualified_joins
+  direct-sql--identifier-case-sensitivity)

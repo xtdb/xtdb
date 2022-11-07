@@ -4,4 +4,4 @@
   [{x4 (sum x1)}]
   [:rename
    {length x1, _table x2}
-   [:scan [length {_table (= _table "Movie")}]]]]]
+   [:scan [length {_table (= _table "movie")}]]]]]

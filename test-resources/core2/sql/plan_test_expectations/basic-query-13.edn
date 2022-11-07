@@ -6,4 +6,4 @@
    {name x1, lastname x2, _table x3}
    [:select
     (= name lastname)
-    [:scan [name lastname {_table (= _table "StarsIn")}]]]]]]
+    [:scan [name lastname {_table (= _table "starsin")}]]]]]]

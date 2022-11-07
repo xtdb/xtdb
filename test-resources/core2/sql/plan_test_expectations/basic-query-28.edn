@@ -6,4 +6,4 @@
    [{x4 (= x1 "foo")}]
    [:rename
     {year x1, _table x2}
-    [:scan [year {_table (= _table "StarsIn")}]]]]]]
+    [:scan [year {_table (= _table "starsin")}]]]]]]

@@ -1,5 +1,5 @@
 [:rename
- {x1 A, x2 B}
+ {x1 a, x2 b}
  [:project
   [x1 x2]
   [:apply
@@ -7,16 +7,16 @@
    {x2 ?x17, x5 ?x18}
    [:cross-join
     [:rename
-     {A x1, B x2, _table x3}
-     [:scan [A B {_table (= _table "R")}]]]
-    [:rename {C x5, _table x6} [:scan [C {_table (= _table "S")}]]]]
+     {a x1, b x2, _table x3}
+     [:scan [a b {_table (= _table "r")}]]]
+    [:rename {c x5, _table x6} [:scan [c {_table (= _table "s")}]]]]
    [:project
     [x8 x9]
     [:semi-join
      [{x9 x12} (= x13 ?x18)]
      [:rename
-      {A x8, B x9, _table x10}
-      [:scan [{A (= A ?x17)} B {_table (= _table "R")}]]]
+      {a x8, b x9, _table x10}
+      [:scan [{a (= a ?x17)} b {_table (= _table "r")}]]]
      [:rename
-      {A x12, B x13, _table x14}
-      [:scan [A B {_table (= _table "R")}]]]]]]]]
+      {a x12, b x13, _table x14}
+      [:scan [a b {_table (= _table "r")}]]]]]]]]

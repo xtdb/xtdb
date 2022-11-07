@@ -1,9 +1,9 @@
 [:rename
- {x1 movieTitle}
+ {x1 movietitle}
  [:top
   {:limit 10}
   [:project
    [x1]
    [:rename
-    {movieTitle x1, _table x2}
-    [:scan [movieTitle {_table (= _table "StarsIn")}]]]]]]
+    {movietitle x1, _table x2}
+    [:scan [movietitle {_table (= _table "starsin")}]]]]]]

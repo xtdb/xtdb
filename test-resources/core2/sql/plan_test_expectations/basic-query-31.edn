@@ -7,4 +7,4 @@
    {:ordinality-column x5}
    [:rename
     {films x1, _table x2}
-    [:scan [films {_table (= _table "StarsIn")}]]]]]]
+    [:scan [films {_table (= _table "starsin")}]]]]]]

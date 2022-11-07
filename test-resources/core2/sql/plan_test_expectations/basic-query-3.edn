@@ -1,15 +1,15 @@
 [:rename
- {x1 movieTitle}
+ {x1 movietitle}
  [:project
   [x1]
   [:join
    [{x2 x5}]
    [:rename
-    {movieTitle x1, starName x2, _table x3}
-    [:scan [movieTitle starName {_table (= _table "StarsIn")}]]]
+    {movietitle x1, starname x2, _table x3}
+    [:scan [movietitle starname {_table (= _table "starsin")}]]]
    [:rename
     {name x5, birthdate x6, _table x7}
     [:scan
      [{name (= name "Foo")}
       {birthdate (< birthdate 1960)}
-      {_table (= _table "MovieStar")}]]]]]]
+      {_table (= _table "moviestar")}]]]]]]

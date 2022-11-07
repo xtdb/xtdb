@@ -27,4 +27,4 @@
         {application_time_end
          (> application_time_end (current-timestamp))}
         {id (= id 1)}
-        {_table (= _table "Prop_Owner")}]]]]]]]]
+        {_table (= _table "prop_owner")}]]]]]]]]

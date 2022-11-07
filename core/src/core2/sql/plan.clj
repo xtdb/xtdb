@@ -1810,8 +1810,8 @@
     [:directly_executable_statement ^:z dsds]
     (plan dsds)
 
-    [:insert_statement "INSERT" "INTO" [:regular_identifier table] ^:z from-subquery]
-    [:insert {:table table}
+    [:insert_statement "INSERT" "INTO" ^:z table ^:z from-subquery]
+    [:insert {:table (sem/identifier table)}
      (let [inner-plan (plan from-subquery)
            projection (first (sem/projected-columns z))]
        (if (some app-time-col? projection)
@@ -1974,6 +1974,9 @@
     ;; if and when query_name becomes a valid child of table_or_query_name
     ;; this needs changing to specifically match on the table case
 
+    ;; table case in above comment refers to the situation in which a real
+    ;; table appears as a child, not the case of the characters in the table name
+
     [:table_primary [:regular_identifier _]]
     ;;=>
     (->> (build-table-primary z)
@@ -2005,6 +2008,44 @@
          (wrap-with-application-time-select z))
 
     [:table_primary [:regular_identifier _] _ _ _ _ _]
+    ;;=>
+    (->> (build-table-primary z)
+         (wrap-with-system-time-select z)
+         (wrap-with-application-time-select z))
+
+    ;; duplicates matches for delimited_identifier for the same reason as above
+
+    [:table_primary [:delimited_identifier _]]
+    ;;=>
+    (->> (build-table-primary z)
+         (wrap-with-system-time-select z)
+         (wrap-with-application-time-select z))
+
+    [:table_primary [:delimited_identifier _] _]
+    ;;=>
+    (->> (build-table-primary z)
+         (wrap-with-system-time-select z)
+         (wrap-with-application-time-select z))
+
+    [:table_primary [:delimited_identifier _] _ _]
+    ;;=>
+    (->> (build-table-primary z)
+         (wrap-with-system-time-select z)
+         (wrap-with-application-time-select z))
+
+    [:table_primary [:delimited_identifier _] _ _ _]
+    ;;=>
+    (->> (build-table-primary z)
+         (wrap-with-system-time-select z)
+         (wrap-with-application-time-select z))
+
+    [:table_primary [:delimited_identifier _] _ _ _ _]
+    ;;=>
+    (->> (build-table-primary z)
+         (wrap-with-system-time-select z)
+         (wrap-with-application-time-select z))
+
+    [:table_primary [:delimited_identifier _] _ _ _ _ _]
     ;;=>
     (->> (build-table-primary z)
          (wrap-with-system-time-select z)

@@ -10,7 +10,7 @@
      [{x2 x6}]
      [:rename
       {name x1, cert x2, _table x3}
-      [:scan [name cert {_table (= _table "MovieExec")}]]]
+      [:scan [name cert {_table (= _table "movieexec")}]]]
      [:rename
       {length x5, producer x6, year x7, _table x8}
-      [:scan [length producer year {_table (= _table "Movie")}]]]]]]]]
+      [:scan [length producer year {_table (= _table "movie")}]]]]]]]]

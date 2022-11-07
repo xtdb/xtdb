@@ -1,0 +1,119 @@
+hash-threshold 100
+
+statement ok
+INSERT INTO T1(id, col1, col2) VALUES(1,'fish',1000)
+
+statement ok
+INSERT INTO t1(id, coL1, COL2) VALUES(2,'dog',2000)
+
+query ITI rowsort
+SELECT t1.ID, T1.col1, t1.cOl2 FROM T1
+----
+1
+fish
+1000
+2
+dog
+2000
+
+query ITI rowsort
+SELECT "t1".id, T1."col1", t1.cOl2 FROM "t1"
+----
+1
+fish
+1000
+2
+dog
+2000
+
+query ITI rowsort
+SELECT "T1".id, "T1".col1, "T1".cOl2 FROM "T1"
+----
+
+statement ok
+INSERT INTO "T1"(id, "COl1", "col2") VALUES(3,'cat',3000)
+
+query ITI rowsort
+SELECT "T1".id, "T1"."COl1", "T1".cOl2 FROM "T1"
+----
+3
+cat
+3000
+
+statement ok
+UPDATE T1 SET cOl1 = 30 WHERE t1.col2 IN (313, 2000)
+
+query ITI rowsort
+SELECT t1.iD, T1.col1, "t1".col2 FROM t1
+----
+1
+fish
+1000
+2
+30
+2000
+
+statement ok
+UPDATE "T1" SET "cOL2" = 'rabbit' WHERE "T1"."COl1" = 'cat'
+
+statement ok
+UPDATE "T1" SET "COl1" = 40 WHERE "T1"."COl1" = 'cat'
+
+query IIIT rowsort
+SELECT "T1".ID, "T1"."COl1", "T1".COL2, "T1"."cOL2" FROM "T1"
+----
+3
+40
+3000
+rabbit
+
+query II
+SELECT T1.col1, AVG(t1.col2) FROM t1 GROUP BY T1.col1
+----
+0
+1000
+30
+2000
+
+query II
+SELECT "T1"."COl1", AVG("T1".col2) FROM "T1" GROUP BY "T1"."COl1"
+----
+40
+3000
+
+query I
+SELECT t1.col1 FROM T1 WHERE t1.col1 IN ( T1.COL1 )
+----
+0
+30
+
+query I
+SELECT teeone.col2 FROM t1 AS TEEoNE WHERE TEEone.col1 = ( SELECT t1.col1 FROM T1 WHERE t1.col1 = teeONe.cOL1 )
+----
+1000
+2000
+
+query I
+SELECT "T1"."col2" AS "foo" FROM "T1" WHERE "T1"."COl1" IN ( "T1"."COl1" )
+----
+3000
+
+query I
+SELECT "TeeoNE".col2 FROM "T1" AS "TeeoNE" WHERE "TeeoNE"."COl1" = ( SELECT "T1"."COl1" FROM "T1" WHERE "T1"."COl1" = "TeeoNE"."COl1" )
+----
+3000
+
+statement ok
+DELETE FROM T1 WHERE t1.cOl1 = 'fish'
+
+query ITI rowsort
+SELECT t1.ID FROM T1
+----
+2
+
+statement ok
+DELETE FROM "T1" WHERE "T1"."cOL2" = 'rabbit'
+
+query I rowsort
+SELECT "T1".Id FROM "T1"
+----

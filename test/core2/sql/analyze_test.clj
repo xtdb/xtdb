@@ -391,14 +391,14 @@ SELECT t1.d-t1.e AS a, SUM(t1.a) AS b
   (valid? "SELECT 1 FROM t1 OFFSET 1"))
 
 (t/deftest test-check-period-predicand
-  (invalid? [#"Please use a qualified reference to APPLICATION_TIME"]
+  (invalid? [#"Please use a qualified reference to application_time"]
     "SELECT foo.name, bar.also_name
     FROM foo, bar
-    WHERE foo.random_col OVERLAPS bar.APPLICATION_TIME")
-  (invalid? [#"Please use a qualified reference to APPLICATION_TIME"]
+    WHERE foo.random_col OVERLAPS bar.APPLICATIOn_TIME")
+  (invalid? [#"Please use a qualified reference to application_time"]
     "SELECT foo.name, bar.also_name
     FROM foo, bar
-    WHERE foo.APP_TIME OVERLAPS bar.fooble"))
+    WHERE foo.SYSTEM_TImE OVERLAPS bar.fooble"))
 
 (t/deftest test-invalid-table-names
   (invalid? [#"Unexpected:\nAPPLICATION_TIME"]
@@ -417,8 +417,8 @@ SELECT t1.d-t1.e AS a, SUM(t1.a) AS b
     FROM foo")
 
   (invalid?
-    [#"Period not in scope: f.APPLICATION_TIME"
-     #"Period not in scope: f.SYSTEM_TIME"]
+    [#"Period not in scope: f.application_time"
+     #"Period not in scope: f.system_time"]
     "SELECT f.APPLICATION_TIME OVERLAPS f.SYSTEM_TIME
     FROM foo AS f (a)")
 
@@ -427,16 +427,16 @@ SELECT t1.d-t1.e AS a, SUM(t1.a) AS b
     FROM foo
     AS f (system_time_start, system_time_end, application_time_start, application_time_end)")
 
-  (invalid? [#"References to periods may only appear within period predicates: foo.APPLICATION_TIME"]
+  (invalid? [#"References to periods may only appear within period predicates: foo.application_time"]
     "SELECT foo.APPLICATION_TIME
     FROM foo")
 
-  (invalid? [#"References to periods may only appear within period predicates: foo.SYSTEM_TIME"]
+  (invalid? [#"References to periods may only appear within period predicates: foo.system_time"]
     "SELECT foo.bar
     FROM foo
     WHERE foo.SYSTEM_TIME = 20")
 
-  (invalid? [#"References to periods may only appear within period predicates: foo.SYSTEM_TIME"]
+  (invalid? [#"References to periods may only appear within period predicates: foo.system_time"]
     "UPDATE foo SET bar = foo.SYSTEM_TIME"))
 
 (t/deftest check-period-specifications
@@ -470,8 +470,8 @@ SELECT t1.d-t1.e AS a, SUM(t1.a) AS b
     AS f (bar)")
 
   (invalid?
-    [#"Period not in scope: f.APPLICATION_TIME"
-     #"Period not in scope: f.SYSTEM_TIME"]
+    [#"Period not in scope: f.application_time"
+     #"Period not in scope: f.system_time"]
     "SELECT f.APPLICATION_TIME OVERLAPS f.SYSTEM_TIME
     FROM foo
     FOR SYSTEM_TIME AS OF CURRENT_TIMESTAMP
