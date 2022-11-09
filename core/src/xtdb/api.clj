@@ -68,16 +68,54 @@
   node.")
 
   (listen ^java.lang.AutoCloseable [node event-opts f]
-    "Attaches a listener to XTDB's event bus.
+    "Attaches a listener to XTDB's event bus, the supplied callback `f` will be invoked as new events occur, receiving the event as the first argument.
 
-  `event-opts` should contain `:xtdb.api/event-type`, along with any other options the event-type requires.
+  Specify an event type `:xtdb.api/event-type` and options in the map `event-opts`
 
-  We currently only support one public event-type: `:xtdb.api/indexed-tx`.
-  Supplying `:with-tx-ops? true` will include the transaction's operations in the event passed to `f`.
+  For example, this listener prints indexed transactions:
 
-  `(.close ...)` the return value to detach the listener.
+  (def listener (xtdb.api/listen node {:xtdb.api/event-type :xtdb.api/indexed-tx} prn))
 
-  This is an experimental API, subject to change.")
+  Use `.close` on the returned object to detach the listener:
+
+  (.close listener)
+
+  ---
+
+  A listener will receive events in the order they were submitted (say by the indexer) each listener receives events asynchronously on a standalone thread. It does not block query, writes, indexing or other listeners.
+
+  If you start/stop many listeners over the lifetime of your program, ensure you .close listeners you no longer need to free those threads.
+
+  See below for detail on supported event types:
+
+  ---
+
+  Event type `:xtdb.api/indexed-tx`
+
+  Occurs when a transaction has been processed by the indexer, and as such its effects will be visible to query if it was committed.
+
+  Example event:
+
+  {:xtdb.api/event-type :xtdb.api/indexed-tx
+   :xtdb.api/tx-time #inst \"2022-11-09T10:13:33.028-00:00\",
+   :xtdb.api/tx-id 4
+
+   ;; can be false in the case of a rollback or failure, for example, if an ::xt/fn op throws, or a match condition is not met.
+   :committed? true
+
+   ;; if :with-tx-ops? is true
+   :xtdb.api/tx-ops ([:xtdb.api/put {:name \"Fred\", :xt/id \"foo\"}])}
+
+  This event might be useful if you require reactive or dependent processing of indexed transactions, and do not want to block with `await-tx`.
+  Because you receive an event for transactions that did not commit (:committed? false), you could respond to transaction function failures in some way,
+  such as specific logging, or raising an alert.
+
+  Options:
+
+  - :with-tx-ops? (default false)
+     If true includes the indexed tx ops itself the key :xtdb.api/tx-ops
+     For transaction functions and match ops, you will see the expansion (i.e results), not the function call or match.
+     Be aware this option may require fetching transactions from storage per event if the transactions are not in cache.")
 
   (latest-completed-tx [node]
     "Returns the latest transaction to have been indexed by this node.")
