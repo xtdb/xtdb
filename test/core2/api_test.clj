@@ -1,7 +1,7 @@
 (ns core2.api-test
   (:require [clojure.test :as t :refer [deftest]]
             [core2.api :as c2]
-            [core2.local-node :as node]
+            [core2.node :as node]
             [core2.test-util :as tu :refer [*node*]]
             [core2.util :as util])
   (:import (java.time Duration ZoneId)

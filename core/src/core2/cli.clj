@@ -5,7 +5,7 @@
             [clojure.string :as str]
             [clojure.tools.cli :as cli]
             [clojure.tools.logging :as log]
-            [core2.local-node :as node]
+            [core2.node :as node]
             [core2.error :as err]
             [core2.util :as util])
   (:import java.io.File

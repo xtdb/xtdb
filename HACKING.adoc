@@ -56,10 +56,10 @@ wire protocol endpoint, and adds a few sample records for you to query.
 ----
 (ns xtexample
   (:require [core2.api :as c2]
-            [core2.local-node :as local-node]
+            [core2.node :as node]
             [core2.sql.pgwire :as pgwire]))
 
-(def node (local-node/start-node {}))
+(def node (node/start-node {}))
 
 (def server (pgwire/serve node))
 

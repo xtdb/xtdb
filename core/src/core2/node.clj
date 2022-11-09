@@ -1,24 +1,23 @@
-(ns core2.local-node
+(ns core2.node
   (:require [clojure.pprint :as pp]
-            [clojure.spec.alpha :as s]
             [core2.api :as api]
             [core2.datalog :as d]
+            [core2.expression :as expr]
             [core2.ingester :as ingest]
             [core2.operator :as op]
             [core2.sql :as sql]
             [core2.tx-producer :as txp]
             [core2.util :as util]
             [core2.vector.indirect :as iv]
-            [juxt.clojars-mirrors.integrant.core :as ig]
-            [core2.error :as err])
+            [juxt.clojars-mirrors.integrant.core :as ig])
   (:import (core2 IResultCursor IResultSet)
            core2.ingester.Ingester
            (core2.tx_producer ITxProducer)
            (java.io Closeable Writer)
            (java.lang AutoCloseable)
-           (java.time Duration Instant ZoneId)
+           (java.time Duration ZoneId)
            (java.util.concurrent CompletableFuture TimeUnit)
-           (java.util.function Consumer Function)
+           (java.util.function Consumer)
            java.util.Iterator
            (org.apache.arrow.memory BufferAllocator RootAllocator)))
 
@@ -35,19 +34,11 @@
 
 (defmethod ig/init-key :core2/default-tz [_ default-tz] default-tz)
 
-(definterface PreparedQueryAsync
-  (^java.util.concurrent.CompletableFuture openQueryAsync #_<IResultCursor> [queryOpts])
-  (^void close []))
-
 (defprotocol PNode
-  (prepare-ra ^core2.local_node.PreparedQueryAsync [_ query])
-  (prepare-sql ^core2.local_node.PreparedQueryAsync [_ query query-opts])
-
-  ;; TODO to do `-prepare-datalog` we need `d/compile-query` to not take the actual args
-
-  ;; TODO in theory we shouldn't need this, but it's still used in tests
-  (await-tx-async
-    ^java.util.concurrent.CompletableFuture #_<TransactionInstant> [node tx]))
+  (snapshot-async
+    ^java.util.concurrent.CompletableFuture #_<ScanSource> [_]
+    ^java.util.concurrent.CompletableFuture #_<ScanSource> [_ tx]
+    ^java.util.concurrent.CompletableFuture #_<ScanSource> [_ tx ^Duration timeout]))
 
 (deftype CursorResultSet [^IResultCursor cursor
                           ^AutoCloseable maybe-pq
@@ -96,75 +87,47 @@
                  close-fn]
   api/PClient
   (-open-datalog-async [this query args]
-    (let [query (into {:default-tz default-tz} query)
-          {ra-query :query, :keys [args]} (-> (dissoc query :basis :basis-timeout :default-tz)
+    (let [!db (snapshot-async this (get-in query [:basis :tx]) (:basis-timeout query))
+          query (into {:default-tz default-tz} query)
+          {ra-query :query, params :args} (-> (dissoc query :basis :basis-timeout :default-tz)
                                               (d/compile-query args))
-          pq (prepare-ra this ra-query)]
-      (try
-        (-> (.openQueryAsync pq (into {:params args}
-                                      (select-keys query [:basis :basis-timeout :default-tz])))
-            (.thenApply (reify Function
-                          (apply [_ res-cursor]
-                            (try
-                              (cursor->result-set res-cursor pq)
-                              (catch Throwable e
-                                (util/try-close res-cursor)
-                                (throw e)))))))
-        (catch Throwable e
-          (.close pq)
-          (throw e)))))
+          pq (op/prepare-ra ra-query)]
+
+      (-> !db
+          (util/then-apply
+            (fn [db]
+              (-> (.bind pq {:srcs {'$ db}, :params params
+                             :current-time (get-in query [:basis :current-time])
+                             :default-tz (:default-tz query)})
+                  (.openCursor)
+                  (cursor->result-set)))))))
 
   (-open-sql-async [this query query-opts]
-    (let [query-opts (into {:default-tz default-tz} query-opts)
-          pq (prepare-sql this query (select-keys query-opts [:app-time-as-of-now? :default-tz :decorrelate?]))]
-      (try
-        (-> (.openQueryAsync pq query-opts)
-            (.thenApply (reify Function
-                          (apply [_ res-cursor]
-                            (try
-                              (cursor->result-set res-cursor pq)
-                              (catch Throwable e
-                                (util/try-close res-cursor)
-                                (throw e)))))))
-        (catch Throwable e
-          (.close pq)
-          (throw e)))))
+    (let [!db (snapshot-async this (get-in query-opts [:basis :tx]) (:basis-timeout query-opts))
+          query-opts (into {:default-tz default-tz} query-opts)
+          plan (sql/compile-query query (select-keys query-opts [:app-time-as-of-now? :default-tz :decorrelate?]))
+          params (zipmap (map #(symbol (str "?_" %)) (range))
+                         (:? query-opts))
+          pq (op/prepare-ra plan)]
+      (-> !db
+          (util/then-apply
+            (fn [db]
+              (-> (.bind pq {:srcs {'$ db}, :params params
+                             :current-time (get-in query-opts [:basis :current-time])
+                             :default-tz (:default-tz query-opts)})
+                  (.openCursor)
+                  (cursor->result-set)))))))
 
   PNode
-  (prepare-ra [_ query]
-    (let [pq (op/open-prepared-ra query)]
-      (reify PreparedQueryAsync
-        (openQueryAsync [_ {:keys [basis ^Duration basis-timeout, default-tz], :or {default-tz default-tz} :as query-opts}]
-          (let [{:keys [current-time tx], :or {current-time (Instant/now)}} basis]
-            (-> (ingest/snapshot-async ingester tx)
-                (cond-> basis-timeout (.orTimeout (.toMillis basis-timeout) TimeUnit/MILLISECONDS))
-                (util/then-apply
-                  (fn [db]
-                    (.openCursor pq (-> query-opts
-                                        (dissoc :basis :basis-timeout)
-                                        (assoc :current-time current-time
-                                               :default-tz default-tz
-                                               :srcs {'$ db}))))))))
-        AutoCloseable
-        (close [_] (.close pq)))))
-
-  (prepare-sql [this query query-opts]
-    (let [query-opts (into {:default-tz default-tz} query-opts)
-          plan (sql/compile-query query query-opts)
-          pq (prepare-ra this plan)]
-        (reify PreparedQueryAsync
-          (openQueryAsync [_ query-opts]
-            (.openQueryAsync pq (-> (dissoc query-opts :?)
-                                    (assoc :params (zipmap (map #(symbol (str "?_" %)) (range))
-                                                           (:? query-opts))))))
-          (close [_] (.close pq)))))
-
-  (await-tx-async [_ tx]
+  (snapshot-async [this] (snapshot-async this nil))
+  (snapshot-async [this tx] (snapshot-async this tx nil))
+  (snapshot-async [_ tx timeout]
     (-> (if-not (instance? CompletableFuture tx)
-          (CompletableFuture/completedFuture tx)
+          (CompletableFuture/completedFuture (or tx (.latestCompletedTx ingester)))
           tx)
         (util/then-compose (fn [tx]
-                             (.awaitTxAsync ingester tx)))))
+                             (.snapshot ingester tx)))
+        (cond-> timeout (.orTimeout (.toMillis ^Duration timeout) TimeUnit/MILLISECONDS))))
 
   api/PStatus
   (status [_] {:latest-completed-tx (.latestCompletedTx ingester)})
@@ -202,7 +165,7 @@
   (cond-> opts
     (not (ig/find-derived opts parent-k)) (assoc impl-k {})))
 
-(defn start-node ^core2.local_node.Node [opts]
+(defn start-node ^core2.node.Node [opts]
   (let [system (-> (into {::node {}
                           :core2/allocator {}
                           :core2/default-tz nil
@@ -256,7 +219,7 @@
 (defmethod ig/halt-key! ::submit-node [_ ^SubmitNode node]
   (.close node))
 
-(defn start-submit-node ^core2.local_node.SubmitNode [opts]
+(defn start-submit-node ^core2.node.SubmitNode [opts]
   (let [system (-> (into {::submit-node {}
                           :core2.tx-producer/tx-producer {}
                           :core2/allocator {}

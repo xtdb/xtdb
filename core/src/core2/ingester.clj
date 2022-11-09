@@ -23,7 +23,6 @@
 #_{:clj-kondo/ignore [:unused-binding]}
 (definterface Ingester
   (^core2.api.TransactionInstant latestCompletedTx [])
-  (^java.util.concurrent.CompletableFuture #_<TransactionInstant> awaitTxAsync [^core2.api.TransactionInstant tx])
   (^java.util.concurrent.CompletableFuture #_<ScanSource> snapshot [^core2.api.TransactionInstant tx]))
 
 (defmethod ig/prep-key :core2/ingester [_ opts]
@@ -85,15 +84,12 @@
       Ingester
       (latestCompletedTx [_] (.latestCompletedTx indexer))
 
-      (awaitTxAsync [this tx]
-        (await/await-tx-async tx
-                              #(or (some-> @!ingester-error throw)
-                                   (.latestCompletedTx this))
-                              awaiters))
-
       (snapshot [this tx]
         (-> (if tx
-              (.awaitTxAsync this tx)
+              (await/await-tx-async tx
+                                    #(or (some-> @!ingester-error throw)
+                                         (.latestCompletedTx this))
+                                    awaiters)
               (CompletableFuture/completedFuture (.latestCompletedTx this)))
             (util/then-apply (fn [tx]
                                (reify ScanSource

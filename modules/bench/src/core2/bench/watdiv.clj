@@ -2,8 +2,8 @@
   (:require [clojure.java.io :as io]
             [core2.bench :as bench]
             [core2.api :as c2]
-            [core2.local-node :as node])
-  (:import java.util.concurrent.TimeUnit))
+            [core2.node :as node])
+  (:import java.time.Duration))
 
 (comment
   ;; run in XTDB 1.x's xtdb.bench.watdiv-xtdb.
@@ -35,8 +35,7 @@
                                       ;; TODO Core2 doesn't support set vals yet
                                       [:put (->> doc (into {} (remove (comp set? val))))])))))]
     (bench/with-timing :await-tx
-      @(-> (node/await-tx-async node tx)
-           (.orTimeout 5 TimeUnit/HOURS)))
+      @(node/snapshot-async node tx (Duration/ofHours 5)))
 
     (bench/with-timing :finish-chunk
       (bench/finish-chunk node))))

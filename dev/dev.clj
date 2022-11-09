@@ -2,7 +2,7 @@
   (:require [clojure.java.io :as io]
             [clojure.java.browse :as browse]
             [core2.ingester :as ingest]
-            [core2.local-node :as node]
+            [core2.node :as node]
             [core2.test-util :as tu]
             [core2.tpch :as tpch]
             [core2.util :as util]
@@ -51,7 +51,8 @@
                         :core2.buffer-pool/buffer-pool {:cache-path (io/file dev-node-dir "buffers")}
                         :core2.object-store/file-system-object-store {:root-path (io/file dev-node-dir "objects")}
                         :core2/server {}
-                        :core2/pgwire {:port 5433}}}})
+                        :core2/pgwire {:port 5433}
+                        :core2.flight-sql/server {:port 52358}}}})
 
 (ir/set-prep! (fn [] standalone-config))
 

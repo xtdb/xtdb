@@ -1,20 +1,16 @@
 (ns core2.docker-test
   "Basic regression tests for our Dockerfile"
-  (:require [clojure.test :refer [is deftest testing use-fixtures]]
-            [clojure.java.shell :as sh]
+  (:require [clojure.data.json :as json]
             [clojure.java.io :as io]
-            [clojure.tools.logging :as log]
+            [clojure.java.shell :as sh]
             [clojure.string :as str]
+            [clojure.test :refer [deftest is testing use-fixtures]]
+            [clojure.tools.logging :as log]
             [core2.test-util :as tu]
-            [core2.local-node :as node]
-            [core2.api :as c2]
-            [juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc :as jdbc]
-            [clojure.data.json :as json])
-  (:import (java.util List)
+            [juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc :as jdbc])
+  (:import (java.net Socket)
+           (java.util List)
            (java.util.concurrent TimeUnit)
-           (java.net Socket)
-           (java.nio.file Files)
-           (java.nio.file.attribute FileAttribute)
            (org.postgresql.util PGobject)))
 
 (set! *warn-on-reflection* false)
@@ -196,7 +192,7 @@
                            :core2.buffer-pool/buffer-pool {:cache-path (io/file hostdir "buffers")}
                            :core2.object-store/file-system-object-store {:root-path (io/file hostdir "objects")}}
                           (node/start-node))]
-      (-> (node/await-tx-async node (c2/submit-tx node [[:put {:id 42, :greeting "Hello, world!"}]]))
+      (-> (node/snapshot-async node (c2/submit-tx node [[:put {:id 42, :greeting "Hello, world!"}]]))
           (.orTimeout 5 TimeUnit/SECONDS)
           deref))
 

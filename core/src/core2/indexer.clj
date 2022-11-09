@@ -18,7 +18,8 @@
             [core2.vector.indirect :as iv]
             [core2.vector.writer :as vw]
             [core2.watermark :as wm]
-            [juxt.clojars-mirrors.integrant.core :as ig])
+            [juxt.clojars-mirrors.integrant.core :as ig]
+            [core2.expression :as expr])
   (:import clojure.lang.MapEntry
            core2.api.TransactionInstant
            core2.buffer_pool.IBufferPool
@@ -684,12 +685,13 @@
               query-str (t/get-object query-vec sql-offset)]
 
           (letfn [(index-op [^SqlOpIndexer op-idxer query-opts inner-query]
-                    (with-open [pq (op/open-prepared-ra inner-query)]
+                    (let [pq (op/prepare-ra inner-query)]
                       (doseq [param-row param-rows
                               :let [param-row (->> param-row
                                                    (into {} (map (juxt (comp symbol key) val))))]]
-                        (with-open [res (.openCursor pq (into (select-keys tx-opts [:current-time :default-tz])
-                                                              {:srcs {'$ scan-src}, :params param-row}))]
+                        (with-open [res (-> (.bind pq (into (select-keys tx-opts [:current-time :default-tz])
+                                                            {:srcs {'$ scan-src}, :params param-row}))
+                                            (.openCursor))]
                           (.forEachRemaining res
                                              (reify Consumer
                                                (accept [_ in-rel]

@@ -2,7 +2,7 @@
   (:require [clojure.tools.logging :as log]
             [core2.bench :as bench]
             [core2.ingester :as ingest]
-            [core2.local-node :as node]
+            [core2.node :as node]
             [core2.tpch :as tpch]
             [core2.temporal :as temporal]
             [core2.test-util :as tu]
@@ -14,7 +14,7 @@
 
 (defn run-multinode [{:keys [scale-factor sleep-ms]} start-node]
   (log/info "Starting primary node")
-  (with-open [^core2.local_node.Node primary-node (start-node)]
+  (with-open [^core2.node.Node primary-node (start-node)]
     (let [!last-tx (future
                      (let [last-tx (tpch/submit-docs! primary-node scale-factor)]
                        (log/info "last submitted tx:" last-tx)
@@ -23,18 +23,18 @@
         (Thread/sleep sleep-ms)
 
         (log/info "Starting secondary node 1")
-        (with-open [^core2.local_node.Node secondary-node1 (start-node)]
+        (with-open [^core2.node.Node secondary-node1 (start-node)]
           (Thread/sleep sleep-ms)
 
           (log/info "Starting secondary node 2")
-          (with-open [^core2.local_node.Node secondary-node2 (start-node)]
+          (with-open [^core2.node.Node secondary-node2 (start-node)]
             (Thread/sleep sleep-ms)
 
             (log/info "Starting secondary node 3")
-            (with-open [^core2.local_node.Node secondary-node3 (start-node)]
+            (with-open [^core2.node.Node secondary-node3 (start-node)]
               (let [last-tx @!last-tx
                     query tpch/tpch-q1-pricing-summary-report]
-                (letfn [(test-node [k ^core2.local_node.Node node]
+                (letfn [(test-node [k ^core2.node.Node node]
                           (log/info "awaiting" k "node")
                           (let [db (ingest/snapshot (util/component node :core2/ingester)
                                                   last-tx (Duration/ofHours 1))]
@@ -50,7 +50,7 @@
                   (.awaitSnapshotBuild ^core2.temporal.TemporalManagerPrivate (::temporal/temporal-manager @(:!system primary-node)))
 
                   (log/info "Starting post finish-chunk node")
-                  (with-open [^core2.local_node.Node secondary-node4 (start-node)]
+                  (with-open [^core2.node.Node secondary-node4 (start-node)]
                     (test-node :secondary4 secondary-node4)))))))
 
         (finally

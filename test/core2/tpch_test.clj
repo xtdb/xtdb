@@ -1,13 +1,12 @@
 (ns core2.tpch-test
   (:require [clojure.java.io :as io]
             [clojure.test :as t]
-            [core2.ingester :as ingest]
             [core2.json :as c2-json]
             [core2.test-util :as tu]
             [core2.tpch :as tpch]
-            [core2.util :as util])
-  (:import [java.nio.file Files LinkOption Path]
-           [java.time Duration ZoneId]))
+            [core2.util :as util]
+            [core2.node :as node])
+  (:import [java.nio.file Files LinkOption Path]))
 
 (def ^:dynamic *node* nil)
 (def ^:dynamic *db* nil)
@@ -18,15 +17,13 @@
   (util/delete-dir node-dir)
 
   (with-open [node (tu/->local-node {:node-dir node-dir})]
-    (let [last-tx (-> (case method
-                        :docs (tpch/submit-docs! node scale-factor)
-                        :dml (tpch/submit-dml! node scale-factor))
-                      (tu/then-await-tx node))]
+    (let [last-tx (case method
+                    :docs (tpch/submit-docs! node scale-factor)
+                    :dml (tpch/submit-dml! node scale-factor))]
+      (tu/then-await-tx last-tx node)
       (tu/finish-chunk node)
 
-      (let [db (ingest/snapshot (tu/component node :core2/ingester)
-                                last-tx
-                                (Duration/ofMinutes 1))]
+      (let [db @(node/snapshot-async node last-tx)]
         (binding [*node* node, *db* db]
           (f))))))
 

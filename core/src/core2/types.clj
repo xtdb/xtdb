@@ -226,13 +226,10 @@
   UUID
   (value->col-type [_] [:extension-type :uuid [:fixed-size-binary 16] ""])
   (write-value! [^UUID uuid ^IVectorWriter writer]
-    (let [underlying-writer (.getUnderlyingWriter (.asExtension writer))
-          bb (doto (ByteBuffer/allocate 16)
-               (.putLong (.getMostSignificantBits uuid))
-               (.putLong (.getLeastSignificantBits uuid)))]
+    (let [underlying-writer (.getUnderlyingWriter (.asExtension writer))]
       (.setSafe ^FixedSizeBinaryVector (.getVector underlying-writer)
                 (.getPosition underlying-writer)
-                (.array bb))))
+                (util/uuid->bytes uuid))))
 
   URI
   (value->col-type [_] [:extension-type :uri :utf8 ""])

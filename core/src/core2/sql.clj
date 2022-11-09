@@ -11,7 +11,9 @@
   ([query query-opts]
    (binding [r/*memo* (HashMap.)
              plan/*opts* query-opts]
-     (-> (parser/parse query) parser/or-throw
-         (sem/analyze-query) sem/or-throw
+     (let [ast (-> (parser/parse query) parser/or-throw
+                   (sem/analyze-query) sem/or-throw)]
+       (-> ast
          (plan/plan-query query-opts)
-         #_(doto clojure.pprint/pprint)))))
+           (vary-meta assoc :param-count (sem/param-count ast))
+           #_(doto clojure.pprint/pprint))))))

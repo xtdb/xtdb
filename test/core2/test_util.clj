@@ -5,18 +5,21 @@
             [core2.api :as c2]
             [core2.client :as client]
             [core2.json :as c2-json]
-            [core2.local-node :as node]
+            [core2.node :as node]
             [core2.logical-plan :as lp]
             core2.object-store
             [core2.operator :as op]
+            core2.operator.scan
             [core2.temporal :as temporal]
             [core2.types :as types]
             [core2.util :as util]
             [core2.vector.indirect :as iv]
-            [core2.vector.writer :as vw])
+            [core2.vector.writer :as vw]
+            [core2.expression :as expr])
   (:import (core2 ICursor InstantSource)
-           core2.local_node.Node
+           core2.node.Node
            core2.object_store.FileSystemObjectStore
+           core2.operator.scan.ScanSource
            core2.vector.IIndirectVector
            java.net.ServerSocket
            (java.nio.file Files Path)
@@ -76,12 +79,11 @@
   ([node k] (util/component node k)))
 
 (defn then-await-tx
-  (^core2.api.TransactionInstant [tx node]
-   @(node/await-tx-async node tx))
+  (^core2.operator.scan.ScanSource [tx node]
+   (.txBasis ^ScanSource @(node/snapshot-async node tx)))
 
-  (^core2.api.TransactionInstant [tx node ^Duration timeout]
-   @(-> (node/await-tx-async node tx)
-        (.orTimeout (.toMillis timeout) TimeUnit/MILLISECONDS))))
+  (^core2.operator.scan.ScanSource [tx node ^Duration timeout]
+   (.txBasis ^ScanSource @(node/snapshot-async node tx timeout))))
 
 (defn latest-completed-tx ^core2.api.TransactionInstant [node]
   (:latest-completed-tx (c2/status node)))
@@ -204,17 +206,15 @@
 
 (defn query-ra
   ([query] (query-ra query {}))
-  ([query {:keys [srcs params preserve-blocks? with-col-types?] :as query-opts}]
-   (with-open [pq (op/open-prepared-ra query)
-               res (.openCursor pq (-> query-opts
-                                       (dissoc :preserve-blocks? :with-col-types?)
-                                       (assoc :srcs srcs, :params params)))]
-
-     (let [rows (-> (<-cursor res)
-                   (cond->> (not preserve-blocks?) (into [] cat)))]
-       (if with-col-types?
-         {:res rows, :col-types (.columnTypes res)}
-         rows)))))
+  ([query {:keys [preserve-blocks? with-col-types?] :as query-opts}]
+   (let [pq (op/prepare-ra query)
+         bq (.bind pq (select-keys query-opts [:srcs :current-time :default-tz :params]))]
+     (with-open [res (.openCursor bq)]
+       (let [rows (-> (<-cursor res)
+                      (cond->> (not preserve-blocks?) (into [] cat)))]
+         (if with-col-types?
+           {:res rows, :col-types (.columnTypes bq)}
+           rows))))))
 
 (t/deftest round-trip-cursor
   (with-allocator
@@ -246,7 +246,7 @@
             :when (.endsWith (str path) ".json")]
       (check-json-file (.resolve expected-path (.getFileName path)) path))))
 
-(defn ->local-node ^core2.local_node.Node [{:keys [^Path node-dir ^String buffers-dir
+(defn ->local-node ^core2.node.Node [{:keys [^Path node-dir ^String buffers-dir
                                                    max-rows-per-block max-rows-per-chunk]
                                             :or {buffers-dir "buffers"}}]
   (node/start-node {:core2.log/local-directory-log {:root-path (.resolve node-dir "log")
@@ -258,7 +258,7 @@
                                             :max-rows-per-chunk max-rows-per-chunk}
                                            (into {} (filter val)))}))
 
-(defn ->local-submit-node ^core2.local_node.SubmitNode [{:keys [^Path node-dir]}]
+(defn ->local-submit-node ^core2.node.SubmitNode [{:keys [^Path node-dir]}]
   (node/start-submit-node {:core2.tx-producer/tx-producer {:clock (->mock-clock)}
                            :core2.log/local-directory-log {:root-path (.resolve node-dir "log")
                                                            :clock (->mock-clock)}}))

@@ -8,14 +8,13 @@
             [clojure.string :as str]
             [clojure.tools.logging :as log]
             [core2.api :as c2]
-            [core2.local-node :as node]
+            [core2.node :as node]
             [core2.rewrite :as r]
             [core2.sql.analyze :as sem]
             [core2.sql.parser :as parser]
             [core2.sql.plan :as plan]
             [core2.util :as util]
-            [juxt.clojars-mirrors.integrant.core :as ig]
-            [core2.sql :as sql])
+            [juxt.clojars-mirrors.integrant.core :as ig])
   (:import (clojure.lang PersistentQueue)
            (core2 IResultSet)
            (core2.types IntervalDayTime IntervalMonthDayNano IntervalYearMonth)
@@ -1419,7 +1418,7 @@
         await-ex (when tx
                    (try
                      ;; TODO consider blocking policy
-                     @(node/await-tx-async node tx)
+                     @(node/snapshot-async node tx)
                      nil
                      (catch Throwable e
                        (log/debug e "Error on await-tx")
