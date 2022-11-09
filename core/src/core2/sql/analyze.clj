@@ -79,6 +79,19 @@
        (count)
        (dec)))
 
+(defn param-count [ag]
+  (apply max
+         (count (->> ag
+                     (r/collect
+                      (fn [ag]
+                        (if (r/ctor? :dynamic_parameter_specification ag)
+                          [:param]
+                          [])))))
+         (->> ag
+              (r/collect (fn [ag]
+                           (r/zmatch ag
+                             [:postgres_parameter_specification s] [(parse-long (subs s 1))]))))))
+
 ;; Identifiers
 
 (defn identifier [ag]
