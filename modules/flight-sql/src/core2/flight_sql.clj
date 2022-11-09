@@ -317,7 +317,7 @@
   (merge {:allocator (ig/ref :core2/allocator)
           :node (ig/ref :core2.node/node)
           :host "127.0.0.1"
-          :port 52358}
+          :port 9832}
          opts))
 
 (defmethod ig/init-key ::server [_ {:keys [allocator node host ^long port]}]
