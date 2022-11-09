@@ -15,9 +15,10 @@
            (core2 IResultSet)
            (java.lang Thread$State)
            (java.net SocketException)
-           (java.sql Connection)
+           (java.sql Connection DriverManager)
            (java.time Clock Instant ZoneId ZoneOffset)
            (java.util.concurrent CompletableFuture CountDownLatch TimeUnit)
+           org.apache.arrow.driver.jdbc.ArrowFlightJdbcDriver
            (org.postgresql.util PGobject PSQLException)))
 
 (set! *warn-on-reflection* false)
@@ -43,36 +44,44 @@
           (pgwire/serve *node*)
           (set! *server*)))))
 
-(defn- each-fixture [f]
-  (binding [*port* nil
-            *server* nil
-            *node* nil]
-    (try
-      (f)
-      (finally
-        (some-> *node* .close)
-        (some-> *server* .close)))))
+(t/use-fixtures :once
+  (fn [f]
+    (let [check-if-no-pgwire-threads (zero? (count @#'pgwire/servers))]
+      (try
+        (f)
+        (finally
+          (when check-if-no-pgwire-threads
+            ;; warn if it looks like threads are stick around (for CI logs)
+            (when-not (zero? (->> (Thread/getAllStackTraces)
+                                  keys
+                                  (map #(.getName ^Thread %))
+                                  (filter #(str/starts-with? % "pgwire"))
+                                  count))
+              (log/warn "dangling pgwire resources discovered after tests!"))
 
-(t/use-fixtures :each #'each-fixture)
+            ;; stop all just in case we can clean up anyway
+            (pgwire/stop-all))))))
 
-(defn- once-fixture [f]
-  (let [check-if-no-pgwire-threads (zero? (count @#'pgwire/servers))]
-    (try
-      (f)
-      (finally
-        (when check-if-no-pgwire-threads
-          ;; warn if it looks like threads are stick around (for CI logs)
-          (when-not (zero? (->> (Thread/getAllStackTraces)
-                                keys
-                                (map #(.getName %))
-                                (filter #(str/starts-with? % "pgwire"))
-                                count))
-            (log/warn "dangling pgwire resources discovered after tests!"))
+  (fn [f]
+    ;; HACK see https://issues.apache.org/jira/browse/ARROW-18296
+    ;; this ensures the FSQL driver is at the end of the DriverManager list
+    (when-let [fsql-driver (->> (enumeration-seq (DriverManager/getDrivers))
+                                (filter #(instance? ArrowFlightJdbcDriver %))
+                                first)]
+      (DriverManager/deregisterDriver fsql-driver)
+      (DriverManager/registerDriver fsql-driver))
+    (f)))
 
-          ;; stop all just in case we can clean up anyway
-          (pgwire/stop-all))))))
-
-(t/use-fixtures :once #'once-fixture)
+(t/use-fixtures :each
+  (fn [f]
+    (binding [*port* nil
+              *server* nil
+              *node* nil]
+      (try
+        (f)
+        (finally
+          (util/try-close *server*)
+          (util/try-close *node*))))))
 
 (defn- jdbc-url [& params]
   (require-server)
