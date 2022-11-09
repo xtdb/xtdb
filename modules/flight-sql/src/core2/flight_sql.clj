@@ -4,10 +4,10 @@
             [core2.node :as node]
             [core2.operator :as op]
             [core2.sql :as sql]
-            [core2.test-util :as test-util]
             [core2.types :as types]
             [core2.util :as util]
             [core2.vector.indirect :as iv]
+            [core2.vector.writer :as vw]
             [juxt.clojars-mirrors.integrant.core :as ig])
   (:import clojure.lang.MapEntry
            (com.google.protobuf Any ByteString)
@@ -15,7 +15,7 @@
            java.io.Closeable
            (java.util ArrayList HashMap Map)
            (java.util.concurrent CompletableFuture ConcurrentHashMap)
-           (java.util.function BiConsumer Consumer BiFunction)
+           (java.util.function BiConsumer BiFunction Consumer)
            (org.apache.arrow.flight FlightEndpoint FlightInfo FlightProducer$ServerStreamListener FlightProducer$StreamListener
                                     FlightServer FlightServer$Builder FlightServerMiddleware FlightServerMiddleware$Factory FlightServerMiddleware$Key
                                     FlightStream Location PutResult Result Ticket)
@@ -27,8 +27,45 @@
                                              FlightSql$DoPutUpdateResult
                                              FlightSql$TicketStatementQuery)
            org.apache.arrow.memory.BufferAllocator
-           (org.apache.arrow.vector VectorSchemaRoot)
+           (org.apache.arrow.vector FieldVector ValueVector VectorSchemaRoot)
+           org.apache.arrow.vector.complex.DenseUnionVector
            org.apache.arrow.vector.types.pojo.Schema))
+
+;;;; populate-root temporarily copied from test-util
+
+(defn- write-vec! [^ValueVector v, vs]
+  (.clear v)
+
+  (let [duv? (instance? DenseUnionVector v)
+        writer (vw/vec->writer v)]
+    (doseq [v vs]
+      (.startValue writer)
+      (if duv?
+        (doto (.writerForType (.asDenseUnion writer) (types/value->col-type v))
+          (.startValue)
+          (->> (types/write-value! v))
+          (.endValue))
+
+        (types/write-value! v writer))
+
+      (.endValue writer))
+
+    (.setValueCount v (count vs))
+
+    v))
+
+(defn- populate-root ^core2.vector.IIndirectRelation [^VectorSchemaRoot root rows]
+  (.clear root)
+
+  (let [field-vecs (.getFieldVectors root)
+        row-count (count rows)]
+    (doseq [^FieldVector field-vec field-vecs]
+      (write-vec! field-vec (map (keyword (.getName (.getField field-vec))) rows)))
+
+    (.setRowCount root row-count)
+    root))
+
+;;;; end populate-root
 
 (defn- new-id ^com.google.protobuf.ByteString []
   (ByteString/copyFrom (util/uuid->bytes (random-uuid))))
@@ -117,7 +154,7 @@
                                      ;; because we can get DUVs in the in-rel but the output just expects mono vecs.
                                      ;; also HACK for using the test-util in main code.
 
-                                     (test-util/populate-root vsr (iv/rel->rows in-rel))
+                                     (populate-root vsr (iv/rel->rows in-rel))
                                      (.putNext listener))))
 
               (.completed listener)))]
