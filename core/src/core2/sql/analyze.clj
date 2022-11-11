@@ -1108,6 +1108,11 @@
          (check-duplicates "Table variable" ag
                            (local-names (dclo ag) :correlation-name))
 
+         :with_clause (if (= (r/lexeme ag 2) "RECURSIVE")
+                        [(format "RECURSIVE WITH clauses are not supported: %s %s"
+                                 (->src-str ag)
+                                 (->line-info-str ag))]
+                        [])
          :with_list
          (check-duplicates "CTE query name" ag
                            (local-names (cteo ag) :query-name))

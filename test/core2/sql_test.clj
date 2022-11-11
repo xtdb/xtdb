@@ -1199,3 +1199,10 @@
 (deftest parenthesized-joined-tables-are-unboxed-502
   (t/is (= (plan-sql "SELECT 1 FROM ( tab0 JOIN tab2 ON TRUE )")
            (plan-sql "SELECT 1 FROM tab0 JOIN tab2 ON TRUE"))))
+
+(deftest test-with-clause
+  (t/is (=plan-file
+          "test-with-clause"
+          (plan-sql "WITH foo AS (SELECT bar.id FROM bar WHERE bar.id = 5)
+                    SELECT foo.id, baz.id
+                    FROM foo, foo AS baz"))))

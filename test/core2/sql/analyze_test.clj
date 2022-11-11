@@ -763,3 +763,11 @@ SELECT t1.d-t1.e AS a, SUM(t1.a) AS b
 
   (invalid? [#"Updating sys-time columns is not supported:"]
             "UPDATE foo SET system_time_start = DATE '2020-01-01'"))
+
+(t/deftest test-with-recursive-unsupported-490
+  (invalid? [#"RECURSIVE WITH clauses are not supported"]
+            "WITH RECURSIVE foo(n) AS
+            (VALUES (0)
+            UNION ALL
+            SELECT foo.n + 1 FROM foo WHERE foo.n < 4)
+            SELECT foo.n FROM foo"))
