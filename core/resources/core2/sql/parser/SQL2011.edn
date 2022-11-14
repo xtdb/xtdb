@@ -1871,7 +1871,9 @@
  :with_clause
  {:tag :cat,
   :parsers
-  ({:tag :string, :string "WITH"} {:tag :nt, :keyword :with_list})},
+  ({:tag :string, :string "WITH"}
+   {:tag :opt, :parser {:tag :string, :string "RECURSIVE"}}
+   {:tag :nt, :keyword :with_list})},
  :with_list_element
  {:tag :cat,
   :parsers
