@@ -40,7 +40,8 @@
                   :cat (let [[opts mandatory] (split-with (comp #{:opt :star} :tag) (:parsers node))]
                          (doseq [opt opts]
                            (.push stack opt))
-                         (.push stack (first mandatory)))
+                         (when-not (empty? mandatory)
+                           (.push stack (first mandatory))))
                   :ord (do (.push stack (:parser1 node))
                            (.push stack (:parser2 node)))
                   :alt (doseq [alt (:parsers node)]
@@ -272,6 +273,11 @@
       (util/lru-memoize)))
 
 (comment
+  (sql-parser "SELECT foo.bar,
+                        SUM(foo.bar) OVER (PARTITION BY foo.biff) AS baz
+                        FROM foo" :directly_executable_statement)
+
+
   (sql-parser "SELECT * FROMfoo" :directly_executable_statement)
 
   (println (failure->str (sql-parser "* FROMfoo" :term)))

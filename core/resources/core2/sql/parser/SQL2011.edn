@@ -95,6 +95,12 @@
       {:tag :nt, :keyword :character_string_literal}
       {:tag :nt, :keyword :right_paren, :hide true})}})},
  :greater_than_operator {:tag :string, :string ">"},
+ :nested_window_function
+ {:tag :alt,
+  :parsers
+  ({:tag :nt, :keyword :nested_row_number_function}
+   {:tag :nt, :keyword :value_of_expression_at_row}),
+  :red {:reduction-type :raw}},
  :character_like_predicate
  {:tag :cat,
   :parsers
@@ -159,6 +165,17 @@
    {:tag :nt, :keyword :value_expression})},
  :direct_sql_statements
  {:tag :plus, :parser {:tag :nt, :keyword :direct_sql_statement}},
+ :row_marker_delta
+ {:tag :alt,
+  :parsers
+  ({:tag :cat,
+    :parsers
+    ({:tag :nt, :keyword :plus_sign}
+     {:tag :nt, :keyword :row_marker_offset})}
+   {:tag :cat,
+    :parsers
+    ({:tag :nt, :keyword :minus_sign}
+     {:tag :nt, :keyword :row_marker_offset})})},
  :set_transaction_statement
  {:tag :cat,
   :parsers
@@ -383,6 +400,13 @@
   ({:tag :nt, :keyword :value_expression_primary}
    {:tag :nt, :keyword :string_value_function}),
   :red {:reduction-type :raw}},
+ :ntile_function
+ {:tag :cat,
+  :parsers
+  ({:tag :string, :string "NTILE"}
+   {:tag :nt, :keyword :left_paren, :hide true}
+   {:tag :nt, :keyword :number_of_tiles}
+   {:tag :nt, :keyword :right_paren, :hide true})},
  :contextually_typed_row_value_constructor
  {:tag :alt,
   :parsers
@@ -430,6 +454,13 @@
   ({:tag :nt, :keyword :binary_value_expression}
    {:tag :nt, :keyword :concatenation_operator}
    {:tag :nt, :keyword :binary_factor})},
+ :nested_row_number_function
+ {:tag :cat,
+  :parsers
+  ({:tag :string, :string "ROW_NUMBER"}
+   {:tag :nt, :keyword :left_paren, :hide true}
+   {:tag :nt, :keyword :row_marker}
+   {:tag :nt, :keyword :right_paren, :hide true})},
  :maximum_cardinality
  {:tag :nt, :keyword :unsigned_integer, :red {:reduction-type :raw}},
  :floor_function
@@ -491,6 +522,12 @@
     ({:tag :nt, :keyword :space} {:tag :regexp, :regexp #"T"}),
     :hide true}
    {:tag :nt, :keyword :unquoted_time_string})},
+ :window_frame_units
+ {:tag :alt,
+  :parsers
+  ({:tag :string, :string "ROWS"}
+   {:tag :string, :string "RANGE"}
+   {:tag :string, :string "GROUPS"})},
  :character_representation {:tag :regexp, :regexp #"(''|[^'])*"},
  :fetch_first_row_count
  {:tag :nt,
@@ -529,6 +566,18 @@
        ({:tag :string, :string "ALL"}
         {:tag :string, :string "DISTINCT"})}}
      {:tag :nt, :keyword :query_term})})},
+ :window_frame_start
+ {:tag :alt,
+  :parsers
+  ({:tag :cat,
+    :parsers
+    ({:tag :string, :string "UNBOUNDED"}
+     {:tag :string, :string "PRECEDING"})}
+   {:tag :nt, :keyword :window_frame_preceding}
+   {:tag :cat,
+    :parsers
+    ({:tag :string, :string "CURRENT"}
+     {:tag :string, :string "ROW"})})},
  :left_brace {:tag :string, :string "{", :red {:reduction-type :raw}},
  :string_value_function
  {:tag :alt,
@@ -670,7 +719,8 @@
   ({:tag :nt, :keyword :from_clause}
    {:tag :opt, :parser {:tag :nt, :keyword :where_clause}}
    {:tag :opt, :parser {:tag :nt, :keyword :group_by_clause}}
-   {:tag :opt, :parser {:tag :nt, :keyword :having_clause}})},
+   {:tag :opt, :parser {:tag :nt, :keyword :having_clause}}
+   {:tag :opt, :parser {:tag :nt, :keyword :window_clause}})},
  :directly_executable_statement
  {:tag :alt,
   :parsers
@@ -684,6 +734,13 @@
   ({:tag :nt, :keyword :comp_op}
    {:tag :nt, :keyword :quantifier}
    {:tag :nt, :keyword :table_subquery})},
+ :window_frame_between
+ {:tag :cat,
+  :parsers
+  ({:tag :string, :string "BETWEEN"}
+   {:tag :nt, :keyword :window_frame_bound_1}
+   {:tag :string, :string "AND"}
+   {:tag :nt, :keyword :window_frame_bound_2})},
  :max_cardinality_expression
  {:tag :cat,
   :parsers
@@ -702,6 +759,8 @@
      ({:tag :nt, :keyword :period, :hide true}
       {:tag :nt, :keyword :identifier})}})},
  :less_than_operator {:tag :string, :string "<"},
+ :default_expression
+ {:tag :nt, :keyword :value_expression, :red {:reduction-type :raw}},
  :start_field
  {:tag :cat,
   :parsers
@@ -732,6 +791,12 @@
       :parsers
       ({:tag :nt, :keyword :comma, :hide true}
        {:tag :nt, :keyword :when_operand})}}})},
+ :window_frame_extent
+ {:tag :alt,
+  :parsers
+  ({:tag :nt, :keyword :window_frame_start}
+   {:tag :nt, :keyword :window_frame_between}),
+  :red {:reduction-type :raw}},
  :period_or_point_in_time_predicand
  {:tag :alt,
   :parsers
@@ -811,6 +876,12 @@
     ({:tag :string, :string "FOR"}
      {:tag :string, :string "ALL"}
      {:tag :string, :string "SYSTEM_TIME"})})},
+ :window_name_or_specification
+ {:tag :alt,
+  :parsers
+  ({:tag :nt, :keyword :window_name}
+   {:tag :nt, :keyword :in_line_window_specification}),
+  :red {:reduction-type :raw}},
  :character_large_object_type
  {:tag :alt,
   :parsers
@@ -1011,6 +1082,12 @@
    {:tag :nt, :keyword :null_predicate_part_2}
    {:tag :nt, :keyword :quantified_comparison_predicate_part_2}),
   :red {:reduction-type :raw}},
+ :window_function
+ {:tag :cat,
+  :parsers
+  ({:tag :nt, :keyword :window_function_type}
+   {:tag :string, :string "OVER"}
+   {:tag :nt, :keyword :window_name_or_specification})},
  :basic_identifier_chain
  {:tag :nt, :keyword :identifier_chain, :red {:reduction-type :raw}},
  :set_local_time_zone_statement
@@ -1020,6 +1097,10 @@
    {:tag :string, :string "TIME"}
    {:tag :string, :string "ZONE"}
    {:tag :nt, :keyword :set_time_zone_value})},
+ :offset
+ {:tag :nt,
+  :keyword :exact_numeric_literal,
+  :red {:reduction-type :raw}},
  :sort_key
  {:tag :nt, :keyword :value_expression, :red {:reduction-type :raw}},
  :general_logarithm_argument
@@ -1037,7 +1118,7 @@
     :parser
     {:tag :regexp,
      :regexp
-     #"(?i)(\b(NULL|WITH|SELECT|FROM|WHERE|GROUP|HAVING|ORDER|OFFSET|FETCH|LIMIT|UNION|EXCEPT|INTERSECT|CURRENT_TIME|CURRENT_TIMESTAMP|CURRENT_DATE|LOCALTIME|LOCALTIMESTAMP|END_OF_TIME)\b)"}}
+     #"(?i)(\b(NULL|WITH|SELECT|FROM|WHERE|GROUP|HAVING|ORDER|OFFSET|FETCH|LIMIT|PARTITION|ROWS|RANGE|GROUPS|UNION|EXCEPT|INTERSECT|CURRENT_TIME|CURRENT_TIMESTAMP|CURRENT_DATE|LOCALTIME|LOCALTIMESTAMP|END_OF_TIME)\b)"}}
    {:tag :regexp, :regexp #"[a-zA-Z][a-zA-Z0-9_]*"})},
  :contextually_typed_row_value_expression
  {:tag :alt,
@@ -1045,6 +1126,11 @@
   ({:tag :nt, :keyword :row_value_special_case}
    {:tag :nt, :keyword :contextually_typed_row_value_constructor}),
   :red {:reduction-type :raw}},
+ :row_marker_expression
+ {:tag :cat,
+  :parsers
+  ({:tag :nt, :keyword :row_marker}
+   {:tag :opt, :parser {:tag :nt, :keyword :row_marker_delta}})},
  :asterisked_identifier
  {:tag :nt, :keyword :identifier, :red {:reduction-type :raw}},
  :scale
@@ -1072,6 +1158,12 @@
    {:tag :nt, :keyword :period_predicand_2})},
  :set_function_specification
  {:tag :nt, :keyword :aggregate_function, :red {:reduction-type :raw}},
+ :nth_row
+ {:tag :alt,
+  :parsers
+  ({:tag :nt, :keyword :simple_value_specification}
+   {:tag :nt, :keyword :dynamic_parameter_specification}),
+  :red {:reduction-type :raw}},
  :extract_source
  {:tag :alt,
   :parsers
@@ -1130,6 +1222,8 @@
       {:tag :string, :string "BY"}
       {:tag :nt, :keyword :sort_specification_list})}}
    {:tag :nt, :keyword :right_paren, :hide true})},
+ :window_partition_column_reference
+ {:tag :nt, :keyword :column_reference},
  :numeric_value_function
  {:tag :alt,
   :parsers
@@ -1215,6 +1309,15 @@
  {:tag :nt,
   :keyword :datetime_value_expression,
   :red {:reduction-type :raw}},
+ :from_first_or_last
+ {:tag :alt,
+  :parsers
+  ({:tag :cat,
+    :parsers
+    ({:tag :string, :string "FROM"} {:tag :string, :string "FIRST"})}
+   {:tag :cat,
+    :parsers
+    ({:tag :string, :string "FROM"} {:tag :string, :string "LAST"})})},
  :binary_substring_function
  {:tag :cat,
   :parsers
@@ -1318,6 +1421,12 @@
  {:tag :nt,
   :keyword :computational_operation,
   :red {:reduction-type :raw}},
+ :window_frame_clause
+ {:tag :cat,
+  :parsers
+  ({:tag :nt, :keyword :window_frame_units}
+   {:tag :nt, :keyword :window_frame_extent}
+   {:tag :opt, :parser {:tag :nt, :keyword :window_frame_exclusion}})},
  :interval_term_2
  {:tag :nt, :keyword :interval_term, :red {:reduction-type :raw}},
  :comma {:tag :string, :string ",", :red {:reduction-type :raw}},
@@ -1375,6 +1484,15 @@
   ({:tag :nt, :keyword :exact_numeric_literal}
    {:tag :nt, :keyword :approximate_numeric_literal}),
   :red {:reduction-type :raw}},
+ :window_frame_bound
+ {:tag :alt,
+  :parsers
+  ({:tag :nt, :keyword :window_frame_start}
+   {:tag :cat,
+    :parsers
+    ({:tag :string, :string "UNBOUNDED"}
+     {:tag :string, :string "FOLLOWING"})}
+   {:tag :nt, :keyword :window_frame_following})},
  :single_datetime_field
  {:tag :alt,
   :parsers
@@ -1422,6 +1540,14 @@
   :red {:reduction-type :raw}},
  :field_name
  {:tag :nt, :keyword :identifier, :red {:reduction-type :raw}},
+ :first_or_last_value_function
+ {:tag :cat,
+  :parsers
+  ({:tag :nt, :keyword :first_or_last_value}
+   {:tag :nt, :keyword :left_paren, :hide true}
+   {:tag :nt, :keyword :value_expression}
+   {:tag :nt, :keyword :right_paren, :hide true}
+   {:tag :opt, :parser {:tag :nt, :keyword :null_treatment}})},
  :transaction_characteristics
  {:tag :opt,
   :parser
@@ -1472,6 +1598,10 @@
   :parsers
   ({:tag :opt, :parser {:tag :nt, :keyword :sign}}
    {:tag :nt, :keyword :unsigned_numeric_literal})},
+ :in_line_window_specification
+ {:tag :nt,
+  :keyword :window_specification,
+  :red {:reduction-type :raw}},
  :vertical_bar {:tag :string, :string "|"},
  :table_reference
  {:tag :alt,
@@ -1583,6 +1713,8 @@
  :current_date_value_function {:tag :string, :string "CURRENT_DATE"},
  :point_in_time_2
  {:tag :nt, :keyword :point_in_time, :red {:reduction-type :raw}},
+ :window_name
+ {:tag :nt, :keyword :identifier, :red {:reduction-type :raw}},
  :exponential_function
  {:tag :cat,
   :parsers
@@ -1621,6 +1753,12 @@
         :parsers
         ({:tag :nt, :keyword :comma, :hide true}
          {:tag :nt, :keyword :select_sublist})}}})})},
+ :number_of_tiles
+ {:tag :alt,
+  :parsers
+  ({:tag :nt, :keyword :simple_value_specification}
+   {:tag :nt, :keyword :dynamic_parameter_specification}),
+  :red {:reduction-type :raw}},
  :row_value_constructor_predicand
  {:tag :alt,
   :parsers
@@ -1706,6 +1844,26 @@
    {:tag :nt, :keyword :left_paren, :hide true}
    {:tag :nt, :keyword :join_column_list}
    {:tag :nt, :keyword :right_paren, :hide true})},
+ :lead_or_lag_function
+ {:tag :cat,
+  :parsers
+  ({:tag :nt, :keyword :lead_or_lag}
+   {:tag :nt, :keyword :left_paren, :hide true}
+   {:tag :nt, :keyword :lead_or_lag_extent}
+   {:tag :opt,
+    :parser
+    {:tag :cat,
+     :parsers
+     ({:tag :nt, :keyword :comma, :hide true}
+      {:tag :nt, :keyword :offset}
+      {:tag :opt,
+       :parser
+       {:tag :cat,
+        :parsers
+        ({:tag :nt, :keyword :comma, :hide true}
+         {:tag :nt, :keyword :default_expression})}})}}
+   {:tag :nt, :keyword :right_paren, :hide true}
+   {:tag :opt, :parser {:tag :nt, :keyword :null_treatment}})},
  :numeric_value_expression_base
  {:tag :nt,
   :keyword :numeric_value_expression,
@@ -1713,9 +1871,7 @@
  :with_clause
  {:tag :cat,
   :parsers
-  ({:tag :string, :string "WITH"}
-   {:tag :opt, :parser {:tag :string, :string "RECURSIVE"}}
-   {:tag :nt, :keyword :with_list})},
+  ({:tag :string, :string "WITH"} {:tag :nt, :keyword :with_list})},
  :with_list_element
  {:tag :cat,
   :parsers
@@ -1735,6 +1891,8 @@
   ({:tag :nt, :keyword :unsigned_value_specification}
    {:tag :nt, :keyword :column_reference}
    {:tag :nt, :keyword :set_function_specification}
+   {:tag :nt, :keyword :window_function}
+   {:tag :nt, :keyword :nested_window_function}
    {:tag :nt, :keyword :scalar_subquery}
    {:tag :nt, :keyword :case_expression}
    {:tag :nt, :keyword :cast_specification}
@@ -1760,6 +1918,12 @@
       :parsers
       ({:tag :nt, :keyword :comma, :hide true}
        {:tag :nt, :keyword :table_row_value_expression})}}})},
+ :window_partition_clause
+ {:tag :cat,
+  :parsers
+  ({:tag :string, :string "PARTITION"}
+   {:tag :string, :string "BY"}
+   {:tag :nt, :keyword :window_partition_column_reference_list})},
  :binary_factor
  {:tag :nt, :keyword :binary_primary, :red {:reduction-type :raw}},
  :greater_than_or_equals_operator {:tag :string, :string ">="},
@@ -1939,6 +2103,8 @@
    {:tag :string, :string "FROM"}
    {:tag :nt, :keyword :extract_source}
    {:tag :nt, :keyword :right_paren, :hide true})},
+ :new_window_name
+ {:tag :nt, :keyword :window_name, :red {:reduction-type :raw}},
  :time_precision
  {:tag :nt,
   :keyword :time_fractional_seconds_precision,
@@ -2007,6 +2173,17 @@
      {:tag :nt, :keyword :length}
      {:tag :nt, :keyword :right_paren, :hide true})}
    {:tag :nt, :keyword :binary_large_object_string_type})},
+ :window_order_clause
+ {:tag :cat,
+  :parsers
+  ({:tag :string, :string "ORDER"}
+   {:tag :string, :string "BY"}
+   {:tag :nt, :keyword :sort_specification_list})},
+ :window_clause
+ {:tag :cat,
+  :parsers
+  ({:tag :string, :string "WINDOW"}
+   {:tag :nt, :keyword :window_definition_list})},
  :primary_datetime_field
  {:tag :alt,
   :parsers
@@ -2141,6 +2318,12 @@
  :question_mark {:tag :string, :string "?"},
  :object_column
  {:tag :nt, :keyword :column_name, :red {:reduction-type :raw}},
+ :row_marker_offset
+ {:tag :alt,
+  :parsers
+  ({:tag :nt, :keyword :simple_value_specification}
+   {:tag :nt, :keyword :dynamic_parameter_specification}),
+  :red {:reduction-type :raw}},
  :where_clause
  {:tag :cat,
   :parsers
@@ -2156,6 +2339,8 @@
   :parsers
   ({:tag :string, :string "ON"}
    {:tag :nt, :keyword :search_condition})},
+ :existing_window_name
+ {:tag :nt, :keyword :window_name, :red {:reduction-type :raw}},
  :with_or_without_time_zone
  {:tag :alt,
   :parsers
@@ -2190,6 +2375,24 @@
   :parsers
   ({:tag :nt, :keyword :period_predicand_1}
    {:tag :nt, :keyword :period_succeeds_predicate_part_2})},
+ :window_function_type
+ {:tag :alt,
+  :parsers
+  ({:tag :cat,
+    :parsers
+    ({:tag :nt, :keyword :rank_function_type}
+     {:tag :nt, :keyword :left_paren, :hide true}
+     {:tag :nt, :keyword :right_paren, :hide true})}
+   {:tag :cat,
+    :parsers
+    ({:tag :string, :string "ROW_NUMBER"}
+     {:tag :nt, :keyword :left_paren, :hide true}
+     {:tag :nt, :keyword :right_paren, :hide true})}
+   {:tag :nt, :keyword :aggregate_function}
+   {:tag :nt, :keyword :ntile_function}
+   {:tag :nt, :keyword :lead_or_lag_function}
+   {:tag :nt, :keyword :first_or_last_value_function}
+   {:tag :nt, :keyword :nth_value_function})},
  :unquoted_time_string
  {:tag :cat,
   :parsers
@@ -2227,6 +2430,18 @@
  {:tag :nt,
   :keyword :character_value_expression,
   :red {:reduction-type :raw}},
+ :window_definition_list
+ {:tag :cat,
+  :parsers
+  ({:tag :nt, :keyword :window_definition}
+   {:tag :opt,
+    :parser
+    {:tag :plus,
+     :parser
+     {:tag :cat,
+      :parsers
+      ({:tag :nt, :keyword :comma, :hide true}
+       {:tag :nt, :keyword :window_definition})}}})},
  :row_type_body
  {:tag :cat,
   :parsers
@@ -2249,6 +2464,8 @@
   :parsers
   ({:tag :nt, :keyword :result_expression}
    {:tag :string, :string "NULL"})},
+ :window_frame_bound_2
+ {:tag :nt, :keyword :window_frame_bound, :red {:reduction-type :raw}},
  :character_pattern
  {:tag :nt,
   :keyword :character_value_expression,
@@ -2381,6 +2598,17 @@
       {:tag :nt, :keyword :right_paren, :hide true})}}
    {:tag :opt, :parser {:tag :nt, :keyword :override_clause}}
    {:tag :nt, :keyword :query_expression})},
+ :nth_value_function
+ {:tag :cat,
+  :parsers
+  ({:tag :string, :string "NTH_VALUE"}
+   {:tag :nt, :keyword :left_paren, :hide true}
+   {:tag :nt, :keyword :value_expression}
+   {:tag :nt, :keyword :comma, :hide true}
+   {:tag :nt, :keyword :nth_row}
+   {:tag :nt, :keyword :right_paren, :hide true}
+   {:tag :opt, :parser {:tag :nt, :keyword :from_first_or_last}}
+   {:tag :opt, :parser {:tag :nt, :keyword :null_treatment}})},
  :character_overlay_function
  {:tag :cat,
   :parsers
@@ -2404,6 +2632,8 @@
      ({:tag :string, :string "USING"}
       {:tag :nt, :keyword :char_length_units})}}
    {:tag :nt, :keyword :right_paren, :hide true})},
+ :window_frame_bound_1
+ {:tag :nt, :keyword :window_frame_bound, :red {:reduction-type :raw}},
  :time_fractional_seconds_precision
  {:tag :nt, :keyword :unsigned_integer, :red {:reduction-type :raw}},
  :subquery
@@ -2502,6 +2732,26 @@
    {:tag :opt, :parser {:tag :nt, :keyword :else_clause}}
    {:tag :string, :string "END"})},
  :unquoted_interval_string {:tag :regexp, :regexp #"[\d\:\-\+\. ]+"},
+ :window_frame_exclusion
+ {:tag :alt,
+  :parsers
+  ({:tag :cat,
+    :parsers
+    ({:tag :string, :string "EXCLUDE"}
+     {:tag :string, :string "CURRENT"}
+     {:tag :string, :string "ROW"})}
+   {:tag :cat,
+    :parsers
+    ({:tag :string, :string "EXCLUDE"}
+     {:tag :string, :string "GROUP"})}
+   {:tag :cat,
+    :parsers
+    ({:tag :string, :string "EXCLUDE"} {:tag :string, :string "TIES"})}
+   {:tag :cat,
+    :parsers
+    ({:tag :string, :string "EXCLUDE"}
+     {:tag :string, :string "NO"}
+     {:tag :string, :string "OTHERS"})})},
  :array_element
  {:tag :nt, :keyword :value_expression, :red {:reduction-type :raw}},
  :array_element_reference
@@ -2548,6 +2798,13 @@
    {:tag :nt, :keyword :row_type}
    {:tag :nt, :keyword :collection_type}),
   :red {:reduction-type :raw}},
+ :window_specification_details
+ {:tag :cat,
+  :parsers
+  ({:tag :opt, :parser {:tag :nt, :keyword :existing_window_name}}
+   {:tag :opt, :parser {:tag :nt, :keyword :window_partition_clause}}
+   {:tag :opt, :parser {:tag :nt, :keyword :window_order_clause}}
+   {:tag :opt, :parser {:tag :nt, :keyword :window_frame_clause}})},
  :square_root
  {:tag :cat,
   :parsers
@@ -2644,6 +2901,21 @@
   :parsers
   ({:tag :string, :string "APPLICATION_TIME"}
    {:tag :string, :string "APP_TIME"})},
+ :value_of_expression_at_row
+ {:tag :cat,
+  :parsers
+  ({:tag :string, :string "VALUE_OF"}
+   {:tag :nt, :keyword :left_paren, :hide true}
+   {:tag :nt, :keyword :value_expression}
+   {:tag :string, :string "AT"}
+   {:tag :nt, :keyword :row_marker_expression}
+   {:tag :opt,
+    :parser
+    {:tag :cat,
+     :parsers
+     ({:tag :nt, :keyword :comma, :hide true}
+      {:tag :nt, :keyword :value_of_default_value})}}
+   {:tag :nt, :keyword :right_paren, :hide true})},
  :contextually_typed_row_value_constructor_element
  {:tag :alt,
   :parsers
@@ -2720,6 +2992,18 @@
   ({:tag :nt, :keyword :case_abbreviation}
    {:tag :nt, :keyword :case_specification}),
   :red {:reduction-type :raw}},
+ :window_partition_column_reference_list
+ {:tag :cat,
+  :parsers
+  ({:tag :nt, :keyword :window_partition_column_reference}
+   {:tag :opt,
+    :parser
+    {:tag :plus,
+     :parser
+     {:tag :cat,
+      :parsers
+      ({:tag :nt, :keyword :comma, :hide true}
+       {:tag :nt, :keyword :window_partition_column_reference})}}})},
  :period_immediately_succeeds_predicate
  {:tag :cat,
   :parsers
@@ -2758,6 +3042,11 @@
   ({:tag :string, :string "ORDER"}
    {:tag :string, :string "BY"}
    {:tag :nt, :keyword :sort_specification_list})},
+ :window_frame_preceding
+ {:tag :cat,
+  :parsers
+  ({:tag :nt, :keyword :unsigned_value_specification}
+   {:tag :string, :string "PRECEDING"})},
  :period_contains_predicate_part_2
  {:tag :cat,
   :parsers
@@ -2792,6 +3081,10 @@
    {:tag :nt, :keyword :right_paren, :hide true})},
  :scalar_subquery
  {:tag :nt, :keyword :subquery, :red {:reduction-type :raw}},
+ :lead_or_lag
+ {:tag :alt,
+  :parsers
+  ({:tag :string, :string "LEAD"} {:tag :string, :string "LAG"})},
  :from_constructor
  {:tag :cat,
   :parsers
@@ -2859,6 +3152,11 @@
    {:tag :nt, :keyword :when_operand_list}
    {:tag :string, :string "THEN"}
    {:tag :nt, :keyword :result})},
+ :first_or_last_value
+ {:tag :alt,
+  :parsers
+  ({:tag :string, :string "FIRST_VALUE"}
+   {:tag :string, :string "LAST_VALUE"})},
  :percent {:tag :string, :string "%"},
  :current_local_timestamp_value_function
  {:tag :cat,
@@ -2909,6 +3207,13 @@
      {:tag :string, :string "TO"}
      {:tag :nt, :keyword :end_field})}
    {:tag :nt, :keyword :single_datetime_field})},
+ :rank_function_type
+ {:tag :alt,
+  :parsers
+  ({:tag :string, :string "RANK"}
+   {:tag :string, :string "DENSE_RANK"}
+   {:tag :string, :string "PERCENT_RANK"}
+   {:tag :string, :string "CUME_DIST"})},
  :character_string_literal
  {:tag :plus, :parser {:tag :regexp, :regexp #"'(''|[^'])*'"}},
  :session_characteristic
@@ -2919,6 +3224,12 @@
  {:tag :nt, :keyword :table_name, :red {:reduction-type :raw}},
  :column_name
  {:tag :nt, :keyword :identifier, :red {:reduction-type :raw}},
+ :window_specification
+ {:tag :cat,
+  :parsers
+  ({:tag :nt, :keyword :left_paren, :hide true}
+   {:tag :nt, :keyword :window_specification_details}
+   {:tag :nt, :keyword :right_paren, :hide true})},
  :computational_operation
  {:tag :alt,
   :parsers
@@ -2935,6 +3246,12 @@
    {:tag :string, :string "VAR_SAMP"}
    {:tag :string, :string "VAR_POP"})},
  :ampersand {:tag :string, :string "&"},
+ :window_definition
+ {:tag :cat,
+  :parsers
+  ({:tag :nt, :keyword :new_window_name}
+   {:tag :string, :string "AS"}
+   {:tag :nt, :keyword :window_specification})},
  :left_paren {:tag :string, :string "(", :red {:reduction-type :raw}},
  :current_timestamp_value_function
  {:tag :cat,
@@ -3012,6 +3329,11 @@
       :parsers
       ({:tag :nt, :keyword :comma, :hide true}
        {:tag :nt, :keyword :table_reference})}}})},
+ :window_frame_following
+ {:tag :cat,
+  :parsers
+  ({:tag :nt, :keyword :unsigned_value_specification}
+   {:tag :string, :string "FOLLOWING"})},
  :predicate
  {:tag :alt,
   :parsers
@@ -3029,6 +3351,8 @@
  {:tag :nt,
   :keyword :binary_value_expression,
   :red {:reduction-type :raw}},
+ :lead_or_lag_extent
+ {:tag :nt, :keyword :value_expression, :red {:reduction-type :raw}},
  :numeric_value_expression_dividend
  {:tag :nt,
   :keyword :numeric_value_expression,
@@ -3146,12 +3470,23 @@
     ({:tag :nt, :keyword :left_paren, :hide true}
      {:tag :nt, :keyword :query_expression_body}
      {:tag :nt, :keyword :right_paren, :hide true})})},
+ :value_of_default_value
+ {:tag :nt, :keyword :value_expression, :red {:reduction-type :raw}},
  :isolation_level
  {:tag :cat,
   :parsers
   ({:tag :string, :string "ISOLATION"}
    {:tag :string, :string "LEVEL"}
    {:tag :nt, :keyword :level_of_isolation})},
+ :row_marker
+ {:tag :alt,
+  :parsers
+  ({:tag :string, :string "BEGIN_PARTITION"}
+   {:tag :string, :string "BEGIN_FRAME"}
+   {:tag :string, :string "CURRENT_ROW"}
+   {:tag :string, :string "FRAME_ROW"}
+   {:tag :string, :string "END_FRAME"}
+   {:tag :string, :string "END_PARTITION"})},
  :binary_value_function
  {:tag :alt,
   :parsers
@@ -3310,6 +3645,17 @@
    {:tag :nt, :keyword :commit_statement}
    {:tag :nt, :keyword :rollback_statement}),
   :red {:reduction-type :raw}},
+ :null_treatment
+ {:tag :alt,
+  :parsers
+  ({:tag :cat,
+    :parsers
+    ({:tag :string, :string "RESPECT"}
+     {:tag :string, :string "NULLS"})}
+   {:tag :cat,
+    :parsers
+    ({:tag :string, :string "IGNORE"}
+     {:tag :string, :string "NULLS"})})},
  :octet_length_expression
  {:tag :cat,
   :parsers
