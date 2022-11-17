@@ -273,8 +273,22 @@
         column-family-handles (into {}
                                     (for [[^int i cfd] (map-indexed vector column-family-defs)]
                                       [cfd (.get column-family-handles-vector (inc i))]))
-        ->column-family-handle (fn [cf-id]
-                                 (get column-family-handles cf-id (first column-family-handles-vector)))
+
+        ^objects cf-handle-array
+        (let [max-cf-id (apply max (keys column-family-handles))
+              arr (object-array (inc (int max-cf-id)))]
+          (doseq [[k v] column-family-handles]
+            (aset arr k v))
+          arr)
+
+        default-column-family-handle (first column-family-handles-vector)
+        ->column-family-handle
+        (fn [cf-id]
+          (let [cf-id (int cf-id)]
+            (if (< cf-id (alength cf-handle-array))
+              (or (aget cf-handle-array cf-id) default-column-family-handle)
+              default-column-family-handle)))
+
         kv-store (map->RocksKv {:db-dir db-dir
                                 :options opts
                                 :db db
