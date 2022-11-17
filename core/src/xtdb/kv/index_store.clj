@@ -22,10 +22,11 @@
            [java.util ArrayList Date HashMap List Map NavigableSet TreeSet]
            [java.util.concurrent Semaphore TimeUnit]
            java.util.concurrent.atomic.AtomicBoolean
-           [java.util.function BiFunction Supplier]
+           [java.util.function BiFunction Supplier Function BiConsumer]
            [org.agrona DirectBuffer ExpandableDirectByteBuffer MutableDirectBuffer]
            xtdb.api.IndexVersionOutOfSyncException
-           [xtdb.codec EntityTx Id]))
+           [xtdb.codec EntityTx Id]
+           (org.agrona.collections MutableLong)))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -1008,41 +1009,64 @@
       (kv/put-kv kv-tx (encode-tx-time-mapping-key-to nil tx-time tx-id) mem/empty-buffer)))
 
   (index-docs [_ docs]
-    (let [attr-bufs (->> (into #{} (mapcat keys) (vals docs))
-                         (into {} (map (juxt identity c/->id-buffer))))
-          bytes-indexed (volatile! 0)
-          store (fn [k v]
-                  (vreset! bytes-indexed (+ ^long @bytes-indexed (mem/capacity k) (mem/capacity v)))
-                  (kv/put-kv kv-tx k v))]
+    (let [attr-bufs (HashMap.)
+          attr-buf-compute (reify Function (apply [_ k] (c/->id-buffer k)))
+          attr-buf-rf-kv (fn [^Map attr-buf k _] (.computeIfAbsent attr-buf k attr-buf-compute) attr-buf)
+          attr-buf-rf-docs (fn [attr-buf doc] (reduce-kv attr-buf-rf-kv attr-buf doc))
+          _ (reduce attr-buf-rf-docs attr-bufs (if (instance? Map docs) (.values ^Map docs) (vals docs)))
 
-      (doseq [[a a-buf] attr-bufs]
-        (store (encode-hash-cache-key-to (.get content-buffer-tl) a-buf) (mem/nippy->buffer a (.get nippy-buffer-tl))))
+          bytes-indexed (MutableLong. 0)
+          store (fn [^DirectBuffer k ^DirectBuffer v]
+                  (.set bytes-indexed (+ (.get bytes-indexed) (.capacity k) (.capacity v)))
+                  (kv/put-kv kv-tx k v))
 
-      (doseq [[content-hash doc] docs
-              :let [id (:crux.db/id doc)
+          index-attribute-key
+          (reify BiConsumer
+            (accept [_ a a-buf]
+              (store (encode-hash-cache-key-to (.get content-buffer-tl) a-buf) (mem/nippy->buffer a (.get nippy-buffer-tl)))))
+
+          index-doc
+          (reify BiConsumer
+            (accept [_ content-hash doc]
+              (let [id (:crux.db/id doc)
                     eid-value-buffer (c/value->buffer id (.get eid-buffer-tl))
-                    content-hash (c/id->buffer content-hash (.get content-hash-buffer-tl))]]
+                    content-hash (c/id->buffer content-hash (.get content-hash-buffer-tl))
+                    index-positional-value
+                    (fn [a-buffer v idxs]
+                      (let [value-buffer (c/value->buffer v (.get value-buffer-tl))]
+                        (when (pos? (.capacity value-buffer))
+                          (store (encode-av-key-to (.get content-buffer-tl) a-buffer value-buffer) mem/empty-buffer)
+                          (store (encode-ave-key-to (.get content-buffer-tl) a-buffer value-buffer eid-value-buffer) mem/empty-buffer)
+                          (store (encode-ae-key-to (.get content-buffer-tl) a-buffer eid-value-buffer) mem/empty-buffer)
+                          (store (encode-ecav-key-to (.get content-buffer-tl) eid-value-buffer content-hash a-buffer value-buffer) (encode-ecav-value idxs))
+                          (when (not (c/can-decode-value-buffer? value-buffer))
+                            (store (encode-hash-cache-key-to (.get content-buffer-tl) value-buffer eid-value-buffer) (mem/nippy->buffer v (.get nippy-buffer-tl)))))))
 
-        (store (encode-hash-cache-key-to (.get hash-key-buffer-tl) (c/id->buffer id (.get content-buffer-tl)) eid-value-buffer)
-               (mem/nippy->buffer id (.get nippy-buffer-tl)))
+                    index-value
+                    (reify BiConsumer
+                      (accept [_ a v]
+                        (let [a-buffer (.get attr-bufs a)]
+                          (if (or (set? v) (vector? v))
+                            ;; slow path for coll values, we can make this more efficient but not sure on distribution
+                            ;; of complex vals
+                            (doseq [[v idxs] (val-idxs v)]
+                              (index-positional-value a-buffer v idxs))
+                            (index-positional-value a-buffer v nil)))))]
 
-        (doseq [[a v] doc
-                :let [a (get attr-bufs a)]
-                [v idxs] (val-idxs v)
-                :let [value-buffer (c/value->buffer v (.get value-buffer-tl))]
-                :when (pos? (.capacity value-buffer))]
+                (store (encode-hash-cache-key-to (.get hash-key-buffer-tl) (c/id->buffer id (.get content-buffer-tl)) eid-value-buffer)
+                       (mem/nippy->buffer id (.get nippy-buffer-tl)))
 
-          (store (encode-av-key-to (.get content-buffer-tl) a value-buffer) mem/empty-buffer)
-          (store (encode-ave-key-to (.get content-buffer-tl) a value-buffer eid-value-buffer) mem/empty-buffer)
-          (store (encode-ae-key-to (.get content-buffer-tl) a eid-value-buffer) mem/empty-buffer)
-          (store (encode-ecav-key-to (.get content-buffer-tl) eid-value-buffer content-hash a value-buffer) (encode-ecav-value idxs))
+                (.forEach ^Map doc index-value))))]
 
-          (when (not (c/can-decode-value-buffer? value-buffer))
-            (store (encode-hash-cache-key-to (.get content-buffer-tl) value-buffer eid-value-buffer) (mem/nippy->buffer v (.get nippy-buffer-tl))))))
+      (.forEach attr-bufs index-attribute-key)
 
-      {:bytes-indexed @bytes-indexed
+      (if (instance? Map docs)
+        (.forEach ^Map docs index-doc)
+        (run! (fn [[k v]] (.accept index-doc k v)) docs))
+
+      {:bytes-indexed (.get bytes-indexed)
        :doc-ids (into #{} (map c/new-id (keys docs)))
-       :av-count (->> (vals docs) (apply concat) (count))}))
+       :av-count (transduce (map count) + 0 (vals docs))}))
 
   (unindex-eids [_ base-snapshot eids]
     (let [snapshot (kv/new-tx-snapshot kv-tx)
