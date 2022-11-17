@@ -182,7 +182,7 @@
     (UnsafeBuffer. (->off-heap b tmp) 0 (capacity b))))
 
 (defn direct-byte-buffer ^java.nio.ByteBuffer [b]
-  (let [b (->off-heap b)
+  (let [^DirectBuffer b (if (and (instance? DirectBuffer b) (some? (.byteBuffer ^DirectBuffer b))) b (->off-heap b))
         offset (.wrapAdjustment b)]
     (-> (.byteBuffer b)
         (.duplicate)
