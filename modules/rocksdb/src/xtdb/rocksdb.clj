@@ -120,10 +120,11 @@
                            wb)))
 
   (put-kv [_ k v]
-    (let [cfh ^ColumnFamilyHandle (->column-family-handle (->cf-id k))]
+    (let [kb (mem/direct-byte-buffer k)
+          cfh ^ColumnFamilyHandle (->column-family-handle (.get kb 0))]
       (if v
-        (.put wb cfh (mem/direct-byte-buffer k) (mem/direct-byte-buffer v))
-        (.delete wb cfh (mem/direct-byte-buffer k)))))
+        (.put wb cfh kb (mem/direct-byte-buffer v))
+        (.delete wb cfh kb))))
 
   (commit-kv-tx [this]
     (.write db write-options wb)
