@@ -15,7 +15,7 @@
   (:import clojure.lang.MapEntry
            java.io.Closeable
            [java.util.concurrent CompletableFuture]
-           [java.util.concurrent ExecutorService ThreadFactory]
+           [java.util.concurrent ExecutorService ThreadFactory Executors TimeUnit]
            java.util.function.BiFunction
            xtdb.codec.EntityTx))
 
@@ -445,8 +445,8 @@
 (def ^ThreadFactory txs-processor-thread-factory
   (xio/thread-factory "xtdb-tx-processor"))
 
-(def ^ThreadFactory stats-processor-thread-factory
-  (xio/thread-factory "xtdb-stats-processor"))
+(def ^ThreadFactory housekeeping-thread-factory
+  (xio/thread-factory "xtdb-tx-housekeeping"))
 
 (defn- validate-tx-time-override! [latest-tx tx tx-time-override]
   (let [tx-log-time (::xt/tx-time tx)
@@ -534,26 +534,74 @@
               (throw t)))))
 
       (let [latest-tx! (atom (db/latest-completed-tx index-store))
+
+            ;; === pipelining executors ===
+
             txs-docs-fetch-executor (xio/bounded-thread-pool 1 1 docs-fetcher-thread-factory)
             txs-docs-encode-executor (xio/bounded-thread-pool 1 1 docs-encoder-thread-factory)
             txs-index-executor (xio/bounded-thread-pool 1 5 txs-processor-thread-factory)
-            stats-executor (xio/bounded-thread-pool 1 1 stats-processor-thread-factory)
+            housekeeping-executor (Executors/newSingleThreadScheduledExecutor housekeeping-thread-factory)
+
+            ;; === error handling policy ===
+
+            ;; the mutable box is necessary to define handle-ex as we will not hold a reference until we start the subscription
+            subscription-fut (atom nil)
+
+            ;; it is important exceptions on any executor/agent is handled intentionally to stop the subscription
+            ;; and provide a signal to the application that indexing has failed
+            handle-ex
+            (fn [ex]
+              (set-ingester-error! ex)
+              (when-some [^CompletableFuture fut @subscription-fut]
+                (.completeExceptionally fut ex)))
+
+            apply-if-not-done
+            (fn [^CompletableFuture fut f args]
+              (try
+                (when-not (.isDone fut)
+                  (apply f args))
+                (catch Throwable t
+                  (handle-ex t)
+                  nil)))
+
+            ;; === stats buffering ===
+
+            ;; maintaining statistics per-transaction has a relatively high constant factor
+            ;; overhead, so we reduce this by buffering documents (stats-agent) before flushing to the index.
+            ;; We will flush the buffer as soon as it contains stats-buffer-doc-count docs, or approximately
+            ;; every stats-buffer-flush-ms on a schedule.
+
+            stats-buffer-doc-count 32
+            stats-buffer-flush-ms 500
+
+            stats-agent (agent {} :error-handler (fn [_ag ex] (handle-ex ex)))
+
+            flush-stats (fn [buf] (db/index-stats index-store buf) {})
+
+            buffer-docs
+            (fn [buf docs]
+              (cond
+                (not (map? docs)) (into buf docs)
+                (= 0 (count buf)) docs
+                :else (into buf docs)))
+
+            flush-stats-if-enough-docs
+            (fn [buf]
+              (if (< (count buf) stats-buffer-doc-count)
+                buf
+                (flush-stats buf)))
+
+            stats-scheduled-fut
+            (.scheduleAtFixedRate housekeeping-executor ^Runnable (fn [] (send stats-agent flush-stats)) 0 stats-buffer-flush-ms TimeUnit/MILLISECONDS)
+
+            ;; === subscription ===
 
             job (db/subscribe tx-log
                               latest-xtdb-tx-id
                               (fn [^CompletableFuture fut txs]
+                                (reset! subscription-fut fut)
                                 (letfn [(submit-job! [^ExecutorService executor ^Callable f & args]
-                                          (.submit executor ^Callable (fn []
-                                                                        (try
-                                                                          (when-not (.isDone fut)
-                                                                            (apply f args))
-
-                                                                          (catch Throwable t
-                                                                            (set-ingester-error! t)
-                                                                            (.completeExceptionally fut t))))))
-
-                                        (stats-fn [docs]
-                                          (db/index-stats index-store docs))
+                                          (.submit executor ^Callable (fn [] (apply-if-not-done fut f args))))
 
                                         (txs-index-fn [{:keys [tx docs in-flight-tx]}]
                                           (let [tx-time-override (get-in tx [::xt/submit-tx-opts ::xt/tx-time])
@@ -570,7 +618,10 @@
                                             (if committing?
                                               (do
                                                 (db/commit in-flight-tx tx)
-                                                (submit-job! stats-executor stats-fn (into docs indexed-docs)))
+                                                (doto stats-agent
+                                                  (send buffer-docs docs)
+                                                  (send buffer-docs indexed-docs)
+                                                  (send flush-stats-if-enough-docs)))
                                               (db/abort in-flight-tx tx))))
 
                                         (txs-doc-encoder-fn [txs]
@@ -604,10 +655,11 @@
                           (.cancel job false)
                           @(.handle job (reify BiFunction
                                           (apply [_ _v _e]
+                                            (.cancel stats-scheduled-fut false)
                                             (doseq [^ExecutorService executor [txs-docs-fetch-executor txs-docs-encode-executor txs-index-executor]]
                                               (.shutdownNow executor))
                                             (doseq [^ExecutorService executor [txs-docs-fetch-executor txs-docs-encode-executor txs-index-executor]]
                                               (.awaitTermination executor 60, java.util.concurrent.TimeUnit/SECONDS))
-
-                                            (.shutdown ^ExecutorService stats-executor)
-                                            (.awaitTermination ^ExecutorService stats-executor 60, java.util.concurrent.TimeUnit/SECONDS)))))))))))
+                                            (.shutdown housekeeping-executor)
+                                            (send stats-agent flush-stats)
+                                            (await stats-agent)))))))))))
