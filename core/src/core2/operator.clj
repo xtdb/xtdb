@@ -22,6 +22,7 @@
             [core2.types :as types])
   (:import clojure.lang.MapEntry
            core2.ICursor
+           java.lang.AutoCloseable
            java.time.Clock
            (java.util HashMap)
            (java.util.function Function)
@@ -30,7 +31,9 @@
 #_{:clj-kondo/ignore [:unused-binding]}
 (definterface BoundQuery
   (columnTypes [])
-  (^core2.ICursor openCursor []))
+  (^core2.ICursor openCursor [])
+  (^void close []
+    "optional: if you close this BoundQuery it'll close any closed-over params relation"))
 
 #_{:clj-kondo/ignore [:unused-binding]}
 (definterface PreparedQuery
@@ -89,7 +92,8 @@
                                                                  (apply [_ emit-opts]
                                                                    (binding [expr/*clock* clock]
                                                                      (lp/emit-expr conformed-query emit-opts)))))]
-            (reify BoundQuery
+            (reify
+              BoundQuery
               (columnTypes [_] col-types)
 
               (openCursor [_]
@@ -101,4 +105,7 @@
 
                     (catch Throwable t
                       (util/try-close allocator)
-                      (throw t))))))))))))
+                      (throw t)))))
+
+              AutoCloseable
+              (close [_] (util/try-close params)))))))))

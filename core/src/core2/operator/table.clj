@@ -95,8 +95,10 @@
 
               :param (let [{:keys [param]} expr]
                        (.add col-type-set (get param-types param))
-                       (.put out-row k-kw (fn [{:keys [params]}]
-                                            (get params param))))
+                       ;; TODO let's try not to copy this out and back in again
+                       (.put out-row k-kw (fn [{:keys [^IIndirectRelation params]}]
+                                            (let [col (.vectorForName params (name param))]
+                                              (types/get-object (.getVector col) (.getIndex col 0))))))
 
               ;; HACK: this is quite heavyweight to calculate a single value -
               ;; the EE doesn't yet have an efficient means to do so...

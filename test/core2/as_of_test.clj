@@ -5,6 +5,7 @@
             [core2.test-util :as tu]
             [core2.util :as util]))
 
+(t/use-fixtures :once tu/with-allocator)
 (t/use-fixtures :each tu/with-node)
 
 (def end-of-time-zdt (util/->zdt util/end-of-time))

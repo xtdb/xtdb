@@ -12,5 +12,8 @@ public interface IProjectionSpec {
     Symbol getColumnName();
     Object getColumnType();
 
-    IIndirectVector<?> project(BufferAllocator allocator, IIndirectRelation readRelation, Map<Symbol, Object> params);
+    /**
+     * @param params a single-row indirect relation containing the params for this invocation - maybe a view over a bigger param relation.
+     */
+    IIndirectVector<?> project(BufferAllocator allocator, IIndirectRelation readRelation, IIndirectRelation params);
 }

@@ -249,7 +249,10 @@
                                        (openDependentCursor [_this in-rel idx]
                                          (open-dependent-cursor (-> query-opts
                                                                     (update :params
-                                                                            (fnil into {})
-                                                                            (for [[ik dk] columns]
-                                                                              (let [iv (.vectorForName in-rel (name ik))]
-                                                                                (MapEntry/create dk (types/get-object (.getVector iv) (.getIndex iv idx)))))))))))))}))))
+                                                                            (fn [params]
+                                                                              (iv/->indirect-rel (concat params
+                                                                                                         (for [[ik dk] columns]
+                                                                                                           (-> (.vectorForName in-rel (name ik))
+                                                                                                               (.select (int-array [idx]))
+                                                                                                               (.withName (name dk)))))
+                                                                                                 1))))))))))}))))

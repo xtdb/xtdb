@@ -39,6 +39,8 @@
 
 (set! *unchecked-math* :warn-on-boxed)
 
+(def ^:private empty-params (iv/->indirect-rel [] 1))
+
 (definterface IGroupMapper
   (^org.apache.arrow.vector.IntVector groupMapping [^core2.vector.IIndirectRelation inRelation])
   (^java.util.List #_<IIndirectVector> finish []))
@@ -295,7 +297,7 @@
             (finish [_]
               (let [sum-ivec (.finish sum-agg)
                     count-ivec (.finish count-agg)
-                    out-vec (.project projecter al (iv/->indirect-rel [sum-ivec count-ivec]) {})]
+                    out-vec (.project projecter al (iv/->indirect-rel [sum-ivec count-ivec]) empty-params)]
                 (if (instance? NullVector (.getVector out-vec))
                   out-vec
                   (do
@@ -350,7 +352,7 @@
             IAggregateSpec
             (aggregate [_ in-rel group-mapping]
               (let [in-vec (.vectorForName in-rel (name from-name))]
-                (with-open [x2 (.project x2-projecter al (iv/->indirect-rel [in-vec]) {})]
+                (with-open [x2 (.project x2-projecter al (iv/->indirect-rel [in-vec]) empty-params)]
                   (.aggregate sumx-agg in-rel group-mapping)
                   (.aggregate sumx2-agg (iv/->indirect-rel [x2]) group-mapping)
                   (.aggregate countx-agg in-rel group-mapping))))
@@ -359,7 +361,7 @@
               (let [sumx-ivec (.finish sumx-agg)
                     sumx2-ivec (.finish sumx2-agg)
                     countx-ivec (.finish countx-agg)
-                    out-ivec (.project finish-projecter al (iv/->indirect-rel [countx-ivec sumx-ivec sumx2-ivec]) {})]
+                    out-ivec (.project finish-projecter al (iv/->indirect-rel [countx-ivec sumx-ivec sumx2-ivec]) empty-params)]
                 (if (instance? NullVector (.getVector out-ivec))
                   out-ivec
                   (do
@@ -396,7 +398,7 @@
 
             (finish [_]
               (let [variance-ivec (.finish variance-agg)
-                    out-ivec (.project finish-projecter al (iv/->indirect-rel [variance-ivec]) {})]
+                    out-ivec (.project finish-projecter al (iv/->indirect-rel [variance-ivec]) empty-params)]
                 (if (instance? NullVector (.getVector out-ivec))
                   out-ivec
                   (do

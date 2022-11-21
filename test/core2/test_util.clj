@@ -110,6 +110,15 @@
   (^org.apache.arrow.vector.ValueVector [col-name col-type vs]
    (.getVector (vw/open-vec *allocator* col-name col-type vs))))
 
+(defn open-rel ^core2.vector.IIndirectRelation [vecs]
+  (iv/->indirect-rel (map iv/->direct-vec vecs)))
+
+(defn open-params ^core2.vector.IIndirectRelation [params-map]
+  (open-rel (for [[k v] params-map]
+              (open-vec k [v]))))
+
+(def empty-params (iv/->indirect-rel [] 1))
+
 (defn populate-root ^core2.vector.IIndirectRelation [^VectorSchemaRoot root rows]
   (.clear root)
 
@@ -168,15 +177,20 @@
 
 (defn query-ra
   ([query] (query-ra query {}))
-  ([query {:keys [preserve-blocks? with-col-types?] :as query-opts}]
-   (let [pq (op/prepare-ra query)
-         bq (.bind pq (select-keys query-opts [:srcs :current-time :default-tz :params :table-args]))]
-     (with-open [res (.openCursor bq)]
-       (let [rows (-> (<-cursor res)
-                      (cond->> (not preserve-blocks?) (into [] cat)))]
-         (if with-col-types?
-           {:res rows, :col-types (.columnTypes bq)}
-           rows))))))
+  ([query {:keys [params preserve-blocks? with-col-types?] :as query-opts}]
+   (with-open [^IIndirectRelation
+               params-rel (iv/->indirect-rel (for [[k v] params]
+                                               (iv/->direct-vec (open-vec k [v])))
+                                             1)]
+     (let [pq (op/prepare-ra query)
+           bq (.bind pq (-> (select-keys query-opts [:srcs :current-time :default-tz :table-args])
+                            (assoc :params params-rel)))]
+       (with-open [res (.openCursor bq)]
+         (let [rows (-> (<-cursor res)
+                        (cond->> (not preserve-blocks?) (into [] cat)))]
+           (if with-col-types?
+             {:res rows, :col-types (.columnTypes bq)}
+             rows)))))))
 
 (t/deftest round-trip-cursor
   (with-allocator

@@ -343,18 +343,21 @@
 (extend-protocol ArrowReadable
   TimeStampSecTZVector
   (get-object [this idx]
-    (-> (Instant/ofEpochSecond (.get this idx))
-        (.atZone (zone-id this))))
+    (when-not (.isNull this idx)
+      (-> (Instant/ofEpochSecond (.get this idx))
+          (.atZone (zone-id this)))))
 
   TimeStampMilliTZVector
   (get-object [this idx]
-    (-> (Instant/ofEpochMilli (.get this idx))
-        (.atZone (zone-id this))))
+    (when-not (.isNull this idx)
+      (-> (Instant/ofEpochMilli (.get this idx))
+          (.atZone (zone-id this)))))
 
   TimeStampMicroTZVector
   (get-object [this idx]
-    (-> ^Instant (util/micros->instant (.get this ^int idx))
-        (.atZone (zone-id this))))
+    (when-not (.isNull this idx)
+      (-> ^Instant (util/micros->instant (.get this ^int idx))
+          (.atZone (zone-id this)))))
 
   TimeStampNanoTZVector
   (get-object [this idx]
@@ -364,47 +367,60 @@
 (extend-protocol ArrowReadable
   DateDayVector
   (get-object [this idx]
-    (LocalDate/ofEpochDay (.get this idx)))
+    (when-not (.isNull this idx)
+      (LocalDate/ofEpochDay (.get this idx))))
+
   DateMilliVector
   (get-object [this idx]
-    (LocalDate/ofEpochDay (quot (.get this idx) 86400000))))
+    (when-not (.isNull this idx)
+      (LocalDate/ofEpochDay (quot (.get this idx) 86400000)))))
 
 (extend-protocol ArrowReadable
   TimeNanoVector
   (get-object [this idx]
-    (LocalTime/ofNanoOfDay (.get this idx)))
+    (when-not (.isNull this idx)
+      (LocalTime/ofNanoOfDay (.get this idx))))
+
   TimeMicroVector
   (get-object [this idx]
-    (LocalTime/ofNanoOfDay (* (.get this idx) 1e3)))
+    (when-not (.isNull this idx)
+      (LocalTime/ofNanoOfDay (* (.get this idx) 1e3))))
+
   TimeMilliVector
   (get-object [this idx]
-    (LocalTime/ofNanoOfDay (* (long (.get this idx)) 1e6)))
+    (when-not (.isNull this idx)
+      (LocalTime/ofNanoOfDay (* (long (.get this idx)) 1e6))))
+
   TimeSecVector
   (get-object [this idx]
-    (LocalTime/ofSecondOfDay (.get this idx))))
+    (when-not (.isNull this idx)
+      (LocalTime/ofSecondOfDay (.get this idx)))))
 
 (extend-protocol ArrowReadable
   ;; we are going to override the get-object function
   ;; to unify the representation on read for non nanovectors
   IntervalYearVector
   (get-object [this idx]
-    (IntervalYearMonth. (Period/ofMonths (.get this idx))))
+    (when-not (.isNull this idx)
+      (IntervalYearMonth. (Period/ofMonths (.get this idx)))))
 
   IntervalDayVector
   (get-object [this idx]
-    (let [holder (NullableIntervalDayHolder.)
-          _ (.get this idx holder)
-          period (Period/ofDays (.-days holder))
-          duration (Duration/ofMillis (.-milliseconds holder))]
-      (IntervalDayTime. period duration)))
+    (when-not (.isNull this idx)
+      (let [holder (NullableIntervalDayHolder.)
+            _ (.get this idx holder)
+            period (Period/ofDays (.-days holder))
+            duration (Duration/ofMillis (.-milliseconds holder))]
+        (IntervalDayTime. period duration))))
 
   IntervalMonthDayNanoVector
   (get-object [this idx]
-    (let [holder (NullableIntervalMonthDayNanoHolder.)
-          _ (.get this idx holder)
-          period (Period/of 0 (.-months holder) (.-days holder))
-          duration (Duration/ofNanos (.-nanoseconds holder))]
-      (IntervalMonthDayNano. period duration))))
+    (when-not (.isNull this idx)
+      (let [holder (NullableIntervalMonthDayNanoHolder.)
+            _ (.get this idx holder)
+            period (Period/of 0 (.-months holder) (.-days holder))
+            duration (Duration/ofNanos (.-nanoseconds holder))]
+        (IntervalMonthDayNano. period duration)))))
 
 (extend-protocol ArrowReadable
   ListVector

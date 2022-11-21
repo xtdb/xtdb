@@ -78,8 +78,10 @@
   ([q] (run-query q {}))
   ([q args]
    (let [{::tpch/keys [params table-args]} (meta q)]
-     (tu/query-ra q (merge {:srcs {'$ *db*}, :params params, :table-args table-args}
-                           args)))))
+     (tu/with-allocator
+       (fn []
+         (tu/query-ra q (merge {:srcs {'$ *db*}, :params params, :table-args table-args}
+                               args)))))))
 
 (defn slurp-query [query-no]
   (slurp (io/resource (str "core2/sql/tpch/" (format "q%02d.sql" query-no)))))

@@ -31,12 +31,12 @@
           row-ids (doto (align/->row-id-bitmap (.select (expr/->expression-relation-selector '(<= age 30) {:col-types {'age :i64}})
                                                         tu/*allocator*
                                                         (iv/->indirect-rel [(iv/->direct-vec age-vec)])
-                                                        {})
+                                                        tu/empty-params)
                                                age-row-id-vec)
                     (.and (align/->row-id-bitmap (.select (expr/->expression-relation-selector '(<= name "Frank") {:col-types {'name :utf8}})
                                                           tu/*allocator*
                                                           (iv/->indirect-rel [(iv/->direct-vec name-vec)])
-                                                          {})
+                                                          tu/empty-params)
                                                  name-row-id-vec)))]
 
       (with-open [row-id-col (tu/open-vec "_row-id" (vec (.toArray row-ids)))]

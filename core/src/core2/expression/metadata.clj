@@ -7,7 +7,7 @@
             [core2.types :as types]
             [core2.vector.indirect :as iv])
   (:import core2.metadata.IMetadataIndices
-           core2.vector.IIndirectVector
+           (core2.vector IIndirectRelation IIndirectVector)
            org.apache.arrow.memory.RootAllocator
            [org.apache.arrow.vector VarBinaryVector VectorSchemaRoot]
            [org.apache.arrow.vector.complex StructVector]
@@ -125,15 +125,16 @@
             simplify-and-or-expr)
     :call (call-meta-expr expr)))
 
-(defn- ->bloom-hashes [expr params]
+(defn- ->bloom-hashes [expr ^IIndirectRelation params]
   (with-open [allocator (RootAllocator.)]
     (vec
      (for [{:keys [param-expr]} (->> (ewalk/expr-seq expr)
                                      (filter :bloom-hash-sym))]
        (bloom/literal-hashes allocator
-                             (some-> (or (find param-expr :literal)
-                                         (find params (get param-expr :param)))
-                                     val))))))
+                             (if-let [[_ literal] (find param-expr :literal)]
+                               literal
+                               (when-let [param-col (.vectorForName params (name (get param-expr :param)))]
+                                 (types/get-object (.getVector param-col) (.getIndex param-col 0)))))))))
 
 (def ^:private metadata-root-sym (gensym "metadata-root"))
 (def ^:private metadata-idxs-sym (gensym "metadata-idxs"))
@@ -210,7 +211,7 @@
           {:expr expr
            :f (-> `(fn [chunk-idx#
                         ~(-> metadata-root-sym (expr/with-tag VectorSchemaRoot))
-                        ~expr/params-sym
+                        ~(-> expr/params-sym (expr/with-tag IIndirectRelation))
                         [~@(keep :bloom-hash-sym (ewalk/expr-seq expr))]]
                      (let [~(-> metadata-idxs-sym (expr/with-tag IMetadataIndices)) (meta/->metadata-idxs ~metadata-root-sym)
 
@@ -229,8 +230,10 @@
       (util/lru-memoize)))
 
 (defn ->metadata-selector [form col-types params]
-  (let [{:keys [expr f]} (compile-meta-expr (expr/form->expr form {:param-types (expr/->param-types params), :col-types col-types})
-                                            {:param-classes (expr/param-classes params)
+  (let [param-types (expr/->param-types params)
+        {:keys [expr f]} (compile-meta-expr (expr/form->expr form {:param-types param-types,
+                                                                   :col-types col-types})
+                                            {:param-types param-types
                                              :extract-vecs-from-rel? false})]
     (fn [chunk-idx metadata-root]
       (f chunk-idx metadata-root params (->bloom-hashes expr params)))))

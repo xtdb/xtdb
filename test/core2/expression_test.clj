@@ -28,14 +28,12 @@
    (tu/open-vec "d" (range 1000))
    (tu/open-vec "e" (map #(format "%04d" %) (range 1000)))])
 
-(defn- open-rel ^core2.vector.IIndirectRelation [vecs]
-  (iv/->indirect-rel (map iv/->direct-vec vecs)))
-
 (t/deftest test-simple-projection
-  (with-open [in-rel (open-rel (->data-vecs))]
+  (with-open [in-rel (tu/open-rel (->data-vecs))]
     (letfn [(project [form]
               (with-open [project-col (.project (expr/->expression-projection-spec "c" form {:col-types {'a :f64, 'b :f64, 'd :i64}, :param-types {}})
-                                                tu/*allocator* in-rel {})]
+                                                tu/*allocator* in-rel
+                                                tu/empty-params)]
                 (tu/<-column project-col)))]
 
       (t/is (= (mapv (comp double +) (range 1000) (range 1000))
@@ -68,11 +66,12 @@
             "cannot call arbitrary functions"))))
 
 (t/deftest can-compile-simple-expression
-  (with-open [in-rel (open-rel (->data-vecs))]
-    (letfn [(select-relation [form col-types params]
-              (alength (.select (expr/->expression-relation-selector form {:col-types col-types,
-                                                                           :param-types (expr/->param-types params)})
-                                tu/*allocator* in-rel params)))]
+  (with-open [in-rel (tu/open-rel (->data-vecs))]
+    (letfn [(select-relation [form col-types params-map]
+              (with-open [param-rel (tu/open-params params-map)]
+                (alength (.select (expr/->expression-relation-selector form {:col-types col-types
+                                                                             :param-types (expr/->param-types param-rel)})
+                                  tu/*allocator* in-rel param-rel))))]
 
       (t/testing "selector"
         (t/is (= 500 (select-relation '(>= a 500) {'a :f64} {})))
@@ -85,7 +84,7 @@
 (t/deftest nil-selection-doesnt-yield-the-row
   (t/is (= 0
            (-> (.select (expr/->expression-relation-selector '(and true nil) {})
-                        tu/*allocator* (iv/->indirect-rel [] 1) {})
+                        tu/*allocator* (iv/->indirect-rel [] 1) tu/empty-params)
                (alength)))))
 
 (t/deftest can-extract-min-max-range-from-expression
@@ -117,14 +116,14 @@
         (t/is (= {:app-time-start [Long/MIN_VALUE μs-2019]}
                  (transpose (expr.temp/->temporal-min-max-range
                              {"application_time_start" '(and (<= application_time_start #inst "2019")
-                                                        (<= application_time_start #inst "2020"))}
+                                                             (<= application_time_start #inst "2020"))}
                              {})))))
 
       (t/testing "disjunction not supported"
         (t/is (= {}
                  (transpose (expr.temp/->temporal-min-max-range
                              {"application_time_start" '(or (= application_time_start #inst "2019")
-                                                       (= application_time_start #inst "2020"))}
+                                                            (= application_time_start #inst "2020"))}
                              {})))))
 
       (t/testing "ignores non-ts literals"
@@ -139,12 +138,14 @@
                   :app-time-end [Long/MIN_VALUE (dec μs-2018)]
                   :sys-start [Long/MIN_VALUE μs-2019]
                   :sys-end [(inc μs-2019) Long/MAX_VALUE]}
-                 (transpose (expr.temp/->temporal-min-max-range
-                             {"system_time_start" '(>= ?sys-time system_time_start)
-                              "system_time_end" '(< ?sys-time system_time_end)
-                              "application_time_start" '(<= ?app-time application_time_start)
-                              "application_time_end" '(> ?app-time application_time_end)}
-                             {'?sys-time (util/->instant #inst "2019",) '?app-time (util/->instant #inst "2018")}))))))))
+                 (with-open [params (tu/open-params {'?sys-time (util/->instant #inst "2019")
+                                                     '?app-time (util/->instant #inst "2018")})]
+                   (transpose (expr.temp/->temporal-min-max-range
+                               {"system_time_start" '(>= ?sys-time system_time_start)
+                                "system_time_end" '(< ?sys-time system_time_end)
+                                "application_time_start" '(<= ?app-time application_time_start)
+                                "application_time_end" '(> ?app-time application_time_end)}
+                               params)))))))))
 
 (defn project
   "Use to test an expression on some example documents. See also, project1.
@@ -250,14 +251,14 @@
                        (into {} (map (juxt #(symbol (.getName ^IIndirectVector %))
                                            #(types/field->col-type (.getField (.getVector ^IIndirectVector %)))))))]
     (with-open [out-ivec (.project (expr/->expression-projection-spec "out" form {:col-types col-types, :param-types {}})
-                                   tu/*allocator* rel {})]
+                                   tu/*allocator* rel tu/empty-params)]
       {:res (tu/<-column out-ivec)
        :res-type (types/field->col-type (.getField (.getVector out-ivec)))})))
 
 (t/deftest test-nils
   (letfn [(run-test [f xs ys]
-            (with-open [rel (open-rel [(tu/open-vec "x" xs)
-                                       (tu/open-vec "y" ys)])]
+            (with-open [rel (tu/open-rel [(tu/open-vec "x" xs)
+                                          (tu/open-vec "y" ys)])]
               (-> (run-projection rel (list f 'x 'y))
                   :res)))]
 
@@ -266,11 +267,11 @@
 
 (t/deftest test-method-too-large-147
   (letfn [(run-test [form]
-            (with-open [rel (open-rel [(tu/open-vec "a" [1 nil 3])
-                                       (tu/open-vec "b" [1.2 5.3 nil])
-                                       (tu/open-vec "c" [2 nil 8])
-                                       (tu/open-vec "d" [3.4 nil 5.3])
-                                       (tu/open-vec "e" [8 5 3])])]
+            (with-open [rel (tu/open-rel [(tu/open-vec "a" [1 nil 3])
+                                          (tu/open-vec "b" [1.2 5.3 nil])
+                                          (tu/open-vec "c" [2 nil 8])
+                                          (tu/open-vec "d" [3.4 nil 5.3])
+                                          (tu/open-vec "e" [8 5 3])])]
               (-> (run-projection rel form)
                   :res)))]
 
@@ -289,9 +290,9 @@
 
 (t/deftest test-variadics
   (letfn [(run-test [f x y z]
-            (with-open [rel (open-rel [(tu/open-vec "x" [x])
-                                       (tu/open-vec "y" [y])
-                                       (tu/open-vec "z" [z])])]
+            (with-open [rel (tu/open-rel [(tu/open-vec "x" [x])
+                                          (tu/open-vec "y" [y])
+                                          (tu/open-vec "z" [z])])]
               (-> (run-projection rel (list f 'x 'y 'z))
                   :res first)))]
 
@@ -301,7 +302,7 @@
     (t/is (false? (run-test '> 4 1 2)))))
 
 (defn- project-mono-value [f-sym val col-type]
-  (with-open [rel (open-rel [(tu/open-vec "s" col-type [val])])]
+  (with-open [rel (tu/open-rel [(tu/open-vec "s" col-type [val])])]
     (-> (run-projection rel (list f-sym 's))
         :res
         first)))
@@ -309,8 +310,8 @@
 (t/deftest test-character-length
   (letfn [(len [s unit] (project1 (list 'character-length 'a unit) {:a s}))]
     (t/are [s]
-      (and (= (.count (.codePoints s)) (len s "CHARACTERS"))
-           (= (alength (.getBytes s "utf-8")) (len s "OCTETS")))
+        (and (= (.count (.codePoints s)) (len s "CHARACTERS"))
+             (= (alength (.getBytes s "utf-8")) (len s "OCTETS")))
 
       ""
       "a"
@@ -339,7 +340,7 @@
 
 (t/deftest test-like
   (t/are [s ptn expected-result]
-    (= expected-result (project1 '(like a b) {:a s, :b ptn}))
+      (= expected-result (project1 '(like a b) {:a s, :b ptn}))
 
     "" "" true
     "a" "" false
@@ -383,7 +384,7 @@
 
 (t/deftest test-like-regex
   (t/are [s ptn expected-result]
-    (= expected-result (project1 '(like-regex a b "") {:a s, :b ptn}))
+      (= expected-result (project1 '(like-regex a b "") {:a s, :b ptn}))
 
     "" "" true
     "a" "" true
@@ -429,7 +430,7 @@
 
   (t/testing "flags"
     (t/are [s ptn flags expected-result]
-      (= expected-result (project1 (list 'like-regex 'a 'b flags) {:a s, :b ptn}))
+        (= expected-result (project1 (list 'like-regex 'a 'b flags) {:a s, :b ptn}))
 
       "" "" "i" true
       "A" "a" "i" true
@@ -453,7 +454,7 @@
         u 95]
 
     (t/are [s ptn expected-result]
-      (= expected-result (project1 '(like a b) {:a (some-> s byte-array), :b (some-> ptn byte-array)}))
+        (= expected-result (project1 '(like a b) {:a (some-> s byte-array), :b (some-> ptn byte-array)}))
 
       [] [] true
 
@@ -494,7 +495,7 @@
 (t/deftest test-trim
   (t/testing "leading trims of $"
     (t/are [s expected]
-      (= expected (project1 '(trim a b c) {:a s, :b "LEADING", :c "$"}))
+        (= expected (project1 '(trim a b c) {:a s, :b "LEADING", :c "$"}))
 
       "" ""
       " " " "
@@ -511,7 +512,7 @@
 
   (t/testing "trailing trims of $"
     (t/are [s expected]
-      (= expected (project1 '(trim a b c) {:a s, :b "TRAILING", :c "$"}))
+        (= expected (project1 '(trim a b c) {:a s, :b "TRAILING", :c "$"}))
 
       "" ""
       " " " "
@@ -528,7 +529,7 @@
 
   (t/testing "both trims of $"
     (t/are [s expected]
-      (= expected (project1 '(trim a b c) {:a s, :b "BOTH", :c "$"}))
+        (= expected (project1 '(trim a b c) {:a s, :b "BOTH", :c "$"}))
 
       "" ""
       " " " "
@@ -546,7 +547,7 @@
 
   (t/testing "null trim char returns null"
     (t/are [s trim-spec expected]
-      (= expected (project1 '(trim a b c) {:a s, :b trim-spec, :c nil}))
+        (= expected (project1 '(trim a b c) {:a s, :b trim-spec, :c nil}))
 
       "a" "BOTH" nil
       nil "BOTH" nil
@@ -559,7 +560,7 @@
 
   (t/testing "extended char plane trim"
     (t/are [s trim-char expected]
-      (= expected (project1 '(trim a b c) {:a s, :b "BOTH", :c trim-char}))
+        (= expected (project1 '(trim a b c) {:a s, :b "BOTH", :c trim-char}))
       "" "😎" ""
       "😎a" "😎" "a"
       "😎a" "😎" "a")))
@@ -574,9 +575,9 @@
 (tct/defspec sql-trim-is-equiv-to-java-trim-on-space-prop
   (tcp/for-all [s (tcg/fmap (comp all-whitespace-to-spaces str/join) (tcg/vector (tcg/elements [tcg/string (tcg/return " ")])))]
     (and
-      (= (str/trim s) (project1 '(trim a b c) {:a s, :b "BOTH", :c " "}))
-      (= (str/triml s) (project1 '(trim a b c) {:a s, :b "LEADING", :c " "}))
-      (= (str/trimr s) (project1 '(trim a b c) {:a s, :b "TRAILING", :c " "})))))
+     (= (str/trim s) (project1 '(trim a b c) {:a s, :b "BOTH", :c " "}))
+     (= (str/triml s) (project1 '(trim a b c) {:a s, :b "LEADING", :c " "}))
+     (= (str/trimr s) (project1 '(trim a b c) {:a s, :b "TRAILING", :c " "})))))
 
 (defn- btrim [bin trim-spec trim-octet]
   (some-> (project1 '(trim a b c) {:a (some-> bin byte-array), :b trim-spec, :c (some-> trim-octet vector byte-array)})
@@ -586,7 +587,7 @@
 (t/deftest test-binary-trim
   (t/testing "leading trims of 0"
     (t/are [bin expected]
-      (= expected (btrim bin "LEADING" 0))
+        (= expected (btrim bin "LEADING" 0))
 
       [] []
       ;; \space
@@ -604,7 +605,7 @@
 
   (t/testing "trailing trims of 0"
     (t/are [bin expected]
-      (= expected (btrim bin "TRAILING" 0))
+        (= expected (btrim bin "TRAILING" 0))
 
       [] []
       [32] [32]
@@ -621,7 +622,7 @@
 
   (t/testing "both trims of 0"
     (t/are [bin expected]
-      (= expected (btrim bin "BOTH" 0))
+        (= expected (btrim bin "BOTH" 0))
 
       [] []
       [32] [32]
@@ -639,7 +640,7 @@
 
   (t/testing "null trim octet returns null"
     (t/are [bin trim-spec expected]
-      (= expected (btrim bin trim-spec nil))
+        (= expected (btrim bin trim-spec nil))
 
       [42] "BOTH" nil
       nil "BOTH" nil
@@ -653,9 +654,9 @@
   (t/testing "numeric octet is permitted"
     ;; no defined behaviour for bigint / bigdec
     (t/are [bin trim-spec octet expected]
-      (= expected (some-> (project1 '(trim a b c) {:a (some-> bin byte-array), :b trim-spec, :c octet})
-                          expr/resolve-bytes
-                          vec))
+        (= expected (some-> (project1 '(trim a b c) {:a (some-> bin byte-array), :b trim-spec, :c octet})
+                            expr/resolve-bytes
+                            vec))
 
       nil "BOTH" (byte 0) nil
       nil "BOTH" (int 0) nil
@@ -702,16 +703,16 @@
 (tct/defspec bin-trim-is-equiv-to-str-trim-on-utf8-prop
   (tcp/for-all [^String s (tcg/fmap (comp all-whitespace-to-spaces str/join) (tcg/vector (tcg/elements [tcg/string (tcg/return " ")])))]
     (and
-      (= (str/trim s)
-         (String. (byte-array (btrim (.getBytes s "utf-8") "BOTH" 32)) "utf-8"))
-      (= (str/triml s)
-         (String. (byte-array (btrim (.getBytes s "utf-8") "LEADING" 32)) "utf-8"))
-      (= (str/trimr s)
-         (String. (byte-array (btrim (.getBytes s "utf-8") "TRAILING" 32)) "utf-8")))))
+     (= (str/trim s)
+        (String. (byte-array (btrim (.getBytes s "utf-8") "BOTH" 32)) "utf-8"))
+     (= (str/triml s)
+        (String. (byte-array (btrim (.getBytes s "utf-8") "LEADING" 32)) "utf-8"))
+     (= (str/trimr s)
+        (String. (byte-array (btrim (.getBytes s "utf-8") "TRAILING" 32)) "utf-8")))))
 
 (t/deftest test-upper
   (t/are [s expected]
-    (= expected (project1 '(upper a) {:a s}))
+      (= expected (project1 '(upper a) {:a s}))
     nil nil
     "" ""
     " " " "
@@ -725,7 +726,7 @@
 
 (t/deftest test-lower
   (t/are [s expected]
-    (= expected (project1 '(lower a) {:a s}))
+      (= expected (project1 '(lower a) {:a s}))
     nil nil
     "" ""
     " " " "
@@ -740,7 +741,7 @@
 
 (t/deftest concat-test
   (t/are [s1 s2 expected]
-    (= expected (project1 '(concat a b) {:a s1, :b s2}))
+      (= expected (project1 '(concat a b) {:a s1, :b s2}))
 
     nil nil nil
     "" nil nil
@@ -765,7 +766,7 @@
 
 (t/deftest bin-concat-test
   (t/are [b1 b2 expected]
-    (= expected (bconcat b1 b2))
+      (= expected (bconcat b1 b2))
     nil nil nil
     [] nil nil
     nil [] nil
@@ -790,7 +791,7 @@
 
 (t/deftest position-test
   (t/are [s1 s2 unit expected]
-    (= expected (project1 (list 'position 'a 'b unit) {:a s1, :b s2}))
+      (= expected (project1 (list 'position 'a 'b unit) {:a s1, :b s2}))
 
     nil nil "CHARACTERS" nil
     nil "" "CHARACTERS" nil
@@ -844,7 +845,7 @@
 
 (t/deftest binary-position-test
   (t/are [b1 b2 expected]
-    (= expected (project1 (list 'position 'a 'b) {:a (some-> b1 byte-array), :b (some-> b2 byte-array)}))
+      (= expected (project1 (list 'position 'a 'b) {:a (some-> b1 byte-array), :b (some-> b2 byte-array)}))
     nil nil nil
     [] [] 1
     [42] [] 0
@@ -863,7 +864,7 @@
 
 (t/deftest substring-test
   (t/are [s pos len expected]
-    (= expected (project1 '(substring a b c true) {:a s, :b pos, :c len}))
+      (= expected (project1 '(substring a b c true) {:a s, :b pos, :c len}))
 
     "" -1 0 ""
     "" 0 0 ""
@@ -922,7 +923,7 @@
 
 (t/deftest bin-substring-test
   (t/are [s pos len expected]
-    (= expected (vec (expr/resolve-bytes (project1 '(substring a b c true) {:a (some-> s byte-array), :b pos, :c len}))))
+      (= expected (vec (expr/resolve-bytes (project1 '(substring a b c true) {:a (some-> s byte-array), :b pos, :c len}))))
 
     [] -1 0 []
     [] 0 0 []
@@ -952,7 +953,7 @@
 
 (t/deftest overlay-test
   (t/are [s1 s2 from len expected]
-    (= expected (project1 '(overlay a b c d) {:a s1, :b s2, :c from, :d len}))
+      (= expected (project1 '(overlay a b c d) {:a s1, :b s2, :c from, :d len}))
 
     "" "" 1 0 ""
     "" "" 1 1 ""
@@ -992,14 +993,14 @@
   (-> string-gen
       (tcg/bind (fn [s]
                   (tcg/tuple
-                    (tcg/return s)
-                    (tcg/choose 0 (count s)))))
+                   (tcg/return s)
+                   (tcg/choose 0 (count s)))))
       (tcg/bind (fn [[s i]]
                   (tcg/tuple
-                    (tcg/return s)
-                    string-gen
-                    (tcg/return (inc i))
-                    (tcg/choose 0 (- (count s) i)))))) )
+                   (tcg/return s)
+                   string-gen
+                   (tcg/return (inc i))
+                   (tcg/choose 0 (- (count s) i)))))) )
 
 (tct/defspec overlay-is-equiv-to-ss-concat-on-ascii-prop
   (tcp/for-all [[s1 s2 i len] (overlay-args-gen tcg/string-ascii)]
@@ -1008,7 +1009,7 @@
 
 (t/deftest binary-overlay-test
   (t/are [s1 s2 from len expected]
-    (= expected (vec (expr/resolve-bytes (project1 '(overlay a b c d) {:a (some-> s1 byte-array), :b (some-> s2 byte-array), :c from, :d len}))))
+      (= expected (vec (expr/resolve-bytes (project1 '(overlay a b c d) {:a (some-> s1 byte-array), :b (some-> s2 byte-array), :c from, :d len}))))
 
     [] [] 1 0 []
     [] [] 1 1 []
@@ -1072,8 +1073,8 @@
 
 (t/deftest test-min-max
   (letfn [(run-test [form x y]
-            (with-open [rel (open-rel [(tu/open-vec "x" [x])
-                                       (tu/open-vec "y" [y])])]
+            (with-open [rel (tu/open-rel [(tu/open-vec "x" [x])
+                                          (tu/open-vec "y" [y])])]
               (-> (run-projection rel form)
                   :res first)))]
     (t/is (= 9 (run-test '(max x y) 1 9)))
@@ -1091,14 +1092,14 @@
                (run-test '(min x y) #time/date-time "2020-08-01T15:09:00" #time/date "2020-08-02"))))))
 
 (t/deftest can-return-string-multiple-times
-  (with-open [rel (open-rel [(tu/open-vec "x" [1 2 3])])]
+  (with-open [rel (tu/open-rel [(tu/open-vec "x" [1 2 3])])]
     (t/is (= {:res ["foo" "foo" "foo"]
               :res-type :utf8}
              (run-projection rel "foo")))))
 
 (t/deftest test-cond
   (letfn [(run-test [expr xs]
-            (with-open [rel (open-rel [(tu/open-vec "x" xs)])]
+            (with-open [rel (tu/open-rel [(tu/open-vec "x" xs)])]
               (run-projection rel expr)))]
 
     (t/is (= {:res ["big" "small" "tiny" "tiny"]
@@ -1112,7 +1113,7 @@
                        [500 50 5 nil])))))
 
 (t/deftest test-let
-  (with-open [rel (open-rel [(tu/open-vec "x" [1 2 3 nil])])]
+  (with-open [rel (tu/open-rel [(tu/open-vec "x" [1 2 3 nil])])]
     (t/is (= {:res [6 9 12 nil]
               :res-type [:union #{:null :i64}]}
              (run-projection rel '(let [y (* x 2)
@@ -1120,7 +1121,7 @@
                                     (+ x y)))))))
 
 (t/deftest test-case
-  (with-open [rel (open-rel [(tu/open-vec "x" [1 2 3 nil])])]
+  (with-open [rel (tu/open-rel [(tu/open-vec "x" [1 2 3 nil])])]
     (t/is (= {:res ["x=1" "x=2" "none of the above" "none of the above"]
               :res-type :utf8}
              (run-projection rel '(case (* x 2)
@@ -1130,8 +1131,8 @@
 
 (t/deftest test-coalesce
   (letfn [(run-test [expr]
-            (with-open [rel (open-rel [(tu/open-vec "x" ["x" nil nil])
-                                       (tu/open-vec "y" ["y" "y" nil])])]
+            (with-open [rel (tu/open-rel [(tu/open-vec "x" ["x" nil nil])
+                                          (tu/open-vec "y" ["y" "y" nil])])]
               (run-projection rel expr)))]
 
     (t/is (= {:res ["x" "y" nil]
@@ -1148,8 +1149,8 @@
 
 (t/deftest test-nullif
   (letfn [(run-test [expr]
-            (with-open [rel (open-rel [(tu/open-vec "x" ["x" "y" nil "x"])
-                                       (tu/open-vec "y" ["y" "y" nil nil])])]
+            (with-open [rel (tu/open-rel [(tu/open-vec "x" ["x" "y" nil "x"])
+                                          (tu/open-vec "y" ["y" "y" nil nil])])]
               (run-projection rel expr)))]
 
     (t/is (= {:res ["x" nil nil "x"]
@@ -1158,8 +1159,8 @@
 
 (t/deftest test-mixing-numeric-types
   (letfn [(run-test [f x y]
-            (with-open [rel (open-rel [(tu/open-vec "x" [x])
-                                       (tu/open-vec "y" [y])])]
+            (with-open [rel (tu/open-rel [(tu/open-vec "x" [x])
+                                          (tu/open-vec "y" [y])])]
               (-> (run-projection rel (list f 'x 'y))
                   (update :res first))))]
 
@@ -1198,13 +1199,13 @@
 
 (t/deftest test-throws-on-overflow
   (letfn [(run-unary-test [f x]
-            (with-open [rel (open-rel [(tu/open-vec "x" [x])])]
+            (with-open [rel (tu/open-rel [(tu/open-vec "x" [x])])]
               (-> (run-projection rel (list f 'x))
                   (update :res first))))
 
           (run-binary-test [f x y]
-            (with-open [rel (open-rel [(tu/open-vec "x" [x])
-                                       (tu/open-vec "y" [y])])]
+            (with-open [rel (tu/open-rel [(tu/open-vec "x" [x])
+                                          (tu/open-vec "y" [y])])]
               (-> (run-projection rel (list f 'x 'y))
                   (update :res first))))]
 
@@ -1228,19 +1229,19 @@
 (t/deftest test-polymorphic-columns
   (t/is (= {:res [1.2 1 3.4]
             :res-type [:union #{:i64 :f64}]}
-           (with-open [rel (open-rel [(tu/open-vec "x" [1.2 1 3.4])])]
+           (with-open [rel (tu/open-rel [(tu/open-vec "x" [1.2 1 3.4])])]
              (run-projection rel 'x))))
 
   (t/is (= {:res [4.4 9.75]
             :res-type [:union #{:f32 :f64}]}
-           (with-open [rel (open-rel [(tu/open-vec "x" [1 1.5])
-                                      (tu/open-vec "y" [3.4 (float 8.25)])])]
+           (with-open [rel (tu/open-rel [(tu/open-vec "x" [1 1.5])
+                                         (tu/open-vec "y" [3.4 (float 8.25)])])]
              (run-projection rel '(+ x y)))))
 
   (t/is (= {:res [(float 4.4) nil nil nil]
             :res-type [:union #{:null :f32 :f64}]}
-           (with-open [rel (open-rel [(tu/open-vec "x" [1 12 nil nil])
-                                      (tu/open-vec "y" [(float 3.4) nil 4.8 nil])])]
+           (with-open [rel (tu/open-rel [(tu/open-vec "x" [1 12 nil nil])
+                                         (tu/open-vec "y" [(float 3.4) nil 4.8 nil])])]
              (run-projection rel '(+ x y))))))
 
 (t/deftest test-ternary-booleans
@@ -1248,8 +1249,8 @@
              :res-type [:union #{:null :bool}]}
             {:res [true true true true false nil true nil nil]
              :res-type [:union #{:null :bool}]}]
-           (with-open [rel (open-rel [(tu/open-vec "x" [true true true false false false nil nil nil])
-                                      (tu/open-vec "y" [true false nil true false nil true false nil])])]
+           (with-open [rel (tu/open-rel [(tu/open-vec "x" [true true true false false false nil nil nil])
+                                         (tu/open-vec "y" [true false nil true false nil true false nil])])]
              [(run-projection rel '(and x y))
               (run-projection rel '(or x y))])))
 
@@ -1261,7 +1262,7 @@
              :res-type :bool}
             {:res [false false true]
              :res-type :bool}]
-           (with-open [rel (open-rel [(tu/open-vec "x" [true false nil])])]
+           (with-open [rel (tu/open-rel [(tu/open-vec "x" [true false nil])])]
              [(run-projection rel '(not x))
               (run-projection rel '(true? x))
               (run-projection rel '(false? x))
@@ -1365,8 +1366,8 @@
                                   #(->bigint-vec "y" 3))))))))
 
 (t/deftest test-struct-literals
-  (with-open [rel (open-rel [(tu/open-vec "x" [1.2 3.4])
-                             (tu/open-vec "y" [3.4 8.25])])]
+  (with-open [rel (tu/open-rel [(tu/open-vec "x" [1.2 3.4])
+                                (tu/open-vec "y" [3.4 8.25])])]
     (t/is (= {:res [{:x 1.2, :y 3.4}
                     {:x 3.4, :y 8.25}]
               :res-type [:struct '{x :f64, y :f64}]}
@@ -1379,7 +1380,7 @@
              (run-projection rel '(. {:x x, :y y} z))))))
 
 (t/deftest test-nested-structs
-  (with-open [rel (open-rel [(tu/open-vec "y" [1.2 3.4])])]
+  (with-open [rel (tu/open-rel [(tu/open-vec "y" [1.2 3.4])])]
     (t/is (= {:res [{:x {:y 1.2}}
                     {:x {:y 3.4}}]
               :res-type [:struct '{x [:struct {y :f64}]}]}
@@ -1395,8 +1396,8 @@
 
 (t/deftest test-lists
   (t/testing "simple lists"
-    (with-open [rel (open-rel [(tu/open-vec "x" [1.2 3.4])
-                               (tu/open-vec "y" [3.4 8.25])])]
+    (with-open [rel (tu/open-rel [(tu/open-vec "x" [1.2 3.4])
+                                  (tu/open-vec "y" [3.4 8.25])])]
       (t/is (= {:res [[1.2 3.4 10.0]
                       [3.4 8.25 10.0]]
                 :res-type [:fixed-size-list 3 :f64]}
@@ -1408,27 +1409,27 @@
                                      (nth [x y] 1)])))))
 
   (t/testing "nil idxs"
-    (with-open [rel (open-rel [(tu/open-vec "x" [1.2 3.4])
-                               (tu/open-vec "y" [0 nil])])]
+    (with-open [rel (tu/open-rel [(tu/open-vec "x" [1.2 3.4])
+                                  (tu/open-vec "y" [0 nil])])]
       (t/is (= {:res [1.2 nil]
                 :res-type [:union #{:f64 :null}]}
                (run-projection rel '(nth [x] y))))))
 
   (t/testing "IOOBE"
-    (with-open [rel (open-rel [(tu/open-vec "x" [1.2 3.4])])]
+    (with-open [rel (tu/open-rel [(tu/open-vec "x" [1.2 3.4])])]
       (t/is (thrown? IndexOutOfBoundsException
                      (run-projection rel '(nth [x] -1)))))
 
-    (with-open [rel (open-rel [(tu/open-vec "x" [1.2 3.4])])]
+    (with-open [rel (tu/open-rel [(tu/open-vec "x" [1.2 3.4])])]
       (t/is (thrown? IndexOutOfBoundsException
                      (run-projection rel '(nth [x] 1))))))
 
   (t/testing "might not be lists"
-    (with-open [rel (open-rel [(tu/open-vec "x"
-                                            [12.0
-                                             [1 2 3]
-                                             [4 5]
-                                             "foo"])])]
+    (with-open [rel (tu/open-rel [(tu/open-vec "x"
+                                               [12.0
+                                                [1 2 3]
+                                                [4 5]
+                                                "foo"])])]
       (t/is (= {:res [nil 2 5 nil]
                 :res-type [:union #{:i64 :null}]}
                (run-projection rel '(nth x 1))))))
@@ -1437,7 +1438,7 @@
     (t/is (= [42] (project1 '[(+ 1 a)] {:a 41})))))
 
 (t/deftest test-mixing-prims-with-non-prims
-  (with-open [rel (open-rel [(tu/open-vec "x" [{:a 42, :b 8}, {:a 12, :b 5}])])]
+  (with-open [rel (tu/open-rel [(tu/open-vec "x" [{:a 42, :b 8}, {:a 12, :b 5}])])]
     (t/is (= {:res [{:a 42, :b 8, :sum 50}
                     {:a 12, :b 5, :sum 17}]
               :res-type [:struct '{a [:union #{:null :i64}], b [:union #{:null :i64}] sum [:union #{:null :i64}]}]}
@@ -1446,12 +1447,12 @@
                                    :sum (+ (. x a) (. x b))})))))
 
 (t/deftest test-multiple-struct-legs
-  (with-open [rel (open-rel [(tu/open-vec "x"
-                                          [{:a 42}
-                                           {:a 12, :b 5}
-                                           {:b 10}
-                                           {:a 15, :b 25}
-                                           10.0])])]
+  (with-open [rel (tu/open-rel [(tu/open-vec "x"
+                                             [{:a 42}
+                                              {:a 12, :b 5}
+                                              {:b 10}
+                                              {:a 15, :b 25}
+                                              10.0])])]
     (t/is (= {:res [{:a 42}
                     {:a 12, :b 5}
                     {:b 10}
@@ -1558,7 +1559,7 @@
 
 (t/deftest test-trim-array
   (t/are [expected expr variables]
-    (= expected (project1 expr variables))
+      (= expected (project1 expr variables))
 
     nil '(trim-array nil nil) {}
     nil '(trim-array nil 42) {}

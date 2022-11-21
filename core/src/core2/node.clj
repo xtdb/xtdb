@@ -2,13 +2,13 @@
   (:require [clojure.pprint :as pp]
             [core2.api :as api]
             [core2.datalog :as d]
-            [core2.expression :as expr]
             [core2.ingester :as ingest]
             [core2.operator :as op]
             [core2.sql :as sql]
             [core2.tx-producer :as txp]
             [core2.util :as util]
             [core2.vector.indirect :as iv]
+            [core2.vector.writer :as vw]
             [juxt.clojars-mirrors.integrant.core :as ig])
   (:import (core2 IResultCursor IResultSet)
            core2.ingester.Ingester
@@ -41,6 +41,7 @@
     ^java.util.concurrent.CompletableFuture #_<ScanSource> [_ tx ^Duration timeout]))
 
 (deftype CursorResultSet [^IResultCursor cursor
+                          ^AutoCloseable params
                           ^:unsynchronized-mutable ^Iterator next-values]
   IResultSet
   (columnTypes [_] (.columnTypes cursor))
@@ -61,10 +62,11 @@
 
   (next [_] (.next next-values))
   (close [_]
-    (.close cursor)))
+    (.close cursor)
+    (.close params)))
 
-(defn- cursor->result-set ^core2.IResultSet [^IResultCursor cursor]
-   (CursorResultSet. cursor nil))
+(defn- cursor->result-set ^core2.IResultSet [^IResultCursor cursor, ^AutoCloseable params]
+   (CursorResultSet. cursor params nil))
 
 (defn- validate-tx-ops [tx-ops]
   (try
@@ -75,7 +77,8 @@
     (catch Throwable e
       (CompletableFuture/failedFuture e))))
 
-(defrecord Node [^Ingester ingester
+(defrecord Node [^BufferAllocator allocator
+                 ^Ingester ingester
                  ^ITxProducer tx-producer
                  default-tz
                  !system
@@ -91,27 +94,42 @@
       (-> !db
           (util/then-apply
             (fn [db]
-              (-> (.bind pq {:srcs {'$ db}, :params params, :table-args table-args
-                             :current-time (get-in query [:basis :current-time])
-                             :default-tz (:default-tz query)})
-                  (.openCursor)
-                  (cursor->result-set)))))))
+              (let [^AutoCloseable
+                    params (iv/->indirect-rel (for [[k v] params]
+                                                (vw/open-vec allocator (symbol k) [v]))
+                                              1)]
+                (try
+                  (-> (.bind pq {:srcs {'$ db}, :params params, :table-args table-args
+                                 :current-time (get-in query [:basis :current-time])
+                                 :default-tz (:default-tz query)})
+                      (.openCursor)
+                      (cursor->result-set params))
+                  (catch Throwable t
+                    (.close params)
+                    (throw t)))))))))
 
   (-open-sql-async [this query query-opts]
     (let [!db (snapshot-async this (get-in query-opts [:basis :tx]) (:basis-timeout query-opts))
           query-opts (into {:default-tz default-tz} query-opts)
           plan (sql/compile-query query (select-keys query-opts [:app-time-as-of-now? :default-tz :decorrelate?]))
-          params (zipmap (map #(symbol (str "?_" %)) (range))
-                         (:? query-opts))
           pq (op/prepare-ra plan)]
       (-> !db
           (util/then-apply
             (fn [db]
-              (-> (.bind pq {:srcs {'$ db}, :params params
-                             :current-time (get-in query-opts [:basis :current-time])
-                             :default-tz (:default-tz query-opts)})
-                  (.openCursor)
-                  (cursor->result-set)))))))
+              (let [^AutoCloseable
+                    params (iv/->indirect-rel (->> (:? query-opts)
+                                                   (sequence (map-indexed (fn [idx v]
+                                                                            (vw/open-vec allocator (symbol (str "?_" idx)) [v])))))
+                                              1)]
+                (try
+                  (-> (.bind pq {:srcs {'$ db}, :params params
+                                 :current-time (get-in query-opts [:basis :current-time])
+                                 :default-tz (:default-tz query-opts)})
+                      (.openCursor)
+                      (cursor->result-set params))
+                  (catch Throwable t
+                    (.close params)
+                    (throw t)))))))))
 
   PNode
   (snapshot-async [this] (snapshot-async this nil))
@@ -145,7 +163,8 @@
 (defmethod pp/simple-dispatch Node [it] (print-method it *out*))
 
 (defmethod ig/prep-key ::node [_ opts]
-  (merge {:ingester (ig/ref :core2/ingester)
+  (merge {:allocator (ig/ref :core2/allocator)
+          :ingester (ig/ref :core2/ingester)
           :tx-producer (ig/ref ::txp/tx-producer)
           :default-tz (ig/ref :core2/default-tz)}
          opts))

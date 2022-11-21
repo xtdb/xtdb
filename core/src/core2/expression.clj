@@ -315,7 +315,6 @@
     (let [{:keys [literal]} expr]
       {:op :param, :param (gensym 'lit),
        :param-type (types/value->col-type literal)
-       :param-class (class literal)
        :literal literal})
     expr))
 
@@ -323,19 +322,6 @@
   (->> expr
        (macro/macroexpand-all)
        (walk/postwalk-expr lit->param)))
-
-(defmethod codegen-expr :param [{:keys [param param-type] :as expr} {:keys [param-types param-classes]}]
-  (let [param-type (get param-types param param-type)
-        param-class (get expr :param-class (get param-classes param))]
-    (into {:return-type param-type
-           :batch-bindings [[param
-                             (emit-value param-class
-                                         (get expr :literal
-                                              (cond-> `(get ~params-sym '~param)
-                                                param-class (with-tag param-class))))]]
-           :continue (fn [f]
-                       (f param-type param))}
-          (select-keys expr #{:literal}))))
 
 (defn- wrap-boxed-poly-return [{:keys [return-type continue] :as emitted-expr} _]
   (zmatch return-type
@@ -390,6 +376,19 @@
                          [[variable `(some-> ~variable (.monoReader))]])
        :continue (fn [f]
                    (f col-type (read-value-code col-type variable idx)))})))
+
+(defmethod codegen-expr :param [{:keys [param] :as expr} {:keys [param-types]}]
+  (if-let [[_ literal] (find expr :literal)]
+    (let [lit-type (types/value->col-type literal)
+          lit-class (class literal)]
+      (into {:return-type lit-type
+             :batch-bindings [[param (emit-value lit-class literal)]]
+             :continue (fn [f]
+                         (f lit-type param))}
+            (select-keys expr #{:literal})))
+
+    (codegen-expr {:op :variable, :variable param, :rel params-sym, :idx 0}
+                  {:var->col-type {param (get param-types param)}})))
 
 (defmethod codegen-expr :if [{:keys [pred then else] :as expr} opts]
   (let [{p-ret :return-type, p-cont :continue, :as emitted-p} (codegen-expr pred opts)
@@ -1429,7 +1428,7 @@
 
           {:expr-fn (delay
                       (-> `(fn [~(-> rel-sym (with-tag IIndirectRelation))
-                                ~params-sym
+                                ~(-> params-sym (with-tag IIndirectRelation))
                                 ~(-> out-vec-sym (with-tag ValueVector))]
                              (let [~@(batch-bindings emitted-expr)
                                    ~@writer-bindings
@@ -1451,7 +1450,7 @@
     :if :if-some
     :metadata-field-present :metadata-vp-call})
 
-(defn- emit-prim-expr [prim-expr col-name {:keys [var->col-type param-classes param-types] :as opts}]
+(defn- emit-prim-expr [prim-expr col-name {:keys [var->col-type param-types] :as opts}]
   (let [prim-expr (->> prim-expr
                        (walk/prewalk-expr (fn [{:keys [op] :as expr}]
                                             (if (contains? primitive-ops op)
@@ -1473,7 +1472,6 @@
 
         {:keys [expr-fn return-type]} (memo-generate-projection prim-expr
                                                                 {:var->col-type var->col-type
-                                                                 :param-classes param-classes
                                                                  :param-types param-types})
         out-field (types/col-type->field col-name return-type)]
 
@@ -1514,18 +1512,17 @@
   (defmethod emit-expr op [prim-expr col-name opts]
     (emit-prim-expr prim-expr col-name opts)))
 
-(defn ->param-types [params]
+(defn ->param-types [^IIndirectRelation params]
   (->> params
-       (into {} (map (juxt key (comp types/value->col-type val))))))
-
-(defn param-classes [params]
-  (->> params (into {} (map (juxt key (comp class val))))))
+       (into {} (map (fn [^IIndirectVector col]
+                       (MapEntry/create
+                        (symbol (.getName col))
+                        (types/field->col-type (.getField (.getVector col)))))))))
 
 (defn ->expression-projection-spec ^core2.operator.IProjectionSpec [col-name form {:keys [col-types param-types] :as input-types}]
   (let [expr (form->expr form input-types)
 
         ;; HACK - this runs the analyser (we discard the emission) to get the widest possible out-type.
-        ;; we assume that we don't need `:param-classes`
         widest-out-type (-> (emit-expr expr col-name
                                        {:param-types param-types
                                         :var->col-type col-types})
@@ -1542,7 +1539,6 @@
                                                   (types/field->col-type (.getField (.getVector iv)))]))))
 
               {:keys [eval-expr]} (emit-expr expr col-name {:param-types (->param-types params)
-                                                            :param-classes (param-classes params)
                                                             :var->col-type var->col-type})]
           (iv/->direct-vec (eval-expr in-rel allocator params)))))))
 

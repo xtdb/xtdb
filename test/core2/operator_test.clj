@@ -9,6 +9,8 @@
            (java.time LocalTime)
            (org.roaringbitmap RoaringBitmap)))
 
+(t/use-fixtures :once tu/with-allocator)
+
 (t/deftest test-find-gt-ivan
   (with-open [node (node/start-node {:core2/row-counts {:max-rows-per-chunk 10, :max-rows-per-block 2}})]
     (-> (c2/submit-tx node [[:put {:name "Håkan", :id :hak}]])
@@ -45,8 +47,9 @@
                                            (expr.meta/->metadata-selector '(> name "Ivan") '#{name} {})))
                   "only needs to scan chunk 1, block 1")
             (t/is (= expected-match
-                     (meta/matching-chunks metadata-mgr
-                                           (expr.meta/->metadata-selector '(> name ?name) '#{name} {'?name "Ivan"})))
+                     (with-open [params (tu/open-params {'?name "Ivan"})]
+                       (meta/matching-chunks metadata-mgr
+                                             (expr.meta/->metadata-selector '(> name ?name) '#{name} params))))
                   "only needs to scan chunk 1, block 1"))
 
           (-> (c2/submit-tx node [[:put {:name "Jeremy", :id :jdt}]])
@@ -87,8 +90,9 @@
               "only needs to scan chunk 0, block 0")
 
         (t/is (= expected-match
-                 (meta/matching-chunks metadata-mgr
-                                       (expr.meta/->metadata-selector '(= name ?name) '#{name} {'?name "Ivan"})))
+                 (with-open [params (tu/open-params {'?name "Ivan"})]
+                   (meta/matching-chunks metadata-mgr
+                                         (expr.meta/->metadata-selector '(= name ?name) '#{name} params))))
               "only needs to scan chunk 0, block 0"))
 
       (t/is (= #{{:name "Ivan"}}

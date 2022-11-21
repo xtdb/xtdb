@@ -12,7 +12,7 @@
   (:import clojure.lang.MapEntry
            (com.google.protobuf Any ByteString)
            (core2.operator BoundQuery PreparedQuery)
-           java.io.Closeable
+           java.lang.AutoCloseable
            (java.util ArrayList HashMap Map)
            (java.util.concurrent CompletableFuture ConcurrentHashMap)
            (java.util.function BiConsumer BiFunction Consumer)
@@ -152,14 +152,22 @@
             (or (.computeIfPresent stmts ps-id
                                    (reify BiFunction
                                      (apply [_ _ps-id {:keys [^PreparedQuery prepd-query] :as ^Map ps}]
-                                       (doto ps
-                                         (.put :bound-query
-                                               (.bind prepd-query
-                                                      {:srcs {'$ @(node/snapshot-async node)}
-                                                       ;; NOTE we assume there's only one param row for read queries - valid?
-                                                       :params (->> (first (flight-stream->rows flight-stream))
-                                                                    (into {} (map-indexed (fn [idx v]
-                                                                                            (MapEntry/create (symbol (str "?_" idx)) v)))))}))))))
+                                       ;; TODO we likely needn't take these out and put them back.
+                                       ;; NOTE we assume there's only one param row for read queries - valid?
+                                       (let [new-params (-> (first (flight-stream->rows flight-stream))
+                                                            (->> (sequence (map-indexed (fn [idx v]
+                                                                                          (vw/open-vec allocator (symbol (str "?_" idx)) [v])))))
+                                                            (iv/->indirect-rel 1))]
+                                         (try
+                                           (doto ps
+                                             (some-> (.put :bound-query
+                                                           (.bind prepd-query
+                                                                  {:srcs {'$ @(node/snapshot-async node)}
+                                                                   :params new-params}))
+                                                     util/try-close))
+                                           (catch Throwable t
+                                             (util/try-close new-params)
+                                             (throw t)))))))
                 (throw (UnsupportedOperationException. "invalid ps-id"))))
 
           (.onCompleted ack-stream)))
@@ -218,9 +226,8 @@
                        -1 -1)))
 
       (getStreamPreparedStatement [_ ticket _ctx listener]
-        (let [^Map ps (or (get stmts (.getPreparedStatementHandle ticket))
-                          (throw (UnsupportedOperationException. "invalid ps-id")))
-              bound-query (.remove ps :bound-query)]
+        (let [{:keys [bound-query]} (or (get stmts (.getPreparedStatementHandle ticket))
+                                        (throw (UnsupportedOperationException. "invalid ps-id")))]
           (handle-get-stream bound-query listener)))
 
       (createPreparedStatement [_ req _ctx listener]
@@ -246,8 +253,9 @@
           (.onCompleted listener)))
 
       (closePreparedStatement [_ req _ctx listener]
-        (let [_ps (.remove stmts (.getPreparedStatementHandle req))]
-          ;; at some point we'll need to close the ps?
+        (let [ps (.remove stmts (.getPreparedStatementHandle req))]
+          (some-> (:bound-query ps) util/try-close)
+
           (.onCompleted listener)))
 
       (beginTransaction [_ _req _ctx listener]
@@ -311,7 +319,7 @@
                          (.build))
                  (.start))]
     (log/infof "Flight SQL server started, port %d" port)
-    (reify Closeable
+    (reify AutoCloseable
       (close [_]
         (util/try-close server)
         (run! util/try-close (vals stmts))

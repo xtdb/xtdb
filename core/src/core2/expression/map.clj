@@ -91,7 +91,7 @@
 
           (-> `(fn [~(expr/with-tag left-rel IIndirectRelation)
                     ~(expr/with-tag right-rel IIndirectRelation)
-                    ~expr/params-sym]
+                    ~(-> expr/params-sym (expr/with-tag IIndirectRelation))]
                  (let [~@(expr/batch-bindings emitted-expr)]
                    (reify IntBinaryOperator
                      (~'applyAsInt [_# ~left-idx ~right-idx]

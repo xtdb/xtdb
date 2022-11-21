@@ -18,8 +18,7 @@
             [core2.vector.indirect :as iv]
             [core2.vector.writer :as vw]
             [core2.watermark :as wm]
-            [juxt.clojars-mirrors.integrant.core :as ig]
-            [core2.expression :as expr])
+            [juxt.clojars-mirrors.integrant.core :as ig])
   (:import clojure.lang.MapEntry
            core2.api.TransactionInstant
            core2.buffer_pool.IBufferPool
@@ -28,7 +27,7 @@
            core2.object_store.ObjectStore
            core2.operator.scan.ScanSource
            (core2.temporal ITemporalManager ITemporalTxIndexer)
-           (core2.vector IIndirectVector IVectorWriter)
+           (core2.vector IIndirectVector IIndirectRelation IVectorWriter)
            (core2.watermark IWatermarkManager)
            java.io.Closeable
            java.lang.AutoCloseable
@@ -686,12 +685,18 @@
 
           (letfn [(index-op [^SqlOpIndexer op-idxer query-opts inner-query]
                     (let [pq (op/prepare-ra inner-query)]
-                      (doseq [param-row param-rows
-                              :let [param-row (->> param-row
-                                                   (into {} (map (juxt (comp symbol key) val))))]]
-                        (with-open [res (-> (.bind pq (into (select-keys tx-opts [:current-time :default-tz])
-                                                            {:srcs {'$ scan-src}, :params param-row}))
+                      (doseq [param-row param-rows]
+                        ;; TODO pass param-row directly as Arrow data
+                        (with-open [^IIndirectRelation
+                                    param-rel (iv/->indirect-rel (for [[k v] param-row]
+                                                                   (vw/open-vec (.getAllocator tx-ops-vec) k [v]))
+                                                                 1)
+
+
+                                    res (-> (.bind pq (into (select-keys tx-opts [:current-time :default-tz])
+                                                            {:srcs {'$ scan-src}, :params param-rel}))
                                             (.openCursor))]
+
                           (.forEachRemaining res
                                              (reify Consumer
                                                (accept [_ in-rel]

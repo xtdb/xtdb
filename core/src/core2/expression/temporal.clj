@@ -7,8 +7,9 @@
             [core2.temporal :as temporal]
             [core2.types :as types]
             [core2.util :as util])
-  (:import (java.time Duration Instant LocalDate LocalDateTime LocalTime Period ZoneId ZoneOffset ZonedDateTime)
-           (java.time.temporal ChronoField ChronoUnit Temporal)
+  (:import core2.vector.IIndirectRelation
+           (java.time Duration Instant LocalDate LocalDateTime LocalTime Period ZoneId ZoneOffset ZonedDateTime)
+           (java.time.temporal ChronoField ChronoUnit)
            (org.apache.arrow.vector PeriodDuration)))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -28,7 +29,7 @@
                                          (aget min-range range-idx)))
       nil)))
 
-(defn ->temporal-min-max-range [selects params]
+(defn ->temporal-min-max-range [selects ^IIndirectRelation params]
   (let [min-range (temporal/->min-range)
         max-range (temporal/->max-range)
         col-types (zipmap (map symbol (keys temporal/temporal-col-types))
@@ -46,9 +47,11 @@
 
                 :metadata-vp-call
                 (let [{:keys [f param-expr]} expr]
-                  (when-let [v (util/sql-temporal->instant (some-> (or (find param-expr :literal)
-                                                                       (find params (get param-expr :param)))
-                                                                   val)
+                  (when-let [v (util/sql-temporal->instant (if-let [[_ literal] (find param-expr :literal)]
+                                                             literal
+
+                                                             (let [col (.vectorForName params (name (get param-expr :param)))]
+                                                               (types/get-object (.getVector col) (.getIndex col 0))))
                                                            (.getZone expr/*clock*))]
                     (apply-constraint min-range max-range f col-name v)))
 
