@@ -2,6 +2,7 @@
   (:require [core2.types :as types])
   (:import (core2.types IntervalDayTime IntervalMonthDayNano)
            (core2.vector IMonoVectorWriter IMonoVectorReader IPolyVectorWriter IPolyVectorReader IWriterPosition)
+           java.nio.ByteBuffer
            (java.time Duration Period)
            java.util.List
            (org.apache.arrow.vector BaseFixedWidthVector BaseVariableWidthVector BitVectorHelper DateMilliVector ExtensionTypeVector FixedSizeBinaryVector IntervalDayVector IntervalMonthDayNanoVector IntervalYearVector NullVector PeriodDuration TimeMicroVector TimeMilliVector TimeNanoVector TimeSecVector ValueVector)
@@ -51,7 +52,7 @@
   (->mono-reader [arrow-vec]
     (let [byte-width (.getByteWidth arrow-vec)]
       (reify IMonoVectorReader
-        (readBuffer [_ idx]
+        (readObject [_ idx]
           (.nioBuffer (.getDataBuffer arrow-vec) (* byte-width idx) byte-width)))))
 
   (->mono-writer [arrow-vec]
@@ -60,8 +61,9 @@
       (reify IMonoVectorWriter
         (writerPosition [_] wp)
         (writeNull [_ _] (.setNull arrow-vec (.getPositionAndIncrement wp)))
-        (writeBuffer [_ buf]
-          (let [pos (.position buf)
+        (writeObject [_ obj]
+          (let [^ByteBuffer buf obj
+                pos (.position buf)
                 idx (.getPositionAndIncrement wp)]
             (.setIndexDefined arrow-vec idx)
             (.setBytes (.getDataBuffer arrow-vec) (* byte-width idx) buf)
@@ -110,7 +112,7 @@
   BaseVariableWidthVector
   (->mono-reader [arrow-vec]
     (reify IMonoVectorReader
-      (readBuffer [_ idx]
+      (readObject [_ idx]
         (.nioBuffer (.getDataBuffer arrow-vec) (.getStartOffset arrow-vec idx) (.getValueLength arrow-vec idx)))))
 
   (->mono-writer [arrow-vec]
@@ -120,8 +122,9 @@
 
         (writeNull [_ _] (.setNull arrow-vec (.getPositionAndIncrement wp)))
 
-        (writeBuffer [_ buf]
-          (let [pos (.position buf)]
+        (writeObject [_ obj]
+          (let [^ByteBuffer buf obj
+                pos (.position buf)]
             (.setSafe arrow-vec (.getPositionAndIncrement wp) buf pos (- (.limit buf) pos))
             (.position buf pos)))))))
 
@@ -276,7 +279,6 @@
   (readLong [_] (.readLong inner idx))
   (readFloat [_] (.readFloat inner idx))
   (readDouble [_] (.readDouble inner idx))
-  (readBuffer [_] (.readBuffer inner idx))
   (readObject [_] (.readObject inner idx)))
 
 (deftype NullableVectorWriter [^IMonoVectorWriter inner]
@@ -291,7 +293,6 @@
   (writeLong [_ _type-id v] (.writeLong inner v))
   (writeFloat [_ _type-id v] (.writeFloat inner v))
   (writeDouble [_ _type-id v] (.writeDouble inner v))
-  (writeBuffer [_ _type-id v] (.writeBuffer inner v))
   (writeObject [_ _type-id v] (.writeObject inner v)))
 
 (deftype MonoToPolyReader [^IMonoVectorReader inner
@@ -311,7 +312,6 @@
   (readLong [_] (.readLong inner idx))
   (readFloat [_] (.readFloat inner idx))
   (readDouble [_] (.readDouble inner idx))
-  (readBuffer [_] (.readBuffer inner idx))
   (readObject [_] (.readObject inner idx)))
 
 (deftype DuvReader [^DenseUnionVector duv, ^bytes type-id-mapping,
@@ -337,7 +337,6 @@
   (readLong [_] (.readLong inner-rdr inner-offset))
   (readFloat [_] (.readFloat inner-rdr inner-offset))
   (readDouble [_] (.readDouble inner-rdr inner-offset))
-  (readBuffer [_] (.readBuffer inner-rdr inner-offset))
   (readObject [_] (.readObject inner-rdr inner-offset)))
 
 (extend-protocol PolyFactory
@@ -413,7 +412,6 @@
           (writeLong [_ type-id v] (.writeLong ^IMonoVectorWriter (duv-child-writer type-id) v))
           (writeFloat [_ type-id v] (.writeFloat ^IMonoVectorWriter (duv-child-writer type-id) v))
           (writeDouble [_ type-id v] (.writeDouble ^IMonoVectorWriter (duv-child-writer type-id) v))
-          (writeBuffer [_ type-id v] (.writeBuffer ^IMonoVectorWriter (duv-child-writer type-id) v))
           (writeObject [_ type-id v] (.writeObject ^IMonoVectorWriter (duv-child-writer type-id) v))))))
 
   ExtensionTypeVector
@@ -446,7 +444,6 @@
   (readLong [_ idx] (.readLong inner (aget idxs idx)))
   (readFloat [_ idx] (.readFloat inner (aget idxs idx)))
   (readDouble [_ idx] (.readDouble inner (aget idxs idx)))
-  (readBuffer [_ idx] (.readBuffer inner (aget idxs idx)))
   (readObject [_ idx] (.readObject inner (aget idxs idx))))
 
 (deftype IndirectVectorPolyReader [^IPolyVectorReader inner, ^ints idxs]
@@ -461,5 +458,4 @@
   (readLong [_] (.readLong inner))
   (readFloat [_] (.readFloat inner))
   (readDouble [_] (.readDouble inner))
-  (readBuffer [_] (.readBuffer inner))
   (readObject [_] (.readObject inner)))

@@ -17,6 +17,5 @@ public interface IMonoVectorWriter {
     void writeFloat(float floatValue);
     void writeDouble(double doubleValue);
 
-    void writeBuffer(ByteBuffer bufferValue);
     void writeObject(Object objectValue);
 }

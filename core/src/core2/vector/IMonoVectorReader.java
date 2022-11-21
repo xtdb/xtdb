@@ -15,6 +15,5 @@ public interface IMonoVectorReader {
     float readFloat(int idx);
     double readDouble(int idx);
 
-    ByteBuffer readBuffer(int idx);
     Object readObject(int idx);
 }

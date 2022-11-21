@@ -14,6 +14,5 @@ public interface IPolyValueWriter {
     void writeFloat(byte typeId, float floatValue);
     void writeDouble(byte typeId, double doubleValue);
 
-    void writeBuffer(byte typeId, ByteBuffer bufferValue);
     void writeObject(byte typeId, Object objectValue);
 }

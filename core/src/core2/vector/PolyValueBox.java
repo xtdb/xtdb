@@ -14,7 +14,6 @@ public class PolyValueBox implements IPolyValueReader, IPolyValueWriter {
     private float floatValue;
     private double doubleValue;
 
-    private ByteBuffer bufferValue;
     private Object objectValue;
 
     @Override
@@ -55,11 +54,6 @@ public class PolyValueBox implements IPolyValueReader, IPolyValueWriter {
     @Override
     public double readDouble() {
         return doubleValue;
-    }
-
-    @Override
-    public ByteBuffer readBuffer() {
-        return bufferValue;
     }
 
     @Override
@@ -115,13 +109,7 @@ public class PolyValueBox implements IPolyValueReader, IPolyValueWriter {
     }
 
     @Override
-    public void writeBuffer(byte typeId, ByteBuffer bufferValue) {
-        this.typeId = typeId;
-        this.bufferValue = bufferValue;
-    }
-
-    @Override
-    public void writeObject(byte typeId, Object bufferValue) {
+    public void writeObject(byte typeId, Object objectValue) {
         this.typeId = typeId;
         this.objectValue = objectValue;
     }

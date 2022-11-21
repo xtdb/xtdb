@@ -243,10 +243,15 @@
 (defmethod write-value-code :null [_ & args] `(.writeNull ~@args))
 
 (doseq [[k sym] '{:bool Boolean, :i8 Byte, :i16 Short, :i32 Int, :i64 Long, :f32 Float, :f64 Double
-                  :date Int, :time-local Long, :timestamp-tz Long, :timestamp-local Long, :duration Long, :interval Object
-                  :utf8 Buffer, :varbinary Buffer}]
+                  :date Int, :time-local Long, :timestamp-tz Long, :timestamp-local Long, :duration Long}]
   (defmethod read-value-code k [_ & args] `(~(symbol (str ".read" sym)) ~@args))
   (defmethod write-value-code k [_ & args] `(~(symbol (str ".write" sym)) ~@args)))
+
+(doseq [[k tag] {:utf8 ByteBuffer, :varbinary ByteBuffer, :interval PeriodDuration}]
+  (defmethod read-value-code k [_ & args]
+    (-> `(.readObject ~@args) (with-tag tag)))
+
+  (defmethod write-value-code k [_ & args] `(.writeObject ~@args)))
 
 (defmethod read-value-code :extension-type [[_ _ underlying-type _] & args]
   (apply read-value-code underlying-type args))

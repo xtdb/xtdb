@@ -1,7 +1,5 @@
 package core2.vector;
 
-import java.nio.ByteBuffer;
-
 public interface IPolyValueReader {
     byte getTypeId();
 
@@ -14,6 +12,5 @@ public interface IPolyValueReader {
     float readFloat();
     double readDouble();
 
-    ByteBuffer readBuffer();
     Object readObject();
 }
