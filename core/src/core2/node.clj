@@ -41,7 +41,6 @@
     ^java.util.concurrent.CompletableFuture #_<ScanSource> [_ tx ^Duration timeout]))
 
 (deftype CursorResultSet [^IResultCursor cursor
-                          ^AutoCloseable maybe-pq
                           ^:unsynchronized-mutable ^Iterator next-values]
   IResultSet
   (columnTypes [_] (.columnTypes cursor))
@@ -62,14 +61,10 @@
 
   (next [_] (.next next-values))
   (close [_]
-    (.close cursor)
-    (util/try-close maybe-pq)))
+    (.close cursor)))
 
-(defn- cursor->result-set
-  (^core2.IResultSet [^IResultCursor cursor]
-   (cursor->result-set cursor nil))
-  (^core2.IResultSet [^IResultCursor cursor, ^AutoCloseable maybe-pq]
-   (CursorResultSet. cursor maybe-pq nil)))
+(defn- cursor->result-set ^core2.IResultSet [^IResultCursor cursor]
+   (CursorResultSet. cursor nil))
 
 (defn- validate-tx-ops [tx-ops]
   (try
