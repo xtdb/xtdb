@@ -829,3 +829,11 @@
 (defn with-nullable-cols [col-types]
   (->> col-types
        (into {} (map (juxt key (comp #(merge-col-types % :null) val))))))
+
+(defn rows->col-types [rows]
+  (->> (for [col-name (into #{} (mapcat keys) rows)]
+         [(symbol col-name) (->> rows
+                                 (into #{} (map (fn [row]
+                                                  (value->col-type (get row col-name)))))
+                                 (apply merge-col-types))])
+       (into {})))

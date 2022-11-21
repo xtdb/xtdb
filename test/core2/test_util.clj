@@ -178,13 +178,7 @@
 
 (defmethod lp/emit-expr ::blocks [{:keys [col-types blocks]} _args]
   (let [col-types (or col-types
-                      (let [rows (into [] cat blocks)]
-                        (->> (for [col-name (into #{} (mapcat keys) rows)]
-                               [(symbol col-name) (->> rows
-                                                       (into #{} (map (fn [row]
-                                                                        (types/value->col-type (get row col-name)))))
-                                                       (apply types/merge-col-types))])
-                             (into {}))))
+                      (types/rows->col-types (into [] cat blocks)))
         ^Schema schema (Schema. (for [[col-name col-type] col-types]
                                   (types/col-type->field col-name col-type)))]
     {:col-types col-types
@@ -208,7 +202,7 @@
   ([query] (query-ra query {}))
   ([query {:keys [preserve-blocks? with-col-types?] :as query-opts}]
    (let [pq (op/prepare-ra query)
-         bq (.bind pq (select-keys query-opts [:srcs :current-time :default-tz :params]))]
+         bq (.bind pq (select-keys query-opts [:srcs :current-time :default-tz :params :table-args]))]
      (with-open [res (.openCursor bq)]
        (let [rows (-> (<-cursor res)
                       (cond->> (not preserve-blocks?) (into [] cat)))]

@@ -18,8 +18,10 @@
             core2.operator.table
             core2.operator.top
             core2.operator.unwind
-            [core2.util :as util])
-  (:import core2.ICursor
+            [core2.util :as util]
+            [core2.types :as types])
+  (:import clojure.lang.MapEntry
+           core2.ICursor
            java.time.Clock
            (java.util HashMap)
            (java.util.function Function)
@@ -37,6 +39,13 @@
   ;; ... or at least raise questions about who then owns the params
   (^core2.operator.BoundQuery bind [queryOpts]
    "queryOpts :: {:srcs, :params, :current-time, :default-tz}"))
+
+(defn- ->table-arg-types [table-args]
+  (->> (for [[table-key rows] table-args]
+         (MapEntry/create
+          table-key
+          (types/rows->col-types rows)))
+       (into {})))
 
 (defn- wrap-cursor ^core2.ICursor [^ICursor cursor, ^BufferAllocator al, ^Clock clock]
   (reify ICursor
@@ -67,13 +76,14 @@
                                          (mapcat scan/->scan-cols))))
           cache (HashMap.)]
       (reify PreparedQuery
-        (bind [_ {:keys [srcs params current-time default-tz]}]
+        (bind [_ {:keys [srcs params table-args current-time default-tz]}]
           (let [clock (Clock/fixed (or current-time (.instant expr/*clock*))
                                    (or default-tz (.getZone expr/*clock*)))
 
                 {:keys [col-types ->cursor]} (.computeIfAbsent cache
                                                                {:scan-col-types (scan/->scan-col-types srcs scan-cols)
                                                                 :param-types (expr/->param-types params)
+                                                                :table-arg-types (->table-arg-types table-args)
                                                                 :default-tz default-tz}
                                                                (reify Function
                                                                  (apply [_ emit-opts]
@@ -86,7 +96,7 @@
                 (let [allocator (RootAllocator.)]
                   (try
                     (binding [expr/*clock* clock]
-                      (-> (->cursor {:allocator allocator, :clock clock, :srcs srcs, :params params})
+                      (-> (->cursor {:allocator allocator, :clock clock, :srcs srcs, :params params, :table-args table-args})
                           (wrap-cursor allocator clock)))
 
                     (catch Throwable t

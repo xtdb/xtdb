@@ -14,8 +14,8 @@
                          e [:union #{:bool :i64}]
                          f [:duration :micro]}}
            (-> (tu/query-ra '[:table [a b c d e f] ?table]
-                            {:params {'?table [{:a 12, :b "foo" :c 1.2 :d nil :e true :f (Duration/ofHours 1)}
-                                               {:a 100, :b "bar", :c 3.14, :d #inst "2020", :e 10, :f (Duration/ofMinutes 1)}]}
+                            {:table-args {'?table [{:a 12, :b "foo" :c 1.2 :d nil :e true :f (Duration/ofHours 1)}
+                                                   {:a 100, :b "bar", :c 3.14, :d #inst "2020", :e 10, :f (Duration/ofMinutes 1)}]}
                              :with-col-types? true}))))
 
   (t/is (= {:res [{:a 12, :b "foo" :c 1.2 :d nil :e true}
@@ -25,27 +25,27 @@
                          e [:union #{:bool :i64}]}}
            (-> (tu/query-ra '[:table [{:a 12, :b "foo", :c 1.2, :d nil, :e true}
                                       {:a 100, :b "bar", :c 3.14, :d #inst "2020", :e 10}]]
-                             {:with-col-types? true})))
+                            {:with-col-types? true})))
         "inline table")
 
   (t/is (= {:res [], :col-types {}}
            (-> (tu/query-ra '[:table ?table]
-                            {:params {'?table []}
+                            {:table-args {'?table []}
                              :with-col-types? true})))
         "empty")
 
   (t/is (= {:res [{:a 12, :b "foo"}, {:a 100, :b nil}]
             :col-types '{a :i64, b [:union #{:utf8 :null}]}}
            (-> (tu/query-ra '[:table ?table]
-                            {:params {'?table [{:a 12, :b "foo"}
-                                               {:a 100}]}
+                            {:table-args {'?table [{:a 12, :b "foo"}
+                                                   {:a 100}]}
                              :with-col-types? true})))
         "differing columns")
 
   (t/is (= {:res [{:a 12}]
             :col-types '{a :i64}}
            (-> (tu/query-ra '[:table [a] ?table]
-                            {:params {'?table [{:a 12, :b "foo"}]}
+                            {:table-args {'?table [{:a 12, :b "foo"}]}
                              :with-col-types? true})))
         "restricts to provided col-names")
 

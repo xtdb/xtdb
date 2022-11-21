@@ -192,7 +192,7 @@
                               [{a (+ a 1)}
                                {b (* (+ a 1) b)}]
                               Fact]]]
-                          {:params {'?table [{:a 0 :b 1}]}}))))
+                          {:table-args {'?table [{:a 0 :b 1}]}}))))
 
   (t/testing "transitive closure"
     (t/is (= [{:x "a", :y "b"}
@@ -217,18 +217,18 @@
                              [:join [{z z}]
                               [:rename {y z} Path]
                               [:rename {x z} Path]]]]
-                          {:params {'?table [{:x "a" :y "b"}
-                                             {:x "b" :y "c"}
-                                             {:x "c" :y "d"}
-                                             {:x "d" :y "a"}]}})))))
+                          {:table-args {'?table [{:x "a" :y "b"}
+                                                 {:x "b" :y "c"}
+                                                 {:x "c" :y "d"}
+                                                 {:x "d" :y "a"}]}})))))
 
 (t/deftest test-assignment-operator
   (t/is (= [{:a 1 :b 1}]
            (tu/query-ra '[:assign [X [:table ?x]
                                    Y [:table ?y]]
                           [:join [{a b}] X Y]]
-                        {:params '{?x [{:a 1}]
-                                   ?y [{:b 1}]}})))
+                        {:table-args '{?x [{:a 1}]
+                                       ?y [{:b 1}]}})))
 
   (t/testing "can see earlier assignments"
     (t/is (= [{:a 1 :b 1}]
@@ -236,8 +236,8 @@
                                      Y [:join [{a b}] X [:table ?y]]
                                      X Y]
                             X]
-                          {:params '{?x [{:a 1}]
-                                     ?y [{:b 1}]}})))))
+                          {:table-args '{?x [{:a 1}]
+                                         ?y [{:b 1}]}})))))
 
 (t/deftest test-unwind-operator
   (t/is (= [{:a 1, :b [1 2], :b* 1}
@@ -247,27 +247,27 @@
             {:a 2, :b [3 4 5], :b* 5}]
            (tu/query-ra '[:unwind {b* b}
                           [:table ?x]]
-                        {:params '{?x [{:a 1, :b [1 2]} {:a 2, :b [3 4 5]}]}})))
+                        {:table-args '{?x [{:a 1, :b [1 2]} {:a 2, :b [3 4 5]}]}})))
 
   (t/is (= [{:a 1, :b* 1} {:a 1, :b* 2}]
            (tu/query-ra '[:project [a b*]
                           [:unwind {b* b}
                            [:table ?x]]]
-                        {:params '{?x [{:a 1, :b [1 2]} {:a 2, :b []}]}}))
+                        {:table-args '{?x [{:a 1, :b [1 2]} {:a 2, :b []}]}}))
         "skips rows with empty lists")
 
   (t/is (= [{:a 1, :b* 1} {:a 1, :b* 2}]
            (tu/query-ra '[:project [a b*]
                           [:unwind {b* b}
                            [:table ?x]]]
-                        {:params '{?x [{:a 2, :b 1} {:a 1, :b [1 2]}]}}))
+                        {:table-args '{?x [{:a 2, :b 1} {:a 1, :b [1 2]}]}}))
         "skips rows with non-list unwind column")
 
   (t/is (= [{:a 1, :b* 1} {:a 1, :b* "foo"}]
            (tu/query-ra '[:project [a b*]
                           [:unwind {b* b}
                            [:table ?x]]]
-                        {:params '{?x [{:a 1, :b [1 "foo"]}]}}))
+                        {:table-args '{?x [{:a 1, :b [1 "foo"]}]}}))
         "handles multiple types")
 
   (t/is (= [{:a 1, :b* 1, :$ordinal 1}
@@ -278,7 +278,7 @@
            (tu/query-ra '[:project [a b* $ordinal]
                           [:unwind {b* b} {:ordinality-column $ordinal}
                            [:table ?x]]]
-                        {:params '{?x [{:a 1 :b [1 2]} {:a 2 :b [3 4 5]}]}}))
+                        {:table-args '{?x [{:a 1 :b [1 2]} {:a 2 :b [3 4 5]}]}}))
         "with ordinality"))
 
 (t/deftest test-project-row-number
@@ -286,14 +286,14 @@
            (tu/query-ra '[:project [a {$row-num (row-number)}]
                           [:table ?a]]
 
-                        {:params {'?a [{:a 12} {:a 0} {:a 100}]}}))))
+                        {:table-args {'?a [{:a 12} {:a 0} {:a 100}]}}))))
 
 (t/deftest test-project-append-columns
   (t/is (= [{:a 12, :$row-num 1}, {:a 0, :$row-num 2}, {:a 100, :$row-num 3}]
            (tu/query-ra '[:project {:append-columns? true} [{$row-num (row-number)}]
                           [:table ?a]]
 
-                        {:params {'?a [{:a 12} {:a 0} {:a 100}]}}))))
+                        {:table-args {'?a [{:a 12} {:a 0} {:a 100}]}}))))
 
 (t/deftest test-array-agg
   (t/is (= [{:a 1, :bs [1 3 6]}
@@ -301,12 +301,12 @@
             {:a 3, :bs [5]}]
            (tu/query-ra '[:group-by [a {bs (array-agg b)}]
                           [:table ?ab]]
-                        {:params {'?ab [{:a 1, :b 1}
-                                        {:a 2, :b 2}
-                                        {:a 1, :b 3}
-                                        {:a 2, :b 4}
-                                        {:a 3, :b 5}
-                                        {:a 1, :b 6}]}}))))
+                        {:table-args {'?ab [{:a 1, :b 1}
+                                            {:a 2, :b 2}
+                                            {:a 1, :b 3}
+                                            {:a 2, :b 4}
+                                            {:a 3, :b 5}
+                                            {:a 1, :b 6}]}}))))
 
 (t/deftest test-between
   (t/is (= [[true true] [false true]
@@ -318,12 +318,12 @@
                 (tu/query-ra '[:project [{b (between x l r)}
                                          {bs (between-symmetric x l r)}]
                                [:table ?xlr]]
-                             {:params {'?xlr (map #(zipmap [:x :l :r] %)
-                                                  [[5 0 10] [5 10 0]
-                                                   [0 0 10] [0 10 0]
-                                                   [-1 0 10] [-1 10 0]
-                                                   [11 0 10] [11 10 0]
-                                                   [10 0 10] [10 10 0]])}})))))
+                             {:table-args {'?xlr (map #(zipmap [:x :l :r] %)
+                                                      [[5 0 10] [5 10 0]
+                                                       [0 0 10] [0 10 0]
+                                                       [-1 0 10] [-1 10 0]
+                                                       [11 0 10] [11 10 0]
+                                                       [10 0 10] [10 10 0]])}})))))
 
 (t/deftest test-join-theta
   (t/is (= [{:x3 "31" :x4 "13"} {:x3 "31" :x4 "31"}]

@@ -19,7 +19,7 @@
   (s/cat :op #{:table}
          :explicit-col-names (s/? (s/coll-of ::lp/column :kind vector?))
          :table (s/or :rows (s/coll-of (s/map-of simple-ident? any?))
-                      :param ::lp/param)))
+                      :table-arg ::lp/param)))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -116,41 +116,21 @@
                                (fn [v opts]
                                  (if (fn? v) (v opts) v))))})))
 
-(defn- param-type->col-types [param-type]
-  (letfn [(->struct-cols-inner [col-type]
-            (zmatch col-type
-              [:struct struct-cols] #{struct-cols}))
-
-          (->struct-cols-outer [col-type]
-            (zmatch col-type
-              [:list [:union inner-types]] (->> inner-types (into #{} (mapcat ->struct-cols-inner)))
-              [:list inner-type] (->struct-cols-inner inner-type)
-              [:fixed-size-list _ [:union inner-types]] (->> inner-types (into #{} (mapcat ->struct-cols-inner)))
-              [:fixed-size-list _ inner-type] (->struct-cols-inner inner-type)
-              [:union inner-types] (->> inner-types (into #{} (mapcat ->struct-cols-outer)))))]
-
-    (let [struct-cols (->struct-cols-outer param-type)]
-      (->> (for [table-key (into #{} (mapcat keys) struct-cols)]
-             [(symbol table-key) (->> (into #{} (map #(get % table-key :null)) struct-cols)
-                                      (apply types/merge-col-types))])
-           (into {})))))
-
-(defn- emit-param-table [param table-expr {:keys [param-types]}]
-  (let [col-types (-> (or (get param-types param)
+(defn- emit-arg-table [param table-expr {:keys [table-arg-types]}]
+  (let [col-types (-> (or (get table-arg-types param)
                           (throw (err/illegal-arg :unknown-table
                                                   {::err/message "Table refers to unknown param"
-                                                   :param param, :params (set (keys param-types))})))
-                      (param-type->col-types)
+                                                   :param param, :table-args (set (keys table-arg-types))})))
                       (restrict-cols table-expr))]
 
     {:col-types col-types
-     :->out-rel (fn [{:keys [params] :as opts}]
-                  (->out-rel opts col-types (get params param) (fn [v _opts] v)))}))
+     :->out-rel (fn [{:keys [table-args] :as opts}]
+                  (->out-rel opts col-types (get table-args param) (fn [v _opts] v)))}))
 
 (defmethod lp/emit-expr :table [{:keys [table] :as table-expr} opts]
   (let [{:keys [col-types ->out-rel]} (zmatch table
                                         [:rows rows] (emit-rows-table rows table-expr opts)
-                                        [:param param] (emit-param-table param table-expr opts))]
+                                        [:table-arg param] (emit-arg-table param table-expr opts))]
 
     {:col-types col-types
      :->cursor (fn [opts]

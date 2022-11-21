@@ -84,14 +84,14 @@
   (-open-datalog-async [this query args]
     (let [!db (snapshot-async this (get-in query [:basis :tx]) (:basis-timeout query))
           query (into {:default-tz default-tz} query)
-          {ra-query :query, params :args} (-> (dissoc query :basis :basis-timeout :default-tz)
-                                              (d/compile-query args))
+          {ra-query :query, :keys [params table-args]} (-> (dissoc query :basis :basis-timeout :default-tz)
+                                                           (d/compile-query args))
           pq (op/prepare-ra ra-query)]
 
       (-> !db
           (util/then-apply
             (fn [db]
-              (-> (.bind pq {:srcs {'$ db}, :params params
+              (-> (.bind pq {:srcs {'$ db}, :params params, :table-args table-args
                              :current-time (get-in query [:basis :current-time])
                              :default-tz (:default-tz query)})
                   (.openCursor)

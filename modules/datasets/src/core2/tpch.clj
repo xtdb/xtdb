@@ -415,15 +415,16 @@
              [:scan [ps_partkey ps_suppkey]]
              [:scan [s_suppkey {s_comment (like s_comment "%Customer%Complaints%")}]]]]]]]]
       (with-meta {::params {'?brand "Brand#45"
-                            ; '?type "MEDIUM POLISHED%"
-                            '?sizes [{:p_size 49}
-                                     {:p_size 14}
-                                     {:p_size 23}
-                                     {:p_size 45}
-                                     {:p_size 19}
-                                     {:p_size 3}
-                                     {:p_size 36}
-                                     {:p_size 9}]}})))
+                            ;; '?type "MEDIUM POLISHED%"
+                            }
+                  ::table-args {'?sizes [{:p_size 49}
+                                         {:p_size 14}
+                                         {:p_size 23}
+                                         {:p_size 45}
+                                         {:p_size 19}
+                                         {:p_size 3}
+                                         {:p_size 36}
+                                         {:p_size 9}]}})))
 
 (def tpch-q17-small-quantity-order-revenue
   (-> '[:project [{avg_yearly (/ sum_extendedprice 7)}]
@@ -559,13 +560,13 @@
               [:select (> c_acctbal 0.0)
                Customer]]]]
            [:scan [o_custkey]]]]]]
-      (with-meta {::params {'?cntrycodes [{:cntrycode "13"}
-                                          {:cntrycode "31"}
-                                          {:cntrycode "23"}
-                                          {:cntrycode "29"}
-                                          {:cntrycode "30"}
-                                          {:cntrycode "18"}
-                                          {:cntrycode "17"}]}})))
+      (with-meta {::table-args {'?cntrycodes [{:cntrycode "13"}
+                                              {:cntrycode "31"}
+                                              {:cntrycode "23"}
+                                              {:cntrycode "29"}
+                                              {:cntrycode "30"}
+                                              {:cntrycode "18"}
+                                              {:cntrycode "17"}]}})))
 
 (def queries
   [#'tpch-q1-pricing-summary-report

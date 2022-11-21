@@ -118,39 +118,46 @@
                                                                         (gensym "?in"))
                                            nil)))))]
 
-    {:args (->> (mapcat (fn [[binding-type binding-arg] arg]
-                          (case binding-type
-                            (:source :scalar) [(MapEntry/create binding-arg arg)]
-                            :tuple (map (fn [logic-var arg]
-                                          (MapEntry/create logic-var arg))
-                                        binding-arg
-                                        arg)
+    {:params (->> (mapcat (fn [[binding-type binding-arg] arg]
+                            (case binding-type
+                              (:source :scalar) [(MapEntry/create binding-arg arg)]
+                              :tuple (map (fn [logic-var arg]
+                                            (MapEntry/create logic-var arg))
+                                          binding-arg
+                                          arg)
+                              (:collection :relation) nil))
+                          in-bindings
+                          args)
+                  (into {}))
+     :table-args (->> (mapcat (fn [[binding-type binding-arg] arg]
+                                  (case binding-type
+                                    (:source :scalar :tuple) nil
 
-                            :collection (let [binding (first binding-arg)
-                                              binding-k (-> binding name (subs 1) keyword)]
-                                          (if-not (coll? arg)
-                                            (throw (err/illegal-arg :bad-collection
-                                                                    {:binding binding
-                                                                     :coll arg}))
-                                            [(MapEntry/create (get table-keys #{binding})
-                                                              (vec (for [v arg]
-                                                                     {binding-k v})))]))
+                                    :collection (let [binding (first binding-arg)
+                                                      binding-k (-> binding name (subs 1) keyword)]
+                                                  (if-not (coll? arg)
+                                                    (throw (err/illegal-arg :bad-collection
+                                                                            {:binding binding
+                                                                             :coll arg}))
+                                                    [(MapEntry/create (get table-keys #{binding})
+                                                                      (vec (for [v arg]
+                                                                             {binding-k v})))]))
 
-                            :relation (let [conformed-arg (s/conform ::relation-arg arg)]
-                                        (if (s/invalid? conformed-arg)
-                                          (throw (err/illegal-arg :bad-relation
-                                                                  {:binding (first binding-arg)
-                                                                   :relation arg
-                                                                   :explain-data (s/explain-data ::relation-arg arg)}))
-                                          (let [[rel-type rel] conformed-arg
-                                                binding (first binding-arg)]
-                                            [(MapEntry/create (get table-keys (set binding))
-                                                              (case rel-type
-                                                                :maps rel
-                                                                :vecs (mapv #(zipmap (mapv keyword binding) %) rel)))])))))
-                        in-bindings
-                        args)
-                (into {}))
+                                    :relation (let [conformed-arg (s/conform ::relation-arg arg)]
+                                                (if (s/invalid? conformed-arg)
+                                                  (throw (err/illegal-arg :bad-relation
+                                                                          {:binding (first binding-arg)
+                                                                           :relation arg
+                                                                           :explain-data (s/explain-data ::relation-arg arg)}))
+                                                  (let [[rel-type rel] conformed-arg
+                                                        binding (first binding-arg)]
+                                                    [(MapEntry/create (get table-keys (set binding))
+                                                                      (case rel-type
+                                                                        :maps rel
+                                                                        :vecs (mapv #(zipmap (mapv keyword binding) %) rel)))])))))
+                                in-bindings
+                                args)
+                        (into {}))
      :table-keys table-keys}))
 
 (defn- ->rel-expr [rel-clauses {:keys [in-scalars v-vars find-vars eid-srcs]}]
@@ -249,7 +256,7 @@
                                 [(table-plan src table-vars) more-table-keys])))]
     ;; TODO this won't be _the_ most efficient way to join these tables
     ;; we'll want to cross-join the smallest one, and then see which ones then join, and repeat
-    (reduce (fn [expr [table-vars src :as entry]]
+    (reduce (fn [expr [table-vars src]]
               (join-exprs (table-plan src table-vars) expr))
             expr
             table-keys)))
@@ -350,16 +357,17 @@
 
 (defn compile-query [query args]
   (let [conformed-query (conform-query query)
-        {:keys [args table-keys]} (compile-args conformed-query args)]
+        {:keys [params table-args table-keys]} (compile-args conformed-query args)]
     {:query (-> (compile-where conformed-query {:table-keys table-keys})
                 (with-group-by conformed-query)
                 (with-order-by conformed-query)
                 (with-top conformed-query)
                 (with-renamed-find-vars conformed-query))
-     :args args}))
+     :params params, :table-args table-args}))
 
 (comment
   (compile-query '{:find [?e1 ?e2 ?a1 ?a2]
+                   :in [$]
                    :where [[?e1 :name "Ivan"]
                            [?e2 :name "Ivan"]
                            [?e1 :age ?a1]
