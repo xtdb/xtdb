@@ -27,32 +27,10 @@
                                              FlightSql$DoPutUpdateResult
                                              FlightSql$TicketStatementQuery)
            org.apache.arrow.memory.BufferAllocator
-           (org.apache.arrow.vector FieldVector ValueVector VectorSchemaRoot)
-           org.apache.arrow.vector.complex.DenseUnionVector
+           (org.apache.arrow.vector FieldVector VectorSchemaRoot)
            org.apache.arrow.vector.types.pojo.Schema))
 
 ;;;; populate-root temporarily copied from test-util
-
-(defn- write-vec! [^ValueVector v, vs]
-  (.clear v)
-
-  (let [duv? (instance? DenseUnionVector v)
-        writer (vw/vec->writer v)]
-    (doseq [v vs]
-      (.startValue writer)
-      (if duv?
-        (doto (.writerForType (.asDenseUnion writer) (types/value->col-type v))
-          (.startValue)
-          (->> (types/write-value! v))
-          (.endValue))
-
-        (types/write-value! v writer))
-
-      (.endValue writer))
-
-    (.setValueCount v (count vs))
-
-    v))
 
 (defn- populate-root ^core2.vector.IIndirectRelation [^VectorSchemaRoot root rows]
   (.clear root)
@@ -60,7 +38,7 @@
   (let [field-vecs (.getFieldVectors root)
         row-count (count rows)]
     (doseq [^FieldVector field-vec field-vecs]
-      (write-vec! field-vec (map (keyword (.getName (.getField field-vec))) rows)))
+      (vw/write-vec! field-vec (map (keyword (.getName (.getField field-vec))) rows)))
 
     (.setRowCount root row-count)
     root))

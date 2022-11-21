@@ -14,19 +14,17 @@
             [core2.types :as types]
             [core2.util :as util]
             [core2.vector.indirect :as iv]
-            [core2.vector.writer :as vw]
-            [core2.expression :as expr])
+            [core2.vector.writer :as vw])
   (:import (core2 ICursor InstantSource)
            core2.node.Node
            core2.object_store.FileSystemObjectStore
            core2.operator.scan.ScanSource
-           core2.vector.IIndirectVector
+           (core2.vector IIndirectRelation IIndirectVector)
            java.net.ServerSocket
            (java.nio.file Files Path)
            java.nio.file.attribute.FileAttribute
            (java.time Duration Instant Period)
            (java.util LinkedList)
-           java.util.concurrent.TimeUnit
            java.util.function.Consumer
            (org.apache.arrow.memory BufferAllocator RootAllocator)
            (org.apache.arrow.vector FieldVector ValueVector VectorSchemaRoot)
@@ -105,42 +103,12 @@
   (.finishChunk ^core2.indexer.Indexer (component node :core2.indexer/indexer))
   (await-temporal-snapshot-build node))
 
-(defn write-vec! [^ValueVector v, vs]
-  (.clear v)
-
-  (let [duv? (instance? DenseUnionVector v)
-        writer (vw/vec->writer v)]
-    (doseq [v vs]
-      (.startValue writer)
-      (if duv?
-        (doto (.writerForType (.asDenseUnion writer) (types/value->col-type v))
-          (.startValue)
-          (->> (types/write-value! v))
-          (.endValue))
-
-        (types/write-value! v writer))
-
-      (.endValue writer))
-
-    (.setValueCount v (count vs))
-
-    v))
-
 (defn open-vec
   (^org.apache.arrow.vector.ValueVector [col-name vs]
-   (open-vec col-name
-             (->> (into #{} (map types/value->col-type) vs)
-                  (apply types/merge-col-types))
-             vs))
+   (.getVector (vw/open-vec *allocator* col-name vs)))
 
   (^org.apache.arrow.vector.ValueVector [col-name col-type vs]
-   (let [res (-> (types/col-type->field col-name col-type)
-                 (.createVector *allocator*))]
-     (try
-       (doto res (write-vec! vs))
-       (catch Throwable e
-         (.close res)
-         (throw e))))))
+   (.getVector (vw/open-vec *allocator* col-name col-type vs))))
 
 (defn populate-root ^core2.vector.IIndirectRelation [^VectorSchemaRoot root rows]
   (.clear root)
@@ -148,7 +116,7 @@
   (let [field-vecs (.getFieldVectors root)
         row-count (count rows)]
     (doseq [^FieldVector field-vec field-vecs]
-      (write-vec! field-vec (map (keyword (.getName (.getField field-vec))) rows)))
+      (vw/write-vec! field-vec (map (keyword (.getName (.getField field-vec))) rows)))
 
     (.setRowCount root row-count)
     root))

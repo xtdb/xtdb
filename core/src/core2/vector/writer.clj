@@ -494,3 +494,41 @@
           :let [col-type (types/field->col-type (.getField (.getVector src-col)))
                 ^IVectorWriter vec-writer (.writerForName dest-rel (.getName src-col) col-type)]]
     (append-vec vec-writer src-col)))
+
+(defn write-vec! [^ValueVector v, vs]
+  (.clear v)
+
+  (let [duv? (instance? DenseUnionVector v)
+        writer (vec->writer v)]
+    (doseq [v vs]
+      (.startValue writer)
+      (if duv?
+        (doto (.writerForType (.asDenseUnion writer) (types/value->col-type v))
+          (.startValue)
+          (->> (types/write-value! v))
+          (.endValue))
+
+        (types/write-value! v writer))
+
+      (.endValue writer))
+
+    (.setValueCount v (count vs))
+
+    v))
+
+(defn open-vec
+  (^core2.vector.IIndirectVector [allocator col-name vs]
+   (open-vec allocator col-name
+             (->> (into #{} (map types/value->col-type) vs)
+                  (apply types/merge-col-types))
+             vs))
+
+  (^core2.vector.IIndirectVector [allocator col-name col-type vs]
+   (let [res (-> (types/col-type->field col-name col-type)
+                 (.createVector allocator))]
+     (try
+       (write-vec! res vs)
+       (iv/->direct-vec res)
+       (catch Throwable e
+         (.close res)
+         (throw e))))))

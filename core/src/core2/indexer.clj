@@ -117,8 +117,8 @@
                                (reduce (fn [^Roaring64Bitmap l, ^Roaring64Bitmap r]
                                          (doto l (.and r))))
                                (.toArray))]
-              (with-open [row-id-vec (util/open-bigint-vec allocator "_row-id" row-ids)]
-                (let [aligned-roots (align/align-vectors (.values roots) (iv/->indirect-rel [(iv/->direct-vec row-id-vec)]))
+              (with-open [row-id-col (vw/open-vec allocator "_row-id" :i64 row-ids)]
+                (let [aligned-roots (align/align-vectors (.values roots) (iv/->indirect-rel [row-id-col]))
                       id-col (.vectorForName aligned-roots "id")
                       id-vec (.getVector id-col)
                       table-col (.vectorForName aligned-roots "_table")
