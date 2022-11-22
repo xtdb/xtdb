@@ -2,6 +2,7 @@
   (:require [clojure.spec.alpha :as s]
             [core2.error :as err]
             core2.log
+            [core2.rewrite :refer [zmatch]]
             [core2.sql :as sql]
             [core2.types :as types]
             [core2.util :as util]
@@ -9,7 +10,6 @@
             [juxt.clojars-mirrors.integrant.core :as ig])
   (:import (core2.log Log LogRecord)
            core2.vector.IDenseUnionWriter
-           java.io.ByteArrayOutputStream
            (java.time Instant ZoneId)
            java.util.ArrayList
            org.apache.arrow.memory.BufferAllocator
@@ -54,8 +54,8 @@
 (defmethod tx-op-spec :sql [_]
   (s/cat :op #{:sql}
          :query string?
-         ;; TODO FSQL might benefit from being able to just chuck the VSR/VSR bytes in here.
-         :param-rows (s/? (s/coll-of (s/coll-of any? :kind sequential?) :kind sequential?))))
+         :params (s/? (s/or :rows (s/coll-of (s/coll-of any? :kind sequential?) :kind sequential?)
+                            :bytes #(= :varbinary (types/value->col-type %))))))
 
 (s/def ::tx-op
   (s/and vector? (s/multi-spec tx-op-spec (fn [v _] v))))
@@ -175,12 +175,15 @@
   (let [sql-writer (.asStruct (.writerForTypeId tx-ops-writer 3))
         query-writer (.writerForName sql-writer "query")
         params-writer (.writerForName sql-writer "params")]
-    (fn write-sql! [{:keys [query param-rows]}]
+    (fn write-sql! [{:keys [query params]}]
       (.startValue sql-writer)
 
       (types/write-value! query query-writer)
-      (when param-rows
-        (types/write-value! (encode-params allocator query param-rows) params-writer))
+
+      (when params
+        (zmatch params
+          [:rows param-rows] (types/write-value! (encode-params allocator query param-rows) params-writer)
+          [:bytes param-bytes] (types/write-value! param-bytes params-writer)))
 
       (.endValue sql-writer))))
 

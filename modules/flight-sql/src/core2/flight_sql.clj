@@ -88,7 +88,6 @@
   (comp #{:insert :delete :erase :merge} first))
 
 (defn- flight-stream->rows [^FlightStream flight-stream]
-  ;; TODO ideally we'd just pass this as a VSR
   (let [root (.getRoot flight-stream)
         rows (ArrayList.)
         col-count (count (.getFieldVectors root))]
@@ -101,6 +100,12 @@
           (.add rows (vec row)))))
 
     (vec rows)))
+
+(defn- flight-stream->bytes [^FlightStream flight-stream]
+  (util/build-arrow-ipc-byte-buffer (.getRoot flight-stream) :stream
+    (fn [write-batch!]
+      (while (.next flight-stream)
+        (write-batch!)))))
 
 (defn- ->fsql-producer [{:keys [allocator node ^Map fsql-txs, ^Map stmts, ^Map tickets] :as svr}]
   (letfn [(col-types->schema ^org.apache.arrow.vector.types.pojo.Schema [col-types]
@@ -130,7 +135,6 @@
                                      (.clear vsr)
                                      ;; HACK getting results in a Clojure data structure, putting them back in to a VSR
                                      ;; because we can get DUVs in the in-rel but the output just expects mono vecs.
-                                     ;; also HACK for using the test-util in main code.
 
                                      (populate-root vsr (iv/rel->rows in-rel))
                                      (.putNext listener))))
@@ -153,7 +157,6 @@
                                    (reify BiFunction
                                      (apply [_ _ps-id {:keys [^PreparedQuery prepd-query] :as ^Map ps}]
                                        ;; TODO we likely needn't take these out and put them back.
-                                       ;; NOTE we assume there's only one param row for read queries - valid?
                                        (let [new-params (-> (first (flight-stream->rows flight-stream))
                                                             (->> (sequence (map-indexed (fn [idx v]
                                                                                           (-> (vw/open-vec allocator (symbol (str "?_" idx)) [v])
@@ -179,7 +182,7 @@
         (fn []
           @(-> (let [{:keys [sql fsql-tx-id]} (or (get stmts (.getPreparedStatementHandle cmd))
                                                   (throw (UnsupportedOperationException. "invalid ps-id")))
-                     dml [:sql sql (flight-stream->rows flight-stream)]]
+                     dml [:sql sql (flight-stream->bytes flight-stream)]]
                  (exec-dml dml fsql-tx-id))
 
                (then-send-do-put-update-res ack-stream allocator))))

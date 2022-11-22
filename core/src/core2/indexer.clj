@@ -692,11 +692,19 @@
                                                          (.indexOp op-idxer in-rel query-opts))))))]
                         (if (.isNull params-vec sql-offset)
                           (index-op* nil)
+
                           (with-open [is (ByteArrayInputStream. (.get params-vec sql-offset))
                                       asr (ArrowStreamReader. is allocator)]
                             (let [root (.getVectorSchemaRoot asr)]
                               (while (.loadNextBatch asr)
                                 (let [rel (iv/<-root root)
+
+                                      ^IIndirectRelation
+                                      rel (iv/->indirect-rel (->> rel
+                                                                  (map-indexed (fn [idx ^IIndirectVector col]
+                                                                                 (.withName col (str "?_" idx)))))
+                                                             (.rowCount rel))
+
                                       selection (int-array 1)]
                                   (dotimes [idx (.rowCount rel)]
                                     (aset selection 0 idx)
