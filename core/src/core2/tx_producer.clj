@@ -2,13 +2,16 @@
   (:require [clojure.spec.alpha :as s]
             [core2.error :as err]
             core2.log
+            [core2.sql :as sql]
             [core2.types :as types]
             [core2.util :as util]
             [core2.vector.writer :as vw]
             [juxt.clojars-mirrors.integrant.core :as ig])
   (:import (core2.log Log LogRecord)
            core2.vector.IDenseUnionWriter
+           java.io.ByteArrayOutputStream
            (java.time Instant ZoneId)
+           java.util.ArrayList
            org.apache.arrow.memory.BufferAllocator
            (org.apache.arrow.vector TimeStampMicroTZVector VectorSchemaRoot)
            (org.apache.arrow.vector.types.pojo ArrowType$Union Schema)
@@ -51,6 +54,7 @@
 (defmethod tx-op-spec :sql [_]
   (s/cat :op #{:sql}
          :query string?
+         ;; TODO FSQL might benefit from being able to just chuck the VSR/VSR bytes in here.
          :param-rows (s/? (s/coll-of (s/coll-of any? :kind sequential?) :kind sequential?))))
 
 (s/def ::tx-op
@@ -86,10 +90,8 @@
                                                          (types/col-type->field '_table [:union #{:null :utf8}])
                                                          (types/->field "id" types/dense-union-type false))
 
-                                          (types/->field "sql" types/struct-type false
-                                                         (types/col-type->field 'query :utf8)
-                                                         (types/->field "param-rows" types/list-type true
-                                                                        (types/->field "param-row" types/dense-union-type false)))))
+                                          (types/col-type->field 'sql [:struct {:query :utf8
+                                                                                :params [:union #{:null :varbinary}]}])))
 
             (types/col-type->field "system-time" nullable-inst-type)
             (types/col-type->field "default-tz" :utf8)
@@ -149,17 +151,36 @@
         (.endValue))
       (.endValue evict-writer))))
 
-(defn- ->sql-writer [^IDenseUnionWriter tx-ops-writer]
+(defn encode-params [^BufferAllocator allocator, query, param-rows]
+  (let [plan (sql/compile-query query)
+        {:keys [^long param-count]} (meta plan)
+
+        vecs (ArrayList. param-count)]
+    (try
+      ;; TODO check param count in each row, handle error
+      (dotimes [col-idx param-count]
+        (.add vecs
+              (vw/open-vec allocator (symbol (str "?_" col-idx))
+                           (mapv #(nth % col-idx) param-rows))))
+
+      (let [root (doto (VectorSchemaRoot. vecs) (.setRowCount (count param-rows)))]
+        (util/build-arrow-ipc-byte-buffer root :stream
+          (fn [write-batch!]
+            (write-batch!))))
+
+      (finally
+        (run! util/try-close vecs)))))
+
+(defn- ->sql-writer [^IDenseUnionWriter tx-ops-writer, ^BufferAllocator allocator]
   (let [sql-writer (.asStruct (.writerForTypeId tx-ops-writer 3))
         query-writer (.writerForName sql-writer "query")
-        param-rows-writer (.writerForName sql-writer "param-rows")]
+        params-writer (.writerForName sql-writer "params")]
     (fn write-sql! [{:keys [query param-rows]}]
       (.startValue sql-writer)
 
       (types/write-value! query query-writer)
-      (types/write-value! (vec (for [param-row param-rows]
-                                 (zipmap (map #(keyword (str "?_" %)) (range)) param-row)))
-                          param-rows-writer)
+      (when param-rows
+        (types/write-value! (encode-params allocator query param-rows) params-writer))
 
       (.endValue sql-writer))))
 
@@ -175,7 +196,7 @@
             write-put! (->put-writer tx-ops-writer)
             write-delete! (->delete-writer tx-ops-writer)
             write-evict! (->evict-writer tx-ops-writer)
-            write-sql! (->sql-writer tx-ops-writer)]
+            write-sql! (->sql-writer tx-ops-writer allocator)]
 
         (when sys-time
           (doto ^TimeStampMicroTZVector (.getVector root "system-time")

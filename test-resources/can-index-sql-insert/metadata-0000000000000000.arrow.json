@@ -89,6 +89,33 @@
           "key" : "type-head"
         }]
       },{
+        "name" : "f64",
+        "nullable" : true,
+        "type" : {
+          "name" : "struct"
+        },
+        "children" : [{
+          "name" : "min",
+          "nullable" : true,
+          "type" : {
+            "name" : "floatingpoint",
+            "precision" : "DOUBLE"
+          },
+          "children" : [ ]
+        },{
+          "name" : "max",
+          "nullable" : true,
+          "type" : {
+            "name" : "floatingpoint",
+            "precision" : "DOUBLE"
+          },
+          "children" : [ ]
+        }],
+        "metadata" : [{
+          "value" : "f64",
+          "key" : "type-head"
+        }]
+      },{
         "name" : "i64",
         "nullable" : true,
         "type" : {
@@ -115,33 +142,6 @@
         }],
         "metadata" : [{
           "value" : "i64",
-          "key" : "type-head"
-        }]
-      },{
-        "name" : "f64",
-        "nullable" : true,
-        "type" : {
-          "name" : "struct"
-        },
-        "children" : [{
-          "name" : "min",
-          "nullable" : true,
-          "type" : {
-            "name" : "floatingpoint",
-            "precision" : "DOUBLE"
-          },
-          "children" : [ ]
-        },{
-          "name" : "max",
-          "nullable" : true,
-          "type" : {
-            "name" : "floatingpoint",
-            "precision" : "DOUBLE"
-          },
-          "children" : [ ]
-        }],
-        "metadata" : [{
-          "value" : "f64",
           "key" : "type-head"
         }]
       }]
@@ -215,21 +215,6 @@
           "DATA" : ["table","table","world","world","","","","","",""]
         }]
       },{
-        "name" : "i64",
-        "count" : 10,
-        "VALIDITY" : [0,0,0,0,1,1,1,1,1,1],
-        "children" : [{
-          "name" : "min",
-          "count" : 10,
-          "VALIDITY" : [0,0,0,0,1,1,1,1,1,1],
-          "DATA" : ["0","0","0","0","12","12","1","1","0","0"]
-        },{
-          "name" : "max",
-          "count" : 10,
-          "VALIDITY" : [0,0,0,0,1,1,1,1,1,1],
-          "DATA" : ["0","0","0","0","12","12","2","2","1","1"]
-        }]
-      },{
         "name" : "f64",
         "count" : 10,
         "VALIDITY" : [0,0,0,0,1,1,0,0,0,0],
@@ -243,6 +228,21 @@
           "count" : 10,
           "VALIDITY" : [0,0,0,0,1,1,0,0,0,0],
           "DATA" : [0.0,0.0,0.0,0.0,3.3,3.3,0.0,0.0,0.0,0.0]
+        }]
+      },{
+        "name" : "i64",
+        "count" : 10,
+        "VALIDITY" : [0,0,0,0,1,1,1,1,1,1],
+        "children" : [{
+          "name" : "min",
+          "count" : 10,
+          "VALIDITY" : [0,0,0,0,1,1,1,1,1,1],
+          "DATA" : ["0","0","0","0","12","12","1","1","0","0"]
+        },{
+          "name" : "max",
+          "count" : 10,
+          "VALIDITY" : [0,0,0,0,1,1,1,1,1,1],
+          "DATA" : ["0","0","0","0","12","12","2","2","1","1"]
         }]
       }]
     },{

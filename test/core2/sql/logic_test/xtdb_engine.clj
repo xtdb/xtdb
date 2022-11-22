@@ -199,7 +199,7 @@
    (binding [r/*memo* (HashMap.)]
      (-> (c2/submit-tx
            node
-           [[:sql sql-statement [[]]]]
+           [[:sql sql-statement]]
            (cond-> opts
              (= (get variables "APP_TIME_DEFAULTS") "AS_OF_NOW")
              (assoc :app-time-as-of-now? true)

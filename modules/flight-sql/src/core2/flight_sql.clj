@@ -140,7 +140,7 @@
     (reify FlightSqlProducer
       (acceptPutStatement [_ cmd _ctx _flight-stream ack-stream]
         (fn []
-          @(-> (exec-dml [:sql (.getQuery cmd) [[]]]
+          @(-> (exec-dml [:sql (.getQuery cmd)]
                          (when (.hasTransactionId cmd)
                            (.getTransactionId cmd)))
                (then-send-do-put-update-res ack-stream allocator))))

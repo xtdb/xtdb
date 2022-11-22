@@ -262,7 +262,7 @@
                         col-map)
                       row-count)))
 
-(defn <-root [^VectorSchemaRoot root]
+(defn <-root ^core2.vector.IIndirectRelation [^VectorSchemaRoot root]
   (let [cols (LinkedHashMap.)]
     (doseq [^ValueVector in-vec (.getFieldVectors root)]
       (.put cols (.getName in-vec) (->direct-vec in-vec)))

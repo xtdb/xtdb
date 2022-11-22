@@ -83,7 +83,7 @@
       "name" : "tx-id",
       "count" : 3,
       "VALIDITY" : [1,1,1],
-      "DATA" : ["0","3405","6234"]
+      "DATA" : ["0","3301","6034"]
     },{
       "name" : "system-time",
       "count" : 3,

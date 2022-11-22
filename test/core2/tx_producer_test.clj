@@ -41,14 +41,16 @@
 
                    [:delete "reading-demo000000"]
 
-                   [:sql "INSERT INTO foo (foo, bar, baz) VALUES (?, ?, ?)"
+                   [:sql "INSERT INTO foo (id) VALUES (0)"]
+
+                   [:sql "INSERT INTO foo (id, foo, bar) VALUES (?, ?, ?)"
                     [[1 nil 3.3]
                      [2 "hello" 12]]]
 
                    [:sql "UPDATE foo FOR PORTION OF APP_TIME FROM DATE '2021-01-01' TO DATE '2024-01-01' SET bar = 'world' WHERE foo.id = ?"
                     [[1]]]
 
-                   [:sql "DELETE FROM foo FOR PORTION OF APP_TIME FROM DATE '2023' TO DATE '2025' WHERE foo.id = ?"
+                   [:sql "DELETE FROM foo FOR PORTION OF APP_TIME FROM DATE '2023-01-01' TO DATE '2025-01-01' WHERE foo.id = ?"
                     [[1]]]]
 
                   {:sys-time (util/->instant #inst "2021")

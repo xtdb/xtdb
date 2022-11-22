@@ -29,7 +29,7 @@
            (core2.temporal ITemporalManager ITemporalTxIndexer)
            (core2.vector IIndirectVector IIndirectRelation IVectorWriter)
            (core2.watermark IWatermarkManager)
-           java.io.Closeable
+           (java.io ByteArrayInputStream Closeable)
            java.lang.AutoCloseable
            java.nio.ByteBuffer
            (java.time Instant ZoneId)
@@ -37,8 +37,9 @@
            [java.util.concurrent CompletableFuture ConcurrentHashMap ConcurrentSkipListMap]
            [java.util.function Consumer Function]
            [org.apache.arrow.memory ArrowBuf BufferAllocator]
-           [org.apache.arrow.vector BigIntVector BitVector TimeStampMicroTZVector TimeStampVector ValueVector VarCharVector VectorLoader VectorSchemaRoot VectorUnloader]
+           [org.apache.arrow.vector BigIntVector BitVector TimeStampMicroTZVector TimeStampVector ValueVector VarBinaryVector VarCharVector VectorLoader VectorSchemaRoot VectorUnloader]
            [org.apache.arrow.vector.complex DenseUnionVector ListVector StructVector]
+           [org.apache.arrow.vector.ipc ArrowStreamReader]
            org.roaringbitmap.longlong.Roaring64Bitmap
            org.roaringbitmap.RoaringBitmap))
 
@@ -664,61 +665,60 @@
             (.logEvict log-op-idxer iid)
             (.indexEvict temporal-idxer iid)))))))
 
-(defn- ->sql-indexer ^core2.indexer.OpIndexer [^IMetadataManager metadata-mgr, ^IBufferPool buffer-pool, ^IInternalIdManager iid-mgr
+(defn- ->sql-indexer ^core2.indexer.OpIndexer [^BufferAllocator allocator, ^IMetadataManager metadata-mgr, ^IBufferPool buffer-pool, ^IInternalIdManager iid-mgr
                                                ^ILogOpIndexer log-op-idxer, ^ITemporalTxIndexer temporal-idxer, ^IDocumentIndexer doc-idxer
                                                ^DenseUnionVector tx-ops-vec, ^ScanSource scan-src
                                                {:keys [app-time-as-of-now?] :as tx-opts}]
   (let [sql-vec (.getStruct tx-ops-vec 3)
         ^VarCharVector query-vec (.getChild sql-vec "query" VarCharVector)
-        ^ListVector param-rows-vec (.getChild sql-vec "param-rows" ListVector)
+        ^VarBinaryVector params-vec (.getChild sql-vec "params" VarBinaryVector)
         insert-idxer (->sql-insert-indexer iid-mgr log-op-idxer temporal-idxer doc-idxer tx-opts)
         update-idxer (->sql-update-indexer metadata-mgr buffer-pool log-op-idxer temporal-idxer doc-idxer)
         delete-idxer (->sql-delete-indexer log-op-idxer temporal-idxer doc-idxer)
         erase-idxer (->sql-erase-indexer log-op-idxer temporal-idxer)]
     (reify OpIndexer
       (indexOp [_ tx-op-idx]
-        (let [sql-offset (.getOffset tx-ops-vec tx-op-idx)
-              param-rows (if-not (.isEmpty param-rows-vec sql-offset)
-                           (t/get-object param-rows-vec sql-offset)
-                           [{}])
-
-              query-str (t/get-object query-vec sql-offset)]
-
+        (let [sql-offset (.getOffset tx-ops-vec tx-op-idx)]
           (letfn [(index-op [^SqlOpIndexer op-idxer query-opts inner-query]
                     (let [pq (op/prepare-ra inner-query)]
-                      (doseq [param-row param-rows]
-                        ;; TODO pass param-row directly as Arrow data
-                        (with-open [^IIndirectRelation
-                                    param-rel (iv/->indirect-rel (for [[k v] param-row]
-                                                                   (-> (vw/open-vec (.getAllocator tx-ops-vec) k [v])
-                                                                       (iv/->direct-vec)))
-                                                                 1)
+                      (letfn [(index-op* [^IIndirectRelation params]
+                                (with-open [res (-> (.bind pq (into (select-keys tx-opts [:current-time :default-tz])
+                                                                    {:srcs {'$ scan-src}, :params params}))
+                                                    (.openCursor))]
 
+                                  (.forEachRemaining res
+                                                     (reify Consumer
+                                                       (accept [_ in-rel]
+                                                         (.indexOp op-idxer in-rel query-opts))))))]
+                        (if (.isNull params-vec sql-offset)
+                          (index-op* nil)
+                          (with-open [is (ByteArrayInputStream. (.get params-vec sql-offset))
+                                      asr (ArrowStreamReader. is allocator)]
+                            (let [root (.getVectorSchemaRoot asr)]
+                              (while (.loadNextBatch asr)
+                                (let [rel (iv/<-root root)
+                                      selection (int-array 1)]
+                                  (dotimes [idx (.rowCount rel)]
+                                    (aset selection 0 idx)
+                                    (index-op* (-> rel (iv/select selection))))))))))))]
 
-                                    res (-> (.bind pq (into (select-keys tx-opts [:current-time :default-tz])
-                                                            {:srcs {'$ scan-src}, :params param-rel}))
-                                            (.openCursor))]
+            (let [query-str (t/get-object query-vec sql-offset)]
 
-                          (.forEachRemaining res
-                                             (reify Consumer
-                                               (accept [_ in-rel]
-                                                 (.indexOp op-idxer in-rel query-opts))))))))]
+              ;; TODO handle error
+              (zmatch (sql/compile-query query-str {:app-time-as-of-now? app-time-as-of-now?})
+                [:insert query-opts inner-query]
+                (index-op insert-idxer query-opts inner-query)
 
-            ;; TODO handle error
-            (zmatch (sql/compile-query query-str {:app-time-as-of-now? app-time-as-of-now?})
-              [:insert query-opts inner-query]
-              (index-op insert-idxer query-opts inner-query)
+                [:update query-opts inner-query]
+                (index-op update-idxer query-opts inner-query)
 
-              [:update query-opts inner-query]
-              (index-op update-idxer query-opts inner-query)
+                [:delete query-opts inner-query]
+                (index-op delete-idxer query-opts inner-query)
 
-              [:delete query-opts inner-query]
-              (index-op delete-idxer query-opts inner-query)
+                [:erase query-opts inner-query]
+                (index-op erase-idxer query-opts inner-query)
 
-              [:erase query-opts inner-query]
-              (index-op erase-idxer query-opts inner-query)
-
-              (throw (UnsupportedOperationException. "sql query")))))))))
+                (throw (UnsupportedOperationException. "sql query"))))))))))
 
 (defn- live-cols->live-roots [live-cols]
   (->> live-cols
@@ -769,7 +769,8 @@
           put-idxer (->put-indexer iid-mgr log-op-idxer temporal-idxer doc-idxer tx-ops-vec sys-time)
           delete-idxer (->delete-indexer iid-mgr log-op-idxer temporal-idxer doc-idxer tx-ops-vec sys-time)
           evict-idxer (->evict-indexer iid-mgr log-op-idxer temporal-idxer doc-idxer tx-ops-vec)
-          sql-idxer (->sql-indexer metadata-mgr buffer-pool iid-mgr log-op-idxer temporal-idxer doc-idxer
+          sql-idxer (->sql-indexer allocator metadata-mgr buffer-pool iid-mgr
+                                   log-op-idxer temporal-idxer doc-idxer
                                    tx-ops-vec scan-src
                                    {:current-time sys-time, :app-time-as-of-now? app-time-as-of-now?, :default-tz default-tz})]
 

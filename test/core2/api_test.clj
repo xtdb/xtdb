@@ -220,8 +220,7 @@
 
 (deftest test-sql-insert-app-time-date-398
   (let [!tx (c2/submit-tx *node*
-                          [[:sql "INSERT INTO foo (id, application_time_start) VALUES ('foo', DATE '2018-01-01')"
-                             [[]]]])]
+                          [[:sql "INSERT INTO foo (id, application_time_start) VALUES ('foo', DATE '2018-01-01')"]])]
 
     (t/is (= (c2/map->TransactionInstant {:tx-id 0, :sys-time (util/->instant #inst "2020-01-01")}) @!tx))
 
@@ -245,8 +244,7 @@
                  (q !tx))))
 
       (let [!tx (c2/submit-tx *node*
-                              [[:sql "UPDATE foo SET version = 1 WHERE foo.id = 'foo'"
-                                [[]]]]
+                              [[:sql "UPDATE foo SET version = 1 WHERE foo.id = 'foo'"]]
                               {:app-time-as-of-now? true})]
         (t/is (= #{{:version 0, :application_time_start tt1, :application_time_end tt2}
                    {:version 1, :application_time_start tt2, :application_time_end eot}}
@@ -265,8 +263,7 @@
                    (q !tx)))))
 
       (let [!tx (c2/submit-tx *node*
-                              [[:sql "UPDATE foo SET version = 3 WHERE foo.id = 'foo'"
-                                [[]]]])]
+                              [[:sql "UPDATE foo SET version = 3 WHERE foo.id = 'foo'"]])]
 
         (t/is (= #{{:version 3, :application_time_start tt1, :application_time_end tt2}
                    {:version 2, :application_time_start tt2, :application_time_end tt2} ; hmm...
@@ -275,8 +272,7 @@
                  (q !tx))))
 
       (let [!tx (c2/submit-tx *node*
-                              [[:sql "DELETE FROM foo WHERE foo.id = 'foo'"
-                                [[]]]]
+                              [[:sql "DELETE FROM foo WHERE foo.id = 'foo'"]]
                               {:app-time-as-of-now? true})]
 
         (t/is (= #{{:version 3, :application_time_start tt1, :application_time_end tt2}
@@ -287,8 +283,7 @@
 
       (let [!tx (c2/submit-tx *node*
                               [[:sql "UPDATE foo FOR ALL APPLICATION_TIME
-                                     SET version = 4 WHERE foo.id = 'foo'"
-                                [[]]]]
+                                     SET version = 4 WHERE foo.id = 'foo'"]]
                               {:app-time-as-of-now? true})]
         (t/is (=
                #{{:version 4, :application_time_start tt1, :application_time_end tt2}
@@ -301,8 +296,7 @@
 
       (let [!tx (c2/submit-tx *node*
                               [[:sql "DELETE FROM foo FOR ALL APPLICATION_TIME
-                                     WHERE foo.id = 'foo'"
-                                [[]]]]
+                                     WHERE foo.id = 'foo'"]]
                               {:app-time-as-of-now? true})]
         (t/is (=
                #{{:version 2, :application_time_start tt2, :application_time_end tt2}
@@ -330,8 +324,7 @@
                              {:basis {:tx !tx}}))))
 
     (let [!tx (c2/submit-tx *node*
-                            [[:sql "UPDATE foo SET version = 1 WHERE foo.id = 'foo'"
-                              [[]]]]
+                            [[:sql "UPDATE foo SET version = 1 WHERE foo.id = 'foo'"]]
                             {:app-time-as-of-now? true})]
 
       (t/is (= [{:version 1, :application_time_start tt2, :application_time_end eot}]
@@ -371,8 +364,7 @@
                                [["foo", 0]
                                 ["bar", 0]]]])
           tx2 @(c2/submit-tx *node*
-                             [[:sql "UPDATE foo SET version = 1"
-                               [[]]]]
+                             [[:sql "UPDATE foo SET version = 1"]]
                              {:app-time-as-of-now? true})
           v0 {:version 0,
               :application_time_start (util/->zdt #inst "2020-01-01"),
@@ -397,8 +389,7 @@
                (q tx2)))
 
       (let [tx3 @(c2/submit-tx *node*
-                               [[:sql "ERASE FROM foo WHERE foo.id = 'foo'"
-                                 [[]]]])]
+                               [[:sql "ERASE FROM foo WHERE foo.id = 'foo'"]])]
         (t/is (= #{(assoc v0 :id "bar") (assoc v1 :id "bar")} (q tx3)))
         (t/is (= #{(assoc v0 :id "bar") (assoc v1 :id "bar")} (q tx2)))
 
