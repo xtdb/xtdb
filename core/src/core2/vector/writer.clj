@@ -517,18 +517,17 @@
     v))
 
 (defn open-vec
-  (^core2.vector.IIndirectVector [allocator col-name vs]
+  (^org.apache.arrow.vector.ValueVector [allocator col-name vs]
    (open-vec allocator col-name
              (->> (into #{} (map types/value->col-type) vs)
                   (apply types/merge-col-types))
              vs))
 
-  (^core2.vector.IIndirectVector [allocator col-name col-type vs]
+  (^org.apache.arrow.vector.ValueVector [allocator col-name col-type vs]
    (let [res (-> (types/col-type->field col-name col-type)
                  (.createVector allocator))]
      (try
-       (write-vec! res vs)
-       (iv/->direct-vec res)
+       (doto res (write-vec! vs))
        (catch Throwable e
          (.close res)
          (throw e))))))

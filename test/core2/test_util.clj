@@ -105,10 +105,10 @@
 
 (defn open-vec
   (^org.apache.arrow.vector.ValueVector [col-name vs]
-   (.getVector (vw/open-vec *allocator* col-name vs)))
+   (vw/open-vec *allocator* col-name vs))
 
   (^org.apache.arrow.vector.ValueVector [col-name col-type vs]
-   (.getVector (vw/open-vec *allocator* col-name col-type vs))))
+   (vw/open-vec *allocator* col-name col-type vs)))
 
 (defn open-rel ^core2.vector.IIndirectRelation [vecs]
   (iv/->indirect-rel (map iv/->direct-vec vecs)))

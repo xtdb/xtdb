@@ -96,7 +96,8 @@
             (fn [db]
               (let [^AutoCloseable
                     params (iv/->indirect-rel (for [[k v] params]
-                                                (vw/open-vec allocator (symbol k) [v]))
+                                                (-> (vw/open-vec allocator (symbol k) [v])
+                                                    (iv/->direct-vec)))
                                               1)]
                 (try
                   (-> (.bind pq {:srcs {'$ db}, :params params, :table-args table-args
@@ -119,7 +120,8 @@
               (let [^AutoCloseable
                     params (iv/->indirect-rel (->> (:? query-opts)
                                                    (sequence (map-indexed (fn [idx v]
-                                                                            (vw/open-vec allocator (symbol (str "?_" idx)) [v])))))
+                                                                            (-> (vw/open-vec allocator (symbol (str "?_" idx)) [v])
+                                                                                (iv/->direct-vec))))))
                                               1)]
                 (try
                   (-> (.bind pq {:srcs {'$ db}, :params params

@@ -156,7 +156,8 @@
                                        ;; NOTE we assume there's only one param row for read queries - valid?
                                        (let [new-params (-> (first (flight-stream->rows flight-stream))
                                                             (->> (sequence (map-indexed (fn [idx v]
-                                                                                          (vw/open-vec allocator (symbol (str "?_" idx)) [v])))))
+                                                                                          (-> (vw/open-vec allocator (symbol (str "?_" idx)) [v])
+                                                                                              (iv/->direct-vec))))))
                                                             (iv/->indirect-rel 1))]
                                          (try
                                            (doto ps

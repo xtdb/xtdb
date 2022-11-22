@@ -116,7 +116,8 @@
                                (reduce (fn [^Roaring64Bitmap l, ^Roaring64Bitmap r]
                                          (doto l (.and r))))
                                (.toArray))]
-              (with-open [row-id-col (vw/open-vec allocator "_row-id" :i64 row-ids)]
+              (with-open [row-id-col (-> (vw/open-vec allocator "_row-id" :i64 row-ids)
+                                         (iv/->direct-vec))]
                 (let [aligned-roots (align/align-vectors (.values roots) (iv/->indirect-rel [row-id-col]))
                       id-col (.vectorForName aligned-roots "id")
                       id-vec (.getVector id-col)
@@ -689,7 +690,8 @@
                         ;; TODO pass param-row directly as Arrow data
                         (with-open [^IIndirectRelation
                                     param-rel (iv/->indirect-rel (for [[k v] param-row]
-                                                                   (vw/open-vec (.getAllocator tx-ops-vec) k [v]))
+                                                                   (-> (vw/open-vec (.getAllocator tx-ops-vec) k [v])
+                                                                       (iv/->direct-vec)))
                                                                  1)
 
 
