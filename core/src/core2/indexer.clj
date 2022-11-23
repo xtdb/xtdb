@@ -1,6 +1,5 @@
 (ns core2.indexer
   (:require [clojure.tools.logging :as log]
-            [core2.align :as align]
             [core2.api :as c2]
             [core2.blocks :as blocks]
             [core2.bloom :as bloom]
@@ -662,8 +661,8 @@
                                          :when (not (temporal/temporal-column? (.getName in-col)))]
                                      (content-row-copier doc-idxer table in-col)))
               id-col (.vectorForName in-rel "id")
-              app-time-start-rdr (some-> (.vectorForName in-rel "application_time_start") (.monoReader))
-              app-time-end-rdr (some-> (.vectorForName in-rel "application_time_end") (.monoReader))]
+              app-time-start-rdr (some-> (.vectorForName in-rel "application_time_start") (.monoReader t/temporal-col-type))
+              app-time-end-rdr (some-> (.vectorForName in-rel "application_time_end") (.monoReader t/temporal-col-type))]
           (dotimes [idx row-count]
             (let [row-id (.nextRowId doc-idxer)]
               (doseq [^ContentRowCopier content-row-copier content-row-copiers]
@@ -695,14 +694,14 @@
     (indexOp [_ in-rel {:keys [table]}]
       (let [row-count (.rowCount in-rel)
             content-row-copiers (->> (for [^IIndirectVector in-col in-rel
-                                           :let [col-name (.getName in-col)]
-                                           :when (not (temporal/temporal-column? col-name))]
-                                       [col-name (content-row-copier doc-idxer table in-col)])
-                                     (into {}))
-            iid-rdr (.monoReader (.vectorForName in-rel "_iid"))
-            row-id-rdr (.monoReader (.vectorForName in-rel "_row-id"))
-            app-time-start-rdr (.monoReader (.vectorForName in-rel "application_time_start"))
-            app-time-end-rdr (.monoReader (.vectorForName in-rel "application_time_end"))]
+                                       :let [col-name (.getName in-col)]
+                                       :when (not (temporal/temporal-column? col-name))]
+                                   [col-name (content-row-copier doc-idxer table in-col)])
+                                 (into {}))
+            iid-rdr (.monoReader (.vectorForName in-rel "_iid") :i64)
+            row-id-rdr (.monoReader (.vectorForName in-rel "_row-id") :i64)
+            app-time-start-rdr (.monoReader (.vectorForName in-rel "application_time_start") t/temporal-col-type)
+            app-time-end-rdr (.monoReader (.vectorForName in-rel "application_time_end") t/temporal-col-type)]
         (dotimes [idx row-count]
           (let [old-row-id (.readLong row-id-rdr idx)
                 new-row-id (.nextRowId doc-idxer)
@@ -747,9 +746,9 @@
   (reify SqlOpIndexer
     (indexOp [_ in-rel _query-opts]
       (let [row-count (.rowCount in-rel)
-            iid-rdr (.monoReader (.vectorForName in-rel "_iid"))
-            app-time-start-rdr (.monoReader (.vectorForName in-rel "application_time_start"))
-            app-time-end-rdr (.monoReader (.vectorForName in-rel "application_time_end"))]
+            iid-rdr (.monoReader (.vectorForName in-rel "_iid") :i64)
+            app-time-start-rdr (.monoReader (.vectorForName in-rel "application_time_start") t/temporal-col-type)
+            app-time-end-rdr (.monoReader (.vectorForName in-rel "application_time_end") t/temporal-col-type)]
         (dotimes [idx row-count]
           (let [row-id (.nextRowId doc-idxer)
                 iid (.readLong iid-rdr idx)
@@ -762,7 +761,7 @@
   (reify SqlOpIndexer
     (indexOp [_ in-rel _query-opts]
       (let [row-count (.rowCount in-rel)
-            iid-rdr (.monoReader (.vectorForName in-rel "_iid"))]
+            iid-rdr (.monoReader (.vectorForName in-rel "_iid") :i64)]
         (dotimes [idx row-count]
           (let [iid (.readLong iid-rdr idx)]
             (.logEvict log-op-idxer iid)

@@ -6,6 +6,8 @@ import java.nio.ByteBuffer;
 
 public interface IMonoVectorReader {
 
+    int valueCount();
+
     boolean readBoolean(int idx);
     byte readByte(int idx);
     short readShort(int idx);

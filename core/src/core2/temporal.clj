@@ -130,12 +130,10 @@
                               ^long appTimeStart, ^long appTimeEnd
                               ^boolean newEntity, ^boolean tombstone])
 
-(def temporal-col-type [:timestamp-tz :micro "UTC"])
-
 (def temporal-col-types
   {"_iid" :i64, "_row-id" :i64
-   "system_time_start" temporal-col-type, "system_time_end" temporal-col-type
-   "application_time_start" temporal-col-type, "application_time_end" temporal-col-type})
+   "system_time_start" types/temporal-col-type, "system_time_end" types/temporal-col-type
+   "application_time_start" types/temporal-col-type, "application_time_end" types/temporal-col-type})
 
 (defn temporal-column? [col-name]
   (contains? temporal-col-types (name col-name)))
@@ -281,9 +279,9 @@
     (try
       (doseq [col-name columns]
         (let [col-idx (->temporal-column-idx col-name)
-              ^BaseFixedWidthVector temporal-vec (-> (types/col-type->field col-name (get temporal-col-types col-name))
-                                                     (.createVector allocator))
-              temporal-vec-wtr (vec/->mono-writer temporal-vec)]
+              col-type (types/col-type->field col-name (get temporal-col-types col-name))
+              ^BaseFixedWidthVector temporal-vec (.createVector col-type allocator)
+              temporal-vec-wtr (vec/->mono-writer temporal-vec col-type)]
           (.allocateNew temporal-vec value-count)
           (dotimes [n value-count]
             (let [^longs coordinate (aget coordinates n)]

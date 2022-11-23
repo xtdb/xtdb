@@ -1,7 +1,5 @@
 package core2.vector;
 
-import java.nio.ByteBuffer;
-
 public interface IPolyValueWriter {
     void writeNull(byte typeId, Void nullValue);
 
@@ -15,4 +13,11 @@ public interface IPolyValueWriter {
     void writeDouble(byte typeId, double doubleValue);
 
     void writeObject(byte typeId, Object objectValue);
+
+    IMonoVectorWriter writeMonoListElements(byte typeId, int elementCount);
+    IPolyVectorWriter writePolyListElements(byte typeId, int elementCount);
+
+    void writeStructEntries(byte typeId);
+    IMonoValueWriter monoStructFieldWriter(byte typeId, String fieldName);
+    IPolyValueWriter polyStructFieldWriter(byte typeId, String fieldName);
 }

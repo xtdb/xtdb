@@ -211,7 +211,7 @@
                                ~(-> expr/rel-sym (expr/with-tag IIndirectRelation))
                                ~(-> group-mapping-sym (expr/with-tag IntVector))]
                             (let [~acc-col-sym (iv/->direct-vec ~acc-sym)
-                                  ~acc-writer-sym (vec/->poly-writer ~acc-sym ~ordered-col-types)
+                                  ~acc-writer-sym (vec/->poly-writer ~acc-sym ~return-type)
                                   ~@(expr/batch-bindings emitted-expr)]
                               (dotimes [~expr/idx-sym (.rowCount ~expr/rel-sym)]
                                 (let [~group-idx-sym (.get ~group-mapping-sym ~expr/idx-sym)]

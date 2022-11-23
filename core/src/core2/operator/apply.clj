@@ -48,11 +48,14 @@
                                        (reify Consumer
                                          (accept [_ dep-rel]
                                            (let [match-vec (.vectorForName ^IIndirectRelation dep-rel "_expr")
-                                                 match-rdr (.polyReader match-vec [:null :bool])]
-                                             (dotimes [idx (.getValueCount match-vec)]
-                                               (case (.read match-rdr idx)
-                                                 0 (aset !match 0 (max (aget !match 0) 0))
-                                                 1 (aset !match 0 (max (aget !match 0) (if (.readBoolean match-rdr) 1 -1)))))))))))
+                                                 match-rdr (.polyReader match-vec [:union #{:null :bool}])]
+                                             ;; HACK: if the iteration order changes I'd like to know about it :)
+                                             (case (vec #{:null :bool})
+                                               [:null :bool]
+                                               (dotimes [idx (.getValueCount match-vec)]
+                                                 (case (.read match-rdr idx)
+                                                   0 (aset !match 0 (max (aget !match 0) 0))
+                                                   1 (aset !match 0 (max (aget !match 0) (if (.readBoolean match-rdr) 1 -1))))))))))))
               (let [match (aget !match 0)]
                 (.startValue out-writer)
                 (if (zero? match)

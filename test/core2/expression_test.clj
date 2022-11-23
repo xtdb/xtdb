@@ -1382,7 +1382,7 @@
               :res-type [:struct '{x :f64, y :f64}]}
              (run-projection rel '{:x x, :y y})))
 
-    (t/is (= {:res [3.4 8.25], :res-type [:union #{:null :f64}]}
+    (t/is (= {:res [3.4 8.25], :res-type :f64}
              (run-projection rel '(. {:x x, :y y} y))))
 
     (t/is (= {:res [nil nil], :res-type :null}
@@ -1396,12 +1396,24 @@
              (run-projection rel '{:x {:y y}})))
 
     (t/is (= {:res [{:y 1.2} {:y 3.4}]
-              :res-type [:union #{:null [:struct '{y :f64}]}]}
+              :res-type [:struct '{y :f64}]}
              (run-projection rel '(. {:x {:y y}} x))))
 
     (t/is (= {:res [1.2 3.4]
-              :res-type [:union #{:null :f64}]}
+              :res-type :f64}
              (run-projection rel '(.. {:x {:y y}} x y))))))
+
+(t/deftest test-struct-equals
+  (t/is (= true (project1 '(= {} {}) {})))
+  (t/is (= false (project1 '(= {:a 1, :b 2} {:a 1, :b 2, :c 3}) {})))
+
+  (t/is (= true (project1 '(= {:a 1, :b 2, :c 3} {:a 1, :b 2, :c 3}) {})))
+  (t/is (= false (project1 '(= {:a 1, :b 2, :c 4} {:a 1, :b 2, :c 3}) {})))
+  (t/is (= true (project1 '(= {:a 1, :b 2, :c 3} {:a 1, :b 2, :c 3.0}) {})))
+  (t/is (= false (project1 '(= {:a 1, :b 2, :c 2.5} {:a 1, :b 2, :c 3.0}) {})))
+
+  (t/is (= nil (project1 '(= {:a 1, :b 2, :c nil} {:a 1, :b 2, :c 3.0}) {})))
+  (t/is (= false (project1 '(= {:a 1, :b 3, :c nil} {:a 1, :b 2, :c 3.0}) {}))))
 
 (t/deftest test-lists
   (t/testing "simple lists"
@@ -1409,11 +1421,11 @@
                                   (tu/open-vec "y" [3.4 8.25])])]
       (t/is (= {:res [[1.2 3.4 10.0]
                       [3.4 8.25 10.0]]
-                :res-type [:fixed-size-list 3 :f64]}
+                :res-type [:list :f64]}
                (run-projection rel '[x y 10.0])))
 
       (t/is (= {:res [[1.2 3.4] [3.4 8.25]]
-                :res-type [:fixed-size-list 2 [:union #{:null :f64}]]}
+                :res-type [:list [:union #{:null :f64}]]}
                (run-projection rel '[(nth [x y] 0)
                                      (nth [x y] 1)])))))
 
@@ -1446,11 +1458,25 @@
   (t/testing "Nested expr"
     (t/is (= [42] (project1 '[(+ 1 a)] {:a 41})))))
 
+(t/deftest test-list-equals
+  (t/is (= true (project1 '(= [] []) {})))
+  (t/is (= false (project1 '(= [1 2] [1 2 3]) {})))
+
+  (t/is (= true (project1 '(= [1 2 3] [1 2 3]) {})))
+  (t/is (= false (project1 '(= [1 2 4] [1 2 3]) {})))
+  (t/is (= true (project1 '(= [1 2 3] [1 2 3.0]) {})))
+  (t/is (= false (project1 '(= [1 2 2.5] [1 2 3.0]) {})))
+
+  (t/is (= nil (project1 '(= [1 2 nil] [1 2 3.0]) {})))
+  (t/is (= false (project1 '(= [1 3 nil] [1 2 3.0]) {})))
+
+  (t/is (= true (project1 '(= [[1 2] [3 4]] [[1 2] [3 4]]) {}))))
+
 (t/deftest test-mixing-prims-with-non-prims
   (with-open [rel (tu/open-rel [(tu/open-vec "x" [{:a 42, :b 8}, {:a 12, :b 5}])])]
     (t/is (= {:res [{:a 42, :b 8, :sum 50}
                     {:a 12, :b 5, :sum 17}]
-              :res-type [:struct '{a [:union #{:null :i64}], b [:union #{:null :i64}] sum [:union #{:null :i64}]}]}
+              :res-type [:struct '{a :i64, b :i64, sum :i64}]}
              (run-projection rel '{:a (. x a)
                                    :b (. x b)
                                    :sum (+ (. x a) (. x b))})))))
@@ -1460,22 +1486,30 @@
                                              [{:a 42}
                                               {:a 12, :b 5}
                                               {:b 10}
-                                              {:a 15, :b 25}
+                                              {:a 15, :b 25.0}
                                               10.0])])]
     (t/is (= {:res [{:a 42}
                     {:a 12, :b 5}
                     {:b 10}
-                    {:a 15, :b 25}
+                    {:a 15, :b 25.0}
                     10.0]
               :res-type [:union #{[:struct '{a :i64}]
-                                  [:struct '{a :i64, b :i64}]
+                                  [:struct '{a :i64, b [:union #{:f64 :i64}]}]
                                   [:struct '{b :i64}]
                                   :f64}]}
              (run-projection rel 'x)))
 
     (t/is (= {:res [42 12 nil 15 nil]
               :res-type [:union #{:i64 :null}]}
-             (run-projection rel '(. x a))))))
+             (run-projection rel '(. x a))))
+
+    (t/is (= {:res [{:xa 42, :xb nil}
+                    {:xa 12, :xb 5}
+                    {:xa nil, :xb 10}
+                    {:xa 15, :xb 25.0}
+                    {:xa nil, :xb nil}],
+              :res-type '[:struct {xa [:union #{:null :i64}], xb [:union #{:f64 :null :i64}]}]}
+             (run-projection rel '{:xa (. x a), :xb (. x b)})))))
 
 (t/deftest test-current-times-111
   (let [inst (Instant/parse "2022-01-01T01:23:45.678912345Z")
