@@ -1614,6 +1614,9 @@
     [:join _ lhs rhs]
     (vec (mapcat relation-columns [lhs rhs]))
 
+    [:mega-join _ rels]
+    (vec (mapcat relation-columns rels))
+
     [:cross-join lhs rhs]
     (vec (mapcat relation-columns [lhs rhs]))
 
@@ -2428,6 +2431,43 @@
     (when (columns-in-both-relations? predicate lhs rhs)
       [:join [predicate] lhs rhs])))
 
+(defn- merge-joins-to-mega-join [z]
+  (r/zmatch z
+    [:join jc-1
+     [:join jc-2 r1 r2]
+     [:join jc-3 r3 r4]]
+    ;;=>
+    [:mega-join (vec (concat jc-1 jc-2 jc-3)) [r1 r2 r3 r4]]
+
+    [:join jc-1
+     [:join jc-2 r2 r3]
+     r1]
+    ;;=>
+    [:mega-join (vec (concat jc-1 jc-2)) [r1 r2 r3]]
+
+    [:join jc-1
+     r1
+     [:join jc-2 r2 r3]]
+    ;;=>
+    [:mega-join (vec (concat jc-1 jc-2)) [r1 r2 r3]]
+
+    [:join
+     jc
+     [:mega-join join-clauses
+      rels]
+     rhs]
+    ;;=>
+    [:mega-join (vec (concat join-clauses jc)) (conj rels rhs)]
+
+
+    [:join
+     jc
+     lhs
+     [:mega-join join-clauses
+      rels]]
+    ;;=>
+    [:mega-join (vec (concat join-clauses jc)) (conj rels lhs)]))
+
 (defn- promote-selection-to-join [z]
   (r/zmatch z
     [:select predicate
@@ -3119,6 +3159,7 @@
                    %))
                (r/innermost (r/mono-tp (instrument-rules optimise-plan-rules)))
                (r/topdown (r/adhoc-tp r/id-tp (instrument-rules [#'rewrite-equals-predicates-in-join-as-equi-join-map])))
+               (r/innermost (r/mono-tp (instrument-rules [#'merge-joins-to-mega-join])))
                (r/node)
                (add-projection-fn))
 

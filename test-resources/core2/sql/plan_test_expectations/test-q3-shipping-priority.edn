@@ -11,10 +11,20 @@
      [x11 x5 x6 {x18 (sum x17)}]
      [:map
       [{x17 (* x12 (- 1 x13))}]
-      [:join
-       [{x8 x11}]
-       [:join
-        [{x2 x7}]
+      [:mega-join
+       ({x8 x11} {x2 x7})
+       [[:rename
+         {l_orderkey x11,
+          l_extendedprice x12,
+          l_discount x13,
+          l_shipdate x14,
+          _table x15}
+         [:scan
+          [l_orderkey
+           l_extendedprice
+           l_discount
+           {l_shipdate (> l_shipdate #time/date "1995-03-15")}
+           {_table (= _table "lineitem")}]]]
         [:rename
          {c_mktsegment x1, c_custkey x2, _table x3}
          [:scan
@@ -32,16 +42,4 @@
            o_shippriority
            o_custkey
            o_orderkey
-           {_table (= _table "orders")}]]]]
-       [:rename
-        {l_orderkey x11,
-         l_extendedprice x12,
-         l_discount x13,
-         l_shipdate x14,
-         _table x15}
-        [:scan
-         [l_orderkey
-          l_extendedprice
-          l_discount
-          {l_shipdate (> l_shipdate #time/date "1995-03-15")}
-          {_table (= _table "lineitem")}]]]]]]]]]]
+           {_table (= _table "orders")}]]]]]]]]]]]

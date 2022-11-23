@@ -9,64 +9,60 @@
     [x1 {x35 (count x34)}]
     [:map
      [{x34 1}]
-     [:join
-      [{x3 x16}]
-      [:join
-       [{x7 x12}]
-       [:join
-        [{x2 x6}]
-        [:rename
-         {s_name x1, s_suppkey x2, s_nationkey x3, _table x4}
-         [:scan
-          [s_name
-           s_suppkey
-           s_nationkey
-           {_table (= _table "supplier")}]]]
-        [:anti-join
-         [(<> x27 x6) {x7 x26}]
-         [:semi-join
-          [(<> x21 x6) {x7 x20}]
-          [:rename
-           {l_suppkey x6,
-            l_orderkey x7,
-            l_receiptdate x8,
-            l_commitdate x9,
-            _table x10}
-           [:select
-            (> l_receiptdate l_commitdate)
-            [:scan
-             [l_suppkey
-              l_orderkey
-              l_receiptdate
-              l_commitdate
-              {_table (= _table "lineitem")}]]]]
-          [:rename
-           {l_orderkey x20, l_suppkey x21, _table x22}
-           [:scan
-            [l_orderkey l_suppkey {_table (= _table "lineitem")}]]]]
-         [:rename
-          {l_orderkey x26,
-           l_suppkey x27,
-           l_receiptdate x28,
-           l_commitdate x29,
-           _table x30}
-          [:select
-           (> l_receiptdate l_commitdate)
-           [:scan
-            [l_orderkey
-             l_suppkey
-             l_receiptdate
-             l_commitdate
-             {_table (= _table "lineitem")}]]]]]]
-       [:rename
+     [:mega-join
+      ({x7 x12} {x2 x6} {x3 x16})
+      [[:rename
         {o_orderkey x12, o_orderstatus x13, _table x14}
         [:scan
          [o_orderkey
           {o_orderstatus (= o_orderstatus "F")}
-          {_table (= _table "orders")}]]]]
-      [:rename
-       {n_nationkey x16, n_name x17, _table x18}
-       [:scan
-        [n_nationkey
-         {n_name (= n_name "SAUDI ARABIA")}
-         {_table (= _table "nation")}]]]]]]]]]
+          {_table (= _table "orders")}]]]
+       [:rename
+        {s_name x1, s_suppkey x2, s_nationkey x3, _table x4}
+        [:scan
+         [s_name
+          s_suppkey
+          s_nationkey
+          {_table (= _table "supplier")}]]]
+       [:anti-join
+        [(<> x27 x6) {x7 x26}]
+        [:semi-join
+         [(<> x21 x6) {x7 x20}]
+         [:rename
+          {l_suppkey x6,
+           l_orderkey x7,
+           l_receiptdate x8,
+           l_commitdate x9,
+           _table x10}
+          [:select
+           (> l_receiptdate l_commitdate)
+           [:scan
+            [l_suppkey
+             l_orderkey
+             l_receiptdate
+             l_commitdate
+             {_table (= _table "lineitem")}]]]]
+         [:rename
+          {l_orderkey x20, l_suppkey x21, _table x22}
+          [:scan
+           [l_orderkey l_suppkey {_table (= _table "lineitem")}]]]]
+        [:rename
+         {l_orderkey x26,
+          l_suppkey x27,
+          l_receiptdate x28,
+          l_commitdate x29,
+          _table x30}
+         [:select
+          (> l_receiptdate l_commitdate)
+          [:scan
+           [l_orderkey
+            l_suppkey
+            l_receiptdate
+            l_commitdate
+            {_table (= _table "lineitem")}]]]]]
+       [:rename
+        {n_nationkey x16, n_name x17, _table x18}
+        [:scan
+         [n_nationkey
+          {n_name (= n_name "SAUDI ARABIA")}
+          {_table (= _table "nation")}]]]]]]]]]]

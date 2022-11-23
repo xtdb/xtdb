@@ -1,6 +1,7 @@
 (ns core2.operator.join
   (:require [clojure.set :as set]
             [clojure.spec.alpha :as s]
+            [clojure.string :as str]
             [core2.bloom :as bloom]
             [core2.error :as err]
             [core2.expression :as expr]
@@ -79,6 +80,11 @@
          :left ::lp/ra-expression
          :right ::lp/ra-expression))
 
+(defmethod lp/ra-expr :mega-join [_]
+  (s/cat :op #{:mega-join}
+         :conditions ::join-condition
+         :relations (s/coll-of ::lp/ra-expression)))
+
 (set! *unchecked-math* :warn-on-boxed)
 
 (defn- cross-product ^core2.vector.IIndirectRelation [^IIndirectRelation left-rel, ^IIndirectRelation right-rel]
@@ -139,7 +145,7 @@
     (util/try-close right-cursor)))
 
 (defmethod lp/emit-expr :cross-join [{:keys [left right]} args]
-  (lp/binary-expr left right args
+  (lp/binary-expr (lp/emit-expr left args) (lp/emit-expr right args)
     (fn [left-col-types right-col-types]
       {:col-types (merge left-col-types right-col-types)
        :->cursor (fn [{:keys [allocator]} left-cursor right-cursor]
@@ -372,15 +378,15 @@
        (into {} (map (juxt #(.getColumnName ^IProjectionSpec %)
                            #(.getColumnType ^IProjectionSpec %))))))
 
-(defn- emit-join-expr {:style/indent 2} [{:keys [condition left right]} {:keys [param-types] :as args} f]
-  (lp/binary-expr left right args
+(defn- emit-join-expr {:style/indent 2} [{:keys [condition left right]} {:keys [param-types] :as _args} f]
+  (lp/binary-expr left right
     (fn [left-col-types right-col-types]
       (let [{equis :equi-condition, thetas :pred-expr} (group-by first condition)
 
             theta-expr (when-let [theta-exprs (seq (map second thetas))]
                          (list* 'and theta-exprs))
 
-            equi-specs (->> (vals equis)
+            equi-specs (->> (map last equis)
                             (into [] (map-indexed (fn [idx condition]
                                                     (equi-spec idx condition left-col-types right-col-types param-types)))))
 
@@ -417,24 +423,37 @@
 (defn- ->pushdown-blooms [key-col-names]
   (vec (repeatedly (count key-col-names) #(MutableRoaringBitmap.))))
 
-(defmethod lp/emit-expr :join [join-expr {:keys [param-types] :as args}]
+(defn emit-join-children [join-expr args]
+  (-> join-expr
+      (update :left #(lp/emit-expr % args))
+      (update :right #(lp/emit-expr % args))) )
+
+(defn emit-join-expr-and-children {:style/indent 2} [join-expr args f]
+  (emit-join-expr
+    (emit-join-children join-expr args)
+    args f))
+
+(defn emit-inner-join-expr
+  [join-expr {:keys [param-types] :as args}]
   (emit-join-expr join-expr args
-    (fn [{:keys [left-col-types right-col-types left-key-col-names right-key-col-names theta-expr]}]
-      {:col-types (merge-with types/merge-col-types left-col-types right-col-types)
-       :->cursor (fn [{:keys [allocator params]} left-cursor right-cursor]
-                   (JoinCursor. allocator left-cursor right-cursor
-                                (emap/->relation-map allocator {:build-col-types left-col-types
-                                                                :build-key-col-names left-key-col-names
-                                                                :probe-col-types right-col-types
-                                                                :probe-key-col-names right-key-col-names
-                                                                :store-full-build-rel? true
-                                                                :theta-expr theta-expr
-                                                                :param-types param-types
-                                                                :params params})
-                                nil (->pushdown-blooms right-key-col-names) ::inner-join))})))
+                  (fn [{:keys [left-col-types right-col-types left-key-col-names right-key-col-names theta-expr]}]
+                    {:col-types (merge-with types/merge-col-types left-col-types right-col-types)
+                     :->cursor (fn [{:keys [allocator params]} left-cursor right-cursor]
+                                 (JoinCursor. allocator left-cursor right-cursor
+                                              (emap/->relation-map allocator {:build-col-types left-col-types
+                                                                              :build-key-col-names left-key-col-names
+                                                                              :probe-col-types right-col-types
+                                                                              :probe-key-col-names right-key-col-names
+                                                                              :store-full-build-rel? true
+                                                                              :theta-expr theta-expr
+                                                                              :param-types param-types
+                                                                              :params params})
+                                              nil (->pushdown-blooms right-key-col-names) ::inner-join))})))
+(defmethod lp/emit-expr :join [join-expr args]
+  (emit-inner-join-expr (emit-join-children join-expr args) args))
 
 (defmethod lp/emit-expr :left-outer-join [join-expr {:keys [param-types] :as args}]
-  (emit-join-expr join-expr args
+  (emit-join-expr-and-children join-expr args
     (fn [{:keys [left-col-types right-col-types left-key-col-names right-key-col-names theta-expr]}]
       {:col-types (merge-with types/merge-col-types left-col-types (-> right-col-types types/with-nullable-cols))
        :->cursor (fn [{:keys [allocator params]}, left-cursor right-cursor]
@@ -451,7 +470,7 @@
                                 nil nil ::left-outer-join))})))
 
 (defmethod lp/emit-expr :full-outer-join [join-expr {:keys [param-types] :as args}]
-  (emit-join-expr join-expr args
+  (emit-join-expr-and-children join-expr args
     (fn [{:keys [left-col-types right-col-types left-key-col-names right-key-col-names theta-expr]}]
       {:col-types (merge-with types/merge-col-types (-> left-col-types types/with-nullable-cols) (-> right-col-types types/with-nullable-cols))
        :->cursor (fn [{:keys [allocator params]}, left-cursor right-cursor]
@@ -468,7 +487,7 @@
                                 (RoaringBitmap.) nil ::full-outer-join))})))
 
 (defmethod lp/emit-expr :semi-join [join-expr {:keys [param-types] :as args}]
-  (emit-join-expr join-expr args
+  (emit-join-expr-and-children join-expr args
     (fn [{:keys [left-col-types right-col-types left-key-col-names right-key-col-names theta-expr]}]
       {:col-types left-col-types
        :->cursor (fn [{:keys [allocator params]} left-cursor right-cursor]
@@ -484,7 +503,7 @@
                                 nil (->pushdown-blooms right-key-col-names) ::semi-join))})))
 
 (defmethod lp/emit-expr :anti-join [join-expr {:keys [param-types] :as args}]
-  (emit-join-expr join-expr args
+  (emit-join-expr-and-children join-expr args
     (fn [{:keys [left-col-types right-col-types left-key-col-names right-key-col-names theta-expr]}]
       {:col-types left-col-types
        :->cursor (fn [{:keys [allocator params]} left-cursor right-cursor]
@@ -509,7 +528,7 @@
 
 (defmethod lp/emit-expr :mark-join [{:keys [mark-spec] :as join-expr} {:keys [param-types] :as args}]
   (let [[mark-col-name mark-condition] (first mark-spec)]
-    (emit-join-expr (assoc join-expr :condition mark-condition) args
+    (emit-join-expr-and-children (assoc join-expr :condition mark-condition) args
       (fn [{:keys [left-col-types right-col-types left-key-col-names right-key-col-names theta-expr]}]
         {:col-types (assoc left-col-types mark-col-name [:union #{:bool :null}])
 
@@ -557,7 +576,7 @@
                  (util/try-close probe-cursor)))))}))))
 
 (defmethod lp/emit-expr :single-join [join-expr {:keys [param-types] :as args}]
-  (emit-join-expr join-expr args
+  (emit-join-expr-and-children join-expr args
     (fn [{:keys [left-col-types right-col-types left-key-col-names right-key-col-names theta-expr]}]
       {:col-types (merge-with types/merge-col-types left-col-types (-> right-col-types types/with-nullable-cols))
 
@@ -573,3 +592,107 @@
                                                                 :param-types param-types
                                                                 :params params})
                                 nil nil ::single-join))})))
+(defn expr-symbols [expr]
+  (set (for [x (flatten (if (coll? expr)
+                          (seq expr)
+                          [expr]))
+             :when (and (symbol? x)
+                        (str/starts-with? (str x) "x"))]
+         x)))
+
+(defn columns [relation]
+  (set (keys (:col-types relation))))
+
+(defn adjust-equi-condition
+  "Swaps the sides of equi conditions to match location of cols in plan"
+  [{:keys [condition] :as join-condition}]
+  (if (= (first condition) :equi-condition)
+    (let [equi-join-cond (last condition)
+          lhs (first (keys equi-join-cond))
+          rhs (first (vals equi-join-cond))
+          lhs-cols (expr-symbols lhs)]
+      (if (= (:cols-from-current-rel join-condition) lhs-cols)
+        condition
+        [:equi-condition {rhs lhs}])) condition))
+
+(defn find-join-conditions-which-contain-cols-from-plan
+  "Returns join conditions which reference at least one col from the current plan"
+  [plan conditions]
+  (filter
+    (comp seq :cols-from-current-rel)
+    (map
+      (fn [condition]
+        (let [cols-from-current-rel (set/intersection (columns plan) (:cols condition))]
+          (assoc
+            condition
+            :cols-from-current-rel cols-from-current-rel
+            :other-cols (set/difference (:cols condition) cols-from-current-rel))))
+      conditions)))
+
+(defn match-relations-to-potential-join-clauses
+  "Attaches conditions to relations that satisfy the remaining columns not present in the existing plan"
+  [rels conditions]
+  (keep
+    (fn [rel]
+      (when-let [valid-join-conditions-for-rel
+                 (->>
+                   conditions
+                   (map
+                     (fn [condition]
+                       (assoc
+                         condition
+                         :all-cols-present?
+                         (-> condition
+                             (:other-cols)
+                             (set/difference (columns rel))
+                             (empty?)))))
+                   (filter #(-> % :all-cols-present?))
+                   (not-empty))]
+        (assoc rel :valid-join-conditions-for-rel valid-join-conditions-for-rel)))
+    rels))
+
+(defn remove-joined-relation [join-candidate rels]
+  (remove #(= (:relation-id %) (:relation-id join-candidate)) rels))
+
+(defn remove-used-join-conditions [join-candidate conditions]
+  (remove
+    #(contains?
+       (set
+         (map
+           :condition-id
+           (:valid-join-conditions-for-rel join-candidate)))
+       (:condition-id %))
+    conditions))
+
+(defmethod lp/emit-expr :mega-join [{:keys [conditions relations]} args]
+  (let [conditions-with-cols (->> conditions
+                                  (map (fn [condition]
+                                         {:cols (-> condition last expr-symbols)
+                                          :condition condition}))
+                                  (map-indexed #(assoc %2 :condition-id %1)))
+        child-relations (->> relations
+                             (map #(lp/emit-expr % args))
+                             (map-indexed #(assoc %2 :relation-id %1)))]
+    (loop [plan (first child-relations)
+           rels (rest child-relations)
+           conditions conditions-with-cols]
+      (if (seq rels)
+        (let [join-candidate (->> conditions
+                                  (find-join-conditions-which-contain-cols-from-plan plan)
+                                  (match-relations-to-potential-join-clauses rels)
+                                  (first))
+              join-conditions (mapv
+                                adjust-equi-condition
+                                (:valid-join-conditions-for-rel join-candidate))]
+          (if (seq join-candidate)
+            (recur
+              (emit-inner-join-expr
+                {:condition join-conditions
+                 :left plan
+                 :right join-candidate}
+                args)
+              (remove-joined-relation join-candidate rels)
+              (remove-used-join-conditions join-candidate conditions))
+            (throw (err/runtime-err :core2.mega-join/plan-error
+                                    {::err/message "Unable to find join candidate"}))))
+        plan))))

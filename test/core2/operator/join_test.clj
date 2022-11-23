@@ -774,3 +774,50 @@
              (tu/query-ra '[:single-join [{x y}]
                             [::tu/blocks [[{:x 0}]]]
                             [::tu/blocks {y :i64} []]])))))
+
+(t/deftest test-mega-join
+  (t/is (= [{:x1 1, :x2 1, :x4 3, :x3 1}]
+           (tu/query-ra
+             '[:mega-join
+               [{x1 x2}
+                (> (+ x1 10) (+ (+ x3 2) x4))
+                {x1 x3}]
+               [[::tu/blocks [[{:x1 1}]]]
+                [::tu/blocks [[{:x2 1}]]]
+                [::tu/blocks [[{:x3 1 :x4 3}]]]]])))
+
+  (t/testing "params"
+    (t/is (= [{:x1 1, :x2 1, :x4 3, :x3 1, :x5 2}]
+             (tu/query-ra
+               '[:apply :cross-join {x5 ?x2}
+                 [::tu/blocks [[{:x5 2}]]]
+                 [:mega-join
+                  [{x1 (- ?x2 1)}
+                   (> (+ x1 10) (+ (+ x3 2) x4))
+                   {x1 x3}]
+                  [[::tu/blocks [[{:x1 1}]]]
+                   [::tu/blocks [[{:x2 1}]]]
+                   [::tu/blocks [[{:x3 1 :x4 3}]]]]]]))))
+
+  (t/is (thrown-with-msg? RuntimeException
+                          #"Unable to find join candidate"
+                          (tu/query-ra
+                            '[:mega-join
+                             [{x1 x4}
+                              (> (+ x1 10) (+ (+ x3 2) x4))
+                              {x1 x3}]
+                             [[::tu/blocks [[{:x1 1}]]]
+                              [::tu/blocks [[{:x2 1}]]]
+                              [::tu/blocks [[{:x3 1 :x4 3}]]]]]))
+        "throws if unable to find a valid join order")
+
+  (t/testing "empty input"
+    (t/is (= []
+             (tu/query-ra
+               '[:mega-join
+                 [{x1 x2}
+                  (> (+ x1 10) (+ (+ x3 2) x4))
+                  {x1 x3}]
+                 [[::tu/blocks {x1 :i64} []]
+                  [::tu/blocks [[{:x2 1}]]]
+                  [::tu/blocks [[{:x3 1 :x4 3}]]]]])))))

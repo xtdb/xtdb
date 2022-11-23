@@ -157,7 +157,7 @@
             {:n_name "JAPAN"
              :revenue 660651.2424999999}
             {:n_name "INDONESIA"
-             :revenue 566379.5275999999}
+             :revenue 566379.5276}
             {:n_name "INDIA"
              :revenue 422874.6844}]
            (q (tpch-test/slurp-query 5)))))
@@ -182,7 +182,7 @@
             {:supp_nation "GERMANY"
              :cust_nation"FRANCE"
              :l_year 1996,
-             :revenue 379095.8854}]
+             :revenue 379095.88539999997}]
            (q (tpch-test/slurp-query 7)))))
 
 (t/deftest ^:integration test-q8-national-market-share

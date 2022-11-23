@@ -9,51 +9,45 @@
     [x26
      {x30 (extract "YEAR" x22)}
      {x31 (- (* x9 (- 1 x10)) (* x17 x11))}]
-    [:join
-     [{x6 x27}]
-     [:join
-      [{x14 x23}]
-      [:join
-       [{x12 x18} {x13 x19}]
-       [:join
-        [{x5 x12} {x1 x13}]
-        [:cross-join
-         [:rename
-          {p_partkey x1, p_name x2, _table x3}
-          [:scan
-           [p_partkey
-            {p_name (like p_name "%green%")}
-            {_table (= _table "part")}]]]
-         [:rename
-          {s_suppkey x5, s_nationkey x6, _table x7}
-          [:scan
-           [s_suppkey s_nationkey {_table (= _table "supplier")}]]]]
-        [:rename
-         {l_extendedprice x9,
-          l_discount x10,
-          l_quantity x11,
-          l_suppkey x12,
-          l_partkey x13,
-          l_orderkey x14,
-          _table x15}
-         [:scan
-          [l_extendedprice
-           l_discount
-           l_quantity
-           l_suppkey
-           l_partkey
-           l_orderkey
-           {_table (= _table "lineitem")}]]]]
+    [:mega-join
+     ({x12 x18} {x13 x19} {x5 x12} {x1 x13} {x14 x23} {x6 x27})
+     [[:rename
+       {ps_supplycost x17, ps_suppkey x18, ps_partkey x19, _table x20}
+       [:scan
+        [ps_supplycost
+         ps_suppkey
+         ps_partkey
+         {_table (= _table "partsupp")}]]]
+      [:cross-join
        [:rename
-        {ps_supplycost x17, ps_suppkey x18, ps_partkey x19, _table x20}
+        {p_partkey x1, p_name x2, _table x3}
         [:scan
-         [ps_supplycost
-          ps_suppkey
-          ps_partkey
-          {_table (= _table "partsupp")}]]]]
+         [p_partkey
+          {p_name (like p_name "%green%")}
+          {_table (= _table "part")}]]]
+       [:rename
+        {s_suppkey x5, s_nationkey x6, _table x7}
+        [:scan
+         [s_suppkey s_nationkey {_table (= _table "supplier")}]]]]
+      [:rename
+       {l_extendedprice x9,
+        l_discount x10,
+        l_quantity x11,
+        l_suppkey x12,
+        l_partkey x13,
+        l_orderkey x14,
+        _table x15}
+       [:scan
+        [l_extendedprice
+         l_discount
+         l_quantity
+         l_suppkey
+         l_partkey
+         l_orderkey
+         {_table (= _table "lineitem")}]]]
       [:rename
        {o_orderdate x22, o_orderkey x23, _table x24}
-       [:scan [o_orderdate o_orderkey {_table (= _table "orders")}]]]]
-     [:rename
-      {n_name x26, n_nationkey x27, _table x28}
-      [:scan [n_name n_nationkey {_table (= _table "nation")}]]]]]]]]
+       [:scan [o_orderdate o_orderkey {_table (= _table "orders")}]]]
+      [:rename
+       {n_name x26, n_nationkey x27, _table x28}
+       [:scan [n_name n_nationkey {_table (= _table "nation")}]]]]]]]]]

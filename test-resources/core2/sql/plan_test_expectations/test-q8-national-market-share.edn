@@ -10,73 +10,64 @@
      [{x39 (cond (= x29 "BRAZIL") x38 0)}]
      [:project
       [{x37 (extract "YEAR" x16)} {x38 (* x9 (- 1 x10))} x29]
-      [:join
-       [{x26 x33}]
-       [:join
-        [{x6 x30}]
-        [:join
-         [{x22 x25}]
-         [:join
-          [{x18 x21}]
-          [:join
-           [{x13 x17}]
-           [:join
-            [{x1 x11} {x5 x12}]
-            [:cross-join
-             [:rename
-              {p_partkey x1, p_type x2, _table x3}
-              [:scan
-               [p_partkey
-                {p_type (= p_type "ECONOMY ANODIZED STEEL")}
-                {_table (= _table "part")}]]]
-             [:rename
-              {s_suppkey x5, s_nationkey x6, _table x7}
-              [:scan
-               [s_suppkey
-                s_nationkey
-                {_table (= _table "supplier")}]]]]
-            [:rename
-             {l_extendedprice x9,
-              l_discount x10,
-              l_partkey x11,
-              l_suppkey x12,
-              l_orderkey x13,
-              _table x14}
-             [:scan
-              [l_extendedprice
-               l_discount
-               l_partkey
-               l_suppkey
-               l_orderkey
-               {_table (= _table "lineitem")}]]]]
-           [:rename
-            {o_orderdate x16,
-             o_orderkey x17,
-             o_custkey x18,
-             _table x19}
-            [:scan
-             [{o_orderdate
-               (between
-                o_orderdate
-                #time/date "1995-01-01"
-                #time/date "1996-12-31")}
-              o_orderkey
-              o_custkey
-              {_table (= _table "orders")}]]]]
-          [:rename
-           {c_custkey x21, c_nationkey x22, _table x23}
-           [:scan
-            [c_custkey c_nationkey {_table (= _table "customer")}]]]]
+      [:mega-join
+       ({x13 x17}
+        {x1 x11}
+        {x5 x12}
+        {x18 x21}
+        {x22 x25}
+        {x6 x30}
+        {x26 x33})
+       [[:rename
+         {o_orderdate x16, o_orderkey x17, o_custkey x18, _table x19}
+         [:scan
+          [{o_orderdate
+            (between
+             o_orderdate
+             #time/date "1995-01-01"
+             #time/date "1996-12-31")}
+           o_orderkey
+           o_custkey
+           {_table (= _table "orders")}]]]
+        [:cross-join
          [:rename
-          {n_nationkey x25, n_regionkey x26, _table x27}
+          {p_partkey x1, p_type x2, _table x3}
           [:scan
-           [n_nationkey n_regionkey {_table (= _table "nation")}]]]]
+           [p_partkey
+            {p_type (= p_type "ECONOMY ANODIZED STEEL")}
+            {_table (= _table "part")}]]]
+         [:rename
+          {s_suppkey x5, s_nationkey x6, _table x7}
+          [:scan
+           [s_suppkey s_nationkey {_table (= _table "supplier")}]]]]
+        [:rename
+         {l_extendedprice x9,
+          l_discount x10,
+          l_partkey x11,
+          l_suppkey x12,
+          l_orderkey x13,
+          _table x14}
+         [:scan
+          [l_extendedprice
+           l_discount
+           l_partkey
+           l_suppkey
+           l_orderkey
+           {_table (= _table "lineitem")}]]]
+        [:rename
+         {c_custkey x21, c_nationkey x22, _table x23}
+         [:scan
+          [c_custkey c_nationkey {_table (= _table "customer")}]]]
+        [:rename
+         {n_nationkey x25, n_regionkey x26, _table x27}
+         [:scan
+          [n_nationkey n_regionkey {_table (= _table "nation")}]]]
         [:rename
          {n_name x29, n_nationkey x30, _table x31}
-         [:scan [n_name n_nationkey {_table (= _table "nation")}]]]]
-       [:rename
-        {r_regionkey x33, r_name x34, _table x35}
-        [:scan
-         [r_regionkey
-          {r_name (= r_name "AMERICA")}
-          {_table (= _table "region")}]]]]]]]]]]
+         [:scan [n_name n_nationkey {_table (= _table "nation")}]]]
+        [:rename
+         {r_regionkey x33, r_name x34, _table x35}
+         [:scan
+          [r_regionkey
+           {r_name (= r_name "AMERICA")}
+           {_table (= _table "region")}]]]]]]]]]]]

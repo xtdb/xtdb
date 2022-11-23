@@ -49,89 +49,81 @@
        [{x1 x31}]
        [:map
         [{$row_number$ (row-number)}]
-        [:join
-         [{x23 x26}]
-         [:join
-          [{x13 x22}]
-          [:join
-           [{x1 x16} {x12 x17}]
-           [:cross-join
-            [:rename
-             {p_partkey x1, p_mfgr x2, p_size x3, p_type x4, _table x5}
-             [:scan
-              [p_partkey
-               p_mfgr
-               {p_size (= p_size 15)}
-               {p_type (like p_type "%BRASS")}
-               {_table (= _table "part")}]]]
-            [:rename
-             {s_acctbal x7,
-              s_name x8,
-              s_address x9,
-              s_phone x10,
-              s_comment x11,
-              s_suppkey x12,
-              s_nationkey x13,
-              _table x14}
-             [:scan
-              [s_acctbal
-               s_name
-               s_address
-               s_phone
-               s_comment
-               s_suppkey
-               s_nationkey
-               {_table (= _table "supplier")}]]]]
-           [:rename
-            {ps_partkey x16,
-             ps_suppkey x17,
-             ps_supplycost x18,
-             _table x19}
-            [:scan
-             [ps_partkey
-              ps_suppkey
-              ps_supplycost
-              {_table (= _table "partsupp")}]]]]
-          [:rename
+        [:mega-join
+         ({x13 x22} {x1 x16} {x12 x17} {x23 x26})
+         [[:rename
            {n_name x21, n_nationkey x22, n_regionkey x23, _table x24}
            [:scan
             [n_name
              n_nationkey
              n_regionkey
-             {_table (= _table "nation")}]]]]
+             {_table (= _table "nation")}]]]
+          [:cross-join
+           [:rename
+            {p_partkey x1, p_mfgr x2, p_size x3, p_type x4, _table x5}
+            [:scan
+             [p_partkey
+              p_mfgr
+              {p_size (= p_size 15)}
+              {p_type (like p_type "%BRASS")}
+              {_table (= _table "part")}]]]
+           [:rename
+            {s_acctbal x7,
+             s_name x8,
+             s_address x9,
+             s_phone x10,
+             s_comment x11,
+             s_suppkey x12,
+             s_nationkey x13,
+             _table x14}
+            [:scan
+             [s_acctbal
+              s_name
+              s_address
+              s_phone
+              s_comment
+              s_suppkey
+              s_nationkey
+              {_table (= _table "supplier")}]]]]
+          [:rename
+           {ps_partkey x16,
+            ps_suppkey x17,
+            ps_supplycost x18,
+            _table x19}
+           [:scan
+            [ps_partkey
+             ps_suppkey
+             ps_supplycost
+             {_table (= _table "partsupp")}]]]
+          [:rename
+           {r_regionkey x26, r_name x27, _table x28}
+           [:scan
+            [r_regionkey
+             {r_name (= r_name "EUROPE")}
+             {_table (= _table "region")}]]]]]]
+       [:mega-join
+        ({x36 x39} {x32 x35} {x40 x43})
+        [[:rename
+          {n_nationkey x39, n_regionkey x40, _table x41}
+          [:scan
+           [n_nationkey n_regionkey {_table (= _table "nation")}]]]
          [:rename
-          {r_regionkey x26, r_name x27, _table x28}
+          {ps_supplycost x30,
+           ps_partkey x31,
+           ps_suppkey x32,
+           _table x33}
+          [:scan
+           [ps_supplycost
+            ps_partkey
+            ps_suppkey
+            {_table (= _table "partsupp")}]]]
+         [:rename
+          {s_suppkey x35, s_nationkey x36, _table x37}
+          [:scan
+           [s_suppkey s_nationkey {_table (= _table "supplier")}]]]
+         [:rename
+          {r_regionkey x43, r_name x44, _table x45}
           [:scan
            [r_regionkey
             {r_name (= r_name "EUROPE")}
-            {_table (= _table "region")}]]]]]
-       [:join
-        [{x40 x43}]
-        [:join
-         [{x36 x39}]
-         [:join
-          [{x32 x35}]
-          [:rename
-           {ps_supplycost x30,
-            ps_partkey x31,
-            ps_suppkey x32,
-            _table x33}
-           [:scan
-            [ps_supplycost
-             ps_partkey
-             ps_suppkey
-             {_table (= _table "partsupp")}]]]
-          [:rename
-           {s_suppkey x35, s_nationkey x36, _table x37}
-           [:scan
-            [s_suppkey s_nationkey {_table (= _table "supplier")}]]]]
-         [:rename
-          {n_nationkey x39, n_regionkey x40, _table x41}
-          [:scan
-           [n_nationkey n_regionkey {_table (= _table "nation")}]]]]
-        [:rename
-         {r_regionkey x43, r_name x44, _table x45}
-         [:scan
-          [r_regionkey
-           {r_name (= r_name "EUROPE")}
-           {_table (= _table "region")}]]]]]]]]]]]
+            {_table (= _table "region")}]]]]]]]]]]]]

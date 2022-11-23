@@ -92,7 +92,7 @@
     (util/try-close right-cursor)))
 
 (defmethod lp/emit-expr :union-all [{:keys [left right]} args]
-  (lp/binary-expr left right args
+  (lp/binary-expr (lp/emit-expr left args) (lp/emit-expr right args)
     (fn [left-col-types right-col-types]
       {:col-types (union-col-types left-col-types right-col-types)
        :->cursor (fn [_opts left-cursor right-cursor]
@@ -141,7 +141,7 @@
     (util/try-close right-cursor)))
 
 (defmethod lp/emit-expr :intersect [{:keys [left right]} args]
-  (lp/binary-expr left right args
+  (lp/binary-expr (lp/emit-expr left args) (lp/emit-expr right args)
     (fn [left-col-types right-col-types]
       (let [col-types (union-col-types left-col-types right-col-types)]
         {:col-types col-types
@@ -152,7 +152,7 @@
                                           false))}))))
 
 (defmethod lp/emit-expr :difference [{:keys [left right]} args]
-  (lp/binary-expr left right args
+  (lp/binary-expr (lp/emit-expr left args) (lp/emit-expr right args)
     (fn [left-col-types right-col-types]
       (let [col-types (union-col-types left-col-types right-col-types)]
         {:col-types col-types

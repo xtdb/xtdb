@@ -12,10 +12,11 @@
     [x6 {:direction :asc, :null-ordering :nulls-last}]]
    [:group-by
     [x1 x2 x5 x6 x7 {x22 (sum x11)}]
-    [:join
-     [{x5 x12}]
-     [:join
-      [{x2 x8}]
+    [:mega-join
+     ({x5 x12} {x2 x8})
+     [[:rename
+       {l_quantity x11, l_orderkey x12, _table x13}
+       [:scan [l_quantity l_orderkey {_table (= _table "lineitem")}]]]
       [:rename
        {c_name x1, c_custkey x2, _table x3}
        [:scan [c_name c_custkey {_table (= _table "customer")}]]]
@@ -40,8 +41,6 @@
          [:rename
           {l_orderkey x15, l_quantity x16, _table x17}
           [:scan
-           [l_orderkey l_quantity {_table (= _table "lineitem")}]]]]]]]
-     [:rename
-      {l_quantity x11, l_orderkey x12, _table x13}
-      [:scan
-       [l_quantity l_orderkey {_table (= _table "lineitem")}]]]]]]]]
+           [l_orderkey
+            l_quantity
+            {_table (= _table "lineitem")}]]]]]]]]]]]]

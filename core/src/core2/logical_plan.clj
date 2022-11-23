@@ -50,10 +50,14 @@
       (case (first spec)
         cat (->> (rest spec)
                  (partition 2)
-                 (keep (fn [[k form]]
-                         (when (= form ::ra-expression)
-                           k)))
-                 (mapv expr))))))
+                 (mapcat
+                   (fn [[k form]]
+                     (cond
+                       (= form ::ra-expression)
+                       [(expr k)]
+                       (= form (list 'coll-of :core2.logical-plan/ra-expression))
+                       (expr k))))
+                 (vec))))))
 
 (defn child-exprs [ra]
   (into #{ra} (mapcat child-exprs) (direct-child-exprs ra)))
@@ -75,9 +79,9 @@
                        (util/try-close inner)
                        (throw e)))))}))
 
-(defn binary-expr {:style/indent 3} [left right args f]
-  (let [{left-col-types :col-types, ->left-cursor :->cursor} (emit-expr left args)
-        {right-col-types :col-types, ->right-cursor :->cursor} (emit-expr right args)
+(defn binary-expr {:style/indent 3} [left right f]
+  (let [{left-col-types :col-types, ->left-cursor :->cursor} left
+        {right-col-types :col-types, ->right-cursor :->cursor} right
         {:keys [col-types ->cursor]} (f left-col-types right-col-types)]
 
     {:col-types col-types

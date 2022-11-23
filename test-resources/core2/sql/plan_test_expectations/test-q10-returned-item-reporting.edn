@@ -17,45 +17,9 @@
      [x1 x2 x3 x5 x21 x4 x6 {x26 (sum x25)}]
      [:map
       [{x25 (* x15 (- 1 x16))}]
-      [:join
-       [{x7 x22}]
-       [:join
-        [{x11 x17}]
-        [:join
-         [{x1 x10}]
-         [:rename
-          {c_custkey x1,
-           c_name x2,
-           c_acctbal x3,
-           c_address x4,
-           c_phone x5,
-           c_comment x6,
-           c_nationkey x7,
-           _table x8}
-          [:scan
-           [c_custkey
-            c_name
-            c_acctbal
-            c_address
-            c_phone
-            c_comment
-            c_nationkey
-            {_table (= _table "customer")}]]]
-         [:rename
-          {o_custkey x10, o_orderkey x11, o_orderdate x12, _table x13}
-          [:scan
-           [o_custkey
-            o_orderkey
-            {o_orderdate
-             (and
-              (<
-               o_orderdate
-               (+
-                #time/date "1993-10-01"
-                (single-field-interval "3" "MONTH" 2 0)))
-              (>= o_orderdate #time/date "1993-10-01"))}
-            {_table (= _table "orders")}]]]]
-        [:rename
+      [:mega-join
+       ({x11 x17} {x1 x10} {x7 x22})
+       [[:rename
          {l_extendedprice x15,
           l_discount x16,
           l_orderkey x17,
@@ -66,8 +30,40 @@
            l_discount
            l_orderkey
            {l_returnflag (= l_returnflag "R")}
-           {_table (= _table "lineitem")}]]]]
-       [:rename
-        {n_name x21, n_nationkey x22, _table x23}
-        [:scan
-         [n_name n_nationkey {_table (= _table "nation")}]]]]]]]]]]
+           {_table (= _table "lineitem")}]]]
+        [:rename
+         {c_custkey x1,
+          c_name x2,
+          c_acctbal x3,
+          c_address x4,
+          c_phone x5,
+          c_comment x6,
+          c_nationkey x7,
+          _table x8}
+         [:scan
+          [c_custkey
+           c_name
+           c_acctbal
+           c_address
+           c_phone
+           c_comment
+           c_nationkey
+           {_table (= _table "customer")}]]]
+        [:rename
+         {o_custkey x10, o_orderkey x11, o_orderdate x12, _table x13}
+         [:scan
+          [o_custkey
+           o_orderkey
+           {o_orderdate
+            (and
+             (<
+              o_orderdate
+              (+
+               #time/date "1993-10-01"
+               (single-field-interval "3" "MONTH" 2 0)))
+             (>= o_orderdate #time/date "1993-10-01"))}
+           {_table (= _table "orders")}]]]
+        [:rename
+         {n_name x21, n_nationkey x22, _table x23}
+         [:scan
+          [n_name n_nationkey {_table (= _table "nation")}]]]]]]]]]]]
