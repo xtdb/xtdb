@@ -44,7 +44,7 @@
     (util/try-close in-cursor)))
 
 (defmethod lp/emit-expr :rename [{:keys [columns relation prefix]} args]
-  (lp/unary-expr relation args
+  (lp/unary-expr (lp/emit-expr relation args)
     (fn [col-types]
       (let [col-name-mapping (->> (for [old-name (set (keys col-types))]
                                     [old-name

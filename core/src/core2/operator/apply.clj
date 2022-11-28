@@ -196,7 +196,7 @@
 
   ;; TODO: decodes/re-encodes row values - can we pass these directly to the sub-query?
 
-  (lp/unary-expr independent-relation args
+  (lp/unary-expr (lp/emit-expr independent-relation args)
     (fn [independent-col-types]
       (let [{:keys [param-types] :as dependent-args} (-> args
                                                          (update :param-types

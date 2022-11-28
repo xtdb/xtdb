@@ -37,7 +37,7 @@
     (util/try-close in-cursor)))
 
 (defmethod lp/emit-expr :select [{:keys [predicate relation]} {:keys [param-types] :as args}]
-  (lp/unary-expr relation args
+  (lp/unary-expr (lp/emit-expr relation args)
     (fn [inner-col-types]
       (let [selector (expr/->expression-relation-selector predicate {:col-types inner-col-types, :param-types param-types})]
         {:col-types inner-col-types

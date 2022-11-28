@@ -121,7 +121,7 @@
 
 (defmethod lp/emit-expr :unwind [{:keys [columns relation], {:keys [ordinality-column]} :opts}, op-args]
   (let [[to-col from-col] (first columns)]
-    (lp/unary-expr relation op-args
+    (lp/unary-expr (lp/emit-expr relation op-args)
       (fn [col-types]
         (let [unwind-col-type (->> (get col-types from-col)
                                    types/flatten-union-types

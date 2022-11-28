@@ -67,8 +67,8 @@
   (fn [ra-expr srcs]
     (:op ra-expr)))
 
-(defn unary-expr {:style/indent 2} [relation args f]
-  (let [{->inner-cursor :->cursor, inner-col-types :col-types} (emit-expr relation args)
+(defn unary-expr {:style/indent 2} [relation f]
+  (let [{->inner-cursor :->cursor, inner-col-types :col-types} relation
         {:keys [col-types ->cursor]} (f inner-col-types)]
     {:col-types col-types
      :->cursor (fn [opts]

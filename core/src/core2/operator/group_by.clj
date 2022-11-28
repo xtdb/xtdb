@@ -640,7 +640,7 @@
 (defmethod lp/emit-expr :group-by [{:keys [columns relation]} args]
   (let [{group-cols :group-by, aggs :aggregate} (group-by first columns)
         group-cols (mapv second group-cols)]
-    (lp/unary-expr relation args
+    (lp/unary-expr (lp/emit-expr relation args)
       (fn [col-types]
         (let [agg-factories (for [[_ agg] aggs]
                               (let [[to-column agg-form] (first agg)]

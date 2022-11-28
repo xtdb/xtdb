@@ -93,7 +93,7 @@
   (->ProjectCursor allocator in-cursor projection-specs clock params))
 
 (defmethod lp/emit-expr :project [{:keys [projections relation], {:keys [append-columns?]} :opts} {:keys [param-types] :as args}]
-  (lp/unary-expr relation args
+  (lp/unary-expr (lp/emit-expr relation args)
     (fn [inner-col-types]
       (let [projection-specs (concat (when append-columns?
                                        (for [[col-name col-type] inner-col-types]

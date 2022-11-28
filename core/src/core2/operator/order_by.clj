@@ -76,7 +76,7 @@
     (util/try-close in-cursor)))
 
 (defmethod lp/emit-expr :order-by [{:keys [order-specs relation]} args]
-  (lp/unary-expr relation args
+  (lp/unary-expr (lp/emit-expr relation args)
     (fn [col-types]
       {:col-types col-types
        :->cursor (fn [{:keys [allocator]} in-cursor]

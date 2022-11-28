@@ -191,7 +191,7 @@
     (util/try-close in-cursor)))
 
 (defmethod lp/emit-expr :distinct [{:keys [relation]} args]
-  (lp/unary-expr relation args
+  (lp/unary-expr (lp/emit-expr relation args)
     (fn [inner-col-types]
       {:col-types inner-col-types
        :->cursor (fn [{:keys [allocator]} in-cursor]

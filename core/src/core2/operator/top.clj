@@ -53,7 +53,7 @@
     (.close in-cursor)))
 
 (defmethod lp/emit-expr :top [{:keys [relation], {:keys [skip limit]} :top} args]
-  (lp/unary-expr relation args
+  (lp/unary-expr (lp/emit-expr relation args)
     (fn [col-types]
       {:col-types col-types
        :->cursor (fn [_opts in-cursor]
