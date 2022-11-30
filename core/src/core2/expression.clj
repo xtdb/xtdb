@@ -463,13 +463,16 @@
                                                ~((:continue (get emitted-thens local-type)) f))))))}))
         (wrap-boxed-poly-return opts))))
 
-(defmulti codegen-mono-call
+(defmulti codegen-call
   "Expects a map containing both the expression and an `:arg-types` key - a vector of col-types.
    This `:arg-types` vector should be monomorphic - if the args are polymorphic, call this multimethod multiple times.
 
    Returns a map containing
-    * `:return-types` (set)
-    * `:->call-code` (fn [emitted-args])"
+    * `:return-type`
+    and one of the following
+    * for monomorphic return types: `:->call-code` :: emitted-args -> code
+    * for polymorphic return types: `:continue-call` :: f, emitted-args -> code
+        where f :: return-type, code -> code"
 
   (fn [{:keys [f arg-types]}]
     (vec (cons (keyword (namespace f) (name f))
@@ -477,64 +480,10 @@
 
   :hierarchy #'types/col-type-hierarchy)
 
-#_{:clj-kondo/ignore [:unused-binding]}
-(defmulti codegen-call
-  (fn [{:keys [f] :as expr}]
-    (keyword f))
-  :default ::default)
-
 (def ^:private shortcut-null-args?
   (complement (comp #{:true? :false? :nil? :boolean :null-eq
                       :compare-nulls-first :compare-nulls-last}
                     keyword)))
-
-(defmethod codegen-call ::default [{:keys [f emitted-args] :as expr}]
-  (let [shortcut-null? (shortcut-null-args? f)
-
-        all-arg-types (reduce (fn [acc {:keys [return-type]}]
-                                (for [el acc
-                                      return-type (types/flatten-union-types return-type)]
-                                  (conj el return-type)))
-                              [[]]
-                              emitted-args)
-
-        emitted-calls (->> (for [arg-types all-arg-types
-                                 :when (or (not shortcut-null?)
-                                           (every? #(not= :null %) arg-types))]
-                             (MapEntry/create arg-types
-                                              (codegen-mono-call (assoc expr
-                                                                        :args emitted-args
-                                                                        :arg-types arg-types))))
-                           (into {}))
-
-        return-type (->> (cond-> (into #{} (map :return-type) (vals emitted-calls))
-                           (and shortcut-null?
-                                (some #(= :null %)
-                                      (sequence cat all-arg-types)))
-                           (conj :null))
-                         (apply types/merge-col-types))]
-
-    {:return-type return-type
-     :batch-bindings (->> (vals emitted-calls) (sequence (mapcat :batch-bindings)))
-     :continue (fn continue-call-expr [handle-emitted-expr]
-                 (let [build-args-then-call
-                       (reduce (fn step [build-next-arg {continue-this-arg :continue}]
-                                 ;; step: emit this arg, and pass it through to the inner build-fn
-                                 (fn continue-building-args [arg-types emitted-args]
-                                   (continue-this-arg (fn [arg-type emitted-arg]
-                                                        (if (and shortcut-null? (= arg-type :null))
-                                                          (handle-emitted-expr :null nil)
-                                                          (build-next-arg (conj arg-types arg-type)
-                                                                          (conj emitted-args emitted-arg)))))))
-
-                               ;; innermost fn - we're done, call continue-call for these types
-                               (fn call-with-built-args [arg-types emitted-args]
-                                 (let [{:keys [return-type ->call-code]} (get emitted-calls arg-types)]
-                                   (handle-emitted-expr return-type (->call-code emitted-args))))
-
-                               ;; reverse because we're working inside-out
-                               (reverse emitted-args))]
-                   (build-args-then-call [] [])))}))
 
 (defn- cont-b3-call [arg-type code]
   (if (= :null arg-type)
@@ -544,14 +493,14 @@
 (defn- nullable? [col-type]
   (contains? (types/flatten-union-types col-type) :null))
 
-(defmethod codegen-call :and [{[{l-ret :return-type, l-cont :continue}
-                                {r-ret :return-type, r-cont :continue}] :emitted-args}]
+(defn- codegen-and [[{l-ret :return-type, l-cont :continue}
+                     {r-ret :return-type, r-cont :continue}]]
   (let [nullable? (or (nullable? l-ret) (nullable? r-ret))]
     {:return-type (if nullable? [:union #{:bool :null}] :bool)
      :continue (if-not nullable?
                  (fn [f]
                    (f :bool `(and ~(l-cont (fn [_ code] `(boolean ~code)))
-                                 ~(r-cont (fn [_ code] `(boolean ~code))))))
+                                  ~(r-cont (fn [_ code] `(boolean ~code))))))
 
                  (let [l-sym (gensym 'l)
                        r-sym (gensym 'r)]
@@ -564,14 +513,14 @@
                           ~(f :null nil)
                           ~(f :bool `(== 1 ~l-sym ~r-sym)))))))}))
 
-(defmethod codegen-call :or [{[{l-ret :return-type, l-cont :continue}
-                               {r-ret :return-type, r-cont :continue}] :emitted-args}]
+(defn- codegen-or [[{l-ret :return-type, l-cont :continue}
+                    {r-ret :return-type, r-cont :continue}]]
   (let [nullable? (or (nullable? l-ret) (nullable? r-ret))]
     {:return-type (if nullable? [:union #{:bool :null}] :bool)
      :continue (if-not nullable?
                  (fn [f]
                    (f :bool `(or ~(l-cont (fn [_ code] `(boolean ~code)))
-                                ~(r-cont (fn [_ code] `(boolean ~code))))))
+                                 ~(r-cont (fn [_ code] `(boolean ~code))))))
 
                  (let [l-sym (gensym 'l)
                        r-sym (gensym 'r)]
@@ -584,10 +533,68 @@
                           ~(f :null nil)
                           ~(f :bool `(not (== -1 ~l-sym ~r-sym))))))))}))
 
-(defmethod codegen-expr :call [{:keys [args] :as expr} opts]
+(declare codegen-concat)
+
+(defmethod codegen-expr :call [{:keys [f args] :as expr} opts]
   (let [emitted-args (for [arg args]
                        (codegen-expr arg opts))]
-    (-> (codegen-call (-> expr (assoc :emitted-args emitted-args)))
+    (-> (case f
+          :and (codegen-and emitted-args)
+          :or (codegen-or emitted-args)
+          :concat (codegen-concat (-> expr (assoc :emitted-args emitted-args)))
+
+          (let [shortcut-null? (shortcut-null-args? f)
+
+                all-arg-types (reduce (fn [acc {:keys [return-type]}]
+                                        (for [el acc
+                                              return-type (types/flatten-union-types return-type)]
+                                          (conj el return-type)))
+                                      [[]]
+                                      emitted-args)
+
+                emitted-calls (->> (for [arg-types all-arg-types
+                                         :when (or (not shortcut-null?)
+                                                   (every? #(not= :null %) arg-types))]
+                                     (MapEntry/create arg-types
+                                                      (codegen-call (assoc expr
+                                                                                :args emitted-args
+                                                                                :arg-types arg-types))))
+                                   (into {}))
+
+                return-type (->> (cond-> (into #{} (map :return-type) (vals emitted-calls))
+                                   (and shortcut-null?
+                                        (some #(= :null %)
+                                              (sequence cat all-arg-types)))
+                                   (conj :null))
+                                 (apply types/merge-col-types))]
+
+            {:return-type return-type
+             :batch-bindings (->> (vals emitted-calls) (sequence (mapcat :batch-bindings)))
+             :continue (fn continue-call-expr [handle-emitted-expr]
+                         (let [build-args-then-call
+                               (reduce (fn step [build-next-arg {continue-this-arg :continue}]
+                                         ;; step: emit this arg, and pass it through to the inner build-fn
+                                         (fn continue-building-args [arg-types emitted-args]
+                                           (continue-this-arg (fn [arg-type emitted-arg]
+                                                                (if (and shortcut-null? (= arg-type :null))
+                                                                  (handle-emitted-expr :null nil)
+                                                                  (build-next-arg (conj arg-types arg-type)
+                                                                                  (conj emitted-args emitted-arg)))))))
+
+                                       ;; innermost fn - we're done, call continue-call for these types
+                                       (fn call-with-built-args [arg-types emitted-args]
+                                         (let [{:keys [return-type continue-call ->call-code]} (get emitted-calls arg-types)]
+                                           (cond
+                                             continue-call (continue-call handle-emitted-expr emitted-args)
+                                             ->call-code (handle-emitted-expr return-type (->call-code emitted-args))
+                                             :else (throw (IllegalStateException.
+                                                           (str "internal error: invalid call definition"
+                                                                (pr-str {:f f, :arg-types arg-types})))))))
+
+                                       ;; reverse because we're working inside-out
+                                       (reverse emitted-args))]
+                           (build-args-then-call [] [])))}))
+
         (assoc :children emitted-args)
         (wrap-boxed-poly-return opts))))
 
@@ -598,67 +605,67 @@
         :let [f-sym (symbol (name f-kw))]]
 
   (doseq [col-type #{:num :timestamp-tz :duration :date}]
-    (defmethod codegen-mono-call [f-kw col-type col-type] [_]
+    (defmethod codegen-call [f-kw col-type col-type] [_]
       {:return-type :bool, :->call-code #(do `(~f-sym ~@%))}))
 
   (doseq [col-type #{:varbinary :utf8}]
-    (defmethod codegen-mono-call [f-kw col-type col-type] [_]
+    (defmethod codegen-call [f-kw col-type col-type] [_]
       {:return-type :bool, :->call-code #(cmp `(util/compare-nio-buffers-unsigned ~@%))}))
 
-  (defmethod codegen-mono-call [f-kw :any :any] [_]
+  (defmethod codegen-call [f-kw :any :any] [_]
     {:return-type :bool, :->call-code #(cmp `(compare ~@%))}))
 
-(defmethod codegen-mono-call [:= :num :num] [_]
+(defmethod codegen-call [:= :num :num] [_]
   {:return-type :bool
    :->call-code #(do `(== ~@%))})
 
-(defmethod codegen-mono-call [:= :any :any] [_]
+(defmethod codegen-call [:= :any :any] [_]
   {:return-type :bool
    :->call-code #(do `(= ~@%))})
 
 ;; null-eq is an internal function used in situations where two nulls should compare equal,
 ;; e.g when grouping rows in group-by.
-(defmethod codegen-mono-call [:null-eq :any :any] [call]
-  (codegen-mono-call (assoc call :f :=)))
+(defmethod codegen-call [:null-eq :any :any] [call]
+  (codegen-call (assoc call :f :=)))
 
-(defmethod codegen-mono-call [:null-eq :null :any] [_]
+(defmethod codegen-call [:null-eq :null :any] [_]
   {:return-type :bool, :->call-code (constantly false)})
 
-(defmethod codegen-mono-call [:null-eq :any :null] [_]
+(defmethod codegen-call [:null-eq :any :null] [_]
   {:return-type :bool, :->call-code (constantly false)})
 
-(defmethod codegen-mono-call [:null-eq :null :null] [_]
+(defmethod codegen-call [:null-eq :null :null] [_]
   {:return-type :bool, :->call-code (constantly true)})
 
-(defmethod codegen-mono-call [:<> :num :num] [_]
+(defmethod codegen-call [:<> :num :num] [_]
   {:return-type :bool, :->call-code #(do `(not (== ~@%)))})
 
-(defmethod codegen-mono-call [:<> :any :any] [_]
+(defmethod codegen-call [:<> :any :any] [_]
   {:return-type :bool, :->call-code #(do `(not= ~@%))})
 
-(defmethod codegen-mono-call [:not :bool] [_]
+(defmethod codegen-call [:not :bool] [_]
   {:return-type :bool, :->call-code #(do `(not ~@%))})
 
-(defmethod codegen-mono-call [:true? :bool] [_]
+(defmethod codegen-call [:true? :bool] [_]
   {:return-type :bool, :->call-code #(do `(true? ~@%))})
 
-(defmethod codegen-mono-call [:false? :bool] [_]
+(defmethod codegen-call [:false? :bool] [_]
   {:return-type :bool, :->call-code #(do `(false? ~@%))})
 
-(defmethod codegen-mono-call [:nil? :null] [_]
+(defmethod codegen-call [:nil? :null] [_]
   {:return-type :bool, :->call-code (constantly true)})
 
 (doseq [f #{:true? :false? :nil?}]
-  (defmethod codegen-mono-call [f :any] [_]
+  (defmethod codegen-call [f :any] [_]
     {:return-type :bool, :->call-code (constantly false)}))
 
-(defmethod codegen-mono-call [:boolean :null] [_]
+(defmethod codegen-call [:boolean :null] [_]
   {:return-type :bool, :->call-code (constantly false)})
 
-(defmethod codegen-mono-call [:boolean :bool] [_]
+(defmethod codegen-call [:boolean :bool] [_]
   {:return-type :bool, :->call-code first})
 
-(defmethod codegen-mono-call [:boolean :any] [_]
+(defmethod codegen-call [:boolean :any] [_]
   {:return-type :bool, :->call-code (constantly true)})
 
 (defn- with-math-integer-cast
@@ -667,79 +674,79 @@
   (let [arg-cast (if (isa? types/widening-hierarchy int-type :i32) 'int 'long)]
     (map #(list arg-cast %) emitted-args)))
 
-(defmethod codegen-mono-call [:+ :int :int] [{:keys [arg-types]}]
+(defmethod codegen-call [:+ :int :int] [{:keys [arg-types]}]
   (let [return-type (types/least-upper-bound arg-types)]
     {:return-type return-type
      :->call-code (fn [emitted-args]
                     (list (type->cast return-type)
                           `(Math/addExact ~@(with-math-integer-cast return-type emitted-args))))}))
 
-(defmethod codegen-mono-call [:+ :num :num] [{:keys [arg-types]}]
+(defmethod codegen-call [:+ :num :num] [{:keys [arg-types]}]
   {:return-type (types/least-upper-bound arg-types)
    :->call-code #(do `(+ ~@%))})
 
-(defmethod codegen-mono-call [:- :int :int] [{:keys [arg-types]}]
+(defmethod codegen-call [:- :int :int] [{:keys [arg-types]}]
   (let [return-type (types/least-upper-bound arg-types)]
     {:return-type return-type
      :->call-code (fn [emitted-args]
                     (list (type->cast return-type)
                           `(Math/subtractExact ~@(with-math-integer-cast return-type emitted-args))))}))
 
-(defmethod codegen-mono-call [:- :num :num] [{:keys [arg-types]}]
+(defmethod codegen-call [:- :num :num] [{:keys [arg-types]}]
   {:return-type (types/least-upper-bound arg-types)
    :->call-code #(do `(- ~@%))})
 
-(defmethod codegen-mono-call [:- :num] [{[x-type] :arg-types}]
+(defmethod codegen-call [:- :num] [{[x-type] :arg-types}]
   {:return-type x-type
    :->call-code (fn [emitted-args]
                   (list (type->cast x-type)
                         `(Math/negateExact ~@(with-math-integer-cast x-type emitted-args))))})
 
-(defmethod codegen-mono-call [:- :num] [{[x-type] :arg-types}]
+(defmethod codegen-call [:- :num] [{[x-type] :arg-types}]
   {:return-type x-type
    :->call-code #(do `(- ~@%))})
 
-(defmethod codegen-mono-call [:* :int :int] [{:keys [arg-types]}]
+(defmethod codegen-call [:* :int :int] [{:keys [arg-types]}]
   (let [return-type (types/least-upper-bound arg-types)]
     {:return-type return-type
      :->call-code (fn [emitted-args]
                     (list (type->cast return-type)
                           `(Math/multiplyExact ~@(with-math-integer-cast return-type emitted-args))))}))
 
-(defmethod codegen-mono-call [:* :num :num] [{:keys [arg-types]}]
+(defmethod codegen-call [:* :num :num] [{:keys [arg-types]}]
   {:return-type (types/least-upper-bound arg-types)
    :->call-code #(do `(* ~@%))})
 
-(defmethod codegen-mono-call [:mod :num :num] [{:keys [arg-types]}]
+(defmethod codegen-call [:mod :num :num] [{:keys [arg-types]}]
   {:return-type (types/least-upper-bound arg-types)
    :->call-code #(do `(mod ~@%))})
 
-(defmethod codegen-mono-call [:/ :int :int] [{:keys [arg-types]}]
+(defmethod codegen-call [:/ :int :int] [{:keys [arg-types]}]
   {:return-type (types/least-upper-bound arg-types)
    :->call-code #(do `(quot ~@%))})
 
-(defmethod codegen-mono-call [:/ :num :num] [{:keys [arg-types]}]
+(defmethod codegen-call [:/ :num :num] [{:keys [arg-types]}]
   {:return-type (types/least-upper-bound arg-types)
    :->call-code #(do `(/ ~@%))})
 
 ;; TODO extend min/max to variable width
-(defmethod codegen-mono-call [:max :num :num] [{:keys [arg-types]}]
+(defmethod codegen-call [:max :num :num] [{:keys [arg-types]}]
   {:return-type (types/least-upper-bound arg-types)
    :->call-code #(do `(Math/max ~@%))})
 
-(defmethod codegen-mono-call [:min :num :num] [{:keys [arg-types]}]
+(defmethod codegen-call [:min :num :num] [{:keys [arg-types]}]
   {:return-type (types/least-upper-bound arg-types)
    :->call-code #(do `(Math/min ~@%))})
 
-(defmethod codegen-mono-call [:power :num :num] [_]
+(defmethod codegen-call [:power :num :num] [_]
   {:return-type :f64, :->call-code #(do `(Math/pow ~@%))})
 
-(defmethod codegen-mono-call [:log :num :num] [_]
+(defmethod codegen-call [:log :num :num] [_]
   {:return-type :f64,
    :->call-code (fn [[base x]]
                   `(/ (Math/log ~x) (Math/log ~base)))})
 
-(defmethod codegen-mono-call [:double :num] [_]
+(defmethod codegen-call [:double :num] [_]
   {:return-type :f64, :->call-code #(do `(double ~@%))})
 
 (defn like->regex [like-pattern]
@@ -750,7 +757,7 @@
       (->> (format "^%s\\z"))
       re-pattern))
 
-(defmethod codegen-mono-call [:like :utf8 :utf8] [{[_ {:keys [literal]}] :args}]
+(defmethod codegen-call [:like :utf8 :utf8] [{[_ {:keys [literal]}] :args}]
   {:return-type :bool
    :->call-code (fn [[haystack-code needle-code]]
                   `(boolean (re-find ~(if literal
@@ -801,7 +808,7 @@
     buf-or-bytes
     (ByteBuffer/wrap ^bytes buf-or-bytes)))
 
-(defmethod codegen-mono-call [:like :varbinary :varbinary] [{[_ {:keys [literal]}] :args}]
+(defmethod codegen-call [:like :varbinary :varbinary] [{[_ {:keys [literal]}] :args}]
   {:return-type :bool
    :->call-code (fn [[haystack-code needle-code]]
                   `(boolean (re-find ~(if literal
@@ -809,7 +816,7 @@
                                         `(like->regex (binary->hex-like-pattern (buf->bytes ~needle-code))))
                                      (Hex/encodeHexString (buf->bytes ~haystack-code)))))})
 
-(defmethod codegen-mono-call [:like-regex :utf8 :utf8 :utf8] [{:keys [args]}]
+(defmethod codegen-call [:like-regex :utf8 :utf8 :utf8] [{:keys [args]}]
   (let [[_ re-literal flags] (map :literal args)
 
         flag-map
@@ -881,7 +888,7 @@
     "TRAILING" (sql-trim-trailing s trim-char)
     "BOTH" (-> s (sql-trim-leading trim-char) (sql-trim-trailing trim-char))))
 
-(defmethod codegen-mono-call [:trim :utf8 :utf8 :utf8] [_]
+(defmethod codegen-call [:trim :utf8 :utf8 :utf8] [_]
   {:return-type :utf8
    :->call-code (fn [[s trim-spec trim-char]]
                   `(ByteBuffer/wrap (.getBytes (sql-trim (resolve-string ~s) (resolve-string ~trim-spec) (resolve-string ~trim-char))
@@ -928,23 +935,23 @@
     "LEADING" (binary-trim-leading bin trim-octet)
     "TRAILING" (binary-trim-trailing bin trim-octet)))
 
-(defmethod codegen-mono-call [:trim :varbinary :utf8 :varbinary] [_]
+(defmethod codegen-call [:trim :varbinary :utf8 :varbinary] [_]
   {:return-type :varbinary
    :->call-code (fn [[s trim-spec trim-octet]]
                   `(ByteBuffer/wrap (binary-trim (resolve-bytes ~s) (resolve-string ~trim-spec) (first (resolve-bytes ~trim-octet)))))})
 
-(defmethod codegen-mono-call [:trim :varbinary :utf8 :num] [_]
+(defmethod codegen-call [:trim :varbinary :utf8 :num] [_]
   {:return-type :varbinary
    :->call-code (fn [[s trim-spec trim-octet]]
                   ;; should we throw an explicit error if no good cast to byte is possible?
                   `(ByteBuffer/wrap (binary-trim (resolve-bytes ~s) (resolve-string ~trim-spec) (byte ~trim-octet))))})
 
-(defmethod codegen-mono-call [:upper :utf8] [_]
+(defmethod codegen-call [:upper :utf8] [_]
   {:return-type :utf8
    :->call-code (fn [[code]]
                   `(ByteBuffer/wrap (.getBytes (.toUpperCase (resolve-string ~code)) StandardCharsets/UTF_8)))})
 
-(defmethod codegen-mono-call [:lower :utf8] [_]
+(defmethod codegen-call [:lower :utf8] [_]
   {:return-type :utf8
    :->call-code (fn [[code]]
                   `(ByteBuffer/wrap (.getBytes (.toLowerCase (resolve-string ~code)) StandardCharsets/UTF_8)))})
@@ -976,16 +983,17 @@
     (ByteBuffer/wrap (.getBytes ^String s-or-buf StandardCharsets/UTF_8))))
 
 ;; concat is not a simple mono-call, as it permits a variable number of arguments so we can avoid intermediate alloc
-(defmethod codegen-call :concat [{:keys [emitted-args] :as expr}]
+(defn- codegen-concat [{:keys [emitted-args] :as expr}]
   (when (< (count emitted-args) 2)
     (throw (err/illegal-arg :core2.expression/arity-error
                             {::err/message "Arity error, concat requires at least two arguments"
                              :expr (dissoc expr :emitted-args :arg-types)})))
   (let [possible-types (into #{} (mapcat (comp types/flatten-union-types :return-type)) emitted-args)
         value-types (disj possible-types :null)
-        _ (when (< 1 (count value-types)) (throw (err/illegal-arg :core2.expression/type-error
-                                                                  {::err/message "All arguments to `concat` must be of the same type."
-                                                                   :types value-types})))
+        _ (when (< 1 (count value-types))
+            (throw (err/illegal-arg :core2.expression/type-error
+                                    {::err/message "All arguments to `concat` must be of the same type."
+                                     :types value-types})))
         value-type (first value-types)
         ->concat-code (case value-type
                         :utf8 #(do `(buf-concat (mapv resolve-utf8-buf [~@%])))
@@ -1005,32 +1013,32 @@
                                (reverse emitted-args))]
                    (build-args-then-call [])))}))
 
-(defmethod codegen-mono-call [:substring :utf8 :int :int :bool] [_]
+(defmethod codegen-call [:substring :utf8 :int :int :bool] [_]
   {:return-type :utf8
    :->call-code (fn [[x start length use-len]]
                   `(StringUtil/sqlUtf8Substring (resolve-utf8-buf ~x) ~start ~length ~use-len))})
 
-(defmethod codegen-mono-call [:substring :varbinary :int :int :bool] [_]
+(defmethod codegen-call [:substring :varbinary :int :int :bool] [_]
   {:return-type :varbinary
    :->call-code (fn [[x start length use-len]]
                   `(StringUtil/sqlBinSubstring (resolve-buf ~x) ~start ~length ~use-len))})
 
-(defmethod codegen-mono-call [:character-length :utf8 :utf8] [{:keys [args]}]
+(defmethod codegen-call [:character-length :utf8 :utf8] [{:keys [args]}]
   (let [[_ unit] (map :literal args)]
     {:return-type :i32
      :->call-code (case unit
                     "CHARACTERS" #(do `(StringUtil/utf8Length (resolve-utf8-buf ~(first %))))
                     "OCTETS" #(do `(.remaining (resolve-utf8-buf ~(first %)))))}))
 
-(defmethod codegen-mono-call [:octet-length :utf8] [_]
+(defmethod codegen-call [:octet-length :utf8] [_]
   {:return-type :i32
    :->call-code #(do `(.remaining (resolve-utf8-buf ~@%)))})
 
-(defmethod codegen-mono-call [:octet-length :varbinary] [_]
+(defmethod codegen-call [:octet-length :varbinary] [_]
   {:return-type :i32
    :->call-code #(do `(.remaining (resolve-buf ~@%)))})
 
-(defmethod codegen-mono-call [:position :utf8 :utf8 :utf8] [{:keys [args]}]
+(defmethod codegen-call [:position :utf8 :utf8 :utf8] [{:keys [args]}]
   (let [[_ _ unit] (map :literal args)]
     {:return-type :i32
      :->call-code (fn [[needle haystack]]
@@ -1038,25 +1046,25 @@
                       "CHARACTERS" `(StringUtil/sqlUtf8Position (resolve-utf8-buf ~needle) (resolve-utf8-buf ~haystack))
                       "OCTETS" `(StringUtil/SqlBinPosition (resolve-utf8-buf ~needle) (resolve-utf8-buf ~haystack))))}))
 
-(defmethod codegen-mono-call [:position :varbinary :varbinary] [_]
+(defmethod codegen-call [:position :varbinary :varbinary] [_]
   {:return-type :i32
    :->call-code (fn [[needle haystack]] `(StringUtil/SqlBinPosition (resolve-buf ~needle) (resolve-buf ~haystack)))})
 
-(defmethod codegen-mono-call [:overlay :utf8 :utf8 :int :int] [_]
+(defmethod codegen-call [:overlay :utf8 :utf8 :int :int] [_]
   {:return-type :utf8
    :->call-code (fn [[target replacement from len]]
                   `(StringUtil/sqlUtf8Overlay (resolve-utf8-buf ~target) (resolve-utf8-buf ~replacement) ~from ~len))})
 
-(defmethod codegen-mono-call [:overlay :varbinary :varbinary :int :int] [_]
+(defmethod codegen-call [:overlay :varbinary :varbinary :int :int] [_]
   {:return-type :varbinary
    :->call-code (fn [[target replacement from len]]
                   `(StringUtil/sqlBinOverlay (resolve-buf ~target) (resolve-buf ~replacement) ~from ~len))})
 
-(defmethod codegen-mono-call [:default-overlay-length :utf8] [_]
+(defmethod codegen-call [:default-overlay-length :utf8] [_]
   {:return-type :i32
    :->call-code #(do `(StringUtil/utf8Length (resolve-utf8-buf ~@%)))})
 
-(defmethod codegen-mono-call [:default-overlay-length :varbinary] [_]
+(defmethod codegen-call [:default-overlay-length :varbinary] [_]
   {:return-type :i32
    :->call-code #(do `(.remaining (resolve-buf ~@%)))})
 
@@ -1075,7 +1083,7 @@
                                :exp 'Math/exp
                                :floor 'Math/floor
                                :ceil 'Math/ceil}]
-  (defmethod codegen-mono-call [math-op :num] [_]
+  (defmethod codegen-call [math-op :num] [_]
     {:return-type :f64
      :->call-code #(do `(~math-method ~@%))}))
 
@@ -1115,7 +1123,7 @@
   (defmethod codegen-cast [:utf8 col-type] [_]
     {:return-type col-type, :->call-code #(do `(~parse-sym (buf->str ~@%)))}))
 
-(defmethod codegen-mono-call [:cast :any] [{[source-type] :arg-types, :keys [target-type]}]
+(defmethod codegen-call [:cast :any] [{[source-type] :arg-types, :keys [target-type]}]
   (codegen-cast {:source-type source-type, :target-type target-type}))
 
 #_{:clj-kondo/ignore [:unused-binding]}

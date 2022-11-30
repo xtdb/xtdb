@@ -8,41 +8,41 @@
 
 (set! *unchecked-math* :warn-on-boxed)
 
-(defmethod expr/codegen-mono-call [:compare :bool :bool] [_]
+(defmethod expr/codegen-call [:compare :bool :bool] [_]
   {:return-type :i32
    :->call-code (fn [emitted-args]
                   `(Boolean/compare ~@emitted-args))})
 
-(defmethod expr/codegen-mono-call [:compare :int :int] [_]
+(defmethod expr/codegen-call [:compare :int :int] [_]
   {:return-type :i32
    :->call-code (fn [emitted-args]
                   `(Long/compare ~@emitted-args))})
 
-(defmethod expr/codegen-mono-call [:compare :num :num] [_]
+(defmethod expr/codegen-call [:compare :num :num] [_]
   {:return-type :i32
    :->call-code (fn [emitted-args]
                   `(Double/compare ~@emitted-args))})
 
-(defmethod expr/codegen-mono-call [:compare :date :date] [_]
+(defmethod expr/codegen-call [:compare :date :date] [_]
   ;; TODO different scales
   {:return-type :i32
    :->call-code (fn [emitted-args]
                   `(Long/compare ~@emitted-args))})
 
-(defmethod expr/codegen-mono-call [:compare :timestamp-tz :timestamp-tz] [_]
+(defmethod expr/codegen-call [:compare :timestamp-tz :timestamp-tz] [_]
   ;; TODO different scales
   {:return-type :i32
    :->call-code (fn [emitted-args]
                   `(Long/compare ~@emitted-args))})
 
 (doseq [col-type #{:varbinary :utf8}]
-  (defmethod expr/codegen-mono-call [:compare col-type col-type] [_]
+  (defmethod expr/codegen-call [:compare col-type col-type] [_]
     {:return-type :i32
      :->call-code (fn [emitted-args]
                     `(util/compare-nio-buffers-unsigned ~@emitted-args))}))
 
 (doseq [col-type #{[:extension :keyword ""] [:extension :uuid ""]}]
-  (defmethod expr/codegen-mono-call [:compare col-type col-type] [_]
+  (defmethod expr/codegen-call [:compare col-type col-type] [_]
     {:return-type :i32
      :->call-code (fn [emitted-args]
                     `(.compareTo ~@(map #(expr/with-tag % Comparable) emitted-args)))}))
@@ -53,13 +53,13 @@
                                       [:compare-nulls-last :null :null 0]
                                       [:compare-nulls-last :null :any 1]
                                       [:compare-nulls-last :any :null -1]]]
-  (defmethod expr/codegen-mono-call [f left-type right-type] [_]
+  (defmethod expr/codegen-call [f left-type right-type] [_]
     {:return-type :i32
      :->call-code (constantly res)}))
 
 (doseq [f [:compare-nulls-first :compare-nulls-last]]
-  (defmethod expr/codegen-mono-call [f :any :any] [expr]
-    (expr/codegen-mono-call (assoc expr :f :compare))))
+  (defmethod expr/codegen-call [f :any :any] [expr]
+    (expr/codegen-call (assoc expr :f :compare))))
 
 (def ^:private build-comparator
   (-> (fn [left-col-type right-col-type null-ordering]
