@@ -9,7 +9,8 @@
             [xtdb.checkpoint :as cp]
             [xtdb.kv.index-store :as kvi]
             [xtdb.codec :as c])
-  (:import java.util.Map java.util.HashMap
+  (:import java.util.Map
+           java.util.HashMap
            java.util.function.Function
            (java.io Closeable File)
            (java.nio.file Files Path)
@@ -17,9 +18,9 @@
            (org.rocksdb BlockBasedTableConfig Checkpoint CompressionType FlushOptions LRUCache
                         DBOptions Options ReadOptions RocksDB RocksIterator
                         WriteBatchWithIndex WriteBatch WriteOptions Statistics StatsLevel
-                        ColumnFamilyOptions ColumnFamilyDescriptor ColumnFamilyHandle BloomFilter CompactionPriority)
-           (java.nio ByteBuffer)
-           (org.agrona DirectBuffer)))
+                        ColumnFamilyOptions ColumnFamilyDescriptor ColumnFamilyHandle BloomFilter)
+           (org.agrona DirectBuffer)
+           (xtdb.kv KvSnapshotPrefixSupport)))
 
 (defprotocol CfId
   (->cf-id [this]))
@@ -43,8 +44,9 @@
 
 (set! *unchecked-math* :warn-on-boxed)
 
-(def ^:const column-family-defs [c/entity+vt+tt+tx-id->content-hash-index-id
-                                 c/entity+z+tx-id->content-hash-index-id])
+(def column-family-defs
+  [{:id-byte c/entity+vt+tt+tx-id->content-hash-index-id, :prefix-len (+ c/id-size c/index-id-size)}
+   {:id-byte c/entity+z+tx-id->content-hash-index-id}])
 
 (defn- iterator->key [^RocksIterator i]
   (when (.isValid i)
@@ -75,7 +77,11 @@
     (doseq [^RocksIterator i (.values is)]
       (.close i))))
 
-(defrecord RocksKvTxSnapshot [^RocksDB db, ->column-family-handle, ^ReadOptions read-options, snapshot, ^WriteBatchWithIndex wb]
+(defrecord RocksKvTxSnapshot [^RocksDB db, ->column-family-handle,
+                              ^ReadOptions read-options,
+                              ^ReadOptions prefix-read-options,
+                              snapshot,
+                              ^WriteBatchWithIndex wb]
   kv/KvSnapshot
   (new-iterator [_]
     (let [k->i (reify Function
@@ -88,12 +94,24 @@
     (some-> (.getFromBatchAndDB wb db ^ColumnFamilyHandle (->column-family-handle (->cf-id k)) read-options (mem/->on-heap k))
             (mem/as-buffer)))
 
+  KvSnapshotPrefixSupport
+  (newPrefixSeekOptimisedIterator [_]
+    (let [k->i (reify Function
+                 (apply [_ k]
+                   (let [cfh (->column-family-handle k)]
+                     (.newIteratorWithBase wb cfh (.newIterator db cfh prefix-read-options) prefix-read-options))))]
+      (->RocksKvIterator nil (HashMap.) k->i)))
+
   Closeable
   (close [_]
     (.close read-options)
+    (.close prefix-read-options)
     (.releaseSnapshot db snapshot)))
 
-(defrecord RocksKvSnapshot [^RocksDB db, ->column-family-handle, ^ReadOptions read-options, snapshot]
+(defrecord RocksKvSnapshot [^RocksDB db, ->column-family-handle,
+                            ^ReadOptions read-options,
+                            ^ReadOptions prefix-read-options,
+                            snapshot]
   kv/KvSnapshot
   (new-iterator [_]
     (let [k->i (reify Function
@@ -105,9 +123,17 @@
     (some-> (.get db ^ColumnFamilyHandle (->column-family-handle (->cf-id k)) read-options (mem/->on-heap k))
             (mem/as-buffer)))
 
+  KvSnapshotPrefixSupport
+  (newPrefixSeekOptimisedIterator [_]
+    (let [k->i (reify Function
+                 (apply [_ k]
+                   (.newIterator db (->column-family-handle k) read-options)))]
+      (->RocksKvIterator nil (HashMap.) k->i)))
+
   Closeable
   (close [_]
     (.close read-options)
+    (.close prefix-read-options)
     (.releaseSnapshot db snapshot)))
 
 (defrecord RocksKvTx [^RocksDB db, ->column-family-handle, ^WriteOptions write-options, ^WriteBatchWithIndex wb]
@@ -117,6 +143,9 @@
       (->RocksKvTxSnapshot db
                            ->column-family-handle
                            (doto (ReadOptions.)
+                             (.setSnapshot snapshot))
+                           (doto (ReadOptions.)
+                             (.setPrefixSameAsStart true)
                              (.setSnapshot snapshot))
                            snapshot
                            wb)))
@@ -178,6 +207,9 @@
       (->RocksKvSnapshot db
                          ->column-family-handle
                          (doto (ReadOptions.)
+                           (.setSnapshot snapshot))
+                         (doto (ReadOptions.)
+                           (.setPrefixSameAsStart true)
                            (.setSnapshot snapshot))
                          snapshot)))
 
@@ -248,8 +280,20 @@
                                            :spec #(instance? Options %)}
                               :disable-wal? {:doc "Disable Write Ahead Log"
                                              :default false
-                                             :spec ::sys/boolean}}}
-  [{:keys [^Path db-dir sync? disable-wal? metrics checkpointer ^Options db-options block-cache] :as options}]
+                                             :spec ::sys/boolean}
+                              :enable-filters?
+                              {:doc
+                               "Enables additional probabilistic filtering of certain index seeks, and caching of filters.
+
+                               Can reduce I/O at the cost of increased demands on block cache, this option may increase the size of SST files on disk slightly, expect around 2-3% increase in size.
+
+                               Some effects may require new SST files to be written by RocksDB, so may not have an immediate impact.
+
+                               If this option is enabled, a block cache size of at least 256MB is recommended. See https://docs.xtdb.com/storage/rocksdb/#blocks-cache for instructions on
+                               configuring the block cache."
+                               :default false
+                               :spec ::sys/boolean}}}
+  [{:keys [^Path db-dir sync? disable-wal? metrics checkpointer ^Options db-options block-cache enable-filters?] :as options}]
 
   (RocksDB/loadLibrary)
 
@@ -266,31 +310,49 @@
                       (.setCompressionType CompressionType/LZ4_COMPRESSION)
                       (.setBottommostCompressionType CompressionType/ZSTD_COMPRESSION))
 
-        _ (when block-cache
-            (.setTableFormatConfig default-cfo (doto (BlockBasedTableConfig.)
-                                                 (.setBlockCache block-cache))))
+        configure-table
+        (fn [^BlockBasedTableConfig cfg]
+          (when block-cache
+            (.setBlockCache cfg block-cache))
+          (when enable-filters?
+            (.setCacheIndexAndFilterBlocks cfg true)
+            ;; true by default (but requires CacheIndexAndFilterBlocks to do anything), however not specified as such in docs so setting here just in case it is redefined in
+            ;; a subsequent rocks jni release.
+            (.setCacheIndexAndFilterBlocksWithHighPriority cfg true)))
 
-        cfo (doto (ColumnFamilyOptions.)
-              (.setCompressionType CompressionType/LZ4_COMPRESSION)
-              (.setBottommostCompressionType CompressionType/ZSTD_COMPRESSION))
-
         _ (when block-cache
-            (.setTableFormatConfig cfo (doto (BlockBasedTableConfig.)
-                                         (.setBlockCache block-cache))))
+            (.setTableFormatConfig default-cfo (doto (BlockBasedTableConfig.) (configure-table))))
 
         column-family-descriptors
         (into [(ColumnFamilyDescriptor. RocksDB/DEFAULT_COLUMN_FAMILY default-cfo)]
-              (for [c column-family-defs]
-                (ColumnFamilyDescriptor. (byte-array [(byte c)]) cfo)))
+              (for [{:keys [id-byte, prefix-len]} column-family-defs
+                    :let [cfo (doto (ColumnFamilyOptions.)
+                                (.setCompressionType CompressionType/LZ4_COMPRESSION)
+                                (.setBottommostCompressionType CompressionType/ZSTD_COMPRESSION))
+
+                          table-config (BlockBasedTableConfig.)
+
+                          _ (configure-table table-config)
+
+                          _ (when (and enable-filters? block-cache prefix-len)
+                              (.useFixedLengthPrefixExtractor cfo (int prefix-len))
+                              (.setFilterPolicy table-config (BloomFilter.))
+                              (.setWholeKeyFiltering table-config false)
+                              (.setMemtablePrefixBloomSizeRatio cfo 0.05))
+
+                          _ (.setTableFormatConfig cfo table-config)
+                          ]]
+                (ColumnFamilyDescriptor. (byte-array [id-byte]) cfo)))
 
         column-family-handles-vector (java.util.Vector.)
 
         stats (when metrics (doto (Statistics.) (.setStatsLevel (StatsLevel/EXCEPT_DETAILED_TIMERS))))
+
         opts (doto (or ^DBOptions db-options (DBOptions.))
                (cond-> metrics (.setStatistics stats))
                (.setCreateIfMissing true)
                (.setCreateMissingColumnFamilies true)
-               (.setMaxBackgroundJobs (max 2 (dec (-> (Runtime/getRuntime) .availableProcessors)))))
+               (cond-> (nil? db-options) (.setMaxBackgroundJobs (max 2 (dec (.availableProcessors (Runtime/getRuntime)))))))
 
         db (try
              (RocksDB/open opts (-> (Files/createDirectories db-dir (make-array FileAttribute 0))
@@ -304,7 +366,7 @@
         metrics (when metrics (metrics db stats))
         column-family-handles (into {}
                                     (for [[^int i cfd] (map-indexed vector column-family-defs)]
-                                      [cfd (.get column-family-handles-vector (inc i))]))
+                                      [(:id-byte cfd) (.get column-family-handles-vector (inc i))]))
 
         ^objects cf-handle-array
         (let [max-cf-id (apply max (keys column-family-handles))

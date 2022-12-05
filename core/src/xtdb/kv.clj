@@ -15,6 +15,21 @@
   (new-iterator ^java.io.Closeable [this])
   (get-value [this k]))
 
+;; interface rather than protocol because made optional via fast instance? checks.
+(definterface KvSnapshotPrefixSupport
+  (newPrefixSeekOptimisedIterator []))
+
+(defn new-prefix-seek-optimised-iterator
+  "Opens a new iterator, allowing for prefix-only search optimisations (if they are possible).
+
+  Callers must be ok for your iterator to only see keys sharing the prefix supplied as the `k` arg to `(seek iterator k)`.
+
+  WARNING: Depending on the capabilities of the KV store implementation you may or may not see keys outside the prefix, do not depend on either."
+  [kv-snapshot]
+  (if (instance? KvSnapshotPrefixSupport kv-snapshot)
+    (.newPrefixSeekOptimisedIterator ^KvSnapshotPrefixSupport kv-snapshot)
+    (new-iterator kv-snapshot)))
+
 (defprotocol KvStoreTx
   (new-tx-snapshot ^java.io.Closeable [this])
   (abort-kv-tx [this])
