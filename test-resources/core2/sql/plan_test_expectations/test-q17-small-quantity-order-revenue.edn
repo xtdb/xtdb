@@ -14,22 +14,22 @@
        [{x6 x12}]
        [:map
         [{$row_number$ (row-number)}]
-        [:join
+        [:mega-join
          [{x2 x6}]
-         [:rename
-          {l_extendedprice x1, l_partkey x2, l_quantity x3, _table x4}
-          [:scan
-           [l_extendedprice
-            l_partkey
-            l_quantity
-            {_table (= _table "lineitem")}]]]
-         [:rename
-          {p_partkey x6, p_brand x7, p_container x8, _table x9}
-          [:scan
-           [p_partkey
-            {p_brand (= p_brand "Brand#23")}
-            {p_container (= p_container "MED BOX")}
-            {_table (= _table "part")}]]]]]
+         [[:rename
+           {l_extendedprice x1, l_partkey x2, l_quantity x3, _table x4}
+           [:scan
+            [l_extendedprice
+             l_partkey
+             l_quantity
+             {_table (= _table "lineitem")}]]]
+          [:rename
+           {p_partkey x6, p_brand x7, p_container x8, _table x9}
+           [:scan
+            [p_partkey
+             {p_brand (= p_brand "Brand#23")}
+             {p_container (= p_container "MED BOX")}
+             {_table (= _table "part")}]]]]]]
        [:rename
         {l_quantity x11, l_partkey x12, _table x13}
         [:scan

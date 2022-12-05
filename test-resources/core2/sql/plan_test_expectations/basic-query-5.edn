@@ -2,11 +2,11 @@
  {x5 movietitle}
  [:project
   [x5]
-  [:join
+  [:mega-join
    [{x1 x5} {x2 x6}]
-   [:rename
-    {title x1, movieyear x2, _table x3}
-    [:scan [title movieyear {_table (= _table "movie")}]]]
-   [:rename
-    {movietitle x5, year x6, _table x7}
-    [:scan [movietitle year {_table (= _table "starsin")}]]]]]]
+   [[:rename
+     {title x1, movieyear x2, _table x3}
+     [:scan [title movieyear {_table (= _table "movie")}]]]
+    [:rename
+     {movietitle x5, year x6, _table x7}
+     [:scan [movietitle year {_table (= _table "starsin")}]]]]]]]

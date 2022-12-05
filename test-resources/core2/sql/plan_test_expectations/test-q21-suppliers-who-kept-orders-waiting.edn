@@ -10,8 +10,14 @@
     [:map
      [{x34 1}]
      [:mega-join
-      ({x7 x12} {x2 x6} {x3 x16})
+      [{x3 x16} {x7 x12} {x2 x6}]
       [[:rename
+        {n_nationkey x16, n_name x17, _table x18}
+        [:scan
+         [n_nationkey
+          {n_name (= n_name "SAUDI ARABIA")}
+          {_table (= _table "nation")}]]]
+       [:rename
         {o_orderkey x12, o_orderstatus x13, _table x14}
         [:scan
          [o_orderkey
@@ -59,10 +65,4 @@
             l_suppkey
             l_receiptdate
             l_commitdate
-            {_table (= _table "lineitem")}]]]]]
-       [:rename
-        {n_nationkey x16, n_name x17, _table x18}
-        [:scan
-         [n_nationkey
-          {n_name (= n_name "SAUDI ARABIA")}
-          {_table (= _table "nation")}]]]]]]]]]]
+            {_table (= _table "lineitem")}]]]]]]]]]]]]

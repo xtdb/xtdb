@@ -6,11 +6,11 @@
    (< x11 1930)
    [:group-by
     [x1 {x10 (sum x5)} {x11 (min x7)}]
-    [:join
+    [:mega-join
      [{x2 x6}]
-     [:rename
-      {name x1, cert x2, _table x3}
-      [:scan [name cert {_table (= _table "movieexec")}]]]
-     [:rename
-      {length x5, producer x6, year x7, _table x8}
-      [:scan [length producer year {_table (= _table "movie")}]]]]]]]]
+     [[:rename
+       {name x1, cert x2, _table x3}
+       [:scan [name cert {_table (= _table "movieexec")}]]]
+      [:rename
+       {length x5, producer x6, year x7, _table x8}
+       [:scan [length producer year {_table (= _table "movie")}]]]]]]]]]

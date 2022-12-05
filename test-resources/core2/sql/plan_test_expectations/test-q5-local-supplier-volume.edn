@@ -7,8 +7,21 @@
    [:map
     [{x29 (* x10 (- 1 x11))}]
     [:mega-join
-     ({x6 x12} {x1 x5} {x13 x16} {x2 x17} {x17 x21} {x22 x25})
+     [{x22 x25} {x17 x21} {x13 x16} {x2 x17} {x6 x12} {x1 x5}]
      [[:rename
+       {r_regionkey x25, r_name x26, _table x27}
+       [:scan
+        [r_regionkey
+         {r_name (= r_name "ASIA")}
+         {_table (= _table "region")}]]]
+      [:rename
+       {n_name x20, n_nationkey x21, n_regionkey x22, _table x23}
+       [:scan
+        [n_name n_nationkey n_regionkey {_table (= _table "nation")}]]]
+      [:rename
+       {s_suppkey x16, s_nationkey x17, _table x18}
+       [:scan [s_suppkey s_nationkey {_table (= _table "supplier")}]]]
+      [:rename
        {l_extendedprice x10,
         l_discount x11,
         l_orderkey x12,
@@ -36,17 +49,4 @@
              #time/date "1994-01-01"
              (single-field-interval "1" "YEAR" 2 0)))
            (>= o_orderdate #time/date "1994-01-01"))}
-         {_table (= _table "orders")}]]]
-      [:rename
-       {s_suppkey x16, s_nationkey x17, _table x18}
-       [:scan [s_suppkey s_nationkey {_table (= _table "supplier")}]]]
-      [:rename
-       {n_name x20, n_nationkey x21, n_regionkey x22, _table x23}
-       [:scan
-        [n_name n_nationkey n_regionkey {_table (= _table "nation")}]]]
-      [:rename
-       {r_regionkey x25, r_name x26, _table x27}
-       [:scan
-        [r_regionkey
-         {r_name (= r_name "ASIA")}
-         {_table (= _table "region")}]]]]]]]]]
+         {_table (= _table "orders")}]]]]]]]]]

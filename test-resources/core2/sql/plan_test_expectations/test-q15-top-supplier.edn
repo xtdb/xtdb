@@ -8,39 +8,39 @@
     (= x14 x25)
     [:single-join
      []
-     [:join
+     [:mega-join
       [{x1 x7}]
-      [:rename
-       {s_suppkey x1, s_name x2, s_address x3, s_phone x4, _table x5}
-       [:scan
-        [s_suppkey
-         s_name
-         s_address
-         s_phone
-         {_table (= _table "supplier")}]]]
-      [:group-by
-       [x7 {x14 (sum x13)}]
-       [:map
-        [{x13 (* x8 (- 1 x9))}]
-        [:rename
-         {l_suppkey x7,
-          l_extendedprice x8,
-          l_discount x9,
-          l_shipdate x10,
-          _table x11}
-         [:scan
-          [l_suppkey
-           l_extendedprice
-           l_discount
-           {l_shipdate
-            (and
-             (<
-              l_shipdate
-              (+
-               #time/date "1996-01-01"
-               (single-field-interval "3" "MONTH" 2 0)))
-             (>= l_shipdate #time/date "1996-01-01"))}
-           {_table (= _table "lineitem")}]]]]]]
+      [[:rename
+        {s_suppkey x1, s_name x2, s_address x3, s_phone x4, _table x5}
+        [:scan
+         [s_suppkey
+          s_name
+          s_address
+          s_phone
+          {_table (= _table "supplier")}]]]
+       [:group-by
+        [x7 {x14 (sum x13)}]
+        [:map
+         [{x13 (* x8 (- 1 x9))}]
+         [:rename
+          {l_suppkey x7,
+           l_extendedprice x8,
+           l_discount x9,
+           l_shipdate x10,
+           _table x11}
+          [:scan
+           [l_suppkey
+            l_extendedprice
+            l_discount
+            {l_shipdate
+             (and
+              (<
+               l_shipdate
+               (+
+                #time/date "1996-01-01"
+                (single-field-interval "3" "MONTH" 2 0)))
+              (>= l_shipdate #time/date "1996-01-01"))}
+            {_table (= _table "lineitem")}]]]]]]]
      [:group-by
       [{x25 (max x23)}]
       [:group-by

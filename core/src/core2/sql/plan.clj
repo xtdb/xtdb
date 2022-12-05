@@ -2432,41 +2432,24 @@
       [:join [predicate] lhs rhs])))
 
 (defn- merge-joins-to-mega-join [z]
-  (r/zmatch z
-    [:join jc-1
-     [:join jc-2 r1 r2]
-     [:join jc-3 r3 r4]]
+  (r/zmatch
+    z
+    [:join jc r1 r2]
     ;;=>
-    [:mega-join (vec (concat jc-1 jc-2 jc-3)) [r1 r2 r3 r4]]
+    [:mega-join jc [r1 r2]]
 
-    [:join jc-1
-     [:join jc-2 r2 r3]
-     r1]
+    [:mega-join jc
+     ^:z rels]
     ;;=>
-    [:mega-join (vec (concat jc-1 jc-2)) [r1 r2 r3]]
-
-    [:join jc-1
-     r1
-     [:join jc-2 r2 r3]]
-    ;;=>
-    [:mega-join (vec (concat jc-1 jc-2)) [r1 r2 r3]]
-
-    [:join
-     jc
-     [:mega-join join-clauses
-      rels]
-     rhs]
-    ;;=>
-    [:mega-join (vec (concat join-clauses jc)) (conj rels rhs)]
-
-
-    [:join
-     jc
-     lhs
-     [:mega-join join-clauses
-      rels]]
-    ;;=>
-    [:mega-join (vec (concat join-clauses jc)) (conj rels lhs)]))
+    (when-let [mega-join (r/find-first (partial r/ctor? :mega-join) rels)]
+      (let [[_ inner-jc inner-rels :as inner-mega-join] (r/znode mega-join)
+            outer-rels (r/znode rels)]
+        [:mega-join
+         (vec (concat jc inner-jc))
+         (vec
+           (concat
+             (remove #(= inner-mega-join %) outer-rels)
+             inner-rels))]))))
 
 (defn- promote-selection-to-join [z]
   (r/zmatch z

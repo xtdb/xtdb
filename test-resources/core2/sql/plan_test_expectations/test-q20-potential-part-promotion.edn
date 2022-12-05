@@ -4,72 +4,72 @@
   [[x1 {:direction :asc, :null-ordering :nulls-last}]]
   [:project
    [x1 x2]
-   [:join
+   [:mega-join
     [{x4 x7}]
-    [:semi-join
-     [{x3 x11}]
+    [[:semi-join
+      [{x3 x11}]
+      [:rename
+       {s_name x1,
+        s_address x2,
+        s_suppkey x3,
+        s_nationkey x4,
+        _table x5}
+       [:scan
+        [s_name
+         s_address
+         s_suppkey
+         s_nationkey
+         {_table (= _table "supplier")}]]]
+      [:select
+       (> x13 x29)
+       [:map
+        [{x29 (* 0.5 x27)}]
+        [:group-by
+         [x11 x12 x13 x14 $row_number$ {x27 (sum x21)}]
+         [:left-outer-join
+          [{x12 x22} {x11 x23}]
+          [:map
+           [{$row_number$ (row-number)}]
+           [:semi-join
+            [{x12 x16}]
+            [:rename
+             {ps_suppkey x11,
+              ps_partkey x12,
+              ps_availqty x13,
+              _table x14}
+             [:scan
+              [ps_suppkey
+               ps_partkey
+               ps_availqty
+               {_table (= _table "partsupp")}]]]
+            [:rename
+             {p_partkey x16, p_name x17, _table x18}
+             [:scan
+              [p_partkey
+               {p_name (like p_name "forest%")}
+               {_table (= _table "part")}]]]]]
+          [:rename
+           {l_quantity x21,
+            l_partkey x22,
+            l_suppkey x23,
+            l_shipdate x24,
+            _table x25}
+           [:scan
+            [l_quantity
+             l_partkey
+             l_suppkey
+             {l_shipdate
+              (and
+               (<
+                l_shipdate
+                (+
+                 #time/date "1994-01-01"
+                 (single-field-interval "1" "YEAR" 2 0)))
+               (>= l_shipdate #time/date "1994-01-01"))}
+             {_table (= _table "lineitem")}]]]]]]]]
      [:rename
-      {s_name x1,
-       s_address x2,
-       s_suppkey x3,
-       s_nationkey x4,
-       _table x5}
+      {n_nationkey x7, n_name x8, _table x9}
       [:scan
-       [s_name
-        s_address
-        s_suppkey
-        s_nationkey
-        {_table (= _table "supplier")}]]]
-     [:select
-      (> x13 x29)
-      [:map
-       [{x29 (* 0.5 x27)}]
-       [:group-by
-        [x11 x12 x13 x14 $row_number$ {x27 (sum x21)}]
-        [:left-outer-join
-         [{x12 x22} {x11 x23}]
-         [:map
-          [{$row_number$ (row-number)}]
-          [:semi-join
-           [{x12 x16}]
-           [:rename
-            {ps_suppkey x11,
-             ps_partkey x12,
-             ps_availqty x13,
-             _table x14}
-            [:scan
-             [ps_suppkey
-              ps_partkey
-              ps_availqty
-              {_table (= _table "partsupp")}]]]
-           [:rename
-            {p_partkey x16, p_name x17, _table x18}
-            [:scan
-             [p_partkey
-              {p_name (like p_name "forest%")}
-              {_table (= _table "part")}]]]]]
-         [:rename
-          {l_quantity x21,
-           l_partkey x22,
-           l_suppkey x23,
-           l_shipdate x24,
-           _table x25}
-          [:scan
-           [l_quantity
-            l_partkey
-            l_suppkey
-            {l_shipdate
-             (and
-              (<
-               l_shipdate
-               (+
-                #time/date "1994-01-01"
-                (single-field-interval "1" "YEAR" 2 0)))
-              (>= l_shipdate #time/date "1994-01-01"))}
-            {_table (= _table "lineitem")}]]]]]]]]
-    [:rename
-     {n_nationkey x7, n_name x8, _table x9}
-     [:scan
-      [n_nationkey
-       {n_name (= n_name "CANADA")}
-       {_table (= _table "nation")}]]]]]]]
+       [n_nationkey
+        {n_name (= n_name "CANADA")}
+        {_table (= _table "nation")}]]]]]]]]

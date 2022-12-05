@@ -2,7 +2,9 @@
  {x1 a}
  [:project
   [x1]
-  [:join
+  [:mega-join
    [{(+ x1 1) (+ x4 1)}]
-   [:rename {a x1, _table x2} [:scan [a {_table (= _table "a")}]]]
-   [:rename {b x4, _table x5} [:scan [b {_table (= _table "bar")}]]]]]]
+   [[:rename {a x1, _table x2} [:scan [a {_table (= _table "a")}]]]
+    [:rename
+     {b x4, _table x5}
+     [:scan [b {_table (= _table "bar")}]]]]]]]

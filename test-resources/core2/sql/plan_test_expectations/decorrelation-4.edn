@@ -10,14 +10,14 @@
      [{x2 x11}]
      [:map
       [{$row_number$ (row-number)}]
-      [:join
+      [:mega-join
        [{x2 x6}]
-       [:rename
-        {name x1, id x2, _table x3}
-        [:scan [name id {_table (= _table "students")}]]]
-       [:rename
-        {course x5, sid x6, grade x7, _table x8}
-        [:scan [course sid grade {_table (= _table "exams")}]]]]]
+       [[:rename
+         {name x1, id x2, _table x3}
+         [:scan [name id {_table (= _table "students")}]]]
+        [:rename
+         {course x5, sid x6, grade x7, _table x8}
+         [:scan [course sid grade {_table (= _table "exams")}]]]]]]
      [:rename
       {grade x10, sid x11, _table x12}
       [:scan [grade sid {_table (= _table "exams")}]]]]]]]]

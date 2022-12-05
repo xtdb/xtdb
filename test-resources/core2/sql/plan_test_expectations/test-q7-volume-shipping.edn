@@ -9,15 +9,24 @@
    [:project
     [x20 x24 {x28 (extract "YEAR" x5)} {x29 (* x6 (- 1 x7))}]
     [:mega-join
-     ({x9 x12}
-      {x1 x8}
-      {x13 x16}
-      {x2 x21}
-      {x17 x25}
+     [{x17 x25}
       (or
        (and (= x20 "FRANCE") (= x24 "GERMANY"))
-       (and (= x20 "GERMANY") (= x24 "FRANCE"))))
+       (and (= x20 "GERMANY") (= x24 "FRANCE")))
+      {x2 x21}
+      {x13 x16}
+      {x9 x12}
+      {x1 x8}]
      [[:rename
+       {n_name x24, n_nationkey x25, _table x26}
+       [:scan [n_name n_nationkey {_table (= _table "nation")}]]]
+      [:rename
+       {n_name x20, n_nationkey x21, _table x22}
+       [:scan [n_name n_nationkey {_table (= _table "nation")}]]]
+      [:rename
+       {c_custkey x16, c_nationkey x17, _table x18}
+       [:scan [c_custkey c_nationkey {_table (= _table "customer")}]]]
+      [:rename
        {o_orderkey x12, o_custkey x13, _table x14}
        [:scan [o_orderkey o_custkey {_table (= _table "orders")}]]]
       [:rename
@@ -40,13 +49,4 @@
          l_discount
          l_suppkey
          l_orderkey
-         {_table (= _table "lineitem")}]]]
-      [:rename
-       {c_custkey x16, c_nationkey x17, _table x18}
-       [:scan [c_custkey c_nationkey {_table (= _table "customer")}]]]
-      [:rename
-       {n_name x20, n_nationkey x21, _table x22}
-       [:scan [n_name n_nationkey {_table (= _table "nation")}]]]
-      [:rename
-       {n_name x24, n_nationkey x25, _table x26}
-       [:scan [n_name n_nationkey {_table (= _table "nation")}]]]]]]]]]
+         {_table (= _table "lineitem")}]]]]]]]]]

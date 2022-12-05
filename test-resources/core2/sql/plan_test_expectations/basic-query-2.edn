@@ -2,14 +2,14 @@
  {x1 movietitle}
  [:project
   [x1]
-  [:join
+  [:mega-join
    [{x2 x5}]
-   [:rename
-    {movietitle x1, starname x2, _table x3}
-    [:scan [movietitle starname {_table (= _table "starsin")}]]]
-   [:rename
-    {name x5, birthdate x6, _table x7}
-    [:scan
-     [name
-      {birthdate (and (< birthdate 1960) (> birthdate 1950))}
-      {_table (= _table "moviestar")}]]]]]]
+   [[:rename
+     {movietitle x1, starname x2, _table x3}
+     [:scan [movietitle starname {_table (= _table "starsin")}]]]
+    [:rename
+     {name x5, birthdate x6, _table x7}
+     [:scan
+      [name
+       {birthdate (and (< birthdate 1960) (> birthdate 1950))}
+       {_table (= _table "moviestar")}]]]]]]]

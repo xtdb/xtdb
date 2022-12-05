@@ -18,8 +18,11 @@
      [:map
       [{x25 (* x15 (- 1 x16))}]
       [:mega-join
-       ({x11 x17} {x1 x10} {x7 x22})
+       [{x7 x22} {x11 x17} {x1 x10}]
        [[:rename
+         {n_name x21, n_nationkey x22, _table x23}
+         [:scan [n_name n_nationkey {_table (= _table "nation")}]]]
+        [:rename
          {l_extendedprice x15,
           l_discount x16,
           l_orderkey x17,
@@ -62,8 +65,4 @@
                #time/date "1993-10-01"
                (single-field-interval "3" "MONTH" 2 0)))
              (>= o_orderdate #time/date "1993-10-01"))}
-           {_table (= _table "orders")}]]]
-        [:rename
-         {n_name x21, n_nationkey x22, _table x23}
-         [:scan
-          [n_name n_nationkey {_table (= _table "nation")}]]]]]]]]]]]
+           {_table (= _table "orders")}]]]]]]]]]]]

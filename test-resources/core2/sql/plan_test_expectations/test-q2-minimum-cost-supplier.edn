@@ -50,8 +50,14 @@
        [:map
         [{$row_number$ (row-number)}]
         [:mega-join
-         ({x13 x22} {x1 x16} {x12 x17} {x23 x26})
+         [{x23 x26} {x13 x22} {x1 x16} {x12 x17}]
          [[:rename
+           {r_regionkey x26, r_name x27, _table x28}
+           [:scan
+            [r_regionkey
+             {r_name (= r_name "EUROPE")}
+             {_table (= _table "region")}]]]
+          [:rename
            {n_name x21, n_nationkey x22, n_regionkey x23, _table x24}
            [:scan
             [n_name
@@ -94,16 +100,16 @@
             [ps_partkey
              ps_suppkey
              ps_supplycost
-             {_table (= _table "partsupp")}]]]
-          [:rename
-           {r_regionkey x26, r_name x27, _table x28}
-           [:scan
-            [r_regionkey
-             {r_name (= r_name "EUROPE")}
-             {_table (= _table "region")}]]]]]]
+             {_table (= _table "partsupp")}]]]]]]
        [:mega-join
-        ({x36 x39} {x32 x35} {x40 x43})
+        [{x40 x43} {x36 x39} {x32 x35}]
         [[:rename
+          {r_regionkey x43, r_name x44, _table x45}
+          [:scan
+           [r_regionkey
+            {r_name (= r_name "EUROPE")}
+            {_table (= _table "region")}]]]
+         [:rename
           {n_nationkey x39, n_regionkey x40, _table x41}
           [:scan
            [n_nationkey n_regionkey {_table (= _table "nation")}]]]
@@ -120,10 +126,6 @@
          [:rename
           {s_suppkey x35, s_nationkey x36, _table x37}
           [:scan
-           [s_suppkey s_nationkey {_table (= _table "supplier")}]]]
-         [:rename
-          {r_regionkey x43, r_name x44, _table x45}
-          [:scan
-           [r_regionkey
-            {r_name (= r_name "EUROPE")}
-            {_table (= _table "region")}]]]]]]]]]]]]
+           [s_suppkey
+            s_nationkey
+            {_table (= _table "supplier")}]]]]]]]]]]]]

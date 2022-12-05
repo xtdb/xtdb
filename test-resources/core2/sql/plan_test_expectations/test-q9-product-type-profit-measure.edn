@@ -10,8 +10,14 @@
      {x30 (extract "YEAR" x22)}
      {x31 (- (* x9 (- 1 x10)) (* x17 x11))}]
     [:mega-join
-     ({x12 x18} {x13 x19} {x5 x12} {x1 x13} {x14 x23} {x6 x27})
+     [{x6 x27} {x14 x23} {x12 x18} {x13 x19} {x5 x12} {x1 x13}]
      [[:rename
+       {n_name x26, n_nationkey x27, _table x28}
+       [:scan [n_name n_nationkey {_table (= _table "nation")}]]]
+      [:rename
+       {o_orderdate x22, o_orderkey x23, _table x24}
+       [:scan [o_orderdate o_orderkey {_table (= _table "orders")}]]]
+      [:rename
        {ps_supplycost x17, ps_suppkey x18, ps_partkey x19, _table x20}
        [:scan
         [ps_supplycost
@@ -44,10 +50,4 @@
          l_suppkey
          l_partkey
          l_orderkey
-         {_table (= _table "lineitem")}]]]
-      [:rename
-       {o_orderdate x22, o_orderkey x23, _table x24}
-       [:scan [o_orderdate o_orderkey {_table (= _table "orders")}]]]
-      [:rename
-       {n_name x26, n_nationkey x27, _table x28}
-       [:scan [n_name n_nationkey {_table (= _table "nation")}]]]]]]]]]
+         {_table (= _table "lineitem")}]]]]]]]]]
