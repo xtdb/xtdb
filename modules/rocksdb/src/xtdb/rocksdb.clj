@@ -17,7 +17,9 @@
            (org.rocksdb BlockBasedTableConfig Checkpoint CompressionType FlushOptions LRUCache
                         DBOptions Options ReadOptions RocksDB RocksIterator
                         WriteBatchWithIndex WriteBatch WriteOptions Statistics StatsLevel
-                        ColumnFamilyOptions ColumnFamilyDescriptor ColumnFamilyHandle)))
+                        ColumnFamilyOptions ColumnFamilyDescriptor ColumnFamilyHandle BloomFilter CompactionPriority)
+           (java.nio ByteBuffer)
+           (org.agrona DirectBuffer)))
 
 (defprotocol CfId
   (->cf-id [this]))
@@ -120,11 +122,39 @@
                            wb)))
 
   (put-kv [_ k v]
-    (let [kb (mem/direct-byte-buffer k)
-          cfh ^ColumnFamilyHandle (->column-family-handle (.get kb 0))]
-      (if v
-        (.put wb cfh kb (mem/direct-byte-buffer v))
-        (.delete wb cfh kb))))
+    (if (and (instance? DirectBuffer k)
+             (or (nil? v) (instance? DirectBuffer v)))
+      (let [^DirectBuffer k k
+            ^DirectBuffer v v
+            koffset (.wrapAdjustment k)
+            kcap (.capacity k)
+            kbb (.byteBuffer k)
+            kpos (.position kbb)
+            klim (.limit kbb)
+            _ (.position kbb koffset)
+            _ (.limit kbb (+ koffset kcap))
+            cfh ^ColumnFamilyHandle (->column-family-handle (.get kbb koffset))]
+
+        (if v
+          (let [voffset (.wrapAdjustment v)
+                vcap (.capacity v)
+                vbb (.byteBuffer v)
+                vpos (.position vbb)
+                vlim (.limit vbb)]
+            (.position vbb voffset)
+            (.limit vbb (+ voffset vcap))
+            (.put wb cfh kbb vbb)
+            (.position vbb vpos)
+            (.limit vbb vlim))
+          (.delete wb cfh kbb))
+
+        (.position kbb kpos)
+        (.limit kbb klim))
+      (let [kb (mem/direct-byte-buffer k)
+            cfh ^ColumnFamilyHandle (->column-family-handle (.get kb (.position kb)))]
+        (if v
+          (.put wb cfh kb (mem/direct-byte-buffer v))
+          (.delete wb cfh kb)))))
 
   (commit-kv-tx [this]
     (.write db write-options wb)
