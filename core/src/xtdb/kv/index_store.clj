@@ -711,6 +711,7 @@
                             level-1-iterator-delay
                             level-2-iterator-delay
                             entity-as-of-iterator-delay
+                            entity-as-of-prefix-optimised-iterator-delay
                             decode-value-iterator-delay
                             cache-iterator-delay
                             nested-index-snapshot-state
@@ -723,7 +724,7 @@
     (when (.compareAndSet closed? false true)
       (doseq [nested-index-snapshot @nested-index-snapshot-state]
         (xio/try-close nested-index-snapshot))
-      (doseq [i [level-1-iterator-delay level-2-iterator-delay entity-as-of-iterator-delay decode-value-iterator-delay cache-iterator-delay]
+      (doseq [i [level-1-iterator-delay level-2-iterator-delay entity-as-of-iterator-delay entity-as-of-prefix-optimised-iterator-delay decode-value-iterator-delay cache-iterator-delay]
               :when (realized? i)]
         (xio/try-close @i))
       (when close-snapshot?
@@ -806,7 +807,7 @@
 
   (entity-as-of-resolver [this eid valid-time tx-id]
     (assert tx-id)
-    (let [i @entity-as-of-iterator-delay
+    (let [i @entity-as-of-prefix-optimised-iterator-delay
           prefix-size (+ c/index-id-size c/id-size)
           eid (if (instance? DirectBuffer eid)
                 (if (c/id-buffer? eid)
@@ -834,7 +835,7 @@
 
   (entity-as-of [_ eid valid-time tx-id]
     (assert tx-id)
-    (let [i @entity-as-of-iterator-delay
+    (let [i @entity-as-of-prefix-optimised-iterator-delay
           prefix-size (+ c/index-id-size c/id-size)
           eid-buffer (c/->id-buffer eid)
           seek-k (encode-bitemp-key-to (.get seek-buffer-tl)
@@ -959,6 +960,7 @@
                      (delay (kv/new-iterator snapshot))
                      (delay (kv/new-iterator snapshot))
                      (delay (kv/new-iterator snapshot))
+                     (delay (kv/new-prefix-seek-optimised-iterator snapshot))
                      (delay (kv/new-iterator snapshot))
                      (delay (kv/new-iterator snapshot))
                      (atom [])
