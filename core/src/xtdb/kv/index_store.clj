@@ -463,11 +463,11 @@
               (inc (decode-stats-value->doc-value-count-from b)))))
 
 (defn decode-stats-value->eid-hll-buffer-from ^org.agrona.MutableDirectBuffer [^MutableDirectBuffer b]
-  (let [hll-size (/ (- (.capacity b) Long/BYTES Long/BYTES) 2)]
+  (let [hll-size (quot (- (.capacity b) Long/BYTES Long/BYTES) 2)]
     (mem/slice-buffer b (+ Long/BYTES Long/BYTES) hll-size)))
 
 (defn decode-stats-value->value-hll-buffer-from ^org.agrona.MutableDirectBuffer [^MutableDirectBuffer b]
-  (let [^long hll-size (/ (- (.capacity b) Long/BYTES Long/BYTES) 2)]
+  (let [hll-size (quot (- (.capacity b) Long/BYTES Long/BYTES) 2)]
     (mem/slice-buffer b (+ Long/BYTES Long/BYTES hll-size) hll-size)))
 
 (defn- stats-kvs [stats-kvs-cache persistent-kv-store docs]
@@ -501,7 +501,11 @@
                                           (inc-stats-value-doc-count)
                                           (-> decode-stats-value->eid-hll-buffer-from (hll/add e)))
 
-                                        (doseq [v (c/vectorize-value v)]
+                                        (if (or (vector? v) (set? v))
+                                          (doseq [v v]
+                                            (doto stats-buf
+                                              (inc-stats-value-doc-value-count)
+                                              (-> decode-stats-value->value-hll-buffer-from (hll/add v))))
                                           (doto stats-buf
                                             (inc-stats-value-doc-value-count)
                                             (-> decode-stats-value->value-hll-buffer-from (hll/add v))))
