@@ -9,9 +9,9 @@
 (def ^{:tag 'int} default-buffer-size (* Integer/BYTES 1024))
 
 (defn add ^org.agrona.MutableDirectBuffer [^MutableDirectBuffer hll v]
-  (let [m (/ (.capacity hll) Integer/BYTES)
+  (let [m (quot (.capacity hll) Integer/BYTES)
         b (Integer/numberOfTrailingZeros m)
-        x (mix-collection-hash (hash v) 0)
+        x (mix-collection-hash (clojure.lang.Util/hasheq v) 0)
         j (bit-and (bit-shift-right x (- Integer/SIZE b)) (dec m))
         w (bit-and x (dec (bit-shift-left 1 (- Integer/SIZE b))))]
     (doto hll
@@ -21,7 +21,7 @@
                ByteOrder/BIG_ENDIAN))))
 
 (defn estimate ^double [^DirectBuffer hll]
-  (let [m (/ (.capacity hll) Integer/BYTES)
+  (let [m (quot (.capacity hll) Integer/BYTES)
         z (/ 1.0 (double (loop [n 0
                                 acc 0.0]
                            (if (< n (.capacity hll))
