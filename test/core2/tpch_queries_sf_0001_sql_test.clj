@@ -62,20 +62,24 @@
     :count_order 1457}])
 
 (deftest test-q1-pricing-summary-report
-  (t/is (= q1-pricing-summary-report-expectation
-           (q (tpch-test/slurp-query 1)))))
+  (tpch-test/is-equal?
+    q1-pricing-summary-report-expectation
+    (q (tpch-test/slurp-query 1))))
 
 (deftest ^:integration test-q1-pricing-summary-report-no-decorrelation
-  (t/is (= q1-pricing-summary-report-expectation
-           (q (tpch-test/slurp-query 1) {:decorrelate? false}))))
+  (tpch-test/is-equal?
+    q1-pricing-summary-report-expectation
+    (q (tpch-test/slurp-query 1) {:decorrelate? false})))
 
 (deftest test-q2-minimum-cost-supplier
-  (t/is (= []
-           (q (tpch-test/slurp-query 2)))))
+  (tpch-test/is-equal?
+    []
+    (q (tpch-test/slurp-query 2))))
 
 (deftest ^:integration test-q2-minimum-cost-supplier-no-decorrelation
-  (t/is (= []
-           (q (tpch-test/slurp-query 2) {:decorrelate? false}))))
+  (tpch-test/is-equal?
+    []
+    (q (tpch-test/slurp-query 2) {:decorrelate? false})))
 
 (def q3-shipping-priority-expectation
   [{:l_orderkey "orderkey_1637"
@@ -112,12 +116,14 @@
     :o_shippriority 0}])
 
 (deftest test-q3-shipping-priority
-  (t/is (= q3-shipping-priority-expectation
-           (q (tpch-test/slurp-query 3)))))
+  (tpch-test/is-equal?
+    q3-shipping-priority-expectation
+    (q (tpch-test/slurp-query 3))))
 
 (deftest ^:integration test-q3-shipping-priority-no-decorrelation
-  (t/is (= q3-shipping-priority-expectation
-           (q (tpch-test/slurp-query 3) {:decorrelate? false}))))
+  (tpch-test/is-equal?
+    q3-shipping-priority-expectation
+    (q (tpch-test/slurp-query 3) {:decorrelate? false})))
 
 (def q4-order-priority-checking-expectation
   [{:o_orderpriority "1-URGENT", :order_count 9}
@@ -127,46 +133,56 @@
    {:o_orderpriority "5-LOW", :order_count 12}])
 
 (deftest test-q4-order-priority-checking
-  (t/is (= q4-order-priority-checking-expectation
-           (q (tpch-test/slurp-query 4)))))
+  (tpch-test/is-equal?
+    q4-order-priority-checking-expectation
+    (q (tpch-test/slurp-query 4))))
 
 (deftest ^:integration test-q4-order-priority-checking-no-decorrelation
-  (t/is (= q4-order-priority-checking-expectation
-           (q (tpch-test/slurp-query 4) {:decorrelate? false}))))
+  (tpch-test/is-equal?
+    q4-order-priority-checking-expectation
+    (q (tpch-test/slurp-query 4) {:decorrelate? false})))
 
 (deftest test-q5-local-supplier-volume
-  (t/is (= []
-           (q (tpch-test/slurp-query 5)))))
+  (tpch-test/is-equal?
+    []
+    (q (tpch-test/slurp-query 5))))
 
 (deftest ^:integration test-q5-local-supplier-volume-no-decorrelation
-  (t/is (= []
-           (q (tpch-test/slurp-query 5) {:decorrelate? false}))))
+  (tpch-test/is-equal?
+    []
+    (q (tpch-test/slurp-query 5) {:decorrelate? false})))
 
 (deftest test-q6-forecasting-revenue-change
-  (t/is (= [{:revenue 77949.9186}]
-           (q (tpch-test/slurp-query 6)))))
+  (tpch-test/is-equal?
+    [{:revenue 77949.9186}]
+    (q (tpch-test/slurp-query 6))))
 
 (deftest ^:integration test-q6-forecasting-revenue-change-no-decorrelation
-  (t/is (= [{:revenue 77949.9186}]
-           (q (tpch-test/slurp-query 6) {:decorrelate? false}))))
+  (tpch-test/is-equal?
+    [{:revenue 77949.9186}]
+    (q (tpch-test/slurp-query 6) {:decorrelate? false})))
 
 (deftest test-q7-volume-shipping
-  (t/is (= []
-           (q (tpch-test/slurp-query 7)))))
+  (tpch-test/is-equal?
+    []
+    (q (tpch-test/slurp-query 7))))
 
 (deftest ^:integration test-q7-volume-shipping-no-decorrelation
-  (t/is (= []
-           (q (tpch-test/slurp-query 7) {:decorrelate? false}))))
+  (tpch-test/is-equal?
+    []
+    (q (tpch-test/slurp-query 7) {:decorrelate? false})))
 
 (deftest test-q8-national-market-share
-  (t/is (= [{:o_year 1995, :mkt_share 0.0}
-            {:o_year 1996, :mkt_share 0.0}]
-           (q (tpch-test/slurp-query 8)))))
+  (tpch-test/is-equal?
+    [{:o_year 1995, :mkt_share 0.0}
+     {:o_year 1996, :mkt_share 0.0}]
+    (q (tpch-test/slurp-query 8))))
 
 (deftest ^:integration test-q8-national-market-share-no-decorrelation
-  (t/is (= [{:o_year 1995, :mkt_share 0.0}
-            {:o_year 1996, :mkt_share 0.0}]
-           (q (tpch-test/slurp-query 8) {:decorrelate? false}))))
+  (tpch-test/is-equal?
+    [{:o_year 1995, :mkt_share 0.0}
+     {:o_year 1996, :mkt_share 0.0}]
+    (q (tpch-test/slurp-query 8) {:decorrelate? false})))
 
 (def q9-product-type-profit-measure-expectation
   [{:nation "ARGENTINA", :o_year 1998, :sum_profit 17779.069700000007}
@@ -405,37 +421,43 @@
     :c_comment "ously final packages haggle blithely after the express deposits. furiou"}])
 
 (deftest test-q10-returned-item-reporting
-  (t/is (= q10-returned-item-reporting-expectation
-           (q (tpch-test/slurp-query 10)))))
+  (tpch-test/is-equal?
+    q10-returned-item-reporting-expectation
+    (q (tpch-test/slurp-query 10))))
 
 (deftest ^:integration test-q10-returned-item-reporting-no-decorrelation
-  (t/is (= q10-returned-item-reporting-expectation
-           (q (tpch-test/slurp-query 10) {:decorrelate? false}))))
+  (tpch-test/is-equal?
+    q10-returned-item-reporting-expectation
+    (q (tpch-test/slurp-query 10) {:decorrelate? false})))
 
 (deftest test-q11-important-stock-identification
-    (t/is (= [] (q (tpch-test/slurp-query 11)))))
+  (tpch-test/is-equal?
+    [] (q (tpch-test/slurp-query 11))))
 
 (deftest ^:integration test-q11-important-stock-identification-no-decorrelation
-    (t/is (= [] (q (tpch-test/slurp-query 11) {:decorrelate? false}))))
+  (tpch-test/is-equal?
+    [] (q (tpch-test/slurp-query 11) {:decorrelate? false})))
 
 
 (deftest test-q12-shipping-modes-and-order-priority
-  (t/is (= [{:l_shipmode "MAIL"
-             :high_line_count 5
-             :low_line_count 5}
-            {:l_shipmode "SHIP"
-             :high_line_count 5
-             :low_line_count 10}]
-           (q (tpch-test/slurp-query 12)))))
+  (tpch-test/is-equal?
+    [{:l_shipmode "MAIL"
+      :high_line_count 5
+      :low_line_count 5}
+     {:l_shipmode "SHIP"
+      :high_line_count 5
+      :low_line_count 10}]
+    (q (tpch-test/slurp-query 12))))
 
 (deftest ^:integration test-q12-shipping-modes-and-order-priority-no-decorrelation
-  (t/is (= [{:l_shipmode "MAIL"
-             :high_line_count 5
-             :low_line_count 5}
-            {:l_shipmode "SHIP"
-             :high_line_count 5
-             :low_line_count 10}]
-           (q (tpch-test/slurp-query 12) {:decorrelate? false}))))
+  (tpch-test/is-equal?
+    [{:l_shipmode "MAIL"
+      :high_line_count 5
+      :low_line_count 5}
+     {:l_shipmode "SHIP"
+      :high_line_count 5
+      :low_line_count 10}]
+    (q (tpch-test/slurp-query 12) {:decorrelate? false})))
 
 (def q13-customer-distribution-expectation
   [{:c_count 0 :custdist 50}
@@ -467,37 +489,43 @@
    {:c_count 3 :custdist 1}])
 
 (deftest test-q13-customer-distribution
-  (t/is (= q13-customer-distribution-expectation
-           (q (tpch-test/slurp-query 13)))))
+  (tpch-test/is-equal?
+    q13-customer-distribution-expectation
+    (q (tpch-test/slurp-query 13))))
 
 (deftest ^:integration test-q13-customer-distribution-no-decorrelation
-  (t/is (= q13-customer-distribution-expectation
-           (q (tpch-test/slurp-query 13) {:decorrelate? false}))))
+  (tpch-test/is-equal?
+    q13-customer-distribution-expectation
+    (q (tpch-test/slurp-query 13) {:decorrelate? false})))
 
 (deftest test-q14-promotion-effect
-  (t/is (= [{:promo_revenue 15.230212611597251}]
-           (q (tpch-test/slurp-query 14)))))
+  (tpch-test/is-equal?
+    [{:promo_revenue 15.230212611597251}]
+    (q (tpch-test/slurp-query 14))))
 
 (deftest ^:integration test-q14-promotion-effect-no-decorrelation
-  (t/is (= [{:promo_revenue 15.230212611597251}]
-           (q (tpch-test/slurp-query 14) {:decorrelate? false}))))
+  (tpch-test/is-equal?
+    [{:promo_revenue 15.230212611597251}]
+    (q (tpch-test/slurp-query 14) {:decorrelate? false})))
 
 
 (deftest test-q15-top-supplier
-  (t/is (= [{:total_revenue 797313.3838
-             :s_suppkey "suppkey_10"
-             :s_name "Supplier#000000010"
-             :s_address "Saygah3gYWMp72i PY"
-             :s_phone "34-852-489-8585"}]
-           (q (tpch-test/slurp-query 15)))))
+  (tpch-test/is-equal?
+    [{:total_revenue 797313.3838
+      :s_suppkey "suppkey_10"
+      :s_name "Supplier#000000010"
+      :s_address "Saygah3gYWMp72i PY"
+      :s_phone "34-852-489-8585"}]
+    (q (tpch-test/slurp-query 15))))
 
 (deftest ^:integration test-q15-top-supplier-no-decorrelation
-  (t/is (= [{:total_revenue 797313.3838
-             :s_suppkey "suppkey_10"
-             :s_name "Supplier#000000010"
-             :s_address "Saygah3gYWMp72i PY"
-             :s_phone "34-852-489-8585"}]
-           (q (tpch-test/slurp-query 15) {:decorrelate? false}))))
+  (tpch-test/is-equal?
+    [{:total_revenue 797313.3838
+      :s_suppkey "suppkey_10"
+      :s_name "Supplier#000000010"
+      :s_address "Saygah3gYWMp72i PY"
+      :s_phone "34-852-489-8585"}]
+    (q (tpch-test/slurp-query 15) {:decorrelate? false})))
 
 (def q16-part-supplier-relationship-expectation
   [{:p_brand "Brand#11" :p_type "PROMO ANODIZED TIN" :p_size 45 :supplier_cnt 4}
@@ -536,52 +564,64 @@
    {:p_brand "Brand#54" :p_type "ECONOMY ANODIZED BRASS" :p_size 9 :supplier_cnt 1}])
 
 (deftest test-q16-part-supplier-relationship
-  (t/is (= q16-part-supplier-relationship-expectation
-           (q (tpch-test/slurp-query 16)))))
+  (tpch-test/is-equal?
+    q16-part-supplier-relationship-expectation
+    (q (tpch-test/slurp-query 16))))
 
 (deftest ^:integration test-q16-part-supplier-relationship-no-decorrelation
-  (t/is (= q16-part-supplier-relationship-expectation
-           (q (tpch-test/slurp-query 16) {:decorrelate? false}))))
+  (tpch-test/is-equal?
+    q16-part-supplier-relationship-expectation
+    (q (tpch-test/slurp-query 16) {:decorrelate? false})))
 
 (deftest test-q17-small-quantity-order-revenue
-  (t/is (= [{:avg_yearly nil}]
-           (q (tpch-test/slurp-query 17)))))
+  (tpch-test/is-equal?
+    [{:avg_yearly nil}]
+    (q (tpch-test/slurp-query 17))))
 
 (deftest ^:integration test-q17-small-quantity-order-revenue-no-decorrelation
-  (t/is (= [{:avg_yearly nil}]
-           (q (tpch-test/slurp-query 17) {:decorrelate? false}))))
+  (tpch-test/is-equal?
+    [{:avg_yearly nil}]
+    (q (tpch-test/slurp-query 17) {:decorrelate? false})))
 
 (deftest test-q18-large-volume-customer
-  (t/is (= []
-           (q (tpch-test/slurp-query 18)))))
+  (tpch-test/is-equal?
+    []
+    (q (tpch-test/slurp-query 18))))
 
 (deftest ^:integration test-q18-large-volume-customer-no-decorrelation
-  (t/is (= []
-           (q (tpch-test/slurp-query 18) {:decorrelate? false}))))
+  (tpch-test/is-equal?
+    []
+    (q (tpch-test/slurp-query 18) {:decorrelate? false})))
 
 (deftest test-q19-discounted-revenue
-  (t/is (= [{:revenue nil}]
-           (q (tpch-test/slurp-query 19)))))
+  (tpch-test/is-equal?
+    [{:revenue nil}]
+    (q (tpch-test/slurp-query 19))))
 
 (deftest ^:integration test-q19-discounted-revenue-no-decorrelation
-  (t/is (= [{:revenue nil}]
-           (q (tpch-test/slurp-query 19) {:decorrelate? false}))))
+  (tpch-test/is-equal?
+    [{:revenue nil}]
+    (q (tpch-test/slurp-query 19) {:decorrelate? false})))
 
 (deftest test-q20-potential-part-promotion
-  (t/is (= []
-           (q (tpch-test/slurp-query 20)))))
+  (tpch-test/is-equal?
+    []
+    (q (tpch-test/slurp-query 20))))
 
 (deftest ^:integration test-q20-potential-part-promotion-no-decorrelation
-  (t/is (= []
-           (q (tpch-test/slurp-query 20) {:decorrelate? false}))))
+  (tpch-test/is-equal?
+    []
+    (q (tpch-test/slurp-query 20) {:decorrelate? false})))
 
 (deftest test-q21-suppliers-who-kept-orders-waiting
-  (t/is (= []
-           (q (tpch-test/slurp-query 21)))))
+  (tpch-test/is-equal?
+    []
+    (q (tpch-test/slurp-query 21))))
 
 (deftest ^:integration test-q21-suppliers-who-kept-orders-waiting-no-decorrelation
-  (t/is (= []
-           (q (tpch-test/slurp-query 21) {:decorrelate? false}))))
+  (tpch-test/is-equal?
+    []
+    (q (tpch-test/slurp-query 21) {:decorrelate? false})))
 
 (def q22-global-sales-opportunity-expectation
   [{:cntrycode "13"
@@ -607,9 +647,11 @@
     :totacctbal 9331.13}])
 
 (deftest test-q22-global-sales-opportunity
-  (t/is (= q22-global-sales-opportunity-expectation
-           (q (tpch-test/slurp-query 22)))))
+  (tpch-test/is-equal?
+    q22-global-sales-opportunity-expectation
+    (q (tpch-test/slurp-query 22))))
 
 (deftest ^:integration test-q22-global-sales-opportunity-no-decorrelation
-  (t/is (= q22-global-sales-opportunity-expectation
-           (q (tpch-test/slurp-query 22) {:decorrelate? false}))))
+  (tpch-test/is-equal?
+    q22-global-sales-opportunity-expectation
+    (q (tpch-test/slurp-query 22) {:decorrelate? false})))

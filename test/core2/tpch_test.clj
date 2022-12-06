@@ -88,14 +88,15 @@
 
 (defn is-equal?
   [expected actual]
-  (if (empty? expected)
+  (t/is (= (count expected) (count actual)) (pr-str [expected actual]))
+  (if (or (empty? expected) (empty? actual))
     (t/is (= expected actual))
     (->> (for [[expected-row actual-row] (map vector expected actual)
                :let [msg (pr-str [expected-row actual-row])]]
            (let [row-cols (keys expected-row)]
              (boolean
                (and
-                 (t/is (= row-cols (keys actual-row)))
+                 (t/is (= (set row-cols) (set (keys actual-row))))
                  (->> row-cols
                       (mapv
                         (fn [col]
