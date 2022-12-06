@@ -233,12 +233,14 @@
 (deftest test-q9-product-type-profit-measure
   ;; on 0.001 there are duplicate ids generated in the partsupp table
   ;; we treat these as 'last document wins', so there'll be some partsupp docs that have already been replaced
-  (t/is (= q9-product-type-profit-measure-expectation
-           (q (tpch-test/slurp-query 9)))))
+  (tpch-test/is-equal?
+    q9-product-type-profit-measure-expectation
+    (q (tpch-test/slurp-query 9))))
 
 (deftest ^:integration test-q9-product-type-profit-measure-no-decorrelation
-  (t/is (= q9-product-type-profit-measure-expectation
-           (q (tpch-test/slurp-query 9) {:decorrelate? false}))))
+  (tpch-test/is-equal?
+    q9-product-type-profit-measure-expectation
+    (q (tpch-test/slurp-query 9) {:decorrelate? false})))
 
 (def q10-returned-item-reporting-expectation
   [{:c_custkey "custkey_121"

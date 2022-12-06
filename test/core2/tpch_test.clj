@@ -85,3 +85,26 @@
 
 (defn slurp-query [query-no]
   (slurp (io/resource (str "core2/sql/tpch/" (format "q%02d.sql" query-no)))))
+
+(defn is-equal?
+  [expected actual]
+  (if (empty? expected)
+    (t/is (= expected actual))
+    (->> (for [[expected-row actual-row] (map vector expected actual)
+               :let [msg (pr-str [expected-row actual-row])]]
+           (let [row-cols (keys expected-row)]
+             (boolean
+               (and
+                 (t/is (= row-cols (keys actual-row)))
+                 (->> row-cols
+                      (mapv
+                        (fn [col]
+                          (let [x (col expected-row)
+                                y (col actual-row)]
+                            (if (and (number? x) (number? y))
+                              (let [epsilon 0.001
+                                    diff (Math/abs (- (double x) (double y)))]
+                                (t/is (<= diff epsilon) msg))
+                              (t/is (= x y) msg)))))
+                     (every? true?))))))
+         (every? true?))))
