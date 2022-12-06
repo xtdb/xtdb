@@ -24,17 +24,6 @@
          ps_suppkey
          ps_partkey
          {_table (= _table "partsupp")}]]]
-      [:cross-join
-       [:rename
-        {p_partkey x1, p_name x2, _table x3}
-        [:scan
-         [p_partkey
-          {p_name (like p_name "%green%")}
-          {_table (= _table "part")}]]]
-       [:rename
-        {s_suppkey x5, s_nationkey x6, _table x7}
-        [:scan
-         [s_suppkey s_nationkey {_table (= _table "supplier")}]]]]
       [:rename
        {l_extendedprice x9,
         l_discount x10,
@@ -50,4 +39,14 @@
          l_suppkey
          l_partkey
          l_orderkey
-         {_table (= _table "lineitem")}]]]]]]]]]
+         {_table (= _table "lineitem")}]]]
+      [:rename
+       {p_partkey x1, p_name x2, _table x3}
+       [:scan
+        [p_partkey
+         {p_name (like p_name "%green%")}
+         {_table (= _table "part")}]]]
+      [:rename
+       {s_suppkey x5, s_nationkey x6, _table x7}
+       [:scan
+        [s_suppkey s_nationkey {_table (= _table "supplier")}]]]]]]]]]

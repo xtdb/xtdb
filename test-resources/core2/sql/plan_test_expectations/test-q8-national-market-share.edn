@@ -46,17 +46,6 @@
            o_orderkey
            o_custkey
            {_table (= _table "orders")}]]]
-        [:cross-join
-         [:rename
-          {p_partkey x1, p_type x2, _table x3}
-          [:scan
-           [p_partkey
-            {p_type (= p_type "ECONOMY ANODIZED STEEL")}
-            {_table (= _table "part")}]]]
-         [:rename
-          {s_suppkey x5, s_nationkey x6, _table x7}
-          [:scan
-           [s_suppkey s_nationkey {_table (= _table "supplier")}]]]]
         [:rename
          {l_extendedprice x9,
           l_discount x10,
@@ -70,4 +59,16 @@
            l_partkey
            l_suppkey
            l_orderkey
-           {_table (= _table "lineitem")}]]]]]]]]]]]
+           {_table (= _table "lineitem")}]]]
+        [:rename
+         {p_partkey x1, p_type x2, _table x3}
+         [:scan
+          [p_partkey
+           {p_type (= p_type "ECONOMY ANODIZED STEEL")}
+           {_table (= _table "part")}]]]
+        [:rename
+         {s_suppkey x5, s_nationkey x6, _table x7}
+         [:scan
+          [s_suppkey
+           s_nationkey
+           {_table (= _table "supplier")}]]]]]]]]]]]

@@ -2,12 +2,13 @@
  {x8 $column_1$}
  [:project
   [x8]
-  [:cross-join
-   [:rename
-    {a x1, _table x2}
-    [:scan [{a (= a 42)} {_table (= _table "a")}]]]
-   [:group-by
-    [{x8 (array-agg x4)}]
-    [:rename
-     {b1 x4, b2 x5, _table x6}
-     [:scan [b1 {b2 (= b2 42)} {_table (= _table "b")}]]]]]]]
+  [:mega-join
+   []
+   [[:rename
+     {a x1, _table x2}
+     [:scan [{a (= a 42)} {_table (= _table "a")}]]]
+    [:group-by
+     [{x8 (array-agg x4)}]
+     [:rename
+      {b1 x4, b2 x5, _table x6}
+      [:scan [b1 {b2 (= b2 42)} {_table (= _table "b")}]]]]]]]]

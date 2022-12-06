@@ -2432,14 +2432,16 @@
       [:join [predicate] lhs rhs])))
 
 (defn- merge-joins-to-mega-join [z]
-  (r/zmatch
-    z
+  (r/zmatch z
     [:join jc r1 r2]
     ;;=>
     [:mega-join jc [r1 r2]]
 
-    [:mega-join jc
-     ^:z rels]
+    [:cross-join r1 r2]
+    ;;=>
+    [:mega-join [] [r1 r2]]
+
+    [:mega-join jc ^:z rels]
     ;;=>
     (when-let [mega-join (r/find-first (partial r/ctor? :mega-join) rels)]
       (let [[_ inner-jc inner-rels :as inner-mega-join] (r/znode mega-join)

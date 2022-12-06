@@ -2,12 +2,13 @@
  {x1 a}
  [:project
   [x1]
-  [:cross-join
-   [:rename
-    {a x1, b x2, c x3, _table x4}
-    [:scan [a {b (= b ?_1)} {c (= c ?_2)} {_table (= _table "foo")}]]]
-   [:project
-    [x6]
-    [:rename
-     {b x6, c x7, _table x8}
-     [:scan [b {c (= c ?_0)} {_table (= _table "bar")}]]]]]]]
+  [:mega-join
+   []
+   [[:rename
+     {a x1, b x2, c x3, _table x4}
+     [:scan [a {b (= b ?_1)} {c (= c ?_2)} {_table (= _table "foo")}]]]
+    [:project
+     [x6]
+     [:rename
+      {b x6, c x7, _table x8}
+      [:scan [b {c (= c ?_0)} {_table (= _table "bar")}]]]]]]]]

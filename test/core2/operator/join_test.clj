@@ -786,6 +786,22 @@
                 [::tu/blocks [[{:x2 1}]]]
                 [::tu/blocks [[{:x3 1 :x4 3}]]]]])))
 
+  (t/testing "disconnected relations/sub-graphs"
+    (t/is (= [{:x1 1, :x2 1, :x4 3, :x3 1, :x5 5, :x6 10, :x7 10, :x8 8}]
+             (tu/query-ra
+               '[:mega-join
+                 [{x1 x2}
+                  (> (+ x1 10) (+ (+ x3 2) x4))
+                  {x1 x3}
+                  {x6 x7}]
+                 [[::tu/blocks [[{:x1 1}]]]
+                  [::tu/blocks [[{:x2 1}]]]
+                  [::tu/blocks [[{:x3 1 :x4 3}]]]
+                  [::tu/blocks [[{:x5 5}]]]
+                  [::tu/blocks [[{:x6 10}]]]
+                  [::tu/blocks [[{:x7 10}]]]
+                  [::tu/blocks [[{:x8 8}]]]]]))))
+
   (t/testing "params"
     (t/is (= [{:x1 1, :x2 1, :x4 3, :x3 1, :x5 2}]
              (tu/query-ra
@@ -800,16 +816,15 @@
                    [::tu/blocks [[{:x3 1 :x4 3}]]]]]]))))
 
   (t/is (thrown-with-msg? RuntimeException
-                          #"Unable to find join candidate"
+                          #"Unused Join Conditions Remain"
                           (tu/query-ra
                             '[:mega-join
-                             [{x1 x4}
-                              (> (+ x1 10) (+ (+ x3 2) x4))
-                              {x1 x3}]
+                             [{x1 x2}
+                              {x5 x6}]
                              [[::tu/blocks [[{:x1 1}]]]
                               [::tu/blocks [[{:x2 1}]]]
                               [::tu/blocks [[{:x3 1 :x4 3}]]]]]))
-        "throws if unable to find a valid join order")
+        "throws if after joining all relations there are still unused join conditions")
 
   (t/testing "empty input"
     (t/is (= []

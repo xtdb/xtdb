@@ -1,13 +1,14 @@
 [:rename
  {x1 id, x4 id_1}
- [:cross-join
-  [:project
-   [x1]
-   [:rename
-    {id x1, _table x2}
-    [:scan [{id (= id 5)} {_table (= _table "bar")}]]]]
-  [:project
-   [x4]
-   [:rename
-    {id x4, _table x5}
-    [:scan [{id (= id 5)} {_table (= _table "bar")}]]]]]]
+ [:mega-join
+  []
+  [[:project
+    [x1]
+    [:rename
+     {id x1, _table x2}
+     [:scan [{id (= id 5)} {_table (= _table "bar")}]]]]
+   [:project
+    [x4]
+    [:rename
+     {id x4, _table x5}
+     [:scan [{id (= id 5)} {_table (= _table "bar")}]]]]]]]

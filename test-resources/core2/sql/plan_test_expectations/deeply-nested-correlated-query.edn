@@ -5,11 +5,12 @@
   [:apply
    :semi-join
    {x2 ?x17, x5 ?x18}
-   [:cross-join
-    [:rename
-     {a x1, b x2, _table x3}
-     [:scan [a b {_table (= _table "r")}]]]
-    [:rename {c x5, _table x6} [:scan [c {_table (= _table "s")}]]]]
+   [:mega-join
+    []
+    [[:rename
+      {a x1, b x2, _table x3}
+      [:scan [a b {_table (= _table "r")}]]]
+     [:rename {c x5, _table x6} [:scan [c {_table (= _table "s")}]]]]]
    [:project
     [x8 x9]
     [:semi-join

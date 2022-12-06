@@ -2,22 +2,23 @@
  {x1 a1}
  [:project
   [x1]
-  [:cross-join
-   [:mega-join
-    [{x1 x6}]
-    [[:semi-join
-      [{x2 x12}]
-      [:rename
-       {a1 x1, b1 x2, _table x3}
-       [:scan [a1 b1 {_table (= _table "t1")}]]]
-      [:table [x12] [{x12 532} {x12 593}]]]
-     [:semi-join
-      [{x5 x15}]
-      [:rename
-       {b1 x5, a2 x6, _table x7}
-       [:scan [b1 a2 {_table (= _table "t2")}]]]
-      [:table [x15] [{x15 808} {x15 662}]]]]]
-   [:semi-join
-    [{x9 x18}]
-    [:rename {c1 x9, _table x10} [:scan [c1 {_table (= _table "t3")}]]]
-    [:table [x18] [{x18 792} {x18 14}]]]]]]
+  [:mega-join
+   [{x1 x6}]
+   [[:semi-join
+     [{x9 x18}]
+     [:rename
+      {c1 x9, _table x10}
+      [:scan [c1 {_table (= _table "t3")}]]]
+     [:table [x18] [{x18 792} {x18 14}]]]
+    [:semi-join
+     [{x2 x12}]
+     [:rename
+      {a1 x1, b1 x2, _table x3}
+      [:scan [a1 b1 {_table (= _table "t1")}]]]
+     [:table [x12] [{x12 532} {x12 593}]]]
+    [:semi-join
+     [{x5 x15}]
+     [:rename
+      {b1 x5, a2 x6, _table x7}
+      [:scan [b1 a2 {_table (= _table "t2")}]]]
+     [:table [x15] [{x15 808} {x15 662}]]]]]]]

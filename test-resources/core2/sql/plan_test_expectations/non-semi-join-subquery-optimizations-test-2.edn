@@ -2,16 +2,17 @@
  {x1 a}
  [:project
   [x1]
-  [:cross-join
-   [:rename {a x1, _table x2} [:scan [a {_table (= _table "foo")}]]]
-   [:select
-    (= true x7)
-    [:top
-     {:limit 1}
-     [:union-all
-      [:project
-       [{x7 true}]
-       [:rename
-        {c x4, _table x5}
-        [:scan [c {_table (= _table "foo")}]]]]
-      [:table [{x7 false}]]]]]]]]
+  [:mega-join
+   []
+   [[:rename {a x1, _table x2} [:scan [a {_table (= _table "foo")}]]]
+    [:select
+     (= true x7)
+     [:top
+      {:limit 1}
+      [:union-all
+       [:project
+        [{x7 true}]
+        [:rename
+         {c x4, _table x5}
+         [:scan [c {_table (= _table "foo")}]]]]
+       [:table [{x7 false}]]]]]]]]]

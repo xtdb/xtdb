@@ -87,6 +87,11 @@
 
 (set! *unchecked-math* :warn-on-boxed)
 
+(defn emit-join-children [join-expr args]
+  (-> join-expr
+      (update :left #(lp/emit-expr % args))
+      (update :right #(lp/emit-expr % args))) )
+
 (defn- cross-product ^core2.vector.IIndirectRelation [^IIndirectRelation left-rel, ^IIndirectRelation right-rel]
   (let [left-row-count (.rowCount left-rel)
         right-row-count (.rowCount right-rel)
@@ -144,12 +149,16 @@
     (util/try-close right-rel)
     (util/try-close right-cursor)))
 
-(defmethod lp/emit-expr :cross-join [{:keys [left right]} args]
-  (lp/binary-expr (lp/emit-expr left args) (lp/emit-expr right args)
+(defn emit-cross-join [{:keys [left right]}]
+  (lp/binary-expr left right
     (fn [left-col-types right-col-types]
       {:col-types (merge left-col-types right-col-types)
        :->cursor (fn [{:keys [allocator]} left-cursor right-cursor]
                    (CrossJoinCursor. allocator left-cursor right-cursor (ArrayList.) nil nil))})))
+
+
+(defmethod lp/emit-expr :cross-join [join-expr args]
+  (emit-cross-join (emit-join-children join-expr args)))
 
 (defn- build-phase [^ICursor build-cursor, ^IRelationMap rel-map, pushdown-blooms]
   (.forEachRemaining build-cursor
@@ -423,11 +432,6 @@
 (defn- ->pushdown-blooms [key-col-names]
   (vec (repeatedly (count key-col-names) #(MutableRoaringBitmap.))))
 
-(defn emit-join-children [join-expr args]
-  (-> join-expr
-      (update :left #(lp/emit-expr % args))
-      (update :right #(lp/emit-expr % args))) )
-
 (defn emit-join-expr-and-children {:style/indent 2} [join-expr args f]
   (emit-join-expr
     (emit-join-children join-expr args)
@@ -664,6 +668,34 @@
        (:condition-id %))
     conditions))
 
+(defn build-plan-for-next-sub-graph [conditions relations args]
+  (loop [plan (first relations)
+         rels (rest relations)
+         conditions conditions]
+    (if (seq rels)
+      (let [join-candidate (->> conditions
+                                (find-join-conditions-which-contain-cols-from-plan plan)
+                                (match-relations-to-potential-join-clauses rels)
+                                (first))
+            join-conditions (mapv
+                              adjust-equi-condition
+                              (:valid-join-conditions-for-rel join-candidate))]
+        (if (seq join-candidate)
+          (recur
+            (emit-inner-join-expr
+              {:condition join-conditions
+               :left plan
+               :right join-candidate}
+              args)
+            (remove-joined-relation join-candidate rels)
+            (remove-used-join-conditions join-candidate conditions))
+          {:sub-graph-plan plan
+           :sub-graph-unused-rels rels
+           :sub-graph-unused-conditions conditions}))
+      {:sub-graph-plan plan
+       :sub-graph-unused-rels rels
+       :sub-graph-unused-conditions conditions})))
+
 (defmethod lp/emit-expr :mega-join [{:keys [conditions relations]} args]
   (let [conditions-with-cols (->> conditions
                                   (map (fn [condition]
@@ -672,27 +704,22 @@
                                   (map-indexed #(assoc %2 :condition-id %1)))
         child-relations (->> relations
                              (map #(lp/emit-expr % args))
-                             (map-indexed #(assoc %2 :relation-id %1)))]
-    (loop [plan (first child-relations)
-           rels (rest child-relations)
-           conditions conditions-with-cols]
-      (if (seq rels)
-        (let [join-candidate (->> conditions
-                                  (find-join-conditions-which-contain-cols-from-plan plan)
-                                  (match-relations-to-potential-join-clauses rels)
-                                  (first))
-              join-conditions (mapv
-                                adjust-equi-condition
-                                (:valid-join-conditions-for-rel join-candidate))]
-          (if (seq join-candidate)
-            (recur
-              (emit-inner-join-expr
-                {:condition join-conditions
-                 :left plan
-                 :right join-candidate}
-                args)
-              (remove-joined-relation join-candidate rels)
-              (remove-used-join-conditions join-candidate conditions))
-            (throw (err/runtime-err :core2.mega-join/plan-error
-                                    {::err/message "Unable to find join candidate"}))))
-        plan))))
+                             (map-indexed #(assoc %2 :relation-id %1)))
+        sub-graph-plans (loop [sub-graph-plans []
+                               relations child-relations
+                               conditions conditions-with-cols]
+                          (if (seq relations)
+                            (let [{:keys [sub-graph-plan
+                                          sub-graph-unused-rels
+                                          sub-graph-unused-conditions]}
+                                  (build-plan-for-next-sub-graph conditions relations args)]
+                              (recur (conj sub-graph-plans sub-graph-plan) sub-graph-unused-rels sub-graph-unused-conditions))
+                            (if (seq conditions)
+                              (throw (err/runtime-err :core2.mega-join/plan-error
+                                                      {::err/message "Unused Join Conditions Remain"
+                                                       :conditions conditions}))
+                              sub-graph-plans)))]
+    (reduce (fn [full-plan sub-graph-plan]
+              (emit-cross-join
+                {:left full-plan
+                 :right sub-graph-plan})) sub-graph-plans)))
