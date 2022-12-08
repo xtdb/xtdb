@@ -301,6 +301,14 @@
     (t/is (true? (run-test '< 1 2 4)))
     (t/is (false? (run-test '> 4 1 2)))))
 
+(t/deftest test-numeric-errors-503
+  (t/is (thrown-with-msg? RuntimeException #"division by zero"
+                          (project1 '(/ a 0) {:a 5})))
+  (t/is (thrown-with-msg? RuntimeException #"division by zero"
+                          (project1 '(/ a 0.0) {:a 5})))
+  (t/is (thrown-with-msg? RuntimeException #"division by zero"
+                          (project1 '(/ a 0) {:a 5.0}))))
+
 (defn- project-mono-value [f-sym val col-type]
   (with-open [rel (tu/open-rel [(tu/open-vec "s" col-type [val])])]
     (-> (run-projection rel (list f-sym 's))

@@ -721,13 +721,26 @@
   {:return-type (types/least-upper-bound arg-types)
    :->call-code #(do `(mod ~@%))})
 
+(defn throw-div-0 []
+  (throw (err/runtime-err ::division-by-zero
+                          {::err/message "data exception — division by zero"})))
+
 (defmethod codegen-call [:/ :int :int] [{:keys [arg-types]}]
   {:return-type (types/least-upper-bound arg-types)
-   :->call-code #(do `(quot ~@%))})
+   :->call-code #(do `(try
+                        (quot ~@%)
+                        (catch ArithmeticException e#
+                          (case (.getMessage e#)
+                            "/ by zero" (throw-div-0)
+                            (throw e#)))))})
 
 (defmethod codegen-call [:/ :num :num] [{:keys [arg-types]}]
   {:return-type (types/least-upper-bound arg-types)
-   :->call-code #(do `(/ ~@%))})
+   :->call-code (fn [[l r]]
+                  `(let [l# ~l, r# ~r]
+                     (if (zero? r#)
+                       (throw-div-0)
+                       (/ l# r#))))})
 
 ;; TODO extend min/max to variable width
 (defmethod codegen-call [:max :num :num] [{:keys [arg-types]}]
