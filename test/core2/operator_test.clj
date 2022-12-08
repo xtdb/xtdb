@@ -30,11 +30,11 @@
     (let [^IMetadataManager metadata-mgr (tu/component node ::meta/metadata-manager)]
       (letfn [(test-query-ivan [expected db]
                 (t/is (= expected
-                         (set (tu/query-ra '[:scan [id {name (> name "Ivan")}]]
+                         (set (tu/query-ra '[:scan xt_docs [id {name (> name "Ivan")}]]
                                            {:srcs {'$ db}}))))
 
                 (t/is (= expected
-                         (set (tu/query-ra '[:scan [id {name (> name ?name)}]]
+                         (set (tu/query-ra '[:scan xt_docs [id {name (> name ?name)}]]
                                            {:srcs {'$ db}, :params {'?name "Ivan"}})))))]
 
         (let [db @(node/snapshot-async node)]
@@ -96,11 +96,11 @@
               "only needs to scan chunk 0, block 0"))
 
       (t/is (= #{{:name "Ivan"}}
-               (set (tu/query-ra '[:scan [{name (= name "Ivan")}]]
+               (set (tu/query-ra '[:scan xt_docs [{name (= name "Ivan")}]]
                                  {:srcs {'$ db}}))))
 
       (t/is (= #{{:name "Ivan"}}
-               (set (tu/query-ra '[:scan [{name (= name ?name)}]]
+               (set (tu/query-ra '[:scan xt_docs [{name (= name ?name)}]]
                                  {:srcs {'$ db}, :params {'?name "Ivan"}})))))))
 
 (t/deftest test-temporal-bounds
@@ -110,8 +110,10 @@
           {tt2 :sys-time, :as tx2} @(c2/submit-tx node [[:put {:id :my-doc, :last-updated "tx2"}]])
           db @(node/snapshot-async node tx2)]
       (letfn [(q [& temporal-constraints]
-                (->> (tu/query-ra [:scan (into '[last-updated]
-                                               temporal-constraints)]
+                (->> (tu/query-ra [:scan
+                                   'xt_docs
+                                   (into '[last-updated]
+                                         temporal-constraints)]
                                   {:srcs {'$ db}
                                    :params {'?sys-time1 tt1, '?sys-time2 tt2}})
                      (into #{} (map :last-updated))))]

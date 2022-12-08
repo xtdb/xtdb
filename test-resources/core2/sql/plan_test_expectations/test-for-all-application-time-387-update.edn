@@ -1,28 +1,27 @@
 [:update
  {:table "users"}
  [:rename
-  {x2 _iid,
-   x3 _row-id,
-   x6 system_time_start,
-   x7 system_time_end,
-   x9 first_name,
-   x10 application_time_start,
-   x11 application_time_end}
+  {x1 _iid,
+   x2 _row-id,
+   x5 system_time_start,
+   x6 system_time_end,
+   x8 first_name,
+   x9 application_time_start,
+   x10 application_time_end}
   [:project
-   [x2 x3 x6 x7 {x9 "Sue"} {x10 (cast-tstz x4)} {x11 (cast-tstz x5)}]
+   [x1 x2 x5 x6 {x8 "Sue"} {x9 (cast-tstz x3)} {x10 (cast-tstz x4)}]
    [:rename
-    {_table x1,
-     _iid x2,
-     _row-id x3,
-     application_time_start x4,
-     application_time_end x5,
-     system_time_start x6,
-     system_time_end x7}
+    {_iid x1,
+     _row-id x2,
+     application_time_start x3,
+     application_time_end x4,
+     system_time_start x5,
+     system_time_end x6}
     [:scan
-     [{_table (= _table "users")}
-      _iid
+     users
+     (_iid
       _row-id
       application_time_start
       application_time_end
       system_time_start
-      system_time_end]]]]]]
+      system_time_end)]]]]]

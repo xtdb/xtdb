@@ -4,18 +4,13 @@
   [x1]
   [:mega-join
    []
-   [[:rename {a x1, _table x2} [:scan [a {_table (= _table "foo")}]]]
+   [[:rename {a x1} [:scan foo [a]]]
     [:apply
      :semi-join
-     {x5 ?x12, x4 ?x13}
-     [:rename
-      {c x4, b x5, _table x6}
-      [:scan [c b {_table (= _table "bar")}]]]
+     {x4 ?x9, x3 ?x10}
+     [:rename {c x3, b x4} [:scan bar [c b]]]
      [:project
-      [x8]
+      [x6]
       [:rename
-       {b x8, a x9, _table x10}
-       [:scan
-        [{b (= ?x13 b)}
-         {a (= a ?x12)}
-         {_table (= _table "foo")}]]]]]]]]]
+       {b x6, a x7}
+       [:scan foo [{b (= ?x10 b)} {a (= a ?x9)}]]]]]]]]]

@@ -4,15 +4,11 @@
   [x1]
   [:mega-join
    []
-   [[:rename {a x1, _table x2} [:scan [a {_table (= _table "foo")}]]]
+   [[:rename {a x1} [:scan foo [a]]]
     [:select
-     (= true x7)
+     (= true x5)
      [:top
       {:limit 1}
       [:union-all
-       [:project
-        [{x7 true}]
-        [:rename
-         {c x4, _table x5}
-         [:scan [c {_table (= _table "foo")}]]]]
-       [:table [{x7 false}]]]]]]]]]
+       [:project [{x5 true}] [:rename {c x3} [:scan foo [c]]]]
+       [:table [{x5 false}]]]]]]]]]

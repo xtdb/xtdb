@@ -202,7 +202,11 @@
          [:rename (->> cols
                        (into {} (comp (filter :value-arg)
                                       (map (juxt :col-name :value-arg)))))
-          [:scan src (-> (vec (for [{:keys [col-name col-pred]} cols]
+          [:scan
+           src
+           'xt_docs ;; assumes all docs put into system that
+           ;; want to be queried by datalog will be stored under xt_docs table
+           (-> (vec (for [{:keys [col-name col-pred]} cols]
                                 (if col-pred
                                   {col-name col-pred}
                                   col-name)))

@@ -1,74 +1,60 @@
 [:rename
- {x37 o_year, x43 mkt_share}
+ {x29 o_year, x35 mkt_share}
  [:order-by
-  [[x37 {:direction :asc, :null-ordering :nulls-last}]]
+  [[x29 {:direction :asc, :null-ordering :nulls-last}]]
   [:project
-   [x37 {x43 (/ x40 x41)}]
+   [x29 {x35 (/ x32 x33)}]
    [:group-by
-    [x37 {x40 (sum x39)} {x41 (sum x38)}]
+    [x29 {x32 (sum x31)} {x33 (sum x30)}]
     [:map
-     [{x39 (cond (= x29 "BRAZIL") x38 0)}]
+     [{x31 (cond (= x23 "BRAZIL") x30 0)}]
      [:project
-      [{x37 (extract "YEAR" x16)} {x38 (* x9 (- 1 x10))} x29]
+      [{x29 (extract "YEAR" x13)} {x30 (* x7 (- 1 x8))} x23]
       [:mega-join
-       [{x26 x33}
-        {x6 x30}
-        {x22 x25}
-        {x18 x21}
-        {x13 x17}
-        {x1 x11}
-        {x5 x12}]
+       [{x21 x26}
+        {x5 x24}
+        {x18 x20}
+        {x15 x17}
+        {x11 x14}
+        {x1 x9}
+        {x4 x10}]
        [[:rename
-         {r_regionkey x33, r_name x34, _table x35}
-         [:scan
-          [r_regionkey
-           {r_name (= r_name "AMERICA")}
-           {_table (= _table "region")}]]]
+         {r_regionkey x26, r_name x27}
+         [:scan region [r_regionkey {r_name (= r_name "AMERICA")}]]]
         [:rename
-         {n_name x29, n_nationkey x30, _table x31}
-         [:scan [n_name n_nationkey {_table (= _table "nation")}]]]
+         {n_name x23, n_nationkey x24}
+         [:scan nation [n_name n_nationkey]]]
         [:rename
-         {n_nationkey x25, n_regionkey x26, _table x27}
-         [:scan
-          [n_nationkey n_regionkey {_table (= _table "nation")}]]]
+         {n_nationkey x20, n_regionkey x21}
+         [:scan nation [n_nationkey n_regionkey]]]
         [:rename
-         {c_custkey x21, c_nationkey x22, _table x23}
-         [:scan
-          [c_custkey c_nationkey {_table (= _table "customer")}]]]
+         {c_custkey x17, c_nationkey x18}
+         [:scan customer [c_custkey c_nationkey]]]
         [:rename
-         {o_orderdate x16, o_orderkey x17, o_custkey x18, _table x19}
+         {o_orderdate x13, o_orderkey x14, o_custkey x15}
          [:scan
+          orders
           [{o_orderdate
             (between
              o_orderdate
              #time/date "1995-01-01"
              #time/date "1996-12-31")}
            o_orderkey
-           o_custkey
-           {_table (= _table "orders")}]]]
+           o_custkey]]]
         [:rename
-         {l_extendedprice x9,
-          l_discount x10,
-          l_partkey x11,
-          l_suppkey x12,
-          l_orderkey x13,
-          _table x14}
+         {l_extendedprice x7,
+          l_discount x8,
+          l_partkey x9,
+          l_suppkey x10,
+          l_orderkey x11}
          [:scan
-          [l_extendedprice
-           l_discount
-           l_partkey
-           l_suppkey
-           l_orderkey
-           {_table (= _table "lineitem")}]]]
+          lineitem
+          [l_extendedprice l_discount l_partkey l_suppkey l_orderkey]]]
         [:rename
-         {p_partkey x1, p_type x2, _table x3}
+         {p_partkey x1, p_type x2}
          [:scan
-          [p_partkey
-           {p_type (= p_type "ECONOMY ANODIZED STEEL")}
-           {_table (= _table "part")}]]]
+          part
+          [p_partkey {p_type (= p_type "ECONOMY ANODIZED STEEL")}]]]
         [:rename
-         {s_suppkey x5, s_nationkey x6, _table x7}
-         [:scan
-          [s_suppkey
-           s_nationkey
-           {_table (= _table "supplier")}]]]]]]]]]]]
+         {s_suppkey x4, s_nationkey x5}
+         [:scan supplier [s_suppkey s_nationkey]]]]]]]]]]]

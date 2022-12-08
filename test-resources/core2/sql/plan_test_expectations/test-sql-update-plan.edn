@@ -1,33 +1,32 @@
 [:update
  {:table "users"}
  [:rename
-  {x3 _iid,
-   x4 _row-id,
-   x7 system_time_start,
-   x8 system_time_end,
-   x10 first_name,
-   x11 application_time_start,
-   x12 application_time_end}
+  {x2 _iid,
+   x3 _row-id,
+   x6 system_time_start,
+   x7 system_time_end,
+   x9 first_name,
+   x10 application_time_start,
+   x11 application_time_end}
   [:project
-   [x3
-    x4
+   [x2
+    x3
+    x6
     x7
-    x8
-    {x10 "Sue"}
-    {x11 (cast-tstz (max x5 #time/date "2021-07-01"))}
-    {x12 (cast-tstz (min x6 #time/date "9999-12-31"))}]
+    {x9 "Sue"}
+    {x10 (cast-tstz (max x4 #time/date "2021-07-01"))}
+    {x11 (cast-tstz (min x5 #time/date "9999-12-31"))}]
    [:rename
-    {_table x1,
-     id x2,
-     _iid x3,
-     _row-id x4,
-     application_time_start x5,
-     application_time_end x6,
-     system_time_start x7,
-     system_time_end x8}
+    {id x1,
+     _iid x2,
+     _row-id x3,
+     application_time_start x4,
+     application_time_end x5,
+     system_time_start x6,
+     system_time_end x7}
     [:scan
-     [{_table (= _table "users")}
-      {id (= id ?_0)}
+     users
+     [{id (= id ?_0)}
       _iid
       _row-id
       {application_time_start

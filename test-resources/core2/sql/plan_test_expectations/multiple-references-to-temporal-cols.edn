@@ -9,11 +9,11 @@
    {system_time_start x1,
     system_time_end x2,
     application_time_start x3,
-    application_time_end x4,
-    _table x5}
+    application_time_end x4}
    [:select
     (< #time/date "2001-01-01" #time/date "2002-01-01")
     [:scan
+     foo
      [{system_time_start
        (and
         (< system_time_start #time/date "2002-01-01")
@@ -29,5 +29,4 @@
       {application_time_end
        (and
         (> application_time_end #time/date "2000-01-01")
-        (> application_time_end 10))}
-      {_table (= _table "foo")}]]]]]]
+        (> application_time_end 10))}]]]]]]

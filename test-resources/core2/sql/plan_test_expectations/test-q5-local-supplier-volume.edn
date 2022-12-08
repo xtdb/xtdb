@@ -1,44 +1,37 @@
 [:rename
- {x20 n_name, x30 revenue}
+ {x16 n_name, x24 revenue}
  [:order-by
-  [[x30 {:direction :desc, :null-ordering :nulls-last}]]
+  [[x24 {:direction :desc, :null-ordering :nulls-last}]]
   [:group-by
-   [x20 {x30 (sum x29)}]
+   [x16 {x24 (sum x23)}]
    [:map
-    [{x29 (* x10 (- 1 x11))}]
+    [{x23 (* x8 (- 1 x9))}]
     [:mega-join
-     [{x22 x25} {x17 x21} {x13 x16} {x2 x17} {x6 x12} {x1 x5}]
+     [{x18 x20} {x14 x17} {x11 x13} {x2 x14} {x5 x10} {x1 x4}]
      [[:rename
-       {r_regionkey x25, r_name x26, _table x27}
+       {r_regionkey x20, r_name x21}
+       [:scan region [r_regionkey {r_name (= r_name "ASIA")}]]]
+      [:rename
+       {n_name x16, n_nationkey x17, n_regionkey x18}
+       [:scan nation [n_name n_nationkey n_regionkey]]]
+      [:rename
+       {s_suppkey x13, s_nationkey x14}
+       [:scan supplier [s_suppkey s_nationkey]]]
+      [:rename
+       {l_extendedprice x8,
+        l_discount x9,
+        l_orderkey x10,
+        l_suppkey x11}
        [:scan
-        [r_regionkey
-         {r_name (= r_name "ASIA")}
-         {_table (= _table "region")}]]]
+        lineitem
+        [l_extendedprice l_discount l_orderkey l_suppkey]]]
       [:rename
-       {n_name x20, n_nationkey x21, n_regionkey x22, _table x23}
+       {c_custkey x1, c_nationkey x2}
+       [:scan customer [c_custkey c_nationkey]]]
+      [:rename
+       {o_custkey x4, o_orderkey x5, o_orderdate x6}
        [:scan
-        [n_name n_nationkey n_regionkey {_table (= _table "nation")}]]]
-      [:rename
-       {s_suppkey x16, s_nationkey x17, _table x18}
-       [:scan [s_suppkey s_nationkey {_table (= _table "supplier")}]]]
-      [:rename
-       {l_extendedprice x10,
-        l_discount x11,
-        l_orderkey x12,
-        l_suppkey x13,
-        _table x14}
-       [:scan
-        [l_extendedprice
-         l_discount
-         l_orderkey
-         l_suppkey
-         {_table (= _table "lineitem")}]]]
-      [:rename
-       {c_custkey x1, c_nationkey x2, _table x3}
-       [:scan [c_custkey c_nationkey {_table (= _table "customer")}]]]
-      [:rename
-       {o_custkey x5, o_orderkey x6, o_orderdate x7, _table x8}
-       [:scan
+        orders
         [o_custkey
          o_orderkey
          {o_orderdate
@@ -48,5 +41,4 @@
             (+
              #time/date "1994-01-01"
              (single-field-interval "1" "YEAR" 2 0)))
-           (>= o_orderdate #time/date "1994-01-01"))}
-         {_table (= _table "orders")}]]]]]]]]]
+           (>= o_orderdate #time/date "1994-01-01"))}]]]]]]]]]

@@ -1,9 +1,9 @@
 [:rename
- {x5 $column_1$}
+ {x4 $column_1$}
  [:project
-  [{x5 4}]
+  [{x4 4}]
   [:rename
-   {application_time_start x1, application_time_end x2, _table x3}
+   {application_time_start x1, application_time_end x2}
    [:select
     (if
      (>
@@ -25,7 +25,4 @@
       (>
        application_time_end
        #time/zoned-date-time "3000-01-01T00:00Z")))
-    [:scan
-     [application_time_start
-      application_time_end
-      {_table (= _table "t1")}]]]]]]
+    [:scan t1 [application_time_start application_time_end]]]]]]

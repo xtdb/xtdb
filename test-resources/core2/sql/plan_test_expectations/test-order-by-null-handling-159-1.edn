@@ -2,6 +2,4 @@
  {x1 a}
  [:order-by
   [[x1 {:direction :asc, :null-ordering :nulls-first}]]
-  [:project
-   [x1]
-   [:rename {a x1, _table x2} [:scan [a {_table (= _table "foo")}]]]]]]
+  [:rename {a x1} [:scan foo [a]]]]]

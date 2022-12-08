@@ -1,14 +1,8 @@
 [:rename
- {x9 some_column}
+ {x7 some_column}
  [:project
-  [{x9 (= 1 x7)}]
+  [{x7 (= 1 x5)}]
   [:single-join
    []
-   [:rename
-    {y x1, _table x2}
-    [:scan [{y (= y 1)} {_table (= _table "x")}]]]
-   [:group-by
-    [{x7 (max x4)}]
-    [:rename
-     {bar x4, _table x5}
-     [:scan [bar {_table (= _table "foo")}]]]]]]]
+   [:rename {y x1} [:scan x [{y (= y 1)}]]]
+   [:group-by [{x5 (max x3)}] [:rename {bar x3} [:scan foo [bar]]]]]]]

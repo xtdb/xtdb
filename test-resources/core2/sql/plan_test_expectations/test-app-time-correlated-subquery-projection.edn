@@ -1,21 +1,15 @@
 [:rename
- {x9 $column_1$}
+ {x7 $column_1$}
  [:project
-  [x9]
+  [x7]
   [:apply
    :single-join
-   {x1 ?x10, x2 ?x11}
+   {x1 ?x8, x2 ?x9}
    [:rename
-    {application_time_start x1, application_time_end x2, _table x3}
-    [:scan
-     [application_time_start
-      application_time_end
-      {_table (= _table "bar")}]]]
+    {application_time_start x1, application_time_end x2}
+    [:scan bar [application_time_start application_time_end]]]
    [:project
-    [{x9 (and (< x5 ?x11) (> x6 ?x10))}]
+    [{x7 (and (< x4 ?x9) (> x5 ?x8))}]
     [:rename
-     {application_time_start x5, application_time_end x6, _table x7}
-     [:scan
-      [application_time_start
-       application_time_end
-       {_table (= _table "foo")}]]]]]]]
+     {application_time_start x4, application_time_end x5}
+     [:scan foo [application_time_start application_time_end]]]]]]]

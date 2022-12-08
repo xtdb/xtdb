@@ -1,7 +1,5 @@
 [:rename
- {x5 bar}
+ {x4 bar}
  [:project
-  [{x5 (- x1 4)}]
-  [:group-by
-   [x1]
-   [:rename {a x1, _table x2} [:scan [a {_table (= _table "foo")}]]]]]]
+  [{x4 (- x1 4)}]
+  [:group-by [x1] [:rename {a x1} [:scan foo [a]]]]]]

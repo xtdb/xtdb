@@ -2,8 +2,4 @@
  {x1 movietitle}
  [:top
   {:skip 5}
-  [:project
-   [x1]
-   [:rename
-    {movietitle x1, _table x2}
-    [:scan [movietitle {_table (= _table "starsin")}]]]]]]
+  [:rename {movietitle x1} [:scan starsin [movietitle]]]]]

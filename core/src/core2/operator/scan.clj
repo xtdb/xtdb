@@ -35,9 +35,9 @@
 (defmethod lp/ra-expr :scan [_]
   (s/cat :op #{:scan}
          :source (s/? ::lp/source)
+         :table simple-symbol?
          :columns (s/coll-of (s/or :column ::lp/column
-                                   :select ::lp/column-expression)
-                             :min-count 1)))
+                                   :select ::lp/column-expression))))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -177,6 +177,10 @@
   (iv/->indirect-rel (remove #(= "_row-id" (.getName ^IIndirectVector %)) rel)
                      (.rowCount rel)))
 
+(defn- remove-table-col ^core2.vector.IIndirectRelation [^IIndirectRelation rel]
+  (iv/->indirect-rel (remove #(= "_table" (.getName ^IIndirectVector %)) rel)
+                     (.rowCount rel)))
+
 (deftype ScanCursor [^BufferAllocator allocator
                      ^IBufferPool buffer-pool
                      ^IMetadataManager metadata-manager
@@ -200,7 +204,8 @@
                           temporal-rel (->temporal-rel watermark allocator temporal-col-names temporal-min-range temporal-max-range atemporal-row-id-bitmap)]
                       (or (try
                             (let [temporal-rel (-> temporal-rel (apply-temporal-preds allocator col-preds params))
-                                  read-rel (cond-> (align/align-vectors (.values in-roots) temporal-rel)
+                                  read-rel (cond-> (remove-table-col
+                                                     (align/align-vectors (.values in-roots) temporal-rel))
                                              (not keep-row-id-col?) (remove-row-id-col))]
                               (if (and read-rel (pos? (.rowCount read-rel)))
                                 (do
@@ -272,8 +277,12 @@
       (expr.temp/apply-constraint temporal-min-range temporal-max-range
                                   :> "system_time_end" sys-time))))
 
-(defmethod lp/emit-expr :scan [{:keys [source columns]} {:keys [scan-col-types param-types]}]
+(defmethod lp/emit-expr :scan [{:keys [source table columns]} {:keys [scan-col-types param-types]}]
   (let [src-key (or source '$)
+
+        columns (conj columns [:select {'_table (list '= '_table (name table))}])
+
+        scan-col-types (assoc scan-col-types [src-key '_table] :utf8)
 
         col-names (->> columns
                        (into [] (comp (map (fn [[col-type arg]]
@@ -309,7 +318,7 @@
                                          :when (not (temporal/temporal-column? (name col-name)))]
                                      select)))]
 
-    {:col-types col-types
+    {:col-types (dissoc col-types '_table)
      :->cursor (fn [{:keys [allocator srcs params]}]
                  (let [^ScanSource src (get srcs src-key)
                        metadata-mgr (.metadataManager src)

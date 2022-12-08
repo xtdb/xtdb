@@ -467,7 +467,7 @@
 
   (time (-main "--verify" "--db" "sqlite" "test/core2/sql/logic_test/sqlite_test/select4.test"))
 
-  (time (-main "--verify" "--direct-sql" "--dirs" "--db" "xtdb" "test/core2/sql/logic_test/direct-sql/"))
+  (time (-main "--verify" "--direct-sql" "--db" "xtdb" "test/core2/sql/logic_test/direct-sql/no-projected-cols.test"))
 
  (= (time
       (with-out-str

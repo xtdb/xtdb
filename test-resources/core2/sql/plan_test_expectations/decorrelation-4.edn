@@ -1,23 +1,19 @@
 [:rename
- {x1 name, x5 course}
+ {x1 name, x4 course}
  [:project
-  [x1 x5]
+  [x1 x4]
   [:select
-   (= x7 x14)
+   (= x6 x11)
    [:group-by
-    [x1 x2 x3 x5 x6 x7 x8 $row_number$ {x14 (min x10)}]
+    [x1 x2 x4 x5 x6 $row_number$ {x11 (min x8)}]
     [:left-outer-join
-     [{x2 x11}]
+     [{x2 x9}]
      [:map
       [{$row_number$ (row-number)}]
       [:mega-join
-       [{x2 x6}]
-       [[:rename
-         {name x1, id x2, _table x3}
-         [:scan [name id {_table (= _table "students")}]]]
+       [{x2 x5}]
+       [[:rename {name x1, id x2} [:scan students [name id]]]
         [:rename
-         {course x5, sid x6, grade x7, _table x8}
-         [:scan [course sid grade {_table (= _table "exams")}]]]]]]
-     [:rename
-      {grade x10, sid x11, _table x12}
-      [:scan [grade sid {_table (= _table "exams")}]]]]]]]]
+         {course x4, sid x5, grade x6}
+         [:scan exams [course sid grade]]]]]]
+     [:rename {grade x8, sid x9} [:scan exams [grade sid]]]]]]]]

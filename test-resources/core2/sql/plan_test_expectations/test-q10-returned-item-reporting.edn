@@ -1,39 +1,38 @@
 [:rename
  {x1 c_custkey,
   x2 c_name,
-  x26 revenue,
+  x22 revenue,
   x3 c_acctbal,
-  x21 n_name,
+  x18 n_name,
   x4 c_address,
   x5 c_phone,
   x6 c_comment}
  [:project
-  [x1 x2 x26 x3 x21 x4 x5 x6]
+  [x1 x2 x22 x3 x18 x4 x5 x6]
   [:top
    {:limit 20}
    [:order-by
-    [[x26 {:direction :desc, :null-ordering :nulls-last}]]
+    [[x22 {:direction :desc, :null-ordering :nulls-last}]]
     [:group-by
-     [x1 x2 x3 x5 x21 x4 x6 {x26 (sum x25)}]
+     [x1 x2 x3 x5 x18 x4 x6 {x22 (sum x21)}]
      [:map
-      [{x25 (* x15 (- 1 x16))}]
+      [{x21 (* x13 (- 1 x14))}]
       [:mega-join
-       [{x7 x22} {x11 x17} {x1 x10}]
+       [{x7 x19} {x10 x15} {x1 x9}]
        [[:rename
-         {n_name x21, n_nationkey x22, _table x23}
-         [:scan [n_name n_nationkey {_table (= _table "nation")}]]]
+         {n_name x18, n_nationkey x19}
+         [:scan nation [n_name n_nationkey]]]
         [:rename
-         {l_extendedprice x15,
-          l_discount x16,
-          l_orderkey x17,
-          l_returnflag x18,
-          _table x19}
+         {l_extendedprice x13,
+          l_discount x14,
+          l_orderkey x15,
+          l_returnflag x16}
          [:scan
+          lineitem
           [l_extendedprice
            l_discount
            l_orderkey
-           {l_returnflag (= l_returnflag "R")}
-           {_table (= _table "lineitem")}]]]
+           {l_returnflag (= l_returnflag "R")}]]]
         [:rename
          {c_custkey x1,
           c_name x2,
@@ -41,20 +40,20 @@
           c_address x4,
           c_phone x5,
           c_comment x6,
-          c_nationkey x7,
-          _table x8}
+          c_nationkey x7}
          [:scan
+          customer
           [c_custkey
            c_name
            c_acctbal
            c_address
            c_phone
            c_comment
-           c_nationkey
-           {_table (= _table "customer")}]]]
+           c_nationkey]]]
         [:rename
-         {o_custkey x10, o_orderkey x11, o_orderdate x12, _table x13}
+         {o_custkey x9, o_orderkey x10, o_orderdate x11}
          [:scan
+          orders
           [o_custkey
            o_orderkey
            {o_orderdate
@@ -64,5 +63,4 @@
               (+
                #time/date "1993-10-01"
                (single-field-interval "3" "MONTH" 2 0)))
-             (>= o_orderdate #time/date "1993-10-01"))}
-           {_table (= _table "orders")}]]]]]]]]]]]
+             (>= o_orderdate #time/date "1993-10-01"))}]]]]]]]]]]]

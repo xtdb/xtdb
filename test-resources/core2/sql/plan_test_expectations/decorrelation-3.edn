@@ -1,23 +1,17 @@
 [:rename
- {x1 name, x14 $column_2$}
+ {x1 name, x11 $column_2$}
  [:project
-  [x1 x14]
+  [x1 x11]
   [:group-by
-   [x1 x2 x3 x4 $row_number$ {x14 (count x13)}]
+   [x1 x2 x3 $row_number$ {x11 (count x10)}]
    [:left-outer-join
-    [{x2 x10}]
+    [{x2 x8}]
     [:map
      [{$row_number$ (row-number)}]
      [:anti-join
-      [(or (= x3 x6) (nil? x3) (nil? x6))]
+      [(or (= x3 x5) (nil? x3) (nil? x5))]
       [:rename
-       {name x1, custno x2, country x3, _table x4}
-       [:scan [name custno country {_table (= _table "customers")}]]]
-      [:rename
-       {country x6, _table x7}
-       [:scan [country {_table (= _table "salesp")}]]]]]
-    [:map
-     [{x13 1}]
-     [:rename
-      {custno x10, _table x11}
-      [:scan [custno {_table (= _table "orders")}]]]]]]]]
+       {name x1, custno x2, country x3}
+       [:scan customers [name custno country]]]
+      [:rename {country x5} [:scan salesp [country]]]]]
+    [:map [{x10 1}] [:rename {custno x8} [:scan orders [custno]]]]]]]]

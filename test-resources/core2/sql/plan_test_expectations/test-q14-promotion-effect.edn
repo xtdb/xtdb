@@ -1,21 +1,18 @@
 [:rename
- {x16 promo_revenue}
+ {x14 promo_revenue}
  [:project
-  [{x16 (/ (* 100.0 x13) x14)}]
+  [{x14 (/ (* 100.0 x11) x12)}]
   [:group-by
-   [{x13 (sum x11)} {x14 (sum x12)}]
+   [{x11 (sum x9)} {x12 (sum x10)}]
    [:map
-    [{x11 (cond (like x7 "PROMO%") (* x1 (- 1 x2)) 0)}
-     {x12 (* x1 (- 1 x2))}]
+    [{x9 (cond (like x6 "PROMO%") (* x1 (- 1 x2)) 0)}
+     {x10 (* x1 (- 1 x2))}]
     [:mega-join
-     [{x3 x8}]
+     [{x3 x7}]
      [[:rename
-       {l_extendedprice x1,
-        l_discount x2,
-        l_partkey x3,
-        l_shipdate x4,
-        _table x5}
+       {l_extendedprice x1, l_discount x2, l_partkey x3, l_shipdate x4}
        [:scan
+        lineitem
         [l_extendedprice
          l_discount
          l_partkey
@@ -26,8 +23,7 @@
             (+
              #time/date "1995-09-01"
              (single-field-interval "1" "MONTH" 2 0)))
-           (>= l_shipdate #time/date "1995-09-01"))}
-         {_table (= _table "lineitem")}]]]
+           (>= l_shipdate #time/date "1995-09-01"))}]]]
       [:rename
-       {p_type x7, p_partkey x8, _table x9}
-       [:scan [p_type p_partkey {_table (= _table "part")}]]]]]]]]]
+       {p_type x6, p_partkey x7}
+       [:scan part [p_type p_partkey]]]]]]]]]

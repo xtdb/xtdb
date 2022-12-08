@@ -1,45 +1,42 @@
 [:rename
- {x11 l_orderkey, x18 revenue, x5 o_orderdate, x6 o_shippriority}
+ {x9 l_orderkey, x15 revenue, x4 o_orderdate, x5 o_shippriority}
  [:project
-  [x11 x18 x5 x6]
+  [x9 x15 x4 x5]
   [:top
    {:limit 10}
    [:order-by
-    [[x18 {:direction :desc, :null-ordering :nulls-last}]
-     [x5 {:direction :asc, :null-ordering :nulls-last}]]
+    [[x15 {:direction :desc, :null-ordering :nulls-last}]
+     [x4 {:direction :asc, :null-ordering :nulls-last}]]
     [:group-by
-     [x11 x5 x6 {x18 (sum x17)}]
+     [x9 x4 x5 {x15 (sum x14)}]
      [:map
-      [{x17 (* x12 (- 1 x13))}]
+      [{x14 (* x10 (- 1 x11))}]
       [:mega-join
-       ({x8 x11} {x2 x7})
+       [{x7 x9} {x2 x6}]
        [[:rename
-         {l_orderkey x11,
-          l_extendedprice x12,
-          l_discount x13,
-          l_shipdate x14,
-          _table x15}
+         {l_orderkey x9,
+          l_extendedprice x10,
+          l_discount x11,
+          l_shipdate x12}
          [:scan
+          lineitem
           [l_orderkey
            l_extendedprice
            l_discount
-           {l_shipdate (> l_shipdate #time/date "1995-03-15")}
-           {_table (= _table "lineitem")}]]]
+           {l_shipdate (> l_shipdate #time/date "1995-03-15")}]]]
         [:rename
-         {c_mktsegment x1, c_custkey x2, _table x3}
+         {c_mktsegment x1, c_custkey x2}
          [:scan
-          [{c_mktsegment (= c_mktsegment "BUILDING")}
-           c_custkey
-           {_table (= _table "customer")}]]]
+          customer
+          [{c_mktsegment (= c_mktsegment "BUILDING")} c_custkey]]]
         [:rename
-         {o_orderdate x5,
-          o_shippriority x6,
-          o_custkey x7,
-          o_orderkey x8,
-          _table x9}
+         {o_orderdate x4,
+          o_shippriority x5,
+          o_custkey x6,
+          o_orderkey x7}
          [:scan
+          orders
           [{o_orderdate (< o_orderdate #time/date "1995-03-15")}
            o_shippriority
            o_custkey
-           o_orderkey
-           {_table (= _table "orders")}]]]]]]]]]]]
+           o_orderkey]]]]]]]]]]]

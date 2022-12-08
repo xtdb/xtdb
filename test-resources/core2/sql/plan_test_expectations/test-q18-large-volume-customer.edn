@@ -1,46 +1,34 @@
 [:rename
  {x1 c_name,
   x2 c_custkey,
-  x5 o_orderkey,
-  x6 o_orderdate,
-  x7 o_totalprice,
-  x22 sum_qty}
+  x4 o_orderkey,
+  x5 o_orderdate,
+  x6 o_totalprice,
+  x18 sum_qty}
  [:top
   {:limit 100}
   [:order-by
-   [[x7 {:direction :desc, :null-ordering :nulls-last}]
-    [x6 {:direction :asc, :null-ordering :nulls-last}]]
+   [[x6 {:direction :desc, :null-ordering :nulls-last}]
+    [x5 {:direction :asc, :null-ordering :nulls-last}]]
    [:group-by
-    [x1 x2 x5 x6 x7 {x22 (sum x11)}]
+    [x1 x2 x4 x5 x6 {x18 (sum x9)}]
     [:mega-join
-     ({x5 x12} {x2 x8})
+     [{x4 x10} {x2 x7}]
      [[:rename
-       {l_quantity x11, l_orderkey x12, _table x13}
-       [:scan [l_quantity l_orderkey {_table (= _table "lineitem")}]]]
+       {l_quantity x9, l_orderkey x10}
+       [:scan lineitem [l_quantity l_orderkey]]]
       [:rename
-       {c_name x1, c_custkey x2, _table x3}
-       [:scan [c_name c_custkey {_table (= _table "customer")}]]]
+       {c_name x1, c_custkey x2}
+       [:scan customer [c_name c_custkey]]]
       [:semi-join
-       [{x5 x15}]
+       [{x4 x12}]
        [:rename
-        {o_orderkey x5,
-         o_orderdate x6,
-         o_totalprice x7,
-         o_custkey x8,
-         _table x9}
-        [:scan
-         [o_orderkey
-          o_orderdate
-          o_totalprice
-          o_custkey
-          {_table (= _table "orders")}]]]
+        {o_orderkey x4, o_orderdate x5, o_totalprice x6, o_custkey x7}
+        [:scan orders [o_orderkey o_orderdate o_totalprice o_custkey]]]
        [:select
-        (> x19 300)
+        (> x15 300)
         [:group-by
-         [x15 {x19 (sum x16)}]
+         [x12 {x15 (sum x13)}]
          [:rename
-          {l_orderkey x15, l_quantity x16, _table x17}
-          [:scan
-           [l_orderkey
-            l_quantity
-            {_table (= _table "lineitem")}]]]]]]]]]]]]
+          {l_orderkey x12, l_quantity x13}
+          [:scan lineitem [l_orderkey l_quantity]]]]]]]]]]]]

@@ -38,7 +38,7 @@
                                  :let [col-name (name (get col-name-mapping (symbol (.getName in-col))))]]
                            (.add out-cols (.withName in-col col-name)))
 
-                         (.accept c (iv/->indirect-rel out-cols))))))))
+                         (.accept c (iv/->indirect-rel out-cols (.rowCount in-rel)))))))))
 
   (close [_]
     (util/try-close in-cursor)))

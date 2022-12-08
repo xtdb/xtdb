@@ -152,15 +152,18 @@
     :create-table (create-table node record)
     :create-view (create-view node record)))
 
+(defn outer-projection [tree]
+  (->> (sem/projected-columns (r/$ (r/vector-zip tree) 1))
+       (first)
+       (mapv plan/unqualified-projection-symbol)
+       (plan/generate-unique-column-names)))
+
 (defn execute-query-expression [this from-subquery]
   (let [ingester (tu/component this :core2/ingester)
         db (ingest/snapshot ingester)]
     (binding [r/*memo* (HashMap.)]
       (let [tree (normalize-query (:tables this) from-subquery)
-            projection (->> (sem/projected-columns (r/$ (r/vector-zip tree) 1))
-                            (first)
-                            (mapv plan/unqualified-projection-symbol)
-                            (plan/generate-unique-column-names))
+            projection (outer-projection tree)
             plan (-> tree
                      (sem/analyze-query) sem/or-throw
                      (plan/plan-query {:decorrelate? true, :project-anonymous-columns? true}))
@@ -210,17 +213,19 @@
     node))
 
 (defn- execute-sql-query [node sql-statement variables opts]
-  ;; relies on order of cols in map, see fix in execute-query-expression for current best approach
-  ;; chosing not to re impl it here as I hope we can solve it on a lower level.
   (binding [r/*memo* (HashMap.)]
-    (->> (c2/sql-query node sql-statement
-                       (cond-> opts
-                          (= (get variables "APP_TIME_DEFAULTS") "AS_OF_NOW")
-                          (assoc :app-time-as-of-now? true)
+    (let [projection (outer-projection (p/parse sql-statement :query_expression))]
+      (vec
+        (for [row (c2/sql-query
+                    node
+                    sql-statement
+                    (cond-> opts
+                      (= (get variables "APP_TIME_DEFAULTS") "AS_OF_NOW")
+                      (assoc :app-time-as-of-now? true)
 
-                          (get variables "CURRENT_TIMESTAMP")
-                          (assoc-in [:basis :current-time] (Instant/parse (get variables "CURRENT_TIMESTAMP")))))
-         (mapv vals))))
+                      (get variables "CURRENT_TIMESTAMP")
+                      (assoc-in [:basis :current-time] (Instant/parse (get variables "CURRENT_TIMESTAMP")))))]
+          (mapv #(-> % name keyword row) projection))))))
 
 (defn parse-create-table [^String x]
   (when-let [[_ table-name columns] (re-find #"(?is)^\s*CREATE\s+TABLE\s+(\w+)\s*\((.+)\)\s*$" x)]

@@ -1,34 +1,33 @@
 [:update
  {:table "foo"}
  [:rename
-  {x6 _iid,
-   x7 _row-id,
-   x2 system_time_start,
-   x3 system_time_end,
-   x9 bar,
-   x10 application_time_start,
-   x11 application_time_end}
+  {x5 _iid,
+   x6 _row-id,
+   x1 system_time_start,
+   x2 system_time_end,
+   x8 bar,
+   x9 application_time_start,
+   x10 application_time_end}
   [:project
-   [x6
-    x7
+   [x5
+    x6
+    x1
     x2
-    x3
-    {x9 (and (< x2 x5) (> x3 x4))}
-    {x10 (cast-tstz x4)}
-    {x11 (cast-tstz x5)}]
+    {x8 (and (< x1 x4) (> x2 x3))}
+    {x9 (cast-tstz x3)}
+    {x10 (cast-tstz x4)}]
    [:rename
-    {_table x1,
-     system_time_start x2,
-     system_time_end x3,
-     application_time_start x4,
-     application_time_end x5,
-     _iid x6,
-     _row-id x7}
+    {system_time_start x1,
+     system_time_end x2,
+     application_time_start x3,
+     application_time_end x4,
+     _iid x5,
+     _row-id x6}
     [:scan
-     [{_table (= _table "foo")}
-      system_time_start
+     foo
+     (system_time_start
       system_time_end
       application_time_start
       application_time_end
       _iid
-      _row-id]]]]]]
+      _row-id)]]]]]

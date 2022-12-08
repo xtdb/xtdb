@@ -3,10 +3,8 @@
  [:project
   [x1]
   [:select
-   (or x8 (= x2 42))
+   (or x7 (= x2 42))
    [:mark-join
-    {x8 [{x1 x5}]}
-    [:rename
-     {a x1, b x2, _table x3}
-     [:scan [a b {_table (= _table "foo")}]]]
-    [:table [x5] [{x5 1} {x5 2}]]]]]]
+    {x7 [{x1 x4}]}
+    [:rename {a x1, b x2} [:scan foo [a b]]]
+    [:table [x4] [{x4 1} {x4 2}]]]]]]

@@ -3,15 +3,9 @@
  [:project
   [x1]
   [:semi-join
-   [{x1 x7} {x4 x8}]
+   [{x1 x5} {x3 x6}]
    [:mega-join
     []
-    [[:rename
-      {foo x1, _table x2}
-      [:scan [foo {_table (= _table "x")}]]]
-     [:rename
-      {biz x4, _table x5}
-      [:scan [biz {_table (= _table "y")}]]]]]
-   [:rename
-    {bar x7, baz x8, _table x9}
-    [:scan [bar baz {_table (= _table "z")}]]]]]]
+    [[:rename {foo x1} [:scan x [foo]]]
+     [:rename {biz x3} [:scan y [biz]]]]]
+   [:rename {bar x5, baz x6} [:scan z [bar baz]]]]]]

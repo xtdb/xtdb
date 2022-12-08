@@ -1,16 +1,14 @@
 [:rename
- {x1 name, x10 $column_2$}
+ {x1 name, x8 $column_2$}
  [:project
-  [x1 x10]
+  [x1 x8]
   [:select
-   (< x11 1930)
+   (< x9 1930)
    [:group-by
-    [x1 {x10 (sum x5)} {x11 (min x7)}]
+    [x1 {x8 (sum x4)} {x9 (min x6)}]
     [:mega-join
-     [{x2 x6}]
-     [[:rename
-       {name x1, cert x2, _table x3}
-       [:scan [name cert {_table (= _table "movieexec")}]]]
+     [{x2 x5}]
+     [[:rename {name x1, cert x2} [:scan movieexec [name cert]]]
       [:rename
-       {length x5, producer x6, year x7, _table x8}
-       [:scan [length producer year {_table (= _table "movie")}]]]]]]]]]
+       {length x4, producer x5, year x6}
+       [:scan movie [length producer year]]]]]]]]]

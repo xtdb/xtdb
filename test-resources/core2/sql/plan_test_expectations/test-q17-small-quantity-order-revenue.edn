@@ -1,36 +1,31 @@
 [:rename
- {x21 avg_yearly}
+ {x18 avg_yearly}
  [:project
-  [{x21 (/ x19 7.0)}]
+  [{x18 (/ x16 7.0)}]
   [:group-by
-   [{x19 (sum x1)}]
+   [{x16 (sum x1)}]
    [:select
-    (< x3 x17)
+    (< x3 x14)
     [:map
-     [{x17 (* 0.2 x15)}]
+     [{x14 (* 0.2 x12)}]
      [:group-by
-      [x1 x2 x3 x4 x6 x7 x8 x9 $row_number$ {x15 (avg x11)}]
+      [x1 x2 x3 x5 x6 x7 $row_number$ {x12 (avg x9)}]
       [:left-outer-join
-       [{x6 x12}]
+       [{x5 x10}]
        [:map
         [{$row_number$ (row-number)}]
         [:mega-join
-         [{x2 x6}]
+         [{x2 x5}]
          [[:rename
-           {l_extendedprice x1, l_partkey x2, l_quantity x3, _table x4}
-           [:scan
-            [l_extendedprice
-             l_partkey
-             l_quantity
-             {_table (= _table "lineitem")}]]]
+           {l_extendedprice x1, l_partkey x2, l_quantity x3}
+           [:scan lineitem [l_extendedprice l_partkey l_quantity]]]
           [:rename
-           {p_partkey x6, p_brand x7, p_container x8, _table x9}
+           {p_partkey x5, p_brand x6, p_container x7}
            [:scan
+            part
             [p_partkey
              {p_brand (= p_brand "Brand#23")}
-             {p_container (= p_container "MED BOX")}
-             {_table (= _table "part")}]]]]]]
+             {p_container (= p_container "MED BOX")}]]]]]]
        [:rename
-        {l_quantity x11, l_partkey x12, _table x13}
-        [:scan
-         [l_quantity l_partkey {_table (= _table "lineitem")}]]]]]]]]]]
+        {l_quantity x9, l_partkey x10}
+        [:scan lineitem [l_quantity l_partkey]]]]]]]]]]

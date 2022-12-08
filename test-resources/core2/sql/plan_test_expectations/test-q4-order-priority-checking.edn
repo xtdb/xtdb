@@ -1,16 +1,17 @@
 [:rename
- {x1 o_orderpriority, x13 order_count}
+ {x1 o_orderpriority, x11 order_count}
  [:order-by
   [[x1 {:direction :asc, :null-ordering :nulls-last}]]
   [:group-by
-   [x1 {x13 (count x12)}]
+   [x1 {x11 (count x10)}]
    [:map
-    [{x12 1}]
+    [{x10 1}]
     [:semi-join
-     [{x3 x6}]
+     [{x3 x5}]
      [:rename
-      {o_orderpriority x1, o_orderdate x2, o_orderkey x3, _table x4}
+      {o_orderpriority x1, o_orderdate x2, o_orderkey x3}
       [:scan
+       orders
        [o_orderpriority
         {o_orderdate
          (and
@@ -20,14 +21,9 @@
             #time/date "1993-07-01"
             (single-field-interval "3" "MONTH" 2 0)))
           (>= o_orderdate #time/date "1993-07-01"))}
-        o_orderkey
-        {_table (= _table "orders")}]]]
+        o_orderkey]]]
      [:rename
-      {l_orderkey x6, l_commitdate x7, l_receiptdate x8, _table x9}
+      {l_orderkey x5, l_commitdate x6, l_receiptdate x7}
       [:select
        (< l_commitdate l_receiptdate)
-       [:scan
-        [l_orderkey
-         l_commitdate
-         l_receiptdate
-         {_table (= _table "lineitem")}]]]]]]]]]
+       [:scan lineitem [l_orderkey l_commitdate l_receiptdate]]]]]]]]]

@@ -3,11 +3,11 @@
  [:project
   [x3]
   [:rename
-   {system_time_start x1, system_time_end x2, bar x3, _table x4}
+   {system_time_start x1, system_time_end x2, bar x3}
    [:scan
+    foo
     [{system_time_start
       (<= system_time_start #time/date-time "2999-01-01T00:00")}
      {system_time_end
       (> system_time_end #time/date-time "2999-01-01T00:00")}
-     bar
-     {_table (= _table "foo")}]]]]]
+     bar]]]]]

@@ -1,15 +1,9 @@
 [:rename
- {x9 some_column}
+ {x7 some_column}
  [:project
-  [{x9 (= 1 x7)}]
+  [{x7 (= 1 x5)}]
   [:apply
    :single-join
-   {x1 ?x8}
-   [:rename
-    {y x1, _table x2}
-    [:scan [{y (= y 1)} {_table (= _table "x")}]]]
-   [:project
-    [{x7 (= x4 ?x8)}]
-    [:rename
-     {bar x4, _table x5}
-     [:scan [bar {_table (= _table "foo")}]]]]]]]
+   {x1 ?x6}
+   [:rename {y x1} [:scan x [{y (= y 1)}]]]
+   [:project [{x5 (= x3 ?x6)}] [:rename {bar x3} [:scan foo [bar]]]]]]]

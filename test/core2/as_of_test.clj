@@ -18,7 +18,7 @@
         !tx2 (c2/submit-tx tu/*node* [[:put {:id :my-doc, :last-updated "tx2"}]])]
 
     (t/is (= #{{:last-updated "tx1"} {:last-updated "tx2"}}
-             (set (tu/query-ra '[:scan [last-updated]]
+             (set (tu/query-ra '[:scan xt_docs [last-updated]]
                                {:srcs {'$ (ingest/snapshot ingester !tx2)}}))))
 
     (t/is (= #{{:last-updated "tx2"}}
@@ -30,7 +30,7 @@
 
     (t/testing "at tx1"
       (t/is (= #{{:last-updated "tx1"}}
-               (set (tu/query-ra '[:scan [last-updated]]
+               (set (tu/query-ra '[:scan xt_docs [last-updated]]
                                  {:srcs {'$ (ingest/snapshot ingester !tx1)}}))))
 
       (t/is (= #{{:last-updated "tx1"}}
@@ -58,9 +58,11 @@
                                   :application_time_end end-of-time-zdt
                                   :system_time_start sys-time
                                   :system_time_end end-of-time-zdt}}
-             (->> (tu/query-ra '[:scan [id
-                                        application_time_start application_time_end
-                                        system_time_start system_time_end]]
+             (->> (tu/query-ra '[:scan
+                                 xt_docs
+                                 [id
+                                  application_time_start application_time_end
+                                  system_time_start system_time_end]]
                                {:srcs {'$ (ingest/snapshot ingester tx1)}})
                   (into {} (map (juxt :id identity))))))))
 
@@ -90,17 +92,21 @@
                 :system_time_end end-of-time-zdt}]
 
     (t/is (= [replaced-v0-doc v1-doc]
-             (tu/query-ra '[:scan [id version
-                                   application_time_start application_time_end
-                                   system_time_start system_time_end]]
+             (tu/query-ra '[:scan
+                            xt_docs
+                            [id version
+                             application_time_start application_time_end
+                             system_time_start system_time_end]]
                           {:srcs {'$ db}}))
           "all app-time")
 
     #_ ; FIXME
     (t/is (= [original-v0-doc replaced-v0-doc v1-doc]
-             (tu/query-ra '[:scan [id version
-                                   application_time_start application_time_end
-                                   system_time_start {system_time_end (<= system_time_end ?eot)}]]
+             (tu/query-ra '[:scan
+                            xt_docs
+                            [id version
+                             application_time_start application_time_end
+                             system_time_start {system_time_end (<= system_time_end ?eot)}]]
                           {:srcs {'$ db}
                            :params {'?eot util/end-of-time}}))
           "all app, all sys")))
@@ -108,9 +114,11 @@
 (t/deftest test-evict
   (let [ingester (tu/component :core2/ingester)]
     (letfn [(all-time-docs [db]
-              (->> (tu/query-ra '[:scan [id
-                                         application_time_start {application_time_end (<= application_time_end ?eot)}
-                                         system_time_start {system_time_end (<= system_time_end ?eot)}]]
+              (->> (tu/query-ra '[:scan
+                                  xt_docs
+                                  [id
+                                   application_time_start {application_time_end (<= application_time_end ?eot)}
+                                   system_time_start {system_time_end (<= system_time_end ?eot)}]]
                                 {:srcs {'$ db}
                                  :params {'?eot util/end-of-time}})
                    (map :id)

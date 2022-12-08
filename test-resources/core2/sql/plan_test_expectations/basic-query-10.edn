@@ -1,7 +1,5 @@
 [:rename
- {x4 $column_1$}
+ {x3 $column_1$}
  [:group-by
-  [{x4 (sum x1)}]
-  [:rename
-   {length x1, _table x2}
-   [:scan [length {_table (= _table "movie")}]]]]]
+  [{x3 (sum x1)}]
+  [:rename {length x1} [:scan movie [length]]]]]

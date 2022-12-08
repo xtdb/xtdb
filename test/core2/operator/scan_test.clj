@@ -15,7 +15,7 @@
                                  [:put {:id :bar, :col1 "bar1", :col2 "bar2"}]
                                  [:put {:id :foo, :col2 "baz2"}]])]
       (t/is (= [{:id :bar, :col1 "bar1", :col2 "bar2"}]
-               (tu/query-ra '[:scan [id col1 col2]]
+               (tu/query-ra '[:scan xt_docs [id col1 col2]]
                             {:srcs {'$ @(node/snapshot-async node tx)}}))))))
 
 (t/deftest multiple-sources
@@ -25,8 +25,8 @@
           tx2 (c2/submit-tx node2 [[:put {:id :foo, :col2 "col2"}]])]
       (t/is (= [{:id :foo, :col1 "col1", :col2 "col2"}]
                (tu/query-ra '[:join [{id id}]
-                              [:scan $db1 [id col1]]
-                              [:scan $db2 [id col2]]]
+                              [:scan $db1 xt_docs [id col1]]
+                              [:scan $db2 xt_docs [id col2]]]
                             {:srcs {'$db1 @(node/snapshot-async node1 tx1),
                                     '$db2 @(node/snapshot-async node2 tx2)}}))))))
 
@@ -34,7 +34,7 @@
   (with-open [node (node/start-node {})]
     (let [tx (c2/submit-tx node [[:put {:id :foo}]])]
       (t/is (= [{:id :foo}]
-               (tu/query-ra '[:scan [id id]]
+               (tu/query-ra '[:scan xt_docs [id id]]
                             {:srcs {'$ @(node/snapshot-async node tx)}}))))))
 
 (t/deftest test-scanning-temporal-cols
@@ -43,9 +43,11 @@
                                    {:app-time-start #inst "2021"
                                     :app-time-end #inst "3000"}]])]
 
-      (let [res (first (tu/query-ra '[:scan [id
-                                             application_time_start application_time_end
-                                             system_time_start system_time_end]]
+      (let [res (first (tu/query-ra '[:scan
+                                      xt_docs
+                                      [id
+                                       application_time_start application_time_end
+                                       system_time_start system_time_end]]
                                     {:srcs {'$ @(node/snapshot-async node tx)}}))]
         (t/is (= #{:id :application_time_start :application_time_end :system_time_end :system_time_start}
                  (-> res keys set)))
@@ -57,7 +59,8 @@
                (-> (first (tu/query-ra '[:project [id
                                                    {app-time-start application_time_start}
                                                    {app-time-end application_time_end}]
-                                         [:scan [id application_time_start application_time_end]]]
+                                         [:scan xt_docs
+                                          [id application_time_start application_time_end]]]
                                        {:srcs {'$ @(node/snapshot-async node tx)}}))
                    (dissoc :system_time_start :system_time_end)))))))
 
@@ -67,14 +70,16 @@
     (let [ingester (tu/component node :core2/ingester)
           tx @(c2/submit-tx node [[:put {:id :doc}]])]
 
-      (t/is (tu/query-ra '[:scan [application_time_start application_time_end
-                                  system_time_start system_time_end]]
+      (t/is (tu/query-ra '[:scan
+                           xt_docs
+                           [application_time_start application_time_end
+                            system_time_start system_time_end]]
                          {:srcs {'$ @(node/snapshot-async node tx)}})))))
 
 (t/deftest test-scan-col-types
   (with-open [node (node/start-node {})]
     (letfn [(->col-types [tx]
-              (-> (op/prepare-ra '[:scan [id]])
+              (-> (op/prepare-ra '[:scan xt_docs [id]])
                   (.bind {:srcs {'$ @(node/snapshot-async node tx)}})
                   (.columnTypes)))]
 

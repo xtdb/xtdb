@@ -3,8 +3,6 @@
  [:project
   [x1]
   [:semi-join
-   [{x2 x5}]
-   [:rename
-    {y x1, z x2, _table x3}
-    [:scan [y z {_table (= _table "x")}]]]
-   [:rename {z x5, _table x6} [:scan [z {_table (= _table "y")}]]]]]]
+   [{x2 x4}]
+   [:rename {y x1, z x2} [:scan x [y z]]]
+   [:rename {z x4} [:scan y [z]]]]]]

@@ -1,14 +1,10 @@
 [:rename
- {x8 $column_1$}
+ {x6 $column_1$}
  [:project
-  [x8]
+  [x6]
   [:mega-join
    []
-   [[:rename
-     {a x1, _table x2}
-     [:scan [{a (= a 42)} {_table (= _table "a")}]]]
+   [[:rename {a x1} [:scan a [{a (= a 42)}]]]
     [:group-by
-     [{x8 (array-agg x4)}]
-     [:rename
-      {b1 x4, b2 x5, _table x6}
-      [:scan [b1 {b2 (= b2 42)} {_table (= _table "b")}]]]]]]]]
+     [{x6 (array-agg x3)}]
+     [:rename {b1 x3, b2 x4} [:scan b [b1 {b2 (= b2 42)}]]]]]]]]

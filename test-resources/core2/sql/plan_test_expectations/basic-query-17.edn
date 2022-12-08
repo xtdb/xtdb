@@ -2,13 +2,5 @@
  {x1 name}
  [:distinct
   [:intersect
-   [:project
-    [x1]
-    [:rename
-     {name x1, _table x2}
-     [:scan [name {_table (= _table "starsin")}]]]]
-   [:project
-    [x1]
-    [:rename
-     {name x1, _table x5}
-     [:scan [name {_table (= _table "starsin")}]]]]]]]
+   [:rename {name x1} [:scan starsin [name]]]
+   [:rename {name x1} [:scan starsin [name]]]]]]

@@ -43,8 +43,8 @@
                      (throw (.getCause e)))))))
 
 (t/deftest round-trips-lists
-  (let [!tx (c2/submit-tx *node* [[:put {:id :foo, :list [1 2 ["foo" "bar"]] :_table "bar"}]
-                                  [:sql "INSERT INTO bar (id, list) VALUES ('bar', ARRAY[?, 2, 3 + 5])"
+  (let [!tx (c2/submit-tx *node* [[:put {:id :foo, :list [1 2 ["foo" "bar"]]}]
+                                  [:sql "INSERT INTO xt_docs (id, list) VALUES ('bar', ARRAY[?, 2, 3 + 5])"
                                    [[4]]]])]
     (t/is (= (c2/map->TransactionInstant {:tx-id 0, :sys-time (util/->instant #inst "2020-01-01")}) @!tx))
 
@@ -59,7 +59,7 @@
     (t/is (= [{:id :foo, :list [1 2 ["foo" "bar"]]}
               {:id "bar", :list [4 2 8]}]
              (c2/sql-query *node*
-                           "SELECT b.id, b.list FROM bar b"
+                           "SELECT b.id, b.list FROM xt_docs b"
                            {:basis {:tx !tx}
                             :basis-timeout (Duration/ofSeconds 1)})))))
 

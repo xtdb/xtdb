@@ -1485,27 +1485,27 @@
                           (map symbol derived-columns))
           (plan subquery-ref)]
          (plan subquery-ref))
-       [:scan (vec
-                (let [columns (->> (for [{:keys [identifier]} projection]
-                                     (symbol identifier))
-                                   (concat
-                                     (system-time-columns tp)
-                                     (application-time-columns tp))
-                                   (distinct)
-                                   (vec))]
-                  (conj
-                    columns
-                    {'_table (list '= '_table table-or-query-name)})))])]))
+       [:scan
+        (symbol table-or-query-name)
+        (vec
+          (->> (for [{:keys [identifier]} projection]
+                 (symbol identifier))
+               (concat
+                 (system-time-columns tp)
+                 (application-time-columns tp))
+               (distinct)
+               (vec)))])]))
 
 (defn- build-target-table [tt]
   (let [{:keys [id correlation-name table-or-query-name]} (sem/table tt)
         projection (first (sem/projected-columns tt))]
     [:rename (table-reference-symbol correlation-name id)
-     [:scan (vec (conj (for [{:keys [identifier]} projection
-                             :let [identifier (symbol identifier)]
-                             :when (not= '_table identifier)]
-                         identifier)
-                       {'_table (list '= '_table table-or-query-name)}))]]))
+     [:scan
+      (symbol table-or-query-name)
+      (for [{:keys [identifier]} projection
+            :let [identifier (symbol identifier)]
+            :when (not= '_table identifier)]
+        identifier)]]))
 
 (defn- build-lateral-derived-table [tp qe]
   (let [scope-id (sem/id (sem/scope-element tp))
@@ -1608,7 +1608,7 @@
     [:table table]
     (mapv symbol (keys (first table)))
 
-    [:scan columns]
+    [:scan _table columns]
     (mapv ->projected-column columns)
 
     [:join _ lhs rhs]
@@ -2194,10 +2194,10 @@
         (with-smap [:table (w/postwalk-replace smap table)]
           smap))
 
-      [:scan columns]
+      [:scan table columns]
       (let [smap (zipmap (map ->projected-column columns)
                          (repeatedly next-name))]
-        (with-smap [:rename smap [:scan columns]] smap))
+        (with-smap [:rename smap [:scan table columns]] smap))
 
       [:join join-map lhs rhs]
       (let [smap (merge (->smap lhs) (->smap rhs))]
@@ -2613,14 +2613,14 @@
   (r/zmatch z
     [:select predicate-1
      [:select predicate-2
-      [:scan relation]]]
+      [:scan table relation]]]
     ;;=>
-    [:select (merge-conjunctions predicate-1 predicate-2) [:scan relation]]))
+    [:select (merge-conjunctions predicate-1 predicate-2) [:scan table relation]]))
 
 (defn- add-selection-to-scan-predicate [z]
   (r/zmatch z
     [:select predicate
-     [:scan columns]]
+     [:scan table columns]]
     ;;=>
     (let [underlying-scan-columns (set (map ->projected-column columns))
           {:keys [scan-columns new-select-predicate]}
@@ -2653,8 +2653,8 @@
       (when-not (= columns scan-columns)
         (if new-select-predicate
           [:select new-select-predicate
-           [:scan scan-columns]]
-          [:scan scan-columns])))))
+           [:scan table scan-columns]]
+          [:scan table scan-columns])))))
 
 ;; Decorrelation rules.
 
