@@ -289,7 +289,8 @@
         opts (doto (or ^DBOptions db-options (DBOptions.))
                (cond-> metrics (.setStatistics stats))
                (.setCreateIfMissing true)
-               (.setCreateMissingColumnFamilies true))
+               (.setCreateMissingColumnFamilies true)
+               (.setMaxBackgroundJobs (max 2 (dec (-> (Runtime/getRuntime) .availableProcessors)))))
 
         db (try
              (RocksDB/open opts (-> (Files/createDirectories db-dir (make-array FileAttribute 0))
