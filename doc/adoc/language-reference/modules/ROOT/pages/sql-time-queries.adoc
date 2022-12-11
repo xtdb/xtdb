@@ -3,7 +3,6 @@
 In addition to this documentation, there are a number of
 https://github.com/xtdb/core2-playground/blob/main/bitemporal/snodgrass-99.sql[examples in the `core2-playground` repo].
 
-
 [#enhancedsql2011]
 == Enhanced SQL:2011
 
@@ -74,6 +73,10 @@ SELECT posts.text,
        posts.application_time_start,
        posts.application_time_end FROM posts;
 ----
+
+
+== Table Period Specification Grammar
+railroad::query_system_time_period_specification.html[]
 
 
 [#timecolumns]

@@ -44,3 +44,4 @@ asciidoc:
     page-pagination: true
   extensions:
     - ./antora-extensions/code-tabs.js
+    - ./antora-extensions/railroads.js
