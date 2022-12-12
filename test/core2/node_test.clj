@@ -315,3 +315,9 @@ ORDER BY foo.application_time_start"
               {:data [6 7], :data_1 [6 7]}]
              (c2/sql-query tu/*node* "SELECT t3.data, t2.data FROM t3, t3 AS t2"
                            {:basis {:tx !tx}})))))
+
+(t/deftest test-mutable-data-buffer-bug
+  (let [!tx (c2/submit-tx tu/*node* [[:sql "INSERT INTO t1(id) VALUES(1)"]])]
+    (t/is (= [{:$column_1$ [{:foo 5} {:foo 5}]}]
+             (c2/sql-query tu/*node* "SELECT ARRAY [OBJECT('foo': 5), OBJECT('foo': 5)] FROM t1"
+                           {:basis {:tx !tx}})))))

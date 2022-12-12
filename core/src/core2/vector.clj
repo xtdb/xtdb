@@ -2,11 +2,14 @@
   (:require [core2.types :as types])
   (:import (clojure.lang MapEntry)
            (core2.types IntervalDayTime IntervalMonthDayNano)
-           (core2.vector IMonoVectorWriter IMonoVectorReader IPolyValueReader IPolyVectorWriter IPolyVectorReader IStructValueReader IWriterPosition)
+           (core2.vector IMonoVectorReader IMonoVectorWriter IPolyVectorReader IPolyVectorWriter IStructValueReader IWriterPosition)
            java.nio.ByteBuffer
            (java.time Duration Period)
            java.util.List
-           (org.apache.arrow.vector BaseFixedWidthVector BaseVariableWidthVector BitVectorHelper DateMilliVector ExtensionTypeVector FixedSizeBinaryVector IntervalDayVector IntervalMonthDayNanoVector IntervalYearVector NullVector PeriodDuration TimeMicroVector TimeMilliVector TimeNanoVector TimeSecVector ValueVector)
+           (org.apache.arrow.vector BaseVariableWidthVector BigIntVector BitVector DateDayVector DateMilliVector DurationVector ExtensionTypeVector
+                                    FixedSizeBinaryVector Float4Vector Float8Vector IntVector IntervalDayVector IntervalMonthDayNanoVector
+                                    IntervalYearVector NullVector PeriodDuration SmallIntVector TimeMicroVector TimeMilliVector TimeNanoVector TimeSecVector
+                                    TimeStampVector TinyIntVector ValueVector)
            (org.apache.arrow.vector.complex DenseUnionVector ListVector StructVector)))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -70,44 +73,66 @@
             (.setBytes (.getDataBuffer arrow-vec) (* byte-width idx) buf)
             (.position buf pos)))))))
 
-(defn- fwv-write-idx ^long [^BaseFixedWidthVector arrow-vec, ^IWriterPosition wp]
-  (let [idx (.getPositionAndIncrement wp)]
-    (.setIndexDefined arrow-vec idx)
-    idx))
+(defmacro def-fixed-width-mono-factory [clazz read-method write-method]
+  `(extend-protocol MonoFactory
+     ~clazz
+     (~'->mono-reader [arrow-vec# _col-type#]
+      (reify IMonoVectorReader
+        (~read-method [_# idx#] (.get arrow-vec# idx#))))
+
+     (~'->mono-writer [arrow-vec# _col-type#]
+      (let [wp# (IWriterPosition/build)]
+        (reify IMonoVectorWriter
+          (~'writerPosition [_#] wp#)
+          (~'writeNull [_# _#] (.setNull arrow-vec# (.getPositionAndIncrement wp#)))
+
+          (~write-method [_# v#]
+           (.setSafe arrow-vec# (.getPositionAndIncrement wp#) v#)))))))
+
+#_{:clj-kondo/ignore [:unresolved-symbol]}
+(do
+  (def-fixed-width-mono-factory TinyIntVector readByte writeByte)
+  (def-fixed-width-mono-factory SmallIntVector readShort writeShort)
+  (def-fixed-width-mono-factory IntVector readInt writeInt)
+  (def-fixed-width-mono-factory BigIntVector readLong writeLong)
+  (def-fixed-width-mono-factory Float4Vector readFloat writeFloat)
+  (def-fixed-width-mono-factory Float8Vector readDouble writeDouble)
+
+  (def-fixed-width-mono-factory DateDayVector readInt writeInt)
+  (def-fixed-width-mono-factory DateMilliVector readLong writeLong)
+  (def-fixed-width-mono-factory TimeStampVector readLong writeLong)
+  (def-fixed-width-mono-factory TimeSecVector readLong writeLong)
+  (def-fixed-width-mono-factory TimeMilliVector readLong writeLong)
+  (def-fixed-width-mono-factory TimeMicroVector readLong writeLong)
+  (def-fixed-width-mono-factory TimeNanoVector readLong writeLong))
 
 (extend-protocol MonoFactory
-  BaseFixedWidthVector
+  BitVector
   (->mono-reader [arrow-vec _col-type]
     (reify IMonoVectorReader
-      (readBoolean [_ idx] (== 1 (BitVectorHelper/get (.getDataBuffer arrow-vec) idx)))
-      (readByte [_ idx] (.getByte (.getDataBuffer arrow-vec) idx))
-      (readShort [_ idx] (.getShort (.getDataBuffer arrow-vec) (* idx Short/BYTES)))
-      (readInt [_ idx] (.getInt (.getDataBuffer arrow-vec) (* idx Integer/BYTES)))
-      (readLong [_ idx] (.getLong (.getDataBuffer arrow-vec) (* idx Long/BYTES)))
-      (readFloat [_ idx] (.getFloat (.getDataBuffer arrow-vec) (* idx Float/BYTES)))
-      (readDouble [_ idx] (.getDouble (.getDataBuffer arrow-vec) (* idx Double/BYTES)))))
+      (readBoolean [_ idx] (== 1 (.get arrow-vec idx)))))
 
   (->mono-writer [arrow-vec _col-type]
     (let [wp (IWriterPosition/build)]
       (reify
         IMonoVectorWriter
         (writerPosition [_] wp)
-
         (writeNull [_ _] (.setNull arrow-vec (.getPositionAndIncrement wp)))
+        (writeBoolean [_ v] (.setSafe arrow-vec (.getPositionAndIncrement wp) (if v 1 0))))))
 
-        (writeBoolean [_ v]
-          (let [buf (.getDataBuffer arrow-vec)
-                idx (fwv-write-idx arrow-vec wp)]
-            (if v
-              (BitVectorHelper/setBit buf idx)
-              (BitVectorHelper/unsetBit buf idx))))
+  DurationVector
+  (->mono-reader [arrow-vec _col-type]
+    (reify IMonoVectorReader
+      ;; `.get` here returns an ArrowBuf, naturally.
+      (readLong [_ idx] (DurationVector/get (.getDataBuffer arrow-vec) idx))))
 
-        (writeByte [_ v] (.setByte (.getDataBuffer arrow-vec) (fwv-write-idx arrow-vec wp) v))
-        (writeShort [_ v] (.setShort (.getDataBuffer arrow-vec) (* (fwv-write-idx arrow-vec wp) Short/BYTES) v))
-        (writeInt [_ v] (.setInt (.getDataBuffer arrow-vec) (* (fwv-write-idx arrow-vec wp) Integer/BYTES) v))
-        (writeLong [_ v] (.setLong (.getDataBuffer arrow-vec) (* (fwv-write-idx arrow-vec wp) Long/BYTES) v))
-        (writeFloat [_ v] (.setFloat (.getDataBuffer arrow-vec) (* (fwv-write-idx arrow-vec wp) Float/BYTES) v))
-        (writeDouble [_ v] (.setDouble (.getDataBuffer arrow-vec) (* (fwv-write-idx arrow-vec wp) Double/BYTES) v))))))
+  (->mono-writer [arrow-vec _col-type]
+    (let [wp (IWriterPosition/build)]
+      (reify
+        IMonoVectorWriter
+        (writerPosition [_] wp)
+        (writeNull [_ _] (.setNull arrow-vec (.getPositionAndIncrement wp)))
+        (writeLong [_ v] (.setSafe arrow-vec (.getPositionAndIncrement wp) v))))))
 
 (extend-protocol MonoFactory
   BaseVariableWidthVector
