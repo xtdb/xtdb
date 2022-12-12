@@ -321,3 +321,16 @@ ORDER BY foo.application_time_start"
     (t/is (= [{:$column_1$ [{:foo 5} {:foo 5}]}]
              (c2/sql-query tu/*node* "SELECT ARRAY [OBJECT('foo': 5), OBJECT('foo': 5)] FROM t1"
                            {:basis {:tx !tx}})))))
+
+(t/deftest test-differing-length-lists-441
+  (let [!tx (c2/submit-tx tu/*node* [[:sql "INSERT INTO t1(id, data) VALUES (1, [2, 3])"]
+                                     [:sql "INSERT INTO t1(id, data) VALUES (2, [5, 6, 7])"]])]
+    (t/is (= [{:data [2 3]} {:data [5 6 7]}]
+             (c2/sql-query tu/*node* "SELECT t1.data FROM t1"
+                           {:basis {:tx !tx}}))))
+
+  (let [!tx (c2/submit-tx tu/*node* [[:sql "INSERT INTO t2(id, data) VALUES (1, [2, 3])"]
+                                     [:sql "INSERT INTO t2(id, data) VALUES (2, ['dog', 'cat'])"]])]
+    (t/is (= [{:data [2 3]} {:data ["dog" "cat"]}]
+             (c2/sql-query tu/*node* "SELECT t2.data FROM t2"
+                           {:basis {:tx !tx}})))))
