@@ -135,6 +135,7 @@ SELECT t3.data[2] FROM t3
 3
 7
 
+skipif xtdb # see #546
 query TT nosort
 SELECT t3.data, t2.data FROM t3, t3 AS t2
 ----
