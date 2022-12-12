@@ -334,3 +334,17 @@ ORDER BY foo.application_time_start"
     (t/is (= [{:data [2 3]} {:data ["dog" "cat"]}]
              (c2/sql-query tu/*node* "SELECT t2.data FROM t2"
                            {:basis {:tx !tx}})))))
+
+(t/deftest test-cross-join-ioobe-547
+  (let [!tx (c2/submit-tx tu/*node* [[:sql "
+INSERT INTO t2(id, data)
+VALUES(2, OBJECT ('foo': OBJECT('bibble': true), 'bar': OBJECT('baz': 1001)))"]
+
+                                     [:sql "
+INSERT INTO t1(id, data)
+VALUES(1, OBJECT ('foo': OBJECT('bibble': true), 'bar': OBJECT('baz': 1001)))"]])]
+
+    #_ ; FIXME
+    (t/is (= [{:t2d {:bibble true}, :t1d {:baz 1001}}]
+             (c2/sql-query tu/*node* "SELECT t2.data t2d, t1.data t1d FROM t2, t1"
+                           {:basis {:tx !tx}})))))
