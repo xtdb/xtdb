@@ -304,3 +304,14 @@ ORDER BY foo.application_time_start"
                                (-> '{:find [id]
                                      :where [[id :id]]}
                                    (assoc :basis {:tx !tx1})))))))
+
+(t/deftest test-list-round-trip-546
+  (let [!tx (c2/submit-tx tu/*node* [[:sql "INSERT INTO t3(id, data) VALUES (1, [2, 3])"]
+                                     [:sql "INSERT INTO t3(id, data) VALUES (2, [6, 7])"]])]
+    #_ ; FIXME #546
+    (t/is (= [{:data [2 3], :data_1 [2 3]}
+              {:data [2 3], :data_1 [6 7]}
+              {:data [6 7], :data_1 [2 3]}
+              {:data [6 7], :data_1 [6 7]}]
+             (c2/sql-query tu/*node* "SELECT t3.data, t2.data FROM t3, t3 AS t2"
+                           {:basis {:tx !tx}})))))
