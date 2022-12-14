@@ -1511,6 +1511,64 @@
               :res-type '[:struct {xa [:union #{:null :i64}], xb [:union #{:f64 :null :i64}]}]}
              (run-projection rel '{:xa (. x a), :xb (. x b)})))))
 
+#_ ; FIXME #620
+(t/deftest test-least-upper-bound-upcast
+  ;; when we have nested polymorphic values, two different types may live in the same key of a DUV
+  ;; e.g. when we take the union of `[:list :i64]` and `[:list :f64]`, we get `[:list [:union #{:i64 :f64}]]`
+
+  ;; (n.b. we could have opted for `[:union #{[:list :i64] [:list :f64]}]`, which is a stronger type,
+  ;;  but this would lead to bigger type explosions)
+
+  (t/is (= [[1] [1.5]]
+           (project1 '[[1] [1.5]] {})))
+
+  (t/is (= [[1 nil] [1.5 "foo"]]
+           (project1 '[[1 nil] [1.5 "foo"]] {})))
+
+  (with-open [rel (tu/open-rel [(tu/open-vec "x"
+                                             [true false])])]
+    (t/is (= {:res [[1] [1.5]],
+              :res-type '[:list [:union #{:i64 :f64}]]}
+             (run-projection rel '(if x [1] [1.5])))))
+
+  (with-open [rel (tu/open-rel [(tu/open-vec "x"
+                                             [{:a 5, :b 1}
+                                              {:a "foo", :b 1}
+                                              {:a 12.0, :b 5, :c 1}
+                                              {:b 1.5}])])]
+    (t/is (= {:res [5 "foo" 12.0 nil],
+              :res-type '[:union #{:i64 :f64 :utf8 :null}]}
+             (run-projection rel '(. x a)))))
+
+  (with-open [rel (tu/open-rel [(tu/open-vec "x"
+                                             [{:a [5], :b 1}
+                                              {:a [12.0], :b 5, :c 1}
+                                              {:b 1.5}])])]
+    (t/is (= {:res [[5] [12.0] nil],
+              :res-type '[:union #{[:list [:union #{:i64 :f64}]] :null}]}
+             (run-projection rel '(. x a))))))
+
+(t/deftest test-mixing-composite-types
+  #_ ; FIXME #552
+  (with-open [rel (tu/open-rel [(tu/open-vec "x"
+                                             [{:a 42}
+                                              {:a 12.0, :b 5, :c [1 2 3]}
+                                              {:b 10, :c [8 1.5]}
+                                              {:a 15, :b 25}
+                                              10.0])])]
+
+    (t/is (= {:res [{:a 42, :sums [nil nil]}
+                    {:a 12.0, :sums [17.0 7]}
+                    {:a nil, :sums [nil 11.5]}
+                    {:a 15, :sums [40 nil]}
+                    {:a nil, :sums [nil nil]}],
+              :res-type '[:struct
+                          {a [:union #{:f64 :null :i64}],
+                           sums [:list [:union #{:f64 :null :i64}]]}]}
+             (run-projection rel '{:a (. x a),
+                                   :sums [(+ (. x a) (. x b))
+                                          (+ (. x b) (nth (. x c) 1))]})))))
+
 (t/deftest test-current-times-111
   (let [inst (Instant/parse "2022-01-01T01:23:45.678912345Z")
         utc-tz (ZoneId/of "UTC")

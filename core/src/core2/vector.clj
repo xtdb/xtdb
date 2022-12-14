@@ -460,6 +460,8 @@
 
   (read [_] type-id)
 
+  (valueCount [_] (.valueCount inner))
+
   (readBoolean [_] (.readBoolean inner idx))
   (readByte [_] (.readByte inner idx))
   (readShort [_] (.readShort inner idx))
@@ -469,21 +471,38 @@
   (readDouble [_] (.readDouble inner idx))
   (readObject [_] (.readObject inner idx)))
 
-(deftype DuvReader [^DenseUnionVector duv, ^bytes type-id-mapping,
+(deftype RemappedTypeIdReader [^IPolyVectorReader inner-rdr, ^bytes type-id-mapping]
+  IPolyVectorReader
+  (read [_ idx] (aget type-id-mapping (.read inner-rdr idx)))
+  (read [_] (aget type-id-mapping (.read inner-rdr)))
+
+  (valueCount [_] (.valueCount inner-rdr))
+
+  (readBoolean [_] (.readBoolean inner-rdr))
+  (readByte [_] (.readByte inner-rdr))
+  (readShort [_] (.readShort inner-rdr))
+  (readInt [_] (.readInt inner-rdr))
+  (readLong [_] (.readLong inner-rdr))
+  (readFloat [_] (.readFloat inner-rdr))
+  (readDouble [_] (.readDouble inner-rdr))
+  (readObject [_] (.readObject inner-rdr)))
+
+(deftype DuvReader [^DenseUnionVector duv
                     ^"[Lcore2.vector.IMonoVectorReader;" inner-readers
-                    ^:unsynchronized-mutable ^byte mapped-type-id
+                    ^:unsynchronized-mutable ^byte type-id
                     ^:unsynchronized-mutable ^IMonoVectorReader inner-rdr
                     ^:unsynchronized-mutable ^int inner-offset]
   IPolyVectorReader
   (read [this idx]
-    (let [type-id (.getTypeId duv idx)
-          mapped-type-id (aget type-id-mapping type-id)]
-      (set! (.mapped-type-id this) mapped-type-id)
+    (let [type-id (.getTypeId duv idx)]
+      (set! (.type-id this) type-id)
       (set! (.inner-offset this) (.getOffset duv idx))
       (set! (.inner-rdr this) (aget inner-readers type-id))
-      mapped-type-id))
+      type-id))
 
-  (read [_] mapped-type-id)
+  (read [_] type-id)
+
+  (valueCount [_] (.getValueCount duv))
 
   (readBoolean [_] (.readBoolean inner-rdr inner-offset))
   (readByte [_] (.readByte inner-rdr inner-offset))
@@ -550,7 +569,8 @@
             (let [col-type (nth ordered-col-types (aget type-id-mapping duv-type-id))]
               (aset readers duv-type-id (->mono-reader (.getVectorByType duv duv-type-id) col-type))))
 
-          (->DuvReader duv type-id-mapping readers 0 nil 0)))))
+          (-> (->DuvReader duv readers 0 nil 0)
+              (->RemappedTypeIdReader type-id-mapping))))))
 
   (->poly-writer [duv [_ inner-types]]
     (let [wp (IWriterPosition/build)

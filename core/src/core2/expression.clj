@@ -11,12 +11,12 @@
            (core2 StringUtil)
            (core2.operator IProjectionSpec IRelationSelector)
            (core2.types IntervalDayTime IntervalMonthDayNano IntervalYearMonth)
-           (core2.vector IIndirectRelation IIndirectVector IMonoVectorReader IPolyVectorReader IStructValueReader)
+           (core2.vector IIndirectRelation IIndirectVector IMonoVectorReader IPolyVectorReader IStructValueReader MonoToPolyReader RemappedTypeIdReader)
            core2.vector.ValueBox
            (java.nio ByteBuffer)
            (java.nio.charset StandardCharsets)
            (java.time Clock Duration Instant LocalDate LocalDateTime LocalTime OffsetDateTime ZoneOffset ZonedDateTime)
-           (java.util Arrays Date)
+           (java.util Arrays Date List)
            (java.util.regex Pattern)
            (java.util.stream IntStream)
            (org.apache.arrow.vector BitVector PeriodDuration ValueVector)
@@ -177,6 +177,26 @@
       Returned fn returns the emitted code for the expression (including the code supplied by the callback)."
   (fn [{:keys [op]} opts]
     op))
+
+(defmulti codegen-cast
+  (fn [{:keys [source-type target-type]}]
+    [(types/col-type-head source-type) (types/col-type-head target-type)])
+  :default ::default
+  :hierarchy #'types/col-type-hierarchy)
+
+(defmethod codegen-cast ::default [{:keys [source-type target-type]}]
+  (throw (err/illegal-arg :core2.expression/cast-error
+                          {::err/message (format "Unsupported cast: '%s' -> '%s'"
+                                                 (pr-str source-type) (pr-str target-type))
+                           :source-type source-type
+                           :target-type target-type})))
+
+(defmethod codegen-cast [:num :num] [{:keys [target-type]}]
+  {:return-type target-type
+   :->call-code #(do `(~(type->cast target-type) ~@%))})
+
+(defmethod codegen-cast [:num :utf8] [_]
+  {:return-type :utf8, :->call-code #(do `(resolve-utf8-buf (str ~@%)))})
 
 (defn resolve-string ^String [x]
   (cond
@@ -483,8 +503,9 @@
                                         `(let [~local ~code]
                                            ~((:continue (get emitted-thens local-type)) f)))))}
 
-          (let [{e-ret :return-type, e-cont :continue, :as emitted-else} (codegen-expr else opts)]
-            {:return-type (apply types/merge-col-types e-ret then-rets)
+          (let [{e-ret :return-type, e-cont :continue, :as emitted-else} (codegen-expr else opts)
+                return-type (apply types/merge-col-types e-ret then-rets)]
+            {:return-type return-type
              :children (cons emitted-else children)
              :continue (fn [f]
                          (continue-expr (fn [local-type code]
@@ -1124,26 +1145,6 @@
     {:return-type :f64
      :->call-code #(do `(~math-method ~@%))}))
 
-(defmulti codegen-cast
-  (fn [{:keys [source-type target-type]}]
-    [(types/col-type-head source-type) (types/col-type-head target-type)])
-  :default ::default
-  :hierarchy #'types/col-type-hierarchy)
-
-(defmethod codegen-cast ::default [{:keys [source-type target-type]}]
-  (throw (err/illegal-arg :core2.expression/cast-error
-                          {::err/message (format "Unsupported cast: '%s' -> '%s'"
-                                                 (pr-str source-type) (pr-str target-type))
-                           :source-type source-type
-                           :target-type target-type})))
-
-(defmethod codegen-cast [:num :num] [{:keys [target-type]}]
-  {:return-type target-type
-   :->call-code #(do `(~(type->cast target-type) ~@%))})
-
-(defmethod codegen-cast [:num :utf8] [_]
-  {:return-type :utf8, :->call-code #(do `(resolve-utf8-buf (str ~@%)))})
-
 (defn buf->str ^String [^ByteBuffer buf]
   (let [bs (byte-array (.remaining buf))
         pos (.position buf)]
@@ -1289,6 +1290,23 @@
                          (~'readDouble [_#] (.readDouble ~box-sym))
                          (~'readObject [_#] (.readObject ~box-sym))))))}))
 
+(defmethod codegen-cast [:list :list] [{[_ source-el-type] :source-type
+                                        [_ target-el-type :as target-type] :target-type}]
+  (assert (types/union? target-el-type))
+  (if (types/union? source-el-type)
+    (let [target-types ^List (vec (second target-el-type))
+          type-id-mapping (->> (second source-el-type)
+                               (mapv (fn [source-type]
+                                       (.indexOf target-types source-type))))]
+      {:return-type target-type
+       :->call-code (fn [[code]]
+                      `(RemappedTypeIdReader. ~code (byte-array ~type-id-mapping)))})
+
+    (let [type-id (.indexOf ^List (vec (second target-el-type)) source-el-type)]
+      {:return-type target-type
+       :->call-code (fn [[code]]
+                      `(MonoToPolyReader. ~code ~type-id 0))})))
+
 (defmethod codegen-expr :list [{:keys [elements]} opts]
   (let [el-count (count elements)
         emitted-els (->> elements
@@ -1298,6 +1316,7 @@
         el-type (->> (into #{} (map :return-type) emitted-els)
                      (apply types/merge-col-types))
         return-type [:list el-type]]
+
     (into {:return-type return-type
            :children emitted-els}
 
@@ -1393,7 +1412,6 @@
 
     {:return-type [:union #{:bool :null}]
      :continue-call (fn continue-list= [f [l-code r-code]]
-
                       (let [l-sym (gensym 'l), r-sym (gensym 'r)]
                         ;; this is essentially `(every? = ...)` but with 3VL
                         `(let [~l-sym ~l-code, ~r-sym ~r-code
@@ -1461,9 +1479,7 @@
         ;; TODO should lit->param be outside the memoize, s.t. we don't have a cache entry for each literal value?
         (let [expr (prepare-expr expr)
               {:keys [return-type continue] :as emitted-expr} (codegen-expr expr opts)
-
               {:keys [writer-bindings write-value-out!]} (write-value-out-code return-type)]
-
           {:!projection-fn (delay
                              (-> `(fn [~(-> rel-sym (with-tag IIndirectRelation))
                                        ~(-> params-sym (with-tag IIndirectRelation))
