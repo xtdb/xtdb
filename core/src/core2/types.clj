@@ -435,14 +435,15 @@
 (extend-protocol ArrowReadable
   ListVector
   (get-object [this idx]
-    (let [data-vec (.getDataVector this)
-          x (loop [element-idx (.getElementStartIndex this idx)
-                   acc (transient [])]
-              (if (= (.getElementEndIndex this idx) element-idx)
-                acc
-                (recur (inc element-idx)
-                       (conj! acc (get-object data-vec element-idx)))))]
-      (persistent! x)))
+    (when-not (.isNull this idx)
+      (let [data-vec (.getDataVector this)
+            x (loop [element-idx (.getElementStartIndex this idx)
+                     acc (transient [])]
+                (if (= (.getElementEndIndex this idx) element-idx)
+                  acc
+                  (recur (inc element-idx)
+                         (conj! acc (get-object data-vec element-idx)))))]
+        (persistent! x))))
 
   FixedSizeListVector
   (get-object [this idx]
