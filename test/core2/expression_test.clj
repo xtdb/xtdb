@@ -1436,14 +1436,14 @@
                 :res-type [:union #{:f64 :null}]}
                (run-projection rel '(nth [x] y))))))
 
-  (t/testing "IOOBE"
+  (t/testing "index out of bounds"
     (with-open [rel (tu/open-rel [(tu/open-vec "x" [1.2 3.4])])]
-      (t/is (thrown? IndexOutOfBoundsException
-                     (run-projection rel '(nth [x] -1)))))
+      (t/is (= {:res [nil nil], :res-type [:union #{:null :f64}]}
+               (run-projection rel '(nth [x] -1)))))
 
     (with-open [rel (tu/open-rel [(tu/open-vec "x" [1.2 3.4])])]
-      (t/is (thrown? IndexOutOfBoundsException
-                     (run-projection rel '(nth [x] 1))))))
+      (t/is (= {:res [nil nil], :res-type [:union #{:null :f64}]}
+               (run-projection rel '(nth [x] 1))))))
 
   (t/testing "might not be lists"
     (with-open [rel (tu/open-rel [(tu/open-vec "x"

@@ -1327,7 +1327,7 @@
                                ~n-sym ~n-code]
                            (if (and (>= ~n-sym 0) (< ~n-sym (.valueCount ~list-sym)))
                              ~(continue-read f list-el-type list-sym n-sym)
-                             (throw (IndexOutOfBoundsException.))))))}))
+                             ~(f :null nil)))))}))
 
 (defmethod codegen-call [:nth :any :int] [_]
   {:return-type :null, :->call-code (constantly nil)})
