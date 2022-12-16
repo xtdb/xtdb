@@ -856,18 +856,19 @@
 
 (declare plan)
 
-(defn- correlated-column->param [qe scope-id join-table]
-  (->> (for [{:keys [^long table-scope-id table-id type] :as column-reference} (sem/all-column-references qe)
+(defn- correlated-column->param [qe scope-id joined-tables]
+  (let [joined-tables-ids (set (map :id joined-tables))]
+    (->> (for [{:keys [^long table-scope-id table-id type] :as column-reference} (sem/all-column-references qe)
              :when (and (= table-scope-id scope-id)
-                        (if-let [id (:id join-table)]
-                          (= id table-id)
+                        (if joined-tables
+                          (contains? joined-tables-ids table-id)
                           true)
                         (not= type :within-group-varying))
              :let [column-reference-symbol (column-reference-symbol column-reference)
                    param-symbol (symbol (str "?" column-reference-symbol))]]
 
          [column-reference-symbol param-symbol])
-       (into {})))
+       (into {}))))
 
 (defn- build-apply [apply-mode column->param independent-relation dependent-relation]
   [:apply
@@ -955,12 +956,12 @@
   optimised in a similar way to semi/anti join applies.
 
   Returns a 'subquery info' map. See its usage in apply-subqery/apply-predicative-subquery."
-  [sq join-table]
+  [sq joined-tables]
   (let [scope-id (sem/id (sem/scope-element sq))]
     (r/zmatch sq
       [:subquery ^:z qe]
       (let [subquery-plan [:rename (subquery-reference-symbol qe) (plan qe)]
-            column->param (correlated-column->param qe scope-id join-table)]
+            column->param (correlated-column->param qe scope-id joined-tables)]
         {:type :subquery
          :subquery-type (:type (sem/subquery-type sq))
          :plan subquery-plan
@@ -970,7 +971,7 @@
        [:subquery ^:z qe]]
       (let [exists-symbol (exists-symbol qe)
             subquery-plan [:rename (subquery-reference-symbol qe) (plan qe)]
-            column->param (correlated-column->param qe scope-id join-table)]
+            column->param (correlated-column->param qe scope-id joined-tables)]
         {:type :exists
          :plan subquery-plan
          :column->param column->param
@@ -1002,8 +1003,8 @@
                             (build-column->param
                               (find-aggr-out-column-refs
                                 (find-table-operators in-value-list-plan)))
-                            (correlated-column->param qe scope-id join-table)
-                            (correlated-column->param rvp scope-id join-table))]
+                            (correlated-column->param qe scope-id joined-tables)
+                            (correlated-column->param rvp scope-id joined-tables))]
         {:type :quantified-comparison
          :quantifier (if (= co '=) :some :all)
          :plan subquery-plan
@@ -1021,8 +1022,8 @@
                             (build-column->param
                               (find-aggr-out-column-refs
                                 (find-table-operators subquery-plan)))
-                            (correlated-column->param qe scope-id join-table)
-                            (correlated-column->param rvp scope-id join-table))]
+                            (correlated-column->param qe scope-id joined-tables)
+                            (correlated-column->param rvp scope-id joined-tables))]
         {:type :quantified-comparison
          :quantifier quantifier
          :plan subquery-plan
@@ -1032,7 +1033,7 @@
 
       [:array_value_constructor_by_query _ [:subquery ^:z qe]]
       (let [subquery-plan [:rename (subquery-reference-symbol qe) (plan qe)]
-            column->param (correlated-column->param qe scope-id join-table)
+            column->param (correlated-column->param qe scope-id joined-tables)
             projected-columns (set (subquery-projection-symbols qe))]
         (when-not (= 1 (count projected-columns)) (throw (err/illegal-arg :core2.sql/parse-error
                                                                           {::err/message "ARRAY subquery must return exactly 1 column"
@@ -1183,14 +1184,14 @@
         disjuncts (concat [disjuncts])))
     (flatten-expr and-predicate? predicate)))
 
-(defn- plan-subquery-containg-clause [sc relation join-table]
+(defn- plan-subquery-containg-clause [sc relation joined-tables]
   (let [sc-expr (expr sc)
         predicates (predicate-conjunctive-clauses sc-expr)
         predicate-set (set predicates)
         [new-relation predicate-set]
         (reduce
           (fn [[new-relation predicate-set] sq]
-            (apply-predicative-subquery new-relation (interpret-subquery sq join-table) predicate-set))
+            (apply-predicative-subquery new-relation (interpret-subquery sq joined-tables) predicate-set))
           [relation predicate-set]
           (find-sub-queries sc))
         unused-predicates (filter #(contains? predicate-set %) predicates)]
@@ -1794,9 +1795,8 @@
   (let [planned-rhs (apply reduce
                            (fn [acc predicate]
                              [:select predicate acc])
-                           (plan-subquery-containg-clause sc (plan rhs) (sem/table rhs))) ;; equiv to wrap-with-select
-        ;; with extra param, should probably be rolled back in eventually.
-         apply-params (correlated-column->param sc (sem/id (sem/scope-element sc)) (sem/table lhs))]
+                           (plan-subquery-containg-clause sc (plan rhs) (sem/local-tables rhs)))
+         apply-params (correlated-column->param sc (sem/id (sem/scope-element sc)) (sem/local-tables lhs))]
     (if (= join-type "INNER")
       [:apply :cross-join apply-params (plan lhs) (w/postwalk-replace apply-params planned-rhs)]
       [:apply :left-outer-join apply-params (plan lhs) (w/postwalk-replace apply-params planned-rhs)])))

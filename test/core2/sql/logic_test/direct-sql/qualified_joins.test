@@ -431,6 +431,7 @@ NULL
 2
 1
 
+
 query II rowsort
 SELECT foo.x, bar.x bar_x FROM foo LEFT JOIN bar ON foo.x IN (SELECT baz.x FROM baz WHERE baz.x = foo.x AND bar.x = 1) AND bar.x IN (SELECT foo.x FROM foo WHERE bar.x = foo.x)
 ----
@@ -438,3 +439,36 @@ SELECT foo.x, bar.x bar_x FROM foo LEFT JOIN bar ON foo.x IN (SELECT baz.x FROM 
 NULL
 2
 1
+
+# multiple qualified-joins
+
+query III rowsort
+SELECT foo.x, bar.x, baz.x FROM foo LEFT JOIN bar ON foo.x = bar.x LEFT JOIN baz ON foo.x = baz.x
+----
+1
+1
+NULL
+2
+NULL
+2
+
+query III rowsort
+SELECT foo.x, bar.x, baz.x FROM foo LEFT JOIN bar ON foo.x = bar.x LEFT JOIN baz ON foo.x = bar.x
+----
+1
+1
+2
+2
+NULL
+NULL
+
+statement ok
+INSERT INTO bibble (id, x) VALUES (1, 1), (2, 2)
+
+query IIII rowsort
+SELECT foo.x, bar.x, baz.x, bibble.x FROM foo JOIN bar ON foo.x = bar.x RIGHT JOIN baz ON bar.x = (SELECT baz.x FROM baz WHERE foo.x = bar.x) LEFT JOIN bibble ON bar.x = bibble.x
+----
+NULL
+NULL
+2
+NULL
