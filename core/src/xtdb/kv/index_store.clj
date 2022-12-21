@@ -651,7 +651,9 @@
                                          v (canonical-buffer-lookup canonical-buffer-cache v)]
                                      (.add vs v)
                                      (recur (kv/next i)))))
-                               vs))))
+                               ;; for speculative transactions the iterator will not contain the desired entries
+                               ;; to avoid polluting the cache for subsequent transactions, we do not save 'not found' results
+                               (not-empty vs)))))
 
 (defn- step-fn [i k-fn seek-k]
   ((fn step [^DirectBuffer k]
