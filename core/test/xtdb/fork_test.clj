@@ -1,10 +1,8 @@
 (ns xtdb.fork-test
   (:require [clojure.test :as t]
             [xtdb.api :as xt]
-            [xtdb.db :as db]
             [xtdb.fixtures :as fix :refer [*api*]]
-            [xtdb.fixtures.kv :as fkv]
-            [xtdb.tx :as tx])
+            [xtdb.fixtures.kv :as fkv])
   (:import java.util.Date))
 
 (t/use-fixtures :each fkv/with-each-kv-store* fkv/with-kv-store-opts* fix/with-node)
@@ -249,3 +247,21 @@
       (t/is (= #{["Ivan"]}
                (xt/q db+evict '{:find [?name]
                                 :where [[_ :name ?name]]}))))))
+
+(t/deftest cav-cache-re-use-regression-1851-test
+  (fix/submit+await-tx [[::xt/put {:xt/id :ensure-unique-fn
+                                   :xt/fn '(fn [ctx id]
+                                             (if (= 1 (count (xtdb.api/q (xtdb.api/db ctx)
+                                                                         '{:find [e]
+                                                                           :in [e]
+                                                                           :where [[e :xt/id]]}
+                                                                         id)))
+                                               []
+                                               false))}]])
+  (let [id "Ivan"
+        doc {:xt/id id :foo :bar}
+        tx [[::xt/put doc]
+            [::xt/fn :ensure-unique-fn id]]]
+    (xt/with-tx (xt/db *api*) tx)
+    (fix/submit+await-tx tx)
+    (t/is (= doc (xt/entity (xt/db *api*) id)))))
