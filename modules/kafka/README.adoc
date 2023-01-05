@@ -18,4 +18,4 @@ com.xtdb/xtdb-kafka {:mvn/version "1.22.1"}
 </dependency>
 ----
 
-For more details, see the https://xtdb.com/reference/kafka.html[Kafka documentation]
+For more details, see the https://docs.xtdb.com/storage/kafka[Kafka documentation]
