@@ -1178,7 +1178,8 @@
        (with-open [index-snapshot ^Closeable (open-index-snapshot db)]
          (let [db (assoc db :index-snapshot index-snapshot)
                in-args (when (seq not-vars)
-                         [(vec (for [^VarBinding var-binding not-var-bindings]
+                         [(vec (for [^VarBinding var-binding not-var-bindings
+                                     :when (some? var-binding)]
                                  (.get join-keys (.result-index var-binding))))])
                {:keys [results]} (build-sub-query db terms not-in-bindings in-args rule-name->rules)]
            (empty? results))))}))

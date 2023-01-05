@@ -510,7 +510,23 @@
                                               :where [[e :name name]
                                                       [e :name "Ivan"]
                                                       (not [e :last-name "Ivannotov"]
-                                                           [e :name "Bob"])]}))))))
+                                                           [e :name "Bob"])]}))))
+
+      (t/testing "unbound variable in not clause (triple)"
+
+        (t/is (= 1 (count (with-open [n (xt/start-node {})]
+                            (xt/submit-tx n [[::xt/put {:xt/id :foo :ref :a}]])
+                            (xt/sync n)
+                            (xt/q (xt/db n)
+                                  '{:find [?e]
+                                    :where [[?e :xt/id]
+                                            (not [?x :ref ?e])]})))))
+
+        (t/is (= 3 (count (xt/q (xt/db *api*) '{:find [e]
+                                                :where [[e :name name]
+                                                        [e :name "Ivan"]
+                                                        (not [e :last-name "Ivannotov"]
+                                                             [e :name unbound])]})))))))
 
   (t/testing "variable v"
     (t/is (= 0 (count (xt/q (xt/db *api*) '{:find [e]
