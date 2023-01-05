@@ -301,7 +301,6 @@ EDN::
 * `kafka-config` (connection config)
 * `tx-topic-opts` (topic options)
 * `poll-wait-duration` (string/`Duration`, default 1 second, `"PT1S"`): time to wait on each Kafka poll.
-* `poll-sleep-duration` (string/`Duration`, default 1 second, `"PT1S"`): time to sleep between each poll, if the previous poll didn't yield any transactions.
 
 === Document store (`+xtdb.kafka/->document-store+`)
 
@@ -309,7 +308,6 @@ EDN::
 * `doc-topic-opts` (topic options)
 * `local-document-store` (document store, default local in-memory kv-store)
 * `poll-wait-duration` (string/`Duration`, default 1 second, `"PT1S"`): time to wait on each Kafka poll.
-* `poll-sleep-duration` (string/`Duration`, default 1 second, `"PT1S"`): time to sleep between each poll, if the previous poll didn't yield any transactions.
 
 [#submit-only-doc-store]
 === Submit-only document store (`+xtdb.kafka/->submit-only-document-store+`)
