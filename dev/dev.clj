@@ -75,7 +75,7 @@
 (def embedded-kafka-config
   (let [kafka-port (xio/free-port)]
     {::embedded-kafka {:kafka-port kafka-port
-                       :kafka-dir (io/file dev-node-dir "kafka")}
+                       :kafka-dir (io/file dev-node-dir (str "kafka." kafka-port))}
      ::xtdb {:ek (i/ref ::embedded-kafka)
              :node-opts {::k/kafka-config {:bootstrap-servers (str "http://localhost:" kafka-port)}
                          :xtdb/index-store {:kv-store {:xtdb/module `rocks/->kv-store
@@ -84,10 +84,32 @@
                                                :kafka-config ::k/kafka-config
                                                :local-document-store {:kv-store {:xtdb/module `rocks/->kv-store,
                                                                                  :db-dir (io/file dev-node-dir "ek-documents")}}}
-                         :xtdb/tx-log {:xtdb/module `k/->tx-log, :kafka-config ::k/kafka-config}}}}))
+                         :xtdb/tx-log {:xtdb/module `k/->tx-log,
+                                       :kafka-config ::k/kafka-config
+                                       #_#_:poll-wait-duration (java.time.Duration/ofMillis 10)}}}}))
+
+(def local-kafka-config
+  {::xtdb {:node-opts
+           {:kafka-config {:xtdb/module 'xtdb.kafka/->kafka-config
+                           :bootstrap-servers "localhost:9092"}
+
+            :xtdb/index-store {:kv-store {:xtdb/module `rocks/->kv-store
+                                          :db-dir (io/file dev-node-dir "xtdb-indexes")}}
+
+            :xtdb/tx-log {:xtdb/module 'xtdb.kafka/->tx-log
+                          :tx-topic-opts {:topic-name "xtdb-transaction-log"}
+                          :kafka-config :kafka-config
+                          #_#_:poll-wait-duration (java.time.Duration/ofMillis 10)}
+
+            :xtdb/document-store {:xtdb/module 'xtdb.kafka/->document-store
+                                  :doc-topic-opts {:topic-name "xtdb-document-store"}
+                                  :kafka-config :kafka-config}}}})
+
 
 ;; swap for `embedded-kafka-config` to use embedded-kafka
-(ir/set-prep! (fn [] standalone-config))
+;(ir/set-prep! (fn [] standalone-config))
+; (ir/set-prep! (fn [] local-kafka-config))
+(ir/set-prep! (fn [] embedded-kafka-config))
 
 (defn xtdb-node []
   (::xtdb system))
