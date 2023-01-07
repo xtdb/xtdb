@@ -159,6 +159,6 @@
         (t/testing "open-tx-log throws when poll timeouts (poll-wait-duration)"
           (t/is
             (thrown-with-msg?
-              Exception
+              clojure.lang.ExceptionInfo
               #"Poll timeout on Kafka consumer!"
               (xt/open-tx-log *api* 0 false))))))))
