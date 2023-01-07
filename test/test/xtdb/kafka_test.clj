@@ -54,10 +54,10 @@
   (t/testing "compaction"
     (let [with-fixtures
           (t/join-fixtures
-            [(fix/with-opts
-               {::fk/doc-topic-opts
-                {:topic-name (str "compacted-" fk/*doc-topic*)}})
-             fix/with-node])]
+           [(fix/with-opts
+              {::fk/doc-topic-opts
+               {:topic-name (str "compacted-" fk/*doc-topic*)}})
+            fix/with-node])]
       (with-fixtures
         (fn []
           (t/testing "new node can pick-up"
@@ -71,8 +71,8 @@
   ;; removed once kafka compacts it away.
 
   (let [with-fixtures (t/join-fixtures
-                        [fk/with-cluster-tx-log-opts
-                         fk/with-cluster-doc-store-opts])]
+                       [fk/with-cluster-tx-log-opts
+                        fk/with-cluster-doc-store-opts])]
     (with-fixtures
       (fn []
         (with-compacted-node (submit-txs-to-compact)
@@ -131,3 +131,34 @@
                      (for [n (range 1000)]
                        [(keyword (str "key-" n))
                         (str "value-" n)]))]]))))))))
+
+(defn- with-cluster-tx-log-opts [f]
+  (let [test-id (rand-int 10)]
+    (binding [fk/*tx-topic* (str "tx-topic-" test-id)]
+      (fix/with-opts {::k/kafka-config (merge
+                                        {:bootstrap-servers fk/*kafka-bootstrap-servers*}
+                                        fk/*kafka-config*)
+                      ::tx-topic-opts {:xtdb/module `k/->topic-opts,
+                                       :topic-name fk/*tx-topic*}
+                      :xtdb/tx-log {:xtdb/module `k/->tx-log,
+                                    :kafka-config ::k/kafka-config,
+                                    :tx-topic-opts ::tx-topic-opts
+                                    :poll-wait-duration (Duration/ofMillis 1)}}
+        f))))
+
+(t/deftest poll-timeout-throws
+  (let [with-fixtures
+        (t/join-fixtures
+         [fk/with-cluster-doc-store-opts
+          with-cluster-tx-log-opts
+          fix/with-node])]
+    (with-fixtures
+      (fn []
+        (dotimes [_ 10]
+          (fix/transact! *api* [(fix/random-person)]))
+        (t/testing "open-tx-log throws when poll timeouts (poll-wait-duration)"
+          (t/is
+            (thrown-with-msg?
+              Exception
+              #"Poll timeout on Kafka consumer!"
+              (xt/open-tx-log *api* 0 false))))))))
