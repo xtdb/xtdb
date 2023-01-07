@@ -132,8 +132,8 @@
         (cons records (consumer-seqs consumer poll-duration)))
       (when throw?
         (throw (ex-info "Poll timeout on Kafka consumer!"
-                        {:cause #{:poll-wait-duration}
-                         :value poll-duration})))))))
+                        {:cause #{:poll-wait-duration :xtdb.kafka/tx-log}
+                         :current-value poll-duration})))))))
 
 ;;;; TxLog
 
