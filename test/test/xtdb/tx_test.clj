@@ -1553,4 +1553,4 @@
                               :xt/fn '(fn [_ n] [[::xt/put {:xt/id :foo, :answer n}]])}]
                    [::xt/fn :put-foo 42]])
     (xt/sync node)
-    (t/is (try-until-true 1000 #(= 1 (:answer (xt/attribute-stats node)))))))
+    (t/is (fix/spin-until-true 1000 #(= 1 (:answer (xt/attribute-stats node)))))))
