@@ -15,7 +15,8 @@
            java.util.Date
            org.eclipse.rdf4j.query.Binding
            org.eclipse.rdf4j.repository.RepositoryConnection
-           org.eclipse.rdf4j.repository.sparql.SPARQLRepository))
+           org.eclipse.rdf4j.repository.sparql.SPARQLRepository
+           (java.util Random)))
 
 (t/use-fixtures :once every-api/with-embedded-kafka-cluster)
 (t/use-fixtures :each every-api/with-each-api-implementation)
@@ -625,3 +626,14 @@
                         :tx-ops [[:xtdb.api/put {:xt/id :foo, :last-updated :just-now}]]}]
                  (with-open [log (xt/open-tx-log *api* nil true)]
                    (vec (iterator-seq log)))))))))
+
+(t/deftest stat-buffering-att-count-1852
+  (t/testing "de-duplication permitted only within transactions"
+    (let [rand (Random. 0)]
+      (doseq [tx (partition-by
+                   (fn [_] (if (< (.nextInt rand 35) 4) (Object.) nil))
+                   (for [i (range 10000)]
+                     [::xt/put {:xt/id (.nextInt rand 10)}]))]
+        (xt/submit-tx *api* tx))
+      (xt/sync *api*)
+      (t/is (fix/spin-until-true 600 #(= 5850 (:xt/id (xt/attribute-stats *api*))))))))
