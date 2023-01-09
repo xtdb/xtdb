@@ -574,16 +574,9 @@
             stats-buffer-doc-count 32
             stats-buffer-flush-ms 500
 
-            stats-agent (agent {} :error-handler (fn [_ag ex] (handle-ex ex)))
+            stats-agent (agent [] :error-handler (fn [_ag ex] (handle-ex ex)))
 
-            flush-stats (fn [buf] (db/index-stats index-store buf) {})
-
-            buffer-docs
-            (fn [buf docs]
-              (cond
-                (not (map? docs)) (into buf docs)
-                (= 0 (count buf)) docs
-                :else (into buf docs)))
+            flush-stats (fn [buf] (db/index-stats index-store buf) [])
 
             flush-stats-if-enough-docs
             (fn [buf]
@@ -619,8 +612,7 @@
                                               (do
                                                 (db/commit in-flight-tx tx)
                                                 (doto stats-agent
-                                                  (send buffer-docs docs)
-                                                  (send buffer-docs indexed-docs)
+                                                  (send into (into docs indexed-docs))
                                                   (send flush-stats-if-enough-docs)))
                                               (db/abort in-flight-tx tx))))
 
