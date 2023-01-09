@@ -130,3 +130,17 @@
       (doc-value-count [_ attr] (get-in stats [attr :doc-value-count]))
       (eid-cardinality [_ attr] (get-in stats [attr :eids]))
       (value-cardinality [_ attr] (get-in stats [attr :vals])))))
+
+(defn spin-until-true
+  "Spin calling (f) until it returns truthy or the timeout (ms) elapses.
+
+  If (f) never returns truthy, returns the last value of (f) (i.e false or nil).
+
+  Always calls (f) at least once, does not short circuit on false/nil."
+  [ms f]
+  (let [end-ms (+ (System/currentTimeMillis) ms)]
+    (loop [ret (f)]
+      (cond
+        ret ret
+        (< (System/currentTimeMillis) end-ms) (recur (f))
+        :else ret))))
