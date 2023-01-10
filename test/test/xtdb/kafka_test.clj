@@ -146,7 +146,7 @@
                                     :poll-wait-duration (Duration/ofMillis 1)}}
         f))))
 
-(t/deftest poll-timeout-throws
+(t/deftest poll-timeout-throws-default
   (let [with-fixtures
         (t/join-fixtures
          [fk/with-cluster-doc-store-opts
@@ -158,7 +158,42 @@
           (fix/transact! *api* [(fix/random-person)]))
         (t/testing "open-tx-log throws when poll timeouts (poll-wait-duration)"
           (t/is
-            (thrown-with-msg?
-              clojure.lang.ExceptionInfo
-              #"Poll timeout on Kafka consumer!"
-              (xt/open-tx-log *api* 0 false))))))))
+           (thrown-with-msg?
+            clojure.lang.ExceptionInfo
+            #"Poll timeout on Kafka consumer!"
+            (xt/open-tx-log *api* 0 false))))))))
+
+(t/deftest poll-timeout-throws-override
+  (let [with-fixtures
+        (t/join-fixtures
+         [fk/with-cluster-doc-store-opts
+          fk/with-cluster-tx-log-opts
+          fix/with-node])]
+    (with-fixtures
+      (fn []
+        (dotimes [_ 10]
+          (fix/transact! *api* [(fix/random-person)]))
+        (t/testing "open-tx-log throws when poll timeouts (kafka/poll-wait-duration)"
+          (t/is
+           (thrown-with-msg?
+            clojure.lang.ExceptionInfo
+            #"Poll timeout on Kafka consumer!"
+            (xt/open-tx-log *api* 0 {:kafka/poll-wait-duration
+                                     (Duration/ofMillis 1)}))))))))
+
+(t/deftest both-poll-timeout-override-and-with-ops
+  (let [with-fixtures
+        (t/join-fixtures
+         [fk/with-cluster-doc-store-opts
+          fk/with-cluster-tx-log-opts
+          fix/with-node])]
+    (with-fixtures
+      (fn []
+        (dotimes [_ 10]
+          (fix/transact! *api* [(fix/random-person)]))
+        (t/testing "open-tx-log throws when poll timeouts (kafka/poll-wait-duration)"
+          (with-open [c ^xtdb.io.Cursor
+                      (xt/open-tx-log *api* 0 {:kafka/poll-wait-duration (Duration/ofMillis 1010)
+                                               :with-ops? true})]
+            (t/is (.hasNext c))
+            (t/is (contains? (.next c) :xtdb.api/tx-ops))))))))
