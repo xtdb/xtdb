@@ -49,7 +49,7 @@
    (fn [^CompletableFuture fut]
      (loop [after-tx-id after-tx-id]
        (let [last-tx-id (if-let [^ICursor log (try
-                                                (db/open-tx-log tx-log after-tx-id)
+                                                (db/open-tx-log tx-log after-tx-id {})
                                                 (catch InterruptedException e (throw e))
                                                 (catch Exception e
                                                   (log/warn e "Error polling for txs, will retry")))]
@@ -94,7 +94,7 @@
                                              (< after-tx-id latest-submitted-tx-id)))
 
                                   ;; catching up
-                                  (with-open [log (db/open-tx-log tx-log after-tx-id)]
+                                  (with-open [log (db/open-tx-log tx-log after-tx-id {})]
                                     (reduce handle-txs
                                             after-tx-id
                                             (->> (iterator-seq log)
@@ -110,7 +110,7 @@
                                                   (.release semaphore (- permits tx-batch-size))
                                                   tx-batch-size)
                                                 permits)]
-                                    (with-open [log (db/open-tx-log tx-log after-tx-id)]
+                                    (with-open [log (db/open-tx-log tx-log after-tx-id {})]
                                       (handle-txs after-tx-id
                                                   (->> (iterator-seq log)
                                                        (into [] (take limit)))))))]

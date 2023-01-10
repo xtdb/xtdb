@@ -525,7 +525,7 @@
           (try
             (when (or (nil? after-tx-id)
                       (< ^long after-tx-id ^long latest-xtdb-tx-id))
-              (with-open [log (db/open-tx-log tx-log after-tx-id)]
+              (with-open [log (db/open-tx-log tx-log after-tx-id {})]
                 (doseq [{::keys [tx-id] :as tx} (->> (iterator-seq log)
                                                      (take-while (comp #(<= ^long % ^long latest-xtdb-tx-id) ::xt/tx-id)))]
                   (process-tx-f document-store (assoc tx :committing? (not (db/tx-failed? index-store tx-id)))))))

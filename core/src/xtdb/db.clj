@@ -61,7 +61,7 @@
 
 (defprotocol TxLog
   (submit-tx [this tx-events] [this tx-events opts])
-  (open-tx-log ^xtdb.api.ICursor [this after-tx-id]
+  (open-tx-log ^xtdb.api.ICursor [this after-tx-id opts]
    "Returns a serialized iterator (cursor) over transactions (see spec ::xtdb.api/tx) in the log after the given tx id.
 
    The cursor:
