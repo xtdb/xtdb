@@ -32,6 +32,7 @@
    [com.xtdb/xtdb-lucene ~xt-version]
    [com.xtdb/xtdb-test ~xt-version]
    [com.xtdb/xtdb-bench ~xt-version]
+   [com.xtdb/xtdb-replicator ~xt-version]
 
    [ch.qos.logback/logback-classic "1.2.11"]
    [ch.qos.logback/logback-core "1.2.11"]
@@ -106,6 +107,7 @@
    [com.xtdb/xtdb-lucene]
    [com.xtdb/xtdb-test]
    [com.xtdb/xtdb-bench]
+   [com.xtdb/xtdb-replicator]
 
    [org.apache.kafka/connect-api "2.6.0" :scope "provided"]
 
