@@ -181,7 +181,7 @@
             (xt/open-tx-log *api* 0 {:kafka/poll-wait-duration
                                      (Duration/ofMillis 1)}))))))))
 
-(t/deftest both-poll-timeout-override-and-with-ops
+(t/deftest both-poll-timeout-override-with-ops
   (let [with-fixtures
         (t/join-fixtures
          [fk/with-cluster-doc-store-opts
@@ -191,9 +191,25 @@
       (fn []
         (dotimes [_ 10]
           (fix/transact! *api* [(fix/random-person)]))
-        (t/testing "open-tx-log throws when poll timeouts (kafka/poll-wait-duration)"
+        (t/testing "open-tx-log with override timeout and ops"
           (with-open [c ^xtdb.io.Cursor
                       (xt/open-tx-log *api* 0 {:kafka/poll-wait-duration (Duration/ofMillis 1010)
                                                :with-ops? true})]
             (t/is (.hasNext c))
             (t/is (contains? (.next c) :xtdb.api/tx-ops))))))))
+
+(t/deftest both-poll-timeout-override-without-ops
+  (let [with-fixtures
+        (t/join-fixtures
+         [fk/with-cluster-doc-store-opts
+          fk/with-cluster-tx-log-opts
+          fix/with-node])]
+    (with-fixtures
+      (fn []
+        (dotimes [_ 10]
+          (fix/transact! *api* [(fix/random-person)]))
+        (t/testing "open-tx-log with override timeout without ops"
+          (with-open [c ^xtdb.io.Cursor
+                      (xt/open-tx-log *api* 0 {:kafka/poll-wait-duration (Duration/ofMillis 1010)})]
+            (t/is (.hasNext c))
+            (t/is (not (contains? (.next c) :xtdb.api/tx-ops)))))))))
