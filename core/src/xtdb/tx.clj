@@ -84,9 +84,9 @@
 
 (alter-meta! #'index-tx-event assoc :arglists '([tx-event tx in-flight-tx]))
 
-(defn- put-delete-etxs [k start-valid-time end-valid-time content-hash
-                        {::xt/keys [tx-time tx-id valid-time]}
-                        {:keys [index-snapshot]}]
+(defn- put-delete-coords [k start-valid-time end-valid-time content-hash
+                          {::xt/keys [tx-time tx-id valid-time]}
+                          {:keys [index-snapshot]}]
   (let [eid (c/new-id k)
         ->new-entity-tx (fn [vt]
                           (c/->EntityTx eid vt tx-time tx-id content-hash))
@@ -94,36 +94,42 @@
         start-valid-time (or start-valid-time valid-time tx-time)]
 
     (if end-valid-time
-      (when-not (= start-valid-time end-valid-time)
-        (let [entity-history (db/entity-history index-snapshot eid :desc {:start-valid-time end-valid-time})]
-          (into (->> (cons start-valid-time
-                           (->> (map etx->vt entity-history)
-                                (take-while #(neg? (compare start-valid-time %)))))
-                     (remove #{end-valid-time})
-                     (mapv ->new-entity-tx))
+      {:etxs (when-not (= start-valid-time end-valid-time)
+               (let [entity-history (db/entity-history index-snapshot eid :desc {:start-valid-time end-valid-time})]
+                 (into (->> (cons start-valid-time
+                                  (->> (map etx->vt entity-history)
+                                       (take-while #(neg? (compare start-valid-time %)))))
+                            (remove #{end-valid-time})
+                            (mapv ->new-entity-tx))
 
-                [(if-let [entity-to-restore ^EntityTx (first entity-history)]
-                   (-> entity-to-restore
-                       (assoc :vt end-valid-time))
+                       [(if-let [entity-to-restore ^EntityTx (first entity-history)]
+                          (-> entity-to-restore
+                              (assoc :vt end-valid-time))
 
-                   (c/->EntityTx eid end-valid-time tx-time tx-id c/nil-id-buffer))])))
+                          (c/->EntityTx eid end-valid-time tx-time tx-id c/nil-id-buffer))])))
 
-      (->> (cons start-valid-time
-                 (when-let [visible-entity (some-> (db/entity-as-of index-snapshot eid start-valid-time tx-id)
+       :coords [[(if content-hash :put :delete)
+                 {:eid eid, :content-hash content-hash
+                  :start-valid-time start-valid-time, :end-valid-time end-valid-time}]]}
 
-                                                   (select-keys [:tx-time :tx-id :content-hash]))]
-                   (->> (db/entity-history index-snapshot eid :asc {:start-valid-time start-valid-time})
-                        (remove (comp #{start-valid-time} :valid-time))
-                        (take-while #(= visible-entity (select-keys % [:tx-time :tx-id :content-hash])))
-                        (mapv etx->vt))))
+      (let [visible-entity (some-> (db/entity-as-of index-snapshot eid start-valid-time tx-id)
+                                   (select-keys [:tx-time :tx-id :content-hash]))
+            [before after] (->> (db/entity-history index-snapshot eid :asc {:start-valid-time start-valid-time})
+                                (remove (comp #{start-valid-time} :valid-time))
+                                (split-with #(= visible-entity (select-keys % [:tx-time :tx-id :content-hash]))))
+            end-valid-time (some-> (first after) etx->vt)]
 
-           (map ->new-entity-tx)))))
+        {:etxs (->> (cons start-valid-time (mapv etx->vt before))
+                    (map ->new-entity-tx))
+         :coords [[(if content-hash :put :delete)
+                   {:eid eid, :content-hash content-hash
+                    :start-valid-time start-valid-time, :end-valid-time end-valid-time}]]}))))
 
 (defmethod index-tx-event :crux.tx/put [[_op k v start-valid-time end-valid-time] tx in-flight-tx]
-  {:etxs (put-delete-etxs k start-valid-time end-valid-time (c/new-id v) tx in-flight-tx)})
+  (put-delete-coords k start-valid-time end-valid-time (c/new-id v) tx in-flight-tx))
 
 (defmethod index-tx-event :crux.tx/delete [[_op k start-valid-time end-valid-time] tx in-flight-tx]
-  {:etxs (put-delete-etxs k start-valid-time end-valid-time nil tx in-flight-tx)})
+  (put-delete-coords k start-valid-time end-valid-time nil tx in-flight-tx))
 
 (defmethod index-tx-event :crux.tx/match [[_op k v at-valid-time :as match-op]
                                           {::xt/keys [tx-time tx-id valid-time]}
@@ -152,7 +158,7 @@
             (let [docs (strict-fetch-docs document-store-tx #{current-id expected-id})]
               (= (get docs current-id)
                  (get docs expected-id))))
-      {:etxs (put-delete-etxs eid valid-time nil (c/new-id new-v) tx in-flight-tx)}
+      (put-delete-coords eid valid-time nil (c/new-id new-v) tx in-flight-tx)
       (do
         (log/warn "CAS failure:" (xio/pr-edn-str cas-op) "was:" (c/new-id content-hash))
         {:abort? true}))))
@@ -270,7 +276,7 @@
   (throw (err/illegal-arg :unknown-tx-op {:op op})))
 
 (defrecord InFlightTx [!tx-state !tx !tx-stats !docs
-                       index-store-tx document-store-tx
+                       index-store-tx document-store-tx replicator-tx
                        db-provider bus]
   db/DocumentStore
   (submit-docs [_ docs]
@@ -290,6 +296,7 @@
   db/InFlightTx
   (index-tx-docs [_ docs]
     (let [stats (db/index-docs index-store-tx docs)]
+      (db/index-replicator-docs replicator-tx docs)
       (swap! !tx-stats update-tx-stats stats)
       (swap! !docs merge docs)))
 
@@ -299,6 +306,7 @@
                    :submitted-tx (select-keys tx [::xt/tx-id ::xt/tx-time ::xt/tx-ops])})
 
     (db/index-tx index-store-tx tx)
+    (db/index-replicator-tx replicator-tx tx)
 
     (try
       (let [tx-state @!tx-state]
@@ -310,39 +318,42 @@
       (with-open [index-snapshot (db/open-index-snapshot index-store-tx)]
         (let [deps (assoc this :index-snapshot index-snapshot)
               {::txe/keys [tx-events]} tx
+
               [abort? indexed-docs]
               (loop [[tx-event & more-tx-events] tx-events
                      indexed-docs []]
                 (if-not tx-event
                   [false indexed-docs]
-                  (let [{:keys [docs abort? evict-eids etxs], new-tx-events :tx-events}
+                  (let [{:keys [docs abort? evict-eids etxs coords], new-tx-events :tx-events}
                         (index-tx-event tx-event tx deps)
                         docs (->> docs (xio/map-vals c/xt->crux))]
                     (if abort?
                       (let [new-docs (seq (concat docs (arg-docs-to-replace document-store-tx more-tx-events)))]
                         (when new-docs (db/submit-docs document-store-tx new-docs))
-                        [true indexed-docs])
+                        [true indexed-docs nil])
 
-                      (do
-                        (let [docs-to-index (-> docs without-tx-fn-docs)]
+                      (let [docs-to-index (-> docs without-tx-fn-docs)]
+                        (when (seq docs-to-index)
+                          (when-let [missing-ids (seq (remove :crux.db/id (vals docs-to-index)))]
+                            (throw (err/illegal-arg :missing-eid {::err/message "Missing required attribute :crux.db/id"
+                                                                  :docs missing-ids})))
 
-                          (when (seq docs-to-index)
-                            (when-let [missing-ids (seq (remove :crux.db/id (vals docs-to-index)))]
-                              (throw (err/illegal-arg :missing-eid {::err/message "Missing required attribute :crux.db/id"
-                                                                    :docs missing-ids})))
+                          (db/index-tx-docs this docs-to-index))
 
-                            (db/index-tx-docs this docs-to-index))
+                        (db/index-entity-txs index-store-tx etxs)
+                        (db/index-coords replicator-tx
+                                         (into coords
+                                               (for [eid evict-eids]
+                                                 [:evict {:eid eid}])))
+                        (let [{:keys [tombstones]} (when (seq evict-eids)
+                                                     (db/unindex-eids index-store-tx nil evict-eids))]
+                          (when-let [docs (seq (concat docs tombstones))]
+                            (db/submit-docs document-store-tx docs)))
 
-                          (db/index-entity-txs index-store-tx etxs)
-                          (let [{:keys [tombstones]} (when (seq evict-eids)
-                                                       (db/unindex-eids index-store-tx nil evict-eids))]
-                            (when-let [docs (seq (concat docs tombstones))]
-                              (db/submit-docs document-store-tx docs)))
-
-                            (if (Thread/interrupted)
-                              (throw (InterruptedException.))
-                              (recur (concat new-tx-events more-tx-events)
-                                     (into indexed-docs docs-to-index)))))))))]
+                        (if (Thread/interrupted)
+                          (throw (InterruptedException.))
+                          (recur (concat new-tx-events more-tx-events)
+                                 (into indexed-docs docs-to-index))))))))]
           (when abort?
             (reset! !tx-state :abort-only))
 
@@ -357,6 +368,7 @@
     (when-not (compare-and-set! !tx-state :open :committed)
       (throw (IllegalStateException. (str "Transaction marked as " (name @!tx-state)))))
 
+    (db/commit-replicator-tx replicator-tx)
     (fork/commit-doc-store-tx document-store-tx)
     (db/commit-index-tx index-store-tx)
 
@@ -374,6 +386,7 @@
                          (throw (IllegalStateException. "Transaction marked as " tx-state))
                          :aborted)))
 
+    (db/abort-replicator-tx replicator-tx)
     (fork/abort-doc-store-tx document-store-tx)
     (db/abort-index-tx index-store-tx tx @!docs)
 
@@ -384,26 +397,39 @@
                    :committed? false
                    ::txe/tx-events (::txe/tx-events tx)})))
 
-(defrecord TxIndexer [index-store document-store bus query-engine]
+(defrecord TxIndexer [index-store document-store bus query-engine replicator]
   db/TxIndexer
   (begin-tx [_]
     (let [index-store-tx (db/begin-index-tx index-store)
-          document-store-tx (fork/begin-document-store-tx document-store)]
+          document-store-tx (fork/begin-document-store-tx document-store)
+          replicator-tx (db/begin-replicator-tx replicator)]
       (->InFlightTx (atom :open)
                     (atom nil)
                     (atom {:av-count 0, :bytes-indexed 0, :doc-ids #{}})
                     (atom {})
                     index-store-tx
                     document-store-tx
+                    replicator-tx
                     (assoc query-engine
                            :index-store index-store-tx
                            :document-store document-store-tx)
                     bus))))
 
+(extend-protocol db/Replicator
+  nil
+  (begin-replicator-tx [_]
+    (reify db/ReplicatorTx
+      (index-replicator-tx [_ _tx])
+      (index-replicator-docs [_ _docs])
+      (index-coords [_ _coords])
+      (commit-replicator-tx [_])
+      (abort-replicator-tx [_]))))
+
 (defn ->tx-indexer {::sys/deps {:index-store :xtdb/index-store
                                 :document-store :xtdb/document-store
                                 :bus :xtdb/bus
-                                :query-engine :xtdb/query-engine}}
+                                :query-engine :xtdb/query-engine
+                                :replicator (constantly nil)}}
   [deps]
   (map->TxIndexer deps))
 

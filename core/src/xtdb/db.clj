@@ -23,6 +23,16 @@
   (begin-index-tx [this])
   (index-stats [this docs]))
 
+(defprotocol ReplicatorTx
+  (index-replicator-tx [replicator-tx tx])
+  (index-replicator-docs [replicator-tx docs])
+  (index-coords [replicator-tx coords])
+  (commit-replicator-tx [replictor-tx])
+  (abort-replicator-tx [replicator-tx]))
+
+(defprotocol Replicator
+  (begin-replicator-tx [replicator]))
+
 (defprotocol LatestCompletedTx
   (latest-completed-tx [this]))
 

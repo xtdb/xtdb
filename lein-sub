@@ -26,6 +26,7 @@ test
 modules/s3
 modules/azure-blobs
 modules/google-cloud-storage
+modules/replicator
 bench"
   fi
 
