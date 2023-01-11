@@ -302,19 +302,17 @@ EDN::
 * `tx-topic-opts` (topic options)
 * `poll-wait-duration` (string/`Duration`, default 1 second, `"PT1S"`): time to wait on each Kafka poll.
 
-[NOTE]
+==== Note
 
 `poll-wait-duration` specifies the duration for which xref:client::clojure.adoc[open-tx-doc] will wait for a record to show
-up on the transaction topic. If for any reason (e.g., latency to the Kafka broker) no record was received, the call
-will return an empty cursor (i.e., on which `.hasNext` is false). For the Kafka implementation of `open-tx-doc` accepts
+up on the transaction topic. If for any reason (e.g., latency to the Kafka broker) no record was received during that time,
+the call would return an empty cursor (i.e., on which `.hasNext` is false). For the Kafka implementation of `open-tx-doc` accepts
 also a map (instead of the `with-ops?` Boolean) with the following optional keys:
 
 [source,clojure]
- ----
  {:with-ops? true
    :kafka/poll-wait-duration (Duration/ofMillis 2000)
  }
- ----
 
 
 === Document store (`+xtdb.kafka/->document-store+`)
