@@ -132,6 +132,7 @@
                        [(keyword (str "key-" n))
                         (str "value-" n)]))]]))))))))
 
+
 (defn- with-cluster-tx-log-opts [f]
   (let [test-id (rand-int 10)]
     (binding [fk/*tx-topic* (str "tx-topic-" test-id)]
@@ -146,7 +147,7 @@
                                     :poll-wait-duration (Duration/ofMillis 1)}}
         f))))
 
-(t/deftest poll-timeout-throws-default
+(t/deftest empty-cursor-on-initial-poll-timeout
   (let [with-fixtures
         (t/join-fixtures
          [fk/with-cluster-doc-store-opts
@@ -156,30 +157,15 @@
       (fn []
         (dotimes [_ 10]
           (fix/transact! *api* [(fix/random-person)]))
-        (t/testing "open-tx-log throws when poll timeouts (poll-wait-duration)"
-          (t/is
-           (thrown-with-msg?
-            clojure.lang.ExceptionInfo
-            #"Poll timeout on Kafka consumer!"
-            (xt/open-tx-log *api* 0 false))))))))
+        (t/testing "empty cursor when poll timeouts (poll-wait-duration)"
+          (with-open [c ^xtdb.io.Cursor (xt/open-tx-log *api* 0 false)]
+            (t/is (not (.hasNext c)))))
 
-(t/deftest poll-timeout-throws-override
-  (let [with-fixtures
-        (t/join-fixtures
-         [fk/with-cluster-doc-store-opts
-          fk/with-cluster-tx-log-opts
-          fix/with-node])]
-    (with-fixtures
-      (fn []
-        (dotimes [_ 10]
-          (fix/transact! *api* [(fix/random-person)]))
-        (t/testing "open-tx-log throws when poll timeouts (kafka/poll-wait-duration)"
-          (t/is
-           (thrown-with-msg?
-            clojure.lang.ExceptionInfo
-            #"Poll timeout on Kafka consumer!"
-            (xt/open-tx-log *api* 0 {:kafka/poll-wait-duration
-                                     (Duration/ofMillis 1)}))))))))
+        (t/testing "non empty cursor when explicitly override timeout"
+          (with-open [c ^xtdb.io.Cursor
+                      (xt/open-tx-log *api* 0 {:kafka/poll-wait-duration
+                                               (Duration/ofMillis 1000)})]
+            (t/is (.hasNext c))))))))
 
 (t/deftest both-poll-timeout-override-with-ops
   (let [with-fixtures

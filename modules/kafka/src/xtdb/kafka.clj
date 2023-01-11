@@ -120,20 +120,12 @@
         (Thread/interrupted)
         (throw (.getCause e))))))
 
-(defn- consumer-seqs
-  ([consumer poll-duration]
-   (consumer-seqs consumer poll-duration false))
-  ([consumer poll-duration throw?]
-   (lazy-seq
-    (log/trace "polling")
-    (if-let [records (seq (poll-consumer consumer poll-duration))]
-      (do
-        (log/tracef "got %d records" (count records))
-        (cons records (consumer-seqs consumer poll-duration)))
-      (when throw?
-        (throw (ex-info "Poll timeout on Kafka consumer!"
-                        {:cause #{:poll-wait-duration :xtdb.kafka/tx-log}
-                         :current-value poll-duration})))))))
+(defn- consumer-seqs [consumer poll-duration]
+  (lazy-seq
+   (log/trace "polling")
+   (when-let [records (seq (poll-consumer consumer poll-duration))]
+     (log/tracef "got %d records" (count records))
+     (cons records (consumer-seqs consumer poll-duration)))))
 
 ;;;; TxLog
 
@@ -187,7 +179,7 @@
           duration (get opts :kafka/poll-wait-duration)
           poll-wait-duration (if (instance? Duration duration) duration poll-wait-duration)]
       (xio/->cursor #(.close consumer)
-                    (->> (consumer-seqs consumer poll-wait-duration true)
+                    (->> (consumer-seqs consumer poll-wait-duration)
                          (mapcat identity)
                          (map tx-record->tx-log-entry)))))
 
