@@ -311,7 +311,7 @@ also a map (instead of the `with-ops?` Boolean) with the following optional keys
 
 [source,clojure]
  {:with-ops? true
-   :kafka/poll-wait-duration (Duration/ofMillis 2000)
+  :kafka/poll-wait-duration (Duration/ofMillis 2000)
  }
 
 
