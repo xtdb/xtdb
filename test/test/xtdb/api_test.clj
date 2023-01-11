@@ -640,3 +640,9 @@
           (xt/submit-tx *api* tx))
         (xt/sync *api*)
         (t/is (fix/spin-until-true 600 #(= 5850 (:xt/id (xt/attribute-stats *api*)))))))))
+
+(t/deftest db-throw-closing-1803-test
+  (.close *api*)
+  ;; will segfault on early versions, exception here is ok, :remote config does not throw.
+  (when-not (= :remote every-api/*node-type*)
+    (t/is (thrown-with-msg? IllegalStateException #"closing" (xt/db *api*)))))
