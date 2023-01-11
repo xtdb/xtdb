@@ -674,36 +674,45 @@
     (latest-completed-tx-i i)))
 
 (defprotocol PThreadManager
-  (snapshot-opened [_ snapshot])
-  (snapshot-closed [_ snapshot]))
+  "An object that tracks unsafe kv usage (as tickets) and the threads that hold valid pointers to native kv handles (rocks/lmdb).
+
+  This tracking is necessary to avoid use after free segfaults.
+
+  Before opening a snapshot, call acquire-snapshot-ticket, when the snapshot is closed call .close on the ticket.
+
+  IMPORTANT:
+  When .closed the thread manager should attempt to interrupt threads that acquired said tickets. It is safe to interrupt these
+  threads only if valid pointers to index or kv snapshots are not passed between threads, otherwise arbitrary threads
+  could be interrupted by the thread manager."
+  (open-kv-ticket ^Closeable [thread-manager]))
 
 (deftype ThreadManager [^Map snapshot-threads
                         ^:volatile-mutable ^Semaphore closing-semaphore]
   PThreadManager
-  (snapshot-opened [this snapshot]
-    (locking this
+  (open-kv-ticket [thread-mgr]
+    (locking thread-mgr
       (when closing-semaphore
         (throw (IllegalStateException. "closing")))
-
-      (.put snapshot-threads snapshot (Thread/currentThread))))
-
-  (snapshot-closed [this snapshot]
-    (locking this
-      (.remove snapshot-threads snapshot)
-      (when closing-semaphore
-        (.release closing-semaphore))))
+      (let [ticket (reify Closeable
+                     (close [ticket]
+                       (locking thread-mgr
+                         (.remove snapshot-threads ticket)
+                         ;; use intentional field access to avoid closure over mutable field
+                         (when-some [^Semaphore closing-semaphore (.closing-semaphore thread-mgr)]
+                           (.release closing-semaphore)))))]
+        (.put snapshot-threads ticket (Thread/currentThread))
+        ticket)))
 
   Closeable
-  (close [this]
-    (let [open-thread-count (locking this
-                              (when-not closing-semaphore
-                                (set! (.closing-semaphore this) (Semaphore. 0))
-
-                                (let [open-threads (vals snapshot-threads)]
-                                  (doseq [^Thread thread (set open-threads)]
-                                    (.interrupt thread))
-                                  (count open-threads))))]
-
+  (close [thread-mgr]
+    (when-some [open-thread-count
+                (locking thread-mgr
+                  (when-not closing-semaphore
+                    (set! (.closing-semaphore thread-mgr) (Semaphore. 0))
+                    (let [open-threads (vals snapshot-threads)]
+                      (doseq [^Thread thread (set open-threads)]
+                        (.interrupt thread))
+                      (count open-threads))))]
       (when-not (.tryAcquire closing-semaphore open-thread-count 60 TimeUnit/SECONDS)
         (log/warn "Failed to shut down index-store after 60s due to outstanding snapshots"
                   (pr-str snapshot-threads))))))
@@ -717,7 +726,7 @@
                             decode-value-iterator-delay
                             cache-iterator-delay
                             nested-index-snapshot-state
-                            thread-mgr
+                            thread-mgr-ticket
                             cav-cache
                             canonical-buffer-cache
                             ^AtomicBoolean closed?]
@@ -730,8 +739,8 @@
               :when (realized? i)]
         (xio/try-close @i))
       (when close-snapshot?
-        (xio/try-close snapshot)
-        (snapshot-closed thread-mgr snapshot))))
+        (xio/try-close snapshot))
+      (xio/try-close thread-mgr-ticket)))
 
   db/IndexSnapshot
   (av [_ a min-v]
@@ -953,10 +962,7 @@
   (-read-index-meta [_ k not-found]
     (read-meta-snapshot snapshot k not-found)))
 
-(defn- new-kv-index-snapshot [snapshot close-snapshot? thread-mgr cav-cache canonical-buffer-cache]
-  (when close-snapshot?
-    (snapshot-opened thread-mgr snapshot))
-
+(defn- new-kv-index-snapshot [snapshot close-snapshot? thread-mgr-ticket cav-cache canonical-buffer-cache]
   (->KvIndexSnapshot snapshot
                      close-snapshot?
                      (delay (kv/new-iterator snapshot))
@@ -966,7 +972,7 @@
                      (delay (kv/new-iterator snapshot))
                      (delay (kv/new-iterator snapshot))
                      (atom [])
-                     thread-mgr
+                     thread-mgr-ticket
                      cav-cache
                      canonical-buffer-cache
                      (AtomicBoolean.)))
@@ -1169,7 +1175,7 @@
 
   db/IndexSnapshotFactory
   (open-index-snapshot [_]
-    (new-kv-index-snapshot (kv/new-tx-snapshot kv-tx) true thread-mgr cav-cache canonical-buffer-cache)))
+    (new-kv-index-snapshot (kv/new-tx-snapshot kv-tx) true (open-kv-ticket thread-mgr) cav-cache canonical-buffer-cache)))
 
 (defn- forked-index-tx [{:keys [thread-mgr kv-store] :as index-store}]
   (let [abort-index-tx (->KvIndexStoreTx kv-store nil thread-mgr (nop-cache/->nop-cache {}) (nop-cache/->nop-cache {}))
@@ -1193,25 +1199,34 @@
       (kv/store kv-store (stats-kvs stats-kvs-cache kv-store (vals docs)))))
 
   (tx-failed? [_ tx-id]
-    (with-open [snapshot (kv/new-snapshot kv-store)]
+    (with-open [_ (open-kv-ticket thread-mgr)
+                snapshot (kv/new-snapshot kv-store)]
       (some? (kv/get-value snapshot (encode-failed-tx-id-key-to nil tx-id)))))
 
   db/LatestCompletedTx
   (latest-completed-tx [_]
-    (latest-completed-tx kv-store))
+    (with-open [_ (open-kv-ticket thread-mgr)]
+      (latest-completed-tx kv-store)))
 
   db/IndexMeta
   (-read-index-meta [_ k not-found]
-    (read-meta kv-store k not-found))
+    (with-open [_ (open-kv-ticket thread-mgr)]
+      (read-meta kv-store k not-found)))
 
   db/IndexSnapshotFactory
   (open-index-snapshot [_]
-    (new-kv-index-snapshot (kv/new-snapshot kv-store) true thread-mgr cav-cache canonical-buffer-cache))
+    (let [ticket (open-kv-ticket thread-mgr)]
+      (try
+        (new-kv-index-snapshot (kv/new-snapshot kv-store) true ticket cav-cache canonical-buffer-cache)
+        (catch Throwable e
+          (xio/try-close ticket)
+          (throw e)))))
 
   status/Status
   (status-map [this]
-    {:xtdb.index/index-version (current-index-version kv-store)
-     :xtdb.tx-log/consumer-state (db/read-index-meta this :xtdb.tx-log/consumer-state)})
+    (with-open [_ (open-kv-ticket thread-mgr)]
+      {:xtdb.index/index-version (current-index-version kv-store)
+       :xtdb.tx-log/consumer-state (db/read-index-meta this :xtdb.tx-log/consumer-state)}))
 
   Closeable
   (close [_]
