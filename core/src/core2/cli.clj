@@ -80,9 +80,6 @@
                                 (apply merge-with merge))}))))
 
 (defn- shutdown-hook-promise []
-  ;; NOTE: This isn't registered until the node manages to start up
-  ;; cleanly, so ctrl-c keeps working as expected in case the node
-  ;; fails to start.
   (let [main-thread (Thread/currentThread)
         shutdown? (promise)]
     (.addShutdownHook (Runtime/getRuntime)
@@ -100,6 +97,7 @@
                                "core2.shutdown-hook-thread"))
     shutdown?))
 
+#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (defn start-node-from-command-line [args]
   (util/install-uncaught-exception-handler!)
 
@@ -114,6 +112,9 @@
 
       :else (with-open [_node (node/start-node node-opts)]
               (log/info "Node started")
+              ;; NOTE: This isn't registered until the node manages to start up
+              ;; cleanly, so ctrl-c keeps working as expected in case the node
+              ;; fails to start.
               @(shutdown-hook-promise)))
 
     (shutdown-agents)))

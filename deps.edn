@@ -11,6 +11,7 @@
         com.xtdb.labs/core2-s3 {:local/root "modules/s3"}
         com.xtdb.labs/core2-jdbc {:local/root "modules/jdbc"}
         com.xtdb.labs/core2-bench {:local/root "modules/bench"}
+        com.xtdb.labs/core2-c1-import {:local/root "modules/c1-import"}
 
         integrant/repl {:mvn/version "0.3.2"}
         org.slf4j/slf4j-api {:mvn/version "1.7.36"}
