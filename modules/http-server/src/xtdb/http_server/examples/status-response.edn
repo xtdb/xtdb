@@ -1,4 +1,4 @@
-{:xtdb.version/version "1.22.1",
+{:xtdb.version/version "1.23.0",
  :xtdb.version/revision nil, :xtdb.index/index-version 13,
  :xtdb.tx-log/consumer-state nil,
  :xtdb.kv/kv-store "xtdb.rocksdb.RocksKv",
