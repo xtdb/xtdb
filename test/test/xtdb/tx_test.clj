@@ -547,7 +547,7 @@
         (fix/submit+await-tx [[::xt/put tx2-ivan tx2-valid-time]
                               [::xt/put tx2-petr tx2-valid-time]])]
 
-    (with-open [log-iterator (db/open-tx-log (:tx-log *api*) nil)]
+    (with-open [log-iterator (db/open-tx-log (:tx-log *api*) nil {})]
       (let [log (iterator-seq log-iterator)]
         (t/is (not (realized? log)))
         (t/is (= [{::xt/tx-id tx1-id
@@ -1070,7 +1070,7 @@
     (t/is (= {:xt/id :ivan, :name "Ivan"}
              (xt/entity (xt/db *api*) :ivan)))
 
-    (let [arg-doc-id (with-open [tx-log (db/open-tx-log (:tx-log *api*) nil)]
+    (let [arg-doc-id (with-open [tx-log (db/open-tx-log (:tx-log *api*) nil {})]
                        (-> (iterator-seq tx-log) last ::txe/tx-events first last))]
 
       (t/is (= {:crux.db.fn/tx-events [[:crux.tx/put (c/new-id :ivan) (c/hash-doc {:xt/id :ivan, :name "Ivan"})]]}
@@ -1088,7 +1088,7 @@
     (t/is (= {:xt/id :no-fn-args-doc}
              (xt/entity (xt/db *api*) :no-fn-args-doc)))
 
-    (let [arg-doc-id (with-open [tx-log (db/open-tx-log (:tx-log *api*) nil)]
+    (let [arg-doc-id (with-open [tx-log (db/open-tx-log (:tx-log *api*) nil {})]
                        (-> (iterator-seq tx-log) last ::txe/tx-events first last))]
 
       (t/is (= {:crux.db.fn/tx-events [[:crux.tx/put (c/new-id :no-fn-args-doc) (c/hash-doc {:xt/id :no-fn-args-doc})]]}
@@ -1111,7 +1111,7 @@
     (t/is (= {:xt/id :bob, :name "Bob"}
              (xt/entity (xt/db *api*) :bob)))
 
-    (let [arg-doc-id (with-open [tx-log (db/open-tx-log (:tx-log *api*) 1)]
+    (let [arg-doc-id (with-open [tx-log (db/open-tx-log (:tx-log *api*) 1 {})]
                        (-> (iterator-seq tx-log) last ::txe/tx-events first last))
           arg-doc (-> (db/fetch-docs (:document-store *api*) #{arg-doc-id})
                       (get arg-doc-id)
@@ -1149,7 +1149,7 @@
 
     (t/is (nil? (xt/entity (xt/db *api*) :petr)))
 
-    (let [arg-doc-id (with-open [tx-log (db/open-tx-log (:tx-log *api*) nil)]
+    (let [arg-doc-id (with-open [tx-log (db/open-tx-log (:tx-log *api*) nil {})]
                        (-> (iterator-seq tx-log) last ::txe/tx-events first last))]
 
       (t/is (true? (-> (db/fetch-docs (:document-store *api*) #{arg-doc-id})
@@ -1209,7 +1209,7 @@
                         [::xt/match :foo {:xt/id :foo}]
                         [::xt/fn :foo :foo-arg]])
 
-  (let [arg-doc-id (with-open [tx-log (db/open-tx-log (:tx-log *api*) nil)]
+  (let [arg-doc-id (with-open [tx-log (db/open-tx-log (:tx-log *api*) nil {})]
                      (-> (iterator-seq tx-log)
                          first
                          :xtdb.tx.event/tx-events

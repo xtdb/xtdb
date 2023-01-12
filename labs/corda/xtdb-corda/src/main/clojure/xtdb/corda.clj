@@ -149,7 +149,7 @@
     (throw (UnsupportedOperationException.
             "CordaTxLog does not support submit-tx - submit transactions directly to Corda")))
 
-  (open-tx-log ^xtdb.api.ICursor [this after-tx-id]
+  (open-tx-log ^xtdb.api.ICursor [this after-tx-id _]
     (let [txs (open-tx-log this after-tx-id)]
       (xio/->cursor #(xio/try-close txs) (iterator-seq txs))))
 

@@ -429,7 +429,7 @@
                (xt/entity (xt/db *api*) :ivan)))
 
       (let [*server-api* (or *http-server-api* *api*)
-            arg-doc-id (with-open [tx-log (db/open-tx-log (:tx-log *server-api*) nil)]
+            arg-doc-id (with-open [tx-log (db/open-tx-log (:tx-log *server-api*) nil {})]
                          (-> (iterator-seq tx-log) last ::txe/tx-events first last))]
 
         (t/is (= {:crux.db.fn/tx-events [[:crux.tx/put (c/new-id :ivan) (c/hash-doc {:xt/id :ivan, :name "Ivan"})]]}

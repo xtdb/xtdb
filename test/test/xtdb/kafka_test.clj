@@ -27,7 +27,7 @@
     (fn []
       (t/testing "transacting and indexing"
         (let [submitted-tx (xt/submit-tx *api* [[::xt/put evicted-doc]
-                                                 [::xt/put non-evicted-doc]])
+                                                [::xt/put non-evicted-doc]])
               _ (xt/await-tx *api* submitted-tx)
               _ (xt/submit-tx *api* [[::xt/evict (:xt/id evicted-doc)]])
               submitted-tx (xt/submit-tx *api* [[::xt/put after-evict-doc]])
@@ -52,8 +52,12 @@
 
 (defn with-compacted-node [{:keys [compacted-docs submitted-tx]} f]
   (t/testing "compaction"
-    (let [with-fixtures (t/join-fixtures [(fix/with-opts {::fk/doc-topic-opts {:topic-name (str "compacted-" fk/*doc-topic*)}})
-                                          fix/with-node])]
+    (let [with-fixtures
+          (t/join-fixtures
+           [(fix/with-opts
+              {::fk/doc-topic-opts
+               {:topic-name (str "compacted-" fk/*doc-topic*)}})
+            fix/with-node])]
       (with-fixtures
         (fn []
           (t/testing "new node can pick-up"
@@ -66,7 +70,9 @@
   ;; replace the original document. The original document will be then
   ;; removed once kafka compacts it away.
 
-  (let [with-fixtures (t/join-fixtures [fk/with-cluster-tx-log-opts fk/with-cluster-doc-store-opts])]
+  (let [with-fixtures (t/join-fixtures
+                       [fk/with-cluster-tx-log-opts
+                        fk/with-cluster-doc-store-opts])]
     (with-fixtures
       (fn []
         (with-compacted-node (submit-txs-to-compact)
@@ -78,10 +84,18 @@
 
 (t/deftest test-consumer-seeks-after-restart
   (fix/with-tmp-dirs #{tmp-indices tmp-docs}
-    (let [with-fixtures (t/join-fixtures [fk/with-cluster-tx-log-opts
-                                          fk/with-cluster-doc-store-opts
-                                          (fix/with-opts {:xtdb/index-store {:kv-store {:xtdb/module `xtdb.rocksdb/->kv-store, :db-dir tmp-indices}}
-                                                          :xtdb/document-store {:local-document-store {:kv-store {:xtdb/module `xtdb.rocksdb/->kv-store, :db-dir tmp-docs}}}})])]
+    (let [with-fixtures (t/join-fixtures
+                         [fk/with-cluster-tx-log-opts
+                          fk/with-cluster-doc-store-opts
+                          (fix/with-opts
+                            {:xtdb/index-store
+                             {:kv-store
+                              {:xtdb/module `xtdb.rocksdb/->kv-store,
+                               :db-dir tmp-indices}}
+                             :xtdb/document-store
+                             {:local-document-store
+                              {:kv-store {:xtdb/module `xtdb.rocksdb/->kv-store,
+                                          :db-dir tmp-docs}}}})])]
       (with-fixtures
         (fn []
           (fix/with-node
@@ -95,13 +109,14 @@
               (t/is (xt/entity (xt/db *api*) :bar)))))))))
 
 (t/deftest submit-oversized-doc
-  (let [with-fixtures (t/join-fixtures [(partial
-                                         fk/with-kafka-config
-                                         {:properties-map {"max.partition.fetch.bytes" "1024"
-                                                           "max.request.size" "1024"}})
-                                        fk/with-cluster-tx-log-opts
-                                        fk/with-cluster-doc-store-opts
-                                        fix/with-node])]
+  (let [with-fixtures (t/join-fixtures
+                       [(partial
+                         fk/with-kafka-config
+                         {:properties-map {"max.partition.fetch.bytes" "1024"
+                                           "max.request.size" "1024"}})
+                        fk/with-cluster-tx-log-opts
+                        fk/with-cluster-doc-store-opts
+                        fix/with-node])]
     (with-fixtures
       (fn []
         (t/testing "submitting an oversized document returns proper exception"
@@ -116,3 +131,71 @@
                      (for [n (range 1000)]
                        [(keyword (str "key-" n))
                         (str "value-" n)]))]]))))))))
+
+
+(defn- with-cluster-tx-log-opts [f]
+  (let [test-id (rand-int 10)]
+    (binding [fk/*tx-topic* (str "tx-topic-" test-id)]
+      (fix/with-opts {::k/kafka-config (merge
+                                        {:bootstrap-servers fk/*kafka-bootstrap-servers*}
+                                        fk/*kafka-config*)
+                      ::tx-topic-opts {:xtdb/module `k/->topic-opts,
+                                       :topic-name fk/*tx-topic*}
+                      :xtdb/tx-log {:xtdb/module `k/->tx-log,
+                                    :kafka-config ::k/kafka-config,
+                                    :tx-topic-opts ::tx-topic-opts
+                                    :poll-wait-duration (Duration/ofMillis 1)}}
+        f))))
+
+(t/deftest empty-cursor-on-initial-poll-timeout
+  (let [with-fixtures
+        (t/join-fixtures
+         [fk/with-cluster-doc-store-opts
+          with-cluster-tx-log-opts
+          fix/with-node])]
+    (with-fixtures
+      (fn []
+        (dotimes [_ 10]
+          (fix/transact! *api* [(fix/random-person)]))
+        (t/testing "empty cursor when poll timeouts (poll-wait-duration)"
+          (with-open [c ^xtdb.io.Cursor (xt/open-tx-log *api* 0 false)]
+            (t/is (not (.hasNext c)))))
+
+        (t/testing "non empty cursor when explicitly override timeout"
+          (with-open [c ^xtdb.io.Cursor
+                      (xt/open-tx-log *api* 0 {:kafka/poll-wait-duration
+                                               (Duration/ofMillis 1000)})]
+            (t/is (.hasNext c))))))))
+
+(t/deftest both-poll-timeout-override-with-ops
+  (let [with-fixtures
+        (t/join-fixtures
+         [fk/with-cluster-doc-store-opts
+          fk/with-cluster-tx-log-opts
+          fix/with-node])]
+    (with-fixtures
+      (fn []
+        (dotimes [_ 10]
+          (fix/transact! *api* [(fix/random-person)]))
+        (t/testing "open-tx-log with override timeout and ops"
+          (with-open [c ^xtdb.io.Cursor
+                      (xt/open-tx-log *api* 0 {:kafka/poll-wait-duration (Duration/ofMillis 1010)
+                                               :with-ops? true})]
+            (t/is (.hasNext c))
+            (t/is (contains? (.next c) :xtdb.api/tx-ops))))))))
+
+(t/deftest both-poll-timeout-override-without-ops
+  (let [with-fixtures
+        (t/join-fixtures
+         [fk/with-cluster-doc-store-opts
+          fk/with-cluster-tx-log-opts
+          fix/with-node])]
+    (with-fixtures
+      (fn []
+        (dotimes [_ 10]
+          (fix/transact! *api* [(fix/random-person)]))
+        (t/testing "open-tx-log with override timeout without ops"
+          (with-open [c ^xtdb.io.Cursor
+                      (xt/open-tx-log *api* 0 {:kafka/poll-wait-duration (Duration/ofMillis 1010)})]
+            (t/is (.hasNext c))
+            (t/is (not (contains? (.next c) :xtdb.api/tx-ops)))))))))

@@ -160,7 +160,7 @@
            ::xt/tx-time (or (::xt/tx-time opts)
                             (::xt/tx-time tx-data))}))))
 
-  (open-tx-log [_ after-tx-id]
+  (open-tx-log [_ after-tx-id _]
     ;; see https://github.com/xtdb/xtdb/pull/1815 for detail on fetch policy
     (let [conn (jdbc/get-connection pool)
           require-rollback (when (= :postgresql (db-type dialect)) (.setAutoCommit conn false) true)

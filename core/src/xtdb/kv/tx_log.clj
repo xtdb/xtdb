@@ -94,7 +94,7 @@
   (latest-submitted-tx [_]
     (latest-submitted-tx kv-store))
 
-  (open-tx-log [this after-tx-id]
+  (open-tx-log [this after-tx-id _]
     (let [batch-size 100]
       (letfn [(tx-log [after-tx-id]
                 (lazy-seq

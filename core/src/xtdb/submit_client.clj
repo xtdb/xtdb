@@ -26,7 +26,7 @@
     (when with-ops?
       (throw (err/illegal-arg :with-opts-not-supported
                               {::err/message "with-ops? not supported"})))
-    (db/open-tx-log (:tx-log this) after-tx-id))
+    (db/open-tx-log (:tx-log this) after-tx-id {}))
 
   Closeable
   (close [_]

@@ -39,9 +39,11 @@
 (def ^:dynamic *consumer-options* {})
 
 (defn ^KafkaConsumer open-consumer []
-  (k/->consumer {:kafka-config (k/->kafka-config {:bootstrap-servers *kafka-bootstrap-servers*
-                                                  :properties-map (merge {"group.id" (str (UUID/randomUUID))}
-                                                                         *consumer-options*)})}))
+  (k/->consumer {:kafka-config
+                 (k/->kafka-config
+                   {:bootstrap-servers *kafka-bootstrap-servers*
+                    :properties-map (merge {"group.id" (str (UUID/randomUUID))}
+                                           *consumer-options*)})}))
 
 (def ^:dynamic *kafka-config* {})
 
@@ -57,8 +59,11 @@
       (fix/with-opts {::k/kafka-config (merge
                                         {:bootstrap-servers *kafka-bootstrap-servers*}
                                         *kafka-config*)
-                      ::tx-topic-opts {:xtdb/module `k/->topic-opts, :topic-name *tx-topic*}
-                      :xtdb/tx-log {:xtdb/module `k/->tx-log, :kafka-config ::k/kafka-config, :tx-topic-opts ::tx-topic-opts}}
+                      ::tx-topic-opts {:xtdb/module `k/->topic-opts,
+                                       :topic-name *tx-topic*}
+                      :xtdb/tx-log {:xtdb/module `k/->tx-log,
+                                    :kafka-config ::k/kafka-config,
+                                    :tx-topic-opts ::tx-topic-opts}}
         f))))
 
 (defn with-cluster-doc-store-opts [f]
@@ -68,6 +73,9 @@
       (fix/with-opts {::k/kafka-config (merge
                                         {:bootstrap-servers *kafka-bootstrap-servers*}
                                         *kafka-config*)
-                      ::doc-topic-opts {:xtdb/module `k/->topic-opts, :topic-name *doc-topic*}
-                      :xtdb/document-store {:xtdb/module `k/->document-store, :kafka-config ::k/kafka-config, :doc-topic-opts ::doc-topic-opts}}
+                      ::doc-topic-opts {:xtdb/module `k/->topic-opts,
+                                        :topic-name *doc-topic*}
+                      :xtdb/document-store {:xtdb/module `k/->document-store,
+                                            :kafka-config ::k/kafka-config,
+                                            :doc-topic-opts ::doc-topic-opts}}
         f))))

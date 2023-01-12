@@ -224,7 +224,8 @@
   (submit-tx [this tx-ops opts] @(xt/submit-tx-async this tx-ops opts))
 
   (open-tx-log ^xtdb.api.ICursor [this after-tx-id with-ops?]
-    (let [with-ops? (boolean with-ops?)]
+    (let [opts with-ops?
+          with-ops? (if (map? opts) (boolean (:with-ops? opts)) (boolean opts))]
       (xio/with-read-lock lock
         (ensure-node-open this)
         (if (let [latest-submitted-tx-id (::xt/tx-id (xt/latest-submitted-tx this))]
@@ -233,7 +234,7 @@
           xio/empty-cursor
 
           (let [latest-completed-tx-id (::xt/tx-id (xt/latest-completed-tx this))
-                tx-log-iterator (db/open-tx-log tx-log after-tx-id)
+                tx-log-iterator (db/open-tx-log tx-log after-tx-id opts)
                 tx-log (->> (iterator-seq tx-log-iterator)
                             (remove #(db/tx-failed? index-store (::xt/tx-id %)))
                             (take-while (comp #(<= % latest-completed-tx-id) ::xt/tx-id))

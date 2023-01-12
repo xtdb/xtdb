@@ -174,8 +174,10 @@
            ::xt/tx-time (or (::xt/tx-time opts)
                             (Date. (.timestamp record-meta)))}))))
 
-  (open-tx-log [this after-tx-id]
-    (let [consumer (open-consumer this after-tx-id)]
+  (open-tx-log [this after-tx-id opts]
+    (let [consumer (open-consumer this after-tx-id)
+          duration (get opts :kafka/poll-wait-duration)
+          poll-wait-duration (if (instance? Duration duration) duration poll-wait-duration)]
       (xio/->cursor #(.close consumer)
                     (->> (consumer-seqs consumer poll-wait-duration)
                          (mapcat identity)
