@@ -28,7 +28,7 @@
              {:jvm-opts ["-Dlogback.configurationFile=../../resources/logback-test.xml"]
               :dependencies [[metosin/reitit-dev "0.5.18"]
 
-                             [org.clojure/clojurescript "1.11.60"]
+                             [org.clojure/clojurescript "1.10.844"]
                              [ch.qos.logback/logback-classic "1.2.11"]
                              [cljsjs/codemirror "5.44.0-1"]
                              [com.bhauman/figwheel-main "0.2.18"
