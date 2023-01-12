@@ -241,8 +241,10 @@
                           :core2/allocator {}
                           :core2/default-tz nil}
                          opts)
-                   ig/prep
                    (doto ig/load-namespaces)
+                   (with-default-impl :core2/log :core2.log/memory-log)
+                   (doto ig/load-namespaces)
+                   ig/prep
                    ig/init)]
 
     (-> (::submit-node system)
