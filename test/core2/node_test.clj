@@ -294,3 +294,14 @@ ORDER BY foo.application_time_start"
     (t/is (= []
              (c2/sql-query tu/*node* "SELECT foo.id foo, foo.x FROM foo LEFT JOIN bar USING (id) WHERE foo.x = bar.x"
                            {:basis {:tx !tx}})))))
+
+(t/deftest test-c1-importer-abort-op
+  (let [_!tx0 (c2/submit-tx tu/*node* [[:put {:id :foo}]])
+        !tx1 (c2/submit-tx tu/*node* [[:put {:id :bar}]
+                                      [:abort]
+                                      [:put {:id :baz}]])]
+    (t/is (= [{:id :foo}]
+             (c2/datalog-query tu/*node*
+                               (-> '{:find [?id]
+                                     :where [[?id :id]]}
+                                   (assoc :basis {:tx !tx1})))))))

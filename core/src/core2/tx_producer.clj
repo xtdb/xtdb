@@ -51,6 +51,10 @@
          :table (s/? string?)
          :id ::id))
 
+;; required for C1 importer
+(defmethod tx-op-spec :abort [_]
+  (s/cat :op #{:abort}))
+
 (defmethod tx-op-spec :sql [_]
   (s/cat :op #{:sql}
          :query string?
@@ -77,79 +81,30 @@
 (def ^:private ^org.apache.arrow.vector.types.pojo.Schema tx-schema
   (Schema. [(types/->field "tx-ops" types/list-type false
                            (types/->field "tx-ops" (ArrowType$Union. UnionMode/Dense (int-array (range 6))) false
+                                          (types/col-type->field 'sql [:struct {:query :utf8
+                                                                                :params [:union #{:null :varbinary}]}])
+
                                           (types/->field "put" types/struct-type false
                                                          (types/->field "document" types/dense-union-type false)
                                                          (types/col-type->field 'application_time_start nullable-inst-type)
                                                          (types/col-type->field 'application_time_end nullable-inst-type))
+
                                           (types/->field "delete" types/struct-type false
                                                          (types/col-type->field '_table [:union #{:null :utf8}])
                                                          (types/->field "id" types/dense-union-type false)
                                                          (types/col-type->field 'application_time_start nullable-inst-type)
                                                          (types/col-type->field 'application_time_end nullable-inst-type))
+
                                           (types/->field "evict" types/struct-type false
                                                          (types/col-type->field '_table [:union #{:null :utf8}])
                                                          (types/->field "id" types/dense-union-type false))
 
-                                          (types/col-type->field 'sql [:struct {:query :utf8
-                                                                                :params [:union #{:null :varbinary}]}])))
+                                          ;; C1 importer
+                                          (types/col-type->field 'abort :null)))
 
             (types/col-type->field "system-time" nullable-inst-type)
             (types/col-type->field "default-tz" :utf8)
             (types/col-type->field "application-time-as-of-now?" :bool)]))
-
-(defn- ->put-writer [^IDenseUnionWriter tx-ops-writer]
-  (let [put-writer (.asStruct (.writerForTypeId tx-ops-writer 0))
-        doc-writer (.asDenseUnion (.writerForName put-writer "document"))
-        app-time-start-writer (.writerForName put-writer "application_time_start")
-        app-time-end-writer (.writerForName put-writer "application_time_end")]
-    (fn write-put! [{:keys [doc], {:keys [app-time-start app-time-end]} :app-time-opts}]
-      (let [doc (into {:_table "xt_docs"} doc)]
-        (.startValue put-writer)
-        (doto (.writerForType doc-writer (types/value->col-type doc))
-          (.startValue)
-          (->> (types/write-value! doc))
-          (.endValue))
-
-        (types/write-value! app-time-start app-time-start-writer)
-        (types/write-value! app-time-end app-time-end-writer)
-
-        (.endValue put-writer)))))
-
-(defn- ->delete-writer [^IDenseUnionWriter tx-ops-writer]
-  (let [delete-writer (.asStruct (.writerForTypeId tx-ops-writer 1))
-        table-writer (.writerForName delete-writer "_table")
-        id-writer (.asDenseUnion (.writerForName delete-writer "id"))
-        app-time-start-writer (.writerForName delete-writer "application_time_start")
-        app-time-end-writer (.writerForName delete-writer "application_time_end")]
-    (fn write-delete! [{:keys [id table], {:keys [app-time-start app-time-end]} :app-time-opts}]
-      (.startValue delete-writer)
-
-      (some-> table (types/write-value! table-writer))
-
-      (doto (-> id-writer
-                (.writerForType (types/value->col-type id)))
-        (.startValue)
-        (->> (types/write-value! id))
-        (.endValue))
-
-      (types/write-value! app-time-start app-time-start-writer)
-      (types/write-value! app-time-end app-time-end-writer)
-
-      (.endValue delete-writer))))
-
-(defn- ->evict-writer [^IDenseUnionWriter tx-ops-writer]
-  (let [evict-writer (.asStruct (.writerForTypeId tx-ops-writer 2))
-        table-writer (.writerForName evict-writer "_table")
-        id-writer (.asDenseUnion (.writerForName evict-writer "id"))]
-    (fn [{:keys [table id]}]
-      (.startValue evict-writer)
-      (some-> table (types/write-value! table-writer))
-      (doto (-> id-writer
-                (.writerForType (types/value->col-type id)))
-        (.startValue)
-        (->> (types/write-value! id))
-        (.endValue))
-      (.endValue evict-writer))))
 
 (defn encode-params [^BufferAllocator allocator, query, param-rows]
   (let [plan (sql/compile-query query)
@@ -172,7 +127,7 @@
         (run! util/try-close vecs)))))
 
 (defn- ->sql-writer [^IDenseUnionWriter tx-ops-writer, ^BufferAllocator allocator]
-  (let [sql-writer (.asStruct (.writerForTypeId tx-ops-writer 3))
+  (let [sql-writer (.asStruct (.writerForTypeId tx-ops-writer 0))
         query-writer (.writerForName sql-writer "query")
         params-writer (.writerForName sql-writer "params")]
     (fn write-sql! [{:keys [query params]}]
@@ -187,6 +142,66 @@
 
       (.endValue sql-writer))))
 
+(defn- ->put-writer [^IDenseUnionWriter tx-ops-writer]
+  (let [put-writer (.asStruct (.writerForTypeId tx-ops-writer 1))
+        doc-writer (.asDenseUnion (.writerForName put-writer "document"))
+        app-time-start-writer (.writerForName put-writer "application_time_start")
+        app-time-end-writer (.writerForName put-writer "application_time_end")]
+    (fn write-put! [{:keys [doc], {:keys [app-time-start app-time-end]} :app-time-opts}]
+      (let [doc (into {:_table "xt_docs"} doc)]
+        (.startValue put-writer)
+        (doto (.writerForType doc-writer (types/value->col-type doc))
+          (.startValue)
+          (->> (types/write-value! doc))
+          (.endValue))
+
+        (types/write-value! app-time-start app-time-start-writer)
+        (types/write-value! app-time-end app-time-end-writer)
+
+        (.endValue put-writer)))))
+
+(defn- ->delete-writer [^IDenseUnionWriter tx-ops-writer]
+  (let [delete-writer (.asStruct (.writerForTypeId tx-ops-writer 2))
+        table-writer (.writerForName delete-writer "_table")
+        id-writer (.asDenseUnion (.writerForName delete-writer "id"))
+        app-time-start-writer (.writerForName delete-writer "application_time_start")
+        app-time-end-writer (.writerForName delete-writer "application_time_end")]
+    (fn write-delete! [{:keys [id table], {:keys [app-time-start app-time-end]} :app-time-opts}]
+      (.startValue delete-writer)
+
+      (some-> table (types/write-value! table-writer))
+
+      (doto (-> id-writer
+                (.writerForType (types/value->col-type id)))
+        (.startValue)
+        (->> (types/write-value! id))
+        (.endValue))
+
+      (types/write-value! app-time-start app-time-start-writer)
+      (types/write-value! app-time-end app-time-end-writer)
+
+      (.endValue delete-writer))))
+
+(defn- ->evict-writer [^IDenseUnionWriter tx-ops-writer]
+  (let [evict-writer (.asStruct (.writerForTypeId tx-ops-writer 3))
+        table-writer (.writerForName evict-writer "_table")
+        id-writer (.asDenseUnion (.writerForName evict-writer "id"))]
+    (fn [{:keys [table id]}]
+      (.startValue evict-writer)
+      (some-> table (types/write-value! table-writer))
+      (doto (-> id-writer
+                (.writerForType (types/value->col-type id)))
+        (.startValue)
+        (->> (types/write-value! id))
+        (.endValue))
+      (.endValue evict-writer))))
+
+(defn- ->abort-writer [^IDenseUnionWriter tx-ops-writer]
+  (let [abort-writer (.writerForTypeId tx-ops-writer 4)]
+    (fn [_]
+      (.startValue abort-writer)
+      (.endValue abort-writer))))
+
 (defn serialize-tx-ops ^java.nio.ByteBuffer [^BufferAllocator allocator tx-ops {:keys [^Instant sys-time, default-tz, app-time-as-of-now?]}]
   (let [tx-ops (conform-tx-ops tx-ops)
         op-count (count tx-ops)]
@@ -199,6 +214,7 @@
             write-put! (->put-writer tx-ops-writer)
             write-delete! (->delete-writer tx-ops-writer)
             write-evict! (->evict-writer tx-ops-writer)
+            write-abort! (->abort-writer tx-ops-writer)
             write-sql! (->sql-writer tx-ops-writer allocator)]
 
         (when sys-time
@@ -218,6 +234,7 @@
               :put (write-put! tx-op)
               :delete (write-delete! tx-op)
               :evict (write-evict! tx-op)
+              :abort (write-abort! tx-op)
               :sql (write-sql! tx-op)))
 
           (.endValue tx-ops-writer))

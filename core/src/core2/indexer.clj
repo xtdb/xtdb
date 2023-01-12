@@ -438,7 +438,7 @@
           (.endValue vec-writer))))))
 
 (defn- put-doc-copier ^core2.indexer.DocRowCopier [^TransactionIndexer indexer, ^DenseUnionVector tx-ops-vec]
-  (let [doc-rdr (-> (.getStruct tx-ops-vec 0)
+  (let [doc-rdr (-> (.getStruct tx-ops-vec 1)
                     (.getChild "document")
                     (iv/->direct-vec)
                     (.structReader))
@@ -452,7 +452,7 @@
 
 (defn- ->put-indexer ^core2.indexer.OpIndexer [^IInternalIdManager iid-mgr ^ILogOpIndexer log-op-idxer, ^ITemporalTxIndexer temporal-idxer, ^IDocumentIndexer doc-idxer
                                                ^DenseUnionVector tx-ops-vec, ^Instant current-time]
-  (let [put-vec (.getStruct tx-ops-vec 0)
+  (let [put-vec (.getStruct tx-ops-vec 1)
         ^DenseUnionVector doc-duv (.getChild put-vec "document" DenseUnionVector)
         ^TimeStampVector app-time-start-vec (.getChild put-vec "application_time_start")
         ^TimeStampVector app-time-end-vec (.getChild put-vec "application_time_end")
@@ -486,7 +486,7 @@
   ^core2.indexer.OpIndexer
   [^IInternalIdManager iid-mgr, ^ILogOpIndexer log-op-idxer, ^ITemporalTxIndexer temporal-idxer, ^IDocumentIndexer doc-idxer
    ^DenseUnionVector tx-ops-vec, ^Instant current-time]
-  (let [delete-vec (.getStruct tx-ops-vec 1)
+  (let [delete-vec (.getStruct tx-ops-vec 2)
         ^VarCharVector table-vec (.getChild delete-vec "_table" VarCharVector)
         ^DenseUnionVector id-vec (.getChild delete-vec "id" DenseUnionVector)
         ^TimeStampVector app-time-start-vec (.getChild delete-vec "application_time_start")
@@ -514,7 +514,7 @@
   [^IInternalIdManager iid-mgr ^ILogOpIndexer log-op-idxer, ^ITemporalTxIndexer temporal-idxer, ^IDocumentIndexer doc-idxer
    ^DenseUnionVector tx-ops-vec]
 
-  (let [evict-vec (.getStruct tx-ops-vec 2)
+  (let [evict-vec (.getStruct tx-ops-vec 3)
         ^VarCharVector table-vec (.getChild evict-vec "_table" VarCharVector)
         ^DenseUnionVector id-vec (.getChild evict-vec "id" DenseUnionVector)]
     (reify OpIndexer
@@ -669,7 +669,7 @@
                                                ^ILogOpIndexer log-op-idxer, ^ITemporalTxIndexer temporal-idxer, ^IDocumentIndexer doc-idxer
                                                ^DenseUnionVector tx-ops-vec, ^ScanSource scan-src
                                                {:keys [app-time-as-of-now?] :as tx-opts}]
-  (let [sql-vec (.getStruct tx-ops-vec 3)
+  (let [sql-vec (.getStruct tx-ops-vec 0)
         ^VarCharVector query-vec (.getChild sql-vec "query" VarCharVector)
         ^VarBinaryVector params-vec (.getChild sql-vec "params" VarBinaryVector)
         insert-idxer (->sql-insert-indexer iid-mgr log-op-idxer temporal-idxer doc-idxer tx-opts)
@@ -738,6 +738,8 @@
        (into {} (map (fn [[col-name ^LiveColumn live-col]]
                        (MapEntry/create col-name (.txLiveRoot live-col)))))))
 
+(def ^:private abort-exn (err/runtime-err :abort-exn))
+
 (deftype Indexer [^BufferAllocator allocator
                   ^ObjectStore object-store
                   ^IMetadataManager metadata-mgr
@@ -785,15 +787,16 @@
       (if-let [e (try
                    (dotimes [tx-op-idx (.getValueCount tx-ops-vec)]
                      (case (.getTypeId tx-ops-vec tx-op-idx)
-                       0 (.indexOp put-idxer tx-op-idx)
-                       1 (.indexOp delete-idxer tx-op-idx)
-                       2 (.indexOp evict-idxer tx-op-idx)
-                       3 (.indexOp sql-idxer tx-op-idx)))
-                   nil
+                       0 (.indexOp sql-idxer tx-op-idx)
+                       1 (.indexOp put-idxer tx-op-idx)
+                       2 (.indexOp delete-idxer tx-op-idx)
+                       3 (.indexOp evict-idxer tx-op-idx)
+                       4 (throw abort-exn)))
                    (catch core2.RuntimeException e e)
                    (catch core2.IllegalArgumentException e e))]
         (do
-          (log/debug e "aborted tx")
+          (when (not= e abort-exn)
+            (log/debug e "aborted tx"))
           (.abort temporal-idxer)
           (.abort log-op-idxer)
           (.abort doc-idxer))
