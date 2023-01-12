@@ -1,5 +1,5 @@
 = HTTP
-:page-aliases: reference::http.adoc
+:page-aliases: 1.23.0@reference::http.adoc
 
 This document explains how to configure the XTDB HTTP module.
 To query over HTTP, see the

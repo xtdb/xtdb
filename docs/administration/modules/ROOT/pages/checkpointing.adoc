@@ -1,5 +1,5 @@
 = Checkpointing
-:page-aliases: reference::checkpointing.adoc
+:page-aliases: 1.23.0@reference::checkpointing.adoc
 
 XTDB nodes can save checkpoints of their query indices on a regular basis, so that new nodes can start to service queries faster.
 
