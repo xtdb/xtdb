@@ -41,7 +41,7 @@
      :->call-code (fn [emitted-args]
                     `(util/compare-nio-buffers-unsigned ~@emitted-args))}))
 
-(doseq [col-type #{[:extension :keyword ""] [:extension :uuid ""]}]
+(doseq [col-type #{[:extension :c2/clj-keyword ""] [:extension :uuid ""]}]
   (defmethod expr/codegen-call [:compare col-type col-type] [_]
     {:return-type :i32
      :->call-code (fn [emitted-args]

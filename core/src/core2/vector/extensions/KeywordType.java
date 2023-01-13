@@ -14,7 +14,7 @@ public class KeywordType extends XtExtensionType {
     }
 
     public KeywordType() {
-        super("keyword", Utf8.INSTANCE);
+        super("c2/clj-keyword", Utf8.INSTANCE);
     }
 
     @Override

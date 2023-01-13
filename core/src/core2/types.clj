@@ -219,7 +219,7 @@
 
 (extend-protocol ArrowWriteable
   Keyword
-  (value->col-type [_] [:extension-type :keyword :utf8 ""])
+  (value->col-type [_] [:extension-type :c2/clj-keyword :utf8 ""])
   (write-value! [kw ^IVectorWriter writer]
     (write-value! (str (symbol kw)) (.getUnderlyingWriter (.asExtension writer))))
 
@@ -786,8 +786,8 @@
 
 (defmethod col-type->field* :extension-type [col-name nullable? [_type-head xname underlying-type xdata]]
   (let [^ArrowType$ExtensionType
-        raw-type (or (ExtensionTypeRegistry/lookup (name xname))
-                     (throw (IllegalStateException. (format "can't find extension type: '%s'" (name xname)))))]
+        raw-type (or (ExtensionTypeRegistry/lookup (str (symbol xname)))
+                     (throw (IllegalStateException. (format "can't find extension type: '%s'" (str (symbol xname))))))]
 
     (->field col-name
              (.deserialize raw-type (.getType (col-type->field underlying-type)) xdata)

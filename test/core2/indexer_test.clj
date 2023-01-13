@@ -562,7 +562,7 @@
           (tu/finish-chunk node1)
 
           (t/is (= [:union #{:utf8
-                             [:extension-type :keyword :utf8 ""]
+                             [:extension-type :c2/clj-keyword :utf8 ""]
                              [:extension-type :uuid [:fixed-size-binary 16] ""]}]
                    (.columnType mm1 "id")))
 
@@ -570,7 +570,7 @@
             (let [^IMetadataManager mm2 (tu/component node2 ::meta/metadata-manager)]
               (tu/then-await-tx tx2 node2 (Duration/ofMillis 200))
 
-              (t/is (= [:union #{:utf8 [:extension-type :keyword :utf8 ""]
+              (t/is (= [:union #{:utf8 [:extension-type :c2/clj-keyword :utf8 ""]
                                  [:extension-type :uuid [:fixed-size-binary 16] ""]}]
                        (.columnType mm2 "id"))))))))))
 

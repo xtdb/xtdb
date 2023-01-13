@@ -118,7 +118,7 @@
 
 (defmethod col-type->type-metadata :extension-type [[type-head xname storage-type xdata]]
   {"type-head" (name type-head)
-   "xname" (name xname)
+   "xname" (str (symbol xname))
    "xstorage-type" (pr-str (col-type->type-metadata storage-type))
    "xdata" xdata})
 
