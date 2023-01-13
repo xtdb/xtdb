@@ -4,14 +4,14 @@
             [core2.types :as types]
             [core2.util :as util]
             [core2.vector.writer :as vw])
-  (:import (core2.types IntervalDayTime IntervalMonthDayNano IntervalYearMonth)
-           (core2.vector.extensions KeywordVector UuidVector UriVector)
+  (:import (core2.types IntervalDayTime IntervalYearMonth)
+           (core2.vector IVectorWriter)
+           (core2.vector.extensions ClojureFormVector KeywordVector UriVector UuidVector)
            java.net.URI
            java.nio.ByteBuffer
-           (java.time Instant OffsetDateTime ZonedDateTime ZoneId ZoneOffset LocalDate LocalTime Period Duration)
-           (org.apache.arrow.vector BigIntVector BitVector Float4Vector Float8Vector IntVector NullVector SmallIntVector TimeStampMicroTZVector TinyIntVector VarBinaryVector VarCharVector DateDayVector DateMilliVector TimeNanoVector TimeSecVector TimeMilliVector TimeMicroVector PeriodDuration IntervalMonthDayNanoVector IntervalYearVector IntervalDayVector)
-           (org.apache.arrow.vector.complex DenseUnionVector ListVector StructVector)
-           (core2.vector IVectorWriter)))
+           (java.time Instant LocalDate LocalTime OffsetDateTime ZonedDateTime)
+           (org.apache.arrow.vector BigIntVector BitVector DateDayVector DateMilliVector Float4Vector Float8Vector IntVector IntervalDayVector IntervalMonthDayNanoVector IntervalYearVector NullVector SmallIntVector TimeMicroVector TimeMilliVector TimeNanoVector TimeSecVector TimeStampMicroTZVector TinyIntVector VarBinaryVector VarCharVector)
+           (org.apache.arrow.vector.complex DenseUnionVector ListVector StructVector)))
 
 (t/use-fixtures :each tu/with-allocator)
 
@@ -74,9 +74,9 @@
              (test-round-trip vs))
           "nested types"))
 
-  (let [vs [:foo :foo/bar #uuid "97a392d5-5e3f-406f-9651-a828ee79b156" (URI/create "https://xtdb.com")]]
+  (let [vs [:foo :foo/bar #uuid "97a392d5-5e3f-406f-9651-a828ee79b156" (URI/create "https://xtdb.com") #c2/clj-form (fn [a b] (+ a b))]]
     (t/is (= {:vs vs
-              :vec-types [KeywordVector KeywordVector UuidVector UriVector]}
+              :vec-types [KeywordVector KeywordVector UuidVector UriVector ClojureFormVector]}
              (test-round-trip vs))
           "extension types")))
 

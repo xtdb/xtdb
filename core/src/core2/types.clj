@@ -1,11 +1,13 @@
 (ns core2.types
   (:require [clojure.string :as str]
+            core2.api
             [core2.rewrite :refer [zmatch]]
             [core2.util :as util])
   (:import (clojure.lang Keyword MapEntry)
+           (core2.api ClojureForm)
            (core2.types IntervalDayTime IntervalMonthDayNano IntervalYearMonth)
            (core2.vector IDenseUnionWriter IVectorWriter)
-           (core2.vector.extensions KeywordType KeywordVector UriType UriVector UuidType UuidVector)
+           (core2.vector.extensions ClojureFormType, ClojureFormVector KeywordType KeywordVector UriType UriVector UuidType UuidVector)
            java.net.URI
            (java.nio ByteBuffer CharBuffer)
            java.nio.charset.StandardCharsets
@@ -234,7 +236,12 @@
   URI
   (value->col-type [_] [:extension-type :uri :utf8 ""])
   (write-value! [^URI uri ^IVectorWriter writer]
-    (write-value! (str uri) (.getUnderlyingWriter (.asExtension writer)))))
+    (write-value! (str uri) (.getUnderlyingWriter (.asExtension writer))))
+
+  ClojureForm
+  (value->col-type [_] [:extension-type :c2/clj-form :utf8 ""])
+  (write-value! [{:keys [form]} ^IVectorWriter writer]
+    (write-value! (pr-str form) (.getUnderlyingWriter (.asExtension writer)))))
 
 (defprotocol VectorType
   (^java.lang.Class arrow-type->vector-type [^ArrowType arrow-type]))
@@ -307,6 +314,7 @@
 
 (extend-protocol VectorType
   KeywordType (arrow-type->vector-type [_] KeywordVector)
+  ClojureFormType (arrow-type->vector-type [_] ClojureFormVector)
   UuidType (arrow-type->vector-type [_] UuidVector)
   UriType (arrow-type->vector-type [_] UriVector))
 

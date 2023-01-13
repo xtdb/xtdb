@@ -18,6 +18,15 @@
 (defmethod print-method TransactionInstant [tx-key w]
   (print-dup tx-key w))
 
+(defrecord ClojureForm [form])
+
+(defmethod print-dup ClojureForm [{:keys [form]} ^Writer w]
+  (.write w "#c2/clj-form ")
+  (print-method form w))
+
+(defmethod print-method ClojureForm [clj-form w]
+  (print-dup clj-form w))
+
 (defprotocol PClient
   ;; we may want to go to `Stream` instead, when we have a Java API
   (-open-datalog-async ^java.util.concurrent.CompletableFuture [node query args])

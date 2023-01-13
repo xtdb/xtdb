@@ -556,13 +556,15 @@
         (t/is (= :utf8 (.columnType mm1 "id")))
 
         (let [tx2 (c2/submit-tx node1 [[:put {:id :bar}]
-                                       [:put {:id #uuid "8b190984-2196-4144-9fa7-245eb9a82da8"}]])]
+                                       [:put {:id #uuid "8b190984-2196-4144-9fa7-245eb9a82da8"}]
+                                       [:put {:id #c2/clj-form :foo}]])]
           (tu/then-await-tx tx2 node1 (Duration/ofMillis 200))
 
           (tu/finish-chunk node1)
 
           (t/is (= [:union #{:utf8
                              [:extension-type :c2/clj-keyword :utf8 ""]
+                             [:extension-type :c2/clj-form :utf8 ""]
                              [:extension-type :uuid [:fixed-size-binary 16] ""]}]
                    (.columnType mm1 "id")))
 
@@ -570,7 +572,9 @@
             (let [^IMetadataManager mm2 (tu/component node2 ::meta/metadata-manager)]
               (tu/then-await-tx tx2 node2 (Duration/ofMillis 200))
 
-              (t/is (= [:union #{:utf8 [:extension-type :c2/clj-keyword :utf8 ""]
+              (t/is (= [:union #{:utf8
+                                 [:extension-type :c2/clj-keyword :utf8 ""]
+                                 [:extension-type :c2/clj-form :utf8 ""]
                                  [:extension-type :uuid [:fixed-size-binary 16] ""]}]
                        (.columnType mm2 "id"))))))))))
 
