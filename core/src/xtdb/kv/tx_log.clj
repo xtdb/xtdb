@@ -73,7 +73,7 @@
              (take limit)
              vec)))))
 
-(defn- throw-if-closed [tx-submit-executor]
+(defn- throw-if-closed [^ExecutorService tx-submit-executor]
   (when (.isShutdown tx-submit-executor)
     (throw (IllegalStateException. "TxLog is closed."))))
 
