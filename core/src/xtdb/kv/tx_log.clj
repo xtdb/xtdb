@@ -73,6 +73,10 @@
              (take limit)
              vec)))))
 
+(defn- throw-if-closed [tx-submit-executor]
+  (when (.isShutdown tx-submit-executor)
+    (throw (IllegalStateException. "TxLog is closed."))))
+
 (defrecord KvTxLog [^ExecutorService tx-submit-executor
                     kv-store fsync? subscriber-handler]
   db/TxLog
@@ -80,8 +84,7 @@
     (db/submit-tx this tx-events {}))
 
   (submit-tx [this tx-events opts]
-    (when (.isShutdown tx-submit-executor)
-      (throw (IllegalStateException. "TxLog is closed.")))
+    (throw-if-closed tx-submit-executor)
 
     (let [!submitted-tx (.submit tx-submit-executor ^Callable #(submit-tx tx-events this opts))]
       (delay
@@ -92,9 +95,11 @@
           submitted-tx))))
 
   (latest-submitted-tx [_]
+    (throw-if-closed tx-submit-executor)
     (latest-submitted-tx kv-store))
 
   (open-tx-log [this after-tx-id _]
+    (throw-if-closed tx-submit-executor)
     (let [batch-size 100]
       (letfn [(tx-log [after-tx-id]
                 (lazy-seq
@@ -105,6 +110,7 @@
         (xio/->cursor (fn []) (tx-log after-tx-id)))))
 
   (subscribe [this after-tx-id f]
+    (throw-if-closed tx-submit-executor)
     (tx-sub/handle-notifying-subscriber subscriber-handler this after-tx-id f))
 
   Closeable

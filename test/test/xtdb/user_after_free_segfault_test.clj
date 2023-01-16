@@ -15,20 +15,15 @@
                :db-dir (xio/create-tmpdir "log")}}})
 
 (t/deftest use-after-free-segfault-on-close-1803-rocks-test
-  (let [node (xt/start-node (kv-node-opts 'xtdb.rocksdb/->kv-store))
-        spy identity
-        ;; use println version if having segfaults, test reporter will not help you!
-        #_#_ spy println]
+  (let [node (xt/start-node (kv-node-opts 'xtdb.rocksdb/->kv-store))]
     (.close node)
     ;; will segfault on early versions
-    (spy "db")
     (t/is (thrown-with-msg? IllegalStateException #"closing" (xt/db node)))
-    (spy "stats")
-    (try (xt/attribute-stats node) (catch Throwable _))
-    (spy "completed-tx")
-    (try (xt/latest-completed-tx node) (catch Throwable _))
-    (spy "submitted-tx")
-    (try (xt/latest-submitted-tx node) (catch Throwable _))))
+    (t/is (thrown-with-msg? IllegalStateException #"XTDB node is closed" (xt/status node)))
+    (t/is (thrown-with-msg? IllegalStateException #"XTDB node is closed" (xt/attribute-stats node)))
+    (t/is (thrown-with-msg? IllegalStateException #"TxLog is closed" (xt/latest-submitted-tx node)))
+    (t/is (thrown-with-msg? IllegalStateException #"XTDB node is closed" (xt/latest-completed-tx node)))
+    (t/is (thrown-with-msg? IllegalStateException #"TxLog is closed" (xt/sync node)))))
 
 (t/deftest use-after-free-segfault-on-close-1803-lmdb-test
   (let [node-opts (kv-node-opts 'xtdb.lmdb/->kv-store)
