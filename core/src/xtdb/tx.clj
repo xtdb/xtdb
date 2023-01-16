@@ -445,8 +445,8 @@
 (def ^ThreadFactory txs-processor-thread-factory
   (xio/thread-factory "xtdb-tx-processor"))
 
-(def ^ThreadFactory housekeeping-thread-factory
-  (xio/thread-factory "xtdb-tx-housekeeping"))
+(def ^ThreadFactory stats-thread-factory
+  (xio/thread-factory "xtdb-tx-stats"))
 
 (defn- validate-tx-time-override! [latest-tx tx tx-time-override]
   (let [tx-log-time (::xt/tx-time tx)
@@ -540,7 +540,7 @@
             txs-docs-fetch-executor (xio/bounded-thread-pool 1 1 docs-fetcher-thread-factory)
             txs-docs-encode-executor (xio/bounded-thread-pool 1 1 docs-encoder-thread-factory)
             txs-index-executor (xio/bounded-thread-pool 1 5 txs-processor-thread-factory)
-            housekeeping-executor (Executors/newSingleThreadScheduledExecutor housekeeping-thread-factory)
+            stats-executor (Executors/newSingleThreadScheduledExecutor stats-thread-factory)
 
             ;; === error handling policy ===
 
@@ -567,7 +567,7 @@
             ;; === stats buffering ===
 
             ;; maintaining statistics per-transaction has a relatively high constant factor
-            ;; overhead, so we reduce this by buffering documents (stats-agent) before flushing to the index.
+            ;; overhead, so we reduce this by buffering documents (stats-buffer) before flushing to the index.
             ;; We will flush the buffer as soon as it contains stats-buffer-doc-count docs, or approximately
             ;; every stats-buffer-flush-ms on a schedule.
 
@@ -585,7 +585,7 @@
                 (flush-stats buf)))
 
             stats-scheduled-fut
-            (.scheduleAtFixedRate housekeeping-executor ^Runnable (fn [] (send stats-agent flush-stats)) 0 stats-buffer-flush-ms TimeUnit/MILLISECONDS)
+            (.scheduleAtFixedRate stats-executor ^Runnable (fn [] (send-via stats-executor stats-agent flush-stats)) 0 stats-buffer-flush-ms TimeUnit/MILLISECONDS)
 
             ;; === subscription ===
 
@@ -611,9 +611,9 @@
                                             (if committing?
                                               (do
                                                 (db/commit in-flight-tx tx)
-                                                (doto stats-agent
-                                                  (send into (into docs indexed-docs))
-                                                  (send flush-stats-if-enough-docs)))
+                                                (doto stats-executor
+                                                  (send-via stats-agent into (into docs indexed-docs))
+                                                  (send-via stats-agent flush-stats-if-enough-docs)))
                                               (db/abort in-flight-tx tx))))
 
                                         (txs-doc-encoder-fn [txs]
@@ -648,10 +648,11 @@
                           @(.handle job (reify BiFunction
                                           (apply [_ _v _e]
                                             (.cancel stats-scheduled-fut false)
-                                            (doseq [^ExecutorService executor [txs-docs-fetch-executor txs-docs-encode-executor txs-index-executor]]
+                                            (send-via stats-executor stats-agent flush-stats)
+                                            (let [p (promise)]
+                                              (send-via stats-executor stats-agent #(do (deliver p true) %))
+                                              (deref p (* 60 1000) nil))
+                                            (doseq [^ExecutorService executor [txs-docs-fetch-executor txs-docs-encode-executor txs-index-executor stats-executor]]
                                               (.shutdownNow executor))
-                                            (doseq [^ExecutorService executor [txs-docs-fetch-executor txs-docs-encode-executor txs-index-executor]]
-                                              (.awaitTermination executor 60, java.util.concurrent.TimeUnit/SECONDS))
-                                            (.shutdown housekeeping-executor)
-                                            (send stats-agent flush-stats)
-                                            (await stats-agent)))))))))))
+                                            (doseq [^ExecutorService executor [txs-docs-fetch-executor txs-docs-encode-executor txs-index-executor stats-executor]]
+                                              (.awaitTermination executor 60, java.util.concurrent.TimeUnit/SECONDS))))))))))))
