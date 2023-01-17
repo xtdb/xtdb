@@ -110,3 +110,17 @@
                           :in [?s]
                           :where [[(lucene-text-search ?s) [[?e]]]]}
                      (build-lucene-multi-field-or-string [:firstname :surname] "Fre*"))))))
+
+(t/deftest test-uri-as-xtid-1884
+  (with-open [node (xt/start-node {:multi {:xtdb/module 'xtdb.lucene/->lucene-store
+                                           :analyzer 'xtdb.lucene/->analyzer
+                                           :indexer 'xtdb.lucene.multi-field/->indexer}})]
+    (->> (xt/submit-tx node [[::xt/put
+                              {:xt/id  (new java.net.URI "http://clojuredocs.org/")
+                               :firstname "Fred" :surname "Smith"}]])
+         (xt/await-tx node))
+    (with-open [db (xt/open-db node)]
+      (t/is (seq (xt/q db
+                       '{:find [?e]
+                         :where [[(lucene-text-search "firstname:%s AND surname:%s" "Fred" "Smith"
+                                                  {:lucene-store-k :multi}) [[?e]]]]}))))))
