@@ -177,6 +177,58 @@
               (t/is (zero? (.getAccountedSize (.getReferenceManager ^ArrowBuf buffer))))
               (t/is (= 2 (count (.buffers ^BufferPool bp)))))))))))
 
+(t/deftest temporal-watermark-is-immutable-567
+  (with-open [node (node/start-node {})]
+    (let [{tt :sys-time, :as tx} @(c2/submit-tx node [[:put {:id :foo, :version 0}]]
+                                                {:app-time-as-of-now? true})
+
+          ;; this snapshot contains the watermarks
+          db @(node/snapshot-async node tx)]
+      (t/is (= [{:id :foo, :version 0,
+                 :application_time_start (util/->zdt tt)
+                 :application_time_end (util/->zdt util/end-of-time)
+                 :system_time_start (util/->zdt tt)
+                 :system_time_end (util/->zdt util/end-of-time)}]
+               (tu/query-ra '[:scan xt_docs [id version
+                                             application_time_start, application_time_end
+                                             system_time_start, system_time_end]]
+                            {:srcs {'$ db}})))
+
+      (let [{tt2 :sys-time, :as tx2} @(c2/submit-tx node [[:put {:id :foo, :version 1}]]
+                                                    {:app-time-as-of-now? true})
+            db2 @(node/snapshot-async node tx2)]
+        (t/is (= [{:id :foo, :version 0,
+                   :application_time_start (util/->zdt tt)
+                   :application_time_end (util/->zdt util/end-of-time)
+                   :system_time_start (util/->zdt tt)
+                   :system_time_end (util/->zdt tt2)}
+                  {:id :foo, :version 0,
+                   :application_time_start (util/->zdt tt)
+                   :application_time_end (util/->zdt tt2)
+                   :system_time_start (util/->zdt tt2)
+                   :system_time_end (util/->zdt util/end-of-time)}
+                  {:id :foo, :version 1,
+                   :application_time_start (util/->zdt tt2)
+                   :application_time_end (util/->zdt util/end-of-time)
+                   :system_time_start (util/->zdt tt2)
+                   :system_time_end (util/->zdt util/end-of-time)}]
+                 (tu/query-ra '[:scan xt_docs [id version
+                                               application_time_start, application_time_end
+                                               system_time_start, {system_time_end (<= system_time_end core2/end-of-time)}]]
+                              {:srcs {'$ db2}})))
+
+        #_ ; FIXME #567 this sees the updated system_time_end of the first entry
+        (t/is (= [{:id :foo, :version 0,
+                   :application_time_start (util/->zdt tt)
+                   :application_time_end (util/->zdt util/end-of-time)
+                   :system_time_start (util/->zdt tt)
+                   :system_time_end (util/->zdt util/end-of-time)}]
+                 (tu/query-ra '[:scan xt_docs [id version
+                                               application_time_start, application_time_end
+                                               system_time_start, system_time_end]]
+                              {:srcs {'$ db}}))
+              "re-using the original snapshot should see the same result")))))
+
 (t/deftest can-handle-dynamic-cols-in-same-block
   (let [node-dir (util/->path "target/can-handle-dynamic-cols-in-same-block")
         tx-ops [[:put {:id "foo"
