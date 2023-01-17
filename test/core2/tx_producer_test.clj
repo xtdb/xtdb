@@ -47,11 +47,15 @@
                     [[1 nil 3.3]
                      [2 "hello" 12]]]
 
+                   [:call :foo 12 nil :bar]
+
                    [:sql "UPDATE foo FOR PORTION OF APP_TIME FROM DATE '2021-01-01' TO DATE '2024-01-01' SET bar = 'world' WHERE foo.id = ?"
                     [[1]]]
 
                    [:sql "DELETE FROM foo FOR PORTION OF APP_TIME FROM DATE '2023-01-01' TO DATE '2025-01-01' WHERE foo.id = ?"
-                    [[1]]]]
+                    [[1]]]
+
+                   [:call :foo2 "hello" "world"]]
 
                   {:sys-time (util/->instant #inst "2021")
                    :app-time-as-of-now? true

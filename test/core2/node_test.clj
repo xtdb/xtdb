@@ -4,12 +4,7 @@
             [core2.test-util :as tu]
             [core2.util :as util]))
 
-(defn- with-mock-clocks [f]
-  (tu/with-opts {:core2.log/memory-log {:instant-src (tu/->mock-clock)}
-                 :core2.tx-producer/tx-producer {:instant-src (tu/->mock-clock)}}
-    f))
-
-(t/use-fixtures :each with-mock-clocks tu/with-node)
+(t/use-fixtures :each tu/with-mock-clock tu/with-node)
 
 (t/deftest test-multi-value-insert-423
   (letfn [(expected [tt]

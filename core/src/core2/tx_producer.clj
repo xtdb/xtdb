@@ -14,6 +14,7 @@
            java.util.ArrayList
            org.apache.arrow.memory.BufferAllocator
            (org.apache.arrow.vector TimeStampMicroTZVector VectorSchemaRoot)
+           (org.apache.arrow.vector.complex DenseUnionVector)
            (org.apache.arrow.vector.types.pojo ArrowType$Union Schema)
            org.apache.arrow.vector.types.UnionMode))
 
@@ -33,6 +34,12 @@
 (s/def ::app-time-as-of-now? boolean)
 
 (defmulti tx-op-spec first)
+
+(defmethod tx-op-spec :sql [_]
+  (s/cat :op #{:sql}
+         :query string?
+         :params (s/? (s/or :rows (s/coll-of (s/coll-of any? :kind sequential?) :kind sequential?)
+                            :bytes #(= :varbinary (types/value->col-type %))))))
 
 (defmethod tx-op-spec :put [_]
   (s/cat :op #{:put}
@@ -55,11 +62,10 @@
 (defmethod tx-op-spec :abort [_]
   (s/cat :op #{:abort}))
 
-(defmethod tx-op-spec :sql [_]
-  (s/cat :op #{:sql}
-         :query string?
-         :params (s/? (s/or :rows (s/coll-of (s/coll-of any? :kind sequential?) :kind sequential?)
-                            :bytes #(= :varbinary (types/value->col-type %))))))
+(defmethod tx-op-spec :call [_]
+  (s/cat :op #{:call}
+         :fn-id ::id
+         :args (s/* any?)))
 
 (s/def ::tx-op
   (s/and vector? (s/multi-spec tx-op-spec (fn [v _] v))))
@@ -78,29 +84,37 @@
 
 (def ^:private nullable-inst-type [:union #{:null [:timestamp-tz :micro "UTC"]}])
 
+(def ^:private ^org.apache.arrow.vector.types.pojo.Field tx-ops-field
+  (types/->field "tx-ops" (ArrowType$Union. UnionMode/Dense (int-array (range 6))) false
+                 (types/col-type->field 'sql [:struct {:query :utf8
+                                                       :params [:union #{:null :varbinary}]}])
+
+                 (types/->field "put" types/struct-type false
+                                (types/->field "document" types/dense-union-type false)
+                                (types/col-type->field 'application_time_start nullable-inst-type)
+                                (types/col-type->field 'application_time_end nullable-inst-type))
+
+                 (types/->field "delete" types/struct-type false
+                                (types/col-type->field '_table [:union #{:null :utf8}])
+                                (types/->field "id" types/dense-union-type false)
+                                (types/col-type->field 'application_time_start nullable-inst-type)
+                                (types/col-type->field 'application_time_end nullable-inst-type))
+
+                 (types/->field "evict" types/struct-type false
+                                (types/col-type->field '_table [:union #{:null :utf8}])
+                                (types/->field "id" types/dense-union-type false))
+
+                 (types/->field "call" types/struct-type false
+                                (types/->field "fn-id" types/dense-union-type false)
+                                (types/->field "args" types/list-type false
+                                               (types/->field "arg" types/dense-union-type false)))
+
+                 ;; C1 importer
+                 (types/col-type->field 'abort :null)))
+
 (def ^:private ^org.apache.arrow.vector.types.pojo.Schema tx-schema
   (Schema. [(types/->field "tx-ops" types/list-type false
-                           (types/->field "tx-ops" (ArrowType$Union. UnionMode/Dense (int-array (range 6))) false
-                                          (types/col-type->field 'sql [:struct {:query :utf8
-                                                                                :params [:union #{:null :varbinary}]}])
-
-                                          (types/->field "put" types/struct-type false
-                                                         (types/->field "document" types/dense-union-type false)
-                                                         (types/col-type->field 'application_time_start nullable-inst-type)
-                                                         (types/col-type->field 'application_time_end nullable-inst-type))
-
-                                          (types/->field "delete" types/struct-type false
-                                                         (types/col-type->field '_table [:union #{:null :utf8}])
-                                                         (types/->field "id" types/dense-union-type false)
-                                                         (types/col-type->field 'application_time_start nullable-inst-type)
-                                                         (types/col-type->field 'application_time_end nullable-inst-type))
-
-                                          (types/->field "evict" types/struct-type false
-                                                         (types/col-type->field '_table [:union #{:null :utf8}])
-                                                         (types/->field "id" types/dense-union-type false))
-
-                                          ;; C1 importer
-                                          (types/col-type->field 'abort :null)))
+                           tx-ops-field)
 
             (types/col-type->field "system-time" nullable-inst-type)
             (types/col-type->field "default-tz" :utf8)
@@ -196,55 +210,81 @@
         (.endValue))
       (.endValue evict-writer))))
 
+(defn- ->call-writer [^IDenseUnionWriter tx-ops-writer]
+  (let [call-writer (.asStruct (.writerForTypeId tx-ops-writer 4))
+        fn-id-writer (.asDenseUnion (.writerForName call-writer "fn-id"))
+        args-list-writer (.asList (.writerForName call-writer "args"))]
+    (fn write-call! [{:keys [fn-id args]}]
+      (.startValue call-writer)
+      (doto (-> fn-id-writer
+                (.writerForType (types/value->col-type fn-id)))
+        (.startValue)
+        (->> (types/write-value! fn-id))
+        (.endValue))
+
+      (types/write-value! (vec args) args-list-writer)
+
+      (.endValue call-writer))))
+
 (defn- ->abort-writer [^IDenseUnionWriter tx-ops-writer]
-  (let [abort-writer (.writerForTypeId tx-ops-writer 4)]
+  (let [abort-writer (.writerForTypeId tx-ops-writer 5)]
     (fn [_]
       (.startValue abort-writer)
       (.endValue abort-writer))))
 
-(defn serialize-tx-ops ^java.nio.ByteBuffer [^BufferAllocator allocator tx-ops {:keys [^Instant sys-time, default-tz, app-time-as-of-now?]}]
+(defn open-tx-ops-vec ^org.apache.arrow.vector.ValueVector [^BufferAllocator allocator]
+  (.createVector tx-ops-field allocator))
+
+(defn write-tx-ops! [^BufferAllocator allocator, ^IDenseUnionWriter tx-ops-writer, tx-ops]
   (let [tx-ops (conform-tx-ops tx-ops)
-        op-count (count tx-ops)]
-    (with-open [root (VectorSchemaRoot/create tx-schema allocator)]
-      (let [ops-list-writer (.asList (vw/vec->writer (.getVector root "tx-ops")))
-            default-tz-writer (vw/vec->writer (.getVector root "default-tz"))
-            app-time-behaviour-writer (vw/vec->writer (.getVector root "application-time-as-of-now?"))
-            tx-ops-writer (.asDenseUnion (.getDataWriter ops-list-writer))
+        op-count (count tx-ops)
 
-            write-put! (->put-writer tx-ops-writer)
-            write-delete! (->delete-writer tx-ops-writer)
-            write-evict! (->evict-writer tx-ops-writer)
-            write-abort! (->abort-writer tx-ops-writer)
-            write-sql! (->sql-writer tx-ops-writer allocator)]
+        write-sql! (->sql-writer tx-ops-writer allocator)
+        write-put! (->put-writer tx-ops-writer)
+        write-delete! (->delete-writer tx-ops-writer)
+        write-evict! (->evict-writer tx-ops-writer)
+        write-call! (->call-writer tx-ops-writer)
+        write-abort! (->abort-writer tx-ops-writer)]
 
-        (when sys-time
-          (doto ^TimeStampMicroTZVector (.getVector root "system-time")
-            (.setSafe 0 (util/instant->micros sys-time))))
+    (dotimes [tx-op-n op-count]
+      (.startValue tx-ops-writer)
 
-        (types/write-value! (str default-tz) default-tz-writer)
-        (types/write-value! (boolean app-time-as-of-now?) app-time-behaviour-writer)
+      (let [tx-op (nth tx-ops tx-op-n)]
+        (case (:op tx-op)
+          :sql (write-sql! tx-op)
+          :put (write-put! tx-op)
+          :delete (write-delete! tx-op)
+          :evict (write-evict! tx-op)
+          :call (write-call! tx-op)
+          :abort (write-abort! tx-op)))
 
-        (.startValue ops-list-writer)
+      (.endValue tx-ops-writer))))
 
-        (dotimes [tx-op-n op-count]
-          (.startValue tx-ops-writer)
+(defn serialize-tx-ops ^java.nio.ByteBuffer [^BufferAllocator allocator tx-ops {:keys [^Instant sys-time, default-tz, app-time-as-of-now?]}]
+  (with-open [root (VectorSchemaRoot/create tx-schema allocator)]
+    (let [ops-list-writer (.asList (vw/vec->writer (.getVector root "tx-ops")))
+          tx-ops-writer (.asDenseUnion (.getDataWriter ops-list-writer))
 
-          (let [tx-op (nth tx-ops tx-op-n)]
-            (case (:op tx-op)
-              :put (write-put! tx-op)
-              :delete (write-delete! tx-op)
-              :evict (write-evict! tx-op)
-              :abort (write-abort! tx-op)
-              :sql (write-sql! tx-op)))
+          default-tz-writer (vw/vec->writer (.getVector root "default-tz"))
+          app-time-behaviour-writer (vw/vec->writer (.getVector root "application-time-as-of-now?"))]
 
-          (.endValue tx-ops-writer))
+      (when sys-time
+        (doto ^TimeStampMicroTZVector (.getVector root "system-time")
+          (.setSafe 0 (util/instant->micros sys-time))))
 
-        (.endValue ops-list-writer)
+      (types/write-value! (str default-tz) default-tz-writer)
+      (types/write-value! (boolean app-time-as-of-now?) app-time-behaviour-writer)
 
-        (.setRowCount root 1)
-        (.syncSchema root)
+      (.startValue ops-list-writer)
 
-        (util/root->arrow-ipc-byte-buffer root :stream)))))
+      (write-tx-ops! allocator tx-ops-writer tx-ops)
+
+      (.endValue ops-list-writer)
+
+      (.setRowCount root 1)
+      (.syncSchema root)
+
+      (util/root->arrow-ipc-byte-buffer root :stream))))
 
 (deftype TxProducer [^BufferAllocator allocator, ^Log log, ^ZoneId default-tz]
   ITxProducer

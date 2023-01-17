@@ -7,18 +7,15 @@
             [core2.sql :as sql]
             [core2.tx-producer :as txp]
             [core2.util :as util]
-            [core2.vector.indirect :as iv]
             [core2.vector.writer :as vw]
             [juxt.clojars-mirrors.integrant.core :as ig])
-  (:import (core2 IResultCursor IResultSet)
+  (:import clojure.lang.MapEntry
            core2.ingester.Ingester
            (core2.tx_producer ITxProducer)
            (java.io Closeable Writer)
            (java.lang AutoCloseable)
            (java.time Duration ZoneId)
            (java.util.concurrent CompletableFuture TimeUnit)
-           (java.util.function Consumer)
-           java.util.Iterator
            (org.apache.arrow.memory BufferAllocator RootAllocator)))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -40,34 +37,6 @@
     ^java.util.concurrent.CompletableFuture #_<ScanSource> [_ tx]
     ^java.util.concurrent.CompletableFuture #_<ScanSource> [_ tx ^Duration timeout]))
 
-(deftype CursorResultSet [^IResultCursor cursor
-                          ^AutoCloseable params
-                          ^:unsynchronized-mutable ^Iterator next-values]
-  IResultSet
-  (columnTypes [_] (.columnTypes cursor))
-
-  (hasNext [res]
-    (boolean
-     (or (and next-values (.hasNext next-values))
-         ;; need to call rel->rows eagerly - the rel may have been reused/closed after
-         ;; the tryAdvance returns.
-         (do
-           (while (and (.tryAdvance cursor
-                                    (reify Consumer
-                                      (accept [_ rel]
-                                        (set! (.-next-values res)
-                                              (.iterator (iv/rel->rows rel))))))
-                       (not (and next-values (.hasNext next-values)))))
-           (and next-values (.hasNext next-values))))))
-
-  (next [_] (.next next-values))
-  (close [_]
-    (.close cursor)
-    (.close params)))
-
-(defn- cursor->result-set ^core2.IResultSet [^IResultCursor cursor, ^AutoCloseable params]
-   (CursorResultSet. cursor params nil))
-
 (defn- validate-tx-ops [tx-ops]
   (try
     (doseq [{:keys [op] :as tx-op} (txp/conform-tx-ops tx-ops)
@@ -85,53 +54,22 @@
                  close-fn]
   api/PClient
   (-open-datalog-async [this query args]
-    (let [!db (snapshot-async this (get-in query [:basis :tx]) (:basis-timeout query))
-          query (into {:default-tz default-tz} query)
-          {ra-query :query, :keys [params table-args]} (-> (dissoc query :basis :basis-timeout :default-tz)
-                                                           (d/compile-query args))
-          pq (op/prepare-ra ra-query)]
+    (let [query (into {:default-tz default-tz} query)
+          !db (snapshot-async this (get-in query [:basis :tx]) (:basis-timeout query))]
 
       (-> !db
           (util/then-apply
             (fn [db]
-              (let [^AutoCloseable
-                    params (iv/->indirect-rel (for [[k v] params]
-                                                (-> (vw/open-vec allocator (symbol k) [v])
-                                                    (iv/->direct-vec)))
-                                              1)]
-                (try
-                  (-> (.bind pq {:srcs {'$ db}, :params params, :table-args table-args
-                                 :current-time (get-in query [:basis :current-time])
-                                 :default-tz (:default-tz query)})
-                      (.openCursor)
-                      (cursor->result-set params))
-                  (catch Throwable t
-                    (.close params)
-                    (throw t)))))))))
+              (d/open-datalog-query allocator query db args))))))
 
   (-open-sql-async [this query query-opts]
-    (let [!db (snapshot-async this (get-in query-opts [:basis :tx]) (:basis-timeout query-opts))
-          query-opts (into {:default-tz default-tz} query-opts)
-          plan (sql/compile-query query (select-keys query-opts [:app-time-as-of-now? :default-tz :decorrelate?]))
-          pq (op/prepare-ra plan)]
+    (let [query-opts (into {:default-tz default-tz} query-opts)
+          !db (snapshot-async this (get-in query-opts [:basis :tx]) (:basis-timeout query-opts))
+          pq (sql/prepare-sql query query-opts)]
       (-> !db
           (util/then-apply
             (fn [db]
-              (let [^AutoCloseable
-                    params (iv/->indirect-rel (->> (:? query-opts)
-                                                   (sequence (map-indexed (fn [idx v]
-                                                                            (-> (vw/open-vec allocator (symbol (str "?_" idx)) [v])
-                                                                                (iv/->direct-vec))))))
-                                              1)]
-                (try
-                  (-> (.bind pq {:srcs {'$ db}, :params params
-                                 :current-time (get-in query-opts [:basis :current-time])
-                                 :default-tz (:default-tz query-opts)})
-                      (.openCursor)
-                      (cursor->result-set params))
-                  (catch Throwable t
-                    (.close params)
-                    (throw t)))))))))
+              (sql/open-sql-query allocator pq db query-opts))))))
 
   PNode
   (snapshot-async [this] (snapshot-async this nil))

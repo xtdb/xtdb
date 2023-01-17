@@ -531,3 +531,12 @@
        (catch Throwable e
          (.close res)
          (throw e))))))
+
+(defn open-rel ^core2.vector.IIndirectRelation [vecs]
+  (iv/->indirect-rel (map iv/->direct-vec vecs)))
+
+(defn open-params ^core2.vector.IIndirectRelation [allocator params-map]
+  (open-rel (for [[k v] params-map]
+              (open-vec allocator k [v]))))
+
+(def empty-params (iv/->indirect-rel [] 1))

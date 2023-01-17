@@ -18,14 +18,15 @@
             core2.operator.table
             core2.operator.top
             core2.operator.unwind
+            [core2.types :as types]
             [core2.util :as util]
-            [core2.types :as types])
+            [core2.vector.indirect :as iv])
   (:import clojure.lang.MapEntry
-           core2.ICursor
+           (core2 ICursor IResultCursor IResultSet)
            java.lang.AutoCloseable
            java.time.Clock
-           (java.util HashMap)
-           (java.util.function Function)
+           (java.util HashMap Iterator)
+           (java.util.function Consumer Function)
            (org.apache.arrow.memory BufferAllocator RootAllocator)))
 
 #_{:clj-kondo/ignore [:unused-binding]}
@@ -109,3 +110,31 @@
 
               AutoCloseable
               (close [_] (util/try-close params)))))))))
+
+(deftype CursorResultSet [^IResultCursor cursor
+                          ^AutoCloseable params
+                          ^:unsynchronized-mutable ^Iterator next-values]
+  IResultSet
+  (columnTypes [_] (.columnTypes cursor))
+
+  (hasNext [res]
+    (boolean
+     (or (and next-values (.hasNext next-values))
+         ;; need to call rel->rows eagerly - the rel may have been reused/closed after
+         ;; the tryAdvance returns.
+         (do
+           (while (and (.tryAdvance cursor
+                                    (reify Consumer
+                                      (accept [_ rel]
+                                        (set! (.-next-values res)
+                                              (.iterator (iv/rel->rows rel))))))
+                       (not (and next-values (.hasNext next-values)))))
+           (and next-values (.hasNext next-values))))))
+
+  (next [_] (.next next-values))
+  (close [_]
+    (.close cursor)
+    (.close params)))
+
+(defn cursor->result-set ^core2.IResultSet [^IResultCursor cursor, ^AutoCloseable params]
+   (CursorResultSet. cursor params nil))

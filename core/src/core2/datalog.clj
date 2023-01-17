@@ -2,8 +2,12 @@
   (:require [clojure.set :as set]
             [clojure.spec.alpha :as s]
             [clojure.string :as str]
-            [core2.error :as err])
-  (:import clojure.lang.MapEntry))
+            [core2.error :as err]
+            [core2.operator :as op]
+            [core2.vector.writer :as vw])
+  (:import clojure.lang.MapEntry
+           java.lang.AutoCloseable
+           org.apache.arrow.memory.BufferAllocator))
 
 (s/def ::logic-var
   (s/and simple-symbol?
@@ -377,3 +381,20 @@
                            [?e1 :age ?a1]
                            [?e2 :age ?a2]]}
                  [:db]))
+
+(defn open-datalog-query ^core2.IResultSet [^BufferAllocator allocator query db args]
+  (let [{ra-query :query, :keys [params table-args]} (-> (dissoc query :basis :basis-timeout :default-tz)
+                                                         (compile-query args))
+        pq (op/prepare-ra ra-query)
+
+        ^AutoCloseable
+        params (vw/open-params allocator params)]
+    (try
+      (-> (.bind pq {:srcs {'$ db}, :params params, :table-args table-args
+                     :current-time (get-in query [:basis :current-time])
+                     :default-tz (:default-tz query)})
+          (.openCursor)
+          (op/cursor->result-set params))
+      (catch Throwable t
+        (.close params)
+        (throw t)))))

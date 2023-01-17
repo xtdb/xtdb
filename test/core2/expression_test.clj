@@ -10,7 +10,8 @@
             [core2.test-util :as tu]
             [core2.types :as types]
             [core2.util :as util]
-            [core2.vector.indirect :as iv])
+            [core2.vector.indirect :as iv]
+            [core2.vector.writer :as vw])
   (:import (core2 StringUtil)
            core2.vector.IIndirectVector
            (java.nio ByteBuffer)
@@ -33,7 +34,7 @@
     (letfn [(project [form]
               (with-open [project-col (.project (expr/->expression-projection-spec "c" form {:col-types {'a :f64, 'b :f64, 'd :i64}, :param-types {}})
                                                 tu/*allocator* in-rel
-                                                tu/empty-params)]
+                                                vw/empty-params)]
                 (tu/<-column project-col)))]
 
       (t/is (= (mapv (comp double +) (range 1000) (range 1000))
@@ -84,7 +85,7 @@
 (t/deftest nil-selection-doesnt-yield-the-row
   (t/is (= 0
            (-> (.select (expr/->expression-relation-selector '(and true nil) {})
-                        tu/*allocator* (iv/->indirect-rel [] 1) tu/empty-params)
+                        tu/*allocator* (iv/->indirect-rel [] 1) vw/empty-params)
                (alength)))))
 
 (t/deftest can-extract-min-max-range-from-expression
@@ -251,7 +252,7 @@
                        (into {} (map (juxt #(symbol (.getName ^IIndirectVector %))
                                            #(types/field->col-type (.getField (.getVector ^IIndirectVector %)))))))]
     (with-open [out-ivec (.project (expr/->expression-projection-spec "out" form {:col-types col-types, :param-types {}})
-                                   tu/*allocator* rel tu/empty-params)]
+                                   tu/*allocator* rel vw/empty-params)]
       {:res (tu/<-column out-ivec)
        :res-type (types/field->col-type (.getField (.getVector out-ivec)))})))
 

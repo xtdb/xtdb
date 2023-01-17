@@ -111,13 +111,10 @@
    (vw/open-vec *allocator* col-name col-type vs)))
 
 (defn open-rel ^core2.vector.IIndirectRelation [vecs]
-  (iv/->indirect-rel (map iv/->direct-vec vecs)))
+  (vw/open-rel vecs))
 
 (defn open-params ^core2.vector.IIndirectRelation [params-map]
-  (open-rel (for [[k v] params-map]
-              (open-vec k [v]))))
-
-(def empty-params (iv/->indirect-rel [] 1))
+  (vw/open-params *allocator* params-map))
 
 (defn populate-root ^core2.vector.IIndirectRelation [^VectorSchemaRoot root rows]
   (.clear root)

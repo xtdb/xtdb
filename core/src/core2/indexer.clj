@@ -5,6 +5,7 @@
             [core2.blocks :as blocks]
             [core2.bloom :as bloom]
             [core2.buffer-pool :as bp]
+            [core2.datalog :as d]
             [core2.error :as err]
             [core2.metadata :as meta]
             core2.object-store
@@ -13,33 +14,35 @@
             [core2.rewrite :refer [zmatch]]
             [core2.sql :as sql]
             [core2.temporal :as temporal]
+            [core2.tx-producer :as txp]
             [core2.types :as t]
             [core2.util :as util]
             [core2.vector.indirect :as iv]
             [core2.vector.writer :as vw]
             [core2.watermark :as wm]
-            [juxt.clojars-mirrors.integrant.core :as ig])
+            [juxt.clojars-mirrors.integrant.core :as ig]
+            [sci.core :as sci])
   (:import clojure.lang.MapEntry
-           core2.api.TransactionInstant
+           (core2.api ClojureForm TransactionInstant)
            core2.buffer_pool.IBufferPool
            core2.ICursor
            core2.metadata.IMetadataManager
            core2.object_store.ObjectStore
            core2.operator.scan.ScanSource
            (core2.temporal ITemporalManager ITemporalTxIndexer)
-           (core2.vector IIndirectVector IIndirectRelation IVectorWriter)
+           (core2.vector IIndirectRelation IIndirectVector IVectorWriter)
            (core2.watermark IWatermarkManager)
            (java.io ByteArrayInputStream Closeable)
            java.lang.AutoCloseable
            java.nio.ByteBuffer
            (java.time Instant ZoneId)
-           [java.util Collections HashMap Map TreeMap]
-           [java.util.concurrent CompletableFuture ConcurrentHashMap ConcurrentSkipListMap]
-           [java.util.function Consumer Function]
-           [org.apache.arrow.memory ArrowBuf BufferAllocator]
-           [org.apache.arrow.vector BigIntVector BitVector TimeStampMicroTZVector TimeStampVector ValueVector VarBinaryVector VarCharVector VectorLoader VectorSchemaRoot VectorUnloader]
-           [org.apache.arrow.vector.complex DenseUnionVector ListVector StructVector]
-           [org.apache.arrow.vector.ipc ArrowStreamReader]
+           (java.util Collections HashMap Map TreeMap)
+           (java.util.concurrent CompletableFuture ConcurrentHashMap ConcurrentSkipListMap)
+           (java.util.function Consumer Function)
+           (org.apache.arrow.memory ArrowBuf BufferAllocator)
+           (org.apache.arrow.vector BigIntVector BitVector TimeStampMicroTZVector TimeStampVector ValueVector VarBinaryVector VarCharVector VectorLoader VectorSchemaRoot VectorUnloader)
+           (org.apache.arrow.vector.complex DenseUnionVector ListVector StructVector)
+           (org.apache.arrow.vector.ipc ArrowStreamReader)
            org.roaringbitmap.longlong.Roaring64Bitmap
            org.roaringbitmap.RoaringBitmap))
 
@@ -418,8 +421,11 @@
                                                  (util/micros->instant (.get sys-time-vec (dec tx-count))))
              :latest-row-id (.get row-id-vec (dec (.getValueCount row-id-vec)))}))))))
 
+(def ^:private abort-exn (err/runtime-err :abort-exn))
+
 (definterface OpIndexer
-  (^void indexOp [^long tx-op-idx]))
+  (^org.apache.arrow.vector.complex.DenseUnionVector indexOp [^long tx-op-idx]
+   "returns a tx-ops-vec of more operations (mostly for `:call`)"))
 
 (definterface DocRowCopier
   (^void copyDocRow [^long rowId, ^int srcIdx]))
@@ -480,7 +486,9 @@
                              (.get app-time-end-vec put-offset))]
           (.copyDocRow doc-copier row-id put-offset)
           (.logPut log-op-idxer iid row-id start-app-time end-app-time)
-          (.indexPut temporal-idxer iid row-id start-app-time end-app-time new-entity?))))))
+          (.indexPut temporal-idxer iid row-id start-app-time end-app-time new-entity?))
+
+        nil))))
 
 (defn- ->delete-indexer
   ^core2.indexer.OpIndexer
@@ -507,7 +515,9 @@
                              util/end-of-time-μs
                              (.get app-time-end-vec delete-offset))]
           (.logDelete log-op-idxer iid start-app-time end-app-time)
-          (.indexDelete temporal-idxer iid row-id start-app-time end-app-time new-entity?))))))
+          (.indexDelete temporal-idxer iid row-id start-app-time end-app-time new-entity?))
+
+        nil))))
 
 (defn- ->evict-indexer
   ^core2.indexer.OpIndexer
@@ -525,7 +535,115 @@
               eid (t/get-object id-vec evict-offset)
               iid (.getOrCreateInternalId iid-mgr table eid row-id)]
           (.logEvict log-op-idxer iid)
-          (.indexEvict temporal-idxer iid))))))
+          (.indexEvict temporal-idxer iid))
+
+        nil))))
+
+(defn- find-fn [allocator sci-ctx scan-src tx-opts fn-id]
+  ;; HACK: assume xt_docs here...
+  ;; TODO confirm fn-body doc key
+
+  (let [pq (op/prepare-ra '[:scan xt_docs [{id (= id ?id)} fn]])]
+    (with-open [bq (.bind pq (into (select-keys tx-opts [:current-time :default-tz])
+                                   {:srcs {'$ scan-src},
+                                    :params (iv/->indirect-rel [(-> (vw/open-vec allocator '?id [fn-id])
+                                                                    (iv/->direct-vec))]
+                                                               1)
+                                    :app-time-as-of-now? true}))
+                res (.openCursor bq)]
+
+      (let [!fn-doc (object-array 1)]
+        (.tryAdvance res
+                     (reify Consumer
+                       (accept [_ in-rel]
+                         (when (pos? (.rowCount ^IIndirectRelation in-rel))
+                           (aset !fn-doc 0 (first (iv/rel->rows in-rel)))))))
+
+        (let [fn-doc (or (aget !fn-doc 0)
+                         (throw (err/runtime-err :core2.call/no-such-tx-fn {:fn-id fn-id})))
+              fn-body (:fn fn-doc)]
+
+          (when-not (instance? ClojureForm fn-body)
+            (throw (err/illegal-arg :core2.call/invalid-tx-fn {:fn-doc fn-doc})))
+
+          (let [fn-form (:form fn-body)]
+            (try
+              (sci/eval-form sci-ctx fn-form)
+
+              (catch Throwable t
+                (throw (err/runtime-err :core2.call/error-compiling-tx-fn {:fn-form fn-form} t))))))))))
+
+(defn- tx-fn-q [allocator scan-src tx-opts q & args]
+  ;; bear in mind Datalog doesn't yet look at `app-time-as-of-now?`, essentially just assumes its true.
+  (let [q (into tx-opts q)]
+    (with-open [res (d/open-datalog-query allocator q scan-src args)]
+      (vec (iterator-seq res)))))
+
+(defn- tx-fn-sql
+  ([allocator scan-src tx-opts query]
+   (tx-fn-sql allocator scan-src tx-opts query {}))
+
+  ([allocator scan-src tx-opts query query-opts]
+   (try
+     (let [query-opts (into tx-opts query-opts)
+           pq (sql/prepare-sql query query-opts)]
+       (with-open [res (sql/open-sql-query allocator pq scan-src query-opts)]
+         (vec (iterator-seq res))))
+     (catch Throwable e
+       (log/error e)
+       (throw e)))))
+
+(def ^:private !last-tx-fn-error (atom nil))
+
+(defn reset-tx-fn-error! []
+  (first (reset-vals! !last-tx-fn-error nil)))
+
+(defn- ->call-indexer ^core2.indexer.OpIndexer [allocator, ^DenseUnionVector tx-ops-vec, scan-src, {:keys [tx-key] :as tx-opts}]
+  (let [call-vec (.getStruct tx-ops-vec 4)
+        ^DenseUnionVector fn-id-vec (.getChild call-vec "fn-id" DenseUnionVector)
+        ^ListVector args-vec (.getChild call-vec "args" ListVector)
+
+        ;; TODO confirm/expand API that we expose to tx-fns
+        sci-ctx (sci/init {:bindings {'q (partial tx-fn-q allocator scan-src tx-opts)
+                                      'sql-q (partial tx-fn-sql allocator scan-src tx-opts)
+                                      '*current-tx* tx-key}})]
+
+    (reify OpIndexer
+      (indexOp [_ tx-op-idx]
+        (try
+          (let [call-offset (.getOffset tx-ops-vec tx-op-idx)
+                fn-id (t/get-object fn-id-vec call-offset)
+                tx-fn (find-fn allocator (sci/fork sci-ctx) scan-src tx-opts fn-id)
+
+                args (t/get-object args-vec call-offset)
+
+                res (try
+                      (sci/binding [sci/out *out*
+                                    sci/in *in*]
+                        (apply tx-fn args))
+
+                      (catch Throwable t
+                        (log/warn t "unhandled error evaluating tx fn")
+                        (throw (err/runtime-err :core2.call/error-evaluating-tx-fn
+                                                {:fn-id fn-id, :args args}
+                                                t))))]
+            (when (false? res)
+              (throw abort-exn))
+
+            ;; if the user returns `nil` or `true`, we just continue with the rest of the transaction
+            (when-not (or (nil? res) (true? res))
+              (let [tx-ops-vec (txp/open-tx-ops-vec allocator)]
+                (try
+                  (txp/write-tx-ops! allocator (.asDenseUnion (vw/vec->writer tx-ops-vec)) res)
+                  tx-ops-vec
+
+                  (catch Throwable t
+                    (.close tx-ops-vec)
+                    (throw t))))))
+
+          (catch Throwable t
+            (reset! !last-tx-fn-error t)
+            (throw t)))))))
 
 (defn- table-row-writer [^IDocumentIndexer doc-idxer, ^String table-name]
   (let [^LiveColumn live-col (.getLiveColumn doc-idxer "_table")
@@ -726,7 +844,9 @@
                 [:erase query-opts inner-query]
                 (index-op erase-idxer query-opts inner-query)
 
-                (throw (UnsupportedOperationException. "sql query"))))))))))
+                (throw (UnsupportedOperationException. "sql query"))))))
+
+        nil))))
 
 (defn- live-cols->live-roots [live-cols]
   (->> live-cols
@@ -737,8 +857,6 @@
   (->> live-cols
        (into {} (map (fn [[col-name ^LiveColumn live-col]]
                        (MapEntry/create col-name (.txLiveRoot live-col)))))))
-
-(def ^:private abort-exn (err/runtime-err :abort-exn))
 
 (deftype Indexer [^BufferAllocator allocator
                   ^ObjectStore object-store
@@ -759,10 +877,6 @@
   (indexTx [this {:keys [sys-time] :as tx-key} tx-root]
     (let [^DenseUnionVector tx-ops-vec (-> ^ListVector (.getVector tx-root "tx-ops")
                                            (.getDataVector))
-          default-tz (ZoneId/of (str (-> (.getVector tx-root "default-tz")
-                                         (.getObject 0))))
-          app-time-as-of-now? (== 1 (-> ^BitVector (.getVector tx-root "application-time-as-of-now?")
-                                        (.get 0)))
 
           log-op-idxer (.startTx log-indexer tx-key)
           temporal-idxer (.startTx temporal-mgr tx-key)
@@ -776,42 +890,58 @@
                        (wm/->Watermark nil (live-cols->live-roots live-columns) (live-cols->tx-live-roots live-columns)
                                        temporal-idxer chunk-idx max-rows-per-block)))
 
-          put-idxer (->put-indexer iid-mgr log-op-idxer temporal-idxer doc-idxer tx-ops-vec sys-time)
-          delete-idxer (->delete-indexer iid-mgr log-op-idxer temporal-idxer doc-idxer tx-ops-vec sys-time)
-          evict-idxer (->evict-indexer iid-mgr log-op-idxer temporal-idxer doc-idxer tx-ops-vec)
-          sql-idxer (->sql-indexer allocator metadata-mgr buffer-pool iid-mgr
-                                   log-op-idxer temporal-idxer doc-idxer
-                                   tx-ops-vec scan-src
-                                   {:current-time sys-time, :app-time-as-of-now? app-time-as-of-now?, :default-tz default-tz})]
+          tx-opts {:current-time sys-time
+                   :app-time-as-of-now? (== 1 (-> ^BitVector (.getVector tx-root "application-time-as-of-now?")
+                                                  (.get 0)))
+                   :default-tz (ZoneId/of (str (-> (.getVector tx-root "default-tz")
+                                                   (.getObject 0))))
+                   :tx-key tx-key}]
 
-      (if-let [e (try
-                   (dotimes [tx-op-idx (.getValueCount tx-ops-vec)]
-                     (case (.getTypeId tx-ops-vec tx-op-idx)
-                       0 (.indexOp sql-idxer tx-op-idx)
-                       1 (.indexOp put-idxer tx-op-idx)
-                       2 (.indexOp delete-idxer tx-op-idx)
-                       3 (.indexOp evict-idxer tx-op-idx)
-                       4 (throw abort-exn)))
-                   (catch core2.RuntimeException e e)
-                   (catch core2.IllegalArgumentException e e))]
-        (do
-          (when (not= e abort-exn)
-            (log/debug e "aborted tx"))
-          (.abort temporal-idxer)
-          (.abort log-op-idxer)
-          (.abort doc-idxer))
+      (letfn [(index-tx-ops [^DenseUnionVector tx-ops-vec]
+                (let [!put-idxer (delay (->put-indexer iid-mgr log-op-idxer temporal-idxer doc-idxer tx-ops-vec sys-time))
+                      !delete-idxer (delay (->delete-indexer iid-mgr log-op-idxer temporal-idxer doc-idxer tx-ops-vec sys-time))
+                      !evict-idxer (delay (->evict-indexer iid-mgr log-op-idxer temporal-idxer doc-idxer tx-ops-vec))
+                      !call-idxer (delay (->call-indexer allocator tx-ops-vec scan-src tx-opts))
+                      !sql-idxer (delay (->sql-indexer allocator metadata-mgr buffer-pool iid-mgr
+                                                      log-op-idxer temporal-idxer doc-idxer
+                                                      tx-ops-vec scan-src tx-opts))]
+                  (dotimes [tx-op-idx (.getValueCount tx-ops-vec)]
+                    (when-let [more-tx-ops (case (.getTypeId tx-ops-vec tx-op-idx)
+                                             0 (.indexOp ^OpIndexer @!sql-idxer tx-op-idx)
+                                             1 (.indexOp ^OpIndexer @!put-idxer tx-op-idx)
+                                             2 (.indexOp ^OpIndexer @!delete-idxer tx-op-idx)
+                                             3 (.indexOp ^OpIndexer @!evict-idxer tx-op-idx)
+                                             4 (.indexOp ^OpIndexer @!call-idxer tx-op-idx)
+                                             5 (throw abort-exn))]
+                      (try
+                        (index-tx-ops more-tx-ops)
+                        (finally
+                          (util/try-close more-tx-ops)))))))]
+        (if-let [e (try
+                     (index-tx-ops tx-ops-vec)
+                     (catch core2.RuntimeException e e)
+                     (catch core2.IllegalArgumentException e e)
+                     (catch Throwable t
+                       (log/error t "error in indexer - FIXME memory leak here?")
+                       (throw t)))]
+          (do
+            (when (not= e abort-exn)
+              (log/debug e "aborted tx"))
+            (.abort temporal-idxer)
+            (.abort log-op-idxer)
+            (.abort doc-idxer))
 
-        (do
-          (let [tx-row-count (.commit doc-idxer)]
-            (set! (.chunk-row-count this) (+ chunk-row-count tx-row-count)))
+          (do
+            (let [tx-row-count (.commit doc-idxer)]
+              (set! (.chunk-row-count this) (+ chunk-row-count tx-row-count)))
 
-          (.commit log-op-idxer)
+            (.commit log-op-idxer)
 
-          (let [evicted-row-ids (.commit temporal-idxer)]
-            #_{:clj-kondo/ignore [:missing-body-in-when]}
-            (when-not (.isEmpty evicted-row-ids)
-              ;; TODO create work item
-              ))))
+            (let [evicted-row-ids (.commit temporal-idxer)]
+              #_{:clj-kondo/ignore [:missing-body-in-when]}
+              (when-not (.isEmpty evicted-row-ids)
+                ;; TODO create work item
+                )))))
 
       (.setWatermark watermark-mgr chunk-idx tx-key (snapshot-live-cols live-columns) nil (.getTemporalWatermark temporal-mgr))
       (set! (.-latest-completed-tx this) tx-key)

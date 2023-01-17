@@ -12,7 +12,7 @@
         "type" : {
           "name" : "union",
           "mode" : "Dense",
-          "typeIds" : [0,1,2,3,4]
+          "typeIds" : [0,1,2,3,4,5]
         },
         "children" : [{
           "name" : "sql",
@@ -485,6 +485,89 @@
             "children" : [ ]
           }]
         },{
+          "name" : "call",
+          "nullable" : false,
+          "type" : {
+            "name" : "struct"
+          },
+          "children" : [{
+            "name" : "fn-id",
+            "nullable" : false,
+            "type" : {
+              "name" : "union",
+              "mode" : "Dense",
+              "typeIds" : [0]
+            },
+            "children" : [{
+              "name" : "clj-keyword",
+              "nullable" : false,
+              "type" : {
+                "name" : "KeywordType"
+              },
+              "children" : [ ],
+              "metadata" : [{
+                "value" : "c2/clj-keyword",
+                "key" : "ARROW:extension:name"
+              },{
+                "value" : "",
+                "key" : "ARROW:extension:metadata"
+              }]
+            }]
+          },{
+            "name" : "args",
+            "nullable" : false,
+            "type" : {
+              "name" : "list"
+            },
+            "children" : [{
+              "name" : "$data$",
+              "nullable" : false,
+              "type" : {
+                "name" : "union",
+                "mode" : "Dense",
+                "typeIds" : [0,1,2,3]
+              },
+              "children" : [{
+                "name" : "i64",
+                "nullable" : false,
+                "type" : {
+                  "name" : "int",
+                  "bitWidth" : 64,
+                  "isSigned" : true
+                },
+                "children" : [ ]
+              },{
+                "name" : "null",
+                "nullable" : true,
+                "type" : {
+                  "name" : "null"
+                },
+                "children" : [ ]
+              },{
+                "name" : "clj-keyword",
+                "nullable" : false,
+                "type" : {
+                  "name" : "KeywordType"
+                },
+                "children" : [ ],
+                "metadata" : [{
+                  "value" : "c2/clj-keyword",
+                  "key" : "ARROW:extension:name"
+                },{
+                  "value" : "",
+                  "key" : "ARROW:extension:metadata"
+                }]
+              },{
+                "name" : "utf8",
+                "nullable" : false,
+                "type" : {
+                  "name" : "utf8"
+                },
+                "children" : [ ]
+              }]
+            }]
+          }]
+        },{
           "name" : "abort",
           "nullable" : true,
           "type" : {
@@ -524,12 +607,12 @@
       "name" : "tx-ops",
       "count" : 1,
       "VALIDITY" : [1],
-      "OFFSET" : [0,8],
+      "OFFSET" : [0,10],
       "children" : [{
         "name" : "$data$",
-        "count" : 8,
-        "TYPE_ID" : [1,1,2,2,0,0,0,0],
-        "OFFSET" : [0,1,0,1,0,1,2,3],
+        "count" : 10,
+        "TYPE_ID" : [1,1,2,2,0,0,4,0,0,4],
+        "OFFSET" : [0,1,0,1,0,1,0,2,3,1],
         "children" : [{
           "name" : "sql",
           "count" : 4,
@@ -857,6 +940,55 @@
             "count" : 0,
             "TYPE_ID" : [ ],
             "OFFSET" : [ ]
+          }]
+        },{
+          "name" : "call",
+          "count" : 2,
+          "VALIDITY" : [1,1],
+          "children" : [{
+            "name" : "fn-id",
+            "count" : 2,
+            "TYPE_ID" : [0,0],
+            "OFFSET" : [0,1],
+            "children" : [{
+              "name" : "clj-keyword",
+              "count" : 2,
+              "VALIDITY" : [1,1],
+              "OFFSET" : [0,3,7],
+              "DATA" : ["foo","foo2"]
+            }]
+          },{
+            "name" : "args",
+            "count" : 2,
+            "VALIDITY" : [1,1],
+            "OFFSET" : [0,3,5],
+            "children" : [{
+              "name" : "$data$",
+              "count" : 5,
+              "TYPE_ID" : [0,1,2,3,3],
+              "OFFSET" : [0,0,0,0,1],
+              "children" : [{
+                "name" : "i64",
+                "count" : 1,
+                "VALIDITY" : [1],
+                "DATA" : ["12"]
+              },{
+                "name" : "null",
+                "count" : 1
+              },{
+                "name" : "clj-keyword",
+                "count" : 1,
+                "VALIDITY" : [1],
+                "OFFSET" : [0,3],
+                "DATA" : ["bar"]
+              },{
+                "name" : "utf8",
+                "count" : 2,
+                "VALIDITY" : [1,1],
+                "OFFSET" : [0,5,10],
+                "DATA" : ["hello","world"]
+              }]
+            }]
           }]
         },{
           "name" : "abort",
