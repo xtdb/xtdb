@@ -366,7 +366,8 @@
                                          (mem/->nippy-buffer this))
                                        (mem/->nippy-buffer this))]
       (if (or (< max-value-index-length (.capacity nippy-buffer))
-              (not (nippy/freezable? this)))
+              (not (or (nippy/freezable? this)
+                       (uri? this))))
         (doto (id-function to nippy-buffer)
           (.putByte 0 object-value-type-id))
         (-> (doto to
