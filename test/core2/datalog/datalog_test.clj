@@ -397,3 +397,89 @@
                                     [?f :first-name ?n]]}
                           (assoc :basis {:tx tx})))
                     (into []))))))
+
+(deftest test-not-join-scan
+  (let [tx (c2/submit-tx
+             tu/*node*
+             [[:put {:id :ivan, :first-name "Ivan", :last-name "Ivanov" :foo 1}]
+              [:put {:id :petr, :first-name "Petr", :last-name "Petrov" :foo 1}]
+              [:put {:id :sergei :first-name "Sergei" :last-name "Sergei" :foo 1}]])]
+    (t/is (= [{:e :ivan} {:e :sergei}]
+             (->> (c2/plan-datalog
+                    tu/*node*
+                    (-> '{:find [?e]
+                          :where [[?e :foo 1]
+                                  (not-join [?e]
+                                            [?e :first-name "Petr"])]}
+                        (assoc :basis {:tx tx})))
+                  (into []))))
+    (t/is (= [{:e :ivan} {:e :sergei}]
+             (->> (c2/plan-datalog
+                    tu/*node*
+                    (-> '{:find [?e]
+                          :where [[?e :foo ?n]
+                                  (not-join [?e ?n]
+                                            [?e :first-name "Petr"]
+                                            [?e :foo ?n])]}
+                        (assoc :basis {:tx tx})))
+                  (into []))))
+
+    (t/is (= []
+             (->> (c2/plan-datalog
+                    tu/*node*
+                    (-> '{:find [?e]
+                          :where [[?e :foo ?n]
+                                  (not-join [?e ?n]
+                                            [?e :foo ?n])]}
+                        (assoc :basis {:tx tx})))
+                  (into []))))
+
+    (t/is (= [{:e :petr} {:e :sergei}]
+             (->> (c2/plan-datalog
+                    tu/*node*
+                    (-> '{:find [?e]
+                          :where [[?e :foo 1]
+                                  (not-join [?e]
+                                            [?e :last-name "Ivanov"])]}
+                        (assoc :basis {:tx tx})))
+                  (into []))))
+
+    (t/is (= [{:e :ivan} {:e :petr} {:e :sergei}]
+             (->> (c2/plan-datalog
+                    tu/*node*
+                    (-> '{:find [?e]
+                          :where [[?e :foo 1]
+                                  (not-join [?e]
+                                            [?e :first-name "Jeff"])]}
+                        (assoc :basis {:tx tx})))
+                  (into []))))
+
+    (t/is (= [{:e :ivan} {:e :petr}]
+             (->> (c2/plan-datalog
+                    tu/*node*
+                    (-> '{:find [?e]
+                          :where [[?e :foo 1]
+                                  (not-join [?e]
+                                            [?e :first-name ?n]
+                                            [?e :last-name ?n])]}
+                        (assoc :basis {:tx tx})))
+                  (into []))))
+
+    (t/is (= [{:e :petr, :first-name "Ivan", :last-name "Ivanov", :a "Petr", :b "Petrov"}
+              {:e :sergei, :first-name "Ivan", :last-name "Ivanov", :a "Sergei", :b "Sergei"}
+              {:e :ivan, :first-name "Petr", :last-name "Petrov", :a "Ivan", :b "Ivanov"}
+              {:e :sergei, :first-name "Petr", :last-name "Petrov", :a "Sergei", :b "Sergei"}]
+             (->> (c2/plan-datalog
+                    tu/*node*
+                    (-> '{:find [?e ?first-name ?last-name ?a ?b]
+                          :in [[[?first-name ?last-name]]]
+                          :where [[?e :foo 1]
+                                  [?e :first-name ?a]
+                                  [?e :last-name ?b]
+                                  (not-join [?e ?first-name ?last-name]
+                                            [?e :first-name ?first-name]
+                                            [?e :last-name ?last-name])]}
+                        (assoc :basis {:tx tx}))
+                    [["Ivan" "Ivanov"]
+                     ["Petr" "Petrov"]])
+                  (into []))))))

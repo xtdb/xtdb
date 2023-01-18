@@ -27,6 +27,21 @@
   (s/or :logic-var ::logic-var
         :aggregate ::aggregate))
 
+(defn- expression-spec [sym spec]
+  (s/and seq?
+         #(= sym (first %))
+         (s/conformer next (fn [v] [sym v]))
+         spec))
+
+(s/def ::not-join
+  (expression-spec 'not-join (s/cat :args ::args-list
+                                    :terms (s/+ ::term))))
+
+(s/def ::term
+  (s/or :triple ::triple
+        :not-join ::not-join
+        :predicate ::predicate))
+
 (defn- find-arg-var [[find-arg-type find-arg-arg]]
   (case find-arg-type
     :logic-var find-arg-arg
@@ -78,8 +93,7 @@
          (s/conformer first vector)))
 
 (s/def ::where
-  (s/coll-of (s/or :triple ::triple
-                   :predicate ::predicate)))
+  (s/coll-of ::term :kind vector? :min-count 1))
 
 (s/def ::offset nat-int?)
 (s/def ::limit nat-int?)
@@ -270,14 +284,32 @@
                      (join-exprs left-expr right-expr)
                      right-expr)
                    table-keys)))))))
+(declare compile-where)
+
+(defn wrap-with-not-joins [plan not-joins]
+  (if not-joins
+    (let [not-join-sub-plans
+          (for [not-join not-joins
+                :let [not-join (set/rename-keys not-join {:args :find :terms :where})
+                      join-conditions (mapv #(hash-map % %) (:find not-join))
+                      not-join (update not-join :find #(mapv (partial vector :logic-var) %))]]
+            [join-conditions (compile-where not-join {})])]
+      (reduce
+        (fn [current-plan [join-conditions sub-plan]]
+          [:anti-join join-conditions current-plan sub-plan])
+        plan
+        not-join-sub-plans))
+    plan))
 
 (defn compile-where [{where-clauses :where :as query} {:keys [table-keys]}]
   (let [{triples :triple,
-         predicates :predicate} (->> where-clauses
-                                     (reduce (fn [acc [clause-type clause-arg]]
-                                               (update acc clause-type (fnil conj []) clause-arg))
-                                             {}))]
+         predicates :predicate
+         not-joins :not-join} (->> where-clauses
+                                  (reduce (fn [acc [clause-type clause-arg]]
+                                            (update acc clause-type (fnil conj []) clause-arg))
+                                          {}))]
     (-> (compile-triples triples query {:table-keys table-keys})
+        (wrap-with-not-joins not-joins)
         (wrap-predicates predicates))))
 
 (defn- aggregate-logic-var-name [{:keys [aggregate logic-var]}]
