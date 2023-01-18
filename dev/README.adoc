@@ -36,7 +36,7 @@ The test suite relies on the `timeout` command line utility, this comes as a def
 
 == CI
 
-We use CircleCI for continuous integration - you'll likely want to set it up to build commits pushed to your fork.
+We use CircleCI for continuous integration - you'll likely want to set it up to build commits pushed to your fork - do this by heading to your personal CircleCI dashboard, 'projects', and then 'Set Up Project' on the XTDB fork.
 
 You'll need to add the following environment variables, values for which are stored in Pass under the `circleci.com` directory.
 
