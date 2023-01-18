@@ -6,7 +6,7 @@
 
 (ns core2.datalog.datalog-test
   (:require [core2.james-bond :as bond]
-            [clojure.test :as t]
+            [clojure.test :as t :refer [deftest]]
             [core2.test-util :as tu]
             [core2.api :as c2]))
 
@@ -16,7 +16,7 @@
   [[:put {:id :ivan, :first-name "Ivan", :last-name "Ivanov"}]
    [:put {:id :petr, :first-name "Petr", :last-name "Petrov"}]])
 
-(t/deftest test-scan
+(deftest test-scan
   (let [tx (c2/submit-tx tu/*node* ivan+petr)]
     (t/is (= [{:name "Ivan"}
               {:name "Petr"}]
@@ -35,7 +35,7 @@
                   (into [])))
           "returning eid")))
 
-(t/deftest test-basic-query
+(deftest test-basic-query
   (let [tx (c2/submit-tx tu/*node* ivan+petr)]
     (t/is (= [{:e :ivan}]
              (->> (c2/plan-datalog tu/*node*
@@ -64,7 +64,7 @@
                   (into [])))
           "literal eid")))
 
-(t/deftest test-order-by
+(deftest test-order-by
   (let [tx (c2/submit-tx tu/*node* ivan+petr)]
     (t/is (= [{:first-name "Ivan"} {:first-name "Petr"}]
              (->> (c2/plan-datalog tu/*node*
@@ -111,7 +111,7 @@
                   (into []))))))
 
 ;; https://github.com/tonsky/datascript/blob/1.1.0/test/datascript/test/query.cljc#L12-L36
-(t/deftest datascript-test-joins
+(deftest datascript-test-joins
   (let [tx (c2/submit-tx tu/*node*
                          [[:put {:id 1, :name "Ivan", :age 15}]
                           [:put {:id 2, :name "Petr", :age 37}]
@@ -185,7 +185,7 @@
                   (into #{})))
           "cross join required here")))
 
-(t/deftest test-joins
+(deftest test-joins
   (let [tx (c2/submit-tx tu/*node* bond/tx-ops)]
     (t/is (= #{{:film-name "Skyfall", :bond-name "Daniel Craig"}}
              (->> (c2/plan-datalog tu/*node*
@@ -215,7 +215,7 @@
           "one -> many")))
 
 ;; https://github.com/tonsky/datascript/blob/1.1.0/test/datascript/test/query_aggregates.cljc#L14-L39
-(t/deftest datascript-test-aggregates
+(deftest datascript-test-aggregates
   (let [tx (c2/submit-tx tu/*node*
                          [[:put {:id :cerberus, :heads 3}]
                           [:put {:id :medusa, :heads 1}]
@@ -240,7 +240,7 @@
                   (into #{})))
           "various aggs")))
 
-(t/deftest test-query-with-in-bindings
+(deftest test-query-with-in-bindings
   (let [tx (c2/submit-tx tu/*node* ivan+petr)]
     (t/is (= #{{:e :ivan}}
              (->> (c2/plan-datalog tu/*node*
@@ -325,7 +325,7 @@
                                         ["Petr" "Petrov"]])
                       (into #{}))))))))
 
-(t/deftest test-in-arity-exceptions
+(deftest test-in-arity-exceptions
   (let [tx (c2/submit-tx tu/*node* ivan+petr)]
     (t/is (thrown-with-msg? IllegalArgumentException
                             #":in arity mismatch"
@@ -335,7 +335,7 @@
                                                       (assoc :basis {:tx tx})))
                                  (into []))))))
 
-(t/deftest test-known-predicates
+(deftest test-known-predicates
   (let [tx (c2/submit-tx tu/*node* ivan+petr)]
     (t/is (= #{{:first-name "Ivan", :last-name "Ivanov"}}
              (->> (c2/plan-datalog tu/*node*
@@ -371,3 +371,28 @@
                                                       [(< ?first-name "Ivan")]]}
                                             (assoc :basis {:tx tx})))
                        (into []))))))
+
+(deftest test-value-unification
+  (let [tx (c2/submit-tx
+             tu/*node*
+             (conj
+               ivan+petr
+               [:put {:id :sergei :first-name "Sergei" :last-name "Sergei"}]
+               [:put {:id :jeff :first-name "Sergei" :last-name "but-different"}]))]
+      (t/is (= [{:e :sergei, :n "Sergei"}]
+               (->> (c2/plan-datalog
+                      tu/*node*
+                      (-> '{:find [?e ?n]
+                            :where [[?e :last-name ?n]
+                                    [?e :first-name ?n]]}
+                          (assoc :basis {:tx tx})))
+                    (into []))))
+      (t/is (= [{:e :sergei, :f :sergei, :n "Sergei"} {:e :sergei, :f :jeff, :n "Sergei"}]
+               (->> (c2/plan-datalog
+                      tu/*node*
+                      (-> '{:find [?e ?f ?n]
+                            :where [[?e :last-name ?n]
+                                    [?e :first-name ?n]
+                                    [?f :first-name ?n]]}
+                          (assoc :basis {:tx tx})))
+                    (into []))))))

@@ -99,6 +99,12 @@
   (s/or :maps (s/coll-of (s/map-of simple-keyword? any?))
         :vecs (s/coll-of vector?)))
 
+(defn wrap-predicates [plan predicates]
+  (case (count predicates)
+    0 plan
+    1 [:select (first predicates) plan]
+    [:select (list* 'and predicates) plan]))
+
 (defn- conform-query [query]
   (let [conformed-query (s/conform ::query query)]
     (when (s/invalid? conformed-query)
@@ -200,22 +206,28 @@
                                clauses))
                eid-col (conj eid-col))
 
-        vars (into #{} (keep :value-arg) cols)]
+        vars (into #{} (keep :value-arg) cols)
+
+        multi-col-predicates (for [unifed-vals (filter #(> (count %) 1) (vals (group-by :value-arg cols)))]
+                               (list* '= (map :col-name unifed-vals)))]
 
     (-> [:project (vec vars)
          [:rename (->> cols
                        (into {} (comp (filter :value-arg)
                                       (map (juxt :col-name :value-arg)))))
-          [:scan
-           src
-           'xt_docs ;; assumes all docs put into system that
-           ;; want to be queried by datalog will be stored under xt_docs table
-           (-> (vec (for [{:keys [col-name col-pred]} cols]
-                                (if col-pred
-                                  {col-name col-pred}
-                                  col-name)))
-                         (conj '{application_time_start (<= application_time_start (current-timestamp))}
-                               '{application_time_end (> application_time_end (current-timestamp))}))]]]
+          (cond-> [:scan
+                   src
+                   'xt_docs ;; assumes all docs put into system that
+                   ;; want to be queried by datalog will be stored under xt_docs table
+                   (-> (vec (for [{:keys [col-name col-pred]} cols]
+                              (if col-pred
+                                {col-name col-pred}
+                                col-name)))
+                       (conj '{application_time_start (<= application_time_start (current-timestamp))}
+                             '{application_time_end (> application_time_end (current-timestamp))}))]
+            ;; Needs to be done here as we rename unifying columns to the same column name just after this
+            ;; I think we want to avoid duplicate column names, but thats a bigger task.
+            (seq multi-col-predicates) (wrap-predicates multi-col-predicates))]]
         (with-meta {::vars vars}))))
 
 (defn- join-exprs [left-expr right-expr]
@@ -305,13 +317,7 @@
                      right-expr)
                    table-keys)))))))
 
-(defn wrap-predicates [plan predicates]
-  (case (count predicates)
-    0 plan
-    1 [:select (first predicates) plan]
-    [:select (list* 'and predicates) plan]))
-
-(defn compile-where [{where-clauses :where, :as query} {:keys [table-keys]}]
+(defn compile-where [{where-clauses :where :as query} {:keys [table-keys]}]
   (let [{triples :triple,
          predicates :predicate} (->> where-clauses
                                      (reduce (fn [acc [clause-type clause-arg]]
