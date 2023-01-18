@@ -331,7 +331,8 @@
                             #":in arity mismatch"
                             (->> (c2/plan-datalog tu/*node*
                                                   (-> '{:find [?e]
-                                                        :in [?foo]}
+                                                        :in [?foo]
+                                                        :where [[?e :foo ?foo]]}
                                                       (assoc :basis {:tx tx})))
                                  (into []))))))
 
