@@ -20,34 +20,25 @@
 (s/def ::value (some-fn eid?))
 
 (s/def ::aggregate
-  (s/cat :aggregate simple-symbol?
-         :logic-var ::logic-var))
+  (s/cat :agg-fn simple-symbol?
+         :param ::logic-var))
 
 (s/def ::find-arg
   (s/or :logic-var ::logic-var
         :aggregate ::aggregate))
 
-(defn- expression-spec [sym spec]
-  (s/and seq?
-         #(= sym (first %))
-         (s/conformer next (fn [v] [sym v]))
-         spec))
-
 (s/def ::not-join
-  (expression-spec 'not-join (s/cat :args ::args-list
-                                    :terms (s/+ ::term))))
+  (s/cat :not-join '#{not-join}
+         :args ::args-list
+         :terms (s/+ ::term)))
 
 (s/def ::term
   (s/or :triple ::triple
         :not-join ::not-join
         :predicate ::predicate))
 
-(defn- find-arg-var [[find-arg-type find-arg-arg]]
-  (case find-arg-type
-    :logic-var find-arg-arg
-    :aggregate (:logic-var find-arg-arg)))
-
 (s/def ::find (s/coll-of ::find-arg :kind vector? :min-count 1))
+(s/def ::keys (s/coll-of symbol? :kind vector?))
 
 (s/def ::args-list (s/coll-of ::logic-var, :kind vector?, :min-count 1))
 
@@ -61,12 +52,6 @@
         :tuple ::args-list
         :collection (s/tuple ::logic-var '#{...})
         :relation (s/tuple ::args-list)))
-
-(defn- in-scalar-vars [[binding-type binding-arg]]
-  (case binding-type
-    :scalar #{binding-arg}
-    :tuple (set binding-arg)
-    (:source :collection :relation) #{}))
 
 (s/def ::in (s/* ::in-binding))
 
@@ -82,15 +67,15 @@
                         (-> triple (update :src (some-fn identity (constantly '$)))))
                       identity)))
 
+(s/def ::call
+  (s/and list?
+         (s/cat :f simple-symbol?
+                :args (s/* (s/or :logic-var ::logic-var
+                                 :value ::value)))))
+
 (s/def ::predicate
   (s/and vector?
-         (-> (s/cat :application
-                    (s/spec (-> (s/cat :f simple-symbol?
-                                       :args (s/* (s/nonconforming (s/or :logic-var ::logic-var
-                                                                         :value ::value))))
-                                (s/nonconforming))))
-             (s/nonconforming))
-         (s/conformer first vector)))
+         (s/cat :call (s/spec ::call))))
 
 (s/def ::where
   (s/coll-of ::term :kind vector? :min-count 1))
@@ -98,26 +83,21 @@
 (s/def ::offset nat-int?)
 (s/def ::limit nat-int?)
 
-(s/def ::order-element (s/and vector?
-                              (s/cat :find-arg (s/or :logic-var ::logic-var
-                                                     :aggregate ::aggregate)
-                                     :direction (s/? #{:asc :desc}))))
+(s/def ::order-element
+  (s/and vector?
+         (s/cat :find-arg (s/or :logic-var ::logic-var
+                                :aggregate ::aggregate)
+                :direction (s/? #{:asc :desc}))))
 
 (s/def ::order-by (s/coll-of ::order-element :kind vector?))
 
 (s/def ::query
   (s/keys :req-un [::find]
-          :opt-un [::in ::where ::order-by ::offset ::limit]))
+          :opt-un [::keys ::in ::where ::order-by ::offset ::limit]))
 
 (s/def ::relation-arg
   (s/or :maps (s/coll-of (s/map-of simple-keyword? any?))
         :vecs (s/coll-of vector?)))
-
-(defn wrap-predicates [plan predicates]
-  (case (count predicates)
-    0 plan
-    1 [:select (first predicates) plan]
-    [:select (list* 'and predicates) plan]))
 
 (defn- conform-query [query]
   (let [conformed-query (s/conform ::query query)]
@@ -128,216 +108,287 @@
                                :explain (s/explain-data ::query query)})))
     conformed-query))
 
-(defn- ->table-keys [{in-bindings :in}]
+(declare plan-query)
+
+(defn- wrap-select [plan predicates]
+  (case (count predicates)
+    0 plan
+    1 [:select (first predicates) plan]
+    [:select (list* 'and predicates) plan]))
+
+(defn- wrap-scan-col-preds [scan-col col-preds]
+  (case (count col-preds)
+    0 scan-col
+    1 {scan-col (first col-preds)}
+    {scan-col (list* 'and col-preds)}))
+
+(defn- analyse-in [{in-bindings :in}]
+  (let [in-bindings (->> in-bindings
+                         (into [] (map-indexed
+                                   (fn [idx [binding-type binding-arg]]
+                                     (let [prefix (str "in" idx)
+                                           table-key (symbol (str "?" prefix))]
+                                       (letfn [(with-param-prefix [lv]
+                                                 (symbol (str "?" prefix "_" (subs (str lv) 1))))
+                                               (with-table-col-prefix [lv]
+                                                 (symbol (str prefix "_" (subs (str lv) 1))))]
+                                         (-> (case binding-type
+                                               :source {:in-col binding-arg}
+                                               :scalar {:var->col {binding-arg (with-param-prefix binding-arg)}, :in-col binding-arg}
+                                               :tuple {:var->col (->> binding-arg (into {} (map (juxt identity with-param-prefix))))
+                                                       :in-cols binding-arg}
+                                               :relation (let [cols (first binding-arg)]
+                                                           {:table-key table-key
+                                                            :in-cols cols
+                                                            :var->col (->> cols (into {} (map (juxt identity with-table-col-prefix))))})
+                                               :collection (let [col (first binding-arg)]
+                                                             {:table-key table-key
+                                                              :var->col {col (with-table-col-prefix col)}
+                                                              :in-col col}))
+                                             (assoc :binding-type binding-type))))))))]
+    {:in-bindings in-bindings
+     :var->cols (-> in-bindings
+                    (->> (mapcat :var->col)
+                         (group-by key))
+                    (update-vals #(into #{} (map val) %)))}))
+
+(defn- plan-in-tables [{:keys [in-bindings]}]
   (->> in-bindings
-       (into {} (keep (fn [[binding-type binding-arg]]
-                        (case binding-type
-                          :relation (MapEntry/create (set (first binding-arg))
-                                                     (gensym "?in"))
-                          :collection (MapEntry/create #{(first binding-arg)}
-                                                       (gensym "?in"))
-                          nil))))))
+       (into [] (keep (fn [{:keys [table-key var->col]}]
+                        (when table-key
+                          [:rename var->col
+                           [:table table-key]]))))))
 
-(defn- ->rel-expr [rel-clauses {:keys [in-scalars v-vars find-vars eid-srcs]}]
-  (let [{[eid-type eid-arg] :e, :keys [src]} (first rel-clauses)
+(defn- analyse-triples [triples]
+  (letfn [(->triple-rel [^long idx, [[src e] triples]]
+            (let [triples (->> (conj triples {:e e, :a :id, :v e})
+                               (map #(update % :a symbol)))
+                  prefix (symbol (str "t" idx))
+                  var->attrs (-> triples
+                                 (->> (keep (fn [{:keys [a], [v-type v-arg] :v}]
+                                              (when (= :logic-var v-type)
+                                                {:a a, :lv v-arg})))
+                                      (group-by :lv))
+                                 (update-vals #(into #{} (map :a) %)))]
 
-        eid-col (case eid-type
-                  :literal {:col-name 'id,
-                            :col-pred (list '= 'id eid-arg)}
+              {:src src, :e e, :prefix prefix,
+               :attrs (into #{} (map :a) triples)
+               :attr->lits (-> triples
+                               (->> (keep (fn [{:keys [a], [v-type v-arg] :v}]
+                                            (when (= :literal v-type)
+                                              {:a a, :lit v-arg})))
+                                    (group-by :a))
+                               (update-vals #(into #{} (map :lit) %)))
+               :var->attrs var->attrs
+               :var->col (->> (keys var->attrs)
+                              (into {} (map (juxt identity
+                                                  #(symbol (str prefix "_" (subs (str %) 1)))))))}))]
 
-                  :logic-var (let [retain-e-col? (or (contains? v-vars eid-arg)
-                                                     (contains? find-vars eid-arg)
-                                                     (> (count (get eid-srcs eid-arg)) 1))]
-                               (when (or retain-e-col?
-                                         (contains? in-scalars eid-arg))
-                                 (cond-> {:col-name 'id}
-                                   retain-e-col?
-                                   (assoc :value-arg eid-arg)
+    (->> (group-by (juxt :src :e) triples)
+         (into [] (map-indexed ->triple-rel)))))
 
-                                   (contains? in-scalars eid-arg)
-                                   (assoc :col-pred (list '= 'id eid-arg))))))
+(defn- analyse-pred [{{:keys [args] :as call} :call}]
+  {:call call
+   :vars (->> args
+              (into #{} (keep (fn [[var-type var-arg]]
+                                (when (= :logic-var var-type)
+                                  var-arg)))))})
 
-        cols (cond-> (for [[a clauses] (group-by :a rel-clauses)
-                           :let [col-name (symbol (name a))]]
-                       (reduce (fn [acc {[v-type v-arg] :v}]
-                                 ;; TODO assumes at most one LV and at most one lit per EA
-                                 (case v-type
-                                   :literal (assoc acc :col-pred (list '= col-name v-arg))
-                                   :logic-var (cond-> acc
-                                                (contains? in-scalars v-arg)
-                                                (assoc :col-pred (list '= col-name v-arg))
+(defn- analyse-not-joins [not-join-clauses]
+  ;; TODO check args all bind
+  (->> not-join-clauses
+       (into [] (map-indexed (fn [idx {:keys [args terms]}]
+                               (let [var->col (->> args
+                                                   (into {}
+                                                         (map (juxt identity #(symbol (str "nj" idx "_" (subs (str %) 1)))))))]
+                                 {:inner-q {:find (vec (for [arg args]
+                                                         [:logic-var arg]))
+                                            :keys (vec (for [arg args]
+                                                         (keyword (var->col arg))))
+                                            :where terms}
+                                  :var->col var->col}))))
+       (not-empty)))
 
-                                                :always
-                                                (assoc :value-arg v-arg))
-                                   nil acc))
-                               {:col-name col-name}
-                               clauses))
-               eid-col (conj eid-col))
+(defn- wrap-not-joins [plan {{:keys [not-join-clauses]} :where-attrs
+                             {body-var->col :var->col} :body-attrs}]
+  (reduce (fn [plan {nj-var->col :var->col, :keys [inner-q]}]
+            [:anti-join (->> nj-var->col
+                             (mapv (fn [[lv nv-col]]
+                                     {(get body-var->col lv) nv-col})))
+             plan
 
-        vars (into #{} (keep :value-arg) cols)
+             (:plan (plan-query inner-q))])
+          plan
+          not-join-clauses))
 
-        multi-col-predicates (for [unifed-vals (filter #(> (count %) 1) (vals (group-by :value-arg cols)))]
-                               (list* '= (map :col-name unifed-vals)))]
+(defn- analyse-where [{where-clauses :where}]
+  (let [{triple-clauses :triple
+         pred-clauses :predicate
+         not-join-clauses :not-join} (-> where-clauses
+                                         (->> (group-by first))
+                                         (update-vals #(mapv second %)))
 
-    (-> [:project (vec vars)
-         [:rename (->> cols
-                       (into {} (comp (filter :value-arg)
-                                      (map (juxt :col-name :value-arg)))))
-          (cond-> [:scan
-                   src
-                   'xt_docs ;; assumes all docs put into system that
-                   ;; want to be queried by datalog will be stored under xt_docs table
-                   (-> (vec (for [{:keys [col-name col-pred]} cols]
-                              (if col-pred
-                                {col-name col-pred}
-                                col-name)))
-                       (conj '{application_time_start (<= application_time_start (current-timestamp))}
-                             '{application_time_end (> application_time_end (current-timestamp))}))]
-            ;; Needs to be done here as we rename unifying columns to the same column name just after this
-            ;; I think we want to avoid duplicate column names, but thats a bigger task.
-            (seq multi-col-predicates) (wrap-predicates multi-col-predicates))]]
-        (with-meta {::vars vars}))))
+        triple-rels (analyse-triples triple-clauses)]
 
-(defn- join-exprs [left-expr right-expr]
-  (let [{left-vars ::vars} (meta left-expr)
-        {right-vars ::vars} (meta right-expr)
-        vars (set/union left-vars right-vars)]
-    (-> (if-let [[overlap-var & more-overlap-vars] (seq (set/intersection left-vars right-vars))]
-          (if-not (seq more-overlap-vars)
-            [:join [{overlap-var overlap-var}] left-expr right-expr]
+    {:triple-rels triple-rels
+     :preds (mapv analyse-pred pred-clauses)
+     :not-join-clauses (analyse-not-joins not-join-clauses)
+     :var->cols (-> triple-rels
+                    (->> (mapcat :var->col)
+                         (group-by key))
+                    (update-vals #(into #{} (map val) %)))}))
 
-            (let [var-mapping (->> (map (juxt identity gensym) more-overlap-vars)
-                                   (into {}))]
-              [:project (vec vars)
-               [:select (reduce (fn [acc el]
-                                  (list 'and acc el))
-                                (for [[left right] var-mapping]
-                                  (list '= left right)))
-                [:join [{overlap-var overlap-var}]
-                 left-expr
-                 [:rename var-mapping right-expr]]]]))
+(defn- plan-where-rels [{:keys [triple-rels]}]
+  (for [{:keys [src attrs attr->lits var->col var->attrs]} triple-rels]
+    [:project (vec (for [[lv col] var->col]
+                     {col (first (get var->attrs lv))}))
+     (-> [:scan src 'xt_docs
+          (->> (into attrs '#{application_time_start application_time_end})
+               (into [] (map (fn [attr]
+                               (-> attr
+                                   (wrap-scan-col-preds
+                                    (concat (for [lit (get attr->lits attr)]
+                                              (list '= attr lit))
+                                            (case attr
+                                              application_time_start ['(<= application_time_start (current-timestamp))]
+                                              application_time_end ['(> application_time_end (current-timestamp))]
+                                              nil))))))))]
 
-          [:cross-join left-expr right-expr])
+         (wrap-select (for [attrs (->> (vals var->attrs)
+                                       (filter #(> (count %) 1)))
+                            [a1 a2] (partition 2 1 attrs)]
+                        (list '= a1 a2))))]))
 
-        (with-meta {::vars vars}))))
+(defn- wrap-predicates [plan {{:keys [preds]} :where-attrs
+                              {:keys [var->col]} :body-attrs}]
+  (-> plan
+      (wrap-select
+       (for [{:keys [call]} preds]
+         (s/unform ::call
+                   (-> call
+                       (update :args (fn [args]
+                                       (->> args
+                                            (mapv (fn [[arg-type arg]]
+                                                    (if (= arg-type :logic-var)
+                                                      [:logic-var (get var->col arg)]
+                                                      [arg-type arg]))))))))))))
 
-(defn- table-plan [src table-vars]
-  (-> [:rename (->> table-vars
-                    (into {} (map (juxt (comp symbol #(subs % 1) name) identity))))
-       [:table src]]
-      (with-meta {::vars table-vars})))
+(defn- ->body-attrs [{:keys [where-attrs in-attrs]}]
+  (let [var->cols (reduce (fn [acc [lv col]]
+                            (-> acc
+                                (update lv (fnil into #{}) col)))
+                          (:var->cols where-attrs)
+                          (:var->cols in-attrs))]
+    {:var->cols var->cols
+     :var->col (->> (keys var->cols)
+                    (into {} (map (juxt identity #(symbol (subs (str %) 1))))))}))
 
-(defn- join-tables [expr table-keys]
-  (let [expr-vars (::vars (meta expr))]
-    (reduce (fn [[expr table-keys] [table-vars src :as entry]]
-              (if (empty? (set/difference table-vars expr-vars))
-                [(join-exprs (table-plan src table-vars) expr) table-keys]
-                [expr (conj table-keys entry)]))
-            [expr {}]
-            table-keys)))
+(defn- plan-relations [{:keys [where-attrs in-attrs],
+                        {:keys [var->cols var->col]} :body-attrs
+                        :as attrs}]
+  (let [in-rels (plan-in-tables in-attrs)
+        where-rels (plan-where-rels where-attrs)
 
-(defn- cross-join-tables [expr table-keys]
-  (let [[expr table-keys] (if expr
-                            [expr table-keys]
-                            (when (seq table-keys)
-                              (let [[[table-vars src] & more-table-keys] table-keys]
-                                [(table-plan src table-vars) more-table-keys])))]
-    ;; TODO this won't be _the_ most efficient way to join these tables
-    ;; we'll want to cross-join the smallest one, and then see which ones then join, and repeat
-    (reduce (fn [expr [table-vars src]]
-              (join-exprs (table-plan src table-vars) expr))
-            expr
-            table-keys)))
+        unify-preds (vec
+                     (for [cols (vals var->cols)
+                           :when (> (count cols) 1)
+                           ;; this picks an arbitrary binary order if there are >2
+                           ;; once mega-join has multi-way joins we could throw the multi-way `=` over the fence
+                           [c1 c2] (partition 2 1 cols)]
+                       (list '= c1 c2)))]
 
-(defn- compile-triples [triples {find-args :find, in-bindings :in} {:keys [table-keys]}]
-  (let [find-vars (into #{} (map find-arg-var) find-args)
-        in-scalars (into #{} (mapcat in-scalar-vars) in-bindings)
-        xform->lvs (keep (fn [[var-type var-arg]]
-                           (when (= :logic-var var-type)
-                             var-arg)))
-        v-vars (into #{} (comp (map :v) xform->lvs) triples)
-        eid-srcs (->> (for [{[eid-type eid-arg] :e, :keys [src]} triples
-                            :when (= eid-type :logic-var)]
-                        (MapEntry/create eid-arg src))
-                      (reduce (fn [acc [eid src]]
-                                (-> acc (update eid (fnil conj #{}) src)))
-                              {}))]
-    (loop [[triple & more-triples] triples
-           left-expr nil
-           table-keys table-keys]
-      (let [[left-expr table-keys] (join-tables left-expr table-keys)]
-        (if-not triple
-          (or (cross-join-tables left-expr table-keys)
-              (throw (err/illegal-arg :no-clauses-available-to-query
-                                      {::err/message "no clauses available to query"})))
+    (-> [:project (vec (for [[lv cols] var->cols]
+                         {(get var->col lv) (first cols)}))
+         (-> [:mega-join []
+              (vec (concat in-rels where-rels))]
+             (wrap-select unify-preds))]
+        (wrap-predicates attrs)
+        (wrap-not-joins attrs))))
 
-          (let [same-src+entity? (comp #{[(:src triple) (:e triple)]} (juxt :src :e))
-                clauses (cons triple (filter same-src+entity? more-triples))
-                right-expr (->rel-expr clauses
-                                       {:in-scalars in-scalars
-                                        :find-vars find-vars
-                                        :v-vars v-vars
-                                        :eid-srcs eid-srcs})]
+(defn- analyse-find-clauses [{find-clauses :find, rename-keys :keys}]
+  (when-let [clauses (mapv (fn [[clause-type clause] rename-key]
+                             (let [rename-sym (some-> rename-key symbol)]
+                               (-> (case clause-type
+                                     :logic-var {:lv clause
+                                                 :col rename-sym
+                                                 :vars #{clause}}
+                                     :aggregate (let [{:keys [agg-fn param]} clause]
+                                                  {:aggregate clause
+                                                   :col (or rename-sym (symbol (str agg-fn "-" param)))
+                                                   :vars #{param}}))
+                                   (assoc :clause-type clause-type))))
+                           find-clauses
+                           (or rename-keys (repeat nil)))]
 
-            (recur (remove same-src+entity? more-triples)
-                   (if left-expr
-                     (join-exprs left-expr right-expr)
-                     right-expr)
-                   table-keys)))))))
-(declare compile-where)
+    (let [{agg-clauses :aggregate, lv-clauses :logic-var} (->> clauses (group-by :clause-type))]
+      (into {:clauses (mapv #(select-keys % [:lv :clause-type :col]) clauses)}
 
-(defn wrap-with-not-joins [plan not-joins]
-  (if not-joins
-    (let [not-join-sub-plans
-          (for [not-join not-joins
-                :let [not-join (set/rename-keys not-join {:args :find :terms :where})
-                      join-conditions (mapv #(hash-map % %) (:find not-join))
-                      not-join (update not-join :find #(mapv (partial vector :logic-var) %))]]
-            [join-conditions (compile-where not-join {})])]
-      (reduce
-        (fn [current-plan [join-conditions sub-plan]]
-          [:anti-join join-conditions current-plan sub-plan])
-        plan
-        not-join-sub-plans))
+            (when-let [aggs (->> agg-clauses
+                                 (into {} (comp (filter #(= :aggregate (:clause-type %)))
+                                                (map (juxt :col :aggregate)))))]
+              {:aggs aggs
+               :grouping-vars (->> lv-clauses
+                                   (into #{} (comp (remove :aggregate) (mapcat :vars))))})))))
+
+(defn- analyse-order-by [{:keys [order-by]}]
+  (when order-by
+    (let [clause-attrs (analyse-find-clauses {:find (map :find-arg order-by)})]
+      (-> clause-attrs
+          (update :clauses (fn [clauses]
+                             (mapv (fn [clause {:keys [direction]}]
+                                     (-> clause (assoc :direction (or direction :asc))))
+                                   clauses order-by)))))))
+
+(defn- analyse-head [query]
+  (let [find-attrs (analyse-find-clauses query)
+        order-by-attrs (analyse-order-by query)]
+    {:find-clauses (:clauses find-attrs)
+     :order-by-clauses (not-empty (:clauses order-by-attrs))
+     :aggs (->> (merge (:aggs find-attrs)
+                       (:aggs order-by-attrs))
+                (not-empty))
+
+     ;; HACK: need to error-check this
+     :grouping-vars (set/union (set (:grouping-vars find-attrs))
+                               (set (:grouping-vars order-by-attrs)))}))
+
+(defn- wrap-group-by [plan {{:keys [aggs grouping-vars]} :head-attrs
+                            :keys [body-var->col]}]
+  (if aggs
+    [:group-by (into (mapv body-var->col grouping-vars)
+                     (map (fn [[col agg]]
+                            {col (s/unform ::aggregate
+                                           (-> agg
+                                               (update :param body-var->col)))}))
+                     aggs)
+     plan]
     plan))
 
-(defn compile-where [{where-clauses :where :as query} {:keys [table-keys]}]
-  (let [{triples :triple,
-         predicates :predicate
-         not-joins :not-join} (->> where-clauses
-                                  (reduce (fn [acc [clause-type clause-arg]]
-                                            (update acc clause-type (fnil conj []) clause-arg))
-                                          {}))]
-    (-> (compile-triples triples query {:table-keys table-keys})
-        (wrap-with-not-joins not-joins)
-        (wrap-predicates predicates))))
-
-(defn- aggregate-logic-var-name [{:keys [aggregate logic-var]}]
-  (symbol (str aggregate "-" logic-var)))
-
-(defn- with-group-by [plan {find-args :find}]
-  (if (every? (comp #{:logic-var} first) find-args)
-    [:project (mapv second find-args)
-     plan]
-
-    [:group-by (vec (for [[arg-type arg] find-args]
-                      (case arg-type
-                        :logic-var arg
-                        :aggregate {(aggregate-logic-var-name arg)
-                                    (let [{:keys [aggregate logic-var]} arg]
-                                      (list aggregate logic-var))})))
-     plan]))
-
-(defn- with-order-by [plan {:keys [order-by]}]
-  (if order-by
-    [:order-by (vec (for [{:keys [find-arg direction]} order-by
-                          :let [[arg-type arg] find-arg]]
-                      [(case arg-type
-                         :logic-var arg
-                         :aggregate (aggregate-logic-var-name arg))
-                       {:direction (or direction :asc)}]))
+(defn- wrap-order-by [plan order-by-clauses {:keys [body-var->col]}]
+  (if order-by-clauses
+    [:order-by (mapv (fn [{:keys [clause-type direction] :as clause}]
+                       [(case clause-type
+                          :logic-var (body-var->col (:lv clause))
+                          :aggregate (:col clause))
+                        {:direction direction}])
+                     order-by-clauses)
      plan]
     plan))
+
+(defn- wrap-head [plan {{:keys [find-clauses order-by-clauses] :as head-attrs} :head-attrs
+                        {body-var->col :var->col} :body-attrs}]
+  [:project (->> find-clauses
+                 (mapv (fn [{:keys [clause-type] :as clause}]
+                         (case clause-type
+                           :logic-var (let [in-col (body-var->col (:lv clause))]
+                                        (if-let [out-col (:col clause)]
+                                          {out-col in-col}
+                                          in-col))
+                           :aggregate (:col clause)))))
+   (-> plan
+       (wrap-group-by {:head-attrs head-attrs
+                       :body-var->col body-var->col})
+       (wrap-order-by order-by-clauses {:body-var->col body-var->col}))])
 
 (defn- with-top [plan {:keys [limit offset]}]
   (if (or limit offset)
@@ -348,95 +399,95 @@
 
     plan))
 
-(defn- with-renamed-find-vars [plan {find-vars :find}]
-  [:rename (->> find-vars
-                (into {} (keep (fn [[var-type var-arg]]
-                                 (when (= var-type :logic-var)
-                                   (MapEntry/create var-arg (symbol (subs (name var-arg) 1))))))))
-   plan])
+(defn- plan-query [conformed-query]
+  (let [head-attrs (analyse-head conformed-query)
+        {:keys [in-bindings] :as in-attrs} (analyse-in conformed-query)
+        where-attrs (analyse-where conformed-query)
+        body-attrs (->body-attrs {:where-attrs where-attrs, :in-attrs in-attrs})]
+
+    {:plan (-> (plan-relations {:where-attrs where-attrs, :in-attrs in-attrs, :body-attrs body-attrs})
+               (wrap-head {:head-attrs head-attrs, :body-attrs body-attrs})
+               (with-top conformed-query))
+
+     :in-bindings in-bindings}))
 
 (defn compile-query [query]
-  (let [conformed-query (conform-query query)
-        table-keys (->table-keys conformed-query)]
-    {:conformed-query conformed-query
-     :table-keys table-keys
-     :plan (-> (compile-where conformed-query {:table-keys table-keys})
-               (with-group-by conformed-query)
-               (with-order-by conformed-query)
-               (with-top conformed-query)
-               (with-renamed-find-vars conformed-query))}))
+  (plan-query (conform-query query)))
 
 (comment
-  (compile-query '{:find [?e1 ?e2 ?a1 ?a2]
-                   :in [$ [[?first ?last]]]
-                   :where [[?e1 :name "Ivan"]
-                           [?e2 :name "Ivan"]
-                           [?e1 :age ?a1]
-                           [?e2 :age ?a2]]}))
+  (compile-query '{:find [?parent ?child ?a1 ?a2]
+                   :in [[[?a1 ?a2]]]
+                   :where [[?parent :name "Ivan"]
+                           [?child :parent ?parent]
+                           [?parent :id ?id]
+                           [?parent :age ?a1]
+                           [?child :age ?a2]]})
 
-(defn- split-args [args {:keys [table-keys], {in-bindings :in} :conformed-query}]
-  (when (not= (count in-bindings) (count args))
-    (throw (err/illegal-arg :in-arity-exception {::err/message ":in arity mismatch"
-                                                 :expected (s/unform ::in in-bindings)
-                                                 :actual (count args)})))
+  (compile-query '{:find [?e ?name]
+                   :where [[?e :first-name ?name]
+                           [?e :last-name ?name]]}))
 
-  {:params (->> (mapcat (fn [[binding-type binding-arg] arg]
-                          (case binding-type
-                            (:source :scalar) [(MapEntry/create binding-arg arg)]
-                            :tuple (map (fn [logic-var arg]
-                                          (MapEntry/create logic-var arg))
-                                        binding-arg
-                                        arg)
-                            (:collection :relation) nil))
-                        in-bindings
-                        args)
-                (into {}))
+(defn- args->params [args in-bindings]
+  (->> (mapcat (fn [{:keys [binding-type in-col in-cols var->col]} arg]
+                 (case binding-type
+                   (:source :scalar) [(MapEntry/create (var->col in-col) arg)]
+                   :tuple (zipmap (map var->col in-cols) arg)
+                   (:collection :relation) nil))
+               in-bindings
+               args)
+       (into {})))
 
-   :table-args (->> (mapcat (fn [[binding-type binding-arg] arg]
-                              (case binding-type
-                                (:source :scalar :tuple) nil
+(defn- args->tables [args in-bindings]
+  (->> (mapcat (fn [{:keys [binding-type in-col in-cols table-key var->col]} arg]
+                 (letfn [(col->kw [col] (-> col var->col keyword))]
+                   (case binding-type
+                     (:source :scalar :tuple) nil
 
-                                :collection (let [binding (first binding-arg)
-                                                  binding-k (-> binding name (subs 1) keyword)]
-                                              (if-not (coll? arg)
-                                                (throw (err/illegal-arg :bad-collection
-                                                                        {:binding binding
-                                                                         :coll arg}))
-                                                [(MapEntry/create (get table-keys #{binding})
-                                                                  (vec (for [v arg]
-                                                                         {binding-k v})))]))
+                     :collection (let [binding-k (col->kw in-col)]
+                                   (if-not (coll? arg)
+                                     (throw (err/illegal-arg :bad-collection
+                                                             {:binding in-col
+                                                              :coll arg}))
+                                     [(MapEntry/create table-key
+                                                       (vec (for [v arg]
+                                                              {binding-k v})))]))
 
-                                :relation (let [conformed-arg (s/conform ::relation-arg arg)]
-                                            (if (s/invalid? conformed-arg)
-                                              (throw (err/illegal-arg :bad-relation
-                                                                      {:binding (first binding-arg)
-                                                                       :relation arg
-                                                                       :explain-data (s/explain-data ::relation-arg arg)}))
-                                              (let [[rel-type rel] conformed-arg
-                                                    binding (first binding-arg)]
-                                                [(MapEntry/create (get table-keys (set binding))
-                                                                  (case rel-type
-                                                                    :maps rel
-                                                                    :vecs (mapv #(zipmap (mapv keyword binding) %) rel)))])))))
-                            in-bindings
-                            args)
-                    (into {}))})
+                     :relation (let [conformed-arg (s/conform ::relation-arg arg)]
+                                 (if (s/invalid? conformed-arg)
+                                   (throw (err/illegal-arg :bad-relation
+                                                           {:binding in-cols
+                                                            :relation arg
+                                                            :explain-data (s/explain-data ::relation-arg arg)}))
+                                   (let [[rel-type rel] conformed-arg
+                                         ks (mapv col->kw in-cols)]
+                                     [(MapEntry/create table-key
+                                                       (case rel-type
+                                                         :maps (mapv #(update-keys % (fn [k]
+                                                                                       (col->kw (symbol (str "?" (symbol k))))))
+                                                                     rel)
+                                                         :vecs (mapv #(zipmap ks %) rel)))]))))))
+               in-bindings
+               args)
+       (into {})))
 
 (defn open-datalog-query ^core2.IResultSet [^BufferAllocator allocator query db args]
-  (let [{:keys [plan], :as compiled-query} (compile-query (dissoc query :basis :basis-timeout :default-tz))
+  (let [{:keys [plan in-bindings]} (compile-query (dissoc query :basis :basis-timeout :default-tz))
 
-        pq (op/prepare-ra plan)
+        pq (op/prepare-ra plan)]
 
-        {:keys [params table-args]} (split-args args compiled-query)
+    (when (not= (count in-bindings) (count args))
+      (throw (err/illegal-arg :in-arity-exception {::err/message ":in arity mismatch"
+                                                   :expected (count in-bindings)
+                                                   :actual args})))
 
-        ^AutoCloseable
-        params (vw/open-params allocator params)]
-    (try
-      (-> (.bind pq {:srcs {'$ db}, :params params, :table-args table-args
-                     :current-time (get-in query [:basis :current-time])
-                     :default-tz (:default-tz query)})
-          (.openCursor)
-          (op/cursor->result-set params))
-      (catch Throwable t
-        (.close params)
-        (throw t)))))
+    (let [^AutoCloseable
+          params (vw/open-params allocator (args->params args in-bindings))]
+      (try
+        (-> (.bind pq {:srcs {'$ db}, :params params, :table-args (args->tables args in-bindings)
+                       :current-time (get-in query [:basis :current-time])
+                       :default-tz (:default-tz query)})
+            (.openCursor)
+            (op/cursor->result-set params))
+        (catch Throwable t
+          (.close params)
+          (throw t))))))
