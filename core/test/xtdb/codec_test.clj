@@ -211,13 +211,14 @@
       (fix/submit+await-tx node [[::xt/put doc]])
       (t/is (= doc (xt/entity (xt/db node) :foo)))))
   (with-open [node (xt/start-node {})]
-    (let [doc {:xt/id (new java.net.URI "http://clojuredocs.org/")
+    (let [uri (new java.net.URI "http://clojuredocs.org/")
+          doc {:xt/id uri
                :date (java.util.Date.)
                :uri (java.net.URI. "https://google.com")
                :url (java.net.URL. "https://google.com")
                :uuid (java.util.UUID/randomUUID)}]
       (fix/submit+await-tx node [[::xt/put doc]])
-      (t/is (= doc (xt/entity (xt/db node) :foo))))))
+      (t/is (= doc (xt/entity (xt/db node) uri))))))
 
 (t/deftest test-id-reader-with-existing-buffer-1778
   (t/testing "can read and convert to real id using existing buffer"
