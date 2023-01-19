@@ -2,6 +2,7 @@
   (:require [clojure.set :as set]
             [clojure.spec.alpha :as s]
             [clojure.string :as str]
+            [clojure.walk :as walk]
             [core2.bloom :as bloom]
             [core2.error :as err]
             [core2.expression :as expr]
@@ -596,16 +597,34 @@
                                                                 :param-types param-types
                                                                 :params params})
                                 nil nil ::single-join))})))
-(defn expr-symbols [expr]
-  (set (for [x (flatten (if (coll? expr)
-                          (seq expr)
-                          [expr]))
-             :when (and (symbol? x)
-                        (str/starts-with? (str x) "x"))]
-         x)))
 
 (defn columns [relation]
   (set (keys (:col-types relation))))
+
+(defn expr->columns [expr]
+  (if (symbol? expr)
+    (if (not (clojure.string/starts-with? (str expr) "?"))
+      #{expr}
+      #{})
+    (set
+      (walk/postwalk
+        (fn [token]
+          (if (seq? token)
+            (mapcat
+              (fn [child]
+                (cond
+                  (seq? child)
+                  child
+
+                  (and (symbol? child)
+                       (not (clojure.string/starts-with? (str child) "?")))
+                  [child]))
+              (rest token))
+            token))
+        expr))))
+
+(defn remove-params [maybe-cols-and-params]
+  (set (remove #(str/starts-with? (str %) "?") maybe-cols-and-params)))
 
 (defn adjust-equi-condition
   "Swaps the sides of equi conditions to match location of cols in plan"
@@ -614,7 +633,7 @@
     (let [equi-join-cond (last condition)
           lhs (first (keys equi-join-cond))
           rhs (first (vals equi-join-cond))
-          lhs-cols (expr-symbols lhs)]
+          lhs-cols (expr->columns lhs)]
       (if (= (:cols-from-current-rel join-condition) lhs-cols)
         condition
         [:equi-condition {rhs lhs}])) condition))
@@ -696,10 +715,18 @@
        :sub-graph-unused-rels rels
        :sub-graph-unused-conditions conditions})))
 
+(defn condition->cols [[condition-type condition]]
+  (if (= condition-type :equi-condition)
+    (let [[lhs rhs] (first condition)]
+      (set/union
+        (expr->columns rhs)
+        (expr->columns lhs)))
+    (expr->columns condition)))
+
 (defmethod lp/emit-expr :mega-join [{:keys [conditions relations]} args]
   (let [conditions-with-cols (->> conditions
                                   (map (fn [condition]
-                                         {:cols (-> condition last expr-symbols)
+                                         {:cols (condition->cols condition)
                                           :condition condition}))
                                   (map-indexed #(assoc %2 :condition-id %1)))
         child-relations (->> relations
