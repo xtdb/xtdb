@@ -3,7 +3,8 @@
             [core2.expression :as expr]
             [core2.logical-plan :as lp]
             [core2.util :as util]
-            [core2.vector.indirect :as iv])
+            [core2.vector.indirect :as iv]
+            [clojure.string :as str])
   (:import core2.ICursor
            core2.operator.IProjectionSpec
            java.time.Clock
@@ -20,6 +21,10 @@
          :opts (s/? (s/keys :req-un [::append-columns?]))
          :projections (s/coll-of (s/or :column ::lp/column
                                        :row-number-column (s/map-of ::lp/column #{'(row-number)}, :conform-keys true, :count 1)
+                                       ;; don't do this for params, because they aren't real cols
+                                       ;; the EE handles these through `:extend`
+                                       :rename (s/map-of ::lp/column (s/and ::lp/column #(not (str/starts-with? (name %) "?")))
+                                                         :conform-keys true, :count 1)
                                        :extend ::lp/column-expression)
                                  :min-count 1)
          :relation ::lp/ra-expression))
@@ -62,6 +67,17 @@
               (.close out-vec)
               (throw e))))))))
 
+(defrecord RenameProjectionSpec [to-name from-name col-type]
+  IProjectionSpec
+  (getColumnName [_] to-name)
+  (getColumnType [_] col-type)
+  (project [_ _allocator in-rel _params]
+    (-> (.vectorForName in-rel (name from-name))
+        (.withName (name to-name)))))
+
+(defn ->rename-projection-spec ^core2.operator.IProjectionSpec [to-name from-name col-type]
+  (->RenameProjectionSpec to-name from-name col-type))
+
 (deftype ProjectCursor [^BufferAllocator allocator
                         ^ICursor in-cursor
                         ^List #_<IProjectionSpec> projection-specs
@@ -77,7 +93,8 @@
                        (try
                          (doseq [^IProjectionSpec projection-spec projection-specs]
                            (let [out-col (.project projection-spec allocator read-rel params)]
-                             (when-not (instance? IdentityProjectionSpec projection-spec)
+                             (when-not (or (instance? IdentityProjectionSpec projection-spec)
+                                           (instance? RenameProjectionSpec projection-spec))
                                (.add close-cols out-col))
                              (.add out-cols out-col)))
 
@@ -103,6 +120,8 @@
                                          :column (->identity-projection-spec arg (get inner-col-types arg))
                                          :row-number-column (let [[col-name _form] (first arg)]
                                                               (->row-number-projection-spec col-name))
+                                         :rename (let [[to-name from-name] (first arg)]
+                                                   (->rename-projection-spec to-name from-name (get inner-col-types from-name)))
                                          :extend (let [[col-name form] (first arg)]
                                                    (expr/->expression-projection-spec col-name form
                                                                                       {:col-types inner-col-types
