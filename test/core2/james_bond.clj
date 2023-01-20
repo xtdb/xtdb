@@ -5,12 +5,12 @@
   (vec
    (for [doc (read-string (slurp (io/resource "james-bond.edn")))]
      [:put
-      ;; no cardinality many as yet (if at all?)
+      ;; no cardinality many as yet, see #574
       (->> (dissoc doc :film/vehicles :film/bond-girls)
-           ;; nor keywords
-           (into {} (map (juxt key
-                               (comp (fn [v]
-                                       (if (keyword? v)
-                                         (name v)
-                                         v))
-                                     val)))))])))
+           ;; nor namespaced keywords, see #573
+           (into {} (map (letfn [(un-ns-kw [v]
+                                   (if (qualified-keyword? v)
+                                     (keyword (str (namespace v) "--" (name v)))
+                                     v))]
+                           (juxt (comp un-ns-kw key)
+                                 (comp un-ns-kw val))))))])))

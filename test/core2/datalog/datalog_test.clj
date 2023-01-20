@@ -191,9 +191,9 @@
              (->> (c2/plan-datalog tu/*node*
                                    (-> '{:find [?film-name ?bond-name]
                                          :in [?film]
-                                         :where [[?film :film/name ?film-name]
-                                                 [?film :film/bond ?bond]
-                                                 [?bond :person/name ?bond-name]]}
+                                         :where [[?film :film--name ?film-name]
+                                                 [?film :film--bond ?bond]
+                                                 [?bond :person--name ?bond-name]]}
                                        (assoc :basis {:tx tx}))
                                    "skyfall")
                   (into #{})))
@@ -206,9 +206,9 @@
              (->> (c2/plan-datalog tu/*node*
                                    (-> '{:find [?film-name ?bond-name]
                                          :in [?bond]
-                                         :where [[?film :film/name ?film-name]
-                                                 [?film :film/bond ?bond]
-                                                 [?bond :person/name ?bond-name]]}
+                                         :where [[?film :film--name ?film-name]
+                                                 [?film :film--bond ?bond]
+                                                 [?bond :person--name ?bond-name]]}
                                        (assoc :basis {:tx tx}))
                                    "daniel-craig")
                   (into #{})))
