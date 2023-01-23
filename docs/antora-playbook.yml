@@ -4,14 +4,14 @@ site:
   url: https://docs.xtdb.com
   # homeUrl: &home_url /xyz/5.2/index.html
   keys:
-    mainSiteUrl: "https://xtdb.com/"
-    mainSiteTitle: XTDB - Home
-    matomoUrl: "//bunseki.juxt.pro/"
-    matomoSiteId: "4"
-    typesenseHost: xtagzc25w84ufq37p-1.a1.typesense.net
-    typesenseApiKey: 0zVHpGQFDUhgP9hazp1laLklfy00AlGD
-    typesenseCollectionName: xtdb-website-ts-index
-    hiddenComponent: main
+    main_site_url: 'https://xtdb.com/'
+    main_site_title: 'XTDB - Home'
+    matomo_url: '//bunseki.juxt.pro/'
+    matomo_site_id: '4'
+    typesense_host: 'xtagzc25w84ufq37p-1.a1.typesense.net'
+    typesense_api_key: '0zVHpGQFDUhgP9hazp1laLklfy00AlGD'
+    typesense_collection_name: 'xtdb-website-ts-index'
+    hidden_component: 'main'
 
 content:
   sources:
