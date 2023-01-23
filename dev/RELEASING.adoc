@@ -45,6 +45,8 @@ It may be sensible to update `dev-SNAPSHOT` in response to the release, unless i
 
 ## Docs:
 
+Note that if you do not have your git `origin` remote set to the xtdb/xtdb repo then the "Edit this page" URL that is visible throughout the docs will currently use whatever repo you have configured for `origin` (e.g. refset/xtdb). Antora does not currently provide a means of overriding this. It may therefore be simplest to use a fresh clone temporarily for this process.
+
 . Await CircleCI.
 . Ensure you have fetched all remote doc-v* branches e.g `git fetch origin 'refs/heads/docs-v*:refs/remotes/origin/docs-v*'`
 . Create a `docs-v<next-release>` branch
