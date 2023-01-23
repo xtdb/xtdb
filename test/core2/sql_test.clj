@@ -1,7 +1,7 @@
 (ns core2.sql-test
-  (:require [clojure.test :as t :refer [deftest]]
-            [clojure.java.io :as io]
-            [core2.sql.plan :as plan]
+  (:require [clojure.java.io :as io]
+            [clojure.test :as t :refer [deftest]]
+            [core2.logical-plan :as lp]
             [core2.sql :as sql])
   (:import (java.time LocalDateTime)))
 
@@ -331,7 +331,7 @@
 
 (t/deftest parameters-referenced-in-relation-test
   (t/are [expected plan apply-columns]
-         (= expected (plan/parameters-referenced-in-relation? plan (vals apply-columns)))
+         (= expected (lp/parameters-referenced-in-relation? plan (vals apply-columns)))
          true '[:table [{x6 ?x8}]] '{x2 ?x8}
          false '[:table [{x6 ?x4}]] '{x2 ?x8}))
 

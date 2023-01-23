@@ -20,7 +20,7 @@
      (let [ast (-> (parser/parse query) parser/or-throw
                    (sem/analyze-query) sem/or-throw)]
        (-> ast
-         (plan/plan-query query-opts)
+           (plan/plan-query query-opts)
            (vary-meta assoc :param-count (sem/param-count ast))
            #_(doto clojure.pprint/pprint))))))
 
