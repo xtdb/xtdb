@@ -336,7 +336,7 @@
                                                       (assoc :basis {:tx tx})))
                                  (into []))))))
 
-(deftest test-known-predicates
+(deftest test-basic-predicates
   (let [tx (c2/submit-tx tu/*node* ivan+petr)]
     (t/is (= #{{:first-name "Ivan", :last-name "Ivanov"}}
              (->> (c2/plan-datalog tu/*node*
@@ -498,4 +498,30 @@
                                              [?e3 :age ?a3]
                                              [(+ ?a1 ?a2) ?a12]
                                              [(= ?a12 ?a3)]]}
+                                   (assoc :basis {:tx !tx})))))))
+
+(deftest test-nested-expressions-581
+  (let [!tx (c2/submit-tx tu/*node*
+                          [[:put {:id :ivan, :age 15}]
+                           [:put {:id :petr, :age 22, :height 240, :parent 1}]
+                           [:put {:id :slava, :age 37, :parent 2}]])]
+
+    (t/is (= [{:e1 :ivan, :e2 :petr, :e3 :slava}
+              {:e1 :petr, :e2 :ivan, :e3 :slava}]
+             (c2/datalog-query tu/*node*
+                               (-> '{:find [?e1 ?e2 ?e3]
+                                     :where [[?e1 :age ?a1]
+                                             [?e2 :age ?a2]
+                                             [?e3 :age ?a3]
+                                             [(= (+ ?a1 ?a2) ?a3)]]}
+                                   (assoc :basis {:tx !tx})))))
+
+    #_ ; FIXME #580 - `:p0_sum-ages` -> `:sum-ages`
+    (t/is (= [{:a1 15, :a2 22, :a3 37, :p0_sum-ages 74}]
+             (c2/datalog-query tu/*node*
+                               (-> '{:find [?a1 ?a2 ?a3 ?sum-ages]
+                                     :where [[:ivan :age ?a1]
+                                             [:petr :age ?a2]
+                                             [:slava :age ?a3]
+                                             [(+ (+ ?a1 ?a2) ?a3) ?sum-ages]]}
                                    (assoc :basis {:tx !tx})))))))

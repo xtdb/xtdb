@@ -36,7 +36,7 @@
 (s/def ::term
   (s/or :triple ::triple
         :not-join ::not-join
-        :call ::call))
+        :call ::call-clause))
 
 (s/def ::find (s/coll-of ::find-arg :kind vector? :min-count 1))
 (s/def ::keys (s/coll-of symbol? :kind vector?))
@@ -74,15 +74,21 @@
                         (-> triple (update :src (some-fn identity (constantly '$)))))
                       identity)))
 
-(s/def ::call-form
+(s/def ::fn-call
   (s/and list?
          (s/cat :f simple-symbol?
-                :args (s/* (s/or :logic-var ::logic-var
-                                 :value ::value)))))
+                :args (s/* ::form))))
 
-(s/def ::call
+(s/def ::form
+  (s/or :logic-var ::logic-var
+        :fn-call ::fn-call
+        :value ::value))
+
+(s/def ::call-clause
   (s/and vector?
-         (s/cat :call-form (s/spec ::call-form)
+         ;; top-level can only be a fn-call because otherwise the EDN Datalog syntax is ambiguous
+         ;; (it wasn't ever meant to handle this...)
+         (s/cat :form (s/spec (s/or :fn-call ::fn-call))
                 :return (s/? ::binding))))
 
 (s/def ::where
@@ -204,15 +210,18 @@
                            (group-by key))
                       (update-vals #(into #{} (map val) %)))})))
 
+(defn- form-vars [form]
+  (letfn [(form-vars* [[form-type form-arg]]
+            (case form-type
+              :fn-call (into #{} (mapcat form-vars*) (:args form-arg))
+              :logic-var #{form-arg}
+              :value #{}))]
+    (form-vars* form)))
+
 (defn- analyse-calls [calls]
   (->> calls
-       (into [] (map-indexed (fn [idx {{:keys [args] :as call-form} :call-form
-                                       :keys [return]}]
-                               (into {:call-form call-form
-                                      :required-vars (->> args
-                                                          (into #{} (keep (fn [[var-type var-arg]]
-                                                                            (when (= :logic-var var-type)
-                                                                              var-arg)))))}
+       (into [] (map-indexed (fn [idx {:keys [form return]}]
+                               (into {:form form, :required-vars (form-vars form)}
 
                                      (when-let [[return-type return-arg] return]
                                        (let [prefix (str "p" idx "_")]
@@ -223,28 +232,28 @@
                                              (assoc :return-type return-type))))))))))
 
 (defn- wrap-calls [plan {:keys [calls var->col]}]
-  (letfn [(call-form [{:keys [call-form]}]
-            (s/unform ::call-form
-                      (-> call-form
-                          (update :args (fn [args]
-                                          (->> args
-                                               (mapv (fn [[arg-type arg]]
-                                                       (if (= arg-type :logic-var)
-                                                         [:logic-var (get var->col arg)]
-                                                         [arg-type arg])))))))))
+  (letfn [(map-lvs [[form-type form-arg]]
+            [form-type
+             (case form-type
+               :logic-var (get var->col form-arg)
+               :fn-call (-> form-arg (update :args #(mapv map-lvs %)))
+               :value form-arg)])
+
+          (form->sexp [{:keys [form]}]
+            (s/unform ::form (map-lvs form)))
 
           (wrap-scalars [plan scalars]
             (if scalars
               [:map (vec
                      (for [{:keys [return-col] :as call} scalars]
-                       {return-col (call-form call)}))
+                       {return-col (form->sexp call)}))
                plan]
               plan))]
 
     (let [{selects nil, scalars :scalar} (group-by :return-type calls)]
       (-> plan
           (wrap-scalars scalars)
-          (wrap-select (map call-form selects))))))
+          (wrap-select (map form->sexp selects))))))
 
 (defn- analyse-not-joins [not-join-clauses]
   ;; TODO check args all bind
