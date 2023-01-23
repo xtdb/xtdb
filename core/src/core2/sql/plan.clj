@@ -1973,12 +1973,8 @@
 
   ([ag {:keys [validate-plan?], :or {validate-plan? false}, :as opts}]
    (letfn [(validate-plan [plan]
-             (when (and validate-plan? (not (s/valid? ::lp/logical-plan plan)))
-               (throw (err/illegal-arg ::invalid-plan
-                                       {::err/message (s/explain-str ::lp/logical-plan plan)
-                                        :plan plan
-                                        :explain-data (s/explain-data ::lp/logical-plan plan)}))))]
-
+             (when validate-plan?
+               (lp/validate-plan plan)))]
      (try
        (let [plan (plan ag)]
          (if (#{:insert :delete :update :erase} (first plan))

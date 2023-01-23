@@ -1297,3 +1297,10 @@
                (r/topdown (r/adhoc-tp r/id-tp (instrument-rules [#'rewrite-equals-predicates-in-join-as-equi-join-map])))
                (r/innermost (r/mono-tp (instrument-rules [#'merge-joins-to-mega-join])))
                (r/node))))))
+
+(defn validate-plan [plan]
+  (when-not (s/valid? ::logical-plan plan)
+    (throw (err/illegal-arg ::invalid-plan
+                            {::err/message (s/explain-str ::logical-plan plan)
+                             :plan plan
+                             :explain-data (s/explain-data ::logical-plan plan)}))))
