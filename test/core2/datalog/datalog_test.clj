@@ -498,6 +498,16 @@
                                              [?e3 :age ?a3]
                                              [(+ ?a1 ?a2) ?a12]
                                              [(= ?a12 ?a3)]]}
+                                   (assoc :basis {:tx !tx})))))
+
+    (t/is (= [{:e1 :ivan, :e2 :petr, :e3 :slava}
+              {:e1 :petr, :e2 :ivan, :e3 :slava}]
+             (c2/datalog-query tu/*node*
+                               (-> '{:find [?e1 ?e2 ?e3]
+                                     :where [[?e1 :age ?a1]
+                                             [?e2 :age ?a2]
+                                             [?e3 :age ?a3]
+                                             [(+ ?a1 ?a2) ?a3]]}
                                    (assoc :basis {:tx !tx})))))))
 
 (deftest test-nested-expressions-581
@@ -516,12 +526,33 @@
                                              [(= (+ ?a1 ?a2) ?a3)]]}
                                    (assoc :basis {:tx !tx})))))
 
-    #_ ; FIXME #580 - `:p0_sum-ages` -> `:sum-ages`
-    (t/is (= [{:a1 15, :a2 22, :a3 37, :p0_sum-ages 74}]
+    (t/is (= [{:a1 15, :a2 22, :a3 37, :sum-ages 74, :inc-sum-ages 75}]
              (c2/datalog-query tu/*node*
-                               (-> '{:find [?a1 ?a2 ?a3 ?sum-ages]
+                               (-> '{:find [?a1 ?a2 ?a3 ?sum-ages ?inc-sum-ages]
                                      :where [[:ivan :age ?a1]
                                              [:petr :age ?a2]
                                              [:slava :age ?a3]
-                                             [(+ (+ ?a1 ?a2) ?a3) ?sum-ages]]}
-                                   (assoc :basis {:tx !tx})))))))
+                                             [(+ (+ ?a1 ?a2) ?a3) ?sum-ages]
+                                             [(+ ?a1 (+ ?a2 ?a3 1)) ?inc-sum-ages]]}
+                                   (assoc :basis {:tx !tx})))))
+
+    (t/testing "unifies results of two calls"
+      (t/is (= [{:a1 15, :a2 22, :a3 37, :sum-ages 74}]
+               (c2/datalog-query tu/*node*
+                                 (-> '{:find [?a1 ?a2 ?a3 ?sum-ages]
+                                       :where [[:ivan :age ?a1]
+                                               [:petr :age ?a2]
+                                               [:slava :age ?a3]
+                                               [(+ (+ ?a1 ?a2) ?a3) ?sum-ages]
+                                               [(+ ?a1 (+ ?a2 ?a3)) ?sum-ages]]}
+                                     (assoc :basis {:tx !tx})))))
+
+      (t/is (= []
+               (c2/datalog-query tu/*node*
+                                 (-> '{:find [?a1 ?a2 ?a3 ?sum-ages]
+                                       :where [[:ivan :age ?a1]
+                                               [:petr :age ?a2]
+                                               [:slava :age ?a3]
+                                               [(+ (+ ?a1 ?a2) ?a3) ?sum-ages]
+                                               [(+ ?a1 (+ ?a2 ?a3 1)) ?sum-ages]]}
+                                     (assoc :basis {:tx !tx}))))))))

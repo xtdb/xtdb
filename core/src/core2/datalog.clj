@@ -321,21 +321,29 @@
           (if (and (empty? not-joins) (empty? available-calls))
             ;; TODO error message
             (throw (err/illegal-arg :duff-query
-                                    {:var->col var->col
+                                    {:known-vars (set (keys var->col))
                                      :unavailable-calls unavailable-calls}))
 
-            (recur unavailable-calls
-                   nil ; TODO not-joins could have required vars, this is naive
+            (let [new-vars (into #{} (mapcat (comp keys :var->col)) available-calls)
 
-                   (into var->col
-                         (mapcat :var->col)
-                         available-calls)
+                  new-var->col (into var->col
+                                     (map (juxt identity #(col-sym (subs (str %) 1))))
+                                     new-vars)
 
-                   ;; TODO unify new vars with previous ones if applicable
-                   (conj levels {:calls available-calls
-                                 :not-joins not-joins
-                                 :var->col var->col
-                                 :var->cols {}}))))))))
+                  new-var->cols (-> (concat var->col (mapcat :var->col available-calls))
+                                    (->> (group-by key))
+                                    (update-vals #(into #{} (map val) %)))]
+
+              (recur unavailable-calls
+                     nil ; TODO not-joins could have required vars, this is naive
+
+                     new-var->col
+
+                     ;; TODO unify new vars with previous ones if applicable
+                     (conj levels {:calls available-calls
+                                   :not-joins not-joins
+                                   :var->col new-var->col
+                                   :var->cols new-var->cols})))))))))
 
 (defn- plan-triples [triple-rels]
   (for [{:keys [src attrs attr->lits var->col var->attrs]} triple-rels]
@@ -358,28 +366,34 @@
                             [a1 a2] (partition 2 1 attrs)]
                         (list '= a1 a2))))]))
 
+(defn- wrap-unify-vars [plan {:keys [var->cols var->col]}]
+  [:project (vec (for [[lv cols] var->cols
+                       :let [out-col (get var->col lv)
+                             in-col (first cols)]]
+                   (if (= out-col in-col)
+                     out-col
+                     {out-col in-col})))
+   (-> plan
+       (wrap-select (vec
+                     (for [cols (vals var->cols)
+                           :when (> (count cols) 1)
+                           ;; this picks an arbitrary binary order if there are >2
+                           ;; once mega-join has multi-way joins we could throw the multi-way `=` over the fence
+                           [c1 c2] (partition 2 1 cols)]
+                       (list '= c1 c2)))))])
+
 (defn- plan-body [{:keys [in-bindings levels]}]
-  (reduce (fn [plan {:keys [triple-rels var->cols var->col], :as level}]
-            (let [unify-preds (vec
-                               (for [cols (vals var->cols)
-                                     :when (> (count cols) 1)
-                                     ;; this picks an arbitrary binary order if there are >2
-                                     ;; once mega-join has multi-way joins we could throw the multi-way `=` over the fence
-                                     [c1 c2] (partition 2 1 cols)]
-                                 (list '= c1 c2)))]
-              (-> (if plan
-                    ;; TODO both unify-preds and a projection in this `then` branch
-                    (-> plan
-                        (wrap-calls level)
-                        (wrap-not-joins level))
+  (reduce (fn [plan {:keys [triple-rels], :as level}]
+            (-> (if plan
+                  (-> plan
+                      (wrap-calls level)
+                      (wrap-not-joins level))
 
-                    [:project (vec (for [[lv cols] var->cols]
-                                     {(get var->col lv) (first cols)}))
-                     (-> [:mega-join []
-                          (vec (concat (plan-in-tables in-bindings)
-                                       (plan-triples triple-rels)))]
+                  [:mega-join []
+                   (vec (concat (plan-in-tables in-bindings)
+                                (plan-triples triple-rels)))])
 
-                         (wrap-select unify-preds))]))))
+                (wrap-unify-vars level)))
           nil
 
           levels))
