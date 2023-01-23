@@ -1961,6 +1961,12 @@
                               {::err/message (str "Cannot build plan for: "  (pr-str (r/node z)))
                                :node (r/node z)})))))
 
+(defn rewrite-plan [plan opts]
+  (let [plan (lp/remove-names plan opts)
+        {:keys [add-projection-fn]} (meta plan)]
+    (-> plan
+      (lp/rewrite-plan opts)
+      (add-projection-fn))))
 
 (defn plan-query
   ([ag] (plan-query ag {}))
@@ -1978,9 +1984,9 @@
          (if (#{:insert :delete :update :erase} (first plan))
            (let [[dml-op dml-op-opts plan] plan]
              [dml-op dml-op-opts
-              (doto (lp/rewrite-plan plan opts)
+              (doto (rewrite-plan plan opts)
                 (validate-plan))])
-           (doto (lp/rewrite-plan plan opts)
+           (doto (rewrite-plan plan opts)
              (validate-plan))))
        (catch Throwable t
          (throw (err/illegal-arg ;;might not be a bad query but IAE returns errors via pg-wire

@@ -477,7 +477,7 @@
                                 {::err/message (str "cannot remove names for: " (pr-str (r/node relation-in)))
                                  :node (r/node relation-in)}))))))
 
-(defn- remove-names [relation {:keys [project-anonymous-columns?]}]
+(defn remove-names [relation {:keys [project-anonymous-columns?]}]
   (let [projection (relation-columns relation)
         relation (binding [*name-counter* (atom 0)]
                    (r/node (r/bottomup (r/adhoc-tp r/id-tp remove-names-step) (r/vector-zip relation))))
@@ -1262,10 +1262,9 @@
    #'decorrelate-apply-rule-8
    #'decorrelate-apply-rule-9])
 
+
 (defn rewrite-plan [plan {:keys [decorrelate? instrument-rules?], :or {decorrelate? true, instrument-rules? false}, :as opts}]
-  (let [plan (remove-names plan opts)
-        {:keys [add-projection-fn]} (meta plan)
-        !fired-rules (atom [])]
+  (let [!fired-rules (atom [])]
     (letfn [(instrument-rule [f]
               (fn [z]
                 (when-let [successful-rewrite (f z)]
@@ -1287,5 +1286,4 @@
                (r/innermost (r/mono-tp (instrument-rules optimise-plan-rules)))
                (r/topdown (r/adhoc-tp r/id-tp (instrument-rules [#'rewrite-equals-predicates-in-join-as-equi-join-map])))
                (r/innermost (r/mono-tp (instrument-rules [#'merge-joins-to-mega-join])))
-               (r/node)
-               (add-projection-fn))))))
+               (r/node))))))
