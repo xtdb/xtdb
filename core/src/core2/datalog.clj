@@ -36,12 +36,18 @@
 (s/def ::term
   (s/or :triple ::triple
         :not-join ::not-join
-        :predicate ::predicate))
+        :call ::call))
 
 (s/def ::find (s/coll-of ::find-arg :kind vector? :min-count 1))
 (s/def ::keys (s/coll-of symbol? :kind vector?))
 
 (s/def ::args-list (s/coll-of ::logic-var, :kind vector?, :min-count 1))
+
+(s/def ::binding
+  (s/or :scalar ::logic-var
+        :tuple ::args-list
+        :collection (s/tuple ::logic-var '#{...})
+        :relation (s/tuple ::args-list)))
 
 (s/def ::source
   (s/and simple-symbol?
@@ -68,15 +74,16 @@
                         (-> triple (update :src (some-fn identity (constantly '$)))))
                       identity)))
 
-(s/def ::call
+(s/def ::call-form
   (s/and list?
          (s/cat :f simple-symbol?
                 :args (s/* (s/or :logic-var ::logic-var
                                  :value ::value)))))
 
-(s/def ::predicate
+(s/def ::call
   (s/and vector?
-         (s/cat :call (s/spec ::call))))
+         (s/cat :call-form (s/spec ::call-form)
+                :return (s/? ::binding))))
 
 (s/def ::where
   (s/coll-of ::term :kind vector? :min-count 1))
@@ -156,7 +163,7 @@
                          (group-by key))
                     (update-vals #(into #{} (map val) %)))}))
 
-(defn- plan-in-tables [{:keys [in-bindings]}]
+(defn- plan-in-tables [in-bindings]
   (->> in-bindings
        (into [] (keep (fn [{:keys [table-key var->col]}]
                         (when table-key
@@ -184,19 +191,60 @@
                                     (group-by :a))
                                (update-vals #(into #{} (map :lit) %)))
                :var->attrs var->attrs
+
                :var->col (->> (keys var->attrs)
                               (into {} (map (juxt identity
                                                   #(col-sym (str prefix "_" (subs (str %) 1)))))))}))]
 
-    (->> (group-by (juxt :src :e) triples)
-         (into [] (map-indexed ->triple-rel)))))
+    (let [triple-rels (->> (group-by (juxt :src :e) triples)
+                           (into [] (map-indexed ->triple-rel)))]
+      {:triple-rels triple-rels
+       :var->cols (-> triple-rels
+                      (->> (mapcat :var->col)
+                           (group-by key))
+                      (update-vals #(into #{} (map val) %)))})))
 
-(defn- analyse-pred [{{:keys [args] :as call} :call}]
-  {:call call
-   :vars (->> args
-              (into #{} (keep (fn [[var-type var-arg]]
-                                (when (= :logic-var var-type)
-                                  var-arg)))))})
+(defn- analyse-calls [calls]
+  (->> calls
+       (into [] (map-indexed (fn [idx {{:keys [args] :as call-form} :call-form
+                                       :keys [return]}]
+                               (into {:call-form call-form
+                                      :required-vars (->> args
+                                                          (into #{} (keep (fn [[var-type var-arg]]
+                                                                            (when (= :logic-var var-type)
+                                                                              var-arg)))))}
+
+                                     (when-let [[return-type return-arg] return]
+                                       (let [prefix (str "p" idx "_")]
+                                         (-> (case return-type
+                                               :scalar (let [return-col (col-sym (str prefix (subs (str return-arg) 1)))]
+                                                         {:return-col return-col
+                                                          :var->col {return-arg return-col}}))
+                                             (assoc :return-type return-type))))))))))
+
+(defn- wrap-calls [plan {:keys [calls var->col]}]
+  (letfn [(call-form [{:keys [call-form]}]
+            (s/unform ::call-form
+                      (-> call-form
+                          (update :args (fn [args]
+                                          (->> args
+                                               (mapv (fn [[arg-type arg]]
+                                                       (if (= arg-type :logic-var)
+                                                         [:logic-var (get var->col arg)]
+                                                         [arg-type arg])))))))))
+
+          (wrap-scalars [plan scalars]
+            (if scalars
+              [:map (vec
+                     (for [{:keys [return-col] :as call} scalars]
+                       {return-col (call-form call)}))
+               plan]
+              plan))]
+
+    (let [{selects nil, scalars :scalar} (group-by :return-type calls)]
+      (-> plan
+          (wrap-scalars scalars)
+          (wrap-select (map call-form selects))))))
 
 (defn- analyse-not-joins [not-join-clauses]
   ;; TODO check args all bind
@@ -213,36 +261,74 @@
                                   :var->col var->col}))))
        (not-empty)))
 
-(defn- wrap-not-joins [plan {{:keys [not-join-clauses]} :where-attrs
-                             {body-var->col :var->col} :body-attrs}]
+(defn- wrap-not-joins [plan {:keys [not-joins var->col]}]
   (reduce (fn [plan {nj-var->col :var->col, :keys [inner-q]}]
             [:anti-join (->> nj-var->col
                              (mapv (fn [[lv nv-col]]
-                                     {(get body-var->col lv) nv-col})))
+                                     {(get var->col lv) nv-col})))
              plan
 
              (:plan (plan-query inner-q))])
           plan
-          not-join-clauses))
+          not-joins))
 
-(defn- analyse-where [{where-clauses :where}]
-  (let [{triple-clauses :triple
-         pred-clauses :predicate
+(defn- analyse-body [{where-clauses :where, :as query}]
+  (let [{:keys [in-bindings] :as in-attrs} (analyse-in query)
+        {triple-clauses :triple
+         call-clauses :call
          not-join-clauses :not-join} (-> where-clauses
                                          (->> (group-by first))
                                          (update-vals #(mapv second %)))
 
-        triple-rels (analyse-triples triple-clauses)]
+        {:keys [triple-rels] :as triples} (analyse-triples triple-clauses)
+        calls (analyse-calls call-clauses)
 
-    {:triple-rels triple-rels
-     :preds (mapv analyse-pred pred-clauses)
-     :not-join-clauses (analyse-not-joins not-join-clauses)
-     :var->cols (-> triple-rels
-                    (->> (mapcat :var->col)
-                         (group-by key))
-                    (update-vals #(into #{} (map val) %)))}))
+        l0-var->cols (reduce (fn [acc [lv col]]
+                               (-> acc
+                                   (update lv (fnil into #{}) col)))
+                             (:var->cols triples)
+                             (:var->cols in-attrs))
 
-(defn- plan-where-rels [{:keys [triple-rels]}]
+        l0-var->col (->> (keys l0-var->cols)
+                         (into {} (map (juxt identity #(col-sym (subs (str %) 1))))))]
+
+    (loop [calls calls
+           not-joins (analyse-not-joins not-join-clauses)
+           var->col l0-var->col
+           levels [{:triple-rels triple-rels
+                    :var->cols l0-var->cols
+                    :var->col l0-var->col}]]
+
+      (if (and (empty? calls)
+               (empty? not-joins))
+        {:in-bindings in-bindings
+         :levels levels
+         :var->col var->col}
+
+        (let [{available-calls true
+               unavailable-calls false} (->> calls
+                                             (group-by (fn [{:keys [required-vars]}]
+                                                         (set/superset? (set (keys var->col)) required-vars))))]
+          (if (and (empty? not-joins) (empty? available-calls))
+            ;; TODO error message
+            (throw (err/illegal-arg :duff-query
+                                    {:var->col var->col
+                                     :unavailable-calls unavailable-calls}))
+
+            (recur unavailable-calls
+                   nil ; TODO not-joins could have required vars, this is naive
+
+                   (into var->col
+                         (mapcat :var->col)
+                         available-calls)
+
+                   ;; TODO unify new vars with previous ones if applicable
+                   (conj levels {:calls available-calls
+                                 :not-joins not-joins
+                                 :var->col var->col
+                                 :var->cols {}}))))))))
+
+(defn- plan-triples [triple-rels]
   (for [{:keys [src attrs attr->lits var->col var->attrs]} triple-rels]
     [:project (vec (for [[lv col] var->col]
                      {col (first (get var->attrs lv))}))
@@ -263,51 +349,31 @@
                             [a1 a2] (partition 2 1 attrs)]
                         (list '= a1 a2))))]))
 
-(defn- wrap-predicates [plan {{:keys [preds]} :where-attrs
-                              {:keys [var->col]} :body-attrs}]
-  (-> plan
-      (wrap-select
-       (for [{:keys [call]} preds]
-         (s/unform ::call
-                   (-> call
-                       (update :args (fn [args]
-                                       (->> args
-                                            (mapv (fn [[arg-type arg]]
-                                                    (if (= arg-type :logic-var)
-                                                      [:logic-var (get var->col arg)]
-                                                      [arg-type arg]))))))))))))
+(defn- plan-body [{:keys [in-bindings levels]}]
+  (reduce (fn [plan {:keys [triple-rels var->cols var->col], :as level}]
+            (let [unify-preds (vec
+                               (for [cols (vals var->cols)
+                                     :when (> (count cols) 1)
+                                     ;; this picks an arbitrary binary order if there are >2
+                                     ;; once mega-join has multi-way joins we could throw the multi-way `=` over the fence
+                                     [c1 c2] (partition 2 1 cols)]
+                                 (list '= c1 c2)))]
+              (-> (if plan
+                    ;; TODO both unify-preds and a projection in this `then` branch
+                    (-> plan
+                        (wrap-calls level)
+                        (wrap-not-joins level))
 
-(defn- ->body-attrs [{:keys [where-attrs in-attrs]}]
-  (let [var->cols (reduce (fn [acc [lv col]]
-                            (-> acc
-                                (update lv (fnil into #{}) col)))
-                          (:var->cols where-attrs)
-                          (:var->cols in-attrs))]
-    {:var->cols var->cols
-     :var->col (->> (keys var->cols)
-                    (into {} (map (juxt identity #(col-sym (subs (str %) 1))))))}))
+                    [:project (vec (for [[lv cols] var->cols]
+                                     {(get var->col lv) (first cols)}))
+                     (-> [:mega-join []
+                          (vec (concat (plan-in-tables in-bindings)
+                                       (plan-triples triple-rels)))]
 
-(defn- plan-relations [{:keys [where-attrs in-attrs],
-                        {:keys [var->cols var->col]} :body-attrs
-                        :as attrs}]
-  (let [in-rels (plan-in-tables in-attrs)
-        where-rels (plan-where-rels where-attrs)
+                         (wrap-select unify-preds))]))))
+          nil
 
-        unify-preds (vec
-                     (for [cols (vals var->cols)
-                           :when (> (count cols) 1)
-                           ;; this picks an arbitrary binary order if there are >2
-                           ;; once mega-join has multi-way joins we could throw the multi-way `=` over the fence
-                           [c1 c2] (partition 2 1 cols)]
-                       (list '= c1 c2)))]
-
-    (-> [:project (vec (for [[lv cols] var->cols]
-                         {(get var->col lv) (first cols)}))
-         (-> [:mega-join []
-              (vec (concat in-rels where-rels))]
-             (wrap-select unify-preds))]
-        (wrap-predicates attrs)
-        (wrap-not-joins attrs))))
+          levels))
 
 (defn- analyse-find-clauses [{find-clauses :find, rename-keys :keys}]
   (when-let [clauses (mapv (fn [[clause-type clause] rename-key]
@@ -405,11 +471,9 @@
 
 (defn- plan-query [conformed-query]
   (let [head-attrs (analyse-head conformed-query)
-        {:keys [in-bindings] :as in-attrs} (analyse-in conformed-query)
-        where-attrs (analyse-where conformed-query)
-        body-attrs (->body-attrs {:where-attrs where-attrs, :in-attrs in-attrs})]
+        {:keys [in-bindings] :as body-attrs} (analyse-body conformed-query)]
 
-    {:plan (-> (plan-relations {:where-attrs where-attrs, :in-attrs in-attrs, :body-attrs body-attrs})
+    {:plan (-> (plan-body body-attrs)
                (wrap-head {:head-attrs head-attrs, :body-attrs body-attrs})
                (with-top conformed-query))
 
@@ -476,7 +540,11 @@
 
 (defn open-datalog-query ^core2.IResultSet [^BufferAllocator allocator query db args]
   (let [{:keys [plan in-bindings]} (compile-query (dissoc query :basis :basis-timeout :default-tz))
-        plan (lp/rewrite-plan plan {})
+
+        plan (-> plan
+                 #_(doto clojure.pprint/pprint)
+                 (lp/rewrite-plan {})
+                 #_(doto (lp/validate-plan)))
 
         pq (op/prepare-ra plan)]
 
