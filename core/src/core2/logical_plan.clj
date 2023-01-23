@@ -154,6 +154,9 @@
     [:scan _table columns]
     (mapv ->projected-column columns)
 
+    [:scan _src _table columns]
+    (mapv ->projected-column columns)
+
     [:join _ lhs rhs]
     (vec (mapcat relation-columns [lhs rhs]))
 
@@ -176,6 +179,9 @@
     (conj
       (relation-columns lhs)
       (->projected-column projection))
+
+    [:mega-join _ rels]
+    (vec (mapcat relation-columns rels))
 
     [:single-join _ lhs rhs]
     (vec (mapcat relation-columns [lhs rhs]))
@@ -697,7 +703,11 @@
     [:select predicate
      [join-op join-map lhs rhs]]
     ;;=>
-    (when (or push-correlated? (no-correlated-columns? predicate))
+    (when (and
+            (contains?
+              #{:join :semi-join :anti-join :left-outer-join :single-join :mark-join}
+              join-op)
+            (or push-correlated? (no-correlated-columns? predicate)))
       (cond
         (columns-in-predicate-present-in-relation? lhs predicate)
         [join-op join-map [:select predicate lhs] rhs]

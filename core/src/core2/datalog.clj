@@ -3,6 +3,7 @@
             [clojure.spec.alpha :as s]
             [clojure.string :as str]
             [core2.error :as err]
+            [core2.logical-plan :as lp]
             [core2.operator :as op]
             [core2.vector.writer :as vw])
   (:import clojure.lang.MapEntry
@@ -122,6 +123,9 @@
     1 {scan-col (first col-preds)}
     {scan-col (list* 'and col-preds)}))
 
+(defn- col-sym [col]
+  (vary-meta (symbol col) assoc :column? true))
+
 (defn- analyse-in [{in-bindings :in}]
   (let [in-bindings (->> in-bindings
                          (into [] (map-indexed
@@ -131,7 +135,7 @@
                                        (letfn [(with-param-prefix [lv]
                                                  (symbol (str "?" prefix "_" (subs (str lv) 1))))
                                                (with-table-col-prefix [lv]
-                                                 (symbol (str prefix "_" (subs (str lv) 1))))]
+                                                 (col-sym (str prefix "_" (subs (str lv) 1))))]
                                          (-> (case binding-type
                                                :source {:in-col binding-arg}
                                                :scalar {:var->col {binding-arg (with-param-prefix binding-arg)}, :in-col binding-arg}
@@ -162,8 +166,8 @@
 (defn- analyse-triples [triples]
   (letfn [(->triple-rel [^long idx, [[src e] triples]]
             (let [triples (->> (conj triples {:e e, :a :id, :v e})
-                               (map #(update % :a symbol)))
-                  prefix (symbol (str "t" idx))
+                               (map #(update % :a col-sym)))
+                  prefix (str "t" idx)
                   var->attrs (-> triples
                                  (->> (keep (fn [{:keys [a], [v-type v-arg] :v}]
                                               (when (= :logic-var v-type)
@@ -171,7 +175,7 @@
                                       (group-by :lv))
                                  (update-vals #(into #{} (map :a) %)))]
 
-              {:src src, :e e, :prefix prefix,
+              {:src src, :e e,
                :attrs (into #{} (map :a) triples)
                :attr->lits (-> triples
                                (->> (keep (fn [{:keys [a], [v-type v-arg] :v}]
@@ -182,7 +186,7 @@
                :var->attrs var->attrs
                :var->col (->> (keys var->attrs)
                               (into {} (map (juxt identity
-                                                  #(symbol (str prefix "_" (subs (str %) 1)))))))}))]
+                                                  #(col-sym (str prefix "_" (subs (str %) 1)))))))}))]
 
     (->> (group-by (juxt :src :e) triples)
          (into [] (map-indexed ->triple-rel)))))
@@ -200,7 +204,7 @@
        (into [] (map-indexed (fn [idx {:keys [args terms]}]
                                (let [var->col (->> args
                                                    (into {}
-                                                         (map (juxt identity #(symbol (str "nj" idx "_" (subs (str %) 1)))))))]
+                                                         (map (juxt identity #(col-sym (str "nj" idx "_" (subs (str %) 1)))))))]
                                  {:inner-q {:find (vec (for [arg args]
                                                          [:logic-var arg]))
                                             :keys (vec (for [arg args]
@@ -281,7 +285,7 @@
                           (:var->cols in-attrs))]
     {:var->cols var->cols
      :var->col (->> (keys var->cols)
-                    (into {} (map (juxt identity #(symbol (subs (str %) 1))))))}))
+                    (into {} (map (juxt identity #(col-sym (subs (str %) 1))))))}))
 
 (defn- plan-relations [{:keys [where-attrs in-attrs],
                         {:keys [var->cols var->col]} :body-attrs
@@ -307,14 +311,14 @@
 
 (defn- analyse-find-clauses [{find-clauses :find, rename-keys :keys}]
   (when-let [clauses (mapv (fn [[clause-type clause] rename-key]
-                             (let [rename-sym (some-> rename-key symbol)]
+                             (let [rename-sym (some-> rename-key col-sym)]
                                (-> (case clause-type
                                      :logic-var {:lv clause
                                                  :col rename-sym
                                                  :vars #{clause}}
                                      :aggregate (let [{:keys [agg-fn param]} clause]
                                                   {:aggregate clause
-                                                   :col (or rename-sym (symbol (str agg-fn "-" param)))
+                                                   :col (or rename-sym (col-sym (str agg-fn "-" param)))
                                                    :vars #{param}}))
                                    (assoc :clause-type clause-type))))
                            find-clauses
@@ -463,7 +467,7 @@
                                      [(MapEntry/create table-key
                                                        (case rel-type
                                                          :maps (mapv #(update-keys % (fn [k]
-                                                                                       (col->kw (symbol (str "?" (symbol k))))))
+                                                                                       (col->kw (col-sym (str "?" (symbol k))))))
                                                                      rel)
                                                          :vecs (mapv #(zipmap ks %) rel)))]))))))
                in-bindings
@@ -472,6 +476,7 @@
 
 (defn open-datalog-query ^core2.IResultSet [^BufferAllocator allocator query db args]
   (let [{:keys [plan in-bindings]} (compile-query (dissoc query :basis :basis-timeout :default-tz))
+        plan (lp/rewrite-plan plan {})
 
         pq (op/prepare-ra plan)]
 
@@ -490,4 +495,4 @@
             (op/cursor->result-set params))
         (catch Throwable t
           (.close params)
-          (throw t))))))
+          (throw t))))) )
