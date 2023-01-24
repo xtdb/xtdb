@@ -33,11 +33,6 @@
          :args ::args-list
          :terms (s/+ ::term)))
 
-(s/def ::term
-  (s/or :triple ::triple
-        :not-join ::not-join
-        :call ::call-clause))
-
 (s/def ::find (s/coll-of ::find-arg :kind vector? :min-count 1))
 (s/def ::keys (s/coll-of symbol? :kind vector?))
 
@@ -91,6 +86,31 @@
          (s/cat :form (s/spec (s/or :fn-call ::fn-call))
                 :return (s/? ::binding))))
 
+(s/def ::and (s/cat :and #{'and}
+                    :terms (s/+ ::term)))
+
+(s/def ::or-branches
+  (s/+ (s/and (s/or :term ::term, :and ::and)
+              (s/conformer (fn [[type arg]]
+                             (case type
+                               :term [arg]
+                               :and (:terms arg)))
+                           (fn [terms]
+                             (if (= (count terms) 1)
+                               [:term (first terms)]
+                               [:and {:and 'and, :terms terms}]))))))
+
+(s/def ::or-join
+  (s/cat :or-join #{'or-join}
+         :args ::args-list
+         :branches ::or-branches))
+
+(s/def ::term
+  (s/or :triple ::triple
+        :not-join ::not-join
+        :or-join ::or-join
+        :call ::call-clause))
+
 (s/def ::where
   (s/coll-of ::term :kind vector? :min-count 1))
 
@@ -138,6 +158,57 @@
 
 (defn- col-sym [col]
   (vary-meta (symbol col) assoc :column? true))
+
+(defn- form-vars [form]
+  (letfn [(form-vars* [[form-type form-arg]]
+            (case form-type
+              :fn-call (into #{} (mapcat form-vars*) (:args form-arg))
+              :logic-var #{form-arg}
+              :value #{}))]
+    (form-vars* form)))
+
+(defn- combine-term-vars [term-varses]
+  (let [{:keys [provided-vars] :as vars} (->> term-varses
+                                              (apply merge-with set/union))]
+    (-> vars
+        (update :required-vars set/difference provided-vars))))
+
+(defn- term-vars [[term-type term-arg]]
+  (case term-type
+    :call (let [{:keys [form return]} term-arg]
+            {:required-vars (form-vars form)
+             :provided-vars (when-let [[return-type return-arg] return]
+                              (case return-type
+                                :scalar return-arg))})
+
+    :triple {:provided-vars (into #{}
+                                  (comp (map term-arg)
+                                        (keep (fn [[val-type val-arg]]
+                                                (when (= :logic-var val-type)
+                                                  val-arg))))
+                                  [:e :v])}
+
+    :or-join (let [{:keys [args branches]} term-arg
+                   arg-vars (set args)
+                   branches-vars (for [branch branches]
+                                   (into {:branch branch}
+                                         (combine-term-vars (map term-vars branch))))
+                   provided-vars (->> branches-vars
+                                      (map (comp set :provided-vars))
+                                      (apply set/intersection))
+                   required-vars (->> branches-vars
+                                      (map (comp set :required-vars))
+                                      (apply set/union))]
+
+               (when-let [unsatisfied-vars (not-empty (set/difference required-vars arg-vars))]
+                 (throw (err/illegal-arg :unsatisfied-vars
+                                         {:vars unsatisfied-vars
+                                          :term (s/unform ::or-join term-arg)})))
+
+               {:provided-vars (set/intersection arg-vars provided-vars)
+                :required-vars (set/difference arg-vars provided-vars)})
+
+    :not-join (throw (UnsupportedOperationException.))))
 
 (defn- analyse-in [{in-bindings :in}]
   (let [in-bindings (->> in-bindings
@@ -210,14 +281,6 @@
                            (group-by key))
                       (update-vals #(into #{} (map val) %)))})))
 
-(defn- form-vars [form]
-  (letfn [(form-vars* [[form-type form-arg]]
-            (case form-type
-              :fn-call (into #{} (mapcat form-vars*) (:args form-arg))
-              :logic-var #{form-arg}
-              :value #{}))]
-    (form-vars* form)))
-
 (defn- analyse-calls [calls]
   (->> calls
        (into [] (map-indexed (fn [idx {:keys [form return]}]
@@ -281,13 +344,74 @@
           plan
           not-joins))
 
+(defn- analyse-or-joins [or-join-clauses]
+  (->> or-join-clauses
+       (into [] (map-indexed
+                 (fn [oj-idx {:keys [args branches] :as oj}]
+                   (let [{oj-required-vars :required-vars} (term-vars [:or-join oj])
+
+                         in-vars (vec oj-required-vars)
+
+                         var->col (->> args
+                                       (into {}
+                                             (map (juxt identity #(col-sym (str "oj" oj-idx "_" (subs (str %) 1)))))))]
+
+                     {:var->col var->col
+                      :required-vars oj-required-vars
+                      :branch-queries (->> branches
+                                           (mapv (fn [branch]
+                                                   {:find (vec (for [arg args]
+                                                                 [:logic-var arg]))
+                                                    :in [[:tuple in-vars]]
+                                                    :keys (vec (for [arg args]
+                                                                 (keyword (var->col arg))))
+                                                    :where branch})))}))))
+       (not-empty)))
+
+(defn- wrap-or-joins [plan {outer-var->col :var->col, :keys [or-joins]}]
+  (if or-joins
+    (let [or-joins (->> or-joins
+                        (mapv
+                         (fn [{:keys [required-vars branch-queries]}]
+                           (let [branch-plans (->> branch-queries
+                                                   (mapv (fn [query]
+                                                           (plan-query query))))]
+
+                             {:plan (->> branch-plans
+                                         (map :plan)
+                                         (reduce (fn [acc plan]
+                                                   [:union-all acc plan])))
+
+                              :apply-mapping (when required-vars
+                                               (let [{:keys [in-bindings]} (first branch-plans)
+                                                     {:keys [var->col]} (first in-bindings)]
+                                                 (->> var->col
+                                                      (into {} (map (fn [[lv in-var]]
+                                                                      (MapEntry/create
+                                                                       (get outer-var->col lv)
+                                                                       in-var)))))))}))))]
+
+      (if-let [apply-mapping (not-empty (into {} (mapcat :apply-mapping) or-joins))]
+        [:apply :cross-join apply-mapping
+         plan
+         [:mega-join []
+          (mapv :plan or-joins)]]
+
+        [:mega-join []
+         (into [plan]
+               (map :plan)
+               or-joins)]))
+
+    plan))
+
 (defn- analyse-body [{where-clauses :where, :as query}]
   (let [{:keys [in-bindings] :as in-attrs} (analyse-in query)
         {triple-clauses :triple
          call-clauses :call
-         not-join-clauses :not-join} (-> where-clauses
-                                         (->> (group-by first))
-                                         (update-vals #(mapv second %)))
+         not-join-clauses :not-join
+         or-join-clauses :or-join} (-> where-clauses
+                                       (->> (group-by first))
+                                       (update-vals #(mapv second %)))
 
         {:keys [triple-rels] :as triples} (analyse-triples triple-clauses)
         calls (analyse-calls call-clauses)
@@ -303,13 +427,13 @@
 
     (loop [calls calls
            not-joins (analyse-not-joins not-join-clauses)
+           or-joins (analyse-or-joins or-join-clauses)
            var->col l0-var->col
            levels [{:triple-rels triple-rels
                     :var->cols l0-var->cols
                     :var->col l0-var->col}]]
 
-      (if (and (empty? calls)
-               (empty? not-joins))
+      (if (and (empty? calls) (empty? not-joins) (empty? or-joins))
         {:in-bindings in-bindings
          :levels levels
          :var->col var->col}
@@ -317,31 +441,38 @@
         (let [{available-calls true
                unavailable-calls false} (->> calls
                                              (group-by (fn [{:keys [required-vars]}]
-                                                         (set/superset? (set (keys var->col)) required-vars))))]
-          (if (and (empty? not-joins) (empty? available-calls))
-            ;; TODO error message
-            (throw (err/illegal-arg :duff-query
-                                    {:known-vars (set (keys var->col))
-                                     :unavailable-calls unavailable-calls}))
+                                                         (set/superset? (set (keys var->col)) required-vars))))
 
-            (let [new-vars (into #{} (mapcat (comp keys :var->col)) available-calls)
+              {available-ojs true
+               unavailable-ojs false} (->> or-joins
+                                           (group-by (fn [{:keys [required-vars]}]
+                                                       (set/superset? (set (keys var->col)) required-vars))))]
+
+          (if (and (empty? not-joins) (empty? available-calls) (empty? available-ojs))
+            (throw (err/illegal-arg :no-available-clauses
+                                    {:known-vars (set (keys var->col))
+                                     :unavailable-calls unavailable-calls
+                                     :unavailable-or-joins unavailable-ojs}))
+
+            (let [new-vars (into #{} (mapcat (comp keys :var->col)) (concat available-calls available-ojs))
 
                   new-var->col (into var->col
                                      (map (juxt identity #(col-sym (subs (str %) 1))))
                                      new-vars)
 
-                  new-var->cols (-> (concat var->col (mapcat :var->col available-calls))
+                  new-var->cols (-> (concat var->col (mapcat :var->col (concat available-calls available-ojs)))
                                     (->> (group-by key))
                                     (update-vals #(into #{} (map val) %)))]
 
               (recur unavailable-calls
                      nil ; TODO not-joins could have required vars, this is naive
+                     unavailable-ojs
 
                      new-var->col
 
-                     ;; TODO unify new vars with previous ones if applicable
                      (conj levels {:calls available-calls
                                    :not-joins not-joins
+                                   :or-joins available-ojs
                                    :var->col new-var->col
                                    :var->cols new-var->cols})))))))))
 
@@ -387,11 +518,13 @@
             (-> (if plan
                   (-> plan
                       (wrap-calls level)
-                      (wrap-not-joins level))
+                      (wrap-not-joins level)
+                      (wrap-or-joins level))
 
-                  [:mega-join []
-                   (vec (concat (plan-in-tables in-bindings)
-                                (plan-triples triple-rels)))])
+                  (if-let [rels (not-empty (vec (concat (plan-in-tables in-bindings)
+                                                        (plan-triples triple-rels))))]
+                    [:mega-join [] rels]
+                    [:table [{}]]))
 
                 (wrap-unify-vars level)))
           nil

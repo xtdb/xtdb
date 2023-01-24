@@ -487,8 +487,8 @@
 (t/deftest calling-a-function-580
   (let [!tx (c2/submit-tx tu/*node*
                           [[:put {:id :ivan, :age 15}]
-                           [:put {:id :petr, :age 22, :height 240, :parent 1}]
-                           [:put {:id :slava, :age 37, :parent 2}]])]
+                           [:put {:id :petr, :age 22}]
+                           [:put {:id :slava, :age 37}]])]
     (t/is (= [{:e1 :ivan, :e2 :petr, :e3 :slava}
               {:e1 :petr, :e2 :ivan, :e3 :slava}]
              (c2/datalog-query tu/*node*
@@ -556,3 +556,31 @@
                                                [(+ (+ ?a1 ?a2) ?a3) ?sum-ages]
                                                [(+ ?a1 (+ ?a2 ?a3 1)) ?sum-ages]]}
                                      (assoc :basis {:tx !tx}))))))))
+
+(t/deftest test-or-join
+  (let [!tx (c2/submit-tx tu/*node* [[:put {:id :ivan, :age 20, :role :developer}]
+                                     [:put {:id :oleg, :age 30, :role :manager}]
+                                     [:put {:id :petr, :age 35, :role :qa}]
+                                     [:put {:id :sergei, :age 35, :role :manager}]])]
+
+    (letfn [(q [query]
+              (c2/datalog-query tu/*node*
+                                (-> query
+                                    (assoc :basis {:tx !tx}))))]
+      (t/is (= [{:e :petr} {:e :ivan}]
+               (q '{:find [?e]
+                    :where [(or-join [?e]
+                                     [?e :role :developer]
+                                     [?e :age 35])
+                            (or-join [?e]
+                                     [?e :id :petr]
+                                     [?e :id :ivan])]})))
+
+      (t/is (= [{:e :petr}, {:e :oleg}]
+               (q '{:find [?e]
+                    :where [[:sergei :age ?age]
+                            [:sergei :role ?role]
+                            (or-join [?e ?age ?role]
+                                     [?e :age ?age]
+                                     [?e :role ?role])
+                            [(<> ?e :sergei)]]}))))))
