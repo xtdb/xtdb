@@ -301,10 +301,10 @@
                                    :foo "foo"}]])
         (tu/then-await-tx node (Duration/ofMillis 2000)))
     (t/is (= [{:id "nil-bar", :foo "foo", :bar nil}]
-             (c2/datalog-query node '{:find [?id ?foo ?bar]
-                                      :where [[?e :id ?id]
-                                              [?e :foo ?foo]
-                                              [?e :bar ?bar]]})))))
+             (c2/datalog-query node '{:find [id foo bar]
+                                      :where [[e :id id]
+                                              [e :foo foo]
+                                              [e :bar bar]]})))))
 
 (t/deftest round-trips-extensions-via-ipc
   (let [node-dir (util/->path "target/round-trips-extensions-via-ipc")
@@ -318,13 +318,13 @@
       (tu/finish-chunk node)
 
       (t/is (= #{{:id :foo, :uuid uuid}}
-               (set (c2/datalog-query node '{:find [?id ?uuid]
-                                             :where [[?id :uuid ?uuid]]})))))
+               (set (c2/datalog-query node '{:find [id uuid]
+                                             :where [[id :uuid uuid]]})))))
 
     (with-open [node (tu/->local-node {:node-dir node-dir})]
       (t/is (= #{{:id :foo, :uuid uuid}}
-               (set (c2/datalog-query node '{:find [?id ?uuid]
-                                             :where [[?id :uuid ?uuid]]})))))))
+               (set (c2/datalog-query node '{:find [id uuid]
+                                             :where [[id :uuid uuid]]})))))))
 
 (t/deftest writes-log-file
   (let [node-dir (util/->path "target/writes-log-file")]

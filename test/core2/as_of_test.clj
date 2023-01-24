@@ -23,8 +23,8 @@
 
     (t/is (= #{{:last-updated "tx2"}}
              (->> (c2/plan-datalog tu/*node*
-                                   (-> '{:find [?last-updated]
-                                         :where [[?e :last-updated ?last-updated]]}
+                                   (-> '{:find [last-updated]
+                                         :where [[e :last-updated last-updated]]}
                                        (assoc :basis {:tx !tx2})))
                   (into #{}))))
 
@@ -35,8 +35,8 @@
 
       (t/is (= #{{:last-updated "tx1"}}
                (->> (c2/plan-datalog tu/*node*
-                                     (-> '{:find [?last-updated]
-                                           :where [[?e :last-updated ?last-updated]]}
+                                     (-> '{:find [last-updated]
+                                           :where [[e :last-updated last-updated]]}
                                          (assoc :basis {:tx !tx1})))
                     (into #{})))))))
 
@@ -106,9 +106,9 @@
                             xt_docs
                             [id version
                              application_time_start application_time_end
-                             system_time_start {system_time_end (<= system_time_end ?eot)}]]
+                             system_time_start {system_time_end (<= system_time_end eot)}]]
                           {:srcs {'$ db}
-                           :params {'?eot util/end-of-time}}))
+                           :params {'eot util/end-of-time}}))
           "all app, all sys")))
 
 (t/deftest test-evict
@@ -117,10 +117,10 @@
               (->> (tu/query-ra '[:scan
                                   xt_docs
                                   [id
-                                   application_time_start {application_time_end (<= application_time_end ?eot)}
-                                   system_time_start {system_time_end (<= system_time_end ?eot)}]]
+                                   application_time_start {application_time_end (<= application_time_end eot)}
+                                   system_time_start {system_time_end (<= system_time_end eot)}]]
                                 {:srcs {'$ db}
-                                 :params {'?eot util/end-of-time}})
+                                 :params {'eot util/end-of-time}})
                    (map :id)
                    frequencies))]
 

@@ -17,8 +17,8 @@
       (t/is (= [{:id :foo, :n 0}
                 {:id :bar, :n 1}]
                (c2/datalog-query tu/*node*
-                                 (-> '{:find [?id ?n]
-                                       :where [[?id :n ?n]]}
+                                 (-> '{:find [id n]
+                                       :where [[id :n n]]}
                                      (assoc :basis {:tx !tx})))))))
 
   (t/testing "nested tx fn"
@@ -35,8 +35,8 @@
                 {:id :bar-inner, :from :inner}
                 {:id :bar-outer, :from :outer}]
                (c2/datalog-query tu/*node*
-                                 (-> '{:find [?id ?from]
-                                       :where [[?id :from ?from]]}
+                                 (-> '{:find [id from]
+                                       :where [[id :from from]]}
                                      (assoc :basis {:tx !tx}))))))))
 
 (t/deftest test-tx-fn-return-values
@@ -47,9 +47,9 @@
             (let [!tx (c2/submit-tx tu/*node* [[:call :identity ret-val]
                                                [:put {:id put-id}]])]
               (->> (c2/datalog-query tu/*node*
-                                     (-> '{:find [?id]
-                                           :in [?id]
-                                           :where [[?id :id]]}
+                                     (-> '{:find [id]
+                                           :in [id]
+                                           :where [[id :id]]}
                                          (assoc :basis {:tx !tx}))
                                      put-id)
                    (into #{} (map :id)))))]
@@ -62,16 +62,16 @@
 (t/deftest test-tx-fn-q
   (let [!tx (c2/submit-tx tu/*node* [[:put {:id :doc-counter,
                                             :fn #c2/clj-form (fn [id]
-                                                               (let [doc-count (count (q '{:find [?id]
-                                                                                           :where [[?id :id]]}))]
+                                                               (let [doc-count (count (q '{:find [id]
+                                                                                           :where [[id :id]]}))]
                                                                  [[:put {:id id, :doc-count doc-count}]]))}]
                                      [:call :doc-counter :foo]
                                      [:call :doc-counter :bar]])]
     (t/is (= [{:id :foo, :doc-count 1}
               {:id :bar, :doc-count 2}]
              (c2/datalog-query tu/*node*
-                               (-> '{:find [?id ?doc-count]
-                                     :where [[?id :doc-count ?doc-count]]}
+                               (-> '{:find [id doc-count]
+                                     :where [[id :doc-count doc-count]]}
                                    (assoc :basis {:tx !tx})))))))
 
 (t/deftest test-tx-fn-sql-q
@@ -84,8 +84,8 @@
     (t/is (= [{:id :foo, :doc-count 1}
               {:id :bar, :doc-count 2}]
              (c2/datalog-query tu/*node*
-                               (-> '{:find [?id ?doc-count]
-                                     :where [[?id :doc-count ?doc-count]]}
+                               (-> '{:find [id doc-count]
+                                     :where [[id :doc-count doc-count]]}
                                    (assoc :basis {:tx !tx})))))))
 
 (t/deftest test-tx-fn-current-tx
@@ -101,15 +101,15 @@
               {:id :bar, :tx-id 0, :sys-time (util/->zdt tt0)}
               {:id :baz, :tx-id 1, :sys-time (util/->zdt tt1)}]
              (c2/datalog-query tu/*node*
-                               (-> '{:find [?id ?tx-id ?sys-time]
-                                     :where [[?id :tx-id ?tx-id]
-                                             [?id :sys-time ?sys-time]]}
+                               (-> '{:find [id tx-id sys-time]
+                                     :where [[id :tx-id tx-id]
+                                             [id :sys-time sys-time]]}
                                    (assoc :basis {:tx tx1})))))))
 
 (t/deftest test-tx-fn-exceptions
   (letfn [(foo-version [!tx]
             (-> (c2/datalog-query tu/*node*
-                                  (-> '{:find [?id ?version], :where [[?id :version ?version]]}
+                                  (-> '{:find [id version], :where [[id :version version]]}
                                       (assoc :basis {:tx !tx})))
                 first :version))]
 

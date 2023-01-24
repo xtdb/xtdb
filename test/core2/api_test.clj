@@ -23,8 +23,8 @@
 
     (t/is (= [{:e :foo, :inst (util/->zdt #inst "2021")}]
              (->> (c2/plan-datalog *node*
-                                   (-> '{:find [?e ?inst]
-                                         :where [[?e :inst ?inst]]}
+                                   (-> '{:find [e inst]
+                                         :where [[e :inst inst]]}
                                        (assoc :basis {:tx !tx}
                                               :basis-timeout (Duration/ofSeconds 1))))
                   (into []))))))
@@ -51,8 +51,8 @@
     (t/is (= [{:id :foo, :list [1 2 ["foo" "bar"]]}
               {:id "bar", :list [4 2 8]}]
              (c2/datalog-query *node*
-                               (-> '{:find [?id ?list]
-                                     :where [[?id :list ?list]]}
+                               (-> '{:find [id list]
+                                     :where [[id :list list]]}
                                    (assoc :basis {:tx !tx}
                                           :basis-timeout (Duration/ofSeconds 1))))))
 
@@ -71,8 +71,8 @@
     (t/is (= #{{:id :foo, :struct {:a 1, :b {:c "bar"}}}
                {:id :bar, :struct {:a true, :d 42.0}}}
              (set (c2/datalog-query *node*
-                                    (-> '{:find [?id ?struct]
-                                          :where [[?id :struct ?struct]]}
+                                    (-> '{:find [id struct]
+                                          :where [[id :struct struct]]}
                                         (assoc :basis {:tx !tx}
                                                :basis-timeout (Duration/ofSeconds 1)))))))))
 
@@ -121,8 +121,8 @@
 
     (letfn [(q-at [tx]
               (->> (c2/datalog-query *node*
-                                     (-> '{:find [?id]
-                                           :where [[?e :id ?id]]}
+                                     (-> '{:find [id]
+                                           :where [[e :id id]]}
                                          (assoc :basis {:tx tx}
                                                 :basis-timeout (Duration/ofSeconds 1))))
                    (into #{} (map :id))))]

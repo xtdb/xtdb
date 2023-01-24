@@ -297,6 +297,6 @@ ORDER BY foo.application_time_start"
                                       [:put {:id :baz}]])]
     (t/is (= [{:id :foo}]
              (c2/datalog-query tu/*node*
-                               (-> '{:find [?id]
-                                     :where [[?id :id]]}
+                               (-> '{:find [id]
+                                     :where [[id :id]]}
                                    (assoc :basis {:tx !tx1})))))))

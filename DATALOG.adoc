@@ -70,8 +70,8 @@ When finalised (by `reduce`) this will ensure the query results are adequately c
 ----
 (with-open [node (node/start-node {})]
   (->> (c2/plan-datalog-query node
-                              '{:find [?e ?name]
-                                :where [[?e :name ?name]]})
+                              '{:find [e name]
+                                :where [[e :name name]]})
        (into [])))
 ----
 
@@ -114,10 +114,10 @@ The `plan-datalog-query` functions take the node, the query, and then a variable
 [source,clojure]
 ----
 (->> (c2/plan-datalog-query tu/*node*
-                            (-> '{:find [?e]
-                                  :in [?first-name ?last-name]
-                                  :where [[?e :first-name ?first-name]
-                                          [?e :last-name ?last-name]]}
+                            (-> '{:find [e]
+                                  :in [first-name last-name]
+                                  :where [[e :first-name first-name]
+                                          [e :last-name last-name]]}
                                 (assoc :basis {:tx tx}))
                             "Ivan" "Ivanov")
      (into #{}))
@@ -146,8 +146,8 @@ This is for repeatable queries - it defaults to 'now' if not provided.
 [source,clojure]
 ----
 (->> (c2/plan-datalog-query node
-                            (-> '{:find [?e ?name]
-                                  :where [[?e :name ?name]]}
+                            (-> '{:find [e name]
+                                  :where [[e :name name]]}
                                 (assoc :basis {:current-time #inst "..."})))
      (into []))
 ----

@@ -12,7 +12,7 @@
 
 (s/def ::logic-var
   (s/and simple-symbol?
-         (comp #(str/starts-with? % "?") name)))
+         (comp #(not (str/starts-with? % "$")) name)))
 
 ;; TODO flesh out
 (def ^:private eid? (some-fn string? number? inst? keyword?))
@@ -39,10 +39,10 @@
 (s/def ::args-list (s/coll-of ::logic-var, :kind vector?, :min-count 1))
 
 (s/def ::binding
-  (s/or :scalar ::logic-var
-        :tuple ::args-list
-        :collection (s/tuple ::logic-var '#{...})
-        :relation (s/tuple ::args-list)))
+  (s/or :collection (s/tuple ::logic-var '#{...})
+        :relation (s/tuple ::args-list)
+        :scalar ::logic-var
+        :tuple ::args-list))
 
 (s/def ::source
   (s/and simple-symbol?
@@ -50,10 +50,10 @@
 
 (s/def ::in-binding
   (s/or :source ::source
-        :scalar ::logic-var
-        :tuple ::args-list
         :collection (s/tuple ::logic-var '#{...})
-        :relation (s/tuple ::args-list)))
+        :relation (s/tuple ::args-list)
+        :scalar ::logic-var
+        :tuple ::args-list))
 
 (s/def ::in (s/* ::in-binding))
 
@@ -217,9 +217,9 @@
                                      (let [prefix (str "in" idx)
                                            table-key (symbol (str "?" prefix))]
                                        (letfn [(with-param-prefix [lv]
-                                                 (symbol (str "?" prefix "_" (subs (str lv) 1))))
+                                                 (symbol (str "?" prefix "_" (str lv))))
                                                (with-table-col-prefix [lv]
-                                                 (col-sym (str prefix "_" (subs (str lv) 1))))]
+                                                 (col-sym (str prefix "_" (str lv))))]
                                          (-> (case binding-type
                                                :source {:in-col binding-arg}
                                                :scalar {:var->col {binding-arg (with-param-prefix binding-arg)}, :in-col binding-arg}
@@ -271,7 +271,7 @@
 
                :var->col (->> (keys var->attrs)
                               (into {} (map (juxt identity
-                                                  #(col-sym (str prefix "_" (subs (str %) 1)))))))}))]
+                                                  #(col-sym (str prefix "_" (str %)))))))}))]
 
     (let [triple-rels (->> (group-by (juxt :src :e) triples)
                            (into [] (map-indexed ->triple-rel)))]
@@ -289,7 +289,7 @@
                                      (when-let [[return-type return-arg] return]
                                        (let [prefix (str "p" idx "_")]
                                          (-> (case return-type
-                                               :scalar (let [return-col (col-sym (str prefix (subs (str return-arg) 1)))]
+                                               :scalar (let [return-col (col-sym (str prefix (str return-arg)))]
                                                          {:return-col return-col
                                                           :var->col {return-arg return-col}}))
                                              (assoc :return-type return-type))))))))))
@@ -324,7 +324,7 @@
        (into [] (map-indexed (fn [idx {:keys [args terms]}]
                                (let [var->col (->> args
                                                    (into {}
-                                                         (map (juxt identity #(col-sym (str "nj" idx "_" (subs (str %) 1)))))))]
+                                                         (map (juxt identity #(col-sym (str "nj" idx "_" (str %)))))))]
                                  {:inner-q {:find (vec (for [arg args]
                                                          [:logic-var arg]))
                                             :keys (vec (for [arg args]
@@ -354,7 +354,7 @@
 
                          var->col (->> args
                                        (into {}
-                                             (map (juxt identity #(col-sym (str "oj" oj-idx "_" (subs (str %) 1)))))))]
+                                             (map (juxt identity #(col-sym (str "oj" oj-idx "_" (str %)))))))]
 
                      {:var->col var->col
                       :required-vars oj-required-vars
@@ -423,7 +423,7 @@
                              (:var->cols in-attrs))
 
         l0-var->col (->> (keys l0-var->cols)
-                         (into {} (map (juxt identity #(col-sym (subs (str %) 1))))))]
+                         (into {} (map (juxt identity #(col-sym (str %))))))]
 
     (loop [calls calls
            not-joins (analyse-not-joins not-join-clauses)
@@ -457,7 +457,7 @@
             (let [new-vars (into #{} (mapcat (comp keys :var->col)) (concat available-calls available-ojs))
 
                   new-var->col (into var->col
-                                     (map (juxt identity #(col-sym (subs (str %) 1))))
+                                     (map (juxt identity #(col-sym (str %))))
                                      new-vars)
 
                   new-var->cols (-> (concat var->col (mapcat :var->col (concat available-calls available-ojs)))
@@ -638,19 +638,6 @@
 (defn compile-query [query]
   (plan-query (conform-query query)))
 
-(comment
-  (compile-query '{:find [?parent ?child ?a1 ?a2]
-                   :in [[[?a1 ?a2]]]
-                   :where [[?parent :name "Ivan"]
-                           [?child :parent ?parent]
-                           [?parent :id ?id]
-                           [?parent :age ?a1]
-                           [?child :age ?a2]]})
-
-  (compile-query '{:find [?e ?name]
-                   :where [[?e :first-name ?name]
-                           [?e :last-name ?name]]}))
-
 (defn- args->params [args in-bindings]
   (->> (mapcat (fn [{:keys [binding-type in-col in-cols var->col]} arg]
                  (case binding-type
@@ -687,7 +674,7 @@
                                      [(MapEntry/create table-key
                                                        (case rel-type
                                                          :maps (mapv #(update-keys % (fn [k]
-                                                                                       (col->kw (col-sym (str "?" (symbol k))))))
+                                                                                       (col->kw (symbol k))))
                                                                      rel)
                                                          :vecs (mapv #(zipmap ks %) rel)))]))))))
                in-bindings
