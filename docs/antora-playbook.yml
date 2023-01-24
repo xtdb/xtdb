@@ -14,6 +14,7 @@ site:
     hidden_component: 'main'
 
 content:
+  edit_url: 'https://github.com/xtdb/xtdb/edit/{refname}/{path}'
   sources:
     - url: ../
       start_path: docs/main # index - Only necessary to read self-hosted docs.
