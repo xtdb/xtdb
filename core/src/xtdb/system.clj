@@ -102,6 +102,7 @@
 (defrecord ModuleRef [sym opts]
   Dep
   (prepare-dep [this k-path opts]
+    (prn [:ModuleRef/prepare-dep this])
     (let [opts (-> opts (spread-opts (:opts this)))
           module-var (or (try
                            (requiring-resolve (:sym this))

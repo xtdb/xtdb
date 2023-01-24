@@ -28,8 +28,9 @@
 
                  [pro.juxt.clojars-mirrors.clj-http/clj-http "3.12.2"]
                  [software.amazon.awssdk/s3]
-                 [com.amazonaws/aws-java-sdk-ses "1.11.988"]
-                 [com.amazonaws/aws-java-sdk-logs "1.11.988"]
+                 [com.amazonaws/aws-java-sdk-logs "1.12.389" :exclusions [com.fasterxml.jackson.dataformat/jackson-dataformat-cbor]]
+                 [com.amazonaws/aws-java-sdk-ses "1.12.389" :exclusions [com.fasterxml.jackson.dataformat/jackson-dataformat-cbor]]
+
 
                  ;; rdf
                  [org.eclipse.rdf4j/rdf4j-repository-sparql "3.0.0"]
@@ -37,8 +38,11 @@
                  [org.eclipse.rdf4j/rdf4j-repository-sail "3.0.0"]
 
                  ;; cloudwatch metrics deps
-                 [io.github.azagniotov/dropwizard-metrics-cloudwatch "2.0.3"]
-                 [software.amazon.awssdk/cloudwatch]]
+                 [io.github.azagniotov/dropwizard-metrics-cloudwatch "2.0.8" :exclusions [io.netty/netty-transport-native-unix-common]]
+                 [software.amazon.awssdk/cloudwatch "2.19.21" :exclusions [io.netty/netty-transport-native-unix-common]]
+                 [software.amazon.awssdk/s3 "2.19.21" :exclusions [io.netty/netty-transport-native-unix-common]]
+                 #_[io.github.azagniotov/dropwizard-metrics-cloudwatch "2.0.8"]
+                 #_[software.amazon.awssdk/cloudwatch]]
 
   :resource-paths ["resources" "data"]
   :jvm-opts ["-Xms3g" "-Xmx3g"]

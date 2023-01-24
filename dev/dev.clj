@@ -11,11 +11,15 @@
             [xtdb.kafka :as k]
             [xtdb.kafka.embedded :as ek]
             [xtdb.lucene]
+            [xtdb.s3]
             [xtdb.rocksdb :as rocks])
   (:import (ch.qos.logback.classic Level Logger)
            (java.io Closeable File)
            (org.slf4j LoggerFactory)
-           (xtdb.api IXtdb)))
+           (xtdb.api IXtdb)
+           (xtdb.s3 S3Configurator)
+           (software.amazon.awssdk.services.s3 S3AsyncClient)
+           (software.amazon.awssdk.auth.credentials ProfileCredentialsProvider)))
 
 (defn set-log-level! [ns level]
   (.setLevel ^Logger (LoggerFactory/getLogger (name ns))
@@ -44,6 +48,51 @@
 
 (defmethod i/halt-key! ::xtdb [_ ^IXtdb node]
   (.close node))
+
+(defn- s3-configurator [_]
+  (reify S3Configurator
+    (makeClient [_]
+      (let [configurator
+            (-> (S3AsyncClient/crtBuilder)
+                (.credentialsProvider
+                 (. ProfileCredentialsProvider create "jan-juxt"))
+                  ; (.targetThroughputInGbps 20.0)
+                  ; (.minimumPartSizeInBytes (* 8 1024))
+                (.build))]
+        configurator))))
+
+(def checkpoint-config
+  {::xtdb {:node-opts
+           {:xtdb/index-store
+            {:kv-store
+             {:xtdb/module `rocks/->kv-store
+
+              :db-dir (io/file dev-node-dir "indexes"),
+
+              :checkpointer
+              {:xtdb/module `xtdb.checkpoint/->checkpointer
+
+               :store {:xtdb/module `xtdb.s3.checkpoint/->cp-store
+                       :bucket "jan-bucket1"
+                       :prefix "CKX"
+                       :transfer-manager? true
+                       :configurator `s3-configurator}
+
+               :approx-frequency (java.time.Duration/ofSeconds 30)}}}
+
+            :xtdb/document-store
+            {:kv-store {:xtdb/module `rocks/->kv-store,
+                        :db-dir (io/file dev-node-dir "documents")
+                        :block-cache :xtdb.rocksdb/block-cache}}
+
+            :xtdb/tx-log
+            {:kv-store {:xtdb/module `rocks/->kv-store,
+                        :db-dir (io/file dev-node-dir "tx-log")
+                        :block-cache :xtdb.rocksdb/block-cache}}
+
+            :xtdb.rocksdb/block-cache
+            {:xtdb/module `rocks/->lru-block-cache
+             :cache-size (* 128 1024 1024)}}}})
 
 (def standalone-config
   {::xtdb {:node-opts {:xtdb/index-store {:kv-store {:xtdb/module `rocks/->kv-store,
@@ -105,9 +154,9 @@
                                   :doc-topic-opts {:topic-name "xtdb-document-store"}
                                   :kafka-config :kafka-config}}}})
 
-
 ;; swap for `embedded-kafka-config` to use embedded-kafka
-(ir/set-prep! (fn [] standalone-config))
+(ir/set-prep! (fn [] checkpoint-config))
+; (ir/set-prep! (fn [] standalone-config))
 ; (ir/set-prep! (fn [] local-kafka-config))
 ; (ir/set-prep! (fn [] embedded-kafka-config))
 

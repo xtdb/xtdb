@@ -1,8 +1,11 @@
 package xtdb.s3;
 
 import software.amazon.awssdk.services.s3.S3AsyncClient;
+import software.amazon.awssdk.transfer.s3.S3TransferManager;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
+import software.amazon.awssdk.transfer.s3.model.UploadDirectoryRequest;
+import software.amazon.awssdk.transfer.s3.model.DownloadDirectoryRequest;
 
 import clojure.java.api.Clojure;
 import clojure.lang.IFn;
@@ -13,6 +16,14 @@ public interface S3Configurator {
     }
 
     default GetObjectRequest.Builder configureGet(GetObjectRequest.Builder builder) {
+        return builder;
+    }
+
+    default UploadDirectoryRequest.Builder configureUploadDirectory(UploadDirectoryRequest.Builder builder) {
+        return builder;
+    }
+
+    default DownloadDirectoryRequest.Builder configureDownloadDirectory(DownloadDirectoryRequest.Builder builder) {
         return builder;
     }
 
