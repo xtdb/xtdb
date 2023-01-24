@@ -393,3 +393,10 @@
                                 :->column-family-handle ->column-family-handle})]
     (cond-> kv-store
       checkpointer (assoc :cp-job (cp/start checkpointer kv-store {::cp/cp-format cp-format})))))
+
+
+(comment
+
+  (cond-> 1 (.setStatistics stats))
+
+  :ok)
