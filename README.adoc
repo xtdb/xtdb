@@ -122,4 +122,4 @@ We would love to hear from you: hello@xtdb.com
 
 The Affero GNU Public License, Version 3.
 
-Copyright © 2018-2022 JUXT LTD.
+Copyright © 2018-2023 JUXT LTD.
