@@ -110,11 +110,29 @@ We expose these via the https://github.com/xtdb/xtdb/blob/main/modules/s3/src/xt
 Through this interface, you can supply an `S3AsyncClient` for xtdb-s3 to use, adapt the `PutObjectRequest`/`GetObjectRequest` as required, and choose the serialisation format.
 By default, we get credentials through the usual AWS credentials provider, and store documents using https://github.com/ptaoussanis/nippy[Nippy].
 
-=== AWS Transfer Manager
-Also AWS Transfer Manager works fine with the regular `S3AsyncClient` it is recommended to use the new 
-link:https://aws.amazon.com/blogs/developer/introducing-crt-based-s3-client-and-the-s3-transfer-manager-in-the-aws-sdk-for-java-2-x/[CRT-based S3 client] in order to gain its full benefit. 
-The following snippet 
 
+[tabs]
+====
+Clojure::
++
+[source,clojure]
+----
+{:xtdb/document-store {:xtdb/module 'xtdb.s3/->document-store
+                       :configurator (fn [_]
+                                       (reify S3Configurator
+                                         ...)
+                       ...}}
+----
+====
+
+
+=== AWS Transfer Manager
+Also AWS Transfer Manager works fine with the regular `S3AsyncClient` it is recommended to use the new
+link:https://aws.amazon.com/blogs/developer/introducing-crt-based-s3-client-and-the-s3-transfer-manager-in-the-aws-sdk-for-java-2-x/[CRT-based S3 client] in order to gain its full benefit.
+The following snippet
+
+[tabs]
+====
 [source,clojure]
 ----
 (defn- s3-configurator [_]
@@ -146,18 +164,5 @@ The following snippet
                :approx-frequency (java.time.Duration/ofSeconds 30)}}}
                ...
     }
-----
-
-[tabs]
-====
-Clojure::
-+
-[source,clojure]
-----
-{:xtdb/document-store {:xtdb/module 'xtdb.s3/->document-store
-                       :configurator (fn [_]
-                                       (reify S3Configurator
-                                         ...)
-                       ...}}
 ----
 ====
