@@ -49,18 +49,6 @@
 (defmethod i/halt-key! ::xtdb [_ ^IXtdb node]
   (.close node))
 
-(defn- s3-configurator [_]
-  (reify S3Configurator
-    (makeClient [_]
-      (let [configurator
-            (-> (S3AsyncClient/crtBuilder)
-                (.credentialsProvider
-                 (. ProfileCredentialsProvider create "jan-juxt"))
-                  ; (.targetThroughputInGbps 20.0)
-                  ; (.minimumPartSizeInBytes (* 8 1024))
-                (.build))]
-        configurator))))
-
 (def standalone-config
   {::xtdb {:node-opts {:xtdb/index-store {:kv-store {:xtdb/module `rocks/->kv-store,
                                                      :db-dir (io/file dev-node-dir "indexes"),
