@@ -133,6 +133,8 @@ The following snippet
 
 [tabs]
 ====
+Clojure::
++
 [source,clojure]
 ----
 (defn- s3-configurator [_]
