@@ -150,6 +150,10 @@ Clojure::
         configurator))))
 ----
 
+[tabs]
+====
+Clojure::
++
 [source,clojure]
 ----
     {
