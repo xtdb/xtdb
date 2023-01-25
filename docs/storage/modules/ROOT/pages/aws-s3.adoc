@@ -128,23 +128,24 @@ The following snippet
                  (.minimumPartSizeInBytes (* 8 1024))
                 (.build))]
         configurator))))
+----
 
+[source,clojure]
+----
     {
               ...
               :checkpointer
               {:xtdb/module `xtdb.checkpoint/->checkpointer
 
                :store {:xtdb/module `xtdb.s3.checkpoint/->cp-store
-                       :bucket "jan-bucket1"
-                       :prefix "CKX"
+                       :bucket "checkpoint-bucket"
+                       :prefix "checkpoint-dir"
                        :transfer-manager? true
                        :configurator `s3-configurator}
 
                :approx-frequency (java.time.Duration/ofSeconds 30)}}}
                ...
     }
-...
-
 ----
 
 [tabs]
