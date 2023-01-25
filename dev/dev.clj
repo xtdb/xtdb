@@ -16,10 +16,7 @@
   (:import (ch.qos.logback.classic Level Logger)
            (java.io Closeable File)
            (org.slf4j LoggerFactory)
-           (xtdb.api IXtdb)
-           (xtdb.s3 S3Configurator)
-           (software.amazon.awssdk.services.s3 S3AsyncClient)
-           (software.amazon.awssdk.auth.credentials ProfileCredentialsProvider)))
+           (xtdb.api IXtdb)))
 
 (defn set-log-level! [ns level]
   (.setLevel ^Logger (LoggerFactory/getLogger (name ns))

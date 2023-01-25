@@ -39,10 +39,7 @@
 
                  ;; cloudwatch metrics deps
                  [io.github.azagniotov/dropwizard-metrics-cloudwatch "2.0.8" :exclusions [io.netty/netty-transport-native-unix-common]]
-                 [software.amazon.awssdk/cloudwatch "2.19.21" :exclusions [io.netty/netty-transport-native-unix-common]]
-                 [software.amazon.awssdk/s3 "2.19.21" :exclusions [io.netty/netty-transport-native-unix-common]]
-                 #_[io.github.azagniotov/dropwizard-metrics-cloudwatch "2.0.8"]
-                 #_[software.amazon.awssdk/cloudwatch]]
+                 [software.amazon.awssdk/cloudwatch "2.19.21" :exclusions [io.netty/netty-transport-native-unix-common]]]
 
   :resource-paths ["resources" "data"]
   :jvm-opts ["-Xms3g" "-Xmx3g"]

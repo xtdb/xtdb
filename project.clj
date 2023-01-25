@@ -89,11 +89,9 @@
    [pro.juxt.clojars-mirrors.cheshire/cheshire "5.10.0"]
    [pro.juxt.clojars-mirrors.com.taoensso/nippy "3.1.1-2"]
    [ring/ring-devel "1.9.5"]
-   [software.amazon.awssdk/sts "2.19.21"]
+   [software.amazon.awssdk/s3 "2.19.21"]
    [software.amazon.awssdk/cloudwatch "2.19.21"]
-   [software.amazon.awssdk.crt/aws-crt "0.21.1"]
-   [software.amazon.awssdk/s3-transfer-manager "2.19.21"]
-   ]
+   [software.amazon.awssdk/s3-transfer-manager "2.19.21"]]
 
   :dependencies
   [[org.clojure/clojure]

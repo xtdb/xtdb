@@ -15,8 +15,6 @@
   :dependencies [[org.clojure/clojure]
                  [org.clojure/tools.logging]
                  [com.xtdb/xtdb-core]
-                 [software.amazon.awssdk/sts]
-                 [software.amazon.awssdk.crt/aws-crt]
                  [software.amazon.awssdk/s3-transfer-manager]]
 
   :profiles {:test {:dependencies [[com.xtdb/xtdb-test]]}}
