@@ -357,7 +357,7 @@
                                        (assoc :basis {:tx tx})))
                   (into #{}))))
 
-    (t/is (empty (->> (c2/plan-datalog tu/*node*
+    (t/is (empty? (->> (c2/plan-datalog tu/*node*
                                         (-> '{:find [first-name last-name]
                                               :where [[e :first-name first-name]
                                                       [e :last-name last-name]
@@ -367,104 +367,102 @@
                        (into []))))
 
     (t/is (empty (->> (c2/plan-datalog tu/*node*
-                                        (-> '{:find [first-name last-name]
-                                              :where [[e :first-name first-name]
-                                                      [e :last-name last-name]
-                                                      [(< first-name "Ivan")]]}
-                                            (assoc :basis {:tx tx})))
-                       (into []))))))
+                                       (-> '{:find [first-name last-name]
+                                             :where [[e :first-name first-name]
+                                                     [e :last-name last-name]
+                                                     [(< first-name "Ivan")]]}
+                                           (assoc :basis {:tx tx})))
+                      (into []))))))
 
 (deftest test-value-unification
-  (let [tx (c2/submit-tx
-             tu/*node*
-             (conj
-               ivan+petr
-               [:put {:id :sergei :first-name "Sergei" :last-name "Sergei"}]
-               [:put {:id :jeff :first-name "Sergei" :last-name "but-different"}]))]
-      (t/is (= [{:e :sergei, :n "Sergei"}]
-               (->> (c2/plan-datalog
-                      tu/*node*
-                      (-> '{:find [e n]
-                            :where [[e :last-name n]
-                                    [e :first-name n]]}
-                          (assoc :basis {:tx tx})))
-                    (into []))))
-      (t/is (= [{:e :sergei, :f :sergei, :n "Sergei"} {:e :sergei, :f :jeff, :n "Sergei"}]
-               (->> (c2/plan-datalog
-                      tu/*node*
-                      (-> '{:find [e f n]
-                            :where [[e :last-name n]
-                                    [e :first-name n]
-                                    [f :first-name n]]}
-                          (assoc :basis {:tx tx})))
-                    (into []))))))
+  (let [tx (c2/submit-tx tu/*node*
+                         (conj ivan+petr
+                               [:put {:id :sergei :first-name "Sergei" :last-name "Sergei"}]
+                               [:put {:id :jeff :first-name "Sergei" :last-name "but-different"}]))]
+    (t/is (= [{:e :sergei, :n "Sergei"}]
+             (->> (c2/plan-datalog
+                   tu/*node*
+                   (-> '{:find [e n]
+                         :where [[e :last-name n]
+                                 [e :first-name n]]}
+                       (assoc :basis {:tx tx})))
+                  (into []))))
+    (t/is (= [{:e :sergei, :f :sergei, :n "Sergei"} {:e :sergei, :f :jeff, :n "Sergei"}]
+             (->> (c2/plan-datalog
+                   tu/*node*
+                   (-> '{:find [e f n]
+                         :where [[e :last-name n]
+                                 [e :first-name n]
+                                 [f :first-name n]]}
+                       (assoc :basis {:tx tx})))
+                  (into []))))))
 
-(deftest test-not-join
+(deftest test-anti-join
   (let [tx (c2/submit-tx
-             tu/*node*
-             [[:put {:id :ivan, :first-name "Ivan", :last-name "Ivanov" :foo 1}]
-              [:put {:id :petr, :first-name "Petr", :last-name "Petrov" :foo 1}]
-              [:put {:id :sergei :first-name "Sergei" :last-name "Sergei" :foo 1}]])]
+            tu/*node*
+            [[:put {:id :ivan, :first-name "Ivan", :last-name "Ivanov" :foo 1}]
+             [:put {:id :petr, :first-name "Petr", :last-name "Petrov" :foo 1}]
+             [:put {:id :sergei :first-name "Sergei" :last-name "Sergei" :foo 1}]])]
 
     (t/is (= [{:e :ivan} {:e :sergei}]
              (->> (c2/plan-datalog
-                    tu/*node*
-                    (-> '{:find [e]
-                          :where [[e :foo 1]
-                                  (not-join [e]
-                                            [e :first-name "Petr"])]}
-                        (assoc :basis {:tx tx})))
+                   tu/*node*
+                   (-> '{:find [e]
+                         :where [[e :foo 1]
+                                 (not-exists? [e]
+                                              [e :first-name "Petr"])]}
+                       (assoc :basis {:tx tx})))
                   (into []))))
     (t/is (= [{:e :ivan} {:e :sergei}]
              (->> (c2/plan-datalog
-                    tu/*node*
-                    (-> '{:find [e]
-                          :where [[e :foo n]
-                                  (not-join [e n]
-                                            [e :first-name "Petr"]
-                                            [e :foo n])]}
-                        (assoc :basis {:tx tx})))
+                   tu/*node*
+                   (-> '{:find [e]
+                         :where [[e :foo n]
+                                 (not-exists? [e n]
+                                              [e :first-name "Petr"]
+                                              [e :foo n])]}
+                       (assoc :basis {:tx tx})))
                   (into []))))
 
     (t/is (= []
              (->> (c2/plan-datalog
-                    tu/*node*
-                    (-> '{:find [e]
-                          :where [[e :foo n]
-                                  (not-join [e n]
-                                            [e :foo n])]}
-                        (assoc :basis {:tx tx})))
+                   tu/*node*
+                   (-> '{:find [e]
+                         :where [[e :foo n]
+                                 (not-exists? [e n]
+                                              [e :foo n])]}
+                       (assoc :basis {:tx tx})))
                   (into []))))
 
     (t/is (= [{:e :petr} {:e :sergei}]
              (->> (c2/plan-datalog
-                    tu/*node*
-                    (-> '{:find [e]
-                          :where [[e :foo 1]
-                                  (not-join [e]
-                                            [e :last-name "Ivanov"])]}
-                        (assoc :basis {:tx tx})))
+                   tu/*node*
+                   (-> '{:find [e]
+                         :where [[e :foo 1]
+                                 (not-exists? [e]
+                                              [e :last-name "Ivanov"])]}
+                       (assoc :basis {:tx tx})))
                   (into []))))
 
     (t/is (= [{:e :ivan} {:e :petr} {:e :sergei}]
              (->> (c2/plan-datalog
-                    tu/*node*
-                    (-> '{:find [e]
-                          :where [[e :foo 1]
-                                  (not-join [e]
-                                            [e :first-name "Jeff"])]}
-                        (assoc :basis {:tx tx})))
+                   tu/*node*
+                   (-> '{:find [e]
+                         :where [[e :foo 1]
+                                 (not-exists? [e]
+                                              [e :first-name "Jeff"])]}
+                       (assoc :basis {:tx tx})))
                   (into []))))
 
     (t/is (= [{:e :ivan} {:e :petr}]
              (->> (c2/plan-datalog
-                    tu/*node*
-                    (-> '{:find [e]
-                          :where [[e :foo 1]
-                                  (not-join [e]
-                                            [e :first-name n]
-                                            [e :last-name n])]}
-                        (assoc :basis {:tx tx})))
+                   tu/*node*
+                   (-> '{:find [e]
+                         :where [[e :foo 1]
+                                 (not-exists? [e]
+                                              [e :first-name n]
+                                              [e :last-name n])]}
+                       (assoc :basis {:tx tx})))
                   (into []))))
 
     (t/is (= [{:e :petr, :first-name "Ivan", :last-name "Ivanov", :a "Petr", :b "Petrov"}
@@ -472,119 +470,116 @@
               {:e :ivan, :first-name "Petr", :last-name "Petrov", :a "Ivan", :b "Ivanov"}
               {:e :sergei, :first-name "Petr", :last-name "Petrov", :a "Sergei", :b "Sergei"}]
              (->> (c2/plan-datalog
-                    tu/*node*
-                    (-> '{:find [e first-name last-name a b]
-                          :in [[[first-name last-name]]]
-                          :where [[e :foo 1]
-                                  [e :first-name a]
-                                  [e :last-name b]
-                                  (not-join [e first-name last-name]
-                                            [e :first-name first-name]
-                                            [e :last-name last-name])]}
-                        (assoc :basis {:tx tx}))
-                    [["Ivan" "Ivanov"]
-                     ["Petr" "Petrov"]])
+                   tu/*node*
+                   (-> '{:find [e first-name last-name a b]
+                         :in [[[first-name last-name]]]
+                         :where [[e :foo 1]
+                                 [e :first-name a]
+                                 [e :last-name b]
+                                 (not-exists? [e first-name last-name]
+                                              [e :first-name first-name]
+                                              [e :last-name last-name])]}
+                       (assoc :basis {:tx tx}))
+                   [["Ivan" "Ivanov"]
+                    ["Petr" "Petrov"]])
                   (into []))))
 
-    (t/testing "apply not-joins"
+    (t/testing "apply anti-joins"
       (t/is (= [{:n 1, :e :ivan} {:n 1, :e :petr} {:n 1, :e :sergei}]
                (c2/datalog-query
-                 tu/*node*
-                 (-> '{:find [e n]
-                       :where [[e :foo n]
-                               (not-join [e n]
-                                         [e :first-name "Petr"]
-                                         [(= n 2)])]}
-                     (assoc :basis {:tx tx})))))
-
-      (t/is (= [{:n 1, :e :ivan} {:n 1, :e :sergei}]
-               (c2/datalog-query
-                 tu/*node*
-                 (-> '{:find [e n]
-                       :where [[e :foo n]
-                               (not-join [e n]
-                                         [e :first-name "Petr"]
-                                         [(= n 1)])]}
-                     (assoc :basis {:tx tx})))))
-
-      (t/is (= []
-               (c2/datalog-query
-                 tu/*node*
-                 (-> '{:find [e n]
-                       :where [[e :foo n]
-                               (not-join [n]
-                                         [(= n 1)])]}
-                     (assoc :basis {:tx tx})))))
-
-      (t/is (= [{:n "Petr", :e :petr} {:n "Sergei", :e :sergei}]
-               (c2/datalog-query
-                 tu/*node*
-                 (-> '{:find [e n]
-                       :where [[e :first-name n]
-                               (not-join [n]
-                                         [(= "Ivan" n)])]}
-                     (assoc :basis {:tx tx})))))
-
-
-      (t/is (= [{:n "Petr", :e :petr} {:n "Sergei", :e :sergei}]
-               (c2/datalog-query
-                 tu/*node*
-                 (-> '{:find [e n]
-                       :where [[e :first-name n]
-                               (not-join [n]
-                                         [e :first-name n]
-                                         [e :first-name "Ivan"])]}
-                     (assoc :basis {:tx tx})))))
-
-      (t/is (= [{:n 1, :e :ivan} {:n 1, :e :sergei}]
-               (c2/datalog-query
-                 tu/*node*
-                 (-> '{:find [e n]
-                       :where [[e :foo n]
-                               (not-join [e n]
-                                         [e :first-name "Petr"]
-                                         [e :foo n]
-                                         [(= n 1)])]}
-                     (assoc :basis {:tx tx})))))
-
-
-      (t/is (thrown-with-msg?
-              IllegalArgumentException
-              #":unsatisfied-vars"
-              (c2/datalog-query
                 tu/*node*
                 (-> '{:find [e n]
                       :where [[e :foo n]
-                              (not-join [e]
-                                        [e :first-name "Petr"]
-                                        [(= n 1)])]}
+                              (not-exists? [e n]
+                                           [e :first-name "Petr"]
+                                           [(= n 2)])]}
+                    (assoc :basis {:tx tx})))))
+
+      (t/is (= [{:n 1, :e :ivan} {:n 1, :e :sergei}]
+               (c2/datalog-query
+                tu/*node*
+                (-> '{:find [e n]
+                      :where [[e :foo n]
+                              (not-exists? [e n]
+                                           [e :first-name "Petr"]
+                                           [(= n 1)])]}
+                    (assoc :basis {:tx tx})))))
+
+      (t/is (= []
+               (c2/datalog-query
+                tu/*node*
+                (-> '{:find [e n]
+                      :where [[e :foo n]
+                              (not-exists? [n]
+                                           [(= n 1)])]}
+                    (assoc :basis {:tx tx})))))
+
+      (t/is (= [{:n "Petr", :e :petr} {:n "Sergei", :e :sergei}]
+               (c2/datalog-query
+                tu/*node*
+                (-> '{:find [e n]
+                      :where [[e :first-name n]
+                              (not-exists? [n]
+                                           [(= "Ivan" n)])]}
                     (assoc :basis {:tx tx})))))
 
 
+      (t/is (= [{:n "Petr", :e :petr} {:n "Sergei", :e :sergei}]
+               (c2/datalog-query
+                tu/*node*
+                (-> '{:find [e n]
+                      :where [[e :first-name n]
+                              (not-exists? [n]
+                                           [e :first-name n]
+                                           [e :first-name "Ivan"])]}
+                    (assoc :basis {:tx tx})))))
 
+      (t/is (= [{:n 1, :e :ivan} {:n 1, :e :sergei}]
+               (c2/datalog-query
+                tu/*node*
+                (-> '{:find [e n]
+                      :where [[e :foo n]
+                              (not-exists? [e n]
+                                           [e :first-name "Petr"]
+                                           [e :foo n]
+                                           [(= n 1)])]}
+                    (assoc :basis {:tx tx})))))
+
+
+      (t/is (thrown-with-msg?
+             IllegalArgumentException
+             #":unsatisfied-vars"
+             (c2/datalog-query
+              tu/*node*
+              (-> '{:find [e n]
+                    :where [[e :foo n]
+                            (not-exists? [e]
+                                         [e :first-name "Petr"]
+                                         [(= n 1)])]}
+                  (assoc :basis {:tx tx})))))
 
       ;; TODO what to do if arg var isn't used, either remove it from the join
       ;; or convert the anti-join to an apply and param all the args
       #_(t/is (= [{:e :ivan} {:e :sergei}]
                  (c2/datalog-query
-                   tu/*node*
-                   (-> '{:find [e n]
-                         :where [[e :foo n]
-                                 (not-join [e n]
-                                           [e :first-name "Petr"])]}
-                       (assoc :basis {:tx tx}))))))
+                  tu/*node*
+                  (-> '{:find [e n]
+                        :where [[e :foo n]
+                                (not-exists? [e n]
+                                             [e :first-name "Petr"])]}
+                      (assoc :basis {:tx tx}))))))
 
-    (t/testing "Multiple not-joins"
+    (t/testing "Multiple anti-joins"
       (t/is (= [{:n "Petr", :e :petr}]
                (c2/datalog-query
-                 tu/*node*
-                 (-> '{:find [e n]
-                       :where [[e :first-name n]
-                               (not-join [n]
-                                         [(= n "Ivan")])
-                               (not-join [e]
-                                         [e :first-name "Sergei"])]}
-                     (assoc :basis {:tx tx}))))))))
+                tu/*node*
+                (-> '{:find [e n]
+                      :where [[e :first-name n]
+                              (not-exists? [n]
+                                           [(= n "Ivan")])
+                              (not-exists? [e]
+                                           [e :first-name "Sergei"])]}
+                    (assoc :basis {:tx tx}))))))))
 
 (t/deftest calling-a-function-580
   (let [!tx (c2/submit-tx tu/*node*
