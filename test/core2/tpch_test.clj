@@ -97,7 +97,7 @@
 
 (def ^:private ^:dynamic *datalog-qs*
   ;; replace with *qs* once these are all expected to work
-  #{1 4 6})
+  #{1 4 6 16})
 
 (defn test-datalog-query [n expected-res]
   (let [q (inc n)]
