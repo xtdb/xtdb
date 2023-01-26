@@ -1,8 +1,10 @@
 (ns core2.tpch-test
   (:require [clojure.java.io :as io]
             [clojure.test :as t]
+            [core2.datalog :as d]
             [core2.datasets.tpch :as tpch]
             [core2.datasets.tpch.ra :as tpch-ra]
+            [core2.datasets.tpch.datalog :as tpch-datalog]
             [core2.node :as node]
             [core2.sql :as sql]
             core2.sql-test
@@ -92,6 +94,32 @@
 (comment
   (binding [*qs* #{1 5}]
     (t/run-test test-01-ra)))
+
+(def ^:private ^:dynamic *datalog-qs*
+  ;; replace with *qs* once these are all expected to work
+  #{})
+
+(defn test-datalog-query [n expected-res]
+  (let [q (inc n)]
+    (when (contains? *datalog-qs* q)
+      (let [query @(nth tpch-datalog/queries n)
+            {::tpch-datalog/keys [in-args]} (meta query)]
+        (tu/with-allocator
+          (fn []
+            (with-open [res (d/open-datalog-query tu/*allocator* query *db* in-args)]
+              (t/is (is-equal? expected-res (vec (iterator-seq res)))
+                    (format "Q%02d" (inc n))))))))))
+
+(t/deftest test-001-datalog
+  (with-tpch-data {:method :docs, :scale-factor 0.001
+                   :node-dir (util/->path "target/tpch-queries-datalog-sf-001")}
+    (fn []
+      (dorun
+       (map-indexed test-datalog-query results-sf-001)))))
+
+(comment
+  (binding [*datalog-qs* #{4}]
+    (t/run-test test-001-datalog)))
 
 (defn slurp-sql-query [query-no]
   (slurp (io/resource (str "core2/sql/tpch/" (format "q%02d.sql" query-no)))))
