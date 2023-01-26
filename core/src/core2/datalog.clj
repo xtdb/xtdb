@@ -208,7 +208,17 @@
                {:provided-vars (set/intersection arg-vars provided-vars)
                 :required-vars (set/difference arg-vars provided-vars)})
 
-    :not-join (throw (UnsupportedOperationException.))))
+    :not-join (let [{:keys [args terms]} term-arg
+                    arg-vars (set args)
+                    {:keys [required-vars]} (combine-term-vars (map term-vars terms))]
+
+                (when-let [unsatisfied-vars (not-empty (set/difference required-vars arg-vars))]
+                  (throw (err/illegal-arg :unsatisfied-vars
+                                          {:vars unsatisfied-vars
+                                           :term (s/unform ::not-join term-arg)})))
+
+                ;;not-joins do not provide vars
+                {:required-vars required-vars})))
 
 (defn- analyse-in [{in-bindings :in}]
   (let [in-bindings (->> in-bindings
@@ -324,30 +334,64 @@
           (wrap-select (map form->sexp selects))))))
 
 (defn- analyse-not-joins [not-join-clauses]
-  ;; TODO check args all bind
   (->> not-join-clauses
-       (into [] (map-indexed (fn [idx {:keys [args terms]}]
-                               (let [var->col (->> args
+       (into [] (map-indexed (fn [nj-idx {:keys [args terms] :as nj}]
+                               (let [{nj-required-vars :required-vars} (term-vars [:not-join nj])
+
+                                     var->col (->> args
                                                    (into {}
-                                                         (map (juxt identity #(col-sym (str "nj" idx "_" (str %)))))))]
-                                 {:inner-q {:find (vec (for [arg args]
-                                                         [:logic-var arg]))
-                                            :keys (vec (for [arg args]
-                                                         (keyword (var->col arg))))
-                                            :where terms}
-                                  :var->col var->col}))))
+                                                         (map (juxt identity #(col-sym (str "nj" nj-idx "_" (str %)))))))
+                                     required-vars (if (seq nj-required-vars) (set args) #{})]
+
+                                 {:var->col var->col
+                                  :required-vars required-vars
+                                  :query (cond-> {:find (vec (for [arg args]
+                                                               [:logic-var arg]))
+                                                  :keys (vec (for [arg args]
+                                                               (keyword (var->col arg))))
+                                                  :where terms}
+                                           (seq required-vars) (assoc :in [[:tuple args]]))}))))
        (not-empty)))
 
-(defn- wrap-not-joins [plan {:keys [not-joins var->col]}]
-  (reduce (fn [plan {nj-var->col :var->col, :keys [inner-q]}]
-            [:anti-join (->> nj-var->col
-                             (mapv (fn [[lv nv-col]]
-                                     {(get var->col lv) nv-col})))
-             plan
+(defn- wrap-not-joins [plan {outer-var->col :var->col, :keys [not-joins]}]
+  (if not-joins
+    (let [not-joins (->> not-joins
+                         (mapv
+                           (fn [{:keys [required-vars query var->col]}]
+                             (let [plan (plan-query query)
+                                   apply-mapping (when required-vars
+                                                   (let [{:keys [in-bindings]} plan
+                                                         {:keys [var->col]} (first in-bindings)]
+                                                     (->> var->col
+                                                          (into {} (map (fn [[lv in-var]]
+                                                                          (MapEntry/create
+                                                                            (get outer-var->col lv)
+                                                                            in-var)))))))]
+                               (assoc
+                                 plan
+                                 :join-condition
+                                 (->> var->col
+                                      (mapv (fn [[lv col]]
+                                              {(get outer-var->col lv) col})))
+                                 :apply-mapping
+                                 apply-mapping)))))]
 
-             (:plan (plan-query inner-q))])
-          plan
-          not-joins))
+      (reduce
+        (fn [outer-plan {:keys [plan apply-mapping join-condition]}]
+          (if (seq apply-mapping)
+            [:apply
+             :anti-join
+             apply-mapping
+             outer-plan
+             plan]
+
+            [:anti-join
+             join-condition
+             outer-plan
+             plan]))
+        plan
+        not-joins))
+    plan))
 
 (defn- analyse-union-joins [union-join-clauses]
   (->> union-join-clauses
@@ -431,8 +475,8 @@
                          (into {} (map (juxt identity #(col-sym (str %))))))]
 
     (loop [calls calls
-           not-joins (analyse-not-joins not-join-clauses)
            union-joins (analyse-union-joins union-join-clauses)
+           not-joins (analyse-not-joins not-join-clauses)
            var->col l0-var->col
            levels [{:triple-rels triple-rels
                     :var->cols l0-var->cols
@@ -451,13 +495,19 @@
               {available-ojs true
                unavailable-ojs false} (->> union-joins
                                            (group-by (fn [{:keys [required-vars]}]
-                                                       (set/superset? (set (keys var->col)) required-vars))))]
+                                                       (set/superset? (set (keys var->col)) required-vars))))
 
-          (if (and (empty? not-joins) (empty? available-calls) (empty? available-ojs))
+              {available-njs true
+               unavailable-njs false}  (->> not-joins
+                                            (group-by (fn [{:keys [required-vars]}]
+                                                        (set/superset? (set (keys var->col)) required-vars))))]
+
+          (if (and (empty? available-calls) (empty? available-ojs) (empty? available-njs))
             (throw (err/illegal-arg :no-available-clauses
                                     {:known-vars (set (keys var->col))
                                      :unavailable-calls unavailable-calls
-                                     :unavailable-union-joins unavailable-ojs}))
+                                     :unavailable-union-joins unavailable-ojs
+                                     :unavailable-not-joins unavailable-njs}))
 
             (let [new-vars (into #{} (mapcat (comp keys :var->col)) (concat available-calls available-ojs))
 
@@ -470,8 +520,10 @@
                                     (update-vals #(into #{} (map val) %)))]
 
               (recur unavailable-calls
-                     nil ; TODO not-joins could have required vars, this is naive
+
                      unavailable-ojs
+
+                     unavailable-njs
 
                      new-var->col
 

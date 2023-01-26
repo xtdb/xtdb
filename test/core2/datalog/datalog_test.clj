@@ -399,12 +399,13 @@
                           (assoc :basis {:tx tx})))
                     (into []))))))
 
-(deftest test-not-join-scan
+(deftest test-not-join
   (let [tx (c2/submit-tx
              tu/*node*
              [[:put {:id :ivan, :first-name "Ivan", :last-name "Ivanov" :foo 1}]
               [:put {:id :petr, :first-name "Petr", :last-name "Petrov" :foo 1}]
               [:put {:id :sergei :first-name "Sergei" :last-name "Sergei" :foo 1}]])]
+
     (t/is (= [{:e :ivan} {:e :sergei}]
              (->> (c2/plan-datalog
                     tu/*node*
@@ -483,7 +484,107 @@
                         (assoc :basis {:tx tx}))
                     [["Ivan" "Ivanov"]
                      ["Petr" "Petrov"]])
-                  (into []))))))
+                  (into []))))
+
+    (t/testing "apply not-joins"
+      (t/is (= [{:n 1, :e :ivan} {:n 1, :e :petr} {:n 1, :e :sergei}]
+               (c2/datalog-query
+                 tu/*node*
+                 (-> '{:find [e n]
+                       :where [[e :foo n]
+                               (not-join [e n]
+                                         [e :first-name "Petr"]
+                                         [(= n 2)])]}
+                     (assoc :basis {:tx tx})))))
+
+      (t/is (= [{:n 1, :e :ivan} {:n 1, :e :sergei}]
+               (c2/datalog-query
+                 tu/*node*
+                 (-> '{:find [e n]
+                       :where [[e :foo n]
+                               (not-join [e n]
+                                         [e :first-name "Petr"]
+                                         [(= n 1)])]}
+                     (assoc :basis {:tx tx})))))
+
+      (t/is (= []
+               (c2/datalog-query
+                 tu/*node*
+                 (-> '{:find [e n]
+                       :where [[e :foo n]
+                               (not-join [n]
+                                         [(= n 1)])]}
+                     (assoc :basis {:tx tx})))))
+
+      (t/is (= [{:n "Petr", :e :petr} {:n "Sergei", :e :sergei}]
+               (c2/datalog-query
+                 tu/*node*
+                 (-> '{:find [e n]
+                       :where [[e :first-name n]
+                               (not-join [n]
+                                         [(= "Ivan" n)])]}
+                     (assoc :basis {:tx tx})))))
+
+
+      (t/is (= [{:n "Petr", :e :petr} {:n "Sergei", :e :sergei}]
+               (c2/datalog-query
+                 tu/*node*
+                 (-> '{:find [e n]
+                       :where [[e :first-name n]
+                               (not-join [n]
+                                         [e :first-name n]
+                                         [e :first-name "Ivan"])]}
+                     (assoc :basis {:tx tx})))))
+
+      (t/is (= [{:n 1, :e :ivan} {:n 1, :e :sergei}]
+               (c2/datalog-query
+                 tu/*node*
+                 (-> '{:find [e n]
+                       :where [[e :foo n]
+                               (not-join [e n]
+                                         [e :first-name "Petr"]
+                                         [e :foo n]
+                                         [(= n 1)])]}
+                     (assoc :basis {:tx tx})))))
+
+
+      (t/is (thrown-with-msg?
+              IllegalArgumentException
+              #":unsatisfied-vars"
+              (c2/datalog-query
+                tu/*node*
+                (-> '{:find [e n]
+                      :where [[e :foo n]
+                              (not-join [e]
+                                        [e :first-name "Petr"]
+                                        [(= n 1)])]}
+                    (assoc :basis {:tx tx})))))
+
+
+
+
+      ;; TODO what to do if arg var isn't used, either remove it from the join
+      ;; or convert the anti-join to an apply and param all the args
+      #_(t/is (= [{:e :ivan} {:e :sergei}]
+                 (c2/datalog-query
+                   tu/*node*
+                   (-> '{:find [e n]
+                         :where [[e :foo n]
+                                 (not-join [e n]
+                                           [e :first-name "Petr"])]}
+                       (assoc :basis {:tx tx}))))))
+
+    (t/testing "Multiple not-joins"
+      (t/is (= [{:n "Petr", :e :petr}]
+               (c2/datalog-query
+                 tu/*node*
+                 (-> '{:find [e n]
+                       :where [[e :first-name n]
+                               (not-join [n]
+                                         [(= n "Ivan")])
+                               (not-join [e]
+                                         [e :first-name "Sergei"])]}
+                     (assoc :basis {:tx tx}))))))))
 
 (t/deftest calling-a-function-580
   (let [!tx (c2/submit-tx tu/*node*
