@@ -97,7 +97,7 @@
 
 (def ^:private ^:dynamic *datalog-qs*
   ;; replace with *qs* once these are all expected to work
-  #{})
+  #{6})
 
 (defn test-datalog-query [n expected-res]
   (let [q (inc n)]
@@ -117,8 +117,15 @@
       (dorun
        (map-indexed test-datalog-query results-sf-001)))))
 
+(t/deftest ^:integration test-01-datalog
+  (with-tpch-data {:method :docs, :scale-factor 0.01
+                   :node-dir (util/->path "target/tpch-queries-datalog-sf-01")}
+    (fn []
+      (dorun
+       (map-indexed test-datalog-query results-sf-01)))))
+
 (comment
-  (binding [*datalog-qs* #{4}]
+  (binding [*datalog-qs* #{5}]
     (t/run-test test-001-datalog)))
 
 (defn slurp-sql-query [query-no]

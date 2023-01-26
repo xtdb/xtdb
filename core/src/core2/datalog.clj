@@ -257,16 +257,21 @@
                                               (when (= :logic-var v-type)
                                                 {:a a, :lv v-arg})))
                                       (group-by :lv))
-                                 (update-vals #(into #{} (map :a) %)))]
+                                 (update-vals #(into #{} (map :a) %)))
+                  attr->lits (-> triples
+                                 (->> (keep (fn [{:keys [a], [v-type v-arg] :v}]
+                                              (when (= :literal v-type)
+                                                {:a a, :lit v-arg})))
+                                      (group-by :a))
+                                 (update-vals #(into #{} (map :lit) %)))]
 
               {:src src, :e e,
-               :attrs (into #{} (map :a) triples)
-               :attr->lits (-> triples
-                               (->> (keep (fn [{:keys [a], [v-type v-arg] :v}]
-                                            (when (= :literal v-type)
-                                              {:a a, :lit v-arg})))
-                                    (group-by :a))
-                               (update-vals #(into #{} (map :lit) %)))
+               :attrs (-> (into #{} (map :a) triples)
+                          (disj '_table))
+               :table (or (some-> (first (attr->lits '_table))
+                                  symbol)
+                          'xt_docs)
+               :attr->lits (dissoc attr->lits '_table)
                :var->attrs var->attrs
 
                :var->col (->> (keys var->attrs)
@@ -477,10 +482,10 @@
                                    :var->cols new-var->cols})))))))))
 
 (defn- plan-triples [triple-rels]
-  (for [{:keys [src attrs attr->lits var->col var->attrs]} triple-rels]
+  (for [{:keys [src table attrs attr->lits var->col var->attrs]} triple-rels]
     [:project (vec (for [[lv col] var->col]
                      {col (first (get var->attrs lv))}))
-     (-> [:scan src 'xt_docs
+     (-> [:scan src table
           (->> (into attrs '#{application_time_start application_time_end})
                (into [] (map (fn [attr]
                                (-> attr
@@ -687,6 +692,7 @@
         plan (-> plan
                  #_(doto clojure.pprint/pprint)
                  (lp/rewrite-plan {})
+                 #_(doto clojure.pprint/pprint)
                  #_(doto (lp/validate-plan)))
 
         pq (op/prepare-ra plan)]

@@ -121,12 +121,16 @@
         :order-by [[(sum (* l_extendedprice (- 1 l_discount))) :desc]]}
       (with-in-args ["ASIA"])))
 
+;; TODO accept nested expr in agg, #583
 (def q6
-  '{:find [(sum (* l_extendedprice l_discount))]
-    :where [[l :l_shipdate l_shipdate]
+  '{:find [(sum revenue)]
+    :keys [revenue]
+    :where [[l :_table :lineitem]
+            [l :l_shipdate l_shipdate]
             [l :l_quantity l_quantity]
             [l :l_extendedprice l_extendedprice]
             [l :l_discount l_discount]
+            [(* l_extendedprice l_discount) revenue]
             [(>= l_shipdate #inst "1994-01-01")]
             [(< l_shipdate #inst "1995-01-01")]
             [(>= l_discount 0.05)]
