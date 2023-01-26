@@ -7,9 +7,6 @@ executors:
     docker:
       - image: clojure:openjdk-11-tools-deps
 
-orbs:
-  slack: circleci/slack@4.1
-
 parameters:
   run-slt:
     type: boolean
@@ -25,7 +22,6 @@ jobs:
     steps:
       - checkout
 
-      # for Slack
       - run: apt-get update && apt-get install -y curl
 
       - run: 'md5sum deps.edn */deps.edn modules/*/deps.edn > .circleci-cache-key'
@@ -59,12 +55,6 @@ jobs:
             - ~/.gitlibs
           key: v4-dependencies-{{ checksum ".circleci-cache-key" }}
 
-      - slack/notify:
-          branch_pattern: master
-          channel: xtdb-builds
-          event: fail
-          template: basic_fail_1
-
   third-party-notices:
     executor: clojure
 
@@ -90,12 +80,6 @@ jobs:
       - run: apt-get update && apt-get install -y curl
       - run: 'clojure -Srepro -X:core2:4gb:test'
 
-      - slack/notify:
-          branch_pattern: master
-          channel: xtdb-builds
-          event: fail
-          template: basic_fail_1
-
   integration-test:
     executor: clojure
 
@@ -106,12 +90,6 @@ jobs:
       - run: apt-get update && apt-get install -y curl
       # TODO should test the other modules too
       - run: 'clojure -Srepro -X:core2:4gb:integration-test'
-
-      - slack/notify:
-          branch_pattern: master
-          channel: xtdb-builds
-          event: fail
-          template: basic_fail_1
 
   slt-test:
     executor: clojure
@@ -166,17 +144,14 @@ workflows:
     when:
       not: << pipeline.parameters.run-slt >>
     jobs:
-      - setup:
-          context: slack-bot
+      - setup
       - third-party-notices:
           requires:
             - setup
       - test:
-          context: slack-bot
           requires:
             - setup
       - integration-test:
-          context: slack-bot
           requires:
             - setup
       - slt-test:
@@ -189,8 +164,7 @@ workflows:
   slt-nightly:
     when: << pipeline.parameters.run-slt >>
     jobs:
-      - setup:
-          context: slack-bot
+      - setup
       - slt-test-dirs:
           requires:
             - setup
