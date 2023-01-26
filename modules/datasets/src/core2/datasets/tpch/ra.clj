@@ -85,22 +85,21 @@
   (-> '[:order-by [[revenue {:direction :desc}]]
         [:group-by [n_name {revenue (sum disc_price)}]
          [:project [n_name {disc_price (* l_extendedprice (- 1 l_discount))}]
-          [:select (= l_suppkey s_suppkey)
-           [:join [{o_orderkey l_orderkey}]
-            [:join [{s_nationkey c_nationkey}]
-             [:join [{n_nationkey s_nationkey}]
-              [:join [{r_regionkey n_regionkey}]
-               [:scan region [{r_name (= r_name "ASIA")} r_regionkey]]
-               [:scan nation [n_name n_nationkey n_regionkey]]]
-              [:scan supplier [s_suppkey s_nationkey]]]
-             [:join [{o_custkey c_custkey}]
-              [:scan
-               orders
-               [o_orderkey o_custkey
-                {o_orderdate (and (>= o_orderdate ?start-date)
-                                  (< o_orderdate ?end-date))}]]
-              [:scan customer [c_custkey c_nationkey]]]]
-            [:scan lineitem [l_orderkey l_extendedprice l_discount l_suppkey]]]]]]]
+          [:join [{o_orderkey l_orderkey} {s_suppkey l_suppkey}]
+           [:join [{s_nationkey c_nationkey}]
+            [:join [{n_nationkey s_nationkey}]
+             [:join [{r_regionkey n_regionkey}]
+              [:scan region [{r_name (= r_name "ASIA")} r_regionkey]]
+              [:scan nation [n_name n_nationkey n_regionkey]]]
+             [:scan supplier [s_suppkey s_nationkey]]]
+            [:join [{o_custkey c_custkey}]
+             [:scan
+              orders
+              [o_orderkey o_custkey
+               {o_orderdate (and (>= o_orderdate ?start-date)
+                                 (< o_orderdate ?end-date))}]]
+             [:scan customer [c_custkey c_nationkey]]]]
+           [:scan lineitem [l_orderkey l_extendedprice l_discount l_suppkey]]]]]]
       (with-params {'?start-date (LocalDate/parse "1994-01-01")
                     '?end-date (LocalDate/parse "1995-01-01")})))
 
