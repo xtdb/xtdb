@@ -11,7 +11,6 @@
             [xtdb.kafka :as k]
             [xtdb.kafka.embedded :as ek]
             [xtdb.lucene]
-            [xtdb.s3]
             [xtdb.rocksdb :as rocks])
   (:import (ch.qos.logback.classic Level Logger)
            (java.io Closeable File)
@@ -106,8 +105,8 @@
                                   :doc-topic-opts {:topic-name "xtdb-document-store"}
                                   :kafka-config :kafka-config}}}})
 
+
 ;; swap for `embedded-kafka-config` to use embedded-kafka
-; (ir/set-prep! (fn [] checkpoint-config))
 (ir/set-prep! (fn [] standalone-config))
 ; (ir/set-prep! (fn [] local-kafka-config))
 ; (ir/set-prep! (fn [] embedded-kafka-config))
