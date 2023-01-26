@@ -558,7 +558,7 @@
                                                [(+ a1 (+ a2 a3 1)) sum-ages]]}
                                      (assoc :basis {:tx !tx}))))))))
 
-(t/deftest test-or-join
+(t/deftest test-union-join
   (let [!tx (c2/submit-tx tu/*node* [[:put {:id :ivan, :age 20, :role :developer}]
                                      [:put {:id :oleg, :age 30, :role :manager}]
                                      [:put {:id :petr, :age 35, :role :qa}]
@@ -570,18 +570,18 @@
                                     (assoc :basis {:tx !tx}))))]
       (t/is (= [{:e :petr} {:e :ivan}]
                (q '{:find [e]
-                    :where [(or-join [e]
-                                     [e :role :developer]
-                                     [e :age 35])
-                            (or-join [e]
-                                     [e :id :petr]
-                                     [e :id :ivan])]})))
+                    :where [(union-join [e]
+                                        [e :role :developer]
+                                        [e :age 35])
+                            (union-join [e]
+                                        [e :id :petr]
+                                        [e :id :ivan])]})))
 
       (t/is (= [{:e :petr}, {:e :oleg}]
                (q '{:find [e]
                     :where [[:sergei :age age]
                             [:sergei :role role]
-                            (or-join [e age role]
-                                     [e :age age]
-                                     [e :role role])
+                            (union-join [e age role]
+                                        [e :age age]
+                                        [e :role role])
                             [(<> e :sergei)]]}))))))

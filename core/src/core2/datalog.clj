@@ -100,15 +100,15 @@
                                [:term (first terms)]
                                [:and {:and 'and, :terms terms}]))))))
 
-(s/def ::or-join
-  (s/cat :or-join #{'or-join}
+(s/def ::union-join
+  (s/cat :union-join #{'union-join}
          :args ::args-list
          :branches ::or-branches))
 
 (s/def ::term
   (s/or :triple ::triple
         :not-join ::not-join
-        :or-join ::or-join
+        :union-join ::union-join
         :call ::call-clause))
 
 (s/def ::where
@@ -188,7 +188,7 @@
                                                   val-arg))))
                                   [:e :v])}
 
-    :or-join (let [{:keys [args branches]} term-arg
+    :union-join (let [{:keys [args branches]} term-arg
                    arg-vars (set args)
                    branches-vars (for [branch branches]
                                    (into {:branch branch}
@@ -203,7 +203,7 @@
                (when-let [unsatisfied-vars (not-empty (set/difference required-vars arg-vars))]
                  (throw (err/illegal-arg :unsatisfied-vars
                                          {:vars unsatisfied-vars
-                                          :term (s/unform ::or-join term-arg)})))
+                                          :term (s/unform ::union-join term-arg)})))
 
                {:provided-vars (set/intersection arg-vars provided-vars)
                 :required-vars (set/difference arg-vars provided-vars)})
@@ -344,20 +344,20 @@
           plan
           not-joins))
 
-(defn- analyse-or-joins [or-join-clauses]
-  (->> or-join-clauses
+(defn- analyse-union-joins [union-join-clauses]
+  (->> union-join-clauses
        (into [] (map-indexed
-                 (fn [oj-idx {:keys [args branches] :as oj}]
-                   (let [{oj-required-vars :required-vars} (term-vars [:or-join oj])
+                 (fn [uj-idx {:keys [args branches] :as uj}]
+                   (let [{uj-required-vars :required-vars} (term-vars [:union-join uj])
 
-                         in-vars (vec oj-required-vars)
+                         in-vars (vec uj-required-vars)
 
                          var->col (->> args
                                        (into {}
-                                             (map (juxt identity #(col-sym (str "oj" oj-idx "_" (str %)))))))]
+                                             (map (juxt identity #(col-sym (str "uj" uj-idx "_" (str %)))))))]
 
                      {:var->col var->col
-                      :required-vars oj-required-vars
+                      :required-vars uj-required-vars
                       :branch-queries (->> branches
                                            (mapv (fn [branch]
                                                    {:find (vec (for [arg args]
@@ -368,9 +368,9 @@
                                                     :where branch})))}))))
        (not-empty)))
 
-(defn- wrap-or-joins [plan {outer-var->col :var->col, :keys [or-joins]}]
-  (if or-joins
-    (let [or-joins (->> or-joins
+(defn- wrap-union-joins [plan {outer-var->col :var->col, :keys [union-joins]}]
+  (if union-joins
+    (let [union-joins (->> union-joins
                         (mapv
                          (fn [{:keys [required-vars branch-queries]}]
                            (let [branch-plans (->> branch-queries
@@ -391,16 +391,16 @@
                                                                        (get outer-var->col lv)
                                                                        in-var)))))))}))))]
 
-      (if-let [apply-mapping (not-empty (into {} (mapcat :apply-mapping) or-joins))]
+      (if-let [apply-mapping (not-empty (into {} (mapcat :apply-mapping) union-joins))]
         [:apply :cross-join apply-mapping
          plan
          [:mega-join []
-          (mapv :plan or-joins)]]
+          (mapv :plan union-joins)]]
 
         [:mega-join []
          (into [plan]
                (map :plan)
-               or-joins)]))
+               union-joins)]))
 
     plan))
 
@@ -409,7 +409,7 @@
         {triple-clauses :triple
          call-clauses :call
          not-join-clauses :not-join
-         or-join-clauses :or-join} (-> where-clauses
+         union-join-clauses :union-join} (-> where-clauses
                                        (->> (group-by first))
                                        (update-vals #(mapv second %)))
 
@@ -427,13 +427,13 @@
 
     (loop [calls calls
            not-joins (analyse-not-joins not-join-clauses)
-           or-joins (analyse-or-joins or-join-clauses)
+           union-joins (analyse-union-joins union-join-clauses)
            var->col l0-var->col
            levels [{:triple-rels triple-rels
                     :var->cols l0-var->cols
                     :var->col l0-var->col}]]
 
-      (if (and (empty? calls) (empty? not-joins) (empty? or-joins))
+      (if (and (empty? calls) (empty? not-joins) (empty? union-joins))
         {:in-bindings in-bindings
          :levels levels
          :var->col var->col}
@@ -444,7 +444,7 @@
                                                          (set/superset? (set (keys var->col)) required-vars))))
 
               {available-ojs true
-               unavailable-ojs false} (->> or-joins
+               unavailable-ojs false} (->> union-joins
                                            (group-by (fn [{:keys [required-vars]}]
                                                        (set/superset? (set (keys var->col)) required-vars))))]
 
@@ -452,7 +452,7 @@
             (throw (err/illegal-arg :no-available-clauses
                                     {:known-vars (set (keys var->col))
                                      :unavailable-calls unavailable-calls
-                                     :unavailable-or-joins unavailable-ojs}))
+                                     :unavailable-union-joins unavailable-ojs}))
 
             (let [new-vars (into #{} (mapcat (comp keys :var->col)) (concat available-calls available-ojs))
 
@@ -472,7 +472,7 @@
 
                      (conj levels {:calls available-calls
                                    :not-joins not-joins
-                                   :or-joins available-ojs
+                                   :union-joins available-ojs
                                    :var->col new-var->col
                                    :var->cols new-var->cols})))))))))
 
@@ -519,7 +519,7 @@
                   (-> plan
                       (wrap-calls level)
                       (wrap-not-joins level)
-                      (wrap-or-joins level))
+                      (wrap-union-joins level))
 
                   (if-let [rels (not-empty (vec (concat (plan-in-tables in-bindings)
                                                         (plan-triples triple-rels))))]
