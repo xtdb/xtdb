@@ -1,12 +1,14 @@
 (ns core2.tpch-test
   (:require [clojure.java.io :as io]
             [clojure.test :as t]
-            [core2.json :as c2-json]
+            [core2.datasets.tpch :as tpch]
+            [core2.datasets.tpch.ra :as tpch-ra]
+            [core2.node :as node]
+            [core2.sql :as sql]
+            core2.sql-test
             [core2.test-util :as tu]
-            [core2.tpch :as tpch]
-            [core2.util :as util]
-            [core2.node :as node])
-  (:import [java.nio.file Files LinkOption Path]))
+            [core2.util :as util])
+  (:import [java.nio.file Path]))
 
 (def ^:dynamic *node* nil)
 (def ^:dynamic *db* nil)
@@ -27,72 +29,12 @@
         (binding [*node* node, *db* db]
           (f))))))
 
-(def ^:private ^Path tpch-node-dir
-  (util/->path (format "target/can-submit-tpch")))
-
-(def ^:private ^Path tpch-test-dir
-  (.toPath (io/as-file (io/resource "can-submit-tpch/"))))
-
-(defn- object-files [^Path node-dir]
-  (iterator-seq (.iterator (Files/list (.resolve node-dir "objects")))))
-
-(defn- paired-paths
-  "Seq of pairs of files [test-file, written-file] where test-file is a file in the test-resources/can-submit-tpch-docs-xxxx
-  dir, and written-file is the matching file in the node-dir.
-
-  Useful to compare or replace expected .json with the ingest output."
-  [^Path node-dir, ^Path test-dir]
-  (let [objects-dir (-> node-dir (.resolve "objects"))]
-    (for [test-path (iterator-seq (.iterator (Files/list test-dir)))
-          :let [written-object-path (.resolve objects-dir (.relativize test-dir test-path))]]
-      [test-path written-object-path])))
-
-(defn- test-tpch-ingest [method scale-factor expected-objects]
-  (let [sub-dir (format "%s-%s" (name method) scale-factor)
-        node-dir (.resolve tpch-node-dir sub-dir)
-        test-dir (.resolve tpch-test-dir sub-dir)]
-    (with-tpch-data {:method method
-                     :node-dir node-dir
-                     :scale-factor scale-factor}
-      (fn []
-        (t/is (= expected-objects (count (object-files node-dir))))
-        (c2-json/write-arrow-json-files (.toFile (.resolve node-dir "objects")))
-        (doseq [[expected-path actual-path] (paired-paths node-dir test-dir)]
-          (t/is (Files/exists actual-path (make-array LinkOption 0)))
-          (tu/check-json-file expected-path actual-path))))))
-
-(t/deftest ^:integration can-submit-tpch-docs-0.01
-  (test-tpch-ingest :docs 0.01 67))
-
-(t/deftest can-submit-tpch-docs-0.001
-  (test-tpch-ingest :docs 0.001 67))
-
-#_
-(t/deftest ^:integration can-submit-tpch-dml-0.01
-  (test-tpch-ingest :dml 0.01 66))
-
-(t/deftest can-submit-tpch-dml-0.001
-  (test-tpch-ingest :dml 0.001 67))
-
-(defn run-query
-  ([q] (run-query q {}))
-  ([q args]
-   (let [{::tpch/keys [params table-args]} (meta q)]
-     (tu/with-allocator
-       (fn []
-         (tu/query-ra q (merge {:srcs {'$ *db*}, :params params, :table-args table-args}
-                               args)))))))
-
-(defn slurp-query [query-no]
-  (slurp (io/resource (str "core2/sql/tpch/" (format "q%02d.sql" query-no)))))
-
 (defn is-equal?
   [expected actual]
   (t/is (= (count expected) (count actual)) (pr-str [expected actual]))
   (if (or (empty? expected) (empty? actual))
     (t/is (= expected actual))
-    (->> (for [[expected-row actual-row] (map vector expected actual)
-               :let [msg (pr-str [expected-row actual-row])]]
+    (->> (for [[expected-row actual-row] (map vector expected actual)]
            (let [row-cols (keys expected-row)]
              (boolean
                (and
@@ -101,7 +43,8 @@
                       (mapv
                         (fn [col]
                           (let [x (col expected-row)
-                                y (col actual-row)]
+                                y (col actual-row)
+                                msg (pr-str [col expected-row actual-row])]
                             (if (and (number? x) (number? y))
                               (let [epsilon 0.001
                                     diff (Math/abs (- (double x) (double y)))]
@@ -109,3 +52,86 @@
                               (t/is (= x y) msg)))))
                      (every? true?))))))
          (every? true?))))
+
+(def ^:private ^:dynamic *qs*
+  (set (range 1 23)))
+
+(def results-sf-001
+  (-> (io/resource "core2/tpch/results-sf-001.edn") slurp read-string))
+
+(def results-sf-01
+  (-> (io/resource "core2/tpch/results-sf-01.edn") slurp read-string))
+
+(defn test-ra-query [n res]
+  (when (contains? *qs* (inc n))
+    (let [q @(nth tpch-ra/queries n)
+          {::tpch-ra/keys [params table-args]} (meta q)]
+      (tu/with-allocator
+        (fn []
+          (t/is (= res (tu/query-ra q {:srcs {'$ *db*}, :params params, :table-args table-args}))
+                (format "Q%02d" (inc n))))))))
+
+(t/deftest test-001-ra
+  (with-tpch-data {:method :docs, :scale-factor 0.001
+                   :node-dir (util/->path "target/tpch-queries-ra-sf-001")}
+    (fn []
+      (dorun
+       (map-indexed test-ra-query results-sf-001)))))
+
+(comment
+  (binding [*qs* #{1 5}]
+    (t/run-test test-001-ra)))
+
+(t/deftest ^:integration test-01-ra
+  (with-tpch-data {:method :docs, :scale-factor 0.01
+                   :node-dir (util/->path "target/tpch-queries-ra-sf-01")}
+    (fn []
+      (dorun
+       (map-indexed test-ra-query results-sf-01)))))
+
+(comment
+  (binding [*qs* #{1 5}]
+    (t/run-test test-01-ra)))
+
+(defn slurp-sql-query [query-no]
+  (slurp (io/resource (str "core2/sql/tpch/" (format "q%02d.sql" query-no)))))
+
+;; TODO unable to decorr Q19, select stuck under this top/union exists thing
+
+(t/deftest test-sql-plans
+  (dotimes [n 22]
+    (let [n (inc n)]
+      (when (contains? *qs* n)
+        (t/is (=plan-file
+               (format "tpch/q%02d" n)
+               (sql/compile-query (slurp-sql-query n)))
+              (format "Q%02d" n))))))
+
+(defn test-sql-query
+  ([n res] (test-sql-query {:decorrelate? true} n res))
+  ([opts n res]
+   (let [q (inc n)]
+     (when (contains? *qs* q)
+       (let [plan (sql/compile-query (slurp-sql-query q) opts)]
+         (tu/with-allocator
+           (fn []
+             (t/is (is-equal? res (tu/query-ra plan {:srcs {'$ *db*}}))
+                   (format "Q%02d" (inc n))))))))))
+
+(t/deftest test-001-sql
+  (with-tpch-data {:method :dml, :scale-factor 0.001
+                   :node-dir (util/->path "target/tpch-queries-sql-sf-001")}
+    (fn []
+      (dorun
+       (map-indexed test-sql-query results-sf-001)))))
+
+(t/deftest ^:integration test-01-sql
+  (with-tpch-data {:method :dml, :scale-factor 0.01
+                   :node-dir (util/->path "target/tpch-queries-sql-sf-01")}
+    (fn []
+      (dorun
+       (map-indexed test-sql-query results-sf-01)))))
+
+(comment
+  (binding [*qs* #{1}]
+    (t/run-test test-001-sql)))

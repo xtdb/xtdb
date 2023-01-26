@@ -3,7 +3,7 @@
             [core2.bench :as bench]
             [core2.ingester :as ingest]
             [core2.node :as node]
-            [core2.tpch :as tpch]
+            [core2.datasets.tpch :as tpch]
             [core2.temporal :as temporal]
             [core2.test-util :as tu]
             [core2.util :as util])

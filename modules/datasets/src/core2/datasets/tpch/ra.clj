@@ -1,98 +1,10 @@
-(ns core2.tpch
-  (:require [clojure.string :as str]
-            [clojure.tools.logging :as log]
-            [core2.api :as c2])
-  (:import clojure.lang.MapEntry
-           [io.airlift.tpch TpchColumn TpchColumnType$Base TpchEntity TpchTable]
-           [java.time LocalDate]))
-
-;; 0.05 = 7500 customers, 75000 orders, 299814 lineitems, 10000 part, 40000 partsupp, 500 supplier, 25 nation, 5 region
-
-(def ^:private table->pkey
-  {"part" [:p_partkey]
-   "supplier" [:s_suppkey]
-   "partsupp" [:ps_partkey :ps_suppkey]
-   "customer" [:c_custkey]
-   "lineitem" [:l_orderkey :l_linenumber]
-   "orders" [:o_orderkey]
-   "nation" [:n_nationkey]
-   "region" [:r_regionkey]})
-
-(defn- read-tpch-cell [^TpchColumn c, ^TpchEntity b]
-  (condp = (.getBase (.getType c))
-    TpchColumnType$Base/IDENTIFIER (str (str/replace (.getColumnName c) #".+_" "") "_" (.getIdentifier c b))
-    TpchColumnType$Base/INTEGER (long (.getInteger c b))
-    TpchColumnType$Base/VARCHAR (.getString c b)
-    TpchColumnType$Base/DOUBLE (.getDouble c b)
-    TpchColumnType$Base/DATE (LocalDate/ofEpochDay (.getDate c b))))
-
-(defn- tpch-table->docs [^TpchTable table scale-factor]
-  (let [table-name (.getTableName table)]
-    (for [entity (.createGenerator table scale-factor 1 1)]
-      (let [doc (->> (for [^TpchColumn col (.getColumns table)]
-                       [(keyword (.getColumnName col))
-                        (read-tpch-cell col entity)])
-                     (into {}))]
-        (assoc doc
-               :id (->> (mapv doc (get table->pkey table-name))
-                         (str/join "___"))
-               :_table table-name)))))
-
-(defn submit-docs! [tx-producer scale-factor]
-  (log/debug "Transacting TPC-H tables...")
-  (->> (TpchTable/getTables)
-       (reduce (fn [_last-tx ^TpchTable t]
-                 (let [[!last-tx doc-count] (->> (tpch-table->docs t scale-factor)
-                                                 (partition-all 1000)
-                                                 (reduce (fn [[_!last-tx last-doc-count] batch]
-                                                           [(c2/submit-tx tx-producer
-                                                                          (vec (for [doc batch]
-                                                                                 [:put doc])))
-                                                            (+ last-doc-count (count batch))])
-                                                         [nil 0]))]
-                   (log/debug "Transacted" doc-count (.getTableName t))
-                   @!last-tx))
-               nil)))
-
-(defn- tpch-table->dml [^TpchTable table]
-  (format "INSERT INTO %s (%s) VALUES (%s)"
-          (.getTableName table)
-          (->> (cons "id" (for [^TpchColumn col (.getColumns table)]
-                            (.getColumnName col)))
-               (str/join ", "))
-          (->> (repeat (inc (count (.getColumns table))) "?")
-               (str/join ", "))))
-
-(defn- tpch-table->dml-params [^TpchTable table, scale-factor]
-  (let [table-name (.getTableName table)]
-    (for [entity (.createGenerator table scale-factor 1 1)]
-      (let [doc (for [^TpchColumn col (.getColumns table)]
-                  (MapEntry/create (keyword (.getColumnName col))
-                                   (read-tpch-cell col entity)))]
-        (cons (->> (mapv (into {} doc) (get table->pkey table-name))
-                   (str/join "___"))
-              (vals doc))))))
-
-(defn submit-dml! [tx-producer scale-factor]
-  (log/debug "Transacting TPC-H tables...")
-  (->> (TpchTable/getTables)
-       (reduce (fn [_last-tx ^TpchTable table]
-                 (let [dml (tpch-table->dml table)
-                       [!last-tx doc-count] (->> (tpch-table->dml-params table scale-factor)
-                                                 (partition-all 1000)
-                                                 (reduce (fn [[_!last-tx last-doc-count] param-batch]
-                                                           [(c2/submit-tx tx-producer
-                                                                          [[:sql dml param-batch]])
-                                                            (+ last-doc-count (count param-batch))])
-                                                         [nil 0]))]
-                   (log/debug "Transacted" doc-count (.getTableName table))
-                   @!last-tx))
-               nil)))
+(ns core2.datasets.tpch.ra
+  (:import [java.time LocalDate]))
 
 (defn- with-params [q params]
   (vary-meta q assoc ::params params))
 
-(def tpch-q1-pricing-summary-report
+(def q1-pricing-summary-report
   (-> '[:order-by [[l_returnflag] [l_linestatus]]
         [:group-by [l_returnflag l_linestatus
                     {sum_qty (sum l_quantity)}
@@ -114,7 +26,7 @@
                   l_quantity l_extendedprice l_discount l_tax]]]]]
       (with-params {'?ship-date (LocalDate/parse "1998-09-02")})))
 
-(def tpch-q2-minimum-cost-supplier
+(def q2-minimum-cost-supplier
   (-> '[:assign [PartSupp [:join [{s_suppkey ps_suppkey}]
                            [:join [{n_nationkey s_nationkey}]
                             [:join [{n_regionkey r_regionkey}]
@@ -136,7 +48,7 @@
                     ;; '?type "BRASS"
                     '?size 15})))
 
-(def tpch-q3-shipping-priority
+(def q3-shipping-priority
   (-> '[:top {:limit 10}
         [:order-by [[revenue {:direction :desc}] [o_orderdate {:direction :desc}]]
          [:group-by [l_orderkey
@@ -155,7 +67,7 @@
       (with-params {'?segment "BUILDING"
                     '?date (LocalDate/parse "1995-03-15")})))
 
-(def tpch-q4-order-priority-checking
+(def q4-order-priority-checking
   (-> '[:order-by [[o_orderpriority]]
         [:group-by [o_orderpriority {order_count (count-star)}]
          [:semi-join [{o_orderkey l_orderkey}]
@@ -169,7 +81,7 @@
                     ;; in the spec this is one date with `+ INTERVAL 3 MONTHS`
                     '?end-date (LocalDate/parse "1993-10-01")})))
 
-(def tpch-q5-local-supplier-volume
+(def q5-local-supplier-volume
   (-> '[:order-by [[revenue {:direction :desc}]]
         [:group-by [n_name {revenue (sum disc_price)}]
          [:project [n_name {disc_price (* l_extendedprice (- 1 l_discount))}]
@@ -192,7 +104,7 @@
       (with-params {'?start-date (LocalDate/parse "1994-01-01")
                     '?end-date (LocalDate/parse "1995-01-01")})))
 
-(def tpch-q6-forecasting-revenue-change
+(def q6-forecasting-revenue-change
   (-> '[:group-by [{revenue (sum disc_price)}]
         [:project [{disc_price (* l_extendedprice l_discount)}]
          [:scan
@@ -208,7 +120,7 @@
                     '?min-discount 0.05
                     '?max-discount 0.07})))
 
-(def tpch-q7-volume-shipping
+(def q7-volume-shipping
   (-> '[:order-by [[supp_nation] [cust_nation] [l_year]]
         [:group-by [supp_nation cust_nation l_year {revenue (sum volume)}]
          [:project [supp_nation cust_nation
@@ -241,7 +153,7 @@
                     '?start-date (LocalDate/parse "1995-01-01")
                     '?end-date (LocalDate/parse "1996-12-31")})))
 
-(def tpch-q8-national-market-share
+(def q8-national-market-share
   (-> '[:order-by [[o_year]]
         [:project [o_year {mkt_share (/ brazil_revenue revenue)}]
          [:group-by [o_year {brazil_revenue (sum brazil_volume)} {revenue (sum volume)}]
@@ -279,7 +191,7 @@
                     '?start-date (LocalDate/parse "1995-01-01")
                     '?end-date (LocalDate/parse "1996-12-31")})))
 
-(def tpch-q9-product-type-profit-measure
+(def q9-product-type-profit-measure
   (-> '[:order-by [[nation] [o_year {:direction :desc}]]
         [:group-by [nation o_year {sum_profit (sum amount)}]
          [:rename {n_name nation}
@@ -304,7 +216,7 @@
       #_
       (with-params {'?color "green"})))
 
-(def tpch-q10-returned-item-reporting
+(def q10-returned-item-reporting
   (-> '[:top {:limit 20}
         [:order-by [[revenue {:direction :desc}]]
          [:group-by [c_custkey c_name c_acctbal c_phone n_name c_address c_comment
@@ -327,7 +239,7 @@
       (with-params {'?start-date (LocalDate/parse "1993-10-01")
                     '?end-date (LocalDate/parse "1994-01-01")})))
 
-(def tpch-q11-important-stock-identification
+(def q11-important-stock-identification
   (-> '[:assign [PartSupp [:project [ps_partkey {value (* ps_supplycost ps_availqty)}]
                            [:join [{s_suppkey ps_suppkey}]
                             [:join [{n_nationkey s_nationkey}]
@@ -346,7 +258,7 @@
       (with-params {'?nation "GERMANY"
                     '?fraction 0.0001})))
 
-(def tpch-q12-shipping-modes-and-order-priority
+(def q12-shipping-modes-and-order-priority
   (-> '[:order-by [[l_shipmode]]
         [:group-by [l_shipmode
                     {high_line_count (sum high_line)}
@@ -376,7 +288,7 @@
                     '?start-date (LocalDate/parse "1994-01-01")
                     '?end-date (LocalDate/parse "1995-01-01")})))
 
-(def tpch-q13-customer-distribution
+(def q13-customer-distribution
   (-> '[:order-by [[custdist {:direction :desc}] [c_count {:direction :desc}]]
         [:group-by [c_count {custdist (count-star)}]
          [:group-by [c_custkey {c_count (count o_comment)}]
@@ -387,7 +299,7 @@
       (with-params {'?word1 "special"
                     '?word2 "requests"})))
 
-(def tpch-q14-promotion-effect
+(def q14-promotion-effect
   (-> '[:project [{promo_revenue (* 100 (/ promo_revenue revenue))}]
         [:group-by [{promo_revenue (sum promo_disc_price)}
                     {revenue (sum disc_price)}]
@@ -405,7 +317,7 @@
       (with-params {'?start-date (LocalDate/parse "1995-09-01")
                     '?end-date (LocalDate/parse "1995-10-01")})))
 
-(def tpch-q15-top-supplier
+(def q15-top-supplier
   (-> '[:assign [Revenue [:group-by [supplier_no {total_revenue (sum disc_price)}]
                           [:rename {l_suppkey supplier_no}
                            [:project [l_suppkey {disc_price (* l_extendedprice (- 1 l_discount))}]
@@ -426,7 +338,7 @@
       (with-params {'?start-date (LocalDate/parse "1996-01-01")
                     '?end-date (LocalDate/parse "1996-04-01")})))
 
-(def tpch-q16-part-supplier-relationship
+(def q16-part-supplier-relationship
   (-> '[:order-by [[supplier_cnt {:direction :desc}] [p_brand] [p_type] [p_size]]
         [:group-by [p_brand p_type p_size {supplier_cnt (count ps_suppkey)}]
          [:distinct
@@ -452,7 +364,7 @@
                                          {:p_size 36}
                                          {:p_size 9}]}})))
 
-(def tpch-q17-small-quantity-order-revenue
+(def q17-small-quantity-order-revenue
   (-> '[:project [{avg_yearly (/ sum_extendedprice 7)}]
         [:group-by [{sum_extendedprice (sum l_extendedprice)}]
          [:select (< l_quantity small_avg_qty)
@@ -468,7 +380,7 @@
       (with-params {'?brand "Brand#23"
                     '?container "MED_BOX"})))
 
-(def tpch-q18-large-volume-customer
+(def q18-large-volume-customer
   (-> '[:top {:limit 100}
         [:order-by [[o_totalprice {:direction :desc}] [o_orderdate {:direction :desc}]]
          [:group-by [c_name c_custkey o_orderkey o_orderdate o_totalprice {sum_qty (sum l_quantity)}]
@@ -483,7 +395,7 @@
            [:scan lineitem [l_orderkey l_quantity]]]]]]
       (with-params {'?qty 300})))
 
-(def tpch-q19-discounted-revenue
+(def q19-discounted-revenue
   (-> '[:group-by [{revenue (sum disc_price)}]
         [:project [{disc_price (* l_extendedprice (- 1 l_discount))}]
          [:select (or (and (= p_brand ?brand1)
@@ -523,7 +435,7 @@
       (with-params {'?qty1 1, '?qty2 10, '?qty3 20
                     '?brand1 "Brand#12", '?brand2 "Brand23", '?brand3 "Brand#34"})))
 
-(def tpch-q20-potential-part-promotion
+(def q20-potential-part-promotion
   (-> '[:order-by [[s_name]]
         [:project [s_name s_address]
          [:semi-join [{s_suppkey ps_suppkey}]
@@ -548,7 +460,7 @@
                     '?end-date (LocalDate/parse "1995-01-01")
                     '?nation "CANADA"})))
 
-(def tpch-q21-suppliers-who-kept-orders-waiting
+(def q21-suppliers-who-kept-orders-waiting
   (-> '[:assign [L1 [:select (<> l1_l_suppkey l2_l_suppkey)
                      [:join [{l1_l_orderkey l2_l_orderkey}]
                       [:join [{l1_l_suppkey s_suppkey}]
@@ -577,7 +489,7 @@
                   [:scan lineitem [l_orderkey l_suppkey l_receiptdate l_commitdate]]]]]]]]]]]]]
       (with-params {'?nation "SAUDI ARABIA"})))
 
-(def tpch-q22-global-sales-opportunity
+(def q22-global-sales-opportunity
   (-> '[:assign [Customer [:semi-join [{cntrycode cntrycode}]
                            [:project [c_custkey {cntrycode (substring c_phone 1 2 true)} c_acctbal]
                             [:scan customer [c_custkey c_phone c_acctbal]]]
@@ -601,25 +513,25 @@
                                               {:cntrycode "17"}]}})))
 
 (def queries
-  [#'tpch-q1-pricing-summary-report
-   #'tpch-q2-minimum-cost-supplier
-   #'tpch-q3-shipping-priority
-   #'tpch-q4-order-priority-checking
-   #'tpch-q5-local-supplier-volume
-   #'tpch-q6-forecasting-revenue-change
-   #'tpch-q7-volume-shipping
-   #'tpch-q8-national-market-share
-   #'tpch-q9-product-type-profit-measure
-   #'tpch-q10-returned-item-reporting
-   #'tpch-q11-important-stock-identification
-   #'tpch-q12-shipping-modes-and-order-priority
-   #'tpch-q13-customer-distribution
-   #'tpch-q14-promotion-effect
-   #'tpch-q15-top-supplier
-   #'tpch-q16-part-supplier-relationship
-   #'tpch-q17-small-quantity-order-revenue
-   #'tpch-q18-large-volume-customer
-   #'tpch-q19-discounted-revenue
-   #'tpch-q20-potential-part-promotion
-   #'tpch-q21-suppliers-who-kept-orders-waiting
-   #'tpch-q22-global-sales-opportunity])
+  [#'q1-pricing-summary-report
+   #'q2-minimum-cost-supplier
+   #'q3-shipping-priority
+   #'q4-order-priority-checking
+   #'q5-local-supplier-volume
+   #'q6-forecasting-revenue-change
+   #'q7-volume-shipping
+   #'q8-national-market-share
+   #'q9-product-type-profit-measure
+   #'q10-returned-item-reporting
+   #'q11-important-stock-identification
+   #'q12-shipping-modes-and-order-priority
+   #'q13-customer-distribution
+   #'q14-promotion-effect
+   #'q15-top-supplier
+   #'q16-part-supplier-relationship
+   #'q17-small-quantity-order-revenue
+   #'q18-large-volume-customer
+   #'q19-discounted-revenue
+   #'q20-potential-part-promotion
+   #'q21-suppliers-who-kept-orders-waiting
+   #'q22-global-sales-opportunity])

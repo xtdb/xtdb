@@ -1,10 +1,10 @@
 (ns dev
   (:require [clojure.java.io :as io]
             [clojure.java.browse :as browse]
+            [core2.datasets.tpch :as tpch]
             [core2.ingester :as ingest]
             [core2.node :as node]
             [core2.test-util :as tu]
-            [core2.tpch :as tpch]
             [core2.util :as util]
             [integrant.core :as i]
             [integrant.repl :as ir]

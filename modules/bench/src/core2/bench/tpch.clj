@@ -4,7 +4,7 @@
             [core2.ingester :as ingest]
             [core2.node :as node]
             [core2.test-util :as tu]
-            [core2.tpch :as tpch]
+            [core2.datasets.tpch :as tpch]
             [core2.util :as util])
   (:import core2.node.Node
            java.time.Duration))

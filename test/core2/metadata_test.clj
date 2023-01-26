@@ -3,7 +3,7 @@
             [core2.api :as c2]
             [core2.metadata :as meta]
             [core2.test-util :as tu]
-            [core2.tpch :as tpch]))
+            [core2.datasets.tpch :as tpch]))
 
 (t/use-fixtures :each tu/with-node)
 
