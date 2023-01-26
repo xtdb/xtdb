@@ -28,6 +28,11 @@
   (s/or :logic-var ::logic-var
         :aggregate ::aggregate))
 
+(s/def ::semi-join
+  (s/cat :exists '#{exists?}
+         :args ::args-list
+         :terms (s/+ ::term)))
+
 (s/def ::anti-join
   (s/cat :not-exists '#{not-exists?}
          :args ::args-list
@@ -107,6 +112,7 @@
 
 (s/def ::term
   (s/or :triple ::triple
+        :semi-join ::semi-join
         :anti-join ::anti-join
         :union-join ::union-join
         :call ::call-clause))
@@ -174,51 +180,55 @@
         (update :required-vars set/difference provided-vars))))
 
 (defn- term-vars [[term-type term-arg]]
-  (case term-type
-    :call (let [{:keys [form return]} term-arg]
-            {:required-vars (form-vars form)
-             :provided-vars (when-let [[return-type return-arg] return]
-                              (case return-type
-                                :scalar return-arg))})
+  (letfn [(sj-term-vars [spec]
+            (let [{:keys [args terms]} term-arg
+                  arg-vars (set args)
+                  {:keys [required-vars]} (combine-term-vars (map term-vars terms))]
 
-    :triple {:provided-vars (into #{}
-                                  (comp (map term-arg)
-                                        (keep (fn [[val-type val-arg]]
-                                                (when (= :logic-var val-type)
-                                                  val-arg))))
-                                  [:e :v])}
+              (when-let [unsatisfied-vars (not-empty (set/difference required-vars arg-vars))]
+                (throw (err/illegal-arg :unsatisfied-vars
+                                        {:vars unsatisfied-vars
+                                         :term (s/unform spec term-arg)})))
 
-    :union-join (let [{:keys [args branches]} term-arg
-                      arg-vars (set args)
-                      branches-vars (for [branch branches]
-                                      (into {:branch branch}
-                                            (combine-term-vars (map term-vars branch))))
-                      provided-vars (->> branches-vars
-                                         (map (comp set :provided-vars))
-                                         (apply set/intersection))
-                      required-vars (->> branches-vars
-                                         (map (comp set :required-vars))
-                                         (apply set/union))]
+              ;; semi-joins do not provide vars
+              {:required-vars required-vars}))]
 
-                  (when-let [unsatisfied-vars (not-empty (set/difference required-vars arg-vars))]
-                    (throw (err/illegal-arg :unsatisfied-vars
-                                            {:vars unsatisfied-vars
-                                             :term (s/unform ::union-join term-arg)})))
+    (case term-type
+      :call (let [{:keys [form return]} term-arg]
+              {:required-vars (form-vars form)
+               :provided-vars (when-let [[return-type return-arg] return]
+                                (case return-type
+                                  :scalar return-arg))})
 
-                  {:provided-vars (set/intersection arg-vars provided-vars)
-                   :required-vars (set/difference arg-vars provided-vars)})
+      :triple {:provided-vars (into #{}
+                                    (comp (map term-arg)
+                                          (keep (fn [[val-type val-arg]]
+                                                  (when (= :logic-var val-type)
+                                                    val-arg))))
+                                    [:e :v])}
 
-    :anti-join (let [{:keys [args terms]} term-arg
-                     arg-vars (set args)
-                     {:keys [required-vars]} (combine-term-vars (map term-vars terms))]
+      :union-join (let [{:keys [args branches]} term-arg
+                        arg-vars (set args)
+                        branches-vars (for [branch branches]
+                                        (into {:branch branch}
+                                              (combine-term-vars (map term-vars branch))))
+                        provided-vars (->> branches-vars
+                                           (map (comp set :provided-vars))
+                                           (apply set/intersection))
+                        required-vars (->> branches-vars
+                                           (map (comp set :required-vars))
+                                           (apply set/union))]
 
-                 (when-let [unsatisfied-vars (not-empty (set/difference required-vars arg-vars))]
-                   (throw (err/illegal-arg :unsatisfied-vars
-                                           {:vars unsatisfied-vars
-                                            :term (s/unform ::anti-join term-arg)})))
+                    (when-let [unsatisfied-vars (not-empty (set/difference required-vars arg-vars))]
+                      (throw (err/illegal-arg :unsatisfied-vars
+                                              {:vars unsatisfied-vars
+                                               :term (s/unform ::union-join term-arg)})))
 
-                 ;;anti-joins do not provide vars
-                 {:required-vars required-vars})))
+                    {:provided-vars (set/intersection arg-vars provided-vars)
+                     :required-vars (set/difference arg-vars provided-vars)})
+
+      :semi-join (sj-term-vars ::semi-join)
+      :anti-join (sj-term-vars ::anti-join))))
 
 (defn- analyse-in [{in-bindings :in}]
   (let [in-bindings (->> in-bindings
@@ -333,15 +343,19 @@
           (wrap-scalars scalars)
           (wrap-select (map form->sexp selects))))))
 
-(defn- analyse-anti-joins [anti-join-clauses]
-  (->> anti-join-clauses
-       (into [] (map-indexed (fn [aj-idx {:keys [args terms] :as aj}]
-                               (let [{aj-required-vars :required-vars} (term-vars [:anti-join aj])
+(defn- analyse-semi-joins [sj-type sj-clauses]
+  (->> sj-clauses
+       (into [] (map-indexed (fn [sj-idx {:keys [args terms] :as sj}]
+                               (let [prefix (format "%s%d_"
+                                                    (case sj-type :semi-join "sj", :anti-join "aj")
+                                                    sj-idx)
+                                     {sj-required-vars :required-vars} (term-vars [sj-type sj])
 
                                      var->col (->> args
                                                    (into {}
-                                                         (map (juxt identity #(col-sym (str "aj" aj-idx "_" (str %)))))))
-                                     required-vars (if (seq aj-required-vars) (set args) #{})]
+                                                         (map (juxt identity #(col-sym (str prefix %))))))
+
+                                     required-vars (if (seq sj-required-vars) (set args) #{})]
 
                                  {:var->col var->col
                                   :required-vars required-vars
@@ -353,40 +367,34 @@
                                            (seq required-vars) (assoc :in [[:tuple args]]))}))))
        (not-empty)))
 
-(defn- wrap-anti-joins [plan {outer-var->col :var->col, :keys [anti-joins]}]
-  (let [anti-joins (->> anti-joins
-                        (mapv
-                         (fn [{:keys [required-vars query var->col]}]
-                           (let [plan (plan-query query)
-                                 apply-mapping (when required-vars
-                                                 (let [{:keys [in-bindings]} plan
-                                                       {:keys [var->col]} (first in-bindings)]
-                                                   (->> var->col
-                                                        (into {} (map (fn [[lv in-var]]
-                                                                        (MapEntry/create (get outer-var->col lv) in-var)))))))]
-                             (-> plan
-                                 (assoc :join-condition
-                                        (->> var->col
-                                             (mapv (fn [[lv col]]
-                                                     {(get outer-var->col lv) col})))
+(defn- wrap-semi-joins [plan sj-type {outer-var->col :var->col, :as attrs}]
+  (->> (get attrs (case sj-type :semi-join :semi-joins, :anti-join :anti-joins))
+       (mapv (fn [{:keys [required-vars query var->col]}]
+               (let [plan (plan-query query)
+                     apply-mapping (when required-vars
+                                     (let [{:keys [in-bindings]} plan
+                                           {:keys [var->col]} (first in-bindings)]
+                                       (->> var->col
+                                            (into {} (map (fn [[lv in-var]]
+                                                            (MapEntry/create (get outer-var->col lv) in-var)))))))]
+                 (-> plan
+                     (assoc :join-condition (->> var->col
+                                                 (mapv (fn [[lv col]]
+                                                         {(get outer-var->col lv) col})))
 
-                                        :apply-mapping apply-mapping))))))]
+                            :apply-mapping apply-mapping)))))
 
-    (reduce
-     (fn [outer-plan {:keys [plan apply-mapping join-condition]}]
-       (if (seq apply-mapping)
-         [:apply
-          :anti-join
-          apply-mapping
-          outer-plan
-          plan]
 
-         [:anti-join
-          join-condition
-          outer-plan
-          plan]))
-     plan
-     anti-joins)))
+       (reduce (fn [outer-plan {:keys [plan apply-mapping join-condition]}]
+                 (if (seq apply-mapping)
+                   [:apply sj-type apply-mapping
+                    outer-plan
+                    plan]
+
+                   [sj-type join-condition
+                    outer-plan
+                    plan]))
+               plan)))
 
 (defn- analyse-union-joins [union-join-clauses]
   (->> union-join-clauses
@@ -452,6 +460,7 @@
   (let [{:keys [in-bindings] :as in-attrs} (analyse-in query)
         {triple-clauses :triple
          call-clauses :call
+         semi-join-clauses :semi-join
          anti-join-clauses :anti-join
          union-join-clauses :union-join} (-> where-clauses
                                              (->> (group-by first))
@@ -469,15 +478,17 @@
         l0-var->col (->> (keys l0-var->cols)
                          (into {} (map (juxt identity #(col-sym (str %))))))]
 
+
     (loop [calls calls
            union-joins (analyse-union-joins union-join-clauses)
-           anti-joins (analyse-anti-joins anti-join-clauses)
+           semi-joins (analyse-semi-joins :semi-join semi-join-clauses)
+           anti-joins (analyse-semi-joins :anti-join anti-join-clauses)
            var->col l0-var->col
            levels [{:triple-rels triple-rels
                     :var->cols l0-var->cols
                     :var->col l0-var->col}]]
 
-      (if (and (empty? calls) (empty? anti-joins) (empty? union-joins))
+      (if (and (empty? calls) (empty? semi-joins) (empty? anti-joins) (empty? union-joins))
         {:in-bindings in-bindings
          :levels levels
          :var->col var->col}
@@ -487,44 +498,44 @@
                                              (group-by (fn [{:keys [required-vars]}]
                                                          (set/superset? (set (keys var->col)) required-vars))))
 
-              {available-ojs true
-               unavailable-ojs false} (->> union-joins
+              {available-ujs true
+               unavailable-ujs false} (->> union-joins
                                            (group-by (fn [{:keys [required-vars]}]
                                                        (set/superset? (set (keys var->col)) required-vars))))
 
-              {available-njs true
-               unavailable-njs false}  (->> anti-joins
-                                            (group-by (fn [{:keys [required-vars]}]
-                                                        (set/superset? (set (keys var->col)) required-vars))))]
+              {available-sjs true
+               unavailable-sjs false} (->> semi-joins
+                                           (group-by (fn [{:keys [required-vars]}]
+                                                       (set/superset? (set (keys var->col)) required-vars))))
+              {available-ajs true
+               unavailable-ajs false} (->> anti-joins
+                                           (group-by (fn [{:keys [required-vars]}]
+                                                       (set/superset? (set (keys var->col)) required-vars))))]
 
-          (if (and (empty? available-calls) (empty? available-ojs) (empty? available-njs))
+          (if (and (empty? available-calls) (empty? available-ujs) (empty? available-sjs) (empty? available-ajs))
             (throw (err/illegal-arg :no-available-clauses
                                     {:known-vars (set (keys var->col))
                                      :unavailable-calls unavailable-calls
-                                     :unavailable-union-joins unavailable-ojs
-                                     :unavailable-anti-joins unavailable-njs}))
+                                     :unavailable-union-joins unavailable-ujs
+                                     :unavailable-semi-joins unavailable-sjs
+                                     :unavailable-anti-joins unavailable-ajs}))
 
-            (let [new-vars (into #{} (mapcat (comp keys :var->col)) (concat available-calls available-ojs))
+            (let [new-vars (into #{} (mapcat (comp keys :var->col)) (concat available-calls available-ujs))
 
                   new-var->col (into var->col
                                      (map (juxt identity #(col-sym (str %))))
                                      new-vars)
 
-                  new-var->cols (-> (concat var->col (mapcat :var->col (concat available-calls available-ojs)))
+                  new-var->cols (-> (concat var->col (mapcat :var->col (concat available-calls available-ujs)))
                                     (->> (group-by key))
                                     (update-vals #(into #{} (map val) %)))]
 
-              (recur unavailable-calls
-
-                     unavailable-ojs
-
-                     unavailable-njs
-
+              (recur unavailable-calls unavailable-ujs unavailable-sjs unavailable-ajs
                      new-var->col
-
                      (conj levels {:calls available-calls
-                                   :anti-joins anti-joins
-                                   :union-joins available-ojs
+                                   :semi-joins available-sjs
+                                   :anti-joins available-ajs
+                                   :union-joins available-ujs
                                    :var->col new-var->col
                                    :var->cols new-var->cols})))))))))
 
@@ -570,7 +581,8 @@
             (-> (if plan
                   (-> plan
                       (wrap-calls level)
-                      (wrap-anti-joins level)
+                      (wrap-semi-joins :semi-join level)
+                      (wrap-semi-joins :anti-join level)
                       (wrap-union-joins level))
 
                   (if-let [rels (not-empty (vec (concat (plan-in-tables in-bindings)

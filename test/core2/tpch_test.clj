@@ -97,7 +97,7 @@
 
 (def ^:private ^:dynamic *datalog-qs*
   ;; replace with *qs* once these are all expected to work
-  #{6})
+  #{4 6})
 
 (defn test-datalog-query [n expected-res]
   (let [q (inc n)]
@@ -125,7 +125,7 @@
        (map-indexed test-datalog-query results-sf-01)))))
 
 (comment
-  (binding [*datalog-qs* #{5}]
+  (binding [*datalog-qs* #{4}]
     (t/run-test test-001-datalog)))
 
 (defn slurp-sql-query [query-no]

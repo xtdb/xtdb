@@ -88,18 +88,20 @@
       (with-in-args ["BUILDING"])))
 
 (def q4
-  '{:find [o_orderpriority
-           (count o)]
+  '{:find [o_orderpriority (count o)]
     :keys [o_orderpriority order_count]
-    :where [[o :o_orderdate o_orderdate]
+    :where [[o :_table :orders]
+            [o :o_orderdate o_orderdate]
             [o :o_orderpriority o_orderpriority]
             [(>= o_orderdate #inst "1993-07-01")]
             [(< o_orderdate #inst "1993-10-01")]
-            (or-join [o]
-                     (and [l :l_orderkey o]
-                          [l :l_commitdate l_commitdate]
-                          [l :l_receiptdate l_receiptdate]
-                          [(< l_commitdate l_receiptdate)]))]
+
+            (exists? [o]
+                     [l :_table :lineitem]
+                     [l :l_orderkey o]
+                     [l :l_commitdate l_commitdate]
+                     [l :l_receiptdate l_receiptdate]
+                     [(< l_commitdate l_receiptdate)])]
     :order-by [[o_orderpriority :asc]]})
 
 (def q5

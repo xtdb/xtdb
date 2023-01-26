@@ -397,6 +397,44 @@
                        (assoc :basis {:tx tx})))
                   (into []))))))
 
+(deftest test-semi-join
+  (let [!tx (c2/submit-tx tu/*node*
+                          [[:put {:id :ivan, :name "Ivan"}]
+                           [:put {:id :petr, :name "Petr", :parent :ivan}]
+                           [:put {:id :sergei, :name "Sergei", :parent :petr}]
+                           [:put {:id :jeff, :name "Jeff", :parent :petr}]])]
+
+    (t/is (= [{:e :ivan} {:e :petr}]
+             (c2/datalog-query tu/*node*
+                               (-> '{:find [e]
+                                     :where [[e :name name]
+                                             (exists? [e]
+                                                      [c :parent e])]}
+                                   (assoc :basis {:tx !tx}))))
+
+          "find people who have children")
+
+    (t/is (= [{:e :sergei} {:e :jeff}]
+             (c2/datalog-query tu/*node*
+                               (-> '{:find [e]
+                                     :where [[e :name name]
+                                             [e :parent p]
+                                             (exists? [e p]
+                                                      [s :parent p]
+                                                      [(<> e s)])]}
+                                   (assoc :basis {:tx !tx}))))
+          "find people who have siblings")
+
+    (t/is (thrown-with-msg? IllegalArgumentException
+                            #":unsatisfied-vars"
+                            (c2/datalog-query tu/*node*
+                                              (-> '{:find [e n]
+                                                    :where [[e :foo n]
+                                                            (exists? [e]
+                                                                     [e :first-name "Petr"]
+                                                                     [(= n 1)])]}
+                                                  (assoc :basis {:tx !tx})))))))
+
 (deftest test-anti-join
   (let [tx (c2/submit-tx
             tu/*node*
@@ -413,6 +451,7 @@
                                               [e :first-name "Petr"])]}
                        (assoc :basis {:tx tx})))
                   (into []))))
+
     (t/is (= [{:e :ivan} {:e :sergei}]
              (->> (c2/plan-datalog
                    tu/*node*
