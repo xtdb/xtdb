@@ -9,23 +9,26 @@
            l_linestatus
            (sum l_quantity)
            (sum l_extendedprice)
-           (sum (* l_extendedprice (- 1 l_discount)))
-           (sum (* (* l_extendedprice (- 1 l_discount))
-                   (+ 1 l_tax)))
+           (sum disc_price)
+           (sum charge)
            (avg l_quantity)
            (avg l_extendedprice)
            (avg l_discount)
            (count l)]
-    :where [[l :l_shipdate l_shipdate]
+    :keys [l_returnflag l_linestatus sum_qty sum_base_price sum_disc_price
+           sum_charge avg_qty avg_price avg_disc count_order]
+    :where [[l :_table :lineitem]
+            [l :l_shipdate l_shipdate]
             [l :l_quantity l_quantity]
             [l :l_extendedprice l_extendedprice]
             [l :l_discount l_discount]
             [l :l_tax l_tax]
             [l :l_returnflag l_returnflag]
             [l :l_linestatus l_linestatus]
+            [(* l_extendedprice (- 1 l_discount)) disc_price]
+            [(* (* l_extendedprice (- 1 l_discount)) (+ 1 l_tax)) charge]
             [(<= l_shipdate #inst "1998-09-02")]]
-    :order-by [[l_returnflag :asc]
-               [l_linestatus :asc]]})
+    :order-by [[l_returnflag :asc] [l_linestatus :asc]]})
 
 (def q2
   '{:find [s_acctbal
@@ -68,22 +71,27 @@
 
 (def q3
   (-> '{:find [o
-               (sum (* l_extendedprice (- 1 l_discount)))
+               (sum revenue)
                o_orderdate
                o_shippriority]
+        :keys [l_orderkey revenue o_orderdate o_shippriority]
         :in [?segment]
-        :where [[c :c_mktsegment ?segment]
+        :where [
+                [c :c_mktsegment ?segment]
+                [c :_table :customer]
                 [o :o_custkey c]
                 [o :o_shippriority o_shippriority]
                 [o :o_orderdate o_orderdate]
+                [o :_table :orders]
                 [(< o_orderdate #inst "1995-03-15")]
                 [l :l_orderkey o]
                 [l :l_discount l_discount]
                 [l :l_extendedprice l_extendedprice]
                 [l :l_shipdate l_shipdate]
-                [(> l_shipdate #inst "1995-03-15")]]
-        :order-by [[(sum (* l_extendedprice (- 1 l_discount))) :desc]
-                   [o_orderdate :asc]]
+                [l :_table :lineitem]
+                [(> l_shipdate #inst "1995-03-15")]
+                [(* l_extendedprice (- 1 l_discount)) revenue]]
+        :order-by [[(sum revenue) :desc] [o_orderdate :asc]]
         :limit 10}
       (with-in-args ["BUILDING"])))
 
