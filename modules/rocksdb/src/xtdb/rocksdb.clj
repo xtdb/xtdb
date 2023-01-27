@@ -277,7 +277,7 @@
                                       :default false
                                       :spec ::sys/boolean}
                               :db-options {:doc "RocksDB Options"
-                                           :spec #(instance? Options %)}
+                                           :spec #(instance? DBOptions %)}
                               :disable-wal? {:doc "Disable Write Ahead Log"
                                              :default false
                                              :spec ::sys/boolean}
