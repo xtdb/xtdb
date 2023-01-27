@@ -277,7 +277,7 @@
                                       :default false
                                       :spec ::sys/boolean}
                               :db-options {:doc "RocksDB Options"
-                                           :spec #(instance? Options %)}
+                                           :spec #(instance? DBOptions %)}
                               :disable-wal? {:doc "Disable Write Ahead Log"
                                              :default false
                                              :spec ::sys/boolean}
@@ -393,3 +393,10 @@
                                 :->column-family-handle ->column-family-handle})]
     (cond-> kv-store
       checkpointer (assoc :cp-job (cp/start checkpointer kv-store {::cp/cp-format cp-format})))))
+
+
+(comment
+
+  (cond-> 1 (.setStatistics stats))
+
+  :ok)
