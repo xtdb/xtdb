@@ -22,6 +22,9 @@
             --weather-big)
                 INCLUDES+=' --include ts-weather/big/* --include ts-weather/big/*'
                 shift;;
+            --auctionmark)
+                INCLUDES+=' --include auctionmark/*'
+                shift;;
             --help)
                 echo "Flags: --watdiv, --devices-med, --devices-big, --weather-med, --weather-big"
                 exit 0;;

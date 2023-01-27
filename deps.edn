@@ -49,6 +49,8 @@
                     #_"-Darrow.memory.debug.allocator=true"
                     #_"-Darrow.enable_unsafe_memory_access=true"]}
 
+           :profiler {:jvm-opts ["-Djdk.attach.allowAttachSelf"]}
+
            :4gb {:jvm-opts ["-Xmx1280m"
                             "-Xms1280m"
                             "-XX:MaxDirectMemorySize=2g"

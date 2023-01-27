@@ -7,4 +7,9 @@
         com.xtdb.labs/core2-jdbc {:local/root "../jdbc"}
 
         org.clojure/data.csv {:mvn/version "1.0.1"}
-        ch.qos.logback/logback-classic {:mvn/version "1.2.10"}}}
+        ch.qos.logback/logback-classic {:mvn/version "1.2.10"}
+
+        ;; bench2
+        io.micrometer/micrometer-core {:mvn/version "1.9.5"}
+        com.github.oshi/oshi-core {:mvn/version "6.3.0"}
+        pro.juxt.clojars-mirrors.hiccup/hiccup {:mvn/version "2.0.0-alpha2"}}}
