@@ -432,7 +432,7 @@
                                                       [:union-all acc plan])))
 
                                  :apply-mapping (when required-vars
-                                                  (let [{:keys [var->col]}(:apply-params (first branch-plans))]
+                                                  (let [{:keys [var->col]} (:apply-params (first branch-plans))]
                                                     (->> var->col
                                                          (into {} (map (fn [[lv in-var]]
                                                                          (MapEntry/create
