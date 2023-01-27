@@ -3,7 +3,7 @@
 (defn- with-in-args [q in-args]
   (-> q (vary-meta assoc ::in-args in-args)))
 
-;; TODO nested agg exprs
+;; TODO reintro nested agg exprs
 (def q1
   '{:find [l_returnflag
            l_linestatus
@@ -30,23 +30,19 @@
             [(<= l_shipdate #inst "1998-09-02")]]
     :order-by [[l_returnflag :asc] [l_linestatus :asc]]})
 
-;; TODO nested sub-query
 (def q2
-  '{:find [s_acctbal
-           s_name
-           n_name
-           p
-           p_mfgr
-           s_address
-           s_phone
-           s_comment]
+  '{:find [s_acctbal s_name n_name p p_mfgr s_address s_phone s_comment]
     :where [[p :_table :part]
+            [ps :_table :partsupp]
+            [s :_table :supplier]
+            [n :_table :nation]
+            [r :_table :region]
+
             [p :p_mfgr p_mfgr]
             [p :p_size 15]
             [p :p_type p_type]
-            [(like "%BRASS" p_type)]
+            [(like p_type "%BRASS")]
 
-            [ps :_table :partsupp]
             [ps :ps_partkey p]
             [ps :ps_supplycost ps_supplycost]
             [ps :ps_suppkey s]
@@ -54,18 +50,17 @@
             (q {:find [(min ps_supplycost)]
                 :keys [ps_supplycost]
                 :in [p]
-                :where [[ps :_table partsupp]
+                :where [[ps :_table :partsupp]
+                        [s :_table :supplier]
+                        [n :_table :nation]
+                        [r :_table :region]
                         [ps :ps_partkey p]
                         [ps :ps_supplycost ps_supplycost]
                         [ps :ps_suppkey s]
-                        [s :_table :supplier]
                         [s :s_nationkey n]
-                        [n :_table :nation]
                         [n :n_regionkey r]
-                        [r :_table :region]
                         [r :r_name "EUROPE"]]})
 
-            [s :_table :supplier]
             [s :s_acctbal s_acctbal]
             [s :s_address s_address]
             [s :s_name s_name]
@@ -73,11 +68,9 @@
             [s :s_comment s_comment]
             [s :s_nationkey n]
 
-            [n :_table :nation]
             [n :n_name n_name]
             [n :n_regionkey r]
 
-            [r :_table :region]
             [r :r_name "EUROPE"]]
 
     :order-by [[s_acctbal :desc]
@@ -86,12 +79,8 @@
                [p :asc]]
     :limit 100})
 
-;; TODO join order
 (def q3
-  (-> '{:find [o
-               (sum revenue)
-               o_orderdate
-               o_shippriority]
+  (-> '{:find [o (sum revenue) o_orderdate o_shippriority]
         :keys [l_orderkey revenue o_orderdate o_shippriority]
         :in [?segment]
         :where [[c :_table :customer]
@@ -113,7 +102,6 @@
         :limit 10}
       (with-in-args ["BUILDING"])))
 
-;; DONE
 (def q4
   '{:find [o_orderpriority (count o)]
     :keys [o_orderpriority order_count]
@@ -132,8 +120,6 @@
 
     :order-by [[o_orderpriority :asc]]})
 
-;; TODO join order
-;; TODO nested agg exprs
 (def q5
   (-> '{:find [n_name (sum (* l_extendedprice (- 1 l_discount)))]
         :in [?region]
@@ -162,7 +148,7 @@
         :order-by [[(sum (* l_extendedprice (- 1 l_discount))) :desc]]}
       (with-in-args ["ASIA"])))
 
-;; TODO accept nested expr in agg, #583
+;; TODO reintro nested agg exprs
 (def q6
   '{:find [(sum revenue)]
     :keys [revenue]
@@ -178,8 +164,6 @@
             [(<= l_discount 0.07)]
             [(< l_quantity 24.0)]]})
 
-;; TODO join order (I'd guess)
-;; TODO nested agg exprs
 (def q7
   '{:find [supp_nation cust_nation l_year (sum (* l_extendedprice (- 1 l_discount)))]
     :where [[o :_table :orders]
@@ -210,8 +194,6 @@
                       (= "FRANCE" cust_nation)))]]
     :order-by [[supp_nation :asc] [cust_nation :asc] [l_year :asc]]})
 
-;; TODO nested agg exprs
-;; TODO sub queries
 (def q8
   '{:find [o_year mkt_share]
     :where [(q {:find [o_year
@@ -250,8 +232,6 @@
             [(/ brazil_volume volume) mkt_share]]
     :order-by [[o_year :asc]]})
 
-;; TODO nested agg exprs
-;; TODO join order (probably)
 (def q9
   '{:find [nation o_year
            (sum (- (* l_extendedprice (- 1 l_discount))
@@ -286,8 +266,6 @@
 
     :order-by [[nation :asc] [o_year :desc]]})
 
-;; TODO join order planning
-;; TODO agg exprs
 (def q10
   '{:find [c c_name (sum (* l_extendedprice (- 1 l_discount)))
            c_acctbal n_name c_address c_phone c_comment]
@@ -314,8 +292,6 @@
     :order-by [[(sum (* l_extendedprice (- 1 l_discount))) :desc]]
     :limit 20})
 
-;; TODO agg exprs
-;; TODO sub-queries
 (def q11
   '{:find [ps_partkey value]
     :where [(q {:find [(sum (* ps_supplycost ps_availqty))]
@@ -344,8 +320,7 @@
             [(> value (* 0.0001 total-value))]]
     :order-by [[value :desc]]})
 
-;; TODO nested agg exprs, #583
-;; TODO select + mega join
+;; TODO reintro nested agg exprs
 (def q12
   (-> '{:find [l_shipmode
                (sum high-line-count)
@@ -373,8 +348,6 @@
 
       (with-in-args [#{"MAIL" "SHIP"}])))
 
-;; TODO sub query
-;; TODO left join
 (def q13
   '{:find [c_count (count c_count)]
     :where [(or [(q {:find [c (count o)]
@@ -388,8 +361,6 @@
                      [(identity 0) c_count]))]
     :order-by [[(count c_count) :desc] [c_count :desc]]})
 
-;; TODO nested agg exprs,
-;; TODO exprs in finds
 (def q14
   '{:find [(* 100 (/ promo total))]
     :where [(q {:find [(sum (if (clojure.string/starts-with? p_type "PROMO")
@@ -408,7 +379,6 @@
                         [(>= l_shipdate #inst "1995-09-01")]
                         [(< l_shipdate #inst "1995-10-01")]]})]})
 
-;; TODO this has a view which we currently bind back as a value containing a relation
 (def q15
   '{:find [s s_name s_address s_phone total_revenue]
     :where [[(q {:find [s (* l_extendedprice (- 1 l_discount))]
@@ -426,7 +396,6 @@
             [s :s_address s_address]
             [s :s_phone s_phone]]})
 
-;; DONE
 (def q16
   (-> '{:find [p_brand p_type p_size (count-distinct s)]
         :keys [p_brand p_type p_size supplier_cnt]
@@ -455,7 +424,6 @@
       ;; TODO set
       (with-in-args [[3 9 14 19 23 36 45 49]])))
 
-;; TODO sub query
 (def q17
   '{:find [avg_yearly]
     :where [(q {:find [(sum l_extendedprice)]
@@ -480,9 +448,9 @@
 
             [(/ sum_extendedprice 7.0) avg_yearly]]})
 
-;; TODO sub-query
 (def q18
   '{:find [c_name c o o_orderdate o_totalprice sum_quantity]
+    :keys [c_name c_custkey o_orderkey o_orderdate o_totalprice sum_qty]
     :where [[o :_table :orders]
             [c :_table :customer]
             (q {:find [o (sum l_quantity)]
@@ -498,8 +466,6 @@
     :order-by [[o_totalprice :desc] [o_orderdate :asc]]
     :limit 100})
 
-;; TODO cardinality-many literals
-;; TODO agg exprs
 (def q19
   (-> '{:find [(sum (* l_extendedprice (- 1 l_discount)))]
         :in [[l_shipmode ...]]
@@ -536,7 +502,6 @@
 
       (with-in-args [#{"AIR" "AIR REG"}])))
 
-;; TODO sub-query
 (def q20
   '{:find [s_name s_address]
     :where [[ps :_table :partsupp]
@@ -606,8 +571,6 @@
     :order-by [[(count l1) :desc] [s_name :asc]]
     :limit 100})
 
-;; TODO sub queries
-;; TODO `contains?`
 (def q22
   '{:find [cntrycode (count c) (sum c_acctbal)]
     :where [[c :_table :customer]

@@ -18,18 +18,23 @@
 ;; (slurp (io/resource (format "io/airlift/tpch/queries/q%d.sql" 1)))
 
 (defn with-tpch-data [{:keys [method ^Path node-dir scale-factor]} f]
-  (util/delete-dir node-dir)
+  (if *node*
+    (let [db @(node/snapshot-async *node*)]
+      (binding [*db* db]
+        (f)))
 
-  (with-open [node (tu/->local-node {:node-dir node-dir})]
-    (let [last-tx (case method
-                    :docs (tpch/submit-docs! node scale-factor)
-                    :dml (tpch/submit-dml! node scale-factor))]
-      (tu/then-await-tx last-tx node)
-      (tu/finish-chunk node)
+    (do
+      (util/delete-dir node-dir)
+      (with-open [node (tu/->local-node {:node-dir node-dir})]
+        (let [last-tx (case method
+                        :docs (tpch/submit-docs! node scale-factor)
+                        :dml (tpch/submit-dml! node scale-factor))]
+          (tu/then-await-tx last-tx node)
+          (tu/finish-chunk node)
 
-      (let [db @(node/snapshot-async node last-tx)]
-        (binding [*node* node, *db* db]
-          (f))))))
+          (let [db @(node/snapshot-async node last-tx)]
+            (binding [*node* node, *db* db]
+              (f))))))))
 
 (defn is-equal?
   [expected actual]
@@ -97,7 +102,15 @@
 
 (def ^:private ^:dynamic *datalog-qs*
   ;; replace with *qs* once these are all expected to work
-  #{1 4 6 16})
+  (-> (set (range 1 23))
+      (disj 2 3 5 8 9 10 21) ; TODO join-order planning
+      (disj 5 8 9 11 14 17) ; TODO nested agg exprs
+      (disj 14) ; TODO exprs in `:find`
+      (disj 7 20) ; TODO general fail
+      (disj 13) ; TODO left-join
+      (disj 15) ; TODO has a view, not sure how to represent this
+      (disj 19 22) ; TODO cardinality-many literals
+      ))
 
 (defn test-datalog-query [n expected-res]
   (let [q (inc n)]
@@ -125,8 +138,12 @@
        (map-indexed test-datalog-query results-sf-01)))))
 
 (comment
-  (binding [*datalog-qs* #{4}]
-    (t/run-test test-001-datalog)))
+  (binding [*datalog-qs* #{2}]
+    (t/run-test test-001-datalog))
+
+  (binding [*node* dev/node
+            *datalog-qs* #{1}]
+    (t/run-test test-01-datalog)))
 
 (defn slurp-sql-query [query-no]
   (slurp (io/resource (str "core2/sql/tpch/" (format "q%02d.sql" query-no)))))
