@@ -72,7 +72,28 @@
              (c2/datalog-query tu/*node*
                                (-> '{:find [id doc-count]
                                      :where [[id :doc-count doc-count]]}
-                                   (assoc :basis {:tx !tx})))))))
+                                   (assoc :basis {:tx !tx}))))))
+
+  (let [!tx2 (c2/submit-tx tu/*node* [[:put {:id :petr :balance 100}]
+                                      [:put {:id :ivan :balance 200}]
+                                      [:put {:id :update-balance,
+                                             :fn #c2/clj-form (fn [id]
+                                                                (let [[account] (q '{:find [id balance]
+                                                                                     :in [id]
+                                                                                     :where [[id :balance balance]]}
+                                                                                   id)]
+                                                                  (if account
+                                                                    [[:put (update account :balance inc)]]
+                                                                    [])))}]
+                                      [:call :update-balance :petr]
+                                      [:call :update-balance :undefined]])]
+    (t/is (= #{{:id :petr, :balance 101}
+               {:id :ivan, :balance 200}}
+             (set (c2/datalog-query tu/*node*
+                                    (-> '{:find [id balance]
+                                          :where [[id :balance balance]]}
+                                        (assoc :basis {:tx !tx2})))))
+          "query in tx-fn with in-args")))
 
 (t/deftest test-tx-fn-sql-q
   (let [!tx (c2/submit-tx tu/*node* [[:put {:id :doc-counter,
