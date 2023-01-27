@@ -130,8 +130,7 @@
 
 (defn flatten-expr [pred expr]
   (if (pred expr)
-    (concat (flatten-expr pred (nth expr 1))
-            (flatten-expr pred (nth expr 2)))
+    (mapcat (partial flatten-expr pred) (rest expr))
     [expr]))
 
 ;; NOTE: might be better to try do this via projected-columns and meta
