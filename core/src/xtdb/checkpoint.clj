@@ -15,7 +15,8 @@
 (defprotocol CheckpointStore
   (available-checkpoints [store opts])
   (download-checkpoint [store checkpoint dir])
-  (upload-checkpoint [store dir opts]))
+  (upload-checkpoint [store dir opts])
+  (cleanup-checkpoint [store dir]))
 
 (alter-meta! #'available-checkpoints assoc :arglists '([store {:keys [::cp-format]}]))
 (alter-meta! #'upload-checkpoint assoc :arglists '([store dir {:keys [::cp-format tx]}]))
