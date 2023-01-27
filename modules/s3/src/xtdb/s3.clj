@@ -13,7 +13,9 @@
            java.util.function.BiFunction
            [software.amazon.awssdk.core.async AsyncRequestBody AsyncResponseTransformer]
            software.amazon.awssdk.core.ResponseBytes
-           [software.amazon.awssdk.services.s3.model CommonPrefix GetObjectRequest ListObjectsV2Request ListObjectsV2Response NoSuchKeyException PutObjectRequest S3Object]
+           [software.amazon.awssdk.services.s3.model
+            CommonPrefix GetObjectRequest ListObjectsV2Request ListObjectsV2Response
+            NoSuchKeyException PutObjectRequest S3Object]
            software.amazon.awssdk.services.s3.S3AsyncClient))
 
 (defn ^:no-doc put-objects [{:keys [^S3Configurator configurator ^S3AsyncClient client bucket prefix]} objs]
@@ -45,7 +47,7 @@
                                   (if e
                                     (try
                                       (throw (.getCause ^Throwable e))
-                                      (catch NoSuchKeyException e
+                                      (catch NoSuchKeyException _
                                         (log/warn "S3 key not found: " s3-key))
                                       (catch Exception e
                                         (log/warnf e "Error fetching S3 object: s3://%s/%s" bucket (str prefix path))))
@@ -57,7 +59,7 @@
                           (when-let [resp (.get fut)]
                             [path resp]))))))
 
-(defn ^:no-doc list-objects [{:keys [^S3Configurator configurator ^S3AsyncClient client bucket prefix]}
+(defn ^:no-doc list-objects [{:keys [^S3Configurator _ ^S3AsyncClient client bucket prefix]}
                              {:keys [path recursive?]}]
   (letfn [(list-objects* [continuation-token]
             (lazy-seq

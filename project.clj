@@ -34,6 +34,9 @@
    [com.xtdb/xtdb-bench ~xt-version]
    [com.xtdb/xtdb-replicator ~xt-version]
 
+   ;;
+   [com.xtdb/xtdb-s3 ~xt-version]
+
    [ch.qos.logback/logback-classic "1.2.11"]
    [ch.qos.logback/logback-core "1.2.11"]
    [cljsjs/react "17.0.1-0"]
@@ -86,8 +89,9 @@
    [pro.juxt.clojars-mirrors.cheshire/cheshire "5.10.0"]
    [pro.juxt.clojars-mirrors.com.taoensso/nippy "3.1.1-2"]
    [ring/ring-devel "1.9.5"]
-   [software.amazon.awssdk/cloudwatch "2.17.241"]
-   [software.amazon.awssdk/s3 "2.17.241"]]
+   [software.amazon.awssdk/s3 "2.19.21"]
+   [software.amazon.awssdk/cloudwatch "2.19.21"]
+   [software.amazon.awssdk/s3-transfer-manager "2.19.21"]]
 
   :dependencies
   [[org.clojure/clojure]
@@ -108,6 +112,7 @@
    [com.xtdb/xtdb-test]
    [com.xtdb/xtdb-bench]
    [com.xtdb/xtdb-replicator]
+   [com.xtdb/xtdb-s3]
 
    [org.apache.kafka/connect-api "2.6.0" :scope "provided"]
 
