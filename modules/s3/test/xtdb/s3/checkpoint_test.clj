@@ -3,6 +3,7 @@
             [xtdb.fixtures.checkpoint-store :as fix.cp-store]
             [xtdb.s3-test :as s3t]
             [xtdb.s3.checkpoint :as s3c]
+            [xtdb.s3.checkpoint-transfer-manager :as s3ctm]
             [xtdb.system :as sys])
   (:import xtdb.s3.S3Configurator
            java.util.UUID
@@ -36,7 +37,7 @@
 
 
 (t/deftest test-checkpoint-store-transfer-manager
-  (with-open [sys (-> (sys/prep-system {:store {:xtdb/module `s3c/->cp-store
+  (with-open [sys (-> (sys/prep-system {:store {:xtdb/module `s3ctm/->cp-store
                                                 :configurator `->crt-configurator
                                                 :bucket s3t/test-s3-bucket
                                                 :transfer-manager? true
