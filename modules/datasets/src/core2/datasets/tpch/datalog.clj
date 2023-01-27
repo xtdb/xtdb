@@ -120,8 +120,10 @@
 
     :order-by [[o_orderpriority :asc]]})
 
+;; TODO reintro agg exprs
 (def q5
-  (-> '{:find [n_name (sum (* l_extendedprice (- 1 l_discount)))]
+  (-> '{:find [n_name (sum li_price)]
+        :keys [n_name revenue]
         :in [?region]
         :where [[o :_table :orders]
                 [l :_table :lineitem]
@@ -139,13 +141,14 @@
                 [l :l_suppkey s]
                 [l :l_extendedprice l_extendedprice]
                 [l :l_discount l_discount]
+                [(* l_extendedprice (- 1 l_discount)) li_price]
 
                 [s :s_nationkey n]
                 [c :c_nationkey n]
                 [n :n_name n_name]
                 [n :n_regionkey r]
                 [r :r_name ?region]]
-        :order-by [[(sum (* l_extendedprice (- 1 l_discount))) :desc]]}
+        :order-by [[(sum li_price) :desc]]}
       (with-in-args ["ASIA"])))
 
 ;; TODO reintro nested agg exprs
