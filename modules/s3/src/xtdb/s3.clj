@@ -59,7 +59,7 @@
                           (when-let [resp (.get fut)]
                             [path resp]))))))
 
-(defn ^:no-doc list-objects [{:keys [^S3Configurator _configurator ^S3AsyncClient client bucket prefix]}
+(defn ^:no-doc list-objects [{:keys [^S3Configurator _ ^S3AsyncClient client bucket prefix]}
                              {:keys [path recursive?]}]
   (letfn [(list-objects* [continuation-token]
             (lazy-seq

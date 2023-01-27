@@ -142,10 +142,10 @@ Clojure::
               :checkpointer
               {:xtdb/module `xtdb.checkpoint/->checkpointer
 
-               :store {:xtdb/module `xtdb.s3.checkpoint/->cp-store
+               :store {:xtdb/module `xtdb.s3.checkpoint-transfer-manager/->cp-store
                        :bucket "checkpoint-bucket"
                        :prefix "checkpoint-dir"
-                       :configurator `s3-configurator}         ;;;; ;; see below
+                       :configurator `s3-configurator}         ;;;; ;; see below for an example
 
                :approx-frequency (java.time.Duration/ofSeconds 3600)}}}
                ...
