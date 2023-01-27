@@ -89,11 +89,11 @@ EDN::
 
 Most Cloud providers offer some high-performance block storage facility (e.g.
 link:https://aws.amazon.com/ebs/[AWS EBS] or
-link:https://cloud.google.com/storage[Google Cloud Storage]. These volumes
+link:https://cloud.google.com/storage[Google Cloud Storage]). These volumes
 usually can be mounted on compute platforms (e.g. EC2) or containers (e.g. K8S).
 Often the Cloud provider also offers tooling to quickly snapshot those volumes
-(see link:https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/EBSSnapshots.html[EBS snapshots]. A possible checkpoint strategy for XTDB nodes running in a cloud
-environment with such a facility, would consist in:
+(see link:https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/EBSSnapshots.html[EBS snapshots]). A possible checkpoint strategy for XTDB nodes running in a cloud environment with such a facility, would consist in:
+
 * having `[:checkpointer :store :path]` pointing to a filesystem mounted on such
   a volume
 * having the joining XTDB node `[:checkpointer :store :path]` point to a
