@@ -180,9 +180,6 @@
       (relation-columns lhs)
       (->projected-column projection))
 
-    [:mega-join _ rels]
-    (vec (mapcat relation-columns rels))
-
     [:single-join _ lhs rhs]
     (vec (mapcat relation-columns [lhs rhs]))
 
@@ -1225,6 +1222,55 @@
            inner-lhs
            [:anti-join join-condition inner-rhs rhs]])))
 
+(defn- promote-selection-to-mega-join [z]
+  (r/zmatch
+    z
+    [:select predicate
+     [:mega-join join-condition rels]]
+    ;;=>
+    (when (columns-in-predicate-present-in-relation? [:mega-join join-condition rels] predicate)
+      [:mega-join (conj join-condition predicate) rels])))
+
+(defn- split-conjunctions-in-mega-join [z]
+  (r/zmatch
+    z
+    [:mega-join join-condition rels]
+    ;;=>
+    (when (some and-predicate? join-condition)
+      [:mega-join (vec (mapcat #(flatten-expr and-predicate? %) join-condition)) rels])))
+
+(defn- push-predicates-from-mega-join-to-child-relations [z]
+  (r/zmatch
+    z
+    [:mega-join join-condition rels]
+    ;;=>
+    (let [indexed-rels (map-indexed (fn [idx rel] {:idx idx
+                                                   :rel rel
+                                                   :preds []}) rels)
+          indexed-preds (map-indexed (fn [idx pred] {:idx idx
+                                                     :pred pred}) join-condition)]
+      (when-let [moveable-preds
+                 (seq
+                   (for [{:keys [pred] :as predicate} indexed-preds
+                         {:keys [rel] :as relation} indexed-rels
+                         :when (columns-in-predicate-present-in-relation? rel pred)]
+                     (update relation :preds conj predicate)))]
+        (let [updated-rels (-> (group-by :idx moveable-preds)
+                               (update-vals (fn [updates-for-rel]
+                                              (reduce
+                                                (fn [rel pred]
+                                                  [:select (:pred pred)
+                                                   rel])
+                                                (:rel (first updates-for-rel))
+                                                (mapcat :preds updates-for-rel)))))
+              pushed-down-preds (set (keys (group-by :idx (mapcat :preds moveable-preds))))
+
+              output-join-conditions (mapv :pred (remove #(pushed-down-preds (:idx %)) indexed-preds))
+              output-rels (mapv #(if-let [updated-rel (get updated-rels (:idx %))]
+                                   updated-rel
+                                   (:rel %)) indexed-rels)]
+          [:mega-join output-join-conditions output-rels])))))
+
 
 (def ^:private push-correlated-selection-down-past-join (partial push-selection-down-past-join true))
 (def ^:private push-correlated-selection-down-past-rename (partial push-selection-down-past-rename true))
@@ -1243,6 +1289,9 @@
 (def ^:private optimise-plan-rules
   [#'promote-selection-cross-join-to-join
    #'promote-selection-to-join
+   #'promote-selection-to-mega-join
+   #'split-conjunctions-in-mega-join
+   #'push-predicates-from-mega-join-to-child-relations
    #'push-selection-down-past-apply
    #'push-correlated-selection-down-past-join
    #'push-correlated-selection-down-past-rename

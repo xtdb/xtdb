@@ -241,8 +241,8 @@
                                                (with-table-col-prefix [lv]
                                                  (col-sym (str prefix "_" (str lv))))]
                                          (-> (case binding-type
-                                               :source {:in-col binding-arg}
-                                               :scalar {:var->col {binding-arg (with-param-prefix binding-arg)}, :in-col binding-arg}
+                                               :source {:in-cols [binding-arg]}
+                                               :scalar {:var->col {binding-arg (with-param-prefix binding-arg)}, :in-cols [binding-arg]}
                                                :tuple {:var->col (->> binding-arg (into {} (map (juxt identity with-param-prefix))))
                                                        :in-cols binding-arg}
                                                :relation (let [cols (first binding-arg)]
@@ -252,7 +252,7 @@
                                                :collection (let [col (first binding-arg)]
                                                              {:table-key table-key
                                                               :var->col {col (with-table-col-prefix col)}
-                                                              :in-col col}))
+                                                              :in-cols [col]}))
                                              (assoc :binding-type binding-type))))))))]
     {:in-bindings in-bindings
      :var->cols (-> in-bindings
@@ -262,10 +262,9 @@
 
 (defn- plan-in-tables [in-bindings]
   (->> in-bindings
-       (into [] (keep (fn [{:keys [table-key var->col]}]
+       (into [] (keep (fn [{:keys [table-key in-cols var->col]}]
                         (when table-key
-                          [:rename var->col
-                           [:table table-key]]))))))
+                          [:table (mapv var->col in-cols) table-key]))))))
 
 (defn- analyse-triples [triples]
   (letfn [(->triple-rel [^long idx, [[src e] triples]]
@@ -716,9 +715,9 @@
   (plan-query (conform-query query)))
 
 (defn- args->params [args in-bindings]
-  (->> (mapcat (fn [{:keys [binding-type in-col in-cols var->col]} arg]
+  (->> (mapcat (fn [{:keys [binding-type in-cols var->col]} arg]
                  (case binding-type
-                   (:source :scalar) [(MapEntry/create (var->col in-col) arg)]
+                   (:source :scalar) [(MapEntry/create (var->col (first in-cols)) arg)]
                    :tuple (zipmap (map var->col in-cols) arg)
                    (:collection :relation) nil))
                in-bindings
@@ -726,12 +725,13 @@
        (into {})))
 
 (defn- args->tables [args in-bindings]
-  (->> (mapcat (fn [{:keys [binding-type in-col in-cols table-key var->col]} arg]
+  (->> (mapcat (fn [{:keys [binding-type in-cols table-key var->col]} arg]
                  (letfn [(col->kw [col] (-> col var->col keyword))]
                    (case binding-type
                      (:source :scalar :tuple) nil
 
-                     :collection (let [binding-k (col->kw in-col)]
+                     :collection (let [in-col (first in-cols)
+                                       binding-k (col->kw in-col)]
                                    (if-not (coll? arg)
                                      (throw (err/illegal-arg :bad-collection
                                                              {:binding in-col
