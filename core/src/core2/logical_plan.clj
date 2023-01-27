@@ -521,7 +521,7 @@
                         (:correlated-column? (meta x)))]
          x)))
 
-(defn- equals-predicate? [predicate]
+(defn equals-predicate? [predicate]
   (and (sequential? predicate)
        (= 3 (count predicate))
        (= '= (first predicate))))

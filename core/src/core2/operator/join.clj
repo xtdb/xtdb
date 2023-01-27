@@ -626,9 +626,10 @@
 (defn remove-params [maybe-cols-and-params]
   (set (remove #(str/starts-with? (str %) "?") maybe-cols-and-params)))
 
-(defn adjust-equi-condition
-  "Swaps the sides of equi conditions to match location of cols in plan"
-  [{:keys [condition] :as join-condition}]
+(defn adjust-to-equi-condition
+  "Swaps the sides of equi conditions to match location of cols in plan
+  or rewrite simple equals predicate condition as equi condition"
+  [{:keys [condition cols-from-current-rel other-cols] :as join-condition}]
   (if (= (first condition) :equi-condition)
     (let [equi-join-cond (last condition)
           lhs (first (keys equi-join-cond))
@@ -636,7 +637,21 @@
           lhs-cols (expr->columns lhs)]
       (if (= (:cols-from-current-rel join-condition) lhs-cols)
         condition
-        [:equi-condition {rhs lhs}])) condition))
+        [:equi-condition {rhs lhs}]))
+    (let [predicate (last condition)]
+      (if (lp/equals-predicate? predicate)
+        (let [[_ a b] predicate]
+          (cond (and (= cols-from-current-rel #{a})
+                     (= other-cols #{b}))
+                [:equi-condition {a b}]
+
+                (and (= cols-from-current-rel #{b})
+                     (= other-cols #{a}))
+                [:equi-condition {b a}]
+
+                :else
+                condition))
+        condition))))
 
 (defn find-join-conditions-which-contain-cols-from-plan
   "Returns join conditions which reference at least one col from the current plan"
@@ -697,7 +712,7 @@
                                 (match-relations-to-potential-join-clauses rels)
                                 (first))
             join-conditions (mapv
-                              adjust-equi-condition
+                              adjust-to-equi-condition
                               (:valid-join-conditions-for-rel join-candidate))]
         (if (seq join-candidate)
           (recur

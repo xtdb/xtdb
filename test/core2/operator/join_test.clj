@@ -1,5 +1,6 @@
 (ns core2.operator.join-test
   (:require [clojure.test :as t]
+            [core2.operator.join :as join]
             [core2.test-util :as tu]))
 
 (t/use-fixtures :each tu/with-allocator)
@@ -858,3 +859,14 @@
                   [:table [{:person 1}]]
                   [:table [{:foo 1 :bar "woo"}
                            {:foo 1 :bar "yay"}]]]])))))
+
+(t/deftest test-adjust-to-equi-condition
+  (t/is
+    (= '[:equi-condition {t0_n t1_n}]
+       (join/adjust-to-equi-condition
+         '{:cols #{t1_n t0_n},
+           :condition [:pred-expr (= t1_n t0_n)],
+           :condition-id 0,
+           :cols-from-current-rel #{t0_n},
+           :other-cols #{t1_n},
+           :all-cols-present? true}))))
