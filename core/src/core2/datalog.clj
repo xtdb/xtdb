@@ -364,7 +364,7 @@
                                                   :keys (vec (for [arg args]
                                                                (keyword (var->col arg))))
                                                   :where terms}
-                                           (seq required-vars) (assoc :in [[:tuple args]]))}))))
+                                           (seq required-vars) (assoc :apply-params args))}))))
        (not-empty)))
 
 (defn- wrap-semi-joins [plan sj-type {outer-var->col :var->col, :as attrs}]
@@ -372,8 +372,7 @@
        (mapv (fn [{:keys [required-vars query var->col]}]
                (let [plan (plan-query query)
                      apply-mapping (when required-vars
-                                     (let [{:keys [in-bindings]} plan
-                                           {:keys [var->col]} (first in-bindings)]
+                                     (let [{:keys [var->col]} (:apply-params plan)]
                                        (->> var->col
                                             (into {} (map (fn [[lv in-var]]
                                                             (MapEntry/create (get outer-var->col lv) in-var)))))))]
@@ -402,8 +401,6 @@
                  (fn [uj-idx {:keys [args branches] :as uj}]
                    (let [{uj-required-vars :required-vars} (term-vars [:union-join uj])
 
-                         in-vars (vec uj-required-vars)
-
                          var->col (->> args
                                        (into {}
                                              (map (juxt identity #(col-sym (str "uj" uj-idx "_" (str %)))))))]
@@ -414,7 +411,7 @@
                                            (mapv (fn [branch]
                                                    {:find (vec (for [arg args]
                                                                  [:logic-var arg]))
-                                                    :in [[:tuple in-vars]]
+                                                    :apply-params (vec uj-required-vars)
                                                     :keys (vec (for [arg args]
                                                                  (keyword (var->col arg))))
                                                     :where branch})))}))))
@@ -435,8 +432,7 @@
                                                       [:union-all acc plan])))
 
                                  :apply-mapping (when required-vars
-                                                  (let [{:keys [in-bindings]} (first branch-plans)
-                                                        {:keys [var->col]} (first in-bindings)]
+                                                  (let [{:keys [var->col]}(:apply-params (first branch-plans))]
                                                     (->> var->col
                                                          (into {} (map (fn [[lv in-var]]
                                                                          (MapEntry/create
@@ -456,8 +452,21 @@
 
     plan))
 
-(defn- analyse-body [{where-clauses :where, :as query}]
+(defn analyse-apply-params [apply-params]
+  ;;TODO symbol names will clash with nested applies
+  ;; (where an apply is nested inside the dep side of another apply)
+  (let [var->col (into
+                   {}
+                   (for [param apply-params]
+                     (let [param-symbol (with-meta (symbol (str "?ap_" param)) {:correlated-column? true})]
+                       (MapEntry/create param param-symbol))))]
+    {:var->col var->col
+     :var->cols
+     (update-vals var->col hash-set)}))
+
+(defn- analyse-body [{where-clauses :where, apply-params :apply-params, :as query}]
   (let [{:keys [in-bindings] :as in-attrs} (analyse-in query)
+        analysed-apply-params (analyse-apply-params apply-params)
         {triple-clauses :triple
          call-clauses :call
          semi-join-clauses :semi-join
@@ -473,7 +482,9 @@
                                (-> acc
                                    (update lv (fnil into #{}) col)))
                              (:var->cols triples)
-                             (:var->cols in-attrs))
+                             (concat
+                               (:var->cols in-attrs)
+                               (:var->cols analysed-apply-params)))
 
         l0-var->col (->> (keys l0-var->cols)
                          (into {} (map (juxt identity #(col-sym (str %))))))]
@@ -490,6 +501,7 @@
 
       (if (and (empty? calls) (empty? semi-joins) (empty? anti-joins) (empty? union-joins))
         {:in-bindings in-bindings
+         :apply-params analysed-apply-params
          :levels levels
          :var->col var->col}
 
@@ -560,7 +572,7 @@
                             [a1 a2] (partition 2 1 attrs)]
                         (list '= a1 a2))))]))
 
-(defn- wrap-unify-vars [plan {:keys [var->cols var->col]}]
+(defn- wrap-unify-vars [plan {:keys [var->cols var->col] :as l}]
   [:project (vec (for [[lv cols] var->cols
                        :let [out-col (get var->col lv)
                              in-col (first cols)]]
@@ -691,13 +703,14 @@
 
 (defn- plan-query [conformed-query]
   (let [head-attrs (analyse-head conformed-query)
-        {:keys [in-bindings] :as body-attrs} (analyse-body conformed-query)]
+        {:keys [in-bindings apply-params] :as body-attrs} (analyse-body conformed-query)]
 
     {:plan (-> (plan-body body-attrs)
                (wrap-head {:head-attrs head-attrs, :body-attrs body-attrs})
                (with-top conformed-query))
 
-     :in-bindings in-bindings}))
+     :in-bindings in-bindings
+     :apply-params apply-params}))
 
 (defn compile-query [query]
   (plan-query (conform-query query)))
