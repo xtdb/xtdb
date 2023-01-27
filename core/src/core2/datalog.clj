@@ -110,12 +110,16 @@
          :args ::args-list
          :branches ::or-branches))
 
+(s/def ::sub-query
+  (s/cat :q #{'q}, :query ::query))
+
 (s/def ::term
   (s/or :triple ::triple
         :semi-join ::semi-join
         :anti-join ::anti-join
         :union-join ::union-join
-        :call ::call-clause))
+        :call ::call-clause
+        :sub-query ::sub-query))
 
 (s/def ::where
   (s/coll-of ::term :kind vector? :min-count 1))
@@ -148,7 +152,7 @@
                                :explain (s/explain-data ::query query)})))
     conformed-query))
 
-(declare plan-query)
+(declare analyse-query plan-query)
 
 (defn- wrap-select [plan predicates]
   (case (count predicates)
@@ -358,40 +362,43 @@
 
                                  {:var->col var->col
                                   :required-vars required-vars
-                                  :query (cond-> {:find (vec (for [arg args]
-                                                               [:logic-var arg]))
-                                                  :keys (vec (for [arg args]
-                                                               (keyword (var->col arg))))
-                                                  :where terms}
-                                           (seq required-vars) (assoc :apply-params args))}))))
+                                  :sub-query (-> (cond-> {:find (vec (for [arg args]
+                                                                       [:logic-var arg]))
+                                                          :keys (vec (for [arg args]
+                                                                       (keyword (var->col arg))))
+                                                          :where terms}
+                                                   (seq required-vars) (assoc :apply-params args))
+                                                 (analyse-query))}))))
        (not-empty)))
 
 (defn- wrap-semi-joins [plan sj-type {outer-var->col :var->col, :as attrs}]
   (->> (get attrs (case sj-type :semi-join :semi-joins, :anti-join :anti-joins))
-       (mapv (fn [{:keys [required-vars query var->col]}]
-               (let [plan (plan-query query)
+       (mapv (fn [{:keys [required-vars sub-query var->col]}]
+               (let [in-bindings (get-in sub-query [:body-attrs :in-bindings])
+                     sq-plan (plan-query sub-query)
                      apply-mapping (when required-vars
-                                     (let [{:keys [var->col]} (:apply-params plan)]
+                                     (let [{:keys [var->col]} (-> (meta sq-plan)
+                                                                  (get-in [::attrs :body-attrs :apply-params]))]
                                        (->> var->col
                                             (into {} (map (fn [[lv in-var]]
                                                             (MapEntry/create (get outer-var->col lv) in-var)))))))]
-                 (-> plan
-                     (assoc :join-condition (->> var->col
-                                                 (mapv (fn [[lv col]]
-                                                         {(get outer-var->col lv) col})))
+                 {:sq-plan sq-plan
+                  :join-condition (->> var->col
+                                       (mapv (fn [[lv col]]
+                                               {(get outer-var->col lv) col})))
 
-                            :apply-mapping apply-mapping)))))
+                  :apply-mapping apply-mapping})))
 
 
-       (reduce (fn [outer-plan {:keys [plan apply-mapping join-condition]}]
+       (reduce (fn [acc {:keys [sq-plan apply-mapping join-condition]}]
                  (if (seq apply-mapping)
                    [:apply sj-type apply-mapping
-                    outer-plan
-                    plan]
+                    acc
+                    sq-plan]
 
                    [sj-type join-condition
-                    outer-plan
-                    plan]))
+                    acc
+                    sq-plan]))
                plan)))
 
 (defn- analyse-union-joins [union-join-clauses]
@@ -416,38 +423,86 @@
                                                     :where branch})))}))))
        (not-empty)))
 
+(defn- sq-apply-mapping [sub-query-attrs {:keys [required-vars outer-var->col]}]
+  (when required-vars
+    (let [{:keys [var->col]} (-> sub-query-attrs
+                                 (get-in [:body-attrs :apply-params]))]
+      (->> var->col
+           (into {} (map (fn [[lv in-var]]
+                           (MapEntry/create
+                            (get outer-var->col lv)
+                            in-var))))))))
+
 (defn- wrap-union-joins [plan {outer-var->col :var->col, :keys [union-joins]}]
   (if union-joins
     (let [union-joins (->> union-joins
                            (mapv
                             (fn [{:keys [required-vars branch-queries]}]
-                              (let [branch-plans (->> branch-queries
-                                                      (mapv (fn [query]
-                                                              (plan-query query))))]
+                              (let [branches (mapv analyse-query branch-queries)
+                                    apply-mapping (sq-apply-mapping (first branches)
+                                                                    {:required-vars required-vars
+                                                                     :outer-var->col outer-var->col})]
 
-                                {:plan (->> branch-plans
-                                            (map :plan)
-                                            (reduce (fn [acc plan]
-                                                      [:union-all acc plan])))
+                                (-> branches
+                                    (->> (map plan-query)
+                                         (reduce (fn [acc plan]
+                                                   [:union-all acc plan])))
+                                    (vary-meta assoc :apply-mapping apply-mapping))))))]
 
-                                 :apply-mapping (when required-vars
-                                                  (let [{:keys [var->col]} (:apply-params (first branch-plans))]
-                                                    (->> var->col
-                                                         (into {} (map (fn [[lv in-var]]
-                                                                         (MapEntry/create
-                                                                          (get outer-var->col lv)
-                                                                          in-var)))))))}))))]
-
-      (if-let [apply-mapping (not-empty (into {} (mapcat :apply-mapping) union-joins))]
+      (if-let [apply-mapping (not-empty (into {} (mapcat (comp :apply-mapping meta)) union-joins))]
         [:apply :cross-join apply-mapping
          plan
-         [:mega-join []
-          (mapv :plan union-joins)]]
+         [:mega-join [] union-joins]]
 
         [:mega-join []
-         (into [plan]
-               (map :plan)
-               union-joins)]))
+         (into [plan] union-joins)]))
+
+    plan))
+
+(defn- analyse-sub-queries [sub-query-clauses]
+  (->> sub-query-clauses
+       (into [] (map-indexed
+                 (fn [sq-idx {:keys [query]}]
+                   (let [required-vars (->> (:in query)
+                                            (into #{} (map
+                                                       (fn [[in-type in-arg :as in]]
+                                                         (when-not (= in-type :scalar)
+                                                           (throw (err/illegal-arg :non-scalar-subquery-param
+                                                                                   (s/unform ::in-binding in))))
+                                                         in-arg))))
+                         sub-query (analyse-query (-> query
+                                                      (dissoc :in)
+                                                      (assoc :apply-params (vec required-vars))))]
+                     {:sub-query sub-query
+                      :required-vars required-vars
+                      :var->col (->> (keys (get-in sub-query [:head-attrs :var->col]))
+                                     (into {} (map (juxt identity #(col-sym (str "sq" sq-idx "_" (str %)))))))}))))
+       (not-empty)))
+
+(defn- wrap-sub-queries [plan {outer-var->col :var->col, :keys [sub-queries]}]
+  (if sub-queries
+    (let [sub-queries (->> sub-queries
+                           (mapv
+                            (fn [{:keys [required-vars sub-query var->col]}]
+                              (let [apply-mapping (sq-apply-mapping sub-query
+                                                                    {:required-vars required-vars
+                                                                     :outer-var->col outer-var->col})]
+
+                                (-> [:project (->> var->col
+                                                   (mapv (fn [[lv col]]
+                                                           {col lv})))
+                                     (plan-query sub-query)]
+                                    (vary-meta assoc :apply-mapping apply-mapping))))))]
+
+      (if-let [apply-mapping (->> sub-queries
+                                  (into {} (mapcat (comp :apply-mapping meta)))
+                                  (not-empty))]
+        [:apply :cross-join apply-mapping
+         plan
+         [:mega-join [] sub-queries]]
+
+        [:mega-join []
+         (into [plan] sub-queries)]))
 
     plan))
 
@@ -466,13 +521,12 @@
 (defn- analyse-body [{where-clauses :where, apply-params :apply-params, :as query}]
   (let [{:keys [in-bindings] :as in-attrs} (analyse-in query)
         analysed-apply-params (analyse-apply-params apply-params)
-        {triple-clauses :triple
-         call-clauses :call
-         semi-join-clauses :semi-join
-         anti-join-clauses :anti-join
-         union-join-clauses :union-join} (-> where-clauses
-                                             (->> (group-by first))
-                                             (update-vals #(mapv second %)))
+
+        {triple-clauses :triple, call-clauses :call, sub-query-clauses :sub-query
+         semi-join-clauses :semi-join, anti-join-clauses :anti-join, union-join-clauses :union-join}
+        (-> where-clauses
+            (->> (group-by first))
+            (update-vals #(mapv second %)))
 
         {:keys [triple-rels] :as triples} (analyse-triples triple-clauses)
         calls (analyse-calls call-clauses)
@@ -488,67 +542,63 @@
         l0-var->col (->> (keys l0-var->cols)
                          (into {} (map (juxt identity #(col-sym (str %))))))]
 
-
     (loop [calls calls
            union-joins (analyse-union-joins union-join-clauses)
            semi-joins (analyse-semi-joins :semi-join semi-join-clauses)
            anti-joins (analyse-semi-joins :anti-join anti-join-clauses)
+           sub-queries (analyse-sub-queries sub-query-clauses)
            var->col l0-var->col
            levels [{:triple-rels triple-rels
                     :var->cols l0-var->cols
                     :var->col l0-var->col}]]
 
-      (if (and (empty? calls) (empty? semi-joins) (empty? anti-joins) (empty? union-joins))
+      (if (and (empty? calls) (empty? sub-queries)
+               (empty? semi-joins) (empty? anti-joins) (empty? union-joins))
         {:in-bindings in-bindings
          :apply-params analysed-apply-params
          :levels levels
          :var->col var->col}
 
-        (let [{available-calls true
-               unavailable-calls false} (->> calls
-                                             (group-by (fn [{:keys [required-vars]}]
-                                                         (set/superset? (set (keys var->col)) required-vars))))
+        (letfn [(available? [{:keys [required-vars]}]
+                  (set/superset? (set (keys var->col)) required-vars))]
+          (let [{available-calls true, unavailable-calls false} (->> calls (group-by available?))
+                {available-sqs true, unavailable-sqs false} (->> sub-queries (group-by available?))
+                {available-ujs true, unavailable-ujs false} (->> union-joins (group-by available?))
+                {available-sjs true, unavailable-sjs false} (->> semi-joins (group-by available?))
+                {available-ajs true, unavailable-ajs false} (->> anti-joins (group-by available?))]
 
-              {available-ujs true
-               unavailable-ujs false} (->> union-joins
-                                           (group-by (fn [{:keys [required-vars]}]
-                                                       (set/superset? (set (keys var->col)) required-vars))))
+            (if (and (empty? available-calls) (empty? available-sqs)
+                     (empty? available-ujs) (empty? available-sjs) (empty? available-ajs))
+              (throw (err/illegal-arg :no-available-clauses
+                                      {:known-vars (set (keys var->col))
+                                       :unavailable-subqs unavailable-sqs
+                                       :unavailable-calls unavailable-calls
+                                       :unavailable-union-joins unavailable-ujs
+                                       :unavailable-semi-joins unavailable-sjs
+                                       :unavailable-anti-joins unavailable-ajs}))
 
-              {available-sjs true
-               unavailable-sjs false} (->> semi-joins
-                                           (group-by (fn [{:keys [required-vars]}]
-                                                       (set/superset? (set (keys var->col)) required-vars))))
-              {available-ajs true
-               unavailable-ajs false} (->> anti-joins
-                                           (group-by (fn [{:keys [required-vars]}]
-                                                       (set/superset? (set (keys var->col)) required-vars))))]
+              (let [new-vars->cols (->> (concat available-calls available-ujs available-sqs)
+                                        (mapcat :var->col))
 
-          (if (and (empty? available-calls) (empty? available-ujs) (empty? available-sjs) (empty? available-ajs))
-            (throw (err/illegal-arg :no-available-clauses
-                                    {:known-vars (set (keys var->col))
-                                     :unavailable-calls unavailable-calls
-                                     :unavailable-union-joins unavailable-ujs
-                                     :unavailable-semi-joins unavailable-sjs
-                                     :unavailable-anti-joins unavailable-ajs}))
+                    new-var->col (->> (keys new-vars->cols)
+                                      (into var->col
+                                            (comp (distinct)
+                                                  (map (juxt identity #(col-sym (str %)))))))
 
-            (let [new-vars (into #{} (mapcat (comp keys :var->col)) (concat available-calls available-ujs))
+                    new-var->cols (-> (concat var->col new-vars->cols)
+                                      (->> (group-by key))
+                                      (update-vals #(into #{} (map val) %)))]
 
-                  new-var->col (into var->col
-                                     (map (juxt identity #(col-sym (str %))))
-                                     new-vars)
-
-                  new-var->cols (-> (concat var->col (mapcat :var->col (concat available-calls available-ujs)))
-                                    (->> (group-by key))
-                                    (update-vals #(into #{} (map val) %)))]
-
-              (recur unavailable-calls unavailable-ujs unavailable-sjs unavailable-ajs
-                     new-var->col
-                     (conj levels {:calls available-calls
-                                   :semi-joins available-sjs
-                                   :anti-joins available-ajs
-                                   :union-joins available-ujs
-                                   :var->col new-var->col
-                                   :var->cols new-var->cols})))))))))
+                (recur unavailable-calls unavailable-sqs
+                       unavailable-ujs unavailable-sjs unavailable-ajs
+                       new-var->col
+                       (conj levels {:calls available-calls
+                                     :sub-queries available-sqs
+                                     :semi-joins available-sjs
+                                     :anti-joins available-ajs
+                                     :union-joins available-ujs
+                                     :var->col new-var->col
+                                     :var->cols new-var->cols}))))))))))
 
 (defn- plan-triples [triple-rels]
   (for [{:keys [src table attrs attr->lits var->col var->attrs]} triple-rels]
@@ -594,7 +644,8 @@
                       (wrap-calls level)
                       (wrap-semi-joins :semi-join level)
                       (wrap-semi-joins :anti-join level)
-                      (wrap-union-joins level))
+                      (wrap-union-joins level)
+                      (wrap-sub-queries level))
 
                   (if-let [rels (not-empty (vec (concat (plan-in-tables in-bindings)
                                                         (plan-triples triple-rels))))]
@@ -611,7 +662,7 @@
                              (let [rename-sym (some-> rename-key col-sym)]
                                (-> (case clause-type
                                      :logic-var {:lv clause
-                                                 :col rename-sym
+                                                 :col (or rename-sym (col-sym clause))
                                                  :vars #{clause}}
                                      :aggregate (let [{:keys [agg-fn param]} clause]
                                                   {:aggregate clause
@@ -643,15 +694,19 @@
 (defn- analyse-head [query]
   (let [find-attrs (analyse-find-clauses query)
         order-by-attrs (analyse-order-by query)]
-    {:find-clauses (:clauses find-attrs)
-     :order-by-clauses (not-empty (:clauses order-by-attrs))
-     :aggs (->> (merge (:aggs find-attrs)
-                       (:aggs order-by-attrs))
-                (not-empty))
+    (into (select-keys query [:limit :offset])
+          {:find-clauses (:clauses find-attrs)
+           :order-by-clauses (not-empty (:clauses order-by-attrs))
+           :aggs (->> (merge (:aggs find-attrs)
+                             (:aggs order-by-attrs))
+                      (not-empty))
 
-     ;; HACK: need to error-check this
-     :grouping-vars (set/union (set (:grouping-vars find-attrs))
-                               (set (:grouping-vars order-by-attrs)))}))
+           ;; HACK: need to error-check this
+           :grouping-vars (set/union (set (:grouping-vars find-attrs))
+                                     (set (:grouping-vars order-by-attrs)))
+
+           :var->col (->> (:clauses find-attrs)
+                          (into {} (map (comp (juxt identity identity) :col))))})))
 
 (defn- wrap-group-by [plan {{:keys [aggs grouping-vars]} :head-attrs
                             :keys [body-var->col]}]
@@ -691,7 +746,7 @@
                        :body-var->col body-var->col})
        (wrap-order-by order-by-clauses {:body-var->col body-var->col}))])
 
-(defn- with-top [plan {:keys [limit offset]}]
+(defn- with-top [plan {{:keys [limit offset]} :head-attrs}]
   (if (or limit offset)
     [:top (cond-> {}
             offset (assoc :skip offset)
@@ -700,19 +755,20 @@
 
     plan))
 
-(defn- plan-query [conformed-query]
-  (let [head-attrs (analyse-head conformed-query)
-        {:keys [in-bindings apply-params] :as body-attrs} (analyse-body conformed-query)]
+(defn- analyse-query [conformed-query]
+  {:head-attrs (analyse-head conformed-query)
+   :body-attrs (analyse-body conformed-query)})
 
-    {:plan (-> (plan-body body-attrs)
-               (wrap-head {:head-attrs head-attrs, :body-attrs body-attrs})
-               (with-top conformed-query))
-
-     :in-bindings in-bindings
-     :apply-params apply-params}))
+(defn- plan-query [{:keys [body-attrs] :as attrs}]
+  (-> (plan-body body-attrs)
+      (wrap-head attrs)
+      (with-top attrs)
+      (vary-meta assoc ::attrs attrs)))
 
 (defn compile-query [query]
-  (plan-query (conform-query query)))
+  (-> (conform-query query)
+      (analyse-query)
+      (plan-query)))
 
 (defn- args->params [args in-bindings]
   (->> (mapcat (fn [{:keys [binding-type in-cols var->col]} arg]
@@ -759,7 +815,8 @@
        (into {})))
 
 (defn open-datalog-query ^core2.IResultSet [^BufferAllocator allocator query db args]
-  (let [{:keys [plan in-bindings]} (compile-query (dissoc query :basis :basis-timeout :default-tz))
+  (let [plan (compile-query (dissoc query :basis :basis-timeout :default-tz))
+        {:keys [in-bindings]} (-> (meta plan) (get-in [::attrs :body-attrs]))
 
         plan (-> plan
                  #_(doto clojure.pprint/pprint)

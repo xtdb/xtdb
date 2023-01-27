@@ -720,3 +720,41 @@
                                         [e :age age]
                                         [e :role role])
                             [(<> e :sergei)]]}))))))
+
+(t/deftest test-nested-query
+  (let [!tx (c2/submit-tx tu/*node* bond/tx-ops)]
+    (t/is (= [{:bond-name "Roger Moore", :film-name "A View to a Kill"}
+              {:bond-name "Roger Moore", :film-name "For Your Eyes Only"}
+              {:bond-name "Roger Moore", :film-name "Live and Let Die"}
+              {:bond-name "Roger Moore", :film-name "Moonraker"}
+              {:bond-name "Roger Moore", :film-name "Octopussy"}
+              {:bond-name "Roger Moore", :film-name "The Man with the Golden Gun"}
+              {:bond-name "Roger Moore", :film-name "The Spy Who Loved Me"}]
+             (c2/datalog-query tu/*node*
+                               (-> '{:find [bond-name film-name]
+                                     :where [(q {:find [bond bond-name (count bond)]
+                                                 :keys [bond-with-most-films bond-name film-count]
+                                                 :where [[_ :film--bond bond]
+                                                         [bond :person--name bond-name]]
+                                                 :order-by [[(count bond) :desc] [bond-name]]
+                                                 :limit 1})
+
+                                             [film :film--bond bond-with-most-films]
+                                             [film :film--name film-name]]
+                                     :order-by [[film-name]]}
+                                   (assoc :basis {:tx !tx}))))
+          "films made by the Bond with the most films"))
+
+  (let [!tx (c2/submit-tx tu/*node* [[:put {:id :a1, :a 1}]
+                                     [:put {:id :a2, :a 2}]
+                                     [:put {:id :b2, :b 2}]
+                                     [:put {:id :b3, :b 3}]])]
+    (t/is (= [{:aid :a2, :bid :b2}]
+             (c2/datalog-query tu/*node*
+                               (-> '{:find [aid bid]
+                                     :where [[aid :a a]
+                                             (q {:find [bid]
+                                                 :in [a]
+                                                 :where [[bid :b a]]})]}
+                                   (assoc :basis {:tx !tx}))))
+          "(contrived) correlated sub-query")))
