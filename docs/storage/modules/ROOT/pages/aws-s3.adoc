@@ -28,7 +28,7 @@ pom.xml::
 ----
 ====
 
-== Using S3
+== Using S3 as a document store.
 
 Replace the implementation of the document store with `+xtdb.s3/->document-store+`
 
@@ -66,7 +66,7 @@ EDN::
 ----
 ====
 
-== Parameters
+=== Parameters
 
 * `configurator` (xref:#configurator[`S3Configurator`])
 * `bucket` (string, required)
@@ -74,11 +74,14 @@ EDN::
 * `cache-size` (int): size of in-memory document cache (number of entries, not bytes)
 
 [#checkpoint-store]
-== Checkpoint store
+== Using S3 as a checkpoint store
 
 S3 can be used as a query index xref:administration::checkpointing.adoc[checkpoint store].
-
 Checkpoints aren't GC'd by XTDB - we recommend you set a lifecycle policy on your bucket to remove older checkpoints.
+
+
+=== Option 1: Using the legacy S3 `checkpoint` module
+
 
 [source,clojure]
 ----
@@ -89,7 +92,7 @@ Checkpoints aren't GC'd by XTDB - we recommend you set a lifecycle policy on you
                         :configurator ...
                         :bucket "..."
                         :prefix "..."
-                        :transfer-manager? ...}}
+                 ...}}
 ----
 
 === Parameters
@@ -100,7 +103,7 @@ Checkpoints aren't GC'd by XTDB - we recommend you set a lifecycle policy on you
 * `transfer-manager?` (boolean, optional default `false`): Use link:https://docs.aws.amazon.com/sdk-for-java/latest/developer-guide/transfer-manager.html[AWS S3 Transfer Manager]
 
 [#configurator]
-== Configuring S3 requests
+===  Configuring S3 requests
 
 WARNING: This is unfortunately currently only accessible from Clojure - we plan to expose it outside of Clojure soon.
 
@@ -126,13 +129,49 @@ Clojure::
 ====
 
 
-=== AWS Transfer Manager
-Also AWS Transfer Manager works fine with the regular `S3AsyncClient` it is recommended to use the new
-link:https://aws.amazon.com/blogs/developer/introducing-crt-based-s3-client-and-the-s3-transfer-manager-in-the-aws-sdk-for-java-2-x/[CRT-based S3 client] in order to gain its full benefit.
-The following snippet
+=== Option 2: Using the new `checkpoint-transfer-manager` module
 
 [tabs]
 ====
+Clojure::
++
+[source,clojure]
+----
+    {
+              ...
+              :checkpointer
+              {:xtdb/module `xtdb.checkpoint/->checkpointer
+
+               :store {:xtdb/module `xtdb.s3.checkpoint/->cp-store
+                       :bucket "checkpoint-bucket"
+                       :prefix "checkpoint-dir"
+                       :configurator `s3-configurator}         ;;;; ;; see below
+
+               :approx-frequency (java.time.Duration/ofSeconds 3600)}}}
+               ...
+    }
+----
+====
+
+Although AWS Transfer Manager works fine with the regular `S3AsyncClient` it is recommended to use the new
+link:https://aws.amazon.com/blogs/developer/introducing-crt-based-s3-client-and-the-s3-transfer-manager-in-the-aws-sdk-for-java-2-x/[CRT-based S3 client] in order to gain its full benefit. For example:
+
+[tabs]
+====
+EDN::
+[source,clojure]
+----
+  {:deps 
+     {
+       ...
+       software.amazon.awssdk/s3-transfer-manager {:mvn/version "2.19.21"}
+       software.amazon.awssdk.crt/aws-crt {:mvn/version "0.21.1"}
+       ...
+     } 
+    ...
+  }
+----
+
 Clojure::
 +
 [source,clojure]
@@ -149,26 +188,8 @@ Clojure::
                 (.build))]
         configurator))))
 ----
-
-[tabs]
 ====
-Clojure::
-+
-[source,clojure]
-----
-    {
-              ...
-              :checkpointer
-              {:xtdb/module `xtdb.checkpoint/->checkpointer
 
-               :store {:xtdb/module `xtdb.s3.checkpoint/->cp-store
-                       :bucket "checkpoint-bucket"
-                       :prefix "checkpoint-dir"
-                       :transfer-manager? true
-                       :configurator `s3-configurator}
+When using the CRT Client, S3 Transfer Manager uses multipart transfers: it is recommended that you configure the 
+link:https://docs.aws.amazon.com/AmazonS3/latest/userguide/mpu-abort-incomplete-mpu-lifecycle-config.html[AbortIncompleteMultipartUpload] policy on your bucket.
 
-               :approx-frequency (java.time.Duration/ofSeconds 30)}}}
-               ...
-    }
-----
-====
