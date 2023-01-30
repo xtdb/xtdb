@@ -166,6 +166,12 @@
     1 {scan-col (first col-preds)}
     {scan-col (list* 'and col-preds)}))
 
+(defn- mega-join [preds rels]
+  (case (count rels)
+    0 [:table [{}]]
+    1 (first rels)
+    [:mega-join preds rels]))
+
 (defn- col-sym [col]
   (vary-meta (symbol col) assoc :column? true))
 
@@ -452,10 +458,9 @@
       (if-let [apply-mapping (not-empty (into {} (mapcat (comp :apply-mapping meta)) union-joins))]
         [:apply :cross-join apply-mapping
          plan
-         [:mega-join [] union-joins]]
+         (mega-join [] union-joins)]
 
-        [:mega-join []
-         (into [plan] union-joins)]))
+        (mega-join [] (into [plan] union-joins))))
 
     plan))
 
@@ -499,10 +504,9 @@
                                   (not-empty))]
         [:apply :cross-join apply-mapping
          plan
-         [:mega-join [] sub-queries]]
+         (mega-join [] sub-queries)]
 
-        [:mega-join []
-         (into [plan] sub-queries)]))
+        (mega-join [] (into [plan] sub-queries))))
 
     plan))
 
@@ -647,10 +651,8 @@
                       (wrap-union-joins level)
                       (wrap-sub-queries level))
 
-                  (if-let [rels (not-empty (vec (concat (plan-in-tables in-bindings)
-                                                        (plan-triples triple-rels))))]
-                    [:mega-join [] rels]
-                    [:table [{}]]))
+                  (mega-join [] (vec (concat (plan-in-tables in-bindings)
+                                             (plan-triples triple-rels)))))
 
                 (wrap-unify-vars level)))
           nil
