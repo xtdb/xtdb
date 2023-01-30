@@ -620,7 +620,7 @@
                                            [e :first-name "Sergei"])]}
                     (assoc :basis {:tx tx}))))))))
 
-(t/deftest calling-a-function-580
+(deftest calling-a-function-580
   (let [!tx (c2/submit-tx tu/*node*
                           [[:put {:id :ivan, :age 15}]
                            [:put {:id :petr, :age 22}]
@@ -693,7 +693,7 @@
                                                [(+ a1 (+ a2 a3 1)) sum-ages]]}
                                      (assoc :basis {:tx !tx}))))))))
 
-(t/deftest test-union-join
+(deftest test-union-join
   (let [!tx (c2/submit-tx tu/*node* [[:put {:id :ivan, :age 20, :role :developer}]
                                      [:put {:id :oleg, :age 30, :role :manager}]
                                      [:put {:id :petr, :age 35, :role :qa}]
@@ -721,7 +721,7 @@
                                         [e :role role])
                             [(<> e :sergei)]]}))))))
 
-(t/deftest test-nested-query
+(deftest test-nested-query
   (let [!tx (c2/submit-tx tu/*node* bond/tx-ops)]
     (t/is (= [{:bond-name "Roger Moore", :film-name "A View to a Kill"}
               {:bond-name "Roger Moore", :film-name "For Your Eyes Only"}
