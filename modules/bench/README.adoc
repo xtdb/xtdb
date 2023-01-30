@@ -14,3 +14,5 @@ All run through scripts in `./bin`:
 - `push-docker.sh` - pushes the bench Docker image
 - `run-bench.sh tpch [--scale-factor 0.01] [--count 1]` - kicks off an ECS job.
 - `run-bench.sh ts-devices [--size <small|med|big>] [--count 1]` - kicks off an ECS job.
+
+You can also run it locally with (e.g.) `clojure -Mcore2:4gb:bench-tpch --scale-factor 0.05` from the top-level of the Core2 repo.

@@ -3,7 +3,9 @@
             [clojure.tools.logging :as log]
             core2.indexer
             [core2.kafka :as k]
+            [core2.log.local-directory-log :as ldl]
             [core2.node :as node]
+            [core2.object-store :as os]
             [core2.s3 :as s3]
             [core2.util :as util])
   (:import core2.indexer.Indexer
@@ -38,15 +40,22 @@
 (defn finish-chunk [^Node node]
   (.finishChunk ^Indexer (util/component node :core2.indexer/indexer)))
 
-(defn ^core2.node.Node start-node
-  ([] (start-node (str (UUID/randomUUID))))
+(defn start-node
+  (^core2.node.Node [] (start-node {}))
 
-  ([node-id]
+  (^core2.node.Node [{:keys [node-id node-type ^Path node-tmp-dir]
+                      :or {node-id (str (UUID/randomUUID))
+                           node-type :in-memory}}]
    (log/info "Starting node, id:" node-id)
-   (node/start-node {::k/log {:bootstrap-servers "localhost:9092"
-                              :topic-name (str "bench-log-" node-id)}
-                     ::s3/object-store {:bucket "core2-bench"
-                                        :prefix (str "node." node-id)}})))
+
+   (node/start-node (case node-type
+                      :in-memory {}
+                      :local-fs {:core2.log/local-directory-log {:root-path (.resolve node-tmp-dir "log")}
+                                 ::os/file-system-object-store {:root-path (.resolve node-tmp-dir "objects")}}
+                      :kafka-s3 {::k/log {:bootstrap-servers "localhost:9092"
+                                          :topic-name (str "bench-log-" node-id)}
+                                 ::s3/object-store {:bucket "core2-bench"
+                                                    :prefix (str "node." node-id)}}))))
 
 (defn tmp-file-path ^java.nio.file.Path [prefix suffix]
   (doto (Files/createTempFile prefix suffix (make-array FileAttribute 0))
@@ -62,3 +71,9 @@
                   ^GetObjectRequest (.build))
               tmp-path)
   tmp-path)
+
+(def node-type-arg
+  [nil "--node-type (in-memory | local | kafka-s3)" nil
+   :id :node-type
+   :default :local-fs
+   :parse-fn keyword])

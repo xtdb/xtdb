@@ -5,6 +5,7 @@
             [core2.node :as node]
             [core2.test-util :as tu]
             [core2.datasets.tpch :as tpch]
+            [core2.datasets.tpch.ra :as tpch-ra]
             [core2.util :as util])
   (:import core2.node.Node
            java.time.Duration))
@@ -19,13 +20,18 @@
       (bench/finish-chunk node))))
 
 (defn query-tpch [db]
-  (doseq [q tpch/queries]
-    (bench/with-timing (str "query " (:name (meta q)))
-      (let [q @q]
-        (try
-          (count (tu/query-ra q (merge {'$ db} (::tpch/params (meta q)))))
-          (catch Exception e
-            (.printStackTrace e)))))))
+  (tu/with-allocator
+    (fn []
+      (doseq [q tpch-ra/queries]
+        (bench/with-timing (str "query " (:name (meta q)))
+          (let [q @q
+                {::tpch-ra/keys [params table-args]} (meta q)]
+            (try
+              (count (tu/query-ra q {:srcs {'$ db}
+                                     :params params
+                                     :table-args table-args}))
+              (catch Exception e
+                (.printStackTrace e)))))))))
 
 (comment
   (with-open [node (bench/start-node)]
@@ -44,20 +50,22 @@
     (let [opts (or (bench/parse-args [[nil "--scale-factor 0.01" "Scale factor for regular TPCH test"
                                        :id :scale-factor
                                        :default 0.01
-                                       :parse-fn #(Double/parseDouble %)]]
+                                       :parse-fn #(Double/parseDouble %)]
+                                      bench/node-type-arg]
                                      args)
                    (System/exit 1))]
       (log/info "Opts: " (pr-str opts))
-      (with-open [node (bench/start-node)]
-        (bench/with-timing :ingest
-          (ingest-tpch node opts))
+      (tu/with-tmp-dirs #{node-tmp-dir}
+        (with-open [node (bench/start-node (into opts {:node-tmp-dir node-tmp-dir}))]
+          (bench/with-timing :ingest
+            (ingest-tpch node opts))
 
-        (let [db (ingest/snapshot (util/component node :core2/ingester))]
-          (bench/with-timing :cold-queries
-            (query-tpch db))
+          (let [db (ingest/snapshot (util/component node :core2/ingester))]
+            (bench/with-timing :cold-queries
+              (query-tpch db))
 
-          (bench/with-timing :hot-queries
-            (query-tpch db)))))
+            (bench/with-timing :hot-queries
+              (query-tpch db))))))
 
     (catch Exception e
       (.printStackTrace e)
