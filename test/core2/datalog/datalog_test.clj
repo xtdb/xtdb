@@ -758,3 +758,25 @@
                                                  :where [[bid :b a]]})]}
                                    (assoc :basis {:tx !tx}))))
           "(contrived) correlated sub-query")))
+
+(t/deftest test-explicit-unwind-574
+  (let [!tx (c2/submit-tx tu/*node* bond/tx-ops)]
+    (t/is (= [{:brand "Aston Martin", :model "DB10"}
+              {:brand "Aston Martin", :model "DB5"}
+              {:brand "Jaguar", :model "C-X75"}
+              {:brand "Jaguar", :model "XJ8"}
+              {:brand "Land Rover", :model "Discovery Sport"}
+              {:brand "Land Rover", :model "Land Rover Defender Bigfoot"}
+              {:brand "Land Rover", :model "Range Rover Sport"}
+              {:brand "Mercedes Benz", :model "S-Class"}
+              {:brand "Rolls-Royce", :model "Silver Wraith"}]
+
+             (c2/datalog-query tu/*node*
+                               (-> '{:find [brand model]
+                                     :in [film]
+                                     :where [[film :film--vehicles [vehicle ...]]
+                                             [vehicle :vehicle--brand brand]
+                                             [vehicle :vehicle--model model]]
+                                     :order-by [[brand] [model]]}
+                                   (assoc :basis {:tx !tx}))
+                               :spectre)))))

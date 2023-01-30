@@ -69,7 +69,9 @@
          (s/cat :src (s/? ::source)
                 :e (s/or :literal ::eid, :logic-var ::logic-var)
                 :a keyword?
-                :v (s/? (s/or :literal ::value, :logic-var ::logic-var)))
+                :v (s/? (s/or :literal ::value,
+                              :logic-var ::logic-var
+                              :unwind (s/tuple ::logic-var #{'...}))))
          (s/conformer (fn [triple]
                         (-> triple (update :src (some-fn identity (constantly '$)))))
                       identity)))
@@ -172,8 +174,11 @@
     1 (first rels)
     [:mega-join preds rels]))
 
-(defn- col-sym [col]
-  (vary-meta (symbol col) assoc :column? true))
+(defn- col-sym
+  ([col]
+   (-> (symbol col) (vary-meta assoc :column? true)))
+  ([prefix col]
+   (col-sym (str (format "%s_%s" prefix col)))))
 
 (defn- form-vars [form]
   (letfn [(form-vars* [[form-type form-arg]]
@@ -281,12 +286,25 @@
             (let [triples (->> (conj triples {:e e, :a :id, :v e})
                                (map #(update % :a col-sym)))
                   prefix (str "t" idx)
-                  var->attrs (-> triples
-                                 (->> (keep (fn [{:keys [a], [v-type v-arg] :v}]
-                                              (when (= :logic-var v-type)
-                                                {:a a, :lv v-arg})))
-                                      (group-by :lv))
-                                 (update-vals #(into #{} (map :a) %)))
+
+                  attr->unwind-col (->> triples
+                                        (into {}
+                                              (comp (keep (fn [{:keys [a], [v-type v-arg] :v}]
+                                                            (when (= v-type :unwind)
+                                                              a)))
+                                                    (distinct)
+                                                    (map-indexed (fn [uw-idx a]
+                                                                   [a (col-sym (format "%s_uw%d" prefix uw-idx) a)])))))
+
+                  var->cols (-> triples
+                                (->> (keep (fn [{:keys [a], [v-type v-arg] :v}]
+                                             (case v-type
+                                               :logic-var {:lv v-arg, :col a}
+                                               :unwind {:lv (first v-arg), :col (attr->unwind-col a)}
+                                               nil)))
+                                     (group-by :lv))
+                                 (update-vals #(into #{} (map :col) %)))
+
                   attr->lits (-> triples
                                  (->> (keep (fn [{:keys [a], [v-type v-arg] :v}]
                                               (when (= :literal v-type)
@@ -301,11 +319,10 @@
                                   symbol)
                           'xt_docs)
                :attr->lits (dissoc attr->lits '_table)
-               :var->attrs var->attrs
-
-               :var->col (->> (keys var->attrs)
-                              (into {} (map (juxt identity
-                                                  #(col-sym (str prefix "_" (str %)))))))}))]
+               :attr->unwind-col attr->unwind-col
+               :var->cols var->cols
+               :var->col (->> (keys var->cols)
+                              (into {} (map (juxt identity (partial col-sym prefix)))))}))]
 
     (let [triple-rels (->> (group-by (juxt :src :e) triples)
                            (into [] (map-indexed ->triple-rel)))]
@@ -604,10 +621,17 @@
                                      :var->col new-var->col
                                      :var->cols new-var->cols}))))))))))
 
+(defn- wrap-unwind [plan {:keys [attr->unwind-col]}]
+  (reduce (fn [plan [a uw-col]]
+            [:unwind {uw-col a}
+             plan])
+          plan
+          attr->unwind-col))
+
 (defn- plan-triples [triple-rels]
-  (for [{:keys [src table attrs attr->lits var->col var->attrs]} triple-rels]
+  (for [{:keys [src table attrs attr->lits var->col var->cols] :as triple-rel} triple-rels]
     [:project (vec (for [[lv col] var->col]
-                     {col (first (get var->attrs lv))}))
+                     {col (first (var->cols lv))}))
      (-> [:scan src table
           (->> (into attrs '#{application_time_start application_time_end})
                (into [] (map (fn [attr]
@@ -620,10 +644,12 @@
                                               application_time_end ['(> application_time_end (current-timestamp))]
                                               nil))))))))]
 
-         (wrap-select (for [attrs (->> (vals var->attrs)
-                                       (filter #(> (count %) 1)))
-                            [a1 a2] (partition 2 1 attrs)]
-                        (list '= a1 a2))))]))
+         (wrap-unwind triple-rel)
+
+         (wrap-select (for [cols (->> (vals var->cols)
+                                      (filter #(> (count %) 1)))
+                            [c1 c2] (partition 2 1 cols)]
+                        (list '= c1 c2))))]))
 
 (defn- wrap-unify-vars [plan {:keys [var->cols var->col] :as l}]
   [:project (vec (for [[lv cols] var->cols
