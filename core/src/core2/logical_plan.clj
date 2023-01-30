@@ -660,9 +660,11 @@
        [:select (w/postwalk-replace (set/map-invert columns) predicate)
         relation]])))
 
-(defn- predicate-depends-on-calculated-expression? [predicate projection]
-  (not (set/subset? (set (expr-symbols predicate))
-                    (set (filter symbol? projection)))))
+(defn- predicate-depends-on-calculated-column? [predicate projection-spec]
+  (not-empty (set/intersection (set (expr-symbols predicate))
+                               (set (keep #(when (map? %)
+                                             (key (first %)))
+                                          projection-spec)))))
 
 (defn- push-selection-down-past-project [push-correlated? z]
   (r/zmatch z
@@ -671,7 +673,7 @@
       relation]]
     ;;=>
     (when (and (or push-correlated? (no-correlated-columns? predicate))
-               (not (predicate-depends-on-calculated-expression? predicate projection)))
+               (not (predicate-depends-on-calculated-column? predicate projection)))
       [:project projection
        [:select predicate
         relation]])
@@ -681,7 +683,7 @@
       relation]]
     ;;=>
     (when (and (or push-correlated? (no-correlated-columns? predicate))
-               (not (predicate-depends-on-calculated-expression? predicate (relation-columns relation))))
+               (not (predicate-depends-on-calculated-column? predicate projection)))
       [:map projection
        [:select predicate
         relation]])))
@@ -693,7 +695,7 @@
       relation]]
     ;;=>
     (when (and (or push-correlated? (no-correlated-columns? predicate))
-               (not (predicate-depends-on-calculated-expression? predicate group-by-columns)))
+               (not (predicate-depends-on-calculated-column? predicate group-by-columns)))
       [:group-by group-by-columns
        [:select predicate
         relation]])))
