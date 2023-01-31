@@ -8,7 +8,8 @@
   (:require [core2.james-bond :as bond]
             [clojure.test :as t :refer [deftest]]
             [core2.test-util :as tu]
-            [core2.api :as c2]))
+            [core2.api :as c2]
+            [core2.node :as node]))
 
 (t/use-fixtures :each tu/with-node)
 
@@ -780,3 +781,28 @@
                                      :order-by [[brand] [model]]}
                                    (assoc :basis {:tx !tx}))
                                :spectre)))))
+
+(t/deftest bug-non-string-table-names-599
+  (with-open [node (node/start-node {:core2/row-counts {:max-rows-per-block 10, :max-rows-per-chunk 100}})]
+    (letfn [(submit-ops! [ids]
+              (last (for [tx-ops (->> (for [id ids]
+                                        [:put {:id id,
+                                               :data (str "data" id)
+                                               :_table :t1}])
+                                      (partition-all 20))]
+                      @(c2/submit-tx node tx-ops))))
+
+            (count-table [tx]
+              (-> (c2/datalog-query node (-> '{:find [(count id)]
+                                               :keys [id-count]
+                                               :where [[id :id]
+                                                       [id :_table :t1]]}
+                                             (assoc :basis {:tx tx})))
+                  (first)
+                  (:id-count)))]
+
+      (let [tx (submit-ops! (range 80))]
+        (t/is (= 80 (count-table tx))))
+
+      (let [tx (submit-ops! (range 80 160))]
+        (t/is (= 160 (count-table tx)))))))

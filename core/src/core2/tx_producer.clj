@@ -162,7 +162,10 @@
         app-time-start-writer (.writerForName put-writer "application_time_start")
         app-time-end-writer (.writerForName put-writer "application_time_end")]
     (fn write-put! [{:keys [doc], {:keys [app-time-start app-time-end]} :app-time-opts}]
-      (let [doc (into {:_table "xt_docs"} doc)]
+      ;; HACK always coerce table-name to string
+      ;; need to differentiate different types later on
+      (let [doc (-> (into {:_table "xt_docs"} doc)
+                    (update :_table name))]
         (.startValue put-writer)
         (doto (.writerForType doc-writer (types/value->col-type doc))
           (.startValue)
