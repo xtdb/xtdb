@@ -80,23 +80,17 @@
 
   (cleanup-checkpoint [this  {:keys [tx cp-at]}]
     (let [s3-dir (format "checkpoint-%s-%s" (::xt/tx-id tx) (xio/format-rfc3339-date cp-at))
-          files (->> (s3/list-objects this {:path s3-dir :recursive? true})
-                     (keep (fn [[type arg]]
+          files (as-> (s3/list-objects this {:path s3-dir :recursive? true}) $
+                    (keep (fn [[type arg]]
                              (when (= type :object)
-                               arg)))
-                     vec
-                     (conj prefix))]
-      (prn [:CLEANUP files])))
+                               arg)) $)
+                     (vec $)
+                     (conj $ s3-dir))]
+      (s3/delete-objects this files)))
 
   Closeable
   (close [_]
     (.close client)))
-
-(comment
-
-  (def x '([:object "checkpoint-23-2023-01-30T15:14:52.780-00:00/000022.sst"] [:object "checkpoint-23-2023-01-30T15:14:52.780-00:00/000023.sst"] [:object "checkpoint-23-2023-01-30T15:14:52.780-00:00/000043.sst"] [:object "checkpoint-23-2023-01-30T15:14:52.780-00:00/000044.sst"] [:object "checkpoint-23-2023-01-30T15:14:52.780-00:00/000045.sst"] [:object "checkpoint-23-2023-01-30T15:14:52.780-00:00/000046.sst"] [:object "checkpoint-23-2023-01-30T15:14:52.780-00:00/000047.sst"] [:object "checkpoint-23-2023-01-30T15:14:52.780-00:00/000048.sst"] [:object "checkpoint-23-2023-01-30T15:14:52.780-00:00/000082.sst"] [:object "checkpoint-23-2023-01-30T15:14:52.780-00:00/000084.sst"] [:object "checkpoint-23-2023-01-30T15:14:52.780-00:00/000085.sst"] [:object "checkpoint-23-2023-01-30T15:14:52.780-00:00/000087.sst"] [:object "checkpoint-23-2023-01-30T15:14:52.780-00:00/000088.sst"] [:object "checkpoint-23-2023-01-30T15:14:52.780-00:00/000089.sst"] [:object "checkpoint-23-2023-01-30T15:14:52.780-00:00/CURRENT"] [:object "checkpoint-23-2023-01-30T15:14:52.780-00:00/MANIFEST-000072"] [:object "checkpoint-23-2023-01-30T15:14:52.780-00:00/OPTIONS-000074"]))
-
-  :ok)
 
 (defn ->cp-store {::sys/deps {:configurator (fn [_] (reify S3Configurator))}
                   ::sys/args {:bucket {:required? true,

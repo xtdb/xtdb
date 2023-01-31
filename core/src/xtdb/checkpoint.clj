@@ -50,7 +50,6 @@
               (->> pr-str (log/info "Uploaded checkpoint:")))
             (swap! success inc)
             (finally
-              (prn [:DIR (type dir)])
               (xio/delete-dir dir)
               (when-not (pos? @success)
                 (cleanup-checkpoint store opts)

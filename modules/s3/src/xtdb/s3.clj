@@ -76,8 +76,8 @@
                  (.build))
         res (-> (.deleteObjects client req)
                 (.join))]
-        (when (.hasError res)
-      (log/warnf "Failed to delete some objects on s3://%s/%s" bucket prefix))))
+        (when (.hasErrors res)
+          (log/warnf "Failed to delete some objects on s3://%s/%s" bucket prefix))))
 
 (defn ^:no-doc list-objects [{:keys [^S3Configurator _ ^S3AsyncClient client bucket prefix]}
                              {:keys [path recursive?]}]
