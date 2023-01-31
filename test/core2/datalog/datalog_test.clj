@@ -806,3 +806,30 @@
 
       (let [tx (submit-ops! (range 80 160))]
         (t/is (= 160 (count-table tx)))))))
+
+(t/deftest bug-dont-throw-on-non-existing-column-597
+  (with-open [node (node/start-node {:core2/row-counts {:max-rows-per-block 10, :max-rows-per-chunk 100}})]
+    (letfn [(submit-ops! [ids]
+              (last (for [tx-ops (->> (for [id ids]
+                                        [:put {:id id,
+                                               :data (str "data" id)
+                                               :_table :t1}])
+                                      (partition-all 20))]
+                      @(c2/submit-tx node tx-ops))))
+
+            (count-table [tx]
+              (-> (c2/datalog-query node (-> '{:find [(count id)]
+                                               :keys [id-count]
+                                               :where [[id :id]
+                                                       [id :_table :t1]]}
+                                             (assoc :basis {:tx tx})))
+                  (first)
+                  (:id-count)))]
+
+      (let [_tx1 (c2/submit-tx node [[:put {:id 0 :foo :bar}]])
+            tx2 (submit-ops! (range 1010))]
+        (t/is (= 1010 (count-table tx2)))
+        (t/is (= [] (c2/datalog-query node (-> '{:find [id]
+                                                 :where [[id :id]
+                                                         [id :some-attr my-attr]]}
+                                               (assoc :basis {:tx tx2})))))))))

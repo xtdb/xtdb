@@ -292,8 +292,7 @@
                                       (distinct))))
 
         {content-col-names false, temporal-col-names true} (->> col-names
-                                                                (mapv name)
-                                                                (group-by temporal/temporal-column?))
+                                                                (group-by (comp temporal/temporal-column? name)))
 
         col-types (->> col-names
                        (into {} (map (juxt identity
@@ -328,7 +327,9 @@
                      (let [metadata-pred (expr.meta/->metadata-selector (cons 'and metadata-args) (set col-names) params)
                            [temporal-min-range temporal-max-range] (doto (expr.temp/->temporal-min-max-range selects params)
                                                                      (apply-src-tx! src col-preds))
-                           matching-chunks (LinkedList. (or (meta/matching-chunks metadata-mgr metadata-pred) []))]
+                           matching-chunks (LinkedList. (or (meta/matching-chunks metadata-mgr metadata-pred) []))
+                           content-col-names (mapv name content-col-names)
+                           temporal-col-names (mapv name temporal-col-names)]
                        (-> (ScanCursor. allocator buffer-pool metadata-mgr watermark
                                         content-col-names temporal-col-names col-preds
                                         temporal-min-range temporal-max-range
