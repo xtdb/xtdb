@@ -747,21 +747,33 @@
         child-relations (->> relations
                              (map #(lp/emit-expr % args))
                              (map-indexed #(assoc %2 :relation-id %1)))
-        sub-graph-plans (loop [sub-graph-plans []
-                               relations child-relations
-                               conditions conditions-with-cols]
-                          (if (seq relations)
-                            (let [{:keys [sub-graph-plan
-                                          sub-graph-unused-rels
-                                          sub-graph-unused-conditions]}
-                                  (build-plan-for-next-sub-graph conditions relations args)]
-                              (recur (conj sub-graph-plans sub-graph-plan) sub-graph-unused-rels sub-graph-unused-conditions))
-                            (if (seq conditions)
-                              (throw (err/runtime-err :core2.mega-join/plan-error
-                                                      {::err/message "Unused Join Conditions Remain"
-                                                       :conditions conditions}))
-                              sub-graph-plans)))]
-    (reduce (fn [full-plan sub-graph-plan]
-              (emit-cross-join
-                {:left full-plan
-                 :right sub-graph-plan})) sub-graph-plans)))
+        {:keys [sub-graph-plans unused-join-conditions]}
+        (loop [sub-graph-plans []
+               relations child-relations
+               conditions conditions-with-cols]
+          (if (seq relations)
+            (let [{:keys [sub-graph-plan
+                          sub-graph-unused-rels
+                          sub-graph-unused-conditions]}
+                  (build-plan-for-next-sub-graph conditions relations args)]
+              (recur (conj sub-graph-plans sub-graph-plan) sub-graph-unused-rels sub-graph-unused-conditions))
+            {:sub-graph-plans sub-graph-plans
+             :unused-join-conditions conditions}))]
+    ;; bit of a hack as currently mega-join may not choose a join order where
+    ;; a condition like the one below is ever valid, but it should always be correct
+    ;; to used the unused conditions as conditions for the outermost join
+    (if (seq unused-join-conditions)
+      (emit-inner-join-expr
+        {:condition (mapv :condition unused-join-conditions)
+         :left
+         (reduce (fn [full-plan sub-graph-plan]
+                   (emit-cross-join
+                     {:left full-plan
+                      :right sub-graph-plan})) (butlast sub-graph-plans))
+         :right (last sub-graph-plans)}
+        args)
+      (reduce (fn [full-plan sub-graph-plan]
+                (emit-cross-join
+                  {:left full-plan
+                   :right sub-graph-plan})) sub-graph-plans))))
+

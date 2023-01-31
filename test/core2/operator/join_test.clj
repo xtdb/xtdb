@@ -789,7 +789,7 @@
                 [::tu/blocks [[{:x2 1}]]]
                 [::tu/blocks [[{:x3 1 :x4 3}]]]]])))
 
-(t/testing "disconnected relations/sub-graphs"
+  (t/testing "disconnected relations/sub-graphs"
     (t/is (= [{:x1 1, :x2 1, :x4 3, :x3 1, :x5 5, :x6 10, :x7 10, :x8 8}]
              (tu/query-ra
                '[:mega-join
@@ -826,17 +826,6 @@
                   [:table [{:baz 10}]]]]
                {:params {'?foo 1}}))))
 
-(t/is (thrown-with-msg? RuntimeException
-                          #"Unused Join Conditions Remain"
-                          (tu/query-ra
-                            '[:mega-join
-                             [{x1 x2}
-                              {x5 x6}]
-                             [[::tu/blocks [[{:x1 1}]]]
-                              [::tu/blocks [[{:x2 1}]]]
-                              [::tu/blocks [[{:x3 1 :x4 3}]]]]]))
-        "throws if after joining all relations there are still unused join conditions")
-
   (t/testing "empty input"
     (t/is (= []
              (tu/query-ra
@@ -858,7 +847,20 @@
                  [[:table [{:name 1}]]
                   [:table [{:person 1}]]
                   [:table [{:foo 1 :bar "woo"}
-                           {:foo 1 :bar "yay"}]]]])))))
+                           {:foo 1 :bar "yay"}]]]])))
+
+    (t/testing "Unused join conditions are added as conditions to the outermost join"
+      ;; bit of a hack as currently mega-join may not choose a join order where
+      ;; a condition like the one below is ever valid, but it should always be correct
+      ;; to used the unused conditions as conditions for the outermost join
+      (t/is (= [{:person 1, :bar "woo", :name 1, :foo 2}]
+               (tu/query-ra
+                 '[:mega-join
+                   [(= (+ name person) foo)]
+                   [[:table [{:name 1}]]
+                    [:table [{:person 1}]]
+                    [:table [{:foo 2 :bar "woo"}
+                             {:foo 1 :bar "yay"}]]]]))))))
 
 (t/deftest test-adjust-to-equi-condition
   (t/is
