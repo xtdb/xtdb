@@ -153,19 +153,23 @@
         cp)))
 
   (download-checkpoint [_ {::keys [cp-path]} dir]
-    (let [to-path (.toPath ^File dir)]
+    (let [to-path (.toPath ^File dir)
+          success (atom 0)]
       (when-not (or (not (Files/exists to-path (make-array LinkOption 0)))
                     (empty? (Files/list to-path)))
         (throw (IllegalArgumentException. "non-empty checkpoint restore dir: " to-path)))
 
       (try
         (sync-path cp-path to-path)
+        (swap! success inc)
         (catch Exception e
-          (xio/delete-dir to-path)
           (throw (ex-info "incomplete checkpoint restore"
                           {:cp-path cp-path
                            :local-dir to-path}
-                          e))))))
+                          e)))
+        (finally
+          (when-not (pos? @success)
+            (xio/delete-dir dir))))))
 
   (upload-checkpoint [_ dir {:keys [tx cp-at ::cp-format]}]
     (let [from-path (.toPath ^File dir)
