@@ -833,3 +833,20 @@
                                                  :where [[id :id]
                                                          [id :some-attr my-attr]]}
                                                (assoc :basis {:tx tx2})))))))))
+
+(t/deftest add-better-metadata-support-for-keywords
+  (with-open [node (node/start-node {:core2/row-counts {:max-rows-per-block 10, :max-rows-per-chunk 100}})]
+    (letfn [(submit-ops! [ids]
+              (last (for [tx-ops (->> (for [id ids]
+                                        [:put {:id id,
+                                               :data (str "data" id)
+                                               :_table :t1}])
+                                      (partition-all 20))]
+                      @(c2/submit-tx node tx-ops))))]
+      (let [_tx1 (c2/submit-tx node [[:put {:id :some-doc}]])
+            ;; going over the chunk boundary
+            tx2 (submit-ops! (range 200))]
+        (t/is (= [{:id :some-doc}]
+                 (c2/datalog-query node (-> '{:find [id]
+                                              :where [[id :id :some-doc]]}
+                                            (assoc :basis {:tx tx2})))))))))

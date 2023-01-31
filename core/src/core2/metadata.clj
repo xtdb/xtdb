@@ -112,10 +112,6 @@
 (defmethod type->metadata-writer :null [_write-col-meta! metadata-root col-type] (->bool-type-handler metadata-root col-type))
 (defmethod type->metadata-writer :bool [_write-col-meta! metadata-root col-type] (->bool-type-handler metadata-root col-type))
 
-;; TODO anything we can do for extension types? I suppose we should probably special case our own...
-;; they'll get included in the bloom filter, which is sufficient for UUIDs/keywords/etc.
-(defmethod type->metadata-writer :extension-type [_write-col-meta! metadata-root col-type] (->bool-type-handler metadata-root col-type))
-
 (defmethod col-type->type-metadata :extension-type [[type-head xname storage-type xdata]]
   {"type-head" (name type-head)
    "xname" (str (symbol xname))
@@ -160,6 +156,22 @@
 
 (doseq [type-head #{:int :float :utf8 :varbinary :timestamp-tz :timestamp-local :date :interval :time-local}]
   (defmethod type->metadata-writer type-head [_write-col-meta! metadata-root col-type] (->min-max-type-handler metadata-root col-type)))
+
+(defmulti extension-type->metadata-writer
+  (fn [_write-col-meta! _metadata-root col-type] (second col-type))
+  :default ::default)
+
+(defmethod extension-type->metadata-writer ::default [_write-col-meta! metadata-root col-type]
+  (->bool-type-handler metadata-root col-type))
+
+(defmethod extension-type->metadata-writer :c2/clj-keyword [_write-col-meta! metadata-root col-type]
+  (->min-max-type-handler metadata-root col-type))
+
+;; TODO anything we can do for extension types? I suppose we should probably special case our own...
+;; they'll get included in the bloom filter, which is sufficient for UUIDs/keywords/etc.
+(defmethod type->metadata-writer :extension-type [write-col-meta! metadata-root col-type]
+  ;; (clojure.pprint/pprint col-type)
+  (extension-type->metadata-writer write-col-meta! metadata-root col-type))
 
 (defmethod col-type->type-metadata :fixed-size-binary [[type-head byte-width]]
   {"type-head" (name type-head), "byte-width" (str byte-width)})

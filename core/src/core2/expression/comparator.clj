@@ -41,11 +41,20 @@
      :->call-code (fn [emitted-args]
                     `(util/compare-nio-buffers-unsigned ~@emitted-args))}))
 
-(doseq [col-type #{[:extension :c2/clj-keyword ""] [:extension :uuid ""]}]
+(doseq [col-type #{[:extension-type :c2/clj-keyword ""] [:extension-type :uuid ""]}]
   (defmethod expr/codegen-call [:compare col-type col-type] [_]
     {:return-type :i32
      :->call-code (fn [emitted-args]
                     `(.compareTo ~@(map #(expr/with-tag % Comparable) emitted-args)))}))
+
+(defmulti codegen-compare-extension-type
+  (fn [{:keys [arg-types]}] (mapv second arg-types)))
+
+(defmethod codegen-compare-extension-type [:c2/clj-keyword :c2/clj-keyword] [call]
+  (expr/codegen-call (assoc call :arg-types [:utf8 :utf8])))
+
+(defmethod expr/codegen-call [:compare :extension-type :extension-type] [call]
+  (codegen-compare-extension-type call))
 
 (doseq [[f left-type right-type res] [[:compare-nulls-first :null :null 0]
                                       [:compare-nulls-first :null :any -1]
