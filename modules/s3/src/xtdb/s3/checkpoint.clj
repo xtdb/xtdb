@@ -48,6 +48,7 @@
                                                              (AsyncResponseTransformer/toFile (doto file (io/make-parents)))))))]
 
       (when-not (= (set (keys get-objs-resp)) (set s3-paths))
+        (xio/delete-dir dir)
         (throw (ex-info "incomplete checkpoint restore" {:expected s3-paths
                                                          :actual (keys get-objs-resp)})))
 
@@ -62,9 +63,6 @@
                               (MapEntry/create (str s3-dir "/" (.relativize dir-path (.toPath file)))
                                                (AsyncRequestBody/fromFile file))))))
            (s3/put-objects this))
-
-      ;; TODO remove me.
-      (throw (ex-info "artificial failing" {}))
 
       (let [cp {::cp/cp-format cp-format,
                 :tx tx

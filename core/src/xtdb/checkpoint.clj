@@ -161,6 +161,7 @@
       (try
         (sync-path cp-path to-path)
         (catch Exception e
+          (xio/delete-dir to-path)
           (throw (ex-info "incomplete checkpoint restore"
                           {:cp-path cp-path
                            :local-dir to-path}
