@@ -660,9 +660,16 @@
        [:select (w/postwalk-replace (set/map-invert columns) predicate)
         relation]])))
 
+(defn rename-map-for-projection-spec [projection-spec]
+  (into
+    {}
+    (filter
+      #(and (map? %) (column? (val (first %))))
+      projection-spec)))
+
 (defn- predicate-depends-on-calculated-column? [predicate projection-spec]
   (not-empty (set/intersection (set (expr-symbols predicate))
-                               (set (keep #(when (map? %)
+                               (set (keep #(when (and (map? %) (not (column? (val (first %)))))
                                              (key (first %)))
                                           projection-spec)))))
 
@@ -675,7 +682,7 @@
     (when (and (or push-correlated? (no-correlated-columns? predicate))
                (not (predicate-depends-on-calculated-column? predicate projection)))
       [:project projection
-       [:select predicate
+       [:select (w/postwalk-replace (rename-map-for-projection-spec projection) predicate)
         relation]])
 
     [:select predicate
