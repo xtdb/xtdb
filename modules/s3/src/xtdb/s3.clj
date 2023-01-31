@@ -15,6 +15,7 @@
            software.amazon.awssdk.core.ResponseBytes
            [software.amazon.awssdk.services.s3.model
             CommonPrefix GetObjectRequest ListObjectsV2Request ListObjectsV2Response
+            DeleteObjectsRequest Delete ObjectIdentifier
             NoSuchKeyException PutObjectRequest S3Object]
            software.amazon.awssdk.services.s3.S3AsyncClient))
 
@@ -58,6 +59,25 @@
          (into {} (keep (fn [[path ^CompletableFuture fut]]
                           (when-let [resp (.get fut)]
                             [path resp]))))))
+
+
+(defn ^:no-doc delete-objects [{:keys [^S3AsyncClient client bucket prefix]} keys]
+  (let [object-ids (->> keys
+                        (map #(str prefix %))
+                        (map #(-> (ObjectIdentifier/builder)
+                                  (.key %) .build)))
+        ^DeleteObjectsRequest
+        req  (-> (DeleteObjectsRequest/builder)
+                 (.bucket bucket)
+                 (.delete
+                   (-> (Delete/builder)
+                       (.objects object-ids)
+                       (.build)))
+                 (.build))
+        res (-> (.deleteObjects client req)
+                (.join))]
+        (when (.hasError res)
+      (log/warnf "Failed to delete some objects on s3://%s/%s" bucket prefix))))
 
 (defn ^:no-doc list-objects [{:keys [^S3Configurator _ ^S3AsyncClient client bucket prefix]}
                              {:keys [path recursive?]}]
