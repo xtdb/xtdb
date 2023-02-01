@@ -7,6 +7,7 @@
             [clojure.string :as str])
   (:import core2.ICursor
            core2.operator.IProjectionSpec
+           core2.vector.IIndirectRelation
            java.time.Clock
            java.util.function.Consumer
            java.util.ArrayList
@@ -25,8 +26,7 @@
                                        ;; the EE handles these through `:extend`
                                        :rename (s/map-of ::lp/column (s/and ::lp/column #(not (str/starts-with? (name %) "?")))
                                                          :conform-keys true, :count 1)
-                                       :extend ::lp/column-expression)
-                                 :min-count 1)
+                                       :extend ::lp/column-expression))
          :relation ::lp/ra-expression))
 
 (defmethod lp/ra-expr :map [_]
@@ -88,7 +88,8 @@
     (.tryAdvance in-cursor
                  (reify Consumer
                    (accept [_ read-rel]
-                     (let [close-cols (ArrayList.)
+                     (let [^IIndirectRelation read-rel read-rel
+                           close-cols (ArrayList.)
                            out-cols (ArrayList.)]
                        (try
                          (doseq [^IProjectionSpec projection-spec projection-specs]
@@ -98,7 +99,7 @@
                                (.add close-cols out-col))
                              (.add out-cols out-col)))
 
-                         (.accept c (iv/->indirect-rel out-cols))
+                         (.accept c (iv/->indirect-rel out-cols (.rowCount read-rel)))
 
                          (finally
                            (run! util/try-close close-cols))))))))

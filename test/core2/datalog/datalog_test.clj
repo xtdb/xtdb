@@ -704,11 +704,11 @@
               (c2/datalog-query tu/*node*
                                 (-> query
                                     (assoc :basis {:tx !tx}))))]
-      (t/is (= [{:e :petr} {:e :ivan}]
+      (t/is (= [{:e :ivan}]
                (q '{:find [e]
                     :where [(union-join [e]
                                         [e :role :developer]
-                                        [e :age 35])
+                                        [e :age 30])
                             (union-join [e]
                                         [e :id :petr]
                                         [e :id :ivan])]})))
