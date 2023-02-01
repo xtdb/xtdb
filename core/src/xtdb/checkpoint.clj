@@ -77,7 +77,6 @@
           ses (Executors/newSingleThreadScheduledExecutor (xio/thread-factory "xtdb-checkpoint"))]
       (letfn [(run [[time & more-times]]
                 (try
-
                   (checkpoint {:approx-frequency approx-frequency,
                                :dir checkpoint-dir,
                                :src src,
