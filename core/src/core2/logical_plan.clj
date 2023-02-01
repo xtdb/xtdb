@@ -1283,37 +1283,6 @@
                                    (:rel %)) indexed-rels)]
           [:mega-join output-join-conditions output-rels])))))
 
-(defn- squash-projects [z]
-  ;; Assumes no duplicate cols in inner proj-spec, which currently holds true
-  ;; could be adapted to support duplicate cols if needed
-
-  ;; symbol? is used to differentiate between extend/rename projects and
-  ;; normal column trimming projects
-  (r/zmatch z
-    [:project o-proj-spec
-     [:project i-proj-spec
-      rel]]
-    ;;=>
-    (let [i-proj-map (-> (group-by #(if (symbol? %)
-                                      %
-                                      (key (first %))) i-proj-spec)
-                         (update-vals first))
-          squashed-projection-spec
-          (vec (for [o-proj o-proj-spec]
-                 (if (symbol? o-proj)
-                   (get i-proj-map o-proj)
-                   (let [[out-col proj-expr] (first o-proj)]
-                     (if (column? proj-expr)
-                       (let [i-proj (get i-proj-map proj-expr)]
-                         (if (symbol? i-proj)
-                           (if (= out-col i-proj)
-                             out-col
-                             {out-col i-proj})
-                           {out-col (val (first i-proj))}))
-                       o-proj)))))]
-
-      [:project squashed-projection-spec rel])))
-
 (def ^:private push-correlated-selection-down-past-join (partial push-selection-down-past-join true))
 (def ^:private push-correlated-selection-down-past-rename (partial push-selection-down-past-rename true))
 (def ^:private push-correlated-selection-down-past-project (partial push-selection-down-past-project true))
@@ -1348,7 +1317,6 @@
 (def ^:private decorrelate-plan-rules
   [#'pull-correlated-selection-up-towards-apply
    #'remove-redundant-projects
-   #'squash-projects
    #'push-selection-down-past-apply
    #'push-decorrelated-selection-down-past-join
    #'push-decorrelated-selection-down-past-rename
