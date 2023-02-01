@@ -91,3 +91,7 @@
 (t/deftest test-fs-checkpoint-store
   (fix/with-tmp-dirs #{cp-store-dir}
     (fix.cp-store/test-checkpoint-store (cp/->filesystem-checkpoint-store {:path (.toPath cp-store-dir)}))))
+
+(t/deftest test-fs-checkpoint-broken-store
+  (fix/with-tmp-dirs #{cp-store-dir}
+    (fix.cp-store/test-checkpoint-broken-store (cp/->filesystem-checkpoint-store {:path (.toPath cp-store-dir)}))))
