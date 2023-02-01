@@ -27,7 +27,7 @@
             [l :l_linestatus l_linestatus]
             [(* l_extendedprice (- 1 l_discount)) disc_price]
             [(* (* l_extendedprice (- 1 l_discount)) (+ 1 l_tax)) charge]
-            [(<= l_shipdate #inst "1998-09-02")]]
+            [(<= l_shipdate #time/date "1998-09-02")]]
     :order-by [[l_returnflag :asc] [l_linestatus :asc]]})
 
 (def q2
@@ -91,12 +91,12 @@
                 [o :o_custkey c]
                 [o :o_shippriority o_shippriority]
                 [o :o_orderdate o_orderdate]
-                [(< o_orderdate #inst "1995-03-15")]
+                [(< o_orderdate #time/date "1995-03-15")]
                 [l :l_orderkey o]
                 [l :l_discount l_discount]
                 [l :l_extendedprice l_extendedprice]
                 [l :l_shipdate l_shipdate]
-                [(> l_shipdate #inst "1995-03-15")]
+                [(> l_shipdate #time/date "1995-03-15")]
                 [(* l_extendedprice (- 1 l_discount)) revenue]]
         :order-by [[(sum revenue) :desc] [o_orderdate :asc]]
         :limit 10}
@@ -108,8 +108,8 @@
     :where [[o :_table :orders]
             [o :o_orderdate o_orderdate]
             [o :o_orderpriority o_orderpriority]
-            [(>= o_orderdate #inst "1993-07-01")]
-            [(< o_orderdate #inst "1993-10-01")]
+            [(>= o_orderdate #time/date "1993-07-01")]
+            [(< o_orderdate #time/date "1993-10-01")]
 
             (exists? [o]
                      [l :_table :lineitem]
@@ -134,8 +134,8 @@
 
                 [o :o_custkey c]
                 [o :o_orderdate o_orderdate]
-                [(>= o_orderdate #inst "1994-01-01")]
-                [(< o_orderdate #inst "1995-01-01")]
+                [(>= o_orderdate #time/date "1994-01-01")]
+                [(< o_orderdate #time/date "1995-01-01")]
 
                 [l :l_orderkey o]
                 [l :l_suppkey s]
@@ -161,8 +161,8 @@
             [l :l_extendedprice l_extendedprice]
             [l :l_discount l_discount]
             [(* l_extendedprice l_discount) revenue]
-            [(>= l_shipdate #inst "1994-01-01")]
-            [(< l_shipdate #inst "1995-01-01")]
+            [(>= l_shipdate #time/date "1994-01-01")]
+            [(< l_shipdate #time/date "1995-01-01")]
             [(>= l_discount 0.05)]
             [(<= l_discount 0.07)]
             [(< l_quantity 24.0)]]})
@@ -182,8 +182,8 @@
             [l :l_shipdate l_shipdate]
             [l :l_discount l_discount]
             [l :l_extendedprice l_extendedprice]
-            [(>= l_shipdate #inst "1995-01-01")]
-            [(<= l_shipdate #inst "1996-12-31")]
+            [(>= l_shipdate #time/date "1995-01-01")]
+            [(<= l_shipdate #time/date "1996-12-31")]
             [(extract "YEAR" l_shipdate) l_year]
 
             [s :s_nationkey n1]
@@ -216,8 +216,8 @@
 
                                     [o :o_custkey c]
                                     [o :o_orderdate o_orderdate]
-                                    [(>= o_orderdate #inst "1995-01-01")]
-                                    [(<= o_orderdate #inst "1996-12-31")]
+                                    [(>= o_orderdate #time/date "1995-01-01")]
+                                    [(<= o_orderdate #time/date "1996-12-31")]
 
                                     [l :l_orderkey o]
                                     [l :l_suppkey s]
@@ -285,8 +285,8 @@
             [c :c_comment c_comment]
             [o :o_custkey c]
             [o :o_orderdate o_orderdate]
-            [(>= o_orderdate #inst "1993-10-01")]
-            [(< o_orderdate #inst "1994-01-01")]
+            [(>= o_orderdate #time/date "1993-10-01")]
+            [(< o_orderdate #time/date "1994-01-01")]
             [l :l_orderkey o]
             [l :l_extendedprice l_extendedprice]
             [l :l_discount l_discount]
@@ -338,8 +338,8 @@
                 [l :l_commitdate l_commitdate]
                 [l :l_shipdate l_shipdate]
                 [l :l_shipmode l_shipmode]
-                [(>= l_receiptdate #inst "1994-01-01")]
-                [(< l_receiptdate #inst "1995-01-01")]
+                [(>= l_receiptdate #time/date "1994-01-01")]
+                [(< l_receiptdate #time/date "1995-01-01")]
                 [(< l_commitdate l_receiptdate)]
                 [(< l_shipdate l_commitdate)]
 
@@ -379,8 +379,8 @@
                         [l :l_shipdate l_shipdate]
                         [l :l_extendedprice l_extendedprice]
                         [l :l_discount l_discount]
-                        [(>= l_shipdate #inst "1995-09-01")]
-                        [(< l_shipdate #inst "1995-10-01")]]})]})
+                        [(>= l_shipdate #time/date "1995-09-01")]
+                        [(< l_shipdate #time/date "1995-10-01")]]})]})
 
 (def q15
   '{:find [s s_name s_address s_phone total_revenue]
@@ -389,8 +389,8 @@
                          [l :l_shipdate l_shipdate]
                          [l :l_extendedprice l_extendedprice]
                          [l :l_discount l_discount]
-                         [(>= l_shipdate #inst "1996-01-01")]
-                         [(< l_shipdate #inst "1996-04-01")]]})
+                         [(>= l_shipdate #time/date "1996-01-01")]
+                         [(< l_shipdate #time/date "1996-04-01")]]})
              revenue]
             [(q {:find [(max total_revenue)]
                  :in [$ [[_ total_revenue]]]} revenue) [[total_revenue]]]
@@ -530,8 +530,8 @@
                         [l :l_partkey p]
                         [l :l_suppkey s]
                         [l :l_shipdate l_shipdate]
-                        [(>= l_shipdate #inst "1994-01-01")]
-                        [(< l_shipdate #inst "1995-01-01")]
+                        [(>= l_shipdate #time/date "1994-01-01")]
+                        [(< l_shipdate #time/date "1995-01-01")]
                         [l :l_quantity l_quantity]]})
             [(> ps_availqty (* sum_quantity 0.5))]]
     :order-by [[s_name :asc]]})

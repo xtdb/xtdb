@@ -7,6 +7,7 @@
             [core2.operator :as op]
             [core2.vector.writer :as vw])
   (:import clojure.lang.MapEntry
+           java.time.LocalDate
            java.lang.AutoCloseable
            org.apache.arrow.memory.BufferAllocator))
 
@@ -15,7 +16,7 @@
          (comp #(not (str/starts-with? % "$")) name)))
 
 ;; TODO flesh out
-(def ^:private eid? (some-fn string? number? inst? keyword?))
+(def ^:private eid? (some-fn string? number? inst? keyword? (partial instance? LocalDate)))
 
 (s/def ::eid eid?)
 (s/def ::value (some-fn eid?))
