@@ -92,6 +92,28 @@
   (fix/with-tmp-dirs #{cp-store-dir}
     (fix.cp-store/test-checkpoint-store (cp/->filesystem-checkpoint-store {:path (.toPath cp-store-dir)}))))
 
-(t/deftest test-fs-checkpoint-broken-store
+(t/deftest test-fs-checkpoint-store-failed-download
   (fix/with-tmp-dirs #{cp-store-dir}
-    (fix.cp-store/test-checkpoint-broken-store (cp/->filesystem-checkpoint-store {:path (.toPath cp-store-dir)}))))
+    (fix.cp-store/test-checkpoint-broken-store-failed-download
+      (cp/->filesystem-checkpoint-store {:path (.toPath cp-store-dir)}))))
+
+(t/deftest test-fs-checkpoint-store-failed-upload
+  (fix/with-tmp-dirs #{cp-store-dir dir}
+    (with-redefs [xtdb.checkpoint/sync-path @#'fix.cp-store/sync-path-throw]
+      (let [store (cp/->filesystem-checkpoint-store {:path (.toPath cp-store-dir)})]
+        (t/testing "no leftovers after failed checkpoint"
+          (t/is (thrown-with-msg?
+                 Exception #"broken!"
+                 (cp/checkpoint {::cp/cp-format ::foo-format
+                                 :dir dir
+                                 :approx-frequency (Duration/ofHours 1)
+                                 :store store
+                                 :src (let [!tx-id (atom 0)]
+                                        (reify cp/CheckpointSource
+                                          (save-checkpoint [_ dir]
+                                            (let [tx-id (swap! !tx-id inc)]
+                                              (spit (doto (io/file dir "hello.edn")
+                                                      (io/make-parents))
+                                                    (pr-str {:msg "Hello world!", :tx-id tx-id}))
+                                              {:tx {::xt/tx-id tx-id}}))))})))
+          (t/is (= 0 (.count (java.nio.file.Files/list (.toPath cp-store-dir))))))))))

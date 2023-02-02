@@ -81,7 +81,7 @@
       (Files/copy from-path to-path ^"[Ljava.nio.file.CopyOption;" (make-array CopyOption 0))))
   (throw (Exception. "broken!")))
 
-(defn test-checkpoint-broken-store
+(defn test-checkpoint-broken-store-failed-download
   [cp-store]
   (fix/with-tmp-dirs #{local-dir}
     (let [src-dir (doto (io/file local-dir "src")
