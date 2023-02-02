@@ -582,67 +582,66 @@
                :grouping-vars (->> lv-clauses
                                    (into #{} (comp (remove :aggregate) (mapcat :vars))))})))))
 
-(defn- analyse-order-by [{:keys [order-by]}]
+(defn- plan-find [query]
+  (let [{:keys [clauses aggs grouping-vars]} (analyse-find-clauses query)]
+    (-> clauses
+        (->> (mapv (fn [{:keys [clause-type] :as clause}]
+                     (case clause-type
+                       :logic-var (let [in-col (col-sym (:lv clause))]
+                                    (if-let [out-col (:col clause)]
+                                      {out-col in-col}
+                                      in-col))
+                       :aggregate (:col clause)))))
+        (with-meta {::vars (into #{} (map :col) clauses)
+                    ::aggs aggs
+                    ::grouping-vars grouping-vars}))))
+
+(defn- wrap-find [plan find-clauses]
+  (-> [:project find-clauses plan]
+      (with-meta (-> (meta plan) (assoc ::vars (::vars (meta find-clauses)))))))
+
+(defn- plan-order-by [{:keys [order-by]}]
   (when order-by
-    (let [clause-attrs (analyse-find-clauses {:find (map :find-arg order-by)})]
-      (-> clause-attrs
-          (update :clauses (fn [clauses]
-                             (mapv (fn [clause {:keys [direction]}]
-                                     (-> clause (assoc :direction (or direction :asc))))
-                                   clauses order-by)))))))
-
-(defn- analyse-head [query]
-  (let [find-attrs (analyse-find-clauses query)
-        order-by-attrs (analyse-order-by query)]
-    (into (select-keys query [:limit :offset])
-          {:find-clauses (:clauses find-attrs)
-           :order-by-clauses (not-empty (:clauses order-by-attrs))
-           :aggs (->> (merge (:aggs find-attrs)
-                             (:aggs order-by-attrs))
-                      (not-empty))
-
-           ;; HACK: need to error-check this
-           :grouping-vars (set/union (set (:grouping-vars find-attrs))
-                                     (set (:grouping-vars order-by-attrs)))
-
-           :var->col (->> (:clauses find-attrs)
-                          (into {} (map (comp (juxt identity identity) :col))))})))
-
-(defn- wrap-group-by [plan {:keys [aggs grouping-vars]}]
-  (if aggs
-    (-> [:group-by (into (vec grouping-vars)
-                         (map (fn [[col agg]]
-                                {col (s/unform ::aggregate agg)}))
-                         aggs)
-         plan]
-        (with-meta (into (meta plan) {::vars (into (set grouping-vars) (map key) aggs)}) ))
-    plan))
+    (let [{:keys [clauses aggs grouping-vars]} (analyse-find-clauses {:find (map :find-arg order-by)})]
+      (-> (mapv (fn [{:keys [clause-type] :as clause} {:keys [direction] :or {direction :asc}}]
+                  [(case clause-type
+                     :logic-var (:lv clause)
+                     :aggregate (:col clause))
+                   {:direction direction}])
+                clauses order-by)
+          (with-meta {::aggs aggs, :grouping-vars grouping-vars})))))
 
 (defn- wrap-order-by [plan order-by-clauses]
-  (-> [:order-by (mapv (fn [{:keys [clause-type direction] :as clause}]
-                         [(case clause-type
-                            :logic-var (:lv clause)
-                            :aggregate (:col clause))
-                          {:direction direction}])
-                       order-by-clauses)
-       plan]
+  (-> [:order-by order-by-clauses plan]
       (with-meta (meta plan))))
 
-(defn- wrap-head [plan query]
-  (let [{:keys [find-clauses order-by-clauses] :as head-attrs} (analyse-head query)]
-    (-> [:project (->> find-clauses
-                       (mapv (fn [{:keys [clause-type] :as clause}]
-                               (case clause-type
-                                 :logic-var (let [in-col (col-sym (:lv clause))]
-                                              (if-let [out-col (:col clause)]
-                                                {out-col in-col}
-                                                in-col))
-                                 :aggregate (:col clause)))))
-         (-> plan
-             (wrap-group-by head-attrs)
-             (cond-> order-by-clauses (wrap-order-by order-by-clauses)))]
+(defn- plan-group-by [{:keys [find-clauses order-by-clauses]}]
+  (let [{find-aggs ::aggs, find-grouping-vars ::grouping-vars} (meta find-clauses)
+        {order-by-aggs ::aggs, order-by-grouping-vars ::grouping-vars} (meta order-by-clauses)
+        aggs (not-empty (merge find-aggs order-by-aggs))
+        grouping-vars (set/union (set find-grouping-vars)
+                                 (set order-by-grouping-vars))]
+    (when aggs
+      (-> (into (vec grouping-vars)
+                (map (fn [[col agg]]
+                       {col (s/unform ::aggregate agg)}))
+                aggs)
+          (with-meta {::vars (into (set grouping-vars) (map key) aggs)})))))
 
-        (with-meta (-> (meta plan) (assoc ::vars (into #{} (map :col) find-clauses)))))))
+(defn- wrap-group-by [plan group-by-clauses]
+  (-> [:group-by group-by-clauses plan]
+      (with-meta (-> (meta plan) (assoc ::vars (::vars (meta group-by-clauses)))))))
+
+(defn- wrap-head [plan query]
+  (let [find-clauses (plan-find query)
+        order-by-clauses (plan-order-by query)
+        group-by-clauses (plan-group-by {:find-clauses find-clauses
+                                         :order-by-clauses order-by-clauses})]
+
+    (-> plan
+        (cond-> group-by-clauses (wrap-group-by group-by-clauses)
+                order-by-clauses (wrap-order-by order-by-clauses))
+        (wrap-find find-clauses))))
 
 (defn- wrap-top [plan {:keys [limit offset]}]
   (if (or limit offset)
@@ -733,3 +732,4 @@
         (catch Throwable t
           (.close params)
           (throw t))))))
+
