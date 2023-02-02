@@ -45,6 +45,34 @@
 (defmethod i/halt-key! ::xtdb [_ ^IXtdb node]
   (.close node))
 
+(def checkpoint-fs-config
+  {::xtdb
+   {:node-opts
+    {:xtdb/index-store
+     {:kv-store
+      {:xtdb/module `rocks/->kv-store,
+       :db-dir (io/file dev-node-dir "indexes"),
+       :checkpointer
+       {:xtdb/module 'xtdb.checkpoint/->checkpointer
+        :store {:xtdb/module 'xtdb.checkpoint/->filesystem-checkpoint-store
+                :path (io/file dev-node-dir "checkpoints")}
+        :approx-frequency (java.time.Duration/ofSeconds 30)}}}
+
+     :xtdb/document-store
+     {:kv-store {:xtdb/module `rocks/->kv-store,
+                 :db-dir (io/file dev-node-dir "documents")
+                 :block-cache :xtdb.rocksdb/block-cache}}
+
+     :xtdb/tx-log
+     {:kv-store {:xtdb/module `rocks/->kv-store,
+                 :db-dir (io/file dev-node-dir "tx-log")
+                 :block-cache :xtdb.rocksdb/block-cache}}
+
+     :xtdb.rocksdb/block-cache
+     {:xtdb/module `rocks/->lru-block-cache
+      :cache-size (* 128 1024 1024)}}}})
+
+
 (def standalone-config
   {::xtdb {:node-opts {:xtdb/index-store {:kv-store {:xtdb/module `rocks/->kv-store,
                                                      :db-dir (io/file dev-node-dir "indexes"),
@@ -106,7 +134,8 @@
                                   :kafka-config :kafka-config}}}})
 
 
-;; swap for `embedded-kafka-config` to use embedded-kafka
+;; swap for `embedded-kafka-config`  to use embedded-kafka
+; (ir/set-prep! (fn [] checkpoint-fs-config))
 (ir/set-prep! (fn [] standalone-config))
 ; (ir/set-prep! (fn [] local-kafka-config))
 ; (ir/set-prep! (fn [] embedded-kafka-config))

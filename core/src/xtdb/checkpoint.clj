@@ -1,5 +1,6 @@
 (ns xtdb.checkpoint
   (:require [clojure.tools.logging :as log]
+            [clojure.java.io :as io]
             [xtdb.api :as xt]
             [xtdb.io :as xio]
             [xtdb.system :as sys])
@@ -15,10 +16,12 @@
 (defprotocol CheckpointStore
   (available-checkpoints [store opts])
   (download-checkpoint [store checkpoint dir])
-  (upload-checkpoint [store dir opts]))
+  (upload-checkpoint [store dir opts])
+  (cleanup-checkpoint [store opts]))
 
 (alter-meta! #'available-checkpoints assoc :arglists '([store {:keys [::cp-format]}]))
-(alter-meta! #'upload-checkpoint assoc :arglists '([store dir {:keys [::cp-format tx]}]))
+(alter-meta! #'upload-checkpoint assoc :arglists '([store dir {:keys [::cp-format cp-at tx]}]))
+(alter-meta! #'cleanup-checkpoint assoc :arglists '([store {:keys [::cp-format cp-at tx]}]))
 
 (defprotocol CheckpointSource
   (save-checkpoint [_ dir]))
@@ -36,14 +39,19 @@
 
 (defn checkpoint [{:keys [dir src store ::cp-format approx-frequency]}]
   (when-not (recent-cp? (first (available-checkpoints store {::cp-format cp-format})) approx-frequency)
-    (try
-      (when-let [{:keys [tx]} (save-checkpoint src dir)]
-        (when tx
-          (log/infof "Uploading checkpoint at '%s'" tx)
-          (doto (upload-checkpoint store dir {:tx tx, ::cp-format cp-format})
-            (->> pr-str (log/info "Uploaded checkpoint:")))))
-      (finally
-        (xio/delete-dir dir)))))
+    (when-let [{:keys [tx]} (save-checkpoint src dir)]
+      (when tx
+        (let [cp-at (java.util.Date.)
+              opts {:tx tx :cp-at cp-at ::cp-format cp-format}]
+          (try
+            (log/infof "Uploading checkpoint at '%s'" tx)
+            (doto (upload-checkpoint store dir opts)
+              (->> pr-str (log/info "Uploaded checkpoint:")))
+            (catch Throwable t
+              (xio/delete-dir dir)
+              (cleanup-checkpoint store opts)
+              (log/warn "Cleaned-up failed checkpoint:" opts)
+              (throw t))))))))
 
 (defn cp-seq [^Instant start ^Duration freq]
   (lazy-seq
@@ -149,17 +157,18 @@
 
       (try
         (sync-path cp-path to-path)
-        (catch Exception e
+        (catch Throwable t
+          (xio/delete-dir dir)
           (throw (ex-info "incomplete checkpoint restore"
                           {:cp-path cp-path
                            :local-dir to-path}
-                          e))))))
+                          t))))))
 
-  (upload-checkpoint [_ dir {:keys [tx ::cp-format]}]
+  (upload-checkpoint [_ dir {:keys [tx cp-at ::cp-format]}]
     (let [from-path (.toPath ^File dir)
-          cp-at (java.util.Date.)
           cp-prefix (format "checkpoint-%s-%s" (::xt/tx-id tx) (xio/format-rfc3339-date cp-at))
           to-path (.resolve root-path cp-prefix)]
+
       (sync-path from-path to-path)
 
       (let [cp {::cp-format cp-format,
@@ -174,7 +183,12 @@
                                 StandardCharsets/UTF_8)
                      ^"[Ljava.nio.file.OpenOption;"
                      (into-array OpenOption #{StandardOpenOption/WRITE StandardOpenOption/CREATE_NEW}))
-        cp))))
+        cp)))
+
+  (cleanup-checkpoint [_ {:keys [tx cp-at]}]
+    (let [cp-prefix (format "checkpoint-%s-%s" (::xt/tx-id tx) (xio/format-rfc3339-date cp-at))
+          to-path (io/file (.toString root-path) cp-prefix)]
+      (xio/delete-dir to-path))))
 
 (defn ->filesystem-checkpoint-store {::sys/args {:path {:spec ::sys/path, :required? true}}} [{:keys [path]}]
   (->FileSystemCheckpointStore path))

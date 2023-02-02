@@ -48,14 +48,13 @@
                                                              (AsyncResponseTransformer/toFile (doto file (io/make-parents)))))))]
 
       (when-not (= (set (keys get-objs-resp)) (set s3-paths))
+        (xio/delete-dir dir)
         (throw (ex-info "incomplete checkpoint restore" {:expected s3-paths
                                                          :actual (keys get-objs-resp)})))
-
       checkpoint))
 
-  (upload-checkpoint [this dir {:keys [tx ::cp/cp-format]}]
+  (upload-checkpoint [this dir {:keys [tx cp-at ::cp/cp-format]}]
     (let [dir-path (.toPath ^File dir)
-          cp-at (java.util.Date.)
           s3-dir (format "checkpoint-%s-%s" (::xt/tx-id tx) (xio/format-rfc3339-date cp-at))]
       (->> (file-seq dir)
            (into {} (keep (fn [^File file]
@@ -75,6 +74,16 @@
                                                                ::s3-dir (str s3-dir "/")
                                                                ::cp/checkpoint-at cp-at}))})
         cp)))
+
+  (cleanup-checkpoint [this  {:keys [tx cp-at]}]
+    (let [s3-dir (format "checkpoint-%s-%s" (::xt/tx-id tx) (xio/format-rfc3339-date cp-at))
+          files (as-> (s3/list-objects this {:path s3-dir :recursive? true}) $
+                  (keep (fn [[type arg]]
+                          (when (= type :object)
+                            arg)) $)
+                  (vec $)
+                  (conj $ s3-dir))]
+      (s3/delete-objects this files)))
 
   Closeable
   (close [_]
