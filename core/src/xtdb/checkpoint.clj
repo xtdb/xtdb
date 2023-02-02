@@ -42,18 +42,16 @@
     (when-let [{:keys [tx]} (save-checkpoint src dir)]
       (when tx
         (let [cp-at (java.util.Date.)
-              opts {:tx tx :cp-at cp-at ::cp-format cp-format}
-              success (atom 0)]
+              opts {:tx tx :cp-at cp-at ::cp-format cp-format}]
           (try
             (log/infof "Uploading checkpoint at '%s'" tx)
             (doto (upload-checkpoint store dir opts)
               (->> pr-str (log/info "Uploaded checkpoint:")))
-            (swap! success inc)
-            (finally
+            (catch Throwable t
               (xio/delete-dir dir)
-              (when-not (pos? @success)
-                (cleanup-checkpoint store opts)
-                (log/warn "Cleaned-up failed checkpoint:" opts)))))))))
+              (cleanup-checkpoint store opts)
+              (log/warn "Cleaned-up failed checkpoint:" opts)
+              (throw t))))))))
 
 (defn cp-seq [^Instant start ^Duration freq]
   (lazy-seq
