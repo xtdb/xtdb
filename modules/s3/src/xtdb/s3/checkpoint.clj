@@ -38,25 +38,20 @@
     (when-not (empty? (.listFiles ^File dir))
       (throw (IllegalArgumentException. "non-empty checkpoint restore dir: " dir)))
 
-    (let [success (atom 0)]
-      (try
-        (let [s3-paths (->> (s3/list-objects this {:path s3-dir, :recursive? true})
-                            (map second))
-              get-objs-resp (s3/get-objects this
-                                            (for [s3-path s3-paths]
-                                              (let [file (io/file dir (str (.relativize (Paths/get s3-dir (make-array String 0))
-                                                                                        (Paths/get s3-path (make-array String 0)))))]
-                                                (MapEntry/create s3-path
-                                                                 (AsyncResponseTransformer/toFile (doto file (io/make-parents)))))))]
+    (let [s3-paths (->> (s3/list-objects this {:path s3-dir, :recursive? true})
+                        (map second))
+          get-objs-resp (s3/get-objects this
+                                        (for [s3-path s3-paths]
+                                          (let [file (io/file dir (str (.relativize (Paths/get s3-dir (make-array String 0))
+                                                                                    (Paths/get s3-path (make-array String 0)))))]
+                                            (MapEntry/create s3-path
+                                                             (AsyncResponseTransformer/toFile (doto file (io/make-parents)))))))]
 
-          (when-not (= (set (keys get-objs-resp)) (set s3-paths))
-            (throw (ex-info "incomplete checkpoint restore" {:expected s3-paths
-                                                             :actual (keys get-objs-resp)})))
-          (swap! success inc)
-          checkpoint)
-        (finally
-          (when-not (pos? @success)
-            (xio/delete-dir dir))))))
+      (when-not (= (set (keys get-objs-resp)) (set s3-paths))
+        (xio/delete-dir dir)
+        (throw (ex-info "incomplete checkpoint restore" {:expected s3-paths
+                                                         :actual (keys get-objs-resp)})))
+      checkpoint))
 
   (upload-checkpoint [this dir {:keys [tx cp-at ::cp/cp-format]}]
     (let [dir-path (.toPath ^File dir)
