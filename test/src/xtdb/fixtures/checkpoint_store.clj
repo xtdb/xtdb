@@ -7,19 +7,6 @@
   (:import  [java.nio.file NoSuchFileException CopyOption Files FileVisitOption LinkOption Path]
             java.nio.file.attribute.FileAttribute))
 
-(defn- sync-path-throw
-  [^Path from-root-path ^Path to-root-path]
-  (doseq [^Path from-path (-> (Files/walk from-root-path Integer/MAX_VALUE (make-array FileVisitOption 0))
-                              .iterator
-                              iterator-seq)
-          :let [to-path (.resolve to-root-path (str (.relativize from-root-path from-path)))]]
-    (cond
-      (Files/isDirectory from-path (make-array LinkOption 0))
-      (Files/createDirectories to-path (make-array FileAttribute 0))
-      (Files/isRegularFile from-path (make-array LinkOption 0))
-      (Files/copy from-path to-path ^"[Ljava.nio.file.CopyOption;" (make-array CopyOption 0))))
-  (throw :bang))
-
 (defn test-checkpoint-store [cp-store]
   (fix/with-tmp-dirs #{local-dir}
     (let [src-dir (doto (io/file local-dir "src")
