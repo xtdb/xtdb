@@ -455,7 +455,7 @@
 (alter-meta! #'->xtdb-handler assoc :arglists '([xtdb-node {:keys [jwks read-only? server-label]}]))
 
 (defn ->server {::sys/deps {:xtdb-node :xtdb/node}
-                ::sys/args {:port {:spec ::sys/nat-int
+                ::sys/args {:port {:spec :xtdb.io/port
                                    :doc "Port to start the HTTP server on"
                                    :default default-server-port}
                             :read-only? {:spec ::sys/boolean
