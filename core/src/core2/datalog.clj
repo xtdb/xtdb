@@ -164,13 +164,18 @@
       (with-meta (meta plan))))
 
 (defn- unify-preds [var->cols]
-  (vec
-   (for [cols (vals var->cols)
-         :when (> (count cols) 1)
-         ;; this picks an arbitrary binary order if there are >2
-         ;; once mega-join has multi-way joins we could throw the multi-way `=` over the fence
-         [c1 c2] (partition 2 1 cols)]
-     (list '= c1 c2))))
+  ;; this enumerates all the binary join conditions
+  ;; once mega-join has multi-way joins we could throw the multi-way `=` over the fence
+  (->> (vals var->cols)
+       (filter #(> (count %) 1))
+       (mapcat
+         (fn [cols]
+           (->> (set (for [col cols
+                           col2 cols
+                           :when (not= col col2)]
+                       (set [col col2])))
+                (map #(list* '= %)))))
+       (vec)))
 
 (defn- wrap-unify [plan var->cols]
   (-> [:project (vec (for [[lv cols] var->cols]
