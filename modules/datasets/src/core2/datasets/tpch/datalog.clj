@@ -121,7 +121,7 @@
 (def q5
   (-> '{:find [n_name (sum (* l_extendedprice (- 1 l_discount)))]
         :keys [n_name revenue]
-        :in [?region]
+        :in [region]
         :where [[o :_table :orders]
                 [l :_table :lineitem]
                 [s :_table :supplier]
@@ -143,7 +143,7 @@
                 [c :c_nationkey n]
                 [n :n_name n_name]
                 [n :n_regionkey r]
-                [r :r_name ?region]]
+                [r :r_name region]]
         :order-by [[(sum (* l_extendedprice (- 1 l_discount))) :desc]]}
       (with-in-args ["ASIA"])))
 

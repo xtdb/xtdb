@@ -74,7 +74,7 @@
 
 (defn unary-expr {:style/indent 2} [relation f]
   (let [{->inner-cursor :->cursor, inner-col-types :col-types} relation
-        {:keys [col-types ->cursor]} (f inner-col-types)]
+        {:keys [col-types ->cursor stats]} (f inner-col-types)]
     {:col-types col-types
      :->cursor (fn [opts]
                  (let [inner (->inner-cursor opts)]
@@ -82,12 +82,13 @@
                      (->cursor opts inner)
                      (catch Throwable e
                        (util/try-close inner)
-                       (throw e)))))}))
+                       (throw e)))))
+     :stats stats}))
 
 (defn binary-expr {:style/indent 3} [left right f]
   (let [{left-col-types :col-types, ->left-cursor :->cursor} left
         {right-col-types :col-types, ->right-cursor :->cursor} right
-        {:keys [col-types ->cursor]} (f left-col-types right-col-types)]
+        {:keys [col-types ->cursor stats]} (f left-col-types right-col-types)]
 
     {:col-types col-types
      :->cursor (fn [opts]
@@ -101,7 +102,8 @@
                            (throw e))))
                      (catch Throwable e
                        (util/try-close left)
-                       (throw e)))))}))
+                       (throw e)))))
+     :stats stats}))
 
 ;;;; Rewriting of logical plan.
 

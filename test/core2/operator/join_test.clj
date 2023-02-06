@@ -1,6 +1,7 @@
 (ns core2.operator.join-test
-  (:require [clojure.test :as t]
+  (:require [clojure.test :as t :refer [deftest]]
             [core2.operator.join :as join]
+            [core2.logical-plan :as lp]
             [core2.test-util :as tu]))
 
 (t/use-fixtures :each tu/with-allocator)
@@ -872,3 +873,52 @@
            :cols-from-current-rel #{t0_n},
            :other-cols #{t1_n},
            :all-cols-present? true}))))
+
+(deftest test-mega-join-join-order
+
+  (t/is
+    (=
+     [[2 3 0 1]]
+     (:join-order
+       (lp/emit-expr
+         '{:op :mega-join,
+           :conditions
+           [[:equi-condition {bar biff}]
+            [:equi-condition {foo baz}]
+            [:equi-condition {foo bar}]],
+           :relations
+           [{:op :core2.test-util/blocks,
+             :stats {:row-count 3}
+             :blocks [[{:baz 1}]]}
+            {:op :core2.test-util/blocks,
+             :stats nil
+             :blocks [[{:biff 1}]]}
+            {:op :core2.test-util/blocks,
+             :stats {:row-count 1}
+             :blocks [[{:foo 1}]]}
+            {:op :core2.test-util/blocks,
+             :stats {:row-count 2}
+             :blocks [[{:bar 1}]]}]}
+         {}))))
+
+  (t/testing "disconnected-sub-graphs"
+    (t/is
+      (=
+       [[1 0] [2]]
+       (:join-order
+         (lp/emit-expr
+           '{:op :mega-join,
+             :conditions
+             [[:equi-condition {foo baz}]],
+             :relations
+             [{:op :core2.test-util/blocks,
+               :stats {:row-count 3}
+               :blocks [[{:baz 1}]]}
+              {:op :core2.test-util/blocks,
+               :stats {:row-count 1}
+               :blocks [[{:foo 1}]]}
+              {:op :core2.test-util/blocks,
+               :stats {:row-count 2}
+               :blocks [[{:bar 1}]]}]}
+           {}))))))
+

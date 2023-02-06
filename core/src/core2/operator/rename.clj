@@ -44,15 +44,18 @@
     (util/try-close in-cursor)))
 
 (defmethod lp/emit-expr :rename [{:keys [columns relation prefix]} args]
-  (lp/unary-expr (lp/emit-expr relation args)
-    (fn [col-types]
-      (let [col-name-mapping (->> (for [old-name (set (keys col-types))]
-                                    [old-name
-                                     (cond-> (get columns old-name old-name)
-                                       prefix (->> name (str prefix relation-prefix-delimiter) symbol))])
-                                  (into {}))]
-        {:col-types (->> col-types
-                         (into {}
-                               (map (juxt (comp col-name-mapping key) val))))
-         :->cursor (fn [_opts in-cursor]
-                     (RenameCursor. in-cursor col-name-mapping (set/map-invert col-name-mapping)))}))))
+  (let [emmited-child-relation (lp/emit-expr relation args)]
+    (lp/unary-expr
+      emmited-child-relation
+      (fn [col-types]
+        (let [col-name-mapping (->> (for [old-name (set (keys col-types))]
+                                      [old-name
+                                       (cond-> (get columns old-name old-name)
+                                         prefix (->> name (str prefix relation-prefix-delimiter) symbol))])
+                                    (into {}))]
+          {:col-types (->> col-types
+                           (into {}
+                                 (map (juxt (comp col-name-mapping key) val))))
+           :stats (:stats emmited-child-relation)
+           :->cursor (fn [_opts in-cursor]
+                       (RenameCursor. in-cursor col-name-mapping (set/map-invert col-name-mapping)))})))))

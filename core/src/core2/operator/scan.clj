@@ -14,6 +14,7 @@
             [core2.types :as t]
             [core2.util :as util]
             [core2.vector.indirect :as iv]
+            [core2.vector.writer :as vw]
             core2.watermark)
   (:import clojure.lang.MapEntry
            core2.buffer_pool.IBufferPool
@@ -281,7 +282,7 @@
       (expr.temp/apply-constraint temporal-min-range temporal-max-range
                                   :> "system_time_end" sys-time))))
 
-(defmethod lp/emit-expr :scan [{:keys [source table columns]} {:keys [scan-col-types param-types]}]
+(defmethod lp/emit-expr :scan [{:keys [source table columns]} {:keys [scan-col-types param-types srcs]}]
   (let [src-key (or source '$)
 
         col-names (->> columns
@@ -315,9 +316,23 @@
                                      col-name)
                                    (for [[col-name select] selects
                                          :when (not (temporal/temporal-column? (name col-name)))]
-                                     select)))]
+                                     select)))
+        row-count
+        (let [^ScanSource src (get srcs src-key)
+              metadata-mgr (.metadataManager src)]
+          (reduce
+            +
+            (meta/matching-chunks
+              metadata-mgr
+              (name table)
+              (fn [_chunk-idx ^VectorSchemaRoot metadata-root]
+                (let [metadata-idxs (meta/->metadata-idxs metadata-root)
+                      id-col-idx (.columnIndex metadata-idxs "id")
+                      count-vec  (.getVector metadata-root "count")]
+                  (.get count-vec id-col-idx))))))]
 
-    {:col-types (dissoc col-types '_table)
+{:col-types (dissoc col-types '_table)
+     :stats {:row-count row-count}
      :->cursor (fn [{:keys [allocator srcs params]}]
                  (let [^ScanSource src (get srcs src-key)
                        metadata-mgr (.metadataManager src)

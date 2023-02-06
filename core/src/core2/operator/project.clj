@@ -111,26 +111,29 @@
   (->ProjectCursor allocator in-cursor projection-specs clock params))
 
 (defmethod lp/emit-expr :project [{:keys [projections relation], {:keys [append-columns?]} :opts} {:keys [param-types] :as args}]
-  (lp/unary-expr (lp/emit-expr relation args)
-    (fn [inner-col-types]
-      (let [projection-specs (concat (when append-columns?
-                                       (for [[col-name col-type] inner-col-types]
-                                         (->identity-projection-spec col-name col-type)))
-                                     (for [[p-type arg] projections]
-                                       (case p-type
-                                         :column (->identity-projection-spec arg (get inner-col-types arg))
-                                         :row-number-column (let [[col-name _form] (first arg)]
-                                                              (->row-number-projection-spec col-name))
-                                         :rename (let [[to-name from-name] (first arg)]
-                                                   (->rename-projection-spec to-name from-name (get inner-col-types from-name)))
-                                         :extend (let [[col-name form] (first arg)]
-                                                   (expr/->expression-projection-spec col-name form
-                                                                                      {:col-types inner-col-types
-                                                                                       :param-types param-types})))))]
-        {:col-types (->> projection-specs
-                         (into {} (map (juxt #(.getColumnName ^IProjectionSpec %)
-                                             #(.getColumnType ^IProjectionSpec %)))))
-         :->cursor (fn [opts in-cursor] (->project-cursor opts in-cursor projection-specs))}))))
+  (let [emmited-child-relation (lp/emit-expr relation args)]
+    (lp/unary-expr
+      emmited-child-relation
+      (fn [inner-col-types]
+        (let [projection-specs (concat (when append-columns?
+                                         (for [[col-name col-type] inner-col-types]
+                                           (->identity-projection-spec col-name col-type)))
+                                       (for [[p-type arg] projections]
+                                         (case p-type
+                                           :column (->identity-projection-spec arg (get inner-col-types arg))
+                                           :row-number-column (let [[col-name _form] (first arg)]
+                                                                (->row-number-projection-spec col-name))
+                                           :rename (let [[to-name from-name] (first arg)]
+                                                     (->rename-projection-spec to-name from-name (get inner-col-types from-name)))
+                                           :extend (let [[col-name form] (first arg)]
+                                                     (expr/->expression-projection-spec col-name form
+                                                                                        {:col-types inner-col-types
+                                                                                         :param-types param-types})))))]
+          {:col-types (->> projection-specs
+                           (into {} (map (juxt #(.getColumnName ^IProjectionSpec %)
+                                               #(.getColumnType ^IProjectionSpec %)))))
+           :stats (:stats emmited-child-relation)
+           :->cursor (fn [opts in-cursor] (->project-cursor opts in-cursor projection-specs))})))))
 
 (defmethod lp/emit-expr :map [op args]
   (lp/emit-expr (assoc op :op :project :opts {:append-columns? true}) args))

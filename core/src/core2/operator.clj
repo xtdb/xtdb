@@ -23,6 +23,7 @@
             [core2.vector.indirect :as iv])
   (:import clojure.lang.MapEntry
            (core2 ICursor IResultCursor IResultSet)
+           core2.operator.scan.ScanSource
            java.lang.AutoCloseable
            java.time.Clock
            (java.util HashMap Iterator)
@@ -88,11 +89,17 @@
                                                                {:scan-col-types (scan/->scan-col-types srcs scan-cols)
                                                                 :param-types (expr/->param-types params)
                                                                 :table-arg-types (->table-arg-types table-args)
-                                                                :default-tz default-tz}
+                                                                :default-tz default-tz
+                                                                :last-known-chunk-by-src (into
+                                                                                           {}
+                                                                                           (for [[src-key ^ScanSource src] srcs]
+                                                                                             (MapEntry/create
+                                                                                               src-key
+                                                                                               (.lastEntry (.chunksMetadata (.metadataManager src))))))}
                                                                (reify Function
                                                                  (apply [_ emit-opts]
                                                                    (binding [expr/*clock* clock]
-                                                                     (lp/emit-expr conformed-query emit-opts)))))]
+                                                                     (lp/emit-expr conformed-query (assoc emit-opts :srcs srcs))))))]
             (reify
               BoundQuery
               (columnTypes [_] col-types)

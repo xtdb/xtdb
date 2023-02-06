@@ -146,12 +146,13 @@
          :col-types (s/? (s/map-of simple-symbol? some?))
          :blocks vector?))
 
-(defmethod lp/emit-expr ::blocks [{:keys [col-types blocks]} _args]
+(defmethod lp/emit-expr ::blocks [{:keys [col-types blocks stats]} _args]
   (let [col-types (or col-types
                       (types/rows->col-types (into [] cat blocks)))
         ^Schema schema (Schema. (for [[col-name col-type] col-types]
                                   (types/col-type->field col-name col-type)))]
     {:col-types col-types
+     :stats stats
      :->cursor (fn [{:keys [allocator]}]
                  (->cursor allocator schema blocks))}))
 

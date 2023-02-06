@@ -705,7 +705,8 @@
 (defn build-plan-for-next-sub-graph [conditions relations args]
   (loop [plan (first relations)
          rels (rest relations)
-         conditions conditions]
+         conditions conditions
+         join-order [(:relation-id plan)]]
     (if (seq rels)
       (let [join-candidate (->> conditions
                                 (find-join-conditions-which-contain-cols-from-plan plan)
@@ -714,7 +715,7 @@
             join-conditions (mapv
                               adjust-to-equi-condition
                               (:valid-join-conditions-for-rel join-candidate))]
-        (if (seq join-candidate)
+        (if join-candidate
           (recur
             (emit-inner-join-expr
               {:condition join-conditions
@@ -722,13 +723,16 @@
                :right join-candidate}
               args)
             (remove-joined-relation join-candidate rels)
-            (remove-used-join-conditions join-candidate conditions))
+            (remove-used-join-conditions join-candidate conditions)
+            (conj join-order (:relation-id join-candidate)))
           {:sub-graph-plan plan
            :sub-graph-unused-rels rels
-           :sub-graph-unused-conditions conditions}))
+           :sub-graph-unused-conditions conditions
+           :sub-graph-join-order join-order}))
       {:sub-graph-plan plan
        :sub-graph-unused-rels rels
-       :sub-graph-unused-conditions conditions})))
+       :sub-graph-unused-conditions conditions
+       :sub-graph-join-order join-order})))
 
 (defn condition->cols [[condition-type condition]]
   (if (= condition-type :equi-condition)
@@ -746,34 +750,46 @@
                                   (map-indexed #(assoc %2 :condition-id %1)))
         child-relations (->> relations
                              (map #(lp/emit-expr % args))
-                             (map-indexed #(assoc %2 :relation-id %1)))
-        {:keys [sub-graph-plans unused-join-conditions]}
+                             (map-indexed #(assoc %2 :relation-id %1))
+                             (sort-by
+                               (juxt (comp nil? :row-count :stats)
+                                     (comp :row-count :stats))))
+        {:keys [sub-graph-plans unused-join-conditions join-order]}
         (loop [sub-graph-plans []
                relations child-relations
-               conditions conditions-with-cols]
+               conditions conditions-with-cols
+               join-order []]
           (if (seq relations)
             (let [{:keys [sub-graph-plan
                           sub-graph-unused-rels
-                          sub-graph-unused-conditions]}
+                          sub-graph-unused-conditions
+                          sub-graph-join-order]}
                   (build-plan-for-next-sub-graph conditions relations args)]
-              (recur (conj sub-graph-plans sub-graph-plan) sub-graph-unused-rels sub-graph-unused-conditions))
+              (recur
+                (conj sub-graph-plans sub-graph-plan)
+                sub-graph-unused-rels
+                sub-graph-unused-conditions
+                (conj join-order sub-graph-join-order)))
             {:sub-graph-plans sub-graph-plans
-             :unused-join-conditions conditions}))]
+             :unused-join-conditions conditions
+             :join-order join-order}))]
     ;; bit of a hack as currently mega-join may not choose a join order where
     ;; a condition like the one below is ever valid, but it should always be correct
     ;; to used the unused conditions as conditions for the outermost join
-    (if (seq unused-join-conditions)
-      (emit-inner-join-expr
-        {:condition (mapv :condition unused-join-conditions)
-         :left
-         (reduce (fn [full-plan sub-graph-plan]
-                   (emit-cross-join
-                     {:left full-plan
-                      :right sub-graph-plan})) (butlast sub-graph-plans))
-         :right (last sub-graph-plans)}
-        args)
-      (reduce (fn [full-plan sub-graph-plan]
-                (emit-cross-join
-                  {:left full-plan
-                   :right sub-graph-plan})) sub-graph-plans))))
+    (assoc
+      (if (seq unused-join-conditions)
+        (emit-inner-join-expr
+          {:condition (mapv :condition unused-join-conditions)
+           :left
+           (reduce (fn [full-plan sub-graph-plan]
+                     (emit-cross-join
+                       {:left full-plan
+                        :right sub-graph-plan})) (butlast sub-graph-plans))
+           :right (last sub-graph-plans)}
+          args)
+        (reduce (fn [full-plan sub-graph-plan]
+                  (emit-cross-join
+                    {:left full-plan
+                     :right sub-graph-plan})) sub-graph-plans))
+      :join-order join-order)))
 

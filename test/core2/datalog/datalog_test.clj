@@ -597,9 +597,9 @@
                        (assoc :basis {:tx tx})))
                   (into []))))
 
-    (t/is (= [{:e :petr, :first-name "Ivan", :last-name "Ivanov", :a "Petr", :b "Petrov"}
+    (t/is (= [{:e :ivan, :first-name "Petr", :last-name "Petrov", :a "Ivan", :b "Ivanov"}
+              {:e :petr, :first-name "Ivan", :last-name "Ivanov", :a "Petr", :b "Petrov"}
               {:e :sergei, :first-name "Ivan", :last-name "Ivanov", :a "Sergei", :b "Sergei"}
-              {:e :ivan, :first-name "Petr", :last-name "Petrov", :a "Ivan", :b "Ivanov"}
               {:e :sergei, :first-name "Petr", :last-name "Petrov", :a "Sergei", :b "Sergei"}]
              (->> (c2/plan-datalog
                    tu/*node*
@@ -614,7 +614,8 @@
                        (assoc :basis {:tx tx}))
                    [["Ivan" "Ivanov"]
                     ["Petr" "Petrov"]])
-                  (into []))))
+                  (into [])
+                  (sort-by :e))))
 
     (t/testing "apply anti-joins"
       (t/is (= [{:n 1, :e :ivan} {:n 1, :e :petr} {:n 1, :e :sergei}]
