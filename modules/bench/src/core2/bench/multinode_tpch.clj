@@ -4,6 +4,7 @@
             [core2.ingester :as ingest]
             [core2.node :as node]
             [core2.datasets.tpch :as tpch]
+            [core2.datasets.tpch.ra :as tpch.ra]
             [core2.temporal :as temporal]
             [core2.test-util :as tu]
             [core2.util :as util])
@@ -33,7 +34,7 @@
             (log/info "Starting secondary node 3")
             (with-open [^core2.node.Node secondary-node3 (start-node)]
               (let [last-tx @!last-tx
-                    query tpch/tpch-q1-pricing-summary-report]
+                    query tpch.ra/q1-pricing-summary-report]
                 (letfn [(test-node [k ^core2.node.Node node]
                           (log/info "awaiting" k "node")
                           (let [db (ingest/snapshot (util/component node :core2/ingester)
