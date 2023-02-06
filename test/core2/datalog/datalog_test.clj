@@ -216,7 +216,7 @@
           "one -> many")))
 
 ;; https://github.com/tonsky/datascript/blob/1.1.0/test/datascript/test/query_aggregates.cljc#L14-L39
-(deftest datascript-test-aggregates
+(t/deftest datascript-test-aggregates
   (let [tx (c2/submit-tx tu/*node*
                          [[:put {:id :cerberus, :heads 3}]
                           [:put {:id :medusa, :heads 1}]
@@ -225,6 +225,7 @@
     (t/is (= #{{:heads 1, :count-heads 3} {:heads 3, :count-heads 1}}
              (->> (c2/plan-datalog tu/*node*
                                    (-> '{:find [heads (count heads)]
+                                         :keys [heads count-heads]
                                          :where [[monster :heads heads]]}
                                        (assoc :basis {:tx tx})))
                   (into #{})))
@@ -236,10 +237,101 @@
                                                 (min heads)
                                                 (max heads)
                                                 (count heads)]
+                                         :keys [sum-heads min-heads max-heads count-heads]
                                          :where [[monster :heads heads]]}
                                        (assoc :basis {:tx tx})))
                   (into #{})))
           "various aggs")))
+
+(t/deftest test-find-exprs
+  (let [!tx (c2/submit-tx tu/*node* [[:put {:id :o1, :unit-price 1.49, :quantity 4}]
+                                     [:put {:id :o2, :unit-price 5.39, :quantity 1}]
+                                     [:put {:id :o3, :unit-price 0.59, :quantity 7}]])]
+    (t/is (= [{:oid :o1, :o-value 5.96}
+              {:oid :o2, :o-value 5.39}
+              {:oid :o3, :o-value 4.13}]
+             (c2/datalog-query tu/*node*
+                               (-> '{:find [oid (* unit-price qty)]
+                                     :keys [oid o-value]
+                                     :where [[oid :unit-price unit-price]
+                                             [oid :quantity qty]]}
+                                   (assoc :basis {:tx !tx})))))))
+
+(deftest test-aggregate-exprs
+  (let [!tx (c2/submit-tx tu/*node* [[:put {:id :foo, :category :c0, :v 1}]
+                                     [:put {:id :bar, :category :c0, :v 2}]
+                                     [:put {:id :baz, :category :c1, :v 4}]])]
+    (t/is (= [{:category :c0, :sum-doubles 6}
+              {:category :c1, :sum-doubles 8}]
+             (c2/datalog-query tu/*node*
+                               (-> '{:find [category (sum (* 2 v))]
+                                     :keys [category sum-doubles]
+                                     :where [[e :category category]
+                                             [e :v v]]}
+                                   (assoc :basis {:tx !tx}))))))
+
+  (t/is (= [{:x 0, :sum-y 0, :sum-expr 1}
+            {:x 1, :sum-y 1, :sum-expr 5}
+            {:x 2, :sum-y 3, :sum-expr 14}
+            {:x 3, :sum-y 6, :sum-expr 30}]
+           (c2/datalog-query tu/*node*
+                             '{:find [x (sum y) (sum (+ (* y y) x 1))]
+                               :keys [x sum-y sum-expr]
+                               :in [[[x y]]]}
+                             (for [x (range 4)
+                                   y (range (inc x))]
+                               [x y]))))
+
+  (t/is (= [{:sum-evens 20}]
+           (c2/datalog-query tu/*node*
+                             '{:find [(sum (if (= 0 (mod x 2)) x 0))]
+                               :keys [sum-evens]
+                               :in [[x ...]]}
+                             (range 10)))
+        "if")
+
+  ;; TODO aggregates nested within other aggregates/forms
+  ;; - doesn't appear in TPC-H but guess we'll want these eventually
+
+  #_
+  (t/is (= #{[28.5]}
+           (xt/q (xt/db *api*)
+                 '{:find [(/ (double (sum (* ?x ?x)))
+                             (count ?x))]
+                   :in [[?x ...]]}
+                 (range 10)))
+        "aggregates can be included in exprs")
+
+  #_
+  (t/is (thrown-with-msg? IllegalArgumentException
+                          #"nested agg"
+                          (xt/q (xt/db *api*)
+                                '{:find [(sum (sum ?x))]
+                                  :in [[?x ...]]}
+                                (range 10)))
+        "aggregates can't be nested")
+
+  (t/testing "implicitly groups by variables present outside of aggregates"
+    (t/is (= [{:x-div-y 1, :sum-z 2} {:x-div-y 2, :sum-z 3} {:x-div-y 2, :sum-z 5}]
+             (c2/datalog-query tu/*node*
+                               '{:find [(/ x y) (sum z)]
+                                 :keys [x-div-y sum-z]
+                                 :in [[[x y z]]]}
+                               [[1 1 2]
+                                [2 1 3]
+                                [4 2 5]]))
+          "even though (/ x y) yields the same result in the latter two rows, we group by them individually")
+
+    #_
+    (t/is (= #{[1 3] [1 7] [4 -1]}
+             (c2/datalog-query tu/*node*
+                               '{:find [x (- (sum z) y)]
+                                 :in [[[x y z]]]}
+                               [[1 1 4]
+                                [1 3 2]
+                                [1 3 8]
+                                [4 6 5]]))
+          "groups by x and y in this case")))
 
 (deftest test-query-with-in-bindings
   (let [tx (c2/submit-tx tu/*node* ivan+petr)]

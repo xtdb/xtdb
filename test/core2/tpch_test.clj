@@ -86,7 +86,7 @@
        (map-indexed test-ra-query results-sf-001)))))
 
 (comment
-  (binding [*qs* #{1 5}]
+  (binding [*qs* #{11 17}]
     (t/run-test test-001-ra)))
 
 (t/deftest ^:integration test-01-ra
@@ -97,15 +97,13 @@
        (map-indexed test-ra-query results-sf-01)))))
 
 (comment
-  (binding [*qs* #{1 5}]
+  (binding [*qs* #{11 17}]
     (t/run-test test-01-ra)))
 
 (def ^:private ^:dynamic *datalog-qs*
   ;; replace with *qs* once these are all expected to work
   (-> (set (range 1 23))
       (disj 2 3 5 8 9 10 21) ; TODO join-order planning
-      (disj 5 8 9 11 14 17) ; TODO nested agg exprs
-      (disj 14) ; TODO exprs in `:find`
       (disj 7 20) ; TODO general fail
       (disj 13) ; TODO left-join
       (disj 15) ; TODO has a view, not sure how to represent this

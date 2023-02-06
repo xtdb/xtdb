@@ -19,13 +19,19 @@
 (s/def ::eid eid?)
 (s/def ::value (some-fn eid?))
 
-(s/def ::aggregate
-  (s/cat :agg-fn simple-symbol?
-         :param ::logic-var))
+(s/def ::fn-call
+  (s/and list?
+         (s/cat :f simple-symbol?
+                :args (s/* ::form))))
+
+(s/def ::form
+  (s/or :logic-var ::logic-var
+        :fn-call ::fn-call
+        :value ::value))
 
 (s/def ::find-arg
   (s/or :logic-var ::logic-var
-        :aggregate ::aggregate))
+        :form ::form))
 
 (s/def ::semi-join
   (s/cat :exists '#{exists?}
@@ -69,16 +75,6 @@
                 :v (s/? (s/or :literal ::value,
                               :logic-var ::logic-var
                               :unwind (s/tuple ::logic-var #{'...}))))))
-
-(s/def ::fn-call
-  (s/and list?
-         (s/cat :f simple-symbol?
-                :args (s/* ::form))))
-
-(s/def ::form
-  (s/or :logic-var ::logic-var
-        :fn-call ::fn-call
-        :value ::value))
 
 (s/def ::call-clause
   (s/and vector?
@@ -125,8 +121,7 @@
 
 (s/def ::order-element
   (s/and vector?
-         (s/cat :find-arg (s/or :logic-var ::logic-var
-                                :aggregate ::aggregate)
+         (s/cat :find-arg ::find-arg
                 :direction (s/? #{:asc :desc}))))
 
 (s/def ::order-by (s/coll-of ::order-element :kind vector?))
@@ -562,86 +557,97 @@
                        unavailable-calls unavailable-sqs
                        unavailable-ujs unavailable-sjs unavailable-ajs)))))))))
 
-(defn- analyse-find-clauses [{find-clauses :find, rename-keys :keys}]
-  (when-let [clauses (mapv (fn [[clause-type clause] rename-key]
-                             (let [rename-sym (some-> rename-key col-sym)]
-                               (-> (case clause-type
-                                     :logic-var {:lv clause
-                                                 :col (or rename-sym (col-sym clause))
-                                                 :vars #{clause}}
-                                     :aggregate (let [{:keys [agg-fn param]} clause]
-                                                  {:aggregate clause
-                                                   :col (or rename-sym (col-sym (str agg-fn "-" param)))
-                                                   :vars #{param}}))
-                                   (assoc :clause-type clause-type))))
-                           find-clauses
-                           (or rename-keys (repeat nil)))]
+;; HACK these are just the grouping-fns used in TPC-H
+;; - we're going to want a better way to recognise them
+(def ^:private grouping-fn? '#{count count-distinct sum avg min max})
 
-    (let [{agg-clauses :aggregate, lv-clauses :logic-var} (->> clauses (group-by :clause-type))]
-      (into {:clauses (->> clauses (mapv #(select-keys % [:lv :clause-type :col])))}
+(defn- plan-head-exprs [{find-clause :find, :keys [order-by]}]
+  (letfn [(with-col-name [prefix idx fc]
+            (-> (vec fc) (with-meta {::col (col-sym prefix (str idx))})))
 
-            (when-let [aggs (->> agg-clauses
-                                 (into {} (comp (filter #(= :aggregate (:clause-type %)))
-                                                (map (juxt :col :aggregate)))))]
-              {:aggs aggs
-               :grouping-vars (->> lv-clauses
-                                   (into #{} (comp (remove :aggregate) (mapcat :vars))))})))))
+          (plan-head-form [col [form-type form-arg :as form]]
+            (if (and (= form-type :fn-call)
+                     (grouping-fn? (:f form-arg)))
+              (let [{:keys [f], [[agg-arg-type :as agg-arg]] :args} form-arg]
+                (if (= agg-arg-type :logic-var)
+                  (-> col
+                      (with-meta {::agg {col (s/unform ::form form)}, ::col col}))
 
-(defn- plan-find [query]
-  (let [{:keys [clauses aggs grouping-vars]} (analyse-find-clauses query)]
+                  (let [projection-sym (col-sym col "_agg")]
+                    (-> col
+                        (with-meta {::col col
+                                    ::agg {col (list f projection-sym)}
+                                    ::agg-projection {projection-sym (s/unform ::form agg-arg)}})))))
+
+              (-> (s/unform ::form form)
+                  (with-meta {::grouping-vars (form-vars form), ::col col}))))]
+
+    (->> (concat (->> find-clause
+                      (into [] (map-indexed (partial with-col-name "_column"))))
+                 (->> order-by
+                      (into [] (comp (map :find-arg)
+                                     (map-indexed (partial with-col-name "_ob"))))))
+         (into {} (comp (distinct)
+                        (map
+                         (fn [[arg-type arg :as find-arg]]
+                           [find-arg
+                            (case arg-type
+                              :logic-var (-> arg (with-meta {::grouping-vars #{arg}, ::col arg}))
+                              :form (let [{::keys [col]} (meta find-arg)]
+                                      (plan-head-form col arg)))])))))))
+
+(defn- plan-find [{find-args :find, rename-keys :keys} head-exprs]
+  (let [clauses (->> find-args
+                     (mapv (fn [rename-key clause]
+                             (let [expr (get head-exprs clause)
+                                   {::keys [col]} (meta expr)
+                                   col (or (some-> rename-key col-sym) col)]
+                               (-> (if (= col expr) col {col expr})
+                                   (with-meta {::var col}))))
+                           (or rename-keys (repeat nil))))]
     (-> clauses
-        (->> (mapv (fn [{:keys [clause-type] :as clause}]
-                     (case clause-type
-                       :logic-var (let [in-col (col-sym (:lv clause))]
-                                    (if-let [out-col (:col clause)]
-                                      {out-col in-col}
-                                      in-col))
-                       :aggregate (:col clause)))))
-        (with-meta {::vars (into #{} (map :col) clauses)
-                    ::aggs aggs
-                    ::grouping-vars grouping-vars}))))
+        (with-meta {::vars (->> clauses (into #{} (map (comp ::var meta))))}))))
 
 (defn- wrap-find [plan find-clauses]
   (-> [:project find-clauses plan]
       (with-meta (-> (meta plan) (assoc ::vars (::vars (meta find-clauses)))))))
 
-(defn- plan-order-by [{:keys [order-by]}]
-  (when order-by
-    (let [{:keys [clauses aggs grouping-vars]} (analyse-find-clauses {:find (map :find-arg order-by)})]
-      (-> (mapv (fn [{:keys [clause-type] :as clause} {:keys [direction] :or {direction :asc}}]
-                  [(case clause-type
-                     :logic-var (:lv clause)
-                     :aggregate (:col clause))
-                   {:direction direction}])
-                clauses order-by)
-          (with-meta {::aggs aggs, :grouping-vars grouping-vars})))))
+(defn- plan-order-by [{:keys [order-by]} head-exprs]
+  (some->> order-by
+           (mapv (fn [{:keys [find-arg direction] :or {direction :asc}}]
+                   [(::col (meta (get head-exprs find-arg)))
+                    {:direction direction}]))))
 
 (defn- wrap-order-by [plan order-by-clauses]
   (-> [:order-by order-by-clauses plan]
       (with-meta (meta plan))))
 
-(defn- plan-group-by [{:keys [find-clauses order-by-clauses]}]
-  (let [{find-aggs ::aggs, find-grouping-vars ::grouping-vars} (meta find-clauses)
-        {order-by-aggs ::aggs, order-by-grouping-vars ::grouping-vars} (meta order-by-clauses)
-        aggs (not-empty (merge find-aggs order-by-aggs))
-        grouping-vars (set/union (set find-grouping-vars)
-                                 (set order-by-grouping-vars))]
-    (when aggs
-      (-> (into (vec grouping-vars)
-                (map (fn [[col agg]]
-                       {col (s/unform ::aggregate agg)}))
-                aggs)
-          (with-meta {::vars (into (set grouping-vars) (map key) aggs)})))))
+(defn- plan-group-by [head-exprs]
+  (let [head-exprs (vals head-exprs)]
+    (when-let [aggs (->> head-exprs (into {} (keep (comp ::agg meta))) (not-empty))]
+      (let [grouping-vars (->> head-exprs (into [] (mapcat (comp ::grouping-vars meta))))]
+        (-> (into grouping-vars
+                  (map (fn [[col agg]]
+                         {col agg}))
+                  aggs)
+            (with-meta {::vars (into (set grouping-vars) (map key) aggs)
+                        ::agg-projections (->> head-exprs
+                                               (into [] (keep (comp ::agg-projection meta)))
+                                               (not-empty))}))))))
 
 (defn- wrap-group-by [plan group-by-clauses]
-  (-> [:group-by group-by-clauses plan]
-      (with-meta (-> (meta plan) (assoc ::vars (::vars (meta group-by-clauses)))))))
+  (let [{::keys [agg-projections]} (meta group-by-clauses)]
+    (-> [:group-by group-by-clauses
+         (if agg-projections
+           [:map agg-projections plan]
+           plan)]
+        (with-meta (-> (meta plan) (assoc ::vars (::vars (meta group-by-clauses))))))))
 
 (defn- wrap-head [plan query]
-  (let [find-clauses (plan-find query)
-        order-by-clauses (plan-order-by query)
-        group-by-clauses (plan-group-by {:find-clauses find-clauses
-                                         :order-by-clauses order-by-clauses})]
+  (let [head-exprs (plan-head-exprs query)
+        find-clauses (plan-find query head-exprs)
+        order-by-clauses (plan-order-by query head-exprs)
+        group-by-clauses (plan-group-by head-exprs)]
 
     (-> plan
         (cond-> group-by-clauses (wrap-group-by group-by-clauses)
@@ -737,4 +743,3 @@
         (catch Throwable t
           (.close params)
           (throw t))))))
-

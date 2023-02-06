@@ -9,8 +9,8 @@
            l_linestatus
            (sum l_quantity)
            (sum l_extendedprice)
-           (sum disc_price)
-           (sum charge)
+           (sum (* l_extendedprice (- 1 l_discount)))
+           (sum (* (* l_extendedprice (- 1 l_discount)) (+ 1 l_tax)))
            (avg l_quantity)
            (avg l_extendedprice)
            (avg l_discount)
@@ -25,8 +25,6 @@
             [l :l_tax l_tax]
             [l :l_returnflag l_returnflag]
             [l :l_linestatus l_linestatus]
-            [(* l_extendedprice (- 1 l_discount)) disc_price]
-            [(* (* l_extendedprice (- 1 l_discount)) (+ 1 l_tax)) charge]
             [(<= l_shipdate #time/date "1998-09-02")]]
     :order-by [[l_returnflag :asc] [l_linestatus :asc]]})
 
@@ -120,9 +118,8 @@
 
     :order-by [[o_orderpriority :asc]]})
 
-;; TODO reintro agg exprs
 (def q5
-  (-> '{:find [n_name (sum li_price)]
+  (-> '{:find [n_name (sum (* l_extendedprice (- 1 l_discount)))]
         :keys [n_name revenue]
         :in [?region]
         :where [[o :_table :orders]
@@ -141,7 +138,6 @@
                 [l :l_suppkey s]
                 [l :l_extendedprice l_extendedprice]
                 [l :l_discount l_discount]
-                [(* l_extendedprice (- 1 l_discount)) li_price]
 
                 [s :s_nationkey n]
                 [c :c_nationkey n]
@@ -151,16 +147,14 @@
         :order-by [[(sum li_price) :desc]]}
       (with-in-args ["ASIA"])))
 
-;; TODO reintro nested agg exprs
 (def q6
-  '{:find [(sum revenue)]
+  '{:find [(sum (* l_extendedprice l_discount))]
     :keys [revenue]
     :where [[l :_table :lineitem]
             [l :l_shipdate l_shipdate]
             [l :l_quantity l_quantity]
             [l :l_extendedprice l_extendedprice]
             [l :l_discount l_discount]
-            [(* l_extendedprice l_discount) revenue]
             [(>= l_shipdate #time/date "1994-01-01")]
             [(< l_shipdate #time/date "1995-01-01")]
             [(>= l_discount 0.05)]
@@ -299,7 +293,7 @@
   '{:find [ps_partkey value]
     :where [(q {:find [(sum (* ps_supplycost ps_availqty))]
                 :keys [total-value]
-                :where [[ps :_table partsupp]
+                :where [[ps :_table :partsupp]
                         [s :_table :supplier]
                         [n :_table :nation]
 
@@ -310,7 +304,7 @@
                         [n :n_name "GERMANY"]]})
             (q {:find [ps_partkey (sum (* ps_supplycost ps_availqty))]
                 :keys [ps_partkey value]
-                :where [[ps :_table partsupp]
+                :where [[ps :_table :partsupp]
                         [s :_table :supplier]
                         [n :_table :nation]
 
@@ -323,11 +317,10 @@
             [(> value (* 0.0001 total-value))]]
     :order-by [[value :desc]]})
 
-;; TODO reintro nested agg exprs
 (def q12
   (-> '{:find [l_shipmode
-               (sum high-line-count)
-               (sum low-line-count)]
+               (sum (case o_orderpriority "1-URGENT" 1, "2-HIGH" 1, 0))
+               (sum (case o_orderpriority "1-URGENT" 0, "2-HIGH" 0, 1))]
         :keys [l_shipmode high_line_count low_line_count]
         :in [[l_shipmode ...]]
         :where [[l :_table :lineitem]
@@ -343,10 +336,7 @@
                 [(< l_commitdate l_receiptdate)]
                 [(< l_shipdate l_commitdate)]
 
-                [o :o_orderpriority o_orderpriority]
-
-                [(case o_orderpriority "1-URGENT" 1, "2-HIGH" 1, 0) high-line-count]
-                [(case o_orderpriority "1-URGENT" 0, "2-HIGH" 0, 1) low-line-count]]
+                [o :o_orderpriority o_orderpriority]]
         :order-by [[l_shipmode :asc]]}
 
       (with-in-args [#{"MAIL" "SHIP"}])))
@@ -366,7 +356,8 @@
 
 (def q14
   '{:find [(* 100 (/ promo total))]
-    :where [(q {:find [(sum (if (clojure.string/starts-with? p_type "PROMO")
+    :keys [promo_revenue]
+    :where [(q {:find [(sum (if (like p_type "PROMO%")
                               (* l_extendedprice (- 1 l_discount))
                               0))
                        (sum (* l_extendedprice (- 1 l_discount)))]
