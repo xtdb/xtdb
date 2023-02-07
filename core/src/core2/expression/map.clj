@@ -19,6 +19,7 @@
 (def ^:private ^org.apache.arrow.memory.util.hash.ArrowBufHasher hasher
   (MurmurHasher.))
 
+#_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface IIndexHasher
   (^int hashCode [^int idx]))
 
@@ -40,18 +41,18 @@
               (recur (inc n) (MurmurHasher/combineHashCode hash-code (.hashCode v (.getIndex col idx) hasher))))
             hash-code))))))
 
-#_{:clj-kondo/ignore [:unused-binding]}
+#_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface IRelationMapBuilder
   (^void add [^int inIdx])
   (^int addIfNotPresent [^int inIdx]))
 
-#_{:clj-kondo/ignore [:unused-binding]}
+#_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface IRelationMapProber
   (^int indexOf [^int inIdx, ^boolean removeOnMatch])
   (^void forEachMatch [^int inIdx, ^java.util.function.IntConsumer c])
   (^int matches [^int inIdx]))
 
-#_{:clj-kondo/ignore [:unused-binding]}
+#_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface IRelationMap
   (^java.util.Map buildColumnTypes [])
   (^java.util.List buildKeyColumnNames [])

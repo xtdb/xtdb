@@ -41,6 +41,7 @@
 
 (set! *unchecked-math* :warn-on-boxed)
 
+#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (definterface ScanSource
   (^core2.metadata.IMetadataManager metadataManager [])
   (^core2.buffer_pool.BufferPool bufferPool [])

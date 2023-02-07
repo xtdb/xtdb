@@ -25,14 +25,14 @@
 
 (set! *unchecked-math* :warn-on-boxed)
 
-#_{:clj-kondo/ignore [:unused-binding]}
+#_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface IMetadataManager
   (^void registerNewChunk [^java.util.Map roots, ^long chunk-idx])
   (^java.util.SortedSet knownChunks [])
   (^java.util.concurrent.CompletableFuture withMetadata [^long chunkIdx, ^java.util.function.BiFunction f])
   (columnType [^String colName]))
 
-#_{:clj-kondo/ignore [:unused-binding]}
+#_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface IMetadataIndices
   (^java.util.Set columnNames [])
   (^Long columnIndex [^String columnName])
@@ -62,15 +62,17 @@
                        (t/col-type->field "max-row-id" [:union #{:null :i64}])
                        (t/col-type->field "row-id-bloom" [:union #{:null :varbinary}]))
 
-            (t/col-type->field "count" :i64)
+            (t/col-type->field 'count :i64)
 
             (t/->field "types" t/struct-type true)
 
-            (t/col-type->field "bloom" [:union #{:null :varbinary}])]))
+            (t/col-type->field 'bloom [:union #{:null :varbinary}])]))
 
+#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (definterface ContentMetadataWriter
   (^void writeContentMetadata [^int typesVecIdx]))
 
+#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (definterface NestedMetadataWriter
   (appendNestedMetadata ^core2.metadata.ContentMetadataWriter [^org.apache.arrow.vector.ValueVector contentVector]))
 

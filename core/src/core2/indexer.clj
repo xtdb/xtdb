@@ -63,7 +63,7 @@
 
   opts)
 
-#_{:clj-kondo/ignore [:unused-binding]}
+#_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface IInternalIdManager
   (^long getOrCreateInternalId [^String table, ^Object id, ^long row-id])
   (^boolean isKnownId [^String table, ^Object id]))
@@ -136,7 +136,7 @@
                                             (.get row-id-vec (.getIndex row-id-col idx)))))))))))
     iid-mgr))
 
-#_{:clj-kondo/ignore [:unused-binding]}
+#_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface ILiveColumn
   (^void writeRowId [^long rowId])
   (^boolean containsRowId [^long rowId])
@@ -206,7 +206,7 @@
                (-> (t/->field field-name t/dense-union-type false) (.createVector allocator))
                (Roaring64Bitmap.)))
 
-#_{:clj-kondo/ignore [:unused-binding]}
+#_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface IDocumentIndexer
   (^core2.indexer.ILiveColumn getLiveColumn [^String fieldName])
   (^java.util.Map liveColumnsWith [^long rowId])
@@ -244,14 +244,14 @@
     (doseq [^ILiveColumn live-col (vals live-columns)]
       (.abort live-col))))
 
-#_{:clj-kondo/ignore [:unused-binding]}
+#_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface TransactionIndexer
   (^core2.watermark.Watermark getWatermark [])
   (^core2.api.TransactionInstant indexTx [^core2.api.TransactionInstant tx
                                           ^org.apache.arrow.vector.VectorSchemaRoot txRoot])
   (^core2.api.TransactionInstant latestCompletedTx []))
 
-#_{:clj-kondo/ignore [:unused-binding]}
+#_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface IndexerPrivate
   (^java.nio.ByteBuffer writeColumn [^core2.indexer.LiveColumn live-column])
   (^void closeCols [])
@@ -273,7 +273,7 @@
                         application-time-end [:union #{:null [:timestamp-tz :micro "UTC"]}]
                         evict? :bool}]]}])
 
-#_{:clj-kondo/ignore [:unused-binding]}
+#_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface ILogOpIndexer
   (^void logPut [^long iid, ^long rowId, ^long app-timeStart, ^long app-timeEnd])
   (^void logDelete [^long iid, ^long app-timeStart, ^long app-timeEnd])
@@ -281,6 +281,7 @@
   (^void commit [])
   (^void abort []))
 
+#_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface ILogIndexer
   (^core2.indexer.ILogOpIndexer startTx [^core2.api.TransactionInstant txKey])
   (^java.nio.ByteBuffer writeLog [])
@@ -423,6 +424,7 @@
 
 (def ^:private abort-exn (err/runtime-err :abort-exn))
 
+#_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface OpIndexer
   (^org.apache.arrow.vector.complex.DenseUnionVector indexOp [^long tx-op-idx]
    "returns a tx-ops-vec of more operations (mostly for `:call`)"))
@@ -659,6 +661,7 @@
         (.endValue vec-str-writer)
         (.endValue vec-writer)))))
 
+#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (definterface SqlOpIndexer
   (^void indexOp [^core2.vector.IIndirectRelation inRelation, queryOpts]))
 

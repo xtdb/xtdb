@@ -18,7 +18,7 @@
            java.util.function.IntUnaryOperator
            org.apache.arrow.vector.VectorSchemaRoot))
 
-#_{:clj-kondo/ignore [:unused-binding]}
+#_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface IWatermark
   (columnType [^String columnName])
   (^Iterable liveSlices [^Iterable columnNames])
@@ -30,7 +30,7 @@
                                                            ^longs temporalMaxRange
                                                            ^org.roaringbitmap.longlong.Roaring64Bitmap rowIdBitmap]))
 
-#_{:clj-kondo/ignore [:unused-binding]}
+#_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface IWatermarkManager
   (^core2.watermark.IWatermark getWatermark [])
   (^void setWatermark [^long chunkIdx,

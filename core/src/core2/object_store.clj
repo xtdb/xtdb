@@ -12,7 +12,7 @@
 
 (set! *unchecked-math* :warn-on-boxed)
 
-#_{:clj-kondo/ignore [:unused-binding]}
+#_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface ObjectStore
   (^java.util.concurrent.CompletableFuture #_<ByteBuffer> getObject [^String k]
    "Asynchonously returns the given object in a ByteBuffer
