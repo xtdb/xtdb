@@ -2,7 +2,7 @@
   (:require [cheshire.core :as json]
             [clojure.java.io :as io]
             [clojure.test :as t]
-            [core2.json :as c2-json]
+            [core2.test-json :as tj]
             [core2.tx-producer :as txp]
             [core2.util :as util])
   (:import org.apache.arrow.memory.RootAllocator))
@@ -61,6 +61,6 @@
                    :app-time-as-of-now? true
                    :default-tz #time/zone "Europe/London"})
 
-                 (c2-json/arrow-streaming->json)
+                 (tj/arrow-streaming->json)
                  #_(doto (->> (spit expected-file)))
                  (json/parse-string))))))

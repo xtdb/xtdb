@@ -1,0 +1,33 @@
+{
+  "schema" : {
+    "fields" : [{
+      "name" : "_row-id",
+      "nullable" : false,
+      "type" : {
+        "name" : "int",
+        "bitWidth" : 64,
+        "isSigned" : true
+      },
+      "children" : [ ]
+    },{
+      "name" : "id",
+      "nullable" : false,
+      "type" : {
+        "name" : "union",
+        "mode" : "Dense",
+        "typeIds" : [0]
+      },
+      "children" : [{
+        "name" : "i64",
+        "nullable" : false,
+        "type" : {
+          "name" : "int",
+          "bitWidth" : 64,
+          "isSigned" : true
+        },
+        "children" : [ ]
+      }]
+    }]
+  },
+  "batches" : [ ]
+}

@@ -90,12 +90,14 @@
                                                        :params [:union #{:null :varbinary}]}])
 
                  (types/->field "put" types/struct-type false
+                                (types/col-type->field 'table :utf8)
+                                (types/->field "id" types/dense-union-type false)
                                 (types/->field "document" types/dense-union-type false)
                                 (types/col-type->field 'application_time_start nullable-inst-type)
                                 (types/col-type->field 'application_time_end nullable-inst-type))
 
                  (types/->field "delete" types/struct-type false
-                                (types/col-type->field '_table [:union #{:null :utf8}])
+                                (types/col-type->field 'table :utf8)
                                 (types/->field "id" types/dense-union-type false)
                                 (types/col-type->field 'application_time_start nullable-inst-type)
                                 (types/col-type->field 'application_time_end nullable-inst-type))
@@ -158,35 +160,44 @@
 
 (defn- ->put-writer [^IDenseUnionWriter tx-ops-writer]
   (let [put-writer (.asStruct (.writerForTypeId tx-ops-writer 1))
+        table-writer (.writerForName put-writer "table")
+        id-writer (.asDenseUnion (.writerForName put-writer "id"))
         doc-writer (.asDenseUnion (.writerForName put-writer "document"))
         app-time-start-writer (.writerForName put-writer "application_time_start")
         app-time-end-writer (.writerForName put-writer "application_time_end")]
     (fn write-put! [{:keys [doc], {:keys [app-time-start app-time-end]} :app-time-opts}]
-      ;; HACK always coerce table-name to string
-      ;; need to differentiate different types later on
-      (let [doc (-> (into {:_table "xt_docs"} doc)
-                    (update :_table name))]
-        (.startValue put-writer)
+      (.startValue put-writer)
+
+      (let [{:keys [id]} doc]
+        (doto (.writerForType id-writer (types/value->col-type id))
+          (.startValue)
+          (->> (types/write-value! id))
+          (.endValue)))
+
+      (let [doc (dissoc doc :_table :id)]
         (doto (.writerForType doc-writer (types/value->col-type doc))
           (.startValue)
           (->> (types/write-value! doc))
-          (.endValue))
+          (.endValue)))
 
-        (types/write-value! app-time-start app-time-start-writer)
-        (types/write-value! app-time-end app-time-end-writer)
+      (types/write-value! (name (:_table doc "xt_docs")) table-writer)
+      (types/write-value! app-time-start app-time-start-writer)
+      (types/write-value! app-time-end app-time-end-writer)
 
-        (.endValue put-writer)))))
+      (.endValue put-writer))))
 
 (defn- ->delete-writer [^IDenseUnionWriter tx-ops-writer]
   (let [delete-writer (.asStruct (.writerForTypeId tx-ops-writer 2))
-        table-writer (.writerForName delete-writer "_table")
+        table-writer (.writerForName delete-writer "table")
         id-writer (.asDenseUnion (.writerForName delete-writer "id"))
         app-time-start-writer (.writerForName delete-writer "application_time_start")
         app-time-end-writer (.writerForName delete-writer "application_time_end")]
-    (fn write-delete! [{:keys [id table], {:keys [app-time-start app-time-end]} :app-time-opts}]
+    (fn write-delete! [{:keys [id table],
+                        {:keys [app-time-start app-time-end]} :app-time-opts
+                        :or {table "xt_docs"}}]
       (.startValue delete-writer)
 
-      (some-> table (types/write-value! table-writer))
+      (types/write-value! table table-writer)
 
       (doto (-> id-writer
                 (.writerForType (types/value->col-type id)))

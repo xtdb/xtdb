@@ -7,7 +7,7 @@
             [core2.api :as c2]
             [core2.buffer-pool :as bp]
             [core2.indexer :as idx]
-            [core2.json :as c2-json]
+            [core2.test-json :as tj]
             [core2.node :as node]
             [core2.metadata :as meta]
             [core2.object-store :as os]
@@ -15,7 +15,8 @@
             [core2.ts-devices :as ts]
             [core2.types :as ty]
             [core2.util :as util]
-            [core2.watermark :as wm])
+            [core2.watermark :as wm]
+            [clojure.string :as str])
   (:import core2.api.TransactionInstant
            [core2.buffer_pool BufferPool IBufferPool]
            core2.node.Node
@@ -29,6 +30,8 @@
            [org.apache.arrow.memory ArrowBuf BufferAllocator]
            [org.apache.arrow.vector BigIntVector VectorLoader VectorSchemaRoot]
            [org.apache.arrow.vector.complex StructVector]))
+
+(t/use-fixtures :once tu/with-allocator)
 
 (def txs
   [[[:put {:id "device-info-demo000000",
@@ -72,7 +75,7 @@
 
 (t/deftest can-build-chunk-as-arrow-ipc-file-format
   (let [node-dir (util/->path "target/can-build-chunk-as-arrow-ipc-file-format")
-        last-tx-key (c2/map->TransactionInstant {:tx-id 8997, :sys-time (util/->instant #inst "2020-01-02")})
+        last-tx-key (c2/map->TransactionInstant {:tx-id 8349, :sys-time (util/->instant #inst "2020-01-02")})
         total-number-of-ops (count (for [tx-ops txs
                                          op tx-ops]
                                      op))]
@@ -97,7 +100,7 @@
         (t/testing "watermark"
           (with-open [^AutoCloseable rc-watermark (.getWatermark wm-mgr)]
             (let [live-roots (:live-roots (:watermark rc-watermark))
-                  id-column (find live-roots "id")]
+                  id-column (find (get live-roots "xt_docs") "id")]
               (t/is (zero? (:chunk-idx (:watermark rc-watermark))))
               (t/is (t/is 20 (count live-roots)))
               (t/is (= ["id" 4]
@@ -113,14 +116,15 @@
                   :latest-row-id (dec total-number-of-ops)}
                  (idx/latest-tx {:object-store os, :buffer-pool bp})))
 
-        (let [objects-list (.listObjects os "metadata-")]
+        (let [objects-list (->> (.listObjects os) (filter #(str/includes? % "metadata.arrow")))]
           (t/is (= 1 (count objects-list)))
-          (t/is (= "metadata-0000000000000000.arrow" (first objects-list))))
+          (t/is (= "chunk-00/xt_docs/metadata.arrow" (first objects-list))))
 
-        (tu/check-json (.toPath (io/as-file (io/resource "can-build-chunk-as-arrow-ipc-file-format"))) os)
+        (tj/check-json (.toPath (io/as-file (io/resource "can-build-chunk-as-arrow-ipc-file-format")))
+                       (.resolve node-dir "objects"))
 
         (t/testing "buffer pool"
-          (let [buffer-name "metadata-0000000000000000.arrow"
+          (let [buffer-name "chunk-00/xt_docs/metadata.arrow"
                 ^ArrowBuf buffer @(.getBuffer bp buffer-name)
                 footer (util/read-arrow-footer buffer)]
             (t/is (= 3 (count (.buffers ^BufferPool bp))))
@@ -137,7 +141,7 @@
             (with-open [^VectorSchemaRoot metadata-batch (VectorSchemaRoot/create (.getSchema footer) a)
                         record-batch (util/->arrow-record-batch-view (first (.getRecordBatches footer)) buffer)]
               (.load (VectorLoader. metadata-batch) record-batch)
-              (t/is (= 38 (.getRowCount metadata-batch)))
+              (t/is (= 36 (.getRowCount metadata-batch)))
               (let [id-col-idx (-> (meta/->metadata-idxs metadata-batch)
                                    (.columnIndex "id"))]
                 (t/is (= "id" (-> (.getVector metadata-batch "column")
@@ -244,14 +248,13 @@
     (util/delete-dir node-dir)
 
     (with-open [node (tu/->local-node {:node-dir node-dir})]
-      (let [^ObjectStore os (tu/component node ::os/file-system-object-store)]
+      (-> (c2/submit-tx node tx-ops)
+          (tu/then-await-tx node (Duration/ofMillis 2000)))
 
-        (-> (c2/submit-tx node tx-ops)
-            (tu/then-await-tx node (Duration/ofMillis 2000)))
+      (tu/finish-chunk node)
 
-        (tu/finish-chunk node)
-
-        (tu/check-json (.toPath (io/as-file (io/resource "can-handle-dynamic-cols-in-same-block"))) os)))))
+      (tj/check-json (.toPath (io/as-file (io/resource "can-handle-dynamic-cols-in-same-block")))
+                     (.resolve node-dir "objects")))))
 
 (t/deftest test-multi-block-metadata
   (let [node-dir (util/->path "target/multi-block-metadata")
@@ -268,29 +271,28 @@
     (util/delete-dir node-dir)
 
     (with-open [node (tu/->local-node {:node-dir node-dir, :max-rows-per-block 3})]
-      (let [^ObjectStore os (tu/component node ::os/file-system-object-store)]
+      (-> (c2/submit-tx node tx0)
+          (tu/then-await-tx node (Duration/ofMillis 200)))
 
-        (-> (c2/submit-tx node tx0)
-            (tu/then-await-tx node (Duration/ofMillis 200)))
+      (-> (c2/submit-tx node tx1)
+          (tu/then-await-tx node (Duration/ofMillis 200)))
 
-        (-> (c2/submit-tx node tx1)
-            (tu/then-await-tx node (Duration/ofMillis 200)))
+      (tu/finish-chunk node)
 
-        (tu/finish-chunk node)
-
-        (tu/check-json (.toPath (io/as-file (io/resource "multi-block-metadata"))) os))
+      (tj/check-json (.toPath (io/as-file (io/resource "multi-block-metadata")))
+                     (.resolve node-dir "objects"))
 
       (let [^IMetadataManager mm (tu/component node ::meta/metadata-manager)]
         (t/is (= [:union #{:utf8 [:timestamp-tz :micro "UTC"] :f64}]
-                 (.columnType mm "id")))
+                 (.columnType mm "xt_docs" "id")))
 
         (t/is (= [:list [:union #{:utf8 [:timestamp-tz :micro "UTC"] :f64 :bool}]]
-                 (.columnType mm "list")))
+                 (.columnType mm "xt_docs" "list")))
 
         (t/is (= [:struct '{a [:union #{:bool :i64}]
                             b [:union #{:utf8
                                         [:struct {c :utf8, d :utf8}]}]}]
-                 (.columnType mm "struct")))))))
+                 (.columnType mm "xt_docs" "struct")))))))
 
 (t/deftest round-trips-nils
   (with-open [node (node/start-node {})]
@@ -331,29 +333,28 @@
     (util/delete-dir node-dir)
 
     (with-open [node (tu/->local-node {:node-dir node-dir})]
-      (let [^ObjectStore os (::os/file-system-object-store @(:!system node))]
+      (-> (c2/submit-tx node [[:put {:id "foo"}]
+                              [:put {:id "bar"}]])
+          (tu/then-await-tx node))
 
-        (-> (c2/submit-tx node [[:put {:id "foo"}]
-                                [:put {:id "bar"}]])
-            (tu/then-await-tx node))
+      ;; aborted tx shows up in log
+      (-> (c2/submit-tx node [[:sql "INSERT INTO foo (id, application_time_start, application_time_end) VALUES (1, DATE '2020-01-01', DATE '2019-01-01')"]])
+          (tu/then-await-tx node))
 
-        ;; aborted tx shows up in log
-        (-> (c2/submit-tx node [[:sql "INSERT INTO foo (id, application_time_start, application_time_end) VALUES (1, DATE '2020-01-01', DATE '2019-01-01')"]])
-            (tu/then-await-tx node))
+      (-> (c2/submit-tx node [[:delete "foo" {:app-time-start #inst "2020-04-01"}]
+                              [:put {:id "bar", :month "april"},
+                               {:app-time-start #inst "2020-04-01"
+                                :app-time-end #inst "2020-05-01"}]])
+          (tu/then-await-tx node))
 
-        (-> (c2/submit-tx node [[:delete "foo" {:app-time-start #inst "2020-04-01"}]
-                                [:put {:id "bar", :month "april"},
-                                 {:app-time-start #inst "2020-04-01"
-                                  :app-time-end #inst "2020-05-01"}]])
-            (tu/then-await-tx node))
+      (tu/finish-chunk node)
 
-        (tu/finish-chunk node)
-
-        (tu/check-json (.toPath (io/as-file (io/resource "writes-log-file"))) os)))))
+      (tj/check-json (.toPath (io/as-file (io/resource "writes-log-file")))
+                     (.resolve node-dir "objects")))))
 
 (t/deftest can-stop-node-without-writing-chunks
   (let [node-dir (util/->path "target/can-stop-node-without-writing-chunks")
-        last-tx-key (c2/map->TransactionInstant {:tx-id 8997, :sys-time (util/->instant #inst "2020-01-02")})]
+        last-tx-key (c2/map->TransactionInstant {:tx-id 8349, :sys-time (util/->instant #inst "2020-01-02")})]
     (util/delete-dir node-dir)
 
     (with-open [node (tu/->local-node {:node-dir node-dir})]
@@ -409,18 +410,18 @@
                    (idx/latest-tx {:object-store os, :buffer-pool bp})))
 
           (let [objs (.listObjects os)]
-            (t/is (= 4 (count (filter #(re-matches #"temporal-\p{XDigit}+.*" %) objs))))
-            (t/is (= 4 (count (filter #(re-matches #"temporal-snapshot-\p{XDigit}+.*" %) objs))))
-            (t/is (= 4 (count (filter #(re-matches #"metadata-.*" %) objs))))
-            (t/is (= 1 (count (filter #(re-matches #"chunk-.*-api-version.*" %) objs))))
-            (t/is (= 4 (count (filter #(re-matches #"chunk-.*-battery-level.*" %) objs))))))))
-
-    (c2-json/write-arrow-json-files (.toFile (.resolve node-dir "objects")))
+            (t/is (= 4 (count (filter #(re-matches #"^chunk-\p{XDigit}+/temporal\.arrow$" %) objs))))
+            (t/is (= 4 (count (filter #(re-matches #"temporal-snapshots/\p{XDigit}+.*" %) objs))))
+            (t/is (= 1 (count (filter #(re-matches #"chunk-\p{XDigit}+/device-info/metadata\.arrow" %) objs))))
+            (t/is (= 4 (count (filter #(re-matches #"chunk-\p{XDigit}+/device-readings/metadata\.arrow" %) objs))))
+            (t/is (= 1 (count (filter #(re-matches #"chunk-.*/device-info/content-api-version\.arrow" %) objs))))
+            (t/is (= 4 (count (filter #(re-matches #"chunk-.*/device-readings/content-battery-level\.arrow" %) objs))))))))
 
     (t/testing "blocks are row-id aligned"
       (letfn [(row-id-ranges [^String file-name]
-                (let [path (.resolve (.resolve node-dir "objects") file-name)]
-                  (for [batch (-> (Files/readString path)
+                (let [path (-> node-dir (.resolve "objects") (.resolve file-name))
+                      json-path (tj/write-arrow-json-file path)]
+                  (for [batch (-> (Files/readString json-path)
                                   json/parse-string
                                   (get "batches"))
                         :let [data (-> (get batch "columns")
@@ -430,29 +431,33 @@
                      (Long/parseLong (last data))
                      (count data)])))]
 
-        (t/is (= [[0 299 300] [300 599 300] [600 899 300] [900 1199 300]
-                  [1200 1499 300] [1500 1799 300] [1800 2099 300]
-                  [2100 2399 300] [2400 2699 300] [2700 2999 300]]
-                 (row-id-ranges "chunk-0000000000000000-id.arrow.json")))
-
         (t/is (= [[0 298 150] [300 598 150] [600 898 150] [900 1198 150]
                   [1200 1498 150] [1500 1798 150] [1800 1998 100]]
-                 (row-id-ranges "chunk-0000000000000000-api-version.arrow.json")))
+                 (row-id-ranges "chunk-00/device-info/content-id.arrow")))
 
         (t/is (= [[1 299 150] [301 599 150] [601 899 150] [901 1199 150]
                   [1201 1499 150] [1501 1799 150] [1801 2099 200]
                   [2100 2399 300] [2400 2699 300] [2700 2999 300]]
-                 (row-id-ranges "chunk-0000000000000000-battery-level.arrow.json")))
+                 (row-id-ranges "chunk-00/device-readings/content-id.arrow")))
+
+        (t/is (= [[0 298 150] [300 598 150] [600 898 150] [900 1198 150]
+                  [1200 1498 150] [1500 1798 150] [1800 1998 100]]
+                 (row-id-ranges "chunk-00/device-info/content-api-version.arrow")))
+
+        (t/is (= [[1 299 150] [301 599 150] [601 899 150] [901 1199 150]
+                  [1201 1499 150] [1501 1799 150] [1801 2099 200]
+                  [2100 2399 300] [2400 2699 300] [2700 2999 300]]
+                 (row-id-ranges "chunk-00/device-readings/content-battery-level.arrow")))
 
         (t/is (= [[3000 3299 300] [3300 3599 300] [3600 3899 300] [3900 4199 300]
                   [4200 4499 300] [4500 4799 300] [4800 5099 300]
                   [5100 5399 300] [5400 5699 300] [5700 5999 300]]
-                 (row-id-ranges "chunk-0000000000000bb8-id.arrow.json")))
+                 (row-id-ranges "chunk-2bb8/device-readings/content-id.arrow")))
 
         (t/is (= [[3000 3299 300] [3300 3599 300] [3600 3899 300] [3900 4199 300]
                   [4200 4499 300] [4500 4799 300] [4800 5099 300]
                   [5100 5399 300] [5400 5699 300] [5700 5999 300]]
-                 (row-id-ranges "chunk-0000000000000bb8-battery-level.arrow.json")))))))
+                 (row-id-ranges "chunk-2bb8/device-readings/content-battery-level.arrow")))))))
 
 (t/deftest can-ingest-ts-devices-mini-into-multiple-nodes
   (let [node-dir (util/->path "target/can-ingest-ts-devices-mini-into-multiple-nodes")
@@ -488,11 +493,11 @@
             (tu/await-temporal-snapshot-build node)
 
             (let [objs (.listObjects os)]
-              (t/is (= 11 (count (filter #(re-matches #"temporal-\p{XDigit}+.*" %) objs))))
-              (t/is (= 11 (count (filter #(re-matches #"temporal-snapshot-\p{XDigit}+.*" %) objs))))
-              (t/is (= 11 (count (filter #(re-matches #"metadata-.*" %) objs))))
-              (t/is (= 2 (count (filter #(re-matches #"chunk-.*-api-version.*" %) objs))))
-              (t/is (= 11 (count (filter #(re-matches #"chunk-.*-battery-level.*" %) objs)))))))))))
+              (t/is (= 11 (count (filter #(re-matches #"chunk-\p{XDigit}+/temporal\.arrow" %) objs))))
+              (t/is (= 11 (count (filter #(re-matches #"temporal-snapshots/\p{XDigit}+.arrow" %) objs))))
+              (t/is (= 13 (count (filter #(re-matches #"chunk-\p{XDigit}+/device-(?:info|readings)/metadata.arrow" %) objs))))
+              (t/is (= 2 (count (filter #(re-matches #"chunk-\p{XDigit}+/device-info/content-api-version\.arrow" %) objs))))
+              (t/is (= 11 (count (filter #(re-matches #"chunk-\p{XDigit}+/device-readings/content-battery-level\.arrow" %) objs)))))))))))
 
 (t/deftest can-ingest-ts-devices-mini-with-stop-start-and-reach-same-state
   (let [node-dir (util/->path "target/can-ingest-ts-devices-mini-with-stop-start-and-reach-same-state")
@@ -537,13 +542,16 @@
                 (t/is (< latest-row-id (count first-half-tx-ops)))
 
                 (let [objs (.listObjects os)]
-                  (t/is (= 5 (count (filter #(re-matches #"metadata-.*" %) objs))))
-                  (t/is (= 2 (count (filter #(re-matches #"chunk-.*-api-version.*" %) objs))))
-                  (t/is (= 5 (count (filter #(re-matches #"chunk-.*-battery-level.*" %) objs)))))
+                  (t/is (= 5 (count (filter #(re-matches #"^chunk-\p{XDigit}+/temporal\.arrow$" %) objs))))
+                  (t/is (= 5 (count (filter #(re-matches #"temporal-snapshots/\p{XDigit}+.*" %) objs))))
+                  (t/is (= 2 (count (filter #(re-matches #"chunk-\p{XDigit}+/device-info/metadata\.arrow" %) objs))))
+                  (t/is (= 5 (count (filter #(re-matches #"chunk-\p{XDigit}+/device-readings/metadata\.arrow" %) objs))))
+                  (t/is (= 2 (count (filter #(re-matches #"chunk-.*/device-info/content-api-version\.arrow" %) objs))))
+                  (t/is (= 5 (count (filter #(re-matches #"chunk-.*/device-readings/content-battery-level\.arrow" %) objs)))))
 
                 (t/is (= 2000 (count (.id->internal-id iid-mgr)))))
 
-              (t/is (= :utf8 (.columnType mm "id")))
+              (t/is (= :utf8 (.columnType mm "device-readings" "id")))
 
               (let [^TransactionInstant
                     second-half-tx-key @(reduce
@@ -567,7 +575,7 @@
 
                     (t/is (>= (count (.id->internal-id iid-mgr)) 2000))
 
-                    (t/is (= :utf8 (.columnType mm "id"))))
+                    (t/is (= :utf8 (.columnType mm "device-info" "id"))))
 
                   (doseq [^Node node [new-node node]]
                     (t/is (= second-half-tx-key (-> second-half-tx-key
@@ -582,13 +590,14 @@
                                 ^IMetadataManager mm (tu/component node ::meta/metadata-manager)]]
 
                     (let [objs (.listObjects os)]
-                      (t/is (= 11 (count (filter #(re-matches #"temporal-\p{XDigit}+.*" %) objs))))
-                      (t/is (= 11 (count (filter #(re-matches #"temporal-snapshot-\p{XDigit}+.*" %) objs))))
-                      (t/is (= 11 (count (filter #(re-matches #"metadata-.*" %) objs))))
-                      (t/is (= 2 (count (filter #(re-matches #"chunk-.*-api-version.*" %) objs))))
-                      (t/is (= 11 (count (filter #(re-matches #"chunk-.*-battery-level.*" %) objs)))))
+                      (t/is (= 11 (count (filter #(re-matches #"^chunk-\p{XDigit}+/temporal\.arrow$" %) objs))))
+                      (t/is (= 11 (count (filter #(re-matches #"temporal-snapshots/\p{XDigit}+.*" %) objs))))
+                      (t/is (= 2 (count (filter #(re-matches #"chunk-\p{XDigit}+/device-info/metadata\.arrow" %) objs))))
+                      (t/is (= 11 (count (filter #(re-matches #"chunk-\p{XDigit}+/device-readings/metadata\.arrow" %) objs))))
+                      (t/is (= 2 (count (filter #(re-matches #"chunk-.*/device-info/content-api-version\.arrow" %) objs))))
+                      (t/is (= 11 (count (filter #(re-matches #"chunk-.*/device-readings/content-battery-level\.arrow" %) objs)))))
 
-                    (t/is (= :utf8 (.columnType mm "id")))
+                    (t/is (= :utf8 (.columnType mm "device-info" "id")))
 
                     (t/is (= 2000 (count (.id->internal-id iid-mgr))))))))))))))
 
@@ -605,7 +614,7 @@
 
         (tu/finish-chunk node1)
 
-        (t/is (= :utf8 (.columnType mm1 "id")))
+        (t/is (= :utf8 (.columnType mm1 "xt_docs" "id")))
 
         (let [tx2 (c2/submit-tx node1 [[:put {:id :bar}]
                                        [:put {:id #uuid "8b190984-2196-4144-9fa7-245eb9a82da8"}]
@@ -618,7 +627,7 @@
                              [:extension-type :c2/clj-keyword :utf8 ""]
                              [:extension-type :c2/clj-form :utf8 ""]
                              [:extension-type :uuid [:fixed-size-binary 16] ""]}]
-                   (.columnType mm1 "id")))
+                   (.columnType mm1 "xt_docs" "id")))
 
           (with-open [node2 (tu/->local-node (assoc node-opts :buffers-dir "buffers-1"))]
             (let [^IMetadataManager mm2 (tu/component node2 ::meta/metadata-manager)]
@@ -628,7 +637,7 @@
                                  [:extension-type :c2/clj-keyword :utf8 ""]
                                  [:extension-type :c2/clj-form :utf8 ""]
                                  [:extension-type :uuid [:fixed-size-binary 16] ""]}]
-                       (.columnType mm2 "id"))))))))))
+                       (.columnType mm2 "xt_docs" "id"))))))))))
 
 (t/deftest test-await-fails-fast
   (with-redefs [idx/->live-column (fn [& _args]
@@ -665,4 +674,5 @@
 
         (tu/finish-chunk node)
 
-        (tu/check-json (.toPath (io/as-file (io/resource "can-index-sql-insert"))) os)))))
+        (tj/check-json (.toPath (io/as-file (io/resource "can-index-sql-insert")))
+                       (.resolve node-dir "objects"))))))

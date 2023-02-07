@@ -38,17 +38,17 @@
                                            {:srcs {'$ db}, :params {'?name "Ivan"}})))))]
 
         (let [db @(node/snapshot-async node)]
-          (t/is (= #{0 1} (.knownChunks metadata-mgr)))
+          (t/is (= #{0 1} (set (keys (.chunksMetadata metadata-mgr)))))
 
           (let [expected-match [(meta/map->ChunkMatch
                                  {:chunk-idx 1, :block-idxs (doto (RoaringBitmap.) (.add 1))})]]
             (t/is (= expected-match
-                     (meta/matching-chunks metadata-mgr
+                     (meta/matching-chunks metadata-mgr "xt_docs"
                                            (expr.meta/->metadata-selector '(> name "Ivan") '#{name} {})))
                   "only needs to scan chunk 1, block 1")
             (t/is (= expected-match
                      (with-open [params (tu/open-params {'?name "Ivan"})]
-                       (meta/matching-chunks metadata-mgr
+                       (meta/matching-chunks metadata-mgr "xt_docs"
                                              (expr.meta/->metadata-selector '(> name ?name) '#{name} params))))
                   "only needs to scan chunk 1, block 1"))
 
@@ -81,17 +81,17 @@
     (tu/finish-chunk node)
     (let [^IMetadataManager metadata-mgr (tu/component node ::meta/metadata-manager)
           db @(node/snapshot-async node)]
-      (t/is (= #{0 3} (.knownChunks metadata-mgr)))
+      (t/is (= #{0 3} (set (keys (.chunksMetadata metadata-mgr)))))
       (let [expected-match [(meta/map->ChunkMatch
                              {:chunk-idx 0, :block-idxs (doto (RoaringBitmap.) (.add 0))})]]
         (t/is (= expected-match
-                 (meta/matching-chunks metadata-mgr
+                 (meta/matching-chunks metadata-mgr "xt_docs"
                                        (expr.meta/->metadata-selector '(= name "Ivan") '#{name} {})))
               "only needs to scan chunk 0, block 0")
 
         (t/is (= expected-match
                  (with-open [params (tu/open-params {'?name "Ivan"})]
-                   (meta/matching-chunks metadata-mgr
+                   (meta/matching-chunks metadata-mgr "xt_docs"
                                          (expr.meta/->metadata-selector '(= name ?name) '#{name} params))))
               "only needs to scan chunk 0, block 0"))
 

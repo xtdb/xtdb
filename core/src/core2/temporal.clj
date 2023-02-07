@@ -13,7 +13,7 @@
            core2.object_store.ObjectStore
            [core2.temporal.kd_tree IKdTreePointAccess MergedKdTree]
            java.io.Closeable
-           [java.util ArrayList Arrays Comparator Map]
+           [java.util ArrayList Arrays Comparator]
            [java.util.concurrent CompletableFuture ExecutorService Executors]
            [java.util.function LongFunction Predicate ToLongFunction]
            java.util.stream.LongStream
@@ -89,7 +89,7 @@
 (defn ->copy-range ^longs [^longs range]
   (some-> range (Arrays/copyOf (alength range))))
 
-#_{:clj-kondo/ignore [:unused-binding]}
+#_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface ITemporalRelationSource
   (^core2.vector.IIndirectRelation createTemporalRelation [^org.apache.arrow.memory.BufferAllocator allocator
                                                            ^java.util.List columns
@@ -97,7 +97,7 @@
                                                            ^longs temporalMaxRange
                                                            ^org.roaringbitmap.longlong.Roaring64Bitmap rowIdBitmap]))
 
-#_{:clj-kondo/ignore [:unused-binding]}
+#_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface ITemporalTxIndexer
   (^void indexPut [^long iid, ^long rowId, ^long startValidTime, ^long endValidTime, ^boolean newEntity])
   (^void indexDelete [^long iid, ^long rowId, ^long startValidTime, ^long endValidTime, ^boolean newEntity])
@@ -105,7 +105,7 @@
   (^org.roaringbitmap.longlong.Roaring64Bitmap commit [])
   (^void abort []))
 
-#_{:clj-kondo/ignore [:unused-binding]}
+#_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface ITemporalManager
   (^core2.temporal.ITemporalRelationSource getTemporalWatermark [])
   (^core2.vector.IIndirectRelation createTemporalRelation [^org.apache.arrow.memory.BufferAllocator allocator
@@ -116,7 +116,7 @@
   (^void registerNewChunk [^long chunkIdx])
   (^core2.temporal.ITemporalTxIndexer startTx [^core2.api.TransactionInstant txKey]))
 
-#_{:clj-kondo/ignore [:unused-binding]}
+#_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface TemporalManagerPrivate
   (^void populateKnownChunks [])
   (^Long latestTemporalSnapshotIndex [^int chunk-idx])
@@ -243,13 +243,13 @@
      overlap)))
 
 (defn- ->temporal-obj-key [chunk-idx]
-  (format "temporal-%016x.arrow" chunk-idx))
+  (format "chunk-%s/temporal.arrow" (util/->lex-hex-string chunk-idx)))
 
 (defn- ->temporal-snapshot-obj-key [chunk-idx]
-  (format "temporal-snapshot-%016x.arrow" chunk-idx))
+  (format "temporal-snapshots/%s.arrow" (util/->lex-hex-string chunk-idx)))
 
 (defn- temporal-snapshot-obj-key->chunk-idx ^long [obj-key]
-  (Long/parseLong (second (re-find #"temporal-snapshot-(\p{XDigit}{16})\.arrow" obj-key)) 16))
+  (util/<-lex-hex-string (second (re-find #"temporal-snapshots/(\p{XDigit}+)\.arrow" obj-key))))
 
 (defn- ->temporal-rel ^core2.vector.IIndirectRelation [^BufferAllocator allocator, kd-tree columns temporal-min-range temporal-max-range ^Roaring64Bitmap row-id-bitmap]
   (let [^IKdTreePointAccess point-access (kd/kd-tree-point-access kd-tree)
@@ -308,7 +308,7 @@
                           ^boolean async-snapshot?]
   TemporalManagerPrivate
   (latestTemporalSnapshotIndex [_ chunk-idx]
-    (->> (.listObjects object-store "temporal-snapshot-")
+    (->> (.listObjects object-store "temporal-snapshots/")
          (map temporal-snapshot-obj-key->chunk-idx)
          (filter #(<= ^long % chunk-idx))
          (last)))
@@ -317,7 +317,7 @@
     (let [kd-tree (atom base-kd-tree)]
       (try
         (let [snapshot-idx (long (or snapshot-idx -1))
-              new-chunk-idxs (for [^long idx (distinct (concat (.knownChunks metadata-manager) [chunk-idx]))
+              new-chunk-idxs (for [^long idx (distinct (concat (keys (.chunksMetadata metadata-manager)) [chunk-idx]))
                                    :when (> idx snapshot-idx)
                                    :while (<= idx chunk-idx)]
                                idx)
@@ -352,7 +352,7 @@
                                     (kd/->merged-kd-tree nil)))))
 
   (populateKnownChunks [this]
-    (when-let [temporal-chunk-idx (last (.knownChunks metadata-manager))]
+    (when-let [temporal-chunk-idx (last (keys (.chunksMetadata metadata-manager)))]
       (.reloadTemporalIndex this temporal-chunk-idx (.latestTemporalSnapshotIndex this temporal-chunk-idx))))
 
   (awaitSnapshotBuild [_]
@@ -360,7 +360,7 @@
 
   (buildTemporalSnapshot [this chunk-idx snapshot-idx]
     (let [new-snapshot-obj-key (->temporal-snapshot-obj-key chunk-idx)
-          path (util/->temp-file new-snapshot-obj-key "")]
+          path (util/->temp-file "temporal-snapshot" "")]
       (try
         (if snapshot-idx
           (let [^ArrowBuf temporal-buffer @(.getBuffer buffer-pool (->temporal-snapshot-obj-key snapshot-idx))]
@@ -394,7 +394,7 @@
   (registerNewChunk [this chunk-idx]
     (when kd-tree
       (let [new-temporal-obj-key (->temporal-obj-key chunk-idx)
-            path (util/->temp-file new-temporal-obj-key "")]
+            path (util/->temp-file "temporal-idx" "")]
         (try
           (let [temporal-buf (-> (grid/->disk-grid allocator
                                                    path

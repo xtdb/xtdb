@@ -74,13 +74,13 @@
 
   (listObjects [this] (.listObjects this nil))
 
-  (listObjects [_ obj-prefix]
+  (listObjects [_ dir]
     (letfn [(list-objects* [continuation-token]
               (lazy-seq
                (let [^ListObjectsV2Request
                      req (-> (ListObjectsV2Request/builder)
                              (.bucket bucket)
-                             (.prefix (str prefix obj-prefix))
+                             (.prefix (str prefix dir "/"))
                              (cond-> continuation-token (.continuationToken continuation-token))
                              (.build))
 

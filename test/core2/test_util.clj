@@ -1,10 +1,8 @@
 (ns core2.test-util
-  (:require [cheshire.core :as json]
-            [clojure.spec.alpha :as s]
+  (:require [clojure.spec.alpha :as s]
             [clojure.test :as t]
             [core2.api :as c2]
             [core2.client :as client]
-            [core2.json :as c2-json]
             [core2.node :as node]
             [core2.logical-plan :as lp]
             core2.object-store
@@ -17,7 +15,6 @@
             [core2.vector.writer :as vw])
   (:import (core2 ICursor InstantSource)
            core2.node.Node
-           core2.object_store.FileSystemObjectStore
            core2.operator.scan.ScanSource
            (core2.vector IIndirectRelation IIndirectVector)
            java.net.ServerSocket
@@ -27,8 +24,7 @@
            (java.util LinkedList)
            java.util.function.Consumer
            (org.apache.arrow.memory BufferAllocator RootAllocator)
-           (org.apache.arrow.vector FieldVector ValueVector VectorSchemaRoot)
-           org.apache.arrow.vector.complex.DenseUnionVector
+           (org.apache.arrow.vector FieldVector VectorSchemaRoot)
            (org.apache.arrow.vector.types.pojo Schema)))
 
 (def ^:dynamic ^org.apache.arrow.memory.BufferAllocator *allocator*)
@@ -201,27 +197,9 @@
 
           (t/is (= blocks (<-cursor cursor))))))))
 
-(defn check-json-file [^Path expected, ^Path actual]
-  (t/is (= (json/parse-string (Files/readString expected))
-           (json/parse-string (Files/readString actual)))
-        actual))
-
-(defn check-json [^Path expected-path, ^FileSystemObjectStore os]
-  (let [^Path os-path (.root-path os)]
-
-    (let [expected-file-count (.count (Files/list expected-path))]
-      (t/is (= expected-file-count (.count (Files/list os-path))))
-      (t/is (= expected-file-count (count (.listObjects os)))))
-
-    (c2-json/write-arrow-json-files (.toFile os-path))
-
-    (doseq [^Path path (iterator-seq (.iterator (Files/list os-path)))
-            :when (.endsWith (str path) ".json")]
-      (check-json-file (.resolve expected-path (.getFileName path)) path))))
-
 (defn ->local-node ^core2.node.Node [{:keys [^Path node-dir ^String buffers-dir
-                                                   max-rows-per-block max-rows-per-chunk]
-                                            :or {buffers-dir "buffers"}}]
+                                             max-rows-per-block max-rows-per-chunk]
+                                      :or {buffers-dir "buffers"}}]
   (node/start-node {:core2.log/local-directory-log {:root-path (.resolve node-dir "log")
                                                     :instant-src (->mock-clock)}
                     :core2.tx-producer/tx-producer {:instant-src (->mock-clock)}

@@ -45,12 +45,12 @@
     (t/is (thrown? IllegalStateException (get-object obj-store :alice)))))
 
 (defn ^::os-test test-list-objects [^ObjectStore obj-store]
-  (put-object obj-store "alice" :alice)
-  (put-object obj-store "alan" :alan)
-  (put-object obj-store "bob" :bob)
+  (put-object obj-store "bar/alice" :alice)
+  (put-object obj-store "foo/alan" :alan)
+  (put-object obj-store "bar/bob" :bob)
 
-  (t/is (= ["alan" "alice" "bob"] (.listObjects obj-store)))
-  (t/is (= ["alan" "alice"] (.listObjects obj-store "al"))))
+  (t/is (= ["bar/alice" "bar/bob" "foo/alan"] (.listObjects obj-store)))
+  (t/is (= ["bar/alice" "bar/bob"] (.listObjects obj-store "bar"))))
 
 (def os-tests
   (->> (ns-interns (create-ns 'core2.object-store-test))

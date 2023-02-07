@@ -50,12 +50,13 @@
 
 (def ^:dynamic *column->pushdown-bloom* {})
 
-(defn ->scan-cols [{:keys [source columns]}]
+(defn ->scan-cols [{:keys [source table columns]}]
   (let [src-key (or source '$)]
     (for [column columns]
-      [src-key (zmatch column
-                 [:column col] col
-                 [:select col-map] (key (first col-map)))])))
+      [src-key table
+       (zmatch column
+         [:column col] col
+         [:select col-map] (key (first col-map)))])))
 
 (defn ->scan-col-types [srcs scan-cols]
   (let [mm+wms (HashMap.)]
@@ -72,12 +73,12 @@
                                         {:src src
                                          :wm (.openWatermark src)})))))
 
-              (->col-type [[src-key col-name]]
+              (->col-type [[src-key table col-name]]
                 (let [{:keys [^ScanSource src, ^IWatermark wm]} (->mm+wm src-key)]
                   (if (temporal/temporal-column? col-name)
                     [:timestamp-tz :micro "UTC"]
-                    (t/merge-col-types (.columnType (.metadataManager src) (name col-name))
-                                       (.columnType wm (name col-name))))))]
+                    (t/merge-col-types (.columnType (.metadataManager src) (name table) (name col-name))
+                                       (.columnType wm (name table) (name col-name))))))]
 
         (->> scan-cols
              (into {} (map (juxt identity ->col-type)))))
@@ -153,9 +154,10 @@
                      (iv/select (.select col-pred allocator temporal-rel params))))
                temporal-rel)))
 
-(defn- filter-pushdown-bloom-block-idxs [^IMetadataManager metadata-manager ^long chunk-idx ^String col-name ^RoaringBitmap block-idxs]
+(defn- filter-pushdown-bloom-block-idxs [^IMetadataManager metadata-manager chunk-idx ^String table-name ^String col-name ^RoaringBitmap block-idxs]
   (if-let [^MutableRoaringBitmap pushdown-bloom (get *column->pushdown-bloom* (symbol col-name))]
-    @(meta/with-metadata metadata-manager chunk-idx
+  ;; would prefer this `^long` to be on the param but can only have 4 params in a primitive hinted function in Clojure
+    @(meta/with-metadata metadata-manager ^long chunk-idx table-name
        (fn [_chunk-idx ^VectorSchemaRoot metadata-root]
          (let [metadata-idxs (meta/->metadata-idxs metadata-root)
                ^VarBinaryVector bloom-vec (.getVector metadata-root "bloom")]
@@ -183,6 +185,7 @@
                      ^IBufferPool buffer-pool
                      ^IMetadataManager metadata-manager
                      ^IWatermark watermark
+                     ^String table-name
                      ^List content-col-names
                      ^List temporal-col-names
                      ^Map col-preds
@@ -204,10 +207,9 @@
                           temporal-rel (->temporal-rel watermark allocator temporal-col-names temporal-min-range temporal-max-range atemporal-row-id-bitmap)]
                       (or (try
                             (let [temporal-rel (-> temporal-rel (apply-temporal-preds allocator col-preds params))
-                                  read-rel (-> (align/align-vectors (.values in-roots) temporal-rel)
-                                               (remove-col "_table")
-                                               (cond-> (not keep-row-id-col?) (remove-col "_row-id")
-                                                       (not keep-id-col?) (remove-col "id")))]
+                                  read-rel (cond-> (align/align-vectors (.values in-roots) temporal-rel)
+                                             (not keep-row-id-col?) (remove-col "_row-id")
+                                             (not keep-id-col?) (remove-col "id"))]
                               (if (and read-rel (pos? (.rowCount read-rel)))
                                 (do
                                   (.accept c read-rel)
@@ -215,6 +217,7 @@
                                 false))
                             (finally
                               (util/try-close temporal-rel)))
+
                           (recur)))
 
                     (do
@@ -237,16 +240,16 @@
                   (when-let [{:keys [chunk-idx block-idxs]} (.poll matching-chunks)]
                     (or (when-let [block-idxs (reduce (fn [block-idxs col-name]
                                                         (or (->> block-idxs
-                                                                 (filter-pushdown-bloom-block-idxs metadata-manager chunk-idx col-name))
+                                                                 (filter-pushdown-bloom-block-idxs metadata-manager chunk-idx table-name col-name))
                                                             (reduced nil)))
                                                       block-idxs
                                                       content-col-names)]
                           (let [chunks (->> (for [col-name content-col-names]
-                                              (-> (.getBuffer buffer-pool (meta/->chunk-obj-key chunk-idx col-name))
+                                              (-> (.getBuffer buffer-pool (meta/->chunk-obj-key chunk-idx table-name col-name))
                                                   (util/then-apply
-                                                    (fn [buf]
-                                                      (MapEntry/create col-name (util/->chunks buf {:block-idxs block-idxs
-                                                                                                    :close-buffer? true}))))))
+                                                   (fn [buf]
+                                                     (MapEntry/create col-name (util/->chunks buf {:block-idxs block-idxs
+                                                                                                   :close-buffer? true}))))))
                                             (remove nil?)
                                             vec
                                             (into {} (map deref)))]
@@ -281,10 +284,6 @@
 (defmethod lp/emit-expr :scan [{:keys [source table columns]} {:keys [scan-col-types param-types]}]
   (let [src-key (or source '$)
 
-        columns (conj columns [:select {'_table (list '= '_table (name table))}])
-
-        scan-col-types (assoc scan-col-types [src-key '_table] :utf8)
-
         col-names (->> columns
                        (into [] (comp (map (fn [[col-type arg]]
                                              (case col-type
@@ -298,7 +297,7 @@
         col-types (->> col-names
                        (into {} (map (juxt identity
                                            (fn [col-name]
-                                             (get scan-col-types [src-key col-name]))))))
+                                             (get scan-col-types [src-key table col-name]))))))
 
         selects (->> (for [[col-type arg] columns
                            :when (= col-type :select)]
@@ -328,14 +327,17 @@
                      (let [metadata-pred (expr.meta/->metadata-selector (cons 'and metadata-args) (set col-names) params)
                            [temporal-min-range temporal-max-range] (doto (expr.temp/->temporal-min-max-range selects params)
                                                                      (apply-src-tx! src col-preds))
-                           matching-chunks (LinkedList. (or (meta/matching-chunks metadata-mgr metadata-pred) []))
+                           matching-chunks (LinkedList. (or (meta/matching-chunks metadata-mgr (name table) metadata-pred) []))
                            content-col-names (mapv name content-col-names)
                            temporal-col-names (mapv name temporal-col-names)]
                        (-> (ScanCursor. allocator buffer-pool metadata-mgr watermark
-                                        content-col-names temporal-col-names col-preds
+                                        (name table) content-col-names temporal-col-names col-preds
                                         temporal-min-range temporal-max-range
-                                        matching-chunks (.iterator (.liveSlices watermark content-col-names))
-                                        params #_chunks nil)
+                                        matching-chunks (-> (.liveSlices watermark (name table)
+                                                                         (or (not-empty content-col-names) #{"id"}))
+                                                            (.iterator))
+                                        params
+                                        #_chunks nil)
                            (coalesce/->coalescing-cursor allocator)
                            (util/and-also-close watermark)))
                      (catch Throwable t

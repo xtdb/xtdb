@@ -1,0 +1,127 @@
+{
+  "schema" : {
+    "fields" : [{
+      "name" : "column",
+      "nullable" : false,
+      "type" : {
+        "name" : "utf8"
+      },
+      "children" : [ ]
+    },{
+      "name" : "block-idx",
+      "nullable" : true,
+      "type" : {
+        "name" : "int",
+        "bitWidth" : 32,
+        "isSigned" : true
+      },
+      "children" : [ ]
+    },{
+      "name" : "root-column",
+      "nullable" : true,
+      "type" : {
+        "name" : "struct"
+      },
+      "children" : [{
+        "name" : "min-row-id",
+        "nullable" : true,
+        "type" : {
+          "name" : "int",
+          "bitWidth" : 64,
+          "isSigned" : true
+        },
+        "children" : [ ]
+      },{
+        "name" : "max-row-id",
+        "nullable" : true,
+        "type" : {
+          "name" : "int",
+          "bitWidth" : 64,
+          "isSigned" : true
+        },
+        "children" : [ ]
+      },{
+        "name" : "row-id-bloom",
+        "nullable" : true,
+        "type" : {
+          "name" : "binary"
+        },
+        "children" : [ ]
+      }]
+    },{
+      "name" : "count",
+      "nullable" : false,
+      "type" : {
+        "name" : "int",
+        "bitWidth" : 64,
+        "isSigned" : true
+      },
+      "children" : [ ]
+    },{
+      "name" : "types",
+      "nullable" : true,
+      "type" : {
+        "name" : "struct"
+      },
+      "children" : [ ]
+    },{
+      "name" : "bloom",
+      "nullable" : true,
+      "type" : {
+        "name" : "binary"
+      },
+      "children" : [ ]
+    }]
+  },
+  "batches" : [{
+    "count" : 1,
+    "columns" : [{
+      "name" : "column",
+      "count" : 1,
+      "VALIDITY" : [1],
+      "OFFSET" : [0,2],
+      "DATA" : ["id"]
+    },{
+      "name" : "block-idx",
+      "count" : 1,
+      "VALIDITY" : [0],
+      "DATA" : [0]
+    },{
+      "name" : "root-column",
+      "count" : 1,
+      "VALIDITY" : [0],
+      "children" : [{
+        "name" : "min-row-id",
+        "count" : 1,
+        "VALIDITY" : [0],
+        "DATA" : ["0"]
+      },{
+        "name" : "max-row-id",
+        "count" : 1,
+        "VALIDITY" : [0],
+        "DATA" : ["0"]
+      },{
+        "name" : "row-id-bloom",
+        "count" : 1,
+        "VALIDITY" : [0],
+        "OFFSET" : [0,0],
+        "DATA" : [""]
+      }]
+    },{
+      "name" : "count",
+      "count" : 1,
+      "VALIDITY" : [1],
+      "DATA" : ["0"]
+    },{
+      "name" : "types",
+      "count" : 1,
+      "VALIDITY" : [1]
+    },{
+      "name" : "bloom",
+      "count" : 1,
+      "VALIDITY" : [1],
+      "OFFSET" : [0,8],
+      "DATA" : ["3a30000000000000"]
+    }]
+  }]
+}

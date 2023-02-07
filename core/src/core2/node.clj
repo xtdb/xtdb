@@ -3,14 +3,11 @@
             [core2.api :as api]
             [core2.datalog :as d]
             [core2.ingester :as ingest]
-            [core2.operator :as op]
             [core2.sql :as sql]
             [core2.tx-producer :as txp]
             [core2.util :as util]
-            [core2.vector.writer :as vw]
             [juxt.clojars-mirrors.integrant.core :as ig])
-  (:import clojure.lang.MapEntry
-           core2.ingester.Ingester
+  (:import core2.ingester.Ingester
            (core2.tx_producer ITxProducer)
            (java.io Closeable Writer)
            (java.lang AutoCloseable)

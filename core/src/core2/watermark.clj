@@ -20,8 +20,8 @@
 
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface IWatermark
-  (columnType [^String columnName])
-  (^Iterable liveSlices [^Iterable columnNames])
+  (columnType [^String tableName, ^String columnName])
+  (^Iterable liveSlices [^String tableName, ^Iterable columnNames])
 
   ;; this is a lot of duplication - I guess we'd extend interfaces here if we were in Java
   (^core2.vector.IIndirectRelation createTemporalRelation [^org.apache.arrow.memory.BufferAllocator allocator
@@ -43,14 +43,15 @@
                       ^ITemporalRelationSource temporal-roots-src
                       ^long chunk-idx, ^int max-rows-per-block]
   IWatermark
-  (columnType [_ col-name]
-    (when-let [^VectorSchemaRoot root (.get live-roots col-name)]
+  (columnType [_ table-name col-name]
+    (when-let [^VectorSchemaRoot root (some-> live-roots ^Map (.get table-name) (.get col-name))]
       (-> (.getVector root col-name)
           (.getField)
           (types/field->col-type))))
 
-  (liveSlices [_ col-names]
-    (for [^Map roots [live-roots tx-live-roots]
+  (liveSlices [_ table-name col-names]
+    (for [^Map roots [(.get live-roots table-name)
+                      (.get tx-live-roots table-name)]
           :when roots
           :let [slices (into {}
                              (keep (fn [col-name]
@@ -68,8 +69,8 @@
 
 (defrecord ReferenceCountingWatermark [^Watermark watermark, ^AtomicInteger ref-count, ^Map thread->count]
   IWatermark
-  (columnType [_ col-name] (.columnType watermark col-name))
-  (liveSlices [_ col-names] (.liveSlices watermark col-names))
+  (columnType [_ table-name col-name] (.columnType watermark table-name col-name))
+  (liveSlices [_ table-name col-names] (.liveSlices watermark table-name col-names))
 
   (createTemporalRelation [_ allocator columns temporal-min-range temporal-max-range row-id-bitmap]
     (.createTemporalRelation watermark allocator columns temporal-min-range temporal-max-range row-id-bitmap))
@@ -94,7 +95,7 @@
 
           (zero? new-ref-count)
           (do (util/try-close (.temporal-roots-src watermark))
-              (doseq [root (vals (.live-roots watermark))]
+              (doseq [root (->> (vals (.live-roots watermark)) (mapcat vals))]
                 (util/try-close root))))))))
 
 (defn- remove-closed-watermarks [^StampedLock open-watermarks-lock, ^Set open-watermarks]

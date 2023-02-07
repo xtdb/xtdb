@@ -5,7 +5,7 @@
             [clojure.spec.alpha :as s])
   (:import java.io.Closeable
            java.nio.ByteBuffer
-           [java.nio.file CopyOption Files FileSystems OpenOption Path StandardOpenOption]
+           [java.nio.file CopyOption Files FileSystems FileVisitOption LinkOption OpenOption Path StandardOpenOption]
            [java.util.concurrent CompletableFuture ConcurrentSkipListMap Executors ExecutorService]
            java.util.function.Supplier
            java.util.NavigableMap))
@@ -24,7 +24,7 @@
 
   (^java.util.concurrent.CompletableFuture #_<?> putObject [^String k, ^java.nio.ByteBuffer buf])
   (^java.lang.Iterable #_<String> listObjects [])
-  (^java.lang.Iterable #_<String> listObjects [^String prefix])
+  (^java.lang.Iterable #_<String> listObjects [^String dir])
   (^java.util.concurrent.CompletableFuture #_<?> deleteObject [^String k]))
 
 (defn obj-missing-exception [k]
@@ -113,13 +113,17 @@
             (util/write-buffer-to-path buf to-path))))))
 
   (listObjects [_this]
-    (vec (sort (for [^Path path (iterator-seq (.iterator (Files/list root-path)))]
-                 (str (.relativize root-path path))))))
-
-  (listObjects [_this prefix]
-    (with-open [dir-stream (Files/newDirectoryStream root-path (str prefix "*"))]
-      (vec (sort (for [^Path path dir-stream]
+    (with-open [dir-stream (Files/walk root-path (make-array FileVisitOption 0))]
+      (vec (sort (for [^Path path (iterator-seq (.iterator dir-stream))
+                       :when (Files/isRegularFile path (make-array LinkOption 0))]
                    (str (.relativize root-path path)))))))
+
+  (listObjects [_this dir]
+    (let [dir (.resolve root-path dir)]
+      (when (Files/exists dir (make-array LinkOption 0))
+        (with-open [dir-stream (Files/newDirectoryStream dir)]
+          (vec (sort (for [^Path path dir-stream]
+                       (str (.relativize root-path path)))))))))
 
   (deleteObject [_this k]
     (util/completable-future pool

@@ -95,45 +95,22 @@
   (close [_]
     (.clear id->internal-id)))
 
-(defmethod ig/init-key ::internal-id-manager [_ {:keys [allocator ^IBufferPool buffer-pool, ^IMetadataManager metadata-mgr]}]
-  (let [iid-mgr (InternalIdManager. (ConcurrentHashMap.))
-        known-chunks (.knownChunks metadata-mgr)]
-    (doseq [chunk-idx known-chunks]
-      ;; once we have split storage per-table this should get a lot simpler/faster
-      ;; HACK I could probably be a better async citizen here, but it's at startup,
-      ;; and hopefully the above should make this easier anyway
-      (with-open [id-chunks (-> @(.getBuffer buffer-pool (meta/->chunk-obj-key chunk-idx "id"))
-                                (util/->chunks {:close-buffer? true}))
-                  table-chunks (-> @(.getBuffer buffer-pool (meta/->chunk-obj-key chunk-idx "_table"))
-                                   (util/->chunks {:close-buffer? true}))]
-        (let [roots (HashMap.)]
-          (while (and (.tryAdvance id-chunks
-                                   (reify Consumer
-                                     (accept [_ id-root] (.put roots :id id-root))))
-                      (.tryAdvance table-chunks
-                                   (reify Consumer
-                                     (accept [_ table-root] (.put roots :table table-root)))))
-            (let [row-ids (->> (for [^VectorSchemaRoot root (.values roots)]
-                                 (align/->row-id-bitmap (.getVector root 0)))
-
-                               ^Roaring64Bitmap
-                               (reduce (fn [^Roaring64Bitmap l, ^Roaring64Bitmap r]
-                                         (doto l (.and r))))
-                               (.toArray))]
-              (with-open [row-id-col (-> (vw/open-vec allocator "_row-id" :i64 row-ids)
-                                         (iv/->direct-vec))]
-                (let [aligned-roots (align/align-vectors (.values roots) (iv/->indirect-rel [row-id-col]))
-                      id-col (.vectorForName aligned-roots "id")
-                      id-vec (.getVector id-col)
-                      table-col (.vectorForName aligned-roots "_table")
-                      table-vec (.getVector table-col)
-                      row-id-col (.vectorForName aligned-roots "_row-id")
-                      ^BigIntVector row-id-vec (.getVector row-id-col)]
-                  (dotimes [idx (.rowCount aligned-roots)]
-                    (.getOrCreateInternalId iid-mgr
-                                            (t/get-object table-vec (.getIndex id-col idx))
-                                            (t/get-object id-vec (.getIndex id-col idx))
-                                            (.get row-id-vec (.getIndex row-id-col idx)))))))))))
+(defmethod ig/init-key ::internal-id-manager [_ {:keys [^IBufferPool buffer-pool, ^IMetadataManager metadata-mgr]}]
+  (let [iid-mgr (InternalIdManager. (ConcurrentHashMap.))]
+    (doseq [[chunk-idx chunk-metadata] (.chunksMetadata metadata-mgr)
+            {:keys [table]} chunk-metadata]
+      (with-open [id-chunks (-> @(.getBuffer buffer-pool (meta/->chunk-obj-key chunk-idx table "id"))
+                                (util/->chunks {:close-buffer? true}))]
+        (.forEachRemaining id-chunks
+                           (reify Consumer
+                             (accept [_ id-root]
+                               (let [^VectorSchemaRoot id-root id-root
+                                     id-vec (.getVector id-root "id")
+                                     ^BigIntVector row-id-vec (.getVector id-root "_row-id")]
+                                 (dotimes [idx (.getRowCount id-root)]
+                                   (.getOrCreateInternalId iid-mgr table
+                                                           (t/get-object id-vec idx)
+                                                           (.get row-id-vec idx)))))))))
     iid-mgr))
 
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
@@ -208,8 +185,8 @@
 
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface IDocumentIndexer
-  (^core2.indexer.ILiveColumn getLiveColumn [^String fieldName])
-  (^java.util.Map liveColumnsWith [^long rowId])
+  (^core2.indexer.ILiveColumn getLiveColumn [^String table, ^String fieldName])
+  (^java.util.Map liveColumnsWith [^String table, ^long rowId])
   (^long nextRowId [])
   (^long commit [] "returns: count of rows in this tx")
   (^void abort []))
@@ -217,14 +194,15 @@
 (deftype DocumentIndexer [^BufferAllocator allocator, ^Map live-columns
                           ^long start-row-id, ^:unsynchronized-mutable ^long tx-row-count]
   IDocumentIndexer
-  (getLiveColumn [_ field-name]
-    (.computeIfAbsent live-columns field-name
-                      (util/->jfn
-                        (fn [field-name]
-                          (->live-column allocator field-name)))))
+  (getLiveColumn [_ table field-name]
+    (-> ^Map (.computeIfAbsent live-columns table
+                               (util/->jfn (fn [_table] (HashMap.))))
+        (.computeIfAbsent field-name
+                          (util/->jfn (fn [field-name]
+                                        (->live-column allocator field-name))))))
 
-  (liveColumnsWith [_ row-id]
-    (->> live-columns
+  (liveColumnsWith [_ table row-id]
+    (->> (.get live-columns table)
          (into {} (filter (comp (fn [^LiveColumn live-col]
                                   (.containsRowId live-col row-id))
                                 val)))))
@@ -235,13 +213,13 @@
       (+ start-row-id tx-row-count)))
 
   (commit [_]
-    (doseq [^ILiveColumn live-col (vals live-columns)]
+    (doseq [^ILiveColumn live-col (->> (vals live-columns) (mapcat vals))]
       (.commit live-col))
 
     tx-row-count)
 
   (abort [_]
-    (doseq [^ILiveColumn live-col (vals live-columns)]
+    (doseq [^ILiveColumn live-col (->> (vals live-columns) (mapcat vals))]
       (.abort live-col))))
 
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
@@ -259,10 +237,17 @@
 
 (defn- snapshot-live-cols [^Map live-columns]
   (Collections/unmodifiableSortedMap
-   (reduce-kv (fn [^Map acc k ^LiveColumn col]
-                (doto acc (.put k (util/slice-root (.liveRoot col)))))
+   (reduce-kv (fn [^Map acc table-name ^Map table-cols]
+                (doto acc (.put table-name
+                                (reduce-kv (fn [^Map acc col-name ^LiveColumn col]
+                                             (doto acc (.put col-name (util/slice-root (.liveRoot col)))))
+                                           (TreeMap.)
+                                           table-cols))))
               (TreeMap.)
               live-columns)))
+
+(defn- ->log-obj-key [chunk-idx]
+  (format "chunk-%s/log.arrow" (util/->lex-hex-string chunk-idx)))
 
 (def ^:private log-ops-col-type
   '[:union #{:null
@@ -398,8 +383,10 @@
         (.close log-writer)))))
 
 (defn- with-latest-log-chunk [{:keys [^ObjectStore object-store ^IBufferPool buffer-pool]} f]
-  (when-let [latest-log-k (last (.listObjects object-store "log-"))]
-    @(-> (.getBuffer buffer-pool latest-log-k)
+  (when-let [latest-chunk-idx (some-> (last (.listObjects object-store "chunk-metadata/"))
+                                      (->> (re-matches #"chunk-metadata/(\p{XDigit}+)\.arrow") second)
+                                      util/<-lex-hex-string)]
+    @(-> (.getBuffer buffer-pool (->log-obj-key latest-chunk-idx))
          (util/then-apply
            (fn [^ArrowBuf log-buffer]
              (assert log-buffer)
@@ -429,66 +416,76 @@
   (^org.apache.arrow.vector.complex.DenseUnionVector indexOp [^long tx-op-idx]
    "returns a tx-ops-vec of more operations (mostly for `:call`)"))
 
-(definterface DocRowCopier
-  (^void copyDocRow [^long rowId, ^int srcIdx]))
+#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
+(definterface ContentRowCopier
+  (^void copyContentRow [^long rowId, ^int srcIdx]))
 
-(defn- doc-row-copier ^core2.indexer.DocRowCopier [^IDocumentIndexer doc-idxer, ^IIndirectVector col-rdr]
+(defn- content-row-copier ^core2.indexer.ContentRowCopier [^IDocumentIndexer doc-idxer, ^String table, ^IIndirectVector col-rdr]
   (let [col-name (.getName col-rdr)
-        ^LiveColumn live-col (.getLiveColumn doc-idxer col-name)
+        ^LiveColumn live-col (.getLiveColumn doc-idxer table col-name)
         ^IVectorWriter vec-writer (.contentWriter live-col)
         row-copier (.rowCopier col-rdr vec-writer)]
-    (reify DocRowCopier
-      (copyDocRow [_ row-id src-idx]
+    (reify ContentRowCopier
+      (copyContentRow [_ row-id src-idx]
         (when (.isPresent col-rdr src-idx)
           (.writeRowId live-col row-id)
           (.startValue vec-writer)
           (.copyRow row-copier src-idx)
           (.endValue vec-writer))))))
 
-(defn- put-doc-copier ^core2.indexer.DocRowCopier [^TransactionIndexer indexer, ^DenseUnionVector tx-ops-vec]
-  (let [doc-rdr (-> (.getStruct tx-ops-vec 1)
-                    (.getChild "document")
-                    (iv/->direct-vec)
-                    (.structReader))
-        doc-copiers (vec
-                     (for [^String col-name (.structKeys doc-rdr)]
-                       (doc-row-copier indexer (.readerForKey doc-rdr col-name))))]
-    (reify DocRowCopier
-      (copyDocRow [_ row-id src-idx]
-        (doseq [^DocRowCopier doc-copier doc-copiers]
-          (.copyDocRow doc-copier row-id src-idx))))))
+(defn- put-row-copier ^core2.indexer.ContentRowCopier [^IDocumentIndexer indexer, ^VarCharVector table-vec, ^DenseUnionVector id-duv, ^DenseUnionVector doc-duv]
+  (let [id-rdr (iv/->direct-vec id-duv)
+        doc-rdr (.structReader (iv/->direct-vec doc-duv))
+        table->content-copiers (HashMap.)]
+    (reify ContentRowCopier
+      (copyContentRow [_ row-id src-idx]
+        (let [table-name (t/get-object table-vec src-idx)
+              ^Map field->content-copiers (.computeIfAbsent table->content-copiers table-name
+                                                            (util/->jfn (fn [_table-name]
+                                                                          (doto (HashMap.)
+                                                                            (.put "id" (content-row-copier indexer table-name id-rdr))))))]
+
+          (-> ^ContentRowCopier (.get field->content-copiers "id")
+              (.copyContentRow row-id src-idx))
+
+          (doseq [^String col-name (.structKeys doc-rdr)
+                  :let [col-rdr (.readerForKey doc-rdr col-name)]
+                  :when (.isPresent col-rdr src-idx)]
+            (-> ^ContentRowCopier
+                (.computeIfAbsent field->content-copiers col-name
+                                                         (util/->jfn (fn [_col-name]
+                                                                       (content-row-copier indexer table-name col-rdr))))
+                (.copyContentRow row-id src-idx))))))))
 
 (defn- ->put-indexer ^core2.indexer.OpIndexer [^IInternalIdManager iid-mgr ^ILogOpIndexer log-op-idxer, ^ITemporalTxIndexer temporal-idxer, ^IDocumentIndexer doc-idxer
                                                ^DenseUnionVector tx-ops-vec, ^Instant current-time]
   (let [put-vec (.getStruct tx-ops-vec 1)
+        ^VarCharVector table-vec (.getChild put-vec "table" VarCharVector)
+        ^DenseUnionVector id-duv (.getChild put-vec "id" DenseUnionVector)
         ^DenseUnionVector doc-duv (.getChild put-vec "document" DenseUnionVector)
         ^TimeStampVector app-time-start-vec (.getChild put-vec "application_time_start")
         ^TimeStampVector app-time-end-vec (.getChild put-vec "application_time_end")
-        doc-copier (put-doc-copier doc-idxer tx-ops-vec)
+        row-copier (put-row-copier doc-idxer table-vec id-duv doc-duv)
         current-time-µs (util/instant->micros current-time)]
     (reify OpIndexer
       (indexOp [_ tx-op-idx]
         (let [row-id (.nextRowId doc-idxer)
-              put-offset (.getOffset tx-ops-vec tx-op-idx)
-              leg-type-id (.getTypeId doc-duv put-offset)
-              leg-offset (.getOffset doc-duv put-offset)
-              id-vec (-> ^StructVector (.getVectorByType doc-duv leg-type-id)
-                         (.getChild "id"))
-              ^VarCharVector table-vec (-> ^StructVector (.getVectorByType doc-duv leg-type-id)
-                                           (.getChild "_table"))
-              table (or (some-> table-vec (t/get-object leg-offset)) "xt_docs")
-              eid (t/get-object id-vec leg-offset)
-              new-entity? (not (.isKnownId iid-mgr table eid))
-              iid (.getOrCreateInternalId iid-mgr table eid row-id)
-              start-app-time (if (.isNull app-time-start-vec put-offset)
-                               current-time-µs
-                               (.get app-time-start-vec put-offset))
-              end-app-time (if (.isNull app-time-end-vec put-offset)
-                             util/end-of-time-μs
-                             (.get app-time-end-vec put-offset))]
-          (.copyDocRow doc-copier row-id put-offset)
-          (.logPut log-op-idxer iid row-id start-app-time end-app-time)
-          (.indexPut temporal-idxer iid row-id start-app-time end-app-time new-entity?))
+              put-offset (.getOffset tx-ops-vec tx-op-idx)]
+
+          (.copyContentRow row-copier row-id put-offset)
+
+          (let [table (t/get-object table-vec put-offset)
+                eid (t/get-object id-duv put-offset)
+                new-entity? (not (.isKnownId iid-mgr table eid))
+                iid (.getOrCreateInternalId iid-mgr table eid row-id)
+                start-app-time (if (.isNull app-time-start-vec put-offset)
+                                 current-time-µs
+                                 (.get app-time-start-vec put-offset))
+                end-app-time (if (.isNull app-time-end-vec put-offset)
+                               util/end-of-time-μs
+                               (.get app-time-end-vec put-offset))]
+            (.logPut log-op-idxer iid row-id start-app-time end-app-time)
+            (.indexPut temporal-idxer iid row-id start-app-time end-app-time new-entity?)))
 
         nil))))
 
@@ -497,7 +494,7 @@
   [^IInternalIdManager iid-mgr, ^ILogOpIndexer log-op-idxer, ^ITemporalTxIndexer temporal-idxer, ^IDocumentIndexer doc-idxer
    ^DenseUnionVector tx-ops-vec, ^Instant current-time]
   (let [delete-vec (.getStruct tx-ops-vec 2)
-        ^VarCharVector table-vec (.getChild delete-vec "_table" VarCharVector)
+        ^VarCharVector table-vec (.getChild delete-vec "table" VarCharVector)
         ^DenseUnionVector id-vec (.getChild delete-vec "id" DenseUnionVector)
         ^TimeStampVector app-time-start-vec (.getChild delete-vec "application_time_start")
         ^TimeStampVector app-time-end-vec (.getChild delete-vec "application_time_end")
@@ -506,7 +503,7 @@
       (indexOp [_ tx-op-idx]
         (let [row-id (.nextRowId doc-idxer)
               delete-offset (.getOffset tx-ops-vec tx-op-idx)
-              table (or (t/get-object table-vec delete-offset) "xt_docs")
+              table (t/get-object table-vec delete-offset)
               eid (t/get-object id-vec delete-offset)
               new-entity? (not (.isKnownId iid-mgr table eid))
               iid (.getOrCreateInternalId iid-mgr table eid row-id)
@@ -647,20 +644,6 @@
             (reset! !last-tx-fn-error t)
             (throw t)))))))
 
-(defn- table-row-writer [^IDocumentIndexer doc-idxer, ^String table-name]
-  (let [^LiveColumn live-col (.getLiveColumn doc-idxer "_table")
-        ^IVectorWriter vec-writer (.contentWriter live-col)
-        ^IVectorWriter vec-str-writer (.writerForType (.asDenseUnion vec-writer) :utf8)]
-    (reify DocRowCopier
-      (copyDocRow [_ row-id _src-idx]
-        (.writeRowId live-col row-id)
-
-        (.startValue vec-writer)
-        (.startValue vec-str-writer)
-        (t/write-value! table-name vec-str-writer)
-        (.endValue vec-str-writer)
-        (.endValue vec-writer)))))
-
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (definterface SqlOpIndexer
   (^void indexOp [^core2.vector.IIndirectRelation inRelation, queryOpts]))
@@ -674,18 +657,17 @@
     (reify SqlOpIndexer
       (indexOp [_ in-rel {:keys [table]}]
         (let [row-count (.rowCount in-rel)
-              doc-row-copiers (vec
-                               (cons (table-row-writer doc-idxer table)
-                                     (for [^IIndirectVector in-col in-rel
-                                           :when (not (temporal/temporal-column? (.getName in-col)))]
-                                       (doc-row-copier doc-idxer in-col))))
+              content-row-copiers (vec
+                                   (for [^IIndirectVector in-col in-rel
+                                         :when (not (temporal/temporal-column? (.getName in-col)))]
+                                     (content-row-copier doc-idxer table in-col)))
               id-col (.vectorForName in-rel "id")
               app-time-start-rdr (some-> (.vectorForName in-rel "application_time_start") (.monoReader))
               app-time-end-rdr (some-> (.vectorForName in-rel "application_time_end") (.monoReader))]
           (dotimes [idx row-count]
             (let [row-id (.nextRowId doc-idxer)]
-              (doseq [^DocRowCopier doc-row-copier doc-row-copiers]
-                (.copyDocRow doc-row-copier row-id idx))
+              (doseq [^ContentRowCopier content-row-copier content-row-copiers]
+                (.copyContentRow content-row-copier row-id idx))
 
               (let [eid (t/get-object (.getVector id-col) (.getIndex id-col idx))
                     new-entity? (not (.isKnownId iid-mgr table eid))
@@ -710,13 +692,13 @@
    ^ILogOpIndexer log-op-idxer, ^ITemporalTxIndexer temporal-idxer, ^IDocumentIndexer doc-idxer]
 
   (reify SqlOpIndexer
-    (indexOp [_ in-rel _query-opts]
+    (indexOp [_ in-rel {:keys [table]}]
       (let [row-count (.rowCount in-rel)
-            doc-row-copiers (->> (for [^IIndirectVector in-col in-rel
-                                       :let [col-name (.getName in-col)]
-                                       :when (not (temporal/temporal-column? col-name))]
-                                   [col-name (doc-row-copier doc-idxer in-col)])
-                                 (into {}))
+            content-row-copiers (->> (for [^IIndirectVector in-col in-rel
+                                           :let [col-name (.getName in-col)]
+                                           :when (not (temporal/temporal-column? col-name))]
+                                       [col-name (content-row-copier doc-idxer table in-col)])
+                                     (into {}))
             iid-rdr (.monoReader (.vectorForName in-rel "_iid"))
             row-id-rdr (.monoReader (.vectorForName in-rel "_row-id"))
             app-time-start-rdr (.monoReader (.vectorForName in-rel "application_time_start"))
@@ -727,25 +709,25 @@
                 iid (.readLong iid-rdr idx)
                 start-app-time (.readLong app-time-start-rdr idx)
                 end-app-time (.readLong app-time-end-rdr idx)]
-            (doseq [^DocRowCopier doc-row-copier (vals doc-row-copiers)]
-              (.copyDocRow doc-row-copier new-row-id idx))
+            (doseq [^ContentRowCopier content-row-copier (vals content-row-copiers)]
+              (.copyContentRow content-row-copier new-row-id idx))
 
             (letfn [(copy-row [^BigIntVector root-row-id-vec, ^ValueVector content-vec]
-                      (let [doc-row-copier (doc-row-copier doc-idxer (iv/->direct-vec content-vec))]
+                      (let [content-row-copier (content-row-copier doc-idxer table (iv/->direct-vec content-vec))]
                         ;; TODO these are sorted, so we could binary search instead
                         (dotimes [idx (.getValueCount root-row-id-vec)]
                           (when (= old-row-id (.get root-row-id-vec idx))
-                            (.copyDocRow doc-row-copier new-row-id idx)))))]
+                            (.copyContentRow content-row-copier new-row-id idx)))))]
 
-              (doseq [[^String col-name, ^LiveColumn live-col] (.liveColumnsWith doc-idxer old-row-id)
-                      :when (not (contains? doc-row-copiers col-name))]
+              (doseq [[^String col-name, ^LiveColumn live-col] (.liveColumnsWith doc-idxer table old-row-id)
+                      :when (not (contains? content-row-copiers col-name))]
                 (copy-row (.row-id-vec live-col) (.content-vec live-col))
                 (copy-row (.transient-row-id-vec live-col) (.transient-content-vec live-col)))
 
-              (when-let [{:keys [^long chunk-idx cols]} (meta/row-id->cols metadata-mgr old-row-id)]
+              (when-let [{:keys [^long chunk-idx cols]} (meta/row-id->cols metadata-mgr (name table) old-row-id)]
                 (doseq [{:keys [^String col-name ^long block-idx]} cols
-                        :when (not (contains? doc-row-copiers col-name))]
-                  @(-> (.getBuffer buffer-pool (meta/->chunk-obj-key chunk-idx col-name))
+                        :when (not (contains? content-row-copiers col-name))]
+                  @(-> (.getBuffer buffer-pool (meta/->chunk-obj-key chunk-idx table col-name))
                        (util/then-apply
                          (fn [buf]
                            (with-open [chunks (util/->chunks buf {:block-idxs (doto (RoaringBitmap.)
@@ -853,13 +835,19 @@
 
 (defn- live-cols->live-roots [live-cols]
   (->> live-cols
-       (into {} (map (fn [[col-name ^LiveColumn live-col]]
-                       (MapEntry/create col-name (.liveRoot live-col)))))))
+       (into {} (map (fn [[table-name ^Map live-cols]]
+                       (MapEntry/create table-name
+                                        (->> live-cols
+                                             (into {} (map (fn [[col-name ^LiveColumn live-col]]
+                                                             (MapEntry/create col-name (.liveRoot live-col))))))))))))
 
 (defn- live-cols->tx-live-roots [live-cols]
   (->> live-cols
-       (into {} (map (fn [[col-name ^LiveColumn live-col]]
-                       (MapEntry/create col-name (.txLiveRoot live-col)))))))
+       (into {} (map (fn [[table-name ^Map live-cols]]
+                       (MapEntry/create table-name
+                                        (->> live-cols
+                                             (into {} (map (fn [[col-name ^LiveColumn live-col]]
+                                                             (MapEntry/create col-name (.txLiveRoot live-col))))))))))))
 
 (deftype Indexer [^BufferAllocator allocator
                   ^ObjectStore object-store
@@ -906,8 +894,8 @@
                       !evict-idxer (delay (->evict-indexer iid-mgr log-op-idxer temporal-idxer doc-idxer tx-ops-vec))
                       !call-idxer (delay (->call-indexer allocator tx-ops-vec scan-src tx-opts))
                       !sql-idxer (delay (->sql-indexer allocator metadata-mgr buffer-pool iid-mgr
-                                                      log-op-idxer temporal-idxer doc-idxer
-                                                      tx-ops-vec scan-src tx-opts))]
+                                                       log-op-idxer temporal-idxer doc-idxer
+                                                       tx-ops-vec scan-src tx-opts))]
                   (dotimes [tx-op-idx (.getValueCount tx-ops-vec)]
                     (when-let [more-tx-ops (case (.getTypeId tx-ops-vec tx-op-idx)
                                              0 (.indexOp ^OpIndexer @!sql-idxer tx-op-idx)
@@ -973,7 +961,7 @@
                                          (write-batch!))))))))))))
 
   (closeCols [_this]
-    (doseq [^LiveColumn live-column (vals live-columns)]
+    (doseq [^LiveColumn live-column (->> (vals live-columns) (mapcat vals))]
       (util/try-close live-column))
 
     (.clear live-columns)
@@ -985,9 +973,10 @@
 
       (try
         @(CompletableFuture/allOf (->> (cons
-                                        (.putObject object-store (format "log-%016x.arrow" chunk-idx) (.writeLog log-indexer))
-                                        (for [[^String col-name, ^LiveColumn live-column] live-columns]
-                                          (.putObject object-store (meta/->chunk-obj-key chunk-idx col-name) (.writeColumn this live-column))))
+                                        (.putObject object-store (->log-obj-key chunk-idx) (.writeLog log-indexer))
+                                        (for [[^String table-name, ^Map table-live-cols] live-columns
+                                              [^String col-name, ^LiveColumn live-column] table-live-cols]
+                                          (.putObject object-store (meta/->chunk-obj-key chunk-idx table-name col-name) (.writeColumn this live-column))))
                                        (into-array CompletableFuture)))
         (.registerNewChunk temporal-mgr chunk-idx)
         (.registerNewChunk metadata-mgr (live-cols->live-roots live-columns) chunk-idx)

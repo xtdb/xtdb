@@ -1,0 +1,108 @@
+{
+  "schema" : {
+    "fields" : [{
+      "name" : "table",
+      "nullable" : false,
+      "type" : {
+        "name" : "utf8"
+      },
+      "children" : [ ]
+    },{
+      "name" : "min-row-id",
+      "nullable" : false,
+      "type" : {
+        "name" : "int",
+        "bitWidth" : 64,
+        "isSigned" : true
+      },
+      "children" : [ ]
+    },{
+      "name" : "max-row-id",
+      "nullable" : false,
+      "type" : {
+        "name" : "int",
+        "bitWidth" : 64,
+        "isSigned" : true
+      },
+      "children" : [ ]
+    },{
+      "name" : "col-types",
+      "nullable" : false,
+      "type" : {
+        "name" : "list"
+      },
+      "children" : [{
+        "name" : "$data",
+        "nullable" : false,
+        "type" : {
+          "name" : "struct"
+        },
+        "children" : [{
+          "name" : "col-name",
+          "nullable" : false,
+          "type" : {
+            "name" : "utf8"
+          },
+          "children" : [ ]
+        },{
+          "name" : "col-type",
+          "nullable" : false,
+          "type" : {
+            "name" : "ClojureFormType"
+          },
+          "children" : [ ],
+          "metadata" : [{
+            "value" : "c2/clj-form",
+            "key" : "ARROW:extension:name"
+          },{
+            "value" : "",
+            "key" : "ARROW:extension:metadata"
+          }]
+        }]
+      }]
+    }]
+  },
+  "batches" : [{
+    "count" : 1,
+    "columns" : [{
+      "name" : "table",
+      "count" : 1,
+      "VALIDITY" : [1],
+      "OFFSET" : [0,7],
+      "DATA" : ["xt_docs"]
+    },{
+      "name" : "min-row-id",
+      "count" : 1,
+      "VALIDITY" : [1],
+      "DATA" : ["0"]
+    },{
+      "name" : "max-row-id",
+      "count" : 1,
+      "VALIDITY" : [1],
+      "DATA" : ["3"]
+    },{
+      "name" : "col-types",
+      "count" : 1,
+      "VALIDITY" : [1],
+      "OFFSET" : [0,2],
+      "children" : [{
+        "name" : "$data",
+        "count" : 2,
+        "VALIDITY" : [1,1],
+        "children" : [{
+          "name" : "col-name",
+          "count" : 2,
+          "VALIDITY" : [1,1],
+          "OFFSET" : [0,2,7],
+          "DATA" : ["id","month"]
+        },{
+          "name" : "col-type",
+          "count" : 2,
+          "VALIDITY" : [1,1],
+          "OFFSET" : [0,5,10],
+          "DATA" : [":utf8",":utf8"]
+        }]
+      }]
+    }]
+  }]
+}

@@ -1,0 +1,51 @@
+{
+  "schema" : {
+    "fields" : [{
+      "name" : "_row-id",
+      "nullable" : false,
+      "type" : {
+        "name" : "int",
+        "bitWidth" : 64,
+        "isSigned" : true
+      },
+      "children" : [ ]
+    },{
+      "name" : "os-name",
+      "nullable" : false,
+      "type" : {
+        "name" : "union",
+        "mode" : "Dense",
+        "typeIds" : [0]
+      },
+      "children" : [{
+        "name" : "utf8",
+        "nullable" : false,
+        "type" : {
+          "name" : "utf8"
+        },
+        "children" : [ ]
+      }]
+    }]
+  },
+  "batches" : [{
+    "count" : 2,
+    "columns" : [{
+      "name" : "_row-id",
+      "count" : 2,
+      "VALIDITY" : [1,1],
+      "DATA" : ["0","2"]
+    },{
+      "name" : "os-name",
+      "count" : 2,
+      "TYPE_ID" : [0,0],
+      "OFFSET" : [0,1],
+      "children" : [{
+        "name" : "utf8",
+        "count" : 2,
+        "VALIDITY" : [1,1],
+        "OFFSET" : [0,5,10],
+        "DATA" : ["6.0.1","6.0.1"]
+      }]
+    }]
+  }]
+}

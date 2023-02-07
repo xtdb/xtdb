@@ -42,6 +42,29 @@
             "name" : "struct"
           },
           "children" : [{
+            "name" : "table",
+            "nullable" : false,
+            "type" : {
+              "name" : "utf8"
+            },
+            "children" : [ ]
+          },{
+            "name" : "id",
+            "nullable" : false,
+            "type" : {
+              "name" : "union",
+              "mode" : "Dense",
+              "typeIds" : [0]
+            },
+            "children" : [{
+              "name" : "utf8",
+              "nullable" : false,
+              "type" : {
+                "name" : "utf8"
+              },
+              "children" : [ ]
+            }]
+          },{
             "name" : "document",
             "nullable" : false,
             "type" : {
@@ -56,38 +79,6 @@
                 "name" : "struct"
               },
               "children" : [{
-                "name" : "_table",
-                "nullable" : false,
-                "type" : {
-                  "name" : "union",
-                  "mode" : "Dense",
-                  "typeIds" : [0]
-                },
-                "children" : [{
-                  "name" : "utf8",
-                  "nullable" : false,
-                  "type" : {
-                    "name" : "utf8"
-                  },
-                  "children" : [ ]
-                }]
-              },{
-                "name" : "id",
-                "nullable" : false,
-                "type" : {
-                  "name" : "union",
-                  "mode" : "Dense",
-                  "typeIds" : [0]
-                },
-                "children" : [{
-                  "name" : "utf8",
-                  "nullable" : false,
-                  "type" : {
-                    "name" : "utf8"
-                  },
-                  "children" : [ ]
-                }]
-              },{
                 "name" : "api-version",
                 "nullable" : false,
                 "type" : {
@@ -277,39 +268,7 @@
                   "children" : [ ]
                 }]
               },{
-                "name" : "_table",
-                "nullable" : false,
-                "type" : {
-                  "name" : "union",
-                  "mode" : "Dense",
-                  "typeIds" : [0]
-                },
-                "children" : [{
-                  "name" : "utf8",
-                  "nullable" : false,
-                  "type" : {
-                    "name" : "utf8"
-                  },
-                  "children" : [ ]
-                }]
-              },{
                 "name" : "bssid",
-                "nullable" : false,
-                "type" : {
-                  "name" : "union",
-                  "mode" : "Dense",
-                  "typeIds" : [0]
-                },
-                "children" : [{
-                  "name" : "utf8",
-                  "nullable" : false,
-                  "type" : {
-                    "name" : "utf8"
-                  },
-                  "children" : [ ]
-                }]
-              },{
-                "name" : "id",
                 "nullable" : false,
                 "type" : {
                   "name" : "union",
@@ -420,8 +379,8 @@
             "name" : "struct"
           },
           "children" : [{
-            "name" : "_table",
-            "nullable" : true,
+            "name" : "table",
+            "nullable" : false,
             "type" : {
               "name" : "utf8"
             },
@@ -635,6 +594,24 @@
           "count" : 2,
           "VALIDITY" : [1,1],
           "children" : [{
+            "name" : "table",
+            "count" : 2,
+            "VALIDITY" : [1,1],
+            "OFFSET" : [0,7,14],
+            "DATA" : ["xt_docs","xt_docs"]
+          },{
+            "name" : "id",
+            "count" : 2,
+            "TYPE_ID" : [0,0],
+            "OFFSET" : [0,1],
+            "children" : [{
+              "name" : "utf8",
+              "count" : 2,
+              "VALIDITY" : [1,1],
+              "OFFSET" : [0,22,40],
+              "DATA" : ["device-info-demo000000","reading-demo000000"]
+            }]
+          },{
             "name" : "document",
             "count" : 2,
             "TYPE_ID" : [0,1],
@@ -644,30 +621,6 @@
               "count" : 1,
               "VALIDITY" : [1],
               "children" : [{
-                "name" : "_table",
-                "count" : 1,
-                "TYPE_ID" : [0],
-                "OFFSET" : [0],
-                "children" : [{
-                  "name" : "utf8",
-                  "count" : 1,
-                  "VALIDITY" : [1],
-                  "OFFSET" : [0,7],
-                  "DATA" : ["xt_docs"]
-                }]
-              },{
-                "name" : "id",
-                "count" : 1,
-                "TYPE_ID" : [0],
-                "OFFSET" : [0],
-                "children" : [{
-                  "name" : "utf8",
-                  "count" : 1,
-                  "VALIDITY" : [1],
-                  "OFFSET" : [0,22],
-                  "DATA" : ["device-info-demo000000"]
-                }]
-              },{
                 "name" : "api-version",
                 "count" : 1,
                 "TYPE_ID" : [0],
@@ -800,18 +753,6 @@
                   "DATA" : [59.0]
                 }]
               },{
-                "name" : "_table",
-                "count" : 1,
-                "TYPE_ID" : [0],
-                "OFFSET" : [0],
-                "children" : [{
-                  "name" : "utf8",
-                  "count" : 1,
-                  "VALIDITY" : [1],
-                  "OFFSET" : [0,7],
-                  "DATA" : ["xt_docs"]
-                }]
-              },{
                 "name" : "bssid",
                 "count" : 1,
                 "TYPE_ID" : [0],
@@ -822,18 +763,6 @@
                   "VALIDITY" : [1],
                   "OFFSET" : [0,17],
                   "DATA" : ["01:02:03:04:05:06"]
-                }]
-              },{
-                "name" : "id",
-                "count" : 1,
-                "TYPE_ID" : [0],
-                "OFFSET" : [0],
-                "children" : [{
-                  "name" : "utf8",
-                  "count" : 1,
-                  "VALIDITY" : [1],
-                  "OFFSET" : [0,18],
-                  "DATA" : ["reading-demo000000"]
                 }]
               },{
                 "name" : "battery-temperature",
@@ -897,11 +826,11 @@
           "count" : 2,
           "VALIDITY" : [1,1],
           "children" : [{
-            "name" : "_table",
+            "name" : "table",
             "count" : 2,
-            "VALIDITY" : [1,0],
-            "OFFSET" : [0,7,7],
-            "DATA" : ["xt_docs",""]
+            "VALIDITY" : [1,1],
+            "OFFSET" : [0,7,14],
+            "DATA" : ["xt_docs","xt_docs"]
           },{
             "name" : "id",
             "count" : 2,

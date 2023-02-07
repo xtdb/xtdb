@@ -1,0 +1,51 @@
+{
+  "schema" : {
+    "fields" : [{
+      "name" : "_row-id",
+      "nullable" : false,
+      "type" : {
+        "name" : "int",
+        "bitWidth" : 64,
+        "isSigned" : true
+      },
+      "children" : [ ]
+    },{
+      "name" : "bssid",
+      "nullable" : false,
+      "type" : {
+        "name" : "union",
+        "mode" : "Dense",
+        "typeIds" : [0]
+      },
+      "children" : [{
+        "name" : "utf8",
+        "nullable" : false,
+        "type" : {
+          "name" : "utf8"
+        },
+        "children" : [ ]
+      }]
+    }]
+  },
+  "batches" : [{
+    "count" : 2,
+    "columns" : [{
+      "name" : "_row-id",
+      "count" : 2,
+      "VALIDITY" : [1,1],
+      "DATA" : ["1","3"]
+    },{
+      "name" : "bssid",
+      "count" : 2,
+      "TYPE_ID" : [0,0],
+      "OFFSET" : [0,1],
+      "children" : [{
+        "name" : "utf8",
+        "count" : 2,
+        "VALIDITY" : [1,1],
+        "OFFSET" : [0,17,34],
+        "DATA" : ["01:02:03:04:05:06","A0:B1:C5:D2:E0:F3"]
+      }]
+    }]
+  }]
+}
