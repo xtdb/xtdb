@@ -144,7 +144,7 @@
                 [n :n_name n_name]
                 [n :n_regionkey r]
                 [r :r_name ?region]]
-        :order-by [[(sum li_price) :desc]]}
+        :order-by [[(sum (* l_extendedprice (- 1 l_discount))) :desc]]}
       (with-in-args ["ASIA"])))
 
 (def q6
