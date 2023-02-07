@@ -9,6 +9,8 @@
   (:import clojure.lang.MapEntry
            java.time.LocalDate
            java.lang.AutoCloseable
+           (java.util.concurrent ConcurrentHashMap)
+           (java.util.function Function)
            org.apache.arrow.memory.BufferAllocator))
 
 (s/def ::logic-var simple-symbol?)
@@ -719,7 +721,10 @@
                args)
        (into {})))
 
-(defn open-datalog-query ^core2.IResultSet [^BufferAllocator allocator query db args]
+
+
+(defn open-datalog-query ^core2.IResultSet [^BufferAllocator allocator ^ConcurrentHashMap prepare-ra-cache
+                                            query db args]
   (let [plan (compile-query (dissoc query :basis :basis-timeout :default-tz))
         {::keys [in-bindings]} (meta plan)
 
@@ -730,7 +735,11 @@
                  #_(doto clojure.pprint/pprint)
                  (doto (lp/validate-plan)))
 
-        pq (op/prepare-ra plan)]
+        ^core2.operator.PreparedQuery pq (.computeIfAbsent prepare-ra-cache
+                                                           plan
+                                                           (reify Function
+                                                             (apply [_ _]
+                                                               (op/prepare-ra plan))))]
 
     (when (not= (count in-bindings) (count args))
       (throw (err/illegal-arg :in-arity-exception {::err/message ":in arity mismatch"

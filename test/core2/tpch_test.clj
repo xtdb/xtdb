@@ -10,7 +10,8 @@
             core2.sql-test
             [core2.test-util :as tu]
             [core2.util :as util])
-  (:import [java.nio.file Path]))
+  (:import (java.nio.file Path)
+           (java.util.concurrent ConcurrentHashMap)))
 
 (def ^:dynamic *node* nil)
 (def ^:dynamic *db* nil)
@@ -114,10 +115,11 @@
   (let [q (inc n)]
     (when (contains? *datalog-qs* q)
       (let [query @(nth tpch-datalog/queries n)
-            {::tpch-datalog/keys [in-args]} (meta query)]
+            {::tpch-datalog/keys [in-args]} (meta query)
+            ra-cache (ConcurrentHashMap.)]
         (tu/with-allocator
           (fn []
-            (with-open [res (d/open-datalog-query tu/*allocator* query *db* in-args)]
+            (with-open [res (d/open-datalog-query tu/*allocator* ra-cache query *db* in-args)]
               (t/is (is-equal? expected-res (vec (iterator-seq res)))
                     (format "Q%02d" (inc n))))))))))
 

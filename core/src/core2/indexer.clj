@@ -538,11 +538,17 @@
 
         nil))))
 
-(defn- find-fn [allocator sci-ctx scan-src tx-opts fn-id]
+(defn- find-fn [allocator sci-ctx scan-src ^ConcurrentHashMap prepare-ra-cache tx-opts fn-id]
   ;; HACK: assume xt_docs here...
   ;; TODO confirm fn-body doc key
 
-  (let [pq (op/prepare-ra '[:scan xt_docs [{id (= id ?id)} fn]])]
+  (let [lp '[:scan xt_docs [{id (= id ?id)} fn]]
+        ;; prepare-ra-cache a bit overkill here for now
+        ^core2.operator.PreparedQuery pq (.computeIfAbsent prepare-ra-cache
+                                                           lp
+                                                           (reify Function
+                                                             (apply [_ _]
+                                                               (op/prepare-ra lp))))]
     (with-open [bq (.bind pq (into (select-keys tx-opts [:current-time :default-tz])
                                    {:srcs {'$ scan-src},
                                     :params (iv/->indirect-rel [(-> (vw/open-vec allocator '?id [fn-id])
@@ -572,20 +578,20 @@
               (catch Throwable t
                 (throw (err/runtime-err :core2.call/error-compiling-tx-fn {:fn-form fn-form} t))))))))))
 
-(defn- tx-fn-q [allocator scan-src tx-opts q & args]
+(defn- tx-fn-q [allocator prepare-ra-cache scan-src tx-opts q & args]
   ;; bear in mind Datalog doesn't yet look at `app-time-as-of-now?`, essentially just assumes its true.
   (let [q (into tx-opts q)]
-    (with-open [res (d/open-datalog-query allocator q scan-src args)]
+    (with-open [res (d/open-datalog-query allocator prepare-ra-cache q scan-src args)]
       (vec (iterator-seq res)))))
 
 (defn- tx-fn-sql
-  ([allocator scan-src tx-opts query]
-   (tx-fn-sql allocator scan-src tx-opts query {}))
+  ([allocator ^ConcurrentHashMap prepare-ra-cache scan-src tx-opts query]
+   (tx-fn-sql allocator prepare-ra-cache scan-src tx-opts query {}))
 
-  ([allocator scan-src tx-opts query query-opts]
+  ([allocator ^ConcurrentHashMap prepare-ra-cache scan-src tx-opts query query-opts]
    (try
      (let [query-opts (into tx-opts query-opts)
-           pq (sql/prepare-sql query query-opts)]
+           pq (sql/prepare-sql query prepare-ra-cache query-opts)]
        (with-open [res (sql/open-sql-query allocator pq scan-src query-opts)]
          (vec (iterator-seq res))))
      (catch Throwable e
@@ -597,14 +603,16 @@
 (defn reset-tx-fn-error! []
   (first (reset-vals! !last-tx-fn-error nil)))
 
-(defn- ->call-indexer ^core2.indexer.OpIndexer [allocator, ^DenseUnionVector tx-ops-vec, scan-src, {:keys [tx-key] :as tx-opts}]
+
+(defn- ->call-indexer ^core2.indexer.OpIndexer [allocator, ^DenseUnionVector tx-ops-vec, scan-src,
+                                                prepare-ra-cache, {:keys [tx-key] :as tx-opts}]
   (let [call-vec (.getStruct tx-ops-vec 4)
         ^DenseUnionVector fn-id-vec (.getChild call-vec "fn-id" DenseUnionVector)
         ^ListVector args-vec (.getChild call-vec "args" ListVector)
 
         ;; TODO confirm/expand API that we expose to tx-fns
-        sci-ctx (sci/init {:bindings {'q (partial tx-fn-q allocator scan-src tx-opts)
-                                      'sql-q (partial tx-fn-sql allocator scan-src tx-opts)
+        sci-ctx (sci/init {:bindings {'q (partial tx-fn-q allocator prepare-ra-cache scan-src tx-opts)
+                                      'sql-q (partial tx-fn-sql allocator prepare-ra-cache scan-src tx-opts)
                                       'sleep (fn [n] (Thread/sleep n))
                                       '*current-tx* tx-key}})]
 
@@ -613,7 +621,7 @@
         (try
           (let [call-offset (.getOffset tx-ops-vec tx-op-idx)
                 fn-id (t/get-object fn-id-vec call-offset)
-                tx-fn (find-fn allocator (sci/fork sci-ctx) scan-src tx-opts fn-id)
+                tx-fn (find-fn allocator (sci/fork sci-ctx) scan-src prepare-ra-cache tx-opts fn-id)
 
                 args (t/get-object args-vec call-offset)
 
@@ -772,7 +780,7 @@
 
 (defn- ->sql-indexer ^core2.indexer.OpIndexer [^BufferAllocator allocator, ^IMetadataManager metadata-mgr, ^IBufferPool buffer-pool, ^IInternalIdManager iid-mgr
                                                ^ILogOpIndexer log-op-idxer, ^ITemporalTxIndexer temporal-idxer, ^IDocumentIndexer doc-idxer
-                                               ^DenseUnionVector tx-ops-vec, ^ScanSource scan-src
+                                               ^DenseUnionVector tx-ops-vec, ^ScanSource scan-src, ^ConcurrentHashMap prepared-ra-cache
                                                {:keys [app-time-as-of-now?] :as tx-opts}]
   (let [sql-vec (.getStruct tx-ops-vec 0)
         ^VarCharVector query-vec (.getChild sql-vec "query" VarCharVector)
@@ -785,7 +793,11 @@
       (indexOp [_ tx-op-idx]
         (let [sql-offset (.getOffset tx-ops-vec tx-op-idx)]
           (letfn [(index-op [^SqlOpIndexer op-idxer query-opts inner-query]
-                    (let [pq (op/prepare-ra inner-query)]
+                    (let [^core2.operator.PreparedQuery pq (.computeIfAbsent prepared-ra-cache
+                                                                             inner-query
+                                                                             (reify Function
+                                                                               (apply [_ _]
+                                                                                 (op/prepare-ra inner-query))))]
                       (letfn [(index-op* [^IIndirectRelation params]
                                 (with-open [res (-> (.bind pq (into (select-keys tx-opts [:current-time :default-tz])
                                                                     {:srcs {'$ scan-src}, :params params}))
@@ -864,6 +876,7 @@
                   ^long max-rows-per-block
 
                   ^Map live-columns
+                  ^ConcurrentHashMap prepare-ra-cache
                   ^:volatile-mutable ^long chunk-idx
                   ^:volatile-mutable ^TransactionInstant latest-completed-tx
                   ^:volatile-mutable ^long chunk-row-count
@@ -899,10 +912,10 @@
                 (let [!put-idxer (delay (->put-indexer iid-mgr log-op-idxer temporal-idxer doc-idxer tx-ops-vec sys-time))
                       !delete-idxer (delay (->delete-indexer iid-mgr log-op-idxer temporal-idxer doc-idxer tx-ops-vec sys-time))
                       !evict-idxer (delay (->evict-indexer iid-mgr log-op-idxer temporal-idxer doc-idxer tx-ops-vec))
-                      !call-idxer (delay (->call-indexer allocator tx-ops-vec scan-src tx-opts))
+                      !call-idxer (delay (->call-indexer allocator tx-ops-vec scan-src prepare-ra-cache tx-opts))
                       !sql-idxer (delay (->sql-indexer allocator metadata-mgr buffer-pool iid-mgr
                                                        log-op-idxer temporal-idxer doc-idxer
-                                                       tx-ops-vec scan-src tx-opts))]
+                                                       tx-ops-vec scan-src prepare-ra-cache tx-opts))]
                   (dotimes [tx-op-idx (.getValueCount tx-ops-vec)]
                     (when-let [more-tx-ops (case (.getTypeId tx-ops-vec tx-op-idx)
                                              0 (.indexOp ^OpIndexer @!sql-idxer tx-op-idx)
@@ -1055,11 +1068,12 @@
           :watermark-mgr (ig/ref ::wm/watermark-manager)
           :internal-id-mgr (ig/ref ::internal-id-manager)
           :buffer-pool (ig/ref ::bp/buffer-pool)
-          :row-counts (ig/ref :core2/row-counts)}
+          :row-counts (ig/ref :core2/row-counts)
+          :prepare-ra-cache (ig/ref :core2/prepare-ra-cache)}
          opts))
 
 (defmethod ig/init-key ::indexer
-  [_ {:keys [allocator object-store metadata-mgr buffer-pool ^ITemporalManager temporal-mgr, internal-id-mgr, watermark-mgr]
+  [_ {:keys [allocator object-store metadata-mgr buffer-pool ^ITemporalManager temporal-mgr, ^IWatermarkManager watermark-mgr, internal-id-mgr prepare-ra-cache]
       {:keys [max-rows-per-chunk max-rows-per-block]} :row-counts
       :as deps}]
 
@@ -1073,6 +1087,7 @@
 
               max-rows-per-chunk max-rows-per-block
               (ConcurrentSkipListMap.) ; live-columns
+              prepare-ra-cache
               chunk-idx latest-tx 0
 
               nil ; watermark

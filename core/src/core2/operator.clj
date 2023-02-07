@@ -26,7 +26,8 @@
            core2.operator.scan.ScanSource
            java.lang.AutoCloseable
            java.time.Clock
-           (java.util HashMap Iterator)
+           (java.util Iterator)
+           (java.util.concurrent ConcurrentHashMap)
            (java.util.function Consumer Function)
            (org.apache.arrow.memory BufferAllocator RootAllocator)))
 
@@ -79,12 +80,11 @@
     (let [scan-cols (->> (lp/child-exprs conformed-query)
                          (into #{} (comp (filter (comp #{:scan} :op))
                                          (mapcat scan/->scan-cols))))
-          cache (HashMap.)]
+          cache (ConcurrentHashMap.)]
       (reify PreparedQuery
         (bind [_ {:keys [srcs params table-args current-time default-tz]}]
           (let [clock (Clock/fixed (or current-time (.instant expr/*clock*))
                                    (or default-tz (.getZone expr/*clock*)))
-
                 {:keys [col-types ->cursor]} (.computeIfAbsent cache
                                                                {:scan-col-types (scan/->scan-col-types srcs scan-cols)
                                                                 :param-types (expr/->param-types params)

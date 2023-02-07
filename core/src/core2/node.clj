@@ -12,7 +12,7 @@
            (java.io Closeable Writer)
            (java.lang AutoCloseable)
            (java.time Duration ZoneId)
-           (java.util.concurrent CompletableFuture TimeUnit)
+           (java.util.concurrent CompletableFuture TimeUnit ConcurrentHashMap)
            (org.apache.arrow.memory BufferAllocator RootAllocator)))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -27,6 +27,8 @@
     :else util/utc))
 
 (defmethod ig/init-key :core2/default-tz [_ default-tz] default-tz)
+
+(defmethod ig/init-key :core2/prepare-ra-cache [_ _] (ConcurrentHashMap.))
 
 (defprotocol PNode
   (snapshot-async
@@ -48,7 +50,8 @@
                  ^ITxProducer tx-producer
                  default-tz
                  !system
-                 close-fn]
+                 close-fn
+                 prepare-ra-cache]
   api/PClient
   (-open-datalog-async [this query args]
     (let [query (into {:default-tz default-tz} query)
@@ -57,12 +60,12 @@
       (-> !db
           (util/then-apply
             (fn [db]
-              (d/open-datalog-query allocator query db args))))))
+              (d/open-datalog-query allocator prepare-ra-cache query db args))))))
 
   (-open-sql-async [this query query-opts]
     (let [query-opts (into {:default-tz default-tz} query-opts)
           !db (snapshot-async this (get-in query-opts [:basis :tx]) (:basis-timeout query-opts))
-          pq (sql/prepare-sql query query-opts)]
+          pq (sql/prepare-sql query prepare-ra-cache query-opts)]
       (-> !db
           (util/then-apply
             (fn [db]
@@ -103,7 +106,8 @@
   (merge {:allocator (ig/ref :core2/allocator)
           :ingester (ig/ref :core2/ingester)
           :tx-producer (ig/ref ::txp/tx-producer)
-          :default-tz (ig/ref :core2/default-tz)}
+          :default-tz (ig/ref :core2/default-tz)
+          :prepare-ra-cache (ig/ref :core2/prepare-ra-cache) }
          opts))
 
 (defmethod ig/init-key ::node [_ deps]
@@ -128,7 +132,8 @@
                           :core2.temporal/temporal-manager {}
                           :core2.buffer-pool/buffer-pool {}
                           :core2.watermark/watermark-manager {}
-                          ::txp/tx-producer {}}
+                          ::txp/tx-producer {}
+                          :core2/prepare-ra-cache {}}
                          opts)
                    (doto ig/load-namespaces)
                    (with-default-impl :core2/log :core2.log/memory-log)
