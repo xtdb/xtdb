@@ -86,7 +86,7 @@
         (run! util/try-close (map :wm (vals mm+wms)))))))
 
 (defn- next-roots [col-names chunks]
-  (when (= (count col-names) (count chunks))
+  (when (and chunks (= (count col-names) (count chunks)))
     (let [in-roots (HashMap.)]
       (when (every? true? (for [col-name col-names
                                 :let [^ICursor chunk (get chunks col-name)]
@@ -105,14 +105,15 @@
      (.and y))))
 
 (defn- ->atemporal-row-id-bitmap [^BufferAllocator allocator, ^List col-names, ^Map col-preds, ^Map in-roots, params]
-  (->> (for [^String col-name col-names
-             :when (not (temporal/temporal-column? col-name))
-             :let [^IRelationSelector col-pred (.get col-preds col-name)
-                   ^VectorSchemaRoot in-root (.get in-roots (name col-name))]]
-         (align/->row-id-bitmap (when col-pred
-                                  (.select col-pred allocator (iv/<-root in-root) params))
-                                (.getVector in-root t/row-id-field)))
-       (reduce roaring64-and)))
+  (when (seq col-names)
+    (->> (for [^String col-name col-names
+               :when (not (temporal/temporal-column? col-name))
+               :let [^IRelationSelector col-pred (.get col-preds col-name)
+                     ^VectorSchemaRoot in-root (.get in-roots (name col-name))]]
+           (align/->row-id-bitmap (when col-pred
+                                    (.select col-pred allocator (iv/<-root in-root) params))
+                                  (.getVector in-root t/row-id-field)))
+         (reduce roaring64-and))))
 
 (defn- adjust-temporal-min-range-to-row-id-range ^longs [^longs temporal-min-range ^Roaring64Bitmap row-id-bitmap]
   (let [temporal-min-range (or (temporal/->copy-range temporal-min-range) (temporal/->min-range))]
@@ -133,8 +134,12 @@
                 (min max-row-id (aget temporal-max-range temporal/row-id-idx))))))))
 
 (defn- ->temporal-rel ^core2.vector.IIndirectRelation [^IWatermark watermark, ^BufferAllocator allocator, ^List col-names ^longs temporal-min-range ^longs temporal-max-range atemporal-row-id-bitmap]
-  (let [temporal-min-range (adjust-temporal-min-range-to-row-id-range temporal-min-range atemporal-row-id-bitmap)
-        temporal-max-range (adjust-temporal-max-range-to-row-id-range temporal-max-range atemporal-row-id-bitmap)]
+  (let [temporal-min-range (cond-> temporal-min-range
+                             atemporal-row-id-bitmap
+                             (adjust-temporal-min-range-to-row-id-range atemporal-row-id-bitmap))
+        temporal-max-range (cond-> temporal-max-range
+                             atemporal-row-id-bitmap
+                             (adjust-temporal-max-range-to-row-id-range atemporal-row-id-bitmap))]
     (.createTemporalRelation watermark allocator
                              (->> (conj col-names "_row-id")
                                   (into [] (comp (distinct) (filter temporal/temporal-column?))))
@@ -210,6 +215,9 @@
                                              (not keep-row-id-col?) (remove-row-id-col))]
                               (if (and read-rel (pos? (.rowCount read-rel)))
                                 (do
+                                  ;; if we don't have content-cols, we don't want to loop forever, #45
+                                  (when (empty? content-col-names)
+                                    (set! (.chunks this) nil))
                                   (.accept c read-rel)
                                   true)
                                 false))

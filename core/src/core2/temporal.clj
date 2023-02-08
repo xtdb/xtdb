@@ -253,16 +253,17 @@
 
 (defn- ->temporal-rel ^core2.vector.IIndirectRelation [^BufferAllocator allocator, kd-tree columns temporal-min-range temporal-max-range ^Roaring64Bitmap row-id-bitmap]
   (let [^IKdTreePointAccess point-access (kd/kd-tree-point-access kd-tree)
-        ^LongStream kd-tree-idxs (if (.isEmpty row-id-bitmap)
+        ^LongStream kd-tree-idxs (if (and row-id-bitmap (.isEmpty row-id-bitmap))
                                    (LongStream/empty)
                                    (kd/kd-tree-range-search kd-tree temporal-min-range temporal-max-range))
         coordinates (-> kd-tree-idxs
                         (.mapToObj (reify LongFunction
                                      (apply [_ x]
                                        (.getArrayPoint point-access x))))
-                        (.filter (reify Predicate
-                                   (test [_ x]
-                                     (.contains row-id-bitmap (aget ^longs x row-id-idx)))))
+                        (cond-> row-id-bitmap (.filter
+                                               (reify Predicate
+                                                 (test [_ x]
+                                                   (.contains row-id-bitmap (aget ^longs x row-id-idx))))))
                         (.sorted (Comparator/comparingLong (reify ToLongFunction
                                                              (applyAsLong [_ x]
                                                                (aget ^longs x row-id-idx)))))

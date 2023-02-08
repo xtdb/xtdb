@@ -57,7 +57,7 @@
     (iv/->indirect-vec in-vec (.toArray (.build res)))))
 
 (defn align-vectors ^core2.vector.IIndirectRelation [^List content-roots, ^IIndirectRelation temporal-rel]
-   ;; assumption: temporal-rel is sorted by row-id
+  ;; assumption: temporal-rel is sorted by row-id
   (let [read-cols (LinkedList. (seq temporal-rel))
         temporal-row-id-col (.vectorForName temporal-rel "_row-id")]
     (assert temporal-row-id-col)

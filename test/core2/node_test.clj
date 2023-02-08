@@ -63,21 +63,25 @@ VALUES (1, 'Happy 2024!', DATE '2024-01-01'),
                            {:basis {:tx !tx}})))))
 
 (t/deftest test-delete-without-search-315
-  (let [!tx1 (c2/submit-tx tu/*node* [[:sql "INSERT INTO foo (id) VALUES ('foo')"]])]
-    (t/is (= [{:id "foo",
-               :application_time_start (util/->zdt #inst "2020")
-               :application_time_end (util/->zdt util/end-of-time)}]
-             (c2/sql-query tu/*node* "SELECT foo.id, foo.application_time_start, foo.application_time_end FROM foo"
-                           {:basis {:tx !tx1}})))
-
-    #_ ; FIXME #45
-    (let [!tx2 (c2/submit-tx tu/*node* [[:sql "DELETE FROM foo"]])]
+  (letfn [(q [!tx]
+            (c2/sql-query tu/*node* "SELECT foo.id, foo.application_time_start, foo.application_time_end FROM foo"
+                          {:basis {:tx !tx}}))]
+    (let [!tx (c2/submit-tx tu/*node* [[:sql "INSERT INTO foo (id) VALUES ('foo')"]])]
       (t/is (= [{:id "foo",
                  :application_time_start (util/->zdt #inst "2020")
-                 :application_time_end (util/->zdt #inst "2021")}]
-               (c2/sql-query tu/*node* "SELECT foo.id, foo.application_time_start, foo.application_time_end FROM foo"
-                             {:basis {:tx !tx2}
-                              :basis-timeout (java.time.Duration/ofMillis 500)}))))))
+                 :application_time_end (util/->zdt util/end-of-time)}]
+               (q !tx))))
+
+    (let [!tx (c2/submit-tx tu/*node* [[:sql "DELETE FROM foo"]]
+                            {:app-time-as-of-now? true})]
+      (t/is (= [{:id "foo"
+                 :application_time_start (util/->zdt #inst "2020")
+                 :application_time_end (util/->zdt #inst "2020-01-02")}]
+               (q !tx))))
+
+    (let [!tx (c2/submit-tx tu/*node* [[:sql "DELETE FROM foo"]])]
+      (t/is (= []
+               (q !tx))))))
 
 (t/deftest test-update-set-field-from-param-328
   (c2/submit-tx tu/*node* [[:sql "INSERT INTO users (id, first_name, last_name) VALUES (?, ?, ?)"
