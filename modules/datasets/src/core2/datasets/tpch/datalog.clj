@@ -30,6 +30,7 @@
 
 (def q2
   '{:find [s_acctbal s_name n_name p p_mfgr s_address s_phone s_comment]
+    :keys [s_acctbal s_name n_name p_partkey p_mfgr s_address s_phone s_comment]
     :where [[p :_table :part]
             [ps :_table :partsupp]
             [s :_table :supplier]
@@ -233,6 +234,7 @@
   '{:find [nation o_year
            (sum (- (* l_extendedprice (- 1 l_discount))
                    (* ps_supplycost l_quantity)))]
+    :keys [nation o_year sum_profit]
     :where [[l :_table :lineitem]
             [ps :_table :partsupp]
             [s :_table :supplier]
@@ -265,7 +267,9 @@
 
 (def q10
   '{:find [c c_name (sum (* l_extendedprice (- 1 l_discount)))
-           c_acctbal n_name c_address c_phone c_comment]
+           c_acctbal c_phone n_name c_address c_comment]
+    :keys [c_custkey c_name revenue
+           c_acctbal c_phone n_name c_address c_comment]
     :where [[c :_table :customer]
             [l :_table :lineitem]
             [n :_table :nation]

@@ -103,7 +103,8 @@
 (def ^:private ^:dynamic *datalog-qs*
   ;; replace with *qs* once these are all expected to work
   (-> (set (range 1 23))
-      (disj 2 3 5 8 9 10 21) ; TODO join-order planning
+      (disj 2) ; TODO extra row in results
+      (disj 21) ; TODO apply decorr
       (disj 7 20) ; TODO general fail
       (disj 13) ; TODO left-join
       (disj 15) ; TODO has a view, not sure how to represent this
