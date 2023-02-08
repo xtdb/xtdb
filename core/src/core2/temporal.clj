@@ -253,17 +253,16 @@
 
 (defn- ->temporal-rel ^core2.vector.IIndirectRelation [^BufferAllocator allocator, kd-tree columns temporal-min-range temporal-max-range ^Roaring64Bitmap row-id-bitmap]
   (let [^IKdTreePointAccess point-access (kd/kd-tree-point-access kd-tree)
-        ^LongStream kd-tree-idxs (if (and row-id-bitmap (.isEmpty row-id-bitmap))
+        ^LongStream kd-tree-idxs (if (.isEmpty row-id-bitmap)
                                    (LongStream/empty)
                                    (kd/kd-tree-range-search kd-tree temporal-min-range temporal-max-range))
         coordinates (-> kd-tree-idxs
                         (.mapToObj (reify LongFunction
                                      (apply [_ x]
                                        (.getArrayPoint point-access x))))
-                        (cond-> row-id-bitmap (.filter
-                                               (reify Predicate
-                                                 (test [_ x]
-                                                   (.contains row-id-bitmap (aget ^longs x row-id-idx))))))
+                        (.filter (reify Predicate
+                                   (test [_ x]
+                                     (.contains row-id-bitmap (aget ^longs x row-id-idx)))))
 
                         ;; HACK we seem to be creating zero-length app-time ranges, I don't know why, #403
                         ;; we filter them out here, but likely best that we don't create them in the first place

@@ -134,12 +134,8 @@
                 (min max-row-id (aget temporal-max-range temporal/row-id-idx))))))))
 
 (defn- ->temporal-rel ^core2.vector.IIndirectRelation [^IWatermark watermark, ^BufferAllocator allocator, ^List col-names ^longs temporal-min-range ^longs temporal-max-range atemporal-row-id-bitmap]
-  (let [temporal-min-range (cond-> temporal-min-range
-                             atemporal-row-id-bitmap
-                             (adjust-temporal-min-range-to-row-id-range atemporal-row-id-bitmap))
-        temporal-max-range (cond-> temporal-max-range
-                             atemporal-row-id-bitmap
-                             (adjust-temporal-max-range-to-row-id-range atemporal-row-id-bitmap))]
+  (let [temporal-min-range (adjust-temporal-min-range-to-row-id-range temporal-min-range atemporal-row-id-bitmap)
+        temporal-max-range (adjust-temporal-max-range-to-row-id-range temporal-max-range atemporal-row-id-bitmap)]
     (.createTemporalRelation watermark allocator
                              (->> (conj col-names "_row-id")
                                   (into [] (comp (distinct) (filter temporal/temporal-column?))))
@@ -179,12 +175,8 @@
                  filtered-block-idxs))))))
     block-idxs))
 
-(defn- remove-row-id-col ^core2.vector.IIndirectRelation [^IIndirectRelation rel]
-  (iv/->indirect-rel (remove #(= "_row-id" (.getName ^IIndirectVector %)) rel)
-                     (.rowCount rel)))
-
-(defn- remove-table-col ^core2.vector.IIndirectRelation [^IIndirectRelation rel]
-  (iv/->indirect-rel (remove #(= "_table" (.getName ^IIndirectVector %)) rel)
+(defn- remove-col ^core2.vector.IIndirectRelation [^IIndirectRelation rel, ^String col-name]
+  (iv/->indirect-rel (remove #(= col-name (.getName ^IIndirectVector %)) rel)
                      (.rowCount rel)))
 
 (deftype ScanCursor [^BufferAllocator allocator
@@ -202,7 +194,9 @@
                      ^:unsynchronized-mutable ^Map #_#_<String, ICursor> chunks]
   ICursor
   (tryAdvance [this c]
-    (let [keep-row-id-col? (contains? (set temporal-col-names) "_row-id")]
+    (let [keep-row-id-col? (contains? (set temporal-col-names) "_row-id")
+          keep-id-col? (contains? (set content-col-names) "id")
+          content-col-names (or (not-empty content-col-names) #{"id"})]
       (letfn [(next-block [chunks]
                 (loop []
                   (if-let [^Map in-roots (next-roots content-col-names chunks)]
@@ -210,14 +204,12 @@
                           temporal-rel (->temporal-rel watermark allocator temporal-col-names temporal-min-range temporal-max-range atemporal-row-id-bitmap)]
                       (or (try
                             (let [temporal-rel (-> temporal-rel (apply-temporal-preds allocator col-preds params))
-                                  read-rel (cond-> (remove-table-col
-                                                     (align/align-vectors (.values in-roots) temporal-rel))
-                                             (not keep-row-id-col?) (remove-row-id-col))]
+                                  read-rel (-> (align/align-vectors (.values in-roots) temporal-rel)
+                                               (remove-col "_table")
+                                               (cond-> (not keep-row-id-col?) (remove-col "_row-id")
+                                                       (not keep-id-col?) (remove-col "id")))]
                               (if (and read-rel (pos? (.rowCount read-rel)))
                                 (do
-                                  ;; if we don't have content-cols, we don't want to loop forever, #45
-                                  (when (empty? content-col-names)
-                                    (set! (.chunks this) nil))
                                   (.accept c read-rel)
                                   true)
                                 false))
