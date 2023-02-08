@@ -506,6 +506,7 @@
                                  :secondary-indices :xtdb/secondary-indices}}
   [{:keys [tx-log tx-indexer document-store bus index-store secondary-indices batch-preferred-doc-count]}]
   (log/info "Started tx-ingester")
+  (bus/send bus {::xt/event-type ::tx-ingester-starting})
 
   (let [!error (atom nil)
         secondary-indices @(:!secondary-indices secondary-indices)
