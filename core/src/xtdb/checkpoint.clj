@@ -3,6 +3,7 @@
             [clojure.java.io :as io]
             [xtdb.api :as xt]
             [xtdb.io :as xio]
+            [xtdb.bus :as bus]
             [xtdb.system :as sys])
   (:import [java.io Closeable File]
            java.net.URI
@@ -58,7 +59,7 @@
    (cons (.plus start (Duration/ofSeconds (rand-int (.getSeconds freq))))
          (cp-seq (.plus start freq) freq))))
 
-(defrecord ScheduledCheckpointer [store, ^Path checkpoint-dir, ^Duration approx-frequency
+(defrecord ScheduledCheckpointer [store bus ^Path checkpoint-dir, ^Duration approx-frequency
                                   keep-dir-between-checkpoints? keep-dir-on-close?]
   Checkpointer
   (try-restore [_ dir cp-format]
@@ -67,6 +68,7 @@
       (log/debug "checking for checkpoints to restore from")
       (when-let [cp (first (available-checkpoints store {::cp-format cp-format}))]
         (log/infof "restoring from %s to %s" cp dir)
+        (bus/send bus {::xt/event-type ::index-restoring})
         (download-checkpoint store cp dir)
         cp)))
 
@@ -105,7 +107,8 @@
           (when-not keep-dir-on-close?
             (xio/delete-dir checkpoint-dir)))))))
 
-(defn ->checkpointer {::sys/deps {:store {:xtdb/module (fn [_])}}
+(defn ->checkpointer {::sys/deps {:store {:xtdb/module (fn [_])}
+                                  :bus :xtdb/bus}
                       ::sys/args {:checkpoint-dir {:spec ::sys/path
                                                    :required? false}
                                   :keep-dir-between-checkpoints? {:spec ::sys/boolean
