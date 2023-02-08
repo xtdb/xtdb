@@ -258,7 +258,6 @@
                                   [[tt1 tt2]]]]
                                 {:app-time-as-of-now? true})]
           (t/is (= #{{:version 2, :application_time_start tt1, :application_time_end tt2}
-                     {:version 2, :application_time_start tt2, :application_time_end tt2} ; hmm...
                      {:version 1, :application_time_start tt2, :application_time_end eot}}
                    (q !tx)))))
 
@@ -266,8 +265,6 @@
                               [[:sql "UPDATE foo SET version = 3 WHERE foo.id = 'foo'"]])]
 
         (t/is (= #{{:version 3, :application_time_start tt1, :application_time_end tt2}
-                   {:version 2, :application_time_start tt2, :application_time_end tt2} ; hmm...
-                   {:version 3, :application_time_start tt2, :application_time_end tt2} ; hmm...
                    {:version 3, :application_time_start tt2, :application_time_end eot}}
                  (q !tx))))
 
@@ -276,8 +273,6 @@
                               {:app-time-as-of-now? true})]
 
         (t/is (= #{{:version 3, :application_time_start tt1, :application_time_end tt2}
-                   {:version 2, :application_time_start tt2, :application_time_end tt2} ; hmm...
-                   {:version 3, :application_time_start tt2, :application_time_end tt2} ; hmm...
                    {:version 3, :application_time_start tt2, :application_time_end tt5}}
                  (q !tx))))
 
@@ -285,24 +280,16 @@
                               [[:sql "UPDATE foo FOR ALL APPLICATION_TIME
                                      SET version = 4 WHERE foo.id = 'foo'"]]
                               {:app-time-as-of-now? true})]
-        (t/is (=
-               #{{:version 4, :application_time_start tt1, :application_time_end tt2}
-                 {:version 4, :application_time_start tt2, :application_time_end tt5}
-                 {:version 2, :application_time_start tt2, :application_time_end tt2}
-                 {:version 3, :application_time_start tt2, :application_time_end tt2}
-                 {:version 4, :application_time_start tt2, :application_time_end tt2}}
-               (q !tx))
+        (t/is (= #{{:version 4, :application_time_start tt1, :application_time_end tt2}
+                   {:version 4, :application_time_start tt2, :application_time_end tt5}}
+                 (q !tx))
               "UPDATE FOR ALL APPLICATION_TIME"))
 
       (let [!tx (c2/submit-tx *node*
                               [[:sql "DELETE FROM foo FOR ALL APPLICATION_TIME
                                      WHERE foo.id = 'foo'"]]
                               {:app-time-as-of-now? true})]
-        (t/is (=
-               #{{:version 2, :application_time_start tt2, :application_time_end tt2}
-                 {:version 3, :application_time_start tt2, :application_time_end tt2}
-                 {:version 4, :application_time_start tt2, :application_time_end tt2}}
-               (q !tx))
+        (t/is (= #{} (q !tx))
               "DELETE FOR ALL APPLICATION_TIME")))))
 
 (deftest test-dql-as-of-now-flag-339

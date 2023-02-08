@@ -264,6 +264,14 @@
                                                (reify Predicate
                                                  (test [_ x]
                                                    (.contains row-id-bitmap (aget ^longs x row-id-idx))))))
+
+                        ;; HACK we seem to be creating zero-length app-time ranges, I don't know why, #403
+                        ;; we filter them out here, but likely best that we don't create them in the first place
+                        (.filter (reify Predicate
+                                   (test [_ x]
+                                     (not= (aget ^longs x app-time-start-idx)
+                                           (aget ^longs x app-time-end-idx)))))
+
                         (.sorted (Comparator/comparingLong (reify ToLongFunction
                                                              (applyAsLong [_ x]
                                                                (aget ^longs x row-id-idx)))))
