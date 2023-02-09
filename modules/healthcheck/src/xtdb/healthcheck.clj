@@ -2,6 +2,7 @@
   "Healthcheck for XTDB."
   (:require
    [clojure.data.json :as json]
+   [clojure.string :as s]
    [xtdb.system :as sys]
    [xtdb.bus :as bus]
    [xtdb.api :as xt]
@@ -28,22 +29,20 @@
 
 (defn- ->routes
   [events]
-  (let [->event-type (fn [m] (dissoc m ::xt/event-type))]
-    (ccore/routes
-     (ccore/context "/healthz" []
-                    (ccore/GET "/hist" []
-                               (json/write-str (->> @events
-                                                    #_(sort-by :timestamp)
-                                                    (mapv ->event-type)))))
-     (croute/not-found "Page not found!"))))
+  (ccore/routes
+   (ccore/context "/healthz" []
+     (ccore/GET "/" [] (json/write-str (last @events)))
+     (ccore/GET "/hist" [] (json/write-str @events))
+     (ccore/GET "/ns/:ns" [ns] (json/write-str
+                                 (filter #(s/includes? (:namespace %) ns) @events))))
+   (croute/not-found "Page not found!")))
 
 (defn ->server {::sys/deps {:bus :xtdb/bus}
                 ::sys/before [[:xtdb/index-store :kv-store]]
                 ::sys/args {:port {:spec :xtdb.io/port
                                    :doc "Port to start the healthcheck HTTP server on"
                                    :default default-server-port}
-                            :jetty-opts
-                            {:doc "Extra options to pass to Jetty, see https://ring-clojure.github.io/ring/ring.adapter.jetty.html"}}}
+                            :jetty-opts {:doc "Extra options to pass to Jetty"}}}
   [{:keys [bus port jetty-opts] :as options}]
   (let [events (atom [(update (bus/->event :healthz :xtdb.node/node-starting) :clock adjust-clock)])
         app (->routes events)
