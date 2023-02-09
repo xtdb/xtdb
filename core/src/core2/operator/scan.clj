@@ -320,17 +320,17 @@
         (let [^ScanSource src (get srcs src-key)
               metadata-mgr (.metadataManager src)]
           (reduce
-            +
-            (meta/matching-chunks
-              metadata-mgr
-              (name table)
-              (fn [_chunk-idx ^VectorSchemaRoot metadata-root]
-                (let [metadata-idxs (meta/->metadata-idxs metadata-root)
-                      id-col-idx (.columnIndex metadata-idxs "id")
-                      ^BigIntVector count-vec (.getVector metadata-root "count")]
-                  (.get count-vec id-col-idx))))))]
+           +
+           (meta/matching-chunks
+            metadata-mgr
+            (name table)
+            (fn [_chunk-idx ^VectorSchemaRoot metadata-root]
+              (let [metadata-idxs (meta/->metadata-idxs metadata-root)
+                    id-col-idx (.columnIndex metadata-idxs "id")
+                    ^BigIntVector count-vec (.getVector metadata-root "count")]
+                (.get count-vec id-col-idx))))))]
 
-{:col-types (dissoc col-types '_table)
+    {:col-types (dissoc col-types '_table)
      :stats {:row-count row-count}
      :->cursor (fn [{:keys [allocator srcs params]}]
                  (let [^ScanSource src (get srcs src-key)

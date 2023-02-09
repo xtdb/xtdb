@@ -30,13 +30,14 @@
            core2.operator.scan.ScanSource
            (core2.temporal ITemporalManager ITemporalTxIndexer)
            (core2.vector IIndirectRelation IIndirectVector IVectorWriter)
-           (core2.watermark IWatermarkManager)
+           (core2.watermark ISharedWatermark IWatermarkManager)
            (java.io ByteArrayInputStream Closeable)
            java.lang.AutoCloseable
            java.nio.ByteBuffer
            (java.time Instant ZoneId)
            (java.util Collections HashMap Map TreeMap)
            (java.util.concurrent CompletableFuture ConcurrentHashMap ConcurrentSkipListMap)
+           (java.util.concurrent.locks StampedLock)
            (java.util.function Consumer Function)
            (org.apache.arrow.memory ArrowBuf BufferAllocator)
            (org.apache.arrow.vector BigIntVector BitVector TimeStampMicroTZVector TimeStampVector ValueVector VarBinaryVector VarCharVector VectorLoader VectorSchemaRoot VectorUnloader)
@@ -223,7 +224,7 @@
 
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface TransactionIndexer
-  (^core2.watermark.Watermark getWatermark [])
+  (^core2.watermark.IWatermark openWatermark [^core2.api.TransactionInstant tx])
   (^core2.api.TransactionInstant indexTx [^core2.api.TransactionInstant tx
                                           ^org.apache.arrow.vector.VectorSchemaRoot txRoot])
   (^core2.api.TransactionInstant latestCompletedTx []))
@@ -854,14 +855,19 @@
                   ^IBufferPool buffer-pool
                   ^ITemporalManager temporal-mgr
                   ^IInternalIdManager iid-mgr
-                  ^IWatermarkManager watermark-mgr
+                  ^IWatermarkManager wm-mgr
+                  ^ILogIndexer log-indexer
+
                   ^long max-rows-per-chunk
                   ^long max-rows-per-block
+
                   ^Map live-columns
-                  ^ILogIndexer log-indexer
                   ^:volatile-mutable ^long chunk-idx
                   ^:volatile-mutable ^TransactionInstant latest-completed-tx
-                  ^:volatile-mutable ^long chunk-row-count]
+                  ^:volatile-mutable ^long chunk-row-count
+
+                  ^:volatile-mutable ^ISharedWatermark shared-wm
+                  ^StampedLock wm-lock]
 
   TransactionIndexer
   (indexTx [this {:keys [sys-time] :as tx-key} tx-root]
@@ -878,7 +884,7 @@
                      (txBasis [_] tx-key)
                      (openWatermark [_]
                        (wm/->Watermark nil (live-cols->live-roots live-columns) (live-cols->tx-live-roots live-columns)
-                                       temporal-idxer chunk-idx max-rows-per-block)))
+                                       temporal-idxer chunk-idx max-rows-per-block false)))
 
           tx-opts {:current-time sys-time
                    :app-time-as-of-now? (== 1 (-> ^BitVector (.getVector tx-root "application-time-as-of-now?")
@@ -907,39 +913,78 @@
                         (index-tx-ops more-tx-ops)
                         (finally
                           (util/try-close more-tx-ops)))))))]
-        (if-let [e (try
-                     (index-tx-ops tx-ops-vec)
-                     (catch core2.RuntimeException e e)
-                     (catch core2.IllegalArgumentException e e)
-                     (catch Throwable t
-                       (log/error t "error in indexer - FIXME memory leak here?")
-                       (throw t)))]
-          (do
-            (when (not= e abort-exn)
-              (log/debug e "aborted tx"))
-            (.abort temporal-idxer)
-            (.abort log-op-idxer)
-            (.abort doc-idxer))
+        (let [e (try
+                  (index-tx-ops tx-ops-vec)
+                  (catch core2.RuntimeException e e)
+                  (catch core2.IllegalArgumentException e e)
+                  (catch Throwable t
+                    (log/error t "error in indexer - FIXME memory leak here?")
+                    (throw t)))
+              wm-lock-stamp (.writeLock wm-lock)]
+          (try
+            (if e
+              (do
+                (when (not= e abort-exn)
+                  (log/debug e "aborted tx"))
+                (.abort temporal-idxer)
+                (.abort log-op-idxer)
+                (.abort doc-idxer))
 
-          (do
-            (let [tx-row-count (.commit doc-idxer)]
-              (set! (.chunk-row-count this) (+ chunk-row-count tx-row-count)))
+              (do
+                (let [tx-row-count (.commit doc-idxer)]
+                  (set! (.chunk-row-count this) (+ chunk-row-count tx-row-count)))
 
-            (.commit log-op-idxer)
+                (.commit log-op-idxer)
 
-            (let [evicted-row-ids (.commit temporal-idxer)]
-              #_{:clj-kondo/ignore [:missing-body-in-when]}
-              (when-not (.isEmpty evicted-row-ids)
-                ;; TODO create work item
-                )))))
+                (let [evicted-row-ids (.commit temporal-idxer)]
+                  #_{:clj-kondo/ignore [:missing-body-in-when]}
+                  (when-not (.isEmpty evicted-row-ids)
+                    ;; TODO create work item
+                    ))))
 
-      (.setWatermark watermark-mgr chunk-idx tx-key (snapshot-live-cols live-columns) nil (.getTemporalWatermark temporal-mgr))
-      (set! (.-latest-completed-tx this) tx-key)
+            (set! (.-latest-completed-tx this) tx-key)
+
+            (finally
+              (.unlock wm-lock wm-lock-stamp)))))
 
       (when (>= chunk-row-count max-rows-per-chunk)
         (.finishChunk this))
 
       tx-key))
+
+  (openWatermark [this tx-key]
+    (letfn [(maybe-existing-wm []
+              (when-let [^ISharedWatermark wm (.shared-wm this)]
+                (let [wm-tx-key (.txBasis wm)]
+                  (when (or (nil? tx-key)
+                            (and wm-tx-key
+                                 (<= (.tx-id tx-key) (.tx-id wm-tx-key))))
+                    (.retain wm)))))]
+      (or (let [wm-lock-stamp (.readLock wm-lock)]
+            (try
+              (maybe-existing-wm)
+              (finally
+                (.unlock wm-lock wm-lock-stamp))))
+
+          (let [wm-lock-stamp (.writeLock wm-lock)]
+            (try
+              (or (maybe-existing-wm)
+                  (let [^ISharedWatermark old-wm (.shared-wm this)]
+                    (try
+                      (let [shared-wm (.wrapWatermark wm-mgr
+                                                      (wm/->Watermark tx-key
+                                                                      (snapshot-live-cols live-columns)
+                                                                      (Collections/emptySortedMap)
+                                                                      (.getTemporalWatermark temporal-mgr)
+                                                                      chunk-idx max-rows-per-block true))]
+                        (set! (.shared-wm this) shared-wm)
+
+                        (.retain shared-wm))
+                      (finally
+                        (some-> old-wm .release)))))
+
+              (finally
+                (.unlock wm-lock wm-lock-stamp)))))))
 
   (latestCompletedTx [_] latest-completed-tx)
 
@@ -970,42 +1015,48 @@
     (when-not (.isEmpty live-columns)
       (log/debugf "finishing chunk '%x', tx '%s'" chunk-idx (pr-str latest-completed-tx))
 
-      (try
-        @(CompletableFuture/allOf (->> (cons
-                                        (.putObject object-store (->log-obj-key chunk-idx) (.writeLog log-indexer))
-                                        (for [[^String table-name, ^Map table-live-cols] live-columns
-                                              [^String col-name, ^LiveColumn live-column] table-live-cols]
-                                          (.putObject object-store (meta/->chunk-obj-key chunk-idx table-name col-name) (.writeColumn this live-column))))
-                                       (into-array CompletableFuture)))
-        (.registerNewChunk temporal-mgr chunk-idx)
-        (.registerNewChunk metadata-mgr (live-cols->live-roots live-columns) chunk-idx)
+      @(CompletableFuture/allOf (->> (cons
+                                      (.putObject object-store (->log-obj-key chunk-idx) (.writeLog log-indexer))
+                                      (for [[^String table-name, ^Map table-live-cols] live-columns
+                                            [^String col-name, ^LiveColumn live-column] table-live-cols]
+                                        (.putObject object-store (meta/->chunk-obj-key chunk-idx table-name col-name) (.writeColumn this live-column))))
+                                     (into-array CompletableFuture)))
+      (.registerNewChunk temporal-mgr chunk-idx)
+      (.registerNewChunk metadata-mgr (live-cols->live-roots live-columns) chunk-idx)
 
-        (set! (.-chunk-idx this) (+ chunk-idx chunk-row-count))
-        (set! (.-chunk-row-count this) 0)
+      (let [wm-lock-stamp (.writeLock wm-lock)]
+        (try
+          (set! (.-chunk-idx this) (+ chunk-idx chunk-row-count))
+          (set! (.-chunk-row-count this) 0)
 
-        (.setWatermark watermark-mgr chunk-idx latest-completed-tx nil nil (.getTemporalWatermark temporal-mgr))
-        (log/debug "finished chunk.")
-        (finally
-          (.closeCols this)))))
+          (when-let [^ISharedWatermark shared-wm (.shared-wm this)]
+            (set! (.shared-wm this) nil)
+            (.release shared-wm))
+
+          (.closeCols this)
+          (log/debug "finished chunk.")
+          (finally
+            (.unlock wm-lock wm-lock-stamp))))))
 
   Closeable
   (close [this]
     (.closeCols this)
-    (.close log-indexer)))
+    (.close log-indexer)
+    (some-> shared-wm .release)))
 
 (defmethod ig/prep-key ::indexer [_ opts]
   (merge {:allocator (ig/ref :core2/allocator)
           :object-store (ig/ref :core2/object-store)
           :metadata-mgr (ig/ref ::meta/metadata-manager)
           :temporal-mgr (ig/ref ::temporal/temporal-manager)
-          :watermark-mgr (ig/ref :core2.watermark/watermark-manager)
+          :watermark-mgr (ig/ref ::wm/watermark-manager)
           :internal-id-mgr (ig/ref ::internal-id-manager)
           :buffer-pool (ig/ref ::bp/buffer-pool)
           :row-counts (ig/ref :core2/row-counts)}
          opts))
 
 (defmethod ig/init-key ::indexer
-  [_ {:keys [allocator object-store metadata-mgr buffer-pool ^ITemporalManager temporal-mgr, ^IWatermarkManager watermark-mgr, internal-id-mgr]
+  [_ {:keys [allocator object-store metadata-mgr buffer-pool ^ITemporalManager temporal-mgr, internal-id-mgr, watermark-mgr]
       {:keys [max-rows-per-chunk max-rows-per-block]} :row-counts
       :as deps}]
 
@@ -1013,13 +1064,16 @@
         chunk-idx (if latest-row-id
                     (inc (long latest-row-id))
                     0)]
-    (.setWatermark watermark-mgr chunk-idx latest-tx nil nil (.getTemporalWatermark temporal-mgr))
 
     (Indexer. allocator object-store metadata-mgr buffer-pool temporal-mgr internal-id-mgr watermark-mgr
-              max-rows-per-chunk max-rows-per-block
-              (ConcurrentSkipListMap.)
               (->log-indexer allocator max-rows-per-block)
-              chunk-idx latest-tx 0)))
+
+              max-rows-per-chunk max-rows-per-block
+              (ConcurrentSkipListMap.) ; live-columns
+              chunk-idx latest-tx 0
+
+              nil ; watermark
+              (StampedLock.))))
 
 (defmethod ig/halt-key! ::indexer [_ ^AutoCloseable indexer]
   (.close indexer))

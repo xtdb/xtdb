@@ -2,29 +2,29 @@
   (:require [cheshire.core :as json]
             [clojure.data.csv :as csv]
             [clojure.java.io :as io]
+            [clojure.string :as str]
             [clojure.test :as t]
             [clojure.tools.logging :as log]
             [core2.api :as c2]
             [core2.buffer-pool :as bp]
             [core2.indexer :as idx]
-            [core2.test-json :as tj]
-            [core2.node :as node]
             [core2.metadata :as meta]
+            [core2.node :as node]
             [core2.object-store :as os]
+            [core2.test-json :as tj]
             [core2.test-util :as tu]
             [core2.ts-devices :as ts]
             [core2.types :as ty]
             [core2.util :as util]
-            [core2.watermark :as wm]
-            [clojure.string :as str])
+            core2.watermark
+            [core2.vector.indirect :as iv])
   (:import core2.api.TransactionInstant
            [core2.buffer_pool BufferPool IBufferPool]
-           core2.node.Node
+           (core2.indexer InternalIdManager TransactionIndexer)
            core2.metadata.IMetadataManager
+           core2.node.Node
            core2.object_store.ObjectStore
-           core2.indexer.InternalIdManager
-           core2.watermark.IWatermarkManager
-           java.lang.AutoCloseable
+           core2.watermark.IWatermark
            java.nio.file.Files
            java.time.Duration
            [org.apache.arrow.memory ArrowBuf BufferAllocator]
@@ -86,7 +86,7 @@
             ^BufferAllocator a (:core2/allocator system)
             ^ObjectStore os (::os/file-system-object-store system)
             ^IBufferPool bp (::bp/buffer-pool system)
-            ^IWatermarkManager wm-mgr (::wm/watermark-manager system)]
+            ^TransactionIndexer idxer (::idx/indexer system)]
 
         (t/is (nil? (idx/latest-tx {:object-store os, :buffer-pool bp})))
 
@@ -98,19 +98,19 @@
                  (tu/then-await-tx last-tx-key node (Duration/ofSeconds 2))))
 
         (t/testing "watermark"
-          (with-open [^AutoCloseable rc-watermark (.getWatermark wm-mgr)]
-            (let [live-roots (:live-roots (:watermark rc-watermark))
-                  id-column (find (get live-roots "xt_docs") "id")]
-              (t/is (zero? (:chunk-idx (:watermark rc-watermark))))
-              (t/is (t/is 20 (count live-roots)))
-              (t/is (= ["id" 4]
-                       [(key id-column) (.getRowCount ^VectorSchemaRoot (val id-column))])))))
+          (with-open [^IWatermark watermark (.openWatermark idxer last-tx-key)]
+            (let [live-slices (.liveSlices watermark "xt_docs" ["id"])]
+              (t/is (zero? (.chunkIdx watermark)))
+              (t/is (= #{"id"}
+                       (into #{} (mapcat keys) live-slices))))))
 
         (tu/finish-chunk node)
 
-        (with-open [^AutoCloseable rc-watermark (.getWatermark wm-mgr)]
-          (t/is (= 4 (:chunk-idx (:watermark rc-watermark))))
-          (t/is (empty? (:live-roots (:watermark rc-watermark)))))
+        (with-open [^IWatermark watermark (.openWatermark idxer last-tx-key)]
+          (t/is (= 4 (.chunkIdx watermark)))
+
+          #_ ; we no longer expose this...
+          (t/is (empty? (:live-roots watermark))))
 
         (t/is (= {:latest-tx last-tx-key
                   :latest-row-id (dec total-number-of-ops)}
@@ -186,7 +186,6 @@
     (let [{tt :sys-time, :as tx} @(c2/submit-tx node [[:put {:id :foo, :version 0}]]
                                                 {:app-time-as-of-now? true})
 
-          ;; this snapshot contains the watermarks
           db @(node/snapshot-async node tx)]
       (t/is (= [{:id :foo, :version 0,
                  :application_time_start (util/->zdt tt)

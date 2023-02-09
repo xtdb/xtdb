@@ -11,7 +11,6 @@
   (:import core2.api.TransactionInstant
            core2.indexer.TransactionIndexer
            core2.operator.scan.ScanSource
-           core2.watermark.IWatermarkManager
            [core2.log Log LogSubscriber]
            java.lang.AutoCloseable
            java.time.Duration
@@ -20,7 +19,7 @@
            org.apache.arrow.vector.TimeStampMicroTZVector
            org.apache.arrow.vector.ipc.ArrowStreamReader))
 
-#_{:clj-kondo/ignore [:unused-binding]}
+#_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface Ingester
   (^core2.api.TransactionInstant latestCompletedTx [])
   (^java.util.concurrent.CompletableFuture #_<ScanSource> snapshot [^core2.api.TransactionInstant tx]))
@@ -30,13 +29,12 @@
               :log (ig/ref :core2/log)
               :indexer (ig/ref :core2.indexer/indexer)
               :metadata-mgr (ig/ref :core2.metadata/metadata-manager)
-              :watermark-mgr (ig/ref :core2.watermark/watermark-manager)
               :buffer-pool (ig/ref :core2.buffer-pool/buffer-pool)}
              opts)
       (util/maybe-update :poll-sleep-duration util/->duration)))
 
 (defmethod ig/init-key :core2/ingester [_ {:keys [^BufferAllocator allocator, ^Log log, ^TransactionIndexer indexer
-                                                  metadata-mgr ^IWatermarkManager watermark-mgr buffer-pool]}]
+                                                  metadata-mgr buffer-pool]}]
   (let [!cancel-hook (promise)
         awaiters (PriorityBlockingQueue.)
         !ingester-error (atom nil)]
@@ -96,7 +94,7 @@
                                  (metadataManager [_] metadata-mgr)
                                  (bufferPool [_] buffer-pool)
                                  (txBasis [_] tx)
-                                 (openWatermark [_] (.getWatermark watermark-mgr)))))))
+                                 (openWatermark [_] (.openWatermark indexer tx)))))))
 
       AutoCloseable
       (close [_]
@@ -112,6 +110,7 @@
       (util/then-compose (fn [tx]
                            (.snapshot ingester tx)))))
 
+#_{:clj-kondo/ignore [:redefined-var]} ; kondo thinks this is a duplicate of the interface method.
 (defn snapshot
   ([^Ingester ingester]
    (snapshot ingester nil))
