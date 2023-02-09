@@ -40,7 +40,7 @@
 
 (defn checkpoint [{:keys [dir bus src store ::cp-format approx-frequency]}]
   (when-not (recent-cp? (first (available-checkpoints store {::cp-format cp-format})) approx-frequency)
-    (bus/send bus (bus/->event :healthz :checkpointing))
+    (bus/send bus (bus/->event :healthz :begin-checkpoint))
     (when-let [{:keys [tx]} (save-checkpoint src dir)]
       (when tx
         (let [cp-at (java.util.Date.)
@@ -53,7 +53,8 @@
               (xio/delete-dir dir)
               (cleanup-checkpoint store opts)
               (log/warn "Cleaned-up failed checkpoint:" opts)
-              (throw t))))))))
+              (throw t))))))
+    (bus/send bus (bus/->event :healthz :end-checkpoint))))
 
 (defn cp-seq [^Instant start ^Duration freq]
   (lazy-seq
@@ -69,9 +70,9 @@
       (log/debug "checking for checkpoints to restore from")
       (when-let [cp (first (available-checkpoints store {::cp-format cp-format}))]
         (log/infof "restoring from %s to %s" cp dir)
-        (bus/send bus (bus/->event :healthz :index-restoring))
+        (bus/send bus (bus/->event :healthz :begin-restore))
         (download-checkpoint store cp dir)
-        (bus/send bus (bus/->event :healthz :index-restored))
+        (bus/send bus (bus/->event :healthz :end-restore))
         cp)))
 
   (start [this src {::keys [cp-format]}]
