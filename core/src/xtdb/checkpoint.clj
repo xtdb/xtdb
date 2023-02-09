@@ -38,8 +38,9 @@
        (< (.getSeconds (Duration/between (.toInstant checkpoint-at) (Instant/now)))
           (/ (.getSeconds approx-frequency) 2))))
 
-(defn checkpoint [{:keys [dir src store ::cp-format approx-frequency]}]
+(defn checkpoint [{:keys [dir bus src store ::cp-format approx-frequency]}]
   (when-not (recent-cp? (first (available-checkpoints store {::cp-format cp-format})) approx-frequency)
+    (bus/send bus (bus/->event :healthz :checkpointing))
     (when-let [{:keys [tx]} (save-checkpoint src dir)]
       (when tx
         (let [cp-at (java.util.Date.)
@@ -68,8 +69,9 @@
       (log/debug "checking for checkpoints to restore from")
       (when-let [cp (first (available-checkpoints store {::cp-format cp-format}))]
         (log/infof "restoring from %s to %s" cp dir)
-        (bus/send bus {::xt/event-type ::index-restoring})
+        (bus/send bus (bus/->event :healthz :index-restoring))
         (download-checkpoint store cp dir)
+        (bus/send bus (bus/->event :healthz :index-restored))
         cp)))
 
   (start [this src {::keys [cp-format]}]
@@ -79,6 +81,7 @@
                 (try
                   (checkpoint {:approx-frequency approx-frequency,
                                :dir checkpoint-dir,
+                               :bus bus
                                :src src,
                                :store store,
                                ::cp-format cp-format})
