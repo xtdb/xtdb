@@ -13,7 +13,7 @@
    [java.io Closeable]
    org.eclipse.jetty.server.Server))
 
-(defrecord HTTPServer [^Server server listener events options]
+(defrecord HTTPServer [^Server server ^Closeable listener events options]
   Closeable
   (close [_]
     (.stop server)
