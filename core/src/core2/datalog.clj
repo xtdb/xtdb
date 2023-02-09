@@ -471,10 +471,12 @@
   (if-let [apply-mapping (->> union-joins
                               (into {} (mapcat (comp ::apply-mapping meta)))
                               not-empty)]
-    (let [sq-plan (mega-join union-joins param-vars)]
-      (-> [:apply :cross-join apply-mapping
-           plan sq-plan]
-          (with-meta (-> (meta plan) (update ::vars into (::vars (meta sq-plan)))))))
+    (let [sq-plan (mega-join union-joins param-vars)
+          [plan-u sq-plan-u :as rels] (with-unique-cols [plan sq-plan] param-vars)
+          apply-mapping-u (update-keys apply-mapping (::var->col (meta plan-u)))]
+      (-> [:apply :cross-join apply-mapping-u
+           plan-u sq-plan-u]
+          (wrap-unify (::var->cols (meta rels)))))
 
 
     (mega-join (into [plan] union-joins) param-vars)))
@@ -497,10 +499,12 @@
   (if-let [apply-mapping (->> sub-queries
                               (into {} (mapcat (comp ::apply-mapping meta)))
                               (not-empty))]
-    (let [sq-plan (mega-join sub-queries param-vars)]
-      (-> [:apply :cross-join apply-mapping
-           plan sq-plan]
-          (with-meta (-> (meta plan) (update ::vars into (::vars (meta sq-plan)))))))
+    (let [sq-plan (mega-join sub-queries param-vars)
+          [plan-u sq-plan-u :as rels] (with-unique-cols [plan sq-plan] param-vars)
+          apply-mapping-u (update-keys apply-mapping (::var->col (meta plan-u)))]
+      (-> [:apply :cross-join apply-mapping-u
+           plan-u sq-plan-u]
+          (wrap-unify (::var->cols (meta rels)))))
 
     (mega-join (into [plan] sub-queries) param-vars)))
 

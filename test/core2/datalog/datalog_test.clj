@@ -950,3 +950,35 @@
                  (c2/datalog-query node (-> '{:find [id]
                                               :where [[id :id :some-doc]]}
                                             (assoc :basis {:tx tx2})))))))))
+
+(deftest test-subquery-unification
+  (let [!tx (c2/submit-tx tu/*node* [[:put {:id :a1, :a 2 :b 1 :_table "a"}]
+                                     [:put {:id :a2, :a 2 :b 3 :_table "a"}]
+                                     [:put {:id :a3, :a 2 :b 0 :_table "a"}]])]
+
+    (t/testing "variables returned from subqueries that must be run as an apply are unified"
+
+      (t/testing "subquery"
+        (t/is (= [{:aid :a2 :a 2 :b 3}]
+                 (c2/datalog-query tu/*node*
+                                   (-> '{:find [aid a b]
+                                         :where [[aid :a a]
+                                                 [aid :b b]
+                                                 [aid :_table "a"]
+                                                 (q {:find [b]
+                                                     :in [a]
+                                                     :where [[(+ a 1) b]]})]}
+                                       (assoc :basis {:tx !tx}))))
+              "b is unified"))
+
+      (t/testing "union-join"
+        (t/is (= [{:aid :a2 :a 2 :b 3}]
+                 (c2/datalog-query tu/*node*
+                                   (-> '{:find [aid a b]
+                                         :where [[aid :a a]
+                                                 [aid :b b]
+                                                 [aid :_table "a"]
+                                                 (union-join [a b]
+                                                             [(+ a 1) b])]}
+                                       (assoc :basis {:tx !tx}))))
+              "b is unified")))))
