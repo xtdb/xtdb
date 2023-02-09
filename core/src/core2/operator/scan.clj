@@ -14,7 +14,6 @@
             [core2.types :as t]
             [core2.util :as util]
             [core2.vector.indirect :as iv]
-            [core2.vector.writer :as vw]
             core2.watermark)
   (:import clojure.lang.MapEntry
            core2.buffer_pool.IBufferPool
@@ -26,7 +25,7 @@
            [java.util HashMap Iterator LinkedList List Map Queue]
            [java.util.function Consumer Function]
            org.apache.arrow.memory.BufferAllocator
-           [org.apache.arrow.vector VarBinaryVector VectorSchemaRoot]
+           [org.apache.arrow.vector BigIntVector VarBinaryVector VectorSchemaRoot]
            [org.roaringbitmap IntConsumer RoaringBitmap]
            org.roaringbitmap.buffer.MutableRoaringBitmap
            org.roaringbitmap.longlong.Roaring64Bitmap))
@@ -328,7 +327,7 @@
               (fn [_chunk-idx ^VectorSchemaRoot metadata-root]
                 (let [metadata-idxs (meta/->metadata-idxs metadata-root)
                       id-col-idx (.columnIndex metadata-idxs "id")
-                      count-vec  (.getVector metadata-root "count")]
+                      ^BigIntVector count-vec (.getVector metadata-root "count")]
                   (.get count-vec id-col-idx))))))]
 
 {:col-types (dissoc col-types '_table)
