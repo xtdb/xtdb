@@ -1,7 +1,7 @@
 package core2.vector;
 
 public interface IPolyValueReader {
-    byte getTypeId();
+    byte read();
 
     boolean readBoolean();
     byte readByte();

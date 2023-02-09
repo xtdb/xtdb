@@ -170,11 +170,16 @@
       (let [col-sym (gensym 'meta-col)
             col-field (types/col-type->field col-type)
 
+            val-sym (gensym 'val)
+
             {:keys [continue] :as emitted-expr}
-            (expr/codegen-expr {:op :call, :f f
-                                :args [{:op :variable, :variable col-sym}, param-expr]}
+            (expr/codegen-expr {:op :call, :f :boolean
+                                :args [{:op :if-some, :local val-sym, :expr {:op :variable, :variable col-sym}
+                                        :then {:op :call, :f f
+                                               :args [{:op :local, :local val-sym}, param-expr]}
+                                        :else {:op :literal, :literal false}}]}
                                (-> opts
-                                   (assoc-in [:var->col-type col-sym] col-type)))]
+                                   (assoc-in [:var->col-type col-sym] (types/merge-col-types col-type :null))))]
         {:return-type :bool
          :batch-bindings [[(-> col-sym (expr/with-tag IIndirectVector))
                            `(some-> ^StructVector (.getChild ~types-vec-sym ~(.getName col-field))
@@ -183,10 +188,9 @@
          :children [emitted-expr]
          :continue (fn [cont]
                      (cont :bool
-                           `(boolean
-                             (when ~col-sym
-                               (when-let [~expr/idx-sym ~idx-code]
-                                 ~(continue (fn [_ code] code)))))))}))))
+                           `(when ~col-sym
+                              (when-let [~expr/idx-sym ~idx-code]
+                                ~(continue (fn [_ code] code))))))}))))
 
 (defmethod ewalk/walk-expr :metadata-vp-call [inner outer expr]
   (outer (-> expr (update :param-expr inner))))

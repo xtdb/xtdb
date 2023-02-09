@@ -44,6 +44,6 @@ public interface IIndirectVector<V extends ValueVector> extends AutoCloseable {
         getVector().close();
     }
 
-    IMonoVectorReader monoReader();
-    IPolyVectorReader polyReader(List<Object> orderedColTypes);
+    IMonoVectorReader monoReader(Object colType);
+    IPolyVectorReader polyReader(Object colType);
 }

@@ -875,7 +875,6 @@
            :all-cols-present? true}))))
 
 (deftest test-mega-join-join-order
-
   (t/is
     (=
      [[2 3 0 1]]
@@ -922,3 +921,18 @@
                :blocks [[{:bar 1}]]}]}
            {}))))))
 
+(t/deftest can-join-on-lists-491
+  (t/is (= [{:id [1 2], :foo 0, :bar 5}]
+           (tu/query-ra
+            '[:join [{id id}]
+              [::tu/blocks [[{:id [1 2], :foo 0}
+                             {:id [1 3], :foo 1}]]]
+              [::tu/blocks [[{:id [1 2], :bar 5}]]]]))))
+
+(t/deftest can-join-on-structs-491
+  (t/is (= [{:id {:a 1, :b 2}, :foo 0, :bar 5}]
+           (tu/query-ra
+            '[:join [{id id}]
+              [::tu/blocks [[{:id {:a 1, :b 2}, :foo 0}
+                             {:id {:a 1, :b 3}, :foo 1}]]]
+              [::tu/blocks [[{:id {:a 1, :b 2}, :bar 5}]]]]))))

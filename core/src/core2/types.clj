@@ -28,6 +28,8 @@
 (def dense-union-type (ArrowType$Union. UnionMode/Dense (int-array 0)))
 (def list-type (.getType Types$MinorType/LIST))
 
+(def temporal-col-type [:timestamp-tz :micro "UTC"])
+
 (defprotocol ArrowWriteable
   (value->col-type [v])
   (write-value! [v ^core2.vector.IVectorWriter writer]))
@@ -433,14 +435,15 @@
 (extend-protocol ArrowReadable
   ListVector
   (get-object [this idx]
-    (let [data-vec (.getDataVector this)
-          x (loop [element-idx (.getElementStartIndex this idx)
-                   acc (transient [])]
-              (if (= (.getElementEndIndex this idx) element-idx)
-                acc
-                (recur (inc element-idx)
-                       (conj! acc (get-object data-vec element-idx)))))]
-      (persistent! x)))
+    (when-not (.isNull this idx)
+      (let [data-vec (.getDataVector this)
+            x (loop [element-idx (.getElementStartIndex this idx)
+                     acc (transient [])]
+                (if (= (.getElementEndIndex this idx) element-idx)
+                  acc
+                  (recur (inc element-idx)
+                         (conj! acc (get-object data-vec element-idx)))))]
+        (persistent! x))))
 
   FixedSizeListVector
   (get-object [this idx]
@@ -456,10 +459,8 @@
   StructVector
   (get-object [this idx]
     (-> (reduce (fn [acc k]
-                  (let [duv (.getChild this k ValueVector)]
-                    (cond-> acc
-                      (not (.isNull duv idx))
-                      (assoc! (keyword k) (get-object duv idx)))))
+                  (let [child-vec (.getChild this k ValueVector)]
+                    (assoc! acc (keyword k) (get-object child-vec idx))))
                 (transient {})
                 (.getChildFieldNames this))
         (persistent!)))
@@ -472,15 +473,15 @@
 (defn ->field ^org.apache.arrow.vector.types.pojo.Field [^String field-name ^ArrowType arrow-type nullable & children]
   (Field. field-name (FieldType. nullable arrow-type nil nil) children))
 
-(defn field-with-name ^org.apache.arrow.vector.types.pojo.Field [^Field field, col-name]
-  (Field. (name col-name) (.getFieldType field) (.getChildren field)))
-
 ;;;; col-types
 
 (defn col-type-head [col-type]
   (if (vector? col-type)
     (first col-type)
     col-type))
+
+(defn union? [col-type]
+  (= :union (col-type-head col-type)))
 
 (def col-type-hierarchy
   (-> (make-hierarchy)
@@ -497,7 +498,9 @@
       (derive :timestamp-tz :any) (derive :timestamp-local :any)
       (derive :date :any) (derive :time-local :any) (derive :interval :any) (derive :duration :any)
       (derive :varbinary :any) (derive :utf8 :any)
-      (derive :extension-type :any)))
+      (derive :extension-type :any)
+
+      (derive :list :any) (derive :struct :any)))
 
 (defn flatten-union-types [col-type]
   (if (= :union (col-type-head col-type))

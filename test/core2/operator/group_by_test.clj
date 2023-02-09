@@ -58,16 +58,16 @@
     (t/is (= #{{:a 1, :var-pop 25.0, :var-samp 50.0, :stddev-pop 5.0, :stddev-samp 7.0710678118654755}
                {:a 2, :var-pop 0.0, :var-samp nil, :stddev-pop 0.0, :stddev-samp nil}
                {:a 3, :var-pop nil, :var-samp nil, :stddev-pop nil, :stddev-samp nil}}
-             (-> (run-test '[a
-                             {var-pop (var_pop b)}
-                             {var-samp (var_samp b)}
-                             {stddev-pop (stddev_pop b)}
-                             {stddev-samp (stddev_samp b)}]
-                           [[{:a 1 :b 20}
-                             {:a 1 :b 10}
-                             {:a 2 :b 30}
-                             {:a 3 :b nil}]])
-                 (:res))))
+             (set (tu/query-ra [:group-by '[a
+                                            {var-pop (var_pop b)}
+                                            {var-samp (var_samp b)}
+                                            {stddev-pop (stddev_pop b)}
+                                            {stddev-samp (stddev_samp b)}]
+                                [::tu/blocks '{a :i64, b [:union #{:null :i64}]}
+                                 [[{:a 1 :b 20}
+                                   {:a 1 :b 10}
+                                   {:a 2 :b 30}
+                                   {:a 3 :b nil}]]]]))))
 
     (t/is (= {:res #{{:a 1} {:a 2} {:a 3}}
               :col-types '{a :i64}}

@@ -304,3 +304,47 @@ ORDER BY foo.application_time_start"
                                (-> '{:find [id]
                                      :where [[id :id]]}
                                    (assoc :basis {:tx !tx1})))))))
+
+(t/deftest test-list-round-trip-546
+  (let [!tx (c2/submit-tx tu/*node* [[:sql "INSERT INTO t3(id, data) VALUES (1, [2, 3])"]
+                                     [:sql "INSERT INTO t3(id, data) VALUES (2, [6, 7])"]])]
+    #_ ; FIXME #546
+    (t/is (= [{:data [2 3], :data_1 [2 3]}
+              {:data [2 3], :data_1 [6 7]}
+              {:data [6 7], :data_1 [2 3]}
+              {:data [6 7], :data_1 [6 7]}]
+             (c2/sql-query tu/*node* "SELECT t3.data, t2.data FROM t3, t3 AS t2"
+                           {:basis {:tx !tx}})))))
+
+(t/deftest test-mutable-data-buffer-bug
+  (let [!tx (c2/submit-tx tu/*node* [[:sql "INSERT INTO t1(id) VALUES(1)"]])]
+    (t/is (= [{:$column_1$ [{:foo 5} {:foo 5}]}]
+             (c2/sql-query tu/*node* "SELECT ARRAY [OBJECT('foo': 5), OBJECT('foo': 5)] FROM t1"
+                           {:basis {:tx !tx}})))))
+
+(t/deftest test-differing-length-lists-441
+  (let [!tx (c2/submit-tx tu/*node* [[:sql "INSERT INTO t1(id, data) VALUES (1, [2, 3])"]
+                                     [:sql "INSERT INTO t1(id, data) VALUES (2, [5, 6, 7])"]])]
+    (t/is (= [{:data [2 3]} {:data [5 6 7]}]
+             (c2/sql-query tu/*node* "SELECT t1.data FROM t1"
+                           {:basis {:tx !tx}}))))
+
+  (let [!tx (c2/submit-tx tu/*node* [[:sql "INSERT INTO t2(id, data) VALUES (1, [2, 3])"]
+                                     [:sql "INSERT INTO t2(id, data) VALUES (2, ['dog', 'cat'])"]])]
+    (t/is (= [{:data [2 3]} {:data ["dog" "cat"]}]
+             (c2/sql-query tu/*node* "SELECT t2.data FROM t2"
+                           {:basis {:tx !tx}})))))
+
+(t/deftest test-cross-join-ioobe-547
+  (let [!tx (c2/submit-tx tu/*node* [[:sql "
+INSERT INTO t2(id, data)
+VALUES(2, OBJECT ('foo': OBJECT('bibble': true), 'bar': OBJECT('baz': 1001)))"]
+
+                                     [:sql "
+INSERT INTO t1(id, data)
+VALUES(1, OBJECT ('foo': OBJECT('bibble': true), 'bar': OBJECT('baz': 1001)))"]])]
+
+    #_ ; FIXME
+    (t/is (= [{:t2d {:bibble true}, :t1d {:baz 1001}}]
+             (c2/sql-query tu/*node* "SELECT t2.data t2d, t1.data t1d FROM t2, t1"
+                           {:basis {:tx !tx}})))))

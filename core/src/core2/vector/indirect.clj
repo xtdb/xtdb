@@ -158,8 +158,8 @@
   (structReader [_] (->StructReader v))
   (listReader [_] (->list-reader v))
 
-  (monoReader [_] (vec/->mono-reader v))
-  (polyReader [_ ordered-col-types] (vec/->poly-reader v ordered-col-types)))
+  (monoReader [_ col-type] (vec/->mono-reader v col-type))
+  (polyReader [_ col-type] (vec/->poly-reader v col-type)))
 
 (defn compose-selection
   "Returns the composition of the selections sel1, sel2 which when applied to a vector will be the same as (select (select iv sel1) sel2).
@@ -225,12 +225,12 @@
         (copyRow [_ idx]
           (.copyRow copier (.getIndex this-vec idx))))))
 
-  (monoReader [_]
-    (-> (.monoReader v)
+  (monoReader [_ col-type]
+    (-> (.monoReader v col-type)
         (vec/->IndirectVectorMonoReader idxs)))
 
-  (polyReader [_ ordered-col-types]
-    (-> (.polyReader v ordered-col-types)
+  (polyReader [_ col-type]
+    (-> (.polyReader v col-type)
         (vec/->IndirectVectorPolyReader idxs))))
 
 (defn ->direct-vec ^core2.vector.IIndirectVector [^ValueVector in-vec]
