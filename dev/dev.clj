@@ -11,6 +11,7 @@
             [xtdb.kafka :as k]
             [xtdb.kafka.embedded :as ek]
             [xtdb.lucene]
+            [xtdb.checkpoint]
             [xtdb.rocksdb :as rocks])
   (:import (ch.qos.logback.classic Level Logger)
            (java.io Closeable File)
@@ -39,16 +40,29 @@
 (def dev-node-dir
   (io/file "dev/dev-node"))
 
+(defn- delay-funcall
+  "Delay function call `ms` milliseconds"
+  [ms f & args]
+  (Thread/sleep ms)
+  (apply f args))
+
 (defmethod i/init-key ::xtdb [_ {:keys [node-opts]}]
   (xt/start-node node-opts))
+
+;; simulate a long-lasting recovery.
+(defmethod i/init-key ::xtdb* [_ {:keys [node-opts]}]
+  (let [sync-path @#'xtdb.checkpoint/sync-path]
+    (with-redefs [xtdb.checkpoint/sync-path (partial delay-funcall 20000 sync-path)]
+      (xt/start-node node-opts))))
 
 (defmethod i/halt-key! ::xtdb [_ ^IXtdb node]
   (.close node))
 
 (def checkpoint-fs-config
-  {::xtdb
+  {::xtdb*
    {:node-opts
-    {:xtdb/index-store
+    {:xtdb.healthcheck/server {:port 7999}
+     :xtdb/index-store
      {:kv-store
       {:xtdb/module `rocks/->kv-store,
        :db-dir (io/file dev-node-dir "indexes"),
@@ -135,8 +149,8 @@
 
 
 ;; swap for `embedded-kafka-config`  to use embedded-kafka
-; (ir/set-prep! (fn [] checkpoint-fs-config))
-(ir/set-prep! (fn [] standalone-config))
+(ir/set-prep! (fn [] checkpoint-fs-config))
+; (ir/set-prep! (fn [] standalone-config))
 ; (ir/set-prep! (fn [] local-kafka-config))
 ; (ir/set-prep! (fn [] embedded-kafka-config))
 
