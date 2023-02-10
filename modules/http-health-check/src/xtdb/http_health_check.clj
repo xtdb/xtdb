@@ -31,11 +31,15 @@
   [events]
   (ccore/routes
    (ccore/context "/healthz" []
-     (ccore/GET "/" [] (json/write-str (last @events)))
+     (ccore/GET "/" [] (json/write-str
+                        (->> (group-by :namespace @events)
+                             ((fn [m] (for [[k v] m] [k (last v)])))
+                             (map second)
+                             (sort-by :clock))))
      (ccore/GET "/hist" [] (json/write-str @events))
      (ccore/GET "/ns/:ns" [ns] (json/write-str
-                                 (filter #(s/includes? (:namespace %) ns) @events))))
-   (croute/not-found "Page not found!")))
+                                (filter #(s/includes? (:namespace %) ns) @events))))
+   (croute/not-found "Not found!")))
 
 (defn ->server {::sys/deps {:bus :xtdb/bus}
                 ::sys/before [[:xtdb/index-store :kv-store]]
