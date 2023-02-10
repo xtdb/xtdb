@@ -23,7 +23,7 @@ The `:clock` attribute is a number of seconds (accurate to the nanosecond) and r
 
 // TODO finish this write-up once I've sorted the event question.
 
-== HTTP routes served.
+== HTTP routes served
 Currently the HTTP Health Check module serves the following routes:
 
 .Bulleted

@@ -1,11 +1,11 @@
-= xtdb-http-server
+= xtdb-http-health-check
 
-This module offers an HTTP server that allows you to send transactions and run queries via a REST API.
+XTDB HTTP Health Check
 
-.deps.ednxxx
+.deps.edn
 [source,clojure]
 ----
-com.xtdb/xtdb-http-server {:mvn/version "1.23.0"}
+com.xtdb/xtdb-http-health-check {:mvn/version "1.23.0"}
 ----
 
 .pom.xml
@@ -13,9 +13,8 @@ com.xtdb/xtdb-http-server {:mvn/version "1.23.0"}
 ----
 <dependency>
     <groupId>com.xtdb</groupId>
-    <artifactId>xtdb-http-server</artifactId>
+    <artifactId>xtdb-http-health-check</artifactId>
     <version>1.23.0</version>
 </dependency>
 ----
 
-For more details, see the https://xtdb.com/reference/http.html[HTTP documentation].
