@@ -165,6 +165,7 @@
                                        :kafka-config ::k/kafka-config
                                        #_#_:poll-wait-duration (java.time.Duration/ofMillis 10)}}}}))
 
+;; this config assumes you have access to a Kafka broker.
 (def local-kafka-config
   {::xtdb {:node-opts
            {:kafka-config {:xtdb/module 'xtdb.kafka/->kafka-config
@@ -184,11 +185,12 @@
 
 
 ;; swap for `embedded-kafka-config`  to use embedded-kafka
-(ir/set-prep! (fn [] local-kafka-config))
+(ir/set-prep! (fn [] standalone-config))
+; (ir/set-prep! (fn [] local-kafka-config))
+; (ir/set-prep! (fn [] embedded-kafka-config))
 ; (ir/set-prep! (fn [] checkpoint-fs-config))
 ; (ir/set-prep! (fn [] checkpoint-fs-healthz-config))
-; (ir/set-prep! (fn [] standalone-config))
-; (ir/set-prep! (fn [] embedded-kafka-config))
+
 
 (defn xtdb-node []
   (::xtdb system))
