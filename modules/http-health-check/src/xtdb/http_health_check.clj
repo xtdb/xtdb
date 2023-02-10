@@ -30,7 +30,7 @@
 (defn- process-event
   [{::xt/keys [event-type] :as event}]
   (if-not (:clock event)
-    {::xt/event-type "internal"
+    {::xt/event-type :internal
      :namespace (namespace event-type)
      :event (name event-type)
      :timestamp (java.util.Date.)
