@@ -53,7 +53,7 @@
               :db-spec db-spec}
     f))
 
-(def ^:private jdbc-dialects
+(def jdbc-dialects
   (cond->
     #{:h2 :sqlite #_:postgres #_:mysql #_:mssql}
 
@@ -61,6 +61,13 @@
     ;; we can upgrade to get support via docker, but it changes the lib significantly (native tarball vs docker)
     ;; so skipping tests for now
     (not= "aarch64" (System/getProperty "os.arch")) (conj :embedded-postgres)))
+
+(defn set-test-dialects!
+  "Use to override the dialects used for tests using the with-each-jdbc-dialect fixture.
+
+  Usage: (set-test-dialects! :h2 :sqlite :mysql)"
+  [& dialects]
+  (alter-var-root #'jdbc-dialects (constantly (set dialects))))
 
 ;; Optional:
 ;; in `xtdb-jdbc`: `docker-compose up` (`docker-compose up -d` for background)
