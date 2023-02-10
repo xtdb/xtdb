@@ -27,6 +27,16 @@
   [now]
   (/ (- now base-time) (double 1e9)))
 
+(defn- process-event
+  [{::xt/keys [event-type] :as event}]
+  (if-not (:clock event)
+    {::xt/event-type "internal"
+     :namespace (namespace event-type)
+     :event (name event-type)
+     :timestamp (java.util.Date.)
+     :clock (adjust-clock (System/nanoTime))}
+    (update event :clock adjust-clock)))
+
 (defn- ->routes
   [events]
   (ccore/routes
@@ -48,9 +58,11 @@
                                    :default default-server-port}
                             :jetty-opts {:doc "Extra options to pass to Jetty"}}}
   [{:keys [bus port jetty-opts] :as options}]
-  (let [events (atom [(update (bus/->event :healthz :xtdb.node/node-starting) :clock adjust-clock)])
+  (let [events (atom [(process-event {::xt/event-type :xtdb.node/node-starting})])
         app (->routes events)
         ^Server server (jetty/run-jetty app (merge {:port port :join? false} jetty-opts))
-        listener (bus/listen bus {::xt/event-types #{:xtdb.node/node-closing :healthz}}
-                             #(swap! events conj (update % :clock adjust-clock)))]
+        listener (bus/listen bus {::xt/event-types #{:xtdb.node/node-closing
+                                                     :xtdb.node/slow-query
+                                                     :healthz}}
+                             #(swap! events conj (process-event %)))]
     (->HTTPServer server listener events options)))
