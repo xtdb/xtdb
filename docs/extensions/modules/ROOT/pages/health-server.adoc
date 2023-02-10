@@ -1,36 +1,59 @@
-= HTTP
+= HTTP Health Server
 :page-aliases: reference::http.adoc
 
-This document explains how to configure the XTDB HTTP module.
-To query over HTTP, see the
-xref:clients::http.adoc[HTTP Client Reference].
+This document explains how to configure the XTDB HTTP Health Server module.
+
+Production XTDB nodes often run in containers deployed on infrastructures where automation matters: nodes are "managed" by components in charge of tasks such as monitoring resources and routing traffic. Examples of such infrastructure include (but are not limited to) link:https://kubernetes.io/[Kubernetes] and link:https://aws.amazon.com/ecs/[AWS ECS]. In all cases the supervising component has the need to assess the health of the XTDB nodes it supervises. 
+
+The XTDB Health Check module aims at facilitating this task by allowing some important states of a running node that uses it to be observable. It achieves this by first collecting `events` published by the node as it transits through its various states; then making them available via a tiny http server it runs. 
+
+Rather than a health-check service directly usable by e.g. by K8S, it provides informations usable when configuring liveness, readiness and startup probes, with the intent to cope with the case of a link:https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#define-startup-probes[slow starting container] e.g., when upon starting the node recovers its index-store from a large checkpoint.
+
+== Structure of an event
+[source.clojure]
+----
+{:event "end-restore",
+ :thread "nREPL-session-8139ad0e-476e-455e-9579-810d6d4e5f06",
+ :clock 10.406734083,
+ :event-type "healthz",
+ :timestamp "2023-02-10T06:16:33.190Z",
+ :namespace "xtdb.checkpoint"}
+----
+The `:clock` attribute is a number of seconds (accurate to the nanosecond) and reasonably monotonic.  Internally the various XTDB components communicate via a lightweight bus.
+
+// TODO finish this write-up once I've sorted the event question.
+
+== HTTP routes served.
+Currently the HTTP Health Check module serves the following routes:
+
+.Bulleted
+* `/healthz`
+- returns the latest events of each namespace
+* `/healthz/hist`
+- returns the full history (as an ordered vector)
+* `/healthz/ns/:ns`
+- returns the full history for namespace `:ns`
+
+== Events currently collected
+
+.Bulleted
+* `xtdb.node/node-closing`
+* `xtdb.checkpoint/begin-checkpoint` and `xtdb.checkpoint/end-checkpoint`
+* `xtdb.checkpoint/begin-restore` and `xtdb.checkpoint/end-restore`
+* `begin-tx-ingester`
 
 
-XTDB offers a REST API layer in the `xtdb-http-server` module that allows you to send transactions and run queries over HTTP.
-
-image::remote-cluster-mode.svg[Remote Cluster Mode,450,145,align="centre"]
-
-Using XTDB in this manner is a valid use-case but it cannot support all of the features and benefits that running the XTDB node inside of your application provides, in particular the ability to efficiently combine custom code with multiple in-process Datalog queries.
-
-Your application only needs to communicate with one XTDB node when using the REST API.
-Multiple XTDB nodes can placed be behind a HTTP load balancer to spread the writes and reads over a horizontally-scaled cluster transparently to the application.
-Each XTDB node in such a cluster will be independently catching up with the head of the transaction log, and since different queries might go to different nodes, you have to be slightly conscious of read consistency when designing your application to use XTDB in this way.
-Fortunately, you can readily achieve read-your-writes consistency with the ability to query consistent point-in-time snapshots using specific temporal coordinates.
-
-The REST API also provides an experimental endpoint for SPARQL 1.1 Protocol queries under `/_xtdb/sparql/`, rewriting the query into the XTDB Datalog dialect.
-Only a small subset of SPARQL is supported and no other RDF features are available.
-
-[#start-http-server]
-== Starting an HTTP Server
+[#start-http-health-check]
+== Starting the HTTP Health Check server
 
 === Project Dependency
 
 [source,clojure, subs=attributes+]
 ----
-com.xtdb/xtdb-http-server {:mvn/version "{xtdb_version}"}
+com.xtdb/xtdb-http-health-check {:mvn/version "{xtdb_version}"}
 ----
 
-You can start up a Jetty HTTP/HTTP2 server on a node by including `xtdb.http-server/server` in your node configuration, optionally passing the server port:
+You can start up a Jetty HTTP/HTTP2 server on a node by including `xtdb.http-health-check/server` in your node configuration, optionally passing the server port:
 
 [tabs]
 ====
@@ -39,8 +62,8 @@ JSON::
 [source,json]
 ----
 {
-  "xtdb.http-server/server": {
-    "port": 3000,
+  "xtdb.http-health-check/server": {
+    "port": 8080,  
     ...
   }
 }
@@ -50,16 +73,18 @@ Clojure::
 +
 [source,clojure]
 ----
-{:xtdb.http-server/server {:port 3000
-                           ...}
+{:xtdb.http-health-check/server 
+    {:port 8080
+     ...}}
 ----
 
 EDN::
 +
 [source,clojure]
 ----
-{:xtdb.http-server/server {:port 3000
-                           ...}
+{:xtdb.http-health-check/server 
+    {:port 8080
+     ...}}
 ----
 ====
 
@@ -67,21 +92,14 @@ EDN::
 
 === Parameters
 
-* `port` (int, default 3000)
-* `read-only?` (boolean, default false): start the HTTP server in read-only mode
-* `jwks` (string): https://jwt.io/[JSON Web Token] (JWT) key set to authorise requests against - `{"keys": [...]}`
+* `port` (int, default 7000)
 * `jetty-opts` (map): further options to pass to the https://ring-clojure.github.io/ring/ring.adapter.jetty.html[Ring Jetty adapter]
 
-=== Ring Handler
+=== Ring Handler (TODO)
 
 XTDB also exposes a https://github.com/ring-clojure/ring[Ring] handler that you can include within your own Ring-compatible server, with parameters as above:
 
 [source,clojure]
 ----
-(xtdb.http-server/->xtdb-handler xtdb-node {...})
+(xtdb.http-health-check/->xtdb-handler xtdb-node {...})
 ----
-
-[#http-client-reference]
-== HTTP Client Reference
-
-See the xref:clients::http.adoc[HTTP Client Reference].
