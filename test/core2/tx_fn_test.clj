@@ -1,6 +1,7 @@
 (ns core2.tx-fn-test
   (:require [clojure.test :as t]
             [core2.api :as c2]
+            [core2.node :as node]
             [core2.indexer :as idx]
             [core2.test-util :as tu]
             [core2.util :as util]))
@@ -204,3 +205,19 @@
     (t/testing "still working after all these errors"
       (let [!tx (c2/submit-tx tu/*node* [[:call :update-version :done]])]
         (= :done (foo-version !tx))))))
+
+(t/deftest handle-interrupted-exception-614
+  (t/is (thrown-with-msg?
+         Exception #"sleep interrupted"
+         @(reduce conj []
+                  (with-open [node (node/start-node {})]
+                    (let [!tx1 @(c2/submit-tx node [[:put {:id :hello-world
+                                                           :fn #c2/clj-form (fn hello-world [id]
+                                                                              (sleep 200)
+                                                                              [[:put {:id id :foo (str id)}]])}]])
+                          !tx2 (c2/submit-tx node [[:call :hello-world 1]])]
+                      (Thread/sleep 100)
+                      (tu/then-await-tx !tx1 node)
+                      (c2/plan-datalog-async node (assoc '{:find [id]
+                                                           :where [[id :foo]]}
+                                                         :basis {:tx !tx2}))))))))

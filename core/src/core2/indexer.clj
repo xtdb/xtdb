@@ -605,6 +605,7 @@
         ;; TODO confirm/expand API that we expose to tx-fns
         sci-ctx (sci/init {:bindings {'q (partial tx-fn-q allocator scan-src tx-opts)
                                       'sql-q (partial tx-fn-sql allocator scan-src tx-opts)
+                                      'sleep (fn [n] (Thread/sleep n))
                                       '*current-tx* tx-key}})]
 
     (reify OpIndexer
@@ -621,6 +622,7 @@
                                     sci/in *in*]
                         (apply tx-fn args))
 
+                      (catch InterruptedException ie (throw ie))
                       (catch Throwable t
                         (log/warn t "unhandled error evaluating tx fn")
                         (throw (err/runtime-err :core2.call/error-evaluating-tx-fn
@@ -917,6 +919,7 @@
                   (index-tx-ops tx-ops-vec)
                   (catch core2.RuntimeException e e)
                   (catch core2.IllegalArgumentException e e)
+                  (catch InterruptedException e (throw e))
                   (catch Throwable t
                     (log/error t "error in indexer - FIXME memory leak here?")
                     (throw t)))
