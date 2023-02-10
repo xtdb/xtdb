@@ -8,7 +8,7 @@
 (t/deftest test-bus
   (let [events (atom [])]
 
-    (with-open [bus ^Closeable (bus/->bus)
+    (with-open [bus ^Closeable (bus/->bus {:sync? true})
                 _ (bus/->bus-stop {:bus bus})
                 _ (bus/listen bus {::xt/event-types #{:xtdb.node/node-closing
                                                       :xtdb.node/slow-query
