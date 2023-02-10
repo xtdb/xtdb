@@ -240,7 +240,7 @@
               {:required-vars (form-vars form)
                :provided-vars (when-let [[return-type return-arg] return]
                                 (case return-type
-                                  :scalar return-arg))})
+                                  :scalar #{return-arg}))})
 
       :triple {:provided-vars (into #{}
                                     (comp (map term-arg)
@@ -253,7 +253,7 @@
                         arg-vars (set args)
                         branches-vars (for [branch branches]
                                         (into {:branch branch}
-                                              (combine-term-vars (map term-vars branch))))
+                                                (combine-term-vars (map term-vars branch))))
                         provided-vars (->> branches-vars
                                            (map (comp set :provided-vars))
                                            (apply set/intersection))
@@ -475,6 +475,7 @@
       (-> [:apply :cross-join apply-mapping
            plan sq-plan]
           (with-meta (-> (meta plan) (update ::vars into (::vars (meta sq-plan)))))))
+
 
     (mega-join (into [plan] union-joins) param-vars)))
 

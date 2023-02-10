@@ -813,7 +813,14 @@
                             (union-join [e age role]
                                         [e :age age]
                                         [e :role role])
-                            [(<> e :sergei)]]}))))))
+                            [(<> e :sergei)]]})))
+
+      (t/testing "functions within union-join"
+        (t/is (= [{:age 35, :older-age 45}]
+                 (q '{:find [age older-age]
+                      :where [[:sergei :age age]
+                              (union-join [age older-age]
+                                          [(+ age 10) older-age])]})))))))
 
 (deftest test-nested-query
   (let [!tx (c2/submit-tx tu/*node* bond/tx-ops)]
