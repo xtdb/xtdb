@@ -183,7 +183,7 @@
     (tx-sub/handle-polling-subscription this after-tx-id {:poll-sleep-duration (Duration/ofMillis 100)} f))
 
   (latest-submitted-tx [_]
-    (when-let [max-offset (-> (jdbc/execute-one! pool ["SELECT max(EVENT_OFFSET) AS max_offset FROM tx_events WHERE topic = 'txs'"]
+    (when-let [max-offset (-> (jdbc/execute-one! pool ["SELECT max(EVENT_OFFSET) AS max_offset FROM tx_events"]
                                                  {:builder-fn jdbcr/as-unqualified-lower-maps})
                               :max_offset)]
       {::xt/tx-id (long max-offset)}))
