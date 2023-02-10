@@ -1,0 +1,87 @@
+= HTTP
+:page-aliases: reference::http.adoc
+
+This document explains how to configure the XTDB HTTP module.
+To query over HTTP, see the
+xref:clients::http.adoc[HTTP Client Reference].
+
+
+XTDB offers a REST API layer in the `xtdb-http-server` module that allows you to send transactions and run queries over HTTP.
+
+image::remote-cluster-mode.svg[Remote Cluster Mode,450,145,align="centre"]
+
+Using XTDB in this manner is a valid use-case but it cannot support all of the features and benefits that running the XTDB node inside of your application provides, in particular the ability to efficiently combine custom code with multiple in-process Datalog queries.
+
+Your application only needs to communicate with one XTDB node when using the REST API.
+Multiple XTDB nodes can placed be behind a HTTP load balancer to spread the writes and reads over a horizontally-scaled cluster transparently to the application.
+Each XTDB node in such a cluster will be independently catching up with the head of the transaction log, and since different queries might go to different nodes, you have to be slightly conscious of read consistency when designing your application to use XTDB in this way.
+Fortunately, you can readily achieve read-your-writes consistency with the ability to query consistent point-in-time snapshots using specific temporal coordinates.
+
+The REST API also provides an experimental endpoint for SPARQL 1.1 Protocol queries under `/_xtdb/sparql/`, rewriting the query into the XTDB Datalog dialect.
+Only a small subset of SPARQL is supported and no other RDF features are available.
+
+[#start-http-server]
+== Starting an HTTP Server
+
+=== Project Dependency
+
+[source,clojure, subs=attributes+]
+----
+com.xtdb/xtdb-http-server {:mvn/version "{xtdb_version}"}
+----
+
+You can start up a Jetty HTTP/HTTP2 server on a node by including `xtdb.http-server/server` in your node configuration, optionally passing the server port:
+
+[tabs]
+====
+JSON::
++
+[source,json]
+----
+{
+  "xtdb.http-server/server": {
+    "port": 3000,
+    ...
+  }
+}
+----
+
+Clojure::
++
+[source,clojure]
+----
+{:xtdb.http-server/server {:port 3000
+                           ...}
+----
+
+EDN::
++
+[source,clojure]
+----
+{:xtdb.http-server/server {:port 3000
+                           ...}
+----
+====
+
+// TODO Authorization section
+
+=== Parameters
+
+* `port` (int, default 3000)
+* `read-only?` (boolean, default false): start the HTTP server in read-only mode
+* `jwks` (string): https://jwt.io/[JSON Web Token] (JWT) key set to authorise requests against - `{"keys": [...]}`
+* `jetty-opts` (map): further options to pass to the https://ring-clojure.github.io/ring/ring.adapter.jetty.html[Ring Jetty adapter]
+
+=== Ring Handler
+
+XTDB also exposes a https://github.com/ring-clojure/ring[Ring] handler that you can include within your own Ring-compatible server, with parameters as above:
+
+[source,clojure]
+----
+(xtdb.http-server/->xtdb-handler xtdb-node {...})
+----
+
+[#http-client-reference]
+== HTTP Client Reference
+
+See the xref:clients::http.adoc[HTTP Client Reference].
