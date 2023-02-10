@@ -19,14 +19,12 @@ Rather than a health-check service directly usable by e.g. by K8S, it provides i
  :timestamp "2023-02-10T06:16:33.190Z",
  :namespace "xtdb.checkpoint"}
 ----
-The `:clock` attribute is a number of seconds (accurate to the nanosecond) and reasonably monotonic.  Internally the various XTDB components communicate via a lightweight bus.
+The `:clock` attribute is a number of seconds (accurate to the nanosecond) and reasonably monotonic.  
 
 // TODO finish this write-up once I've sorted the event question.
 
 == HTTP routes served
-Currently the HTTP Health Check module serves the following routes:
-
-.Bulleted
+.Currently the HTTP Health Check module serves the following routes:
 * `/healthz`
 - returns the latest events of each namespace
 * `/healthz/hist`
@@ -36,11 +34,14 @@ Currently the HTTP Health Check module serves the following routes:
 
 == Events currently collected
 
-.Bulleted
-* `xtdb.node/node-closing`
-* `xtdb.checkpoint/begin-checkpoint` and `xtdb.checkpoint/end-checkpoint`
-* `xtdb.checkpoint/begin-restore` and `xtdb.checkpoint/end-restore`
-* `begin-tx-ingester`
+.Currently the module collects the following events:
+* `xtdb.node/node-starting`
+* `xtdb.node/slow-closing`
+* `xtdb.node/slow-query`
+* `xtdb.checkpoint/begin-checkpoint`, `xtdb.checkpoint/end-checkpoint`
+* `xtdb.checkpoint/begin-restore`, `xtdb.checkpoint/end-restore`
+* `xtdb.tx/begin-tx-ingester`
+* `xtdb.query/failed-query`
 
 
 [#start-http-health-check]
