@@ -8,11 +8,22 @@
             [xtdb.fixtures.lubm :as fl]
             [juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc :as jdbc]
             [juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc.result-set :as jdbcr]
-            [xtdb.jdbc :as j]
-            [clojure.java.data :as jd]))
+            [xtdb.jdbc :as j]))
 
+(comment
+  ;; NOTE: CI does not run the tests for all dialects, to do so, run the setup code below.
+  ;; pre-req: docker-compose
+
+  (require 'clojure.java.shell)
+  ;; spin up containers
+  (clojure.java.shell/sh "docker-compose" "up" "-d" :dir "modules/jdbc")
+  ;; set dialects to get better coverage
+  (fj/set-test-dialects! :mysql :mssql :postgres :h2 :sqlite)
+  ;; docker down if needed
+  (clojure.java.shell/sh "docker-compose" "down" :dir "modules/jdbc")
+
+  )
 (t/use-fixtures :each fj/with-each-jdbc-dialect fj/with-jdbc-node fix/with-node fj/with-db-type)
-
 (t/deftest test-happy-path-jdbc-event-log
   (let [doc {:xt/id :origin-man :name "Adam"}
         submitted-tx (xt/submit-tx *api* [[::xt/put doc]])]
@@ -157,3 +168,40 @@
       (let [db (xt/db *api*)]
         (t/is (= {:xt/id :foo} (xt/entity db :foo)))
         (t/is (= {:xt/id :bar} (xt/entity db :bar)))))))
+
+(t/deftest latest-submitted-tx-1896
+  (xt/submit-tx *api* [[::xt/put {:xt/id "foo"}]])
+  (t/is (pos-int? (::xt/tx-id (xt/latest-submitted-tx *api*))))
+
+  (let [offset (::xt/tx-id (xt/latest-submitted-tx *api*))
+        pool (-> *api* :!system deref ::j/connection-pool :pool)
+        jdbc-execute jdbc/execute!
+        insert-docs! (fn [n]
+                       (with-redefs [jdbc/execute! jdbc-execute]
+                         (dotimes [_ n]
+                           (#'j/insert-event! pool
+                             (str (random-uuid))
+                             (str (random-uuid))
+                             "not-a-topic"))))
+        captured-queries (atom [])]
+
+    (with-redefs [jdbc/execute! (fn [db sql-vec & args] (swap! captured-queries conj sql-vec) (apply jdbc-execute db sql-vec args))]
+      (insert-docs! 1)
+      (t/is (= offset (::xt/tx-id (xt/latest-submitted-tx *api*))))
+
+      (insert-docs! 512)
+      (t/is (= offset (::xt/tx-id (xt/latest-submitted-tx *api*))))
+
+      (insert-docs! 2048)
+      (t/is (= offset (::xt/tx-id (xt/latest-submitted-tx *api*)))))
+
+    ;; if you want to double-check plans, uncomment this - insert more rows if you want
+    ;; to see more accurate plans
+    #_
+    (do
+      (println fj/*db-type*)
+      (t/is (pos? (count @captured-queries)))
+      (doseq [[sql & params] @captured-queries]
+        (try
+          (prn (jdbc/execute! pool (into [(str "EXPLAIN " sql)] params)))
+          (catch Throwable _ (println "EXC")))))))
