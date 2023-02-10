@@ -1,5 +1,5 @@
-(defproject com.xtdb/xtdb-healthcheck "<inherited>"
-  :description "XTDB Healthcheck"
+(defproject com.xtdb/xtdb-health-check "<inherited>"
+  :description "XTDB health check server"
 
   :plugins [[lein-parent "0.3.8"]]
 

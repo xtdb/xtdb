@@ -2,7 +2,7 @@
 
 This module offers an HTTP server that allows you to send transactions and run queries via a REST API.
 
-.deps.edn
+.deps.ednxxx
 [source,clojure]
 ----
 com.xtdb/xtdb-http-server {:mvn/version "1.23.0"}
