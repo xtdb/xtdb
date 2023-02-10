@@ -43,26 +43,61 @@
 (defn- delay-funcall
   "Delay function call `ms` milliseconds"
   [ms f & args]
-  (Thread/sleep ms)
+  (when (pos? ms)
+    (Thread/sleep ms))
   (apply f args))
 
 (defmethod i/init-key ::xtdb [_ {:keys [node-opts]}]
   (xt/start-node node-opts))
 
 ;; simulate a long-lasting recovery.
-(defmethod i/init-key ::xtdb* [_ {:keys [node-opts]}]
+(defmethod i/init-key ::xtdb* [_ {:keys [node-opts recovery-delay]}]
   (let [sync-path @#'xtdb.checkpoint/sync-path]
-    (with-redefs [xtdb.checkpoint/sync-path (partial delay-funcall 20000 sync-path)]
+    (with-redefs [xtdb.checkpoint/sync-path (partial delay-funcall recovery-delay sync-path)]
       (xt/start-node node-opts))))
 
 (defmethod i/halt-key! ::xtdb [_ ^IXtdb node]
   (.close node))
 
-(def checkpoint-fs-config
+;; this config starts the HTTP health-check server and set
+;; (filesystem) checkpointing. Upon starting, if
+;;   * the XT node detects it needs a recovery
+;;     (e.g., `dev/dev-node-checkpoint` is missing), and
+;;   * some checkpoint is available, then
+;; XT will start a recovery pausing for `recovery-delay`.
+(def checkpoint-fs-healthz-config
   {::xtdb*
-   {:node-opts
-    {:xtdb.healthcheck/server {:port 7999}
+   {:recovery-delay 10000 ;; milliseconds
+    :node-opts
+    {:xtdb.http-health-check/server {:port 8080}
      :xtdb/index-store
+     {:kv-store
+      {:xtdb/module `rocks/->kv-store,
+       :db-dir (io/file dev-node-dir "indexes"),
+       :checkpointer
+       {:xtdb/module 'xtdb.checkpoint/->checkpointer
+        :store {:xtdb/module 'xtdb.checkpoint/->filesystem-checkpoint-store
+                :path (io/file dev-node-dir "checkpoints")}
+        :approx-frequency (java.time.Duration/ofSeconds 30)}}}
+
+     :xtdb/document-store
+     {:kv-store {:xtdb/module `rocks/->kv-store,
+                 :db-dir (io/file dev-node-dir "documents")
+                 :block-cache :xtdb.rocksdb/block-cache}}
+
+     :xtdb/tx-log
+     {:kv-store {:xtdb/module `rocks/->kv-store,
+                 :db-dir (io/file dev-node-dir "tx-log")
+                 :block-cache :xtdb.rocksdb/block-cache}}
+
+     :xtdb.rocksdb/block-cache
+     {:xtdb/module `rocks/->lru-block-cache
+      :cache-size (* 128 1024 1024)}}}})
+
+(def checkpoint-fs-config
+  {::xtdb
+   {:node-opts
+    {:xtdb/index-store
      {:kv-store
       {:xtdb/module `rocks/->kv-store,
        :db-dir (io/file dev-node-dir "indexes"),
@@ -149,9 +184,10 @@
 
 
 ;; swap for `embedded-kafka-config`  to use embedded-kafka
-(ir/set-prep! (fn [] checkpoint-fs-config))
+(ir/set-prep! (fn [] local-kafka-config))
+; (ir/set-prep! (fn [] checkpoint-fs-config))
+; (ir/set-prep! (fn [] checkpoint-fs-healthz-config))
 ; (ir/set-prep! (fn [] standalone-config))
-; (ir/set-prep! (fn [] local-kafka-config))
 ; (ir/set-prep! (fn [] embedded-kafka-config))
 
 (defn xtdb-node []
