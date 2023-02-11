@@ -15,11 +15,11 @@
 
 (s/def ::logic-var simple-symbol?)
 
-;; TODO flesh out
-(def ^:private eid? (some-fn string? number? inst? keyword? (partial instance? LocalDate)))
-
-(s/def ::eid eid?)
-(s/def ::value (some-fn eid?))
+(s/def ::eid ::lp/value)
+(s/def ::attr keyword?)
+(s/def ::value ::lp/value)
+(s/def ::table simple-symbol?)
+(s/def ::column simple-symbol?)
 
 (s/def ::fn-call
   (s/and list?
@@ -67,16 +67,44 @@
 
 (s/def ::in (s/* ::in-binding))
 
-(s/def ::e (s/or :literal ::eid, :logic-var ::logic-var))
+(s/def ::triple-value
+  (s/or :literal ::value,
+        :logic-var ::logic-var
+        :unwind (s/tuple ::logic-var #{'...})))
+
+(s/def ::match
+  (-> (s/or :map (-> (s/map-of ::attr ::triple-value)
+                     (s/and (s/conformer vec #(into {} %))))
+            :vector (-> (s/or :column ::column
+                              :map (s/map-of ::attr ::triple-value))
+                        (s/and (s/conformer (fn [[tag arg]]
+                                              (case tag :map arg, :column {(keyword arg) [:logic-var arg]}))
+                                            (fn [arg]
+                                              [:map arg])))
+                        (s/coll-of :kind vector?)))
+
+      (s/and (s/conformer (fn [[tag arg]]
+                            (case tag
+                              :map (vec arg)
+                              :vector (into [] cat arg)))
+                          (fn [v]
+                            [:vector (mapv #(conj {} %) v)])))))
+
+(s/def ::temporal-opts
+  (-> (s/keys :opt-un [::lp/for-app-time ::lp/for-sys-time])
+      (s/nonconforming)))
+
+(s/def ::from
+  (s/coll-of (s/and list? (s/cat :table ::table, :match ::match,
+                                 :temporal-opts (s/? ::temporal-opts)))
+             :kind vector?))
 
 (s/def ::triple
   (s/and vector?
          (s/conformer identity vec)
-         (s/cat :e ::e
-                :a keyword?
-                :v (s/? (s/or :literal ::value,
-                              :logic-var ::logic-var
-                              :unwind (s/tuple ::logic-var #{'...}))))))
+         (s/cat :e (s/or :literal ::eid, :logic-var ::logic-var)
+                :a ::attr
+                :v (s/? ::triple-value))))
 
 (s/def ::call-clause
   (s/and vector?
@@ -107,30 +135,6 @@
 (s/def ::sub-query
   (s/cat :q #{'q}, :sub-query ::query))
 
-(s/def ::temporal-literal ::util/datetime-value)
-
-(s/def ::for-all-app-time (s/cat :k #{'for-all-app-time}, :e ::e))
-
-(s/def ::for-app-time-at
-  (s/cat :k #{'for-app-time-at}, :e ::e,
-         :time-at ::temporal-literal))
-
-(s/def ::for-app-time-in
-  (s/cat :k #{'for-app-time-in}, :e ::e
-         :time-from (s/nilable ::temporal-literal)
-         :time-to (s/nilable ::temporal-literal)))
-
-(s/def ::for-all-sys-time (s/cat :k #{'for-all-sys-time}, :e ::e))
-
-(s/def ::for-sys-time-at
-  (s/cat :k #{'for-sys-time-at}, :e ::e,
-         :time-at ::temporal-literal))
-
-(s/def ::for-sys-time-in
-  (s/cat :k #{'for-sys-time-in}, :e ::e
-         :time-from (s/nilable ::temporal-literal)
-         :time-to (s/nilable ::temporal-literal)))
-
 (s/def ::rule
   (s/and list?
          (s/cat :name simple-symbol?
@@ -150,19 +154,11 @@
 (s/def ::rules (s/coll-of ::rule-definition :kind vector?))
 
 (s/def ::term
-  (s/or :triple ::triple
-        :semi-join ::semi-join
+  (s/or :semi-join ::semi-join
         :anti-join ::anti-join
         :union-join ::union-join
 
-        :for-all-app-time ::for-all-app-time
-        :for-app-time-in ::for-app-time-in
-        :for-app-time-at ::for-app-time-at
-
-        :for-all-sys-time ::for-all-sys-time
-        :for-sys-time-in ::for-sys-time-in
-        :for-sys-time-at ::for-sys-time-at
-
+        :triple ::triple
         :call ::call-clause
         :sub-query ::sub-query
         :rule ::rule))
@@ -182,7 +178,7 @@
 
 (s/def ::query
   (s/keys :req-un [::find]
-          :opt-un [::keys ::in ::where ::order-by ::offset ::limit ::rules]))
+          :opt-un [::keys ::in ::from ::where ::order-by ::offset ::limit ::rules]))
 
 (s/def ::relation-arg
   (s/or :maps (s/coll-of (s/map-of simple-keyword? any?))
@@ -360,50 +356,26 @@
                                              (map (juxt identity ->param-sym)))
                                        in-bindings)}))))
 
-(defn- ->temporal-clauses [temporal-rules]
-  (letfn [(with-time-in-clause [clauses time-k {:keys [time-from time-to]}]
-            (-> clauses (assoc time-k [:in time-from time-to])))
-
-          (with-time-at-clause [clauses time-k {:keys [time-at]}]
-            (-> clauses (assoc time-k [:at time-at])))]
-
-    (->> temporal-rules
-         (reduce (fn [acc {:keys [e] :as rule}]
-                   (-> acc
-                       (update e
-                               (fn [e-preds {:keys [k] :as rule}]
-                                 (case k
-                                   for-all-app-time (-> e-preds (assoc :for-app-time :all-time))
-                                   for-app-time-in (-> e-preds (with-time-in-clause :for-app-time rule))
-                                   for-app-time-at (-> e-preds (with-time-at-clause :for-app-time rule))
-
-                                   for-all-sys-time (-> e-preds (assoc :for-sys-time :all-time))
-                                   for-sys-time-in (-> e-preds (with-time-in-clause :for-sys-time rule))
-                                   for-sys-time-at (-> e-preds (with-time-at-clause :for-sys-time rule))))
-                               rule)))
-                 {}))))
-
 (defn- wrap-scan-col-preds [scan-col col-preds]
   (case (count col-preds)
     0 scan-col
     1 {scan-col (first col-preds)}
     {scan-col (list* 'and col-preds)}))
 
-(defn- plan-scan [triples temporal-clauses]
-  (let [attrs (into #{} (map :a) triples)
+(defn- plan-scan [table match temporal-opts]
+  (let [attrs (set (keys match))
 
-        attr->lits (-> triples
-                       (->> (keep (fn [{:keys [a], [v-type v-arg] :v}]
+        attr->lits (-> match
+                       (->> (keep (fn [[a [v-type v-arg]]]
                                     (when (= :literal v-type)
                                       {:a a, :lit v-arg})))
                             (group-by :a))
                        (update-vals #(into #{} (map :lit) %)))]
 
-    (-> [:scan {:table (or (some-> (first (attr->lits '_table)) symbol)
-                           'xt_docs)
-                :for-app-time (:for-app-time temporal-clauses [:at :now])
+    (-> [:scan {:table table
+                :for-app-time (:for-app-time temporal-opts [:at :now])
                 ;; defaults handled by scan
-                :for-sys-time (:for-sys-time temporal-clauses)}
+                :for-sys-time (:for-sys-time temporal-opts)}
          (-> attrs
              (disj '_table)
              (->> (mapv (fn [attr]
@@ -418,7 +390,7 @@
 (defn- wrap-unwind [plan triples]
   (->> triples
        (transduce
-        (comp (keep (fn [{:keys [a], [v-type _v-arg] :v}]
+        (comp (keep (fn [[a [v-type _v-arg]]]
                       (when (= v-type :unwind)
                         a)))
               (distinct))
@@ -430,25 +402,28 @@
                             (vary-meta update ::vars conj uw-col)))))
         plan)))
 
-(defn- plan-triples [triples temporal-clauses]
-  (let [triples (group-by :e triples)]
+(defn- plan-from [from triples]
+  (let [tables (into from
+                     (map (fn [[e triples]]
+                            (let [{triples false, table true} (group-by #(= :_table (:a %)) triples)]
+                              {:table 'xt_docs
+                               :match (conj (for [{:keys [a v]} triples]
+                                              (MapEntry/create a v))
+                                            (MapEntry/create :id e))})))
+                     (group-by :e triples))]
     (vec
-     (for [e (set/union (set (keys triples))
-                        (set (keys temporal-clauses)))
-           :let [triples (->> (conj (get triples e) {:e e, :a :id, :v e})
-                              (map #(update % :a col-sym)))
-                 temporal-clauses (get temporal-clauses e)]]
-       (let [var->cols (-> triples
-                           (->> (keep (fn [{:keys [a], [v-type v-arg] :v}]
+     (for [{:keys [table match temporal-opts]} tables]
+       (let [match (->> match (mapv (fn [[a v]] (MapEntry/create (col-sym a) v))))
+             var->cols (-> match
+                           (->> (keep (fn [[a [v-type v-arg]]]
                                         (case v-type
                                           :logic-var {:lv v-arg, :col a}
                                           :unwind {:lv (first v-arg), :col (attr->unwind-col a)}
                                           nil)))
                                 (group-by :lv))
                            (update-vals #(into #{} (map :col) %)))]
-
-         (-> (plan-scan triples temporal-clauses)
-             (wrap-unwind triples)
+         (-> (plan-scan table match temporal-opts)
+             (wrap-unwind match)
              (wrap-unify var->cols)))))))
 
 (defn- plan-call [{:keys [form return]}]
@@ -802,7 +777,7 @@
                                       {:rule-name name})))))
         rule-name->rules))
 
-(defn- plan-body [{where-clauses :where, apply-mapping ::apply-mapping, rules :rules, :as query}]
+(defn- plan-body [{:keys [from], where-clauses :where, apply-mapping ::apply-mapping, rules :rules, :as query}]
   (let [in-rels (plan-in-tables query)
         {::keys [param-vars]} (meta in-rels)
 
@@ -813,17 +788,12 @@
         where-clauses (expand-rules rule-name->rules where-clauses)
 
         {triple-clauses :triple, call-clauses :call, sub-query-clauses :sub-query
-         semi-join-clauses :semi-join, anti-join-clauses :anti-join, union-join-clauses :union-join
-         :as grouped-clauses}
+         semi-join-clauses :semi-join, anti-join-clauses :anti-join, union-join-clauses :union-join}
         (-> where-clauses
             (->> (group-by first))
-            (update-vals #(mapv second %)))
+            (update-vals #(mapv second %)))]
 
-        temporal-rules (mapcat grouped-clauses [:for-all-app-time :for-app-time-at :for-app-time-in
-                                                :for-all-sys-time :for-sys-time-at :for-sys-time-in])
-        temporal-clauses (->temporal-clauses temporal-rules)]
-
-    (loop [plan (mega-join (vec (concat in-rels (plan-triples triple-clauses temporal-clauses)))
+    (loop [plan (mega-join (vec (concat in-rels (plan-from from triple-clauses)))
                            (concat param-vars apply-mapping))
 
            calls (some->> call-clauses (mapv plan-call))

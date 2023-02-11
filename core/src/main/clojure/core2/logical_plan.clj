@@ -6,7 +6,10 @@
             [core2.error :as err]
             [core2.rewrite :as r]
             [core2.util :as util])
-  (:import (clojure.lang Var)))
+  (:import (clojure.lang Var)
+           java.time.LocalDate
+           java.time.temporal.Temporal
+           java.util.Date))
 
 ;; See also:
 ;; https://dbis-uibk.github.io/relax/help#relalg-reference
@@ -20,11 +23,11 @@
 (s/def ::relation simple-symbol?)
 (s/def ::column simple-symbol?)
 
+;; TODO flesh out
+(s/def ::value (some-fn string? number? inst? keyword? (partial instance? LocalDate)))
+
 (defn source-sym? [sym]
   (str/starts-with? (name sym) "$"))
-
-(s/def ::source
-  (s/and simple-symbol? source-sym?))
 
 (s/def ::param
   (s/and simple-symbol? #(str/starts-with? (name %) "?")))
@@ -32,6 +35,36 @@
 (s/def ::expression any?)
 
 (s/def ::column-expression (s/map-of ::column ::expression :conform-keys true :count 1))
+
+(defmulti temporal-filter-spec
+  (fn [v]
+    (cond-> v (coll? v) first))
+  :default ::default)
+
+(defmethod temporal-filter-spec :all-time [_]
+  (s/and #{:all-time}
+         (s/conformer (constantly [:all-time]) (constantly :all-time))))
+
+(s/def ::temporal-filter-value
+  (s/or :now #{:now '(current-timestamp)}
+        :literal (some-fn (partial instance? Date)
+                          (partial instance? Temporal))
+        :param simple-symbol?))
+
+(defmethod temporal-filter-spec :at [_]
+  (s/tuple #{:at} ::temporal-filter-value))
+
+(defmethod temporal-filter-spec :in [_]
+  (s/tuple #{:in} (s/nilable ::temporal-filter-value) (s/nilable ::temporal-filter-value)))
+
+(defmethod temporal-filter-spec :between [_]
+  (s/tuple #{:between} (s/nilable ::temporal-filter-value) (s/nilable ::temporal-filter-value)))
+
+(s/def ::temporal-filter
+  (s/multi-spec temporal-filter-spec (fn retag [_] (throw (UnsupportedOperationException.)))))
+
+(s/def ::for-app-time (s/nilable ::temporal-filter))
+(s/def ::for-sys-time (s/nilable ::temporal-filter))
 
 (defmulti ra-expr
   (fn [expr]

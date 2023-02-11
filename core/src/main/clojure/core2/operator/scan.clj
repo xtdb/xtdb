@@ -34,42 +34,12 @@
 
 (s/def ::table simple-symbol?)
 
-(defmulti temporal-filter-spec
-  (fn [v]
-    (cond-> v (coll? v) first))
-  :default ::default)
-
-(defmethod temporal-filter-spec :all-time [_]
-  (s/and #{:all-time}
-         (s/conformer (constantly [:all-time]) (constantly :all-time))))
-
-(s/def ::temporal-filter-value
-  (s/or :now #{:now '(current-timestamp)}
-        :literal (some-fn (partial instance? Date)
-                          (partial instance? Temporal))
-        :param simple-symbol?))
-
-(defmethod temporal-filter-spec :at [_]
-  (s/tuple #{:at} ::temporal-filter-value))
-
-(defmethod temporal-filter-spec :in [_]
-  (s/tuple #{:in} (s/nilable ::temporal-filter-value) (s/nilable ::temporal-filter-value)))
-
-(defmethod temporal-filter-spec :between [_]
-  (s/tuple #{:between} (s/nilable ::temporal-filter-value) (s/nilable ::temporal-filter-value)))
-
-(s/def ::temporal-filter
-  (s/multi-spec temporal-filter-spec (fn retag [_] (throw (UnsupportedOperationException.)))))
-
-(s/def ::for-app-time (s/nilable ::temporal-filter))
-(s/def ::for-sys-time (s/nilable ::temporal-filter))
-
 ;; TODO be good to just specify a single expression here and have the interpreter split it
 ;; into metadata + col-preds - the former can accept more than just `(and ~@col-preds)
 (defmethod lp/ra-expr :scan [_]
   (s/cat :op #{:scan}
          :scan-opts (s/keys :req-un [::table]
-                            :opt-un [::for-app-time ::for-sys-time])
+                            :opt-un [::lp/for-app-time ::lp/for-sys-time])
          :columns (s/coll-of (s/or :column ::lp/column
                                    :select ::lp/column-expression))))
 

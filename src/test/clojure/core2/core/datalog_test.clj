@@ -24,14 +24,14 @@
               {:name "Petr"}]
              (c2/q tu/*node*
                    (-> '{:find [name]
-                         :where [[e :first-name name]]}
+                         :from [(xt_docs {:first-name name})]}
                        (assoc :basis {:tx tx})))))
 
     (t/is (= [{:e :ivan, :name "Ivan"}
               {:e :petr, :name "Petr"}]
              (c2/q tu/*node*
                    (-> '{:find [e name]
-                         :where [[e :first-name name]]}
+                         :from [(xt_docs {:id e, :first-name name})]}
                        (assoc :basis {:tx tx}))))
           "returning eid")))
 
@@ -838,8 +838,7 @@
             (count-table [tx]
               (-> (c2/q node (-> '{:find [(count id)]
                                    :keys [id-count]
-                                   :where [[id :id]
-                                           [id :_table :t1]]}
+                                   :from [(t1 [id])]}
                                  (assoc :basis {:tx tx})))
                   (first)
                   (:id-count)))]
@@ -858,24 +857,18 @@
                                                :data (str "data" id)
                                                :_table :t1}])
                                       (partition-all 20))]
-                      (c2/submit-tx node tx-ops))))
-
-            (count-table [tx]
-              (-> (c2/q node (-> '{:find [(count id)]
-                                   :keys [id-count]
-                                   :where [[id :id]
-                                           [id :_table :t1]]}
-                                 (assoc :basis {:tx tx})))
-                  (first)
-                  (:id-count)))]
+                      (c2/submit-tx node tx-ops))))]
 
       (let [_tx1 (c2/submit-tx node [[:put {:id 0 :foo :bar}]])
             tx2 (submit-ops! (range 1010))]
-        (t/is (= 1010 (count-table tx2)))
-        (t/is (= [] (c2/q node (-> '{:find [id]
-                                     :where [[id :id]
-                                             [id :some-attr my-attr]]}
-                                   (assoc :basis {:tx tx2})))))))))
+        (t/is (= 1010 (-> (c2/q node '{:find [(count id)]
+                                       :keys [id-count]
+                                       :from [(t1 {:id id})]})
+                          (first)
+                          (:id-count))))
+
+        (t/is (= [] (c2/q node '{:find [id]
+                                 :from [(xt_docs [id some-attr])]})))))))
 
 (t/deftest add-better-metadata-support-for-keywords
   (with-open [node (node/start-node {:core2/live-chunk {:rows-per-block 10, :rows-per-chunk 1000}})]
@@ -905,10 +898,8 @@
         (t/is (= [{:aid :a2 :a 2 :b 3}]
                  (c2/q tu/*node*
                        (-> '{:find [aid a b]
-                             :where [[aid :a a]
-                                     [aid :b b]
-                                     [aid :_table "a"]
-                                     (q {:find [b]
+                             :from [(a [{:id aid} a b])]
+                             :where [(q {:find [b]
                                          :in [a]
                                          :where [[(+ a 1) b]]})]}
                            (assoc :basis {:tx tx}))))
@@ -918,10 +909,8 @@
         (t/is (= [{:aid :a2 :a 2 :b 3}]
                  (c2/q tu/*node*
                        (-> '{:find [aid a b]
-                             :where [[aid :a a]
-                                     [aid :b b]
-                                     [aid :_table "a"]
-                                     (union-join [a b]
+                             :from [(a [{:id aid} a b])]
+                             :where [(union-join [a b]
                                                  [(+ a 1) b])]}
                            (assoc :basis {:tx tx}))))
               "b is unified")))))
@@ -1210,40 +1199,42 @@
                 {:id :mark, :app-start (util/->zdt #inst "2023"), :app-end (util/->zdt #inst "2024")}
                 {:id :john, :app-start (util/->zdt #inst "2016"), :app-end (util/->zdt #inst "2020")}]
                (q '{:find [id app-start app-end]
-                    :where [(for-all-app-time id)
-                            [id :application_time_start app-start]
-                            [id :application_time_end app-end]]}
+                    :from [(xt_docs [id {:application_time_start app-start
+                                         :application_time_end app-end}]
+                                    {:for-app-time :all-time})]}
                   tx1, nil))
             "entity history, all time")
 
       (t/is (= [{:id :matthew, :app-start (util/->zdt #inst "2015"), :app-end (util/->zdt util/end-of-time)}
                 {:id :luke, :app-start (util/->zdt #inst "2021"), :app-end (util/->zdt #inst "2022")}]
                (q '{:find [id app-start app-end]
-                    :where [(for-app-time-in id, #inst "2021", #inst "2023")
-                            [id :application_time_start app-start]
-                            [id :application_time_end app-end]]}
+                    :from [(xt_docs [id {:application_time_start app-start
+                                         :application_time_end app-end}]
+                                    {:for-app-time [:in #inst "2021", #inst "2023"]})]}
                   tx1, nil))
             "entity history, range")
 
       (t/is (= [{:id :matthew}, {:id :mark}]
                (q '{:find [id],
-                    :where [(for-app-time-at id #inst "2018")
-                            (for-app-time-at id2 #inst "2023")
-                            [(= id id2)]]},
+                    :from [(xt_docs [id]
+                                    {:for-app-time [:at #inst "2018"]})
+                           (xt_docs [id]
+                                    {:for-app-time [:at #inst "2023"]})]},
                   tx1, nil))
             "cross-time join - who was here in both 2018 and 2023?")
 
       (t/is (= [{:id :matthew} {:id :mark}]
                (q '{:find [id],
-                    :where [(for-all-app-time id)
-                            [id :application_time_start app-start]
-                            [id :application_time_end app-end]
+                    :from [(xt_docs [id {:application_time_start app-start
+                                         :application_time_end app-end}]
+                                    {:for-app-time :all-time})
 
-                            (for-all-app-time :john)
-                            [:john :application_time_start john-start]
-                            [:john :application_time_end john-end]
+                           (xt_docs [{:id :john
+                                      :application_time_start john-start
+                                      :application_time_end john-end}]
+                                    {:for-app-time :all-time})]
 
-                            [(<> id :john)]
+                    :where [[(<> id :john)]
 
                             ;; eventually: 'overlaps?'
                             [(< app-start john-end)]
@@ -1260,12 +1251,13 @@
                  :tt-start (util/->zdt #inst "2020-01-02")
                  :tt-end (util/->zdt util/end-of-time)}]
                (q '{:find [vt-start vt-end tt-start tt-end]
-                    :where [(for-all-app-time :luke)
-                            (for-all-sys-time :luke)
-                            [:luke :application_time_start vt-start]
-                            [:luke :application_time_end vt-end]
-                            [:luke :system_time_start tt-start]
-                            [:luke :system_time_end tt-end]]}
+                    :from [(xt_docs {:id :luke
+                                     :application_time_start vt-start
+                                     :application_time_end vt-end
+                                     :system_time_start tt-start
+                                     :system_time_end tt-end}
+                                    {:for-app-time :all-time
+                                     :for-sys-time :all-time})]}
                   tx1 nil))
 
             "for all sys time"))))
@@ -1310,10 +1302,11 @@
                             [[:put {:id :delete-1-week-records,
                                     :fn #c2/clj-form (fn delete-1-weeks-records []
                                                        (->> (q '{:find [id app-start app-end]
-                                                                 :where [(for-all-app-time id)
-                                                                         [id :application_time_start app-start]
-                                                                         [id :application_time_end app-end]
-                                                                         [(= (- #inst "1970-01-08" #inst "1970-01-01")
+                                                                 :from [(xt_docs [id
+                                                                                  {:application_time_start app-start
+                                                                                   :application_time_end app-end}]
+                                                                                 {:for-app-time :all-time})]
+                                                                 :where [[(= (- #inst "1970-01-08" #inst "1970-01-01")
                                                                              (- app-end app-start))]]})
                                                             (map (fn [{:keys [id app-start app-end]}]
                                                                    [:delete id {:app-time-start app-start
@@ -1327,56 +1320,59 @@
 
       (t/is (= [{:cust 145 :app-start (util/->zdt #inst "1998-01-10")}]
                (q '{:find [cust app-start]
-                    :where [(for-all-app-time id)
-                            [id :application_time_start app-start]
-                            [id :customer-number cust]]}, tx0, nil))
+                    :from [(xt_docs {:customer-number cust, :application_time_start app-start}
+                                    {:for-app-time :all-time})]}
+                  tx0, nil))
             "as-of 14 Jan")
 
       (t/is (= [{:cust 145, :app-start (util/->zdt #inst "1998-01-10")}
                 {:cust 827, :app-start (util/->zdt #inst "1998-01-15")}]
                (q '{:find [cust app-start]
-                    :where [(for-all-app-time id)
-                            [id :application_time_start app-start]
-                            [id :customer-number cust]]}, tx1, nil))
+                    :from [(xt_docs {:customer-number cust, :application_time_start app-start}
+                                    {:for-app-time :all-time})]}
+                  tx1, nil))
             "as-of 18 Jan")
 
       (t/is (= [{:cust 145, :app-start (util/->zdt #inst "1998-01-05")}
                 {:cust 827, :app-start (util/->zdt #inst "1998-01-12")}]
                (q '{:find [cust app-start]
-                    :order-by [[app-start :asc]]
-                    :where [(for-all-app-time id)
-                            [id :application_time_start app-start]
-                            [id :customer-number cust]]}, tx5, nil))
+                    :from [(xt_docs {:customer-number cust, :application_time_start app-start}
+                                    {:for-app-time :all-time})]
+                    :order-by [[app-start :asc]]}
+                  tx5, nil))
             "as-of 29 Jan")
 
       (t/is (= [{:cust 827, :app-start (util/->zdt #inst "1998-01-12"), :app-end (util/->zdt #inst "1998-01-20")}]
                (q '{:find [cust app-start app-end]
-                    :order-by [[app-start :asc]]
-                    :where [(for-all-app-time id)
-                            [id :application_time_start app-start]
-                            [id :application_time_end app-end]
-                            [id :customer-number cust]]}, tx6, nil))
+                    :from [(xt_docs {:customer-number cust,
+                                     :application_time_start app-start
+                                     :application_time_end app-end}
+                                    {:for-app-time :all-time})]
+                    :order-by [[app-start :asc]]}
+                  tx6, nil))
             "'as best known' (as-of 30 Jan)")
 
       (t/is (= [{:prop 3621, :vt-begin (util/->zdt #inst "1998-01-15"), :vt-end (util/->zdt #inst "1998-01-20")}]
                (q '{:find [prop (greatest app-start app-start2) (least app-end app-end2)]
                     :keys [prop vt-begin vt-end]
                     :in [in-prop]
-                    :order-by [[app-start :asc]]
-                    :where [(for-all-app-time id)
-                            [id :property-number in-prop]
-                            [id :customer-number cust]
-                            [id :application_time_start app-start]
-                            [id :application_time_end app-end]
-                            (for-all-app-time id2)
-                            [id2 :customer-number cust]
-                            [id2 :property-number prop]
-                            [(<> prop in-prop)]
-                            [id2 :application_time_start app-start2]
-                            [id2 :application_time_end app-end2]
+                    :from [(xt_docs {:property-number in-prop
+                                     :customer-number cust
+                                     :application_time_start app-start
+                                     :application_time_end app-end}
+                                    {:for-app-time :all-time})
+
+                           (xt_docs {:property-number prop
+                                     :customer-number cust
+                                     :application_time_start app-start2
+                                     :application_time_end app-end2}
+                                    {:for-app-time :all-time})]
+                    :where [[(<> prop in-prop)]
                             ;; eventually: 'overlaps?'
                             [(< app-start app-end2)]
-                            [(> app-end app-start2)]]}, tx7, nil, 7797))
+                            [(> app-end app-start2)]]
+                    :order-by [[app-start :asc]]}
+                  tx7, nil, 7797))
             "Case 2: Valid-time sequenced and transaction-time current")
 
       (t/is (= [{:prop 3621,
@@ -1387,30 +1383,33 @@
                (q '{:find [prop (greatest app-start app-start2) (least app-end app-end2) (greatest sys-start sys-start2) (least sys-end sys-end2)]
                     :keys [prop vt-begin vt-end recorded-start recorded-stop]
                     :in [in-prop]
-                    :order-by [[app-start :asc]]
-                    :where [(for-all-app-time id)
-                            (for-all-sys-time id)
-                            [id :property-number in-prop]
-                            [id :customer-number cust]
-                            [id :application_time_start app-start]
-                            [id :application_time_end app-end]
-                            [id :system_time_start sys-start]
-                            [id :system_time_end sys-end]
-                            (for-all-app-time id2)
-                            (for-all-sys-time id2)
-                            [id2 :customer-number cust]
-                            [id2 :property-number prop]
-                            [(<> prop in-prop)]
-                            [id2 :application_time_start app-start2]
-                            [id2 :application_time_end app-end2]
-                            [id2 :system_time_start sys-start2]
-                            [id2 :system_time_end sys-end2]
+                    :from [(xt_docs {:property-number in-prop
+                                     :customer-number cust
+                                     :application_time_start app-start
+                                     :application_time_end app-end
+                                     :system_time_start sys-start
+                                     :system_time_end sys-end}
+                                    {:for-app-time :all-time
+                                     :for-sys-time :all-time})
+
+                           (xt_docs {:customer-number cust
+                                     :property-number prop
+                                     :application_time_start app-start2
+                                     :application_time_end app-end2
+                                     :system_time_start sys-start2
+                                     :system_time_end sys-end2}
+
+                                    {:for-app-time :all-time
+                                     :for-sys-time :all-time})]
+                    :where [[(<> prop in-prop)]
                             ;; eventually: 'overlaps?'
                             [(< app-start app-end2)]
                             [(> app-end app-start2)]
                             ;; eventually: 'overlaps?'
                             [(< sys-start sys-end2)]
-                            [(> sys-end sys-start2)]]}, tx7, nil, 7797))
+                            [(> sys-end sys-start2)]]
+                    :order-by [[app-start :asc]]}
+                  tx7, nil, 7797))
             "Case 5: Application-time sequenced and system-time sequenced")
 
       (t/is (= [{:prop 3621,
@@ -1420,28 +1419,28 @@
                (q '{:find [prop (greatest app-start app-start2) (least app-end app-end2) sys-start2]
                     :keys [prop vt-begin vt-end recorded-start]
                     :in [in-prop]
-                    :order-by [[app-start :asc]]
-                    :where [(for-all-app-time id)
-                            (for-all-sys-time id)
-                            [id :property-number in-prop]
-                            [id :customer-number cust]
-                            [id :application_time_start app-start]
-                            [id :application_time_end app-end]
-                            [id :system_time_start sys-start]
-                            [id :system_time_end sys-end]
-                            (for-all-app-time id2)
-                            (for-all-sys-time id2)
-                            [id2 :customer-number cust]
-                            [id2 :property-number prop]
-                            [(<> prop in-prop)]
-                            [id2 :application_time_start app-start2]
-                            [id2 :application_time_end app-end2]
-                            [id2 :system_time_start sys-start2]
-                            [id2 :system_time_end sys-end2]
+                    :from [(xt_docs {:property-number in-prop
+                                     :customer-number cust
+                                     :application_time_start app-start
+                                     :application_time_end app-end
+                                     :system_time_start sys-start
+                                     :system_time_end sys-end}
+                                    {:for-app-time :all-time
+                                     :for-sys-time :all-time})
+
+                           (xt_docs {:customer-number cust
+                                     :property-number prop
+                                     :application_time_start app-start2
+                                     :application_time_end app-end2
+                                     :system_time_start sys-start2
+                                     :system_time_end sys-end2})]
+                    :where [[(<> prop in-prop)]
                             ;; eventually: 'overlaps?'
                             [(< app-start app-end2)]
                             [(> app-end app-start2)]
                             ;; eventually: 'contains?' with point
                             [(> sys-start2 sys-start)]
-                            [(< sys-start2 sys-end)]]}, tx7, nil, 7797))
+                            [(< sys-start2 sys-end)]]
+                    :order-by [[app-start :asc]]}
+                  tx7, nil, 7797))
             "Case 8: Application-time sequenced and system-time nonsequenced"))))
