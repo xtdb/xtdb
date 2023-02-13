@@ -13,9 +13,7 @@
 
   :dependencies [[org.clojure/clojure]
                  [com.xtdb/xtdb-core]
-                 [ring/ring-core "1.9.6"]
-                 [ring/ring-jetty-adapter "1.9.6"]
-                 [compojure "1.7.0"]]
+                 [pro.juxt.clojars-mirrors.xtdb/xtdb-http-server-deps "0.0.2"]]
 
   :profiles {:dev {:dependencies [[ch.qos.logback/logback-classic]]}}
 

@@ -78,7 +78,7 @@
        {:xtdb/module 'xtdb.checkpoint/->checkpointer
         :store {:xtdb/module 'xtdb.checkpoint/->filesystem-checkpoint-store
                 :path (io/file dev-node-dir "checkpoints")}
-        :approx-frequency (java.time.Duration/ofSeconds 30)}}}
+        :approx-frequency (java.time.Duration/ofSeconds 120)}}}
 
      :xtdb/document-store
      {:kv-store {:xtdb/module `rocks/->kv-store,
@@ -185,11 +185,11 @@
 
 
 ;; swap for `embedded-kafka-config`  to use embedded-kafka
-; (ir/set-prep! (fn [] standalone-config))
+(ir/set-prep! (fn [] standalone-config))
 ; (ir/set-prep! (fn [] local-kafka-config))
 ; (ir/set-prep! (fn [] embedded-kafka-config))
 ; (ir/set-prep! (fn [] checkpoint-fs-config))
-(ir/set-prep! (fn [] checkpoint-fs-healthz-config))
+; (ir/set-prep! (fn [] checkpoint-fs-healthz-config))
 
 
 (defn xtdb-node []
