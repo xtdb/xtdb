@@ -2,7 +2,7 @@
 
 Rigorous benchmarking supports the team's development activities by providing rapid feedback on complex changes and a regular benchmark process allows the team to discover and address performance regressions during day-to-day development, well in advance of any releases.
 
-The https://github.com/xtdb/xtdb/tree/main/bench[`bench`] sub-project contains a number of benchmarking suites that are run nightly on standard AWS infrastructure (`m5.xlarge` instances via https://github.com/xtdb/xtdb/blob/main/bench/cloudformation.yaml[CloudFormation]) to support regression testing of new development and validate all performance improvement changes.
+The https://github.com/xtdb/xtdb/tree/main/bench[`bench`] sub-project contains a number of benchmarking suites that are run nightly on standard AWS infrastructure (`m5.xlarge` instances via https://github.com/xtdb/xtdb/blob/main/bench/cloudformation/xtdb-bench.yaml[CloudFormation]) to support regression testing of new development and validate all performance improvement changes.
 
 These suites cover a wide range of analysis at a variety of scale factors, including: graph query performance, bitemporal query performance, ingestion performance (throughput & latency), and disk usage.
 

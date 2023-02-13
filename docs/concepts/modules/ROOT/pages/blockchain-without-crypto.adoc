@@ -185,7 +185,7 @@ The arc of the story is never exactly the same but there are some milestones tha
 Here is a representative story.
 Your software service begins with a relational database.
 https://www.youtube.com/watch?v=UgcC_bY4rPg[Just]
-https://vadosware.io/talks/2019-06-just-use-postgres.condensed.pdf[Use]
+https://web.archive.org/web/20221209223244/https://vadosware.io/talks/2019-06-just-use-postgres.condensed.pdf[Use]
 https://news.ycombinator.com/item?id=16376096[Postgres], right?
 
 At some point, you find that the development team is spending an unreasonable amount of time trolling through log files looking for particular facts to answer self-imposed auditing queries.

@@ -24,7 +24,7 @@ and its architecture -- past, present, and very-near-future.
 [#columnar]
 === Columnar Stores
 
-* https://www.cs.umd.edu/class/spring2015/cmsc724/abadi-column-stores.pdf[The Design and Implementation of Modern Column-Oriented Database Systems], Abadi, Boncz, et al. Foundations and Trends in Databases, Vol. 5, No. 3, Pages 197–280. 2012.
+* https://stratos.seas.harvard.edu/files/stratos/files/columnstoresfntdbs.pdf[The Design and Implementation of Modern Column-Oriented Database Systems], Abadi, Boncz, et al. Foundations and Trends in Databases, Vol. 5, No. 3, Pages 197–280. 2012.
 * https://web.stanford.edu/class/cs345d-01/rl/cstore.pdf[C-Store: A Column-oriented DBMS], Stonebraker, Abadi, et al. Proceedings of the 31st VLDB Conference. 2005.
 * https://arxiv.org/pdf/2004.14471.pdf[Mainlining Databases: SupportingFast Transactional Workloads onUniversal Columnar Data File Format], Li, Butrovich, et al. April 2020.
 * https://db.in.tum.de/~muehlbau/papers/mvcc.pdf[Fast Serializable Multi-Version Concurrency Controlfor Main-Memory Database Systems], Neumann, Mühlbauer, Kemper. SIGMOD’15. 2015.
@@ -35,7 +35,7 @@ and its architecture -- past, present, and very-near-future.
 === Columnar Stores: MonetDB / VectorWise
 
 * http://www.cs.cmu.edu/~natassa/courses/15-823/syllabus/papers/boncz99database.pdf[Database Architecture Optimized for the new Bottleneck: Memory Access], Boncz, Manegold, Kersten. Proceedings of the 25th VLDB Conference. 1999.
-* https://strum355.netsoc.co/books/PDF/MonetDB-X100%20-%20Hyper-Pipelining%20Query%20Execution%20(CIDR%202005%20P19).pdf[MonetDB/X100: Hyper-Pipelining Query Execution], Boncz, Zukowski, Nes. CIDR. 2005.
+* https://www.cidrdb.org/cidr2005/papers/P19.pdf[MonetDB/X100: Hyper-Pipelining Query Execution], Boncz, Zukowski, Nes. CIDR. 2005.
 * https://www.semanticscholar.org/paper/Database-Architecture-Evolution%3A-Mammals-Flourished-Boncz-Manegold/6986b4b3ee2420d136b7392a39f182dc7d95a6f4?p2df[Database Architecture Evolution: Mammals Flourished long before Dinosaurs became Extinct], Boncz, Manegold, Kersten. Proceedings VLDB Endowment, Vol. 2, Pages 1648-1653. 2009.
 * https://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.43.8552&rep=rep1&type=pdf[MIL Primatives for Querying a Fragmented World], Boncz, Kersten. VLDB Journal. 1999.
 * https://ir.cwi.nl/pub/18687/18687B.pdf[The Story of VectorWise], Boncz. Base de Donnees Avancees (BDA). 2011.
@@ -69,7 +69,7 @@ and its architecture -- past, present, and very-near-future.
 * http://people.cs.aau.dk/~csj/Thesis/[Temporal Database Management], Jensen. 2000.
 ** https://people.cs.aau.dk/~csj/Thesis/pdf/chapter2.pdf[Chapter 2: Semantics of Time-Varying Information], Jensen, Snodgrass. 2000.
 ** https://people.cs.aau.dk/~csj/Thesis/pdf/chapter4.pdf[Chapter 4: On the Semantics of “Now” in Databases], Clifford, Dyreson, et al. 2000.
-** http://people.cs.aau.dk/~csj/Glossary/[The Consensus Glossary of Temporal Database Concepts]
+** https://dl.acm.org/doi/pdf/10.1145/181550.181560[The Consensus Glossary of Temporal Database Concepts], Christian S. Jensen, James Clifford et al. 1994
 * https://opus.bibliothek.uni-augsburg.de/opus4/frontdoor/deliver/index/docId/59490/file/ICDE15-bitemporal-timeline.pdf[Bi-temporal Timeline Index: A Data Structure forProcessing Queries on Bi-temporal Data], Kaufmann et al. 2015 IEEE 31st International Conference on Data Engineering, April 2015.
 * https://www2.cs.arizona.edu/~rts/pubs/ISDec94.pdf[Unifying Temporal Data Models via a Conceptual Model], Jensen, Snodgrass. Information Systems, Volume 19, Issue 7, October 1994, Pages 513-547.
 * https://www.marklogic.com/blog/bitemporal/[A Deep Dive into Bitemporal], Woolridge. MarkLogic Weblog. 2016.
@@ -93,7 +93,7 @@ and its architecture -- past, present, and very-near-future.
 * https://arxiv.org/abs/1310.3314[Skew Strikes Back: New Developments in the Theory of Join Algorithms], Ngo, Re, Rudra. ACM SIGMOD Record, Vol. 42, No. 4, Pages 5-16. 2014.
 * http://db.in.tum.de/~freitag/papers/techreport-freitag-tum-i2082.pdf[Combining Worst-Case Optimal and Traditional Binary Join Processing], Freitag et al.
 * https://users.dcc.uchile.cl/~gnavarro/ps/sigmod21.pdf[Worst-Case Optimal Graph Joins in Almost No Space], Arroyuelo, Hogan, et al. SIGMOD '21. 2021.
-* http://citeseerx.ist.psu.edu/viewdoc/download;jsessionid=CFD3DCD1A3AECA50776F3A913BF541B4?doi=10.1.1.498.5779&rep=rep1&type=pdf[Execution Strategies for SQL Subqueries], Elhemali, Galindo-Legaria, et al. Proceedings of the ACM SIGMOD International Conference on Management of Data. 2007.
+* https://www.cse.iitb.ac.in/infolab/Data/Courses/CS632/2014/2009/Papers/subquery-proc-elhemali-sigmod07.pdf[Execution Strategies for SQL Subqueries], Elhemali, Galindo-Legaria, et al. Proceedings of the ACM SIGMOD International Conference on Management of Data. 2007.
 * https://cs.ulb.ac.be/public/_media/teaching/infoh417/sql2alg_eng.pdf[Translating SQL into the Relational Algebra], Bussche, Vansummeren. 2009.
 * https://subs.emis.de/LNI/Proceedings/Proceedings241/383.pdf[Unnesting Arbitrary Queries], Neumann, Kemper. BTW. 2015.
 
@@ -126,7 +126,7 @@ and its architecture -- past, present, and very-near-future.
 
 * https://www.uni-weimar.de/fileadmin/user/fak/medien/professuren/Virtual_Reality/pictures/asrtrt01/bih_presentation.pdf[BIH (Bounding Interval Hierarchy)], Gründl.
 * https://people.cs.clemson.edu/~dhouse/courses/405/papers/bounding-interval-WK06.pdf[Instant Ray Tracing: The Bounding Interval Hierarchy], Wächter, Keller. Eurographics Symposium on Rendering. 2006.
-* https://cs.swansea.ac.uk/wordpressvc/wp-content/uploads/2012/10/d-and-c-ray-tracing.pdf[Naive Ray-Tracing: A Divide-And-Conquer Approach], Mora. ACM Trans. Graph. 30, 5, Article 117. October 2011.
+* https://web.archive.org/web/20211022010018/https://cs.swansea.ac.uk/wordpressvc/wp-content/uploads/2012/10/d-and-c-ray-tracing.pdf[Naive Ray-Tracing: A Divide-And-Conquer Approach], Mora. ACM Trans. Graph. 30, 5, Article 117. October 2011.
 
 [#closestpoint]
 === Data Structures: Closest Point

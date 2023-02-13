@@ -5,7 +5,7 @@ Development Status: Alpha
 
 A XTDB module that allows you to pipe verified https://www.corda.net/[Corda] transactions into an XTDB node, to then query using XTDB's bitemporal Datalog query engine.
 
-NOTE: For an introduction to Corda, check out the  https://docs.corda.net/docs/corda-os/4.8/tutorials-index.html[tutorials on the Corda site].
+NOTE: For an introduction to Corda, check out the  https://docs.r3.com/en/platform/corda/4.10/community/get-started/tutorials/overview.html[tutorials on the Corda site].
 
 == Setup
 
