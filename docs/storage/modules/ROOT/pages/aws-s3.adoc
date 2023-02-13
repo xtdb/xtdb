@@ -159,15 +159,16 @@ link:https://aws.amazon.com/blogs/developer/introducing-crt-based-s3-client-and-
 [tabs]
 ====
 EDN::
++
 [source,clojure]
 ----
-  {:deps 
+  {:deps
      {
        ...
        software.amazon.awssdk/s3-transfer-manager {:mvn/version "2.19.21"}
        software.amazon.awssdk.crt/aws-crt {:mvn/version "0.21.1"}
        ...
-     } 
+     }
     ...
   }
 ----
