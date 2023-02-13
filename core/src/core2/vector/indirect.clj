@@ -270,7 +270,8 @@
 
 (defn select ^core2.vector.IIndirectRelation [^IIndirectRelation in-rel, ^ints idxs]
   (->indirect-rel (for [^IIndirectVector in-col in-rel]
-                    (.select in-col idxs))))
+                    (.select in-col idxs))
+                  (alength idxs)))
 
 (defn copy ^core2.vector.IIndirectRelation [^IIndirectRelation in-rel, ^BufferAllocator allocator]
   (->indirect-rel (for [^IIndirectVector in-col in-rel]
