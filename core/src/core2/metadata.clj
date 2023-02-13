@@ -439,9 +439,16 @@
 (defn ->metadata-idxs ^core2.metadata.IMetadataIndices [^VectorSchemaRoot metadata-root]
   (let [col-idx-cache (HashMap.)
         block-idx-cache (HashMap.)
+        row-count (.getRowCount metadata-root)
         ^VarCharVector column-name-vec (.getVector metadata-root "column")
         ^IntVector block-idx-vec (.getVector metadata-root "block-idx")
-        root-col-vec (.getVector metadata-root "root-column")]
+        root-col-vec (.getVector metadata-root "root-column")
+        block-count (loop [block-count 0, idx 0]
+                      (cond
+                        (>= idx row-count) (inc block-count)
+                        (.isNull block-idx-vec idx) (recur block-count (inc idx))
+                        :else (recur (max (.get block-idx-vec idx) block-count)
+                                     (inc idx))))]
     (dotimes [meta-idx (.getRowCount metadata-root)]
       (let [col-name (str (.getObject column-name-vec meta-idx))]
         (when-not (.isNull root-col-vec meta-idx)
@@ -449,16 +456,12 @@
             (.put col-idx-cache col-name meta-idx)
             (.put block-idx-cache [col-name (.get block-idx-vec meta-idx)] meta-idx)))))
 
-    (let [block-count (->> (keys block-idx-cache)
-                           (map second)
-                           ^long (apply max)
-                           inc)]
-      (reify IMetadataIndices
-        IMetadataIndices
-        (columnNames [_] (set (keys col-idx-cache)))
-        (columnIndex [_ col-name] (get col-idx-cache col-name))
-        (blockIndex [_ col-name block-idx] (get block-idx-cache [col-name block-idx]))
-        (blockCount [_] block-count)))))
+    (reify IMetadataIndices
+      IMetadataIndices
+      (columnNames [_] (set (keys col-idx-cache)))
+      (columnIndex [_ col-name] (get col-idx-cache col-name))
+      (blockIndex [_ col-name block-idx] (get block-idx-cache [col-name block-idx]))
+      (blockCount [_] block-count))))
 
 (deftype MetadataManager [^BufferAllocator allocator
                           ^ObjectStore object-store
