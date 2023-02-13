@@ -18,7 +18,7 @@
   (:import clojure.lang.MapEntry
            core2.buffer_pool.IBufferPool
            core2.ICursor
-           core2.metadata.IMetadataManager
+           (core2.metadata IMetadataManager ITableMetadata)
            core2.operator.IRelationSelector
            (core2.vector IIndirectRelation IIndirectVector)
            core2.watermark.IWatermark
@@ -158,16 +158,16 @@
   (if-let [^MutableRoaringBitmap pushdown-bloom (get *column->pushdown-bloom* (symbol col-name))]
   ;; would prefer this `^long` to be on the param but can only have 4 params in a primitive hinted function in Clojure
     @(meta/with-metadata metadata-manager ^long chunk-idx table-name
-       (fn [_chunk-idx ^VectorSchemaRoot metadata-root]
-         (let [metadata-idxs (meta/->metadata-idxs metadata-root)
+       (fn [_chunk-idx, ^ITableMetadata table-metadata]
+         (let [metadata-root (.metadataRoot table-metadata)
                ^VarBinaryVector bloom-vec (.getVector metadata-root "bloom")]
            (when (MutableRoaringBitmap/intersects pushdown-bloom
-                                                  (bloom/bloom->bitmap bloom-vec (.columnIndex metadata-idxs col-name)))
+                                                  (bloom/bloom->bitmap bloom-vec (.columnIndex table-metadata col-name)))
              (let [filtered-block-idxs (RoaringBitmap.)]
                (.forEach block-idxs
                          (reify IntConsumer
                            (accept [_ block-idx]
-                             (when-let [bloom-vec-idx (.blockIndex metadata-idxs col-name block-idx)]
+                             (when-let [bloom-vec-idx (.blockIndex table-metadata col-name block-idx)]
                                (when (and (not (.isNull bloom-vec bloom-vec-idx))
                                           (MutableRoaringBitmap/intersects pushdown-bloom
                                                                            (bloom/bloom->bitmap bloom-vec bloom-vec-idx)))
@@ -324,10 +324,9 @@
            (meta/matching-chunks
             metadata-mgr
             (name table)
-            (fn [_chunk-idx ^VectorSchemaRoot metadata-root]
-              (let [metadata-idxs (meta/->metadata-idxs metadata-root)
-                    id-col-idx (.columnIndex metadata-idxs "id")
-                    ^BigIntVector count-vec (.getVector metadata-root "count")]
+            (fn [_chunk-idx ^ITableMetadata table-metadata]
+              (let [id-col-idx (.columnIndex table-metadata "id")
+                    ^BigIntVector count-vec (.getVector (.metadataRoot table-metadata) "count")]
                 (.get count-vec id-col-idx))))))]
 
     {:col-types (dissoc col-types '_table)

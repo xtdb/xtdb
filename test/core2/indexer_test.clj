@@ -142,7 +142,7 @@
                         record-batch (util/->arrow-record-batch-view (first (.getRecordBatches footer)) buffer)]
               (.load (VectorLoader. metadata-batch) record-batch)
               (t/is (= 36 (.getRowCount metadata-batch)))
-              (let [id-col-idx (-> (meta/->metadata-idxs metadata-batch)
+              (let [id-col-idx (-> (meta/->table-metadata metadata-batch (meta/->table-metadata-idxs metadata-batch))
                                    (.columnIndex "id"))]
                 (t/is (= "id" (-> (.getVector metadata-batch "column")
                                   (ty/get-object id-col-idx))))

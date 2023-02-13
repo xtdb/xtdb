@@ -16,7 +16,7 @@
            core2.object_store.ObjectStore
            java.io.Closeable
            (java.util ArrayList HashMap Map NavigableMap TreeMap)
-           (java.util.concurrent CompletableFuture)
+           (java.util.concurrent CompletableFuture ConcurrentHashMap)
            (java.util.function Consumer Function)
            (org.apache.arrow.memory ArrowBuf BufferAllocator)
            (org.apache.arrow.vector BigIntVector BitVector IntVector ValueVector VarBinaryVector VarCharVector VectorSchemaRoot)
@@ -32,11 +32,12 @@
 (definterface IMetadataManager
   (^void registerNewChunk [^java.util.Map roots, ^long chunk-idx])
   (^java.util.NavigableMap chunksMetadata [])
-  (^java.util.concurrent.CompletableFuture withMetadata [^long chunkIdx, ^String tableName, ^java.util.function.BiFunction f])
+  (^java.util.concurrent.CompletableFuture withMetadata [^long chunkIdx, ^String tableName, ^java.util.function.BiFunction #_#_<long, ITableMetadata> f])
   (columnType [^String tableName, ^String colName]))
 
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
-(definterface IMetadataIndices
+(definterface ITableMetadata
+  (^org.apache.arrow.vector.VectorSchemaRoot metadataRoot [])
   (^java.util.Set columnNames [])
   (^Long columnIndex [^String columnName])
   (^Long blockIndex [^String column-name, ^int blockIdx])
@@ -436,19 +437,13 @@
 
     (.syncSchema metadata-root)))
 
-(defn ->metadata-idxs ^core2.metadata.IMetadataIndices [^VectorSchemaRoot metadata-root]
+(defn ->table-metadata-idxs [^VectorSchemaRoot metadata-root]
   (let [col-idx-cache (HashMap.)
         block-idx-cache (HashMap.)
         row-count (.getRowCount metadata-root)
         ^VarCharVector column-name-vec (.getVector metadata-root "column")
         ^IntVector block-idx-vec (.getVector metadata-root "block-idx")
-        root-col-vec (.getVector metadata-root "root-column")
-        block-count (loop [block-count 0, idx 0]
-                      (cond
-                        (>= idx row-count) (inc block-count)
-                        (.isNull block-idx-vec idx) (recur block-count (inc idx))
-                        :else (recur (max (.get block-idx-vec idx) block-count)
-                                     (inc idx))))]
+        root-col-vec (.getVector metadata-root "root-column")]
     (dotimes [meta-idx (.getRowCount metadata-root)]
       (let [col-name (str (.getObject column-name-vec meta-idx))]
         (when-not (.isNull root-col-vec meta-idx)
@@ -456,18 +451,29 @@
             (.put col-idx-cache col-name meta-idx)
             (.put block-idx-cache [col-name (.get block-idx-vec meta-idx)] meta-idx)))))
 
-    (reify IMetadataIndices
-      IMetadataIndices
-      (columnNames [_] (set (keys col-idx-cache)))
-      (columnIndex [_ col-name] (get col-idx-cache col-name))
-      (blockIndex [_ col-name block-idx] (get block-idx-cache [col-name block-idx]))
-      (blockCount [_] block-count))))
+    {:col-idx-cache col-idx-cache
+     :block-idx-cache block-idx-cache
+     :block-count (loop [block-count 0, idx 0]
+                      (cond
+                        (>= idx row-count) (inc block-count)
+                        (.isNull block-idx-vec idx) (recur block-count (inc idx))
+                        :else (recur (max (.get block-idx-vec idx) block-count)
+                                     (inc idx))))}))
+
+(defn ->table-metadata ^core2.metadata.ITableMetadata [^VectorSchemaRoot vsr, {:keys [col-idx-cache, block-idx-cache, block-count]}]
+  (reify ITableMetadata
+    (metadataRoot [_] vsr)
+    (columnNames [_] (set (keys col-idx-cache)))
+    (columnIndex [_ col-name] (get col-idx-cache col-name))
+    (blockIndex [_ col-name block-idx] (get block-idx-cache [col-name block-idx]))
+    (blockCount [_] block-count)) )
 
 (deftype MetadataManager [^BufferAllocator allocator
                           ^ObjectStore object-store
                           ^IBufferPool buffer-pool
                           ^long max-rows-per-block
                           ^NavigableMap chunks-metadata
+                          ^Map table-metadata-idxs
                           ^:unsynchronised-mutable ^Map col-types]
   IMetadataManager
   (registerNewChunk [this live-roots chunk-idx]
@@ -488,7 +494,13 @@
   (withMetadata [_ chunk-idx table-name f]
     (with-single-root buffer-pool (->table-metadata-obj-key chunk-idx table-name)
       (fn [metadata-root]
-        (.apply f chunk-idx metadata-root))))
+        (.apply f chunk-idx
+                (->table-metadata metadata-root
+                                  (.computeIfAbsent table-metadata-idxs
+                                                    [chunk-idx table-name]
+                                                    (reify Function
+                                                      (apply [_ _]
+                                                        (->table-metadata-idxs metadata-root)))))))))
 
   (chunksMetadata [_] chunks-metadata)
 
@@ -512,8 +524,9 @@
   ;; TODO cache which chunk each row-id is in.
   (let [bloom-hash (bloom/literal-hashes (.allocator ^MetadataManager metadata-mgr) row-id)]
     (->> (matching-chunks metadata-mgr table-name
-                          (fn [^long chunk-idx ^VectorSchemaRoot metadata-root]
+                          (fn [^long chunk-idx ^ITableMetadata table-metadata]
                             (let [cols (ArrayList.)
+                                  metadata-root (.metadataRoot table-metadata)
                                   ^VarCharVector col-name-vec (.getVector metadata-root "column")
                                   ^IntVector block-idx-vec (.getVector metadata-root "block-idx")
                                   ^StructVector root-col-vec (.getVector metadata-root "root-column")
@@ -547,6 +560,7 @@
         chunks-metadata (load-chunks-metadata deps cm-obj-keys)]
     (MetadataManager. allocator object-store buffer-pool max-rows-per-block
                       (TreeMap. chunks-metadata)
+                      (ConcurrentHashMap.)
                       (->> (vals chunks-metadata) (reduce merge-col-types {})))))
 
 (defmethod ig/halt-key! ::metadata-manager [_ mgr]

@@ -6,10 +6,10 @@
             [core2.util :as util]
             [core2.types :as types]
             [core2.vector.indirect :as iv])
-  (:import core2.metadata.IMetadataIndices
+  (:import core2.metadata.ITableMetadata
            (core2.vector IIndirectRelation IIndirectVector)
            org.apache.arrow.memory.RootAllocator
-           [org.apache.arrow.vector VarBinaryVector VectorSchemaRoot]
+           [org.apache.arrow.vector VarBinaryVector]
            [org.apache.arrow.vector.complex StructVector]
            org.roaringbitmap.RoaringBitmap))
 
@@ -136,8 +136,8 @@
                                (when-let [param-col (.vectorForName params (name (get param-expr :param)))]
                                  (types/get-object (.getVector param-col) (.getIndex param-col 0)))))))))
 
+(def ^:private table-metadata-sym (gensym "table-metadata"))
 (def ^:private metadata-root-sym (gensym "metadata-root"))
-(def ^:private metadata-idxs-sym (gensym "metadata-idxs"))
 (def ^:private block-idx-sym (gensym "block-idx"))
 (def ^:private types-vec-sym (gensym "types-vec"))
 (def ^:private bloom-vec-sym (gensym "bloom-vec"))
@@ -149,15 +149,15 @@
                  (f :bool
                     `(boolean
                       (if ~block-idx-sym
-                        (.blockIndex ~metadata-idxs-sym ~field-name ~block-idx-sym)
-                        (.columnIndex ~metadata-idxs-sym ~field-name)))))}))
+                        (.blockIndex ~table-metadata-sym ~field-name ~block-idx-sym)
+                        (.columnIndex ~table-metadata-sym ~field-name)))))}))
 
 (defmethod expr/codegen-expr :metadata-vp-call [{:keys [f meta-value field param-expr col-type bloom-hash-sym]} opts]
   (let [field-name (str field)
 
         idx-code `(if ~block-idx-sym
-                    (.blockIndex ~metadata-idxs-sym ~field-name ~block-idx-sym)
-                    (.columnIndex ~metadata-idxs-sym ~field-name))]
+                    (.blockIndex ~table-metadata-sym ~field-name ~block-idx-sym)
+                    (.columnIndex ~table-metadata-sym ~field-name))]
 
     (if (= meta-value :bloom-filter)
       {:return-type :bool
@@ -197,10 +197,10 @@
 
 (defmethod ewalk/direct-child-exprs :metadata-vp-call [{:keys [param-expr]}] #{param-expr})
 
-(defn check-meta [chunk-idx ^IMetadataIndices metadata-idxs check-meta-f]
+(defn check-meta [chunk-idx ^ITableMetadata table-metadata check-meta-f]
   (when (check-meta-f nil)
     (let [block-idxs (RoaringBitmap.)]
-      (dotimes [block-idx (.blockCount metadata-idxs)]
+      (dotimes [block-idx (.blockCount table-metadata)]
         (when (check-meta-f block-idx)
           (.add block-idxs block-idx)))
 
@@ -214,16 +214,15 @@
               {:keys [continue] :as emitted-expr} (expr/codegen-expr expr opts)]
           {:expr expr
            :f (-> `(fn [chunk-idx#
-                        ~(-> metadata-root-sym (expr/with-tag VectorSchemaRoot))
+                        ~(-> table-metadata-sym (expr/with-tag ITableMetadata))
                         ~(-> expr/params-sym (expr/with-tag IIndirectRelation))
                         [~@(keep :bloom-hash-sym (ewalk/expr-seq expr))]]
-                     (let [~(-> metadata-idxs-sym (expr/with-tag IMetadataIndices)) (meta/->metadata-idxs ~metadata-root-sym)
-
+                     (let [~metadata-root-sym (.metadataRoot ~table-metadata-sym)
                            ~(-> types-vec-sym (expr/with-tag StructVector)) (.getVector ~metadata-root-sym "types")
                            ~(-> bloom-vec-sym (expr/with-tag VarBinaryVector)) (.getVector ~metadata-root-sym "bloom")
 
                            ~@(expr/batch-bindings emitted-expr)]
-                       (check-meta chunk-idx# ~metadata-idxs-sym
+                       (check-meta chunk-idx# ~table-metadata-sym
                                    (fn check-meta# [~block-idx-sym]
                                      ~(continue (fn [_ code] code))))))
                   #_(doto clojure.pprint/pprint)
