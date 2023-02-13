@@ -678,6 +678,26 @@
   {:return-type :bool
    :->call-code #(do `(= ~@%))})
 
+(doseq [col-type #{:varbinary :utf8}]
+  (defmethod codegen-call [:= col-type col-type] [_]
+    {:return-type :bool,
+     :->call-code #(do `(.equals ~@%))}))
+
+;; TODO with this pattern we need a defmulti for every fn - not ideal.
+(defmulti codegen-ext-=
+  (fn [{:keys [arg-types]}]
+    (mapv second arg-types)))
+
+(defmethod codegen-ext-= :default [expr]
+  {:return-type :bool, :->call-code #(do `(= ~@%))})
+
+(defmethod codegen-ext-= [:c2/clj-keyword :c2/clj-keyword] [_]
+  {:return-type :bool,
+   :->call-code #(do `(.equals ~@%))})
+
+(defmethod codegen-call [:= :extension-type :extension-type] [expr]
+  (codegen-ext-= expr))
+
 ;; null-eq is an internal function used in situations where two nulls should compare equal,
 ;; e.g when grouping rows in group-by.
 (defmethod codegen-call [:null-eq :any :any] [call]
