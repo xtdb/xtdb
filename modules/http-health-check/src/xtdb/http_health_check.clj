@@ -50,8 +50,7 @@
      ["/ns/:ns" (fn [{:keys [:path-params] :as r}]
                   (prn [:HEALTHZ path-params])
                   (json/write-str
-                    (filter #(s/includes? (:namespace %) (:ns path-params)) @events)))]]]))
-
+                   (filter #(s/includes? (:namespace %) (:ns path-params)) @events)))]]]))
 
 (defn ->server {::sys/deps {:bus :xtdb/bus}
                 ::sys/before [[:xtdb/index-store :kv-store]]
@@ -62,11 +61,11 @@
   [{:keys [bus port jetty-opts] :as options}]
   (let [events (atom [(process-event {::xt/event-type :xtdb.node/node-starting})])
         ^Server server (j/run-jetty
-                         (rr/ring-handler (->xtdb-router events)
-                                          (rr/routes
-                                            (rr/create-resource-handler {:path "/"})
-                                            (rr/create-default-handler)))
-                         (merge {:port port :join? false} jetty-opts))
+                        (rr/ring-handler (->xtdb-router events)
+                                         (rr/routes
+                                          (rr/create-resource-handler {:path "/"})
+                                          (rr/create-default-handler)))
+                        (merge {:port port :join? false} jetty-opts))
         listener (bus/listen bus {::xt/event-types #{:xtdb.node/node-closing
                                                      :xtdb.node/slow-query
                                                      :healthz}}
