@@ -3,7 +3,7 @@
             [core2.vector.writer :as vw])
   (:import java.nio.ByteBuffer
            org.apache.arrow.memory.BufferAllocator
-           org.apache.arrow.memory.util.hash.MurmurHasher
+           (org.apache.arrow.memory.util.hash MurmurHasher SimpleHasher)
            [org.apache.arrow.vector ValueVector VarBinaryVector]
            org.roaringbitmap.buffer.ImmutableRoaringBitmap
            org.roaringbitmap.RoaringBitmap))
@@ -49,15 +49,13 @@
           (recur (inc n))
           false)))))
 
-(def ^:private initial-murmur-hasher (MurmurHasher. 0))
-
 ;; Cassandra-style hashes:
 ;; https://www.researchgate.net/publication/220770131_Less_Hashing_Same_Performance_Building_a_Better_Bloom_Filter
 (defn bloom-hashes
   (^ints [^ValueVector vec ^long idx]
    (bloom-hashes vec idx bloom-k bloom-bit-mask))
   (^ints [^ValueVector vec ^long idx ^long k ^long mask]
-   (let [hash-1 (.hashCode vec idx initial-murmur-hasher)
+   (let [hash-1 (.hashCode vec idx SimpleHasher/INSTANCE)
          hash-2 (.hashCode vec idx (MurmurHasher. hash-1))
          acc (int-array k)]
      (dotimes [n k]

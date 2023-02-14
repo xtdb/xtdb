@@ -12,12 +12,12 @@
            java.util.List
            java.util.function.IntBinaryOperator
            (org.apache.arrow.memory BufferAllocator)
-           (org.apache.arrow.memory.util.hash MurmurHasher)
+           (org.apache.arrow.memory.util.hash MurmurHasher SimpleHasher)
            (org.apache.arrow.vector NullVector)
            (org.roaringbitmap IntConsumer RoaringBitmap)))
 
 (def ^:private ^org.apache.arrow.memory.util.hash.ArrowBufHasher hasher
-  (MurmurHasher.))
+  SimpleHasher/INSTANCE)
 
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface IIndexHasher
