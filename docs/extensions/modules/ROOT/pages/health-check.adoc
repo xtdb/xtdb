@@ -1,0 +1,106 @@
+= HTTP Health Server
+:page-aliases: reference::http.adoc
+
+This document explains how to configure the XTDB HTTP Health Server module.
+
+Production XTDB nodes often run in containers deployed on infrastructures where automation matters: nodes are "managed" by components in charge of tasks such as monitoring resources and routing traffic. Examples of such infrastructure include (but are not limited to) link:https://kubernetes.io/[Kubernetes] and link:https://aws.amazon.com/ecs/[AWS ECS]. In all cases the supervising component has the need to assess the health of the XTDB nodes it supervises. 
+
+The XTDB Health Check module aims at facilitating this task by allowing some important states of a running node that uses it to be observable. It achieves this by first collecting `events` published by the node as it transits through its various states; then making them available via a tiny http server it runs. 
+
+Rather than a health-check service directly usable by e.g. by K8S, it provides informations usable when configuring liveness, readiness and startup probes, with the intent to cope with the case of a link:https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#define-startup-probes[slow starting container] e.g., when upon starting the node recovers its index-store from a large checkpoint.
+
+== Structure of an event
+[source.clojure]
+----
+{:event "end-restore",
+ :thread "nREPL-session-8139ad0e-476e-455e-9579-810d6d4e5f06",
+ :clock 10.406734083,
+ :event-type "healthz",
+ :timestamp "2023-02-10T06:16:33.190Z",
+ :namespace "xtdb.checkpoint"}
+----
+The `:clock` attribute is a number of seconds (accurate to the nanosecond) and reasonably monotonic.  
+
+// TODO finish this write-up once I've sorted the event question.
+
+== HTTP routes served
+.Currently the HTTP Health Check module serves the following routes:
+* `/healthz`
+- returns the latest events of each namespace
+* `/healthz/hist`
+- returns the full history (as an ordered vector)
+* `/healthz/ns/:ns`
+- returns the full history for namespace `:ns`
+
+== Events currently collected
+
+.Currently the module collects the following events:
+* `xtdb.node/node-starting`
+* `xtdb.node/slow-closing`
+* `xtdb.node/slow-query`
+* `xtdb.checkpoint/begin-checkpoint`, `xtdb.checkpoint/end-checkpoint`
+* `xtdb.checkpoint/begin-restore`, `xtdb.checkpoint/end-restore`
+* `xtdb.tx/begin-tx-ingester`
+* `xtdb.query/failed-query`
+
+
+[#start-http-health-check]
+== Starting the HTTP Health Check server
+
+=== Project Dependency
+
+[source,clojure, subs=attributes+]
+----
+com.xtdb/xtdb-http-health-check {:mvn/version "{xtdb_version}"}
+----
+
+You can start up a Jetty HTTP/HTTP2 server on a node by including `xtdb.http-health-check/server` in your node configuration, optionally passing the server port:
+
+[tabs]
+====
+JSON::
++
+[source,json]
+----
+{
+  "xtdb.http-health-check/server": {
+    "port": 8080,  
+    ...
+  }
+}
+----
+
+Clojure::
++
+[source,clojure]
+----
+{:xtdb.http-health-check/server 
+    {:port 8080
+     ...}}
+----
+
+EDN::
++
+[source,clojure]
+----
+{:xtdb.http-health-check/server 
+    {:port 8080
+     ...}}
+----
+====
+
+// TODO Authorization section
+
+=== Parameters
+
+* `port` (int, default 7000)
+* `jetty-opts` (map): further options to pass to the https://ring-clojure.github.io/ring/ring.adapter.jetty.html[Ring Jetty adapter]
+
+=== Ring Handler (TODO)
+
+XTDB also exposes a https://github.com/ring-clojure/ring[Ring] handler that you can include within your own Ring-compatible server, with parameters as above:
+
+[source,clojure]
+----
+(xtdb.http-health-check/->xtdb-handler xtdb-node {...})
+----

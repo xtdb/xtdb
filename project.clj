@@ -23,6 +23,7 @@
    [com.xtdb/xtdb-kafka-embedded ~xt-version]
    [com.xtdb/xtdb-jdbc ~xt-version]
    [com.xtdb/xtdb-metrics ~xt-version]
+   [com.xtdb/xtdb-http-health-check ~xt-version]
    [com.xtdb/xtdb-http-server ~xt-version]
    [com.xtdb/xtdb-http-client ~xt-version]
    [com.xtdb.labs/xtdb-rdf ~xt-version]
@@ -113,6 +114,7 @@
    [com.xtdb/xtdb-bench]
    [com.xtdb/xtdb-replicator]
    [com.xtdb/xtdb-s3]
+   [com.xtdb/xtdb-http-health-check]
 
    [org.apache.kafka/connect-api "2.6.0" :scope "provided"]
 

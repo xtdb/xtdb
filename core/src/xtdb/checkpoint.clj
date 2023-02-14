@@ -3,6 +3,7 @@
             [clojure.java.io :as io]
             [xtdb.api :as xt]
             [xtdb.io :as xio]
+            [xtdb.bus :as bus]
             [xtdb.system :as sys])
   (:import [java.io Closeable File]
            java.net.URI
@@ -37,8 +38,9 @@
        (< (.getSeconds (Duration/between (.toInstant checkpoint-at) (Instant/now)))
           (/ (.getSeconds approx-frequency) 2))))
 
-(defn checkpoint [{:keys [dir src store ::cp-format approx-frequency]}]
+(defn checkpoint [{:keys [dir bus src store ::cp-format approx-frequency]}]
   (when-not (recent-cp? (first (available-checkpoints store {::cp-format cp-format})) approx-frequency)
+    (bus/send bus (bus/->event :healthz :begin-checkpoint))
     (when-let [{:keys [tx]} (save-checkpoint src dir)]
       (when tx
         (let [cp-at (java.util.Date.)
@@ -51,14 +53,15 @@
               (xio/delete-dir dir)
               (cleanup-checkpoint store opts)
               (log/warn "Cleaned-up failed checkpoint:" opts)
-              (throw t))))))))
+              (throw t))))))
+    (bus/send bus (bus/->event :healthz :end-checkpoint))))
 
 (defn cp-seq [^Instant start ^Duration freq]
   (lazy-seq
    (cons (.plus start (Duration/ofSeconds (rand-int (.getSeconds freq))))
          (cp-seq (.plus start freq) freq))))
 
-(defrecord ScheduledCheckpointer [store, ^Path checkpoint-dir, ^Duration approx-frequency
+(defrecord ScheduledCheckpointer [store bus ^Path checkpoint-dir, ^Duration approx-frequency
                                   keep-dir-between-checkpoints? keep-dir-on-close?]
   Checkpointer
   (try-restore [_ dir cp-format]
@@ -67,7 +70,9 @@
       (log/debug "checking for checkpoints to restore from")
       (when-let [cp (first (available-checkpoints store {::cp-format cp-format}))]
         (log/infof "restoring from %s to %s" cp dir)
+        (bus/send bus (bus/->event :healthz :begin-restore))
         (download-checkpoint store cp dir)
+        (bus/send bus (bus/->event :healthz :end-restore))
         cp)))
 
   (start [this src {::keys [cp-format]}]
@@ -77,6 +82,7 @@
                 (try
                   (checkpoint {:approx-frequency approx-frequency,
                                :dir checkpoint-dir,
+                               :bus bus
                                :src src,
                                :store store,
                                ::cp-format cp-format})
@@ -105,7 +111,8 @@
           (when-not keep-dir-on-close?
             (xio/delete-dir checkpoint-dir)))))))
 
-(defn ->checkpointer {::sys/deps {:store {:xtdb/module (fn [_])}}
+(defn ->checkpointer {::sys/deps {:store {:xtdb/module (fn [_])}
+                                  :bus :xtdb/bus}
                       ::sys/args {:checkpoint-dir {:spec ::sys/path
                                                    :required? false}
                                   :keep-dir-between-checkpoints? {:spec ::sys/boolean

@@ -36,6 +36,15 @@
 (s/def ::event (s/merge (s/keys :req [::xt/event-type])
                         (s/multi-spec event-spec ::xt/event-type)))
 
+(defmacro ->event
+  [event-type msg]
+  `{::xt/event-type ~event-type
+    :namespace ~(str *ns*)
+    :thread (.getName (Thread/currentThread))
+    :timestamp (java.util.Date.)
+    :clock (System/nanoTime)
+    :event ~msg})
+
 (defn- close-executor [^ExecutorService executor]
   (try
     (.shutdown executor)
