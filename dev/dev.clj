@@ -185,11 +185,11 @@
 
 
 ;; swap for `embedded-kafka-config`  to use embedded-kafka
-(ir/set-prep! (fn [] standalone-config))
+; (ir/set-prep! (fn [] standalone-config))
 ; (ir/set-prep! (fn [] local-kafka-config))
 ; (ir/set-prep! (fn [] embedded-kafka-config))
 ; (ir/set-prep! (fn [] checkpoint-fs-config))
-; (ir/set-prep! (fn [] checkpoint-fs-healthz-config))
+(ir/set-prep! (fn [] checkpoint-fs-healthz-config))
 
 
 (defn xtdb-node []

@@ -48,7 +48,6 @@
                         (sort-by :clock))))]
      ["/hist" (fn [_] (json/write-str @events))]
      ["/ns/:ns" (fn [{:keys [:path-params] :as r}]
-                  (prn [:HEALTHZ path-params])
                   (json/write-str
                    (filter #(s/includes? (:namespace %) (:ns path-params)) @events)))]]]))
 
