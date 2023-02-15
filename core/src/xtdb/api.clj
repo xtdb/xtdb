@@ -23,9 +23,12 @@
 (s/def ::evicted? boolean?)
 (s/def :crux.db.fn/args (s/coll-of any? :kind vector?))
 
+(s/def ::fn-db-arg (s/or :sym symbol? :destructuring map?))
+(s/def ::fn-arg (s/or :sym symbol? :destructuring (s/or :map map? :vec vector?)))
+
 (s/def ::fn
   (s/cat :fn #{'fn}
-         :args (s/coll-of symbol? :kind vector? :min-count 1)
+         :args (s/and vector? (s/cat :db ::fn-db-arg :args (s/* ::fn-arg)))
          :body (s/* any?)))
 
 (defprotocol PXtdb
