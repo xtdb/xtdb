@@ -37,19 +37,57 @@
      :clock (adjust-clock (System/nanoTime))}
     (update event :clock adjust-clock)))
 
+(defn- ->lag-event
+  [lag]
+  {::xt/event-type :internal
+   :namespace "xtdb.tx-indexing"
+   :event lag
+   :timestamp (java.util.Date.)
+   :clock (adjust-clock (System/nanoTime))})
+
+(defn- tx-ingester-lag!
+  [{:keys [events xtdb-node]}]
+  (when xtdb-node
+    (let [completed (xt/latest-completed-tx xtdb-node)
+          submitted (xt/latest-submitted-tx xtdb-node)]
+      (swap! events conj (->lag-event {:latest-completed-tx completed
+                                       :latest-submitted-tx submitted})))))
+
 (defn- ->xtdb-router
-  [events]
+  [{:keys [events] :as opts}]
   (rr/router
    [["/healthz"
-     ["/" (fn [_] (json/write-str
-                   (->> (group-by :namespace @events)
-                        ((fn [m] (for [[k v] m] [k (last v)])))
-                        (map second)
-                        (sort-by :clock))))]
-     ["/hist" (fn [_] (json/write-str @events))]
-     ["/ns/:ns" (fn [{:keys [:path-params] :as r}]
+     ["/" (fn [_]
+            (tx-ingester-lag! opts)
+            (json/write-str
+             (->> (group-by :namespace @events)
+                  ((fn [m] (for [[k v] m] [k (last v)])))
+                  (map second)
+                  (sort-by :clock))))]
+     ["/hist" (fn [_]
+                (tx-ingester-lag! opts)
+                (json/write-str @events))]
+     ["/ns/:ns" (fn [{:keys [:path-params]}]
+                  (tx-ingester-lag! opts)
                   (json/write-str
                    (filter #(s/includes? (:namespace %) (:ns path-params)) @events)))]]]))
+
+;; entry point for users including our handler in their own server
+(defn ->xtdb-handler
+  [xtdb-node]
+  (let [events   (atom [(process-event {::xt/event-type :xtdb.node/node-starting})])
+        ^Closeable listener
+        (bus/listen (:bus xtdb-node)
+                    {::xt/event-types #{:xtdb.node/node-closing
+                                        :xtdb.node/slow-query
+                                        :healthz}}
+                    #(swap! events conj (process-event %)))]
+    (try
+      (rr/ring-handler (->xtdb-router {:events events})
+                       (rr/routes
+                        (rr/create-resource-handler {:path "/"})
+                        (rr/create-default-handler)))
+      (finally (.close listener)))))
 
 (defn ->server {::sys/deps {:bus :xtdb/bus}
                 ::sys/before [[:xtdb/index-store :kv-store]]
@@ -60,7 +98,7 @@
   [{:keys [bus port jetty-opts] :as options}]
   (let [events (atom [(process-event {::xt/event-type :xtdb.node/node-starting})])
         ^Server server (j/run-jetty
-                        (rr/ring-handler (->xtdb-router events)
+                        (rr/ring-handler (->xtdb-router {:events events})
                                          (rr/routes
                                           (rr/create-resource-handler {:path "/"})
                                           (rr/create-default-handler)))
