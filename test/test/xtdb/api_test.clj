@@ -646,3 +646,30 @@
   ;; will segfault on early versions, exception here is ok, :remote config does not throw.
   (when-not (= :remote every-api/*node-type*)
     (t/is (thrown-with-msg? IllegalStateException #"closing" (xt/db *api*)))))
+
+(t/deftest submit-validates-tx-fn-test
+  ;; the goal of this test is to demonstrate eager validation of :xt/fn definitions on submit
+  ;; so the user gets feedback if they supply an incorrect function
+  (doseq [invalid-form [nil,
+                        42,
+                        ^:no-remote (fn [db])
+                        '(fn [])
+                        '(fn [#{}])
+                        '(constantly 42)
+                        '(comp (fn [db]))]
+          :when (case every-api/*node-type*
+                  :remote (not (:no-remote (meta invalid-form)))
+                  true)]
+    (t/is (thrown-with-msg? Throwable #"\:xt\/fn not a valid clojure fn form" (xt/submit-tx *api* [[::xt/put {:xt/id (random-uuid), :xt/fn invalid-form}]]))))
+
+  (doseq [valid-form ['(fn [db])
+                      '(fn [{:keys []}])
+                      '(fn [{} []])
+                      '(fn [{} & args])
+                      '(fn [{} {} {} {}])
+                      '(fn [db & args])
+                      '(fn [& args])]]
+    (t/is (any? (xt/await-tx *api* (xt/submit-tx *api* [[::xt/put {:xt/id (random-uuid) :xt/fn valid-form}]])))))
+
+  (doseq [wont-compile ['(fn [db] (no-such-var))]]
+    (t/is (thrown-with-msg? Throwable #"\:xt\/fn compilation failed" (xt/submit-tx *api* [[::xt/put {:xt/id (random-uuid), :xt/fn wont-compile}]])))))

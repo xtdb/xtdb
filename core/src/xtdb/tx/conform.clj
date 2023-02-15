@@ -1,5 +1,6 @@
 (ns ^:no-doc xtdb.tx.conform
-  (:require [xtdb.api :as xt]
+  (:require [clojure.spec.alpha :as s]
+            [xtdb.api :as xt]
             [xtdb.codec :as c]
             [xtdb.db :as db]
             [xtdb.error :as err]
@@ -16,6 +17,15 @@
     (when-not (and (map? doc)
                    (every? keyword? (keys doc)))
       (throw (ex-info "invalid doc" {:doc doc})))
+
+    (when (contains? doc :xt/fn)
+      (let [fn-body (:xt/fn doc)]
+        (if (s/valid? ::xt/fn fn-body)
+          (try
+            (eval fn-body)
+            (catch Throwable t
+              (throw (ex-info ":xt/fn compilation failed" {:fn fn-body} t))))
+          (throw (ex-info ":xt/fn not a valid clojure fn form, check :xt/fn is a quoted clojure function of at least 1 argument." {:fn fn-body})))))
 
     (-> doc
         (update :xt/id check-eid))))
