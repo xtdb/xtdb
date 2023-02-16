@@ -72,22 +72,30 @@
                   (json/write-str
                    (filter #(s/includes? (:namespace %) (:ns path-params)) @events)))]]]))
 
-;; entry point for users including our handler in their own server
-(defn ->xtdb-handler
+(defprotocol EventSnapshot
+  (get-snapshot [_]))
+
+(defrecord XTDBEventSink [xtdb-node ^Closeable listener events]
+  EventSnapshot
+  (get-snapshot [_]
+    (tx-ingester-lag! {:xtdb-node xtdb-node :events events})
+    (->> (group-by :namespace @events)
+         ((fn [m] (for [[k v] m] [k (last v)])))
+         (map second)
+         (sort-by :clock)))
+  Closeable
+  (close [_]
+    (.close listener)))
+
+(defn ->xtdb-event-sink
   [xtdb-node]
-  (let [events   (atom [(process-event {::xt/event-type :xtdb.node/node-starting})])
-        ^Closeable listener
-        (bus/listen (:bus xtdb-node)
-                    {::xt/event-types #{:xtdb.node/node-closing
-                                        :xtdb.node/slow-query
-                                        :healthz}}
-                    #(swap! events conj (process-event %)))]
-    (try
-      (rr/ring-handler (->xtdb-router {:events events})
-                       (rr/routes
-                        (rr/create-resource-handler {:path "/"})
-                        (rr/create-default-handler)))
-      (finally (.close listener)))))
+  (let [events (atom [(process-event {::xt/event-type :xtdb.node/node-starting})])
+        ^Closeable listener (bus/listen (:bus xtdb-node)
+                                        {::xt/event-types #{:xtdb.node/node-closing
+                                                            :xtdb.node/slow-query
+                                                            :healthz}}
+                                        #(swap! events conj (process-event %)))]
+    (->XTDBEventSink xtdb-node listener events)))
 
 (defn ->server {::sys/deps {:bus :xtdb/bus}
                 ::sys/before [[:xtdb/index-store :kv-store]]
