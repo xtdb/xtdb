@@ -1,13 +1,14 @@
 (ns core2.temporal
-  (:require core2.buffer-pool
+  (:require [clojure.tools.logging :as log]
+            core2.buffer-pool
             [core2.metadata :as meta]
             [core2.temporal.grid :as grid]
             [core2.temporal.kd-tree :as kd]
+            [core2.types :as types]
             [core2.util :as util]
             [core2.vector :as vec]
             [core2.vector.indirect :as iv]
-            [juxt.clojars-mirrors.integrant.core :as ig]
-            [core2.types :as types])
+            [juxt.clojars-mirrors.integrant.core :as ig])
   (:import core2.buffer_pool.IBufferPool
            core2.metadata.IMetadataManager
            core2.object_store.ObjectStore
@@ -247,7 +248,11 @@
   (format "temporal-snapshots/%s.arrow" (util/->lex-hex-string chunk-idx)))
 
 (defn- temporal-snapshot-obj-key->chunk-idx ^long [obj-key]
-  (util/<-lex-hex-string (second (re-find #"temporal-snapshots/(\p{XDigit}+)\.arrow" obj-key))))
+  (try
+    (util/<-lex-hex-string (second (re-find #"temporal-snapshots/(\p{XDigit}+)\.arrow" obj-key)))
+    (catch Throwable t
+      (log/errorf t "Failed to parse %s" obj-key)
+      (throw t))))
 
 (defn- ->temporal-rel ^core2.vector.IIndirectRelation [^BufferAllocator allocator, kd-tree columns temporal-min-range temporal-max-range ^Roaring64Bitmap row-id-bitmap]
   (let [^IKdTreePointAccess point-access (kd/kd-tree-point-access kd-tree)
