@@ -2,7 +2,7 @@
   (:require [core2.types :as types])
   (:import (clojure.lang MapEntry)
            (core2.types IntervalDayTime IntervalMonthDayNano)
-           (core2.vector IMonoVectorReader IMonoVectorWriter IPolyVectorReader IPolyVectorWriter IStructValueReader IWriterPosition)
+           (core2.vector IIndirectVector IMonoVectorReader IMonoVectorWriter IPolyVectorReader IPolyVectorWriter IStructValueReader IWriterPosition)
            java.nio.ByteBuffer
            (java.time Duration Period)
            java.util.List
@@ -636,20 +636,20 @@
           nn-type-id (case (.indexOf ^List ordered-col-types :null) 0 1, 1 0)]
       (->NullableVectorWriter (->mono-writer arrow-vec (nth ordered-col-types nn-type-id))))))
 
-(deftype IndirectVectorMonoReader [^IMonoVectorReader inner, ^ints idxs]
+(deftype IndirectVectorMonoReader [^IMonoVectorReader inner, ^IIndirectVector col]
   IMonoVectorReader
-  (readBoolean [_ idx] (.readBoolean inner (aget idxs idx)))
-  (readByte [_ idx] (.readByte inner (aget idxs idx)))
-  (readShort [_ idx] (.readShort inner (aget idxs idx)))
-  (readInt [_ idx] (.readInt inner (aget idxs idx)))
-  (readLong [_ idx] (.readLong inner (aget idxs idx)))
-  (readFloat [_ idx] (.readFloat inner (aget idxs idx)))
-  (readDouble [_ idx] (.readDouble inner (aget idxs idx)))
-  (readObject [_ idx] (.readObject inner (aget idxs idx))))
+  (readBoolean [_ idx] (.readBoolean inner (.getIndex col idx)))
+  (readByte [_ idx] (.readByte inner (.getIndex col idx)))
+  (readShort [_ idx] (.readShort inner (.getIndex col idx)))
+  (readInt [_ idx] (.readInt inner (.getIndex col idx)))
+  (readLong [_ idx] (.readLong inner (.getIndex col idx)))
+  (readFloat [_ idx] (.readFloat inner (.getIndex col idx)))
+  (readDouble [_ idx] (.readDouble inner (.getIndex col idx)))
+  (readObject [_ idx] (.readObject inner (.getIndex col idx))))
 
-(deftype IndirectVectorPolyReader [^IPolyVectorReader inner, ^ints idxs]
+(deftype IndirectVectorPolyReader [^IPolyVectorReader inner, ^IIndirectVector col]
   IPolyVectorReader
-  (read [_ idx] (.read inner (aget idxs idx)))
+  (read [_ idx] (.read inner (.getIndex col idx)))
   (read [_] (.read inner))
 
   (readBoolean [_] (.readBoolean inner))

@@ -2,8 +2,9 @@
   (:require [core2.vector :as vec]
             [core2.types :as ty]
             [core2.util :as util])
-  (:import [core2.vector IIndirectRelation IIndirectVector IListElementCopier IListReader IRowCopier IStructReader]
-           [java.util LinkedHashMap Map]
+  (:import core2.ICursor
+           [core2.vector IIndirectRelation IIndirectVector IListElementCopier IListReader IRowCopier IStructReader]
+           [java.util Iterator LinkedHashMap Map]
            org.apache.arrow.memory.BufferAllocator
            [org.apache.arrow.vector FieldVector ValueVector VectorSchemaRoot]
            [org.apache.arrow.vector.complex DenseUnionVector FixedSizeListVector ListVector StructVector]
@@ -179,6 +180,33 @@
       (aset new-left idx (aget sel1 (aget sel2 idx))))
     new-left))
 
+(defn- copy-to! [^IIndirectVector col, ^ValueVector out-vec]
+  (.clear out-vec)
+
+  (let [in-vec (.getVector col)
+        src-value-count (.getValueCount col)]
+    (if (instance? DenseUnionVector in-vec)
+      ;; DUV.copyValueSafe is broken - it's not safe, and it calls DenseUnionWriter.setPosition which NPEs
+      (let [^DenseUnionVector from-duv in-vec
+            ^DenseUnionVector to-duv out-vec]
+        (dotimes [idx src-value-count]
+          (let [src-idx (.getIndex col idx)
+                type-id (.getTypeId from-duv src-idx)
+                dest-sub-vec (.getVectorByType to-duv type-id)
+                dest-offset (.getValueCount dest-sub-vec)
+                tp (.makeTransferPair (.getVectorByType from-duv type-id) dest-sub-vec)]
+            (.setTypeId to-duv idx type-id)
+            (.setOffset to-duv idx dest-offset)
+            (.copyValueSafe tp (.getOffset from-duv src-idx) dest-offset)
+            (.setValueCount to-duv (inc idx)))))
+      (let [tp (.makeTransferPair in-vec out-vec)]
+        (dotimes [idx src-value-count]
+          (.copyValueSafe tp (.getIndex col idx) idx)))))
+
+  (DirectVector. (doto out-vec
+                   (.setValueCount (.getValueCount col)))
+                 (.getName col)))
+
 (defrecord IndirectVector [^IIndirectVector v, ^ints idxs]
   IIndirectVector
   (getVector [_] (.getVector v))
@@ -193,31 +221,7 @@
   (select [this new-idxs]
     (IndirectVector. v (compose-selection (.idxs this) new-idxs)))
 
-  (copyTo [this out-vec]
-    (.clear out-vec)
-
-    (let [in-vec (.getVector this)]
-      (if (instance? DenseUnionVector in-vec)
-        ;; DUV.copyValueSafe is broken - it's not safe, and it calls DenseUnionWriter.setPosition which NPEs
-        (let [^DenseUnionVector from-duv in-vec
-              ^DenseUnionVector to-duv out-vec]
-          (dotimes [idx (alength idxs)]
-            (let [src-idx (aget idxs idx)
-                  type-id (.getTypeId from-duv src-idx)
-                  dest-sub-vec (.getVectorByType to-duv type-id)
-                  dest-offset (.getValueCount dest-sub-vec)
-                  tp (.makeTransferPair (.getVectorByType from-duv type-id) dest-sub-vec)]
-              (.setTypeId to-duv idx type-id)
-              (.setOffset to-duv idx dest-offset)
-              (.copyValueSafe tp (.getOffset from-duv src-idx) dest-offset)
-              (.setValueCount to-duv (inc idx)))))
-        (let [tp (.makeTransferPair in-vec out-vec)]
-          (dotimes [idx (alength idxs)]
-            (.copyValueSafe tp (aget idxs idx) idx)))))
-
-    (DirectVector. (doto out-vec
-                     (.setValueCount (alength idxs)))
-                   (.getName this)))
+  (copyTo [this out-vec] (copy-to! this out-vec))
 
   (rowCopier [this-vec w]
     (let [copier (.rowCopier v w)]
@@ -225,13 +229,13 @@
         (copyRow [_ idx]
           (.copyRow copier (.getIndex this-vec idx))))))
 
-  (monoReader [_ col-type]
+  (monoReader [this col-type]
     (-> (.monoReader v col-type)
-        (vec/->IndirectVectorMonoReader idxs)))
+        (vec/->IndirectVectorMonoReader this)))
 
-  (polyReader [_ col-type]
+  (polyReader [this col-type]
     (-> (.polyReader v col-type)
-        (vec/->IndirectVectorPolyReader idxs))))
+        (vec/->IndirectVectorPolyReader this))))
 
 (defn ->direct-vec ^core2.vector.IIndirectVector [^ValueVector in-vec]
   (DirectVector. in-vec (.getName in-vec)))
@@ -278,6 +282,34 @@
                     (.copy in-col allocator))
                   (.rowCount in-rel)))
 
+(deftype SliceVector [^IIndirectVector col, ^long start-idx, ^long len]
+  IIndirectVector
+  (getVector [_] (.getVector col))
+  (getIndex [_ idx] (+ start-idx idx))
+  (getName [_] (.getName col))
+  (getValueCount [_] len)
+  (withName [_ col-name] (SliceVector. (.withName col col-name) start-idx len))
+  (isPresent [this idx] (.isPresent col (.getIndex this idx)))
+  (select [this new-idxs] (IndirectVector. this new-idxs))
+  (copyTo [this out-vec] (copy-to! this out-vec))
+
+  (rowCopier [this-vec w]
+    (let [copier (.rowCopier col w)]
+      (reify IRowCopier
+        (copyRow [_ idx]
+          (.copyRow copier (.getIndex this-vec idx))))))
+
+  (monoReader [this col-type]
+    (-> (.monoReader col col-type)
+        (vec/->IndirectVectorMonoReader this)))
+
+  (polyReader [this col-type]
+    (-> (.polyReader col col-type)
+        (vec/->IndirectVectorPolyReader this))))
+
+(defn slice-col ^core2.vector.IIndirectVector [^IIndirectVector col, ^long start-idx, ^long len]
+  (SliceVector. col start-idx len))
+
 (defn rel->rows ^java.lang.Iterable [^IIndirectRelation rel]
   (let [ks (for [^IIndirectVector col rel]
              (keyword (.getName col)))]
@@ -289,6 +321,26 @@
                         (when-not (.isNull v i)
                           (ty/get-object v i))))))
           (range (.rowCount rel)))))
+
+(deftype SliceCursor [^IIndirectRelation rel
+                      ^:volatile-mutable ^long start-idx
+                      ^Iterator row-counts]
+  ICursor
+  (tryAdvance [this c]
+    (if (.hasNext row-counts)
+      (let [^long row-count (.next row-counts)]
+        (.accept c (->indirect-rel (for [col rel]
+                                     (slice-col col start-idx row-count))))
+        (set! (.-start-idx this) (+ (.-start-idx this) row-count))
+        true)
+      false))
+
+  (close [_]
+    ;; we don't close the rel here, assume we don't own it.
+    ))
+
+(defn ->slice-cursor [^IIndirectRelation rel, ^Iterable row-counts]
+  (SliceCursor. rel 0 (.iterator row-counts)))
 
 (deftype DuvChildReader [^IIndirectVector parent-col
                          ^DenseUnionVector parent-duv

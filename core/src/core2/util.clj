@@ -18,10 +18,9 @@
            java.nio.file.attribute.FileAttribute
            [java.time Duration Instant LocalDate LocalDateTime LocalTime OffsetDateTime ZoneId ZonedDateTime]
            java.time.temporal.ChronoUnit
-           [java.util ArrayList Collections Date IdentityHashMap LinkedHashMap LinkedList Map Queue UUID WeakHashMap]
+           [java.util ArrayList Collections Date HashMap Iterator LinkedHashMap LinkedList Map Queue UUID WeakHashMap]
            [java.util.concurrent CompletableFuture ExecutorService Executors ThreadFactory TimeUnit]
-           java.util.concurrent.atomic.AtomicInteger
-           [java.util.function BiFunction Consumer Function IntUnaryOperator Supplier]
+           [java.util.function BiFunction Consumer Function Supplier]
            [org.apache.arrow.compression CommonsCompressionFactory]
            [org.apache.arrow.flatbuf Footer Message RecordBatch]
            [org.apache.arrow.memory AllocationManager ArrowBuf BufferAllocator]
@@ -403,17 +402,6 @@
     (catch ClassNotFoundException _
       (fn free-direct-buffer-nop [_]))))
 
-(defn inc-ref-count
-  (^long [^AtomicInteger ref-count]
-   (inc-ref-count ref-count 1))
-  (^long [^AtomicInteger ref-count ^long increment]
-   (.updateAndGet ^AtomicInteger ref-count
-                  (reify IntUnaryOperator
-                    (applyAsInt [_ x]
-                      (if (pos? x)
-                        (+ x increment)
-                        x))))))
-
 (def ^:private ^Method allocation-manager-associate-method
   (doto (.getDeclaredMethod AllocationManager "associate" (into-array Class [BufferAllocator]))
     (.setAccessible true)))
@@ -503,6 +491,53 @@
                    nil
                    (boolean close-buffer?)))))
 
+(deftype ConcatCursor [^Iterator #_<ICursor<E>> cursors
+                       ^:volatile-mutable ^ICursor #_<E> current-cursor]
+  ICursor #_<E>
+  (tryAdvance [this c]
+    (loop []
+      (cond
+        current-cursor
+        (or (.tryAdvance current-cursor c)
+            (do
+              (.close current-cursor)
+              (set! (.current-cursor this) nil)
+              (recur)))
+
+        (.hasNext cursors)
+        (do
+          (set! (.current-cursor this) (.next cursors))
+          (recur))
+
+        :else false)))
+
+  (close [_]
+    (try-close current-cursor)
+    (run! try-close (iterator-seq cursors))))
+
+(defn ->concat-cursor [& cursors]
+  (ConcatCursor. (.iterator ^Iterable cursors) nil))
+
+(defn combine-col-cursors ^ICursor #_#_<Map<String, IIR>> [^Map #_#_<String, ICursor<IIR>> col-cursors]
+  (reify ICursor
+    (tryAdvance [_ c]
+      (let [out-rels (HashMap.)]
+        ;; normally rels aren't supposed to escape the scope of the tryAdvance call
+        ;; but we effectively still own it, so we assume its state doesn't change
+        ;; immediately after the call
+        (if (every? (fn [[col-name ^ICursor col-cursor]]
+                      (.tryAdvance col-cursor
+                                   (reify Consumer
+                                     (accept [_ out-rel]
+                                       (.put out-rels col-name out-rel)))))
+                    col-cursors)
+          (do
+            (.accept c out-rels)
+            true)
+          false)))
+
+    (close [_] (run! try-close (vals col-cursors)))))
+
 (defn with-last-block [^ArrowBuf buf, f]
   (let [res (promise)
         last-block-idx (-> (.getRecordBatches (read-arrow-footer buf))
@@ -547,9 +582,6 @@
               (recur (inc n))
               (Byte/compareUnsigned x-byte y-byte)))))
       diff)))
-
-(defn ->identity-set []
-  (Collections/newSetFromMap (IdentityHashMap.)))
 
 (defmacro case-enum
   "Like `case`, but explicitly dispatch on Java enum ordinals.

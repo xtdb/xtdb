@@ -27,6 +27,7 @@
            core2.watermark.IWatermark
            java.nio.file.Files
            java.time.Duration
+           java.util.function.Consumer
            [org.apache.arrow.memory ArrowBuf BufferAllocator]
            [org.apache.arrow.vector BigIntVector VectorLoader VectorSchemaRoot]
            [org.apache.arrow.vector.complex StructVector]))
@@ -99,10 +100,16 @@
 
         (t/testing "watermark"
           (with-open [^IWatermark watermark (.openWatermark idxer last-tx-key)]
-            (let [live-slices (.liveSlices watermark "xt_docs" ["id"])]
-              (t/is (zero? (.chunkIdx watermark)))
-              (t/is (= #{"id"}
-                       (into #{} (mapcat keys) live-slices))))))
+            (t/is (zero? (.chunkIdx watermark)))
+
+            (let [live-blocks (.liveBlocks watermark "xt_docs" ["id"])
+                  !res (volatile! [])]
+              (.forEachRemaining live-blocks
+                                 (reify Consumer
+                                   (accept [_ content-cols]
+                                     (vswap! !res conj (set (keys content-cols))))))
+
+              (t/is (= [#{"id"}] @!res)))))
 
         (tu/finish-chunk node)
 

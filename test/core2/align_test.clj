@@ -27,18 +27,18 @@
               name-root (let [^List vecs [name-row-id-vec name-vec]]
                           (VectorSchemaRoot. vecs))]
 
-    (let [roots [name-root age-root]
+    (let [roots [(iv/<-root name-root) (iv/<-root age-root)]
 
           row-ids (doto (align/->row-id-bitmap (.select (expr/->expression-relation-selector '(<= age 30) {:col-types {'age :i64}})
                                                         tu/*allocator*
                                                         (iv/->indirect-rel [(iv/->direct-vec age-vec)])
                                                         vw/empty-params)
-                                               age-row-id-vec)
+                                               (iv/->direct-vec age-row-id-vec))
                     (.and (align/->row-id-bitmap (.select (expr/->expression-relation-selector '(<= name "Frank") {:col-types {'name :utf8}})
                                                           tu/*allocator*
                                                           (iv/->indirect-rel [(iv/->direct-vec name-vec)])
                                                           vw/empty-params)
-                                                 name-row-id-vec)))]
+                                                 (iv/->direct-vec name-row-id-vec))))]
 
       (with-open [row-id-col (tu/open-vec "_row-id" (vec (.toArray row-ids)))]
         (let [temporal-rel (iv/->indirect-rel [(iv/->direct-vec row-id-col)])]

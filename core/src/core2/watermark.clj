@@ -5,12 +5,15 @@
             core2.temporal
             [core2.types :as types]
             [core2.util :as util]
-            [juxt.clojars-mirrors.integrant.core :as ig])
+            [juxt.clojars-mirrors.integrant.core :as ig]
+            [core2.vector.indirect :as iv])
   (:import clojure.lang.MapEntry
            core2.api.TransactionInstant
+           core2.ICursor
            core2.temporal.ITemporalRelationSource
            java.lang.AutoCloseable
            [java.util HashMap Map]
+           java.util.function.Consumer
            java.util.concurrent.atomic.AtomicInteger
            (java.util.concurrent Semaphore TimeUnit)
            org.apache.arrow.vector.VectorSchemaRoot))
@@ -18,7 +21,7 @@
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface IWatermark
   (columnType [^String tableName, ^String columnName])
-  (^Iterable liveSlices [^String tableName, ^Iterable columnNames])
+  (^core2.ICursor #_#_<Map<String, IIR> liveBlocks [^String tableName, ^Iterable columnNames])
   (^core2.api.TransactionInstant txBasis [])
   (^long chunkIdx [])
 
@@ -41,6 +44,16 @@
 (definterface IWatermarkManager
   (^core2.watermark.ISharedWatermark wrapWatermark [^core2.watermark.IWatermark wm]))
 
+(defn- roots->cursor ^core2.ICursor #_#_<Map<String, IIR>> [^Map roots, col-names, ^long chunk-idx, ^long max-rows-per-block]
+  (let [slice-cursors (->> col-names
+                           (into {} (keep (fn [^String col-name]
+                                            (when-let [root (.get roots col-name)]
+                                              (MapEntry/create col-name
+                                                               (iv/->slice-cursor (iv/<-root root)
+                                                                                  (blocks/row-id-aligned-blocks root chunk-idx max-rows-per-block))))))))]
+    (when (= (set (keys slice-cursors)) (set col-names))
+      (util/combine-col-cursors slice-cursors))))
+
 (deftype Watermark [^TransactionInstant tx-key, ^Map live-roots, ^Map tx-live-roots,
                     ^ITemporalRelationSource temporal-roots-src
                     ^long chunk-idx, ^int max-rows-per-block
@@ -52,18 +65,9 @@
           (.getField)
           (types/field->col-type))))
 
-  (liveSlices [_ table-name col-names]
-    (for [^Map roots [(.get live-roots table-name)
-                      (.get tx-live-roots table-name)]
-          :when roots
-          :let [slices (into {}
-                             (keep (fn [col-name]
-                                     (when-let [root (.get roots col-name)]
-                                       (let [row-counts (blocks/row-id-aligned-blocks root chunk-idx max-rows-per-block)]
-                                         (MapEntry/create col-name (blocks/->slices root row-counts))))))
-                             col-names)]
-          :when (= (count col-names) (count slices))]
-      slices))
+  (liveBlocks [_ table-name col-names]
+    (util/->concat-cursor (some-> (.get live-roots table-name) (roots->cursor col-names chunk-idx max-rows-per-block))
+                          (some-> (.get tx-live-roots table-name) (roots->cursor col-names chunk-idx max-rows-per-block))))
 
   (txBasis [_] tx-key)
   (chunkIdx [_] chunk-idx)
@@ -102,7 +106,7 @@
 
           (reify IWatermark
             (columnType [_ table-name col-name] (.columnType wm table-name col-name))
-            (liveSlices [_ table-name col-names] (.liveSlices wm table-name col-names))
+            (liveBlocks [_ table-name col-names] (.liveBlocks wm table-name col-names))
             (txBasis [_] (.txBasis wm))
             (chunkIdx [_] (.chunkIdx wm))
 

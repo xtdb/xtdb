@@ -86,17 +86,84 @@
       (finally
         (run! util/try-close (map :wm (vals mm+wms)))))))
 
-(defn- next-roots [col-names chunks]
-  (when (and chunks (= (count col-names) (count chunks)))
-    (let [in-roots (HashMap.)]
-      (when (every? true? (for [col-name col-names
-                                :let [^ICursor chunk (get chunks col-name)]
-                                :when chunk]
-                            (.tryAdvance chunk
-                                         (reify Consumer
-                                           (accept [_ root]
-                                             (.put in-roots col-name root))))))
-        in-roots))))
+(defn- filter-pushdown-bloom-block-idxs [^IMetadataManager metadata-manager chunk-idx ^String table-name ^String col-name ^RoaringBitmap block-idxs]
+  (if-let [^MutableRoaringBitmap pushdown-bloom (get *column->pushdown-bloom* (symbol col-name))]
+  ;; would prefer this `^long` to be on the param but can only have 4 params in a primitive hinted function in Clojure
+    @(meta/with-metadata metadata-manager ^long chunk-idx table-name
+       (fn [_chunk-idx, ^ITableMetadata table-metadata]
+         (let [metadata-root (.metadataRoot table-metadata)
+               ^VarBinaryVector bloom-vec (.getVector metadata-root "bloom")]
+           (when (MutableRoaringBitmap/intersects pushdown-bloom
+                                                  (bloom/bloom->bitmap bloom-vec (.columnIndex table-metadata col-name)))
+             (let [filtered-block-idxs (RoaringBitmap.)]
+               (.forEach block-idxs
+                         (reify IntConsumer
+                           (accept [_ block-idx]
+                             (when-let [bloom-vec-idx (.blockIndex table-metadata col-name block-idx)]
+                               (when (and (not (.isNull bloom-vec bloom-vec-idx))
+                                          (MutableRoaringBitmap/intersects pushdown-bloom
+                                                                           (bloom/bloom->bitmap bloom-vec bloom-vec-idx)))
+                                 (.add filtered-block-idxs block-idx))))))
+
+               (when-not (.isEmpty filtered-block-idxs)
+                 filtered-block-idxs))))))
+    block-idxs))
+
+(deftype ContentChunkCursor [^IMetadataManager metadata-mgr
+                             ^IBufferPool buffer-pool
+                             table-name content-col-names
+                             ^Queue matching-chunks
+                             ^ICursor current-cursor]
+  ICursor #_#_<Map<String, IIR>>
+  (tryAdvance [this c]
+    (loop []
+      (or (when current-cursor
+            (or (.tryAdvance current-cursor
+                             (reify Consumer
+                               (accept [_ in-roots]
+                                 (.accept c (update-vals in-roots iv/<-root)))))
+                (do
+                  (util/try-close current-cursor)
+                  (set! (.-current-cursor this) nil)
+                  false)))
+
+          (if-let [{:keys [chunk-idx block-idxs]} (.poll matching-chunks)]
+            (if-let [block-idxs (reduce (fn [block-idxs col-name]
+                                          (or (->> block-idxs
+                                                   (filter-pushdown-bloom-block-idxs metadata-mgr chunk-idx table-name col-name))
+                                              (reduced nil)))
+                                        block-idxs
+                                        content-col-names)]
+
+              (let [col-cursors (->> (for [col-name content-col-names]
+                                       (-> (.getBuffer buffer-pool (meta/->chunk-obj-key chunk-idx table-name col-name))
+                                           (util/then-apply
+                                             (fn [buf]
+                                               (MapEntry/create col-name (util/->chunks buf {:block-idxs block-idxs
+                                                                                             :close-buffer? true}))))))
+                                     (remove nil?)
+                                     vec
+                                     (into {} (map deref)))]
+
+                (when (= (count col-cursors) (count content-col-names))
+                  (set! (.current-cursor this) (util/combine-col-cursors col-cursors)))
+
+                (recur))
+
+              (recur))
+
+            false))))
+
+  (close [_]
+    (some-> current-cursor util/try-close)))
+
+(defn- ->content-chunks ^core2.ICursor [^IMetadataManager metadata-mgr
+                                        ^IBufferPool buffer-pool
+                                        table-name content-col-names
+                                        metadata-pred]
+  (ContentChunkCursor. metadata-mgr buffer-pool table-name content-col-names
+                       (LinkedList. (or (meta/matching-chunks metadata-mgr table-name metadata-pred) []))
+                       nil))
 
 (defn- roaring64-and
   (^org.roaringbitmap.longlong.Roaring64Bitmap [] (Roaring64Bitmap.))
@@ -105,15 +172,15 @@
    (doto x
      (.and y))))
 
-(defn- ->atemporal-row-id-bitmap [^BufferAllocator allocator, ^List col-names, ^Map col-preds, ^Map in-roots, params]
+(defn- ->atemporal-row-id-bitmap [^BufferAllocator allocator, ^List col-names, ^Map col-preds, ^Map in-rels, params]
   (when (seq col-names)
     (->> (for [^String col-name col-names
                :when (not (temporal/temporal-column? col-name))
                :let [^IRelationSelector col-pred (.get col-preds col-name)
-                     ^VectorSchemaRoot in-root (.get in-roots (name col-name))]]
+                     ^IIndirectRelation in-rel (.get in-rels (name col-name))]]
            (align/->row-id-bitmap (when col-pred
-                                    (.select col-pred allocator (iv/<-root in-root) params))
-                                  (.getVector in-root t/row-id-field)))
+                                    (.select col-pred allocator in-rel params))
+                                  (.vectorForName in-rel "_row-id")))
          (reduce roaring64-and))))
 
 (defn- adjust-temporal-min-range-to-row-id-range ^longs [^longs temporal-min-range ^Roaring64Bitmap row-id-bitmap]
@@ -154,122 +221,48 @@
                      (iv/select (.select col-pred allocator temporal-rel params))))
                temporal-rel)))
 
-(defn- filter-pushdown-bloom-block-idxs [^IMetadataManager metadata-manager chunk-idx ^String table-name ^String col-name ^RoaringBitmap block-idxs]
-  (if-let [^MutableRoaringBitmap pushdown-bloom (get *column->pushdown-bloom* (symbol col-name))]
-  ;; would prefer this `^long` to be on the param but can only have 4 params in a primitive hinted function in Clojure
-    @(meta/with-metadata metadata-manager ^long chunk-idx table-name
-       (fn [_chunk-idx, ^ITableMetadata table-metadata]
-         (let [metadata-root (.metadataRoot table-metadata)
-               ^VarBinaryVector bloom-vec (.getVector metadata-root "bloom")]
-           (when (MutableRoaringBitmap/intersects pushdown-bloom
-                                                  (bloom/bloom->bitmap bloom-vec (.columnIndex table-metadata col-name)))
-             (let [filtered-block-idxs (RoaringBitmap.)]
-               (.forEach block-idxs
-                         (reify IntConsumer
-                           (accept [_ block-idx]
-                             (when-let [bloom-vec-idx (.blockIndex table-metadata col-name block-idx)]
-                               (when (and (not (.isNull bloom-vec bloom-vec-idx))
-                                          (MutableRoaringBitmap/intersects pushdown-bloom
-                                                                           (bloom/bloom->bitmap bloom-vec bloom-vec-idx)))
-                                 (.add filtered-block-idxs block-idx))))))
-
-               (when-not (.isEmpty filtered-block-idxs)
-                 filtered-block-idxs))))))
-    block-idxs))
-
 (defn- remove-col ^core2.vector.IIndirectRelation [^IIndirectRelation rel, ^String col-name]
   (iv/->indirect-rel (remove #(= col-name (.getName ^IIndirectVector %)) rel)
                      (.rowCount rel)))
 
 (deftype ScanCursor [^BufferAllocator allocator
-                     ^IBufferPool buffer-pool
                      ^IMetadataManager metadata-manager
                      ^IWatermark watermark
-                     ^String table-name
                      ^List content-col-names
                      ^List temporal-col-names
                      ^Map col-preds
                      ^longs temporal-min-range
                      ^longs temporal-max-range
-                     ^Queue #_<ChunkMatch> matching-chunks
-                     ^Iterator live-slices
-                     params
-                     ^:unsynchronized-mutable ^Map #_#_<String, ICursor> chunks]
+                     ^ICursor #_#_<Map<String, IIR>> blocks
+                     params]
   ICursor
-  (tryAdvance [this c]
+  (tryAdvance [_ c]
     (let [keep-row-id-col? (contains? (set temporal-col-names) "_row-id")
           keep-id-col? (contains? (set content-col-names) "id")
-          content-col-names (or (not-empty content-col-names) #{"id"})]
-      (letfn [(next-block [chunks]
-                (loop []
-                  (if-let [^Map in-roots (next-roots content-col-names chunks)]
-                    (let [atemporal-row-id-bitmap (->atemporal-row-id-bitmap allocator content-col-names col-preds in-roots params)
-                          temporal-rel (->temporal-rel watermark allocator temporal-col-names temporal-min-range temporal-max-range atemporal-row-id-bitmap)]
-                      (or (try
-                            (let [temporal-rel (-> temporal-rel (apply-temporal-preds allocator col-preds params))
-                                  read-rel (cond-> (align/align-vectors (.values in-roots) temporal-rel)
-                                             (not keep-row-id-col?) (remove-col "_row-id")
-                                             (not keep-id-col?) (remove-col "id"))]
-                              (if (and read-rel (pos? (.rowCount read-rel)))
-                                (do
-                                  (.accept c read-rel)
-                                  true)
-                                false))
-                            (finally
-                              (util/try-close temporal-rel)))
+          content-col-names (or (not-empty content-col-names) #{"id"})
+          !advanced? (volatile! false)]
 
-                          (recur)))
-
-                    (do
-                      (doseq [^ICursor chunk (vals chunks)]
-                        (.close chunk))
-                      (set! (.chunks this) nil)
-
-                      false))))
-
-              (live-chunk []
-                (loop []
-                  (when (.hasNext live-slices)
-                    (let [chunks (.next live-slices)]
-                      (set! (.chunks this) chunks)
-                      (or (next-block chunks)
-                          (recur))))))
-
-              (next-chunk []
-                (loop []
-                  (when-let [{:keys [chunk-idx block-idxs]} (.poll matching-chunks)]
-                    (or (when-let [block-idxs (reduce (fn [block-idxs col-name]
-                                                        (or (->> block-idxs
-                                                                 (filter-pushdown-bloom-block-idxs metadata-manager chunk-idx table-name col-name))
-                                                            (reduced nil)))
-                                                      block-idxs
-                                                      content-col-names)]
-                          (let [chunks (->> (for [col-name content-col-names]
-                                              (-> (.getBuffer buffer-pool (meta/->chunk-obj-key chunk-idx table-name col-name))
-                                                  (util/then-apply
-                                                   (fn [buf]
-                                                     (MapEntry/create col-name (util/->chunks buf {:block-idxs block-idxs
-                                                                                                   :close-buffer? true}))))))
-                                            (remove nil?)
-                                            vec
-                                            (into {} (map deref)))]
-                            (set! (.chunks this) chunks)
-
-                            (next-block chunks)))
-                        (recur)))))]
-
-        (or (when chunks
-              (next-block chunks))
-
-            (next-chunk)
-
-            (live-chunk)
-
-            false))))
+      (while (and (not @!advanced?)
+                  (.tryAdvance blocks
+                               (reify Consumer
+                                 (accept [_ in-roots]
+                                   (let [^Map in-roots in-roots
+                                         atemporal-row-id-bitmap (->atemporal-row-id-bitmap allocator content-col-names col-preds in-roots params)
+                                         temporal-rel (->temporal-rel watermark allocator temporal-col-names temporal-min-range temporal-max-range atemporal-row-id-bitmap)]
+                                     (try
+                                       (let [temporal-rel (-> temporal-rel (apply-temporal-preds allocator col-preds params))
+                                             read-rel (cond-> (align/align-vectors (.values in-roots) temporal-rel)
+                                                        (not keep-row-id-col?) (remove-col "_row-id")
+                                                        (not keep-id-col?) (remove-col "id"))]
+                                         (when (and read-rel (pos? (.rowCount read-rel)))
+                                           (.accept c read-rel)
+                                           (vreset! !advanced? true)))
+                                       (finally
+                                         (util/try-close temporal-rel)))))))))
+      (boolean @!advanced?)))
 
   (close [_]
-    (doseq [^ICursor chunk (vals chunks)]
-      (util/try-close chunk))))
+    (util/try-close blocks)))
 
 (defn- apply-src-tx! [[^longs temporal-min-range, ^longs temporal-max-range], ^ScanSource src, col-preds]
   (when-let [sys-time (some-> (.txBasis src) (.sys-time))]
@@ -316,18 +309,15 @@
                                    (for [[col-name select] selects
                                          :when (not (temporal/temporal-column? (name col-name)))]
                                      select)))
-        row-count
-        (let [^ScanSource src (get srcs src-key)
-              metadata-mgr (.metadataManager src)]
-          (reduce
-           +
-           (meta/matching-chunks
-            metadata-mgr
-            (name table)
-            (fn [_chunk-idx ^ITableMetadata table-metadata]
-              (let [id-col-idx (.columnIndex table-metadata "id")
-                    ^BigIntVector count-vec (.getVector (.metadataRoot table-metadata) "count")]
-                (.get count-vec id-col-idx))))))]
+        row-count (let [^ScanSource src (get srcs src-key)
+                        metadata-mgr (.metadataManager src)]
+                    (->> (meta/matching-chunks metadata-mgr
+                                               (name table)
+                                               (fn [_chunk-idx ^ITableMetadata table-metadata]
+                                                 (let [id-col-idx (.columnIndex table-metadata "id")
+                                                       ^BigIntVector count-vec (.getVector (.metadataRoot table-metadata) "count")]
+                                                   (.get count-vec id-col-idx))))
+                         (reduce +)))]
 
     {:col-types (dissoc col-types '_table)
      :stats {:row-count row-count}
@@ -340,17 +330,17 @@
                      (let [metadata-pred (expr.meta/->metadata-selector (cons 'and metadata-args) (set col-names) params)
                            [temporal-min-range temporal-max-range] (doto (expr.temp/->temporal-min-max-range selects params)
                                                                      (apply-src-tx! src col-preds))
-                           matching-chunks (LinkedList. (or (meta/matching-chunks metadata-mgr (name table) metadata-pred) []))
                            content-col-names (mapv name content-col-names)
                            temporal-col-names (mapv name temporal-col-names)]
-                       (-> (ScanCursor. allocator buffer-pool metadata-mgr watermark
-                                        (name table) content-col-names temporal-col-names col-preds
+                       (-> (ScanCursor. allocator metadata-mgr watermark
+                                        content-col-names temporal-col-names col-preds
                                         temporal-min-range temporal-max-range
-                                        matching-chunks (-> (.liveSlices watermark (name table)
-                                                                         (or (not-empty content-col-names) #{"id"}))
-                                                            (.iterator))
-                                        params
-                                        #_chunks nil)
+                                        (util/->concat-cursor (->content-chunks metadata-mgr buffer-pool
+                                                                                (name table) content-col-names
+                                                                                metadata-pred)
+                                                              (.liveBlocks watermark (name table)
+                                                                           (or (not-empty content-col-names) #{"id"})))
+                                        params)
                            (coalesce/->coalescing-cursor allocator)
                            (util/and-also-close watermark)))
                      (catch Throwable t

@@ -109,7 +109,7 @@
   (def !submit-tpch
     (future
       (let [last-tx (time
-                     (tpch/submit-docs! node 0.1))]
+                     (tpch/submit-docs! node 0.05))]
         (time (tu/then-await-tx last-tx node (Duration/ofHours 1)))
         (time (tu/finish-chunk node)))))
 
