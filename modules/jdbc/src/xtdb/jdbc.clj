@@ -183,10 +183,26 @@
     (tx-sub/handle-polling-subscription this after-tx-id {:poll-sleep-duration (Duration/ofMillis 100)} f))
 
   (latest-submitted-tx [_]
-    (when-let [max-offset (-> (jdbc/execute-one! pool ["SELECT max(EVENT_OFFSET) AS max_offset FROM tx_events WHERE topic = 'txs'"]
-                                                 {:builder-fn jdbcr/as-unqualified-lower-maps})
-                              :max_offset)]
-      {::xt/tx-id (long max-offset)}))
+    ;; See #1896 we used to do a MAX(event_offset), but because we need to filter the topic to 'txs', MAX could not use an index for all dialect.
+    (letfn [(q [sql] (jdbc/execute! pool sql {:builder-fn jdbcr/as-unqualified-lower-maps}))
+            (fetch-events [offset optimistic-limit]
+              (assert (<= optimistic-limit 1000) "rseq-events currently depends on limit being no greater than 1000")
+              (case (db-type dialect)
+                ;; T-SQL requires variables and stuff to parameterize the TOP, for simplicity fixing it.
+                :mssql (q ["SELECT TOP 1000 event_offset, topic FROM tx_events WHERE event_offset < ? ORDER BY event_offset DESC" offset])
+                (q ["SELECT event_offset, topic FROM tx_events WHERE event_offset < ? ORDER BY event_offset DESC LIMIT ?" offset optimistic-limit])))
+            (rseq-events [offset iter]
+              (lazy-seq
+                (let [limit (if (zero? iter) 1 1000)        ; optimistic first query as we are very likely to find our row at the head
+                      events (fetch-events offset limit)]
+                  (if (<= limit (count events))             ; can receive more events than limit if :mssql, see fetch-events
+                    (concat events (rseq-events (reduce min (map :event_offset events)) (inc iter)))
+                    (seq events)))))]
+
+      (->> (rseq-events Long/MAX_VALUE 0)
+           (some (fn [{:keys [topic, event_offset]}]
+                   (when (= "txs" topic)
+                     {::xt/tx-id (long event_offset)}))))))
 
   Closeable
   (close [_]

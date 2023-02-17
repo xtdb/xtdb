@@ -256,4 +256,4 @@ EDN::
 === Document store (`+xtdb.jdbc/->document-store+`)
 
 * `connection-pool`
-. document-cache
+* `document-cache` (`xtdb.cache/->cache` - a default LRU cache size of `131072` will apply unless a custom cache module is configured)
