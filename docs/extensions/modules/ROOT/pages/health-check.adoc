@@ -1,11 +1,14 @@
-= HTTP Health Server
+= HTTP Health Server (Labs)
 :page-aliases: reference::http.adoc
 
 This document explains how to configure the XTDB HTTP Health Server module.
 
-Production XTDB nodes often run in containers deployed on infrastructures where automation matters: nodes are "managed" by components in charge of tasks such as monitoring resources and routing traffic. Examples of such infrastructure include (but are not limited to) link:https://kubernetes.io/[Kubernetes] and link:https://aws.amazon.com/ecs/[AWS ECS]. In all cases the supervising component has the need to assess the health of the XTDB nodes it supervises. 
+Production XTDB nodes often run in containers deployed on infrastructures where automation matters: nodes are "managed" by components in charge of tasks such as monitoring resources and routing traffic.
+Examples of such infrastructure include (but are not limited to) link:https://kubernetes.io/[Kubernetes] and link:https://aws.amazon.com/ecs/[AWS ECS].
+In all cases the supervising component has the need to assess the health of the XTDB nodes it supervises.
 
-The XTDB Health Check module aims at facilitating this task by allowing some important states of a running node that uses it to be observable. It achieves this by first collecting `events` published by the node as it transits through its various states; then making them available via a tiny http server it runs. 
+The XTDB Health Check module aims at facilitating this task by allowing some important states of a running node that uses it to be observable.
+It achieves this by first collecting `events` published by the node as it transits through its various states; then making them available via a tiny http server it runs.
 
 Rather than a health-check service directly usable by e.g. by K8S, it provides informations usable when configuring liveness, readiness and startup probes, with the intent to cope with the case of a link:https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#define-startup-probes[slow starting container] e.g., when upon starting the node recovers its index-store from a large checkpoint.
 
@@ -51,7 +54,7 @@ The `:clock` attribute is a number of seconds (accurate to the nanosecond) and r
 
 [source,clojure, subs=attributes+]
 ----
-com.xtdb/xtdb-http-health-check {:mvn/version "{xtdb_version}"}
+com.xtdb.labs/xtdb-http-health-check {:mvn/version "{xtdb_version}"}
 ----
 
 You can start up a Jetty HTTP/HTTP2 server on a node by including `xtdb.http-health-check/server` in your node configuration, optionally passing the server port:

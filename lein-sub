@@ -17,7 +17,7 @@ modules/lmdb
 modules/jdbc
 modules/http-client
 modules/http-server
-modules/http-health-check
+labs/http-health-check
 modules/kafka-embedded
 modules/kafka-connect
 modules/kafka
