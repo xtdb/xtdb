@@ -1,10 +1,10 @@
 (ns core2.bench2.auctionmark-test
   (:require [clojure.test :as t]
             [core2.bench2 :as b]
-            [core2.bench.auctionmark :as am]
+            [core2.bench2.auctionmark :as am]
             [core2.test-util :as tu :refer [*node*]]
             [core2.api :as c2]
-            [core2.bench.core2 :as bcore2])
+            [core2.bench2.core2 :as bcore2])
   (:import (java.time Clock)
            (java.util Random)
            (java.util.concurrent ConcurrentHashMap)))
