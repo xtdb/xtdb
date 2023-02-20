@@ -48,7 +48,7 @@
                                     :secondary3 secondary-node3}]
                     (test-node k node))
 
-                  (idx/finish-chunk! (util/component primary-node ::idx/indexer))
+                  (idx/finish-chunk! (util/component primary-node :core2/indexer))
                   (.awaitSnapshotBuild ^core2.temporal.TemporalManagerPrivate (::temporal/temporal-manager @(:!system primary-node)))
 
                   (log/info "Starting post finish-chunk node")

@@ -8,6 +8,8 @@
             [core2.api :as c2]
             [core2.buffer-pool :as bp]
             [core2.indexer :as idx]
+            core2.indexer.internal-id-manager
+            [core2.indexer.log-indexer :as log-idx]
             [core2.metadata :as meta]
             [core2.node :as node]
             [core2.object-store :as os]
@@ -16,11 +18,11 @@
             [core2.ts-devices :as ts]
             [core2.types :as ty]
             [core2.util :as util]
-            core2.watermark
-            [core2.vector.indirect :as iv])
+            core2.watermark)
   (:import core2.api.TransactionInstant
            [core2.buffer_pool BufferPool IBufferPool]
-           (core2.indexer InternalIdManager TransactionIndexer)
+           (core2.indexer  TransactionIndexer)
+           (core2.indexer.internal_id_manager InternalIdManager)
            core2.metadata.IMetadataManager
            core2.node.Node
            core2.object_store.ObjectStore
@@ -87,9 +89,9 @@
             ^BufferAllocator a (:core2/allocator system)
             ^ObjectStore os (::os/file-system-object-store system)
             ^IBufferPool bp (::bp/buffer-pool system)
-            ^TransactionIndexer idxer (::idx/indexer system)]
+            ^TransactionIndexer idxer (:core2/indexer system)]
 
-        (t/is (nil? (idx/latest-tx {:object-store os, :buffer-pool bp})))
+        (t/is (nil? (log-idx/latest-tx {:object-store os, :buffer-pool bp})))
 
         (t/is (= last-tx-key
                  @(last (for [tx-ops txs]
@@ -121,7 +123,7 @@
 
         (t/is (= {:latest-tx last-tx-key
                   :latest-row-id (dec total-number-of-ops)}
-                 (idx/latest-tx {:object-store os, :buffer-pool bp})))
+                 (log-idx/latest-tx {:object-store os, :buffer-pool bp})))
 
         (let [objects-list (->> (.listObjects os) (filter #(str/includes? % "metadata.arrow")))]
           (t/is (= 1 (count objects-list)))
@@ -413,7 +415,7 @@
 
           (t/is (= {:latest-tx last-tx-key
                     :latest-row-id (dec (count tx-ops))}
-                   (idx/latest-tx {:object-store os, :buffer-pool bp})))
+                   (log-idx/latest-tx {:object-store os, :buffer-pool bp})))
 
           (let [objs (.listObjects os)]
             (t/is (= 4 (count (filter #(re-matches #"^chunk-\p{XDigit}+/temporal\.arrow$" %) objs))))
@@ -534,7 +536,7 @@
             (let [system @(:!system node)
                   ^ObjectStore os (::os/file-system-object-store system)
                   ^BufferPool bp (::bp/buffer-pool system)
-                  ^InternalIdManager iid-mgr (::idx/internal-id-manager system)
+                  ^InternalIdManager iid-mgr (:core2.indexer/internal-id-manager system)
                   ^IMetadataManager mm (::meta/metadata-manager system)]
               (t/is (= first-half-tx-key
                        (-> first-half-tx-key
@@ -542,7 +544,7 @@
               (t/is (= first-half-tx-key (tu/latest-completed-tx node)))
 
               (let [{:keys [^TransactionInstant latest-tx, latest-row-id]}
-                    (idx/latest-tx {:object-store os, :buffer-pool bp})]
+                    (log-idx/latest-tx {:object-store os, :buffer-pool bp})]
 
                 (t/is (< (:tx-id latest-tx) (:tx-id first-half-tx-key)))
                 (t/is (< latest-row-id (count first-half-tx-ops)))
@@ -667,7 +669,7 @@
             ^ObjectStore os (::os/file-system-object-store system)
             ^IBufferPool bp (::bp/buffer-pool system)]
 
-        (t/is (nil? (idx/latest-tx {:object-store os, :buffer-pool bp})))
+        (t/is (nil? (log-idx/latest-tx {:object-store os, :buffer-pool bp})))
 
         (let [last-tx-key (c2/map->TransactionInstant {:tx-id 0, :sys-time (util/->instant #inst "2020-01-01")})]
           (t/is (= last-tx-key

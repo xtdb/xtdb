@@ -125,8 +125,9 @@
                           :core2/allocator {}
                           :core2/default-tz nil
                           :core2/row-counts {}
-                          :core2.indexer/indexer {}
+                          :core2/indexer {}
                           :core2.indexer/internal-id-manager {}
+                          :core2.indexer/log-indexer {}
                           :core2/ingester {}
                           :core2.metadata/metadata-manager {}
                           :core2.temporal/temporal-manager {}

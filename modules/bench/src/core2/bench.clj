@@ -39,7 +39,7 @@
                       (/ (- (System/nanoTime) start-ns#) 1e6)))))))
 
 (defn finish-chunk! [node]
-  (idx/finish-chunk! (util/component node ::idx/indexer)))
+  (idx/finish-chunk! (util/component node :core2/indexer)))
 
 (defn start-node
   (^core2.node.Node [] (start-node {}))

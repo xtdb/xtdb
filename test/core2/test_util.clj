@@ -97,7 +97,7 @@
   (.awaitSnapshotBuild ^core2.temporal.TemporalManagerPrivate (::temporal/temporal-manager @(:!system node))))
 
 (defn finish-chunk! [node]
-  (idx/finish-chunk! (component node ::idx/indexer))
+  (idx/finish-chunk! (component node :core2/indexer))
   (await-temporal-snapshot-build node))
 
 (defn open-vec

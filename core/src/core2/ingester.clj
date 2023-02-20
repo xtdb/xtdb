@@ -27,7 +27,7 @@
 (defmethod ig/prep-key :core2/ingester [_ opts]
   (-> (merge {:allocator (ig/ref :core2/allocator)
               :log (ig/ref :core2/log)
-              :indexer (ig/ref :core2.indexer/indexer)
+              :indexer (ig/ref :core2/indexer)
               :metadata-mgr (ig/ref :core2.metadata/metadata-manager)
               :buffer-pool (ig/ref :core2.buffer-pool/buffer-pool)}
              opts)

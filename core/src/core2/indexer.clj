@@ -6,6 +6,8 @@
             [core2.buffer-pool :as bp]
             [core2.datalog :as d]
             [core2.error :as err]
+            core2.indexer.internal-id-manager
+            [core2.indexer.log-indexer :as log-idx]
             [core2.metadata :as meta]
             core2.object-store
             [core2.operator :as op]
@@ -25,6 +27,8 @@
            (core2.api ClojureForm TransactionInstant)
            core2.buffer_pool.IBufferPool
            core2.ICursor
+           core2.indexer.internal_id_manager.IInternalIdManager
+           (core2.indexer.log_indexer ILogIndexer ILogOpIndexer)
            core2.metadata.IMetadataManager
            core2.object_store.ObjectStore
            core2.operator.scan.ScanSource
@@ -33,15 +37,14 @@
            (core2.watermark ISharedWatermark IWatermarkManager)
            (java.io ByteArrayInputStream Closeable)
            java.lang.AutoCloseable
-           java.nio.ByteBuffer
            (java.time Instant ZoneId)
            (java.util Collections HashMap Map TreeMap)
            (java.util.concurrent CompletableFuture ConcurrentHashMap ConcurrentSkipListMap)
            (java.util.concurrent.locks StampedLock)
            (java.util.function Consumer Function)
-           (org.apache.arrow.memory ArrowBuf BufferAllocator)
-           (org.apache.arrow.vector BigIntVector BitVector TimeStampMicroTZVector TimeStampVector ValueVector VarBinaryVector VarCharVector VectorLoader VectorSchemaRoot VectorUnloader)
-           (org.apache.arrow.vector.complex DenseUnionVector ListVector StructVector)
+           (org.apache.arrow.memory BufferAllocator)
+           (org.apache.arrow.vector BigIntVector BitVector TimeStampVector ValueVector VarBinaryVector VarCharVector VectorLoader VectorSchemaRoot VectorUnloader)
+           (org.apache.arrow.vector.complex DenseUnionVector ListVector)
            (org.apache.arrow.vector.ipc ArrowStreamReader)
            org.roaringbitmap.longlong.Roaring64Bitmap
            org.roaringbitmap.RoaringBitmap))
@@ -62,56 +65,6 @@
                 "can be set via system property core2.bloom.bits")))
 
   opts)
-
-#_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
-(definterface IInternalIdManager
-  (^long getOrCreateInternalId [^String table, ^Object id, ^long row-id])
-  (^boolean isKnownId [^String table, ^Object id]))
-
-(defn- normalize-id [id]
-  (cond-> id
-    (bytes? id) (ByteBuffer/wrap)))
-
-(defmethod ig/prep-key ::internal-id-manager [_ opts]
-  (merge {:metadata-mgr (ig/ref ::meta/metadata-manager)
-          :buffer-pool (ig/ref :core2.buffer-pool/buffer-pool)
-          :allocator (ig/ref :core2/allocator)}
-         opts))
-
-(deftype InternalIdManager [^Map id->internal-id]
-  IInternalIdManager
-  (getOrCreateInternalId [_ table id row-id]
-    (.computeIfAbsent id->internal-id
-                      [table (normalize-id id)]
-                      (reify Function
-                        (apply [_ _]
-                          ;; big endian for index distribution
-                          (Long/reverseBytes row-id)))))
-
-  (isKnownId [_ table id]
-    (.containsKey id->internal-id [table (normalize-id id)]))
-
-  Closeable
-  (close [_]
-    (.clear id->internal-id)))
-
-(defmethod ig/init-key ::internal-id-manager [_ {:keys [^IBufferPool buffer-pool, ^IMetadataManager metadata-mgr]}]
-  (let [iid-mgr (InternalIdManager. (ConcurrentHashMap.))]
-    (doseq [[chunk-idx chunk-metadata] (.chunksMetadata metadata-mgr)
-            {:keys [table]} chunk-metadata]
-      (with-open [id-chunks (-> @(.getBuffer buffer-pool (meta/->chunk-obj-key chunk-idx table "id"))
-                                (util/->chunks {:close-buffer? true}))]
-        (.forEachRemaining id-chunks
-                           (reify Consumer
-                             (accept [_ id-root]
-                               (let [^VectorSchemaRoot id-root id-root
-                                     id-vec (.getVector id-root "id")
-                                     ^BigIntVector row-id-vec (.getVector id-root "_row-id")]
-                                 (dotimes [idx (.getRowCount id-root)]
-                                   (.getOrCreateInternalId iid-mgr table
-                                                           (t/get-object id-vec idx)
-                                                           (.get row-id-vec idx)))))))))
-    iid-mgr))
 
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface ILiveColumn
@@ -247,169 +200,6 @@
                                            table-cols))))
               (TreeMap.)
               live-columns)))
-
-(defn- ->log-obj-key [chunk-idx]
-  (format "chunk-%s/log.arrow" (util/->lex-hex-string chunk-idx)))
-
-(def ^:private log-ops-col-type
-  '[:union #{:null
-             [:list
-              [:struct {iid :i64
-                        row-id [:union #{:null :i64}]
-                        application-time-start [:union #{:null [:timestamp-tz :micro "UTC"]}]
-                        application-time-end [:union #{:null [:timestamp-tz :micro "UTC"]}]
-                        evict? :bool}]]}])
-
-#_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
-(definterface ILogOpIndexer
-  (^void logPut [^long iid, ^long rowId, ^long app-timeStart, ^long app-timeEnd])
-  (^void logDelete [^long iid, ^long app-timeStart, ^long app-timeEnd])
-  (^void logEvict [^long iid])
-  (^void commit [])
-  (^void abort []))
-
-#_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
-(definterface ILogIndexer
-  (^core2.indexer.ILogOpIndexer startTx [^core2.api.TransactionInstant txKey])
-  (^java.nio.ByteBuffer writeLog [])
-  (^void clear [])
-  (^void close []))
-
-(defn- ->log-indexer [^BufferAllocator allocator, ^long max-rows-per-block]
-  (let [log-writer (vw/->rel-writer allocator)
-        transient-log-writer (vw/->rel-writer allocator)
-
-        ;; we're ignoring the writers for tx-id and sys-time, because they're simple primitive vecs and we're only writing to idx 0
-        ^BigIntVector tx-id-vec (-> (.writerForName transient-log-writer "tx-id" :i64)
-                                    (.getVector))
-
-        ^TimeStampMicroTZVector sys-time-vec (-> (.writerForName transient-log-writer "system-time" [:timestamp-tz :micro "UTC"])
-                                                 (.getVector))
-
-        ops-writer (.asList (.writerForName transient-log-writer "ops" log-ops-col-type))
-        ^ListVector ops-vec (.getVector ops-writer)
-        ops-data-writer (.asStruct (.getDataWriter ops-writer))
-
-        row-id-writer (.writerForName ops-data-writer "row-id")
-        ^BigIntVector row-id-vec (.getVector row-id-writer)
-        iid-writer (.writerForName ops-data-writer "iid")
-        ^BigIntVector iid-vec (.getVector iid-writer)
-
-        app-time-start-writer (.writerForName ops-data-writer "application-time-start")
-        ^TimeStampMicroTZVector app-time-start-vec (.getVector app-time-start-writer)
-        app-time-end-writer (.writerForName ops-data-writer "application-time-end")
-        ^TimeStampMicroTZVector app-time-end-vec (.getVector app-time-end-writer)
-
-        evict-writer (.writerForName ops-data-writer "evict?")
-        ^BitVector evict-vec (.getVector evict-writer)]
-
-    (reify ILogIndexer
-      (startTx [_ tx-key]
-        (.startValue ops-writer)
-        (doto tx-id-vec
-          (.setSafe 0 (.tx-id tx-key))
-          (.setValueCount 1))
-        (doto sys-time-vec
-          (.setSafe 0 (util/instant->micros (.sys-time tx-key)))
-          (.setValueCount 1))
-
-        (reify ILogOpIndexer
-          (logPut [_ iid row-id app-time-start app-time-end]
-            (let [op-idx (.startValue ops-data-writer)]
-              (.setSafe row-id-vec op-idx row-id)
-              (.setSafe iid-vec op-idx iid)
-              (.setSafe app-time-start-vec op-idx app-time-start)
-              (.setSafe app-time-end-vec op-idx app-time-end)
-              (.setSafe evict-vec op-idx 0)
-
-              (.endValue ops-data-writer)))
-
-          (logDelete [_ iid app-time-start app-time-end]
-            (let [op-idx (.startValue ops-data-writer)]
-              (.setSafe iid-vec op-idx iid)
-              (.setNull row-id-vec op-idx)
-              (.setSafe app-time-start-vec op-idx app-time-start)
-              (.setSafe app-time-end-vec op-idx app-time-end)
-              (.setSafe evict-vec op-idx 0)
-
-              (.endValue ops-data-writer)))
-
-          (logEvict [_ iid]
-            (let [op-idx (.startValue ops-data-writer)]
-              (.setSafe iid-vec op-idx iid)
-              (.setNull row-id-vec op-idx)
-              (.setNull app-time-start-vec op-idx)
-              (.setNull app-time-end-vec op-idx)
-              (.setSafe evict-vec op-idx 1))
-
-            (.endValue ops-data-writer))
-
-          (commit [_]
-            (.endValue ops-writer)
-            (.setValueCount ops-vec 1)
-            (vw/append-rel log-writer (vw/rel-writer->reader transient-log-writer))
-
-            (.clear transient-log-writer))
-
-          (abort [_]
-            (.clear ops-vec)
-            (.setNull ops-vec 0)
-            (.setValueCount ops-vec 1)
-            (vw/append-rel log-writer (vw/rel-writer->reader transient-log-writer))
-
-            (.clear transient-log-writer))))
-
-      (writeLog [_]
-        (let [log-root (let [^Iterable vecs (for [^IVectorWriter w (seq log-writer)]
-                                              (.getVector w))]
-                         (VectorSchemaRoot. vecs))]
-          (with-open [write-root (VectorSchemaRoot/create (.getSchema log-root) allocator)]
-            (let [loader (VectorLoader. write-root)
-                  row-counts (blocks/list-count-blocks (.getVector log-root "ops") max-rows-per-block)]
-              (with-open [^ICursor slices (blocks/->slices log-root row-counts)]
-                (util/build-arrow-ipc-byte-buffer write-root :file
-                  (fn [write-batch!]
-                    (.forEachRemaining slices
-                                       (reify Consumer
-                                         (accept [_ sliced-root]
-                                           (with-open [arb (.getRecordBatch (VectorUnloader. sliced-root))]
-                                             (.load loader arb)
-                                             (write-batch!))))))))))))
-
-      (clear [_]
-        (.clear log-writer))
-
-      Closeable
-      (close [_]
-        (.close transient-log-writer)
-        (.close log-writer)))))
-
-(defn- with-latest-log-chunk [{:keys [^ObjectStore object-store ^IBufferPool buffer-pool]} f]
-  (when-let [latest-chunk-idx (some-> (last (.listObjects object-store "chunk-metadata/"))
-                                      (->> (re-matches #"chunk-metadata/(\p{XDigit}+)\.arrow") second)
-                                      util/<-lex-hex-string)]
-    @(-> (.getBuffer buffer-pool (->log-obj-key latest-chunk-idx))
-         (util/then-apply
-           (fn [^ArrowBuf log-buffer]
-             (assert log-buffer)
-
-             (when log-buffer
-               (f log-buffer)))))))
-
-(defn latest-tx [deps]
-  (with-latest-log-chunk deps
-    (fn [log-buf]
-      (util/with-last-block log-buf
-        (fn [^VectorSchemaRoot log-root]
-          (let [tx-count (.getRowCount log-root)
-                ^BigIntVector tx-id-vec (.getVector log-root "tx-id")
-                ^TimeStampMicroTZVector sys-time-vec (.getVector log-root "system-time")
-                ^BigIntVector row-id-vec (-> ^ListVector (.getVector log-root "ops")
-                                             ^StructVector (.getDataVector)
-                                             (.getChild "row-id"))]
-            {:latest-tx (c2/->TransactionInstant (.get tx-id-vec (dec tx-count))
-                                                 (util/micros->instant (.get sys-time-vec (dec tx-count))))
-             :latest-row-id (.get row-id-vec (dec (.getValueCount row-id-vec)))}))))))
 
 (def ^:private abort-exn (err/runtime-err :abort-exn))
 
@@ -1035,7 +825,7 @@
       (log/debugf "finishing chunk '%x', tx '%s'" chunk-idx (pr-str latest-completed-tx))
 
       @(CompletableFuture/allOf (->> (cons
-                                      (.putObject object-store (->log-obj-key chunk-idx) (.writeLog log-indexer))
+                                      (.finishChunk log-indexer chunk-idx)
                                       (for [[^String table-name, ^Map table-live-cols] live-columns
                                             [^String col-name, ^LiveColumn live-column] table-live-cols]
                                         (.putObject object-store (meta/->chunk-obj-key chunk-idx table-name col-name) (.writeColumn this live-column))))
@@ -1063,30 +853,31 @@
     (.close log-indexer)
     (some-> shared-wm .release)))
 
-(defmethod ig/prep-key ::indexer [_ opts]
+(defmethod ig/prep-key :core2/indexer [_ opts]
   (merge {:allocator (ig/ref :core2/allocator)
           :object-store (ig/ref :core2/object-store)
           :metadata-mgr (ig/ref ::meta/metadata-manager)
           :temporal-mgr (ig/ref ::temporal/temporal-manager)
           :watermark-mgr (ig/ref ::wm/watermark-manager)
-          :internal-id-mgr (ig/ref ::internal-id-manager)
+          :internal-id-mgr (ig/ref :core2.indexer/internal-id-manager)
           :buffer-pool (ig/ref ::bp/buffer-pool)
+          :log-indexer (ig/ref :core2.indexer/log-indexer)
           :row-counts (ig/ref :core2/row-counts)
           :prepare-ra-cache (ig/ref :core2/prepare-ra-cache)}
          opts))
 
-(defmethod ig/init-key ::indexer
-  [_ {:keys [allocator object-store metadata-mgr buffer-pool ^ITemporalManager temporal-mgr, ^IWatermarkManager watermark-mgr, internal-id-mgr prepare-ra-cache]
+(defmethod ig/init-key :core2/indexer
+  [_ {:keys [allocator object-store metadata-mgr buffer-pool ^ITemporalManager temporal-mgr, ^IWatermarkManager watermark-mgr, internal-id-mgr log-indexer prepare-ra-cache]
       {:keys [max-rows-per-chunk max-rows-per-block]} :row-counts
       :as deps}]
 
-  (let [{:keys [latest-row-id latest-tx]} (latest-tx deps)
+  (let [{:keys [latest-row-id latest-tx]} (log-idx/latest-tx deps)
         chunk-idx (if latest-row-id
                     (inc (long latest-row-id))
                     0)]
 
     (Indexer. allocator object-store metadata-mgr buffer-pool temporal-mgr internal-id-mgr watermark-mgr
-              (->log-indexer allocator max-rows-per-block)
+              log-indexer
 
               max-rows-per-chunk max-rows-per-block
               (ConcurrentSkipListMap.) ; live-columns
@@ -1096,5 +887,5 @@
               nil ; watermark
               (StampedLock.))))
 
-(defmethod ig/halt-key! ::indexer [_ ^AutoCloseable indexer]
+(defmethod ig/halt-key! :core2/indexer [_ ^AutoCloseable indexer]
   (.close indexer))

@@ -7,7 +7,8 @@
             [clojure.tools.logging :as log]
             [core2.indexer :as idx]
             [core2.object-store :as os]
-            [core2.buffer-pool :as bp])
+            [core2.buffer-pool :as bp]
+            [core2.indexer.log-indexer :as log-idx])
   (:import java.time.Duration))
 
 (def ^:private ^:dynamic *node*)
@@ -29,8 +30,8 @@
             (tu/finish-chunk! node)
 
             (t/is (= [last-tx-key (dec 1001000)]
-                     (idx/latest-tx {:object-store (tu/component ::os/file-system-object-store)
-                                     :buffer-pool (tu/component ::bp/buffer-pool)}))))
+                     (log-idx/latest-tx {:object-store (tu/component ::os/file-system-object-store)
+                                         :buffer-pool (tu/component ::bp/buffer-pool)}))))
 
           (f))))))
 
