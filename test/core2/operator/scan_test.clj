@@ -85,7 +85,7 @@
 
       (let [tx (-> (c2/submit-tx node [[:put {:id :doc}]])
                    (tu/then-await-tx node))]
-        (tu/finish-chunk node)
+        (tu/finish-chunk! node)
 
         (t/is (= '{id [:extension-type :c2/clj-keyword :utf8 ""]}
                  (->col-types tx))))

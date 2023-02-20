@@ -256,7 +256,7 @@
 
   (def node (node/start-node (node-dir->config node-dir)))
   (.close node)
-  (tu/finish-chunk node)
+  (tu/finish-chunk! node)
 
   (def get-item-query '{:find [i_id i_u_id i_initial_price i_current_price]
                         :in [i_id]

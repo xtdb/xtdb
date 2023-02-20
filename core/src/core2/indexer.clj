@@ -232,8 +232,10 @@
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface IndexerPrivate
   (^java.nio.ByteBuffer writeColumn [^core2.indexer.LiveColumn live-column])
-  (^void closeCols [])
-  (^void finishChunk []))
+  (^void closeCols []))
+
+(defprotocol Finish
+  (^void finish-chunk! [_]))
 
 (defn- snapshot-live-cols [^Map live-columns]
   (Collections/unmodifiableSortedMap
@@ -964,7 +966,7 @@
               (.unlock wm-lock wm-lock-stamp)))))
 
       (when (>= chunk-row-count max-rows-per-chunk)
-        (.finishChunk this))
+        (finish-chunk! this))
 
       tx-key))
 
@@ -1027,7 +1029,8 @@
     (.clear live-columns)
     (.clear log-indexer))
 
-  (finishChunk [this]
+  Finish
+  (finish-chunk! [this]
     (when-not (.isEmpty live-columns)
       (log/debugf "finishing chunk '%x', tx '%s'" chunk-idx (pr-str latest-completed-tx))
 

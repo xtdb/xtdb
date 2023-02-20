@@ -111,7 +111,7 @@
       (let [last-tx (time
                      (tpch/submit-docs! node 0.05))]
         (time (tu/then-await-tx last-tx node (Duration/ofHours 1)))
-        (time (tu/finish-chunk node)))))
+        (time (tu/finish-chunk! node)))))
 
   (do
     (newline)

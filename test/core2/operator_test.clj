@@ -16,7 +16,7 @@
     (-> (c2/submit-tx node [[:put {:name "Håkan", :id :hak}]])
         (tu/then-await-tx node))
 
-    (tu/finish-chunk node)
+    (tu/finish-chunk! node)
 
     (c2/submit-tx node [[:put {:name "Dan", :id :dan}]
                         [:put {:name "Ivan", :id :iva}]])
@@ -25,7 +25,7 @@
                             [:put {:name "Jon", :id :jon}]])
         (tu/then-await-tx node))
 
-    (tu/finish-chunk node)
+    (tu/finish-chunk! node)
 
     (let [^IMetadataManager metadata-mgr (tu/component node ::meta/metadata-manager)]
       (letfn [(test-query-ivan [expected db]
@@ -72,13 +72,13 @@
                             [:put {:name "Ivan", :id :iva}]])
         (tu/then-await-tx node))
 
-    (tu/finish-chunk node)
+    (tu/finish-chunk! node)
 
     (-> (c2/submit-tx node [[:put {:name "Håkan", :id :hak}]
                             [:put {:name "James", :id :jms}]])
         (tu/then-await-tx node))
 
-    (tu/finish-chunk node)
+    (tu/finish-chunk! node)
     (let [^IMetadataManager metadata-mgr (tu/component node ::meta/metadata-manager)
           db @(node/snapshot-async node)]
       (t/is (= #{0 3} (set (keys (.chunksMetadata metadata-mgr)))))

@@ -12,7 +12,8 @@
             [core2.types :as types]
             [core2.util :as util]
             [core2.vector.indirect :as iv]
-            [core2.vector.writer :as vw])
+            [core2.vector.writer :as vw]
+            [core2.indexer :as idx])
   (:import (core2 ICursor InstantSource)
            core2.node.Node
            core2.operator.scan.ScanSource
@@ -95,8 +96,8 @@
 (defn await-temporal-snapshot-build [^Node node]
   (.awaitSnapshotBuild ^core2.temporal.TemporalManagerPrivate (::temporal/temporal-manager @(:!system node))))
 
-(defn finish-chunk [^Node node]
-  (.finishChunk ^core2.indexer.Indexer (component node :core2.indexer/indexer))
+(defn finish-chunk! [node]
+  (idx/finish-chunk! (component node ::idx/indexer))
   (await-temporal-snapshot-build node))
 
 (defn open-vec

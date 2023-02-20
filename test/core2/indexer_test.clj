@@ -111,7 +111,7 @@
 
               (t/is (= [#{"id"}] @!res)))))
 
-        (tu/finish-chunk node)
+        (tu/finish-chunk! node)
 
         (with-open [^IWatermark watermark (.openWatermark idxer last-tx-key)]
           (t/is (= 4 (.chunkIdx watermark)))
@@ -257,7 +257,7 @@
       (-> (c2/submit-tx node tx-ops)
           (tu/then-await-tx node (Duration/ofMillis 2000)))
 
-      (tu/finish-chunk node)
+      (tu/finish-chunk! node)
 
       (tj/check-json (.toPath (io/as-file (io/resource "can-handle-dynamic-cols-in-same-block")))
                      (.resolve node-dir "objects")))))
@@ -283,7 +283,7 @@
       (-> (c2/submit-tx node tx1)
           (tu/then-await-tx node (Duration/ofMillis 200)))
 
-      (tu/finish-chunk node)
+      (tu/finish-chunk! node)
 
       (tj/check-json (.toPath (io/as-file (io/resource "multi-block-metadata")))
                      (.resolve node-dir "objects"))
@@ -323,7 +323,7 @@
       (-> (c2/submit-tx node [[:put {:id :foo, :uuid uuid}]])
           (tu/then-await-tx node (Duration/ofMillis 2000)))
 
-      (tu/finish-chunk node)
+      (tu/finish-chunk! node)
 
       (t/is (= #{{:id :foo, :uuid uuid}}
                (set (c2/datalog-query node '{:find [id uuid]
@@ -353,7 +353,7 @@
                                 :app-time-end #inst "2020-05-01"}]])
           (tu/then-await-tx node))
 
-      (tu/finish-chunk node)
+      (tu/finish-chunk! node)
 
       (tj/check-json (.toPath (io/as-file (io/resource "writes-log-file")))
                      (.resolve node-dir "objects")))))
@@ -409,7 +409,7 @@
 
           (t/is (= last-tx-key (tu/then-await-tx last-tx-key node (Duration/ofSeconds 15))))
           (t/is (= last-tx-key (tu/latest-completed-tx node)))
-          (tu/finish-chunk node)
+          (tu/finish-chunk! node)
 
           (t/is (= {:latest-tx last-tx-key
                     :latest-row-id (dec (count tx-ops))}
@@ -618,7 +618,7 @@
         (-> (c2/submit-tx node1 [[:put {:id "foo"}]])
             (tu/then-await-tx node1 (Duration/ofSeconds 1)))
 
-        (tu/finish-chunk node1)
+        (tu/finish-chunk! node1)
 
         (t/is (= :utf8 (.columnType mm1 "xt_docs" "id")))
 
@@ -627,7 +627,7 @@
                                        [:put {:id #c2/clj-form :foo}]])]
           (tu/then-await-tx tx2 node1 (Duration/ofMillis 200))
 
-          (tu/finish-chunk node1)
+          (tu/finish-chunk! node1)
 
           (t/is (= [:union #{:utf8
                              [:extension-type :c2/clj-keyword :utf8 ""]
@@ -678,7 +678,7 @@
           (t/is (= last-tx-key
                    (tu/then-await-tx last-tx-key node (Duration/ofSeconds 1)))))
 
-        (tu/finish-chunk node)
+        (tu/finish-chunk! node)
 
         (tj/check-json (.toPath (io/as-file (io/resource "can-index-sql-insert")))
                        (.resolve node-dir "objects"))))))

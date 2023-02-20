@@ -7,7 +7,8 @@
             [core2.datasets.tpch.ra :as tpch.ra]
             [core2.temporal :as temporal]
             [core2.test-util :as tu]
-            [core2.util :as util])
+            [core2.util :as util]
+            [core2.indexer :as idx])
   (:import java.nio.file.attribute.FileAttribute
            java.nio.file.Files
            java.time.Duration
@@ -47,7 +48,7 @@
                                     :secondary3 secondary-node3}]
                     (test-node k node))
 
-                  (.finishChunk ^core2.indexer.Indexer (util/component primary-node :core2.indexer/indexer))
+                  (idx/finish-chunk! (util/component primary-node ::idx/indexer))
                   (.awaitSnapshotBuild ^core2.temporal.TemporalManagerPrivate (::temporal/temporal-manager @(:!system primary-node)))
 
                   (log/info "Starting post finish-chunk node")

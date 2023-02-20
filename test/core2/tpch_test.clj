@@ -31,7 +31,7 @@
                         :docs (tpch/submit-docs! node scale-factor)
                         :dml (tpch/submit-dml! node scale-factor))]
           (tu/then-await-tx last-tx node)
-          (tu/finish-chunk node)
+          (tu/finish-chunk! node)
 
           (let [db @(node/snapshot-async node last-tx)]
             (binding [*node* node, *db* db]

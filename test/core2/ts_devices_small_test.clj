@@ -26,7 +26,7 @@
             (log/info "transactions submitted, last tx" (pr-str last-tx-key))
             (t/is (= last-tx-key (tu/then-await-tx last-tx-key node (Duration/ofMinutes 15))))
             (t/is (= last-tx-key (tu/latest-completed-tx node)))
-            (tu/finish-chunk node)
+            (tu/finish-chunk! node)
 
             (t/is (= [last-tx-key (dec 1001000)]
                      (idx/latest-tx {:object-store (tu/component ::os/file-system-object-store)

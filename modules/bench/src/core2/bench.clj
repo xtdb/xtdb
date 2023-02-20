@@ -7,7 +7,8 @@
             [core2.node :as node]
             [core2.object-store :as os]
             [core2.s3 :as s3]
-            [core2.util :as util])
+            [core2.util :as util]
+            [core2.indexer :as idx])
   (:import core2.indexer.Indexer
            core2.node.Node
            [java.nio.file Files Path]
@@ -37,8 +38,8 @@
                       block-name#
                       (/ (- (System/nanoTime) start-ns#) 1e6)))))))
 
-(defn finish-chunk [^Node node]
-  (.finishChunk ^Indexer (util/component node :core2.indexer/indexer)))
+(defn finish-chunk! [node]
+  (idx/finish-chunk! (util/component node ::idx/indexer)))
 
 (defn start-node
   (^core2.node.Node [] (start-node {}))

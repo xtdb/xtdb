@@ -38,7 +38,7 @@
       @(node/snapshot-async node tx (Duration/ofHours 5)))
 
     (bench/with-timing :finish-chunk
-      (bench/finish-chunk node))))
+      (bench/finish-chunk! node))))
 
 (defn- query-watdiv [node query-file]
   ;; TODO currently fails because it doesn't like strings as attributes
