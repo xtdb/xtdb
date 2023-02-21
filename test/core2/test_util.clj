@@ -3,8 +3,9 @@
             [clojure.test :as t]
             [core2.api :as c2]
             [core2.client :as client]
-            [core2.node :as node]
+            [core2.indexer :as idx]
             [core2.logical-plan :as lp]
+            [core2.node :as node]
             core2.object-store
             [core2.operator :as op]
             core2.operator.scan
@@ -12,8 +13,7 @@
             [core2.types :as types]
             [core2.util :as util]
             [core2.vector.indirect :as iv]
-            [core2.vector.writer :as vw]
-            [core2.indexer :as idx])
+            [core2.vector.writer :as vw])
   (:import (core2 ICursor InstantSource)
            core2.node.Node
            core2.operator.scan.ScanSource

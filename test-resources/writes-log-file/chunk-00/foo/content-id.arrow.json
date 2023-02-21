@@ -15,18 +15,9 @@
       "type" : {
         "name" : "union",
         "mode" : "Dense",
-        "typeIds" : [0]
+        "typeIds" : [ ]
       },
-      "children" : [{
-        "name" : "i64",
-        "nullable" : false,
-        "type" : {
-          "name" : "int",
-          "bitWidth" : 64,
-          "isSigned" : true
-        },
-        "children" : [ ]
-      }]
+      "children" : [ ]
     }]
   },
   "batches" : [ ]

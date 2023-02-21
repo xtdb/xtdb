@@ -104,7 +104,9 @@
           (with-open [^IWatermark watermark (.openWatermark idxer last-tx-key)]
             (t/is (zero? (.chunkIdx watermark)))
 
-            (let [live-blocks (.liveBlocks watermark "xt_docs" ["id"])
+            (let [live-blocks (-> (.liveChunk watermark)
+                                  (.liveTable "xt_docs")
+                                  (.liveBlocks ["id"]))
                   !res (volatile! [])]
               (.forEachRemaining live-blocks
                                  (reify Consumer
@@ -125,7 +127,7 @@
                   :latest-row-id (dec total-number-of-ops)}
                  (log-idx/latest-tx {:object-store os, :buffer-pool bp})))
 
-        (let [objects-list (->> (.listObjects os) (filter #(str/includes? % "metadata.arrow")))]
+        (let [objects-list (->> (.listObjects os) (filter #(str/ends-with? % "/metadata.arrow")))]
           (t/is (= 1 (count objects-list)))
           (t/is (= "chunk-00/xt_docs/metadata.arrow" (first objects-list))))
 
@@ -349,7 +351,7 @@
       (-> (c2/submit-tx node [[:sql "INSERT INTO foo (id, application_time_start, application_time_end) VALUES (1, DATE '2020-01-01', DATE '2019-01-01')"]])
           (tu/then-await-tx node))
 
-      (-> (c2/submit-tx node [[:delete "foo" {:app-time-start #inst "2020-04-01"}]
+      (-> (c2/submit-tx node [[:delete "xt_docs" "foo" {:app-time-start #inst "2020-04-01"}]
                               [:put {:id "bar", :month "april"},
                                {:app-time-start #inst "2020-04-01"
                                 :app-time-end #inst "2020-05-01"}]])
@@ -648,16 +650,17 @@
                        (.columnType mm2 "xt_docs" "id"))))))))))
 
 (t/deftest test-await-fails-fast
-  (with-redefs [idx/->live-column (fn [& _args]
-                                    (throw (UnsupportedOperationException. "oh no!")))
-                log/log* (let [log* log/log*]
-                           (fn [logger level throwable message]
-                             (when-not (instance? UnsupportedOperationException throwable)
-                               (log* logger level throwable message))))]
-    (with-open [node (node/start-node {})]
-      (t/is (thrown-with-msg? Exception #"oh no!"
-                              (-> (c2/submit-tx node [[:put {:id "foo", :count 42}]])
-                                  (tu/then-await-tx node (Duration/ofSeconds 1))))))))
+  (let [e (UnsupportedOperationException. "oh no!")]
+    (with-redefs [idx/content-row-copier (fn [& _args]
+                                           (throw e))
+                  log/log* (let [log* log/log*]
+                             (fn [logger level throwable message]
+                               (when-not (identical? e throwable)
+                                 (log* logger level throwable message))))]
+      (with-open [node (node/start-node {})]
+        (t/is (thrown-with-msg? Exception #"oh no!"
+                                (-> (c2/submit-tx node [[:put {:id "foo", :count 42}]])
+                                    (tu/then-await-tx node (Duration/ofSeconds 1)))))))))
 
 (t/deftest test-indexes-sql-insert
   (let [node-dir (util/->path "target/can-index-sql-insert")]

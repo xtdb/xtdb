@@ -30,7 +30,8 @@
 
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface IMetadataManager
-  (^void registerNewChunk [^java.util.Map roots, ^long chunk-idx])
+  (^java.util.concurrent.CompletableFuture finishTableChunk [^long chunkIdx, ^String tableName, ^java.util.Map liveRoots])
+  (^java.util.concurrent.CompletableFuture finishChunk [^long chunkIdx, newChunkMetadata])
   (^java.util.NavigableMap chunksMetadata [])
   (^java.util.concurrent.CompletableFuture withMetadata [^long chunkIdx, ^String tableName, ^java.util.function.BiFunction #_#_<long, ITableMetadata> f])
   (columnType [^String tableName, ^String colName]))
@@ -85,19 +86,18 @@
             (t/col-type->field 'max-row-id :i64)
             (t/col-type->field 'col-types '[:list [:struct {col-name :utf8, col-type [:extension-type :c2/clj-form :utf8 ""]}]])]))
 
-(defn- live-roots->chunk-metadata [^Map live-roots]
-  (vec (for [[table-name ^Map live-roots] live-roots
-             :let [^VectorSchemaRoot id-root (.get live-roots "id")
-                   ^BigIntVector row-id-vec (.getVector id-root "_row-id")
-                   row-count (.getRowCount id-root)]
-             :when (pos? row-count)]
-         {:table table-name
-          :min-row-id (.get row-id-vec 0)
-          :max-row-id (.get row-id-vec (dec row-count))
-          :col-types (->> (for [[^String col-name, ^VectorSchemaRoot col-root] live-roots]
-                            (MapEntry/create col-name
-                                             (t/field->col-type (.getField (.getVector col-root col-name)))))
-                          (into {}))})))
+(defn live-roots->chunk-metadata [^String table-name, ^Map live-roots]
+  (when-let [^VectorSchemaRoot id-root (.get live-roots "id")]
+    (when (pos? (.getRowCount id-root))
+      (let [^BigIntVector row-id-vec (.getVector id-root "_row-id")
+            row-count (.getRowCount id-root)]
+        {:table table-name
+         :min-row-id (.get row-id-vec 0)
+         :max-row-id (.get row-id-vec (dec row-count))
+         :col-types (->> (for [[^String col-name, ^VectorSchemaRoot col-root] live-roots]
+                           (MapEntry/create col-name
+                                            (t/field->col-type (.getField (.getVector col-root col-name)))))
+                         (into {}))}))))
 
 (defn- write-chunk-metadata ^java.nio.ByteBuffer [^BufferAllocator allocator, chunk-meta]
   (let [table-count (count chunk-meta)]
@@ -476,20 +476,17 @@
                           ^Map table-metadata-idxs
                           ^:unsynchronised-mutable ^Map col-types]
   IMetadataManager
-  (registerNewChunk [this live-roots chunk-idx]
-    @(->> (for [[table-name live-roots] live-roots]
-            (let [metadata-buf (with-open [metadata-root (VectorSchemaRoot/create table-metadata-schema allocator)]
-                                 (write-meta metadata-root live-roots chunk-idx max-rows-per-block)
-                                 (util/root->arrow-ipc-byte-buffer metadata-root :file))]
+  (finishTableChunk [_ chunk-idx table-name live-roots]
+    (let [metadata-buf (with-open [metadata-root (VectorSchemaRoot/create table-metadata-schema allocator)]
+                         (write-meta metadata-root live-roots chunk-idx max-rows-per-block)
+                         (util/root->arrow-ipc-byte-buffer metadata-root :file))]
 
-              (.putObject object-store (->table-metadata-obj-key chunk-idx table-name) metadata-buf)))
-          (into-array CompletableFuture)
-          (CompletableFuture/allOf))
+      (.putObject object-store (->table-metadata-obj-key chunk-idx table-name) metadata-buf)))
 
-    (let [new-chunk-metadata (live-roots->chunk-metadata live-roots)]
-      @(.putObject object-store (->chunk-metadata-obj-key chunk-idx) (write-chunk-metadata allocator new-chunk-metadata))
-      (set! (.col-types this) (merge-col-types col-types new-chunk-metadata))
-      (.put chunks-metadata chunk-idx new-chunk-metadata)))
+  (finishChunk [this chunk-idx new-chunk-metadata]
+    @(.putObject object-store (->chunk-metadata-obj-key chunk-idx) (write-chunk-metadata allocator new-chunk-metadata))
+    (set! (.col-types this) (merge-col-types col-types new-chunk-metadata))
+    (.put chunks-metadata chunk-idx new-chunk-metadata))
 
   (withMetadata [_ chunk-idx table-name f]
     (with-single-root buffer-pool (->table-metadata-obj-key chunk-idx table-name)

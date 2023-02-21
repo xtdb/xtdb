@@ -1,29 +1,24 @@
 (ns core2.watermark
   (:require [clojure.tools.logging :as log]
             core2.api
-            [core2.blocks :as blocks]
+            core2.live-chunk
             core2.temporal
-            [core2.types :as types]
             [core2.util :as util]
-            [juxt.clojars-mirrors.integrant.core :as ig]
-            [core2.vector.indirect :as iv])
-  (:import clojure.lang.MapEntry
-           core2.api.TransactionInstant
-           core2.ICursor
+            [juxt.clojars-mirrors.integrant.core :as ig])
+  (:import core2.api.TransactionInstant
+           core2.live_chunk.ILiveChunkWatermark
            core2.temporal.ITemporalRelationSource
            java.lang.AutoCloseable
-           [java.util HashMap Map]
-           java.util.function.Consumer
-           java.util.concurrent.atomic.AtomicInteger
-           (java.util.concurrent Semaphore TimeUnit)
-           org.apache.arrow.vector.VectorSchemaRoot))
+           [java.util Map]
+           (java.util.concurrent ConcurrentHashMap Semaphore TimeUnit)
+           java.util.concurrent.atomic.AtomicInteger))
 
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface IWatermark
-  (columnType [^String tableName, ^String columnName])
-  (^core2.ICursor #_#_<Map<String, IIR> liveBlocks [^String tableName, ^Iterable columnNames])
   (^core2.api.TransactionInstant txBasis [])
   (^long chunkIdx [])
+
+  (^core2.live_chunk.ILiveChunkWatermark liveChunk [])
 
   ;; this is a lot of duplication - I guess we'd extend interfaces here if we were in Java
   (^core2.vector.IIndirectRelation createTemporalRelation [^org.apache.arrow.memory.BufferAllocator allocator
@@ -44,33 +39,14 @@
 (definterface IWatermarkManager
   (^core2.watermark.ISharedWatermark wrapWatermark [^core2.watermark.IWatermark wm]))
 
-(defn- roots->cursor ^core2.ICursor #_#_<Map<String, IIR>> [^Map roots, col-names, ^long chunk-idx, ^long max-rows-per-block]
-  (let [slice-cursors (->> col-names
-                           (into {} (keep (fn [^String col-name]
-                                            (when-let [root (.get roots col-name)]
-                                              (MapEntry/create col-name
-                                                               (iv/->slice-cursor (iv/<-root root)
-                                                                                  (blocks/row-id-aligned-blocks root chunk-idx max-rows-per-block))))))))]
-    (when (= (set (keys slice-cursors)) (set col-names))
-      (util/combine-col-cursors slice-cursors))))
-
-(deftype Watermark [^TransactionInstant tx-key, ^Map live-roots, ^Map tx-live-roots,
+(deftype Watermark [^TransactionInstant tx-key, ^ILiveChunkWatermark live-chunk
                     ^ITemporalRelationSource temporal-roots-src
                     ^long chunk-idx, ^int max-rows-per-block
-                    ^boolean close-roots?]
+                    ^boolean close-temporal-roots?]
   IWatermark
-  (columnType [_ table-name col-name]
-    (when-let [^VectorSchemaRoot root (some-> live-roots ^Map (.get table-name) (.get col-name))]
-      (-> (.getVector root col-name)
-          (.getField)
-          (types/field->col-type))))
-
-  (liveBlocks [_ table-name col-names]
-    (util/->concat-cursor (some-> (.get live-roots table-name) (roots->cursor col-names chunk-idx max-rows-per-block))
-                          (some-> (.get tx-live-roots table-name) (roots->cursor col-names chunk-idx max-rows-per-block))))
-
   (txBasis [_] tx-key)
   (chunkIdx [_] chunk-idx)
+  (liveChunk [_] live-chunk)
 
   (createTemporalRelation [_ allocator columns temporal-min-range temporal-max-range row-id-bitmap]
     (.createTemporalRelation temporal-roots-src allocator columns
@@ -78,10 +54,10 @@
                              row-id-bitmap))
 
   (close [_]
-    (when close-roots?
-      (util/try-close temporal-roots-src)
-      (doseq [root (->> (vals live-roots) (mapcat vals))]
-        (util/try-close root)))))
+    (util/try-close live-chunk)
+
+    (when close-temporal-roots?
+      (util/try-close temporal-roots-src))))
 
 (deftype WatermarkManager [^Map thread-ref-counts
                            ^:volatile-mutable ^Semaphore closing-semaphore]
@@ -105,10 +81,9 @@
                                       (inc (or cnt 0))))))
 
           (reify IWatermark
-            (columnType [_ table-name col-name] (.columnType wm table-name col-name))
-            (liveBlocks [_ table-name col-names] (.liveBlocks wm table-name col-names))
             (txBasis [_] (.txBasis wm))
             (chunkIdx [_] (.chunkIdx wm))
+            (liveChunk [_] (.liveChunk wm))
 
             (createTemporalRelation [_ allocator columns temporal-min-range temporal-max-range row-id-bitmap]
               (.createTemporalRelation wm allocator columns temporal-min-range temporal-max-range row-id-bitmap))
@@ -150,7 +125,7 @@
                   (pr-str thread-ref-counts))))))
 
 (defmethod ig/init-key ::watermark-manager [_ _]
-  (WatermarkManager. (HashMap.) nil))
+  (WatermarkManager. (ConcurrentHashMap.) nil))
 
 (defmethod ig/halt-key! ::watermark-manager [_ wm-mgr]
   (util/try-close wm-mgr))

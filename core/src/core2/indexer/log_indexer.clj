@@ -1,7 +1,6 @@
 (ns core2.indexer.log-indexer
   (:require [core2.api :as c2]
             [core2.blocks :as blocks]
-            core2.buffer-pool
             [core2.util :as util]
             [core2.vector.writer :as vw]
             [juxt.clojars-mirrors.integrant.core :as ig])

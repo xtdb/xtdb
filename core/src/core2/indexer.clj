@@ -1,13 +1,13 @@
 (ns core2.indexer
   (:require [clojure.tools.logging :as log]
             [core2.api :as c2]
-            [core2.blocks :as blocks]
             [core2.bloom :as bloom]
             [core2.buffer-pool :as bp]
             [core2.datalog :as d]
             [core2.error :as err]
             core2.indexer.internal-id-manager
             [core2.indexer.log-indexer :as log-idx]
+            core2.live-chunk
             [core2.metadata :as meta]
             core2.object-store
             [core2.operator :as op]
@@ -23,12 +23,11 @@
             [core2.watermark :as wm]
             [juxt.clojars-mirrors.integrant.core :as ig]
             [sci.core :as sci])
-  (:import clojure.lang.MapEntry
-           (core2.api ClojureForm TransactionInstant)
+  (:import (core2.api ClojureForm TransactionInstant)
            core2.buffer_pool.IBufferPool
-           core2.ICursor
            core2.indexer.internal_id_manager.IInternalIdManager
            (core2.indexer.log_indexer ILogIndexer ILogOpIndexer)
+           (core2.live_chunk ILiveChunk ILiveChunkTx ILiveColumnTx ILiveTableTx)
            core2.metadata.IMetadataManager
            core2.object_store.ObjectStore
            core2.operator.scan.ScanSource
@@ -38,15 +37,14 @@
            (java.io ByteArrayInputStream Closeable)
            java.lang.AutoCloseable
            (java.time Instant ZoneId)
-           (java.util Collections HashMap Map TreeMap)
-           (java.util.concurrent CompletableFuture ConcurrentHashMap ConcurrentSkipListMap)
+           (java.util HashMap Map)
+           (java.util.concurrent CompletableFuture ConcurrentHashMap)
            (java.util.concurrent.locks StampedLock)
            (java.util.function Consumer Function)
            (org.apache.arrow.memory BufferAllocator)
-           (org.apache.arrow.vector BigIntVector BitVector TimeStampVector ValueVector VarBinaryVector VarCharVector VectorLoader VectorSchemaRoot VectorUnloader)
+           (org.apache.arrow.vector BigIntVector BitVector TimeStampVector ValueVector VarBinaryVector VarCharVector VectorSchemaRoot)
            (org.apache.arrow.vector.complex DenseUnionVector ListVector)
            (org.apache.arrow.vector.ipc ArrowStreamReader)
-           org.roaringbitmap.longlong.Roaring64Bitmap
            org.roaringbitmap.RoaringBitmap))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -67,139 +65,14 @@
   opts)
 
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
-(definterface ILiveColumn
-  (^void writeRowId [^long rowId])
-  (^boolean containsRowId [^long rowId])
-  (^core2.vector.IVectorWriter contentWriter [])
-  (^org.apache.arrow.vector.VectorSchemaRoot liveRoot [])
-  (^org.apache.arrow.vector.VectorSchemaRoot txLiveRoot [])
-  (^void commit [])
-  (^void abort [])
-  (^void close []))
-
-(deftype LiveColumn [^BigIntVector row-id-vec, ^ValueVector content-vec, ^Roaring64Bitmap row-id-bitmap
-                     ^BigIntVector transient-row-id-vec, ^ValueVector transient-content-vec, ^Roaring64Bitmap transient-row-id-bitmap]
-  ILiveColumn
-  (writeRowId [_ row-id]
-    (.addLong transient-row-id-bitmap row-id)
-
-    (let [dest-idx (.getValueCount transient-row-id-vec)]
-      (.setValueCount transient-row-id-vec (inc dest-idx))
-      (.set transient-row-id-vec dest-idx row-id)))
-
-  (containsRowId [_ row-id]
-    (or (.contains row-id-bitmap row-id)
-        (.contains transient-row-id-bitmap row-id)))
-
-  (contentWriter [_] (vw/vec->writer transient-content-vec))
-
-  (liveRoot [_]
-    (let [^Iterable vs [row-id-vec content-vec]]
-      (VectorSchemaRoot. vs)))
-
-  (txLiveRoot [_]
-    (let [^Iterable vs [transient-row-id-vec transient-content-vec]]
-      (VectorSchemaRoot. vs)))
-
-  (commit [_]
-    (doto (vw/vec->writer content-vec)
-      (vw/append-vec (iv/->direct-vec transient-content-vec)))
-
-    (doto (vw/vec->writer row-id-vec)
-      (vw/append-vec (iv/->direct-vec transient-row-id-vec)))
-
-    (doto row-id-bitmap (.or transient-row-id-bitmap))
-
-    (.clear transient-row-id-vec)
-    (.clear transient-content-vec)
-    (.clear transient-row-id-bitmap))
-
-  (abort [_]
-    (.clear transient-row-id-vec)
-    (.clear transient-content-vec)
-    (.clear transient-row-id-bitmap))
-
-  Closeable
-  (close [_]
-    (util/try-close transient-row-id-vec)
-    (util/try-close transient-content-vec)
-
-    (util/try-close content-vec)
-    (util/try-close row-id-vec)))
-
-(defn ->live-column [^BufferAllocator allocator, ^String field-name]
-  (LiveColumn. (-> t/row-id-field (.createVector allocator))
-               (-> (t/->field field-name t/dense-union-type false) (.createVector allocator))
-               (Roaring64Bitmap.)
-
-               (-> t/row-id-field (.createVector allocator))
-               (-> (t/->field field-name t/dense-union-type false) (.createVector allocator))
-               (Roaring64Bitmap.)))
-
-#_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
-(definterface IDocumentIndexer
-  (^core2.indexer.ILiveColumn getLiveColumn [^String table, ^String fieldName])
-  (^java.util.Map liveColumnsWith [^String table, ^long rowId])
-  (^long nextRowId [])
-  (^long commit [] "returns: count of rows in this tx")
-  (^void abort []))
-
-(deftype DocumentIndexer [^BufferAllocator allocator, ^Map live-columns
-                          ^long start-row-id, ^:unsynchronized-mutable ^long tx-row-count]
-  IDocumentIndexer
-  (getLiveColumn [_ table field-name]
-    (-> ^Map (.computeIfAbsent live-columns table
-                               (util/->jfn (fn [_table] (HashMap.))))
-        (.computeIfAbsent field-name
-                          (util/->jfn (fn [field-name]
-                                        (->live-column allocator field-name))))))
-
-  (liveColumnsWith [_ table row-id]
-    (->> (.get live-columns table)
-         (into {} (filter (comp (fn [^LiveColumn live-col]
-                                  (.containsRowId live-col row-id))
-                                val)))))
-
-  (nextRowId [this]
-    (let [tx-row-count tx-row-count]
-      (set! (.tx-row-count this) (inc tx-row-count))
-      (+ start-row-id tx-row-count)))
-
-  (commit [_]
-    (doseq [^ILiveColumn live-col (->> (vals live-columns) (mapcat vals))]
-      (.commit live-col))
-
-    tx-row-count)
-
-  (abort [_]
-    (doseq [^ILiveColumn live-col (->> (vals live-columns) (mapcat vals))]
-      (.abort live-col))))
-
-#_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface TransactionIndexer
   (^core2.watermark.IWatermark openWatermark [^core2.api.TransactionInstant tx])
   (^core2.api.TransactionInstant indexTx [^core2.api.TransactionInstant tx
                                           ^org.apache.arrow.vector.VectorSchemaRoot txRoot])
   (^core2.api.TransactionInstant latestCompletedTx []))
 
-#_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
-(definterface IndexerPrivate
-  (^java.nio.ByteBuffer writeColumn [^core2.indexer.LiveColumn live-column])
-  (^void closeCols []))
-
 (defprotocol Finish
   (^void finish-chunk! [_]))
-
-(defn- snapshot-live-cols [^Map live-columns]
-  (Collections/unmodifiableSortedMap
-   (reduce-kv (fn [^Map acc table-name ^Map table-cols]
-                (doto acc (.put table-name
-                                (reduce-kv (fn [^Map acc col-name ^LiveColumn col]
-                                             (doto acc (.put col-name (util/slice-root (.liveRoot col)))))
-                                           (TreeMap.)
-                                           table-cols))))
-              (TreeMap.)
-              live-columns)))
 
 (def ^:private abort-exn (err/runtime-err :abort-exn))
 
@@ -212,9 +85,9 @@
 (definterface ContentRowCopier
   (^void copyContentRow [^long rowId, ^int srcIdx]))
 
-(defn- content-row-copier ^core2.indexer.ContentRowCopier [^IDocumentIndexer doc-idxer, ^String table, ^IIndirectVector col-rdr]
+(defn- content-row-copier ^core2.indexer.ContentRowCopier [^ILiveTableTx live-table, ^IIndirectVector col-rdr]
   (let [col-name (.getName col-rdr)
-        ^LiveColumn live-col (.getLiveColumn doc-idxer table col-name)
+        ^ILiveColumnTx live-col (.liveColumn live-table col-name)
         ^IVectorWriter vec-writer (.contentWriter live-col)
         row-copier (.rowCopier col-rdr vec-writer)]
     (reify ContentRowCopier
@@ -225,17 +98,18 @@
           (.copyRow row-copier src-idx)
           (.endValue vec-writer))))))
 
-(defn- put-row-copier ^core2.indexer.ContentRowCopier [^IDocumentIndexer indexer, ^VarCharVector table-vec, ^DenseUnionVector id-duv, ^DenseUnionVector doc-duv]
+(defn- put-row-copier ^core2.indexer.ContentRowCopier [^ILiveChunkTx live-chunk, ^VarCharVector table-vec, ^DenseUnionVector id-duv, ^DenseUnionVector doc-duv]
   (let [id-rdr (iv/->direct-vec id-duv)
         doc-rdr (.structReader (iv/->direct-vec doc-duv))
         table->content-copiers (HashMap.)]
     (reify ContentRowCopier
       (copyContentRow [_ row-id src-idx]
         (let [table-name (t/get-object table-vec src-idx)
+              live-table (.liveTable live-chunk table-name)
               ^Map field->content-copiers (.computeIfAbsent table->content-copiers table-name
                                                             (util/->jfn (fn [_table-name]
                                                                           (doto (HashMap.)
-                                                                            (.put "id" (content-row-copier indexer table-name id-rdr))))))]
+                                                                            (.put "id" (content-row-copier live-table id-rdr))))))]
 
           (-> ^ContentRowCopier (.get field->content-copiers "id")
               (.copyContentRow row-id src-idx))
@@ -246,10 +120,10 @@
             (-> ^ContentRowCopier
                 (.computeIfAbsent field->content-copiers col-name
                                                          (util/->jfn (fn [_col-name]
-                                                                       (content-row-copier indexer table-name col-rdr))))
+                                                                       (content-row-copier live-table col-rdr))))
                 (.copyContentRow row-id src-idx))))))))
 
-(defn- ->put-indexer ^core2.indexer.OpIndexer [^IInternalIdManager iid-mgr ^ILogOpIndexer log-op-idxer, ^ITemporalTxIndexer temporal-idxer, ^IDocumentIndexer doc-idxer
+(defn- ->put-indexer ^core2.indexer.OpIndexer [^IInternalIdManager iid-mgr ^ILogOpIndexer log-op-idxer, ^ITemporalTxIndexer temporal-idxer, ^ILiveChunkTx live-chunk
                                                ^DenseUnionVector tx-ops-vec, ^Instant current-time]
   (let [put-vec (.getStruct tx-ops-vec 1)
         ^VarCharVector table-vec (.getChild put-vec "table" VarCharVector)
@@ -257,11 +131,11 @@
         ^DenseUnionVector doc-duv (.getChild put-vec "document" DenseUnionVector)
         ^TimeStampVector app-time-start-vec (.getChild put-vec "application_time_start")
         ^TimeStampVector app-time-end-vec (.getChild put-vec "application_time_end")
-        row-copier (put-row-copier doc-idxer table-vec id-duv doc-duv)
+        row-copier (put-row-copier live-chunk table-vec id-duv doc-duv)
         current-time-µs (util/instant->micros current-time)]
     (reify OpIndexer
       (indexOp [_ tx-op-idx]
-        (let [row-id (.nextRowId doc-idxer)
+        (let [row-id (.nextRowId live-chunk)
               put-offset (.getOffset tx-ops-vec tx-op-idx)]
 
           (.copyContentRow row-copier row-id put-offset)
@@ -281,10 +155,8 @@
 
         nil))))
 
-(defn- ->delete-indexer
-  ^core2.indexer.OpIndexer
-  [^IInternalIdManager iid-mgr, ^ILogOpIndexer log-op-idxer, ^ITemporalTxIndexer temporal-idxer, ^IDocumentIndexer doc-idxer
-   ^DenseUnionVector tx-ops-vec, ^Instant current-time]
+(defn- ->delete-indexer ^core2.indexer.OpIndexer [^IInternalIdManager iid-mgr, ^ILogOpIndexer log-op-idxer, ^ITemporalTxIndexer temporal-idxer, ^ILiveChunkTx live-chunk
+                                                  ^DenseUnionVector tx-ops-vec, ^Instant current-time]
   (let [delete-vec (.getStruct tx-ops-vec 2)
         ^VarCharVector table-vec (.getChild delete-vec "table" VarCharVector)
         ^DenseUnionVector id-vec (.getChild delete-vec "id" DenseUnionVector)
@@ -293,7 +165,7 @@
         current-time-µs (util/instant->micros current-time)]
     (reify OpIndexer
       (indexOp [_ tx-op-idx]
-        (let [row-id (.nextRowId doc-idxer)
+        (let [row-id (.nextRowId live-chunk)
               delete-offset (.getOffset tx-ops-vec tx-op-idx)
               table (t/get-object table-vec delete-offset)
               eid (t/get-object id-vec delete-offset)
@@ -310,17 +182,15 @@
 
         nil))))
 
-(defn- ->evict-indexer
-  ^core2.indexer.OpIndexer
-  [^IInternalIdManager iid-mgr ^ILogOpIndexer log-op-idxer, ^ITemporalTxIndexer temporal-idxer, ^IDocumentIndexer doc-idxer
-   ^DenseUnionVector tx-ops-vec]
+(defn- ->evict-indexer ^core2.indexer.OpIndexer [^IInternalIdManager iid-mgr ^ILogOpIndexer log-op-idxer, ^ITemporalTxIndexer temporal-idxer, ^ILiveChunkTx live-chunk
+                                                 ^DenseUnionVector tx-ops-vec]
 
   (let [evict-vec (.getStruct tx-ops-vec 3)
         ^VarCharVector table-vec (.getChild evict-vec "_table" VarCharVector)
         ^DenseUnionVector id-vec (.getChild evict-vec "id" DenseUnionVector)]
     (reify OpIndexer
       (indexOp [_ tx-op-idx]
-        (let [row-id (.nextRowId doc-idxer)
+        (let [row-id (.nextRowId live-chunk)
               evict-offset (.getOffset tx-ops-vec tx-op-idx)
               table (or (t/get-object table-vec evict-offset) "xt_docs")
               eid (t/get-object id-vec evict-offset)
@@ -395,7 +265,6 @@
 (defn reset-tx-fn-error! []
   (first (reset-vals! !last-tx-fn-error nil)))
 
-
 (defn- ->call-indexer ^core2.indexer.OpIndexer [allocator, ^DenseUnionVector tx-ops-vec, scan-src,
                                                 prepare-ra-cache, {:keys [tx-key] :as tx-opts}]
   (let [call-vec (.getStruct tx-ops-vec 4)
@@ -450,24 +319,23 @@
 (definterface SqlOpIndexer
   (^void indexOp [^core2.vector.IIndirectRelation inRelation, queryOpts]))
 
-(defn- ->sql-insert-indexer
-  ^core2.indexer.SqlOpIndexer
-  [^IInternalIdManager iid-mgr, ^ILogOpIndexer log-op-idxer, ^ITemporalTxIndexer temporal-idxer, ^IDocumentIndexer doc-idxer
-   {:keys [^Instant current-time]}]
+(defn- ->sql-insert-indexer ^core2.indexer.SqlOpIndexer [^IInternalIdManager iid-mgr, ^ILogOpIndexer log-op-idxer, ^ITemporalTxIndexer temporal-idxer
+                                                         ^ILiveChunkTx live-chunk, {:keys [^Instant current-time]}]
 
   (let [current-time-µs (util/instant->micros current-time)]
     (reify SqlOpIndexer
       (indexOp [_ in-rel {:keys [table]}]
         (let [row-count (.rowCount in-rel)
+            live-table (.liveTable live-chunk table)
               content-row-copiers (vec
                                    (for [^IIndirectVector in-col in-rel
                                          :when (not (temporal/temporal-column? (.getName in-col)))]
-                                     (content-row-copier doc-idxer table in-col)))
+                                     (content-row-copier live-table in-col)))
               id-col (.vectorForName in-rel "id")
               app-time-start-rdr (some-> (.vectorForName in-rel "application_time_start") (.monoReader t/temporal-col-type))
               app-time-end-rdr (some-> (.vectorForName in-rel "application_time_end") (.monoReader t/temporal-col-type))]
           (dotimes [idx row-count]
-            (let [row-id (.nextRowId doc-idxer)]
+            (let [row-id (.nextRowId live-chunk)]
               (doseq [^ContentRowCopier content-row-copier content-row-copiers]
                 (.copyContentRow content-row-copier row-id idx))
 
@@ -488,18 +356,17 @@
                 (.logPut log-op-idxer iid row-id start-app-time end-app-time)
                 (.indexPut temporal-idxer iid row-id start-app-time end-app-time new-entity?)))))))))
 
-(defn- ->sql-update-indexer
-  ^core2.indexer.SqlOpIndexer
-  [^IMetadataManager metadata-mgr, ^IBufferPool buffer-pool
-   ^ILogOpIndexer log-op-idxer, ^ITemporalTxIndexer temporal-idxer, ^IDocumentIndexer doc-idxer]
-
+(defn- ->sql-update-indexer ^core2.indexer.SqlOpIndexer [^IMetadataManager metadata-mgr, ^IBufferPool buffer-pool
+                                                         ^ILogOpIndexer log-op-idxer, ^ITemporalTxIndexer temporal-idxer
+                                                         ^ILiveChunkTx live-chunk]
   (reify SqlOpIndexer
     (indexOp [_ in-rel {:keys [table]}]
       (let [row-count (.rowCount in-rel)
+            live-table (.liveTable live-chunk table)
             content-row-copiers (->> (for [^IIndirectVector in-col in-rel
                                        :let [col-name (.getName in-col)]
                                        :when (not (temporal/temporal-column? col-name))]
-                                   [col-name (content-row-copier doc-idxer table in-col)])
+                                   [col-name (content-row-copier live-table in-col)])
                                  (into {}))
             iid-rdr (.monoReader (.vectorForName in-rel "_iid") :i64)
             row-id-rdr (.monoReader (.vectorForName in-rel "_row-id") :i64)
@@ -507,24 +374,25 @@
             app-time-end-rdr (.monoReader (.vectorForName in-rel "application_time_end") t/temporal-col-type)]
         (dotimes [idx row-count]
           (let [old-row-id (.readLong row-id-rdr idx)
-                new-row-id (.nextRowId doc-idxer)
+                new-row-id (.nextRowId live-chunk)
                 iid (.readLong iid-rdr idx)
                 start-app-time (.readLong app-time-start-rdr idx)
                 end-app-time (.readLong app-time-end-rdr idx)]
             (doseq [^ContentRowCopier content-row-copier (vals content-row-copiers)]
               (.copyContentRow content-row-copier new-row-id idx))
 
-            (letfn [(copy-row [^BigIntVector root-row-id-vec, ^ValueVector content-vec]
-                      (let [content-row-copier (content-row-copier doc-idxer table (iv/->direct-vec content-vec))]
+            (letfn [(copy-row [^String col-name, ^VectorSchemaRoot live-root]
+                      (let [^BigIntVector root-row-id-vec (.getVector live-root "_row-id")
+                            content-vec (.getVector live-root col-name)
+                            content-row-copier (content-row-copier live-table (iv/->direct-vec content-vec))]
                         ;; TODO these are sorted, so we could binary search instead
                         (dotimes [idx (.getValueCount root-row-id-vec)]
                           (when (= old-row-id (.get root-row-id-vec idx))
                             (.copyContentRow content-row-copier new-row-id idx)))))]
 
-              (doseq [[^String col-name, ^LiveColumn live-col] (.liveColumnsWith doc-idxer table old-row-id)
+              (doseq [[^String col-name, ^VectorSchemaRoot live-root] (.liveRootsWith live-table old-row-id)
                       :when (not (contains? content-row-copiers col-name))]
-                (copy-row (.row-id-vec live-col) (.content-vec live-col))
-                (copy-row (.transient-row-id-vec live-col) (.transient-content-vec live-col)))
+                (copy-row col-name live-root))
 
               (when-let [{:keys [^long chunk-idx cols]} (meta/row-id->cols metadata-mgr (name table) old-row-id)]
                 (doseq [{:keys [^String col-name ^long block-idx]} cols
@@ -538,14 +406,12 @@
                              (-> chunks
                                  (.forEachRemaining (reify Consumer
                                                       (accept [_ block-root]
-                                                        (let [^VectorSchemaRoot block-root block-root]
-                                                          (copy-row (.getVector block-root "_row-id")
-                                                                    (.getVector block-root col-name))))))))))))))
+                                                        (copy-row col-name block-root))))))))))))
 
             (.logPut log-op-idxer iid new-row-id start-app-time end-app-time)
             (.indexPut temporal-idxer iid new-row-id start-app-time end-app-time false)))))))
 
-(defn- ->sql-delete-indexer ^core2.indexer.SqlOpIndexer [^ILogOpIndexer log-op-idxer, ^ITemporalTxIndexer temporal-idxer, ^IDocumentIndexer doc-idxer]
+(defn- ->sql-delete-indexer ^core2.indexer.SqlOpIndexer [^ILogOpIndexer log-op-idxer, ^ITemporalTxIndexer temporal-idxer, ^ILiveChunkTx live-chunk]
   (reify SqlOpIndexer
     (indexOp [_ in-rel _query-opts]
       (let [row-count (.rowCount in-rel)
@@ -553,7 +419,7 @@
             app-time-start-rdr (.monoReader (.vectorForName in-rel "application_time_start") t/temporal-col-type)
             app-time-end-rdr (.monoReader (.vectorForName in-rel "application_time_end") t/temporal-col-type)]
         (dotimes [idx row-count]
-          (let [row-id (.nextRowId doc-idxer)
+          (let [row-id (.nextRowId live-chunk)
                 iid (.readLong iid-rdr idx)
                 start-app-time (.readLong app-time-start-rdr idx)
                 end-app-time (.readLong app-time-end-rdr idx)]
@@ -571,7 +437,7 @@
             (.indexEvict temporal-idxer iid)))))))
 
 (defn- ->sql-indexer ^core2.indexer.OpIndexer [^BufferAllocator allocator, ^IMetadataManager metadata-mgr, ^IBufferPool buffer-pool, ^IInternalIdManager iid-mgr
-                                               ^ILogOpIndexer log-op-idxer, ^ITemporalTxIndexer temporal-idxer, ^IDocumentIndexer doc-idxer
+                                               ^ILogOpIndexer log-op-idxer, ^ITemporalTxIndexer temporal-idxer, ^ILiveChunk doc-idxer
                                                ^DenseUnionVector tx-ops-vec, ^ScanSource scan-src, ^ConcurrentHashMap prepared-ra-cache
                                                {:keys [app-time-as-of-now?] :as tx-opts}]
   (let [sql-vec (.getStruct tx-ops-vec 0)
@@ -639,22 +505,6 @@
 
         nil))))
 
-(defn- live-cols->live-roots [live-cols]
-  (->> live-cols
-       (into {} (map (fn [[table-name ^Map live-cols]]
-                       (MapEntry/create table-name
-                                        (->> live-cols
-                                             (into {} (map (fn [[col-name ^LiveColumn live-col]]
-                                                             (MapEntry/create col-name (.liveRoot live-col))))))))))))
-
-(defn- live-cols->tx-live-roots [live-cols]
-  (->> live-cols
-       (into {} (map (fn [[table-name ^Map live-cols]]
-                       (MapEntry/create table-name
-                                        (->> live-cols
-                                             (into {} (map (fn [[col-name ^LiveColumn live-col]]
-                                                             (MapEntry/create col-name (.txLiveRoot live-col))))))))))))
-
 (deftype Indexer [^BufferAllocator allocator
                   ^ObjectStore object-store
                   ^IMetadataManager metadata-mgr
@@ -663,12 +513,12 @@
                   ^IInternalIdManager iid-mgr
                   ^IWatermarkManager wm-mgr
                   ^ILogIndexer log-indexer
+                  ^ILiveChunk live-chunk
+                  ^Map prepare-ra-cache
 
                   ^long max-rows-per-chunk
                   ^long max-rows-per-block
 
-                  ^Map live-columns
-                  ^ConcurrentHashMap prepare-ra-cache
                   ^:volatile-mutable ^long chunk-idx
                   ^:volatile-mutable ^TransactionInstant latest-completed-tx
                   ^:volatile-mutable ^long chunk-row-count
@@ -678,87 +528,87 @@
 
   TransactionIndexer
   (indexTx [this {:keys [sys-time] :as tx-key} tx-root]
-    (let [^DenseUnionVector tx-ops-vec (-> ^ListVector (.getVector tx-root "tx-ops")
-                                           (.getDataVector))
+    (with-open [live-chunk-tx (.startTx live-chunk chunk-idx (+ chunk-idx chunk-row-count))]
+      (let [^DenseUnionVector tx-ops-vec (-> ^ListVector (.getVector tx-root "tx-ops")
+                                             (.getDataVector))
 
-          log-op-idxer (.startTx log-indexer tx-key)
-          temporal-idxer (.startTx temporal-mgr tx-key)
-          doc-idxer (DocumentIndexer. allocator live-columns (+ chunk-idx chunk-row-count) 0)
+            log-op-idxer (.startTx log-indexer tx-key)
+            temporal-idxer (.startTx temporal-mgr tx-key)
 
-          scan-src (reify ScanSource
-                     (metadataManager [_] metadata-mgr)
-                     (bufferPool [_] buffer-pool)
-                     (txBasis [_] tx-key)
-                     (openWatermark [_]
-                       (wm/->Watermark nil (live-cols->live-roots live-columns) (live-cols->tx-live-roots live-columns)
-                                       temporal-idxer chunk-idx max-rows-per-block false)))
+            scan-src (reify ScanSource
+                       (metadataManager [_] metadata-mgr)
+                       (bufferPool [_] buffer-pool)
+                       (txBasis [_] tx-key)
+                       (openWatermark [_]
+                         (wm/->Watermark nil (.openWatermark live-chunk-tx)
+                                         temporal-idxer chunk-idx max-rows-per-block false)))
 
-          tx-opts {:current-time sys-time
-                   :app-time-as-of-now? (== 1 (-> ^BitVector (.getVector tx-root "application-time-as-of-now?")
-                                                  (.get 0)))
-                   :default-tz (ZoneId/of (str (-> (.getVector tx-root "default-tz")
-                                                   (.getObject 0))))
-                   :tx-key tx-key}]
+            tx-opts {:current-time sys-time
+                     :app-time-as-of-now? (== 1 (-> ^BitVector (.getVector tx-root "application-time-as-of-now?")
+                                                    (.get 0)))
+                     :default-tz (ZoneId/of (str (-> (.getVector tx-root "default-tz")
+                                                     (.getObject 0))))
+                     :tx-key tx-key}]
 
-      (letfn [(index-tx-ops [^DenseUnionVector tx-ops-vec]
-                (let [!put-idxer (delay (->put-indexer iid-mgr log-op-idxer temporal-idxer doc-idxer tx-ops-vec sys-time))
-                      !delete-idxer (delay (->delete-indexer iid-mgr log-op-idxer temporal-idxer doc-idxer tx-ops-vec sys-time))
-                      !evict-idxer (delay (->evict-indexer iid-mgr log-op-idxer temporal-idxer doc-idxer tx-ops-vec))
-                      !call-idxer (delay (->call-indexer allocator tx-ops-vec scan-src prepare-ra-cache tx-opts))
-                      !sql-idxer (delay (->sql-indexer allocator metadata-mgr buffer-pool iid-mgr
-                                                       log-op-idxer temporal-idxer doc-idxer
-                                                       tx-ops-vec scan-src prepare-ra-cache tx-opts))]
-                  (dotimes [tx-op-idx (.getValueCount tx-ops-vec)]
-                    (when-let [more-tx-ops (case (.getTypeId tx-ops-vec tx-op-idx)
-                                             0 (.indexOp ^OpIndexer @!sql-idxer tx-op-idx)
-                                             1 (.indexOp ^OpIndexer @!put-idxer tx-op-idx)
-                                             2 (.indexOp ^OpIndexer @!delete-idxer tx-op-idx)
-                                             3 (.indexOp ^OpIndexer @!evict-idxer tx-op-idx)
-                                             4 (.indexOp ^OpIndexer @!call-idxer tx-op-idx)
-                                             5 (throw abort-exn))]
-                      (try
-                        (index-tx-ops more-tx-ops)
-                        (finally
-                          (util/try-close more-tx-ops)))))))]
-        (let [e (try
-                  (index-tx-ops tx-ops-vec)
-                  (catch core2.RuntimeException e e)
-                  (catch core2.IllegalArgumentException e e)
-                  (catch InterruptedException e (throw e))
-                  (catch Throwable t
-                    (log/error t "error in indexer - FIXME memory leak here?")
-                    (throw t)))
-              wm-lock-stamp (.writeLock wm-lock)]
-          (try
-            (if e
-              (do
-                (when (not= e abort-exn)
-                  (log/debug e "aborted tx"))
-                (.abort temporal-idxer)
-                (.abort log-op-idxer)
-                (.abort doc-idxer))
+        (letfn [(index-tx-ops [^DenseUnionVector tx-ops-vec]
+                  (let [!put-idxer (delay (->put-indexer iid-mgr log-op-idxer temporal-idxer live-chunk-tx tx-ops-vec sys-time))
+                        !delete-idxer (delay (->delete-indexer iid-mgr log-op-idxer temporal-idxer live-chunk-tx tx-ops-vec sys-time))
+                        !evict-idxer (delay (->evict-indexer iid-mgr log-op-idxer temporal-idxer live-chunk-tx tx-ops-vec))
+                        !call-idxer (delay (->call-indexer allocator tx-ops-vec scan-src prepare-ra-cache tx-opts))
+                        !sql-idxer (delay (->sql-indexer allocator metadata-mgr buffer-pool iid-mgr
+                                                         log-op-idxer temporal-idxer live-chunk-tx
+                                                         tx-ops-vec scan-src prepare-ra-cache tx-opts))]
+                    (dotimes [tx-op-idx (.getValueCount tx-ops-vec)]
+                      (when-let [more-tx-ops (case (.getTypeId tx-ops-vec tx-op-idx)
+                                               0 (.indexOp ^OpIndexer @!sql-idxer tx-op-idx)
+                                               1 (.indexOp ^OpIndexer @!put-idxer tx-op-idx)
+                                               2 (.indexOp ^OpIndexer @!delete-idxer tx-op-idx)
+                                               3 (.indexOp ^OpIndexer @!evict-idxer tx-op-idx)
+                                               4 (.indexOp ^OpIndexer @!call-idxer tx-op-idx)
+                                               5 (throw abort-exn))]
+                        (try
+                          (index-tx-ops more-tx-ops)
+                          (finally
+                            (util/try-close more-tx-ops)))))))]
+          (let [e (try
+                    (index-tx-ops tx-ops-vec)
+                    (catch core2.RuntimeException e e)
+                    (catch core2.IllegalArgumentException e e)
+                    (catch InterruptedException e (throw e))
+                    (catch Throwable t
+                      (log/error t "error in indexer - FIXME memory leak here?")
+                      (throw t)))
+                wm-lock-stamp (.writeLock wm-lock)]
+            (try
+              (if e
+                (do
+                  (when (not= e abort-exn)
+                    (log/debug e "aborted tx"))
+                  (.abort temporal-idxer)
+                  (.abort log-op-idxer)
+                  (.abort live-chunk-tx))
 
-              (do
-                (let [tx-row-count (.commit doc-idxer)]
-                  (set! (.chunk-row-count this) (+ chunk-row-count tx-row-count)))
+                (do
+                  (let [tx-row-count (.commit live-chunk-tx)]
+                    (set! (.chunk-row-count this) (+ chunk-row-count tx-row-count)))
 
-                (.commit log-op-idxer)
+                  (.commit log-op-idxer)
 
-                (let [evicted-row-ids (.commit temporal-idxer)]
-                  #_{:clj-kondo/ignore [:missing-body-in-when]}
-                  (when-not (.isEmpty evicted-row-ids)
-                    ;; TODO create work item
-                    ))))
+                  (let [evicted-row-ids (.commit temporal-idxer)]
+                    #_{:clj-kondo/ignore [:missing-body-in-when]}
+                    (when-not (.isEmpty evicted-row-ids)
+                      ;; TODO create work item
+                      ))))
 
-            (set! (.-latest-completed-tx this) tx-key)
+              (set! (.-latest-completed-tx this) tx-key)
 
-            (finally
-              (.unlock wm-lock wm-lock-stamp)))))
+              (finally
+                (.unlock wm-lock wm-lock-stamp)))))
 
-      (when (>= chunk-row-count max-rows-per-chunk)
-        (finish-chunk! this))
+        (when (>= chunk-row-count max-rows-per-chunk)
+          (finish-chunk! this))
 
-      tx-key))
+        tx-key)))
 
   (openWatermark [this tx-key]
     (letfn [(maybe-existing-wm []
@@ -781,8 +631,7 @@
                     (try
                       (let [shared-wm (.wrapWatermark wm-mgr
                                                       (wm/->Watermark tx-key
-                                                                      (snapshot-live-cols live-columns)
-                                                                      (Collections/emptySortedMap)
+                                                                      (.openWatermark live-chunk chunk-idx)
                                                                       (.getTemporalWatermark temporal-mgr)
                                                                       chunk-idx max-rows-per-block true))]
                         (set! (.shared-wm this) shared-wm)
@@ -796,60 +645,35 @@
 
   (latestCompletedTx [_] latest-completed-tx)
 
-  IndexerPrivate
-  (writeColumn [_this live-column]
-    (let [^VectorSchemaRoot live-root (.liveRoot live-column)]
-      (with-open [write-root (VectorSchemaRoot/create (.getSchema live-root) allocator)]
-        (let [loader (VectorLoader. write-root)
-              row-counts (blocks/row-id-aligned-blocks live-root chunk-idx max-rows-per-block)]
-          (with-open [^ICursor slices (blocks/->slices live-root row-counts)]
-            (util/build-arrow-ipc-byte-buffer write-root :file
-              (fn [write-batch!]
-                (.forEachRemaining slices
-                                   (reify Consumer
-                                     (accept [_ sliced-root]
-                                       (with-open [arb (.getRecordBatch (VectorUnloader. sliced-root))]
-                                         (.load loader arb)
-                                         (write-batch!))))))))))))
-
-  (closeCols [_this]
-    (doseq [^LiveColumn live-column (->> (vals live-columns) (mapcat vals))]
-      (util/try-close live-column))
-
-    (.clear live-columns)
-    (.clear log-indexer))
-
   Finish
   (finish-chunk! [this]
-    (when-not (.isEmpty live-columns)
-      (log/debugf "finishing chunk '%x', tx '%s'" chunk-idx (pr-str latest-completed-tx))
+    (log/debugf "finishing chunk '%x', tx '%s'" chunk-idx (pr-str latest-completed-tx))
 
-      @(CompletableFuture/allOf (->> (cons
-                                      (.finishChunk log-indexer chunk-idx)
-                                      (for [[^String table-name, ^Map table-live-cols] live-columns
-                                            [^String col-name, ^LiveColumn live-column] table-live-cols]
-                                        (.putObject object-store (meta/->chunk-obj-key chunk-idx table-name col-name) (.writeColumn this live-column))))
+    (let [!chunk-metadata (.finishChunk live-chunk chunk-idx)]
+      @(CompletableFuture/allOf (->> [(.finishChunk log-indexer chunk-idx)
+                                      !chunk-metadata]
                                      (into-array CompletableFuture)))
+
       (.registerNewChunk temporal-mgr chunk-idx)
-      (.registerNewChunk metadata-mgr (live-cols->live-roots live-columns) chunk-idx)
+      (.finishChunk metadata-mgr chunk-idx @!chunk-metadata))
 
-      (let [wm-lock-stamp (.writeLock wm-lock)]
-        (try
-          (set! (.-chunk-idx this) (+ chunk-idx chunk-row-count))
-          (set! (.-chunk-row-count this) 0)
+    (let [wm-lock-stamp (.writeLock wm-lock)]
+      (try
+        (set! (.-chunk-idx this) (+ chunk-idx chunk-row-count))
+        (set! (.-chunk-row-count this) 0)
 
-          (when-let [^ISharedWatermark shared-wm (.shared-wm this)]
-            (set! (.shared-wm this) nil)
-            (.release shared-wm))
+        (when-let [^ISharedWatermark shared-wm (.shared-wm this)]
+          (set! (.shared-wm this) nil)
+          (.release shared-wm))
 
-          (.closeCols this)
-          (log/debug "finished chunk.")
-          (finally
-            (.unlock wm-lock wm-lock-stamp))))))
+        (log/debug "finished chunk.")
+        (finally
+          (.unlock wm-lock wm-lock-stamp))))
+
+    (.clear live-chunk))
 
   Closeable
-  (close [this]
-    (.closeCols this)
+  (close [_]
     (.close log-indexer)
     (some-> shared-wm .release)))
 
@@ -860,6 +684,7 @@
           :temporal-mgr (ig/ref ::temporal/temporal-manager)
           :watermark-mgr (ig/ref ::wm/watermark-manager)
           :internal-id-mgr (ig/ref :core2.indexer/internal-id-manager)
+          :live-chunk (ig/ref :core2/live-chunk)
           :buffer-pool (ig/ref ::bp/buffer-pool)
           :log-indexer (ig/ref :core2.indexer/log-indexer)
           :row-counts (ig/ref :core2/row-counts)
@@ -867,7 +692,7 @@
          opts))
 
 (defmethod ig/init-key :core2/indexer
-  [_ {:keys [allocator object-store metadata-mgr buffer-pool ^ITemporalManager temporal-mgr, ^IWatermarkManager watermark-mgr, internal-id-mgr log-indexer prepare-ra-cache]
+  [_ {:keys [allocator object-store metadata-mgr buffer-pool ^ITemporalManager temporal-mgr, ^IWatermarkManager watermark-mgr, internal-id-mgr log-indexer live-chunk prepare-ra-cache]
       {:keys [max-rows-per-chunk max-rows-per-block]} :row-counts
       :as deps}]
 
@@ -877,11 +702,9 @@
                     0)]
 
     (Indexer. allocator object-store metadata-mgr buffer-pool temporal-mgr internal-id-mgr watermark-mgr
-              log-indexer
+              log-indexer live-chunk prepare-ra-cache
 
               max-rows-per-chunk max-rows-per-block
-              (ConcurrentSkipListMap.) ; live-columns
-              prepare-ra-cache
               chunk-idx latest-tx 0
 
               nil ; watermark

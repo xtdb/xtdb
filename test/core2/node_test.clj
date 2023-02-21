@@ -101,7 +101,6 @@ VALUES (1, 'Happy 2024!', DATE '2024-01-01'),
                                       [:sql "INSERT INTO t2 (id, foo) VALUES ('thing', 't2-foo')"]])
         !tx2 (c2/submit-tx tu/*node* [[:sql "UPDATE t2 SET foo = 't2-foo-v2' WHERE t2.id = 'thing'"]])]
 
-
     (t/is (= [{:id "thing", :foo "t1-foo"}]
              (c2/sql-query tu/*node* "SELECT t1.id, t1.foo FROM t1"
                            {:basis {:tx !tx1}})))

@@ -22,10 +22,10 @@
            core2.operator.IRelationSelector
            (core2.vector IIndirectRelation IIndirectVector)
            core2.watermark.IWatermark
-           [java.util HashMap Iterator LinkedList List Map Queue]
+           [java.util HashMap LinkedList List Map Queue]
            [java.util.function Consumer Function]
            org.apache.arrow.memory.BufferAllocator
-           [org.apache.arrow.vector BigIntVector VarBinaryVector VectorSchemaRoot]
+           [org.apache.arrow.vector BigIntVector VarBinaryVector]
            [org.roaringbitmap IntConsumer RoaringBitmap]
            org.roaringbitmap.buffer.MutableRoaringBitmap
            org.roaringbitmap.longlong.Roaring64Bitmap))
@@ -78,7 +78,10 @@
                   (if (temporal/temporal-column? col-name)
                     [:timestamp-tz :micro "UTC"]
                     (t/merge-col-types (.columnType (.metadataManager src) (name table) (name col-name))
-                                       (.columnType wm (name table) (name col-name))))))]
+                                       (some-> (.liveChunk wm)
+                                               (.liveTable (name table))
+                                               (.liveColumn (name col-name))
+                                               (.columnType))))))]
 
         (->> scan-cols
              (into {} (map (juxt identity ->col-type)))))
@@ -338,8 +341,9 @@
                                         (util/->concat-cursor (->content-chunks metadata-mgr buffer-pool
                                                                                 (name table) content-col-names
                                                                                 metadata-pred)
-                                                              (.liveBlocks watermark (name table)
-                                                                           (or (not-empty content-col-names) #{"id"})))
+                                                              (some-> (.liveChunk watermark)
+                                                                      (.liveTable (name table))
+                                                                      (.liveBlocks (or (not-empty content-col-names) #{"id"}))))
                                         params)
                            (coalesce/->coalescing-cursor allocator)
                            (util/and-also-close watermark)))
