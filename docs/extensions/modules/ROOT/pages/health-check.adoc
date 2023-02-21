@@ -1,5 +1,4 @@
 = HTTP Health Server (Labs)
-:page-aliases: reference::http.adoc
 
 This document explains how to configure the XTDB HTTP Health Server module.
 
