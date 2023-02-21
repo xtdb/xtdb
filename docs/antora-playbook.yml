@@ -6,8 +6,8 @@ site:
   keys:
     main_site_url: 'https://xtdb.com/'
     main_site_title: 'XTDB - Home'
-    matomo_url: '//bunseki.juxt.pro/'
-    matomo_site_id: '4'
+    analytics_url: 'https://bunseki.juxt.pro'
+    analytics_site_id: 'c5026354-28df-4f0c-a17d-43d1a01b2c94'
     github_url: 'https://github.com/xtdb/xtdb'
     typesense_host: 'xtagzc25w84ufq37p-1.a1.typesense.net'
     typesense_api_key: '0zVHpGQFDUhgP9hazp1laLklfy00AlGD'
