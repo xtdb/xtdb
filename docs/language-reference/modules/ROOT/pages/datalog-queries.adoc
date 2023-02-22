@@ -840,14 +840,14 @@ include::example$test/xtdb/docs/examples_test.clj[tags=history-with-docs,indent=
 === Document History Range
 Retrievable entity versions can be bounded by four time coordinates:
 
-* valid-time-start
-* tx-time-start
-* valid-time-end
-* tx-time-end
+* start-valid-time
+* end-valid-time
+* start-tx
+* end-tx
 
-All coordinates are inclusive. All coordinates can be null. The specified sort-order direction will be relative to the actual order of the start/end times provided.
+All coordinates can be null. Start coordinates are inclusive and end coordinates are exclusive, however the specified sort-order direction will be relative to the actual order of the start/end times provided.
 
-The returned order is always sorted by valid-time first, and then tx-time second as the tie-break (e.g. when `with-corrections? true` is specified).
+The returned order is always sorted by `valid-time` first, and then `tx-time` second as the tie-break (e.g. when `with-corrections? true` is specified). `tx-id` is the tie-break when `tx-time` is equal.
 
 [source,clj]
 ----
