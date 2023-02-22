@@ -1,6 +1,5 @@
 (ns core2.live-chunk
-  (:require [clojure.tools.logging :as log]
-            [core2.blocks :as blocks]
+  (:require [core2.blocks :as blocks]
             core2.indexer.internal-id-manager
             [core2.metadata :as meta]
             core2.object-store
@@ -16,6 +15,7 @@
            java.lang.AutoCloseable
            (java.util HashMap Map)
            (java.util.concurrent CompletableFuture)
+           java.util.concurrent.atomic.AtomicLong
            java.util.function.Consumer
            (org.apache.arrow.memory BufferAllocator)
            (org.apache.arrow.vector BigIntVector ValueVector VectorLoader VectorSchemaRoot VectorUnloader)
@@ -45,7 +45,7 @@
   (^core2.live_chunk.ILiveColumnWatermark openWatermark [^boolean retain])
   (^boolean containsRowId [^long rowId])
   (^org.apache.arrow.vector.VectorSchemaRoot liveRoot [])
-  (^java.util.concurrent.CompletableFuture finishChunk [^long chunk-idx])
+  (^java.util.concurrent.CompletableFuture finishChunk [])
   (^void close []))
 
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
@@ -69,7 +69,7 @@
 (definterface ILiveTable
   (^core2.live_chunk.ILiveTableWatermark openWatermark [^boolean retain])
   (^core2.live_chunk.ILiveTableTx startTx [])
-  (^java.util.concurrent.CompletableFuture #_<chunk-metadata> finishChunk [^long chunk-idx])
+  (^java.util.concurrent.CompletableFuture finishChunk [])
 
   (^void close []))
 
@@ -93,12 +93,14 @@
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface ILiveChunk
   (^core2.live_chunk.ILiveTable liveTable [^String table])
-  (^core2.live_chunk.ILiveChunkWatermark openWatermark [^long chunk-idx])
+  (^core2.live_chunk.ILiveChunkWatermark openWatermark [])
 
-  (^core2.live_chunk.ILiveChunkTx startTx [^long chunkIdx, ^long startRowId])
+  (^core2.live_chunk.ILiveChunkTx startTx [])
 
-  (^java.util.concurrent.CompletableFuture #_<Iterable<chunk-metadata>> finishChunk [^long chunk-idx])
-  (^void clear [])
+  (^long chunkIdx [])
+  (^boolean isChunkFull [])
+
+  (^java.util.concurrent.CompletableFuture finishChunk [^core2.api.TransactionInstant latest-completed-tx])
   (^void close []))
 
 (deftype LiveColumnTx [^BigIntVector row-id-vec, ^ValueVector content-vec, ^Roaring64Bitmap row-id-bitmap
@@ -201,7 +203,7 @@
         AutoCloseable
         (close [_] (when retain? (.close live-root))))))
 
-  (finishChunk [_ chunk-idx]
+  (finishChunk [_]
     (.putObject object-store (meta/->chunk-obj-key chunk-idx table-name col-name)
                 (let [^Iterable vs [row-id-vec content-vec]
                       ^VectorSchemaRoot live-root (VectorSchemaRoot. vs)]
@@ -320,14 +322,14 @@
           (run! util/try-close (.values wms))
           (throw t)))))
 
-  (finishChunk [_ chunk-idx]
+  (finishChunk [_]
     (let [live-roots (-> live-columns
                          (update-vals (fn [^ILiveColumn live-col]
                                         (.liveRoot live-col))))
           !fut (CompletableFuture/allOf
                 (->> (cons (.finishTableChunk metadata-mgr chunk-idx table-name live-roots)
                            (for [^ILiveColumn live-column (vals live-columns)]
-                             (.finishChunk live-column chunk-idx)))
+                             (.finishChunk live-column)))
                      (into-array CompletableFuture)))
           chunk-metadata (meta/live-roots->chunk-metadata table-name live-roots)]
       (-> !fut
@@ -338,78 +340,72 @@
     (run! util/try-close (.values live-columns))
     (.clear live-columns)))
 
-(deftype LiveChunkTx [^BufferAllocator allocator, ^ObjectStore object-store, ^IMetadataManager metadata-mgr
-                      ^Map live-tables, ^Map live-table-txs,
-                      ^long max-rows-per-block
-                      ^long chunk-idx, ^long start-row-id
-                      ^:unsynchronized-mutable ^long tx-row-count]
-  ILiveChunkTx
-  (liveTable [_ table-name]
-    (letfn [(->live-table [table]
-              (LiveTable. allocator object-store metadata-mgr
-                          table (HashMap.)
-                          max-rows-per-block chunk-idx))
-
-            (->live-table-tx [table-name]
-              (-> ^ILiveTable
-                  (.computeIfAbsent live-tables table-name
-                                    (util/->jfn ->live-table))
-                  (.startTx)))]
-
-      (.computeIfAbsent live-table-txs table-name
-                        (util/->jfn ->live-table-tx))))
-
-  (openWatermark [_]
-    (let [wms (HashMap.)]
-      (try
-        (doseq [[table-name ^ILiveTableTx live-table] live-table-txs]
-          (.put wms table-name (.openWatermark live-table false)))
-
-        (doseq [[table-name ^ILiveTable live-table] live-tables]
-          (.computeIfAbsent wms table-name
-                            (util/->jfn (fn [_] (.openWatermark live-table false)))))
-
-        (reify ILiveChunkWatermark
-          (liveTable [_ table-name] (.get wms table-name))
-
-          AutoCloseable
-          (close [_] (run! util/try-close (.values wms))))
-
-        (catch Throwable t
-          (run! util/try-close (.values wms))
-          (throw t)))))
-
-  (nextRowId [this]
-    (let [tx-row-count tx-row-count]
-      (set! (.tx-row-count this) (inc tx-row-count))
-      (+ start-row-id tx-row-count)))
-
-  (commit [_]
-    (doseq [^ILiveTableTx live-table (.values live-table-txs)]
-      (.commit live-table))
-    tx-row-count)
-
-  (abort [_]
-    (doseq [^ILiveTableTx live-table (.values live-table-txs)]
-      (.abort live-table)))
-
-  AutoCloseable
-  (close [_]
-    (run! util/try-close (.values live-table-txs))
-    (.clear live-table-txs)))
-
 (deftype LiveChunk [^BufferAllocator allocator
                     ^ObjectStore object-store
                     ^IMetadataManager metadata-mgr
+                    ^long max-rows-per-chunk, ^long max-rows-per-block
                     ^Map live-tables
-                    ^long max-rows-per-block]
+                    ^:volatile-mutable ^long chunk-idx
+                    ^:volatile-mutable ^long chunk-row-count]
   ILiveChunk
   (liveTable [_ table] (.get live-tables table))
 
-  (startTx [_ chunk-idx start-row-id]
-    (LiveChunkTx. allocator object-store metadata-mgr live-tables (HashMap.) max-rows-per-block chunk-idx start-row-id 0))
+  (startTx [live-chunk]
+    (let [live-table-txs (HashMap.)
+          !chunk-row-count (AtomicLong. chunk-row-count)]
+      (reify ILiveChunkTx
+        (liveTable [_ table-name]
+          (letfn [(->live-table [table]
+                    (LiveTable. allocator object-store metadata-mgr
+                                table (HashMap.)
+                                max-rows-per-block chunk-idx))
 
-  (openWatermark [_ _chunk-idx]
+                  (->live-table-tx [table-name]
+                    (-> ^ILiveTable
+                        (.computeIfAbsent live-tables table-name
+                                          (util/->jfn ->live-table))
+                        (.startTx)))]
+
+            (.computeIfAbsent live-table-txs table-name
+                              (util/->jfn ->live-table-tx))))
+
+        (openWatermark [_]
+          (let [wms (HashMap.)]
+            (try
+              (doseq [[table-name ^ILiveTableTx live-table] live-table-txs]
+                (.put wms table-name (.openWatermark live-table false)))
+
+              (doseq [[table-name ^ILiveTable live-table] live-tables]
+                (.computeIfAbsent wms table-name
+                                  (util/->jfn (fn [_] (.openWatermark live-table false)))))
+
+              (reify ILiveChunkWatermark
+                (liveTable [_ table-name] (.get wms table-name))
+
+                AutoCloseable
+                (close [_] (run! util/try-close (.values wms))))
+
+              (catch Throwable t
+                (run! util/try-close (.values wms))
+                (throw t)))))
+
+        (nextRowId [_] (+ (.getAndIncrement !chunk-row-count) chunk-idx))
+
+        (commit [_]
+          (doseq [^ILiveTableTx live-table (.values live-table-txs)]
+            (.commit live-table))
+          (set! (.chunk-row-count live-chunk) (.get !chunk-row-count)))
+
+        (abort [_]
+          (doseq [^ILiveTableTx live-table (.values live-table-txs)]
+            (.abort live-table)))
+
+        AutoCloseable
+        (close [_]
+          (run! util/try-close (.values live-table-txs))
+          (.clear live-table-txs)))))
+
+  (openWatermark [_]
     (let [wms (HashMap.)]
       (try
         (doseq [[table-name ^ILiveTable live-table] live-tables]
@@ -425,20 +421,32 @@
           (run! util/try-close (.values wms))
           (throw t)))))
 
-  (finishChunk [_ chunk-idx]
+  (chunkIdx [_] chunk-idx)
+  (isChunkFull [_] (>= chunk-row-count max-rows-per-chunk))
+
+  (finishChunk [this-lc latest-completed-tx]
     (let [futs (for [^ILiveTable live-table (vals live-tables)]
-                 (.finishChunk live-table chunk-idx))]
+                 (.finishChunk live-table))]
 
       (-> (CompletableFuture/allOf (into-array CompletableFuture futs))
           (util/then-apply (fn [_]
-                             {:tables (into {} (keep deref) futs)})))))
+                             (.finishChunk metadata-mgr chunk-idx
+                                           {:latest-completed-tx latest-completed-tx
+                                            :latest-row-id (dec (+ chunk-idx chunk-row-count))
+                                            :tables (into {} (keep deref) futs)})
 
-  (clear [_]
-    (run! util/try-close (.values live-tables))
-    (.clear live-tables))
+                             (run! util/try-close (.values live-tables))
+                             (.clear live-tables)
+
+                             (set! (.chunk-idx this-lc)
+                                   (+ (.chunk-idx this-lc) (.chunk-row-count this-lc)))
+
+                             (set! (.chunk-row-count this-lc) 0))))))
 
   AutoCloseable
-  (close [this] (.clear this)))
+  (close [_]
+    (run! util/try-close (.values live-tables))
+    (.clear live-tables)))
 
 (defmethod ig/prep-key :core2/live-chunk [_ opts]
   (merge {:allocator (ig/ref :core2/allocator)
@@ -448,9 +456,14 @@
          opts))
 
 (defmethod ig/init-key :core2/live-chunk [_ {:keys [allocator object-store metadata-mgr]
-                                             {:keys [max-rows-per-block]} :row-counts}]
-  (LiveChunk. allocator object-store metadata-mgr
-              (HashMap.) max-rows-per-block))
+                                             {:keys [max-rows-per-chunk max-rows-per-block]} :row-counts}]
+  (let [chunk-idx (if-let [{:keys [^long latest-row-id]} (meta/latest-chunk-metadata metadata-mgr)]
+                    (inc latest-row-id)
+                    0)]
+    (LiveChunk. allocator object-store metadata-mgr
+                max-rows-per-chunk max-rows-per-block
+                (HashMap.)
+                chunk-idx 0)))
 
 (defmethod ig/halt-key! :core2/live-chunk [_ live-chunk]
   (util/try-close live-chunk))

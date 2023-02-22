@@ -33,7 +33,7 @@
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface IMetadataManager
   (^java.util.concurrent.CompletableFuture finishTableChunk [^long chunkIdx, ^String tableName, ^java.util.Map liveRoots])
-  (^java.util.concurrent.CompletableFuture finishChunk [^long chunkIdx, newChunkMetadata])
+  (^void finishChunk [^long chunkIdx, newChunkMetadata])
   (^java.util.NavigableMap chunksMetadata [])
   (^java.util.concurrent.CompletableFuture withMetadata [^long chunkIdx, ^String tableName, ^java.util.function.BiFunction #_#_<long, ITableMetadata> f])
   (columnType [^String tableName, ^String colName]))
@@ -439,7 +439,7 @@
                           ^long max-rows-per-block
                           ^NavigableMap chunks-metadata
                           ^Map table-metadata-idxs
-                          ^:unsynchronised-mutable ^Map col-types]
+                          ^:volatile-mutable ^Map col-types]
   IMetadataManager
   (finishTableChunk [_ chunk-idx table-name live-roots]
     (let [metadata-buf (with-open [metadata-root (VectorSchemaRoot/create table-metadata-schema allocator)]

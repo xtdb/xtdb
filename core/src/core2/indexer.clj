@@ -326,7 +326,7 @@
     (reify SqlOpIndexer
       (indexOp [_ in-rel {:keys [table]}]
         (let [row-count (.rowCount in-rel)
-            live-table (.liveTable live-chunk table)
+              live-table (.liveTable live-chunk table)
               content-row-copiers (vec
                                    (for [^IIndirectVector in-col in-rel
                                          :when (not (temporal/temporal-column? (.getName in-col)))]
@@ -516,19 +516,14 @@
                   ^ILiveChunk live-chunk
                   ^Map prepare-ra-cache
 
-                  ^long max-rows-per-chunk
-                  ^long max-rows-per-block
-
-                  ^:volatile-mutable ^long chunk-idx
                   ^:volatile-mutable ^TransactionInstant latest-completed-tx
-                  ^:volatile-mutable ^long chunk-row-count
 
                   ^:volatile-mutable ^ISharedWatermark shared-wm
                   ^StampedLock wm-lock]
 
   TransactionIndexer
   (indexTx [this {:keys [sys-time] :as tx-key} tx-root]
-    (with-open [live-chunk-tx (.startTx live-chunk chunk-idx (+ chunk-idx chunk-row-count))]
+    (with-open [live-chunk-tx (.startTx live-chunk)]
       (let [^DenseUnionVector tx-ops-vec (-> ^ListVector (.getVector tx-root "tx-ops")
                                              (.getDataVector))
 
@@ -540,8 +535,7 @@
                        (bufferPool [_] buffer-pool)
                        (txBasis [_] tx-key)
                        (openWatermark [_]
-                         (wm/->Watermark nil (.openWatermark live-chunk-tx)
-                                         temporal-idxer chunk-idx max-rows-per-block false)))
+                         (wm/->Watermark nil (.openWatermark live-chunk-tx) temporal-idxer false)))
 
             tx-opts {:current-time sys-time
                      :app-time-as-of-now? (== 1 (-> ^BitVector (.getVector tx-root "application-time-as-of-now?")
@@ -585,27 +579,26 @@
                   (when (not= e abort-exn)
                     (log/debug e "aborted tx"))
                   (.abort temporal-idxer)
-                  (.abort log-op-idxer)
-                  (.abort live-chunk-tx))
+                  (.abort live-chunk-tx)
+                  (.abort log-op-idxer))
 
                 (do
-                  (let [tx-row-count (.commit live-chunk-tx)]
-                    (set! (.chunk-row-count this) (+ chunk-row-count tx-row-count)))
-
-                  (.commit log-op-idxer)
+                  (.commit live-chunk-tx)
 
                   (let [evicted-row-ids (.commit temporal-idxer)]
                     #_{:clj-kondo/ignore [:missing-body-in-when]}
                     (when-not (.isEmpty evicted-row-ids)
                       ;; TODO create work item
-                      ))))
+                      ))
+
+                  (.commit log-op-idxer)))
 
               (set! (.-latest-completed-tx this) tx-key)
 
               (finally
                 (.unlock wm-lock wm-lock-stamp)))))
 
-        (when (>= chunk-row-count max-rows-per-chunk)
+        (when (.isChunkFull live-chunk)
           (finish-chunk! this))
 
         tx-key)))
@@ -631,9 +624,9 @@
                     (try
                       (let [shared-wm (.wrapWatermark wm-mgr
                                                       (wm/->Watermark tx-key
-                                                                      (.openWatermark live-chunk chunk-idx)
+                                                                      (.openWatermark live-chunk)
                                                                       (.getTemporalWatermark temporal-mgr)
-                                                                      chunk-idx max-rows-per-block true))]
+                                                                      true))]
                         (set! (.shared-wm this) shared-wm)
 
                         (.retain shared-wm))
@@ -647,33 +640,20 @@
 
   Finish
   (finish-chunk! [this]
-    (log/debugf "finishing chunk '%x', tx '%s'" chunk-idx (pr-str latest-completed-tx))
-
-    (let [!chunk-metadata (.finishChunk live-chunk chunk-idx)]
-      @(CompletableFuture/allOf (->> [(.finishChunk log-indexer chunk-idx)
-                                      !chunk-metadata]
-                                     (into-array CompletableFuture)))
-
+    (let [chunk-idx (.chunkIdx live-chunk)]
       (.registerNewChunk temporal-mgr chunk-idx)
-      (.finishChunk metadata-mgr chunk-idx
-                    (into {:latest-completed-tx latest-completed-tx
-                           :latest-row-id (dec (+ chunk-idx chunk-row-count))}
-                          @!chunk-metadata)))
+      @(.finishChunk log-indexer chunk-idx)
+      @(.finishChunk live-chunk latest-completed-tx))
 
     (let [wm-lock-stamp (.writeLock wm-lock)]
       (try
-        (set! (.-chunk-idx this) (+ chunk-idx chunk-row-count))
-        (set! (.-chunk-row-count this) 0)
-
         (when-let [^ISharedWatermark shared-wm (.shared-wm this)]
           (set! (.shared-wm this) nil)
           (.release shared-wm))
 
         (log/debug "finished chunk.")
         (finally
-          (.unlock wm-lock wm-lock-stamp))))
-
-    (.clear live-chunk))
+          (.unlock wm-lock wm-lock-stamp)))))
 
   Closeable
   (close [_]
@@ -690,25 +670,18 @@
           :live-chunk (ig/ref :core2/live-chunk)
           :buffer-pool (ig/ref ::bp/buffer-pool)
           :log-indexer (ig/ref :core2.indexer/log-indexer)
-          :row-counts (ig/ref :core2/row-counts)
           :prepare-ra-cache (ig/ref :core2/prepare-ra-cache)}
          opts))
 
 (defmethod ig/init-key :core2/indexer
-  [_ {:keys [allocator object-store ^IMetadataManager metadata-mgr, buffer-pool ^ITemporalManager temporal-mgr, ^IWatermarkManager watermark-mgr, internal-id-mgr log-indexer live-chunk prepare-ra-cache]
-      {:keys [max-rows-per-chunk max-rows-per-block]} :row-counts}]
+  [_ {:keys [allocator object-store metadata-mgr buffer-pool ^ITemporalManager temporal-mgr, ^IWatermarkManager watermark-mgr, internal-id-mgr log-indexer live-chunk prepare-ra-cache]}]
 
-  (let [{:keys [latest-row-id latest-completed-tx]} (some-> (.lastEntry (.chunksMetadata metadata-mgr))
-                                                            (.getValue))
-        chunk-idx (if latest-row-id
-                    (inc (long latest-row-id))
-                    0)]
+  (let [{:keys [latest-completed-tx]} (meta/latest-chunk-metadata metadata-mgr)]
 
     (Indexer. allocator object-store metadata-mgr buffer-pool temporal-mgr internal-id-mgr watermark-mgr
               log-indexer live-chunk prepare-ra-cache
 
-              max-rows-per-chunk max-rows-per-block
-              chunk-idx latest-completed-tx 0
+              latest-completed-tx
 
               nil ; watermark
               (StampedLock.))))

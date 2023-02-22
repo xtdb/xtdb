@@ -16,7 +16,6 @@
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface IWatermark
   (^core2.api.TransactionInstant txBasis [])
-  (^long chunkIdx [])
 
   (^core2.live_chunk.ILiveChunkWatermark liveChunk [])
 
@@ -41,11 +40,9 @@
 
 (deftype Watermark [^TransactionInstant tx-key, ^ILiveChunkWatermark live-chunk
                     ^ITemporalRelationSource temporal-roots-src
-                    ^long chunk-idx, ^int max-rows-per-block
                     ^boolean close-temporal-roots?]
   IWatermark
   (txBasis [_] tx-key)
-  (chunkIdx [_] chunk-idx)
   (liveChunk [_] live-chunk)
 
   (createTemporalRelation [_ allocator columns temporal-min-range temporal-max-range row-id-bitmap]
@@ -82,7 +79,6 @@
 
           (reify IWatermark
             (txBasis [_] (.txBasis wm))
-            (chunkIdx [_] (.chunkIdx wm))
             (liveChunk [_] (.liveChunk wm))
 
             (createTemporalRelation [_ allocator columns temporal-min-range temporal-max-range row-id-bitmap]

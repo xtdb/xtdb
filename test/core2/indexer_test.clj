@@ -101,8 +101,6 @@
 
         (t/testing "watermark"
           (with-open [^IWatermark watermark (.openWatermark idxer last-tx-key)]
-            (t/is (zero? (.chunkIdx watermark)))
-
             (let [live-blocks (-> (.liveChunk watermark)
                                   (.liveTable "xt_docs")
                                   (.liveBlocks ["id"]))
@@ -115,12 +113,6 @@
               (t/is (= [#{"id"}] @!res)))))
 
         (tu/finish-chunk! node)
-
-        (with-open [^IWatermark watermark (.openWatermark idxer last-tx-key)]
-          (t/is (= 4 (.chunkIdx watermark)))
-
-          #_ ; we no longer expose this...
-          (t/is (empty? (:live-roots watermark))))
 
         (t/is (= {:latest-completed-tx last-tx-key
                   :latest-row-id (dec total-number-of-ops)}
