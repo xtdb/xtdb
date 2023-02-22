@@ -48,7 +48,7 @@
 (defmethod ig/init-key :core2.indexer/internal-id-manager [_ {:keys [^IBufferPool buffer-pool, ^IMetadataManager metadata-mgr]}]
   (let [iid-mgr (InternalIdManager. (ConcurrentHashMap.))]
     (doseq [[chunk-idx chunk-metadata] (.chunksMetadata metadata-mgr)
-            {:keys [table]} chunk-metadata]
+            table (keys (:tables chunk-metadata))]
       (with-open [id-chunks (-> @(.getBuffer buffer-pool (meta/->chunk-obj-key chunk-idx table "id"))
                                 (util/->chunks {:close-buffer? true}))]
         (.forEachRemaining id-chunks

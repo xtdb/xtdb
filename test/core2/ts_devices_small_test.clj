@@ -1,14 +1,11 @@
 (ns core2.ts-devices-small-test
   (:require [clojure.test :as t]
+            [clojure.tools.logging :as log]
             [core2.ingester :as ingest]
+            [core2.metadata :as meta]
             [core2.test-util :as tu]
             [core2.ts-devices :as tsd]
-            [core2.util :as util]
-            [clojure.tools.logging :as log]
-            [core2.indexer :as idx]
-            [core2.object-store :as os]
-            [core2.buffer-pool :as bp]
-            [core2.indexer.log-indexer :as log-idx])
+            [core2.util :as util])
   (:import java.time.Duration))
 
 (def ^:private ^:dynamic *node*)
@@ -29,9 +26,10 @@
             (t/is (= last-tx-key (tu/latest-completed-tx node)))
             (tu/finish-chunk! node)
 
-            (t/is (= [last-tx-key (dec 1001000)]
-                     (log-idx/latest-tx {:object-store (tu/component ::os/file-system-object-store)
-                                         :buffer-pool (tu/component ::bp/buffer-pool)}))))
+            (t/is (= {:latest-completed-tx last-tx-key
+                      :latest-row-id (dec 1001000)}
+                     (-> (meta/latest-chunk-metadata (tu/component ::meta/metadata-manager))
+                         (select-keys [:latest-completed-tx :latest-row-id])))))
 
           (f))))))
 

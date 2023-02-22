@@ -9,7 +9,6 @@
             [core2.buffer-pool :as bp]
             [core2.indexer :as idx]
             core2.indexer.internal-id-manager
-            [core2.indexer.log-indexer :as log-idx]
             [core2.metadata :as meta]
             [core2.node :as node]
             [core2.object-store :as os]
@@ -85,13 +84,13 @@
     (util/delete-dir node-dir)
 
     (with-open [node (tu/->local-node {:node-dir node-dir})]
-      (let [system @(:!system node)
-            ^BufferAllocator a (:core2/allocator system)
-            ^ObjectStore os (::os/file-system-object-store system)
-            ^IBufferPool bp (::bp/buffer-pool system)
-            ^TransactionIndexer idxer (:core2/indexer system)]
+      (let [^BufferAllocator a (tu/component node :core2/allocator)
+            ^ObjectStore os (tu/component node ::os/file-system-object-store)
+            ^IBufferPool bp (tu/component node ::bp/buffer-pool)
+            mm (tu/component node ::meta/metadata-manager)
+            ^TransactionIndexer idxer (tu/component node :core2/indexer)]
 
-        (t/is (nil? (log-idx/latest-tx {:object-store os, :buffer-pool bp})))
+        (t/is (nil? (meta/latest-chunk-metadata mm)))
 
         (t/is (= last-tx-key
                  @(last (for [tx-ops txs]
@@ -123,9 +122,10 @@
           #_ ; we no longer expose this...
           (t/is (empty? (:live-roots watermark))))
 
-        (t/is (= {:latest-tx last-tx-key
+        (t/is (= {:latest-completed-tx last-tx-key
                   :latest-row-id (dec total-number-of-ops)}
-                 (log-idx/latest-tx {:object-store os, :buffer-pool bp})))
+                 (-> (meta/latest-chunk-metadata mm)
+                     (select-keys [:latest-completed-tx :latest-row-id]))))
 
         (let [objects-list (->> (.listObjects os) (filter #(str/ends-with? % "/metadata.arrow")))]
           (t/is (= 1 (count objects-list)))
@@ -138,7 +138,7 @@
           (let [buffer-name "chunk-00/xt_docs/metadata.arrow"
                 ^ArrowBuf buffer @(.getBuffer bp buffer-name)
                 footer (util/read-arrow-footer buffer)]
-            (t/is (= 3 (count (.buffers ^BufferPool bp))))
+            (t/is (= 2 (count (.buffers ^BufferPool bp))))
             (t/is (instance? ArrowBuf buffer))
             (t/is (= 2 (.getRefCount (.getReferenceManager ^ArrowBuf buffer))))
 
@@ -190,7 +190,7 @@
               (t/is (zero? (.getRefCount (.getReferenceManager ^ArrowBuf buffer))))
               (t/is (= size (.getSize (.getReferenceManager ^ArrowBuf buffer))))
               (t/is (zero? (.getAccountedSize (.getReferenceManager ^ArrowBuf buffer))))
-              (t/is (= 2 (count (.buffers ^BufferPool bp)))))))))))
+              (t/is (= 1 (count (.buffers ^BufferPool bp)))))))))))
 
 (t/deftest temporal-watermark-is-immutable-567
   (with-open [node (node/start-node {})]
@@ -394,7 +394,7 @@
                 info-reader (io/reader (io/resource "devices_mini_device_info.csv"))
                 readings-reader (io/reader (io/resource "devices_mini_readings.csv"))]
       (let [^ObjectStore os (tu/component node ::os/file-system-object-store)
-            ^IBufferPool bp (tu/component node ::bp/buffer-pool)
+            ^IMetadataManager mm (tu/component node ::meta/metadata-manager)
             device-infos (map ts/device-info-csv->doc (csv/read-csv info-reader))
             readings (map ts/readings-csv->doc (csv/read-csv readings-reader))
             [initial-readings rest-readings] (split-at (count device-infos) readings)
@@ -415,9 +415,10 @@
           (t/is (= last-tx-key (tu/latest-completed-tx node)))
           (tu/finish-chunk! node)
 
-          (t/is (= {:latest-tx last-tx-key
+          (t/is (= {:latest-completed-tx last-tx-key
                     :latest-row-id (dec (count tx-ops))}
-                   (log-idx/latest-tx {:object-store os, :buffer-pool bp})))
+                   (-> (meta/latest-chunk-metadata mm)
+                       (select-keys [:latest-completed-tx :latest-row-id]))))
 
           (let [objs (.listObjects os)]
             (t/is (= 4 (count (filter #(re-matches #"^chunk-\p{XDigit}+/temporal\.arrow$" %) objs))))
@@ -537,7 +538,6 @@
           (with-open [node (tu/->local-node (assoc node-opts :buffers-dir "buffers-1"))]
             (let [system @(:!system node)
                   ^ObjectStore os (::os/file-system-object-store system)
-                  ^BufferPool bp (::bp/buffer-pool system)
                   ^InternalIdManager iid-mgr (:core2.indexer/internal-id-manager system)
                   ^IMetadataManager mm (::meta/metadata-manager system)]
               (t/is (= first-half-tx-key
@@ -545,10 +545,10 @@
                            (tu/then-await-tx node (Duration/ofSeconds 10)))))
               (t/is (= first-half-tx-key (tu/latest-completed-tx node)))
 
-              (let [{:keys [^TransactionInstant latest-tx, latest-row-id]}
-                    (log-idx/latest-tx {:object-store os, :buffer-pool bp})]
+              (let [{:keys [^TransactionInstant latest-completed-tx, latest-row-id]}
+                    (meta/latest-chunk-metadata mm)]
 
-                (t/is (< (:tx-id latest-tx) (:tx-id first-half-tx-key)))
+                (t/is (< (:tx-id latest-completed-tx) (:tx-id first-half-tx-key)))
                 (t/is (< latest-row-id (count first-half-tx-ops)))
 
                 (let [objs (.listObjects os)]
@@ -668,11 +668,8 @@
 
     (with-open [node (tu/->local-node {:node-dir node-dir
                                        :clock (tu/->mock-clock)})]
-      (let [system @(:!system node)
-            ^ObjectStore os (::os/file-system-object-store system)
-            ^IBufferPool bp (::bp/buffer-pool system)]
-
-        (t/is (nil? (log-idx/latest-tx {:object-store os, :buffer-pool bp})))
+      (let [mm (tu/component node ::meta/metadata-manager)]
+        (t/is (nil? (meta/latest-chunk-metadata mm)))
 
         (let [last-tx-key (c2/map->TransactionInstant {:tx-id 0, :sys-time (util/->instant #inst "2020-01-01")})]
           (t/is (= last-tx-key

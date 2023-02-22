@@ -1,18 +1,16 @@
 (ns core2.indexer.log-indexer
-  (:require [core2.api :as c2]
-            [core2.blocks :as blocks]
+  (:require [core2.blocks :as blocks]
             [core2.util :as util]
             [core2.vector.writer :as vw]
             [juxt.clojars-mirrors.integrant.core :as ig])
-  (:import core2.buffer_pool.IBufferPool
-           core2.ICursor
+  (:import core2.ICursor
            core2.object_store.ObjectStore
            (core2.vector IVectorWriter)
            (java.io Closeable)
            (java.util.function Consumer)
-           (org.apache.arrow.memory ArrowBuf BufferAllocator)
+           (org.apache.arrow.memory BufferAllocator)
            (org.apache.arrow.vector BigIntVector BitVector TimeStampMicroTZVector VectorLoader VectorSchemaRoot VectorUnloader)
-           (org.apache.arrow.vector.complex ListVector StructVector)) )
+           (org.apache.arrow.vector.complex ListVector)) )
 
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface ILogOpIndexer
@@ -158,29 +156,3 @@
         (.close transient-log-writer)
         (.close log-writer)))))
 
-(defn- with-latest-log-chunk [{:keys [^ObjectStore object-store ^IBufferPool buffer-pool]} f]
-  (when-let [latest-chunk-idx (some-> (last (.listObjects object-store "chunk-metadata/"))
-                                      (->> (re-matches #"chunk-metadata/(\p{XDigit}+)\.arrow") second)
-                                      util/<-lex-hex-string)]
-    @(-> (.getBuffer buffer-pool (->log-obj-key latest-chunk-idx))
-         (util/then-apply
-           (fn [^ArrowBuf log-buffer]
-             (assert log-buffer)
-
-             (when log-buffer
-               (f log-buffer)))))))
-
-(defn latest-tx [deps]
-  (with-latest-log-chunk deps
-    (fn [log-buf]
-      (util/with-last-block log-buf
-        (fn [^VectorSchemaRoot log-root]
-          (let [tx-count (.getRowCount log-root)
-                ^BigIntVector tx-id-vec (.getVector log-root "tx-id")
-                ^TimeStampMicroTZVector sys-time-vec (.getVector log-root "system-time")
-                ^BigIntVector row-id-vec (-> ^ListVector (.getVector log-root "ops")
-                                             ^StructVector (.getDataVector)
-                                             (.getChild "row-id"))]
-            {:latest-tx (c2/->TransactionInstant (.get tx-id-vec (dec tx-count))
-                                                 (util/micros->instant (.get sys-time-vec (dec tx-count))))
-             :latest-row-id (.get row-id-vec (dec (.getValueCount row-id-vec)))}))))))

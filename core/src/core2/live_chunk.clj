@@ -430,7 +430,8 @@
                  (.finishChunk live-table chunk-idx))]
 
       (-> (CompletableFuture/allOf (into-array CompletableFuture futs))
-          (util/then-apply (fn [_] (into [] (keep deref) futs))))))
+          (util/then-apply (fn [_]
+                             {:tables (into {} (keep deref) futs)})))))
 
   (clear [_]
     (run! util/try-close (.values live-tables))
@@ -446,7 +447,8 @@
           :row-counts (ig/ref :core2/row-counts)}
          opts))
 
-(defmethod ig/init-key :core2/live-chunk [_ {:keys [allocator object-store metadata-mgr], {:keys [max-rows-per-block]} :row-counts}]
+(defmethod ig/init-key :core2/live-chunk [_ {:keys [allocator object-store metadata-mgr]
+                                             {:keys [max-rows-per-block]} :row-counts}]
   (LiveChunk. allocator object-store metadata-mgr
               (HashMap.) max-rows-per-block))
 

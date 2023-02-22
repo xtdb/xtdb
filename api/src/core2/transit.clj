@@ -24,7 +24,7 @@
 (def tj-write-handlers
   (merge (-> {Period "time/period"
               LocalDate "time/date"
-              LocalDateTime  "time/date-time"
+              LocalDateTime "time/date-time"
               ZonedDateTime "time/zoned-date-time"
               OffsetTime "time/offset-time"
               Instant "time/instant"

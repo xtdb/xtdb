@@ -17,8 +17,9 @@
 
         org.roaringbitmap/RoaringBitmap {:mvn/version "0.9.26"}
 
+        com.cognitect/transit-clj {:mvn/version "1.0.329"}
         pro.juxt.clojars-mirrors.integrant/integrant {:mvn/version "0.8.0"}
-        org.babashka/sci {:mvn/version "0.6.37"}
+        org.babashka/sci {:mvn/version "0.6.37"} ; TODO Maven Central mirror
 
         commons-codec/commons-codec {:mvn/version "1.15"}}
 

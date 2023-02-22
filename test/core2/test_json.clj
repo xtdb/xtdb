@@ -43,11 +43,16 @@
 
   ([^Path expected-dir, ^Path actual-dir, file-pattern]
    (doseq [^Path path (iterator-seq (.iterator (Files/walk actual-dir (make-array FileVisitOption 0))))
-           :let [file-name (str (.getFileName path))]
-           :when (and (str/ends-with? file-name ".arrow")
+           :let [file-name (str (.getFileName path))
+                 file-type (cond
+                             (str/ends-with? file-name ".arrow") :arrow
+                             (str/ends-with? file-name ".transit.json") :transit)]
+           :when (and file-type
                       (or (nil? file-pattern)
                           (re-matches file-pattern file-name)))]
-     (doto (write-arrow-json-file path)
+     (doto (case file-type
+             :arrow (write-arrow-json-file path)
+             :transit path)
        #_ ; uncomment this to reset the expected file (but don't commit it)
        (copy-expected-file expected-dir actual-dir)))
 

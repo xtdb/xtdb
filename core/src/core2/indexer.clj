@@ -655,7 +655,10 @@
                                      (into-array CompletableFuture)))
 
       (.registerNewChunk temporal-mgr chunk-idx)
-      (.finishChunk metadata-mgr chunk-idx @!chunk-metadata))
+      (.finishChunk metadata-mgr chunk-idx
+                    (into {:latest-completed-tx latest-completed-tx
+                           :latest-row-id (dec (+ chunk-idx chunk-row-count))}
+                          @!chunk-metadata)))
 
     (let [wm-lock-stamp (.writeLock wm-lock)]
       (try
@@ -692,11 +695,11 @@
          opts))
 
 (defmethod ig/init-key :core2/indexer
-  [_ {:keys [allocator object-store metadata-mgr buffer-pool ^ITemporalManager temporal-mgr, ^IWatermarkManager watermark-mgr, internal-id-mgr log-indexer live-chunk prepare-ra-cache]
-      {:keys [max-rows-per-chunk max-rows-per-block]} :row-counts
-      :as deps}]
+  [_ {:keys [allocator object-store ^IMetadataManager metadata-mgr, buffer-pool ^ITemporalManager temporal-mgr, ^IWatermarkManager watermark-mgr, internal-id-mgr log-indexer live-chunk prepare-ra-cache]
+      {:keys [max-rows-per-chunk max-rows-per-block]} :row-counts}]
 
-  (let [{:keys [latest-row-id latest-tx]} (log-idx/latest-tx deps)
+  (let [{:keys [latest-row-id latest-completed-tx]} (some-> (.lastEntry (.chunksMetadata metadata-mgr))
+                                                            (.getValue))
         chunk-idx (if latest-row-id
                     (inc (long latest-row-id))
                     0)]
@@ -705,7 +708,7 @@
               log-indexer live-chunk prepare-ra-cache
 
               max-rows-per-chunk max-rows-per-block
-              chunk-idx latest-tx 0
+              chunk-idx latest-completed-tx 0
 
               nil ; watermark
               (StampedLock.))))
