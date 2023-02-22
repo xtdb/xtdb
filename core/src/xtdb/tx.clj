@@ -10,6 +10,7 @@
             [xtdb.error :as err]
             [xtdb.fork :as fork]
             [xtdb.io :as xio]
+            [xtdb.status :as status]
             [xtdb.system :as sys]
             [xtdb.tx.conform :as txc]
             [xtdb.tx.event :as txe])
@@ -461,6 +462,10 @@
 
   db/LatestCompletedTx
   (latest-completed-tx [_] (db/latest-completed-tx index-store))
+
+  status/Status
+  (status-map [_]
+    {:ingester-failed? (some? @!error)})
 
   Closeable
   (close [_]

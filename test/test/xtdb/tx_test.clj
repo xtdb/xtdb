@@ -1554,3 +1554,12 @@
                    [::xt/fn :put-foo 42]])
     (xt/sync node)
     (t/is (fix/spin-until-true 1000 #(= 1 (:answer (xt/attribute-stats node)))))))
+
+(t/deftest ingester-failed-returned-by-status-test
+  (t/is (false? (:ingester-failed? (xt/status *api*))))
+
+  (with-redefs [tx/strict-fetch-docs (fn [& _] (throw (Exception. "boom")))]
+    (xt/submit-tx *api* [[::xt/put {:xt/id "boom"}]])
+    (try (xt/sync *api*) (catch Throwable _)))
+
+  (t/is (true? (:ingester-failed? (xt/status *api*)))))
