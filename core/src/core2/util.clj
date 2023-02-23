@@ -207,23 +207,6 @@
                                          #{StandardOpenOption/READ StandardOpenOption/WRITE}))]
      (.map in map-mode 0 (.size in)))))
 
-(defn write-buffer-to-path [^ByteBuffer from-buffer ^Path to-path]
-  (with-open [file-ch (->file-channel to-path write-new-file-opts)
-              buf-ch (->seekable-byte-channel from-buffer)]
-    (.transferFrom file-ch buf-ch 0 (.size buf-ch))))
-
-(defn atomic-move [^Path from-path ^Path to-path]
-  (Files/move from-path to-path (into-array CopyOption [StandardCopyOption/ATOMIC_MOVE]))
-  to-path)
-
-(defn write-buffer-to-path-atomically [^ByteBuffer from-buffer ^Path to-path]
-  (let [to-path-temp (.resolveSibling to-path (str "." (UUID/randomUUID)))]
-    (try
-      (write-buffer-to-path from-buffer to-path-temp)
-      (atomic-move to-path-temp to-path)
-      (finally
-        (Files/deleteIfExists to-path-temp)))))
-
 (def ^:private file-deletion-visitor
   (proxy [SimpleFileVisitor] []
     (visitFile [file _]
@@ -253,6 +236,24 @@
 (defn ->temp-file ^Path [^String prefix ^String suffix]
   (doto (Files/createTempFile prefix suffix (make-array FileAttribute 0))
     (delete-file)))
+
+(defn write-buffer-to-path [^ByteBuffer from-buffer ^Path to-path]
+  (with-open [file-ch (->file-channel to-path write-new-file-opts)
+              buf-ch (->seekable-byte-channel from-buffer)]
+    (.transferFrom file-ch buf-ch 0 (.size buf-ch))))
+
+(defn atomic-move [^Path from-path ^Path to-path]
+  (Files/move from-path to-path (into-array CopyOption [StandardCopyOption/ATOMIC_MOVE]))
+  to-path)
+
+(defn write-buffer-to-path-atomically [^ByteBuffer from-buffer, ^Path root-path, ^Path to-path]
+  (let [to-path-temp (doto (.resolve root-path (str ".tmp/" (UUID/randomUUID)))
+                       (-> (.getParent) mkdirs))]
+    (try
+      (write-buffer-to-path from-buffer to-path-temp)
+      (atomic-move to-path-temp to-path)
+      (finally
+        (Files/deleteIfExists to-path-temp)))))
 
 (defn ->supplier {:style/indent :defn} ^java.util.function.Supplier [f]
   (reify Supplier

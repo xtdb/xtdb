@@ -108,7 +108,7 @@
           (if (identical? (FileSystems/getDefault) (.getFileSystem to-path))
             (if (util/path-exists to-path)
               to-path
-              (util/write-buffer-to-path-atomically buf to-path))
+              (util/write-buffer-to-path-atomically buf root-path to-path))
 
             (util/write-buffer-to-path buf to-path))))))
 
