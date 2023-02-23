@@ -20,5 +20,18 @@
       "children" : [ ]
     }]
   },
-  "batches" : [ ]
+  "batches" : [{
+    "count" : 0,
+    "columns" : [{
+      "name" : "_row-id",
+      "count" : 0,
+      "VALIDITY" : [ ],
+      "DATA" : [ ]
+    },{
+      "name" : "id",
+      "count" : 0,
+      "TYPE_ID" : [ ],
+      "OFFSET" : [ ]
+    }]
+  }]
 }

@@ -8,7 +8,7 @@
 (t/use-fixtures :each tu/with-allocator)
 
 (deftest test-scan
-  (with-open [node (node/start-node {:core2/row-counts {:max-rows-per-chunk 2, :max-rows-per-block 2}})]
+  (with-open [node (node/start-node {:core2/live-chunk {:rows-per-block 2 , :rows-per-chunk 2}})]
     (let [_tx (-> (c2/submit-tx node [[:put {:id "foo1" :_table "foo"}]
                                       [:put {:id "bar1" :_table "bar"}]])
                   (tu/then-await-tx node))

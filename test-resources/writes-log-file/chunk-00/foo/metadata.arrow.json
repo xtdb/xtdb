@@ -74,54 +74,54 @@
     }]
   },
   "batches" : [{
-    "count" : 1,
+    "count" : 0,
     "columns" : [{
       "name" : "column",
-      "count" : 1,
-      "VALIDITY" : [1],
-      "OFFSET" : [0,2],
-      "DATA" : ["id"]
+      "count" : 0,
+      "VALIDITY" : [ ],
+      "OFFSET" : [0],
+      "DATA" : [ ]
     },{
       "name" : "block-idx",
-      "count" : 1,
-      "VALIDITY" : [0],
-      "DATA" : [0]
+      "count" : 0,
+      "VALIDITY" : [ ],
+      "DATA" : [ ]
     },{
       "name" : "root-column",
-      "count" : 1,
-      "VALIDITY" : [0],
+      "count" : 0,
+      "VALIDITY" : [ ],
       "children" : [{
         "name" : "min-row-id",
-        "count" : 1,
-        "VALIDITY" : [0],
-        "DATA" : ["0"]
+        "count" : 0,
+        "VALIDITY" : [ ],
+        "DATA" : [ ]
       },{
         "name" : "max-row-id",
-        "count" : 1,
-        "VALIDITY" : [0],
-        "DATA" : ["0"]
+        "count" : 0,
+        "VALIDITY" : [ ],
+        "DATA" : [ ]
       },{
         "name" : "row-id-bloom",
-        "count" : 1,
-        "VALIDITY" : [0],
-        "OFFSET" : [0,0],
-        "DATA" : [""]
+        "count" : 0,
+        "VALIDITY" : [ ],
+        "OFFSET" : [0],
+        "DATA" : [ ]
       }]
     },{
       "name" : "count",
-      "count" : 1,
-      "VALIDITY" : [1],
-      "DATA" : ["0"]
+      "count" : 0,
+      "VALIDITY" : [ ],
+      "DATA" : [ ]
     },{
       "name" : "types",
-      "count" : 1,
-      "VALIDITY" : [1]
+      "count" : 0,
+      "VALIDITY" : [ ]
     },{
       "name" : "bloom",
-      "count" : 1,
-      "VALIDITY" : [1],
-      "OFFSET" : [0,8],
-      "DATA" : ["3a30000000000000"]
+      "count" : 0,
+      "VALIDITY" : [ ],
+      "OFFSET" : [0],
+      "DATA" : [ ]
     }]
   }]
 }

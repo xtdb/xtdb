@@ -1,6 +1,5 @@
 (ns core2.metadata
   (:require [cognitect.transit :as transit]
-            [core2.blocks :as blocks]
             [core2.bloom :as bloom]
             core2.buffer-pool
             [core2.expression.comparator :as expr.comp]
@@ -12,27 +11,39 @@
             [juxt.clojars-mirrors.integrant.core :as ig])
   (:import [clojure.lang MapEntry]
            core2.buffer_pool.IBufferPool
-           core2.ICursor
            core2.object_store.ObjectStore
+           (core2.vector IIndirectVector)
            (java.io ByteArrayInputStream ByteArrayOutputStream)
            java.lang.AutoCloseable
            java.nio.ByteBuffer
            (java.util ArrayList HashMap Map NavigableMap TreeMap)
            (java.util.concurrent ConcurrentHashMap)
            (java.util.function Consumer Function)
+           java.util.stream.IntStream
            (org.apache.arrow.memory ArrowBuf BufferAllocator)
            (org.apache.arrow.vector BigIntVector BitVector IntVector ValueVector VarBinaryVector VarCharVector VectorSchemaRoot)
            (org.apache.arrow.vector.complex DenseUnionVector ListVector StructVector)
            (org.apache.arrow.vector.types Types$MinorType)
-           (org.apache.arrow.vector.types.pojo ArrowType$Bool Field FieldType Schema)
+           (org.apache.arrow.vector.types.pojo ArrowType$Bool ArrowType$Union Field FieldType Schema)
            org.apache.arrow.vector.util.Text
-           org.roaringbitmap.RoaringBitmap))
+           (org.roaringbitmap RoaringBitmap)))
 
 (set! *unchecked-math* :warn-on-boxed)
 
+#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
+(definterface IColumnMetadataWriter
+  (^void writeBlockMetadata [^core2.vector.IIndirectRelation liveRel, ^int blockIdx])
+  (^void writeChunkMetadata [^core2.vector.IIndirectRelation liveRel]))
+
+#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
+(definterface ITableMetadataWriter
+  (^core2.metadata.IColumnMetadataWriter columnMetadataWriter [^String colName])
+  (^java.util.concurrent.CompletableFuture finishChunk [])
+  (^void close []))
+
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface IMetadataManager
-  (^java.util.concurrent.CompletableFuture finishTableChunk [^long chunkIdx, ^String tableName, ^java.util.Map liveRoots])
+  (^core2.metadata.ITableMetadataWriter openTableMetadataWriter [^String table-name, ^long chunk-idx])
   (^void finishChunk [^long chunkIdx, newChunkMetadata])
   (^java.util.NavigableMap chunksMetadata [])
   (^java.util.concurrent.CompletableFuture withMetadata [^long chunkIdx, ^String tableName, ^java.util.function.BiFunction #_#_<long, ITableMetadata> f])
@@ -152,7 +163,7 @@
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (definterface NestedMetadataWriter
-  (appendNestedMetadata ^core2.metadata.ContentMetadataWriter [^org.apache.arrow.vector.ValueVector contentVector]))
+  (appendNestedMetadata ^core2.metadata.ContentMetadataWriter [^core2.vector.IIndirectVector contentCol]))
 
 #_{:clj-kondo/ignore [:unused-binding]}
 (defmulti type->metadata-writer
@@ -184,7 +195,7 @@
                                                      (FieldType. true ArrowType$Bool/INSTANCE nil (col-type->type-metadata col-type))
                                                      []))]
     (reify NestedMetadataWriter
-      (appendNestedMetadata [_ _content-vec]
+      (appendNestedMetadata [_ _content-col]
         (reify ContentMetadataWriter
           (writeContentMetadata [_ types-vec-idx]
             (.setSafeToOne bit-vec types-vec-idx)))))))
@@ -215,24 +226,28 @@
         min-vec (.getChild struct-vec "min")
         max-vec (.getChild struct-vec "max")]
     (reify NestedMetadataWriter
-      (appendNestedMetadata [_ content-vec]
-        (reify ContentMetadataWriter
-          (writeContentMetadata [_ types-vec-idx]
-            (.setIndexDefined struct-vec types-vec-idx)
+      (appendNestedMetadata [_ content-col]
+        (let [content-vec (.getVector content-col)]
+          (reify ContentMetadataWriter
+            (writeContentMetadata [_ types-vec-idx]
+              (.setIndexDefined struct-vec types-vec-idx)
 
-            (let [min-comparator (expr.comp/->comparator (iv/->direct-vec content-vec) (iv/->direct-vec min-vec) :nulls-last)
-                  max-comparator (expr.comp/->comparator (iv/->direct-vec content-vec) (iv/->direct-vec max-vec) :nulls-last)]
+              (let [min-comparator (expr.comp/->comparator content-col (iv/->direct-vec min-vec) :nulls-last)
+                    max-comparator (expr.comp/->comparator content-col (iv/->direct-vec max-vec) :nulls-first)]
 
-              (dotimes [values-idx (.getValueCount content-vec)]
-                (when (or (.isNull min-vec types-vec-idx)
-                          (and (not (.isNull content-vec values-idx))
-                               (neg? (.applyAsInt min-comparator values-idx types-vec-idx))))
-                  (.copyFromSafe min-vec values-idx types-vec-idx content-vec))
+                (.setNull min-vec types-vec-idx)
+                (.setNull max-vec types-vec-idx)
+                (dotimes [values-idx (.getValueCount content-col)]
+                  (let [values-vec-idx (.getIndex content-col values-idx)]
+                    (when (or (.isNull min-vec types-vec-idx)
+                              (and (not (.isNull content-vec values-vec-idx))
+                                   (neg? (.applyAsInt min-comparator values-idx types-vec-idx))))
+                      (.copyFromSafe min-vec values-vec-idx types-vec-idx content-vec))
 
-                (when (or (.isNull max-vec types-vec-idx)
-                          (and (not (.isNull content-vec values-idx))
-                               (pos? (.applyAsInt max-comparator values-idx types-vec-idx))))
-                  (.copyFromSafe max-vec values-idx types-vec-idx content-vec))))))))))
+                    (when (or (.isNull max-vec types-vec-idx)
+                              (and (not (.isNull content-vec values-vec-idx))
+                                   (pos? (.applyAsInt max-comparator values-idx types-vec-idx))))
+                      (.copyFromSafe max-vec values-vec-idx types-vec-idx content-vec))))))))))))
 
 (doseq [type-head #{:int :float :utf8 :varbinary :timestamp-tz :timestamp-local :date :interval :time-local}]
   (defmethod type->metadata-writer type-head [_write-col-meta! metadata-root col-type] (->min-max-type-handler metadata-root col-type)))
@@ -296,9 +311,17 @@
                                                            (FieldType. true (.getType Types$MinorType/INT) nil (col-type->type-metadata col-type))
                                                            []))]
     (reify NestedMetadataWriter
-      (appendNestedMetadata [_ content-vec]
-        (let [^ListVector content-vec content-vec]
-          (write-col-meta! (.getDataVector content-vec))
+      (appendNestedMetadata [_ content-col]
+        (let [list-rdr (.listReader content-col)
+              ^ListVector content-vec (.getVector content-col)
+              data-vec (.getDataVector content-vec)
+              idxs (RoaringBitmap.)]
+          (dotimes [idx (.getValueCount content-col)]
+            (.add idxs
+                  (.getElementStartIndex list-rdr idx)
+                  (.getElementEndIndex list-rdr idx)))
+          ;; HACK needs to be selected
+          (write-col-meta! (iv/->indirect-vec data-vec (.toArray idxs)))
           (let [data-meta-idx (dec (.getRowCount metadata-root))]
             (reify ContentMetadataWriter
               (writeContentMetadata [_ types-vec-idx]
@@ -316,14 +339,14 @@
                                                               [(types/col-type->field "$data" [:union #{:null :i32}])]))
         ^IntVector nested-col-idxs-vec (.getDataVector struct-meta-vec)]
     (reify NestedMetadataWriter
-      (appendNestedMetadata [_ content-vec]
-        (let [^StructVector content-vec content-vec
-              sub-cols (vec content-vec)
-              sub-col-count (count sub-cols)
+      (appendNestedMetadata [_ content-col]
+        (let [struct-rdr (.structReader content-col)
+              struct-ks (vec (.structKeys struct-rdr))
+              sub-col-count (count struct-ks)
               sub-col-idxs (int-array sub-col-count)]
 
           (dotimes [n sub-col-count]
-            (write-col-meta! (nth sub-cols n))
+            (write-col-meta! (.readerForKey struct-rdr (nth struct-ks n)))
             (aset sub-col-idxs n (dec (.getRowCount metadata-root))))
 
           (reify ContentMetadataWriter
@@ -333,8 +356,9 @@
                   (.setSafe nested-col-idxs-vec (+ start-idx n) (aget sub-col-idxs n)))
                 (.endValue struct-meta-vec types-vec-idx sub-col-count)))))))))
 
-(defn write-meta [^VectorSchemaRoot metadata-root, live-roots, ^long chunk-idx, ^long max-rows-per-block]
-  (let [^VarCharVector column-name-vec (.getVector metadata-root "column")
+(defn open-table-meta-writer [^BufferAllocator allocator, ^ObjectStore object-store, ^String table-name, ^long chunk-idx]
+  (let [metadata-root (VectorSchemaRoot/create table-metadata-schema allocator)
+        ^VarCharVector column-name-vec (.getVector metadata-root "column")
 
         ^IntVector block-idx-vec (.getVector metadata-root "block-idx")
 
@@ -351,56 +375,74 @@
 
         type-metadata-writers (HashMap.)]
 
-    (letfn [(write-root-col-row-ids! [^BigIntVector row-id-vec]
-              (let [value-count (.getValueCount row-id-vec)]
+    (letfn [(write-root-col-row-ids! [^IIndirectVector row-id-col]
+              (let [value-count (.getValueCount row-id-col)
+                    row-id-rdr (.monoReader row-id-col :i64)]
                 (when-not (zero? value-count)
                   (let [meta-idx (dec (.getRowCount metadata-root))]
                     (.setIndexDefined root-col-vec meta-idx)
-                    (.setSafe min-row-id-vec meta-idx (.get row-id-vec 0))
-                    (.setSafe max-row-id-vec meta-idx (.get row-id-vec (dec value-count)))
-                    (bloom/write-bloom row-id-bloom-vec meta-idx row-id-vec)))))
+                    (.setSafe min-row-id-vec meta-idx (.readLong row-id-rdr 0))
+                    (.setSafe max-row-id-vec meta-idx (.readLong row-id-rdr (dec value-count)))
+                    (bloom/write-bloom row-id-bloom-vec meta-idx row-id-col)))))
 
-            (write-col-meta! [^DenseUnionVector content-vec]
-              (let [content-writers (->> (seq content-vec)
-                                         (into [] (keep (fn [^ValueVector values-vec]
-                                                          (when-not (zero? (.getValueCount values-vec))
-                                                            (let [^NestedMetadataWriter nested-meta-writer
-                                                                  (.computeIfAbsent type-metadata-writers (types/field->col-type (.getField values-vec))
-                                                                                    (reify Function
-                                                                                      (apply [_ col-type]
-                                                                                        (type->metadata-writer write-col-meta! metadata-root col-type))))]
+            (write-col-meta! [^IIndirectVector content-col]
+              (let [^DenseUnionVector content-vec (.getVector content-col)
+                    ^ArrowType$Union duv-type (.getType (.getField content-vec))
+                    content-writers (->> (.getTypeIds duv-type)
+                                         (into [] (keep (fn [^long type-id]
+                                                          (let [^ValueVector values-vec (.getVectorByType content-vec type-id)
+                                                                sel (IntStream/builder)]
 
-                                                              (.appendNestedMetadata nested-meta-writer values-vec)))))))
+                                                            (dotimes [idx (.getValueCount content-col)]
+                                                              (let [idx (.getIndex content-col idx)]
+                                                                (when (= type-id (.getTypeId content-vec idx))
+                                                                  (.add sel (.getOffset content-vec idx)))))
+
+                                                            (let [values-col (iv/->indirect-vec values-vec (.toArray (.build sel)))]
+                                                              (when-not (zero? (.getValueCount values-col))
+                                                                (let [^NestedMetadataWriter nested-meta-writer
+                                                                      (.computeIfAbsent type-metadata-writers (types/field->col-type (.getField values-vec))
+                                                                                        (reify Function
+                                                                                          (apply [_ col-type]
+                                                                                            (type->metadata-writer write-col-meta! metadata-root col-type))))]
+
+                                                                  (.appendNestedMetadata nested-meta-writer values-col)))))))))
 
                     meta-idx (.getRowCount metadata-root)]
-                (.setRowCount metadata-root (inc meta-idx))
-                (.setSafe column-name-vec meta-idx (Text. (.getName content-vec)))
-                (.setSafe count-vec meta-idx (.getValueCount content-vec))
-                (bloom/write-bloom bloom-vec meta-idx content-vec)
+                (.setSafe column-name-vec meta-idx (Text. (.getName content-col)))
+                (.setSafe count-vec meta-idx (.getValueCount content-col))
+                (bloom/write-bloom bloom-vec meta-idx content-col)
 
                 (.setIndexDefined types-vec meta-idx)
 
                 (doseq [^ContentMetadataWriter content-writer content-writers]
-                  (.writeContentMetadata content-writer meta-idx))))]
+                  (.writeContentMetadata content-writer meta-idx))
 
-      (doseq [[^String col-name, ^VectorSchemaRoot live-root] (sort-by key live-roots)]
-        (write-col-meta! (.getVector live-root col-name))
-        (write-root-col-row-ids! (.getVector live-root "_row-id"))
+                (.setRowCount metadata-root (inc meta-idx))))]
 
-        (let [block-row-counts (blocks/row-id-aligned-blocks live-root chunk-idx max-rows-per-block)]
-          (with-open [^ICursor slices (blocks/->slices live-root block-row-counts)]
-            (loop [block-idx 0]
-              (when (.tryAdvance slices
-                                 (reify Consumer
-                                   (accept [_ live-slice]
-                                     (let [^VectorSchemaRoot live-slice live-slice]
-                                       (when-not (zero? (.getRowCount live-slice))
-                                         (write-col-meta! (.getVector live-slice col-name))
-                                         (write-root-col-row-ids! (.getVector live-slice "_row-id"))
-                                         (.setSafe block-idx-vec (dec (.getRowCount metadata-root)) block-idx))))))
-                (recur (inc block-idx))))))))
+      (reify ITableMetadataWriter
+        (columnMetadataWriter [_ col-name]
+          (reify IColumnMetadataWriter
+            (writeBlockMetadata [_ live-rel block-idx]
+              (when (not (zero? (.rowCount live-rel)))
+                (write-col-meta! (.vectorForName live-rel col-name))
+                (write-root-col-row-ids! (.vectorForName live-rel "_row-id"))
+                (.setSafe block-idx-vec (dec (.getRowCount metadata-root)) block-idx)))
 
-    (.syncSchema metadata-root)))
+            (writeChunkMetadata [_ live-rel]
+              (when (not (zero? (.rowCount live-rel)))
+                (write-col-meta! (.vectorForName live-rel col-name))
+                (write-root-col-row-ids! (.vectorForName live-rel "_row-id"))))))
+
+        (finishChunk [_]
+          (.syncSchema metadata-root)
+
+          (let [metadata-buf (util/root->arrow-ipc-byte-buffer metadata-root :file)]
+            (.putObject object-store (->table-metadata-obj-key chunk-idx table-name) metadata-buf)))
+
+        AutoCloseable
+        (close [_]
+          (.close metadata-root))))))
 
 (defn ->table-metadata-idxs [^VectorSchemaRoot metadata-root]
   (let [col-idx-cache (HashMap.)
@@ -436,17 +478,12 @@
 (deftype MetadataManager [^BufferAllocator allocator
                           ^ObjectStore object-store
                           ^IBufferPool buffer-pool
-                          ^long max-rows-per-block
                           ^NavigableMap chunks-metadata
                           ^Map table-metadata-idxs
                           ^:volatile-mutable ^Map col-types]
   IMetadataManager
-  (finishTableChunk [_ chunk-idx table-name live-roots]
-    (let [metadata-buf (with-open [metadata-root (VectorSchemaRoot/create table-metadata-schema allocator)]
-                         (write-meta metadata-root live-roots chunk-idx max-rows-per-block)
-                         (util/root->arrow-ipc-byte-buffer metadata-root :file))]
-
-      (.putObject object-store (->table-metadata-obj-key chunk-idx table-name) metadata-buf)))
+  (openTableMetadataWriter [_ table-name chunk-idx]
+    (open-table-meta-writer allocator object-store table-name chunk-idx))
 
   (finishChunk [this chunk-idx new-chunk-metadata]
     @(.putObject object-store (->chunk-metadata-obj-key chunk-idx) (write-chunk-metadata new-chunk-metadata))
@@ -471,6 +508,22 @@
   AutoCloseable
   (close [_]
     (.clear chunks-metadata)))
+
+(defmethod ig/prep-key ::metadata-manager [_ opts]
+  (merge {:allocator (ig/ref :core2/allocator)
+          :object-store (ig/ref :core2/object-store)
+          :buffer-pool (ig/ref :core2.buffer-pool/buffer-pool)}
+         opts))
+
+(defmethod ig/init-key ::metadata-manager [_ {:keys [allocator ^ObjectStore object-store buffer-pool], :as deps}]
+  (let [chunks-metadata (load-chunks-metadata deps)]
+    (MetadataManager. allocator object-store buffer-pool
+                      chunks-metadata
+                      (ConcurrentHashMap.)
+                      (->> (vals chunks-metadata) (reduce merge-col-types {})))))
+
+(defmethod ig/halt-key! ::metadata-manager [_ mgr]
+  (util/try-close mgr))
 
 (defn with-metadata [^IMetadataManager metadata-mgr, ^long chunk-idx, ^String table-name, f]
   (.withMetadata metadata-mgr chunk-idx table-name (util/->jbifn f)))
@@ -508,25 +561,6 @@
                                 {:chunk-idx chunk-idx, :cols cols}))))
          (remove nil?)
          first)))
-
-(defmethod ig/prep-key ::metadata-manager [_ opts]
-  (merge {:allocator (ig/ref :core2/allocator)
-          :object-store (ig/ref :core2/object-store)
-          :buffer-pool (ig/ref :core2.buffer-pool/buffer-pool)
-          :row-counts (ig/ref :core2/row-counts)}
-         opts))
-
-(defmethod ig/init-key ::metadata-manager [_ {:keys [allocator ^ObjectStore object-store buffer-pool]
-                                              {:keys [max-rows-per-block]} :row-counts
-                                              :as deps}]
-  (let [chunks-metadata (load-chunks-metadata deps)]
-    (MetadataManager. allocator object-store buffer-pool max-rows-per-block
-                      chunks-metadata
-                      (ConcurrentHashMap.)
-                      (->> (vals chunks-metadata) (reduce merge-col-types {})))))
-
-(defmethod ig/halt-key! ::metadata-manager [_ mgr]
-  (util/try-close mgr))
 
 (defn latest-chunk-metadata [^IMetadataManager metadata-mgr]
   (some-> (.lastEntry (.chunksMetadata metadata-mgr))

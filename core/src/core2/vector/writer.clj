@@ -121,6 +121,17 @@
 
 (declare ^core2.vector.IVectorWriter vec->writer)
 
+(defn- duv-type-id ^java.lang.Byte [^DenseUnionVector duv, col-type]
+  (let [field (.getField duv)
+        type-ids (.getTypeIds ^ArrowType$Union (.getType field))
+        duv-leg-key (types/col-type->duv-leg-key col-type)]
+    (-> (keep-indexed (fn [idx ^Field sub-field]
+                        (when (= duv-leg-key (-> (types/field->col-type sub-field)
+                                                 (types/col-type->duv-leg-key)))
+                          (aget type-ids idx)))
+                      (.getChildren field))
+        (first))))
+
 (deftype DuvWriter [^DenseUnionVector dest-duv,
                     ^"[Lcore2.vector.IVectorWriter;" writers-by-type-id
                     ^Map writers-by-type
@@ -183,7 +194,7 @@
 
                                                (types/col-type->field field-name col-type))
 
-                                type-id (or (iv/duv-type-id dest-duv col-type)
+                                type-id (or (duv-type-id dest-duv col-type)
                                             (.registerNewTypeId dest-duv field))]
 
                             (when-not (.getVectorByType dest-duv type-id)

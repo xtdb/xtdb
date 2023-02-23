@@ -1,12 +1,11 @@
 (ns core2.indexer
   (:require [clojure.tools.logging :as log]
             [core2.api :as c2]
-            [core2.bloom :as bloom]
             [core2.buffer-pool :as bp]
             [core2.datalog :as d]
             [core2.error :as err]
             core2.indexer.internal-id-manager
-            [core2.indexer.log-indexer :as log-idx]
+            core2.indexer.log-indexer
             core2.live-chunk
             [core2.metadata :as meta]
             core2.object-store
@@ -38,31 +37,16 @@
            java.lang.AutoCloseable
            (java.time Instant ZoneId)
            (java.util HashMap Map)
-           (java.util.concurrent CompletableFuture ConcurrentHashMap)
+           (java.util.concurrent ConcurrentHashMap)
            (java.util.concurrent.locks StampedLock)
            (java.util.function Consumer Function)
            (org.apache.arrow.memory BufferAllocator)
-           (org.apache.arrow.vector BigIntVector BitVector TimeStampVector ValueVector VarBinaryVector VarCharVector VectorSchemaRoot)
+           (org.apache.arrow.vector BigIntVector BitVector TimeStampVector VarBinaryVector VarCharVector VectorSchemaRoot)
            (org.apache.arrow.vector.complex DenseUnionVector ListVector)
            (org.apache.arrow.vector.ipc ArrowStreamReader)
            org.roaringbitmap.RoaringBitmap))
 
 (set! *unchecked-math* :warn-on-boxed)
-
-(defmethod ig/prep-key :core2/row-counts [_ opts]
-  (merge {:max-rows-per-block 1000
-          :max-rows-per-chunk 100000}
-         opts))
-
-(defmethod ig/init-key :core2/row-counts [_ {:keys [max-rows-per-chunk] :as opts}]
-  (let [bloom-false-positive-probability (bloom/bloom-false-positive-probability? max-rows-per-chunk)]
-    (when (> bloom-false-positive-probability 0.05)
-      (log/warn "Bloom should be sized for large chunks:" max-rows-per-chunk
-                "false positive probability:" bloom-false-positive-probability
-                "bits:" bloom/bloom-bits
-                "can be set via system property core2.bloom.bits")))
-
-  opts)
 
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface TransactionIndexer
@@ -72,6 +56,7 @@
   (^core2.api.TransactionInstant latestCompletedTx []))
 
 (defprotocol Finish
+  (^void finish-block! [_])
   (^void finish-chunk! [_]))
 
 (def ^:private abort-exn (err/runtime-err :abort-exn))
@@ -598,6 +583,9 @@
               (finally
                 (.unlock wm-lock wm-lock-stamp)))))
 
+        (while (.isBlockFull live-chunk)
+          (finish-block! this))
+
         (when (.isChunkFull live-chunk)
           (finish-chunk! this))
 
@@ -639,6 +627,26 @@
   (latestCompletedTx [_] latest-completed-tx)
 
   Finish
+  (finish-block! [this]
+    (try
+      (.finishBlock live-chunk)
+      (.finishBlock log-indexer)
+
+      (let [wm-lock-stamp (.writeLock wm-lock)]
+        (try
+          (when-let [^ISharedWatermark shared-wm (.shared-wm this)]
+            (set! (.shared-wm this) nil)
+            (.release shared-wm))
+
+          (.nextBlock live-chunk)
+
+          (finally
+            (.unlock wm-lock wm-lock-stamp))))
+
+      (catch Throwable t
+        (clojure.tools.logging/error t "fail")
+        (throw t))))
+
   (finish-chunk! [this]
     (let [chunk-idx (.chunkIdx live-chunk)]
       (.registerNewChunk temporal-mgr chunk-idx)
@@ -651,9 +659,14 @@
           (set! (.shared-wm this) nil)
           (.release shared-wm))
 
-        (log/debug "finished chunk.")
+        (.nextChunk live-chunk)
+
         (finally
-          (.unlock wm-lock wm-lock-stamp)))))
+          (.unlock wm-lock wm-lock-stamp))))
+
+    (.nextChunk log-indexer)
+
+    (log/debug "finished chunk."))
 
   Closeable
   (close [_]

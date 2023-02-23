@@ -66,7 +66,7 @@
 
       (reader-for-key v col-name))))
 
-#_{:clj-kondo/ignore [:unused-binding]}
+#_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface IAbstractListVector
   (^int getElementStartIndex [^int idx])
   (^int getElementEndIndex [^int idx])
@@ -235,7 +235,27 @@
 
   (polyReader [this col-type]
     (-> (.polyReader v col-type)
-        (vec/->IndirectVectorPolyReader this))))
+        (vec/->IndirectVectorPolyReader this)))
+
+  (structReader [_]
+    (let [struct-rdr (.structReader v)]
+      (reify IStructReader
+        (structKeys [_] (.structKeys struct-rdr))
+        (readerForKey [_ col-name]
+          (-> (.readerForKey struct-rdr col-name)
+              (.select idxs))))))
+
+  (listReader [this]
+    (let [inner-rdr (.listReader v)]
+      (reify IListReader
+        (isPresent [_ idx] (.isPresent inner-rdr (.getIndex this idx)))
+        (getElementStartIndex [_ idx] (.getElementStartIndex inner-rdr (.getIndex this idx)))
+        (getElementEndIndex [_ idx] (.getElementEndIndex inner-rdr (.getIndex this idx)))
+        (elementCopier [_ w]
+          (let [inner-copier (.elementCopier inner-rdr w)]
+            (reify IListElementCopier
+              (copyElement [_ idx n]
+                (.copyElement inner-copier (.getIndex this idx) n)))))))))
 
 (defn ->direct-vec ^core2.vector.IIndirectVector [^ValueVector in-vec]
   (DirectVector. in-vec (.getName in-vec)))
@@ -282,7 +302,7 @@
                     (.copy in-col allocator))
                   (.rowCount in-rel)))
 
-(deftype SliceVector [^IIndirectVector col, ^long start-idx, ^long len]
+(defrecord SliceVector [^IIndirectVector col, ^long start-idx, ^long len]
   IIndirectVector
   (getVector [_] (.getVector col))
   (getIndex [_ idx] (+ start-idx idx))
@@ -310,6 +330,10 @@
 (defn slice-col ^core2.vector.IIndirectVector [^IIndirectVector col, ^long start-idx, ^long len]
   (SliceVector. col start-idx len))
 
+(defn slice-rel [^IIndirectRelation rel, ^long start-idx, ^long len]
+  (->indirect-rel (for [col rel]
+                    (slice-col col start-idx len))))
+
 (defn rel->rows ^java.lang.Iterable [^IIndirectRelation rel]
   (let [ks (for [^IIndirectVector col rel]
              (keyword (.getName col)))]
@@ -329,8 +353,7 @@
   (tryAdvance [this c]
     (if (.hasNext row-counts)
       (let [^long row-count (.next row-counts)]
-        (.accept c (->indirect-rel (for [col rel]
-                                     (slice-col col start-idx row-count))))
+        (.accept c (slice-rel rel start-idx row-count))
         (set! (.-start-idx this) (+ (.-start-idx this) row-count))
         true)
       false))
@@ -341,24 +364,3 @@
 
 (defn ->slice-cursor [^IIndirectRelation rel, ^Iterable row-counts]
   (SliceCursor. rel 0 (.iterator row-counts)))
-
-(deftype DuvChildReader [^IIndirectVector parent-col
-                         ^DenseUnionVector parent-duv
-                         ^byte type-id
-                         ^ValueVector type-vec]
-  IIndirectVector
-  (getVector [_] type-vec)
-  (getIndex [_ idx] (.getOffset parent-duv (.getIndex parent-col idx)))
-  (getName [_] (.getName parent-col))
-  (withName [_ name] (DuvChildReader. (.withName parent-col name) parent-duv type-id type-vec)))
-
-(defn duv-type-id ^java.lang.Byte [^DenseUnionVector duv, col-type]
-  (let [field (.getField duv)
-        type-ids (.getTypeIds ^ArrowType$Union (.getType field))
-        duv-leg-key (ty/col-type->duv-leg-key col-type)]
-    (-> (keep-indexed (fn [idx ^Field sub-field]
-                        (when (= duv-leg-key (-> (ty/field->col-type sub-field)
-                                                 (ty/col-type->duv-leg-key)))
-                          (aget type-ids idx)))
-                      (.getChildren field))
-        (first))))

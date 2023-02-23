@@ -50,7 +50,7 @@
           "children" : [ ]
         },{
           "name" : "application-time-start",
-          "nullable" : true,
+          "nullable" : false,
           "type" : {
             "name" : "timestamp",
             "unit" : "MICROSECOND",
@@ -59,7 +59,7 @@
           "children" : [ ]
         },{
           "name" : "application-time-end",
-          "nullable" : true,
+          "nullable" : false,
           "type" : {
             "name" : "timestamp",
             "unit" : "MICROSECOND",

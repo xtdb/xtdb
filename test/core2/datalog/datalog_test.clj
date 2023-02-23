@@ -883,7 +883,7 @@
                                :spectre)))))
 
 (t/deftest bug-non-string-table-names-599
-  (with-open [node (node/start-node {:core2/row-counts {:max-rows-per-block 10, :max-rows-per-chunk 100}})]
+  (with-open [node (node/start-node {:core2/live-chunk {:rows-per-block 10, :rows-per-chunk 1000}})]
     (letfn [(submit-ops! [ids]
               (last (for [tx-ops (->> (for [id ids]
                                         [:put {:id id,
@@ -908,7 +908,7 @@
         (t/is (= 160 (count-table tx)))))))
 
 (t/deftest bug-dont-throw-on-non-existing-column-597
-  (with-open [node (node/start-node {:core2/row-counts {:max-rows-per-block 10, :max-rows-per-chunk 100}})]
+  (with-open [node (node/start-node {:core2/live-chunk {:rows-per-block 10, :rows-per-chunk 1000}})]
     (letfn [(submit-ops! [ids]
               (last (for [tx-ops (->> (for [id ids]
                                         [:put {:id id,
@@ -935,7 +935,7 @@
                                                (assoc :basis {:tx tx2})))))))))
 
 (t/deftest add-better-metadata-support-for-keywords
-  (with-open [node (node/start-node {:core2/row-counts {:max-rows-per-block 10, :max-rows-per-chunk 100}})]
+  (with-open [node (node/start-node {:core2/live-chunk {:rows-per-block 10, :rows-per-chunk 1000}})]
     (letfn [(submit-ops! [ids]
               (last (for [tx-ops (->> (for [id ids]
                                         [:put {:id id,

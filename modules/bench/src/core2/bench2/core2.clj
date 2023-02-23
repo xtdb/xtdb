@@ -193,8 +193,7 @@
     {:core2.log/local-directory-log {:root-path (.resolve path "log")}
      :core2.tx-producer/tx-producer {}
      :core2.buffer-pool/buffer-pool {:cache-path (.resolve path "buffers")}
-     :core2.object-store/file-system-object-store {:root-path (.resolve path "objects")}
-     :core2/row-counts {}}))
+     :core2.object-store/file-system-object-store {:root-path (.resolve path "objects")}}))
 
 (defn- ->worker [node]
   (let [clock (Clock/systemUTC)

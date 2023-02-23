@@ -7,7 +7,9 @@
            core2.object_store.ObjectStore
            (core2.vector IVectorWriter)
            (java.io Closeable)
+           java.util.ArrayList
            (java.util.function Consumer)
+           java.util.concurrent.atomic.AtomicInteger
            (org.apache.arrow.memory BufferAllocator)
            (org.apache.arrow.vector BigIntVector BitVector TimeStampMicroTZVector VectorLoader VectorSchemaRoot VectorUnloader)
            (org.apache.arrow.vector.complex ListVector)) )
@@ -23,8 +25,9 @@
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface ILogIndexer
   (^core2.indexer.log_indexer.ILogOpIndexer startTx [^core2.api.TransactionInstant txKey])
+  (^void finishBlock [])
   (^java.util.concurrent.CompletableFuture finishChunk [^long chunkIdx])
-  (^void clear [])
+  (^void nextChunk [])
   (^void close []))
 
 (def ^:private log-ops-col-type
@@ -32,8 +35,8 @@
              [:list
               [:struct {iid :i64
                         row-id [:union #{:null :i64}]
-                        application-time-start [:union #{:null [:timestamp-tz :micro "UTC"]}]
-                        application-time-end [:union #{:null [:timestamp-tz :micro "UTC"]}]
+                        application-time-start [:timestamp-tz :micro "UTC"]
+                        application-time-end [:timestamp-tz :micro "UTC"]
                         evict? :bool}]]}])
 
 (defn- ->log-obj-key [chunk-idx]
@@ -41,12 +44,10 @@
 
 (defmethod ig/prep-key :core2.indexer/log-indexer [_ opts]
   (merge {:allocator (ig/ref :core2/allocator)
-          :object-store (ig/ref :core2/object-store)
-          :row-counts (ig/ref :core2/row-counts)}
+          :object-store (ig/ref :core2/object-store)}
          opts))
 
-(defmethod ig/init-key :core2.indexer/log-indexer [_ {:keys [^BufferAllocator allocator, ^ObjectStore object-store],
-                                                      {:keys [^long max-rows-per-block]} :row-counts}]
+(defmethod ig/init-key :core2.indexer/log-indexer [_ {:keys [^BufferAllocator allocator, ^ObjectStore object-store]}]
   (let [log-writer (vw/->rel-writer allocator)
         transient-log-writer (vw/->rel-writer allocator)
 
@@ -72,7 +73,10 @@
         ^TimeStampMicroTZVector app-time-end-vec (.getVector app-time-end-writer)
 
         evict-writer (.writerForName ops-data-writer "evict?")
-        ^BitVector evict-vec (.getVector evict-writer)]
+        ^BitVector evict-vec (.getVector evict-writer)
+
+        block-row-counts (ArrayList.)
+        !block-row-count (AtomicInteger.)]
 
     (reify ILogIndexer
       (startTx [_ tx-key]
@@ -120,7 +124,8 @@
             (.setValueCount ops-vec 1)
             (vw/append-rel log-writer (vw/rel-writer->reader transient-log-writer))
 
-            (.clear transient-log-writer))
+            (.clear transient-log-writer)
+            (.getAndIncrement !block-row-count))
 
           (abort [_]
             (.clear ops-vec)
@@ -128,16 +133,19 @@
             (.setValueCount ops-vec 1)
             (vw/append-rel log-writer (vw/rel-writer->reader transient-log-writer))
 
-            (.clear transient-log-writer))))
+            (.clear transient-log-writer)
+            (.getAndIncrement !block-row-count))))
+
+      (finishBlock [_]
+        (.add block-row-counts (.getAndSet !block-row-count 0)))
 
       (finishChunk [_ chunk-idx]
         (let [log-root (let [^Iterable vecs (for [^IVectorWriter w (seq log-writer)]
                                               (.getVector w))]
                          (VectorSchemaRoot. vecs))
               log-bytes (with-open [write-root (VectorSchemaRoot/create (.getSchema log-root) allocator)]
-                          (let [loader (VectorLoader. write-root)
-                                row-counts (blocks/list-count-blocks (.getVector log-root "ops") max-rows-per-block)]
-                            (with-open [^ICursor slices (blocks/->slices log-root row-counts)]
+                          (let [loader (VectorLoader. write-root)]
+                            (with-open [^ICursor slices (blocks/->slices log-root block-row-counts)]
                               (util/build-arrow-ipc-byte-buffer write-root :file
                                 (fn [write-batch!]
                                   (.forEachRemaining slices
@@ -148,11 +156,11 @@
                                                            (write-batch!))))))))))]
           (.putObject object-store (->log-obj-key chunk-idx) log-bytes)))
 
-      (clear [_]
-        (.clear log-writer))
+      (nextChunk [_]
+        (.clear log-writer)
+        (.clear block-row-counts))
 
       Closeable
       (close [_]
         (.close transient-log-writer)
         (.close log-writer)))))
-

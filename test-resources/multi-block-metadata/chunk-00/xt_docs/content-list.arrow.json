@@ -114,5 +114,52 @@
         }]
       }]
     }]
+  },{
+    "count" : 0,
+    "columns" : [{
+      "name" : "_row-id",
+      "count" : 0,
+      "VALIDITY" : [ ],
+      "DATA" : [ ]
+    },{
+      "name" : "list",
+      "count" : 0,
+      "TYPE_ID" : [ ],
+      "OFFSET" : [ ],
+      "children" : [{
+        "name" : "list",
+        "count" : 0,
+        "VALIDITY" : [ ],
+        "OFFSET" : [0],
+        "children" : [{
+          "name" : "$data$",
+          "count" : 0,
+          "TYPE_ID" : [ ],
+          "OFFSET" : [ ],
+          "children" : [{
+            "name" : "f64",
+            "count" : 0,
+            "VALIDITY" : [ ],
+            "DATA" : [ ]
+          },{
+            "name" : "utf8",
+            "count" : 0,
+            "VALIDITY" : [ ],
+            "OFFSET" : [0],
+            "DATA" : [ ]
+          },{
+            "name" : "timestamp-tz-micro-utc",
+            "count" : 0,
+            "VALIDITY" : [ ],
+            "DATA" : [ ]
+          },{
+            "name" : "bool",
+            "count" : 0,
+            "VALIDITY" : [ ],
+            "DATA" : [ ]
+          }]
+        }]
+      }]
+    }]
   }]
 }

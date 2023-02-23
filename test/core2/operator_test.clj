@@ -12,7 +12,7 @@
 (t/use-fixtures :once tu/with-allocator)
 
 (t/deftest test-find-gt-ivan
-  (with-open [node (node/start-node {:core2/row-counts {:max-rows-per-chunk 10, :max-rows-per-block 2}})]
+  (with-open [node (node/start-node {:core2/live-chunk {:rows-per-block 2, :rows-per-chunk 10}})]
     (-> (c2/submit-tx node [[:put {:name "Håkan", :id :hak}]])
         (tu/then-await-tx node))
 
@@ -66,7 +66,7 @@
                            db))))))
 
 (t/deftest test-find-eq-ivan
-  (with-open [node (node/start-node {:core2/row-counts {:max-rows-per-chunk 10, :max-rows-per-block 3}})]
+  (with-open [node (node/start-node {:core2/live-chunk {:rows-per-block 3, :rows-per-chunk 10}})]
     (-> (c2/submit-tx node [[:put {:name "Håkan", :id :hak}]
                             [:put {:name "James", :id :jms}]
                             [:put {:name "Ivan", :id :iva}]])

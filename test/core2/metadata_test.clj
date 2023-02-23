@@ -39,7 +39,7 @@
                  (row-id->col-names "lineitem" 1750)))
 
         (t/is (= {:col-names li-cols, :block-idxs #{2}}
-                 (row-id->col-names "lineitem" 2000)))))))
+                 (row-id->col-names "lineitem" 2750)))))))
 
 (t/deftest test-param-metadata-error-310
   (let [!tx1 (c2/submit-tx tu/*node*

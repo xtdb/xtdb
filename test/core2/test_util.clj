@@ -97,6 +97,7 @@
   (.awaitSnapshotBuild ^core2.temporal.TemporalManagerPrivate (::temporal/temporal-manager @(:!system node))))
 
 (defn finish-chunk! [node]
+  (idx/finish-block! (component node :core2/indexer))
   (idx/finish-chunk! (component node :core2/indexer))
   (await-temporal-snapshot-build node))
 
@@ -200,15 +201,15 @@
           (t/is (= blocks (<-cursor cursor))))))))
 
 (defn ->local-node ^core2.node.Node [{:keys [^Path node-dir ^String buffers-dir
-                                             max-rows-per-block max-rows-per-chunk]
+                                             rows-per-block rows-per-chunk]
                                       :or {buffers-dir "buffers"}}]
   (node/start-node {:core2.log/local-directory-log {:root-path (.resolve node-dir "log")
                                                     :instant-src (->mock-clock)}
                     :core2.tx-producer/tx-producer {:instant-src (->mock-clock)}
                     :core2.buffer-pool/buffer-pool {:cache-path (.resolve node-dir buffers-dir)}
                     :core2.object-store/file-system-object-store {:root-path (.resolve node-dir "objects")}
-                    :core2/row-counts (->> {:max-rows-per-block max-rows-per-block
-                                            :max-rows-per-chunk max-rows-per-chunk}
+                    :core2/live-chunk (->> {:rows-per-block rows-per-block
+                                            :rows-per-chunk rows-per-chunk}
                                            (into {} (filter val)))}))
 
 (defn ->local-submit-node ^core2.node.SubmitNode [{:keys [^Path node-dir]}]

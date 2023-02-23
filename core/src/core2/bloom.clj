@@ -1,7 +1,9 @@
 (ns core2.bloom
   (:require [core2.types :as types]
+            [core2.vector.indirect :as iv]
             [core2.vector.writer :as vw])
-  (:import java.nio.ByteBuffer
+  (:import (core2.vector IIndirectVector IVectorWriter)
+           java.nio.ByteBuffer
            org.apache.arrow.memory.BufferAllocator
            (org.apache.arrow.memory.util.hash MurmurHasher SimpleHasher)
            [org.apache.arrow.vector ValueVector VarBinaryVector]
@@ -52,10 +54,12 @@
 ;; Cassandra-style hashes:
 ;; https://www.researchgate.net/publication/220770131_Less_Hashing_Same_Performance_Building_a_Better_Bloom_Filter
 (defn bloom-hashes
-  (^ints [^ValueVector vec ^long idx]
-   (bloom-hashes vec idx bloom-k bloom-bit-mask))
-  (^ints [^ValueVector vec ^long idx ^long k ^long mask]
-   (let [hash-1 (.hashCode vec idx SimpleHasher/INSTANCE)
+  (^ints [^IIndirectVector col ^long idx]
+   (bloom-hashes col idx bloom-k bloom-bit-mask))
+  (^ints [^IIndirectVector col ^long idx ^long k ^long mask]
+   (let [vec (.getVector col)
+         idx (.getIndex col idx)
+         hash-1 (.hashCode vec idx SimpleHasher/INSTANCE)
          hash-2 (.hashCode vec idx (MurmurHasher. hash-1))
          acc (int-array k)]
      (dotimes [n k]
@@ -64,17 +68,16 @@
 
 (defn literal-hashes ^ints [^BufferAllocator allocator literal]
   (let [col-type (types/value->col-type literal)]
-    (with-open [^ValueVector vec (.createVector (types/col-type->field "_" col-type) allocator)]
-      (let [writer (vw/vec->writer vec)]
-        (.startValue writer)
-        (types/write-value! literal writer)
-        (.endValue writer))
-      (bloom-hashes vec 0))))
+    (with-open [^IVectorWriter writer (vw/->vec-writer allocator "_" col-type)]
+      (.startValue writer)
+      (types/write-value! literal writer)
+      (.endValue writer)
+      (bloom-hashes (iv/->direct-vec (.getVector writer)) 0))))
 
-(defn write-bloom [^VarBinaryVector bloom-vec, ^long meta-idx, ^ValueVector field-vec]
+(defn write-bloom [^VarBinaryVector bloom-vec, ^long meta-idx, ^IIndirectVector col]
   (let [bloom (RoaringBitmap.)]
-    (dotimes [in-idx (.getValueCount field-vec)]
-      (let [^ints el-hashes (bloom-hashes field-vec in-idx)]
+    (dotimes [in-idx (.getValueCount col)]
+      (let [^ints el-hashes (bloom-hashes col in-idx)]
         (.add bloom el-hashes)))
     (let [ba (byte-array (.serializedSizeInBytes bloom))]
       (.serialize bloom (ByteBuffer/wrap ba))

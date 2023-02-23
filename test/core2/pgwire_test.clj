@@ -893,7 +893,7 @@
           (is (= [{:ping "pong"}] (jdbc/execute! db ["select ping;"]))))))))
 
 ;; right now all isolation levels have the same defined behaviour
-(deftest transaction-by-default-pins-the-basis-too-last-tx-test
+(deftest transaction-by-default-pins-the-basis-to-last-tx-test
   (require-node)
   (let [insert #(-> (c2/submit-tx *node* [[:put %]])
                     (tu/then-await-tx *node*))]

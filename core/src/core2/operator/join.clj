@@ -174,10 +174,9 @@
                              (dotimes [col-idx (count build-key-col-names)]
                                (let [build-col-name (nth build-key-col-names col-idx)
                                      build-col (.vectorForName build-rel (name build-col-name))
-                                     internal-vec (.getVector build-col)
                                      ^MutableRoaringBitmap pushdown-bloom (nth pushdown-blooms col-idx)]
                                  (dotimes [build-idx (.rowCount build-rel)]
-                                   (.add pushdown-bloom ^ints (bloom/bloom-hashes internal-vec (.getIndex build-col build-idx))))))))))))
+                                   (.add pushdown-bloom ^ints (bloom/bloom-hashes build-col build-idx)))))))))))
 
 #_{:clj-kondo/ignore [:unused-binding]}
 (defmulti ^core2.vector.IIndirectRelation probe-phase
