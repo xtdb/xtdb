@@ -1,5 +1,5 @@
 {:deps {com.xtdb.labs/core2-api {:local/root "../../api"}
         com.xtdb.labs/core2-core {:local/root "../../core"}
 
-        org.apache.arrow/arrow-vector {:mvn/version "10.0.0"}
-        org.apache.arrow/flight-sql {:mvn/version "10.0.0"}}}
+        org.apache.arrow/arrow-vector {:mvn/version "11.0.0"}
+        org.apache.arrow/flight-sql {:mvn/version "11.0.0"}}}
