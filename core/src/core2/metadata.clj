@@ -16,9 +16,9 @@
            (java.io ByteArrayInputStream ByteArrayOutputStream)
            java.lang.AutoCloseable
            java.nio.ByteBuffer
-           (java.util ArrayList HashMap Map NavigableMap TreeMap)
+           (java.util ArrayList HashMap HashSet Map NavigableMap TreeMap)
            (java.util.concurrent ConcurrentHashMap)
-           (java.util.function Consumer Function)
+           (java.util.function BiFunction Consumer Function)
            java.util.stream.IntStream
            (org.apache.arrow.memory ArrowBuf BufferAllocator)
            (org.apache.arrow.vector BigIntVector BitVector IntVector ValueVector VarBinaryVector VarCharVector VectorSchemaRoot)
@@ -32,8 +32,8 @@
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (definterface IColumnMetadataWriter
-  (^void writeBlockMetadata [^core2.vector.IIndirectRelation liveRel, ^int blockIdx])
-  (^void writeChunkMetadata [^core2.vector.IIndirectRelation liveRel]))
+  (^void writeMetadata [^core2.vector.IIndirectRelation liveRel, ^int blockIdx]
+   "blockIdx = -1 for metadata for the whole column"))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (definterface ITableMetadataWriter
@@ -46,16 +46,20 @@
   (^core2.metadata.ITableMetadataWriter openTableMetadataWriter [^String table-name, ^long chunk-idx])
   (^void finishChunk [^long chunkIdx, newChunkMetadata])
   (^java.util.NavigableMap chunksMetadata [])
-  (^java.util.concurrent.CompletableFuture withMetadata [^long chunkIdx, ^String tableName, ^java.util.function.BiFunction #_#_<long, ITableMetadata> f])
+  (^java.util.concurrent.CompletableFuture withMetadata [^long chunkIdx, ^String tableName, ^java.util.function.Function #_<ITableMetadata> f])
   (columnType [^String tableName, ^String colName]))
 
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface ITableMetadata
   (^org.apache.arrow.vector.VectorSchemaRoot metadataRoot [])
   (^java.util.Set columnNames [])
-  (^Long columnIndex [^String columnName])
-  (^Long blockIndex [^String column-name, ^int blockIdx])
+  (^Long rowIndex [^String column-name, ^int blockIdx]
+   "pass blockIdx = -1 for metadata about the whole chunk")
   (^long blockCount []))
+
+#_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
+(definterface IMetadataPredicate
+  (^java.util.function.IntPredicate build [^core2.metadata.ITableMetadata tableMetadata]))
 
 (defrecord ChunkMatch [^long chunk-idx, ^RoaringBitmap block-idxs])
 
@@ -142,7 +146,7 @@
 
 (def ^org.apache.arrow.vector.types.pojo.Schema table-metadata-schema
   (Schema. [(types/col-type->field 'column :utf8)
-            (types/col-type->field 'block-idx [:union #{:i32 :null}])
+            (types/col-type->field 'block-idx :i32) ; -1 for whole chunk
 
             (types/->field "root-column" types/struct-type true
                            ;; here because they're only easily accessible for non-nested columns.
@@ -423,16 +427,11 @@
       (reify ITableMetadataWriter
         (columnMetadataWriter [_ col-name]
           (reify IColumnMetadataWriter
-            (writeBlockMetadata [_ live-rel block-idx]
+            (writeMetadata [_ live-rel block-idx]
               (when (not (zero? (.rowCount live-rel)))
                 (write-col-meta! (.vectorForName live-rel col-name))
                 (write-root-col-row-ids! (.vectorForName live-rel "_row-id"))
-                (.setSafe block-idx-vec (dec (.getRowCount metadata-root)) block-idx)))
-
-            (writeChunkMetadata [_ live-rel]
-              (when (not (zero? (.rowCount live-rel)))
-                (write-col-meta! (.vectorForName live-rel col-name))
-                (write-root-col-row-ids! (.vectorForName live-rel "_row-id"))))))
+                (.setSafe block-idx-vec (dec (.getRowCount metadata-root)) block-idx)))))
 
         (finishChunk [_]
           (.syncSchema metadata-root)
@@ -445,34 +444,31 @@
           (.close metadata-root))))))
 
 (defn ->table-metadata-idxs [^VectorSchemaRoot metadata-root]
-  (let [col-idx-cache (HashMap.)
-        block-idx-cache (HashMap.)
+  (let [block-idx-cache (HashMap.)
         row-count (.getRowCount metadata-root)
         ^VarCharVector column-name-vec (.getVector metadata-root "column")
         ^IntVector block-idx-vec (.getVector metadata-root "block-idx")
-        root-col-vec (.getVector metadata-root "root-column")]
+        root-col-vec (.getVector metadata-root "root-column")
+        col-names (HashSet.)]
     (dotimes [meta-idx (.getRowCount metadata-root)]
       (let [col-name (str (.getObject column-name-vec meta-idx))]
+        (.add col-names col-name)
         (when-not (.isNull root-col-vec meta-idx)
-          (if (.isNull block-idx-vec meta-idx)
-            (.put col-idx-cache col-name meta-idx)
-            (.put block-idx-cache [col-name (.get block-idx-vec meta-idx)] meta-idx)))))
+          (.put block-idx-cache [col-name (.get block-idx-vec meta-idx)] meta-idx))))
 
-    {:col-idx-cache col-idx-cache
+    {:col-names (into #{} col-names)
      :block-idx-cache block-idx-cache
      :block-count (loop [block-count 0, idx 0]
                     (cond
                       (>= idx row-count) (inc block-count)
-                      (.isNull block-idx-vec idx) (recur block-count (inc idx))
                       :else (recur (max (.get block-idx-vec idx) block-count)
                                    (inc idx))))}))
 
-(defn ->table-metadata ^core2.metadata.ITableMetadata [^VectorSchemaRoot vsr, {:keys [col-idx-cache, block-idx-cache, block-count]}]
+(defn ->table-metadata ^core2.metadata.ITableMetadata [^VectorSchemaRoot vsr, {:keys [col-names block-idx-cache, block-count]}]
   (reify ITableMetadata
     (metadataRoot [_] vsr)
-    (columnNames [_] (set (keys col-idx-cache)))
-    (columnIndex [_ col-name] (get col-idx-cache col-name))
-    (blockIndex [_ col-name block-idx] (get block-idx-cache [col-name block-idx]))
+    (columnNames [_] col-names)
+    (rowIndex [_ col-name block-idx] (get block-idx-cache [col-name block-idx]))
     (blockCount [_] block-count)) )
 
 (deftype MetadataManager [^BufferAllocator allocator
@@ -493,13 +489,12 @@
   (withMetadata [_ chunk-idx table-name f]
     (with-single-root buffer-pool (->table-metadata-obj-key chunk-idx table-name)
       (fn [metadata-root]
-        (.apply f chunk-idx
-                (->table-metadata metadata-root
-                                  (.computeIfAbsent table-metadata-idxs
-                                                    [chunk-idx table-name]
-                                                    (reify Function
-                                                      (apply [_ _]
-                                                        (->table-metadata-idxs metadata-root)))))))))
+        (.apply f (->table-metadata metadata-root
+                                    (.computeIfAbsent table-metadata-idxs
+                                                      [chunk-idx table-name]
+                                                      (reify Function
+                                                        (apply [_ _]
+                                                          (->table-metadata-idxs metadata-root)))))))))
 
   (chunksMetadata [_] chunks-metadata)
 
@@ -525,40 +520,59 @@
 (defmethod ig/halt-key! ::metadata-manager [_ mgr]
   (util/try-close mgr))
 
-(defn with-metadata [^IMetadataManager metadata-mgr, ^long chunk-idx, ^String table-name, f]
-  (.withMetadata metadata-mgr chunk-idx table-name (util/->jbifn f)))
+(defn with-metadata [^IMetadataManager metadata-mgr, ^long chunk-idx, ^String table-name, ^Function f]
+  (.withMetadata metadata-mgr chunk-idx table-name f))
 
-(defn matching-chunks [^IMetadataManager metadata-mgr, table-name, metadata-pred]
+(defn with-all-metadata [^IMetadataManager metadata-mgr, table-name, ^BiFunction f]
   (->> (for [[^long chunk-idx, chunk-metadata] (.chunksMetadata metadata-mgr)
              :let [table (get-in chunk-metadata [:tables table-name])]
              :when table]
-         (with-metadata metadata-mgr chunk-idx table-name metadata-pred))
+         (with-metadata metadata-mgr chunk-idx table-name
+           (util/->jfn
+             (fn [table-meta]
+               (.apply f chunk-idx table-meta)))))
        vec
        (into [] (keep deref))))
+
+(defn matching-chunks [^IMetadataManager metadata-mgr, table-name, ^IMetadataPredicate metadata-pred]
+  (with-all-metadata metadata-mgr table-name
+    (util/->jbifn
+      (fn [^long chunk-idx, ^ITableMetadata table-metadata]
+        (let [pred (.build metadata-pred table-metadata)]
+          (when (.test pred -1)
+            (let [block-idxs (RoaringBitmap.)]
+              (dotimes [block-idx (.blockCount table-metadata)]
+                (when (.test pred block-idx)
+                  (.add block-idxs block-idx)))
+
+              (when-not (.isEmpty block-idxs)
+                (->ChunkMatch chunk-idx block-idxs)))))))))
 
 (defn row-id->cols [^IMetadataManager metadata-mgr, ^String table-name, ^long row-id]
   ;; TODO cache which chunk each row-id is in.
   (let [bloom-hash (bloom/literal-hashes (.allocator ^MetadataManager metadata-mgr) row-id)]
-    (->> (matching-chunks metadata-mgr table-name
-                          (fn [^long chunk-idx ^ITableMetadata table-metadata]
-                            (let [cols (ArrayList.)
-                                  metadata-root (.metadataRoot table-metadata)
-                                  ^VarCharVector col-name-vec (.getVector metadata-root "column")
-                                  ^IntVector block-idx-vec (.getVector metadata-root "block-idx")
-                                  ^StructVector root-col-vec (.getVector metadata-root "root-column")
-                                  ^BigIntVector min-row-id-vec (.getChild root-col-vec "min-row-id" BigIntVector)
-                                  ^BigIntVector max-row-id-vec (.getChild root-col-vec "max-row-id" BigIntVector)
-                                  ^VarBinaryVector row-id-bloom-vec (.getChild root-col-vec "row-id-bloom" VarBinaryVector)]
-                              (dotimes [idx (.getRowCount metadata-root)]
-                                (when (and (not (.isNull block-idx-vec idx))
-                                           (not (.isNull root-col-vec idx))
-                                           (>= row-id (.get min-row-id-vec idx))
-                                           (<= row-id (.get max-row-id-vec idx))
-                                           (bloom/bloom-contains? row-id-bloom-vec idx bloom-hash))
-                                  (.add cols {:col-name (str (.getObject col-name-vec idx))
-                                              :block-idx (.get block-idx-vec idx)})))
-                              (when-not (.isEmpty cols)
-                                {:chunk-idx chunk-idx, :cols cols}))))
+    (->> (with-all-metadata metadata-mgr table-name
+           (util/->jbifn
+             (fn [^long chunk-idx ^ITableMetadata table-metadata]
+               (let [cols (ArrayList.)
+                     metadata-root (.metadataRoot table-metadata)
+                     ^VarCharVector col-name-vec (.getVector metadata-root "column")
+                     ^IntVector block-idx-vec (.getVector metadata-root "block-idx")
+                     ^StructVector root-col-vec (.getVector metadata-root "root-column")
+                     ^BigIntVector min-row-id-vec (.getChild root-col-vec "min-row-id" BigIntVector)
+                     ^BigIntVector max-row-id-vec (.getChild root-col-vec "max-row-id" BigIntVector)
+                     ^VarBinaryVector row-id-bloom-vec (.getChild root-col-vec "row-id-bloom" VarBinaryVector)]
+                 (dotimes [idx (.getRowCount metadata-root)]
+                   (let [block-idx (.get block-idx-vec idx)]
+                     (when (and (not (neg? block-idx))
+                                (not (.isNull root-col-vec idx))
+                                (>= row-id (.get min-row-id-vec idx))
+                                (<= row-id (.get max-row-id-vec idx))
+                                (bloom/bloom-contains? row-id-bloom-vec idx bloom-hash))
+                       (.add cols {:col-name (str (.getObject col-name-vec idx))
+                                   :block-idx block-idx}))))
+                 (when-not (.isEmpty cols)
+                   {:chunk-idx chunk-idx, :cols cols})))))
          (remove nil?)
          first)))
 

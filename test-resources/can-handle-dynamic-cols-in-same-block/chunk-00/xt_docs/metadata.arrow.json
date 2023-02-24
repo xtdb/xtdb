@@ -9,7 +9,7 @@
       "children" : [ ]
     },{
       "name" : "block-idx",
-      "nullable" : true,
+      "nullable" : false,
       "type" : {
         "name" : "int",
         "bitWidth" : 32,
@@ -270,8 +270,8 @@
     },{
       "name" : "block-idx",
       "count" : 16,
-      "VALIDITY" : [0,0,0,0,1,1,0,1,0,0,0,0,0,0,0,0],
-      "DATA" : [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+      "VALIDITY" : [0,0,0,0,1,1,0,1,0,0,0,0,1,1,0,1],
+      "DATA" : [0,0,0,0,0,0,0,0,0,0,0,0,-1,-1,0,-1]
     },{
       "name" : "root-column",
       "count" : 16,

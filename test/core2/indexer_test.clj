@@ -146,7 +146,7 @@
               (.load (VectorLoader. metadata-batch) record-batch)
               (t/is (= 36 (.getRowCount metadata-batch)))
               (let [id-col-idx (-> (meta/->table-metadata metadata-batch (meta/->table-metadata-idxs metadata-batch))
-                                   (.columnIndex "id"))]
+                                   (.rowIndex "id" -1))]
                 (t/is (= "id" (-> (.getVector metadata-batch "column")
                                   (ty/get-object id-col-idx))))
                 (let [^StructVector utf8-type-vec (-> ^StructVector (.getVector metadata-batch "types")

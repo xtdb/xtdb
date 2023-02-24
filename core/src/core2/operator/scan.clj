@@ -93,23 +93,24 @@
   (if-let [^MutableRoaringBitmap pushdown-bloom (get *column->pushdown-bloom* (symbol col-name))]
   ;; would prefer this `^long` to be on the param but can only have 4 params in a primitive hinted function in Clojure
     @(meta/with-metadata metadata-manager ^long chunk-idx table-name
-       (fn [_chunk-idx, ^ITableMetadata table-metadata]
-         (let [metadata-root (.metadataRoot table-metadata)
-               ^VarBinaryVector bloom-vec (.getVector metadata-root "bloom")]
-           (when (MutableRoaringBitmap/intersects pushdown-bloom
-                                                  (bloom/bloom->bitmap bloom-vec (.columnIndex table-metadata col-name)))
-             (let [filtered-block-idxs (RoaringBitmap.)]
-               (.forEach block-idxs
-                         (reify IntConsumer
-                           (accept [_ block-idx]
-                             (when-let [bloom-vec-idx (.blockIndex table-metadata col-name block-idx)]
-                               (when (and (not (.isNull bloom-vec bloom-vec-idx))
-                                          (MutableRoaringBitmap/intersects pushdown-bloom
-                                                                           (bloom/bloom->bitmap bloom-vec bloom-vec-idx)))
-                                 (.add filtered-block-idxs block-idx))))))
+       (util/->jfn
+         (fn [^ITableMetadata table-metadata]
+           (let [metadata-root (.metadataRoot table-metadata)
+                 ^VarBinaryVector bloom-vec (.getVector metadata-root "bloom")]
+             (when (MutableRoaringBitmap/intersects pushdown-bloom
+                                                    (bloom/bloom->bitmap bloom-vec (.rowIndex table-metadata col-name -1)))
+               (let [filtered-block-idxs (RoaringBitmap.)]
+                 (.forEach block-idxs
+                           (reify IntConsumer
+                             (accept [_ block-idx]
+                               (when-let [bloom-vec-idx (.rowIndex table-metadata col-name block-idx)]
+                                 (when (and (not (.isNull bloom-vec bloom-vec-idx))
+                                            (MutableRoaringBitmap/intersects pushdown-bloom
+                                                                             (bloom/bloom->bitmap bloom-vec bloom-vec-idx)))
+                                   (.add filtered-block-idxs block-idx))))))
 
-               (when-not (.isEmpty filtered-block-idxs)
-                 filtered-block-idxs))))))
+                 (when-not (.isEmpty filtered-block-idxs)
+                   filtered-block-idxs)))))))
     block-idxs))
 
 (deftype ContentChunkCursor [^IMetadataManager metadata-mgr
@@ -314,12 +315,12 @@
                                      select)))
         row-count (let [^ScanSource src (get srcs src-key)
                         metadata-mgr (.metadataManager src)]
-                    (->> (meta/matching-chunks metadata-mgr
-                                               (name table)
-                                               (fn [_chunk-idx ^ITableMetadata table-metadata]
-                                                 (let [id-col-idx (.columnIndex table-metadata "id")
-                                                       ^BigIntVector count-vec (.getVector (.metadataRoot table-metadata) "count")]
-                                                   (.get count-vec id-col-idx))))
+                    (->> (meta/with-all-metadata metadata-mgr (name table)
+                           (util/->jbifn
+                            (fn [_chunk-idx ^ITableMetadata table-metadata]
+                              (let [id-col-idx (.rowIndex table-metadata "id" -1)
+                                    ^BigIntVector count-vec (.getVector (.metadataRoot table-metadata) "count")]
+                                (.get count-vec id-col-idx)))))
                          (reduce +)))]
 
     {:col-types (dissoc col-types '_table)

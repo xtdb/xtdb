@@ -6,12 +6,12 @@
             [core2.util :as util]
             [core2.types :as types]
             [core2.vector.indirect :as iv])
-  (:import core2.metadata.ITableMetadata
+  (:import (core2.metadata IMetadataPredicate ITableMetadata)
            (core2.vector IIndirectRelation IIndirectVector)
+           java.util.function.IntPredicate
            org.apache.arrow.memory.RootAllocator
            [org.apache.arrow.vector VarBinaryVector]
-           [org.apache.arrow.vector.complex StructVector]
-           org.roaringbitmap.RoaringBitmap))
+           [org.apache.arrow.vector.complex StructVector]))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -148,16 +148,12 @@
      :continue (fn [f]
                  (f :bool
                     `(boolean
-                      (if ~block-idx-sym
-                        (.blockIndex ~table-metadata-sym ~field-name ~block-idx-sym)
-                        (.columnIndex ~table-metadata-sym ~field-name)))))}))
+                      (.rowIndex ~table-metadata-sym ~field-name ~block-idx-sym))))}))
 
 (defmethod expr/codegen-expr :metadata-vp-call [{:keys [f meta-value field param-expr col-type bloom-hash-sym]} opts]
   (let [field-name (str field)
 
-        idx-code `(if ~block-idx-sym
-                    (.blockIndex ~table-metadata-sym ~field-name ~block-idx-sym)
-                    (.columnIndex ~table-metadata-sym ~field-name))]
+        idx-code `(.rowIndex ~table-metadata-sym ~field-name ~block-idx-sym)]
 
     (if (= meta-value :bloom-filter)
       {:return-type :bool
@@ -197,24 +193,13 @@
 
 (defmethod ewalk/direct-child-exprs :metadata-vp-call [{:keys [param-expr]}] #{param-expr})
 
-(defn check-meta [chunk-idx ^ITableMetadata table-metadata check-meta-f]
-  (when (check-meta-f nil)
-    (let [block-idxs (RoaringBitmap.)]
-      (dotimes [block-idx (.blockCount table-metadata)]
-        (when (check-meta-f block-idx)
-          (.add block-idxs block-idx)))
-
-      (when-not (.isEmpty block-idxs)
-        (meta/->ChunkMatch chunk-idx block-idxs)))))
-
 (def ^:private compile-meta-expr
   (-> (fn [expr opts]
         (let [expr (or (meta-expr (expr/prepare-expr expr))
                        (expr/prepare-expr {:op :literal, :literal true}))
               {:keys [continue] :as emitted-expr} (expr/codegen-expr expr opts)]
           {:expr expr
-           :f (-> `(fn [chunk-idx#
-                        ~(-> table-metadata-sym (expr/with-tag ITableMetadata))
+           :f (-> `(fn [~(-> table-metadata-sym (expr/with-tag ITableMetadata))
                         ~(-> expr/params-sym (expr/with-tag IIndirectRelation))
                         [~@(keep :bloom-hash-sym (ewalk/expr-seq expr))]]
                      (let [~metadata-root-sym (.metadataRoot ~table-metadata-sym)
@@ -222,9 +207,9 @@
                            ~(-> bloom-vec-sym (expr/with-tag VarBinaryVector)) (.getVector ~metadata-root-sym "bloom")
 
                            ~@(expr/batch-bindings emitted-expr)]
-                       (check-meta chunk-idx# ~table-metadata-sym
-                                   (fn check-meta# [~block-idx-sym]
-                                     ~(continue (fn [_ code] code))))))
+                       (reify IntPredicate
+                         (~'test [_ ~block-idx-sym]
+                          (boolean ~(continue (fn [_ code] code)))))))
                   #_(doto clojure.pprint/pprint)
                   (eval))}))
 
@@ -237,6 +222,8 @@
         {:keys [expr f]} (compile-meta-expr (expr/form->expr form {:param-types param-types,
                                                                    :col-types col-types})
                                             {:param-types param-types
-                                             :extract-vecs-from-rel? false})]
-    (fn [chunk-idx metadata-root]
-      (f chunk-idx metadata-root params (->bloom-hashes expr params)))))
+                                             :extract-vecs-from-rel? false})
+        bloom-hashes (->bloom-hashes expr params)]
+    (reify IMetadataPredicate
+      (build [_ table-metadata]
+        (f table-metadata params bloom-hashes)))))

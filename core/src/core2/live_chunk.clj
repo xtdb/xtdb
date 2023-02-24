@@ -256,16 +256,16 @@
         (close [_] (when retain? (.close live-root))))))
 
   (finishBlock [this]
-    (.writeBlockMetadata col-metadata-writer
-                         (iv/slice-rel (iv/<-root (.liveRoot this))
-                                       (.chunkRowCount row-counter)
-                                       (.blockRowCount row-counter))
-                         (.blockIdx row-counter))
+    (.writeMetadata col-metadata-writer
+                    (iv/slice-rel (iv/<-root (.liveRoot this))
+                                  (.chunkRowCount row-counter)
+                                  (.blockRowCount row-counter))
+                    (.blockIdx row-counter))
     (.nextBlock row-counter))
 
   (finishChunk [this]
     (let [live-root (.liveRoot this)]
-      (.writeChunkMetadata col-metadata-writer (iv/<-root live-root))
+      (.writeMetadata col-metadata-writer (iv/<-root live-root) -1)
 
       (.putObject object-store (meta/->chunk-obj-key chunk-idx table-name col-name)
                   (with-open [write-root (VectorSchemaRoot/create (.getSchema live-root) allocator)]
