@@ -100,4 +100,13 @@
 (defprotocol DocumentStore
   "Once `submit-docs` function returns successfully, any call to `fetch-docs` across the cluster must return the submitted docs."
   (submit-docs [this id-and-docs])
-  (fetch-docs [this ids]))
+  (fetch-docs [this ids]
+    "Fetches documents from storage. Returning a map containing entries where found [id, document content (deserialized map)].
+
+    Input ids are converted to id hashes via xtdb.codec/new-id, the hash is looked up, not necessarily the supplied id.
+
+    Thrown exceptions may contain a :cognitect.anomalies/category key to inform callers of the nature of
+    any error, without knowledge of the implementation of DocumentStore.
+
+    Returned ids are always of the type xtdb.codec.Id, as such they may not share a representation (or equality) with the supplied ids,
+    map an input id through xtdb.codec/new-id to find its corresponding entry."))
