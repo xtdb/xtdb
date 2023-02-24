@@ -1,0 +1,7 @@
+{:deps {com.cognitect/transit-clj {:mvn/version "1.0.324"}
+        com.widdindustries/time-literals {:mvn/version "0.1.6"}
+
+        org.apache.arrow/arrow-algorithm {:mvn/version "10.0.0"}
+        org.apache.arrow/arrow-compression {:mvn/version "10.0.0"}
+        org.apache.arrow/arrow-vector {:mvn/version "10.0.0"}
+        org.apache.arrow/arrow-memory-netty {:mvn/version "10.0.0"}}}

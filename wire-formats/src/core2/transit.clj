@@ -1,5 +1,4 @@
 (ns core2.transit
-  "This namespace additionally requires a project dependency on `time-literals`, provided by HTTP server + HTTP client"
   (:require [cognitect.transit :as transit]
             [core2.api :as c2]
             [core2.edn :as c2-edn]

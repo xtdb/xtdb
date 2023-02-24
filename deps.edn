@@ -1,5 +1,6 @@
 {:deps {org.clojure/clojure {:mvn/version "1.11.1"}
         com.xtdb.labs/core2-api {:local/root "api"}
+        com.xtdb.labs/core2-wire-formats {:local/root "wire-formats"}
         com.xtdb.labs/core2-core {:local/root "core"}
         com.xtdb.labs/core2-client {:local/root "http-client-clj"}
         com.xtdb.labs/core2-server {:local/root "http-server"}
@@ -17,7 +18,6 @@
         org.slf4j/slf4j-api {:mvn/version "1.7.36"}
         ch.qos.logback/logback-classic {:mvn/version "1.2.10"}
         cheshire/cheshire {:mvn/version "5.10.0"}
-        com.cognitect/transit-clj {:mvn/version "1.0.324"}
 
         org.clojure/data.csv {:mvn/version "1.0.0"}
         org.clojure/tools.namespace {:mvn/version "1.2.0"}
@@ -27,7 +27,6 @@
         org.xerial/sqlite-jdbc {:mvn/version "3.36.0.3"}
         org.apache.arrow/flight-sql-jdbc-driver {:mvn/version "10.0.0"}
 
-        com.widdindustries/time-literals {:mvn/version "0.1.6"}
         io.github.cognitect-labs/test-runner {:git/tag "v0.5.0" :git/sha "b3fd0d2"}
         com.clojure-goes-fast/clj-async-profiler {:mvn/version "1.0.3"}}
 
