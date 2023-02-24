@@ -1,4 +1,5 @@
-{:deps {com.xtdb.labs/core2-api {:local/root "../api"}
+{:paths ["src/main/clojure"]
+ :deps {com.xtdb.labs/core2-api {:local/root "../api"}
         com.xtdb.labs/core2-core {:local/root "../core"}
 
         org.clojure/data.json {:mvn/version "2.4.0"}

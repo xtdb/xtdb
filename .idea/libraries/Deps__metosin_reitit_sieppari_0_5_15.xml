@@ -1,0 +1,9 @@
+<component name="libraryTable">
+  <library name="Deps: metosin/reitit-sieppari:0.5.15">
+    <CLASSES>
+      <root url="jar://$MAVEN_REPOSITORY$/metosin/reitit-sieppari/0.5.15/reitit-sieppari-0.5.15.jar!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES />
+  </library>
+</component>

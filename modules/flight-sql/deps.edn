@@ -1,4 +1,6 @@
-{:deps {com.xtdb.labs/core2-api {:local/root "../../api"}
+{:paths ["src/main/clojure"]
+
+ :deps {com.xtdb.labs/core2-api {:local/root "../../api"}
         com.xtdb.labs/core2-core {:local/root "../../core"}
 
         org.apache.arrow/arrow-vector {:mvn/version "11.0.0"}

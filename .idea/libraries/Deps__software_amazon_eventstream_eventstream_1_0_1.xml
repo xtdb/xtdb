@@ -1,0 +1,9 @@
+<component name="libraryTable">
+  <library name="Deps: software.amazon.eventstream/eventstream:1.0.1">
+    <CLASSES>
+      <root url="jar://$MAVEN_REPOSITORY$/software/amazon/eventstream/eventstream/1.0.1/eventstream-1.0.1.jar!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES />
+  </library>
+</component>

@@ -1,0 +1,9 @@
+<component name="libraryTable">
+  <library name="Deps: meta-merge:1.0.0">
+    <CLASSES>
+      <root url="jar://$MAVEN_REPOSITORY$/meta-merge/meta-merge/1.0.0/meta-merge-1.0.0.jar!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES />
+  </library>
+</component>

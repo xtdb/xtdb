@@ -1,6 +1,6 @@
 {:deps {org.clojure/clojure {:mvn/version "1.11.1"}}
 
- :paths ["src" "target/classes"]
+ :paths ["src/main/clojure" "src/main/resources" "target/classes"]
 
  :deps/prep-lib {:ensure "target/classes"
                  :alias :build

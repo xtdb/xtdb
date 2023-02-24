@@ -1,4 +1,6 @@
-{:deps {com.xtdb.labs/core2-api {:local/root "../../api"}
+{:paths ["src/main/clojure" "src/dev/resources"]
+
+ :deps {com.xtdb.labs/core2-api {:local/root "../../api"}
         com.xtdb.labs/core2-core {:local/root "../../core"}
 
         io.airlift.tpch/tpch {:mvn/version "0.10"}

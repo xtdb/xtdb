@@ -1,0 +1,9 @@
+<component name="libraryTable">
+  <library name="Deps: org.clojure/java.data:1.0.95">
+    <CLASSES>
+      <root url="jar://$MAVEN_REPOSITORY$/org/clojure/java.data/1.0.95/java.data-1.0.95.jar!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES />
+  </library>
+</component>

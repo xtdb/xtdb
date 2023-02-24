@@ -171,18 +171,18 @@ workflows:
           matrix:
             parameters:
               dirs:
-                - "test/core2/sql/logic_test/sqlite_test/random/expr/"
-                - "test/core2/sql/logic_test/sqlite_test/random/aggregates/"
-                - "test/core2/sql/logic_test/sqlite_test/random/groupby/"
-                - "test/core2/sql/logic_test/sqlite_test/random/select/"
-                - "test/core2/sql/logic_test/sqlite_test/index/between/"
-                - "test/core2/sql/logic_test/sqlite_test/index/commute/"
-                - "test/core2/sql/logic_test/sqlite_test/index/orderby/"
-                - "test/core2/sql/logic_test/sqlite_test/index/orderby_nosort/"
-                - "test/core2/sql/logic_test/sqlite_test/index/in/"
-                - "test/core2/sql/logic_test/sqlite_test/index/random/"
-                  #  - "test/core2/sql/logic_test/sqlite_test/index/delete/"
-                  #  - "test/core2/sql/logic_test/sqlite_test/index/view/"
+                - "src/test/resources/core2/sql/logic_test/sqlite_test/random/expr/"
+                - "src/test/resources/core2/sql/logic_test/sqlite_test/random/aggregates/"
+                - "src/test/resources/core2/sql/logic_test/sqlite_test/random/groupby/"
+                - "src/test/resources/core2/sql/logic_test/sqlite_test/random/select/"
+                - "src/test/resources/core2/sql/logic_test/sqlite_test/index/between/"
+                - "src/test/resources/core2/sql/logic_test/sqlite_test/index/commute/"
+                - "src/test/resources/core2/sql/logic_test/sqlite_test/index/orderby/"
+                - "src/test/resources/core2/sql/logic_test/sqlite_test/index/orderby_nosort/"
+                - "src/test/resources/core2/sql/logic_test/sqlite_test/index/in/"
+                - "src/test/resources/core2/sql/logic_test/sqlite_test/index/random/"
+                  #  - "src/test/resources/core2/sql/logic_test/sqlite_test/index/delete/"
+                  #  - "src/test/resources/core2/sql/logic_test/sqlite_test/index/view/"
       - store-test-results:
           requires:
             - slt-test-dirs

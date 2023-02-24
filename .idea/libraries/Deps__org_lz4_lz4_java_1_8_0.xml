@@ -1,0 +1,9 @@
+<component name="libraryTable">
+  <library name="Deps: org.lz4/lz4-java:1.8.0">
+    <CLASSES>
+      <root url="jar://$MAVEN_REPOSITORY$/org/lz4/lz4-java/1.8.0/lz4-java-1.8.0.jar!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES />
+  </library>
+</component>

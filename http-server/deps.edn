@@ -1,4 +1,6 @@
-{:deps {com.xtdb.labs/core2-api {:local/root "../api"}
+{:paths ["src/main/clojure"]
+
+ :deps {com.xtdb.labs/core2-api {:local/root "../api"}
         com.xtdb.labs/core2-core {:local/root "../core"}
         com.xtdb.labs/core2-wire-formats {:local/root "../wire-formats"}
 

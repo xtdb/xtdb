@@ -1,0 +1,9 @@
+<component name="libraryTable">
+  <library name="Deps: org.apache.arrow/flight-sql:11.0.0">
+    <CLASSES>
+      <root url="jar://$MAVEN_REPOSITORY$/org/apache/arrow/flight-sql/11.0.0/flight-sql-11.0.0.jar!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES />
+  </library>
+</component>

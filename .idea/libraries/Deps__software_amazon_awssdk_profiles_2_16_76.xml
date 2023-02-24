@@ -1,0 +1,9 @@
+<component name="libraryTable">
+  <library name="Deps: software.amazon.awssdk/profiles:2.16.76">
+    <CLASSES>
+      <root url="jar://$MAVEN_REPOSITORY$/software/amazon/awssdk/profiles/2.16.76/profiles-2.16.76.jar!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES />
+  </library>
+</component>

@@ -3,7 +3,7 @@
 
         software.amazon.awssdk/s3 {:mvn/version "2.16.76"}}
 
- :paths ["src" "target/classes"]
+ :paths ["src/main/clojure" "target/classes"]
 
  :deps/prep-lib {:ensure "target/classes"
                  :alias :build

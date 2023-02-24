@@ -1,0 +1,9 @@
+<component name="libraryTable">
+  <library name="Deps: io.netty/netty-tcnative-boringssl-static$osx-x86_64:2.0.54.Final">
+    <CLASSES>
+      <root url="jar://$MAVEN_REPOSITORY$/io/netty/netty-tcnative-boringssl-static/2.0.54.Final/netty-tcnative-boringssl-static-2.0.54.Final-osx-x86_64.jar!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES />
+  </library>
+</component>

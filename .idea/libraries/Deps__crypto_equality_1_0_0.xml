@@ -1,0 +1,9 @@
+<component name="libraryTable">
+  <library name="Deps: crypto-equality:1.0.0">
+    <CLASSES>
+      <root url="jar://$MAVEN_REPOSITORY$/crypto-equality/crypto-equality/1.0.0/crypto-equality-1.0.0.jar!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES />
+  </library>
+</component>

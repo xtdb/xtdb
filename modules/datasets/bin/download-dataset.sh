@@ -33,5 +33,5 @@
     done
 
     set -xe
-    aws s3 sync --exclude '*' $INCLUDES s3://xtdb-datasets data/
+    aws s3 sync --exclude '*' $INCLUDES s3://xtdb-datasets src/dev/resources/data/
 )

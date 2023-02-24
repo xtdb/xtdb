@@ -7,10 +7,108 @@
   <component name="NewModuleRootManager" inherit-compiler-output="true">
     <exclude-output />
     <content url="file://$MODULE_DIR$">
-      <sourceFolder url="file://$MODULE_DIR$/resources" type="java-resource" />
-      <sourceFolder url="file://$MODULE_DIR$/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/src/main/clojure" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/src/main/resources" type="java-resource" />
       <excludeFolder url="file://$MODULE_DIR$/.cpcache" />
     </content>
+    <orderEntry type="inheritedJdk" />
     <orderEntry type="sourceFolder" forTests="false" />
+    <orderEntry type="library" name="Deps: com.cognitect/transit-java:1.0.362" level="project" />
+    <orderEntry type="library" name="Deps: org.clojure/data.json:2.4.0" level="project" />
+    <orderEntry type="library" name="Deps: org.lz4/lz4-java:1.8.0" level="project" />
+    <orderEntry type="library" name="Deps: org.clojure/clojure:1.11.1" level="project" />
+    <orderEntry type="library" name="Deps: pro.juxt.clojars-mirrors.hiccup/hiccup:2.0.0-alpha2" level="project" />
+    <orderEntry type="library" name="Deps: software.amazon.awssdk/profiles:2.16.76" level="project" />
+    <orderEntry type="library" name="Deps: commons-codec:1.15" level="project" />
+    <orderEntry type="library" name="Deps: com.zaxxer/HikariCP:4.0.3" level="project" />
+    <orderEntry type="library" name="Deps: org.apache.commons/commons-compress:1.20" level="project" />
+    <orderEntry type="library" name="Deps: com.google.errorprone/error_prone_annotations:2.1.3" level="project" />
+    <orderEntry type="library" name="Deps: org.clojure/tools.logging:1.2.4" level="project" />
+    <orderEntry type="library" name="Deps: software.amazon.awssdk/aws-query-protocol:2.16.76" level="project" />
+    <orderEntry type="library" name="Deps: org.clojure/core.specs.alpha:0.2.62" level="project" />
+    <orderEntry type="library" name="Deps: io.netty/netty-common:4.1.82.Final" level="project" />
+    <orderEntry type="library" name="Deps: org.apache.arrow/arrow-vector$tests:11.0.0" level="project" />
+    <orderEntry type="library" name="Deps: org.apache.arrow/arrow-format:11.0.0" level="project" />
+    <orderEntry type="library" name="Deps: com.fasterxml.jackson.core/jackson-databind:2.13.4" level="project" />
+    <orderEntry type="library" name="Deps: org.clojure/spec.alpha:0.3.218" level="project" />
+    <orderEntry type="library" name="Deps: software.amazon.awssdk/apache-client:2.16.76" level="project" />
+    <orderEntry type="library" name="Deps: pro.juxt.clojars-mirrors.com.github.seancorfield/next.jdbc:1.2.674" level="project" />
+    <orderEntry type="library" name="Deps: org.clojure/tools.cli:1.0.206" level="project" />
+    <orderEntry type="library" name="Deps: software.amazon.awssdk/s3:2.16.76" level="project" />
+    <orderEntry type="library" name="Deps: org.apache.arrow/arrow-memory-netty:11.0.0" level="project" />
+    <orderEntry type="library" name="Deps: org.codehaus.mojo/animal-sniffer-annotations:1.14" level="project" />
+    <orderEntry type="library" name="Deps: henryw374/js-joda:3.2.0-0" level="project" />
+    <orderEntry type="library" name="Deps: org.apache.arrow/arrow-algorithm:11.0.0" level="project" />
+    <orderEntry type="library" name="Deps: io.netty/netty-codec-http2:4.1.63.Final" level="project" />
+    <orderEntry type="library" name="Deps: io.netty/netty-codec:4.1.63.Final" level="project" />
+    <orderEntry type="library" name="Deps: com.github.luben/zstd-jni:1.5.0-4" level="project" />
+    <orderEntry type="library" name="Deps: com.googlecode.json-simple/json-simple:1.1.1" level="project" />
+    <orderEntry type="library" name="Deps: software.amazon.awssdk/aws-xml-protocol:2.16.76" level="project" />
+    <orderEntry type="library" name="Deps: ch.qos.logback/logback-core:1.2.10" level="project" />
+    <orderEntry type="library" name="Deps: io.netty/netty-buffer:4.1.82.Final" level="project" />
+    <orderEntry type="library" name="Deps: io.netty/netty-handler:4.1.63.Final" level="project" />
+    <orderEntry type="library" name="Deps: com.fasterxml.jackson.core/jackson-core:2.13.4" level="project" />
+    <orderEntry type="library" name="Deps: com.google.flatbuffers/flatbuffers-java:1.12.0" level="project" />
+    <orderEntry type="library" name="Deps: org.apache.httpcomponents/httpcore:4.4.13" level="project" />
+    <orderEntry type="library" name="Deps: pro.juxt.clojars-mirrors.weavejester/dependency:0.2.1" level="project" />
+    <orderEntry type="library" name="Deps: com.typesafe.netty/netty-reactive-streams-http:2.0.5" level="project" />
+    <orderEntry type="library" name="Deps: software.amazon.awssdk/sdk-core:2.16.76" level="project" />
+    <orderEntry type="library" name="Deps: software.amazon.awssdk/regions:2.16.76" level="project" />
+    <orderEntry type="library" name="Deps: com.fasterxml.jackson.core/jackson-annotations:2.13.4" level="project" />
+    <orderEntry type="library" name="Deps: org.javassist/javassist:3.18.1-GA" level="project" />
+    <orderEntry type="library" name="Deps: org.roaringbitmap/shims:0.9.26" level="project" />
+    <orderEntry type="library" name="Deps: com.widdindustries/time-literals:0.1.6" level="project" />
+    <orderEntry type="library" name="Deps: commons-logging:1.2" level="project" />
+    <orderEntry type="library" name="Deps: com.google.guava/guava:26.0-jre" level="project" />
+    <orderEntry type="library" name="Deps: org.apache.arrow/arrow-vector:11.0.0" level="project" />
+    <orderEntry type="library" name="Deps: io.netty/netty-transport-native-epoll$linux-x86_64:4.1.63.Final" level="project" />
+    <orderEntry type="library" name="Deps: org.xerial.snappy/snappy-java:1.1.8.4" level="project" />
+    <orderEntry type="library" name="Deps: software.amazon.awssdk/aws-core:2.16.76" level="project" />
+    <orderEntry type="library" name="Deps: net.cgrand/macrovich:0.2.0" level="project" />
+    <orderEntry type="library" name="Deps: org.msgpack/msgpack:0.6.12" level="project" />
+    <orderEntry type="library" name="Deps: io.micrometer/micrometer-core:1.9.5" level="project" />
+    <orderEntry type="library" name="Deps: borkdude/edamame:1.0.16" level="project" />
+    <orderEntry type="library" name="Deps: com.google.j2objc/j2objc-annotations:1.1" level="project" />
+    <orderEntry type="library" name="Deps: org.clojure/data.csv:1.0.1" level="project" />
+    <orderEntry type="library" name="Deps: com.cognitect/transit-clj:1.0.329" level="project" />
+    <orderEntry type="library" name="Deps: io.netty/netty-transport:4.1.63.Final" level="project" />
+    <orderEntry type="library" name="Deps: com.github.oshi/oshi-core:6.3.0" level="project" />
+    <orderEntry type="library" name="Deps: software.amazon.awssdk/auth:2.16.76" level="project" />
+    <orderEntry type="library" name="Deps: io.netty/netty-transport-native-unix-common:4.1.63.Final" level="project" />
+    <orderEntry type="library" name="Deps: software.amazon.awssdk/http-client-spi:2.16.76" level="project" />
+    <orderEntry type="library" name="Deps: org.apache.arrow/arrow-memory-core:11.0.0" level="project" />
+    <orderEntry type="library" name="Deps: io.netty/netty-codec-http:4.1.63.Final" level="project" />
+    <orderEntry type="library" name="Deps: org.apache.httpcomponents/httpclient:4.5.13" level="project" />
+    <orderEntry type="library" name="Deps: software.amazon.awssdk/protocol-core:2.16.76" level="project" />
+    <orderEntry type="library" name="Deps: org.babashka/sci.impl.types:0.0.2" level="project" />
+    <orderEntry type="library" name="Deps: org.checkerframework/checker-qual:2.5.2" level="project" />
+    <orderEntry type="library" name="Deps: cljs.java-time:0.1.19" level="project" />
+    <orderEntry type="library" name="Deps: net.java.dev.jna/jna:5.12.1" level="project" />
+    <orderEntry type="library" name="Deps: software.amazon.eventstream/eventstream:1.0.1" level="project" />
+    <orderEntry type="library" name="Deps: com.typesafe.netty/netty-reactive-streams:2.0.5" level="project" />
+    <orderEntry type="library" name="Deps: software.amazon.awssdk/arns:2.16.76" level="project" />
+    <orderEntry type="library" name="Deps: org.latencyutils/LatencyUtils:2.0.3" level="project" />
+    <orderEntry type="library" name="Deps: org.apache.kafka/kafka-clients:3.1.0" level="project" />
+    <orderEntry type="library" name="Deps: org.clojure/tools.reader:1.3.4" level="project" />
+    <orderEntry type="library" name="Deps: org.babashka/sci:0.6.37" level="project" />
+    <orderEntry type="library" name="Deps: org.reactivestreams/reactive-streams:1.0.3" level="project" />
+    <orderEntry type="library" name="Deps: net.java.dev.jna/jna-platform:5.12.1" level="project" />
+    <orderEntry type="library" name="Deps: io.netty/netty-resolver:4.1.63.Final" level="project" />
+    <orderEntry type="library" name="Deps: software.amazon.awssdk/metrics-spi:2.16.76" level="project" />
+    <orderEntry type="library" name="Deps: software.amazon.awssdk/utils:2.16.76" level="project" />
+    <orderEntry type="library" name="Deps: org.slf4j/slf4j-api:2.0.3" level="project" />
+    <orderEntry type="library" name="Deps: software.amazon.awssdk/netty-nio-client:2.16.76" level="project" />
+    <orderEntry type="library" name="Deps: pro.juxt.clojars-mirrors.integrant/integrant:0.8.0" level="project" />
+    <orderEntry type="library" name="Deps: ch.qos.logback/logback-classic:1.2.10" level="project" />
+    <orderEntry type="library" name="Deps: org.clojure/java.data:1.0.95" level="project" />
+    <orderEntry type="library" name="Deps: borkdude/sci.impl.reflector:0.0.1" level="project" />
+    <orderEntry type="library" name="Deps: com.google.code.findbugs/jsr305:3.0.2" level="project" />
+    <orderEntry type="library" name="Deps: org.roaringbitmap/RoaringBitmap:0.9.26" level="project" />
+    <orderEntry type="library" name="Deps: org.hdrhistogram/HdrHistogram:2.1.12" level="project" />
+    <orderEntry type="library" name="Deps: io.airlift.tpch/tpch:0.10" level="project" />
+    <orderEntry type="library" name="Deps: com.fasterxml.jackson.datatype/jackson-datatype-jsr310:2.13.4" level="project" />
+    <orderEntry type="library" name="Deps: javax.xml.bind/jaxb-api:2.3.0" level="project" />
+    <orderEntry type="library" name="Deps: org.apache.arrow/arrow-compression:11.0.0" level="project" />
+    <orderEntry type="library" name="Deps: software.amazon.awssdk/annotations:2.16.76" level="project" />
   </component>
 </module>

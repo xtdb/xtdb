@@ -1,0 +1,9 @@
+<component name="libraryTable">
+  <library name="Deps: io.airlift.tpch/tpch:0.10">
+    <CLASSES>
+      <root url="jar://$MAVEN_REPOSITORY$/io/airlift/tpch/tpch/0.10/tpch-0.10.jar!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES />
+  </library>
+</component>

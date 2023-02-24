@@ -1,0 +1,9 @@
+<component name="libraryTable">
+  <library name="Deps: org.hdrhistogram/HdrHistogram:2.1.12">
+    <CLASSES>
+      <root url="jar://$MAVEN_REPOSITORY$/org/hdrhistogram/HdrHistogram/2.1.12/HdrHistogram-2.1.12.jar!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES />
+  </library>
+</component>

@@ -1,0 +1,9 @@
+<component name="libraryTable">
+  <library name="Deps: org.apache.httpcomponents/httpclient:4.5.13">
+    <CLASSES>
+      <root url="jar://$MAVEN_REPOSITORY$/org/apache/httpcomponents/httpclient/4.5.13/httpclient-4.5.13.jar!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES />
+  </library>
+</component>

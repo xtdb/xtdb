@@ -1,0 +1,9 @@
+<component name="libraryTable">
+  <library name="Deps: org.checkerframework/checker-qual:2.5.2">
+    <CLASSES>
+      <root url="jar://$MAVEN_REPOSITORY$/org/checkerframework/checker-qual/2.5.2/checker-qual-2.5.2.jar!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES />
+  </library>
+</component>

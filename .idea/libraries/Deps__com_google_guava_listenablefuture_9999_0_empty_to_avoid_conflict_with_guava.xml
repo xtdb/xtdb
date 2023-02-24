@@ -1,0 +1,9 @@
+<component name="libraryTable">
+  <library name="Deps: com.google.guava/listenablefuture:9999.0-empty-to-avoid-conflict-with-guava">
+    <CLASSES>
+      <root url="jar://$MAVEN_REPOSITORY$/com/google/guava/listenablefuture/9999.0-empty-to-avoid-conflict-with-guava/listenablefuture-9999.0-empty-to-avoid-conflict-with-guava.jar!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES />
+  </library>
+</component>

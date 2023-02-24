@@ -1,0 +1,9 @@
+<component name="libraryTable">
+  <library name="Deps: org.apache.arrow/arrow-format:11.0.0">
+    <CLASSES>
+      <root url="jar://$MAVEN_REPOSITORY$/org/apache/arrow/arrow-format/11.0.0/arrow-format-11.0.0.jar!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES />
+  </library>
+</component>

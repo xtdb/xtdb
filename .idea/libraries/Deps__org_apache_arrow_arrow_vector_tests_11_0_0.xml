@@ -1,0 +1,9 @@
+<component name="libraryTable">
+  <library name="Deps: org.apache.arrow/arrow-vector$tests:11.0.0">
+    <CLASSES>
+      <root url="jar://$MAVEN_REPOSITORY$/org/apache/arrow/arrow-vector/11.0.0/arrow-vector-11.0.0-tests.jar!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES />
+  </library>
+</component>

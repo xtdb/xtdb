@@ -1,0 +1,9 @@
+<component name="libraryTable">
+  <library name="Deps: software.amazon.awssdk/aws-xml-protocol:2.16.76">
+    <CLASSES>
+      <root url="jar://$MAVEN_REPOSITORY$/software/amazon/awssdk/aws-xml-protocol/2.16.76/aws-xml-protocol-2.16.76.jar!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES />
+  </library>
+</component>

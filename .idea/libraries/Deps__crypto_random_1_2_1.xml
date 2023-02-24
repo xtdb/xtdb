@@ -1,0 +1,9 @@
+<component name="libraryTable">
+  <library name="Deps: crypto-random:1.2.1">
+    <CLASSES>
+      <root url="jar://$MAVEN_REPOSITORY$/crypto-random/crypto-random/1.2.1/crypto-random-1.2.1.jar!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES />
+  </library>
+</component>

@@ -1,0 +1,9 @@
+<component name="libraryTable">
+  <library name="Deps: metosin/spec-tools:0.10.5">
+    <CLASSES>
+      <root url="jar://$MAVEN_REPOSITORY$/metosin/spec-tools/0.10.5/spec-tools-0.10.5.jar!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES />
+  </library>
+</component>

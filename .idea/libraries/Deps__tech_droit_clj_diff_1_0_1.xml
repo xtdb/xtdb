@@ -1,0 +1,9 @@
+<component name="libraryTable">
+  <library name="Deps: tech.droit/clj-diff:1.0.1">
+    <CLASSES>
+      <root url="jar://$MAVEN_REPOSITORY$/tech/droit/clj-diff/1.0.1/clj-diff-1.0.1.jar!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES />
+  </library>
+</component>

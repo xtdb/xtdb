@@ -7,8 +7,57 @@
   <component name="NewModuleRootManager" inherit-compiler-output="true">
     <exclude-output />
     <content url="file://$MODULE_DIR$">
-      <sourceFolder url="file://$MODULE_DIR$/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/src/main/clojure" isTestSource="false" />
     </content>
+    <orderEntry type="inheritedJdk" />
     <orderEntry type="sourceFolder" forTests="false" />
+    <orderEntry type="library" name="Deps: com.cognitect/transit-java:1.0.362" level="project" />
+    <orderEntry type="library" name="Deps: org.clojure/data.json:2.4.0" level="project" />
+    <orderEntry type="library" name="Deps: org.lz4/lz4-java:1.8.0" level="project" />
+    <orderEntry type="library" name="Deps: org.clojure/clojure:1.11.1" level="project" />
+    <orderEntry type="library" name="Deps: commons-codec:1.15" level="project" />
+    <orderEntry type="library" name="Deps: org.apache.commons/commons-compress:1.20" level="project" />
+    <orderEntry type="library" name="Deps: org.clojure/tools.logging:1.2.4" level="project" />
+    <orderEntry type="library" name="Deps: org.clojure/core.specs.alpha:0.2.62" level="project" />
+    <orderEntry type="library" name="Deps: io.netty/netty-common:4.1.82.Final" level="project" />
+    <orderEntry type="library" name="Deps: org.apache.arrow/arrow-vector$tests:11.0.0" level="project" />
+    <orderEntry type="library" name="Deps: org.apache.arrow/arrow-format:11.0.0" level="project" />
+    <orderEntry type="library" name="Deps: com.fasterxml.jackson.core/jackson-databind:2.13.4" level="project" />
+    <orderEntry type="library" name="Deps: org.clojure/spec.alpha:0.3.218" level="project" />
+    <orderEntry type="library" name="Deps: org.clojure/tools.cli:1.0.206" level="project" />
+    <orderEntry type="library" name="Deps: org.apache.arrow/arrow-memory-netty:11.0.0" level="project" />
+    <orderEntry type="library" name="Deps: henryw374/js-joda:3.2.0-0" level="project" />
+    <orderEntry type="library" name="Deps: org.apache.arrow/arrow-algorithm:11.0.0" level="project" />
+    <orderEntry type="library" name="Deps: com.github.luben/zstd-jni:1.5.0-4" level="project" />
+    <orderEntry type="library" name="Deps: com.googlecode.json-simple/json-simple:1.1.1" level="project" />
+    <orderEntry type="library" name="Deps: io.netty/netty-buffer:4.1.82.Final" level="project" />
+    <orderEntry type="library" name="Deps: com.fasterxml.jackson.core/jackson-core:2.13.4" level="project" />
+    <orderEntry type="library" name="Deps: com.google.flatbuffers/flatbuffers-java:1.12.0" level="project" />
+    <orderEntry type="library" name="Deps: pro.juxt.clojars-mirrors.weavejester/dependency:0.2.1" level="project" />
+    <orderEntry type="library" name="Deps: com.fasterxml.jackson.core/jackson-annotations:2.13.4" level="project" />
+    <orderEntry type="library" name="Deps: org.javassist/javassist:3.18.1-GA" level="project" />
+    <orderEntry type="library" name="Deps: org.roaringbitmap/shims:0.9.26" level="project" />
+    <orderEntry type="library" name="Deps: com.widdindustries/time-literals:0.1.6" level="project" />
+    <orderEntry type="library" name="Deps: org.apache.arrow/arrow-vector:11.0.0" level="project" />
+    <orderEntry type="library" name="Deps: org.xerial.snappy/snappy-java:1.1.8.4" level="project" />
+    <orderEntry type="library" name="Deps: net.cgrand/macrovich:0.2.0" level="project" />
+    <orderEntry type="library" name="Deps: org.msgpack/msgpack:0.6.12" level="project" />
+    <orderEntry type="library" name="Deps: borkdude/edamame:1.0.16" level="project" />
+    <orderEntry type="library" name="Deps: org.clojure/data.csv:1.0.1" level="project" />
+    <orderEntry type="library" name="Deps: com.cognitect/transit-clj:1.0.329" level="project" />
+    <orderEntry type="library" name="Deps: org.apache.arrow/arrow-memory-core:11.0.0" level="project" />
+    <orderEntry type="library" name="Deps: org.babashka/sci.impl.types:0.0.2" level="project" />
+    <orderEntry type="library" name="Deps: cljs.java-time:0.1.19" level="project" />
+    <orderEntry type="library" name="Deps: org.apache.kafka/kafka-clients:3.1.0" level="project" />
+    <orderEntry type="library" name="Deps: org.clojure/tools.reader:1.3.4" level="project" />
+    <orderEntry type="library" name="Deps: org.babashka/sci:0.6.37" level="project" />
+    <orderEntry type="library" name="Deps: org.slf4j/slf4j-api:1.7.30" level="project" />
+    <orderEntry type="library" name="Deps: pro.juxt.clojars-mirrors.integrant/integrant:0.8.0" level="project" />
+    <orderEntry type="library" name="Deps: borkdude/sci.impl.reflector:0.0.1" level="project" />
+    <orderEntry type="library" name="Deps: com.google.code.findbugs/jsr305:3.0.2" level="project" />
+    <orderEntry type="library" name="Deps: org.roaringbitmap/RoaringBitmap:0.9.26" level="project" />
+    <orderEntry type="library" name="Deps: com.fasterxml.jackson.datatype/jackson-datatype-jsr310:2.13.4" level="project" />
+    <orderEntry type="library" name="Deps: javax.xml.bind/jaxb-api:2.3.0" level="project" />
+    <orderEntry type="library" name="Deps: org.apache.arrow/arrow-compression:11.0.0" level="project" />
   </component>
 </module>

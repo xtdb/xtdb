@@ -1,0 +1,9 @@
+<component name="libraryTable">
+  <library name="Deps: com.fasterxml.jackson.datatype/jackson-datatype-jsr310:2.13.4">
+    <CLASSES>
+      <root url="jar://$MAVEN_REPOSITORY$/com/fasterxml/jackson/datatype/jackson-datatype-jsr310/2.13.4/jackson-datatype-jsr310-2.13.4.jar!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES />
+  </library>
+</component>

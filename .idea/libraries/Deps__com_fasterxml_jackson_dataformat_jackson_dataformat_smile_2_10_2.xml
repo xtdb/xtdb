@@ -1,0 +1,9 @@
+<component name="libraryTable">
+  <library name="Deps: com.fasterxml.jackson.dataformat/jackson-dataformat-smile:2.10.2">
+    <CLASSES>
+      <root url="jar://$MAVEN_REPOSITORY$/com/fasterxml/jackson/dataformat/jackson-dataformat-smile/2.10.2/jackson-dataformat-smile-2.10.2.jar!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES />
+  </library>
+</component>

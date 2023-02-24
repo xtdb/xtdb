@@ -1,0 +1,9 @@
+<component name="libraryTable">
+  <library name="Deps: tigris:0.1.2">
+    <CLASSES>
+      <root url="jar://$MAVEN_REPOSITORY$/tigris/tigris/0.1.2/tigris-0.1.2.jar!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES />
+  </library>
+</component>

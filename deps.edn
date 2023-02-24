@@ -1,4 +1,6 @@
-{:deps {org.clojure/clojure {:mvn/version "1.11.1"}
+{:paths ["src/dev/clojure" "src/dev/resources" "src/test/clojure" "src/test/resources" "modules/datasets/data"]
+
+ :deps {org.clojure/clojure {:mvn/version "1.11.1"}
         com.xtdb.labs/core2-api {:local/root "api"}
         com.xtdb.labs/core2-wire-formats {:local/root "wire-formats"}
         com.xtdb.labs/core2-core {:local/root "core"}
@@ -30,13 +32,6 @@
         io.github.cognitect-labs/test-runner {:git/tag "v0.5.0" :git/sha "b3fd0d2"}
         com.clojure-goes-fast/clj-async-profiler {:mvn/version "1.0.3"}}
 
- :paths ["dev"
-         "dev-resources"
-         "test"
-         "test-resources"
-         "core/dev"
-         "modules/datasets/data"]
-
  :aliases {:core2 {:jvm-opts ["--add-opens=java.base/java.nio=ALL-UNNAMED" ; needed on JDK16 to allow Netty/Arrow access DirectBuffer internals
                               "-Dio.netty.tryReflectionSetAccessible=true"]}
 
@@ -61,13 +56,16 @@
                             "-XX:MaxMetaspaceSize=1g"]}
 
            :test {:exec-fn cognitect.test-runner.api/test
-                  :exec-args {:excludes [:integration :timescale :s3 :kafka :jdbc :slt :docker]}}
+                  :exec-args {:excludes [:integration :timescale :s3 :kafka :jdbc :slt :docker]
+                              :dirs ["src/test/clojure"]}}
 
            :integration-test {:exec-fn cognitect.test-runner.api/test
-                              :exec-args {:includes [:integration]}}
+                              :exec-args {:includes [:integration]
+                                          :dirs ["src/test/clojure"]}}
 
            :timescale-test {:exec-fn cognitect.test-runner.api/test
-                            :exec-args {:includes [:timescale]}}
+                            :exec-args {:includes [:timescale]}
+                            :dirs ["src/test/clojure"]}
 
            :slt-test {:main-opts
                       ["-m" "core2.sql.logic-test.runner"
@@ -75,16 +73,16 @@
                        "--db" "xtdb"
                        "--max-failures" "0"
                        "--max-errors" "0"
-                       "test/core2/sql/logic_test/sqlite_test/xtdb.test"
-                       "test/core2/sql/logic_test/sqlite_test/select1.test"
-                       "test/core2/sql/logic_test/sqlite_test/select2.test"
-                       "test/core2/sql/logic_test/sqlite_test/select3.test"
-                       "test/core2/sql/logic_test/sqlite_test/select4.test"
-                       #_"test/core2/sql/logic_test/sqlite_test/select5.test"
-                       "test/core2/sql/logic_test/sqlite_test/random/expr/slt_good_0.test"
-                       "test/core2/sql/logic_test/sqlite_test/random/aggregates/slt_good_0.test"
-                       "test/core2/sql/logic_test/sqlite_test/random/groupby/slt_good_0.test"
-                       "test/core2/sql/logic_test/sqlite_test/random/select/slt_good_0.test"]}
+                       "src/test/resources/core2/sql/logic_test/sqlite_test/xtdb.test"
+                       "src/test/resources/core2/sql/logic_test/sqlite_test/select1.test"
+                       "src/test/resources/core2/sql/logic_test/sqlite_test/select2.test"
+                       "src/test/resources/core2/sql/logic_test/sqlite_test/select3.test"
+                       "src/test/resources/core2/sql/logic_test/sqlite_test/select4.test"
+                       #_"src/test/resources/core2/sql/logic_test/sqlite_test/select5.test"
+                       "src/test/resources/core2/sql/logic_test/sqlite_test/random/expr/slt_good_0.test"
+                       "src/test/resources/core2/sql/logic_test/sqlite_test/random/aggregates/slt_good_0.test"
+                       "src/test/resources/core2/sql/logic_test/sqlite_test/random/groupby/slt_good_0.test"
+                       "src/test/resources/core2/sql/logic_test/sqlite_test/random/select/slt_good_0.test"]}
 
            :slt-test-2 {:main-opts
                         ["-m" "core2.sql.logic-test.runner"
@@ -92,12 +90,12 @@
                          "--db" "xtdb"
                          "--max-failures" "0"
                          "--max-errors" "0"
-                         "test/core2/sql/logic_test/sqlite_test/index/between/1/slt_good_0.test"
-                         "test/core2/sql/logic_test/sqlite_test/index/commute/10/slt_good_0.test"
-                         "test/core2/sql/logic_test/sqlite_test/index/in/10/slt_good_0.test"
-                         "test/core2/sql/logic_test/sqlite_test/index/orderby/10/slt_good_0.test"
-                         "test/core2/sql/logic_test/sqlite_test/index/orderby_nosort/10/slt_good_0.test"
-                         "test/core2/sql/logic_test/sqlite_test/index/random/10/slt_good_0.test"]}
+                         "src/test/resources/core2/sql/logic_test/sqlite_test/index/between/1/slt_good_0.test"
+                         "src/test/resources/core2/sql/logic_test/sqlite_test/index/commute/10/slt_good_0.test"
+                         "src/test/resources/core2/sql/logic_test/sqlite_test/index/in/10/slt_good_0.test"
+                         "src/test/resources/core2/sql/logic_test/sqlite_test/index/orderby/10/slt_good_0.test"
+                         "src/test/resources/core2/sql/logic_test/sqlite_test/index/orderby_nosort/10/slt_good_0.test"
+                         "src/test/resources/core2/sql/logic_test/sqlite_test/index/random/10/slt_good_0.test"]}
 
            :slt-test-dirs {:main-opts
                            ["-m" "core2.sql.logic-test.runner"
@@ -110,16 +108,20 @@
                                            :max-errors 61}}
 
            :s3-test {:exec-fn cognitect.test-runner.api/test
-                     :exec-args {:includes [:s3]}}
+                     :exec-args {:includes [:s3]}
+                     :dirs ["src/test/clojure"]}
 
            :kafka-test {:exec-fn cognitect.test-runner.api/test
-                        :exec-args {:includes [:kafka]}}
+                        :exec-args {:includes [:kafka]
+                                    :dirs ["src/test/clojure"]}}
 
            :jdbc-test {:exec-fn cognitect.test-runner.api/test
-                       :exec-args {:includes [:jdbc]}}
+                       :exec-args {:includes [:jdbc]
+                                   :dirs ["src/test/clojure"]}}
 
            :docker-test {:exec-fn cognitect.test-runner.api/test
-                         :exec-args {:includes [:docker]}}
+                         :exec-args {:includes [:docker]
+                                     :dirs ["src/test/clojure"]}}
 
            :uberjar {:deps {io.github.seancorfield/build-clj {:git/tag "v0.6.7" :git/sha "22c2d09"}}
                      :replace-paths []

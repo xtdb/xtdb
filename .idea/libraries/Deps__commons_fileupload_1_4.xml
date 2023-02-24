@@ -1,0 +1,9 @@
+<component name="libraryTable">
+  <library name="Deps: commons-fileupload:1.4">
+    <CLASSES>
+      <root url="jar://$MAVEN_REPOSITORY$/commons-fileupload/commons-fileupload/1.4/commons-fileupload-1.4.jar!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES />
+  </library>
+</component>

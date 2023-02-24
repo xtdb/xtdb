@@ -1,0 +1,9 @@
+<component name="libraryTable">
+  <library name="Deps: com.google.errorprone/error_prone_annotations:2.14.0">
+    <CLASSES>
+      <root url="jar://$MAVEN_REPOSITORY$/com/google/errorprone/error_prone_annotations/2.14.0/error_prone_annotations-2.14.0.jar!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES />
+  </library>
+</component>
