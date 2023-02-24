@@ -15,8 +15,6 @@ pom.xml.asc
 # Ignore Gradle build output directory
 build
 
-*.iml
-.idea/
 .cpcache/
 .lsp/.cache/
 /_manifest

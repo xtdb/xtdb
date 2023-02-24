@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<module type="JAVA_MODULE" version="4">
+  <component name="BuildSystem">
+    <option name="buildSystemId" value="CLOJURE_DEPS" />
+    <option name="displayName" value="core2" />
+  </component>
+  <component name="NewModuleRootManager" inherit-compiler-output="true">
+    <exclude-output />
+    <content url="file://$MODULE_DIR$">
+      <sourceFolder url="file://$MODULE_DIR$/dev" isTestSource="true" />
+      <sourceFolder url="file://$MODULE_DIR$/dev-resources" type="java-test-resource" />
+      <sourceFolder url="file://$MODULE_DIR$/test" isTestSource="true" />
+      <sourceFolder url="file://$MODULE_DIR$/test-resources" type="java-test-resource" />
+      <excludeFolder url="file://$MODULE_DIR$/target" />
+      <excludeFolder url="file://$MODULE_DIR$/build" />
+      <excludeFolder url="file://$MODULE_DIR$/.clj-kondo/.cache" />
+      <excludeFolder url="file://$MODULE_DIR$/.lsp/.cache" />
+      <excludeFolder url="file://$MODULE_DIR$/dev/dev-node" />
+      <excludeFolder url="file://$MODULE_DIR$/.cpcache" />
+      <excludeFolder url="file://$MODULE_DIR$/.gradle" />
+    </content>
+    <orderEntry type="sourceFolder" forTests="false" />
+  </component>
+</module>
