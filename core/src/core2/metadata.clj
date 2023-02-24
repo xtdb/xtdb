@@ -18,6 +18,7 @@
            java.nio.ByteBuffer
            (java.util ArrayList HashMap HashSet Map NavigableMap TreeMap)
            (java.util.concurrent ConcurrentHashMap)
+           java.util.concurrent.atomic.AtomicInteger
            (java.util.function BiFunction Consumer Function)
            java.util.stream.IntStream
            (org.apache.arrow.memory ArrowBuf BufferAllocator)
@@ -30,6 +31,14 @@
 
 (set! *unchecked-math* :warn-on-boxed)
 
+#_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
+(definterface ITableMetadata
+  (^org.apache.arrow.vector.VectorSchemaRoot metadataRoot [])
+  (^java.util.Set columnNames [])
+  (^Long rowIndex [^String column-name, ^int blockIdx]
+   "pass blockIdx = -1 for metadata about the whole chunk")
+  (^long blockCount []))
+
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (definterface IColumnMetadataWriter
   (^void writeMetadata [^core2.vector.IIndirectRelation liveRel, ^int blockIdx]
@@ -38,6 +47,7 @@
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (definterface ITableMetadataWriter
   (^core2.metadata.IColumnMetadataWriter columnMetadataWriter [^String colName])
+  (^core2.metadata.ITableMetadata tableMetadata [])
   (^java.util.concurrent.CompletableFuture finishChunk [])
   (^void close []))
 
@@ -48,14 +58,6 @@
   (^java.util.NavigableMap chunksMetadata [])
   (^java.util.concurrent.CompletableFuture withMetadata [^long chunkIdx, ^String tableName, ^java.util.function.Function #_<ITableMetadata> f])
   (columnType [^String tableName, ^String colName]))
-
-#_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
-(definterface ITableMetadata
-  (^org.apache.arrow.vector.VectorSchemaRoot metadataRoot [])
-  (^java.util.Set columnNames [])
-  (^Long rowIndex [^String column-name, ^int blockIdx]
-   "pass blockIdx = -1 for metadata about the whole chunk")
-  (^long blockCount []))
 
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface IMetadataPredicate
@@ -360,6 +362,34 @@
                   (.setSafe nested-col-idxs-vec (+ start-idx n) (aget sub-col-idxs n)))
                 (.endValue struct-meta-vec types-vec-idx sub-col-count)))))))))
 
+(defn ->table-metadata-idxs [^VectorSchemaRoot metadata-root]
+  (let [block-idx-cache (HashMap.)
+        row-count (.getRowCount metadata-root)
+        ^VarCharVector column-name-vec (.getVector metadata-root "column")
+        ^IntVector block-idx-vec (.getVector metadata-root "block-idx")
+        root-col-vec (.getVector metadata-root "root-column")
+        col-names (HashSet.)]
+    (dotimes [meta-idx (.getRowCount metadata-root)]
+      (let [col-name (str (.getObject column-name-vec meta-idx))]
+        (.add col-names col-name)
+        (when-not (.isNull root-col-vec meta-idx)
+          (.put block-idx-cache [col-name (.get block-idx-vec meta-idx)] meta-idx))))
+
+    {:col-names (into #{} col-names)
+     :block-idx-cache block-idx-cache
+     :block-count (loop [block-count 0, idx 0]
+                    (cond
+                      (>= idx row-count) (inc block-count)
+                      :else (recur (max (.get block-idx-vec idx) block-count)
+                                   (inc idx))))}))
+
+(defn ->table-metadata ^core2.metadata.ITableMetadata [^VectorSchemaRoot vsr, {:keys [col-names block-idx-cache, block-count]}]
+  (reify ITableMetadata
+    (metadataRoot [_] vsr)
+    (columnNames [_] col-names)
+    (rowIndex [_ col-name block-idx] (get block-idx-cache [col-name block-idx]))
+    (blockCount [_] block-count)))
+
 (defn open-table-meta-writer [^BufferAllocator allocator, ^ObjectStore object-store, ^String table-name, ^long chunk-idx]
   (let [metadata-root (VectorSchemaRoot/create table-metadata-schema allocator)
         ^VarCharVector column-name-vec (.getVector metadata-root "column")
@@ -377,7 +407,11 @@
 
         ^VarBinaryVector bloom-vec (.getVector metadata-root "bloom")
 
-        type-metadata-writers (HashMap.)]
+        type-metadata-writers (HashMap.)
+
+        col-names (HashSet.)
+        block-idx-cache (HashMap.)
+        !block-count (AtomicInteger. 0)]
 
     (letfn [(write-root-col-row-ids! [^IIndirectVector row-id-col]
               (let [value-count (.getValueCount row-id-col)
@@ -426,12 +460,24 @@
 
       (reify ITableMetadataWriter
         (columnMetadataWriter [_ col-name]
+          (.add col-names col-name)
+
           (reify IColumnMetadataWriter
             (writeMetadata [_ live-rel block-idx]
               (when (not (zero? (.rowCount live-rel)))
                 (write-col-meta! (.vectorForName live-rel col-name))
                 (write-root-col-row-ids! (.vectorForName live-rel "_row-id"))
-                (.setSafe block-idx-vec (dec (.getRowCount metadata-root)) block-idx)))))
+                (.setSafe block-idx-vec (dec (.getRowCount metadata-root)) block-idx)
+                (when-not (neg? block-idx)
+                  (.set !block-count block-idx))
+
+                (.put block-idx-cache [col-name block-idx] (dec (.getRowCount metadata-root)))))))
+
+        (tableMetadata [_]
+          (->table-metadata metadata-root
+                            {:col-names (into #{} col-names)
+                             :block-idx-cache (into {} block-idx-cache)
+                             :block-count (.get !block-count)}))
 
         (finishChunk [_]
           (.syncSchema metadata-root)
@@ -442,34 +488,6 @@
         AutoCloseable
         (close [_]
           (.close metadata-root))))))
-
-(defn ->table-metadata-idxs [^VectorSchemaRoot metadata-root]
-  (let [block-idx-cache (HashMap.)
-        row-count (.getRowCount metadata-root)
-        ^VarCharVector column-name-vec (.getVector metadata-root "column")
-        ^IntVector block-idx-vec (.getVector metadata-root "block-idx")
-        root-col-vec (.getVector metadata-root "root-column")
-        col-names (HashSet.)]
-    (dotimes [meta-idx (.getRowCount metadata-root)]
-      (let [col-name (str (.getObject column-name-vec meta-idx))]
-        (.add col-names col-name)
-        (when-not (.isNull root-col-vec meta-idx)
-          (.put block-idx-cache [col-name (.get block-idx-vec meta-idx)] meta-idx))))
-
-    {:col-names (into #{} col-names)
-     :block-idx-cache block-idx-cache
-     :block-count (loop [block-count 0, idx 0]
-                    (cond
-                      (>= idx row-count) (inc block-count)
-                      :else (recur (max (.get block-idx-vec idx) block-count)
-                                   (inc idx))))}))
-
-(defn ->table-metadata ^core2.metadata.ITableMetadata [^VectorSchemaRoot vsr, {:keys [col-names block-idx-cache, block-count]}]
-  (reify ITableMetadata
-    (metadataRoot [_] vsr)
-    (columnNames [_] col-names)
-    (rowIndex [_ col-name block-idx] (get block-idx-cache [col-name block-idx]))
-    (blockCount [_] block-count)) )
 
 (deftype MetadataManager [^BufferAllocator allocator
                           ^ObjectStore object-store

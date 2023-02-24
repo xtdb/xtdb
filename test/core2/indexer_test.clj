@@ -7,6 +7,7 @@
             [clojure.tools.logging :as log]
             [core2.api :as c2]
             [core2.buffer-pool :as bp]
+            [core2.expression.metadata :as expr.meta]
             [core2.indexer :as idx]
             core2.indexer.internal-id-manager
             [core2.metadata :as meta]
@@ -17,18 +18,20 @@
             [core2.ts-devices :as ts]
             [core2.types :as ty]
             [core2.util :as util]
-            core2.watermark)
+            core2.watermark
+            [core2.vector.indirect :as iv])
   (:import core2.api.TransactionInstant
            [core2.buffer_pool BufferPool IBufferPool]
            (core2.indexer  TransactionIndexer)
            (core2.indexer.internal_id_manager InternalIdManager)
-           core2.metadata.IMetadataManager
+           (core2.metadata IMetadataManager)
            core2.node.Node
            core2.object_store.ObjectStore
+           core2.operator.scan.ScanSource
            core2.watermark.IWatermark
            java.nio.file.Files
            java.time.Duration
-           java.util.function.Consumer
+           (java.util.function Consumer)
            [org.apache.arrow.memory ArrowBuf BufferAllocator]
            [org.apache.arrow.vector BigIntVector VectorLoader VectorSchemaRoot]
            [org.apache.arrow.vector.complex StructVector]))
@@ -103,7 +106,7 @@
           (with-open [^IWatermark watermark (.openWatermark idxer last-tx-key)]
             (let [live-blocks (-> (.liveChunk watermark)
                                   (.liveTable "xt_docs")
-                                  (.liveBlocks ["id"]))
+                                  (.liveBlocks ["id"] nil))
                   !res (volatile! [])]
               (.forEachRemaining live-blocks
                                  (reify Consumer
@@ -678,3 +681,63 @@
 
         (tj/check-json (.toPath (io/as-file (io/resource "can-index-sql-insert")))
                        (.resolve node-dir "objects"))))))
+
+(t/deftest test-skips-irrelevant-live-blocks-632
+  (with-open [node (node/start-node {:core2/live-chunk {:rows-per-block 2, :rows-per-chunk 10}})]
+    (-> (c2/submit-tx node [[:put {:name "Håkan", :id :hak}]])
+        (tu/then-await-tx node))
+
+    (tu/finish-chunk! node)
+
+    (c2/submit-tx node [[:put {:name "Dan", :id :dan}]
+                        [:put {:name "Ivan", :id :iva}]])
+
+    (-> (c2/submit-tx node [[:put {:name "James", :id :jms}]
+                            [:put {:name "Jon", :id :jon}]])
+        (tu/then-await-tx node))
+
+    (let [^IMetadataManager metadata-mgr (tu/component node ::meta/metadata-manager)
+          ^ScanSource db @(node/snapshot-async node)]
+      (with-open [params (tu/open-params {'?name "Ivan"})]
+        (let [gt-literal-selector (expr.meta/->metadata-selector '(> name "Ivan") '#{name} {})
+              gt-param-selector (expr.meta/->metadata-selector '(> name ?name) '#{name} params)]
+
+          (t/is (= #{0} (set (keys (.chunksMetadata metadata-mgr)))))
+
+          (letfn [(test-live-blocks [^IWatermark wm, metadata-pred]
+                    (with-open [live-blocks (-> (.liveChunk wm)
+                                                (.liveTable "xt_docs")
+                                                (.liveBlocks #{"name"} metadata-pred))]
+                      (let [!res (atom [])]
+                        (.forEachRemaining live-blocks
+                                           (reify Consumer
+                                             (accept [_ in-rels]
+                                               (swap! !res conj (-> in-rels (update-vals iv/rel->rows))))))
+                        @!res)))]
+
+            (with-open [wm1 (.openWatermark db)]
+              (t/is (= [{"name" [{:_row-id 1, :name "Dan"} {:_row-id 2, :name "Ivan"}]}
+                        {"name" [{:_row-id 3, :name "James"} {:_row-id 4, :name "Jon"}]}]
+                       (test-live-blocks wm1 nil))
+                    "no selector")
+
+              (t/is (= [{"name" [{:_row-id 3, :name "James"} {:_row-id 4, :name "Jon"}]}]
+                       (test-live-blocks wm1 gt-literal-selector))
+                    "only second block, literal selector")
+
+              (t/is (= [{"name" [{:_row-id 3, :name "James"} {:_row-id 4, :name "Jon"}]}]
+                       (test-live-blocks wm1 gt-param-selector))
+                    "only second block, param selector")
+
+              (let [!next-tx (c2/submit-tx node [[:put {:name "Jeremy", :id :jdt}]])
+                    ^ScanSource next-db @(node/snapshot-async node !next-tx)]
+
+                (with-open [wm2 (.openWatermark next-db)]
+                  (t/is (= [{"name" [{:_row-id 3, :name "James"} {:_row-id 4, :name "Jon"}]}]
+                           (test-live-blocks wm1 gt-literal-selector))
+                        "replay with wm1")
+
+                  (t/is (= [{"name" [{:_row-id 3, :name "James"} {:_row-id 4, :name "Jon"}]}
+                            {"name" [{:_row-id 5, :name "Jeremy"}]}]
+                           (test-live-blocks wm2 gt-literal-selector))
+                        "now on wm2"))))))))))

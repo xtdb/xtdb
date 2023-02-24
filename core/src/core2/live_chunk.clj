@@ -12,15 +12,16 @@
             [juxt.clojars-mirrors.integrant.core :as ig])
   (:import [clojure.lang MapEntry]
            core2.ICursor
-           (core2.metadata IColumnMetadataWriter IMetadataManager ITableMetadataWriter)
+           (core2.metadata IColumnMetadataWriter IMetadataManager IMetadataPredicate ITableMetadata ITableMetadataWriter)
            core2.object_store.ObjectStore
            java.lang.AutoCloseable
            (java.util ArrayList HashMap List Map)
            (java.util.concurrent CompletableFuture)
-           java.util.concurrent.atomic.AtomicLong
+           java.util.concurrent.atomic.AtomicInteger
            java.util.function.Consumer
            (org.apache.arrow.memory BufferAllocator)
            (org.apache.arrow.vector BigIntVector ValueVector VectorLoader VectorSchemaRoot VectorUnloader)
+           org.roaringbitmap.RoaringBitmap
            org.roaringbitmap.longlong.Roaring64Bitmap))
 
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
@@ -68,7 +69,7 @@
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface ILiveColumnWatermark
   (columnType [])
-  (^core2.ICursor #_<IIR> liveBlocks [])
+  (^core2.ICursor #_<IIR> liveBlocks [^org.roaringbitmap.RoaringBitmap excludeBlockIdxs])
   (^void close []))
 
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
@@ -107,7 +108,7 @@
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface ILiveTableWatermark
   (^core2.live_chunk.ILiveColumnWatermark liveColumn [^String colName])
-  (^core2.ICursor #_<IIR> liveBlocks [^Iterable colNames])
+  (^core2.ICursor #_<IIR> liveBlocks [^Iterable colNames, ^core2.metadata.IMetadataPredicate metadataPred])
   (^void close []))
 
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
@@ -153,6 +154,23 @@
   (^void nextChunk [])
   (^void close []))
 
+(defn- without-block-idxs [^ICursor inner, ^RoaringBitmap exclude-block-idxs]
+  (let [!block-idx (AtomicInteger. 0)]
+    (reify ICursor
+      (tryAdvance [_ c]
+        (let [!advanced? (volatile! false)]
+          (while (and (not @!advanced?)
+                      (.tryAdvance inner
+                                   (reify Consumer
+                                     (accept [_ el]
+                                       (let [block-idx (.getAndIncrement !block-idx)]
+                                         (when-not (.contains exclude-block-idxs block-idx)
+                                           (.accept c el)
+                                           (vreset! !advanced? true))))))))
+          @!advanced?))
+
+      (close [_] (.close inner)))))
+
 (deftype LiveColumnTx [^BigIntVector row-id-vec, ^ValueVector content-vec, ^Roaring64Bitmap row-id-bitmap
                        ^BigIntVector transient-row-id-vec, ^ValueVector transient-content-vec, ^Roaring64Bitmap transient-row-id-bitmap
                        ^IRowCounter row-counter]
@@ -190,9 +208,10 @@
       (reify ILiveColumnWatermark
         (columnType [_] col-type)
 
-        (liveBlocks [_]
+        (liveBlocks [_ exclude-block-idxs]
           (util/->concat-cursor (iv/->slice-cursor (iv/<-root tx-live-root) [(.getRowCount tx-live-root)])
-                                (iv/->slice-cursor (iv/<-root live-root) row-counts)))
+                                (-> (iv/->slice-cursor (iv/<-root live-root) row-counts)
+                                    (without-block-idxs exclude-block-idxs))))
 
         AutoCloseable
         (close [_] (when retain? (.close live-root))))))
@@ -249,8 +268,9 @@
       (reify ILiveColumnWatermark
         (columnType [_] col-type)
 
-        (liveBlocks [_]
-          (iv/->slice-cursor (iv/<-root live-root) row-counts))
+        (liveBlocks [_ exclude-block-idxs]
+          (-> (iv/->slice-cursor (iv/<-root live-root) row-counts)
+              (without-block-idxs exclude-block-idxs)))
 
         AutoCloseable
         (close [_] (when retain? (.close live-root))))))
@@ -288,13 +308,19 @@
     (util/try-close content-vec)
     (util/try-close row-id-vec)))
 
-(defn- table-wm-live-blocks ^core2.ICursor [^Map wms, ^Iterable col-names]
-  (let [slice-cursors (->> col-names
-                           (into {} (keep (fn [^String col-name]
-                                            (when-let [^ILiveColumnWatermark col-wm (.get wms col-name)]
-                                              (MapEntry/create col-name (.liveBlocks col-wm)))))))]
-    (when (= (set (keys slice-cursors)) (set col-names))
-      (util/combine-col-cursors slice-cursors))))
+(defn- table-wm-live-blocks ^core2.ICursor [^Map wms, ^Iterable col-names, ^ITableMetadata table-metadata, ^IMetadataPredicate metadata-pred]
+  (let [exclude-block-idxs (RoaringBitmap.)]
+    (when-let [pred (some-> metadata-pred (.build table-metadata))]
+      (dotimes [block-idx (.blockCount table-metadata)]
+        (when-not (.test pred block-idx)
+          (.add exclude-block-idxs block-idx))))
+
+    (let [slice-cursors (->> col-names
+                             (into {} (keep (fn [^String col-name]
+                                              (when-let [^ILiveColumnWatermark col-wm (.get wms col-name)]
+                                                (MapEntry/create col-name (.liveBlocks col-wm exclude-block-idxs)))))))]
+      (when (= (set (keys slice-cursors)) (set col-names))
+        (util/combine-col-cursors slice-cursors)))))
 
 (deftype LiveTableTx [^BufferAllocator allocator, ^ObjectStore object-store
                       ^String table-name, ^ITableMetadataWriter table-metadata-writer
@@ -338,7 +364,8 @@
 
         (reify ILiveTableWatermark
           (liveColumn [_ col-name] (.get wms col-name))
-          (liveBlocks [_ col-names] (table-wm-live-blocks wms col-names))
+          (liveBlocks [_ col-names metadata-pred]
+            (table-wm-live-blocks wms col-names (.tableMetadata table-metadata-writer) metadata-pred))
 
           AutoCloseable
           (close [_] (run! util/try-close (.values wms))))
@@ -377,7 +404,8 @@
 
         (reify ILiveTableWatermark
           (liveColumn [_ col-name] (.get wms col-name))
-          (liveBlocks [_ col-names] (table-wm-live-blocks wms col-names))
+          (liveBlocks [_ col-names metadata-pred]
+            (table-wm-live-blocks wms col-names (.tableMetadata table-metadata-writer) metadata-pred))
 
           AutoCloseable
           (close [_] (run! util/try-close (.values wms))))
