@@ -208,7 +208,8 @@
 (defn- ->temporal-rel ^core2.vector.IIndirectRelation [^IWatermark watermark, ^BufferAllocator allocator, ^List col-names ^longs temporal-min-range ^longs temporal-max-range atemporal-row-id-bitmap]
   (let [temporal-min-range (adjust-temporal-min-range-to-row-id-range temporal-min-range atemporal-row-id-bitmap)
         temporal-max-range (adjust-temporal-max-range-to-row-id-range temporal-max-range atemporal-row-id-bitmap)]
-    (.createTemporalRelation watermark allocator
+    (.createTemporalRelation (.temporalRootsSource watermark)
+                             allocator
                              (->> (conj col-names "_row-id")
                                   (into [] (comp (distinct) (filter temporal/temporal-column?))))
                              temporal-min-range

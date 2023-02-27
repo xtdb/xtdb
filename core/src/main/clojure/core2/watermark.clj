@@ -16,15 +16,8 @@
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface IWatermark
   (^core2.api.TransactionInstant txBasis [])
-
   (^core2.live_chunk.ILiveChunkWatermark liveChunk [])
-
-  ;; this is a lot of duplication - I guess we'd extend interfaces here if we were in Java
-  (^core2.vector.IIndirectRelation createTemporalRelation [^org.apache.arrow.memory.BufferAllocator allocator
-                                                           ^java.util.List columns
-                                                           ^longs temporalMinRange
-                                                           ^longs temporalMaxRange
-                                                           ^org.roaringbitmap.longlong.Roaring64Bitmap rowIdBitmap])
+  (^core2.temporal.ITemporalRelationSource temporalRootsSource [])
 
   (^void close []))
 
@@ -44,11 +37,7 @@
   IWatermark
   (txBasis [_] tx-key)
   (liveChunk [_] live-chunk)
-
-  (createTemporalRelation [_ allocator columns temporal-min-range temporal-max-range row-id-bitmap]
-    (.createTemporalRelation temporal-roots-src allocator columns
-                             temporal-min-range temporal-max-range
-                             row-id-bitmap))
+  (temporalRootsSource [_] temporal-roots-src)
 
   (close [_]
     (util/try-close live-chunk)
@@ -80,9 +69,7 @@
           (reify IWatermark
             (txBasis [_] (.txBasis wm))
             (liveChunk [_] (.liveChunk wm))
-
-            (createTemporalRelation [_ allocator columns temporal-min-range temporal-max-range row-id-bitmap]
-              (.createTemporalRelation wm allocator columns temporal-min-range temporal-max-range row-id-bitmap))
+            (temporalRootsSource [_] (.temporalRootsSource wm))
 
             AutoCloseable
             (close [_]
