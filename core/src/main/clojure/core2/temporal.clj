@@ -454,10 +454,6 @@
         (createTemporalRelation [_ allocator columns temporal-min-range temporal-max-range row-id-bitmap]
           (->temporal-rel allocator @!kd-tree columns temporal-min-range temporal-max-range row-id-bitmap)))))
 
-  ITemporalRelationSource
-  (createTemporalRelation [_ allocator columns temporal-min-range temporal-max-range row-id-bitmap]
-    (->temporal-rel allocator kd-tree columns temporal-min-range temporal-max-range row-id-bitmap))
-
   Closeable
   (close [this]
     (util/shutdown-pool snapshot-pool)
