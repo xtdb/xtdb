@@ -56,7 +56,7 @@ A uniqueness constraint can be handled 3 ways:
 
 . Encode the unique value in the ID (e.g. store the value(s) in a string ID, or use a map ID) of an entity representing that value, with a reference to the other entity that currently "owns" the value.
 . Use ::xt/match, however this takes time to confirm successful assertions and when there is contention you need to implement retry logic at each client.
-. Use a xref:language-reference::datalog-transactions#transaction-functions[transaction function]. This is slower still, though at least avoids the need to worry about contention & retrying. You can also express very complex constraints in these functions.
+. Use a xref:{page-component-version}@language-reference::datalog-transactions#transaction-functions[transaction function]. This is slower still, though at least avoids the need to worry about contention & retrying. You can also express very complex constraints in these functions.
 
 
 [#modeling]
@@ -170,7 +170,7 @@ http://vvvvalvalval.github.io/posts/2018-01-06-so-yeah-about-clojures-syntax.htm
 blog post].
 +
 We offer a module providing some limited SQL support using https://calcite.apache.org/docs/index.html[Apache Calcite] - read more about it
-xref:language-reference::sql-queries.adoc[**here**].
+xref:{page-component-version}@language-reference::sql-queries.adoc[**here**].
 
 How does XTDB compare to Datomic (On-Prem)?::
 
@@ -400,7 +400,7 @@ the core team.
 
 Does XTDB provide transaction functions?::
 
-  Yes - read more about transaction functions in XTDB xref:language-reference::datalog-transactions#transaction-functions[**here**].
+  Yes - read more about transaction functions in XTDB xref:{page-component-version}@language-reference::datalog-transactions#transaction-functions[**here**].
 
 
 Does XTDB support the full Datomic/DataScript dialect of Datalog?::
@@ -438,7 +438,7 @@ cross shard queries. Sharding is mainly useful to increase throughput.
 
 Does XTDB support pull expressions?::
 
-  Yes - XTDB supports a 'pull' syntax, allowing you to decouple specifying which entities you want from what data you'd like about those entities in your queries. This support is based on the excellent https://edn-query-language.org/eql/1.0.0/what-is-eql.html[EDN Query Language (EQL)^] library. See more xref:language-reference::datalog-queries#pull[**here**].
+  Yes - XTDB supports a 'pull' syntax, allowing you to decouple specifying which entities you want from what data you'd like about those entities in your queries. This support is based on the excellent https://edn-query-language.org/eql/1.0.0/what-is-eql.html[EDN Query Language (EQL)^] library. See more xref:{page-component-version}@language-reference::datalog-queries#pull[**here**].
 
 
 Do you have any benchmarks?::

@@ -3,7 +3,7 @@
 
 This document explains how to configure the XTDB HTTP module.
 To query over HTTP, see the
-xref:clients::http.adoc[HTTP Client Reference].
+xref:{page-component-version}@clients::http.adoc[HTTP Client Reference].
 
 
 XTDB offers a REST API layer in the `xtdb-http-server` module that allows you to send transactions and run queries over HTTP.
@@ -84,4 +84,4 @@ XTDB also exposes a https://github.com/ring-clojure/ring[Ring] handler that you 
 [#http-client-reference]
 == HTTP Client Reference
 
-See the xref:clients::http.adoc[HTTP Client Reference].
+See the xref:{page-component-version}@clients::http.adoc[HTTP Client Reference].

@@ -163,7 +163,7 @@ If you do not want the local node to index transactions, you can use the xref:su
 
 ==== Sharing the local KV store
 
-You can safely use the same KV storage to hold both the local document store and the main query indices, which can potentially simplify related configurations (e.g. xref:administration::checkpointing.adoc[checkpointing]) and improve resource utilization.
+You can safely use the same KV storage to hold both the local document store and the main query indices, which can potentially simplify related configurations (e.g. xref:{page-component-version}@administration::checkpointing.adoc[checkpointing]) and improve resource utilization.
 
 [tabs]
 ====
@@ -304,7 +304,7 @@ EDN::
 
 ==== Note
 
-`poll-wait-duration` specifies the duration for which xref:clients::clojure.adoc[open-tx-log] will wait for a record to show
+`poll-wait-duration` specifies the duration for which xref:{page-component-version}@clients::clojure.adoc[open-tx-log] will wait for a record to show
 up on the transaction topic. If for any reason (e.g., latency to the Kafka broker) no record was received during that time,
 the call would return an empty cursor (i.e., on which `.hasNext` is false). For this reason,  the Kafka implementation
 of `open-tx-log` accepts also a map (instead of the `with-ops?` Boolean) with the following optional keys:

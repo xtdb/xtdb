@@ -56,7 +56,7 @@ class XtdbService(private val serviceHub: AppServiceHub) : SingletonSerializable
 }
 ----
 
-This is a minimal configuration - see the main xref:administration::configuring.adoc[Configuring XTDB] documentation for how to further configure the XTDB node within the `startXtdbNode` block.
+This is a minimal configuration - see the main xref:{page-component-version}@administration::configuring.adoc[Configuring XTDB] documentation for how to further configure the XTDB node within the `startXtdbNode` block.
 
 == Mapping Corda documents into XTDB
 
@@ -103,7 +103,7 @@ In the same way as each Corda node will only see a subset of transactions of the
 == Querying XTDB
 
 To access the standard XTDB query API, you can make the XTDB node available as a field on your Corda service (as above), and then
-xref:language-reference::datalog-queries.adoc[query XTDB as normal].
+xref:{page-component-version}@language-reference::datalog-queries.adoc[query XTDB as normal].
 
 [source,kotlin]
 ----

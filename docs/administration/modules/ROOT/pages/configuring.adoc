@@ -13,7 +13,7 @@
 A XTDB node consists of a number of modules, which can be independently configured and augmented.
 
 Once you have an
-xref:administration::installing.adoc[in-memory XTDB node]
+xref:installing.adoc[in-memory XTDB node]
 set up, you can then start to configure the various modules.
 Configure modules using a JSON config file, EDN config file, or programmatically:
 
@@ -76,8 +76,8 @@ include::example$test/xtdb/docs/examples/configuration/configuration_test.clj[ta
 Without any explicit configuration, XTDB will start an in-memory node.
 
 **At this point, you can start
-xref:language-reference::datalog-transactions.adoc[submitting transactions] and
-xref:language-reference::datalog-queries.adoc[running queries]!**
+xref:{page-component-version}@language-reference::datalog-transactions.adoc[submitting transactions] and
+xref:{page-component-version}@language-reference::datalog-queries.adoc[running queries]!**
 
 == Storage
 
@@ -87,16 +87,16 @@ All three are backed by local KV stores by default, but they can be independentl
 [cols="1,3*^"]
 |===
 | | Transaction Log | Document Store | Index Store
-| xref:storage::aws-s3.adoc[AWS S3] | | ✓ |
-| xref:storage::azure-blobs.adoc[Azure Blobs] | | ✓ |
-| xref:storage::corda.adoc[DLT - Corda] footnote:[configured via its own entry point - see the module docs for more information] | ✓ | ✓ |
-| xref:storage::google-cloud-storage.adoc[Google Cloud Storage] | | ✓ |
-| xref:storage::kafka.adoc[Kafka] | ✓ | ✓ |
-| xref:storage::jdbc.adoc[JDBC] | ✓ | ✓ |
+| xref:{page-component-version}@storage::aws-s3.adoc[AWS S3] | | ✓ |
+| xref:{page-component-version}@storage::azure-blobs.adoc[Azure Blobs] | | ✓ |
+| xref:{page-component-version}@storage::corda.adoc[DLT - Corda] footnote:[configured via its own entry point - see the module docs for more information] | ✓ | ✓ |
+| xref:{page-component-version}@storage::google-cloud-storage.adoc[Google Cloud Storage] | | ✓ |
+| xref:{page-component-version}@storage::kafka.adoc[Kafka] | ✓ | ✓ |
+| xref:{page-component-version}@storage::jdbc.adoc[JDBC] | ✓ | ✓ |
 | In-memory KV | ✓ | ✓ | ✓
-| xref:storage::lmdb.adoc[LMDB] (KV) | ✓ | ✓ | ✓
-| xref:storage::rocksdb.adoc[RocksDB] (KV) | ✓ | ✓ | ✓
-| xref:storage::xodus.adoc[Xodus] (KV) footnote:[via third-party `crux-xodus` module] | ✓ | ✓ | ✓
+| xref:{page-component-version}@storage::lmdb.adoc[LMDB] (KV) | ✓ | ✓ | ✓
+| xref:{page-component-version}@storage::rocksdb.adoc[RocksDB] (KV) | ✓ | ✓ | ✓
+| xref:{page-component-version}@storage::xodus.adoc[Xodus] (KV) footnote:[via third-party `crux-xodus` module] | ✓ | ✓ | ✓
 |===
 
 For specific details and examples of how to configure each of these modules, see their individual sections.

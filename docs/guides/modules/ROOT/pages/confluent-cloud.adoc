@@ -115,7 +115,7 @@ Retrieve the document:
 You could even try this from a second REPL with a second node connecting to the
 same cluster.
 
-Note that the node's indexes will be in-memory by default and therefore will be recomputed each time you start a node. For persisted indexes that resume when you restart a node you probably want to configure xref:storage::rocksdb.adoc[RocksDB] as well.
+Note that the node's indexes will be in-memory by default and therefore will be recomputed each time you start a node. For persisted indexes that resume when you restart a node you probably want to configure xref:{page-component-version}@storage::rocksdb.adoc[RocksDB] as well.
 
 Behind the scenes, XTDB will automatically generate topics with the required retention/compaction configurations and will set the number of partitions for the transaction topic to `1`.
 

@@ -1,7 +1,7 @@
 = HTTP
 
 This document explains how to query XTDB over HTTP.
-To configure your HTTP module, see the xref:extensions::http.adoc[HTTP module documentation].
+To configure your HTTP module, see the xref:{page-component-version}@extensions::http.adoc[HTTP module documentation].
 
 There is also an link:https://docs.xtdb.com/clients/http/openapi/{xtdb_version}[OpenAPI Reference] describing the HTTP endpoint.
 
@@ -782,7 +782,7 @@ curl -X POST \
 ----
 
 Note:
-xref:language-reference::datalog-transactions#transaction-functions[Transaction functions]
+xref:{page-component-version}@language-reference::datalog-transactions#transaction-functions[Transaction functions]
 should be submitted as strings containing clojure code, and read in as EDN.
 --
 

@@ -98,7 +98,7 @@ include::example$test/xtdb/docs/examples/query_test.clj[tags=find-expr,indent=0]
 ----
 
 * `let`, and other macros are unsupported - you can create and call fully-qualified Clojure functions for more advanced use cases.
-* Function calls are guarded by xref:administration::configuring.adoc#fn-allowlist[`:fn-allow-list`], if it was specified in the node configuration.
+* Function calls are guarded by xref:{page-component-version}@administration::configuring.adoc#fn-allowlist[`:fn-allow-list`], if it was specified in the node configuration.
 
 [#find-aggregate]
 === Aggregates
@@ -972,7 +972,7 @@ XTDB does _not yet_ support:
 
 Many advanced query requirements can be addressed using custom predicate function calls since you can reference any function that is loaded (and available on the classpath) by using its fully qualified name in a Datalog clause, e.g. `[(clojure.core/+ x y) z)]`.
 These custom functions can be passed the `db` query context using the `$` argument convention for sophisticated nesting of queries and other lookups. Destructuring the results of a function as a relation is also supported, similarly to `:in` bindings.
-The suite of functions in the `clojure.core` namespace may be referred to without the fully qualified prefix, including `clojure.core/eval`, however an xref:administration::configuring.adoc#fn-allowlist[allowlist feature] is available to help maintain security (particularly relevant when the HTTP server is being used).
+The suite of functions in the `clojure.core` namespace may be referred to without the fully qualified prefix, including `clojure.core/eval`, however an xref:{page-component-version}@administration::configuring.adoc#fn-allowlist[allowlist feature] is available to help maintain security (particularly relevant when the HTTP server is being used).
 
 These functions can be used, for example, to access data that is deeply nested with a given top-level value.
 

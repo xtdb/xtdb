@@ -5,7 +5,7 @@ SQL module for XTDB built on https://calcite.apache.org/[Apache Calcite].
 
 This document describes setup and configuration for the SQL module.
 To query using the SQL module,
-see the xref:language-reference::sql-queries.adoc[SQL Query Reference].
+see the xref:{page-component-version}@language-reference::sql-queries.adoc[SQL Query Reference].
 
 
 == Setup
@@ -121,4 +121,4 @@ coursier launch sqlline:sqlline:1.9.0 org.apache.calcite.avatica:avatica-core:1.
 [#sql-query-reference]
 == SQL Query Reference
 
-See the xref:language-reference::sql-queries.adoc[SQL Query Reference].
+See the xref:{page-component-version}@language-reference::sql-queries.adoc[SQL Query Reference].

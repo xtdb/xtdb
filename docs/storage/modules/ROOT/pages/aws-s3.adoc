@@ -76,7 +76,7 @@ EDN::
 [#checkpoint-store]
 == Using S3 as a checkpoint store
 
-S3 can be used as a query index xref:administration::checkpointing.adoc[checkpoint store].
+S3 can be used as a query index xref:{page-component-version}@administration::checkpointing.adoc[checkpoint store].
 Checkpoints aren't GC'd by XTDB - we recommend you set a lifecycle policy on your bucket to remove older checkpoints.
 
 

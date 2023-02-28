@@ -2,7 +2,7 @@
 
 This document explains how to query XTDB using SQL.
 To configure your XTDB SQL module, see the
-xref:extensions::sql.adoc[SQL module documentation].
+xref:{page-component-version}@extensions::sql.adoc[SQL module documentation].
 
 [#table-definitions]
 == Table Definitions

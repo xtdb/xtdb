@@ -2,11 +2,11 @@
 
 == Docs
 
-* xref:language-reference::index.adoc[Language Reference]
-* xref:clients::index.adoc[Clients]
-* xref:administration::index.adoc[Administration]
-* xref:extensions::index.adoc[Extensions]
-* xref:storage::index.adoc[Storage]
+* xref:{page-component-version}@language-reference::index.adoc[Language Reference]
+* xref:{page-component-version}@clients::index.adoc[Clients]
+* xref:{page-component-version}@administration::index.adoc[Administration]
+* xref:{page-component-version}@extensions::index.adoc[Extensions]
+* xref:{page-component-version}@storage::index.adoc[Storage]
 
 == Learn
 

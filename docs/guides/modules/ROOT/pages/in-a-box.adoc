@@ -13,7 +13,7 @@ This guide will show you how to set up XTDB with the following properties:
 . One node: Only one XTDB node is configured
 . Storage: RocksDB is used for all 3 stores (tx-log, doc-store, and index-store)
 
-This guide will not discuss high-availability, failover/clustering/replication, or backups. You can use this simple RocksDB configuration in production and back it up as you would any other volume. If you want more advanced features, however, you should consider the xref:storage::kafka.adoc[Kafka] and/or xref:storage::jdbc.adoc[JDBC] modules.
+This guide will not discuss high-availability, failover/clustering/replication, or backups. You can use this simple RocksDB configuration in production and back it up as you would any other volume. If you want more advanced features, however, you should consider the xref:{page-component-version}@storage::kafka.adoc[Kafka] and/or xref:{page-component-version}@storage::jdbc.adoc[JDBC] modules.
 
 All the code from this guide is compiled into minimal (working) project examples for Clojure and Java you can see in the https://github.com/deobald/crux-in-a-box[crux-in-a-box] GitHub repo.
 
