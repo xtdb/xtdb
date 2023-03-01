@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="GradleMigrationSettings" migrationVersion="1" />
+  <component name="GradleSettings">
+    <option name="linkedExternalProjectsSettings">
+      <GradleProjectSettings>
+        <option name="distributionType" value="DEFAULT_WRAPPED" />
+        <option name="externalProjectPath" value="$PROJECT_DIR$" />
+        <option name="gradleHome" value="/usr/share/java/gradle" />
+        <option name="modules">
+          <set>
+            <option value="$PROJECT_DIR$" />
+            <option value="$PROJECT_DIR$/api" />
+            <option value="$PROJECT_DIR$/core" />
+            <option value="$PROJECT_DIR$/http-client-clj" />
+            <option value="$PROJECT_DIR$/http-server" />
+            <option value="$PROJECT_DIR$/modules" />
+            <option value="$PROJECT_DIR$/modules/bench" />
+            <option value="$PROJECT_DIR$/modules/c1-import" />
+            <option value="$PROJECT_DIR$/modules/datasets" />
+            <option value="$PROJECT_DIR$/modules/flight-sql" />
+            <option value="$PROJECT_DIR$/modules/jdbc" />
+            <option value="$PROJECT_DIR$/modules/kafka" />
+            <option value="$PROJECT_DIR$/modules/s3" />
+            <option value="$PROJECT_DIR$/pgwire-server" />
+            <option value="$PROJECT_DIR$/wire-formats" />
+          </set>
+        </option>
+      </GradleProjectSettings>
+    </option>
+  </component>
+</project>

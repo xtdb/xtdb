@@ -29,7 +29,7 @@ public class StringUtil {
     }
 
     /**
-     * In our SQL dialect & arrow we operate always on utf8.
+     * In our SQL dialect &amp; arrow we operate always on utf8.
      * Java strings are utf-16 backed, and java chars cannot represent all utf-8 characters in one char - therefore
      * we do not use string length or anything like it, so that one character == one code point.
      * */

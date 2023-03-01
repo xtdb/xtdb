@@ -13,7 +13,8 @@
             [core2.types :as types]
             [core2.util :as util]
             [core2.vector.indirect :as iv]
-            [core2.vector.writer :as vw])
+            [core2.vector.writer :as vw]
+            [time-literals.read-write :as time-literals])
   (:import (core2 ICursor InstantSource)
            core2.node.Node
            core2.operator.scan.ScanSource
@@ -27,6 +28,8 @@
            (org.apache.arrow.memory BufferAllocator RootAllocator)
            (org.apache.arrow.vector FieldVector VectorSchemaRoot)
            (org.apache.arrow.vector.types.pojo Schema)))
+
+(time-literals/print-time-literals-clj!)
 
 (def ^:dynamic ^org.apache.arrow.memory.BufferAllocator *allocator*)
 

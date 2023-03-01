@@ -1,1 +1,13 @@
-{:clean {:ns-inner-blocks-indentation :same-line}}
+{:clean {:ns-inner-blocks-indentation :same-line}
+ :source-paths ["api/src/main/java" "api/src/main/clojure"
+                "wire-formats/src/main/clojure"
+                "core/src/main/clojure" "core/src/main/java"
+                "http-server/src/main/clojure"
+                "http-client-clj/src/main/clojure"
+                "pgwire-server/src/main/clojure"
+
+                "modules/jdbc/src/main/clojure"
+                "modules/kafka/src/main/clojure"
+                "modules/s3/src/main/clojure" "modules/s3/src/main/java"
+
+                "src/test/clojure" "src/dev/clojure"]}
