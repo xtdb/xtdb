@@ -1,9 +1,0 @@
-<component name="libraryTable">
-  <library name="Deps: integrant/repl:0.3.2">
-    <CLASSES>
-      <root url="jar://$MAVEN_REPOSITORY$/integrant/repl/0.3.2/repl-0.3.2.jar!/" />
-    </CLASSES>
-    <JAVADOC />
-    <SOURCES />
-  </library>
-</component>

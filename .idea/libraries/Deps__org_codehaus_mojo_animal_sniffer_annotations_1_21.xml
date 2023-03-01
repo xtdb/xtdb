@@ -1,9 +1,0 @@
-<component name="libraryTable">
-  <library name="Deps: org.codehaus.mojo/animal-sniffer-annotations:1.21">
-    <CLASSES>
-      <root url="jar://$MAVEN_REPOSITORY$/org/codehaus/mojo/animal-sniffer-annotations/1.21/animal-sniffer-annotations-1.21.jar!/" />
-    </CLASSES>
-    <JAVADOC />
-    <SOURCES />
-  </library>
-</component>

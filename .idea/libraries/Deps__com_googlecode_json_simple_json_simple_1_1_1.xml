@@ -1,9 +1,0 @@
-<component name="libraryTable">
-  <library name="Deps: com.googlecode.json-simple/json-simple:1.1.1">
-    <CLASSES>
-      <root url="jar://$MAVEN_REPOSITORY$/com/googlecode/json-simple/json-simple/1.1.1/json-simple-1.1.1.jar!/" />
-    </CLASSES>
-    <JAVADOC />
-    <SOURCES />
-  </library>
-</component>

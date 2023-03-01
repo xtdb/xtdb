@@ -1,9 +1,0 @@
-<component name="libraryTable">
-  <library name="Deps: pro.juxt.clojars-mirrors.integrant/integrant:0.8.0">
-    <CLASSES>
-      <root url="jar://$MAVEN_REPOSITORY$/pro/juxt/clojars-mirrors/integrant/integrant/0.8.0/integrant-0.8.0.jar!/" />
-    </CLASSES>
-    <JAVADOC />
-    <SOURCES />
-  </library>
-</component>

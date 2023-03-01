@@ -1,9 +1,0 @@
-<component name="libraryTable">
-  <library name="Deps: org.apache.calcite.avatica/avatica:1.18.0">
-    <CLASSES>
-      <root url="jar://$MAVEN_REPOSITORY$/org/apache/calcite/avatica/avatica/1.18.0/avatica-1.18.0.jar!/" />
-    </CLASSES>
-    <JAVADOC />
-    <SOURCES />
-  </library>
-</component>

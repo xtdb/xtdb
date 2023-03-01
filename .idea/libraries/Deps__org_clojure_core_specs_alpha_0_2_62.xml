@@ -1,9 +1,0 @@
-<component name="libraryTable">
-  <library name="Deps: org.clojure/core.specs.alpha:0.2.62">
-    <CLASSES>
-      <root url="jar://$MAVEN_REPOSITORY$/org/clojure/core.specs.alpha/0.2.62/core.specs.alpha-0.2.62.jar!/" />
-    </CLASSES>
-    <JAVADOC />
-    <SOURCES />
-  </library>
-</component>

@@ -1,9 +1,0 @@
-<component name="libraryTable">
-  <library name="Deps: com.google.guava/guava:26.0-jre">
-    <CLASSES>
-      <root url="jar://$MAVEN_REPOSITORY$/com/google/guava/guava/26.0-jre/guava-26.0-jre.jar!/" />
-    </CLASSES>
-    <JAVADOC />
-    <SOURCES />
-  </library>
-</component>

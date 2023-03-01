@@ -1,9 +1,0 @@
-<component name="libraryTable">
-  <library name="Deps: weavejester/dependency:0.2.1">
-    <CLASSES>
-      <root url="jar://$MAVEN_REPOSITORY$/weavejester/dependency/0.2.1/dependency-0.2.1.jar!/" />
-    </CLASSES>
-    <JAVADOC />
-    <SOURCES />
-  </library>
-</component>

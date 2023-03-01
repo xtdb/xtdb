@@ -1,9 +1,0 @@
-<component name="libraryTable">
-  <library name="Deps: mvxcvi/puget:1.1.2">
-    <CLASSES>
-      <root url="jar://$MAVEN_REPOSITORY$/mvxcvi/puget/1.1.2/puget-1.1.2.jar!/" />
-    </CLASSES>
-    <JAVADOC />
-    <SOURCES />
-  </library>
-</component>

@@ -1,9 +1,0 @@
-<component name="libraryTable">
-  <library name="Deps: commons-logging:1.2">
-    <CLASSES>
-      <root url="jar://$MAVEN_REPOSITORY$/commons-logging/commons-logging/1.2/commons-logging-1.2.jar!/" />
-    </CLASSES>
-    <JAVADOC />
-    <SOURCES />
-  </library>
-</component>

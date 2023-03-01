@@ -1,9 +1,0 @@
-<component name="libraryTable">
-  <library name="Deps: javax.xml.bind/jaxb-api:2.3.0">
-    <CLASSES>
-      <root url="jar://$MAVEN_REPOSITORY$/javax/xml/bind/jaxb-api/2.3.0/jaxb-api-2.3.0.jar!/" />
-    </CLASSES>
-    <JAVADOC />
-    <SOURCES />
-  </library>
-</component>

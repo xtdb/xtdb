@@ -1,9 +1,0 @@
-<component name="libraryTable">
-  <library name="Deps: org.clojure/data.csv:1.0.1">
-    <CLASSES>
-      <root url="jar://$MAVEN_REPOSITORY$/org/clojure/data.csv/1.0.1/data.csv-1.0.1.jar!/" />
-    </CLASSES>
-    <JAVADOC />
-    <SOURCES />
-  </library>
-</component>

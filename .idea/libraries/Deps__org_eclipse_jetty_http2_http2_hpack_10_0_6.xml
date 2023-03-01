@@ -1,9 +1,0 @@
-<component name="libraryTable">
-  <library name="Deps: org.eclipse.jetty.http2/http2-hpack:10.0.6">
-    <CLASSES>
-      <root url="jar://$MAVEN_REPOSITORY$/org/eclipse/jetty/http2/http2-hpack/10.0.6/http2-hpack-10.0.6.jar!/" />
-    </CLASSES>
-    <JAVADOC />
-    <SOURCES />
-  </library>
-</component>

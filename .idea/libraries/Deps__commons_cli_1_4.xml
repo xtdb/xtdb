@@ -1,9 +1,0 @@
-<component name="libraryTable">
-  <library name="Deps: commons-cli:1.4">
-    <CLASSES>
-      <root url="jar://$MAVEN_REPOSITORY$/commons-cli/commons-cli/1.4/commons-cli-1.4.jar!/" />
-    </CLASSES>
-    <JAVADOC />
-    <SOURCES />
-  </library>
-</component>

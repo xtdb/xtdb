@@ -1,9 +1,0 @@
-<component name="libraryTable">
-  <library name="Deps: org.apache.kafka/kafka-clients:3.1.0">
-    <CLASSES>
-      <root url="jar://$MAVEN_REPOSITORY$/org/apache/kafka/kafka-clients/3.1.0/kafka-clients-3.1.0.jar!/" />
-    </CLASSES>
-    <JAVADOC />
-    <SOURCES />
-  </library>
-</component>

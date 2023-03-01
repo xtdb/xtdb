@@ -1,9 +1,0 @@
-<component name="libraryTable">
-  <library name="Deps: metosin/reitit-ring:0.5.15">
-    <CLASSES>
-      <root url="jar://$MAVEN_REPOSITORY$/metosin/reitit-ring/0.5.15/reitit-ring-0.5.15.jar!/" />
-    </CLASSES>
-    <JAVADOC />
-    <SOURCES />
-  </library>
-</component>

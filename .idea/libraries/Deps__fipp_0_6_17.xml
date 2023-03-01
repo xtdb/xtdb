@@ -1,9 +1,0 @@
-<component name="libraryTable">
-  <library name="Deps: fipp:0.6.17">
-    <CLASSES>
-      <root url="jar://$MAVEN_REPOSITORY$/fipp/fipp/0.6.17/fipp-0.6.17.jar!/" />
-    </CLASSES>
-    <JAVADOC />
-    <SOURCES />
-  </library>
-</component>

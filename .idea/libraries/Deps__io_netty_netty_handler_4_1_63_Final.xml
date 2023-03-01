@@ -1,9 +1,0 @@
-<component name="libraryTable">
-  <library name="Deps: io.netty/netty-handler:4.1.63.Final">
-    <CLASSES>
-      <root url="jar://$MAVEN_REPOSITORY$/io/netty/netty-handler/4.1.63.Final/netty-handler-4.1.63.Final.jar!/" />
-    </CLASSES>
-    <JAVADOC />
-    <SOURCES />
-  </library>
-</component>

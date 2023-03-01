@@ -1,9 +1,0 @@
-<component name="libraryTable">
-  <library name="Deps: org.msgpack/msgpack:0.6.12">
-    <CLASSES>
-      <root url="jar://$MAVEN_REPOSITORY$/org/msgpack/msgpack/0.6.12/msgpack-0.6.12.jar!/" />
-    </CLASSES>
-    <JAVADOC />
-    <SOURCES />
-  </library>
-</component>

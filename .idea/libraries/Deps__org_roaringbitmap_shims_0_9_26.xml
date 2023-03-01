@@ -1,9 +1,0 @@
-<component name="libraryTable">
-  <library name="Deps: org.roaringbitmap/shims:0.9.26">
-    <CLASSES>
-      <root url="jar://$MAVEN_REPOSITORY$/org/roaringbitmap/shims/0.9.26/shims-0.9.26.jar!/" />
-    </CLASSES>
-    <JAVADOC />
-    <SOURCES />
-  </library>
-</component>
