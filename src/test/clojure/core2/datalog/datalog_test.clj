@@ -5,13 +5,14 @@
 ;; https://github.com/tonsky/datascript
 
 (ns core2.datalog.datalog-test
-  (:require [core2.james-bond :as bond]
-            [clojure.test :as t :refer [deftest]]
-            [core2.test-util :as tu]
+  (:require [clojure.test :as t :refer [deftest]]
             [core2.api :as c2]
-            [core2.node :as node]))
+            [core2.james-bond :as bond]
+            [core2.node :as node]
+            [core2.test-util :as tu]
+            [core2.util :as util]))
 
-(t/use-fixtures :each tu/with-node)
+(t/use-fixtures :each tu/with-mock-clock tu/with-node)
 
 (def ivan+petr
   [[:put {:id :ivan, :first-name "Ivan", :last-name "Ivanov"}]
@@ -719,26 +720,28 @@
                           [[:put {:id :ivan, :age 15}]
                            [:put {:id :petr, :age 22}]
                            [:put {:id :slava, :age 37}]])]
-    (t/is (= [{:e1 :ivan, :e2 :petr, :e3 :slava}
-              {:e1 :petr, :e2 :ivan, :e3 :slava}]
-             (c2/datalog-query tu/*node*
-                               (-> '{:find [e1 e2 e3]
-                                     :where [[e1 :age a1]
-                                             [e2 :age a2]
-                                             [e3 :age a3]
-                                             [(+ a1 a2) a12]
-                                             [(= a12 a3)]]}
-                                   (assoc :basis {:tx !tx})))))
+    (t/is (= #{{:e1 :petr, :e2 :ivan, :e3 :slava}
+               {:e1 :ivan, :e2 :petr, :e3 :slava}}
+             (set
+              (c2/datalog-query tu/*node*
+                                (-> '{:find [e1 e2 e3]
+                                      :where [[e1 :age a1]
+                                              [e2 :age a2]
+                                              [e3 :age a3]
+                                              [(+ a1 a2) a12]
+                                              [(= a12 a3)]]}
+                                    (assoc :basis {:tx !tx}))))))
 
-    (t/is (= [{:e1 :ivan, :e2 :petr, :e3 :slava}
-              {:e1 :petr, :e2 :ivan, :e3 :slava}]
-             (c2/datalog-query tu/*node*
-                               (-> '{:find [e1 e2 e3]
-                                     :where [[e1 :age a1]
-                                             [e2 :age a2]
-                                             [e3 :age a3]
-                                             [(+ a1 a2) a3]]}
-                                   (assoc :basis {:tx !tx})))))))
+    (t/is (= #{{:e1 :petr, :e2 :ivan, :e3 :slava}
+               {:e1 :ivan, :e2 :petr, :e3 :slava}}
+             (set
+              (c2/datalog-query tu/*node*
+                                (-> '{:find [e1 e2 e3]
+                                      :where [[e1 :age a1]
+                                              [e2 :age a2]
+                                              [e3 :age a3]
+                                              [(+ a1 a2) a3]]}
+                                    (assoc :basis {:tx !tx}))))))))
 
 (deftest test-nested-expressions-581
   (let [!tx (c2/submit-tx tu/*node*
@@ -982,3 +985,90 @@
                                                              [(+ a 1) b])]}
                                        (assoc :basis {:tx !tx}))))
               "b is unified")))))
+
+(t/deftest test-temporal-opts
+  (letfn [(q [query !tx current-time]
+            (c2/datalog-query tu/*node*
+                              (-> query
+                                  (assoc :basis {:tx !tx, :current-time (util/->instant current-time)}))))]
+
+    ;; Matthew 2015+
+
+    ;; tx0
+    ;; 2018/2019: Matthew, Mark
+    ;; 2021+: Matthew, Luke
+
+    ;; tx1
+    ;; 2016-2018: Matthew, John
+    ;; 2018-2020: Matthew, Mark, John
+    ;; 2020: Matthew
+    ;; 2021-2022: Matthew, Luke
+    ;; 2023: Matthew, Mark (again)
+    ;; 2024+: Matthew
+
+    (let [!tx0 (c2/submit-tx tu/*node* [[:put {:id :matthew} {:app-time-start #inst "2015"}]
+                                        [:put {:id :mark} {:app-time-start #inst "2018", :app-time-end #inst "2020"}]
+                                        [:put {:id :luke} {:app-time-start #inst "2021"}]])
+
+          !tx1 (c2/submit-tx tu/*node* [[:delete :luke {:app-time-start #inst "2022"}]
+                                        [:put {:id :mark} {:app-time-start #inst "2023", :app-time-end #inst "2024"}]
+                                        [:put {:id :john} {:app-time-start #inst "2016", :app-time-end #inst "2020"}]])]
+
+      (t/is (= [{:id :matthew}, {:id :mark}]
+               (q '{:find [id], :where [[id :id]]}, !tx1, #inst "2023")))
+
+      (t/is (= [{:id :matthew}, {:id :luke}]
+               (q '{:find [id], :where [[id :id]]}, !tx1, #inst "2021"))
+            "back in app-time")
+
+      (t/is (= [{:id :matthew}, {:id :luke}]
+               (q '{:find [id], :where [[id :id]]}, !tx0, #inst "2023"))
+            "back in sys-time")
+
+      (t/is (= [{:id :matthew, :app-start (util/->zdt #inst "2015"), :app-end (util/->zdt util/end-of-time)}
+                {:id :mark, :app-start (util/->zdt #inst "2018"), :app-end (util/->zdt #inst "2020")}
+                {:id :luke, :app-start (util/->zdt #inst "2021"), :app-end (util/->zdt #inst "2022")}
+                {:id :mark, :app-start (util/->zdt #inst "2023"), :app-end (util/->zdt #inst "2024")}
+                {:id :john, :app-start (util/->zdt #inst "2016"), :app-end (util/->zdt #inst "2020")}]
+               (q '{:find [id app-start app-end]
+                    :where [(for-all-app-time id)
+                            [id :application_time_start app-start]
+                            [id :application_time_end app-end]]}
+                  !tx1, nil))
+            "entity history, all time")
+
+      (t/is (= [{:id :matthew, :app-start (util/->zdt #inst "2015"), :app-end (util/->zdt util/end-of-time)}
+                {:id :luke, :app-start (util/->zdt #inst "2021"), :app-end (util/->zdt #inst "2022")}]
+               (q '{:find [id app-start app-end]
+                    :where [(for-app-time-in id, #inst "2021", #inst "2023")
+                            [id :application_time_start app-start]
+                            [id :application_time_end app-end]]}
+                  !tx1, nil))
+            "entity history, range")
+
+      (t/is (= [{:id :matthew}, {:id :mark}]
+               (q '{:find [id],
+                    :where [(for-app-time-at id #inst "2018")
+                            (for-app-time-at id2 #inst "2023")
+                            [(= id id2)]]},
+                  !tx1, nil))
+            "cross-time join - who was here in both 2018 and 2023?")
+
+      (t/is (= [{:id :matthew} {:id :mark}]
+               (q '{:find [id],
+                    :where [(for-all-app-time id)
+                            [id :application_time_start app-start]
+                            [id :application_time_end app-end]
+
+                            (for-all-app-time :john)
+                            [:john :application_time_start john-start]
+                            [:john :application_time_end john-end]
+
+                            [(<> id :john)]
+
+                            ;; eventually: 'overlaps?'
+                            [(< app-start john-end)]
+                            [(> app-end john-start)]]},
+                  !tx1, nil))
+            "who worked with John?"))))
+
