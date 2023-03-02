@@ -314,7 +314,8 @@
             (Thread/sleep 100)
 
             (when-let [indexing-error @!indexing-error]
-              (throw (IllegalStateException. "document indexing error" indexing-error)))
+              (let [ex-data {:cognitect.anomalies/category :cognitect.anomalies/fault}]
+                (throw (xtdb.IllegalStateException. "document indexing error" ex-data indexing-error))))
 
             (recur (read-doc-offsets index-store)
                    (into docs
