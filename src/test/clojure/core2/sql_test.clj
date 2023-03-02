@@ -2,7 +2,7 @@
   (:require [clojure.java.io :as io]
             [clojure.test :as t :refer [deftest]]
             [core2.logical-plan :as lp]
-            [core2.sql :as sql])
+            [core2.core.sql :as sql])
   (:import (java.time LocalDateTime)))
 
 (defn plan-sql

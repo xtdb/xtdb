@@ -1,12 +1,12 @@
 (ns core2.tpch-test
   (:require [clojure.java.io :as io]
             [clojure.test :as t]
-            [core2.datalog :as d]
+            [core2.core.datalog :as d]
             [core2.datasets.tpch :as tpch]
             [core2.datasets.tpch.ra :as tpch-ra]
             [core2.datasets.tpch.datalog :as tpch-datalog]
             [core2.node :as node]
-            [core2.sql :as sql]
+            [core2.core.sql :as sql]
             core2.sql-test
             [core2.test-util :as tu]
             [core2.util :as util])

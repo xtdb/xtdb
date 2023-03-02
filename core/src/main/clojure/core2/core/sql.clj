@@ -1,4 +1,4 @@
-(ns core2.sql
+(ns core2.core.sql
   (:require [core2.operator :as op]
             [core2.rewrite :as r]
             [core2.sql.analyze :as sem]

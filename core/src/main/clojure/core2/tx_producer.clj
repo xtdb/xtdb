@@ -3,7 +3,7 @@
             [core2.error :as err]
             core2.log
             [core2.rewrite :refer [zmatch]]
-            [core2.sql :as sql]
+            [core2.core.sql :as sql]
             [core2.types :as types]
             [core2.util :as util]
             [core2.vector.writer :as vw]

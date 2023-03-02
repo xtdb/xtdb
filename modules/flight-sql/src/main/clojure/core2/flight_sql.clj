@@ -3,7 +3,7 @@
             [core2.api :as c2]
             [core2.node :as node]
             [core2.operator :as op]
-            [core2.sql :as sql]
+            [core2.core.sql :as sql]
             [core2.types :as types]
             [core2.util :as util]
             [core2.vector.indirect :as iv]

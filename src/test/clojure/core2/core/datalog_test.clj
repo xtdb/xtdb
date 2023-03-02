@@ -4,7 +4,7 @@
 ;; directory as `LICENSE`.
 ;; https://github.com/tonsky/datascript
 
-(ns core2.datalog.datalog-test
+(ns core2.core.datalog-test
   (:require [clojure.test :as t :refer [deftest]]
             [core2.api :as c2]
             [core2.james-bond :as bond]

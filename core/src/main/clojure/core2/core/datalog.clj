@@ -1,4 +1,4 @@
-(ns core2.datalog
+(ns core2.core.datalog
   (:require [clojure.set :as set]
             [clojure.spec.alpha :as s]
             [clojure.string :as str]

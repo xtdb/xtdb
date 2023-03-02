@@ -2,7 +2,7 @@
   (:require [clojure.tools.logging :as log]
             [core2.api :as c2]
             [core2.buffer-pool :as bp]
-            [core2.datalog :as d]
+            [core2.core.datalog :as d]
             [core2.error :as err]
             core2.indexer.internal-id-manager
             core2.indexer.log-indexer
@@ -12,7 +12,7 @@
             [core2.operator :as op]
             core2.operator.scan
             [core2.rewrite :refer [zmatch]]
-            [core2.sql :as sql]
+            [core2.core.sql :as sql]
             [core2.temporal :as temporal]
             [core2.tx-producer :as txp]
             [core2.types :as t]

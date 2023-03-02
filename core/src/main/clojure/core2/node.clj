@@ -1,9 +1,9 @@
 (ns core2.node
   (:require [clojure.pprint :as pp]
             [core2.api :as api]
-            [core2.datalog :as d]
+            [core2.core.datalog :as d]
             [core2.ingester :as ingest]
-            [core2.sql :as sql]
+            [core2.core.sql :as sql]
             [core2.tx-producer :as txp]
             [core2.util :as util]
             [juxt.clojars-mirrors.integrant.core :as ig])
