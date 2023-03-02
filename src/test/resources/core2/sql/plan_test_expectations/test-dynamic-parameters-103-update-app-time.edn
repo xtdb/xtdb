@@ -14,8 +14,8 @@
     x6
     x7
     {x9 ?_2}
-    {x10 (cast-tstz (max x4 ?_0))}
-    {x11 (cast-tstz (min x5 ?_1))}]
+    {x10 (cast-tstz (greatest x4 ?_0))}
+    {x11 (cast-tstz (least x5 ?_1))}]
    [:rename
     {id x1,
      _iid x2,

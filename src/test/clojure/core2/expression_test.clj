@@ -1080,25 +1080,25 @@
   (t/is (= [2.772588722239781 nil]
            (project '(ln x) [{:x 16} {:x nil}]))))
 
-(t/deftest test-min-max
+(t/deftest test-least-greatest
   (letfn [(run-test [form x y]
             (with-open [rel (tu/open-rel [(tu/open-vec "x" [x])
                                           (tu/open-vec "y" [y])])]
               (-> (run-projection rel form)
                   :res first)))]
-    (t/is (= 9 (run-test '(max x y) 1 9)))
-    (t/is (= 1.0 (run-test '(min x y) 1.0 9.0)))
+    (t/is (= 9 (run-test '(greatest x y) 1 9)))
+    (t/is (= 1.0 (run-test '(least x y) 1.0 9.0)))
 
-    (t/is (= nil (run-test '(min x y) nil 9.0)))
+    (t/is (= nil (run-test '(least x y) nil 9.0)))
 
-    (t/is (= nil (run-test '(max x y) 1.0 nil)))
+    (t/is (= nil (run-test '(greatest x y) 1.0 nil)))
 
     (t/testing "mixed temporal types"
       (t/is (= #time/date "2020-08-02"
-               (run-test '(min x y) #time/date-time "2020-08-02T15:09:00" #time/date "2020-08-02")))
+               (run-test '(least x y) #time/date-time "2020-08-02T15:09:00" #time/date "2020-08-02")))
 
       (t/is (= #time/date-time "2020-08-01T15:09:00"
-               (run-test '(min x y) #time/date-time "2020-08-01T15:09:00" #time/date "2020-08-02"))))))
+               (run-test '(least x y) #time/date-time "2020-08-01T15:09:00" #time/date "2020-08-02"))))))
 
 (t/deftest can-return-string-multiple-times
   (with-open [rel (tu/open-rel [(tu/open-vec "x" [1 2 3])])]

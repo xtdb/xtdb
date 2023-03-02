@@ -14,8 +14,8 @@
     x6
     x7
     {x9 "Sue"}
-    {x10 (cast-tstz (max x4 #time/date "2021-07-01"))}
-    {x11 (cast-tstz (min x5 #time/date "9999-12-31"))}]
+    {x10 (cast-tstz (greatest x4 #time/date "2021-07-01"))}
+    {x11 (cast-tstz (least x5 #time/date "9999-12-31"))}]
    [:rename
     {id x1,
      _iid x2,

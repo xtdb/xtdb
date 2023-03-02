@@ -27,7 +27,7 @@
 (doseq [f #{:+ :- :* :/}]
   (defmethod macroexpand1-call f [expr] (macroexpand1l-call expr)))
 
-(doseq [[f cmp-f] [[:max :>] [:min :<]]]
+(doseq [[f cmp-f] [[:greatest :>] [:least :<]]]
   (defmethod macroexpand1-call f [{:keys [f args] :as expr}]
     (case (count args)
       0 {:op :literal, :literal nil}

@@ -818,11 +818,11 @@
                        (/ l# r#))))})
 
 ;; TODO extend min/max to variable width
-(defmethod codegen-call [:max :num :num] [{:keys [arg-types]}]
+(defmethod codegen-call [:greatest :num :num] [{:keys [arg-types]}]
   {:return-type (types/least-upper-bound arg-types)
    :->call-code #(do `(Math/max ~@%))})
 
-(defmethod codegen-call [:min :num :num] [{:keys [arg-types]}]
+(defmethod codegen-call [:least :num :num] [{:keys [arg-types]}]
   {:return-type (types/least-upper-bound arg-types)
    :->call-code #(do `(Math/min ~@%))})
 

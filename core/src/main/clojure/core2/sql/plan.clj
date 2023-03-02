@@ -231,10 +231,10 @@
          (cons 'case))
 
     :least_function
-    (list* 'min (map expr (r/right-zips (r/$ z 2))))
+    (list* 'least (map expr (r/right-zips (r/$ z 2))))
 
     :greatest_function
-    (list* 'max (map expr (r/right-zips (r/$ z 2))))
+    (list* 'greatest (map expr (r/right-zips (r/$ z 2))))
 
     (throw (err/illegal-arg :core2.sql/parse-error
                             {::err/message (str "Cannot build expression for: "  (pr-str (r/node z)))
@@ -1619,13 +1619,13 @@
 
                             [{'application_time_start `(~'cast-tstz ~(cond
                                                                        (= :all-application-time app-time-extents) app-start-sym
-                                                                       app-from-expr `(~'max ~app-start-sym ~app-from-expr)
-                                                                       app-time-as-of-now? `(~'max ~app-start-sym (~'current-timestamp))
+                                                                       app-from-expr `(~'greatest ~app-start-sym ~app-from-expr)
+                                                                       app-time-as-of-now? `(~'greatest ~app-start-sym (~'current-timestamp))
                                                                        :else app-start-sym))}
                              {'application_time_end `(~'cast-tstz ~(cond
                                                                      (= :all-application-time app-time-extents) app-end-sym
-                                                                     app-to-expr `(~'min ~app-end-sym ~app-to-expr)
-                                                                     app-time-as-of-now? `(~'min ~app-end-sym ~'core2/end-of-time)
+                                                                     app-to-expr `(~'least ~app-end-sym ~app-to-expr)
+                                                                     app-time-as-of-now? `(~'least ~app-end-sym ~'core2/end-of-time)
                                                                      :else app-end-sym))}]))
           (if (and app-to app-from)
             [:select `(~'and
