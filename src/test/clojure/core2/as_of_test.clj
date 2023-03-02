@@ -1,6 +1,6 @@
 (ns core2.as-of-test
   (:require [clojure.test :as t]
-            [core2.api :as c2]
+            [core2.datalog :as c2]
             [core2.ingester :as ingest]
             [core2.test-util :as tu]
             [core2.util :as util]))
@@ -13,39 +13,37 @@
 (t/deftest test-as-of-tx
   (let [ingester (tu/component :core2/ingester)
 
-        !tx1 (c2/submit-tx tu/*node* [[:put {:id :my-doc, :last-updated "tx1"}]])
+        tx1 (c2/submit-tx tu/*node* [[:put {:id :my-doc, :last-updated "tx1"}]])
         _ (Thread/sleep 10) ; prevent same-ms transactions
-        !tx2 (c2/submit-tx tu/*node* [[:put {:id :my-doc, :last-updated "tx2"}]])]
+        tx2 (c2/submit-tx tu/*node* [[:put {:id :my-doc, :last-updated "tx2"}]])]
 
     (t/is (= #{{:last-updated "tx1"} {:last-updated "tx2"}}
              (set (tu/query-ra '[:scan xt_docs [last-updated]]
-                               {:srcs {'$ (ingest/snapshot ingester !tx2)}}))))
+                               {:srcs {'$ (ingest/snapshot ingester tx2)}}))))
 
     (t/is (= #{{:last-updated "tx2"}}
-             (->> (c2/plan-datalog tu/*node*
-                                   (-> '{:find [last-updated]
-                                         :where [[e :last-updated last-updated]]}
-                                       (assoc :basis {:tx !tx2})))
-                  (into #{}))))
+             (set (c2/q tu/*node*
+                        (-> '{:find [last-updated]
+                              :where [[e :last-updated last-updated]]}
+                            (assoc :basis {:tx tx2}))))))
 
     (t/testing "at tx1"
       (t/is (= #{{:last-updated "tx1"}}
                (set (tu/query-ra '[:scan xt_docs [last-updated]]
-                                 {:srcs {'$ (ingest/snapshot ingester !tx1)}}))))
+                                 {:srcs {'$ (ingest/snapshot ingester tx1)}}))))
 
       (t/is (= #{{:last-updated "tx1"}}
-               (->> (c2/plan-datalog tu/*node*
-                                     (-> '{:find [last-updated]
-                                           :where [[e :last-updated last-updated]]}
-                                         (assoc :basis {:tx !tx1})))
-                    (into #{})))))))
+               (set (c2/q tu/*node*
+                          (-> '{:find [last-updated]
+                                :where [[e :last-updated last-updated]]}
+                              (assoc :basis {:tx tx1})))))))))
 
 (t/deftest test-app-time
   (let [ingester (tu/component :core2/ingester)
 
-        {:keys [sys-time] :as tx1} @(c2/submit-tx tu/*node* [[:put {:id :doc, :version 1}]
-                                                             [:put {:id :doc-with-app-time}
-                                                              {:app-time-start #inst "2021"}]])
+        {:keys [sys-time] :as tx1} (c2/submit-tx tu/*node* [[:put {:id :doc, :version 1}]
+                                                            [:put {:id :doc-with-app-time}
+                                                             {:app-time-start #inst "2021"}]])
         sys-time (util/->zdt sys-time)]
 
     (t/is (= {:doc {:id :doc,
@@ -69,12 +67,12 @@
 (t/deftest test-sys-time
   (let [ingester (tu/component :core2/ingester)
 
-        tx1 @(c2/submit-tx tu/*node* [[:put {:id :doc, :version 0}]])
+        tx1 (c2/submit-tx tu/*node* [[:put {:id :doc, :version 0}]])
         tt1 (util/->zdt (:sys-time tx1))
 
         _ (Thread/sleep 10) ; prevent same-ms transactions
 
-        tx2 @(c2/submit-tx tu/*node* [[:put {:id :doc, :version 1}]])
+        tx2 (c2/submit-tx tu/*node* [[:put {:id :doc, :version 1}]])
         tt2 (util/->zdt (:sys-time tx2))
 
         db (ingest/snapshot ingester tx2)
@@ -124,14 +122,14 @@
                    (map :id)
                    frequencies))]
 
-      (let [_ @(c2/submit-tx tu/*node* [[:put {:id :doc, :version 0}]
-                                        [:put {:id :other-doc, :version 0}]])
+      (let [_ (c2/submit-tx tu/*node* [[:put {:id :doc, :version 0}]
+                                       [:put {:id :other-doc, :version 0}]])
             _ (Thread/sleep 10)         ; prevent same-ms transactions
-            tx2 @(c2/submit-tx tu/*node* [[:put {:id :doc, :version 1}]])]
+            tx2 (c2/submit-tx tu/*node* [[:put {:id :doc, :version 1}]])]
 
         (t/is (= {:doc 3, :other-doc 1} (all-time-docs (ingest/snapshot ingester tx2)))
               "documents present before evict"))
 
-      (let [tx3 @(c2/submit-tx tu/*node* [[:evict :doc]])]
+      (let [tx3 (c2/submit-tx tu/*node* [[:evict :doc]])]
         (t/is (= {:other-doc 1} (all-time-docs (ingest/snapshot ingester tx3)))
               "documents removed after evict")))))

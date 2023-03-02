@@ -1,7 +1,6 @@
 (ns core2.operator.scan-test
   (:require [clojure.test :as t]
-            [core2.api :as c2]
-            [core2.ingester :as ingest]
+            [core2.datalog :as c2]
             [core2.node :as node]
             [core2.operator :as op]
             [core2.test-util :as tu]
@@ -39,9 +38,9 @@
 
 (t/deftest test-scanning-temporal-cols
   (with-open [node (node/start-node {})]
-    (let [tx @(c2/submit-tx node [[:put {:id :doc}
-                                   {:app-time-start #inst "2021"
-                                    :app-time-end #inst "3000"}]])]
+    (let [tx (c2/submit-tx node [[:put {:id :doc}
+                                  {:app-time-start #inst "2021"
+                                   :app-time-end #inst "3000"}]])]
 
       (let [res (first (tu/query-ra '[:scan
                                       xt_docs
@@ -68,7 +67,7 @@
 (t/deftest test-only-scanning-temporal-cols-45
   (with-open [node (node/start-node {})]
     (let [ingester (tu/component node :core2/ingester)
-          tx @(c2/submit-tx node [[:put {:id :doc}]])]
+          tx (c2/submit-tx node [[:put {:id :doc}]])]
 
       (t/is (tu/query-ra '[:scan
                            xt_docs

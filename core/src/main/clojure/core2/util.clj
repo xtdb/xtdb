@@ -2,7 +2,7 @@
   (:require [clojure.java.io :as io]
             [clojure.spec.alpha :as s]
             [clojure.tools.logging :as log]
-            core2.api
+            core2.api.impl
             [core2.error :as err]
             [clojure.string :as str])
   (:import clojure.lang.MapEntry

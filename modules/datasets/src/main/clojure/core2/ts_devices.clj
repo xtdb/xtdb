@@ -3,7 +3,7 @@
             [clojure.instant :as inst]
             [clojure.java.io :as io]
             [clojure.string :as str]
-            [core2.api :as c2]
+            [core2.datalog :as c2]
             [core2.ingester :as ingest])
   (:import java.util.zip.GZIPInputStream))
 
@@ -69,13 +69,13 @@
            readings (map readings-csv->doc (csv/read-csv readings-rdr))
            [initial-readings rest-readings] (split-at (count device-infos) readings)]
 
-       @(->> (for [{:keys [time] :as doc} (concat (interleave device-infos initial-readings) rest-readings)]
-               (cond-> [:put doc]
-                 time (conj {:application_time_start time})))
-             (partition-all batch-size)
-             (reduce (fn [_acc tx-ops]
-                       (c2/submit-tx tx-producer tx-ops))
-                     nil))))))
+       (->> (for [{:keys [time] :as doc} (concat (interleave device-infos initial-readings) rest-readings)]
+              (cond-> [:put doc]
+                time (conj {:application_time_start time})))
+            (partition-all batch-size)
+            (reduce (fn [_acc tx-ops]
+                      (c2/submit-tx tx-producer tx-ops))
+                    nil))))))
 
 (def query-recent-battery-temperatures
   ;; SELECT time, device_id, battery_temperature

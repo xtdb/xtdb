@@ -4,7 +4,8 @@
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing] :as t]
             [clojure.tools.logging :as log]
-            [core2.api :as c2]
+            [core2.api.impl :as c2.impl]
+            [core2.datalog :as c2.d]
             [core2.node :as node]
             [core2.pgwire :as pgwire]
             [core2.test-util :as tu]
@@ -15,7 +16,7 @@
            (core2 IResultSet)
            (java.lang Thread$State)
            (java.net SocketException)
-           (java.sql Connection DriverManager)
+           (java.sql Connection DriverManager PreparedStatement)
            (java.time Clock Instant ZoneId ZoneOffset)
            (java.util.concurrent CompletableFuture CountDownLatch TimeUnit)
            org.apache.arrow.driver.jdbc.ArrowFlightJdbcDriver
@@ -619,19 +620,19 @@
 
         start-conn1
         (fn []
-          (with-open [conn (jdbc-conn)]
-            (with-open [stmt (.prepareStatement conn "select a.a from a")]
-              (try
-                (with-redefs [c2/open-sql-async (fn [& _] (deliver stmt-promise stmt) (CompletableFuture.))]
-                  (with-open [_rs (.executeQuery stmt)]
-                    :not-cancelled))
-                (catch PSQLException e
-                  (.getMessage e))))))
+          (with-open [conn (jdbc-conn)
+                      stmt (.prepareStatement conn "select a.a from a")]
+            (try
+              (with-redefs [pgwire/open-sql& (fn [& _] (deliver stmt-promise stmt) (CompletableFuture.))]
+                (with-open [_rs (.executeQuery stmt)]
+                  :not-cancelled))
+              (catch PSQLException e
+                (.getMessage e)))))
 
         fut (future (start-conn1))]
 
     (is (not= :timeout (deref stmt-promise 1000 :timeout)))
-    (when (realized? stmt-promise) (.cancel @stmt-promise))
+    (when (realized? stmt-promise) (.cancel ^PreparedStatement @stmt-promise))
     (is (= "ERROR: query cancelled during execution" (deref fut 1000 :timeout)))))
 
 (deftest jdbc-prepared-query-close-test
@@ -745,7 +746,7 @@
 
         (testing "query crash during plan"
           (with-redefs [clojure.tools.logging/logf (constantly nil)
-                        c2/open-sql-async (fn [& _] (CompletableFuture/failedFuture (Throwable. "oops")))]
+                        c2.impl/open-sql& (fn [& _] (CompletableFuture/failedFuture (Throwable. "oops")))]
             (send "select a.a from (values (42)) a (a);\n")
             (is (str/includes? (read :err) "unexpected server error during query execution")))
 
@@ -755,11 +756,11 @@
 
         (testing "query crash during result set iteration"
           (with-redefs [clojure.tools.logging/logf (constantly nil)
-                        c2/open-sql-async (fn [& _] (CompletableFuture/completedFuture
-                                                      (reify IResultSet
-                                                        (hasNext [_] true)
-                                                        (next [_] (throw (Throwable. "oops")))
-                                                        (close [_]))))]
+                        c2.impl/open-sql& (fn [& _] (CompletableFuture/completedFuture
+                                                (reify IResultSet
+                                                  (hasNext [_] true)
+                                                  (next [_] (throw (Throwable. "oops")))
+                                                  (close [_]))))]
             (send "select a.a from (values (42)) a (a);\n")
             (is (str/includes? (read :err) "unexpected server error during query execution")))
 
@@ -852,7 +853,7 @@
 ;; maps cannot be created from SQL yet, or used as parameters - but we can read them from XT.
 (deftest map-read-test
   (with-open [conn (jdbc-conn)]
-    (-> (c2/submit-tx *node* [[:put {:id "map-test", :a {:b 42} :_table "a"}]])
+    (-> (c2.d/submit-tx *node* [[:put {:id "map-test", :a {:b 42} :_table "a"}]])
         (tu/then-await-tx *node*))
     (let [rs (q conn ["select a.a from a a"])]
       (is (= [{:a {"b" 42}}] rs)))))
@@ -895,7 +896,7 @@
 ;; right now all isolation levels have the same defined behaviour
 (deftest transaction-by-default-pins-the-basis-to-last-tx-test
   (require-node)
-  (let [insert #(-> (c2/submit-tx *node* [[:put %]])
+  (let [insert #(-> (c2.d/submit-tx *node* [[:put %]])
                     (tu/then-await-tx *node*))]
     (insert {:id :fred, :name "Fred" :_table "a"})
     (with-open [conn (jdbc-conn)]

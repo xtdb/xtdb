@@ -1,6 +1,6 @@
 (ns core2.client
   (:require [cognitect.transit :as transit]
-            [core2.api :as c2]
+            [core2.api.impl :as api]
             [core2.error :as err]
             [core2.transit :as c2.transit]
             [juxt.clojars-mirrors.hato.v0v8v2.hato.client :as hato]
@@ -18,7 +18,7 @@
    :encode {:handlers c2.transit/tj-write-handlers}})
 
 (def router
-  (r/router c2/http-routes))
+  (r/router api/http-routes))
 
 (defn- handle-err [e]
   (throw (or (when-let [body (:body (ex-data e))]
@@ -75,8 +75,8 @@
       (throw e))))
 
 (defrecord Core2Client [base-url]
-  c2/PClient
-  (-open-datalog-async [client query params]
+  api/PNode
+  (open-datalog& [client query params]
     (let [basis-tx (get-in query [:basis :tx])
           ^CompletableFuture !basis-tx (if (instance? CompletableFuture basis-tx)
                                          basis-tx
@@ -94,7 +94,7 @@
                         (apply [_ resp]
                           (:body resp)))))))
 
-  (-open-sql-async [client query {:keys [basis] :as query-opts}]
+  (open-sql& [client query {:keys [basis] :as query-opts}]
     (let [{basis-tx :tx} basis
           ^CompletableFuture !basis-tx (if (instance? CompletableFuture basis-tx)
                                          basis-tx
@@ -112,11 +112,11 @@
                         (apply [_ resp]
                           (:body resp)))))))
 
-  c2/PSubmitNode
-  (submit-tx [client tx-ops]
-    (c2/submit-tx client tx-ops {}))
+  api/PSubmitNode
+  (submit-tx& [client tx-ops]
+    (api/submit-tx& client tx-ops {}))
 
-  (submit-tx [client tx-ops opts]
+  (submit-tx& [client tx-ops opts]
     (-> ^CompletableFuture
         (request client :post :tx
                  {:content-type :transit+json
@@ -127,7 +127,7 @@
                       (apply [_ resp]
                         (:body resp))))))
 
-  c2/PStatus
+  api/PStatus
   (status [client]
     (-> @(request client :get :status)
         :body))

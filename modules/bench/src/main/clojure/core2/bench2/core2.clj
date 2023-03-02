@@ -1,16 +1,17 @@
 (ns core2.bench2.core2
   (:require [clojure.java.io :as io]
-            [core2.api :as c2]
+            [core2.datalog :as c2]
+            [core2.api.impl :as c2.impl]
             [core2.bench2 :as b]
             [core2.bench2.measurement :as bm]
             [core2.node :as node]
             [core2.test-util :as tu])
   (:import (java.nio.file Path)
-           (io.micrometer.core.instrument MeterRegistry Tag Timer)
+           (io.micrometer.core.instrument MeterRegistry Timer)
            (java.io Closeable File)
            (java.time Clock Duration)
            (java.util Random)
-           (java.util.concurrent ConcurrentHashMap Executors)
+           (java.util.concurrent ConcurrentHashMap)
            (java.util.concurrent.atomic AtomicLong)))
 
 (set! *warn-on-reflection* false)
@@ -120,32 +121,33 @@
     (fn-gauge "node.tx.lag tx-id" compute-lag-abs )
 
     (reify
-      c2/PClient
-      (-open-datalog-async [_ query args] (c2/-open-datalog-async node query args))
-      (-open-sql-async [_ query query-opts] (c2/-open-sql-async node query query-opts))
+      c2.impl/PNode
+      (open-datalog& [_ query args] (c2.impl/open-datalog& node query args))
+      (open-sql& [_ query query-opts] (c2.impl/open-sql& node query query-opts))
 
       node/PNode
       (snapshot-async [_] (node/snapshot-async node))
       (snapshot-async [_ tx] (node/snapshot-async node tx))
       (snapshot-async [_ tx timeout] (node/snapshot-async node tx timeout))
 
-      c2/PStatus
-      (status [_]  #_(c2/status node)
-              (let [{:keys [latest-completed-tx] :as res} (c2/status node)]
-                (reset! last-completed latest-completed-tx)
-                res))
+      c2.impl/PStatus
+      (status [_]
+        (let [{:keys [latest-completed-tx] :as res} (c2/status node)]
+          (reset! last-completed latest-completed-tx)
+          res))
 
-      c2/PSubmitNode
-      (submit-tx [_ tx-ops] #_(c2/submit-tx node tx-ops)
-                 (let [ret (c2/submit-tx node tx-ops)]
-                   (reset! last-submitted [ret (System/currentTimeMillis)])
-                   ;; (.incrementAndGet submit-counter)
-                   ret))
-      (submit-tx [_ tx-ops opts] #_(c2/submit-tx node tx-ops opts)
-                 (let [ret (c2/submit-tx node tx-ops opts)]
-                   (reset! last-submitted [ret (System/currentTimeMillis)])
-                   ;; (.incrementAndGet submit-counter)
-                   ret))
+      c2.impl/PSubmitNode
+      (submit-tx& [_ tx-ops]
+        (let [ret (c2.impl/submit-tx& node tx-ops)]
+          (reset! last-submitted [ret (System/currentTimeMillis)])
+          ;; (.incrementAndGet submit-counter)
+          ret))
+
+      (submit-tx& [_ tx-ops opts]
+        (let [ret (c2/submit-tx& node tx-ops opts)]
+          (reset! last-submitted [ret (System/currentTimeMillis)])
+          ;; (.incrementAndGet submit-counter)
+          ret))
 
       Closeable
       ;; o/w some stage closes the node for later stages
@@ -209,7 +211,7 @@
   ;; Running in process
   ;; ======
 
-  (require '[core2.api :as c2]
+  (require '[core2.api.impl :as c2]
            '[core2.node :as node])
 
   (def run-duration "PT5S")

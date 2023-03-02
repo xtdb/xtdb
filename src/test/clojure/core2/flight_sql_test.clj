@@ -1,6 +1,6 @@
 (ns core2.flight-sql-test
   (:require [clojure.test :as t]
-            [core2.api :as c2]
+            [core2.sql :as c2]
             [core2.test-util :as tu]
             [core2.types :as types]
             [core2.vector.indirect :as iv]

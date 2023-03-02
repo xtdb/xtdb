@@ -1,6 +1,6 @@
 (ns core2.node
   (:require [clojure.pprint :as pp]
-            [core2.api :as api]
+            [core2.api.impl :as api]
             [core2.core.datalog :as d]
             [core2.ingester :as ingest]
             [core2.core.sql :as sql]
@@ -52,8 +52,8 @@
                  !system
                  close-fn
                  prepare-ra-cache]
-  api/PClient
-  (-open-datalog-async [this query args]
+  api/PNode
+  (open-datalog& [this query args]
     (let [query (into {:default-tz default-tz} query)
           !db (snapshot-async this (get-in query [:basis :tx]) (:basis-timeout query))]
 
@@ -62,7 +62,7 @@
             (fn [db]
               (d/open-datalog-query allocator prepare-ra-cache query db args))))))
 
-  (-open-sql-async [this query query-opts]
+  (open-sql& [this query query-opts]
     (let [query-opts (into {:default-tz default-tz} query-opts)
           !db (snapshot-async this (get-in query-opts [:basis :tx]) (:basis-timeout query-opts))
           pq (sql/prepare-sql query prepare-ra-cache query-opts)]
@@ -86,11 +86,11 @@
   (status [_] {:latest-completed-tx (.latestCompletedTx ingester)})
 
   api/PSubmitNode
-  (submit-tx [_ tx-ops]
+  (submit-tx& [_ tx-ops]
     (or (validate-tx-ops tx-ops)
         (.submitTx tx-producer tx-ops)))
 
-  (submit-tx [_ tx-ops opts]
+  (submit-tx& [_ tx-ops opts]
     (or (validate-tx-ops tx-ops)
         (.submitTx tx-producer tx-ops opts)))
 
@@ -150,11 +150,11 @@
 
 (defrecord SubmitNode [^ITxProducer tx-producer, !system, close-fn]
   api/PSubmitNode
-  (submit-tx [_ tx-ops]
+  (submit-tx& [_ tx-ops]
     (or (validate-tx-ops tx-ops)
         (.submitTx tx-producer tx-ops)))
 
-  (submit-tx [_ tx-ops opts]
+  (submit-tx& [_ tx-ops opts]
     (or (validate-tx-ops tx-ops)
         (.submitTx tx-producer tx-ops opts)))
 

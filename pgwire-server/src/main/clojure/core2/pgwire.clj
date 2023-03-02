@@ -7,7 +7,8 @@
             [clojure.set :as set]
             [clojure.string :as str]
             [clojure.tools.logging :as log]
-            [core2.api :as c2]
+            [core2.sql :as c2]
+            [core2.api.impl :as c2.impl]
             [core2.node :as node]
             [core2.rewrite :as r]
             [core2.sql.analyze :as sem]
@@ -1471,6 +1472,10 @@
                                :update_statement__searched "UPDATE 0"
                                :erase_statement__searched "ERASE 0")})))
 
+(defn- open-sql& [node query opts]
+  ;; because we can't with-redefs a protocol fn in the tests 🙄
+  (c2.impl/open-sql& node query opts))
+
 (defn cmd-exec-query
   "Given a statement of type :query will execute it against the servers :node and send the results."
   [{:keys [server, conn-state] :as conn}
@@ -1491,7 +1496,7 @@
         ;; execute the query asynchronously (to enable later enable cancellation mid query)
         ^CompletableFuture
         query-fut (try
-                    (c2/open-sql-async node transformed-query query-opts)
+                    (open-sql& node transformed-query query-opts)
                     (catch Throwable e (CompletableFuture/failedFuture e)))]
 
     ;; keep the fut around in case of interrupt exc (for cleanup)
@@ -1501,7 +1506,7 @@
     (.whenComplete query-fut
                    (reify BiConsumer
                      (accept [_ _ ex]
-                       (when ex (log/debug ex "Error during query open-sql-async"))
+                       (when ex (log/debug ex "Error during query open-sql&"))
                        (swap! conn-state update :executing disj query-fut))))
 
     (cmd-await-query-result conn {:projection projection, :query query, :iteration 0, :fut query-fut})))

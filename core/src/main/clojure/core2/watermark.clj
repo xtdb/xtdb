@@ -1,6 +1,6 @@
 (ns core2.watermark
   (:require [clojure.tools.logging :as log]
-            core2.api
+            core2.api.impl
             core2.live-chunk
             core2.temporal
             [core2.util :as util]

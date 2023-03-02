@@ -1,6 +1,6 @@
 (ns core2.flight-sql
   (:require [clojure.tools.logging :as log]
-            [core2.api :as c2]
+            [core2.sql :as c2]
             [core2.node :as node]
             [core2.operator :as op]
             [core2.core.sql :as sql]
@@ -9,8 +9,7 @@
             [core2.vector.indirect :as iv]
             [core2.vector.writer :as vw]
             [juxt.clojars-mirrors.integrant.core :as ig])
-  (:import clojure.lang.MapEntry
-           (com.google.protobuf Any ByteString)
+  (:import (com.google.protobuf Any ByteString)
            (core2.operator BoundQuery PreparedQuery)
            java.lang.AutoCloseable
            (java.util ArrayList HashMap Map)
@@ -121,7 +120,7 @@
                 (CompletableFuture/completedFuture nil)
                 (CompletableFuture/failedFuture (UnsupportedOperationException. "unknown tx")))
 
-              (-> (c2/submit-tx node [dml])
+              (-> (c2/submit-tx& node [dml])
                   (then-await-fn svr))))
 
           (handle-get-stream [^BoundQuery bq, ^FlightProducer$ServerStreamListener listener]
@@ -281,7 +280,7 @@
           (if (= FlightSql$ActionEndTransactionRequest$EndTransaction/END_TRANSACTION_COMMIT
                  (.getAction req))
 
-            @(-> (c2/submit-tx node dml)
+            @(-> (c2/submit-tx& node dml)
                  (then-await-fn svr)
                  (.whenComplete (reify BiConsumer
                                   (accept [_ _v e]

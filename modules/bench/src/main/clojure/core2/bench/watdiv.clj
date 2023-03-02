@@ -1,7 +1,7 @@
 (ns core2.bench.watdiv
   (:require [clojure.java.io :as io]
             [core2.bench :as bench]
-            [core2.api :as c2]
+            [core2.datalog :as c2]
             [core2.node :as node])
   (:import java.time.Duration))
 
@@ -48,8 +48,7 @@
                              (map read-string)
                              (map-indexed vector))]
       (bench/with-timing (keyword (str "query-" idx))
-        (count (->> (c2/plan-datalog node query)
-                    (into [])))))))
+        (count (c2/q node query))))))
 
 (comment
   (with-open [node (node/start-node {})]

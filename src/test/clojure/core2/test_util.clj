@@ -1,7 +1,7 @@
 (ns core2.test-util
   (:require [clojure.spec.alpha :as s]
             [clojure.test :as t]
-            [core2.api :as c2]
+            [core2.api.impl :as api]
             [core2.client :as client]
             [core2.indexer :as idx]
             [core2.logical-plan :as lp]
@@ -84,7 +84,7 @@
    (.txBasis ^ScanSource @(node/snapshot-async node tx timeout))))
 
 (defn latest-completed-tx ^core2.api.TransactionInstant [node]
-  (:latest-completed-tx (c2/status node)))
+  (:latest-completed-tx (api/status node)))
 
 (defn ->mock-clock
   (^core2.InstantSource []

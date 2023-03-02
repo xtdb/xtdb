@@ -1,6 +1,6 @@
 (ns core2.ingester
   (:require [clojure.tools.logging :as log]
-            core2.api
+            core2.api.impl
             [core2.await :as await]
             core2.indexer
             core2.log

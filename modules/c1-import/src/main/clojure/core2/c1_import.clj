@@ -137,7 +137,7 @@
     (shutdown-agents)))
 
 (comment
-  (require '[core2.api :as c2])
+  (require '[core2.api.impl :as c2])
 
   (with-open [node (node/start-node {:core2/c1-import {:export-log-path "/tmp/tpch"}})]
     (try

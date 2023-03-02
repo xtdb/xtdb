@@ -3,7 +3,7 @@
             [clojure.spec.alpha :as s]
             [clojure.tools.logging :as log]
             [cognitect.transit :as transit]
-            [core2.api :as c2]
+            [core2.api.impl :as c2.impl]
             [core2.core.datalog :as d]
             [core2.error :as err]
             [core2.node :as node]
@@ -60,12 +60,12 @@
 
 (defmethod route-handler :status [_]
   {:get (fn [{:keys [node] :as _req}]
-          {:status 200, :body (c2/status node)})})
+          {:status 200, :body (c2.impl/status node)})})
 
 (defmethod route-handler :tx [_]
   {:post {:handler (fn [{:keys [node] :as req}]
                      (let [{:keys [tx-ops opts]} (get-in req [:parameters :body])]
-                       (-> (c2/submit-tx node tx-ops opts)
+                       (-> (c2.impl/submit-tx& node tx-ops opts)
                            (util/then-apply (fn [tx]
                                               {:status 200, :body tx})))))
 
@@ -112,7 +112,7 @@
 
    :post {:handler (fn [{:keys [node parameters]}]
                      (let [{{:keys [query params]} :body} parameters]
-                       (-> (apply c2/open-datalog-async node query params)
+                       (-> (c2.impl/open-datalog& node query params)
                            (util/then-apply (fn [res]
                                               {:status 200, :body res})))))
 
@@ -135,7 +135,7 @@
 
    :post {:handler (fn [{:keys [node parameters]}]
                      (let [{{:keys [query] :as query-opts} :body} parameters]
-                       (-> (c2/open-sql-async node query (dissoc query-opts :query))
+                       (-> (c2.impl/open-sql& node query (dissoc query-opts :query))
                            (util/then-apply (fn [res]
                                               {:status 200, :body res})))))
 
@@ -156,7 +156,7 @@
                           {::err/message (str "Malformed " (-> ex ex-data :format pr-str) " request.")})})
 
 (def router
-  (http/router c2/http-routes
+  (http/router c2.impl/http-routes
                {:expand (fn [{route-name :name, :as route} opts]
                           (r/expand (cond-> route
                                       route-name (merge (route-handler route)))

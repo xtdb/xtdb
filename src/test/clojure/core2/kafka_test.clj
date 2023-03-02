@@ -1,6 +1,6 @@
 (ns core2.kafka-test
   (:require [clojure.test :as t]
-            [core2.api :as c2]
+            [core2.datalog :as c2]
             [core2.ingester :as ingest]
             [core2.kafka :as k]
             [core2.node :as node]

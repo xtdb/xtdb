@@ -1,5 +1,5 @@
 (ns core2.await
-  (:require core2.api)
+  (:require core2.api.impl)
   (:import core2.api.TransactionInstant
            [java.util.concurrent CompletableFuture PriorityBlockingQueue]))
 

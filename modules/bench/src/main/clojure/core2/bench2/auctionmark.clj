@@ -1,15 +1,13 @@
 (ns core2.bench2.auctionmark
-  (:require
-   [clojure.java.io :as io]
-   [clojure.string :as str]
-   [clojure.tools.logging :as log]
-   [core2.api :as c2]
-   [core2.bench2 :as b2]
-   [core2.test-util :as tu])
-  (:import
-   (java.time Duration Instant)
-   (java.util ArrayList Random)
-   (java.util.concurrent ConcurrentHashMap)))
+  (:require [clojure.java.io :as io]
+            [clojure.string :as str]
+            [clojure.tools.logging :as log]
+            [core2.datalog :as c2]
+            [core2.bench2 :as b2]
+            [core2.test-util :as tu])
+  (:import (java.time Duration Instant)
+           (java.util ArrayList Random)
+           (java.util.concurrent ConcurrentHashMap)))
 
 (defn random-price [worker] (.nextDouble (b2/rng worker)))
 
@@ -293,7 +291,7 @@
                           [?gav-id :_table :gav]
                           [?gav-id :gav_gag_id ?gag-id]
                           [?gav-id :gav_name ?gav-name]]}]
-          (->> (c2/datalog-query (:sut worker) q gag-ids gav-ids)
+          (->> (c2/q (:sut worker) q gag-ids gav-ids)
                (str/join " ")
                (str description " ")))]
 
@@ -339,13 +337,13 @@
       :else i_status)))
 
 (defn item-status-groups [node ^Instant now]
-  (let [items (c2/datalog-query node '{:find [i, i_id, i_u_id, i_status, i_end_date, i_num_bids]
-                                       :where [[i :_table :item]
-                                               [i :i_id i_id]
-                                               [i :i_u_id i_u_id]
-                                               [i :i_status i_status]
-                                               [i :i_end_date i_end_date]
-                                               [i :i_num_bids i_num_bids]]})
+  (let [items (c2/q node '{:find [i, i_id, i_u_id, i_status, i_end_date, i_num_bids]
+                           :where [[i :_table :item]
+                                   [i :i_id i_id]
+                                   [i :i_u_id i_u_id]
+                                   [i :i_status i_status]
+                                   [i :i_end_date i_end_date]
+                                   [i :i_num_bids i_num_bids]]})
         all (ArrayList.)
         open (ArrayList.)
         ending-soon (ArrayList.)
@@ -385,8 +383,8 @@
         (.putAll custom-state {:item-status-groups (item-status-groups db now)}))))
 
 (defn largest-id [node table prefix-length]
-  (let [id (->> (c2/datalog-query node `{:find [~'id]
-                                         :where [[~'id :_table ~table]]})
+  (let [id (->> (c2/q node `{:find [~'id]
+                             :where [[~'id :_table ~table]]})
                 (sort-by :id #(cond (< (count %1) (count %2)) 1
                                     (< (count %2) (count %1)) -1
                                     :else (compare %2 %1)))
@@ -479,7 +477,7 @@
                     [i_id :i_u_id i_u_id]
                     [i_id :i_initial_price i_initial_price]
                     [i_id :i_current_price i_current_price]]}]
-    (c2/datalog-query sut q i_id)))
+    (c2/q sut q i_id)))
 
 (defn read-category-tsv []
   (let [cat-tsv-rows
@@ -606,7 +604,7 @@
 
 (defn sync-call [worker]
   (let [node (:sut worker)
-        tx @(c2/submit-tx node [[:put {:id "auctionmarkd-sync"}]])]
+        tx (c2/submit-tx node [[:put {:id "auctionmarkd-sync"}]])]
     (log/info "Syncing node!")
     (tu/then-await-tx tx node (Duration/ofSeconds 30))
     (log/info "Finished syncing node!")))

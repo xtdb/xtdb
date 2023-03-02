@@ -1,7 +1,7 @@
 (ns core2.align-test
   (:require [clojure.test :as t]
             [core2.align :as align]
-            [core2.api :as c2]
+            [core2.datalog :as c2]
             [core2.expression :as expr]
             [core2.ingester :as ingest]
             [core2.node :as node]

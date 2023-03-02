@@ -1,6 +1,6 @@
 (ns core2.tx-fn-test
   (:require [clojure.test :as t]
-            [core2.api :as c2]
+            [core2.datalog :as c2]
             [core2.node :as node]
             [core2.indexer :as idx]
             [core2.test-util :as tu]
@@ -17,10 +17,10 @@
                                        [:call :my-fn :bar 1]])]
       (t/is (= [{:id :foo, :n 0}
                 {:id :bar, :n 1}]
-               (c2/datalog-query tu/*node*
-                                 (-> '{:find [id n]
-                                       :where [[id :n n]]}
-                                     (assoc :basis {:tx !tx})))))))
+               (c2/q tu/*node*
+                     (-> '{:find [id n]
+                           :where [[id :n n]]}
+                         (assoc :basis {:tx !tx})))))))
 
   (t/testing "nested tx fn"
     (let [!tx (c2/submit-tx tu/*node* [[:put {:id :inner-fn,
@@ -35,10 +35,10 @@
       (t/is (= [{:id :foo-inner, :from :inner}
                 {:id :bar-inner, :from :inner}
                 {:id :bar-outer, :from :outer}]
-               (c2/datalog-query tu/*node*
-                                 (-> '{:find [id from]
-                                       :where [[id :from from]]}
-                                     (assoc :basis {:tx !tx}))))))))
+               (c2/q tu/*node*
+                     (-> '{:find [id from]
+                           :where [[id :from from]]}
+                         (assoc :basis {:tx !tx}))))))))
 
 (t/deftest test-tx-fn-return-values
   (c2/submit-tx tu/*node* [[:put {:id :identity,
@@ -47,12 +47,12 @@
   (letfn [(run-test [ret-val put-id]
             (let [!tx (c2/submit-tx tu/*node* [[:call :identity ret-val]
                                                [:put {:id put-id}]])]
-              (->> (c2/datalog-query tu/*node*
-                                     (-> '{:find [id]
-                                           :in [id]
-                                           :where [[id :id]]}
-                                         (assoc :basis {:tx !tx}))
-                                     put-id)
+              (->> (c2/q tu/*node*
+                         (-> '{:find [id]
+                               :in [id]
+                               :where [[id :id]]}
+                             (assoc :basis {:tx !tx}))
+                         put-id)
                    (into #{} (map :id)))))]
 
     (t/is (= #{:empty-list} (run-test [] :empty-list)))
@@ -70,10 +70,10 @@
                                      [:call :doc-counter :bar]])]
     (t/is (= [{:id :foo, :doc-count 1}
               {:id :bar, :doc-count 2}]
-             (c2/datalog-query tu/*node*
-                               (-> '{:find [id doc-count]
-                                     :where [[id :doc-count doc-count]]}
-                                   (assoc :basis {:tx !tx}))))))
+             (c2/q tu/*node*
+                   (-> '{:find [id doc-count]
+                         :where [[id :doc-count doc-count]]}
+                       (assoc :basis {:tx !tx}))))))
 
   (let [!tx2 (c2/submit-tx tu/*node* [[:put {:id :petr :balance 100}]
                                       [:put {:id :ivan :balance 200}]
@@ -90,10 +90,10 @@
                                       [:call :update-balance :undefined]])]
     (t/is (= #{{:id :petr, :balance 101}
                {:id :ivan, :balance 200}}
-             (set (c2/datalog-query tu/*node*
-                                    (-> '{:find [id balance]
-                                          :where [[id :balance balance]]}
-                                        (assoc :basis {:tx !tx2})))))
+             (set (c2/q tu/*node*
+                        (-> '{:find [id balance]
+                              :where [[id :balance balance]]}
+                            (assoc :basis {:tx !tx2})))))
           "query in tx-fn with in-args")))
 
 (t/deftest test-tx-fn-sql-q
@@ -105,34 +105,34 @@
                                      [:call :doc-counter :bar]])]
     (t/is (= [{:id :foo, :doc-count 1}
               {:id :bar, :doc-count 2}]
-             (c2/datalog-query tu/*node*
-                               (-> '{:find [id doc-count]
-                                     :where [[id :doc-count doc-count]]}
-                                   (assoc :basis {:tx !tx})))))))
+             (c2/q tu/*node*
+                   (-> '{:find [id doc-count]
+                         :where [[id :doc-count doc-count]]}
+                       (assoc :basis {:tx !tx})))))))
 
 (t/deftest test-tx-fn-current-tx
-  (let [{tt0 :sys-time} @(c2/submit-tx tu/*node* [[:put {:id :with-tx
-                                                         :fn #c2/clj-form (fn [id]
-                                                                            [[:put (into {:id id} *current-tx*)]])}]
-                                                  [:call :with-tx :foo]
-                                                  [:call :with-tx :bar]])
+  (let [{tt0 :sys-time} (c2/submit-tx tu/*node* [[:put {:id :with-tx
+                                                        :fn #c2/clj-form (fn [id]
+                                                                           [[:put (into {:id id} *current-tx*)]])}]
+                                                 [:call :with-tx :foo]
+                                                 [:call :with-tx :bar]])
 
-        {tt1 :sys-time, :as tx1} @(c2/submit-tx tu/*node* [[:call :with-tx :baz]])]
+        {tt1 :sys-time, :as tx1} (c2/submit-tx tu/*node* [[:call :with-tx :baz]])]
 
     (t/is (= [{:id :foo, :tx-id 0, :sys-time (util/->zdt tt0)}
               {:id :bar, :tx-id 0, :sys-time (util/->zdt tt0)}
               {:id :baz, :tx-id 1, :sys-time (util/->zdt tt1)}]
-             (c2/datalog-query tu/*node*
-                               (-> '{:find [id tx-id sys-time]
-                                     :where [[id :tx-id tx-id]
-                                             [id :sys-time sys-time]]}
-                                   (assoc :basis {:tx tx1})))))))
+             (c2/q tu/*node*
+                   (-> '{:find [id tx-id sys-time]
+                         :where [[id :tx-id tx-id]
+                                 [id :sys-time sys-time]]}
+                       (assoc :basis {:tx tx1})))))))
 
 (t/deftest test-tx-fn-exceptions
   (letfn [(foo-version [!tx]
-            (-> (c2/datalog-query tu/*node*
-                                  (-> '{:find [id version], :where [[id :version version]]}
-                                      (assoc :basis {:tx !tx})))
+            (-> (c2/q tu/*node*
+                      (-> '{:find [id version], :where [[id :version version]]}
+                          (assoc :basis {:tx !tx})))
                 first :version))]
 
     (let [!tx (c2/submit-tx tu/*node* '[[:put {:id :assoc-version
@@ -209,15 +209,14 @@
 (t/deftest handle-interrupted-exception-614
   (t/is (thrown-with-msg?
          Exception #"sleep interrupted"
-         @(reduce conj []
-                  (with-open [node (node/start-node {})]
-                    (let [!tx1 @(c2/submit-tx node [[:put {:id :hello-world
-                                                           :fn #c2/clj-form (fn hello-world [id]
-                                                                              (sleep 200)
-                                                                              [[:put {:id id :foo (str id)}]])}]])
-                          !tx2 (c2/submit-tx node [[:call :hello-world 1]])]
-                      (Thread/sleep 100)
-                      (tu/then-await-tx !tx1 node)
-                      (c2/plan-datalog-async node (assoc '{:find [id]
-                                                           :where [[id :foo]]}
-                                                         :basis {:tx !tx2}))))))))
+         @(with-open [node (node/start-node {})]
+            (let [tx1 (c2/submit-tx node [[:put {:id :hello-world
+                                                 :fn #c2/clj-form (fn hello-world [id]
+                                                                    (sleep 200)
+                                                                    [[:put {:id id :foo (str id)}]])}]])
+                  tx2 (c2/submit-tx node [[:call :hello-world 1]])]
+              (Thread/sleep 100)
+              (tu/then-await-tx tx1 node)
+              (c2/q& node (assoc '{:find [id]
+                                   :where [[id :foo]]}
+                                 :basis {:tx tx2})))))))

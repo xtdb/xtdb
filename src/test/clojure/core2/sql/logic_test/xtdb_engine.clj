@@ -1,6 +1,7 @@
 (ns core2.sql.logic-test.xtdb-engine
   (:require [clojure.string :as str]
-            [core2.api :as c2]
+            [core2.datalog :as c2.d]
+            [core2.sql :as c2.sql]
             [core2.error :as err]
             [core2.ingester :as ingest]
             [core2.rewrite :as r]
@@ -185,7 +186,7 @@
       (into {:_table table} (zipmap (map keyword columns) row)))))
 
 (defn- insert-statement [node insert-statement]
-  (-> (c2/submit-tx node (vec (for [doc (insert->docs node insert-statement)]
+  (-> (c2.d/submit-tx node (vec (for [doc (insert->docs node insert-statement)]
                                 [:put (merge {:id (UUID/randomUUID)} doc)])))
       (tu/then-await-tx node))
   node)
@@ -200,15 +201,14 @@
 
 (defn- execute-sql-statement [node sql-statement variables opts]
    (binding [r/*memo* (HashMap.)]
-     (-> (c2/submit-tx
-           node
-           [[:sql sql-statement]]
-           (cond-> opts
-             (= (get variables "APP_TIME_DEFAULTS") "AS_OF_NOW")
-             (assoc :app-time-as-of-now? true)
+     (-> (c2.sql/submit-tx node
+                           [[:sql sql-statement]]
+                           (cond-> opts
+                             (= (get variables "APP_TIME_DEFAULTS") "AS_OF_NOW")
+                             (assoc :app-time-as-of-now? true)
 
-             (get variables "CURRENT_TIMESTAMP")
-             (assoc-in [:basis :current-time] (Instant/parse (get variables "CURRENT_TIMESTAMP")))))
+                             (get variables "CURRENT_TIMESTAMP")
+                             (assoc-in [:basis :current-time] (Instant/parse (get variables "CURRENT_TIMESTAMP")))))
         (tu/then-await-tx node))
     node))
 
@@ -216,15 +216,13 @@
   (binding [r/*memo* (HashMap.)]
     (let [projection (outer-projection (p/parse sql-statement :query_expression))]
       (vec
-        (for [row (c2/sql-query
-                    node
-                    sql-statement
-                    (cond-> opts
-                      (= (get variables "APP_TIME_DEFAULTS") "AS_OF_NOW")
-                      (assoc :app-time-as-of-now? true)
+       (for [row (c2.sql/q node sql-statement
+                           (cond-> opts
+                             (= (get variables "APP_TIME_DEFAULTS") "AS_OF_NOW")
+                             (assoc :app-time-as-of-now? true)
 
-                      (get variables "CURRENT_TIMESTAMP")
-                      (assoc-in [:basis :current-time] (Instant/parse (get variables "CURRENT_TIMESTAMP")))))]
+                             (get variables "CURRENT_TIMESTAMP")
+                             (assoc-in [:basis :current-time] (Instant/parse (get variables "CURRENT_TIMESTAMP")))))]
           (mapv #(-> % name keyword row) projection))))))
 
 (defn parse-create-table [^String x]

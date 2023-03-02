@@ -1,5 +1,5 @@
 (ns core2.log
-  (:require core2.api
+  (:require core2.api.impl
             [core2.util :as util]
             [clojure.tools.logging :as log])
   (:import core2.api.TransactionInstant

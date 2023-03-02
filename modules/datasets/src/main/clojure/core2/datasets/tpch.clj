@@ -1,7 +1,8 @@
 (ns core2.datasets.tpch
   (:require [clojure.string :as str]
             [clojure.tools.logging :as log]
-            [core2.api :as c2])
+            [core2.datalog :as c2.d]
+            [core2.sql :as c2.sql])
   (:import clojure.lang.MapEntry
            [io.airlift.tpch TpchColumn TpchColumnType$Base TpchEntity TpchTable]
            [java.time LocalDate]))
@@ -45,13 +46,13 @@
                  (let [[!last-tx doc-count] (->> (tpch-table->docs t scale-factor)
                                                  (partition-all 1000)
                                                  (reduce (fn [[_!last-tx last-doc-count] batch]
-                                                           [(c2/submit-tx tx-producer
-                                                                          (vec (for [doc batch]
-                                                                                 [:put doc])))
+                                                           [(c2.d/submit-tx& tx-producer
+                                                                             (vec (for [doc batch]
+                                                                                    [:put doc])))
                                                             (+ last-doc-count (count batch))])
                                                          [nil 0]))]
                    (log/debug "Transacted" doc-count (.getTableName t))
-                   @!last-tx))
+                   !last-tx))
                nil)))
 
 (defn- tpch-table->dml [^TpchTable table]
@@ -81,8 +82,8 @@
                        [!last-tx doc-count] (->> (tpch-table->dml-params table scale-factor)
                                                  (partition-all 1000)
                                                  (reduce (fn [[_!last-tx last-doc-count] param-batch]
-                                                           [(c2/submit-tx tx-producer
-                                                                          [[:sql dml param-batch]])
+                                                           [(c2.sql/submit-tx& tx-producer
+                                                                               [[:sql dml param-batch]])
                                                             (+ last-doc-count (count param-batch))])
                                                          [nil 0]))]
                    (log/debug "Transacted" doc-count (.getTableName table))

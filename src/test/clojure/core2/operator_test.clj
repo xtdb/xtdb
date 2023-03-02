@@ -1,6 +1,6 @@
 (ns core2.operator-test
   (:require [clojure.test :as t]
-            [core2.api :as c2]
+            [core2.datalog :as c2]
             [core2.expression.metadata :as expr.meta]
             [core2.node :as node]
             [core2.metadata :as meta]
@@ -105,15 +105,13 @@
 
 (t/deftest test-temporal-bounds
   (with-open [node (node/start-node {})]
-    (let [{tt1 :sys-time} @(c2/submit-tx node [[:put {:id :my-doc, :last-updated "tx1"}]])
+    (let [{tt1 :sys-time} (c2/submit-tx node [[:put {:id :my-doc, :last-updated "tx1"}]])
           _ (Thread/sleep 10) ; to prevent same-ms transactions
-          {tt2 :sys-time, :as tx2} @(c2/submit-tx node [[:put {:id :my-doc, :last-updated "tx2"}]])
+          {tt2 :sys-time, :as tx2} (c2/submit-tx node [[:put {:id :my-doc, :last-updated "tx2"}]])
           db @(node/snapshot-async node tx2)]
       (letfn [(q [& temporal-constraints]
-                (->> (tu/query-ra [:scan
-                                   'xt_docs
-                                   (into '[last-updated]
-                                         temporal-constraints)]
+                (->> (tu/query-ra [:scan 'xt_docs
+                                   (into '[last-updated] temporal-constraints)]
                                   {:srcs {'$ db}
                                    :params {'?sys-time1 tt1, '?sys-time2 tt2}})
                      (into #{} (map :last-updated))))]

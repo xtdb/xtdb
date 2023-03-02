@@ -1,6 +1,6 @@
 (ns core2.stats-test
   (:require [clojure.test :as t :refer [deftest]]
-            [core2.api :as c2]
+            [core2.datalog :as c2]
             [core2.logical-plan :as lp]
             [core2.node :as node]
             [core2.test-util :as tu]))

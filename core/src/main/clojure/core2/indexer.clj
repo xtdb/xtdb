@@ -1,6 +1,6 @@
 (ns core2.indexer
   (:require [clojure.tools.logging :as log]
-            [core2.api :as c2]
+            [core2.api.impl :as c2]
             [core2.buffer-pool :as bp]
             [core2.core.datalog :as d]
             [core2.error :as err]

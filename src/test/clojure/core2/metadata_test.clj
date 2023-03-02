@@ -1,6 +1,6 @@
 (ns core2.metadata-test
   (:require [clojure.test :as t]
-            [core2.api :as c2]
+            [core2.sql :as c2]
             [core2.metadata :as meta]
             [core2.test-util :as tu]
             [core2.datasets.tpch :as tpch]))
@@ -42,13 +42,13 @@
                  (row-id->col-names "lineitem" 2750)))))))
 
 (t/deftest test-param-metadata-error-310
-  (let [!tx1 (c2/submit-tx tu/*node*
+  (let [tx1 (c2/submit-tx tu/*node*
                            [[:sql "INSERT INTO users (id, name, application_time_start) VALUES (?, ?, ?)"
                              [["dave", "Dave", #inst "2018"]
                               ["claire", "Claire", #inst "2019"]]]])]
 
     (t/is (= [{:name "Dave"}]
-             (c2/sql-query tu/*node* "SELECT users.name FROM users WHERE users.id = ?"
-                           {:basis {:tx !tx1}
-                            :? ["dave"]}))
+             (c2/q tu/*node* "SELECT users.name FROM users WHERE users.id = ?"
+                   {:basis {:tx tx1}
+                    :? ["dave"]}))
           "#310")))

@@ -1,12 +1,12 @@
 (ns core2.sql.interval-test
   (:require [clojure.test :as t]
-            [core2.api :as c2]
+            [core2.sql :as c2]
             [core2.test-util :as tu]))
 
 (t/use-fixtures :each tu/with-node)
 
 (defn- q [expr]
-  (-> (c2/sql-query tu/*node* (format "SELECT %s r FROM (VALUES ('a')) a" expr) {})
+  (-> (c2/q tu/*node* (format "SELECT %s r FROM (VALUES ('a')) a" expr) {})
       first :r))
 
 (t/deftest test-interval-literals
