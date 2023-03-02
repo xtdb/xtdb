@@ -49,10 +49,7 @@
                                     (try
                                       (throw (.getCause ^Throwable e))
                                       (catch NoSuchKeyException _
-                                        (log/warn "S3 key not found: " s3-key))
-                                      (catch Exception e
-                                        (log/warnf e "Error fetching S3 object: s3://%s/%s" bucket (str prefix path))))
-
+                                        (log/warn "S3 key not found: " s3-key)))
                                     resp)))))]))
 
          (into {})
