@@ -13,8 +13,10 @@
         http/get
         :body
         ((fn [^String s] (.getBytes s))))
-    (catch Exception _ ;; TODO : Log "not found" etc.
-      nil)))
+    (catch Exception e
+      (if (= 404 (:status (ex-data e)))
+        nil
+        (throw e)))))
 
 (defn- put-blob [sas-token storage-account container blob-name blob-bytes]
   ;; TODO ETag
