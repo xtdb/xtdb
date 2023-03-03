@@ -11,7 +11,8 @@
             [xtdb.io :as xio]
             [xtdb.system :as sys]
             [xtdb.tx.conform :as txc]
-            [xtdb.tx.event :as txe])
+            [xtdb.tx.event :as txe]
+            [xtdb.tx-document-store-safety :as tx-doc-store-safety])
   (:import clojure.lang.MapEntry
            java.io.Closeable
            [java.util.concurrent CompletableFuture]
@@ -49,20 +50,15 @@
 (defn- without-tx-fn-docs [docs]
   (into {} (remove (comp tx-fn-doc? val)) docs))
 
-(defn- strict-fetch-docs [document-store doc-hashes]
-  (let [doc-hashes (set doc-hashes)
-        docs (db/fetch-docs document-store doc-hashes)
-        fetched-doc-hashes (set (keys docs))]
-    (when-not (= fetched-doc-hashes doc-hashes)
-      (throw (IllegalStateException. (str "missing docs: " (pr-str (set/difference doc-hashes fetched-doc-hashes))))))
-
-    docs))
+(defn- fetch-docs-for-tx [document-store doc-hashes]
+  (binding [tx-doc-store-safety/*in-tx* true]
+    (tx-doc-store-safety/fetch-docs document-store doc-hashes)))
 
 (defn- arg-docs-to-replace [document-store tx-events]
-  (->> (db/fetch-docs document-store (for [[op :as tx-event] tx-events
+  (->> (fetch-docs-for-tx document-store (for [[op :as tx-event] tx-events
                                            :when (= op :crux.tx/fn)
                                            :let [[_op _fn-id arg-doc-id] tx-event]]
-                                       arg-doc-id))
+                                           arg-doc-id))
        (into {}
              (map (fn [[arg-doc-id arg-doc]]
                     (MapEntry/create arg-doc-id
@@ -155,7 +151,7 @@
     (if (or (= current-id expected-id)
             ;; see xtdb/xtdb#362 - we'd like to just compare content hashes here, but
             ;; can't rely on the old content-hashing returning the same hash for the same document
-            (let [docs (strict-fetch-docs document-store-tx #{current-id expected-id})]
+            (let [docs (fetch-docs-for-tx document-store-tx #{current-id expected-id})]
               (= (get docs current-id)
                  (get docs expected-id))))
       (put-delete-coords eid valid-time nil (c/new-id new-v) tx in-flight-tx)
@@ -206,12 +202,12 @@
         {args-doc-id :xt/id,
          :crux.db.fn/keys [args tx-events failed?]
          :as args-doc} (when args-content-hash
-                         (-> (strict-fetch-docs document-store-tx #{args-content-hash})
+                         (-> (fetch-docs-for-tx document-store-tx #{args-content-hash})
                              (get args-content-hash)
                              c/crux->xt))]
     (cond
       tx-events {:tx-events tx-events
-                 :docs (strict-fetch-docs document-store-tx (txc/tx-events->doc-hashes tx-events))}
+                 :docs (fetch-docs-for-tx document-store-tx (txc/tx-events->doc-hashes tx-events))}
 
       failed? (do
                 (log/warn "Transaction function failed when originally evaluated:"
@@ -631,7 +627,10 @@
                                                                 [tx true])
                                                               [tx false])
                                                 _ (reset! latest-tx! tx)
-                                                {:keys [committing?, indexed-docs]} (when-not abort? (db/index-tx-events in-flight-tx tx))]
+                                                {:keys [committing?, indexed-docs]}
+                                                (when-not abort?
+                                                  (binding [tx-doc-store-safety/*in-tx* true]
+                                                    (db/index-tx-events in-flight-tx tx)))]
 
                                             (process-tx-f in-flight-tx (assoc tx :committing? committing?))
 
@@ -641,6 +640,7 @@
                                                 (doto stats-executor
                                                   (send-via stats-agent into (into docs indexed-docs))
                                                   (send-via stats-agent flush-stats-if-enough-docs)))
+                                              ;; do we need the in-flight to be closed on retry?
                                               (db/abort in-flight-tx tx))))
 
                                         (txs-doc-encoder-fn [txs]
@@ -650,7 +650,7 @@
                                               (submit-job! txs-index-executor txs-index-fn (assoc m :tx tx :in-flight-tx in-flight-tx)))))
 
                                         (txs-doc-fetch-fn [txs doc-hashes]
-                                          (let [docs (strict-fetch-docs document-store doc-hashes)
+                                          (let [docs (fetch-docs-for-tx document-store doc-hashes)
                                                 txs (doall
                                                      (for [tx txs]
                                                        {:tx tx

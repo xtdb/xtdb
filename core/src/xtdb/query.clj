@@ -20,6 +20,7 @@
             [xtdb.pull :as pull]
             [xtdb.system :as sys]
             [xtdb.tx :as tx]
+            [xtdb.tx-document-store-safety :as tx-doc-store-safety]
             [xtdb.with-tx :as with-tx])
   (:import (clojure.lang Box ExceptionInfo MapEntry)
            (java.io Closeable Writer)
@@ -1988,7 +1989,7 @@
 (defn- entity [{:keys [document-store] :as db} index-snapshot eid]
   (when-let [content-hash (some-> (entity-tx db index-snapshot eid)
                                   ::xt/content-hash)]
-    (-> (db/fetch-docs document-store #{content-hash})
+    (-> (tx-doc-store-safety/fetch-docs document-store #{content-hash})
         (get content-hash)
         (c/keep-non-evicted-doc)
         (c/crux->xt))))
@@ -2125,11 +2126,12 @@
                       (->> (for [history-batch (->> (db/entity-history index-snapshot eid sort-order opts)
                                                     (partition-all 100))
                                  :let [docs (when with-docs?
-                                              (->> (db/fetch-docs document-store
-                                                                  (->> history-batch
-                                                                       (into #{}
-                                                                             (comp (keep #(.content-hash ^EntityTx %))
-                                                                                   (remove #{(c/new-id c/nil-id-buffer)})))))
+                                              (->> (tx-doc-store-safety/fetch-docs
+                                                     document-store
+                                                     (->> history-batch
+                                                          (into #{}
+                                                                (comp (keep #(.content-hash ^EntityTx %))
+                                                                      (remove #{(c/new-id c/nil-id-buffer)})))))
                                                    (xio/map-vals c/crux->xt)))]]
                              (->> history-batch
                                   (map (fn [^EntityTx etx]
