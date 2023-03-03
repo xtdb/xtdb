@@ -5,8 +5,9 @@
             [clojure.spec.alpha :as s]
             [clojure.string :as str]
             [clojure.tools.logging :as log]
-            [juxt.clojars-mirrors.nippy.v3v1v1.taoensso.nippy :as nippy])
-  (:import (clojure.lang MapEntry)
+            [juxt.clojars-mirrors.nippy.v3v1v1.taoensso.nippy :as nippy]
+            [cognitect.anomalies :as-alias anomalies])
+  (:import (clojure.lang Box MapEntry)
            [java.io DataInputStream DataOutputStream File IOException Reader]
            (java.lang AutoCloseable)
            (java.lang.management BufferPoolMXBean ManagementFactory)
@@ -363,3 +364,60 @@
           (vector? entry) {:xtdb.tx.event/tx-events entry}
           (map? entry) entry
           :else (throw (IllegalStateException. (format "unexpected value on tx-log: '%s'" (pr-str entry)))))))
+
+(defn sleep
+  "Wraps Thread/sleep so that it can be overridden in tests."
+  [ms]
+  (Thread/sleep (long ms)))
+
+(defn exp-backoff
+  "Calls f, while it throws a retryable Throwable, invokes it again after a back-off period.
+  The back-off period grows exponentially until some max.
+
+  Back off can be interrupted for cancellation.
+
+  Options:
+
+  :retryable
+  A function that returns true if the given Throwable is retryable. If not retryable the exception will be rethrown.
+  Default uses the ex-data :cognitect.anomalies/category to determine whether to retry. Will retry on unavailable, or busy.
+  If anomaly is nil or not-found, any java.lang.Exception is considered retryable.
+
+  :start-wait-ms (default 50)
+  The amount of time to wait before the first retry.
+
+  :max-wait-ms (default 60000, 1 minute)
+  The maximum amount of time to wait, to stop the exponential growth of the backoff.
+
+  :wait-mul (default 2)
+  The multiplier to be applied to the wait-ms every retry.
+
+  :on-retry (default logs the exception as an ERROR)
+  Function that is applied to the exception each retry, perhaps for logging or monitoring."
+  ([f] (exp-backoff f {}))
+  ([f {:keys [retryable
+              on-retry
+              wait-mul
+              start-wait-ms
+              max-wait-ms]
+       :or {retryable (fn default-retryable [t]
+                        (let [data (ex-data t)
+                              not-found (Object.)
+                              category (::anomalies/category data not-found)]
+                          (if (identical? not-found category)
+                            (instance? Exception t)
+                            (contains? #{::anomalies/unavailable, ::anomalies/busy} category))))
+            start-wait-ms 50
+            on-retry #(log/error % "Retryable exception caught during exp-backoff loop")
+            wait-mul 2
+            max-wait-ms 60000}}]
+   (letfn [(try-call [wait-ms]
+             (try
+               (Box. (f))
+               (catch InterruptedException e (throw e))
+               (catch Throwable t
+                 (when-not (retryable t) (throw t))
+                 (on-retry t)
+                 (sleep wait-ms)
+                 (partial try-call (min max-wait-ms (* wait-mul wait-ms))))))]
+     (.-val ^Box (trampoline try-call (min max-wait-ms start-wait-ms))))))
