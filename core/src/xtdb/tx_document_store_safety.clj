@@ -15,7 +15,7 @@
   "A version of fetch docs that when in a transaction (*in-tx* is true) implements additional safety semantics
   that are important for the integrity of transaction processing across multiple nodes.
 
-  - Exceptions thrown by the doc store are retried according to the options of xio/exp-backoff, avoiding an ingester panic for errors relating to unavailable.
+  - Exceptions thrown by the doc store are retried according to the options of xio/exp-backoff, avoiding an ingester panic for errors relating to unavailability.
   - Missing documents cause an IllegalStateException to be propagated to the caller (without backoff), this will cause an ingester panic.
 
   Options to the xio/exp-backoff loop can be varied with *exp-backoff-opts*.
