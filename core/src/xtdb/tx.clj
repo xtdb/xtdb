@@ -52,7 +52,7 @@
 
 (defn- fetch-docs-for-tx [document-store doc-hashes]
   (binding [tx-doc-store-safety/*in-tx* true]
-    (tx-doc-store-safety/fetch-docs document-store doc-hashes)))
+    (tx-doc-store-safety/fetch-docs-throw-on-missing document-store doc-hashes)))
 
 (defn- arg-docs-to-replace [document-store tx-events]
   (->> (fetch-docs-for-tx document-store (for [[op :as tx-event] tx-events
