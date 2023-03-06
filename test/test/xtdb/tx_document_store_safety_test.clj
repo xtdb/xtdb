@@ -131,8 +131,11 @@
         (xt/submit-tx node [[::xt/put {:xt/id unique-msg, :n 0}]])
         (t/is (f/spin-until-true 100 #(ingester-panic? node)))))))
 
-(t/deftest entity-call-during-tx-fn-processing-recovery-test
-  (doseq [example recoverable-exceptions]
+(t/deftest entity-or-pull-call-during-tx-fn-processing-recovery-test
+  (doseq [example recoverable-exceptions
+          call ['(xtdb.api/entity (xtdb.api/db ctx) 0)
+                '(xtdb.api/pull (xtdb.api/db ctx) [:foo] 0)
+                '(xtdb.api/q (xtdb.api/db ctx) (quote {:find [(pull ?e [:foo])] :where [[?e :xt/id 0]]}))]]
     (let [unique-msg (str (random-uuid))
           ex (construct-ex example unique-msg)
           retried (promise)]
@@ -145,9 +148,7 @@
                                       (deliver retried true))))]
           (xt/submit-tx node [[::xt/put {:xt/id 0}]])
           (test-tx-fn {:node node
-                       :f '(fn [ctx unique-msg]
-                             (xtdb.api/entity (xtdb.api/db ctx) 0)
-                             [[:xtdb.api/put {:xt/id unique-msg}]])
+                       :f (list 'fn '[ctx unique-msg] call '[[:xtdb.api/put {:xt/id unique-msg}]])
                        :args [unique-msg]
                        :on-start (fn [] (misbehave node ex))})
           (t/is (f/spin-until-true 100 #(realized? retried)))
