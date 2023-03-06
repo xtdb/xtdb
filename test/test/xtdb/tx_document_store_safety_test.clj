@@ -153,3 +153,21 @@
           (t/is (f/spin-until-true 100 #(realized? retried)))
           (behave node)
           (t/is (f/spin-until-true 100 #(xt/entity (xt/db node) unique-msg))))))))
+
+(t/deftest entity-during-tx-fn-tolerates-missing-test
+  (with-open [node (xt/start-node {})]
+    (xt/submit-tx node [[::xt/put {:xt/id 0}]])
+    (test-tx-fn {:node node
+                 :f '(fn [ctx]
+                       (when (nil? (xtdb.api/entity (xtdb.api/db ctx) "foo"))
+                         [[:xtdb.api/put {:xt/id 1}]]))})
+    (t/is (f/spin-until-true 100 #(xt/entity (xt/db node) 1)))))
+
+(t/deftest pull-during-tx-fn-tolerates-missing-test
+  (with-open [node (xt/start-node {})]
+    (xt/submit-tx node [[::xt/put {:xt/id 0, :x "foo"}]])
+    (test-tx-fn {:node node
+                 :f '(fn [ctx]
+                       (when (= #{[nil]} (xtdb.api/q (xtdb.api/db ctx) (quote {:find [(pull ?x [:xt/id])] :where [[?e :x ?x]]})))
+                         [[:xtdb.api/put {:xt/id 1}]]))})
+    (t/is (f/spin-until-true 100 #(xt/entity (xt/db node) 1)))))
