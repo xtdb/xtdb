@@ -1558,7 +1558,7 @@
 (t/deftest ingester-failed-returned-by-status-test
   (t/is (false? (:ingester-failed? (xt/status *api*))))
 
-  (with-redefs [tx/strict-fetch-docs (fn [& _] (throw (Exception. "boom")))]
+  (with-redefs [tx/fetch-docs-for-tx (fn [& _] (throw (Exception. "boom")))]
     (xt/submit-tx *api* [[::xt/put {:xt/id "boom"}]])
     (try (xt/sync *api*) (catch Throwable _)))
 
