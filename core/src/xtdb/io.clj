@@ -419,5 +419,6 @@
                  (when-not (retryable t) (throw t))
                  (on-retry t)
                  (sleep wait-ms)
+                 (when (Thread/interrupted) (throw (InterruptedException.))) ; sleep should have thrown, but we might redefine it in tests
                  (partial try-call (min max-wait-ms (* wait-mul wait-ms))))))]
      (.-val ^Box (trampoline try-call (min max-wait-ms start-wait-ms))))))
