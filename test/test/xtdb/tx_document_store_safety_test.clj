@@ -5,27 +5,29 @@
             [xtdb.fixtures :as f]
             [xtdb.io :as xio]
             [xtdb.kv.document-store :as kv-doc-store]
+            [xtdb.kv.tx-log :as kv-tx-log]
             [xtdb.mem-kv :as mem-kv]
             [xtdb.cache.nop :as nop-cache]
             [xtdb.tx-document-store-safety :as tx-doc-store-safety])
   (:import (clojure.lang IFn)
            (java.io Closeable)))
 
-(defn dodgy-doc-store []
-  (let [doc-store (kv-doc-store/->document-store {:kv-store (mem-kv/->kv-store)
-                                                  :document-cache (nop-cache/->nop-cache {})})
-        fetch-ex (atom nil)]
-    (reify db/DocumentStore
-      (submit-docs [_ id-and-docs]
-        (db/submit-docs doc-store id-and-docs))
-      (fetch-docs [_ ids]
-        (when-some [ex @fetch-ex]
-          (throw ex))
-        (db/fetch-docs doc-store ids))
-      IFn
-      (invoke [_ ex] (reset! fetch-ex ex))
-      Closeable
-      (close [_] (xio/try-close doc-store)))))
+(defn dodgy-doc-store
+  ([] (dodgy-doc-store (kv-doc-store/->document-store {:kv-store (mem-kv/->kv-store)
+                                                       :document-cache (nop-cache/->nop-cache {})})))
+  ([doc-store]
+   (let [fetch-ex (atom nil)]
+     (reify db/DocumentStore
+       (submit-docs [_ id-and-docs]
+         (db/submit-docs doc-store id-and-docs))
+       (fetch-docs [_ ids]
+         (when-some [ex @fetch-ex]
+           (throw ex))
+         (db/fetch-docs doc-store ids))
+       IFn
+       (invoke [_ ex] (reset! fetch-ex ex))
+       Closeable
+       (close [_] (xio/try-close doc-store))))))
 
 (defn misbehave [node ex]
   (let [doc-store (:xtdb/document-store @(:!system node))]
@@ -64,7 +66,6 @@
           :on-ex (fn [ex] (reset! ex-ref ex) (on-ex ex))
           :on-done (fn []
                      (deliver done-promise {:ret @ret-ref, :ex @ex-ref})
-                     (swap! test-tx-fn-state dissoc fid)
                      (on-done))}
          (swap! test-tx-fn-state assoc fid))
     (xt/submit-tx node [[::xt/put {:xt/id fid, :xt/fn f'}] (into [::xt/fn fid fid] args)])
@@ -172,3 +173,51 @@
                        (when (= #{[nil]} (xtdb.api/q (xtdb.api/db ctx) (quote {:find [(pull ?x [:xt/id])] :where [[?e :x ?x]]})))
                          [[:xtdb.api/put {:xt/id 1}]]))})
     (t/is (f/spin-until-true 100 #(xt/entity (xt/db node) 1)))))
+
+(t/deftest tx-loop-can-be-terminated-with-interrupt-recovering-on-restart-test
+  (let [doc-dir (.toPath (xio/create-tmpdir "doc-kv"))
+        tx-dir (.toPath (xio/create-tmpdir "tx-kv"))
+        node-opts
+        {::doc-kv
+         {:xtdb/module `mem-kv/->kv-store
+          :db-dir doc-dir}
+         ::tx-kv
+         {:xtdb/module `mem-kv/->kv-store
+          :db-dir tx-dir}
+         ::doc-store
+         {:xtdb/module `kv-doc-store/->document-store
+          :kv-store ::doc-kv}
+         :xtdb/document-store
+         {:xtdb/module ^{:xtdb.system/deps {:doc-store 'foo}} (fn [{:keys [doc-store]}] (dodgy-doc-store doc-store))
+          :doc-store ::doc-store}
+         :xtdb/tx-log
+         {:kv-store ::tx-kv}}
+        start-node #(xt/start-node node-opts)]
+
+    (let [node (start-node)
+          unique-msg (str (random-uuid))
+          ex (Exception. unique-msg)
+          retried (promise)]
+      (with-redefs [xio/sleep (constantly nil)
+                    tx-doc-store-safety/*exp-backoff-opts*
+                    (assoc tx-doc-store-safety/*exp-backoff-opts*
+                      :on-retry (fn [ex]
+                                  (when (= unique-msg (ex-message ex))
+                                    (deliver retried true))))]
+        (xt/submit-tx node [[::xt/put {:xt/id 0}]])
+        (let [tx-result (test-tx-fn {:node node
+                                     :f '(fn [ctx unique-msg]
+                                           (xtdb.api/entity (xtdb.api/db ctx) 0)
+                                           [[:xtdb.api/put {:xt/id unique-msg}]])
+                                     :args [unique-msg]
+                                     :on-start (fn []
+                                                 (when-not (realized? retried)
+                                                   (misbehave node ex)))})]
+          (t/is (f/spin-until-true 100 #(realized? retried)))
+          (t/testing "close interrupts the tx fn"
+            (.close ^Closeable node)
+            (t/is (f/spin-until-true 100 #(instance? InterruptedException (:ex (deref tx-result 10 :timeout))))))))
+
+      (t/testing "restarting the node should resume and complete the transaction"
+        (with-open [^Closeable restarted-node (start-node)]
+          (t/is (f/spin-until-true 100 #(xt/entity (xt/db restarted-node) unique-msg))))))))
