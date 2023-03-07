@@ -5,6 +5,7 @@
             [core2.error :as err]
             [core2.logical-plan :as lp]
             [core2.operator :as op]
+            [core2.util :as util]
             [core2.vector.writer :as vw])
   (:import clojure.lang.MapEntry
            (java.time LocalDate Instant ZonedDateTime)
@@ -110,10 +111,7 @@
 (s/def ::sub-query
   (s/cat :q #{'q}, :query ::query))
 
-(s/def ::temporal-literal
-  (some-fn (partial instance? Date)
-           (partial instance? Instant)
-           (partial instance? ZonedDateTime)))
+(s/def ::temporal-literal ::util/datetime-value)
 
 (s/def ::for-all-app-time (s/cat :k #{'for-all-app-time}, :e ::e))
 

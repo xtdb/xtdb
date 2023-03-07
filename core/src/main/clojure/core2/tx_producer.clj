@@ -27,8 +27,8 @@
 
 (s/def ::id any?)
 (s/def ::doc (s/keys :req-un [::id]))
-(s/def ::app-time-start inst?)
-(s/def ::app-time-end inst?)
+(s/def ::app-time-start ::util/datetime-value)
+(s/def ::app-time-end ::util/datetime-value)
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (s/def ::app-time-as-of-now? boolean)

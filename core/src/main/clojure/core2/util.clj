@@ -97,6 +97,11 @@
 (s/def ::duration
   (s/and (s/conformer ->duration) #(instance? Duration %)))
 
+(s/def ::datetime-value
+  (some-fn (partial instance? Date)
+           (partial instance? Instant)
+           (partial instance? ZonedDateTime)))
+
 (defprotocol TimeConversions
   (^java.time.Instant ->instant [v])
   (^java.time.ZonedDateTime ->zdt [v]))
