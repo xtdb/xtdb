@@ -142,22 +142,29 @@ allprojects {
 }
 
 dependencies {
-    testImplementation(project(":api"))
-    testImplementation(project(":wire-formats"))
-    testImplementation(project(":core"))
+    fun projectDep(name: String) {
+        testImplementation(project(name))
+        val mainSourceSet = project(name).dependencyProject.sourceSets.main.get()
+        devImplementation(mainSourceSet.clojure.sourceDirectories)
+        devImplementation(mainSourceSet.resources.sourceDirectories)
+    }
 
-    testImplementation(project(":http-server"))
-    testImplementation(project(":http-client-clj"))
-    testImplementation(project(":pgwire-server"))
+    projectDep(":api")
+    projectDep(":wire-formats")
+    projectDep(":core")
 
-    testImplementation(project(":modules:jdbc"))
-    testImplementation(project(":modules:kafka"))
-    testImplementation(project(":modules:s3"))
+    projectDep(":http-server")
+    projectDep(":http-client-clj")
+    projectDep(":pgwire-server")
 
-    testImplementation(project(":modules:bench"))
-    testImplementation(project(":modules:c1-import"))
-    testImplementation(project(":modules:datasets"))
-    testImplementation(project(":modules:flight-sql"))
+    projectDep(":modules:jdbc")
+    projectDep(":modules:kafka")
+    projectDep(":modules:s3")
+
+    projectDep(":modules:bench")
+    projectDep(":modules:c1-import")
+    projectDep(":modules:datasets")
+    projectDep(":modules:flight-sql")
 
     testImplementation("org.clojure", "data.csv", "1.0.1")
     testImplementation("org.clojure", "tools.logging", "1.2.4")
