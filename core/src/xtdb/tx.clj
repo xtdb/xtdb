@@ -256,6 +256,7 @@
                                      (mapcat :docs)
                                      conformed-tx-ops)})))
 
+                  (catch InterruptedException e (throw e))
                   (catch Throwable t
                     (reset! !last-tx-fn-error t)
                     (log/warn t "Transaction function failure:" fn-id args-doc-id)
