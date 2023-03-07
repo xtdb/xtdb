@@ -119,3 +119,17 @@
    (assoc opts
           :document-cache document-cache
           :document-store (->NIODocumentStore root-path (Executors/newFixedThreadPool pool-size (xio/thread-factory "doc-store"))))))
+
+(def ^:dynamic *in-tx* false)
+(def ^:dynamic *exp-backoff-opts* nil)
+
+(defn fetch-docs-with-retry-if-in-tx
+  "Like db/fetch-docs, but exceptions thrown by the doc store cause retries according to the options of xio/exp-backoff, avoiding an ingester panic for errors relating to unavailability.
+
+  Options to the xio/exp-backoff loop can be varied with *exp-backoff-opts*.
+
+  If not in a transaction, identical to db/fetch-docs."
+  [document-store ids]
+  (if *in-tx*
+    (xio/exp-backoff #(db/fetch-docs document-store ids) *exp-backoff-opts*)
+    (db/fetch-docs document-store ids)))

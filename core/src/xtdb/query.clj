@@ -13,6 +13,7 @@
             [xtdb.cache :as cache]
             [xtdb.codec :as c]
             [xtdb.db :as db]
+            [xtdb.document-store :as document-store]
             [xtdb.error :as err]
             [xtdb.index :as idx]
             [xtdb.io :as xio]
@@ -20,7 +21,6 @@
             [xtdb.pull :as pull]
             [xtdb.system :as sys]
             [xtdb.tx :as tx]
-            [xtdb.tx-document-store-safety :as tx-doc-store-safety]
             [xtdb.with-tx :as with-tx])
   (:import (clojure.lang Box ExceptionInfo MapEntry)
            (java.io Closeable Writer)
@@ -1989,7 +1989,7 @@
 (defn- entity [{:keys [document-store] :as db} index-snapshot eid]
   (when-let [content-hash (some-> (entity-tx db index-snapshot eid)
                                   ::xt/content-hash)]
-    (-> (tx-doc-store-safety/fetch-docs document-store #{content-hash})
+    (-> (document-store/fetch-docs-with-retry-if-in-tx document-store #{content-hash})
         (get content-hash)
         (c/keep-non-evicted-doc)
         (c/crux->xt))))
@@ -2126,7 +2126,7 @@
                       (->> (for [history-batch (->> (db/entity-history index-snapshot eid sort-order opts)
                                                     (partition-all 100))
                                  :let [docs (when with-docs?
-                                              (->> (tx-doc-store-safety/fetch-docs
+                                              (->> (document-store/fetch-docs-with-retry-if-in-tx
                                                      document-store
                                                      (->> history-batch
                                                           (into #{}

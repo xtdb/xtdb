@@ -1,10 +1,10 @@
 (ns ^:no-doc xtdb.pull
   (:require [xtdb.codec :as c]
             [xtdb.db :as db]
+            [xtdb.document-store :as document-store]
             [xtdb.io :as xio]
             [juxt.clojars-mirrors.eql.v2021v02v28.edn-query-language.core :as eql]
-            [clojure.string :as string]
-            [xtdb.tx-document-store-safety :as tx-doc-store-safety])
+            [clojure.string :as string])
   (:import clojure.lang.MapEntry))
 
 (defn- recognise-union [child]
@@ -19,7 +19,7 @@
 
 (defn- lookup-docs [v {:keys [document-store]}]
   (when-let [hashes (not-empty (::hashes (meta v)))]
-    (->> (tx-doc-store-safety/fetch-docs document-store hashes)
+    (->> (document-store/fetch-docs-with-retry-if-in-tx document-store hashes)
          (xio/map-vals c/crux->xt))))
 
 (defmacro let-docs {:style/indent 1} [[binding hashes] & body]

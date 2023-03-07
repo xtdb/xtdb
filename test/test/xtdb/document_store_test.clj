@@ -1,14 +1,13 @@
-(ns xtdb.tx-document-store-safety-test
+(ns xtdb.document-store-test
   (:require [clojure.test :as t]
             [xtdb.api :as xt]
+            [xtdb.cache.nop :as nop-cache]
             [xtdb.db :as db]
+            [xtdb.document-store :as document-store]
             [xtdb.fixtures :as f]
             [xtdb.io :as xio]
             [xtdb.kv.document-store :as kv-doc-store]
-            [xtdb.kv.tx-log :as kv-tx-log]
-            [xtdb.mem-kv :as mem-kv]
-            [xtdb.cache.nop :as nop-cache]
-            [xtdb.tx-document-store-safety :as tx-doc-store-safety])
+            [xtdb.mem-kv :as mem-kv])
   (:import (clojure.lang IFn)
            (java.io Closeable)))
 
@@ -56,7 +55,7 @@
                         on-done (constantly nil)}}]
   (let [fid (str (random-uuid))
         f (eval f)
-        f' '(fn [ctx fid & args] ((requiring-resolve 'xtdb.tx-document-store-safety-test/run-test-tx-fn) fid (cons ctx args)))
+        f' '(fn [ctx fid & args] ((requiring-resolve 'xtdb.document-store-test/run-test-tx-fn) fid (cons ctx args)))
         ret-ref (atom nil)
         ex-ref (atom nil)
         done-promise (promise)]
@@ -114,8 +113,8 @@
     (with-open [node (dodgy-node)]
       (misbehave node ex)
       (with-redefs [xio/sleep (constantly nil)
-                    tx-doc-store-safety/*exp-backoff-opts*
-                    (assoc tx-doc-store-safety/*exp-backoff-opts*
+                    document-store/*exp-backoff-opts*
+                    (assoc document-store/*exp-backoff-opts*
                       :on-retry (fn [ex] (when (= unique-msg (ex-message ex)) (deliver retried true))))]
         (xt/submit-tx node [[::xt/put {:xt/id unique-msg, :n 0}]])
         (t/is (f/spin-until-true 100 #(realized? retried)))
@@ -142,8 +141,8 @@
           retried (promise)]
       (with-open [node (dodgy-node)]
         (with-redefs [xio/sleep (constantly nil)
-                      tx-doc-store-safety/*exp-backoff-opts*
-                      (assoc tx-doc-store-safety/*exp-backoff-opts*
+                      document-store/*exp-backoff-opts*
+                      (assoc document-store/*exp-backoff-opts*
                         :on-retry (fn [ex]
                                     (when (= unique-msg (ex-message ex))
                                       (deliver retried true))))]
@@ -199,8 +198,8 @@
           ex (Exception. unique-msg)
           retried (promise)]
       (with-redefs [xio/sleep (constantly nil)
-                    tx-doc-store-safety/*exp-backoff-opts*
-                    (assoc tx-doc-store-safety/*exp-backoff-opts*
+                    document-store/*exp-backoff-opts*
+                    (assoc document-store/*exp-backoff-opts*
                       :on-retry (fn [ex]
                                   (when (= unique-msg (ex-message ex))
                                     (deliver retried true))))]

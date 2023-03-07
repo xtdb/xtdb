@@ -6,13 +6,13 @@
             [xtdb.bus :as bus]
             [xtdb.codec :as c]
             [xtdb.db :as db]
+            [xtdb.document-store :as document-store]
             [xtdb.error :as err]
             [xtdb.fork :as fork]
             [xtdb.io :as xio]
             [xtdb.system :as sys]
             [xtdb.tx.conform :as txc]
-            [xtdb.tx.event :as txe]
-            [xtdb.tx-document-store-safety :as tx-doc-store-safety])
+            [xtdb.tx.event :as txe])
   (:import clojure.lang.MapEntry
            java.io.Closeable
            [java.util.concurrent CompletableFuture]
@@ -50,9 +50,17 @@
 (defn- without-tx-fn-docs [docs]
   (into {} (remove (comp tx-fn-doc? val)) docs))
 
-(defn- fetch-docs-for-tx [document-store doc-hashes]
-  (binding [tx-doc-store-safety/*in-tx* true]
-    (tx-doc-store-safety/fetch-docs-throw-on-missing document-store doc-hashes)))
+(defn- fetch-docs-for-tx [document-store ids]
+  (binding [document-store/*in-tx* true]
+    (let [doc-hashes (into #{} (map c/new-id) ids)
+          docs (document-store/fetch-docs-with-retry-if-in-tx document-store doc-hashes)
+          fetched-doc-hashes (set (keys docs))]
+      (when-not (= fetched-doc-hashes doc-hashes)
+        (let [missing-docs (set/difference doc-hashes fetched-doc-hashes)
+              ex-data {:cognitect.anomalies/category :cognitect.anomalies/not-found
+                       :missing-docs missing-docs}]
+          (throw (xtdb.IllegalStateException. (str "missing docs: " (pr-str missing-docs)) ex-data nil))))
+      docs)))
 
 (defn- arg-docs-to-replace [document-store tx-events]
   (->> (fetch-docs-for-tx document-store (for [[op :as tx-event] tx-events
@@ -630,7 +638,7 @@
                                                 _ (reset! latest-tx! tx)
                                                 {:keys [committing?, indexed-docs]}
                                                 (when-not abort?
-                                                  (binding [tx-doc-store-safety/*in-tx* true]
+                                                  (binding [document-store/*in-tx* true]
                                                     (db/index-tx-events in-flight-tx tx)))]
 
                                             (process-tx-f in-flight-tx (assoc tx :committing? committing?))
