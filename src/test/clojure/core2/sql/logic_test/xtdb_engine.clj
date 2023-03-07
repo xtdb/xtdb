@@ -169,7 +169,7 @@
                      (sem/analyze-query) sem/or-throw
                      (plan/plan-query {:decorrelate? true, :project-anonymous-columns? true}))
             column->anonymous-col (:column->name (meta plan))]
-        (vec (for [row (tu/query-ra plan {:srcs {'$ db}})]
+        (vec (for [row (tu/query-ra plan {:src db})]
                (mapv #(-> (get column->anonymous-col %) name keyword row) projection)))))))
 
 (defn insert->docs [{:keys [tables] :as node} insert-statement]

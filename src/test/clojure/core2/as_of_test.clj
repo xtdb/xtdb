@@ -19,7 +19,7 @@
 
     (t/is (= #{{:last-updated "tx1"} {:last-updated "tx2"}}
              (set (tu/query-ra '[:scan xt_docs [last-updated]]
-                               {:srcs {'$ (ingest/snapshot ingester tx2)}}))))
+                               {:src (ingest/snapshot ingester tx2)}))))
 
     (t/is (= #{{:last-updated "tx2"}}
              (set (c2/q tu/*node*
@@ -30,7 +30,7 @@
     (t/testing "at tx1"
       (t/is (= #{{:last-updated "tx1"}}
                (set (tu/query-ra '[:scan xt_docs [last-updated]]
-                                 {:srcs {'$ (ingest/snapshot ingester tx1)}}))))
+                                 {:src (ingest/snapshot ingester tx1)}))))
 
       (t/is (= #{{:last-updated "tx1"}}
                (set (c2/q tu/*node*
@@ -61,7 +61,7 @@
                                  [id
                                   application_time_start application_time_end
                                   system_time_start system_time_end]]
-                               {:srcs {'$ (ingest/snapshot ingester tx1)}})
+                               {:src (ingest/snapshot ingester tx1)})
                   (into {} (map (juxt :id identity))))))))
 
 (t/deftest test-sys-time
@@ -95,7 +95,7 @@
                             [id version
                              application_time_start application_time_end
                              system_time_start system_time_end]]
-                          {:srcs {'$ db}}))
+                          {:src db}))
           "all app-time")
 
     #_ ; FIXME
@@ -105,7 +105,7 @@
                             [id version
                              application_time_start application_time_end
                              system_time_start {system_time_end (<= system_time_end eot)}]]
-                          {:srcs {'$ db}
+                          {:src db
                            :params {'eot util/end-of-time}}))
           "all app, all sys")))
 
@@ -117,7 +117,7 @@
                                   [id
                                    application_time_start {application_time_end (<= application_time_end eot)}
                                    system_time_start {system_time_end (<= system_time_end eot)}]]
-                                {:srcs {'$ db}
+                                {:src db
                                  :params {'eot util/end-of-time}})
                    (map :id)
                    frequencies))]

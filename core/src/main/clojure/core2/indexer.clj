@@ -197,7 +197,7 @@
                                                              (apply [_ _]
                                                                (op/prepare-ra lp))))]
     (with-open [bq (.bind pq (into (select-keys tx-opts [:current-time :default-tz])
-                                   {:srcs {'$ scan-src},
+                                   {:src scan-src,
                                     :params (iv/->indirect-rel [(-> (vw/open-vec allocator '?id [fn-id])
                                                                     (iv/->direct-vec))]
                                                                1)
@@ -443,7 +443,7 @@
                                                                                  (op/prepare-ra inner-query))))]
                       (letfn [(index-op* [^IIndirectRelation params]
                                 (with-open [res (-> (.bind pq (into (select-keys tx-opts [:current-time :default-tz])
-                                                                    {:srcs {'$ scan-src}, :params params}))
+                                                                    {:src scan-src, :params params}))
                                                     (.openCursor))]
 
                                   (.forEachRemaining res

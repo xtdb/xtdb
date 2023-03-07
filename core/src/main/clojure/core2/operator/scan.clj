@@ -34,7 +34,6 @@
 ;; into metadata + col-preds - the former can accept more than just `(and ~@col-preds)
 (defmethod lp/ra-expr :scan [_]
   (s/cat :op #{:scan}
-         :source (s/? ::lp/source)
          :table simple-symbol?
          :columns (s/coll-of (s/or :column ::lp/column
                                    :select ::lp/column-expression))))
@@ -50,44 +49,26 @@
 
 (def ^:dynamic *column->pushdown-bloom* {})
 
-(defn ->scan-cols [{:keys [source table columns]}]
-  (let [src-key (or source '$)]
-    (for [column columns]
-      [src-key table
-       (zmatch column
-         [:column col] col
-         [:select col-map] (key (first col-map)))])))
+(defn ->scan-cols [{:keys [table columns]}]
+  (for [column columns]
+    [table
+     (zmatch column
+             [:column col] col
+             [:select col-map] (key (first col-map)))]))
 
-(defn ->scan-col-types [srcs scan-cols]
-  (let [mm+wms (HashMap.)]
-    (try
-      (letfn [(->mm+wm [src-key]
-                (.computeIfAbsent mm+wms src-key
-                                  (reify Function
-                                    (apply [_ _src-key]
-                                      (let [^ScanSource src (or (get srcs src-key)
-                                                                (throw (err/illegal-arg :unknown-src
-                                                                                        {::err/message "Query refers to unknown source"
-                                                                                         :db src-key
-                                                                                         :src-keys (keys srcs)})))]
-                                        {:src src
-                                         :wm (.openWatermark src)})))))
+(defn ->scan-col-types [^ScanSource src scan-cols]
+  (with-open [wm (.openWatermark src)]
+    (letfn [(->col-type [[table col-name]]
+              (if (temporal/temporal-column? col-name)
+                [:timestamp-tz :micro "UTC"]
+                (t/merge-col-types (.columnType (.metadataManager src) (name table) (name col-name))
+                                   (some-> (.liveChunk wm)
+                                           (.liveTable (name table))
+                                           (.liveColumn (name col-name))
+                                           (.columnType)))))]
 
-              (->col-type [[src-key table col-name]]
-                (let [{:keys [^ScanSource src, ^IWatermark wm]} (->mm+wm src-key)]
-                  (if (temporal/temporal-column? col-name)
-                    [:timestamp-tz :micro "UTC"]
-                    (t/merge-col-types (.columnType (.metadataManager src) (name table) (name col-name))
-                                       (some-> (.liveChunk wm)
-                                               (.liveTable (name table))
-                                               (.liveColumn (name col-name))
-                                               (.columnType))))))]
-
-        (->> scan-cols
-             (into {} (map (juxt identity ->col-type)))))
-
-      (finally
-        (run! util/try-close (map :wm (vals mm+wms)))))))
+      (->> scan-cols
+           (into {} (map (juxt identity ->col-type)))))))
 
 (defn- filter-pushdown-bloom-block-idxs [^IMetadataManager metadata-manager chunk-idx ^String table-name ^String col-name ^RoaringBitmap block-idxs]
   (if-let [^MutableRoaringBitmap pushdown-bloom (get *column->pushdown-bloom* (symbol col-name))]
@@ -279,10 +260,8 @@
       (expr.temp/apply-constraint temporal-min-range temporal-max-range
                                   :> "system_time_end" sys-time))))
 
-(defmethod lp/emit-expr :scan [{:keys [source table columns]} {:keys [scan-col-types param-types srcs]}]
-  (let [src-key (or source '$)
-
-        col-names (->> columns
+(defmethod lp/emit-expr :scan [{:keys [table columns]} {:keys [^ScanSource src, scan-col-types, param-types]}]
+  (let [col-names (->> columns
                        (into [] (comp (map (fn [[col-type arg]]
                                              (case col-type
                                                :column arg
@@ -295,7 +274,7 @@
         col-types (->> col-names
                        (into {} (map (juxt identity
                                            (fn [col-name]
-                                             (get scan-col-types [src-key table col-name]))))))
+                                             (get scan-col-types [table col-name]))))))
 
         selects (->> (for [[col-type arg] columns
                            :when (= col-type :select)]
@@ -314,8 +293,7 @@
                                    (for [[col-name select] selects
                                          :when (not (temporal/temporal-column? (name col-name)))]
                                      select)))
-        row-count (let [^ScanSource src (get srcs src-key)
-                        metadata-mgr (.metadataManager src)]
+        row-count (let [metadata-mgr (.metadataManager src)]
                     (->> (meta/with-all-metadata metadata-mgr (name table)
                            (util/->jbifn
                             (fn [_chunk-idx ^ITableMetadata table-metadata]
@@ -326,9 +304,8 @@
 
     {:col-types (dissoc col-types '_table)
      :stats {:row-count row-count}
-     :->cursor (fn [{:keys [allocator srcs params]}]
-                 (let [^ScanSource src (get srcs src-key)
-                       metadata-mgr (.metadataManager src)
+     :->cursor (fn [{:keys [allocator ^ScanSource src params]}]
+                 (let [metadata-mgr (.metadataManager src)
                        buffer-pool (.bufferPool src)
                        watermark (.openWatermark src)]
                    (try

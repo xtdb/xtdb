@@ -14,4 +14,4 @@
             db (ingest/snapshot (tu/component node :core2/ingester) tx)]
         (t/is (= [{:id :foo}]
                  (tu/query-ra '[:scan [id]]
-                              {:srcs {'$ db}})))))))
+                              {:src db})))))))

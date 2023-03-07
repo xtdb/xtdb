@@ -64,4 +64,4 @@
                               [{system_time_start (< system_time_start #time/zoned-date-time "3002-01-01T00:00Z")}
                                {system_time_end (> system_time_end #time/zoned-date-time "2999-01-01T00:00Z")}
                                last_updated]]
-                            {:srcs {'$ (ingest/snapshot ingester !tx)}}))))))
+                            {:src (ingest/snapshot ingester !tx)}))))))

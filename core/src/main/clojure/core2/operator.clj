@@ -44,7 +44,7 @@
   ;; but if we were to make params a VSR this would then make BoundQuery a closeable resource
   ;; ... or at least raise questions about who then owns the params
   (^core2.operator.BoundQuery bind [queryOpts]
-   "queryOpts :: {:srcs, :params, :current-time, :default-tz}"))
+   "queryOpts :: {:src, :params, :current-time, :default-tz}"))
 
 (defn- ->table-arg-types [table-args]
   (->> (for [[table-key rows] table-args]
@@ -82,24 +82,21 @@
                                          (mapcat scan/->scan-cols))))
           cache (ConcurrentHashMap.)]
       (reify PreparedQuery
-        (bind [_ {:keys [srcs params table-args current-time default-tz]}]
+        (bind [_ {:keys [^ScanSource src params table-args current-time default-tz]}]
+          (assert (or src (empty? scan-cols)))
+
           (let [clock (Clock/fixed (or current-time (.instant expr/*clock*))
                                    (or default-tz (.getZone expr/*clock*)))
                 {:keys [col-types ->cursor]} (.computeIfAbsent cache
-                                                               {:scan-col-types (scan/->scan-col-types srcs scan-cols)
+                                                               {:scan-col-types (when src (scan/->scan-col-types src scan-cols))
                                                                 :param-types (expr/->param-types params)
                                                                 :table-arg-types (->table-arg-types table-args)
                                                                 :default-tz default-tz
-                                                                :last-known-chunk-by-src (into
-                                                                                           {}
-                                                                                           (for [[src-key ^ScanSource src] srcs]
-                                                                                             (MapEntry/create
-                                                                                               src-key
-                                                                                               (.lastEntry (.chunksMetadata (.metadataManager src))))))}
+                                                                :last-known-chunk (when src (.lastEntry (.chunksMetadata (.metadataManager src))))}
                                                                (reify Function
                                                                  (apply [_ emit-opts]
                                                                    (binding [expr/*clock* clock]
-                                                                     (lp/emit-expr conformed-query (assoc emit-opts :srcs srcs))))))]
+                                                                     (lp/emit-expr conformed-query (assoc emit-opts :src src))))))]
             (reify
               BoundQuery
               (columnTypes [_] col-types)
@@ -108,7 +105,7 @@
                 (let [allocator (RootAllocator.)]
                   (try
                     (binding [expr/*clock* clock]
-                      (-> (->cursor {:allocator allocator, :clock clock, :srcs srcs, :params params, :table-args table-args})
+                      (-> (->cursor {:allocator allocator, :clock clock, :src src, :params params, :table-args table-args})
                           (wrap-cursor allocator clock)))
 
                     (catch Throwable t

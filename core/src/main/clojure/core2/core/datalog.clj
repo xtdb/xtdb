@@ -839,7 +839,7 @@
     (let [^AutoCloseable
           params (vw/open-params allocator (args->params args in-bindings))]
       (try
-        (-> (.bind pq {:srcs {'$ db}, :params params, :table-args (args->tables args in-bindings)
+        (-> (.bind pq {:src db, :params params, :table-args (args->tables args in-bindings)
                        :current-time (get-in query [:basis :current-time])
                        :default-tz (:default-tz query)})
             (.openCursor)

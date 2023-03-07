@@ -24,18 +24,14 @@
           db @(node/snapshot-async node)]
 
       (t/is (= {:row-count 3}
-               (:stats
-                 (lp/emit-expr
-                   '{:op :scan, :table foo, :columns [[:column id]]}
-                   {:scan-col-types {['$ 'id] :utf8},
-                    :srcs {'$ db}}))))
+               (:stats (lp/emit-expr '{:op :scan, :table foo, :columns [[:column id]]}
+                                     {:scan-col-types {['$ 'id] :utf8},
+                                      :src db}))))
 
       (t/is (= {:row-count 2}
-               (:stats
-                 (lp/emit-expr
-                   '{:op :scan, :table bar, :columns [[:column id]]}
-                   {:scan-col-types {['$ 'id] :utf8},
-                    :srcs {'$ db}})))))))
+               (:stats (lp/emit-expr '{:op :scan, :table bar, :columns [[:column id]]}
+                                     {:scan-col-types {['$ 'id] :utf8},
+                                      :src db})))))))
 
 (deftest test-project
   (t/is (= {:row-count 5}

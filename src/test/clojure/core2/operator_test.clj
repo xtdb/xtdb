@@ -31,11 +31,11 @@
       (letfn [(test-query-ivan [expected db]
                 (t/is (= expected
                          (set (tu/query-ra '[:scan xt_docs [id {name (> name "Ivan")}]]
-                                           {:srcs {'$ db}}))))
+                                           {:src db}))))
 
                 (t/is (= expected
                          (set (tu/query-ra '[:scan xt_docs [id {name (> name ?name)}]]
-                                           {:srcs {'$ db}, :params {'?name "Ivan"}})))))]
+                                           {:src db, :params {'?name "Ivan"}})))))]
 
         (let [db @(node/snapshot-async node)]
           (t/is (= #{0 1} (set (keys (.chunksMetadata metadata-mgr)))))
@@ -97,11 +97,11 @@
 
       (t/is (= #{{:name "Ivan"}}
                (set (tu/query-ra '[:scan xt_docs [{name (= name "Ivan")}]]
-                                 {:srcs {'$ db}}))))
+                                 {:src db}))))
 
       (t/is (= #{{:name "Ivan"}}
                (set (tu/query-ra '[:scan xt_docs [{name (= name ?name)}]]
-                                 {:srcs {'$ db}, :params {'?name "Ivan"}})))))))
+                                 {:src db, :params {'?name "Ivan"}})))))))
 
 (t/deftest test-temporal-bounds
   (with-open [node (node/start-node {})]
@@ -112,7 +112,7 @@
       (letfn [(q [& temporal-constraints]
                 (->> (tu/query-ra [:scan 'xt_docs
                                    (into '[last-updated] temporal-constraints)]
-                                  {:srcs {'$ db}
+                                  {:src db
                                    :params {'?sys-time1 tt1, '?sys-time2 tt2}})
                      (into #{} (map :last-updated))))]
         (t/is (= #{"tx1" "tx2"}

@@ -69,7 +69,7 @@
 
 #_{:clj-kondo/ignore #{:unused-binding}}
 (defmulti emit-expr
-  (fn [ra-expr srcs]
+  (fn [ra-expr opts]
     (:op ra-expr)))
 
 (defn unary-expr {:style/indent 2} [relation f]

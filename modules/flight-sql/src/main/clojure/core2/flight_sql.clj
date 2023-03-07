@@ -165,7 +165,7 @@
                                            (doto ps
                                              (some-> (.put :bound-query
                                                            (.bind prepd-query
-                                                                  {:srcs {'$ @(node/snapshot-async node)}
+                                                                  {:src @(node/snapshot-async node)
                                                                    :params new-params}))
                                                      util/try-close))
                                            (catch Throwable t
@@ -192,7 +192,7 @@
               ^BoundQuery bq (-> (sql/compile-query sql {})
                                  (op/prepare-ra)
                                  ;; HACK need to get the basis from somewhere...
-                                 (.bind {:srcs {'$ @(node/snapshot-async node)}}))
+                                 (.bind {:src @(node/snapshot-async node)}))
               ticket (Ticket. (-> (doto (FlightSql$TicketStatementQuery/newBuilder)
                                     (.setStatementHandle ticket-handle))
                                   (.build)
@@ -222,7 +222,7 @@
                                   (.toByteArray)))
 
               ^BoundQuery bound-query (or bound-query
-                                          (.bind prepd-query {:srcs {'$ @(node/snapshot-async node)}}))]
+                                          (.bind prepd-query {:src @(node/snapshot-async node)}))]
           (.put ps :bound-query bound-query)
           (FlightInfo. (col-types->schema (.columnTypes bound-query)) descriptor
                        [(FlightEndpoint. ticket (make-array Location 0))]

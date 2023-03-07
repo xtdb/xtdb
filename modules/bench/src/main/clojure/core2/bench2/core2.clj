@@ -291,7 +291,7 @@
   (def rand-seq (shuffle open-ids))
 
   (def q  (fn [open-id]
-            (tu/query-ra ra-query {:srcs {'$ @(node/snapshot-async node)}
+            (tu/query-ra ra-query {:src @(node/snapshot-async node)
                                    :params {'?i_id open-id}})))
   ;; ra query
   (time

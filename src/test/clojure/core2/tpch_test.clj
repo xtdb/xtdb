@@ -76,7 +76,7 @@
           {::tpch-ra/keys [params table-args]} (meta q)]
       (tu/with-allocator
         (fn []
-          (t/is (= res (tu/query-ra q {:srcs {'$ *db*}, :params params, :table-args table-args}))
+          (t/is (= res (tu/query-ra q {:src *db*, :params params, :table-args table-args}))
                 (format "Q%02d" (inc n))))))))
 
 (t/deftest test-001-ra
@@ -167,7 +167,7 @@
        (let [plan (sql/compile-query (slurp-sql-query q) opts)]
          (tu/with-allocator
            (fn []
-             (t/is (is-equal? res (tu/query-ra plan {:srcs {'$ *db*}}))
+             (t/is (is-equal? res (tu/query-ra plan {:src *db*}))
                    (format "Q%02d" (inc n))))))))))
 
 (t/deftest test-001-sql

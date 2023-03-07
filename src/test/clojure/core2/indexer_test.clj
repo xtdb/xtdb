@@ -203,7 +203,7 @@
                (tu/query-ra '[:scan xt_docs [id version
                                              application_time_start, application_time_end
                                              system_time_start, system_time_end]]
-                            {:srcs {'$ db}})))
+                            {:src db})))
 
       (let [{tt2 :sys-time, :as tx2} (c2.d/submit-tx node [[:put {:id :foo, :version 1}]]
                                                      {:app-time-as-of-now? true})
@@ -226,7 +226,7 @@
                  (tu/query-ra '[:scan xt_docs [id version
                                                application_time_start, application_time_end
                                                system_time_start, {system_time_end (<= system_time_end core2/end-of-time)}]]
-                              {:srcs {'$ db2}})))
+                              {:src db2})))
 
         #_ ; FIXME #567 this sees the updated system_time_end of the first entry
         (t/is (= [{:id :foo, :version 0,
@@ -237,7 +237,7 @@
                  (tu/query-ra '[:scan xt_docs [id version
                                                application_time_start, application_time_end
                                                system_time_start, system_time_end]]
-                              {:srcs {'$ db}}))
+                              {:src db}))
               "re-using the original snapshot should see the same result")))))
 
 (t/deftest can-handle-dynamic-cols-in-same-block

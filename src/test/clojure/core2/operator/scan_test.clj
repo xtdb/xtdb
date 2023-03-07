@@ -15,26 +15,14 @@
                                  [:put {:id :foo, :col2 "baz2"}]])]
       (t/is (= [{:id :bar, :col1 "bar1", :col2 "bar2"}]
                (tu/query-ra '[:scan xt_docs [id col1 col2]]
-                            {:srcs {'$ @(node/snapshot-async node tx)}}))))))
-
-(t/deftest multiple-sources
-  (with-open [node1 (node/start-node {})
-              node2 (node/start-node {})]
-    (let [tx1 (c2/submit-tx node1 [[:put {:id :foo, :col1 "col1"}]])
-          tx2 (c2/submit-tx node2 [[:put {:id :foo, :col2 "col2"}]])]
-      (t/is (= [{:id :foo, :col1 "col1", :col2 "col2"}]
-               (tu/query-ra '[:join [{id id}]
-                              [:scan $db1 xt_docs [id col1]]
-                              [:scan $db2 xt_docs [id col2]]]
-                            {:srcs {'$db1 @(node/snapshot-async node1 tx1),
-                                    '$db2 @(node/snapshot-async node2 tx2)}}))))))
+                            {:src @(node/snapshot-async node tx)}))))))
 
 (t/deftest test-duplicates-in-scan-1
   (with-open [node (node/start-node {})]
     (let [tx (c2/submit-tx node [[:put {:id :foo}]])]
       (t/is (= [{:id :foo}]
                (tu/query-ra '[:scan xt_docs [id id]]
-                            {:srcs {'$ @(node/snapshot-async node tx)}}))))))
+                            {:src @(node/snapshot-async node tx)}))))))
 
 (t/deftest test-scanning-temporal-cols
   (with-open [node (node/start-node {})]
@@ -47,7 +35,7 @@
                                       [id
                                        application_time_start application_time_end
                                        system_time_start system_time_end]]
-                                    {:srcs {'$ @(node/snapshot-async node tx)}}))]
+                                    {:src @(node/snapshot-async node tx)}))]
         (t/is (= #{:id :application_time_start :application_time_end :system_time_end :system_time_start}
                  (-> res keys set)))
 
@@ -60,7 +48,7 @@
                                                    {app-time-end application_time_end}]
                                          [:scan xt_docs
                                           [id application_time_start application_time_end]]]
-                                       {:srcs {'$ @(node/snapshot-async node tx)}}))
+                                       {:src @(node/snapshot-async node tx)}))
                    (dissoc :system_time_start :system_time_end)))))))
 
 #_ ; FIXME hangs
@@ -73,13 +61,13 @@
                            xt_docs
                            [application_time_start application_time_end
                             system_time_start system_time_end]]
-                         {:srcs {'$ @(node/snapshot-async node tx)}})))))
+                         {:src @(node/snapshot-async node tx)})))))
 
 (t/deftest test-scan-col-types
   (with-open [node (node/start-node {})]
     (letfn [(->col-types [tx]
               (-> (op/prepare-ra '[:scan xt_docs [id]])
-                  (.bind {:srcs {'$ @(node/snapshot-async node tx)}})
+                  (.bind {:src @(node/snapshot-async node tx)})
                   (.columnTypes)))]
 
       (let [tx (-> (c2/submit-tx node [[:put {:id :doc}]])

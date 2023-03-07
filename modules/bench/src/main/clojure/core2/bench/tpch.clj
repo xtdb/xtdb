@@ -27,7 +27,7 @@
           (let [q @q
                 {::tpch-ra/keys [params table-args]} (meta q)]
             (try
-              (count (tu/query-ra q {:srcs {'$ db}
+              (count (tu/query-ra q {:src db
                                      :params params
                                      :table-args table-args}))
               (catch Exception e

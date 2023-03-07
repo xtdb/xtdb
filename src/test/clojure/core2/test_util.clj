@@ -182,7 +182,7 @@
                                                (iv/->direct-vec (open-vec k [v])))
                                              1)]
      (let [pq (op/prepare-ra query)
-           bq (.bind pq (-> (select-keys query-opts [:srcs :current-time :default-tz :table-args])
+           bq (.bind pq (-> (select-keys query-opts [:src :current-time :default-tz :table-args])
                             (assoc :params params-rel)))]
        (with-open [res (.openCursor bq)]
          (let [rows (-> (<-cursor res)

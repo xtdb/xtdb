@@ -40,7 +40,7 @@
                                     (into {} (map-indexed (fn [idx v]
                                                             (MapEntry/create (symbol (str "?_" idx)) v))))))]
     (try
-      (-> (.bind pq {:srcs {'$ db}, :params params
+      (-> (.bind pq {:src db, :params params
                      :current-time (get-in query-opts [:basis :current-time])
                      :default-tz (:default-tz query-opts)})
           (.openCursor)
