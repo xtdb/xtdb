@@ -1,8 +1,6 @@
 name: language-reference
 title: Language Reference
-version: master
-prerelease: indeed
-display_version: master
+version: 1.23.1
 start_page: ROOT:index.adoc
 nav:
   - modules/ROOT/nav.adoc
