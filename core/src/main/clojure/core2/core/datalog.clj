@@ -373,7 +373,9 @@
                                    for-app-time-in (-> e-preds (with-time-in-preds :app-time clause))
                                    for-app-time-at (-> e-preds (with-time-at-preds :app-time clause))
 
-                                   for-all-sys-time (-> e-preds (update :sys-time identity))
+                                   for-all-sys-time (-> e-preds
+                                                        (update-in [:sys-time 'system_time_end] (fnil conj [])
+                                                                   '(<= system_time_end core2/end-of-time)))
                                    for-sys-time-in (-> e-preds (with-time-in-preds :sys-time clause))
                                    for-sys-time-at (-> e-preds (with-time-at-preds :sys-time clause))))
                                clause)))

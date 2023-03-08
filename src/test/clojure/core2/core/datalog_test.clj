@@ -1010,5 +1010,23 @@
                             [(< app-start john-end)]
                             [(> app-end john-start)]]},
                   !tx1, nil))
-            "who worked with John?"))))
+            "who worked with John?")
 
+      (t/is (= [{:vt-start (util/->zdt #inst "2021")
+                 :vt-end (util/->zdt util/end-of-time)
+                 :tt-start (util/->zdt #inst "2020-01-01")
+                 :tt-end (util/->zdt #inst "2020-01-02")}
+                {:vt-start (util/->zdt #inst "2021")
+                 :vt-end (util/->zdt #inst "2022")
+                 :tt-start (util/->zdt #inst "2020-01-02")
+                 :tt-end (util/->zdt util/end-of-time)}]
+               (q '{:find [vt-start vt-end tt-start tt-end]
+                    :where [(for-all-app-time :luke)
+                            (for-all-sys-time :luke)
+                            [:luke :application_time_start vt-start]
+                            [:luke :application_time_end vt-end]
+                            [:luke :system_time_start tt-start]
+                            [:luke :system_time_end tt-end]]}
+                  !tx1 nil))
+
+            "for all sys time"))))
