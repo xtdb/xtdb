@@ -19,7 +19,7 @@
            (java.sql Connection DriverManager PreparedStatement)
            (java.time Clock Instant ZoneId ZoneOffset)
            (java.util.concurrent CompletableFuture CountDownLatch TimeUnit)
-           org.apache.arrow.driver.jdbc.ArrowFlightJdbcDriver
+           #_org.apache.arrow.driver.jdbc.ArrowFlightJdbcDriver
            (org.postgresql.util PGobject PSQLException)))
 
 (set! *warn-on-reflection* false)
@@ -63,6 +63,7 @@
             ;; stop all just in case we can clean up anyway
             (pgwire/stop-all))))))
 
+  #_ ; HACK commented out while we're not bringing in the Flight JDBC driver
   (fn [f]
     ;; HACK see https://issues.apache.org/jira/browse/ARROW-18296
     ;; this ensures the FSQL driver is at the end of the DriverManager list
