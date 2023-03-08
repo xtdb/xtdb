@@ -9,32 +9,26 @@
             core2.watermark
             [juxt.clojars-mirrors.integrant.core :as ig])
   (:import core2.api.TransactionInstant
-           core2.indexer.TransactionIndexer
-           core2.operator.scan.ScanSource
+           core2.indexer.IIndexer
            [core2.log Log LogSubscriber]
            java.lang.AutoCloseable
-           java.time.Duration
            (java.util.concurrent CompletableFuture PriorityBlockingQueue TimeUnit)
            org.apache.arrow.memory.BufferAllocator
-           org.apache.arrow.vector.TimeStampMicroTZVector
-           org.apache.arrow.vector.ipc.ArrowStreamReader))
+           org.apache.arrow.vector.ipc.ArrowStreamReader
+           org.apache.arrow.vector.TimeStampMicroTZVector))
 
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface Ingester
-  (^core2.api.TransactionInstant latestCompletedTx [])
-  (^java.util.concurrent.CompletableFuture #_<ScanSource> snapshot [^core2.api.TransactionInstant tx]))
+  (^java.util.concurrent.CompletableFuture #_<TransactionInstant> awaitTxAsync [^core2.api.TransactionInstant tx, ^java.time.Duration timeout]))
 
 (defmethod ig/prep-key :core2/ingester [_ opts]
   (-> (merge {:allocator (ig/ref :core2/allocator)
               :log (ig/ref :core2/log)
-              :indexer (ig/ref :core2/indexer)
-              :metadata-mgr (ig/ref :core2.metadata/metadata-manager)
-              :buffer-pool (ig/ref :core2.buffer-pool/buffer-pool)}
+              :indexer (ig/ref :core2/indexer)}
              opts)
       (util/maybe-update :poll-sleep-duration util/->duration)))
 
-(defmethod ig/init-key :core2/ingester [_ {:keys [^BufferAllocator allocator, ^Log log, ^TransactionIndexer indexer
-                                                  metadata-mgr buffer-pool]}]
+(defmethod ig/init-key :core2/ingester [_ {:keys [^BufferAllocator allocator, ^Log log, ^IIndexer indexer]}]
   (let [!cancel-hook (promise)
         awaiters (PriorityBlockingQueue.)
         !ingester-error (atom nil)]
@@ -80,21 +74,14 @@
 
     (reify
       Ingester
-      (latestCompletedTx [_] (.latestCompletedTx indexer))
-
-      (snapshot [this tx]
+      (awaitTxAsync [_ tx timeout]
         (-> (if tx
               (await/await-tx-async tx
                                     #(or (some-> @!ingester-error throw)
-                                         (.latestCompletedTx this))
+                                         (.latestCompletedTx indexer))
                                     awaiters)
-              (CompletableFuture/completedFuture (.latestCompletedTx this)))
-            (util/then-apply (fn [tx]
-                               (reify ScanSource
-                                 (metadataManager [_] metadata-mgr)
-                                 (bufferPool [_] buffer-pool)
-                                 (txBasis [_] tx)
-                                 (openWatermark [_] (.openWatermark indexer tx)))))))
+              (CompletableFuture/completedFuture (.latestCompletedTx indexer)))
+            (cond-> timeout (.orTimeout (.toMillis timeout) TimeUnit/MILLISECONDS))))
 
       AutoCloseable
       (close [_]
@@ -103,21 +90,3 @@
 (defmethod ig/halt-key! :core2/ingester [_ ingester]
   (util/try-close ingester))
 
-(defn snapshot-async ^java.util.concurrent.CompletableFuture [^Ingester ingester, tx]
-  (-> (if-not (instance? CompletableFuture tx)
-        (CompletableFuture/completedFuture tx)
-        tx)
-      (util/then-compose (fn [tx]
-                           (.snapshot ingester tx)))))
-
-#_{:clj-kondo/ignore [:redefined-var]} ; kondo thinks this is a duplicate of the interface method.
-(defn snapshot
-  ([^Ingester ingester]
-   (snapshot ingester nil))
-
-  ([^Ingester ingester, tx]
-   (snapshot ingester tx nil))
-
-  ([^Ingester ingester, tx, ^Duration timeout]
-   @(-> (snapshot-async ingester tx)
-        (cond-> timeout (.orTimeout (.toMillis timeout) TimeUnit/MILLISECONDS)))))

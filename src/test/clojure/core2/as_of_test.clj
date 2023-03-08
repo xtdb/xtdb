@@ -1,7 +1,6 @@
 (ns core2.as-of-test
   (:require [clojure.test :as t]
             [core2.datalog :as c2]
-            [core2.ingester :as ingest]
             [core2.test-util :as tu]
             [core2.util :as util]))
 
@@ -11,15 +10,13 @@
 (def end-of-time-zdt (util/->zdt util/end-of-time))
 
 (t/deftest test-as-of-tx
-  (let [ingester (tu/component :core2/ingester)
-
-        tx1 (c2/submit-tx tu/*node* [[:put {:id :my-doc, :last-updated "tx1"}]])
-        _ (Thread/sleep 10) ; prevent same-ms transactions
-        tx2 (c2/submit-tx tu/*node* [[:put {:id :my-doc, :last-updated "tx2"}]])]
+  (let [tx1 (c2/submit-tx tu/*node* [[:put {:id :my-doc, :last-updated "tx1"}]])
+        tx2 (-> (c2/submit-tx tu/*node* [[:put {:id :my-doc, :last-updated "tx2"}]])
+                (tu/then-await-tx tu/*node*))]
 
     (t/is (= #{{:last-updated "tx1"} {:last-updated "tx2"}}
              (set (tu/query-ra '[:scan xt_docs [last-updated]]
-                               {:src (ingest/snapshot ingester tx2)}))))
+                               {:node tu/*node*}))))
 
     (t/is (= #{{:last-updated "tx2"}}
              (set (c2/q tu/*node*
@@ -30,7 +27,7 @@
     (t/testing "at tx1"
       (t/is (= #{{:last-updated "tx1"}}
                (set (tu/query-ra '[:scan xt_docs [last-updated]]
-                                 {:src (ingest/snapshot ingester tx1)}))))
+                                 {:node tu/*node*, :basis {:tx tx1}}))))
 
       (t/is (= #{{:last-updated "tx1"}}
                (set (c2/q tu/*node*
@@ -39,11 +36,10 @@
                               (assoc :basis {:tx tx1})))))))))
 
 (t/deftest test-app-time
-  (let [ingester (tu/component :core2/ingester)
-
-        {:keys [sys-time] :as tx1} (c2/submit-tx tu/*node* [[:put {:id :doc, :version 1}]
-                                                            [:put {:id :doc-with-app-time}
-                                                             {:app-time-start #inst "2021"}]])
+  (let [{:keys [sys-time] :as tx} (-> (c2/submit-tx tu/*node* [[:put {:id :doc, :version 1}]
+                                                               [:put {:id :doc-with-app-time}
+                                                                {:app-time-start #inst "2021"}]])
+                                      (tu/then-await-tx tu/*node*))
         sys-time (util/->zdt sys-time)]
 
     (t/is (= {:doc {:id :doc,
@@ -56,26 +52,28 @@
                                   :application_time_end end-of-time-zdt
                                   :system_time_start sys-time
                                   :system_time_end end-of-time-zdt}}
-             (->> (tu/query-ra '[:scan
-                                 xt_docs
+             (->> (tu/query-ra '[:scan xt_docs
                                  [id
                                   application_time_start application_time_end
                                   system_time_start system_time_end]]
-                               {:src (ingest/snapshot ingester tx1)})
+                               {:node tu/*node*
+                                :basis {:tx tx}})
                   (into {} (map (juxt :id identity))))))))
 
 (t/deftest test-sys-time
-  (let [ingester (tu/component :core2/ingester)
-
-        tx1 (c2/submit-tx tu/*node* [[:put {:id :doc, :version 0}]])
+  (let [tx1 (c2/submit-tx tu/*node* [[:put {:id :doc, :version 0}]])
         tt1 (util/->zdt (:sys-time tx1))
 
-        _ (Thread/sleep 10) ; prevent same-ms transactions
+        tx2 (-> (c2/submit-tx tu/*node* [[:put {:id :doc, :version 1}]])
+                (tu/then-await-tx tu/*node*))
 
-        tx2 (c2/submit-tx tu/*node* [[:put {:id :doc, :version 1}]])
         tt2 (util/->zdt (:sys-time tx2))
 
-        db (ingest/snapshot ingester tx2)
+        original-v0-doc {:id :doc, :version 0
+                         :application_time_start tt1
+                         :application_time_end end-of-time-zdt
+                         :system_time_start tt1
+                         :system_time_end tt2}
 
         replaced-v0-doc {:id :doc, :version 0
                          :application_time_start tt1
@@ -90,46 +88,42 @@
                 :system_time_end end-of-time-zdt}]
 
     (t/is (= [replaced-v0-doc v1-doc]
-             (tu/query-ra '[:scan
-                            xt_docs
+             (tu/query-ra '[:scan xt_docs
                             [id version
                              application_time_start application_time_end
                              system_time_start system_time_end]]
-                          {:src db}))
+                          {:node tu/*node*}))
           "all app-time")
 
-    #_ ; FIXME
     (t/is (= [original-v0-doc replaced-v0-doc v1-doc]
-             (tu/query-ra '[:scan
-                            xt_docs
+             (tu/query-ra '[:scan xt_docs
                             [id version
                              application_time_start application_time_end
                              system_time_start {system_time_end (<= system_time_end eot)}]]
-                          {:src db
+                          {:node tu/*node*
                            :params {'eot util/end-of-time}}))
           "all app, all sys")))
 
 (t/deftest test-evict
-  (let [ingester (tu/component :core2/ingester)]
-    (letfn [(all-time-docs [db]
-              (->> (tu/query-ra '[:scan
-                                  xt_docs
-                                  [id
-                                   application_time_start {application_time_end (<= application_time_end eot)}
-                                   system_time_start {system_time_end (<= system_time_end eot)}]]
-                                {:src db
-                                 :params {'eot util/end-of-time}})
-                   (map :id)
-                   frequencies))]
+  (letfn [(all-time-docs []
+            (->> (tu/query-ra '[:scan xt_docs
+                                [id
+                                 application_time_start {application_time_end (<= application_time_end eot)}
+                                 system_time_start {system_time_end (<= system_time_end eot)}]]
+                              {:node tu/*node*, :params {'eot util/end-of-time}})
+                 (map :id)
+                 frequencies))]
 
-      (let [_ (c2/submit-tx tu/*node* [[:put {:id :doc, :version 0}]
-                                       [:put {:id :other-doc, :version 0}]])
-            _ (Thread/sleep 10)         ; prevent same-ms transactions
-            tx2 (c2/submit-tx tu/*node* [[:put {:id :doc, :version 1}]])]
+    (c2/submit-tx tu/*node* [[:put {:id :doc, :version 0}]
+                             [:put {:id :other-doc, :version 0}]])
+    (-> (c2/submit-tx tu/*node* [[:put {:id :doc, :version 1}]])
+        (tu/then-await-tx tu/*node*))
 
-        (t/is (= {:doc 3, :other-doc 1} (all-time-docs (ingest/snapshot ingester tx2)))
-              "documents present before evict"))
+    (t/is (= {:doc 3, :other-doc 1} (all-time-docs))
+          "documents present before evict")
 
-      (let [tx3 (c2/submit-tx tu/*node* [[:evict :doc]])]
-        (t/is (= {:other-doc 1} (all-time-docs (ingest/snapshot ingester tx3)))
-              "documents removed after evict")))))
+    (-> (c2/submit-tx tu/*node* [[:evict :doc]])
+        (tu/then-await-tx tu/*node*))
+
+    (t/is (= {:other-doc 1} (all-time-docs))
+          "documents removed after evict")))

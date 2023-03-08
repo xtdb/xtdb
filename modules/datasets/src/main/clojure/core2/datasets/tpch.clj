@@ -52,7 +52,7 @@
                                                             (+ last-doc-count (count batch))])
                                                          [nil 0]))]
                    (log/debug "Transacted" doc-count (.getTableName t))
-                   !last-tx))
+                   @!last-tx))
                nil)))
 
 (defn- tpch-table->dml [^TpchTable table]

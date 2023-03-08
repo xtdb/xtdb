@@ -2,17 +2,23 @@
   (:require [clojure.pprint :as pp]
             [core2.api.impl :as api]
             [core2.core.datalog :as d]
-            [core2.ingester :as ingest]
             [core2.core.sql :as sql]
+            core2.indexer
+            [core2.ingester :as ingest]
+            [core2.operator :as op]
             [core2.tx-producer :as txp]
             [core2.util :as util]
+            [core2.vector.writer :as vw]
             [juxt.clojars-mirrors.integrant.core :as ig])
-  (:import core2.ingester.Ingester
+  (:import core2.indexer.IIndexer
+           core2.ingester.Ingester
+           core2.operator.IRaQuerySource
            (core2.tx_producer ITxProducer)
+           core2.vector.IIndirectRelation
            (java.io Closeable Writer)
            (java.lang AutoCloseable)
-           (java.time Duration ZoneId)
-           (java.util.concurrent CompletableFuture TimeUnit ConcurrentHashMap)
+           (java.time ZoneId)
+           (java.util.concurrent CompletableFuture)
            (org.apache.arrow.memory BufferAllocator RootAllocator)))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -28,14 +34,6 @@
 
 (defmethod ig/init-key :core2/default-tz [_ default-tz] default-tz)
 
-(defmethod ig/init-key :core2/prepare-ra-cache [_ _] (ConcurrentHashMap.))
-
-(defprotocol PNode
-  (snapshot-async
-    ^java.util.concurrent.CompletableFuture #_<ScanSource> [_]
-    ^java.util.concurrent.CompletableFuture #_<ScanSource> [_ tx]
-    ^java.util.concurrent.CompletableFuture #_<ScanSource> [_ tx ^Duration timeout]))
-
 (defn- validate-tx-ops [tx-ops]
   (try
     (doseq [{:keys [op] :as tx-op} (txp/conform-tx-ops tx-ops)
@@ -45,45 +43,45 @@
     (catch Throwable e
       (CompletableFuture/failedFuture e))))
 
+(defprotocol PNode
+  (await-tx&
+    ^java.util.concurrent.CompletableFuture [node tx]
+    ^java.util.concurrent.CompletableFuture [node tx timeout]))
+
 (defrecord Node [^BufferAllocator allocator
-                 ^Ingester ingester
+                 ^Ingester ingester, ^IIndexer indexer
                  ^ITxProducer tx-producer
+                 ^IRaQuerySource ra-src, wm-src
                  default-tz
-                 !system
-                 close-fn
-                 prepare-ra-cache]
+                 system, close-fn]
+  PNode
+  (await-tx& [this tx] (await-tx& this tx nil))
+  (await-tx& [_ tx timeout] (.awaitTxAsync ingester tx timeout))
+
   api/PNode
   (open-datalog& [this query args]
-    (let [query (into {:default-tz default-tz} query)
-          !db (snapshot-async this (get-in query [:basis :tx]) (:basis-timeout query))]
-
-      (-> !db
+    (let [query (into {:default-tz default-tz} query)]
+      (-> (await-tx& this (get-in query [:basis :tx]) (:basis-timeout query))
           (util/then-apply
-            (fn [db]
-              (d/open-datalog-query allocator prepare-ra-cache query db args))))))
+            (fn [tx]
+              (d/open-datalog-query allocator ra-src wm-src
+                                    (-> query
+                                        (update-in [:basis :tx] (fnil identity tx)))
+                                    args))))))
 
   (open-sql& [this query query-opts]
     (let [query-opts (into {:default-tz default-tz} query-opts)
-          !db (snapshot-async this (get-in query-opts [:basis :tx]) (:basis-timeout query-opts))
-          pq (sql/prepare-sql query prepare-ra-cache query-opts)]
-      (-> !db
+          !await-tx (await-tx& this (get-in query-opts [:basis :tx]) (:basis-timeout query))
+          pq (.prepareRaQuery ra-src (sql/compile-query query query-opts))]
+      (-> !await-tx
           (util/then-apply
-            (fn [db]
-              (sql/open-sql-query allocator pq db query-opts))))))
-
-  PNode
-  (snapshot-async [this] (snapshot-async this nil))
-  (snapshot-async [this tx] (snapshot-async this tx nil))
-  (snapshot-async [_ tx timeout]
-    (-> (if-not (instance? CompletableFuture tx)
-          (CompletableFuture/completedFuture (or tx (.latestCompletedTx ingester)))
-          tx)
-        (util/then-compose (fn [tx]
-                             (.snapshot ingester tx)))
-        (cond-> timeout (.orTimeout (.toMillis ^Duration timeout) TimeUnit/MILLISECONDS))))
+            (fn [tx]
+              (sql/open-sql-query allocator wm-src pq
+                                  (-> query-opts
+                                      (update-in [:basis :tx] (fnil identity tx)))))))))
 
   api/PStatus
-  (status [_] {:latest-completed-tx (.latestCompletedTx ingester)})
+  (status [_] {:latest-completed-tx (.latestCompletedTx indexer)})
 
   api/PSubmitNode
   (submit-tx& [_ tx-ops]
@@ -104,17 +102,19 @@
 
 (defmethod ig/prep-key ::node [_ opts]
   (merge {:allocator (ig/ref :core2/allocator)
+          :indexer (ig/ref :core2/indexer)
+          :wm-src (ig/ref :core2/indexer)
           :ingester (ig/ref :core2/ingester)
           :tx-producer (ig/ref ::txp/tx-producer)
           :default-tz (ig/ref :core2/default-tz)
-          :prepare-ra-cache (ig/ref :core2/prepare-ra-cache) }
+          :ra-src (ig/ref :core2.operator/ra-query-source)}
          opts))
 
 (defmethod ig/init-key ::node [_ deps]
-  (map->Node (assoc deps :!system (atom nil))))
+  (map->Node deps))
 
-(defmethod ig/halt-key! ::node [_ ^Node node]
-  (.close node))
+(defmethod ig/halt-key! ::node [_ node]
+  (util/try-close node))
 
 (defn- with-default-impl [opts parent-k impl-k]
   (cond-> opts
@@ -133,8 +133,9 @@
                           :core2.temporal/temporal-manager {}
                           :core2.buffer-pool/buffer-pool {}
                           :core2.watermark/watermark-manager {}
-                          ::txp/tx-producer {}
-                          :core2/prepare-ra-cache {}}
+                          :core2.operator.scan/scan-emitter {}
+                          :core2.operator/ra-query-source {}
+                          ::txp/tx-producer {}}
                          opts)
                    (doto ig/load-namespaces)
                    (with-default-impl :core2/log :core2.log/memory-log)
@@ -144,8 +145,8 @@
                    ig/init)]
 
     (-> (::node system)
-        (doto (-> :!system (reset! system)))
-        (assoc :close-fn #(do (ig/halt! system)
+        (assoc :system system
+               :close-fn #(do (ig/halt! system)
                               #_(println (.toVerboseString ^RootAllocator (:core2/allocator system))))))))
 
 (defrecord SubmitNode [^ITxProducer tx-producer, !system, close-fn]

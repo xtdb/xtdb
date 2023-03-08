@@ -159,7 +159,7 @@
   (instant->micros end-of-time))
 
 (defn component
-  ([node k] (get @(:!system node) k)))
+  ([node k] (get (:system node) k)))
 
 ;;; IO
 
@@ -543,33 +543,6 @@
           false)))
 
     (close [_] (run! try-close (vals col-cursors)))))
-
-(defn with-last-block [^ArrowBuf buf, f]
-  (let [res (promise)
-        last-block-idx (-> (.getRecordBatches (read-arrow-footer buf))
-                           (count) (dec))]
-    (with-open [chunk (->chunks buf {:block-idxs (doto (RoaringBitmap.)
-                                                   (.add last-block-idx))
-                                     :close-buffer? true})]
-      (when (.tryAdvance chunk
-                         (reify Consumer
-                           (accept [_ root]
-                             (deliver res (f root)))))
-        @res))))
-
-(defn and-also-close ^core2.ICursor [^ICursor cursor, ^AutoCloseable closeable]
-  (reify ICursor
-    (characteristics [_] (.characteristics cursor))
-    (estimateSize [_] (.estimateSize cursor))
-    (getComparator [_] (.getComparator cursor))
-    (getExactSizeIfKnown [_] (.getExactSizeIfKnown cursor))
-    (hasCharacteristics [_ c] (.hasCharacteristics cursor c))
-    (tryAdvance [_ c] (.tryAdvance cursor c))
-    (trySplit [_] (.trySplit cursor))
-
-    (close [_]
-      (try-close cursor)
-      (try-close closeable))))
 
 (defn compare-nio-buffers-unsigned ^long [^ByteBuffer x ^ByteBuffer y]
   (let [rem-x (.remaining x)

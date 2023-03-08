@@ -1,6 +1,5 @@
 (ns core2.indexer
   (:require [clojure.tools.logging :as log]
-            [core2.api.impl :as c2]
             [core2.buffer-pool :as bp]
             [core2.core.datalog :as d]
             [core2.error :as err]
@@ -10,7 +9,6 @@
             [core2.metadata :as meta]
             core2.object-store
             [core2.operator :as op]
-            core2.operator.scan
             [core2.rewrite :refer [zmatch]]
             [core2.core.sql :as sql]
             [core2.temporal :as temporal]
@@ -29,17 +27,16 @@
            (core2.live_chunk ILiveChunk ILiveChunkTx ILiveColumnTx ILiveTableTx)
            core2.metadata.IMetadataManager
            core2.object_store.ObjectStore
-           core2.operator.scan.ScanSource
+           core2.operator.IRaQuerySource
            (core2.temporal ITemporalManager ITemporalTxIndexer)
            (core2.vector IIndirectRelation IIndirectVector IVectorWriter)
-           (core2.watermark ISharedWatermark IWatermarkManager)
+           (core2.watermark ISharedWatermark IWatermarkManager IWatermarkSource)
            (java.io ByteArrayInputStream Closeable)
            java.lang.AutoCloseable
            (java.time Instant ZoneId)
            (java.util HashMap Map)
-           (java.util.concurrent ConcurrentHashMap)
            (java.util.concurrent.locks StampedLock)
-           (java.util.function Consumer Function)
+           (java.util.function Consumer)
            (org.apache.arrow.memory BufferAllocator)
            (org.apache.arrow.vector BigIntVector BitVector TimeStampVector VarBinaryVector VarCharVector VectorSchemaRoot)
            (org.apache.arrow.vector.complex DenseUnionVector ListVector)
@@ -49,8 +46,7 @@
 (set! *unchecked-math* :warn-on-boxed)
 
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
-(definterface TransactionIndexer
-  (^core2.watermark.IWatermark openWatermark [^core2.api.TransactionInstant tx])
+(definterface IIndexer
   (^core2.api.TransactionInstant indexTx [^core2.api.TransactionInstant tx
                                           ^org.apache.arrow.vector.VectorSchemaRoot txRoot])
   (^core2.api.TransactionInstant latestCompletedTx []))
@@ -185,23 +181,19 @@
 
         nil))))
 
-(defn- find-fn [allocator sci-ctx scan-src ^ConcurrentHashMap prepare-ra-cache tx-opts fn-id]
+(defn- find-fn [allocator ^IRaQuerySource ra-src, wm-src, sci-ctx {:keys [basis default-tz]} fn-id]
   ;; HACK: assume xt_docs here...
   ;; TODO confirm fn-body doc key
 
   (let [lp '[:scan xt_docs [{id (= id ?id)} fn]]
-        ;; prepare-ra-cache a bit overkill here for now
-        ^core2.operator.PreparedQuery pq (.computeIfAbsent prepare-ra-cache
-                                                           lp
-                                                           (reify Function
-                                                             (apply [_ _]
-                                                               (op/prepare-ra lp))))]
-    (with-open [bq (.bind pq (into (select-keys tx-opts [:current-time :default-tz])
-                                   {:src scan-src,
-                                    :params (iv/->indirect-rel [(-> (vw/open-vec allocator '?id [fn-id])
-                                                                    (iv/->direct-vec))]
-                                                               1)
-                                    :app-time-as-of-now? true}))
+        ^core2.operator.PreparedQuery pq (.prepareRaQuery ra-src lp)]
+    (with-open [bq (.bind pq wm-src
+                          {:params (iv/->indirect-rel [(-> (vw/open-vec allocator '?id [fn-id])
+                                                           (iv/->direct-vec))]
+                                                      1)
+                           :app-time-as-of-now? true
+                           :basis basis
+                           :default-tz default-tz})
                 res (.openCursor bq)]
 
       (let [!fn-doc (object-array 1)]
@@ -225,21 +217,21 @@
               (catch Throwable t
                 (throw (err/runtime-err :core2.call/error-compiling-tx-fn {:fn-form fn-form} t))))))))))
 
-(defn- tx-fn-q [allocator prepare-ra-cache scan-src tx-opts q & args]
+(defn- tx-fn-q [allocator ra-src wm-src tx-opts q & args]
   ;; bear in mind Datalog doesn't yet look at `app-time-as-of-now?`, essentially just assumes its true.
   (let [q (into tx-opts q)]
-    (with-open [res (d/open-datalog-query allocator prepare-ra-cache q scan-src args)]
+    (with-open [res (d/open-datalog-query allocator ra-src wm-src q args)]
       (vec (iterator-seq res)))))
 
 (defn- tx-fn-sql
-  ([allocator ^ConcurrentHashMap prepare-ra-cache scan-src tx-opts query]
-   (tx-fn-sql allocator prepare-ra-cache scan-src tx-opts query {}))
+  ([allocator, ^IRaQuerySource ra-src, wm-src tx-opts query]
+   (tx-fn-sql allocator ra-src wm-src tx-opts query {}))
 
-  ([allocator ^ConcurrentHashMap prepare-ra-cache scan-src tx-opts query query-opts]
+  ([allocator, ^IRaQuerySource ra-src, wm-src tx-opts query query-opts]
    (try
      (let [query-opts (into tx-opts query-opts)
-           pq (sql/prepare-sql query prepare-ra-cache query-opts)]
-       (with-open [res (sql/open-sql-query allocator pq scan-src query-opts)]
+           pq (.prepareRaQuery ra-src (sql/compile-query query query-opts))]
+       (with-open [res (sql/open-sql-query allocator wm-src pq query-opts)]
          (vec (iterator-seq res))))
      (catch Throwable e
        (log/error e)
@@ -250,15 +242,15 @@
 (defn reset-tx-fn-error! []
   (first (reset-vals! !last-tx-fn-error nil)))
 
-(defn- ->call-indexer ^core2.indexer.OpIndexer [allocator, ^DenseUnionVector tx-ops-vec, scan-src,
-                                                prepare-ra-cache, {:keys [tx-key] :as tx-opts}]
+(defn- ->call-indexer ^core2.indexer.OpIndexer [allocator, ra-src, wm-src
+                                                ^DenseUnionVector tx-ops-vec, {:keys [tx-key] :as tx-opts}]
   (let [call-vec (.getStruct tx-ops-vec 4)
         ^DenseUnionVector fn-id-vec (.getChild call-vec "fn-id" DenseUnionVector)
         ^ListVector args-vec (.getChild call-vec "args" ListVector)
 
         ;; TODO confirm/expand API that we expose to tx-fns
-        sci-ctx (sci/init {:bindings {'q (partial tx-fn-q allocator prepare-ra-cache scan-src tx-opts)
-                                      'sql-q (partial tx-fn-sql allocator prepare-ra-cache scan-src tx-opts)
+        sci-ctx (sci/init {:bindings {'q (partial tx-fn-q allocator ra-src wm-src tx-opts)
+                                      'sql-q (partial tx-fn-sql allocator ra-src wm-src tx-opts)
                                       'sleep (fn [n] (Thread/sleep n))
                                       '*current-tx* tx-key}})]
 
@@ -267,7 +259,7 @@
         (try
           (let [call-offset (.getOffset tx-ops-vec tx-op-idx)
                 fn-id (t/get-object fn-id-vec call-offset)
-                tx-fn (find-fn allocator (sci/fork sci-ctx) scan-src prepare-ra-cache tx-opts fn-id)
+                tx-fn (find-fn allocator ra-src wm-src (sci/fork sci-ctx)tx-opts fn-id)
 
                 args (t/get-object args-vec call-offset)
 
@@ -305,7 +297,7 @@
   (^void indexOp [^core2.vector.IIndirectRelation inRelation, queryOpts]))
 
 (defn- ->sql-insert-indexer ^core2.indexer.SqlOpIndexer [^IInternalIdManager iid-mgr, ^ILogOpIndexer log-op-idxer, ^ITemporalTxIndexer temporal-idxer
-                                                         ^ILiveChunkTx live-chunk, {:keys [^Instant current-time]}]
+                                                         ^ILiveChunkTx live-chunk, {{:keys [^Instant current-time]} :basis}]
 
   (let [current-time-µs (util/instant->micros current-time)]
     (reify SqlOpIndexer
@@ -423,8 +415,8 @@
 
 (defn- ->sql-indexer ^core2.indexer.OpIndexer [^BufferAllocator allocator, ^IMetadataManager metadata-mgr, ^IBufferPool buffer-pool, ^IInternalIdManager iid-mgr
                                                ^ILogOpIndexer log-op-idxer, ^ITemporalTxIndexer temporal-idxer, ^ILiveChunk doc-idxer
-                                               ^DenseUnionVector tx-ops-vec, ^ScanSource scan-src, ^ConcurrentHashMap prepared-ra-cache
-                                               {:keys [app-time-as-of-now?] :as tx-opts}]
+                                               ^DenseUnionVector tx-ops-vec, ^IRaQuerySource ra-src, wm-src
+                                               {:keys [app-time-as-of-now? basis default-tz] :as tx-opts}]
   (let [sql-vec (.getStruct tx-ops-vec 0)
         ^VarCharVector query-vec (.getChild sql-vec "query" VarCharVector)
         ^VarBinaryVector params-vec (.getChild sql-vec "params" VarBinaryVector)
@@ -436,14 +428,9 @@
       (indexOp [_ tx-op-idx]
         (let [sql-offset (.getOffset tx-ops-vec tx-op-idx)]
           (letfn [(index-op [^SqlOpIndexer op-idxer query-opts inner-query]
-                    (let [^core2.operator.PreparedQuery pq (.computeIfAbsent prepared-ra-cache
-                                                                             inner-query
-                                                                             (reify Function
-                                                                               (apply [_ _]
-                                                                                 (op/prepare-ra inner-query))))]
+                    (let [^core2.operator.PreparedQuery pq (.prepareRaQuery ra-src inner-query)]
                       (letfn [(index-op* [^IIndirectRelation params]
-                                (with-open [res (-> (.bind pq (into (select-keys tx-opts [:current-time :default-tz])
-                                                                    {:src scan-src, :params params}))
+                                (with-open [res (-> (.bind pq wm-src {:params params, :basis basis, :default-tz default-tz})
                                                     (.openCursor))]
 
                                   (.forEachRemaining res
@@ -496,17 +483,17 @@
                   ^IBufferPool buffer-pool
                   ^ITemporalManager temporal-mgr
                   ^IInternalIdManager iid-mgr
+                  ^IRaQuerySource ra-src
                   ^IWatermarkManager wm-mgr
                   ^ILogIndexer log-indexer
                   ^ILiveChunk live-chunk
-                  ^Map prepare-ra-cache
 
                   ^:volatile-mutable ^TransactionInstant latest-completed-tx
 
                   ^:volatile-mutable ^ISharedWatermark shared-wm
                   ^StampedLock wm-lock]
 
-  TransactionIndexer
+  IIndexer
   (indexTx [this {:keys [sys-time] :as tx-key} tx-root]
     (with-open [live-chunk-tx (.startTx live-chunk)]
       (let [^DenseUnionVector tx-ops-vec (-> ^ListVector (.getVector tx-root "tx-ops")
@@ -515,28 +502,25 @@
             log-op-idxer (.startTx log-indexer tx-key)
             temporal-idxer (.startTx temporal-mgr tx-key)
 
-            scan-src (reify ScanSource
-                       (metadataManager [_] metadata-mgr)
-                       (bufferPool [_] buffer-pool)
-                       (txBasis [_] tx-key)
-                       (openWatermark [_]
-                         (wm/->Watermark nil (.openWatermark live-chunk-tx) temporal-idxer false)))
+            wm-src (reify IWatermarkSource
+                     (openWatermark [_ _tx]
+                       (wm/->Watermark nil (.openWatermark live-chunk-tx) temporal-idxer false)))
 
-            tx-opts {:current-time sys-time
-                     :app-time-as-of-now? (== 1 (-> ^BitVector (.getVector tx-root "application-time-as-of-now?")
-                                                    (.get 0)))
+            tx-opts {:basis {:tx tx-key, :current-time sys-time}
                      :default-tz (ZoneId/of (str (-> (.getVector tx-root "default-tz")
                                                      (.getObject 0))))
+                     :app-time-as-of-now? (== 1 (-> ^BitVector (.getVector tx-root "application-time-as-of-now?")
+                                                    (.get 0)))
                      :tx-key tx-key}]
 
         (letfn [(index-tx-ops [^DenseUnionVector tx-ops-vec]
                   (let [!put-idxer (delay (->put-indexer iid-mgr log-op-idxer temporal-idxer live-chunk-tx tx-ops-vec sys-time))
                         !delete-idxer (delay (->delete-indexer iid-mgr log-op-idxer temporal-idxer live-chunk-tx tx-ops-vec sys-time))
                         !evict-idxer (delay (->evict-indexer iid-mgr log-op-idxer temporal-idxer live-chunk-tx tx-ops-vec))
-                        !call-idxer (delay (->call-indexer allocator tx-ops-vec scan-src prepare-ra-cache tx-opts))
+                        !call-idxer (delay (->call-indexer allocator ra-src wm-src tx-ops-vec tx-opts))
                         !sql-idxer (delay (->sql-indexer allocator metadata-mgr buffer-pool iid-mgr
                                                          log-op-idxer temporal-idxer live-chunk-tx
-                                                         tx-ops-vec scan-src prepare-ra-cache tx-opts))]
+                                                         tx-ops-vec ra-src wm-src tx-opts))]
                     (dotimes [tx-op-idx (.getValueCount tx-ops-vec)]
                       (when-let [more-tx-ops (case (.getTypeId tx-ops-vec tx-op-idx)
                                                0 (.indexOp ^OpIndexer @!sql-idxer tx-op-idx)
@@ -591,6 +575,7 @@
 
         tx-key)))
 
+  IWatermarkSource
   (openWatermark [this tx-key]
     (letfn [(maybe-existing-wm []
               (when-let [^ISharedWatermark wm (.shared-wm this)]
@@ -683,16 +668,17 @@
           :live-chunk (ig/ref :core2/live-chunk)
           :buffer-pool (ig/ref ::bp/buffer-pool)
           :log-indexer (ig/ref :core2.indexer/log-indexer)
-          :prepare-ra-cache (ig/ref :core2/prepare-ra-cache)}
+          :ra-src (ig/ref ::op/ra-query-source)}
          opts))
 
 (defmethod ig/init-key :core2/indexer
-  [_ {:keys [allocator object-store metadata-mgr buffer-pool ^ITemporalManager temporal-mgr, ^IWatermarkManager watermark-mgr, internal-id-mgr log-indexer live-chunk prepare-ra-cache]}]
+  [_ {:keys [allocator object-store metadata-mgr buffer-pool ^ITemporalManager temporal-mgr, ^IWatermarkManager watermark-mgr, ra-src
+             internal-id-mgr log-indexer live-chunk]}]
 
   (let [{:keys [latest-completed-tx]} (meta/latest-chunk-metadata metadata-mgr)]
 
-    (Indexer. allocator object-store metadata-mgr buffer-pool temporal-mgr internal-id-mgr watermark-mgr
-              log-indexer live-chunk prepare-ra-cache
+    (Indexer. allocator object-store metadata-mgr buffer-pool temporal-mgr internal-id-mgr
+              ra-src watermark-mgr log-indexer live-chunk
 
               latest-completed-tx
 

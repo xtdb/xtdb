@@ -21,23 +21,22 @@
     (c2/submit-tx node [[:put {:name "Dan", :id :dan}]
                         [:put {:name "Ivan", :id :iva}]])
 
-    (-> (c2/submit-tx node [[:put {:name "James", :id :jms}]
-                            [:put {:name "Jon", :id :jon}]])
-        (tu/then-await-tx node))
+    (let [tx1 (-> (c2/submit-tx node [[:put {:name "James", :id :jms}]
+                                      [:put {:name "Jon", :id :jon}]])
+                  (tu/then-await-tx node))]
 
-    (tu/finish-chunk! node)
+      (tu/finish-chunk! node)
 
-    (let [^IMetadataManager metadata-mgr (tu/component node ::meta/metadata-manager)]
-      (letfn [(test-query-ivan [expected db]
-                (t/is (= expected
-                         (set (tu/query-ra '[:scan xt_docs [id {name (> name "Ivan")}]]
-                                           {:src db}))))
+      (let [^IMetadataManager metadata-mgr (tu/component node ::meta/metadata-manager)]
+        (letfn [(test-query-ivan [expected tx]
+                  (t/is (= expected
+                           (set (tu/query-ra '[:scan xt_docs [id {name (> name "Ivan")}]]
+                                             {:node node, :basis {:tx tx}}))))
 
-                (t/is (= expected
-                         (set (tu/query-ra '[:scan xt_docs [id {name (> name ?name)}]]
-                                           {:src db, :params {'?name "Ivan"}})))))]
+                  (t/is (= expected
+                           (set (tu/query-ra '[:scan xt_docs [id {name (> name ?name)}]]
+                                             {:node node, :basis {:tx tx}, :params {'?name "Ivan"}})))))]
 
-        (let [db @(node/snapshot-async node)]
           (t/is (= #{0 1} (set (keys (.chunksMetadata metadata-mgr)))))
 
           (let [expected-match [(meta/map->ChunkMatch
@@ -52,18 +51,17 @@
                                              (expr.meta/->metadata-selector '(> name ?name) '#{name} params))))
                   "only needs to scan chunk 1, block 1"))
 
-          (-> (c2/submit-tx node [[:put {:name "Jeremy", :id :jdt}]])
-              (tu/then-await-tx node))
+          (let [tx2 (-> (c2/submit-tx node [[:put {:name "Jeremy", :id :jdt}]])
+                        (tu/then-await-tx node))]
 
-          (test-query-ivan #{{:id :jms, :name "James"}
-                             {:id :jon, :name "Jon"}}
-                           db))
+            (test-query-ivan #{{:id :jms, :name "James"}
+                               {:id :jon, :name "Jon"}}
+                             tx1)
 
-        (let [db @(node/snapshot-async node)]
-          (test-query-ivan #{{:id :jms, :name "James"}
-                             {:id :jon, :name "Jon"}
-                             {:id :jdt, :name "Jeremy"}}
-                           db))))))
+            (test-query-ivan #{{:id :jms, :name "James"}
+                               {:id :jon, :name "Jon"}
+                               {:id :jdt, :name "Jeremy"}}
+                             tx2)))))))
 
 (t/deftest test-find-eq-ivan
   (with-open [node (node/start-node {:core2/live-chunk {:rows-per-block 3, :rows-per-chunk 10}})]
@@ -79,8 +77,7 @@
         (tu/then-await-tx node))
 
     (tu/finish-chunk! node)
-    (let [^IMetadataManager metadata-mgr (tu/component node ::meta/metadata-manager)
-          db @(node/snapshot-async node)]
+    (let [^IMetadataManager metadata-mgr (tu/component node ::meta/metadata-manager)]
       (t/is (= #{0 3} (set (keys (.chunksMetadata metadata-mgr)))))
       (let [expected-match [(meta/map->ChunkMatch
                              {:chunk-idx 0, :block-idxs (doto (RoaringBitmap.) (.add 0))})]]
@@ -97,23 +94,21 @@
 
       (t/is (= #{{:name "Ivan"}}
                (set (tu/query-ra '[:scan xt_docs [{name (= name "Ivan")}]]
-                                 {:src db}))))
+                                 {:node node}))))
 
       (t/is (= #{{:name "Ivan"}}
                (set (tu/query-ra '[:scan xt_docs [{name (= name ?name)}]]
-                                 {:src db, :params {'?name "Ivan"}})))))))
+                                 {:node node, :params {'?name "Ivan"}})))))))
 
 (t/deftest test-temporal-bounds
   (with-open [node (node/start-node {})]
     (let [{tt1 :sys-time} (c2/submit-tx node [[:put {:id :my-doc, :last-updated "tx1"}]])
-          _ (Thread/sleep 10) ; to prevent same-ms transactions
-          {tt2 :sys-time, :as tx2} (c2/submit-tx node [[:put {:id :my-doc, :last-updated "tx2"}]])
-          db @(node/snapshot-async node tx2)]
+          {tt2 :sys-time} (-> (c2/submit-tx node [[:put {:id :my-doc, :last-updated "tx2"}]])
+                              (tu/then-await-tx node))]
       (letfn [(q [& temporal-constraints]
                 (->> (tu/query-ra [:scan 'xt_docs
                                    (into '[last-updated] temporal-constraints)]
-                                  {:src db
-                                   :params {'?sys-time1 tt1, '?sys-time2 tt2}})
+                                  {:node node, :params {'?sys-time1 tt1, '?sys-time2 tt2}})
                      (into #{} (map :last-updated))))]
         (t/is (= #{"tx1" "tx2"}
                  (q)))

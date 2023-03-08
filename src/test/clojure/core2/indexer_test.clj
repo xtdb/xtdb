@@ -24,13 +24,12 @@
             core2.watermark)
   (:import core2.api.TransactionInstant
            [core2.buffer_pool BufferPool IBufferPool]
-           (core2.indexer  TransactionIndexer)
+           (core2.indexer  IIndexer)
            (core2.indexer.internal_id_manager InternalIdManager)
            (core2.metadata IMetadataManager)
            core2.node.Node
            core2.object_store.ObjectStore
-           core2.operator.scan.ScanSource
-           core2.watermark.IWatermark
+           (core2.watermark IWatermark IWatermarkSource)
            java.nio.file.Files
            java.time.Duration
            (java.util.function Consumer)
@@ -93,7 +92,7 @@
             ^ObjectStore os (tu/component node ::os/file-system-object-store)
             ^IBufferPool bp (tu/component node ::bp/buffer-pool)
             mm (tu/component node ::meta/metadata-manager)
-            ^TransactionIndexer idxer (tu/component node :core2/indexer)]
+            ^IWatermarkSource wm-src (tu/component node :core2/indexer)]
 
         (t/is (nil? (meta/latest-chunk-metadata mm)))
 
@@ -105,7 +104,7 @@
                  (tu/then-await-tx last-tx-key node (Duration/ofSeconds 2))))
 
         (t/testing "watermark"
-          (with-open [^IWatermark watermark (.openWatermark idxer last-tx-key)]
+          (with-open [^IWatermark watermark (.openWatermark wm-src last-tx-key)]
             (let [live-blocks (-> (.liveChunk watermark)
                                   (.liveTable "xt_docs")
                                   (.liveBlocks ["id"] nil))
@@ -191,10 +190,9 @@
 
 (t/deftest temporal-watermark-is-immutable-567
   (with-open [node (node/start-node {})]
-    (let [{tt :sys-time, :as tx} (c2.d/submit-tx node [[:put {:id :foo, :version 0}]]
-                                                 {:app-time-as-of-now? true})
-
-          db @(node/snapshot-async node tx)]
+    (let [{tt :sys-time, :as tx} (-> (c2.d/submit-tx node [[:put {:id :foo, :version 0}]]
+                                                     {:app-time-as-of-now? true})
+                                     (tu/then-await-tx node))]
       (t/is (= [{:id :foo, :version 0,
                  :application_time_start (util/->zdt tt)
                  :application_time_end (util/->zdt util/end-of-time)
@@ -203,11 +201,11 @@
                (tu/query-ra '[:scan xt_docs [id version
                                              application_time_start, application_time_end
                                              system_time_start, system_time_end]]
-                            {:src db})))
+                            {:node node})))
 
-      (let [{tt2 :sys-time, :as tx2} (c2.d/submit-tx node [[:put {:id :foo, :version 1}]]
-                                                     {:app-time-as-of-now? true})
-            db2 @(node/snapshot-async node tx2)]
+      (let [{tt2 :sys-time} (-> (c2.d/submit-tx node [[:put {:id :foo, :version 1}]]
+                                                {:app-time-as-of-now? true})
+                                (tu/then-await-tx node))]
         (t/is (= [{:id :foo, :version 0,
                    :application_time_start (util/->zdt tt)
                    :application_time_end (util/->zdt util/end-of-time)
@@ -226,7 +224,7 @@
                  (tu/query-ra '[:scan xt_docs [id version
                                                application_time_start, application_time_end
                                                system_time_start, {system_time_end (<= system_time_end core2/end-of-time)}]]
-                              {:src db2})))
+                              {:node node})))
 
         #_ ; FIXME #567 this sees the updated system_time_end of the first entry
         (t/is (= [{:id :foo, :version 0,
@@ -237,7 +235,7 @@
                  (tu/query-ra '[:scan xt_docs [id version
                                                application_time_start, application_time_end
                                                system_time_start, system_time_end]]
-                              {:src db}))
+                              {:node node, :basis {:tx tx}}))
               "re-using the original snapshot should see the same result")))))
 
 (t/deftest can-handle-dynamic-cols-in-same-block
@@ -495,7 +493,7 @@
                            (partition-all 100 tx-ops))]
 
           (doseq [^Node node (shuffle (take 6 (cycle [node-1 node-2 node-3])))
-                  :let [os ^ObjectStore (::os/file-system-object-store @(:!system node))]]
+                  :let [os ^ObjectStore (util/component node ::os/file-system-object-store)]]
             (t/is (= last-tx-key (tu/then-await-tx last-tx-key node (Duration/ofSeconds 60))))
             (t/is (= last-tx-key (tu/latest-completed-tx node)))
 
@@ -535,10 +533,9 @@
                                  (partition-all 100 first-half-tx-ops))]
 
           (with-open [node (tu/->local-node (assoc node-opts :buffers-dir "buffers-1"))]
-            (let [system @(:!system node)
-                  ^ObjectStore os (::os/file-system-object-store system)
-                  ^InternalIdManager iid-mgr (:core2.indexer/internal-id-manager system)
-                  ^IMetadataManager mm (::meta/metadata-manager system)]
+            (let [^ObjectStore os (util/component node ::os/file-system-object-store)
+                  ^InternalIdManager iid-mgr (util/component node :core2.indexer/internal-id-manager)
+                  ^IMetadataManager mm (util/component node ::meta/metadata-manager)]
               (t/is (= first-half-tx-key
                        (-> first-half-tx-key
                            (tu/then-await-tx node (Duration/ofSeconds 10)))))
@@ -595,7 +592,7 @@
                   (tu/await-temporal-snapshot-build node)
 
                   (doseq [^Node node [new-node node]
-                          :let [^ObjectStore os (::os/file-system-object-store @(:!system node))
+                          :let [^ObjectStore os (tu/component node ::os/file-system-object-store)
                                 ^IMetadataManager mm (tu/component node ::meta/metadata-manager)]]
 
                     (let [objs (.listObjects os)]
@@ -699,7 +696,7 @@
         (tu/then-await-tx node))
 
     (let [^IMetadataManager metadata-mgr (tu/component node ::meta/metadata-manager)
-          ^ScanSource db @(node/snapshot-async node)]
+          ^IWatermarkSource wm-src (tu/component node :core2/indexer)]
       (with-open [params (tu/open-params {'?name "Ivan"})]
         (let [gt-literal-selector (expr.meta/->metadata-selector '(> name "Ivan") '#{name} {})
               gt-param-selector (expr.meta/->metadata-selector '(> name ?name) '#{name} params)]
@@ -717,7 +714,7 @@
                                                (swap! !res conj (-> in-rels (update-vals iv/rel->rows))))))
                         @!res)))]
 
-            (with-open [wm1 (.openWatermark db)]
+            (with-open [wm1 (.openWatermark wm-src nil)]
               (t/is (= [{"name" [{:_row-id 1, :name "Dan"} {:_row-id 2, :name "Ivan"}]}
                         {"name" [{:_row-id 3, :name "James"} {:_row-id 4, :name "Jon"}]}]
                        (test-live-blocks wm1 nil))
@@ -731,10 +728,10 @@
                        (test-live-blocks wm1 gt-param-selector))
                     "only second block, param selector")
 
-              (let [!next-tx (c2.d/submit-tx node [[:put {:name "Jeremy", :id :jdt}]])
-                    ^ScanSource next-db @(node/snapshot-async node !next-tx)]
+              (let [next-tx (-> (c2.d/submit-tx node [[:put {:name "Jeremy", :id :jdt}]])
+                                (tu/then-await-tx node))]
 
-                (with-open [wm2 (.openWatermark next-db)]
+                (with-open [wm2 (.openWatermark wm-src next-tx)]
                   (t/is (= [{"name" [{:_row-id 3, :name "James"} {:_row-id 4, :name "Jon"}]}]
                            (test-live-blocks wm1 gt-literal-selector))
                         "replay with wm1")

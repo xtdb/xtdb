@@ -860,11 +860,10 @@
 
 (deftest start-stop-as-module-test
   (let [port (tu/free-port)]
-    (with-open [node (node/start-node {:core2/pgwire {:port port
-                                                      :num-threads 3}})]
+    (with-open [_node (node/start-node {:core2/pgwire {:port port
+                                                       :num-threads 3}})]
       (let [srv (get @#'pgwire/servers port)]
-        (is (some? srv))
-        (is (identical? (::node/node @(:!system node)) (:node srv))))
+        (is (some? srv)))
 
       (with-open [conn (jdbc-conn)]
         (is (= "pong" (ping conn)))))

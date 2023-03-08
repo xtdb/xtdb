@@ -1,13 +1,14 @@
 (ns core2.api.impl
-  (:import java.util.concurrent.ExecutionException))
+  (:import core2.IResultSet
+           java.util.concurrent.ExecutionException
+           java.util.function.Function))
 
 (defprotocol PNode
   (^java.util.concurrent.CompletableFuture open-datalog& [node q args])
   (^java.util.concurrent.CompletableFuture open-sql& [node q opts]))
 
 (defprotocol PSubmitNode
-  (^java.util.concurrent.CompletableFuture #_<TransactionInstant>
-   submit-tx&
+  (^java.util.concurrent.CompletableFuture #_<TransactionInstant> submit-tx&
    [node tx-ops]
    [node tx-ops opts]))
 
@@ -34,3 +35,4 @@
 
    ["/sql" {:name :sql-query
             :summary "SQL"}]])
+

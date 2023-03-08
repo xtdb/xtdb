@@ -14,12 +14,12 @@
   (let [tx (bench/with-timing :submit-docs
              (tpch/submit-docs! node scale-factor))]
     (bench/with-timing :await-tx
-      @(node/snapshot-async node tx (Duration/ofHours 5)))
+      @(node/await-tx& node tx (Duration/ofHours 5)))
 
     (bench/with-timing :finish-chunk
       (bench/finish-chunk! node))))
 
-(defn query-tpch [db]
+(defn query-tpch [node]
   (tu/with-allocator
     (fn []
       (doseq [q tpch-ra/queries]
@@ -27,7 +27,7 @@
           (let [q @q
                 {::tpch-ra/keys [params table-args]} (meta q)]
             (try
-              (count (tu/query-ra q {:src db
+              (count (tu/query-ra q {:node node
                                      :params params
                                      :table-args table-args}))
               (catch Exception e
@@ -38,12 +38,11 @@
     (bench/with-timing :ingest
       (ingest-tpch node {:scale-factor 0.01}))
 
-    (let [db (ingest/snapshot (util/component node :core2/ingester))]
-      (bench/with-timing :cold-queries
-        (query-tpch db))
+    (bench/with-timing :cold-queries
+      (query-tpch node))
 
-      (bench/with-timing :hot-queries
-        (query-tpch db)))))
+    (bench/with-timing :hot-queries
+      (query-tpch node))))
 
 (defn -main [& args]
   (try
@@ -60,12 +59,11 @@
           (bench/with-timing :ingest
             (ingest-tpch node opts))
 
-          (let [db (ingest/snapshot (util/component node :core2/ingester))]
-            (bench/with-timing :cold-queries
-              (query-tpch db))
+          (bench/with-timing :cold-queries
+            (query-tpch node))
 
-            (bench/with-timing :hot-queries
-              (query-tpch db))))))
+          (bench/with-timing :hot-queries
+            (query-tpch node)))))
 
     (catch Exception e
       (.printStackTrace e)

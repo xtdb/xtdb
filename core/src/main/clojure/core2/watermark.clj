@@ -22,6 +22,10 @@
   (^void close []))
 
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
+(definterface IWatermarkSource
+  (^core2.watermark.IWatermark openWatermark [^core2.api.TransactionInstant txKey]))
+
+#_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface ISharedWatermark
   (^core2.api.TransactionInstant txBasis [])
   (^core2.watermark.IWatermark retain [])

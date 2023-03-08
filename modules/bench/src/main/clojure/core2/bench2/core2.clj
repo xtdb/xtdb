@@ -126,9 +126,8 @@
       (open-sql& [_ query query-opts] (c2.impl/open-sql& node query query-opts))
 
       node/PNode
-      (snapshot-async [_] (node/snapshot-async node))
-      (snapshot-async [_ tx] (node/snapshot-async node tx))
-      (snapshot-async [_ tx timeout] (node/snapshot-async node tx timeout))
+      (await-tx& [_ tx] (node/await-tx& node tx))
+      (await-tx& [_ tx timeout] (node/await-tx& node tx timeout))
 
       c2.impl/PStatus
       (status [_]

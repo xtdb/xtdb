@@ -1,16 +1,18 @@
 (ns core2.flight-sql
   (:require [clojure.tools.logging :as log]
-            [core2.sql :as c2]
+            [core2.core.sql :as sql]
+            core2.indexer
             [core2.node :as node]
             [core2.operator :as op]
-            [core2.core.sql :as sql]
+            [core2.sql :as c2]
             [core2.types :as types]
             [core2.util :as util]
             [core2.vector.indirect :as iv]
             [core2.vector.writer :as vw]
             [juxt.clojars-mirrors.integrant.core :as ig])
   (:import (com.google.protobuf Any ByteString)
-           (core2.operator BoundQuery PreparedQuery)
+           core2.indexer.IIndexer
+           (core2.operator BoundQuery PreparedQuery IRaQuerySource)
            java.lang.AutoCloseable
            (java.util ArrayList HashMap Map)
            (java.util.concurrent CompletableFuture ConcurrentHashMap)
@@ -51,10 +53,11 @@
   (Result. (.toByteArray (Any/pack res))))
 
 (defn then-await-fn ^java.util.concurrent.CompletableFuture [cf {:keys [node]}]
-  (util/then-compose cf
-    (fn [tx]
-      ;; HACK til we have the ability to await on the connection
-      (node/snapshot-async node tx))))
+  (-> cf
+      (util/then-compose
+       (fn [tx]
+         ;; HACK til we have the ability to await on the connection
+         (node/await-tx& node tx)))))
 
 (doto (def ^:private do-put-update-msg
         (let [^org.apache.arrow.flight.sql.impl.FlightSql$DoPutUpdateResult$Builder
@@ -106,7 +109,7 @@
       (while (.next flight-stream)
         (write-batch!)))))
 
-(defn- ->fsql-producer [{:keys [allocator node ^Map fsql-txs, ^Map stmts, ^Map tickets] :as svr}]
+(defn- ->fsql-producer [{:keys [allocator node, ^IIndexer idxer, ^IRaQuerySource ra-src, wm-src, ^Map fsql-txs, ^Map stmts, ^Map tickets] :as svr}]
   (letfn [(col-types->schema ^org.apache.arrow.vector.types.pojo.Schema [col-types]
             (Schema. (for [[col-name col-type] col-types]
                        (types/col-type->field col-name col-type))))
@@ -164,9 +167,9 @@
                                          (try
                                            (doto ps
                                              (some-> (.put :bound-query
-                                                           (.bind prepd-query
-                                                                  {:src @(node/snapshot-async node)
-                                                                   :params new-params}))
+                                                           (.bind prepd-query wm-src
+                                                                  {:node node, :params new-params,
+                                                                   :basis {:tx (.latestCompletedTx idxer)}}))
                                                      util/try-close))
                                            (catch Throwable t
                                              (util/try-close new-params)
@@ -189,10 +192,11 @@
       (getFlightInfoStatement [_ cmd _ctx descriptor]
         (let [sql (.toStringUtf8 (.getQueryBytes cmd))
               ticket-handle (new-id)
-              ^BoundQuery bq (-> (sql/compile-query sql {})
-                                 (op/prepare-ra)
+              ^BoundQuery bq (-> (.prepareRaQuery ra-src (sql/compile-query sql {}))
                                  ;; HACK need to get the basis from somewhere...
-                                 (.bind {:src @(node/snapshot-async node)}))
+                                 (.bind wm-src
+                                        {:node node
+                                         :basis {:tx (.latestCompletedTx idxer)}}))
               ticket (Ticket. (-> (doto (FlightSql$TicketStatementQuery/newBuilder)
                                     (.setStatementHandle ticket-handle))
                                   (.build)
@@ -222,7 +226,7 @@
                                   (.toByteArray)))
 
               ^BoundQuery bound-query (or bound-query
-                                          (.bind prepd-query {:src @(node/snapshot-async node)}))]
+                                          (.bind prepd-query wm-src {:node node}))]
           (.put ps :bound-query bound-query)
           (FlightInfo. (col-types->schema (.columnTypes bound-query)) descriptor
                        [(FlightEndpoint. ticket (make-array Location 0))]
@@ -241,7 +245,7 @@
               ps (cond-> {:id ps-id, :sql sql
                           :fsql-tx-id (when (.hasTransactionId req)
                                         (.getTransactionId req))}
-                   (not (dml? plan)) (assoc :prepd-query (op/prepare-ra plan)))]
+                   (not (dml? plan)) (assoc :prepd-query (.prepareRaQuery ra-src plan)))]
           (.put stmts ps-id (HashMap. ^Map ps))
 
           (.onNext listener
@@ -305,16 +309,19 @@
 (defmethod ig/prep-key ::server [_ opts]
   (merge {:allocator (ig/ref :core2/allocator)
           :node (ig/ref :core2.node/node)
+          :idxer (ig/ref :core2/indexer)
+          :ra-src (ig/ref :core2.operator/ra-query-source)
+          :wm-src (ig/ref :core2/indexer)
           :host "127.0.0.1"
           :port 9832}
          opts))
 
-(defmethod ig/init-key ::server [_ {:keys [allocator node host ^long port]}]
+(defmethod ig/init-key ::server [_ {:keys [allocator node idxer ra-src wm-src host ^long port]}]
   (let [fsql-txs (ConcurrentHashMap.)
         stmts (ConcurrentHashMap.)
         tickets (ConcurrentHashMap.)
         server (doto (-> (FlightServer/builder allocator (Location/forGrpcInsecure host port)
-                                               (->fsql-producer {:allocator allocator, :node node
+                                               (->fsql-producer {:allocator allocator, :node node, :idxer idxer, :ra-src ra-src, :wm-src wm-src
                                                                  :fsql-txs fsql-txs, :stmts stmts, :tickets tickets}))
 
                          #_(doto with-error-logging-middleware)

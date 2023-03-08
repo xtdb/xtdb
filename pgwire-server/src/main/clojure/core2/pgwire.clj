@@ -1419,7 +1419,7 @@
         await-ex (when tx
                    (try
                      ;; TODO consider blocking policy
-                     @(node/snapshot-async node tx)
+                     @(node/await-tx& node tx)
                      nil
                      (catch Throwable e
                        (log/debug e "Error on await-tx")

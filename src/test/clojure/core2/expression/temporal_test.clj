@@ -18,7 +18,7 @@
       (= expected (-> (tu/query-ra [:project [{'res '(= ?a ?b)}]
                                     [:table [{}]]]
                                    {:params {'?a a, '?b b}
-                                    :current-time Instant/EPOCH
+                                    :basis {:current-time Instant/EPOCH}
                                     :default-tz (ZoneOffset/of zone-id)})
                       first :res))
     ;; identity
@@ -49,7 +49,7 @@
               ([src-value tgt-type {:keys [default-tz], :or {default-tz ZoneOffset/UTC}}]
                (-> (tu/query-ra [:project [{'res `(~'cast ~'arg ~tgt-type)}]
                                  [:table [{}]]]
-                                {:current-time current-time
+                                {:basis {:current-time current-time}
                                  :default-tz default-tz
                                  :params {'arg src-value}})
                    first :res)))]
@@ -263,7 +263,7 @@
        (->> (tu/query-ra [:project [{'res (list 'cast '?t1 [:timestamp-local :micro])}]
                           [:table [{}]]]
                          {:params {'?t1 t1}
-                          :current-time now
+                          :basis {:current-time now}
                           :default-tz default-tz})
             first :res))))
 
@@ -276,7 +276,7 @@
        (->> (tu/query-ra [:project [{'res (list 'cast '?t1 [:timestamp-tz :micro (str zdt-tz)])}]
                           [:table [{}]]]
                          {:params {'?t1 t1}
-                          :current-time now
+                          :basis {:current-time now}
                           :default-tz default-tz})
             first :res))))
 

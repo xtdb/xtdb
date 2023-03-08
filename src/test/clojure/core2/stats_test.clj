@@ -3,35 +3,35 @@
             [core2.datalog :as c2]
             [core2.logical-plan :as lp]
             [core2.node :as node]
-            [core2.test-util :as tu]))
+            [core2.test-util :as tu]
+            [core2.util :as util]))
 
 (t/use-fixtures :each tu/with-allocator)
 
 (deftest test-scan
   (with-open [node (node/start-node {:core2/live-chunk {:rows-per-block 2 , :rows-per-chunk 2}})]
-    (let [_tx (-> (c2/submit-tx node [[:put {:id "foo1" :_table "foo"}]
-                                      [:put {:id "bar1" :_table "bar"}]])
-                  (tu/then-await-tx node))
+    (let [scan-emitter (util/component node :core2.operator.scan/scan-emitter)]
+      (-> (c2/submit-tx node [[:put {:id "foo1" :_table "foo"}]
+                              [:put {:id "bar1" :_table "bar"}]])
+          (tu/then-await-tx node))
 
-          _tx (-> (c2/submit-tx node [[:put {:id "foo2" :_table "foo"}]
-                                      [:put {:id "baz1" :_table "baz"}]])
-                  (tu/then-await-tx node))
+      (-> (c2/submit-tx node [[:put {:id "foo2" :_table "foo"}]
+                              [:put {:id "baz1" :_table "baz"}]])
+          (tu/then-await-tx node))
 
-          _tx (-> (c2/submit-tx node [[:put {:id "foo3" :_table "foo"}]
-                                      [:put {:id "bar2" :_table "bar"}]])
-                  (tu/then-await-tx node))
-
-          db @(node/snapshot-async node)]
+      (-> (c2/submit-tx node [[:put {:id "foo3" :_table "foo"}]
+                              [:put {:id "bar2" :_table "bar"}]])
+          (tu/then-await-tx node))
 
       (t/is (= {:row-count 3}
                (:stats (lp/emit-expr '{:op :scan, :table foo, :columns [[:column id]]}
                                      {:scan-col-types {['$ 'id] :utf8},
-                                      :src db}))))
+                                      :scan-emitter scan-emitter}))))
 
       (t/is (= {:row-count 2}
                (:stats (lp/emit-expr '{:op :scan, :table bar, :columns [[:column id]]}
                                      {:scan-col-types {['$ 'id] :utf8},
-                                      :src db})))))))
+                                      :scan-emitter scan-emitter})))))))
 
 (deftest test-project
   (t/is (= {:row-count 5}

@@ -16,8 +16,9 @@
             [core2.vector.writer :as vw]
             [time-literals.read-write :as time-literals])
   (:import (core2 ICursor InstantSource)
+           core2.indexer.IIndexer
            core2.node.Node
-           core2.operator.scan.ScanSource
+           (core2.operator IRaQuerySource PreparedQuery)
            (core2.vector IIndirectRelation IIndirectVector)
            java.net.ServerSocket
            (java.nio.file Files Path)
@@ -77,11 +78,11 @@
   ([node k] (util/component node k)))
 
 (defn then-await-tx
-  (^core2.operator.scan.ScanSource [tx node]
-   (.txBasis ^ScanSource @(node/snapshot-async node tx)))
+  (^core2.api.TransactionInstant [tx node]
+   @(node/await-tx& node tx))
 
-  (^core2.operator.scan.ScanSource [tx node ^Duration timeout]
-   (.txBasis ^ScanSource @(node/snapshot-async node tx timeout))))
+  (^core2.api.TransactionInstant [tx node ^Duration timeout]
+   @(node/await-tx& node tx timeout)))
 
 (defn latest-completed-tx ^core2.api.TransactionInstant [node]
   (:latest-completed-tx (api/status node)))
@@ -96,8 +97,8 @@
 (defn with-mock-clock [f]
   (with-opts {:core2.log/memory-log {:instant-src (->mock-clock)}} f))
 
-(defn await-temporal-snapshot-build [^Node node]
-  (.awaitSnapshotBuild ^core2.temporal.TemporalManagerPrivate (::temporal/temporal-manager @(:!system node))))
+(defn await-temporal-snapshot-build [node]
+  (.awaitSnapshotBuild ^core2.temporal.TemporalManagerPrivate (util/component node ::temporal/temporal-manager)))
 
 (defn finish-chunk! [node]
   (idx/finish-block! (component node :core2/indexer))
@@ -176,20 +177,26 @@
 
 (defn query-ra
   ([query] (query-ra query {}))
-  ([query {:keys [params preserve-blocks? with-col-types?] :as query-opts}]
-   (with-open [^IIndirectRelation
-               params-rel (iv/->indirect-rel (for [[k v] params]
-                                               (iv/->direct-vec (open-vec k [v])))
-                                             1)]
-     (let [pq (op/prepare-ra query)
-           bq (.bind pq (-> (select-keys query-opts [:src :current-time :default-tz :table-args])
-                            (assoc :params params-rel)))]
-       (with-open [res (.openCursor bq)]
-         (let [rows (-> (<-cursor res)
-                        (cond->> (not preserve-blocks?) (into [] cat)))]
-           (if with-col-types?
-             {:res rows, :col-types (.columnTypes bq)}
-             rows)))))))
+  ([query {:keys [node params preserve-blocks? with-col-types?] :as query-opts}]
+   (let [^IIndexer indexer (some-> node (util/component :core2/indexer))]
+     (with-open [^IIndirectRelation
+                 params-rel (if params
+                              (vw/open-params *allocator* params)
+                              vw/empty-params)]
+       (let [^PreparedQuery pq (if node
+                                 (let [^IRaQuerySource ra-src (util/component node ::op/ra-query-source)]
+                                   (.prepareRaQuery ra-src query))
+                                 (op/prepare-ra query))
+             bq (.bind pq indexer
+                       (-> (select-keys query-opts [:basis :table-args :default-tz])
+                           (update-in [:basis :tx] (fnil identity (some-> indexer .latestCompletedTx)))
+                           (assoc :params params-rel)))]
+         (with-open [res (.openCursor bq)]
+           (let [rows (-> (<-cursor res)
+                          (cond->> (not preserve-blocks?) (into [] cat)))]
+             (if with-col-types?
+               {:res rows, :col-types (.columnTypes bq)}
+               rows))))))))
 
 (t/deftest round-trip-cursor
   (with-allocator
@@ -203,9 +210,9 @@
 
           (t/is (= blocks (<-cursor cursor))))))))
 
-(defn ->local-node ^core2.node.Node [{:keys [^Path node-dir ^String buffers-dir
-                                             rows-per-block rows-per-chunk]
-                                      :or {buffers-dir "buffers"}}]
+(defn ->local-node ^java.lang.AutoCloseable [{:keys [^Path node-dir ^String buffers-dir
+                                                     rows-per-block rows-per-chunk]
+                                              :or {buffers-dir "buffers"}}]
   (node/start-node {:core2.log/local-directory-log {:root-path (.resolve node-dir "log")
                                                     :instant-src (->mock-clock)}
                     :core2.tx-producer/tx-producer {:instant-src (->mock-clock)}
@@ -215,7 +222,7 @@
                                             :rows-per-chunk rows-per-chunk}
                                            (into {} (filter val)))}))
 
-(defn ->local-submit-node ^core2.node.SubmitNode [{:keys [^Path node-dir]}]
+(defn ->local-submit-node ^java.lang.AutoCloseable [{:keys [^Path node-dir]}]
   (node/start-submit-node {:core2.tx-producer/tx-producer {:clock (->mock-clock)}
                            :core2.log/local-directory-log {:root-path (.resolve node-dir "log")
                                                            :clock (->mock-clock)}}))

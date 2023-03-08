@@ -35,7 +35,7 @@
                                       ;; TODO Core2 doesn't support set vals yet
                                       [:put (->> doc (into {} (remove (comp set? val))))])))))]
     (bench/with-timing :await-tx
-      @(node/snapshot-async node tx (Duration/ofHours 5)))
+      @(node/await-tx& node tx (Duration/ofHours 5)))
 
     (bench/with-timing :finish-chunk
       (bench/finish-chunk! node))))

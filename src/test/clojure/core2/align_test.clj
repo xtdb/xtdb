@@ -49,19 +49,21 @@
 (t/deftest test-aligns-temporal-columns-correctly-363
   (with-open [node (node/start-node {})]
     (c2/submit-tx node [[:put {:id :my-doc, :last_updated "tx1" :_table "foo"}]] {:sys-time #inst "3000"})
-    (let [!tx (c2/submit-tx node [[:put {:id :my-doc, :last_updated "tx2" :_table "foo"}]] {:sys-time #inst "3001"})
-          ingester (tu/component node :core2/ingester)]
-      (t/is (= [{:system_time_start (util/->zdt #inst "3000")
-                 :system_time_end (util/->zdt #inst "3001")
-                 :last_updated "tx1"}
-                {:system_time_start (util/->zdt #inst "3001")
-                 :system_time_end (util/->zdt util/end-of-time)
-                 :last_updated "tx1"}
-                {:system_time_start (util/->zdt #inst "3001")
-                 :system_time_end (util/->zdt util/end-of-time)
-                 :last_updated "tx2"}]
-               (tu/query-ra '[:scan foo
-                              [{system_time_start (< system_time_start #time/zoned-date-time "3002-01-01T00:00Z")}
-                               {system_time_end (> system_time_end #time/zoned-date-time "2999-01-01T00:00Z")}
-                               last_updated]]
-                            {:src (ingest/snapshot ingester !tx)}))))))
+
+    (-> (c2/submit-tx node [[:put {:id :my-doc, :last_updated "tx2" :_table "foo"}]] {:sys-time #inst "3001"})
+        (tu/then-await-tx node))
+
+    (t/is (= [{:system_time_start (util/->zdt #inst "3000")
+               :system_time_end (util/->zdt #inst "3001")
+               :last_updated "tx1"}
+              {:system_time_start (util/->zdt #inst "3001")
+               :system_time_end (util/->zdt util/end-of-time)
+               :last_updated "tx1"}
+              {:system_time_start (util/->zdt #inst "3001")
+               :system_time_end (util/->zdt util/end-of-time)
+               :last_updated "tx2"}]
+             (tu/query-ra '[:scan foo
+                            [{system_time_start (< system_time_start #time/zoned-date-time "3002-01-01T00:00Z")}
+                             {system_time_end (> system_time_end #time/zoned-date-time "2999-01-01T00:00Z")}
+                             last_updated]]
+                          {:node node})))))

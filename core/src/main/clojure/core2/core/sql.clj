@@ -9,8 +9,6 @@
            core2.operator.PreparedQuery
            java.lang.AutoCloseable
            java.util.HashMap
-           (java.util.concurrent ConcurrentHashMap)
-           (java.util.function Function)
            org.apache.arrow.memory.BufferAllocator))
 
 (defn compile-query
@@ -26,23 +24,15 @@
            (vary-meta assoc :param-count (sem/param-count ast))
            #_(doto clojure.pprint/pprint))))))
 
-(defn prepare-sql ^core2.operator.PreparedQuery [query ^ConcurrentHashMap prepare-ra-cache query-opts]
-  (.computeIfAbsent prepare-ra-cache
-                    (compile-query query (select-keys query-opts [:app-time-as-of-now? :default-tz :decorrelate?]))
-                    (reify Function
-                      (apply [_ compiled-query]
-                        (op/prepare-ra compiled-query)))))
-
-(defn open-sql-query ^core2.IResultSet [^BufferAllocator allocator, ^PreparedQuery pq, db, query-opts]
+(defn open-sql-query ^core2.IResultSet [^BufferAllocator allocator, wm-src, ^PreparedQuery pq,
+                                        {:keys [basis default-tz] :as query-opts}]
   (let [^AutoCloseable
         params (vw/open-params allocator
                                (->> (:? query-opts)
                                     (into {} (map-indexed (fn [idx v]
                                                             (MapEntry/create (symbol (str "?_" idx)) v))))))]
     (try
-      (-> (.bind pq {:src db, :params params
-                     :current-time (get-in query-opts [:basis :current-time])
-                     :default-tz (:default-tz query-opts)})
+      (-> (.bind pq wm-src {:params params, :basis basis, :default-tz default-tz})
           (.openCursor)
           (op/cursor->result-set params))
       (catch Throwable t

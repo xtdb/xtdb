@@ -8,11 +8,10 @@
             [core2.util :as util]
             [core2.vector.writer :as vw])
   (:import clojure.lang.MapEntry
+           core2.operator.IRaQuerySource
            (java.time LocalDate Instant ZonedDateTime)
            java.lang.AutoCloseable
            java.util.Date
-           (java.util.concurrent ConcurrentHashMap)
-           (java.util.function Function)
            org.apache.arrow.memory.BufferAllocator))
 
 (s/def ::logic-var simple-symbol?)
@@ -811,9 +810,9 @@
                args)
        (into {})))
 
-(defn open-datalog-query ^core2.IResultSet [^BufferAllocator allocator ^ConcurrentHashMap prepare-ra-cache
-                                            query db args]
-  (let [plan (compile-query (dissoc query :basis :basis-timeout :default-tz))
+(defn open-datalog-query ^core2.IResultSet [^BufferAllocator allocator, ^IRaQuerySource ra-src, wm-src
+                                            {:keys [basis] :as query} args]
+  (let [plan (compile-query (dissoc query :basis :basis-timeout))
         {::keys [in-bindings]} (meta plan)
 
         plan (-> plan
@@ -823,11 +822,7 @@
                  #_(doto clojure.pprint/pprint)
                  (doto (lp/validate-plan)))
 
-        ^core2.operator.PreparedQuery pq (.computeIfAbsent prepare-ra-cache
-                                                           plan
-                                                           (reify Function
-                                                             (apply [_ _]
-                                                               (op/prepare-ra plan))))]
+        ^core2.operator.PreparedQuery pq (.prepareRaQuery ra-src plan)]
 
     (when (not= (count in-bindings) (count args))
       (throw (err/illegal-arg :in-arity-exception {::err/message ":in arity mismatch"
@@ -837,9 +832,8 @@
     (let [^AutoCloseable
           params (vw/open-params allocator (args->params args in-bindings))]
       (try
-        (-> (.bind pq {:src db, :params params, :table-args (args->tables args in-bindings)
-                       :current-time (get-in query [:basis :current-time])
-                       :default-tz (:default-tz query)})
+        (-> (.bind pq wm-src
+                   {:params params, :table-args (args->tables args in-bindings), :basis basis})
             (.openCursor)
             (op/cursor->result-set params))
         (catch Throwable t

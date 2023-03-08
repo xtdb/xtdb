@@ -1,28 +1,24 @@
 (ns core2.tpch-test
   (:require [clojure.java.io :as io]
             [clojure.test :as t]
-            [core2.core.datalog :as d]
+            [core2.core.sql :as core.sql]
+            [core2.datalog :as d]
             [core2.datasets.tpch :as tpch]
             [core2.datasets.tpch.ra :as tpch-ra]
             [core2.datasets.tpch.datalog :as tpch-datalog]
-            [core2.node :as node]
-            [core2.core.sql :as sql]
+            [core2.sql :as sql]
             core2.sql-test
             [core2.test-util :as tu]
             [core2.util :as util])
-  (:import (java.nio.file Path)
-           (java.util.concurrent ConcurrentHashMap)))
+  (:import (java.nio.file Path)))
 
 (def ^:dynamic *node* nil)
-(def ^:dynamic *db* nil)
 
 ;; (slurp (io/resource (format "io/airlift/tpch/queries/q%d.sql" 1)))
 
 (defn with-tpch-data [{:keys [method ^Path node-dir scale-factor]} f]
   (if *node*
-    (let [db @(node/snapshot-async *node*)]
-      (binding [*db* db]
-        (f)))
+    (f)
 
     (do
       (util/delete-dir node-dir)
@@ -33,9 +29,8 @@
           (tu/then-await-tx last-tx node)
           (tu/finish-chunk! node)
 
-          (let [db @(node/snapshot-async node last-tx)]
-            (binding [*node* node, *db* db]
-              (f))))))))
+          (binding [*node* node]
+            (f)))))))
 
 (defn is-equal?
   [expected actual]
@@ -76,7 +71,7 @@
           {::tpch-ra/keys [params table-args]} (meta q)]
       (tu/with-allocator
         (fn []
-          (t/is (= res (tu/query-ra q {:src *db*, :params params, :table-args table-args}))
+          (t/is (= res (tu/query-ra q {:node *node*, :params params, :table-args table-args}))
                 (format "Q%02d" (inc n))))))))
 
 (t/deftest test-001-ra
@@ -115,13 +110,9 @@
   (let [q (inc n)]
     (when (contains? *datalog-qs* q)
       (let [query @(nth tpch-datalog/queries n)
-            {::tpch-datalog/keys [in-args]} (meta query)
-            ra-cache (ConcurrentHashMap.)]
-        (tu/with-allocator
-          (fn []
-            (with-open [res (d/open-datalog-query tu/*allocator* ra-cache query *db* in-args)]
-              (t/is (is-equal? expected-res (vec (iterator-seq res)))
-                    (format "Q%02d" (inc n))))))))))
+            {::tpch-datalog/keys [in-args]} (meta query)]
+        (t/is (is-equal? expected-res (apply d/q *node* query in-args))
+              (format "Q%02d" (inc n)))))))
 
 (t/deftest test-001-datalog
   (with-tpch-data {:method :docs, :scale-factor 0.001
@@ -141,6 +132,7 @@
   (binding [*datalog-qs* #{2}]
     (t/run-test test-001-datalog))
 
+  #_{:clj-kondo/ignore [:unresolved-namespace]}
   (binding [*node* dev/node
             *datalog-qs* #{1}]
     (t/run-test test-01-datalog)))
@@ -156,7 +148,7 @@
       (when (contains? *qs* n)
         (t/is (=plan-file
                (format "tpch/q%02d" n)
-               (sql/compile-query (slurp-sql-query n)))
+               (core.sql/compile-query (slurp-sql-query n)))
               (format "Q%02d" n))))))
 
 (defn test-sql-query
@@ -164,11 +156,8 @@
   ([opts n res]
    (let [q (inc n)]
      (when (contains? *qs* q)
-       (let [plan (sql/compile-query (slurp-sql-query q) opts)]
-         (tu/with-allocator
-           (fn []
-             (t/is (is-equal? res (tu/query-ra plan {:src *db*}))
-                   (format "Q%02d" (inc n))))))))))
+       (t/is (is-equal? res (sql/q *node* (slurp-sql-query q) opts))
+             (format "Q%02d" (inc n)))))))
 
 (t/deftest test-001-sql
   (with-tpch-data {:method :dml, :scale-factor 0.001

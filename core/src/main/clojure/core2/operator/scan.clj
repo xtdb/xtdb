@@ -2,28 +2,29 @@
   (:require [clojure.spec.alpha :as s]
             [core2.align :as align]
             [core2.bloom :as bloom]
+            [core2.buffer-pool :as bp]
             [core2.coalesce :as coalesce]
-            [core2.error :as err]
             [core2.expression :as expr]
             [core2.expression.metadata :as expr.meta]
             [core2.expression.temporal :as expr.temp]
             [core2.logical-plan :as lp]
             [core2.metadata :as meta]
-            [core2.rewrite :refer [zmatch]]
             [core2.temporal :as temporal]
             [core2.types :as t]
             [core2.util :as util]
             [core2.vector.indirect :as iv]
-            core2.watermark)
+            core2.watermark
+            [juxt.clojars-mirrors.integrant.core :as ig])
   (:import clojure.lang.MapEntry
+           core2.api.TransactionInstant
            core2.buffer_pool.IBufferPool
            core2.ICursor
            (core2.metadata IMetadataManager ITableMetadata)
            core2.operator.IRelationSelector
            (core2.vector IIndirectRelation IIndirectVector)
            core2.watermark.IWatermark
-           [java.util HashMap LinkedList List Map Queue]
-           [java.util.function Consumer Function]
+           [java.util LinkedList List Map Queue]
+           [java.util.function Consumer]
            org.apache.arrow.memory.BufferAllocator
            [org.apache.arrow.vector BigIntVector VarBinaryVector]
            [org.roaringbitmap IntConsumer RoaringBitmap]
@@ -38,37 +39,19 @@
          :columns (s/coll-of (s/or :column ::lp/column
                                    :select ::lp/column-expression))))
 
-(set! *unchecked-math* :warn-on-boxed)
+#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
+(definterface IScanEmitter
+  (scanColTypes [^core2.watermark.IWatermark wm, scan-cols])
+  (emitScan [scan-expr scan-col-types param-types]))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
-(definterface ScanSource
-  (^core2.metadata.IMetadataManager metadataManager [])
-  (^core2.buffer_pool.BufferPool bufferPool [])
-  (^core2.api.TransactionInstant txBasis [])
-  (^core2.watermark.IWatermark openWatermark []))
+(defn ->scan-cols [{:keys [table columns]}]
+  (for [[col-tag col-arg] columns]
+    [table (case col-tag
+             :column col-arg
+             :select (key (first col-arg)))]))
 
 (def ^:dynamic *column->pushdown-bloom* {})
-
-(defn ->scan-cols [{:keys [table columns]}]
-  (for [column columns]
-    [table
-     (zmatch column
-             [:column col] col
-             [:select col-map] (key (first col-map)))]))
-
-(defn ->scan-col-types [^ScanSource src scan-cols]
-  (with-open [wm (.openWatermark src)]
-    (letfn [(->col-type [[table col-name]]
-              (if (temporal/temporal-column? col-name)
-                [:timestamp-tz :micro "UTC"]
-                (t/merge-col-types (.columnType (.metadataManager src) (name table) (name col-name))
-                                   (some-> (.liveChunk wm)
-                                           (.liveTable (name table))
-                                           (.liveColumn (name col-name))
-                                           (.columnType)))))]
-
-      (->> scan-cols
-           (into {} (map (juxt identity ->col-type)))))))
 
 (defn- filter-pushdown-bloom-block-idxs [^IMetadataManager metadata-manager chunk-idx ^String table-name ^String col-name ^RoaringBitmap block-idxs]
   (if-let [^MutableRoaringBitmap pushdown-bloom (get *column->pushdown-bloom* (symbol col-name))]
@@ -250,8 +233,8 @@
   (close [_]
     (util/try-close blocks)))
 
-(defn- apply-src-tx! [[^longs temporal-min-range, ^longs temporal-max-range], ^ScanSource src, col-preds]
-  (when-let [sys-time (some-> (.txBasis src) (.sys-time))]
+(defn- apply-basis-tx! [[^longs temporal-min-range, ^longs temporal-max-range], {^TransactionInstant basis-tx :tx} col-preds]
+  (when-let [sys-time (some-> basis-tx (.sys-time))]
     (expr.temp/apply-constraint temporal-min-range temporal-max-range
                                 :<= "system_time_start" sys-time)
 
@@ -260,58 +243,73 @@
       (expr.temp/apply-constraint temporal-min-range temporal-max-range
                                   :> "system_time_end" sys-time))))
 
-(defmethod lp/emit-expr :scan [{:keys [table columns]} {:keys [^ScanSource src, scan-col-types, param-types]}]
-  (let [col-names (->> columns
-                       (into [] (comp (map (fn [[col-type arg]]
-                                             (case col-type
-                                               :column arg
-                                               :select (key (first arg)))))
-                                      (distinct))))
+(defmethod ig/prep-key ::scan-emitter [_ opts]
+  (merge opts
+         {:metadata-mgr (ig/ref ::meta/metadata-manager)
+          :buffer-pool (ig/ref ::bp/buffer-pool)}))
 
-        {content-col-names false, temporal-col-names true} (->> col-names
-                                                                (group-by (comp temporal/temporal-column? name)))
+(defmethod ig/init-key ::scan-emitter [_ {:keys [^IMetadataManager metadata-mgr, ^IBufferPool buffer-pool]}]
+  (reify IScanEmitter
+    (scanColTypes [_ wm scan-cols]
+      (letfn [(->col-type [[table col-name]]
+                (if (temporal/temporal-column? col-name)
+                  [:timestamp-tz :micro "UTC"]
+                  (t/merge-col-types (.columnType metadata-mgr (name table) (name col-name))
+                                     (some-> (.liveChunk wm)
+                                             (.liveTable (name table))
+                                             (.liveColumn (name col-name))
+                                             (.columnType)))))]
 
-        col-types (->> col-names
-                       (into {} (map (juxt identity
-                                           (fn [col-name]
-                                             (get scan-col-types [table col-name]))))))
+        (->> scan-cols
+             (into {} (map (juxt identity ->col-type))))))
 
-        selects (->> (for [[col-type arg] columns
-                           :when (= col-type :select)]
-                       (first arg))
-                     (into {}))
+    (emitScan [_ {:keys [table columns]} scan-col-types param-types]
+      (let [col-names (->> columns
+                           (into [] (comp (map (fn [[col-type arg]]
+                                                 (case col-type
+                                                   :column arg
+                                                   :select (key (first arg)))))
+                                          (distinct))))
 
-        col-preds (->> (for [[col-name select-form] selects]
-                         ;; for temporal preds, we may not need to re-apply these if they can be represented as a temporal range.
-                         (MapEntry/create (name col-name)
-                                          (expr/->expression-relation-selector select-form {:col-types col-types, :param-types param-types})))
-                       (into {}))
+            {content-col-names false, temporal-col-names true} (->> col-names
+                                                                    (group-by (comp temporal/temporal-column? name)))
 
-        metadata-args (vec (concat (for [col-name content-col-names
-                                         :when (not (contains? col-preds (name col-name)))]
-                                     col-name)
-                                   (for [[col-name select] selects
-                                         :when (not (temporal/temporal-column? (name col-name)))]
-                                     select)))
-        row-count (let [metadata-mgr (.metadataManager src)]
-                    (->> (meta/with-all-metadata metadata-mgr (name table)
-                           (util/->jbifn
-                            (fn [_chunk-idx ^ITableMetadata table-metadata]
-                              (let [id-col-idx (.rowIndex table-metadata "id" -1)
-                                    ^BigIntVector count-vec (.getVector (.metadataRoot table-metadata) "count")]
-                                (.get count-vec id-col-idx)))))
-                         (reduce +)))]
+            col-types (->> col-names
+                           (into {} (map (juxt identity
+                                               (fn [col-name]
+                                                 (get scan-col-types [table col-name]))))))
 
-    {:col-types (dissoc col-types '_table)
-     :stats {:row-count row-count}
-     :->cursor (fn [{:keys [allocator ^ScanSource src params]}]
-                 (let [metadata-mgr (.metadataManager src)
-                       buffer-pool (.bufferPool src)
-                       watermark (.openWatermark src)]
-                   (try
+            selects (->> (for [[col-type arg] columns
+                               :when (= col-type :select)]
+                           (first arg))
+                         (into {}))
+
+            col-preds (->> (for [[col-name select-form] selects]
+                             ;; for temporal preds, we may not need to re-apply these if they can be represented as a temporal range.
+                             (MapEntry/create (name col-name)
+                                              (expr/->expression-relation-selector select-form {:col-types col-types, :param-types param-types})))
+                           (into {}))
+
+            metadata-args (vec (concat (for [col-name content-col-names
+                                             :when (not (contains? col-preds (name col-name)))]
+                                         col-name)
+                                       (for [[col-name select] selects
+                                             :when (not (temporal/temporal-column? (name col-name)))]
+                                         select)))
+            row-count (->> (meta/with-all-metadata metadata-mgr (name table)
+                             (util/->jbifn
+                              (fn [_chunk-idx ^ITableMetadata table-metadata]
+                                (let [id-col-idx (.rowIndex table-metadata "id" -1)
+                                      ^BigIntVector count-vec (.getVector (.metadataRoot table-metadata) "count")]
+                                  (.get count-vec id-col-idx)))))
+                           (reduce +))]
+
+        {:col-types (dissoc col-types '_table)
+         :stats {:row-count row-count}
+         :->cursor (fn [{:keys [allocator, ^IWatermark watermark, basis, params]}]
                      (let [metadata-pred (expr.meta/->metadata-selector (cons 'and metadata-args) (set col-names) params)
                            [temporal-min-range temporal-max-range] (doto (expr.temp/->temporal-min-max-range selects params)
-                                                                     (apply-src-tx! src col-preds))
+                                                                     (apply-basis-tx! basis col-preds))
                            content-col-names (mapv name content-col-names)
                            temporal-col-names (mapv name temporal-col-names)]
                        (-> (ScanCursor. allocator metadata-mgr watermark
@@ -325,8 +323,7 @@
                                                                       (.liveBlocks (or (not-empty content-col-names) #{"id"})
                                                                                    metadata-pred)))
                                         params)
-                           (coalesce/->coalescing-cursor allocator)
-                           (util/and-also-close watermark)))
-                     (catch Throwable t
-                       (util/try-close watermark)
-                       (throw t)))))}))
+                           (coalesce/->coalescing-cursor allocator))))}))))
+
+(defmethod lp/emit-expr :scan [scan-expr {:keys [^IScanEmitter scan-emitter scan-col-types, param-types]}]
+  (.emitScan scan-emitter scan-expr scan-col-types param-types))

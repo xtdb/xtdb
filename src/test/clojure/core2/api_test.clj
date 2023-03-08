@@ -431,6 +431,7 @@
             (->> (c2.sql/q tu/*node* "SELECT foo.id, foo.application_time_start, foo.application_time_end FROM foo"
                            {:basis {:tx tx}})
                  (into {} (map (juxt :id (juxt :application_time_start :application_time_end))))))]
+
     (c2.sql/submit-tx tu/*node* [[:sql "INSERT INTO foo (id) VALUES (1)"]])
 
     (let [tx (c2.sql/submit-tx tu/*node* [[:sql "

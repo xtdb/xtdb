@@ -159,18 +159,16 @@
        (mapv plan/unqualified-projection-symbol)
        (plan/generate-unique-column-names)))
 
-(defn execute-query-expression [this from-subquery]
-  (let [ingester (tu/component this :core2/ingester)
-        db (ingest/snapshot ingester)]
-    (binding [r/*memo* (HashMap.)]
-      (let [tree (normalize-query (:tables this) from-subquery)
-            projection (outer-projection tree)
-            plan (-> tree
-                     (sem/analyze-query) sem/or-throw
-                     (plan/plan-query {:decorrelate? true, :project-anonymous-columns? true}))
-            column->anonymous-col (:column->name (meta plan))]
-        (vec (for [row (tu/query-ra plan {:src db})]
-               (mapv #(-> (get column->anonymous-col %) name keyword row) projection)))))))
+(defn execute-query-expression [node from-subquery]
+  (binding [r/*memo* (HashMap.)]
+    (let [tree (normalize-query (:tables node) from-subquery)
+          projection (outer-projection tree)
+          plan (-> tree
+                   (sem/analyze-query) sem/or-throw
+                   (plan/plan-query {:decorrelate? true, :project-anonymous-columns? true}))
+          column->anonymous-col (:column->name (meta plan))]
+      (vec (for [row (tu/query-ra plan {:node node})]
+             (mapv #(-> (get column->anonymous-col %) name keyword row) projection))))))
 
 (defn insert->docs [{:keys [tables] :as node} insert-statement]
   (let [[_ _ _ insertion-target insert-columns-and-source] insert-statement
@@ -187,7 +185,7 @@
 
 (defn- insert-statement [node insert-statement]
   (-> (c2.d/submit-tx node (vec (for [doc (insert->docs node insert-statement)]
-                                [:put (merge {:id (UUID/randomUUID)} doc)])))
+                                  [:put (merge {:id (UUID/randomUUID)} doc)])))
       (tu/then-await-tx node))
   node)
 

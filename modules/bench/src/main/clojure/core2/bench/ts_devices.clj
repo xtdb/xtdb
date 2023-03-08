@@ -24,7 +24,7 @@
              (tsd/submit-ts-devices node {:device-info-file device-info-file
                                           :readings-file readings-file}))]
     (bench/with-timing :await-tx
-      @(node/snapshot-async node tx (Duration/ofHours 5)))
+      @(node/await-tx& node tx (Duration/ofHours 5)))
 
     (bench/with-timing :finish-chunk
       (bench/finish-chunk! node))))

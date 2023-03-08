@@ -1965,8 +1965,8 @@
   (let [plan (lp/remove-names plan opts)
         {:keys [add-projection-fn]} (meta plan)]
     (-> plan
-      (lp/rewrite-plan opts)
-      (add-projection-fn))))
+        (lp/rewrite-plan opts)
+        (add-projection-fn))))
 
 (defn plan-query
   ([ag] (plan-query ag {}))

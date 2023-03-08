@@ -24,7 +24,7 @@
   (let [q "INSERT INTO foo (id, dt, tstz) VALUES (?, DATE '2020-08-01', CAST(DATE '2020-08-01' AS TIMESTAMP WITH TIME ZONE))"]
     (c2/submit-tx tu/*node* [[:sql q [["foo"]]]])
     (let [tx (c2/submit-tx tu/*node* [[:sql q [["bar"]]]]
-                            {:default-tz #time/zone "America/Los_Angeles"})
+                           {:default-tz #time/zone "America/Los_Angeles"})
           q "SELECT foo.id, foo.dt, CAST(foo.dt AS TIMESTAMP WITH TIME ZONE) cast_tstz, foo.tstz FROM foo"]
 
       (t/is (= [{:id "foo", :dt #time/date "2020-08-01",
@@ -44,4 +44,5 @@
                  :tstz #time/zoned-date-time "2020-08-01T00:00-07:00[America/Los_Angeles]"}]
 
                (c2/q tu/*node* q
-                     {:basis {:tx tx}, :default-tz #time/zone "America/Los_Angeles"}))))))
+                     {:basis {:tx tx}
+                      :default-tz #time/zone "America/Los_Angeles"}))))))
