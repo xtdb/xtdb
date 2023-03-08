@@ -3,6 +3,7 @@
             [clojure.string :as string]
             [clojure.test :as t]
             [clojure.tools.logging.impl :as log-impl]
+            [xtdb.fixtures :as f]
             [xtdb.fixtures.kv :as fkv]
             [xtdb.tx.event :as xte]
             [xtdb.api :as xt]
@@ -1563,3 +1564,8 @@
     (try (xt/sync *api*) (catch Throwable _)))
 
   (t/is (true? (:ingester-failed? (xt/status *api*)))))
+
+(t/deftest tx-fn-throwing-oom-aborts-ingester-test
+  (xt/submit-tx *api* [[::xt/put {:xt/id :oom, :xt/fn '(fn [_] (throw (java.lang.OutOfMemoryError. "test oom")))}]
+                       [::xt/fn :oom]])
+  (t/is (f/spin-until-true 100 #(:ingester-failed? (xt/status *api*)))))
