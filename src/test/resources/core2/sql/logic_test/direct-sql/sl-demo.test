@@ -676,24 +676,6 @@ SELECT *
 
 query I nosort
 SELECT P2.property_number
-  FROM Prop_Owner
-         FOR ALL SYSTEM_TIME
-         FOR ALL APPLICATION_TIME
-         AS P1,
-       Prop_Owner
-         FOR ALL SYSTEM_TIME
-         FOR ALL APPLICATION_TIME
-         AS P2
- WHERE P1.property_number = 7797
-   AND P2.property_number <> P1.property_number
-   AND P1.customer_number = P2.customer_number
-----
-3621
-3621
-3621
-
-query I nosort
-SELECT P2.property_number
 FROM Prop_Owner AS P1,
      Prop_Owner AS P2
 WHERE P1.property_number = 7797

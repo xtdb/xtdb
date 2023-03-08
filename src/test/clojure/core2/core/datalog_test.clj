@@ -1030,3 +1030,179 @@
                   !tx1 nil))
 
             "for all sys time"))))
+
+(t/deftest test-snodgrass-99-tutorial
+  (letfn [(q [query !tx current-time & in]
+            (apply c2/q
+                   tu/*node*
+                   (-> query
+                       (assoc :basis {:tx !tx, :current-time (util/->instant current-time)}))
+                   in))]
+
+    (let [!tx0 (c2/submit-tx tu/*node*
+                             [[:put {:id 1 :customer-number 145 :property-number 7797} {:app-time-start #inst "1998-01-10"}]]
+                             {:sys-time #inst "1998-01-10"})
+
+          !tx1 (c2/submit-tx tu/*node*
+                             [[:put {:id 1 :customer-number 827 :property-number 7797} {:app-time-start #inst "1998-01-15"}]]
+                             {:sys-time #inst "1998-01-15"})
+
+          !tx2 (c2/submit-tx tu/*node*
+                             [[:delete 1 {:app-time-start #inst "1998-01-20"}]]
+                             {:sys-time #inst "1998-01-20"})
+
+          !tx3 (c2/submit-tx tu/*node*
+                             [[:put {:id 1 :customer-number 145 :property-number 7797} {:app-time-start #inst "1998-01-03"
+                                                                                        :app-time-end #inst "1998-01-10"}]]
+                             {:sys-time #inst "1998-01-23"})
+
+          !tx4 (c2/submit-tx tu/*node*
+                             [[:delete 1 {:app-time-start #inst "1998-01-03" :app-time-end #inst "1998-01-05"}]]
+                             {:sys-time #inst "1998-01-26"})
+
+          !tx5 (c2/submit-tx tu/*node*
+                             [[:put {:id 1 :customer-number 145 :property-number 7797} {:app-time-start #inst "1998-01-05"
+                                                                                        :app-time-end #inst "1998-01-12"}]
+                              [:put {:id 1 :customer-number 827 :property-number 7797} {:app-time-start #inst "1998-01-12"
+                                                                                        :app-time-end #inst "1998-01-20"}]]
+                             {:sys-time #inst "1998-01-28"})
+
+          !tx6 (c2/submit-tx tu/*node*
+                             [[:put {:id :delete-1-week-records,
+                                     :fn #c2/clj-form (fn delete-1-weeks-records []
+                                                        (->> (q '{:find [id app-start app-end]
+                                                                  :where [(for-all-app-time id)
+                                                                          [id :application_time_start app-start]
+                                                                          [id :application_time_end app-end]
+                                                                          [(= (- #inst "1970-01-08" #inst "1970-01-01")
+                                                                              (- app-end app-start))]]})
+                                                             (map (fn [{:keys [id app-start app-end]}]
+                                                                    [:delete id {:app-time-start app-start
+                                                                                 :app-time-end app-end}]))))}]
+                              [:call :delete-1-week-records]]
+                             {:sys-time #inst "1998-01-30"})
+
+          !tx7 (c2/submit-tx tu/*node*
+                             [[:put {:id 2 :customer-number 827 :property-number 3621} {:app-time-start #inst "1998-01-15"}]]
+                             {:sys-time #inst "1998-01-31"})]
+
+      (t/is (= [{:cust 145 :app-start (util/->zdt #inst "1998-01-10")}]
+               (q '{:find [cust app-start]
+                    :where [(for-all-app-time id)
+                            [id :application_time_start app-start]
+                            [id :customer-number cust]]}, !tx0, nil))
+            "as-of 14 Jan")
+
+      (t/is (= [{:cust 145, :app-start (util/->zdt #inst "1998-01-10")}
+                {:cust 827, :app-start (util/->zdt #inst "1998-01-15")}]
+               (q '{:find [cust app-start]
+                    :where [(for-all-app-time id)
+                            [id :application_time_start app-start]
+                            [id :customer-number cust]]}, !tx1, nil))
+            "as-of 18 Jan")
+
+      (t/is (= [{:cust 145, :app-start (util/->zdt #inst "1998-01-05")}
+                {:cust 827, :app-start (util/->zdt #inst "1998-01-12")}]
+               (q '{:find [cust app-start]
+                    :order-by [[app-start :asc]]
+                    :where [(for-all-app-time id)
+                            [id :application_time_start app-start]
+                            [id :customer-number cust]]}, !tx5, nil))
+            "as-of 29 Jan")
+
+      (t/is (= [{:cust 827, :app-start (util/->zdt #inst "1998-01-12"), :app-end (util/->zdt #inst "1998-01-20")}]
+               (q '{:find [cust app-start app-end]
+                    :order-by [[app-start :asc]]
+                    :where [(for-all-app-time id)
+                            [id :application_time_start app-start]
+                            [id :application_time_end app-end]
+                            [id :customer-number cust]]}, !tx6, nil))
+            "'as best known' (as-of 30 Jan)")
+
+      (t/is (= [{:prop 3621, :vt-begin (util/->zdt #inst "1998-01-15"), :vt-end (util/->zdt #inst "1998-01-20")}]
+               (q '{:find [prop (greatest app-start app-start2) (least app-end app-end2)]
+                    :keys [prop vt-begin vt-end]
+                    :in [in-prop]
+                    :order-by [[app-start :asc]]
+                    :where [(for-all-app-time id)
+                            [id :property-number in-prop]
+                            [id :customer-number cust]
+                            [id :application_time_start app-start]
+                            [id :application_time_end app-end]
+                            (for-all-app-time id2)
+                            [id2 :customer-number cust]
+                            [id2 :property-number prop]
+                            [(<> prop in-prop)]
+                            [id2 :application_time_start app-start2]
+                            [id2 :application_time_end app-end2]
+                            ;; eventually: 'overlaps?'
+                            [(< app-start app-end2)]
+                            [(> app-end app-start2)]]}, !tx7, nil, 7797))
+            "Case 2: Valid-time sequenced and transaction-time current")
+
+      (t/is (= [{:prop 3621,
+                 :vt-begin (util/->zdt #inst "1998-01-15"),
+                 :vt-end (util/->zdt #inst "1998-01-20"),
+                 :recorded-start (util/->zdt #inst "1998-01-31"),
+                 :recorded-stop (util/->zdt util/end-of-time)}]
+               (q '{:find [prop (greatest app-start app-start2) (least app-end app-end2) (greatest sys-start sys-start2) (least sys-end sys-end2)]
+                    :keys [prop vt-begin vt-end recorded-start recorded-stop]
+                    :in [in-prop]
+                    :order-by [[app-start :asc]]
+                    :where [(for-all-app-time id)
+                            (for-all-sys-time id)
+                            [id :property-number in-prop]
+                            [id :customer-number cust]
+                            [id :application_time_start app-start]
+                            [id :application_time_end app-end]
+                            [id :system_time_start sys-start]
+                            [id :system_time_end sys-end]
+                            (for-all-app-time id2)
+                            (for-all-sys-time id2)
+                            [id2 :customer-number cust]
+                            [id2 :property-number prop]
+                            [(<> prop in-prop)]
+                            [id2 :application_time_start app-start2]
+                            [id2 :application_time_end app-end2]
+                            [id2 :system_time_start sys-start2]
+                            [id2 :system_time_end sys-end2]
+                            ;; eventually: 'overlaps?'
+                            [(< app-start app-end2)]
+                            [(> app-end app-start2)]
+                            ;; eventually: 'overlaps?'
+                            [(< sys-start sys-end2)]
+                            [(> sys-end sys-start2)]]}, !tx7, nil, 7797))
+            "Case 5: Application-time sequenced and system-time sequenced")
+
+      (t/is (= [{:prop 3621,
+                 :vt-begin (util/->zdt #inst "1998-01-15"),
+                 :vt-end (util/->zdt #inst "1998-01-20"),
+                 :recorded-start (util/->zdt #inst "1998-01-31")}]
+               (q '{:find [prop (greatest app-start app-start2) (least app-end app-end2) sys-start2]
+                    :keys [prop vt-begin vt-end recorded-start]
+                    :in [in-prop]
+                    :order-by [[app-start :asc]]
+                    :where [(for-all-app-time id)
+                            (for-all-sys-time id)
+                            [id :property-number in-prop]
+                            [id :customer-number cust]
+                            [id :application_time_start app-start]
+                            [id :application_time_end app-end]
+                            [id :system_time_start sys-start]
+                            [id :system_time_end sys-end]
+                            (for-all-app-time id2)
+                            (for-all-sys-time id2)
+                            [id2 :customer-number cust]
+                            [id2 :property-number prop]
+                            [(<> prop in-prop)]
+                            [id2 :application_time_start app-start2]
+                            [id2 :application_time_end app-end2]
+                            [id2 :system_time_start sys-start2]
+                            [id2 :system_time_end sys-end2]
+                            ;; eventually: 'overlaps?'
+                            [(< app-start app-end2)]
+                            [(> app-end app-start2)]
+                            ;; eventually: 'contains?' with point
+                            [(> sys-start2 sys-start)]
+                            [(< sys-start2 sys-end)]]}, !tx7, nil, 7797))
+            "Case 8: Application-time sequenced and system-time nonsequenced"))))
