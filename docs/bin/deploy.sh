@@ -22,9 +22,13 @@ set -e
     --include "*.webp"  \
     --include "*.avif"  \
     --include "*.woff2" \
+    --include "*.ico"   \
+    --cache-control "max-age=172800,public"  # 2 days
+
+    aws s3 sync $DEPLOY_PATH s3://$S3_BUCKET \
+    --exclude "*"       \
     --include "*.js"    \
     --include "*.css"   \
-    --include "*.ico"   \
     --cache-control "max-age=172800,public"  # 2 days
 
     # use cp to avoid sync flake with timestamps/same-sized items (see https://github.com/aws/aws-cli/issues/3273)
