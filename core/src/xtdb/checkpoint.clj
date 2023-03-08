@@ -159,8 +159,8 @@
   (download-checkpoint [_ {::keys [cp-path]} dir]
     (let [to-path (.toPath ^File dir)]
       (when-not (or (not (Files/exists to-path (make-array LinkOption 0)))
-                    (empty? (Files/list to-path)))
-        (throw (IllegalArgumentException. "non-empty checkpoint restore dir: " to-path)))
+                    (empty? (.toArray (Files/list to-path))))
+        (throw (IllegalArgumentException. (str "non-empty checkpoint restore dir: " to-path))))
 
       (try
         (sync-path cp-path to-path)

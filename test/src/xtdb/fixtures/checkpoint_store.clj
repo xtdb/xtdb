@@ -16,6 +16,17 @@
           cp-2 {::cp/cp-format ::foo-cp-format
                 :tx {::xt/tx-id 2}}]
 
+      (t/testing "destination dir exists and contains a file"
+        (let [dest-dir (io/file local-dir "dest")
+              rogue-file (io/file dest-dir "hello.txt")
+              cps (cp/available-checkpoints cp-store {::cp/cp-format ::foo-cp-format})]
+          (try
+            (.mkdirs dest-dir)
+            (spit rogue-file "I should not be present")
+            (t/is (thrown? IllegalArgumentException  (cp/download-checkpoint cp-store (first cps) dest-dir)))
+            (finally
+                  (io/delete-file rogue-file)))))
+
       (t/testing "first checkpoint"
         (spit (io/file src-dir "hello.txt") "Hello world")
 
