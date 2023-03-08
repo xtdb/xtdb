@@ -5,7 +5,7 @@ XTDB HTTP Health Check
 .deps.edn
 [source,clojure]
 ----
-com.xtdb.labs/xtdb-http-health-check {:mvn/version "1.23.0"}
+com.xtdb.labs/xtdb-http-health-check {:mvn/version "1.23.1"}
 ----
 
 .pom.xml
@@ -14,7 +14,6 @@ com.xtdb.labs/xtdb-http-health-check {:mvn/version "1.23.0"}
 <dependency>
     <groupId>com.xtdb.labs</groupId>
     <artifactId>xtdb-http-health-check</artifactId>
-    <version>1.23.0</version>
+    <version>1.23.1</version>
 </dependency>
 ----
-

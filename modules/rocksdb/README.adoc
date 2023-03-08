@@ -5,7 +5,7 @@ https://rocksdb.org/[RocksDB] is often used as the data store for XTDB's query i
 .deps.edn
 [source,clojure]
 ----
-com.xtdb/xtdb-rocksdb {:mvn/version "1.23.0"}
+com.xtdb/xtdb-rocksdb {:mvn/version "1.23.1"}
 ----
 
 .pom.xml
@@ -14,7 +14,7 @@ com.xtdb/xtdb-rocksdb {:mvn/version "1.23.0"}
 <dependency>
     <groupId>com.xtdb</groupId>
     <artifactId>xtdb-rocksdb</artifactId>
-    <version>1.23.0</version>
+    <version>1.23.1</version>
 </dependency>
 ----
 
