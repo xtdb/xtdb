@@ -1,5 +1,5 @@
 = Kafka
-:page-aliases: reference::kafka.adoc
+:page-aliases: 1.23.1@reference::kafka.adoc
 
 When using XTDB at scale it is recommended to use multiple XTDB nodes connected via a Kafka cluster. Use of multiple nodes provides availability and Kafka itself provides strong fault-tolerance guarantees.
 Kafka can be used for XTDB's transaction log and document store components.
