@@ -46,9 +46,7 @@
     [node tx-time ^Duration timeout]
     "Blocks until the node has caught up indexing to the latest tx available at
   the time this method is called. Will throw an exception on timeout. The
-  returned date is the latest transaction time indexed by this node. This can be
-  used as the second parameter in (db valid-time transaction-time) for
-  consistent reads.
+  returned date is the latest transaction time indexed by this node.
 
   timeout – max time to wait, can be nil for the default.
   Returns the latest known transaction time.")
