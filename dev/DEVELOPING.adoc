@@ -40,9 +40,9 @@ You do not need to install Gradle to develop Core2 - there is a Gradle https://d
 
 * Test all with `./gradlew test`; `./gradlew integration-test` for longer tests
 * Some tests have external dependencies which require `docker-compose`:
-  * `docker-compose up` (`docker-compose up <postgres|kafka>` etc for individual containers),
-  * `./gradlew jdbc-test` / `./gradlew kafka-test`
-  * `docker-compose down`
+** `docker-compose up` (`docker-compose up <postgres|kafka>` etc for individual containers),
+** `./gradlew jdbc-test` / `./gradlew kafka-test`
+** `docker-compose down`
 
 == Profiling
 
