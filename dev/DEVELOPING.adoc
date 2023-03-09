@@ -15,7 +15,7 @@ You will need either JDK 11 or 17 installed.
 
 == Getting started
 
-Core2 uses Gradle[https://gradle.org/] - a JVM build tool that supports multi-module, polyglot projects.
+Core2 uses https://gradle.org/[Gradle] - a JVM build tool that supports multi-module, polyglot projects.
 You do not need to install Gradle to develop Core2 - there is a Gradle https://docs.gradle.org/current/userguide/gradle_wrapper.html[wrapper] in the repo.
 
 * Java classes are (re-)compiled automatically when you (re-)start a REPL or run tests
