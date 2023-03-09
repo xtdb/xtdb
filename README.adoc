@@ -11,15 +11,19 @@ In addition to SQL, XTDB supplies a [Datalog](https://en.wikipedia.org/wiki/Data
 
 This is experimental software.
 
-If you are looking for a stable release of an immutable document database with bitemporal query capabilities, we are continuing to develop and support XTDB 1.x here: https://github.com/xtdb/xtdb
+If you are looking for a stable release of an immutable document database with bitemporal query capabilities, we are continuing to develop and support XTDB 1.x at https://github.com/xtdb/xtdb.
 
 == Quick links
 
 * https://xtdb.com[XTDB 1.x documentation]
 // * Maven releases
 // * Release notes
-* Support: https://juxt-oss.zulipchat.com/#narrow/stream/194466-crux[Zulip community chat] | https://github.com/xtdb/xtdb/discussions[GitHub Discussions] | hello@xtdb.com
+* Support:
+  https://discuss.xtdb.com/[discuss.xtdb.com,window=_blank] |
+  https://juxt-oss.zulipchat.com/#narrow/stream/194466-crux[Zulip community chat,window=_blank] |
+  hello@xtdb.com
 * https://github.com/xtdb/core2/tree/master/dev/DEVELOPING.adoc[Developing XTDB Core2]
+* https://www.zotero.org/groups/4778667/xtdb/[Bibliography,window=_blank]
 
 == Inside-out Architecture
 
