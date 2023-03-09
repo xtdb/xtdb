@@ -1,8 +1,7 @@
 (ns core2.bench.ts-devices
   (:require [clojure.tools.logging :as log]
             [core2.bench :as bench]
-            [core2.ts-devices :as tsd]
-            [core2.node :as node])
+            [core2.ts-devices :as tsd])
   (:import java.time.Duration))
 
 (def cli-arg-spec
@@ -20,14 +19,15 @@
     (.toFile tmp-file)))
 
 (defn ingest-tsd [node {:keys [device-info-file readings-file]}]
-  (let [tx (bench/with-timing :submit-docs
-             (tsd/submit-ts-devices node {:device-info-file device-info-file
-                                          :readings-file readings-file}))]
-    (bench/with-timing :await-tx
-      @(node/await-tx& node tx (Duration/ofHours 5)))
+  (bench/with-timing :submit-docs
+    (tsd/submit-ts-devices node {:device-info-file device-info-file
+                                 :readings-file readings-file}))
 
-    (bench/with-timing :finish-chunk
-      (bench/finish-chunk! node))))
+  (bench/with-timing :sync
+    (bench/sync-node node (Duration/ofHours 5)))
+
+  (bench/with-timing :finish-chunk
+    (bench/finish-chunk! node)))
 
 (defn -main [& args]
   (try

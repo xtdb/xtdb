@@ -11,8 +11,7 @@
 
 (t/deftest test-as-of-tx
   (let [tx1 (c2/submit-tx tu/*node* [[:put {:id :my-doc, :last-updated "tx1"}]])
-        tx2 (-> (c2/submit-tx tu/*node* [[:put {:id :my-doc, :last-updated "tx2"}]])
-                (tu/then-await-tx tu/*node*))]
+        tx2 (c2/submit-tx tu/*node* [[:put {:id :my-doc, :last-updated "tx2"}]])]
 
     (t/is (= #{{:last-updated "tx1"} {:last-updated "tx2"}}
              (set (tu/query-ra '[:scan xt_docs [last-updated]]
@@ -36,10 +35,9 @@
                               (assoc :basis {:tx tx1})))))))))
 
 (t/deftest test-app-time
-  (let [{:keys [sys-time] :as tx} (-> (c2/submit-tx tu/*node* [[:put {:id :doc, :version 1}]
-                                                               [:put {:id :doc-with-app-time}
-                                                                {:app-time-start #inst "2021"}]])
-                                      (tu/then-await-tx tu/*node*))
+  (let [{:keys [sys-time] :as tx} (c2/submit-tx tu/*node* [[:put {:id :doc, :version 1}]
+                                                           [:put {:id :doc-with-app-time}
+                                                            {:app-time-start #inst "2021"}]])
         sys-time (util/->zdt sys-time)]
 
     (t/is (= {:doc {:id :doc,
@@ -57,15 +55,14 @@
                                   application_time_start application_time_end
                                   system_time_start system_time_end]]
                                {:node tu/*node*
-                                :basis {:tx tx}})
+                                :basis {:after-tx tx}})
                   (into {} (map (juxt :id identity))))))))
 
 (t/deftest test-sys-time
   (let [tx1 (c2/submit-tx tu/*node* [[:put {:id :doc, :version 0}]])
         tt1 (util/->zdt (:sys-time tx1))
 
-        tx2 (-> (c2/submit-tx tu/*node* [[:put {:id :doc, :version 1}]])
-                (tu/then-await-tx tu/*node*))
+        tx2 (c2/submit-tx tu/*node* [[:put {:id :doc, :version 1}]])
 
         tt2 (util/->zdt (:sys-time tx2))
 
@@ -116,14 +113,13 @@
 
     (c2/submit-tx tu/*node* [[:put {:id :doc, :version 0}]
                              [:put {:id :other-doc, :version 0}]])
-    (-> (c2/submit-tx tu/*node* [[:put {:id :doc, :version 1}]])
-        (tu/then-await-tx tu/*node*))
+
+    (c2/submit-tx tu/*node* [[:put {:id :doc, :version 1}]])
 
     (t/is (= {:doc 3, :other-doc 1} (all-time-docs))
           "documents present before evict")
 
-    (-> (c2/submit-tx tu/*node* [[:evict :doc]])
-        (tu/then-await-tx tu/*node*))
+    (c2/submit-tx tu/*node* [[:evict :doc]])
 
     (t/is (= {:other-doc 1} (all-time-docs))
           "documents removed after evict")))

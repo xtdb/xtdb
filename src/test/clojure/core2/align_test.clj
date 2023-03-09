@@ -50,8 +50,7 @@
   (with-open [node (node/start-node {})]
     (c2/submit-tx node [[:put {:id :my-doc, :last_updated "tx1" :_table "foo"}]] {:sys-time #inst "3000"})
 
-    (-> (c2/submit-tx node [[:put {:id :my-doc, :last_updated "tx2" :_table "foo"}]] {:sys-time #inst "3001"})
-        (tu/then-await-tx node))
+    (c2/submit-tx node [[:put {:id :my-doc, :last_updated "tx2" :_table "foo"}]] {:sys-time #inst "3001"})
 
     (t/is (= [{:system_time_start (util/->zdt #inst "3000")
                :system_time_end (util/->zdt #inst "3001")

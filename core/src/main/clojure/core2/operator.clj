@@ -102,12 +102,13 @@
          (bind [_ wm-src {:keys [params table-args basis default-tz]}]
            (assert (or scan-emitter (empty? scan-cols)))
 
-           (let [{:keys [tx current-time]} basis
+           (let [{:keys [tx after-tx current-time]} basis
+                 wm-tx (or tx after-tx)
                  clock (Clock/fixed (or current-time (.instant expr/*clock*))
                                     (or default-tz (.getZone expr/*clock*)))
                  {:keys [col-types ->cursor]} (.computeIfAbsent cache
                                                                 {:scan-col-types (when scan-emitter
-                                                                                   (with-open [wm (.openWatermark wm-src tx)]
+                                                                                   (with-open [wm (.openWatermark wm-src wm-tx)]
                                                                                      (.scanColTypes scan-emitter wm scan-cols)))
                                                                  :param-types (expr/->param-types params)
                                                                  :table-arg-types (->table-arg-types table-args)
@@ -125,11 +126,14 @@
                (openCursor [_]
                  (.acquire ref-ctr)
                  (let [allocator (RootAllocator.)
-                       wm (some-> wm-src (.openWatermark tx))]
+                       wm (some-> wm-src (.openWatermark wm-tx))]
                    (try
                      (binding [expr/*clock* clock]
                        (-> (->cursor {:allocator allocator, :watermark wm
-                                      :clock clock, :basis basis
+                                      :clock clock,
+                                      :basis (-> basis
+                                                 (dissoc :after-tx)
+                                                 (update :tx (fnil identity (some-> wm .txBasis))))
                                       :params params, :table-args table-args})
                            (wrap-cursor allocator wm clock ref-ctr)))
 

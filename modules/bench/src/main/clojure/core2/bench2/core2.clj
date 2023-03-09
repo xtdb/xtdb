@@ -125,10 +125,6 @@
       (open-datalog& [_ query args] (c2.impl/open-datalog& node query args))
       (open-sql& [_ query query-opts] (c2.impl/open-sql& node query query-opts))
 
-      node/PNode
-      (await-tx& [_ tx] (node/await-tx& node tx))
-      (await-tx& [_ tx timeout] (node/await-tx& node tx timeout))
-
       c2.impl/PStatus
       (status [_]
         (let [{:keys [latest-completed-tx] :as res} (c2/status node)]

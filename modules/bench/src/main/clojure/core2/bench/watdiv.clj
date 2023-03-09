@@ -2,7 +2,8 @@
   (:require [clojure.java.io :as io]
             [core2.bench :as bench]
             [core2.datalog :as c2]
-            [core2.node :as node])
+            [core2.node :as node]
+            [core2.test-util :as tu])
   (:import java.time.Duration))
 
 (comment
@@ -35,7 +36,7 @@
                                       ;; TODO Core2 doesn't support set vals yet
                                       [:put (->> doc (into {} (remove (comp set? val))))])))))]
     (bench/with-timing :await-tx
-      @(node/await-tx& node tx (Duration/ofHours 5)))
+      (tu/then-await-tx* tx node (Duration/ofHours 5)))
 
     (bench/with-timing :finish-chunk
       (bench/finish-chunk! node))))

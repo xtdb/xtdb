@@ -14,7 +14,7 @@
 (t/deftest test-find-gt-ivan
   (with-open [node (node/start-node {:core2/live-chunk {:rows-per-block 2, :rows-per-chunk 10}})]
     (-> (c2/submit-tx node [[:put {:name "Håkan", :id :hak}]])
-        (tu/then-await-tx node))
+        (tu/then-await-tx* node))
 
     (tu/finish-chunk! node)
 
@@ -23,7 +23,7 @@
 
     (let [tx1 (-> (c2/submit-tx node [[:put {:name "James", :id :jms}]
                                       [:put {:name "Jon", :id :jon}]])
-                  (tu/then-await-tx node))]
+                  (tu/then-await-tx* node))]
 
       (tu/finish-chunk! node)
 
@@ -51,8 +51,7 @@
                                              (expr.meta/->metadata-selector '(> name ?name) '#{name} params))))
                   "only needs to scan chunk 1, block 1"))
 
-          (let [tx2 (-> (c2/submit-tx node [[:put {:name "Jeremy", :id :jdt}]])
-                        (tu/then-await-tx node))]
+          (let [tx2 (c2/submit-tx node [[:put {:name "Jeremy", :id :jdt}]])]
 
             (test-query-ivan #{{:id :jms, :name "James"}
                                {:id :jon, :name "Jon"}}
@@ -68,13 +67,13 @@
     (-> (c2/submit-tx node [[:put {:name "Håkan", :id :hak}]
                             [:put {:name "James", :id :jms}]
                             [:put {:name "Ivan", :id :iva}]])
-        (tu/then-await-tx node))
+        (tu/then-await-tx* node))
 
     (tu/finish-chunk! node)
 
     (-> (c2/submit-tx node [[:put {:name "Håkan", :id :hak}]
                             [:put {:name "James", :id :jms}]])
-        (tu/then-await-tx node))
+        (tu/then-await-tx* node))
 
     (tu/finish-chunk! node)
     (let [^IMetadataManager metadata-mgr (tu/component node ::meta/metadata-manager)]
@@ -103,8 +102,7 @@
 (t/deftest test-temporal-bounds
   (with-open [node (node/start-node {})]
     (let [{tt1 :sys-time} (c2/submit-tx node [[:put {:id :my-doc, :last-updated "tx1"}]])
-          {tt2 :sys-time} (-> (c2/submit-tx node [[:put {:id :my-doc, :last-updated "tx2"}]])
-                              (tu/then-await-tx node))]
+          {tt2 :sys-time} (c2/submit-tx node [[:put {:id :my-doc, :last-updated "tx2"}]])]
       (letfn [(q [& temporal-constraints]
                 (->> (tu/query-ra [:scan 'xt_docs
                                    (into '[last-updated] temporal-constraints)]

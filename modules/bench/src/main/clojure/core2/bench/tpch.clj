@@ -1,23 +1,22 @@
 (ns core2.bench.tpch
   (:require [clojure.tools.logging :as log]
             [core2.bench :as bench]
-            [core2.ingester :as ingest]
-            [core2.node :as node]
-            [core2.test-util :as tu]
             [core2.datasets.tpch :as tpch]
             [core2.datasets.tpch.ra :as tpch-ra]
-            [core2.util :as util])
+            [core2.node :as node]
+            [core2.test-util :as tu])
   (:import core2.node.Node
            java.time.Duration))
 
 (defn ingest-tpch [^Node node {:keys [scale-factor]}]
-  (let [tx (bench/with-timing :submit-docs
-             (tpch/submit-docs! node scale-factor))]
-    (bench/with-timing :await-tx
-      @(node/await-tx& node tx (Duration/ofHours 5)))
+  (bench/with-timing :submit-docs
+    (tpch/submit-docs! node scale-factor))
 
-    (bench/with-timing :finish-chunk
-      (bench/finish-chunk! node))))
+  (bench/with-timing :sync
+    (bench/sync-node node (Duration/ofHours 5)))
+
+  (bench/with-timing :finish-chunk
+    (bench/finish-chunk! node)))
 
 (defn query-tpch [node]
   (tu/with-allocator

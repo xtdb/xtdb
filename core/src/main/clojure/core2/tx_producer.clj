@@ -14,14 +14,11 @@
            java.util.ArrayList
            org.apache.arrow.memory.BufferAllocator
            (org.apache.arrow.vector TimeStampMicroTZVector VectorSchemaRoot)
-           (org.apache.arrow.vector.complex DenseUnionVector)
            (org.apache.arrow.vector.types.pojo ArrowType$Union Schema)
            org.apache.arrow.vector.types.UnionMode))
 
-#_{:clj-kondo/ignore [:unused-binding]}
+#_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface ITxProducer
-  (submitTx
-    ^java.util.concurrent.CompletableFuture #_<TransactionInstant> [^java.util.List txOps])
   (submitTx
     ^java.util.concurrent.CompletableFuture #_<TransactionInstant> [^java.util.List txOps, ^java.util.Map opts]))
 
@@ -302,9 +299,6 @@
 
 (deftype TxProducer [^BufferAllocator allocator, ^Log log, ^ZoneId default-tz]
   ITxProducer
-  (submitTx [this tx-ops]
-    (.submitTx this tx-ops {}))
-
   (submitTx [_ tx-ops opts]
     (let [{:keys [sys-time] :as opts} (-> (into {:default-tz default-tz} opts)
                                           (util/maybe-update :sys-time util/->instant))]

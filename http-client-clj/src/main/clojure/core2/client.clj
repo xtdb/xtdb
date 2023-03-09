@@ -74,7 +74,7 @@
       (.close body)
       (throw e))))
 
-(defrecord Core2Client [base-url]
+(defrecord Core2Client [base-url, !latest-submitted-tx]
   api/PNode
   (open-datalog& [client query params]
     (let [basis-tx (get-in query [:basis :tx])
@@ -112,6 +112,8 @@
                         (apply [_ resp]
                           (:body resp)))))))
 
+  (latest-submitted-tx [_] @!latest-submitted-tx)
+
   api/PSubmitNode
   (submit-tx& [client tx-ops]
     (api/submit-tx& client tx-ops {}))
@@ -125,7 +127,9 @@
 
         (.thenApply (reify Function
                       (apply [_ resp]
-                        (:body resp))))))
+                        (let [tx (:body resp)]
+                          (swap! !latest-submitted-tx api/max-tx tx)
+                          tx))))))
 
   api/PStatus
   (status [client]
@@ -136,4 +140,4 @@
   (close [_]))
 
 (defn start-client ^core2.client.Core2Client [url]
-  (->Core2Client url))
+  (->Core2Client url (atom nil)))

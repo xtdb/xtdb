@@ -1,18 +1,18 @@
 (ns core2.bench
   (:require [clojure.tools.cli :as cli]
             [clojure.tools.logging :as log]
-            core2.indexer
+            [core2.api.impl :as c2.impl]
+            [core2.indexer :as idx]
+            core2.ingester
             [core2.kafka :as k]
-            [core2.log.local-directory-log :as ldl]
             [core2.node :as node]
             [core2.object-store :as os]
             [core2.s3 :as s3]
-            [core2.util :as util]
-            [core2.indexer :as idx])
-  (:import core2.indexer.Indexer
-           core2.node.Node
+            [core2.util :as util])
+  (:import core2.ingester.Ingester
            [java.nio.file Files Path]
            java.nio.file.attribute.FileAttribute
+           java.time.Duration
            java.util.UUID
            software.amazon.awssdk.services.s3.model.GetObjectRequest
            software.amazon.awssdk.services.s3.S3Client))
@@ -57,6 +57,15 @@
                                           :topic-name (str "bench-log-" node-id)}
                                  ::s3/object-store {:bucket "core2-bench"
                                                     :prefix (str "node." node-id)}}))))
+
+(defn sync-node
+  (^core2.api.TransactionInstant [node]
+   (sync-node node nil))
+
+  (^core2.api.TransactionInstant [node ^Duration timeout]
+   @(.awaitTxAsync ^Ingester (util/component node :core2/ingester)
+                   (c2.impl/latest-submitted-tx node)
+                   timeout)))
 
 (defn tmp-file-path ^java.nio.file.Path [prefix suffix]
   (doto (Files/createTempFile prefix suffix (make-array FileAttribute 0))

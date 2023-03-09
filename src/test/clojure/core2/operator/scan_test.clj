@@ -11,10 +11,9 @@
 
 (t/deftest test-simple-scan
   (with-open [node (node/start-node {})]
-    (-> (c2/submit-tx node [[:put {:id :foo, :col1 "foo1"}]
-                            [:put {:id :bar, :col1 "bar1", :col2 "bar2"}]
-                            [:put {:id :foo, :col2 "baz2"}]])
-        (tu/then-await-tx node))
+    (c2/submit-tx node [[:put {:id :foo, :col1 "foo1"}]
+                        [:put {:id :bar, :col1 "bar1", :col2 "bar2"}]
+                        [:put {:id :foo, :col2 "baz2"}]])
 
     (t/is (= [{:id :bar, :col1 "bar1", :col2 "bar2"}]
              (tu/query-ra '[:scan xt_docs [id col1 col2]]
@@ -22,8 +21,7 @@
 
 (t/deftest test-duplicates-in-scan-1
   (with-open [node (node/start-node {})]
-    (-> (c2/submit-tx node [[:put {:id :foo}]])
-        (tu/then-await-tx node))
+    (c2/submit-tx node [[:put {:id :foo}]])
 
     (t/is (= [{:id :foo}]
              (tu/query-ra '[:scan xt_docs [id id]]
@@ -31,10 +29,9 @@
 
 (t/deftest test-scanning-temporal-cols
   (with-open [node (node/start-node {})]
-    (-> (c2/submit-tx node [[:put {:id :doc}
-                             {:app-time-start #inst "2021"
-                              :app-time-end #inst "3000"}]])
-        (tu/then-await-tx node))
+    (c2/submit-tx node [[:put {:id :doc}
+                         {:app-time-start #inst "2021"
+                          :app-time-end #inst "3000"}]])
 
     (let [res (first (tu/query-ra '[:scan
                                     xt_docs
@@ -59,8 +56,7 @@
 
 (t/deftest test-only-scanning-temporal-cols-45
   (with-open [node (node/start-node {})]
-    (let [{tt :sys-time} (-> (c2/submit-tx node [[:put {:id :doc}]])
-                             (tu/then-await-tx node))]
+    (let [{tt :sys-time} (c2/submit-tx node [[:put {:id :doc}]])]
 
       (t/is (= [{:application_time_start (util/->zdt tt)
                  :application_time_end (util/->zdt util/end-of-time)
@@ -81,14 +77,14 @@
                     (.columnTypes)))]
 
         (let [tx (-> (c2/submit-tx node [[:put {:id :doc}]])
-                     (tu/then-await-tx node))]
+                     (tu/then-await-tx* node))]
           (tu/finish-chunk! node)
 
           (t/is (= '{id [:extension-type :c2/clj-keyword :utf8 ""]}
                    (->col-types tx))))
 
         (let [tx (-> (c2/submit-tx node [[:put {:id "foo"}]])
-                     (tu/then-await-tx node))]
+                     (tu/then-await-tx* node))]
 
           (t/is (= '{id [:union #{[:extension-type :c2/clj-keyword :utf8 ""] :utf8}]}
                    (->col-types tx))))))))

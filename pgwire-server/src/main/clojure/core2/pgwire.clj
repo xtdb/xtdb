@@ -15,7 +15,8 @@
             [core2.sql.parser :as parser]
             [core2.sql.plan :as plan]
             [core2.util :as util]
-            [juxt.clojars-mirrors.integrant.core :as ig])
+            [juxt.clojars-mirrors.integrant.core :as ig]
+            [core2.sql :as c2.sql])
   (:import (clojure.lang PersistentQueue)
            (core2 IResultSet)
            (core2.types IntervalDayTime IntervalMonthDayNano IntervalYearMonth)
@@ -1384,6 +1385,7 @@
         (try
           (cmd-send-query-result conn {:query query, :projection projection :result-set rs})
           (catch Throwable e
+            (log/warn e "err")
             (cmd-send-error conn (err-execution-exception e "unexpected server error during query execution")))
           (finally
             ;; try and close the result set (to warn on leak!)
@@ -1395,6 +1397,7 @@
       (try
         @fut
         (catch Throwable ex
+          (log/warn ex "err")
           (cmd-send-error conn (err-execution-exception ex "unexpected server error during query execution"))))
 
       ;; otherwise, come back around and wait again
@@ -1404,29 +1407,18 @@
 (def supported-param-oids
   (set (map (comp oids :pg) type-mappings)))
 
-(defn- submit-tx [node dml-buf {:keys [app-time-as-of-now?]}]
+(defn- submit-tx [{:keys [server conn-state]} dml-buf {:keys [app-time-as-of-now?]}]
   (let [tx-ops (mapv (fn [{:keys [transformed-query params]}]
                        [:sql transformed-query [params]])
-                     dml-buf)
-
-        ;; TODO review err log policy
-        [tx submit-ex] (try
-                         [(c2/submit-tx node tx-ops {:app-time-as-of-now? app-time-as-of-now?})]
-                         (catch Throwable e
-                           (log/debug e "Error on submit-tx")
-                           [nil e]))
-
-        await-ex (when tx
-                   (try
-                     ;; TODO consider blocking policy
-                     @(node/await-tx& node tx)
-                     nil
-                     (catch Throwable e
-                       (log/debug e "Error on await-tx")
-                       e)))]
-    (cond
-      submit-ex (err-execution-exception submit-ex "unexpected error on tx submit (report as a bug)")
-      await-ex (err-execution-exception await-ex "unexpected error on tx await (report as a bug)"))))
+                     dml-buf)]
+    ;; TODO review err log policy
+    (try
+      (let [tx (c2/submit-tx (:node server) tx-ops {:app-time-as-of-now? app-time-as-of-now?})]
+        (swap! conn-state update-in [:session :latest-submitted-tx] c2.impl/max-tx tx)
+        nil)
+      (catch Throwable e
+        (log/debug e "Error on submit-tx")
+        (err-execution-exception e "unexpected error on tx submit (report as a bug)")))))
 
 (defn- ->xtify-param [{:keys [arg-types param-format]}]
   (fn xtify-param [param-idx param]
@@ -1441,9 +1433,8 @@
         (pg-read-binary param)
         (pg-read-text param)))))
 
-(defn- cmd-exec-dml [{:keys [server, conn-state] :as conn} {:keys [dml-type query transformed-query params] :as stmt}]
-  (let [node (:node server)
-        xtify-param (->xtify-param stmt)
+(defn- cmd-exec-dml [{:keys [conn-state] :as conn} {:keys [dml-type query transformed-query params] :as stmt}]
+  (let [xtify-param (->xtify-param stmt)
         xt-params (vec (map-indexed xtify-param params))
 
         {:keys [transaction], {:keys [^Clock clock] :as session} :session} @conn-state
@@ -1458,7 +1449,7 @@
       ;; we buffer the statement in the transaction (to be flushed with COMMIT)
       (swap! conn-state update-in [:transaction :dml-buf] (fnil conj []) stmt)
 
-      (submit-tx node [stmt] {:app-time-as-of-now? app-time-as-of-now?
+      (submit-tx conn [stmt] {:app-time-as-of-now? app-time-as-of-now?
                               :default-tz (.getZone clock)}))
 
     (cmd-write-msg conn msg-command-complete
@@ -1484,11 +1475,13 @@
         xtify-param (->xtify-param stmt)
         xt-params (vec (map-indexed xtify-param params))
 
-        {{:keys [basis]} :transaction, {:keys [^Clock clock] :as session} :session} @conn-state
+        {{:keys [^Clock clock, latest-submitted-tx] :as session} :session
+         {:keys [basis]} :transaction} @conn-state
 
         app-time-as-of-now? (= :as-of-now (get-in session [:parameters :app-time-defaults]))
 
-        query-opts {:basis (into {:current-time (.instant clock)} basis)
+        query-opts {:basis (or basis {:current-time (.instant clock), :after-tx latest-submitted-tx})
+                    :basis-timeout (Duration/ofSeconds 1)
                     :default-tz (.getZone clock)
                     :? xt-params
                     :app-time-as-of-now? app-time-as-of-now?}
@@ -1535,34 +1528,33 @@
   (cmd-send-row-description conn projection))
 
 (defn cmd-begin [{:keys [server conn-state] :as conn} access-mode]
-  (let [{:keys [node]} server]
-    (swap! conn-state
-           (fn [{:keys [session] :as st}]
-             (let [{:keys [^Clock clock]} session]
-               (-> st
-                   (assoc :transaction
-                          {:basis {:tx (:latest-completed-tx (c2/status node))
-                                   :current-time (.instant clock)}
+  (swap! conn-state
+         (fn [{:keys [session] :as st}]
+           (let [{:keys [^Clock clock latest-submitted-tx]} session]
+             (-> st
+                 (assoc :transaction
+                        {:basis {:current-time (.instant clock)
+                                 :tx (c2.impl/max-tx (:latest-completed-tx (c2/status (:node server)))
+                                                     latest-submitted-tx)}
 
-                           :access-mode (or access-mode
-                                            (:access-mode (:next-transaction session))
-                                            (:access-mode session))})
+                         :access-mode (or access-mode
+                                          (:access-mode (:next-transaction session))
+                                          (:access-mode session))})
 
-                   ;; clear :next-transaction variables for now
-                   ;; aware right now this may not be spec compliant depending on interplay between START TRANSACTION and SET TRANSACTION
-                   ;; thus TODO check spec for correct 'clear' behaviour of SET TRANSACTION vars
-                   (update :session dissoc :next-transaction))))))
+                 ;; clear :next-transaction variables for now
+                 ;; aware right now this may not be spec compliant depending on interplay between START TRANSACTION and SET TRANSACTION
+                 ;; thus TODO check spec for correct 'clear' behaviour of SET TRANSACTION vars
+                 (update :session dissoc :next-transaction)))))
 
   (cmd-write-msg conn msg-command-complete {:command "BEGIN"}))
 
-(defn cmd-commit [{:keys [server conn-state] :as conn}]
-  (let [{:keys [node]} server
-        {{:keys [failed err dml-buf]} :transaction, :keys [session]} @conn-state]
+(defn cmd-commit [{:keys [conn-state] :as conn}]
+  (let [{{:keys [failed err dml-buf]} :transaction, :keys [session]} @conn-state]
     (if failed
       ;; TODO better err
       (cmd-send-error conn (or err (err-protocol-violation "transaction failed")))
 
-      (if-let [err (submit-tx node dml-buf {:app-time-as-of-now? (= :as-of-now (get-in session [:parameters :app-time-defaults]))})]
+      (if-let [err (submit-tx conn dml-buf {:app-time-as-of-now? (= :as-of-now (get-in session [:parameters :app-time-defaults]))})]
         (do
           (swap! conn-state update :transaction assoc :failed true, :err err)
           (cmd-send-error conn err))

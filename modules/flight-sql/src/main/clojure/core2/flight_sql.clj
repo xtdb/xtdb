@@ -2,7 +2,7 @@
   (:require [clojure.tools.logging :as log]
             [core2.core.sql :as sql]
             core2.indexer
-            [core2.node :as node]
+            core2.ingester
             [core2.operator :as op]
             [core2.sql :as c2]
             [core2.types :as types]
@@ -12,6 +12,7 @@
             [juxt.clojars-mirrors.integrant.core :as ig])
   (:import (com.google.protobuf Any ByteString)
            core2.indexer.IIndexer
+           core2.ingester.Ingester
            (core2.operator BoundQuery PreparedQuery IRaQuerySource)
            java.lang.AutoCloseable
            (java.util ArrayList HashMap Map)
@@ -52,12 +53,12 @@
 (defn- pack-result ^org.apache.arrow.flight.Result [res]
   (Result. (.toByteArray (Any/pack res))))
 
-(defn then-await-fn ^java.util.concurrent.CompletableFuture [cf {:keys [node]}]
+(defn then-await-fn ^java.util.concurrent.CompletableFuture [cf {:keys [^Ingester ingester]}]
   (-> cf
       (util/then-compose
        (fn [tx]
          ;; HACK til we have the ability to await on the connection
-         (node/await-tx& node tx)))))
+         (.awaitTxAsync ingester tx nil)))))
 
 (doto (def ^:private do-put-update-msg
         (let [^org.apache.arrow.flight.sql.impl.FlightSql$DoPutUpdateResult$Builder
@@ -310,18 +311,19 @@
   (merge {:allocator (ig/ref :core2/allocator)
           :node (ig/ref :core2.node/node)
           :idxer (ig/ref :core2/indexer)
+          :ingester (ig/ref :core2/ingester)
           :ra-src (ig/ref :core2.operator/ra-query-source)
           :wm-src (ig/ref :core2/indexer)
           :host "127.0.0.1"
           :port 9832}
          opts))
 
-(defmethod ig/init-key ::server [_ {:keys [allocator node idxer ra-src wm-src host ^long port]}]
+(defmethod ig/init-key ::server [_ {:keys [allocator node idxer ingester ra-src wm-src host ^long port]}]
   (let [fsql-txs (ConcurrentHashMap.)
         stmts (ConcurrentHashMap.)
         tickets (ConcurrentHashMap.)
         server (doto (-> (FlightServer/builder allocator (Location/forGrpcInsecure host port)
-                                               (->fsql-producer {:allocator allocator, :node node, :idxer idxer, :ra-src ra-src, :wm-src wm-src
+                                               (->fsql-producer {:allocator allocator, :node node, :idxer idxer, :ingester ingester, :ra-src ra-src, :wm-src wm-src
                                                                  :fsql-txs fsql-txs, :stmts stmts, :tickets tickets}))
 
                          #_(doto with-error-logging-middleware)

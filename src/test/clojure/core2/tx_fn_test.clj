@@ -210,13 +210,13 @@
   (t/is (thrown-with-msg?
          Exception #"sleep interrupted"
          @(with-open [node (node/start-node {})]
-            (let [tx1 (c2/submit-tx node [[:put {:id :hello-world
-                                                 :fn #c2/clj-form (fn hello-world [id]
-                                                                    (sleep 200)
-                                                                    [[:put {:id id :foo (str id)}]])}]])
-                  tx2 (c2/submit-tx node [[:call :hello-world 1]])]
-              (Thread/sleep 100)
-              (tu/then-await-tx tx1 node)
-              (c2/q& node (assoc '{:find [id]
-                                   :where [[id :foo]]}
-                                 :basis {:tx tx2})))))))
+            (c2/submit-tx node [[:put {:id :hello-world
+                                       :fn #c2/clj-form (fn hello-world [id]
+                                                          (sleep 200)
+                                                          [[:put {:id id :foo (str id)}]])}]])
+            (c2/submit-tx node [[:call :hello-world 1]])
+
+            (Thread/sleep 100)
+
+            (c2/q& node '{:find [id]
+                          :where [[id :foo]]})))))

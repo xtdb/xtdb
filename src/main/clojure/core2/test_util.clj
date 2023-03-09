@@ -4,6 +4,7 @@
             [core2.api.impl :as api]
             [core2.client :as client]
             [core2.indexer :as idx]
+            core2.ingester
             [core2.logical-plan :as lp]
             [core2.node :as node]
             core2.object-store
@@ -17,6 +18,7 @@
             [time-literals.read-write :as time-literals])
   (:import (core2 ICursor InstantSource)
            core2.indexer.IIndexer
+           core2.ingester.Ingester
            (core2.operator IRaQuerySource PreparedQuery)
            (core2.vector IIndirectRelation IIndirectVector)
            java.net.ServerSocket
@@ -76,12 +78,12 @@
   ([k] (component *node* k))
   ([node k] (util/component node k)))
 
-(defn then-await-tx
+(defn then-await-tx*
   (^core2.api.TransactionInstant [tx node]
-   @(node/await-tx& node tx))
+   (then-await-tx* tx node nil))
 
   (^core2.api.TransactionInstant [tx node ^Duration timeout]
-   @(node/await-tx& node tx timeout)))
+   @(.awaitTxAsync ^Ingester (util/component node :core2/ingester) tx timeout)))
 
 (defn latest-completed-tx ^core2.api.TransactionInstant [node]
   (:latest-completed-tx (api/status node)))
@@ -177,7 +179,11 @@
 (defn query-ra
   ([query] (query-ra query {}))
   ([query {:keys [node params preserve-blocks? with-col-types?] :as query-opts}]
-   (let [^IIndexer indexer (some-> node (util/component :core2/indexer))]
+   (let [^IIndexer indexer (util/component node :core2/indexer)
+         query-opts (cond-> query-opts
+                      node (-> (update :basis api/after-latest-submitted-tx node)
+                               (doto (-> :basis :after-tx (then-await-tx* node)))))]
+
      (with-open [^IIndirectRelation
                  params-rel (if params
                               (vw/open-params *allocator* params)
@@ -188,7 +194,6 @@
                                  (op/prepare-ra query))
              bq (.bind pq indexer
                        (-> (select-keys query-opts [:basis :table-args :default-tz])
-                           (update-in [:basis :tx] (fnil identity (some-> indexer .latestCompletedTx)))
                            (assoc :params params-rel)))]
          (with-open [res (.openCursor bq)]
            (let [rows (-> (<-cursor res)

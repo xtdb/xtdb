@@ -38,7 +38,7 @@
                     query tpch.ra/q1-pricing-summary-report]
                 (letfn [(test-node [k ^core2.node.Node node]
                           (log/info "awaiting" k "node")
-                          @(node/await-tx& node last-tx (Duration/ofHours 1))
+                          (tu/then-await-tx* last-tx node (Duration/ofHours 1))
                           (log/info "rows:"
                                     (count (tu/query-ra query {:node node, :params (::tpch/params (meta query))}))))]
                   (doseq [[k node] {:primary primary-node

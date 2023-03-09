@@ -184,9 +184,8 @@
       (into {:_table table} (zipmap (map keyword columns) row)))))
 
 (defn- insert-statement [node insert-statement]
-  (-> (c2.d/submit-tx node (vec (for [doc (insert->docs node insert-statement)]
-                                  [:put (merge {:id (UUID/randomUUID)} doc)])))
-      (tu/then-await-tx node))
+  (c2.d/submit-tx node (vec (for [doc (insert->docs node insert-statement)]
+                              [:put (merge {:id (UUID/randomUUID)} doc)])))
   node)
 
 (defn skip-statement? [^String x]
@@ -199,15 +198,14 @@
 
 (defn- execute-sql-statement [node sql-statement variables opts]
    (binding [r/*memo* (HashMap.)]
-     (-> (c2.sql/submit-tx node
-                           [[:sql sql-statement]]
-                           (cond-> opts
-                             (= (get variables "APP_TIME_DEFAULTS") "AS_OF_NOW")
-                             (assoc :app-time-as-of-now? true)
+     (c2.sql/submit-tx node
+                       [[:sql sql-statement]]
+                       (cond-> opts
+                         (= (get variables "APP_TIME_DEFAULTS") "AS_OF_NOW")
+                         (assoc :app-time-as-of-now? true)
 
-                             (get variables "CURRENT_TIMESTAMP")
-                             (assoc-in [:basis :current-time] (Instant/parse (get variables "CURRENT_TIMESTAMP")))))
-        (tu/then-await-tx node))
+                         (get variables "CURRENT_TIMESTAMP")
+                         (assoc-in [:basis :current-time] (Instant/parse (get variables "CURRENT_TIMESTAMP")))))
     node))
 
 (defn- execute-sql-query [node sql-statement variables opts]

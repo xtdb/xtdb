@@ -606,7 +606,7 @@
   (let [node (:sut worker)
         tx (c2/submit-tx node [[:put {:id "auctionmarkd-sync"}]])]
     (log/info "Syncing node!")
-    (tu/then-await-tx tx node (Duration/ofSeconds 30))
+    (tu/then-await-tx* tx node (Duration/ofSeconds 30))
     (log/info "Finished syncing node!")))
 
 (defn benchmark [{:keys [seed,

@@ -9,7 +9,7 @@
 
 (t/deftest test-row-id->cols
   (-> (tpch/submit-docs! tu/*node* 0.001)
-      (tu/then-await-tx tu/*node*))
+      (tu/then-await-tx* tu/*node*))
 
   (tu/finish-chunk! tu/*node*)
 

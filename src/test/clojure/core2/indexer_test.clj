@@ -101,7 +101,7 @@
                          (c2.d/submit-tx node tx-ops)))))
 
         (t/is (= last-tx-key
-                 (tu/then-await-tx last-tx-key node (Duration/ofSeconds 2))))
+                 (tu/then-await-tx* last-tx-key node (Duration/ofSeconds 2))))
 
         (t/testing "watermark"
           (with-open [^IWatermark watermark (.openWatermark wm-src last-tx-key)]
@@ -190,9 +190,8 @@
 
 (t/deftest temporal-watermark-is-immutable-567
   (with-open [node (node/start-node {})]
-    (let [{tt :sys-time, :as tx} (-> (c2.d/submit-tx node [[:put {:id :foo, :version 0}]]
-                                                     {:app-time-as-of-now? true})
-                                     (tu/then-await-tx node))]
+    (let [{tt :sys-time, :as tx} (c2.d/submit-tx node [[:put {:id :foo, :version 0}]]
+                                                 {:app-time-as-of-now? true})]
       (t/is (= [{:id :foo, :version 0,
                  :application_time_start (util/->zdt tt)
                  :application_time_end (util/->zdt util/end-of-time)
@@ -203,9 +202,8 @@
                                              system_time_start, system_time_end]]
                             {:node node})))
 
-      (let [{tt2 :sys-time} (-> (c2.d/submit-tx node [[:put {:id :foo, :version 1}]]
-                                                {:app-time-as-of-now? true})
-                                (tu/then-await-tx node))]
+      (let [{tt2 :sys-time} (c2.d/submit-tx node [[:put {:id :foo, :version 1}]]
+                                            {:app-time-as-of-now? true})]
         (t/is (= [{:id :foo, :version 0,
                    :application_time_start (util/->zdt tt)
                    :application_time_end (util/->zdt util/end-of-time)
@@ -254,7 +252,7 @@
 
     (with-open [node (tu/->local-node {:node-dir node-dir})]
       (-> (c2.d/submit-tx node tx-ops)
-          (tu/then-await-tx node (Duration/ofMillis 2000)))
+          (tu/then-await-tx* node (Duration/ofMillis 2000)))
 
       (tu/finish-chunk! node)
 
@@ -276,11 +274,10 @@
     (util/delete-dir node-dir)
 
     (with-open [node (tu/->local-node {:node-dir node-dir, :rows-per-block 3})]
-      (-> (c2.d/submit-tx node tx0)
-          (tu/then-await-tx node (Duration/ofMillis 200)))
+      (c2.d/submit-tx node tx0)
 
       (-> (c2.d/submit-tx node tx1)
-          (tu/then-await-tx node (Duration/ofMillis 200)))
+          (tu/then-await-tx* node (Duration/ofMillis 200)))
 
       (tu/finish-chunk! node)
 
@@ -301,12 +298,11 @@
 
 (t/deftest round-trips-nils
   (with-open [node (node/start-node {})]
-    (-> (c2.d/submit-tx node [[:put {:id "nil-bar"
-                                     :foo "foo"
-                                     :bar nil}]
-                              [:put {:id "no-bar"
-                                     :foo "foo"}]])
-        (tu/then-await-tx node (Duration/ofMillis 2000)))
+    (c2.d/submit-tx node [[:put {:id "nil-bar"
+                                 :foo "foo"
+                                 :bar nil}]
+                          [:put {:id "no-bar"
+                                 :foo "foo"}]])
     (t/is (= [{:id "nil-bar", :foo "foo", :bar nil}]
              (c2.d/q node '{:find [id foo bar]
                             :where [[e :id id]
@@ -320,7 +316,7 @@
 
     (with-open [node (tu/->local-node {:node-dir node-dir})]
       (-> (c2.d/submit-tx node [[:put {:id :foo, :uuid uuid}]])
-          (tu/then-await-tx node (Duration/ofMillis 2000)))
+          (tu/then-await-tx* node (Duration/ofMillis 2000)))
 
       (tu/finish-chunk! node)
 
@@ -338,19 +334,17 @@
     (util/delete-dir node-dir)
 
     (with-open [node (tu/->local-node {:node-dir node-dir})]
-      (-> (c2.d/submit-tx node [[:put {:id "foo"}]
-                                [:put {:id "bar"}]])
-          (tu/then-await-tx node))
+      (c2.d/submit-tx node [[:put {:id "foo"}]
+                            [:put {:id "bar"}]])
 
       ;; aborted tx shows up in log
-      (-> (c2.d/submit-tx node [[:sql "INSERT INTO foo (id, application_time_start, application_time_end) VALUES (1, DATE '2020-01-01', DATE '2019-01-01')"]])
-          (tu/then-await-tx node))
+      (c2.d/submit-tx node [[:sql "INSERT INTO foo (id, application_time_start, application_time_end) VALUES (1, DATE '2020-01-01', DATE '2019-01-01')"]])
 
       (-> (c2.d/submit-tx node [[:delete "xt_docs" "foo" {:app-time-start #inst "2020-04-01"}]
                                 [:put {:id "bar", :month "april"},
                                  {:app-time-start #inst "2020-04-01"
                                   :app-time-end #inst "2020-05-01"}]])
-          (tu/then-await-tx node))
+          (tu/then-await-tx* node))
 
       (tu/finish-chunk! node)
 
@@ -370,12 +364,12 @@
                          (c2.d/submit-tx node tx-ops)))))
 
         (t/is (= last-tx-key
-                 (tu/then-await-tx last-tx-key node (Duration/ofSeconds 2))))
+                 (tu/then-await-tx* last-tx-key node (Duration/ofSeconds 2))))
         (t/is (= last-tx-key (tu/latest-completed-tx node)))
 
         (with-open [node (tu/->local-node {:node-dir node-dir})]
           (t/is (= last-tx-key
-                   (tu/then-await-tx last-tx-key node (Duration/ofSeconds 2))))
+                   (tu/then-await-tx* last-tx-key node (Duration/ofSeconds 2))))
 
           (t/is (= last-tx-key (tu/latest-completed-tx node))))
 
@@ -406,7 +400,7 @@
                            nil
                            (partition-all 100 tx-ops))]
 
-          (t/is (= last-tx-key (tu/then-await-tx last-tx-key node (Duration/ofSeconds 15))))
+          (t/is (= last-tx-key (tu/then-await-tx* last-tx-key node (Duration/ofSeconds 15))))
           (t/is (= last-tx-key (tu/latest-completed-tx node)))
           (tu/finish-chunk! node)
 
@@ -494,7 +488,7 @@
 
           (doseq [^Node node (shuffle (take 6 (cycle [node-1 node-2 node-3])))
                   :let [os ^ObjectStore (util/component node ::os/file-system-object-store)]]
-            (t/is (= last-tx-key (tu/then-await-tx last-tx-key node (Duration/ofSeconds 60))))
+            (t/is (= last-tx-key (tu/then-await-tx* last-tx-key node (Duration/ofSeconds 60))))
             (t/is (= last-tx-key (tu/latest-completed-tx node)))
 
             (Thread/sleep 1000) ;; TODO for now
@@ -538,7 +532,7 @@
                   ^IMetadataManager mm (util/component node ::meta/metadata-manager)]
               (t/is (= first-half-tx-key
                        (-> first-half-tx-key
-                           (tu/then-await-tx node (Duration/ofSeconds 10)))))
+                           (tu/then-await-tx* node (Duration/ofSeconds 10)))))
               (t/is (= first-half-tx-key (tu/latest-completed-tx node)))
 
               (let [{:keys [^TransactionInstant latest-completed-tx, latest-row-id]}
@@ -576,7 +570,7 @@
 
                     (t/is (<= (:tx-id first-half-tx-key)
                               (:tx-id (-> first-half-tx-key
-                                          (tu/then-await-tx node (Duration/ofSeconds 10))))
+                                          (tu/then-await-tx* node (Duration/ofSeconds 10))))
                               (:tx-id second-half-tx-key)))
 
                     (t/is (>= (count (.id->internal-id iid-mgr)) 2000))
@@ -585,7 +579,7 @@
 
                   (doseq [^Node node [new-node node]]
                     (t/is (= second-half-tx-key (-> second-half-tx-key
-                                                    (tu/then-await-tx node (Duration/ofSeconds 15)))))
+                                                    (tu/then-await-tx* node (Duration/ofSeconds 15)))))
                     (t/is (= second-half-tx-key (tu/latest-completed-tx node))))
 
                   (Thread/sleep 1000) ;; TODO for now
@@ -616,7 +610,7 @@
       (let [^IMetadataManager mm1 (tu/component node1 ::meta/metadata-manager)]
 
         (-> (c2.d/submit-tx node1 [[:put {:id "foo"}]])
-            (tu/then-await-tx node1 (Duration/ofSeconds 1)))
+            (tu/then-await-tx* node1 (Duration/ofSeconds 1)))
 
         (tu/finish-chunk! node1)
 
@@ -625,7 +619,7 @@
         (let [tx2 (c2.d/submit-tx node1 [[:put {:id :bar}]
                                          [:put {:id #uuid "8b190984-2196-4144-9fa7-245eb9a82da8"}]
                                          [:put {:id #c2/clj-form :foo}]])]
-          (tu/then-await-tx tx2 node1 (Duration/ofMillis 200))
+          (tu/then-await-tx* tx2 node1 (Duration/ofMillis 200))
 
           (tu/finish-chunk! node1)
 
@@ -637,7 +631,7 @@
 
           (with-open [node2 (tu/->local-node (assoc node-opts :buffers-dir "buffers-1"))]
             (let [^IMetadataManager mm2 (tu/component node2 ::meta/metadata-manager)]
-              (tu/then-await-tx tx2 node2 (Duration/ofMillis 200))
+              (tu/then-await-tx* tx2 node2 (Duration/ofMillis 200))
 
               (t/is (= [:union #{:utf8
                                  [:extension-type :c2/clj-keyword :utf8 ""]
@@ -656,7 +650,7 @@
       (with-open [node (node/start-node {})]
         (t/is (thrown-with-msg? Exception #"oh no!"
                                 (-> (c2.d/submit-tx node [[:put {:id "foo", :count 42}]])
-                                    (tu/then-await-tx node (Duration/ofSeconds 1)))))))))
+                                    (tu/then-await-tx* node (Duration/ofSeconds 1)))))))))
 
 (t/deftest test-indexes-sql-insert
   (let [node-dir (util/->path "target/can-index-sql-insert")]
@@ -674,7 +668,7 @@
                                               [1, 1, "world", 3.3]]]])))
 
           (t/is (= last-tx-key
-                   (tu/then-await-tx last-tx-key node (Duration/ofSeconds 1)))))
+                   (tu/then-await-tx* last-tx-key node (Duration/ofSeconds 1)))))
 
         (tu/finish-chunk! node)
 
@@ -684,7 +678,7 @@
 (t/deftest test-skips-irrelevant-live-blocks-632
   (with-open [node (node/start-node {:core2/live-chunk {:rows-per-block 2, :rows-per-chunk 10}})]
     (-> (c2.d/submit-tx node [[:put {:name "Håkan", :id :hak}]])
-        (tu/then-await-tx node))
+        (tu/then-await-tx* node))
 
     (tu/finish-chunk! node)
 
@@ -693,7 +687,7 @@
 
     (-> (c2.d/submit-tx node [[:put {:name "James", :id :jms}]
                               [:put {:name "Jon", :id :jon}]])
-        (tu/then-await-tx node))
+        (tu/then-await-tx* node))
 
     (let [^IMetadataManager metadata-mgr (tu/component node ::meta/metadata-manager)
           ^IWatermarkSource wm-src (tu/component node :core2/indexer)]
@@ -729,7 +723,7 @@
                     "only second block, param selector")
 
               (let [next-tx (-> (c2.d/submit-tx node [[:put {:name "Jeremy", :id :jdt}]])
-                                (tu/then-await-tx node))]
+                                (tu/then-await-tx* node))]
 
                 (with-open [wm2 (.openWatermark wm-src next-tx)]
                   (t/is (= [{"name" [{:_row-id 3, :name "James"} {:_row-id 4, :name "Jon"}]}]

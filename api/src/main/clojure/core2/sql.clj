@@ -5,18 +5,23 @@
            java.util.function.Function))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
-(defn q& ^java.util.concurrent.CompletableFuture [node q opts]
-  (-> (impl/open-sql& node q opts)
-      (.thenApply
-       (reify Function
-         (apply [_ res]
-           (with-open [^IResultSet res res]
-             (vec (iterator-seq res))))))))
+(defn q& ^java.util.concurrent.CompletableFuture
+  ([node q] (q& node q {}))
+
+  ([node q opts]
+   (-> (impl/open-sql& node q (-> opts (update :basis impl/after-latest-submitted-tx node)))
+       (.thenApply
+        (reify Function
+          (apply [_ res]
+            (with-open [^IResultSet res res]
+              (vec (iterator-seq res)))))))))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
-(defn q [node q opts]
-  (-> @(q& node q opts)
-      (impl/rethrowing-cause)))
+(defn q
+  ([node sql] (q node sql {}))
+  ([node sql opts]
+   (-> @(q& node sql opts)
+       (impl/rethrowing-cause))))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (defn submit-tx&

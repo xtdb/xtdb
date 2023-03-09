@@ -6,7 +6,7 @@
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (defn q& ^java.util.concurrent.CompletableFuture [node q & args]
-  (-> (impl/open-datalog& node q args)
+  (-> (impl/open-datalog& node (-> q (update :basis impl/after-latest-submitted-tx node)) args)
       (.thenApply
        (reify Function
          (apply [_ res]
