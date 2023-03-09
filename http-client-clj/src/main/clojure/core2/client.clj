@@ -5,7 +5,8 @@
             [core2.transit :as c2.transit]
             [juxt.clojars-mirrors.hato.v0v8v2.hato.client :as hato]
             [juxt.clojars-mirrors.hato.v0v8v2.hato.middleware :as hato.middleware]
-            [juxt.clojars-mirrors.reitit-core.v0v5v15.reitit.core :as r])
+            [juxt.clojars-mirrors.reitit-core.v0v5v15.reitit.core :as r]
+            [core2.api.impl :as impl])
   (:import core2.IResultSet
            [java.io EOFException InputStream]
            java.lang.AutoCloseable
@@ -87,7 +88,8 @@
                             (request client :post :datalog-query
                                      {:content-type :transit+json
                                       :form-params {:query (-> query
-                                                               (assoc-in [:basis :tx] basis-tx))
+                                                               (assoc-in [:basis :tx] basis-tx)
+                                                               (update :basis impl/after-latest-submitted-tx client))
                                                     :params params}
                                       :as ::transit+json->resultset}))))
           (.thenApply (reify Function
@@ -104,9 +106,10 @@
                           (apply [_ basis-tx]
                             (request client :post :sql-query
                                      {:content-type :transit+json
-                                      :form-params (into (cond-> {:query query}
-                                                           basis-tx (assoc-in [:basis :tx] basis-tx))
-                                                         (dissoc query-opts :basis))
+                                      :form-params (-> query-opts
+                                                       (assoc :query query)
+                                                       (assoc-in [:basis :tx] basis-tx)
+                                                       (update :basis impl/after-latest-submitted-tx client))
                                       :as ::transit+json->resultset}))))
           (.thenApply (reify Function
                         (apply [_ resp]

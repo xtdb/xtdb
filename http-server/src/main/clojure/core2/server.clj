@@ -89,8 +89,9 @@
               (transit/write writer el))))))))
 
 (s/def ::current-time inst?)
-(s/def ::tx #(instance? TransactionInstant %))
-(s/def ::basis (s/keys :opt-un [::current-time ::tx]))
+(s/def ::tx (s/nilable #(instance? TransactionInstant %)))
+(s/def ::after-tx (s/nilable #(instance? TransactionInstant %)))
+(s/def ::basis (s/keys :opt-un [::current-time ::tx ::after-tx]))
 
 (s/def ::basis-timeout
   (st/spec (s/nilable #(instance? Duration %))
@@ -177,7 +178,7 @@
                                                    ::r.coercion/request-coercion handle-request-coercion-error
                                                    :muuntaja/decode handle-muuntaja-decode-error
                                                    ::ri.exception/wrap (fn [handler e req]
-                                                                         #_(log/warn e "response error")
+                                                                         (log/warn e "response error")
                                                                          (handler e req))}))]
 
                                       [ri.muuntaja/format-request-interceptor]
