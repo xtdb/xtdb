@@ -132,7 +132,6 @@
                           :core2.metadata/metadata-manager {}
                           :core2.temporal/temporal-manager {}
                           :core2.buffer-pool/buffer-pool {}
-                          :core2.watermark/watermark-manager {}
                           :core2.operator.scan/scan-emitter {}
                           :core2.operator/ra-query-source {}
                           ::txp/tx-producer {}}

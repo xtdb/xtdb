@@ -30,7 +30,7 @@
            core2.operator.IRaQuerySource
            (core2.temporal ITemporalManager ITemporalTxIndexer)
            (core2.vector IIndirectRelation IIndirectVector IVectorWriter)
-           (core2.watermark ISharedWatermark IWatermarkManager IWatermarkSource)
+           (core2.watermark IWatermark IWatermarkSource)
            (java.io ByteArrayInputStream Closeable)
            java.lang.AutoCloseable
            (java.time Instant ZoneId)
@@ -484,13 +484,12 @@
                   ^ITemporalManager temporal-mgr
                   ^IInternalIdManager iid-mgr
                   ^IRaQuerySource ra-src
-                  ^IWatermarkManager wm-mgr
                   ^ILogIndexer log-indexer
                   ^ILiveChunk live-chunk
 
                   ^:volatile-mutable ^TransactionInstant latest-completed-tx
 
-                  ^:volatile-mutable ^ISharedWatermark shared-wm
+                  ^:volatile-mutable ^IWatermark shared-wm
                   ^StampedLock wm-lock]
 
   IIndexer
@@ -504,7 +503,7 @@
 
             wm-src (reify IWatermarkSource
                      (openWatermark [_ _tx]
-                       (wm/->Watermark nil (.openWatermark live-chunk-tx) temporal-idxer false)))
+                       (wm/->wm nil (.openWatermark live-chunk-tx) temporal-idxer false)))
 
             tx-opts {:basis {:tx tx-key, :current-time sys-time}
                      :default-tz (ZoneId/of (str (-> (.getVector tx-root "default-tz")
@@ -578,12 +577,12 @@
   IWatermarkSource
   (openWatermark [this tx-key]
     (letfn [(maybe-existing-wm []
-              (when-let [^ISharedWatermark wm (.shared-wm this)]
+              (when-let [^IWatermark wm (.shared-wm this)]
                 (let [wm-tx-key (.txBasis wm)]
                   (when (or (nil? tx-key)
                             (and wm-tx-key
                                  (<= (.tx-id tx-key) (.tx-id wm-tx-key))))
-                    (.retain wm)))))]
+                    (doto wm .retain)))))]
       (or (let [wm-lock-stamp (.readLock wm-lock)]
             (try
               (maybe-existing-wm)
@@ -593,18 +592,13 @@
           (let [wm-lock-stamp (.writeLock wm-lock)]
             (try
               (or (maybe-existing-wm)
-                  (let [^ISharedWatermark old-wm (.shared-wm this)]
+                  (let [^IWatermark old-wm (.shared-wm this)]
                     (try
-                      (let [shared-wm (.wrapWatermark wm-mgr
-                                                      (wm/->Watermark tx-key
-                                                                      (.openWatermark live-chunk)
-                                                                      (.getTemporalWatermark temporal-mgr)
-                                                                      true))]
+                      (let [^IWatermark shared-wm (wm/->wm tx-key (.openWatermark live-chunk) (.getTemporalWatermark temporal-mgr) true)]
                         (set! (.shared-wm this) shared-wm)
-
-                        (.retain shared-wm))
+                        (doto shared-wm .retain))
                       (finally
-                        (some-> old-wm .release)))))
+                        (some-> old-wm .close)))))
 
               (finally
                 (.unlock wm-lock wm-lock-stamp)))))))
@@ -619,9 +613,9 @@
 
       (let [wm-lock-stamp (.writeLock wm-lock)]
         (try
-          (when-let [^ISharedWatermark shared-wm (.shared-wm this)]
+          (when-let [^IWatermark shared-wm (.shared-wm this)]
             (set! (.shared-wm this) nil)
-            (.release shared-wm))
+            (.close shared-wm))
 
           (.nextBlock live-chunk)
 
@@ -640,9 +634,9 @@
 
     (let [wm-lock-stamp (.writeLock wm-lock)]
       (try
-        (when-let [^ISharedWatermark shared-wm (.shared-wm this)]
+        (when-let [^IWatermark shared-wm (.shared-wm this)]
           (set! (.shared-wm this) nil)
-          (.release shared-wm))
+          (.close shared-wm))
 
         (.nextChunk live-chunk)
 
@@ -656,14 +650,13 @@
   Closeable
   (close [_]
     (.close log-indexer)
-    (some-> shared-wm .release)))
+    (some-> shared-wm .close)))
 
 (defmethod ig/prep-key :core2/indexer [_ opts]
   (merge {:allocator (ig/ref :core2/allocator)
           :object-store (ig/ref :core2/object-store)
           :metadata-mgr (ig/ref ::meta/metadata-manager)
           :temporal-mgr (ig/ref ::temporal/temporal-manager)
-          :watermark-mgr (ig/ref ::wm/watermark-manager)
           :internal-id-mgr (ig/ref :core2.indexer/internal-id-manager)
           :live-chunk (ig/ref :core2/live-chunk)
           :buffer-pool (ig/ref ::bp/buffer-pool)
@@ -672,13 +665,13 @@
          opts))
 
 (defmethod ig/init-key :core2/indexer
-  [_ {:keys [allocator object-store metadata-mgr buffer-pool ^ITemporalManager temporal-mgr, ^IWatermarkManager watermark-mgr, ra-src
+  [_ {:keys [allocator object-store metadata-mgr buffer-pool ^ITemporalManager temporal-mgr, ra-src
              internal-id-mgr log-indexer live-chunk]}]
 
   (let [{:keys [latest-completed-tx]} (meta/latest-chunk-metadata metadata-mgr)]
 
     (Indexer. allocator object-store metadata-mgr buffer-pool temporal-mgr internal-id-mgr
-              ra-src watermark-mgr log-indexer live-chunk
+              ra-src log-indexer live-chunk
 
               latest-completed-tx
 

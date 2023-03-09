@@ -1,5 +1,6 @@
 (ns core2.operator
   (:require [clojure.spec.alpha :as s]
+            [clojure.tools.logging :as log]
             [core2.error :as err]
             [core2.expression :as expr]
             core2.expression.temporal
@@ -24,11 +25,11 @@
             [core2.vector.indirect :as iv]
             [juxt.clojars-mirrors.integrant.core :as ig])
   (:import clojure.lang.MapEntry
-           (core2 ICursor IResultCursor IResultSet)
+           (core2 ICursor IResultCursor IResultSet RefCounter)
            core2.metadata.IMetadataManager
            core2.operator.scan.IScanEmitter
            java.lang.AutoCloseable
-           java.time.Clock
+           (java.time Clock Duration)
            (java.util Iterator)
            (java.util.concurrent ConcurrentHashMap)
            (java.util.function Consumer Function)
@@ -60,9 +61,12 @@
           (types/rows->col-types rows)))
        (into {})))
 
-(defn- wrap-cursor ^core2.ICursor [^ICursor cursor, ^AutoCloseable wm, ^BufferAllocator al, ^Clock clock]
+(defn- wrap-cursor ^core2.ICursor [^ICursor cursor, ^AutoCloseable wm, ^BufferAllocator al, ^Clock clock, ^RefCounter ref-ctr]
   (reify ICursor
     (tryAdvance [_ c]
+      (when (.isClosing ref-ctr)
+        (throw (InterruptedException.)))
+
       (binding [expr/*clock* clock]
         (.tryAdvance cursor c)))
 
@@ -74,15 +78,16 @@
     (trySplit [_] (.trySplit cursor))
 
     (close [_]
+      (.release ref-ctr)
       (util/try-close cursor)
       (util/try-close wm)
       (util/try-close al))))
 
 (defn prepare-ra ^core2.operator.PreparedQuery
   ;; this one used from zero-dep tests
-  (^core2.operator.PreparedQuery [query] (prepare-ra query nil nil))
+  (^core2.operator.PreparedQuery [query] (prepare-ra query {:ref-ctr (RefCounter.)}))
 
-  (^core2.operator.PreparedQuery [query, ^IScanEmitter scan-emitter, ^IMetadataManager metadata-mgr]
+  (^core2.operator.PreparedQuery [query, {:keys [^IScanEmitter scan-emitter, ^IMetadataManager metadata-mgr, ^RefCounter ref-ctr]}]
    (let [conformed-query (s/conform ::lp/logical-plan query)]
      (when (s/invalid? conformed-query)
        (throw (err/illegal-arg :malformed-query
@@ -118,6 +123,7 @@
                (columnTypes [_] col-types)
 
                (openCursor [_]
+                 (.acquire ref-ctr)
                  (let [allocator (RootAllocator.)
                        wm (some-> wm-src (.openWatermark tx))]
                    (try
@@ -125,9 +131,10 @@
                        (-> (->cursor {:allocator allocator, :watermark wm
                                       :clock clock, :basis basis
                                       :params params, :table-args table-args})
-                           (wrap-cursor allocator wm clock)))
+                           (wrap-cursor allocator wm clock ref-ctr)))
 
                      (catch Throwable t
+                       (.release ref-ctr)
                        (util/try-close wm)
                        (util/try-close allocator)
                        (throw t)))))
@@ -140,14 +147,22 @@
          {:scan-emitter (ig/ref ::scan/scan-emitter)
           :metadata-mgr (ig/ref ::meta/metadata-manager)}))
 
-(defmethod ig/init-key ::ra-query-source [_ {:keys [scan-emitter metadata-mgr]}]
-  (let [cache (ConcurrentHashMap.)]
-    (reify IRaQuerySource
+(defmethod ig/init-key ::ra-query-source [_ deps]
+  (let [cache (ConcurrentHashMap.)
+        ref-ctr (RefCounter.)
+        deps (-> deps (assoc :ref-ctr ref-ctr))]
+    (reify
+      IRaQuerySource
       (prepareRaQuery [_ query]
         (.computeIfAbsent cache query
                           (reify Function
                             (apply [_ _]
-                              (prepare-ra query scan-emitter metadata-mgr))))))))
+                              (prepare-ra query deps)))))
+
+      AutoCloseable
+      (close [_]
+        (when-not (.tryClose ref-ctr (Duration/ofMinutes 1))
+          (log/warn "Failed to shut down after 60s due to outstanding queries"))))))
 
 (deftype CursorResultSet [^IResultCursor cursor
                           ^AutoCloseable params
