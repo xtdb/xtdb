@@ -17,14 +17,15 @@
 
 (set! *unchecked-math* :warn-on-boxed)
 
-#_{:clj-kondo/ignore [:unused-binding]}
+#_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface IKdTreePointAccess
   (^java.util.List getPoint [^long idx])
   (^longs getArrayPoint [^long idx])
   (^long getCoordinate [^long idx ^int axis])
   (^void setCoordinate [^long idx ^int axis ^long value])
   (^void swapPoint [^long from-idx ^long to-idx])
-  (^boolean isDeleted [^long idx])
+  (^boolean isDeleted [^long idx]
+   "entry is deleted from the kd-tree, not that the entity/row was deleted")
   (^boolean isInRange [^long idx ^longs min-range ^longs max-range ^int mask]))
 
 ;; NOTE: 'retain' is a bit of a misnomer here (compared to its usage within Arrow) -
