@@ -17,7 +17,6 @@
             [time-literals.read-write :as time-literals])
   (:import (core2 ICursor InstantSource)
            core2.indexer.IIndexer
-           core2.node.Node
            (core2.operator IRaQuerySource PreparedQuery)
            (core2.vector IIndirectRelation IIndirectVector)
            java.net.ServerSocket

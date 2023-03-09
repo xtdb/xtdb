@@ -11,13 +11,13 @@
 (ctn/disable-reload!)
 (util/install-uncaught-exception-handler!)
 
-(apply ctn/set-refresh-dirs (cons (io/file "src/test/clojure")
-                                  (for [^File dir (concat (.listFiles (io/file "."))
-                                                          (.listFiles (io/file "modules")))
-                                        :when (and (.isDirectory dir)
-                                                   (.exists (io/file dir "deps.edn")))
-                                        sub-dir #{"src/main/clojure" "src/test/clojure"}]
-                                    (io/file dir sub-dir))))
+(apply ctn/set-refresh-dirs (for [^File dir (concat [(io/file ".")]
+                                                    (.listFiles (io/file "."))
+                                                    (.listFiles (io/file "modules")))
+                                  :when (and (.isDirectory dir)
+                                             (.exists (io/file dir "deps.edn")))
+                                  sub-dir #{"src/main/clojure" "src/test/clojure"}]
+                              (io/file dir sub-dir)))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (defn reset []

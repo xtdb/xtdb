@@ -178,9 +178,6 @@ dependencies {
     testImplementation("cheshire", "cheshire", "5.11.0")
     testImplementation("org.xerial", "sqlite-jdbc", "3.39.3.0")
     testImplementation("org.clojure", "test.check", "1.1.1")
-
-    // brings in vendored SLF4J (but doesn't change the class names). naughty.
-    // testImplementation("org.apache.arrow", "flight-sql-jdbc-driver", "11.0.0")
 }
 
 fun createSltTask(
