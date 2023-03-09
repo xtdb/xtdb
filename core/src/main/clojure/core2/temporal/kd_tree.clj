@@ -28,9 +28,6 @@
    "entry is deleted from the kd-tree, not that the entity/row was deleted")
   (^boolean isInRange [^long idx ^longs min-range ^longs max-range ^int mask]))
 
-;; NOTE: 'retain' is a bit of a misnomer here (compared to its usage within Arrow) -
-;; all of the implementations seem to take a defensive copy, rather than just incrementing the ref-counter.
-
 (defprotocol KdTree
   (kd-tree-insert [_ allocator point])
   (kd-tree-delete [_ allocator point])
