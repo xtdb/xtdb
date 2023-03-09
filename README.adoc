@@ -1,64 +1,11 @@
-= XTDB '`Core2`' Research 🧪
+= XTDB 'Core2' Research 🧪
 
 Welcome to the XTDB research repository!
 
-XTDB '`Core2`' is an experimental, SQL-first, immutable database concept.
+XTDB Core2 is a pre-alpha, general-purpose, immutable database supporting bitemporal Datalog and SQL queries via Java, Clojure and HTTP APIs.
 
-== Quickstart
-
-[source,sh]
-----
-docker pull xtdb/core2
-docker run -p 5432:5432 xtdb/core2
-----
-
-Core2 supports the Postgres Wire Protocol.
-Connect to Core2 using any Postgres client:
-
-[source,sh]
-----
-psql -h localhost
-----
-
-More examples are available in the https://github.com/xtdb/core2-playground[Core2 Playground].
-
-
-== Documentation
-
-Preliminary documentation is available at https://core2docs.xtdb.com/[core2docs.xtdb.com].
-
-This documentation is still an early work-in-progress.
-Please do not open issues on this repository with documentation-related questions at this stage.
-
-
-== Vision
-
-The technical aim is to implement https://en.wikipedia.org/wiki/SQL:2011#New_features[SQL:2011 temporal query capabilities] on top of immutable, columnar data storage.
-
-Core2 implements a dynamic schema model (i.e. no explicit https://en.wikipedia.org/wiki/Data_definition_language[DDL] is required) and allows for relational querying across nested, document-shaped data.
-Core2 embraces a https://xtdb.com/blog/dev-diary-may-22/#_pillar_1_sosac[separated-storage-and-compute] architecture, using https://arrow.apache.org/[Apache Arrow] as the underlying columnar data format.
-
-image::doc/img/xtdb-core2-node-1.svg[Core2 Architecture Diagram, 1000, 460]
-
-Read more about Core2 in our https://xtdb.com/pdfs/vision-doc.pdf[Vision Document] (PDF).
-
-
-== SQL:2011
-
-All data in XTDB is https://en.wikipedia.org/wiki/Bitemporal_modeling[bitemporal data].
-Core2 not only implements SQL:2011's bitemporal features, but makes those features much more practical and accessible to regular users.
-Traditional concerns about awkward bitemporal schema migrations are avoided thanks to pervasive support for dynamic querying across polymorphic records.
-
-SQL:2011 queries enable querying _across_ time.
-For example, the following query asks "Which employees and contractors worked for the company at the same time?"
-
-[source,sql]
-----
-SELECT employee.name, contractor.name
-FROM employee, contractor
-WHERE employee.application_time OVERLAPS contractor.application_time
-----
-
+Bitemporal indexing of schemaless documents enables broad possibilities for creating layered extensions on top, such as to add additional transaction, query, and schema capabilities.
+In addition to SQL, XTDB supplies a [Datalog](https://en.wikipedia.org/wiki/Datalog) query interface that can be used to express complex joins and recursive graph traversals.
 
 == Warning
 
@@ -66,26 +13,43 @@ This is experimental software.
 
 If you are looking for a stable release of an immutable document database with bitemporal query capabilities, we are continuing to develop and support XTDB 1.x here: https://github.com/xtdb/xtdb
 
+== Quick links
 
-== Hows does this differ from XTDB 1.x?
+* https://xtdb.com[XTDB 1.x documentation]
+// * Maven releases
+// * Release notes
+* Support: https://juxt-oss.zulipchat.com/#narrow/stream/194466-crux[Zulip community chat] | https://github.com/xtdb/xtdb/discussions[GitHub Discussions] | hello@xtdb.com
+* https://github.com/xtdb/core2/tree/master/dev/DEVELOPING.adoc[Developing XTDB Core2]
+
+== Inside-out Architecture
+
+XTDB embraces the transaction log as the central point of coordination when running as a distributed system.
+
+[quote,Martin Kleppman]
+____
+What do we have to gain from turning the database inside out?
+
+Simpler code, better scalability, better robustness, lower latency, and more flexibility for doing interesting things with data.
+____
+
+image::doc/img/xtdb-core2-node-1.svg[Core2 Architecture Diagram, 1000, 460]
+
+== How does this differ from XTDB 1.x?
 
 XTDB 1.x is a mature product offering that is used in production by many organizations, and its ongoing development is focused on hardening and performance.
-XTDB 1.x is a https://en.wikipedia.org/wiki/Datalog[Datalog-first], embeddable database that emphasizes in-process JVM usage to enable advanced functionality like user-defined transaction functions, speculative transactions, programmatic Datalog rules, and more.
+XTDB 1.x is an embeddable database that emphasizes in-process JVM usage to enable advanced functionality like user-defined transaction functions, speculative transactions, programmatic Datalog rules, and more.
 
-Core2's initial objective is to take the key principles embodied in XTDB 1.x -- immutability, schemaless records, and temporal querying -- to a mainstream SQL audience.
+Core2's initial objective is to take the key principles embodied in XTDB 1.x -- immutability, schemaless records, and temporal querying -- to a mainstream audience.
 
 [cols=3*]
 |===
 | | XTDB 1.x | '`Core2`' Research Concept
 | Status | Stable | Experimental (pre-alpha)
 | Initial Stable Release | 2019 | TBD
-| Primary Interface | Java + 'https://github.com/edn-format/edn[edn] Datalog' | SQL (https://github.com/xtdb/core2/blob/2d8791c653f58a3eb24c650967e781204dd22975/doc/adr/0038-pgwire.adoc[Postgres] native drivers, JDBC, https://github.com/xtdb/core2/blob/859baec8289289545aca842d320a5adc17f3c67b/doc/adr/0008-sql-support.adoc#protocols[etc.])
-| Secondary Interface | OpenAPI, Calcite SQL (read-only) | Many secondary languages (Datalog, SPARQL, Gremlin, etc.) are possible
 | Execution Model | Tuple-at-a-Time Sort-Merge Joins | Vectorized Relational Algebra
 | Storage & Compute | Coupled (nodes are full replicas) | Separated (cost-effective scale out)
 | Primary Storage Format | Custom Key-Value encodings | Columnar Apache Arrow
-| Bitemporal Querying | Timeslice only ('as-of') | SQL:2011 and beyond
-| Temporal Granularity | Milliseconds | Microseconds
+| Bitemporal Querying | Timeslice only ('as-of') | Fully bitemporal - SQL:2011 and beyond
 | Relational Decorrelation | No | Yes
 | Analytical Querying | No | Yes
 | Single-partition Transaction Log | Infinite Retention | Ephemeral WAL
@@ -98,6 +62,53 @@ Core2's initial objective is to take the key principles embodied in XTDB 1.x -- 
 | Dynamism (ad-hoc graph joins, union typing, schemaless, etc.) | Yes | Yes
 |===
 
+See link:DATALOG.adoc[] for instructions on how to translate 1.x Datalog transactions/queries to Core2.
+
+== Repo Layout
+
+Core2 is split across multiple projects which are maintained within this repository.
+
+* `api` contains the user API to Core2.
+* `core` contains the main functional components of XTDB along with interfaces for the pluggable storage components (Kafka, JDBC, S3 DB etc.).
+  Implementations of these storage options are located in their own projects.
+* `http-server` and `http-client-clj` contain the HTTP server implementation, and a remote client for Clojure users.
+* Storage and other modules are under `modules`.
+  Modules are published to Maven independently so that you can maintain granular dependencies on precisely the individual components needed for your application.
+
+== Pre-Release Snapshot Builds
+
+Maven snapshot versions are periodically published under `dev-SNAPSHOT` and are used to facilitate support and debugging activities during the development cycle.
+To access snapshots versions, the Sonatype snapshot repository must be added to your project definition:
+
+[source,xml]
+----
+<repository>
+  <id>sonatype.snapshots</id>
+  <name>Sonatype Snapshot Repository</name>
+  <url>https://s01.oss.sonatype.org/content/repositories/snapshots</url>
+  <releases>
+    <enabled>false</enabled>
+  </releases>
+  <snapshots>
+    <enabled>true</enabled>
+  </snapshots>
+</repository>
+----
+
+[source,clojure]
+----
+;; project.clj
+:repositories [["sonatype-snapshots" {:url "https://s01.oss.sonatype.org/content/repositories/snapshots"}]]
+----
+
+[source,clojure]
+----
+;; deps.edn
+:mvn/repos {"sonatype-snapshots" {:url "https://s01.oss.sonatype.org/content/repositories/snapshots"}}
+----
+
+In contrast to regular releases which are immutable, a `dev-SNAPSHOT` release can be "updated" - this mutability can often be useful but may also cause unexpected surprises when depending on `dev-SNAPSHOT` for longer than necessary.
+Snapshot versions, including full `dev-<timestamp>` coordinates (which are useful to avoid being caught out by mutation), can be found https://s01.oss.sonatype.org/content/repositories/snapshots/com/xtdb/xtdb-core/dev-SNAPSHOT/[here].
 
 === Troubleshooting
 
@@ -112,11 +123,9 @@ When that happens, you will see this error:
 
 To resolve this, upgrade to the latest version of Docker.
 
-
 == Questions, Thoughts & Feedback
 
 We would love to hear from you: hello@xtdb.com
-
 
 == License and Copyright
 

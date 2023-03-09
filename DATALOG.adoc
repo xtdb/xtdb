@@ -29,7 +29,7 @@ Where XTDB 1.x has a transaction log, document store and query indices, Core2 ha
 
 === Setup
 
-Main require: `[core2.api :as c2]`
+Main require: `[core2.api.datalog :as c2]`
 
 Configuration uses https://github.com/weavejester/integrant[Integrant].
 
@@ -57,101 +57,76 @@ Transactions are slightly different to XTDB 1.x:
 
 - `[:xtdb.api/put <doc>]` -> `[:put <doc>]`. Put and delete supported thus far.
 - `:xt/id` -> `:id`. Valid ID types currently strings, numbers, dates.
-- `c2/submit-tx` returns `CompletableFuture`, deref it to get the transaction details.
 - `tx-time` -> `sys[tem]-time`
 - `valid-time` -> `app[lication]-time`
 
 === Datalog Queries
-In a similar manner to `next.jdbc`[https://github.com/seancorfield/next-jdbc], execute Datalog queries in Core2 using `c2/plan-datalog-query`.
-This returns a reducible sequence that you can pass to (say) `reduce`, `into` or `run!`.
-When finalised (by `reduce`) this will ensure the query results are adequately closed.
+
+The Datalog API is in `core2.datalog`
 
 [source,clojure]
 ----
+(require '[core2.datalog :as c2]])
+
 (with-open [node (node/start-node {})]
-  (->> (c2/plan-datalog-query node
-                              '{:find [e name]
-                                :where [[e :name name]]})
-       (into [])))
+  (c2/q node '{:find [e name]
+               :where [[e :name name]]}))
 ----
 
 These queries currently return a vector of maps `[{:e ..., :name ...}, {...}]`, although this is only because it's what was closest to what we had available at the time.
 
 === SQL queries
 
-Same as Datalog, but use `plan-sql-query` instead.
+Same as Datalog, but use `core2.sql` instead.
 
 [source,clojure]
 ----
-(with-open [node (node/start-node {})]
-  (->> (c2/plan-sql-query node "SELECT u.name FROM users u")
-       (into [])))
-----
+(require '[core2.sql :as c2])
 
+(with-open [node (node/start-node {})]
+  (c2/submit-tx node "INSERT INTO users (id, name) VALUES ('jms', 'James')")
+  (c2/q node "SELECT u.name FROM users u"))
+----
 
 === Bases
 
 Core2 doesn't have the concept of DBs - instead, we pass the node and (optionally) a 'basis' to queries.
-In Core2, the upper bound for the system-time is applied per-source; the default upper bound for app-time is applied at the query level - this is because each data source has their own system-time timeline, but app-time is assumed to be a single timeline, consistent across data sources.
+Unlike 1.x, a Core2 client will implicitly await the last transaction it submitted - in normal usage, a user shouldn't need to either `await-tx` (indeed, such a function doesn't publicly exist in Core2) nor supply an explicit basis.
 
 [source,clojure]
 ----
-;; simple case - use the latest tx the node has available:
-(->> (c2/plan-datalog-query node '{...})
-     (into []))
+;; simple case - will indefinitely await the latest transaction you've submitted:
+(c2/q node '{...})
 
-;; or, to read your own writes (timeout optional):
-;; `plan-datalog-query` will await the transaction
-(->> (c2/plan-datalog-query node
-                            (-> '{:find ..., :where ...}
-                                (assoc :basis {:tx tx}
-                                       :basis-timeout (Duration/ofSeconds 1))))
-     (into []))
+;; specify a transaction basis, and/or a timeout
+(c2/q node (-> '{:find ..., :where ...}
+               (assoc :basis {:tx tx}
+                      :basis-timeout (Duration/ofSeconds 1))))
 ----
 
-The `plan-datalog-query` functions take the node, the query, and then a variable number of params.
+The `q` functions take the node, the query, and then a variable number of params.
 
 [source,clojure]
 ----
-(->> (c2/plan-datalog-query tu/*node*
-                            (-> '{:find [e]
-                                  :in [first-name last-name]
-                                  :where [[e :first-name first-name]
-                                          [e :last-name last-name]]}
-                                (assoc :basis {:tx tx}))
-                            "Ivan" "Ivanov")
-     (into #{}))
+(c2/q node
+      '{:find [e]
+        :in [first-name last-name]
+        :where [[e :first-name first-name]
+                [e :last-name last-name]]}
+      "Ivan" "Ivanov")
 ----
 
-Unlike Datomic, `$` shouldn't be included in `:in` - if/when we reinstate multiple sources to Datalog queries, I propose we include them as a named map in the basis-opts:
-
-[source,clojure]
-----
-;; something like this, anyway.
-(->> (c2/plan-datalog-query node
-                            (-> '{:find [...]
-                                  :where [[$db1 ...], [$db2 ...]]}
-                                (assoc :basis {'$db1 {:tx tx}
-                                               '$db2 {:tx tx}}
-                                       :basis-timeout (Duration/ofSeconds 1))))
-     (into []))
-----
-
-`plan-datalog-query-async` is the same, except it runs entirely asynchronously and returns a `CompletableFuture` of the query plan.
-(In fact, `plan-datalog-query` just calls `plan-datalog-query-async` and deref's it.)
+`q&` is the same, except it runs entirely asynchronously and returns a `CompletableFuture` of the query plan.
+(In fact, `q` just calls `q&` and deref's it.)
 
 The basis map can also contain a `:current-time` option, which applies to any entities that don't specify other app-time constraints.
 This is for repeatable queries - it defaults to 'now' if not provided.
 
 [source,clojure]
 ----
-(->> (c2/plan-datalog-query node
-                            (-> '{:find [e name]
-                                  :where [[e :name name]]}
-                                (assoc :basis {:current-time #inst "..."})))
-     (into []))
+(c2/q node
+      (-> '{:find [e name]
+            :where [[e :name name]]}
+          (assoc :basis {:current-time #inst "..."})))
 ----
 
-There is also `tu/query-ra` which accepts a lower-level relational algebra query - have a look in `core2.logical-plan` for what can go into these plans, and `core2.tpch-queries` for examples.
-
-SQL queries do not currently support bases.

@@ -1,0 +1,49 @@
+= Docker
+
+== Building a local image for testing
+
+* Make sure your Docker daemon is running
+* `./bin/docker-build.sh [--clean]` will build and tag as `core2:latest`, and load it into your images list. The `--clean` flag can be used to ensure the core2 uberjar is rebuilt.
+* To run: `docker run -p 5432:5432 core2` (with no `xtdb/` organization prefix)
+
+== Building and pushing a multi-arch image to dockerhub
+
+Pushing core2 images requires a login to docker with permission to push to the xtdb docker hub org, ask @refset or @jarohen if you do not have this.
+
+* install https://github.com/docker/buildx[buildx] if it is not already (docker desktop, recent docker versions have it bundled). This will enable multi-arch builds support.
+* `docker buildx install` to https://github.com/docker/buildx#set-buildx-as-the-default-builder[set buildx as your default Docker builder]
+* `./bin/docker-build-and-push.sh [--clean] [--latest]` will build and push the image as `xtdb/core2:"$sha"` as well as `xtdb/core2:latest` if `--latest` is supplied.
+
+As with a local build, the `--clean` flag can ensure a the core2 uberjar is built afresh.
+
+== Troubleshooting
+
+If you get an error on build like this:
+
+[source,text]
+----
+error: multiple platforms feature is currently not supported for docker driver. Please switch to a different driver (eg. "docker buildx create --use")
+----
+
+You may have to create and switch to a builder using the `docker-container` buildx driver:
+
+[source,shell]
+----
+# you only need to run this once to configure buildx:
+docker buildx create --name mybuilder --driver=docker-container --use
+# then re-run:
+./bin/docker-build-and-push.sh --clean --latest
+----
+
+See also this https://www.docker.com/blog/multi-arch-build-and-images-the-simple-way/[blog from docker] and https://cloudolife.com/2022/03/05/Infrastructure-as-Code-IaC/Container/Docker/Docker-buildx-support-multiple-architectures-images/[this tutorial] for more details on multi-arch builds with buildx.
+
+If you try to push to Docker Hub without credentials configured, you will see:
+
+[source,text]
+----
+error: failed to solve: server message: insufficient_scope: authorization failed
+----
+
+* Make sure you have an account on https://hub.docker.com
+* Ask @refset or @jarohen to add your account to the `xtdb` organization
+* Log in with `docker login` (interactive) to save your credentials locally

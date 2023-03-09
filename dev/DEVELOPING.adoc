@@ -1,0 +1,77 @@
+= Developing Core2
+
+The top-level project ties all the other projects together for convenience whilst working within this repo.
+All of the below commands should be run in the *root* of the Core2 repo.
+
+== Links
+
+* https://github.com/orgs/xtdb/projects/13/views/1[Kanban board,window=_blank]
+* https://circleci.com/gh/xtdb/core2[CircleCI build,window=_blank] image:https://circleci.com/gh/xtdb/core2.svg?style=svg&circle-token=867b84b6d1b4dfff332773f771457349529aee8b[]
+* link:GIT.adoc[Git practices in XTDB]
+
+== Prerequisites
+
+You will need either JDK 11 or 17 installed.
+
+== Getting started
+
+Core2 uses Gradle[https://gradle.org/] - a JVM build tool that supports multi-module, polyglot projects.
+You do not need to install Gradle to develop Core2 - there is a Gradle https://docs.gradle.org/current/userguide/gradle_wrapper.html[wrapper] in the repo.
+
+* Java classes are (re-)compiled automatically when you (re-)start a REPL or run tests
+* Start a REPL with `./gradlew clojureRepl`
+* Once you've connected to the REPL, in the `user` namespace, run:
+** `(dev)` to require and go to the `dev` namespace.
+** `(go)` to start up the dev node
+** `(halt)` to stop it
+** `(reset)` to stop it, reload changed namespaces, and restart it
+** if you're using Emacs/CIDER, `cider-ns-refresh` will do all this for you - `C-c M-n M-r`, `, s x` in Spacemacs, `, n r` in Doom.
+** Conjure users can use `ConjureRefresh`, see the https://github.com/Olical/conjure#mappings[docs] for bindings
+** see https://github.com/weavejester/integrant-repl[Integrant REPL] for more details.
+* You should now have a running XTDB node under `dev/node` - you can verify this by calling `(xt/status node)` (in the `dev` namespace).
+* Most of the time, you shouldn't need to bounce the REPL, but:
+** if you add a module, or change any of the dependencies of any of the modules, that'll require a REPL bounce.
+** if you change any of the Java classes, that'll require a REPL bounce
+** otherwise, `(dev/reset)` (or just `(reset)` if you're already in the `dev` ns) should be sufficient.
+** Please don't put any more side-effecting top-level code in dev namespaces - you'll break this reload ability and make me sad.
+** To run a single test file, run (e.g.) `./gradlew test --tests 'core2.api_test**'`
+
+== Testing
+
+* Test all with `./gradlew test`; `./gradlew integration-test` for longer tests
+* Some tests have external dependencies which require `docker-compose`:
+  * `docker-compose up` (`docker-compose up <postgres|kafka>` etc for individual containers),
+  * `./gradlew jdbc-test` / `./gradlew kafka-test`
+  * `docker-compose down`
+
+== Profiling
+
+NOTE: TODO: adapt to Gradle
+
+To attach YourKit:
+
+* Install YourKit (it's on the AUR, for Arch folks)
+* Add an alias to `~/.clojure/deps.edn`:
++
+[source,clojure]
+----
+{:aliases {:yourkit {:jvm-opts ["-agentpath:/opt/yourkit/bin/linux-x86-64/libyjpagent.so"]}}}
+----
+* `clj -A:yourkit -M:repl/cider`
+
+== Releasing Core2
+
+See link:RELEASING.adoc[].
+
+== Arrow Fork
+
+We maintain a fork of [Arrow](https://github.com/apache/arrow) to fix a couple of issues in `DenseUnionVector` - see [this diff](https://github.com/apache/arrow/compare/master...juxt:master) for more details.
+
+To upgrade Arrow:
+
+* Usual bump in `project.clj`
+* Clone the [Arrow repo](https://github.com/apache/arrow), add the [JUXT fork](https://github.com/juxt/arrow) as a remote.
+* Rebase `juxt/master` on the upstream tag.
+* In Core2, `./bin/rebuild-forked-arrow-files.sh`
+* Test
+* Push (`--force-with-lease`) to JUXT fork, and commit to Core2.

@@ -1,0 +1,59 @@
+= Git practices in XTDB
+
+A rough guide of how we tend to use Git, in practice.
+Obviously use discretion when applying these - they're guidelines, not hard and fast rules.
+This is a living document - please feel free to start discussions/raise PRs.
+
+We loosely follow a https://nvie.com/posts/a-successful-git-branching-model/['git flow'] model.
+Differences:
+
+* We develop on the `master` branch, rather than `develop`.
+* When we find bugs on a previous release that require patch releases, we create a branch from master named (for example) `1.10.x`.
+
+Other conventions:
+
+* **PRs by default**
++
+Simple, uncontroversial changes (typos, say, or other non-code changes) *can* go straight to `master`, within reason, but be aware of the curse of the 'simple change'.
+Err on the side of caution if need be.
+
+** PRs (again, within reason) should be atomic - the 'minimum viable merge'.
+   If you've got to a point where your change would add value to an XTDB user, it can be a PR.
+** On the other side, don't include unrelated bugfixes in a larger PR, because we may want to merge those independently of the rest of the PR.
+** Where reasonable, try to make the distinction between changes that preserve XTDB's behaviour (e.g. refactorings/restructurings) and changes that advance XTDB - it's much easier to review a change knowing that it's supposed to behave exactly the same as it did before.
+
+* **Optimise your commits for later reading**
++
+Future developers looking back at commits will likely not care about the exact trials and tribulations/learning path you went through to fix a bug/write a feature (though no doubt it felt like an arduous journey at the time).
+Consider *why* developers might need to go back and look at commit history and how you'd explain your change to those developers, and organise your commits accordingly - it's probably not "on Tuesday I did this, then on Wednesday I did this"!
+Remember, 'future developers' will likely include 'future you' :wink:
++
+Commits should be atomic units of change, a transition from a valid state to another valid state - feel free to liberally re-write history on your branch to achieve this.
+If a commit doesn't make sense/work independently without another commit, it's probably a single commit.
+Likewise, if it's two distinct changes, it's two distinct commits.
++
+(FWIW, I tend to make a load of throwaway 'checkpoint' commits - then, when I get to an intermediate working milestone, I'll squash down the checkpoint commits to one atomic commit.
+I find this works well, but each to their own.)
+
+* **Prefer a linear history**
++
+This is related to the previous point, because it's much easier to reason about/bisect changes if they're linear. It means:
+
+** Prefer rebasing feature branches on `master` to pull in changes from elsewhere over merging `master` into the feature branch.
+** When you merge your feature branch back into master, there are a few patterns, depending on the size of the change:
+*** Github's 'squash and merge PR' is a reasonable default
+*** If it's a single commit, it can go straight onto master (once reviewed)
+*** If you want to keep the original commits visible (for git blame purposes, say), `git switch master && git merge --no-ff <branch>` clearly marks out a block of work, preserves your commits, and keeps the history linear.
+
+* **The issue/PR assignee is responsible for progression**
++
+There's two parts to this: firstly, if it's you, it's up to you to chase whoever needs chasing, unblock what needs unblocking, replying to whoever needs replying to, figuring out what needs to be done, etc, so that it's complete **end-to-end**.
+(This can obviously include delegating out if need be - you don't have to _do_ it all yourself - just make sure you're coordinating it.)
++
+With PRs, the assignee is considered to have the 'lock' on the branch.
++
+Secondly, though (and probably more commonly) - if it's you and it shouldn't be, or it's not you and it should be, update it (even if that means no assignee) :smile:
+
+* **Use a fork of https://github.com/xtdb/xtdb**
++
+This means you're responsible for cleaning up your branches rather than have them cluttering up the main repo and annoying me :wink:
