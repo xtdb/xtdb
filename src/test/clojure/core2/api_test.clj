@@ -26,10 +26,8 @@
 
     (t/is (= [{:e :foo, :inst (util/->zdt #inst "2021")}]
              (c2.d/q *node*
-                     (-> '{:find [e inst]
-                           :where [[e :inst inst]]}
-                         (assoc :basis {:tx tx}
-                                :basis-timeout (Duration/ofSeconds 1))))))))
+                     '{:find [e inst]
+                       :where [[e :inst inst]]})))))
 
 (t/deftest test-validation-errors
   (t/is (thrown? IllegalArgumentException
@@ -55,15 +53,13 @@
              (c2.d/q *node*
                      (-> '{:find [id list]
                            :where [[id :list list]]}
-                         (assoc :basis {:tx tx}
-                                :basis-timeout (Duration/ofSeconds 1))))))
+                         (assoc :basis-timeout (Duration/ofSeconds 1))))))
 
     (t/is (= [{:id :foo, :list [1 2 ["foo" "bar"]]}
               {:id "bar", :list [4 2 8]}]
              (c2.sql/q *node*
                        "SELECT b.id, b.list FROM xt_docs b"
-                       {:basis {:tx tx}
-                        :basis-timeout (Duration/ofSeconds 1)})))))
+                       {:basis-timeout (Duration/ofSeconds 1)})))))
 
 (t/deftest round-trips-structs
   (let [tx (c2.d/submit-tx *node* [[:put {:id :foo, :struct {:a 1, :b {:c "bar"}}}]
@@ -73,10 +69,8 @@
     (t/is (= #{{:id :foo, :struct {:a 1, :b {:c "bar"}}}
                {:id :bar, :struct {:a true, :d 42.0}}}
              (set (c2.d/q *node*
-                          (-> '{:find [id struct]
-                                :where [[id :struct struct]]}
-                              (assoc :basis {:tx tx}
-                                     :basis-timeout (Duration/ofSeconds 1)))))))))
+                          '{:find [id struct]
+                            :where [[id :struct struct]]}))))))
 
 (t/deftest round-trips-temporal
   (let [vs {:dt #time/date "2022-08-01"
@@ -84,13 +78,14 @@
             :tstz #time/zoned-date-time "2022-08-01T14:34+01:00"
             :tm #time/time "13:21:14.932254"
             ;; :tmtz #time/offset-time "11:21:14.932254-08:00" ; TODO #323
-            }
-        tx (c2.sql/submit-tx *node* [[:sql "INSERT INTO foo (id, dt, ts, tstz, tm) VALUES ('foo', ?, ?, ?, ?)"
-                                      [(mapv vs [:dt :ts :tstz :tm])]]])]
+            }]
+
+    (c2.sql/submit-tx *node* [[:sql "INSERT INTO foo (id, dt, ts, tstz, tm) VALUES ('foo', ?, ?, ?, ?)"
+                               [(mapv vs [:dt :ts :tstz :tm])]]])
 
     (t/is (= [(assoc vs :id "foo")]
              (c2.sql/q *node* "SELECT f.id, f.dt, f.ts, f.tstz, f.tm FROM foo f"
-                       {:basis {:tx tx}, :basis-timeout (Duration/ofMillis 100)
+                       {:basis-timeout (Duration/ofMillis 100)
                         :default-tz (ZoneId/of "Europe/London")})))
 
     (let [lits [[:dt "DATE '2022-08-01'"]
@@ -99,14 +94,15 @@
                 [:tm "TIME '13:21:14.932254'"]
 
                 #_ ; FIXME #323
-                [:tmtz "TIME '11:21:14.932254-08:00'"]]
-          tx (c2.sql/submit-tx *node* (vec (for [[t lit] lits]
-                                             [:sql (format "INSERT INTO bar (id, v) VALUES (?, %s)" lit)
-                                              [[(name t)]]])))]
+                [:tmtz "TIME '11:21:14.932254-08:00'"]]]
+
+      (c2.sql/submit-tx *node* (vec (for [[t lit] lits]
+                                      [:sql (format "INSERT INTO bar (id, v) VALUES (?, %s)" lit)
+                                       [[(name t)]]])))
       (t/is (= (set (for [[t _lit] lits]
                       {:id (name t), :v (get vs t)}))
                (set (c2.sql/q *node* "SELECT b.id, b.v FROM bar b"
-                              {:basis {:tx tx}, :basis-timeout (Duration/ofMillis 100)
+                              {:basis-timeout (Duration/ofMillis 100)
                                :default-tz (ZoneId/of "Europe/London")})))))))
 
 (t/deftest can-manually-specify-sys-time-47
@@ -144,16 +140,14 @@
     (t/is (= (c2/map->TransactionInstant {:tx-id 0, :sys-time (util/->instant #inst "2020-01-01")}) tx))
 
     (t/is (= [{:name "James"}]
-             (c2.sql/q *node* "SELECT u.name FROM users u WHERE u.name = 'James'"
-                       {:basis {:tx tx}})))))
+             (c2.sql/q *node* "SELECT u.name FROM users u WHERE u.name = 'James'")))))
 
 (t/deftest test-sql-dynamic-params-103
-  (let [tx (c2.d/submit-tx *node* devs)]
+  (c2.d/submit-tx *node* devs)
 
-    (t/is (= [{:name "James"} {:name "Matt"}]
-             (c2.sql/q *node* "SELECT u.name FROM users u WHERE u.name IN (?, ?)"
-                       {:basis {:tx tx}
-                        :? ["James", "Matt"]})))))
+  (t/is (= [{:name "James"} {:name "Matt"}]
+           (c2.sql/q *node* "SELECT u.name FROM users u WHERE u.name IN (?, ?)"
+                     {:? ["James", "Matt"]}))))
 
 (t/deftest start-and-query-empty-node-re-231-test
   (with-open [n (node/start-node {})]
@@ -206,19 +200,18 @@
   (let [tx1 (c2.sql/submit-tx *node*
                               [[:sql "INSERT INTO users (id, name, application_time_start) VALUES (?, ?, ?)"
                                 [["dave", "Dave", #inst "2018"]
-                                 ["claire", "Claire", #inst "2019"]]]])
+                                 ["claire", "Claire", #inst "2019"]]]])]
 
-        _ (t/is (= (c2/map->TransactionInstant {:tx-id 0, :sys-time (util/->instant #inst "2020-01-01")}) tx1))
+    (t/is (= (c2/map->TransactionInstant {:tx-id 0, :sys-time (util/->instant #inst "2020-01-01")}) tx1))
 
-        tx2 (c2.sql/submit-tx *node*
-                              [[:sql "INSERT INTO people (id, renamed_name, application_time_start)
+    (c2.sql/submit-tx *node*
+                      [[:sql "INSERT INTO people (id, renamed_name, application_time_start)
                                    SELECT users.id, users.name, users.application_time_start
                                    FROM users FOR APPLICATION_TIME AS OF DATE '2019-06-01'
-                                   WHERE users.name = 'Dave'"]])]
+                                   WHERE users.name = 'Dave'"]])
 
     (t/is (= [{:renamed_name "Dave"}]
-             (c2.sql/q *node* "SELECT people.renamed_name FROM people FOR APPLICATION_TIME AS OF DATE '2019-06-01'"
-                       {:basis {:tx tx2}})))))
+             (c2.sql/q *node* "SELECT people.renamed_name FROM people FOR APPLICATION_TIME AS OF DATE '2019-06-01'")))))
 
 (deftest test-sql-insert-app-time-date-398
   (let [tx (c2.sql/submit-tx *node*
@@ -227,121 +220,126 @@
     (t/is (= (c2/map->TransactionInstant {:tx-id 0, :sys-time (util/->instant #inst "2020-01-01")}) tx))
 
     (t/is (= [{:id "foo", :application_time_start (util/->zdt #inst "2018"), :application_time_end (util/->zdt util/end-of-time)}]
-             (c2.sql/q *node* "SELECT foo.id, foo.application_time_start, foo.application_time_end FROM foo"
-                       {:basis {:tx tx}})))))
+             (c2.sql/q *node* "SELECT foo.id, foo.application_time_start, foo.application_time_end FROM foo")))))
 
 (deftest test-dml-as-of-now-flag-339
   (let [tt1 (util/->zdt #inst "2020-01-01")
         tt2 (util/->zdt #inst "2020-01-02")
         tt5 (util/->zdt #inst "2020-01-05")
         eot (util/->zdt util/end-of-time)]
-    (letfn [(q [tx]
+    (letfn [(q []
               (set (c2.sql/q *node*
-                             "SELECT foo.version, foo.application_time_start, foo.application_time_end FROM foo"
-                             {:basis {:tx tx}})))]
-      (let [tx (c2.sql/submit-tx *node*
-                                 [[:sql "INSERT INTO foo (id, version) VALUES (?, ?)"
-                                   [["foo", 0]]]])]
-        (t/is (= #{{:version 0, :application_time_start tt1, :application_time_end eot}}
-                 (q tx))))
+                             "SELECT foo.version, foo.application_time_start, foo.application_time_end FROM foo")))]
 
-      (let [tx (c2.sql/submit-tx *node*
-                                 [[:sql "UPDATE foo SET version = 1 WHERE foo.id = 'foo'"]]
-                                 {:app-time-as-of-now? true})]
+      (c2.sql/submit-tx *node*
+                        [[:sql "INSERT INTO foo (id, version) VALUES (?, ?)"
+                          [["foo", 0]]]])
+
+      (t/is (= #{{:version 0, :application_time_start tt1, :application_time_end eot}}
+               (q)))
+
+      (t/testing "update as-of-now"
+        (c2.sql/submit-tx *node*
+                          [[:sql "UPDATE foo SET version = 1 WHERE foo.id = 'foo'"]]
+                          {:app-time-as-of-now? true})
+
         (t/is (= #{{:version 0, :application_time_start tt1, :application_time_end tt2}
                    {:version 1, :application_time_start tt2, :application_time_end eot}}
-                 (q tx))))
+                 (q))))
 
       (t/testing "`FOR PORTION OF` means flag is ignored"
-        (let [tx (c2.sql/submit-tx *node*
-                                   [[:sql (str "UPDATE foo "
-                                               "FOR PORTION OF APP_TIME FROM ? TO ? "
-                                               "SET version = 2 WHERE foo.id = 'foo'")
-                                     [[tt1 tt2]]]]
-                                   {:app-time-as-of-now? true})]
-          (t/is (= #{{:version 2, :application_time_start tt1, :application_time_end tt2}
-                     {:version 1, :application_time_start tt2, :application_time_end eot}}
-                   (q tx)))))
+        (c2.sql/submit-tx *node*
+                          [[:sql (str "UPDATE foo "
+                                      "FOR PORTION OF APP_TIME FROM ? TO ? "
+                                      "SET version = 2 WHERE foo.id = 'foo'")
+                            [[tt1 tt2]]]]
+                          {:app-time-as-of-now? true})
+        (t/is (= #{{:version 2, :application_time_start tt1, :application_time_end tt2}
+                   {:version 1, :application_time_start tt2, :application_time_end eot}}
+                 (q))))
 
-      (let [tx (c2.sql/submit-tx *node*
-                                 [[:sql "UPDATE foo SET version = 3 WHERE foo.id = 'foo'"]])]
+      (t/testing "UPDATE for-all-time"
+        (c2.sql/submit-tx *node*
+                          [[:sql "UPDATE foo SET version = 3 WHERE foo.id = 'foo'"]])
 
         (t/is (= #{{:version 3, :application_time_start tt1, :application_time_end tt2}
                    {:version 3, :application_time_start tt2, :application_time_end eot}}
-                 (q tx))))
+                 (q))))
 
-      (let [tx (c2.sql/submit-tx *node*
-                                 [[:sql "DELETE FROM foo WHERE foo.id = 'foo'"]]
-                                 {:app-time-as-of-now? true})]
+      (t/testing "DELETE as-of-now"
+        (c2.sql/submit-tx *node*
+                          [[:sql "DELETE FROM foo WHERE foo.id = 'foo'"]]
+                          {:app-time-as-of-now? true})
 
         (t/is (= #{{:version 3, :application_time_start tt1, :application_time_end tt2}
                    {:version 3, :application_time_start tt2, :application_time_end tt5}}
-                 (q tx))))
+                 (q))))
 
-      (let [tx (c2.sql/submit-tx *node*
-                                 [[:sql "UPDATE foo FOR ALL APPLICATION_TIME
+      (t/testing "UPDATE FOR ALL APPLICATION_TIME"
+        (c2.sql/submit-tx *node*
+                          [[:sql "UPDATE foo FOR ALL APPLICATION_TIME
                                      SET version = 4 WHERE foo.id = 'foo'"]]
-                                 {:app-time-as-of-now? true})]
+                          {:app-time-as-of-now? true})
+
         (t/is (= #{{:version 4, :application_time_start tt1, :application_time_end tt2}
                    {:version 4, :application_time_start tt2, :application_time_end tt5}}
-                 (q tx))
-              "UPDATE FOR ALL APPLICATION_TIME"))
+                 (q))))
 
-      (let [tx (c2.sql/submit-tx *node*
-                                 [[:sql "DELETE FROM foo FOR ALL APPLICATION_TIME
+      (t/testing "DELETE FOR ALL APPLICATION_TIME"
+        (c2.sql/submit-tx *node*
+                          [[:sql "DELETE FROM foo FOR ALL APPLICATION_TIME
                                      WHERE foo.id = 'foo'"]]
-                                 {:app-time-as-of-now? true})]
-        (t/is (= #{} (q tx))
-              "DELETE FOR ALL APPLICATION_TIME")))))
+                          {:app-time-as-of-now? true})
+
+        (t/is (= #{} (q)))))))
 
 (deftest test-dql-as-of-now-flag-339
   (let [tt1 (util/->zdt #inst "2020-01-01")
         tt2 (util/->zdt #inst "2020-01-02")
         eot (util/->zdt util/end-of-time)]
 
-    (let [tx (c2.sql/submit-tx *node*
-                               [[:sql "INSERT INTO foo (id, version) VALUES (?, ?)"
-                                 [["foo", 0]]]])]
-      (t/is (= [{:version 0, :application_time_start tt1, :application_time_end eot}]
-               (c2.sql/q *node*
-                         "SELECT foo.version, foo.application_time_start, foo.application_time_end FROM foo"
-                         {:basis {:tx tx}, :app-time-as-of-now? true})))
+    (c2.sql/submit-tx *node*
+                      [[:sql "INSERT INTO foo (id, version) VALUES (?, ?)"
+                        [["foo", 0]]]])
 
-      (t/is (= [{:version 0, :application_time_start tt1, :application_time_end eot}]
-               (c2.sql/q *node*
-                         "SELECT foo.version, foo.application_time_start, foo.application_time_end FROM foo"
-                         {:basis {:tx tx}}))))
+    (t/is (= [{:version 0, :application_time_start tt1, :application_time_end eot}]
+             (c2.sql/q *node*
+                       "SELECT foo.version, foo.application_time_start, foo.application_time_end FROM foo"
+                       {:app-time-as-of-now? true})))
 
-    (let [tx (c2.sql/submit-tx *node*
-                               [[:sql "UPDATE foo SET version = 1 WHERE foo.id = 'foo'"]]
-                               {:app-time-as-of-now? true})]
+    (t/is (= [{:version 0, :application_time_start tt1, :application_time_end eot}]
+             (c2.sql/q *node*
+                       "SELECT foo.version, foo.application_time_start, foo.application_time_end FROM foo")))
 
-      (t/is (= [{:version 1, :application_time_start tt2, :application_time_end eot}]
-               (c2.sql/q *node*
-                         "SELECT foo.version, foo.application_time_start, foo.application_time_end FROM foo"
-                         {:basis {:tx tx}, :app-time-as-of-now? true})))
+    (c2.sql/submit-tx *node*
+                      [[:sql "UPDATE foo SET version = 1 WHERE foo.id = 'foo'"]]
+                      {:app-time-as-of-now? true})
 
-      (t/is (= [{:version 0, :application_time_start tt1, :application_time_end tt2}
-                {:version 1, :application_time_start tt2, :application_time_end eot}]
-               (c2.sql/q *node*
-                         "SELECT foo.version, foo.application_time_start, foo.application_time_end FROM foo"
-                         {:basis {:tx tx}}))
-            "without flag it returns all app-time")
+    (t/is (= [{:version 1, :application_time_start tt2, :application_time_end eot}]
+             (c2.sql/q *node*
+                       "SELECT foo.version, foo.application_time_start, foo.application_time_end FROM foo"
+                       {:app-time-as-of-now? true})))
 
-      (t/is (= [{:version 0, :application_time_start tt1, :application_time_end tt2}]
-               (c2.sql/q *node*
-                         (str "SELECT foo.version, foo.application_time_start, foo.application_time_end "
-                              "FROM foo FOR APPLICATION_TIME AS OF ?")
-                         {:basis {:tx tx}, :app-time-as-of-now? true, :? [tt1]}))
-            "`FOR APPLICATION_TIME AS OF` overrides flag")
+    (t/is (= [{:version 0, :application_time_start tt1, :application_time_end tt2}
+              {:version 1, :application_time_start tt2, :application_time_end eot}]
+             (c2.sql/q *node*
+                       "SELECT foo.version, foo.application_time_start, foo.application_time_end FROM foo"))
+          "without flag it returns all app-time")
 
-      (t/is (= [{:version 0, :application_time_start tt1, :application_time_end tt2}
-                {:version 1, :application_time_start tt2, :application_time_end eot}]
-               (c2.sql/q *node*
-                         "SELECT foo.version, foo.application_time_start, foo.application_time_end
+    (t/is (= [{:version 0, :application_time_start tt1, :application_time_end tt2}]
+             (c2.sql/q *node*
+                       (str "SELECT foo.version, foo.application_time_start, foo.application_time_end "
+                            "FROM foo FOR APPLICATION_TIME AS OF ?")
+                       {:app-time-as-of-now? true, :? [tt1]}))
+          "`FOR APPLICATION_TIME AS OF` overrides flag")
+
+    (t/is (= [{:version 0, :application_time_start tt1, :application_time_end tt2}
+              {:version 1, :application_time_start tt2, :application_time_end eot}]
+             (c2.sql/q *node*
+                       "SELECT foo.version, foo.application_time_start, foo.application_time_end
                              FROM foo FOR ALL APPLICATION_TIME"
-                         {:basis {:tx tx} :app-time-as-of-now? true}))
-            "FOR ALL APPLICATION_TIME ignores flag and returns all app-time"))))
+                       {:app-time-as-of-now? true}))
+          "FOR ALL APPLICATION_TIME ignores flag and returns all app-time")))
 
 (t/deftest test-erase
   (letfn [(q [tx]
@@ -421,28 +419,28 @@
                (with-unwrapped-execution-exception)))))
 
   (t/testing "still an active node"
-    (let [tx (c2.sql/submit-tx tu/*node* [[:sql "INSERT INTO users (id, name) VALUES ('dave', 'Dave')"]])]
-      (t/is (= [{:name "Dave"}]
-               (c2.sql/q tu/*node* "SELECT users.name FROM users"
-                         {:basis {:tx tx}}))))))
+    (c2.sql/submit-tx tu/*node* [[:sql "INSERT INTO users (id, name) VALUES ('dave', 'Dave')"]])
+
+    (t/is (= [{:name "Dave"}]
+             (c2.sql/q tu/*node* "SELECT users.name FROM users")))))
 
 (t/deftest aborts-insert-if-end-lt-start-401-425
-  (letfn [(q-all [tx]
-            (->> (c2.sql/q tu/*node* "SELECT foo.id, foo.application_time_start, foo.application_time_end FROM foo"
-                           {:basis {:tx tx}})
+  (letfn [(q-all []
+            (->> (c2.sql/q tu/*node* "SELECT foo.id, foo.application_time_start, foo.application_time_end FROM foo")
                  (into {} (map (juxt :id (juxt :application_time_start :application_time_end))))))]
 
     (c2.sql/submit-tx tu/*node* [[:sql "INSERT INTO foo (id) VALUES (1)"]])
 
-    (let [tx (c2.sql/submit-tx tu/*node* [[:sql "
+    (c2.sql/submit-tx tu/*node* [[:sql "
 INSERT INTO foo (id, application_time_start, application_time_end)
-VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"]])]
+VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"]])
 
-      (t/is (= {1 [(util/->zdt #inst "2020-01-01") (util/->zdt util/end-of-time)]}
-               (q-all tx))))
+    (t/is (= {1 [(util/->zdt #inst "2020-01-01") (util/->zdt util/end-of-time)]}
+             (q-all)))
 
     (t/testing "continues indexing after abort"
-      (let [tx (c2.sql/submit-tx tu/*node* [[:sql "INSERT INTO foo (id) VALUES (3)"]])]
-        (t/is (= {1 [(util/->zdt #inst "2020-01-01") (util/->zdt util/end-of-time)]
-                  3 [(util/->zdt #inst "2020-01-03") (util/->zdt util/end-of-time)]}
-                 (q-all tx)))))))
+      (c2.sql/submit-tx tu/*node* [[:sql "INSERT INTO foo (id) VALUES (3)"]])
+
+      (t/is (= {1 [(util/->zdt #inst "2020-01-01") (util/->zdt util/end-of-time)]
+                3 [(util/->zdt #inst "2020-01-03") (util/->zdt util/end-of-time)]}
+               (q-all))))))
