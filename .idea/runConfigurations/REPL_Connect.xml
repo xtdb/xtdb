@@ -1,0 +1,15 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="REPL Connect" type="ClojureREPL" factoryName="Remote" activateToolWindowBeforeRun="false">
+    <module name="core2" />
+    <setting name="displayName" value="REPL Connect" />
+    <setting name="host" value="" />
+    <setting name="port" value="0" />
+    <setting name="replType" value="NREPL" />
+    <setting name="configType" value="PORT_FILE" />
+    <setting name="replPortFileType" value="STANDARD" />
+    <setting name="customPortFile" value="" />
+    <setting name="fixLineNumbers" value="false" />
+    <setting name="focusEditor" value="false" />
+    <method v="2" />
+  </configuration>
+</component>
