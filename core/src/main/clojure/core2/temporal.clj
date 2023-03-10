@@ -1,5 +1,6 @@
 (ns core2.temporal
   (:require [clojure.tools.logging :as log]
+            [clojure.set :as set]
             core2.buffer-pool
             [core2.metadata :as meta]
             [core2.temporal.grid :as grid]
@@ -14,6 +15,7 @@
            core2.object_store.ObjectStore
            [core2.temporal.kd_tree IKdTreePointAccess MergedKdTree]
            java.io.Closeable
+           java.time.Instant
            [java.util ArrayList Arrays Comparator]
            [java.util.concurrent CompletableFuture ExecutorService Executors]
            [java.util.function LongFunction Predicate ToLongFunction]
@@ -96,7 +98,9 @@
                                                            ^java.util.List columns
                                                            ^longs temporalMinRange
                                                            ^longs temporalMaxRange
-                                                           ^org.roaringbitmap.longlong.Roaring64Bitmap rowIdBitmap]))
+                                                           ^org.roaringbitmap.longlong.Roaring64Bitmap rowIdBitmap])
+
+  (^clojure.lang.PersistentHashSet getCurrentRowIds [^long current-time]))
 
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface ITemporalTxIndexer
@@ -180,8 +184,18 @@
             kd-tree
             overlap)))
 
-(defn insert-coordinates [kd-tree, ^BufferAllocator allocator, ^TemporalCoordinates coordinates]
-  (let [new-entity? (.newEntity coordinates)
+(defn update-current-row-ids [^clojure.lang.PersistentHashSet current-row-ids removals ^TemporalCoordinates coordinates]
+  (let [x (apply disj current-row-ids removals)]
+    (if (.tombstone coordinates)
+      x
+      (conj x (.rowId coordinates)))))
+
+(defn remove-evicted-row-ids [^clojure.lang.PersistentHashSet current-row-ids ^Roaring64Bitmap evicted-row-ids]
+  (set/difference current-row-ids (set (.toArray evicted-row-ids))))
+
+(defn insert-coordinates [kd-tree, ^BufferAllocator allocator, ^TemporalCoordinates coordinates !current-row-ids sys-time-μs]
+  (let [^long sys-time-μs sys-time-μs
+        new-entity? (.newEntity coordinates)
         row-id (.rowId coordinates)
         iid (.iid coordinates)
         sys-time-start-μs (.sysTimeStart coordinates)
@@ -225,6 +239,16 @@
                                        (aset app-time-end-idx app-time-end-μs)
                                        (aset sys-time-start-idx sys-time-start-μs)
                                        (aset sys-time-end-idx util/end-of-time-μs))))]
+
+    (when (and
+            (<= app-time-start-μs sys-time-μs)
+            (> app-time-end-μs sys-time-μs))
+      (vswap!
+        !current-row-ids
+        update-current-row-ids
+        (map (fn [^longs coord] (aget coord row-id-idx)) overlap)
+        coordinates))
+
     (reduce
      (fn [kd-tree ^longs coord]
        (cond-> (kd/kd-tree-insert kd-tree allocator (doto (->copy-range coord)
@@ -284,7 +308,7 @@
     (try
       (doseq [col-name columns]
         (let [col-idx (->temporal-column-idx col-name)
-              col-type (types/col-type->field col-name (get temporal-col-types col-name))
+              col-type (types/col-type->field col-name (get temporal-col-types col-name)) ;TODO rename to field
               ^BaseFixedWidthVector temporal-vec (.createVector col-type allocator)
               temporal-vec-wtr (vec/->mono-writer temporal-vec col-type)]
           (.allocateNew temporal-vec value-count)
@@ -300,11 +324,110 @@
         (run! util/try-close cols)
         (throw e)))))
 
+(defn row-ids-to-add [kd-tree ^long latest-completed-tx-time ^long current-time]
+  (let [min-range (doto (->min-range)
+                    (aset app-time-start-idx (inc latest-completed-tx-time))
+                    (aset app-time-end-idx (inc current-time))
+                    (aset sys-time-end-idx (inc current-time)))
+
+        max-range (doto (->max-range)
+                    (aset app-time-start-idx current-time))
+
+        ^IKdTreePointAccess point-access (kd/kd-tree-point-access kd-tree)
+
+        overlap (-> ^LongStream (kd/kd-tree-range-search
+                                  kd-tree
+                                  min-range
+                                  max-range)
+                    (.mapToObj (reify LongFunction
+                                 (apply [_ x]
+                                   (doto (long-array 3)
+                                     (aset 0 (.getCoordinate point-access x app-time-start-idx))
+                                     (aset 1 (.getCoordinate point-access x row-id-idx))
+                                     (aset 2 1)))))
+                    (.toArray))]
+    overlap))
+
+(defn row-ids-to-remove [kd-tree ^long latest-completed-tx-time ^long current-time]
+  (let [min-range (doto (->min-range)
+                    (aset app-time-end-idx (inc latest-completed-tx-time))
+                    (aset sys-time-end-idx (inc current-time)))
+
+        ;; justification here for sys-time-end constraint is that if a rows system time end
+        ;; is before current-time then then that row would have been removed during transaction
+        ;; processing as there is no way for a system time end to be in the future.
+        ;; Same applies above for row-ids-to-add
+
+        max-range (doto (->max-range)
+                    (aset app-time-start-idx latest-completed-tx-time)
+                    (aset app-time-end-idx current-time))
+
+        ^IKdTreePointAccess point-access (kd/kd-tree-point-access kd-tree)
+
+        overlap (-> ^LongStream (kd/kd-tree-range-search
+                                  kd-tree
+                                  min-range
+                                  max-range)
+                    (.mapToObj (reify LongFunction
+                                 (apply [_ x]
+                                   (doto (long-array 3)
+                                     (aset 0 (.getCoordinate point-access x app-time-end-idx))
+                                     (aset 1 (.getCoordinate point-access x row-id-idx))
+                                     (aset 2 0)))))
+                    (.toArray))]
+    overlap))
+
+(defn row-ids-to-from-start [kd-tree ^long current-time]
+  (let [min-range (doto (->min-range)
+                    (aset app-time-end-idx (inc current-time))
+                    (aset sys-time-end-idx (inc current-time)))
+
+        max-range (doto (->max-range)
+                    (aset app-time-start-idx current-time))
+
+        ^IKdTreePointAccess point-access (kd/kd-tree-point-access kd-tree)
+
+        overlap (-> ^LongStream (kd/kd-tree-range-search
+                                  kd-tree
+                                  min-range
+                                  max-range)
+                    (.mapToObj (reify LongFunction
+                                 (apply [_ x]
+                                   (doto (long-array 2)
+                                     (aset 0 (.getCoordinate point-access x app-time-start-idx))
+                                     (aset 1 (.getCoordinate point-access x row-id-idx))))))
+                    (.toArray))]
+    overlap))
+
+
+(defn advance-current-row-ids [current-row-ids kd-tree latest-completed-tx-time current-time]
+  (let [row-ids-to-add (row-ids-to-add kd-tree latest-completed-tx-time current-time)
+        row-ids-to-remove (row-ids-to-remove kd-tree latest-completed-tx-time current-time)
+        row-id-changes-by-app-time (sort-by #(aget ^longs % 0) (concat row-ids-to-add row-ids-to-remove))]
+    (reduce
+      (fn [current-row-ids-acc ^longs change]
+        (if (= 1 (aget change 2))
+          (conj current-row-ids-acc (aget change 1))
+          (disj current-row-ids-acc (aget change 1))))
+      current-row-ids
+      row-id-changes-by-app-time)))
+
+(defn current-row-ids-from-start [kd-tree current-time]
+  (let [row-ids-to-add (row-ids-to-from-start kd-tree current-time)
+        row-id-changes-by-app-time (sort-by #(aget ^longs % 0) row-ids-to-add)]
+    (reduce
+      (fn [current-row-ids-acc ^longs change]
+        (conj current-row-ids-acc (aget change 1)))
+      #{}
+      row-id-changes-by-app-time)))
+
 (deftype TemporalManager [^BufferAllocator allocator
                           ^ObjectStore object-store
                           ^IBufferPool buffer-pool
                           ^IMetadataManager metadata-manager
                           ^ExecutorService snapshot-pool
+                          ^:volatile-mutable current-row-ids
+                          ^:volatile-mutable ^core2.api.TransactionInstant latest-completed-tx
                           ^:unsynchronized-mutable snapshot-future
                           ^:unsynchronized-mutable kd-tree-snapshot-idx
                           ^:volatile-mutable kd-tree
@@ -356,7 +479,11 @@
 
   (populateKnownChunks [this]
     (when-let [temporal-chunk-idx (last (keys (.chunksMetadata metadata-manager)))]
-      (.reloadTemporalIndex this temporal-chunk-idx (.latestTemporalSnapshotIndex this temporal-chunk-idx))))
+      (.reloadTemporalIndex this temporal-chunk-idx (.latestTemporalSnapshotIndex this temporal-chunk-idx))
+      (set! (.current-row-ids this)
+            (current-row-ids-from-start
+              (.kd-tree this)
+              (util/instant->micros (.sys-time latest-completed-tx))))))
 
   (awaitSnapshotBuild [_]
     (some-> snapshot-future (deref)))
@@ -384,11 +511,19 @@
 
   ITemporalManager
   (getTemporalWatermark [_]
-    (let [kd-tree (some-> kd-tree (kd/kd-tree-retain allocator))]
+    (let [kd-tree (some-> kd-tree (kd/kd-tree-retain allocator))
+          latest-completed-tx latest-completed-tx]
       (reify
         ITemporalRelationSource
         (createTemporalRelation [_ allocator columns temporal-min-range temporal-max-range row-id-bitmap]
           (->temporal-rel allocator kd-tree columns temporal-min-range temporal-max-range row-id-bitmap))
+
+        (getCurrentRowIds [_ current-time]
+          (advance-current-row-ids
+            current-row-ids
+            kd-tree
+            (util/instant->micros (.sys-time latest-completed-tx))
+            current-time))
 
         Closeable
         (close [_]
@@ -424,7 +559,17 @@
   (startTx [this-tm tx-key]
     (let [sys-time-μs (util/instant->micros (.sys-time tx-key))
           evicted-row-ids (Roaring64Bitmap.)
-          !kd-tree (volatile! kd-tree)]
+          !kd-tree (volatile! kd-tree)
+          !current-row-ids (volatile! current-row-ids)]
+
+      (when latest-completed-tx
+        (vswap!
+          !current-row-ids
+          advance-current-row-ids
+          @!kd-tree
+          (util/instant->micros (.sys-time latest-completed-tx))
+          sys-time-μs))
+
       (reify
         ITemporalTxIndexer
         (indexPut [_ iid row-id start-app-time end-app-time new-entity?]
@@ -432,34 +577,49 @@
                   insert-coordinates allocator (TemporalCoordinates. row-id iid
                                                                      sys-time-μs util/end-of-time-μs
                                                                      start-app-time end-app-time
-                                                                     new-entity? false)))
+                                                                     new-entity? false)
+                  !current-row-ids
+                  sys-time-μs))
 
         (indexDelete [_ iid row-id start-app-time end-app-time new-entity?]
           (vswap! !kd-tree
                   insert-coordinates allocator (TemporalCoordinates. row-id iid
                                                                      sys-time-μs util/end-of-time-μs
                                                                      start-app-time end-app-time
-                                                                     new-entity? true)))
+                                                                     new-entity? true)
+                  !current-row-ids
+                  sys-time-μs))
 
         (indexEvict [_ iid]
-          (vswap! !kd-tree evict-id allocator iid evicted-row-ids))
+          (vswap! !kd-tree evict-id allocator iid evicted-row-ids)
+          (vswap! !current-row-ids remove-evicted-row-ids evicted-row-ids))
 
         (commit [_]
           (set! (.kd-tree this-tm) @!kd-tree)
+          (set! (.current-row-ids this-tm) @!current-row-ids)
+          (set! (.latest-completed-tx this-tm) tx-key)
           evicted-row-ids)
 
         (abort [_])
 
         ITemporalRelationSource
         (createTemporalRelation [_ allocator columns temporal-min-range temporal-max-range row-id-bitmap]
-          (->temporal-rel allocator @!kd-tree columns temporal-min-range temporal-max-range row-id-bitmap)))))
+          (->temporal-rel allocator @!kd-tree columns temporal-min-range temporal-max-range row-id-bitmap))
+
+        (getCurrentRowIds [_ current-time]
+          (advance-current-row-ids
+            @!current-row-ids
+            @!kd-tree
+            (util/instant->micros (.sys-time latest-completed-tx))
+            current-time)))))
 
   Closeable
   (close [this]
     (util/shutdown-pool snapshot-pool)
     (set! (.snapshot-future this) nil)
     (util/try-close kd-tree)
-    (set! (.kd-tree this) nil)))
+    (set! (.kd-tree this) nil)
+    (set! (.latest-completed-tx this) nil)))
 
 (defmethod ig/prep-key ::temporal-manager [_ opts]
   (merge {:allocator (ig/ref :core2/allocator)
@@ -478,7 +638,7 @@
 
   (let [pool (Executors/newSingleThreadExecutor (util/->prefix-thread-factory "temporal-snapshot-"))]
     (doto (TemporalManager. allocator object-store buffer-pool metadata-mgr
-                            pool nil nil nil async-snapshot?)
+                            pool #{} (:latest-completed-tx (meta/latest-chunk-metadata metadata-mgr)) nil nil nil async-snapshot?)
       (.populateKnownChunks))))
 
 (defmethod ig/halt-key! ::temporal-manager [_ ^TemporalManager mgr]

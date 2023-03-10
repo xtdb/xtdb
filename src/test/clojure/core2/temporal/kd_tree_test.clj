@@ -30,33 +30,49 @@
 
 (defn ->coordinates ^core2.temporal.TemporalCoordinates [{:keys [id
                                                                  ^long row-id
-                                                                 ^Date sys-time-start
-                                                                 ^Date sys-time-end
-                                                                 ^Date app-time-start
-                                                                 ^Date app-time-end
+                                                                 sys-time-start
+                                                                 sys-time-end
+                                                                 app-time-start
+                                                                 app-time-end
                                                                  new-entity? tombstone?]}]
   (TemporalCoordinates. row-id id
-                        (util/instant->micros (.toInstant sys-time-start))
-                        (util/instant->micros (or (some-> sys-time-end .toInstant)
+                        (util/instant->micros (if (instance? Date sys-time-start)
+                                                (.toInstant ^Date sys-time-start)
+                                                sys-time-start))
+                        (util/instant->micros (or (if (instance? Date sys-time-end)
+                                                    (some-> ^Date sys-time-end .toInstant)
+                                                    sys-time-end)
                                                   util/end-of-time))
-                        (util/instant->micros (.toInstant (or app-time-start sys-time-start)))
-                        (util/instant->micros (or (some-> app-time-end .toInstant)
+                        (util/instant->micros (let [ats (or app-time-start sys-time-start)]
+                                                    (if (instance? Date ats)
+                                                      (.toInstant ^Date ats)
+                                                      ats)))
+                        (util/instant->micros (or (if (instance? Date app-time-end)
+                                                    (some-> ^Date app-time-end .toInstant)
+                                                    app-time-end)
                                                   util/end-of-time))
                         new-entity? (boolean tombstone?)))
 
+ (defn as-micros [^java.util.Date inst]
+  (util/instant->micros (.toInstant inst)))
+
 (t/deftest bitemporal-sys-time-split-test
   (let [kd-tree nil
-        row-id->row (HashMap.)]
+        row-id->row (HashMap.)
+        !current-row-ids (volatile! #{})]
     ;; Current Insert
     ;; Eva Nielsen buys the flat at Skovvej 30 in Aalborg on January 10,
     ;; 1998.
     (with-open [allocator (RootAllocator.)
-                ^Closeable kd-tree (temporal/insert-coordinates kd-tree
-                                                                allocator
-                                                                (->coordinates {:id 7797
-                                                                                :row-id 1
-                                                                                :sys-time-start #inst "1998-01-10"
-                                                                                :new-entity? true}))]
+                ^Closeable kd-tree (let [sys-time #inst "1998-01-10"]
+                                     (temporal/insert-coordinates kd-tree
+                                                                  allocator
+                                                                  (->coordinates {:id 7797
+                                                                                  :row-id 1
+                                                                                  :sys-time-start sys-time
+                                                                                  :new-entity? true})
+                                                                  !current-row-ids
+                                                                  (as-micros sys-time)))]
       (.put row-id->row 1 {:customer-number 145})
       (t/is (= [{:id 7797,
                  :customer-number 145,
@@ -66,15 +82,20 @@
                  :sys-time-start #inst "1998-01-10T00:00:00.000-00:00",
                  :sys-time-end #inst "9999-12-31T23:59:59.999-00:00"}]
                (temporal-rows kd-tree row-id->row)))
+      (t/is (= #{1}
+               @!current-row-ids))
 
       ;; Current Update
       ;; Peter Olsen buys the flat on January 15, 1998.
-      (let [kd-tree (temporal/insert-coordinates kd-tree
+      (let [sys-time #inst "1998-01-15"
+            kd-tree (temporal/insert-coordinates kd-tree
                                                  allocator
                                                  (->coordinates {:id 7797
                                                                  :row-id 2
-                                                                 :sys-time-start #inst "1998-01-15"
-                                                                 :new-entity? false}))]
+                                                                 :sys-time-start sys-time
+                                                                 :new-entity? false})
+                                                 !current-row-ids
+                                                 (as-micros sys-time))]
         (.put row-id->row 2 {:customer-number 827})
         (t/is (= [{:id 7797,
                    :row-id 1,
@@ -98,16 +119,21 @@
                    :sys-time-start #inst "1998-01-15T00:00:00.000-00:00",
                    :sys-time-end #inst "9999-12-31T23:59:59.999-00:00"}]
                  (temporal-rows kd-tree row-id->row)))
+        (t/is (= #{2}
+                 @!current-row-ids))
 
         ;; Current Delete
         ;; Peter Olsen sells the flat on January 20, 1998.
-        (let [kd-tree (temporal/insert-coordinates kd-tree
+        (let [sys-time #inst "1998-01-20"
+              kd-tree (temporal/insert-coordinates kd-tree
                                                    allocator
                                                    (->coordinates {:id 7797
                                                                    :row-id 3
-                                                                   :sys-time-start #inst "1998-01-20"
+                                                                   :sys-time-start sys-time
                                                                    :new-entity? false
-                                                                   :tombstone? true}))]
+                                                                   :tombstone? true})
+                                                   !current-row-ids
+                                                   (as-micros sys-time))]
           (.put row-id->row 3 {:customer-number 827})
           (t/is (= [{:id 7797,
                      :customer-number 145,
@@ -138,17 +164,22 @@
                      :sys-time-start #inst "1998-01-20T00:00:00.000-00:00",
                      :sys-time-end #inst "9999-12-31T23:59:59.999-00:00"}]
                    (temporal-rows kd-tree row-id->row)))
+          (t/is (= #{}
+                   @!current-row-ids))
 
           ;; Sequenced Insert
           ;; Eva actually purchased the flat on January 3, performed on January 23.
-          (let [kd-tree (temporal/insert-coordinates kd-tree
+          (let [sys-time #inst "1998-01-23"
+                kd-tree (temporal/insert-coordinates kd-tree
                                                      allocator
                                                      (->coordinates {:id 7797
                                                                      :row-id 4
-                                                                     :sys-time-start #inst "1998-01-23"
+                                                                     :sys-time-start sys-time
                                                                      :app-time-start #inst "1998-01-03"
                                                                      :app-time-end #inst "1998-01-15"
-                                                                     :new-entity? false}))]
+                                                                     :new-entity? false})
+                                                     !current-row-ids
+                                                     (as-micros sys-time))]
             (.put row-id->row 4 {:customer-number 145})
             (t/is (= [{:id 7797,
                        :customer-number 145,
@@ -186,19 +217,24 @@
                        :sys-time-start #inst "1998-01-23T00:00:00.000-00:00",
                        :sys-time-end #inst "9999-12-31T23:59:59.999-00:00"}]
                      (temporal-rows kd-tree row-id->row)))
+            (t/is (= #{}
+                     @!current-row-ids))
 
             ;; NOTE: rows differs from book, but covered area is the same.
             ;; Sequenced Delete
             ;; A sequenced deletion performed on January 26: Eva actually purchased the flat on January 5.
-            (let [kd-tree (temporal/insert-coordinates kd-tree
+            (let [sys-time #inst "1998-01-26"
+                  kd-tree (temporal/insert-coordinates kd-tree
                                                        allocator
                                                        (->coordinates {:id 7797
                                                                        :row-id 5
-                                                                       :sys-time-start #inst "1998-01-26"
+                                                                       :sys-time-start sys-time
                                                                        :app-time-start #inst "1998-01-02"
                                                                        :app-time-end #inst "1998-01-05"
                                                                        :new-entity? false
-                                                                       :tombstone? true}))]
+                                                                       :tombstone? true})
+                                                       !current-row-ids
+                                                       (as-micros sys-time))]
               (.put row-id->row 5 {:customer-number 145})
               (t/is (= [{:id 7797,
                          :customer-number 145,
@@ -243,18 +279,23 @@
                          :sys-time-start #inst "1998-01-26T00:00:00.000-00:00",
                          :sys-time-end #inst "9999-12-31T23:59:59.999-00:00"}]
                        (temporal-rows kd-tree row-id->row)))
+              (t/is (= #{}
+                       @!current-row-ids))
 
               ;; NOTE: rows differs from book, but covered area is the same.
               ;; Sequenced Update
               ;; A sequenced update performed on January 28: Peter actually purchased the flat on January 12.
-              (let [kd-tree (temporal/insert-coordinates kd-tree
+              (let [sys-time #inst "1998-01-28"
+                    kd-tree (temporal/insert-coordinates kd-tree
                                                          allocator
                                                          (->coordinates {:id 7797
                                                                          :row-id 6
-                                                                         :sys-time-start #inst "1998-01-28"
+                                                                         :sys-time-start sys-time
                                                                          :app-time-start #inst "1998-01-12"
                                                                          :app-time-end #inst "1998-01-15"
-                                                                         :new-entity? false}))]
+                                                                         :new-entity? false})
+                                                         !current-row-ids
+                                                         (as-micros sys-time))]
                 (.put row-id->row 6 {:customer-number 827})
                 (t/is (= [{:id 7797,
                            :customer-number 145,
@@ -312,13 +353,16 @@
                            :app-time-end #inst "1998-01-15T00:00:00.000-00:00",
                            :sys-time-start #inst "1998-01-28T00:00:00.000-00:00",
                            :sys-time-end #inst "9999-12-31T23:59:59.999-00:00"}]
-                         (temporal-rows kd-tree row-id->row))
+                         (temporal-rows kd-tree row-id->row)))
+                (t/is (= #{}
+                         @!current-row-ids))
 
-                      (t/testing "rebuilding tree results in tree with same points"
-                        (let [points (mapv vec (kd/kd-tree->seq kd-tree))]
-                          (with-open [rebuilt-tree (kd/build-node-kd-tree allocator (shuffle points))]
-                            (t/is (= (sort points)
-                                     (sort (mapv vec (kd/kd-tree->seq rebuilt-tree)))))))))))))))))
+
+                (t/testing "rebuilding tree results in tree with same points"
+                  (let [points (mapv vec (kd/kd-tree->seq kd-tree))]
+                    (with-open [rebuilt-tree (kd/build-node-kd-tree allocator (shuffle points))]
+                      (t/is (= (sort points)
+                               (sort (mapv vec (kd/kd-tree->seq rebuilt-tree))))))))))))))))
 
 (t/deftest kd-tree-sanity-check
   (let [points [[7 2] [5 4] [9 6] [4 7] [8 1] [2 3]]]
