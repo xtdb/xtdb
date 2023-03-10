@@ -167,13 +167,14 @@ dependencies {
     projectDep(":modules:datasets")
     projectDep(":modules:flight-sql")
 
+    api("ch.qos.logback", "logback-classic", "1.4.5")
+
     testImplementation("org.clojure", "data.csv", "1.0.1")
     testImplementation("org.clojure", "tools.logging", "1.2.4")
     testImplementation("org.clojure", "tools.cli", "1.0.206")
 
     devImplementation("integrant", "repl", "0.3.2")
     testImplementation("org.slf4j", "slf4j-api", "2.0.6")
-    testImplementation("ch.qos.logback", "logback-classic", "1.4.5")
     testImplementation("com.clojure-goes-fast", "clj-async-profiler", "1.0.0")
     testImplementation("org.postgresql", "postgresql", "42.5.0")
     testImplementation("cheshire", "cheshire", "5.11.0")

@@ -15,7 +15,8 @@
             [core2.util :as util]
             [core2.vector.indirect :as iv]
             [core2.vector.writer :as vw])
-  (:import (core2 ICursor InstantSource)
+  (:import [ch.qos.logback.classic Level Logger]
+           (core2 ICursor InstantSource)
            core2.indexer.IIndexer
            core2.ingester.Ingester
            (core2.operator IRaQuerySource PreparedQuery)
@@ -28,7 +29,8 @@
            java.util.function.Consumer
            (org.apache.arrow.memory BufferAllocator RootAllocator)
            (org.apache.arrow.vector FieldVector VectorSchemaRoot)
-           (org.apache.arrow.vector.types.pojo Schema)))
+           (org.apache.arrow.vector.types.pojo Schema)
+           org.slf4j.LoggerFactory))
 
 (def ^:dynamic ^org.apache.arrow.memory.BufferAllocator *allocator*)
 
@@ -246,3 +248,23 @@
          (with-tmp-dirs #{~@more-bindings}
            ~@body)))
     `(do ~@body)))
+
+(defn set-log-level! [ns level]
+  (.setLevel ^Logger (LoggerFactory/getLogger (name ns))
+             (when level
+               (Level/valueOf (name level)))))
+
+(defn get-log-level! [ns]
+  (some->> (.getLevel ^Logger (LoggerFactory/getLogger (name ns)))
+           (str)
+           (.toLowerCase)
+           (keyword)))
+
+#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
+(defmacro with-log-level [ns level & body]
+  `(let [level# (get-log-level! ~ns)]
+     (try
+       (set-log-level! ~ns ~level)
+       ~@body
+       (finally
+         (set-log-level! ~ns level#)))))

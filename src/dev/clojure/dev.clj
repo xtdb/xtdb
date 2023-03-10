@@ -1,37 +1,15 @@
 (ns dev
-  (:require [clojure.java.io :as io]
+  (:require [clj-async-profiler.core :as clj-async-profiler]
             [clojure.java.browse :as browse]
+            [clojure.java.io :as io]
             [core2.datasets.tpch :as tpch]
             [core2.ingester :as ingest]
             [core2.node :as node]
             [core2.test-util :as tu]
             [core2.util :as util]
             [integrant.core :as i]
-            [integrant.repl :as ir]
-            [clj-async-profiler.core :as clj-async-profiler])
-  (:import [ch.qos.logback.classic Level Logger]
-           java.time.Duration
-           org.slf4j.LoggerFactory))
-
-(defn set-log-level! [ns level]
-  (.setLevel ^Logger (LoggerFactory/getLogger (name ns))
-             (when level
-               (Level/valueOf (name level)))))
-
-(defn get-log-level! [ns]
-  (some->> (.getLevel ^Logger (LoggerFactory/getLogger (name ns)))
-           (str)
-           (.toLowerCase)
-           (keyword)))
-
-#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
-(defmacro with-log-level [ns level & body]
-  `(let [level# (get-log-level! ~ns)]
-     (try
-       (set-log-level! ~ns ~level)
-       ~@body
-       (finally
-         (set-log-level! ~ns level#)))))
+            [integrant.repl :as ir])
+  (:import java.time.Duration))
 
 (def dev-node-dir
   (io/file "dev/dev-node"))
