@@ -54,6 +54,7 @@ allprojects {
             jvmArgs = defaultJvmArgs
 
             maxHeapSize = "2g"
+            maxParallelForks = Runtime.getRuntime().availableProcessors().div(2).coerceIn(1, 4)
         }
 
         if (plugins.hasPlugin("dev.clojurephant.clojure")) {
