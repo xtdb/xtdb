@@ -1,9 +1,14 @@
 (ns ^{:clojure.tools.namespace.repl/load false}
   core2.edn
+  (:require [time-literals.read-write :as time-literals])
   (:import (core2.types IntervalDayTime IntervalMonthDayNano IntervalYearMonth)
            java.io.Writer
            [java.time Duration Period]
            [org.apache.arrow.vector PeriodDuration]))
+
+(when-not (or (some-> (System/getenv "CORE2_NO_JAVA_TIME_LITERALS") Boolean/valueOf)
+              (some-> (System/getProperty "core2.no-java-time-literals") Boolean/valueOf))
+  (time-literals/print-time-literals-clj!))
 
 (defn period-duration-reader [[p d]]
   (PeriodDuration. (Period/parse p) (Duration/parse d)))

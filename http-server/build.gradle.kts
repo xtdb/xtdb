@@ -34,5 +34,4 @@ dependencies {
     api("metosin", "reitit-spec", "0.5.15")
 
     api("com.cognitect", "transit-clj", "1.0.329")
-    api("com.widdindustries", "time-literals", "0.1.6")
 }

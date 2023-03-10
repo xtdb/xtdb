@@ -2,8 +2,7 @@
   (:require [clojure.java.io :as io]
             [clojure.tools.namespace.repl :as ctn]
             core2.edn
-            [core2.util :as util]
-            [time-literals.read-write :as time-literals])
+            [core2.util :as util])
   (:import java.io.File))
 
 (alter-var-root #'*warn-on-reflection* (constantly true))
@@ -31,4 +30,3 @@
   (require 'dev)
   (in-ns 'dev))
 
-(time-literals/print-time-literals-clj!)
