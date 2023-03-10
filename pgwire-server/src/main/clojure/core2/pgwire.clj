@@ -579,7 +579,10 @@
         ;; one nice thing about sleep is if we are interrupted
         ;; (as we've been asked to close)
         ;; we get an exception here
-        (if (try (Thread/sleep 1) true (catch InterruptedException _ false))
+        (if (try
+              (Thread/sleep 1)
+              true
+              (catch InterruptedException _ false))
           (recur)
           true)
 
@@ -735,27 +738,26 @@
 (defn stop-server [server]
   (let [{:keys [server-status, server-state, port]} server
         drain-wait (:drain-wait @server-state 5000)
-        interrupted (.isInterrupted (Thread/currentThread))
-        drain (not (or interrupted (contains? #{0, nil} drain-wait)))]
+        drain (not (contains? #{0, nil} drain-wait))]
 
     (when (and drain (compare-and-set! server-status :running :draining))
       (log/debug "Server draining connections")
-      (loop [wait-until (+ (System/currentTimeMillis) drain-wait)]
-        (cond
-          ;; connections all closed, proceed
-          (empty? (:connections @server-state)) nil
+      (let [wait-until (+ (System/currentTimeMillis) drain-wait)]
+        (loop []
+          (cond
+            ;; connections all closed, proceed
+            (empty? (:connections @server-state)) nil
 
-          ;; timeout
-          (< wait-until (System/currentTimeMillis))
-          (do (log/warn "Could not drain connections in time, force closing")
-              (swap! server-state assoc :force-close true))
+            (Thread/interrupted)
+            (do (log/warn "Interrupted during drain, force closing")
+                (swap! server-state assoc :force-close true))
 
-          ;; we are interrupted, hurry up!
-          (.isInterrupted (Thread/currentThread))
-          (do (log/warn "Interupted during drain, force closing")
-              (swap! server-state assoc :force-close true))
+            ;; timeout
+            (< wait-until (System/currentTimeMillis))
+            (do (log/warn "Could not drain connections in time, force closing")
+                (swap! server-state assoc :force-close true))
 
-          :else (do (Thread/sleep 10) (recur wait-until)))))
+            :else (do (Thread/sleep 10) (recur))))))
 
     (cleanup-server-resources server)
 
@@ -1279,9 +1281,7 @@
         ;; this query has been cancelled!
         cancelled-by-client? #(:cancel @conn-state)
         ;; please die as soon as possible (not the same as draining, which leaves conns :running for a time)
-        closing? #(= :closing @conn-status)
-        ;; really you need to stop ASAP (force conn tp termination)
-        interrupted? #(.isInterrupted (Thread/currentThread))]
+        closing? #(= :closing @conn-status)]
     (loop [n-rows-out 0]
       (cond
         (cancelled-by-client?)
@@ -1289,8 +1289,10 @@
             (swap! conn-state dissoc :cancel)
             (cmd-send-error conn (err-query-cancelled "query cancelled during execution")))
 
-        (interrupted?)
-        (log/debug "query interrupted by server (forced shutdown)")
+        (Thread/interrupted)
+        (do
+          (log/debug "query interrupted by server (forced shutdown)")
+          (throw (InterruptedException.)))
 
         (closing?)
         (log/debug "query result stream stopping (conn closing)")
@@ -1303,8 +1305,7 @@
                 ;; allow interrupts - this can happen if we are blocking during the row reduce and our conn is forced to close.
                 (catch InterruptedException e
                   (log/debug e "Interrupt thrown sending query results")
-                  ;; make sure interrupt flag hasn't been cleared - conn-loop will terminate if interrupted.
-                  (.interrupt (Thread/currentThread)))
+                  (throw e))
 
                 ;; rethrow socket ex without logs (this is expected during any msg transfer
                 ;; might later need to be more specific for storage
@@ -1350,17 +1351,16 @@
         ;; how many times have we awaited
         iteration (or iteration 0)
         ;; how long should we sleep for (if not interrupted / done)
-        sleep-time (min 10 (long (* (double iteration) 0.01)))
-
-        interrupted (.isInterrupted (Thread/currentThread))
-
-        ;; do not sleep if interrupted (or not enough iterations)
-        no-sleep (and (pos? sleep-time) interrupted)]
+        sleep-time (min 10 (long (* (double iteration) 0.01)))]
 
     (when cancelled (swap! conn-state dissoc :cancel))
 
+    (when (Thread/interrupted)
+      (log/debug "query interrupted by server (forced shutdown)")
+      (throw (InterruptedException.)))
+
     ;; naive bounded wait a very short amount only after a few iterations (some queries return quickly!)
-    (when-not (or cancelled (.isDone fut) no-sleep)
+    (when-not (or cancelled (.isDone fut))
       (Thread/sleep sleep-time))
 
     (cond
@@ -1369,10 +1369,6 @@
       (do
         (log/debug "query cancelled during execution" {:cid (:cid conn), :port (:port (:server conn))})
         (cmd-send-error conn (err-query-cancelled "query cancelled during execution")))
-
-      ;; if interrupted exit now, this will happen if conn threadpool needs to be shutdown immediately
-      interrupted
-      (log/debug "query interrupted by server (forced shutdown)")
 
       ;; close happens if conns do not drain in time so we should exit
       (= :closing @conn-status)
@@ -1948,7 +1944,7 @@
   (try
     (loop []
       (cond
-        (.isInterrupted (Thread/currentThread)) nil
+        (Thread/interrupted) (throw (InterruptedException.))
 
         (.isClosed ^ServerSocket @accept-socket)
         (log/debug "Accept socket closed, exiting accept loop")
@@ -1956,7 +1952,6 @@
         (#{:draining :running} @server-status)
         (do
           (try
-
             ;; set a low timeout to leave accept early if needed
             (when (= :draining @server-status)
               (.setSoTimeout ^ServerSocket @accept-socket 10))
@@ -1984,11 +1979,11 @@
                 (log/warn e "Accept time out" {:port port})))
             (catch IOException e
               (log/warn e "Accept IO exception" {:port port})))
-          (recur))
+          (recur))))
 
-        :else nil))
-    ;; should already be stopping if interrupted
-    (catch InterruptedException _ (.interrupt (Thread/currentThread)))
+    (catch InterruptedException _
+      (swap! server-state assoc :accept-interrupted true))
+
     ;; for the unknowns, do not stop - leave in an error state
     ;; so it can be inspected.
     (catch Throwable e
@@ -1997,9 +1992,7 @@
       (when-not (:silent-accept @server-state)
         (log/error e "Exception caught on accept thread" {:port port}))))
 
-  (when (.isInterrupted (Thread/currentThread))
-    (swap! server-state assoc :accept-interrupted true)
-    (log/debug "Accept loop interrupted, exiting accept loop")))
+  (log/debug "exiting accept loop"))
 
 (defn- create-server [{:keys [node port num-threads drain-wait unsafe-init-state]}]
   (assert node ":node is required")
