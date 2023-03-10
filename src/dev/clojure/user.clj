@@ -16,8 +16,11 @@
                                                     (.listFiles (io/file "modules")))
                                   :when (and (.isDirectory dir)
                                              (.exists (io/file dir "deps.edn")))
-                                  sub-dir #{"src/main/clojure" "src/test/clojure"}]
-                              (io/file dir sub-dir)))
+                                  sub-dir #{"src/main/clojure" "src/test/clojure"}
+                                  :let [refresh-dir (io/file dir sub-dir)]
+
+                                  :when (not= refresh-dir (io/file "modules/flight-sql/src/test/clojure"))]
+                              refresh-dir))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (defn reset []
