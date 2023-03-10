@@ -106,9 +106,7 @@
         (throw e)))))
 
 (deftest ssl-test
-  (t/are [sslmode expect]
-    (= expect (try-sslmode sslmode))
-
+  (t/are [sslmode expect] (= expect (try-sslmode sslmode))
     "disable" :ok
     "allow" :ok
     "prefer" :ok
@@ -558,28 +556,29 @@
 (deftest concurrent-conns-close-midway-test
   (require-server {:num-threads 2
                    :accept-so-timeout 10})
-  (let [spawn (fn spawn [i]
-                (future
-                  (try
-                    (with-open [conn (jdbc-conn "loginTimeout" "1"
-                                                "socketTimeout" "1")]
-                      (loop [query-til (+ (System/currentTimeMillis)
-                                          (* i 1000))]
-                        (ping conn)
-                        (when (< (System/currentTimeMillis) query-til)
-                          (recur query-til))))
-                    ;; we expect an ex here, whether or not draining
-                    (catch PSQLException _))))
+  (tu/with-log-level 'core2.pgwire :off
+    (let [spawn (fn spawn [i]
+                  (future
+                    (try
+                      (with-open [conn (jdbc-conn "loginTimeout" "1"
+                                                  "socketTimeout" "1")]
+                        (loop [query-til (+ (System/currentTimeMillis)
+                                            (* i 1000))]
+                          (ping conn)
+                          (when (< (System/currentTimeMillis) query-til)
+                            (recur query-til))))
+                      ;; we expect an ex here, whether or not draining
+                      (catch PSQLException _))))
 
-        futs (mapv spawn (range 10))]
+          futs (mapv spawn (range 10))]
 
-    (is (some #(not= :timeout (deref % 1000 :timeout)) futs))
+      (is (some #(not= :timeout (deref % 1000 :timeout)) futs))
 
-    (.close *server*)
+      (.close *server*)
 
-    (is (every? #(not= :timeout (deref % 1000 :timeout)) futs))
+      (is (every? #(not= :timeout (deref % 1000 :timeout)) futs))
 
-    (check-server-resources-freed)))
+      (check-server-resources-freed))))
 
 ;; the goal of this test is to cause a bunch of ping queries to block on parse
 ;; until the server is draining
@@ -861,16 +860,17 @@
       (is (= [{:a {"b" 42}}] rs)))))
 
 (deftest start-stop-as-module-test
-  (let [port (tu/free-port)]
-    (with-open [_node (node/start-node {:core2/pgwire {:port port
-                                                       :num-threads 3}})]
-      (let [srv (get @#'pgwire/servers port)]
-        (is (some? srv)))
+  (tu/with-log-level 'core2.pgwire :off
+    (let [port (tu/free-port)]
+      (with-open [_node (node/start-node {:core2/pgwire {:port port
+                                                         :num-threads 3}})]
+        (let [srv (get @#'pgwire/servers port)]
+          (is (some? srv)))
 
-      (with-open [conn (jdbc-conn)]
-        (is (= "pong" (ping conn)))))
+        (with-open [conn (jdbc-conn)]
+          (is (= "pong" (ping conn)))))
 
-    (is (not (contains? @#'pgwire/servers port)))))
+      (is (not (contains? @#'pgwire/servers port))))))
 
 (deftest open-close-transaction-does-not-crash-test
   (with-open [conn (jdbc-conn)]
@@ -1316,8 +1316,9 @@
           (is (re-find #"INSERT does not contain mandatory id column" s)))))))
 
 (deftest runtime-error-query-test
-  (with-open [conn (jdbc-conn)]
-    (is (thrown? PSQLException #"Data error - trim error" (q conn ["SELECT TRIM(LEADING 'abc' FROM a.a) FROM (VALUES ('')) a (a)"])))))
+  (tu/with-log-level 'core2.pgwire :off
+    (with-open [conn (jdbc-conn)]
+      (is (thrown? PSQLException #"Data error - trim error" (q conn ["SELECT TRIM(LEADING 'abc' FROM a.a) FROM (VALUES ('')) a (a)"]))))))
 
 (deftest runtime-error-commit-test
   (with-open [conn (jdbc-conn)]
