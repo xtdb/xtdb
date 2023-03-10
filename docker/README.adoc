@@ -4,11 +4,16 @@
 
 * Make sure your Docker daemon is running
 * `./bin/docker-build.sh [--clean]` will build and tag as `core2:latest`, and load it into your images list. The `--clean` flag can be used to ensure the core2 uberjar is rebuilt.
-* To run: `docker run -p 5432:5432 core2` (with no `xtdb/` organization prefix)
+* To run: `docker run -ti --rm -p 5432:5432 -p 9832:9832 -p 3000:3000 core2` (with no `xtdb/` organization prefix)
 
-== Building and pushing a multi-arch image to dockerhub
+== Deployment setup
 
-Pushing core2 images requires a login to docker with permission to push to the xtdb docker hub org, ask @refset or @jarohen if you do not have this.
+* It's recommend to set up a Docker https://docs.docker.com/engine/reference/commandline/login/#credentials-store[credentials store], if you haven't already.
+** Arch: `docker-credential-helpers-bin`, and normal https://www.passwordstore.org/[Pass] setup.
+** OSX: can use the keychain - follow instructions on the above link.
+* https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry#authenticating-with-a-personal-access-token-classic[Authenticate] to the Github Container Registry.
+
+== Building and pushing a multi-arch image
 
 * install https://github.com/docker/buildx[buildx] if it is not already (docker desktop, recent docker versions have it bundled). This will enable multi-arch builds support.
 * `docker buildx install` to https://github.com/docker/buildx#set-buildx-as-the-default-builder[set buildx as your default Docker builder]
