@@ -9,9 +9,8 @@
             [core2.vector.writer :as vw])
   (:import clojure.lang.MapEntry
            core2.operator.IRaQuerySource
-           (java.time LocalDate Instant ZonedDateTime)
            java.lang.AutoCloseable
-           java.util.Date
+           (java.time LocalDate)
            org.apache.arrow.memory.BufferAllocator))
 
 (s/def ::logic-var simple-symbol?)
@@ -343,45 +342,27 @@
                                              (map (juxt identity ->param-sym)))
                                        in-bindings)}))))
 
-(defn- ->temporal-preds [temporal-clauses]
-  (letfn [(->start-k [time-k]
-            (case time-k :app-time 'application_time_start, :sys-time 'system_time_start))
+(defn- ->temporal-clauses [temporal-rules]
+  (letfn [(with-time-in-clause [clauses time-k {:keys [time-from time-to]}]
+            (-> clauses (assoc time-k (list 'in time-from time-to))))
 
-          (->end-k [time-k]
-            (case time-k :app-time 'application_time_end, :sys-time 'system_time_end))
+          (with-time-at-clause [clauses time-k {:keys [time-at]}]
+            (-> clauses (assoc time-k (list 'at time-at))))]
 
-          (with-time-in-preds [preds time-k {:keys [time-from time-to]}]
-            (let [start-k (->start-k time-k), end-k (->end-k time-k)]
-              (-> preds
-                  (update time-k
-                          (fn [acc]
-                            (-> acc
-                                ;; app-time overlaps [time-from time-to]
-                                (cond-> time-from (update start-k (fnil conj []) (list '< start-k time-to)))
-                                (cond-> time-to (update end-k (fnil conj []) (list '> end-k time-from)))))))))
-
-          (with-time-at-preds [preds time-k {:keys [time-at]}]
-            (let [start-k (->start-k time-k), end-k (->end-k time-k)]
-              (-> preds
-                  (update-in [time-k start-k] (fnil conj []) (list '<= start-k time-at))
-                  (update-in [time-k end-k] (fnil conj []) (list '> end-k time-at)))))]
-
-    (->> temporal-clauses
-         (reduce (fn [acc {:keys [e] :as clause}]
+    (->> temporal-rules
+         (reduce (fn [acc {:keys [e] :as rule}]
                    (-> acc
                        (update e
-                               (fn [e-preds {:keys [k] :as clause}]
+                               (fn [e-preds {:keys [k] :as rule}]
                                  (case k
-                                   for-all-app-time (-> e-preds (update :app-time identity))
-                                   for-app-time-in (-> e-preds (with-time-in-preds :app-time clause))
-                                   for-app-time-at (-> e-preds (with-time-at-preds :app-time clause))
+                                   for-all-app-time (-> e-preds (assoc :for-app-time :all-time))
+                                   for-app-time-in (-> e-preds (with-time-in-clause :for-app-time rule))
+                                   for-app-time-at (-> e-preds (with-time-at-clause :for-app-time rule))
 
-                                   for-all-sys-time (-> e-preds
-                                                        (update-in [:sys-time 'system_time_end] (fnil conj [])
-                                                                   '(<= system_time_end core2/end-of-time)))
-                                   for-sys-time-in (-> e-preds (with-time-in-preds :sys-time clause))
-                                   for-sys-time-at (-> e-preds (with-time-at-preds :sys-time clause))))
-                               clause)))
+                                   for-all-sys-time (-> e-preds (assoc :for-sys-time :all-time))
+                                   for-sys-time-in (-> e-preds (with-time-in-clause :for-sys-time rule))
+                                   for-sys-time-at (-> e-preds (with-time-at-clause :for-sys-time rule))))
+                               rule)))
                  {}))))
 
 (defn- wrap-scan-col-preds [scan-col col-preds]
@@ -390,7 +371,7 @@
     1 {scan-col (first col-preds)}
     {scan-col (list* 'and col-preds)}))
 
-(defn- plan-scan [triples temporal-preds]
+(defn- plan-scan [triples temporal-clauses]
   (let [attrs (into #{} (map :a) triples)
 
         attr->lits (-> triples
@@ -398,32 +379,19 @@
                                     (when (= :literal v-type)
                                       {:a a, :lit v-arg})))
                             (group-by :a))
-                       (update-vals #(into #{} (map :lit) %)))
-
-        app-time-preds (get temporal-preds :app-time
-                            '{application_time_start [(<= application_time_start (current-timestamp))]
-                              application_time_end [(> application_time_end (current-timestamp))]})
-
-        ;; defaults handled by apply-src-tx
-        sys-time-preds (get temporal-preds :sys-time)]
+                       (update-vals #(into #{} (map :lit) %)))]
 
     (-> [:scan {:table (or (some-> (first (attr->lits '_table)) symbol)
-                           'xt_docs)}
+                           'xt_docs)
+                :for-app-time (:for-app-time temporal-clauses '(at :now))
+                ;; defaults handled by scan
+                :for-sys-time (:for-sys-time temporal-clauses)}
          (-> attrs
-             (cond-> app-time-preds (conj 'application_time_start 'application_time_end)
-                     sys-time-preds (conj 'system_time_start 'system_time_end))
              (disj '_table)
              (->> (mapv (fn [attr]
                           (-> attr
-                              (wrap-scan-col-preds
-                               (concat (for [lit (get attr->lits attr)]
-                                         (list '= attr lit))
-                                       (case attr
-                                         application_time_start (get app-time-preds 'application_time_start)
-                                         application_time_end (get app-time-preds 'application_time_end)
-                                         system_time_start (get sys-time-preds 'system_time_start)
-                                         system_time_end (get sys-time-preds 'system_time_end)
-                                         nil))))))))]
+                              (wrap-scan-col-preds (for [lit (get attr->lits attr)]
+                                                     (list '= attr lit))))))))]
         (with-meta {::vars attrs}))))
 
 (defn- attr->unwind-col [a]
@@ -444,14 +412,14 @@
                             (vary-meta update ::vars conj uw-col)))))
         plan)))
 
-(defn- plan-triples [triples temporal-preds]
+(defn- plan-triples [triples temporal-clauses]
   (let [triples (group-by :e triples)]
     (vec
      (for [e (set/union (set (keys triples))
-                        (set (keys temporal-preds)))
+                        (set (keys temporal-clauses)))
            :let [triples (->> (conj (get triples e) {:e e, :a :id, :v e})
                               (map #(update % :a col-sym)))
-                 temporal-preds (get temporal-preds e)]]
+                 temporal-clauses (get temporal-clauses e)]]
        (let [var->cols (-> triples
                            (->> (keep (fn [{:keys [a], [v-type v-arg] :v}]
                                         (case v-type
@@ -461,7 +429,7 @@
                                 (group-by :lv))
                            (update-vals #(into #{} (map :col) %)))]
 
-         (-> (plan-scan triples temporal-preds)
+         (-> (plan-scan triples temporal-clauses)
              (wrap-unwind triples)
              (wrap-unify var->cols)))))))
 
@@ -610,11 +578,11 @@
             (->> (group-by first))
             (update-vals #(mapv second %)))
 
-        temporal-clauses (mapcat grouped-clauses [:for-all-app-time :for-app-time-at :for-app-time-in
-                                                  :for-all-sys-time :for-sys-time-at :for-sys-time-in])
-        temporal-preds (->temporal-preds temporal-clauses)]
+        temporal-rules (mapcat grouped-clauses [:for-all-app-time :for-app-time-at :for-app-time-in
+                                                :for-all-sys-time :for-sys-time-at :for-sys-time-in])
+        temporal-clauses (->temporal-clauses temporal-rules)]
 
-    (loop [plan (mega-join (vec (concat in-rels (plan-triples triple-clauses temporal-preds)))
+    (loop [plan (mega-join (vec (concat in-rels (plan-triples triple-clauses temporal-clauses)))
                            (concat param-vars apply-mapping))
 
            calls (some->> call-clauses (mapv plan-call))

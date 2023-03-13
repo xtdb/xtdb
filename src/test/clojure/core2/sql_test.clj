@@ -40,7 +40,6 @@
            {:type :error, :message "Missing Expectation File"
             :expected exp-plan-file-path#  :actual (Exception. "Missing Expectation File")})))))
 
-
 (deftest test-basic-queries
   (t/is (=plan-file
           "basic-query-1"
@@ -854,22 +853,16 @@
 
 
   (t/testing "BETWEEN A AND B"
-
     (t/is
       (=plan-file
-        "system-time-between-symmetric-local-table-literals"
-        (plan-sql "SELECT 4 FROM t1 FOR SYSTEM_TIME BETWEEN SYMMETRIC TIMESTAMP '3002-01-01 00:00:00+00:00' AND DATE '3001-01-01'")))
-
-    (t/is
-      (=plan-file
-        "system-time-between-asymmetric-subquery"
-        (plan-sql "SELECT (SELECT 4 FROM t1 FOR SYSTEM_TIME BETWEEN ASYMMETRIC DATE '3001-01-01' AND TIMESTAMP '3002-01-01 00:00:00+00:00') FROM t2")))
+        "system-time-between-subquery"
+        (plan-sql "SELECT (SELECT 4 FROM t1 FOR SYSTEM_TIME BETWEEN DATE '3001-01-01' AND TIMESTAMP '3002-01-01 00:00:00+00:00') FROM t2")))
 
     (t/is
       (=plan-file
         "system-time-between-lateraly-derived-table"
         (plan-sql "SELECT x.y, y.z FROM x FOR SYSTEM_TIME AS OF DATE '3001-01-01',
-                  LATERAL (SELECT z.z FROM z FOR SYSTEM_TIME FROM '3001-01-01' TO TIMESTAMP '3002-01-01 00:00:00+00:00' WHERE z.z = x.y) AS y")))))
+                  LATERAL (SELECT z.z FROM z FOR SYSTEM_TIME FROM DATE '3001-01-01' TO TIMESTAMP '3002-01-01 00:00:00+00:00' WHERE z.z = x.y) AS y")))))
 
 (deftest test-application-time-period-spec-queries
 
@@ -880,45 +873,25 @@
         (plan-sql "SELECT foo.bar FROM foo FOR APPLICATION_TIME AS OF TIMESTAMP '2999-01-01 00:00:00'"))))
 
   (t/testing "FROM A to B"
-
     (t/is
       (=plan-file
         "application-time-period-spec-from-to"
         (plan-sql "SELECT foo.bar FROM foo FOR APP_TIME FROM DATE '2999-01-01' TO TIMESTAMP '3000-01-01 00:00:00+00:00'"))))
 
-
   (t/testing "BETWEEN A AND B"
-
     (t/is
       (=plan-file
         "application-time-period-spec-between"
-        (plan-sql "SELECT 4 FROM t1 FOR APPLICATION_TIME BETWEEN TIMESTAMP '3000-01-01 00:00:00+00:00' AND DATE '3001-01-01'")))
-
-    (t/is
-      (=plan-file
-        "application-time-period-spec-between-asym"
-        (plan-sql "SELECT 4 FROM t1 FOR APPLICATION_TIME BETWEEN ASYMMETRIC TIMESTAMP '3000-01-01 00:00:00+00:00' AND DATE '3001-01-01'")))
-
-    (t/is
-      (=plan-file
-        "application-time-period-spec-between-sym"
-        (plan-sql "SELECT 4 FROM t1 FOR APPLICATION_TIME BETWEEN SYMMETRIC TIMESTAMP '3001-01-01 00:00:00+00:00' AND DATE '3000-01-01'")))
-
-    (t/is
-      (=plan-file
-        "application-time-period-spec-between-sym-asc"
-        (plan-sql "SELECT 4 FROM t1 FOR APPLICATION_TIME BETWEEN SYMMETRIC TIMESTAMP '3000-01-01 00:00:00+00:00' AND DATE '3001-01-01'")))))
+        (plan-sql "SELECT 4 FROM t1 FOR APPLICATION_TIME BETWEEN TIMESTAMP '3000-01-01 00:00:00+00:00' AND DATE '3001-01-01'")))))
 
 (deftest test-application-and-system-time-period-spec-queries
-
   (t/testing "BETWEEN A AND B"
-
     (t/is
       (=plan-file
         "application-and-system-time-period-spec-between"
         (plan-sql "SELECT 4 FROM t1
                   FOR SYSTEM_TIME BETWEEN DATE '2000-01-01' AND DATE '2001-01-01'
-                  FOR APPLICATION_TIME BETWEEN SYMMETRIC TIMESTAMP '3001-01-01 00:00:00+00:00' AND DATE '3000-01-01'")))))
+                  FOR APPLICATION_TIME BETWEEN TIMESTAMP '3001-01-01 00:00:00+00:00' AND DATE '3000-01-01'")))))
 
 ;; x1 = app-time-start x2 = app-time-end
 
@@ -1117,16 +1090,6 @@
         FROM foo
         FOR ALL APPLICATION_TIME"
         {:app-time-as-of-now? true})))
-
-  (t/is (= (plan-sql
-             "SELECT foo.bar
-             FROM foo")
-           (plan-sql
-             "SELECT foo.bar
-             FROM foo
-             FOR ALL APPLICATION_TIME"
-             {:app-time-as-of-now? true}))
-        "query: FOR ALL APPLICATION_TIME")
 
   (t/is
     (=plan-file

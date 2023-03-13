@@ -1,16 +1,7 @@
-[:rename
- {x3 bar}
- [:project
-  [x3]
-  [:rename
-   {system_time_start x1, system_time_end x2, bar x3}
-   [:select
-    (<
-     #time/date "2999-01-01"
-     #time/zoned-date-time "3000-01-01T00:00Z")
-    [:scan
-     {:table foo}
-     [{system_time_start
-       (< system_time_start #time/zoned-date-time "3000-01-01T00:00Z")}
-      {system_time_end (> system_time_end #time/date "2999-01-01")}
-      bar]]]]]]
+[:scan
+ {:table foo,
+  :for-sys-time
+  (in
+   #time/date "2999-01-01"
+   #time/zoned-date-time "3000-01-01T00:00Z")}
+ [bar]]

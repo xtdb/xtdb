@@ -128,19 +128,19 @@
   OffsetDateTime
   (->instant [odt] (.toInstant odt)))
 
-(defn sql-temporal->instant
-  "Given some temporal value (such as a Date, LocalDateTime, OffsetDateTime and so on) will return the corresponding Instant.
-
-   To do this for LocalDate and LocalDateTime, the provided SQL session time zone is assumed to be the implied time zone of the date/time."
-  ^Instant [temporal ^ZoneId session-zone]
-  (condp instance? temporal
-    LocalDate (sql-temporal->instant (.atTime ^LocalDate temporal LocalTime/MIDNIGHT) session-zone)
-    LocalDateTime (.toInstant (.atZone ^LocalDateTime temporal session-zone))
-    (->instant temporal)))
-
 (defn instant->micros ^long [^Instant inst]
   (-> (Math/multiplyExact (.getEpochSecond inst) #=(long 1e6))
       (Math/addExact (quot (.getNano inst) 1000))))
+
+(defn sql-temporal->micros
+  "Given some temporal value (such as a Date, LocalDateTime, OffsetDateTime and so on) will return the corresponding Instant.
+
+   To do this for LocalDate and LocalDateTime, the provided SQL session time zone is assumed to be the implied time zone of the date/time."
+  ^long [temporal ^ZoneId session-zone]
+  (condp instance? temporal
+    LocalDate (sql-temporal->micros (.atTime ^LocalDate temporal LocalTime/MIDNIGHT) session-zone)
+    LocalDateTime (instant->micros (.toInstant (.atZone ^LocalDateTime temporal session-zone)))
+    (instant->micros (->instant temporal))))
 
 (defn instant->nanos ^long [^Instant inst]
   (-> (Math/multiplyExact (.getEpochSecond inst) #=(long 1e9))

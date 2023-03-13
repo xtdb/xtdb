@@ -1,28 +1,16 @@
 [:rename
- {x3 y, x7 z}
- [:project
-  [x3 x7]
-  [:mega-join
-   [{x3 x7}]
-   [[:rename
-     {system_time_start x1, system_time_end x2, y x3}
-     [:scan
-      {:table x}
-      [{system_time_start
-        (<= system_time_start #time/date "3001-01-01")}
-       {system_time_end (> system_time_end #time/date "3001-01-01")}
-       y]]]
-    [:project
-     [x7]
-     [:rename
-      {system_time_start x5, system_time_end x6, z x7}
-      [:select
-       (< "3001-01-01" #time/zoned-date-time "3002-01-01T00:00Z")
-       [:scan
-        {:table z}
-        [{system_time_start
-          (<
-           system_time_start
-           #time/zoned-date-time "3002-01-01T00:00Z")}
-         {system_time_end (> system_time_end "3001-01-01")}
-         z]]]]]]]]]
+ {x1 y, x3 z}
+ [:mega-join
+  [{x1 x3}]
+  [[:rename
+    {y x1}
+    [:scan {:table x, :for-sys-time (at #time/date "3001-01-01")} [y]]]
+   [:rename
+    {z x3}
+    [:scan
+     {:table z,
+      :for-sys-time
+      (in
+       #time/date "3001-01-01"
+       #time/zoned-date-time "3002-01-01T00:00Z")}
+     [z]]]]]]

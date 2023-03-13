@@ -6,11 +6,11 @@
             [core2.coalesce :as coalesce]
             [core2.expression :as expr]
             [core2.expression.metadata :as expr.meta]
-            [core2.expression.temporal :as expr.temp]
+            [core2.expression.walk :as expr.walk]
             [core2.logical-plan :as lp]
             [core2.metadata :as meta]
             [core2.temporal :as temporal]
-            [core2.types :as t]
+            [core2.types :as types]
             [core2.util :as util]
             [core2.vector.indirect :as iv]
             core2.watermark
@@ -23,7 +23,8 @@
            core2.operator.IRelationSelector
            (core2.vector IIndirectRelation IIndirectVector)
            core2.watermark.IWatermark
-           [java.util LinkedList List Map Queue]
+           java.time.temporal.Temporal
+           [java.util Date LinkedList List Map Queue]
            [java.util.function Consumer]
            org.apache.arrow.memory.BufferAllocator
            [org.apache.arrow.vector BigIntVector VarBinaryVector]
@@ -33,11 +34,47 @@
 
 (s/def ::table simple-symbol?)
 
+(defmulti temporal-filter-spec
+  (fn [v]
+    (cond-> v (coll? v) first))
+  :default ::default)
+
+(defmethod temporal-filter-spec :all-time [_]
+  (s/and #{:all-time}
+         (s/conformer (constantly {:tag 'all-time}) (constantly :all-time))))
+
+(s/def ::temporal-filter-value
+  (s/or :now #{:now '(current-timestamp)}
+        :literal (some-fn (partial instance? Date)
+                          (partial instance? Temporal))
+        :param simple-symbol?))
+
+(defmethod temporal-filter-spec 'at [_]
+  (s/cat :tag #{'at}
+         :at ::temporal-filter-value))
+
+(defmethod temporal-filter-spec 'in [_]
+  (s/cat :tag #{'in}
+         :from (s/nilable ::temporal-filter-value)
+         :to (s/nilable ::temporal-filter-value)))
+
+(defmethod temporal-filter-spec 'between [_]
+  (s/cat :tag #{'between}
+         :from (s/nilable ::temporal-filter-value)
+         :to (s/nilable ::temporal-filter-value)))
+
+(s/def ::temporal-filter
+  (s/multi-spec temporal-filter-spec (fn retag [_] (throw (UnsupportedOperationException.)))))
+
+(s/def ::for-app-time (s/nilable ::temporal-filter))
+(s/def ::for-sys-time (s/nilable ::temporal-filter))
+
 ;; TODO be good to just specify a single expression here and have the interpreter split it
 ;; into metadata + col-preds - the former can accept more than just `(and ~@col-preds)
 (defmethod lp/ra-expr :scan [_]
   (s/cat :op #{:scan}
-         :scan-opts (s/keys :req-un [::table])
+         :scan-opts (s/keys :req-un [::table]
+                            :opt-un [::for-app-time ::for-sys-time])
          :columns (s/coll-of (s/or :column ::lp/column
                                    :select ::lp/column-expression))))
 
@@ -235,15 +272,87 @@
   (close [_]
     (util/try-close blocks)))
 
-(defn- apply-basis-tx! [[^longs temporal-min-range, ^longs temporal-max-range], {^TransactionInstant basis-tx :tx} col-preds]
-  (when-let [sys-time (some-> basis-tx (.sys-time))]
-    (expr.temp/apply-constraint temporal-min-range temporal-max-range
-                                :<= "system_time_start" sys-time)
+(defn ->temporal-min-max-range [^IIndirectRelation params, {^TransactionInstant basis-tx :tx}, {:keys [for-app-time for-sys-time]}, selects]
+  (let [min-range (temporal/->min-range)
+        max-range (temporal/->max-range)]
+    (letfn [(apply-constraint [f col-name ^long time-μs]
+              (let [range-idx (temporal/->temporal-column-idx col-name)]
+                (case f
+                  :< (aset max-range range-idx
+                           (min (dec time-μs) (aget max-range range-idx)))
+                  :<= (aset max-range range-idx
+                            (min time-μs (aget max-range range-idx)))
+                  :> (aset min-range range-idx
+                           (max (inc time-μs) (aget min-range range-idx)))
+                  :>= (aset min-range range-idx
+                            (max time-μs (aget min-range range-idx)))
+                  nil)))
 
-    (when-not (or (contains? col-preds "system_time_start")
-                  (contains? col-preds "system_time_end"))
-      (expr.temp/apply-constraint temporal-min-range temporal-max-range
-                                  :> "system_time_end" sys-time))))
+            (->time-μs [[tag arg]]
+              (case tag
+                :literal (-> arg
+                             (util/sql-temporal->micros (.getZone expr/*clock*)))
+                :param (-> (let [col (.vectorForName params (name arg))]
+                             (types/get-object (.getVector col) (.getIndex col 0)))
+                           (util/sql-temporal->micros (.getZone expr/*clock*)))
+                :now (-> (.instant expr/*clock*)
+                         (util/instant->micros))))]
+
+      (when-let [sys-time (some-> basis-tx (.sys-time) util/instant->micros)]
+        (apply-constraint :<= "system_time_start" sys-time)
+
+        (when-not for-sys-time
+          (apply-constraint :> "system_time_end" sys-time)))
+
+      (letfn [(apply-constraints [constraints start-col end-col]
+                (when-let [{:keys [tag]} constraints]
+                  (case tag
+                    at (let [at-μs (->time-μs (:at constraints))]
+                         (apply-constraint :<= start-col at-μs)
+                         (apply-constraint :> end-col at-μs))
+
+                    ;; overlaps [time-from time-to]
+                    in (let [{:keys [from to]} constraints]
+                         (when from
+                           (apply-constraint :> end-col (->time-μs from)))
+                         (when to
+                           (apply-constraint :< start-col (->time-μs to))))
+
+                    between (let [{:keys [from to]} constraints]
+                              (when from
+                                (apply-constraint :> end-col (->time-μs from)))
+                              (when to
+                                (apply-constraint :<= start-col (->time-μs to))))
+
+                    all-time nil)))]
+
+        (apply-constraints for-app-time "application_time_start" "application_time_end")
+        (apply-constraints for-sys-time "system_time_start" "system_time_end"))
+
+      (let [col-types (-> temporal/temporal-col-types (update-keys symbol))
+            param-types (expr/->param-types params)]
+        (doseq [[col-name select-form] selects
+                :when (temporal/temporal-column? col-name)]
+          (->> (expr/form->expr select-form {:param-types param-types, :col-types col-types})
+               (expr/prepare-expr)
+               (expr.meta/meta-expr)
+               (expr.walk/prewalk-expr
+                (fn [{:keys [op] :as expr}]
+                  (case op
+                    :call (when (not= :or (:f expr))
+                            expr)
+
+                    :metadata-vp-call
+                    (let [{:keys [f param-expr]} expr]
+                      (when-let [v (if-let [[_ literal] (find param-expr :literal)]
+                                     (when literal (->time-μs [:literal literal]))
+                                     (->time-μs [:param (get param-expr :param)]))]
+                        (apply-constraint f col-name v)))
+
+                    expr)))))
+        [min-range max-range]))
+
+    [min-range max-range]))
 
 (defmethod ig/prep-key ::scan-emitter [_ opts]
   (merge opts
@@ -256,7 +365,7 @@
       (letfn [(->col-type [[table col-name]]
                 (if (temporal/temporal-column? col-name)
                   [:timestamp-tz :micro "UTC"]
-                  (t/merge-col-types (.columnType metadata-mgr (name table) (name col-name))
+                  (types/merge-col-types (.columnType metadata-mgr (name table) (name col-name))
                                      (some-> (.liveChunk wm)
                                              (.liveTable (name table))
                                              (.liveColumn (name col-name))
@@ -265,7 +374,7 @@
         (->> scan-cols
              (into {} (map (juxt identity ->col-type))))))
 
-    (emitScan [_ {:keys [columns], {:keys [table]} :scan-opts} scan-col-types param-types]
+    (emitScan [_ {:keys [columns], {:keys [table] :as scan-opts} :scan-opts} scan-col-types param-types]
       (let [col-names (->> columns
                            (into [] (comp (map (fn [[col-type arg]]
                                                  (case col-type
@@ -273,16 +382,17 @@
                                                    :select (key (first arg)))))
                                           (distinct))))
 
-            {content-col-names false, temporal-col-names true} (->> col-names
-                                                                    (group-by (comp temporal/temporal-column? name)))
+            {content-col-names false, temporal-col-names true}
+            (->> col-names
+                 (group-by (comp temporal/temporal-column? name)))
 
             col-types (->> col-names
                            (into {} (map (juxt identity
                                                (fn [col-name]
                                                  (get scan-col-types [table col-name]))))))
 
-            selects (->> (for [[col-type arg] columns
-                               :when (= col-type :select)]
+            selects (->> (for [[tag arg] columns
+                               :when (= tag :select)]
                            (first arg))
                          (into {}))
 
@@ -300,18 +410,17 @@
                                          select)))
             row-count (->> (meta/with-all-metadata metadata-mgr (name table)
                              (util/->jbifn
-                              (fn [_chunk-idx ^ITableMetadata table-metadata]
-                                (let [id-col-idx (.rowIndex table-metadata "id" -1)
-                                      ^BigIntVector count-vec (.getVector (.metadataRoot table-metadata) "count")]
-                                  (.get count-vec id-col-idx)))))
+                               (fn [_chunk-idx ^ITableMetadata table-metadata]
+                                 (let [id-col-idx (.rowIndex table-metadata "id" -1)
+                                       ^BigIntVector count-vec (.getVector (.metadataRoot table-metadata) "count")]
+                                   (.get count-vec id-col-idx)))))
                            (reduce +))]
 
         {:col-types (dissoc col-types '_table)
          :stats {:row-count row-count}
-         :->cursor (fn [{:keys [allocator, ^IWatermark watermark, basis, params]}]
+         :->cursor (fn [{:keys [allocator, ^IWatermark watermark, basis, params] :as foo}]
                      (let [metadata-pred (expr.meta/->metadata-selector (cons 'and metadata-args) (set col-names) params)
-                           [temporal-min-range temporal-max-range] (doto (expr.temp/->temporal-min-max-range selects params)
-                                                                     (apply-basis-tx! basis col-preds))
+                           [temporal-min-range temporal-max-range] (->temporal-min-max-range params basis scan-opts selects)
                            content-col-names (mapv name content-col-names)
                            temporal-col-names (mapv name temporal-col-names)]
                        (-> (ScanCursor. allocator metadata-mgr watermark

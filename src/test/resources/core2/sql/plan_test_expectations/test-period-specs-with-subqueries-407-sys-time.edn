@@ -1,11 +1,7 @@
 [:rename
- {x5 $column_1$}
+ {x3 $column_1$}
  [:project
-  [{x5 1}]
+  [{x3 1}]
   [:rename
-   {system_time_start x1, system_time_end x2, bar x3}
-   [:scan
-    {:table foo}
-    [{system_time_start (<= system_time_start core2/end-of-time)}
-     system_time_end
-     bar]]]]]
+   {bar x1}
+   [:scan {:table foo, :for-sys-time :all-time} [bar]]]]]

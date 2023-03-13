@@ -1,39 +1,15 @@
 [:rename
- {x6 $column_1$}
+ {x2 $column_1$}
  [:project
-  [{x6 4}]
+  [{x2 4}]
   [:rename
-   {system_time_start x1,
-    system_time_end x2,
-    application_time_start x3,
-    application_time_end x4}
-   [:select
-    (and
-     (<= #time/date "2000-01-01" #time/date "2001-01-01")
-     (if
-      (>
-       #time/zoned-date-time "3001-01-01T00:00Z"
-       #time/date "3000-01-01")
-      (and
-       (<=
-        #time/date "3000-01-01"
-        #time/zoned-date-time "3001-01-01T00:00Z")
-       (<=
-        application_time_start
-        #time/zoned-date-time "3001-01-01T00:00Z")
-       (> application_time_end #time/date "3000-01-01"))
-      (and
-       (<=
-        #time/zoned-date-time "3001-01-01T00:00Z"
-        #time/date "3000-01-01")
-       (<= application_time_start #time/date "3000-01-01")
-       (>
-        application_time_end
-        #time/zoned-date-time "3001-01-01T00:00Z"))))
-    [:scan
-     {:table t1}
-     [{system_time_start
-       (<= system_time_start #time/date "2001-01-01")}
-      {system_time_end (> system_time_end #time/date "2000-01-01")}
-      application_time_start
-      application_time_end]]]]]]
+   {}
+   [:scan
+    {:table t1,
+     :for-app-time
+     (between
+      #time/zoned-date-time "3001-01-01T00:00Z"
+      #time/date "3000-01-01"),
+     :for-sys-time
+     (between #time/date "2000-01-01" #time/date "2001-01-01")}
+    []]]]]

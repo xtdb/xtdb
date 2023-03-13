@@ -1,13 +1,7 @@
 [:rename
- {x5 $column_1$}
+ {x3 $column_1$}
  [:project
-  [{x5 1}]
+  [{x3 1}]
   [:rename
-   {application_time_start x1, application_time_end x2, bar x3}
-   [:scan
-    {:table foo}
-    [{application_time_start
-      (<= application_time_start (current-timestamp))}
-     {application_time_end
-      (> application_time_end (current-timestamp))}
-     bar]]]]]
+   {bar x1}
+   [:scan {:table foo, :for-app-time (at (current-timestamp))} [bar]]]]]

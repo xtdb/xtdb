@@ -220,10 +220,10 @@
                    :application_time_end (util/->zdt util/end-of-time)
                    :system_time_start (util/->zdt tt2)
                    :system_time_end (util/->zdt util/end-of-time)}]
-                 (tu/query-ra '[:scan {:table xt_docs}
+                 (tu/query-ra '[:scan {:table xt_docs, :for-sys-time :all-time}
                                 [id version
                                  application_time_start, application_time_end
-                                 system_time_start, {system_time_end (<= system_time_end core2/end-of-time)}]]
+                                 system_time_start, system_time_end]]
                               {:node node})))
 
         #_ ; FIXME #567 this sees the updated system_time_end of the first entry

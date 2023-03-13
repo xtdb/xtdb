@@ -1,0 +1,16 @@
+[:rename
+ {x3 $column_1$}
+ [:single-join
+  []
+  [:rename {} [:scan {:table t2} []]]
+  [:project
+   [{x3 4}]
+   [:rename
+    {}
+    [:scan
+     {:table t1,
+      :for-sys-time
+      (between
+       #time/date "3001-01-01"
+       #time/zoned-date-time "3002-01-01T00:00Z")}
+     []]]]]]

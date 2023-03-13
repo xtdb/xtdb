@@ -1,29 +1,21 @@
 [:insert
  {:table "prop_owner"}
  [:rename
-  {x9 id,
-   x10 customer_number,
-   x11 property_number,
-   x13 application_time_start,
-   x14 application_time_end}
+  {x6 id,
+   x7 customer_number,
+   x8 property_number,
+   x10 application_time_start,
+   x11 application_time_end}
   [:project
-   [x9 x10 x11 {x13 (cast-tstz x12)} {x14 (cast-tstz x7)}]
+   [x6 x7 x8 {x10 (cast-tstz x9)} {x11 (cast-tstz x4)}]
    [:project
-    [{x9 1} {x10 145} {x11 7797} {x12 #time/date "1998-01-03"} x7]
+    [{x6 1} {x7 145} {x8 7797} {x9 #time/date "1998-01-03"} x4]
     [:group-by
-     [{x7 (min x1)}]
+     [{x4 (min x1)}]
      [:rename
-      {system_time_start x1,
-       system_time_end x2,
-       application_time_start x3,
-       application_time_end x4,
-       id x5}
+      {system_time_start x1, id x2}
       [:scan
-       {:table prop_owner}
-       [{system_time_start (<= system_time_start core2/end-of-time)}
-        system_time_end
-        {application_time_start
-         (<= application_time_start (current-timestamp))}
-        {application_time_end
-         (> application_time_end (current-timestamp))}
-        {id (= id 1)}]]]]]]]]
+       {:table prop_owner,
+        :for-app-time (at (current-timestamp)),
+        :for-sys-time :all-time}
+       [system_time_start {id (= id 1)}]]]]]]]]

@@ -67,10 +67,8 @@
                tx2)))))
 
 (deftest system-time-between-a-to-b
-
   (let [tx (c2.d/submit-tx tu/*node* [[:put {:id :my-doc, :last_updated "tx1" :_table "foo"}]] {:sys-time #inst "3000"})
         tx2 (c2.d/submit-tx tu/*node* [[:put {:id :my-doc, :last_updated "tx2" :_table "foo"}]] {:sys-time #inst "3001"})]
-
     (is (= []
            (query-at-tx
              "SELECT foo.last_updated FROM foo FOR SYSTEM_TIME BETWEEN DATE '2998-01-01' AND TIMESTAMP '2999-01-01 00:00:00+00:00'"
@@ -95,30 +93,10 @@
     (is (= [{:last_updated "tx1"} {:last_updated "tx2"}]
            (query-at-tx
              "SELECT foo.last_updated FROM foo FOR SYSTEM_TIME BETWEEN DATE '3001-01-01' AND TIMESTAMP '3002-01-01 00:00:00+00:00'"
-             tx2)))
-
-    (is (= [{:last_updated "tx1"} {:last_updated "tx2"}]
-           (query-at-tx
-             "SELECT foo.last_updated FROM foo FOR SYSTEM_TIME BETWEEN ASYMMETRIC DATE '3001-01-01' AND TIMESTAMP '3002-01-01 00:00:00+00:00'"
-             tx2))
-        "ASYMMTERIC behaves like default")
-
-    (is (= [{:last_updated "tx1"} {:last_updated "tx2"}]
-           (query-at-tx
-             "SELECT foo.last_updated FROM foo FOR SYSTEM_TIME BETWEEN SYMMETRIC TIMESTAMP '3002-01-01 00:00:00+00:00' AND DATE '3001-01-01'"
-             tx2))
-        "SYMMETRIC flips POT1 and 2")
-
-    (is (= [{:last_updated "tx1"} {:last_updated "tx2"}]
-           (query-at-tx
-             "SELECT foo.last_updated FROM foo FOR SYSTEM_TIME BETWEEN SYMMETRIC DATE '3001-01-01' AND TIMESTAMP '3002-01-01 00:00:00+00:00'"
-             tx2))
-        "SYMMETRIC flips POT1 and 2 only if PIT1 > PIT2")))
+             tx2)))))
 
 (deftest app-time-period-predicates
-
   (testing "OVERLAPS"
-
     (let [tx (c2.d/submit-tx tu/*node* [[:put {:id :my-doc, :last_updated "2000" :_table "foo"}
                                          {:app-time-start #inst "2000"}]
                                         [:put {:id :my-doc, :last_updated "3000" :_table "foo"}

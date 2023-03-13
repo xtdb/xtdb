@@ -1,13 +1,3 @@
-[:rename
- {x3 bar}
- [:project
-  [x3]
-  [:rename
-   {application_time_start x1, application_time_end x2, bar x3}
-   [:scan
-    {:table foo}
-    [{application_time_start
-      (<= application_time_start #time/date-time "2999-01-01T00:00")}
-     {application_time_end
-      (> application_time_end #time/date-time "2999-01-01T00:00")}
-     bar]]]]]
+[:scan
+ {:table foo, :for-app-time (at #time/date-time "2999-01-01T00:00")}
+ [bar]]

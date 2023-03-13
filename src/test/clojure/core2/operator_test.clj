@@ -104,7 +104,7 @@
     (let [{tt1 :sys-time} (c2/submit-tx node [[:put {:id :my-doc, :last-updated "tx1"}]])
           {tt2 :sys-time} (c2/submit-tx node [[:put {:id :my-doc, :last-updated "tx2"}]])]
       (letfn [(q [& temporal-constraints]
-                (->> (tu/query-ra [:scan '{:table xt_docs}
+                (->> (tu/query-ra [:scan '{:table xt_docs, :for-sys-time :all-time}
                                    (into '[last-updated] temporal-constraints)]
                                   {:node node, :params {'?sys-time1 tt1, '?sys-time2 tt2}})
                      (into #{} (map :last-updated))))]

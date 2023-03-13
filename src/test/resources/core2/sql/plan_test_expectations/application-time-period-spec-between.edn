@@ -1,18 +1,13 @@
 [:rename
- {x4 $column_1$}
+ {x2 $column_1$}
  [:project
-  [{x4 4}]
+  [{x2 4}]
   [:rename
-   {application_time_start x1, application_time_end x2}
-   [:select
-    (<=
-     #time/zoned-date-time "3000-01-01T00:00Z"
-     #time/date "3001-01-01")
-    [:scan
-     {:table t1}
-     [{application_time_start
-       (<= application_time_start #time/date "3001-01-01")}
-      {application_time_end
-       (>
-        application_time_end
-        #time/zoned-date-time "3000-01-01T00:00Z")}]]]]]]
+   {}
+   [:scan
+    {:table t1,
+     :for-app-time
+     (between
+      #time/zoned-date-time "3000-01-01T00:00Z"
+      #time/date "3001-01-01")}
+    []]]]]

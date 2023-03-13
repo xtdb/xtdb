@@ -92,20 +92,20 @@
           "all app-time")
 
     (t/is (= [original-v0-doc replaced-v0-doc v1-doc]
-             (tu/query-ra '[:scan {:table xt_docs}
+             (tu/query-ra '[:scan {:table xt_docs, :for-sys-time :all-time}
                             [id version
                              application_time_start application_time_end
-                             system_time_start {system_time_end (<= system_time_end eot)}]]
+                             system_time_start system_time_end]]
                           {:node tu/*node*
                            :params {'eot util/end-of-time}}))
           "all app, all sys")))
 
 (t/deftest test-evict
   (letfn [(all-time-docs []
-            (->> (tu/query-ra '[:scan {:table xt_docs}
+            (->> (tu/query-ra '[:scan {:table xt_docs, :for-sys-time :all-time}
                                 [id
                                  application_time_start {application_time_end (<= application_time_end eot)}
-                                 system_time_start {system_time_end (<= system_time_end eot)}]]
+                                 system_time_start system_time_end]]
                               {:node tu/*node*, :params {'eot util/end-of-time}})
                  (map :id)
                  frequencies))]

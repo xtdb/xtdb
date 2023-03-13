@@ -14,50 +14,6 @@
 
 (set! *unchecked-math* :warn-on-boxed)
 
-(defn apply-constraint [^longs min-range ^longs max-range
-                        f col-name ^Instant time]
-  (let [range-idx (temporal/->temporal-column-idx col-name)
-        time-μs (util/instant->micros time)]
-    (case f
-      :< (aset max-range range-idx (min (dec time-μs)
-                                        (aget max-range range-idx)))
-      :<= (aset max-range range-idx (min time-μs
-                                         (aget max-range range-idx)))
-      :> (aset min-range range-idx (max (inc time-μs)
-                                        (aget min-range range-idx)))
-      :>= (aset min-range range-idx (max time-μs
-                                         (aget min-range range-idx)))
-      nil)))
-
-(defn ->temporal-min-max-range [selects ^IIndirectRelation params]
-  (let [min-range (temporal/->min-range)
-        max-range (temporal/->max-range)
-        col-types (zipmap (map symbol (keys temporal/temporal-col-types))
-                          (repeat types/temporal-col-type))]
-    (doseq [[col-name select-form] selects
-            :when (temporal/temporal-column? col-name)]
-      (->> (expr/form->expr select-form {:param-types (expr/->param-types params) :col-types col-types})
-           (expr/prepare-expr)
-           (expr.meta/meta-expr)
-           (ewalk/prewalk-expr
-            (fn [{:keys [op] :as expr}]
-              (case op
-                :call (when (not= :or (:f expr))
-                        expr)
-
-                :metadata-vp-call
-                (let [{:keys [f param-expr]} expr]
-                  (when-let [v (util/sql-temporal->instant (if-let [[_ literal] (find param-expr :literal)]
-                                                             literal
-
-                                                             (let [col (.vectorForName params (name (get param-expr :param)))]
-                                                               (types/get-object (.getVector col) (.getIndex col 0))))
-                                                           (.getZone expr/*clock*))]
-                    (apply-constraint min-range max-range f col-name v)))
-
-                expr)))))
-    [min-range max-range]))
-
 ;;;; units
 
 (defn- with-conversion [form from-unit to-unit]
