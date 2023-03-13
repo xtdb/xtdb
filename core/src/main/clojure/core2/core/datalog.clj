@@ -291,7 +291,7 @@
                         arg-vars (set args)
                         branches-vars (for [branch branches]
                                         (into {:branch branch}
-                                                (combine-term-vars (map term-vars branch))))
+                                              (combine-term-vars (map term-vars branch))))
                         provided-vars (->> branches-vars
                                            (map (comp set :provided-vars))
                                            (apply set/intersection))
@@ -308,7 +308,10 @@
                      :required-vars (set/difference arg-vars provided-vars)})
 
       :semi-join (sj-term-vars ::semi-join)
-      :anti-join (sj-term-vars ::anti-join))))
+      :anti-join (sj-term-vars ::anti-join)
+      :sub-query (let [{:keys [query]} term-arg]
+                   {:provided-vars (->> (map form-vars (:find query))
+                                        (apply set/union))}))))
 
 (defn- ->param-sym [lv]
   (-> (symbol (str "?" (name lv)))

@@ -765,6 +765,18 @@
                               (union-join [age older-age]
                                           [(+ age 10) older-age])]})))))))
 
+(deftest test-union-join-with-subquery-638
+  (let [!tx (c2/submit-tx tu/*node* [[:put {:id :ivan, :age 20, :role :developer}]
+                                     [:put {:id :oleg, :age 30, :role :manager}]
+                                     [:put {:id :petr, :age 35, :role :qa}]
+                                     [:put {:id :sergei, :age 35, :role :manager}]])]
+    (t/is (= [{:e :oleg}]
+             (c2/q tu/*node* (-> '{:find [e]
+                                   :where [(union-join [e]
+                                                       (q {:find [e]
+                                                           :where [[e :age 30]]}))]}
+                                 (assoc :basis {:tx !tx})))))))
+
 (deftest test-nested-query
   (let [!tx (c2/submit-tx tu/*node* bond/tx-ops)]
     (t/is (= [{:bond-name "Roger Moore", :film-name "A View to a Kill"}
