@@ -11,6 +11,7 @@ val defaultJvmArgs = listOf(
     "--add-opens=java.base/java.nio=ALL-UNNAMED",
     "-Dio.netty.tryReflectionSetAccessible=true",
     "-Djdk.attach.allowAttachSelf",
+    "-XX:-OmitStackTraceInFastThrow",
 )
 
 allprojects {
