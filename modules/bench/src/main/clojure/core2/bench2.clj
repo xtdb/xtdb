@@ -81,7 +81,7 @@
       (fn sample-weighting [^Random random]
         (let [i (.nextInt random len)
               [split small large] (aget parts i)]
-          (if (< (.nextDouble random) (double split)) small large))))))
+          (if (<= (/ (.nextDouble random) len) (double split)) small large))))))
 
 (defn random-seq [worker opts f & args]
   (let [{:keys [min, max, unique]} opts]
