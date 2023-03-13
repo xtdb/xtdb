@@ -12,6 +12,8 @@
       [(or (= x3 x5) (nil? x3) (nil? x5))]
       [:rename
        {name x1, custno x2, country x3}
-       [:scan customers [name custno country]]]
-      [:rename {country x5} [:scan salesp [country]]]]]
-    [:map [{x10 1}] [:rename {custno x8} [:scan orders [custno]]]]]]]]
+       [:scan {:table customers} [name custno country]]]
+      [:rename {country x5} [:scan {:table salesp} [country]]]]]
+    [:map
+     [{x10 1}]
+     [:rename {custno x8} [:scan {:table orders} [custno]]]]]]]]

@@ -13,11 +13,11 @@
       [(or (= x1 x12) (nil? x1) (nil? x12))]
       [:rename
        {ps_suppkey x1, ps_partkey x2}
-       [:scan partsupp [ps_suppkey ps_partkey]]]
+       [:scan {:table partsupp} [ps_suppkey ps_partkey]]]
       [:rename
        {s_suppkey x12, s_comment x13}
        [:scan
-        supplier
+        {:table supplier}
         [s_suppkey
          {s_comment (like s_comment "%Customer%Complaints%")}]]]]
      [:semi-join
@@ -25,7 +25,7 @@
       [:rename
        {p_brand x4, p_type x5, p_size x6, p_partkey x7}
        [:scan
-        part
+        {:table part}
         [{p_brand (<> p_brand "Brand#45")}
          {p_type (not (like p_type "MEDIUM POLISHED%"))}
          p_size

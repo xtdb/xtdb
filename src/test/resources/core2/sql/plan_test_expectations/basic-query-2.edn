@@ -6,10 +6,10 @@
    [{x2 x4}]
    [[:rename
      {movietitle x1, starname x2}
-     [:scan starsin [movietitle starname]]]
+     [:scan {:table starsin} [movietitle starname]]]
     [:rename
      {name x4, birthdate x5}
      [:scan
-      moviestar
+      {:table moviestar}
       [name
        {birthdate (and (< birthdate 1960) (> birthdate 1950))}]]]]]]]

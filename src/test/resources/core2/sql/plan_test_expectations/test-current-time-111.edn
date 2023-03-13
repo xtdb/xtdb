@@ -24,4 +24,4 @@
    {x11 (local-timestamp 9)}
    {x12 core2/end-of-time}
    {x13 core2/end-of-time}]
-  [:rename {a x1} [:scan u [a]]]]]
+  [:rename {a x1} [:scan {:table u} [a]]]]]

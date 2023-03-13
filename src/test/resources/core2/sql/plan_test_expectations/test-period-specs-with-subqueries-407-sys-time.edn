@@ -5,7 +5,7 @@
   [:rename
    {system_time_start x1, system_time_end x2, bar x3}
    [:scan
-    foo
+    {:table foo}
     [{system_time_start (<= system_time_start core2/end-of-time)}
      system_time_end
      bar]]]]]

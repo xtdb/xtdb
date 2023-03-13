@@ -21,4 +21,4 @@
        #time/date "3001-01-01")
       (<= system_time_start #time/date "3001-01-01")
       (> system_time_end #time/zoned-date-time "3002-01-01T00:00Z")))
-    [:scan t1 [system_time_start system_time_end]]]]]]
+    [:scan {:table t1} [system_time_start system_time_end]]]]]]

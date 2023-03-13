@@ -12,8 +12,10 @@
       [{$row_number$ (row-number)}]
       [:mega-join
        [{x2 x5}]
-       [[:rename {name x1, id x2} [:scan students [name id]]]
+       [[:rename {name x1, id x2} [:scan {:table students} [name id]]]
         [:rename
          {course x4, sid x5, grade x6}
-         [:scan exams [course sid grade]]]]]]
-     [:rename {grade x8, sid x9} [:scan exams [grade sid]]]]]]]]
+         [:scan {:table exams} [course sid grade]]]]]]
+     [:rename
+      {grade x8, sid x9}
+      [:scan {:table exams} [grade sid]]]]]]]]

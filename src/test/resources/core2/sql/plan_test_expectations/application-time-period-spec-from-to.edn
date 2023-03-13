@@ -9,7 +9,7 @@
      #time/date "2999-01-01"
      #time/zoned-date-time "3000-01-01T00:00Z")
     [:scan
-     foo
+     {:table foo}
      [{application_time_start
        (<
         application_time_start

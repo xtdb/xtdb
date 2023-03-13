@@ -2,5 +2,5 @@
  {x1 id, x3 id_1}
  [:mega-join
   []
-  [[:rename {id x1} [:scan bar [{id (= id 5)}]]]
-   [:rename {id x3} [:scan bar [{id (= id 5)}]]]]]]
+  [[:rename {id x1} [:scan {:table bar} [{id (= id 5)}]]]
+   [:rename {id x3} [:scan {:table bar} [{id (= id 5)}]]]]]]

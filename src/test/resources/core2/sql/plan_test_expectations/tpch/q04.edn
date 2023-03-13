@@ -11,7 +11,7 @@
      [:rename
       {o_orderpriority x1, o_orderdate x2, o_orderkey x3}
       [:scan
-       orders
+       {:table orders}
        [o_orderpriority
         {o_orderdate
          (and
@@ -26,4 +26,6 @@
       {l_orderkey x5, l_commitdate x6, l_receiptdate x7}
       [:select
        (< l_commitdate l_receiptdate)
-       [:scan lineitem [l_orderkey l_commitdate l_receiptdate]]]]]]]]]
+       [:scan
+        {:table lineitem}
+        [l_orderkey l_commitdate l_receiptdate]]]]]]]]]

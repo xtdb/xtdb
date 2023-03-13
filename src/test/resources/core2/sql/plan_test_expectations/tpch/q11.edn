@@ -16,18 +16,20 @@
         [{x7 x9} {x4 x6}]
         [[:rename
           {n_nationkey x9, n_name x10}
-          [:scan nation [n_nationkey {n_name (= n_name "GERMANY")}]]]
+          [:scan
+           {:table nation}
+           [n_nationkey {n_name (= n_name "GERMANY")}]]]
          [:rename
           {ps_partkey x1,
            ps_supplycost x2,
            ps_availqty x3,
            ps_suppkey x4}
           [:scan
-           partsupp
+           {:table partsupp}
            [ps_partkey ps_supplycost ps_availqty ps_suppkey]]]
          [:rename
           {s_suppkey x6, s_nationkey x7}
-          [:scan supplier [s_suppkey s_nationkey]]]]]]]
+          [:scan {:table supplier} [s_suppkey s_nationkey]]]]]]]
      [:project
       [{x30 (* x28 1.0E-4)}]
       [:group-by
@@ -38,10 +40,14 @@
          [{x22 x24} {x19 x21}]
          [[:rename
            {n_nationkey x24, n_name x25}
-           [:scan nation [n_nationkey {n_name (= n_name "GERMANY")}]]]
+           [:scan
+            {:table nation}
+            [n_nationkey {n_name (= n_name "GERMANY")}]]]
           [:rename
            {ps_supplycost x17, ps_availqty x18, ps_suppkey x19}
-           [:scan partsupp [ps_supplycost ps_availqty ps_suppkey]]]
+           [:scan
+            {:table partsupp}
+            [ps_supplycost ps_availqty ps_suppkey]]]
           [:rename
            {s_suppkey x21, s_nationkey x22}
-           [:scan supplier [s_suppkey s_nationkey]]]]]]]]]]]]]
+           [:scan {:table supplier} [s_suppkey s_nationkey]]]]]]]]]]]]]

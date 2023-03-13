@@ -190,16 +190,17 @@
 
 (t/deftest temporal-watermark-is-immutable-567
   (with-open [node (node/start-node {})]
-    (let [{tt :sys-time, :as tx} (c2.d/submit-tx node [[:put {:id :foo, :version 0}]]
-                                                 {:app-time-as-of-now? true})]
+    (let [{tt :sys-time} (c2.d/submit-tx node [[:put {:id :foo, :version 0}]]
+                                         {:app-time-as-of-now? true})]
       (t/is (= [{:id :foo, :version 0,
                  :application_time_start (util/->zdt tt)
                  :application_time_end (util/->zdt util/end-of-time)
                  :system_time_start (util/->zdt tt)
                  :system_time_end (util/->zdt util/end-of-time)}]
-               (tu/query-ra '[:scan xt_docs [id version
-                                             application_time_start, application_time_end
-                                             system_time_start, system_time_end]]
+               (tu/query-ra '[:scan {:table xt_docs}
+                              [id version
+                               application_time_start, application_time_end
+                               system_time_start, system_time_end]]
                             {:node node})))
 
       (let [{tt2 :sys-time} (c2.d/submit-tx node [[:put {:id :foo, :version 1}]]
@@ -219,9 +220,10 @@
                    :application_time_end (util/->zdt util/end-of-time)
                    :system_time_start (util/->zdt tt2)
                    :system_time_end (util/->zdt util/end-of-time)}]
-                 (tu/query-ra '[:scan xt_docs [id version
-                                               application_time_start, application_time_end
-                                               system_time_start, {system_time_end (<= system_time_end core2/end-of-time)}]]
+                 (tu/query-ra '[:scan {:table xt_docs}
+                                [id version
+                                 application_time_start, application_time_end
+                                 system_time_start, {system_time_end (<= system_time_end core2/end-of-time)}]]
                               {:node node})))
 
         #_ ; FIXME #567 this sees the updated system_time_end of the first entry
@@ -230,9 +232,10 @@
                    :application_time_end (util/->zdt util/end-of-time)
                    :system_time_start (util/->zdt tt)
                    :system_time_end (util/->zdt util/end-of-time)}]
-                 (tu/query-ra '[:scan xt_docs [id version
-                                               application_time_start, application_time_end
-                                               system_time_start, system_time_end]]
+                 (tu/query-ra '[:scan {:table xt_docs}
+                                [id version
+                                 application_time_start, application_time_end
+                                 system_time_start, system_time_end]]
                               {:node node, :basis {:tx tx}}))
               "re-using the original snapshot should see the same result")))))
 

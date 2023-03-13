@@ -23,7 +23,7 @@
      system_time_start x6,
      system_time_end x7}
     [:scan
-     users
+     {:table users}
      [{id (= id ?_0)}
       _iid
       _row-id

@@ -2,4 +2,5 @@
  {x1 y, x3 z}
  [:mega-join
   [{x1 x3}]
-  [[:rename {y x1} [:scan x [y]]] [:rename {z x3} [:scan z [z]]]]]]
+  [[:rename {y x1} [:scan {:table x} [y]]]
+   [:rename {z x3} [:scan {:table z} [z]]]]]]

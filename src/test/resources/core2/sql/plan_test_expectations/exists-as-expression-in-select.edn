@@ -5,9 +5,11 @@
   [:apply
    :cross-join
    {x1 ?x9}
-   [:rename {y x1, z x2} [:scan x [y {z (= z 10)}]]]
+   [:rename {y x1, z x2} [:scan {:table x} [y {z (= z 10)}]]]
    [:top
     {:limit 1}
     [:union-all
-     [:project [{x6 true}] [:rename {z x4} [:scan y [{z (= z ?x9)}]]]]
+     [:project
+      [{x6 true}]
+      [:rename {z x4} [:scan {:table y} [{z (= z ?x9)}]]]]
      [:table [{x6 false}]]]]]]]

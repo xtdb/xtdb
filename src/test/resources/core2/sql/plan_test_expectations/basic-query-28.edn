@@ -4,4 +4,4 @@
   [[x3 {:direction :asc, :null-ordering :nulls-last}]]
   [:project
    [{x3 (= x1 "foo")}]
-   [:rename {year x1} [:scan starsin [year]]]]]]
+   [:rename {year x1} [:scan {:table starsin} [year]]]]]]

@@ -18,7 +18,7 @@
          [{(substring x1 1 2 true) x5}]
          [:rename
           {c_phone x1, c_acctbal x2, c_custkey x3}
-          [:scan customer [c_phone c_acctbal c_custkey]]]
+          [:scan {:table customer} [c_phone c_acctbal c_custkey]]]
          [:table
           [x5]
           [{x5 "13"}
@@ -34,7 +34,9 @@
           [{(substring x9 1 2 true) x11}]
           [:rename
            {c_acctbal x8, c_phone x9}
-           [:scan customer [{c_acctbal (> c_acctbal 0.0)} c_phone]]]
+           [:scan
+            {:table customer}
+            [{c_acctbal (> c_acctbal 0.0)} c_phone]]]
           [:table
            [x11]
            [{x11 "13"}
@@ -44,4 +46,6 @@
             {x11 "30"}
             {x11 "18"}
             {x11 "17"}]]]]]]
-      [:rename {o_custkey x16} [:scan orders [o_custkey]]]]]]]]]
+      [:rename
+       {o_custkey x16}
+       [:scan {:table orders} [o_custkey]]]]]]]]]

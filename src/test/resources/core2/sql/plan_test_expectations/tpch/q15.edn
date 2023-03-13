@@ -12,7 +12,7 @@
       [{x1 x6}]
       [[:rename
         {s_suppkey x1, s_name x2, s_address x3, s_phone x4}
-        [:scan supplier [s_suppkey s_name s_address s_phone]]]
+        [:scan {:table supplier} [s_suppkey s_name s_address s_phone]]]
        [:group-by
         [x6 {x12 (sum x11)}]
         [:map
@@ -23,7 +23,7 @@
            l_discount x8,
            l_shipdate x9}
           [:scan
-           lineitem
+           {:table lineitem}
            [l_suppkey
             l_extendedprice
             l_discount
@@ -47,7 +47,7 @@
           l_discount x16,
           l_shipdate x17}
          [:scan
-          lineitem
+          {:table lineitem}
           [l_suppkey
            l_extendedprice
            l_discount

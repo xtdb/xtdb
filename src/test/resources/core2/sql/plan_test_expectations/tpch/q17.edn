@@ -18,14 +18,16 @@
          [{x2 x5}]
          [[:rename
            {l_extendedprice x1, l_partkey x2, l_quantity x3}
-           [:scan lineitem [l_extendedprice l_partkey l_quantity]]]
+           [:scan
+            {:table lineitem}
+            [l_extendedprice l_partkey l_quantity]]]
           [:rename
            {p_partkey x5, p_brand x6, p_container x7}
            [:scan
-            part
+            {:table part}
             [p_partkey
              {p_brand (= p_brand "Brand#23")}
              {p_container (= p_container "MED BOX")}]]]]]]
        [:rename
         {l_quantity x9, l_partkey x10}
-        [:scan lineitem [l_quantity l_partkey]]]]]]]]]]
+        [:scan {:table lineitem} [l_quantity l_partkey]]]]]]]]]]

@@ -34,7 +34,7 @@
       l_tax x6,
       l_shipdate x7}
      [:scan
-      lineitem
+      {:table lineitem}
       [l_returnflag
        l_linestatus
        l_quantity

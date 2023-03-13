@@ -2,7 +2,7 @@
  {x5 $column_1$}
  [:single-join
   []
-  [:rename {} [:scan t2 []]]
+  [:rename {} [:scan {:table t2} []]]
   [:project
    [{x5 4}]
    [:rename
@@ -12,7 +12,7 @@
       #time/date "3001-01-01"
       #time/zoned-date-time "3002-01-01T00:00Z")
      [:scan
-      t1
+      {:table t1}
       [{system_time_start
         (<=
          system_time_start

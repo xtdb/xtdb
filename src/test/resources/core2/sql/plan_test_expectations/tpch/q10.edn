@@ -21,14 +21,14 @@
        [{x7 x19} {x10 x15} {x1 x9}]
        [[:rename
          {n_name x18, n_nationkey x19}
-         [:scan nation [n_name n_nationkey]]]
+         [:scan {:table nation} [n_name n_nationkey]]]
         [:rename
          {l_extendedprice x13,
           l_discount x14,
           l_orderkey x15,
           l_returnflag x16}
          [:scan
-          lineitem
+          {:table lineitem}
           [l_extendedprice
            l_discount
            l_orderkey
@@ -42,7 +42,7 @@
           c_comment x6,
           c_nationkey x7}
          [:scan
-          customer
+          {:table customer}
           [c_custkey
            c_name
            c_acctbal
@@ -53,7 +53,7 @@
         [:rename
          {o_custkey x9, o_orderkey x10, o_orderdate x11}
          [:scan
-          orders
+          {:table orders}
           [o_custkey
            o_orderkey
            {o_orderdate

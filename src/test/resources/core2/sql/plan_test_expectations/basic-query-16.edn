@@ -1,5 +1,5 @@
 [:rename
  {x1 name}
  [:union-all
-  [:rename {name x1} [:scan starsin [name]]]
-  [:rename {name x1} [:scan starsin [name]]]]]
+  [:rename {name x1} [:scan {:table starsin} [name]]]
+  [:rename {name x1} [:scan {:table starsin} [name]]]]]

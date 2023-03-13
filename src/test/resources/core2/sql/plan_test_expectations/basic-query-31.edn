@@ -5,4 +5,4 @@
   [:unwind
    {x3 x1}
    {:ordinality-column x4}
-   [:rename {films x1} [:scan starsin [films]]]]]]
+   [:rename {films x1} [:scan {:table starsin} [films]]]]]]

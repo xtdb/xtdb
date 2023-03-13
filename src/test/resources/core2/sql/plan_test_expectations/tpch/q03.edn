@@ -19,7 +19,7 @@
           l_discount x11,
           l_shipdate x12}
          [:scan
-          lineitem
+          {:table lineitem}
           [l_orderkey
            l_extendedprice
            l_discount
@@ -27,7 +27,7 @@
         [:rename
          {c_mktsegment x1, c_custkey x2}
          [:scan
-          customer
+          {:table customer}
           [{c_mktsegment (= c_mktsegment "BUILDING")} c_custkey]]]
         [:rename
          {o_orderdate x4,
@@ -35,7 +35,7 @@
           o_custkey x6,
           o_orderkey x7}
          [:scan
-          orders
+          {:table orders}
           [{o_orderdate (< o_orderdate #time/date "1995-03-15")}
            o_shippriority
            o_custkey

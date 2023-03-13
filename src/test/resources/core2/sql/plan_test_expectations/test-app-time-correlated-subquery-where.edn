@@ -7,13 +7,13 @@
    {x1 ?x8, x2 ?x9}
    [:rename
     {application_time_start x1, application_time_end x2}
-    [:scan bar [application_time_start application_time_end]]]
+    [:scan {:table bar} [application_time_start application_time_end]]]
    [:project
     [x4]
     [:rename
      {name x4, application_time_start x5, application_time_end x6}
      [:scan
-      foo
+      {:table foo}
       [name
        {application_time_start (< application_time_start ?x9)}
        {application_time_end (> application_time_end ?x8)}]]]]]]]

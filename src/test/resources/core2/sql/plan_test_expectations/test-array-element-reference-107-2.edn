@@ -2,4 +2,4 @@
  {x4 dyn_idx}
  [:project
   [{x4 (nth x1 (- (nth x2 (- 1 1)) 1))}]
-  [:rename {b x1, a x2} [:scan u [b a]]]]]
+  [:rename {b x1, a x2} [:scan {:table u} [b a]]]]]

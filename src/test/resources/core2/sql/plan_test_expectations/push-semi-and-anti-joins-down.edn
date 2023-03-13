@@ -6,6 +6,6 @@
    [{x1 x5} {x3 x6}]
    [:mega-join
     []
-    [[:rename {foo x1} [:scan x [foo]]]
-     [:rename {biz x3} [:scan y [biz]]]]]
-   [:rename {bar x5, baz x6} [:scan z [bar baz]]]]]]
+    [[:rename {foo x1} [:scan {:table x} [foo]]]
+     [:rename {biz x3} [:scan {:table y} [biz]]]]]
+   [:rename {bar x5, baz x6} [:scan {:table z} [bar baz]]]]]]

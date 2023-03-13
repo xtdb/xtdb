@@ -6,5 +6,5 @@
    [{x7 (not x6)}]
    [:mark-join
     {x6 [(> x1 x3)]}
-    [:rename {z x1} [:scan x [z]]]
-    [:rename {z x3} [:scan y [z]]]]]]]
+    [:rename {z x1} [:scan {:table x} [z]]]
+    [:rename {z x3} [:scan {:table y} [z]]]]]]]

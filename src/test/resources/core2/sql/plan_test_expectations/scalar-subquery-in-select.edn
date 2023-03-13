@@ -4,5 +4,7 @@
   [{x7 (= 1 x5)}]
   [:single-join
    []
-   [:rename {y x1} [:scan x [{y (= y 1)}]]]
-   [:group-by [{x5 (max x3)}] [:rename {bar x3} [:scan foo [bar]]]]]]]
+   [:rename {y x1} [:scan {:table x} [{y (= y 1)}]]]
+   [:group-by
+    [{x5 (max x3)}]
+    [:rename {bar x3} [:scan {:table foo} [bar]]]]]]]

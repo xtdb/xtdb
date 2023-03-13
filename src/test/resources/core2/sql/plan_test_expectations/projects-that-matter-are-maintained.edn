@@ -2,7 +2,9 @@
  {x1 id}
  [:distinct
   [:union-all
-   [:rename {id x1} [:scan customers [id]]]
+   [:rename {id x1} [:scan {:table customers} [id]]]
    [:project
     [x1]
-    [:rename {id x1, product x4} [:scan orders [id product]]]]]]]
+    [:rename
+     {id x1, product x4}
+     [:scan {:table orders} [id product]]]]]]]

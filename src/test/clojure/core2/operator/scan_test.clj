@@ -16,7 +16,7 @@
                         [:put {:id :foo, :col2 "baz2"}]])
 
     (t/is (= [{:id :bar, :col1 "bar1", :col2 "bar2"}]
-             (tu/query-ra '[:scan xt_docs [id col1 col2]]
+             (tu/query-ra '[:scan {:table xt_docs} [id col1 col2]]
                           {:node node})))))
 
 (t/deftest test-duplicates-in-scan-1
@@ -24,7 +24,7 @@
     (c2/submit-tx node [[:put {:id :foo}]])
 
     (t/is (= [{:id :foo}]
-             (tu/query-ra '[:scan xt_docs [id id]]
+             (tu/query-ra '[:scan {:table xt_docs} [id id]]
                           {:node node})))))
 
 (t/deftest test-scanning-temporal-cols
@@ -33,8 +33,7 @@
                          {:app-time-start #inst "2021"
                           :app-time-end #inst "3000"}]])
 
-    (let [res (first (tu/query-ra '[:scan
-                                    xt_docs
+    (let [res (first (tu/query-ra '[:scan {:table xt_docs}
                                     [id
                                      application_time_start application_time_end
                                      system_time_start system_time_end]]
@@ -49,7 +48,7 @@
              (-> (first (tu/query-ra '[:project [id
                                                  {app-time-start application_time_start}
                                                  {app-time-end application_time_end}]
-                                       [:scan xt_docs
+                                       [:scan {:table xt_docs}
                                         [id application_time_start application_time_end]]]
                                      {:node node}))
                  (dissoc :system_time_start :system_time_end))))))
@@ -62,8 +61,7 @@
                  :application_time_end (util/->zdt util/end-of-time)
                  :system_time_start (util/->zdt tt),
                  :system_time_end (util/->zdt util/end-of-time)}]
-               (tu/query-ra '[:scan
-                              xt_docs
+               (tu/query-ra '[:scan {:table xt_docs}
                               [application_time_start application_time_end
                                system_time_start system_time_end]]
                             {:node node}))))))
@@ -72,7 +70,7 @@
   (with-open [node (node/start-node {})]
     (let [^IRaQuerySource ra-src (util/component node :core2.operator/ra-query-source)]
       (letfn [(->col-types [tx]
-                (-> (.prepareRaQuery ra-src '[:scan xt_docs [id]])
+                (-> (.prepareRaQuery ra-src '[:scan {:table xt_docs} [id]])
                     (.bind (util/component node :core2/indexer) {:node node, :basis {:tx tx}})
                     (.columnTypes)))]
 

@@ -6,4 +6,4 @@
    [[x2 {:direction :asc, :null-ordering :nulls-last}]]
    [:rename
     {movietitle x1, year x2}
-    [:scan starsin [movietitle year]]]]]]
+    [:scan {:table starsin} [movietitle year]]]]]]

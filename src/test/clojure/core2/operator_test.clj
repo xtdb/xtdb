@@ -30,11 +30,11 @@
       (let [^IMetadataManager metadata-mgr (tu/component node ::meta/metadata-manager)]
         (letfn [(test-query-ivan [expected tx]
                   (t/is (= expected
-                           (set (tu/query-ra '[:scan xt_docs [id {name (> name "Ivan")}]]
+                           (set (tu/query-ra '[:scan {:table xt_docs} [id {name (> name "Ivan")}]]
                                              {:node node, :basis {:tx tx}}))))
 
                   (t/is (= expected
-                           (set (tu/query-ra '[:scan xt_docs [id {name (> name ?name)}]]
+                           (set (tu/query-ra '[:scan {:table xt_docs} [id {name (> name ?name)}]]
                                              {:node node, :basis {:tx tx}, :params {'?name "Ivan"}})))))]
 
           (t/is (= #{0 1} (set (keys (.chunksMetadata metadata-mgr)))))
@@ -92,11 +92,11 @@
               "only needs to scan chunk 0, block 0"))
 
       (t/is (= #{{:name "Ivan"}}
-               (set (tu/query-ra '[:scan xt_docs [{name (= name "Ivan")}]]
+               (set (tu/query-ra '[:scan {:table xt_docs} [{name (= name "Ivan")}]]
                                  {:node node}))))
 
       (t/is (= #{{:name "Ivan"}}
-               (set (tu/query-ra '[:scan xt_docs [{name (= name ?name)}]]
+               (set (tu/query-ra '[:scan {:table xt_docs} [{name (= name ?name)}]]
                                  {:node node, :params {'?name "Ivan"}})))))))
 
 (t/deftest test-temporal-bounds
@@ -104,7 +104,7 @@
     (let [{tt1 :sys-time} (c2/submit-tx node [[:put {:id :my-doc, :last-updated "tx1"}]])
           {tt2 :sys-time} (c2/submit-tx node [[:put {:id :my-doc, :last-updated "tx2"}]])]
       (letfn [(q [& temporal-constraints]
-                (->> (tu/query-ra [:scan 'xt_docs
+                (->> (tu/query-ra [:scan '{:table xt_docs}
                                    (into '[last-updated] temporal-constraints)]
                                   {:node node, :params {'?sys-time1 tt1, '?sys-time2 tt2}})
                      (into #{} (map :last-updated))))]

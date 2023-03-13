@@ -24,7 +24,7 @@
      _iid x5,
      _row-id x6}
     [:scan
-     foo
+     {:table foo}
      (system_time_start
       system_time_end
       application_time_start

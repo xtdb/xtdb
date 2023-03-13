@@ -16,19 +16,21 @@
      [{x4 x10} {x2 x7}]
      [[:rename
        {l_quantity x9, l_orderkey x10}
-       [:scan lineitem [l_quantity l_orderkey]]]
+       [:scan {:table lineitem} [l_quantity l_orderkey]]]
       [:rename
        {c_name x1, c_custkey x2}
-       [:scan customer [c_name c_custkey]]]
+       [:scan {:table customer} [c_name c_custkey]]]
       [:semi-join
        [{x4 x12}]
        [:rename
         {o_orderkey x4, o_orderdate x5, o_totalprice x6, o_custkey x7}
-        [:scan orders [o_orderkey o_orderdate o_totalprice o_custkey]]]
+        [:scan
+         {:table orders}
+         [o_orderkey o_orderdate o_totalprice o_custkey]]]
        [:select
         (> x15 300)
         [:group-by
          [x12 {x15 (sum x13)}]
          [:rename
           {l_orderkey x12, l_quantity x13}
-          [:scan lineitem [l_orderkey l_quantity]]]]]]]]]]]]
+          [:scan {:table lineitem} [l_orderkey l_quantity]]]]]]]]]]]]

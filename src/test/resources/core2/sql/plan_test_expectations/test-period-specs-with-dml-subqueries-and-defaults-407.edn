@@ -19,7 +19,7 @@
        application_time_end x4,
        id x5}
       [:scan
-       prop_owner
+       {:table prop_owner}
        [{system_time_start (<= system_time_start core2/end-of-time)}
         system_time_end
         {application_time_start

@@ -1468,8 +1468,7 @@
                           (map symbol derived-columns))
           (plan subquery-ref)]
          (plan subquery-ref))
-       [:scan
-        (symbol table-or-query-name)
+       [:scan {:table (symbol table-or-query-name)}
         (vec
           (->> (for [{:keys [identifier]} projection]
                  (symbol identifier))
@@ -1483,8 +1482,7 @@
   (let [{:keys [id correlation-name table-or-query-name]} (sem/table tt)
         projection (first (sem/projected-columns tt))]
     [:rename (table-reference-symbol correlation-name id)
-     [:scan
-      (symbol table-or-query-name)
+     [:scan {:table (symbol table-or-query-name)}
       (for [{:keys [identifier]} projection
             :let [identifier (symbol identifier)]
             :when (not= '_table identifier)]

@@ -185,7 +185,7 @@
   ;; HACK: assume xt_docs here...
   ;; TODO confirm fn-body doc key
 
-  (let [lp '[:scan xt_docs [{id (= id ?id)} fn]]
+  (let [lp '[:scan {:table xt_docs} [{id (= id ?id)} fn]]
         ^core2.operator.PreparedQuery pq (.prepareRaQuery ra-src lp)]
     (with-open [bq (.bind pq wm-src
                           {:params (iv/->indirect-rel [(-> (vw/open-vec allocator '?id [fn-id])

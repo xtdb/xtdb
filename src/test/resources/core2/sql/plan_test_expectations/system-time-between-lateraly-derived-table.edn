@@ -7,7 +7,7 @@
    [[:rename
      {system_time_start x1, system_time_end x2, y x3}
      [:scan
-      x
+      {:table x}
       [{system_time_start
         (<= system_time_start #time/date "3001-01-01")}
        {system_time_end (> system_time_end #time/date "3001-01-01")}
@@ -19,7 +19,7 @@
       [:select
        (< "3001-01-01" #time/zoned-date-time "3002-01-01T00:00Z")
        [:scan
-        z
+        {:table z}
         [{system_time_start
           (<
            system_time_start

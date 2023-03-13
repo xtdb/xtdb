@@ -49,7 +49,7 @@
               l_shipmode x5,
               l_shipinstruct x6}
              [:scan
-              lineitem
+              {:table lineitem}
               [l_extendedprice
                l_discount
                l_partkey
@@ -59,7 +59,9 @@
                 (= l_shipinstruct "DELIVER IN PERSON")}]]]
             [:rename
              {p_partkey x8, p_brand x9, p_container x10, p_size x11}
-             [:scan part [p_partkey p_brand p_container p_size]]]]]
+             [:scan
+              {:table part}
+              [p_partkey p_brand p_container p_size]]]]]
           [:table
            [x13]
            [{x13 "SM CASE"}

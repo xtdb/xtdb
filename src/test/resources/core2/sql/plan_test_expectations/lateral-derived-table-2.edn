@@ -1,1 +1,1 @@
-[:scan z [{z (= z 1)}]]
+[:scan {:table z} [{z (= z 1)}]]

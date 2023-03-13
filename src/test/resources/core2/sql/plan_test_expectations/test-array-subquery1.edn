@@ -4,7 +4,9 @@
   [x6]
   [:mega-join
    []
-   [[:rename {a x1} [:scan a [{a (= a 42)}]]]
+   [[:rename {a x1} [:scan {:table a} [{a (= a 42)}]]]
     [:group-by
      [{x6 (array-agg x3)}]
-     [:rename {b1 x3, b2 x4} [:scan b [b1 {b2 (= b2 42)}]]]]]]]]
+     [:rename
+      {b1 x3, b2 x4}
+      [:scan {:table b} [b1 {b2 (= b2 42)}]]]]]]]]

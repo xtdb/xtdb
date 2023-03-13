@@ -2,7 +2,7 @@
  {x1 col1, x5 $column_2$}
  [:single-join
   []
-  [:rename {col1 x1} [:scan t1 [col1]]]
+  [:rename {col1 x1} [:scan {:table t1} [col1]]]
   [:project
    [{x5 ?_0}]
-   [:rename {col1 x3} [:scan bar [{col1 (= col1 4)}]]]]]]
+   [:rename {col1 x3} [:scan {:table bar} [{col1 (= col1 4)}]]]]]]

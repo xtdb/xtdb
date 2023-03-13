@@ -19,19 +19,19 @@
       {x1 x7}]
      [[:rename
        {n_name x19, n_nationkey x20}
-       [:scan nation [n_name n_nationkey]]]
+       [:scan {:table nation} [n_name n_nationkey]]]
       [:rename
        {n_name x16, n_nationkey x17}
-       [:scan nation [n_name n_nationkey]]]
+       [:scan {:table nation} [n_name n_nationkey]]]
       [:rename
        {c_custkey x13, c_nationkey x14}
-       [:scan customer [c_custkey c_nationkey]]]
+       [:scan {:table customer} [c_custkey c_nationkey]]]
       [:rename
        {o_orderkey x10, o_custkey x11}
-       [:scan orders [o_orderkey o_custkey]]]
+       [:scan {:table orders} [o_orderkey o_custkey]]]
       [:rename
        {s_suppkey x1, s_nationkey x2}
-       [:scan supplier [s_suppkey s_nationkey]]]
+       [:scan {:table supplier} [s_suppkey s_nationkey]]]
       [:rename
        {l_shipdate x4,
         l_extendedprice x5,
@@ -39,7 +39,7 @@
         l_suppkey x7,
         l_orderkey x8}
        [:scan
-        lineitem
+        {:table lineitem}
         [{l_shipdate
           (between
            l_shipdate

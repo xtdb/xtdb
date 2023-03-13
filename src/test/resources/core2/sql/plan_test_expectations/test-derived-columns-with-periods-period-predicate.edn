@@ -8,7 +8,7 @@
     application_time_start x3,
     application_time_end x4}
    [:scan
-    foo
+    {:table foo}
     [system_time_start
      system_time_end
      application_time_start

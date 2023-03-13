@@ -407,8 +407,8 @@
         ;; defaults handled by apply-src-tx
         sys-time-preds (get temporal-preds :sys-time)]
 
-    (-> [:scan (or (some-> (first (attr->lits '_table)) symbol)
-                   'xt_docs)
+    (-> [:scan {:table (or (some-> (first (attr->lits '_table)) symbol)
+                           'xt_docs)}
          (-> attrs
              (cond-> app-time-preds (conj 'application_time_start 'application_time_end)
                      sys-time-preds (conj 'system_time_start 'system_time_end))

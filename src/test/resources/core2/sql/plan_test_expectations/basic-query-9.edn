@@ -8,7 +8,9 @@
     [x1 {x8 (sum x4)} {x9 (min x6)}]
     [:mega-join
      [{x2 x5}]
-     [[:rename {name x1, cert x2} [:scan movieexec [name cert]]]
+     [[:rename
+       {name x1, cert x2}
+       [:scan {:table movieexec} [name cert]]]
       [:rename
        {length x4, producer x5, year x6}
-       [:scan movie [length producer year]]]]]]]]]
+       [:scan {:table movie} [length producer year]]]]]]]]]

@@ -4,5 +4,5 @@
   [x1]
   [:semi-join
    [{x2 x4}]
-   [:rename {y x1, z x2} [:scan x [y z]]]
+   [:rename {y x1, z x2} [:scan {:table x} [y z]]]
    [:table [x4] [{x4 1} {x4 2}]]]]]

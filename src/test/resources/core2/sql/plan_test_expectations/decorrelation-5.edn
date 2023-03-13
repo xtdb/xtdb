@@ -17,14 +17,14 @@
         [[:rename
           {name x1, id x2, major x3, year x4}
           [:scan
-           students
+           {:table students}
            [name
             id
             {major (or (= major "CS") (= major "Games Eng"))}
             year]]]
          [:rename
           {course x6, sid x7, grade x8}
-          [:scan exams [course sid grade]]]]]]
+          [:scan {:table exams} [course sid grade]]]]]]
       [:rename
        {grade x10, sid x11, curriculum x12, date x13}
-       [:scan exams [grade sid curriculum date]]]]]]]]]
+       [:scan {:table exams} [grade sid curriculum date]]]]]]]]]

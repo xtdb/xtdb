@@ -19,7 +19,7 @@
      system_time_start x6,
      system_time_end x7}
     [:scan
-     foo
+     {:table foo}
      (baz
       _iid
       _row-id

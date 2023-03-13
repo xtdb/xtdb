@@ -2,4 +2,7 @@
  {x1 films, x3 $column_2$}
  [:project
   [x1 x3]
-  [:unwind {x3 x1} {} [:rename {films x1} [:scan starsin [films]]]]]]
+  [:unwind
+   {x3 x1}
+   {}
+   [:rename {films x1} [:scan {:table starsin} [films]]]]]]

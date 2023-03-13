@@ -31,11 +31,13 @@
            org.roaringbitmap.buffer.MutableRoaringBitmap
            org.roaringbitmap.longlong.Roaring64Bitmap))
 
+(s/def ::table simple-symbol?)
+
 ;; TODO be good to just specify a single expression here and have the interpreter split it
 ;; into metadata + col-preds - the former can accept more than just `(and ~@col-preds)
 (defmethod lp/ra-expr :scan [_]
   (s/cat :op #{:scan}
-         :table simple-symbol?
+         :scan-opts (s/keys :req-un [::table])
          :columns (s/coll-of (s/or :column ::lp/column
                                    :select ::lp/column-expression))))
 
@@ -45,7 +47,7 @@
   (emitScan [scan-expr scan-col-types param-types]))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
-(defn ->scan-cols [{:keys [table columns]}]
+(defn ->scan-cols [{:keys [columns], {:keys [table]} :scan-opts}]
   (for [[col-tag col-arg] columns]
     [table (case col-tag
              :column col-arg
@@ -263,7 +265,7 @@
         (->> scan-cols
              (into {} (map (juxt identity ->col-type))))))
 
-    (emitScan [_ {:keys [table columns]} scan-col-types param-types]
+    (emitScan [_ {:keys [columns], {:keys [table]} :scan-opts} scan-col-types param-types]
       (let [col-names (->> columns
                            (into [] (comp (map (fn [[col-type arg]]
                                                  (case col-type

@@ -1,1 +1,1 @@
-[:scan t1 [{a (nil? a)}]]
+[:scan {:table t1} [{a (nil? a)}]]

@@ -9,7 +9,7 @@
     application_time_end x4,
     bar x5}
    [:scan
-    foo
+    {:table foo}
     [{system_time_start (<= system_time_start (current-timestamp))}
      {system_time_end (> system_time_end (current-timestamp))}
      {application_time_start

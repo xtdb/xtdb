@@ -10,7 +10,9 @@
       [{x3 x9}]
       [:rename
        {s_name x1, s_address x2, s_suppkey x3, s_nationkey x4}
-       [:scan supplier [s_name s_address s_suppkey s_nationkey]]]
+       [:scan
+        {:table supplier}
+        [s_name s_address s_suppkey s_nationkey]]]
       [:select
        (> x11 x24)
        [:map
@@ -25,11 +27,13 @@
             [{x10 x13}]
             [:rename
              {ps_suppkey x9, ps_partkey x10, ps_availqty x11}
-             [:scan partsupp [ps_suppkey ps_partkey ps_availqty]]]
+             [:scan
+              {:table partsupp}
+              [ps_suppkey ps_partkey ps_availqty]]]
             [:rename
              {p_partkey x13, p_name x14}
              [:scan
-              part
+              {:table part}
               [p_partkey {p_name (like p_name "forest%")}]]]]]
           [:rename
            {l_quantity x17,
@@ -37,7 +41,7 @@
             l_suppkey x19,
             l_shipdate x20}
            [:scan
-            lineitem
+            {:table lineitem}
             [l_quantity
              l_partkey
              l_suppkey
@@ -51,4 +55,6 @@
                (>= l_shipdate #time/date "1994-01-01"))}]]]]]]]]
      [:rename
       {n_nationkey x6, n_name x7}
-      [:scan nation [n_nationkey {n_name (= n_name "CANADA")}]]]]]]]]
+      [:scan
+       {:table nation}
+       [n_nationkey {n_name (= n_name "CANADA")}]]]]]]]]

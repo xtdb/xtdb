@@ -5,5 +5,5 @@
   [:apply
    :single-join
    {x1 ?x5}
-   [:rename {bar x1} [:scan x [bar]]]
-   [:project [{x4 ?x5}] [:rename {} [:scan z []]]]]]]
+   [:rename {bar x1} [:scan {:table x} [bar]]]
+   [:project [{x4 ?x5}] [:rename {} [:scan {:table z} []]]]]]]

@@ -4,5 +4,5 @@
   [{x2 x4}]
   [:rename
    {country x1, custno x2}
-   [:scan customers [{country (= country "Mexico")} custno]]]
-  [:rename {custno x4} [:scan orders [custno]]]]]
+   [:scan {:table customers} [{country (= country "Mexico")} custno]]]
+  [:rename {custno x4} [:scan {:table orders} [custno]]]]]

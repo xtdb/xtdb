@@ -10,7 +10,7 @@
      [{x1 x4}]
      [:map
       [{$row_number$ (row-number)}]
-      [:rename {custkey x1} [:scan customer [custkey]]]]
+      [:rename {custkey x1} [:scan {:table customer} [custkey]]]]
      [:rename
       {totalprice x3, custkey x4}
-      [:scan orders [totalprice custkey]]]]]]]]
+      [:scan {:table orders} [totalprice custkey]]]]]]]]

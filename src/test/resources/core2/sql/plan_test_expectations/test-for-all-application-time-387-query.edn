@@ -1,1 +1,1 @@
-[:scan foo [bar]]
+[:scan {:table foo} [bar]]

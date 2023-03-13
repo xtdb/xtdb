@@ -13,7 +13,7 @@
    [:select
     (< #time/date "2001-01-01" #time/date "2002-01-01")
     [:scan
-     foo
+     {:table foo}
      [{system_time_start
        (and
         (< system_time_start #time/date "2002-01-01")

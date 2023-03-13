@@ -4,4 +4,5 @@
   [x1]
   [:mega-join
    [{x1 (+ x3 1)}]
-   [[:rename {a x1} [:scan a [a]]] [:rename {b x3} [:scan bar [b]]]]]]]
+   [[:rename {a x1} [:scan {:table a} [a]]]
+    [:rename {b x3} [:scan {:table bar} [b]]]]]]]

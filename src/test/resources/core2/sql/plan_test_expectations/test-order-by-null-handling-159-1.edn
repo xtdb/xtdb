@@ -2,4 +2,4 @@
  {x1 a}
  [:order-by
   [[x1 {:direction :asc, :null-ordering :nulls-first}]]
-  [:rename {a x1} [:scan foo [a]]]]]
+  [:rename {a x1} [:scan {:table foo} [a]]]]]

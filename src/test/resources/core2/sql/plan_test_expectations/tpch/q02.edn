@@ -48,17 +48,21 @@
          [{x20 x22} {x12 x19} {x1 x14} {x11 x15}]
          [[:rename
            {r_regionkey x22, r_name x23}
-           [:scan region [r_regionkey {r_name (= r_name "EUROPE")}]]]
+           [:scan
+            {:table region}
+            [r_regionkey {r_name (= r_name "EUROPE")}]]]
           [:rename
            {n_name x18, n_nationkey x19, n_regionkey x20}
-           [:scan nation [n_name n_nationkey n_regionkey]]]
+           [:scan {:table nation} [n_name n_nationkey n_regionkey]]]
           [:rename
            {ps_partkey x14, ps_suppkey x15, ps_supplycost x16}
-           [:scan partsupp [ps_partkey ps_suppkey ps_supplycost]]]
+           [:scan
+            {:table partsupp}
+            [ps_partkey ps_suppkey ps_supplycost]]]
           [:rename
            {p_partkey x1, p_mfgr x2, p_size x3, p_type x4}
            [:scan
-            part
+            {:table part}
             [p_partkey
              p_mfgr
              {p_size (= p_size 15)}
@@ -72,7 +76,7 @@
             s_suppkey x11,
             s_nationkey x12}
            [:scan
-            supplier
+            {:table supplier}
             [s_acctbal
              s_name
              s_address
@@ -84,13 +88,17 @@
         [{x33 x35} {x30 x32} {x27 x29}]
         [[:rename
           {r_regionkey x35, r_name x36}
-          [:scan region [r_regionkey {r_name (= r_name "EUROPE")}]]]
+          [:scan
+           {:table region}
+           [r_regionkey {r_name (= r_name "EUROPE")}]]]
          [:rename
           {n_nationkey x32, n_regionkey x33}
-          [:scan nation [n_nationkey n_regionkey]]]
+          [:scan {:table nation} [n_nationkey n_regionkey]]]
          [:rename
           {ps_supplycost x25, ps_partkey x26, ps_suppkey x27}
-          [:scan partsupp [ps_supplycost ps_partkey ps_suppkey]]]
+          [:scan
+           {:table partsupp}
+           [ps_supplycost ps_partkey ps_suppkey]]]
          [:rename
           {s_suppkey x29, s_nationkey x30}
-          [:scan supplier [s_suppkey s_nationkey]]]]]]]]]]]]
+          [:scan {:table supplier} [s_suppkey s_nationkey]]]]]]]]]]]]

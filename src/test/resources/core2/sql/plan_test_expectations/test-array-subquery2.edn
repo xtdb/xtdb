@@ -8,5 +8,5 @@
     [{x1 x5}]
     [[:map
       [{$row_number$ (row-number)}]
-      [:rename {b x1, a x2} [:scan a [b {a (= a 42)}]]]]
-     [:rename {b1 x4, b2 x5} [:scan b [b1 b2]]]]]]]]
+      [:rename {b x1, a x2} [:scan {:table a} [b {a (= a 42)}]]]]
+     [:rename {b1 x4, b2 x5} [:scan {:table b} [b1 b2]]]]]]]]

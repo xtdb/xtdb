@@ -1,3 +1,4 @@
 [:rename
  {x1 movietitle}
- [:distinct [:rename {movietitle x1} [:scan starsin [movietitle]]]]]
+ [:distinct
+  [:rename {movietitle x1} [:scan {:table starsin} [movietitle]]]]]

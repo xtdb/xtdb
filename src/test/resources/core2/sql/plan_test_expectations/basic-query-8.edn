@@ -4,5 +4,5 @@
   [x1]
   [:left-outer-join
    [{x1 x3}]
-   [:rename {title x1} [:scan starsin [title]]]
-   [:rename {title x3} [:scan movie [title]]]]]]
+   [:rename {title x1} [:scan {:table starsin} [title]]]
+   [:rename {title x3} [:scan {:table movie} [title]]]]]]

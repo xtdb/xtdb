@@ -6,7 +6,7 @@
    []
    [[:rename
      {a x1, b x2, c x3}
-     [:scan foo [a {b (= b ?_1)} {c (= c ?_2)}]]]
+     [:scan {:table foo} [a {b (= b ?_1)} {c (= c ?_2)}]]]
     [:project
      [x5]
-     [:rename {b x5, c x6} [:scan bar [b {c (= c ?_0)}]]]]]]]]
+     [:rename {b x5, c x6} [:scan {:table bar} [b {c (= c ?_0)}]]]]]]]]

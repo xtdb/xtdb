@@ -2,4 +2,4 @@
  {x3 $column_1$}
  [:group-by
   [{x3 (sum x1)}]
-  [:rename {length x1} [:scan movie [length]]]]]
+  [:rename {length x1} [:scan {:table movie} [length]]]]]

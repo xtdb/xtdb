@@ -6,7 +6,7 @@
    [(< x2 x7) (> x3 x6)]
    [[:rename
      {name x1, system_time_start x2, system_time_end x3}
-     [:scan foo [name system_time_start system_time_end]]]
+     [:scan {:table foo} [name system_time_start system_time_end]]]
     [:rename
      {name x5, system_time_start x6, system_time_end x7}
-     [:scan bar [name system_time_start system_time_end]]]]]]]
+     [:scan {:table bar} [name system_time_start system_time_end]]]]]]]

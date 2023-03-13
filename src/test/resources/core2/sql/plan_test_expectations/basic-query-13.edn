@@ -1,1 +1,1 @@
-[:select (= name lastname) [:scan starsin [name lastname]]]
+[:select (= name lastname) [:scan {:table starsin} [name lastname]]]

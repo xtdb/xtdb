@@ -152,10 +152,7 @@
     [:table table]
     (mapv symbol (keys (first table)))
 
-    [:scan _table columns]
-    (mapv ->projected-column columns)
-
-    [:scan _src _table columns]
+    [:scan _scan-opts columns]
     (mapv ->projected-column columns)
 
     [:join _ lhs rhs]
@@ -240,7 +237,7 @@
             []))
         (vec))
 
-    [:arrow path]
+    [:arrow _path]
     []
 
     (throw (err/illegal-arg ::cannot-calculate-relation-cols
@@ -340,10 +337,10 @@
         (with-smap [:table (w/postwalk-replace smap table)]
           smap))
 
-      [:scan table columns]
+      [:scan scan-opts columns]
       (let [smap (zipmap (map ->projected-column columns)
                          (repeatedly next-name))]
-        (with-smap [:rename smap [:scan table columns]] smap))
+        (with-smap [:rename smap [:scan scan-opts columns]] smap))
 
       [:join join-map lhs rhs]
       (let [smap (merge (->smap lhs) (->smap rhs))]

@@ -11,11 +11,11 @@
      [x1 {x8 (count x3)}]
      [:left-outer-join
       [{x1 x4}]
-      [:rename {c_custkey x1} [:scan customer [c_custkey]]]
+      [:rename {c_custkey x1} [:scan {:table customer} [c_custkey]]]
       [:rename
        {o_orderkey x3, o_custkey x4, o_comment x5}
        [:scan
-        orders
+        {:table orders}
         [o_orderkey
          o_custkey
          {o_comment

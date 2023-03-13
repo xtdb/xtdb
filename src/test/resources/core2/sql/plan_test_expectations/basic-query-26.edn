@@ -11,4 +11,4 @@
      [{x4 (= x2 "foo")}]
      [:rename
       {movietitle x1, year x2}
-      [:scan starsin [movietitle year]]]]]]]]
+      [:scan {:table starsin} [movietitle year]]]]]]]]

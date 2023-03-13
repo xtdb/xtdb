@@ -4,7 +4,9 @@
   [x4]
   [:mega-join
    [{x1 x4} {x2 x5}]
-   [[:rename {title x1, movieyear x2} [:scan movie [title movieyear]]]
+   [[:rename
+     {title x1, movieyear x2}
+     [:scan {:table movie} [title movieyear]]]
     [:rename
      {movietitle x4, year x5}
-     [:scan starsin [movietitle year]]]]]]]
+     [:scan {:table starsin} [movietitle year]]]]]]]

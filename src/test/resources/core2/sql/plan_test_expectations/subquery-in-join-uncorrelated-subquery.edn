@@ -4,10 +4,10 @@
   [x1]
   [:mega-join
    []
-   [[:rename {a x1} [:scan foo [a]]]
+   [[:rename {a x1} [:scan {:table foo} [a]]]
     [:select
      (= x3 x5)
      [:single-join
       []
-      [:rename {c x3} [:scan bar [c]]]
-      [:rename {b x5} [:scan foo [b]]]]]]]]]
+      [:rename {c x3} [:scan {:table bar} [c]]]
+      [:rename {b x5} [:scan {:table foo} [b]]]]]]]]]

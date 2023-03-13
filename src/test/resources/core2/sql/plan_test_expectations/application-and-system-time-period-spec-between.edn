@@ -31,7 +31,7 @@
         application_time_end
         #time/zoned-date-time "3001-01-01T00:00Z"))))
     [:scan
-     t1
+     {:table t1}
      [{system_time_start
        (<= system_time_start #time/date "2001-01-01")}
       {system_time_end (> system_time_end #time/date "2000-01-01")}

@@ -6,5 +6,5 @@
    (or x7 (= x2 42))
    [:mark-join
     {x7 [{x1 x4}]}
-    [:rename {a x1, b x2} [:scan foo [a b]]]
+    [:rename {a x1, b x2} [:scan {:table foo} [a b]]]
     [:table [x4] [{x4 1} {x4 2}]]]]]]

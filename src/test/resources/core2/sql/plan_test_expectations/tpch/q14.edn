@@ -12,7 +12,7 @@
      [[:rename
        {l_extendedprice x1, l_discount x2, l_partkey x3, l_shipdate x4}
        [:scan
-        lineitem
+        {:table lineitem}
         [l_extendedprice
          l_discount
          l_partkey
@@ -26,4 +26,4 @@
            (>= l_shipdate #time/date "1995-09-01"))}]]]
       [:rename
        {p_type x6, p_partkey x7}
-       [:scan part [p_type p_partkey]]]]]]]]]
+       [:scan {:table part} [p_type p_partkey]]]]]]]]]
