@@ -182,6 +182,12 @@ dependencies {
     testImplementation("org.clojure", "test.check", "1.1.1")
 }
 
+if (hasProperty("fin")) {
+    dependencies {
+        devImplementation("vvvvalvalval","scope-capture","0.3.3")
+    }
+}
+
 fun createSltTask(
     taskName: String,
     maxFailures: Long = 0,
