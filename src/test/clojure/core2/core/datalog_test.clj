@@ -938,6 +938,244 @@
                            (assoc :basis {:tx tx}))))
               "b is unified")))))
 
+(deftest test-basic-rules
+  (let [_tx (c2/submit-tx tu/*node* [[:put {:id :ivan :name "Ivan" :last-name "Ivanov" :age 21}]
+                                     [:put {:id :petr :name "Petr" :last-name "Petrov" :age 18}]
+                                     [:put {:id :georgy :name "Georgy" :last-name "George" :age 17}]])
+        q (fn q [query & args]
+            (apply c2/q tu/*node* query args))]
+
+    (t/testing "without rule"
+      (t/is (= [{:i :ivan}] (q '{:find [i]
+                                 :where [[i :age age]
+                                         [(>= age 21)]]}))))
+
+    (t/testing "empty rules"
+      (t/is (= [{:i :ivan}] (q '{:find [i]
+                                 :where [[i :age age]
+                                         [(>= age 21)]]
+                                 :rules []}))))
+
+    (t/testing "rule using required bound args"
+      (t/is (= [{:i :ivan}] (q '{:find [i]
+                                 :where [[i :age age]
+                                         (over-twenty-one? age)]
+                                 :rules [[(over-twenty-one? age)
+                                          [(>= age 21)]]]}))))
+
+    (t/testing "rule using required bound args (different arg names)"
+      (t/is (= [{:i :ivan}] (q '{:find [i]
+                                 :where [[i :age age]
+                                         (over-twenty-one? age)]
+                                 :rules [[(over-twenty-one? age-other)
+                                          [(>= age-other 21)]]]}))))
+
+    (t/testing "rules directly on arguments"
+      (t/is (= [{:age 21}] (q '{:find [age]
+                                :where [(over-twenty-one? age)]
+                                :in [age]
+                                :rules [[(over-twenty-one? age)
+                                         [(>= age 21)]]]}
+                              21)))
+
+      (t/is (= [] (q '{:find [age]
+                       :where [(over-twenty-one? age)]
+                       :in [age]
+                       :rules [[(over-twenty-one? age)
+                                [(>= age 21)]]]}
+                     20))))
+
+    (t/testing "testing rule with multiple args"
+      (t/is (= [{:i :petr, :age 18, :u :ivan}
+                {:i :georgy, :age 17, :u :ivan}
+                {:i :georgy, :age 17, :u :petr}]
+               (q '{:find [i age u]
+                    :where [(older-users age u)
+                            [i :age age]]
+                    :rules [[(older-users age u)
+                             [u :age age2]
+                             [(> age2 age)]]]}))))
+
+    (t/testing "testing rule with multiple args (different arg names in rule)"
+      (t/is (= [{:i :petr, :age 18, :u :ivan}
+                {:i :georgy, :age 17, :u :ivan}
+                {:i :georgy, :age 17, :u :petr}]
+               (q '{:find [i age u]
+                    :where [(older-users age u)
+                            [i :age age]]
+                    :rules [[(older-users age-other u-other)
+                             [u-other :age age2]
+                             [(> age2 age-other)]]]}))))
+
+
+    (t/testing "nested rules"
+      (t/is (= [{:i :ivan}] (q '{:find [i]
+                                 :where [[i :age age]
+                                         (over-twenty-one? age)]
+                                 :rules [[(over-twenty-one? x)
+                                          (over-twenty-one-internal? x)]
+                                         [(over-twenty-one-internal? y)
+                                          [(>= y 21)]]]}))))
+
+
+    (t/testing "nested rules bound (same arg names)"
+      (t/is (= [{:i :ivan}] (q '{:find [i]
+                                 :where [[i :age age]
+                                         (over-twenty-one? age)]
+                                 :rules [[(over-twenty-one? age)
+                                          (over-twenty-one-internal? age)]
+                                         [(over-twenty-one-internal? age)
+                                          [(>= age 21)]]]}))))
+
+    (t/is (= [{:i :ivan}] (q '{:find [i]
+                               :where [[i :age age]
+                                       (over-twenty-one? age)]
+                               :rules [[(over-twenty-one? x)
+                                        (over-twenty-one-internal? x)]
+                                       [(over-twenty-one-internal? y)
+                                        [(>= y 21)]]]})))
+
+    (t/testing "rule using literal arguments"
+      (t/is (= [{:i :ivan}] (q '{:find [i]
+                                 :where [[i :age age]
+                                         (over-age? age 21)]
+                                 :rules [[(over-age? age required-age)
+                                          [(>= age required-age)]]]}))))
+
+    (t/testing "same arg-name different position test (shadowing test)"
+      (t/is (= [{:i :ivan}] (q '{:find [i]
+                                 :where [[i :age age]
+                                         (over-age? age 21)]
+                                 :rules [[(over-age? other-age age)
+                                          [(>= other-age age)]]]}))))
+
+    (t/testing "semi-join in rule"
+      (t/is (= [{:i :petr, :age 18}
+                {:i :georgy, :age 17}]
+               (q '{:find [i age]
+                    :where [[i :age age]
+                            (older? age)]
+                    :rules [[(older? age)
+                             (exists? [age]
+                                      [i :age age2]
+                                      [(> age2 age)])]]}))))
+
+
+    (t/testing "anti-join in rule"
+      (t/is (= [{:i :ivan, :age 21}]
+               (q  '{:find [i age]
+                     :where [[i :age age]
+                             (not-older? age)]
+                     :rules [[(not-older? age)
+                              (not-exists? [age]
+                                           [i :age age2]
+                                           [(> age2 age)])]]}))))
+
+    (t/testing "subquery in rule"
+      (t/is (= [{:i :petr, :other-age 21}
+                {:i :georgy, :other-age 21}
+                {:i :georgy, :other-age 18}]
+               (q '{:find [i other-age]
+                    :where [[i :age age]
+                            (older-ages age other-age)]
+                    :rules [[(older-ages age other-age)
+                             (q {:find [other-age]
+                                 :in [age]
+                                 :where [[i :age other-age]
+                                         [(> other-age age)]]})]]}))))
+
+    (t/testing "subquery in rule with aggregates, expressions and order-by"
+      (t/is [{:i :ivan, :max-older-age nil, :max-older-age-times2 nil}
+             {:i :petr, :max-older-age 21, :max-older-age-times2 42}
+             {:i :georgy, :max-older-age 21, :max-older-age-times2 42}]
+            (q '{:find [i max-older-age max-older-age-times2]
+                 :where [[i :age age]
+                         (older-ages age max-older-age max-older-age-times2)]
+                 :rules [[(older-ages age max-older-age max-older-age2)
+                          (q {:find [(max older-age) (max (* older-age 2))]
+                              :keys [max-older-age max-older-age2]
+                              :in [age]
+                              :where [[i :age older-age]
+                                      [(> older-age age)]]
+                              :order-by [[(max older-age) :desc]]})]]})))
+
+    (t/testing "rule using multiple branches"
+      (t/is (= [{:i :ivan}] (q '{:find [i]
+                                 :where [(is-ivan-or-bob? i)]
+                                 :rules [[(is-ivan-or-bob? i)
+                                          [i :name "Bob"]]
+                                         [(is-ivan-or-bob? i)
+                                          [i :name "Ivan"]
+                                          [i :last-name "Ivanov"]]]})))
+
+      (t/is (= [{:name "Petr"}] (q '{:find [name]
+                                     :where [[i :name name]
+                                             (not-exists? [i]
+                                                          (is-ivan-or-georgy? i))]
+                                     :rules [[(is-ivan-or-georgy? i)
+                                              [i :name "Ivan"]]
+                                             [(is-ivan-or-georgy? i)
+                                              [i :name "Georgy"]]]})))
+
+      (t/is (= [{:i :ivan}
+                {:i :petr}]
+               (q '{:find [i]
+                    :where [(is-ivan-or-petr? i)]
+                    :rules [[(is-ivan-or-petr? i)
+                             [i :name "Ivan"]]
+                            [(is-ivan-or-petr? i)
+                             [i :name "Petr"]]]}))))
+
+    (t/testing "union-join with rules"
+      (t/is (= [{:i :ivan}]
+               (q '{:find [i]
+                    :where [(union-join [i]
+                                        (is-ivan-or-bob? i))]
+                    :rules [[(is-ivan-or-bob? i)
+                             [i :name "Bob"]]
+                            [(is-ivan-or-bob? i)
+                             [i :name "Ivan"]
+                             [i :last-name "Ivanov"]]]}))))
+
+
+    (t/testing "subquery with rule"
+      (t/is (= [{:i :ivan}]
+               (q '{:find [i]
+                    :where [(q {:find [i]
+                                :where [(is-ivan-or-bob? i)]})]
+                    :rules [[(is-ivan-or-bob? i)
+                             [i :name "Bob"]]
+                            [(is-ivan-or-bob? i)
+                             [i :name "Ivan"]
+                             [i :last-name "Ivanov"]]]})))))
+
+  (t/is (thrown-with-msg?
+         IllegalArgumentException
+         #":unknown-rule"
+         (c2/q tu/*node* '{:find [i]
+                           :where [[i :age age]
+                                   (over-twenty-one? age)]})))
+
+  (t/is (thrown-with-msg?
+         IllegalArgumentException
+         #":rule-wrong-arity"
+         (c2/q tu/*node* '{:find [i]
+                           :where [[i :age age]
+                                   (over-twenty-one? i age)]
+                           :rules [[(over-twenty-one? x)
+                                    [(>= x 21)]]]})))
+  (t/is (thrown-with-msg?
+         IllegalArgumentException
+         #":rule-definitions-require-unique-arity"
+         (c2/q tu/*node* '{:find [i]
+                           :where [[i :age age]
+                                   (is-ivan-or-petr? i name)]
+                           :rules [[(is-ivan-or-petr? i name)
+                                    [i :name "Ivan"]]
+                                   [(is-ivan-or-petr? i)
+                                    [i :name "Petr"]]]}))))
+
+
 (t/deftest test-temporal-opts
   (letfn [(q [query tx current-time]
             (c2/q tu/*node*
