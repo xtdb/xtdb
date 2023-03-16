@@ -15,8 +15,8 @@
 (t/use-fixtures :each tu/with-mock-clock tu/with-node)
 
 (def ivan+petr
-  [[:put {:id :ivan, :first-name "Ivan", :last-name "Ivanov"}]
-   [:put {:id :petr, :first-name "Petr", :last-name "Petrov"}]])
+  '[[:put xt_docs {:id :ivan, :first-name "Ivan", :last-name "Ivanov"}]
+    [:put xt_docs {:id :petr, :first-name "Petr", :last-name "Petrov"}]])
 
 (deftest test-scan
   (let [tx (c2/submit-tx tu/*node* ivan+petr)]
@@ -105,10 +105,10 @@
 ;; https://github.com/tonsky/datascript/blob/1.1.0/test/datascript/test/query.cljc#L12-L36
 (deftest datascript-test-joins
   (let [tx (c2/submit-tx tu/*node*
-                         [[:put {:id 1, :name "Ivan", :age 15}]
-                          [:put {:id 2, :name "Petr", :age 37}]
-                          [:put {:id 3, :name "Ivan", :age 37}]
-                          [:put {:id 4, :age 15}]])]
+                         '[[:put xt_docs {:id 1, :name "Ivan", :age 15}]
+                           [:put xt_docs {:id 2, :name "Petr", :age 37}]
+                           [:put xt_docs {:id 3, :name "Ivan", :age 37}]
+                           [:put xt_docs {:id 4, :age 15}]])]
 
     (t/is (= #{{:e 1} {:e 2} {:e 3}}
              (set (c2/q tu/*node*
@@ -201,10 +201,10 @@
 ;; https://github.com/tonsky/datascript/blob/1.1.0/test/datascript/test/query_aggregates.cljc#L14-L39
 (t/deftest datascript-test-aggregates
   (let [tx (c2/submit-tx tu/*node*
-                         [[:put {:id :cerberus, :heads 3}]
-                          [:put {:id :medusa, :heads 1}]
-                          [:put {:id :cyclops, :heads 1}]
-                          [:put {:id :chimera, :heads 1}]])]
+                         '[[:put xt_docs {:id :cerberus, :heads 3}]
+                           [:put xt_docs {:id :medusa, :heads 1}]
+                           [:put xt_docs {:id :cyclops, :heads 1}]
+                           [:put xt_docs {:id :chimera, :heads 1}]])]
     (t/is (= #{{:heads 1, :count-heads 3} {:heads 3, :count-heads 1}}
              (set (c2/q tu/*node*
                         (-> '{:find [heads (count heads)]
@@ -225,9 +225,9 @@
           "various aggs")))
 
 (t/deftest test-find-exprs
-  (let [tx (c2/submit-tx tu/*node* [[:put {:id :o1, :unit-price 1.49, :quantity 4}]
-                                    [:put {:id :o2, :unit-price 5.39, :quantity 1}]
-                                    [:put {:id :o3, :unit-price 0.59, :quantity 7}]])]
+  (let [tx (c2/submit-tx tu/*node* '[[:put xt_docs {:id :o1, :unit-price 1.49, :quantity 4}]
+                                     [:put xt_docs {:id :o2, :unit-price 5.39, :quantity 1}]
+                                     [:put xt_docs {:id :o3, :unit-price 0.59, :quantity 7}]])]
     (t/is (= [{:oid :o1, :o-value 5.96}
               {:oid :o2, :o-value 5.39}
               {:oid :o3, :o-value 4.13}]
@@ -239,9 +239,9 @@
                        (assoc :basis {:tx tx})))))))
 
 (deftest test-aggregate-exprs
-  (let [tx (c2/submit-tx tu/*node* [[:put {:id :foo, :category :c0, :v 1}]
-                                    [:put {:id :bar, :category :c0, :v 2}]
-                                    [:put {:id :baz, :category :c1, :v 4}]])]
+  (let [tx (c2/submit-tx tu/*node* '[[:put xt_docs {:id :foo, :category :c0, :v 1}]
+                                     [:put xt_docs {:id :bar, :category :c0, :v 2}]
+                                     [:put xt_docs {:id :baz, :category :c1, :v 4}]])]
     (t/is (= [{:category :c0, :sum-doubles 6}
               {:category :c1, :sum-doubles 8}]
              (c2/q tu/*node*
@@ -436,8 +436,8 @@
 (deftest test-value-unification
   (let [tx (c2/submit-tx tu/*node*
                          (conj ivan+petr
-                               [:put {:id :sergei :first-name "Sergei" :last-name "Sergei"}]
-                               [:put {:id :jeff :first-name "Sergei" :last-name "but-different"}]))]
+                               '[:put xt_docs {:id :sergei :first-name "Sergei" :last-name "Sergei"}]
+                               '[:put xt_docs {:id :jeff :first-name "Sergei" :last-name "but-different"}]))]
     (t/is (= [{:e :sergei, :n "Sergei"}]
              (c2/q
               tu/*node*
@@ -456,10 +456,10 @@
 
 (deftest test-semi-join
   (let [tx (c2/submit-tx tu/*node*
-                         [[:put {:id :ivan, :name "Ivan"}]
-                          [:put {:id :petr, :name "Petr", :parent :ivan}]
-                          [:put {:id :sergei, :name "Sergei", :parent :petr}]
-                          [:put {:id :jeff, :name "Jeff", :parent :petr}]])]
+                         '[[:put xt_docs {:id :ivan, :name "Ivan"}]
+                           [:put xt_docs {:id :petr, :name "Petr", :parent :ivan}]
+                           [:put xt_docs {:id :sergei, :name "Sergei", :parent :petr}]
+                           [:put xt_docs {:id :jeff, :name "Jeff", :parent :petr}]])]
 
     (t/is (= [{:e :ivan} {:e :petr}]
              (c2/q tu/*node*
@@ -493,9 +493,9 @@
 (deftest test-anti-join
   (let [tx (c2/submit-tx
             tu/*node*
-            [[:put {:id :ivan, :first-name "Ivan", :last-name "Ivanov" :foo 1}]
-             [:put {:id :petr, :first-name "Petr", :last-name "Petrov" :foo 1}]
-             [:put {:id :sergei :first-name "Sergei" :last-name "Sergei" :foo 1}]])]
+            '[[:put xt_docs {:id :ivan, :first-name "Ivan", :last-name "Ivanov" :foo 1}]
+              [:put xt_docs {:id :petr, :first-name "Petr", :last-name "Petrov" :foo 1}]
+              [:put xt_docs {:id :sergei :first-name "Sergei" :last-name "Sergei" :foo 1}]])]
 
     (t/is (= [{:e :ivan} {:e :sergei}]
              (c2/q tu/*node*
@@ -645,9 +645,9 @@
 
 (deftest calling-a-function-580
   (let [tx (c2/submit-tx tu/*node*
-                         [[:put {:id :ivan, :age 15}]
-                          [:put {:id :petr, :age 22}]
-                          [:put {:id :slava, :age 37}]])]
+                         '[[:put xt_docs {:id :ivan, :age 15}]
+                           [:put xt_docs {:id :petr, :age 22}]
+                           [:put xt_docs {:id :slava, :age 37}]])]
     (t/is (= #{{:e1 :petr, :e2 :ivan, :e3 :slava}
                {:e1 :ivan, :e2 :petr, :e3 :slava}}
              (set
@@ -673,9 +673,9 @@
 
 (deftest test-nested-expressions-581
   (let [tx (c2/submit-tx tu/*node*
-                         [[:put {:id :ivan, :age 15}]
-                          [:put {:id :petr, :age 22, :height 240, :parent 1}]
-                          [:put {:id :slava, :age 37, :parent 2}]])]
+                         '[[:put xt_docs {:id :ivan, :age 15}]
+                           [:put xt_docs {:id :petr, :age 22, :height 240, :parent 1}]
+                           [:put xt_docs {:id :slava, :age 37, :parent 2}]])]
 
     (t/is (= [{:e1 :ivan, :e2 :petr, :e3 :slava}
               {:e1 :petr, :e2 :ivan, :e3 :slava}]
@@ -719,10 +719,10 @@
                          (assoc :basis {:tx tx}))))))))
 
 (deftest test-union-join
-  (let [tx (c2/submit-tx tu/*node* [[:put {:id :ivan, :age 20, :role :developer}]
-                                    [:put {:id :oleg, :age 30, :role :manager}]
-                                    [:put {:id :petr, :age 35, :role :qa}]
-                                    [:put {:id :sergei, :age 35, :role :manager}]])]
+  (let [tx (c2/submit-tx tu/*node* '[[:put xt_docs {:id :ivan, :age 20, :role :developer}]
+                                     [:put xt_docs {:id :oleg, :age 30, :role :manager}]
+                                     [:put xt_docs {:id :petr, :age 35, :role :qa}]
+                                     [:put xt_docs {:id :sergei, :age 35, :role :manager}]])]
 
     (letfn [(q [query]
               (c2/q tu/*node*
@@ -754,10 +754,10 @@
                                           [(+ age 10) older-age])]})))))))
 
 (deftest test-union-join-with-subquery-638
-  (let [tx (c2/submit-tx tu/*node* [[:put {:id :ivan, :age 20, :role :developer}]
-                                    [:put {:id :oleg, :age 30, :role :manager}]
-                                    [:put {:id :petr, :age 35, :role :qa}]
-                                    [:put {:id :sergei, :age 35, :role :manager}]])]
+  (let [tx (c2/submit-tx tu/*node* '[[:put xt_docs {:id :ivan, :age 20, :role :developer}]
+                                     [:put xt_docs {:id :oleg, :age 30, :role :manager}]
+                                     [:put xt_docs {:id :petr, :age 35, :role :qa}]
+                                     [:put xt_docs {:id :sergei, :age 35, :role :manager}]])]
     (t/is (= [{:e :oleg}]
              (c2/q tu/*node* (-> '{:find [e]
                                    :where [(union-join [e]
@@ -789,10 +789,10 @@
                        (assoc :basis {:tx tx}))))
           "films made by the Bond with the most films"))
 
-  (let [tx (c2/submit-tx tu/*node* [[:put {:id :a1, :a 1}]
-                                    [:put {:id :a2, :a 2}]
-                                    [:put {:id :b2, :b 2}]
-                                    [:put {:id :b3, :b 3}]])]
+  (let [tx (c2/submit-tx tu/*node* '[[:put xt_docs {:id :a1, :a 1}]
+                                     [:put xt_docs {:id :a2, :a 2}]
+                                     [:put xt_docs {:id :b2, :b 2}]
+                                     [:put xt_docs {:id :b3, :b 3}]])]
     (t/is (= [{:aid :a2, :bid :b2}]
              (c2/q tu/*node*
                    (-> '{:find [aid bid]
@@ -829,9 +829,9 @@
   (with-open [node (node/start-node {:core2/live-chunk {:rows-per-block 10, :rows-per-chunk 1000}})]
     (letfn [(submit-ops! [ids]
               (last (for [tx-ops (->> (for [id ids]
-                                        [:put {:id id,
-                                               :data (str "data" id)
-                                               :_table :t1}])
+                                        [:put 't1 {:id id,
+                                                   :data (str "data" id)
+                                                   }])
                                       (partition-all 20))]
                       (c2/submit-tx node tx-ops))))
 
@@ -853,13 +853,12 @@
   (with-open [node (node/start-node {:core2/live-chunk {:rows-per-block 10, :rows-per-chunk 1000}})]
     (letfn [(submit-ops! [ids]
               (last (for [tx-ops (->> (for [id ids]
-                                        [:put {:id id,
-                                               :data (str "data" id)
-                                               :_table :t1}])
+                                        [:put 't1 {:id id,
+                                                   :data (str "data" id)}])
                                       (partition-all 20))]
                       (c2/submit-tx node tx-ops))))]
 
-      (let [_tx1 (c2/submit-tx node [[:put {:id 0 :foo :bar}]])
+      (let [_tx1 (c2/submit-tx node '[[:put xt_docs {:id 0 :foo :bar}]])
             tx2 (submit-ops! (range 1010))]
         (t/is (= 1010 (-> (c2/q node '{:find [(count id)]
                                        :keys [id-count]
@@ -874,12 +873,11 @@
   (with-open [node (node/start-node {:core2/live-chunk {:rows-per-block 10, :rows-per-chunk 1000}})]
     (letfn [(submit-ops! [ids]
               (last (for [tx-ops (->> (for [id ids]
-                                        [:put {:id id,
-                                               :data (str "data" id)
-                                               :_table :t1}])
+                                        [:put 't1 {:id id,
+                                                   :data (str "data" id)}])
                                       (partition-all 20))]
                       (c2/submit-tx node tx-ops))))]
-      (let [_tx1 (c2/submit-tx node [[:put {:id :some-doc}]])
+      (let [_tx1 (c2/submit-tx node '[[:put xt_docs {:id :some-doc}]])
             ;; going over the chunk boundary
             tx2 (submit-ops! (range 200))]
         (t/is (= [{:id :some-doc}]
@@ -888,9 +886,9 @@
                                 (assoc :basis {:tx tx2})))))))))
 
 (deftest test-subquery-unification
-  (let [tx (c2/submit-tx tu/*node* [[:put {:id :a1, :a 2 :b 1 :_table "a"}]
-                                    [:put {:id :a2, :a 2 :b 3 :_table "a"}]
-                                    [:put {:id :a3, :a 2 :b 0 :_table "a"}]])]
+  (let [tx (c2/submit-tx tu/*node* '[[:put a {:id :a1, :a 2 :b 1}]
+                                     [:put a {:id :a2, :a 2 :b 3}]
+                                     [:put a {:id :a3, :a 2 :b 0}]])]
 
     (t/testing "variables returned from subqueries that must be run as an apply are unified"
 
@@ -916,9 +914,9 @@
               "b is unified")))))
 
 (deftest test-basic-rules
-  (c2/submit-tx tu/*node* [[:put {:id :ivan :name "Ivan" :last-name "Ivanov" :age 21}]
-                           [:put {:id :petr :name "Petr" :last-name "Petrov" :age 18}]
-                           [:put {:id :georgy :name "Georgy" :last-name "George" :age 17}]])
+  (c2/submit-tx tu/*node* '[[:put xt_docs {:id :ivan :name "Ivan" :last-name "Ivanov" :age 21}]
+                            [:put xt_docs {:id :petr :name "Petr" :last-name "Petrov" :age 18}]
+                            [:put xt_docs {:id :georgy :name "Georgy" :last-name "George" :age 17}]])
   (letfn [(q [query & args]
             (apply c2/q tu/*node* query args))]
 
@@ -1174,13 +1172,13 @@
     ;; 2023: Matthew, Mark (again)
     ;; 2024+: Matthew
 
-    (let [tx0 (c2/submit-tx tu/*node* [[:put {:id :matthew} {:app-time-start #inst "2015"}]
-                                       [:put {:id :mark} {:app-time-start #inst "2018", :app-time-end #inst "2020"}]
-                                       [:put {:id :luke} {:app-time-start #inst "2021"}]])
+    (let [tx0 (c2/submit-tx tu/*node* '[[:put xt_docs {:id :matthew} {:app-time-start #inst "2015"}]
+                                        [:put xt_docs {:id :mark} {:app-time-start #inst "2018", :app-time-end #inst "2020"}]
+                                        [:put xt_docs {:id :luke} {:app-time-start #inst "2021"}]])
 
-          tx1 (c2/submit-tx tu/*node* [[:delete :luke {:app-time-start #inst "2022"}]
-                                       [:put {:id :mark} {:app-time-start #inst "2023", :app-time-end #inst "2024"}]
-                                       [:put {:id :john} {:app-time-start #inst "2016", :app-time-end #inst "2020"}]])]
+          tx1 (c2/submit-tx tu/*node* '[[:delete xt_docs :luke {:app-time-start #inst "2022"}]
+                                        [:put xt_docs {:id :mark} {:app-time-start #inst "2023", :app-time-end #inst "2024"}]
+                                        [:put xt_docs {:id :john} {:app-time-start #inst "2016", :app-time-end #inst "2020"}]])]
 
       (t/is (= [{:id :matthew}, {:id :mark}]
                (q '{:find [id], :where [[id :id]]}, tx1, #inst "2023")))
@@ -1271,51 +1269,51 @@
                    in))]
 
     (let [tx0 (c2/submit-tx tu/*node*
-                            [[:put {:id 1 :customer-number 145 :property-number 7797} {:app-time-start #inst "1998-01-10"}]]
+                            '[[:put xt_docs {:id 1 :customer-number 145 :property-number 7797} {:app-time-start #inst "1998-01-10"}]]
                             {:sys-time #inst "1998-01-10"})
 
           tx1 (c2/submit-tx tu/*node*
-                            [[:put {:id 1 :customer-number 827 :property-number 7797} {:app-time-start #inst "1998-01-15"}]]
+                            '[[:put xt_docs {:id 1 :customer-number 827 :property-number 7797} {:app-time-start #inst "1998-01-15"}]]
                             {:sys-time #inst "1998-01-15"})
 
           tx2 (c2/submit-tx tu/*node*
-                            [[:delete 1 {:app-time-start #inst "1998-01-20"}]]
+                            '[[:delete xt_docs 1 {:app-time-start #inst "1998-01-20"}]]
                             {:sys-time #inst "1998-01-20"})
 
           tx3 (c2/submit-tx tu/*node*
-                            [[:put {:id 1 :customer-number 145 :property-number 7797} {:app-time-start #inst "1998-01-03"
-                                                                                       :app-time-end #inst "1998-01-10"}]]
+                            '[[:put xt_docs {:id 1 :customer-number 145 :property-number 7797} {:app-time-start #inst "1998-01-03"
+                                                                                                :app-time-end #inst "1998-01-10"}]]
                             {:sys-time #inst "1998-01-23"})
 
           tx4 (c2/submit-tx tu/*node*
-                            [[:delete 1 {:app-time-start #inst "1998-01-03" :app-time-end #inst "1998-01-05"}]]
+                            '[[:delete xt_docs 1 {:app-time-start #inst "1998-01-03" :app-time-end #inst "1998-01-05"}]]
                             {:sys-time #inst "1998-01-26"})
 
           tx5 (c2/submit-tx tu/*node*
-                            [[:put {:id 1 :customer-number 145 :property-number 7797} {:app-time-start #inst "1998-01-05"
-                                                                                       :app-time-end #inst "1998-01-12"}]
-                             [:put {:id 1 :customer-number 827 :property-number 7797} {:app-time-start #inst "1998-01-12"
-                                                                                       :app-time-end #inst "1998-01-20"}]]
+                            '[[:put xt_docs {:id 1 :customer-number 145 :property-number 7797} {:app-time-start #inst "1998-01-05"
+                                                                                                :app-time-end #inst "1998-01-12"}]
+                              [:put xt_docs {:id 1 :customer-number 827 :property-number 7797} {:app-time-start #inst "1998-01-12"
+                                                                                                :app-time-end #inst "1998-01-20"}]]
                             {:sys-time #inst "1998-01-28"})
 
           tx6 (c2/submit-tx tu/*node*
-                            [[:put {:id :delete-1-week-records,
-                                    :fn #c2/clj-form (fn delete-1-weeks-records []
-                                                       (->> (q '{:find [id app-start app-end]
-                                                                 :where [(match xt_docs [id
-                                                                                         {:application_time_start app-start
-                                                                                          :application_time_end app-end}]
-                                                                                {:for-app-time :all-time})
-                                                                         [(= (- #inst "1970-01-08" #inst "1970-01-01")
-                                                                             (- app-end app-start))]]})
-                                                            (map (fn [{:keys [id app-start app-end]}]
-                                                                   [:delete id {:app-time-start app-start
-                                                                                :app-time-end app-end}]))))}]
+                            [[:put 'xt_docs {:id :delete-1-week-records,
+                                             :fn #c2/clj-form (fn delete-1-weeks-records []
+                                                                (->> (q '{:find [id app-start app-end]
+                                                                          :where [(match xt_docs [id
+                                                                                                  {:application_time_start app-start
+                                                                                                   :application_time_end app-end}]
+                                                                                         {:for-app-time :all-time})
+                                                                                  [(= (- #inst "1970-01-08" #inst "1970-01-01")
+                                                                                      (- app-end app-start))]]})
+                                                                     (map (fn [{:keys [id app-start app-end]}]
+                                                                            [:delete 'xt_docs id {:app-time-start app-start
+                                                                                                  :app-time-end app-end}]))))}]
                              [:call :delete-1-week-records]]
                             {:sys-time #inst "1998-01-30"})
 
           tx7 (c2/submit-tx tu/*node*
-                            [[:put {:id 2 :customer-number 827 :property-number 3621} {:app-time-start #inst "1998-01-15"}]]
+                            '[[:put xt_docs {:id 2 :customer-number 827 :property-number 3621} {:app-time-start #inst "1998-01-15"}]]
                             {:sys-time #inst "1998-01-31"})]
 
       (t/is (= [{:cust 145 :app-start (util/->zdt #inst "1998-01-10")}]

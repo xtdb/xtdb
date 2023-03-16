@@ -34,10 +34,10 @@
                        [(keyword (.getColumnName col))
                         (read-tpch-cell col entity)])
                      (into {}))]
-        (assoc doc
-               :id (->> (mapv doc (get table->pkey table-name))
-                         (str/join "___"))
-               :_table table-name)))))
+        (-> (assoc doc
+                   :id (->> (mapv doc (get table->pkey table-name))
+                            (str/join "___")))
+            (with-meta {:table (symbol table-name)}))))))
 
 (defn submit-docs! [tx-producer scale-factor]
   (log/debug "Transacting TPC-H tables...")
@@ -48,7 +48,7 @@
                                                  (reduce (fn [[_!last-tx last-doc-count] batch]
                                                            [(c2.d/submit-tx& tx-producer
                                                                              (vec (for [doc batch]
-                                                                                    [:put doc])))
+                                                                                    [:put (:table (meta doc)) doc])))
                                                             (+ last-doc-count (count batch))])
                                                          [nil 0]))]
                    (log/debug "Transacted" doc-count (.getTableName t))

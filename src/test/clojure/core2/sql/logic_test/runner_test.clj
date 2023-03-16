@@ -51,6 +51,8 @@ SELECT t1.a FROM t1
 104
 ")]
 
+
+
     (t/is (= 3 (count records)))
     (t/is (= {"t1" ["a" "b" "c" "d" "e"]} (:tables (:db-engine (slt/execute-records tu/*node* records)))))))
 
@@ -143,10 +145,12 @@ CREATE UNIQUE INDEX t1i0 ON t1(
         (fn [sql-insert-string]
           (xtdb-engine/insert->docs (assoc tu/*node* :tables tables) (p/parse sql-insert-string :insert_statement)))]
     (binding [r/*memo* (HashMap.)]
-      (t/is (= [{:e 103 :c 102 :b 100 :d 101 :a 104 :_table "t1"}]
-               (execute-statement "INSERT INTO t1(e,c,b,d,a) VALUES(103,102,100,101,104)")))
-      (t/is (= [{:a nil :b -102 :c true :d "101" :e 104.5 :_table "t1"}]
-               (execute-statement "INSERT INTO t1 VALUES(NULL,-102,TRUE,'101',104.5)"))))))
+      (let [docs (execute-statement "INSERT INTO t1(e,c,b,d,a) VALUES(103,102,100,101,104)")]
+        (t/is (= [{:e 103 :c 102 :b 100 :d 101 :a 104}] docs))
+        (t/is (= 't1 (:table (meta (first docs))))))
+      (let [docs (execute-statement "INSERT INTO t1 VALUES(NULL,-102,TRUE,'101',104.5)")]
+        (t/is (= [{:a nil :b -102 :c true :d "101" :e 104.5}] docs))
+        (t/is (= 't1 (:table (meta (first docs)))))))))
 
 (comment
 

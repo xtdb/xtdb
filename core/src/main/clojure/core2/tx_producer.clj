@@ -24,6 +24,7 @@
 
 (s/def ::id any?)
 (s/def ::doc (s/keys :req-un [::id]))
+(s/def ::table simple-symbol?)
 (s/def ::app-time-start ::util/datetime-value)
 (s/def ::app-time-end ::util/datetime-value)
 
@@ -40,19 +41,20 @@
 
 (defmethod tx-op-spec :put [_]
   (s/cat :op #{:put}
+         :table ::table
          :doc ::doc
          :app-time-opts (s/? (s/keys :opt-un [::app-time-start ::app-time-end]))))
 
 (defmethod tx-op-spec :delete [_]
   (s/cat :op #{:delete}
-         :table (s/? string?)
+         :table ::table
          :id ::id
          :app-time-opts (s/? (s/keys :opt-un [::app-time-start ::app-time-end]))))
 
 (defmethod tx-op-spec :evict [_]
   ;; eventually this could have app-time/sys start/end?
   (s/cat :op #{:evict}
-         :table (s/? string?)
+         :table ::table
          :id ::id))
 
 ;; required for C1 importer
@@ -150,8 +152,8 @@
 
       (when params
         (zmatch params
-          [:rows param-rows] (types/write-value! (encode-params allocator query param-rows) params-writer)
-          [:bytes param-bytes] (types/write-value! param-bytes params-writer)))
+                [:rows param-rows] (types/write-value! (encode-params allocator query param-rows) params-writer)
+                [:bytes param-bytes] (types/write-value! param-bytes params-writer)))
 
       (.endValue sql-writer))))
 
@@ -162,7 +164,7 @@
         doc-writer (.asDenseUnion (.writerForName put-writer "document"))
         app-time-start-writer (.writerForName put-writer "application_time_start")
         app-time-end-writer (.writerForName put-writer "application_time_end")]
-    (fn write-put! [{:keys [doc], {:keys [app-time-start app-time-end]} :app-time-opts}]
+    (fn write-put! [{:keys [doc table], {:keys [app-time-start app-time-end]} :app-time-opts :as m}]
       (.startValue put-writer)
 
       (let [{:keys [id]} doc]
@@ -171,13 +173,13 @@
           (->> (types/write-value! id))
           (.endValue)))
 
-      (let [doc (dissoc doc :_table :id)]
+      (let [doc (dissoc doc :id)]
         (doto (.writerForType doc-writer (types/value->col-type doc))
           (.startValue)
           (->> (types/write-value! doc))
           (.endValue)))
 
-      (types/write-value! (name (:_table doc "xt_docs")) table-writer)
+      (types/write-value! (name table) table-writer)
       (types/write-value! app-time-start app-time-start-writer)
       (types/write-value! app-time-end app-time-end-writer)
 
@@ -190,11 +192,10 @@
         app-time-start-writer (.writerForName delete-writer "application_time_start")
         app-time-end-writer (.writerForName delete-writer "application_time_end")]
     (fn write-delete! [{:keys [id table],
-                        {:keys [app-time-start app-time-end]} :app-time-opts
-                        :or {table "xt_docs"}}]
+                        {:keys [app-time-start app-time-end]} :app-time-opts}]
       (.startValue delete-writer)
 
-      (types/write-value! table table-writer)
+      (types/write-value! (name table) table-writer)
 
       (doto (-> id-writer
                 (.writerForType (types/value->col-type id)))
@@ -211,9 +212,9 @@
   (let [evict-writer (.asStruct (.writerForTypeId tx-ops-writer 3))
         table-writer (.writerForName evict-writer "_table")
         id-writer (.asDenseUnion (.writerForName evict-writer "id"))]
-    (fn [{:keys [table id]}]
+    (fn [{:keys [id table]}]
       (.startValue evict-writer)
-      (some-> table (types/write-value! table-writer))
+      (some-> (name table) (types/write-value! table-writer))
       (doto (-> id-writer
                 (.writerForType (types/value->col-type id)))
         (.startValue)

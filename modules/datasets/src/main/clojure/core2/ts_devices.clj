@@ -8,36 +8,36 @@
   (:import java.util.zip.GZIPInputStream))
 
 (defn device-info-csv->doc [[device-id api-version manufacturer model os-name]]
-  {:id device-id
-   :_table :device-info
-   :device-id device-id
-   :api-version api-version
-   :manufacturer manufacturer
-   :model model
-   :os-name os-name})
+  (with-meta {:id device-id
+              :device-id device-id
+              :api-version api-version
+              :manufacturer manufacturer
+              :model model
+              :os-name os-name}
+    {:table 'device-info}))
 
 (defn readings-csv->doc [[time device-id battery-level battery-status
                           battery-temperature bssid
                           cpu-avg-1min cpu-avg-5min cpu-avg-15min
                           mem-free mem-used rssi ssid]]
-  {:id device-id
-   :_table :device-readings
-   :time (inst/read-instant-date
-          (-> time
-              (str/replace " " "T")
-              (str/replace #"-(\d\d)$" ".000-$1:00")))
-   :device-id device-id
-   :battery-level (Double/parseDouble battery-level)
-   :battery-status battery-status
-   :battery-temperature (Double/parseDouble battery-temperature)
-   :bssid bssid
-   :cpu-avg-1min (Double/parseDouble cpu-avg-1min)
-   :cpu-avg-5min (Double/parseDouble cpu-avg-5min)
-   :cpu-avg-15min (Double/parseDouble cpu-avg-15min)
-   :mem-free (Double/parseDouble mem-free)
-   :mem-used (Double/parseDouble mem-used)
-   :rssi (Double/parseDouble rssi)
-   :ssid ssid})
+  (with-meta {:id device-id
+              :time (inst/read-instant-date
+                     (-> time
+                         (str/replace " " "T")
+                         (str/replace #"-(\d\d)$" ".000-$1:00")))
+              :device-id device-id
+              :battery-level (Double/parseDouble battery-level)
+              :battery-status battery-status
+              :battery-temperature (Double/parseDouble battery-temperature)
+              :bssid bssid
+              :cpu-avg-1min (Double/parseDouble cpu-avg-1min)
+              :cpu-avg-5min (Double/parseDouble cpu-avg-5min)
+              :cpu-avg-15min (Double/parseDouble cpu-avg-15min)
+              :mem-free (Double/parseDouble mem-free)
+              :mem-used (Double/parseDouble mem-used)
+              :rssi (Double/parseDouble rssi)
+              :ssid ssid}
+    {:table 'device-readings}))
 
 (defn local-ts-devices-file [size file]
   (io/resource (format "ts-devices/small/devices_%s_%s.csv.gz"

@@ -21,7 +21,7 @@
   (t/is (map? (c2.sql/status *node*))))
 
 (t/deftest test-simple-query
-  (let [tx (c2.d/submit-tx *node* [[:put {:id :foo, :inst #inst "2021"}]])]
+  (let [tx (c2.d/submit-tx *node* '[[:put xt_docs {:id :foo, :inst #inst "2021"}]])]
     (t/is (= (c2/map->TransactionInstant {:tx-id 0, :sys-time (util/->instant #inst "2020-01-01")}) tx))
 
     (t/is (= [{:e :foo, :inst (util/->zdt #inst "2021")}]
@@ -32,20 +32,20 @@
 (t/deftest test-validation-errors
   (t/is (thrown? IllegalArgumentException
                  (try
-                   (c2.d/submit-tx *node* [[:pot {:id :foo}]])
+                   (c2.d/submit-tx *node* [[:pot 'xt_docs {:id :foo}]])
                    (catch ExecutionException e
                      (throw (.getCause e))))))
 
   (t/is (thrown? IllegalArgumentException
                  (try
-                   (c2.d/submit-tx *node* [[:put {}]])
+                   (c2.d/submit-tx *node* [[:put 'xt_docs {}]])
                    (catch ExecutionException e
                      (throw (.getCause e)))))))
 
 (t/deftest round-trips-lists
-  (let [tx (c2.d/submit-tx *node* [[:put {:id :foo, :list [1 2 ["foo" "bar"]]}]
-                                   [:sql "INSERT INTO xt_docs (id, list) VALUES ('bar', ARRAY[?, 2, 3 + 5])"
-                                    [[4]]]])]
+  (let [tx (c2.d/submit-tx *node* '[[:put xt_docs {:id :foo, :list [1 2 ["foo" "bar"]]}]
+                                    [:sql "INSERT INTO xt_docs (id, list) VALUES ('bar', ARRAY[?, 2, 3 + 5])"
+                                     [[4]]]])]
     (t/is (= (c2/map->TransactionInstant {:tx-id 0, :sys-time (util/->instant #inst "2020-01-01")}) tx))
 
     (t/is (= [{:id :foo, :list [1 2 ["foo" "bar"]]}
@@ -62,8 +62,8 @@
                        {:basis-timeout (Duration/ofSeconds 1)})))))
 
 (t/deftest round-trips-structs
-  (let [tx (c2.d/submit-tx *node* [[:put {:id :foo, :struct {:a 1, :b {:c "bar"}}}]
-                                   [:put {:id :bar, :struct {:a true, :d 42.0}}]])]
+  (let [tx (c2.d/submit-tx *node* '[[:put xt_docs {:id :foo, :struct {:a 1, :b {:c "bar"}}}]
+                                    [:put xt_docs {:id :bar, :struct {:a true, :d 42.0}}]])]
     (t/is (= (c2/map->TransactionInstant {:tx-id 0, :sys-time (util/->instant #inst "2020-01-01")}) tx))
 
     (t/is (= #{{:id :foo, :struct {:a 1, :b {:c "bar"}}}
@@ -106,13 +106,13 @@
                                :default-tz (ZoneId/of "Europe/London")})))))))
 
 (t/deftest can-manually-specify-sys-time-47
-  (let [tx1 (c2.d/submit-tx *node* [[:put {:id :foo}]]
+  (let [tx1 (c2.d/submit-tx *node* '[[:put xt_docs {:id :foo}]]
                             {:sys-time #inst "2012"})
 
-        _invalid-tx (c2.d/submit-tx *node* [[:put {:id :bar}]]
+        _invalid-tx (c2.d/submit-tx *node* '[[:put xt_docs {:id :bar}]]
                                     {:sys-time #inst "2011"})
 
-        tx3 (c2.d/submit-tx *node* [[:put {:id :baz}]])]
+        tx3 (c2.d/submit-tx *node* '[[:put xt_docs {:id :baz}]])]
 
     (t/is (= (c2/map->TransactionInstant {:tx-id 0, :sys-time (util/->instant #inst "2012")})
              tx1))
@@ -129,10 +129,10 @@
       (t/is (= #{:foo :baz} (q-at tx3))))))
 
 (def ^:private devs
-  [[:put {:id :jms, :name "James" :_table "users"}]
-   [:put {:id :hak, :name "Håkan" :_table "users"}]
-   [:put {:id :mat, :name "Matt" :_table "users"}]
-   [:put {:id :wot, :name "Dan" :_table "users"}]])
+  '[[:put users {:id :jms, :name "James"}]
+    [:put users {:id :hak, :name "Håkan"}]
+    [:put users {:id :mat, :name "Matt"}]
+    [:put users {:id :wot, :name "Dan"}]])
 
 (t/deftest test-sql-roundtrip
   (let [tx (c2.d/submit-tx *node* devs)]

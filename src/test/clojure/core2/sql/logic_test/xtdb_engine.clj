@@ -181,11 +181,12 @@
                     (->> (flatten insert-column-list)
                          (filter string?))))]
     (for [row from-subquery-results]
-      (into {:_table table} (zipmap (map keyword columns) row)))))
+      (-> (zipmap (map keyword columns) row)
+          (with-meta {:table (symbol table)})))))
 
 (defn- insert-statement [node insert-statement]
   (c2.d/submit-tx node (vec (for [doc (insert->docs node insert-statement)]
-                              [:put (merge {:id (UUID/randomUUID)} doc)])))
+                              [:put (:table (meta doc)) (merge {:id (UUID/randomUUID)} doc)])))
   node)
 
 (defn skip-statement? [^String x]

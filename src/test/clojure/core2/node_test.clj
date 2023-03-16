@@ -127,19 +127,19 @@ VALUES (1, 'Happy 2024!', DATE '2024-01-01'),
                  (into {})))]
 
     (c2.d/submit-tx tu/*node*
-                    [[:put {:id :foo, :v "implicit table"}]
-                     [:put {:id :foo, :_table "explicit_table1", :v "explicit table 1"}]
-                     [:put {:id :foo, :_table "explicit_table2", :v "explicit table 2"}]])
+                    [[:put 'xt_docs {:id :foo, :v "implicit table"}]
+                     [:put 'explicit_table1 {:id :foo, :v "explicit table 1"}]
+                     [:put 'explicit_table2 {:id :foo, :v "explicit table 2"}]])
 
     (t/is (= {:xt #{"implicit table"}, :t1 #{"explicit table 1"}, :t2 #{"explicit table 2"}}
              (foos)))
 
-    (c2.d/submit-tx tu/*node* [[:delete :foo]])
+    (c2.d/submit-tx tu/*node* [[:delete 'xt_docs :foo]])
 
     (t/is (= {:xt #{}, :t1 #{"explicit table 1"}, :t2 #{"explicit table 2"}}
              (foos)))
 
-    (c2.d/submit-tx tu/*node* [[:delete "explicit_table1" :foo]])
+    (c2.d/submit-tx tu/*node* [[:delete 'explicit_table1 :foo]])
 
     (t/is (= {:xt #{}, :t1 #{}, :t2 #{"explicit table 2"}}
              (foos)))))
@@ -294,11 +294,11 @@ ORDER BY foo.application_time_start"
            (c2.sql/q tu/*node* "SELECT foo.id foo, foo.x FROM foo LEFT JOIN bar USING (id) WHERE foo.x = bar.x"))))
 
 (t/deftest test-c1-importer-abort-op
-  (c2.d/submit-tx tu/*node* [[:put {:id :foo}]])
+  (c2.d/submit-tx tu/*node* [[:put 'xt_docs {:id :foo}]])
 
-  (c2.d/submit-tx tu/*node* [[:put {:id :bar}]
+  (c2.d/submit-tx tu/*node* [[:put 'xt_docs {:id :bar}]
                              [:abort]
-                             [:put {:id :baz}]])
+                             [:put 'xt_docs {:id :baz}]])
   (t/is (= [{:id :foo}]
            (c2.d/q tu/*node*
                    '{:find [id]

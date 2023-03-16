@@ -4,7 +4,7 @@
 (def tx-ops
   (vec
    (for [doc (read-string (slurp (io/resource "james-bond.edn")))]
-     [:put
+     [:put 'xt_docs
       (-> doc
           ;; no sets as yet
           (update :film/vehicles vec)

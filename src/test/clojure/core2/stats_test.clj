@@ -11,14 +11,14 @@
 (deftest test-scan
   (with-open [node (node/start-node {:core2/live-chunk {:rows-per-block 2 , :rows-per-chunk 2}})]
     (let [scan-emitter (util/component node :core2.operator.scan/scan-emitter)]
-      (c2/submit-tx node [[:put {:id "foo1" :_table "foo"}]
-                          [:put {:id "bar1" :_table "bar"}]])
+      (c2/submit-tx node [[:put 'foo {:id "foo1"}]
+                          [:put 'bar {:id "bar1"}]])
 
-      (c2/submit-tx node [[:put {:id "foo2" :_table "foo"}]
-                          [:put {:id "baz1" :_table "baz"}]])
+      (c2/submit-tx node [[:put 'foo {:id "foo2"}]
+                          [:put 'baz {:id "baz1"}]])
 
-      (-> (c2/submit-tx node [[:put {:id "foo3" :_table "foo"}]
-                              [:put {:id "bar2" :_table "bar"}]])
+      (-> (c2/submit-tx node [[:put 'foo {:id "foo3"}]
+                              [:put 'bar {:id "bar2"}]])
           (tu/then-await-tx* node))
 
       (t/is (= {:row-count 3}
