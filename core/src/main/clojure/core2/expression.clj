@@ -239,17 +239,13 @@
   (defmethod read-value-code k [_ & args] `(~(symbol (str ".read" rw-fn)) ~@args))
   (defmethod write-value-code k [_ & args] `(~(symbol (str ".write" rw-fn)) ~@args)))
 
-(doseq [[k tag] {:utf8 ByteBuffer, :varbinary ByteBuffer, :interval PeriodDuration}]
+(doseq [[k tag] {:utf8 ByteBuffer, :varbinary ByteBuffer,
+                 :uuid ByteBuffer, :uri ByteBuffer, :keyword ByteBuffer
+                 :interval PeriodDuration}]
   (defmethod read-value-code k [_ & args]
     (-> `(.readObject ~@args) (with-tag tag)))
 
   (defmethod write-value-code k [_ & args] `(.writeObject ~@args)))
-
-(defmethod read-value-code :extension-type [[_ _ underlying-type _] & args]
-  (apply read-value-code underlying-type args))
-
-(defmethod write-value-code :extension-type [[_ _ underlying-type _] & args]
-  (apply write-value-code underlying-type args))
 
 (defn- continue-read [f col-type reader-sym & args]
   (zmatch col-type
@@ -663,7 +659,7 @@
     (defmethod codegen-call [f-kw col-type col-type] [_]
       {:return-type :bool, :->call-code #(do `(~f-sym ~@%))}))
 
-  (doseq [col-type #{:varbinary :utf8}]
+  (doseq [col-type #{:varbinary :utf8 :keyword :uuid :uri}]
     (defmethod codegen-call [f-kw col-type col-type] [_]
       {:return-type :bool, :->call-code #(cmp `(util/compare-nio-buffers-unsigned ~@%))}))
 
@@ -682,21 +678,6 @@
   (defmethod codegen-call [:= col-type col-type] [_]
     {:return-type :bool,
      :->call-code #(do `(.equals ~@%))}))
-
-;; TODO with this pattern we need a defmulti for every fn - not ideal.
-(defmulti codegen-ext-=
-  (fn [{:keys [arg-types]}]
-    (mapv second arg-types)))
-
-(defmethod codegen-ext-= :default [expr]
-  {:return-type :bool, :->call-code #(do `(= ~@%))})
-
-(defmethod codegen-ext-= [:c2/clj-keyword :c2/clj-keyword] [_]
-  {:return-type :bool,
-   :->call-code #(do `(.equals ~@%))})
-
-(defmethod codegen-call [:= :extension-type :extension-type] [expr]
-  (codegen-ext-= expr))
 
 ;; null-eq is an internal function used in situations where two nulls should compare equal,
 ;; e.g when grouping rows in group-by.

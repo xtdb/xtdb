@@ -458,7 +458,7 @@
               "typeIds" : [0]
             },
             "children" : [{
-              "name" : "clj-keyword",
+              "name" : "keyword",
               "nullable" : false,
               "type" : {
                 "name" : "KeywordType"
@@ -503,7 +503,7 @@
                 },
                 "children" : [ ]
               },{
-                "name" : "clj-keyword",
+                "name" : "keyword",
                 "nullable" : false,
                 "type" : {
                   "name" : "KeywordType"
@@ -880,7 +880,7 @@
             "TYPE_ID" : [0,0],
             "OFFSET" : [0,1],
             "children" : [{
-              "name" : "clj-keyword",
+              "name" : "keyword",
               "count" : 2,
               "VALIDITY" : [1,1],
               "OFFSET" : [0,3,7],
@@ -905,7 +905,7 @@
                 "name" : "null",
                 "count" : 1
               },{
-                "name" : "clj-keyword",
+                "name" : "keyword",
                 "count" : 1,
                 "VALIDITY" : [1],
                 "OFFSET" : [0,3],

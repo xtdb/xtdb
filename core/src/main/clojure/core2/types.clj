@@ -223,12 +223,12 @@
 
 (extend-protocol ArrowWriteable
   Keyword
-  (value->col-type [_] [:extension-type :c2/clj-keyword :utf8 ""])
+  (value->col-type [_] :keyword)
   (write-value! [kw ^IVectorWriter writer]
     (write-value! (str (symbol kw)) (.getUnderlyingWriter (.asExtension writer))))
 
   UUID
-  (value->col-type [_] [:extension-type :uuid [:fixed-size-binary 16] ""])
+  (value->col-type [_] :uuid)
   (write-value! [^UUID uuid ^IVectorWriter writer]
     (let [underlying-writer (.getUnderlyingWriter (.asExtension writer))]
       (.setSafe ^FixedSizeBinaryVector (.getVector underlying-writer)
@@ -236,12 +236,12 @@
                 (util/uuid->bytes uuid))))
 
   URI
-  (value->col-type [_] [:extension-type :uri :utf8 ""])
+  (value->col-type [_] :uri)
   (write-value! [^URI uri ^IVectorWriter writer]
     (write-value! (str uri) (.getUnderlyingWriter (.asExtension writer))))
 
   ClojureForm
-  (value->col-type [_] [:extension-type :c2/clj-form :utf8 ""])
+  (value->col-type [_] :clj-form)
   (write-value! [{:keys [form]} ^IVectorWriter writer]
     (write-value! (pr-str form) (.getUnderlyingWriter (.asExtension writer)))))
 
@@ -498,7 +498,8 @@
       (derive :timestamp-tz :any) (derive :timestamp-local :any)
       (derive :date :any) (derive :time-local :any) (derive :interval :any) (derive :duration :any)
       (derive :varbinary :any) (derive :utf8 :any)
-      (derive :extension-type :any)
+
+      (derive :keyword :any) (derive :uri :any) (derive :uuid :any) (derive :clj-form :any)
 
       (derive :list :any) (derive :struct :any)))
 
@@ -577,6 +578,18 @@
                      :i8 Types$MinorType/TINYINT, :i16 Types$MinorType/SMALLINT, :i32 Types$MinorType/INT, :i64 Types$MinorType/BIGINT
                      :utf8 Types$MinorType/VARCHAR, :varbinary Types$MinorType/VARBINARY)]
     (->field col-name (.getType minor-type) (or nullable? (= col-type :null)))))
+
+(defmethod col-type->field* :keyword [col-name nullable? col-type]
+  (->field col-name KeywordType/INSTANCE nullable?))
+
+(defmethod col-type->field* :uuid [col-name nullable? col-type]
+  (->field col-name UuidType/INSTANCE nullable?))
+
+(defmethod col-type->field* :uri [col-name nullable? col-type]
+  (->field col-name UriType/INSTANCE nullable?))
+
+(defmethod col-type->field* :clj-form [col-name nullable? col-type]
+  (->field col-name ClojureFormType/INSTANCE nullable?))
 
 (defn col-type->field
   (^org.apache.arrow.vector.types.pojo.Field [col-type] (col-type->field (col-type->field-name col-type) col-type))
@@ -789,23 +802,10 @@
 
 ;;; extension types
 
-#_{:clj-kondo/ignore [:unused-binding]}
-(defmulti extension-type->field-name (fn [[type-head xname xdata]] xname), :default ::default)
-(defmethod extension-type->field-name ::default [[_type-head xname _xdata]] (name xname))
-
-(defmethod col-type->field-name :extension-type [col-type] (extension-type->field-name col-type))
-
-(defmethod col-type->field* :extension-type [col-name nullable? [_type-head xname underlying-type xdata]]
-  (let [^ArrowType$ExtensionType
-        raw-type (or (ExtensionTypeRegistry/lookup (str (symbol xname)))
-                     (throw (IllegalStateException. (format "can't find extension type: '%s'" (str (symbol xname))))))]
-
-    (->field col-name
-             (.deserialize raw-type (.getType (col-type->field underlying-type)) xdata)
-             nullable?)))
-
-(defmethod arrow-type->col-type ArrowType$ExtensionType [^ArrowType$ExtensionType arrow-type]
-  [:extension-type (keyword (.extensionName arrow-type)) (arrow-type->col-type (.storageType arrow-type)) (.serialize arrow-type)])
+(defmethod arrow-type->col-type KeywordType [_] :keyword)
+(defmethod arrow-type->col-type UriType [_] :uri)
+(defmethod arrow-type->col-type UuidType [_] :uuid)
+(defmethod arrow-type->col-type ClojureFormType [_] :clj-form)
 
 ;;; LUB
 

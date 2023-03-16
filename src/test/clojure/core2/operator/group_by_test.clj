@@ -362,7 +362,7 @@
                     :avg 13.0, :avg-distinct 12.333333333333334
                     :array-agg [12 15 15 10], :array-agg-distinct [12 15 10]}}
 
-            :col-types '{k [:extension-type :c2/clj-keyword :utf8 ""],
+            :col-types '{k :keyword,
                          cnt :i64, cnt-distinct :i64,
                          sum [:union #{:null :i64}], sum-distinct [:union #{:null :i64}],
                          avg [:union #{:null :f64}], avg-distinct [:union #{:null :f64}],

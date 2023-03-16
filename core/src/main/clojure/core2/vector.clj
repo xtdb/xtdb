@@ -156,8 +156,8 @@
 
 (extend-protocol MonoFactory
   ExtensionTypeVector
-  (->mono-reader [arrow-vec [_ _ underlying-col-type _]] (->mono-reader (.getUnderlyingVector arrow-vec) underlying-col-type))
-  (->mono-writer [arrow-vec [_ _ underlying-col-type _]] (->mono-writer (.getUnderlyingVector arrow-vec) underlying-col-type)))
+  (->mono-reader [arrow-vec col-type] (->mono-reader (.getUnderlyingVector arrow-vec) col-type))
+  (->mono-writer [arrow-vec col-type] (->mono-writer (.getUnderlyingVector arrow-vec) col-type)))
 
 ;; (@wot) read as an epoch int, do not think it is worth branching for both cases in all date functions.
 (extend-protocol MonoFactory

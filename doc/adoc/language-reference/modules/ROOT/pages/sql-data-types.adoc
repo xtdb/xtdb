@@ -167,7 +167,7 @@ NOTE: The types marked with an asterisk (`UuidVector`, `UriVector`) are Apache A
 ////
 Undocumented / Unsupported:
 
-* Keyword / :c2/clj-keyword
+* Keyword / :keyword
 * TinyInt / :i8 -- the SQL Spec seems to have no direct support for TinyInt / Byte
 * Date/Time types with (seemingly?) no spec equivalent:
 ** Instant

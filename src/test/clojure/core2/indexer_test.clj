@@ -626,20 +626,14 @@
 
           (tu/finish-chunk! node1)
 
-          (t/is (= [:union #{:utf8
-                             [:extension-type :c2/clj-keyword :utf8 ""]
-                             [:extension-type :c2/clj-form :utf8 ""]
-                             [:extension-type :uuid [:fixed-size-binary 16] ""]}]
+          (t/is (= [:union #{:utf8 :keyword :clj-form :uuid}]
                    (.columnType mm1 "xt_docs" "id")))
 
           (with-open [node2 (tu/->local-node (assoc node-opts :buffers-dir "buffers-1"))]
             (let [^IMetadataManager mm2 (tu/component node2 ::meta/metadata-manager)]
               (tu/then-await-tx* tx2 node2 (Duration/ofMillis 200))
 
-              (t/is (= [:union #{:utf8
-                                 [:extension-type :c2/clj-keyword :utf8 ""]
-                                 [:extension-type :c2/clj-form :utf8 ""]
-                                 [:extension-type :uuid [:fixed-size-binary 16] ""]}]
+              (t/is (= [:union #{:utf8 :keyword :clj-form :uuid}]
                        (.columnType mm2 "xt_docs" "id"))))))))))
 
 (t/deftest test-await-fails-fast

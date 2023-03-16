@@ -79,13 +79,13 @@
                      (tu/then-await-tx* node))]
           (tu/finish-chunk! node)
 
-          (t/is (= '{id [:extension-type :c2/clj-keyword :utf8 ""]}
+          (t/is (= '{id :keyword}
                    (->col-types tx))))
 
         (let [tx (-> (c2/submit-tx node [[:put {:id "foo"}]])
                      (tu/then-await-tx* node))]
 
-          (t/is (= '{id [:union #{[:extension-type :c2/clj-keyword :utf8 ""] :utf8}]}
+          (t/is (= '{id [:union #{:keyword :utf8}]}
                    (->col-types tx))))))))
 
 (t/deftest can-create-temporal-min-max-range
