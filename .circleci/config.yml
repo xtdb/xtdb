@@ -34,7 +34,7 @@ orbs:
 
           - run:
               command: |
-                export IMAGE_NAME=juxt/<<parameters.artifact-name>>
+                export IMAGE_NAME=ghcr.io/xtdb/<<parameters.artifact-name>>
                 cd build/xtdb-builder/docker/
                 IMAGE_NAME="${IMAGE_NAME}" IMAGE_VERSION="${CIRCLE_TAG}" ./build-docker.sh
                 echo "${DOCKER_PASS}" | docker login -u "${DOCKER_USER}" --password-stdin

@@ -1,5 +1,9 @@
 FROM clojure:openjdk-11-tools-deps
 
+LABEL org.opencontainers.image.source=https://github.com/xtdb/xtdb
+LABEL org.opencontainers.image.description="XTDB"
+LABEL org.opencontainers.image.licenses="MIT"
+
 WORKDIR /usr/lib/xtdb
 VOLUME /var/lib/xtdb
 ENTRYPOINT ["clojure", "-m", "xtdb.main"]

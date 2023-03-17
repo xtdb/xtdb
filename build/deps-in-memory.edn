@@ -1,5 +1,5 @@
 {:path ["resources"]
- :deps {org.clojure/clojure {:mvn/version "1.10.3"}
+ :deps {org.clojure/clojure {:mvn/version "1.11.1"}
 
         ;; Logging
         org.slf4j/slf4j-api {:mvn/version "1.7.29"}
