@@ -4,4 +4,6 @@
   [{x3 1}]
   [:rename
    {bar x1}
-   [:scan {:table foo, :for-app-time (at (current-timestamp))} [bar]]]]]
+   [:scan
+    {:table foo, :for-app-time [:at (current-timestamp)]}
+    [bar]]]]]

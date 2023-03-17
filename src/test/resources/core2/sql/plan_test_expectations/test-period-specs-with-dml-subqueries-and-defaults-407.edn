@@ -16,6 +16,6 @@
       {system_time_start x1, id x2}
       [:scan
        {:table prop_owner,
-        :for-app-time (at (current-timestamp)),
+        :for-app-time [:at :now],
         :for-sys-time :all-time}
        [system_time_start {id (= id 1)}]]]]]]]]

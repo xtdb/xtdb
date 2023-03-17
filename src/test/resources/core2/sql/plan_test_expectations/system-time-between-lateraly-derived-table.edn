@@ -4,13 +4,15 @@
   [{x1 x3}]
   [[:rename
     {y x1}
-    [:scan {:table x, :for-sys-time (at #time/date "3001-01-01")} [y]]]
+    [:scan
+     {:table x, :for-sys-time [:at #time/date "3001-01-01"]}
+     [y]]]
    [:rename
     {z x3}
     [:scan
      {:table z,
       :for-sys-time
-      (in
+      [:in
        #time/date "3001-01-01"
-       #time/zoned-date-time "3002-01-01T00:00Z")}
+       #time/zoned-date-time "3002-01-01T00:00Z"]}
      [z]]]]]]

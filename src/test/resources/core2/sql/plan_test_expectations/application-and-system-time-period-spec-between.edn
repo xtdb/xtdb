@@ -7,9 +7,9 @@
    [:scan
     {:table t1,
      :for-app-time
-     (between
+     [:between
       #time/zoned-date-time "3001-01-01T00:00Z"
-      #time/date "3000-01-01"),
+      #time/date "3000-01-01"],
      :for-sys-time
-     (between #time/date "2000-01-01" #time/date "2001-01-01")}
+     [:between #time/date "2000-01-01" #time/date "2001-01-01"]}
     []]]]]

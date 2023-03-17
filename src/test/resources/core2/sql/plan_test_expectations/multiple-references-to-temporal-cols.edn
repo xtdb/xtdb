@@ -1,6 +1,6 @@
 [:scan
  {:table foo,
-  :for-sys-time (in #time/date "2001-01-01" #time/date "2002-01-01")}
+  :for-sys-time [:in #time/date "2001-01-01" #time/date "2002-01-01"]}
  [{application_time_start
    (and
     (< application_time_start #time/date "2004-01-01")

@@ -1,5 +1,5 @@
 [:scan
  {:table foo,
-  :for-app-time (at (current-timestamp)),
-  :for-sys-time (at (current-timestamp))}
+  :for-app-time [:at (current-timestamp)],
+  :for-sys-time [:at (current-timestamp)]}
  [bar]]

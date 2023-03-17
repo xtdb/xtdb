@@ -41,7 +41,7 @@
 
 (defmethod temporal-filter-spec :all-time [_]
   (s/and #{:all-time}
-         (s/conformer (constantly {:tag 'all-time}) (constantly :all-time))))
+         (s/conformer (constantly [:all-time]) (constantly :all-time))))
 
 (s/def ::temporal-filter-value
   (s/or :now #{:now '(current-timestamp)}
@@ -49,19 +49,14 @@
                           (partial instance? Temporal))
         :param simple-symbol?))
 
-(defmethod temporal-filter-spec 'at [_]
-  (s/cat :tag #{'at}
-         :at ::temporal-filter-value))
+(defmethod temporal-filter-spec :at [_]
+  (s/tuple #{:at} ::temporal-filter-value))
 
-(defmethod temporal-filter-spec 'in [_]
-  (s/cat :tag #{'in}
-         :from (s/nilable ::temporal-filter-value)
-         :to (s/nilable ::temporal-filter-value)))
+(defmethod temporal-filter-spec :in [_]
+  (s/tuple #{:in} (s/nilable ::temporal-filter-value) (s/nilable ::temporal-filter-value)))
 
-(defmethod temporal-filter-spec 'between [_]
-  (s/cat :tag #{'between}
-         :from (s/nilable ::temporal-filter-value)
-         :to (s/nilable ::temporal-filter-value)))
+(defmethod temporal-filter-spec :between [_]
+  (s/tuple #{:between} (s/nilable ::temporal-filter-value) (s/nilable ::temporal-filter-value)))
 
 (s/def ::temporal-filter
   (s/multi-spec temporal-filter-spec (fn retag [_] (throw (UnsupportedOperationException.)))))
@@ -275,7 +270,7 @@
 (defn ->temporal-min-max-range [^IIndirectRelation params, {^TransactionInstant basis-tx :tx}, {:keys [for-app-time for-sys-time]}, selects]
   (let [min-range (temporal/->min-range)
         max-range (temporal/->max-range)]
-    (letfn [(apply-constraint [f col-name ^long time-μs]
+    (letfn [(apply-bound [f col-name ^long time-μs]
               (let [range-idx (temporal/->temporal-column-idx col-name)]
                 (case f
                   :< (aset max-range range-idx
@@ -299,35 +294,36 @@
                          (util/instant->micros))))]
 
       (when-let [sys-time (some-> basis-tx (.sys-time) util/instant->micros)]
-        (apply-constraint :<= "system_time_start" sys-time)
+        (apply-bound :<= "system_time_start" sys-time)
 
         (when-not for-sys-time
-          (apply-constraint :> "system_time_end" sys-time)))
+          (apply-bound :> "system_time_end" sys-time)))
 
-      (letfn [(apply-constraints [constraints start-col end-col]
-                (when-let [{:keys [tag]} constraints]
+      (letfn [(apply-constraint [constraint start-col end-col]
+                (when-let [[tag & args] constraint]
                   (case tag
-                    at (let [at-μs (->time-μs (:at constraints))]
-                         (apply-constraint :<= start-col at-μs)
-                         (apply-constraint :> end-col at-μs))
+                    :at (let [[at] args
+                              at-μs (->time-μs at)]
+                         (apply-bound :<= start-col at-μs)
+                         (apply-bound :> end-col at-μs))
 
                     ;; overlaps [time-from time-to]
-                    in (let [{:keys [from to]} constraints]
+                    :in (let [[from to] args]
                          (when from
-                           (apply-constraint :> end-col (->time-μs from)))
+                           (apply-bound :> end-col (->time-μs from)))
                          (when to
-                           (apply-constraint :< start-col (->time-μs to))))
+                           (apply-bound :< start-col (->time-μs to))))
 
-                    between (let [{:keys [from to]} constraints]
+                    :between (let [[from to] args]
                               (when from
-                                (apply-constraint :> end-col (->time-μs from)))
+                                (apply-bound :> end-col (->time-μs from)))
                               (when to
-                                (apply-constraint :<= start-col (->time-μs to))))
+                                (apply-bound :<= start-col (->time-μs to))))
 
-                    all-time nil)))]
+                    :all-time nil)))]
 
-        (apply-constraints for-app-time "application_time_start" "application_time_end")
-        (apply-constraints for-sys-time "system_time_start" "system_time_end"))
+        (apply-constraint for-app-time "application_time_start" "application_time_end")
+        (apply-constraint for-sys-time "system_time_start" "system_time_end"))
 
       (let [col-types (-> temporal/temporal-col-types (update-keys symbol))
             param-types (expr/->param-types params)]
@@ -347,7 +343,7 @@
                       (when-let [v (if-let [[_ literal] (find param-expr :literal)]
                                      (when literal (->time-μs [:literal literal]))
                                      (->time-μs [:param (get param-expr :param)]))]
-                        (apply-constraint f col-name v)))
+                        (apply-bound f col-name v)))
 
                     expr)))))
         [min-range max-range]))

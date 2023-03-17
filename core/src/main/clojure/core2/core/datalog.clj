@@ -379,10 +379,10 @@
 
 (defn- ->temporal-clauses [temporal-rules]
   (letfn [(with-time-in-clause [clauses time-k {:keys [time-from time-to]}]
-            (-> clauses (assoc time-k (list 'in time-from time-to))))
+            (-> clauses (assoc time-k [:in time-from time-to])))
 
           (with-time-at-clause [clauses time-k {:keys [time-at]}]
-            (-> clauses (assoc time-k (list 'at time-at))))]
+            (-> clauses (assoc time-k [:at time-at])))]
 
     (->> temporal-rules
          (reduce (fn [acc {:keys [e] :as rule}]
@@ -418,7 +418,7 @@
 
     (-> [:scan {:table (or (some-> (first (attr->lits '_table)) symbol)
                            'xt_docs)
-                :for-app-time (:for-app-time temporal-clauses '(at :now))
+                :for-app-time (:for-app-time temporal-clauses [:at :now])
                 ;; defaults handled by scan
                 :for-sys-time (:for-sys-time temporal-clauses)}
          (-> attrs

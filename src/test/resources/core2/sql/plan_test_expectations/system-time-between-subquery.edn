@@ -10,7 +10,7 @@
     [:scan
      {:table t1,
       :for-sys-time
-      (between
+      [:between
        #time/date "3001-01-01"
-       #time/zoned-date-time "3002-01-01T00:00Z")}
+       #time/zoned-date-time "3002-01-01T00:00Z"]}
      []]]]]]

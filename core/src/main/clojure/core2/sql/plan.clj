@@ -1332,15 +1332,15 @@
 
       [:query_system_time_period_specification "FOR" _ "AS" "OF" ^:z point-in-time]
       ;;=>
-      (list 'at (expr point-in-time))
+      [:at (expr point-in-time)]
 
       [:query_system_time_period_specification "FOR" _ "FROM" ^:z point-in-time-1 "TO" ^:z point-in-time-2]
       ;;=>
-      (list 'in (expr point-in-time-1) (expr point-in-time-2))
+      [:in (expr point-in-time-1) (expr point-in-time-2)]
 
       [:query_system_time_period_specification "FOR" _ "BETWEEN" ^:z point-in-time-1 "AND" ^:z point-in-time-2]
       ;;=>
-      (list 'between (expr point-in-time-1) (expr point-in-time-2)))))
+      [:between (expr point-in-time-1) (expr point-in-time-2)])))
 
 (defn- interpret-application-time-period-spec [table-primary-ast]
   (when-let [z (r/find-first (partial r/ctor? :query_application_time_period_specification) table-primary-ast)]
@@ -1351,15 +1351,15 @@
 
       [:query_application_time_period_specification "FOR" _ "AS" "OF" ^:z point-in-time]
       ;;=>
-      (list 'at (expr point-in-time))
+      [:at (expr point-in-time)]
 
       [:query_application_time_period_specification "FOR" _ "FROM" ^:z point-in-time-1 "TO" ^:z point-in-time-2]
       ;;=>
-      (list 'in (expr point-in-time-1) (expr point-in-time-2))
+      [:in (expr point-in-time-1) (expr point-in-time-2)]
 
       [:query_application_time_period_specification "FOR" _ "BETWEEN" ^:z point-in-time-1 "AND" ^:z point-in-time-2]
       ;;=>
-      (list 'between (expr point-in-time-1) (expr point-in-time-2)))))
+      [:between (expr point-in-time-1) (expr point-in-time-2)])))
 
 (defn- build-table-primary [tp]
   (let [{:keys [id correlation-name table-or-query-name] :as table} (sem/table tp)
@@ -1374,14 +1374,14 @@
        [:scan (->> {:table (symbol table-or-query-name)
                     :for-app-time (or (interpret-application-time-period-spec tp)
                                       (when (:app-time-as-of-now? *opts*)
-                                        '(at (current-timestamp))))
+                                        [:at :now]))
                     :for-sys-time (interpret-system-time-period-spec tp)}
                    (into {} (remove (comp nil? val))))
         (vec
-          (->> (for [{:keys [identifier]} projection]
-                 (symbol identifier))
-               (distinct)
-               (vec)))])]))
+         (->> (for [{:keys [identifier]} projection]
+                (symbol identifier))
+              (distinct)
+              (vec)))])]))
 
 (defn- build-target-table [tt]
   (let [{:keys [id correlation-name table-or-query-name]} (sem/table tt)
