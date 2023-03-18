@@ -110,12 +110,12 @@
             [(>= o_orderdate #time/date "1993-07-01")]
             [(< o_orderdate #time/date "1993-10-01")]
 
-            (exists? [o]
-                     [l :_table :lineitem]
-                     [l :l_orderkey o]
-                     [l :l_commitdate l_commitdate]
-                     [l :l_receiptdate l_receiptdate]
-                     [(< l_commitdate l_receiptdate)])]
+            (exists? {:find [o]
+                      :where [[l :_table :lineitem]
+                              [l :l_orderkey o]
+                              [l :l_commitdate l_commitdate]
+                              [l :l_receiptdate l_receiptdate]
+                              [(< l_commitdate l_receiptdate)]]})]
 
     :order-by [[o_orderpriority :asc]]})
 
@@ -410,10 +410,10 @@
                 [ps :ps_partkey p]
                 [ps :ps_suppkey s]
 
-                (not-exists? [s]
-                             [s :_table :supplier]
-                             [s :s_comment s_comment]
-                             [(like "%Customer%Complaints%" s_comment)])]
+                (not-exists? {:find [s]
+                              :where [[s :_table :supplier]
+                                      [s :s_comment s_comment]
+                                      [(like "%Customer%Complaints%" s_comment)]]})]
         :order-by [[(count-distinct s) :desc]
                    [p_brand :asc]
                    [p_type :asc]
@@ -551,20 +551,22 @@
 
             [(> l_receiptdate l_commitdate)]
 
-            (exists? [o s]
-                     [l2 :_table :lineitem]
-                     [l2 :l_orderkey o]
-                     [l2 :l_suppkey l2s]
-                     [(<> s l2s)])
+            (exists? {:find [o]
+                      :in [s]
+                      :where [[l2 :_table :lineitem]
+                              [l2 :l_orderkey o]
+                              [l2 :l_suppkey l2s]
+                              [(<> s l2s)]]})
 
-            (not-exists? [o s]
-                         [l3 :_table :lineitem]
-                         [l3 :l_orderkey o]
-                         [l3 :l_suppkey l3s]
-                         [(<> s l3s)]
-                         [l3 :l_receiptdate l_receiptdate]
-                         [l3 :l_commitdate l_commitdate]
-                         [(> l_receiptdate l_commitdate)])]
+            (not-exists? {:find [o]
+                          :in [s]
+                          :where [[l3 :_table :lineitem]
+                                  [l3 :l_orderkey o]
+                                  [l3 :l_suppkey l3s]
+                                  [(<> s l3s)]
+                                  [l3 :l_receiptdate l_receiptdate]
+                                  [l3 :l_commitdate l_commitdate]
+                                  [(> l_receiptdate l_commitdate)]]})]
 
     :order-by [[(count l1) :desc] [s_name :asc]]
     :limit 100})
@@ -585,9 +587,9 @@
                         [(contains? #{"13" "31" "23" "29" "30" "18" "17"} cntrycode)]]})
             [c :c_acctbal c_acctbal]
             [(> c_acctbal avg_acctbal)]
-            (not-exists? [c]
-                         [o :_table :orders]
-                         [o :o_custkey c])]
+            (not-exists? {:find [c]
+                          :where [[o :_table :orders]
+                                  [o :o_custkey c]]})]
     :order-by [[cntrycode :asc]]})
 
 (def queries

@@ -463,34 +463,32 @@
 
     (t/is (= [{:e :ivan} {:e :petr}]
              (c2/q tu/*node*
-                   (-> '{:find [e]
-                         :where [[e :name name]
-                                 (exists? [e]
-                                          [c :parent e])]}
-                       (assoc :basis {:tx tx}))))
+                   '{:find [e]
+                     :where [[e :name name]
+                             (exists? {:find [e]
+                                       :where [[c :parent e]]})]}))
 
           "find people who have children")
 
     (t/is (= [{:e :sergei} {:e :jeff}]
              (c2/q tu/*node*
-                   (-> '{:find [e]
-                         :where [[e :name name]
-                                 [e :parent p]
-                                 (exists? [e p]
-                                          [s :parent p]
-                                          [(<> e s)])]}
-                       (assoc :basis {:tx tx}))))
+                   '{:find [e]
+                     :where [[e :name name]
+                             [e :parent p]
+                             (exists? {:find [p]
+                                       :in [e]
+                                       :where [[s :parent p]
+                                               [(<> e s)]]})]}))
           "find people who have siblings")
 
     (t/is (thrown-with-msg? IllegalArgumentException
-                            #":unsatisfied-vars"
+                            #":no-available-clauses"
                             (c2/q tu/*node*
-                                  (-> '{:find [e n]
-                                        :where [[e :foo n]
-                                                (exists? [e]
-                                                         [e :first-name "Petr"]
-                                                         [(= n 1)])]}
-                                      (assoc :basis {:tx tx})))))))
+                                  '{:find [e n]
+                                    :where [[e :foo n]
+                                            (exists? {:find [e]
+                                                      :where [[e :first-name "Petr"]
+                                                              [(= n 1)]]})]})))))
 
 (deftest test-anti-join
   (let [tx (c2/submit-tx
@@ -501,159 +499,149 @@
 
     (t/is (= [{:e :ivan} {:e :sergei}]
              (c2/q tu/*node*
-                   (-> '{:find [e]
-                         :where [[e :foo 1]
-                                 (not-exists? [e]
-                                              [e :first-name "Petr"])]}
-                       (assoc :basis {:tx tx})))))
+                   '{:find [e]
+                     :where [[e :foo 1]
+                             (not-exists? {:find [e]
+                                           :where [[e :first-name "Petr"]]})]})))
 
     (t/is (= [{:e :ivan} {:e :sergei}]
              (c2/q tu/*node*
-                   (-> '{:find [e]
-                         :where [[e :foo n]
-                                 (not-exists? [e n]
-                                              [e :first-name "Petr"]
-                                              [e :foo n])]}
-                       (assoc :basis {:tx tx})))))
+                   '{:find [e]
+                     :where [[e :foo n]
+                             (not-exists? {:find [e n]
+                                           :where [[e :first-name "Petr"]
+                                                   [e :foo n]]})]})))
 
     (t/is (= []
-             (c2/q
-              tu/*node*
-              (-> '{:find [e]
-                    :where [[e :foo n]
-                            (not-exists? [e n]
-                                         [e :foo n])]}
-                  (assoc :basis {:tx tx})))))
+             (c2/q tu/*node*
+                   '{:find [e]
+                     :where [[e :foo n]
+                             (not-exists? {:find [e n]
+                                           :where [[e :foo n]]})]})))
 
     (t/is (= [{:e :petr} {:e :sergei}]
              (c2/q tu/*node*
-                   (-> '{:find [e]
-                         :where [[e :foo 1]
-                                 (not-exists? [e]
-                                              [e :last-name "Ivanov"])]}
-                       (assoc :basis {:tx tx})))))
+                   '{:find [e]
+                     :where [[e :foo 1]
+                             (not-exists? {:find [e]
+                                           :where [[e :last-name "Ivanov"]]})]})))
 
     (t/is (= [{:e :ivan} {:e :petr} {:e :sergei}]
              (c2/q tu/*node*
-                   (-> '{:find [e]
-                         :where [[e :foo 1]
-                                 (not-exists? [e]
-                                              [e :first-name "Jeff"])]}
-                       (assoc :basis {:tx tx})))))
+                   '{:find [e]
+                     :where [[e :foo 1]
+                             (not-exists? {:find [e]
+                                           :where [[e :first-name "Jeff"]]})]})))
 
     (t/is (= [{:e :ivan} {:e :petr}]
              (c2/q tu/*node*
-                   (-> '{:find [e]
-                         :where [[e :foo 1]
-                                 (not-exists? [e]
-                                              [e :first-name n]
-                                              [e :last-name n])]}
-                       (assoc :basis {:tx tx})))))
+                   '{:find [e]
+                     :where [[e :foo 1]
+                             (not-exists? {:find [e]
+                                           :where [[e :first-name n]
+                                                   [e :last-name n]]})]})))
 
     (t/is (= [{:e :ivan, :first-name "Petr", :last-name "Petrov", :a "Ivan", :b "Ivanov"}
               {:e :petr, :first-name "Ivan", :last-name "Ivanov", :a "Petr", :b "Petrov"}
               {:e :sergei, :first-name "Ivan", :last-name "Ivanov", :a "Sergei", :b "Sergei"}
               {:e :sergei, :first-name "Petr", :last-name "Petrov", :a "Sergei", :b "Sergei"}]
              (c2/q tu/*node*
-                   (-> '{:find [e first-name last-name a b]
-                         :in [[[first-name last-name]]]
-                         :where [[e :foo 1]
-                                 [e :first-name a]
-                                 [e :last-name b]
-                                 (not-exists? [e first-name last-name]
-                                              [e :first-name first-name]
-                                              [e :last-name last-name])]}
-                       (assoc :basis {:tx tx}))
+                   '{:find [e first-name last-name a b]
+                     :in [[[first-name last-name]]]
+                     :where [[e :foo 1]
+                             [e :first-name a]
+                             [e :last-name b]
+                             (not-exists? {:find [e first-name last-name]
+                                           :where [[e :first-name first-name]
+                                                   [e :last-name last-name]]})]}
                    [["Ivan" "Ivanov"]
                     ["Petr" "Petrov"]])))
 
     (t/testing "apply anti-joins"
       (t/is (= [{:n 1, :e :ivan} {:n 1, :e :petr} {:n 1, :e :sergei}]
                (c2/q tu/*node*
-                     (-> '{:find [e n]
-                           :where [[e :foo n]
-                                   (not-exists? [e n]
-                                                [e :first-name "Petr"]
-                                                [(= n 2)])]}
-                         (assoc :basis {:tx tx})))))
+                     '{:find [e n]
+                       :where [[e :foo n]
+                               (not-exists? {:find [e]
+                                             :in [n]
+                                             :where [[e :first-name "Petr"]
+                                                     [(= n 2)]]})]})))
 
       (t/is (= [{:n 1, :e :ivan} {:n 1, :e :sergei}]
                (c2/q tu/*node*
-                     (-> '{:find [e n]
-                           :where [[e :foo n]
-                                   (not-exists? [e n]
-                                                [e :first-name "Petr"]
-                                                [(= n 1)])]}
-                         (assoc :basis {:tx tx})))))
+                     '{:find [e n]
+                       :where [[e :foo n]
+                               (not-exists? {:find [e]
+                                             :in [n]
+                                             :where [[e :first-name "Petr"]
+                                                     [(= n 1)]]})]})))
 
       (t/is (= []
                (c2/q tu/*node*
-                     (-> '{:find [e n]
-                           :where [[e :foo n]
-                                   (not-exists? [n]
-                                                [(= n 1)])]}
-                         (assoc :basis {:tx tx})))))
+                     '{:find [e n]
+                       :where [[e :foo n]
+                               (not-exists? {:find []
+                                             :in [n]
+                                             :where [[(= n 1)]]})]})))
 
       (t/is (= [{:n "Petr", :e :petr} {:n "Sergei", :e :sergei}]
                (c2/q tu/*node*
-                     (-> '{:find [e n]
-                           :where [[e :first-name n]
-                                   (not-exists? [n]
-                                                [(= "Ivan" n)])]}
-                         (assoc :basis {:tx tx})))))
+                     '{:find [e n]
+                       :where [[e :first-name n]
+                               (not-exists? {:find []
+                                             :in [n]
+                                             :where [[(= "Ivan" n)]]})]})))
 
 
       (t/is (= [{:n "Petr", :e :petr} {:n "Sergei", :e :sergei}]
                (c2/q tu/*node*
-                     (-> '{:find [e n]
-                           :where [[e :first-name n]
-                                   (not-exists? [n]
-                                                [e :first-name n]
-                                                [e :first-name "Ivan"])]}
-                         (assoc :basis {:tx tx})))))
+                     '{:find [e n]
+                       :where [[e :first-name n]
+                               (not-exists? {:find [n]
+                                             :where [[e :first-name n]
+                                                     [e :first-name "Ivan"]]})]})))
 
       (t/is (= [{:n 1, :e :ivan} {:n 1, :e :sergei}]
                (c2/q tu/*node*
-                     (-> '{:find [e n]
-                           :where [[e :foo n]
-                                   (not-exists? [e n]
-                                                [e :first-name "Petr"]
-                                                [e :foo n]
-                                                [(= n 1)])]}
-                         (assoc :basis {:tx tx})))))
+                     '{:find [e n]
+                       :where [[e :foo n]
+                               (not-exists? {:find [e n]
+                                             :where [[e :first-name "Petr"]
+                                                     [e :foo n]
+                                                     [(= n 1)]]})]})))
 
 
       (t/is (thrown-with-msg?
              IllegalArgumentException
-             #":unsatisfied-vars"
+             #":no-available-clauses"
              (c2/q tu/*node*
                    (-> '{:find [e n]
                          :where [[e :foo n]
-                                 (not-exists? [e]
-                                              [e :first-name "Petr"]
-                                              [(= n 1)])]}
+                                 (not-exists? {:find [e]
+                                               :where [[e :first-name "Petr"]
+                                                       [(= n 1)]]})]}
                        (assoc :basis {:tx tx})))))
 
       ;; TODO what to do if arg var isn't used, either remove it from the join
       ;; or convert the anti-join to an apply and param all the args
       #_(t/is (= [{:e :ivan} {:e :sergei}]
                  (c2/q tu/*node*
-                       (-> '{:find [e n]
-                             :where [[e :foo n]
-                                     (not-exists? [e n]
-                                                  [e :first-name "Petr"])]}
-                           (assoc :basis {:tx tx}))))))
+                       '{:find [e n]
+                         :where [[e :foo n]
+                                 (not-exists? {:find [e]
+                                               :in [n]
+                                               :where [[e :first-name "Petr"]]})]}))))
 
     (t/testing "Multiple anti-joins"
       (t/is (= [{:n "Petr", :e :petr}]
                (c2/q tu/*node*
-                     (-> '{:find [e n]
-                           :where [[e :first-name n]
-                                   (not-exists? [n]
-                                                [(= n "Ivan")])
-                                   (not-exists? [e]
-                                                [e :first-name "Sergei"])]}
-                         (assoc :basis {:tx tx}))))))))
+                     '{:find [e n]
+                       :where [[e :first-name n]
+                               (not-exists? {:find []
+                                             :in [n]
+                                             :where [[(= n "Ivan")]]})
+                               (not-exists? {:find [e]
+                                             :where [[e :first-name "Sergei"]]})]}))))))
 
 (deftest calling-a-function-580
   (let [tx (c2/submit-tx tu/*node*
@@ -939,10 +927,10 @@
               "b is unified")))))
 
 (deftest test-basic-rules
-  (let [_tx (c2/submit-tx tu/*node* [[:put {:id :ivan :name "Ivan" :last-name "Ivanov" :age 21}]
-                                     [:put {:id :petr :name "Petr" :last-name "Petrov" :age 18}]
-                                     [:put {:id :georgy :name "Georgy" :last-name "George" :age 17}]])
-        q (fn q [query & args]
+  (c2/submit-tx tu/*node* [[:put {:id :ivan :name "Ivan" :last-name "Ivanov" :age 21}]
+                           [:put {:id :petr :name "Petr" :last-name "Petrov" :age 18}]
+                           [:put {:id :georgy :name "Georgy" :last-name "George" :age 17}]])
+  (letfn [(q [query & args]
             (apply c2/q tu/*node* query args))]
 
     (t/testing "without rule"
@@ -1017,7 +1005,6 @@
                                          [(over-twenty-one-internal? y)
                                           [(>= y 21)]]]}))))
 
-
     (t/testing "nested rules bound (same arg names)"
       (t/is (= [{:i :ivan}] (q '{:find [i]
                                  :where [[i :age age]
@@ -1056,9 +1043,10 @@
                     :where [[i :age age]
                             (older? age)]
                     :rules [[(older? age)
-                             (exists? [age]
-                                      [i :age age2]
-                                      [(> age2 age)])]]}))))
+                             (exists? {:find []
+                                       :in [age]
+                                       :where [[i :age age2]
+                                               [(> age2 age)]]})]]}))))
 
 
     (t/testing "anti-join in rule"
@@ -1067,9 +1055,10 @@
                      :where [[i :age age]
                              (not-older? age)]
                      :rules [[(not-older? age)
-                              (not-exists? [age]
-                                           [i :age age2]
-                                           [(> age2 age)])]]}))))
+                              (not-exists? {:find []
+                                            :in [age]
+                                            :where [[i :age age2]
+                                                    [(> age2 age)]]})]]}))))
 
     (t/testing "subquery in rule"
       (t/is (= [{:i :petr, :other-age 21}
@@ -1110,8 +1099,8 @@
 
       (t/is (= [{:name "Petr"}] (q '{:find [name]
                                      :where [[i :name name]
-                                             (not-exists? [i]
-                                                          (is-ivan-or-georgy? i))]
+                                             (not-exists? {:find [i]
+                                                           :where [(is-ivan-or-georgy? i)]})]
                                      :rules [[(is-ivan-or-georgy? i)
                                               [i :name "Ivan"]]
                                              [(is-ivan-or-georgy? i)

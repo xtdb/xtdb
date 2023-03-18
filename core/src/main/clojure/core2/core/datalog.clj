@@ -37,15 +37,13 @@
 
 (s/def ::semi-join
   (s/cat :exists '#{exists?}
-         :args ::args-list
-         :terms (s/+ ::term)))
+         :sub-query ::query))
 
 (s/def ::anti-join
   (s/cat :not-exists '#{not-exists?}
-         :args ::args-list
-         :terms (s/+ ::term)))
+         :sub-query ::query))
 
-(s/def ::find (s/coll-of ::find-arg :kind vector? :min-count 1))
+(s/def ::find (s/coll-of ::find-arg :kind vector?))
 (s/def ::keys (s/coll-of symbol? :kind vector?))
 
 (s/def ::args-list (s/coll-of ::logic-var, :kind vector?, :min-count 0))
@@ -107,7 +105,7 @@
          :branches ::or-branches))
 
 (s/def ::sub-query
-  (s/cat :q #{'q}, :query ::query))
+  (s/cat :q #{'q}, :sub-query ::query))
 
 (s/def ::temporal-literal ::util/datetime-value)
 
@@ -289,63 +287,48 @@
         (update :required-vars set/difference provided-vars))))
 
 (defn- term-vars [[term-type term-arg]]
-  (letfn [(sj-term-vars [spec]
-            (let [{:keys [args terms]} term-arg
-                  arg-vars (set args)
-                  {:keys [required-vars]} (combine-term-vars (map term-vars terms))]
+  (case term-type
+    :call (let [{:keys [form return]} term-arg]
+            {:required-vars (form-vars form)
+             :provided-vars (when-let [[return-type return-arg] return]
+                              (case return-type
+                                :scalar #{return-arg}))})
 
-              (when-let [unsatisfied-vars (not-empty (set/difference required-vars arg-vars))]
-                (throw (err/illegal-arg :unsatisfied-vars
-                                        {:vars unsatisfied-vars
-                                         :term (s/unform spec term-arg)})))
+    :triple {:provided-vars (into #{}
+                                  (comp (map term-arg)
+                                        (keep (fn [[val-type val-arg]]
+                                                (when (= :logic-var val-type)
+                                                  val-arg))))
+                                  [:e :v])}
 
-              ;; semi-joins do not provide vars
-              {:required-vars required-vars}))]
+    :union-join (let [{:keys [args branches]} term-arg
+                      arg-vars (set args)
+                      branches-vars (for [branch branches]
+                                      (into {:branch branch}
+                                            (combine-term-vars (map term-vars branch))))
+                      provided-vars (->> branches-vars
+                                         (map (comp set :provided-vars))
+                                         (apply set/intersection))
+                      required-vars (->> branches-vars
+                                         (map (comp set :required-vars))
+                                         (apply set/union))]
 
-    (case term-type
-      :call (let [{:keys [form return]} term-arg]
-              {:required-vars (form-vars form)
-               :provided-vars (when-let [[return-type return-arg] return]
-                                (case return-type
-                                  :scalar #{return-arg}))})
+                  (when-let [unsatisfied-vars (not-empty (set/difference required-vars arg-vars))]
+                    (throw (err/illegal-arg :unsatisfied-vars
+                                            {:vars unsatisfied-vars
+                                             :term (s/unform ::union-join term-arg)})))
 
-      :triple {:provided-vars (into #{}
-                                    (comp (map term-arg)
-                                          (keep (fn [[val-type val-arg]]
-                                                  (when (= :logic-var val-type)
-                                                    val-arg))))
-                                    [:e :v])}
+                  {:provided-vars (set/intersection arg-vars provided-vars)
+                   :required-vars (set/difference arg-vars provided-vars)})
 
-      :union-join (let [{:keys [args branches]} term-arg
-                        arg-vars (set args)
-                        branches-vars (for [branch branches]
-                                        (into {:branch branch}
-                                              (combine-term-vars (map term-vars branch))))
-                        provided-vars (->> branches-vars
-                                           (map (comp set :provided-vars))
-                                           (apply set/intersection))
-                        required-vars (->> branches-vars
-                                           (map (comp set :required-vars))
-                                           (apply set/union))]
-
-                    (when-let [unsatisfied-vars (not-empty (set/difference required-vars arg-vars))]
-                      (throw (err/illegal-arg :unsatisfied-vars
-                                              {:vars unsatisfied-vars
-                                               :term (s/unform ::union-join term-arg)})))
-
-                    {:provided-vars (set/intersection arg-vars provided-vars)
-                     :required-vars (set/difference arg-vars provided-vars)})
-
-      :semi-join (sj-term-vars ::semi-join)
-      :anti-join (sj-term-vars ::anti-join)
-
-      :sub-query (let [{:keys [query]} term-arg]
-                   {:provided-vars (set (or (:keys query)
-                                            (->> (:find query)
-                                                 (filter (comp #{:logic-var} first))
-                                                 (map form-vars)
-                                                 (apply set/union))))
-                    :required-vars (set (map second (:in query)))}))))
+    (:semi-join :anti-join :sub-query)
+    (let [{:keys [sub-query]} term-arg]
+      {:provided-vars (set (or (:keys sub-query)
+                               (->> (:find sub-query)
+                                    (filter (comp #{:logic-var} first))
+                                    (map form-vars)
+                                    (apply set/union))))
+       :required-vars (set (map second (:in sub-query)))})))
 
 (defn- ->param-sym [lv]
   (-> (symbol (str "?" (name lv)))
@@ -519,18 +502,15 @@
              (MapEntry/create param param-symbol)))
          (into {}))))
 
-(defn- plan-semi-join [sj-type {:keys [args terms] :as sj}]
-  (let [{sj-required-vars :required-vars} (term-vars [sj-type sj])
-        required-vars (if (seq sj-required-vars) (set args) #{})
-        apply-mapping (->apply-mapping required-vars)]
+(defn- plan-semi-join [sj-type {:keys [sub-query] :as sj}]
+  (let [{:keys [required-vars provided-vars]} (term-vars [sj-type sj])
+        apply-mapping (when (seq required-vars)
+                        (->apply-mapping (set/union required-vars provided-vars)))]
 
-    (-> (plan-query
-         (cond-> {:find (vec (for [arg args]
-                               [:logic-var arg]))
-                  :where terms}
-           (seq required-vars) (assoc ::apply-mapping apply-mapping)))
-        (vary-meta into {::required-vars required-vars
-                         ::apply-mapping apply-mapping}))))
+    (-> (plan-query (-> sub-query
+                        (assoc ::apply-mapping apply-mapping)
+                        (dissoc :in)))
+        (vary-meta assoc ::apply-mapping apply-mapping))))
 
 (defn- wrap-semi-joins [plan sj-type semi-joins]
   (->> semi-joins
@@ -572,11 +552,10 @@
            plan-u sq-plan-u]
           (wrap-unify (::var->cols (meta rels)))))
 
-
     (mega-join (into [plan] union-joins) param-vars)))
 
-(defn- plan-sub-query [{:keys [query]}]
-  (let [required-vars (->> (:in query)
+(defn- plan-sub-query [{:keys [sub-query]}]
+  (let [required-vars (->> (:in sub-query)
                            (into #{} (map
                                       (fn [[in-type in-arg :as in]]
                                         (when-not (= in-type :scalar)
@@ -584,7 +563,7 @@
                                                                   (s/unform ::in-binding in))))
                                         in-arg))))
         apply-mapping (->apply-mapping required-vars)]
-    (-> (plan-query (-> query
+    (-> (plan-query (-> sub-query
                         (dissoc :in)
                         (assoc ::apply-mapping apply-mapping)))
         (vary-meta into {::required-vars required-vars, ::apply-mapping apply-mapping}))))
@@ -661,24 +640,46 @@
     [(-> triple (update 1 assoc :e new-e) (update 1 assoc :v new-v))
      replace-ctx]))
 
-(defmethod replace-vars :semi-join [[_ {:keys [args terms]}] replace-ctx]
-  (let [[new-args replace-ctx] (replace-arg-list args replace-ctx)
-        new-ctx (new-replacement-ctx args replace-ctx)
-        [new-terms _] (replace-vars* terms new-ctx)]
+(defn- replace-sq-vars [{:keys [find in keys where order-by rules]} replace-ctx]
+  (if-not rules
+    (let [[new-find replace-ctx] (replace-vars* find replace-ctx)
+          [new-in replace-ctx] (replace-vars* in replace-ctx)
+          [new-keys replace-ctx] (reduce (fn [[res replace-ctx] key-symbol]
+                                           (let [[replacement new-replace-ctx] (get-replacement replace-ctx key-symbol)]
+                                             [(conj res replacement) new-replace-ctx]))
+                                         [[] replace-ctx]
+                                         keys)
+          [new-order-by replace-ctx] (let [[new-order-by-elements replace-ctx]
+                                           (-> (map :find-arg order-by)
+                                               (replace-vars* replace-ctx))]
+                                       [(map #(assoc %1 :find-arg %2) order-by new-order-by-elements) replace-ctx])
+          new-ctx (new-replacement-ctx (->> (concat (map form-vars find)
+                                                    (map binding-vars in))
+                                            (apply set/union))
+                                       replace-ctx)
+          [new-where _] (replace-vars* where new-ctx)]
+      [(cond-> {:find new-find
+                :in new-in
+                :where new-where}
+         keys (assoc :keys new-keys)
+         order-by (assoc :order-by new-order-by))
+       replace-ctx])
+
+    (throw (err/illegal-arg :rules-not-supported-in-subquery
+                            (s/unform ::rules rules)))))
+
+(defmethod replace-vars :semi-join [[_ {:keys [sub-query]}] replace-ctx]
+  (let [[new-sq replace-ctx] (replace-sq-vars sub-query replace-ctx)]
     [[:semi-join
       {:exists 'exists?
-       :args new-args
-       :terms new-terms}]
+       :sub-query new-sq}]
      replace-ctx]))
 
-(defmethod replace-vars :anti-join [[_ {:keys [args terms]}] replace-ctx]
-  (let [[new-args replace-ctx] (replace-arg-list args replace-ctx)
-        new-ctx (new-replacement-ctx args replace-ctx)
-        [new-terms _] (replace-vars* terms new-ctx)]
+(defmethod replace-vars :anti-join [[_ {:keys [sub-query]}] replace-ctx]
+  (let [[new-sq replace-ctx] (replace-sq-vars sub-query replace-ctx)]
     [[:anti-join
-      {:not-exists 'not-exists?
-       :args new-args
-       :terms new-terms}]
+      {:exists 'exists?
+       :sub-query new-sq}]
      replace-ctx]))
 
 (defmethod replace-vars :union-join [[_ {:keys [args branches]}] replace-ctx]
@@ -708,35 +709,12 @@
                 args)]
     [(update fn-call 1 assoc :args new-args) new-ctx]))
 
-(defmethod replace-vars :sub-query [[_ {:keys [query]} :as _sub-query] replace-ctx]
-  (let [{:keys [find in keys where order-by rules]} query]
-    (if-not rules
-      (let [[new-find replace-ctx] (replace-vars* find replace-ctx)
-            [new-in replace-ctx] (replace-vars* in replace-ctx)
-            [new-keys replace-ctx] (reduce (fn [[res replace-ctx] key-symbol]
-                                             (let [[replacement new-replace-ctx] (get-replacement replace-ctx key-symbol)]
-                                               [(conj res replacement) new-replace-ctx]))
-                                           [[] replace-ctx]
-                                           keys)
-            [new-order-by replace-ctx] (let [[new-order-by-elements replace-ctx]
-                                             (-> (map :find-arg order-by)
-                                                 (replace-vars* replace-ctx))]
-                                         [(map #(assoc %1 :find-arg %2) order-by new-order-by-elements) replace-ctx])
-            new-ctx (new-replacement-ctx (->> (concat (map form-vars find)
-                                                      (map binding-vars in))
-                                              (apply set/union))
-                                         replace-ctx)
-            [new-where _] (replace-vars* where new-ctx)]
-        [[:sub-query
-          {:q 'q
-           :query (cond-> {:find new-find
-                           :in new-in
-                           :where new-where}
-                    keys (assoc :keys new-keys)
-                    order-by (assoc :order-by new-order-by))}]
-         replace-ctx])
-      (throw (err/illegal-arg :rules-not-supported-in-subquery
-                              (s/unform ::rules rules))))))
+(defmethod replace-vars :sub-query [[_ {:keys [sub-query]}] replace-ctx]
+  (let [[new-sq replace-ctx] (replace-sq-vars sub-query replace-ctx)]
+    [[:sub-query
+      {:q 'q
+       :sub-query new-sq}]
+     replace-ctx]))
 
 (defmethod replace-vars :rule [rule replace-ctx]
   (let [[new-args new-replace-ctx]
@@ -801,20 +779,15 @@
           (case type
             (:triple :call) clause
 
-            (:semi-join :anti-join)
-            (->> clause second :terms
-                 (expand-rules rule-name->rules)
-                 (update clause 1 assoc :terms ))
-
             :union-join
             (->> clause second :branches
                  (mapv (partial expand-rules rule-name->rules))
                  (update clause 1 assoc :branches))
 
-            :sub-query
-            (->> clause second :query :where
+            (:semi-join :anti-join :sub-query)
+            (->> clause second :sub-query :where
                  (expand-rules rule-name->rules)
-                 (update-in clause [1 :query] assoc :where))
+                 (update-in clause [1 :sub-query] assoc :where))
 
             :rule (rewrite-rule rule-name->rules arg)
 
