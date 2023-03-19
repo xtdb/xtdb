@@ -72,7 +72,7 @@
         :logic-var ::logic-var
         :unwind (s/tuple ::logic-var #{'...})))
 
-(s/def ::match
+(s/def ::match-spec
   (-> (s/or :map (-> (s/map-of ::attr ::triple-value)
                      (s/and (s/conformer vec #(into {} %))))
             :vector (-> (s/or :column ::column
@@ -94,10 +94,12 @@
   (-> (s/keys :opt-un [::lp/for-app-time ::lp/for-sys-time])
       (s/nonconforming)))
 
-(s/def ::from
-  (s/coll-of (s/and list? (s/cat :table ::table, :match ::match,
-                                 :temporal-opts (s/? ::temporal-opts)))
-             :kind vector?))
+(s/def ::match
+  (s/and list?
+         (s/cat :tag #{'match}
+                :table ::table,
+                :match ::match-spec,
+                :temporal-opts (s/? ::temporal-opts))))
 
 (s/def ::triple
   (s/and vector?
@@ -161,6 +163,7 @@
         :triple ::triple
         :call ::call-clause
         :sub-query ::sub-query
+        :match ::match
         :rule ::rule))
 
 (s/def ::where
@@ -178,7 +181,7 @@
 
 (s/def ::query
   (s/keys :req-un [::find]
-          :opt-un [::keys ::in ::from ::where ::order-by ::offset ::limit ::rules]))
+          :opt-un [::keys ::in ::where ::order-by ::offset ::limit ::rules]))
 
 (s/def ::relation-arg
   (s/or :maps (s/coll-of (s/map-of simple-keyword? any?))
@@ -402,11 +405,11 @@
                             (vary-meta update ::vars conj uw-col)))))
         plan)))
 
-(defn- plan-from [from triples]
-  (let [tables (into from
+(defn- plan-from [{:keys [triples matches]}]
+  (let [tables (into matches
                      (map (fn [[e triples]]
                             (let [{triples false, table true} (group-by #(= :_table (:a %)) triples)]
-                              {:table 'xt_docs
+                              {:table (symbol (or (second (:v (first table))) 'xt_docs))
                                :match (conj (for [{:keys [a v]} triples]
                                               (MapEntry/create a v))
                                             (MapEntry/create :id e))})))
@@ -777,7 +780,7 @@
                                       {:rule-name name})))))
         rule-name->rules))
 
-(defn- plan-body [{:keys [from], where-clauses :where, apply-mapping ::apply-mapping, rules :rules, :as query}]
+(defn- plan-body [{where-clauses :where, apply-mapping ::apply-mapping, rules :rules, :as query}]
   (let [in-rels (plan-in-tables query)
         {::keys [param-vars]} (meta in-rels)
 
@@ -787,13 +790,14 @@
         _ (check-rule-arity rule-name->rules)
         where-clauses (expand-rules rule-name->rules where-clauses)
 
-        {triple-clauses :triple, call-clauses :call, sub-query-clauses :sub-query
+        {match-clauses :match, triple-clauses :triple, call-clauses :call, sub-query-clauses :sub-query
          semi-join-clauses :semi-join, anti-join-clauses :anti-join, union-join-clauses :union-join}
         (-> where-clauses
             (->> (group-by first))
             (update-vals #(mapv second %)))]
 
-    (loop [plan (mega-join (vec (concat in-rels (plan-from from triple-clauses)))
+    (loop [plan (mega-join (vec (concat in-rels (plan-from {:matches match-clauses
+                                                            :triples triple-clauses})))
                            (concat param-vars apply-mapping))
 
            calls (some->> call-clauses (mapv plan-call))
