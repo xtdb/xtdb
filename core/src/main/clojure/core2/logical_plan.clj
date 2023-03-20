@@ -26,9 +26,6 @@
 ;; TODO flesh out
 (s/def ::value (some-fn string? number? inst? keyword? (partial instance? LocalDate)))
 
-(defn source-sym? [sym]
-  (str/starts-with? (name sym) "$"))
-
 (s/def ::param
   (s/and simple-symbol? #(str/starts-with? (name %) "?")))
 

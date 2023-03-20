@@ -54,13 +54,8 @@
         :scalar ::logic-var
         :tuple ::args-list))
 
-(s/def ::source
-  (s/and simple-symbol?
-         (comp #(str/starts-with? % "$") name)))
-
 (s/def ::in-binding
-  (s/or :source ::source
-        :collection (s/tuple ::logic-var '#{...})
+  (s/or :collection (s/tuple ::logic-var '#{...})
         :relation (s/tuple ::args-list)
         :scalar ::logic-var
         :tuple ::args-list))
@@ -272,7 +267,6 @@
 (defn- binding-vars [binding]
   (letfn [(binding-vars* [[binding-type binding-arg]]
             (case binding-type
-              :source #{}
               :collection #{(first binding-arg)}
               :relation (set (first binding-arg))
               :scalar #{binding-arg}
@@ -339,7 +333,6 @@
                                    (fn [idx [binding-type binding-arg]]
                                      (let [table-key (symbol (str "?in" idx))]
                                        (-> (case binding-type
-                                             :source {::in-cols [binding-arg]}
                                              :scalar {::vars #{binding-arg}, ::in-cols [(->param-sym binding-arg)]}
                                              :tuple {::vars (set binding-arg), ::in-cols (mapv ->param-sym binding-arg)}
                                              :relation (let [cols (first binding-arg)]
@@ -960,7 +953,7 @@
 (defn- args->params [args in-bindings]
   (->> (mapcat (fn [{::keys [binding-type in-cols]} arg]
                  (case binding-type
-                   (:source :scalar) [(MapEntry/create (first in-cols) arg)]
+                   :scalar [(MapEntry/create (first in-cols) arg)]
                    :tuple (zipmap in-cols arg)
                    (:collection :relation) nil))
                in-bindings
@@ -970,7 +963,7 @@
 (defn- args->tables [args in-bindings]
   (->> (mapcat (fn [{::keys [binding-type in-cols table-key]} arg]
                  (case binding-type
-                   (:source :scalar :tuple) nil
+                   (:scalar :tuple) nil
 
                    :collection (let [in-col (first in-cols)
                                      binding-k (keyword in-col)]
