@@ -594,7 +594,7 @@
               (or (maybe-existing-wm)
                   (let [^IWatermark old-wm (.shared-wm this)]
                     (try
-                      (let [^IWatermark shared-wm (wm/->wm tx-key (.openWatermark live-chunk) (.getTemporalWatermark temporal-mgr) true)]
+                      (let [^IWatermark shared-wm (wm/->wm latest-completed-tx (.openWatermark live-chunk) (.getTemporalWatermark temporal-mgr) true)]
                         (set! (.shared-wm this) shared-wm)
                         (doto shared-wm .retain))
                       (finally
