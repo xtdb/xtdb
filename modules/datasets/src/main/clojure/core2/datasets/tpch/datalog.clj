@@ -297,8 +297,7 @@
                    [p_type :asc]
                    [p_size :asc]]}
 
-      ;; TODO set
-      (with-in-args [[3 9 14 19 23 36 45 49]])))
+      (with-in-args [#{3 9 14 19 23 36 45 49}])))
 
 (def q17
   '{:find [avg_yearly]

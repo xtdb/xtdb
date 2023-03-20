@@ -7,12 +7,12 @@
            (core2.api ClojureForm)
            (core2.types IntervalDayTime IntervalMonthDayNano IntervalYearMonth)
            (core2.vector IDenseUnionWriter IVectorWriter)
-           (core2.vector.extensions ClojureFormType, ClojureFormVector KeywordType KeywordVector UriType UriVector UuidType UuidVector)
+           (core2.vector.extensions ClojureFormType, ClojureFormVector KeywordType KeywordVector SetType SetVector UriType UriVector UuidType UuidVector)
            java.net.URI
            (java.nio ByteBuffer CharBuffer)
            java.nio.charset.StandardCharsets
            (java.time Duration Instant LocalDate LocalDateTime LocalTime OffsetDateTime Period ZoneId ZoneOffset ZonedDateTime)
-           (java.util Date List Map UUID)
+           (java.util Date List Map Set UUID)
            java.util.concurrent.ConcurrentHashMap
            java.util.function.Function
            (org.apache.arrow.vector BigIntVector BitVector DateDayVector DateMilliVector DurationVector FixedSizeBinaryVector Float4Vector Float8Vector IntVector IntervalDayVector IntervalMonthDayNanoVector IntervalYearVector NullVector PeriodDuration SmallIntVector TimeMicroVector TimeMilliVector TimeNanoVector TimeSecVector TimeStampMicroTZVector TimeStampMicroVector TimeStampMilliTZVector TimeStampMilliVector TimeStampNanoTZVector TimeStampNanoVector TimeStampSecTZVector TimeStampSecVector TinyIntVector ValueVector VarBinaryVector VarCharVector)
@@ -190,6 +190,11 @@
             (.endValue))
           (write-value! el data-writer))
         (.endValue data-writer))))
+
+  Set
+  (value->col-type [v] [:set (apply merge-col-types (into #{} (map value->col-type) v))])
+  (write-value! [v ^IVectorWriter writer]
+    (write-value! (vec v) (.getUnderlyingWriter (.asExtension writer))))
 
   Map
   (value->col-type [v]
@@ -456,6 +461,19 @@
                        (conj! acc (get-object data-vec element-idx)))))]
       (persistent! x)))
 
+  SetVector
+  (get-object [this idx]
+    (when-not (.isNull this idx)
+      (let [^ListVector uvec (.getUnderlyingVector this)
+            data-vec (.getDataVector uvec)
+            x (loop [element-idx (.getElementStartIndex uvec idx)
+                     acc (transient #{})]
+                (if (= (.getElementEndIndex uvec idx) element-idx)
+                  acc
+                  (recur (inc element-idx)
+                         (conj! acc (get-object data-vec element-idx)))))]
+        (persistent! x))))
+
   StructVector
   (get-object [this idx]
     (-> (reduce (fn [acc k]
@@ -599,6 +617,7 @@
   (zmatch col-type
     [:struct inner-types] [:struct-keys (set (keys inner-types))]
     [:list _inner-types] :list
+    [:set _inner-types] :set
     col-type))
 
 #_{:clj-kondo/ignore [:unused-binding]}
@@ -645,6 +664,13 @@
 
 (defmethod arrow-type->col-type ArrowType$FixedSizeList [^ArrowType$FixedSizeList list-type, data-field]
   [:fixed-size-list (.getListSize list-type) (field->col-type data-field)])
+
+(defmethod col-type->field* :set [col-name nullable? [_ inner-col-type]]
+  (->field col-name SetType/INSTANCE nullable?
+           (col-type->field "$data" inner-col-type)))
+
+(defmethod arrow-type->col-type SetType [_ data-field]
+  [:set (field->col-type data-field)])
 
 ;;; struct
 

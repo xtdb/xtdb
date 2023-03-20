@@ -4,6 +4,7 @@
             [core2.types :as types]
             [core2.vector.indirect :as iv])
   (:import (core2.vector IDenseUnionWriter IExtensionWriter IIndirectRelation IIndirectVector IListWriter IRelationWriter IRowCopier IStructWriter IVectorWriter IWriterPosition)
+           core2.vector.extensions.SetType
            (java.lang AutoCloseable)
            (java.util HashMap LinkedHashMap Map)
            (java.util.function Function)
@@ -188,6 +189,9 @@
                                 ^Field field (case (types/col-type-head col-type)
                                                :list
                                                (types/->field field-name ArrowType$List/INSTANCE false (types/->field "$data$" types/dense-union-type false))
+
+                                               :set
+                                               (types/->field field-name SetType/INSTANCE false (types/->field "$data$" types/dense-union-type false))
 
                                                :struct
                                                (types/->field (str field-name (count writers-by-type)) ArrowType$Struct/INSTANCE false)

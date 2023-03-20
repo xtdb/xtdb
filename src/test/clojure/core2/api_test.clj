@@ -61,6 +61,18 @@
                        "SELECT b.id, b.list FROM xt_docs b"
                        {:basis-timeout (Duration/ofSeconds 1)})))))
 
+(t/deftest round-trips-sets
+  (let [tx (c2.d/submit-tx *node* '[[:put xt_docs {:id :foo, :v #{1 2 #{"foo" "bar"}}}]])]
+    (t/is (= (c2/map->TransactionInstant {:tx-id 0, :sys-time (util/->instant #inst "2020-01-01")}) tx))
+
+    (t/is (= [{:id :foo, :v #{1 2 #{"foo" "bar"}}}]
+             (c2.d/q *node*
+                     '{:find [id v]
+                       :where [[id :v v]]})))
+
+    (t/is (= [{:id :foo, :v #{1 2 #{"foo" "bar"}}}]
+             (c2.sql/q *node* "SELECT b.id, b.v FROM xt_docs b")))))
+
 (t/deftest round-trips-structs
   (let [tx (c2.d/submit-tx *node* '[[:put xt_docs {:id :foo, :struct {:a 1, :b {:c "bar"}}}]
                                     [:put xt_docs {:id :bar, :struct {:a true, :d 42.0}}]])]
