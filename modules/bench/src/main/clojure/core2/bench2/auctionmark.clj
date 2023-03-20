@@ -4,6 +4,7 @@
             [clojure.tools.logging :as log]
             [core2.datalog :as c2]
             [core2.bench2 :as b2]
+            [core2.bench2.core2 :as bcore2]
             [core2.test-util :as tu])
   (:import (java.time Duration Instant)
            (java.util ArrayList Random)
@@ -36,7 +37,6 @@
 (defn generate-user [worker]
   (let [u_id (b2/increment worker user-id)]
     {:id u_id
-     :_table :user
      :u_id u_id
      :u_r_id (b2/sample-flat worker region-id)
      :u_rating 0
@@ -56,7 +56,9 @@
 
   The benchmark randomly selects id from a pool of region ids as an input for u_r_id parameter using flat distribution."
   [worker]
-  (->> [[:put (generate-user worker)]]
+  (->> [[:put
+         'user
+         (generate-user worker)]]
        (c2/submit-tx (:sut worker))))
 
 (def tx-fn-apply-seller-fee
@@ -81,7 +83,7 @@
                            [id :u_sattr7 u_sattr7]]}
                  u_id)]
       (if u
-        [[:put (update u :u_balance dec)]]
+        [[:put 'user (update u :u_balance dec)]]
         []))))
 
 (def item-query
@@ -207,48 +209,43 @@
       (cond-> []
         ;; increment number of bids on item
         i
-        (conj [:put (assoc (first (q item-query i))
-                           :i_num_bids (inc nbids)
-                           :_table :item)])
+        (conj [:put 'item (assoc (first (q item-query i))
+                                 :i_num_bids (inc nbids))])
 
         ;; if new bid exceeds old, bump it
         upd-curr-bid
-        (conj [:put (assoc (first (q item-max-bid-query imb))
-                           :imb_bid bid
-                           :_table :item-max-bid)])
+        (conj [:put 'item-max-bid (assoc (first (q item-max-bid-query imb))
+                                         :imb_bid bid)])
 
         ;; we exceed the old max, win the bid.
         (and curr-bid new-bid-win)
-        (conj [:put (assoc (first (q item-max-bid-query imb))
-                           :_table :item-max-bid
-                           :imb_ib_id new-bid-id
-                           :imb_ib_u_id u_id
-                           :imb_updated now)])
+        (conj [:put 'item-max-bid (assoc (first (q item-max-bid-query imb))
+                                         :imb_ib_id new-bid-id
+                                         :imb_ib_u_id u_id
+                                         :imb_updated now)])
 
         ;; no previous max bid, insert new max bid
         (nil? imb_ib_id)
-        (conj [:put {:id (composite-id-fn new-bid-id i_id)
-                     :_table :item-max-bid
-                     :imb_i_id i_id
-                     :imb_u_id u_id
-                     :imb_ib_id new-bid-id
-                     :imb_ib_i_id i_id
-                     :imb_ib_u_id u_id
-                     :imb_created now
-                     :imb_updated now}])
+        (conj [:put 'item-max-bid {:id (composite-id-fn new-bid-id i_id)
+                                   :imb_i_id i_id
+                                   :imb_u_id u_id
+                                   :imb_ib_id new-bid-id
+                                   :imb_ib_i_id i_id
+                                   :imb_ib_u_id u_id
+                                   :imb_created now
+                                   :imb_updated now}])
 
         :always
         ;; add new bid
-        (conj [:put {:id new-bid-id
-                     :_table :item-bid
-                     :ib_id new-bid-id
-                     :ib_i_id i_id
-                     :ib_u_id u_id
-                     :ib_buyer_id i_buyer_id
-                     :ib_bid new-bid
-                     :ib_max_bid max-bid
-                     :ib_created_at now
-                     :ib_updated now}])))))
+        (conj [:put 'item-bid {:id new-bid-id
+                               :ib_id new-bid-id
+                               :ib_i_id i_id
+                               :ib_u_id u_id
+                               :ib_buyer_id i_buyer_id
+                               :ib_bid new-bid
+                               :ib_max_bid max-bid
+                               :ib_created_at now
+                               :ib_updated now}])))))
 
 (defn- sample-category-id [worker]
   (if-some [weighting (::category-weighting (:custom-state worker))]
@@ -296,25 +293,27 @@
                (str description " ")))]
 
     (->> (concat
-          [[:put {:id i_id
-                  :_table :item
-                  :i_id i_id
-                  :i_u_id u_id
-                  :i_c_id c_id
-                  :i_name name
-                  :i_description description-with-attributes
-                  :i_user_attributes attributes
-                  :i_initial_price initial-price
-                  :i_num_bids 0
-                  :i_num_images (count images)
-                  :i_num_global_attrs (count gav-ids)
-                  :i_start_date start-date
-                  :i_end_date end-date
-                  :i_status :open}]]
+          [[:put
+            'item
+            {:id i_id
+             :i_id i_id
+             :i_u_id u_id
+             :i_c_id c_id
+             :i_name name
+             :i_description description-with-attributes
+             :i_user_attributes attributes
+             :i_initial_price initial-price
+             :i_num_bids 0
+             :i_num_images (count images)
+             :i_num_global_attrs (count gav-ids)
+             :i_start_date start-date
+             :i_end_date end-date
+             :i_status :open}]]
           (for [[i image] (map-indexed vector images)
                 :let [ii_id (bit-or (bit-shift-left i 60) (bit-and i_id-raw 0x0FFFFFFFFFFFFFFF))]]
-            [:put {:id (str "ii_" ii_id)
-                   :_table :item-comment
+            [:put
+             'item-comment
+             {:id (str "ii_" ii_id)
                    :ii_id ii_id
                    :ii_i_id i_id
                    :ii_u_id u_id
@@ -481,7 +480,7 @@
 
 (defn read-category-tsv []
   (let [cat-tsv-rows
-        (with-open [rdr (io/reader (io/resource "auctionmark/auctionmark-categories.tsv"))]
+        (with-open [rdr (io/reader (io/resource "data/auctionmark/auctionmark-categories.tsv"))]
           (vec (for [line (line-seq rdr)
                      :let [split (str/split line #"\t")
                            cat-parts (butlast split)
@@ -520,7 +519,6 @@
 (defn generate-region [worker]
   (let [r-id (b2/increment worker region-id)]
     {:id r-id
-     :_table :region
      :r_id r-id
      :r_name (b2/random-str worker 6 32)}))
 
@@ -528,7 +526,6 @@
   (let [gag-id (b2/increment worker gag-id)
         category-id (b2/sample-flat worker category-id)]
     {:id gag-id
-     :_table :gag
      :gag_c_id category-id
      :gag_name (b2/random-str worker 6 32)}))
 
@@ -536,7 +533,6 @@
   (let [gav-id (b2/increment worker gav-id)
         gag-id (b2/sample-flat worker gag-id)]
     {:id gav-id
-     :_table :gav
      :gav_gag_id gag-id
      :gav_name (b2/random-str worker 6 32)}))
 
@@ -545,7 +541,6 @@
         c-id (b2/increment worker category-id)
         {:keys [category-name, parent]} (categories c-id)]
     {:id c-id
-     :_table :category
      :c_id c-id
      :c_parent_id (when (seq parent) (:id (categories parent)))
      :c_name (or category-name (b2/random-str worker 6 32))}))
@@ -555,7 +550,6 @@
         ua-id (b2/increment worker user-attribute-id)]
     (when u_id
       {:id ua-id
-       :_table :user-attribute
        :ua_u_id u_id
        :ua_name (b2/random-str worker 5 32)
        :ua_value (b2/random-str worker 5 32)
@@ -571,7 +565,6 @@
     (add-item-status worker (->ItemSample i_id i_u_id i_status i_end_date 0))
     (when i_u_id
       {:id i_id
-       :_table :item
        :i_id i_id
        :i_u_id i_u_id
        :i_c_id i_c_id
@@ -602,22 +595,13 @@
       (catch Throwable t
         (log/error t (str "Error while executing " f))))))
 
-(defn sync-call [worker]
-  (let [node (:sut worker)
-        tx (c2/submit-tx node [[:put {:id "auctionmarkd-sync"}]])]
-    (log/info "Syncing node!")
-    (tu/then-await-tx* tx node (Duration/ofSeconds 30))
-    (log/info "Finished syncing node!")))
-
 (defn benchmark [{:keys [seed,
                          threads,
                          duration
-                         sync
                          scale-factor]
                   :or {seed 0,
                        threads 8,
                        duration "PT30S"
-                       sync false
                        scale-factor 0.1}}]
   (let [duration (Duration/parse duration)
         sf scale-factor]
@@ -625,17 +609,16 @@
     {:title "Auction Mark OLTP"
      :seed seed
      :tasks
-     [#_{:t :do
+     [{:t :do
          :stage :load
          :tasks [{:t :call, :f (fn [_] (log/info "start load stage"))}
                  {:t :call, :f [bcore2/install-tx-fns {:apply-seller-fee tx-fn-apply-seller-fee, :new-bid tx-fn-new-bid}]}
                  {:t :call, :f load-categories-tsv}
-                 {:t :call, :f [bcore2/generate generate-region 75]}
-                 {:t :call, :f [bcore2/generate generate-category 16908]}
-                 {:t :call, :f [bcore2/generate generate-user (* sf 1e6)]}
-                 {:t :call, :f [bcore2/generate generate-user-attributes (* sf 1e6 1.3)]}
-                 {:t :call, :f [bcore2/generate generate-item (* sf 1e6 10) true]}
-                 {:t :call, :f sync-call}
+                 {:t :call, :f [bcore2/generate 'region generate-region 75]}
+                 {:t :call, :f [bcore2/generate 'category generate-category 16908]}
+                 {:t :call, :f [bcore2/generate 'user generate-user (* sf 1e6)]}
+                 {:t :call, :f [bcore2/generate 'user-attribute generate-user-attributes (* sf 1e6 1.3)]}
+                 {:t :call, :f [bcore2/generate 'item generate-item (* sf 1e6 10)]}
                  {:t :call, :f (fn [_] (log/info "finished load stage"))}]}
       {:t :do
        :stage :setup-worker
@@ -660,7 +643,4 @@
                       {:t :freq-job
                        :duration duration
                        :freq (Duration/ofMillis (* 0.2 (.toMillis duration)))
-                       :job-task {:t :call, :transaction :index-item-status-groups, :f index-item-status-groups}}]}
-      (when sync {:t :call,
-                  :stage :sync
-                  :f sync-call})]}))
+                       :job-task {:t :call, :transaction :index-item-status-groups, :f index-item-status-groups}}]}]}))

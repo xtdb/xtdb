@@ -19,24 +19,15 @@
 (defn install-tx-fns [worker fns]
   (->> (for [[id fn-def] fns]
          (do (assert (instance? core2.api.ClojureForm  fn-def))
-             [:put {:id id, :fn fn-def}]))
+             [:put 'xt_docs {:id id, :fn fn-def}]))
        (c2/submit-tx (:sut worker))))
 
 (defn generate
-  ([worker f n]
+  ([worker table f n]
    (let [doc-seq (remove nil? (repeatedly (long n) (partial f worker)))
          partition-count 512]
      (doseq [chunk (partition-all partition-count doc-seq)]
-       (c2/submit-tx (:sut worker) (mapv (partial vector :put) chunk)))))
-  ([worker f n await?]
-   (if-not await?
-     (generate worker f n)
-     (let [doc-seq (remove nil? (repeatedly (long n) (partial f worker)))
-           partition-count 512]
-       (->> (partition-all partition-count doc-seq)
-            (map #(c2/submit-tx (:sut worker) (mapv (partial vector :put) %)))
-            last
-            deref)))))
+       (c2/submit-tx (:sut worker) (mapv (partial vector :put table) chunk))))))
 
 (defn install-proxy-node-meters!
   [^MeterRegistry meter-reg]
@@ -202,12 +193,10 @@
     worker))
 
 (comment
+
   ;; ======
   ;; Running in process
   ;; ======
-
-  (require '[core2.api.impl :as c2]
-           '[core2.node :as node])
 
   (def run-duration "PT5S")
   (def run-duration "PT10S")
@@ -219,14 +208,20 @@
   (delete-directory-recursive node-dir)
 
   ;; comment out the different phases in auctionmark.clj
-  ;; setup or only run
+  ;; load phase is the only one required if testing single point queries
+  ;; run-benchmark clears up the node it creates (but not the data),
+  ;; hence needing to create a new one to test single point queries
 
   (def report-core2
     (run-benchmark
      {:node-opts {:node-dir (.toPath node-dir)}
       :benchmark-type :auctionmark
-      :benchmark-opts {:duration run-duration :sync true
+      :benchmark-opts {:duration run-duration
                        :scale-factor 0.1 :threads 8}}))
+
+  ;;;;;;;;;;;;;
+  ;; Viewing Reports
+  ;;;;;;;;;;;;;
 
   (spit (io/file "core2-30s.edn") report-core2)
   (def report-core2 (clojure.edn/read-string (slurp (io/file "core2-30s.edn"))))
@@ -251,8 +246,6 @@
   ;;;;;;;;;;;;;
 
   (def node (node/start-node (node-dir->config node-dir)))
-  (.close node)
-  (tu/finish-chunk! node)
 
   (def get-item-query '{:find [i_id i_u_id i_initial_price i_current_price]
                         :in [i_id]
@@ -262,22 +255,18 @@
                                 [?i :i_u_id i_u_id]
                                 [?i :i_initial_price i_initial_price]
                                 [?i :i_current_price i_current_price]]})
-  ;; better ra for the above
+  ;; ra for the above
   (def ra-query
     '[:scan
-      item
+      {:table item :for-app-time [:at :now], :for-sys-time nil}
       [{i_status (= i_status :open)}
        i_u_id
-       {application_time_start
-        (<= application_time_start (current-timestamp))}
-       {application_time_end
-        (> application_time_end (current-timestamp))}
        i_current_price
        i_initial_price
        {i_id (= i_id ?i_id)}
        id]])
 
-  (def open-ids (->> (c2/datalog-query node '{:find [i]
+  (def open-ids (->> (c2/q node '{:find [i]
                                               :where [[i :_table :item]
                                                       [i :i_status :open]
                                                       #_[j :i_status ]]})
@@ -286,7 +275,7 @@
   (def rand-seq (shuffle open-ids))
 
   (def q  (fn [open-id]
-            (tu/query-ra ra-query {:src @(node/snapshot-async node)
+            (tu/query-ra ra-query {:node node
                                    :params {'?i_id open-id}})))
   ;; ra query
   (time
@@ -297,4 +286,4 @@
   ;; datalog query
   (time
    (doseq [id (take (* 1000 1) (shuffle rand-seq))]
-     (c2/datalog-query node get-item-query id))))
+     (c2/q node get-item-query id))))
