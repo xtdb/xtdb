@@ -1,0 +1,364 @@
+{
+  "schema" : {
+    "fields" : [{
+      "name" : "tx-ops",
+      "nullable" : false,
+      "type" : {
+        "name" : "list"
+      },
+      "children" : [{
+        "name" : "$data$",
+        "nullable" : false,
+        "type" : {
+          "name" : "union",
+          "mode" : "Dense",
+          "typeIds" : [0,1,2,3,4,5]
+        },
+        "children" : [{
+          "name" : "sql",
+          "nullable" : false,
+          "type" : {
+            "name" : "struct"
+          },
+          "children" : [{
+            "name" : "query",
+            "nullable" : false,
+            "type" : {
+              "name" : "utf8"
+            },
+            "children" : [ ]
+          },{
+            "name" : "params",
+            "nullable" : true,
+            "type" : {
+              "name" : "binary"
+            },
+            "children" : [ ]
+          }]
+        },{
+          "name" : "put",
+          "nullable" : false,
+          "type" : {
+            "name" : "struct"
+          },
+          "children" : [{
+            "name" : "table",
+            "nullable" : false,
+            "type" : {
+              "name" : "utf8"
+            },
+            "children" : [ ]
+          },{
+            "name" : "id",
+            "nullable" : false,
+            "type" : {
+              "name" : "union",
+              "mode" : "Dense",
+              "typeIds" : [ ]
+            },
+            "children" : [ ]
+          },{
+            "name" : "document",
+            "nullable" : false,
+            "type" : {
+              "name" : "union",
+              "mode" : "Dense",
+              "typeIds" : [ ]
+            },
+            "children" : [ ]
+          },{
+            "name" : "application_time_start",
+            "nullable" : true,
+            "type" : {
+              "name" : "timestamp",
+              "unit" : "MICROSECOND",
+              "timezone" : "UTC"
+            },
+            "children" : [ ]
+          },{
+            "name" : "application_time_end",
+            "nullable" : true,
+            "type" : {
+              "name" : "timestamp",
+              "unit" : "MICROSECOND",
+              "timezone" : "UTC"
+            },
+            "children" : [ ]
+          }]
+        },{
+          "name" : "delete",
+          "nullable" : false,
+          "type" : {
+            "name" : "struct"
+          },
+          "children" : [{
+            "name" : "table",
+            "nullable" : false,
+            "type" : {
+              "name" : "utf8"
+            },
+            "children" : [ ]
+          },{
+            "name" : "id",
+            "nullable" : false,
+            "type" : {
+              "name" : "union",
+              "mode" : "Dense",
+              "typeIds" : [ ]
+            },
+            "children" : [ ]
+          },{
+            "name" : "application_time_start",
+            "nullable" : true,
+            "type" : {
+              "name" : "timestamp",
+              "unit" : "MICROSECOND",
+              "timezone" : "UTC"
+            },
+            "children" : [ ]
+          },{
+            "name" : "application_time_end",
+            "nullable" : true,
+            "type" : {
+              "name" : "timestamp",
+              "unit" : "MICROSECOND",
+              "timezone" : "UTC"
+            },
+            "children" : [ ]
+          }]
+        },{
+          "name" : "evict",
+          "nullable" : false,
+          "type" : {
+            "name" : "struct"
+          },
+          "children" : [{
+            "name" : "_table",
+            "nullable" : true,
+            "type" : {
+              "name" : "utf8"
+            },
+            "children" : [ ]
+          },{
+            "name" : "id",
+            "nullable" : false,
+            "type" : {
+              "name" : "union",
+              "mode" : "Dense",
+              "typeIds" : [ ]
+            },
+            "children" : [ ]
+          }]
+        },{
+          "name" : "call",
+          "nullable" : false,
+          "type" : {
+            "name" : "struct"
+          },
+          "children" : [{
+            "name" : "fn-id",
+            "nullable" : false,
+            "type" : {
+              "name" : "union",
+              "mode" : "Dense",
+              "typeIds" : [ ]
+            },
+            "children" : [ ]
+          },{
+            "name" : "args",
+            "nullable" : false,
+            "type" : {
+              "name" : "list"
+            },
+            "children" : [{
+              "name" : "$data$",
+              "nullable" : false,
+              "type" : {
+                "name" : "union",
+                "mode" : "Dense",
+                "typeIds" : [ ]
+              },
+              "children" : [ ]
+            }]
+          }]
+        },{
+          "name" : "abort",
+          "nullable" : true,
+          "type" : {
+            "name" : "null"
+          },
+          "children" : [ ]
+        }]
+      }]
+    },{
+      "name" : "system-time",
+      "nullable" : true,
+      "type" : {
+        "name" : "timestamp",
+        "unit" : "MICROSECOND",
+        "timezone" : "UTC"
+      },
+      "children" : [ ]
+    },{
+      "name" : "default-tz",
+      "nullable" : false,
+      "type" : {
+        "name" : "utf8"
+      },
+      "children" : [ ]
+    },{
+      "name" : "application-time-as-of-now?",
+      "nullable" : false,
+      "type" : {
+        "name" : "bool"
+      },
+      "children" : [ ]
+    }]
+  },
+  "batches" : [{
+    "count" : 1,
+    "columns" : [{
+      "name" : "tx-ops",
+      "count" : 1,
+      "VALIDITY" : [1],
+      "OFFSET" : [0,1],
+      "children" : [{
+        "name" : "$data$",
+        "count" : 1,
+        "TYPE_ID" : [0],
+        "OFFSET" : [0],
+        "children" : [{
+          "name" : "sql",
+          "count" : 1,
+          "VALIDITY" : [1],
+          "children" : [{
+            "name" : "query",
+            "count" : 1,
+            "VALIDITY" : [1],
+            "OFFSET" : [0,31],
+            "DATA" : ["INSERT INTO foo (id) VALUES (0)"]
+          },{
+            "name" : "params",
+            "count" : 1,
+            "VALIDITY" : [0],
+            "OFFSET" : [0,0],
+            "DATA" : [""]
+          }]
+        },{
+          "name" : "put",
+          "count" : 0,
+          "VALIDITY" : [ ],
+          "children" : [{
+            "name" : "table",
+            "count" : 0,
+            "VALIDITY" : [ ],
+            "OFFSET" : [0],
+            "DATA" : [ ]
+          },{
+            "name" : "id",
+            "count" : 0,
+            "TYPE_ID" : [ ],
+            "OFFSET" : [ ]
+          },{
+            "name" : "document",
+            "count" : 0,
+            "TYPE_ID" : [ ],
+            "OFFSET" : [ ]
+          },{
+            "name" : "application_time_start",
+            "count" : 0,
+            "VALIDITY" : [ ],
+            "DATA" : [ ]
+          },{
+            "name" : "application_time_end",
+            "count" : 0,
+            "VALIDITY" : [ ],
+            "DATA" : [ ]
+          }]
+        },{
+          "name" : "delete",
+          "count" : 0,
+          "VALIDITY" : [ ],
+          "children" : [{
+            "name" : "table",
+            "count" : 0,
+            "VALIDITY" : [ ],
+            "OFFSET" : [0],
+            "DATA" : [ ]
+          },{
+            "name" : "id",
+            "count" : 0,
+            "TYPE_ID" : [ ],
+            "OFFSET" : [ ]
+          },{
+            "name" : "application_time_start",
+            "count" : 0,
+            "VALIDITY" : [ ],
+            "DATA" : [ ]
+          },{
+            "name" : "application_time_end",
+            "count" : 0,
+            "VALIDITY" : [ ],
+            "DATA" : [ ]
+          }]
+        },{
+          "name" : "evict",
+          "count" : 0,
+          "VALIDITY" : [ ],
+          "children" : [{
+            "name" : "_table",
+            "count" : 0,
+            "VALIDITY" : [ ],
+            "OFFSET" : [0],
+            "DATA" : [ ]
+          },{
+            "name" : "id",
+            "count" : 0,
+            "TYPE_ID" : [ ],
+            "OFFSET" : [ ]
+          }]
+        },{
+          "name" : "call",
+          "count" : 0,
+          "VALIDITY" : [ ],
+          "children" : [{
+            "name" : "fn-id",
+            "count" : 0,
+            "TYPE_ID" : [ ],
+            "OFFSET" : [ ]
+          },{
+            "name" : "args",
+            "count" : 0,
+            "VALIDITY" : [ ],
+            "OFFSET" : [0],
+            "children" : [{
+              "name" : "$data$",
+              "count" : 0,
+              "TYPE_ID" : [ ],
+              "OFFSET" : [ ]
+            }]
+          }]
+        },{
+          "name" : "abort",
+          "count" : 0
+        }]
+      }]
+    },{
+      "name" : "system-time",
+      "count" : 1,
+      "VALIDITY" : [1],
+      "DATA" : [1609459200000000]
+    },{
+      "name" : "default-tz",
+      "count" : 1,
+      "VALIDITY" : [1],
+      "OFFSET" : [0,13],
+      "DATA" : ["Europe/London"]
+    },{
+      "name" : "application-time-as-of-now?",
+      "count" : 1,
+      "VALIDITY" : [1],
+      "DATA" : [1]
+    }]
+  }]
+}
