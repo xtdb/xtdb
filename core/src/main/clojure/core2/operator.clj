@@ -106,9 +106,10 @@
            (assert (or scan-emitter (empty? scan-cols)))
 
            (let [{:keys [tx after-tx current-time]} basis
+                 current-time (or current-time (.instant expr/*clock*))
+                 default-tz (or default-tz (.getZone expr/*clock*))
                  wm-tx (or tx after-tx)
-                 clock (Clock/fixed (or current-time (.instant expr/*clock*))
-                                    (or default-tz (.getZone expr/*clock*)))
+                 clock (Clock/fixed current-time default-tz)
                  {:keys [col-types ->cursor]} (.computeIfAbsent cache
                                                                 {:scan-col-types (when scan-emitter
                                                                                    (with-open [wm (.openWatermark wm-src wm-tx)]
@@ -136,7 +137,8 @@
                                       :clock clock,
                                       :basis (-> basis
                                                  (dissoc :after-tx)
-                                                 (update :tx (fnil identity (some-> wm .txBasis))))
+                                                 (update :tx (fnil identity (some-> wm .txBasis)))
+                                                 (assoc :current-time current-time))
                                       :params params, :table-args table-args})
                            (wrap-cursor allocator wm clock ref-ctr col-types)))
 
