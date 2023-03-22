@@ -2,14 +2,19 @@
 
 Welcome to the XTDB research repository!
 
-XTDB Core2 is a pre-alpha, general-purpose, immutable database supporting bitemporal Datalog and SQL queries via Java, Clojure and HTTP APIs.
+Core2 is a bitemporal and dynamic relational database for SQL and Datalog:
 
-Bitemporal indexing of schemaless documents enables broad possibilities for creating layered extensions on top, such as to add additional transaction, query, and schema capabilities.
-In addition to SQL, XTDB supplies a [Datalog](https://en.wikipedia.org/wiki/Datalog) query interface that can be used to express complex joins and recursive graph traversals.
+- Bitemporal means that all data is accurately versioned as updates are made (system time), and all data exists within a universal domain timeline for representing 'validity'/'effectivity' (application time).
+- Dynamic means that no upfront schema needs to be specified before records can be inserted. Complex and nested data is automatically represented using https://arrow.apache.org/[Apache Arrow] types.
+- Relational means that the full spectrum of traditional SQL database capabilities is available - including joins, transactions, https://en.wikipedia.org/wiki/Multiset#Applications[bag/multiset] semantics, https://en.wikipedia.org/wiki/Three-valued_logic[three-value logic], multiple N-ary relations etc.
+- SQL means immediate accessibility for a mainstream audience, but also includes an eye to the future with preliminary https://arrow.apache.org/blog/2022/02/16/introducing-arrow-flight-sql/[Flight SQL] driver support.
+- https://en.wikipedia.org/wiki/Datalog[Datalog] means a programmer-friendly API for complex relational querying that bypasses SQL's verbose JOINs and https://www.scattered-thoughts.net/writing/against-sql/[compositional challenges].
+
+Core2 can currently be used via Clojure, Java, and HTTP.
 
 == Warning
 
-This is experimental software.
+This is experimental, pre-alpha software.
 
 If you are looking for a stable release of an immutable document database with bitemporal query capabilities, we are continuing to develop and support XTDB 1.x at https://github.com/xtdb/xtdb.
 
@@ -54,6 +59,7 @@ Core2's initial objective is to take the key principles embodied in XTDB 1.x -- 
 | Storage & Compute | Coupled (nodes are full replicas) | Separated (cost-effective scale out)
 | Primary Storage Format | Custom Key-Value encodings | Columnar Apache Arrow
 | Bitemporal Querying | Timeslice only ('as-of') | Fully bitemporal - SQL:2011 and beyond
+| Temporal Granularity | Milliseconds | Microseconds
 | Relational Decorrelation | No | Yes
 | Analytical Querying | No | Yes
 | Single-partition Transaction Log | Infinite Retention | Ephemeral WAL
