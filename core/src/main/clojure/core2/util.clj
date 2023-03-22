@@ -627,3 +627,18 @@
 (defn ->kebab-case-kw [s]
   (-> s name str/lower-case (str/replace "_" "-") keyword))
 
+(defn ns-kw->kw [kw]
+  (if-let [ns (namespace kw)]
+    (keyword (str ns "__" (name kw)))
+    kw))
+
+(defn kw->ns-kw [kw]
+  (apply keyword (str/split (name kw) #"__")))
+
+(defn ns-symbol->symbol [s]
+  (if-let [ns (namespace s)]
+    (with-meta (symbol (str ns "__" (name s))) (meta s))
+    s))
+
+(defn symbol->ns-symbol [s]
+  (with-meta (apply symbol (str/split (name s) #"__")) (meta s)))

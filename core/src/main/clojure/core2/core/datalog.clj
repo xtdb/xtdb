@@ -13,13 +13,15 @@
            (java.time LocalDate)
            (org.apache.arrow.memory BufferAllocator)))
 
-(s/def ::logic-var simple-symbol?)
+(s/def ::logic-var (s/and symbol?
+                          (s/conformer util/ns-symbol->symbol util/symbol->ns-symbol)))
 
 (s/def ::eid ::lp/value)
 (s/def ::attr keyword?)
 (s/def ::value ::lp/value)
 (s/def ::table simple-symbol?)
-(s/def ::column simple-symbol?)
+(s/def ::column (s/and symbol?
+                       (s/conformer util/ns-symbol->symbol util/symbol->ns-symbol)))
 
 (s/def ::fn-call
   (s/and list?
@@ -195,7 +197,7 @@
 
 (defn- col-sym
   ([col]
-   (-> (symbol col) (vary-meta assoc :column? true)))
+   (-> (symbol col) util/ns-symbol->symbol (vary-meta assoc :column? true)))
   ([prefix col]
    (col-sym (str (format "%s_%s" prefix col)))))
 
@@ -1016,7 +1018,7 @@
         (-> (.bind pq wm-src
                    {:params params, :table-args (args->tables args in-bindings), :basis basis})
             (.openCursor)
-            (op/cursor->result-set params))
+            (op/cursor->datalog-result-set params))
         (catch Throwable t
           (.close params)
           (throw t))))))

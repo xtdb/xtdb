@@ -1,5 +1,6 @@
 (ns core2.operator
   (:require [clojure.spec.alpha :as s]
+            [clojure.string :as str]
             [clojure.tools.logging :as log]
             [core2.error :as err]
             [core2.expression :as expr]
@@ -24,7 +25,7 @@
             [core2.util :as util]
             [core2.vector.indirect :as iv]
             [juxt.clojars-mirrors.integrant.core :as ig])
-  (:import clojure.lang.MapEntry
+  (:import (clojure.lang IPersistentMap MapEntry)
            (core2 ICursor IResultCursor IResultSet RefCounter)
            core2.metadata.IMetadataManager
            core2.operator.scan.IScanEmitter
@@ -61,8 +62,8 @@
           (types/rows->col-types rows)))
        (into {})))
 
-(defn- wrap-cursor ^core2.ICursor [^ICursor cursor, ^AutoCloseable wm, ^BufferAllocator al, ^Clock clock, ^RefCounter ref-ctr]
-  (reify ICursor
+(defn- wrap-cursor ^core2.IResultCursor [^ICursor cursor, ^AutoCloseable wm, ^BufferAllocator al, ^Clock clock, ^RefCounter ref-ctr col-types]
+  (reify IResultCursor
     (tryAdvance [_ c]
       (when (.isClosing ref-ctr)
         (throw (InterruptedException.)))
@@ -81,7 +82,9 @@
       (.release ref-ctr)
       (util/try-close cursor)
       (util/try-close wm)
-      (util/try-close al))))
+      (util/try-close al))
+
+    (columnTypes [_] col-types)))
 
 (defn prepare-ra ^core2.operator.PreparedQuery
   ;; this one used from zero-dep tests
@@ -135,7 +138,7 @@
                                                  (dissoc :after-tx)
                                                  (update :tx (fnil identity (some-> wm .txBasis))))
                                       :params params, :table-args table-args})
-                           (wrap-cursor allocator wm clock ref-ctr)))
+                           (wrap-cursor allocator wm clock ref-ctr col-types)))
 
                      (catch Throwable t
                        (.release ref-ctr)
@@ -194,4 +197,46 @@
     (.close params)))
 
 (defn cursor->result-set ^core2.IResultSet [^IResultCursor cursor, ^AutoCloseable params]
-   (CursorResultSet. cursor params nil))
+  (CursorResultSet. cursor params nil))
+
+(defn- rows->datalog-rows ^java.lang.Iterable [rows kw->ns-kw]
+  (mapv #(update-keys % kw->ns-kw) rows))
+
+(deftype DatalogCursorResultSet [^IResultCursor cursor
+                                 ^AutoCloseable params
+                                 ^:unsynchronized-mutable ^Iterator next-values
+                                 ^IPersistentMap kw->ns-kw]
+  IResultSet
+  (columnTypes [_] (.columnTypes cursor))
+
+  (hasNext [res]
+    (boolean
+     (or (and next-values (.hasNext next-values))
+         ;; need to call rel->rows eagerly - the rel may have been reused/closed after
+         ;; the tryAdvance returns.
+         (do
+           (while (and (.tryAdvance cursor
+                                    (reify Consumer
+                                      (accept [_ rel]
+                                        (set! (.-next-values res)
+                                              (-> (iv/rel->rows rel)
+                                                  (rows->datalog-rows kw->ns-kw)
+                                                  (.iterator))))))
+                       (not (and next-values (.hasNext next-values)))))
+           (and next-values (.hasNext next-values))))))
+
+  (next [_] (.next next-values))
+  (close [_]
+    (.close cursor)
+    (.close params)))
+
+(defn- symbol->ns-keyword [s]
+  (apply keyword (str/split (name s) #"__")))
+
+(defn- kw->ns-kw-mapping [column-symbols]
+  (into {} (map (juxt keyword symbol->ns-keyword)) column-symbols))
+
+(defn cursor->datalog-result-set ^core2.IResultSet [^IResultCursor cursor, ^AutoCloseable params]
+  (let [kw->ns-kw-map (-> (keys (.columnTypes cursor))
+                          kw->ns-kw-mapping)]
+    (DatalogCursorResultSet. cursor params nil kw->ns-kw-map)))

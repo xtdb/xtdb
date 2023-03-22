@@ -20,6 +20,17 @@
              (tu/query-ra '[:scan {:table xt_docs} [id col1 col2]]
                           {:node node})))))
 
+
+(t/deftest test-simple-scan-with-namespaced-attributes
+  (with-open [node (node/start-node {})]
+    (c2/submit-tx node [[:put 'xt_docs {:id :foo, :the-ns/col1 "foo1"}]
+                        [:put 'xt_docs {:id :bar, :the-ns/col1 "bar1", :col2 "bar2"}]
+                        [:put 'xt_docs {:id :foo, :the-ns/col2 "baz2"}]])
+
+    (t/is (= [{:id :bar, :the-ns__col1 "bar1", :col2 "bar2"}]
+             (tu/query-ra '[:scan {:table xt_docs} [id the-ns__col1 col2]]
+                          {:node node})))))
+
 (t/deftest test-duplicates-in-scan-1
   (with-open [node (node/start-node {})]
     (c2/submit-tx node [[:put 'xt_docs {:id :foo}]])

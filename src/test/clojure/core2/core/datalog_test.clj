@@ -171,15 +171,35 @@
                             (assoc :basis {:tx tx})))))
           "cross join required here")))
 
+(deftest test-namespaced-attributes
+  (let [_tx (c2/submit-tx tu/*node* [[:put 'xt_docs {:id :foo :foo/bar 1}]
+                                     [:put 'xt_docs {:id :bar :foo/bar 2}]])]
+    (t/is (= [{:i :foo, :n 1} {:i :bar, :n 2}]
+             (c2/q tu/*node*
+                   '{:find [i n]
+                     :where [[i :foo/bar n]]}))
+          "simple query with namespaced attributes")
+    (t/is (= [{:i/i :foo, :n/n 1} {:i/i :bar, :n/n 2}]
+             (c2/q tu/*node*
+                   '{:find [i n]
+                     :keys [i/i n/n]
+                     :where [[i :foo/bar n]]}))
+          "query with namespaced keys")
+    (t/is (= [{:i :foo, :n 1 :foo/bar 1} {:i :bar, :n 2 :foo/bar 2}]
+             (c2/q tu/*node*
+                   '{:find [i n foo/bar]
+                     :where [(match xt_docs [foo/bar {:id i :foo/bar n}])]}))
+          "query with namespaced attributes in match syntax")))
+
 (deftest test-joins
   (let [tx (c2/submit-tx tu/*node* bond/tx-ops)]
     (t/is (= #{{:film-name "Skyfall", :bond-name "Daniel Craig"}}
              (set (c2/q tu/*node*
                         (-> '{:find [film-name bond-name]
                               :in [film]
-                              :where [[film :film--name film-name]
-                                      [film :film--bond bond]
-                                      [bond :person--name bond-name]]}
+                              :where [[film :film/name film-name]
+                                      [film :film/bond bond]
+                                      [bond :person/name bond-name]]}
                             (assoc :basis {:tx tx}))
                         "skyfall")))
           "one -> one")
@@ -191,9 +211,9 @@
              (set (c2/q tu/*node*
                         (-> '{:find [film-name bond-name]
                               :in [bond]
-                              :where [[film :film--name film-name]
-                                      [film :film--bond bond]
-                                      [bond :person--name bond-name]]}
+                              :where [[film :film/name film-name]
+                                      [film :film/bond bond]
+                                      [bond :person/name bond-name]]}
                             (assoc :basis {:tx tx}))
                         "daniel-craig")))
           "one -> many")))
@@ -778,13 +798,13 @@
                    (-> '{:find [bond-name film-name]
                          :where [(q {:find [bond bond-name (count bond)]
                                      :keys [bond-with-most-films bond-name film-count]
-                                     :where [[_ :film--bond bond]
-                                             [bond :person--name bond-name]]
+                                     :where [[_ :film/bond bond]
+                                             [bond :person/name bond-name]]
                                      :order-by [[(count bond) :desc] [bond-name]]
                                      :limit 1})
 
-                                 [film :film--bond bond-with-most-films]
-                                 [film :film--name film-name]]
+                                 [film :film/bond bond-with-most-films]
+                                 [film :film/name film-name]]
                          :order-by [[film-name]]}
                        (assoc :basis {:tx tx}))))
           "films made by the Bond with the most films"))
@@ -818,9 +838,9 @@
              (c2/q tu/*node*
                    (-> '{:find [brand model]
                          :in [film]
-                         :where [[film :film--vehicles [vehicle ...]]
-                                 [vehicle :vehicle--brand brand]
-                                 [vehicle :vehicle--model model]]
+                         :where [[film :film/vehicles [vehicle ...]]
+                                 [vehicle :vehicle/brand brand]
+                                 [vehicle :vehicle/model model]]
                          :order-by [[brand] [model]]}
                        (assoc :basis {:tx tx}))
                    :spectre)))))
@@ -970,7 +990,6 @@
                     :rules [[(older-users age u)
                              [u :age age2]
                              [(> age2 age)]]]}))))
-
     (t/testing "testing rule with multiple args (different arg names in rule)"
       (t/is (= [{:i :petr, :age 18, :u :ivan}
                 {:i :georgy, :age 17, :u :ivan}

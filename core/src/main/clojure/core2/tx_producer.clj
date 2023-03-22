@@ -23,7 +23,8 @@
     ^java.util.concurrent.CompletableFuture #_<TransactionInstant> [^java.util.List txOps, ^java.util.Map opts]))
 
 (s/def ::id any?)
-(s/def ::doc (s/keys :req-un [::id]))
+(s/def ::doc (s/and (s/keys :req-un [::id])
+                    (s/conformer #(update-keys % util/ns-kw->kw) #(update-keys % util/kw->ns-kw))))
 (s/def ::table simple-symbol?)
 (s/def ::app-time-start ::util/datetime-value)
 (s/def ::app-time-end ::util/datetime-value)

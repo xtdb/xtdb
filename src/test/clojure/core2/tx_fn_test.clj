@@ -220,3 +220,18 @@
 
             (c2/q& node '{:find [id]
                           :where [[id :foo]]})))))
+
+
+(t/deftest test-call-tx-fn-with-ns-attr
+  (t/testing "simple call"
+    (let [tx (c2/submit-tx tu/*node* [[:put 'xt_docs {:id :my-fn,
+                                                      :fn #c2/clj-form (fn [id n]
+                                                                         [[:put 'xt_docs {:id id, :a/b n}]])}]
+                                      [:call :my-fn :foo 0]
+                                      [:call :my-fn :bar 1]])]
+      (t/is (= [{:id :foo, :n 0}
+                {:id :bar, :n 1}]
+               (c2/q tu/*node*
+                     (-> '{:find [id n]
+                           :where [[id :a/b n]]}
+                         (assoc :basis {:tx tx}))))))))
