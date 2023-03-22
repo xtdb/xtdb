@@ -1462,3 +1462,74 @@
                     :order-by [[app-start :asc]]}
                   tx7, nil, 7797))
             "Case 8: Application-time sequenced and system-time nonsequenced"))))
+
+(deftest sub-query-projection-in-where-test
+  (c2/submit-tx tu/*node* [[:put 'customer {:id 0, :firstname "bob"}]
+                           [:put 'customer {:id 1, :firstname "alice"}]
+                           [:put 'order {:id 0, :customer 0, :items [{:sku "eggs", :qty 1}]}]
+                           [:put 'order {:id 1, :customer 0, :items [{:sku "cheese", :qty 3}]}]
+                           [:put 'order {:id 2, :customer 1, :items [{:sku "bread", :qty 1} {:sku "eggs", :qty 2}]}]])
+
+  (t/are [q result]
+    (= result (c2/q tu/*node* q))
+
+
+    '{:find [n-customers]
+      :where [[(q {:find [(count id)]
+                   :where [(match customer {:id id})]})
+               n-customers]]}
+    [{:n-customers 2}]
+
+
+    '{:find [customer, n-orders]
+      :where [(match customer {:id customer})
+              [(q {:find [(count order)]
+                   :in [customer]
+                   :where [(match order {:customer customer, :id order})]})
+               n-orders]]}
+    [{:customer 0, :n-orders 2}
+     {:customer 1, :n-orders 1}]
+
+    '{:find [customer, n-orders, n-qty]
+      :where [(match customer {:id customer})
+              [(q {:find [(count order)]
+                   :in [customer]
+                   :where [(match order {:customer customer, :id order})]})
+               n-orders]
+              [(q {:find [(sum qty2)]
+                   :in [customer]
+                   :where [(match order {:customer customer, :id order, :items [item ...]})
+                           [(. item :qty) qty2]]})
+               n-qty]]}
+    [{:customer 0, :n-orders 2, :n-qty 4}
+     {:customer 1, :n-orders 1, :n-qty 3}]
+
+    '{:find [n-orders, n-qty]
+      :where [[(q {:find [(count order)]
+                   :where [(match order {:id order})]})
+               n-orders]
+              [(q {:find [(sum qty2)]
+                   :where [(match order {:id order, :items [item ...]})
+                           [(. item :qty) qty2]]})
+               n-qty]]}
+    [{:n-orders 3, :n-qty 7}]
+
+    '{:find [order firstname]
+      :where [(match order {:id order, :customer customer})
+              [(q {:find [firstname]
+                   :in [customer]
+                   :where [(match customer {:id customer, :firstname firstname})]})
+               firstname]]}
+    [{:order 0, :firstname "bob"}
+     {:order 1, :firstname "bob"}
+     {:order 2, :firstname "alice"}]
+
+    '{:find [order firstname]
+      :where [(match order {:id order, :customer customer})
+              [(q {:find [firstname2]
+                   :in [customer]
+                   :where [(match customer {:id customer, :firstname firstname2})]})
+               firstname]]}
+    [{:order 0, :firstname "bob"}
+     {:order 1, :firstname "bob"}
+     {:order 2, :firstname "alice"}]))

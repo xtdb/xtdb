@@ -152,6 +152,11 @@
 
 (s/def ::rules (s/coll-of ::rule-definition :kind vector?))
 
+(s/def ::sub-query-projection
+  (s/and vector?
+         (s/cat :sub-query (s/spec ::sub-query)
+                :binding ::binding)))
+
 (s/def ::term
   (s/or :semi-join ::semi-join
         :anti-join ::anti-join
@@ -160,8 +165,10 @@
         :triple ::triple
         :call ::call-clause
         :sub-query ::sub-query
+        :sub-query-projection ::sub-query-projection
         :match ::match
         :rule ::rule))
+
 
 (s/def ::where
   (s/coll-of ::term :kind vector? :min-count 1))
@@ -208,7 +215,8 @@
         [:select (list* 'and predicates) plan])
       (with-meta (meta plan))))
 
-(defn- unify-preds [var->cols]
+(defn- unify-preds
+  [var->cols]
   ;; this enumerates all the binary join conditions
   ;; once mega-join has multi-way joins we could throw the multi-way `=` over the fence
   (->> (vals var->cols)
@@ -554,6 +562,22 @@
 
     (mega-join (into [plan] sub-queries) param-vars)))
 
+(defn- wrap-scalar-sub-query [plan scalar-sub-query param-vars]
+  (let [{:keys [sub-query binding]} scalar-sub-query
+        {::keys [apply-mapping]} (meta sub-query)
+        columns (lp/relation-columns sub-query)
+        _ (when (not= 1 (count columns)) (throw (err/illegal-arg :scalar-sub-query-requires-one-column)))
+        col (first columns)
+        binding-sym (second binding)
+        sq-plan (vary-meta [:rename {col binding-sym} sub-query] assoc ::vars #{binding-sym})
+        [plan-u sq-plan-u :as rels] (with-unique-cols [plan sq-plan] param-vars)
+        apply-mapping-u (update-keys apply-mapping (::var->col (meta plan-u)))]
+    (-> [:apply :single-join apply-mapping-u plan-u sq-plan-u]
+        (wrap-unify (::var->cols (meta rels))))))
+
+(defn- wrap-scalar-sub-queries [plan sub-queries param-vars]
+  (reduce #(wrap-scalar-sub-query %1 %2 param-vars) plan sub-queries))
+
 ;;;;;;;;;;;;;;;;;;;;;;;;
 ;; rule substitution
 ;;;;;;;;;;;;;;;;;;;;;;;;
@@ -785,7 +809,8 @@
         _ (check-rule-arity rule-name->rules)
         where-clauses (expand-rules rule-name->rules where-clauses)
 
-        {match-clauses :match, triple-clauses :triple, call-clauses :call, sub-query-clauses :sub-query
+        {match-clauses :match, triple-clauses :triple, call-clauses :call
+         sub-query-clauses :sub-query, sub-query-projection-clauses :sub-query-projection
          semi-join-clauses :semi-join, anti-join-clauses :anti-join, union-join-clauses :union-join}
         (-> where-clauses
             (->> (group-by first))
@@ -796,12 +821,13 @@
                            (concat param-vars apply-mapping))
 
            calls (some->> call-clauses (mapv plan-call))
+           sub-queries (some->> sub-query-clauses (mapv plan-sub-query))
+           sub-query-projections (some->> sub-query-projection-clauses (mapv #(update % :sub-query plan-sub-query)))
            union-joins (some->> union-join-clauses (mapv plan-union-join))
            semi-joins (some->> semi-join-clauses (mapv (partial plan-semi-join :semi-join)))
-           anti-joins (some->> anti-join-clauses (mapv (partial plan-semi-join :anti-join)))
-           sub-queries (some->> sub-query-clauses (mapv plan-sub-query))]
+           anti-joins (some->> anti-join-clauses (mapv (partial plan-semi-join :anti-join)))]
 
-      (if (and (empty? calls) (empty? sub-queries)
+      (if (and (empty? calls) (empty? sub-queries) (empty? sub-query-projections)
                (empty? semi-joins) (empty? anti-joins) (empty? union-joins))
         (-> plan
             (vary-meta assoc ::in-bindings (::in-bindings (meta in-rels))))
@@ -812,11 +838,12 @@
 
             (let [{available-calls true, unavailable-calls false} (->> calls (group-by available?))
                   {available-sqs true, unavailable-sqs false} (->> sub-queries (group-by available?))
+                  {available-sqps true, unavailable-sqps false} (->> sub-query-projections (group-by available?))
                   {available-ujs true, unavailable-ujs false} (->> union-joins (group-by available?))
                   {available-sjs true, unavailable-sjs false} (->> semi-joins (group-by available?))
                   {available-ajs true, unavailable-ajs false} (->> anti-joins (group-by available?))]
 
-              (if (and (empty? available-calls) (empty? available-sqs)
+              (if (and (empty? available-calls) (empty? available-sqs) (empty? available-sqps)
                        (empty? available-ujs) (empty? available-sjs) (empty? available-ajs))
                 (throw (err/illegal-arg :no-available-clauses
                                         {:available-vars available-vars
@@ -827,13 +854,14 @@
                                          :unavailable-anti-joins unavailable-ajs}))
 
                 (recur (cond-> plan
-                         union-joins (wrap-union-joins union-joins param-vars)
-                         available-calls (wrap-calls available-calls)
-                         available-sjs (wrap-semi-joins :semi-join available-sjs)
-                         available-ajs (wrap-semi-joins :anti-join available-ajs)
-                         available-sqs (wrap-sub-queries available-sqs param-vars))
+                               union-joins (wrap-union-joins union-joins param-vars)
+                               available-calls (wrap-calls available-calls)
+                               available-sjs (wrap-semi-joins :semi-join available-sjs)
+                               available-ajs (wrap-semi-joins :anti-join available-ajs)
+                               available-sqs (wrap-sub-queries available-sqs param-vars)
+                               available-sqps (wrap-scalar-sub-queries available-sqps param-vars))
 
-                       unavailable-calls unavailable-sqs
+                       unavailable-calls unavailable-sqs unavailable-sqps
                        unavailable-ujs unavailable-sjs unavailable-ajs)))))))))
 
 ;; HACK these are just the grouping-fns used in TPC-H
