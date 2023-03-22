@@ -1532,4 +1532,12 @@
                firstname]]}
     [{:order 0, :firstname "bob"}
      {:order 1, :firstname "bob"}
-     {:order 2, :firstname "alice"}]))
+     {:order 2, :firstname "alice"}])
+
+  (t/testing "cardinality violation error"
+    (t/is (thrown-with-msg? core2.RuntimeException #"cardinality violation"
+            (->> '{:find [firstname]
+                   :where [[(q {:find [firstname],
+                                :where [(match customer {:firstname firstname})]})
+                            firstname]]}
+                 (c2/q tu/*node*))))))
