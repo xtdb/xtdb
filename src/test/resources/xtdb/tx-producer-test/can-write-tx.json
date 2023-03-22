@@ -42,49 +42,42 @@
             "name" : "struct"
           },
           "children" : [{
-            "name" : "table",
-            "nullable" : false,
-            "type" : {
-              "name" : "utf8"
-            },
-            "children" : [ ]
-          },{
-            "name" : "id",
-            "nullable" : false,
-            "type" : {
-              "name" : "union",
-              "mode" : "Dense",
-              "typeIds" : [0]
-            },
-            "children" : [{
-              "name" : "utf8",
-              "nullable" : false,
-              "type" : {
-                "name" : "utf8"
-              },
-              "children" : [ ]
-            }]
-          },{
             "name" : "document",
             "nullable" : false,
             "type" : {
               "name" : "union",
               "mode" : "Dense",
-              "typeIds" : [0,1]
+              "typeIds" : [ ]
             },
             "children" : [{
-              "name" : "struct0",
+              "name" : "device-info",
               "nullable" : false,
               "type" : {
                 "name" : "struct"
               },
               "children" : [{
+                "name" : "id",
+                "nullable" : false,
+                "type" : {
+                  "name" : "union",
+                  "mode" : "Dense",
+                  "typeIds" : [ ]
+                },
+                "children" : [{
+                  "name" : "utf8",
+                  "nullable" : false,
+                  "type" : {
+                    "name" : "utf8"
+                  },
+                  "children" : [ ]
+                }]
+              },{
                 "name" : "api-version",
                 "nullable" : false,
                 "type" : {
                   "name" : "union",
                   "mode" : "Dense",
-                  "typeIds" : [0]
+                  "typeIds" : [ ]
                 },
                 "children" : [{
                   "name" : "utf8",
@@ -100,7 +93,7 @@
                 "type" : {
                   "name" : "union",
                   "mode" : "Dense",
-                  "typeIds" : [0]
+                  "typeIds" : [ ]
                 },
                 "children" : [{
                   "name" : "utf8",
@@ -116,7 +109,7 @@
                 "type" : {
                   "name" : "union",
                   "mode" : "Dense",
-                  "typeIds" : [0]
+                  "typeIds" : [ ]
                 },
                 "children" : [{
                   "name" : "utf8",
@@ -132,7 +125,7 @@
                 "type" : {
                   "name" : "union",
                   "mode" : "Dense",
-                  "typeIds" : [0]
+                  "typeIds" : [ ]
                 },
                 "children" : [{
                   "name" : "utf8",
@@ -144,7 +137,7 @@
                 }]
               }]
             },{
-              "name" : "struct1",
+              "name" : "device-readings",
               "nullable" : false,
               "type" : {
                 "name" : "struct"
@@ -155,7 +148,7 @@
                 "type" : {
                   "name" : "union",
                   "mode" : "Dense",
-                  "typeIds" : [0]
+                  "typeIds" : [ ]
                 },
                 "children" : [{
                   "name" : "f64",
@@ -167,12 +160,28 @@
                   "children" : [ ]
                 }]
               },{
+                "name" : "device-id",
+                "nullable" : false,
+                "type" : {
+                  "name" : "union",
+                  "mode" : "Dense",
+                  "typeIds" : [ ]
+                },
+                "children" : [{
+                  "name" : "utf8",
+                  "nullable" : false,
+                  "type" : {
+                    "name" : "utf8"
+                  },
+                  "children" : [ ]
+                }]
+              },{
                 "name" : "rssi",
                 "nullable" : false,
                 "type" : {
                   "name" : "union",
                   "mode" : "Dense",
-                  "typeIds" : [0]
+                  "typeIds" : [ ]
                 },
                 "children" : [{
                   "name" : "f64",
@@ -189,7 +198,7 @@
                 "type" : {
                   "name" : "union",
                   "mode" : "Dense",
-                  "typeIds" : [0]
+                  "typeIds" : [ ]
                 },
                 "children" : [{
                   "name" : "f64",
@@ -206,7 +215,7 @@
                 "type" : {
                   "name" : "union",
                   "mode" : "Dense",
-                  "typeIds" : [0]
+                  "typeIds" : [ ]
                 },
                 "children" : [{
                   "name" : "utf8",
@@ -222,7 +231,7 @@
                 "type" : {
                   "name" : "union",
                   "mode" : "Dense",
-                  "typeIds" : [0]
+                  "typeIds" : [ ]
                 },
                 "children" : [{
                   "name" : "utf8",
@@ -238,7 +247,7 @@
                 "type" : {
                   "name" : "union",
                   "mode" : "Dense",
-                  "typeIds" : [0]
+                  "typeIds" : [ ]
                 },
                 "children" : [{
                   "name" : "timestamp-tz-micro-utc",
@@ -256,7 +265,7 @@
                 "type" : {
                   "name" : "union",
                   "mode" : "Dense",
-                  "typeIds" : [0]
+                  "typeIds" : [ ]
                 },
                 "children" : [{
                   "name" : "f64",
@@ -273,7 +282,23 @@
                 "type" : {
                   "name" : "union",
                   "mode" : "Dense",
-                  "typeIds" : [0]
+                  "typeIds" : [ ]
+                },
+                "children" : [{
+                  "name" : "utf8",
+                  "nullable" : false,
+                  "type" : {
+                    "name" : "utf8"
+                  },
+                  "children" : [ ]
+                }]
+              },{
+                "name" : "id",
+                "nullable" : false,
+                "type" : {
+                  "name" : "union",
+                  "mode" : "Dense",
+                  "typeIds" : [ ]
                 },
                 "children" : [{
                   "name" : "utf8",
@@ -289,7 +314,7 @@
                 "type" : {
                   "name" : "union",
                   "mode" : "Dense",
-                  "typeIds" : [0]
+                  "typeIds" : [ ]
                 },
                 "children" : [{
                   "name" : "f64",
@@ -306,7 +331,7 @@
                 "type" : {
                   "name" : "union",
                   "mode" : "Dense",
-                  "typeIds" : [0]
+                  "typeIds" : [ ]
                 },
                 "children" : [{
                   "name" : "f64",
@@ -323,7 +348,7 @@
                 "type" : {
                   "name" : "union",
                   "mode" : "Dense",
-                  "typeIds" : [0]
+                  "typeIds" : [ ]
                 },
                 "children" : [{
                   "name" : "f64",
@@ -340,7 +365,7 @@
                 "type" : {
                   "name" : "union",
                   "mode" : "Dense",
-                  "typeIds" : [0]
+                  "typeIds" : [ ]
                 },
                 "children" : [{
                   "name" : "f64",
@@ -391,16 +416,9 @@
             "type" : {
               "name" : "union",
               "mode" : "Dense",
-              "typeIds" : [0]
+              "typeIds" : [ ]
             },
-            "children" : [{
-              "name" : "utf8",
-              "nullable" : false,
-              "type" : {
-                "name" : "utf8"
-              },
-              "children" : [ ]
-            }]
+            "children" : [ ]
           },{
             "name" : "application_time_start",
             "nullable" : true,
@@ -519,8 +537,8 @@
       "children" : [{
         "name" : "$data$",
         "count" : 4,
-        "TYPE_ID" : [1,1,2,2],
-        "OFFSET" : [0,1,0,1],
+        "TYPE_ID" : [1,1,1,1],
+        "OFFSET" : [0,1,2,3],
         "children" : [{
           "name" : "sql",
           "count" : 0,
@@ -540,268 +558,279 @@
           }]
         },{
           "name" : "put",
-          "count" : 2,
-          "VALIDITY" : [1,1],
+          "count" : 4,
+          "VALIDITY" : [1,1,1,1],
           "children" : [{
-            "name" : "table",
-            "count" : 2,
-            "VALIDITY" : [1,1],
-            "OFFSET" : [0,11,26],
-            "DATA" : ["device-info","device-readings"]
-          },{
-            "name" : "id",
-            "count" : 2,
-            "TYPE_ID" : [0,0],
-            "OFFSET" : [0,1],
+            "name" : "document",
+            "count" : 4,
+            "TYPE_ID" : [0,1,0,1],
+            "OFFSET" : [0,0,1,1],
             "children" : [{
-              "name" : "utf8",
+              "name" : "device-info",
               "count" : 2,
               "VALIDITY" : [1,1],
-              "OFFSET" : [0,22,40],
-              "DATA" : ["device-info-demo000000","reading-demo000000"]
-            }]
-          },{
-            "name" : "document",
-            "count" : 2,
-            "TYPE_ID" : [0,1],
-            "OFFSET" : [0,0],
-            "children" : [{
-              "name" : "struct0",
-              "count" : 1,
-              "VALIDITY" : [1],
               "children" : [{
-                "name" : "api-version",
-                "count" : 1,
-                "TYPE_ID" : [0],
-                "OFFSET" : [0],
+                "name" : "id",
+                "count" : 2,
+                "TYPE_ID" : [0,0],
+                "OFFSET" : [0,1],
                 "children" : [{
                   "name" : "utf8",
-                  "count" : 1,
-                  "VALIDITY" : [1],
-                  "OFFSET" : [0,2],
-                  "DATA" : ["23"]
+                  "count" : 2,
+                  "VALIDITY" : [1,1],
+                  "OFFSET" : [0,22,44],
+                  "DATA" : ["device-info-demo000000","device-info-demo000001"]
+                }]
+              },{
+                "name" : "api-version",
+                "count" : 2,
+                "TYPE_ID" : [0,0],
+                "OFFSET" : [0,1],
+                "children" : [{
+                  "name" : "utf8",
+                  "count" : 2,
+                  "VALIDITY" : [1,1],
+                  "OFFSET" : [0,2,4],
+                  "DATA" : ["23","23"]
                 }]
               },{
                 "name" : "manufacturer",
-                "count" : 1,
-                "TYPE_ID" : [0],
-                "OFFSET" : [0],
+                "count" : 2,
+                "TYPE_ID" : [0,0],
+                "OFFSET" : [0,1],
                 "children" : [{
                   "name" : "utf8",
-                  "count" : 1,
-                  "VALIDITY" : [1],
-                  "OFFSET" : [0,6],
-                  "DATA" : ["iobeam"]
+                  "count" : 2,
+                  "VALIDITY" : [1,1],
+                  "OFFSET" : [0,6,12],
+                  "DATA" : ["iobeam","iobeam"]
                 }]
               },{
                 "name" : "model",
-                "count" : 1,
-                "TYPE_ID" : [0],
-                "OFFSET" : [0],
+                "count" : 2,
+                "TYPE_ID" : [0,0],
+                "OFFSET" : [0,1],
                 "children" : [{
                   "name" : "utf8",
-                  "count" : 1,
-                  "VALIDITY" : [1],
-                  "OFFSET" : [0,5],
-                  "DATA" : ["pinto"]
+                  "count" : 2,
+                  "VALIDITY" : [1,1],
+                  "OFFSET" : [0,5,12],
+                  "DATA" : ["pinto","mustang"]
                 }]
               },{
                 "name" : "os-name",
-                "count" : 1,
-                "TYPE_ID" : [0],
-                "OFFSET" : [0],
+                "count" : 2,
+                "TYPE_ID" : [0,0],
+                "OFFSET" : [0,1],
                 "children" : [{
                   "name" : "utf8",
-                  "count" : 1,
-                  "VALIDITY" : [1],
-                  "OFFSET" : [0,5],
-                  "DATA" : ["6.0.1"]
+                  "count" : 2,
+                  "VALIDITY" : [1,1],
+                  "OFFSET" : [0,5,10],
+                  "DATA" : ["6.0.1","6.0.1"]
                 }]
               }]
             },{
-              "name" : "struct1",
-              "count" : 1,
-              "VALIDITY" : [1],
+              "name" : "device-readings",
+              "count" : 2,
+              "VALIDITY" : [1,1],
               "children" : [{
                 "name" : "cpu-avg-15min",
-                "count" : 1,
-                "TYPE_ID" : [0],
-                "OFFSET" : [0],
+                "count" : 2,
+                "TYPE_ID" : [0,0],
+                "OFFSET" : [0,1],
                 "children" : [{
                   "name" : "f64",
-                  "count" : 1,
-                  "VALIDITY" : [1],
-                  "DATA" : [8.654]
+                  "count" : 2,
+                  "VALIDITY" : [1,1],
+                  "DATA" : [8.654,8.822]
+                }]
+              },{
+                "name" : "device-id",
+                "count" : 2,
+                "TYPE_ID" : [0,0],
+                "OFFSET" : [0,1],
+                "children" : [{
+                  "name" : "utf8",
+                  "count" : 2,
+                  "VALIDITY" : [1,1],
+                  "OFFSET" : [0,22,44],
+                  "DATA" : ["device-info-demo000000","device-info-demo000001"]
                 }]
               },{
                 "name" : "rssi",
-                "count" : 1,
-                "TYPE_ID" : [0],
-                "OFFSET" : [0],
+                "count" : 2,
+                "TYPE_ID" : [0,0],
+                "OFFSET" : [0,1],
                 "children" : [{
                   "name" : "f64",
-                  "count" : 1,
-                  "VALIDITY" : [1],
-                  "DATA" : [-50.0]
+                  "count" : 2,
+                  "VALIDITY" : [1,1],
+                  "DATA" : [-50.0,-61.0]
                 }]
               },{
                 "name" : "cpu-avg-5min",
-                "count" : 1,
-                "TYPE_ID" : [0],
-                "OFFSET" : [0],
+                "count" : 2,
+                "TYPE_ID" : [0,0],
+                "OFFSET" : [0,1],
                 "children" : [{
                   "name" : "f64",
-                  "count" : 1,
-                  "VALIDITY" : [1],
-                  "DATA" : [10.802]
+                  "count" : 2,
+                  "VALIDITY" : [1,1],
+                  "DATA" : [10.802,8.106]
                 }]
               },{
                 "name" : "battery-status",
-                "count" : 1,
-                "TYPE_ID" : [0],
-                "OFFSET" : [0],
+                "count" : 2,
+                "TYPE_ID" : [0,0],
+                "OFFSET" : [0,1],
                 "children" : [{
                   "name" : "utf8",
-                  "count" : 1,
-                  "VALIDITY" : [1],
-                  "OFFSET" : [0,11],
-                  "DATA" : ["discharging"]
+                  "count" : 2,
+                  "VALIDITY" : [1,1],
+                  "OFFSET" : [0,11,22],
+                  "DATA" : ["discharging","discharging"]
                 }]
               },{
                 "name" : "ssid",
-                "count" : 1,
-                "TYPE_ID" : [0],
-                "OFFSET" : [0],
+                "count" : 2,
+                "TYPE_ID" : [0,0],
+                "OFFSET" : [0,1],
                 "children" : [{
                   "name" : "utf8",
-                  "count" : 1,
-                  "VALIDITY" : [1],
-                  "OFFSET" : [0,8],
-                  "DATA" : ["demo-net"]
+                  "count" : 2,
+                  "VALIDITY" : [1,1],
+                  "OFFSET" : [0,8,19],
+                  "DATA" : ["demo-net","stealth-net"]
                 }]
               },{
                 "name" : "time",
-                "count" : 1,
-                "TYPE_ID" : [0],
-                "OFFSET" : [0],
+                "count" : 2,
+                "TYPE_ID" : [0,0],
+                "OFFSET" : [0,1],
                 "children" : [{
                   "name" : "timestamp-tz-micro-utc",
-                  "count" : 1,
-                  "VALIDITY" : [1],
-                  "DATA" : [1479211200000000]
+                  "count" : 2,
+                  "VALIDITY" : [1,1],
+                  "DATA" : [1479211200000000,1479211200000000]
                 }]
               },{
                 "name" : "battery-level",
-                "count" : 1,
-                "TYPE_ID" : [0],
-                "OFFSET" : [0],
+                "count" : 2,
+                "TYPE_ID" : [0,0],
+                "OFFSET" : [0,1],
                 "children" : [{
                   "name" : "f64",
-                  "count" : 1,
-                  "VALIDITY" : [1],
-                  "DATA" : [59.0]
+                  "count" : 2,
+                  "VALIDITY" : [1,1],
+                  "DATA" : [59.0,86.0]
                 }]
               },{
                 "name" : "bssid",
-                "count" : 1,
-                "TYPE_ID" : [0],
-                "OFFSET" : [0],
+                "count" : 2,
+                "TYPE_ID" : [0,0],
+                "OFFSET" : [0,1],
                 "children" : [{
                   "name" : "utf8",
-                  "count" : 1,
-                  "VALIDITY" : [1],
-                  "OFFSET" : [0,17],
-                  "DATA" : ["01:02:03:04:05:06"]
+                  "count" : 2,
+                  "VALIDITY" : [1,1],
+                  "OFFSET" : [0,17,34],
+                  "DATA" : ["01:02:03:04:05:06","A0:B1:C5:D2:E0:F3"]
+                }]
+              },{
+                "name" : "id",
+                "count" : 2,
+                "TYPE_ID" : [0,0],
+                "OFFSET" : [0,1],
+                "children" : [{
+                  "name" : "utf8",
+                  "count" : 2,
+                  "VALIDITY" : [1,1],
+                  "OFFSET" : [0,18,36],
+                  "DATA" : ["reading-demo000000","reading-demo000001"]
                 }]
               },{
                 "name" : "battery-temperature",
-                "count" : 1,
-                "TYPE_ID" : [0],
-                "OFFSET" : [0],
+                "count" : 2,
+                "TYPE_ID" : [0,0],
+                "OFFSET" : [0,1],
                 "children" : [{
                   "name" : "f64",
-                  "count" : 1,
-                  "VALIDITY" : [1],
-                  "DATA" : [89.5]
+                  "count" : 2,
+                  "VALIDITY" : [1,1],
+                  "DATA" : [89.5,93.7]
                 }]
               },{
                 "name" : "cpu-avg-1min",
-                "count" : 1,
-                "TYPE_ID" : [0],
-                "OFFSET" : [0],
+                "count" : 2,
+                "TYPE_ID" : [0,0],
+                "OFFSET" : [0,1],
                 "children" : [{
                   "name" : "f64",
-                  "count" : 1,
-                  "VALIDITY" : [1],
-                  "DATA" : [24.81]
+                  "count" : 2,
+                  "VALIDITY" : [1,1],
+                  "DATA" : [24.81,4.93]
                 }]
               },{
                 "name" : "mem-free",
-                "count" : 1,
-                "TYPE_ID" : [0],
-                "OFFSET" : [0],
+                "count" : 2,
+                "TYPE_ID" : [0,0],
+                "OFFSET" : [0,1],
                 "children" : [{
                   "name" : "f64",
-                  "count" : 1,
-                  "VALIDITY" : [1],
-                  "DATA" : [4.10011078E8]
+                  "count" : 2,
+                  "VALIDITY" : [1,1],
+                  "DATA" : [4.10011078E8,7.20742332E8]
                 }]
               },{
                 "name" : "mem-used",
-                "count" : 1,
-                "TYPE_ID" : [0],
-                "OFFSET" : [0],
+                "count" : 2,
+                "TYPE_ID" : [0,0],
+                "OFFSET" : [0,1],
                 "children" : [{
                   "name" : "f64",
-                  "count" : 1,
-                  "VALIDITY" : [1],
-                  "DATA" : [5.89988922E8]
+                  "count" : 2,
+                  "VALIDITY" : [1,1],
+                  "DATA" : [5.89988922E8,2.79257668E8]
                 }]
               }]
             }]
           },{
             "name" : "application_time_start",
-            "count" : 2,
-            "VALIDITY" : [1,0],
-            "DATA" : [1640995200000000,0]
+            "count" : 4,
+            "VALIDITY" : [0,0,0,0],
+            "DATA" : [0,0,0,0]
           },{
             "name" : "application_time_end",
-            "count" : 2,
-            "VALIDITY" : [1,0],
-            "DATA" : [1735689600000000,0]
+            "count" : 4,
+            "VALIDITY" : [0,0,0,0],
+            "DATA" : [0,0,0,0]
           }]
         },{
           "name" : "delete",
-          "count" : 2,
-          "VALIDITY" : [1,1],
+          "count" : 0,
+          "VALIDITY" : [ ],
           "children" : [{
             "name" : "table",
-            "count" : 2,
-            "VALIDITY" : [1,1],
-            "OFFSET" : [0,11,26],
-            "DATA" : ["device-info","device-readings"]
+            "count" : 0,
+            "VALIDITY" : [ ],
+            "OFFSET" : [0],
+            "DATA" : [ ]
           },{
             "name" : "id",
-            "count" : 2,
-            "TYPE_ID" : [0,0],
-            "OFFSET" : [0,1],
-            "children" : [{
-              "name" : "utf8",
-              "count" : 2,
-              "VALIDITY" : [1,1],
-              "OFFSET" : [0,22,40],
-              "DATA" : ["device-info-demo000000","reading-demo000000"]
-            }]
+            "count" : 0,
+            "TYPE_ID" : [ ],
+            "OFFSET" : [ ]
           },{
             "name" : "application_time_start",
-            "count" : 2,
-            "VALIDITY" : [1,0],
-            "DATA" : [1704067200000000,0]
+            "count" : 0,
+            "VALIDITY" : [ ],
+            "DATA" : [ ]
           },{
             "name" : "application_time_end",
-            "count" : 2,
-            "VALIDITY" : [1,0],
-            "DATA" : [1735689600000000,0]
+            "count" : 0,
+            "VALIDITY" : [ ],
+            "DATA" : [ ]
           }]
         },{
           "name" : "evict",

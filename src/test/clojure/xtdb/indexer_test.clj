@@ -1,6 +1,5 @@
 (ns xtdb.indexer-test
-  (:require [cheshire.core :as json]
-            [clojure.data.csv :as csv]
+  (:require [clojure.data.csv :as csv]
             [clojure.java.io :as io]
             [clojure.string :as str]
             [clojure.test :as t]
@@ -24,7 +23,6 @@
             xtdb.watermark)
   (:import xtdb.api.TransactionInstant
            [xtdb.buffer_pool BufferPool IBufferPool]
-           (xtdb.indexer  IIndexer)
            (xtdb.indexer.internal_id_manager InternalIdManager)
            (xtdb.metadata IMetadataManager)
            xtdb.node.Node
@@ -40,48 +38,52 @@
 (t/use-fixtures :once tu/with-allocator)
 
 (def txs
-  [[[:put 'xt_docs {:id "device-info-demo000000",
-                    :api-version "23",
-                    :manufacturer "iobeam",
-                    :model "pinto",
-                    :os-name "6.0.1"}]
-    [:put 'xt_docs {:id "reading-demo000000",
-                    :device-id "device-info-demo000000",
-                    :cpu-avg-15min 8.654,
-                    :rssi -50.0,
-                    :cpu-avg-5min 10.802,
-                    :battery-status "discharging",
-                    :ssid "demo-net",
-                    :time #inst "2016-11-15T12:00:00.000-00:00",
-                    :battery-level 59.0,
-                    :bssid "01:02:03:04:05:06",
-                    :battery-temperature 89.5,
-                    :cpu-avg-1min 24.81,
-                    :mem-free 4.10011078E8,
-                    :mem-used 5.89988922E8}]]
-   [[:put 'xt_docs {:id "device-info-demo000001",
-                    :api-version "23",
-                    :manufacturer "iobeam",
-                    :model "mustang",
-                    :os-name "6.0.1"}]
-    [:put 'xt_docs {:id "reading-demo000001",
-                    :device-id "device-info-demo000001",
-                    :cpu-avg-15min 8.822,
-                    :rssi -61.0,
-                    :cpu-avg-5min 8.106,
-                    :battery-status "discharging",
-                    :ssid "stealth-net",
-                    :time #inst "2016-11-15T12:00:00.000-00:00",
-                    :battery-level 86.0,
-                    :bssid "A0:B1:C5:D2:E0:F3",
-                    :battery-temperature 93.7,
-                    :cpu-avg-1min 4.93,
-                    :mem-free 7.20742332E8,
-                    :mem-used 2.79257668E8}]]])
+  [[[:put 'device-info
+     {:id "device-info-demo000000",
+      :api-version "23",
+      :manufacturer "iobeam",
+      :model "pinto",
+      :os-name "6.0.1"}]
+    [:put 'device-readings
+     {:id "reading-demo000000",
+      :device-id "device-info-demo000000",
+      :cpu-avg-15min 8.654,
+      :rssi -50.0,
+      :cpu-avg-5min 10.802,
+      :battery-status "discharging",
+      :ssid "demo-net",
+      :time #inst "2016-11-15T12:00:00.000-00:00",
+      :battery-level 59.0,
+      :bssid "01:02:03:04:05:06",
+      :battery-temperature 89.5,
+      :cpu-avg-1min 24.81,
+      :mem-free 4.10011078E8,
+      :mem-used 5.89988922E8}]]
+   [[:put 'device-info
+     {:id "device-info-demo000001",
+      :api-version "23",
+      :manufacturer "iobeam",
+      :model "mustang",
+      :os-name "6.0.1"}]
+    [:put 'device-readings
+     {:id "reading-demo000001",
+      :device-id "device-info-demo000001",
+      :cpu-avg-15min 8.822,
+      :rssi -61.0,
+      :cpu-avg-5min 8.106,
+      :battery-status "discharging",
+      :ssid "stealth-net",
+      :time #inst "2016-11-15T12:00:00.000-00:00",
+      :battery-level 86.0,
+      :bssid "A0:B1:C5:D2:E0:F3",
+      :battery-temperature 93.7,
+      :cpu-avg-1min 4.93,
+      :mem-free 7.20742332E8,
+      :mem-used 2.79257668E8}]]])
 
 (t/deftest can-build-chunk-as-arrow-ipc-file-format
   (let [node-dir (util/->path "target/can-build-chunk-as-arrow-ipc-file-format")
-        last-tx-key (xt.api/map->TransactionInstant {:tx-id 8349, :sys-time (util/->instant #inst "2020-01-02")})
+        last-tx-key (xt.api/map->TransactionInstant {:tx-id 8189, :sys-time (util/->instant #inst "2020-01-02")})
         total-number-of-ops (count (for [tx-ops txs
                                          op tx-ops]
                                      op))]
@@ -106,15 +108,17 @@
         (t/testing "watermark"
           (with-open [^IWatermark watermark (.openWatermark wm-src last-tx-key)]
             (let [live-blocks (-> (.liveChunk watermark)
-                                  (.liveTable "xt_docs")
-                                  (.liveBlocks ["id"] nil))
+                                  (.liveTable "device-info")
+                                  (.liveBlocks #{"id" "model"} nil))
                   !res (volatile! [])]
               (.forEachRemaining live-blocks
                                  (reify Consumer
                                    (accept [_ content-cols]
-                                     (vswap! !res conj (set (keys content-cols))))))
+                                     (vswap! !res conj (iv/rel->rows content-cols)))))
 
-              (t/is (= [#{"id"}] @!res)))))
+              (t/is (= [[{:id "device-info-demo000000", :model "pinto"}
+                         {:id "device-info-demo000001", :model "mustang"}]]
+                       @!res)))))
 
         (tu/finish-chunk! node)
 
@@ -123,15 +127,15 @@
                  (-> (meta/latest-chunk-metadata mm)
                      (select-keys [:latest-completed-tx :latest-row-id]))))
 
-        (let [objects-list (->> (.listObjects os) (filter #(str/ends-with? % "/metadata.arrow")))]
+        (let [objects-list (->> (.listObjects os "chunk-00/device-info") (filter #(str/ends-with? % "/metadata.arrow")))]
           (t/is (= 1 (count objects-list)))
-          (t/is (= "chunk-00/xt_docs/metadata.arrow" (first objects-list))))
+          (t/is (= ["chunk-00/device-info/metadata.arrow"] objects-list)))
 
-        (tj/check-json (.toPath (io/as-file (io/resource "can-build-chunk-as-arrow-ipc-file-format")))
+        (tj/check-json (.toPath (io/as-file (io/resource "xtdb/indexer-test/can-build-chunk-as-arrow-ipc-file-format")))
                        (.resolve node-dir "objects"))
 
         (t/testing "buffer pool"
-          (let [buffer-name "chunk-00/xt_docs/metadata.arrow"
+          (let [buffer-name "chunk-00/device-info/metadata.arrow"
                 ^ArrowBuf buffer @(.getBuffer bp buffer-name)
                 footer (util/read-arrow-footer buffer)]
             (t/is (= 2 (count (.buffers ^BufferPool bp))))
@@ -148,7 +152,7 @@
             (with-open [^VectorSchemaRoot metadata-batch (VectorSchemaRoot/create (.getSchema footer) a)
                         record-batch (util/->arrow-record-batch-view (first (.getRecordBatches footer)) buffer)]
               (.load (VectorLoader. metadata-batch) record-batch)
-              (t/is (= 36 (.getRowCount metadata-batch)))
+              (t/is (= 12 (.getRowCount metadata-batch)))
               (let [id-col-idx (-> (meta/->table-metadata metadata-batch (meta/->table-metadata-idxs metadata-batch))
                                    (.rowIndex "id" -1))]
                 (t/is (= "id" (-> (.getVector metadata-batch "column")
@@ -158,21 +162,21 @@
                   (t/is (= "device-info-demo000000"
                            (-> (.getChild utf8-type-vec "min")
                                (ty/get-object id-col-idx))))
-                  (t/is (= "reading-demo000001"
+                  (t/is (= "device-info-demo000001"
                            (-> (.getChild utf8-type-vec "max")
                                (ty/get-object id-col-idx)))))
 
-                (t/is (= 4 (-> ^BigIntVector (.getVector metadata-batch "count")
+                (t/is (= 2 (-> ^BigIntVector (.getVector metadata-batch "count")
                                (.get id-col-idx)))))
 
               (let [from (.getVector metadata-batch "count")
                     tp (.getTransferPair from a)]
                 (with-open [to (.getTo tp)]
                   (t/is (zero? (.getValueCount to)))
-                  (.splitAndTransfer tp 0 18)
+                  (.splitAndTransfer tp 0 12)
                   (t/is  (= (.memoryAddress (.getDataBuffer from))
                             (.memoryAddress (.getDataBuffer to))))
-                  (t/is (= 18 (.getValueCount to))))))
+                  (t/is (= 12 (.getValueCount to))))))
 
             (t/is (= 2 (.getRefCount (.getReferenceManager ^ArrowBuf buffer))))
 
@@ -259,7 +263,7 @@
 
       (tu/finish-chunk! node)
 
-      (tj/check-json (.toPath (io/as-file (io/resource "can-handle-dynamic-cols-in-same-block")))
+      (tj/check-json (.toPath (io/as-file (io/resource "xtdb/indexer-test/can-handle-dynamic-cols-in-same-block")))
                      (.resolve node-dir "objects")))))
 
 (t/deftest test-multi-block-metadata
@@ -284,19 +288,20 @@
 
       (tu/finish-chunk! node)
 
-      (tj/check-json (.toPath (io/as-file (io/resource "multi-block-metadata")))
+      (tj/check-json (.toPath (io/as-file (io/resource "xtdb/indexer-test/multi-block-metadata")))
                      (.resolve node-dir "objects"))
 
       (let [^IMetadataManager mm (tu/component node ::meta/metadata-manager)]
         (t/is (= [:union #{:utf8 [:timestamp-tz :micro "UTC"] :f64}]
                  (.columnType mm "xt_docs" "id")))
 
-        (t/is (= [:list [:union #{:utf8 [:timestamp-tz :micro "UTC"] :f64 :bool}]]
+        (t/is (= [:union #{:absent [:list [:union #{:utf8 [:timestamp-tz :micro "UTC"] :f64 :bool}]]}]
                  (.columnType mm "xt_docs" "list")))
 
-        (t/is (= [:struct '{a [:union #{:bool :i64}]
-                            b [:union #{:utf8
-                                        [:struct {c :utf8, d :utf8}]}]}]
+        (t/is (= [:union #{:absent
+                           [:struct '{a [:union #{:bool :i64}]
+                                      b [:union #{:utf8
+                                                  [:struct {c :utf8, d :utf8}]}]}]}]
                  (.columnType mm "xt_docs" "struct")))))))
 
 (t/deftest round-trips-nils
@@ -306,7 +311,8 @@
                                           :bar nil}]
                           [:put 'xt_docs {:id "no-bar"
                                           :foo "foo"}]])
-    (t/is (= [{:id "nil-bar", :foo "foo", :bar nil}]
+    (t/is (= [{:id "nil-bar", :foo "foo", :bar nil}
+              {:id "no-bar", :foo "foo"}]
              (xt.d/q node '{:find [id foo bar]
                             :where [(match xt_docs {:id e})
                                     [e :id id]
@@ -354,12 +360,12 @@
 
       (tu/finish-chunk! node)
 
-      (tj/check-json (.toPath (io/as-file (io/resource "writes-log-file")))
+      (tj/check-json (.toPath (io/as-file (io/resource "xtdb/indexer-test/writes-log-file")))
                      (.resolve node-dir "objects")))))
 
 (t/deftest can-stop-node-without-writing-chunks
   (let [node-dir (util/->path "target/can-stop-node-without-writing-chunks")
-        last-tx-key (xt.api/map->TransactionInstant {:tx-id 8349, :sys-time (util/->instant #inst "2020-01-02")})]
+        last-tx-key (xt.api/map->TransactionInstant {:tx-id 8189, :sys-time (util/->instant #inst "2020-01-02")})]
     (util/delete-dir node-dir)
 
     (with-open [node (tu/->local-node {:node-dir node-dir})]
@@ -421,51 +427,7 @@
             (t/is (= 1 (count (filter #(re-matches #"chunk-\p{XDigit}+/device-info/metadata\.arrow" %) objs))))
             (t/is (= 4 (count (filter #(re-matches #"chunk-\p{XDigit}+/device-readings/metadata\.arrow" %) objs))))
             (t/is (= 1 (count (filter #(re-matches #"chunk-.*/device-info/content-api-version\.arrow" %) objs))))
-            (t/is (= 4 (count (filter #(re-matches #"chunk-.*/device-readings/content-battery-level\.arrow" %) objs))))))))
-
-    (t/testing "blocks are row-id aligned"
-      (letfn [(row-id-ranges [^String file-name]
-                (let [path (-> node-dir (.resolve "objects") (.resolve file-name))
-                      json-path (tj/write-arrow-json-file path)]
-                  (for [batch (-> (Files/readString json-path)
-                                  json/parse-string
-                                  (get "batches"))
-                        :let [data (-> (get batch "columns")
-                                       first
-                                       (get "DATA"))]
-                        :when (seq data)]
-
-                    [(Long/parseLong (first data))
-                     (Long/parseLong (last data))
-                     (count data)])))]
-
-        (t/is (= [[0 298 150] [300 598 150] [600 898 150] [900 1198 150]
-                  [1200 1498 150] [1500 1798 150] [1800 1998 100]]
-                 (row-id-ranges "chunk-00/device-info/content-id.arrow")))
-
-        (t/is (= [[1 299 150] [301 599 150] [601 899 150] [901 1199 150]
-                  [1201 1499 150] [1501 1799 150] [1801 2099 200]
-                  [2100 2399 300] [2400 2699 300] [2700 2999 300]]
-                 (row-id-ranges "chunk-00/device-readings/content-id.arrow")))
-
-        (t/is (= [[0 298 150] [300 598 150] [600 898 150] [900 1198 150]
-                  [1200 1498 150] [1500 1798 150] [1800 1998 100]]
-                 (row-id-ranges "chunk-00/device-info/content-api-version.arrow")))
-
-        (t/is (= [[1 299 150] [301 599 150] [601 899 150] [901 1199 150]
-                  [1201 1499 150] [1501 1799 150] [1801 2099 200]
-                  [2100 2399 300] [2400 2699 300] [2700 2999 300]]
-                 (row-id-ranges "chunk-00/device-readings/content-battery-level.arrow")))
-
-        (t/is (= [[3000 3299 300] [3300 3599 300] [3600 3899 300] [3900 4199 300]
-                  [4200 4499 300] [4500 4799 300] [4800 5099 300]
-                  [5100 5399 300] [5400 5699 300] [5700 5999 300]]
-                 (row-id-ranges "chunk-2bb8/device-readings/content-id.arrow")))
-
-        (t/is (= [[3000 3299 300] [3300 3599 300] [3600 3899 300] [3900 4199 300]
-                  [4200 4499 300] [4500 4799 300] [4800 5099 300]
-                  [5100 5399 300] [5400 5699 300] [5700 5999 300]]
-                 (row-id-ranges "chunk-2bb8/device-readings/content-battery-level.arrow")))))))
+            (t/is (= 4 (count (filter #(re-matches #"chunk-.*/device-readings/content-battery-level\.arrow" %) objs))))))))))
 
 (t/deftest can-ingest-ts-devices-mini-into-multiple-nodes
   (let [node-dir (util/->path "target/can-ingest-ts-devices-mini-into-multiple-nodes")
@@ -641,8 +603,8 @@
 
 (t/deftest test-await-fails-fast
   (let [e (UnsupportedOperationException. "oh no!")]
-    (with-redefs [idx/content-row-copier (fn [& _args]
-                                           (throw e))
+    (with-redefs [idx/->put-indexer (fn [& _args]
+                                      (throw e))
                   log/log* (let [log* log/log*]
                              (fn [logger level throwable message]
                                (when-not (identical? e throwable)
@@ -672,7 +634,7 @@
 
         (tu/finish-chunk! node)
 
-        (tj/check-json (.toPath (io/as-file (io/resource "can-index-sql-insert")))
+        (tj/check-json (.toPath (io/as-file (io/resource "xtdb/indexer-test/can-index-sql-insert")))
                        (.resolve node-dir "objects"))))))
 
 (t/deftest test-skips-irrelevant-live-blocks-632
@@ -700,25 +662,25 @@
           (letfn [(test-live-blocks [^IWatermark wm, metadata-pred]
                     (with-open [live-blocks (-> (.liveChunk wm)
                                                 (.liveTable "xt_docs")
-                                                (.liveBlocks #{"name"} metadata-pred))]
+                                                (.liveBlocks #{"_row-id" "name"} metadata-pred))]
                       (let [!res (atom [])]
                         (.forEachRemaining live-blocks
                                            (reify Consumer
-                                             (accept [_ in-rels]
-                                               (swap! !res conj (-> in-rels (update-vals iv/rel->rows))))))
+                                             (accept [_ in-rel]
+                                               (swap! !res conj (iv/rel->rows in-rel)))))
                         @!res)))]
 
             (with-open [wm1 (.openWatermark wm-src nil)]
-              (t/is (= [{"name" [{:_row-id 1, :name "Dan"} {:_row-id 2, :name "Ivan"}]}
-                        {"name" [{:_row-id 3, :name "James"} {:_row-id 4, :name "Jon"}]}]
+              (t/is (= [[{:_row-id 1, :name "Dan"} {:_row-id 2, :name "Ivan"}]
+                        [{:_row-id 3, :name "James"} {:_row-id 4, :name "Jon"}]]
                        (test-live-blocks wm1 nil))
                     "no selector")
 
-              (t/is (= [{"name" [{:_row-id 3, :name "James"} {:_row-id 4, :name "Jon"}]}]
+              (t/is (= [[{:_row-id 3, :name "James"} {:_row-id 4, :name "Jon"}]]
                        (test-live-blocks wm1 gt-literal-selector))
                     "only second block, literal selector")
 
-              (t/is (= [{"name" [{:_row-id 3, :name "James"} {:_row-id 4, :name "Jon"}]}]
+              (t/is (= [[{:_row-id 3, :name "James"} {:_row-id 4, :name "Jon"}]]
                        (test-live-blocks wm1 gt-param-selector))
                     "only second block, param selector")
 
@@ -726,11 +688,11 @@
                                 (tu/then-await-tx* node))]
 
                 (with-open [wm2 (.openWatermark wm-src next-tx)]
-                  (t/is (= [{"name" [{:_row-id 3, :name "James"} {:_row-id 4, :name "Jon"}]}]
+                  (t/is (= [[{:_row-id 3, :name "James"} {:_row-id 4, :name "Jon"}]]
                            (test-live-blocks wm1 gt-literal-selector))
                         "replay with wm1")
 
-                  (t/is (= [{"name" [{:_row-id 3, :name "James"} {:_row-id 4, :name "Jon"}]}
-                            {"name" [{:_row-id 5, :name "Jeremy"}]}]
+                  (t/is (= [[{:_row-id 3, :name "James"} {:_row-id 4, :name "Jon"}]
+                            [{:_row-id 5, :name "Jeremy"}]]
                            (test-live-blocks wm2 gt-literal-selector))
                         "now on wm2"))))))))))

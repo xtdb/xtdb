@@ -497,6 +497,26 @@
                    nil
                    (boolean close-buffer?)))))
 
+(defn combine-col-cursors ^ICursor #_<VSR> [^Map #_#_<String, ICursor<VSR>> col-cursors]
+  (reify ICursor
+    (tryAdvance [_ c]
+      (let [out-vecs (ArrayList. (count col-cursors))]
+        ;; normally rels aren't supposed to escape the scope of the tryAdvance call
+        ;; but we effectively still own it, so we assume its state doesn't change
+        ;; immediately after the call
+        (if (every? (fn [[^String col-name ^ICursor col-cursor]]
+                      (.tryAdvance col-cursor
+                                   (reify Consumer
+                                     (accept [_ root]
+                                       (.add out-vecs (.getVector ^VectorSchemaRoot root col-name))))))
+                    col-cursors)
+          (do
+            (.accept c (VectorSchemaRoot. out-vecs))
+            true)
+          false)))
+
+    (close [_] (run! try-close (vals col-cursors)))))
+
 (deftype ConcatCursor [^Iterator #_<ICursor<E>> cursors
                        ^:volatile-mutable ^ICursor #_<E> current-cursor]
   ICursor #_<E>
@@ -523,26 +543,6 @@
 
 (defn ->concat-cursor [& cursors]
   (ConcatCursor. (.iterator ^Iterable cursors) nil))
-
-(defn combine-col-cursors ^ICursor #_#_<Map<String, IIR>> [^Map #_#_<String, ICursor<IIR>> col-cursors]
-  (reify ICursor
-    (tryAdvance [_ c]
-      (let [out-rels (HashMap.)]
-        ;; normally rels aren't supposed to escape the scope of the tryAdvance call
-        ;; but we effectively still own it, so we assume its state doesn't change
-        ;; immediately after the call
-        (if (every? (fn [[col-name ^ICursor col-cursor]]
-                      (.tryAdvance col-cursor
-                                   (reify Consumer
-                                     (accept [_ out-rel]
-                                       (.put out-rels col-name out-rel)))))
-                    col-cursors)
-          (do
-            (.accept c out-rels)
-            true)
-          false)))
-
-    (close [_] (run! try-close (vals col-cursors)))))
 
 (defn compare-nio-buffers-unsigned ^long [^ByteBuffer x ^ByteBuffer y]
   (let [rem-x (.remaining x)

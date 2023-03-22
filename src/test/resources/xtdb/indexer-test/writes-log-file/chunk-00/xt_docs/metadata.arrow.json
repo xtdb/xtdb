@@ -1,0 +1,189 @@
+{
+  "schema" : {
+    "fields" : [{
+      "name" : "column",
+      "nullable" : false,
+      "type" : {
+        "name" : "utf8"
+      },
+      "children" : [ ]
+    },{
+      "name" : "block-idx",
+      "nullable" : false,
+      "type" : {
+        "name" : "int",
+        "bitWidth" : 32,
+        "isSigned" : true
+      },
+      "children" : [ ]
+    },{
+      "name" : "root-column",
+      "nullable" : false,
+      "type" : {
+        "name" : "bool"
+      },
+      "children" : [ ]
+    },{
+      "name" : "count",
+      "nullable" : false,
+      "type" : {
+        "name" : "int",
+        "bitWidth" : 64,
+        "isSigned" : true
+      },
+      "children" : [ ]
+    },{
+      "name" : "types",
+      "nullable" : true,
+      "type" : {
+        "name" : "struct"
+      },
+      "children" : [{
+        "name" : "i64",
+        "nullable" : true,
+        "type" : {
+          "name" : "struct"
+        },
+        "children" : [{
+          "name" : "min",
+          "nullable" : true,
+          "type" : {
+            "name" : "int",
+            "bitWidth" : 64,
+            "isSigned" : true
+          },
+          "children" : [ ]
+        },{
+          "name" : "max",
+          "nullable" : true,
+          "type" : {
+            "name" : "int",
+            "bitWidth" : 64,
+            "isSigned" : true
+          },
+          "children" : [ ]
+        }],
+        "metadata" : [{
+          "value" : "i64",
+          "key" : "type-head"
+        }]
+      },{
+        "name" : "utf8",
+        "nullable" : true,
+        "type" : {
+          "name" : "struct"
+        },
+        "children" : [{
+          "name" : "min",
+          "nullable" : true,
+          "type" : {
+            "name" : "utf8"
+          },
+          "children" : [ ]
+        },{
+          "name" : "max",
+          "nullable" : true,
+          "type" : {
+            "name" : "utf8"
+          },
+          "children" : [ ]
+        }],
+        "metadata" : [{
+          "value" : "utf8",
+          "key" : "type-head"
+        }]
+      },{
+        "name" : "absent",
+        "nullable" : true,
+        "type" : {
+          "name" : "bool"
+        },
+        "children" : [ ],
+        "metadata" : [{
+          "value" : "absent",
+          "key" : "type-head"
+        }]
+      }]
+    },{
+      "name" : "bloom",
+      "nullable" : true,
+      "type" : {
+        "name" : "binary"
+      },
+      "children" : [ ]
+    }]
+  },
+  "batches" : [{
+    "count" : 6,
+    "columns" : [{
+      "name" : "column",
+      "count" : 6,
+      "VALIDITY" : [1,1,1,1,1,1],
+      "OFFSET" : [0,7,9,14,21,23,28],
+      "DATA" : ["_row-id","id","month","_row-id","id","month"]
+    },{
+      "name" : "block-idx",
+      "count" : 6,
+      "VALIDITY" : [1,1,1,1,1,1],
+      "DATA" : [0,0,0,-1,-1,-1]
+    },{
+      "name" : "root-column",
+      "count" : 6,
+      "VALIDITY" : [1,1,1,1,1,1],
+      "DATA" : [1,1,1,1,1,1]
+    },{
+      "name" : "count",
+      "count" : 6,
+      "VALIDITY" : [1,1,1,1,1,1],
+      "DATA" : ["3","3","3","3","3","3"]
+    },{
+      "name" : "types",
+      "count" : 6,
+      "VALIDITY" : [1,1,1,1,1,1],
+      "children" : [{
+        "name" : "i64",
+        "count" : 6,
+        "VALIDITY" : [1,0,0,1,0,0],
+        "children" : [{
+          "name" : "min",
+          "count" : 6,
+          "VALIDITY" : [1,0,0,1,0,0],
+          "DATA" : ["0","0","0","0","0","0"]
+        },{
+          "name" : "max",
+          "count" : 6,
+          "VALIDITY" : [1,0,0,1,0,0],
+          "DATA" : ["3","0","0","3","0","0"]
+        }]
+      },{
+        "name" : "utf8",
+        "count" : 6,
+        "VALIDITY" : [0,1,1,0,1,1],
+        "children" : [{
+          "name" : "min",
+          "count" : 6,
+          "VALIDITY" : [0,1,1,0,1,1],
+          "OFFSET" : [0,0,3,8,8,11,16],
+          "DATA" : ["","bar","april","","bar","april"]
+        },{
+          "name" : "max",
+          "count" : 6,
+          "VALIDITY" : [0,1,1,0,1,1],
+          "OFFSET" : [0,0,3,8,8,11,16],
+          "DATA" : ["","foo","april","","foo","april"]
+        }]
+      },{
+        "name" : "absent",
+        "count" : 6,
+        "VALIDITY" : [0,0,1,0,0,1],
+        "DATA" : [0,0,1,0,0,1]
+      }]
+    },{
+      "name" : "bloom",
+      "count" : 6,
+      "VALIDITY" : [1,1,1,1,1,1],
+      "OFFSET" : [0,66,118,170,236,288,340],
+      "DATA" : ["3a300000050000000000030005000000080000000a0000000f00010030000000380000003a0000003c0000003e0000000000010003002beefc2a1677f85557c3ade1","3a300000040000000100010002000100040000000b000000280000002c00000030000000320000007009b09d891af031fbe74281","3a300000040000000000020001000000050000000a000000280000002e00000030000000320000003e007c00ba00956a83d4713e","3a300000050000000000030005000000080000000a0000000f00010030000000380000003a0000003c0000003e0000000000010003002beefc2a1677f85557c3ade1","3a300000040000000100010002000100040000000b000000280000002c00000030000000320000007009b09d891af031fbe74281","3a300000040000000000020001000000050000000a000000280000002e00000030000000320000003e007c00ba00956a83d4713e"]
+    }]
+  }]
+}

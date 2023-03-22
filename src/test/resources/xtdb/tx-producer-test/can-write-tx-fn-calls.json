@@ -42,22 +42,6 @@
             "name" : "struct"
           },
           "children" : [{
-            "name" : "table",
-            "nullable" : false,
-            "type" : {
-              "name" : "utf8"
-            },
-            "children" : [ ]
-          },{
-            "name" : "id",
-            "nullable" : false,
-            "type" : {
-              "name" : "union",
-              "mode" : "Dense",
-              "typeIds" : [ ]
-            },
-            "children" : [ ]
-          },{
             "name" : "document",
             "nullable" : false,
             "type" : {
@@ -161,7 +145,7 @@
             "type" : {
               "name" : "union",
               "mode" : "Dense",
-              "typeIds" : [0]
+              "typeIds" : [ ]
             },
             "children" : [{
               "name" : "keyword",
@@ -190,7 +174,7 @@
               "type" : {
                 "name" : "union",
                 "mode" : "Dense",
-                "typeIds" : [0,1,2,3]
+                "typeIds" : [ ]
               },
               "children" : [{
                 "name" : "i64",
@@ -300,17 +284,6 @@
           "count" : 0,
           "VALIDITY" : [ ],
           "children" : [{
-            "name" : "table",
-            "count" : 0,
-            "VALIDITY" : [ ],
-            "OFFSET" : [0],
-            "DATA" : [ ]
-          },{
-            "name" : "id",
-            "count" : 0,
-            "TYPE_ID" : [ ],
-            "OFFSET" : [ ]
-          },{
             "name" : "document",
             "count" : 0,
             "TYPE_ID" : [ ],

@@ -1,13 +1,10 @@
 (ns xtdb.types
-  (:require [clojure.string :as str]
+  (:require [clojure.set :as set]
+            [clojure.string :as str]
             xtdb.api
             [xtdb.rewrite :refer [zmatch]]
             [xtdb.util :as util])
   (:import (clojure.lang Keyword MapEntry)
-           (xtdb.api ClojureForm)
-           (xtdb.types IntervalDayTime IntervalMonthDayNano IntervalYearMonth)
-           (xtdb.vector IDenseUnionWriter IVectorWriter)
-           (xtdb.vector.extensions ClojureFormType, ClojureFormVector KeywordType KeywordVector SetType SetVector UriType UriVector UuidType UuidVector)
            java.net.URI
            (java.nio ByteBuffer CharBuffer)
            java.nio.charset.StandardCharsets
@@ -19,13 +16,17 @@
            (org.apache.arrow.vector.complex DenseUnionVector FixedSizeListVector ListVector StructVector)
            (org.apache.arrow.vector.holders NullableIntervalDayHolder NullableIntervalMonthDayNanoHolder)
            (org.apache.arrow.vector.types DateUnit FloatingPointPrecision IntervalUnit TimeUnit Types$MinorType UnionMode)
-           (org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Date ArrowType$Duration ArrowType$ExtensionType ArrowType$FixedSizeBinary ArrowType$FixedSizeList ArrowType$FloatingPoint ArrowType$Int ArrowType$Interval ArrowType$List ArrowType$Null ArrowType$Struct ArrowType$Time ArrowType$Time ArrowType$Timestamp ArrowType$Union ArrowType$Utf8 ExtensionTypeRegistry Field FieldType)
-           org.apache.arrow.vector.util.Text))
+           (org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Date ArrowType$Duration ArrowType$FixedSizeBinary ArrowType$FixedSizeList ArrowType$FloatingPoint ArrowType$Int ArrowType$Interval ArrowType$List ArrowType$Null ArrowType$Struct ArrowType$Time ArrowType$Time ArrowType$Timestamp ArrowType$Union ArrowType$Utf8 Field FieldType)
+           org.apache.arrow.vector.util.Text
+           (xtdb.api ClojureForm)
+           (xtdb.types IntervalDayTime IntervalMonthDayNano IntervalYearMonth)
+           (xtdb.vector IDenseUnionWriter IVectorWriter)
+           (xtdb.vector.extensions AbsentType AbsentVector ClojureFormType ClojureFormVector KeywordType KeywordVector SetType SetVector UriType UriVector UuidType UuidVector)))
 
 (set! *unchecked-math* :warn-on-boxed)
 
 (def struct-type (.getType Types$MinorType/STRUCT))
-(def dense-union-type (ArrowType$Union. UnionMode/Dense (int-array 0)))
+(def dense-union-type (ArrowType$Union. UnionMode/Dense nil))
 (def list-type (.getType Types$MinorType/LIST))
 
 (def temporal-col-type [:timestamp-tz :micro "UTC"])
@@ -210,7 +211,18 @@
     (let [dest-vec (.getVector writer)]
       (cond
         (instance? StructVector dest-vec)
-        (let [writer (.asStruct writer)]
+        (let [writer (.asStruct writer)
+              col-names (into #{} (map #(.getName ^ValueVector %) dest-vec))]
+          ;; eugh. should be a common way to do this.
+          (doseq [absent-col (set/difference col-names (into #{} (map name) (keys m)))
+                  :let [v-writer (.writerForName writer absent-col)]]
+            (if (instance? IDenseUnionWriter v-writer)
+              (doto (.writerForType (.asDenseUnion v-writer) :absent)
+                (.startValue)
+                (.endValue))
+
+              (write-value! nil v-writer)))
+
           (doseq [[k v] m
                   :let [v-writer (.writerForName writer (name k))]]
             (if (instance? IDenseUnionWriter v-writer)
@@ -331,6 +343,8 @@
 (extend-protocol ArrowReadable
   ;; NOTE: Vectors not explicitly listed here have useful getObject methods and are handled by `ValueVector`.
   ValueVector (get-object [this idx] (.getObject this ^int idx))
+
+  AbsentVector (get-object [_this _idx] :xtdb/absent)
 
   BitVector
   (get-object [this idx]
@@ -477,8 +491,10 @@
   StructVector
   (get-object [this idx]
     (-> (reduce (fn [acc k]
-                  (let [child-vec (.getChild this k ValueVector)]
-                    (assoc! acc (keyword k) (get-object child-vec idx))))
+                  (let [child-vec (.getChild this k ValueVector)
+                        v (get-object child-vec idx)]
+                    (cond-> acc
+                      (not= v :xtdb/absent) (assoc! (keyword k) v))))
                 (transient {})
                 (.getChildFieldNames this))
         (persistent!)))
@@ -503,7 +519,7 @@
 
 (def col-type-hierarchy
   (-> (make-hierarchy)
-      (derive :null :any)
+      (derive :null :any) (derive :absent :null)
       (derive :bool :any)
 
       (derive :f32 :float) (derive :f64 :float)
@@ -532,12 +548,19 @@
               [:union inner-types] (reduce merge-col-type* acc inner-types)
               [:list inner-type] (update acc :list merge-col-type* inner-type)
               [:fixed-size-list el-count inner-type] (update acc [:fixed-size-list el-count] merge-col-type* inner-type)
-              [:struct struct-col-types] (update acc [:struct (set (keys struct-col-types))]
+              [:struct struct-col-types] (update acc :struct
                                                  (fn [acc]
-                                                   (reduce-kv (fn [acc col-name col-type]
-                                                                (update acc col-name merge-col-type* col-type))
-                                                              acc
-                                                              struct-col-types)))
+                                                   (let [default-col-type (if acc {:absent nil} nil)]
+                                                     (as-> acc acc
+                                                       (reduce-kv (fn [acc col-name col-type]
+                                                                    (update acc col-name (fnil merge-col-type* default-col-type) col-type))
+                                                                  acc
+                                                                  struct-col-types)
+                                                       (reduce (fn [acc absent-k]
+                                                                 (update acc absent-k merge-col-type* :absent))
+                                                               acc
+                                                               (set/difference (set (keys acc))
+                                                                               (set (keys struct-col-types))))))))
               (assoc acc col-type nil)))
 
           (kv->col-type [[head opts]]
@@ -545,7 +568,7 @@
               :list [:list (map->col-type opts)]
               :fixed-size-list [:fixed-size-list (second head) (map->col-type opts)]
               :struct [:struct (->> (for [[col-name col-type-map] opts]
-                                      (MapEntry/create col-name (map->col-type col-type-map)) )
+                                      (MapEntry/create col-name (map->col-type col-type-map)))
                                     (into {}))]
               head))
 
@@ -597,28 +620,30 @@
                      :utf8 Types$MinorType/VARCHAR, :varbinary Types$MinorType/VARBINARY)]
     (->field col-name (.getType minor-type) (or nullable? (= col-type :null)))))
 
-(defmethod col-type->field* :keyword [col-name nullable? col-type]
+(defmethod col-type->field* :keyword [col-name nullable? _col-type]
   (->field col-name KeywordType/INSTANCE nullable?))
 
-(defmethod col-type->field* :uuid [col-name nullable? col-type]
+(defmethod col-type->field* :uuid [col-name nullable? _col-type]
   (->field col-name UuidType/INSTANCE nullable?))
 
-(defmethod col-type->field* :uri [col-name nullable? col-type]
+(defmethod col-type->field* :uri [col-name nullable? _col-type]
   (->field col-name UriType/INSTANCE nullable?))
 
-(defmethod col-type->field* :clj-form [col-name nullable? col-type]
+(defmethod col-type->field* :clj-form [col-name nullable? _col-type]
   (->field col-name ClojureFormType/INSTANCE nullable?))
+
+(defmethod col-type->field* :absent [col-name nullable? _col-type]
+  (->field col-name AbsentType/INSTANCE nullable?))
 
 (defn col-type->field
   (^org.apache.arrow.vector.types.pojo.Field [col-type] (col-type->field (col-type->field-name col-type) col-type))
   (^org.apache.arrow.vector.types.pojo.Field [col-name col-type] (col-type->field* (name col-name) false col-type)))
 
 (defn col-type->duv-leg-key [col-type]
-  (zmatch col-type
-    [:struct inner-types] [:struct-keys (set (keys inner-types))]
-    [:list _inner-types] :list
-    [:set _inner-types] :set
-    col-type))
+  (let [head (col-type-head col-type)]
+    (case head
+      (:struct :list :set) head
+      col-type)))
 
 #_{:clj-kondo/ignore [:unused-binding]}
 (defmulti arrow-type->col-type
@@ -832,6 +857,7 @@
 (defmethod arrow-type->col-type UriType [_] :uri)
 (defmethod arrow-type->col-type UuidType [_] :uuid)
 (defmethod arrow-type->col-type ClojureFormType [_] :clj-form)
+(defmethod arrow-type->col-type AbsentType [_] :absent)
 
 ;;; LUB
 
@@ -875,9 +901,6 @@
                lub
                (least-upper-bound2 lub col-type))))
           col-types))
-
-(def ^org.apache.arrow.vector.types.pojo.Field row-id-field
-  (col-type->field "_row-id" :i64))
 
 (defn with-nullable-cols [col-types]
   (->> col-types

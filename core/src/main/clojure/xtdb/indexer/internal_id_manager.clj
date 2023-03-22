@@ -50,15 +50,18 @@
     (doseq [[chunk-idx chunk-metadata] (.chunksMetadata metadata-mgr)
             table (keys (:tables chunk-metadata))]
       (with-open [id-chunks (-> @(.getBuffer buffer-pool (meta/->chunk-obj-key chunk-idx table "id"))
-                                (util/->chunks {:close-buffer? true}))]
-        (.forEachRemaining id-chunks
-                           (reify Consumer
-                             (accept [_ id-root]
-                               (let [^VectorSchemaRoot id-root id-root
-                                     id-vec (.getVector id-root "id")
-                                     ^BigIntVector row-id-vec (.getVector id-root "_row-id")]
-                                 (dotimes [idx (.getRowCount id-root)]
-                                   (.getOrCreateInternalId iid-mgr table
-                                                           (t/get-object id-vec idx)
-                                                           (.get row-id-vec idx)))))))))
+                                (util/->chunks {:close-buffer? true}))
+                  row-id-chunks (-> @(.getBuffer buffer-pool (meta/->chunk-obj-key chunk-idx table "_row-id"))
+                                    (util/->chunks {:close-buffer? true}))]
+        (-> (util/combine-col-cursors {"_row-id" row-id-chunks, "id" id-chunks})
+            (.forEachRemaining
+             (reify Consumer
+               (accept [_ root]
+                 (let [^VectorSchemaRoot root root
+                       id-vec (.getVector root "id")
+                       ^BigIntVector row-id-vec (.getVector root "_row-id")]
+                   (dotimes [idx (.getRowCount root)]
+                     (.getOrCreateInternalId iid-mgr table
+                                             (t/get-object id-vec idx)
+                                             (.get row-id-vec idx))))))))))
     iid-mgr))

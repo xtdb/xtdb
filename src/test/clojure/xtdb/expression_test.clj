@@ -6,20 +6,19 @@
             [clojure.test.check.generators :as tcg]
             [clojure.test.check.properties :as tcp]
             [xtdb.expression :as expr]
-            [xtdb.expression.temporal :as expr.temp]
             [xtdb.test-util :as tu]
             [xtdb.types :as types]
             [xtdb.util :as util]
             [xtdb.vector.indirect :as iv]
             [xtdb.vector.writer :as vw])
-  (:import (xtdb StringUtil)
-           xtdb.vector.IIndirectVector
-           (java.nio ByteBuffer)
+  (:import (java.nio ByteBuffer)
            (java.time Clock Duration Instant LocalDate ZoneId ZonedDateTime)
            (java.time.temporal ChronoUnit)
            (org.apache.arrow.vector DurationVector TimeStampVector ValueVector)
            (org.apache.arrow.vector.types.pojo ArrowType$Duration ArrowType$Timestamp)
-           org.apache.arrow.vector.types.TimeUnit))
+           org.apache.arrow.vector.types.TimeUnit
+           (xtdb StringUtil)
+           xtdb.vector.IIndirectVector))
 
 (t/use-fixtures :each tu/with-allocator)
 
@@ -1426,30 +1425,34 @@
                                              [{:a 42}
                                               {:a 12, :b 5}
                                               {:b 10}
+                                              {:a nil, :b 12}
                                               {:a 15, :b 25.0}
                                               10.0])])]
     (t/is (= {:res [{:a 42}
                     {:a 12, :b 5}
                     {:b 10}
+                    {:a nil, :b 12}
                     {:a 15, :b 25.0}
                     10.0]
-              :res-type [:union #{[:struct '{a :i64}]
-                                  [:struct '{a :i64, b [:union #{:f64 :i64}]}]
-                                  [:struct '{b :i64}]
+              :res-type [:union #{[:struct '{a [:union #{:absent :null :i64}],
+                                             b [:union #{:absent :f64 :i64}]}]
                                   :f64}]}
              (run-projection rel 'x)))
 
-    (t/is (= {:res [42 12 nil 15 nil]
-              :res-type [:union #{:i64 :null}]}
+    (t/is (= {:res [42 12 :xtdb/absent nil 15 nil]
+              :res-type [:union #{:i64 :absent :null}]}
              (run-projection rel '(. x a))))
 
-    (t/is (= {:res [{:xa 42, :xb nil}
+    (t/is (= {:res [{:xa 42}
                     {:xa 12, :xb 5}
-                    {:xa nil, :xb 10}
+                    {:xb 10}
+                    {:xa nil, :xb 12}
                     {:xa 15, :xb 25.0}
                     {:xa nil, :xb nil}],
-              :res-type '[:struct {xa [:union #{:null :i64}], xb [:union #{:f64 :null :i64}]}]}
-             (run-projection rel '{:xa (. x a), :xb (. x b)})))))
+              :res-type '[:struct {xa [:union #{:null :absent :i64}],
+                                   xb [:union #{:f64 :null :absent :i64}]}]}
+             (run-projection rel '{:xa (. x a),
+                                   :xb (. x b)})))))
 
 #_ ; FIXME #620
 (t/deftest test-least-upper-bound-upcast

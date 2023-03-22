@@ -1,14 +1,15 @@
 (ns xtdb.vector.indirect
-  (:require [xtdb.vector :as vec]
-            [xtdb.types :as ty]
-            [xtdb.util :as util])
-  (:import xtdb.ICursor
-           [xtdb.vector IIndirectRelation IIndirectVector IListElementCopier IListReader IRowCopier IStructReader]
-           [java.util Iterator LinkedHashMap Map]
+  (:require [clojure.set :as set]
+            [xtdb.types :as types]
+            [xtdb.util :as util]
+            [xtdb.vector :as vec])
+  (:import [java.util Iterator LinkedHashMap Map]
            org.apache.arrow.memory.BufferAllocator
            [org.apache.arrow.vector FieldVector ValueVector VectorSchemaRoot]
            [org.apache.arrow.vector.complex DenseUnionVector FixedSizeListVector ListVector StructVector]
-           [org.apache.arrow.vector.types.pojo ArrowType$Struct ArrowType$Union Field]))
+           [org.apache.arrow.vector.types.pojo ArrowType$Struct ArrowType$Union Field]
+           xtdb.ICursor
+           [xtdb.vector IIndirectRelation IIndirectVector IListElementCopier IListReader IRowCopier IStructReader]))
 
 (declare ^xtdb.vector.IIndirectVector ->direct-vec
          ^xtdb.vector.IIndirectVector ->IndirectVector)
@@ -302,6 +303,18 @@
                     (.copy in-col allocator))
                   (.rowCount in-rel)))
 
+;; we don't allocate anything here, but we need it because BaseValueVector
+;; (a distant supertype of AbsentVector) thinks it needs one.
+(defn with-absent-cols [^IIndirectRelation rel, ^BufferAllocator allocator, col-names]
+  (let [row-count (.rowCount rel)
+        available-col-names (into #{} (map #(.getName ^IIndirectVector %)) rel)]
+    (->indirect-rel (concat rel
+                            (for [absent-col-name (set/difference col-names available-col-names)]
+                              (->direct-vec (doto (-> (types/col-type->field absent-col-name :absent)
+                                                      (.createVector allocator))
+                                              (.setValueCount row-count)))))
+                    (.rowCount rel))))
+
 (defrecord SliceVector [^IIndirectVector col, ^long start-idx, ^long len]
   IIndirectVector
   (getVector [_] (.getVector col))
@@ -338,12 +351,12 @@
   (let [ks (for [^IIndirectVector col rel]
              (keyword (.getName col)))]
     (mapv (fn [idx]
-            (zipmap ks
-                    (for [^IIndirectVector col rel]
-                      (let [v (.getVector col)
-                            i (.getIndex col idx)]
-                        (when-not (.isNull v i)
-                          (ty/get-object v i))))))
+            (->> (zipmap ks
+                         (for [^IIndirectVector col rel]
+                           (let [v (.getVector col)
+                                 i (.getIndex col idx)]
+                             (types/get-object v i))))
+                 (into {} (remove (comp #(= :xtdb/absent %) val)))))
           (range (.rowCount rel)))))
 
 (deftype SliceCursor [^IIndirectRelation rel
@@ -362,5 +375,5 @@
     ;; we don't close the rel here, assume we don't own it.
     ))
 
-(defn ->slice-cursor [^IIndirectRelation rel, ^Iterable row-counts]
+(defn ->slice-cursor ^xtdb.ICursor [^IIndirectRelation rel, ^Iterable row-counts]
   (SliceCursor. rel 0 (.iterator row-counts)))

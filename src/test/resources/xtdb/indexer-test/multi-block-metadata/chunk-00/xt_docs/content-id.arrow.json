@@ -1,0 +1,89 @@
+{
+  "schema" : {
+    "fields" : [{
+      "name" : "id",
+      "nullable" : false,
+      "type" : {
+        "name" : "union",
+        "mode" : "Dense",
+        "typeIds" : [ ]
+      },
+      "children" : [{
+        "name" : "utf8",
+        "nullable" : false,
+        "type" : {
+          "name" : "utf8"
+        },
+        "children" : [ ]
+      },{
+        "name" : "timestamp-tz-micro-utc",
+        "nullable" : false,
+        "type" : {
+          "name" : "timestamp",
+          "unit" : "MICROSECOND",
+          "timezone" : "UTC"
+        },
+        "children" : [ ]
+      },{
+        "name" : "f64",
+        "nullable" : false,
+        "type" : {
+          "name" : "floatingpoint",
+          "precision" : "DOUBLE"
+        },
+        "children" : [ ]
+      }]
+    }]
+  },
+  "batches" : [{
+    "count" : 4,
+    "columns" : [{
+      "name" : "id",
+      "count" : 4,
+      "TYPE_ID" : [0,1,0,2],
+      "OFFSET" : [0,0,1,0],
+      "children" : [{
+        "name" : "utf8",
+        "count" : 2,
+        "VALIDITY" : [1,1],
+        "OFFSET" : [0,3,6],
+        "DATA" : ["foo","bar"]
+      },{
+        "name" : "timestamp-tz-micro-utc",
+        "count" : 1,
+        "VALIDITY" : [1],
+        "DATA" : [1609459200000000]
+      },{
+        "name" : "f64",
+        "count" : 1,
+        "VALIDITY" : [1],
+        "DATA" : [24.0]
+      }]
+    }]
+  },{
+    "count" : 2,
+    "columns" : [{
+      "name" : "id",
+      "count" : 2,
+      "TYPE_ID" : [2,1],
+      "OFFSET" : [0,0],
+      "children" : [{
+        "name" : "utf8",
+        "count" : 0,
+        "VALIDITY" : [ ],
+        "OFFSET" : [0],
+        "DATA" : [ ]
+      },{
+        "name" : "timestamp-tz-micro-utc",
+        "count" : 1,
+        "VALIDITY" : [1],
+        "DATA" : [1577836800000000]
+      },{
+        "name" : "f64",
+        "count" : 1,
+        "VALIDITY" : [1],
+        "DATA" : [52.0]
+      }]
+    }]
+  }]
+}

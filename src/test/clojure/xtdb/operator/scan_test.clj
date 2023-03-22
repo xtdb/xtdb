@@ -16,7 +16,8 @@
                         [:put 'xt_docs {:id :bar, :col1 "bar1", :col2 "bar2"}]
                         [:put 'xt_docs {:id :foo, :col2 "baz2"}]])
 
-    (t/is (= [{:id :bar, :col1 "bar1", :col2 "bar2"}]
+    (t/is (= [{:id :bar, :col1 "bar1", :col2 "bar2"}
+              {:id :foo, :col2 "baz2"}]
              (tu/query-ra '[:scan {:table xt_docs} [id col1 col2]]
                           {:node node})))))
 
@@ -27,7 +28,8 @@
                         [:put 'xt_docs {:id :bar, :the-ns/col1 "bar1", :col2 "bar2"}]
                         [:put 'xt_docs {:id :foo, :the-ns/col2 "baz2"}]])
 
-    (t/is (= [{:id :bar, :the-ns__col1 "bar1", :col2 "bar2"}]
+    (t/is (= [{:id :bar, :the-ns__col1 "bar1", :col2 "bar2"}
+              {:id :foo}]
              (tu/query-ra '[:scan {:table xt_docs} [id the-ns__col1 col2]]
                           {:node node})))))
 
@@ -77,6 +79,27 @@
                               [application_time_start application_time_end
                                system_time_start system_time_end]]
                             {:node node}))))))
+
+(t/deftest test-aligns-temporal-columns-correctly-363
+  (with-open [node (node/start-node {})]
+    (xt/submit-tx node [[:put 'foo {:id :my-doc, :last_updated "tx1"}]] {:sys-time #inst "3000"})
+
+    (xt/submit-tx node [[:put 'foo {:id :my-doc, :last_updated "tx2"}]] {:sys-time #inst "3001"})
+
+    (t/is (= [{:system_time_start (util/->zdt #inst "3000")
+               :system_time_end (util/->zdt #inst "3001")
+               :last_updated "tx1"}
+              {:system_time_start (util/->zdt #inst "3001")
+               :system_time_end (util/->zdt util/end-of-time)
+               :last_updated "tx1"}
+              {:system_time_start (util/->zdt #inst "3001")
+               :system_time_end (util/->zdt util/end-of-time)
+               :last_updated "tx2"}]
+             (tu/query-ra '[:scan {:table foo, :for-sys-time :all-time}
+                            [{system_time_start (< system_time_start #time/zoned-date-time "3002-01-01T00:00Z")}
+                             {system_time_end (> system_time_end #time/zoned-date-time "2999-01-01T00:00Z")}
+                             last_updated]]
+                          {:node node})))))
 
 (t/deftest test-scan-col-types
   (with-open [node (node/start-node {})]

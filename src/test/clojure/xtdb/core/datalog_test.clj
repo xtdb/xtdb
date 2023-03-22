@@ -126,13 +126,6 @@
                             [:put xt_docs {:id 3, :name "Ivan", :age 37}]
                             [:put xt_docs {:id 4, :age 15}]])]
 
-    (t/is (= #{{:e 1} {:e 2} {:e 3}}
-             (set (xt/q tu/*node*
-                        '{:find [e]
-                          :where [(match xt_docs {:id e})
-                                  [e :name]]})))
-          "testing without V")
-
     (t/is (= #{{:e 1, :v 15} {:e 3, :v 37}}
              (set (xt/q tu/*node*
                         '{:find [e v]
@@ -140,41 +133,30 @@
                                   [e :name "Ivan"]
                                   [e :age v]]}))))
 
-    (t/is (= #{{:e1 1, :e2 1}
-               {:e1 2, :e2 2}
-               {:e1 3, :e2 3}
-               {:e1 1, :e2 3}
-               {:e1 3, :e2 1}}
+    (t/is (= #{{:e1 1, :e2 3} {:e1 3, :e2 1}}
              (set (xt/q tu/*node*
                         '{:find [e1 e2]
-                          :where [(match xt_docs {:id e1})
-                                  (match xt_docs {:id e2})
-                                  [e1 :name n]
-                                  [e2 :name n]]}))))
+                          :where [(match xt_docs {:id e1, :name n})
+                                  (match xt_docs {:id e2, :name n})
+                                  [(<> e1 e2)]]}))))
 
     (t/is (= #{{:e 1, :e2 1, :n "Ivan"}
                {:e 3, :e2 3, :n "Ivan"}
-               {:e 3, :e2 2, :n "Petr"}}
+               {:e 3, :e2 2, :n "Petr"}
+               {:e 1, :e2 4}}
              (set (xt/q tu/*node*
                         '{:find [e e2 n]
-                          :where [(match xt_docs {:id e})
-                                  (match xt_docs {:id e2})
-                                  [e :name "Ivan"]
-                                  [e :age a]
-                                  [e2 :age a]
-                                  [e2 :name n]]}))))
+                          :where [(match xt_docs {:id e, :name "Ivan", :age a})
+                                  (match xt_docs {:id e2, :name n, :age a})]}))))
 
     (t/is (= #{{:e 1, :e2 1, :n "Ivan"}
                {:e 2, :e2 2, :n "Petr"}
-               {:e 3, :e2 3, :n "Ivan"}}
+               {:e 3, :e2 3, :n "Ivan"}
+               {:e 4, :e2 4}}
              (set (xt/q tu/*node*
                         '{:find [e e2 n]
-                          :where [(match xt_docs {:id e})
-                                  (match xt_docs {:id e2})
-                                  [e :name n]
-                                  [e :age a]
-                                  [e2 :name n]
-                                  [e2 :age a]]})))
+                          :where [(match xt_docs {:id e, :name n, :age a})
+                                  (match xt_docs {:id e2, :name n, :age a})]})))
           "multi-param join")
 
     (t/is (= #{{:e1 1, :e2 1, :a1 15, :a2 15}
@@ -951,20 +933,19 @@
                    :order-by [[film-name]]}))
         "films made by the Bond with the most films")
 
-  (let [_tx (xt/submit-tx tu/*node* '[[:put xt_docs {:id :a1, :a 1}]
-                                      [:put xt_docs {:id :a2, :a 2}]
-                                      [:put xt_docs {:id :b2, :b 2}]
-                                      [:put xt_docs {:id :b3, :b 3}]])]
+  (t/testing "(contrived) correlated sub-query"
+    (xt/submit-tx tu/*node* '[[:put a {:id :a1, :a 1}]
+                              [:put a {:id :a2, :a 2}]
+                              [:put b {:id :b2, :b 2}]
+                              [:put b {:id :b3, :b 3}]])
+
     (t/is (= [{:aid :a2, :bid :b2}]
              (xt/q tu/*node*
                    '{:find [aid bid]
-                     :where [(match xt_docs {:id aid})
-                             [aid :a a]
+                     :where [(match a {:id aid, :a a})
                              (q {:find [bid]
                                  :in [a]
-                                 :where [(match xt_docs {:id bid})
-                                         [bid :b a]]})]}))
-          "(contrived) correlated sub-query")))
+                                 :where [(match b {:id bid, :b a})]})]})))))
 
 (t/deftest test-explicit-unwind-574
   (xt/submit-tx tu/*node* bond/tx-ops)
@@ -1019,16 +1000,18 @@
                                       (partition-all 20))]
                       (xt/submit-tx node tx-ops))))]
 
-      (let [_tx1 (xt/submit-tx node '[[:put xt_docs {:id 0 :foo :bar}]])
-            _tx2 (submit-ops! (range 1010))]
-        (t/is (= 1010 (-> (xt/q node '{:find [(count id)]
-                                       :keys [id-count]
-                                       :where [(match t1 {:id id})]})
-                          (first)
-                          (:id-count))))
+      (xt/submit-tx node '[[:put xt_docs {:id 0 :foo :bar}]])
+      (submit-ops! (range 1010))
 
-        (t/is (= [] (xt/q node '{:find [id]
-                                 :where [(match xt_docs [id some-attr])]})))))))
+      (t/is (= 1010 (-> (xt/q node '{:find [(count id)]
+                                     :keys [id-count]
+                                     :where [(match t1 {:id id})]})
+                        (first)
+                        (:id-count))))
+
+      (t/is (= [{:id 0}]
+               (xt/q node '{:find [id]
+                            :where [(match xt_docs [id some-attr])]}))))))
 
 (t/deftest add-better-metadata-support-for-keywords
   (with-open [node (node/start-node {:xtdb/live-chunk {:rows-per-block 10, :rows-per-chunk 1000}})]
@@ -1465,56 +1448,56 @@
                    in))]
 
     (let [tx0 (xt/submit-tx tu/*node*
-                            '[[:put xt_docs {:id 1 :customer-number 145 :property-number 7797} {:app-time-start #inst "1998-01-10"}]]
+                            '[[:put docs {:id 1 :customer-number 145 :property-number 7797} {:app-time-start #inst "1998-01-10"}]]
                             {:sys-time #inst "1998-01-10"})
 
           tx1 (xt/submit-tx tu/*node*
-                            '[[:put xt_docs {:id 1 :customer-number 827 :property-number 7797} {:app-time-start #inst "1998-01-15"}]]
+                            '[[:put docs {:id 1 :customer-number 827 :property-number 7797} {:app-time-start #inst "1998-01-15"}]]
                             {:sys-time #inst "1998-01-15"})
 
-          tx2 (xt/submit-tx tu/*node*
-                            '[[:delete xt_docs 1 {:app-time-start #inst "1998-01-20"}]]
-                            {:sys-time #inst "1998-01-20"})
+          _tx2 (xt/submit-tx tu/*node*
+                             '[[:delete docs 1 {:app-time-start #inst "1998-01-20"}]]
+                             {:sys-time #inst "1998-01-20"})
 
-          tx3 (xt/submit-tx tu/*node*
-                            '[[:put xt_docs {:id 1 :customer-number 145 :property-number 7797} {:app-time-start #inst "1998-01-03"
-                                                                                                :app-time-end #inst "1998-01-10"}]]
-                            {:sys-time #inst "1998-01-23"})
+          _tx3 (xt/submit-tx tu/*node*
+                             '[[:put docs {:id 1 :customer-number 145 :property-number 7797} {:app-time-start #inst "1998-01-03"
+                                                                                              :app-time-end #inst "1998-01-10"}]]
+                             {:sys-time #inst "1998-01-23"})
 
-          tx4 (xt/submit-tx tu/*node*
-                            '[[:delete xt_docs 1 {:app-time-start #inst "1998-01-03" :app-time-end #inst "1998-01-05"}]]
-                            {:sys-time #inst "1998-01-26"})
+          _tx4 (xt/submit-tx tu/*node*
+                             '[[:delete docs 1 {:app-time-start #inst "1998-01-03" :app-time-end #inst "1998-01-05"}]]
+                             {:sys-time #inst "1998-01-26"})
 
           tx5 (xt/submit-tx tu/*node*
-                            '[[:put xt_docs {:id 1 :customer-number 145 :property-number 7797} {:app-time-start #inst "1998-01-05"
-                                                                                                :app-time-end #inst "1998-01-12"}]
-                              [:put xt_docs {:id 1 :customer-number 827 :property-number 7797} {:app-time-start #inst "1998-01-12"
-                                                                                                :app-time-end #inst "1998-01-20"}]]
+                            '[[:put docs {:id 1 :customer-number 145 :property-number 7797} {:app-time-start #inst "1998-01-05"
+                                                                                             :app-time-end #inst "1998-01-12"}]
+                              [:put docs {:id 1 :customer-number 827 :property-number 7797} {:app-time-start #inst "1998-01-12"
+                                                                                             :app-time-end #inst "1998-01-20"}]]
                             {:sys-time #inst "1998-01-28"})
 
           tx6 (xt/submit-tx tu/*node*
                             [[:put 'xt_docs {:id :delete-1-week-records,
                                              :fn #xt/clj-form (fn delete-1-weeks-records []
                                                                 (->> (q '{:find [id app-start app-end]
-                                                                          :where [(match xt_docs [id
-                                                                                                  {:application_time_start app-start
-                                                                                                   :application_time_end app-end}]
+                                                                          :where [(match docs [id
+                                                                                               {:application_time_start app-start
+                                                                                                :application_time_end app-end}]
                                                                                          {:for-app-time :all-time})
                                                                                   [(= (- #inst "1970-01-08" #inst "1970-01-01")
                                                                                       (- app-end app-start))]]})
                                                                      (map (fn [{:keys [id app-start app-end]}]
-                                                                            [:delete 'xt_docs id {:app-time-start app-start
-                                                                                                  :app-time-end app-end}]))))}]
+                                                                            [:delete 'docs id {:app-time-start app-start
+                                                                                               :app-time-end app-end}]))))}]
                              [:call :delete-1-week-records]]
                             {:sys-time #inst "1998-01-30"})
 
           tx7 (xt/submit-tx tu/*node*
-                            '[[:put xt_docs {:id 2 :customer-number 827 :property-number 3621} {:app-time-start #inst "1998-01-15"}]]
+                            '[[:put docs {:id 2 :customer-number 827 :property-number 3621} {:app-time-start #inst "1998-01-15"}]]
                             {:sys-time #inst "1998-01-31"})]
 
       (t/is (= [{:cust 145 :app-start (util/->zdt #inst "1998-01-10")}]
                (q '{:find [cust app-start]
-                    :where [(match xt_docs {:customer-number cust, :application_time_start app-start}
+                    :where [(match docs {:customer-number cust, :application_time_start app-start}
                                    {:for-app-time :all-time})]}
                   tx0, nil))
             "as-of 14 Jan")
@@ -1522,7 +1505,7 @@
       (t/is (= [{:cust 145, :app-start (util/->zdt #inst "1998-01-10")}
                 {:cust 827, :app-start (util/->zdt #inst "1998-01-15")}]
                (q '{:find [cust app-start]
-                    :where [(match xt_docs {:customer-number cust, :application_time_start app-start}
+                    :where [(match docs {:customer-number cust, :application_time_start app-start}
                                    {:for-app-time :all-time})]}
                   tx1, nil))
             "as-of 18 Jan")
@@ -1530,7 +1513,7 @@
       (t/is (= [{:cust 145, :app-start (util/->zdt #inst "1998-01-05")}
                 {:cust 827, :app-start (util/->zdt #inst "1998-01-12")}]
                (q '{:find [cust app-start]
-                    :where [(match xt_docs {:customer-number cust, :application_time_start app-start}
+                    :where [(match docs {:customer-number cust, :application_time_start app-start}
                                    {:for-app-time :all-time})]
                     :order-by [[app-start :asc]]}
                   tx5, nil))
@@ -1538,9 +1521,9 @@
 
       (t/is (= [{:cust 827, :app-start (util/->zdt #inst "1998-01-12"), :app-end (util/->zdt #inst "1998-01-20")}]
                (q '{:find [cust app-start app-end]
-                    :where [(match xt_docs {:customer-number cust,
-                                            :application_time_start app-start
-                                            :application_time_end app-end}
+                    :where [(match docs {:customer-number cust,
+                                         :application_time_start app-start
+                                         :application_time_end app-end}
                                    {:for-app-time :all-time})]
                     :order-by [[app-start :asc]]}
                   tx6, nil))
@@ -1550,16 +1533,16 @@
                (q '{:find [prop (greatest app-start app-start2) (least app-end app-end2)]
                     :keys [prop vt-begin vt-end]
                     :in [in-prop]
-                    :where [(match xt_docs {:property-number in-prop
-                                            :customer-number cust
-                                            :application_time_start app-start
-                                            :application_time_end app-end}
+                    :where [(match docs {:property-number in-prop
+                                         :customer-number cust
+                                         :application_time_start app-start
+                                         :application_time_end app-end}
                                    {:for-app-time :all-time})
 
-                            (match xt_docs {:property-number prop
-                                            :customer-number cust
-                                            :application_time_start app-start2
-                                            :application_time_end app-end2}
+                            (match docs {:property-number prop
+                                         :customer-number cust
+                                         :application_time_start app-start2
+                                         :application_time_end app-end2}
                                    {:for-app-time :all-time})
                             [(<> prop in-prop)]
                             ;; eventually: 'overlaps?'
@@ -1577,21 +1560,21 @@
                (q '{:find [prop (greatest app-start app-start2) (least app-end app-end2) (greatest sys-start sys-start2) (least sys-end sys-end2)]
                     :keys [prop vt-begin vt-end recorded-start recorded-stop]
                     :in [in-prop]
-                    :where [(match xt_docs {:property-number in-prop
-                                            :customer-number cust
-                                            :application_time_start app-start
-                                            :application_time_end app-end
-                                            :system_time_start sys-start
-                                            :system_time_end sys-end}
+                    :where [(match docs {:property-number in-prop
+                                         :customer-number cust
+                                         :application_time_start app-start
+                                         :application_time_end app-end
+                                         :system_time_start sys-start
+                                         :system_time_end sys-end}
                                    {:for-app-time :all-time
                                     :for-sys-time :all-time})
 
-                            (match xt_docs {:customer-number cust
-                                            :property-number prop
-                                            :application_time_start app-start2
-                                            :application_time_end app-end2
-                                            :system_time_start sys-start2
-                                            :system_time_end sys-end2}
+                            (match docs {:customer-number cust
+                                         :property-number prop
+                                         :application_time_start app-start2
+                                         :application_time_end app-end2
+                                         :system_time_start sys-start2
+                                         :system_time_end sys-end2}
 
                                    {:for-app-time :all-time
                                     :for-sys-time :all-time})
@@ -1613,21 +1596,21 @@
                (q '{:find [prop (greatest app-start app-start2) (least app-end app-end2) sys-start2]
                     :keys [prop vt-begin vt-end recorded-start]
                     :in [in-prop]
-                    :where [(match xt_docs {:property-number in-prop
-                                            :customer-number cust
-                                            :application_time_start app-start
-                                            :application_time_end app-end
-                                            :system_time_start sys-start
-                                            :system_time_end sys-end}
+                    :where [(match docs {:property-number in-prop
+                                         :customer-number cust
+                                         :application_time_start app-start
+                                         :application_time_end app-end
+                                         :system_time_start sys-start
+                                         :system_time_end sys-end}
                                    {:for-app-time :all-time
                                     :for-sys-time :all-time})
 
-                            (match xt_docs {:customer-number cust
-                                            :property-number prop
-                                            :application_time_start app-start2
-                                            :application_time_end app-end2
-                                            :system_time_start sys-start2
-                                            :system_time_end sys-end2})
+                            (match docs {:customer-number cust
+                                         :property-number prop
+                                         :application_time_start app-start2
+                                         :application_time_end app-end2
+                                         :system_time_start sys-start2
+                                         :system_time_end sys-end2})
 
                             [(<> prop in-prop)]
                             ;; eventually: 'overlaps?'

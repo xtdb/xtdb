@@ -1,21 +1,21 @@
 (ns xtdb.tx-producer
   (:require [clojure.spec.alpha :as s]
+            [juxt.clojars-mirrors.integrant.core :as ig]
+            [xtdb.core.sql :as sql]
             [xtdb.error :as err]
             xtdb.log
             [xtdb.rewrite :refer [zmatch]]
-            [xtdb.core.sql :as sql]
             [xtdb.types :as types]
             [xtdb.util :as util]
-            [xtdb.vector.writer :as vw]
-            [juxt.clojars-mirrors.integrant.core :as ig])
-  (:import (xtdb.log Log LogRecord)
-           xtdb.vector.IDenseUnionWriter
-           (java.time Instant ZoneId)
-           java.util.ArrayList
+            [xtdb.vector.writer :as vw])
+  (:import (java.time Instant ZoneId)
+           (java.util ArrayList HashMap)
            org.apache.arrow.memory.BufferAllocator
            (org.apache.arrow.vector TimeStampMicroTZVector VectorSchemaRoot)
            (org.apache.arrow.vector.types.pojo ArrowType$Union Schema)
-           org.apache.arrow.vector.types.UnionMode))
+           org.apache.arrow.vector.types.UnionMode
+           (xtdb.log Log LogRecord)
+           (xtdb.vector IDenseUnionWriter IVectorWriter)))
 
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface ITxProducer
@@ -90,8 +90,6 @@
                                                        :params [:union #{:null :varbinary}]}])
 
                  (types/->field "put" types/struct-type false
-                                (types/col-type->field 'table :utf8)
-                                (types/->field "id" types/dense-union-type false)
                                 (types/->field "document" types/dense-union-type false)
                                 (types/col-type->field 'application_time_start nullable-inst-type)
                                 (types/col-type->field 'application_time_end nullable-inst-type))
@@ -160,27 +158,24 @@
 
 (defn- ->put-writer [^IDenseUnionWriter tx-ops-writer]
   (let [put-writer (.asStruct (.writerForTypeId tx-ops-writer 1))
-        table-writer (.writerForName put-writer "table")
-        id-writer (.asDenseUnion (.writerForName put-writer "id"))
         doc-writer (.asDenseUnion (.writerForName put-writer "document"))
         app-time-start-writer (.writerForName put-writer "application_time_start")
-        app-time-end-writer (.writerForName put-writer "application_time_end")]
-    (fn write-put! [{:keys [doc table], {:keys [app-time-start app-time-end]} :app-time-opts :as m}]
+        app-time-end-writer (.writerForName put-writer "application_time_end")
+        table-doc-writers (HashMap.)]
+    (fn write-put! [{:keys [doc table], {:keys [app-time-start app-time-end]} :app-time-opts}]
       (.startValue put-writer)
 
-      (let [{:keys [id]} doc]
-        (doto (.writerForType id-writer (types/value->col-type id))
-          (.startValue)
-          (->> (types/write-value! id))
-          (.endValue)))
+      (.startValue doc-writer)
+      (let [^IVectorWriter
+            table-doc-writer (.computeIfAbsent table-doc-writers table
+                                               (util/->jfn
+                                                 (fn [table]
+                                                   (let [type-id (.registerNewType doc-writer (types/col-type->field table [:struct {}]))]
+                                                     (.writerForTypeId doc-writer type-id)))))]
+        (.startValue table-doc-writer)
+        (types/write-value! doc table-doc-writer)
+        (.endValue table-doc-writer))
 
-      (let [doc (dissoc doc :id)]
-        (doto (.writerForType doc-writer (types/value->col-type doc))
-          (.startValue)
-          (->> (types/write-value! doc))
-          (.endValue)))
-
-      (types/write-value! (name table) table-writer)
       (types/write-value! app-time-start app-time-start-writer)
       (types/write-value! app-time-end app-time-end-writer)
 

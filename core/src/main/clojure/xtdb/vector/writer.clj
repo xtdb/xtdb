@@ -1,18 +1,19 @@
 (ns xtdb.vector.writer
-  (:require [xtdb.error :as err]
+  (:require [clojure.set :as set]
+            [xtdb.error :as err]
             [xtdb.rewrite :refer [zmatch]]
             [xtdb.types :as types]
             [xtdb.vector.indirect :as iv])
-  (:import (xtdb.vector IDenseUnionWriter IExtensionWriter IIndirectRelation IIndirectVector IListWriter IRelationWriter IRowCopier IStructWriter IVectorWriter IWriterPosition)
-           xtdb.vector.extensions.SetType
-           (java.lang AutoCloseable)
+  (:import (java.lang AutoCloseable)
            (java.util HashMap LinkedHashMap Map)
            (java.util.function Function)
            (org.apache.arrow.memory BufferAllocator)
            (org.apache.arrow.util AutoCloseables)
            (org.apache.arrow.vector ExtensionTypeVector NullVector ValueVector)
            (org.apache.arrow.vector.complex DenseUnionVector FixedSizeListVector ListVector StructVector)
-           (org.apache.arrow.vector.types.pojo ArrowType$List ArrowType$Struct ArrowType$Union Field FieldType)))
+           (org.apache.arrow.vector.types.pojo ArrowType$List ArrowType$Struct ArrowType$Union Field FieldType)
+           (xtdb.vector IDenseUnionWriter IExtensionWriter IIndirectRelation IIndirectVector IListWriter IRelationWriter IRowCopier IStructWriter IVectorWriter IWriterPosition)
+           xtdb.vector.extensions.SetType))
 
 (deftype DuvChildWriter [^IDenseUnionWriter parent-writer,
                          ^byte type-id
@@ -149,7 +150,7 @@
 
   (endValue [this]
     (when (neg? (.getTypeId dest-duv pos))
-      (doto (.writerForType this :null)
+      (doto (.writerForType this :absent)
         (.startValue)
         (.endValue)))
 
@@ -180,6 +181,11 @@
           (aset writers-by-type-id type-id writer)
           writer)))
 
+  (registerNewType [_ field]
+    (let [type-id (.registerNewTypeId dest-duv field)]
+      (.addVector dest-duv type-id (.createVector field (.getAllocator dest-duv)))
+      type-id))
+
   (writerForType [this col-type]
     (.computeIfAbsent writers-by-type (types/col-type->duv-leg-key col-type)
                       (reify Function
@@ -194,18 +200,23 @@
                                                (types/->field field-name SetType/INSTANCE false (types/->field "$data$" types/dense-union-type false))
 
                                                :struct
-                                               (types/->field (str field-name (count writers-by-type)) ArrowType$Struct/INSTANCE false)
+                                               (types/->field field-name ArrowType$Struct/INSTANCE false)
 
                                                (types/col-type->field field-name col-type))
 
                                 type-id (or (duv-type-id dest-duv col-type)
-                                            (.registerNewTypeId dest-duv field))]
-
-                            (when-not (.getVectorByType dest-duv type-id)
-                              (.addVector dest-duv type-id
-                                          (.createVector field (.getAllocator dest-duv))))
+                                            (.registerNewType this field))]
 
                             (.writerForTypeId this type-id)))))))
+
+(defn- populate-with-absents [^IDenseUnionWriter w, ^long pos]
+  (when (pos? pos)
+    (let [absent-writer (.writerForType w :absent)]
+      (dotimes [_ pos]
+        (.startValue w)
+        (.startValue absent-writer)
+        (.endValue absent-writer)
+        (.endValue w)))))
 
 (deftype StructWriter [^StructVector dest-vec, ^Map writers,
                        ^:unsynchronized-mutable ^int pos]
@@ -246,11 +257,13 @@
     (.computeIfAbsent writers col-name
                       (reify Function
                         (apply [_ col-name]
-                          (-> (or (.getChild dest-vec col-name)
-                                  (.addOrGet dest-vec col-name
-                                             (FieldType/notNullable types/dense-union-type)
-                                             DenseUnionVector))
-                              (vec->writer pos)))))))
+                          (or (some-> (.getChild dest-vec col-name)
+                                      (vec->writer pos))
+
+                              (doto (vec->writer (.addOrGet dest-vec col-name
+                                                            (FieldType/notNullable types/dense-union-type)
+                                                            DenseUnionVector))
+                                (populate-with-absents pos))))))))
 
 (deftype ListWriter [^ListVector dest-vec
                      ^IVectorWriter data-writer
@@ -466,17 +479,30 @@
         (.computeIfAbsent writers col-name
                           (reify Function
                             (apply [_ col-name]
-                              (->vec-writer allocator col-name)))))
+                              (doto (->vec-writer allocator col-name)
+                                (populate-with-absents (.getPosition wp)))))))
 
       (writerForName [_ col-name col-type]
         (.computeIfAbsent writers col-name
                           (reify Function
                             (apply [_ col-name]
-                              (->vec-writer allocator col-name col-type)))))
+                              (let [pos (.getPosition wp)]
+                                (if (pos? pos)
+                                  (doto (->vec-writer allocator col-name (types/merge-col-types col-type :absent))
+                                    (populate-with-absents pos))
+                                  (->vec-writer allocator col-name col-type)))))))
 
-      (rowCopier [_ in-rel]
-        (let [copiers (vec (for [^IIndirectVector in-vec in-rel]
-                              (->row-copier (.get writers (.getName in-vec)) in-vec)))]
+      (rowCopier [this in-rel]
+        (let [copiers (vec (concat (for [^IIndirectVector in-vec in-rel]
+                                     (->row-copier (.writerForName this (.getName in-vec)) in-vec))
+                                   (for [absent-col-name (set/difference (set (keys writers))
+                                                                         (into #{} (map #(.getName ^IIndirectVector %)) in-rel))
+                                         :let [writer (.writerForName this absent-col-name)]]
+                                     (reify IRowCopier
+                                       (copyRow [_ _src-idx]
+                                         (let [pos (.startValue writer)]
+                                           (.endValue writer)
+                                           pos))))))]
           (reify IRowCopier
             (copyRow [_ src-idx]
               (let [pos (.getPositionAndIncrement wp)]
@@ -508,7 +534,10 @@
   (doseq [^IIndirectVector src-col src-rel
           :let [col-type (types/field->col-type (.getField (.getVector src-col)))
                 ^IVectorWriter vec-writer (.writerForName dest-rel (.getName src-col) col-type)]]
-    (append-vec vec-writer src-col)))
+    (append-vec vec-writer src-col))
+
+  (let [wp (.writerPosition dest-rel)]
+    (.setPosition wp (+ (.getPosition wp) (.rowCount src-rel)))))
 
 (defn write-vec! [^ValueVector v, vs]
   (.clear v)

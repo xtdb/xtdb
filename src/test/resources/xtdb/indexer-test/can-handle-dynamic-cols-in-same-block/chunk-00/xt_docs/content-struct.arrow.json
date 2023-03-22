@@ -1,0 +1,184 @@
+{
+  "schema" : {
+    "fields" : [{
+      "name" : "struct",
+      "nullable" : false,
+      "type" : {
+        "name" : "union",
+        "mode" : "Dense",
+        "typeIds" : [ ]
+      },
+      "children" : [{
+        "name" : "absent",
+        "nullable" : false,
+        "type" : {
+          "name" : "AbsentType"
+        },
+        "children" : [ ],
+        "metadata" : [{
+          "value" : "absent",
+          "key" : "ARROW:extension:name"
+        },{
+          "value" : "",
+          "key" : "ARROW:extension:metadata"
+        }]
+      },{
+        "name" : "struct",
+        "nullable" : false,
+        "type" : {
+          "name" : "struct"
+        },
+        "children" : [{
+          "name" : "a",
+          "nullable" : false,
+          "type" : {
+            "name" : "union",
+            "mode" : "Dense",
+            "typeIds" : [ ]
+          },
+          "children" : [{
+            "name" : "i64",
+            "nullable" : false,
+            "type" : {
+              "name" : "int",
+              "bitWidth" : 64,
+              "isSigned" : true
+            },
+            "children" : [ ]
+          },{
+            "name" : "bool",
+            "nullable" : false,
+            "type" : {
+              "name" : "bool"
+            },
+            "children" : [ ]
+          }]
+        },{
+          "name" : "b",
+          "nullable" : false,
+          "type" : {
+            "name" : "union",
+            "mode" : "Dense",
+            "typeIds" : [ ]
+          },
+          "children" : [{
+            "name" : "utf8",
+            "nullable" : false,
+            "type" : {
+              "name" : "utf8"
+            },
+            "children" : [ ]
+          },{
+            "name" : "absent",
+            "nullable" : false,
+            "type" : {
+              "name" : "AbsentType"
+            },
+            "children" : [ ],
+            "metadata" : [{
+              "value" : "absent",
+              "key" : "ARROW:extension:name"
+            },{
+              "value" : "",
+              "key" : "ARROW:extension:metadata"
+            }]
+          }]
+        },{
+          "name" : "c",
+          "nullable" : false,
+          "type" : {
+            "name" : "union",
+            "mode" : "Dense",
+            "typeIds" : [ ]
+          },
+          "children" : [{
+            "name" : "absent",
+            "nullable" : false,
+            "type" : {
+              "name" : "AbsentType"
+            },
+            "children" : [ ],
+            "metadata" : [{
+              "value" : "absent",
+              "key" : "ARROW:extension:name"
+            },{
+              "value" : "",
+              "key" : "ARROW:extension:metadata"
+            }]
+          },{
+            "name" : "utf8",
+            "nullable" : false,
+            "type" : {
+              "name" : "utf8"
+            },
+            "children" : [ ]
+          }]
+        }]
+      }]
+    }]
+  },
+  "batches" : [{
+    "count" : 6,
+    "columns" : [{
+      "name" : "struct",
+      "count" : 6,
+      "TYPE_ID" : [0,0,0,1,0,1],
+      "OFFSET" : [0,1,2,0,3,1],
+      "children" : [{
+        "name" : "absent",
+        "count" : 4
+      },{
+        "name" : "struct",
+        "count" : 2,
+        "VALIDITY" : [1,1],
+        "children" : [{
+          "name" : "a",
+          "count" : 2,
+          "TYPE_ID" : [0,1],
+          "OFFSET" : [0,0],
+          "children" : [{
+            "name" : "i64",
+            "count" : 1,
+            "VALIDITY" : [1],
+            "DATA" : ["1"]
+          },{
+            "name" : "bool",
+            "count" : 1,
+            "VALIDITY" : [1],
+            "DATA" : [1]
+          }]
+        },{
+          "name" : "b",
+          "count" : 2,
+          "TYPE_ID" : [0,1],
+          "OFFSET" : [0,0],
+          "children" : [{
+            "name" : "utf8",
+            "count" : 1,
+            "VALIDITY" : [1],
+            "OFFSET" : [0,1],
+            "DATA" : ["b"]
+          },{
+            "name" : "absent",
+            "count" : 1
+          }]
+        },{
+          "name" : "c",
+          "count" : 2,
+          "TYPE_ID" : [0,1],
+          "OFFSET" : [0,0],
+          "children" : [{
+            "name" : "absent",
+            "count" : 1
+          },{
+            "name" : "utf8",
+            "count" : 1,
+            "VALIDITY" : [1],
+            "OFFSET" : [0,1],
+            "DATA" : ["c"]
+          }]
+        }]
+      }]
+    }]
+  }]
+}

@@ -174,7 +174,9 @@
 
     (let [struct0 '[:struct {a :utf8, b :utf8}]
           struct1 '[:struct {b :utf8, c :i64}]]
-      (t/is (= [:union #{struct0 struct1}]
+      (t/is (= '[:struct {a [:union #{:utf8 :absent}]
+                          b :utf8
+                          c [:union #{:i64 :absent}]}]
                (types/merge-col-types struct0 struct1))))
 
     (t/is (= '[:union #{:f64 [:struct {a [:union #{:i64 :utf8}]}]}]

@@ -1,6 +1,6 @@
 (ns xtdb.operator.scan
-  (:require [clojure.spec.alpha :as s]
-            [xtdb.align :as align]
+  (:require [clojure.set :as set]
+            [clojure.spec.alpha :as s]
             [xtdb.bloom :as bloom]
             [xtdb.buffer-pool :as bp]
             [xtdb.coalesce :as coalesce]
@@ -16,7 +16,7 @@
             [xtdb.vector.indirect :as iv]
             xtdb.watermark
             [juxt.clojars-mirrors.integrant.core :as ig])
-  (:import (clojure.lang MapEntry IPersistentSet)
+  (:import (clojure.lang IPersistentSet MapEntry)
            xtdb.api.TransactionInstant
            xtdb.buffer_pool.IBufferPool
            xtdb.ICursor
@@ -24,14 +24,14 @@
            xtdb.operator.IRelationSelector
            (xtdb.vector IIndirectRelation IIndirectVector)
            xtdb.watermark.IWatermark
-           java.time.temporal.Temporal
-           [java.util Date LinkedList List Map Queue ArrayList]
-           [java.util.function Consumer]
+           [java.util HashMap LinkedList List Map Queue Set]
+           [java.util.function BiFunction Consumer]
+           java.util.stream.IntStream
            org.apache.arrow.memory.BufferAllocator
            [org.apache.arrow.vector BigIntVector VarBinaryVector]
            [org.roaringbitmap IntConsumer RoaringBitmap]
            org.roaringbitmap.buffer.MutableRoaringBitmap
-           (org.roaringbitmap.longlong LongConsumer Roaring64Bitmap)))
+           (org.roaringbitmap.longlong Roaring64Bitmap)))
 
 (s/def ::table simple-symbol?)
 
@@ -60,7 +60,7 @@
 
 (defn- filter-pushdown-bloom-block-idxs [^IMetadataManager metadata-manager chunk-idx ^String table-name ^String col-name ^RoaringBitmap block-idxs]
   (if-let [^MutableRoaringBitmap pushdown-bloom (get *column->pushdown-bloom* (symbol col-name))]
-  ;; would prefer this `^long` to be on the param but can only have 4 params in a primitive hinted function in Clojure
+    ;; would prefer this `^long` to be on the param but can only have 4 params in a primitive hinted function in Clojure
     @(meta/with-metadata metadata-manager ^long chunk-idx table-name
        (util/->jfn
          (fn [^ITableMetadata table-metadata]
@@ -82,25 +82,27 @@
                    filtered-block-idxs)))))))
     block-idxs))
 
-(deftype ContentChunkCursor [^IMetadataManager metadata-mgr
+(deftype ContentChunkCursor [^BufferAllocator allocator
+                             ^IMetadataManager metadata-mgr
                              ^IBufferPool buffer-pool
                              table-name content-col-names
                              ^Queue matching-chunks
                              ^ICursor current-cursor]
-  ICursor #_#_<Map<String, IIR>>
+  ICursor #_<IIR>
   (tryAdvance [this c]
     (loop []
       (or (when current-cursor
             (or (.tryAdvance current-cursor
                              (reify Consumer
-                               (accept [_ in-roots]
-                                 (.accept c (update-vals in-roots iv/<-root)))))
+                               (accept [_ in-root]
+                                 (.accept c (-> (iv/<-root in-root)
+                                                (iv/with-absent-cols allocator content-col-names))))))
                 (do
                   (util/try-close current-cursor)
                   (set! (.-current-cursor this) nil)
                   false)))
 
-          (if-let [{:keys [chunk-idx block-idxs]} (.poll matching-chunks)]
+          (if-let [{:keys [chunk-idx block-idxs col-names]} (.poll matching-chunks)]
             (if-let [block-idxs (reduce (fn [block-idxs col-name]
                                           (or (->> block-idxs
                                                    (filter-pushdown-bloom-block-idxs metadata-mgr chunk-idx table-name col-name))
@@ -108,18 +110,18 @@
                                         block-idxs
                                         content-col-names)]
 
-              (let [col-cursors (->> (for [col-name content-col-names]
-                                       (-> (.getBuffer buffer-pool (meta/->chunk-obj-key chunk-idx table-name col-name))
-                                           (util/then-apply
-                                             (fn [buf]
-                                               (MapEntry/create col-name (util/->chunks buf {:block-idxs block-idxs
-                                                                                             :close-buffer? true}))))))
-                                     (remove nil?)
-                                     vec
-                                     (into {} (map deref)))]
-
-                (when (= (count col-cursors) (count content-col-names))
-                  (set! (.current-cursor this) (util/combine-col-cursors col-cursors)))
+              (do
+                (set! (.current-cursor this)
+                      (->> (for [col-name (set/intersection col-names content-col-names)]
+                             (-> (.getBuffer buffer-pool (meta/->chunk-obj-key chunk-idx table-name col-name))
+                                 (util/then-apply
+                                   (fn [buf]
+                                     (MapEntry/create col-name
+                                                      (util/->chunks buf {:block-idxs block-idxs, :close-buffer? true}))))))
+                           (remove nil?)
+                           vec
+                           (into {} (map deref))
+                           (util/combine-col-cursors)))
 
                 (recur))
 
@@ -130,31 +132,41 @@
   (close [_]
     (some-> current-cursor util/try-close)))
 
-(defn- ->content-chunks ^xtdb.ICursor [^IMetadataManager metadata-mgr
+(defn- ->content-chunks ^xtdb.ICursor [^BufferAllocator allocator
+                                        ^IMetadataManager metadata-mgr
                                         ^IBufferPool buffer-pool
                                         table-name content-col-names
                                         metadata-pred]
-  (ContentChunkCursor. metadata-mgr buffer-pool table-name content-col-names
+  (ContentChunkCursor. allocator metadata-mgr buffer-pool table-name content-col-names
                        (LinkedList. (or (meta/matching-chunks metadata-mgr table-name metadata-pred) []))
                        nil))
 
-(defn- roaring64-and
-  (^org.roaringbitmap.longlong.Roaring64Bitmap [] (Roaring64Bitmap.))
-  (^org.roaringbitmap.longlong.Roaring64Bitmap [^Roaring64Bitmap x] x)
-  (^org.roaringbitmap.longlong.Roaring64Bitmap [^Roaring64Bitmap x ^Roaring64Bitmap y]
+(defn- roaring-and
+  (^org.roaringbitmap.RoaringBitmap [] (RoaringBitmap.))
+  (^org.roaringbitmap.RoaringBitmap [^RoaringBitmap x] x)
+  (^org.roaringbitmap.RoaringBitmap [^RoaringBitmap x ^RoaringBitmap y]
    (doto x
      (.and y))))
 
-(defn- ->atemporal-row-id-bitmap [^BufferAllocator allocator, ^List col-names, ^Map col-preds, ^Map in-rels, params]
-  (when (seq col-names)
-    (->> (for [^String col-name col-names
-               :when (not (temporal/temporal-column? col-name))
-               :let [^IRelationSelector col-pred (.get col-preds col-name)
-                     ^IIndirectRelation in-rel (.get in-rels (name col-name))]]
-           (align/->row-id-bitmap (when col-pred
-                                    (.select col-pred allocator in-rel params))
-                                  (.vectorForName in-rel "_row-id")))
-         (reduce roaring64-and))))
+(defn- ->atemporal-row-id-bitmap [^BufferAllocator allocator, ^Map col-preds, ^IIndirectRelation in-rel, params]
+  (let [row-id-rdr (-> (.vectorForName in-rel "_row-id")
+                       (.monoReader :i64))
+        res (Roaring64Bitmap.)]
+
+    (if-let [content-col-preds (seq (remove (comp temporal/temporal-column? key) col-preds))]
+      (let [^RoaringBitmap
+            idx-bitmap (->> (for [^IRelationSelector col-pred (vals content-col-preds)]
+                              (RoaringBitmap/bitmapOf (.select col-pred allocator in-rel params)))
+                            (reduce roaring-and))]
+        (.forEach idx-bitmap
+                  (reify org.roaringbitmap.IntConsumer
+                    (accept [_ idx]
+                      (.addLong res (.readLong row-id-rdr idx))))))
+
+      (dotimes [idx (.valueCount row-id-rdr)]
+        (.addLong res (.readLong row-id-rdr idx))))
+
+    res))
 
 (defn- adjust-temporal-min-range-to-row-id-range ^longs [^longs temporal-min-range ^Roaring64Bitmap row-id-bitmap]
   (let [temporal-min-range (or (temporal/->copy-range temporal-min-range) (temporal/->min-range))]
@@ -174,6 +186,18 @@
           (aset temporal/row-id-idx
                 (min max-row-id (aget temporal-max-range temporal/row-id-idx))))))))
 
+(defn- select-current-row-ids ^xtdb.vector.IIndirectRelation [^IIndirectRelation content-rel, ^Roaring64Bitmap atemporal-row-id-bitmap, ^IPersistentSet current-row-ids]
+  (let [sel (IntStream/builder)
+        row-id-rdr (-> (.vectorForName content-rel "_row-id")
+                       (.monoReader :i64))]
+    (dotimes [idx (.rowCount content-rel)]
+      (let [row-id (.readLong row-id-rdr idx)]
+        (when (and (.contains atemporal-row-id-bitmap row-id)
+                   (.contains current-row-ids row-id))
+          (.add sel idx))))
+
+    (iv/select content-rel (.toArray (.build sel)))))
+
 (defn- ->temporal-rel ^xtdb.vector.IIndirectRelation [^IWatermark watermark, ^BufferAllocator allocator, ^List col-names ^longs temporal-min-range ^longs temporal-max-range atemporal-row-id-bitmap]
   (let [temporal-min-range (adjust-temporal-min-range-to-row-id-range temporal-min-range atemporal-row-id-bitmap)
         temporal-max-range (adjust-temporal-max-range-to-row-id-range temporal-max-range atemporal-row-id-bitmap)]
@@ -185,31 +209,6 @@
                              temporal-max-range
                              atemporal-row-id-bitmap)))
 
-(defn- ->atemporal-rel ^xtdb.vector.IIndirectRelation  [^BufferAllocator allocator, ^Roaring64Bitmap atemporal-row-id-bitmap current-row-ids]
-  (let [cols (ArrayList. 1)
-        row-count (long-array [0])]
-    (try
-
-      (let [col-name "_row-id"
-            col-type (types/col-type->field col-name (get temporal/temporal-col-types col-name))
-            ^BigIntVector row-id-vec (.createVector col-type allocator)
-            row-id-vec-wtr (vec/->mono-writer row-id-vec col-type)]
-        (.forEach atemporal-row-id-bitmap
-                  (reify LongConsumer
-                    (accept [_ row-id]
-                      (when (contains? current-row-ids row-id)
-                        (aset row-count 0 (inc (aget row-count 0)))
-                        (.writeLong row-id-vec-wtr row-id)))))
-
-        (.setValueCount row-id-vec (aget row-count 0))
-        (.add cols (iv/->direct-vec row-id-vec)))
-
-      (iv/->indirect-rel cols (aget row-count 0))
-
-      (catch Throwable e
-        (run! util/try-close cols)
-        (throw e)))))
-
 (defn- apply-temporal-preds ^xtdb.vector.IIndirectRelation [^IIndirectRelation temporal-rel, ^BufferAllocator allocator, ^Map col-preds, params]
   (->> (for [^IIndirectVector col temporal-rel
              :let [col-pred (get col-preds (.getName col))]
@@ -220,6 +219,36 @@
                      (iv/select (.select col-pred allocator temporal-rel params))))
                temporal-rel)))
 
+(defn- ->row-id->repeat-count ^java.util.Map [^IIndirectVector row-id-col]
+  (let [res (HashMap.)
+        row-id-rdr (.monoReader row-id-col :i64)]
+    (dotimes [idx (.getValueCount row-id-col)]
+      (let [row-id (.readLong row-id-rdr idx)]
+        (.compute res row-id (reify BiFunction
+                               (apply [_ _k v]
+                                 (if v
+                                   (inc (long v))
+                                   1))))))
+    res))
+
+(defn align-vectors ^xtdb.vector.IIndirectRelation [^IIndirectRelation content-rel, ^IIndirectRelation temporal-rel]
+  ;; assumption: temporal-rel is sorted by row-id
+  (let [temporal-row-id-col (.vectorForName temporal-rel "_row-id")
+        content-row-id-rdr (-> (.vectorForName content-rel "_row-id")
+                               (.monoReader :i64))
+        row-id->repeat-count (->row-id->repeat-count temporal-row-id-col)
+        sel (IntStream/builder)]
+    (assert temporal-row-id-col)
+
+    (dotimes [idx (.valueCount content-row-id-rdr)]
+      (let [row-id (.readLong content-row-id-rdr idx)]
+        (when-let [ns (.get row-id->repeat-count row-id)]
+          (dotimes [_ ns]
+            (.add sel idx)))))
+
+    (iv/->indirect-rel (concat temporal-rel
+                               (iv/select content-rel (.toArray (.build sel)))))))
+
 (defn- remove-col ^xtdb.vector.IIndirectRelation [^IIndirectRelation rel, ^String col-name]
   (iv/->indirect-rel (remove #(= col-name (.getName ^IIndirectVector %)) rel)
                      (.rowCount rel)))
@@ -227,42 +256,43 @@
 (deftype ScanCursor [^BufferAllocator allocator
                      ^IMetadataManager metadata-manager
                      ^IWatermark watermark
-                     ^List content-col-names
-                     ^List temporal-col-names
+                     ^Set content-col-names
+                     ^Set temporal-col-names
                      ^Map col-preds
                      ^longs temporal-min-range
                      ^longs temporal-max-range
                      ^IPersistentSet current-row-ids
-                     ^ICursor #_#_<Map<String, IIR>> blocks
+                     ^ICursor #_<IIR> blocks
                      params]
   ICursor
   (tryAdvance [_ c]
-    (let [keep-row-id-col? (contains? (set temporal-col-names) "_row-id")
-          keep-id-col? (contains? (set content-col-names) "id")
-          content-col-names (or (not-empty content-col-names) #{"id"})
+    (let [keep-row-id-col? (contains? temporal-col-names "_row-id")
+          keep-id-col? (contains? content-col-names "id")
           !advanced? (volatile! false)]
 
       (while (and (not @!advanced?)
                   (.tryAdvance blocks
                                (reify Consumer
-                                 (accept [_ in-roots]
-                                   (let [^Map in-roots in-roots
-                                         atemporal-row-id-bitmap (->atemporal-row-id-bitmap allocator content-col-names col-preds in-roots params)
-                                         base-rel (if current-row-ids
-                                                    (->atemporal-rel allocator atemporal-row-id-bitmap current-row-ids)
-                                                    (->temporal-rel watermark allocator temporal-col-names temporal-min-range temporal-max-range atemporal-row-id-bitmap))]
-                                     (try
-                                       (let [base-rel (if current-row-ids
-                                                        base-rel
-                                                        (-> base-rel (apply-temporal-preds allocator col-preds params)))
-                                             read-rel (cond-> (align/align-vectors (.values in-roots) base-rel)
-                                                        (not keep-row-id-col?) (remove-col "_row-id")
-                                                        (not keep-id-col?) (remove-col "id"))]
-                                         (when (and read-rel (pos? (.rowCount read-rel)))
-                                           (.accept c read-rel)
-                                           (vreset! !advanced? true)))
-                                       (finally
-                                         (util/try-close base-rel)))))))))
+                                 (accept [_ content-rel]
+                                   (let [atemporal-row-id-bitmap (->atemporal-row-id-bitmap allocator col-preds content-rel params)]
+                                     (letfn [(accept-rel [^IIndirectRelation read-rel]
+                                               (when (and read-rel (pos? (.rowCount read-rel)))
+                                                 (let [read-rel (cond-> read-rel
+                                                                  (not keep-row-id-col?) (remove-col "_row-id")
+                                                                  (not keep-id-col?) (remove-col "id"))]
+                                                   (.accept c read-rel)
+                                                   (vreset! !advanced? true))))]
+
+                                       (if current-row-ids
+                                         (accept-rel (-> content-rel
+                                                         (select-current-row-ids atemporal-row-id-bitmap current-row-ids)))
+
+                                         (let [temporal-rel (->temporal-rel watermark allocator temporal-col-names temporal-min-range temporal-max-range atemporal-row-id-bitmap)]
+                                           (try
+                                             (let [temporal-rel (-> temporal-rel (apply-temporal-preds allocator col-preds params))]
+                                               (accept-rel (align-vectors content-rel temporal-rel)))
+                                             (finally
+                                               (util/try-close temporal-rel))))))))))))
       (boolean @!advanced?)))
 
   (close [_]
@@ -305,21 +335,21 @@
                   (case tag
                     :at (let [[at] args
                               at-μs (->time-μs at)]
-                         (apply-bound :<= start-col at-μs)
-                         (apply-bound :> end-col at-μs))
+                          (apply-bound :<= start-col at-μs)
+                          (apply-bound :> end-col at-μs))
 
                     ;; overlaps [time-from time-to]
                     :in (let [[from to] args]
-                         (when from
-                           (apply-bound :> end-col (->time-μs from)))
-                         (when to
-                           (apply-bound :< start-col (->time-μs to))))
+                          (when from
+                            (apply-bound :> end-col (->time-μs from)))
+                          (when to
+                            (apply-bound :< start-col (->time-μs to))))
 
                     :between (let [[from to] args]
-                              (when from
-                                (apply-bound :> end-col (->time-μs from)))
-                              (when to
-                                (apply-bound :<= start-col (->time-μs to))))
+                               (when from
+                                 (apply-bound :> end-col (->time-μs from)))
+                               (when to
+                                 (apply-bound :<= start-col (->time-μs to))))
 
                     :all-time nil)))]
 
@@ -388,10 +418,10 @@
                 (if (temporal/temporal-column? col-name)
                   [:timestamp-tz :micro "UTC"]
                   (types/merge-col-types (.columnType metadata-mgr (name table) (name col-name))
-                                     (some-> (.liveChunk wm)
-                                             (.liveTable (name table))
-                                             (.liveColumn (name col-name))
-                                             (.columnType)))))]
+                                         (some-> (.liveChunk wm)
+                                                 (.liveTable (name table))
+                                                 (.columnTypes)
+                                                 (get (name col-name))))))]
 
         (->> scan-cols
              (into {} (map (juxt identity ->col-type))))))
@@ -407,6 +437,8 @@
             {content-col-names false, temporal-col-names true}
             (->> col-names
                  (group-by (comp temporal/temporal-column? name)))
+
+            content-col-names (conj (set content-col-names) "_row-id")
 
             col-types (->> col-names
                            (into {} (map (juxt identity
@@ -424,12 +456,10 @@
                                               (expr/->expression-relation-selector select-form {:col-types col-types, :param-types param-types})))
                            (into {}))
 
-            metadata-args (vec (concat (for [col-name content-col-names
-                                             :when (not (contains? col-preds (name col-name)))]
-                                         col-name)
-                                       (for [[col-name select] selects
-                                             :when (not (temporal/temporal-column? (name col-name)))]
-                                         select)))
+            metadata-args (vec (for [[col-name select] selects
+                                     :when (not (temporal/temporal-column? (name col-name)))]
+                                 select))
+
             row-count (->> (meta/with-all-metadata metadata-mgr (name table)
                              (util/->jbifn
                                (fn [_chunk-idx ^ITableMetadata table-metadata]
@@ -443,21 +473,19 @@
          :->cursor (fn [{:keys [allocator, ^IWatermark watermark, basis, params]}]
                      (let [metadata-pred (expr.meta/->metadata-selector (cons 'and metadata-args) (set col-names) params)
                            [temporal-min-range temporal-max-range] (->temporal-min-max-range params basis scan-opts selects)
-                           content-col-names (mapv name content-col-names)
-                           temporal-col-names (mapv name temporal-col-names)
+                           content-col-names (into #{} (map name) content-col-names)
+                           temporal-col-names (into #{} (map name) temporal-col-names)
                            current-row-ids (when (use-current-row-id-cache? watermark scan-opts basis temporal-col-names)
                                              (get-current-row-ids watermark basis))]
-
                        (-> (ScanCursor. allocator metadata-mgr watermark
                                         content-col-names temporal-col-names col-preds
                                         temporal-min-range temporal-max-range current-row-ids
-                                        (util/->concat-cursor (->content-chunks metadata-mgr buffer-pool
+                                        (util/->concat-cursor (->content-chunks allocator metadata-mgr buffer-pool
                                                                                 (name table) content-col-names
                                                                                 metadata-pred)
                                                               (some-> (.liveChunk watermark)
                                                                       (.liveTable (name table))
-                                                                      (.liveBlocks (or (not-empty content-col-names) #{"id"})
-                                                                                   metadata-pred)))
+                                                                      (.liveBlocks content-col-names metadata-pred)))
                                         params)
                            (coalesce/->coalescing-cursor allocator))))}))))
 

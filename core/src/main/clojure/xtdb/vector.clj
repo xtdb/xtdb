@@ -56,6 +56,7 @@
   (->mono-reader [arrow-vec _col-type]
     (let [byte-width (.getByteWidth arrow-vec)]
       (reify IMonoVectorReader
+        (valueCount [_] (.getValueCount arrow-vec))
         (readObject [_ idx]
           (.nioBuffer (.getDataBuffer arrow-vec) (* byte-width idx) byte-width)))))
 
@@ -78,6 +79,7 @@
      ~clazz
      (~'->mono-reader [arrow-vec# _col-type#]
       (reify IMonoVectorReader
+        (~'valueCount [_] (.getValueCount arrow-vec#))
         (~read-method [_# idx#] (.get arrow-vec# idx#))))
 
      (~'->mono-writer [arrow-vec# _col-type#]
@@ -110,6 +112,7 @@
   BitVector
   (->mono-reader [arrow-vec _col-type]
     (reify IMonoVectorReader
+      (valueCount [_] (.getValueCount arrow-vec))
       (readBoolean [_ idx] (== 1 (.get arrow-vec idx)))))
 
   (->mono-writer [arrow-vec _col-type]
@@ -123,6 +126,7 @@
   DurationVector
   (->mono-reader [arrow-vec _col-type]
     (reify IMonoVectorReader
+      (valueCount [_] (.getValueCount arrow-vec))
       ;; `.get` here returns an ArrowBuf, naturally.
       (readLong [_ idx] (DurationVector/get (.getDataBuffer arrow-vec) idx))))
 
@@ -138,6 +142,7 @@
   BaseVariableWidthVector
   (->mono-reader [arrow-vec _col-type]
     (reify IMonoVectorReader
+      (valueCount [_] (.getValueCount arrow-vec))
       (readObject [_ idx]
         (.nioBuffer (.getDataBuffer arrow-vec) (.getStartOffset arrow-vec idx) (.getValueLength arrow-vec idx)))))
 
@@ -164,6 +169,7 @@
   DateMilliVector
   (->mono-reader [arrow-vec _col-type]
     (reify IMonoVectorReader
+      (valueCount [_] (.getValueCount arrow-vec))
       (readInt [_ idx] (-> (.get arrow-vec idx) (quot 86400000) (int)))))
 
   (->mono-writer [arrow-vec _col-type]
@@ -177,6 +183,7 @@
   TimeSecVector
   (->mono-reader [arrow-vec _col-type]
     (reify IMonoVectorReader
+      (valueCount [_] (.getValueCount arrow-vec))
       (readLong [_ idx] (.get arrow-vec idx))))
 
   (->mono-writer [arrow-vec _col-type]
@@ -189,6 +196,7 @@
   TimeMilliVector
   (->mono-reader [arrow-vec _col-type]
     (reify IMonoVectorReader
+      (valueCount [_] (.getValueCount arrow-vec))
       (readLong [_ idx] (.get arrow-vec idx))))
 
   (->mono-writer [arrow-vec _col-type]
@@ -201,6 +209,7 @@
   TimeMicroVector
   (->mono-reader [arrow-vec _col-type]
     (reify IMonoVectorReader
+      (valueCount [_] (.getValueCount arrow-vec))
       (readLong [_ idx] (.get arrow-vec idx))))
 
   (->mono-writer [arrow-vec _col-type]
@@ -213,6 +222,7 @@
   TimeNanoVector
   (->mono-reader [arrow-vec _col-type]
     (reify IMonoVectorReader
+      (valueCount [_] (.getValueCount arrow-vec))
       (readLong [_ idx] (.get arrow-vec idx))))
 
   (->mono-writer [arrow-vec _col-type]
@@ -228,6 +238,7 @@
   IntervalYearVector
   (->mono-reader [arrow-vec _col-type]
     (reify IMonoVectorReader
+      (valueCount [_] (.getValueCount arrow-vec))
       (readObject [_ idx]
         (PeriodDuration. (Period/ofMonths (.get arrow-vec idx)) Duration/ZERO))))
 
@@ -244,6 +255,7 @@
   IntervalDayVector
   (->mono-reader [arrow-vec _col-type]
     (reify IMonoVectorReader
+      (valueCount [_] (.getValueCount arrow-vec))
       (readObject [_ idx]
         (let [^IntervalDayTime idt (types/get-object arrow-vec idx)]
           (PeriodDuration. (.-period idt) (.-duration idt))))))
@@ -266,6 +278,7 @@
   IntervalMonthDayNanoVector
   (->mono-reader [arrow-vec _col-type]
     (reify IMonoVectorReader
+      (valueCount [_] (.getValueCount arrow-vec))
       (readObject [_ idx]
         (let [^IntervalMonthDayNano imdn (types/get-object arrow-vec idx)]
           (PeriodDuration. (.-period imdn) (.-duration imdn))))))
@@ -293,6 +306,7 @@
     (if (types/union? el-type)
       (let [inner-rdr (->poly-reader (.getDataVector arrow-vec) el-type)]
         (reify IMonoVectorReader
+          (valueCount [_] (.getValueCount arrow-vec))
           (readObject [_ idx]
             (let [start-idx (.getElementStartIndex arrow-vec idx)
                   value-count (- (.getElementEndIndex arrow-vec idx)
@@ -311,6 +325,7 @@
 
       (let [inner-rdr (->mono-reader (.getDataVector arrow-vec) el-type)]
         (reify IMonoVectorReader
+          (valueCount [_] (.getValueCount arrow-vec))
           (readObject [_ idx]
             (let [start-idx (.getElementStartIndex arrow-vec idx)
                   value-count (- (.getElementEndIndex arrow-vec idx)
@@ -364,6 +379,7 @@
                                                   (->mono-reader child-vec val-type))))
                              (into {}))]
       (reify IMonoVectorReader
+        (valueCount [_] (.getValueCount arrow-vec))
         (readObject [_ idx]
           (reify IStructValueReader
             (readBoolean [_ field-name] (.readBoolean ^IMonoVectorReader (get inner-readers field-name) idx))
@@ -414,6 +430,8 @@
                                ^:unsynchronized-mutable ^byte type-id
                                ^:unsynchronized-mutable ^int idx]
   IPolyVectorReader
+  (valueCount [_] (.getValueCount arrow-vec))
+
   (read [this idx]
     (let [type-id (if (.isNull arrow-vec idx) null-type-id nn-type-id)]
       (set! (.type-id this) type-id)
@@ -638,6 +656,7 @@
 
 (deftype IndirectVectorMonoReader [^IMonoVectorReader inner, ^IIndirectVector col]
   IMonoVectorReader
+  (valueCount [_] (.getValueCount col))
   (readBoolean [_ idx] (.readBoolean inner (.getIndex col idx)))
   (readByte [_ idx] (.readByte inner (.getIndex col idx)))
   (readShort [_ idx] (.readShort inner (.getIndex col idx)))
@@ -649,6 +668,7 @@
 
 (deftype IndirectVectorPolyReader [^IPolyVectorReader inner, ^IIndirectVector col]
   IPolyVectorReader
+  (valueCount [_] (.getValueCount col))
   (read [_ idx] (.read inner (.getIndex col idx)))
   (read [_] (.read inner))
 

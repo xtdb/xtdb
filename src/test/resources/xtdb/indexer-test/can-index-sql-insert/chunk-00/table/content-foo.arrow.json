@@ -1,0 +1,38 @@
+{
+  "schema" : {
+    "fields" : [{
+      "name" : "foo",
+      "nullable" : false,
+      "type" : {
+        "name" : "union",
+        "mode" : "Dense",
+        "typeIds" : [ ]
+      },
+      "children" : [{
+        "name" : "i64",
+        "nullable" : false,
+        "type" : {
+          "name" : "int",
+          "bitWidth" : 64,
+          "isSigned" : true
+        },
+        "children" : [ ]
+      }]
+    }]
+  },
+  "batches" : [{
+    "count" : 2,
+    "columns" : [{
+      "name" : "foo",
+      "count" : 2,
+      "TYPE_ID" : [0,0],
+      "OFFSET" : [0,1],
+      "children" : [{
+        "name" : "i64",
+        "count" : 2,
+        "VALIDITY" : [1,1],
+        "DATA" : ["2","1"]
+      }]
+    }]
+  }]
+}

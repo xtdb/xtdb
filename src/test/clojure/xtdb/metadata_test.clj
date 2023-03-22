@@ -7,7 +7,7 @@
 
 (t/use-fixtures :each tu/with-node)
 
-(t/deftest test-row-id->cols
+(t/deftest test-row-id->chunk
   (-> (tpch/submit-docs! tu/*node* 0.001)
       (tu/then-await-tx* tu/*node*))
 
@@ -15,19 +15,19 @@
 
   (let [metadata-mgr (tu/component ::meta/metadata-manager)]
     (letfn [(row-id->col-names [table row-id]
-              (let [{:keys [cols]} (meta/row-id->cols metadata-mgr table row-id)]
-                {:col-names (into #{} (map (comp keyword :col-name)) cols)
-                 :block-idxs (into #{} (map :block-idx) cols)}))]
+              (-> (meta/row-id->chunk metadata-mgr table row-id)
+                  (dissoc :chunk-idx)
+                  (update :col-names #(into #{} (map keyword) %))))]
       (t/is (= {:col-names #{:id
                              :c_acctbal :c_address :c_comment :c_custkey :c_mktsegment
                              :c_name :c_nationkey :c_phone}
-                :block-idxs #{0}}
+                :block-idx 0}
                (row-id->col-names "customer" 0)))
 
       (t/is (= {:col-names #{:id
                              :o_clerk :o_comment :o_custkey :o_orderdate :o_orderkey
                              :o_orderpriority :o_orderstatus :o_shippriority :o_totalprice}
-                :block-idxs #{0}}
+                :block-idx 0}
                (row-id->col-names "orders" 500)))
 
       (let [li-cols #{:id
@@ -35,10 +35,10 @@
                       :l_linenumber :l_linestatus :l_orderkey :l_partkey
                       :l_quantity :l_receiptdate :l_returnflag :l_shipdate
                       :l_shipinstruct :l_shipmode :l_suppkey :l_tax}]
-        (t/is (= {:col-names li-cols, :block-idxs #{1}}
+        (t/is (= {:col-names li-cols, :block-idx 1}
                  (row-id->col-names "lineitem" 1750)))
 
-        (t/is (= {:col-names li-cols, :block-idxs #{2}}
+        (t/is (= {:col-names li-cols, :block-idx 2}
                  (row-id->col-names "lineitem" 2750)))))))
 
 (t/deftest test-param-metadata-error-310

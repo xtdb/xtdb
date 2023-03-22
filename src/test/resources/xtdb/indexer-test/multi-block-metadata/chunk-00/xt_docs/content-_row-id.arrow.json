@@ -1,0 +1,31 @@
+{
+  "schema" : {
+    "fields" : [{
+      "name" : "_row-id",
+      "nullable" : false,
+      "type" : {
+        "name" : "int",
+        "bitWidth" : 64,
+        "isSigned" : true
+      },
+      "children" : [ ]
+    }]
+  },
+  "batches" : [{
+    "count" : 4,
+    "columns" : [{
+      "name" : "_row-id",
+      "count" : 4,
+      "VALIDITY" : [1,1,1,1],
+      "DATA" : ["0","1","2","3"]
+    }]
+  },{
+    "count" : 2,
+    "columns" : [{
+      "name" : "_row-id",
+      "count" : 2,
+      "VALIDITY" : [1,1],
+      "DATA" : ["4","5"]
+    }]
+  }]
+}

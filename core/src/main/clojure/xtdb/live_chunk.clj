@@ -1,5 +1,6 @@
 (ns xtdb.live-chunk
   (:require [clojure.tools.logging :as log]
+            [juxt.clojars-mirrors.integrant.core :as ig]
             [xtdb.blocks :as blocks]
             [xtdb.bloom :as bloom]
             xtdb.indexer.internal-id-manager
@@ -8,21 +9,22 @@
             [xtdb.types :as types]
             [xtdb.util :as util]
             [xtdb.vector.indirect :as iv]
-            [xtdb.vector.writer :as vw]
-            [juxt.clojars-mirrors.integrant.core :as ig])
+            [xtdb.vector.writer :as vw])
   (:import [clojure.lang MapEntry]
-           xtdb.ICursor
-           (xtdb.metadata IColumnMetadataWriter IMetadataManager IMetadataPredicate ITableMetadata ITableMetadataWriter)
-           xtdb.object_store.ObjectStore
            java.lang.AutoCloseable
            (java.util ArrayList HashMap List Map)
            (java.util.concurrent CompletableFuture)
            java.util.concurrent.atomic.AtomicInteger
-           java.util.function.Consumer
+           (java.util.function Consumer IntPredicate)
+           java.util.stream.IntStream
            (org.apache.arrow.memory BufferAllocator)
            (org.apache.arrow.vector BigIntVector ValueVector VectorLoader VectorSchemaRoot VectorUnloader)
+           org.roaringbitmap.longlong.Roaring64Bitmap
            org.roaringbitmap.RoaringBitmap
-           org.roaringbitmap.longlong.Roaring64Bitmap))
+           xtdb.ICursor
+           (xtdb.metadata IMetadataManager IMetadataPredicate ITableMetadata ITableMetadataWriter)
+           xtdb.object_store.ObjectStore
+           (xtdb.vector IIndirectVector IRelationWriter IVectorWriter)))
 
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface IRowCounter
@@ -67,48 +69,23 @@
     (RowCounter. block-idx 0 block-row-counts 0)))
 
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
-(definterface ILiveColumnWatermark
-  (columnType [])
-  (^xtdb.ICursor #_<IIR> liveBlocks [^org.roaringbitmap.RoaringBitmap excludeBlockIdxs])
-  (^void close []))
+(definterface ILiveTableTx
+  (^xtdb.vector.IRelationWriter writer [])
 
-#_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
-(definterface ILiveColumnTx
-  (^xtdb.live_chunk.ILiveColumnWatermark openWatermark [^boolean retain])
+  (^xtdb.vector.IIndirectRelation liveRow [^long rowId])
   (^void writeRowId [^long rowId])
   (^boolean containsRowId [^long rowId])
-  (^org.apache.arrow.vector.VectorSchemaRoot liveRoot [])
-  (^org.apache.arrow.vector.VectorSchemaRoot txLiveRoot [])
-  (^xtdb.vector.IVectorWriter contentWriter [])
-  (^void commit [])
-  (^void abort [])
-  (^void close []))
 
-#_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
-(definterface ILiveColumn
-  (^xtdb.live_chunk.ILiveColumnTx startTx [])
-  (^xtdb.live_chunk.ILiveColumnWatermark openWatermark [^boolean retain])
-  (^boolean containsRowId [^long rowId])
-  (^org.apache.arrow.vector.VectorSchemaRoot liveRoot [])
-  (^void finishBlock [])
-  (^java.util.concurrent.CompletableFuture finishChunk [])
-  (^void close []))
-
-#_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
-(definterface ILiveTableTx
-  (^xtdb.live_chunk.ILiveColumnTx liveColumn [^String colName])
-  (^Iterable #_#_<Map$Entry<String, VSR>> liveRootsWith [^long rowId])
   (^xtdb.live_chunk.ILiveTableWatermark openWatermark [^boolean retain])
 
   (^void commit [])
-  (^void abort [])
-
   (^void close []))
 
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface ILiveTableWatermark
-  (^xtdb.live_chunk.ILiveColumnWatermark liveColumn [^String colName])
-  (^xtdb.ICursor #_<IIR> liveBlocks [^Iterable colNames, ^xtdb.metadata.IMetadataPredicate metadataPred])
+  (^java.util.Map columnTypes [])
+  (^xtdb.ICursor #_<IIR> liveBlocks [^java.util.Set #_<String> colNames,
+                                      ^xtdb.metadata.IMetadataPredicate metadataPred])
   (^void close []))
 
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
@@ -130,11 +107,9 @@
   (^xtdb.live_chunk.ILiveTableTx liveTable [^String table])
 
   (^xtdb.live_chunk.ILiveChunkWatermark openWatermark [])
-  ;; (live-cols->live-roots live-columns) (live-cols->tx-live-roots live-columns)
 
   (^long nextRowId [])
   (^void commit [])
-  (^void abort [])
   (^void close []))
 
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
@@ -154,6 +129,15 @@
   (^void nextChunk [])
   (^void close []))
 
+(defn- ->excluded-block-idxs ^org.roaringbitmap.RoaringBitmap [^ITableMetadata table-metadata, ^IMetadataPredicate metadata-pred]
+  (let [exclude-block-idxs (RoaringBitmap.)]
+    (when-let [pred (some-> metadata-pred (.build table-metadata))]
+      (dotimes [block-idx (.blockCount table-metadata)]
+        (when-not (.test pred block-idx)
+          (.add exclude-block-idxs block-idx))))
+
+    exclude-block-idxs))
+
 (defn- without-block-idxs [^ICursor inner, ^RoaringBitmap exclude-block-idxs]
   (let [!block-idx (AtomicInteger. 0)]
     (reify ICursor
@@ -171,275 +155,191 @@
 
       (close [_] (.close inner)))))
 
-(deftype LiveColumnTx [^BigIntVector row-id-vec, ^ValueVector content-vec, ^Roaring64Bitmap row-id-bitmap
-                       ^BigIntVector transient-row-id-vec, ^ValueVector transient-content-vec, ^Roaring64Bitmap transient-row-id-bitmap
-                       ^IRowCounter row-counter]
-  ILiveColumnTx
+(defn- retain-vec [^ValueVector v]
+  (-> (.getTransferPair v (.getAllocator v))
+      (doto (.splitAndTransfer 0 (.getValueCount v)))
+      (.getTo)))
+
+(defn- open-wm-rel ^xtdb.vector.IIndirectRelation [^IRelationWriter rel, ^BigIntVector row-id-vec, retain?]
+  (let [out-cols (ArrayList.)]
+    (try
+      (doseq [^ValueVector v (cons row-id-vec (mapv #(.getVector ^IVectorWriter %) rel))]
+        (.add out-cols (iv/->direct-vec (cond-> v
+                                          retain? (retain-vec)))))
+
+      (iv/->indirect-rel out-cols)
+
+      (catch Throwable t
+        (when retain? (run! util/try-close out-cols))
+        (throw t)))))
+
+(deftype LiveTableTx [^BufferAllocator allocator, ^ObjectStore object-store
+                      ^String table-name, ^ITableMetadataWriter table-metadata-writer
+                      ^IRelationWriter static-rel, ^BigIntVector static-row-id-vec, ^Roaring64Bitmap static-row-id-bitmap
+                      ^IRelationWriter transient-rel, ^BigIntVector transient-row-id-vec, ^Roaring64Bitmap transient-row-id-bitmap
+                      ^IRowCounter row-counter]
+  ILiveTableTx
+  (writer [_] transient-rel)
+
+  (liveRow [_ row-id]
+    (letfn [(live-row* [^IRelationWriter rel, ^BigIntVector row-id-vec, ^Roaring64Bitmap row-id-bitmap]
+              (when (.contains row-id-bitmap row-id)
+                (let [idx (-> (IntStream/range 0 (.getValueCount row-id-vec))
+                              (.filter (reify IntPredicate
+                                         (test [_ idx]
+                                           (= row-id (.get row-id-vec idx)))))
+                              (.findFirst)
+                              (.getAsInt))]
+                  (iv/select (vw/rel-writer->reader rel) (int-array [idx])))))]
+
+      (or (live-row* static-rel static-row-id-vec static-row-id-bitmap)
+          (live-row* transient-rel transient-row-id-vec transient-row-id-bitmap))))
+
   (writeRowId [_ row-id]
     (.addLong transient-row-id-bitmap row-id)
 
     (let [dest-idx (.getValueCount transient-row-id-vec)]
-      (.setValueCount transient-row-id-vec (inc dest-idx))
-      (.set transient-row-id-vec dest-idx row-id)))
+      (.setSafe transient-row-id-vec dest-idx row-id)
+      (.setValueCount transient-row-id-vec (inc dest-idx))))
 
   (containsRowId [_ row-id]
-    (or (.contains row-id-bitmap row-id)
+    (or (.contains static-row-id-bitmap row-id)
         (.contains transient-row-id-bitmap row-id)))
 
-  (contentWriter [_] (vw/vec->writer transient-content-vec))
-
-  (liveRoot [_]
-    (let [^Iterable vs [row-id-vec content-vec]]
-      (VectorSchemaRoot. vs)))
-
-  (txLiveRoot [_]
-    (let [^Iterable vs [transient-row-id-vec transient-content-vec]]
-      (VectorSchemaRoot. vs)))
-
-  (openWatermark [this retain?]
-    (let [col-type (types/merge-col-types (types/field->col-type (.getField content-vec))
-                                          (types/field->col-type (.getField transient-content-vec)))
-
-          live-root (cond-> (.liveRoot this)
-                      retain? util/slice-root)
+  (openWatermark [_ retain?]
+    (let [col-types (->> transient-rel
+                         (into {} (map (fn [^IVectorWriter col]
+                                         (let [v (.getVector col)]
+                                           (MapEntry/create (.getName v) (types/field->col-type (.getField v))))))))
           row-counts (.blockRowCounts row-counter)
-          tx-live-root (.txLiveRoot this)]
+          static-wm-rel (open-wm-rel static-rel static-row-id-vec retain?)
+          transient-wm-rel (open-wm-rel transient-rel transient-row-id-vec false)]
 
-      (reify ILiveColumnWatermark
-        (columnType [_] col-type)
+      (reify ILiveTableWatermark
+        (columnTypes [_] col-types)
 
-        (liveBlocks [_ exclude-block-idxs]
-          (util/->concat-cursor (iv/->slice-cursor (iv/<-root tx-live-root) [(.getRowCount tx-live-root)])
-                                (-> (iv/->slice-cursor (iv/<-root live-root) row-counts)
-                                    (without-block-idxs exclude-block-idxs))))
+        (liveBlocks [_ col-names metadata-pred]
+          (let [excluded-block-idxs (->excluded-block-idxs (.tableMetadata table-metadata-writer) metadata-pred)]
+            (util/->concat-cursor (-> (iv/->indirect-rel (->> static-wm-rel
+                                                              (filter (comp col-names #(.getName ^IIndirectVector %)))))
+                                      (iv/with-absent-cols allocator col-names)
+                                      (iv/->slice-cursor row-counts)
+                                      (without-block-idxs excluded-block-idxs))
+                                  (-> (iv/->indirect-rel (->> transient-wm-rel
+                                                              (filter (comp col-names #(.getName ^IIndirectVector %)))))
+                                      (iv/with-absent-cols allocator col-names)
+                                      (iv/->slice-cursor [(.rowCount transient-wm-rel)])))))
 
         AutoCloseable
-        (close [_] (when retain? (.close live-root))))))
+        (close [_] (when retain? (.close static-wm-rel))))))
 
   (commit [_]
-    (doto (vw/vec->writer content-vec)
-      (vw/append-vec (iv/->direct-vec transient-content-vec)))
+    (.addRows row-counter (.getValueCount transient-row-id-vec))
+    (doto static-row-id-bitmap (.or transient-row-id-bitmap))
 
-    (doto (vw/vec->writer row-id-vec)
+    (doto (vw/vec->writer static-row-id-vec)
       (vw/append-vec (iv/->direct-vec transient-row-id-vec)))
 
-    (.addRows row-counter (.getValueCount transient-row-id-vec))
+    (let [copier (.rowCopier static-rel (vw/rel-writer->reader transient-rel))]
+      (dotimes [idx (.getValueCount transient-row-id-vec)]
+        (.copyRow copier idx)))
 
-    (doto row-id-bitmap (.or transient-row-id-bitmap))
-
-    (.clear transient-row-id-vec)
-    (.clear transient-content-vec)
-    (.clear transient-row-id-bitmap))
-
-  (abort [_]
-    (.clear transient-row-id-vec)
-    (.clear transient-content-vec)
-    (.clear transient-row-id-bitmap))
+    (.clear transient-rel))
 
   AutoCloseable
   (close [_]
-    (.close transient-row-id-vec)
-    (.close transient-content-vec)))
+    (.close transient-rel)
+    (util/try-close transient-row-id-vec)))
 
-(deftype LiveColumn [^BufferAllocator allocator, ^ObjectStore object-store
-                     ^String table-name, ^String col-name, ^IColumnMetadataWriter col-metadata-writer
-                     ^BigIntVector row-id-vec, ^ValueVector content-vec, ^Roaring64Bitmap row-id-bitmap
-                     ^long chunk-idx, ^IRowCounter row-counter]
-  ILiveColumn
-  (startTx [_]
-    (LiveColumnTx. row-id-vec content-vec row-id-bitmap
-                   (.createVector types/row-id-field allocator)
-                   (.createVector (types/->field col-name types/dense-union-type false) allocator)
-                   (Roaring64Bitmap.) row-counter))
-
-  (containsRowId [_ row-id] (.contains row-id-bitmap row-id))
-
-  (liveRoot [_]
-    (let [^Iterable vs [row-id-vec content-vec]]
-      (VectorSchemaRoot. vs)))
-
-  (openWatermark [_ retain?]
-    (let [col-type (types/field->col-type (.getField content-vec))
-          ^Iterable vs [row-id-vec content-vec]
-          row-counts (.blockRowCounts row-counter)
-          live-root (cond-> (VectorSchemaRoot. vs)
-                      retain? util/slice-root)]
-
-      (reify ILiveColumnWatermark
-        (columnType [_] col-type)
-
-        (liveBlocks [_ exclude-block-idxs]
-          (-> (iv/->slice-cursor (iv/<-root live-root) row-counts)
-              (without-block-idxs exclude-block-idxs)))
-
-        AutoCloseable
-        (close [_] (when retain? (.close live-root))))))
-
-  (finishBlock [this]
-    (.writeMetadata col-metadata-writer
-                    (iv/slice-rel (iv/<-root (.liveRoot this))
-                                  (.chunkRowCount row-counter)
-                                  (.blockRowCount row-counter))
-                    (.blockIdx row-counter))
-    (.nextBlock row-counter))
-
-  (finishChunk [this]
-    (let [live-root (.liveRoot this)]
-      (.writeMetadata col-metadata-writer (iv/<-root live-root) -1)
-
-      (.putObject object-store (meta/->chunk-obj-key chunk-idx table-name col-name)
-                  (with-open [write-root (VectorSchemaRoot/create (.getSchema live-root) allocator)]
-                    (let [loader (VectorLoader. write-root)
-                          row-counts (.blockRowCounts row-counter)]
-                      (with-open [^ICursor slices (blocks/->slices live-root row-counts)]
-                        (let [buf (util/build-arrow-ipc-byte-buffer write-root :file
-                                    (fn [write-batch!]
-                                      (.forEachRemaining slices
-                                                         (reify Consumer
-                                                           (accept [_ sliced-root]
-                                                             (with-open [arb (.getRecordBatch (VectorUnloader. sliced-root))]
-                                                               (.load loader arb)
-                                                               (write-batch!)))))))]
-                          (.nextChunk row-counter)
-                          buf)))))))
-
-  AutoCloseable
-  (close [_]
-    (util/try-close content-vec)
-    (util/try-close row-id-vec)))
-
-(defn- table-wm-live-blocks ^xtdb.ICursor [^Map wms, ^Iterable col-names, ^ITableMetadata table-metadata, ^IMetadataPredicate metadata-pred]
-  (let [exclude-block-idxs (RoaringBitmap.)]
-    (when-let [pred (some-> metadata-pred (.build table-metadata))]
-      (dotimes [block-idx (.blockCount table-metadata)]
-        (when-not (.test pred block-idx)
-          (.add exclude-block-idxs block-idx))))
-
-    (let [slice-cursors (->> col-names
-                             (into {} (keep (fn [^String col-name]
-                                              (when-let [^ILiveColumnWatermark col-wm (.get wms col-name)]
-                                                (MapEntry/create col-name (.liveBlocks col-wm exclude-block-idxs)))))))]
-      (when (= (set (keys slice-cursors)) (set col-names))
-        (util/combine-col-cursors slice-cursors)))))
-
-(deftype LiveTableTx [^BufferAllocator allocator, ^ObjectStore object-store
-                      ^String table-name, ^ITableMetadataWriter table-metadata-writer
-                      ^Map live-columns, ^Map live-column-txs
-                      ^long chunk-idx, ^long block-idx]
-  ILiveTableTx
-  (liveColumn [_ col-name]
-    (letfn [(->live-col [col-name]
-              (LiveColumn. allocator object-store table-name col-name (.columnMetadataWriter table-metadata-writer col-name)
-                           (-> types/row-id-field (.createVector allocator))
-                           (-> (types/->field col-name types/dense-union-type false) (.createVector allocator))
-                           (Roaring64Bitmap.) chunk-idx (->row-counter block-idx)))
-
-            (->live-col-tx [col-name]
-              (-> ^ILiveColumn
-                  (.computeIfAbsent live-columns col-name (util/->jfn ->live-col))
-                  (.startTx)))]
-
-      (.computeIfAbsent live-column-txs col-name
-                        (util/->jfn ->live-col-tx))))
-
-  (liveRootsWith [_ row-id]
-    (concat (->> live-column-txs
-                 (keep (fn [[col-name, ^ILiveColumnTx live-col]]
-                         (when (.containsRowId live-col row-id)
-                           (MapEntry/create col-name (.txLiveRoot live-col))))))
-            (->> live-columns
-                 (keep (fn [[col-name, ^ILiveColumn live-col]]
-                         (when (.containsRowId live-col row-id)
-                           (MapEntry/create col-name (.liveRoot live-col))))))))
-
-  (openWatermark [_ retain?]
-    (let [wms (HashMap.)]
-      (try
-        (doseq [[col-name ^ILiveColumnTx live-col] live-column-txs]
-          (.put wms col-name (.openWatermark live-col retain?)))
-
-        (doseq [[col-name ^ILiveColumn live-col] live-columns]
-          (.computeIfAbsent wms col-name
-                            (util/->jfn (fn [_] (.openWatermark live-col retain?)))))
-
-        (reify ILiveTableWatermark
-          (liveColumn [_ col-name] (.get wms col-name))
-          (liveBlocks [_ col-names metadata-pred]
-            (table-wm-live-blocks wms col-names (.tableMetadata table-metadata-writer) metadata-pred))
-
-          AutoCloseable
-          (close [_] (run! util/try-close (.values wms))))
-
-        (catch Throwable t
-          (run! util/try-close (.values wms))
-          (throw t)))))
-
-  (commit [_]
-    (doseq [^ILiveColumnTx live-col (.values live-column-txs)]
-      (.commit live-col)))
-
-  (abort [_]
-    (doseq [^ILiveColumnTx live-col (.values live-column-txs)]
-      (.abort live-col)))
-
-  AutoCloseable
-  (close [_]
-    (run! util/try-close (.values live-column-txs))
-    (.clear live-column-txs)))
+(defn- ->col-metadata-writer ^xtdb.metadata.IColumnMetadataWriter [^ITableMetadataWriter table-metadata-writer, ^Map col-metadata-writers, ^String col-name]
+  (.computeIfAbsent col-metadata-writers col-name
+                    (util/->jfn
+                      (fn [col-name]
+                        (.columnMetadataWriter table-metadata-writer col-name)))))
 
 (deftype LiveTable [^BufferAllocator allocator, ^ObjectStore object-store, ^IMetadataManager metadata-mgr
-                    ^String table-name
-                    ^Map live-columns
-                    ^ITableMetadataWriter table-metadata-writer
-                    ^long chunk-idx, ^IRowCounter chunk-row-counter]
+                    ^String table-name,
+                    ^IRelationWriter static-rel, ^BigIntVector row-id-vec, ^Roaring64Bitmap row-id-bitmap
+                    ^ITableMetadataWriter table-metadata-writer, ^Map col-metadata-writers
+                    ^long chunk-idx, ^IRowCounter row-counter]
   ILiveTable
   (startTx [_]
-    (LiveTableTx. allocator object-store table-name table-metadata-writer live-columns (HashMap.) chunk-idx (.blockIdx chunk-row-counter)))
+    (LiveTableTx. allocator object-store table-name table-metadata-writer
+                  static-rel row-id-vec row-id-bitmap
+                  (vw/->rel-writer allocator) (BigIntVector. (types/col-type->field "_row-id" :i64) allocator) (Roaring64Bitmap.)
+                  row-counter))
 
   (openWatermark [_ retain?]
-    (let [wms (HashMap.)]
-      (try
-        (doseq [[col-name ^ILiveColumn live-col] live-columns]
-          (.put wms col-name (.openWatermark live-col retain?)))
+    (let [col-types (->> static-rel
+                         (into {} (map (fn [^IVectorWriter col]
+                                         (let [v (.getVector col)]
+                                           (MapEntry/create (.getName v) (types/field->col-type (.getField v))))))))
+          row-counts (.blockRowCounts row-counter)
+          wm-rel (open-wm-rel static-rel row-id-vec retain?)]
 
-        (reify ILiveTableWatermark
-          (liveColumn [_ col-name] (.get wms col-name))
-          (liveBlocks [_ col-names metadata-pred]
-            (table-wm-live-blocks wms col-names (.tableMetadata table-metadata-writer) metadata-pred))
+      (reify ILiveTableWatermark
+        (columnTypes [_] col-types)
 
-          AutoCloseable
-          (close [_] (run! util/try-close (.values wms))))
+        (liveBlocks [_ col-names metadata-pred]
+          (let [excluded-block-idxs (->excluded-block-idxs (.tableMetadata table-metadata-writer) metadata-pred)]
+            (-> (iv/->indirect-rel (->> wm-rel
+                                        (filter (comp col-names #(.getName ^IIndirectVector %)))))
+                (iv/with-absent-cols allocator col-names)
+                (iv/->slice-cursor row-counts)
+                (without-block-idxs excluded-block-idxs))))
 
-        (catch Throwable t
-          (run! util/try-close (.values wms))
-          (throw t)))))
+        AutoCloseable
+        (close [_] (when retain? (.close wm-rel))))))
 
   (finishBlock [_]
-    (doseq [^ILiveColumn live-col (.values live-columns)]
-      (.finishBlock live-col)))
+    (doseq [^ValueVector live-vec (cons row-id-vec (map #(.getVector ^IVectorWriter %) static-rel))]
+      (doto (->col-metadata-writer table-metadata-writer col-metadata-writers (.getName live-vec))
+        (.writeMetadata (iv/slice-col (iv/->direct-vec live-vec)
+                                      (.chunkRowCount row-counter)
+                                      (.blockRowCount row-counter))
+                        (.blockIdx row-counter))))
+
+    (.nextBlock row-counter))
 
   (finishChunk [_]
-    (let [!fut (-> (CompletableFuture/allOf
-                    (->> (for [^ILiveColumn live-column (vals live-columns)]
-                           (.finishChunk live-column))
+    (let [row-counts (.blockRowCounts row-counter)
+
+          !fut (-> (CompletableFuture/allOf
+                    (->> (cons row-id-vec (map #(.getVector ^IVectorWriter %) static-rel))
+                         (map (fn [^ValueVector live-vec]
+                                (let [live-root (VectorSchemaRoot/of (into-array [live-vec]))]
+                                  (doto (->col-metadata-writer table-metadata-writer col-metadata-writers (.getName live-vec))
+                                    (.writeMetadata (iv/->direct-vec live-vec) -1))
+
+                                  (.putObject object-store (meta/->chunk-obj-key chunk-idx table-name (.getName live-vec))
+                                              (with-open [write-root (VectorSchemaRoot/create (.getSchema live-root) allocator)]
+                                                (let [loader (VectorLoader. write-root)]
+                                                  (with-open [^ICursor slices (blocks/->slices live-root row-counts)]
+                                                    (let [buf (util/build-arrow-ipc-byte-buffer write-root :file
+                                                                                                (fn [write-batch!]
+                                                                                                  (.forEachRemaining slices
+                                                                                                                     (reify Consumer
+                                                                                                                       (accept [_ sliced-root]
+                                                                                                                         (with-open [arb (.getRecordBatch (VectorUnloader. sliced-root))]
+                                                                                                                           (.load loader arb)
+                                                                                                                           (write-batch!)))))))]
+                                                      (.nextChunk row-counter)
+                                                      buf))))))))
                          (into-array CompletableFuture)))
+
                    (util/then-compose
                      (fn [_]
                        (.finishChunk table-metadata-writer))))
 
-          live-roots (-> live-columns
-                         (update-vals (fn [^ILiveColumn live-col]
-                                        (.liveRoot live-col))))
-
-          chunk-metadata (meta/live-roots->chunk-metadata table-name live-roots)]
+          chunk-metadata (meta/live-rel->chunk-metadata table-name (vw/rel-writer->reader static-rel))]
       (-> !fut
           (util/then-apply (fn [_] chunk-metadata)))))
 
   AutoCloseable
   (close [_]
-    (run! util/try-close (.values live-columns))
-    (util/try-close table-metadata-writer)
-    (.clear live-columns)))
+    (util/try-close static-rel)
+    (util/try-close row-id-vec)
+    (util/try-close table-metadata-writer)))
 
 (deftype LiveChunkTx [^BufferAllocator allocator
                       ^ObjectStore object-store
@@ -451,13 +351,13 @@
   (liveTable [_ table-name]
     (letfn [(->live-table [table]
               (LiveTable. allocator object-store metadata-mgr table
-                          (HashMap.) (.openTableMetadataWriter metadata-mgr table chunk-idx)
-                          chunk-idx row-counter))
+                          (vw/->rel-writer allocator) (BigIntVector. (types/col-type->field "_row-id" :i64) allocator) (Roaring64Bitmap.)
+                          (.openTableMetadataWriter metadata-mgr table chunk-idx) (HashMap.)
+                          chunk-idx (->row-counter (.blockIdx row-counter))))
 
             (->live-table-tx [table-name]
-              (-> ^ILiveTable
-                  (.computeIfAbsent live-tables table-name
-                                    (util/->jfn ->live-table))
+              (-> ^ILiveTable (.computeIfAbsent live-tables table-name
+                                                (util/->jfn ->live-table))
                   (.startTx)))]
 
       (.computeIfAbsent live-table-txs table-name
@@ -492,10 +392,6 @@
     (doseq [^ILiveTableTx live-table (.values live-table-txs)]
       (.commit live-table))
     (.addRows row-counter tx-row-count))
-
-  (abort [_]
-    (doseq [^ILiveTableTx live-table (.values live-table-txs)]
-      (.abort live-table)))
 
   AutoCloseable
   (close [_]

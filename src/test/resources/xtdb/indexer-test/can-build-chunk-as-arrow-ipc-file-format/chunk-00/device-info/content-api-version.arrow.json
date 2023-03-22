@@ -1,0 +1,37 @@
+{
+  "schema" : {
+    "fields" : [{
+      "name" : "api-version",
+      "nullable" : false,
+      "type" : {
+        "name" : "union",
+        "mode" : "Dense",
+        "typeIds" : [ ]
+      },
+      "children" : [{
+        "name" : "utf8",
+        "nullable" : false,
+        "type" : {
+          "name" : "utf8"
+        },
+        "children" : [ ]
+      }]
+    }]
+  },
+  "batches" : [{
+    "count" : 2,
+    "columns" : [{
+      "name" : "api-version",
+      "count" : 2,
+      "TYPE_ID" : [0,0],
+      "OFFSET" : [0,1],
+      "children" : [{
+        "name" : "utf8",
+        "count" : 2,
+        "VALIDITY" : [1,1],
+        "OFFSET" : [0,2,4],
+        "DATA" : ["23","23"]
+      }]
+    }]
+  }]
+}

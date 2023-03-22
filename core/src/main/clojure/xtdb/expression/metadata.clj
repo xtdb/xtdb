@@ -22,39 +22,6 @@
       1 (first args)
       (-> expr (assoc :args args)))))
 
-(defn- meta-fallback-expr [{:keys [op] :as expr}]
-  (case op
-    (:literal :param :local) nil ;; expected to be filtered out by the caller, using simplify-and-or-expr
-    :variable {:op :metadata-field-present, :field (:variable expr)}
-
-    :if (let [{:keys [pred then else]} expr]
-          (-> {:op :call, :f :and
-               :args [(meta-fallback-expr pred)
-                      (-> {:op :call, :f :or
-                           :args [(meta-fallback-expr then)
-                                  (meta-fallback-expr else)]}
-                          simplify-and-or-expr)]}
-              simplify-and-or-expr))
-
-    :if-some (let [{:keys [local expr then else]} expr]
-               (recur {:op :let, :local local, :expr expr,
-                       :body {:op :if, :pred {:op :call, :f :nil?
-                                              :args [{:op :local, :local local}]}
-                              :then else
-                              :else then}}))
-
-    :let (let [{:keys [expr body]} expr]
-           (-> {:op :call, :f :and
-                :args [(meta-fallback-expr expr)
-                       (meta-fallback-expr body)]}
-               simplify-and-or-expr))
-
-    :call (let [{:keys [f args]} expr]
-            (-> {:op :call
-                 :f (if (= f :or) :or :and)
-                 :args (map meta-fallback-expr args)}
-                simplify-and-or-expr))))
-
 (declare meta-expr)
 
 (defn call-meta-expr [{:keys [f args] :as expr}]
@@ -108,20 +75,17 @@
                  simplify-and-or-expr)
           nil)
 
-        (meta-fallback-expr expr))))
+        ;; we can't check this call at the metadata level, have to pull the block and look.
+        {:op :literal, :literal true})))
 
 (defn meta-expr [{:keys [op] :as expr}]
   (case op
     (:literal :param :let) nil ;; expected to be filtered out by the caller, using simplify-and-or-expr
-    :variable (meta-fallback-expr expr)
+    :variable {:op :literal, :literal true}
     :if (-> {:op :call
-             :f :and
-             :args [(meta-fallback-expr (:pred expr))
-                    (-> {:op :call
-                         :f :or
-                         :args [(meta-expr (:then expr))
-                                (meta-expr (:else expr))]}
-                        simplify-and-or-expr)]}
+             :f :or
+             :args [(meta-expr (:then expr))
+                    (meta-expr (:else expr))]}
             simplify-and-or-expr)
     :call (call-meta-expr expr)))
 
@@ -141,14 +105,6 @@
 (def ^:private block-idx-sym (gensym "block-idx"))
 (def ^:private types-vec-sym (gensym "types-vec"))
 (def ^:private bloom-vec-sym (gensym "bloom-vec"))
-
-(defmethod expr/codegen-expr :metadata-field-present [{:keys [field]} _]
-  (let [field-name (str field)]
-    {:return-type :bool
-     :continue (fn [f]
-                 (f :bool
-                    `(boolean
-                      (.rowIndex ~table-metadata-sym ~field-name ~block-idx-sym))))}))
 
 (defmethod expr/codegen-expr :metadata-vp-call [{:keys [f meta-value field param-expr col-type bloom-hash-sym]} opts]
   (let [field-name (str field)
