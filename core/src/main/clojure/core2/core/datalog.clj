@@ -566,7 +566,8 @@
   (let [{:keys [sub-query binding]} scalar-sub-query
         {::keys [apply-mapping]} (meta sub-query)
         columns (lp/relation-columns sub-query)
-        _ (when (not= 1 (count columns)) (throw (err/illegal-arg :scalar-sub-query-requires-one-column)))
+        _ (when (not= 1 (count columns))
+            (throw (err/illegal-arg :scalar-sub-query-requires-one-column {::err/message "scalar sub query requires exactly one column"})))
         col (first columns)
         binding-sym (second binding)
         sq-plan (vary-meta [:rename {col binding-sym} sub-query] assoc ::vars #{binding-sym})

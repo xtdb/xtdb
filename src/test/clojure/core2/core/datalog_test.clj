@@ -1536,8 +1536,16 @@
 
   (t/testing "cardinality violation error"
     (t/is (thrown-with-msg? core2.RuntimeException #"cardinality violation"
-            (->> '{:find [firstname]
-                   :where [[(q {:find [firstname],
-                                :where [(match customer {:firstname firstname})]})
-                            firstname]]}
-                 (c2/q tu/*node*))))))
+                            (->> '{:find [firstname]
+                                   :where [[(q {:find [firstname],
+                                                :where [(match customer {:firstname firstname})]})
+                                            firstname]]}
+                                 (c2/q tu/*node*)))))
+
+  (t/testing "multiple column error"
+    (t/is (thrown-with-msg? core2.IllegalArgumentException #"scalar sub query requires exactly one column"
+                            (->> '{:find [n-customers]
+                                   :where [[(q {:find [firstname (count customer)],
+                                                :where [(match customer {:customer customer, :firstname firstname})]})
+                                            n-customers]]}
+                                 (c2/q tu/*node*))))))
