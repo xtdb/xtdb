@@ -6,7 +6,7 @@ Core2 is a bitemporal and dynamic relational database for SQL and Datalog:
 
 - Bitemporal means that all data is accurately versioned as updates are made (system time), and all data exists within a universal domain timeline for representing 'validity'/'effectivity' (application time).
 - Dynamic means that no upfront schema needs to be specified before records can be inserted. Complex and nested data is automatically represented using https://arrow.apache.org/[Apache Arrow] types.
-- Relational means that the full spectrum of traditional SQL database capabilities is available - including joins, transactions, https://en.wikipedia.org/wiki/Multiset#Applications[bag/multiset] semantics, https://en.wikipedia.org/wiki/Three-valued_logic[three-value logic], multiple N-ary relations etc.
+- Relational means that the full spectrum of traditional SQL database capabilities is available - including joins, transactions, https://en.wikipedia.org/wiki/Multiset#Applications[bag/multiset] semantics, https://en.wikipedia.org/wiki/Three-valued_logic[three-valued logic], multiple N-ary relations etc.
 - SQL means immediate accessibility for a mainstream audience, but also includes an eye to the future with preliminary https://arrow.apache.org/blog/2022/02/16/introducing-arrow-flight-sql/[Flight SQL] driver support.
 - https://en.wikipedia.org/wiki/Datalog[Datalog] means a programmer-friendly API for complex relational querying that bypasses SQL's verbose JOINs and https://www.scattered-thoughts.net/writing/against-sql/[compositional challenges].
 
