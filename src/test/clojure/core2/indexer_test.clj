@@ -308,7 +308,8 @@
                                           :foo "foo"}]])
     (t/is (= [{:id "nil-bar", :foo "foo", :bar nil}]
              (c2.d/q node '{:find [id foo bar]
-                            :where [[e :id id]
+                            :where [(match xt_docs {:id e})
+                                    [e :id id]
                                     [e :foo foo]
                                     [e :bar bar]]})))))
 
@@ -325,12 +326,14 @@
 
       (t/is (= #{{:id :foo, :uuid uuid}}
                (set (c2.d/q node '{:find [id uuid]
-                                   :where [[id :uuid uuid]]})))))
+                                   :where [(match xt_docs [id])
+                                           [id :uuid uuid]]})))))
 
     (with-open [node (tu/->local-node {:node-dir node-dir})]
       (t/is (= #{{:id :foo, :uuid uuid}}
                (set (c2.d/q node '{:find [id uuid]
-                                   :where [[id :uuid uuid]]})))))))
+                                   :where [(match xt_docs [id])
+                                           [id :uuid uuid]]})))))))
 
 (t/deftest writes-log-file
   (let [node-dir (util/->path "target/writes-log-file")]

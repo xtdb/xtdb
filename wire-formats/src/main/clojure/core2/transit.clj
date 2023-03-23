@@ -20,7 +20,7 @@
           "core2.interval/year-month" c2-edn/interval-ym-reader
           "core2.interval/day-time" c2-edn/interval-dt-reader
           "core2.interval/month-day-nano" c2-edn/interval-mdn-reader
-          "core2/list" edn/read-string}))
+          "core2/list" (transit/read-handler edn/read-string)}))
 
 (def tj-write-handlers
   (merge (-> {Period "time/period"

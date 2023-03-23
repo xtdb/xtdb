@@ -27,7 +27,8 @@
     (t/is (= [{:e :foo, :inst (util/->zdt #inst "2021")}]
              (c2.d/q *node*
                      '{:find [e inst]
-                       :where [[e :inst inst]]})))))
+                       :where [(match xt_docs {:id e})
+                               [e :inst inst]]})))))
 
 (t/deftest test-validation-errors
   (t/is (thrown? IllegalArgumentException
@@ -52,7 +53,8 @@
               {:id "bar", :list [4 2 8]}]
              (c2.d/q *node*
                      (-> '{:find [id list]
-                           :where [[id :list list]]}
+                           :where [(match xt_docs [id])
+                                   [id :list list]]}
                          (assoc :basis-timeout (Duration/ofSeconds 1))))))
 
     (t/is (= [{:id :foo, :list [1 2 ["foo" "bar"]]}
@@ -68,7 +70,8 @@
     (t/is (= [{:id :foo, :v #{1 2 #{"foo" "bar"}}}]
              (c2.d/q *node*
                      '{:find [id v]
-                       :where [[id :v v]]})))
+                       :where [(match xt_docs [id])
+                               [id :v v]]})))
 
     (t/is (= [{:id :foo, :v #{1 2 #{"foo" "bar"}}}]
              (c2.sql/q *node* "SELECT b.id, b.v FROM xt_docs b")))))
@@ -82,7 +85,8 @@
                {:id :bar, :struct {:a true, :d 42.0}}}
              (set (c2.d/q *node*
                           '{:find [id struct]
-                            :where [[id :struct struct]]}))))))
+                            :where [(match xt_docs [id])
+                                    [id :struct struct]]}))))))
 
 (t/deftest round-trips-temporal
   (let [vs {:dt #time/date "2022-08-01"
@@ -132,7 +136,8 @@
     (letfn [(q-at [tx]
               (->> (c2.d/q *node*
                            (-> '{:find [id]
-                                 :where [[e :id id]]}
+                                 :where [(match xt_docs {:id e})
+                                         [e :id id]]}
                                (assoc :basis {:tx tx}
                                       :basis-timeout (Duration/ofSeconds 1))))
                    (into #{} (map :id))))]

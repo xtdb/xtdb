@@ -26,7 +26,7 @@
 
     (t/is (= {:count-id 1} (first (c2/q *node* '{:find [(count id)]
                                                  :keys [count-id]
-                                                 :where [[id :_table :user]
+                                                 :where [(match user [id])
                                                          [id :u_id]]}))))
     (t/is (= "u_0" (b/sample-flat worker am/user-id)))))
 
@@ -37,7 +37,7 @@
 
     (t/is (= {:count-id 1} (first (c2/q *node* '{:find [(count id)]
                                                  :keys [count-id]
-                                                 :where [[id :_table :category]
+                                                 :where [(match category [id])
                                                          [id :c_id]]}))))
     (t/is (= "c_0" (b/sample-flat worker am/category-id)))))
 
@@ -47,7 +47,7 @@
 
     (t/is (= {:count-id 1} (first (c2/q *node* '{:find [(count id)]
                                                  :keys [count-id]
-                                                 :where [[id :_table :region]
+                                                 :where [(match region [id])
                                                          [id :r_id]]}))))
     (t/is (= "r_0" (b/sample-flat worker am/region-id)))))
 
@@ -59,7 +59,7 @@
 
     (t/is (= {:count-id 1} (first (c2/q *node* '{:find [(count id)]
                                                  :keys [count-id]
-                                                 :where [[id :_table :gag]
+                                                 :where [(match gag [id])
                                                          [id :gag_name]]}))))
     (t/is (= "gag_0" (b/sample-flat worker am/gag-id)))))
 
@@ -72,7 +72,7 @@
 
     (t/is (= {:count-id 1} (first (c2/q *node* '{:find [(count id)]
                                                  :keys [count-id]
-                                                 :where [[id :_table :gav]
+                                                 :where [(match gav [id])
                                                          [id :gav_name]]}))))
     (t/is (= "gav_0" (b/sample-flat worker am/gav-id)))))
 
@@ -82,7 +82,7 @@
     (bcore2/generate worker 'user-attribute am/generate-user-attributes 1)
     (t/is (= {:count-id 1} (first (c2/q *node* '{:find [(count id)]
                                                  :keys [count-id]
-                                                 :where [[id :_table :user-attribute]
+                                                 :where [(match user-attribute [id])
                                                          [id :ua_u_id]]}))))
     (t/is (= "ua_0" (b/sample-flat worker am/user-attribute-id)))))
 
@@ -96,7 +96,7 @@
 
       (t/is (= {:count-id 1} (first (c2/q *node* '{:find [(count id)]
                                                    :keys [count-id]
-                                                   :where [[id :_table :item]
+                                                   :where [(match item [id])
                                                            [id :i_id]]}))))
       (t/is (= "i_0" (:i_id (am/random-item worker :status :open)))))))
 
@@ -120,7 +120,7 @@
 
       (t/is (= {:count-id 1} (first (c2/q *node* '{:find [(count id)]
                                                    :keys [count-id]
-                                                   :where [[id :_table :user]
+                                                   :where [(match user [id])
                                                            [id :u_id]]}))))
       (t/is (= "u_0" (b/sample-flat worker am/user-id))))))
 
@@ -140,19 +140,19 @@
         ;; (t/is (= nil (am/generate-new-bid-params worker)))
         (t/is (= {:i_num_bids 1}
                  (first (c2/q *node* '{:find [i_num_bids]
-                                       :where [[id :_table :item]
+                                       :where [(match item [id])
                                                [id :i_num_bids i_num_bids]]}))))
         ;; there exists a bid
         (t/is (= {:ib_i_id "i_0", :ib_id "ib_0"}
                  (first (c2/q *node* '{:find [ib_id ib_i_id]
-                                       :where [[ib :_table :item-bid]
+                                       :where [(match item-bid {:id ib})
                                                [ib :ib_id ib_id]
                                                [ib :ib_i_id ib_i_id]]}))))
         ;; new max bid
         (t/is (= {:imb "ib_0-i_0", :imb_i_id "i_0"}
                  (first (c2/q *node*
                               '{:find [imb imb_i_id]
-                                :where [[imb :_table :item-max-bid]
+                                :where [(match item-max-bid {:id imb})
                                         [imb :imb_i_id imb_i_id]]})))))
 
       (t/testing "new bid but does not exceed max"
@@ -164,7 +164,7 @@
           (t/is (= 2 (-> (c2/q *node*
                                '{:find [i_num_bids]
                                  :where
-                                 [[id :_table :item]
+                                 [(match item [id])
                                   [id :i_num_bids i_num_bids]]}
                                ;; :basis {:tx tx}
                                )
@@ -172,7 +172,7 @@
           ;; winning bid remains the same
           (t/is (= {:imb "ib_0-i_0", :imb_i_id "i_0"}
                    (first (c2/q *node* '{:find [imb imb_i_id]
-                                         :where [[imb :_table :item-max-bid]
+                                         :where [(match item-max-bid {:id imb})
                                                  [imb :imb_i_id imb_i_id]]} )))))))))
 
 
@@ -190,13 +190,13 @@
 
         ;; new item
         (let [{:keys [i_id i_u_id]} (first (c2/q *node* '{:find [i_id i_u_id]
-                                                          :where [[id :_table :item]
+                                                          :where [(match item [id])
                                                                   [id :i_id i_id]
                                                                   [id :i_u_id i_u_id]]}))]
           (t/is (= "i_0" i_id))
           (t/is (= "u_0" i_u_id)))
         (t/is (< (- (:u_balance (first (c2/q *node* '{:find [u_balance]
-                                                      :where [[u :_table :user]
+                                                      :where [(match user {:id u})
                                                               [u :u_id]
                                                               [u :u_balance u_balance]]})))
                     (double -1.0))

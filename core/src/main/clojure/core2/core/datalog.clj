@@ -415,15 +415,31 @@
                             (vary-meta update ::vars conj uw-col)))))
         plan)))
 
+(defn- match->eids [{:keys [match]}]
+  (->> match
+       (filter (comp #{:id} first))
+       (map second)
+       set))
+
+(defn add-triples-to-matches [matches->eids [e triples]]
+  (let [avs (for [{:keys [a v]} triples]
+              (MapEntry/create a v))
+        [matches->eids matched?]
+        (reduce-kv (fn [[m matched?] match eids]
+                     (if (contains? eids e)
+                       [(assoc m (update match :match into avs) eids) true]
+                       [(assoc m match eids) matched?]))
+                   [{} false] matches->eids)]
+    (when-not matched?
+      (throw (err/illegal-arg :unspecified-table
+                              {:tirples (map #(s/unform ::triple %) triples)})))
+    matches->eids))
+
 (defn- plan-from [{:keys [triples matches]}]
-  (let [tables (into matches
-                     (map (fn [[e triples]]
-                            (let [{triples false, table true} (group-by #(= :_table (:a %)) triples)]
-                              {:table (symbol (or (second (:v (first table))) 'xt_docs))
-                               :match (conj (for [{:keys [a v]} triples]
-                                              (MapEntry/create a v))
-                                            (MapEntry/create :id e))})))
-                     (group-by :e triples))]
+  (let [matches-eids (zipmap matches (map match->eids matches))
+        tables (->> (group-by :e triples)
+                    (reduce add-triples-to-matches matches-eids)
+                    keys)]
     (vec
      (for [{:keys [table match temporal-opts]} tables]
        (let [match (->> match (mapv (fn [[a v]] (MapEntry/create (col-sym a) v))))
@@ -644,6 +660,12 @@
         [new-v replace-ctx] (replace-vars v replace-ctx)]
     [(-> triple (update 1 assoc :e new-e) (update 1 assoc :v new-v))
      replace-ctx]))
+
+(defmethod replace-vars :match [[_ {match-specs :match :as match}] replace-cxt]
+  (let [[new-values new-ctx] (-> (map second match-specs)
+                                 (replace-vars* replace-cxt))]
+    [[:match (assoc match :match (mapv vector (map first match-specs) new-values))]
+     new-ctx]))
 
 (defn- replace-sq-vars [{:keys [find in keys where order-by rules]} replace-ctx]
   (if-not rules

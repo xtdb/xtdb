@@ -60,6 +60,23 @@
                      :where [(match xt_docs [{:id :petr} first-name last-name])]}))
           "literal eid")))
 
+
+(deftest test-no-table-specified
+  (t/is (thrown-with-msg?
+         IllegalArgumentException
+         #":unspecified-table"
+         (c2/q tu/*node* '{:find [i]
+                           :where [[e :foo :bar]]}))))
+
+(deftest test-match-literal-eid
+  (let [_tx (c2/submit-tx tu/*node* ivan+petr)]
+    (t/is (= [{:first-name "Ivan", :last-name "Ivanov"}]
+             (c2/q tu/*node*
+                   '{:find [first-name last-name]
+                     :where [(match xt_docs [{:id :ivan}])
+                             [:ivan :first-name first-name]
+                             [:ivan :last-name last-name]]})))))
+
 (deftest test-order-by
   (let [_tx (c2/submit-tx tu/*node* ivan+petr)]
     (t/is (= [{:first-name "Ivan"} {:first-name "Petr"}]
@@ -476,6 +493,44 @@
                         [e :last-name n]
                         [e :first-name n]
                         [f :first-name n]]})))))
+
+#_(deftest exists-with-no-outer-unification-692
+    (let [_tx (c2/submit-tx tu/*node*
+                            '[[:put xt_docs {:id :ivan, :name "Ivan"}]
+                              [:put xt_docs {:id :petr, :name "Petr"}]
+                              [:put xt_docs {:id :ivan2, :name "Ivan"}]])]
+
+      (t/is (= [{:e :ivan} {:e :ivan2}]
+               (c2/q tu/*node*
+                     '{:find [e]
+                       :where [(match xt_docs {:id e})
+                               (exists? {:find [e2]
+                                         :in [e]
+                                         :where [(match xt_docs {:id e})
+                                                 (match xt_docs {:id e2})
+                                                 [e :name name]
+                                                 [e2 :name name]
+                                                 [(<> e e2)]]})]})))))
+
+(deftest test-implict-match-unification
+  (c2/submit-tx tu/*node* '[[:put foo {:id :ivan, :name "Ivan"}]
+                            [:put foo {:id :petr, :name "Petr"}]
+                            [:put bar {:id :sergei, :name "Sergei"}]
+                            [:put bar {:id :ivan,:name "Ivan"}]
+                            [:put toto {:id :jon, :name "John"}]
+                            [:put toto {:id :mat,:name "Matt"}]])
+  (t/is (= [{:e :ivan, :name "Ivan"}]
+           (c2/q tu/*node*
+                 '{:find [e name]
+                   :where [(match foo {:id e})
+                           (match bar {:id e})
+                           [e :name name]]})))
+  (t/is (= []
+           (c2/q tu/*node*
+                 '{:find [e]
+                   :where [(match foo {:id e})
+                           (match toto {:id e})
+                           [e :name]]}))))
 
 (deftest test-semi-join
   (let [_tx (c2/submit-tx tu/*node*
@@ -1013,25 +1068,29 @@
 
     (t/testing "without rule"
       (t/is (= [{:i :ivan}] (q '{:find [i]
-                                 :where [[i :age age]
+                                 :where [(match xt_docs {:id i})
+                                         [i :age age]
                                          [(>= age 21)]]}))))
 
     (t/testing "empty rules"
       (t/is (= [{:i :ivan}] (q '{:find [i]
-                                 :where [[i :age age]
+                                 :where [(match xt_docs {:id i})
+                                         [i :age age]
                                          [(>= age 21)]]
                                  :rules []}))))
 
     (t/testing "rule using required bound args"
       (t/is (= [{:i :ivan}] (q '{:find [i]
-                                 :where [[i :age age]
+                                 :where [(match xt_docs {:id i})
+                                         [i :age age]
                                          (over-twenty-one? age)]
                                  :rules [[(over-twenty-one? age)
                                           [(>= age 21)]]]}))))
 
     (t/testing "rule using required bound args (different arg names)"
       (t/is (= [{:i :ivan}] (q '{:find [i]
-                                 :where [[i :age age]
+                                 :where [(match xt_docs {:id i})
+                                         [i :age age]
                                          (over-twenty-one? age)]
                                  :rules [[(over-twenty-one? age-other)
                                           [(>= age-other 21)]]]}))))
@@ -1057,25 +1116,31 @@
                 {:i :georgy, :age 17, :u :petr}]
                (q '{:find [i age u]
                     :where [(older-users age u)
+                            (match xt_docs {:id i})
                             [i :age age]]
                     :rules [[(older-users age u)
+                             (match xt_docs {:id u})
                              [u :age age2]
                              [(> age2 age)]]]}))))
+
     (t/testing "testing rule with multiple args (different arg names in rule)"
       (t/is (= [{:i :petr, :age 18, :u :ivan}
                 {:i :georgy, :age 17, :u :ivan}
                 {:i :georgy, :age 17, :u :petr}]
                (q '{:find [i age u]
                     :where [(older-users age u)
+                            (match xt_docs {:id i})
                             [i :age age]]
                     :rules [[(older-users age-other u-other)
+                             (match xt_docs {:id u-other})
                              [u-other :age age2]
                              [(> age2 age-other)]]]}))))
 
 
     (t/testing "nested rules"
       (t/is (= [{:i :ivan}] (q '{:find [i]
-                                 :where [[i :age age]
+                                 :where [(match xt_docs {:id i})
+                                         [i :age age]
                                          (over-twenty-one? age)]
                                  :rules [[(over-twenty-one? x)
                                           (over-twenty-one-internal? x)]
@@ -1084,7 +1149,8 @@
 
     (t/testing "nested rules bound (same arg names)"
       (t/is (= [{:i :ivan}] (q '{:find [i]
-                                 :where [[i :age age]
+                                 :where [(match xt_docs {:id i})
+                                         [i :age age]
                                          (over-twenty-one? age)]
                                  :rules [[(over-twenty-one? age)
                                           (over-twenty-one-internal? age)]
@@ -1092,7 +1158,8 @@
                                           [(>= age 21)]]]}))))
 
     (t/is (= [{:i :ivan}] (q '{:find [i]
-                               :where [[i :age age]
+                               :where [(match xt_docs {:id i})
+                                       [i :age age]
                                        (over-twenty-one? age)]
                                :rules [[(over-twenty-one? x)
                                         (over-twenty-one-internal? x)]
@@ -1101,14 +1168,16 @@
 
     (t/testing "rule using literal arguments"
       (t/is (= [{:i :ivan}] (q '{:find [i]
-                                 :where [[i :age age]
+                                 :where [(match xt_docs {:id i})
+                                         [i :age age]
                                          (over-age? age 21)]
                                  :rules [[(over-age? age required-age)
                                           [(>= age required-age)]]]}))))
 
     (t/testing "same arg-name different position test (shadowing test)"
       (t/is (= [{:i :ivan}] (q '{:find [i]
-                                 :where [[i :age age]
+                                 :where [(match xt_docs {:id i})
+                                         [i :age age]
                                          (over-age? age 21)]
                                  :rules [[(over-age? other-age age)
                                           [(>= other-age age)]]]}))))
@@ -1117,24 +1186,28 @@
       (t/is (= [{:i :petr, :age 18}
                 {:i :georgy, :age 17}]
                (q '{:find [i age]
-                    :where [[i :age age]
+                    :where [(match xt_docs {:id i})
+                            [i :age age]
                             (older? age)]
                     :rules [[(older? age)
                              (exists? {:find []
                                        :in [age]
-                                       :where [[i :age age2]
+                                       :where [(match xt_docs {:id i})
+                                               [i :age age2]
                                                [(> age2 age)]]})]]}))))
 
 
     (t/testing "anti-join in rule"
       (t/is (= [{:i :ivan, :age 21}]
                (q  '{:find [i age]
-                     :where [[i :age age]
+                     :where [(match xt_docs {:id i})
+                             [i :age age]
                              (not-older? age)]
                      :rules [[(not-older? age)
                               (not-exists? {:find []
                                             :in [age]
-                                            :where [[i :age age2]
+                                            :where [(match xt_docs {:id i})
+                                                    [i :age age2]
                                                     [(> age2 age)]]})]]}))))
 
     (t/testing "subquery in rule"
@@ -1142,12 +1215,14 @@
                 {:i :georgy, :other-age 21}
                 {:i :georgy, :other-age 18}]
                (q '{:find [i other-age]
-                    :where [[i :age age]
+                    :where [(match xt_docs {:id i})
+                            [i :age age]
                             (older-ages age other-age)]
                     :rules [[(older-ages age other-age)
                              (q {:find [other-age]
                                  :in [age]
-                                 :where [[i :age other-age]
+                                 :where [(match xt_docs {:id i})
+                                         [i :age other-age]
                                          [(> other-age age)]]})]]}))))
 
     (t/testing "subquery in rule with aggregates, expressions and order-by"
@@ -1155,13 +1230,15 @@
              {:i :petr, :max-older-age 21, :max-older-age-times2 42}
              {:i :georgy, :max-older-age 21, :max-older-age-times2 42}]
             (q '{:find [i max-older-age max-older-age-times2]
-                 :where [[i :age age]
+                 :where [(match xt_docs {:id i})
+                         [i :age age]
                          (older-ages age max-older-age max-older-age-times2)]
                  :rules [[(older-ages age max-older-age max-older-age2)
                           (q {:find [(max older-age) (max (* older-age 2))]
                               :keys [max-older-age max-older-age2]
                               :in [age]
-                              :where [[i :age older-age]
+                              :where [(match xt_docs {:id i})
+                                      [i :age older-age]
                                       [(> older-age age)]]
                               :order-by [[(max older-age) :desc]]})]]})))
 
@@ -1169,18 +1246,23 @@
       (t/is (= [{:i :ivan}] (q '{:find [i]
                                  :where [(is-ivan-or-bob? i)]
                                  :rules [[(is-ivan-or-bob? i)
+                                          (match xt_docs {:id i})
                                           [i :name "Bob"]]
                                          [(is-ivan-or-bob? i)
+                                          (match xt_docs {:id i})
                                           [i :name "Ivan"]
                                           [i :last-name "Ivanov"]]]})))
 
       (t/is (= [{:name "Petr"}] (q '{:find [name]
-                                     :where [[i :name name]
+                                     :where [(match xt_docs {:id i})
+                                             [i :name name]
                                              (not-exists? {:find [i]
                                                            :where [(is-ivan-or-georgy? i)]})]
                                      :rules [[(is-ivan-or-georgy? i)
+                                              (match xt_docs {:id i})
                                               [i :name "Ivan"]]
                                              [(is-ivan-or-georgy? i)
+                                              (match xt_docs {:id i})
                                               [i :name "Georgy"]]]})))
 
       (t/is (= [{:i :ivan}
@@ -1188,8 +1270,10 @@
                (q '{:find [i]
                     :where [(is-ivan-or-petr? i)]
                     :rules [[(is-ivan-or-petr? i)
+                             (match xt_docs {:id i})
                              [i :name "Ivan"]]
                             [(is-ivan-or-petr? i)
+                             (match xt_docs {:id i})
                              [i :name "Petr"]]]}))))
 
     (t/testing "union-join with rules"
@@ -1198,8 +1282,10 @@
                     :where [(union-join [i]
                                         (is-ivan-or-bob? i))]
                     :rules [[(is-ivan-or-bob? i)
+                             (match xt_docs {:id i})
                              [i :name "Bob"]]
                             [(is-ivan-or-bob? i)
+                             (match xt_docs {:id i})
                              [i :name "Ivan"]
                              [i :last-name "Ivanov"]]]}))))
 
@@ -1210,8 +1296,10 @@
                     :where [(q {:find [i]
                                 :where [(is-ivan-or-bob? i)]})]
                     :rules [[(is-ivan-or-bob? i)
+                             (match xt_docs {:id i})
                              [i :name "Bob"]]
                             [(is-ivan-or-bob? i)
+                             (match xt_docs {:id i})
                              [i :name "Ivan"]
                              [i :last-name "Ivanov"]]]})))))
 
@@ -1219,14 +1307,16 @@
          IllegalArgumentException
          #":unknown-rule"
          (c2/q tu/*node* '{:find [i]
-                           :where [[i :age age]
+                           :where [(match xt_docs {:id i})
+                                   [i :age age]
                                    (over-twenty-one? age)]})))
 
   (t/is (thrown-with-msg?
          IllegalArgumentException
          #":rule-wrong-arity"
          (c2/q tu/*node* '{:find [i]
-                           :where [[i :age age]
+                           :where [(match xt_docs {:id i})
+                                   [i :age age]
                                    (over-twenty-one? i age)]
                            :rules [[(over-twenty-one? x)
                                     [(>= x 21)]]]})))
@@ -1234,11 +1324,14 @@
          IllegalArgumentException
          #":rule-definitions-require-unique-arity"
          (c2/q tu/*node* '{:find [i]
-                           :where [[i :age age]
+                           :where [(match xt_docs {:id i})
+                                   [i :age age]
                                    (is-ivan-or-petr? i name)]
                            :rules [[(is-ivan-or-petr? i name)
+                                    (match xt_docs {:id i})
                                     [i :name "Ivan"]]
                                    [(is-ivan-or-petr? i)
+                                    (match xt_docs {:id i})
                                     [i :name "Petr"]]]}))))
 
 
@@ -1271,14 +1364,14 @@
                                         [:put xt_docs {:id :john} {:app-time-start #inst "2016", :app-time-end #inst "2020"}]])]
 
       (t/is (= [{:id :matthew}, {:id :mark}]
-               (q '{:find [id], :where [[id :id]]}, tx1, #inst "2023")))
+               (q '{:find [id], :where [(match xt_docs [id])]}, tx1, #inst "2023")))
 
       (t/is (= [{:id :matthew}, {:id :luke}]
-               (q '{:find [id], :where [[id :id]]}, tx1, #inst "2021"))
+               (q '{:find [id], :where [(match xt_docs [id])]}, tx1, #inst "2021"))
             "back in app-time")
 
       (t/is (= [{:id :matthew}, {:id :luke}]
-               (q '{:find [id], :where [[id :id]]}, tx0, #inst "2023"))
+               (q '{:find [id], :where [(match xt_docs [id])]}, tx0, #inst "2023"))
             "back in sys-time")
 
       (t/is (= [{:id :matthew, :app-start (util/->zdt #inst "2015"), :app-end (util/->zdt util/end-of-time)}

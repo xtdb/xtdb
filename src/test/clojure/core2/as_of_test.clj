@@ -20,7 +20,8 @@
     (t/is (= #{{:last-updated "tx2"}}
              (set (c2/q tu/*node*
                         (-> '{:find [last-updated]
-                              :where [[e :last-updated last-updated]]}
+                              :where [(match xt_docs {:id e})
+                                      [e :last-updated last-updated]]}
                             (assoc :basis {:tx tx2}))))))
 
     (t/testing "at tx1"
@@ -31,7 +32,8 @@
       (t/is (= #{{:last-updated "tx1"}}
                (set (c2/q tu/*node*
                           (-> '{:find [last-updated]
-                                :where [[e :last-updated last-updated]]}
+                                :where [(match xt_docs {:id e})
+                                        [e :last-updated last-updated]]}
                               (assoc :basis {:tx tx1})))))))))
 
 (t/deftest test-app-time

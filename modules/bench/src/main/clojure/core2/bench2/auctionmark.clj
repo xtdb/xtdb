@@ -67,7 +67,7 @@
     (let [[u] (q '{:find [id u_id u_r_id u_rating u_balance u_created
                           u_sattr0 u_sattr1 u_sattr2 u_sattr3 u_sattr4 u_sattr5 u_sattr6 u_sattr7]
                    :in [u_id]
-                   :where [[id :_table :user]
+                   :where [(match user [id])
                            [id :u_id u_id]
                            [id :u_r_id u_r_id]
                            [id :u_rating u_rating]
@@ -92,8 +92,7 @@
            i_end-date]
     :in [i]
     :where
-    [[i :id id]
-     [i :_table :item]
+    [(match item [id {:id i}])
      [i :i_u_id i_u_id]
      [i :i_c_id i_c_id]
      [i :i_name i_name]
@@ -110,8 +109,7 @@
 (def item-max-bid-query
   '{:find [id imb_i_id imb_u_id imb_ib_id imb_ib_i_id imb_ib_u_id imb_created]
     :in [imb]
-    :where [[imb :id id]
-            [imb :_table :item-max-bid]
+    :where [(match item-max-bid [id {:id imb}])
             [imb :imb_i_id imb_i_id]
             [imb :imb_u_id imb_u_id]
             [imb :imb_ib_id imb_ib_id]
@@ -138,7 +136,7 @@
           {:keys [imb imb_ib_id] :as res}
           (-> (quote {:find [imb, imb_ib_id]
                       :in [i_id]
-                      :where [[imb :_table :item-max-bid]
+                      :where [(match item-max-bid {:id imb})
                               [imb :imb_i_id i_id]
                               [imb :imb_u_id u_id]
                               [imb :imb_ib_id imb_ib_id]]})
@@ -151,7 +149,7 @@
           {:keys [i nbids] :as res}
           (-> (quote {:find [i, nbids]
                       :in [i_id]
-                      :where [[i :_table :item]
+                      :where [(match item {:id i})
                               [i :i_id i_id]
                               [i :i_num_bids nbids]
                               [i :i_status :open]]})
@@ -163,11 +161,11 @@
           {:keys [curr-bid, curr-max] :as res}
           (when imb_ib_id
             (-> (quote {:find [curr-bid curr-max]
-                        :in [?imb_ib_id]
-                        :where [[?ib :_table :item-bid]
-                                [?ib :ib_id ?imb_ib_id]
-                                [?ib :ib_bid curr-bid]
-                                [?ib :ib_max_bid curr-max]]})
+                        :in [imb_ib_id]
+                        :where [(match item-bid {:id ib})
+                                [ib :ib_id imb_ib_id]
+                                [ib :ib_bid curr-bid]
+                                [ib :ib_max_bid curr-max]]})
                 (q imb_ib_id)
                 first))
 
@@ -179,8 +177,7 @@
                               i_current_price i_num_bids i_num_images i_num_global_attrs i_start_date
                               i_end_date i_status]
                        :in [i]
-                       :where [[i :id id]
-                               [i :_table :item]
+                       :where [(match item [id {:id i}])
                                [i :i_id i_id]
                                [i :i_u_id i_u_id]
                                [i :i_c_id i_c_id]
@@ -197,7 +194,8 @@
                                [i :i_status i_status]]}
           item-max-bid-query '{:find [id imb_i_id imb_u_id imb_ib_id imb_ib_i_id imb_ib_u_id imb_created]
                                :in [imb]
-                               :where [[imb :id id]
+                               :where [(match item-max-bid [id {:id imb}])
+                                       [imb :id id]
                                        [imb :_table :item-max-bid]
                                        [imb :imb_i_id imb_i_id]
                                        [imb :imb_u_id imb_u_id]
@@ -281,13 +279,13 @@
         end-date (.plusSeconds ^Instant start-date (* 60 60 24 (* (inc (.nextInt (b2/rng worker) 42)))))
         ;; append attribute names to desc
         description-with-attributes
-        (let [q '{:find [?gag-name ?gav-name]
-                  :in [[?gag-id ...] [?gav-id ...]]
-                  :where [[?gag-id :_table :gag]
-                          [?gag-id :gag_name ?gag-name]
-                          [?gav-id :_table :gav]
-                          [?gav-id :gav_gag_id ?gag-id]
-                          [?gav-id :gav_name ?gav-name]]}]
+        (let [q '{:find [gag-name gav-name]
+                  :in [[gag-id ...] [gav-id ...]]
+                  :where [(match gag {:id gag-id})
+                          [gag-id :gag_name gag-name]
+                          (match gav {:id gav-id})
+                          [gav-id :gav_gag_id gag-id]
+                          [gav-id :gav_name gav-name]]}]
           (->> (c2/q (:sut worker) q gag-ids gav-ids)
                (str/join " ")
                (str description " ")))]
@@ -314,10 +312,10 @@
             [:put
              'item-comment
              {:id (str "ii_" ii_id)
-                   :ii_id ii_id
-                   :ii_i_id i_id
-                   :ii_u_id u_id
-                   :ii_path image}])
+              :ii_id ii_id
+              :ii_i_id i_id
+              :ii_u_id u_id
+              :ii_path image}])
           ;; fix BitVector metadata issue
           (when u_id [[:call :apply-seller-fee u_id]]))
          (c2/submit-tx (:sut worker)))))
@@ -337,7 +335,7 @@
 
 (defn item-status-groups [node ^Instant now]
   (let [items (c2/q node '{:find [i, i_id, i_u_id, i_status, i_end_date, i_num_bids]
-                           :where [[i :_table :item]
+                           :where [(match item {:id i})
                                    [i :i_id i_id]
                                    [i :i_u_id i_u_id]
                                    [i :i_status i_status]
@@ -383,7 +381,8 @@
 
 (defn largest-id [node table prefix-length]
   (let [id (->> (c2/q node `{:find [~'id]
-                             :where [[~'id :_table ~table]]})
+                             :where [(match ~table [~'id])
+                                     [~'id :_table ~table]]})
                 (sort-by :id #(cond (< (count %1) (count %2)) 1
                                     (< (count %2) (count %1)) -1
                                     :else (compare %2 %1)))
@@ -470,7 +469,8 @@
         q '{:find [i_id i_u_id i_initial_price i_current_price]
             #_(pull ?i [:i_id, :i_u_id, :i_initial_price, :i_current_price])
             :in [i_id]
-            :where [[i_id :_table :item]
+            :where [(match item {:id i_id})
+                    [i_id :_table :item]
                     ;; [?i :i_id i_id]
                     [i_id :i_status :open]
                     [i_id :i_u_id i_u_id]

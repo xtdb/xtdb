@@ -12,52 +12,52 @@
 
     ;; as of tx tests
     (t/is (= [{:foo "2000-4000"}]
-             (c2/q tu/*node* (-> '{:find [foo]
-                                   :where
-                                   [[1 :foo foo]]}
-                                 (assoc :basis {:tx tx1})))))
+             (c2/q tu/*node*  '{:find [foo]
+                                :where [(match xt_docs {:id 1})
+                                        [1 :foo foo]]})))
     (t/is (= [{:foo "2000-4000"}]
              (c2/q tu/*node* (assoc '{:find [foo]
-                                      :where
-                                      [[1 :foo foo]]}
+                                      :where [(match xt_docs {:id 1})
+                                              [1 :foo foo]]}
                                     :basis {:tx tx2}))))
     ;; app-time
     (t/is (= []
              (c2/q tu/*node* (assoc '{:find [foo]
                                       :where
-                                      [[1 :foo foo]]}
+                                      [(match xt_docs {:id 1})
+                                       [1 :foo foo]]}
                                     :basis {:tx tx2
                                             :current-time (.toInstant #inst "1999")}))))
     (t/is (= [{:foo "2000-4000" }]
              (c2/q tu/*node* (assoc '{:find [foo]
-                                      :where
-                                      [[1 :foo foo]]}
+                                      :where [(match xt_docs {:id 1})
+                                              [1 :foo foo]]}
                                     :basis {:tx tx2
                                             :current-time (.toInstant #inst "2000")}))))
 
     (t/is (= [{:foo "3000-" }]
              (c2/q tu/*node* (assoc '{:find [foo]
-                                      :where
-                                      [[1 :foo foo]]}
+                                      :where [(match xt_docs {:id 1})
+                                              [1 :foo foo]]}
                                     :basis {:tx tx2
                                             :current-time (.toInstant #inst "3001")}))))
 
     (t/is (= []
              (c2/q tu/*node* (assoc '{:find [foo]
-                                      :where
-                                      [[1 :foo foo]]}
+                                      :where [(match xt_docs {:id 1})
+                                              [1 :foo foo]]}
                                     :basis {:tx tx1 ; <- first transaction
                                             :current-time (.toInstant #inst "4001")}))))
 
     ;; sys-time - eugh, TODO, we need to just be able to pass a sys-time to basis
     (t/is (=  []
               (c2/q tu/*node* (assoc '{:find [foo]
-                                       :where
-                                       [[1 :foo foo]]}
+                                       :where [(match xt_docs {:id 1})
+                                               [1 :foo foo]]}
                                      :basis {:tx (c2.api/->TransactionInstant 0 (.toInstant #inst "2000"))}))))
 
     (t/is (=  [{:foo "2000-4000"}]
               (c2/q tu/*node* (assoc '{:find [foo]
-                                       :where
-                                       [[1 :foo foo]]}
+                                       :where [(match xt_docs {:id 1})
+                                               [1 :foo foo]]}
                                      :basis {:tx (c2.api/->TransactionInstant 0 (.toInstant (java.util.Date.)))}))))))

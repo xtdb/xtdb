@@ -302,7 +302,8 @@ ORDER BY foo.application_time_start"
   (t/is (= [{:id :foo}]
            (c2.d/q tu/*node*
                    '{:find [id]
-                     :where [[id :id]]}))))
+                     :where [(match xt_docs [id])
+                             [id :id]]}))))
 
 (t/deftest test-list-round-trip-546
   (c2.sql/submit-tx tu/*node* [[:sql "INSERT INTO t3(id, data) VALUES (1, [2, 3])"]
