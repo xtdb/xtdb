@@ -192,31 +192,28 @@
           "query with namespaced attributes in match syntax")))
 
 (deftest test-joins
-  (let [tx (c2/submit-tx tu/*node* bond/tx-ops)]
-    (t/is (= #{{:film-name "Skyfall", :bond-name "Daniel Craig"}}
-             (set (c2/q tu/*node*
-                        (-> '{:find [film-name bond-name]
-                              :in [film]
-                              :where [[film :film/name film-name]
-                                      [film :film/bond bond]
-                                      [bond :person/name bond-name]]}
-                            (assoc :basis {:tx tx}))
-                        "skyfall")))
-          "one -> one")
+  (c2/submit-tx tu/*node* bond/tx-ops)
 
-    (t/is (= #{{:film-name "Casino Royale", :bond-name "Daniel Craig"}
-               {:film-name "Quantum of Solace", :bond-name "Daniel Craig"}
-               {:film-name "Skyfall", :bond-name "Daniel Craig"}
-               {:film-name "Spectre", :bond-name "Daniel Craig"}}
-             (set (c2/q tu/*node*
-                        (-> '{:find [film-name bond-name]
-                              :in [bond]
-                              :where [[film :film/name film-name]
-                                      [film :film/bond bond]
-                                      [bond :person/name bond-name]]}
-                            (assoc :basis {:tx tx}))
-                        "daniel-craig")))
-          "one -> many")))
+  (t/is (= #{{:film-name "Skyfall", :bond-name "Daniel Craig"}}
+           (set (c2/q tu/*node*
+                      '{:find [film-name bond-name]
+                        :in [film]
+                        :where [(match film {:id film, :film/name film-name, :film/bond bond})
+                                (match person {:id bond, :person/name bond-name})]}
+                      "skyfall")))
+        "one -> one")
+
+  (t/is (= #{{:film-name "Casino Royale", :bond-name "Daniel Craig"}
+             {:film-name "Quantum of Solace", :bond-name "Daniel Craig"}
+             {:film-name "Skyfall", :bond-name "Daniel Craig"}
+             {:film-name "Spectre", :bond-name "Daniel Craig"}}
+           (set (c2/q tu/*node*
+                      '{:find [film-name bond-name]
+                        :in [bond]
+                        :where [(match film {:film/name film-name, :film/bond bond})
+                                (match person {:id bond, :person/name bond-name})]}
+                      "daniel-craig")))
+        "one -> many"))
 
 ;; https://github.com/tonsky/datascript/blob/1.1.0/test/datascript/test/query_aggregates.cljc#L14-L39
 (t/deftest datascript-test-aggregates
@@ -786,28 +783,28 @@
                                  (assoc :basis {:tx tx})))))))
 
 (deftest test-nested-query
-  (let [tx (c2/submit-tx tu/*node* bond/tx-ops)]
-    (t/is (= [{:bond-name "Roger Moore", :film-name "A View to a Kill"}
-              {:bond-name "Roger Moore", :film-name "For Your Eyes Only"}
-              {:bond-name "Roger Moore", :film-name "Live and Let Die"}
-              {:bond-name "Roger Moore", :film-name "Moonraker"}
-              {:bond-name "Roger Moore", :film-name "Octopussy"}
-              {:bond-name "Roger Moore", :film-name "The Man with the Golden Gun"}
-              {:bond-name "Roger Moore", :film-name "The Spy Who Loved Me"}]
-             (c2/q tu/*node*
-                   (-> '{:find [bond-name film-name]
-                         :where [(q {:find [bond bond-name (count bond)]
-                                     :keys [bond-with-most-films bond-name film-count]
-                                     :where [[_ :film/bond bond]
-                                             [bond :person/name bond-name]]
-                                     :order-by [[(count bond) :desc] [bond-name]]
-                                     :limit 1})
+  (c2/submit-tx tu/*node* bond/tx-ops)
 
-                                 [film :film/bond bond-with-most-films]
-                                 [film :film/name film-name]]
-                         :order-by [[film-name]]}
-                       (assoc :basis {:tx tx}))))
-          "films made by the Bond with the most films"))
+  (t/is (= [{:bond-name "Roger Moore", :film-name "A View to a Kill"}
+            {:bond-name "Roger Moore", :film-name "For Your Eyes Only"}
+            {:bond-name "Roger Moore", :film-name "Live and Let Die"}
+            {:bond-name "Roger Moore", :film-name "Moonraker"}
+            {:bond-name "Roger Moore", :film-name "Octopussy"}
+            {:bond-name "Roger Moore", :film-name "The Man with the Golden Gun"}
+            {:bond-name "Roger Moore", :film-name "The Spy Who Loved Me"}]
+           (c2/q tu/*node*
+                 '{:find [bond-name film-name]
+                   :where [(q {:find [bond bond-name (count bond)]
+                               :keys [bond-with-most-films bond-name film-count]
+                               :where [(match film {:film/bond bond})
+                                       (match person {:id bond, :person/name bond-name})]
+                               :order-by [[(count bond) :desc] [bond-name]]
+                               :limit 1})
+
+                           (match film {:film/bond bond-with-most-films
+                                        :film/name film-name})]
+                   :order-by [[film-name]]}))
+        "films made by the Bond with the most films")
 
   (let [tx (c2/submit-tx tu/*node* '[[:put xt_docs {:id :a1, :a 1}]
                                      [:put xt_docs {:id :a2, :a 2}]
@@ -824,26 +821,25 @@
           "(contrived) correlated sub-query")))
 
 (t/deftest test-explicit-unwind-574
-  (let [tx (c2/submit-tx tu/*node* bond/tx-ops)]
-    (t/is (= [{:brand "Aston Martin", :model "DB10"}
-              {:brand "Aston Martin", :model "DB5"}
-              {:brand "Jaguar", :model "C-X75"}
-              {:brand "Jaguar", :model "XJ8"}
-              {:brand "Land Rover", :model "Discovery Sport"}
-              {:brand "Land Rover", :model "Land Rover Defender Bigfoot"}
-              {:brand "Land Rover", :model "Range Rover Sport"}
-              {:brand "Mercedes Benz", :model "S-Class"}
-              {:brand "Rolls-Royce", :model "Silver Wraith"}]
+  (c2/submit-tx tu/*node* bond/tx-ops)
 
-             (c2/q tu/*node*
-                   (-> '{:find [brand model]
-                         :in [film]
-                         :where [[film :film/vehicles [vehicle ...]]
-                                 [vehicle :vehicle/brand brand]
-                                 [vehicle :vehicle/model model]]
-                         :order-by [[brand] [model]]}
-                       (assoc :basis {:tx tx}))
-                   :spectre)))))
+  (t/is (= [{:brand "Aston Martin", :model "DB10"}
+            {:brand "Aston Martin", :model "DB5"}
+            {:brand "Jaguar", :model "C-X75"}
+            {:brand "Jaguar", :model "XJ8"}
+            {:brand "Land Rover", :model "Discovery Sport"}
+            {:brand "Land Rover", :model "Land Rover Defender Bigfoot"}
+            {:brand "Land Rover", :model "Range Rover Sport"}
+            {:brand "Mercedes Benz", :model "S-Class"}
+            {:brand "Rolls-Royce", :model "Silver Wraith"}]
+
+           (c2/q tu/*node*
+                 '{:find [brand model]
+                   :in [film]
+                   :where [(match film {:id film, :film/vehicles [vehicle ...]})
+                           (match vehicle {:id vehicle, :vehicle/brand brand, :vehicle/model model})]
+                   :order-by [[brand] [model]]}
+                 :spectre))))
 
 (t/deftest bug-non-string-table-names-599
   (with-open [node (node/start-node {:core2/live-chunk {:rows-per-block 10, :rows-per-chunk 1000}})]
