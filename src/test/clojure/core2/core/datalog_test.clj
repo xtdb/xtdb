@@ -770,6 +770,24 @@
                               (union-join [age older-age]
                                           [(+ age 10) older-age])]})))))))
 
+(deftest test-union-join-with-match-syntax-693
+  (let [_tx (c2/submit-tx tu/*node* '[[:put xt_docs {:id :ivan, :age 20, :role :developer}]
+                                      [:put xt_docs {:id :oleg, :age 30, :role :manager}]
+                                      [:put xt_docs {:id :petr, :age 35, :role :qa}]
+                                      [:put xt_docs {:id :sergei, :age 35, :role :manager}]])]
+    (t/is (= [{:e :ivan}]
+             (c2/q tu/*node* '{:find [e]
+                               :where [(union-join [e]
+                                                   (and (match xt_docs {:id e})
+                                                        [e :role :developer])
+                                                   (and (match xt_docs {:id e})
+                                                        [e :age 30]))
+                                       (union-join [e]
+                                                   (and (match xt_docs {:id e})
+                                                        [e :id :petr])
+                                                   (and (match xt_docs {:id e})
+                                                        [e :id :ivan]))]})))))
+
 (deftest test-union-join-with-subquery-638
   (let [tx (c2/submit-tx tu/*node* '[[:put xt_docs {:id :ivan, :age 20, :role :developer}]
                                      [:put xt_docs {:id :oleg, :age 30, :role :manager}]

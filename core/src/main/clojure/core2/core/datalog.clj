@@ -331,7 +331,14 @@
                                     (filter (comp #{:logic-var} first))
                                     (map form-vars)
                                     (apply set/union))))
-       :required-vars (set (map second (:in sub-query)))})))
+       :required-vars (set (map second (:in sub-query)))})
+
+    :match {:provided-vars (->> term-arg
+                                :match
+                                (map second)
+                                (filter (comp #{:logic-var} first))
+                                (map second)
+                                set)}))
 
 (defn- ->param-sym [lv]
   (-> (symbol (str "?" (name lv)))
