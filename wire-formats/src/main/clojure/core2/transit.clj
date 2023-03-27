@@ -1,13 +1,13 @@
 (ns core2.transit
-  (:require [cognitect.transit :as transit]
+  (:require [clojure.edn :as edn]
+            [cognitect.transit :as transit]
             [core2.api :as c2]
             [core2.edn :as c2-edn]
             [core2.error :as err]
-            [time-literals.read-write :as time-literals.rw]
-            [clojure.java.io :as io])
-  (:import core2.api.TransactionInstant
+            [time-literals.read-write :as time-literals.rw])
+  (:import (core2.api TransactionInstant)
            (core2.types IntervalDayTime IntervalMonthDayNano IntervalYearMonth)
-           [java.time DayOfWeek Duration Instant LocalDate LocalDateTime LocalTime Month MonthDay OffsetDateTime OffsetTime Period Year YearMonth ZoneId ZonedDateTime]))
+           (java.time DayOfWeek Duration Instant LocalDate LocalDateTime LocalTime Month MonthDay OffsetDateTime OffsetTime Period Year YearMonth ZonedDateTime ZoneId)))
 
 (def tj-read-handlers
   (merge (-> time-literals.rw/tags
@@ -19,7 +19,8 @@
           "core2/period-duration" c2-edn/period-duration-reader
           "core2.interval/year-month" c2-edn/interval-ym-reader
           "core2.interval/day-time" c2-edn/interval-dt-reader
-          "core2.interval/month-day-nano" c2-edn/interval-mdn-reader}))
+          "core2.interval/month-day-nano" c2-edn/interval-mdn-reader
+          "core2/list" edn/read-string}))
 
 (def tj-write-handlers
   (merge (-> {Period "time/period"
@@ -50,4 +51,5 @@
 
           IntervalMonthDayNano (transit/write-handler "core2.interval/month-day-nano"
                                                       #(vector (str (.-period ^IntervalMonthDayNano %))
-                                                               (str (.-duration ^IntervalMonthDayNano %))))}))
+                                                               (str (.-duration ^IntervalMonthDayNano %))))
+          clojure.lang.PersistentList (transit/write-handler "core2/list" #(pr-str %))}))
