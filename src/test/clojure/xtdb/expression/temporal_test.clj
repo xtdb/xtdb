@@ -1,6 +1,6 @@
 (ns xtdb.expression.temporal-test
   (:require [clojure.string :as str]
-            [clojure.test :as t]
+            [clojure.test :as t :refer [deftest]]
             [clojure.test.check.clojure-test :as tct]
             [clojure.test.check.generators :as tcg]
             [clojure.test.check.properties :as tcp]
@@ -816,3 +816,140 @@
       (or (instance? IntervalYearMonth res)
           (instance? IntervalDayTime res)
           (instance? IntervalMonthDayNano res)))))
+
+(deftest test-period-constructor
+  (let [start #time/zoned-date-time "2020-01-01T00:00Z[UTC]"
+        end #time/zoned-date-time "2022-01-01T00:00Z[UTC]"]
+    (t/is (= {:start start :end end}
+             (et/project1 '(period x y)
+                          {:x start, :y end}))))
+
+  (let [start #time/zoned-date-time "2030-01-01T00:00Z[UTC]"
+        end #time/zoned-date-time "2020-01-01T00:00Z[UTC]"]
+    (t/is
+      (thrown-with-msg?
+        RuntimeException
+        #"Start cannot be greater than end when constructing a period"
+        (et/project1 '(period x y)
+                     {:x start, :y end})))))
+
+(deftest test-overlaps?-predicate
+  (t/is
+    (= true
+       (et/project1
+         '(overlaps? x y)
+         {:x {:start #inst "2020", :end #inst "2022"}
+          :y {:start #inst "2021", :end #inst "2023"}})))
+
+  (t/is
+    (= false
+       (et/project1
+         '(overlaps? x y)
+         {:x {:start #inst "2020", :end #inst "2021"}
+          :y {:start #inst "2021", :end #inst "2023"}}))))
+
+(deftest test-contains?-predicate
+  (t/testing "period to period"
+    (t/is
+      (= true
+         (et/project1
+           '(contains? x y)
+           {:x {:start #inst "2020", :end #inst "2025"}
+            :y {:start #inst "2021", :end #inst "2023"}})))
+
+    (t/is
+      (= false
+         (et/project1
+           '(contains? x y)
+           {:x {:start #inst "2020", :end #inst "2022"}
+            :y {:start #inst "2021", :end #inst "2023"}}))))
+
+  (t/testing "period to timestamp"
+    (t/is
+      (= true
+         (et/project1
+           '(contains? x y)
+           {:x {:start #inst "2020", :end #inst "2025"}
+            :y #inst "2021"})))
+
+    (t/is
+      (= false
+         (et/project1
+           '(contains? x y)
+           {:x {:start #inst "2020", :end #inst "2022"}
+            :y #inst "2023"})))))
+
+(deftest test-equals?-predicate
+  (t/is
+    (= true
+       (et/project1
+         '(equals? x y)
+         {:x {:start #inst "2020", :end #inst "2022"}
+          :y {:start #inst "2020", :end #inst "2022"}})))
+
+  (t/is
+    (= false
+       (et/project1
+         '(equals? x y)
+         {:x {:start #inst "2020", :end #inst "2021"}
+          :y {:start #inst "2020", :end #inst "2023"}}))))
+
+(deftest test-procedes?-predicate
+  (t/is
+    (= true
+       (et/project1
+         '(precedes? x y)
+         {:x {:start #inst "2020", :end #inst "2022"}
+          :y {:start #inst "2023", :end #inst "2025"}})))
+
+  (t/is
+    (= false
+       (et/project1
+         '(precedes? x y)
+         {:x {:start #inst "2020", :end #inst "2021"}
+          :y {:start #inst "2020", :end #inst "2023"}}))))
+
+(deftest test-succeeds?-predicate
+  (t/is
+    (= true
+       (et/project1
+         '(succeeds? x y)
+         {:x {:start #inst "2023", :end #inst "2025"}
+          :y {:start #inst "2020", :end #inst "2022"}})))
+
+  (t/is
+    (= false
+       (et/project1
+         '(succeeds? x y)
+         {:x {:start #inst "2020", :end #inst "2021"}
+          :y {:start #inst "2020", :end #inst "2023"}}))))
+
+(deftest test-immediately-procedes?-predicate
+  (t/is
+    (= true
+       (et/project1
+         '(immediately-precedes? x y)
+         {:x {:start #inst "2020", :end #inst "2023"}
+          :y {:start #inst "2023", :end #inst "2025"}})))
+
+  (t/is
+    (= false
+       (et/project1
+         '(immediately-precedes? x y)
+         {:x {:start #inst "2020", :end #inst "2022"}
+          :y {:start #inst "2023", :end #inst "2025"}}))))
+
+(deftest test-immediately-succeeds?-predicate
+  (t/is
+    (= true
+       (et/project1
+         '(immediately-succeeds? x y)
+         {:x {:start #inst "2022", :end #inst "2025"}
+          :y {:start #inst "2020", :end #inst "2022"}})))
+
+  (t/is
+    (= false
+       (et/project1
+         '(immediately-succeeds? x y)
+         {:x {:start #inst "2023", :end #inst "2025"}
+          :y {:start #inst "2020", :end #inst "2022"}}))))

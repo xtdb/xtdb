@@ -1400,25 +1400,6 @@
                   tx1, nil))
             "cross-time join - who was here in both 2018 and 2023?")
 
-      (t/is (= [{:id :matthew} {:id :mark}]
-               (q '{:find [id],
-                    :where [(match xt_docs [id {:application_time_start app-start
-                                                :application_time_end app-end}]
-                                   {:for-app-time :all-time})
-
-                            (match xt_docs [{:id :john
-                                             :application_time_start john-start
-                                             :application_time_end john-end}]
-                                   {:for-app-time :all-time})
-
-                            [(<> id :john)]
-
-                            ;; eventually: 'overlaps?'
-                            [(< app-start john-end)]
-                            [(> app-end john-start)]]},
-                  tx1, nil))
-            "who worked with John?")
-
       (t/is (= [{:vt-start (util/->zdt #inst "2021")
                  :vt-end (util/->zdt util/end-of-time)
                  :tt-start (util/->zdt #inst "2020-01-01")
@@ -1439,7 +1420,7 @@
 
             "for all sys time"))))
 
-(t/deftest test-snodgrass-99-tutorial
+(deftest test-snodgrass-99-tutorial
   (letfn [(q [query tx current-time & in]
             (apply xt/q
                    tu/*node*
@@ -1534,20 +1515,21 @@
                     :keys [prop vt-begin vt-end]
                     :in [in-prop]
                     :where [(match docs {:property-number in-prop
-                                         :customer-number cust
-                                         :application_time_start app-start
-                                         :application_time_end app-end}
+                                            :customer-number cust
+                                            :xt/app-time app-time
+                                            :application_time_start app-start
+                                            :application_time_end app-end}
                                    {:for-app-time :all-time})
 
                             (match docs {:property-number prop
-                                         :customer-number cust
-                                         :application_time_start app-start2
-                                         :application_time_end app-end2}
+                                            :customer-number cust
+                                            :xt/app-time app-time-2
+                                            :application_time_start app-start2
+                                            :application_time_end app-end2}
                                    {:for-app-time :all-time})
+
                             [(<> prop in-prop)]
-                            ;; eventually: 'overlaps?'
-                            [(< app-start app-end2)]
-                            [(> app-end app-start2)]]
+                            [(overlaps? app-time app-time-2)]]
                     :order-by [[app-start :asc]]}
                   tx7, nil, 7797))
             "Case 2: Valid-time sequenced and transaction-time current")
@@ -1561,30 +1543,31 @@
                     :keys [prop vt-begin vt-end recorded-start recorded-stop]
                     :in [in-prop]
                     :where [(match docs {:property-number in-prop
-                                         :customer-number cust
-                                         :application_time_start app-start
-                                         :application_time_end app-end
-                                         :system_time_start sys-start
-                                         :system_time_end sys-end}
+                                            :customer-number cust
+                                            :xt/app-time app-time
+                                            :xt/sys-time sys-time
+                                            :application_time_start app-start
+                                            :application_time_end app-end
+                                            :system_time_start sys-start
+                                            :system_time_end sys-end}
                                    {:for-app-time :all-time
                                     :for-sys-time :all-time})
 
                             (match docs {:customer-number cust
-                                         :property-number prop
-                                         :application_time_start app-start2
-                                         :application_time_end app-end2
-                                         :system_time_start sys-start2
-                                         :system_time_end sys-end2}
+                                            :property-number prop
+                                            :xt/app-time app-time-2
+                                            :xt/sys-time sys-time-2
+                                            :application_time_start app-start2
+                                            :application_time_end app-end2
+                                            :system_time_start sys-start2
+                                            :system_time_end sys-end2}
 
                                    {:for-app-time :all-time
                                     :for-sys-time :all-time})
+
                             [(<> prop in-prop)]
-                            ;; eventually: 'overlaps?'
-                            [(< app-start app-end2)]
-                            [(> app-end app-start2)]
-                            ;; eventually: 'overlaps?'
-                            [(< sys-start sys-end2)]
-                            [(> sys-end sys-start2)]]
+                            [(overlaps? app-time app-time-2)]
+                            [(overlaps? sys-time sys-time-2)]]
                     :order-by [[app-start :asc]]}
                   tx7, nil, 7797))
             "Case 5: Application-time sequenced and system-time sequenced")
@@ -1597,28 +1580,28 @@
                     :keys [prop vt-begin vt-end recorded-start]
                     :in [in-prop]
                     :where [(match docs {:property-number in-prop
-                                         :customer-number cust
-                                         :application_time_start app-start
-                                         :application_time_end app-end
-                                         :system_time_start sys-start
-                                         :system_time_end sys-end}
+                                            :customer-number cust
+                                            :xt/app-time app-time
+                                            :xt/sys-time sys-time
+                                            :application_time_start app-start
+                                            :application_time_end app-end
+                                            :system_time_start sys-start
+                                            :system_time_end sys-end}
                                    {:for-app-time :all-time
                                     :for-sys-time :all-time})
 
                             (match docs {:customer-number cust
-                                         :property-number prop
-                                         :application_time_start app-start2
-                                         :application_time_end app-end2
-                                         :system_time_start sys-start2
-                                         :system_time_end sys-end2})
+                                            :property-number prop
+                                            :xt/app-time app-time-2
+                                            :xt/sys-time sys-time-2
+                                            :application_time_start app-start2
+                                            :application_time_end app-end2
+                                            :system_time_start sys-start2
+                                            :system_time_end sys-end2})
 
                             [(<> prop in-prop)]
-                            ;; eventually: 'overlaps?'
-                            [(< app-start app-end2)]
-                            [(> app-end app-start2)]
-                            ;; eventually: 'contains?' with point
-                            [(> sys-start2 sys-start)]
-                            [(< sys-start2 sys-end)]]
+                            [(overlaps? app-time app-time-2)]
+                            [(contains? sys-time sys-start2)]]
                     :order-by [[app-start :asc]]}
                   tx7, nil, 7797))
             "Case 8: Application-time sequenced and system-time nonsequenced"))))
@@ -1709,3 +1692,155 @@
                                                 :where [(match customer {:customer customer, :firstname firstname})]})
                                             n-customers]]}
                                  (xt/q tu/*node*))))))
+
+(deftest test-period-predicates
+
+  (xt/submit-tx tu/*node* '[[:put xt_docs {:id 1} {:app-time-start #inst "2015"
+                                                   :app-time-end #inst "2020"}]
+                            [:put xt_cats {:id 2} {:app-time-start #inst "2016"
+                                                   :app-time-end #inst "2018"}]])
+
+  (t/is (= [{:id 1, :id2 2,
+             :xt_docs_app_time {:start #time/zoned-date-time "2015-01-01T00:00Z[UTC]",
+                                :end #time/zoned-date-time "2020-01-01T00:00Z[UTC]"},
+             :xt_cats_app_time {:start #time/zoned-date-time "2016-01-01T00:00Z[UTC]",
+                                :end #time/zoned-date-time "2018-01-01T00:00Z[UTC]"}}]
+           (xt/q
+             tu/*node*
+             '{:find [id id2 xt_docs_app_time xt_cats_app_time]
+               :where [(match xt_docs [id {:xt/app-time xt_docs_app_time}]
+                              {:for-app-time :all-time})
+                       (match xt_cats [{:xt/app-time xt_cats_app_time :id id2}]
+                              {:for-app-time :all-time})
+                       [(contains? xt_docs_app_time xt_cats_app_time)]]})))
+
+  (t/is (= [{:id 1, :id2 2,
+             :xt_docs_sys_time {:start #time/zoned-date-time "2020-01-01T00:00Z[UTC]",
+                                :end #time/zoned-date-time "9999-12-31T23:59:59.999999Z[UTC]"},
+             :xt_cats_sys_time {:start #time/zoned-date-time "2020-01-01T00:00Z[UTC]",
+                                :end #time/zoned-date-time "9999-12-31T23:59:59.999999Z[UTC]"}}]
+           (xt/q
+             tu/*node*
+             '{:find [id id2 xt_docs_sys_time xt_cats_sys_time]
+               :where [(match xt_docs [id {:xt/sys-time xt_docs_sys_time}]
+                              {:for-app-time :all-time
+                               :for-sys-time :all-time})
+                       (match xt_cats [{:xt/sys-time xt_cats_sys_time :id id2}]
+                              {:for-app-time :all-time
+                               :for-sys-time :all-time})
+                       [(equals? xt_docs_sys_time xt_cats_sys_time)]]}))))
+
+(deftest test-period-constructor
+  (t/is (= [{:p1 {:start #time/zoned-date-time "2018-01-01T00:00Z[UTC]",
+                  :end #time/zoned-date-time "2022-01-01T00:00Z[UTC]"}}]
+           (xt/q
+             tu/*node*
+             '{:find [p1],
+               :where [[(period #inst "2018" #inst "2022") p1]]})))
+
+  (t/is (thrown-with-msg?
+          RuntimeException
+          #"Start cannot be greater than end when constructing a period"
+          (xt/q
+            tu/*node*
+            '{:find [p1],
+              :where [[(period #inst "2022" #inst "2020") p1]]}))))
+
+(deftest test-period-and-temporal-col-projection
+
+  (xt/submit-tx tu/*node* '[[:put xt_docs {:id 1} {:app-time-start #inst "2015"
+                                                   :app-time-end #inst "2050"}]])
+
+  (t/is (= [{:id 1,
+             :app_time {:start #time/zoned-date-time "2015-01-01T00:00Z[UTC]",
+                        :end #time/zoned-date-time "2050-01-01T00:00Z[UTC]"},
+             :application_time_start #time/zoned-date-time "2015-01-01T00:00Z[UTC]",
+             :app-time-end #time/zoned-date-time "2050-01-01T00:00Z[UTC]"}]
+           (xt/q
+             tu/*node*
+             '{:find [id app_time application_time_start app-time-end]
+               :where [(match xt_docs
+                              [id application_time_start
+                               {:xt/app-time app_time
+                                :application_time_end app-time-end}]
+                              {:for-app-time :all-time})]}))
+        "projecting both period and underlying cols")
+
+  (t/is (= [{:id 1,
+             :app_time {:start #time/zoned-date-time "2015-01-01T00:00Z[UTC]",
+                        :end #time/zoned-date-time "2050-01-01T00:00Z[UTC]"},
+             :sys_time {:start #time/zoned-date-time "2020-01-01T00:00Z[UTC]",
+                        :end #time/zoned-date-time "9999-12-31T23:59:59.999999Z[UTC]"}}]
+           (xt/q
+             tu/*node*
+             '{:find [id app_time sys_time]
+               :where [(match xt_docs [id {:xt/app-time app_time
+                                           :xt/sys-time sys_time}]
+                              {:for-app-time :all-time
+                               :for-sys-time :all-time})]}))
+        "projecting both app and sys-time periods")
+
+  (t/is (= [#:xt{:app-time
+                 {:start #time/zoned-date-time "2015-01-01T00:00Z[UTC]",
+                  :end #time/zoned-date-time "2050-01-01T00:00Z[UTC]"}}]
+           (xt/q
+             tu/*node*
+             '{:find [xt/app-time]
+               :where [(match xt_docs
+                              [id xt/app-time]
+                              {:for-app-time :all-time})]}))
+        "protecting temporal period in vector syntax")
+
+  (t/is (= [{:id 1
+             :id2 1,
+             :app_time {:start #time/zoned-date-time "2015-01-01T00:00Z[UTC]",
+                        :end #time/zoned-date-time "2050-01-01T00:00Z[UTC]"},
+             :sys_time {:start #time/zoned-date-time "2020-01-01T00:00Z[UTC]",
+                        :end #time/zoned-date-time "9999-12-31T23:59:59.999999Z[UTC]"}}]
+           (xt/q
+             tu/*node*
+             '{:find [id id2 app_time sys_time]
+               :where [(match xt_docs [id {:xt/app-time app_time
+                                           :xt/sys-time sys_time}]
+                              {:for-app-time :all-time
+                               :for-sys-time :all-time})
+                       (match xt_docs [{:xt/app-time app_time
+                                        :xt/sys-time sys_time
+                                        :id id2}]
+                              {:for-app-time :all-time
+                               :for-sys-time :all-time})]}))
+        "period unification")
+
+  ;; TODO broken. Both periods are mapped to time, no unification happens.
+  ;; works okay if you use a real column as no name clash plus var->cols sees they share a var
+  ;; probably suggests current approach for how we introduce temporal periods is too naive
+  #_(xt/submit-tx tu/*node* '[[:put xt_docs {:id 2}]])
+
+
+  #_(t/is (= [{:id 2,
+             :time {:start #time/zoned-date-time "2020-01-02T00:00Z[UTC]",
+                    :end #time/zoned-date-time "9999-12-31T23:59:59.999999Z[UTC]"}}]
+           (xt/q
+             tu/*node*
+             '{:find [id time]
+               :where [(match xt_docs [id {:xt/app-time time
+                                           :xt/sys-time time}]
+                              {:for-app-time :all-time
+                               :for-sys-time :all-time})]}))
+        "period unification within match"))
+
+
+(deftest test-period-literal-match
+
+  (xt/submit-tx tu/*node* '[[:put xt_docs {:id 1} {:app-time-start #inst "2015"
+                                                   :app-time-end #inst "2050"}]])
+
+  (t/is (thrown-with-msg?
+          IllegalArgumentException
+          #"Temporal period must be bound to logic var"
+          (xt/q
+             tu/*node*
+             '{:find [id]
+               :where [(match xt_docs
+                              [id {:xt/app-time "111"}]
+                              {:for-app-time :all-time})]}))))

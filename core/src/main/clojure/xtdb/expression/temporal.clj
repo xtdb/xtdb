@@ -7,7 +7,7 @@
             [xtdb.temporal :as temporal]
             [xtdb.types :as types]
             [xtdb.util :as util])
-  (:import xtdb.vector.IIndirectRelation
+  (:import (xtdb.vector IIndirectRelation IStructValueReader)
            (java.time Duration Instant LocalDate LocalDateTime LocalTime Period ZoneId ZoneOffset ZonedDateTime)
            (java.time.temporal ChronoField ChronoUnit)
            (org.apache.arrow.vector PeriodDuration)))
@@ -948,3 +948,95 @@
 (defmethod expr/codegen-call [:abs :num] [{[numeric-type] :arg-types}]
   {:return-type numeric-type
    :->call-code #(do `(Math/abs ~@%))})
+
+(defmethod expr/codegen-call [:period :timestamp-tz :timestamp-tz] [{[start-type end-type] :arg-types}]
+  ;; TODO error assumes micros
+  ;; TODO reflection warning for readLong
+  {:return-type [:struct {'start start-type, 'end end-type}]
+   :->call-code (fn [[start-code end-code]]
+                  `(let [start# ~start-code
+                         end# ~end-code]
+                     (if (> start# end#)
+                       (throw
+                         (err/runtime-err
+                           :core2.temporal/invalid-period
+                           {::err/message
+                            (str
+                              "Start cannot be greater than end when constructing a period - start: "
+                              (util/micros->instant start#)
+                              ", end: "
+                              (util/micros->instant end#))
+                            :start (util/micros->instant start#)
+                            :end (util/micros->instant end#)}))
+                       (reify IStructValueReader
+                         (~'readLong [_ field#]
+                           (case field#
+                             "start" start#
+                             "end" end#))))))})
+
+
+(defn start [^IStructValueReader period]
+  (.readLong period "start"))
+
+(defn end [^IStructValueReader period]
+  (.readLong period "end"))
+
+(defmethod expr/codegen-call [:contains? :struct :struct] [_]
+  {:return-type :bool
+   :->call-code (fn [[p1-code p2-code]]
+                  `(let [p1# ~p1-code
+                         p2# ~p2-code]
+                     (and (<= (start p1#) (start p2#))
+                          (>= (end p1#) (end p2#)))))})
+
+(defmethod expr/codegen-call [:contains? :struct :timestamp-tz] [_]
+  {:return-type :bool
+   :->call-code (fn [[p1-code ts-code]]
+                  `(let [p1# ~p1-code
+                         ts# ~ts-code]
+                     (and (<= (start p1#) ts#)
+                          (>= (end p1#) ts#))))})
+
+(defmethod expr/codegen-call [:overlaps? :struct :struct] [_]
+  {:return-type :bool
+   :->call-code (fn [[p1-code p2-code]]
+                  `(let [p1# ~p1-code
+                         p2# ~p2-code]
+                     (and (< (start p1#) (end p2#))
+                          (> (end p1#) (start p2#)))))})
+
+(defmethod expr/codegen-call [:equals? :struct :struct] [_]
+  {:return-type :bool
+   :->call-code (fn [[p1-code p2-code]]
+                  `(let [p1# ~p1-code
+                         p2# ~p2-code]
+                     (and (= (start p1#) (start p2#))
+                          (= (end p1#) (end p2#)))))})
+
+(defmethod expr/codegen-call [:precedes? :struct :struct] [_]
+  {:return-type :bool
+   :->call-code (fn [[p1-code p2-code]]
+                  `(let [p1# ~p1-code
+                         p2# ~p2-code]
+                     (<= (end p1#) (start p2#))))})
+
+(defmethod expr/codegen-call [:succeeds? :struct :struct] [_]
+  {:return-type :bool
+   :->call-code (fn [[p1-code p2-code]]
+                  `(let [p1# ~p1-code
+                         p2# ~p2-code]
+                     (>= (start p1#) (end p2#))))})
+
+(defmethod expr/codegen-call [:immediately-precedes? :struct :struct] [_]
+  {:return-type :bool
+   :->call-code (fn [[p1-code p2-code]]
+                  `(let [p1# ~p1-code
+                         p2# ~p2-code]
+                     (= (end p1#) (start p2#))))})
+
+(defmethod expr/codegen-call [:immediately-succeeds? :struct :struct] [_]
+  {:return-type :bool
+   :->call-code (fn [[p1-code p2-code]]
+                  `(let [p1# ~p1-code
+                         p2# ~p2-code]
+                     (= (start p1#) (end p2#))))})

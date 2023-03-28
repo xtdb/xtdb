@@ -375,27 +375,76 @@
     1 {scan-col (first col-preds)}
     {scan-col (list* 'and col-preds)}))
 
+(def app-time-period-sym 'xt__app-time)
+(def app-time-start-sym 'application_time_start)
+(def app-time-end-sym 'application_time_end)
+(def app-temporal-cols {:period app-time-period-sym
+                        :start app-time-start-sym
+                        :end app-time-end-sym})
+
+
+(def sys-time-period-sym 'xt__sys-time)
+(def sys-time-start-sym 'system_time_start)
+(def sys-time-end-sym 'system_time_end)
+(def sys-temporal-cols {:period sys-time-period-sym
+                        :start sys-time-start-sym
+                        :end sys-time-end-sym})
+
+(defn replace-period-cols-with-temporal-attrs
+  [original-attrs]
+  (cond-> original-attrs
+    (contains? original-attrs app-time-period-sym)
+    (-> (disj app-time-period-sym)
+        (conj app-time-start-sym app-time-end-sym))
+
+    (contains? original-attrs sys-time-period-sym)
+    (-> (disj sys-time-period-sym)
+        (conj sys-time-start-sym sys-time-end-sym))))
+
+(defn create-period-constructor [match {:keys [period start end]}]
+  (when-let [[_ [lv-type lv]] (first (filter #(= period (first %)) match))]
+    (if (= :logic-var lv-type)
+      {(col-sym lv) (list 'period (col-sym start) (col-sym end))}
+
+      (throw (err/illegal-arg :temporal-period-requires-logic-var
+                              {::err/message "Temporal period must be bound to logic var"
+                               :period period
+                               :value lv})))))
+
+(defn wrap-with-period-constructor [plan match]
+  (if-let [period-constructors (not-empty
+                                 (keep
+                                   #(create-period-constructor match %)
+                                   [app-temporal-cols sys-temporal-cols]))]
+    [:map (vec period-constructors)
+     plan]
+    plan))
+
 (defn- plan-scan [table match temporal-opts]
-  (let [attrs (set (keys match))
+  (let [original-attrs (set (keys match))
+
+        attrs (replace-period-cols-with-temporal-attrs original-attrs)
 
         attr->lits (-> match
                        (->> (keep (fn [[a [v-type v-arg]]]
                                     (when (= :literal v-type)
                                       {:a a, :lit v-arg})))
                             (group-by :a))
-                       (update-vals #(into #{} (map :lit) %)))]
+                       (update-vals #(into #{} (map :lit) %)))
+        plan (-> [:scan {:table table
+                         :for-app-time (:for-app-time temporal-opts [:at :now])
+                         ;; defaults handled by scan
+                         :for-sys-time (:for-sys-time temporal-opts)}
+                  (-> attrs
+                      (disj '_table)
+                      (->> (mapv (fn [attr]
+                                   (-> attr
+                                       (wrap-scan-col-preds (for [lit (get attr->lits attr)]
+                                                              (list '= attr lit))))))))])]
 
-    (-> [:scan {:table table
-                :for-app-time (:for-app-time temporal-opts [:at :now])
-                ;; defaults handled by scan
-                :for-sys-time (:for-sys-time temporal-opts)}
-         (-> attrs
-             (disj '_table)
-             (->> (mapv (fn [attr]
-                          (-> attr
-                              (wrap-scan-col-preds (for [lit (get attr->lits attr)]
-                                                     (list '= attr lit))))))))]
-        (with-meta {::vars attrs}))))
+    (with-meta
+      (wrap-with-period-constructor plan match)
+      {::vars attrs})))
 
 (defn- attr->unwind-col [a]
   (col-sym "__uw" a))
@@ -446,7 +495,13 @@
              var->cols (-> match
                            (->> (keep (fn [[a [v-type v-arg]]]
                                         (case v-type
-                                          :logic-var {:lv v-arg, :col a}
+                                          :logic-var {:lv v-arg
+                                                      :col (if (contains?
+                                                                 #{app-time-period-sym
+                                                                   sys-time-period-sym}
+                                                                 a)
+                                                             (col-sym v-arg)
+                                                             a)}
                                           :unwind {:lv (first v-arg), :col (attr->unwind-col a)}
                                           nil)))
                                 (group-by :lv))
