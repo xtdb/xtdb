@@ -898,6 +898,11 @@
 ;; - we're going to want a better way to recognise them
 (def ^:private grouping-fn? '#{count count-distinct sum avg min max})
 
+(defn- wrap-with-meta [x m]
+  (with-meta {:obj x} (assoc m ::wrapped true)))
+
+(defn- unwrap-with-meta [{:keys [obj]}] obj)
+
 (defn- plan-head-exprs [{find-clause :find, :keys [order-by]}]
   (letfn [(with-col-name [prefix idx fc]
             (-> (vec fc) (with-meta {::col (col-sym prefix (str idx))})))
@@ -915,9 +920,11 @@
                         (with-meta {::col col
                                     ::agg {col (list f projection-sym)}
                                     ::agg-projection {projection-sym (s/unform ::form agg-arg)}})))))
-
-              (-> (s/unform ::form form)
-                  (with-meta {::grouping-vars (form-vars form), ::col col}))))]
+              (let [org-form (s/unform ::form form)
+                    m {::grouping-vars (form-vars form), ::col col}]
+                (if (instance? clojure.lang.IMeta org-form)
+                  (-> org-form (with-meta m))
+                  (wrap-with-meta org-form m)))))]
 
     (->> (concat (->> find-clause
                       (into [] (map-indexed (partial with-col-name "_column"))))
@@ -937,8 +944,10 @@
   (let [clauses (->> find-args
                      (mapv (fn [rename-key clause]
                              (let [expr (get head-exprs clause)
-                                   {::keys [col]} (meta expr)
-                                   col (or (some-> rename-key col-sym) col)]
+                                   {::keys [col wrapped]} (meta expr)
+                                   col (or (some-> rename-key col-sym) col)
+                                   expr (cond->> expr
+                                          wrapped unwrap-with-meta)]
                                (-> (if (= col expr) col {col expr})
                                    (with-meta {::var col}))))
                            (or rename-keys (repeat nil))))]

@@ -754,6 +754,19 @@
                                              :where [(match xt_docs {:id e})
                                                      [e :first-name "Sergei"]]})]}))))))
 
+(deftest test-simple-literals-in-find
+  (c2/submit-tx tu/*node* '[[:put xt_docs {:id :ivan, :age 15}]
+                            [:put xt_docs {:id :petr, :age 22}]
+                            [:put xt_docs {:id :slava, :age 37}]])
+
+
+    (t/is (= [{:_column_0 1, :_column_1 "foo", :id :ivan}
+              {:_column_0 1, :_column_1 "foo", :id :petr}
+              {:_column_0 1, :_column_1 "foo", :id :slava}]
+              (c2/q tu/*node*
+                    '{:find [1 "foo" id]
+                      :where [(match xt_docs [id])]}))))
+
 (deftest calling-a-function-580
   (let [_tx (c2/submit-tx tu/*node*
                           '[[:put xt_docs {:id :ivan, :age 15}]
