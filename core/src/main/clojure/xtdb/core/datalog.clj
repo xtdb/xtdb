@@ -564,22 +564,29 @@
 (defn- plan-semi-join [sj-type {:keys [sub-query] :as sj}]
   (let [{:keys [required-vars provided-vars]} (term-vars [sj-type sj])
         apply-mapping (when (seq required-vars)
-                        (->apply-mapping (set/union required-vars provided-vars)))]
+                        (->apply-mapping required-vars))]
 
     (-> (plan-query (-> sub-query
                         (assoc ::apply-mapping apply-mapping)
                         (dissoc :in)))
-        (vary-meta assoc ::apply-mapping apply-mapping))))
+        (vary-meta assoc
+                   ::apply-mapping apply-mapping
+                   ::provided-vars provided-vars))))
 
 (defn- wrap-semi-joins [plan sj-type semi-joins]
   (->> semi-joins
        (reduce (fn [acc sq-plan]
-                 (let [{::keys [apply-mapping]} (meta sq-plan)]
+                 (let [{::keys [apply-mapping provided-vars]} (meta sq-plan)
+                       {::keys [vars]} (meta acc)
+                       provided-vars-apply-mapping (-> (->apply-mapping provided-vars)
+                                                       (select-keys vars))]
                    (-> (if apply-mapping
-                         [:apply sj-type apply-mapping
-                          acc sq-plan]
-
+                         [:apply sj-type (merge apply-mapping provided-vars-apply-mapping)
+                          acc (->> provided-vars-apply-mapping
+                                   (map (fn [[v1 v2]] (list '= (with-meta v1 {:column? true}) v2)))
+                                   (wrap-select sq-plan))]
                          [sj-type (->> (::vars (meta sq-plan))
+                                       (filter vars)
                                        (mapv (fn [v] {v v})))
                           acc sq-plan])
                        (with-meta (meta acc)))))

@@ -476,24 +476,6 @@
                         [e :first-name n]
                         [f :first-name n]]})))))
 
-#_(deftest exists-with-no-outer-unification-692
-    (let [_tx (xt/submit-tx tu/*node*
-                            '[[:put xt_docs {:id :ivan, :name "Ivan"}]
-                              [:put xt_docs {:id :petr, :name "Petr"}]
-                              [:put xt_docs {:id :ivan2, :name "Ivan"}]])]
-
-      (t/is (= [{:e :ivan} {:e :ivan2}]
-               (xt/q tu/*node*
-                     '{:find [e]
-                       :where [(match xt_docs {:id e})
-                               (exists? {:find [e2]
-                                         :in [e]
-                                         :where [(match xt_docs {:id e})
-                                                 (match xt_docs {:id e2})
-                                                 [e :name name]
-                                                 [e2 :name name]
-                                                 [(<> e e2)]]})]})))))
-
 (deftest test-implict-match-unification
   (xt/submit-tx tu/*node* '[[:put foo {:id :ivan, :name "Ivan"}]
                             [:put foo {:id :petr, :name "Petr"}]
@@ -513,6 +495,54 @@
                    :where [(match foo {:id e})
                            (match toto {:id e})
                            [e :name]]}))))
+
+(deftest exists-with-no-outer-unification-692
+  (let [_tx (xt/submit-tx tu/*node*
+                          '[[:put xt_docs {:id :ivan, :name "Ivan"}]
+                            [:put xt_docs {:id :petr, :name "Petr"}]
+                            [:put xt_docs {:id :ivan2, :name "Ivan"}]])]
+
+    (t/is (= [{:e :ivan} {:e :ivan2}]
+             (xt/q tu/*node*
+                   '{:find [e]
+                     :where [(match xt_docs {:id e})
+                             (exists? {:find [e2]
+                                       :in [e]
+                                       :where [(match xt_docs {:id e})
+                                               (match xt_docs {:id e2})
+                                               [e :name name]
+                                               [e2 :name name]
+                                               [(<> e e2)]]})]}))
+          "with in variables")
+    (t/is (= [{:e :ivan} {:e :ivan2}]
+             (xt/q tu/*node*
+                   '{:find [e]
+                     :where [(match xt_docs {:id e})
+                             (match xt_docs {:id e2})
+                             (exists? {:find [e e2]
+                                       :where [(match xt_docs {:id e})
+                                               (match xt_docs {:id e2})
+                                               [e :name name]
+                                               [e2 :name name]
+                                               [(<> e e2)]]})]}))
+          "without in variables")))
+
+(deftest exists-with-keys-699
+  (let [_tx (xt/submit-tx tu/*node*
+                          '[[:put xt_docs {:id 1, :name "one"}]
+                            [:put xt_docs {:id 2, :name "two"}]
+                            [:put xt_docs {:id 3, :name "three"}]])]
+
+    (t/is (= [{:e 2} {:e 3}]
+             (xt/q tu/*node*
+                   '{:find [e]
+                     :where [(match xt_docs {:id e})
+                             (match xt_docs {:id e3})
+                             (exists? {:find [(+ e2 2)]
+                                       :keys [e3]
+                                       :in [e]
+                                       :where [(match xt_docs {:id e2})
+                                               [(<> e e2)]]})]})))))
 
 (deftest test-semi-join
   (let [_tx (xt/submit-tx tu/*node*
@@ -1614,7 +1644,7 @@
                            [:put 'order {:id 2, :customer 1, :items [{:sku "bread", :qty 1} {:sku "eggs", :qty 2}]}]])
 
   (t/are [q result]
-    (= result (xt/q tu/*node* q))
+      (= result (xt/q tu/*node* q))
 
 
     '{:find [n-customers]
