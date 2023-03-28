@@ -205,8 +205,15 @@
                                                          (update :param-types
                                                                  (fnil into {})
                                                                  (map (fn [[ik dk]]
-                                                                        [dk (get independent-col-types ik)]))
+                                                                        (if-let [col-type (get independent-col-types ik)]
+                                                                          [dk col-type]
+                                                                          (throw
+                                                                            (err/illegal-arg
+                                                                              :core2.apply/missing-column
+                                                                              {::err/message (str "Column missing from independent relation: " ik)
+                                                                               :column ik})))))
                                                                  columns))
+            __ (clojure.pprint/pprint columns)
             {dependent-col-types :col-types, ->dependent-cursor :->cursor} (lp/emit-expr dependent-relation dependent-args)
             out-dependent-col-types (zmatch mode
                                       [:mark-join mark-spec]

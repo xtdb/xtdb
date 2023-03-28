@@ -1,5 +1,5 @@
 (ns core2.operator.apply-test
-  (:require [clojure.test :as t]
+  (:require [clojure.test :as t :refer [deftest]]
             [core2.test-util :as tu]))
 
 (t/deftest test-apply-operator
@@ -141,3 +141,37 @@
                   [:table [{:z 0}, {:z 2}]]]]
                 [:select (= ?x1 y)
                  [:table [{:y 0}, {:y 2}]]]]] {}))))
+
+(deftest test-missing-column-in-independent-rel
+
+  (t/is
+    (= [{:foo 1 :baz 1}]
+       (tu/query-ra
+         '[:apply :cross-join
+           {foo ?bar}
+           [:table [{:foo 1}]]
+           [:select (= baz ?bar)
+            [:table [{:baz 1}]]]] {}))
+    "col with non null type")
+
+  (t/is
+    (= [{:foo nil :baz 1}]
+       (tu/query-ra
+         '[:apply :cross-join
+           {foo ?bar}
+           [:table [{:foo nil}]]
+           [:select (nil? ?bar)
+            [:table [{:baz 1}]]]] {}))
+    "col with null type")
+
+  (t/is
+    (thrown-with-msg?
+      Exception
+      #"Column missing from independent relation: not_foo"
+      (tu/query-ra
+        '[:apply :cross-join
+          {not_foo ?bar}
+          [:table [{:foo 1}]]
+          [:select (= baz ?bar)
+           [:table [{:baz 1}]]]] {})
+      "not_foo missing")))
