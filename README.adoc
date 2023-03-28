@@ -139,6 +139,6 @@ We would love to hear from you: hello@xtdb.com
 
 == License and Copyright
 
-The Affero GNU Public License, Version 3.
+The MIT License.
 
 Copyright © 2018-2023 JUXT LTD.

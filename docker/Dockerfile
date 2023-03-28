@@ -2,7 +2,7 @@ FROM eclipse-temurin:17
 
 LABEL org.opencontainers.image.source=https://github.com/xtdb/core2
 LABEL org.opencontainers.image.description="XTDB Core2"
-LABEL org.opencontainers.image.licenses="AGPL v3"
+LABEL org.opencontainers.image.licenses="The MIT License"
 
 WORKDIR /usr/local/lib/xtdb
 

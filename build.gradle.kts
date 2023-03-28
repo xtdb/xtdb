@@ -100,8 +100,8 @@ allprojects {
 
                         licenses {
                             license {
-                                name.set("GNU Affero General Public License, Version 2 (AGPL 3)")
-                                url.set("https://www.gnu.org/licenses/agpl-4.0.txt")
+                                name.set("The MIT License")
+                                url.set("http://opensource.org/licenses/MIT")
                             }
                         }
                         developers {

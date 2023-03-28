@@ -1,42 +1,140 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<licensing disliked-licenses="0" missing-licenses="2" licensing-check="false">
-  <notice>
-    THIRD-PARTY SOFTWARE NOTICES AND INFORMATION
-    Do Not Translate or Localize
-  </notice>
-  <description>
-    This project incorporates components from the projects listed below. The original licenses under which JUXT LTD. received such components are set forth below. JUXT LTD. reserves all rights not expressly granted herein, whether by implication, estoppel, or otherwise.
-  </description>
+<licensing disliked-licenses="0" missing-licenses="0" licensing-check="true">
+  <notice> 
+    THIRD-PARTY SOFTWARE NOTICES AND INFORMATION 
+    Do Not Translate or Localize 
+  </notice> 
+  <description> 
+    This project incorporates components from the projects listed below. The original licenses under which JUXT LTD. received such components are set forth below. JUXT LTD. reserves all rights not expressly granted herein, whether by implication, estoppel, or otherwise. 
+  </description> 
+
   <artifacts>
     <artifact id="integrant:repl:jar:0.3.2" name="repl">
       <license>The MIT License</license>
     </artifact>
-    <artifact id="com.googlecode.json-simple:json-simple:bundle:1.1.1" name="JSON.simple">
+    <artifact id="io.grpc:grpc-protobuf-lite:jar:1.49.1" name="io.grpc:grpc-protobuf-lite">
+      <license>Apache 2.0</license>
+    </artifact>
+    <artifact id="com.google.j2objc:j2objc-annotations:jar:1.3" name="J2ObjC Annotations">
       <license>The Apache Software License, Version 2.0</license>
     </artifact>
-    <artifact id="com.cognitect:transit-java:jar:1.0.343" name="transit-java">
-      <license>The Apache Software License, Version 2.0</license>
-    </artifact>
-    <artifact id="org.clojure:data.csv:jar:1.0.0" name="data.csv">
-      <license>Eclipse Public License 1.0</license>
-    </artifact>
-    <artifact id="org.msgpack:msgpack:bundle:0.6.12" name="MessagePack for Java">
-      <license>The Apache Software License, Version 2.0</license>
-    </artifact>
-    <artifact id="javax.xml.bind:jaxb-api:jar:2.3.0" name="jaxb-api">
-      <license>CDDL 1.1</license>
-      <license>GPL2 w/ CPE</license>
-    </artifact>
-    <artifact id="com.fasterxml.jackson.dataformat:jackson-dataformat-cbor:bundle:2.10.2" name="Jackson dataformat: CBOR">
+    <artifact id="com.fasterxml.jackson.core:jackson-annotations:bundle:2.13.4" name="Jackson-annotations">
       <license>The Apache Software License, Version 2.0</license>
     </artifact>
     <artifact id="org.slf4j:slf4j-api:jar:1.7.36" name="SLF4J API Module">
       <license>MIT License</license>
     </artifact>
-    <artifact id="org.javassist:javassist:bundle:3.18.1-GA" name="Javassist">
-      <license>Apache License 2.0</license>
-      <license>LGPL 2.1</license>
-      <license>MPL 1.1</license>
+    <artifact id="org.apache.arrow:arrow-jdbc:jar:11.0.0" name="Arrow JDBC Adapter">
+      <license>Apache License, Version 2.0</license>
+    </artifact>
+    <artifact id="io.netty:netty-handler-proxy:jar:4.1.77.Final" name="Netty/Handler/Proxy">
+      <license>Apache License, Version 2.0</license>
+    </artifact>
+    <artifact id="org.apache.arrow:arrow-vector:jar:11.0.0" name="Arrow Vectors">
+      <license>Apache License, Version 2.0</license>
+    </artifact>
+    <artifact id="io.netty:netty-transport-native-unix-common:jar:4.1.77.Final" name="Netty/Transport/Native/Unix/Common">
+      <license>Apache License, Version 2.0</license>
+    </artifact>
+    <artifact id="org.apache.arrow:arrow-memory-netty:jar:11.0.0" name="Arrow Memory - Netty">
+      <license>Apache License, Version 2.0</license>
+    </artifact>
+    <artifact id="org.apache.arrow:flight-core:jar:11.0.0" name="Arrow Flight Core">
+      <license>Apache License, Version 2.0</license>
+    </artifact>
+    <artifact id="org.bouncycastle:bcprov-jdk15on:jar:1.61" name="Bouncy Castle Provider">
+      <license>Bouncy Castle Licence</license>
+    </artifact>
+    <artifact id="org.apache.arrow:flight-sql-jdbc-driver:jar:11.0.0" name="Arrow Flight SQL JDBC Driver">
+      <license>Apache License, Version 2.0</license>
+    </artifact>
+    <artifact id="io.netty:netty-codec-http:jar:4.1.77.Final" name="Netty/Codec/HTTP">
+      <license>Apache License, Version 2.0</license>
+    </artifact>
+    <artifact id="ch.qos.logback:logback-classic:jar:1.2.10" name="Logback Classic Module">
+      <license>GNU Lesser General Public License</license>
+      <license>Eclipse Public License - v 1.0</license>
+    </artifact>
+    <artifact id="io.netty:netty-resolver:jar:4.1.82.Final" name="Netty/Resolver">
+      <license>Apache License, Version 2.0</license>
+    </artifact>
+    <artifact id="io.netty:netty-tcnative-classes:jar:2.0.54.Final" name="Netty/TomcatNative [OpenSSL - Classes]">
+      <license>The Apache Software License, Version 2.0</license>
+    </artifact>
+    <artifact id="org.clojure:java.classpath:jar:1.0.0" name="java.classpath">
+      <license>Eclipse Public License 1.0</license>
+    </artifact>
+    <artifact id="com.google.api.grpc:proto-google-common-protos:jar:2.9.0" name="proto-google-common-protos">
+      <license>Apache-2.0</license>
+    </artifact>
+    <artifact id="com.google.code.gson:gson:jar:2.9.0" name="Gson">
+      <license>Apache-2.0</license>
+    </artifact>
+    <artifact id="io.grpc:grpc-core:jar:1.49.1" name="io.grpc:grpc-core">
+      <license>Apache 2.0</license>
+    </artifact>
+    <artifact id="org.xerial:sqlite-jdbc:jar:3.36.0.3" name="SQLite JDBC">
+      <license>The Apache Software License, Version 2.0</license>
+    </artifact>
+    <artifact id="com.google.guava:listenablefuture:jar:9999.0-empty-to-avoid-conflict-with-guava" name="Guava ListenableFuture only">
+      <license>The Apache Software License, Version 2.0</license>
+    </artifact>
+    <artifact id="io.netty:netty-codec-socks:jar:4.1.77.Final" name="Netty/Codec/Socks">
+      <license>Apache License, Version 2.0</license>
+    </artifact>
+    <artifact id="org.postgresql:postgresql:jar:42.2.20" name="PostgreSQL JDBC Driver">
+      <license>BSD-2-Clause</license>
+    </artifact>
+    <artifact id="commons-cli:commons-cli:jar:1.4" name="Apache Commons CLI">
+      <license>Apache License, Version 2.0</license>
+    </artifact>
+    <artifact id="io.grpc:grpc-stub:jar:1.49.1" name="io.grpc:grpc-stub">
+      <license>Apache 2.0</license>
+    </artifact>
+    <artifact id="com.fasterxml.jackson.core:jackson-core:bundle:2.10.2" name="Jackson-core">
+      <license>The Apache Software License, Version 2.0</license>
+    </artifact>
+    <artifact id="io.grpc:grpc-protobuf:jar:1.49.1" name="io.grpc:grpc-protobuf">
+      <license>Apache 2.0</license>
+    </artifact>
+    <artifact id="io.grpc:grpc-netty:jar:1.49.1" name="io.grpc:grpc-netty">
+      <license>Apache 2.0</license>
+    </artifact>
+    <artifact id="com.fasterxml.jackson.core:jackson-databind:bundle:2.13.4" name="jackson-databind">
+      <license>The Apache Software License, Version 2.0</license>
+    </artifact>
+    <artifact id="com.google.protobuf:protobuf-java:bundle:3.21.6" name="Protocol Buffers [Core]">
+      <license>BSD-3-Clause</license>
+    </artifact>
+    <artifact id="org.clojure:data.csv:jar:1.0.0" name="data.csv">
+      <license>Eclipse Public License 1.0</license>
+    </artifact>
+    <artifact id="com.google.guava:guava:bundle:31.1-jre" name="Guava: Google Core Libraries for Java">
+      <license>Apache License, Version 2.0</license>
+    </artifact>
+    <artifact id="io.grpc:grpc-context:jar:1.49.1" name="io.grpc:grpc-context">
+      <license>Apache 2.0</license>
+    </artifact>
+    <artifact id="io.grpc:grpc-api:jar:1.49.1" name="io.grpc:grpc-api">
+      <license>Apache 2.0</license>
+    </artifact>
+    <artifact id="io.netty:netty-handler:jar:4.1.82.Final" name="Netty/Handler">
+      <license>Apache License, Version 2.0</license>
+    </artifact>
+    <artifact id="io.netty:netty-buffer:jar:4.1.82.Final" name="Netty/Buffer">
+      <license>Apache License, Version 2.0</license>
+    </artifact>
+    <artifact id="io.netty:netty-codec-http2:jar:4.1.77.Final" name="Netty/Codec/HTTP2">
+      <license>Apache License, Version 2.0</license>
+    </artifact>
+    <artifact id="org.hamcrest:hamcrest:jar:2.2" name="Hamcrest">
+      <license>BSD License 3</license>
+    </artifact>
+    <artifact id="com.fasterxml.jackson.dataformat:jackson-dataformat-cbor:bundle:2.10.2" name="Jackson dataformat: CBOR">
+      <license>The Apache Software License, Version 2.0</license>
+    </artifact>
+    <artifact id="javax.annotation:javax.annotation-api:jar:1.3.2" name="javax.annotation API">
+      <license>CDDL + GPLv2 with classpath exception</license>
     </artifact>
     <artifact id="weavejester:dependency:jar:0.2.1" name="dependency">
       <license>Eclipse Public License</license>
@@ -44,14 +142,23 @@
     <artifact id="tigris:tigris:jar:0.1.2" name="tigris">
       <license>Eclipse Public License</license>
     </artifact>
-    <artifact id="henryw374:js-joda:jar:3.2.0-0" name="js-joda">
-      <license>MIT</license>
-    </artifact>
     <artifact id="org.checkerframework:checker-qual:jar:3.5.0" name="Checker Qual">
       <license>The MIT License</license>
     </artifact>
     <artifact id="cheshire:cheshire:jar:5.10.0" name="cheshire">
       <license>The MIT License</license>
+    </artifact>
+    <artifact id="org.apache.calcite.avatica:avatica:jar:1.18.0" name="Apache Calcite Avatica (Shaded)">
+      <license>The Apache License, Version 2.0</license>
+    </artifact>
+    <artifact id="io.netty:netty-transport:jar:4.1.82.Final" name="Netty/Transport">
+      <license>Apache License, Version 2.0</license>
+    </artifact>
+    <artifact id="org.codehaus.mojo:animal-sniffer-annotations:jar:1.21" name="Animal Sniffer Annotations">
+      <license>MIT license</license>
+    </artifact>
+    <artifact id="com.google.errorprone:error_prone_annotations:jar:2.11.0" name="error-prone annotations">
+      <license>Apache 2.0</license>
     </artifact>
     <artifact id="org.clojure:tools.reader:jar:1.3.6" name="tools.reader">
       <license>Eclipse Public License 1.0</license>
@@ -63,39 +170,50 @@
       <license>GNU Lesser General Public License</license>
       <license>Eclipse Public License - v 1.0</license>
     </artifact>
-    <artifact id="com.cognitect:transit-clj:jar:1.0.324" name="transit-clj">
+    <artifact id="io.netty:netty-tcnative-boringssl-static:jar:2.0.54.Final" name="Netty/TomcatNative [BoringSSL - Static]">
       <license>The Apache Software License, Version 2.0</license>
     </artifact>
     <artifact id="org.clojure:tools.namespace:jar:1.2.0" name="tools.namespace">
       <license>Eclipse Public License 1.0</license>
     </artifact>
-    <artifact id="ch.qos.logback:logback-classic:jar:1.2.10" name="Logback Classic Module">
-      <license>GNU Lesser General Public License</license>
-      <license>Eclipse Public License - v 1.0</license>
-    </artifact>
-    <artifact id="org.clojure:java.classpath:jar:1.0.0" name="java.classpath">
-      <license>Eclipse Public License 1.0</license>
-    </artifact>
-    <artifact id="net.cgrand:macrovich:jar:0.2.0" name="macrovich">
-      <license>Eclipse Public License</license>
-    </artifact>
     <artifact id="org.clojure:spec.alpha:jar:0.3.218" name="spec.alpha">
       <license>Eclipse Public License 1.0</license>
     </artifact>
-    <artifact id="org.xerial:sqlite-jdbc:jar:3.36.0.3" name="SQLite JDBC">
-      <license>The Apache Software License, Version 2.0</license>
+    <artifact id="commons-codec:commons-codec:jar:1.15" name="Apache Commons Codec">
+      <license>Apache License, Version 2.0</license>
+    </artifact>
+    <artifact id="io.netty:netty-codec:jar:4.1.82.Final" name="Netty/Codec">
+      <license>Apache License, Version 2.0</license>
+    </artifact>
+    <artifact id="io.netty:netty-common:jar:4.1.82.Final" name="Netty/Common">
+      <license>Apache License, Version 2.0</license>
+    </artifact>
+    <artifact id="org.apache.arrow:flight-sql:jar:11.0.0" name="Arrow Flight SQL">
+      <license>Apache License, Version 2.0</license>
+    </artifact>
+    <artifact id="com.google.flatbuffers:flatbuffers-java:bundle:1.12.0" name="FlatBuffers Java API">
+      <license>Apache License V2.0</license>
     </artifact>
     <artifact id="org.clojure:clojure:jar:1.11.1" name="clojure">
       <license>Eclipse Public License 1.0</license>
     </artifact>
-    <artifact id="commons-codec:commons-codec:jar:1.10" name="Apache Commons Codec">
+    <artifact id="io.perfmark:perfmark-api:jar:0.25.0" name="perfmark:perfmark-api">
+      <license>Apache 2.0</license>
+    </artifact>
+    <artifact id="com.fasterxml.jackson.datatype:jackson-datatype-jsr310:bundle:2.13.4" name="Jackson datatype: JSR310">
+      <license>The Apache Software License, Version 2.0</license>
+    </artifact>
+    <artifact id="joda-time:joda-time:jar:2.10.14" name="Joda-Time">
       <license>Apache License, Version 2.0</license>
     </artifact>
-    <artifact id="com.clojure-goes-fast:clj-async-profiler:jar:0.5.1" name="clj-async-profiler">
-      <license>Eclipse Public License</license>
+    <artifact id="org.apache.arrow:arrow-format:jar:11.0.0" name="Arrow Format">
+      <license>Apache License, Version 2.0</license>
     </artifact>
-    <artifact id="org.postgresql:postgresql:jar:42.2.20" name="PostgreSQL JDBC Driver">
-      <license>BSD-2-Clause</license>
+    <artifact id="org.apache.arrow:arrow-memory-core:jar:11.0.0" name="Arrow Memory - Core">
+      <license>Apache License, Version 2.0</license>
+    </artifact>
+    <artifact id="org.bouncycastle:bcpkix-jdk15on:jar:1.61" name="Bouncy Castle PKIX, CMS, EAC, TSP, PKCS, OCSP, CMP, and CRMF APIs">
+      <license>Bouncy Castle Licence</license>
     </artifact>
     <artifact id="org.clojure:core.specs.alpha:jar:0.2.62" name="core.specs.alpha">
       <license>Eclipse Public License 1.0</license>
@@ -106,13 +224,19 @@
     <artifact id="com.fasterxml.jackson.dataformat:jackson-dataformat-smile:bundle:2.10.2" name="Jackson dataformat: Smile">
       <license>The Apache Software License, Version 2.0</license>
     </artifact>
-    <artifact id="com.fasterxml.jackson.core:jackson-core:bundle:2.10.2" name="Jackson-core">
+    <artifact id="com.google.code.findbugs:jsr305:jar:3.0.2" name="FindBugs-jsr305">
+      <license>The Apache Software License, Version 2.0</license>
+    </artifact>
+    <artifact id="com.google.android:annotations:jar:4.1.1.4" name="Google Android Annotations Library">
+      <license>Apache 2.0</license>
+    </artifact>
+    <artifact id="com.clojure-goes-fast:clj-async-profiler:jar:1.0.3" name="clj-async-profiler">
+      <license>Eclipse Public License</license>
+    </artifact>
+    <artifact id="com.google.guava:failureaccess:bundle:1.0.1" name="Guava InternalFutureFailureAccess and InternalFutures">
       <license>The Apache Software License, Version 2.0</license>
     </artifact>
   </artifacts>
-  <license-missing>
-    <artifact id="com.widdindustries:time-literals:jar:0.1.6" name="jsr310-tagged-literals"/>
-    <artifact id="cljs.java-time:cljs.java-time:jar:0.1.19" name="cljs.java-time"/>
-  </license-missing>
+  <license-missing/>
   <disliked-artifacts/>
 </licensing>
