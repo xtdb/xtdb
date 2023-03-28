@@ -14,5 +14,7 @@ public interface IRelationWriter extends AutoCloseable, Iterable<IVectorWriter<?
         for (IVectorWriter<?> writer: this) {
             writer.clear();
         }
+
+        writerPosition().setPosition(0);
     }
 }
