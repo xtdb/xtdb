@@ -213,7 +213,6 @@
                                                                               {::err/message (str "Column missing from independent relation: " ik)
                                                                                :column ik})))))
                                                                  columns))
-            __ (clojure.pprint/pprint columns)
             {dependent-col-types :col-types, ->dependent-cursor :->cursor} (lp/emit-expr dependent-relation dependent-args)
             out-dependent-col-types (zmatch mode
                                       [:mark-join mark-spec]
