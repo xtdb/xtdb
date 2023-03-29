@@ -1,0 +1,218 @@
+= Datalog queries
+
+This document assumes you are roughly familiar with XTDB 1.x queries - if not, no worries, the documentation is https://docs.xtdb.com/language-reference/datalog-queries/[here].
+
+Queries in 2.x are similar in nature to 1.x - the main difference are as follows:
+
+* In 2.x, every document is contained within a table.
+  To help with querying tables - and, more generally, querying a document-oriented database - we have introduced a `match` construct.
+* 2.x introduces advanced bitemporal functionality to the query engine - you can now query across time within a single query.
+* Queries return a vector of maps.
+  These are no longer implicitly de-duplicated - XTDB 2.x uses 'bag' semantics rather than 'set' semantics.
+* https://docs.xtdb.com/language-reference/datalog-transactions/#await['Awaiting a transaction'] should no longer be necessary in the majority of cases - this is now done for you.
+* Queries are now run against the node (rather than a `db` snapshot) - for 'immutable snapshot'/'repeatable queries' behaviour, you can optionally supply a query 'basis'.
+* Expressions within the query (e.g. for predicates and functions) now use an XTDB standard library, and no longer have access to arbitrary Clojure functions.
+* We now support relational-algebra inspired sub-queries - we've added `exists?` and `not-exists?` (which take full queries) in place of `or-join` and `not-join`, and the humble sub-query has also been clarified.
+
+For more details on each of these, see below:
+
+== `match`
+
+XTDB 2.x adds `match` clauses in queries.
+These are designed to make it easier to work with XTDB's documents, and support XTDB 2.x's new across-time bitemporal queries.
+
+[source,clojure]
+----
+(require '[xtdb.datalog :as xt])
+
+(xt/q node
+      '{:find [first-name last-name]
+        :where [(match :people {:id :jms, :first-name first-name, :last-name last-name})]})
+;; => [{:first-name "James", :last-name "Henderson"}]
+----
+
+Here, we're:
+
+* Filtering to documents from the `:people` table, having an `:id` of `:jms`
+* Extracting the `:first-name` value of that document to the `first-name` variable; the `:last-name` to the `last-name` variable
+* Returning the `first-name` and the `last-name`.
+
+This is an example of the full syntax - we can reduce this to:
+
+[source,clojure]
+----
+{:find [first-name last-name]
+ :where [($ :people [{:id :jms} first-name last-name])]}
+;; => [{:first-name "James", :last-name "Henderson"}]
+
+;; cf. 1.x/other EDN Datalog databases
+{:find [first-name last-name]
+ :where [[u :id :jms]
+         [u :first-name first-name]
+         [u :last-name last-name]]}
+----
+
+* Where the desired logic variable is the same as the key (e.g. `{:first-name first-name}`), we can just specify the former.
+* `$` is an alias for `match`
+
+As with 1.x, any time the same logic variable is referred to more than once in a query, XT will 'unify' them by adding implicit join constraints - every result must agree on the values for each logic variable.
+This can be used to express joins in a very terse manner - e.g.
+
+[source,clojure]
+----
+{:find [author-name blog-date blog-content]
+ :in [blog-id]
+ :where [($ :blogs [{:id blog-id, :author author-id} blog-date blog-content])
+         ($ :authors {:id author-id, :name author-name})]}
+
+;; cf. 1.x/other EDN Datalog databases
+{:find [author-name blog-date blog-content]
+ :in [blog-id]
+ :where [[blog :author author-id]
+         [blog :blog-date blog-date]
+         [blog :blog-content blog-content]
+         [author-id :name author-name]]}
+----
+
+In SQL, this might be represented by
+
+[source,sql]
+----
+SELECT a.name AS author_name, b.blog_date, b.blog_content
+FROM blogs b, authors a
+WHERE b.author = a.id
+  AND b.blog_id = ?
+----
+
+`match` is also the gateway to XTDB 2.x's new across-time bitemporal functionality:
+
+* We can specify `{:for-app-time [:in <start> <end>]}` to get the history of an entity between two times:
++
+[source,clojure]
+----
+{:find [id app-start app-end]
+ :where [($ :people [id {:application_time_start app-start, :application_time_end app-end}]
+            {:for-app-time [:in #inst "2021", #inst "2023"]})]}
+----
++
+* Using different app-times for different match clauses, we can ask questions such as 'who was here in both 2018 and 2023'?
++
+[source,clojure]
+----
+;; here relying on `id` being implicitly unified between the two documents
+{:find [id],
+ :where [($ :people [id]
+            {:for-app-time [:at #inst "2018"]})
+         ($ :people [id]
+            {:for-app-time [:at #inst "2023"]})]})
+----
++
+* And finally, we can use first-class periods to ask questions like 'who worked here at the same time as John?'
++
+[source,clojure]
+----
+{:find [id],
+ :where [($ :people [id {:xt/app-time app-time}]
+            {:for-app-time :all-time})
+
+         ($ :people [{:id :john, :xt/app-time john-app-time}]
+            {:for-app-time :all-time})
+
+         [(<> id :john)]
+         [(overlaps? app-time john-app-time)]]})
+----
+
+== No longer awaiting a transaction
+
+In 1.x, in order to read-your-writes, it is necessary to explicitly 'await' the transaction, using the transaction receipt returned from `submit-tx`.
+This is now implicit - when you call `xt/q`, the client will (by default) await the latest transaction submitted through that client.
+(Transactions submitted through other clients in a cluster are not awaited.)
+
+[source,clojure]
+----
+(with-open [node ...]
+  (xt/submit-tx node
+                [[:put 'users {:id :jms, :first-name "James"}]
+                 [:put 'users {:id :jdt, :first-name "Jeremy"}]])
+
+  ;; no `await-tx` call required here
+
+  (xt/q node '{:find [id first-name]
+               :where [(match users [id first-name])]}))
+----
+
+By default, the query will ensure that the latest-submitted transaction has been indexed, but will then run against the most recent transaction indexed by the node.
+If you need to run the query at an exact transaction (e.g. for repeatable queries), you can specify a `:basis` on the query itself:
+
+[source,clojure]
+----
+(let [tx (xt/submit-tx node
+                       [[:put 'users {:id :jms, :first-name "James"}]
+                        [:put 'users {:id :jdt, :first-name "Jeremy"}]])]
+  (xt/q node (-> '{:find [id first-name]
+                   :where [(match users [id first-name])]}
+                 (assoc :basis {:tx tx, :current-time #inst "2023-03-29T12:00:00"}))))
+----
+
+== The standard library
+
+XTDB 2.x no longer uses `clojure.core` as its standard library - instead, it has a link:./expressions.adoc[rich built-in standard library] drawn from the SQL:2011 specification.
+
+Additionally, the query engine now supports full nested expressions:
+
+[source,clojure]
+----
+;; excerpt from TPC-H benchmark, Q1
+{:find [l_returnflag l_linestatus
+        ...
+        (sum discount_price)
+        (sum (* discount_price (+ 1 l_tax)))
+        ...]
+ :keys [l_returnflag l_linestatus ... sum_disc_price sum_charge ...]
+ :where [(match :lineitem [l_returnflag l_linestatus
+                           l_extendedprice l_discount l_tax])
+         ...
+         [(* l_extendedprice (- 1 l_discount)) discount_price]]}
+----
+
+
+== Sub-queries
+
+XTDB 2.x supports several different types of sub-queries:
+
+* `exists?` - otherwise known as `WHERE EXISTS (...)` or `WHERE x IN (...)` in the SQL world; or 'semi-joins' in relational algebra.
+  These filter the main body of the query to only rows where the sub-query returns one or more documents.
+* `not-exists?` - same, but for `WHERE NOT EXISTS (...)`/`WHERE x NOT IN (...)`; 'anti-joins' in relational algebra
+  These filter the main body of the query to only rows where the sub-query returns zero documents.
+* `q` - as in 1.x, every row in the outer query is joined with corresponding rows from the sub-query.
+
+For example, 'find me people who have children':
+
+[source,clojure]
+----
+{:find [name]
+ :where [(match :people [{:id parent} name])
+         (exists? {:find [parent]
+                   :where [(match :people {:id child, :parent parent})]})]}
+----
+
+In this example, because we've specified `:find [parent]` in the sub-query, and we have a `parent` logic variable in the outer query, XT will ensure that the `parent` in the outer query is the same as the `parent` returned from the inner query.
+
+That is, `:find` can be considered the output values of the inner query - variables that appear in both the outer query and the `:find` clause of the inner query are 'unified'.
+
+Inner queries can also accept input parameters.
+These are specified through the `:in` clauses, as they are in the top-level query.
+
+In this example, XT will first find a `person` in the outer query, then run the sub-query using this value.
+As before, `parent` (as an output) is unified with the outer query.
+
+[source,clojure]
+----
+;; 'find people who have siblings'
+{:find [name]
+ :where [(match :people [{:id person, :parent parent} name])
+         (exists? {:find [parent]
+                   :in [person]
+                   :where [(match :people {:id sibling, :parent parent})
+                           [(<> person sibling)]]})]}
+----
