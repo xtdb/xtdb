@@ -4,7 +4,7 @@ XTDB 2.x is available both as a Maven dependency and a Docker image.
 
 == Install
 
-First, add the XTDB dependencies to your `deps.edn`:
+First, ensure you are running JDK 11+ and then add the XTDB dependencies to your `deps.edn`:
 
 .deps.edn
 [source,clojure]
@@ -34,6 +34,8 @@ Once you have a REPL (started with `clj -A:xtdb` if you're on JDK 16+), you can 
   )
 ----
 
+If you need to refresh your dependencies due to a subsequent SNAPSHOT update, you can clear the cache (e.g. `rm -rf ~/.m2/repository/com/xtdb/labs/`) and force a refresh (e.g. `clj -Sforce`).
+
 == Docker
 
 First, pull the Docker image:
@@ -57,7 +59,7 @@ Then, add the thin client to your `deps.edn`:
         com.xtdb.labs/xtdb-http-client-clj {:mvn/version "2.0.0-SNAPSHOT"}}}
 ----
 
-Once you have a REPL, you can connect to the XTDB node with:
+Once you have a REPL (e.g. by running `clj`), you can connect to the XTDB node with:
 
 [source,clojure]
 ----
@@ -70,6 +72,8 @@ Once you have a REPL, you can connect to the XTDB node with:
   ;; ...
   )
 ----
+
+If you need to update your local image due to a subsequent update, you can run `docker pull ghcr.io/xtdb/xtdb-ea` to fetch the changes.
 
 == The first query
 
