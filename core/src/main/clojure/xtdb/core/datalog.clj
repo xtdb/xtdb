@@ -93,7 +93,7 @@
 
 (s/def ::match
   (s/and list?
-         (s/cat :tag #{'match}
+         (s/cat :tag #{'$ 'match}
                 :table ::table,
                 :match ::match-spec,
                 :temporal-opts (s/? ::temporal-opts))))

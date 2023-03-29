@@ -77,6 +77,14 @@
                              [:ivan :first-name first-name]
                              [:ivan :last-name last-name]]})))))
 
+(deftest test-dollar-match-syntax
+  (let [_tx (xt/submit-tx tu/*node* ivan+petr)]
+    (t/is (= [{:first-name "Ivan", :last-name "Ivanov"}]
+             (xt/q tu/*node*
+                   '{:find [first-name last-name]
+                     :where [($ :xt_docs [{:id :ivan} first-name last-name])]})))))
+
+
 (deftest test-order-by
   (let [_tx (xt/submit-tx tu/*node* ivan+petr)]
     (t/is (= [{:first-name "Ivan"} {:first-name "Petr"}]
