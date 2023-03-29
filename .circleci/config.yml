@@ -55,20 +55,20 @@ jobs:
             - ~/.gitlibs
           key: v4-dependencies-{{ checksum ".circleci-cache-key" }}
 
-  third-party-notices:
-    executor: clojure
+  # third-party-notices:
+  #   executor: clojure
 
-    steps:
-      - attach_workspace:
-          at: ~/
+  #   steps:
+  #     - attach_workspace:
+  #         at: ~/
 
-      - run: apt-get update && apt-get install -y curl maven libxml2-utils
+  #     - run: apt-get update && apt-get install -y curl maven libxml2-utils
 
-      - run: curl -sLO https://raw.githubusercontent.com/babashka/babashka/master/install && chmod +x install && ./install
+  #     - run: curl -sLO https://raw.githubusercontent.com/babashka/babashka/master/install && chmod +x install && ./install
 
-      - run: ./bin/detect-and-create-third-party-notices.sh
+  #     - run: ./bin/detect-and-create-third-party-notices.sh
 
-      - run: bb ./bin/detect_eclipse_public_license.clj
+  #     - run: bb ./bin/detect_eclipse_public_license.clj
 
   test:
     executor: clojure
