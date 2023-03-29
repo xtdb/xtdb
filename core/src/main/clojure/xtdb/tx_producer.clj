@@ -25,7 +25,7 @@
 (s/def ::id any?)
 (s/def ::doc (s/and (s/keys :req-un [::id])
                     (s/conformer #(update-keys % util/ns-kw->kw) #(update-keys % util/kw->ns-kw))))
-(s/def ::table simple-symbol?)
+(s/def ::table (s/and simple-keyword? (s/conformer symbol keyword)))
 (s/def ::app-time-start ::util/datetime-value)
 (s/def ::app-time-end ::util/datetime-value)
 

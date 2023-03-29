@@ -182,7 +182,7 @@
                          (filter string?))))]
     (for [row from-subquery-results]
       (-> (zipmap (map keyword columns) row)
-          (with-meta {:table (symbol table)})))))
+          (with-meta {:table (keyword table)})))))
 
 (defn- insert-statement [node insert-statement]
   (xt.d/submit-tx node (vec (for [doc (insert->docs node insert-statement)]

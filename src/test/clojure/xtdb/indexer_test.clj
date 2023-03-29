@@ -38,13 +38,13 @@
 (t/use-fixtures :once tu/with-allocator)
 
 (def txs
-  [[[:put 'device-info
+  [[[:put :device-info
      {:id "device-info-demo000000",
       :api-version "23",
       :manufacturer "iobeam",
       :model "pinto",
       :os-name "6.0.1"}]
-    [:put 'device-readings
+    [:put :device-readings
      {:id "reading-demo000000",
       :device-id "device-info-demo000000",
       :cpu-avg-15min 8.654,
@@ -59,13 +59,13 @@
       :cpu-avg-1min 24.81,
       :mem-free 4.10011078E8,
       :mem-used 5.89988922E8}]]
-   [[:put 'device-info
+   [[:put :device-info
      {:id "device-info-demo000001",
       :api-version "23",
       :manufacturer "iobeam",
       :model "mustang",
       :os-name "6.0.1"}]
-    [:put 'device-readings
+    [:put :device-readings
      {:id "reading-demo000001",
       :device-id "device-info-demo000001",
       :cpu-avg-15min 8.822,
@@ -194,7 +194,7 @@
 
 (t/deftest temporal-watermark-is-immutable-567
   (with-open [node (node/start-node {})]
-    (let [{tt :sys-time} (xt.d/submit-tx node [[:put 'xt_docs {:id :foo, :version 0}]]
+    (let [{tt :sys-time} (xt.d/submit-tx node [[:put ':xt_docs {:id :foo, :version 0}]]
                                          {:app-time-as-of-now? true})]
       (t/is (= [{:id :foo, :version 0,
                  :application_time_start (util/->zdt tt)
@@ -207,7 +207,7 @@
                                system_time_start, system_time_end]]
                             {:node node})))
 
-      (let [{tt2 :sys-time} (xt.d/submit-tx node [[:put 'xt_docs {:id :foo, :version 1}]]
+      (let [{tt2 :sys-time} (xt.d/submit-tx node [[:put ':xt_docs {:id :foo, :version 1}]]
                                             {:app-time-as-of-now? true})]
         (t/is (= [{:id :foo, :version 0,
                    :application_time_start (util/->zdt tt)
@@ -236,7 +236,7 @@
                    :application_time_end (util/->zdt util/end-of-time)
                    :system_time_start (util/->zdt tt)
                    :system_time_end (util/->zdt util/end-of-time)}]
-                 (tu/query-ra '[:scan {:table xt_docs}
+                 (tu/query-ra '[:scan {:table :xt_docs}
                                 [id version
                                  application_time_start, application_time_end
                                  system_time_start, system_time_end]]
@@ -245,15 +245,15 @@
 
 (t/deftest can-handle-dynamic-cols-in-same-block
   (let [node-dir (util/->path "target/can-handle-dynamic-cols-in-same-block")
-        tx-ops [[:put 'xt_docs {:id "foo"
+        tx-ops [[:put :xt_docs {:id "foo"
                                 :list [12.0 "foo"]}]
-                [:put 'xt_docs {:id 24.0}]
-                [:put 'xt_docs {:id "bar"
+                [:put :xt_docs {:id 24.0}]
+                [:put :xt_docs {:id "bar"
                                 :list [#inst "2020-01-01" false]}]
-                [:put 'xt_docs {:id #inst "2021-01-01"
+                [:put :xt_docs {:id #inst "2021-01-01"
                                 :struct {:a 1, :b "b"}}]
-                [:put 'xt_docs {:id 52.0}]
-                [:put 'xt_docs {:id #inst "2020-01-01"
+                [:put :xt_docs {:id 52.0}]
+                [:put :xt_docs {:id #inst "2020-01-01"
                                 :struct {:a true, :c "c"}}]]]
     (util/delete-dir node-dir)
 
@@ -268,15 +268,15 @@
 
 (t/deftest test-multi-block-metadata
   (let [node-dir (util/->path "target/multi-block-metadata")
-        tx0 [[:put 'xt_docs {:id "foo"
+        tx0 [[:put :xt_docs {:id "foo"
                              :list [12.0 "foo"]}]
-             [:put 'xt_docs {:id #inst "2021-01-01"
+             [:put :xt_docs {:id #inst "2021-01-01"
                              :struct {:a 1, :b "b"}}]
-             [:put 'xt_docs {:id "bar"
+             [:put :xt_docs {:id "bar"
                              :list [#inst "2020-01-01" false]}]
-             [:put 'xt_docs {:id 24.0}]]
-        tx1 [[:put 'xt_docs {:id 52.0}]
-             [:put 'xt_docs {:id #inst "2020-01-01"
+             [:put :xt_docs {:id 24.0}]]
+        tx1 [[:put :xt_docs {:id 52.0}]
+             [:put :xt_docs {:id #inst "2020-01-01"
                              :struct {:a true, :b {:c "c", :d "d"}}}]]]
     (util/delete-dir node-dir)
 
@@ -306,15 +306,15 @@
 
 (t/deftest round-trips-nils
   (with-open [node (node/start-node {})]
-    (xt.d/submit-tx node [[:put 'xt_docs {:id "nil-bar"
+    (xt.d/submit-tx node [[:put :xt_docs {:id "nil-bar"
                                           :foo "foo"
                                           :bar nil}]
-                          [:put 'xt_docs {:id "no-bar"
+                          [:put :xt_docs {:id "no-bar"
                                           :foo "foo"}]])
     (t/is (= [{:id "nil-bar", :foo "foo", :bar nil}
               {:id "no-bar", :foo "foo"}]
              (xt.d/q node '{:find [id foo bar]
-                            :where [(match xt_docs {:id e})
+                            :where [(match :xt_docs {:id e})
                                     [e :id id]
                                     [e :foo foo]
                                     [e :bar bar]]})))))
@@ -325,20 +325,20 @@
     (util/delete-dir node-dir)
 
     (with-open [node (tu/->local-node {:node-dir node-dir})]
-      (-> (xt.d/submit-tx node [[:put 'xt_docs {:id :foo, :uuid uuid}]])
+      (-> (xt.d/submit-tx node [[:put :xt_docs {:id :foo, :uuid uuid}]])
           (tu/then-await-tx* node (Duration/ofMillis 2000)))
 
       (tu/finish-chunk! node)
 
       (t/is (= #{{:id :foo, :uuid uuid}}
                (set (xt.d/q node '{:find [id uuid]
-                                   :where [(match xt_docs [id])
+                                   :where [(match :xt_docs [id])
                                            [id :uuid uuid]]})))))
 
     (with-open [node (tu/->local-node {:node-dir node-dir})]
       (t/is (= #{{:id :foo, :uuid uuid}}
                (set (xt.d/q node '{:find [id uuid]
-                                   :where [(match xt_docs [id])
+                                   :where [(match :xt_docs [id])
                                            [id :uuid uuid]]})))))))
 
 (t/deftest writes-log-file
@@ -346,14 +346,14 @@
     (util/delete-dir node-dir)
 
     (with-open [node (tu/->local-node {:node-dir node-dir})]
-      (xt.d/submit-tx node [[:put 'xt_docs {:id "foo"}]
-                            [:put 'xt_docs {:id "bar"}]])
+      (xt.d/submit-tx node [[:put :xt_docs {:id "foo"}]
+                            [:put :xt_docs {:id "bar"}]])
 
       ;; aborted tx shows up in log
       (xt.d/submit-tx node [[:sql "INSERT INTO foo (id, application_time_start, application_time_end) VALUES (1, DATE '2020-01-01', DATE '2019-01-01')"]])
 
-      (-> (xt.d/submit-tx node [[:delete 'xt_docs "foo" {:app-time-start #inst "2020-04-01"}]
-                                [:put 'xt_docs {:id "bar", :month "april"},
+      (-> (xt.d/submit-tx node [[:delete :xt_docs "foo" {:app-time-start #inst "2020-04-01"}]
+                                [:put :xt_docs {:id "bar", :month "april"},
                                  {:app-time-start #inst "2020-04-01"
                                   :app-time-end #inst "2020-05-01"}]])
           (tu/then-await-tx* node))
@@ -577,16 +577,16 @@
     (with-open [node1 (tu/->local-node (assoc node-opts :buffers-dir "buffers-1"))]
       (let [^IMetadataManager mm1 (tu/component node1 ::meta/metadata-manager)]
 
-        (-> (xt.d/submit-tx node1 [[:put 'xt_docs {:id "foo"}]])
+        (-> (xt.d/submit-tx node1 [[:put :xt_docs {:id "foo"}]])
             (tu/then-await-tx* node1 (Duration/ofSeconds 1)))
 
         (tu/finish-chunk! node1)
 
         (t/is (= :utf8 (.columnType mm1 "xt_docs" "id")))
 
-        (let [tx2 (xt.d/submit-tx node1 [[:put 'xt_docs {:id :bar}]
-                                         [:put 'xt_docs {:id #uuid "8b190984-2196-4144-9fa7-245eb9a82da8"}]
-                                         [:put 'xt_docs {:id #xt/clj-form :foo}]])]
+        (let [tx2 (xt.d/submit-tx node1 [[:put :xt_docs {:id :bar}]
+                                         [:put :xt_docs {:id #uuid "8b190984-2196-4144-9fa7-245eb9a82da8"}]
+                                         [:put :xt_docs {:id #xt/clj-form :foo}]])]
           (tu/then-await-tx* tx2 node1 (Duration/ofMillis 200))
 
           (tu/finish-chunk! node1)
@@ -611,7 +611,7 @@
                                  (log* logger level throwable message))))]
       (with-open [node (node/start-node {})]
         (t/is (thrown-with-msg? Exception #"oh no!"
-                                (-> (xt.d/submit-tx node [[:put 'xt_docs {:id "foo", :count 42}]])
+                                (-> (xt.d/submit-tx node [[:put :xt_docs {:id "foo", :count 42}]])
                                     (tu/then-await-tx* node (Duration/ofSeconds 1)))))))))
 
 (t/deftest test-indexes-sql-insert
@@ -639,16 +639,16 @@
 
 (t/deftest test-skips-irrelevant-live-blocks-632
   (with-open [node (node/start-node {:xtdb/live-chunk {:rows-per-block 2, :rows-per-chunk 10}})]
-    (-> (xt.d/submit-tx node [[:put 'xt_docs {:name "Håkan", :id :hak}]])
+    (-> (xt.d/submit-tx node [[:put :xt_docs {:name "Håkan", :id :hak}]])
         (tu/then-await-tx* node))
 
     (tu/finish-chunk! node)
 
-    (xt.d/submit-tx node [[:put 'xt_docs {:name "Dan", :id :dan}]
-                          [:put 'xt_docs {:name "Ivan", :id :iva}]])
+    (xt.d/submit-tx node [[:put :xt_docs {:name "Dan", :id :dan}]
+                          [:put :xt_docs {:name "Ivan", :id :iva}]])
 
-    (-> (xt.d/submit-tx node [[:put 'xt_docs {:name "James", :id :jms}]
-                              [:put 'xt_docs {:name "Jon", :id :jon}]])
+    (-> (xt.d/submit-tx node [[:put :xt_docs {:name "James", :id :jms}]
+                              [:put :xt_docs {:name "Jon", :id :jon}]])
         (tu/then-await-tx* node))
 
     (let [^IMetadataManager metadata-mgr (tu/component node ::meta/metadata-manager)
@@ -684,7 +684,7 @@
                        (test-live-blocks wm1 gt-param-selector))
                     "only second block, param selector")
 
-              (let [next-tx (-> (xt.d/submit-tx node [[:put 'xt_docs {:name "Jeremy", :id :jdt}]])
+              (let [next-tx (-> (xt.d/submit-tx node [[:put :xt_docs {:name "Jeremy", :id :jdt}]])
                                 (tu/then-await-tx* node))]
 
                 (with-open [wm2 (.openWatermark wm-src next-tx)]

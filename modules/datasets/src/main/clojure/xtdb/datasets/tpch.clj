@@ -37,7 +37,7 @@
         (-> (assoc doc
                    :id (->> (mapv doc (get table->pkey table-name))
                             (str/join "___")))
-            (with-meta {:table (symbol table-name)}))))))
+            (with-meta {:table (keyword table-name)}))))))
 
 (defn submit-docs! [tx-producer scale-factor]
   (log/debug "Transacting TPC-H tables...")

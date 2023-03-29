@@ -147,10 +147,10 @@ CREATE UNIQUE INDEX t1i0 ON t1(
     (binding [r/*memo* (HashMap.)]
       (let [docs (execute-statement "INSERT INTO t1(e,c,b,d,a) VALUES(103,102,100,101,104)")]
         (t/is (= [{:e 103 :c 102 :b 100 :d 101 :a 104}] docs))
-        (t/is (= 't1 (:table (meta (first docs))))))
+        (t/is (= :t1 (:table (meta (first docs))))))
       (let [docs (execute-statement "INSERT INTO t1 VALUES(NULL,-102,TRUE,'101',104.5)")]
         (t/is (= [{:a nil :b -102 :c true :d "101" :e 104.5}] docs))
-        (t/is (= 't1 (:table (meta (first docs)))))))))
+        (t/is (= :t1 (:table (meta (first docs)))))))))
 
 (comment
 

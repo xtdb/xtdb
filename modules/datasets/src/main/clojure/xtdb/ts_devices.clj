@@ -14,7 +14,7 @@
               :manufacturer manufacturer
               :model model
               :os-name os-name}
-    {:table 'device-info}))
+    {:table :device-info}))
 
 (defn readings-csv->doc [[time device-id battery-level battery-status
                           battery-temperature bssid
@@ -37,7 +37,7 @@
               :mem-used (Double/parseDouble mem-used)
               :rssi (Double/parseDouble rssi)
               :ssid ssid}
-    {:table 'device-readings}))
+    {:table :device-readings}))
 
 (defn local-ts-devices-file [size file]
   (io/resource (format "ts-devices/small/devices_%s_%s.csv.gz"

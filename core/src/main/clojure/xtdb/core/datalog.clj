@@ -19,7 +19,7 @@
 (s/def ::eid ::lp/value)
 (s/def ::attr keyword?)
 (s/def ::value ::lp/value)
-(s/def ::table simple-symbol?)
+(s/def ::table (s/and simple-keyword? (s/conformer symbol keyword)))
 (s/def ::column (s/and symbol?
                        (s/conformer util/ns-symbol->symbol util/symbol->ns-symbol)))
 

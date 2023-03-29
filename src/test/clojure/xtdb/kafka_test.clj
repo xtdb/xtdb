@@ -12,5 +12,5 @@
       (xt/submit-tx node [[:put {:id :foo}]])
 
       (t/is (= [{:id :foo}]
-               (tu/query-ra '[:scan {:table xt_docs} [id]]
+               (tu/query-ra '[:scan {:table :xt_docs} [id]]
                             {:node node}))))))

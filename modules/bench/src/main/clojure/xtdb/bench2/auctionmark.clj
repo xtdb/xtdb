@@ -55,8 +55,7 @@
 
   The benchmark randomly selects id from a pool of region ids as an input for u_r_id parameter using flat distribution."
   [worker]
-  (->> [[:put
-         'user
+  (->> [[:put :user
          (generate-user worker)]]
        (xt/submit-tx (:sut worker))))
 
@@ -66,7 +65,7 @@
     (let [[u] (q '{:find [id u_id u_r_id u_rating u_balance u_created
                           u_sattr0 u_sattr1 u_sattr2 u_sattr3 u_sattr4 u_sattr5 u_sattr6 u_sattr7]
                    :in [u_id]
-                   :where [(match user [id])
+                   :where [(match :user [id])
                            [id :u_id u_id]
                            [id :u_r_id u_r_id]
                            [id :u_rating u_rating]
@@ -82,7 +81,7 @@
                            [id :u_sattr7 u_sattr7]]}
                  u_id)]
       (if u
-        [[:put 'user (update u :u_balance dec)]]
+        [[:put :user (update u :u_balance dec)]]
         []))))
 
 (def item-query
@@ -91,7 +90,7 @@
            i_end-date]
     :in [i]
     :where
-    [(match item [id {:id i}])
+    [(match :item [id {:id i}])
      [i :i_u_id i_u_id]
      [i :i_c_id i_c_id]
      [i :i_name i_name]
@@ -108,7 +107,7 @@
 (def item-max-bid-query
   '{:find [id imb_i_id imb_u_id imb_ib_id imb_ib_i_id imb_ib_u_id imb_created]
     :in [imb]
-    :where [(match item-max-bid [id {:id imb}])
+    :where [(match :item-max-bid [id {:id imb}])
             [imb :imb_i_id imb_i_id]
             [imb :imb_u_id imb_u_id]
             [imb :imb_ib_id imb_ib_id]
@@ -135,7 +134,7 @@
           {:keys [imb imb_ib_id] :as res}
           (-> (quote {:find [imb, imb_ib_id]
                       :in [i_id]
-                      :where [(match item-max-bid {:id imb})
+                      :where [(match :item-max-bid {:id imb})
                               [imb :imb_i_id i_id]
                               [imb :imb_u_id u_id]
                               [imb :imb_ib_id imb_ib_id]]})
@@ -148,7 +147,7 @@
           {:keys [i nbids] :as res}
           (-> (quote {:find [i, nbids]
                       :in [i_id]
-                      :where [(match item {:id i})
+                      :where [(match :item {:id i})
                               [i :i_id i_id]
                               [i :i_num_bids nbids]
                               [i :i_status :open]]})
@@ -161,7 +160,7 @@
           (when imb_ib_id
             (-> (quote {:find [curr-bid curr-max]
                         :in [imb_ib_id]
-                        :where [(match item-bid {:id ib})
+                        :where [(match :item-bid {:id ib})
                                 [ib :ib_id imb_ib_id]
                                 [ib :ib_bid curr-bid]
                                 [ib :ib_max_bid curr-max]]})
@@ -176,7 +175,7 @@
                               i_current_price i_num_bids i_num_images i_num_global_attrs i_start_date
                               i_end_date i_status]
                        :in [i]
-                       :where [(match item [id {:id i}])
+                       :where [(match :item [id {:id i}])
                                [i :i_id i_id]
                                [i :i_u_id i_u_id]
                                [i :i_c_id i_c_id]
@@ -193,9 +192,8 @@
                                [i :i_status i_status]]}
           item-max-bid-query '{:find [id imb_i_id imb_u_id imb_ib_id imb_ib_i_id imb_ib_u_id imb_created]
                                :in [imb]
-                               :where [(match item-max-bid [id {:id imb}])
+                               :where [(match :item-max-bid [id {:id imb}])
                                        [imb :id id]
-                                       [imb :_table :item-max-bid]
                                        [imb :imb_i_id imb_i_id]
                                        [imb :imb_u_id imb_u_id]
                                        [imb :imb_ib_id imb_ib_id]
@@ -206,24 +204,24 @@
       (cond-> []
         ;; increment number of bids on item
         i
-        (conj [:put 'item (assoc (first (q item-query i))
+        (conj [:put :item (assoc (first (q item-query i))
                                  :i_num_bids (inc nbids))])
 
         ;; if new bid exceeds old, bump it
         upd-curr-bid
-        (conj [:put 'item-max-bid (assoc (first (q item-max-bid-query imb))
+        (conj [:put :item-max-bid (assoc (first (q item-max-bid-query imb))
                                          :imb_bid bid)])
 
         ;; we exceed the old max, win the bid.
         (and curr-bid new-bid-win)
-        (conj [:put 'item-max-bid (assoc (first (q item-max-bid-query imb))
+        (conj [:put :item-max-bid (assoc (first (q item-max-bid-query imb))
                                          :imb_ib_id new-bid-id
                                          :imb_ib_u_id u_id
                                          :imb_updated now)])
 
         ;; no previous max bid, insert new max bid
         (nil? imb_ib_id)
-        (conj [:put 'item-max-bid {:id (composite-id-fn new-bid-id i_id)
+        (conj [:put :item-max-bid {:id (composite-id-fn new-bid-id i_id)
                                    :imb_i_id i_id
                                    :imb_u_id u_id
                                    :imb_ib_id new-bid-id
@@ -234,7 +232,7 @@
 
         :always
         ;; add new bid
-        (conj [:put 'item-bid {:id new-bid-id
+        (conj [:put :item-bid {:id new-bid-id
                                :ib_id new-bid-id
                                :ib_i_id i_id
                                :ib_u_id u_id
@@ -280,9 +278,9 @@
         description-with-attributes
         (let [q '{:find [gag-name gav-name]
                   :in [[gag-id ...] [gav-id ...]]
-                  :where [(match gag {:id gag-id})
+                  :where [(match :gag {:id gag-id})
                           [gag-id :gag_name gag-name]
-                          (match gav {:id gav-id})
+                          (match :gav {:id gav-id})
                           [gav-id :gav_gag_id gag-id]
                           [gav-id :gav_name gav-name]]}]
           (->> (xt/q (:sut worker) q gag-ids gav-ids)
@@ -290,8 +288,7 @@
                (str description " ")))]
 
     (->> (concat
-          [[:put
-            'item
+          [[:put :item
             {:id i_id
              :i_id i_id
              :i_u_id u_id
@@ -309,7 +306,7 @@
           (for [[i image] (map-indexed vector images)
                 :let [ii_id (bit-or (bit-shift-left i 60) (bit-and i_id-raw 0x0FFFFFFFFFFFFFFF))]]
             [:put
-             'item-comment
+             :item-comment
              {:id (str "ii_" ii_id)
               :ii_id ii_id
               :ii_i_id i_id
@@ -334,7 +331,7 @@
 
 (defn item-status-groups [node ^Instant now]
   (let [items (xt/q node '{:find [i, i_id, i_u_id, i_status, i_end_date, i_num_bids]
-                           :where [(match item {:id i})
+                           :where [(match :item {:id i})
                                    [i :i_id i_id]
                                    [i :i_u_id i_u_id]
                                    [i :i_status i_status]
@@ -380,8 +377,7 @@
 
 (defn largest-id [node table prefix-length]
   (let [id (->> (xt/q node `{:find [~'id]
-                             :where [(match ~table [~'id])
-                                     [~'id :_table ~table]]})
+                             :where [(match ~table [~'id])]})
                 (sort-by :id #(cond (< (count %1) (count %2)) 1
                                     (< (count %2) (count %1)) -1
                                     :else (compare %2 %1)))
@@ -446,17 +442,6 @@
     (when (and (:i_id params) (:u_id params))
       (xt/submit-tx (:sut worker) [[:call :new-bid params]]))))
 
-(defn- pull-query [table attributes]
-  (-> {:find (into '[id] (map symbol attributes))
-       :in '[id]}
-      (assoc :where
-             (->>
-              (mapv #(vector 'id % (symbol %)) attributes)
-              (into [['id :_table table]])))))
-
-(comment
-  (pull-query :item [:i_id, :i_u_id, :i_initial_price, :i_current_price]))
-
 (defn proc-get-item [worker]
   (let [{:keys [sut]} worker
         ;; the benchbase project uses a profile that keeps item pairs around
@@ -468,8 +453,7 @@
         q '{:find [i_id i_u_id i_initial_price i_current_price]
             #_(pull ?i [:i_id, :i_u_id, :i_initial_price, :i_current_price])
             :in [i_id]
-            :where [(match item {:id i_id})
-                    [i_id :_table :item]
+            :where [(match :item {:id i_id})
                     ;; [?i :i_id i_id]
                     [i_id :i_status :open]
                     [i_id :i_u_id i_u_id]

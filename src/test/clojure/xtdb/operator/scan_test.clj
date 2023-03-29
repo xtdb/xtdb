@@ -12,9 +12,9 @@
 
 (t/deftest test-simple-scan
   (with-open [node (node/start-node {})]
-    (xt/submit-tx node [[:put 'xt_docs {:id :foo, :col1 "foo1"}]
-                        [:put 'xt_docs {:id :bar, :col1 "bar1", :col2 "bar2"}]
-                        [:put 'xt_docs {:id :foo, :col2 "baz2"}]])
+    (xt/submit-tx node [[:put :xt_docs {:id :foo, :col1 "foo1"}]
+                        [:put :xt_docs {:id :bar, :col1 "bar1", :col2 "bar2"}]
+                        [:put :xt_docs {:id :foo, :col2 "baz2"}]])
 
     (t/is (= [{:id :bar, :col1 "bar1", :col2 "bar2"}
               {:id :foo, :col2 "baz2"}]
@@ -24,9 +24,9 @@
 
 (t/deftest test-simple-scan-with-namespaced-attributes
   (with-open [node (node/start-node {})]
-    (xt/submit-tx node [[:put 'xt_docs {:id :foo, :the-ns/col1 "foo1"}]
-                        [:put 'xt_docs {:id :bar, :the-ns/col1 "bar1", :col2 "bar2"}]
-                        [:put 'xt_docs {:id :foo, :the-ns/col2 "baz2"}]])
+    (xt/submit-tx node [[:put :xt_docs {:id :foo, :the-ns/col1 "foo1"}]
+                        [:put :xt_docs {:id :bar, :the-ns/col1 "bar1", :col2 "bar2"}]
+                        [:put :xt_docs {:id :foo, :the-ns/col2 "baz2"}]])
 
     (t/is (= [{:id :bar, :the-ns__col1 "bar1", :col2 "bar2"}
               {:id :foo}]
@@ -35,7 +35,7 @@
 
 (t/deftest test-duplicates-in-scan-1
   (with-open [node (node/start-node {})]
-    (xt/submit-tx node [[:put 'xt_docs {:id :foo}]])
+    (xt/submit-tx node [[:put :xt_docs {:id :foo}]])
 
     (t/is (= [{:id :foo}]
              (tu/query-ra '[:scan {:table xt_docs} [id id]]
@@ -43,7 +43,7 @@
 
 (t/deftest test-scanning-temporal-cols
   (with-open [node (node/start-node {})]
-    (xt/submit-tx node [[:put 'xt_docs {:id :doc}
+    (xt/submit-tx node [[:put :xt_docs {:id :doc}
                          {:app-time-start #inst "2021"
                           :app-time-end #inst "3000"}]])
 
@@ -69,7 +69,7 @@
 
 (t/deftest test-only-scanning-temporal-cols-45
   (with-open [node (node/start-node {})]
-    (let [{tt :sys-time} (xt/submit-tx node [[:put 'xt_docs {:id :doc}]])]
+    (let [{tt :sys-time} (xt/submit-tx node [[:put :xt_docs {:id :doc}]])]
 
       (t/is (= [{:application_time_start (util/->zdt tt)
                  :application_time_end (util/->zdt util/end-of-time)
@@ -82,9 +82,9 @@
 
 (t/deftest test-aligns-temporal-columns-correctly-363
   (with-open [node (node/start-node {})]
-    (xt/submit-tx node [[:put 'foo {:id :my-doc, :last_updated "tx1"}]] {:sys-time #inst "3000"})
+    (xt/submit-tx node [[:put :foo {:id :my-doc, :last_updated "tx1"}]] {:sys-time #inst "3000"})
 
-    (xt/submit-tx node [[:put 'foo {:id :my-doc, :last_updated "tx2"}]] {:sys-time #inst "3001"})
+    (xt/submit-tx node [[:put :foo {:id :my-doc, :last_updated "tx2"}]] {:sys-time #inst "3001"})
 
     (t/is (= [{:system_time_start (util/->zdt #inst "3000")
                :system_time_end (util/->zdt #inst "3001")
@@ -109,14 +109,14 @@
                     (.bind (util/component node :xtdb/indexer) {:node node, :basis {:tx tx}})
                     (.columnTypes)))]
 
-        (let [tx (-> (xt/submit-tx node [[:put 'xt_docs {:id :doc}]])
+        (let [tx (-> (xt/submit-tx node [[:put :xt_docs {:id :doc}]])
                      (tu/then-await-tx* node))]
           (tu/finish-chunk! node)
 
           (t/is (= '{id :keyword}
                    (->col-types tx))))
 
-        (let [tx (-> (xt/submit-tx node [[:put 'xt_docs {:id "foo"}]])
+        (let [tx (-> (xt/submit-tx node [[:put :xt_docs {:id "foo"}]])
                      (tu/then-await-tx* node))]
 
           (t/is (= '{id [:union #{:keyword :utf8}]}
