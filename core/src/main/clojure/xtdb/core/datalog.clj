@@ -8,10 +8,10 @@
             [xtdb.util :as util]
             [xtdb.vector.writer :as vw])
   (:import (clojure.lang MapEntry)
-           (xtdb.operator IRaQuerySource)
            (java.lang AutoCloseable)
-           (java.time LocalDate)
-           (org.apache.arrow.memory BufferAllocator)))
+           (org.apache.arrow.memory BufferAllocator)
+           xtdb.IResultSet
+           (xtdb.operator IRaQuerySource)))
 
 (s/def ::logic-var (s/and symbol?
                           (s/conformer util/ns-symbol->symbol util/symbol->ns-symbol)))
@@ -1123,7 +1123,7 @@
        (into {})))
 
 (defn open-datalog-query ^xtdb.IResultSet [^BufferAllocator allocator, ^IRaQuerySource ra-src, wm-src
-                                            {:keys [basis] :as query} args]
+                                            {:keys [basis explain?] :as query} args]
   (let [plan (compile-query (dissoc query :basis :basis-timeout))
         {::keys [in-bindings]} (meta plan)
 
@@ -1132,22 +1132,31 @@
                  #_(->> (binding [*print-meta* true]))
                  (lp/rewrite-plan {})
                  #_(doto clojure.pprint/pprint)
-                 (doto (lp/validate-plan)))
+                 (doto (lp/validate-plan)))]
 
-        ^xtdb.operator.PreparedQuery pq (.prepareRaQuery ra-src plan)]
+    (if explain?
+      (let [col-types '{plan :clj-form}
+            ^Iterable res [{:plan plan}]
+            it (.iterator res)]
+        (reify IResultSet
+          (columnTypes [_] col-types)
+          (hasNext [_] (.hasNext it))
+          (next [_] (.next it))
+          (close [_])))
 
-    (when (not= (count in-bindings) (count args))
-      (throw (err/illegal-arg :in-arity-exception {::err/message ":in arity mismatch"
-                                                   :expected (count in-bindings)
-                                                   :actual args})))
+      (let [^xtdb.operator.PreparedQuery pq (.prepareRaQuery ra-src plan)]
+        (when (not= (count in-bindings) (count args))
+          (throw (err/illegal-arg :in-arity-exception {::err/message ":in arity mismatch"
+                                                       :expected (count in-bindings)
+                                                       :actual args})))
 
-    (let [^AutoCloseable
-          params (vw/open-params allocator (args->params args in-bindings))]
-      (try
-        (-> (.bind pq wm-src
-                   {:params params, :table-args (args->tables args in-bindings), :basis basis})
-            (.openCursor)
-            (op/cursor->datalog-result-set params))
-        (catch Throwable t
-          (.close params)
-          (throw t))))))
+        (let [^AutoCloseable
+              params (vw/open-params allocator (args->params args in-bindings))]
+          (try
+            (-> (.bind pq wm-src
+                       {:params params, :table-args (args->tables args in-bindings), :basis basis})
+                (.openCursor)
+                (op/cursor->datalog-result-set params))
+            (catch Throwable t
+              (.close params)
+              (throw t))))))))

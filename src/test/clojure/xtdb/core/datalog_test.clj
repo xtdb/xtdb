@@ -1869,9 +1869,9 @@
 
 
 (deftest test-period-literal-match
-
-  (xt/submit-tx tu/*node* '[[:put :xt_docs {:id 1} {:app-time-start #inst "2015"
-                                                    :app-time-end #inst "2050"}]])
+  (xt/submit-tx tu/*node* '[[:put :xt_docs {:id 1}
+                             {:app-time-start #inst "2015"
+                              :app-time-end #inst "2050"}]])
 
   (t/is (thrown-with-msg?
          IllegalArgumentException
@@ -1882,3 +1882,17 @@
             :where [(match :xt_docs
                       [id {:xt/app-time "111"}]
                       {:for-app-time :all-time})]}))))
+
+(t/deftest test-explain-plan-654
+  (t/is (= '[{:plan [:project [name age]
+                     [:project [{age _r0_age} {name _r0_name} {pid _r0_pid}]
+                      [:rename {age _r0_age, name _r0_name, pid _r0_pid}
+                       [:project [{pid id} name age]
+                        [:scan {:table people, :for-app-time [:at :now], :for-sys-time nil}
+                         [age name {id (= id ?pid)}]]]]]]}]
+
+           (xt/q tu/*node*
+                 '{:find [name age]
+                   :in [pid]
+                   :where [($ :people [{:id pid} name age])]
+                   :explain? true}))))
