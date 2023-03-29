@@ -48,6 +48,7 @@ This is an example of the full syntax - we can reduce this to:
 ;; cf. 1.x/other EDN Datalog databases
 {:find [first-name last-name]
  :where [[u :id :jms]
+         [u :type :person]
          [u :first-name first-name]
          [u :last-name last-name]]}
 ----
@@ -68,9 +69,11 @@ This can be used to express joins in a very terse manner - e.g.
 ;; cf. 1.x/other EDN Datalog databases
 {:find [author-name blog-date blog-content]
  :in [blog-id]
- :where [[blog :author author-id]
+ :where [[blog :type :blog]
+         [blog :author author-id]
          [blog :blog-date blog-date]
          [blog :blog-content blog-content]
+         [author-id :type :author]
          [author-id :name author-name]]}
 ----
 
