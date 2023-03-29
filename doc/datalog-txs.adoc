@@ -1,0 +1,70 @@
+= Datalog transactions
+
+This document assumes you are roughly familiar with XTDB 1.x transactions - if not, no worries, the documentation is https://docs.xtdb.com/language-reference/datalog-transactions/[here].
+
+Transactions are submitted via `xt/submit-tx`, and are comprised of put and delete operations.
+
+In 2.x, all documents belong in a 'table' (e.g. `:users`), provided as part of each transaction operation.
+
+== `:put` operations:
+
+At their simplest, `:put` operations consist of the table to put the document into, and the document itself.
+Documents must have an `:id` attribute, which is considered unique within the table.
+
+[source,clojure]
+----
+(require '[xtdb.datalog :as xt])
+
+(xt/submit-tx your-node
+              [[:put :users {:id :jms, :first-name "James"}]
+               [:put :users {:id :jdt, :first-name "Jeremy"}]])
+----
+
+`:put` operations optionally take temporal parameters, in order to put the document for a subset of valid time.
+By default, documents are asserted from the current time to the end-of-time, but this can be customised using `:app-time-start` and `:app-time-end`:
+
+[source,clojure]
+----
+(require '[xtdb.datalog :as xt])
+
+(xt/submit-tx your-node
+              [[:put :users {:id :jms, :first-name "James"}
+                {:app-time-start #inst "2020-02-01", :app-time-end #inst "2020-05-01"}]
+
+               [:put :users {:id :jdt, :first-name "Jeremy"}
+                {:app-time-start #inst "2019-05-01"}]])
+----
+
+== `:delete` operations
+
+Delete operations consist of the table to delete the document from, and the document's id.
+Similarly to `:put`, they optionally take temporal parameters, in order to delete the document for a subset of valid time.
+
+[source,clojure]
+----
+(xt/submit-tx your-node
+              [[:delete :users :jms]
+
+               [:delete :users :jdt
+                {:app-time-start #inst "2023-04-01"
+                 :app-time-end #inst "2023-05-01"}]])
+----
+
+== `:match` operations
+
+https://docs.xtdb.com/language-reference/datalog-transactions/#match[Match] operations are not yet supported in 2.x - https://github.com/xtdb/core2/issues/559[coming soon]!
+
+== `:erase` operations
+
+While XTDB by default keeps data forever, 'erase' operations (previously known as https://docs.xtdb.com/language-reference/datalog-transactions/#evict['evict']) allow you to irrevocably delete data from XTDB (e.g. for GDPR 'Right to Erasure' compliance).
+
+[source,clojure]
+----
+(xt/submit-tx your-node [[:erase :users :jms]])
+----
+
+== Transaction functions
+
+XTDB 2.x does support transaction functions in a similar manner to 1.x, although their exact interface is still under active development.
+
+Transaction functions are now run in a https://github.com/babashka/sci[SCI] sandbox.
