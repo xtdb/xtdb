@@ -1,0 +1,96 @@
+= Getting started (Clojure)
+
+XTDB 2.x is available both as a Maven dependency and a Docker image.
+
+== Install
+
+First, add the XTDB dependencies to your `deps.edn`:
+
+.deps.edn
+[source,clojure]
+----
+{:mvn/repos {"ossrh-snapshots" {:url "https://s01.oss.sonatype.org/content/repositories/snapshots"}}
+
+ :deps {org.clojure/clojure {:mvn/version "1.11.1"}
+        com.xtdb.labs/xtdb-api {:mvn/version "2.0.0-SNAPSHOT"}
+        com.xtdb.labs/xtdb-core {:mvn/version "2.0.0-SNAPSHOT"}}
+
+ ;; needed on JDK16+
+ :aliases {:xtdb {:jvm-opts ["--add-opens=java.base/java.nio=ALL-UNNAMED"
+                             "-Dio.netty.tryReflectionSetAccessible=true"]}}}
+----
+
+Once you have a REPL (started with `clj -A:xtdb` if you're on JDK 16+), you can create an in-memory XTDB node with:
+
+[source,clojure]
+----
+(require '[xtdb.node :as xt.node]
+         '[xtdb.datalog :as xt])
+
+(with-open [node (xt.node/start-node {})]
+  (xt/status node)
+
+  ;; ...
+  )
+----
+
+== Docker
+
+First, pull the Docker image:
+
+[source,sh]
+----
+docker pull ghcr.io/xtdb/xtdb-ea
+
+docker run -tip 3000:3000 ghcr.io/xtdb/xtdb-ea
+----
+
+Then, add the thin client to your `deps.edn`:
+
+.deps.edn
+[source,clojure]
+----
+{:mvn/repos {"ossrh-snapshots" {:url "https://s01.oss.sonatype.org/content/repositories/snapshots"}}
+
+ :deps {org.clojure/clojure {:mvn/version "1.11.1"}
+        com.xtdb.labs/xtdb-api {:mvn/version "2.0.0-SNAPSHOT"}
+        com.xtdb.labs/xtdb-http-client-clj {:mvn/version "2.0.0-SNAPSHOT"}}}
+----
+
+Once you have a REPL, you can connect to the XTDB node with:
+
+[source,clojure]
+----
+(require '[xtdb.client :as xt.client]
+         '[xtdb.datalog :as xt])
+
+(with-open [node (xt.client/start-client "http://localhost:3000")]
+  (xt/status node)
+
+  ;; ...
+  )
+----
+
+== The first query
+
+[source,clojure]
+----
+(require '[xtdb.datalog :as xt])
+
+(with-open [node ...]
+  ;; submit some data
+  (xt/submit-tx node
+                [[:put :users {:id :jms, :first-name "James"}]
+                 [:put :users {:id :jdt, :first-name "Jeremy"}]])
+
+  ;; run a Datalog query
+  (xt/q node '{:find [id first-name]
+               :where [(match :users [id first-name])]}))
+----
+
+Congratulations!
+
+Next:
+
+* Learn more about link:./datalog-txs.adoc[submitting transactions]
+* Learn more about link:./datalog-queries.adoc[Datalog queries]
