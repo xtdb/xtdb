@@ -1,0 +1,13 @@
+= XTDB 2.x Docs
+
+* Coming from 1.x?
+
+* Getting started
+* Datalog:
+** Transaction operations
+** Expression language:
+*** Control structures
+*** Arithmetic functions
+*** String functions
+*** Date/time functions
+* SQL
