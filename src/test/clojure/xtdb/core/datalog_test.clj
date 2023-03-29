@@ -1785,7 +1785,6 @@
               :where [[(period #inst "2022" #inst "2020") p1]]}))))
 
 (deftest test-period-and-temporal-col-projection
-
   (xt/submit-tx tu/*node* '[[:put :xt_docs {:id 1} {:app-time-start #inst "2015"
                                                     :app-time-end #inst "2050"}]])
 

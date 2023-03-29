@@ -949,6 +949,15 @@
   {:return-type numeric-type
    :->call-code #(do `(Math/abs ~@%))})
 
+(defn invalid-period-err [^long start-µs, ^long end-µs]
+  (let [start (util/micros->instant start-µs)
+        end (util/micros->instant end-µs)]
+    (err/runtime-err :core2.temporal/invalid-period
+                     {::err/message
+                      (format "Start cannot be greater than end when constructing a period - start: %s, end %s" start end)
+                      :start start
+                      :end end})))
+
 (defmethod expr/codegen-call [:period :timestamp-tz :timestamp-tz] [{[start-type end-type] :arg-types}]
   ;; TODO error assumes micros
   ;; TODO reflection warning for readLong
@@ -957,23 +966,12 @@
                   `(let [start# ~start-code
                          end# ~end-code]
                      (if (> start# end#)
-                       (throw
-                         (err/runtime-err
-                           :core2.temporal/invalid-period
-                           {::err/message
-                            (str
-                              "Start cannot be greater than end when constructing a period - start: "
-                              (util/micros->instant start#)
-                              ", end: "
-                              (util/micros->instant end#))
-                            :start (util/micros->instant start#)
-                            :end (util/micros->instant end#)}))
+                       (throw (invalid-period-err start# end#))
                        (reify IStructValueReader
                          (~'readLong [_ field#]
                            (case field#
                              "start" start#
                              "end" end#))))))})
-
 
 (defn start [^IStructValueReader period]
   (.readLong period "start"))
