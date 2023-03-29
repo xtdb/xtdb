@@ -8,8 +8,8 @@ plugins {
 publishing {
     publications.create("maven", MavenPublication::class) {
         pom {
-            name.set("Core2 HTTP Server")
-            description.set("Core2 HTTP Server")
+            name.set("XTDB HTTP Server")
+            description.set("XTDB HTTP Server")
         }
     }
 }

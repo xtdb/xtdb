@@ -8,8 +8,8 @@ plugins {
 publishing {
     publications.create("maven", MavenPublication::class) {
         pom {
-            name.set("Core2 Clojure HTTP Client")
-            description.set("Core2 Clojure HTTP Server")
+            name.set("XTDB Clojure HTTP Client")
+            description.set("XTDB Clojure HTTP Server")
         }
     }
 }

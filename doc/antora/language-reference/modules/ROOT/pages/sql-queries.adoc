@@ -3,7 +3,7 @@
 [#gotchas]
 == Gotchas
 
-Before discussing basic queries, it's worth reading about XTDB Core2's
+Before discussing basic queries, it's worth reading about XTDB 2.x's
 xref:getting-started::gotchas.adoc["gotchas"].
 
 

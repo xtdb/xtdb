@@ -1,18 +1,18 @@
 #!/usr/bin/env bash
 
-CORE2_PATH=$(realpath $(dirname $0)/..)
+XTDB_PATH=$(realpath $(dirname $0)/..)
 
 # used by Microsoft's `sbom-tool`:
-# rm -r $CORE2_PATH/_manifest/
+# rm -r $XTDB_PATH/_manifest/
 
 (
-  cd $CORE2_PATH
+  cd $XTDB_PATH
 
   clojure -X:deps mvn-pom
 
   # `sbom-tool` will probably have a longer lifespan than neo4j's licensing plugin,
   # but it's also a bit hairier to work with. parking for now. -sd
-  # ./sbom-tool-osx-x64 generate -b . -bc . -pn "core2" -pv "0.1.0" -nsb "https://zig"
+  # ./sbom-tool-osx-x64 generate -b . -bc . -pn "xtdb" -pv "0.1.0" -nsb "https://zig"
 
   mvn org.neo4j.build.plugins:licensing-maven-plugin:check -DfailIfMissing=false && \
   mvn org.neo4j.build.plugins:licensing-maven-plugin:collect-reports && \

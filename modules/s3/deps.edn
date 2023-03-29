@@ -1,5 +1,5 @@
-{:deps {com.xtdb.labs/core2-api {:local/root "../../api"}
-        com.xtdb.labs/core2-core {:local/root "../../core"}
+{:deps {com.xtdb.labs/xtdb-api {:local/root "../../api"}
+        com.xtdb.labs/xtdb-core {:local/root "../../core"}
 
         software.amazon.awssdk/s3 {:mvn/version "2.16.76"}}
 

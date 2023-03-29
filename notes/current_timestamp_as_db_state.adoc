@@ -2,7 +2,7 @@
 
 This document is written in response to link:bases.adoc[bases.adoc] and to make some of my thinking explicit as we reach the next phase, during we will start looking at resolving this in earnest.
 
-Since the inception of Core2, my idea and plan has been that LogAppendTime should be the only canonical source of time. The main argument is that it should be easy to reason about what's happening, and to never introduce any implicit sources of time anywhere in the system. Unless I'm mistaken the key difference is that the Bases proposal implicitly uses the local node's clock to advance observable APPLICATION_TIME.
+Since the inception of core2, my idea and plan has been that LogAppendTime should be the only canonical source of time. The main argument is that it should be easy to reason about what's happening, and to never introduce any implicit sources of time anywhere in the system. Unless I'm mistaken the key difference is that the Bases proposal implicitly uses the local node's clock to advance observable APPLICATION_TIME.
 
 ## Problem and Constraints
 
@@ -51,7 +51,7 @@ This means there will be a slight drift when there are clashes between transacti
 
 == Heartbeats to Advance Time
 
-The nodes in the cluster could send small no-op transactions into the log at random intervals to ensure that time moves forward within some reasonable bound. This would be an optional feature, and not necessary to use XT. These messages could indirectly be an indication of which nodes currently are tailing the log, and potentially also a source to track HybridLogicalClock time, though the very existance of the heartbeats would remove the real need for that. It might still be useful for some reason. As the nodes themselves are the source of these messages, there's no need for additional services on servers to generate them. There will be a tension of freshness and filling up and putting load on the log. As our logs don't need infinite retention in Core2 this is less of an issue. The heartbeat messages could be filtered out in the stored version of the log.
+The nodes in the cluster could send small no-op transactions into the log at random intervals to ensure that time moves forward within some reasonable bound. This would be an optional feature, and not necessary to use XT. These messages could indirectly be an indication of which nodes currently are tailing the log, and potentially also a source to track HybridLogicalClock time, though the very existance of the heartbeats would remove the real need for that. It might still be useful for some reason. As the nodes themselves are the source of these messages, there's no need for additional services on servers to generate them. There will be a tension of freshness and filling up and putting load on the log. As our logs don't need infinite retention in core2 this is less of an issue. The heartbeat messages could be filtered out in the stored version of the log.
 
 == UTC Original Time Zone
 

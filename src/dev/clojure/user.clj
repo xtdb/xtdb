@@ -1,8 +1,8 @@
 (ns user
   (:require [clojure.java.io :as io]
             [clojure.tools.namespace.repl :as ctn]
-            core2.edn
-            [core2.util :as util])
+            xtdb.edn
+            [xtdb.util :as util])
   (:import java.io.File))
 
 (alter-var-root #'*warn-on-reflection* (constantly true))

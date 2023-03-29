@@ -1,4 +1,4 @@
-{c2/period-duration core2.edn/period-duration-reader
- c2/interval-ym core2.edn/interval-ym-reader
- c2/interval-dt core2.edn/interval-dt-reader
- c2/interval-mdn core2.edn/interval-mdn-reader}
+{xt/period-duration xtdb.edn/period-duration-reader
+ xt/interval-ym xtdb.edn/interval-ym-reader
+ xt/interval-dt xtdb.edn/interval-dt-reader
+ xt/interval-mdn xtdb.edn/interval-mdn-reader}

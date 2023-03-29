@@ -1,4 +1,4 @@
-= Releasing Core2
+= Releasing core2
 
 We could automate more of this than we do, but here's a checklist in the meantime.
 
@@ -25,7 +25,7 @@ Build and deploy release jars
 
 . `java -version` -> java-11-openjdk
 . `git clean -dXf`
-. `export CORE2_VERSION=1.23.0` (`set -x CORE2_VERSION=1.23.0` for the fish people)
+. `export XTDB_VERSION=1.23.0` (`set -x XTDB_VERSION=1.23.0` for the fish people)
 . `./gradlew publish`
 
 Release the artifacts to central
@@ -37,7 +37,7 @@ Release the artifacts to central
 
 It may be sensible to update `dev-SNAPSHOT` in response to the release, unless it is already ahead.
 
-. `unset CORE2_VERSION` and deploy the new release as link:#releasing-snapshots[dev-SNAPSHOT]
+. `unset XTDB_VERSION` and deploy the new release as link:#releasing-snapshots[dev-SNAPSHOT]
 
 == Docs:
 
@@ -68,4 +68,4 @@ NOTE: TODO: document deploying documentation site.
 .  `git clean -dXf`
 .  `./gradlew publish`
 .  (nothing to be done in Sonatype!)
-.  Confirm snapshot is live at https://s01.oss.sonatype.org/content/repositories/snapshots/com/xtdb/labs/core2-core/dev-SNAPSHOT/
+.  Confirm snapshot is live at https://s01.oss.sonatype.org/content/repositories/snapshots/com/xtdb/labs/xtdb-core/dev-SNAPSHOT/

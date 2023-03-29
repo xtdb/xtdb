@@ -1,1 +1,1 @@
-["^ ","~:latest-completed-tx",["~#core2/tx-key",["^ ","~:tx-id",7106,"~:sys-time",["~#time/instant","2020-01-03T00:00:00Z"]]],"~:latest-row-id",3,"~:tables",["^ ","xt_docs",["^ ","~:col-types",["^ ","month","~:utf8","id","^:"]]]]
+["^ ","~:latest-completed-tx",["~#xtdb/tx-key",["^ ","~:tx-id",7106,"~:sys-time",["~#time/instant","2020-01-03T00:00:00Z"]]],"~:latest-row-id",3,"~:tables",["^ ","xt_docs",["^ ","~:col-types",["^ ","month","~:utf8","id","^:"]]]]

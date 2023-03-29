@@ -1,12 +1,12 @@
 FROM clojure:openjdk-11-lein-2.9.3
 
-WORKDIR /opt/core2
+WORKDIR /opt/xtdb
 ENTRYPOINT [ \
-    "java","-cp","core2-bench.jar", \
+    "java","-cp","xtdb-bench.jar", \
     "-Dclojure.main.report=stderr", \
     "-Xms3g", "-Xmx3g", \
     "clojure.main", "-m"]
 
-CMD ["core2.bench"]
+CMD ["xtdb.bench"]
 
-ADD target/core2-bench.jar .
+ADD target/xtdb-bench.jar .

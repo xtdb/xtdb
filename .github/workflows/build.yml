@@ -1,5 +1,5 @@
-name: Core2 CI
-run-name: Core2 CI
+name: XTDB CI
+run-name: XTDB CI
 
 on: [push]
 

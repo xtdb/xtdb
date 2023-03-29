@@ -8,8 +8,8 @@ plugins {
 publishing {
     publications.create("maven", MavenPublication::class) {
         pom {
-            name.set("Core2 Kafka")
-            description.set("Core2 Kafka")
+            name.set("XTDB Kafka")
+            description.set("XTDB Kafka")
         }
     }
 }

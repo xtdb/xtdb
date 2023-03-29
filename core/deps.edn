@@ -1,8 +1,8 @@
 {:paths ["src/main/clojure" "src/main/resources" "target/classes"]
 
  :deps {org.clojure/clojure {:mvn/version "1.11.1"}
-        com.xtdb.labs/core2-api {:local/root "../api"}
-        com.xtdb.labs/core2-wire-formats {:local/root "../wire-formats"}
+        com.xtdb.labs/xtdb-api {:local/root "../api"}
+        com.xtdb.labs/xtdb-wire-formats {:local/root "../wire-formats"}
 
         org.clojure/tools.logging {:mvn/version "1.2.4"}
         org.clojure/spec.alpha {:mvn/version "0.3.218"}

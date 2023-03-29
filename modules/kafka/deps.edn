@@ -1,6 +1,6 @@
 {:paths ["src/main/clojure"]
 
- :deps {com.xtdb.labs/core2-api {:local/root "../../api"}
-        com.xtdb.labs/core2-core {:local/root "../../core"}
+ :deps {com.xtdb.labs/xtdb-api {:local/root "../../api"}
+        com.xtdb.labs/xtdb-core {:local/root "../../core"}
 
         org.apache.kafka/kafka-clients {:mvn/version "3.1.0"}}}

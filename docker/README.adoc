@@ -3,8 +3,8 @@
 == Building a local image for testing
 
 * Make sure your Docker daemon is running
-* `./bin/docker-build.sh [--clean]` will build and tag as `core2:latest`, and load it into your images list. The `--clean` flag can be used to ensure the core2 uberjar is rebuilt.
-* To run: `docker run -ti --rm -p 5432:5432 -p 9832:9832 -p 3000:3000 core2` (with no `xtdb/` organization prefix)
+* `./bin/docker-build.sh [--clean]` will build and tag as `xtdb:latest`, and load it into your images list. The `--clean` flag can be used to ensure the xtdb uberjar is rebuilt.
+* To run: `docker run -ti --rm -p 5432:5432 -p 9832:9832 -p 3000:3000 xtdb` (with no `xtdb/` organization prefix)
 
 == Deployment setup
 
@@ -17,9 +17,9 @@
 
 * install https://github.com/docker/buildx[buildx] if it is not already (docker desktop, recent docker versions have it bundled). This will enable multi-arch builds support.
 * `docker buildx install` to https://github.com/docker/buildx#set-buildx-as-the-default-builder[set buildx as your default Docker builder]
-* `./bin/docker-build-and-push.sh [--clean] [--latest]` will build and push the image as `xtdb/core2:"$sha"` as well as `xtdb/core2:latest` if `--latest` is supplied.
+* `./bin/docker-build-and-push.sh [--clean] [--latest]` will build and push the image as `xtdb/xtdb:"$sha"` as well as `xtdb/xtdb:latest` if `--latest` is supplied.
 
-As with a local build, the `--clean` flag can ensure a the core2 uberjar is built afresh.
+As with a local build, the `--clean` flag can ensure a the xtdb uberjar is built afresh.
 
 == Troubleshooting
 

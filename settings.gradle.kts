@@ -1,4 +1,4 @@
-rootProject.name = "core2"
+rootProject.name = "xtdb"
 
 include("api", "core", "wire-formats")
 include("http-server", "http-client-clj", "pgwire-server")

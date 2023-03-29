@@ -8,8 +8,8 @@ plugins {
 publishing {
     publications.create("maven", MavenPublication::class) {
         pom {
-            name.set("Core2 FlightSQL Server")
-            description.set("Core2 FlightSQL Server")
+            name.set("XTDB FlightSQL Server")
+            description.set("XTDB FlightSQL Server")
         }
     }
 }

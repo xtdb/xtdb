@@ -1,8 +1,8 @@
-= XTDB 'Core2' Research 🧪
+= XTDB 'core2' Research 🧪
 
 Welcome to the XTDB research repository!
 
-Core2 is a bitemporal and dynamic relational database for SQL and Datalog:
+core2 is a bitemporal and dynamic relational database for SQL and Datalog:
 
 - Bitemporal means that all data is accurately versioned as updates are made (system time), and all data exists within a universal domain timeline for representing 'validity'/'effectivity' (application time).
 - Dynamic means that no upfront schema needs to be specified before records can be inserted. Complex and nested data is automatically represented using https://arrow.apache.org/[Apache Arrow] types.
@@ -10,7 +10,7 @@ Core2 is a bitemporal and dynamic relational database for SQL and Datalog:
 - SQL means immediate accessibility for a mainstream audience, but also includes an eye to the future with preliminary https://arrow.apache.org/blog/2022/02/16/introducing-arrow-flight-sql/[Flight SQL] driver support.
 - https://en.wikipedia.org/wiki/Datalog[Datalog] means a programmer-friendly API for complex relational querying that bypasses SQL's verbose JOINs and https://www.scattered-thoughts.net/writing/against-sql/[compositional challenges].
 
-Core2 can currently be used via Clojure, Java, and HTTP.
+core2 can currently be used via Clojure, Java, and HTTP.
 
 == Warning
 
@@ -27,7 +27,7 @@ If you are looking for a stable release of an immutable document database with b
   https://discuss.xtdb.com/[discuss.xtdb.com,window=_blank] |
   https://juxt-oss.zulipchat.com/#narrow/stream/194466-crux[Zulip community chat,window=_blank] |
   hello@xtdb.com
-* https://github.com/xtdb/core2/tree/master/dev/DEVELOPING.adoc[Developing XTDB Core2]
+* https://github.com/xtdb/core2/tree/master/dev/DEVELOPING.adoc[Developing XTDB 2.x]
 * https://www.zotero.org/groups/4778667/xtdb/[Bibliography,window=_blank]
 
 == Inside-out Architecture
@@ -41,18 +41,18 @@ What do we have to gain from turning the database inside out?
 Simpler code, better scalability, better robustness, lower latency, and more flexibility for doing interesting things with data.
 ____
 
-image::doc/img/xtdb-core2-node-1.svg[Core2 Architecture Diagram, 1000, 460]
+image::doc/img/xtdb-core2-node-1.svg[core2 Architecture Diagram, 1000, 460]
 
 == How does this differ from XTDB 1.x?
 
 XTDB 1.x is a mature product offering that is used in production by many organizations, and its ongoing development is focused on hardening and performance.
 XTDB 1.x is an embeddable database that emphasizes in-process JVM usage to enable advanced functionality like user-defined transaction functions, speculative transactions, programmatic Datalog rules, and more.
 
-Core2's initial objective is to take the key principles embodied in XTDB 1.x -- immutability, schemaless records, and temporal querying -- to a mainstream audience.
+core2's initial objective is to take the key principles embodied in XTDB 1.x -- immutability, schemaless records, and temporal querying -- to a mainstream audience.
 
 [cols=3*]
 |===
-| | XTDB 1.x | '`Core2`' Research Concept
+| | XTDB 1.x | '`core2`' Research Concept
 | Status | Stable | Experimental (pre-alpha)
 | Initial Stable Release | 2019 | TBD
 | Execution Model | Tuple-at-a-Time Sort-Merge Joins | Vectorized Relational Algebra
@@ -72,13 +72,13 @@ Core2's initial objective is to take the key principles embodied in XTDB 1.x -- 
 | Dynamism (ad-hoc graph joins, union typing, schemaless, etc.) | Yes | Yes
 |===
 
-See link:DATALOG.adoc[] for instructions on how to translate 1.x Datalog transactions/queries to Core2.
+See link:DATALOG.adoc[] for instructions on how to translate 1.x Datalog transactions/queries to core2.
 
 == Repo Layout
 
-Core2 is split across multiple projects which are maintained within this repository.
+core2 is split across multiple projects which are maintained within this repository.
 
-* `api` contains the user API to Core2.
+* `api` contains the user API to core2.
 * `core` contains the main functional components of XTDB along with interfaces for the pluggable storage components (Kafka, JDBC, S3 DB etc.).
   Implementations of these storage options are located in their own projects.
 * `http-server` and `http-client-clj` contain the HTTP server implementation, and a remote client for Clojure users.

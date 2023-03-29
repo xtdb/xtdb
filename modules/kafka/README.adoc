@@ -1,4 +1,4 @@
-= Core2 Kafka
+= core2 Kafka
 
 == Testing
 

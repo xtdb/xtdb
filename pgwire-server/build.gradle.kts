@@ -8,8 +8,8 @@ plugins {
 publishing {
     publications.create("maven", MavenPublication::class) {
         pom {
-            name.set("Core2 PGWire Server")
-            description.set("Core2 PGWire Server")
+            name.set("XTDB PGWire Server")
+            description.set("XTDB PGWire Server")
         }
     }
 }

@@ -1,6 +1,0 @@
-{:core2.log/local-directory-log {:root-path "/var/lib/xtdb/log"}
- :core2.buffer-pool/buffer-pool {:cache-path "/var/lib/xtdb/buffers"}
- :core2.object-store/file-system-object-store {:root-path "/var/lib/xtdb/objects"}
- :core2/server {:port 3000}
- :core2/pgwire {:port 5432}
- :core2.flight-sql/server {:host "0.0.0.0", :port 9832}}

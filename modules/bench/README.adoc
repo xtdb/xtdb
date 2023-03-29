@@ -1,10 +1,10 @@
 = Auctionmark (WIP)
 
-Auctionmark runs in some capacity currently, this guide describes the requirements and steps to use the get-user query as a performance benchmark. Full auctionmark benchmark may or may not be working. Currently the auctionmark dataset is commited to the codebase so you can skip straight to the instructions in core2.bench2.core2.clj
+Auctionmark runs in some capacity currently, this guide describes the requirements and steps to use the get-user query as a performance benchmark. Full auctionmark benchmark may or may not be working. Currently the auctionmark dataset is commited to the codebase so you can skip straight to the instructions in xtdb.bench2.xtdb.clj
 
 - Set up AWS CLI credentials (skip)
 - Run AWS_PROFILE=<profile_name_containing_above_creds> bin/download-dataset.sh --auctionmark (skip)
-- See comments at bottom of core2.bench2.core2.clj for further instructions.
+- See comments at bottom of xtdb.bench2.xtdb.clj for further instructions.
 
 = (Deprecated) Bench
 
@@ -23,7 +23,4 @@ All run through scripts in `./bin`:
 - `run-bench.sh tpch [--scale-factor 0.01] [--count 1]` - kicks off an ECS job.
 - `run-bench.sh ts-devices [--size <small|med|big>] [--count 1]` - kicks off an ECS job.
 
-You can also run it locally with (e.g.) `clojure -Mcore2:4gb:bench-tpch --scale-factor 0.05` from the top-level of the Core2 repo.
-
-
-
+You can also run it locally with (e.g.) `clojure -Mxtdb:4gb:bench-tpch --scale-factor 0.05` from the top-level of the core2 repo.

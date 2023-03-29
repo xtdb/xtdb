@@ -1,7 +1,7 @@
 {
-  "name": "core2-docs",
+  "name": "xtdb-docs",
   "version": "1.0.0",
-  "description": "XTDB Core2 Documentation",
+  "description": "XTDB 2.x Documentation",
   "author": "XTDB",
 
   "scripts": {

@@ -1,6 +1,6 @@
-= XTDB Core2 Docs
+= XTDB 2.x Docs
 
-XTDB Core2 is an experimental database concept.
+XTDB 2.x is an experimental database concept.
 Please note that a number of features are still missing or incomplete.
 
 == Docs

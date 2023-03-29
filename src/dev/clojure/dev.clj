@@ -2,11 +2,11 @@
   (:require [clj-async-profiler.core :as clj-async-profiler]
             [clojure.java.browse :as browse]
             [clojure.java.io :as io]
-            [core2.datasets.tpch :as tpch]
-            [core2.ingester :as ingest]
-            [core2.node :as node]
-            [core2.test-util :as tu]
-            [core2.util :as util]
+            [xtdb.datasets.tpch :as tpch]
+            [xtdb.ingester :as ingest]
+            [xtdb.node :as node]
+            [xtdb.test-util :as tu]
+            [xtdb.util :as util]
             [integrant.core :as i]
             [integrant.repl :as ir])
   (:import java.time.Duration))
@@ -16,21 +16,21 @@
 
 (def node)
 
-(defmethod i/init-key ::core2 [_ {:keys [node-opts]}]
+(defmethod i/init-key ::xtdb [_ {:keys [node-opts]}]
   (alter-var-root #'node (constantly (node/start-node node-opts)))
   node)
 
-(defmethod i/halt-key! ::core2 [_ node]
+(defmethod i/halt-key! ::xtdb [_ node]
   (util/try-close node)
   (alter-var-root #'node (constantly nil)))
 
 (def standalone-config
-  {::core2 {:node-opts {:core2.log/local-directory-log {:root-path (io/file dev-node-dir "log")}
-                        :core2.buffer-pool/buffer-pool {:cache-path (io/file dev-node-dir "buffers")}
-                        :core2.object-store/file-system-object-store {:root-path (io/file dev-node-dir "objects")}
-                        :core2/server {}
-                        :core2/pgwire {:port 5433}
-                        :core2.flight-sql/server {:port 52358}}}})
+  {::xtdb {:node-opts {:xtdb.log/local-directory-log {:root-path (io/file dev-node-dir "log")}
+                        :xtdb.buffer-pool/buffer-pool {:cache-path (io/file dev-node-dir "buffers")}
+                        :xtdb.object-store/file-system-object-store {:root-path (io/file dev-node-dir "objects")}
+                        :xtdb/server {}
+                        :xtdb/pgwire {:port 5433}
+                        :xtdb.flight-sql/server {:port 52358}}}})
 
 (ir/set-prep! (fn [] standalone-config))
 
@@ -97,5 +97,5 @@
                 #'tpch/tpch-q5-local-supplier-volume
                 #'tpch/tpch-q9-product-type-profit-measure]]
       (prn !q)
-      (let [db (ingest/snapshot (tu/component node :core2/ingester))]
+      (let [db (ingest/snapshot (tu/component node :xtdb/ingester))]
         (time (tu/query-ra @!q db))))))

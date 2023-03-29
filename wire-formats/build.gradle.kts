@@ -8,8 +8,8 @@ plugins {
 publishing {
     publications.create("maven", MavenPublication::class) {
         pom {
-            name.set("Core2 Wire Formats")
-            description.set("Core2 Wire Formats")
+            name.set("XTDB Wire Formats")
+            description.set("XTDB Wire Formats")
         }
     }
 }

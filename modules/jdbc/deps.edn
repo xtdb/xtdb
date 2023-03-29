@@ -1,7 +1,7 @@
 {:paths ["src/main/clojure"]
 
- :deps {com.xtdb.labs/core2-api {:local/root "../../api"}
-        com.xtdb.labs/core2-core {:local/root "../../core"}
+ :deps {com.xtdb.labs/xtdb-api {:local/root "../../api"}
+        com.xtdb.labs/xtdb-core {:local/root "../../core"}
 
         org.clojure/java.data {:mvn/version "1.0.95"}
         pro.juxt.clojars-mirrors.com.github.seancorfield/next.jdbc {:mvn/version "1.2.674"}

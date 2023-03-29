@@ -2,5 +2,5 @@
 
  :deps {pro.juxt.clojars-mirrors.hato/hato {:mvn/version "0.8.2"}
         pro.juxt.clojars-mirrors.metosin/reitit-core {:mvn/version "0.5.15"}
-        com.xtdb.labs/core2-api {:local/root "../api"}
-        com.xtdb.labs/core2-wire-formats {:local/root "../wire-formats"}}}
+        com.xtdb.labs/xtdb-api {:local/root "../api"}
+        com.xtdb.labs/xtdb-wire-formats {:local/root "../wire-formats"}}}

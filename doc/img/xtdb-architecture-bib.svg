@@ -115,7 +115,7 @@
   </g>
   <a
      id="a4878"
-     xlink:href="https://github.com/xtdb/core2/blob/master/doc/bib/visual-bibliography.adoc#core2expression"
+     xlink:href="https://github.com/xtdb/core2/blob/master/doc/bib/visual-bibliography.adoc#xtdbexpression"
      transform="translate(37.23665,39.2758)">
     <g
        stroke-linecap="round"
@@ -168,7 +168,7 @@
        text-anchor="middle"
        style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1;"
        direction="ltr"
-       id="text3599">core2.expression</text>
+       id="text3599">xtdb.expression</text>
   </g>
   <g
      stroke-linecap="round"
@@ -216,7 +216,7 @@
        text-anchor="middle"
        style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1;"
        direction="ltr"
-       id="text3611">core2.api</text>
+       id="text3611">xtdb.api</text>
   </g>
   <g
      stroke-linecap="round"
@@ -258,7 +258,7 @@
   </g>
   <a
      id="a4963"
-     xlink:href="https://github.com/xtdb/core2/blob/master/doc/bib/visual-bibliography.adoc#core2sqlparser"
+     xlink:href="https://github.com/xtdb/core2/blob/master/doc/bib/visual-bibliography.adoc#xtdbsqlparser"
      transform="translate(37.23665,39.2758)">
     <g
        stroke-linecap="round"
@@ -301,11 +301,11 @@
        text-anchor="middle"
        style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1;"
        direction="ltr"
-       id="text3633">core2.sql.parser</text>
+       id="text3633">xtdb.sql.parser</text>
   </g>
   <a
      id="a4958"
-     xlink:href="https://github.com/xtdb/core2/blob/master/doc/bib/visual-bibliography.adoc#core2sqlanalyze"
+     xlink:href="https://github.com/xtdb/core2/blob/master/doc/bib/visual-bibliography.adoc#xtdbsqlanalyze"
      transform="translate(37.23665,39.2758)">
     <g
        stroke-linecap="round"
@@ -348,11 +348,11 @@
        text-anchor="middle"
        style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1;"
        direction="ltr"
-       id="text3645">core2.sql.analyze</text>
+       id="text3645">xtdb.sql.analyze</text>
   </g>
   <a
      id="a4953"
-     xlink:href="https://github.com/xtdb/core2/blob/master/doc/bib/visual-bibliography.adoc#core2sqlplan"
+     xlink:href="https://github.com/xtdb/core2/blob/master/doc/bib/visual-bibliography.adoc#xtdbsqlplan"
      transform="translate(37.23665,39.2758)">
     <g
        stroke-linecap="round"
@@ -405,7 +405,7 @@
        text-anchor="middle"
        style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1;"
        direction="ltr"
-       id="text3659">core2.sql.plan</text>
+       id="text3659">xtdb.sql.plan</text>
   </g>
   <g
      stroke-linecap="round"
@@ -525,7 +525,7 @@
        text-anchor="middle"
        style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1;"
        direction="ltr"
-       id="text3689">core2.ingester</text>
+       id="text3689">xtdb.ingester</text>
     <text
        x="110.5"
        y="92"
@@ -593,7 +593,7 @@
        text-anchor="middle"
        style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1;"
        direction="ltr"
-       id="text3705">core2.object-store</text>
+       id="text3705">xtdb.object-store</text>
   </g>
   <g
      stroke-linecap="round"
@@ -920,7 +920,7 @@
        text-anchor="middle"
        style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1;"
        direction="ltr"
-       id="text3795">core2.api</text>
+       id="text3795">xtdb.api</text>
   </g>
   <g
      stroke-linecap="round"
@@ -1172,7 +1172,7 @@
   </g>
   <a
      id="a4873"
-     xlink:href="https://github.com/xtdb/core2/blob/master/doc/bib/visual-bibliography.adoc#core2temporal"
+     xlink:href="https://github.com/xtdb/core2/blob/master/doc/bib/visual-bibliography.adoc#xtdbtemporal"
      transform="translate(37.23665,39.2758)">
     <g
        stroke-linecap="round"
@@ -1225,7 +1225,7 @@
        text-anchor="middle"
        style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1;"
        direction="ltr"
-       id="text3879">core2.temporal</text>
+       id="text3879">xtdb.temporal</text>
   </g>
   <a
      id="a4988"
@@ -1590,7 +1590,7 @@
   </g>
   <a
      id="a4978"
-     xlink:href="https://github.com/xtdb/core2/blob/master/doc/bib/visual-bibliography.adoc#core2datalog"
+     xlink:href="https://github.com/xtdb/core2/blob/master/doc/bib/visual-bibliography.adoc#xtdbdatalog"
      transform="translate(37.23665,39.2758)">
     <g
        stroke-linecap="round"
@@ -1643,7 +1643,7 @@
        text-anchor="middle"
        style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1;"
        direction="ltr"
-       id="text4003">core2.datalog</text>
+       id="text4003">xtdb.datalog</text>
   </g>
   <g
      stroke-linecap="round"
@@ -2131,7 +2131,7 @@
        text-anchor="middle"
        style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1;"
        direction="ltr"
-       id="text4149">core2.api</text>
+       id="text4149">xtdb.api</text>
   </g>
   <g
      stroke-linecap="round"

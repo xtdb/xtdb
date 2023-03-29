@@ -8,8 +8,8 @@ plugins {
 publishing {
     publications.create("maven", MavenPublication::class) {
         pom {
-            name.set("Core2 C1 Importer")
-            description.set("Core2 C1 Importer")
+            name.set("XTDB C1 Importer")
+            description.set("XTDB C1 Importer")
         }
     }
 }

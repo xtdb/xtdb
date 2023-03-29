@@ -1,6 +1,6 @@
 = Bases
 
-XT footnote:[Most of this applies to Core1 and Core2 - I'll explicitly differentiate between them where applicable.] queries and transactions are run against a 'basis'.
+XT footnote:[Most of this applies to Core1 and core2 - I'll explicitly differentiate between them where applicable.] queries and transactions are run against a 'basis'.
 This is required by the following constraints, in particular:
 
 * We'd like to preserve a strong 'referential integrity' - if a user runs the same query with the same arguments/options, no matter when or which node it hits, it should return the same results (unexpected errors aside) - often referred to as 'repeatable queries'.
@@ -17,7 +17,7 @@ For example, at one JUXT client they have a very low write throughput - they mak
 
 To achieve repeatable queries, it's necessary that the query execution doesn't have any 'co-effects' - anything that can affect the results must be bundled up as an argument submitted with the query.
 
-In practice, for Core2
+In practice, for core2
 footnote:[In Core1, we don't have `CURRENT_TIMESTAMP` and friends, but we  do run queries 'as of' a valid-time. We also don't have TZs]
 , this means:
 
@@ -41,17 +41,17 @@ Generally speaking, even though we love repeatable queries, we'd like the defaul
 *** current-time: current time on the receiving node.
 * If the user does provide basis params, we ensure repeatable reads.
 * For a user to 'read their writes', they receive a receipt from `submit-tx`, which they then pass back as a query argument.
-** The receipt from `submit-tx` should contain _both_ basis params footnote:[it currently just contains sys-time, in Core1 and Core2], so that both are set on the query:
+** The receipt from `submit-tx` should contain _both_ basis params footnote:[it currently just contains sys-time, in Core1 and core2], so that both are set on the query:
 +
 [source,clojure]
 ----
-(let [!tx (c2/submit-tx node [...])]
+(let [!tx (xt/submit-tx node [...])]
   (prn @!tx)
   ;; => {:sys-time #inst "2022-08-29T11:00:00Z",
   ;;     :current-time #inst "2022-08-29T11:00:00Z"}
   ;; N.B. these are guaranteed to be the same - we include them both for ease of UX
 
-  (prn (c2/query node "SELECT ..." {:basis !tx})))
+  (prn (xt/query node "SELECT ..." {:basis !tx})))
 ----
 +
 More details below.
@@ -87,7 +87,7 @@ The basis therefore upper-bounds any system-time constraints in the query - the 
 This is again because of the asynchronous ingestion - if latest-indexed tx is 16:30, and we default the basis to now (17:00, say), we will get different results for the same arguments once the transaction at 16:45 is indexed.
 If we instead default to latest-indexed-tx, this issue goes away.
 footnote:[This is more of an issue in Core1, because it has separate `await` and `db` APIs - we have to validate that the tx-time passed to `db` has been correctly awaited.
-In Core2, it's one API call, so we await the transaction and then run the query.]
+In core2, it's one API call, so we await the transaction and then run the query.]
 +
 If the user explicitly supplies 'now', the node then has to wait (possibly indefinitely, if there are no more transactions) for a later transaction to be indexed.
 It may also become an issue if we were to allow the user to retrieve the effective basis of a query as metadata on the results - this would allow a user to query the latest results now but store the basis to repeat the query later.

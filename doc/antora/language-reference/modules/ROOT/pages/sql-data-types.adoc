@@ -129,7 +129,7 @@ TIME '22:15:04.1237'
 ----
 
 |`UUID`
-|https://github.com/xtdb/core2/blob/master/core/src/core2/vector/extensions/UuidVector.java[`UuidVector *`]
+|https://github.com/xtdb/core2/blob/master/core/src/xtdb/vector/extensions/UuidVector.java[`UuidVector *`]
 |Universally Unique Identifier
 a|[source,sql]
 ----
@@ -137,7 +137,7 @@ a|[source,sql]
 ----
 
 |`URI`
-|https://github.com/xtdb/core2/blob/master/core/src/core2/vector/extensions/UriVector.java[`UriVector *`]
+|https://github.com/xtdb/core2/blob/master/core/src/xtdb/vector/extensions/UriVector.java[`UriVector *`]
 |Universal Resource Identifier
 a|[source,sql]
 ----

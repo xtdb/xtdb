@@ -1,12 +1,12 @@
-= Developing Core2
+= Developing core2
 
 The top-level project ties all the other projects together for convenience whilst working within this repo.
-All of the below commands should be run in the *root* of the Core2 repo.
+All of the below commands should be run in the *root* of the core2 repo.
 
 == Links
 
 * https://github.com/orgs/xtdb/projects/13/views/1[Kanban board,window=_blank]
-* https://circleci.com/gh/xtdb/core2[CircleCI build,window=_blank] image:https://circleci.com/gh/xtdb/core2.svg?style=svg&circle-token=867b84b6d1b4dfff332773f771457349529aee8b[]
+* https://circleci.com/gh/xtdb/core2[CircleCI build,window=_blank] image:https://circleci.com/gh/xtdb/xtdb.svg?style=svg&circle-token=867b84b6d1b4dfff332773f771457349529aee8b[]
 * link:GIT.adoc[Git practices in XTDB]
 
 == Prerequisites
@@ -15,8 +15,8 @@ You will need either JDK 11 or 17 installed.
 
 == Getting started
 
-Core2 uses https://gradle.org/[Gradle] - a JVM build tool that supports multi-module, polyglot projects.
-You do not need to install Gradle to develop Core2 - there is a Gradle https://docs.gradle.org/current/userguide/gradle_wrapper.html[wrapper] in the repo.
+core2 uses https://gradle.org/[Gradle] - a JVM build tool that supports multi-module, polyglot projects.
+You do not need to install Gradle to develop core2 - there is a Gradle https://docs.gradle.org/current/userguide/gradle_wrapper.html[wrapper] in the repo.
 
 * Java classes are (re-)compiled automatically when you (re-)start a REPL or run tests
 * Start a REPL with `./gradlew clojureRepl`
@@ -34,7 +34,7 @@ You do not need to install Gradle to develop Core2 - there is a Gradle https://d
 ** if you change any of the Java classes, that'll require a REPL bounce
 ** otherwise, `(dev/reset)` (or just `(reset)` if you're already in the `dev` ns) should be sufficient.
 ** Please don't put any more side-effecting top-level code in dev namespaces - you'll break this reload ability and make me sad.
-** To run a single test file, run (e.g.) `./gradlew test --tests 'core2.api_test**'`
+** To run a single test file, run (e.g.) `./gradlew test --tests 'xtdb.api_test**'`
 
 == Testing
 
@@ -59,7 +59,7 @@ To attach YourKit:
 ----
 * `clj -A:yourkit -M:repl/cider`
 
-== Releasing Core2
+== Releasing core2
 
 See link:RELEASING.adoc[].
 
@@ -72,6 +72,6 @@ To upgrade Arrow:
 * Usual bump in `project.clj`
 * Clone the [Arrow repo](https://github.com/apache/arrow), add the [JUXT fork](https://github.com/juxt/arrow) as a remote.
 * Rebase `juxt/master` on the upstream tag.
-* In Core2, `./bin/rebuild-forked-arrow-files.sh`
+* In core2, `./bin/rebuild-forked-arrow-files.sh`
 * Test
-* Push (`--force-with-lease`) to JUXT fork, and commit to Core2.
+* Push (`--force-with-lease`) to JUXT fork, and commit to core2.

@@ -1,4 +1,4 @@
-= 40. Core2/PGWire transaction behaviour
+= 40. core2/PGWire transaction behaviour
 
 Date: 2022-08-01
 
@@ -8,14 +8,14 @@ Accepted
 
 == Context
 
-We've implemented a PGWire adapter as an initial driver for Core2.
+We've implemented a PGWire adapter as an initial driver for core2.
 Currently this supports read-only queries, but we'd like to extend this to DML too.
 
-=== General Core2 requirements
+=== General core2 requirements
 
 There are three main considerations here:
 
-. In Core2, read-only and write transactions follow different paths:
+. In core2, read-only and write transactions follow different paths:
   * Read-only transactions can be sent to any node, and return a synchronous result (similar to Postgres).
     Write transactions, though, are fundamentally asynchronous - they need to be sent to the tx-log (usually Kafka), and are then consumed asynchronously by each node.
   * This means that write transactions are http://jepsen.io/consistency/models/strict-serializable['strictly serialized'] - happy days.

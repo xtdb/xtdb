@@ -1,0 +1,19 @@
+hash-threshold 100
+
+query T nosort
+SELECT foo.id FROM ARROW_TABLE('src/test/resources/xtdb/operator/arrow-cursor-test.arrow') AS foo
+----
+foo1
+foo2
+foo3
+foo4
+foo5
+
+query T nosort
+SELECT * FROM ARROW_TABLE('src/test/resources/xtdb/operator/arrow-cursor-test.arrow') AS foo(id)
+----
+foo1
+foo2
+foo3
+foo4
+foo5

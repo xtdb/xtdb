@@ -2,4 +2,4 @@
 
 set -e
 
-clojure -M:core2:lib/kaocha:repl/cider-refactor $@
+clojure -M:xtdb:lib/kaocha:repl/cider-refactor $@

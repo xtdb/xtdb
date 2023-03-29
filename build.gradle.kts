@@ -18,7 +18,7 @@ allprojects {
     val proj = this
 
     group = "com.xtdb.labs"
-    version = System.getenv("CORE2_VERSION") ?: "dev-SNAPSHOT"
+    version = System.getenv("XTDB_VERSION") ?: "dev-SNAPSHOT"
 
     repositories {
         mavenCentral()
@@ -91,7 +91,7 @@ allprojects {
             extensions.configure(PublishingExtension::class) {
                 publications.named("maven", MavenPublication::class) {
                     groupId = "com.xtdb.labs"
-                    artifactId = "core2-${proj.name}"
+                    artifactId = "xtdb-${proj.name}"
                     version = proj.version.toString()
                     from(components["java"])
 
@@ -112,8 +112,8 @@ allprojects {
                             }
                         }
                         scm {
-                            connection.set("scm:git:git://github.com/xtdb/core2.git")
-                            developerConnection.set("scm:git:ssh://github.com/xtdb/core2.git")
+                            connection.set("scm:git:git://github.com/xtdb/xtdb.git")
+                            developerConnection.set("scm:git:ssh://github.com/xtdb/xtdb.git")
                             url.set("https://xtdb.com")
                         }
                     }
@@ -201,13 +201,13 @@ fun createSltTask(
         this.maxHeapSize = maxHeapSize
         jvmArgs(defaultJvmArgs)
         this.args = listOf(
-            "-m", "core2.sql.logic-test.runner",
+            "-m", "xtdb.sql.logic-test.runner",
             "--verify",
             "--db", "xtdb",
             "--max-failures", maxFailures.toString(),
             "--max-errors", maxErrors.toString(),
         ) + testFiles.map {
-            "src/test/resources/core2/sql/logic_test/sqlite_test/$it"
+            "src/test/resources/xtdb/sql/logic_test/sqlite_test/$it"
         }
     }
 }

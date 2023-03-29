@@ -79,7 +79,7 @@ jobs:
           at: ~/
 
       - run: apt-get update && apt-get install -y curl
-      - run: 'clojure -Srepro -X:core2:4gb:test'
+      - run: 'clojure -Srepro -X:xtdb:4gb:test'
 
   integration-test:
     executor: clojure
@@ -90,7 +90,7 @@ jobs:
 
       - run: apt-get update && apt-get install -y curl
       # TODO should test the other modules too
-      - run: 'clojure -Srepro -X:core2:4gb:integration-test'
+      - run: 'clojure -Srepro -X:xtdb:4gb:integration-test'
 
   slt-test:
     executor: clojure
@@ -100,7 +100,7 @@ jobs:
       - attach_workspace:
           at: ~/
 
-      - run: 'clojure -Srepro -M:core2:4gb:slt-test'
+      - run: 'clojure -Srepro -M:xtdb:4gb:slt-test'
 
   slt-test-2:
     executor: clojure
@@ -110,7 +110,7 @@ jobs:
       - attach_workspace:
           at: ~/
 
-      - run: 'clojure -Srepro -M:core2:4gb:slt-test-2'
+      - run: 'clojure -Srepro -M:xtdb:4gb:slt-test-2'
 
   slt-test-dirs:
     executor: clojure
@@ -123,7 +123,7 @@ jobs:
       - attach_workspace:
           at: ~/
 
-      - run: 'clojure -Srepro -M:core2:6gb:slt-test-dirs << parameters.dirs >>'
+      - run: 'clojure -Srepro -M:xtdb:6gb:slt-test-dirs << parameters.dirs >>'
 
       - persist_to_workspace:
           root: ~/
@@ -172,18 +172,18 @@ workflows:
           matrix:
             parameters:
               dirs:
-                - "src/test/resources/core2/sql/logic_test/sqlite_test/random/expr/"
-                - "src/test/resources/core2/sql/logic_test/sqlite_test/random/aggregates/"
-                - "src/test/resources/core2/sql/logic_test/sqlite_test/random/groupby/"
-                - "src/test/resources/core2/sql/logic_test/sqlite_test/random/select/"
-                - "src/test/resources/core2/sql/logic_test/sqlite_test/index/between/"
-                - "src/test/resources/core2/sql/logic_test/sqlite_test/index/commute/"
-                - "src/test/resources/core2/sql/logic_test/sqlite_test/index/orderby/"
-                - "src/test/resources/core2/sql/logic_test/sqlite_test/index/orderby_nosort/"
-                - "src/test/resources/core2/sql/logic_test/sqlite_test/index/in/"
-                - "src/test/resources/core2/sql/logic_test/sqlite_test/index/random/"
-                  #  - "src/test/resources/core2/sql/logic_test/sqlite_test/index/delete/"
-                  #  - "src/test/resources/core2/sql/logic_test/sqlite_test/index/view/"
+                - "src/test/resources/xtdb/sql/logic_test/sqlite_test/random/expr/"
+                - "src/test/resources/xtdb/sql/logic_test/sqlite_test/random/aggregates/"
+                - "src/test/resources/xtdb/sql/logic_test/sqlite_test/random/groupby/"
+                - "src/test/resources/xtdb/sql/logic_test/sqlite_test/random/select/"
+                - "src/test/resources/xtdb/sql/logic_test/sqlite_test/index/between/"
+                - "src/test/resources/xtdb/sql/logic_test/sqlite_test/index/commute/"
+                - "src/test/resources/xtdb/sql/logic_test/sqlite_test/index/orderby/"
+                - "src/test/resources/xtdb/sql/logic_test/sqlite_test/index/orderby_nosort/"
+                - "src/test/resources/xtdb/sql/logic_test/sqlite_test/index/in/"
+                - "src/test/resources/xtdb/sql/logic_test/sqlite_test/index/random/"
+                  #  - "src/test/resources/xtdb/sql/logic_test/sqlite_test/index/delete/"
+                  #  - "src/test/resources/xtdb/sql/logic_test/sqlite_test/index/view/"
       - store-test-results:
           requires:
             - slt-test-dirs

@@ -1,6 +1,6 @@
 = Postgres Wire Protocol Overview
 
-XTDB Core2 permits connections over the
+XTDB 2.x permits connections over the
 https://www.postgresql.org/docs/14/protocol.html[Postgres Wire Protocol, v3] ("pgwire").
 
 The Postgres SQL _dialect_, however, is not supported. See the notes below.

@@ -1,4 +1,4 @@
-= XTDB Core2 Documentation
+= XTDB 2.x Documentation
 
 We use https://docs.antora.org/antora/2.3/[Antora] to build the XTDB documentation.
 

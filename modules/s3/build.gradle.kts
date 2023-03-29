@@ -8,8 +8,8 @@ plugins {
 publishing {
     publications.create("maven", MavenPublication::class) {
         pom {
-            name.set("Core2 S3")
-            description.set("Core2 S3")
+            name.set("XTDB S3")
+            description.set("XTDB S3")
         }
     }
 }

@@ -1,13 +1,13 @@
 = SQL Transactions
 
-XTDB Core2 is a schemaless document database.
+XTDB 2.x is a schemaless document database.
 There is no DDL and you can add any record without static table definitions.
 
 
 [#gotchas]
 == Gotchas
 
-Before discussing basic transactions, it's worth reading about XTDB Core2's
+Before discussing basic transactions, it's worth reading about XTDB 2.x's
 xref:getting-started::gotchas.adoc["gotchas"].
 
 

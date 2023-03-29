@@ -1,11 +1,11 @@
 site:
-  title: XTDB Core2 Docs
+  title: XTDB 2.x Docs
   start_page: main::index.adoc
   url: https://core2docs.xtdb.com
   # homeUrl: &home_url /xyz/5.2/index.html
   keys:
     main_site_url: 'https://xtdb.com/'
-    main_site_title: 'XTDB Core2 - Home'
+    main_site_title: 'XTDB 2.x - Home'
     analytics_url: 'https://bunseki.juxt.pro'
     analytics_site_id: 'c5026354-28df-4f0c-a17d-43d1a01b2c94'
     github_url: 'https://github.com/xtdb/core2'

@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: A stack for running Core2 Benchmarks
+Description: A stack for running core2 Benchmarks
 
 Resources:
   # ECS Resources
@@ -130,8 +130,8 @@ Resources:
                 - 's3:DeleteObject'
                 - 's3:ListBucket'
               Resource:
-                - "arn:aws:s3:::core2-bench"
-                - "arn:aws:s3:::core2-bench/*"
+                - "arn:aws:s3:::xtdb-bench"
+                - "arn:aws:s3:::xtdb-bench/*"
             - Effect: Allow
               Action:
                 - 's3:GetObject'

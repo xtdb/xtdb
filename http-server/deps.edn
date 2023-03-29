@@ -1,8 +1,8 @@
 {:paths ["src/main/clojure"]
 
- :deps {com.xtdb.labs/core2-api {:local/root "../api"}
-        com.xtdb.labs/core2-core {:local/root "../core"}
-        com.xtdb.labs/core2-wire-formats {:local/root "../wire-formats"}
+ :deps {com.xtdb.labs/xtdb-api {:local/root "../api"}
+        com.xtdb.labs/xtdb-core {:local/root "../core"}
+        com.xtdb.labs/xtdb-wire-formats {:local/root "../wire-formats"}
 
         ring/ring-core {:mvn/version "1.9.4"}
         info.sunng/ring-jetty9-adapter {:mvn/version "0.15.2"}

@@ -8,8 +8,8 @@ plugins {
 publishing {
     publications.create("maven", MavenPublication::class) {
         pom {
-            name.set("Core2 API")
-            description.set("Core2 API")
+            name.set("XTDB API")
+            description.set("XTDB API")
         }
     }
 }

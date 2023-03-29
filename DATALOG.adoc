@@ -4,13 +4,13 @@
 
 === Architecture
 
-Where XTDB 1.x has a transaction log, document store and query indices, Core2 has a transaction log and an object store.
+Where XTDB 1.x has a transaction log, document store and query indices, 2.x has a transaction log and an object store.
 
 * XTDB 1.x transactions are split up into 'tx-events' and documents, with the former going on the tx-log and the latter to the doc-store.
-  In Core2, the transaction log doesn't need to have infinite retention, so we no longer need this split - transactions go straight on to the log, and the document store is obsolete.
-* Rather than each node having its own query indices, Core2 shares these between nodes in a cluster via the object store.
+  In 2.x, the transaction log doesn't need to have infinite retention, so we no longer need this split - transactions go straight on to the log, and the document store is obsolete.
+* Rather than each node having its own query indices, 2.x shares these between nodes in a cluster via the object store.
   The object store is hence _the_ golden store, thanks to the transience of the transaction log.
-* The files stored in the object store are in https://arrow.apache.org/[Apache Arrow] format, the structure of which Core2 takes responsibility for maintaining - we no longer require a KV store.
+* The files stored in the object store are in https://arrow.apache.org/[Apache Arrow] format, the structure of which 2.x takes responsibility for maintaining - we no longer require a KV store.
 
 [cols="1,2*^"]
 |===
@@ -29,22 +29,22 @@ Where XTDB 1.x has a transaction log, document store and query indices, Core2 ha
 
 === Setup
 
-Main require: `[core2.api.datalog :as c2]`
+Main require: `[xtdb.api.datalog :as xt]`
 
 Configuration uses https://github.com/weavejester/integrant[Integrant].
 
-You can still start a completely in-memory node using `(core2.node/start-node {})`.
+You can still start a completely in-memory node using `(xtdb.node/start-node {})`.
 For a Kafka/JDBC node:
 
 [source,clojure]
 ----
-(with-open [node (node/start-node {:core2.kafka/log {:bootstrap-servers "localhost:9092"}
+(with-open [node (node/start-node {:xtdb.kafka/log {:bootstrap-servers "localhost:9092"}
 
-                                   :core2.jdbc.postgres/dialect {}
-                                   :core2.jdbc/default-pool {:db-spec {:user "postgres"
+                                   :xtdb.jdbc.postgres/dialect {}
+                                   :xtdb.jdbc/default-pool {:db-spec {:user "postgres"
                                                                        :password "postgres"
                                                                        :database "core2test"}}
-                                   :core2.jdbc/object-store {}})]
+                                   :xtdb.jdbc/object-store {}})]
   ;; ...
   )
 ----
@@ -62,14 +62,14 @@ Transactions are slightly different to XTDB 1.x:
 
 === Datalog Queries
 
-The Datalog API is in `core2.datalog`
+The Datalog API is in `xtdb.datalog`
 
 [source,clojure]
 ----
-(require '[core2.datalog :as c2]])
+(require '[xtdb.datalog :as xt]])
 
 (with-open [node (node/start-node {})]
-  (c2/q node '{:find [e name]
+  (xt/q node '{:find [e name]
                :where [[e :name name]]}))
 ----
 
@@ -77,29 +77,29 @@ These queries currently return a vector of maps `[{:e ..., :name ...}, {...}]`, 
 
 === SQL queries
 
-Same as Datalog, but use `core2.sql` instead.
+Same as Datalog, but use `xtdb.sql` instead.
 
 [source,clojure]
 ----
-(require '[core2.sql :as c2])
+(require '[xtdb.sql :as xt])
 
 (with-open [node (node/start-node {})]
-  (c2/submit-tx node "INSERT INTO users (id, name) VALUES ('jms', 'James')")
-  (c2/q node "SELECT u.name FROM users u"))
+  (xt/submit-tx node "INSERT INTO users (id, name) VALUES ('jms', 'James')")
+  (xt/q node "SELECT u.name FROM users u"))
 ----
 
 === Bases
 
-Core2 doesn't have the concept of DBs - instead, we pass the node and (optionally) a 'basis' to queries.
-Unlike 1.x, a Core2 client will implicitly await the last transaction it submitted - in normal usage, a user shouldn't need to either `await-tx` (indeed, such a function doesn't publicly exist in Core2) nor supply an explicit basis.
+2.x doesn't have the concept of DBs - instead, we pass the node and (optionally) a 'basis' to queries.
+Unlike 1.x, a 2.x client will implicitly await the last transaction it submitted - in normal usage, a user shouldn't need to either `await-tx` (indeed, such a function doesn't publicly exist in 2.x) nor supply an explicit basis.
 
 [source,clojure]
 ----
 ;; simple case - will indefinitely await the latest transaction you've submitted:
-(c2/q node '{...})
+(xt/q node '{...})
 
 ;; specify a transaction basis, and/or a timeout
-(c2/q node (-> '{:find ..., :where ...}
+(xt/q node (-> '{:find ..., :where ...}
                (assoc :basis {:tx tx}
                       :basis-timeout (Duration/ofSeconds 1))))
 ----
@@ -108,7 +108,7 @@ The `q` functions take the node, the query, and then a variable number of params
 
 [source,clojure]
 ----
-(c2/q node
+(xt/q node
       '{:find [e]
         :in [first-name last-name]
         :where [[e :first-name first-name]
@@ -124,7 +124,7 @@ This is for repeatable queries - it defaults to 'now' if not provided.
 
 [source,clojure]
 ----
-(c2/q node
+(xt/q node
       (-> '{:find [e name]
             :where [[e :name name]]}
           (assoc :basis {:current-time #inst "..."})))
