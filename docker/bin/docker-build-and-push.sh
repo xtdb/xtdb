@@ -24,7 +24,7 @@ set -e
         esac
     done
 
-    if [ "$1" == "--clean" ] || ! [ -e build/libs/core2-standalone.jar ]; then
+    if [ "$clean" -eq 1 ]; then
         ../gradlew :docker:shadowJar
     fi
 
@@ -34,7 +34,7 @@ set -e
     echo Building Docker image...
 
     if [ "$latest" -eq "1" ]; then
-      docker buildx build --push --platform linux/arm/v7,linux/arm64/v8,linux/amd64 --tag ghcr.io/xtdb/core2:"$sha" --tag ghcr.io/xtdb/core2:latest --build-arg GIT_SHA="$sha" --build-arg XTDB_VERSION="${XTDB_VERSION:-dev-SNAPSHOT}" .
+      docker buildx build --push --platform linux/arm/v7,linux/arm64/v8,linux/amd64 --tag ghcr.io/xtdb/xtdb-ea:latest --build-arg GIT_SHA="$sha" --build-arg XTDB_VERSION="${XTDB_VERSION:-dev-SNAPSHOT}" .
     else
       docker buildx build --push --platform linux/arm/v7,linux/arm64/v8,linux/amd64 --tag ghcr.io/xtdb/core2:"$sha" --build-arg GIT_SHA="$sha" --build-arg XTDB_VERSION="${XTDB_VERSION:-dev-SNAPSHOT}" .
     fi
