@@ -1,4 +1,327 @@
-* Control structures
-* Arithmetic functions
-* String functions
-* Date/time functions
+= Expression engine
+
+This document describes the build-in functions of XTDB 2.x.
+
+If not otherwise specified symbols are considered variables in the following.
+
+== Control Structures
+
+[cols="1,3,2"]
+|===
+|Function/Operator| Description | Examples
+
+|`(not expr)`
+| Negation. Returns true if expression evaluates to false.
+| `(not 1)`, `(not (< 1 2))`
+
+|`(true? expr)`
+| Returns true if expression evaluates to truthy.
+| `(true? true)`
+
+|`(false? expr)`
+| Returns true if expression evaluates to falsy.
+| `(false? false)`
+
+|`(nil? expr)`
+| Returns true if expression evaluates to nil or an absent value.
+| `(nil? foo)` for some variable foo.
+
+|`(boolean expr)`
+| Converts expression into a boolean. True if expr is truthy.
+| `(boolean nil)` -> false
+
+|`(if test then-expr else-expr)`
+| Conditional Form
+| `(if true :foo :bar)`, `(if (< age1 age2) :age1-older :age2-older)`
+
+|`(if-some binding then-expr else-expr)`
+| Conditional with binding form.
+| `(if-some [a 10] :true :false)` -> :true
+
+|`(cond clauses*)`
+|  Takes a set of test/expr pairs. It evaluates each test one at a time.  If a test returns logical true, cond evaluates and returns the value of the corresponding expr and doesn't evaluate any of the other tests or exprs.
+a|
+----
+(cond
+  (> x 100) "big"
+  (> x 10) "small"
+  "tiny")` ;; => 5 for x being 50
+----
+
+
+|`(let [bindings*] exprs*)`
+| Evaluates the exprs in a lexical context in which the symbols in the binding-forms are bound to their respective init-exprs or parts
+  therein.
+a|
+----
+(let [foo 1
+      bar 2]
+  (+ foo bar))
+----
+
+|`(case e clauses*)`
+| Takes an expression, and a set of clauses. Each clause is of the form test-constant result-expr. If test-constant equals e the result-expr is returned. The last clause can be a default result-expr.
+a|
+----
+(case (* x 2)
+  2 "x=1"
+  (+ x 2) "x=2"
+  "none of the above")
+----
+
+
+|`(and exprs*)`
+| Evaluates exprs one at a time, from left to right. If an expression returns logical false, and returns false and doesn't evaluate any of the other expressions, otherwise it returns true.
+|`(and 1 false)`, `(and 1 2)`
+
+|`(or exprs*)`
+| Evaluates exprs one at a time, from left to right. If a form returns a logical true value, or returns true and doesn't evaluate any of the other expressions, otherwise it returns false.
+|`(and 1 false)`, `(and 1 2)`
+
+|===
+
+
+== Comparison Operators
+
+[cols="1,3,2"]
+|===
+|Function/Operator| Description | Examples
+
+|`(< expr1 expr2)`
+| Less than. Returns true if expr1 is less than expr2.
+|`(< 1 2)`, `(< 1.0 2)`
+
+|`(> expr1 expr2)`
+| Greater than. Returns true if expr1 is greater than expr2.
+|`(< 1 2)`, `(< 1.0 2)`
+
+|`(<= expr1 expr2)`
+| Less than or equal to. Returns true if expr1 is less than or equal to expr2.
+|`(< 1 2)`, `(< 1.0 2)`
+
+|`(>= expr1 expr2)`
+| Greater than or equal to. Returns true if expr1 is greater than or equal to expr2.
+|`(< 1 2)`, `(< 1.0 2)`
+
+|`(= exprs*)`
+| Equality. Returns true if all expressions are equal.
+|`(= eid1 eid2)`, `(= 1 1)`, `(= 1.0 2)`
+
+|`(<> expr1 expr2)`
+| Not-equal. Returns true if the result of the expressions are different.
+|`(<> eid1 eid2)`, `(<> 1 1)`, `(<> 1.0 2)`
+
+|===
+
+== Arithmetic
+
+[cols="1,3,2"]
+|===
+|Function/Operator| Description | Examples
+
+|`(+ numeric*)`
+| Addition. Variadic addition function.
+|`(+ 1 2)`-> 3, `(+ 1.0 2)` -> 3.0
+
+|`(- numeric*)`
+| Subtraction. Variadic subtraction function.
+|`(- 1 2 3)`-> 5, `(- 1.0 2)` -> -1.0
+
+|`(* numeric*)`
+| Multiplication. Variadic multiplcation function.
+|`(* 1 2 3)`-> 6, `(* 1.0 2)` -> 2.0
+
+|`(/ numeric*)`
+| Devision. Variadic devision function.
+|`(/ 6 3 2 1)`-> 1, `(/ 1.0 2)` -> 0.5
+
+|`(mod num div)`
+| Modulus of num and div.
+|`(mod 6 2)`-> 0, `(mod 6 4.0)` -> 2.0
+
+|`(greatest numeric*)`
+| Maximum. The maximum of the arguments.
+|`(greatest 1 2 3)`-> 3, `(greatest 1 1.0)` -> 1.0
+
+|`(least numeric*)`
+| Minimum. The minimum of the arguments.
+|`(least 1 2 3)`-> 1, `(least 1 1.0)` -> 1.0
+
+|`(power m n)`
+| Exponentiation. Raising m to the power of n.
+|`(power 2 2)`-> 4.0, `(power 1.0 2.0)` -> 1.0
+
+|`(log base n)`
+| Logorithm. Taking the logarithm in base of n.
+|`(log 10 100)`-> 2, `(log 2.71 2.71)` -> 1.0,
+
+|`(ln n)`
+| Natural logorithm. Taking the natural logarithm of n.
+|`(ln 2.71)` -> 1.0
+
+|`(log10 n)`
+| Logorithm in base 10. Taking the logarithm in base 10 of n.
+|`(log100)`-> 2
+
+|`(double numeric)`
+| Casting to doulble.
+|`(double 2)`-> 2.0
+
+|`(sin numeric)`
+| The sine function.
+|`(sin 1)`-> 0.84
+
+|`(sinh numeric)`
+| Hyperbolic sine function.
+|`(sinh 1)`-> 1.175
+
+|`(asin numeric)`
+| Arcsine function.
+|`(asin 1)`->
+
+|`(sqrt numeric)`
+| The square-root of numeric.
+|`(sqrt 4)`-> 2.0
+
+|`(floor numeric)`
+| Greatest integer less or equal to numeric.
+|`(floor 2.5)`-> 2.0
+
+|`(cast numeric cast-type)`
+| Casts numeric to cast-type.
+|`(cast 1 :f32)` -> 1.0, `(cast 1 :utf8)` -> "1"
+
+|===
+
+== Strings
+
+[cols="2,2,2"]
+|===
+|Function/Operator| Description | Examples
+
+|`(like str pattern)`
+| The like expression returns true if str matches pattern.
+|`(like "foo" "_o_")`-> true, `(like "foo" "f%")`
+
+|`(like-regex str regex flags)`
+| The like-regex expression is similar to `like` except that it takes a regex. The flags parameter specifies certain matching options. \i - case insensitive, \m - treat the source string as multiline string and \s - dotall mode. A '.' matches any character, including line terminators.
+|`(like-regex "foo" "^foo$" "")`-> true, `(like-regex "foo" "(f\|d).*" "")` -> true, `(like-regex "a\nB\nc" "^B$" "m")` -> true, `(like-regex "a\nB\nc" "a.b.c" "is")` -> true
+
+|`(trim str position characters)`
+| Remove the longest string containing only the characters (a space by default) from the start/end/both ends of the str.
+|`(trim "foo" "TRAILING" "o")` -> "f", `(trim "foo" "LEADING" "o")` -> "foo", `(trim "foo" "LEADING" "o")` -> "foo"
+
+|`(upper str)`
+| Turns str into uppercase.
+|`(upper "foo")` -> "FOO"
+
+|`(lower str)`
+| Turns str into lowercase.
+|`(upper "FOO")` -> "foo"
+
+|`(substring str start len use-length)`
+| Extracts substring from start (1-indexed) with length len. use-length can be set to false if len should be ignored.
+|`(substring "XTDB" 1 2 true)` -> "XT"
+
+|`(overlay str replacement pos to-replace)`
+| Replace substring. Inserts replacement in str at pos replacing to-replace characters in original str.
+|`(overlay "XTDB" "Yeah! " 1 0)` -> "Yeah! XTDB", `(overlay "XTDB" " Yeah!" 5 0)` -> "XTDB Yeah!",
+`(overlay "XTDB" " Yeah!" 1 4) -> "Yeah!
+
+|`(character-length str encoding)`
+| Returns the str length in encoding.
+|`(character-length "XTDB" "CHARACTERS")` -> 4, `(character-length "😀" "OCTETS")` -> 4
+
+|`(character-length str encoding)`
+| Returns the str length in encoding.
+|`(character-length "XTDB" "CHARACTERS")` -> 4, `(character-length "😀" "OCTETS")` -> 4
+
+|`(octet-length str)`
+| Returns the length of str in octets.
+|`(octet-length "😀")` -> 4
+
+|`(position str substring encoding)`
+| Location of specified substring in str.
+|`(position "XTDB" "DB" "CHARACTERS")` -> 3
+
+|`(default-overlay-length str)`
+| Returns the default overlay of str.
+|`(default-overlay-length "😀")` -> 1
+
+
+|===
+
+== Date/Time
+
+In the following `field` can be any of "SECOND", "MINUTE", "HOUR", "DAY", "MONTH" and "YEAR".
+Date can be an Instant, ZonedDateTime or LocalDate.
+
+[cols="2,2,2"]
+|===
+|Function/Operator| Description | Examples
+
+|`(extract field date)`
+| Extracts the specified field from the date.
+|`(extract "HOUR" inst)` -> 44 with inst being `#inst "2022-03-21T13:44:52.344"`. `(extract "MINUTE" ld)` with ld being equal to `(LocalDate/of 2022 03 21)`
+
+|`(date-trunc field date)`
+| Truncates the given date to the specified granularity.
+| `(date-trunc "DAY" date) -> `#inst "2021-10-21"` for date being `#inst "2021-10-21T12:34:56Z"`
+
+|`(current-timestamp)`
+| Returns the current timestamp.
+| `(current-timestamp)` -> `#time/zoned-date-time "2023-03-30T10:31:14.279209Z"`
+
+|`(current-date)`
+| Returns the current date.
+| `(current-date)` -> `#time/date "2023-03-30"`
+
+|`(current-time)`
+| Returns the current time.
+| `(current-time)` -> `#time/time "10:35:01.593097"`
+
+|`(local-timestamp)`
+| Returns the local timestamp.
+| `(local-timestamp)` ->  `#time/date-time "2023-03-30T10:35:43.520718"`
+
+|`(local-time)`
+| Returns the local time.
+| `(local-time)` -> `#time/time "10:35:01.593097"`
+
+|===
+
+== Miscellaneous
+
+[cols="2,2,2"]
+|===
+|Function/Operator| Description | Examples
+
+|`(nth list n)`
+| Returns the nth element of list.
+|`(nth [1 2] 1)` -> 1
+
+|`(cardinalist seq)`
+| Returns the length of a sequential structure.
+|`(cardinality [1 2])` -> 2
+
+|`(trim-array seq n)`
+| Returns the first n elements of seq.
+|`(trim-array [1 2] 1)` -> [1]
+
+|`(. struct keyword)`
+| Struct keyword access.
+|`(. {:x {:y 1}} :x)` -> `{:y 1}`
+
+|`(.. struct keyword+)`
+| Nested struct keyword access.
+|`(. {:x {:y 1}} :x :y)` -> 1
+
+|`(coelesce expr*)`
+| Coelesce takes an unlimited number of expressions and returns the first non nil value.
+|`(coalesce nil "default")` -> "default"
+
+|`(nullif x y)`
+| Nullify y if x is true.
+|`(nullif 1 2)` -> nil
+
+|===
