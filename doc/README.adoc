@@ -1,7 +1,5 @@
 = XTDB 2.x Docs
 
-* Coming from 1.x?
-
 * link:./getting-started.adoc[Getting started]
 * Datalog:
 ** link:./datalog-txs.adoc[Submitting a transaction]
