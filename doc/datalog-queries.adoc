@@ -156,7 +156,7 @@ If you need to run the query at an exact transaction (e.g. for repeatable querie
 
 == The standard library
 
-XTDB 2.x no longer uses `clojure.core` as its standard library - instead, it has a link:./expressions.adoc[rich built-in standard library] drawn from the SQL:2011 specification.
+XTDB 2.x no longer uses `clojure.core` as its standard library - instead, it has a link:./expression-lang.adoc[rich built-in standard library] drawn from the SQL:2011 specification.
 
 Additionally, the query engine now supports full nested expressions:
 

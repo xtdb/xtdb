@@ -6,9 +6,5 @@
 * Datalog:
 ** link:./datalog-txs.adoc[Submitting a transaction]
 ** link:./datalog-queries.adoc[Queries]
-** Expression language:
-*** Control structures
-*** Arithmetic functions
-*** String functions
-*** Date/time functions
+** link:./expression-lang.adoc[Expression language]
 * SQL
