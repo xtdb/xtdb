@@ -62,7 +62,7 @@ allprojects {
                 implementation("org.clojure", "clojure", "1.11.1")
 
                 testRuntimeOnly("dev.clojurephant", "jovial", "0.4.1")
-                nrepl("cider", "cider-nrepl", "0.28.6")
+                nrepl("cider", "cider-nrepl", "0.30.0")
             }
 
             clojure {
