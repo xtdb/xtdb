@@ -18,7 +18,7 @@
      system_time_start x5,
      system_time_end x6}
     [:scan
-     {:table users}
+     {:table users, :for-app-time :all-time}
      (_iid
       _row-id
       application_time_start

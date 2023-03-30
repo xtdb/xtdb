@@ -1887,7 +1887,7 @@
                      [:project [{age _r0_age} {name _r0_name} {pid _r0_pid}]
                       [:rename {age _r0_age, name _r0_name, pid _r0_pid}
                        [:project [{pid id} name age]
-                        [:scan {:table people, :for-app-time [:at :now], :for-sys-time nil}
+                        [:scan {:table people, :for-app-time nil, :for-sys-time nil}
                          [age name {id (= id ?pid)}]]]]]]}]
 
            (xt/q tu/*node*
@@ -1899,100 +1899,109 @@
 (deftest test-unbound-vars
 
   (t/is
-    (thrown-with-msg?
-      IllegalArgumentException
-      #"Logic variables in find clause must be bound in where: foo"
-      (xt/q
-        tu/*node*
-        '{:find [foo]
-          :where [(match :xt_docs {:first-name name})]}))
-    "plain logic var in find")
+   (thrown-with-msg?
+    IllegalArgumentException
+    #"Logic variables in find clause must be bound in where: foo"
+    (xt/q
+     tu/*node*
+     '{:find [foo]
+       :where [(match :xt_docs {:first-name name})]}))
+   "plain logic var in find")
 
   (t/is
-    (thrown-with-msg?
-      IllegalArgumentException
-      #"Logic variables in find clause must be bound in where: foo"
-      (xt/q
-        tu/*node*
-        (->
-          '{:find [(+ foo 1)]
-            :where [(match :xt_docs {:first-name name})]})))
-    "logic var within expr in find")
+   (thrown-with-msg?
+    IllegalArgumentException
+    #"Logic variables in find clause must be bound in where: foo"
+    (xt/q
+     tu/*node*
+     (->
+      '{:find [(+ foo 1)]
+        :where [(match :xt_docs {:first-name name})]})))
+   "logic var within expr in find")
 
   (t/is
-    (thrown-with-msg?
-      IllegalArgumentException
-      #"Logic variables in find clause must be bound in where: foo"
-      (xt/q
-        tu/*node*
-        (->
-          '{:find [(sum foo)]
-            :where [(match :xt_docs {:first-name name})]})))
-    "logic var within aggr in find")
+   (thrown-with-msg?
+    IllegalArgumentException
+    #"Logic variables in find clause must be bound in where: foo"
+    (xt/q
+     tu/*node*
+     (->
+      '{:find [(sum foo)]
+        :where [(match :xt_docs {:first-name name})]})))
+   "logic var within aggr in find")
 
   (t/is
-    (thrown-with-msg?
-      IllegalArgumentException
-      #"Logic variables in find clause must be bound in where: foo"
-      (xt/q
-        tu/*node*
-        (->
-          '{:find [(sum (- 64 (+ 20 4 foo)))]
-            :where [(match :xt_docs {:first-name name})]})))
-    "deeply nested logic var in find")
+   (thrown-with-msg?
+    IllegalArgumentException
+    #"Logic variables in find clause must be bound in where: foo"
+    (xt/q
+     tu/*node*
+     (->
+      '{:find [(sum (- 64 (+ 20 4 foo)))]
+        :where [(match :xt_docs {:first-name name})]})))
+   "deeply nested logic var in find")
 
   (t/is
-    (thrown-with-msg?
-      IllegalArgumentException
-      #"Logic variables in find clause must be bound in where: baz, bar, foo"
-      (xt/q
-        tu/*node*
-        (->
-          '{:find [foo (+ 1 bar) (sum (+ 1 (- 1 baz)))]
-            :where [(match :xt_docs {:first-name name})]})))
-    "multiple unbound vars in find")
+   (thrown-with-msg?
+    IllegalArgumentException
+    #"Logic variables in find clause must be bound in where: baz, bar, foo"
+    (xt/q
+     tu/*node*
+     (->
+      '{:find [foo (+ 1 bar) (sum (+ 1 (- 1 baz)))]
+        :where [(match :xt_docs {:first-name name})]})))
+   "multiple unbound vars in find")
 
   (t/is
-    (thrown-with-msg?
-      IllegalArgumentException
-      #"Logic variables in find clause must be bound in where: baz, bar, foo"
-      (xt/q
-        tu/*node*
-        (->
-          '{:find [foo (+ 1 bar) (sum (+ 1 (- 1 baz)))]
-            :where [(match :xt_docs {:first-name name})]})))
-    "multiple unbound vars in find")
+   (thrown-with-msg?
+    IllegalArgumentException
+    #"Logic variables in find clause must be bound in where: baz, bar, foo"
+    (xt/q
+     tu/*node*
+     (->
+      '{:find [foo (+ 1 bar) (sum (+ 1 (- 1 baz)))]
+        :where [(match :xt_docs {:first-name name})]})))
+   "multiple unbound vars in find")
 
   (t/is
-    (thrown-with-msg?
-      IllegalArgumentException
-      #"Logic variables in order-by clause must be bound in where: baz"
-      (xt/q
-        tu/*node*
-        (->
-          '{:find [name]
-            :where [(match :xt_docs {:first-name name})]
-            :order-by [[baz :asc]]})))
-    "simple order-by var")
+   (thrown-with-msg?
+    IllegalArgumentException
+    #"Logic variables in order-by clause must be bound in where: baz"
+    (xt/q
+     tu/*node*
+     (->
+      '{:find [name]
+        :where [(match :xt_docs {:first-name name})]
+        :order-by [[baz :asc]]})))
+   "simple order-by var")
 
   (t/is
-    (thrown-with-msg?
-      IllegalArgumentException
-      #"Logic variables in order-by clause must be bound in where: biff, baz, bing"
-      (xt/q
-        tu/*node*
-        (->
-          '{:find [name]
-            :where [(match :xt_docs {:first-name name})]
-            :order-by [[(count biff) :desc] [baz :asc] [bing]]})))
-    "multiple unbound vars in order-by")
+   (thrown-with-msg?
+    IllegalArgumentException
+    #"Logic variables in order-by clause must be bound in where: biff, baz, bing"
+    (xt/q
+     tu/*node*
+     (->
+      '{:find [name]
+        :where [(match :xt_docs {:first-name name})]
+        :order-by [[(count biff) :desc] [baz :asc] [bing]]})))
+   "multiple unbound vars in order-by")
 
   (t/is
-    (thrown-with-msg?
-      IllegalArgumentException
-      #"Logic variables in find clause must be bound in where: age, min_age"
-      (xt/q tu/*node*
-            '{:find [min_age age]
-              :where [(q {:find [(min age)]
-                          :where [($ :docs {:age age})]})]}))
-    "variables not exposed by subquery"))
+   (thrown-with-msg?
+    IllegalArgumentException
+    #"Logic variables in find clause must be bound in where: age, min_age"
+    (xt/q tu/*node*
+          '{:find [min_age age]
+            :where [(q {:find [(min age)]
+                        :where [($ :docs {:age age})]})]}))
+   "variables not exposed by subquery"))
+
+(t/deftest test-default-all-app-time
+  (let [_tx1 (xt/submit-tx tu/*node* [[:put :xt_docs {:id 1 :foo "2000-4000"} {:app-time-start #inst "2000" :app-time-end #inst "4000"}]])
+        _tx2 (xt/submit-tx tu/*node* [[:put :xt_docs {:id 1 :foo "3000-"} {:app-time-start #inst "3000"}]])]
+    (t/is (= [{:id 1, :foo "2000-4000"} {:id 1, :foo "3000-"}]
+             (xt/q tu/*node*
+                   '{:find [id foo]
+                     :where [(match :xt_docs [id foo])]
+                     :default-all-app-time? true})))))

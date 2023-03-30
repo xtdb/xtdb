@@ -40,7 +40,7 @@
 (defmethod lp/ra-expr :scan [_]
   (s/cat :op #{:scan}
          :scan-opts (s/keys :req-un [::table]
-                            :opt-un [::lp/for-app-time ::lp/for-sys-time])
+                            :opt-un [::lp/for-app-time ::lp/for-sys-time ::lp/default-all-app-time?])
          :columns (s/coll-of (s/or :column ::lp/column
                                    :select ::lp/column-expression))))
 
@@ -385,22 +385,20 @@
   (= :now (first (second scan-op))))
 
 (defn- at-now? [{:keys [for-app-time for-sys-time]}]
-  (and
-    (scan-op-at-now for-app-time)
-    ;; cannot treat nil for app-time as "now" because of the app-time-as-of-now flag
-    ;; which is not currently supported in datalog
-    (or (nil? for-sys-time)
-        (scan-op-at-now for-sys-time))))
+  (and (or (nil? for-app-time)
+           (scan-op-at-now for-app-time))
+       (or (nil? for-sys-time)
+           (scan-op-at-now for-sys-time))))
 
 (defn use-current-row-id-cache? [^IWatermark watermark scan-opts basis temporal-col-names]
   (and
-    (.txBasis watermark)
-    (= (:tx basis)
-       (.txBasis watermark))
-    (at-now? scan-opts)
-    (>= (util/instant->micros (:current-time basis))
-        (util/instant->micros (:sys-time (:tx basis))))
-    (empty? (remove #(= % "id") temporal-col-names))))
+   (.txBasis watermark)
+   (= (:tx basis)
+      (.txBasis watermark))
+   (at-now? scan-opts)
+   (>= (util/instant->micros (:current-time basis))
+       (util/instant->micros (:sys-time (:tx basis))))
+   (empty? (remove #(= % "id") temporal-col-names))))
 
 (defn get-current-row-ids [^IWatermark watermark basis]
   (.getCurrentRowIds
@@ -428,7 +426,7 @@
         (->> scan-cols
              (into {} (map (juxt identity ->col-type))))))
 
-    (emitScan [_ {:keys [columns], {:keys [table] :as scan-opts} :scan-opts} scan-col-types param-types]
+    (emitScan [_ {:keys [columns], {:keys [table for-app-time] :as scan-opts} :scan-opts} scan-col-types param-types]
       (let [col-names (->> columns
                            (into [] (comp (map (fn [[col-type arg]]
                                                  (case col-type
@@ -464,16 +462,19 @@
 
             row-count (->> (meta/with-all-metadata metadata-mgr (name table)
                              (util/->jbifn
-                               (fn [_chunk-idx ^ITableMetadata table-metadata]
-                                 (let [id-col-idx (.rowIndex table-metadata "id" -1)
-                                       ^BigIntVector count-vec (.getVector (.metadataRoot table-metadata) "count")]
-                                   (.get count-vec id-col-idx)))))
+                              (fn [_chunk-idx ^ITableMetadata table-metadata]
+                                (let [id-col-idx (.rowIndex table-metadata "id" -1)
+                                      ^BigIntVector count-vec (.getVector (.metadataRoot table-metadata) "count")]
+                                  (.get count-vec id-col-idx)))))
                            (reduce +))]
 
         {:col-types (dissoc col-types '_table)
          :stats {:row-count row-count}
-         :->cursor (fn [{:keys [allocator, ^IWatermark watermark, basis, params]}]
+         :->cursor (fn [{:keys [allocator, ^IWatermark watermark, basis, params default-all-app-time?]}]
                      (let [metadata-pred (expr.meta/->metadata-selector (cons 'and metadata-args) (set col-names) params)
+                           scan-opts (cond-> scan-opts
+                                       (nil? for-app-time)
+                                       (assoc :for-app-time (if default-all-app-time? [:all-time] [:at [:now :now]])))
                            [temporal-min-range temporal-max-range] (->temporal-min-max-range params basis scan-opts selects)
                            content-col-names (into #{} (map name) content-col-names)
                            temporal-col-names (into #{} (map name) temporal-col-names)

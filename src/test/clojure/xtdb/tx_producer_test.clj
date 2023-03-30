@@ -98,5 +98,5 @@
                          [[:sql "INSERT INTO foo (id) VALUES (0)"]]
 
                          {:sys-time (util/->instant #inst "2021")
-                          :app-time-as-of-now? true
+                          :default-all-app-time? false
                           :default-tz #time/zone "Europe/London"}))

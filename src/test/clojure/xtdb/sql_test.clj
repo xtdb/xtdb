@@ -7,7 +7,7 @@
 
 (defn plan-sql
   ([sql] (plan-sql sql {:decorrelate? true, :validate-plan? true, :instrument-rules? true}))
-  ([sql opts] (sql/compile-query sql opts)))
+  ([sql opts] (sql/compile-query sql (into {:default-all-app-time? true} opts))))
 
 (def regen-expected-files? false)
 
@@ -387,34 +387,34 @@
 
 (t/deftest test-dynamic-parameters-103
   (t/is (=plan-file
-          "test-dynamic-parameters-103-1"
-          (plan-sql "SELECT foo.a FROM foo WHERE foo.b = ? AND foo.c = ?")))
+         "test-dynamic-parameters-103-1"
+         (plan-sql "SELECT foo.a FROM foo WHERE foo.b = ? AND foo.c = ?")))
 
   (t/is (=plan-file
-          "test-dynamic-parameters-103-2"
-          (plan-sql "SELECT foo.a
+         "test-dynamic-parameters-103-2"
+         (plan-sql "SELECT foo.a
                     FROM foo, (SELECT bar.b FROM bar WHERE bar.c = ?) bar (b)
                     WHERE foo.b = ? AND foo.c = ?")))
 
   (t/is (=plan-file
-          "test-dynamic-parameters-103-subquery-project"
-          (plan-sql "SELECT t1.col1, (SELECT ? FROM bar WHERE bar.col1 = 4) FROM t1")))
+         "test-dynamic-parameters-103-subquery-project"
+         (plan-sql "SELECT t1.col1, (SELECT ? FROM bar WHERE bar.col1 = 4) FROM t1")))
 
   (t/is (=plan-file
-          "test-dynamic-parameters-103-top-level-project"
-          (plan-sql "SELECT t1.col1, ? FROM t1")))
+         "test-dynamic-parameters-103-top-level-project"
+         (plan-sql "SELECT t1.col1, ? FROM t1")))
 
   (t/is (=plan-file
-          "test-dynamic-parameters-103-update-set-value"
-          (plan-sql "UPDATE t1 SET col1 = ?")))
+         "test-dynamic-parameters-103-update-set-value"
+         (plan-sql "UPDATE t1 SET col1 = ?")))
 
   (t/is (=plan-file
-          "test-dynamic-parameters-103-table-values"
-          (plan-sql "SELECT bar.foo FROM (VALUES (?)) AS bar(foo)")))
+         "test-dynamic-parameters-103-table-values"
+         (plan-sql "SELECT bar.foo FROM (VALUES (?)) AS bar(foo)")))
 
   (t/is (=plan-file
-          "test-dynamic-parameters-103-update-app-time"
-          (plan-sql "UPDATE users FOR PORTION OF APP_TIME FROM ? TO ? AS u SET first_name = ? WHERE u.id = ?"))))
+         "test-dynamic-parameters-103-update-app-time"
+         (plan-sql "UPDATE users FOR PORTION OF APP_TIME FROM ? TO ? AS u SET first_name = ? WHERE u.id = ?"))))
 
 (t/deftest test-order-by-null-handling-159
   (t/is (=plan-file
@@ -979,10 +979,12 @@
                     (plan-sql "UPDATE users FOR PORTION OF APP_TIME FROM DATE '2021-07-01' TO DATE '9999-12-31' AS u SET first_name = 'Sue' WHERE u.id = ?")))
 
   (t/is (=plan-file "test-sql-update-plan-with-column-references"
-                    (plan-sql "UPDATE foo SET bar = foo.baz")))
+                    (plan-sql "UPDATE foo SET bar = foo.baz"
+                              {:default-all-app-time? true})))
 
   (t/is (=plan-file "test-sql-update-plan-with-period-references"
-                    (plan-sql "UPDATE foo SET bar = (foo.SYSTEM_TIME OVERLAPS foo.APPLICATION_TIME)"))))
+                    (plan-sql "UPDATE foo SET bar = (foo.SYSTEM_TIME OVERLAPS foo.APPLICATION_TIME)"
+                              {:default-all-app-time? true}))))
 
 (deftest dml-target-table-alises
   (t/is (= (plan-sql "UPDATE t1 AS u SET col1 = 30")
@@ -1083,44 +1085,24 @@
 
 (deftest test-for-all-application-time-387
   (t/is
-    (=plan-file
-      "test-for-all-application-time-387-query"
-      (plan-sql
-        "SELECT foo.bar
+   (=plan-file
+    "test-for-all-application-time-387-query"
+    (plan-sql
+     "SELECT foo.bar
         FROM foo
-        FOR ALL APPLICATION_TIME"
-        {:app-time-as-of-now? true})))
+        FOR ALL APPLICATION_TIME")))
 
   (t/is
-    (=plan-file
-      "test-for-all-application-time-387-update"
-      (plan-sql
-        "UPDATE users FOR ALL APP_TIME SET first_name = 'Sue'"
-        {:app-time-as-of-now? true})))
+   (=plan-file
+    "test-for-all-application-time-387-update"
+    (plan-sql
+     "UPDATE users FOR ALL APP_TIME SET first_name = 'Sue'")))
 
   (t/is
-    (=
-     (plan-sql
-       "UPDATE users SET first_name = 'Sue'")
-     (plan-sql
-       "UPDATE users FOR ALL APP_TIME SET first_name = 'Sue'"
-       {:app-time-as-of-now? true}))
-    "UPDATE: FOR ALL APPLICATION_TIME")
-
-    (t/is
-    (=plan-file
-      "test-for-all-application-time-387-delete"
-      (plan-sql
-        "DELETE FROM users FOR ALL APPLICATION_TIME"
-        {:app-time-as-of-now? true})))
-
-  (t/is
-    (=
-     (plan-sql "DELETE FROM users")
-     (plan-sql
-       "DELETE FROM users FOR ALL APPLICATION_TIME"
-       {:app-time-as-of-now? true}))
-    "DELETE: FOR ALL APPLICATION_TIME"))
+   (=plan-file
+    "test-for-all-application-time-387-delete"
+    (plan-sql
+     "DELETE FROM users FOR ALL APPLICATION_TIME"))))
 
 (deftest test-for-all-system-time-404
   (t/is
@@ -1134,21 +1116,21 @@
 (deftest test-period-specs-with-subqueries-407
 
   (t/is
-    (=plan-file
-      "test-period-specs-with-subqueries-407-sys-time"
-      (plan-sql
-        "SELECT 1 FROM (select foo.bar from foo FOR ALL SYSTEM_TIME) as tmp")))
+   (=plan-file
+    "test-period-specs-with-subqueries-407-sys-time"
+    (plan-sql
+     "SELECT 1 FROM (select foo.bar from foo FOR ALL SYSTEM_TIME) as tmp")))
 
   (t/is
-    (=plan-file
-      "test-period-specs-with-subqueries-407-app-time"
-      (plan-sql
-        "SELECT 1 FROM (select foo.bar from foo FOR APPLICATION_TIME AS OF CURRENT_TIMESTAMP) as tmp")))
+   (=plan-file
+    "test-period-specs-with-subqueries-407-app-time"
+    (plan-sql
+     "SELECT 1 FROM (select foo.bar from foo FOR APPLICATION_TIME AS OF CURRENT_TIMESTAMP) as tmp")))
 
   (t/is
-    (=plan-file
-      "test-period-specs-with-dml-subqueries-and-defaults-407" ;;also #424
-      (plan-sql "INSERT INTO prop_owner (id, customer_number, property_number, application_time_start, application_time_end)
+   (=plan-file
+    "test-period-specs-with-dml-subqueries-and-defaults-407" ;;also #424
+    (plan-sql "INSERT INTO prop_owner (id, customer_number, property_number, application_time_start, application_time_end)
                 SELECT 1,
                 145,
                 7797, DATE '1998-01-03', tmp.app_start
@@ -1157,7 +1139,7 @@
                 FROM Prop_Owner
                 FOR ALL SYSTEM_TIME
                 WHERE Prop_Owner.id = 1) AS tmp"
-                {:app-time-as-of-now? true}))))
+              {:default-all-app-time? false}))))
 
 (deftest parenthesized-joined-tables-are-unboxed-502
   (t/is (= (plan-sql "SELECT 1 FROM ( tab0 JOIN tab2 ON TRUE )")

@@ -8,7 +8,8 @@
             [xtdb.logical-plan :as lp]
             xtdb.operator ;; Adds impls logical plan spec
             [xtdb.rewrite :as r]
-            [xtdb.sql.analyze :as sem])
+            [xtdb.sql.analyze :as sem]
+            [xtdb.util :as util])
   (:import (java.time LocalDate LocalDateTime LocalTime OffsetTime ZoneOffset ZonedDateTime ZoneId)))
 
 ;; Attribute grammar for transformation into logical plan.
@@ -1372,9 +1373,7 @@
           (plan subquery-ref)]
          (plan subquery-ref))
        [:scan (->> {:table (symbol table-or-query-name)
-                    :for-app-time (or (interpret-application-time-period-spec tp)
-                                      (when (:app-time-as-of-now? *opts*)
-                                        [:at :now]))
+                    :for-app-time (interpret-application-time-period-spec tp)
                     :for-sys-time (interpret-system-time-period-spec tp)}
                    (into {} (remove (comp nil? val))))
         (vec
@@ -1383,11 +1382,12 @@
               (distinct)
               (vec)))])]))
 
-(defn- build-target-table [tt]
+(defn- build-target-table [tt for-app-time]
   (let [{:keys [id correlation-name table-or-query-name]} (sem/table tt)
         projection (first (sem/projected-columns tt))]
     [:rename (table-reference-symbol correlation-name id)
-     [:scan {:table (symbol table-or-query-name)}
+     [:scan (cond-> {:table (symbol table-or-query-name)}
+              for-app-time (assoc :for-app-time for-app-time))
       (for [{:keys [identifier]} projection
             :let [identifier (symbol identifier)]
             :when (not= '_table identifier)]
@@ -1490,11 +1490,21 @@
           (cond->> obc (wrap-with-order-by (r/$ obc -1)))
           (->> (wrap-with-top))))))
 
+(defn- app-time-extents->for-app-time [app-time-extents app-from-expr app-to-expr]
+  (let [app-from (if (= 'xtdb/end-of-time app-from-expr) util/end-of-time app-from-expr)
+        app-to (if (= 'xtdb/end-of-time app-to-expr) util/end-of-time app-to-expr)]
+    (cond
+      (= app-time-extents :all-application-time) :all-time
+      (and app-from app-to) [:between app-from app-to])))
+
 (defn- plan-dml [dml-op z]
-  (let [{:keys [app-time-as-of-now?]} *opts*
+  (let [{:keys [default-all-app-time?]} *opts*
         tt (r/find-first (partial r/ctor? :target_table) z)
         {:keys [table-or-query-name correlation-name] :as table} (sem/table tt)
-        rel (build-target-table tt)
+        {app-from :from, app-to :to, :as app-time-extents} (sem/dml-app-time-extents z)
+        app-from-expr (some-> app-from (expr))
+        app-to-expr (some-> app-to (expr))
+        rel (build-target-table tt (app-time-extents->for-app-time app-time-extents app-from-expr app-to-expr))
         rel (if-let [sc (r/find-first (partial r/ctor? :search_condition) z)]
               (wrap-with-select sc rel)
               rel)]
@@ -1505,10 +1515,7 @@
                     :qualified-column [correlation-name (name sym)]}
                    (vary-meta assoc :table table))))]
 
-      (let [{app-from :from, app-to :to, :as app-time-extents} (sem/dml-app-time-extents z)
-            app-from-expr (some-> app-from (expr))
-            app-to-expr (some-> app-to (expr))
-            app-start-sym (->qps 'application_time_start)
+      (let [app-start-sym (->qps 'application_time_start)
             app-end-sym (->qps 'application_time_end)]
 
         [dml-op {:table table-or-query-name}
@@ -1523,23 +1530,21 @@
                             [{'application_time_start `(~'cast-tstz ~(cond
                                                                        (= :all-application-time app-time-extents) app-start-sym
                                                                        app-from-expr `(~'greatest ~app-start-sym ~app-from-expr)
-                                                                       app-time-as-of-now? `(~'greatest ~app-start-sym (~'current-timestamp))
+                                                                       (not default-all-app-time?) `(~'greatest ~app-start-sym (~'current-timestamp))
                                                                        :else app-start-sym))}
                              {'application_time_end `(~'cast-tstz ~(cond
                                                                      (= :all-application-time app-time-extents) app-end-sym
                                                                      app-to-expr `(~'least ~app-end-sym ~app-to-expr)
-                                                                     app-time-as-of-now? `(~'least ~app-end-sym ~'xtdb/end-of-time)
                                                                      :else app-end-sym))}]))
-          (if (and app-to app-from)
-            [:select `(~'and
-                       (~'<= ~app-start-sym ~app-to-expr)
-                       (~'>= ~app-end-sym ~app-from-expr))
-             rel]
-            rel)]]))))
+
+          rel]]))))
 
 (defn- plan-erase [z]
   (let [tt (r/find-first (partial r/ctor? :target_table) z)
-        {:keys [table-or-query-name correlation-name] :as table} (sem/table tt)]
+        {:keys [table-or-query-name correlation-name] :as table} (sem/table tt)
+        {app-from :from, app-to :to, :as app-time-extents} (sem/dml-app-time-extents z)
+        app-from-expr (some-> app-from (expr))
+        app-to-expr (some-> app-to (expr))]
     [:erase {:table table-or-query-name}
      [:project (vec
                 (for [{:keys [identifier] :as col} (first (sem/projected-columns z))]
@@ -1553,10 +1558,11 @@
                         :qualified-column [correlation-name "system_time_end"]}
                        (vary-meta assoc :table table)))
                  ~'xtdb/end-of-time)
-       (as-> (build-target-table tt) rel
-         (if-let [sc (r/find-first (partial r/ctor? :search_condition) z)]
-           (wrap-with-select sc rel)
-           rel))]]]))
+       (as-> (build-target-table
+              tt (app-time-extents->for-app-time app-time-extents app-from-expr app-to-expr)) rel
+             (if-let [sc (r/find-first (partial r/ctor? :search_condition) z)]
+               (wrap-with-select sc rel)
+               rel))]]]))
 
 (def app-time-col? (comp #{"application_time_start" "application_time_end"} :identifier))
 

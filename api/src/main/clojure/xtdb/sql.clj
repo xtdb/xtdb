@@ -43,7 +43,8 @@
   ([node q] (q& node q {}))
 
   ([node q opts]
-   (-> (impl/open-sql& node q (-> opts (update :basis impl/after-latest-submitted-tx node)))
+   (-> (impl/open-sql& node q (into {:default-all-app-time? true}
+                                    (update opts :basis impl/after-latest-submitted-tx node)))
        (.thenApply
         (reify Function
           (apply [_ res]
@@ -101,7 +102,8 @@
   Returns a CompleteableFuture containing a map with details about the submitted transaction,
   including sys-time and tx-id."
   (^java.util.concurrent.CompletableFuture [node tx-ops] (submit-tx& node tx-ops {}))
-  (^java.util.concurrent.CompletableFuture [node tx-ops tx-opts] (impl/submit-tx& node tx-ops tx-opts)))
+  (^java.util.concurrent.CompletableFuture [node tx-ops tx-opts]
+   (impl/submit-tx& node tx-ops (into {:default-all-app-time? true} tx-opts))))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (defn submit-tx

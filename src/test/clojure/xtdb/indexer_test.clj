@@ -194,8 +194,8 @@
 
 (t/deftest temporal-watermark-is-immutable-567
   (with-open [node (node/start-node {})]
-    (let [{tt :sys-time} (xt.d/submit-tx node [[:put ':xt_docs {:id :foo, :version 0}]]
-                                         {:app-time-as-of-now? true})]
+    (let [{tt :sys-time} (xt.d/submit-tx node [[:put :xt_docs {:id :foo, :version 0}]]
+                                         {:default-all-app-time? false})]
       (t/is (= [{:id :foo, :version 0,
                  :application_time_start (util/->zdt tt)
                  :application_time_end (util/->zdt util/end-of-time)
@@ -207,8 +207,8 @@
                                system_time_start, system_time_end]]
                             {:node node})))
 
-      (let [{tt2 :sys-time} (xt.d/submit-tx node [[:put ':xt_docs {:id :foo, :version 1}]]
-                                            {:app-time-as-of-now? true})]
+      (let [{tt2 :sys-time} (xt.d/submit-tx node [[:put :xt_docs {:id :foo, :version 1}]]
+                                            {:default-all-app-time? false})]
         (t/is (= [{:id :foo, :version 0,
                    :application_time_start (util/->zdt tt)
                    :application_time_end (util/->zdt util/end-of-time)
@@ -228,7 +228,7 @@
                                 [id version
                                  application_time_start, application_time_end
                                  system_time_start, system_time_end]]
-                              {:node node})))
+                              {:node node :default-all-app-time? true})))
 
         #_ ; FIXME #567 this sees the updated system_time_end of the first entry
         (t/is (= [{:id :foo, :version 0,

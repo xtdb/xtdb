@@ -106,7 +106,8 @@
       (letfn [(q [& temporal-constraints]
                 (->> (tu/query-ra [:scan '{:table xt_docs, :for-sys-time :all-time}
                                    (into '[last-updated] temporal-constraints)]
-                                  {:node node, :params {'?sys-time1 tt1, '?sys-time2 tt2}})
+                                  {:node node, :params {'?sys-time1 tt1, '?sys-time2 tt2}
+                                   :default-all-app-time? true})
                      (into #{} (map :last-updated))))]
         (t/is (= #{"tx1" "tx2"}
                  (q)))

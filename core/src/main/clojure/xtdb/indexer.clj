@@ -163,7 +163,7 @@
                           {:params (iv/->indirect-rel [(-> (vw/open-vec allocator '?id [fn-id])
                                                            (iv/->direct-vec))]
                                                       1)
-                           :app-time-as-of-now? true
+                           :default-all-app-time? false
                            :basis basis
                            :default-tz default-tz})
                 res (.openCursor bq)]
@@ -190,7 +190,6 @@
                 (throw (err/runtime-err :xtdb.call/error-compiling-tx-fn {:fn-form fn-form} t))))))))))
 
 (defn- tx-fn-q [allocator ra-src wm-src tx-opts q & args]
-  ;; bear in mind Datalog doesn't yet look at `app-time-as-of-now?`, essentially just assumes its true.
   (let [q (into tx-opts q)]
     (with-open [res (d/open-datalog-query allocator ra-src wm-src q args)]
       (vec (iterator-seq res)))))
@@ -414,9 +413,9 @@
             (.indexEvict temporal-idxer iid)))))))
 
 (defn- ->sql-indexer ^xtdb.indexer.OpIndexer [^BufferAllocator allocator, ^IMetadataManager metadata-mgr, ^IBufferPool buffer-pool, ^IInternalIdManager iid-mgr
-                                               ^ILogOpIndexer log-op-idxer, ^ITemporalTxIndexer temporal-idxer, ^ILiveChunk doc-idxer
-                                               ^DenseUnionVector tx-ops-vec, ^IRaQuerySource ra-src, wm-src
-                                               {:keys [app-time-as-of-now? basis default-tz] :as tx-opts}]
+                                              ^ILogOpIndexer log-op-idxer, ^ITemporalTxIndexer temporal-idxer, ^ILiveChunk doc-idxer
+                                              ^DenseUnionVector tx-ops-vec, ^IRaQuerySource ra-src, wm-src
+                                              {:keys [default-all-app-time? basis default-tz] :as tx-opts}]
   (let [sql-vec (.getStruct tx-ops-vec 0)
         ^VarCharVector query-vec (.getChild sql-vec "query" VarCharVector)
         ^VarBinaryVector params-vec (.getChild sql-vec "params" VarBinaryVector)
@@ -430,7 +429,7 @@
           (letfn [(index-op [^SqlOpIndexer op-idxer query-opts inner-query]
                     (let [^xtdb.operator.PreparedQuery pq (.prepareRaQuery ra-src inner-query)]
                       (letfn [(index-op* [^IIndirectRelation params]
-                                (with-open [res (-> (.bind pq wm-src {:params params, :basis basis, :default-tz default-tz})
+                                (with-open [res (-> (.bind pq wm-src {:params params, :basis basis, :default-tz default-tz :default-all-app-time? default-all-app-time?})
                                                     (.openCursor))]
 
                                   (.forEachRemaining res
@@ -458,9 +457,8 @@
                                     (index-op* (-> rel (iv/select selection))))))))))))]
 
             (let [query-str (t/get-object query-vec sql-offset)]
-
               ;; TODO handle error
-              (zmatch (sql/compile-query query-str {:app-time-as-of-now? app-time-as-of-now?})
+              (zmatch (sql/compile-query query-str tx-opts)
                 [:insert query-opts inner-query]
                 (index-op insert-idxer query-opts inner-query)
 
@@ -508,8 +506,8 @@
             tx-opts {:basis {:tx tx-key, :current-time sys-time}
                      :default-tz (ZoneId/of (str (-> (.getVector tx-root "default-tz")
                                                      (.getObject 0))))
-                     :app-time-as-of-now? (== 1 (-> ^BitVector (.getVector tx-root "application-time-as-of-now?")
-                                                    (.get 0)))
+                     :default-all-app-time? (== 1 (-> ^BitVector (.getVector tx-root "all-application-time?")
+                                                      (.get 0)))
                      :tx-key tx-key}]
 
         (letfn [(index-tx-ops [^DenseUnionVector tx-ops-vec]

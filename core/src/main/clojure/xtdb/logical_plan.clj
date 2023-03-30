@@ -62,6 +62,7 @@
 
 (s/def ::for-app-time (s/nilable ::temporal-filter))
 (s/def ::for-sys-time (s/nilable ::temporal-filter))
+(s/def ::default-all-app-time? (s/nilable boolean?))
 
 (defmulti ra-expr
   (fn [expr]

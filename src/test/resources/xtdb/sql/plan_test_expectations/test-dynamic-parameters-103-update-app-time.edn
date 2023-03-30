@@ -25,11 +25,11 @@
      system_time_start x6,
      system_time_end x7}
     [:scan
-     {:table users}
+     {:table users, :for-app-time [:between ?_0 ?_1]}
      [{id (= id ?_3)}
       _iid
       _row-id
-      {application_time_start (<= application_time_start ?_1)}
-      {application_time_end (>= application_time_end ?_0)}
+      application_time_start
+      application_time_end
       system_time_start
       system_time_end]]]]]]

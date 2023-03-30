@@ -15,7 +15,7 @@
 
     (t/is (= #{{:last-updated "tx1"} {:last-updated "tx2"}}
              (set (tu/query-ra '[:scan {:table xt_docs} [last-updated]]
-                               {:node tu/*node*}))))
+                               {:node tu/*node* :default-all-app-time? true}))))
 
     (t/is (= #{{:last-updated "tx2"}}
              (set (xt/q tu/*node*
@@ -90,7 +90,7 @@
                             [id version
                              application_time_start application_time_end
                              system_time_start system_time_end]]
-                          {:node tu/*node*}))
+                          {:node tu/*node* :default-all-app-time? true}))
           "all app-time")
 
     (t/is (= [original-v0-doc replaced-v0-doc v1-doc]
@@ -99,7 +99,8 @@
                              application_time_start application_time_end
                              system_time_start system_time_end]]
                           {:node tu/*node*
-                           :params {'eot util/end-of-time}}))
+                           :params {'eot util/end-of-time}
+                           :default-all-app-time? true}))
           "all app, all sys")))
 
 (t/deftest test-evict
@@ -108,7 +109,8 @@
                                 [id
                                  application_time_start {application_time_end (<= application_time_end eot)}
                                  system_time_start system_time_end]]
-                              {:node tu/*node*, :params {'eot util/end-of-time}})
+                              {:node tu/*node*, :params {'eot util/end-of-time}
+                               :default-all-app-time? true})
                  (map :id)
                  frequencies))]
 

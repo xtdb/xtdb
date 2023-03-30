@@ -102,7 +102,7 @@
                                           (mapcat scan/->scan-cols))))
            cache (ConcurrentHashMap.)]
        (reify PreparedQuery
-         (bind [_ wm-src {:keys [params table-args basis default-tz]}]
+         (bind [_ wm-src {:keys [params table-args basis default-tz default-all-app-time?]}]
            (assert (or scan-emitter (empty? scan-cols)))
 
            (let [{:keys [tx after-tx current-time]} basis
@@ -117,6 +117,7 @@
                                                                  :param-types (expr/->param-types params)
                                                                  :table-arg-types (->table-arg-types table-args)
                                                                  :default-tz default-tz
+                                                                 :default-all-app-time? default-all-app-time?
                                                                  :last-known-chunk (when metadata-mgr
                                                                                      (.lastEntry (.chunksMetadata metadata-mgr)))}
                                                                 (reify Function
@@ -139,7 +140,7 @@
                                                  (dissoc :after-tx)
                                                  (update :tx (fnil identity (some-> wm .txBasis)))
                                                  (assoc :current-time current-time))
-                                      :params params, :table-args table-args})
+                                      :params params, :table-args table-args :default-all-app-time? default-all-app-time?})
                            (wrap-cursor allocator wm clock ref-ctr col-types)))
 
                      (catch Throwable t

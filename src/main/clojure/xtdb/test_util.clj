@@ -192,7 +192,7 @@
                                    (.prepareRaQuery ra-src query))
                                  (op/prepare-ra query))
              bq (.bind pq indexer
-                       (-> (select-keys query-opts [:basis :table-args :default-tz])
+                       (-> (select-keys query-opts [:basis :table-args :default-tz :default-all-app-time?])
                            (assoc :params params-rel)))]
          (with-open [res (.openCursor bq)]
            (let [rows (-> (<-cursor res)

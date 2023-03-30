@@ -30,7 +30,7 @@
 (s/def ::app-time-end ::util/datetime-value)
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
-(s/def ::app-time-as-of-now? boolean)
+(s/def ::default-all-app-time? boolean)
 
 (defmulti tx-op-spec first)
 
@@ -118,7 +118,7 @@
 
             (types/col-type->field "system-time" nullable-inst-type)
             (types/col-type->field "default-tz" :utf8)
-            (types/col-type->field "application-time-as-of-now?" :bool)]))
+            (types/col-type->field "all-application-time?" :bool)]))
 
 (defn encode-params [^BufferAllocator allocator, query, param-rows]
   (let [plan (sql/compile-query query)
@@ -268,20 +268,20 @@
 
       (.endValue tx-ops-writer))))
 
-(defn serialize-tx-ops ^java.nio.ByteBuffer [^BufferAllocator allocator tx-ops {:keys [^Instant sys-time, default-tz, app-time-as-of-now?]}]
+(defn serialize-tx-ops ^java.nio.ByteBuffer [^BufferAllocator allocator tx-ops {:keys [^Instant sys-time, default-tz, default-all-app-time?]}]
   (with-open [root (VectorSchemaRoot/create tx-schema allocator)]
     (let [ops-list-writer (.asList (vw/vec->writer (.getVector root "tx-ops")))
           tx-ops-writer (.asDenseUnion (.getDataWriter ops-list-writer))
 
           default-tz-writer (vw/vec->writer (.getVector root "default-tz"))
-          app-time-behaviour-writer (vw/vec->writer (.getVector root "application-time-as-of-now?"))]
+          app-time-behaviour-writer (vw/vec->writer (.getVector root "all-application-time?"))]
 
       (when sys-time
         (doto ^TimeStampMicroTZVector (.getVector root "system-time")
           (.setSafe 0 (util/instant->micros sys-time))))
 
       (types/write-value! (str default-tz) default-tz-writer)
-      (types/write-value! (boolean app-time-as-of-now?) app-time-behaviour-writer)
+      (types/write-value! (boolean default-all-app-time?) app-time-behaviour-writer)
 
       (.startValue ops-list-writer)
 

@@ -239,7 +239,7 @@
     (t/is (= [{:id "foo", :application_time_start (util/->zdt #inst "2018"), :application_time_end (util/->zdt util/end-of-time)}]
              (xt.sql/q *node* "SELECT foo.id, foo.application_time_start, foo.application_time_end FROM foo")))))
 
-(deftest test-dml-as-of-now-flag-339
+(deftest test-dml-default-all-app-time-flag-339
   (let [tt1 (util/->zdt #inst "2020-01-01")
         tt2 (util/->zdt #inst "2020-01-02")
         tt5 (util/->zdt #inst "2020-01-05")
@@ -247,7 +247,6 @@
     (letfn [(q []
               (set (xt.sql/q *node*
                              "SELECT foo.version, foo.application_time_start, foo.application_time_end FROM foo")))]
-
       (xt.sql/submit-tx *node*
                         [[:sql "INSERT INTO foo (id, version) VALUES (?, ?)"
                           [["foo", 0]]]])
@@ -258,7 +257,7 @@
       (t/testing "update as-of-now"
         (xt.sql/submit-tx *node*
                           [[:sql "UPDATE foo SET version = 1 WHERE foo.id = 'foo'"]]
-                          {:app-time-as-of-now? true})
+                          {:default-all-app-time? false})
 
         (t/is (= #{{:version 0, :application_time_start tt1, :application_time_end tt2}
                    {:version 1, :application_time_start tt2, :application_time_end eot}}
@@ -270,7 +269,7 @@
                                       "FOR PORTION OF APP_TIME FROM ? TO ? "
                                       "SET version = 2 WHERE foo.id = 'foo'")
                             [[tt1 tt2]]]]
-                          {:app-time-as-of-now? true})
+                          {:default-all-app-time? false})
         (t/is (= #{{:version 2, :application_time_start tt1, :application_time_end tt2}
                    {:version 1, :application_time_start tt2, :application_time_end eot}}
                  (q))))
@@ -286,7 +285,7 @@
       (t/testing "DELETE as-of-now"
         (xt.sql/submit-tx *node*
                           [[:sql "DELETE FROM foo WHERE foo.id = 'foo'"]]
-                          {:app-time-as-of-now? true})
+                          {:default-all-app-time? false})
 
         (t/is (= #{{:version 3, :application_time_start tt1, :application_time_end tt2}
                    {:version 3, :application_time_start tt2, :application_time_end tt5}}
@@ -296,7 +295,7 @@
         (xt.sql/submit-tx *node*
                           [[:sql "UPDATE foo FOR ALL APPLICATION_TIME
                                      SET version = 4 WHERE foo.id = 'foo'"]]
-                          {:app-time-as-of-now? true})
+                          {:default-all-app-time? false})
 
         (t/is (= #{{:version 4, :application_time_start tt1, :application_time_end tt2}
                    {:version 4, :application_time_start tt2, :application_time_end tt5}}
@@ -306,7 +305,7 @@
         (xt.sql/submit-tx *node*
                           [[:sql "DELETE FROM foo FOR ALL APPLICATION_TIME
                                      WHERE foo.id = 'foo'"]]
-                          {:app-time-as-of-now? true})
+                          {:default-all-app-time? false})
 
         (t/is (= #{} (q)))))))
 
@@ -322,7 +321,7 @@
     (t/is (= [{:version 0, :application_time_start tt1, :application_time_end eot}]
              (xt.sql/q *node*
                        "SELECT foo.version, foo.application_time_start, foo.application_time_end FROM foo"
-                       {:app-time-as-of-now? true})))
+                       {:default-all-app-time? false})))
 
     (t/is (= [{:version 0, :application_time_start tt1, :application_time_end eot}]
              (xt.sql/q *node*
@@ -330,12 +329,12 @@
 
     (xt.sql/submit-tx *node*
                       [[:sql "UPDATE foo SET version = 1 WHERE foo.id = 'foo'"]]
-                      {:app-time-as-of-now? true})
+                      {:default-all-app-time? false})
 
     (t/is (= [{:version 1, :application_time_start tt2, :application_time_end eot}]
              (xt.sql/q *node*
                        "SELECT foo.version, foo.application_time_start, foo.application_time_end FROM foo"
-                       {:app-time-as-of-now? true})))
+                       {:default-all-app-time? false})))
 
     (t/is (= [{:version 0, :application_time_start tt1, :application_time_end tt2}
               {:version 1, :application_time_start tt2, :application_time_end eot}]
@@ -347,7 +346,7 @@
              (xt.sql/q *node*
                        (str "SELECT foo.version, foo.application_time_start, foo.application_time_end "
                             "FROM foo FOR APPLICATION_TIME AS OF ?")
-                       {:app-time-as-of-now? true, :? [tt1]}))
+                       {:default-all-app-time? false, :? [tt1]}))
           "`FOR APPLICATION_TIME AS OF` overrides flag")
 
     (t/is (= [{:version 0, :application_time_start tt1, :application_time_end tt2}
@@ -355,7 +354,7 @@
              (xt.sql/q *node*
                        "SELECT foo.version, foo.application_time_start, foo.application_time_end
                              FROM foo FOR ALL APPLICATION_TIME"
-                       {:app-time-as-of-now? true}))
+                       {:default-all-app-time? false}))
           "FOR ALL APPLICATION_TIME ignores flag and returns all app-time")))
 
 (t/deftest test-erase
@@ -369,7 +368,7 @@
                                    ["bar", 0]]]])
           tx2 (xt.sql/submit-tx *node*
                                 [[:sql "UPDATE foo SET version = 1"]]
-                                {:app-time-as-of-now? true})
+                                {:default-all-app-time? false})
           v0 {:version 0,
               :application_time_start (util/->zdt #inst "2020-01-01"),
               :application_time_end (util/->zdt #inst "2020-01-02")}
@@ -461,3 +460,28 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"]])
       (t/is (= {1 [(util/->zdt #inst "2020-01-01") (util/->zdt util/end-of-time)]
                 3 [(util/->zdt #inst "2020-01-03") (util/->zdt util/end-of-time)]}
                (q-all))))))
+
+(deftest test-insert-from-other-table-with-as-of-now
+  (xt.sql/submit-tx *node*
+                    [[:sql
+                      "INSERT INTO posts (id, user_id, text, application_time_start)
+	                VALUES (9012, 5678, 'Happy 2050!', DATE '2050-01-01')"]])
+
+  (t/is (= [{:text "Happy 2050!"}]
+           (xt.sql/q *node*
+                     "SELECT posts.text FROM posts FOR APPLICATION_TIME AS OF DATE '2050-01-02'")))
+
+  (t/is (= []
+           (xt.sql/q *node*
+                     "SELECT posts.text FROM posts"
+                     {:default-all-app-time? false})))
+
+  (xt.sql/submit-tx *node*
+                    [[:sql
+                      "INSERT INTO t1 SELECT posts.id, posts.text FROM posts"]]
+                    {:default-all-app-time? false})
+
+  (t/is (= []
+           (xt.sql/q *node*
+                     "SELECT t1.text FROM t1 FOR ALL APPLICATION_TIME"
+                     {:default-all-app-time? false}))))

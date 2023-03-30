@@ -519,7 +519,7 @@
       },
       "children" : [ ]
     },{
-      "name" : "application-time-as-of-now?",
+      "name" : "all-application-time?",
       "nullable" : false,
       "type" : {
         "name" : "bool"
@@ -886,7 +886,7 @@
       "OFFSET" : [0,0],
       "DATA" : [""]
     },{
-      "name" : "application-time-as-of-now?",
+      "name" : "all-application-time?",
       "count" : 1,
       "VALIDITY" : [1],
       "DATA" : [0]

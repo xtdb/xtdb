@@ -432,8 +432,7 @@
                             (group-by :a))
                        (update-vals #(into #{} (map :lit) %)))
         plan (-> [:scan {:table table
-                         :for-app-time (:for-app-time temporal-opts [:at :now])
-                         ;; defaults handled by scan
+                         :for-app-time (:for-app-time temporal-opts)
                          :for-sys-time (:for-sys-time temporal-opts)}
                   (-> attrs
                       (disj '_table)
@@ -1138,8 +1137,8 @@
        (into {})))
 
 (defn open-datalog-query ^xtdb.IResultSet [^BufferAllocator allocator, ^IRaQuerySource ra-src, wm-src
-                                           {:keys [basis default-tz explain?] :as query} args]
-  (let [plan (compile-query (dissoc query :basis :basis-timeout))
+                                           {:keys [default-all-app-time? basis default-tz explain?] :as query} args]
+  (let [plan (compile-query (dissoc query :default-all-app-time? :basis :basis-timeout))
         {::keys [in-bindings]} (meta plan)
 
         plan (-> plan
@@ -1169,7 +1168,7 @@
               params (vw/open-params allocator (args->params args in-bindings))]
           (try
             (-> (.bind pq wm-src {:params params, :table-args (args->tables args in-bindings),
-                                  :basis basis, :default-tz default-tz})
+                                  :basis basis, :default-tz default-tz :default-all-app-time? default-all-app-time?})
                 (.openCursor)
                 (op/cursor->datalog-result-set params))
             (catch Throwable t

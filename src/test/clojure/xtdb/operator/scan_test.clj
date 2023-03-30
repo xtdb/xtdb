@@ -99,7 +99,32 @@
                             [{system_time_start (< system_time_start #time/zoned-date-time "3002-01-01T00:00Z")}
                              {system_time_end (> system_time_end #time/zoned-date-time "2999-01-01T00:00Z")}
                              last_updated]]
-                          {:node node})))))
+                          {:node node :default-all-app-time? true})))))
+
+(t/deftest test-for-app-time-in-params
+  (let [tt1 (util/->zdt #inst "2020-01-01")
+        tt2 (util/->zdt #inst "2020-01-02")
+        eot (util/->zdt util/end-of-time)]
+    (with-open [node (node/start-node {})]
+      (xt/submit-tx node [[:put :foo {:id 1, :version "version 1" :last_updated "tx1"}
+                           {:app-time-start tt1 :app-time-end eot}]])
+
+      (xt/submit-tx node [[:put :foo {:id 2, :version "version 2" :last_updated "tx2"}
+                           {:app-time-start tt2 :app-time-end eot}]])
+      (t/is (= [{:id 1, :version "version 1"} {:id 2, :version "version 2"}]
+               (tu/query-ra '[:scan {:table foo,
+                                     :default-all-app-time? false
+                                     :for-app-time [:between ?_start ?_end]}
+                              [id version]]
+                            {:node node :params {'?_start (util/->instant tt1)
+                                                 '?_end (util/->instant eot)}})))
+      (t/is (= [{:id 1, :version "version 1"} {:id 2, :version "version 2"}]
+               (tu/query-ra '[:scan {:table foo,
+                                     :default-all-app-time? false
+                                     :for-app-time :all-time}
+                              [id version]]
+                            {:node node :params {'?_start (util/->instant tt1)
+                                                 '?_end (util/->instant eot)}}))))))
 
 (t/deftest test-scan-col-types
   (with-open [node (node/start-node {})]

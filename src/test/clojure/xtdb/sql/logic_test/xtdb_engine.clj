@@ -198,15 +198,15 @@
       :insert_statement (insert-statement node direct-sql-data-statement))))
 
 (defn- execute-sql-statement [node sql-statement variables opts]
-   (binding [r/*memo* (HashMap.)]
-     (xt.sql/submit-tx node
-                       [[:sql sql-statement]]
-                       (cond-> opts
-                         (= (get variables "APP_TIME_DEFAULTS") "AS_OF_NOW")
-                         (assoc :app-time-as-of-now? true)
+  (binding [r/*memo* (HashMap.)]
+    (xt.sql/submit-tx node
+                      [[:sql sql-statement]]
+                      (cond-> opts
+                        (= (get variables "APP_TIME_DEFAULTS") "AS_OF_NOW")
+                        (assoc :default-all-app-time? false)
 
-                         (get variables "CURRENT_TIMESTAMP")
-                         (assoc-in [:basis :current-time] (Instant/parse (get variables "CURRENT_TIMESTAMP")))))
+                        (get variables "CURRENT_TIMESTAMP")
+                        (assoc-in [:basis :current-time] (Instant/parse (get variables "CURRENT_TIMESTAMP")))))
     node))
 
 (defn- execute-sql-query [node sql-statement variables opts]
@@ -216,11 +216,11 @@
        (for [row (xt.sql/q node sql-statement
                            (cond-> opts
                              (= (get variables "APP_TIME_DEFAULTS") "AS_OF_NOW")
-                             (assoc :app-time-as-of-now? true)
+                             (assoc :default-all-app-time? false)
 
                              (get variables "CURRENT_TIMESTAMP")
                              (assoc-in [:basis :current-time] (Instant/parse (get variables "CURRENT_TIMESTAMP")))))]
-          (mapv #(-> % name keyword row) projection))))))
+         (mapv #(-> % name keyword row) projection))))))
 
 (defn parse-create-table [^String x]
   (when-let [[_ table-name columns] (re-find #"(?is)^\s*CREATE\s+TABLE\s+(\w+)\s*\((.+)\)\s*$" x)]
