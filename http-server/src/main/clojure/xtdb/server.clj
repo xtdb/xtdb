@@ -99,7 +99,7 @@
 
 (s/def ::params (s/nilable (s/coll-of any? :kind vector?)))
 
-(s/def :xtdb.server.datalog/query (s/merge ::d/query (s/keys :opt-un [::basis ::basis-timeout])))
+(s/def :xtdb.server.datalog/query (s/merge ::d/query (s/keys :opt-un [::basis ::basis-timeout ::default-tz])))
 
 (s/def :xtdb.server.datalog/query-body
   (s/keys :req-un [:xtdb.server.datalog/query], :opt-un [::params]))

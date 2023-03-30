@@ -1123,7 +1123,7 @@
        (into {})))
 
 (defn open-datalog-query ^xtdb.IResultSet [^BufferAllocator allocator, ^IRaQuerySource ra-src, wm-src
-                                            {:keys [basis explain?] :as query} args]
+                                           {:keys [basis default-tz explain?] :as query} args]
   (let [plan (compile-query (dissoc query :basis :basis-timeout))
         {::keys [in-bindings]} (meta plan)
 
@@ -1153,8 +1153,8 @@
         (let [^AutoCloseable
               params (vw/open-params allocator (args->params args in-bindings))]
           (try
-            (-> (.bind pq wm-src
-                       {:params params, :table-args (args->tables args in-bindings), :basis basis})
+            (-> (.bind pq wm-src {:params params, :table-args (args->tables args in-bindings),
+                                  :basis basis, :default-tz default-tz})
                 (.openCursor)
                 (op/cursor->datalog-result-set params))
             (catch Throwable t
