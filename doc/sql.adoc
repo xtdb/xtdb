@@ -4,6 +4,8 @@ XTDB 2.x supports a significant subset of the SQL:2011 standard.
 
 == Getting started
 
+First, follow the link:./getting-started.adoc[Getting Started] guide.
+
 [source,clojure]
 ----
 (require '[xtdb.sql :as xt])
