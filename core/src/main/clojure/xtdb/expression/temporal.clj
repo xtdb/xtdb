@@ -960,18 +960,19 @@
 
 (defmethod expr/codegen-call [:period :timestamp-tz :timestamp-tz] [{[start-type end-type] :arg-types}]
   ;; TODO error assumes micros
-  ;; TODO reflection warning for readLong
   {:return-type [:struct {'start start-type, 'end end-type}]
    :->call-code (fn [[start-code end-code]]
                   `(let [start# ~start-code
                          end# ~end-code]
-                     (if (> start# end#)
-                       (throw (invalid-period-err start# end#))
+
+                     (when (> start# end#)
+                       (throw (invalid-period-err start# end#)))
+
                        (reify IStructValueReader
                          (~'readLong [_ field#]
                            (case field#
                              "start" start#
-                             "end" end#))))))})
+                             "end" end#)))))})
 
 (defn start [^IStructValueReader period]
   (.readLong period "start"))
