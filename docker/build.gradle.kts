@@ -22,4 +22,5 @@ tasks.shadowJar {
     archiveBaseName.set("xtdb")
     archiveVersion.set("")
     archiveClassifier.set("standalone")
+    mergeServiceFiles()
 }
