@@ -1,4 +1,5 @@
-((nil . ((cider-ns-refresh-before-fn . "integrant.repl/suspend")
+((nil . ((cider-preferred-build-tool . gradle)
+         (cider-ns-refresh-before-fn . "integrant.repl/suspend")
          (cider-ns-refresh-after-fn  . "integrant.repl/resume")
          (cider-clojure-cli-aliases . ":xtdb:dev")))
  (clojure-mode . ((eval . (define-clojure-indent
