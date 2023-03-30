@@ -5,4 +5,4 @@
 ** link:./datalog-txs.adoc[Submitting a transaction]
 ** link:./datalog-queries.adoc[Queries]
 ** link:./expression-lang.adoc[Expression language]
-* SQL
+* link:./sql.adoc[SQL]
