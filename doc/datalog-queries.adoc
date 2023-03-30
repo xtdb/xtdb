@@ -133,13 +133,13 @@ This is now implicit - when you call `xt/q`, the client will (by default) await 
 ----
 (with-open [node ...]
   (xt/submit-tx node
-                [[:put 'users {:id :jms, :first-name "James"}]
-                 [:put 'users {:id :jdt, :first-name "Jeremy"}]])
+                [[:put :users {:id :jms, :first-name "James"}]
+                 [:put :users {:id :jdt, :first-name "Jeremy"}]])
 
   ;; no `await-tx` call required here
 
   (xt/q node '{:find [id first-name]
-               :where [(match users [id first-name])]}))
+               :where [($ :users [id first-name])]}))
 ----
 
 By default, the query will ensure that the latest-submitted transaction has been indexed, but will then run against the most recent transaction indexed by the node.
@@ -148,10 +148,10 @@ If you need to run the query at an exact transaction (e.g. for repeatable querie
 [source,clojure]
 ----
 (let [tx (xt/submit-tx node
-                       [[:put 'users {:id :jms, :first-name "James"}]
-                        [:put 'users {:id :jdt, :first-name "Jeremy"}]])]
+                       [[:put :users {:id :jms, :first-name "James"}]
+                        [:put :users {:id :jdt, :first-name "Jeremy"}]])]
   (xt/q node (-> '{:find [id first-name]
-                   :where [(match users [id first-name])]}
+                   :where [(match :users [id first-name])]}
                  (assoc :basis {:tx tx, :current-time #inst "2023-03-29T12:00:00"}))))
 ----
 
