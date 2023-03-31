@@ -1895,3 +1895,94 @@
                    :in [pid]
                    :where [($ :people [{:id pid} name age])]
                    :explain? true}))))
+
+(deftest test-unbound-vars
+
+  (t/is
+    (thrown-with-msg?
+      IllegalArgumentException
+      #"Logic variables in find clause must be bound in where: foo"
+      (xt/q
+        tu/*node*
+        '{:find [foo]
+          :where [(match :xt_docs {:first-name name})]}))
+    "plain logic var in find")
+
+  (t/is
+    (thrown-with-msg?
+      IllegalArgumentException
+      #"Logic variables in find clause must be bound in where: foo"
+      (xt/q
+        tu/*node*
+        (->
+          '{:find [(+ foo 1)]
+            :where [(match :xt_docs {:first-name name})]})))
+    "logic var within expr in find")
+
+  (t/is
+    (thrown-with-msg?
+      IllegalArgumentException
+      #"Logic variables in find clause must be bound in where: foo"
+      (xt/q
+        tu/*node*
+        (->
+          '{:find [(sum foo)]
+            :where [(match :xt_docs {:first-name name})]})))
+    "logic var within aggr in find")
+
+  (t/is
+    (thrown-with-msg?
+      IllegalArgumentException
+      #"Logic variables in find clause must be bound in where: foo"
+      (xt/q
+        tu/*node*
+        (->
+          '{:find [(sum (- 64 (+ 20 4 foo)))]
+            :where [(match :xt_docs {:first-name name})]})))
+    "deeply nested logic var in find")
+
+  (t/is
+    (thrown-with-msg?
+      IllegalArgumentException
+      #"Logic variables in find clause must be bound in where: baz, bar, foo"
+      (xt/q
+        tu/*node*
+        (->
+          '{:find [foo (+ 1 bar) (sum (+ 1 (- 1 baz)))]
+            :where [(match :xt_docs {:first-name name})]})))
+    "multiple unbound vars in find")
+
+  (t/is
+    (thrown-with-msg?
+      IllegalArgumentException
+      #"Logic variables in find clause must be bound in where: baz, bar, foo"
+      (xt/q
+        tu/*node*
+        (->
+          '{:find [foo (+ 1 bar) (sum (+ 1 (- 1 baz)))]
+            :where [(match :xt_docs {:first-name name})]})))
+    "multiple unbound vars in find")
+
+  (t/is
+    (thrown-with-msg?
+      IllegalArgumentException
+      #"Logic variables in order-by clause must be bound in where: baz"
+      (xt/q
+        tu/*node*
+        (->
+          '{:find [name]
+            :where [(match :xt_docs {:first-name name})]
+            :order-by [[baz :asc]]})))
+    "simple order-by var")
+
+  (t/is
+    (thrown-with-msg?
+      IllegalArgumentException
+      #"Logic variables in order-by clause must be bound in where: biff, baz, bing"
+      (xt/q
+        tu/*node*
+        (->
+          '{:find [name]
+            :where [(match :xt_docs {:first-name name})]
+            :order-by [[(count biff) :desc] [baz :asc] [bing]]})))
+    "multiple unbound vars in order-by"))
