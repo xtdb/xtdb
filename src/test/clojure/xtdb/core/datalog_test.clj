@@ -1985,4 +1985,14 @@
           '{:find [name]
             :where [(match :xt_docs {:first-name name})]
             :order-by [[(count biff) :desc] [baz :asc] [bing]]})))
-    "multiple unbound vars in order-by"))
+    "multiple unbound vars in order-by")
+
+  (t/is
+    (thrown-with-msg?
+      IllegalArgumentException
+      #"Logic variables in find clause must be bound in where: age, min_age"
+      (xt/q tu/*node*
+            '{:find [min_age age]
+              :where [(q {:find [(min age)]
+                          :where [($ :docs {:age age})]})]}))
+    "variables not exposed by subquery"))
