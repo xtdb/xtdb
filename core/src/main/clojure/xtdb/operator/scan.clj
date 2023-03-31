@@ -393,12 +393,14 @@
         (scan-op-at-now for-sys-time))))
 
 (defn use-current-row-id-cache? [^IWatermark watermark scan-opts basis temporal-col-names]
-  (and (at-now? scan-opts)
-       (>= (util/instant->micros (:current-time basis))
-           (util/instant->micros (:sys-time (:tx basis))))
-       (= (:tx basis)
-          (.txBasis watermark))
-       (empty? (remove #(= % "id") temporal-col-names))))
+  (and
+    (.txBasis watermark)
+    (= (:tx basis)
+       (.txBasis watermark))
+    (at-now? scan-opts)
+    (>= (util/instant->micros (:current-time basis))
+        (util/instant->micros (:sys-time (:tx basis))))
+    (empty? (remove #(= % "id") temporal-col-names))))
 
 (defn get-current-row-ids [^IWatermark watermark basis]
   (.getCurrentRowIds
