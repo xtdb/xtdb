@@ -136,9 +136,9 @@
         (memoize
           (fn [depth]
             (weighted-sample-fn {:match-hit 0.2
-                                 :match-miss (max 0.0 (- 0.01 (* 0.02 depth)))
+                                 :match-miss (max 0.0 (- 0.01 (* 0.005 depth)))
                                  :conditional-hit 0.1
-                                 :conditional-miss (max 0.0 (- 0.01 (* 0.02 depth)))
+                                 :conditional-miss (max 0.0 (- 0.01 (* 0.005 depth)))
                                  :delete 0.01
                                  :put 0.01
                                  :set 0.02
