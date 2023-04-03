@@ -586,7 +586,7 @@
   {:submit {:tx-time-ordering-violations (count of ordering violations, where tx-time is > the previous transaction)} ,
    :consistent true|false,
    :nodes [{:node {:status (result of xt/status call),
-                   :restarts (a vector of restart indicators, :s for a stuck restart, :f for ingester fail),
+                   :restarts (a vector of restart indicators, :s for a stuck restart, :i for ingester fail),
                    :latest-submitted (result of xt/last-submitted-tx)
                    :latest-completed (result of xt/last-completed-tx),
            :expected (the expected st map),
@@ -775,7 +775,7 @@
     (when (some (comp seq :restarts :node) nodes)
       (println)
       (println "Restarts")
-      (println ":s = stuck, :f = ingester fail")
+      (println ":s = stuck, :i = ingester fail")
       (doseq [[i {node-report :node}] (map-indexed vector nodes)
               :let [{:keys [restarts]} node-report]
               :when (seq restarts)]
