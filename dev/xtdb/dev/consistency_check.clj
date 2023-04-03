@@ -643,7 +643,8 @@
           rng (Random. 34234324234)
           tx-results (object-array tx-count)
           tx-nodes (object-array tx-count)
-          retry-silent #(xio/exp-backoff % {:on-retry (constantly nil)})]
+          retry-silent #(xio/exp-backoff % {:retryable (constantly true)
+                                            :on-retry (constantly nil)})]
       (try
 
         ;; start nodes
