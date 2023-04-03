@@ -752,8 +752,8 @@
            :consistent (every? empty? (map :diff node-reports))
            :nodes node-reports})
         (finally
-          (run! xio/delete-dir kv-data-dirs)
-          (run! xio/try-close (keep deref node-refs)))))))
+          (run! xio/try-close (keep deref node-refs))
+          (run! xio/delete-dir kv-data-dirs))))))
 
 (def ^:redef last-printed-report)
 
