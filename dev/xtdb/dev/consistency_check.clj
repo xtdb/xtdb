@@ -135,15 +135,17 @@
         depth-sampler
         (memoize
           (fn [depth]
-            (weighted-sample-fn {:match-hit 0.2
-                                 :match-miss (max 0.0 (- 0.01 (* 0.005 depth)))
-                                 :conditional-hit 0.1
-                                 :conditional-miss (max 0.0 (- 0.01 (* 0.005 depth)))
-                                 :delete 0.01
-                                 :put 0.01
-                                 :set 0.02
-                                 :incr 0.5
-                                 :maybe-non-deterministic (max non-determinism 0.0)})))
+            (weighted-sample-fn
+              (remove (fn [[_ weight]] (<= weight 0.0))
+                      {:match-hit 0.2
+                       :match-miss (max 0.0 (- 0.01 (* 0.005 depth)))
+                       :conditional-hit 0.1
+                       :conditional-miss (max 0.0 (- 0.01 (* 0.005 depth)))
+                       :delete 0.01
+                       :put 0.01
+                       :set 0.02
+                       :incr 0.5
+                       :maybe-non-deterministic (max non-determinism 0.0)}))))
         sample-miss-n-or-nil (weighted-sample-fn {-1 1.0, 1 0.5, nil 0.1})]
     {:short-desc (format "counters %s (non-determinism %s)" counters non-determinism)
      :init (apply put-transition {} tx-fns)
