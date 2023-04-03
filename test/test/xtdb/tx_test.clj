@@ -1,7 +1,9 @@
 (ns xtdb.tx-test
   (:require [clojure.java.io :as io]
+            [clojure.spec.alpha :as s]
             [clojure.string :as string]
             [clojure.test :as t]
+            [clojure.tools.logging :as log]
             [clojure.tools.logging.impl :as log-impl]
             [xtdb.fixtures :as f]
             [xtdb.fixtures.kv :as fkv]
@@ -1569,3 +1571,27 @@
   (xt/submit-tx *api* [[::xt/put {:xt/id :oom, :xt/fn '(fn [_] (throw (java.lang.OutOfMemoryError. "test oom")))}]
                        [::xt/fn :oom]])
   (t/is (f/spin-until-true 100 #(:ingester-failed? (xt/status *api*)))))
+
+(t/deftest tx-fn-throwing-error-does-not-skip-tx-test-1925
+  (let [ca (s/check-asserts?)]
+    (s/check-asserts true)
+    (try
+      (with-redefs [log/log* (constantly nil)]
+        (xt/submit-tx *api*
+                      [[::xt/put {:xt/id :incr
+                                  :xt/fn
+                                  '(fn [ctx]
+                                     (let [n (:n (xtdb.api/entity (xtdb.api/db ctx) :ctr) 0)]
+                                       [[:xtdb.api/put {:xt/id :ctr, :n (inc n)}]]))}]
+                       [::xt/put {:xt/id :oom,
+                                  :xt/fn
+                                  '(fn [_] (throw (OutOfMemoryError.)))}]])
+
+        (xt/submit-tx *api* [[::xt/fn :incr]])
+        (xt/submit-tx *api* [[::xt/fn :oom]])
+        (xt/submit-tx *api* [[::xt/fn :incr]])
+        (t/is (f/spin-until-true 100 #(:ingester-failed? (xt/status *api*))))
+        (try (xt/sync *api*) (catch Throwable _))
+        (t/is (= 1 (:n (xt/entity (xt/db *api*) :ctr)))))
+      (finally
+        (s/check-asserts ca)))))
