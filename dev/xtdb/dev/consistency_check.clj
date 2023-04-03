@@ -5,6 +5,7 @@
    Try (print-test {}) for a quick test."
   (:require [clojure.java.shell :as sh]
             [clojure.pprint :as pp]
+            [clojure.string :as str]
             [clojure.tools.logging :as log]
             [clojure.walk :as walk]
             [juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc :as jdbc]
@@ -688,7 +689,7 @@
                        (cond
                          (:ingester-failed? (xt/status node))
                          (do (xio/try-close node)
-                             (vswap! (restarts node-idx) conj :i)
+                             (vswap! (restarts node-idx) conj [:i now-completed-tx-id])
                              (vreset! node-ref (xt/start-node (get-node-cfg node-idx)))
                              (recur now-completed-tx-id max-completed-tx-id true))
 
@@ -705,7 +706,7 @@
 
                          progressing
                          (do (xio/try-close node)
-                             (vswap! (restarts node-idx) conj :s)
+                             (vswap! (restarts node-idx) conj [:i now-completed-tx-id])
                              (vreset! node-ref (doto (xt/start-node (get-node-cfg node-idx)) (pause-flake)))
                              (recur now-completed-tx-id max-completed-tx-id false))
 
@@ -767,30 +768,27 @@
     (if consistent
       (println "✅ SUCCESS" outcome)
       (do (println "❌ FAIL" outcome)
-          (println )
-          (doseq [[i {:keys [diff]}] (map-indexed vector nodes)]
+          (println)
+          (doseq [[i {node-report :node
+                      :keys [diff]}] (map-indexed vector nodes)]
             (println "node" i (if (seq diff) "❌" "✅"))
+            (let [{:keys [latest-submitted, latest-completed]} node-report
+                  submitted-tx-id (::xt/tx-id latest-submitted)
+                  completed-tx-id (::xt/tx-id latest-completed)]
+              (when (not= submitted-tx-id completed-tx-id)
+                (println "Did not finish indexing at" completed-tx-id "of" submitted-tx-id)))
             (println)
             (when (seq diff)
               (pp/pprint diff))
             (println))))
 
     (when (some (comp seq :restarts :node) nodes)
-      (println)
       (println "Restarts")
       (println ":s = stuck, :i = ingester fail")
       (doseq [[i {node-report :node}] (map-indexed vector nodes)
               :let [{:keys [restarts]} node-report]
               :when (seq restarts)]
-        (print i " ")
-        (let [[t n]
-              (reduce (fn [[t n] r]
-                        (if (= t r)
-                          [t (inc n)]
-                          (do (when t (print t "x" n " "))
-                              [r 1])))
-                      nil restarts)]
-          (when t (print t "x" n " ")))
+        (print i " " (str/join ", " restarts))
         (flush)
         (println)))
 
