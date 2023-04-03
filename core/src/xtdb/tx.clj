@@ -39,7 +39,7 @@
           :req-un [::submitted-tx ::committed?]
           :opt-un [::doc-ids ::av-count ::bytes-indexed]))
 
-(s/def ::ingester-error #(instance? Exception %))
+(s/def ::ingester-error #(instance? Throwable %))
 (defmethod bus/event-spec ::ingester-error [_] (s/keys :req-un [::ingester-error]))
 
 (defn- tx-fn-doc? [doc]
