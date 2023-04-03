@@ -589,9 +589,13 @@
             ;; and provide a signal to the application that indexing has failed
             handle-ex
             (fn [ex]
-              (set-ingester-error! ex)
-              (when-some [^CompletableFuture fut @subscription-fut]
-                (.completeExceptionally fut ex)))
+              (try
+                (set-ingester-error! ex)
+                ;; it is extremely important that a bug in set-ingester-error! does not
+                ;; cause the complete signal to be skipped, so being extra defensive.
+                (finally
+                  (when-some [^CompletableFuture fut @subscription-fut]
+                    (.completeExceptionally fut ex)))))
 
             apply-if-not-done
             (fn [^CompletableFuture fut f args]
