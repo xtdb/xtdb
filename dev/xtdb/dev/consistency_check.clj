@@ -817,7 +817,21 @@
 
   (print-test {:model (counter-model {:non-determinism 0.0})
                :storage {:doc-store {:fetch-flake {nil 1.0, (Exception. "boom") 0.1}}}
-               :tx-count 10000})
+               :tx-count 100})
+
+  (print-test {:model (counter-model {:non-determinism 0.0})
+               :storage {:doc-store {:fetch-flake {nil 1.0, (OutOfMemoryError. "boom") 0.1}}}
+               :tx-count 100})
+
+  (print-test {:model (counter-model {:counters 1, :non-determinism 0.0})
+               :storage {:doc-store {:submit-flake {nil 1.0, (OutOfMemoryError. "boom") 0.1}}}
+               :node-count 1
+               :tx-count 4})
+
+  (print-test {:model (counter-model {:counters 1, :non-determinism 0.0})
+               :storage {:doc-store {:submit-flake {nil 1.0, (OutOfMemoryError. "boom") 0.5}}}
+               :node-count 1
+               :tx-count 3})
 
   (print-test {:model (counter-model
                         {:counters 16,
