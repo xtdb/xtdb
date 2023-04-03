@@ -92,6 +92,22 @@
    :new-st (reduce #(assoc %1 (:xt/id %2) %2) st docs)})
 
 (defn counter-model
+  "Returns a model (for use in test-model or print-test) that describes
+  transactions over some set of counters.
+
+  Includes nesting dependent read sequences including matches and conditional tx-fns.
+
+  Options:
+
+  :counters default 4
+  The number of distinct counters we should transact against
+
+  :non-determinism
+  a weighting that increases the likely-hood of an intentionally non-deterministic tx-fn being introduced.
+  At 0.0, the generated transactions will be entirely deterministic.
+
+  :seed (long)
+  the rng seed used for new transactions via transition-seq."
   [{:keys [counters
            non-determinism
            seed]
