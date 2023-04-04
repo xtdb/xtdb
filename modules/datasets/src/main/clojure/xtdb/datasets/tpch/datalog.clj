@@ -359,7 +359,7 @@
 
 (def q20
   '{:find [s_name s_address]
-    :where [(match part [{:id p} p_name])
+    :where [(match :part [{:id p} p_name])
             [(like p_name "forest%")]
 
             (match :partsupp [{:ps_suppkey s, :ps_partkey p}

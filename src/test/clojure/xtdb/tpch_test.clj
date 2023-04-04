@@ -100,7 +100,7 @@
   ;; replace with *qs* once these are all expected to work
   (-> (set (range 1 23))
       (disj 21) ; TODO apply decorr
-      (disj 7 20) ; TODO general fail
+      (disj 7) ; TODO general fail
       (disj 13) ; TODO left-join
       (disj 15) ; TODO has a view, not sure how to represent this
       (disj 19 22) ; TODO cardinality-many literals
