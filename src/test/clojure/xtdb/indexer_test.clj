@@ -352,10 +352,9 @@
       ;; aborted tx shows up in log
       (xt.d/submit-tx node [[:sql "INSERT INTO foo (id, application_time_start, application_time_end) VALUES (1, DATE '2020-01-01', DATE '2019-01-01')"]])
 
-      (-> (xt.d/submit-tx node [[:delete :xt_docs "foo" {:app-time-start #inst "2020-04-01"}]
+      (-> (xt.d/submit-tx node [[:delete :xt_docs "foo" {:for-app-time [:in #inst "2020-04-01"]}]
                                 [:put :xt_docs {:id "bar", :month "april"},
-                                 {:app-time-start #inst "2020-04-01"
-                                  :app-time-end #inst "2020-05-01"}]])
+                                 {:for-app-time [:in #inst "2020-04-01" #inst "2020-05-01"]}]])
           (tu/then-await-tx* node))
 
       (tu/finish-chunk! node)

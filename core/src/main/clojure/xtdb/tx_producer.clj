@@ -26,8 +26,15 @@
 (s/def ::doc (s/and (s/keys :req-un [::id])
                     (s/conformer #(update-keys % util/ns-kw->kw) #(update-keys % util/kw->ns-kw))))
 (s/def ::table (s/and simple-keyword? (s/conformer symbol keyword)))
-(s/def ::app-time-start ::util/datetime-value)
-(s/def ::app-time-end ::util/datetime-value)
+(s/def ::app-time-start (s/nilable ::util/datetime-value))
+(s/def ::app-time-end (s/nilable ::util/datetime-value))
+
+(s/def ::for-app-time (s/cat :in #{:in}
+                             :app-time-start ::app-time-start
+                             :app-time-end (s/? ::app-time-end)))
+
+(s/def ::temporal-opts (s/and (s/keys :opt-un [::for-app-time])
+                              (s/conformer #(:for-app-time %) #(hash-map :for-app-time %))))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (s/def ::default-all-app-time? boolean)
@@ -44,13 +51,13 @@
   (s/cat :op #{:put}
          :table ::table
          :doc ::doc
-         :app-time-opts (s/? (s/keys :opt-un [::app-time-start ::app-time-end]))))
+         :app-time-opts (s/? ::temporal-opts)))
 
 (defmethod tx-op-spec :delete [_]
   (s/cat :op #{:delete}
          :table ::table
          :id ::id
-         :app-time-opts (s/? (s/keys :opt-un [::app-time-start ::app-time-end]))))
+         :app-time-opts (s/? ::temporal-opts)))
 
 (defmethod tx-op-spec :evict [_]
   ;; eventually this could have app-time/sys start/end?

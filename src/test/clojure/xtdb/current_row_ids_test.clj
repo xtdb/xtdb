@@ -17,33 +17,32 @@
   tx1
   '[[:put :xt_docs {:id :ivan, :first-name "Ivan"}]
     [:put :xt_docs {:id :petr, :first-name "Petr"}
-     {:app-time-start #inst "2020-01-02T12:00:00Z"}]
+     {:for-app-time [:in #inst "2020-01-02T12:00:00Z"]}]
     [:put :xt_docs {:id :susie, :first-name "Susie"}
-     {:app-time-end #inst "2020-01-02T13:00:00Z"}]
+     {:for-app-time [:in nil #inst "2020-01-02T13:00:00Z"]}]
     [:put :xt_docs {:id :sam, :first-name "Sam"}]
     [:put :xt_docs {:id :petr, :first-name "Petr"}
-     {:app-time-start #inst "2020-01-04T12:00:00Z"}]
+     {:for-app-time [:in #inst "2020-01-04T12:00:00Z"]}]
     [:put :xt_docs {:id :jen, :first-name "Jen"}
-     {:app-time-end #inst "2020-01-04T13:00:00Z"}]
+     {:for-app-time [:in nil #inst "2020-01-04T13:00:00Z"]}]
     [:put :xt_docs {:id :james, :first-name "James"}
-     {:app-time-start #inst "2020-01-01T12:00:00Z"}]
+     {:for-app-time [:in #inst "2020-01-01T12:00:00Z"]}]
     [:put :xt_docs {:id :jon, :first-name "Jon"}
-     {:app-time-end #inst "2020-01-01T12:00:00Z"}]
+     {:for-app-time [:in nil #inst "2020-01-01T12:00:00Z"]}]
     [:put :xt_docs {:id :lucy :first-name "Lucy"}]])
 
 (deftest test-current-row-ids
   (xt/submit-tx
-    tu/*node*
-    tx1)
+   tu/*node*
+   tx1)
 
   (xt/submit-tx
-    tu/*node*
-    '[[:put :xt_docs {:id :ivan, :first-name "Ivan-2"}
-       {:app-time-start #inst "2020-01-02T14:00:00Z"}]
-      [:put :xt_docs {:id :ben, :first-name "Ben"}
-       {:app-time-start #inst "2020-01-02T14:00:00Z"
-        :app-time-end #inst "2020-01-02T15:00:00Z"}]
-      [:evict :xt_docs :lucy]])
+   tu/*node*
+   '[[:put :xt_docs {:id :ivan, :first-name "Ivan-2"}
+      {:for-app-time [:in #inst "2020-01-02T14:00:00Z"]}]
+     [:put :xt_docs {:id :ben, :first-name "Ben"}
+      {:for-app-time [:in #inst "2020-01-02T14:00:00Z" #inst "2020-01-02T15:00:00Z"]}]
+     [:evict :xt_docs :lucy]])
 
   (t/is (= [{:name "Ivan-2"}
             {:name "James"}
@@ -51,11 +50,11 @@
             {:name "Petr"}
             {:name "Sam"}]
            (xt/q
-             tu/*node*
-             (-> '{:find [name]
-                   :where [(match :xt_docs {:first-name name})]
-                   :order-by [[name :asc]]}
-                 (assoc :basis {:current-time #time/instant "2020-01-03T00:00:00Z"})))))) ;; timing
+            tu/*node*
+            (-> '{:find [name]
+                  :where [(match :xt_docs {:first-name name})]
+                  :order-by [[name :asc]]}
+                (assoc :basis {:current-time #time/instant "2020-01-03T00:00:00Z"})))))) ;; timing
 
 (defn valid-ids-at [current-time]
   (xt/q
@@ -67,9 +66,9 @@
 (deftest test-current-row-ids-app-time-start-inclusivity
   (t/testing "app-time-start"
     (xt/submit-tx
-      tu/*node*
-      '[[:put :xt_docs {:id 1}
-         {:app-time-start #inst "2020-01-01T00:00:02Z"}]])
+     tu/*node*
+     '[[:put :xt_docs {:id 1}
+        {:for-app-time [:in #inst "2020-01-01T00:00:02Z"]}]])
 
     (t/is (= []
              (valid-ids-at #time/instant "2020-01-01T00:00:01Z")))
@@ -81,9 +80,9 @@
 (deftest test-current-row-ids-app-time-end-inclusivity
   (t/testing "app-time-start"
     (xt/submit-tx
-      tu/*node*
-      '[[:put :xt_docs {:id 1}
-         {:app-time-end #inst "2020-01-01T00:00:02Z"}]])
+     tu/*node*
+     '[[:put :xt_docs {:id 1}
+        {:for-app-time [:in nil #inst "2020-01-01T00:00:02Z"]}]])
 
     (t/is (= [{:id 1}]
              (valid-ids-at #time/instant "2020-01-01T00:00:01Z")))

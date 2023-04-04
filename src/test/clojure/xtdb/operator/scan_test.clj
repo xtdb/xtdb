@@ -44,8 +44,7 @@
 (t/deftest test-scanning-temporal-cols
   (with-open [node (node/start-node {})]
     (xt/submit-tx node [[:put :xt_docs {:id :doc}
-                         {:app-time-start #inst "2021"
-                          :app-time-end #inst "3000"}]])
+                         {:for-app-time [:in #inst "2021" #inst "3000"]}]])
 
     (let [res (first (tu/query-ra '[:scan {:table xt_docs}
                                     [id

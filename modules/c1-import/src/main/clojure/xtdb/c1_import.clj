@@ -51,13 +51,11 @@
                      (case tx-status
                        :commit (for [[tx-op {:keys [eid doc start-valid-time end-valid-time]}] tx-ops]
                                  ;; HACK: what to do if the user has a separate :id key?
-                                 (let [app-time-opts (->> {:app-time-start start-valid-time
-                                                           :app-time-end end-valid-time}
-                                                          (into {} (filter val)))]
+                                 (let [app-time-opts {:for-app-time [:in start-valid-time end-valid-time]}]
                                    (case tx-op
-                                     :put [:put (xform-doc doc) app-time-opts]
-                                     :delete [:delete eid app-time-opts]
-                                     :evict [:evict eid])))
+                                     :put [:put :xt_docs (xform-doc doc) app-time-opts]
+                                     :delete [:delete :xt_docs eid app-time-opts]
+                                     :evict [:evict :xt_docs eid])))
                        :abort [[:abort]])
                      {:sys-time (:xtdb.api/tx-time tx)})
           (recur))))))

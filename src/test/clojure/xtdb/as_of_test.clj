@@ -39,7 +39,7 @@
 (t/deftest test-app-time
   (let [{:keys [sys-time]} (xt/submit-tx tu/*node* [[:put :xt_docs {:id :doc, :version 1}]
                                                     [:put :xt_docs {:id :doc-with-app-time}
-                                                     {:app-time-start #inst "2021"}]])
+                                                     {:for-app-time [:in #inst "2021"]}]])
         sys-time (util/->zdt sys-time)]
 
     (t/is (= {:doc {:id :doc,

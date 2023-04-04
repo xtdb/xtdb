@@ -1389,13 +1389,13 @@
     ;; 2023: Matthew, Mark (again)
     ;; 2024+: Matthew
 
-    (let [tx0 (xt/submit-tx tu/*node* '[[:put :xt_docs {:id :matthew} {:app-time-start #inst "2015"}]
-                                        [:put :xt_docs {:id :mark} {:app-time-start #inst "2018", :app-time-end #inst "2020"}]
-                                        [:put :xt_docs {:id :luke} {:app-time-start #inst "2021"}]])
+    (let [tx0 (xt/submit-tx tu/*node* '[[:put :xt_docs {:id :matthew} {:for-app-time [:in #inst "2015"]}]
+                                        [:put :xt_docs {:id :mark} {:for-app-time [:in  #inst "2018"  #inst "2020"]}]
+                                        [:put :xt_docs {:id :luke} {:for-app-time [:in #inst "2021"]}]])
 
-          tx1 (xt/submit-tx tu/*node* '[[:delete :xt_docs :luke {:app-time-start #inst "2022"}]
-                                        [:put :xt_docs {:id :mark} {:app-time-start #inst "2023", :app-time-end #inst "2024"}]
-                                        [:put :xt_docs {:id :john} {:app-time-start #inst "2016", :app-time-end #inst "2020"}]])]
+          tx1 (xt/submit-tx tu/*node* '[[:delete :xt_docs :luke {:for-app-time [:in #inst "2022"]}]
+                                        [:put :xt_docs {:id :mark} {:for-app-time [:in #inst "2023" #inst "2024"]}]
+                                        [:put :xt_docs {:id :john} {:for-app-time [:in #inst "2016" #inst "2020"]}]])]
 
       (t/is (= [{:id :matthew}, {:id :mark}]
                (q '{:find [id], :where [(match :xt_docs [id])]}, tx1, #inst "2023")))
@@ -1467,31 +1467,33 @@
                    in))]
 
     (let [tx0 (xt/submit-tx tu/*node*
-                            '[[:put :docs {:id 1 :customer-number 145 :property-number 7797} {:app-time-start #inst "1998-01-10"}]]
+                            '[[:put :docs {:id 1 :customer-number 145 :property-number 7797}
+                               {:for-app-time [:in #inst "1998-01-10"]}]]
                             {:sys-time #inst "1998-01-10"})
 
           tx1 (xt/submit-tx tu/*node*
-                            '[[:put :docs {:id 1 :customer-number 827 :property-number 7797} {:app-time-start #inst "1998-01-15"}]]
+                            '[[:put :docs {:id 1 :customer-number 827 :property-number 7797}
+                               {:for-app-time [:in  #inst "1998-01-15"] }]]
                             {:sys-time #inst "1998-01-15"})
 
           _tx2 (xt/submit-tx tu/*node*
-                             '[[:delete :docs 1 {:app-time-start #inst "1998-01-20"}]]
+                             '[[:delete :docs 1 {:for-app-time [:in #inst "1998-01-20"]}]]
                              {:sys-time #inst "1998-01-20"})
 
           _tx3 (xt/submit-tx tu/*node*
-                             '[[:put :docs {:id 1 :customer-number 145 :property-number 7797} {:app-time-start #inst "1998-01-03"
-                                                                                               :app-time-end #inst "1998-01-10"}]]
+                             '[[:put :docs {:id 1 :customer-number 145 :property-number 7797}
+                                {:for-app-time [:in #inst "1998-01-03" #inst "1998-01-10"]}]]
                              {:sys-time #inst "1998-01-23"})
 
           _tx4 (xt/submit-tx tu/*node*
-                             '[[:delete :docs 1 {:app-time-start #inst "1998-01-03" :app-time-end #inst "1998-01-05"}]]
+                             '[[:delete :docs 1 {:for-app-time [:in #inst "1998-01-03" #inst "1998-01-05"]}]]
                              {:sys-time #inst "1998-01-26"})
 
           tx5 (xt/submit-tx tu/*node*
-                            '[[:put :docs {:id 1 :customer-number 145 :property-number 7797} {:app-time-start #inst "1998-01-05"
-                                                                                              :app-time-end #inst "1998-01-12"}]
-                              [:put :docs {:id 1 :customer-number 827 :property-number 7797} {:app-time-start #inst "1998-01-12"
-                                                                                              :app-time-end #inst "1998-01-20"}]]
+                            '[[:put :docs {:id 1 :customer-number 145 :property-number 7797}
+                               {:for-app-time [:in #inst "1998-01-05" #inst "1998-01-12"]}]
+                              [:put :docs {:id 1 :customer-number 827 :property-number 7797}
+                               {:for-app-time [:in #inst "1998-01-12" #inst "1998-01-20"]}]]
                             {:sys-time #inst "1998-01-28"})
 
           tx6 (xt/submit-tx tu/*node*
@@ -1505,13 +1507,13 @@
                                                                                   [(= (- #inst "1970-01-08" #inst "1970-01-01")
                                                                                       (- app-end app-start))]]})
                                                                      (map (fn [{:keys [id app-start app-end]}]
-                                                                            [:delete :docs id {:app-time-start app-start
-                                                                                               :app-time-end app-end}]))))}]
+                                                                            [:delete :docs id {:for-app-time [:in app-start app-end]}]))))}]
                              [:call :delete-1-week-records]]
                             {:sys-time #inst "1998-01-30"})
 
           tx7 (xt/submit-tx tu/*node*
-                            '[[:put :docs {:id 2 :customer-number 827 :property-number 3621} {:app-time-start #inst "1998-01-15"}]]
+                            '[[:put :docs {:id 2 :customer-number 827 :property-number 3621}
+                               {:for-app-time [:in #inst "1998-01-15"]}]]
                             {:sys-time #inst "1998-01-31"})]
 
       (t/is (= [{:cust 145 :app-start (util/->zdt #inst "1998-01-10")}]
@@ -1733,10 +1735,8 @@
 
 (deftest test-period-predicates
 
-  (xt/submit-tx tu/*node* '[[:put :xt_docs {:id 1} {:app-time-start #inst "2015"
-                                                    :app-time-end #inst "2020"}]
-                            [:put :xt_cats {:id 2} {:app-time-start #inst "2016"
-                                                    :app-time-end #inst "2018"}]])
+  (xt/submit-tx tu/*node* '[[:put :xt_docs {:id 1} {:for-app-time [:in #inst "2015" #inst "2020"]}]
+                            [:put :xt_cats {:id 2} {:for-app-time [:in #inst "2016" #inst "2018"]}]])
 
   (t/is (= [{:id 1, :id2 2,
              :xt_docs_app_time {:start #time/zoned-date-time "2015-01-01T00:00Z[UTC]",
@@ -1785,8 +1785,7 @@
               :where [[(period #inst "2022" #inst "2020") p1]]}))))
 
 (deftest test-period-and-temporal-col-projection
-  (xt/submit-tx tu/*node* '[[:put :xt_docs {:id 1} {:app-time-start #inst "2015"
-                                                    :app-time-end #inst "2050"}]])
+  (xt/submit-tx tu/*node* '[[:put :xt_docs {:id 1} {:for-app-time [:in #inst "2015" #inst "2050"]}]])
 
   (t/is (= [{:id 1,
              :app_time {:start #time/zoned-date-time "2015-01-01T00:00Z[UTC]",
@@ -1868,9 +1867,7 @@
 
 
 (deftest test-period-literal-match
-  (xt/submit-tx tu/*node* '[[:put :xt_docs {:id 1}
-                             {:app-time-start #inst "2015"
-                              :app-time-end #inst "2050"}]])
+  (xt/submit-tx tu/*node* '[[:put :xt_docs {:id 1} {:for-app-time [:in #inst "2015" #inst "2050"]}]])
 
   (t/is (thrown-with-msg?
          IllegalArgumentException
