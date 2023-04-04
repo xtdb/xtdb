@@ -2064,7 +2064,6 @@
                      :where [(match :xt_docs [xt/id foo])]
                      :default-all-app-time? true})))))
 
-
 (t/deftest test-sql-insert
   (xt/submit-tx tu/*node* [[:sql "INSERT INTO foo (xt__id) VALUES (0)"]])
   (t/is (= [{:xt/id 0}]
@@ -2079,3 +2078,22 @@
            (xt/q tu/*node*
                  '{:find [id]
                    :where [(match :foo {:xt/id id})]}))))
+
+(t/deftest test-metadata-filtering-for-time-data-607
+  (with-open [node (node/start-node {:xtdb/live-chunk {:rows-per-block 1, :rows-per-chunk 1}})]
+    (xt/submit-tx node [[:put :xt_docs {:xt/id 1 :start-date #time/date "2000-01-01"}]
+                        [:put :xt_docs {:xt/id 2 :start-date #time/date "3000-01-01"}]])
+    (t/is (= [{:id 1}]
+             (xt/q node
+                   '{:find [id]
+                     :where [(match :xt_docs [{:xt/id id} start-date])
+                             [(>= start-date #inst "1500")]
+                             [(< start-date #inst "2500")]]})))
+    (xt/submit-tx node [[:put :xt_docs2 {:xt/id 1 :start-date #inst "2000-01-01"}]
+                        [:put :xt_docs2 {:xt/id 2 :start-date #inst "3000-01-01"}]])
+    (t/is (= [{:id 1}]
+             (xt/q node
+                   '{:find [id]
+                     :where [(match :xt_docs2 [{:xt/id id} start-date])
+                             [(< start-date #time/date "2500-01-01")]
+                             [(< start-date #time/date "2500-01-01")]]})))))

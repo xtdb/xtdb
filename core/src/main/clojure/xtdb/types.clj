@@ -529,13 +529,18 @@
       (derive :uint :num) (derive :int :num) (derive :float :num)
       (derive :num :any)
 
-      (derive :timestamp-tz :any) (derive :timestamp-local :any)
-      (derive :date :any) (derive :time-local :any) (derive :interval :any) (derive :duration :any)
+      (derive :date-time :any)
+
+      (derive :timestamp-tz :date-time) (derive :timestamp-local :date-time)
+      (derive :date :date-time) (derive :time-local :date-time) (derive :interval :any) (derive :duration :any)
       (derive :varbinary :any) (derive :utf8 :any)
 
       (derive :keyword :any) (derive :uri :any) (derive :uuid :any) (derive :clj-form :any)
 
       (derive :list :any) (derive :struct :any)))
+
+(def num-types (descendants col-type-hierarchy :num))
+(def date-time-types (descendants col-type-hierarchy :date-time))
 
 (defn flatten-union-types [col-type]
   (if (= :union (col-type-head col-type))

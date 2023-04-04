@@ -24,24 +24,30 @@
 
 (declare meta-expr)
 
-(defn call-meta-expr [{:keys [f args] :as expr}]
+(defn call-meta-expr [{:keys [f args] :as expr} {:keys [col-types] :as opts}]
   (letfn [(var-param-expr [f meta-value field {:keys [param-type] :as param-expr}]
-            (simplify-and-or-expr
-             {:op :call
-              :f :or
-              ;; TODO this seems like it could make better use
-              ;; of the polymorphic expr patterns?
-              :args (vec (for [col-type (if (isa? types/col-type-hierarchy param-type :num)
-                                          [:i64 :f64]
-                                          [param-type])]
-                           (into {:op :metadata-vp-call,
-                                  :f f
-                                  :meta-value meta-value
-                                  :col-type col-type
-                                  :field field,
-                                  :param-expr param-expr
-                                  :bloom-hash-sym (when (= meta-value :bloom-filter)
-                                                    (gensym 'bloom-hashes))})))}))
+            (let [base-col-types (-> (get col-types field)
+                                     types/flatten-union-types)]
+              (simplify-and-or-expr
+               {:op :call
+                :f :or
+                ;; TODO this seems like it could make better use
+                ;; of the polymorphic expr patterns?
+                :args (vec (for [col-type (cond
+                                            (isa? types/col-type-hierarchy param-type :num)
+                                            (filterv types/num-types base-col-types)
+                                            (and (vector? param-type) (isa? types/col-type-hierarchy (first param-type) :date-time))
+                                            (filterv (comp types/date-time-types first) base-col-types)
+                                            :else
+                                            [param-type])]
+                             (into {:op :metadata-vp-call,
+                                    :f f
+                                    :meta-value meta-value
+                                    :col-type col-type
+                                    :field field,
+                                    :param-expr param-expr
+                                    :bloom-hash-sym (when (= meta-value :bloom-filter)
+                                                      (gensym 'bloom-hashes))})))})))
 
           (bool-expr [var-param-f var-param-meta-fn
                       param-var-f param-var-meta-fn]
@@ -55,9 +61,9 @@
                 nil)))]
 
     (or (case f
-          :and (-> {:op :call, :f :and, :args (map meta-expr args)}
+          :and (-> {:op :call, :f :and, :args (map #(meta-expr % opts) args)}
                    simplify-and-or-expr)
-          :or (-> {:op :call, :f :or, :args (map meta-expr args)}
+          :or (-> {:op :call, :f :or, :args (map #(meta-expr % opts) args)}
                   simplify-and-or-expr)
           :< (bool-expr :< :min, :> :max)
           :<= (bool-expr :<= :min, :>= :max)
@@ -68,7 +74,8 @@
                   :args (->> [(meta-expr {:op :call,
                                           :f :and,
                                           :args [{:op :call, :f :<=, :args args}
-                                                 {:op :call, :f :>=, :args args}]})
+                                                 {:op :call, :f :>=, :args args}]}
+                                         opts)
 
                               (bool-expr nil :bloom-filter, nil :bloom-filter)]
                              (filterv some?))}
@@ -78,16 +85,16 @@
         ;; we can't check this call at the metadata level, have to pull the block and look.
         {:op :literal, :literal true})))
 
-(defn meta-expr [{:keys [op] :as expr}]
+(defn meta-expr [{:keys [op] :as expr} opts]
   (case op
     (:literal :param :let) nil ;; expected to be filtered out by the caller, using simplify-and-or-expr
     :variable {:op :literal, :literal true}
     :if (-> {:op :call
              :f :or
-             :args [(meta-expr (:then expr))
-                    (meta-expr (:else expr))]}
+             :args [(meta-expr (:then expr) opts)
+                    (meta-expr (:else expr) opts)]}
             simplify-and-or-expr)
-    :call (call-meta-expr expr)))
+    :call (call-meta-expr expr opts)))
 
 (defn- ->bloom-hashes [expr ^IIndirectRelation params]
   (with-open [allocator (RootAllocator.)]
@@ -151,7 +158,7 @@
 
 (def ^:private compile-meta-expr
   (-> (fn [expr opts]
-        (let [expr (or (meta-expr (expr/prepare-expr expr))
+        (let [expr (or (meta-expr (expr/prepare-expr expr) opts)
                        (expr/prepare-expr {:op :literal, :literal true}))
               {:keys [continue] :as emitted-expr} (expr/codegen-expr expr opts)]
           {:expr expr
@@ -178,6 +185,7 @@
         {:keys [expr f]} (compile-meta-expr (expr/form->expr form {:param-types param-types,
                                                                    :col-types col-types})
                                             {:param-types param-types
+                                             :col-types col-types
                                              :extract-vecs-from-rel? false})
         bloom-hashes (->bloom-hashes expr params)]
     (reify IMetadataPredicate

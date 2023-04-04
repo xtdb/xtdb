@@ -360,9 +360,9 @@
             param-types (expr/->param-types params)]
         (doseq [[col-name select-form] selects
                 :when (temporal/temporal-column? col-name)]
-          (->> (expr/form->expr select-form {:param-types param-types, :col-types col-types})
-               (expr/prepare-expr)
-               (expr.meta/meta-expr)
+          (->> (-> (expr/form->expr select-form {:param-types param-types, :col-types col-types})
+                   (expr/prepare-expr)
+                   (expr.meta/meta-expr {:col-types col-types}))
                (expr.walk/prewalk-expr
                 (fn [{:keys [op] :as expr}]
                   (case op
@@ -471,7 +471,7 @@
         {:col-types (dissoc col-types '_table)
          :stats {:row-count row-count}
          :->cursor (fn [{:keys [allocator, ^IWatermark watermark, basis, params default-all-app-time?]}]
-                     (let [metadata-pred (expr.meta/->metadata-selector (cons 'and metadata-args) (set col-names) params)
+                     (let [metadata-pred (expr.meta/->metadata-selector (cons 'and metadata-args) col-types params)
                            scan-opts (cond-> scan-opts
                                        (nil? for-app-time)
                                        (assoc :for-app-time (if default-all-app-time? [:all-time] [:at [:now :now]])))
