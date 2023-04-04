@@ -290,6 +290,89 @@ Date can be an Instant, ZonedDateTime or LocalDate.
 
 |===
 
+== Periods
+
+[cols="2,2,2"]
+|===
+|Function/Operator| Description | Examples
+
+|`(period start end)`
+| Constructs a period (struct) with the given start and end values
+|`(period #time/zoned-date-time "2000-01-01T00:00Z" #time/zoned-date-time "2030-01-01T00:00Z)` -> `{:start #time/zoned-date-time "2000-01-01T00:00Z", :end #time/zoned-date-time "2030-01-01T00:00Z"}`
+
+|`(contains? period timestamp)`
+| Returns true if period contains the point in time represented by timestamp.
+| `(contains? (period #inst "2020" #inst "2025") #inst "2023")` -> `true`
+
+|`(contains? period-1 period-2)`
+| Returns true if period-1 contains every point in time from period-2.
+| `(contains? (period #inst "2020" #inst "2025") (period #inst "2021" #inst "2023"))` -> `true`
+
+|`(strictly-contains? period-1 period-2)`
+| Returns true if period-1 contains every point in time from period-2, without beginning or ending at the same time.
+| `(strictly-contains? (period #inst "2020" #inst "2025") (period #inst "2021" #inst "2023"))` -> `true`
+
+|`(overlaps? period-1 period-2)`
+| Returns true if the both periods share at least one point in time.
+| `(overlaps? (period #inst "2020" #inst "2022") (period #inst "2021" #inst "2023"))` -> `true`
+
+|`(strictly-overlaps? period-1 period-2)`
+| Returns true if every point in time from period-1 is contained within period-2, without beginning or ending at the same time.
+| `(strictly-overlaps? (period #inst "2021" #inst "2023") (period #inst "2020" #inst "2025"))` -> `true`
+
+|`(equals? period-1 period-2)`
+| Returns true if the both periods share every point in time.
+| `(equals? (period #inst "2020" #inst "2022") (period #inst "2020" #inst "2022"))` -> `true`
+
+|`(precedes? period-1 period-2)`
+| Returns true if period-1 ends before or exactly as period-2 starts.
+| `(precedes? (period #inst "2020" #inst "2022") (period #inst "2023" #inst "2025"))` -> `true`
+
+|`(strictly-precedes? period-1 period-2)`
+| Returns true if period-1 ends before period-2 starts.
+| `(strictly-precedes? (period #inst "2020" #inst "2022") (period #inst "2023" #inst "2025"))` -> `true`
+
+|`(immediately-precedes? period-1 period-2)`
+| Returns true if period-1 ends exactly as period-2 starts.
+| `(immediately-precedes? (period #inst "2020" #inst "2022") (period #inst "2023" #inst "2025"))` -> `true`
+
+|`(succeeds? period-1 period-2)`
+| Returns true if period-1 starts after or exactly as period-2 ends.
+| `(succeeds? (period #inst "2023" #inst "2025") (period #inst "2020" #inst "2022"))` -> `true`
+
+|`(strictly-succeeds? period-1 period-2)`
+| Returns true if period-1 starts after period-2 ends.
+| `(strictly-succeeds? (period #inst "2023" #inst "2025") (period #inst "2020" #inst "2022"))` -> `true`
+
+|`(immediately-succeeds? period-1 period-2)`
+| Returns true if period-1 starts exactly as period-2 ends.
+| `(immediately-succeeds? (period #inst "2022" #inst "2025") (period #inst "2020" #inst "2022"))` -> `true`
+
+|`(leads? period-1 period-2)`
+| Returns true if period-1 begins before period-2 and ends either during or at the same time as period-2.
+| `(leads? (period #inst "2020" #inst "2024") (period #inst "2021" #inst "2025"))` -> `true`
+
+|`(strictly-leads? period-1 period-2)`
+| Returns true if period-1 begins before period-2 and ends during period-2.
+| `(strictly-leads? (period #inst "2020" #inst "2024") (period #inst "2021" #inst "2025"))` -> `true`
+
+|`(immediately-leads? period-1 period-2)`
+| Returns true if period-1 begins before period-2 and ends at the same point in time.
+| `(immediately-leads? (period #inst "2020" #inst "2024") (period #inst "2021" #inst "2024"))` -> `true`
+
+|`(lags? period-1 period-2)`
+| Returns true if period-1 begins after or at the same time as period-2 and ends after period-2.
+| `(lags? (period #inst "2021" #inst "2025") (period #inst "2020" #inst "2024"))` -> `true`
+
+|`(strictly-lags? period-1 period-2)`
+| Returns true if period-1 begins after period-2 and ends after period-2.
+| `(strictly-lags? (period #inst "2022" #inst "2025") (period #inst "2021" #inst "2024"))` -> `true`
+
+|`(immediately-lags? period-1 period-2)`
+| Returns true if period-1 begins at the same time as period period-2 and ends after period-2.
+| `(immediately-lags? (period #inst "2021" #inst "2025") (period #inst "2021" #inst "2024"))` -> `true`
+|===
+
 == Miscellaneous
 
 [cols="2,2,2"]

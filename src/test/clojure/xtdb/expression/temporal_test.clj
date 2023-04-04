@@ -894,7 +894,7 @@
          {:x {:start #inst "2020", :end #inst "2021"}
           :y {:start #inst "2020", :end #inst "2023"}}))))
 
-(deftest test-procedes?-predicate
+(deftest test-precedes?-predicate
   (t/is
     (= true
        (et/project1
@@ -924,7 +924,7 @@
          {:x {:start #inst "2020", :end #inst "2021"}
           :y {:start #inst "2020", :end #inst "2023"}}))))
 
-(deftest test-immediately-procedes?-predicate
+(deftest test-immediately-precedes?-predicate
   (t/is
     (= true
        (et/project1
@@ -953,3 +953,153 @@
          '(immediately-succeeds? x y)
          {:x {:start #inst "2023", :end #inst "2025"}
           :y {:start #inst "2020", :end #inst "2022"}}))))
+
+(deftest test-leads?-predicate
+  (t/is
+    (= true
+       (et/project1
+         '(leads? x y)
+         {:x {:start #inst "2020", :end #inst "2025"}
+          :y {:start #inst "2021", :end #inst "2025"}})))
+
+  (t/is
+    (= false
+       (et/project1
+         '(leads? x y)
+         {:x {:start #inst "2021", :end #inst "2025"}
+          :y {:start #inst "2021", :end #inst "2025"}}))))
+
+(deftest test-strictly-leads?-predicate
+  (t/is
+    (= true
+       (et/project1
+         '(strictly-leads? x y)
+         {:x {:start #inst "2020", :end #inst "2024"}
+          :y {:start #inst "2021", :end #inst "2025"}})))
+
+  (t/is
+    (= false
+       (et/project1
+         '(strictly-leads? x y)
+         {:x {:start #inst "2020", :end #inst "2025"}
+          :y {:start #inst "2021", :end #inst "2025"}}))))
+
+(deftest test-lags?-predicate
+  (t/is
+    (= true
+       (et/project1
+         '(lags? x y)
+         {:x {:start #inst "2021", :end #inst "2025"}
+          :y {:start #inst "2020", :end #inst "2024"}})))
+
+  (t/is
+    (= false
+       (et/project1
+         '(lags? x y)
+         {:x {:start #inst "2021", :end #inst "2024"}
+          :y {:start #inst "2022", :end #inst "2025"}}))))
+
+(deftest test-strictly-lags?-predicate
+  (t/is
+    (= true
+       (et/project1
+         '(strictly-lags? x y)
+         {:x {:start #inst "2022", :end #inst "2025"}
+          :y {:start #inst "2021", :end #inst "2024"}})))
+
+  (t/is
+    (= false
+       (et/project1
+         '(strictly-lags? x y)
+         {:x {:start #inst "2021", :end #inst "2025"}
+          :y {:start #inst "2021", :end #inst "2024"}}))))
+
+(deftest test-strictly-overlaps?-predicate
+  (t/is
+    (= true
+       (et/project1
+         '(strictly-overlaps? x y)
+         {:x {:start #inst "2022", :end #inst "2024"}
+          :y {:start #inst "2021", :end #inst "2025"}})))
+
+  (t/is
+    (= false
+       (et/project1
+         '(strictly-overlaps? x y)
+         {:x {:start #inst "2021", :end #inst "2024"}
+          :y {:start #inst "2021", :end #inst "2025"}}))))
+
+(deftest test-strictly-contains?-predicate
+  (t/is
+    (= true
+       (et/project1
+         '(strictly-contains? x y)
+         {:x {:start #inst "2021", :end #inst "2025"}
+          :y {:start #inst "2022", :end #inst "2024"}})))
+
+  (t/is
+    (= false
+       (et/project1
+         '(strictly-contains? x y)
+         {:x {:start #inst "2021", :end #inst "2025"}
+          :y {:start #inst "2022", :end #inst "2025"}}))))
+
+(deftest test-strictly-precedes?-predicate
+  (t/is
+    (= true
+       (et/project1
+         '(strictly-precedes? x y)
+         {:x {:start #inst "2020", :end #inst "2022"}
+          :y {:start #inst "2023", :end #inst "2025"}})))
+
+  (t/is
+    (= false
+       (et/project1
+         '(strictly-precedes? x y)
+         {:x {:start #inst "2020", :end #inst "2022"}
+          :y {:start #inst "2022", :end #inst "2023"}}))))
+
+(deftest test-strictly-succeeds?-predicate
+  (t/is
+    (= true
+       (et/project1
+         '(strictly-succeeds? x y)
+         {:x {:start #inst "2023", :end #inst "2024"}
+          :y {:start #inst "2021", :end #inst "2022"}})))
+
+  (t/is
+    (= false
+       (et/project1
+         '(strictly-succeeds? x y)
+         {:x {:start #inst "2022", :end #inst "2024"}
+          :y {:start #inst "2021", :end #inst "2022"}}))))
+
+(deftest test-immediately-leads?-predicate
+  (t/is
+    (= true
+       (et/project1
+         '(immediately-leads? x y)
+         {:x {:start #inst "2021", :end #inst "2024"}
+          :y {:start #inst "2022", :end #inst "2024"}})))
+
+  (t/is
+    (= false
+       (et/project1
+         '(immediately-leads? x y)
+         {:x {:start #inst "2021", :end #inst "2024"}
+          :y {:start #inst "2022", :end #inst "2025"}}))))
+
+(deftest test-immediately-lags?-predicate
+  (t/is
+    (= true
+       (et/project1
+         '(immediately-lags? x y)
+         {:x {:start #inst "2021", :end #inst "2025"}
+          :y {:start #inst "2021", :end #inst "2024"}})))
+
+  (t/is
+    (= false
+       (et/project1
+         '(immediately-lags? x y)
+         {:x {:start #inst "2021", :end #inst "2024"}
+          :y {:start #inst "2021", :end #inst "2025"}}))))

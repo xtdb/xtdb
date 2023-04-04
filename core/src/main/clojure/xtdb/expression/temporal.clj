@@ -964,7 +964,7 @@
     (throw (invalid-period-err start end)))
 
     (reify IStructValueReader
-      (~'readLong [_ field]
+      (readLong [_ field]
         (case field
           "start" start
           "end" end))))
@@ -974,68 +974,107 @@
    :->call-code (fn [[start-code end-code]]
                   `(->period ~start-code ~end-code))})
 
-(defn start [^IStructValueReader period]
+(defn start ^long [^IStructValueReader period]
   (.readLong period "start"))
 
-(defn end [^IStructValueReader period]
+(defn end ^long [^IStructValueReader period]
   (.readLong period "end"))
 
-(defmethod expr/codegen-call [:contains? :struct :struct] [_]
-  {:return-type :bool
-   :->call-code (fn [[p1-code p2-code]]
-                  `(let [p1# ~p1-code
-                         p2# ~p2-code]
-                     (and (<= (start p1#) (start p2#))
-                          (>= (end p1#) (end p2#)))))})
+(defn temporal-contains-point? [^IStructValueReader p1 ^long ts]
+  (and (<= (start p1) ts)
+       (>= (end p1) ts)))
 
 (defmethod expr/codegen-call [:contains? :struct :timestamp-tz] [_]
   {:return-type :bool
    :->call-code (fn [[p1-code ts-code]]
-                  `(let [p1# ~p1-code
-                         ts# ~ts-code]
-                     (and (<= (start p1#) ts#)
-                          (>= (end p1#) ts#))))})
+                  `(temporal-contains-point? ~p1-code ~ts-code))})
 
-(defmethod expr/codegen-call [:overlaps? :struct :struct] [_]
-  {:return-type :bool
-   :->call-code (fn [[p1-code p2-code]]
-                  `(let [p1# ~p1-code
-                         p2# ~p2-code]
-                     (and (< (start p1#) (end p2#))
-                          (> (end p1#) (start p2#)))))})
+(defn temporal-contains? [^IStructValueReader p1 ^IStructValueReader p2]
+  (and (<= (start p1) (start p2))
+       (>= (end p1) (end p2))))
 
-(defmethod expr/codegen-call [:equals? :struct :struct] [_]
-  {:return-type :bool
-   :->call-code (fn [[p1-code p2-code]]
-                  `(let [p1# ~p1-code
-                         p2# ~p2-code]
-                     (and (= (start p1#) (start p2#))
-                          (= (end p1#) (end p2#)))))})
+(defn temporal-strictly-contains? [^IStructValueReader p1 ^IStructValueReader p2]
+  (and (< (start p1) (start p2))
+       (> (end p1) (end p2))))
 
-(defmethod expr/codegen-call [:precedes? :struct :struct] [_]
-  {:return-type :bool
-   :->call-code (fn [[p1-code p2-code]]
-                  `(let [p1# ~p1-code
-                         p2# ~p2-code]
-                     (<= (end p1#) (start p2#))))})
+(defn overlaps? [^IStructValueReader p1 ^IStructValueReader p2]
+  (and (< (start p1) (end p2))
+       (> (end p1) (start p2))))
 
-(defmethod expr/codegen-call [:succeeds? :struct :struct] [_]
-  {:return-type :bool
-   :->call-code (fn [[p1-code p2-code]]
-                  `(let [p1# ~p1-code
-                         p2# ~p2-code]
-                     (>= (start p1#) (end p2#))))})
+(defn strictly-overlaps? [^IStructValueReader p1 ^IStructValueReader p2]
+  (and (> (start p1) (start p2))
+       (< (end p1) (end p2))))
 
-(defmethod expr/codegen-call [:immediately-precedes? :struct :struct] [_]
-  {:return-type :bool
-   :->call-code (fn [[p1-code p2-code]]
-                  `(let [p1# ~p1-code
-                         p2# ~p2-code]
-                     (= (end p1#) (start p2#))))})
+(defn equals? [^IStructValueReader p1 ^IStructValueReader p2]
+  (and (= (start p1) (start p2))
+       (= (end p1) (end p2))))
 
-(defmethod expr/codegen-call [:immediately-succeeds? :struct :struct] [_]
-  {:return-type :bool
-   :->call-code (fn [[p1-code p2-code]]
-                  `(let [p1# ~p1-code
-                         p2# ~p2-code]
-                     (= (start p1#) (end p2#))))})
+(defn precedes? [^IStructValueReader p1 ^IStructValueReader p2]
+  (<= (end p1) (start p2)))
+
+(defn strictly-precedes? [^IStructValueReader p1 ^IStructValueReader p2]
+  (< (end p1) (start p2)))
+
+(defn immediately-precedes? [^IStructValueReader p1 ^IStructValueReader p2]
+  (= (end p1) (start p2)))
+
+(defn succeeds? [^IStructValueReader p1 ^IStructValueReader p2]
+  (>= (start p1) (end p2)))
+
+(defn strictly-succeeds? [^IStructValueReader p1 ^IStructValueReader p2]
+  (> (start p1) (end p2)))
+
+(defn immediately-succeeds? [^IStructValueReader p1 ^IStructValueReader p2]
+  (= (start p1) (end p2)))
+
+(defn leads? [^IStructValueReader p1 ^IStructValueReader p2]
+  (and (< (start p1) (start p2))
+       (< (start p2) (end p1))
+       (<= (end p1) (end p2))))
+
+(defn strictly-leads? [^IStructValueReader p1 ^IStructValueReader p2]
+  (and (< (start p1) (start p2))
+       (< (start p2) (end p1))
+       (< (end p1) (end p2))))
+
+(defn immediately-leads? [^IStructValueReader p1 ^IStructValueReader p2]
+  (and (< (start p1) (start p2))
+       (= (end p1) (end p2))))
+
+(defn lags? [^IStructValueReader p1 ^IStructValueReader p2]
+  (and (>= (start p1) (start p2))
+       (< (start p2) (end p1))
+       (> (end p1) (end p2))))
+
+(defn strictly-lags? [^IStructValueReader p1 ^IStructValueReader p2]
+  (and (> (start p1) (start p2))
+       (< (start p2) (end p1))
+       (> (end p1) (end p2))))
+
+(defn immediately-lags? [^IStructValueReader p1 ^IStructValueReader p2]
+  (and (= (start p1) (start p2))
+       (> (end p1) (end p2))))
+
+(doseq [[pred-name pred-sym] [[:contains? ::temporal-contains?]
+                              [:strictly-contains? ::temporal-strictly-contains?]
+                              [:overlaps? ::overlaps?]
+                              [:strictly-overlaps? ::strictly-overlaps?]
+                              [:equals? ::equals?]
+                              [:precedes? ::precedes?]
+                              [:strictly-precedes? ::strictly-precedes?]
+                              [:immediately-precedes? ::immediately-precedes?]
+                              [:succeeds? ::succeeds?]
+                              [:strictly-succeeds? ::strictly-succeeds?]
+                              [:immediately-succeeds? ::immediately-succeeds?]
+                              [:leads? ::leads?]
+                              [:strictly-leads? ::strictly-leads?]
+                              [:immediately-leads? ::immediately-leads?]
+                              [:lags? ::lags?]
+                              [:strictly-lags? ::strictly-lags?]
+                              [:immediately-lags? ::immediately-lags?]]]
+  (defmethod expr/codegen-call [pred-name :struct :struct] [_]
+    {:return-type :bool
+     :->call-code (fn [[p1-code p2-code]]
+                    `(~(symbol pred-sym) ~p1-code ~p2-code))}))
+
+
