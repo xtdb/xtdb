@@ -146,7 +146,7 @@
 
   DocumentStoreTx
   (abort-doc-store-tx [_]
-    (when-let [docs (not-empty (->> @!docs (into {} (filter (comp :crux.db.fn/failed? val)))))]
+    (when-let [docs (not-empty (->> @!docs (into {} (filter (comp (some-fn :crux.db.fn/tx-events :crux.db.fn/failed?) val)))))]
       (db/submit-docs doc-store docs)))
 
   (commit-doc-store-tx [_]

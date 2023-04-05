@@ -1595,3 +1595,35 @@
         (t/is (= 1 (:n (xt/entity (xt/db *api*) :ctr)))))
       (finally
         (s/check-asserts ca)))))
+
+(t/deftest arg-doc-substitution-happens-for-fns-prior-to-abort-test
+
+  (->> [[::xt/put {:xt/id :noop, :xt/fn '(fn [_ _])}]
+        [::xt/put {:xt/id :fail, :xt/fn '(fn [_] false)}]
+        [::xt/put {:xt/id :throw, :xt/fn '(fn [_] (throw (Exception.)))}]]
+       (xt/submit-tx *api*))
+
+  (->> [[::xt/fn :noop 0]
+        [::xt/match :does-not-exist {:xt/id :does-not-exist}]
+        [::xt/fn :noop 1]]
+       (xt/submit-tx *api*))
+
+  (xt/sync *api*)
+
+  (with-open [tx-cursor (db/open-tx-log (-> *api* :!system deref :xtdb/tx-log) 0 true)]
+    (let [transactions (iterator-seq tx-cursor)
+          tx-events (mapcat ::xte/tx-events transactions)
+          [e1 _e2 e3] tx-events
+          doc-store (-> *api* :!system deref :xtdb/document-store)
+          get-doc #(->> (db/fetch-docs doc-store [%]) first second)]
+
+      (t/is (= 1 (count transactions)))
+      (t/is (= 3 (count tx-events)))
+
+      (t/testing "e1 arg doc replaced with tx-events"
+        (let [[_ _fn-id arg-id] e1]
+          (t/is (:crux.db.fn/tx-events (get-doc arg-id)))))
+
+      (t/testing "e3 arg doc replaced with fail"
+        (let [[_ _fn-id arg-id] e3]
+          (t/is (:crux.db.fn/failed? (get-doc arg-id))))))))
