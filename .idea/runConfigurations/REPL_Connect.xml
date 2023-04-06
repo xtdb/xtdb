@@ -1,6 +1,6 @@
 <component name="ProjectRunConfigurationManager">
   <configuration default="false" name="REPL Connect" type="ClojureREPL" factoryName="Remote" activateToolWindowBeforeRun="false">
-    <module name="core2" />
+    <module name="xtdb" />
     <setting name="displayName" value="REPL Connect" />
     <setting name="host" value="" />
     <setting name="port" value="0" />
