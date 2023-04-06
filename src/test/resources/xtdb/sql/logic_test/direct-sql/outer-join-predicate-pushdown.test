@@ -1,0 +1,18 @@
+hash-threshold 100
+
+# test demonstrates that pushing predicates into the right hand side of an outer join
+(in this case single) changes query semantics and is therefore invalid.
+
+statement ok
+INSERT INTO t1(id, col1, col2) VALUES(1,'fish',1000)
+
+statement ok
+INSERT INTO t2(id, col1, col2) VALUES(2,'dog',1000)
+
+query T rowsort
+SELECT 1 FROM t1 WHERE null = (SELECT t2.col1 FROM t2)
+----
+
+query T rowsort
+SELECT 1 FROM t1 WHERE null = (SELECT t2.col1 FROM t2 WHERE t2.col2 = t1.col2)
+----

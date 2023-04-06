@@ -671,7 +671,8 @@
          [:select predicate independent-relation]
          dependent-relation]
 
-        (columns-in-predicate-present-in-relation? dependent-relation predicate)
+        (and (= :join mode)
+             (columns-in-predicate-present-in-relation? dependent-relation predicate))
         [:apply
          mode
          columns
@@ -750,7 +751,7 @@
       (cond
         (columns-in-predicate-present-in-relation? lhs predicate)
         [join-op join-map [:select predicate lhs] rhs]
-        (and (contains? #{:join :left-outer-join} join-op)
+        (and (= :join join-op)
              (columns-in-predicate-present-in-relation? rhs predicate))
         [join-op join-map lhs [:select predicate rhs]]))
 
