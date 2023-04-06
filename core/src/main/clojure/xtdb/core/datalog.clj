@@ -30,6 +30,7 @@
 
 (s/def ::form
   (s/or :logic-var ::logic-var
+        :sub-query ::sub-query
         :fn-call ::fn-call
         :literal ::value))
 
@@ -109,7 +110,7 @@
   (s/and vector?
          ;; top-level can only be a fn-call because otherwise the EDN Datalog syntax is ambiguous
          ;; (it wasn't ever meant to handle this...)
-         (s/cat :form (s/spec (s/or :fn-call ::fn-call))
+         (s/cat :form (s/spec (s/or :fn-call ::fn-call :sub-query ::sub-query))
                 :return (s/? ::binding))))
 
 (s/def ::and (s/cat :and #{'and}
@@ -165,7 +166,6 @@
         :triple ::triple
         :call ::call-clause
         :sub-query ::sub-query
-        :sub-query-projection ::sub-query-projection
         :match ::match
         :rule ::rule))
 
@@ -265,15 +265,6 @@
           [:mega-join [] rels])
         (wrap-unify (::var->cols (meta rels))))))
 
-(defn- form-vars [form]
-  (letfn [(form-vars* [[form-type form-arg]]
-            (case form-type
-              :fn-call (into #{} (mapcat form-vars*) (:args form-arg))
-              :logic-var #{form-arg}
-              :literal #{}
-              :form (form-vars form-arg)))]
-    (form-vars* form)))
-
 (defn- binding-vars [binding]
   (letfn [(binding-vars* [[binding-type binding-arg]]
             (case binding-type
@@ -282,6 +273,16 @@
               :scalar #{binding-arg}
               :tuple (set binding-arg)))]
     (binding-vars* binding)))
+
+(defn- form-vars [form]
+  (letfn [(form-vars* [[form-type form-arg]]
+            (case form-type
+              :fn-call (into #{} (mapcat form-vars*) (:args form-arg))
+              :logic-var #{form-arg}
+              :literal #{}
+              :form (form-vars form-arg)
+              :sub-query (into #{} (mapcat binding-vars) (-> form-arg :sub-query :in))))]
+    (form-vars* form)))
 
 (defn- combine-term-vars [term-varses]
   (let [{:keys [provided-vars] :as vars} (->> term-varses
@@ -509,46 +510,49 @@
              (wrap-unwind match)
              (wrap-unify var->cols)))))))
 
+(def ^:dynamic *gensym* gensym)
+
+(defn seeded-gensym
+  ([] (seeded-gensym "" 0))
+  ([count-start] (seeded-gensym "" count-start))
+  ([suffix count-start]
+   (let [ctr (atom (dec count-start))]
+     (fn gensym-seed
+       ([] (symbol (str "gensym" suffix (swap! ctr inc))))
+       ([prefix] (symbol (str prefix suffix (swap! ctr inc))))))))
+
+(defn scalar-sub-query-placeholder [sub-query]
+  (with-meta (*gensym* "_sq") {::sub-query sub-query, :column? true}))
+
+(defn scalar-sub-query-referent [sub-query-placeholder]
+  (::sub-query (meta sub-query-placeholder)))
+
+(defn scalar-sub-query-placeholder? [ra-expr]
+  (and (symbol? ra-expr) (some? (scalar-sub-query-referent ra-expr))))
+
+(defn find-scalar-sub-query-placeholders [ra-expr]
+  (cond
+    (scalar-sub-query-placeholder? ra-expr) {ra-expr (scalar-sub-query-referent ra-expr)}
+    (seq? ra-expr) (reduce conj {} (map find-scalar-sub-query-placeholders (rest ra-expr)))
+    :else {}))
+
 (defn- plan-call [{:keys [form return]}]
   (letfn [(with-col-metadata [[form-type form-arg]]
-            [form-type
-             (case form-type
-               :logic-var (if (str/starts-with? (name form-arg) "?")
-                            form-arg
-                            (col-sym form-arg))
-               :fn-call (-> form-arg (update :args #(mapv with-col-metadata %)))
-               :literal form-arg)])]
+            (case form-type
+              :logic-var [:logic-var (if (str/starts-with? (name form-arg) "?")
+                                       form-arg
+                                       (col-sym form-arg))]
+              :fn-call [:fn-call (-> form-arg (update :args #(mapv with-col-metadata %)))]
+              :literal [:literal form-arg]
+              :sub-query [:logic-var (scalar-sub-query-placeholder form-arg)]))]
     (-> (s/unform ::form (with-col-metadata form))
-        (with-meta (into {::required-vars (form-vars form)}
-
-                         (when-let [[return-type return-arg] return]
-                           (-> (case return-type
-                                 :scalar {::return-var return-arg
-                                          ::vars #{return-arg}})
-                               (assoc ::return-type return-type))))))))
-
-(defn- wrap-calls [plan calls]
-  (letfn [(wrap-scalars [plan scalars]
-            (let [scalars (->> scalars
-                               (into [] (map-indexed
-                                         (fn [idx form]
-                                           (let [{::keys [return-var]} (meta form)]
-                                             (-> form
-                                                 (vary-meta assoc ::return-col (col-sym (str "_c" idx) return-var))))))))
-                  var->cols (-> (concat (->> (::vars (meta plan)) (map (juxt identity identity)))
-                                        (->> scalars (map (comp (juxt ::return-var ::return-col) meta))))
-                                (->> (group-by first))
-                                (update-vals #(into #{} (map second) %)))]
-              (-> [:map (vec (for [form scalars]
-                               {(::return-col (meta form)) form}))
-                   plan]
-                  (with-meta (-> (meta plan) (update ::vars into (map ::return-col scalars))))
-                  (wrap-unify var->cols))))]
-
-    (let [{selects nil, scalars :scalar} (group-by (comp ::return-type meta) calls)]
-      (-> plan
-          (cond-> scalars (wrap-scalars scalars))
-          (wrap-select selects)))))
+        (vary-meta merge
+                   {::required-vars (form-vars form)}
+                   (when-let [[return-type return-arg] return]
+                     (-> (case return-type
+                           :scalar {::return-var return-arg
+                                    ::vars #{return-arg}})
+                         (assoc ::return-type return-type)))))))
 
 (defn- ->apply-mapping [apply-params]
   ;;TODO symbol names will clash with nested applies
@@ -559,6 +563,62 @@
                                   (with-meta {:correlated-column? true}))]
              (MapEntry/create param param-symbol)))
          (into {}))))
+
+(defn- plan-sub-query [sub-query]
+  (let [required-vars (->> (:in sub-query)
+                           (into #{} (map
+                                       (fn [[in-type in-arg :as in]]
+                                         (when-not (= in-type :scalar)
+                                           (throw (err/illegal-arg :non-scalar-subquery-param
+                                                                   (s/unform ::in-binding in))))
+                                         in-arg))))
+        apply-mapping (->apply-mapping required-vars)]
+    (-> (plan-query (-> sub-query
+                        (dissoc :in)
+                        (assoc ::apply-mapping apply-mapping)))
+        (vary-meta into {::required-vars required-vars, ::apply-mapping apply-mapping}))))
+
+(defn- wrap-scalar-sub-query [plan binding-sym scalar-sub-query param-vars]
+  (let [col-count (count (:find scalar-sub-query))
+        _ (when (not= 1 col-count) (throw (err/illegal-arg :scalar-sub-query-requires-one-column {::err/message "scalar sub query requires exactly one column"})))
+        sq-plan (plan-sub-query (assoc scalar-sub-query :keys [binding-sym]))
+        {::keys [apply-mapping]} (meta sq-plan)
+        sq-plan (vary-meta sq-plan assoc ::vars #{binding-sym})
+        [plan-u sq-plan-u :as rels] (with-unique-cols [plan sq-plan] param-vars)
+        apply-mapping-u (update-keys apply-mapping (::var->col (meta plan-u)))]
+    (-> [:apply :single-join apply-mapping-u plan-u sq-plan-u]
+        (wrap-unify (::var->cols (meta rels))))))
+
+(defn- wrap-dependent-sub-queries [plan conformed-sub-queries param-vars]
+  (reduce-kv
+    (fn [plan sym sq]
+      (wrap-scalar-sub-query plan sym (:sub-query sq) param-vars))
+    plan
+    conformed-sub-queries))
+
+(defn- wrap-calls [plan calls param-vars]
+  (letfn [(wrap-scalars [plan scalars]
+            (let [scalars (->> scalars
+                               (into [] (map-indexed
+                                          (fn [idx form]
+                                            (let [{::keys [return-var]} (meta form)]
+                                              (-> form
+                                                  (vary-meta assoc ::return-col (col-sym (str "_c" idx) return-var))))))))
+                  var->cols (-> (concat (->> (::vars (meta plan)) (map (juxt identity identity)))
+                                        (->> scalars (map (comp (juxt ::return-var ::return-col) meta))))
+                                (->> (group-by first))
+                                (update-vals #(into #{} (map second) %)))]
+              (-> [:map (vec (for [form scalars]
+                               {(::return-col (meta form)) form}))
+                   plan]
+                  (with-meta (-> (meta plan) (update ::vars into (map ::return-col scalars))))
+                  (wrap-unify var->cols))))]
+    (let [sub-queries (reduce conj {} (map find-scalar-sub-query-placeholders calls))
+          {selects nil, scalars :scalar} (group-by (comp ::return-type meta) calls)]
+      (-> plan
+          (wrap-dependent-sub-queries sub-queries param-vars)
+          (cond-> scalars (wrap-scalars scalars))
+          (wrap-select selects)))))
 
 (defn- plan-semi-join [sj-type {:keys [sub-query] :as sj}]
   (let [{:keys [required-vars provided-vars]} (term-vars [sj-type sj])
@@ -619,20 +679,6 @@
 
     (mega-join (into [plan] union-joins) param-vars)))
 
-(defn- plan-sub-query [{:keys [sub-query]}]
-  (let [required-vars (->> (:in sub-query)
-                           (into #{} (map
-                                      (fn [[in-type in-arg :as in]]
-                                        (when-not (= in-type :scalar)
-                                          (throw (err/illegal-arg :non-scalar-subquery-param
-                                                                  (s/unform ::in-binding in))))
-                                        in-arg))))
-        apply-mapping (->apply-mapping required-vars)]
-    (-> (plan-query (-> sub-query
-                        (dissoc :in)
-                        (assoc ::apply-mapping apply-mapping)))
-        (vary-meta into {::required-vars required-vars, ::apply-mapping apply-mapping}))))
-
 (defn- wrap-sub-queries [plan sub-queries param-vars]
   (if-let [apply-mapping (->> sub-queries
                               (into {} (mapcat (comp ::apply-mapping meta)))
@@ -645,23 +691,6 @@
           (wrap-unify (::var->cols (meta rels)))))
 
     (mega-join (into [plan] sub-queries) param-vars)))
-
-(defn- wrap-scalar-sub-query [plan scalar-sub-query param-vars]
-  (let [{:keys [sub-query binding]} scalar-sub-query
-        {::keys [apply-mapping]} (meta sub-query)
-        columns (lp/relation-columns sub-query)
-        _ (when (not= 1 (count columns))
-            (throw (err/illegal-arg :scalar-sub-query-requires-one-column {::err/message "scalar sub query requires exactly one column"})))
-        col (first columns)
-        binding-sym (second binding)
-        sq-plan (vary-meta [:rename {col binding-sym} sub-query] assoc ::vars #{binding-sym})
-        [plan-u sq-plan-u :as rels] (with-unique-cols [plan sq-plan] param-vars)
-        apply-mapping-u (update-keys apply-mapping (::var->col (meta plan-u)))]
-    (-> [:apply :single-join apply-mapping-u plan-u sq-plan-u]
-        (wrap-unify (::var->cols (meta rels))))))
-
-(defn- wrap-scalar-sub-queries [plan sub-queries param-vars]
-  (reduce #(wrap-scalar-sub-query %1 %2 param-vars) plan sub-queries))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;
 ;; rule substitution
@@ -890,10 +919,8 @@
                                       {:rule-name name})))))
         rule-name->rules))
 
-(defn- plan-body [{where-clauses :where, apply-mapping ::apply-mapping, rules :rules, :as query}]
-  (let [in-rels (plan-in-tables query)
-        {::keys [param-vars]} (meta in-rels)
-
+(defn- plan-body [{where-clauses :where, apply-mapping ::apply-mapping, rules :rules, :as query} in-rels]
+  (let [{::keys [param-vars]} (meta in-rels)
         rule-name->rules (->> rules
                               gensym-rules
                               (group-by (comp :name :head)))
@@ -901,7 +928,7 @@
         where-clauses (expand-rules rule-name->rules where-clauses)
 
         {match-clauses :match, triple-clauses :triple, call-clauses :call
-         sub-query-clauses :sub-query, sub-query-projection-clauses :sub-query-projection
+         sub-query-clauses :sub-query,
          semi-join-clauses :semi-join, anti-join-clauses :anti-join, union-join-clauses :union-join}
         (-> where-clauses
             (->> (group-by first))
@@ -912,14 +939,12 @@
                            (concat param-vars apply-mapping))
 
            calls (some->> call-clauses (mapv plan-call))
-           sub-queries (some->> sub-query-clauses (mapv plan-sub-query))
-           sub-query-projections (some->> sub-query-projection-clauses (mapv #(update % :sub-query plan-sub-query)))
+           sub-queries (some->> sub-query-clauses (mapv (comp plan-sub-query :sub-query)))
            union-joins (some->> union-join-clauses (mapv plan-union-join))
            semi-joins (some->> semi-join-clauses (mapv (partial plan-semi-join :semi-join)))
            anti-joins (some->> anti-join-clauses (mapv (partial plan-semi-join :anti-join)))]
 
-      (if (and (empty? calls) (empty? sub-queries) (empty? sub-query-projections)
-               (empty? semi-joins) (empty? anti-joins) (empty? union-joins))
+      (if (and (empty? calls) (empty? sub-queries) (empty? semi-joins) (empty? anti-joins) (empty? union-joins))
         (-> plan
             (vary-meta assoc ::in-bindings (::in-bindings (meta in-rels))))
 
@@ -929,12 +954,11 @@
 
             (let [{available-calls true, unavailable-calls false} (->> calls (group-by available?))
                   {available-sqs true, unavailable-sqs false} (->> sub-queries (group-by available?))
-                  {available-sqps true, unavailable-sqps false} (->> sub-query-projections (group-by available?))
                   {available-ujs true, unavailable-ujs false} (->> union-joins (group-by available?))
                   {available-sjs true, unavailable-sjs false} (->> semi-joins (group-by available?))
                   {available-ajs true, unavailable-ajs false} (->> anti-joins (group-by available?))]
 
-              (if (and (empty? available-calls) (empty? available-sqs) (empty? available-sqps)
+              (if (and (empty? available-calls) (empty? available-sqs)
                        (empty? available-ujs) (empty? available-sjs) (empty? available-ajs))
                 (throw (err/illegal-arg :no-available-clauses
                                         {:available-vars available-vars
@@ -946,13 +970,12 @@
 
                 (recur (cond-> plan
                                union-joins (wrap-union-joins union-joins param-vars)
-                               available-calls (wrap-calls available-calls)
+                               available-calls (wrap-calls available-calls param-vars)
                                available-sjs (wrap-semi-joins :semi-join available-sjs)
                                available-ajs (wrap-semi-joins :anti-join available-ajs)
-                               available-sqs (wrap-sub-queries available-sqs param-vars)
-                               available-sqps (wrap-scalar-sub-queries available-sqps param-vars))
+                               available-sqs (wrap-sub-queries available-sqs param-vars))
 
-                       unavailable-calls unavailable-sqs unavailable-sqps
+                       unavailable-calls unavailable-sqs
                        unavailable-ujs unavailable-sjs unavailable-ajs)))))))))
 
 ;; HACK these are just the grouping-fns used in TPC-H
@@ -963,6 +986,11 @@
   (with-meta {:obj x} (assoc m ::wrapped true)))
 
 (defn- unwrap-with-meta [{:keys [obj]}] obj)
+
+(defn- plan-head-call [[form-type form :as conformed-form]]
+  (case form-type
+    :literal form
+    (plan-call {:form conformed-form})))
 
 (defn- plan-head-exprs [{find-clause :find, :keys [order-by]}]
   (letfn [(with-col-name [prefix idx fc]
@@ -981,11 +1009,11 @@
                         (with-meta {::col col
                                     ::agg {col (list f projection-sym)}
                                     ::agg-projection {projection-sym (s/unform ::form agg-arg)}})))))
-              (let [org-form (s/unform ::form form)
+              (let [planned-form (plan-head-call form)
                     m {::grouping-vars (form-vars form), ::col col}]
-                (if (instance? clojure.lang.IMeta org-form)
-                  (-> org-form (with-meta m))
-                  (wrap-with-meta org-form m)))))]
+                (if (instance? clojure.lang.IMeta planned-form)
+                  (-> planned-form (vary-meta merge m))
+                  (wrap-with-meta planned-form m)))))]
 
     (->> (concat (->> find-clause
                       (into [] (map-indexed (partial with-col-name "_column"))))
@@ -1015,9 +1043,12 @@
     (-> clauses
         (with-meta {::vars (->> clauses (into #{} (map (comp ::var meta))))}))))
 
-(defn- wrap-find [plan find-clauses]
-  (-> [:project find-clauses plan]
-      (with-meta (-> (meta plan) (assoc ::vars (::vars (meta find-clauses)))))))
+(defn- wrap-find [plan find-clauses param-vars]
+  (let [cols (map (fn [projection] (if (map? projection) (first (vals projection)) projection)) find-clauses)
+        sub-queries (reduce conj {} (map find-scalar-sub-query-placeholders cols))
+        plan' (wrap-dependent-sub-queries plan sub-queries param-vars)]
+    (-> [:project find-clauses plan']
+        (with-meta (-> (meta plan') (assoc ::vars (::vars (meta find-clauses))))))))
 
 (defn- plan-order-by [{:keys [order-by]} head-exprs]
   (some->> order-by
@@ -1062,7 +1093,7 @@
     (unbound-var-check find-vars body-provided-vars "find")
     (unbound-var-check order-by-vars body-provided-vars "order-by")))
 
-(defn- wrap-head [plan query]
+(defn- wrap-head [plan query param-vars]
 
   (check-head-vars query (meta plan))
 
@@ -1074,7 +1105,7 @@
     (-> plan
         (cond-> group-by-clauses (wrap-group-by group-by-clauses)
                 order-by-clauses (wrap-order-by order-by-clauses))
-        (wrap-find find-clauses))))
+        (wrap-find find-clauses param-vars))))
 
 (defn- wrap-top [plan {:keys [limit offset]}]
   (if (or limit offset)
@@ -1087,13 +1118,15 @@
     plan))
 
 (defn- plan-query [conformed-query]
-  (-> (plan-body conformed-query)
-      (wrap-head conformed-query)
-      (wrap-top conformed-query)))
+  (let [in-rels (plan-in-tables conformed-query)]
+    (-> (plan-body conformed-query in-rels)
+        (wrap-head conformed-query (::param-vars (meta in-rels)))
+        (wrap-top conformed-query))))
 
 (defn compile-query [query]
-  (-> (conform-query query)
-      (plan-query)))
+  (binding [*gensym* (seeded-gensym "_" 0)]
+    (-> (conform-query query)
+        (plan-query))))
 
 (defn- args->params [args in-bindings]
   (->> (mapcat (fn [{::keys [binding-type in-cols]} arg]
