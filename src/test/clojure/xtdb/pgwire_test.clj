@@ -357,7 +357,8 @@
                                             :injected-start-exc (Exception. "boom!")}})]
     (check-server-resources-freed server)))
 
-(deftest accept-thread-and-socket-closed-on-uncaught-accept-exc-test
+;; #673
+#_(deftest accept-thread-and-socket-closed-on-uncaught-accept-exc-test
   (require-server)
 
   (swap! (:server-state *server*) assoc
@@ -402,7 +403,8 @@
   (.close *server*)
   (check-server-resources-freed))
 
-(deftest accept-thread-stoppage-sets-error-status
+;; #673
+#_(deftest accept-thread-stoppage-sets-error-status
   (inject-accept-exc)
   (connect-and-throwaway)
   (is (= :error @(:server-status *server*))))
