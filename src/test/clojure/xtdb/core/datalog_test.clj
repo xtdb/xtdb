@@ -1732,10 +1732,6 @@
      {:order 1, :fullname "bob smith"}
      {:order 2, :fullname "alice carrol"}]
 
-    ;; this query does not yet work (dlog compiles correctly, but the predicate
-    ;; is pushed into the dependent side incorrectly causing an erroneous result
-    ;; see
-    #_#_
     '{:find [order]
       :where [(match :order {:id order, :customer customer})
               [(= (q {:find [fn]
