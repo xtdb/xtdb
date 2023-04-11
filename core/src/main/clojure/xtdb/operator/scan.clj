@@ -267,7 +267,7 @@
   ICursor
   (tryAdvance [_ c]
     (let [keep-row-id-col? (contains? temporal-col-names "_row-id")
-          keep-id-col? (contains? content-col-names "id")
+          keep-id-col? (contains? content-col-names "xt__id")
           !advanced? (volatile! false)]
 
       (while (and (not @!advanced?)
@@ -279,7 +279,7 @@
                                                (when (and read-rel (pos? (.rowCount read-rel)))
                                                  (let [read-rel (cond-> read-rel
                                                                   (not keep-row-id-col?) (remove-col "_row-id")
-                                                                  (not keep-id-col?) (remove-col "id"))]
+                                                                  (not keep-id-col?) (remove-col "xt__id"))]
                                                    (.accept c read-rel)
                                                    (vreset! !advanced? true))))]
 
@@ -398,7 +398,7 @@
    (at-now? scan-opts)
    (>= (util/instant->micros (:current-time basis))
        (util/instant->micros (:sys-time (:tx basis))))
-   (empty? (remove #(= % "id") temporal-col-names))))
+   (empty? (remove #(= % "xt__id") temporal-col-names))))
 
 (defn get-current-row-ids [^IWatermark watermark basis]
   (.getCurrentRowIds
@@ -463,7 +463,7 @@
             row-count (->> (meta/with-all-metadata metadata-mgr (name table)
                              (util/->jbifn
                               (fn [_chunk-idx ^ITableMetadata table-metadata]
-                                (let [id-col-idx (.rowIndex table-metadata "id" -1)
+                                (let [id-col-idx (.rowIndex table-metadata "xt__id" -1)
                                       ^BigIntVector count-vec (.getVector (.metadataRoot table-metadata) "count")]
                                   (.get count-vec id-col-idx)))))
                            (reduce +))]

@@ -1,14 +1,14 @@
 hash-threshold 100
 
 statement ok
-INSERT INTO students (id, name , major, year) VALUES
+INSERT INTO students (xt__id, name , major, year) VALUES
 (1, 'Alan', 'CS', 2000),
 (2, 'Betty', 'Games Eng', 2001),
 (3, 'Cath', 'Maths', 2002),
 (4, 'Dave', 'Games Eng', 1000)
 
 statement ok
-INSERT INTO exams (id, sid, curriculum, grade, date) VALUES
+INSERT INTO exams (xt__id, sid, curriculum, grade, date) VALUES
 (1, 1, 'CS', 100, 1900),
 (2, 1, 'CS', 10, 1900),
 (3, 1, 'Games Eng', 100, 1900),
@@ -21,13 +21,13 @@ INSERT INTO exams (id, sid, curriculum, grade, date) VALUES
 (205, 2, 'CS', 100, 3000)
 
 query TI
-SELECT s.name, e.id
+SELECT s.name, e.xt__id
               FROM students s, exams e
-              WHERE s.id = e.sid AND
+              WHERE s.xt__id = e.sid AND
               (s.major = 'CS' OR s.major = 'Games Eng') AND
               e.grade >= (SELECT AVG(e2.grade) + 1
               FROM exams e2
-              WHERE s.id = e2.sid OR
+              WHERE s.xt__id = e2.sid OR
               (e2.curriculum = s.major AND
               s.year > e2.date))
 ----

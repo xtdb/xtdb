@@ -16,20 +16,20 @@
          actual (tj/arrow-streaming->json (txp/serialize-tx-ops tu/*allocator* tx-ops opts))]
 
      ;; uncomment this to reset the expected file (but don't commit it)
-     #_(spit file actual)
+     ;; (spit file actual)
 
      (t/is (= (json/parse-string (slurp file))
               (json/parse-string actual))))))
 
 (def devices-docs
   [[:put :device-info
-    {:id "device-info-demo000000",
+    {:xt/id "device-info-demo000000",
      :api-version "23",
      :manufacturer "iobeam",
      :model "pinto",
      :os-name "6.0.1"}]
    [:put :device-readings
-    {:id "reading-demo000000",
+    {:xt/id "reading-demo000000",
      :device-id "device-info-demo000000",
      :cpu-avg-15min 8.654,
      :rssi -50.0,
@@ -44,13 +44,13 @@
      :mem-free 4.10011078E8,
      :mem-used 5.89988922E8}]
    [:put :device-info
-    {:id "device-info-demo000001",
+    {:xt/id "device-info-demo000001",
      :api-version "23",
      :manufacturer "iobeam",
      :model "mustang",
      :os-name "6.0.1"}]
    [:put :device-readings
-    {:id "reading-demo000001",
+    {:xt/id "reading-demo000001",
      :device-id "device-info-demo000001",
      :cpu-avg-15min 8.822,
      :rssi -61.0,
@@ -75,22 +75,22 @@
 
 (t/deftest can-write-docs-with-different-keys
   (test-serialize-tx-ops (io/resource "xtdb/tx-producer-test/docs-with-different-keys.json")
-                         '[[:put :foo {:id :a, :a 1}]
-                           [:put :foo {:id "b", :b 2}]
-                           [:put :bar {:id 3, :c 3}]]))
+                         '[[:put :foo {:xt/id :a, :a 1}]
+                           [:put :foo {:xt/id "b", :b 2}]
+                           [:put :bar {:xt/id 3, :c 3}]]))
 
 (t/deftest can-write-sql-to-arrow-ipc-streaming-format
   (test-serialize-tx-ops (io/resource "xtdb/tx-producer-test/can-write-sql.json")
-                         [[:sql "INSERT INTO foo (id) VALUES (0)"]
+                         [[:sql "INSERT INTO foo (xt__id) VALUES (0)"]
 
-                          [:sql "INSERT INTO foo (id, foo, bar) VALUES (?, ?, ?)"
+                          [:sql "INSERT INTO foo (xt__id, foo, bar) VALUES (?, ?, ?)"
                            [[1 nil 3.3]
                             [2 "hello" 12]]]
 
-                          [:sql "UPDATE foo FOR PORTION OF APP_TIME FROM DATE '2021-01-01' TO DATE '2024-01-01' SET bar = 'world' WHERE foo.id = ?"
+                          [:sql "UPDATE foo FOR PORTION OF APP_TIME FROM DATE '2021-01-01' TO DATE '2024-01-01' SET bar = 'world' WHERE foo.xt__id = ?"
                            [[1]]]
 
-                          [:sql "DELETE FROM foo FOR PORTION OF APP_TIME FROM DATE '2023-01-01' TO DATE '2025-01-01' WHERE foo.id = ?"
+                          [:sql "DELETE FROM foo FOR PORTION OF APP_TIME FROM DATE '2023-01-01' TO DATE '2025-01-01' WHERE foo.xt__id = ?"
                            [[1]]]]))
 
 (t/deftest can-write-opts

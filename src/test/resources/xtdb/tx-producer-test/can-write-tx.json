@@ -56,7 +56,7 @@
                 "name" : "struct"
               },
               "children" : [{
-                "name" : "id",
+                "name" : "xt__id",
                 "nullable" : false,
                 "type" : {
                   "name" : "union",
@@ -277,7 +277,7 @@
                   "children" : [ ]
                 }]
               },{
-                "name" : "bssid",
+                "name" : "xt__id",
                 "nullable" : false,
                 "type" : {
                   "name" : "union",
@@ -293,7 +293,7 @@
                   "children" : [ ]
                 }]
               },{
-                "name" : "id",
+                "name" : "bssid",
                 "nullable" : false,
                 "type" : {
                   "name" : "union",
@@ -411,7 +411,7 @@
             },
             "children" : [ ]
           },{
-            "name" : "id",
+            "name" : "xt__id",
             "nullable" : false,
             "type" : {
               "name" : "union",
@@ -452,7 +452,7 @@
             },
             "children" : [ ]
           },{
-            "name" : "id",
+            "name" : "xt__id",
             "nullable" : false,
             "type" : {
               "name" : "union",
@@ -570,7 +570,7 @@
               "count" : 2,
               "VALIDITY" : [1,1],
               "children" : [{
-                "name" : "id",
+                "name" : "xt__id",
                 "count" : 2,
                 "TYPE_ID" : [0,0],
                 "OFFSET" : [0,1],
@@ -726,6 +726,18 @@
                   "DATA" : [59.0,86.0]
                 }]
               },{
+                "name" : "xt__id",
+                "count" : 2,
+                "TYPE_ID" : [0,0],
+                "OFFSET" : [0,1],
+                "children" : [{
+                  "name" : "utf8",
+                  "count" : 2,
+                  "VALIDITY" : [1,1],
+                  "OFFSET" : [0,18,36],
+                  "DATA" : ["reading-demo000000","reading-demo000001"]
+                }]
+              },{
                 "name" : "bssid",
                 "count" : 2,
                 "TYPE_ID" : [0,0],
@@ -736,18 +748,6 @@
                   "VALIDITY" : [1,1],
                   "OFFSET" : [0,17,34],
                   "DATA" : ["01:02:03:04:05:06","A0:B1:C5:D2:E0:F3"]
-                }]
-              },{
-                "name" : "id",
-                "count" : 2,
-                "TYPE_ID" : [0,0],
-                "OFFSET" : [0,1],
-                "children" : [{
-                  "name" : "utf8",
-                  "count" : 2,
-                  "VALIDITY" : [1,1],
-                  "OFFSET" : [0,18,36],
-                  "DATA" : ["reading-demo000000","reading-demo000001"]
                 }]
               },{
                 "name" : "battery-temperature",
@@ -817,7 +817,7 @@
             "OFFSET" : [0],
             "DATA" : [ ]
           },{
-            "name" : "id",
+            "name" : "xt__id",
             "count" : 0,
             "TYPE_ID" : [ ],
             "OFFSET" : [ ]
@@ -843,7 +843,7 @@
             "OFFSET" : [0],
             "DATA" : [ ]
           },{
-            "name" : "id",
+            "name" : "xt__id",
             "count" : 0,
             "TYPE_ID" : [ ],
             "OFFSET" : [ ]

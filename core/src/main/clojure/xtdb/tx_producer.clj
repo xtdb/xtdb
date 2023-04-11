@@ -22,8 +22,8 @@
   (submitTx
     ^java.util.concurrent.CompletableFuture #_<TransactionInstant> [^java.util.List txOps, ^java.util.Map opts]))
 
-(s/def ::id any?)
-(s/def ::doc (s/and (s/keys :req-un [::id])
+(s/def :xt/id any?)
+(s/def ::doc (s/and (s/keys :req [:xt/id])
                     (s/conformer #(update-keys % util/ns-kw->kw) #(update-keys % util/kw->ns-kw))))
 (s/def ::table (s/and simple-keyword? (s/conformer symbol keyword)))
 (s/def ::app-time-start (s/nilable ::util/datetime-value))
@@ -56,14 +56,14 @@
 (defmethod tx-op-spec :delete [_]
   (s/cat :op #{:delete}
          :table ::table
-         :id ::id
+         :id :xt/id
          :app-time-opts (s/? ::temporal-opts)))
 
 (defmethod tx-op-spec :evict [_]
   ;; eventually this could have app-time/sys start/end?
   (s/cat :op #{:evict}
          :table ::table
-         :id ::id))
+         :id :xt/id))
 
 ;; required for C1 importer
 (defmethod tx-op-spec :abort [_]
@@ -71,7 +71,7 @@
 
 (defmethod tx-op-spec :call [_]
   (s/cat :op #{:call}
-         :fn-id ::id
+         :fn-id :xt/id
          :args (s/* any?)))
 
 (s/def ::tx-op
@@ -103,13 +103,13 @@
 
                  (types/->field "delete" types/struct-type false
                                 (types/col-type->field 'table :utf8)
-                                (types/->field "id" types/dense-union-type false)
+                                (types/->field "xt__id" types/dense-union-type false)
                                 (types/col-type->field 'application_time_start nullable-inst-type)
                                 (types/col-type->field 'application_time_end nullable-inst-type))
 
                  (types/->field "evict" types/struct-type false
                                 (types/col-type->field '_table [:union #{:null :utf8}])
-                                (types/->field "id" types/dense-union-type false))
+                                (types/->field "xt__id" types/dense-union-type false))
 
                  (types/->field "call" types/struct-type false
                                 (types/->field "fn-id" types/dense-union-type false)
@@ -191,7 +191,7 @@
 (defn- ->delete-writer [^IDenseUnionWriter tx-ops-writer]
   (let [delete-writer (.asStruct (.writerForTypeId tx-ops-writer 2))
         table-writer (.writerForName delete-writer "table")
-        id-writer (.asDenseUnion (.writerForName delete-writer "id"))
+        id-writer (.asDenseUnion (.writerForName delete-writer "xt__id"))
         app-time-start-writer (.writerForName delete-writer "application_time_start")
         app-time-end-writer (.writerForName delete-writer "application_time_end")]
     (fn write-delete! [{:keys [id table],
@@ -214,7 +214,7 @@
 (defn- ->evict-writer [^IDenseUnionWriter tx-ops-writer]
   (let [evict-writer (.asStruct (.writerForTypeId tx-ops-writer 3))
         table-writer (.writerForName evict-writer "_table")
-        id-writer (.asDenseUnion (.writerForName evict-writer "id"))]
+        id-writer (.asDenseUnion (.writerForName evict-writer "xt__id"))]
     (fn [{:keys [id table]}]
       (.startValue evict-writer)
       (some-> (name table) (types/write-value! table-writer))

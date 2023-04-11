@@ -20,7 +20,7 @@ By default, `SELECT` will query across all of `APPLICATION_TIME`, so you will se
 
 [source,sql]
 ----
-INSERT INTO users (id, name) VALUES (1234, 'Matt');
+INSERT INTO users (xt__id, name) VALUES (1234, 'Matt');
 ----
 
 NOTE: If `INSERT` is altered to prevent repeated execution against the same `id`, a true `UPSERT` statement may be added to duplicate this behaviour. However, `UPSERT` (and `REPLACE`) are not a part of the SQL Specification.
@@ -44,7 +44,7 @@ Inserted data can be forced to live in the past or future by setting `applicatio
 
 [source,sql]
 ----
-INSERT INTO users (id, name, application_time_start)
+INSERT INTO users (xt__id, name, application_time_start)
   VALUES (5678, 'Kath', DATE '2027-01-06');
 ----
 
@@ -124,7 +124,7 @@ Construct an Object with `OBJECT`:
 
 [source,sql]
 ----
-INSERT INTO posts (id, text, social)
+INSERT INTO posts (xt__id, text, social)
   VALUES (444, 'XTDB has nested data!',
           OBJECT ('twitter': '@xtdb_com', 'visible': true));
 SELECT posts.social FROM posts;
@@ -134,7 +134,7 @@ For convenience, `OBJECT` has a shorthand literal syntax:
 
 [source,sql]
 ----
-INSERT INTO posts (id, text, social)
+INSERT INTO posts (xt__id, text, social)
   VALUES (555, 'XTDB has object literals!',
           {'twitter': '@xtdb_com', 'visible': true});
 SELECT posts.social FROM posts;
@@ -146,7 +146,7 @@ Construct an Array with `ARRAY`:
 
 [source,sql]
 ----
-INSERT INTO toots (id, text, likes)
+INSERT INTO toots (xt__id, text, likes)
   VALUES (777, 'Did you know XTDB has arrays?',
           ARRAY ['Kath', 'Joe', 'Holly']);
 SELECT toots.likes from toots;
@@ -156,7 +156,7 @@ For convenience, the `ARRAY` keyword can be elided for the shorthand literal syn
 
 [source,sql]
 ----
-INSERT INTO toots (id, text, likes)
+INSERT INTO toots (xt__id, text, likes)
   VALUES (888, 'Did you know XTDB has array literals?',
           ['Kath', 'Joe', 'Holly']);
 SELECT toots.likes[1] from toots;
@@ -168,7 +168,7 @@ Deeper nesting is permitted. Arrays and Objects can be combined. For example:
 
 [source,sql]
 ----
-INSERT INTO toots_deep (id, text, likes)
+INSERT INTO toots_deep (xt__id, text, likes)
   VALUES (999, 'Did you know XTDB supports deep nesting?',
           [{'name': 'Kath', 'count': 5},
            {'name': 'Joe', 'count': 10},

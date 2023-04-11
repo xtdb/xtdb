@@ -186,7 +186,7 @@
 
 (defn- insert-statement [node insert-statement]
   (xt.d/submit-tx node (vec (for [doc (insert->docs node insert-statement)]
-                              [:put (:table (meta doc)) (merge {:id (UUID/randomUUID)} doc)])))
+                              [:put (:table (meta doc)) (merge {:xt/id (UUID/randomUUID)} doc)])))
   node)
 
 (defn skip-statement? [^String x]

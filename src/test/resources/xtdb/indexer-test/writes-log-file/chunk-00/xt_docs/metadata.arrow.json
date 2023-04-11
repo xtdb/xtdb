@@ -119,8 +119,8 @@
       "name" : "column",
       "count" : 6,
       "VALIDITY" : [1,1,1,1,1,1],
-      "OFFSET" : [0,7,9,14,21,23,28],
-      "DATA" : ["_row-id","id","month","_row-id","id","month"]
+      "OFFSET" : [0,7,13,18,25,31,36],
+      "DATA" : ["_row-id","xt__id","month","_row-id","xt__id","month"]
     },{
       "name" : "block-idx",
       "count" : 6,

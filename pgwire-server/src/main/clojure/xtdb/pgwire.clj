@@ -2075,7 +2075,7 @@
       (assert (:node server) "No running pgwire!")
       (->> (for [row rows
                  :let [auto-id (str "pgwire-" (random-uuid))]]
-             [:put (merge {:id auto-id} row)])
+             [:put (merge {:xt/id auto-id} row)])
            (xt/submit-tx (:node server))
            deref))
 
@@ -2100,7 +2100,7 @@
 
   (def server (serve dev/node {:port 5432}))
 
-  ;; insert something, be aware as we haven't set an :id, it will keep creating rows each time it is evaluated!
+  ;; insert something, be aware as we haven't set an :xt/id, it will keep creating rows each time it is evaluated!
   (i {:user "wot", :bio "Hello, world", :age 34})
 
   ;; query with aliases otherwise XT explodes, and no *.

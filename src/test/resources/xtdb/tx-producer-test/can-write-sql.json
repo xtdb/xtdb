@@ -83,7 +83,7 @@
             },
             "children" : [ ]
           },{
-            "name" : "id",
+            "name" : "xt__id",
             "nullable" : false,
             "type" : {
               "name" : "union",
@@ -124,7 +124,7 @@
             },
             "children" : [ ]
           },{
-            "name" : "id",
+            "name" : "xt__id",
             "nullable" : false,
             "type" : {
               "name" : "union",
@@ -219,8 +219,8 @@
             "name" : "query",
             "count" : 4,
             "VALIDITY" : [1,1,1,1],
-            "OFFSET" : [0,31,78,191,291],
-            "DATA" : ["INSERT INTO foo (id) VALUES (0)","INSERT INTO foo (id, foo, bar) VALUES (?, ?, ?)","UPDATE foo FOR PORTION OF APP_TIME FROM DATE '2021-01-01' TO DATE '2024-01-01' SET bar = 'world' WHERE foo.id = ?","DELETE FROM foo FOR PORTION OF APP_TIME FROM DATE '2023-01-01' TO DATE '2025-01-01' WHERE foo.id = ?"]
+            "OFFSET" : [0,35,86,203,307],
+            "DATA" : ["INSERT INTO foo (xt__id) VALUES (0)","INSERT INTO foo (xt__id, foo, bar) VALUES (?, ?, ?)","UPDATE foo FOR PORTION OF APP_TIME FROM DATE '2021-01-01' TO DATE '2024-01-01' SET bar = 'world' WHERE foo.xt__id = ?","DELETE FROM foo FOR PORTION OF APP_TIME FROM DATE '2023-01-01' TO DATE '2025-01-01' WHERE foo.xt__id = ?"]
           },{
             "name" : "params",
             "count" : 4,
@@ -259,7 +259,7 @@
             "OFFSET" : [0],
             "DATA" : [ ]
           },{
-            "name" : "id",
+            "name" : "xt__id",
             "count" : 0,
             "TYPE_ID" : [ ],
             "OFFSET" : [ ]
@@ -285,7 +285,7 @@
             "OFFSET" : [0],
             "DATA" : [ ]
           },{
-            "name" : "id",
+            "name" : "xt__id",
             "count" : 0,
             "TYPE_ID" : [ ],
             "OFFSET" : [ ]

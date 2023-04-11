@@ -1,7 +1,7 @@
 hash-threshold 100
 
 statement ok
-INSERT INTO foo(id, bar) VALUES(1, 'sheep')
+INSERT INTO foo(xt__id, bar) VALUES(1, 'sheep')
 
 query T nosort
 SELECT f.bar

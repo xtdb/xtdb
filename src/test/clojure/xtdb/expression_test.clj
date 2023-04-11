@@ -92,7 +92,7 @@
 
   Usage: (project '(+ a b) [{:a 1, :b 2}, {:a 3, :b 4}]) ;; => [3, 7]"
   [expr docs]
-  (let [docs (map-indexed #(assoc %2 :id %1) docs)
+  (let [docs (map-indexed #(assoc %2 :xt__id %1) docs)
         lp [:project [{'ret expr}] [:table docs]]]
     (mapv :ret (tu/query-ra lp {}))))
 
@@ -118,7 +118,7 @@
                      {:x false, :y false, :z true}]))))
 
 (t/deftest test-date-trunc
-  (let [test-doc {:id :foo,
+  (let [test-doc {:xt__id :foo,
                   :date (util/->instant #inst "2021-10-21T12:34:56Z")
                   :zdt (-> (util/->zdt #inst "2021-08-21T12:34:56Z")
                            (.withZoneSameLocal (ZoneId/of "Europe/London")))}]

@@ -13,16 +13,16 @@
 
 (t/deftest test-find-gt-ivan
   (with-open [node (node/start-node {:xtdb/live-chunk {:rows-per-block 2, :rows-per-chunk 10}})]
-    (-> (xt/submit-tx node [[:put :xt_docs {:name "Håkan", :id :hak}]])
+    (-> (xt/submit-tx node [[:put :xt_docs {:name "Håkan", :xt/id :hak}]])
         (tu/then-await-tx* node))
 
     (tu/finish-chunk! node)
 
-    (xt/submit-tx node [[:put :xt_docs {:name "Dan", :id :dan}]
-                        [:put :xt_docs {:name "Ivan", :id :iva}]])
+    (xt/submit-tx node [[:put :xt_docs {:name "Dan", :xt/id :dan}]
+                        [:put :xt_docs {:name "Ivan", :xt/id :iva}]])
 
-    (let [tx1 (-> (xt/submit-tx node [[:put :xt_docs {:name "James", :id :jms}]
-                                      [:put :xt_docs {:name "Jon", :id :jon}]])
+    (let [tx1 (-> (xt/submit-tx node [[:put :xt_docs {:name "James", :xt/id :jms}]
+                                      [:put :xt_docs {:name "Jon", :xt/id :jon}]])
                   (tu/then-await-tx* node))]
 
       (tu/finish-chunk! node)
@@ -30,17 +30,17 @@
       (let [^IMetadataManager metadata-mgr (tu/component node ::meta/metadata-manager)]
         (letfn [(test-query-ivan [expected tx]
                   (t/is (= expected
-                           (set (tu/query-ra '[:scan {:table xt_docs} [id {name (> name "Ivan")}]]
+                           (set (tu/query-ra '[:scan {:table xt_docs} [xt__id {name (> name "Ivan")}]]
                                              {:node node, :basis {:tx tx}}))))
 
                   (t/is (= expected
-                           (set (tu/query-ra '[:scan {:table xt_docs} [id {name (> name ?name)}]]
+                           (set (tu/query-ra '[:scan {:table xt_docs} [xt__id {name (> name ?name)}]]
                                              {:node node, :basis {:tx tx}, :params {'?name "Ivan"}})))))]
 
           (t/is (= #{0 1} (set (keys (.chunksMetadata metadata-mgr)))))
 
           (let [expected-match [(meta/map->ChunkMatch
-                                 {:chunk-idx 1, :block-idxs (doto (RoaringBitmap.) (.add 1)), :col-names #{"_row-id" "id" "name"}})]]
+                                 {:chunk-idx 1, :block-idxs (doto (RoaringBitmap.) (.add 1)), :col-names #{"_row-id" "xt__id" "name"}})]]
             (t/is (= expected-match
                      (meta/matching-chunks metadata-mgr "xt_docs"
                                            (expr.meta/->metadata-selector '(> name "Ivan") '#{name} {})))
@@ -51,35 +51,35 @@
                                              (expr.meta/->metadata-selector '(> name ?name) '#{name} params))))
                   "only needs to scan chunk 1, block 1"))
 
-          (let [tx2 (xt/submit-tx node [[:put :xt_docs {:name "Jeremy", :id :jdt}]])]
+          (let [tx2 (xt/submit-tx node [[:put :xt_docs {:name "Jeremy", :xt/id :jdt}]])]
 
-            (test-query-ivan #{{:id :jms, :name "James"}
-                               {:id :jon, :name "Jon"}}
+            (test-query-ivan #{{:xt__id :jms, :name "James"}
+                               {:xt__id :jon, :name "Jon"}}
                              tx1)
 
-            (test-query-ivan #{{:id :jms, :name "James"}
-                               {:id :jon, :name "Jon"}
-                               {:id :jdt, :name "Jeremy"}}
+            (test-query-ivan #{{:xt__id :jms, :name "James"}
+                               {:xt__id :jon, :name "Jon"}
+                               {:xt__id :jdt, :name "Jeremy"}}
                              tx2)))))))
 
 (t/deftest test-find-eq-ivan
   (with-open [node (node/start-node {:xtdb/live-chunk {:rows-per-block 3, :rows-per-chunk 10}})]
-    (-> (xt/submit-tx node [[:put :xt_docs {:name "Håkan", :id :hak}]
-                            [:put :xt_docs {:name "James", :id :jms}]
-                            [:put :xt_docs {:name "Ivan", :id :iva}]])
+    (-> (xt/submit-tx node [[:put :xt_docs {:name "Håkan", :xt/id :hak}]
+                            [:put :xt_docs {:name "James", :xt/id :jms}]
+                            [:put :xt_docs {:name "Ivan", :xt/id :iva}]])
         (tu/then-await-tx* node))
 
     (tu/finish-chunk! node)
-    (-> (xt/submit-tx node [[:put :xt_docs {:name "Håkan", :id :hak}]
+    (-> (xt/submit-tx node [[:put :xt_docs {:name "Håkan", :xt/id :hak}]
 
-                            [:put :xt_docs {:name "James", :id :jms}]])
+                            [:put :xt_docs {:name "James", :xt/id :jms}]])
         (tu/then-await-tx* node))
 
     (tu/finish-chunk! node)
     (let [^IMetadataManager metadata-mgr (tu/component node ::meta/metadata-manager)]
       (t/is (= #{0 3} (set (keys (.chunksMetadata metadata-mgr)))))
       (let [expected-match [(meta/map->ChunkMatch
-                             {:chunk-idx 0, :block-idxs (doto (RoaringBitmap.) (.add 0)), :col-names #{"_row-id" "id" "name"}})]]
+                             {:chunk-idx 0, :block-idxs (doto (RoaringBitmap.) (.add 0)), :col-names #{"_row-id" "xt__id" "name"}})]]
         (t/is (= expected-match
                  (meta/matching-chunks metadata-mgr "xt_docs"
                                        (expr.meta/->metadata-selector '(= name "Ivan") '#{name} {})))
@@ -101,8 +101,8 @@
 
 (t/deftest test-temporal-bounds
   (with-open [node (node/start-node {})]
-    (let [{tt1 :sys-time} (xt/submit-tx node [[:put :xt_docs {:id :my-doc, :last-updated "tx1"}]])
-          {tt2 :sys-time} (xt/submit-tx node [[:put :xt_docs {:id :my-doc, :last-updated "tx2"}]])]
+    (let [{tt1 :sys-time} (xt/submit-tx node [[:put :xt_docs {:xt/id :my-doc, :last-updated "tx1"}]])
+          {tt2 :sys-time} (xt/submit-tx node [[:put :xt_docs {:xt/id :my-doc, :last-updated "tx2"}]])]
       (letfn [(q [& temporal-constraints]
                 (->> (tu/query-ra [:scan '{:table xt_docs, :for-sys-time :all-time}
                                    (into '[last-updated] temporal-constraints)]

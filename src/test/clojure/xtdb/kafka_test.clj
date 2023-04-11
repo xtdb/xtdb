@@ -9,8 +9,8 @@
 (t/deftest ^:requires-docker ^:kafka test-kafka
   (let [topic-name (str "xtdb.kafka-test." (UUID/randomUUID))]
     (with-open [node (node/start-node {::k/log {:topic-name topic-name}})]
-      (xt/submit-tx node [[:put {:id :foo}]])
+      (xt/submit-tx node [[:put {:xt/id :foo}]])
 
-      (t/is (= [{:id :foo}]
-               (tu/query-ra '[:scan {:table :xt_docs} [id]]
+      (t/is (= [{:xt__id :foo}]
+               (tu/query-ra '[:scan {:table :xt_docs} [xt__id]]
                             {:node node}))))))

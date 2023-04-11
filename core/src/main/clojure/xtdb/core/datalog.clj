@@ -17,7 +17,8 @@
                           (s/conformer util/ns-symbol->symbol util/symbol->ns-symbol)))
 
 (s/def ::eid ::lp/value)
-(s/def ::attr keyword?)
+(s/def ::attr (s/and keyword?
+                     (s/conformer util/ns-kw->kw util/kw->ns-kw)))
 (s/def ::value ::lp/value)
 (s/def ::table (s/and simple-keyword? (s/conformer symbol keyword)))
 (s/def ::column (s/and symbol?
@@ -70,11 +71,17 @@
         :logic-var ::logic-var
         :unwind (s/tuple ::logic-var #{'...})))
 
+(s/def ::match-map-spec
+  (-> (s/map-of ::attr ::triple-value)
+      (s/and (s/conformer #(vec (map (fn [[attr val]] [(util/ns-kw->kw attr) val]) %))
+                          #(->> %
+                                (map (fn [[attr val]] [(util/kw->ns-kw attr) val]))
+                                (into {} ))))))
+
 (s/def ::match-spec
-  (-> (s/or :map (-> (s/map-of ::attr ::triple-value)
-                     (s/and (s/conformer vec #(into {} %))))
+  (-> (s/or :map ::match-map-spec
             :vector (-> (s/or :column ::column
-                              :map (s/map-of ::attr ::triple-value))
+                              :map ::match-map-spec)
                         (s/and (s/conformer (fn [[tag arg]]
                                               (case tag :map arg, :column {(keyword arg) [:logic-var arg]}))
                                             (fn [arg]
@@ -466,7 +473,7 @@
 
 (defn- match->eids [{:keys [match]}]
   (->> match
-       (filter (comp #{:id} first))
+       (filter (comp #{:xt__id} first))
        (map second)
        set))
 

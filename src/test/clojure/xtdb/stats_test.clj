@@ -11,14 +11,14 @@
 (deftest test-scan
   (with-open [node (node/start-node {:xtdb/live-chunk {:rows-per-block 2 , :rows-per-chunk 2}})]
     (let [scan-emitter (util/component node :xtdb.operator.scan/scan-emitter)]
-      (xt/submit-tx node [[:put :foo {:id "foo1"}]
-                          [:put :bar {:id "bar1"}]])
+      (xt/submit-tx node [[:put :foo {:xt/id "foo1"}]
+                          [:put :bar {:xt/id "bar1"}]])
 
-      (xt/submit-tx node [[:put :foo {:id "foo2"}]
-                          [:put :baz {:id "baz1"}]])
+      (xt/submit-tx node [[:put :foo {:xt/id "foo2"}]
+                          [:put :baz {:xt/id "baz1"}]])
 
-      (-> (xt/submit-tx node [[:put :foo {:id "foo3"}]
-                              [:put :bar {:id "bar2"}]])
+      (-> (xt/submit-tx node [[:put :foo {:xt/id "foo3"}]
+                              [:put :bar {:xt/id "bar2"}]])
           (tu/then-await-tx* node))
 
       (t/is (= {:row-count 3}

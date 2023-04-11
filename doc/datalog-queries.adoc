@@ -27,13 +27,13 @@ These are designed to make it easier to work with XTDB's documents, and support 
 
 (xt/q node
       '{:find [first-name last-name]
-        :where [(match :people {:id :jms, :first-name first-name, :last-name last-name})]})
+        :where [(match :people {:xt/id :jms, :first-name first-name, :last-name last-name})]})
 ;; => [{:first-name "James", :last-name "Henderson"}]
 ----
 
 Here, we're:
 
-* Filtering to documents from the `:people` table, having an `:id` of `:jms`
+* Filtering to documents from the `:people` table, having an `:xt/id` of `:jms`
 * Extracting the `:first-name` value of that document to the `first-name` variable; the `:last-name` to the `last-name` variable
 * Returning the `first-name` and the `last-name`.
 
@@ -42,12 +42,12 @@ This is an example of the full syntax - we can reduce this to:
 [source,clojure]
 ----
 {:find [first-name last-name]
- :where [($ :people [{:id :jms} first-name last-name])]}
+ :where [($ :people [{:xt/id :jms} first-name last-name])]}
 ;; => [{:first-name "James", :last-name "Henderson"}]
 
 ;; cf. 1.x/other EDN Datalog databases
 {:find [first-name last-name]
- :where [[u :id :jms]
+ :where [[u :xt/id :jms]
          [u :type :person]
          [u :first-name first-name]
          [u :last-name last-name]]}
@@ -63,8 +63,8 @@ This can be used to express joins in a very terse manner - e.g.
 ----
 {:find [author-name blog-date blog-content]
  :in [blog-id]
- :where [($ :blogs [{:id blog-id, :author author-id} blog-date blog-content])
-         ($ :authors {:id author-id, :name author-name})]}
+ :where [($ :blogs [{:xt/id blog-id, :author author-id} blog-date blog-content])
+         ($ :authors {:xt/id author-id, :name author-name})]}
 
 ;; cf. 1.x/other EDN Datalog databases
 {:find [author-name blog-date blog-content]
@@ -116,7 +116,7 @@ WHERE b.author = a.id
  :where [($ :people [id {:xt/app-time app-time}]
             {:for-app-time :all-time})
 
-         ($ :people [{:id :john, :xt/app-time john-app-time}]
+         ($ :people [{:xt/id :john, :xt/app-time john-app-time}]
             {:for-app-time :all-time})
 
          [(<> id :john)]
@@ -133,8 +133,8 @@ This is now implicit - when you call `xt/q`, the client will (by default) await 
 ----
 (with-open [node ...]
   (xt/submit-tx node
-                [[:put :users {:id :jms, :first-name "James"}]
-                 [:put :users {:id :jdt, :first-name "Jeremy"}]])
+                [[:put :users {:xt/id :jms, :first-name "James"}]
+                 [:put :users {:xt/id :jdt, :first-name "Jeremy"}]])
 
   ;; no `await-tx` call required here
 
@@ -148,8 +148,8 @@ If you need to run the query at an exact transaction (e.g. for repeatable querie
 [source,clojure]
 ----
 (let [tx (xt/submit-tx node
-                       [[:put :users {:id :jms, :first-name "James"}]
-                        [:put :users {:id :jdt, :first-name "Jeremy"}]])]
+                       [[:put :users {:xt/id :jms, :first-name "James"}]
+                        [:put :users {:xt/id :jdt, :first-name "Jeremy"}]])]
   (xt/q node (-> '{:find [id first-name]
                    :where [(match :users [id first-name])]}
                  (assoc :basis {:tx tx, :current-time #inst "2023-03-29T12:00:00"}))))
@@ -197,9 +197,9 @@ For example, 'find me people who have children':
 [source,clojure]
 ----
 {:find [name]
- :where [(match :people [{:id parent} name])
+ :where [(match :people [{:xt/id parent} name])
          (exists? {:find [parent]
-                   :where [(match :people {:id child, :parent parent})]})]}
+                   :where [(match :people {:xt/id child, :parent parent})]})]}
 ----
 
 In this example, because we've specified `:find [parent]` in the sub-query, and we have a `parent` logic variable in the outer query, XT will ensure that the `parent` in the outer query is the same as the `parent` returned from the inner query.
@@ -216,9 +216,9 @@ As before, `parent` (as an output) is unified with the outer query.
 ----
 ;; 'find people who have siblings'
 {:find [name]
- :where [($ :people [{:id person, :parent parent} name])
+ :where [($ :people [{:xt/id person, :parent parent} name])
          (exists? {:find [parent]
                    :in [person]
-                   :where [($ :people {:id sibling, :parent parent})
+                   :where [($ :people {:xt/id sibling, :parent parent})
                            [(<> person sibling)]]})]}
 ----

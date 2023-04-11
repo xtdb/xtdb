@@ -855,7 +855,7 @@
 ;; maps cannot be created from SQL yet, or used as parameters - but we can read them from XT.
 (deftest map-read-test
   (with-open [conn (jdbc-conn)]
-    (-> (xt.d/submit-tx *node* [[:put :a {:id "map-test", :a {:b 42}}]])
+    (-> (xt.d/submit-tx *node* [[:put :a {:xt/id "map-test", :a {:b 42}}]])
         (tu/then-await-tx* *node*))
 
     (let [rs (q conn ["select a.a from a a"])]
@@ -900,13 +900,13 @@
 (deftest transaction-by-default-pins-the-basis-to-last-tx-test
   (require-node)
   (let [insert #(xt.d/submit-tx *node* [[:put %1 %2]])]
-    (-> (insert :a {:id :fred, :name "Fred"})
+    (-> (insert :a {:xt/id :fred, :name "Fred"})
         (tu/then-await-tx* *node*))
 
     (with-open [conn (jdbc-conn)]
       (jdbc/with-transaction [db conn]
         (is (= [{:name "Fred"}] (q db ["select a.name from a"])))
-        (insert :a {:id :bob, :name "Bob"})
+        (insert :a {:xt/id :bob, :name "Bob"})
         (is (= [{:name "Fred"}] (q db ["select a.name from a"]))))
 
       (is (= [{:name "Fred"}, {:name "Bob"}] (q conn ["select a.name from a"]))))))
@@ -943,7 +943,7 @@
   (with-open [conn (jdbc-conn)]
     (is (thrown-with-msg?
           PSQLException #"ERROR\: DML is not allowed in a READ ONLY transaction"
-          (jdbc/with-transaction [db conn] (q db ["insert into foo(id) values (42)"]))))
+          (jdbc/with-transaction [db conn] (q db ["insert into foo(xt__id) values (42)"]))))
     (is (= [] (q conn ["select foo.a from foo foo"])))))
 
 (defn- session-variables [server-conn ks]
@@ -990,75 +990,75 @@
       (q conn ["SET TRANSACTION READ WRITE"])
       (is (thrown-with-msg? PSQLException #"queries are unsupported in a READ WRITE transaction"
                             (jdbc/with-transaction [tx conn]
-                              (q tx ["INSERT INTO foo(id, a) values(42, 42)"])
+                              (q tx ["INSERT INTO foo(xt__id, a) values(42, 42)"])
                               (q conn ["SELECT foo.a FROM foo"]))))
       (is (= [] (q conn ["SELECT foo.a FROM foo"]))))
 
     (testing "insert it"
       (q conn ["SET TRANSACTION READ WRITE"])
       (jdbc/with-transaction [tx conn]
-        (q tx ["INSERT INTO foo(id, a) values(42, 42)"]))
+        (q tx ["INSERT INTO foo(xt__id, a) values(42, 42)"]))
       (testing "read after write"
         (is (= [{:a 42}] (q conn ["SELECT foo.a FROM foo"])))))
 
     #_#_
     (testing "update it"
-      (tx! conn ["UPDATE foo SET a = foo.a + 1 WHERE foo.id = 42"])
+      (tx! conn ["UPDATE foo SET a = foo.a + 1 WHERE foo.xt__id = 42"])
       (is (= [{:a 43}] (q conn ["SELECT foo.a FROM foo"]))))
 
     (testing "delete it"
-      (tx! conn ["DELETE FROM foo WHERE foo.id = 42"])
+      (tx! conn ["DELETE FROM foo WHERE foo.xt__id = 42"])
       (is (= [] (q conn ["SELECT foo.a FROM foo"]))))))
 
 (when (psql-available?)
   (deftest psql-dml-test
     (psql-session
-      (fn [send read]
-        (testing "set transaction"
-          (send "SET TRANSACTION READ WRITE;\n")
-          (is (str/includes? (read) "SET TRANSACTION")))
+     (fn [send read]
+       (testing "set transaction"
+         (send "SET TRANSACTION READ WRITE;\n")
+         (is (str/includes? (read) "SET TRANSACTION")))
 
-        (testing "begin"
-          (send "BEGIN;\n")
-          (is (str/includes? (read) "BEGIN")))
+       (testing "begin"
+         (send "BEGIN;\n")
+         (is (str/includes? (read) "BEGIN")))
 
-        (testing "insert"
-          (send "INSERT INTO foo (id, a) values (42, 42);\n")
-          (is (str/includes? (read) "INSERT 0 0")))
+       (testing "insert"
+         (send "INSERT INTO foo (xt__id, a) values (42, 42);\n")
+         (is (str/includes? (read) "INSERT 0 0")))
 
-        (testing "insert 2"
-          (send "INSERT INTO foo (id, a) values (366, 366);\n")
-          (is (str/includes? (read) "INSERT 0 0")))
+       (testing "insert 2"
+         (send "INSERT INTO foo (xt__id, a) values (366, 366);\n")
+         (is (str/includes? (read) "INSERT 0 0")))
 
-        (testing "commit"
-          (send "COMMIT;\n")
-          (is (str/includes? (read) "COMMIT")))
+       (testing "commit"
+         (send "COMMIT;\n")
+         (is (str/includes? (read) "COMMIT")))
 
-        (testing "read your own writes"
-          (send "SELECT foo.a FROM foo;\n")
-          (let [s (read)]
-            (is (str/includes? s "42"))
-            (is (str/includes? s "366"))))
+       (testing "read your own writes"
+         (send "SELECT foo.a FROM foo;\n")
+         (let [s (read)]
+           (is (str/includes? s "42"))
+           (is (str/includes? s "366"))))
 
-        (testing "delete"
-          (send "BEGIN READ WRITE;\n")
-          (read)
-          (send "DELETE FROM foo;\n")
-          (let [s (read)]
-            (is (str/includes? s "DELETE 0"))
-            (testing "no description sent"
-              (is (not (str/includes? s "_iid")))))))))
+       (testing "delete"
+         (send "BEGIN READ WRITE;\n")
+         (read)
+         (send "DELETE FROM foo;\n")
+         (let [s (read)]
+           (is (str/includes? s "DELETE 0"))
+           (testing "no description sent"
+             (is (not (str/includes? s "_iid")))))))))
 
   (deftest psql-dml-at-prompt-test
     (psql-session
-      (fn [send read]
-        (send "INSERT INTO foo(id, a) VALUES (42, 42);\n")
-        (is (str/starts-with? (read :err) "ERROR:  DML is only supported in an explicit READ WRITE transaction"))))))
+     (fn [send read]
+       (send "INSERT INTO foo(xt__id, a) VALUES (42, 42);\n")
+       (is (str/starts-with? (read :err) "ERROR:  DML is only supported in an explicit READ WRITE transaction"))))))
 
 (deftest dml-param-test
   (with-open [conn (jdbc-conn)]
-    (tx! conn ["INSERT INTO foo (id, a) VALUES (?, ?)" 42 "hello, world"])
-    (is (= [{:a "hello, world"}] (q conn ["SELECT foo.a FROM foo where foo.id = 42"])))))
+    (tx! conn ["INSERT INTO foo (xt__id, a) VALUES (?, ?)" 42 "hello, world"])
+    (is (= [{:a "hello, world"}] (q conn ["SELECT foo.a FROM foo where foo.xt__id = 42"])))))
 
 ;; SQL:2011 p1037 1,a,i
 (deftest set-transaction-in-transaction-error-test
@@ -1172,9 +1172,9 @@
   (with-open [conn (jdbc-conn "autocommit" "false")]
     (testing "DML enabled with BEGIN READ WRITE"
       (q conn ["BEGIN READ WRITE"])
-      (q conn ["INSERT INTO foo (id) VALUES (42)"])
+      (q conn ["INSERT INTO foo (xt__id) VALUES (42)"])
       (q conn ["COMMIT"])
-      (is (= [{:id 42}] (q conn ["SELECT foo.id from foo"]))))
+      (is (= [{:xt__id 42}] (q conn ["SELECT foo.xt__id from foo"]))))
 
     (testing "BEGIN access mode overrides SET TRANSACTION"
       (q conn ["SET TRANSACTION READ WRITE"])
@@ -1182,7 +1182,7 @@
       (q conn ["BEGIN READ ONLY"])
       (testing "next-transaction cleared on begin"
         (is (= {} (next-transaction-variables (get-last-conn) [:access-mode]))))
-      (is (thrown-with-msg? PSQLException #"DML is not allowed in a READ ONLY transaction" (q conn ["INSERT INTO foo (id) VALUES (43)"])))
+      (is (thrown-with-msg? PSQLException #"DML is not allowed in a READ ONLY transaction" (q conn ["INSERT INTO foo (xt__id) VALUES (43)"])))
       (q conn ["ROLLBACK"]))))
 
 (deftest start-transaction-test
@@ -1190,23 +1190,23 @@
     (let [sql #(q conn [%])]
 
       (sql "START TRANSACTION")
-      (is (thrown-with-msg? PSQLException #"DML is not allowed in a READ ONLY transaction" (sql "INSERT INTO foo (id) VALUES (42)")))
+      (is (thrown-with-msg? PSQLException #"DML is not allowed in a READ ONLY transaction" (sql "INSERT INTO foo (xt__id) VALUES (42)")))
       (sql "ROLLBACK")
 
       (sql "START TRANSACTION READ WRITE")
-      (sql "INSERT INTO foo (id) VALUES (42)")
+      (sql "INSERT INTO foo (xt__id) VALUES (42)")
       (sql "COMMIT")
-      (is (= [{:id 42}] (q conn ["SELECT foo.id from foo"])))
+      (is (= [{:xt__id 42}] (q conn ["SELECT foo.xt__id from foo"])))
 
       (testing "access mode overrides SET TRANSACTION"
         (sql "SET TRANSACTION READ WRITE")
         (sql "START TRANSACTION READ ONLY")
-        (is (thrown-with-msg? PSQLException #"DML is not allowed in a READ ONLY transaction" (sql "INSERT INTO foo (id) VALUES (42)")))
+        (is (thrown-with-msg? PSQLException #"DML is not allowed in a READ ONLY transaction" (sql "INSERT INTO foo (xt__id) VALUES (42)")))
         (sql "ROLLBACK"))
 
       (testing "set transaction cleared"
         (sql "START TRANSACTION")
-        (is (thrown-with-msg? PSQLException #"DML is not allowed in a READ ONLY transaction" (sql "INSERT INTO foo (id) VALUES (42)")))
+        (is (thrown-with-msg? PSQLException #"DML is not allowed in a READ ONLY transaction" (sql "INSERT INTO foo (xt__id) VALUES (42)")))
         (sql "ROLLBACK")))))
 
 (deftest set-session-characteristics-test
@@ -1214,19 +1214,19 @@
     (let [sql #(q conn [%])]
       (sql "SET SESSION CHARACTERISTICS AS TRANSACTION READ WRITE")
       (sql "START TRANSACTION")
-      (sql "INSERT INTO foo (id) VALUES (42)")
+      (sql "INSERT INTO foo (xt__id) VALUES (42)")
       (sql "COMMIT")
 
       (sql "SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY")
-      (is (= [{:id 42}] (q conn ["SELECT foo.id from foo"])))
+      (is (= [{:xt__id 42}] (q conn ["SELECT foo.xt__id from foo"])))
 
       (sql "SET SESSION CHARACTERISTICS AS TRANSACTION READ WRITE")
       (sql "START TRANSACTION")
-      (sql "INSERT INTO foo (id) VALUES (43)")
+      (sql "INSERT INTO foo (xt__id) VALUES (43)")
       (sql "COMMIT")
 
       (sql "SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY")
-      (is (= [{:id 42}, {:id 43}] (q conn ["SELECT foo.id from foo"]))))))
+      (is (= [{:xt__id 42}, {:xt__id 43}] (q conn ["SELECT foo.xt__id from foo"]))))))
 
 (deftest set-app-time-defaults-test
   (with-open [conn (jdbc-conn)]
@@ -1234,20 +1234,20 @@
       (sql "SET app_time_defaults TO as_of_now")
 
       (sql "START TRANSACTION READ WRITE")
-      (sql "INSERT INTO foo (id, version) VALUES ('foo', 0)")
+      (sql "INSERT INTO foo (xt__id, version) VALUES ('foo', 0)")
       (sql "COMMIT")
 
       (sql "START TRANSACTION READ WRITE")
-      (sql "UPDATE foo SET version = 1 WHERE foo.id = 'foo'")
+      (sql "UPDATE foo SET version = 1 WHERE foo.xt__id = 'foo'")
       (sql "COMMIT")
 
       (is (= [{:version 1, :application_time_start "2020-01-02T00:00Z", :application_time_end "9999-12-31T23:59:59.999999Z"}]
              (q conn ["SELECT foo.version, foo.application_time_start, foo.application_time_end FROM foo"])))
 
       (sql "SET application_time_defaults iso_standard")
-      (is (= [{:version 0, :application_time_start "2020-01-01T00:00Z", :application_time_end "2020-01-02T00:00Z"}
-              {:version 1, :application_time_start "2020-01-02T00:00Z", :application_time_end "9999-12-31T23:59:59.999999Z"}]
-             (q conn ["SELECT foo.version, foo.application_time_start, foo.application_time_end FROM foo"]))))))
+      (is (= (set [{:version 0, :application_time_start "2020-01-01T00:00Z", :application_time_end "2020-01-02T00:00Z"}
+                   {:version 1, :application_time_start "2020-01-02T00:00Z", :application_time_end "9999-12-31T23:59:59.999999Z"}])
+             (set (q conn ["SELECT foo.version, foo.application_time_start, foo.application_time_end FROM foo"])))))))
 
 ;; this demonstrates that session / set variables do not change the next statement
 ;; its undefined - but we can say what it is _not_.
@@ -1258,31 +1258,31 @@
       (testing "read only"
         (sql "SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY")
         (sql "BEGIN")
-        (is (thrown-with-msg? PSQLException #"DML is not allowed in a READ ONLY transaction" (sql "INSERT INTO foo (id) values (43)")))
+        (is (thrown-with-msg? PSQLException #"DML is not allowed in a READ ONLY transaction" (sql "INSERT INTO foo (xt__id) values (43)")))
         (sql "ROLLBACK")
-        (is (= [] (sql "select foo.id from foo"))))
+        (is (= [] (sql "select foo.xt__id from foo"))))
 
       (sql "SET SESSION CHARACTERISTICS AS TRANSACTION READ WRITE")
 
       (testing "session access mode inherited"
         (sql "BEGIN")
-        (sql "INSERT INTO foo (id) values (42)")
+        (sql "INSERT INTO foo (xt__id) values (42)")
         (sql "COMMIT")
         (testing "despite read write setting read remains available outside tx"
-          (is (= [{:id 42}] (sql "select foo.id from foo")))))
+          (is (= [{:xt__id 42}] (sql "select foo.xt__id from foo")))))
 
       (testing "override session to start a read only transaction"
         (sql "BEGIN READ ONLY")
-        (is (thrown-with-msg? PSQLException #"DML is not allowed in a READ ONLY transaction" (sql "INSERT INTO foo (id) values (43)")))
+        (is (thrown-with-msg? PSQLException #"DML is not allowed in a READ ONLY transaction" (sql "INSERT INTO foo (xt__id) values (43)")))
         (sql "ROLLBACK")
         (testing "despite read write setting read remains available outside tx"
-          (is (= [{:id 42}] (sql "select foo.id from foo")))))
+          (is (= [{:xt__id 42}] (sql "select foo.xt__id from foo")))))
 
       (testing "set transaction is not cleared by read/autocommit DML, as they don't start a transaction"
         (sql "SET TRANSACTION READ WRITE")
-        (is (= [{:id 42}] (sql "select foo.id from foo")))
-        (sql "INSERT INTO foo (id) values (43)")
-        (is (= [{:id 42} {:id 43}] (sql "select foo.id from foo")))
+        (is (= [{:xt__id 42}] (sql "select foo.xt__id from foo")))
+        (sql "INSERT INTO foo (xt__id) values (43)")
+        (is (= [{:xt__id 42} {:xt__id 43}] (sql "select foo.xt__id from foo")))
         (is (= {:access-mode :read-write} (next-transaction-variables (get-last-conn) [:access-mode])))))))
 
 (deftest analyzer-error-returned-test
@@ -1292,8 +1292,8 @@
   (testing "DML"
     (with-open [conn (jdbc-conn)]
       (q conn ["BEGIN READ WRITE"])
-      (is (thrown-with-msg? PSQLException #"INSERT does not contain mandatory id column" (q conn ["INSERT INTO foo (a) values (42)"])))
-      (is (thrown-with-msg? PSQLException #"INSERT does not contain mandatory id column" (q conn ["COMMIT"]))))))
+      (is (thrown-with-msg? PSQLException #"INSERT does not contain mandatory xt__id column" (q conn ["INSERT INTO foo (a) values (42)"])))
+      (is (thrown-with-msg? PSQLException #"INSERT does not contain mandatory xt__id column" (q conn ["COMMIT"]))))))
 
 (when (psql-available?)
   (deftest psql-analyzer-error-test
@@ -1325,6 +1325,6 @@
 (deftest runtime-error-commit-test
   (with-open [conn (jdbc-conn)]
     (q conn ["START TRANSACTION READ WRITE"])
-    (q conn ["INSERT INTO foo (id) VALUES (TRIM(LEADING 'abc' FROM ''))"])
+    (q conn ["INSERT INTO foo (xt__id) VALUES (TRIM(LEADING 'abc' FROM ''))"])
     #_ ; FIXME #401 - need to show this as an aborted transaction?
     (is (thrown? PSQLException #"Data error - trim error" (q conn ["COMMIT"])))))

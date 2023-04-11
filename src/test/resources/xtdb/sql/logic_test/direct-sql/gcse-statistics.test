@@ -2,34 +2,34 @@ hash-threshold 100
 # yay, I can still do GCSE statistics (with much help from the SQL spec and Google)
 
 statement ok
-INSERT INTO t (id, x) VALUES (1, 10)
+INSERT INTO t (xt__id, x) VALUES (1, 10)
 
 statement ok
-INSERT INTO t (id, x) VALUES (1, 20)
+INSERT INTO t (xt__id, x) VALUES (1, 20)
 
 statement ok
-INSERT INTO t (id, x) VALUES (2, 30)
+INSERT INTO t (xt__id, x) VALUES (2, 30)
 
 statement ok
-INSERT INTO t (id, x) VALUES (2, 40)
+INSERT INTO t (xt__id, x) VALUES (2, 40)
 
 statement ok
-INSERT INTO t (id, x) VALUES (1, 50)
+INSERT INTO t (xt__id, x) VALUES (1, 50)
 
 statement ok
-INSERT INTO t (id, x) VALUES (1, 60)
+INSERT INTO t (xt__id, x) VALUES (1, 60)
 
 statement ok
-INSERT INTO t (id, x) VALUES (2, 70)
+INSERT INTO t (xt__id, x) VALUES (2, 70)
 
 statement ok
-INSERT INTO t (id, x) VALUES (3, 80)
+INSERT INTO t (xt__id, x) VALUES (3, 80)
 
 statement ok
-INSERT INTO t (id, x) VALUES (3, 90)
+INSERT INTO t (xt__id, x) VALUES (3, 90)
 
 query IIIIIR rowsort
-SELECT t.id, COUNT(t.x), MIN(t.x), MAX(t.x), SUM(t.x), AVG(t.x) FROM t GROUP BY t.id
+SELECT t.xt__id, COUNT(t.x), MIN(t.x), MAX(t.x), SUM(t.x), AVG(t.x) FROM t GROUP BY t.xt__id
 ----
 1
 4
@@ -51,7 +51,7 @@ SELECT t.id, COUNT(t.x), MIN(t.x), MAX(t.x), SUM(t.x), AVG(t.x) FROM t GROUP BY 
 85.000
 
 query IRRRR rowsort
-SELECT t.id, VAR_POP(t.x), STDDEV_POP(t.x), VAR_SAMP(t.x), STDDEV_SAMP(t.x) FROM t GROUP BY t.id
+SELECT t.xt__id, VAR_POP(t.x), STDDEV_POP(t.x), VAR_SAMP(t.x), STDDEV_SAMP(t.x) FROM t GROUP BY t.xt__id
 ----
 1
 425.000

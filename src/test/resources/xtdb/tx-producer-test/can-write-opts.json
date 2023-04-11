@@ -83,7 +83,7 @@
             },
             "children" : [ ]
           },{
-            "name" : "id",
+            "name" : "xt__id",
             "nullable" : false,
             "type" : {
               "name" : "union",
@@ -124,7 +124,7 @@
             },
             "children" : [ ]
           },{
-            "name" : "id",
+            "name" : "xt__id",
             "nullable" : false,
             "type" : {
               "name" : "union",
@@ -259,7 +259,7 @@
             "OFFSET" : [0],
             "DATA" : [ ]
           },{
-            "name" : "id",
+            "name" : "xt__id",
             "count" : 0,
             "TYPE_ID" : [ ],
             "OFFSET" : [ ]
@@ -285,7 +285,7 @@
             "OFFSET" : [0],
             "DATA" : [ ]
           },{
-            "name" : "id",
+            "name" : "xt__id",
             "count" : 0,
             "TYPE_ID" : [ ],
             "OFFSET" : [ ]

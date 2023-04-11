@@ -135,8 +135,8 @@
       "name" : "column",
       "count" : 10,
       "VALIDITY" : [1,1,1,1,1,1,1,1,1,1],
-      "OFFSET" : [0,7,9,12,15,18,25,27,30,33,36],
-      "DATA" : ["_row-id","id","foo","bar","baz","_row-id","id","foo","bar","baz"]
+      "OFFSET" : [0,7,13,16,19,22,29,35,38,41,44],
+      "DATA" : ["_row-id","xt__id","foo","bar","baz","_row-id","xt__id","foo","bar","baz"]
     },{
       "name" : "block-idx",
       "count" : 10,

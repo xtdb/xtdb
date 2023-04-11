@@ -274,8 +274,8 @@
       "name" : "column",
       "count" : 24,
       "VALIDITY" : [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
-      "OFFSET" : [0,7,9,15,19,20,21,27,34,36,40,41,42,43,44,50,57,59,65,69,70,71,72,73,79],
-      "DATA" : ["_row-id","id","$data$","list","a","b","struct","_row-id","id","list","a","d","c","b","struct","_row-id","id","$data$","list","a","d","c","b","struct"]
+      "OFFSET" : [0,7,13,19,23,24,25,31,38,44,48,49,50,51,52,58,65,71,77,81,82,83,84,85,91],
+      "DATA" : ["_row-id","xt__id","$data$","list","a","b","struct","_row-id","xt__id","list","a","d","c","b","struct","_row-id","xt__id","$data$","list","a","d","c","b","struct"]
     },{
       "name" : "block-idx",
       "count" : 24,

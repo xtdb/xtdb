@@ -13,14 +13,14 @@ First, follow the link:./getting-started.adoc[Getting Started] guide.
 (with-open [node ...]
   ;; submit some data
   (xt/submit-tx node
-                [[:sql "INSERT INTO users (id, first_name) VALUES (?, ?)"
+                [[:sql "INSERT INTO users (xt__id, first_name) VALUES (?, ?)"
                   [["jms", "James"]
                    ["jdt", "Jeremy"]]]])
 
   ;; run a SQL query
 
   (xt/q node "SELECT u.id, u.first_name FROM users u")
-  ;; => [{:id "jms", :first_name "James"}, {:id "jdt", :first_name "Jeremy"}]
+  ;; => [{:xt/id "jms", :first_name "James"}, {:xt/id "jdt", :first_name "Jeremy"}]
 
   )
 ----

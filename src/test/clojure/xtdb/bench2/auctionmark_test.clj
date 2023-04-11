@@ -26,7 +26,7 @@
 
     (t/is (= {:count-id 1} (first (xt/q *node* '{:find [(count id)]
                                                  :keys [count-id]
-                                                 :where [(match :user [id])
+                                                 :where [(match :user [{:xt/id id}])
                                                          [id :u_id]]}))))
     (t/is (= "u_0" (b/sample-flat worker am/user-id)))))
 
@@ -37,7 +37,7 @@
 
     (t/is (= {:count-id 1} (first (xt/q *node* '{:find [(count id)]
                                                  :keys [count-id]
-                                                 :where [(match :category [id])
+                                                 :where [(match :category [{:xt/id id}])
                                                          [id :c_id]]}))))
     (t/is (= "c_0" (b/sample-flat worker am/category-id)))))
 
@@ -47,7 +47,7 @@
 
     (t/is (= {:count-id 1} (first (xt/q *node* '{:find [(count id)]
                                                  :keys [count-id]
-                                                 :where [(match :region [id])
+                                                 :where [(match :region [{:xt/id id}])
                                                          [id :r_id]]}))))
     (t/is (= "r_0" (b/sample-flat worker am/region-id)))))
 
@@ -59,7 +59,7 @@
 
     (t/is (= {:count-id 1} (first (xt/q *node* '{:find [(count id)]
                                                  :keys [count-id]
-                                                 :where [(match :gag [id])
+                                                 :where [(match :gag [{:xt/id id}])
                                                          [id :gag_name]]}))))
     (t/is (= "gag_0" (b/sample-flat worker am/gag-id)))))
 
@@ -72,7 +72,7 @@
 
     (t/is (= {:count-id 1} (first (xt/q *node* '{:find [(count id)]
                                                  :keys [count-id]
-                                                 :where [(match :gav [id])
+                                                 :where [(match :gav [{:xt/id id}])
                                                          [id :gav_name]]}))))
     (t/is (= "gav_0" (b/sample-flat worker am/gav-id)))))
 
@@ -82,7 +82,7 @@
     (bxt2/generate worker :user-attribute am/generate-user-attributes 1)
     (t/is (= {:count-id 1} (first (xt/q *node* '{:find [(count id)]
                                                  :keys [count-id]
-                                                 :where [(match :user-attribute [id])
+                                                 :where [(match :user-attribute [{:xt/id id}])
                                                          [id :ua_u_id]]}))))
     (t/is (= "ua_0" (b/sample-flat worker am/user-attribute-id)))))
 
@@ -96,7 +96,7 @@
 
       (t/is (= {:count-id 1} (first (xt/q *node* '{:find [(count id)]
                                                    :keys [count-id]
-                                                   :where [(match :item [id])
+                                                   :where [(match :item [{:xt/id id}])
                                                            [id :i_id]]}))))
       (t/is (= "i_0" (:i_id (am/random-item worker :status :open)))))))
 
@@ -120,7 +120,7 @@
 
       (t/is (= {:count-id 1} (first (xt/q *node* '{:find [(count id)]
                                                    :keys [count-id]
-                                                   :where [(match :user [id])
+                                                   :where [(match :user [{:xt/id id}])
                                                            [id :u_id]]}))))
       (t/is (= "u_0" (b/sample-flat worker am/user-id))))))
 
@@ -140,19 +140,19 @@
         ;; (t/is (= nil (am/generate-new-bid-params worker)))
         (t/is (= {:i_num_bids 1}
                  (first (xt/q *node* '{:find [i_num_bids]
-                                       :where [(match :item [id])
+                                       :where [(match :item [{:xt/id id}])
                                                [id :i_num_bids i_num_bids]]}))))
         ;; there exists a bid
         (t/is (= {:ib_i_id "i_0", :ib_id "ib_0"}
                  (first (xt/q *node* '{:find [ib_id ib_i_id]
-                                       :where [(match :item-bid {:id ib})
+                                       :where [(match :item-bid {:xt/id ib})
                                                [ib :ib_id ib_id]
                                                [ib :ib_i_id ib_i_id]]}))))
         ;; new max bid
         (t/is (= {:imb "ib_0-i_0", :imb_i_id "i_0"}
                  (first (xt/q *node*
                               '{:find [imb imb_i_id]
-                                :where [(match :item-max-bid {:id imb})
+                                :where [(match :item-max-bid {:xt/id imb})
                                         [imb :imb_i_id imb_i_id]]})))))
 
       (t/testing "new bid but does not exceed max"
@@ -164,7 +164,7 @@
           (t/is (= 2 (-> (xt/q *node*
                                '{:find [i_num_bids]
                                  :where
-                                 [(match :item [id])
+                                 [(match :item {:xt/id id})
                                   [id :i_num_bids i_num_bids]]}
                                ;; :basis {:tx tx}
                                )
@@ -172,7 +172,7 @@
           ;; winning bid remains the same
           (t/is (= {:imb "ib_0-i_0", :imb_i_id "i_0"}
                    (first (xt/q *node* '{:find [imb imb_i_id]
-                                         :where [(match :item-max-bid {:id imb})
+                                         :where [(match :item-max-bid {:xt/id imb})
                                                  [imb :imb_i_id imb_i_id]]} )))))))))
 
 
@@ -190,13 +190,13 @@
 
         ;; new item
         (let [{:keys [i_id i_u_id]} (first (xt/q *node* '{:find [i_id i_u_id]
-                                                          :where [(match :item [id])
+                                                          :where [(match :item [{:xt/id id}])
                                                                   [id :i_id i_id]
                                                                   [id :i_u_id i_u_id]]}))]
           (t/is (= "i_0" i_id))
           (t/is (= "u_0" i_u_id)))
         (t/is (< (- (:u_balance (first (xt/q *node* '{:find [u_balance]
-                                                      :where [(match :user {:id u})
+                                                      :where [(match :user {:xt/id u})
                                                               [u :u_id]
                                                               [u :u_balance u_balance]]})))
                     (double -1.0))

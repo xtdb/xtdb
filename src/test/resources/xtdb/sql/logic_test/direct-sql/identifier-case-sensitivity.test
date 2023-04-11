@@ -1,13 +1,13 @@
 hash-threshold 100
 
 statement ok
-INSERT INTO T1(id, col1, col2) VALUES(1,'fish',1000)
+INSERT INTO T1(xt__id, col1, col2) VALUES(1,'fish',1000)
 
 statement ok
-INSERT INTO t1(id, coL1, COL2) VALUES(2,'dog',2000)
+INSERT INTO t1(xt__id, coL1, COL2) VALUES(2,'dog',2000)
 
 query ITI rowsort
-SELECT t1.ID, T1.col1, t1.cOl2 FROM T1
+SELECT t1.XT__ID, T1.col1, t1.cOl2 FROM T1
 ----
 1
 fish
@@ -17,7 +17,7 @@ dog
 2000
 
 query ITI rowsort
-SELECT "t1".id, T1."col1", t1.cOl2 FROM "t1"
+SELECT "t1".xt__id, T1."col1", t1.cOl2 FROM "t1"
 ----
 1
 fish
@@ -27,14 +27,14 @@ dog
 2000
 
 query ITI rowsort
-SELECT "T1".id, "T1".col1, "T1".cOl2 FROM "T1"
+SELECT "T1".xt__id, "T1".col1, "T1".cOl2 FROM "T1"
 ----
 
 statement ok
-INSERT INTO "T1"(id, "COl1", "col2") VALUES(3,'cat',3000)
+INSERT INTO "T1"(xt__id, "COl1", "col2") VALUES(3,'cat',3000)
 
 query ITI rowsort
-SELECT "T1".id, "T1"."COl1", "T1".cOl2 FROM "T1"
+SELECT "T1".xt__id, "T1"."COl1", "T1".cOl2 FROM "T1"
 ----
 3
 cat
@@ -44,7 +44,7 @@ statement ok
 UPDATE T1 SET cOl1 = 30 WHERE t1.col2 IN (313, 2000)
 
 query ITI rowsort
-SELECT t1.iD, T1.col1, "t1".col2 FROM t1
+SELECT t1.xt__id, T1.col1, "t1".col2 FROM t1
 ----
 1
 fish
@@ -60,7 +60,7 @@ statement ok
 UPDATE "T1" SET "COl1" = 40 WHERE "T1"."COl1" = 'cat'
 
 query IIIT rowsort
-SELECT "T1".ID, "T1"."COl1", "T1".COL2, "T1"."cOL2" FROM "T1"
+SELECT "T1".XT__ID, "T1"."COl1", "T1".COL2, "T1"."cOL2" FROM "T1"
 ----
 3
 40
@@ -107,7 +107,7 @@ statement ok
 DELETE FROM T1 WHERE t1.cOl1 = 'fish'
 
 query ITI rowsort
-SELECT t1.ID FROM T1
+SELECT t1.XT__ID FROM T1
 ----
 2
 
@@ -115,5 +115,5 @@ statement ok
 DELETE FROM "T1" WHERE "T1"."cOL2" = 'rabbit'
 
 query I rowsort
-SELECT "T1".Id FROM "T1"
+SELECT "T1".xt__id FROM "T1"
 ----

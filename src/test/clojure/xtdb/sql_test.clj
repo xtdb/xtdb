@@ -948,27 +948,29 @@
                 AND foo.APP_TIME OVERLAPS PERIOD (DATE '2000-01-01', DATE '2004-01-01')"))))
 
 (deftest test-sql-insert-plan
-  (t/is (= '[:insert {:table "users"}
-             [:rename {x1 id, x2 name, x5 application_time_start}
-              [:project [x1 x2 {x5 (cast-tstz x3)}]
-               [:table [x1 x2 x3]
-                [{x1 ?_0, x2 ?_1, x3 ?_2}]]]]]
-           (plan-sql "INSERT INTO users (id, name, application_time_start) VALUES (?, ?, ?)")
+  (t/is (= '[:insert
+             {:table "users"}
+             [:rename
+              {x1 xt__id, x2 name, x5 application_time_start}
+              [:project
+               [x1 x2 {x5 (cast-tstz x3)}]
+               [:table [x1 x2 x3] [{x1 ?_0, x2 ?_1, x3 ?_2}]]]]]
+           (plan-sql "INSERT INTO users (xt__id, name, application_time_start) VALUES (?, ?, ?)")
            (plan-sql
             "INSERT INTO users
-             SELECT bar.id, bar.name, bar.application_time_start
-             FROM (VALUES (?, ?, ?)) AS bar(id, name, application_time_start)")
+             SELECT bar.xt__id, bar.name, bar.application_time_start
+             FROM (VALUES (?, ?, ?)) AS bar(xt__id, name, application_time_start)")
            (plan-sql
-            "INSERT INTO users (id, name, application_time_start)
-             SELECT bar.id, bar.name, bar.application_time_start
-             FROM (VALUES (?, ?, ?)) AS bar(id, name, application_time_start)")))
+            "INSERT INTO users (xt__id, name, application_time_start)
+             SELECT bar.xt__id, bar.name, bar.application_time_start
+             FROM (VALUES (?, ?, ?)) AS bar(xt__id, name, application_time_start)")))
 
   (t/is (=plan-file "test-sql-insert-plan-309"
-                    (plan-sql "INSERT INTO customer (id, c_custkey, c_name, c_address, c_nationkey, c_phone, c_acctbal, c_mktsegment, c_comment) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"))
+                    (plan-sql "INSERT INTO customer (xt__id, c_custkey, c_name, c_address, c_nationkey, c_phone, c_acctbal, c_mktsegment, c_comment) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"))
         "#309")
 
   (t/is (=plan-file "test-sql-insert-plan-398"
-                    (plan-sql "INSERT INTO foo (id, application_time_start) VALUES ('foo', DATE '2018-01-01')"))))
+                    (plan-sql "INSERT INTO foo (xt__id, application_time_start) VALUES ('foo', DATE '2018-01-01')"))))
 
 (deftest test-sql-delete-plan
   (t/is (=plan-file "test-sql-delete-plan"
@@ -1130,7 +1132,7 @@
   (t/is
    (=plan-file
     "test-period-specs-with-dml-subqueries-and-defaults-407" ;;also #424
-    (plan-sql "INSERT INTO prop_owner (id, customer_number, property_number, application_time_start, application_time_end)
+    (plan-sql "INSERT INTO prop_owner (xt__id, customer_number, property_number, application_time_start, application_time_end)
                 SELECT 1,
                 145,
                 7797, DATE '1998-01-03', tmp.app_start

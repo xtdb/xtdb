@@ -84,8 +84,8 @@ If you need to update your local image due to a subsequent update, you can run `
 (with-open [node ...]
   ;; submit some data
   (xt/submit-tx node
-                [[:put :users {:id :jms, :first-name "James"}]
-                 [:put :users {:id :jdt, :first-name "Jeremy"}]])
+                [[:put :users {:xt/id :jms, :first-name "James"}]
+                 [:put :users {:xt/id :jdt, :first-name "Jeremy"}]])
 
   ;; run a Datalog query
   (xt/q node '{:find [id first-name]

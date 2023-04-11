@@ -3,7 +3,7 @@ hash-threshold 100
 variable SET APP_TIME_DEFAULTS TO AS_OF_NOW
 
 statement ok
-INSERT INTO posts (id, user_id, text, application_time_start)
+INSERT INTO posts (xt__id, user_id, text, application_time_start)
 	VALUES (9012, 5678, 'Happy 2025!', DATE '2025-01-01')
 
 query T nosort
@@ -18,7 +18,7 @@ SELECT posts.text FROM posts
 
 # finds no rows to insert due to APP_TIME_DEFAULT
 statement ok
-INSERT INTO t1 SELECT posts.id, posts.text FROM posts
+INSERT INTO t1 SELECT posts.xt__id, posts.text FROM posts
 
 
 query T nosort

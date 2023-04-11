@@ -35,8 +35,8 @@
                         (read-tpch-cell col entity)])
                      (into {}))]
         (-> (assoc doc
-                   :id (->> (mapv doc (get table->pkey table-name))
-                            (str/join "___")))
+                   :xt/id (->> (mapv doc (get table->pkey table-name))
+                               (str/join "___")))
             (with-meta {:table (keyword table-name)}))))))
 
 (defn submit-docs! [tx-producer scale-factor]
@@ -58,8 +58,8 @@
 (defn- tpch-table->dml [^TpchTable table]
   (format "INSERT INTO %s (%s) VALUES (%s)"
           (.getTableName table)
-          (->> (cons "id" (for [^TpchColumn col (.getColumns table)]
-                            (.getColumnName col)))
+          (->> (cons "xt__id" (for [^TpchColumn col (.getColumns table)]
+                                (.getColumnName col)))
                (str/join ", "))
           (->> (repeat (inc (count (.getColumns table))) "?")
                (str/join ", "))))

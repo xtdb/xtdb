@@ -192,7 +192,7 @@
                            :xtdb.buffer-pool/buffer-pool {:cache-path (io/file hostdir "buffers")}
                            :xtdb.object-store/file-system-object-store {:root-path (io/file hostdir "objects")}}
                           (node/start-node))]
-      (-> (node/snapshot-async node (xt/submit-tx node [[:put {:id 42, :greeting "Hello, world!"}]]))
+      (-> (node/snapshot-async node (xt/submit-tx node [[:put {:xt/id 42, :greeting "Hello, world!"}]]))
           (.orTimeout 5 TimeUnit/SECONDS)
           deref))
 

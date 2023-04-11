@@ -29,7 +29,7 @@
 
 (defn- xform-doc [doc]
   (-> doc
-      (set/rename-keys {:crux.db/id :id})
+      (set/rename-keys {:crux.db/id :xt/id})
       (->> (into {}
                  (map (fn [[k v]]
                         (MapEntry/create k
@@ -50,7 +50,7 @@
           (.submitTx tx-producer
                      (case tx-status
                        :commit (for [[tx-op {:keys [eid doc start-valid-time end-valid-time]}] tx-ops]
-                                 ;; HACK: what to do if the user has a separate :id key?
+                                 ;; HACK: what to do if the user has a separate :xt/id  key?
                                  (let [app-time-opts {:for-app-time [:in start-valid-time end-valid-time]}]
                                    (case tx-op
                                      :put [:put :xt_docs (xform-doc doc) app-time-opts]

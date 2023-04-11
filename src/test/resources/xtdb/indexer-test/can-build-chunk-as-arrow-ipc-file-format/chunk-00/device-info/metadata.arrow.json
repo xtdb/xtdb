@@ -108,8 +108,8 @@
       "name" : "column",
       "count" : 12,
       "VALIDITY" : [1,1,1,1,1,1,1,1,1,1,1,1],
-      "OFFSET" : [0,7,9,20,32,37,44,51,53,64,76,81,88],
-      "DATA" : ["_row-id","id","api-version","manufacturer","model","os-name","_row-id","id","api-version","manufacturer","model","os-name"]
+      "OFFSET" : [0,7,13,24,36,41,48,55,61,72,84,89,96],
+      "DATA" : ["_row-id","xt__id","api-version","manufacturer","model","os-name","_row-id","xt__id","api-version","manufacturer","model","os-name"]
     },{
       "name" : "block-idx",
       "count" : 12,

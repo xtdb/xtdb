@@ -52,29 +52,29 @@ SELECT t1.d-t1.e AS a, SUM(t1.a) AS b
    AND t1.a > t1.b
  GROUP BY t1.d, t1.e
  ORDER BY b, t1.c"]
-    (t/is (= [{:id 2,
+    (t/is (= [{:xt/id 2,
                :dependent-columns #{},
                :projected-columns
                [{:identifier "a", :index 0} {:identifier "b", :index 1}],
                :type :query-expression,
                :ctes
                {"foo"
-                {:query-name "foo", :id 10, :scope-id 2, :subquery-scope-id 18}},
+                {:query-name "foo", :xt/id 10, :scope-id 2, :subquery-scope-id 18}},
                :order-by-indexes [1 nil]}
-              {:id 18,
+              {:xt/id 18,
                :dependent-columns #{},
                :projected-columns [{:index 0}],
                :parent-id 2,
                :type :query-expression,
                :ctes {}}
-              {:id 20,
+              {:xt/id 20,
                :dependent-columns #{},
                :projected-columns [{:index 0}],
                :parent-id 18,
                :tables
                {"bar"
                 {:correlation-name "bar",
-                 :id 37,
+                 :xt/id 37,
                  :scope-id 20,
                  :table-or-query-name "foo",
                  :cte-id 10,
@@ -82,7 +82,7 @@ SELECT t1.d-t1.e AS a, SUM(t1.a) AS b
                  :used-columns #{}}},
                :columns #{},
                :type :query-specification}
-              {:id 48,
+              {:xt/id 48,
                :dependent-columns #{},
                :projected-columns
                [{:identifier "a", :index 0} {:identifier "b", :index 1}],
@@ -90,14 +90,14 @@ SELECT t1.d-t1.e AS a, SUM(t1.a) AS b
                :tables
                {"t1"
                 {:correlation-name "t1",
-                 :id 118,
+                 :xt/id 118,
                  :scope-id 48,
                  :table-or-query-name "t1",
                  :used-columns
                  #{["t1" "e"] ["t1" "a"] ["t1" "b"] ["t1" "c"] ["t1" "d"]}},
                 "baz"
                 {:correlation-name "baz",
-                 :id 123,
+                 :xt/id 123,
                  :scope-id 48,
                  :table-or-query-name "foo",
                  :cte-id 10,
@@ -141,7 +141,7 @@ SELECT t1.d-t1.e AS a, SUM(t1.a) AS b
                   :table-scope-id 48}},
                :type :query-specification,
                :grouping-columns [["t1" "d"] ["t1" "e"]]}
-              {:id 146,
+              {:xt/id 146,
                :dependent-columns
                #{{:identifiers ["t1" "b"],
                   :type :outer,
@@ -157,7 +157,7 @@ SELECT t1.d-t1.e AS a, SUM(t1.a) AS b
                :parent-id 48,
                :type :query-expression,
                :ctes {}}
-              {:id 148,
+              {:xt/id 148,
                :dependent-columns
                #{{:identifiers ["t1" "b"],
                   :type :outer,
@@ -174,7 +174,7 @@ SELECT t1.d-t1.e AS a, SUM(t1.a) AS b
                :tables
                {"x"
                 {:correlation-name "x",
-                 :id 165,
+                 :xt/id 165,
                  :scope-id 148,
                  :table-or-query-name "t1",
                  :used-columns #{["x" "b"]}}},
@@ -190,7 +190,7 @@ SELECT t1.d-t1.e AS a, SUM(t1.a) AS b
                   :table-id 165,
                   :table-scope-id 148}},
                :type :query-specification}
-              {:id 230,
+              {:xt/id 230,
                :dependent-columns
                #{{:identifiers ["t1" "b"],
                   :type :outer,
@@ -201,7 +201,7 @@ SELECT t1.d-t1.e AS a, SUM(t1.a) AS b
                :parent-id 148,
                :type :query-expression,
                :ctes {}}
-              {:id 232,
+              {:xt/id 232,
                :dependent-columns
                #{{:identifiers ["t1" "b"],
                   :type :outer,
@@ -214,7 +214,7 @@ SELECT t1.d-t1.e AS a, SUM(t1.a) AS b
                :tables
                {"t2"
                 {:correlation-name "t2",
-                 :id 256,
+                 :xt/id 256,
                  :scope-id 232,
                  :subquery-scope-id 260,
                  :used-columns #{["t2" "b"]}}},
@@ -230,20 +230,20 @@ SELECT t1.d-t1.e AS a, SUM(t1.a) AS b
                   :table-id 256,
                   :table-scope-id 232}},
                :type :query-specification}
-              {:id 260,
+              {:xt/id 260,
                :dependent-columns #{},
                :projected-columns [{:identifier "b", :index 0}],
                :parent-id 232,
                :type :query-expression,
                :ctes {}}
-              {:id 262,
+              {:xt/id 262,
                :dependent-columns #{},
                :projected-columns [{:identifier "b", :index 0}],
                :parent-id 260,
                :tables
                {"boz"
                 {:correlation-name "boz",
-                 :id 285,
+                 :xt/id 285,
                  :scope-id 262,
                  :table-or-query-name "boz",
                  :used-columns #{}}},
@@ -723,16 +723,16 @@ SELECT t1.d-t1.e AS a, SUM(t1.a) AS b
                  (map :projected-columns))))
 
 
-  (valid? "INSERT INTO users (id, name) VALUES (?, ?)")
+  (valid? "INSERT INTO users (xt__id, name) VALUES (?, ?)")
 
   (invalid? [#"INSERT requires query to have same degree as column list"]
-            "INSERT INTO users (id, name) VALUES (?, ?, ?)")
+            "INSERT INTO users (xt__id, name) VALUES (?, ?, ?)")
 
-  (invalid? [#"INSERT does not contain mandatory id column"]
+  (invalid? [#"INSERT does not contain mandatory xt__id column"]
             "INSERT INTO users (name, application_time_start) VALUES (?, ?)")
-
   (invalid? [#"Non-deterministic ARROW_TABLE is not allowed in DML statements"]
-            "INSERT INTO users (id, name) SELECT x.id, x.name FROM ARROW_TABLE('test.arrow') AS x")
+
+            "INSERT INTO users (xt__id, name) SELECT x.xt__id, x.name FROM ARROW_TABLE('test.arrow') AS x")
 
   (invalid? [#"Subquery does not select single column"]
             "SELECT (SELECT x.bar, y.foo FROM y) FROM x")

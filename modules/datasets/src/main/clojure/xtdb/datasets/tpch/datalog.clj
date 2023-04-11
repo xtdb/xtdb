@@ -17,7 +17,7 @@
            (count l)]
     :keys [l_returnflag l_linestatus sum_qty sum_base_price sum_disc_price
            sum_charge avg_qty avg_price avg_disc count_order]
-    :where [(match :lineitem [{:id l} l_shipdate l_quantity
+    :where [(match :lineitem [{:xt/id l} l_shipdate l_quantity
                               l_extendedprice l_discount l_tax
                               l_returnflag l_linestatus])
             [(<= l_shipdate #time/date "1998-09-02")]]
@@ -27,23 +27,23 @@
   '{:find [s_acctbal s_name n_name p p_mfgr s_address s_phone s_comment]
     :keys [s_acctbal s_name n_name p_partkey p_mfgr s_address s_phone s_comment]
 
-    :where [(match :part [{:id p} p_mfgr {:p_size 15} p_type])
+    :where [(match :part [{:xt/id p} p_mfgr {:p_size 15} p_type])
             [(like p_type "%BRASS")]
 
             (match :partsupp [{:ps_partkey p, :ps_suppkey s} ps_supplycost])
-            (match :supplier [{:id s, :s_nationkey n}
+            (match :supplier [{:xt/id s, :s_nationkey n}
                               s_acctbal s_address s_name s_phone s_comment])
-            (match :nation [{:id n, :n_regionkey r} n_name])
-            (match :region {:id r, :r_name "EUROPE"})
+            (match :nation [{:xt/id n, :n_regionkey r} n_name])
+            (match :region {:xt/id r, :r_name "EUROPE"})
 
             (q {:find [(min ps_supplycost)]
                 :keys [ps_supplycost]
                 :in [p]
                 :where [(match :partsupp [{:ps_partkey p, :ps_suppkey s}
                                           ps_supplycost])
-                        (match :supplier {:id s, :s_nationkey n})
-                        (match :nation {:id n, :n_regionkey r})
-                        (match :region {:id r, :r_name "EUROPE"})]})]
+                        (match :supplier {:xt/id s, :s_nationkey n})
+                        (match :nation {:xt/id n, :n_regionkey r})
+                        (match :region {:xt/id r, :r_name "EUROPE"})]})]
 
     :order-by [[s_acctbal :desc] [n_name :asc] [s_name :asc] [p :asc]]
     :limit 100})
@@ -53,9 +53,9 @@
         :keys [l_orderkey revenue o_orderdate o_shippriority]
         :in [?segment]
 
-        :where [(match :customer {:id c, :c_mktsegment ?segment})
+        :where [(match :customer {:xt/id c, :c_mktsegment ?segment})
 
-                (match :orders [{:id o, :o_custkey c} o_shippriority o_orderdate])
+                (match :orders [{:xt/id o, :o_custkey c} o_shippriority o_orderdate])
                 [(< o_orderdate #time/date "1995-03-15")]
 
                 (match :lineitem [{:l_orderkey o} l_discount l_extendedprice l_shipdate])
@@ -69,7 +69,7 @@
 (def q4
   '{:find [o_orderpriority (count o)]
     :keys [o_orderpriority order_count]
-    :where [(match :orders [{:id o} o_orderdate o_orderpriority])
+    :where [(match :orders [{:xt/id o} o_orderdate o_orderpriority])
             [(>= o_orderdate #time/date "1993-07-01")]
             [(< o_orderdate #time/date "1993-10-01")]
 
@@ -83,17 +83,17 @@
   (-> '{:find [n_name (sum (* l_extendedprice (- 1 l_discount)))]
         :keys [n_name revenue]
         :in [region]
-        :where [(match :orders [{:id o, :o_custkey c} o_orderdate])
+        :where [(match :orders [{:xt/id o, :o_custkey c} o_orderdate])
                 [(>= o_orderdate #time/date "1994-01-01")]
                 [(< o_orderdate #time/date "1995-01-01")]
 
                 (match :lineitem [{:l_orderkey o, :l_suppkey s}
                                   l_extendedprice l_discount])
 
-                (match :supplier {:id s, :s_nationkey n})
-                (match :customer {:id c, :c_nationkey n})
-                (match :nation [{:id n, :n_regionkey r} n_name])
-                (match :region {:id r, :r_name region})]
+                (match :supplier {:xt/id s, :s_nationkey n})
+                (match :customer {:xt/id c, :c_nationkey n})
+                (match :nation [{:xt/id n, :n_regionkey r} n_name])
+                (match :region {:xt/id r, :r_name region})]
 
         :order-by [[(sum (* l_extendedprice (- 1 l_discount))) :desc]]}
       (with-in-args ["ASIA"])))
@@ -119,10 +119,10 @@
             [(<= l_shipdate #time/date "1996-12-31")]
             [(extract "YEAR" l_shipdate) l_year]
 
-            (match :supplier {:id s, :s_nationkey n1})
-            (match :nation {:id n1, :n_name supp_nation})
-            (match :customer {:id c, :c_nationkey n2})
-            (match :nation {:id n2, :n_name cust_nation})
+            (match :supplier {:xt/id s, :s_nationkey n1})
+            (match :nation {:xt/id n1, :n_name supp_nation})
+            (match :customer {:xt/id c, :c_nationkey n2})
+            (match :nation {:xt/id n2, :n_name cust_nation})
 
             [(or (and (= "FRANCE" supp_nation)
                       (= "GERMANY" cust_nation))
@@ -139,22 +139,22 @@
                 :keys [o_year brazil_volume volume]
                 :where [(q {:find [o_year (sum (* l_extendedprice (- 1 l_discount))) nation]
                             :keys [o_year volume nation]
-                            :where [(match :orders [{:id o, :o_custkey c} o_orderdate])
+                            :where [(match :orders [{:xt/id o, :o_custkey c} o_orderdate])
                                     [(>= o_orderdate #time/date "1995-01-01")]
                                     [(<= o_orderdate #time/date "1996-12-31")]
                                     [(extract "YEAR" o_orderdate) o_year]
 
-                                    (match :lineitem [{:id l, :l_orderkey o, :l_suppkey s, :l_partkey p}
+                                    (match :lineitem [{:xt/id l, :l_orderkey o, :l_suppkey s, :l_partkey p}
                                                       l_extendedprice l_discount])
 
-                                    (match :customer {:id c, :c_nationkey n1})
-                                    (match :nation {:id n1, :n_regionkey r1})
-                                    (match :region {:id r1, :r_name "AMERICA"})
+                                    (match :customer {:xt/id c, :c_nationkey n1})
+                                    (match :nation {:xt/id n1, :n_regionkey r1})
+                                    (match :region {:xt/id r1, :r_name "AMERICA"})
 
-                                    (match :supplier {:id s, :s_nationkey n2})
-                                    (match :nation {:id n2, :n_name nation})
+                                    (match :supplier {:xt/id s, :s_nationkey n2})
+                                    (match :nation {:xt/id n2, :n_name nation})
 
-                                    (match :part {:id p, :p_type "ECONOMY ANODIZED STEEL"})]})]})
+                                    (match :part {:xt/id p, :p_type "ECONOMY ANODIZED STEEL"})]})]})
             [(/ brazil_volume volume) mkt_share]]
     :order-by [[o_year :asc]]})
 
@@ -164,10 +164,10 @@
                    (* ps_supplycost l_quantity)))]
     :keys [nation o_year sum_profit]
 
-    :where [(match :part [{:id p} p_name])
+    :where [(match :part [{:xt/id p} p_name])
             [(like p_name "%green%")]
 
-            (match :orders [{:id o} o_orderdate])
+            (match :orders [{:xt/id o} o_orderdate])
             [(extract "YEAR" o_orderdate) o_year]
 
             (match :lineitem [{:l_orderkey o, :l_suppkey s, :l_partkey p}
@@ -175,8 +175,8 @@
 
             (match :partsupp [{:ps_partkey p, :ps_suppkey s} ps_supplycost])
 
-            (match :supplier {:id s, :s_nationkey n})
-            (match :nation {:id n, :n_name nation})]
+            (match :supplier {:xt/id s, :s_nationkey n})
+            (match :nation {:xt/id n, :n_name nation})]
 
     :order-by [[nation :asc] [o_year :desc]]})
 
@@ -186,15 +186,15 @@
     :keys [c_custkey c_name revenue
            c_acctbal c_phone n_name c_address c_comment]
 
-    :where [(match :orders [{:id o, :o_custkey c}, o_orderdate])
+    :where [(match :orders [{:xt/id o, :o_custkey c}, o_orderdate])
             [(>= o_orderdate #time/date "1993-10-01")]
             [(< o_orderdate #time/date "1994-01-01")]
 
-            (match :customer [{:id c, :c_nationkey n}
+            (match :customer [{:xt/id c, :c_nationkey n}
                               c_name c_address c_phone
                               c_acctbal c_comment])
 
-            (match :nation {:id n, :n_name n_name})
+            (match :nation {:xt/id n, :n_name n_name})
 
             (match :lineitem [{:l_orderkey o, :l_returnflag "R"}
                               l_extendedprice l_discount])]
@@ -207,13 +207,13 @@
     :where [(q {:find [(sum (* ps_supplycost ps_availqty))]
                 :keys [total-value]
                 :where [(match :partsupp [{:ps_suppkey s} ps_availqty ps_supplycost])
-                        (match :supplier [{:id s, :s_nationkey n}])
-                        (match :nation [{:id n, :n_name "GERMANY"}])]})
+                        (match :supplier [{:xt/id s, :s_nationkey n}])
+                        (match :nation [{:xt/id n, :n_name "GERMANY"}])]})
             (q {:find [ps_partkey (sum (* ps_supplycost ps_availqty))]
                 :keys [ps_partkey value]
                 :where [(match :partsupp [{:ps_suppkey s} ps_availqty ps_supplycost ps_partkey])
-                        (match :supplier [{:id s, :s_nationkey n}])
-                        (match :nation [{:id n, :n_name "GERMANY"}])]})
+                        (match :supplier [{:xt/id s, :s_nationkey n}])
+                        (match :nation [{:xt/id n, :n_name "GERMANY"}])]})
             [(> value (* 0.0001 total-value))]]
     :order-by [[value :desc]]})
 
@@ -230,7 +230,7 @@
                 [(< l_commitdate l_receiptdate)]
                 [(< l_shipdate l_commitdate)]
 
-                (match :orders [{:id o} o_orderpriority])]
+                (match :orders [{:xt/id o} o_orderpriority])]
         :order-by [[l_shipmode :asc]]}
 
       (with-in-args [#{"MAIL" "SHIP"}])))
@@ -260,7 +260,7 @@
                         [(>= l_shipdate #time/date "1995-09-01")]
                         [(< l_shipdate #time/date "1995-10-01")]
 
-                        (match :part [{:id p} p_type])]})]})
+                        (match :part [{:xt/id p} p_type])]})]})
 
 (def q15
   '{:find [s s_name s_address s_phone total_revenue]
@@ -283,14 +283,14 @@
   (-> '{:find [p_brand p_type p_size (count-distinct s)]
         :keys [p_brand p_type p_size supplier_cnt]
         :in [[p_size ...]]
-        :where [(match :part [{:id p} p_brand p_type p_size])
+        :where [(match :part [{:xt/id p} p_brand p_type p_size])
                 [(<> p_brand "Brand#45")]
                 [(not (like p_type "MEDIUM POLISHED%"))]
 
                 (match :partsupp [{:ps_partkey p, :ps_suppkey s}])
 
                 (not-exists? {:find [s]
-                              :where [(match :supplier [{:id s} s_comment])
+                              :where [(match :supplier [{:xt/id s} s_comment])
                                       [(like "%Customer%Complaints%" s_comment)]]})]
         :order-by [[(count-distinct s) :desc]
                    [p_brand :asc]
@@ -303,7 +303,7 @@
   '{:find [avg_yearly]
     :where [(q {:find [(sum l_extendedprice)]
                 :keys [sum_extendedprice]
-                :where [(match :part [{:id p, :p_brand "Brand#23", :p_container "MED BOX"}])
+                :where [(match :part [{:xt/id p, :p_brand "Brand#23", :p_container "MED BOX"}])
 
                         (q {:find [(avg l_quantity)]
                             :in [p]
@@ -319,8 +319,8 @@
 (def q18
   '{:find [c_name c o o_orderdate o_totalprice sum_quantity]
     :keys [c_name c_custkey o_orderkey o_orderdate o_totalprice sum_qty]
-    :where [(match :customer [{:id c} c_name])
-            (match :orders [{:id o, :o_custkey c} o_orderdate o_totalprice])
+    :where [(match :customer [{:xt/id c} c_name])
+            (match :orders [{:xt/id o, :o_custkey c} o_orderdate o_totalprice])
             (q {:find [o (sum l_quantity)]
                 :keys [o sum_quantity]
                 :where [(match :lineitem [{:l_orderkey o} l_quantity])]})
@@ -332,7 +332,7 @@
 (def q19
   (-> '{:find [(sum (* l_extendedprice (- 1 l_discount)))]
         :in [[l_shipmode ...]]
-        :where [(match :part [{:id p} p_size])
+        :where [(match :part [{:xt/id p} p_size])
                 (match :lineitem [{:l_shipinstruct "DELIVER IN PERSON", :l_partkey p}
                                   l_shipmode l_discount l_extendedprice l_quantity])
                 (union-join [p l_quantity p_size]
@@ -359,16 +359,16 @@
 
 (def q20
   '{:find [s_name s_address]
-    :where [(match :part [{:id p} p_name])
+    :where [(match :part [{:xt/id p} p_name])
             [(like p_name "forest%")]
 
             (match :partsupp [{:ps_suppkey s, :ps_partkey p}
                               ps_availqty])
 
-            (match :supplier [{:id s, :s_nationkey n}
+            (match :supplier [{:xt/id s, :s_nationkey n}
                               s_name s_address])
 
-            (match :nation {:id n, :n_name "CANADA"})
+            (match :nation {:xt/id n, :n_name "CANADA"})
 
             (q {:find [(sum l_quantity)]
                 :keys [sum_quantity]
@@ -382,11 +382,11 @@
 
 (def q21
   '{:find [s_name (count l1)]
-    :where [(match :nation [{:id n, :n_name "SAUDI ARABIA"}])
-            (match :supplier [{:id s, :s_nationkey n} s_name])
-            (match :orders [{:id o, :o_orderstatus "F"}])
+    :where [(match :nation [{:xt/id n, :n_name "SAUDI ARABIA"}])
+            (match :supplier [{:xt/id s, :s_nationkey n} s_name])
+            (match :orders [{:xt/id o, :o_orderstatus "F"}])
 
-            (match :lineitem [{:id l1, :l_suppkey s, :l_orderkey o}
+            (match :lineitem [{:xt/id l1, :l_suppkey s, :l_orderkey o}
                               l_receiptdate l_commitdate])
             [(> l_receiptdate l_commitdate)]
 

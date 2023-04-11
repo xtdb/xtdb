@@ -8,7 +8,7 @@
   (:import java.util.zip.GZIPInputStream))
 
 (defn device-info-csv->doc [[device-id api-version manufacturer model os-name]]
-  (with-meta {:id device-id
+  (with-meta {:xt/id device-id
               :device-id device-id
               :api-version api-version
               :manufacturer manufacturer
@@ -20,7 +20,7 @@
                           battery-temperature bssid
                           cpu-avg-1min cpu-avg-5min cpu-avg-15min
                           mem-free mem-used rssi ssid]]
-  (with-meta {:id device-id
+  (with-meta {:xt/id device-id
               :time (inst/read-instant-date
                      (-> time
                          (str/replace " " "T")

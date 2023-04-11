@@ -9,15 +9,15 @@ In 2.x, all documents belong in a 'table' (e.g. `:users`), provided as part of e
 == `:put` operations:
 
 At their simplest, `:put` operations consist of the table to put the document into, and the document itself.
-Documents must have an `:id` attribute, which is considered unique within the table.
+Documents must have an `:xt/id` attribute, which is considered unique within the table.
 
 [source,clojure]
 ----
 (require '[xtdb.datalog :as xt])
 
 (xt/submit-tx your-node
-              [[:put :users {:id :jms, :first-name "James"}]
-               [:put :users {:id :jdt, :first-name "Jeremy"}]])
+              [[:put :users {:xt/id :jms, :first-name "James"}]
+               [:put :users {:xt/id :jdt, :first-name "Jeremy"}]])
 ----
 
 `:put` operations optionally take temporal parameters, in order to put the document for a subset of valid time.
@@ -28,10 +28,10 @@ By default, documents are asserted from the current time to the end-of-time, but
 (require '[xtdb.datalog :as xt])
 
 (xt/submit-tx your-node
-              [[:put :users {:id :jms, :first-name "James"}
+              [[:put :users {:xt/id :jms, :first-name "James"}
                 {:for-app-time [:in #inst "2020-02-01" #inst "2020-05-01"]}]
 
-               [:put :users {:id :jdt, :first-name "Jeremy"}
+               [:put :users {:xt/id :jdt, :first-name "Jeremy"}
                 {:for-app-time [:in #inst "2019-05-01"]}]])
 ----
 

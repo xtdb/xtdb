@@ -10,8 +10,8 @@
 (def end-of-time-zdt (util/->zdt util/end-of-time))
 
 (t/deftest test-as-of-tx
-  (let [tx1 (xt/submit-tx tu/*node* [[:put :xt_docs {:id :my-doc, :last-updated "tx1"}]])
-        tx2 (xt/submit-tx tu/*node* [[:put :xt_docs {:id :my-doc, :last-updated "tx2"}]])]
+  (let [tx1 (xt/submit-tx tu/*node* [[:put :xt_docs {:xt/id :my-doc, :last-updated "tx1"}]])
+        tx2 (xt/submit-tx tu/*node* [[:put :xt_docs {:xt/id :my-doc, :last-updated "tx2"}]])]
 
     (t/is (= #{{:last-updated "tx1"} {:last-updated "tx2"}}
              (set (tu/query-ra '[:scan {:table xt_docs} [last-updated]]
@@ -20,7 +20,7 @@
     (t/is (= #{{:last-updated "tx2"}}
              (set (xt/q tu/*node*
                         (-> '{:find [last-updated]
-                              :where [(match :xt_docs {:id e})
+                              :where [(match :xt_docs {:xt/id e})
                                       [e :last-updated last-updated]]}
                             (assoc :basis {:tx tx2}))))))
 
@@ -32,54 +32,54 @@
       (t/is (= #{{:last-updated "tx1"}}
                (set (xt/q tu/*node*
                           (-> '{:find [last-updated]
-                                :where [(match :xt_docs {:id e})
+                                :where [(match :xt_docs {:xt/id e})
                                         [e :last-updated last-updated]]}
                               (assoc :basis {:tx tx1})))))))))
 
 (t/deftest test-app-time
-  (let [{:keys [sys-time]} (xt/submit-tx tu/*node* [[:put :xt_docs {:id :doc, :version 1}]
-                                                    [:put :xt_docs {:id :doc-with-app-time}
+  (let [{:keys [sys-time]} (xt/submit-tx tu/*node* [[:put :xt_docs {:xt/id :doc, :version 1}]
+                                                    [:put :xt_docs {:xt/id :doc-with-app-time}
                                                      {:for-app-time [:in #inst "2021"]}]])
         sys-time (util/->zdt sys-time)]
 
-    (t/is (= {:doc {:id :doc,
+    (t/is (= {:doc {:xt__id :doc,
                     :application_time_start sys-time
                     :application_time_end end-of-time-zdt
                     :system_time_start sys-time
                     :system_time_end end-of-time-zdt}
-              :doc-with-app-time {:id :doc-with-app-time,
+              :doc-with-app-time {:xt__id :doc-with-app-time,
                                   :application_time_start (util/->zdt #inst "2021")
                                   :application_time_end end-of-time-zdt
                                   :system_time_start sys-time
                                   :system_time_end end-of-time-zdt}}
              (->> (tu/query-ra '[:scan {:table xt_docs}
-                                 [id
+                                 [xt__id
                                   application_time_start application_time_end
                                   system_time_start system_time_end]]
                                {:node tu/*node*})
-                  (into {} (map (juxt :id identity))))))))
+                  (into {} (map (juxt :xt__id identity))))))))
 
 (t/deftest test-sys-time
-  (let [tx1 (xt/submit-tx tu/*node* [[:put :xt_docs {:id :doc, :version 0}]])
+  (let [tx1 (xt/submit-tx tu/*node* [[:put :xt_docs {:xt/id :doc, :version 0}]])
         tt1 (util/->zdt (:sys-time tx1))
 
-        tx2 (xt/submit-tx tu/*node* [[:put :xt_docs {:id :doc, :version 1}]])
+        tx2 (xt/submit-tx tu/*node* [[:put :xt_docs {:xt/id :doc, :version 1}]])
 
         tt2 (util/->zdt (:sys-time tx2))
 
-        original-v0-doc {:id :doc, :version 0
+        original-v0-doc {:xt__id :doc, :version 0
                          :application_time_start tt1
                          :application_time_end end-of-time-zdt
                          :system_time_start tt1
                          :system_time_end tt2}
 
-        replaced-v0-doc {:id :doc, :version 0
+        replaced-v0-doc {:xt__id :doc, :version 0
                          :application_time_start tt1
                          :application_time_end tt2
                          :system_time_start tt2
                          :system_time_end end-of-time-zdt}
 
-        v1-doc {:id :doc, :version 1
+        v1-doc {:xt__id :doc, :version 1
                 :application_time_start tt2
                 :application_time_end end-of-time-zdt
                 :system_time_start tt2
@@ -87,7 +87,7 @@
 
     (t/is (= [replaced-v0-doc v1-doc]
              (tu/query-ra '[:scan {:table xt_docs}
-                            [id version
+                            [xt__id version
                              application_time_start application_time_end
                              system_time_start system_time_end]]
                           {:node tu/*node* :default-all-app-time? true}))
@@ -95,7 +95,7 @@
 
     (t/is (= [original-v0-doc replaced-v0-doc v1-doc]
              (tu/query-ra '[:scan {:table xt_docs, :for-sys-time :all-time}
-                            [id version
+                            [xt__id version
                              application_time_start application_time_end
                              system_time_start system_time_end]]
                           {:node tu/*node*
@@ -106,18 +106,18 @@
 (t/deftest test-evict
   (letfn [(all-time-docs []
             (->> (tu/query-ra '[:scan {:table xt_docs, :for-sys-time :all-time}
-                                [id
+                                [xt__id
                                  application_time_start {application_time_end (<= application_time_end eot)}
                                  system_time_start system_time_end]]
                               {:node tu/*node*, :params {'eot util/end-of-time}
                                :default-all-app-time? true})
-                 (map :id)
+                 (map :xt__id)
                  frequencies))]
 
-    (xt/submit-tx tu/*node* [[:put :xt_docs {:id :doc, :version 0}]
-                             [:put :xt_docs {:id :other-doc, :version 0}]])
+    (xt/submit-tx tu/*node* [[:put :xt_docs {:xt/id :doc, :version 0}]
+                             [:put :xt_docs {:xt/id :other-doc, :version 0}]])
 
-    (xt/submit-tx tu/*node* [[:put :xt_docs {:id :doc, :version 1}]])
+    (xt/submit-tx tu/*node* [[:put :xt_docs {:xt/id :doc, :version 1}]])
 
     (t/is (= {:doc 3, :other-doc 1} (all-time-docs))
           "documents present before evict")

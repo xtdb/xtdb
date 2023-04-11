@@ -63,7 +63,7 @@
    "returns a tx-ops-vec of more operations (mostly for `:call`)"))
 
 (defn- ->put-indexer ^xtdb.indexer.OpIndexer [^IInternalIdManager iid-mgr ^ILogOpIndexer log-op-idxer, ^ITemporalTxIndexer temporal-idxer, ^ILiveChunkTx live-chunk
-                                               ^DenseUnionVector tx-ops-vec, ^Instant current-time]
+                                              ^DenseUnionVector tx-ops-vec, ^Instant current-time]
   (let [put-vec (.getStruct tx-ops-vec 1)
         ^DenseUnionVector doc-duv (.getChild put-vec "document" DenseUnionVector)
         ^TimeStampVector app-time-start-vec (.getChild put-vec "application_time_start")
@@ -79,7 +79,7 @@
                          {:table-name table-name
                           :live-table live-table
                           :table-copier table-copier
-                          :id-duv (.getChild table-vec "id" DenseUnionVector)}))
+                          :id-duv (.getChild table-vec "xt__id" DenseUnionVector)}))
                      doc-duv)]
 
     (reify OpIndexer
@@ -109,10 +109,10 @@
         nil))))
 
 (defn- ->delete-indexer ^xtdb.indexer.OpIndexer [^IInternalIdManager iid-mgr, ^ILogOpIndexer log-op-idxer, ^ITemporalTxIndexer temporal-idxer, ^ILiveChunkTx live-chunk
-                                                  ^DenseUnionVector tx-ops-vec, ^Instant current-time]
+                                                 ^DenseUnionVector tx-ops-vec, ^Instant current-time]
   (let [delete-vec (.getStruct tx-ops-vec 2)
         ^VarCharVector table-vec (.getChild delete-vec "table" VarCharVector)
-        ^DenseUnionVector id-vec (.getChild delete-vec "id" DenseUnionVector)
+        ^DenseUnionVector id-vec (.getChild delete-vec "xt__id" DenseUnionVector)
         ^TimeStampVector app-time-start-vec (.getChild delete-vec "application_time_start")
         ^TimeStampVector app-time-end-vec (.getChild delete-vec "application_time_end")
         current-time-µs (util/instant->micros current-time)]
@@ -136,11 +136,11 @@
         nil))))
 
 (defn- ->evict-indexer ^xtdb.indexer.OpIndexer [^IInternalIdManager iid-mgr ^ILogOpIndexer log-op-idxer, ^ITemporalTxIndexer temporal-idxer, ^ILiveChunkTx live-chunk
-                                                 ^DenseUnionVector tx-ops-vec]
+                                                ^DenseUnionVector tx-ops-vec]
 
   (let [evict-vec (.getStruct tx-ops-vec 3)
         ^VarCharVector table-vec (.getChild evict-vec "_table" VarCharVector)
-        ^DenseUnionVector id-vec (.getChild evict-vec "id" DenseUnionVector)]
+        ^DenseUnionVector id-vec (.getChild evict-vec "xt__id" DenseUnionVector)]
     (reify OpIndexer
       (indexOp [_ tx-op-idx]
         (let [row-id (.nextRowId live-chunk)
@@ -157,7 +157,7 @@
   ;; HACK: assume xt_docs here...
   ;; TODO confirm fn-body doc key
 
-  (let [lp '[:scan {:table xt_docs} [{id (= id ?id)} fn]]
+  (let [lp '[:scan {:table xt_docs} [{xt__id (= xt__id ?id)} fn]]
         ^xtdb.operator.PreparedQuery pq (.prepareRaQuery ra-src lp)]
     (with-open [bq (.bind pq wm-src
                           {:params (iv/->indirect-rel [(-> (vw/open-vec allocator '?id [fn-id])
@@ -214,7 +214,7 @@
   (first (reset-vals! !last-tx-fn-error nil)))
 
 (defn- ->call-indexer ^xtdb.indexer.OpIndexer [allocator, ra-src, wm-src
-                                                ^DenseUnionVector tx-ops-vec, {:keys [tx-key] :as tx-opts}]
+                                               ^DenseUnionVector tx-ops-vec, {:keys [tx-key] :as tx-opts}]
   (let [call-vec (.getStruct tx-ops-vec 4)
         ^DenseUnionVector fn-id-vec (.getChild call-vec "fn-id" DenseUnionVector)
         ^ListVector args-vec (.getChild call-vec "args" ListVector)
@@ -230,8 +230,7 @@
         (try
           (let [call-offset (.getOffset tx-ops-vec tx-op-idx)
                 fn-id (t/get-object fn-id-vec call-offset)
-                tx-fn (find-fn allocator ra-src wm-src (sci/fork sci-ctx)tx-opts fn-id)
-
+                tx-fn (find-fn allocator ra-src wm-src (sci/fork sci-ctx) tx-opts fn-id)
                 args (t/get-object args-vec call-offset)
 
                 res (try
@@ -244,7 +243,8 @@
                         (log/warn t "unhandled error evaluating tx fn")
                         (throw (err/runtime-err :xtdb.call/error-evaluating-tx-fn
                                                 {:fn-id fn-id, :args args}
-                                                t))))]
+                                                t))))
+                ]
             (when (false? res)
               (throw abort-exn))
 
@@ -268,7 +268,7 @@
   (^void indexOp [^xtdb.vector.IIndirectRelation inRelation, queryOpts]))
 
 (defn- ->sql-insert-indexer ^xtdb.indexer.SqlOpIndexer [^IInternalIdManager iid-mgr, ^ILogOpIndexer log-op-idxer, ^ITemporalTxIndexer temporal-idxer
-                                                         ^ILiveChunkTx live-chunk, {{:keys [^Instant current-time]} :basis}]
+                                                        ^ILiveChunkTx live-chunk, {{:keys [^Instant current-time]} :basis}]
 
   (let [current-time-µs (util/instant->micros current-time)]
     (reify SqlOpIndexer
@@ -280,7 +280,7 @@
                                                                 #(.getName ^IIndirectVector %))))
                                              (.rowCount in-rel))
               table-copier (.rowCopier (.writer live-table) content-rel)
-              id-col (.vectorForName in-rel "id")
+              id-col (.vectorForName in-rel "xt__id")
               app-time-start-rdr (some-> (.vectorForName in-rel "application_time_start")
                                          (.monoReader t/temporal-col-type))
               app-time-end-rdr (some-> (.vectorForName in-rel "application_time_end")
