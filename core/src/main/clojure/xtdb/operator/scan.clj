@@ -468,7 +468,7 @@
                                   (.get count-vec id-col-idx)))))
                            (reduce +))]
 
-        {:col-types (dissoc col-types '_table)
+        {:col-types col-types
          :stats {:row-count row-count}
          :->cursor (fn [{:keys [allocator, ^IWatermark watermark, basis, params default-all-app-time?]}]
                      (let [metadata-pred (expr.meta/->metadata-selector (cons 'and metadata-args) col-types params)

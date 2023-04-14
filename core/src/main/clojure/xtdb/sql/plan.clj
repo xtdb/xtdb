@@ -1389,8 +1389,7 @@
      [:scan (cond-> {:table (symbol table-or-query-name)}
               for-app-time (assoc :for-app-time for-app-time))
       (for [{:keys [identifier]} projection
-            :let [identifier (symbol identifier)]
-            :when (not= '_table identifier)]
+            :let [identifier (symbol identifier)]]
         identifier)]]))
 
 (defn- build-lateral-derived-table [tp qe]

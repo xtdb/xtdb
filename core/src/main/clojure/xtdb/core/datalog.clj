@@ -443,7 +443,6 @@
                          :for-app-time (:for-app-time temporal-opts)
                          :for-sys-time (:for-sys-time temporal-opts)}
                   (-> attrs
-                      (disj '_table)
                       (->> (mapv (fn [attr]
                                    (-> attr
                                        (wrap-scan-col-preds (for [lit (get attr->lits attr)]
