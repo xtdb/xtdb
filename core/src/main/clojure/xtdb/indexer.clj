@@ -22,6 +22,7 @@
             [xtdb.watermark :as wm])
   (:import (java.io ByteArrayInputStream Closeable)
            java.lang.AutoCloseable
+           (java.nio.channels ClosedByInterruptException)
            (java.time Instant ZoneId)
            (java.util.concurrent.locks StampedLock)
            (java.util.function Consumer IntPredicate ToIntFunction)
@@ -534,6 +535,8 @@
                     (index-tx-ops tx-ops-vec)
                     (catch xtdb.RuntimeException e e)
                     (catch xtdb.IllegalArgumentException e e)
+                    (catch ClosedByInterruptException e
+                      (throw (InterruptedException. (.toString e))))
                     (catch InterruptedException e (throw e))
                     (catch Throwable t
                       (log/error t "error in indexer")

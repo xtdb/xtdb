@@ -4,16 +4,16 @@
             [clojure.string :as str]
             [clojure.test :as t]
             [clojure.tools.logging :as log]
-            [xtdb.datalog :as xt.d]
             [xtdb.api :as xt.api]
-            [xtdb.sql :as xt.sql]
             [xtdb.buffer-pool :as bp]
+            [xtdb.datalog :as xt.d]
             [xtdb.expression.metadata :as expr.meta]
             [xtdb.indexer :as idx]
             xtdb.indexer.internal-id-manager
             [xtdb.metadata :as meta]
             [xtdb.node :as node]
             [xtdb.object-store :as os]
+            [xtdb.sql :as xt.sql]
             [xtdb.test-json :as tj]
             [xtdb.test-util :as tu]
             [xtdb.ts-devices :as ts]
@@ -21,19 +21,21 @@
             [xtdb.util :as util]
             [xtdb.vector.indirect :as iv]
             xtdb.watermark)
-  (:import xtdb.api.TransactionInstant
+  (:import (java.nio.channels ClosedByInterruptException)
+           java.nio.file.Files
+           java.time.Duration
+           (java.util.function Consumer)
+           (java.util.concurrent ExecutionException)
+           [org.apache.arrow.memory ArrowBuf BufferAllocator]
+           [org.apache.arrow.vector BigIntVector VectorLoader VectorSchemaRoot]
+           [org.apache.arrow.vector.complex StructVector]
+           xtdb.api.TransactionInstant
            [xtdb.buffer_pool BufferPool IBufferPool]
            (xtdb.indexer.internal_id_manager InternalIdManager)
            (xtdb.metadata IMetadataManager)
            xtdb.node.Node
            xtdb.object_store.ObjectStore
-           (xtdb.watermark IWatermark IWatermarkSource)
-           java.nio.file.Files
-           java.time.Duration
-           (java.util.function Consumer)
-           [org.apache.arrow.memory ArrowBuf BufferAllocator]
-           [org.apache.arrow.vector BigIntVector VectorLoader VectorSchemaRoot]
-           [org.apache.arrow.vector.complex StructVector]))
+           (xtdb.watermark IWatermark IWatermarkSource)))
 
 (t/use-fixtures :once tu/with-allocator)
 
@@ -611,6 +613,19 @@
       (with-open [node (node/start-node {})]
         (t/is (thrown-with-msg? Exception #"oh no!"
                                 (-> (xt.d/submit-tx node [[:put :xt_docs {:xt/id "foo", :count 42}]])
+                                    (tu/then-await-tx* node (Duration/ofSeconds 1)))))))))
+
+(t/deftest bug-catch-closed-by-interrupt-exception-740
+  (let [e (ClosedByInterruptException.)]
+    (with-redefs [idx/->sql-indexer (fn [& _args]
+                                      (throw e))
+                  log/log* (let [log* log/log*]
+                             (fn [logger level throwable message]
+                               (when-not (identical? e throwable)
+                                 (log* logger level throwable message))))]
+      (with-open [node (node/start-node {})]
+        (t/is (thrown-with-msg? Exception #"ClosedByInterruptException"
+                                (-> (xt.d/submit-tx node [[:sql "INSERT INTO foo(xt__id) VALUES (1)"]])
                                     (tu/then-await-tx* node (Duration/ofSeconds 1)))))))))
 
 (t/deftest test-indexes-sql-insert
