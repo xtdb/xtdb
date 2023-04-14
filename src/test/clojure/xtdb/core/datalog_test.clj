@@ -2097,3 +2097,10 @@
                      :where [(match :xt_docs2 [{:xt/id id} start-date])
                              [(< start-date #time/date "2500-01-01")]
                              [(< start-date #time/date "2500-01-01")]]})))))
+
+(t/deftest bug-non-namespaced-nested-keys-747
+  (xt/submit-tx tu/*node* [[:put :bar {:xt/id 1 :foo {:a/b "foo"}}]])
+  (t/is (= [{:foo {:a/b "foo"}}]
+           (xt/q tu/*node*
+                 '{:find [foo]
+                   :where [(match :bar [foo])]}))))

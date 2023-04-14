@@ -214,7 +214,7 @@
         (let [writer (.asStruct writer)
               col-names (into #{} (map #(.getName ^ValueVector %) dest-vec))]
           ;; eugh. should be a common way to do this.
-          (doseq [absent-col (set/difference col-names (into #{} (map name) (keys m)))
+          (doseq [absent-col (set/difference col-names (into #{} (map (comp str symbol)) (keys m)))
                   :let [v-writer (.writerForName writer absent-col)]]
             (if (instance? IDenseUnionWriter v-writer)
               (doto (.writerForType (.asDenseUnion v-writer) :absent)
@@ -224,7 +224,7 @@
               (write-value! nil v-writer)))
 
           (doseq [[k v] m
-                  :let [v-writer (.writerForName writer (name k))]]
+                  :let [v-writer (.writerForName writer (str (symbol k)))]]
             (if (instance? IDenseUnionWriter v-writer)
               (doto (-> v-writer
                         (.asDenseUnion)
