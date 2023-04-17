@@ -60,7 +60,7 @@
                 (.bucket bucket)
                 (.listObjectsV2RequestTransformer
                  (as-consumer (fn [^ListObjectsV2Request$Builder x]
-                                (.prefix x s3-dir))))
+                                (.prefix x (str prefix s3-dir)))))
                 (.build))
             ^DirectoryDownload dir-download-results
             (.downloadDirectory transfer-manager dir-download-request)
