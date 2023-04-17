@@ -1,5 +1,6 @@
 (ns xtdb.vector
-  (:require [xtdb.types :as types])
+  (:require [xtdb.types :as types]
+            [xtdb.error :as err])
   (:import (clojure.lang MapEntry)
            (xtdb.types IntervalDayTime IntervalMonthDayNano)
            (xtdb.vector IIndirectVector IMonoVectorReader IMonoVectorWriter IPolyVectorReader IPolyVectorWriter IStructValueReader IWriterPosition)
@@ -268,12 +269,14 @@
         (writeObject [_ v]
           (let [^PeriodDuration period-duration v
                 duration (.getDuration period-duration)
-                ddays (.toDaysPart duration)
-                dsecs (Math/subtractExact (.getSeconds duration) (Math/multiplyExact ddays (long 86400)))
-                dmillis (.toMillisPart duration)]
+                dsecs (.getSeconds duration)
+                dmillis (.toMillisPart duration)
+                period (.getPeriod period-duration)]
+            (when (or (not (zero? (.getYears period))) (not (zero? (.getMonths period))))
+              (throw (err/illegal-arg "Period of PeriodDuration can not contain years or months!")))
             (.set arrow-vec (.getPositionAndIncrement wp)
-                  (Math/addExact (.getDays (.getPeriod period-duration)) (int ddays))
-                  (Math/addExact (Math/multiplyExact (int dsecs) (int 1000)) dmillis)))))))
+                  (.getDays (.getPeriod period-duration))
+                  (Math/addExact (Math/multiplyExact (long dsecs) (long 1000)) (long dmillis))))))))
 
   IntervalMonthDayNanoVector
   (->mono-reader [arrow-vec _col-type]
@@ -292,12 +295,11 @@
           (let [^PeriodDuration period-duration v
                 period (.getPeriod period-duration)
                 duration (.getDuration period-duration)
-                ddays (.toDaysPart duration)
-                dsecs (Math/subtractExact (.getSeconds duration) (Math/multiplyExact ddays (long 86400)))
+                dsecs (.getSeconds duration)
                 dnanos (.toNanosPart duration)]
             (.set arrow-vec (.getPositionAndIncrement wp)
                   (.toTotalMonths period)
-                  (Math/addExact (.getDays period) (int ddays))
+                  (.getDays period)
                   (Math/addExact (Math/multiplyExact dsecs (long 1000000000)) (long dnanos)))))))))
 
 (extend-protocol MonoFactory

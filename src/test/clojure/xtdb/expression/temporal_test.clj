@@ -634,6 +634,14 @@
   (tcp/for-all [i (tcg/one-of [interval-ym-gen interval-dt-gen interval-mdn-gen])]
     (= i (et/project1 '(+ a b) {:a i, :b (pd-zero i)}))))
 
+(deftest bug-interval-day-time-normalization-738
+  (let [i #xt/interval-dt ["P0D" "PT-23H-59M-59.001S"]]
+    (t/is (=  i
+              (et/project1 '(+ a b) {:a i, :b (pd-zero i)}))))
+  (let [i #xt/interval-mdn ["P33M244D" "PT48H0.003444443S"] ]
+    (t/is (=  i
+              (et/project1 '(+ a b) {:a i, :b (pd-zero i)})))))
+
 (tct/defspec interval-sub-identity-prop
   (tcp/for-all [i (tcg/one-of [interval-ym-gen interval-dt-gen interval-mdn-gen])]
     (= i (et/project1 '(- a b) {:a i, :b (pd-zero i)}))))

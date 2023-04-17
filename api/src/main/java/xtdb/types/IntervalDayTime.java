@@ -3,12 +3,17 @@ package xtdb.types;
 import java.time.Duration;
 import java.time.Period;
 import java.util.Objects;
+import clojure.lang.PersistentHashMap;
 
 public final class IntervalDayTime {
     public final Period period;
     public final Duration duration;
 
     public IntervalDayTime(Period period, Duration duration) {
+        if ( period.getYears() != 0 || period.getMonths() != 0)
+            throw new xtdb.IllegalArgumentException("Period can not contain years or months!",
+                                                    PersistentHashMap.EMPTY,
+                                                    null);
         this.period = period;
         this.duration = duration;
     }
