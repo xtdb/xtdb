@@ -19,10 +19,10 @@
            (software.amazon.awssdk.services.s3 S3AsyncClient)
            (software.amazon.awssdk.services.s3.model ListObjectsV2Request$Builder)))
 
-(defmacro as-consumer [f]
-  `(reify java.util.function.Consumer
-     (accept [this arg#]
-       (~f arg#))))
+(defn as-consumer [f]
+  (reify java.util.function.Consumer
+    (accept [this arg]
+       (f arg))))
 
 (defrecord CheckpointStore [^S3Configurator configurator  ^S3AsyncClient client bucket prefix]
   cp/CheckpointStore
