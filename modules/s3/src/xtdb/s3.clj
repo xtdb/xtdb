@@ -7,17 +7,15 @@
             [xtdb.io :as xio]
             [xtdb.system :as sys])
   (:import clojure.lang.MapEntry
-           xtdb.s3.S3Configurator
            java.io.Closeable
+           java.util.Collection
            java.util.concurrent.CompletableFuture
            java.util.function.BiFunction
            [software.amazon.awssdk.core.async AsyncRequestBody AsyncResponseTransformer]
            software.amazon.awssdk.core.ResponseBytes
-           [software.amazon.awssdk.services.s3.model
-            CommonPrefix GetObjectRequest ListObjectsV2Request ListObjectsV2Response
-            DeleteObjectsRequest Delete ObjectIdentifier
-            NoSuchKeyException PutObjectRequest S3Object]
-           software.amazon.awssdk.services.s3.S3AsyncClient))
+           [software.amazon.awssdk.services.s3.model CommonPrefix Delete DeleteObjectsRequest DeleteObjectsResponse GetObjectRequest ListObjectsV2Request ListObjectsV2Response NoSuchKeyException ObjectIdentifier PutObjectRequest S3Object]
+           software.amazon.awssdk.services.s3.S3AsyncClient
+           xtdb.s3.S3Configurator))
 
 (defn ^:no-doc put-objects [{:keys [^S3Configurator configurator ^S3AsyncClient client bucket prefix]} objs]
   (->> (for [[path ^AsyncRequestBody request-body] objs]
@@ -59,24 +57,26 @@
 
 
 (defn ^:no-doc delete-objects [{:keys [^S3AsyncClient client bucket prefix]} keys]
-  (let [object-ids (->> keys
-                        (map #(str prefix %))
-                        (map #(-> (ObjectIdentifier/builder)
-                                  (.key %) .build)))
+  (let [^Collection object-ids (->> keys
+                                    (map #(str prefix %))
+                                    (map #(-> (ObjectIdentifier/builder)
+                                              (.key %) .build)))
         ^DeleteObjectsRequest
-        req  (-> (DeleteObjectsRequest/builder)
-                 (.bucket bucket)
-                 (.delete
-                   (-> (Delete/builder)
-                       (.objects object-ids)
-                       (.build)))
-                 (.build))
+        req (-> (DeleteObjectsRequest/builder)
+                (.bucket bucket)
+                (.delete (-> (Delete/builder)
+                             (.objects object-ids)
+                             ^Delete (.build)))
+                (.build))
+
+        ^DeleteObjectsResponse
         res (-> (.deleteObjects client req)
                 (.join))]
-        (when (.hasErrors res)
-          (log/warnf "Failed to delete some objects on s3://%s/%s" bucket prefix))))
 
-(defn ^:no-doc list-objects [{:keys [^S3Configurator _ ^S3AsyncClient client bucket prefix]}
+    (when (.hasErrors res)
+      (log/warnf "Failed to delete some objects on s3://%s/%s" bucket prefix))))
+
+(defn ^:no-doc list-objects [{:keys [^S3AsyncClient client bucket prefix]}
                              {:keys [path recursive?]}]
   (letfn [(list-objects* [continuation-token]
             (lazy-seq
