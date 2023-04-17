@@ -1,0 +1,19 @@
+hash-threshold 100
+
+statement ok
+INSERT INTO foo$bar (xt__id, biff$bing$bong) VALUES (1, 'fish')
+
+query IT rowsort
+SELECT fb.xt__id, fb.biff$bing$bong FROM foo$bar fb
+----
+1
+fish
+
+statement ok
+INSERT INTO baz$ (xt__id, bat$) VALUES (2, 'dog')
+
+query IT rowsort
+SELECT baz$.xt__id, baz$.bat$ FROM baz$
+----
+2
+dog

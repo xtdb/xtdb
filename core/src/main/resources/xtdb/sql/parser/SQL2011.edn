@@ -1113,7 +1113,7 @@
     {:tag :regexp,
      :regexp
      #"(?i)(\b(NULL|WITH|SELECT|FROM|WHERE|GROUP|HAVING|ORDER|OFFSET|FETCH|LIMIT|PARTITION|ROWS|RANGE|GROUPS|UNION|EXCEPT|INTERSECT|CURRENT_TIME|CURRENT_TIMESTAMP|CURRENT_DATE|LOCALTIME|LOCALTIMESTAMP|END_OF_TIME)\b)"}}
-   {:tag :regexp, :regexp #"[a-zA-Z][a-zA-Z0-9_]*"})},
+   {:tag :regexp, :regexp #"[a-zA-Z][a-zA-Z0-9_$]*"})},
  :contextually_typed_row_value_expression
  {:tag :alt,
   :parsers
