@@ -478,7 +478,7 @@
   :parsers
   ({:tag :nt, :keyword :plus_sign} {:tag :nt, :keyword :minus_sign}),
   :red {:reduction-type :raw}},
- :space {:tag :regexp, :regexp #"(?<= )", :red {:reduction-type :raw}},
+ :space {:tag :string, :string " ", :red {:reduction-type :raw}},
  :seconds_value
  {:tag :cat,
   :parsers
@@ -519,7 +519,7 @@
   ({:tag :nt, :keyword :unquoted_date_string}
    {:tag :alt,
     :parsers
-    ({:tag :nt, :keyword :space} {:tag :regexp, :regexp #"T"}),
+    ({:tag :regexp, :regexp #"(?<= )"} {:tag :regexp, :regexp #"T"}),
     :hide true}
    {:tag :nt, :keyword :unquoted_time_string})},
  :window_frame_units
@@ -854,12 +854,6 @@
     ({:tag :string, :string "FOR"}
      {:tag :string, :string "SYSTEM_TIME"}
      {:tag :string, :string "BETWEEN"}
-     {:tag :opt,
-      :parser
-      {:tag :alt,
-       :parsers
-       ({:tag :string, :string "ASYMMETRIC"}
-        {:tag :string, :string "SYMMETRIC"})}}
      {:tag :nt, :keyword :point_in_time_1}
      {:tag :string, :string "AND"}
      {:tag :nt, :keyword :point_in_time_2})}
@@ -1906,8 +1900,8 @@
  {:tag :cat,
   :parsers
   ({:tag :opt, :parser {:tag :string, :string "ARRAY"}}
-   {:tag :nt, :keyword :left_bracket_or_trigraph}
-   {:tag :nt, :keyword :right_bracket_or_trigraph})},
+   {:tag :nt, :keyword :left_bracket_or_trigraph, :hide true}
+   {:tag :nt, :keyword :right_bracket_or_trigraph, :hide true})},
  :in_value_list
  {:tag :cat,
   :parsers
@@ -3116,12 +3110,6 @@
     ({:tag :string, :string "FOR"}
      {:tag :nt, :keyword :application_time_period_name}
      {:tag :string, :string "BETWEEN"}
-     {:tag :opt,
-      :parser
-      {:tag :alt,
-       :parsers
-       ({:tag :string, :string "ASYMMETRIC"}
-        {:tag :string, :string "SYMMETRIC"})}}
      {:tag :nt, :keyword :point_in_time_1}
      {:tag :string, :string "AND"}
      {:tag :nt, :keyword :point_in_time_2})}
@@ -3397,9 +3385,9 @@
  {:tag :cat,
   :parsers
   ({:tag :opt, :parser {:tag :string, :string "ARRAY"}}
-   {:tag :nt, :keyword :left_bracket_or_trigraph}
+   {:tag :nt, :keyword :left_bracket_or_trigraph, :hide true}
    {:tag :opt, :parser {:tag :nt, :keyword :array_element_list}}
-   {:tag :nt, :keyword :right_bracket_or_trigraph})},
+   {:tag :nt, :keyword :right_bracket_or_trigraph, :hide true})},
  :large_object_length
  {:tag :alt,
   :parsers
