@@ -23,9 +23,9 @@
           (try
             (.mkdirs dest-dir)
             (spit rogue-file "I should not be present")
-            (t/is (thrown? IllegalArgumentException  (cp/download-checkpoint cp-store (first cps) dest-dir)))
+            (t/is (thrown? IllegalArgumentException (cp/download-checkpoint cp-store (first cps) dest-dir)))
             (finally
-                  (io/delete-file rogue-file)))))
+              (io/delete-file rogue-file)))))
 
       (t/testing "first checkpoint"
         (spit (io/file src-dir "hello.txt") "Hello world")

@@ -34,8 +34,6 @@
    [com.xtdb/xtdb-test ~xt-version]
    [com.xtdb/xtdb-bench ~xt-version]
    [com.xtdb/xtdb-replicator ~xt-version]
-
-   ;;
    [com.xtdb/xtdb-s3 ~xt-version]
 
    [ch.qos.logback/logback-classic "1.2.11"]
@@ -92,7 +90,8 @@
    [ring/ring-devel "1.9.5"]
    [software.amazon.awssdk/s3 "2.19.21"]
    [software.amazon.awssdk/cloudwatch "2.19.21"]
-   [software.amazon.awssdk/s3-transfer-manager "2.19.21"]]
+   [software.amazon.awssdk/s3-transfer-manager "2.19.21"]
+   [software.amazon.awssdk.crt/aws-crt "0.21.1"]]
 
   :dependencies
   [[org.clojure/clojure]
@@ -130,6 +129,13 @@
    ;; Cloudwatch Deps
    [io.github.azagniotov/dropwizard-metrics-cloudwatch "2.0.8"]
    [software.amazon.awssdk/cloudwatch]
+
+   ;; required for local AWS SSO usage
+   [software.amazon.awssdk/sso "2.19.21"]
+   [software.amazon.awssdk/ssooidc "2.19.21"]
+
+   ;; for AWS S3 CRT test
+   [software.amazon.awssdk.crt/aws-crt]
 
    ;; Prometheus Deps
    [org.dhatim/dropwizard-prometheus "3.1.4"]
