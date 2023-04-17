@@ -47,7 +47,7 @@
                         {::keys [s3-dir] :as checkpoint} dir]
 
     (when-not (empty? (.listFiles ^File dir))
-      (throw (IllegalArgumentException. "non-empty checkpoint restore dir: " dir)))
+      (throw (IllegalArgumentException. (str "non-empty checkpoint restore dir: " dir))))
 
     (with-open [^S3TransferManager transfer-manager
                 (-> (S3TransferManager/builder)

@@ -36,7 +36,7 @@
 
   (download-checkpoint [this {::keys [s3-dir] :as checkpoint} dir]
     (when-not (empty? (.listFiles ^File dir))
-      (throw (IllegalArgumentException. "non-empty checkpoint restore dir: " dir)))
+      (throw (IllegalArgumentException. (str "non-empty checkpoint restore dir: " dir))))
 
     (let [s3-paths (->> (s3/list-objects this {:path s3-dir, :recursive? true})
                         (map second))
