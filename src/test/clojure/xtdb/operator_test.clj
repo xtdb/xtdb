@@ -30,17 +30,17 @@
       (let [^IMetadataManager metadata-mgr (tu/component node ::meta/metadata-manager)]
         (letfn [(test-query-ivan [expected tx]
                   (t/is (= expected
-                           (set (tu/query-ra '[:scan {:table xt_docs} [xt__id {name (> name "Ivan")}]]
+                           (set (tu/query-ra '[:scan {:table xt_docs} [xt/id {name (> name "Ivan")}]]
                                              {:node node, :basis {:tx tx}}))))
 
                   (t/is (= expected
-                           (set (tu/query-ra '[:scan {:table xt_docs} [xt__id {name (> name ?name)}]]
+                           (set (tu/query-ra '[:scan {:table xt_docs} [xt/id {name (> name ?name)}]]
                                              {:node node, :basis {:tx tx}, :params {'?name "Ivan"}})))))]
 
           (t/is (= #{0 1} (set (keys (.chunksMetadata metadata-mgr)))))
 
           (let [expected-match [(meta/map->ChunkMatch
-                                 {:chunk-idx 1, :block-idxs (doto (RoaringBitmap.) (.add 1)), :col-names #{"_row-id" "xt__id" "name"}})]]
+                                 {:chunk-idx 1, :block-idxs (doto (RoaringBitmap.) (.add 1)), :col-names #{"_row-id" "xt$id" "name"}})]]
             (t/is (= expected-match
                      (meta/matching-chunks metadata-mgr "xt_docs"
                                            (expr.meta/->metadata-selector '(> name "Ivan") '#{name} {})))
@@ -53,13 +53,13 @@
 
           (let [tx2 (xt/submit-tx node [[:put :xt_docs {:name "Jeremy", :xt/id :jdt}]])]
 
-            (test-query-ivan #{{:xt__id :jms, :name "James"}
-                               {:xt__id :jon, :name "Jon"}}
+            (test-query-ivan #{{:xt/id :jms, :name "James"}
+                               {:xt/id :jon, :name "Jon"}}
                              tx1)
 
-            (test-query-ivan #{{:xt__id :jms, :name "James"}
-                               {:xt__id :jon, :name "Jon"}
-                               {:xt__id :jdt, :name "Jeremy"}}
+            (test-query-ivan #{{:xt/id :jms, :name "James"}
+                               {:xt/id :jon, :name "Jon"}
+                               {:xt/id :jdt, :name "Jeremy"}}
                              tx2)))))))
 
 (t/deftest test-find-eq-ivan
@@ -79,7 +79,7 @@
     (let [^IMetadataManager metadata-mgr (tu/component node ::meta/metadata-manager)]
       (t/is (= #{0 3} (set (keys (.chunksMetadata metadata-mgr)))))
       (let [expected-match [(meta/map->ChunkMatch
-                             {:chunk-idx 0, :block-idxs (doto (RoaringBitmap.) (.add 0)), :col-names #{"_row-id" "xt__id" "name"}})]]
+                             {:chunk-idx 0, :block-idxs (doto (RoaringBitmap.) (.add 0)), :col-names #{"_row-id" "xt$id" "name"}})]]
         (t/is (= expected-match
                  (meta/matching-chunks metadata-mgr "xt_docs"
                                        (expr.meta/->metadata-selector '(= name "Ivan") '#{name} {})))

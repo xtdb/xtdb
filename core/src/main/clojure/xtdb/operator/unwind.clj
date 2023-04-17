@@ -122,18 +122,18 @@
 (defmethod lp/emit-expr :unwind [{:keys [columns relation], {:keys [ordinality-column]} :opts}, op-args]
   (let [[to-col from-col] (first columns)]
     (lp/unary-expr (lp/emit-expr relation op-args)
-      (fn [col-types]
-        (let [unwind-col-type (->> (get col-types from-col)
-                                   types/flatten-union-types
-                                   (keep (fn [col-type]
-                                           (zmatch col-type
-                                             [:list inner-type] inner-type
-                                             [:fixed-size-list _list-size inner-type] inner-type)))
-                                   (apply types/merge-col-types))]
-          {:col-types (-> col-types
-                          (assoc to-col unwind-col-type)
-                          (cond-> ordinality-column (assoc ordinality-column :i32)))
-           :->cursor (fn [{:keys [allocator]} in-cursor]
-                       (UnwindCursor. allocator in-cursor
-                                      (name from-col) (name to-col)
-                                      (some-> ordinality-column name)))})))))
+                   (fn [col-types]
+                     (let [unwind-col-type (->> (get col-types from-col)
+                                                types/flatten-union-types
+                                                (keep (fn [col-type]
+                                                        (zmatch col-type
+                                                                [:list inner-type] inner-type
+                                                                [:fixed-size-list _list-size inner-type] inner-type)))
+                                                (apply types/merge-col-types))]
+                       {:col-types (-> col-types
+                                       (assoc to-col unwind-col-type)
+                                       (cond-> ordinality-column (assoc ordinality-column :i32)))
+                        :->cursor (fn [{:keys [allocator]} in-cursor]
+                                    (UnwindCursor. allocator in-cursor
+                                                   (str from-col) (str to-col)
+                                                   (some-> ordinality-column name)))})))))

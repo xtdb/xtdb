@@ -1,7 +1,7 @@
 {
   "schema" : {
     "fields" : [{
-      "name" : "os-name",
+      "name" : "xt$id",
       "nullable" : false,
       "type" : {
         "name" : "union",
@@ -19,18 +19,18 @@
     }]
   },
   "batches" : [{
-    "count" : 2,
+    "count" : 3,
     "columns" : [{
-      "name" : "os-name",
-      "count" : 2,
-      "TYPE_ID" : [0,0],
-      "OFFSET" : [0,1],
+      "name" : "xt$id",
+      "count" : 3,
+      "TYPE_ID" : [0,0,0],
+      "OFFSET" : [0,1,2],
       "children" : [{
         "name" : "utf8",
-        "count" : 2,
-        "VALIDITY" : [1,1],
-        "OFFSET" : [0,5,10],
-        "DATA" : ["6.0.1","6.0.1"]
+        "count" : 3,
+        "VALIDITY" : [1,1,1],
+        "OFFSET" : [0,3,6,9],
+        "DATA" : ["foo","bar","bar"]
       }]
     }]
   }]

@@ -24,7 +24,7 @@
 
 (s/def :xt/id any?)
 (s/def ::doc (s/and (s/keys :req [:xt/id])
-                    (s/conformer #(update-keys % util/ns-kw->kw) #(update-keys % util/kw->ns-kw))))
+                    (s/conformer #(update-keys % util/kw->normal-form-kw) #(update-keys % util/normal-form-kw->datalog-form-kw))))
 (s/def ::table (s/and simple-keyword? (s/conformer symbol keyword)))
 (s/def ::app-time-start (s/nilable ::util/datetime-value))
 (s/def ::app-time-end (s/nilable ::util/datetime-value))
@@ -93,8 +93,9 @@
 
 (def ^:private ^org.apache.arrow.vector.types.pojo.Field tx-ops-field
   (types/->field "tx-ops" (ArrowType$Union. UnionMode/Dense (int-array (range 6))) false
-                 (types/col-type->field 'sql [:struct {:query :utf8
-                                                       :params [:union #{:null :varbinary}]}])
+                 (types/col-type->field 'sql [:struct {'query :utf8
+                                                       'params [:union #{:null :varbinary}]}])
+
 
                  (types/->field "put" types/struct-type false
                                 (types/->field "document" types/dense-union-type false)
@@ -103,13 +104,13 @@
 
                  (types/->field "delete" types/struct-type false
                                 (types/col-type->field 'table :utf8)
-                                (types/->field "xt__id" types/dense-union-type false)
+                                (types/->field "xt$id" types/dense-union-type false)
                                 (types/col-type->field 'application_time_start nullable-inst-type)
                                 (types/col-type->field 'application_time_end nullable-inst-type))
 
                  (types/->field "evict" types/struct-type false
                                 (types/col-type->field '_table [:union #{:null :utf8}])
-                                (types/->field "xt__id" types/dense-union-type false))
+                                (types/->field "xt$id" types/dense-union-type false))
 
                  (types/->field "call" types/struct-type false
                                 (types/->field "fn-id" types/dense-union-type false)
@@ -177,7 +178,7 @@
             table-doc-writer (.computeIfAbsent table-doc-writers table
                                                (util/->jfn
                                                  (fn [table]
-                                                   (let [type-id (.registerNewType doc-writer (types/col-type->field table [:struct {}]))]
+                                                   (let [type-id (.registerNewType doc-writer (types/col-type->field (name table) [:struct {}]))]
                                                      (.writerForTypeId doc-writer type-id)))))]
         (.startValue table-doc-writer)
         (types/write-value! doc table-doc-writer)
@@ -191,7 +192,7 @@
 (defn- ->delete-writer [^IDenseUnionWriter tx-ops-writer]
   (let [delete-writer (.asStruct (.writerForTypeId tx-ops-writer 2))
         table-writer (.writerForName delete-writer "table")
-        id-writer (.asDenseUnion (.writerForName delete-writer "xt__id"))
+        id-writer (.asDenseUnion (.writerForName delete-writer "xt$id"))
         app-time-start-writer (.writerForName delete-writer "application_time_start")
         app-time-end-writer (.writerForName delete-writer "application_time_end")]
     (fn write-delete! [{:keys [id table],
@@ -214,7 +215,7 @@
 (defn- ->evict-writer [^IDenseUnionWriter tx-ops-writer]
   (let [evict-writer (.asStruct (.writerForTypeId tx-ops-writer 3))
         table-writer (.writerForName evict-writer "_table")
-        id-writer (.asDenseUnion (.writerForName evict-writer "xt__id"))]
+        id-writer (.asDenseUnion (.writerForName evict-writer "xt$id"))]
     (fn [{:keys [id table]}]
       (.startValue evict-writer)
       (some-> (name table) (types/write-value! table-writer))

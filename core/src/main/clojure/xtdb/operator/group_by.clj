@@ -177,11 +177,11 @@
           (close [_] (.close out-vec)))))))
 
 (def ^:private acc-sym (gensym 'acc))
-(def ^:private acc-col-sym (gensym 'acc-col))
-(def ^:private group-idx-sym (gensym 'group-idx))
-(def ^:private acc-local (gensym 'acc-local))
-(def ^:private val-local (gensym 'val-local))
-(def ^:private acc-writer-sym (gensym 'acc-writer))
+(def ^:private acc-col-sym (gensym 'acc_col))
+(def ^:private group-idx-sym (gensym 'group_idx))
+(def ^:private acc-local (gensym 'acc_local))
+(def ^:private val-local (gensym 'val_local))
+(def ^:private acc-writer-sym (gensym 'acc_writer))
 
 (def emit-agg
   (-> (fn [{:keys [to-type val-expr step-expr]} input-opts]

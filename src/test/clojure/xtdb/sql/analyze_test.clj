@@ -723,16 +723,16 @@ SELECT t1.d-t1.e AS a, SUM(t1.a) AS b
                  (map :projected-columns))))
 
 
-  (valid? "INSERT INTO users (xt__id, name) VALUES (?, ?)")
+  (valid? "INSERT INTO users (xt$id, name) VALUES (?, ?)")
 
   (invalid? [#"INSERT requires query to have same degree as column list"]
-            "INSERT INTO users (xt__id, name) VALUES (?, ?, ?)")
+            "INSERT INTO users (xt$id, name) VALUES (?, ?, ?)")
 
-  (invalid? [#"INSERT does not contain mandatory xt__id column"]
+  (invalid? [#"INSERT does not contain mandatory xt\$id column"]
             "INSERT INTO users (name, application_time_start) VALUES (?, ?)")
   (invalid? [#"Non-deterministic ARROW_TABLE is not allowed in DML statements"]
 
-            "INSERT INTO users (xt__id, name) SELECT x.xt__id, x.name FROM ARROW_TABLE('test.arrow') AS x")
+            "INSERT INTO users (xt$id, name) SELECT x.xt$id, x.name FROM ARROW_TABLE('test.arrow') AS x")
 
   (invalid? [#"Subquery does not select single column"]
             "SELECT (SELECT x.bar, y.foo FROM y) FROM x")

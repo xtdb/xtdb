@@ -1,7 +1,7 @@
 {
   "schema" : {
     "fields" : [{
-      "name" : "api-version",
+      "name" : "mem_used",
       "nullable" : false,
       "type" : {
         "name" : "union",
@@ -9,10 +9,11 @@
         "typeIds" : [ ]
       },
       "children" : [{
-        "name" : "utf8",
+        "name" : "f64",
         "nullable" : false,
         "type" : {
-          "name" : "utf8"
+          "name" : "floatingpoint",
+          "precision" : "DOUBLE"
         },
         "children" : [ ]
       }]
@@ -21,16 +22,15 @@
   "batches" : [{
     "count" : 2,
     "columns" : [{
-      "name" : "api-version",
+      "name" : "mem_used",
       "count" : 2,
       "TYPE_ID" : [0,0],
       "OFFSET" : [0,1],
       "children" : [{
-        "name" : "utf8",
+        "name" : "f64",
         "count" : 2,
         "VALIDITY" : [1,1],
-        "OFFSET" : [0,2,4],
-        "DATA" : ["23","23"]
+        "DATA" : [5.89988922E8,2.79257668E8]
       }]
     }]
   }]

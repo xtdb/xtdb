@@ -1,10 +1,10 @@
 hash-threshold 100
 
 statement ok
-INSERT INTO x (xt__id, bar) VALUES(1,'fish')
+INSERT INTO x (xt$id, bar) VALUES(1,'fish')
 
 statement ok
-INSERT INTO z (xt__id) VALUES(2)
+INSERT INTO z (xt$id) VALUES(2)
 
 query T rowsort
 SELECT (SELECT x.bar FROM z) FROM x

@@ -28,7 +28,7 @@
            (java.util.function Consumer IntPredicate ToIntFunction)
            (java.util.stream IntStream StreamSupport)
            (org.apache.arrow.memory BufferAllocator)
-           (org.apache.arrow.vector BigIntVector BitVector TimeStampVector VarBinaryVector VarCharVector VectorSchemaRoot)
+           (org.apache.arrow.vector BigIntVector BitVector TimeStampVector ValueVector VarBinaryVector VarCharVector VectorSchemaRoot)
            (org.apache.arrow.vector.complex DenseUnionVector ListVector StructVector)
            (org.apache.arrow.vector.ipc ArrowStreamReader)
            org.roaringbitmap.RoaringBitmap
@@ -43,6 +43,7 @@
            (xtdb.operator.scan IScanEmitter)
            (xtdb.temporal ITemporalManager ITemporalTxIndexer)
            (xtdb.vector IIndirectRelation IIndirectVector IRowCopier)
+           (xtdb.vector.indirect DirectVector)
            (xtdb.watermark IWatermark IWatermarkSource)))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -81,7 +82,7 @@
                          {:table-name table-name
                           :live-table live-table
                           :table-copier table-copier
-                          :id-duv (.getChild table-vec "xt__id" DenseUnionVector)}))
+                          :id-duv (.getChild table-vec "xt$id" DenseUnionVector)}))
                      doc-duv)]
 
     (reify OpIndexer
@@ -114,7 +115,7 @@
                                                  ^DenseUnionVector tx-ops-vec, ^Instant current-time]
   (let [delete-vec (.getStruct tx-ops-vec 2)
         ^VarCharVector table-vec (.getChild delete-vec "table" VarCharVector)
-        ^DenseUnionVector id-vec (.getChild delete-vec "xt__id" DenseUnionVector)
+        ^DenseUnionVector id-vec (.getChild delete-vec "xt$id" DenseUnionVector)
         ^TimeStampVector app-time-start-vec (.getChild delete-vec "application_time_start")
         ^TimeStampVector app-time-end-vec (.getChild delete-vec "application_time_end")
         current-time-µs (util/instant->micros current-time)]
@@ -142,7 +143,7 @@
 
   (let [evict-vec (.getStruct tx-ops-vec 3)
         ^VarCharVector table-vec (.getChild evict-vec "_table" VarCharVector)
-        ^DenseUnionVector id-vec (.getChild evict-vec "xt__id" DenseUnionVector)]
+        ^DenseUnionVector id-vec (.getChild evict-vec "xt$id" DenseUnionVector)]
     (reify OpIndexer
       (indexOp [_ tx-op-idx]
         (let [row-id (.nextRowId live-chunk)
@@ -159,7 +160,7 @@
   ;; HACK: assume xt_docs here...
   ;; TODO confirm fn-body doc key
 
-  (let [lp '[:scan {:table xt_docs} [{xt__id (= xt__id ?id)} fn]]
+  (let [lp '[:scan {:table xt_docs} [{xt$id (= xt$id ?id)} fn]]
         ^xtdb.operator.PreparedQuery pq (.prepareRaQuery ra-src lp)]
     (with-open [bq (.bind pq wm-src
                           {:params (iv/->indirect-rel [(-> (vw/open-vec allocator '?id [fn-id])
@@ -279,10 +280,12 @@
               live-table (.liveTable live-chunk table)
               content-rel (iv/->indirect-rel (->> in-rel
                                                   (remove (comp temporal/temporal-column?
-                                                                #(.getName ^IIndirectVector %))))
+                                                                #(.getName ^IIndirectVector %)))
+                                                  (map (fn [^IIndirectVector vec]
+                                                         (.withName vec (util/str->normal-form-str (.getName vec))))))
                                              (.rowCount in-rel))
               table-copier (.rowCopier (.writer live-table) content-rel)
-              id-col (.vectorForName in-rel "xt__id")
+              id-col (.vectorForName in-rel "xt$id")
               app-time-start-rdr (some-> (.vectorForName in-rel "application_time_start")
                                          (.monoReader t/temporal-col-type))
               app-time-end-rdr (some-> (.vectorForName in-rel "application_time_end")
@@ -327,11 +330,14 @@
         (.getAsInt))))
 
 (defn- ->sql-update-indexer ^xtdb.indexer.SqlOpIndexer [^IMetadataManager metadata-mgr, ^IBufferPool buffer-pool
-                                                         ^ILogOpIndexer log-op-idxer, ^ITemporalTxIndexer temporal-idxer
-                                                         ^ILiveChunkTx live-chunk]
+                                                        ^ILogOpIndexer log-op-idxer, ^ITemporalTxIndexer temporal-idxer
+                                                        ^ILiveChunkTx live-chunk]
   (reify SqlOpIndexer
     (indexOp [_ in-rel {:keys [table]}]
       (let [row-count (.rowCount in-rel)
+            ^IIndirectRelation in-rel (iv/->indirect-rel (map (fn [^IIndirectVector vec]
+                                                                (.withName vec (util/str->normal-form-str (.getName vec)))) in-rel)
+                                                         row-count)
             live-table (.liveTable live-chunk table)
             live-table-wtr (.writer live-table)]
         (letfn [(->live-row-copier ^xtdb.vector.IRowCopier [^IIndirectVector col]

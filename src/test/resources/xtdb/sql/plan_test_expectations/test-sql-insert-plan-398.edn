@@ -1,7 +1,7 @@
 [:insert
  {:table "foo"}
  [:rename
-  {x1 xt__id, x4 application_time_start}
+  {x1 xt$id, x4 application_time_start}
   [:project
    [x1 {x4 (cast-tstz x2)}]
    [:table [x1 x2] [{x1 "foo", x2 #time/date "2018-01-01"}]]]]]

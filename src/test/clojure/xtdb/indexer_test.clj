@@ -111,15 +111,15 @@
           (with-open [^IWatermark watermark (.openWatermark wm-src last-tx-key)]
             (let [live-blocks (-> (.liveChunk watermark)
                                   (.liveTable "device-info")
-                                  (.liveBlocks #{"xt__id" "model"} nil))
+                                  (.liveBlocks #{"xt$id" "model"} nil))
                   !res (volatile! [])]
               (.forEachRemaining live-blocks
                                  (reify Consumer
                                    (accept [_ content-cols]
                                      (vswap! !res conj (iv/rel->rows content-cols)))))
 
-              (t/is (= [[{:xt__id "device-info-demo000000", :model "pinto"}
-                         {:xt__id "device-info-demo000001", :model "mustang"}]]
+              (t/is (= [[{:xt$id "device-info-demo000000", :model "pinto"}
+                         {:xt$id "device-info-demo000001", :model "mustang"}]]
                        @!res)))))
 
         (tu/finish-chunk! node)
@@ -156,8 +156,8 @@
               (.load (VectorLoader. metadata-batch) record-batch)
               (t/is (= 12 (.getRowCount metadata-batch)))
               (let [id-col-idx (-> (meta/->table-metadata metadata-batch (meta/->table-metadata-idxs metadata-batch))
-                                   (.rowIndex "xt__id" -1))]
-                (t/is (= "xt__id" (-> (.getVector metadata-batch "column")
+                                   (.rowIndex "xt$id" -1))]
+                (t/is (= "xt$id" (-> (.getVector metadata-batch "column")
                                       (ty/get-object id-col-idx))))
                 (let [^StructVector utf8-type-vec (-> ^StructVector (.getVector metadata-batch "types")
                                                       (.getChild "utf8"))]
@@ -198,36 +198,36 @@
   (with-open [node (node/start-node {})]
     (let [{tt :sys-time} (xt.d/submit-tx node [[:put :xt_docs {:xt/id :foo, :version 0}]]
                                          {:default-all-app-time? false})]
-      (t/is (= [{:xt__id :foo, :version 0,
+      (t/is (= [{:xt$id :foo, :version 0,
                  :application_time_start (util/->zdt tt)
                  :application_time_end (util/->zdt util/end-of-time)
                  :system_time_start (util/->zdt tt)
                  :system_time_end (util/->zdt util/end-of-time)}]
                (tu/query-ra '[:scan {:table xt_docs}
-                              [xt__id version
+                              [xt$id version
                                application_time_start, application_time_end
                                system_time_start, system_time_end]]
                             {:node node})))
 
       (let [{tt2 :sys-time} (xt.d/submit-tx node [[:put :xt_docs {:xt/id :foo, :version 1}]]
                                             {:default-all-app-time? false})]
-        (t/is (= [{:xt__id :foo, :version 0,
+        (t/is (= [{:xt$id :foo, :version 0,
                    :application_time_start (util/->zdt tt)
                    :application_time_end (util/->zdt util/end-of-time)
                    :system_time_start (util/->zdt tt)
                    :system_time_end (util/->zdt tt2)}
-                  {:xt__id :foo, :version 0,
+                  {:xt$id :foo, :version 0,
                    :application_time_start (util/->zdt tt)
                    :application_time_end (util/->zdt tt2)
                    :system_time_start (util/->zdt tt2)
                    :system_time_end (util/->zdt util/end-of-time)}
-                  {:xt__id :foo, :version 1,
+                  {:xt$id :foo, :version 1,
                    :application_time_start (util/->zdt tt2)
                    :application_time_end (util/->zdt util/end-of-time)
                    :system_time_start (util/->zdt tt2)
                    :system_time_end (util/->zdt util/end-of-time)}]
                  (tu/query-ra '[:scan {:table xt_docs, :for-sys-time :all-time}
-                                [xt__id version
+                                [xt$id version
                                  application_time_start, application_time_end
                                  system_time_start, system_time_end]]
                               {:node node :default-all-app-time? true})))
@@ -295,7 +295,7 @@
 
       (let [^IMetadataManager mm (tu/component node ::meta/metadata-manager)]
         (t/is (= [:union #{:utf8 [:timestamp-tz :micro "UTC"] :f64}]
-                 (.columnType mm "xt_docs" "xt__id")))
+                 (.columnType mm "xt_docs" "xt$id")))
 
         (t/is (= [:union #{:absent [:list [:union #{:utf8 [:timestamp-tz :micro "UTC"] :f64 :bool}]]}]
                  (.columnType mm "xt_docs" "list")))
@@ -352,7 +352,7 @@
                             [:put :xt_docs {:xt/id "bar"}]])
 
       ;; aborted tx shows up in log
-      (xt.d/submit-tx node [[:sql "INSERT INTO foo (xt__id, application_time_start, application_time_end) VALUES (1, DATE '2020-01-01', DATE '2019-01-01')"]])
+      (xt.d/submit-tx node [[:sql "INSERT INTO foo (xt$id, application_time_start, application_time_end) VALUES (1, DATE '2020-01-01', DATE '2019-01-01')"]])
 
       (-> (xt.d/submit-tx node [[:delete :xt_docs "foo" {:for-app-time [:in #inst "2020-04-01"]}]
                                 [:put :xt_docs {:xt/id "bar", :month "april"},
@@ -427,8 +427,8 @@
             (t/is (= 4 (count (filter #(re-matches #"temporal-snapshots/\p{XDigit}+.*" %) objs))))
             (t/is (= 1 (count (filter #(re-matches #"chunk-\p{XDigit}+/device-info/metadata\.arrow" %) objs))))
             (t/is (= 4 (count (filter #(re-matches #"chunk-\p{XDigit}+/device-readings/metadata\.arrow" %) objs))))
-            (t/is (= 1 (count (filter #(re-matches #"chunk-.*/device-info/content-api-version\.arrow" %) objs))))
-            (t/is (= 4 (count (filter #(re-matches #"chunk-.*/device-readings/content-battery-level\.arrow" %) objs))))))))))
+            (t/is (= 1 (count (filter #(re-matches #"chunk-.*/device-info/content-api_version\.arrow" %) objs))))
+            (t/is (= 4 (count (filter #(re-matches #"chunk-.*/device-readings/content-battery_level\.arrow" %) objs))))))))))
 
 (t/deftest can-ingest-ts-devices-mini-into-multiple-nodes
   (let [node-dir (util/->path "target/can-ingest-ts-devices-mini-into-multiple-nodes")
@@ -467,8 +467,8 @@
               (t/is (= 11 (count (filter #(re-matches #"chunk-\p{XDigit}+/temporal\.arrow" %) objs))))
               (t/is (= 11 (count (filter #(re-matches #"temporal-snapshots/\p{XDigit}+.arrow" %) objs))))
               (t/is (= 13 (count (filter #(re-matches #"chunk-\p{XDigit}+/device-(?:info|readings)/metadata.arrow" %) objs))))
-              (t/is (= 2 (count (filter #(re-matches #"chunk-\p{XDigit}+/device-info/content-api-version\.arrow" %) objs))))
-              (t/is (= 11 (count (filter #(re-matches #"chunk-\p{XDigit}+/device-readings/content-battery-level\.arrow" %) objs)))))))))))
+              (t/is (= 2 (count (filter #(re-matches #"chunk-\p{XDigit}+/device-info/content-api_version\.arrow" %) objs))))
+              (t/is (= 11 (count (filter #(re-matches #"chunk-\p{XDigit}+/device-readings/content-battery_level\.arrow" %) objs)))))))))))
 
 (t/deftest can-ingest-ts-devices-mini-with-stop-start-and-reach-same-state
   (let [node-dir (util/->path "target/can-ingest-ts-devices-mini-with-stop-start-and-reach-same-state")
@@ -515,12 +515,12 @@
                   (t/is (= 5 (count (filter #(re-matches #"temporal-snapshots/\p{XDigit}+.*" %) objs))))
                   (t/is (= 2 (count (filter #(re-matches #"chunk-\p{XDigit}+/device-info/metadata\.arrow" %) objs))))
                   (t/is (= 5 (count (filter #(re-matches #"chunk-\p{XDigit}+/device-readings/metadata\.arrow" %) objs))))
-                  (t/is (= 2 (count (filter #(re-matches #"chunk-.*/device-info/content-api-version\.arrow" %) objs))))
-                  (t/is (= 5 (count (filter #(re-matches #"chunk-.*/device-readings/content-battery-level\.arrow" %) objs)))))
+                  (t/is (= 2 (count (filter #(re-matches #"chunk-.*/device-info/content-api_version\.arrow" %) objs))))
+                  (t/is (= 5 (count (filter #(re-matches #"chunk-.*/device-readings/content-battery_level\.arrow" %) objs)))))
 
                 (t/is (= 2000 (count (.id->internal-id iid-mgr)))))
 
-              (t/is (= :utf8 (.columnType mm "device-readings" "xt__id")))
+              (t/is (= :utf8 (.columnType mm "device-readings" "xt$id")))
 
               (let [^TransactionInstant
                     second-half-tx-key (reduce
@@ -544,7 +544,7 @@
 
                     (t/is (>= (count (.id->internal-id iid-mgr)) 2000))
 
-                    (t/is (= :utf8 (.columnType mm "device-info" "xt__id"))))
+                    (t/is (= :utf8 (.columnType mm "device-info" "xt$id"))))
 
                   (doseq [^Node node [new-node node]]
                     (t/is (= second-half-tx-key (-> second-half-tx-key
@@ -563,10 +563,10 @@
                       (t/is (= 11 (count (filter #(re-matches #"temporal-snapshots/\p{XDigit}+.*" %) objs))))
                       (t/is (= 2 (count (filter #(re-matches #"chunk-\p{XDigit}+/device-info/metadata\.arrow" %) objs))))
                       (t/is (= 11 (count (filter #(re-matches #"chunk-\p{XDigit}+/device-readings/metadata\.arrow" %) objs))))
-                      (t/is (= 2 (count (filter #(re-matches #"chunk-.*/device-info/content-api-version\.arrow" %) objs))))
-                      (t/is (= 11 (count (filter #(re-matches #"chunk-.*/device-readings/content-battery-level\.arrow" %) objs)))))
+                      (t/is (= 2 (count (filter #(re-matches #"chunk-.*/device-info/content-api_version\.arrow" %) objs))))
+                      (t/is (= 11 (count (filter #(re-matches #"chunk-.*/device-readings/content-battery_level\.arrow" %) objs)))))
 
-                    (t/is (= :utf8 (.columnType mm "device-info" "xt__id")))
+                    (t/is (= :utf8 (.columnType mm "device-info" "xt$id")))
 
                     (t/is (= 2000 (count (.id->internal-id iid-mgr))))))))))))))
 
@@ -583,7 +583,7 @@
 
         (tu/finish-chunk! node1)
 
-        (t/is (= :utf8 (.columnType mm1 "xt_docs" "xt__id")))
+        (t/is (= :utf8 (.columnType mm1 "xt_docs" "xt$id")))
 
         (let [tx2 (xt.d/submit-tx node1 [[:put :xt_docs {:xt/id :bar}]
                                          [:put :xt_docs {:xt/id #uuid "8b190984-2196-4144-9fa7-245eb9a82da8"}]
@@ -593,14 +593,14 @@
           (tu/finish-chunk! node1)
 
           (t/is (= [:union #{:utf8 :keyword :clj-form :uuid}]
-                   (.columnType mm1 "xt_docs" "xt__id")))
+                   (.columnType mm1 "xt_docs" "xt$id")))
 
           (with-open [node2 (tu/->local-node (assoc node-opts :buffers-dir "buffers-1"))]
             (let [^IMetadataManager mm2 (tu/component node2 ::meta/metadata-manager)]
               (tu/then-await-tx* tx2 node2 (Duration/ofMillis 200))
 
               (t/is (= [:union #{:utf8 :keyword :clj-form :uuid}]
-                       (.columnType mm2 "xt_docs" "xt__id"))))))))))
+                       (.columnType mm2 "xt_docs" "xt$id"))))))))))
 
 (t/deftest test-await-fails-fast
   (let [e (UnsupportedOperationException. "oh no!")]
@@ -625,7 +625,7 @@
                                  (log* logger level throwable message))))]
       (with-open [node (node/start-node {})]
         (t/is (thrown-with-msg? Exception #"ClosedByInterruptException"
-                                (-> (xt.d/submit-tx node [[:sql "INSERT INTO foo(xt__id) VALUES (1)"]])
+                                (-> (xt.d/submit-tx node [[:sql "INSERT INTO foo(xt$id) VALUES (1)"]])
                                     (tu/then-await-tx* node (Duration/ofSeconds 1)))))))))
 
 (t/deftest test-indexes-sql-insert
@@ -639,7 +639,7 @@
 
         (let [last-tx-key (xt.api/map->TransactionInstant {:tx-id 0, :sys-time (util/->instant #inst "2020-01-01")})]
           (t/is (= last-tx-key
-                   (xt.sql/submit-tx node [[:sql "INSERT INTO table (xt__id, foo, bar, baz) VALUES (?, ?, ?, ?)"
+                   (xt.sql/submit-tx node [[:sql "INSERT INTO table (xt$id, foo, bar, baz) VALUES (?, ?, ?, ?)"
                                             '[[0, 2, "hello", 12]
                                               [1, 1, "world", 3.3]]]])))
 

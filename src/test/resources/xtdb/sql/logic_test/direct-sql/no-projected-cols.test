@@ -1,10 +1,10 @@
 hash-threshold 100
 
 statement ok
-INSERT INTO foo (xt__id) VALUES (1), (2)
+INSERT INTO foo (xt$id) VALUES (1), (2)
 
 statement ok
-INSERT INTO bar (xt__id) VALUES (3)
+INSERT INTO bar (xt$id) VALUES (3)
 
 query I
 SELECT 4 FROM foo
@@ -13,7 +13,7 @@ SELECT 4 FROM foo
 4
 
 query I
-SELECT (SELECT foo.xt__id FROM bar) FROM foo
+SELECT (SELECT foo.xt$id FROM bar) FROM foo
 ----
 1
 2

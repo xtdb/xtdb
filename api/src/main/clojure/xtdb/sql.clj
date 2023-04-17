@@ -96,7 +96,7 @@
   "Writes transactions to the log for processing. Non Blocking.
   tx-ops is a sequence of SQL statement strings submitted as :sql operations
 
-  [[:sql \"INSERT INTO foo (xt__id, v) VALUES ('foo', 0)\"]
+  [[:sql \"INSERT INTO foo (xt$id, v) VALUES ('foo', 0)\"]
    [:sql \"UPDATE foo SET v = 1\"]]
 
   Returns a CompleteableFuture containing a map with details about the submitted transaction,
@@ -110,7 +110,7 @@
   "Writes transactions to the log for processing
   tx-ops is a sequence of SQL statement strings submitted as :sql operations
 
-  [[:sql \"INSERT INTO foo (xt__id, v) VALUES ('foo', 0)\"]
+  [[:sql \"INSERT INTO foo (xt$id, v) VALUES ('foo', 0)\"]
    [:sql \"UPDATE foo SET v = 1\"]]
 
   Returns a map with details about the submitted transaction,

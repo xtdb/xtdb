@@ -268,19 +268,23 @@
   ICursor
   (tryAdvance [_ c]
     (let [keep-row-id-col? (contains? temporal-col-names "_row-id")
-          keep-id-col? (contains? content-col-names "xt__id")
           !advanced? (volatile! false)]
 
       (while (and (not @!advanced?)
                   (.tryAdvance blocks
                                (reify Consumer
                                  (accept [_ content-rel]
-                                   (let [atemporal-row-id-bitmap (->atemporal-row-id-bitmap allocator col-preds content-rel params)]
+                                   (let [content-rel
+                                         (iv/->indirect-rel
+                                          (map (fn [col-name]
+                                                 (-> (.vectorForName ^IIndirectRelation content-rel (util/str->normal-form-str col-name))
+                                                     (.withName col-name)))
+                                               content-col-names))
+                                         atemporal-row-id-bitmap (->atemporal-row-id-bitmap allocator col-preds content-rel params)]
                                      (letfn [(accept-rel [^IIndirectRelation read-rel]
                                                (when (and read-rel (pos? (.rowCount read-rel)))
                                                  (let [read-rel (cond-> read-rel
-                                                                  (not keep-row-id-col?) (remove-col "_row-id")
-                                                                  (not keep-id-col?) (remove-col "xt__id"))]
+                                                                  (not keep-row-id-col?) (remove-col "_row-id"))]
                                                    (.accept c read-rel)
                                                    (vreset! !advanced? true))))]
 
@@ -399,7 +403,7 @@
    (at-now? scan-opts)
    (>= (util/instant->micros (:current-time basis))
        (util/instant->micros (:sys-time (:tx basis))))
-   (empty? (remove #(= % "xt__id") temporal-col-names))))
+   (empty? (remove #(= % "xt$id") temporal-col-names))))
 
 (defn get-current-row-ids [^IWatermark watermark basis]
   (.getCurrentRowIds
@@ -424,11 +428,11 @@
       (letfn [(->col-type [[table col-name]]
                 (if (temporal/temporal-column? col-name)
                   [:timestamp-tz :micro "UTC"]
-                  (types/merge-col-types (.columnType metadata-mgr (name table) (name col-name))
+                  (types/merge-col-types (.columnType metadata-mgr (name table) (util/str->normal-form-str (str col-name)))
                                          (some-> (.liveChunk wm)
                                                  (.liveTable (name table))
                                                  (.columnTypes)
-                                                 (get (name col-name))))))]
+                                                 (get (util/str->normal-form-str (str col-name)))))))]
 
         (->> scan-cols
              (into {} (map (juxt identity ->col-type))))))
@@ -439,13 +443,17 @@
                                                  (case col-type
                                                    :column arg
                                                    :select (key (first arg)))))
+
                                           (distinct))))
 
             {content-col-names false, temporal-col-names true}
             (->> col-names
-                 (group-by (comp temporal/temporal-column? name)))
+                 (group-by (comp temporal/temporal-column? str)))
 
-            content-col-names (conj (set content-col-names) "_row-id")
+            content-col-names (set (map str content-col-names))
+            normalized-content-col-names (-> (set (map (comp util/str->normal-form-str) content-col-names))
+                                             (conj "_row-id"))
+            content-col-names (conj content-col-names "_row-id")
 
             col-types (->> col-names
                            (into {} (map (juxt identity
@@ -459,20 +467,20 @@
 
             col-preds (->> (for [[col-name select-form] selects]
                              ;; for temporal preds, we may not need to re-apply these if they can be represented as a temporal range.
-                             (MapEntry/create (name col-name)
+                             (MapEntry/create (str col-name)
                                               (expr/->expression-relation-selector select-form {:col-types col-types, :param-types param-types})))
                            (into {}))
 
             metadata-args (vec (for [[col-name select] selects
-                                     :when (not (temporal/temporal-column? (name col-name)))]
+                                     :when (not (temporal/temporal-column? (str col-name)))]
                                  select))
 
             row-count (->> (meta/with-all-metadata metadata-mgr (name table)
                              (util/->jbifn
-                              (fn [_chunk-idx ^ITableMetadata table-metadata]
-                                (let [id-col-idx (.rowIndex table-metadata "xt__id" -1)
-                                      ^BigIntVector count-vec (.getVector (.metadataRoot table-metadata) "count")]
-                                  (.get count-vec id-col-idx)))))
+                               (fn [_chunk-idx ^ITableMetadata table-metadata]
+                                 (let [id-col-idx (.rowIndex table-metadata "xt$id" -1)
+                                       ^BigIntVector count-vec (.getVector (.metadataRoot table-metadata) "count")]
+                                   (.get count-vec id-col-idx)))))
                            (reduce +))]
 
         {:col-types col-types
@@ -483,19 +491,18 @@
                                        (nil? for-app-time)
                                        (assoc :for-app-time (if default-all-app-time? [:all-time] [:at [:now :now]])))
                            [temporal-min-range temporal-max-range] (->temporal-min-max-range params basis scan-opts selects)
-                           content-col-names (into #{} (map name) content-col-names)
-                           temporal-col-names (into #{} (map name) temporal-col-names)
+                           temporal-col-names (into #{} (map str) temporal-col-names)
                            current-row-ids (when (use-current-row-id-cache? watermark scan-opts basis temporal-col-names)
                                              (get-current-row-ids watermark basis))]
                        (-> (ScanCursor. allocator metadata-mgr watermark
                                         content-col-names temporal-col-names col-preds
                                         temporal-min-range temporal-max-range current-row-ids
                                         (util/->concat-cursor (->content-chunks allocator metadata-mgr buffer-pool
-                                                                                (name table) content-col-names
+                                                                                (name table) normalized-content-col-names
                                                                                 metadata-pred)
                                                               (some-> (.liveChunk watermark)
                                                                       (.liveTable (name table))
-                                                                      (.liveBlocks content-col-names metadata-pred)))
+                                                                      (.liveBlocks normalized-content-col-names metadata-pred)))
                                         params)
                            (coalesce/->coalescing-cursor allocator))))}))))
 

@@ -1,7 +1,7 @@
 {
   "schema" : {
     "fields" : [{
-      "name" : "cpu-avg-15min",
+      "name" : "mem_free",
       "nullable" : false,
       "type" : {
         "name" : "union",
@@ -22,7 +22,7 @@
   "batches" : [{
     "count" : 2,
     "columns" : [{
-      "name" : "cpu-avg-15min",
+      "name" : "mem_free",
       "count" : 2,
       "TYPE_ID" : [0,0],
       "OFFSET" : [0,1],
@@ -30,7 +30,7 @@
         "name" : "f64",
         "count" : 2,
         "VALIDITY" : [1,1],
-        "DATA" : [8.654,8.822]
+        "DATA" : [4.10011078E8,7.20742332E8]
       }]
     }]
   }]

@@ -296,13 +296,13 @@
   (let [struct-code (last args)
         struct-sym (gensym 'struct)
         args (butlast args)
-        writer-sym (gensym 'struct-writer)]
+        writer-sym (gensym 'struct_writer)]
     `(let [~struct-sym ~struct-code]
        (.writeStructEntries ~writer-arg ~@args)
        ~@(for [[field val-type] val-types
-               :let [field-name (name field)]]
+               :let [field-name (str field)]]
            (if (types/union? val-type)
-             (let [field-box-sym (gensym 'field-box)
+             (let [field-box-sym (gensym 'field_box)
                    type-id-mapping (->> (second val-type)
                                         (into {} (map-indexed (fn [idx val-type]
                                                                 [val-type idx]))))]
@@ -408,21 +408,22 @@
                                     :or {extract-vecs-from-rel? true}}]
   ;; NOTE we now get the widest var-type in the expr itself, but don't use it here (yet? at all?)
   (let [col-type (or (get var->col-type variable)
-                     (throw (AssertionError. (str "unknown variable: " variable))))]
+                     (throw (AssertionError. (str "unknown variable: " variable))))
+        sanitized-var (util/symbol->normal-form-symbol variable)]
 
     ;; NOTE: when used from metadata exprs, incoming vectors might not exist
     {:return-type col-type
      :batch-bindings (if (types/union? col-type)
                        (if (and extract-vecs-from-rel? extract-vec-from-rel?)
-                         [[variable `(.polyReader (.vectorForName ~rel ~(name variable))
-                                                  '~col-type)]]
-                         [[variable `(some-> ~variable (.polyReader '~col-type))]])
+                         [[sanitized-var `(.polyReader (.vectorForName ~rel ~(str variable))
+                                                       '~col-type)]]
+                         [[sanitized-var `(some-> ~sanitized-var (.polyReader '~col-type))]])
 
                        (if (and extract-vecs-from-rel? extract-vec-from-rel?)
-                         [[variable `(.monoReader (.vectorForName ~rel ~(name variable)) '~col-type)]]
-                         [[variable `(some-> ~variable (.monoReader '~col-type))]]))
+                         [[sanitized-var `(.monoReader (.vectorForName ~rel ~(str variable)) '~col-type)]]
+                         [[sanitized-var `(some-> ~sanitized-var (.monoReader '~col-type))]]))
      :continue (fn [f]
-                 (continue-read f col-type variable idx))}))
+                 (continue-read f col-type sanitized-var idx))}))
 
 (defmethod codegen-expr :param [{:keys [param] :as expr} {:keys [param-types]}]
   (if-let [[_ literal] (find expr :literal)]
@@ -1260,8 +1261,8 @@
     {:return-type val-type
      :continue-call (fn [f [struct-code]]
                       (if (types/union? val-type)
-                        (continue-read f val-type `(.readField ~struct-code ~(name field)))
-                        (continue-read f val-type struct-code (name field))))}
+                        (continue-read f val-type `(.readField ~struct-code ~(str field)))
+                        (continue-read f val-type struct-code (str field))))}
 
     {:return-type :null, :->call-code (constantly nil)}))
 
@@ -1295,8 +1296,8 @@
                                                                                (if continue-call
                                                                                  (continue-call cont-b3-call [l-val-code r-val-code])
                                                                                  (cont-b3-call return-type (->call-code [l-val-code r-val-code])))))
-                                                                           (get r-field-types field) r-code (name field)))
-                                                          (get l-field-types field) l-code (name field)))
+                                                                           (get r-field-types field) r-code (str field)))
+                                                          (get l-field-types field) l-code (str field)))
                                          (reduce (fn [l-code r-code]
                                                    `(let [~res-sym ~l-code]
                                                       (if (== -1 ~res-sym)
@@ -1486,8 +1487,8 @@
                              ~(f :null nil)
                              ~(f :bool `(== 1 ~res-sym))))))}))
 
-(def ^:private out-vec-sym (gensym 'out-vec))
-(def ^:private out-writer-sym (gensym 'out-writer-sym))
+(def ^:private out-vec-sym (gensym 'out_vec))
+(def ^:private out-writer-sym (gensym 'out_writer_sym))
 
 (defn batch-bindings [emitted-expr]
   (letfn [(child-seq [{:keys [children] :as expr}]

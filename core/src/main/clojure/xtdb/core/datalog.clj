@@ -17,16 +17,13 @@
            (xtdb.operator.scan IScanEmitter)
            (xtdb.watermark IWatermarkSource Watermark)))
 
-(s/def ::logic-var (s/and symbol?
-                          (s/conformer util/ns-symbol->symbol util/symbol->ns-symbol)))
+(s/def ::logic-var symbol?)
 
 (s/def ::eid ::lp/value)
-(s/def ::attr (s/and keyword?
-                     (s/conformer util/ns-kw->kw util/kw->ns-kw)))
+(s/def ::attr keyword?)
 (s/def ::value ::lp/value)
 (s/def ::table (s/and simple-keyword? (s/conformer symbol keyword)))
-(s/def ::column (s/and symbol?
-                       (s/conformer util/ns-symbol->symbol util/symbol->ns-symbol)))
+(s/def ::column symbol?)
 
 (s/def ::fn-call
   (s/and list?
@@ -74,9 +71,9 @@
 
 (s/def ::match-map-spec
   (-> (s/map-of ::attr ::triple-value)
-      (s/and (s/conformer #(vec (map (fn [[attr val]] [(util/ns-kw->kw attr) val]) %))
+      (s/and (s/conformer #(vec (map (fn [[attr val]] [attr val]) %))
                           #(->> %
-                                (map (fn [[attr val]] [(util/kw->ns-kw attr) val]))
+                                (map (fn [[attr val]] [attr val]))
                                 (into {} ))))))
 
 (s/def ::match-spec
@@ -205,7 +202,7 @@
 
 (defn- col-sym
   ([col]
-   (-> (symbol col) util/ns-symbol->symbol (vary-meta assoc :column? true)))
+   (-> (symbol col) (vary-meta assoc :column? true)))
   ([prefix col]
    (col-sym (str (format "%s_%s" prefix col)))))
 
@@ -382,7 +379,7 @@
     1 {scan-col (first col-preds)}
     {scan-col (list* 'and col-preds)}))
 
-(def app-time-period-sym 'xt__app-time)
+(def app-time-period-sym 'xt/app-time)
 (def app-time-start-sym 'application_time_start)
 (def app-time-end-sym 'application_time_end)
 (def app-temporal-cols {:period app-time-period-sym
@@ -390,7 +387,7 @@
                         :end app-time-end-sym})
 
 
-(def sys-time-period-sym 'xt__sys-time)
+(def sys-time-period-sym 'xt/sys-time)
 (def sys-time-start-sym 'system_time_start)
 (def sys-time-end-sym 'system_time_end)
 (def sys-temporal-cols {:period sys-time-period-sym
@@ -471,7 +468,7 @@
 
 (defn- match->eids [{:keys [match]}]
   (->> match
-       (filter (comp #{:xt__id} first))
+       (filter (comp #{:xt/id} first))
        (map second)
        set))
 
@@ -486,7 +483,7 @@
                    [{} false] matches->eids)]
     (when-not matched?
       (throw (err/illegal-arg :unspecified-table
-                              {:tirples (map #(s/unform ::triple %) triples)})))
+                              {:triples (map #(s/unform ::triple %) triples)})))
     matches->eids))
 
 (defn- plan-from [{:keys [triples matches]}]
@@ -1167,7 +1164,17 @@
                args)
        (into {})))
 
-(def row-alias-sym 'xt__*)
+(def row-alias-sym 'xt/*)
+
+(defn- str->datalog-form-kw [s]
+  (if-let [i (str/index-of s "/")]
+    (keyword (subs s 0 i) (subs s (inc i)))
+    (keyword s)))
+
+(defn- str->datalog-form-symbol [s]
+  (if-let [i (str/index-of s "/")]
+    (symbol (subs s 0 i) (subs s (inc i)))
+    (symbol s)))
 
 (defn apply-datalog-specific-rewrites [plan basis
                                        ^IWatermarkSource wm-src,
@@ -1177,21 +1184,21 @@
         wm-delay (delay (.openWatermark wm-src wm-tx))
         table-col-names
         (memoize
-          (fn [table]
-            (let [^Watermark wm @wm-delay]
-              (.tableColNames scan-emitter wm (name table)))))]
+         (fn [table]
+           (let [^Watermark wm @wm-delay]
+             (into #{} (map util/normal-form-str->datalog-form-str) (.tableColNames scan-emitter wm (name table))))))]
     (try
       (letfn [(rewrite-row-alias [z]
                 (r/zmatch
-                  z
-                  [:scan scan-opts scan-cols]
-                  (when (some #(= row-alias-sym %) scan-cols)
-                    (let [table (:table scan-opts)
-                          table-cols (table-col-names table)
-                          struct-keys (map keyword table-cols)
-                          scan-row-cols (map symbol table-cols)]
-                      [:map [{row-alias-sym (into {} (zipmap struct-keys scan-row-cols))}]
-                       [:scan scan-opts (into [] (comp cat (filter #(not= row-alias-sym %))) [scan-cols, scan-row-cols])]]))))]
+                 z
+                 [:scan scan-opts scan-cols]
+                 (when (some #(= row-alias-sym %) scan-cols)
+                   (let [table (:table scan-opts)
+                         table-cols (table-col-names table)
+                         struct-keys (map str->datalog-form-kw table-cols)
+                         scan-row-cols (map str->datalog-form-symbol table-cols)]
+                     [:map [{row-alias-sym (into {} (zipmap struct-keys scan-row-cols))}]
+                      [:scan scan-opts (into [] (comp cat (filter #(not= row-alias-sym %))) [scan-cols, scan-row-cols])]]))))]
         (->> plan
              (r/vector-zip)
              (r/innermost (r/mono-tp rewrite-row-alias))
@@ -1234,7 +1241,7 @@
             (-> (.bind pq wm-src {:params params, :table-args (args->tables args in-bindings),
                                   :basis basis, :default-tz default-tz :default-all-app-time? default-all-app-time?})
                 (.openCursor)
-                (op/cursor->datalog-result-set params))
+                (op/cursor->result-set params))
             (catch Throwable t
               (.close params)
               (throw t))))))))

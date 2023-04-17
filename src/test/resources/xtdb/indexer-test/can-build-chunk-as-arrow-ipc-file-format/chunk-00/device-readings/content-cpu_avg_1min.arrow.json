@@ -1,7 +1,7 @@
 {
   "schema" : {
     "fields" : [{
-      "name" : "cpu-avg-1min",
+      "name" : "cpu_avg_1min",
       "nullable" : false,
       "type" : {
         "name" : "union",
@@ -22,7 +22,7 @@
   "batches" : [{
     "count" : 2,
     "columns" : [{
-      "name" : "cpu-avg-1min",
+      "name" : "cpu_avg_1min",
       "count" : 2,
       "TYPE_ID" : [0,0],
       "OFFSET" : [0,1],

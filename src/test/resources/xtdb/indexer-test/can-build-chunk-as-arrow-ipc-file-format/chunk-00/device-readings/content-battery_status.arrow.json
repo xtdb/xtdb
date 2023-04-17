@@ -1,7 +1,7 @@
 {
   "schema" : {
     "fields" : [{
-      "name" : "battery-temperature",
+      "name" : "battery_status",
       "nullable" : false,
       "type" : {
         "name" : "union",
@@ -9,11 +9,10 @@
         "typeIds" : [ ]
       },
       "children" : [{
-        "name" : "f64",
+        "name" : "utf8",
         "nullable" : false,
         "type" : {
-          "name" : "floatingpoint",
-          "precision" : "DOUBLE"
+          "name" : "utf8"
         },
         "children" : [ ]
       }]
@@ -22,15 +21,16 @@
   "batches" : [{
     "count" : 2,
     "columns" : [{
-      "name" : "battery-temperature",
+      "name" : "battery_status",
       "count" : 2,
       "TYPE_ID" : [0,0],
       "OFFSET" : [0,1],
       "children" : [{
-        "name" : "f64",
+        "name" : "utf8",
         "count" : 2,
         "VALIDITY" : [1,1],
-        "DATA" : [89.5,93.7]
+        "OFFSET" : [0,11,22],
+        "DATA" : ["discharging","discharging"]
       }]
     }]
   }]

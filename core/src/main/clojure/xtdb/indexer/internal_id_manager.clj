@@ -49,16 +49,16 @@
   (let [iid-mgr (InternalIdManager. (ConcurrentHashMap.))]
     (doseq [[chunk-idx chunk-metadata] (.chunksMetadata metadata-mgr)
             table (keys (:tables chunk-metadata))]
-      (with-open [id-chunks (-> @(.getBuffer buffer-pool (meta/->chunk-obj-key chunk-idx table "xt__id"))
+      (with-open [id-chunks (-> @(.getBuffer buffer-pool (meta/->chunk-obj-key chunk-idx table "xt$id"))
                                 (util/->chunks {:close-buffer? true}))
                   row-id-chunks (-> @(.getBuffer buffer-pool (meta/->chunk-obj-key chunk-idx table "_row-id"))
                                     (util/->chunks {:close-buffer? true}))]
-        (-> (util/combine-col-cursors {"_row-id" row-id-chunks, "xt__id" id-chunks})
+        (-> (util/combine-col-cursors {"_row-id" row-id-chunks, "xt$id" id-chunks})
             (.forEachRemaining
              (reify Consumer
                (accept [_ root]
                  (let [^VectorSchemaRoot root root
-                       id-vec (.getVector root "xt__id")
+                       id-vec (.getVector root "xt$id")
                        ^BigIntVector row-id-vec (.getVector root "_row-id")]
                    (dotimes [idx (.getRowCount root)]
                      (.getOrCreateInternalId iid-mgr table

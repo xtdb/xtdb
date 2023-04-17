@@ -1,7 +1,7 @@
 [:insert
  {:table "customer"}
  [:rename
-  {x1 xt__id,
+  {x1 xt$id,
    x8 c_mktsegment,
    x2 c_custkey,
    x5 c_nationkey,

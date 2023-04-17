@@ -1,7 +1,7 @@
 [:insert
  {:table "prop_owner"}
  [:rename
-  {x6 xt__id,
+  {x6 xt$id,
    x7 customer_number,
    x8 property_number,
    x10 application_time_start,

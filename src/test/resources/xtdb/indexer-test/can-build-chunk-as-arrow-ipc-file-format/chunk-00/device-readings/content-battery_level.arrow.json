@@ -1,7 +1,7 @@
 {
   "schema" : {
     "fields" : [{
-      "name" : "battery-level",
+      "name" : "battery_level",
       "nullable" : false,
       "type" : {
         "name" : "union",
@@ -22,7 +22,7 @@
   "batches" : [{
     "count" : 2,
     "columns" : [{
-      "name" : "battery-level",
+      "name" : "battery_level",
       "count" : 2,
       "TYPE_ID" : [0,0],
       "OFFSET" : [0,1],

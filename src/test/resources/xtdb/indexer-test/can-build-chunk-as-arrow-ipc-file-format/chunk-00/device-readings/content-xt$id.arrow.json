@@ -1,7 +1,7 @@
 {
   "schema" : {
     "fields" : [{
-      "name" : "cpu-avg-5min",
+      "name" : "xt$id",
       "nullable" : false,
       "type" : {
         "name" : "union",
@@ -9,11 +9,10 @@
         "typeIds" : [ ]
       },
       "children" : [{
-        "name" : "f64",
+        "name" : "utf8",
         "nullable" : false,
         "type" : {
-          "name" : "floatingpoint",
-          "precision" : "DOUBLE"
+          "name" : "utf8"
         },
         "children" : [ ]
       }]
@@ -22,15 +21,16 @@
   "batches" : [{
     "count" : 2,
     "columns" : [{
-      "name" : "cpu-avg-5min",
+      "name" : "xt$id",
       "count" : 2,
       "TYPE_ID" : [0,0],
       "OFFSET" : [0,1],
       "children" : [{
-        "name" : "f64",
+        "name" : "utf8",
         "count" : 2,
         "VALIDITY" : [1,1],
-        "DATA" : [10.802,8.106]
+        "OFFSET" : [0,18,36],
+        "DATA" : ["reading-demo000000","reading-demo000001"]
       }]
     }]
   }]

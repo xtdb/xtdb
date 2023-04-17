@@ -56,7 +56,7 @@
                 "name" : "struct"
               },
               "children" : [{
-                "name" : "xt__id",
+                "name" : "xt$id",
                 "nullable" : false,
                 "type" : {
                   "name" : "union",
@@ -157,7 +157,7 @@
                 "name" : "struct"
               },
               "children" : [{
-                "name" : "xt__id",
+                "name" : "xt$id",
                 "nullable" : false,
                 "type" : {
                   "name" : "union",
@@ -227,7 +227,7 @@
             },
             "children" : [ ]
           },{
-            "name" : "xt__id",
+            "name" : "xt$id",
             "nullable" : false,
             "type" : {
               "name" : "union",
@@ -268,7 +268,7 @@
             },
             "children" : [ ]
           },{
-            "name" : "xt__id",
+            "name" : "xt$id",
             "nullable" : false,
             "type" : {
               "name" : "union",
@@ -386,7 +386,7 @@
               "count" : 2,
               "VALIDITY" : [1,1],
               "children" : [{
-                "name" : "xt__id",
+                "name" : "xt$id",
                 "count" : 2,
                 "TYPE_ID" : [0,1],
                 "OFFSET" : [0,0],
@@ -437,7 +437,7 @@
               "count" : 1,
               "VALIDITY" : [1],
               "children" : [{
-                "name" : "xt__id",
+                "name" : "xt$id",
                 "count" : 1,
                 "TYPE_ID" : [0],
                 "OFFSET" : [0],
@@ -482,7 +482,7 @@
             "OFFSET" : [0],
             "DATA" : [ ]
           },{
-            "name" : "xt__id",
+            "name" : "xt$id",
             "count" : 0,
             "TYPE_ID" : [ ],
             "OFFSET" : [ ]
@@ -508,7 +508,7 @@
             "OFFSET" : [0],
             "DATA" : [ ]
           },{
-            "name" : "xt__id",
+            "name" : "xt$id",
             "count" : 0,
             "TYPE_ID" : [ ],
             "OFFSET" : [ ]

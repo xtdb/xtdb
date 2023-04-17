@@ -35,7 +35,7 @@
                              out-cols (LinkedList.)]
 
                          (doseq [^IIndirectVector in-col in-rel
-                                 :let [col-name (name (get col-name-mapping (symbol (.getName in-col))))]]
+                                 :let [col-name (str (get col-name-mapping (symbol (.getName in-col))))]]
                            (.add out-cols (.withName in-col col-name)))
 
                          (.accept c (iv/->indirect-rel out-cols (.rowCount in-rel)))))))))

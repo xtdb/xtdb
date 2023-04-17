@@ -1,7 +1,7 @@
 {
   "schema" : {
     "fields" : [{
-      "name" : "device-id",
+      "name" : "cpu_avg_5min",
       "nullable" : false,
       "type" : {
         "name" : "union",
@@ -9,10 +9,11 @@
         "typeIds" : [ ]
       },
       "children" : [{
-        "name" : "utf8",
+        "name" : "f64",
         "nullable" : false,
         "type" : {
-          "name" : "utf8"
+          "name" : "floatingpoint",
+          "precision" : "DOUBLE"
         },
         "children" : [ ]
       }]
@@ -21,16 +22,15 @@
   "batches" : [{
     "count" : 2,
     "columns" : [{
-      "name" : "device-id",
+      "name" : "cpu_avg_5min",
       "count" : 2,
       "TYPE_ID" : [0,0],
       "OFFSET" : [0,1],
       "children" : [{
-        "name" : "utf8",
+        "name" : "f64",
         "count" : 2,
         "VALIDITY" : [1,1],
-        "OFFSET" : [0,22,44],
-        "DATA" : ["device-info-demo000000","device-info-demo000001"]
+        "DATA" : [10.802,8.106]
       }]
     }]
   }]

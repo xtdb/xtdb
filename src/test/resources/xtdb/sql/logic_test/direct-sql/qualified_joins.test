@@ -1,18 +1,18 @@
 hash-threshold 100
 
 statement ok
-INSERT INTO foo (xt__id, x) VALUES (1, 1), (2, 2)
+INSERT INTO foo (xt$id, x) VALUES (1, 1), (2, 2)
 
 statement ok
-INSERT INTO bar (xt__id, x) VALUES (1, 1), (2, 3)
+INSERT INTO bar (xt$id, x) VALUES (1, 1), (2, 3)
 
 statement ok
-INSERT INTO baz (xt__id, x) VALUES (1, 2)
+INSERT INTO baz (xt$id, x) VALUES (1, 2)
 
 # named column joins
 
 query IIII rowsort
-SELECT foo.xt__id foo, foo.x foo_x, bar.xt__id bar, bar.x bar_x FROM foo LEFT JOIN bar USING (xt__id, x)
+SELECT foo.xt$id foo, foo.x foo_x, bar.xt$id bar, bar.x bar_x FROM foo LEFT JOIN bar USING (xt$id, x)
 ----
 1
 1
@@ -24,7 +24,7 @@ NULL
 NULL
 
 query IIII rowsort
-SELECT foo.xt__id foo, foo.x foo_x, bar.xt__id bar, bar.x bar_x FROM foo LEFT JOIN bar USING (xt__id) WHERE foo.x = bar.x
+SELECT foo.xt$id foo, foo.x foo_x, bar.xt$id bar, bar.x bar_x FROM foo LEFT JOIN bar USING (xt$id) WHERE foo.x = bar.x
 ----
 1
 1
@@ -32,7 +32,7 @@ SELECT foo.xt__id foo, foo.x foo_x, bar.xt__id bar, bar.x bar_x FROM foo LEFT JO
 1
 
 query IIII rowsort
-SELECT foo.xt__id foo, foo.x foo_x, bar.xt__id bar, bar.x bar_x FROM foo JOIN bar USING (xt__id, x)
+SELECT foo.xt$id foo, foo.x foo_x, bar.xt$id bar, bar.x bar_x FROM foo JOIN bar USING (xt$id, x)
 ----
 1
 1
@@ -40,7 +40,7 @@ SELECT foo.xt__id foo, foo.x foo_x, bar.xt__id bar, bar.x bar_x FROM foo JOIN ba
 1
 
 query IIII rowsort
-SELECT foo.xt__id foo, foo.x foo_x, bar.xt__id bar, bar.x bar_x FROM foo JOIN bar USING (xt__id) WHERE foo.x = bar.x
+SELECT foo.xt$id foo, foo.x foo_x, bar.xt$id bar, bar.x bar_x FROM foo JOIN bar USING (xt$id) WHERE foo.x = bar.x
 ----
 1
 1
@@ -48,7 +48,7 @@ SELECT foo.xt__id foo, foo.x foo_x, bar.xt__id bar, bar.x bar_x FROM foo JOIN ba
 1
 
 query IIII rowsort
-SELECT foo.xt__id foo, foo.x foo_x, bar.xt__id bar, bar.x bar_x FROM foo RIGHT JOIN bar USING (xt__id, x)
+SELECT foo.xt$id foo, foo.x foo_x, bar.xt$id bar, bar.x bar_x FROM foo RIGHT JOIN bar USING (xt$id, x)
 ----
 1
 1
@@ -60,7 +60,7 @@ NULL
 3
 
 query IIII rowsort
-SELECT foo.xt__id foo, foo.x foo_x, bar.xt__id bar, bar.x bar_x FROM foo RIGHT JOIN bar USING (xt__id) WHERE foo.x = bar.x
+SELECT foo.xt$id foo, foo.x foo_x, bar.xt$id bar, bar.x bar_x FROM foo RIGHT JOIN bar USING (xt$id) WHERE foo.x = bar.x
 ----
 1
 1
@@ -68,7 +68,7 @@ SELECT foo.xt__id foo, foo.x foo_x, bar.xt__id bar, bar.x bar_x FROM foo RIGHT J
 1
 
 query IIII rowsort
-SELECT foo.xt__id foo, foo.x foo_x, bar.xt__id bar, bar.x bar_x FROM foo INNER JOIN bar USING (xt__id, x)
+SELECT foo.xt$id foo, foo.x foo_x, bar.xt$id bar, bar.x bar_x FROM foo INNER JOIN bar USING (xt$id, x)
 ----
 1
 1
@@ -76,7 +76,7 @@ SELECT foo.xt__id foo, foo.x foo_x, bar.xt__id bar, bar.x bar_x FROM foo INNER J
 1
 
 query IIII rowsort
-SELECT foo.xt__id foo, foo.x foo_x, bar.xt__id bar, bar.x bar_x FROM foo INNER JOIN bar USING (xt__id) WHERE foo.x = bar.x
+SELECT foo.xt$id foo, foo.x foo_x, bar.xt$id bar, bar.x bar_x FROM foo INNER JOIN bar USING (xt$id) WHERE foo.x = bar.x
 ----
 1
 1
@@ -378,7 +378,7 @@ NULL
 # join over subquery tables with subquery join clause
 
 query II rowsort
-SELECT foo.x, bar.x bar_x FROM (SELECT foo.xt__id, foo.x FROM foo) AS foo LEFT JOIN (SELECT bar.xt__id, bar.x FROM bar) AS bar ON (SELECT baz.x FROM baz WHERE NOT baz.x = bar.x AND foo.x = baz.x) = (SELECT baz.x FROM baz WHERE baz.x = foo.x AND bar.x = 3)
+SELECT foo.x, bar.x bar_x FROM (SELECT foo.xt$id, foo.x FROM foo) AS foo LEFT JOIN (SELECT bar.xt$id, bar.x FROM bar) AS bar ON (SELECT baz.x FROM baz WHERE NOT baz.x = bar.x AND foo.x = baz.x) = (SELECT baz.x FROM baz WHERE baz.x = foo.x AND bar.x = 3)
 ----
 1
 NULL
@@ -463,7 +463,7 @@ NULL
 NULL
 
 statement ok
-INSERT INTO bibble (xt__id, x) VALUES (1, 1), (2, 2)
+INSERT INTO bibble (xt$id, x) VALUES (1, 1), (2, 2)
 
 query IIII rowsort
 SELECT foo.x, bar.x, baz.x, bibble.x FROM foo JOIN bar ON foo.x = bar.x RIGHT JOIN baz ON bar.x = (SELECT baz.x FROM baz WHERE foo.x = bar.x) LEFT JOIN bibble ON bar.x = bibble.x

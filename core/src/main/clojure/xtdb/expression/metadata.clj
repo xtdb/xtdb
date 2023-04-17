@@ -114,7 +114,7 @@
 (def ^:private bloom-vec-sym (gensym "bloom-vec"))
 
 (defmethod expr/codegen-expr :metadata-vp-call [{:keys [f meta-value field param-expr col-type bloom-hash-sym]} opts]
-  (let [field-name (str field)
+  (let [field-name (util/str->normal-form-str (str field))
 
         idx-code `(.rowIndex ~table-metadata-sym ~field-name ~block-idx-sym)]
 
@@ -126,7 +126,7 @@
                            (when-let [~expr/idx-sym ~idx-code]
                              (bloom/bloom-contains? ~bloom-vec-sym ~expr/idx-sym ~bloom-hash-sym)))))}
 
-      (let [col-sym (gensym 'meta-col)
+      (let [col-sym (gensym 'meta_col)
             col-field (types/col-type->field col-type)
 
             val-sym (gensym 'val)

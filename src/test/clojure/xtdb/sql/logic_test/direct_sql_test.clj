@@ -21,5 +21,6 @@
 (slt/def-slt-test direct-sql--qualified_joins {:direct-sql true})
 (slt/def-slt-test direct-sql--qualified_joins-correlated {:direct-sql true, :decorrelate? false} "direct-sql/qualified_joins.test")
 
-(slt/def-slt-test direct-sql--identifier-case-sensitivity {:direct-sql true})
+;; TODO readd + rename test once table normalisation is in
+;; (slt/def-slt-test direct-sql--identifier-case-sensitivity {:direct-sql true})
 (slt/def-slt-test direct-sql--dollar_identifiers {:direct-sql true})

@@ -16,11 +16,10 @@
                         [:put :xt_docs {:xt/id :bar, :col1 "bar1", :col2 "bar2"}]
                         [:put :xt_docs {:xt/id :foo, :col2 "baz2"}]])
 
-    (t/is (= [{:xt__id :bar, :col1 "bar1", :col2 "bar2"}
-              {:xt__id :foo, :col2 "baz2"}]
-             (tu/query-ra '[:scan {:table xt_docs} [xt__id col1 col2]]
+    (t/is (= [{:xt/id :bar, :col1 "bar1", :col2 "bar2"}
+              {:xt/id :foo, :col2 "baz2"}]
+             (tu/query-ra '[:scan {:table xt_docs} [xt/id col1 col2]]
                           {:node node})))))
-
 
 (t/deftest test-simple-scan-with-namespaced-attributes
   (with-open [node (node/start-node {})]
@@ -28,17 +27,17 @@
                         [:put :xt_docs {:xt/id :bar, :the-ns/col1 "bar1", :col2 "bar2"}]
                         [:put :xt_docs {:xt/id :foo, :the-ns/col2 "baz2"}]])
 
-    (t/is (= [{:xt__id :bar, :the-ns__col1 "bar1", :col2 "bar2"}
-              {:xt__id :foo}]
-             (tu/query-ra '[:scan {:table xt_docs} [xt__id the-ns__col1 col2]]
+    (t/is (= [{:xt/id :bar, :the-ns/col1 "bar1", :col2 "bar2"}
+              {:xt/id :foo}]
+             (tu/query-ra '[:scan {:table xt_docs} [xt/id the-ns/col1 col2]]
                           {:node node})))))
 
 (t/deftest test-duplicates-in-scan-1
   (with-open [node (node/start-node {})]
     (xt/submit-tx node [[:put :xt_docs {:xt/id :foo}]])
 
-    (t/is (= [{:xt__id :foo}]
-             (tu/query-ra '[:scan {:table xt_docs} [xt__id xt__id]]
+    (t/is (= [{:xt/id :foo}]
+             (tu/query-ra '[:scan {:table xt_docs} [xt/id xt/id]]
                           {:node node})))))
 
 (t/deftest test-scanning-temporal-cols
@@ -47,22 +46,22 @@
                          {:for-app-time [:in #inst "2021" #inst "3000"]}]])
 
     (let [res (first (tu/query-ra '[:scan {:table xt_docs}
-                                    [xt__id
+                                    [xt/id
                                      application_time_start application_time_end
                                      system_time_start system_time_end]]
                                   {:node node}))]
-      (t/is (= #{:xt__id :application_time_start :application_time_end :system_time_end :system_time_start}
+      (t/is (= #{:xt/id :application_time_start :application_time_end :system_time_end :system_time_start}
                (-> res keys set)))
 
-      (t/is (= {:xt__id :doc, :application_time_start (util/->zdt #inst "2021"), :application_time_end (util/->zdt #inst "3000")}
+      (t/is (= {:xt/id :doc, :application_time_start (util/->zdt #inst "2021"), :application_time_end (util/->zdt #inst "3000")}
                (dissoc res :system_time_start :system_time_end))))
 
-    (t/is (= {:xt__id :doc, :app-time-start (util/->zdt #inst "2021"), :app-time-end (util/->zdt #inst "3000")}
-             (-> (first (tu/query-ra '[:project [xt__id
+    (t/is (= {:xt/id :doc, :app-time-start (util/->zdt #inst "2021"), :app-time-end (util/->zdt #inst "3000")}
+             (-> (first (tu/query-ra '[:project [xt/id
                                                  {app-time-start application_time_start}
                                                  {app-time-end application_time_end}]
                                        [:scan {:table xt_docs}
-                                        [xt__id application_time_start application_time_end]]]
+                                        [xt/id application_time_start application_time_end]]]
                                      {:node node}))
                  (dissoc :system_time_start :system_time_end))))))
 
@@ -110,18 +109,18 @@
 
       (xt/submit-tx node [[:put :foo {:xt/id 2, :version "version 2" :last_updated "tx2"}
                            {:app-time-start tt2 :app-time-end eot}]])
-      (t/is (= [{:xt__id 1, :version "version 1"} {:xt__id 2, :version "version 2"}]
+      (t/is (= [{:xt/id 1, :version "version 1"} {:xt/id 2, :version "version 2"}]
                (tu/query-ra '[:scan {:table foo,
                                      :default-all-app-time? false
                                      :for-app-time [:between ?_start ?_end]}
-                              [xt__id version]]
+                              [xt/id version]]
                             {:node node :params {'?_start (util/->instant tt1)
                                                  '?_end (util/->instant eot)}})))
-      (t/is (= [{:xt__id 1, :version "version 1"} {:xt__id 2, :version "version 2"}]
+      (t/is (= [{:xt/id 1, :version "version 1"} {:xt/id 2, :version "version 2"}]
                (tu/query-ra '[:scan {:table foo,
                                      :default-all-app-time? false
                                      :for-app-time :all-time}
-                              [xt__id version]]
+                              [xt/id version]]
                             {:node node :params {'?_start (util/->instant tt1)
                                                  '?_end (util/->instant eot)}}))))))
 
@@ -129,7 +128,7 @@
   (with-open [node (node/start-node {})]
     (let [^IRaQuerySource ra-src (util/component node :xtdb.operator/ra-query-source)]
       (letfn [(->col-types [tx]
-                (-> (.prepareRaQuery ra-src '[:scan {:table xt_docs} [xt__id]])
+                (-> (.prepareRaQuery ra-src '[:scan {:table xt_docs} [xt/id]])
                     (.bind (util/component node :xtdb/indexer) {:node node, :basis {:tx tx}})
                     (.columnTypes)))]
 
@@ -137,13 +136,13 @@
                      (tu/then-await-tx* node))]
           (tu/finish-chunk! node)
 
-          (t/is (= '{xt__id :keyword}
+          (t/is (= '{xt/id :keyword}
                    (->col-types tx))))
 
         (let [tx (-> (xt/submit-tx node [[:put :xt_docs {:xt/id "foo"}]])
                      (tu/then-await-tx* node))]
 
-          (t/is (= '{xt__id [:union #{:keyword :utf8}]}
+          (t/is (= '{xt/id [:union #{:keyword :utf8}]}
                    (->col-types tx))))))))
 
 (t/deftest can-create-temporal-min-max-range

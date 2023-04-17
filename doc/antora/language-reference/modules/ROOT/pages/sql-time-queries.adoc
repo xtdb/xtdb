@@ -21,7 +21,7 @@ entire timeline at once (`FOR ALL APPLICATION_TIME`):
 
 [source,sql]
 ----
-INSERT INTO posts (xt__id, user_id, text, application_time_start)
+INSERT INTO posts (xt$id, user_id, text, application_time_start)
   VALUES (9012, 5678, 'Happy 2027!', DATE '2027-01-01');
 
 -- data from 2027 is not visible by default
@@ -51,7 +51,7 @@ When XTDB is in ISO Standard mode, queries will return records visible to all of
 
 [source,sql]
 ----
-INSERT INTO posts (xt__id, user_id, text, application_time_start)
+INSERT INTO posts (xt$id, user_id, text, application_time_start)
   VALUES (9012, 5678, 'Happy 2027!', DATE '2027-01-01');
 
 -- data from 2027 is visible by default
@@ -110,7 +110,7 @@ For point-in-time queries on the System Timeline:
 
 [source,sql]
 ----
-INSERT INTO posts (xt__id,title)
+INSERT INTO posts (xt$id,title)
   VALUES (99,'That Time I Attended RubyConf 2005');
 
 SELECT posts.title FROM posts
@@ -123,7 +123,7 @@ For point-in-time queries on the Application Timeline:
 
 [source,sql]
 ----
-INSERT INTO posts (xt__id,title,application_time_start)
+INSERT INTO posts (xt$id,title,application_time_start)
   VALUES (199,'That Time I Attended Strange Loop 2022',
           DATE '2025-09-21');
 
@@ -196,7 +196,7 @@ In the case where `y` is a DateTime value expression (`DATE` or `TIMESTAMP`),
 
 [source,sql]
 ----
-INSERT INTO posts (xt__id,title)
+INSERT INTO posts (xt$id,title)
   VALUES (99,'That Time I Attended RubyConf 2005');
 
 SELECT posts.title FROM posts
@@ -211,7 +211,7 @@ i.e, if xs < ye and xe > ys.
 
 [source,sql]
 ----
-INSERT INTO posts (xt__id,title,application_time_start)
+INSERT INTO posts (xt$id,title,application_time_start)
   VALUES (299,'Overlapping',DATE '2027-01-01');
 
 SELECT posts.title FROM posts
@@ -226,7 +226,7 @@ i.e., if `xs = ys` and `xe = ye`.
 
 [source,sql]
 ----
-INSERT INTO posts (xt__id,title,application_time_start,application_time_end)
+INSERT INTO posts (xt$id,title,application_time_start,application_time_end)
   VALUES (399,'Equals?',DATE '2027-01-01',DATE '2027-01-02');
 
 SELECT posts.title FROM posts
@@ -241,7 +241,7 @@ i.e., if xe ≤ ys.
 
 [source,sql]
 ----
-INSERT INTO posts (xt__id,title,application_time_start,application_time_end)
+INSERT INTO posts (xt$id,title,application_time_start,application_time_end)
   VALUES (499,'Precedes?',DATE '2007-01-01',DATE '2007-01-02');
 
 SELECT posts.title FROM posts
@@ -256,7 +256,7 @@ i.e., if xs ≥ ye.
 
 [source,sql]
 ----
-INSERT INTO posts (xt__id,title,application_time_start,application_time_end)
+INSERT INTO posts (xt$id,title,application_time_start,application_time_end)
   VALUES (599,'Succeeds?',DATE '2037-01-01',DATE '2037-01-02');
 
 SELECT posts.title FROM posts
@@ -271,7 +271,7 @@ of y, i.e., if xe = ys.
 
 [source,sql]
 ----
-INSERT INTO posts (xt__id,title,application_time_start,application_time_end)
+INSERT INTO posts (xt$id,title,application_time_start,application_time_end)
   VALUES (699,'Immediately Precedes?',DATE '2007-01-01',
           TIMESTAMP '2007-01-02 12:34:56');
 
@@ -287,7 +287,7 @@ of y, i.e., if xs = ye.
 
 [source,sql]
 ----
-INSERT INTO posts (xt__id,title,application_time_start,application_time_end)
+INSERT INTO posts (xt$id,title,application_time_start,application_time_end)
   VALUES (799,'Immediately Succeeds?',TIMESTAMP '2036-12-31 12:34:56',
           DATE '2037-01-02');
 
@@ -306,7 +306,7 @@ the old Application Time is "split".
 
 [source,sql]
 ----
-INSERT INTO posts (xt__id,title,application_time_start)
+INSERT INTO posts (xt$id,title,application_time_start)
   VALUES (899,'Will I be split?',DATE '1997-02-02');
 
 UPDATE posts
@@ -332,13 +332,13 @@ a hard-coded end-of-time value. It can be used like so:
 
 [source,sql]
 ----
-INSERT INTO posts (xt__id,title,application_time_start)
+INSERT INTO posts (xt$id,title,application_time_start)
   VALUES (999,'Delete from 1995 to the end of time?',DATE '1990-02-02');
 
 DELETE FROM posts
   FOR PORTION OF APPLICATION_TIME
   FROM DATE '1995-01-01' TO END_OF_TIME
-  WHERE posts.xt__id= 999;
+  WHERE posts.xt$id= 999;
 
 SELECT posts.title,
        posts.system_time_start,
@@ -405,12 +405,12 @@ To retroactively "move" a record into the past or future, use the "upsert" funct
 
 [source,sql]
 ----
-INSERT INTO products (xt__id,name,application_time_start)
+INSERT INTO products (xt$id,name,application_time_start)
   VALUES (1,'iPhone',DATE '2009-01-01');
 SELECT products.name,products.application_time_start
   FROM products; -- returns 2009
 
-INSERT INTO products (xt__id,name,application_time_start)
+INSERT INTO products (xt$id,name,application_time_start)
   VALUES (1,'iPhone',DATE '2007-06-29');
 SELECT products.name,products.application_time_start
   FROM products; -- returns correct 2007 date
@@ -424,13 +424,13 @@ It is not possible to use an `UPDATE` statement to change a record's `APPLICATIO
 
 [source,sql]
 ----
-INSERT INTO employee (xt__id, name, title, application_time_start)
+INSERT INTO employee (xt$id, name, title, application_time_start)
   VALUES (4, 'Deepa', 'Developer', DATE '2013-07-31');
 
 UPDATE employee FOR PORTION OF APPLICATION_TIME
   FROM DATE '2018-01-01' TO DATE '2021-01-01'
   SET title = 'CEO'
-  WHERE employee.xt__id= 4;
+  WHERE employee.xt$id= 4;
 
 SELECT employee.title, employee.application_time_start
   FROM employee FOR ALL APPLICATION_TIME

@@ -1,16 +1,16 @@
 hash-threshold 100
 
 statement ok
-INSERT INTO t1(xt__id, start, end) VALUES(1, DATE '2000-01-01', DATE '3000-01-01')
+INSERT INTO t1(xt$id, start, end) VALUES(1, DATE '2000-01-01', DATE '3000-01-01')
 
 statement ok
-INSERT INTO t1(xt__id, start, end) VALUES(2, DATE '2100-01-01', DATE '3000-01-01')
+INSERT INTO t1(xt$id, start, end) VALUES(2, DATE '2100-01-01', DATE '3000-01-01')
 
 statement ok
-INSERT INTO t1(xt__id, start, end) VALUES(3, DATE '2000-01-01', DATE '2020-01-01')
+INSERT INTO t1(xt$id, start, end) VALUES(3, DATE '2000-01-01', DATE '2020-01-01')
 
 query ITT nosort
-SELECT t1.xt__id, t1.start, t1.end FROM t1
+SELECT t1.xt$id, t1.start, t1.end FROM t1
 ----
 1
 2000-01-01
@@ -23,33 +23,33 @@ SELECT t1.xt__id, t1.start, t1.end FROM t1
 2020-01-01
 
 query ITT nosort
-SELECT t1.xt__id, t1.start, t1.end FROM t1 WHERE t1.APPLICATION_TIME CONTAINS PERIOD (t1.start, t1.end)
+SELECT t1.xt$id, t1.start, t1.end FROM t1 WHERE t1.APPLICATION_TIME CONTAINS PERIOD (t1.start, t1.end)
 ----
 2
 2100-01-01
 3000-01-01
 
 query ITT nosort
-SELECT t1.xt__id, t1.start, t1.end FROM t1 WHERE PERIOD (t1.start, t1.end) PRECEDES t1.APPLICATION_TIME
+SELECT t1.xt$id, t1.start, t1.end FROM t1 WHERE PERIOD (t1.start, t1.end) PRECEDES t1.APPLICATION_TIME
 ----
 3
 2000-01-01
 2020-01-01
 
 query ITT nosort
-SELECT t1.xt__id, t1.start, t1.end FROM t1 WHERE t1.SYSTEM_TIME CONTAINS PERIOD (t1.start, t1.end)
+SELECT t1.xt$id, t1.start, t1.end FROM t1 WHERE t1.SYSTEM_TIME CONTAINS PERIOD (t1.start, t1.end)
 ----
 2
 2100-01-01
 3000-01-01
 
 query ITT nosort
-SELECT t1.xt__id, t1.start, t1.end FROM t1 WHERE PERIOD (t1.start, t1.end) PRECEDES t1.SYSTEM_TIME
+SELECT t1.xt$id, t1.start, t1.end FROM t1 WHERE PERIOD (t1.start, t1.end) PRECEDES t1.SYSTEM_TIME
 ----
 3
 2000-01-01
 2020-01-01
 
 query ITT nosort
-SELECT t1.xt__id, t1.start, t1.end FROM t1 WHERE t1.SYSTEM_TIME OVERLAPS PERIOD (DATE '2000-01-01', DATE '2020-01-01')
+SELECT t1.xt$id, t1.start, t1.end FROM t1 WHERE t1.SYSTEM_TIME OVERLAPS PERIOD (DATE '2000-01-01', DATE '2020-01-01')
 ----

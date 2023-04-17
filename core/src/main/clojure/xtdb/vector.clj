@@ -373,7 +373,7 @@
   StructVector
   (->mono-reader [arrow-vec [_ val-types]]
     (let [inner-readers (->> (for [[field val-type] val-types
-                                   :let [field-name (name field)
+                                   :let [field-name (str field)
                                          child-vec (.getChild arrow-vec field-name)]]
                                (MapEntry/create field-name
                                                 (if (types/union? val-type)
@@ -401,7 +401,7 @@
   (->mono-writer [arrow-vec [_ val-types]]
     (let [wp (IWriterPosition/build)
           inner-writers (->> (for [[field val-type] val-types
-                                   :let [field-name (name field)
+                                   :let [field-name (str field)
                                          child-vec (.getChild arrow-vec field-name)]]
                                (MapEntry/create field-name
                                                 (if (types/union? val-type)

@@ -38,8 +38,8 @@ As you might expect from a schemaless database, the following is perfectly valid
 
 [source,sql]
 ----
-INSERT INTO people (xt__id, name) VALUES (1, 'Floh');
-INSERT INTO people (xt__id, first_name, last_name) VALUES (2, 'Martha', 'Joseph');
+INSERT INTO people (xt$id, name) VALUES (1, 'Floh');
+INSERT INTO people (xt$id, first_name, last_name) VALUES (2, 'Martha', 'Joseph');
 ----
 
 Deciding what to do about missing attributes is, again, discussed in

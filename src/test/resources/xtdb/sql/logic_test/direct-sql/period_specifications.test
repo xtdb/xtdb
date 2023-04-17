@@ -1,55 +1,55 @@
 hash-threshold 100
 
 statement ok
-INSERT INTO t1(xt__id) VALUES(1)
+INSERT INTO t1(xt$id) VALUES(1)
 
 query I nosort
-SELECT t1.xt__id FROM t1
+SELECT t1.xt$id FROM t1
 ----
 1
 
 query I nosort
-SELECT t1.xt__id
+SELECT t1.xt$id
 FROM t1
 FOR SYSTEM_TIME AS OF DATE '2000-01-01'
 ----
 
 query I nosort
-SELECT t1.xt__id
+SELECT t1.xt$id
 FROM t1
 FOR SYSTEM_TIME AS OF DATE '3000-01-01'
 ----
 1
 
 query I nosort
-SELECT t1.xt__id
+SELECT t1.xt$id
 FROM t1
 FOR APPLICATION_TIME AS OF DATE '2000-01-01'
 ----
 
 query I nosort
-SELECT t1.xt__id
+SELECT t1.xt$id
 FROM t1
 FOR APPLICATION_TIME AS OF DATE '3000-01-01'
 ----
 1
 
 query I nosort
-SELECT t1.xt__id
+SELECT t1.xt$id
 FROM t1
 FOR SYSTEM_TIME AS OF DATE '3000-01-01'
 FOR APPLICATION_TIME AS OF DATE '2000-01-01'
 ----
 
 query I nosort
-SELECT t1.xt__id
+SELECT t1.xt$id
 FROM t1
 FOR SYSTEM_TIME AS OF DATE '2000-01-01'
 FOR APPLICATION_TIME AS OF DATE '2000-01-01'
 ----
 
 query I nosort
-SELECT t1.xt__id
+SELECT t1.xt$id
 FROM t1
 FOR SYSTEM_TIME AS OF DATE '3000-01-01'
 FOR APPLICATION_TIME AS OF DATE '3000-01-01'

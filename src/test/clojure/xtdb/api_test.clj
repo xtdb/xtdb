@@ -45,7 +45,7 @@
 
 (t/deftest round-trips-lists
   (let [tx (xt.d/submit-tx *node* '[[:put :xt_docs {:xt/id :foo, :list [1 2 ["foo" "bar"]]}]
-                                    [:sql "INSERT INTO xt_docs (xt__id, list) VALUES ('bar', ARRAY[?, 2, 3 + 5])"
+                                    [:sql "INSERT INTO xt_docs (xt$id, list) VALUES ('bar', ARRAY[?, 2, 3 + 5])"
                                      [[4]]]])]
     (t/is (= (xt/map->TransactionInstant {:tx-id 0, :sys-time (util/->instant #inst "2020-01-01")}) tx))
 
@@ -57,10 +57,10 @@
                                    [id :list list]]}
                          (assoc :basis-timeout (Duration/ofSeconds 1))))))
 
-    (t/is (= [{:xt__id :foo, :list [1 2 ["foo" "bar"]]}
-              {:xt__id "bar", :list [4 2 8]}]
+    (t/is (= [{:xt$id :foo, :list [1 2 ["foo" "bar"]]}
+              {:xt$id "bar", :list [4 2 8]}]
              (xt.sql/q *node*
-                       "SELECT b.xt__id, b.list FROM xt_docs b"
+                       "SELECT b.xt$id, b.list FROM xt_docs b"
                        {:basis-timeout (Duration/ofSeconds 1)})))))
 
 (t/deftest round-trips-sets
@@ -73,8 +73,8 @@
                        :where [(match :xt_docs [{:xt/id id}])
                                [id :v v]]})))
 
-    (t/is (= [{:xt__id :foo, :v #{1 2 #{"foo" "bar"}}}]
-             (xt.sql/q *node* "SELECT b.xt__id, b.v FROM xt_docs b")))))
+    (t/is (= [{:xt$id :foo, :v #{1 2 #{"foo" "bar"}}}]
+             (xt.sql/q *node* "SELECT b.xt$id, b.v FROM xt_docs b")))))
 
 (t/deftest round-trips-structs
   (let [tx (xt.d/submit-tx *node* '[[:put :xt_docs {:xt/id :foo, :struct {:a 1, :b {:c "bar"}}}]
@@ -96,11 +96,11 @@
             ;; :tmtz #time/offset-time "11:21:14.932254-08:00" ; TODO #323
             }]
 
-    (xt.sql/submit-tx *node* [[:sql "INSERT INTO foo (xt__id, dt, ts, tstz, tm) VALUES ('foo', ?, ?, ?, ?)"
+    (xt.sql/submit-tx *node* [[:sql "INSERT INTO foo (xt$id, dt, ts, tstz, tm) VALUES ('foo', ?, ?, ?, ?)"
                                [(mapv vs [:dt :ts :tstz :tm])]]])
 
-    (t/is (= [(assoc vs :xt__id "foo")]
-             (xt.sql/q *node* "SELECT f.xt__id, f.dt, f.ts, f.tstz, f.tm FROM foo f"
+    (t/is (= [(assoc vs :xt$id "foo")]
+             (xt.sql/q *node* "SELECT f.xt$id, f.dt, f.ts, f.tstz, f.tm FROM foo f"
                        {:basis-timeout (Duration/ofMillis 100)
                         :default-tz (ZoneId/of "Europe/London")})))
 
@@ -113,11 +113,11 @@
                 [:tmtz "TIME '11:21:14.932254-08:00'"]]]
 
       (xt.sql/submit-tx *node* (vec (for [[t lit] lits]
-                                      [:sql (format "INSERT INTO bar (xt__id, v) VALUES (?, %s)" lit)
+                                      [:sql (format "INSERT INTO bar (xt$id, v) VALUES (?, %s)" lit)
                                        [[(name t)]]])))
       (t/is (= (set (for [[t _lit] lits]
-                      {:xt__id (name t), :v (get vs t)}))
-               (set (xt.sql/q *node* "SELECT b.xt__id, b.v FROM bar b"
+                      {:xt$id (name t), :v (get vs t)}))
+               (set (xt.sql/q *node* "SELECT b.xt$id, b.v FROM bar b"
                               {:basis-timeout (Duration/ofMillis 100)
                                :default-tz (ZoneId/of "Europe/London")})))))))
 
@@ -176,7 +176,7 @@
                            {:basis {:tx tx}})
                  (into #{} (map (juxt :first_name :last_name :application_time_start :application_time_end)))))]
 
-    (let [tx1 (xt.sql/submit-tx *node* [[:sql "INSERT INTO users (xt__id, first_name, last_name, application_time_start) VALUES (?, ?, ?, ?)"
+    (let [tx1 (xt.sql/submit-tx *node* [[:sql "INSERT INTO users (xt$id, first_name, last_name, application_time_start) VALUES (?, ?, ?, ?)"
                                          [["dave", "Dave", "Davis", #inst "2018"]
                                           ["claire", "Claire", "Cooper", #inst "2019"]
                                           ["alan", "Alan", "Andrews", #inst "2020"]
@@ -190,7 +190,7 @@
 
       (t/is (= tx1-expected (all-users tx1)))
 
-      (let [tx2 (xt.sql/submit-tx *node* [[:sql "DELETE FROM users FOR PORTION OF APP_TIME FROM DATE '2020-05-01' TO END_OF_TIME AS u WHERE u.xt__id = ?"
+      (let [tx2 (xt.sql/submit-tx *node* [[:sql "DELETE FROM users FOR PORTION OF APP_TIME FROM DATE '2020-05-01' TO END_OF_TIME AS u WHERE u.xt$id = ?"
                                            [["dave"]]]])
             tx2-expected #{["Dave" "Davis", (util/->zdt #inst "2018"), (util/->zdt #inst "2020-05-01")]
                            ["Claire" "Cooper", (util/->zdt #inst "2019"), (util/->zdt util/end-of-time)]
@@ -200,7 +200,7 @@
         (t/is (= tx2-expected (all-users tx2)))
         (t/is (= tx1-expected (all-users tx1)))
 
-        (let [tx3 (xt.sql/submit-tx *node* [[:sql "UPDATE users FOR PORTION OF APPLICATION_TIME FROM DATE '2021-07-01' TO END_OF_TIME AS u SET first_name = 'Sue' WHERE u.xt__id = ?"
+        (let [tx3 (xt.sql/submit-tx *node* [[:sql "UPDATE users FOR PORTION OF APPLICATION_TIME FROM DATE '2021-07-01' TO END_OF_TIME AS u SET first_name = 'Sue' WHERE u.xt$id = ?"
                                              [["susan"]]]])
 
               tx3-expected #{["Dave" "Davis", (util/->zdt #inst "2018"), (util/->zdt #inst "2020-05-01")]
@@ -215,14 +215,14 @@
 
 (deftest test-sql-insert
   (let [tx1 (xt.sql/submit-tx *node*
-                              [[:sql "INSERT INTO users (xt__id, name, application_time_start) VALUES (?, ?, ?)"
+                              [[:sql "INSERT INTO users (xt$id, name, application_time_start) VALUES (?, ?, ?)"
                                 [["dave", "Dave", #inst "2018"]
                                  ["claire", "Claire", #inst "2019"]]]])]
 
     (t/is (= (xt/map->TransactionInstant {:tx-id 0, :sys-time (util/->instant #inst "2020-01-01")}) tx1))
 
     (xt.sql/submit-tx *node*
-                      [[:sql "INSERT INTO people (xt__id, renamed_name, application_time_start)
+                      [[:sql "INSERT INTO people (xt$id, renamed_name, application_time_start)
                                    SELECT users.id, users.name, users.application_time_start
                                    FROM users FOR APPLICATION_TIME AS OF DATE '2019-06-01'
                                    WHERE users.name = 'Dave'"]])
@@ -232,12 +232,12 @@
 
 (deftest test-sql-insert-app-time-date-398
   (let [tx (xt.sql/submit-tx *node*
-                             [[:sql "INSERT INTO foo (xt__id, application_time_start) VALUES ('foo', DATE '2018-01-01')"]])]
+                             [[:sql "INSERT INTO foo (xt$id, application_time_start) VALUES ('foo', DATE '2018-01-01')"]])]
 
     (t/is (= (xt/map->TransactionInstant {:tx-id 0, :sys-time (util/->instant #inst "2020-01-01")}) tx))
 
-    (t/is (= [{:xt__id "foo", :application_time_start (util/->zdt #inst "2018"), :application_time_end (util/->zdt util/end-of-time)}]
-             (xt.sql/q *node* "SELECT foo.xt__id, foo.application_time_start, foo.application_time_end FROM foo")))))
+    (t/is (= [{:xt$id "foo", :application_time_start (util/->zdt #inst "2018"), :application_time_end (util/->zdt util/end-of-time)}]
+             (xt.sql/q *node* "SELECT foo.xt$id, foo.application_time_start, foo.application_time_end FROM foo")))))
 
 (deftest test-dml-default-all-app-time-flag-339
   (let [tt1 (util/->zdt #inst "2020-01-01")
@@ -248,7 +248,7 @@
               (set (xt.sql/q *node*
                              "SELECT foo.version, foo.application_time_start, foo.application_time_end FROM foo")))]
       (xt.sql/submit-tx *node*
-                        [[:sql "INSERT INTO foo (xt__id, version) VALUES (?, ?)"
+                        [[:sql "INSERT INTO foo (xt$id, version) VALUES (?, ?)"
                           [["foo", 0]]]])
 
       (t/is (= #{{:version 0, :application_time_start tt1, :application_time_end eot}}
@@ -256,7 +256,7 @@
 
       (t/testing "update as-of-now"
         (xt.sql/submit-tx *node*
-                          [[:sql "UPDATE foo SET version = 1 WHERE foo.xt__id = 'foo'"]]
+                          [[:sql "UPDATE foo SET version = 1 WHERE foo.xt$id = 'foo'"]]
                           {:default-all-app-time? false})
 
         (t/is (= #{{:version 0, :application_time_start tt1, :application_time_end tt2}
@@ -267,7 +267,7 @@
         (xt.sql/submit-tx *node*
                           [[:sql (str "UPDATE foo "
                                       "FOR PORTION OF APP_TIME FROM ? TO ? "
-                                      "SET version = 2 WHERE foo.xt__id = 'foo'")
+                                      "SET version = 2 WHERE foo.xt$id = 'foo'")
                             [[tt1 tt2]]]]
                           {:default-all-app-time? false})
         (t/is (= #{{:version 2, :application_time_start tt1, :application_time_end tt2}
@@ -276,7 +276,7 @@
 
       (t/testing "UPDATE for-all-time"
         (xt.sql/submit-tx *node*
-                          [[:sql "UPDATE foo SET version = 3 WHERE foo.xt__id = 'foo'"]])
+                          [[:sql "UPDATE foo SET version = 3 WHERE foo.xt$id = 'foo'"]])
 
         (t/is (= #{{:version 3, :application_time_start tt1, :application_time_end tt2}
                    {:version 3, :application_time_start tt2, :application_time_end eot}}
@@ -284,7 +284,7 @@
 
       (t/testing "DELETE as-of-now"
         (xt.sql/submit-tx *node*
-                          [[:sql "DELETE FROM foo WHERE foo.xt__id = 'foo'"]]
+                          [[:sql "DELETE FROM foo WHERE foo.xt$id = 'foo'"]]
                           {:default-all-app-time? false})
 
         (t/is (= #{{:version 3, :application_time_start tt1, :application_time_end tt2}
@@ -294,7 +294,7 @@
       (t/testing "UPDATE FOR ALL APPLICATION_TIME"
         (xt.sql/submit-tx *node*
                           [[:sql "UPDATE foo FOR ALL APPLICATION_TIME
-                                     SET version = 4 WHERE foo.xt__id = 'foo'"]]
+                                     SET version = 4 WHERE foo.xt$id = 'foo'"]]
                           {:default-all-app-time? false})
 
         (t/is (= #{{:version 4, :application_time_start tt1, :application_time_end tt2}
@@ -304,7 +304,7 @@
       (t/testing "DELETE FOR ALL APPLICATION_TIME"
         (xt.sql/submit-tx *node*
                           [[:sql "DELETE FROM foo FOR ALL APPLICATION_TIME
-                                     WHERE foo.xt__id = 'foo'"]]
+                                     WHERE foo.xt$id = 'foo'"]]
                           {:default-all-app-time? false})
 
         (t/is (= #{} (q)))))))
@@ -315,7 +315,7 @@
         eot (util/->zdt util/end-of-time)]
 
     (xt.sql/submit-tx *node*
-                      [[:sql "INSERT INTO foo (xt__id, version) VALUES (?, ?)"
+                      [[:sql "INSERT INTO foo (xt$id, version) VALUES (?, ?)"
                         [["foo", 0]]]])
 
     (t/is (= [{:version 0, :application_time_start tt1, :application_time_end eot}]
@@ -328,7 +328,7 @@
                        "SELECT foo.version, foo.application_time_start, foo.application_time_end FROM foo")))
 
     (xt.sql/submit-tx *node*
-                      [[:sql "UPDATE foo SET version = 1 WHERE foo.xt__id = 'foo'"]]
+                      [[:sql "UPDATE foo SET version = 1 WHERE foo.xt$id = 'foo'"]]
                       {:default-all-app-time? false})
 
     (t/is (= [{:version 1, :application_time_start tt2, :application_time_end eot}]
@@ -360,10 +360,10 @@
 (t/deftest test-erase
   (letfn [(q [tx]
             (set (xt.sql/q *node*
-                           "SELECT foo.xt__id, foo.version, foo.application_time_start, foo.application_time_end FROM foo"
+                           "SELECT foo.xt$id, foo.version, foo.application_time_start, foo.application_time_end FROM foo"
                            {:basis {:tx tx}})))]
     (let [tx1 (xt.sql/submit-tx *node*
-                                [[:sql "INSERT INTO foo (xt__id, version) VALUES (?, ?)"
+                                [[:sql "INSERT INTO foo (xt$id, version) VALUES (?, ?)"
                                   [["foo", 0]
                                    ["bar", 0]]]])
           tx2 (xt.sql/submit-tx *node*
@@ -377,26 +377,26 @@
               :application_time_start (util/->zdt #inst "2020-01-02"),
               :application_time_end (util/->zdt util/end-of-time)}]
 
-      (t/is (= #{{:xt__id "foo", :version 0,
+      (t/is (= #{{:xt$id "foo", :version 0,
                   :application_time_start (util/->zdt #inst "2020-01-01")
                   :application_time_end (util/->zdt util/end-of-time)}
-                 {:xt__id "bar", :version 0,
+                 {:xt$id "bar", :version 0,
                   :application_time_start (util/->zdt #inst "2020-01-01")
                   :application_time_end (util/->zdt util/end-of-time)}}
                (q tx1)))
 
-      (t/is (= #{(assoc v0 :xt__id "foo")
-                 (assoc v0 :xt__id "bar")
-                 (assoc v1 :xt__id "foo")
-                 (assoc v1 :xt__id "bar")}
+      (t/is (= #{(assoc v0 :xt$id "foo")
+                 (assoc v0 :xt$id "bar")
+                 (assoc v1 :xt$id "foo")
+                 (assoc v1 :xt$id "bar")}
                (q tx2)))
 
       (let [tx3 (xt.sql/submit-tx *node*
-                                  [[:sql "ERASE FROM foo WHERE foo.xt__id = 'foo'"]])]
-        (t/is (= #{(assoc v0 :xt__id "bar") (assoc v1 :xt__id "bar")} (q tx3)))
-        (t/is (= #{(assoc v0 :xt__id "bar") (assoc v1 :xt__id "bar")} (q tx2)))
+                                  [[:sql "ERASE FROM foo WHERE foo.xt$id = 'foo'"]])]
+        (t/is (= #{(assoc v0 :xt$id "bar") (assoc v1 :xt$id "bar")} (q tx3)))
+        (t/is (= #{(assoc v0 :xt$id "bar") (assoc v1 :xt$id "bar")} (q tx2)))
 
-        (t/is (= #{{:xt__id "bar", :version 0,
+        (t/is (= #{{:xt$id "bar", :version 0,
                     :application_time_start (util/->zdt #inst "2020-01-01")
                     :application_time_end (util/->zdt util/end-of-time)}}
                  (q tx1)))))))
@@ -410,8 +410,8 @@
 (t/deftest throws-static-tx-op-errors-on-submit-346
   (t/is (thrown-with-msg?
          xtdb.IllegalArgumentException
-         #"Invalid SQL query: Parse error at line 1, column 49"
-         (-> (xt.sql/submit-tx tu/*node* [[:sql "INSERT INTO foo (xt__id, dt) VALUES ('id', DATE \"2020-01-01\")"]])
+         #"Invalid SQL query: Parse error at line 1"
+         (-> (xt.sql/submit-tx tu/*node* [[:sql "INSERT INTO foo (xt$id, dt) VALUES ('id', DATE \"2020-01-01\")"]])
              (with-unwrapped-execution-exception)))
         "parse error - date with double quotes")
 
@@ -424,38 +424,38 @@
 
     (t/is (thrown-with-msg?
            xtdb.IllegalArgumentException
-           #"INSERT does not contain mandatory xt__id column"
+           #"INSERT does not contain mandatory xt\$id column"
            (-> (xt.sql/submit-tx tu/*node* [[:sql "INSERT INTO users (foo, bar) VALUES ('foo', 'bar')"]])
                (with-unwrapped-execution-exception))))
 
     (t/is (thrown-with-msg?
            xtdb.IllegalArgumentException
            #"Column name duplicated"
-           (-> (xt.sql/submit-tx tu/*node* [[:sql "INSERT INTO users (xt__id, foo, foo) VALUES ('foo', 'foo', 'foo')"]])
+           (-> (xt.sql/submit-tx tu/*node* [[:sql "INSERT INTO users (xt$id, foo, foo) VALUES ('foo', 'foo', 'foo')"]])
                (with-unwrapped-execution-exception)))))
 
   (t/testing "still an active node"
-    (xt.sql/submit-tx tu/*node* [[:sql "INSERT INTO users (xt__id, name) VALUES ('dave', 'Dave')"]])
+    (xt.sql/submit-tx tu/*node* [[:sql "INSERT INTO users (xt$id, name) VALUES ('dave', 'Dave')"]])
 
     (t/is (= [{:name "Dave"}]
              (xt.sql/q tu/*node* "SELECT users.name FROM users")))))
 
 (t/deftest aborts-insert-if-end-lt-start-401-425
   (letfn [(q-all []
-            (->> (xt.sql/q tu/*node* "SELECT foo.xt__id, foo.application_time_start, foo.application_time_end FROM foo")
-                 (into {} (map (juxt :xt__id (juxt :application_time_start :application_time_end))))))]
+            (->> (xt.sql/q tu/*node* "SELECT foo.xt$id, foo.application_time_start, foo.application_time_end FROM foo")
+                 (into {} (map (juxt :xt$id (juxt :application_time_start :application_time_end))))))]
 
-    (xt.sql/submit-tx tu/*node* [[:sql "INSERT INTO foo (xt__id) VALUES (1)"]])
+    (xt.sql/submit-tx tu/*node* [[:sql "INSERT INTO foo (xt$id) VALUES (1)"]])
 
     (xt.sql/submit-tx tu/*node* [[:sql "
-INSERT INTO foo (xt__id, application_time_start, application_time_end)
+INSERT INTO foo (xt$id, application_time_start, application_time_end)
 VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"]])
 
     (t/is (= {1 [(util/->zdt #inst "2020-01-01") (util/->zdt util/end-of-time)]}
              (q-all)))
 
     (t/testing "continues indexing after abort"
-      (xt.sql/submit-tx tu/*node* [[:sql "INSERT INTO foo (xt__id) VALUES (3)"]])
+      (xt.sql/submit-tx tu/*node* [[:sql "INSERT INTO foo (xt$id) VALUES (3)"]])
 
       (t/is (= {1 [(util/->zdt #inst "2020-01-01") (util/->zdt util/end-of-time)]
                 3 [(util/->zdt #inst "2020-01-03") (util/->zdt util/end-of-time)]}
@@ -464,7 +464,7 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"]])
 (deftest test-insert-from-other-table-with-as-of-now
   (xt.sql/submit-tx *node*
                     [[:sql
-                      "INSERT INTO posts (xt__id, user_id, text, application_time_start)
+                      "INSERT INTO posts (xt$id, user_id, text, application_time_start)
 	                VALUES (9012, 5678, 'Happy 2050!', DATE '2050-01-01')"]])
 
   (t/is (= [{:text "Happy 2050!"}]
@@ -478,7 +478,7 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"]])
 
   (xt.sql/submit-tx *node*
                     [[:sql
-                      "INSERT INTO t1 SELECT posts.xt__id, posts.text FROM posts"]]
+                      "INSERT INTO t1 SELECT posts.xt$id, posts.text FROM posts"]]
                     {:default-all-app-time? false})
 
   (t/is (= []

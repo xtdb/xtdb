@@ -1017,14 +1017,14 @@
                 (conj (format "INSERT requires query to have same degree as column list: %s"
                               (->line-info-str ag)))
 
-                (not (some #{"xt__id"} inserted-columns))
-                (conj (format "INSERT does not contain mandatory xt__id column: %s"
+                (not (some #{"xt$id"} inserted-columns))
+                (conj (format "INSERT does not contain mandatory xt$id column: %s"
                               (->line-info-str ag)))))
 
             [:from_subquery ^:z qe]
             (let [selected-columns (first (projected-columns (r/$ ag -1)))]
-              (when-not (some #{"xt__id"} (map :identifier selected-columns))
-                [(format "INSERT does not contain mandatory xt__id column: %s"
+              (when-not (some #{"xt$id"} (map :identifier selected-columns))
+                [(format "INSERT does not contain mandatory xt$id column: %s"
                          (->line-info-str ag))]))))
 
 (defn- check-select-list [ag]

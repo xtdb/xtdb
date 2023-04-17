@@ -60,8 +60,8 @@
   (-> (fn [left-col-type right-col-type null-ordering]
         (let [left-idx-sym (gensym 'left-idx)
               right-idx-sym (gensym 'right-idx)
-              left-col-sym (gensym 'left-col)
-              right-col-sym (gensym 'right-col)
+              left-col-sym (gensym 'left_col)
+              right-col-sym (gensym 'right_col)
 
               {cont :continue, :as emitted-expr}
               (expr/codegen-expr {:op :call,

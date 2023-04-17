@@ -1,7 +1,7 @@
 {
   "schema" : {
     "fields" : [{
-      "name" : "xt__id",
+      "name" : "os_name",
       "nullable" : false,
       "type" : {
         "name" : "union",
@@ -21,7 +21,7 @@
   "batches" : [{
     "count" : 2,
     "columns" : [{
-      "name" : "xt__id",
+      "name" : "os_name",
       "count" : 2,
       "TYPE_ID" : [0,0],
       "OFFSET" : [0,1],
@@ -29,8 +29,8 @@
         "name" : "utf8",
         "count" : 2,
         "VALIDITY" : [1,1],
-        "OFFSET" : [0,18,36],
-        "DATA" : ["reading-demo000000","reading-demo000001"]
+        "OFFSET" : [0,5,10],
+        "DATA" : ["6.0.1","6.0.1"]
       }]
     }]
   }]

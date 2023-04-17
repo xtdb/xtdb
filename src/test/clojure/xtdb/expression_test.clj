@@ -92,7 +92,7 @@
 
   Usage: (project '(+ a b) [{:a 1, :b 2}, {:a 3, :b 4}]) ;; => [3, 7]"
   [expr docs]
-  (let [docs (map-indexed #(assoc %2 :xt__id %1) docs)
+  (let [docs (map-indexed #(assoc %2 :xt$id %1) docs)
         lp [:project [{'ret expr}] [:table docs]]]
     (mapv :ret (tu/query-ra lp {}))))
 
@@ -118,7 +118,7 @@
                      {:x false, :y false, :z true}]))))
 
 (t/deftest test-date-trunc
-  (let [test-doc {:xt__id :foo,
+  (let [test-doc {:xt$id :foo,
                   :date (util/->instant #inst "2021-10-21T12:34:56Z")
                   :zdt (-> (util/->zdt #inst "2021-08-21T12:34:56Z")
                            (.withZoneSameLocal (ZoneId/of "Europe/London")))}]
@@ -1321,6 +1321,14 @@
 
     (t/is (= {:res [nil nil], :res-type :null}
              (run-projection rel '(. {:x x, :y y} z))))))
+
+(t/deftest test-namespaced-struct-literals
+  (with-open [rel (tu/open-rel [(tu/open-vec "x/x" [1.2 3.4])
+                                (tu/open-vec "y/y" [3.4 8.25])])]
+    (t/is (= {:res [{:x/x 1.2, :y/y 3.4}
+                    {:x/x 3.4, :y/y 8.25}]
+              :res-type [:struct '{x/x :f64, y/y :f64}]}
+             (run-projection rel '{:x/x x/x, :y/y y/y})))))
 
 (t/deftest test-nested-structs
   (with-open [rel (tu/open-rel [(tu/open-vec "y" [1.2 3.4])])]

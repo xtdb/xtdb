@@ -43,7 +43,7 @@
   (getColumnName [_] col-name)
   (getColumnType [_] col-type)
   (project [_ _allocator in-rel _params]
-    (.vectorForName in-rel (name col-name))))
+    (.vectorForName in-rel (str col-name))))
 
 (defn ->identity-projection-spec ^xtdb.operator.IProjectionSpec [col-name col-type]
   (->IdentityProjectionSpec col-name col-type))
@@ -54,7 +54,7 @@
       (getColumnName [_] col-name)
       (getColumnType [_] :i64)
       (project [_ allocator in-rel _params]
-        (let [out-vec (BigIntVector. (name col-name) allocator)
+        (let [out-vec (BigIntVector. (str col-name) allocator)
               start-row-num (aget row-num 0)
               row-count (.rowCount in-rel)]
           (try
@@ -72,8 +72,8 @@
   (getColumnName [_] to-name)
   (getColumnType [_] col-type)
   (project [_ _allocator in-rel _params]
-    (-> (.vectorForName in-rel (name from-name))
-        (.withName (name to-name)))))
+    (-> (.vectorForName in-rel (str from-name))
+        (.withName (str to-name)))))
 
 (defn ->rename-projection-spec ^xtdb.operator.IProjectionSpec [to-name from-name col-type]
   (->RenameProjectionSpec to-name from-name col-type))

@@ -11,6 +11,6 @@
     (with-open [node (node/start-node {::k/log {:topic-name topic-name}})]
       (xt/submit-tx node [[:put {:xt/id :foo}]])
 
-      (t/is (= [{:xt__id :foo}]
-               (tu/query-ra '[:scan {:table :xt_docs} [xt__id]]
+      (t/is (= [{:xt/id :foo}]
+               (tu/query-ra '[:scan {:table :xt_docs} [xt/id]]
                             {:node node}))))))

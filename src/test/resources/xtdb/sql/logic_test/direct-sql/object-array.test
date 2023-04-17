@@ -1,7 +1,7 @@
 hash-threshold 100
 
 statement ok
-INSERT INTO t1(xt__id) VALUES(1)
+INSERT INTO t1(xt$id) VALUES(1)
 
 # testing projection/construction
 
@@ -49,7 +49,7 @@ SELECT ARRAY [OBJECT('foo': 5), OBJECT('foo': 5)] FROM t1
 [{:foo 5} {:foo 5}]
 
 statement ok
-INSERT INTO t1(xt__id) VALUES(2)
+INSERT INTO t1(xt$id) VALUES(2)
 
 # testing more than one row
 
@@ -83,13 +83,13 @@ NULL
 # testing OBJECT round trip
 
 statement ok
-INSERT INTO t2(xt__id, data)
+INSERT INTO t2(xt$id, data)
 VALUES(1, OBJECT ('foo': OBJECT('bibble': true),
 				  'bar': OBJECT('baz': -4113466,
 				        		'flib': OBJECT('true': false))))
 
 statement ok
-INSERT INTO t2(xt__id, data)
+INSERT INTO t2(xt$id, data)
 VALUES(2, {'foo': {'bibble': true},
 		   'bar': {'baz': 1001}})
 
@@ -118,10 +118,10 @@ SELECT t2.data FROM t2
 # testing ARRAY round trip
 
 statement ok
-INSERT INTO t3(xt__id, data) VALUES (1, [2, 3])
+INSERT INTO t3(xt$id, data) VALUES (1, [2, 3])
 
 statement ok
-INSERT INTO t3(xt__id, data) VALUES (2, [6, 7])
+INSERT INTO t3(xt$id, data) VALUES (2, [6, 7])
 
 query T nosort
 SELECT t3.data FROM t3

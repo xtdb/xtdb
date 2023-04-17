@@ -642,7 +642,7 @@
 
 (defn col-type->field
   (^org.apache.arrow.vector.types.pojo.Field [col-type] (col-type->field (col-type->field-name col-type) col-type))
-  (^org.apache.arrow.vector.types.pojo.Field [col-name col-type] (col-type->field* (name col-name) false col-type)))
+  (^org.apache.arrow.vector.types.pojo.Field [col-name col-type] (col-type->field* (str col-name) false col-type)))
 
 (defn col-type->duv-leg-key [col-type]
   (let [head (col-type-head col-type)]

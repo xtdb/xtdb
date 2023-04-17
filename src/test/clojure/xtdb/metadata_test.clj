@@ -18,19 +18,19 @@
               (-> (meta/row-id->chunk metadata-mgr table row-id)
                   (dissoc :chunk-idx)
                   (update :col-names #(into #{} (map keyword) %))))]
-      (t/is (= {:col-names #{:xt__id
+      (t/is (= {:col-names #{:xt$id
                              :c_acctbal :c_address :c_comment :c_custkey :c_mktsegment
                              :c_name :c_nationkey :c_phone}
                 :block-idx 0}
                (row-id->col-names "customer" 0)))
 
-      (t/is (= {:col-names #{:xt__id
+      (t/is (= {:col-names #{:xt$id
                              :o_clerk :o_comment :o_custkey :o_orderdate :o_orderkey
                              :o_orderpriority :o_orderstatus :o_shippriority :o_totalprice}
                 :block-idx 0}
                (row-id->col-names "orders" 500)))
 
-      (let [li-cols #{:xt__id
+      (let [li-cols #{:xt$id
                       :l_comment :l_commitdate :l_discount :l_extendedprice
                       :l_linenumber :l_linestatus :l_orderkey :l_partkey
                       :l_quantity :l_receiptdate :l_returnflag :l_shipdate
@@ -43,12 +43,12 @@
 
 (t/deftest test-param-metadata-error-310
   (let [tx1 (xt/submit-tx tu/*node*
-                           [[:sql "INSERT INTO users (xt__id, name, application_time_start) VALUES (?, ?, ?)"
+                           [[:sql "INSERT INTO users (xt$id, name, application_time_start) VALUES (?, ?, ?)"
                              [["dave", "Dave", #inst "2018"]
                               ["claire", "Claire", #inst "2019"]]]])]
 
     (t/is (= [{:name "Dave"}]
-             (xt/q tu/*node* "SELECT users.name FROM users WHERE users.xt__id = ?"
+             (xt/q tu/*node* "SELECT users.name FROM users WHERE users.xt$id = ?"
                    {:basis {:tx tx1}
                     :? ["dave"]}))
           "#310")))

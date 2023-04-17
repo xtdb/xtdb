@@ -14,7 +14,7 @@ Columns must be fully qualified, such as `users.name`:
 
 [source,sql]
 ----
-INSERT INTO users (xt__id, name) VALUES (1234, 'Matt');
+INSERT INTO users (xt$id, name) VALUES (1234, 'Matt');
 SELECT users.name FROM users;
 ----
 
@@ -37,18 +37,18 @@ Foreign keys are not required and any table can join on any other table, as long
 
 [source,sql]
 ----
-INSERT INTO posts (xt__id, user_id, text)
+INSERT INTO posts (xt$id, user_id, text)
   VALUES (1234, 5678, 'Hello World!');
-INSERT INTO posts (xt__id, user_id, text)
+INSERT INTO posts (xt$id, user_id, text)
   VALUES (2345, 5678, 'Summer Reading: George Copeland');
 
-INSERT INTO people (xt__id, name, friends)
+INSERT INTO people (xt$id, name, friends)
   VALUES (5678, 'Sarah',
           [{'user': 'Dan'},
            {'user': 'Kath'}]);
 
 SELECT posts.text, people.name
-  FROM posts JOIN people ON posts.user.xt__id= people.id;
+  FROM posts JOIN people ON posts.user.xt$id= people.id;
 ----
 
 
@@ -59,11 +59,11 @@ Queries can access correctly-formatted Apache Arrow files directly from the web.
 
 [source,sql]
 ----
-INSERT INTO users (xt__id, post_id, name) VALUES (555, 'foo1', 'Jamie');
+INSERT INTO users (xt$id, post_id, name) VALUES (555, 'foo1', 'Jamie');
 
 SELECT more_posts.id, more_posts.text, users.name
   FROM ARROW_TABLE('https://xtdb.com/more_posts.arrow')
-  AS more_posts JOIN users ON more_posts.xt__id= users.post_id;
+  AS more_posts JOIN users ON more_posts.xt$id= users.post_id;
 ----
 
 NOTE: `ARROW_TABLE` is not permitted in DML (`INSERT`, `UPDATE`, etc.)

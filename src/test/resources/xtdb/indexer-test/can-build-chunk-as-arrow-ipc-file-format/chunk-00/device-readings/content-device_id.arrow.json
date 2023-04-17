@@ -1,7 +1,7 @@
 {
   "schema" : {
     "fields" : [{
-      "name" : "mem-free",
+      "name" : "device_id",
       "nullable" : false,
       "type" : {
         "name" : "union",
@@ -9,11 +9,10 @@
         "typeIds" : [ ]
       },
       "children" : [{
-        "name" : "f64",
+        "name" : "utf8",
         "nullable" : false,
         "type" : {
-          "name" : "floatingpoint",
-          "precision" : "DOUBLE"
+          "name" : "utf8"
         },
         "children" : [ ]
       }]
@@ -22,15 +21,16 @@
   "batches" : [{
     "count" : 2,
     "columns" : [{
-      "name" : "mem-free",
+      "name" : "device_id",
       "count" : 2,
       "TYPE_ID" : [0,0],
       "OFFSET" : [0,1],
       "children" : [{
-        "name" : "f64",
+        "name" : "utf8",
         "count" : 2,
         "VALIDITY" : [1,1],
-        "DATA" : [4.10011078E8,7.20742332E8]
+        "OFFSET" : [0,22,44],
+        "DATA" : ["device-info-demo000000","device-info-demo000001"]
       }]
     }]
   }]

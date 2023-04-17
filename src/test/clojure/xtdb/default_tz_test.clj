@@ -23,25 +23,25 @@
              (xt/q tu/*node* q {:default-tz #time/zone "America/Los_Angeles"})))))
 
 (t/deftest can-specify-default-tz-in-dml-396
-  (let [q "INSERT INTO foo (xt__id, dt, tstz) VALUES (?, DATE '2020-08-01', CAST(DATE '2020-08-01' AS TIMESTAMP WITH TIME ZONE))"]
+  (let [q "INSERT INTO foo (xt$id, dt, tstz) VALUES (?, DATE '2020-08-01', CAST(DATE '2020-08-01' AS TIMESTAMP WITH TIME ZONE))"]
     (xt/submit-tx tu/*node* [[:sql q [["foo"]]]])
     (let [tx (xt/submit-tx tu/*node* [[:sql q [["bar"]]]]
                            {:default-tz #time/zone "America/Los_Angeles"})
-          q "SELECT foo.xt__id, foo.dt, CAST(foo.dt AS TIMESTAMP WITH TIME ZONE) cast_tstz, foo.tstz FROM foo"]
+          q "SELECT foo.xt$id, foo.dt, CAST(foo.dt AS TIMESTAMP WITH TIME ZONE) cast_tstz, foo.tstz FROM foo"]
 
-      (t/is (= [{:xt__id "foo", :dt #time/date "2020-08-01",
+      (t/is (= [{:xt$id "foo", :dt #time/date "2020-08-01",
                  :cast_tstz #time/zoned-date-time "2020-08-01T00:00+01:00[Europe/London]"
                  :tstz #time/zoned-date-time "2020-08-01T00:00+01:00[Europe/London]"}
-                {:xt__id "bar", :dt #time/date "2020-08-01"
+                {:xt$id "bar", :dt #time/date "2020-08-01"
                  :cast_tstz #time/zoned-date-time "2020-08-01T00:00+01:00[Europe/London]"
                  :tstz #time/zoned-date-time "2020-08-01T00:00-07:00[America/Los_Angeles]"}]
 
                (xt/q tu/*node* q {:basis {:tx tx}})))
 
-      (t/is (= [{:xt__id "foo", :dt #time/date "2020-08-01",
+      (t/is (= [{:xt$id "foo", :dt #time/date "2020-08-01",
                  :cast_tstz #time/zoned-date-time "2020-08-01T00:00-07:00[America/Los_Angeles]"
                  :tstz #time/zoned-date-time "2020-08-01T00:00+01:00[Europe/London]"}
-                {:xt__id "bar", :dt #time/date "2020-08-01"
+                {:xt$id "bar", :dt #time/date "2020-08-01"
                  :cast_tstz #time/zoned-date-time "2020-08-01T00:00-07:00[America/Los_Angeles]"
                  :tstz #time/zoned-date-time "2020-08-01T00:00-07:00[America/Los_Angeles]"}]
 

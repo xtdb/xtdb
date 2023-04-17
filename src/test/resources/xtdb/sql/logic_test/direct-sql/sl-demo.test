@@ -3,12 +3,12 @@ hash-threshold 100
 variable SET APP_TIME_DEFAULTS TO AS_OF_NOW
 
 statement ok
-INSERT INTO Prop_Owner (xt__id, customer_number, property_number, application_time_start)
+INSERT INTO Prop_Owner (xt$id, customer_number, property_number, application_time_start)
 VALUES (1, 145, 7797, DATE '1998-01-10')
 
 query IIITTTT nosort
 SELECT *
-  FROM Prop_Owner AS x (xt__id,
+  FROM Prop_Owner AS x (xt$id,
                         customer_number,
                         property_number,
                         application_time_start,
@@ -25,12 +25,12 @@ SELECT *
 9999-12-31T23:59:59.999999Z[UTC]
 
 statement ok
-INSERT INTO Prop_Owner (xt__id, customer_number, property_number, application_time_start)
+INSERT INTO Prop_Owner (xt$id, customer_number, property_number, application_time_start)
 VALUES (1, 827, 7797, DATE '1998-01-15')
 
 query IIITTTT nosort
 SELECT *
-  FROM Prop_Owner AS x (xt__id,
+  FROM Prop_Owner AS x (xt$id,
                         customer_number,
                         property_number,
                         application_time_start,
@@ -51,7 +51,7 @@ SELECT *
   FROM Prop_Owner
          FOR ALL SYSTEM_TIME
          FOR ALL APPLICATION_TIME
-         AS x (xt__id,
+         AS x (xt$id,
                customer_number,
                property_number,
                application_time_start,
@@ -90,7 +90,7 @@ WHERE Prop_Owner.property_number = 7797
 query IIITTTT nosort
 SELECT *
   FROM Prop_Owner
-         AS x (xt__id,
+         AS x (xt$id,
                customer_number,
                property_number,
                application_time_start,
@@ -104,7 +104,7 @@ SELECT *
   FROM Prop_Owner
          FOR ALL SYSTEM_TIME
          FOR ALL APPLICATION_TIME
-         AS x (xt__id,
+         AS x (xt$id,
                customer_number,
                property_number,
                application_time_start,
@@ -142,7 +142,7 @@ SELECT *
 9999-12-31T23:59:59.999999Z[UTC]
 
 statement ok
-INSERT INTO Prop_Owner (xt__id, customer_number, property_number, application_time_start, application_time_end)
+INSERT INTO Prop_Owner (xt$id, customer_number, property_number, application_time_start, application_time_end)
 VALUES (1, 145, 7797, DATE '1998-01-03', DATE '1998-01-10')
 
 query IIITTTT nosort
@@ -150,7 +150,7 @@ SELECT *
   FROM Prop_Owner
          FOR ALL SYSTEM_TIME
          FOR ALL APPLICATION_TIME
-         AS x (xt__id,
+         AS x (xt$id,
                customer_number,
                property_number,
                application_time_start,
@@ -205,7 +205,7 @@ SELECT *
   FROM Prop_Owner
          FOR ALL SYSTEM_TIME
          FOR ALL APPLICATION_TIME
-         AS x (xt__id,
+         AS x (xt$id,
                customer_number,
                property_number,
                application_time_start,
@@ -257,7 +257,7 @@ SELECT *
 9999-12-31T23:59:59.999999Z[UTC]
 
 statement ok
-INSERT INTO Prop_Owner (xt__id,
+INSERT INTO Prop_Owner (xt$id,
                         customer_number,
                         property_number,
                         application_time_start,
@@ -270,7 +270,7 @@ SELECT *
   FROM Prop_Owner
          FOR ALL SYSTEM_TIME
          FOR ALL APPLICATION_TIME
-         AS x (xt__id,
+         AS x (xt$id,
                customer_number,
                property_number,
                application_time_start,
@@ -353,7 +353,7 @@ query IIITTTT nosort
 SELECT *
   FROM Prop_Owner
          FOR ALL APPLICATION_TIME
-         AS x (xt__id,
+         AS x (xt$id,
                customer_number,
                property_number,
                application_time_start,
@@ -381,7 +381,7 @@ SELECT *
   FROM Prop_Owner
          FOR ALL SYSTEM_TIME
          FOR ALL APPLICATION_TIME
-         AS x (xt__id,
+         AS x (xt$id,
                customer_number,
                property_number,
                application_time_start,
@@ -579,7 +579,7 @@ SELECT *
 9999-12-31T23:59:59.999999Z[UTC]
 
 statement ok
-INSERT INTO Prop_Owner (xt__id, customer_number, property_number, application_time_start)
+INSERT INTO Prop_Owner (xt$id, customer_number, property_number, application_time_start)
 VALUES (2, 827, 3621, DATE '1998-01-15')
 ----
 
@@ -588,7 +588,7 @@ SELECT *
   FROM Prop_Owner
          FOR ALL SYSTEM_TIME
          FOR ALL APPLICATION_TIME
-         AS x (xt__id,
+         AS x (xt$id,
                customer_number,
                property_number,
                application_time_start,

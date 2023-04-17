@@ -7,7 +7,6 @@
 (ns xtdb.core.datalog-test
   (:require [clojure.set :as set]
             [clojure.test :as t :refer [deftest]]
-            [clojure.walk :as walk]
             [xtdb.datalog :as xt]
             [xtdb.james-bond :as bond]
             [xtdb.node :as node]
@@ -1991,9 +1990,9 @@
   (t/is (= '[{:plan [:project [name age]
                      [:project [{age _r0_age} {name _r0_name} {pid _r0_pid}]
                       [:rename {age _r0_age, name _r0_name, pid _r0_pid}
-                       [:project [{pid xt__id} name age]
+                       [:project [{pid xt/id} name age]
                         [:scan {:table people, :for-app-time nil, :for-sys-time nil}
-                         [age name {xt__id (= xt__id ?pid)}]]]]]]}]
+                         [age name {xt/id (= xt/id ?pid)}]]]]]]}]
 
            (xt/q tu/*node*
                  '{:find [name age]
@@ -2112,7 +2111,7 @@
                      :default-all-app-time? true})))))
 
 (t/deftest test-sql-insert
-  (xt/submit-tx tu/*node* [[:sql "INSERT INTO foo (xt__id) VALUES (0)"]])
+  (xt/submit-tx tu/*node* [[:sql "INSERT INTO foo (xt$id) VALUES (0)"]])
   (t/is (= [{:xt/id 0}]
            (xt/q tu/*node*
                  '{:find [xt/id]
@@ -2155,11 +2154,9 @@
 (t/deftest test-row-alias
   (let [docs [{:xt/id 42, :firstname "bob"}
               {:xt/id 43, :firstname "alice", :lastname "carrol"}
-              {:xt/id 44, :firstname "jim", :orders [{:sku "eggs", :qty 2}, {:sku "cheese", :qty 1}]}]
-        ;; this renaming behaviour is expected to change so that we round trip here, but for now we don't.
-        read-docs (mapv #(set/rename-keys % {:xt/id :xt__id}) docs)]
+              {:xt/id 44, :firstname "jim", :orders [{:sku "eggs", :qty 2}, {:sku "cheese", :qty 1}]}]]
     (xt/submit-tx tu/*node* (map (partial vector :put :customer) docs))
-    (t/is (= (mapv (fn [doc] {:c doc}) read-docs) (xt/q tu/*node* '{:find [c] :where [($ :customer {:xt/* c})]})))))
+    (t/is (= (mapv (fn [doc] {:c doc}) docs) (xt/q tu/*node* '{:find [c] :where [($ :customer {:xt/* c})]})))))
 
 (t/deftest test-row-alias-sys-time-key-set
   (let [inputs
@@ -2173,16 +2170,16 @@
 
         q (partial xt/q tu/*node*)]
 
-    (t/is (= [{:x {:xt__id 0, :a 0, :c 0}}]
+    (t/is (= [{:x {:xt/id 0, :a 0, :c 0}}]
              (q '{:find [x]
                   :where [($ :x {:xt/* x})]})))
 
-    (t/is (= [{:x {:xt__id 0, :b 0}}]
+    (t/is (= [{:x {:xt/id 0, :b 0}}]
              (q '{:find [x]
                   :where [($ :x {:xt/* x})],
                   :basis {:tx #xt/tx-key {:tx-id 1, :sys-time #time/instant "2023-01-18T00:00:00Z"}}})))
 
-    (t/is (= [{:x {:xt__id 0, :a 0}}]
+    (t/is (= [{:x {:xt/id 0, :a 0}}]
              (q '{:find [x]
                   :where [($ :x {:xt/* x})],
                   :basis {:tx #xt/tx-key {:tx-id 0, :sys-time #time/instant "2023-01-17T00:00:00Z"}}})))))
@@ -2199,14 +2196,23 @@
 
         q (partial xt/q tu/*node*)]
 
-    (t/is (= [{:x {:xt__id 0, :a 0, :c 0}}]
+    (t/is (= [{:x {:xt/id 0, :a 0, :c 0}}]
              (q '{:find [x]
                   :where [($ :x {:xt/* x})]})))
 
-    (t/is (= [{:x {:xt__id 0, :b 0}}]
+    (t/is (= [{:x {:xt/id 0, :b 0}}]
              (q '{:find [x]
                   :where [($ :x {:xt/* x} {:for-app-time [:at #time/instant "2023-01-18T00:00:00Z"]})],})))
 
-    (t/is (= [{:x {:xt__id 0, :a 0}}]
+    (t/is (= [{:x {:xt/id 0, :a 0}}]
              (q '{:find [x]
                   :where [($ :x {:xt/* x} {:for-app-time [:at #time/instant "2023-01-17T00:00:00Z"]})]})))))
+
+(t/deftest test-normalisation
+  (xt/submit-tx tu/*node* [[:put :xt-docs {:xt/id "doc" :Foo/Bar 1 :Bar.Foo/hELLo-wORLd 2}]])
+  (t/is (= [{:Foo/Bar 1, :Bar.Foo/Hello-World 2}]
+           (xt/q tu/*node* '{:find [Foo/Bar Bar.Foo/Hello-World]
+                             :where [(match :xt-docs [Foo/Bar Bar.Foo/Hello-World])]})))
+  (t/is (= [{:bar 1, :foo 2}]
+           (xt/q tu/*node* '{:find [bar foo]
+                             :where [(match :xt-docs {:foo/bar bar :bar.foo/hello-world foo})]}))))

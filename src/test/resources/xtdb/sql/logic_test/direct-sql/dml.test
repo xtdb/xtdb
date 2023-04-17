@@ -1,13 +1,13 @@
 hash-threshold 100
 
 statement ok
-INSERT INTO t1(xt__id, col1, col2) VALUES(1,'fish',1000)
+INSERT INTO t1(xt$id, col1, col2) VALUES(1,'fish',1000)
 
 statement ok
-INSERT INTO t1(xt__id, col1, col2) VALUES(2,'dog',2000)
+INSERT INTO t1(xt$id, col1, col2) VALUES(2,'dog',2000)
 
 query ITI rowsort
-SELECT t1.xt__id, t1.col1, t1.col2 FROM t1
+SELECT t1.xt$id, t1.col1, t1.col2 FROM t1
 ----
 1
 fish
@@ -17,14 +17,14 @@ dog
 2000
 
 query TII rowsort
-SELECT t2.xt__id, t2.col1, t2.col2 FROM t2
+SELECT t2.xt$id, t2.col1, t2.col2 FROM t2
 ----
 
 statement ok
 UPDATE t1 SET col1 = 30 WHERE t1.col2 IN (313, 2000)
 
 query ITI rowsort
-SELECT t1.xt__id, t1.col1, t1.col2 FROM t1
+SELECT t1.xt$id, t1.col1, t1.col2 FROM t1
 ----
 1
 fish
@@ -37,6 +37,6 @@ statement ok
 DELETE FROM t1 WHERE t1.col1 = 'fish'
 
 query ITI rowsort
-SELECT t1.xt__id FROM t1
+SELECT t1.xt$id FROM t1
 ----
 2

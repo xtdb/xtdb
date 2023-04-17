@@ -21,7 +21,7 @@
 ;; https://core.ac.uk/download/pdf/148787624.pdf
 
 (s/def ::relation simple-symbol?)
-(s/def ::column simple-symbol?)
+(s/def ::column symbol?)
 
 ;; TODO flesh out
 (s/def ::value (some-fn string? number? inst? keyword? (partial instance? LocalDate)))

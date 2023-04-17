@@ -627,18 +627,40 @@
 (defn ->kebab-case-kw [s]
   (-> s name str/lower-case (str/replace "_" "-") keyword))
 
-(defn ns-kw->kw [kw]
+(defn- ->normal-form [s]
+  (-> s str/lower-case (str/replace "." "$") (str/replace "-" "_")))
+
+(defn- <-normal-form [s]
+  (-> s (str/replace "$" ".") (str/replace "_" "-")))
+
+(defn kw->normal-form-kw [kw]
   (if-let [ns (namespace kw)]
-    (keyword (str ns "__" (name kw)))
-    kw))
+    (keyword (str (->normal-form ns) "$" (->normal-form (name kw))))
+    (keyword (->normal-form (name kw)))))
 
-(defn kw->ns-kw [kw]
-  (apply keyword (str/split (name kw) #"__")))
+(defn normal-form-kw->datalog-form-kw [kw]
+  (let [kw (name kw)]
+    (if-let [^int i (str/last-index-of kw "$")]
+      (let [ns (subs kw 0 i)
+            kw (subs kw (inc i))]
+        (keyword (<-normal-form ns) (<-normal-form kw)))
+      (keyword (<-normal-form kw)))))
 
-(defn ns-symbol->symbol [s]
+(defn symbol->normal-form-symbol [s]
   (if-let [ns (namespace s)]
-    (with-meta (symbol (str ns "__" (name s))) (meta s))
-    s))
+    (symbol (str (->normal-form ns) "$" (->normal-form (name s))))
+    (symbol (->normal-form (name s)))))
 
-(defn symbol->ns-symbol [s]
-  (with-meta (apply symbol (str/split (name s) #"__")) (meta s)))
+(defn str->normal-form-str [s]
+  (if (= s "_row-id")
+    s
+    (if-let [^int i (str/last-index-of s "/")]
+      (str (->normal-form (subs s 0 i)) "$" (->normal-form (subs s (inc i))))
+      (->normal-form s))))
+
+(defn normal-form-str->datalog-form-str [s]
+  (if-let [^int i (str/last-index-of s "$")]
+    (let [ns (subs s 0 i)
+          s (subs s (inc i))]
+      (str (<-normal-form ns)  "/" (<-normal-form s)))
+    (<-normal-form s)))
