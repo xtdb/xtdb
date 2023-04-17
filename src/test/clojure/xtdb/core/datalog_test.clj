@@ -5,7 +5,9 @@
 ;; https://github.com/tonsky/datascript
 
 (ns xtdb.core.datalog-test
-  (:require [clojure.test :as t :refer [deftest]]
+  (:require [clojure.set :as set]
+            [clojure.test :as t :refer [deftest]]
+            [clojure.walk :as walk]
             [xtdb.datalog :as xt]
             [xtdb.james-bond :as bond]
             [xtdb.node :as node]
@@ -2104,3 +2106,62 @@
            (xt/q tu/*node*
                  '{:find [foo]
                    :where [(match :bar [foo])]}))))
+
+(t/deftest test-row-alias
+  (let [docs [{:xt/id 42, :firstname "bob"}
+              {:xt/id 43, :firstname "alice", :lastname "carrol"}
+              {:xt/id 44, :firstname "jim", :orders [{:sku "eggs", :qty 2}, {:sku "cheese", :qty 1}]}]
+        ;; this renaming behaviour is expected to change so that we round trip here, but for now we don't.
+        read-docs (mapv #(set/rename-keys % {:xt/id :xt__id}) docs)]
+    (xt/submit-tx tu/*node* (map (partial vector :put :customer) docs))
+    (t/is (= (mapv (fn [doc] {:c doc}) read-docs) (xt/q tu/*node* '{:find [c] :where [($ :customer {:xt/* c})]})))))
+
+(t/deftest test-row-alias-sys-time-key-set
+  (let [inputs
+        [[{:xt/id 0, :a 0} #inst "2023-01-17T00:00:00"]
+         [{:xt/id 0, :b 0} #inst "2023-01-18T00:00:00"]
+         [{:xt/id 0, :c 0, :a 0} #inst "2023-01-19T00:00:00"]]
+
+        _
+        (doseq [[doc sys-time] inputs]
+          (xt/submit-tx tu/*node* [[:put :x doc]] {:sys-time sys-time}))
+
+        q (partial xt/q tu/*node*)]
+
+    (t/is (= [{:x {:xt__id 0, :a 0, :c 0}}]
+             (q '{:find [x]
+                  :where [($ :x {:xt/* x})]})))
+
+    (t/is (= [{:x {:xt__id 0, :b 0}}]
+             (q '{:find [x]
+                  :where [($ :x {:xt/* x})],
+                  :basis {:tx #xt/tx-key {:tx-id 1, :sys-time #time/instant "2023-01-18T00:00:00Z"}}})))
+
+    (t/is (= [{:x {:xt__id 0, :a 0}}]
+             (q '{:find [x]
+                  :where [($ :x {:xt/* x})],
+                  :basis {:tx #xt/tx-key {:tx-id 0, :sys-time #time/instant "2023-01-17T00:00:00Z"}}})))))
+
+(t/deftest test-row-alias-app-time-key-set
+  (let [inputs
+        [[{:xt/id 0, :a 0} #inst "2023-01-17T00:00:00"]
+         [{:xt/id 0, :b 0} #inst "2023-01-18T00:00:00"]
+         [{:xt/id 0, :c 0, :a 0} #inst "2023-01-19T00:00:00"]]
+
+        _
+        (doseq [[doc app-time] inputs]
+          (xt/submit-tx tu/*node* [[:put :x doc {:for-app-time [:in app-time]}]]))
+
+        q (partial xt/q tu/*node*)]
+
+    (t/is (= [{:x {:xt__id 0, :a 0, :c 0}}]
+             (q '{:find [x]
+                  :where [($ :x {:xt/* x})]})))
+
+    (t/is (= [{:x {:xt__id 0, :b 0}}]
+             (q '{:find [x]
+                  :where [($ :x {:xt/* x} {:for-app-time [:at #time/instant "2023-01-18T00:00:00Z"]})],})))
+
+    (t/is (= [{:x {:xt__id 0, :a 0}}]
+             (q '{:find [x]
+                  :where [($ :x {:xt/* x} {:for-app-time [:at #time/instant "2023-01-17T00:00:00Z"]})]})))))

@@ -48,7 +48,7 @@
 (defrecord Node [^BufferAllocator allocator
                  ^Ingester ingester, ^IIndexer indexer
                  ^ITxProducer tx-producer
-                 ^IRaQuerySource ra-src, wm-src
+                 ^IRaQuerySource ra-src, wm-src, scan-emitter
                  default-tz
                  !latest-submitted-tx
                  system, close-fn]
@@ -59,7 +59,7 @@
       (-> (.awaitTxAsync ingester (get-in query [:basis :after-tx]) (:basis-timeout query))
           (util/then-apply
             (fn [_]
-              (d/open-datalog-query allocator ra-src wm-src query args))))))
+              (d/open-datalog-query allocator ra-src wm-src scan-emitter query args))))))
 
   (open-sql& [_ query query-opts]
     (let [query-opts (-> (into {:default-tz default-tz} query-opts)
@@ -104,7 +104,8 @@
           :ingester (ig/ref :xtdb/ingester)
           :tx-producer (ig/ref ::txp/tx-producer)
           :default-tz (ig/ref :xtdb/default-tz)
-          :ra-src (ig/ref :xtdb.operator/ra-query-source)}
+          :ra-src (ig/ref :xtdb.operator/ra-query-source)
+          :scan-emitter (ig/ref :xtdb.operator.scan/scan-emitter)}
          opts))
 
 (defmethod ig/init-key ::node [_ deps]

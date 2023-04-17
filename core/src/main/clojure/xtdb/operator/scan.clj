@@ -46,6 +46,7 @@
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (definterface IScanEmitter
+  (tableColNames [^xtdb.watermark.IWatermark wm, ^String table-name])
   (scanColTypes [^xtdb.watermark.IWatermark wm, scan-cols])
   (emitScan [scan-expr scan-col-types param-types]))
 
@@ -413,6 +414,12 @@
 
 (defmethod ig/init-key ::scan-emitter [_ {:keys [^IMetadataManager metadata-mgr, ^IBufferPool buffer-pool]}]
   (reify IScanEmitter
+    (tableColNames [_ wm table-name]
+      (into #{} cat [(keys (.columnTypes metadata-mgr table-name))
+                     (some-> (.liveChunk wm)
+                             (.liveTable table-name)
+                             (.columnTypes)
+                             keys)]))
     (scanColTypes [_ wm scan-cols]
       (letfn [(->col-type [[table col-name]]
                 (if (temporal/temporal-column? col-name)

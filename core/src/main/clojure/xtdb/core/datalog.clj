@@ -5,13 +5,16 @@
             [xtdb.error :as err]
             [xtdb.logical-plan :as lp]
             [xtdb.operator :as op]
+            [xtdb.rewrite :as r]
             [xtdb.util :as util]
             [xtdb.vector.writer :as vw])
   (:import (clojure.lang MapEntry)
            (java.lang AutoCloseable)
            (org.apache.arrow.memory BufferAllocator)
            xtdb.IResultSet
-           (xtdb.operator IRaQuerySource)))
+           (xtdb.operator IRaQuerySource)
+           (xtdb.operator.scan IScanEmitter)
+           (xtdb.watermark IWatermarkSource Watermark)))
 
 (s/def ::logic-var (s/and symbol?
                           (s/conformer util/ns-symbol->symbol util/symbol->ns-symbol)))
@@ -1175,12 +1178,45 @@
                args)
        (into {})))
 
-(defn open-datalog-query ^xtdb.IResultSet [^BufferAllocator allocator, ^IRaQuerySource ra-src, wm-src
+(def row-alias-sym 'xt__*)
+
+(defn apply-datalog-specific-rewrites [plan basis
+                                       ^IWatermarkSource wm-src,
+                                       ^IScanEmitter scan-emitter]
+  (let [{:keys [tx, after-tx]} basis
+        wm-tx (or tx after-tx)
+        wm-delay (delay (.openWatermark wm-src wm-tx))
+        table-col-names
+        (memoize
+          (fn [table]
+            (let [^Watermark wm @wm-delay]
+              (.tableColNames scan-emitter wm (name table)))))]
+    (try
+      (letfn [(rewrite-row-alias [z]
+                (r/zmatch
+                  z
+                  [:scan scan-opts scan-cols]
+                  (when (some #(= row-alias-sym %) scan-cols)
+                    (let [table (:table scan-opts)
+                          table-cols (table-col-names table)
+                          struct-keys (map keyword table-cols)
+                          scan-row-cols (map symbol table-cols)]
+                      [:map [{row-alias-sym (into {} (zipmap struct-keys scan-row-cols))}]
+                       [:scan scan-opts (into [] (comp cat (filter #(not= row-alias-sym %))) [scan-cols, scan-row-cols])]]))))]
+        (->> plan
+             (r/vector-zip)
+             (r/innermost (r/mono-tp rewrite-row-alias))
+             (r/node)))
+      (finally
+        (when (realized? wm-delay) (util/try-close @wm-delay))))))
+
+(defn open-datalog-query ^xtdb.IResultSet [^BufferAllocator allocator, ^IRaQuerySource ra-src, wm-src, ^IScanEmitter scan-emitter
                                            {:keys [default-all-app-time? basis default-tz explain?] :as query} args]
   (let [plan (compile-query (dissoc query :default-all-app-time? :basis :basis-timeout))
         {::keys [in-bindings]} (meta plan)
 
         plan (-> plan
+                 (apply-datalog-specific-rewrites basis wm-src scan-emitter)
                  #_(doto clojure.pprint/pprint)
                  #_(->> (binding [*print-meta* true]))
                  (lp/rewrite-plan {})

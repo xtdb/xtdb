@@ -40,6 +40,7 @@
            xtdb.metadata.IMetadataManager
            xtdb.object_store.ObjectStore
            xtdb.operator.IRaQuerySource
+           (xtdb.operator.scan IScanEmitter)
            (xtdb.temporal ITemporalManager ITemporalTxIndexer)
            (xtdb.vector IIndirectRelation IIndirectVector IRowCopier)
            (xtdb.watermark IWatermark IWatermarkSource)))
@@ -190,9 +191,9 @@
               (catch Throwable t
                 (throw (err/runtime-err :xtdb.call/error-compiling-tx-fn {:fn-form fn-form} t))))))))))
 
-(defn- tx-fn-q [allocator ra-src wm-src tx-opts q & args]
+(defn- tx-fn-q [allocator ra-src wm-src scan-emitter tx-opts q & args]
   (let [q (into tx-opts q)]
-    (with-open [res (d/open-datalog-query allocator ra-src wm-src q args)]
+    (with-open [res (d/open-datalog-query allocator ra-src wm-src scan-emitter q args)]
       (vec (iterator-seq res)))))
 
 (defn- tx-fn-sql
@@ -214,14 +215,14 @@
 (defn reset-tx-fn-error! []
   (first (reset-vals! !last-tx-fn-error nil)))
 
-(defn- ->call-indexer ^xtdb.indexer.OpIndexer [allocator, ra-src, wm-src
+(defn- ->call-indexer ^xtdb.indexer.OpIndexer [allocator, ra-src, wm-src, scan-emitter
                                                ^DenseUnionVector tx-ops-vec, {:keys [tx-key] :as tx-opts}]
   (let [call-vec (.getStruct tx-ops-vec 4)
         ^DenseUnionVector fn-id-vec (.getChild call-vec "fn-id" DenseUnionVector)
         ^ListVector args-vec (.getChild call-vec "args" ListVector)
 
         ;; TODO confirm/expand API that we expose to tx-fns
-        sci-ctx (sci/init {:bindings {'q (partial tx-fn-q allocator ra-src wm-src tx-opts)
+        sci-ctx (sci/init {:bindings {'q (partial tx-fn-q allocator ra-src wm-src scan-emitter tx-opts)
                                       'sql-q (partial tx-fn-sql allocator ra-src wm-src tx-opts)
                                       'sleep (fn [n] (Thread/sleep n))
                                       '*current-tx* tx-key}})]
@@ -479,6 +480,7 @@
 (deftype Indexer [^BufferAllocator allocator
                   ^ObjectStore object-store
                   ^IMetadataManager metadata-mgr
+                  ^IScanEmitter scan-emitter
                   ^IBufferPool buffer-pool
                   ^ITemporalManager temporal-mgr
                   ^IInternalIdManager iid-mgr
@@ -515,7 +517,7 @@
                   (let [!put-idxer (delay (->put-indexer iid-mgr log-op-idxer temporal-idxer live-chunk-tx tx-ops-vec sys-time))
                         !delete-idxer (delay (->delete-indexer iid-mgr log-op-idxer temporal-idxer live-chunk-tx tx-ops-vec sys-time))
                         !evict-idxer (delay (->evict-indexer iid-mgr log-op-idxer temporal-idxer live-chunk-tx tx-ops-vec))
-                        !call-idxer (delay (->call-indexer allocator ra-src wm-src tx-ops-vec tx-opts))
+                        !call-idxer (delay (->call-indexer allocator ra-src wm-src scan-emitter tx-ops-vec tx-opts))
                         !sql-idxer (delay (->sql-indexer allocator metadata-mgr buffer-pool iid-mgr
                                                          log-op-idxer temporal-idxer live-chunk-tx
                                                          tx-ops-vec ra-src wm-src tx-opts))]
@@ -656,6 +658,7 @@
   (merge {:allocator (ig/ref :xtdb/allocator)
           :object-store (ig/ref :xtdb/object-store)
           :metadata-mgr (ig/ref ::meta/metadata-manager)
+          :scan-emitter (ig/ref :xtdb.operator.scan/scan-emitter)
           :temporal-mgr (ig/ref ::temporal/temporal-manager)
           :internal-id-mgr (ig/ref :xtdb.indexer/internal-id-manager)
           :live-chunk (ig/ref :xtdb/live-chunk)
@@ -665,12 +668,12 @@
          opts))
 
 (defmethod ig/init-key :xtdb/indexer
-  [_ {:keys [allocator object-store metadata-mgr buffer-pool ^ITemporalManager temporal-mgr, ra-src
+  [_ {:keys [allocator object-store metadata-mgr scan-emitter buffer-pool ^ITemporalManager temporal-mgr, ra-src
              internal-id-mgr log-indexer live-chunk]}]
 
   (let [{:keys [latest-completed-tx]} (meta/latest-chunk-metadata metadata-mgr)]
 
-    (Indexer. allocator object-store metadata-mgr buffer-pool temporal-mgr internal-id-mgr
+    (Indexer. allocator object-store metadata-mgr scan-emitter buffer-pool temporal-mgr internal-id-mgr
               ra-src log-indexer live-chunk
 
               latest-completed-tx
