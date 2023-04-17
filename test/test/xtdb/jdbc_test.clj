@@ -8,7 +8,8 @@
             [xtdb.fixtures.lubm :as fl]
             [juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc :as jdbc]
             [juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc.result-set :as jdbcr]
-            [xtdb.jdbc :as j]))
+            [xtdb.jdbc :as j])
+  (:import (java.util UUID)))
 
 (comment
   ;; NOTE: CI does not run the tests for all dialects, to do so, run the setup code below.
@@ -180,8 +181,8 @@
                        (with-redefs [jdbc/execute! jdbc-execute]
                          (dotimes [_ n]
                            (#'j/insert-event! pool
-                             (str (random-uuid))
-                             (str (random-uuid))
+                             (str (UUID/randomUUID))
+                             (str (UUID/randomUUID))
                              "not-a-topic"))))
         captured-queries (atom [])]
 

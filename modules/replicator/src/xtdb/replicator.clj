@@ -15,6 +15,8 @@
 (defprotocol TestReplicator
   (force-close-file! [test-replicator]))
 
+(defn- update-vals-backport [m f] (persistent! (reduce-kv #(assoc! %1 %2 (f %3)) (transient {}) m)))
+
 (def tj-write-handlers
   (merge {Id (t/write-handler "xtdb/oid" str)
           EDNId (t/write-handler "xtdb/oid" str)
@@ -35,7 +37,7 @@
               Year "time/year"
               YearMonth "time/year-month"
               MonthDay "time/month-day"}
-             (update-vals #(t/write-handler % str)))))
+             (update-vals-backport #(t/write-handler % str)))))
 
 (def ^"[Ljava.nio.file.attribute.FileAttribute;" empty-file-attrs
   (make-array FileAttribute 0))

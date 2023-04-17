@@ -5,8 +5,7 @@
             [clojure.spec.alpha :as s]
             [clojure.string :as str]
             [clojure.tools.logging :as log]
-            [juxt.clojars-mirrors.nippy.v3v1v1.taoensso.nippy :as nippy]
-            [cognitect.anomalies :as-alias anomalies])
+            [juxt.clojars-mirrors.nippy.v3v1v1.taoensso.nippy :as nippy])
   (:import (clojure.lang Box MapEntry)
            [java.io DataInputStream DataOutputStream File IOException Reader]
            (java.lang AutoCloseable)
@@ -403,10 +402,10 @@
        :or {retryable (fn default-retryable [t]
                         (let [data (ex-data t)
                               not-found (Object.)
-                              category (::anomalies/category data not-found)]
+                              category (:cognitect.anomalies/category data not-found)]
                           (if (identical? not-found category)
                             (instance? Exception t)
-                            (contains? #{::anomalies/unavailable, ::anomalies/busy} category))))
+                            (contains? #{:cognitect.anomalies/unavailable, :cognitect.anomalies/busy} category))))
             start-wait-ms 50
             on-retry #(log/error % "Retryable exception caught during exp-backoff loop")
             wait-mul 2

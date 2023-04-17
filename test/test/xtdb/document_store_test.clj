@@ -9,7 +9,8 @@
             [xtdb.kv.document-store :as kv-doc-store]
             [xtdb.mem-kv :as mem-kv])
   (:import (clojure.lang IFn)
-           (java.io Closeable)))
+           (java.io Closeable)
+           (java.util UUID)))
 
 (defn dodgy-doc-store
   ([] (dodgy-doc-store (kv-doc-store/->document-store {:kv-store (mem-kv/->kv-store)
@@ -53,7 +54,7 @@
                         on-ret (constantly nil)
                         on-ex (constantly nil)
                         on-done (constantly nil)}}]
-  (let [fid (str (random-uuid))
+  (let [fid (str (UUID/randomUUID))
         f (eval f)
         f' '(fn [ctx fid & args] ((requiring-resolve 'xtdb.document-store-test/run-test-tx-fn) fid (cons ctx args)))
         ret-ref (atom nil)
@@ -107,7 +108,7 @@
 
 (t/deftest reads-during-tx-processing-recovery-test
   (doseq [example recoverable-exceptions
-          :let [unique-msg (str (random-uuid))
+          :let [unique-msg (str (UUID/randomUUID))
                 ex (construct-ex example unique-msg)
                 retried (promise)]]
     (with-open [node (dodgy-node)]
@@ -123,7 +124,7 @@
 
 (t/deftest reads-during-tx-processing-panic-test
   (doseq [example unrecoverable-exceptions
-          :let [unique-msg (str (random-uuid))
+          :let [unique-msg (str (UUID/randomUUID))
                 ex (construct-ex example "test panic")]]
     (with-open [node (dodgy-node)]
       (misbehave node ex)
@@ -136,7 +137,7 @@
           call ['(xtdb.api/entity (xtdb.api/db ctx) 0)
                 '(xtdb.api/pull (xtdb.api/db ctx) [:foo] 0)
                 '(xtdb.api/q (xtdb.api/db ctx) (quote {:find [(pull ?e [:foo])] :where [[?e :xt/id 0]]}))]]
-    (let [unique-msg (str (random-uuid))
+    (let [unique-msg (str (UUID/randomUUID))
           ex (construct-ex example unique-msg)
           retried (promise)]
       (with-open [node (dodgy-node)]
@@ -194,7 +195,7 @@
         start-node #(xt/start-node node-opts)]
 
     (let [node (start-node)
-          unique-msg (str (random-uuid))
+          unique-msg (str (UUID/randomUUID))
           ex (Exception. unique-msg)
           retried (promise)]
       (with-redefs [xio/sleep (constantly nil)
