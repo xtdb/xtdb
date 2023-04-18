@@ -1092,12 +1092,9 @@
    :->call-code (fn [[x start length use-len]]
                   `(StringUtil/sqlBinSubstring (resolve-buf ~x) ~start ~length ~use-len))})
 
-(defmethod codegen-call [:character-length :utf8 :utf8] [{:keys [args]}]
-  (let [[_ unit] (map :literal args)]
-    {:return-type :i32
-     :->call-code (case unit
-                    "CHARACTERS" #(do `(StringUtil/utf8Length (resolve-utf8-buf ~(first %))))
-                    "OCTETS" #(do `(.remaining (resolve-utf8-buf ~(first %)))))}))
+(defmethod codegen-call [:character-length :utf8] [{:keys [args]}]
+  {:return-type :i32
+   :->call-code #(do `(StringUtil/utf8Length (resolve-utf8-buf ~(first %))))})
 
 (defmethod codegen-call [:octet-length :utf8] [_]
   {:return-type :i32

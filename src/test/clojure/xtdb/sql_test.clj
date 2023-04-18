@@ -502,14 +502,14 @@
   (t/is (= '(concat (concat x1 "a") "b") (plan-expr "foo.a || 'a' || 'b'"))))
 
 (t/deftest test-character-length-expr
-  (t/is (= '(character-length x1 "CHARACTERS") (plan-expr "CHARACTER_LENGTH(foo.a)")))
-  (t/is (= '(character-length x1 "CHARACTERS") (plan-expr "CHARACTER_LENGTH(foo.a USING CHARACTERS)")))
-  (t/is (= '(character-length x1 "OCTETS") (plan-expr "CHARACTER_LENGTH(foo.a USING OCTETS)"))))
+  (t/is (= '(character-length x1) (plan-expr "CHARACTER_LENGTH(foo.a)")))
+  (t/is (= '(character-length x1) (plan-expr "CHARACTER_LENGTH(foo.a USING CHARACTERS)")))
+  (t/is (= '(octet-length x1) (plan-expr "CHARACTER_LENGTH(foo.a USING OCTETS)"))))
 
 (t/deftest test-char-length-alias
-  (t/is (= '(character-length x1 "CHARACTERS") (plan-expr "CHAR_LENGTH(foo.a)")) "CHAR_LENGTH alias works")
-  (t/is (= '(character-length x1 "CHARACTERS") (plan-expr "CHAR_LENGTH(foo.a USING CHARACTERS)")) "CHAR_LENGTH alias works")
-  (t/is (= '(character-length x1 "OCTETS") (plan-expr "CHAR_LENGTH(foo.a USING OCTETS)")) "CHAR_LENGTH alias works"))
+  (t/is (= '(character-length x1) (plan-expr "CHAR_LENGTH(foo.a)")) "CHAR_LENGTH alias works")
+  (t/is (= '(character-length x1) (plan-expr "CHAR_LENGTH(foo.a USING CHARACTERS)")) "CHAR_LENGTH alias works")
+  (t/is (= '(octet-length x1) (plan-expr "CHAR_LENGTH(foo.a USING OCTETS)")) "CHAR_LENGTH alias works"))
 
 (t/deftest test-octet-length-expr
   (t/is (= '(octet-length x1) (plan-expr "OCTET_LENGTH(foo.a)"))))

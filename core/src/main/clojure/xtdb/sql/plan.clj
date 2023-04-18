@@ -665,10 +665,13 @@
     (list 'position (expr needle) (expr haystack) unit)
 
     [:char_length_expression _ ^:z nve]
-    (list 'character-length (expr nve) "CHARACTERS")
+    (list 'character-length (expr nve))
 
     [:char_length_expression _ ^:z nve _ [:char_length_units unit]]
-    (list 'character-length (expr nve) unit)
+    (list (case unit
+            "CHARACTERS" 'character-length
+            "OCTETS" 'octet-length)
+          (expr nve))
 
     [:octet_length_expression _ ^:z nve]
     (list 'octet-length (expr nve))

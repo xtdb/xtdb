@@ -256,26 +256,24 @@
         first)))
 
 (t/deftest test-character-length
-  (letfn [(len [s unit] (project1 (list 'character-length 'a unit) {:a s}))]
+  (letfn [(len [s] (project1 (list 'character-length 'a) {:a s}))]
     (t/are [s]
-        (and (= (.count (.codePoints s)) (len s "CHARACTERS"))
-             (= (alength (.getBytes s "utf-8")) (len s "OCTETS")))
+        (= (.count (.codePoints s)) (len s))
 
       ""
       "a"
       "hello"
       "😀")
 
-    (t/is (= nil (len nil "CHARACTERS")))
-    (t/is (= nil (len nil "OCTETS")))))
+    (t/is (= nil (len nil)))))
 
 (tct/defspec character-length-is-equiv-to-code-point-count-prop
   (tcp/for-all [^String s tcg/string]
-    (= (.count (.codePoints s)) (project1 '(character-length a "CHARACTERS") {:a s}))))
+    (= (.count (.codePoints s)) (project1 '(character-length a) {:a s}))))
 
-(tct/defspec character-length-octet-is-equiv-to-byte-count-prop
+(tct/defspec octet-length-is-equiv-to-byte-count-prop
   (tcp/for-all [^String s tcg/string]
-    (= (alength (.getBytes s "utf-8")) (project1 '(character-length a "OCTETS") {:a s}))))
+    (= (alength (.getBytes s "utf-8")) (project1 '(octet-length a) {:a s}))))
 
 (t/deftest test-octet-length
   (letfn [(len [s vec-type] (project-mono-value 'octet-length s vec-type))]
@@ -995,7 +993,7 @@
 
 (tct/defspec overlay-len-default-is-len-of-placing-prop
   (tcp/for-all [[s1 s2 i] (overlay-args-gen tcg/string)]
-    (= (project1 '(overlay a b c d) {:a s1, :b s2, :c i, :d (project1 '(character-length a "CHARACTERS") {:a s2})})
+    (= (project1 '(overlay a b c d) {:a s1, :b s2, :c i, :d (project1 '(character-length a) {:a s2})})
        (project1 '(overlay a b c (default-overlay-length b)) {:a s1, :b s2, :c i}))))
 
 (tct/defspec binary-overlay-len-default-is-len-of-placing-prop
