@@ -734,39 +734,39 @@
     (= (vec (apply concat barrs)) (vec (expr/resolve-bytes (project1 (list* 'concat barrs) {}))))))
 
 (t/deftest position-test
-  (t/are [s1 s2 unit expected]
-      (= expected (project1 (list 'position 'a 'b unit) {:a s1, :b s2}))
+  (t/are [pos-fn s1 s2 expected]
+      (= expected (project1 (list pos-fn 'a 'b) {:a s1, :b s2}))
 
-    nil nil "CHARACTERS" nil
-    nil "" "CHARACTERS" nil
-    "" nil "CHARACTERS" nil
+    'position nil nil nil
+    'position nil "" nil
+    'position "" nil nil
 
-    "" "" "CHARACTERS" 1
-    "" "" "OCTETS" 1
+    'position "" "" 1
+    'octet-position "" "" 1
 
-    "a" "" "CHARACTERS" 0
-    "" "a" "CHARACTERS" 1
-    "a" "a" "CHARACTERS" 1
-    "b" "a" "CHARACTERS" 0
+    'position "a" "" 0
+    'position "" "a" 1
+    'position "a" "a" 1
+    'position "b" "a" 0
 
-    "a" "" "OCTETS" 0
-    "" "a" "OCTETS" 1
-    "a" "a" "OCTETS" 1
-    "b" "a" "OCTETS" 0
+    'octet-position "a" "" 0
+    'octet-position "" "a" 1
+    'octet-position "a" "a" 1
+    'octet-position "b" "a" 0
 
-    "😎" "😎" "CHARACTERS" 1
-    "😎" "a😎" "CHARACTERS" 2
-    "😎" "🌝😎" "CHARACTERS" 2
+    'position "😎" "😎" 1
+    'position "😎" "a😎" 2
+    'position "😎" "🌝😎" 2
 
-    "😎" "😎" "OCTETS" 1
-    "😎" "a😎" "OCTETS" 2
-    "😎" "aa😎" "OCTETS" 3
-    "😎" "🌝😎" "OCTETS" 5))
+    'octet-position "😎" "😎" 1
+    'octet-position "😎" "a😎" 2
+    'octet-position "😎" "aa😎" 3
+    'octet-position "😎" "🌝😎" 5))
 
 (tct/defspec position-is-codepoint-count-from-idx-prop
   (tcp/for-all [s1 tcg/string
                 s2 tcg/string]
-    (let [pos (project1 '(position a b "CHARACTERS") {:a s2, :b s1})]
+    (let [pos (project1 '(position a b) {:a s2, :b s1})]
       (if-some [i (str/index-of s1 s2)]
         (= pos (inc (Character/codePointCount (str s1) (int 0) (int i))))
         (zero? pos)))))
@@ -774,7 +774,7 @@
 (tct/defspec position-is-equiv-to-idx-of-on-ascii-prop
   (tcp/for-all [s1 tcg/string-ascii
                 s2 tcg/string-ascii]
-    (let [pos (project1 '(position a b "CHARACTERS") {:a s2, :b s1})]
+    (let [pos (project1 '(position a b) {:a s2, :b s1})]
       (if-some [i (str/index-of s1 s2)]
         (= pos (inc i))
         (zero? pos)))))
@@ -782,14 +782,14 @@
 (tct/defspec position-on-octet-is-equiv-to-idx-of-on-ascii-prop
   (tcp/for-all [s1 tcg/string-ascii
                 s2 tcg/string-ascii]
-    (let [pos (project1 '(position a b "OCTETS") {:a s2, :b s1})]
+    (let [pos (project1 '(octet-position a b) {:a s2, :b s1})]
       (if-some [i (str/index-of s1 s2)]
         (= pos (inc i))
         (zero? pos)))))
 
 (t/deftest binary-position-test
   (t/are [b1 b2 expected]
-      (= expected (project1 (list 'position 'a 'b) {:a (some-> b1 byte-array), :b (some-> b2 byte-array)}))
+      (= expected (project1 '(octet-position a b) {:a (some-> b1 byte-array), :b (some-> b2 byte-array)}))
     nil nil nil
     [] [] 1
     [42] [] 0
@@ -803,8 +803,8 @@
 (tct/defspec binary-position-equiv-to-octet-position-prop
   (tcp/for-all [^String s1 tcg/string
                 ^String s2 tcg/string]
-    (= (project1 '(position a b "OCTETS") {:a s1, :b s2})
-       (project1 '(position a b) {:a (.getBytes s1 "utf-8"), :b (.getBytes s2 "utf-8")}))))
+    (= (project1 '(octet-position a b) {:a s1, :b s2})
+       (project1 '(octet-position a b) {:a (.getBytes s1 "utf-8"), :b (.getBytes s2 "utf-8")}))))
 
 (t/deftest substring-test
   (t/are [s pos len expected]

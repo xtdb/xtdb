@@ -669,10 +669,13 @@
     (list 'concat (expr nve1) (expr nve2))
 
     [:character_position_expression _ ^:z needle _ ^:z haystack]
-    (list 'position (expr needle) (expr haystack) "CHARACTERS")
+    (list 'position (expr needle) (expr haystack))
 
     [:character_position_expression _ ^:z needle _ ^:z haystack _ [:char_length_units unit]]
-    (list 'position (expr needle) (expr haystack) unit)
+    (list (case unit
+            "CHARACTERS" 'position
+            "OCTETS" 'octet-position)
+          (expr needle) (expr haystack))
 
     [:char_length_expression _ ^:z nve]
     (list 'character-length (expr nve))

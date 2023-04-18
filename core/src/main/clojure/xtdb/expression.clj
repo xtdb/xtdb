@@ -1151,17 +1151,20 @@
   {:return-type :i32
    :->call-code #(do `(.remaining (resolve-buf ~@%)))})
 
-(defmethod codegen-call [:position :utf8 :utf8 :utf8] [{:keys [args]}]
-  (let [[_ _ unit] (map :literal args)]
-    {:return-type :i32
-     :->call-code (fn [[needle haystack]]
-                    (case unit
-                      "CHARACTERS" `(StringUtil/sqlUtf8Position (resolve-utf8-buf ~needle) (resolve-utf8-buf ~haystack))
-                      "OCTETS" `(StringUtil/SqlBinPosition (resolve-utf8-buf ~needle) (resolve-utf8-buf ~haystack))))}))
-
-(defmethod codegen-call [:position :varbinary :varbinary] [_]
+(defmethod codegen-call [:position :utf8 :utf8] [{:keys [args]}]
   {:return-type :i32
-   :->call-code (fn [[needle haystack]] `(StringUtil/SqlBinPosition (resolve-buf ~needle) (resolve-buf ~haystack)))})
+   :->call-code (fn [[needle haystack]]
+                  `(StringUtil/sqlUtf8Position (resolve-utf8-buf ~needle) (resolve-utf8-buf ~haystack)))})
+
+(defmethod codegen-call [:octet-position :utf8 :utf8] [{:keys [args]}]
+  {:return-type :i32
+   :->call-code (fn [[needle haystack]]
+                  `(StringUtil/SqlBinPosition (resolve-utf8-buf ~needle) (resolve-utf8-buf ~haystack)))})
+
+(defmethod codegen-call [:octet-position :varbinary :varbinary] [_]
+  {:return-type :i32
+   :->call-code (fn [[needle haystack]]
+                  `(StringUtil/SqlBinPosition (resolve-buf ~needle) (resolve-buf ~haystack)))})
 
 (defmethod codegen-call [:overlay :utf8 :utf8 :int :int] [_]
   {:return-type :utf8
