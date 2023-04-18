@@ -447,23 +447,23 @@
   (t/are [sql expected]
     (= expected (plan-expr sql))
 
-    "TRIM(foo.a)" '(trim x1 "BOTH" " ")
+    "TRIM(foo.a)" '(trim x1 " ")
 
-    "TRIM(LEADING FROM foo.a)" '(trim x1 "LEADING" " ")
-    "TRIM(LEADING '$' FROM foo.a)" '(trim x1 "LEADING" "$")
-    "TRIM(LEADING foo.b FROM foo.a)" '(trim x2 "LEADING" x1)
+    "TRIM(LEADING FROM foo.a)" '(trim-leading x1 " ")
+    "TRIM(LEADING '$' FROM foo.a)" '(trim-leading x1 "$")
+    "TRIM(LEADING foo.b FROM foo.a)" '(trim-leading x2 x1)
 
-    "TRIM(TRAILING FROM foo.a)" '(trim x1 "TRAILING" " ")
-    "TRIM(TRAILING '$' FROM foo.a)" '(trim x1 "TRAILING" "$")
-    "TRIM(TRAILING foo.b FROM foo.a)" '(trim x2 "TRAILING" x1)
+    "TRIM(TRAILING FROM foo.a)" '(trim-trailing x1 " ")
+    "TRIM(TRAILING '$' FROM foo.a)" '(trim-trailing x1 "$")
+    "TRIM(TRAILING foo.b FROM foo.a)" '(trim-trailing x2 x1)
 
-    "TRIM(BOTH FROM foo.a)" '(trim x1 "BOTH" " ")
-    "TRIM(BOTH '$' FROM foo.a)" '(trim x1 "BOTH" "$")
-    "TRIM(BOTH foo.b FROM foo.a)" '(trim x2 "BOTH" x1)
+    "TRIM(BOTH FROM foo.a)" '(trim x1 " ")
+    "TRIM(BOTH '$' FROM foo.a)" '(trim x1 "$")
+    "TRIM(BOTH foo.b FROM foo.a)" '(trim x2 x1)
 
-    "TRIM(BOTH '😎' FROM foo.a)" '(trim x1 "BOTH" "😎")
+    "TRIM(BOTH '😎' FROM foo.a)" '(trim x1 "😎")
 
-    "TRIM('$' FROM foo.a)" '(trim x1 "BOTH" "$")))
+    "TRIM('$' FROM foo.a)" '(trim x1 "$")))
 
 (t/deftest test-like-expr
   (t/are [sql expected]

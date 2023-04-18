@@ -440,8 +440,7 @@
 
 (t/deftest test-trim
   (t/testing "leading trims of $"
-    (t/are [s expected]
-        (= expected (project1 '(trim a b c) {:a s, :b "LEADING", :c "$"}))
+    (t/are [s expected] (= expected (project1 '(trim-leading a b) {:a s, :b "$"}))
 
       "" ""
       " " " "
@@ -457,8 +456,7 @@
       nil nil))
 
   (t/testing "trailing trims of $"
-    (t/are [s expected]
-        (= expected (project1 '(trim a b c) {:a s, :b "TRAILING", :c "$"}))
+    (t/are [s expected] (= expected (project1 '(trim-trailing a b) {:a s, :b "$"}))
 
       "" ""
       " " " "
@@ -475,7 +473,7 @@
 
   (t/testing "both trims of $"
     (t/are [s expected]
-        (= expected (project1 '(trim a b c) {:a s, :b "BOTH", :c "$"}))
+        (= expected (project1 '(trim a b) {:a s, :b "$"}))
 
       "" ""
       " " " "
@@ -492,21 +490,21 @@
       nil nil))
 
   (t/testing "null trim char returns null"
-    (t/are [s trim-spec expected]
-        (= expected (project1 '(trim a b c) {:a s, :b trim-spec, :c nil}))
+    (t/are [trim-fn s expected]
+        (= expected (project1 (list trim-fn 'a 'b) {:a s, :b nil}))
 
-      "a" "BOTH" nil
-      nil "BOTH" nil
+      'trim "a" nil
+      'trim nil nil
 
-      "a" "LEADING" nil
-      nil "LEADING" nil
+      'trim-leading "a" nil
+      'trim-leading nil nil
 
-      "a" "TRAILING" nil
-      nil "TRAILING" nil))
+      'trim-trailing "a" nil
+      'trim-trailing nil nil))
 
   (t/testing "extended char plane trim"
     (t/are [s trim-char expected]
-        (= expected (project1 '(trim a b c) {:a s, :b "BOTH", :c trim-char}))
+        (= expected (project1 '(trim a b) {:a s, :b trim-char}))
       "" "😎" ""
       "😎a" "😎" "a"
       "😎a" "😎" "a")))
@@ -521,19 +519,19 @@
 (tct/defspec sql-trim-is-equiv-to-java-trim-on-space-prop
   (tcp/for-all [s (tcg/fmap (comp all-whitespace-to-spaces str/join) (tcg/vector (tcg/elements [tcg/string (tcg/return " ")])))]
     (and
-     (= (str/trim s) (project1 '(trim a b c) {:a s, :b "BOTH", :c " "}))
-     (= (str/triml s) (project1 '(trim a b c) {:a s, :b "LEADING", :c " "}))
-     (= (str/trimr s) (project1 '(trim a b c) {:a s, :b "TRAILING", :c " "})))))
+     (= (str/trim s) (project1 '(trim a b) {:a s, :b " "}))
+     (= (str/triml s) (project1 '(trim-leading a b) {:a s, :b " "}))
+     (= (str/trimr s) (project1 '(trim-trailing a b) {:a s, :b " "})))))
 
-(defn- btrim [bin trim-spec trim-octet]
-  (some-> (project1 '(trim a b c) {:a (some-> bin byte-array), :b trim-spec, :c (some-> trim-octet vector byte-array)})
+(defn- btrim [trim-fn bin trim-octet]
+  (some-> (project1 (list trim-fn 'a 'b) {:a (some-> bin byte-array), :b (some-> trim-octet vector byte-array)})
           expr/resolve-bytes
           vec))
 
 (t/deftest test-binary-trim
   (t/testing "leading trims of 0"
     (t/are [bin expected]
-        (= expected (btrim bin "LEADING" 0))
+        (= expected (btrim 'trim-leading bin 0))
 
       [] []
       ;; \space
@@ -551,7 +549,7 @@
 
   (t/testing "trailing trims of 0"
     (t/are [bin expected]
-        (= expected (btrim bin "TRAILING" 0))
+        (= expected (btrim 'trim-trailing bin 0))
 
       [] []
       [32] [32]
@@ -568,7 +566,7 @@
 
   (t/testing "both trims of 0"
     (t/are [bin expected]
-        (= expected (btrim bin "BOTH" 0))
+        (= expected (btrim 'trim bin 0))
 
       [] []
       [32] [32]
@@ -585,76 +583,76 @@
       nil nil))
 
   (t/testing "null trim octet returns null"
-    (t/are [bin trim-spec expected]
-        (= expected (btrim bin trim-spec nil))
+    (t/are [trim-fn bin expected]
+        (= expected (btrim trim-fn bin nil))
 
-      [42] "BOTH" nil
-      nil "BOTH" nil
+      'trim [42] nil
+      'trim nil nil
 
-      [42] "LEADING" nil
-      nil "LEADING" nil
+      'trim-leading [42] nil
+      'trim-leading nil nil
 
-      [42] "TRAILING" nil
-      nil "TRAILING" nil))
+      'trim-trailing [42] nil
+      'trim-trailing nil nil))
 
   (t/testing "numeric octet is permitted"
     ;; no defined behaviour for bigint / bigdec
-    (t/are [bin trim-spec octet expected]
-        (= expected (some-> (project1 '(trim a b c) {:a (some-> bin byte-array), :b trim-spec, :c octet})
+    (t/are [trim-fn bin octet expected]
+        (= expected (some-> (project1 (list trim-fn 'a 'b) {:a (some-> bin byte-array), :b octet})
                             expr/resolve-bytes
                             vec))
 
-      nil "BOTH" (byte 0) nil
-      nil "BOTH" (int 0) nil
-      nil "BOTH" (short 0) nil
-      nil "BOTH" (long 0) nil
-      nil "BOTH" (float 0) nil
-      nil "BOTH" (double 0) nil
+      'trim nil (byte 0) nil
+      'trim nil (int 0) nil
+      'trim nil (short 0) nil
+      'trim nil (long 0) nil
+      'trim nil (float 0) nil
+      'trim nil (double 0) nil
 
-      nil "LEADING" (byte 0) nil
-      nil "LEADING" (int 0) nil
-      nil "LEADING" (short 0) nil
-      nil "LEADING" (long 0) nil
-      nil "LEADING" (float 0) nil
-      nil "LEADING" (double 0) nil
+      'trim-leading nil (byte 0) nil
+      'trim-leading nil (int 0) nil
+      'trim-leading nil (short 0) nil
+      'trim-leading nil (long 0) nil
+      'trim-leading nil (float 0) nil
+      'trim-leading nil (double 0) nil
 
-      nil "TRAILING" (byte 0) nil
-      nil "TRAILING" (int 0) nil
-      nil "TRAILING" (short 0) nil
-      nil "TRAILING" (long 0) nil
-      nil "TRAILING" (float 0) nil
-      nil "TRAILING" (double 0) nil
+      'trim-trailing nil (byte 0) nil
+      'trim-trailing nil (int 0) nil
+      'trim-trailing nil (short 0) nil
+      'trim-trailing nil (long 0) nil
+      'trim-trailing nil (float 0) nil
+      'trim-trailing nil (double 0) nil
 
-      [0 42 0] "BOTH" (byte 0) [42]
-      [0 42 0] "BOTH" (int 0) [42]
-      [0 42 0] "BOTH" (short 0) [42]
-      [0 42 0] "BOTH" (long 0) [42]
-      [0 42 0] "BOTH" (float 0) [42]
-      [0 42 0] "BOTH" (double 0) [42]
+      'trim [0 42 0] (byte 0) [42]
+      'trim [0 42 0] (int 0) [42]
+      'trim [0 42 0] (short 0) [42]
+      'trim [0 42 0] (long 0) [42]
+      'trim [0 42 0] (float 0) [42]
+      'trim [0 42 0] (double 0) [42]
 
-      [0 42 0] "LEADING" (byte 0) [42 0]
-      [0 42 0] "LEADING" (int 0) [42 0]
-      [0 42 0] "LEADING" (short 0) [42 0]
-      [0 42 0] "LEADING" (long 0) [42 0]
-      [0 42 0] "LEADING" (float 0) [42 0]
-      [0 42 0] "LEADING" (double 0) [42 0]
+      'trim-leading [0 42 0] (byte 0) [42 0]
+      'trim-leading [0 42 0] (int 0) [42 0]
+      'trim-leading [0 42 0] (short 0) [42 0]
+      'trim-leading [0 42 0] (long 0) [42 0]
+      'trim-leading [0 42 0] (float 0) [42 0]
+      'trim-leading [0 42 0] (double 0) [42 0]
 
-      [0 42 0] "TRAILING" (byte 0) [0 42]
-      [0 42 0] "TRAILING" (int 0) [0 42]
-      [0 42 0] "TRAILING" (short 0) [0 42]
-      [0 42 0] "TRAILING" (long 0) [0 42]
-      [0 42 0] "TRAILING" (float 0) [0 42]
-      [0 42 0] "TRAILING" (double 0) [0 42])))
+      'trim-trailing [0 42 0] (byte 0) [0 42]
+      'trim-trailing [0 42 0] (int 0) [0 42]
+      'trim-trailing [0 42 0] (short 0) [0 42]
+      'trim-trailing [0 42 0] (long 0) [0 42]
+      'trim-trailing [0 42 0] (float 0) [0 42]
+      'trim-trailing [0 42 0] (double 0) [0 42])))
 
 (tct/defspec bin-trim-is-equiv-to-str-trim-on-utf8-prop
   (tcp/for-all [^String s (tcg/fmap (comp all-whitespace-to-spaces str/join) (tcg/vector (tcg/elements [tcg/string (tcg/return " ")])))]
     (and
      (= (str/trim s)
-        (String. (byte-array (btrim (.getBytes s "utf-8") "BOTH" 32)) "utf-8"))
+        (String. (byte-array (btrim 'trim (.getBytes s "utf-8") 32)) "utf-8"))
      (= (str/triml s)
-        (String. (byte-array (btrim (.getBytes s "utf-8") "LEADING" 32)) "utf-8"))
+        (String. (byte-array (btrim 'trim-leading (.getBytes s "utf-8") 32)) "utf-8"))
      (= (str/trimr s)
-        (String. (byte-array (btrim (.getBytes s "utf-8") "TRAILING" 32)) "utf-8")))))
+        (String. (byte-array (btrim 'trim-trailing (.getBytes s "utf-8") 32)) "utf-8")))))
 
 (t/deftest test-upper
   (t/are [s expected]

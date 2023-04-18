@@ -639,16 +639,26 @@
     (list (symbol (str/lower-case tfn)) (expr nve))
 
     [:trim_function _ [:trim_operands [:trim_specification trim-spec] ^:z trim-char _ ^:z nve]]
-    (list 'trim (expr nve) trim-spec (expr trim-char))
+    (list (case trim-spec
+            "LEADING" 'trim-leading
+            "TRAILING" 'trim-trailing
+            "BOTH" 'trim)
+          (expr nve)
+          (expr trim-char))
 
     [:trim_function _ [:trim_operands [:trim_specification trim-spec] _ ^:z nve]]
-    (list 'trim (expr nve) trim-spec " ")
+    (list (case trim-spec
+            "LEADING" 'trim-leading
+            "TRAILING" 'trim-trailing
+            "BOTH" 'trim)
+          (expr nve)
+          " ")
 
     [:trim_function _ [:trim_operands ^:z nve]]
-    (list 'trim (expr nve) "BOTH" " ")
+    (list 'trim (expr nve) " ")
 
     [:trim_function _ [:trim_operands ^:z trim-char _ ^:z nve]]
-    (list 'trim (expr nve) "BOTH" (expr trim-char))
+    (list 'trim (expr nve) (expr trim-char))
 
     [:fold mode ^:z nve]
     (case mode

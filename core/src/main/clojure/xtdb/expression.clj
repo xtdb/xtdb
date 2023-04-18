@@ -902,11 +902,29 @@
                                           `(Pattern/compile (resolve-string ~needle-code) ~flag-int))
                                        (resolve-string ~haystack-code))))}))
 
-;; apache commons has these functions but did not think they were worth the dep.
+;;;; SQL Trim functions.
+;; trim-char is a **SINGLE** unicode-character string e.g \" \".
+;; The string can include 2-char code points, as long as it is one logical unicode character.
+
+;; N.B trim-char is currently restricted to just one character, not all database implementations behave this way.
+;; in postgres you can specify multi-character strings for the trim char.
+
+;; Apache Commons has these functions but did not think they were worth the dep.
 ;; replace if we ever put commons on classpath.
 
-(defn- sql-trim-leading
-  [^String s ^String trim-char]
+(defn- assert-trim-char-conforms
+  "Trim char is allowed to be length 1, or 2 - but only 2 if the 2 chars represent a single unicode character
+  (but are split due to utf-16 surrogacy)."
+  [^String trim-char]
+  (when-not (or (= 1 (.length trim-char))
+                (and (= 2 (.length trim-char))
+                     (= 2 (Character/charCount (.codePointAt trim-char 0)))))
+    (throw (err/runtime-err :xtdb.expression/data-exception
+                            {::err/message "Data Exception - trim error."}))))
+
+(defn sql-trim-leading ^String [^String s, ^String trim-char]
+  (assert-trim-char-conforms trim-char)
+
   (let [trim-cp (.codePointAt trim-char 0)]
     (loop [i 0]
       (if (< i (.length s))
@@ -916,8 +934,9 @@
             (.substring s i (.length s))))
         ""))))
 
-(defn- sql-trim-trailing
-  [^String s ^String trim-char]
+(defn sql-trim-trailing ^String [^String s, ^String trim-char]
+  (assert-trim-char-conforms trim-char)
+
   (let [trim-cp (.codePointAt trim-char 0)]
     (loop [i (unchecked-dec-int (.length s))
            len (.length s)]
@@ -929,42 +948,36 @@
             (.substring s 0 len)))
         ""))))
 
-(defn- trim-char-conforms?
-  "Trim char is allowed to be length 1, or 2 - but only 2 if the 2 chars represent a single unicode character
-  (but are split due to utf-16 surrogacy)."
-  [^String trim-char]
-  (or (= 1 (.length trim-char))
-      (and (= 2 (.length trim-char))
-           (= 2 (Character/charCount (.codePointAt trim-char 0))))))
+(defn sql-trim-both ^String [^String s, ^String trim-char]
+  (-> s
+      (sql-trim-leading trim-char)
+      (sql-trim-trailing trim-char)))
 
-(defn sql-trim
-  "SQL Trim function.
-
-  trim-spec is a string having one of the values: BOTH | TRAILING | LEADING.
-
-  trim-char is a **SINGLE** unicode-character string e.g \" \". The string can include 2-char code points, as long as it is one
-  logical unicode character.
-
-  N.B trim-char is currently restricted to just one character, not all database implementations behave this way, in postgres you
-  can specify multi-character strings for the trim char.
-
-  See also sql-trim-leading, sql-trim-trailing"
-  ^String [^String s ^String trim-spec ^String trim-char]
-  (when-not (trim-char-conforms? trim-char) (throw (err/runtime-err :xtdb.expression/data-exception
-                                                                    {::err/message "Data Exception - trim error."})))
-  (case trim-spec
-    "LEADING" (sql-trim-leading s trim-char)
-    "TRAILING" (sql-trim-trailing s trim-char)
-    "BOTH" (-> s (sql-trim-leading trim-char) (sql-trim-trailing trim-char))))
-
-(defmethod codegen-call [:trim :utf8 :utf8 :utf8] [_]
+(defmethod codegen-call [:trim-leading :utf8 :utf8] [_]
   {:return-type :utf8
-   :->call-code (fn [[s trim-spec trim-char]]
-                  `(ByteBuffer/wrap (.getBytes (sql-trim (resolve-string ~s) (resolve-string ~trim-spec) (resolve-string ~trim-char))
-                                               StandardCharsets/UTF_8)))})
+   :->call-code (fn [[s trim-char]]
+                  `(-> (sql-trim-leading (resolve-string ~s) (resolve-string ~trim-char))
+                       (.getBytes StandardCharsets/UTF_8)
+                       ByteBuffer/wrap))})
 
-(defn- binary-trim-leading
-  [^bytes bin trim-octet]
+(defmethod codegen-call [:trim-trailing :utf8 :utf8] [_]
+  {:return-type :utf8
+   :->call-code (fn [[s trim-char]]
+                  `(-> (sql-trim-trailing (resolve-string ~s) (resolve-string ~trim-char))
+                       (.getBytes StandardCharsets/UTF_8)
+                       ByteBuffer/wrap))})
+
+(defmethod codegen-call [:trim :utf8 :utf8] [_]
+  {:return-type :utf8
+   :->call-code (fn [[s trim-char]]
+                  `(-> (sql-trim-both (resolve-string ~s) (resolve-string ~trim-char))
+                       (.getBytes StandardCharsets/UTF_8)
+                       ByteBuffer/wrap))})
+
+;;;; SQL Trim function on binary.
+;; trim-octet is the byte value to trim.
+
+(defn binary-trim-leading ^bytes [^bytes bin, trim-octet]
   (let [trim-octet (byte trim-octet)]
     (loop [i 0]
       (if (< i (alength bin))
@@ -976,8 +989,7 @@
               (Arrays/copyOfRange bin i (alength bin)))))
         (byte-array 0)))))
 
-(defn- binary-trim-trailing
-  [^bytes bin trim-octet]
+(defn binary-trim-trailing ^bytes [^bytes bin trim-octet]
   (let [trim-octet (byte trim-octet)]
     (loop [i (unchecked-dec-int (alength bin))
            len (alength bin)]
@@ -990,30 +1002,55 @@
               (Arrays/copyOfRange bin 0 len))))
         (byte-array 0)))))
 
-(defn binary-trim
-  "SQL Trim function on binary.
+(defn binary-trim-both ^bytes [^bytes bin, trim-octet]
+  (-> bin
+      (binary-trim-leading trim-octet)
+      (binary-trim-trailing trim-octet)))
 
-  trim-spec is a string having one of the values: BOTH | TRAILING | LEADING.
-
-  trim-octet is the byte value to trim.
-
-  See also binary-trim-leading, binary-trim-trailing"
-  [^bytes bin ^String trim-spec trim-octet]
-  (case trim-spec
-    "BOTH" (-> bin (binary-trim-leading trim-octet) (binary-trim-trailing trim-octet))
-    "LEADING" (binary-trim-leading bin trim-octet)
-    "TRAILING" (binary-trim-trailing bin trim-octet)))
-
-(defmethod codegen-call [:trim :varbinary :utf8 :varbinary] [_]
+(defmethod codegen-call [:trim-leading :varbinary :varbinary] [_]
   {:return-type :varbinary
-   :->call-code (fn [[s trim-spec trim-octet]]
-                  `(ByteBuffer/wrap (binary-trim (resolve-bytes ~s) (resolve-string ~trim-spec) (first (resolve-bytes ~trim-octet)))))})
+   :->call-code (fn [[s trim-octet]]
+                  `(-> (resolve-bytes ~s)
+                       (binary-trim-leading (first (resolve-bytes ~trim-octet)))
+                       ByteBuffer/wrap))})
 
-(defmethod codegen-call [:trim :varbinary :utf8 :num] [_]
+(defmethod codegen-call [:trim-trailing :varbinary :varbinary] [_]
   {:return-type :varbinary
-   :->call-code (fn [[s trim-spec trim-octet]]
+   :->call-code (fn [[s trim-octet]]
+                  `(-> (resolve-bytes ~s)
+                       (binary-trim-trailing (first (resolve-bytes ~trim-octet)))
+                       ByteBuffer/wrap))})
+
+(defmethod codegen-call [:trim :varbinary :varbinary] [_]
+  {:return-type :varbinary
+   :->call-code (fn [[s trim-octet]]
+                  `(-> (resolve-bytes ~s)
+                       (binary-trim-both (first (resolve-bytes ~trim-octet)))
+                       ByteBuffer/wrap))})
+
+(defmethod codegen-call [:trim-leading :varbinary :num] [_]
+  {:return-type :varbinary
+   :->call-code (fn [[s trim-octet]]
                   ;; should we throw an explicit error if no good cast to byte is possible?
-                  `(ByteBuffer/wrap (binary-trim (resolve-bytes ~s) (resolve-string ~trim-spec) (byte ~trim-octet))))})
+                  `(-> (resolve-bytes ~s)
+                       (binary-trim-leading (byte ~trim-octet))
+                       ByteBuffer/wrap))})
+
+(defmethod codegen-call [:trim-trailing :varbinary :num] [_]
+  {:return-type :varbinary
+   :->call-code (fn [[s trim-octet]]
+                  ;; should we throw an explicit error if no good cast to byte is possible?
+                  `(-> (resolve-bytes ~s)
+                       (binary-trim-trailing (byte ~trim-octet))
+                       ByteBuffer/wrap))})
+
+(defmethod codegen-call [:trim :varbinary :num] [_]
+  {:return-type :varbinary
+   :->call-code (fn [[s trim-octet]]
+                  ;; should we throw an explicit error if no good cast to byte is possible?
+                  `(-> (resolve-bytes ~s)
+                       (binary-trim-both (byte ~trim-octet))
+                       ByteBuffer/wrap))})
 
 (defmethod codegen-call [:upper :utf8] [_]
   {:return-type :utf8
