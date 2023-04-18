@@ -7,7 +7,7 @@
    [:map
     [{x20 1}]
     [:project
-     [{x19 (substring x1 1 2 true)} x2]
+     [{x19 (substring x1 1 2)} x2]
      [:anti-join
       [{x3 x16}]
       [:select
@@ -15,7 +15,7 @@
        [:single-join
         []
         [:semi-join
-         [{(substring x1 1 2 true) x5}]
+         [{(substring x1 1 2) x5}]
          [:rename
           {c_phone x1, c_acctbal x2, c_custkey x3}
           [:scan {:table customer} [c_phone c_acctbal c_custkey]]]
@@ -31,7 +31,7 @@
         [:group-by
          [{x14 (avg x8)}]
          [:semi-join
-          [{(substring x9 1 2 true) x11}]
+          [{(substring x9 1 2) x11}]
           [:rename
            {c_acctbal x8, c_phone x9}
            [:scan

@@ -810,7 +810,7 @@
 
 (t/deftest substring-test
   (t/are [s pos len expected]
-      (= expected (project1 '(substring a b c true) {:a s, :b pos, :c len}))
+      (= expected (project1 '(substring s pos len) {:s s, :pos pos, :len len}))
 
     "" -1 0 ""
     "" 0 0 ""
@@ -839,15 +839,14 @@
     "string" -10 2147483646 "string"))
 
 (t/deftest negative-substring-length-test
-  (t/is (thrown-with-msg? IllegalArgumentException #"Negative substring length" (project1 '(substring "" 0 -1 true) {}))))
+  (t/is (thrown-with-msg? IllegalArgumentException #"Negative substring length" (project1 '(substring "" 0 -1) {}))))
 
 (t/deftest substring-nils-test
   (doseq [a ["" nil]
           b [1 nil]
           c [1 nil]
-          d [true false]
           :when (not (and a b c))]
-    (t/is (nil? (project1 '(substring a b c d) {:a a, :b b, :c c, :d d})))))
+    (t/is (nil? (project1 '(substring a b c) {:a a, :b b, :c c})))))
 
 (defn- utf8len [^String s] (StringUtil/utf8Length (ByteBuffer/wrap (.getBytes s "utf-8"))))
 
@@ -859,17 +858,17 @@
 
 (tct/defspec substring-with-no-len-is-equiv-to-remaining-str-prop
   (tcp/for-all [[s i] (substring-args-gen tcg/string)]
-    (= (project1 '(substring a b c true) {:a s, :b i, :c (- (utf8len s) (dec i))})
-       (project1 '(substring a b -1 false) {:a s, :b i}))))
+    (= (project1 '(substring a b c) {:a s, :b i, :c (- (utf8len s) (dec i))})
+       (project1 '(substring a b) {:a s, :b i}))))
 
 (tct/defspec substring-is-equiv-to-clj-on-ascii-when-idx-within-bounds-prop
   (tcp/for-all [[s i len] (substring-args-gen tcg/string-ascii)]
     (= (subs s (dec i) (min (+ (dec i) len) (count s)))
-       (project1 '(substring a b c true) {:a s, :b i, :c len}))))
+       (project1 '(substring a b c) {:a s, :b i, :c len}))))
 
 (t/deftest bin-substring-test
   (t/are [s pos len expected]
-      (= expected (vec (expr/resolve-bytes (project1 '(substring a b c true) {:a (some-> s byte-array), :b pos, :c len}))))
+      (= expected (vec (expr/resolve-bytes (project1 '(substring a b c) {:a (some-> s byte-array), :b pos, :c len}))))
 
     [] -1 0 []
     [] 0 0 []
@@ -894,8 +893,8 @@
 
 (tct/defspec bin-substring-is-equiv-to-substring-on-ascii-prop
   (tcp/for-all [[s i len] (substring-args-gen tcg/string-ascii)]
-    (= (vec (expr/resolve-bytes (project1 '(substring a b c true) {:a (.getBytes ^String s "ascii"), :b i, :c len})))
-       (vec (.getBytes ^String (project1 '(substring a b c true) {:a s, :b i, :c len}) "ascii")))))
+    (= (vec (expr/resolve-bytes (project1 '(substring a b c) {:a (.getBytes ^String s "ascii"), :b i, :c len})))
+       (vec (.getBytes ^String (project1 '(substring a b c) {:a s, :b i, :c len}) "ascii")))))
 
 (t/deftest overlay-test
   (t/are [s1 s2 from len expected]

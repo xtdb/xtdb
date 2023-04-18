@@ -1082,15 +1082,25 @@
                                (reverse emitted-args))]
                    (build-args-then-call [])))}))
 
-(defmethod codegen-call [:substring :utf8 :int :int :bool] [_]
+(defmethod codegen-call [:substring :utf8 :int] [_]
   {:return-type :utf8
-   :->call-code (fn [[x start length use-len]]
-                  `(StringUtil/sqlUtf8Substring (resolve-utf8-buf ~x) ~start ~length ~use-len))})
+   :->call-code (fn [[x start]]
+                  `(StringUtil/sqlUtf8Substring (resolve-utf8-buf ~x) ~start -1 false))})
 
-(defmethod codegen-call [:substring :varbinary :int :int :bool] [_]
+(defmethod codegen-call [:substring :utf8 :int :int] [_]
+  {:return-type :utf8
+   :->call-code (fn [[x start length]]
+                  `(StringUtil/sqlUtf8Substring (resolve-utf8-buf ~x) ~start ~length true))})
+
+(defmethod codegen-call [:substring :varbinary :int] [_]
   {:return-type :varbinary
-   :->call-code (fn [[x start length use-len]]
-                  `(StringUtil/sqlBinSubstring (resolve-buf ~x) ~start ~length ~use-len))})
+   :->call-code (fn [[x start]]
+                  `(StringUtil/sqlBinSubstring (resolve-buf ~x) ~start -1 false))})
+
+(defmethod codegen-call [:substring :varbinary :int :int] [_]
+  {:return-type :varbinary
+   :->call-code (fn [[x start length]]
+                  `(StringUtil/sqlBinSubstring (resolve-buf ~x) ~start ~length true))})
 
 (defmethod codegen-call [:character-length :utf8] [{:keys [args]}]
   {:return-type :i32

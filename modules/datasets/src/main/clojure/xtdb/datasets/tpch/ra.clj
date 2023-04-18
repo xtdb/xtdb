@@ -464,7 +464,7 @@
 
 (def q22-global-sales-opportunity
   (-> '[:assign [Customer [:semi-join [{cntrycode cntrycode}]
-                           [:project [c_custkey {cntrycode (substring c_phone 1 2 true)} c_acctbal]
+                           [:project [c_custkey {cntrycode (substring c_phone 1 2)} c_acctbal]
                             [:scan {:for-app-time [:at :now] :table customer} [c_custkey c_phone c_acctbal]]]
                            [:table ?cntrycodes]]]
         [:order-by [[cntrycode]]

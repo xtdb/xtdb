@@ -559,11 +559,11 @@
 
     [:character_substring_function "SUBSTRING" ^:z cve "FROM" ^:z sp "FOR" ^:z sl]
     ;;=>
-    (list 'substring (expr cve) (expr sp) (expr sl) true)
+    (list 'substring (expr cve) (expr sp) (expr sl))
 
     [:character_substring_function "SUBSTRING" ^:z cve "FROM" ^:z sp]
     ;;=>
-    (list 'substring (expr cve) (expr sp) -1 false)
+    (list 'substring (expr cve) (expr sp))
 
     [:between_predicate ^:z rvp-1 [:between_predicate_part_2 "BETWEEN" ^:z rvp-2 "AND" ^:z rvp-3]]
     ;;=>
