@@ -357,12 +357,19 @@
     (.clear underlying-writer)
     (.clear dest-vec))
 
-  (rowCopier [this src-vec]
-    (if (instance? DenseUnionVector src-vec)
+  (rowCopier [this-writer src-vec]
+    (cond
       ;; assume it's a one-leg DUV
-      (.rowCopier this (first (seq src-vec)))
+      (instance? DenseUnionVector src-vec) (.rowCopier this-writer (first (seq src-vec)))
 
-      (.rowCopier underlying-writer (.getUnderlyingVector ^ExtensionTypeVector src-vec))))
+      (instance? NullVector src-vec) (reify IRowCopier
+                                       (copyRow [_ _src-idx]
+                                         (let [pos (.getPosition this-writer)]
+                                           ;; TODO (#252) do we still need this here?
+                                           (.setValueCount dest-vec (inc pos))
+                                           pos)))
+
+      :else (.rowCopier underlying-writer (.getUnderlyingVector ^ExtensionTypeVector src-vec))))
 
   IExtensionWriter
   (getUnderlyingWriter [_] underlying-writer))
