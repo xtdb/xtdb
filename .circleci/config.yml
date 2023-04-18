@@ -53,7 +53,7 @@ version: 2.1
 jobs:
   build:
     docker:
-      - image: circleci/clojure:openjdk-8-lein
+      - image: cimg/clojure:1.10.3-openjdk-8.0
 
     working_directory: ~/xtdb
 
@@ -94,7 +94,7 @@ jobs:
 
   test:
     docker:
-      - image: circleci/clojure:openjdk-8-lein
+      - image: cimg/clojure:1.10.3-openjdk-8.0
 
     working_directory: ~/xtdb
     steps:
