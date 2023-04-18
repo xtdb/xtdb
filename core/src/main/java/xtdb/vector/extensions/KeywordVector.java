@@ -18,6 +18,10 @@ public class KeywordVector extends XtExtensionVector<VarCharVector> {
 
     @Override
     public Keyword getObject(int index) {
-        return Keyword.intern(getUnderlyingVector().getObject(index).toString());
+        if (isNull(index)) {
+            return null;
+        } else {
+            return Keyword.intern(getUnderlyingVector().getObject(index).toString());
+        }
     }
 }
