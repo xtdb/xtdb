@@ -42,13 +42,10 @@
   (s/or :logic-var ::logic-var
         :form ::form))
 
-(s/def ::semi-join
-  (s/cat :exists '#{exists?}
-         :sub-query ::query))
-
-(s/def ::anti-join
-  (s/cat :not-exists '#{not-exists?}
-         :sub-query ::query))
+(s/def ::sub-query (s/cat :sq-type #{'q}, :sub-query ::query))
+(s/def ::left-join (s/cat :sq-type #{'left-join}, :sub-query ::query))
+(s/def ::semi-join (s/cat :sq-type #{'exists?}, :sub-query ::query))
+(s/def ::anti-join (s/cat :sq-type #{'not-exists?}, :sub-query ::query))
 
 (s/def ::find (s/coll-of ::find-arg :kind vector?))
 (s/def ::keys (s/coll-of symbol? :kind vector?))
@@ -142,9 +139,6 @@
          :args ::args-list
          :branches ::or-branches))
 
-(s/def ::sub-query
-  (s/cat :q #{'q}, :sub-query ::query))
-
 (s/def ::rule
   (s/and list?
          (s/cat :name simple-symbol?
@@ -163,22 +157,18 @@
 
 (s/def ::rules (s/coll-of ::rule-definition :kind vector?))
 
-(s/def ::sub-query-projection
-  (s/and vector?
-         (s/cat :sub-query (s/spec ::sub-query)
-                :binding ::binding)))
-
 (s/def ::term
-  (s/or :semi-join ::semi-join
+  (s/or :inner-join ::sub-query
+        :left-join ::left-join
+        :semi-join ::semi-join
         :anti-join ::anti-join
+
         :union-join ::union-join
 
         :triple ::triple
         :call ::call-clause
-        :sub-query ::sub-query
         :match ::match
         :rule ::rule))
-
 
 (s/def ::where
   (s/coll-of ::term :kind vector? :min-count 1))
@@ -301,7 +291,7 @@
         (update :required-vars set/difference provided-vars))))
 
 (defn- term-vars [[term-type term-arg]]
-  (case term-type
+  (case (keyword term-type)
     :call (let [{:keys [form return]} term-arg]
             {:required-vars (form-vars form)
              :provided-vars (when-let [[return-type return-arg] return]
@@ -335,14 +325,19 @@
                   {:provided-vars (set/intersection arg-vars provided-vars)
                    :required-vars (set/difference arg-vars provided-vars)})
 
-    (:semi-join :anti-join :sub-query)
+    (:inner-join :semi-join :anti-join :left-join :single-join)
     (let [{:keys [sub-query]} term-arg]
       {:provided-vars (set (or (:keys sub-query)
                                (->> (:find sub-query)
                                     (filter (comp #{:logic-var} first))
                                     (map form-vars)
                                     (apply set/union))))
-       :required-vars (set (map second (:in sub-query)))})
+       :required-vars (->> (:in sub-query)
+                           (into #{} (map (fn [[in-type in-arg :as in]]
+                                            (when-not (= in-type :scalar)
+                                              (throw (err/illegal-arg :non-scalar-subquery-param
+                                                                      (s/unform ::in-binding in))))
+                                            in-arg))))})
 
     :match {:provided-vars (->> term-arg
                                 :match
@@ -573,24 +568,20 @@
              (MapEntry/create param param-symbol)))
          (into {}))))
 
-(defn- plan-sub-query [sub-query]
-  (let [required-vars (->> (:in sub-query)
-                           (into #{} (map
-                                       (fn [[in-type in-arg :as in]]
-                                         (when-not (= in-type :scalar)
-                                           (throw (err/illegal-arg :non-scalar-subquery-param
-                                                                   (s/unform ::in-binding in))))
-                                         in-arg))))
+(defn- plan-sub-query [sq-type {:keys [sub-query] :as term-arg}]
+  (let [{:keys [required-vars provided-vars]} (term-vars [sq-type term-arg])
         apply-mapping (->apply-mapping required-vars)]
     (-> (plan-query (-> sub-query
                         (dissoc :in)
                         (assoc ::apply-mapping apply-mapping)))
-        (vary-meta into {::required-vars required-vars, ::apply-mapping apply-mapping}))))
+        (vary-meta into {::provided-vars provided-vars
+                         ::required-vars required-vars
+                         ::apply-mapping apply-mapping}))))
 
 (defn- wrap-scalar-sub-query [plan binding-sym scalar-sub-query param-vars]
   (let [col-count (count (:find scalar-sub-query))
         _ (when (not= 1 col-count) (throw (err/illegal-arg :scalar-sub-query-requires-one-column {::err/message "scalar sub query requires exactly one column"})))
-        sq-plan (plan-sub-query (assoc scalar-sub-query :keys [binding-sym]))
+        sq-plan (plan-sub-query :single-join {:sub-query (assoc scalar-sub-query :keys [binding-sym])})
         {::keys [apply-mapping]} (meta sq-plan)
         sq-plan (vary-meta sq-plan assoc ::vars #{binding-sym})
         [plan-u sq-plan-u :as rels] (with-unique-cols [plan sq-plan] param-vars)
@@ -629,35 +620,38 @@
           (cond-> scalars (wrap-scalars scalars))
           (wrap-select selects)))))
 
-(defn- plan-semi-join [sj-type {:keys [sub-query] :as sj}]
-  (let [{:keys [required-vars provided-vars]} (term-vars [sj-type sj])
-        apply-mapping (when (seq required-vars)
-                        (->apply-mapping required-vars))]
+(defn- wrap-inner-joins [plan sub-queries param-vars]
+  (if-let [apply-mapping (->> sub-queries
+                              (into {} (mapcat (comp ::apply-mapping meta)))
+                              (not-empty))]
+    (let [sq-plan (mega-join sub-queries param-vars)
+          [plan-u sq-plan-u :as rels] (with-unique-cols [plan sq-plan] param-vars)
+          apply-mapping-u (update-keys apply-mapping (::var->col (meta plan-u)))]
+      (-> [:apply :cross-join apply-mapping-u
+           plan-u sq-plan-u]
+          (wrap-unify (::var->cols (meta rels)))))
 
-    (-> (plan-query (-> sub-query
-                        (assoc ::apply-mapping apply-mapping)
-                        (dissoc :in)))
-        (vary-meta assoc
-                   ::apply-mapping apply-mapping
-                   ::provided-vars provided-vars))))
+    (mega-join (into [plan] sub-queries) param-vars)))
 
-(defn- wrap-semi-joins [plan sj-type semi-joins]
-  (->> semi-joins
+(defn- wrap-joins [plan join-type join-plans]
+  (->> join-plans
        (reduce (fn [acc sq-plan]
                  (let [{::keys [apply-mapping provided-vars]} (meta sq-plan)
                        {::keys [vars]} (meta acc)
                        provided-vars-apply-mapping (-> (->apply-mapping provided-vars)
                                                        (select-keys vars))]
                    (-> (if apply-mapping
-                         [:apply sj-type (merge apply-mapping provided-vars-apply-mapping)
+                         [:apply join-type (merge apply-mapping provided-vars-apply-mapping)
                           acc (->> provided-vars-apply-mapping
-                                   (map (fn [[v1 v2]] (list '= (with-meta v1 {:column? true}) v2)))
+                                   (map (fn [[v1 v2]]
+                                          (list '= (with-meta v1 {:column? true}) v2)))
                                    (wrap-select sq-plan))]
-                         [sj-type (->> (::vars (meta sq-plan))
-                                       (filter vars)
-                                       (mapv (fn [v] {v v})))
+                         [join-type (->> (::vars (meta sq-plan))
+                                         (filter vars)
+                                         (mapv (fn [v] {v v})))
                           acc sq-plan])
-                       (with-meta (meta acc)))))
+                       (with-meta (cond-> (meta acc)
+                                    (= :left-outer-join join-type) (update ::vars into provided-vars))))))
                plan)))
 
 (defn- plan-union-join [{:keys [args branches] :as uj}]
@@ -687,19 +681,6 @@
           (wrap-unify (::var->cols (meta rels)))))
 
     (mega-join (into [plan] union-joins) param-vars)))
-
-(defn- wrap-sub-queries [plan sub-queries param-vars]
-  (if-let [apply-mapping (->> sub-queries
-                              (into {} (mapcat (comp ::apply-mapping meta)))
-                              (not-empty))]
-    (let [sq-plan (mega-join sub-queries param-vars)
-          [plan-u sq-plan-u :as rels] (with-unique-cols [plan sq-plan] param-vars)
-          apply-mapping-u (update-keys apply-mapping (::var->col (meta plan-u)))]
-      (-> [:apply :cross-join apply-mapping-u
-           plan-u sq-plan-u]
-          (wrap-unify (::var->cols (meta rels)))))
-
-    (mega-join (into [plan] sub-queries) param-vars)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;
 ;; rule substitution
@@ -797,14 +778,14 @@
 (defmethod replace-vars :semi-join [[_ {:keys [sub-query]}] replace-ctx]
   (let [[new-sq replace-ctx] (replace-sq-vars sub-query replace-ctx)]
     [[:semi-join
-      {:exists 'exists?
+      {:sq-type 'exists?
        :sub-query new-sq}]
      replace-ctx]))
 
 (defmethod replace-vars :anti-join [[_ {:keys [sub-query]}] replace-ctx]
   (let [[new-sq replace-ctx] (replace-sq-vars sub-query replace-ctx)]
     [[:anti-join
-      {:exists 'exists?
+      {:sq-type 'not-exists?
        :sub-query new-sq}]
      replace-ctx]))
 
@@ -835,10 +816,10 @@
                 args)]
     [(update fn-call 1 assoc :args new-args) new-ctx]))
 
-(defmethod replace-vars :sub-query [[_ {:keys [sub-query]}] replace-ctx]
+(defmethod replace-vars :inner-join [[_ {:keys [sub-query]}] replace-ctx]
   (let [[new-sq replace-ctx] (replace-sq-vars sub-query replace-ctx)]
-    [[:sub-query
-      {:q 'q
+    [[:inner-join
+      {:sq-type 'q
        :sub-query new-sq}]
      replace-ctx]))
 
@@ -910,7 +891,7 @@
                  (mapv (partial expand-rules rule-name->rules))
                  (update clause 1 assoc :branches))
 
-            (:semi-join :anti-join :sub-query)
+            (:semi-join :anti-join :inner-join :left-join)
             (->> clause second :sub-query :where
                  (expand-rules rule-name->rules)
                  (update-in clause [1 :sub-query] assoc :where))
@@ -928,7 +909,7 @@
                                       {:rule-name name})))))
         rule-name->rules))
 
-(defn- plan-body [{where-clauses :where, apply-mapping ::apply-mapping, rules :rules, :as query} in-rels]
+(defn- plan-body [{where-clauses :where, apply-mapping ::apply-mapping, rules :rules} in-rels]
   (let [{::keys [param-vars]} (meta in-rels)
         rule-name->rules (->> rules
                               gensym-rules
@@ -937,7 +918,7 @@
         where-clauses (expand-rules rule-name->rules where-clauses)
 
         {match-clauses :match, triple-clauses :triple, call-clauses :call
-         sub-query-clauses :sub-query,
+         inner-join-clauses :inner-join, left-join-clauses :left-join
          semi-join-clauses :semi-join, anti-join-clauses :anti-join, union-join-clauses :union-join}
         (-> where-clauses
             (->> (group-by first))
@@ -948,12 +929,14 @@
                            (concat param-vars apply-mapping))
 
            calls (some->> call-clauses (mapv plan-call))
-           sub-queries (some->> sub-query-clauses (mapv (comp plan-sub-query :sub-query)))
            union-joins (some->> union-join-clauses (mapv plan-union-join))
-           semi-joins (some->> semi-join-clauses (mapv (partial plan-semi-join :semi-join)))
-           anti-joins (some->> anti-join-clauses (mapv (partial plan-semi-join :anti-join)))]
+           inner-joins (some->> inner-join-clauses (mapv (partial plan-sub-query :inner-join)))
+           left-joins (some->> left-join-clauses (mapv (partial plan-sub-query :left-join)))
+           semi-joins (some->> semi-join-clauses (mapv (partial plan-sub-query :semi-join)))
+           anti-joins (some->> anti-join-clauses (mapv (partial plan-sub-query :anti-join)))]
 
-      (if (and (empty? calls) (empty? sub-queries) (empty? semi-joins) (empty? anti-joins) (empty? union-joins))
+      (if (and (empty? calls) (empty? inner-joins) (empty? left-joins)
+               (empty? semi-joins) (empty? anti-joins) (empty? union-joins))
         (-> plan
             (vary-meta assoc ::in-bindings (::in-bindings (meta in-rels))))
 
@@ -962,29 +945,32 @@
                     (set/superset? available-vars (::required-vars (meta clause))))]
 
             (let [{available-calls true, unavailable-calls false} (->> calls (group-by available?))
-                  {available-sqs true, unavailable-sqs false} (->> sub-queries (group-by available?))
+                  {available-ijs true, unavailable-ijs false} (->> inner-joins (group-by available?))
+                  {available-ljs true, unavailable-ljs false} (->> left-joins (group-by available?))
                   {available-ujs true, unavailable-ujs false} (->> union-joins (group-by available?))
                   {available-sjs true, unavailable-sjs false} (->> semi-joins (group-by available?))
                   {available-ajs true, unavailable-ajs false} (->> anti-joins (group-by available?))]
 
-              (if (and (empty? available-calls) (empty? available-sqs)
+              (if (and (empty? available-calls) (empty? available-ijs) (empty? available-ljs)
                        (empty? available-ujs) (empty? available-sjs) (empty? available-ajs))
                 (throw (err/illegal-arg :no-available-clauses
                                         {:available-vars available-vars
-                                         :unavailable-subqs unavailable-sqs
+                                         :unavailable-inner-joins unavailable-ijs
+                                         :unavailable-left-joins unavailable-ljs
                                          :unavailable-calls unavailable-calls
                                          :unavailable-union-joins unavailable-ujs
                                          :unavailable-semi-joins unavailable-sjs
                                          :unavailable-anti-joins unavailable-ajs}))
 
                 (recur (cond-> plan
-                               union-joins (wrap-union-joins union-joins param-vars)
-                               available-calls (wrap-calls available-calls param-vars)
-                               available-sjs (wrap-semi-joins :semi-join available-sjs)
-                               available-ajs (wrap-semi-joins :anti-join available-ajs)
-                               available-sqs (wrap-sub-queries available-sqs param-vars))
+                         union-joins (wrap-union-joins union-joins param-vars)
+                         available-calls (wrap-calls available-calls param-vars)
+                         available-ijs (wrap-inner-joins available-ijs param-vars)
+                         available-sjs (wrap-joins :semi-join available-sjs)
+                         available-ajs (wrap-joins :anti-join available-ajs)
+                         available-ljs (wrap-joins :left-outer-join available-ljs))
 
-                       unavailable-calls unavailable-sqs
+                       unavailable-calls unavailable-ijs unavailable-ljs
                        unavailable-ujs unavailable-sjs unavailable-ajs)))))))))
 
 ;; HACK these are just the grouping-fns used in TPC-H

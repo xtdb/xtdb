@@ -486,7 +486,7 @@
                         [e :first-name n]
                         [f :first-name n]]})))))
 
-(deftest test-implict-match-unification
+(deftest test-implicit-match-unification
   (xt/submit-tx tu/*node* '[[:put :foo {:xt/id :ivan, :name "Ivan"}]
                             [:put :foo {:xt/id :petr, :name "Petr"}]
                             [:put :bar {:xt/id :sergei, :name "Sergei"}]
@@ -554,6 +554,51 @@
                                        :where [(match :xt_docs {:xt/id e2})
                                                [(<> e e2)]]})]})))))
 
+(deftest test-left-join
+  (xt/submit-tx tu/*node*
+                '[[:put :xt_docs {:xt/id :ivan, :name "Ivan"}]
+                  [:put :xt_docs {:xt/id :petr, :name "Petr", :parent :ivan}]
+                  [:put :xt_docs {:xt/id :sergei, :name "Sergei", :parent :petr}]
+                  [:put :xt_docs {:xt/id :jeff, :name "Jeff", :parent :petr}]])
+
+  (t/is (= [{:e :ivan, :c :petr}
+            {:e :petr, :c :sergei}
+            {:e :petr, :c :jeff}
+            {:e :sergei, :c nil}
+            {:e :jeff, :c nil}]
+           (xt/q tu/*node*
+                 '{:find [e c]
+                   :where [(match :xt_docs {:xt/id e, :name name})
+                           (left-join {:find [e c]
+                                       :where [(match :xt_docs {:xt/id c})
+                                               [c :parent e]]})]}))
+
+        "find people who have children")
+
+  (t/is (= [{:e :ivan, :s nil}
+            {:e :petr, :s nil}
+            {:e :sergei, :s :jeff}
+            {:e :jeff, :s :sergei}]
+           (xt/q tu/*node*
+                 '{:find [e s]
+                   :where [(match :xt_docs {:xt/id e, :name name, :parent p})
+                           (left-join {:find [s p]
+                                       :in [e]
+                                       :where [(match :xt_docs {:xt/id s, :parent p})
+                                               [(<> e s)]]})]}))
+        "find people who have siblings")
+
+  (t/is (thrown-with-msg? IllegalArgumentException
+                          #":no-available-clauses"
+                          (xt/q tu/*node*
+                                '{:find [e n]
+                                  :where [(match :xt_docs {:xt/id e})
+                                          [e :foo n]
+                                          (left-join {:find [e]
+                                                      :where [(match :xt_docs {:xt/id e})
+                                                              [e :first-name "Petr"]
+                                                              [(= n 1)]]})]}))))
+
 (deftest test-semi-join
   (let [_tx (xt/submit-tx tu/*node*
                           '[[:put :xt_docs {:xt/id :ivan, :name "Ivan"}]
@@ -564,8 +609,7 @@
     (t/is (= [{:e :ivan} {:e :petr}]
              (xt/q tu/*node*
                    '{:find [e]
-                     :where [(match :xt_docs {:xt/id e})
-                             [e :name name]
+                     :where [(match :xt_docs {:xt/id e, :name name})
                              (exists? {:find [e]
                                        :where [(match :xt_docs {:xt/id c})
                                                [c :parent e]]})]}))
@@ -575,13 +619,10 @@
     (t/is (= [{:e :sergei} {:e :jeff}]
              (xt/q tu/*node*
                    '{:find [e]
-                     :where [(match :xt_docs {:xt/id e})
-                             [e :name name]
-                             [e :parent p]
+                     :where [(match :xt_docs {:xt/id e, :name name, :parent p})
                              (exists? {:find [p]
                                        :in [e]
-                                       :where [(match :xt_docs {:xt/id s})
-                                               [s :parent p]
+                                       :where [(match :xt_docs {:xt/id s, :parent p})
                                                [(<> e s)]]})]}))
           "find people who have siblings")
 
@@ -1670,16 +1711,12 @@
                            [:put :order {:xt/id 1, :customer 0, :items [{:sku "cheese", :qty 3}]}]
                            [:put :order {:xt/id 2, :customer 1, :items [{:sku "bread", :qty 1} {:sku "eggs", :qty 2}]}]])
 
-  (t/are [q result]
-      (= result (xt/q tu/*node* q))
-
-
+  (t/are [q result] (= result (xt/q tu/*node* q))
     '{:find [n-customers]
       :where [[(q {:find [(count id)]
                    :where [(match :customer {:xt/id id})]})
                n-customers]]}
     [{:n-customers 2}]
-
 
     '{:find [customer, n-orders]
       :where [(match :customer {:xt/id customer})
