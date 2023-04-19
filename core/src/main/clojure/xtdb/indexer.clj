@@ -277,13 +277,14 @@
     (reify SqlOpIndexer
       (indexOp [_ in-rel {:keys [table]}]
         (let [row-count (.rowCount in-rel)
-              live-table (.liveTable live-chunk table)
               content-rel (iv/->indirect-rel (->> in-rel
                                                   (remove (comp temporal/temporal-column?
                                                                 #(.getName ^IIndirectVector %)))
                                                   (map (fn [^IIndirectVector vec]
                                                          (.withName vec (util/str->normal-form-str (.getName vec))))))
                                              (.rowCount in-rel))
+              table (util/str->normal-form-str table)
+              live-table (.liveTable live-chunk table)
               table-copier (.rowCopier (.writer live-table) content-rel)
               id-col (.vectorForName in-rel "xt$id")
               app-time-start-rdr (some-> (.vectorForName in-rel "application_time_start")
@@ -338,6 +339,7 @@
             ^IIndirectRelation in-rel (iv/->indirect-rel (map (fn [^IIndirectVector vec]
                                                                 (.withName vec (util/str->normal-form-str (.getName vec)))) in-rel)
                                                          row-count)
+            table (util/str->normal-form-str table)
             live-table (.liveTable live-chunk table)
             live-table-wtr (.writer live-table)]
         (letfn [(->live-row-copier ^xtdb.vector.IRowCopier [^IIndirectVector col]
@@ -373,7 +375,8 @@
                     (doto ^IRowCopier (->live-row-copier live-col)
                       (.copyRow 0)))
 
-                  (when-let [{:keys [^long chunk-idx ^long block-idx, col-names]} (meta/row-id->chunk metadata-mgr (name table) old-row-id)]
+                  (when-let [{:keys [^long chunk-idx ^long block-idx, col-names]}
+                             (meta/row-id->chunk metadata-mgr table old-row-id)]
                     (let [idx @(-> (.getBuffer buffer-pool (meta/->chunk-obj-key chunk-idx table "_row_id"))
                                    (util/then-apply #(row-id->idx % block-idx old-row-id)))]
 

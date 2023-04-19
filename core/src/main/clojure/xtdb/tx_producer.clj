@@ -25,7 +25,8 @@
 (s/def :xt/id any?)
 (s/def ::doc (s/and (s/keys :req [:xt/id])
                     (s/conformer #(update-keys % util/kw->normal-form-kw) #(update-keys % util/normal-form-kw->datalog-form-kw))))
-(s/def ::table (s/and simple-keyword? (s/conformer symbol keyword)))
+(s/def ::table (s/and keyword?
+                      (s/conformer (comp util/symbol->normal-form-symbol symbol) (comp util/normal-form-kw->datalog-form-kw keyword))))
 (s/def ::app-time-start (s/nilable ::util/datetime-value))
 (s/def ::app-time-end (s/nilable ::util/datetime-value))
 

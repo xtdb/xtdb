@@ -2216,3 +2216,9 @@
   (t/is (= [{:bar 1, :foo 2}]
            (xt/q tu/*node* '{:find [bar foo]
                              :where [(match :xt-docs {:foo/bar bar :bar.foo/hello-world foo})]}))))
+
+(t/deftest test-table-normalisation
+  (xt/submit-tx tu/*node* [[:put :xt/the-docs {:xt/id "doc"}]])
+  (t/is (= [{:id "doc"}]
+           (xt/q tu/*node* '{:find [id]
+                             :where [(match :xt/the-docs {:xt/id id})]}))))

@@ -33,7 +33,7 @@
            org.roaringbitmap.buffer.MutableRoaringBitmap
            (org.roaringbitmap.longlong Roaring64Bitmap)))
 
-(s/def ::table simple-symbol?)
+(s/def ::table symbol?)
 
 ;; TODO be good to just specify a single expression here and have the interpreter split it
 ;; into metadata + col-preds - the former can accept more than just `(and ~@col-preds)
@@ -419,21 +419,24 @@
 (defmethod ig/init-key ::scan-emitter [_ {:keys [^IMetadataManager metadata-mgr, ^IBufferPool buffer-pool]}]
   (reify IScanEmitter
     (tableColNames [_ wm table-name]
-      (into #{} cat [(keys (.columnTypes metadata-mgr table-name))
-                     (some-> (.liveChunk wm)
-                             (.liveTable table-name)
-                             (.columnTypes)
-                             keys)]))
+      (let [normalized-table (util/str->normal-form-str table-name)]
+        (into #{} cat [(keys (.columnTypes metadata-mgr normalized-table))
+                       (some-> (.liveChunk wm)
+                               (.liveTable normalized-table)
+                               (.columnTypes)
+                               keys)])))
+
     (scanColTypes [_ wm scan-cols]
       (letfn [(->col-type [[table col-name]]
-                (if (temporal/temporal-column? col-name)
-                  [:timestamp-tz :micro "UTC"]
-                  (types/merge-col-types (.columnType metadata-mgr (name table) (util/str->normal-form-str (str col-name)))
-                                         (some-> (.liveChunk wm)
-                                                 (.liveTable (name table))
-                                                 (.columnTypes)
-                                                 (get (util/str->normal-form-str (str col-name)))))))]
-
+                (let [normalized-table (util/str->normal-form-str (str table))
+                      normalized-col-name (util/str->normal-form-str (str col-name))]
+                  (if (temporal/temporal-column? col-name)
+                    [:timestamp-tz :micro "UTC"]
+                    (types/merge-col-types (.columnType metadata-mgr normalized-table normalized-col-name)
+                                           (some-> (.liveChunk wm)
+                                                   (.liveTable normalized-table)
+                                                   (.columnTypes)
+                                                   (get normalized-col-name))))))]
         (->> scan-cols
              (into {} (map (juxt identity ->col-type))))))
 
@@ -450,10 +453,11 @@
             (->> col-names
                  (group-by (comp temporal/temporal-column? str)))
 
-            content-col-names (set (map str content-col-names))
-            normalized-content-col-names (-> (set (map (comp util/str->normal-form-str) content-col-names))
-                                             (conj "_row_id"))
-            content-col-names (conj content-col-names "_row_id")
+            content-col-names (-> (set (map str content-col-names)) (conj "_row_id"))
+
+            normalized-content-col-names (set (map (comp util/str->normal-form-str) content-col-names))
+
+            normalized-table-name (util/str->normal-form-str (str table))
 
             col-types (->> col-names
                            (into {} (map (juxt identity
@@ -475,7 +479,7 @@
                                      :when (not (temporal/temporal-column? (str col-name)))]
                                  select))
 
-            row-count (->> (meta/with-all-metadata metadata-mgr (name table)
+            row-count (->> (meta/with-all-metadata metadata-mgr normalized-table-name
                              (util/->jbifn
                                (fn [_chunk-idx ^ITableMetadata table-metadata]
                                  (let [id-col-idx (.rowIndex table-metadata "xt$id" -1)
@@ -498,10 +502,10 @@
                                         content-col-names temporal-col-names col-preds
                                         temporal-min-range temporal-max-range current-row-ids
                                         (util/->concat-cursor (->content-chunks allocator metadata-mgr buffer-pool
-                                                                                (name table) normalized-content-col-names
+                                                                                normalized-table-name normalized-content-col-names
                                                                                 metadata-pred)
                                                               (some-> (.liveChunk watermark)
-                                                                      (.liveTable (name table))
+                                                                      (.liveTable normalized-table-name)
                                                                       (.liveBlocks normalized-content-col-names metadata-pred)))
                                         params)
                            (coalesce/->coalescing-cursor allocator))))}))))

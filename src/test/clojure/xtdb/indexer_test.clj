@@ -110,7 +110,7 @@
         (t/testing "watermark"
           (with-open [^IWatermark watermark (.openWatermark wm-src last-tx-key)]
             (let [live-blocks (-> (.liveChunk watermark)
-                                  (.liveTable "device-info")
+                                  (.liveTable "device_info")
                                   (.liveBlocks #{"xt$id" "model"} nil))
                   !res (volatile! [])]
               (.forEachRemaining live-blocks
@@ -129,15 +129,15 @@
                  (-> (meta/latest-chunk-metadata mm)
                      (select-keys [:latest-completed-tx :latest-row-id]))))
 
-        (let [objects-list (->> (.listObjects os "chunk-00/device-info") (filter #(str/ends-with? % "/metadata.arrow")))]
+        (let [objects-list (->> (.listObjects os "chunk-00/device_info") (filter #(str/ends-with? % "/metadata.arrow")))]
           (t/is (= 1 (count objects-list)))
-          (t/is (= ["chunk-00/device-info/metadata.arrow"] objects-list)))
+          (t/is (= ["chunk-00/device_info/metadata.arrow"] objects-list)))
 
         (tj/check-json (.toPath (io/as-file (io/resource "xtdb/indexer-test/can-build-chunk-as-arrow-ipc-file-format")))
                        (.resolve node-dir "objects"))
 
         (t/testing "buffer pool"
-          (let [buffer-name "chunk-00/device-info/metadata.arrow"
+          (let [buffer-name "chunk-00/device_info/metadata.arrow"
                 ^ArrowBuf buffer @(.getBuffer bp buffer-name)
                 footer (util/read-arrow-footer buffer)]
             (t/is (= 2 (count (.buffers ^BufferPool bp))))
@@ -158,7 +158,7 @@
               (let [id-col-idx (-> (meta/->table-metadata metadata-batch (meta/->table-metadata-idxs metadata-batch))
                                    (.rowIndex "xt$id" -1))]
                 (t/is (= "xt$id" (-> (.getVector metadata-batch "column")
-                                      (ty/get-object id-col-idx))))
+                                     (ty/get-object id-col-idx))))
                 (let [^StructVector utf8-type-vec (-> ^StructVector (.getVector metadata-batch "types")
                                                       (.getChild "utf8"))]
                   (t/is (= "device-info-demo000000"
@@ -425,10 +425,10 @@
           (let [objs (.listObjects os)]
             (t/is (= 4 (count (filter #(re-matches #"^chunk-\p{XDigit}+/temporal\.arrow$" %) objs))))
             (t/is (= 4 (count (filter #(re-matches #"temporal-snapshots/\p{XDigit}+.*" %) objs))))
-            (t/is (= 1 (count (filter #(re-matches #"chunk-\p{XDigit}+/device-info/metadata\.arrow" %) objs))))
-            (t/is (= 4 (count (filter #(re-matches #"chunk-\p{XDigit}+/device-readings/metadata\.arrow" %) objs))))
-            (t/is (= 1 (count (filter #(re-matches #"chunk-.*/device-info/content-api_version\.arrow" %) objs))))
-            (t/is (= 4 (count (filter #(re-matches #"chunk-.*/device-readings/content-battery_level\.arrow" %) objs))))))))))
+            (t/is (= 1 (count (filter #(re-matches #"chunk-\p{XDigit}+/device_info/metadata\.arrow" %) objs))))
+            (t/is (= 4 (count (filter #(re-matches #"chunk-\p{XDigit}+/device_readings/metadata\.arrow" %) objs))))
+            (t/is (= 1 (count (filter #(re-matches #"chunk-.*/device_info/content-api_version\.arrow" %) objs))))
+            (t/is (= 4 (count (filter #(re-matches #"chunk-.*/device_readings/content-battery_level\.arrow" %) objs))))))))))
 
 (t/deftest can-ingest-ts-devices-mini-into-multiple-nodes
   (let [node-dir (util/->path "target/can-ingest-ts-devices-mini-into-multiple-nodes")
@@ -466,9 +466,9 @@
             (let [objs (.listObjects os)]
               (t/is (= 11 (count (filter #(re-matches #"chunk-\p{XDigit}+/temporal\.arrow" %) objs))))
               (t/is (= 11 (count (filter #(re-matches #"temporal-snapshots/\p{XDigit}+.arrow" %) objs))))
-              (t/is (= 13 (count (filter #(re-matches #"chunk-\p{XDigit}+/device-(?:info|readings)/metadata.arrow" %) objs))))
-              (t/is (= 2 (count (filter #(re-matches #"chunk-\p{XDigit}+/device-info/content-api_version\.arrow" %) objs))))
-              (t/is (= 11 (count (filter #(re-matches #"chunk-\p{XDigit}+/device-readings/content-battery_level\.arrow" %) objs)))))))))))
+              (t/is (= 13 (count (filter #(re-matches #"chunk-\p{XDigit}+/device_(?:info|readings)/metadata.arrow" %) objs))))
+              (t/is (= 2 (count (filter #(re-matches #"chunk-\p{XDigit}+/device_info/content-api_version\.arrow" %) objs))))
+              (t/is (= 11 (count (filter #(re-matches #"chunk-\p{XDigit}+/device_readings/content-battery_level\.arrow" %) objs)))))))))))
 
 (t/deftest can-ingest-ts-devices-mini-with-stop-start-and-reach-same-state
   (let [node-dir (util/->path "target/can-ingest-ts-devices-mini-with-stop-start-and-reach-same-state")
@@ -513,14 +513,14 @@
                 (let [objs (.listObjects os)]
                   (t/is (= 5 (count (filter #(re-matches #"^chunk-\p{XDigit}+/temporal\.arrow$" %) objs))))
                   (t/is (= 5 (count (filter #(re-matches #"temporal-snapshots/\p{XDigit}+.*" %) objs))))
-                  (t/is (= 2 (count (filter #(re-matches #"chunk-\p{XDigit}+/device-info/metadata\.arrow" %) objs))))
-                  (t/is (= 5 (count (filter #(re-matches #"chunk-\p{XDigit}+/device-readings/metadata\.arrow" %) objs))))
-                  (t/is (= 2 (count (filter #(re-matches #"chunk-.*/device-info/content-api_version\.arrow" %) objs))))
-                  (t/is (= 5 (count (filter #(re-matches #"chunk-.*/device-readings/content-battery_level\.arrow" %) objs)))))
+                  (t/is (= 2 (count (filter #(re-matches #"chunk-\p{XDigit}+/device_info/metadata\.arrow" %) objs))))
+                  (t/is (= 5 (count (filter #(re-matches #"chunk-\p{XDigit}+/device_readings/metadata\.arrow" %) objs))))
+                  (t/is (= 2 (count (filter #(re-matches #"chunk-.*/device_info/content-api_version\.arrow" %) objs))))
+                  (t/is (= 5 (count (filter #(re-matches #"chunk-.*/device_readings/content-battery_level\.arrow" %) objs)))))
 
                 (t/is (= 2000 (count (.id->internal-id iid-mgr)))))
 
-              (t/is (= :utf8 (.columnType mm "device-readings" "xt$id")))
+              (t/is (= :utf8 (.columnType mm "device_readings" "xt$id")))
 
               (let [^TransactionInstant
                     second-half-tx-key (reduce
@@ -544,7 +544,7 @@
 
                     (t/is (>= (count (.id->internal-id iid-mgr)) 2000))
 
-                    (t/is (= :utf8 (.columnType mm "device-info" "xt$id"))))
+                    (t/is (= :utf8 (.columnType mm "device_info" "xt$id"))))
 
                   (doseq [^Node node [new-node node]]
                     (t/is (= second-half-tx-key (-> second-half-tx-key
@@ -561,12 +561,12 @@
                     (let [objs (.listObjects os)]
                       (t/is (= 11 (count (filter #(re-matches #"^chunk-\p{XDigit}+/temporal\.arrow$" %) objs))))
                       (t/is (= 11 (count (filter #(re-matches #"temporal-snapshots/\p{XDigit}+.*" %) objs))))
-                      (t/is (= 2 (count (filter #(re-matches #"chunk-\p{XDigit}+/device-info/metadata\.arrow" %) objs))))
-                      (t/is (= 11 (count (filter #(re-matches #"chunk-\p{XDigit}+/device-readings/metadata\.arrow" %) objs))))
-                      (t/is (= 2 (count (filter #(re-matches #"chunk-.*/device-info/content-api_version\.arrow" %) objs))))
-                      (t/is (= 11 (count (filter #(re-matches #"chunk-.*/device-readings/content-battery_level\.arrow" %) objs)))))
+                      (t/is (= 2 (count (filter #(re-matches #"chunk-\p{XDigit}+/device_info/metadata\.arrow" %) objs))))
+                      (t/is (= 11 (count (filter #(re-matches #"chunk-\p{XDigit}+/device_readings/metadata\.arrow" %) objs))))
+                      (t/is (= 2 (count (filter #(re-matches #"chunk-.*/device_info/content-api_version\.arrow" %) objs))))
+                      (t/is (= 11 (count (filter #(re-matches #"chunk-.*/device_readings/content-battery_level\.arrow" %) objs)))))
 
-                    (t/is (= :utf8 (.columnType mm "device-info" "xt$id")))
+                    (t/is (= :utf8 (.columnType mm "device_info" "xt$id")))
 
                     (t/is (= 2000 (count (.id->internal-id iid-mgr))))))))))))))
 

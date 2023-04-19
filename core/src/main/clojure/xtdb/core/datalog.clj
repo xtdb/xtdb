@@ -22,7 +22,7 @@
 (s/def ::eid ::lp/value)
 (s/def ::attr keyword?)
 (s/def ::value ::lp/value)
-(s/def ::table (s/and simple-keyword? (s/conformer symbol keyword)))
+(s/def ::table (s/and keyword? (s/conformer symbol keyword)))
 (s/def ::column symbol?)
 
 (s/def ::fn-call

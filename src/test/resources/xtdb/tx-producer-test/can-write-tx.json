@@ -50,7 +50,7 @@
               "typeIds" : [ ]
             },
             "children" : [{
-              "name" : "device-info",
+              "name" : "device_info",
               "nullable" : false,
               "type" : {
                 "name" : "struct"
@@ -137,7 +137,7 @@
                 }]
               }]
             },{
-              "name" : "device-readings",
+              "name" : "device_readings",
               "nullable" : false,
               "type" : {
                 "name" : "struct"
@@ -566,7 +566,7 @@
             "TYPE_ID" : [0,1,0,1],
             "OFFSET" : [0,0,1,1],
             "children" : [{
-              "name" : "device-info",
+              "name" : "device_info",
               "count" : 2,
               "VALIDITY" : [1,1],
               "children" : [{
@@ -631,7 +631,7 @@
                 }]
               }]
             },{
-              "name" : "device-readings",
+              "name" : "device_readings",
               "count" : 2,
               "VALIDITY" : [1,1],
               "children" : [{
