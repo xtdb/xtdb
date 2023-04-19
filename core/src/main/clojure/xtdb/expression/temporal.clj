@@ -972,7 +972,8 @@
 (defmethod expr/codegen-call [:period :timestamp-tz :timestamp-tz] [{[start-type end-type] :arg-types}]
   {:return-type [:struct {'start start-type, 'end end-type}]
    :->call-code (fn [[start-code end-code]]
-                  `(->period ~start-code ~end-code))})
+                  (-> `(->period ~start-code ~end-code)
+                      (expr/with-tag IStructValueReader)))})
 
 (defn start ^long [^IStructValueReader period]
   (.readLong period "start"))
