@@ -319,7 +319,7 @@
     (-> (StreamSupport/stream chunks false)
         (.mapToInt (reify ToIntFunction
                      (applyAsInt [_ block-root]
-                       (let [^BigIntVector row-id-vec (.getVector ^VectorSchemaRoot block-root "_row-id")]
+                       (let [^BigIntVector row-id-vec (.getVector ^VectorSchemaRoot block-root "_row_id")]
                          (-> (IntStream/range 0 (.getValueCount row-id-vec))
                              (.filter (reify IntPredicate
                                         (test [_ idx]
@@ -350,7 +350,7 @@
                                           [col-name (->live-row-copier in-col)])
                                         (into {}))
                 iid-rdr (.monoReader (.vectorForName in-rel "_iid") :i64)
-                row-id-rdr (.monoReader (.vectorForName in-rel "_row-id") :i64)
+                row-id-rdr (.monoReader (.vectorForName in-rel "_row_id") :i64)
                 app-time-start-rdr (.monoReader (.vectorForName in-rel "application_time_start") t/temporal-col-type)
                 app-time-end-rdr (.monoReader (.vectorForName in-rel "application_time_end") t/temporal-col-type)]
 
@@ -374,7 +374,7 @@
                       (.copyRow 0)))
 
                   (when-let [{:keys [^long chunk-idx ^long block-idx, col-names]} (meta/row-id->chunk metadata-mgr (name table) old-row-id)]
-                    (let [idx @(-> (.getBuffer buffer-pool (meta/->chunk-obj-key chunk-idx table "_row-id"))
+                    (let [idx @(-> (.getBuffer buffer-pool (meta/->chunk-obj-key chunk-idx table "_row_id"))
                                    (util/then-apply #(row-id->idx % block-idx old-row-id)))]
 
                       (doseq [^String col-name col-names

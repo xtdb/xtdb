@@ -266,7 +266,7 @@
   (startTx [_]
     (LiveTableTx. allocator object-store table-name table-metadata-writer
                   static-rel row-id-vec row-id-bitmap
-                  (vw/->rel-writer allocator) (BigIntVector. (types/col-type->field "_row-id" :i64) allocator) (Roaring64Bitmap.)
+                  (vw/->rel-writer allocator) (BigIntVector. (types/col-type->field "_row_id" :i64) allocator) (Roaring64Bitmap.)
                   row-counter))
 
   (openWatermark [_ retain?]
@@ -351,7 +351,7 @@
   (liveTable [_ table-name]
     (letfn [(->live-table [table]
               (LiveTable. allocator object-store metadata-mgr table
-                          (vw/->rel-writer allocator) (BigIntVector. (types/col-type->field "_row-id" :i64) allocator) (Roaring64Bitmap.)
+                          (vw/->rel-writer allocator) (BigIntVector. (types/col-type->field "_row_id" :i64) allocator) (Roaring64Bitmap.)
                           (.openTableMetadataWriter metadata-mgr table chunk-idx) (HashMap.)
                           chunk-idx (->row-counter (.blockIdx row-counter))))
 

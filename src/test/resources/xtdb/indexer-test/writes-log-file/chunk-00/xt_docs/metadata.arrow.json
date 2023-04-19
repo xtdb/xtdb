@@ -120,7 +120,7 @@
       "count" : 6,
       "VALIDITY" : [1,1,1,1,1,1],
       "OFFSET" : [0,7,12,17,24,29,34],
-      "DATA" : ["_row-id","xt$id","month","_row-id","xt$id","month"]
+      "DATA" : ["_row_id","xt$id","month","_row_id","xt$id","month"]
     },{
       "name" : "block-idx",
       "count" : 6,

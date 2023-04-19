@@ -150,7 +150,7 @@
      (.and y))))
 
 (defn- ->atemporal-row-id-bitmap [^BufferAllocator allocator, ^Map col-preds, ^IIndirectRelation in-rel, params]
-  (let [row-id-rdr (-> (.vectorForName in-rel "_row-id")
+  (let [row-id-rdr (-> (.vectorForName in-rel "_row_id")
                        (.monoReader :i64))
         res (Roaring64Bitmap.)]
 
@@ -189,7 +189,7 @@
 
 (defn- select-current-row-ids ^xtdb.vector.IIndirectRelation [^IIndirectRelation content-rel, ^Roaring64Bitmap atemporal-row-id-bitmap, ^IPersistentSet current-row-ids]
   (let [sel (IntStream/builder)
-        row-id-rdr (-> (.vectorForName content-rel "_row-id")
+        row-id-rdr (-> (.vectorForName content-rel "_row_id")
                        (.monoReader :i64))]
     (dotimes [idx (.rowCount content-rel)]
       (let [row-id (.readLong row-id-rdr idx)]
@@ -204,7 +204,7 @@
         temporal-max-range (adjust-temporal-max-range-to-row-id-range temporal-max-range atemporal-row-id-bitmap)]
     (.createTemporalRelation (.temporalRootsSource watermark)
                              allocator
-                             (->> (conj col-names "_row-id")
+                             (->> (conj col-names "_row_id")
                                   (into [] (comp (distinct) (filter temporal/temporal-column?))))
                              temporal-min-range
                              temporal-max-range
@@ -234,8 +234,8 @@
 
 (defn align-vectors ^xtdb.vector.IIndirectRelation [^IIndirectRelation content-rel, ^IIndirectRelation temporal-rel]
   ;; assumption: temporal-rel is sorted by row-id
-  (let [temporal-row-id-col (.vectorForName temporal-rel "_row-id")
-        content-row-id-rdr (-> (.vectorForName content-rel "_row-id")
+  (let [temporal-row-id-col (.vectorForName temporal-rel "_row_id")
+        content-row-id-rdr (-> (.vectorForName content-rel "_row_id")
                                (.monoReader :i64))
         row-id->repeat-count (->row-id->repeat-count temporal-row-id-col)
         sel (IntStream/builder)]
@@ -267,7 +267,7 @@
                      params]
   ICursor
   (tryAdvance [_ c]
-    (let [keep-row-id-col? (contains? temporal-col-names "_row-id")
+    (let [keep-row-id-col? (contains? temporal-col-names "_row_id")
           !advanced? (volatile! false)]
 
       (while (and (not @!advanced?)
@@ -284,7 +284,7 @@
                                      (letfn [(accept-rel [^IIndirectRelation read-rel]
                                                (when (and read-rel (pos? (.rowCount read-rel)))
                                                  (let [read-rel (cond-> read-rel
-                                                                  (not keep-row-id-col?) (remove-col "_row-id"))]
+                                                                  (not keep-row-id-col?) (remove-col "_row_id"))]
                                                    (.accept c read-rel)
                                                    (vreset! !advanced? true))))]
 
@@ -452,8 +452,8 @@
 
             content-col-names (set (map str content-col-names))
             normalized-content-col-names (-> (set (map (comp util/str->normal-form-str) content-col-names))
-                                             (conj "_row-id"))
-            content-col-names (conj content-col-names "_row-id")
+                                             (conj "_row_id"))
+            content-col-names (conj content-col-names "_row_id")
 
             col-types (->> col-names
                            (into {} (map (juxt identity

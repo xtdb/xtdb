@@ -652,11 +652,9 @@
     (symbol (->normal-form (name s)))))
 
 (defn str->normal-form-str [s]
-  (if (= s "_row-id")
-    s
-    (if-let [^int i (str/last-index-of s "/")]
-      (str (->normal-form (subs s 0 i)) "$" (->normal-form (subs s (inc i))))
-      (->normal-form s))))
+  (if-let [^int i (str/last-index-of s "/")]
+    (str (->normal-form (subs s 0 i)) "$" (->normal-form (subs s (inc i))))
+    (->normal-form s)))
 
 (defn normal-form-str->datalog-form-str [s]
   (if-let [^int i (str/last-index-of s "$")]

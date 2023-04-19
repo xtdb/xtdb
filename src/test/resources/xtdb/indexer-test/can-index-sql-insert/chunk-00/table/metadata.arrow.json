@@ -136,7 +136,7 @@
       "count" : 10,
       "VALIDITY" : [1,1,1,1,1,1,1,1,1,1],
       "OFFSET" : [0,7,12,15,18,21,28,33,36,39,42],
-      "DATA" : ["_row-id","xt$id","foo","bar","baz","_row-id","xt$id","foo","bar","baz"]
+      "DATA" : ["_row_id","xt$id","foo","bar","baz","_row_id","xt$id","foo","bar","baz"]
     },{
       "name" : "block-idx",
       "count" : 10,

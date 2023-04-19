@@ -2,7 +2,7 @@
  {:table "users"}
  [:rename
   {x1 _iid,
-   x2 _row-id,
+   x2 _row_id,
    x5 system_time_start,
    x6 system_time_end,
    x8 application_time_start,
@@ -11,7 +11,7 @@
    [x1 x2 x5 x6 {x8 (cast-tstz x3)} {x9 (cast-tstz x4)}]
    [:rename
     {_iid x1,
-     _row-id x2,
+     _row_id x2,
      application_time_start x3,
      application_time_end x4,
      system_time_start x5,
@@ -19,7 +19,7 @@
     [:scan
      {:table users, :for-app-time :all-time}
      (_iid
-      _row-id
+      _row_id
       application_time_start
       application_time_end
       system_time_start

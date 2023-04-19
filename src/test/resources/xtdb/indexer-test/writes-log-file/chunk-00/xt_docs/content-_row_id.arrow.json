@@ -1,7 +1,7 @@
 {
   "schema" : {
     "fields" : [{
-      "name" : "_row-id",
+      "name" : "_row_id",
       "nullable" : false,
       "type" : {
         "name" : "int",
@@ -12,12 +12,12 @@
     }]
   },
   "batches" : [{
-    "count" : 0,
+    "count" : 3,
     "columns" : [{
-      "name" : "_row-id",
-      "count" : 0,
-      "VALIDITY" : [ ],
-      "DATA" : [ ]
+      "name" : "_row_id",
+      "count" : 3,
+      "VALIDITY" : [1,1,1],
+      "DATA" : ["0","1","3"]
     }]
   }]
 }

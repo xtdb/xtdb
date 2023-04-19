@@ -627,7 +627,7 @@
                           :let [identifier (last identifiers)]]
                       {:identifier identifier
                        :qualified-column [correlation-name identifier]})
-                    (for [col-name ["_iid" "_row-id"
+                    (for [col-name ["_iid" "_row_id"
                                     "application_time_start" "application_time_end"
                                     "system_time_start" "system_time_end"]]
                       {:identifier col-name
@@ -653,7 +653,7 @@
     (:update_statement__searched :delete_statement__searched)
     [(let [{:keys [correlation-name], :as table} (table ag)]
        (vec
-        (concat (->> (for [col-name ["_iid" "_row-id"
+        (concat (->> (for [col-name ["_iid" "_row_id"
                                      "application_time_start" "application_time_end"
                                      "system_time_start" "system_time_end"]]
                        {:identifier col-name
@@ -669,7 +669,7 @@
 
     :erase_statement__searched
     [(let [{:keys [correlation-name], :as table} (table ag)]
-       (->> (for [col-name ["_iid" "_row-id"
+       (->> (for [col-name ["_iid" "_row_id"
                             "application_time_start" "application_time_end"
                             "system_time_start" "system_time_end"]]
               {:identifier col-name

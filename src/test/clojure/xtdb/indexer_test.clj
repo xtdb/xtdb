@@ -676,7 +676,7 @@
           (letfn [(test-live-blocks [^IWatermark wm, metadata-pred]
                     (with-open [live-blocks (-> (.liveChunk wm)
                                                 (.liveTable "xt_docs")
-                                                (.liveBlocks #{"_row-id" "name"} metadata-pred))]
+                                                (.liveBlocks #{"_row_id" "name"} metadata-pred))]
                       (let [!res (atom [])]
                         (.forEachRemaining live-blocks
                                            (reify Consumer
@@ -685,16 +685,16 @@
                         @!res)))]
 
             (with-open [wm1 (.openWatermark wm-src nil)]
-              (t/is (= [[{:_row-id 1, :name "Dan"} {:_row-id 2, :name "Ivan"}]
-                        [{:_row-id 3, :name "James"} {:_row-id 4, :name "Jon"}]]
+              (t/is (= [[{:_row_id 1, :name "Dan"} {:_row_id 2, :name "Ivan"}]
+                        [{:_row_id 3, :name "James"} {:_row_id 4, :name "Jon"}]]
                        (test-live-blocks wm1 nil))
                     "no selector")
 
-              (t/is (= [[{:_row-id 3, :name "James"} {:_row-id 4, :name "Jon"}]]
+              (t/is (= [[{:_row_id 3, :name "James"} {:_row_id 4, :name "Jon"}]]
                        (test-live-blocks wm1 gt-literal-selector))
                     "only second block, literal selector")
 
-              (t/is (= [[{:_row-id 3, :name "James"} {:_row-id 4, :name "Jon"}]]
+              (t/is (= [[{:_row_id 3, :name "James"} {:_row_id 4, :name "Jon"}]]
                        (test-live-blocks wm1 gt-param-selector))
                     "only second block, param selector")
 
@@ -702,11 +702,11 @@
                                 (tu/then-await-tx* node))]
 
                 (with-open [wm2 (.openWatermark wm-src next-tx)]
-                  (t/is (= [[{:_row-id 3, :name "James"} {:_row-id 4, :name "Jon"}]]
+                  (t/is (= [[{:_row_id 3, :name "James"} {:_row_id 4, :name "Jon"}]]
                            (test-live-blocks wm1 gt-literal-selector))
                         "replay with wm1")
 
-                  (t/is (= [[{:_row-id 3, :name "James"} {:_row-id 4, :name "Jon"}]
-                            [{:_row-id 5, :name "Jeremy"}]]
+                  (t/is (= [[{:_row_id 3, :name "James"} {:_row_id 4, :name "Jon"}]
+                            [{:_row_id 5, :name "Jeremy"}]]
                            (test-live-blocks wm2 gt-literal-selector))
                         "now on wm2"))))))))))

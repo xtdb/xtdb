@@ -136,7 +136,7 @@
                               ^boolean newEntity, ^boolean tombstone])
 
 (def temporal-col-types
-  {"_iid" :i64, "_row-id" :i64
+  {"_iid" :i64, "_row_id" :i64
    "system_time_start" types/temporal-col-type, "system_time_end" types/temporal-col-type
    "application_time_start" types/temporal-col-type, "application_time_end" types/temporal-col-type})
 
@@ -151,7 +151,7 @@
 (def ^:const ^int app-time-end-idx 5)
 
 (def ^:private column->idx {"_iid" id-idx
-                            "_row-id" row-id-idx
+                            "_row_id" row-id-idx
                             "application_time_start" app-time-start-idx
                             "application_time_end" app-time-end-idx
                             "system_time_start" sys-time-start-idx

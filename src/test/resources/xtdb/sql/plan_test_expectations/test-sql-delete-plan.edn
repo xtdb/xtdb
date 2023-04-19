@@ -2,7 +2,7 @@
  {:table "users"}
  [:rename
   {x2 _iid,
-   x3 _row-id,
+   x3 _row_id,
    x6 system_time_start,
    x7 system_time_end,
    x9 application_time_start,
@@ -17,7 +17,7 @@
    [:rename
     {id x1,
      _iid x2,
-     _row-id x3,
+     _row_id x3,
      application_time_start x4,
      application_time_end x5,
      system_time_start x6,
@@ -28,7 +28,7 @@
       [:between #time/date "2020-05-01" #time/date "9999-12-31"]}
      [{id (= id ?_0)}
       _iid
-      _row-id
+      _row_id
       application_time_start
       application_time_end
       system_time_start

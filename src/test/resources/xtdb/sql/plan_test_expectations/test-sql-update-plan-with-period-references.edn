@@ -2,7 +2,7 @@
  {:table "foo"}
  [:rename
   {x5 _iid,
-   x6 _row-id,
+   x6 _row_id,
    x1 system_time_start,
    x2 system_time_end,
    x8 bar,
@@ -22,7 +22,7 @@
      application_time_start x3,
      application_time_end x4,
      _iid x5,
-     _row-id x6}
+     _row_id x6}
     [:scan
      {:table foo}
      (system_time_start
@@ -30,4 +30,4 @@
       application_time_start
       application_time_end
       _iid
-      _row-id)]]]]]
+      _row_id)]]]]]

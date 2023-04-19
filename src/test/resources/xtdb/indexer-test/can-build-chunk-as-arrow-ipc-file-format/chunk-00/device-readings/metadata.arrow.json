@@ -171,7 +171,7 @@
       "count" : 30,
       "VALIDITY" : [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
       "OFFSET" : [0,7,15,19,31,35,39,51,70,75,80,93,102,116,124,137,144,152,156,168,172,176,188,207,212,217,230,239,253,261,274],
-      "DATA" : ["_row-id","mem_used","rssi","cpu_avg_5min","ssid","time","cpu_avg_1min","battery_temperature","xt$id","bssid","battery_level","device_id","battery_status","mem_free","cpu_avg_15min","_row-id","mem_used","rssi","cpu_avg_5min","ssid","time","cpu_avg_1min","battery_temperature","xt$id","bssid","battery_level","device_id","battery_status","mem_free","cpu_avg_15min"]
+      "DATA" : ["_row_id","mem_used","rssi","cpu_avg_5min","ssid","time","cpu_avg_1min","battery_temperature","xt$id","bssid","battery_level","device_id","battery_status","mem_free","cpu_avg_15min","_row_id","mem_used","rssi","cpu_avg_5min","ssid","time","cpu_avg_1min","battery_temperature","xt$id","bssid","battery_level","device_id","battery_status","mem_free","cpu_avg_15min"]
     },{
       "name" : "block-idx",
       "count" : 30,

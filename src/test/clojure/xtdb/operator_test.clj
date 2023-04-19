@@ -40,7 +40,7 @@
           (t/is (= #{0 1} (set (keys (.chunksMetadata metadata-mgr)))))
 
           (let [expected-match [(meta/map->ChunkMatch
-                                 {:chunk-idx 1, :block-idxs (doto (RoaringBitmap.) (.add 1)), :col-names #{"_row-id" "xt$id" "name"}})]]
+                                 {:chunk-idx 1, :block-idxs (doto (RoaringBitmap.) (.add 1)), :col-names #{"_row_id" "xt$id" "name"}})]]
             (t/is (= expected-match
                      (meta/matching-chunks metadata-mgr "xt_docs"
                                            (expr.meta/->metadata-selector '(> name "Ivan") '#{name} {})))
@@ -79,7 +79,7 @@
     (let [^IMetadataManager metadata-mgr (tu/component node ::meta/metadata-manager)]
       (t/is (= #{0 3} (set (keys (.chunksMetadata metadata-mgr)))))
       (let [expected-match [(meta/map->ChunkMatch
-                             {:chunk-idx 0, :block-idxs (doto (RoaringBitmap.) (.add 0)), :col-names #{"_row-id" "xt$id" "name"}})]]
+                             {:chunk-idx 0, :block-idxs (doto (RoaringBitmap.) (.add 0)), :col-names #{"_row_id" "xt$id" "name"}})]]
         (t/is (= expected-match
                  (meta/matching-chunks metadata-mgr "xt_docs"
                                        (expr.meta/->metadata-selector '(= name "Ivan") '#{name} {})))

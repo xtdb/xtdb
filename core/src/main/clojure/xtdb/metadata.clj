@@ -394,7 +394,7 @@
                 (.appendNestedMetadata nested-meta-writer values-col)))
 
             (write-col-meta! [^IIndirectVector content-col]
-              (let [content-writers (if (= "_row-id" (.getName content-col))
+              (let [content-writers (if (= "_row_id" (.getName content-col))
                                       [(->nested-meta-writer content-col)]
 
                                       (let [^DenseUnionVector content-vec (.getVector content-col)]
@@ -554,7 +554,7 @@
                    block-matches? (reify IntPredicate
                                     (test [_ block-idx]
                                       (boolean
-                                       (when-let [meta-idx (.rowIndex table-metadata "_row-id" block-idx)]
+                                       (when-let [meta-idx (.rowIndex table-metadata "_row_id" block-idx)]
                                          (<= (.readLong min-i64-rdr meta-idx)
                                              row-id
                                              (.readLong max-i64-rdr meta-idx))))))]
@@ -571,7 +571,7 @@
                                                   (types/get-object col-name-vec idx))))
                                    (.collect (Collectors/toSet))
                                    (set)
-                                   (disj "_row-id")))})))))
+                                   (disj "_row_id")))})))))
        (remove nil?)
        first))
 

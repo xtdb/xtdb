@@ -109,7 +109,7 @@
       "count" : 12,
       "VALIDITY" : [1,1,1,1,1,1,1,1,1,1,1,1],
       "OFFSET" : [0,7,12,23,35,40,47,54,59,70,82,87,94],
-      "DATA" : ["_row-id","xt$id","api_version","manufacturer","model","os_name","_row-id","xt$id","api_version","manufacturer","model","os_name"]
+      "DATA" : ["_row_id","xt$id","api_version","manufacturer","model","os_name","_row_id","xt$id","api_version","manufacturer","model","os_name"]
     },{
       "name" : "block-idx",
       "count" : 12,
