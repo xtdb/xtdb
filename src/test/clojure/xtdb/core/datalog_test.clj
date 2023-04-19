@@ -343,7 +343,15 @@
                     [1 3 2]
                     [1 3 8]
                     [4 6 5]]))
-          "groups by x and y in this case")))
+          "groups by x and y in this case"))
+
+  (t/testing "stddev aggregate"
+    (t/is (= [{:y 23.53720459187964}]
+             (xt/q tu/*node*
+               '{:find [(stddev-pop x)]
+                 :keys [y]
+                 :in [[x ...]]}
+               [10 15 20 35 75])))))
 
 (deftest test-query-with-in-bindings
   (let [_tx (xt/submit-tx tu/*node* ivan+petr)]

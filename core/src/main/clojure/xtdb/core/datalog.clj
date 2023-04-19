@@ -5,6 +5,7 @@
             [xtdb.error :as err]
             [xtdb.logical-plan :as lp]
             [xtdb.operator :as op]
+            [xtdb.operator.group-by :as group-by]
             [xtdb.rewrite :as r]
             [xtdb.util :as util]
             [xtdb.vector.writer :as vw])
@@ -973,9 +974,11 @@
                        unavailable-calls unavailable-ijs unavailable-ljs
                        unavailable-ujs unavailable-sjs unavailable-ajs)))))))))
 
-;; HACK these are just the grouping-fns used in TPC-H
-;; - we're going to want a better way to recognise them
-(def ^:private grouping-fn? '#{count count-distinct sum avg min max})
+(def ^:private aggregate-fn? (->> group-by/->aggregate-factory
+                                  (methods)
+                                  (keys)
+                                  (map symbol)
+                                  (set)))
 
 (defn- wrap-with-meta [x m]
   (with-meta {:obj x} (assoc m ::wrapped true)))
@@ -993,7 +996,7 @@
 
           (plan-head-form [col [form-type form-arg :as form]]
             (if (and (= form-type :fn-call)
-                     (grouping-fn? (:f form-arg)))
+                     (aggregate-fn? (:f form-arg)))
               (let [{:keys [f], [[agg-arg-type :as agg-arg]] :args} form-arg]
                 (if (= agg-arg-type :logic-var)
                   (-> col
