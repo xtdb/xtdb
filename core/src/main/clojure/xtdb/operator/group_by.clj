@@ -200,14 +200,11 @@
                             :else acc-expr}
                            (expr/prepare-expr))
 
-              {:keys [continue] :as emitted-expr} (expr/codegen-expr agg-expr input-opts)
               ;; ignore return-type of the codegen because it may be more specific than the acc type
-
-              vec-type (-> (.getType (types/col-type->field return-type))
-                           (types/arrow-type->vector-type))]
+              {:keys [continue] :as emitted-expr} (expr/codegen-expr agg-expr input-opts)]
 
           {:return-type return-type
-           :eval-agg (-> `(fn [~(-> acc-sym (expr/with-tag vec-type))
+           :eval-agg (-> `(fn [~(-> acc-sym (expr/with-tag ValueVector))
                                ~(-> expr/rel-sym (expr/with-tag IIndirectRelation))
                                ~(-> group-mapping-sym (expr/with-tag IntVector))]
                             (let [~acc-col-sym (iv/->direct-vec ~acc-sym)
