@@ -103,6 +103,7 @@ jobs:
           at: ~/
       - run:
           command: |
+            lein version
             ./lein-sub check
             ./lein-sub test
       - store_test_results:
