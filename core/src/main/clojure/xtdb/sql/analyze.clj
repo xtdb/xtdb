@@ -854,10 +854,20 @@
 (defn- check-aggregate-or-subquery [label ag]
   (r/collect-stop
    (fn [inner-ag]
-     (r/zcase inner-ag
+     (r/zcase
+       inner-ag
+       :general_set_function
+       (r/zmatch
+         inner-ag
+         [:general_set_function [:computational_operation sf] [:set_quantifier sq] _]
+         (when (contains? #{"STDDEV_POP" "STDDEV_SAMP" "VAR_POP" "VAR_SAMP"} sf)
+           [(format "%s does not support set quanitifiers (%s): %s %s"
+                    sf sq (->src-str ag) (->line-info-str ag))]))
+
        :aggregate_function
        [(format (str label " cannot contain aggregate functions: %s %s")
                 (->src-str ag) (->line-info-str ag))]
+
        :query_expression
        [(format (str label " cannot contain nested queries: %s %s")
                 (->src-str ag) (->line-info-str ag))]

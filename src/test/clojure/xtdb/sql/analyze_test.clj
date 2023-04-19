@@ -1,5 +1,5 @@
 (ns xtdb.sql.analyze-test
-  (:require [clojure.test :as t]
+  (:require [clojure.test :as t :refer [deftest]]
             [xtdb.rewrite :as r]
             [xtdb.sql.analyze :as sem]
             [xtdb.sql.parser :as p])
@@ -771,3 +771,12 @@ SELECT t1.d-t1.e AS a, SUM(t1.a) AS b
             UNION ALL
             SELECT foo.n + 1 FROM foo WHERE foo.n < 4)
             SELECT foo.n FROM foo"))
+
+(deftest some-agg-fns-do-not-support-set-quantifiers
+  (invalid? [#"STDDEV_POP does not support set quanitifiers \(DISTINCT\): STDDEV_POP\(DISTINCT t1.a\)"]
+            "SELECT STDDEV_POP(DISTINCT t1.a) FROM t1")
+  (invalid? [#"VAR_SAMP does not support set quanitifiers \(ALL\): VAR_SAMP\(ALL t1.a\)"]
+            "SELECT VAR_SAMP(ALL t1.a) FROM t1")
+  (valid? "SELECT SUM(DISTINCT t1.a) FROM t1"))
+
+
