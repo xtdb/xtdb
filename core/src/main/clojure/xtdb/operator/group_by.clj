@@ -323,12 +323,12 @@
                                         :to-name 'sumx2, :zero-row? zero-row?})
 
         finish-projecter (expr/->expression-projection-spec to-name (case variance-op
-                                                                      :var_pop '(if (> countx 0)
+                                                                      :var-pop '(if (> countx 0)
                                                                                   (/ (- sumx2
                                                                                         (/ (* sumx sumx) (double countx)))
                                                                                      (double countx))
                                                                                   nil)
-                                                                      :var_samp '(if (> countx 1)
+                                                                      :var-samp '(if (> countx 1)
                                                                                    (/ (- sumx2
                                                                                          (/ (* sumx sumx) (double countx)))
                                                                                       (double (- countx 1)))
@@ -374,8 +374,8 @@
               (util/try-close sumx2-agg)
               (util/try-close countx-agg))))))))
 
-(defmethod ->aggregate-factory :var_pop [agg-opts] (->variance-agg-factory :var_pop agg-opts))
-(defmethod ->aggregate-factory :var_samp [agg-opts] (->variance-agg-factory :var_samp agg-opts))
+(defmethod ->aggregate-factory :var-pop [agg-opts] (->variance-agg-factory :var-pop agg-opts))
+(defmethod ->aggregate-factory :var-samp [agg-opts] (->variance-agg-factory :var-samp agg-opts))
 
 (defn- ->stddev-agg-factory [variance-op {:keys [from-name from-type to-name zero-row?]}]
   (let [variance-agg (->aggregate-factory {:f variance-op, :from-name from-name, :from-type from-type
@@ -409,11 +409,11 @@
               (util/try-close res-vec)
               (util/try-close variance-agg))))))))
 
-(defmethod ->aggregate-factory :stddev_pop [agg-opts]
-  (->stddev-agg-factory :var_pop agg-opts))
+(defmethod ->aggregate-factory :stddev-pop [agg-opts]
+  (->stddev-agg-factory :var-pop agg-opts))
 
-(defmethod ->aggregate-factory :stddev_samp [agg-opts]
-  (->stddev-agg-factory :var_samp agg-opts))
+(defmethod ->aggregate-factory :stddev-samp [agg-opts]
+  (->stddev-agg-factory :var-samp agg-opts))
 
 (defn- assert-supported-min-max-types [from-types to-type]
   ;; TODO variable-width types - it's reasonable to want (e.g.) `(min <string-col>)`

@@ -19,10 +19,10 @@
                       {cnt (count b)}
                       {min (min b)}
                       {max (max b)}
-                      {var-pop (var_pop b)}
-                      {var-samp (var_samp b)}
-                      {stddev-pop (stddev_pop b)}
-                      {stddev-samp (stddev_samp b)}]
+                      {var-pop (var-pop b)}
+                      {var-samp (var-samp b)}
+                      {stddev-pop (stddev-pop b)}
+                      {stddev-samp (stddev-samp b)}]
           expected-col-types '{a :i64, cnt :i64
                                sum [:union #{:null :i64}], avg [:union #{:null :f64}]
                                min [:union #{:null :i64}], max [:union #{:null :i64}]
@@ -59,10 +59,10 @@
                {:a 2, :var-pop 0.0, :var-samp nil, :stddev-pop 0.0, :stddev-samp nil}
                {:a 3, :var-pop nil, :var-samp nil, :stddev-pop nil, :stddev-samp nil}}
              (set (tu/query-ra [:group-by '[a
-                                            {var-pop (var_pop b)}
-                                            {var-samp (var_samp b)}
-                                            {stddev-pop (stddev_pop b)}
-                                            {stddev-samp (stddev_samp b)}]
+                                            {var-pop (var-pop b)}
+                                            {var-samp (var-samp b)}
+                                            {stddev-pop (stddev-pop b)}
+                                            {stddev-samp (stddev-samp b)}]
                                 [::tu/blocks '{a :i64, b [:union #{:null :i64}]}
                                  [[{:a 1 :b 20}
                                    {:a 1 :b 10}

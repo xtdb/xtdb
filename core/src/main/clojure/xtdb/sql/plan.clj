@@ -1223,12 +1223,21 @@
                      [:aggregate_function [:general_set_function [:computational_operation sf] ^:z ve]]
                      {:in {(aggregate-symbol "agg_in" aggregate) (expr ve)}
                       :out {(aggregate-symbol "agg_out" aggregate)
-                            (list (symbol (str/lower-case sf)) (aggregate-symbol "agg_in" aggregate))}}
+                            (-> sf
+                                (str/lower-case)
+                                (str/replace "_" "-")
+                                (symbol)
+                                (list (aggregate-symbol "agg_in" aggregate)))}}
 
                      [:aggregate_function [:general_set_function [:computational_operation sf] [:set_quantifier sq] ^:z ve]]
                      {:in {(aggregate-symbol "agg_in" aggregate) (expr ve)}
                       :out {(aggregate-symbol "agg_out" aggregate)
-                            (list (symbol (str (str/lower-case sf) "-" (str/lower-case sq))) (aggregate-symbol "agg_in" aggregate))}}
+                            (-> sf
+                                (str/lower-case)
+                                (str/replace "_" "-")
+                                (str "-" (str/lower-case sq))
+                                (symbol)
+                                (list (aggregate-symbol "agg_in" aggregate)))}}
 
                      [:aggregate_function "COUNT" [:asterisk "*"]]
                      {:in {(aggregate-symbol "agg_in" aggregate) 1}
