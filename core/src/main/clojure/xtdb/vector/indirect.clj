@@ -211,7 +211,7 @@
 (defrecord IndirectVector [^IIndirectVector v, ^ints idxs]
   IIndirectVector
   (getVector [_] (.getVector v))
-  (getIndex [_ idx] (aget idxs idx))
+  (getIndex [_ idx] (.getIndex v (aget idxs idx)))
   (getName [_] (.getName v))
   (getValueCount [_] (alength idxs))
 
@@ -231,11 +231,11 @@
           (.copyRow copier (.getIndex this-vec idx))))))
 
   (monoReader [this col-type]
-    (-> (.monoReader v col-type)
+    (-> (vec/->mono-reader (.getVector this) col-type)
         (vec/->IndirectVectorMonoReader this)))
 
   (polyReader [this col-type]
-    (-> (.polyReader v col-type)
+    (-> (vec/->poly-reader (.getVector this) col-type)
         (vec/->IndirectVectorPolyReader this)))
 
   (structReader [_]
@@ -318,7 +318,7 @@
 (defrecord SliceVector [^IIndirectVector col, ^long start-idx, ^long len]
   IIndirectVector
   (getVector [_] (.getVector col))
-  (getIndex [_ idx] (+ start-idx idx))
+  (getIndex [_ idx] (.getIndex col (+ start-idx idx)))
   (getName [_] (.getName col))
   (getValueCount [_] len)
   (withName [_ col-name] (SliceVector. (.withName col col-name) start-idx len))
@@ -333,11 +333,11 @@
           (.copyRow copier (.getIndex this-vec idx))))))
 
   (monoReader [this col-type]
-    (-> (.monoReader col col-type)
+    (-> (vec/->mono-reader (.getVector this) col-type)
         (vec/->IndirectVectorMonoReader this)))
 
   (polyReader [this col-type]
-    (-> (.polyReader col col-type)
+    (-> (vec/->poly-reader (.getVector this) col-type)
         (vec/->IndirectVectorPolyReader this))))
 
 (defn slice-col ^xtdb.vector.IIndirectVector [^IIndirectVector col, ^long start-idx, ^long len]
