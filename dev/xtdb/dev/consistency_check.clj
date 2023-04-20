@@ -444,7 +444,7 @@
          fetch-flake {}
          submit-flake {}
          close-flake {}}}]
-  (let [flaking (volatile! true)
+  (let [flaking (volatile! false)
         roll-fn (fn [weightings] (let [f (flake-fn weightings)] (fn [] (when @flaking (f rng)))))
         roll-fetch (roll-fn fetch-flake)
         roll-submit (roll-fn submit-flake)
@@ -504,7 +504,7 @@
          cursor-close-flake {}
          latest-submitted-flake {}
          close-flake {}}}]
-  (let [flaking (volatile! true)
+  (let [flaking (volatile! false)
         roll-fn (fn [weightings] (let [f (flake-fn weightings)] (fn [] (when @flaking (f rng)))))
         roll-open (roll-fn open-flake)
         roll-cursor (roll-fn cursor-flake)
@@ -653,7 +653,8 @@
 
         ;; start nodes
         (doseq [[node-idx node-ref] (map-indexed vector node-refs)]
-          (vreset! node-ref (xt/start-node (get-node-cfg node-idx))))
+          (vreset! node-ref (doto (xt/start-node (get-node-cfg node-idx))
+                              (resume-flake))))
 
         ;; submit all transactions
         (let [tx-executor (Executors/newFixedThreadPool submit-threads)
@@ -690,27 +691,27 @@
 
                        (= completed-tx-id now-completed-tx-id)
                        (cond
-                         (:ingester-failed? (xt/status node))
+                         (and progressing (:ingester-failed? (xt/status node)))
                          (do (xio/try-close node)
                              (vswap! (restarts node-idx) conj [:i now-completed-tx-id])
                              (vreset! node-ref (xt/start-node (get-node-cfg node-idx)))
-                             (recur now-completed-tx-id max-completed-tx-id true))
+                             (recur now-completed-tx-id max-completed-tx-id false))
 
 
                          (= now-completed-tx-id now-submitted-tx-id)
                          (cond
                            (not @all-sent)
-                           (recur now-completed-tx-id max-completed-tx-id progressing)
+                           (recur now-completed-tx-id max-completed-tx-id true)
 
                            (not= now-submitted-tx-id (apply max (map (comp ::xt/tx-id deref) tx-results)))
-                           (recur now-completed-tx-id max-completed-tx-id progressing)
+                           (recur now-completed-tx-id max-completed-tx-id true)
 
                            :else nil)
 
                          progressing
                          (do (xio/try-close node)
                              (vswap! (restarts node-idx) conj [:i now-completed-tx-id])
-                             (vreset! node-ref (doto (xt/start-node (get-node-cfg node-idx)) (pause-flake)))
+                             (vreset! node-ref (xt/start-node (get-node-cfg node-idx)))
                              (recur now-completed-tx-id max-completed-tx-id false))
 
                          :else
