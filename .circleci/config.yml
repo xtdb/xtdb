@@ -53,7 +53,7 @@ version: 2.1
 jobs:
   build:
     docker:
-      - image: cimg/clojure:1.10.3-openjdk-8.0
+      - image: wotbrew/xtdb-ci-lein-fix:latest
 
     working_directory: ~/xtdb
 
