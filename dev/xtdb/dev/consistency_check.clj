@@ -243,16 +243,19 @@
 
 (defn state-at [model index] (nth (state-seq model) index))
 
+(defn- update-vals-backport [m f] (persistent! (reduce-kv #(assoc! %1 %2 (f %3)) (transient {}) m)))
+
 (defn- present-state
   "Sorts maps in docs for easier visual consumption."
   [x]
   (cond
     (map? x)
-    (update-vals (into (sorted-map-by
-                         (let [sort-key (juxt #(.getName (class %)) identity)]
-                           (fn [a b] (compare (sort-key a) (sort-key b)))))
-                       x)
-                 present-state)
+    (update-vals-backport
+      (into (sorted-map-by
+              (let [sort-key (juxt #(.getName (class %)) identity)]
+                (fn [a b] (compare (sort-key a) (sort-key b)))))
+            x)
+      present-state)
     (coll? x) (into (empty x) (map present-state) x)
     :else x))
 

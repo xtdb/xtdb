@@ -6,7 +6,7 @@
             :url "http://opensource.org/licenses/MIT"}
 
   :managed-dependencies
-  [[org.clojure/clojure "1.11.1"]
+  [[org.clojure/clojure "1.10.3"]
    [org.clojure/data.csv "1.0.1"]
    [org.clojure/data.json "2.4.0"]
    [org.clojure/java.data "1.0.86"]
