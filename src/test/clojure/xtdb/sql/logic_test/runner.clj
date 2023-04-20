@@ -244,7 +244,6 @@
 
               (report-failure [expected actual]
                 (t/do-report {:type :fail, :expected expected, :actual actual, :file file, :line line})
-                (Thread/dumpStack)
                 (println
                  (format
                   "Failure\n<File>\n%s\n\n<Line>\n%s\n\n<Query>\n%s\n\n<Expected>\n%s\n\n<Actual>\n%s\n\n"
