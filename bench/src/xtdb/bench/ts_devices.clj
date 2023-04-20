@@ -10,7 +10,7 @@
            java.util.Date))
 
 ;; https://docs.timescale.com/v1.2/tutorials/other-sample-datasets#in-depth-devices
-;; Requires https://timescaledata.blob.core.windows.net/datasets/devices_small.tar.gz
+;; Requires https://assets.timescale.com/docs/downloads/devices_small.tar.gz
 
 (def device-info-csv-resource (io/resource "devices_small_device_info.csv"))
 (def readings-csv-resource (io/resource "devices_small_readings.csv"))
