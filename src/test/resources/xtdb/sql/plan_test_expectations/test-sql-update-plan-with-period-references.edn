@@ -3,11 +3,11 @@
  [:rename
   {x5 _iid,
    x6 _row_id,
-   x1 system_time_start,
-   x2 system_time_end,
+   x1 xt$system_from,
+   x2 xt$system_to,
    x8 bar,
-   x9 application_time_start,
-   x10 application_time_end}
+   x9 xt$valid_from,
+   x10 xt$valid_to}
   [:project
    [x5
     x6
@@ -17,17 +17,17 @@
     {x9 (cast-tstz x3)}
     {x10 (cast-tstz x4)}]
    [:rename
-    {system_time_start x1,
-     system_time_end x2,
-     application_time_start x3,
-     application_time_end x4,
+    {xt$system_from x1,
+     xt$system_to x2,
+     xt$valid_from x3,
+     xt$valid_to x4,
      _iid x5,
      _row_id x6}
     [:scan
      {:table foo}
-     (system_time_start
-      system_time_end
-      application_time_start
-      application_time_end
+     (xt$system_from
+      xt$system_to
+      xt$valid_from
+      xt$valid_to
       _iid
       _row_id)]]]]]

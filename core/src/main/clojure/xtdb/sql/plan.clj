@@ -1539,27 +1539,27 @@
                     :qualified-column [correlation-name (name sym)]}
                    (vary-meta assoc :table table))))]
 
-      (let [app-start-sym (->qps 'application_time_start)
-            app-end-sym (->qps 'application_time_end)]
+      (let [app-start-sym (->qps 'xt$valid_from)
+            app-end-sym (->qps 'xt$valid_to)]
 
         [dml-op {:table table-or-query-name}
          [:project (vec
                     (concat (for [{:keys [identifier] :as col} (first (sem/projected-columns z))
-                                  :when (not (#{"application_time_start" "application_time_end"} identifier))]
+                                  :when (not (#{"xt$valid_from" "xt$valid_to"} identifier))]
                               {(symbol identifier)
                                (if-let [derived-expr (:ref (meta col))]
                                  (expr derived-expr)
                                  (qualified-projection-symbol col))})
 
-                            [{'application_time_start `(~'cast-tstz ~(cond
-                                                                       (= :all-application-time app-time-extents) app-start-sym
-                                                                       app-from-expr `(~'greatest ~app-start-sym ~app-from-expr)
-                                                                       (not default-all-app-time?) `(~'greatest ~app-start-sym (~'current-timestamp))
-                                                                       :else app-start-sym))}
-                             {'application_time_end `(~'cast-tstz ~(cond
-                                                                     (= :all-application-time app-time-extents) app-end-sym
-                                                                     app-to-expr `(~'least ~app-end-sym ~app-to-expr)
-                                                                     :else app-end-sym))}]))
+                            [{'xt$valid_from `(~'cast-tstz ~(cond
+                                                              (= :all-application-time app-time-extents) app-start-sym
+                                                              app-from-expr `(~'greatest ~app-start-sym ~app-from-expr)
+                                                              (not default-all-app-time?) `(~'greatest ~app-start-sym (~'current-timestamp))
+                                                              :else app-start-sym))}
+                             {'xt$valid_to `(~'cast-tstz ~(cond
+                                                            (= :all-application-time app-time-extents) app-end-sym
+                                                            app-to-expr `(~'least ~app-end-sym ~app-to-expr)
+                                                            :else app-end-sym))}]))
 
           rel]]))))
 
@@ -1578,8 +1578,8 @@
                      (qualified-projection-symbol col))}))
       [:select `(~'<=
                  ~(qualified-projection-symbol
-                   (-> {:identifier "system_time_end"
-                        :qualified-column [correlation-name "system_time_end"]}
+                   (-> {:identifier "xt$system_to"
+                        :qualified-column [correlation-name "xt$system_to"]}
                        (vary-meta assoc :table table)))
                  ~'xtdb/end-of-time)
        (as-> (build-target-table
@@ -1588,14 +1588,14 @@
                (wrap-with-select sc rel)
                rel))]]]))
 
-(def app-time-col? (comp #{"application_time_start" "application_time_end"} :identifier))
+(def app-time-col? (comp #{"xt$valid_from" "xt$valid_to"} :identifier))
 
 (defn plan-qualified-join [join-type lhs rhs sc]
   (let [planned-rhs (apply reduce
                            (fn [acc predicate]
                              [:select predicate acc])
                            (plan-subquery-containg-clause sc (plan rhs) (sem/local-tables rhs)))
-         apply-params (correlated-column->param sc (sem/id (sem/scope-element sc)) (sem/local-tables lhs))]
+        apply-params (correlated-column->param sc (sem/id (sem/scope-element sc)) (sem/local-tables lhs))]
     (if (= join-type "INNER")
       [:apply :cross-join apply-params (plan lhs) (w/postwalk-replace apply-params planned-rhs)]
       [:apply :left-outer-join apply-params (plan lhs) (w/postwalk-replace apply-params planned-rhs)])))

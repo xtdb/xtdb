@@ -5,8 +5,7 @@
 ;; https://github.com/tonsky/datascript
 
 (ns xtdb.core.datalog-test
-  (:require [clojure.set :as set]
-            [clojure.test :as t :refer [deftest]]
+  (:require [clojure.test :as t :refer [deftest]]
             [xtdb.datalog :as xt]
             [xtdb.james-bond :as bond]
             [xtdb.node :as node]
@@ -1479,8 +1478,8 @@
                 {:id :mark, :app-start (util/->zdt #inst "2023"), :app-end (util/->zdt #inst "2024")}
                 {:id :john, :app-start (util/->zdt #inst "2016"), :app-end (util/->zdt #inst "2020")}]
                (q '{:find [id app-start app-end]
-                    :where [(match :xt_docs [{:xt/id id} {:application_time_start app-start
-                                                          :application_time_end app-end}]
+                    :where [(match :xt_docs [{:xt/id id} {:xt/valid-from app-start
+                                                          :xt/valid-to app-end}]
                                    {:for-app-time :all-time})]}
                   tx1, nil))
             "entity history, all time")
@@ -1488,8 +1487,8 @@
       (t/is (= [{:id :matthew, :app-start (util/->zdt #inst "2015"), :app-end (util/->zdt util/end-of-time)}
                 {:id :luke, :app-start (util/->zdt #inst "2021"), :app-end (util/->zdt #inst "2022")}]
                (q '{:find [id app-start app-end]
-                    :where [(match :xt_docs [{:xt/id id} {:application_time_start app-start
-                                                          :application_time_end app-end}]
+                    :where [(match :xt_docs [{:xt/id id} {:xt/valid-from app-start
+                                                          :xt/valid-to app-end}]
                                    {:for-app-time [:in #inst "2021", #inst "2023"]})]}
                   tx1, nil))
             "entity history, range")
@@ -1513,10 +1512,10 @@
                  :tt-end (util/->zdt util/end-of-time)}]
                (q '{:find [vt-start vt-end tt-start tt-end]
                     :where [(match :xt_docs {:xt/id :luke
-                                             :application_time_start vt-start
-                                             :application_time_end vt-end
-                                             :system_time_start tt-start
-                                             :system_time_end tt-end}
+                                             :xt/valid-from vt-start
+                                             :xt/valid-to vt-end
+                                             :xt/system-from tt-start
+                                             :xt/system-to tt-end}
                                    {:for-app-time :all-time
                                     :for-sys-time :all-time})]}
                   tx1 nil))
@@ -1566,8 +1565,8 @@
                                              :fn #xt/clj-form (fn delete-1-weeks-records []
                                                                 (->> (q '{:find [id app-start app-end]
                                                                           :where [(match :docs {:xt/id id
-                                                                                                :application_time_start app-start
-                                                                                                :application_time_end app-end}
+                                                                                                :xt/valid-from app-start
+                                                                                                :xt/valid-to app-end}
                                                                                          {:for-app-time :all-time})
                                                                                   [(= (- #inst "1970-01-08" #inst "1970-01-01")
                                                                                       (- app-end app-start))]]})
@@ -1583,7 +1582,7 @@
 
       (t/is (= [{:cust 145 :app-start (util/->zdt #inst "1998-01-10")}]
                (q '{:find [cust app-start]
-                    :where [(match :docs {:customer-number cust, :application_time_start app-start}
+                    :where [(match :docs {:customer-number cust, :xt/valid-from app-start}
                                    {:for-app-time :all-time})]}
                   tx0, nil))
             "as-of 14 Jan")
@@ -1591,7 +1590,7 @@
       (t/is (= [{:cust 145, :app-start (util/->zdt #inst "1998-01-10")}
                 {:cust 827, :app-start (util/->zdt #inst "1998-01-15")}]
                (q '{:find [cust app-start]
-                    :where [(match :docs {:customer-number cust, :application_time_start app-start}
+                    :where [(match :docs {:customer-number cust, :xt/valid-from app-start}
                                    {:for-app-time :all-time})]}
                   tx1, nil))
             "as-of 18 Jan")
@@ -1599,7 +1598,7 @@
       (t/is (= [{:cust 145, :app-start (util/->zdt #inst "1998-01-05")}
                 {:cust 827, :app-start (util/->zdt #inst "1998-01-12")}]
                (q '{:find [cust app-start]
-                    :where [(match :docs {:customer-number cust, :application_time_start app-start}
+                    :where [(match :docs {:customer-number cust, :xt/valid-from app-start}
                                    {:for-app-time :all-time})]
                     :order-by [[app-start :asc]]}
                   tx5, nil))
@@ -1608,8 +1607,8 @@
       (t/is (= [{:cust 827, :app-start (util/->zdt #inst "1998-01-12"), :app-end (util/->zdt #inst "1998-01-20")}]
                (q '{:find [cust app-start app-end]
                     :where [(match :docs {:customer-number cust,
-                                          :application_time_start app-start
-                                          :application_time_end app-end}
+                                          :xt/valid-from app-start
+                                          :xt/valid-to app-end}
                                    {:for-app-time :all-time})]
                     :order-by [[app-start :asc]]}
                   tx6, nil))
@@ -1621,16 +1620,16 @@
                     :in [in-prop]
                     :where [(match :docs {:property-number in-prop
                                           :customer-number cust
-                                          :xt/app-time app-time
-                                          :application_time_start app-start
-                                          :application_time_end app-end}
+                                          :xt/valid-time app-time
+                                          :xt/valid-from app-start
+                                          :xt/valid-to app-end}
                                    {:for-app-time :all-time})
 
                             (match :docs {:property-number prop
                                           :customer-number cust
-                                          :xt/app-time app-time-2
-                                          :application_time_start app-start2
-                                          :application_time_end app-end2}
+                                          :xt/valid-time app-time-2
+                                          :xt/valid-from app-start2
+                                          :xt/valid-to app-end2}
                                    {:for-app-time :all-time})
 
                             [(<> prop in-prop)]
@@ -1649,23 +1648,23 @@
                     :in [in-prop]
                     :where [(match :docs {:property-number in-prop
                                           :customer-number cust
-                                          :xt/app-time app-time
-                                          :xt/sys-time sys-time
-                                          :application_time_start app-start
-                                          :application_time_end app-end
-                                          :system_time_start sys-start
-                                          :system_time_end sys-end}
+                                          :xt/valid-time app-time
+                                          :xt/system-time sys-time
+                                          :xt/valid-from app-start
+                                          :xt/valid-to app-end
+                                          :xt/system-from sys-start
+                                          :xt/system-to sys-end}
                                    {:for-app-time :all-time
                                     :for-sys-time :all-time})
 
                             (match :docs {:customer-number cust
                                           :property-number prop
-                                          :xt/app-time app-time-2
-                                          :xt/sys-time sys-time-2
-                                          :application_time_start app-start2
-                                          :application_time_end app-end2
-                                          :system_time_start sys-start2
-                                          :system_time_end sys-end2}
+                                          :xt/valid-time app-time-2
+                                          :xt/system-time sys-time-2
+                                          :xt/valid-from app-start2
+                                          :xt/valid-to app-end2
+                                          :xt/system-from sys-start2
+                                          :xt/system-to sys-end2}
 
                                    {:for-app-time :all-time
                                     :for-sys-time :all-time})
@@ -1686,23 +1685,23 @@
                     :in [in-prop]
                     :where [(match :docs {:property-number in-prop
                                           :customer-number cust
-                                          :xt/app-time app-time
-                                          :xt/sys-time sys-time
-                                          :application_time_start app-start
-                                          :application_time_end app-end
-                                          :system_time_start sys-start
-                                          :system_time_end sys-end}
+                                          :xt/valid-time app-time
+                                          :xt/system-time sys-time
+                                          :xt/valid-from app-start
+                                          :xt/valid-to app-end
+                                          :xt/system-from sys-start
+                                          :xt/system-to sys-end}
                                    {:for-app-time :all-time
                                     :for-sys-time :all-time})
 
                             (match :docs {:customer-number cust
                                           :property-number prop
-                                          :xt/app-time app-time-2
-                                          :xt/sys-time sys-time-2
-                                          :application_time_start app-start2
-                                          :application_time_end app-end2
-                                          :system_time_start sys-start2
-                                          :system_time_end sys-end2})
+                                          :xt/valid-time app-time-2
+                                          :xt/system-time sys-time-2
+                                          :xt/valid-from app-start2
+                                          :xt/valid-to app-end2
+                                          :xt/system-from sys-start2
+                                          :xt/system-to sys-end2})
 
                             [(<> prop in-prop)]
                             [(overlaps? app-time app-time-2)]
@@ -1853,9 +1852,9 @@
            (xt/q
             tu/*node*
             '{:find [xt/id id2 xt_docs_app_time xt_cats_app_time]
-              :where [(match :xt_docs [xt/id {:xt/app-time xt_docs_app_time}]
+              :where [(match :xt_docs [xt/id {:xt/valid-time xt_docs_app_time}]
                              {:for-app-time :all-time})
-                      (match :xt_cats [{:xt/app-time xt_cats_app_time :xt/id id2}]
+                      (match :xt_cats [{:xt/valid-time xt_cats_app_time :xt/id id2}]
                              {:for-app-time :all-time})
                       [(contains? xt_docs_app_time xt_cats_app_time)]]})))
 
@@ -1867,10 +1866,10 @@
            (xt/q
             tu/*node*
             '{:find [xt/id id2 xt_docs_sys_time xt_cats_sys_time]
-              :where [(match :xt_docs [xt/id {:xt/sys-time xt_docs_sys_time}]
+              :where [(match :xt_docs [xt/id {:xt/system-time xt_docs_sys_time}]
                              {:for-app-time :all-time
                               :for-sys-time :all-time})
-                      (match :xt_cats [{:xt/sys-time xt_cats_sys_time :xt/id id2}]
+                      (match :xt_cats [{:xt/system-time xt_cats_sys_time :xt/id id2}]
                              {:for-app-time :all-time
                               :for-sys-time :all-time})
                       [(equals? xt_docs_sys_time xt_cats_sys_time)]]}))))
@@ -1897,15 +1896,15 @@
   (t/is (= [{:xt/id 1,
              :app_time {:start #time/zoned-date-time "2015-01-01T00:00Z[UTC]",
                         :end #time/zoned-date-time "2050-01-01T00:00Z[UTC]"},
-             :application_time_start #time/zoned-date-time "2015-01-01T00:00Z[UTC]",
+             :xt/valid-from #time/zoned-date-time "2015-01-01T00:00Z[UTC]",
              :app-time-end #time/zoned-date-time "2050-01-01T00:00Z[UTC]"}]
            (xt/q
             tu/*node*
-            '{:find [xt/id app_time application_time_start app-time-end]
+            '{:find [xt/id app_time xt/valid-from app-time-end]
               :where [(match :xt_docs
-                        [xt/id application_time_start
-                         {:xt/app-time app_time
-                          :application_time_end app-time-end}]
+                        [xt/id xt/valid-from
+                         {:xt/valid-time app_time
+                          :xt/valid-to app-time-end}]
                         {:for-app-time :all-time})]}))
         "projecting both period and underlying cols")
 
@@ -1917,20 +1916,20 @@
            (xt/q
             tu/*node*
             '{:find [xt/id app_time sys_time]
-              :where [(match :xt_docs [xt/id {:xt/app-time app_time
-                                              :xt/sys-time sys_time}]
+              :where [(match :xt_docs [xt/id {:xt/valid-time app_time
+                                              :xt/system-time sys_time}]
                              {:for-app-time :all-time
                               :for-sys-time :all-time})]}))
         "projecting both app and sys-time periods")
 
-  (t/is (= [#:xt{:app-time
+  (t/is (= [#:xt{:valid-time
                  {:start #time/zoned-date-time "2015-01-01T00:00Z[UTC]",
                   :end #time/zoned-date-time "2050-01-01T00:00Z[UTC]"}}]
            (xt/q
             tu/*node*
-            '{:find [xt/app-time]
+            '{:find [xt/valid-time]
               :where [(match :xt_docs
-                        [id xt/app-time]
+                        [id xt/valid-time]
                         {:for-app-time :all-time})]}))
         "protecting temporal period in vector syntax")
 
@@ -1943,12 +1942,12 @@
            (xt/q
             tu/*node*
             '{:find [xt/id id2 app_time sys_time]
-              :where [(match :xt_docs [xt/id {:xt/app-time app_time
-                                              :xt/sys-time sys_time}]
+              :where [(match :xt_docs [xt/id {:xt/valid-time app_time
+                                              :xt/system-time sys_time}]
                              {:for-app-time :all-time
                               :for-sys-time :all-time})
-                      (match :xt_docs [{:xt/app-time app_time
-                                        :xt/sys-time sys_time
+                      (match :xt_docs [{:xt/valid-time app_time
+                                        :xt/system-time sys_time
                                         :xt/id id2}]
                              {:for-app-time :all-time
                               :for-sys-time :all-time})]}))
@@ -1966,8 +1965,8 @@
              (xt/q
               tu/*node*
               '{:find [id time]
-                :where [(match xt_docs [id {:xt/app-time time
-                                            :xt/sys-time time}]
+                :where [(match xt_docs [id {:xt/valid-time time
+                                            :lxt/system-time time}]
                                {:for-app-time :all-time
                                 :for-sys-time :all-time})]}))
           "period unification within match"))
@@ -1983,7 +1982,7 @@
           tu/*node*
           '{:find [id]
             :where [(match :xt_docs
-                      [id {:xt/app-time "111"}]
+                      [id {:xt/valid-time "111"}]
                       {:for-app-time :all-time})]}))))
 
 (t/deftest test-explain-plan-654

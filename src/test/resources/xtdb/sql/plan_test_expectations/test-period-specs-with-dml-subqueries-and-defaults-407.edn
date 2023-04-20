@@ -4,8 +4,8 @@
   {x6 xt$id,
    x7 customer_number,
    x8 property_number,
-   x10 application_time_start,
-   x11 application_time_end}
+   x10 xt$valid_from,
+   x11 xt$valid_to}
   [:project
    [x6 x7 x8 {x10 (cast-tstz x9)} {x11 (cast-tstz x4)}]
    [:project
@@ -13,7 +13,7 @@
     [:group-by
      [{x4 (min x1)}]
      [:rename
-      {system_time_start x1, id x2}
+      {xt$system_from x1, id x2}
       [:scan
        {:table prop_owner, :for-sys-time :all-time}
-       [system_time_start {id (= id 1)}]]]]]]]]
+       [xt$system_from {id (= id 1)}]]]]]]]]

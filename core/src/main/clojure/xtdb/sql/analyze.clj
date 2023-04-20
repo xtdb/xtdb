@@ -506,11 +506,11 @@
 (defn expand-underlying-column-references [col-ref]
   (case (:type col-ref)
     :system-time-period-reference
-    [(update col-ref :identifiers #(vector (first %) "system_time_start"))
-     (update col-ref :identifiers #(vector (first %) "system_time_end"))]
+    [(update col-ref :identifiers #(vector (first %) "xt$system_from"))
+     (update col-ref :identifiers #(vector (first %) "xt$system_to"))]
     :application-time-period-reference
-    [(update col-ref :identifiers #(vector (first %) "application_time_start"))
-     (update col-ref :identifiers #(vector (first %) "application_time_end"))]
+    [(update col-ref :identifiers #(vector (first %) "xt$valid_from"))
+     (update col-ref :identifiers #(vector (first %) "xt$valid_to"))]
     [col-ref]))
 
 (declare column-reference)
@@ -628,8 +628,8 @@
                       {:identifier identifier
                        :qualified-column [correlation-name identifier]})
                     (for [col-name ["_iid" "_row_id"
-                                    "application_time_start" "application_time_end"
-                                    "system_time_start" "system_time_end"]]
+                                    "xt$valid_from" "xt$valid_to"
+                                    "xt$system_from" "xt$system_to"]]
                       {:identifier col-name
                        :qualified-column [correlation-name col-name]}))
             (into [] (comp (distinct)
@@ -654,8 +654,8 @@
     [(let [{:keys [correlation-name], :as table} (table ag)]
        (vec
         (concat (->> (for [col-name ["_iid" "_row_id"
-                                     "application_time_start" "application_time_end"
-                                     "system_time_start" "system_time_end"]]
+                                     "xt$valid_from" "xt$valid_to"
+                                     "xt$system_from" "xt$system_to"]]
                        {:identifier col-name
                         :qualified-column [correlation-name col-name]})
                      (into [] (map #(vary-meta % assoc :table table))))
@@ -670,8 +670,8 @@
     :erase_statement__searched
     [(let [{:keys [correlation-name], :as table} (table ag)]
        (->> (for [col-name ["_iid" "_row_id"
-                            "application_time_start" "application_time_end"
-                            "system_time_start" "system_time_end"]]
+                            "xt$valid_from" "xt$valid_to"
+                            "xt$system_from" "xt$system_to"]]
               {:identifier col-name
                :qualified-column [correlation-name col-name]})
             (into [] (map #(vary-meta % assoc :table table)))))]
@@ -1099,12 +1099,12 @@
 (defn- check-set-clause [ag]
   (r/zmatch ag
     [:set_clause [:update_target ^:z id] _ _]
-    (concat (when (contains? #{"application_time_start" "application_time_end"} (identifier id))
+    (concat (when (contains? #{"xt$valid_from" "xt$valid_to"} (identifier id))
               [(format "Updating app-time columns outside of `FOR PERIOD OF` is not supported: %s %s"
                        (->src-str ag)
                        (->line-info-str ag))])
 
-            (when (contains? #{"system_time_start" "system_time_end"} (identifier id))
+            (when (contains? #{"xt$system_from" "xt$system_to"} (identifier id))
               [(format "Updating sys-time columns is not supported: %s %s"
                        (->src-str ag)
                        (->line-info-str ag))]))))

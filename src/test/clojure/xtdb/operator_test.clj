@@ -113,62 +113,62 @@
                  (q)))
 
         (t/is (= #{"tx1"}
-                 (q '{system_time_start (<= system_time_start ?sys-time1)})))
+                 (q '{xt$system_from (<= xt$system_from ?sys-time1)})))
 
         (t/is (= #{}
-                 (q '{system_time_start (< system_time_start ?sys-time1)})))
+                 (q '{xt$system_from (< xt$system_from ?sys-time1)})))
 
         (t/is (= #{"tx1" "tx2"}
-                 (q '{system_time_start (<= system_time_start ?sys-time2)})))
+                 (q '{xt$system_from (<= xt$system_from ?sys-time2)})))
 
         (t/is (= #{"tx1" "tx2"}
-                 (q '{system_time_start (> system_time_start ?sys-time1)})))
+                 (q '{xt$system_from (> xt$system_from ?sys-time1)})))
 
         (t/is (= #{}
-                 (q '{system_time_end (< system_time_end ?sys-time2)})))
+                 (q '{xt$system_to (< xt$system_to ?sys-time2)})))
 
         (t/is (= #{"tx1"}
-                 (q '{system_time_end (<= system_time_end ?sys-time2)})))
+                 (q '{xt$system_to (<= xt$system_to ?sys-time2)})))
 
         (t/is (= #{"tx1" "tx2"}
-                 (q '{system_time_end (> system_time_end ?sys-time2)})))
+                 (q '{xt$system_to (> xt$system_to ?sys-time2)})))
 
         (t/is (= #{"tx1" "tx2"}
-                 (q '{system_time_end (>= system_time_end ?sys-time2)})))
+                 (q '{xt$system_to (>= xt$system_to ?sys-time2)})))
 
         (t/testing "multiple constraints"
           (t/is (= #{"tx1"}
-                   (q '{system_time_start (and (<= system_time_start ?sys-time1)
-                                               (<= system_time_start ?sys-time2))})))
+                   (q '{xt$system_from (and (<= xt$system_from ?sys-time1)
+                                            (<= xt$system_from ?sys-time2))})))
 
           (t/is (= #{"tx1"}
-                   (q '{system_time_start (and (<= system_time_start ?sys-time2)
-                                               (<= system_time_start ?sys-time1))})))
+                   (q '{xt$system_from (and (<= xt$system_from ?sys-time2)
+                                            (<= xt$system_from ?sys-time1))})))
 
           (t/is (= #{"tx1" "tx2"}
-                   (q '{system_time_end (and (> system_time_end ?sys-time2)
-                                             (> system_time_end ?sys-time1))})))
+                   (q '{xt$system_to (and (> xt$system_to ?sys-time2)
+                                          (> xt$system_to ?sys-time1))})))
 
           (t/is (= #{"tx1" "tx2"}
-                   (q '{system_time_end (and (> system_time_end ?sys-time1)
-                                             (> system_time_end ?sys-time2))}))))
+                   (q '{xt$system_to (and (> xt$system_to ?sys-time1)
+                                          (> xt$system_to ?sys-time2))}))))
 
         (t/is (= #{}
-                 (q '{system_time_start (<= system_time_start ?sys-time1)}
-                    '{system_time_end (< system_time_end ?sys-time2)})))
+                 (q '{xt$system_from (<= xt$system_from ?sys-time1)}
+                    '{xt$system_to (< xt$system_to ?sys-time2)})))
 
         (t/is (= #{"tx1"}
-                 (q '{system_time_start (<= system_time_start ?sys-time1)}
-                    '{system_time_end (<= system_time_end ?sys-time2)})))
+                 (q '{xt$system_from (<= xt$system_from ?sys-time1)}
+                    '{xt$system_to (<= xt$system_to ?sys-time2)})))
 
         (t/is (= #{"tx1"}
-                 (q '{system_time_start (<= system_time_start ?sys-time1)}
-                    '{system_time_end (> system_time_end ?sys-time1)}))
+                 (q '{xt$system_from (<= xt$system_from ?sys-time1)}
+                    '{xt$system_to (> xt$system_to ?sys-time1)}))
               "as of tt1")
 
         (t/is (= #{"tx1" "tx2"}
-                 (q '{system_time_start (<= system_time_start ?sys-time2)}
-                    '{system_time_end (> system_time_end ?sys-time2)}))
+                 (q '{xt$system_from (<= xt$system_from ?sys-time2)}
+                    '{xt$system_to (> xt$system_to ?sys-time2)}))
               "as of tt2")))))
 
 (t/deftest test-fixpoint-operator

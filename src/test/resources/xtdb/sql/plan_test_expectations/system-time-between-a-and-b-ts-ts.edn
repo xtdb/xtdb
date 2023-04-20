@@ -3,11 +3,11 @@
  [:project
   [x3]
   [:rename
-   {system_time_start x1, system_time_end x2, bar x3, _table x4}
+   {xt$system_from x1, system_time_end x2, bar x3, _table x4}
    [:scan
-    [{system_time_start
+    [{xt$system_from
       (<=
-       system_time_start
+       xt$system_from
        #time/zoned-date-time "3000-01-01T00:00Z")}
      {system_time_end
       (> system_time_end #time/zoned-date-time "2999-01-01T00:00Z")}

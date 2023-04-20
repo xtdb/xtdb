@@ -71,7 +71,7 @@
 
        (->> (for [{:keys [time] :as doc} (concat (interleave device-infos initial-readings) rest-readings)]
               (cond-> [:put doc]
-                time (conj {:application_time_start time})))
+                time (conj {:xt/valid-time time})))
             (partition-all batch-size)
             (reduce (fn [_acc tx-ops]
                       (xt/submit-tx tx-producer tx-ops))

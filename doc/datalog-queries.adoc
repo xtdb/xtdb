@@ -94,7 +94,7 @@ WHERE b.author = a.id
 [source,clojure]
 ----
 {:find [id app-start app-end]
- :where [($ :people [id {:application_time_start app-start, :application_time_end app-end}]
+ :where [($ :people [id {xt/valid-from app-start, :xt/valid-to app-end}]
             {:for-app-time [:in #inst "2021", #inst "2023"]})]}
 ----
 +

@@ -6,12 +6,10 @@
    :single-join
    {x1 ?x8, x2 ?x9}
    [:rename
-    {application_time_start x1, application_time_end x2}
-    [:scan {:table bar} [application_time_start application_time_end]]]
+    {xt$valid_from x1, xt$valid_to x2}
+    [:scan {:table bar} [xt$valid_from xt$valid_to]]]
    [:project
     [{x7 (and (< x4 ?x9) (> x5 ?x8))}]
     [:rename
-     {application_time_start x4, application_time_end x5}
-     [:scan
-      {:table foo}
-      [application_time_start application_time_end]]]]]]]
+     {xt$valid_from x4, xt$valid_to x5}
+     [:scan {:table foo} [xt$valid_from xt$valid_to]]]]]]]

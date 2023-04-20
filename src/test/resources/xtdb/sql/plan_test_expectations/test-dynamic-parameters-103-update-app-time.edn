@@ -3,11 +3,11 @@
  [:rename
   {x2 _iid,
    x3 _row_id,
-   x6 system_time_start,
-   x7 system_time_end,
+   x6 xt$system_from,
+   x7 xt$system_to,
    x9 first_name,
-   x10 application_time_start,
-   x11 application_time_end}
+   x10 xt$valid_from,
+   x11 xt$valid_to}
   [:project
    [x2
     x3
@@ -20,16 +20,16 @@
     {id x1,
      _iid x2,
      _row_id x3,
-     application_time_start x4,
-     application_time_end x5,
-     system_time_start x6,
-     system_time_end x7}
+     xt$valid_from x4,
+     xt$valid_to x5,
+     xt$system_from x6,
+     xt$system_to x7}
     [:scan
      {:table users, :for-app-time [:between ?_0 ?_1]}
      [{id (= id ?_3)}
       _iid
       _row_id
-      application_time_start
-      application_time_end
-      system_time_start
-      system_time_end]]]]]]
+      xt$valid_from
+      xt$valid_to
+      xt$system_from
+      xt$system_to]]]]]]

@@ -43,19 +43,19 @@
         sys-time (util/->zdt sys-time)]
 
     (t/is (= {:doc {:xt/id :doc,
-                    :application_time_start sys-time
-                    :application_time_end end-of-time-zdt
-                    :system_time_start sys-time
-                    :system_time_end end-of-time-zdt}
+                    :xt/valid-from sys-time
+                    :xt/valid-to end-of-time-zdt
+                    :xt/system-from sys-time
+                    :xt/system-to end-of-time-zdt}
               :doc-with-app-time {:xt/id :doc-with-app-time,
-                                  :application_time_start (util/->zdt #inst "2021")
-                                  :application_time_end end-of-time-zdt
-                                  :system_time_start sys-time
-                                  :system_time_end end-of-time-zdt}}
+                                  :xt/valid-from (util/->zdt #inst "2021")
+                                  :xt/valid-to end-of-time-zdt
+                                  :xt/system-from sys-time
+                                  :xt/system-to end-of-time-zdt}}
              (->> (tu/query-ra '[:scan {:table xt_docs}
                                  [xt/id
-                                  application_time_start application_time_end
-                                  system_time_start system_time_end]]
+                                  xt/valid-from xt/valid-to
+                                  xt/system-from xt/system-to]]
                                {:node tu/*node*})
                   (into {} (map (juxt :xt/id identity))))))))
 
@@ -68,36 +68,36 @@
         tt2 (util/->zdt (:sys-time tx2))
 
         original-v0-doc {:xt/id :doc, :version 0
-                         :application_time_start tt1
-                         :application_time_end end-of-time-zdt
-                         :system_time_start tt1
-                         :system_time_end tt2}
+                         :xt/valid-from tt1
+                         :xt/valid-to end-of-time-zdt
+                         :xt/system-from tt1
+                         :xt/system-to tt2}
 
         replaced-v0-doc {:xt/id :doc, :version 0
-                         :application_time_start tt1
-                         :application_time_end tt2
-                         :system_time_start tt2
-                         :system_time_end end-of-time-zdt}
+                         :xt/valid-from tt1
+                         :xt/valid-to tt2
+                         :xt/system-from tt2
+                         :xt/system-to end-of-time-zdt}
 
         v1-doc {:xt/id :doc, :version 1
-                :application_time_start tt2
-                :application_time_end end-of-time-zdt
-                :system_time_start tt2
-                :system_time_end end-of-time-zdt}]
+                :xt/valid-from tt2
+                :xt/valid-to end-of-time-zdt
+                :xt/system-from tt2
+                :xt/system-to end-of-time-zdt}]
 
     (t/is (= [replaced-v0-doc v1-doc]
              (tu/query-ra '[:scan {:table xt_docs}
                             [xt/id version
-                             application_time_start application_time_end
-                             system_time_start system_time_end]]
+                             xt/valid-from xt/valid-to
+                             xt/system-from xt/system-to]]
                           {:node tu/*node* :default-all-app-time? true}))
           "all app-time")
 
     (t/is (= [original-v0-doc replaced-v0-doc v1-doc]
              (tu/query-ra '[:scan {:table xt_docs, :for-sys-time :all-time}
                             [xt/id version
-                             application_time_start application_time_end
-                             system_time_start system_time_end]]
+                             xt/valid-from xt/valid-to
+                             xt/system-from xt/system-to]]
                           {:node tu/*node*
                            :params {'eot util/end-of-time}
                            :default-all-app-time? true}))
@@ -107,8 +107,8 @@
   (letfn [(all-time-docs []
             (->> (tu/query-ra '[:scan {:table xt_docs, :for-sys-time :all-time}
                                 [xt/id
-                                 application_time_start {application_time_end (<= application_time_end eot)}
-                                 system_time_start system_time_end]]
+                                 xt/valid-from {xt/valid-to (<= xt/valid-to eot)}
+                                 xt/system-from xt/system-to]]
                               {:node tu/*node*, :params {'eot util/end-of-time}
                                :default-all-app-time? true})
                  (map :xt/id)

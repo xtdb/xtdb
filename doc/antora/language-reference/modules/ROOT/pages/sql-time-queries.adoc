@@ -21,7 +21,7 @@ entire timeline at once (`FOR ALL APPLICATION_TIME`):
 
 [source,sql]
 ----
-INSERT INTO posts (xt$id, user_id, text, application_time_start)
+INSERT INTO posts (xt$id, user_id, text, xt$valid_from)
   VALUES (9012, 5678, 'Happy 2027!', DATE '2027-01-01');
 
 -- data from 2027 is not visible by default
@@ -51,7 +51,7 @@ When XTDB is in ISO Standard mode, queries will return records visible to all of
 
 [source,sql]
 ----
-INSERT INTO posts (xt$id, user_id, text, application_time_start)
+INSERT INTO posts (xt$id, user_id, text, xt$valid_from)
   VALUES (9012, 5678, 'Happy 2027!', DATE '2027-01-01');
 
 -- data from 2027 is visible by default
@@ -68,10 +68,10 @@ by querying all 4 built-in time columns:
 [source,sql]
 ----
 SELECT posts.text,
-       posts.system_time_start,
-       posts.system_time_end,
-       posts.application_time_start,
-       posts.application_time_end FROM posts;
+       posts.xt$system_from,
+       posts.xt$system_to,
+       posts.xt$valid_from,
+       posts.xt$valid_to FROM posts;
 ----
 
 
@@ -92,11 +92,11 @@ _Application Time_ represents the validity (sometimes called "effectivity") of d
 -- it is what allows users to correct data in the past or insert data into the future.
 
 * `SYSTEM_TIME` is comprised of:
-** system_time_start
-** system_time_end
+** xt$system_from
+** xt$system_to
 * `APPLICATION_TIME` is comprised of:
-** application_time_start
-** application_time_end
+** xt$valid_from
+** xt$valid_to
 
 [#timetravel]
 == Time Travel
@@ -123,7 +123,7 @@ For point-in-time queries on the Application Timeline:
 
 [source,sql]
 ----
-INSERT INTO posts (xt$id,title,application_time_start)
+INSERT INTO posts (xt$id,title,xt$valid_from)
   VALUES (199,'That Time I Attended Strange Loop 2022',
           DATE '2025-09-21');
 
@@ -211,7 +211,7 @@ i.e, if xs < ye and xe > ys.
 
 [source,sql]
 ----
-INSERT INTO posts (xt$id,title,application_time_start)
+INSERT INTO posts (xt$id,title,xt$valid_from)
   VALUES (299,'Overlapping',DATE '2027-01-01');
 
 SELECT posts.title FROM posts
@@ -226,7 +226,7 @@ i.e., if `xs = ys` and `xe = ye`.
 
 [source,sql]
 ----
-INSERT INTO posts (xt$id,title,application_time_start,application_time_end)
+INSERT INTO posts (xt$id,title,xt$valid_from,xt$valid_to)
   VALUES (399,'Equals?',DATE '2027-01-01',DATE '2027-01-02');
 
 SELECT posts.title FROM posts
@@ -241,7 +241,7 @@ i.e., if xe ≤ ys.
 
 [source,sql]
 ----
-INSERT INTO posts (xt$id,title,application_time_start,application_time_end)
+INSERT INTO posts (xt$id,title,xt$valid_from,xt$valid_to)
   VALUES (499,'Precedes?',DATE '2007-01-01',DATE '2007-01-02');
 
 SELECT posts.title FROM posts
@@ -256,7 +256,7 @@ i.e., if xs ≥ ye.
 
 [source,sql]
 ----
-INSERT INTO posts (xt$id,title,application_time_start,application_time_end)
+INSERT INTO posts (xt$id,title,xt$valid_from,xt$valid_to)
   VALUES (599,'Succeeds?',DATE '2037-01-01',DATE '2037-01-02');
 
 SELECT posts.title FROM posts
@@ -271,7 +271,7 @@ of y, i.e., if xe = ys.
 
 [source,sql]
 ----
-INSERT INTO posts (xt$id,title,application_time_start,application_time_end)
+INSERT INTO posts (xt$id,title,xt$valid_from,xt$valid_to)
   VALUES (699,'Immediately Precedes?',DATE '2007-01-01',
           TIMESTAMP '2007-01-02 12:34:56');
 
@@ -287,7 +287,7 @@ of y, i.e., if xs = ye.
 
 [source,sql]
 ----
-INSERT INTO posts (xt$id,title,application_time_start,application_time_end)
+INSERT INTO posts (xt$id,title,xt$valid_from,xt$valid_to)
   VALUES (799,'Immediately Succeeds?',TIMESTAMP '2036-12-31 12:34:56',
           DATE '2037-01-02');
 
@@ -306,7 +306,7 @@ the old Application Time is "split".
 
 [source,sql]
 ----
-INSERT INTO posts (xt$id,title,application_time_start)
+INSERT INTO posts (xt$id,title,xt$valid_from)
   VALUES (899,'Will I be split?',DATE '1997-02-02');
 
 UPDATE posts
@@ -315,10 +315,10 @@ UPDATE posts
   SET title='Split!';
 
 SELECT posts.title,
-       posts.system_time_start,
-       posts.system_time_end,
-       posts.application_time_start,
-       posts.application_time_end
+       posts.xt$system_from,
+       posts.xt$system_to,
+       posts.xt$valid_from,
+       posts.xt$valid_to
        FROM posts
        FOR ALL APPLICATION_TIME;
 ----
@@ -332,7 +332,7 @@ a hard-coded end-of-time value. It can be used like so:
 
 [source,sql]
 ----
-INSERT INTO posts (xt$id,title,application_time_start)
+INSERT INTO posts (xt$id,title,xt$valid_from)
   VALUES (999,'Delete from 1995 to the end of time?',DATE '1990-02-02');
 
 DELETE FROM posts
@@ -341,10 +341,10 @@ DELETE FROM posts
   WHERE posts.xt$id= 999;
 
 SELECT posts.title,
-       posts.system_time_start,
-       posts.system_time_end,
-       posts.application_time_start,
-       posts.application_time_end
+       posts.xt$system_from,
+       posts.xt$system_to,
+       posts.xt$valid_from,
+       posts.xt$valid_to
        FROM posts
        FOR ALL APPLICATION_TIME;
 ----
@@ -360,10 +360,10 @@ To inspect all of System Time:
 [source,sql]
 ----
 SELECT posts.title,
-       posts.system_time_start,
-       posts.system_time_end,
-       posts.application_time_start,
-       posts.application_time_end
+       posts.xt$system_from,
+       posts.xt$system_to,
+       posts.xt$valid_from,
+       posts.xt$valid_to
        FROM posts
        FOR ALL SYSTEM_TIME;
 ----
@@ -373,10 +373,10 @@ To inspect all of Application Time:
 [source,sql]
 ----
 SELECT posts.title,
-       posts.system_time_start,
-       posts.system_time_end,
+       posts.xt$system_from,
+       posts.xt$system_to,
        posts.application_time_start,
-       posts.application_time_end
+       posts.xt$valid_to
        FROM posts
        FOR ALL APPLICATION_TIME;
 ----
@@ -386,10 +386,10 @@ These two clauses can be combined to inspect the entire time plane (both timelin
 [source,sql]
 ----
 SELECT posts.title,
-       posts.system_time_start,
-       posts.system_time_end,
+       posts.xt$system_from,
+       posts.xt$system_to,
        posts.application_time_start,
-       posts.application_time_end
+       posts.xt$valid_to
        FROM posts
        FOR ALL SYSTEM_TIME
        FOR ALL APPLICATION_TIME;

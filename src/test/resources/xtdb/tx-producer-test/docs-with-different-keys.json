@@ -195,7 +195,7 @@
               }]
             }]
           },{
-            "name" : "application_time_start",
+            "name" : "xt$valid_from",
             "nullable" : true,
             "type" : {
               "name" : "timestamp",
@@ -204,7 +204,7 @@
             },
             "children" : [ ]
           },{
-            "name" : "application_time_end",
+            "name" : "xt$valid_to",
             "nullable" : true,
             "type" : {
               "name" : "timestamp",
@@ -236,7 +236,7 @@
             },
             "children" : [ ]
           },{
-            "name" : "application_time_start",
+            "name" : "xt$valid_from",
             "nullable" : true,
             "type" : {
               "name" : "timestamp",
@@ -245,7 +245,7 @@
             },
             "children" : [ ]
           },{
-            "name" : "application_time_end",
+            "name" : "xt$valid_to",
             "nullable" : true,
             "type" : {
               "name" : "timestamp",
@@ -461,12 +461,12 @@
               }]
             }]
           },{
-            "name" : "application_time_start",
+            "name" : "xt$valid_from",
             "count" : 3,
             "VALIDITY" : [0,0,0],
             "DATA" : [0,0,0]
           },{
-            "name" : "application_time_end",
+            "name" : "xt$valid_to",
             "count" : 3,
             "VALIDITY" : [0,0,0],
             "DATA" : [0,0,0]
@@ -487,12 +487,12 @@
             "TYPE_ID" : [ ],
             "OFFSET" : [ ]
           },{
-            "name" : "application_time_start",
+            "name" : "xt$valid_from",
             "count" : 0,
             "VALIDITY" : [ ],
             "DATA" : [ ]
           },{
-            "name" : "application_time_end",
+            "name" : "xt$valid_to",
             "count" : 0,
             "VALIDITY" : [ ],
             "DATA" : [ ]

@@ -1,13 +1,9 @@
 [:scan
  {:table foo,
   :for-sys-time [:in #time/date "2001-01-01" #time/date "2002-01-01"]}
- [{application_time_start
-   (and
-    (< application_time_start #time/date "2004-01-01")
-    (= application_time_start 4))}
-  {application_time_end
-   (and
-    (> application_time_end #time/date "2000-01-01")
-    (> application_time_end 10))}
-  {system_time_start (= system_time_start 20)}
-  {system_time_end (<= system_time_end 23)}]]
+ [{xt$valid_from
+   (and (< xt$valid_from #time/date "2004-01-01") (= xt$valid_from 4))}
+  {xt$valid_to
+   (and (> xt$valid_to #time/date "2000-01-01") (> xt$valid_to 10))}
+  {xt$system_from (= xt$system_from 20)}
+  {xt$system_to (<= xt$system_to 23)}]]

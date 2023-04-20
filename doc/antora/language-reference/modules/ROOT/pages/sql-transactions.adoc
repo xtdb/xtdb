@@ -40,11 +40,11 @@ Your data has reached the Transaction Log but isn't fully committed to the Objec
 === Time-Travel
 
 By default, an `INSERT` occurs "as of now".
-Inserted data can be forced to live in the past or future by setting `application_time_start` and/or `application_time_end`:
+Inserted data can be forced to live in the past or future by setting `xt$valid_from` and/or `xt$valid_to`:
 
 [source,sql]
 ----
-INSERT INTO users (xt$id, name, application_time_start)
+INSERT INTO users (xt$id, name, xt$valid_from)
   VALUES (5678, 'Kath', DATE '2027-01-06');
 ----
 
@@ -62,10 +62,10 @@ UPDATE users SET name='James' WHERE users.id=1234;
 Be aware that the `WHERE` clause requires fully-qualified columns, like `SELECT`.
 
 ////
-Updates can be forced to occur in the past or future by setting `APPLICATION_TIME_START` and/or `APPLICATION_TIME_END`:
+Updates can be forced to occur in the past or future by setting `XT$VALID_FROM` and/or `XT$VALID_TO`:
 [source,sh]
 ----
-UPDATE users SET name='James', application_time_start=DATE '1998-01-05' WHERE users.id=1234;
+UPDATE users SET name='James', xt$valid_from=DATE '1998-01-05' WHERE users.id=1234;
 ----
 ////
 

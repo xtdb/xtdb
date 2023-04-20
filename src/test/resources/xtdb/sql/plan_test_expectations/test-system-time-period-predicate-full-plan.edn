@@ -5,8 +5,8 @@
   [:mega-join
    [(< x2 x7) (> x3 x6)]
    [[:rename
-     {name x1, system_time_start x2, system_time_end x3}
-     [:scan {:table foo} [name system_time_start system_time_end]]]
+     {name x1, xt$system_from x2, xt$system_to x3}
+     [:scan {:table foo} [name xt$system_from xt$system_to]]]
     [:rename
-     {name x5, system_time_start x6, system_time_end x7}
-     [:scan {:table bar} [name system_time_start system_time_end]]]]]]]
+     {name x5, xt$system_from x6, xt$system_to x7}
+     [:scan {:table bar} [name xt$system_from xt$system_to]]]]]]]

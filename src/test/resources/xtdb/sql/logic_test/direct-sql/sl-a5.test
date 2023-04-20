@@ -16,7 +16,7 @@ We love strangeloop
 # Time Travel
 
 statement ok
-INSERT INTO posts (xt$id, user_id, text, application_time_start)
+INSERT INTO posts (xt$id, user_id, text, xt$valid_from)
 	VALUES (9012, 5678, 'Happy 2025!', DATE '2025-01-01')
 
 query T nosort

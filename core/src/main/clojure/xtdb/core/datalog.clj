@@ -379,17 +379,17 @@
     1 {scan-col (first col-preds)}
     {scan-col (list* 'and col-preds)}))
 
-(def app-time-period-sym 'xt/app-time)
-(def app-time-start-sym 'application_time_start)
-(def app-time-end-sym 'application_time_end)
+(def app-time-period-sym 'xt/valid-time)
+(def app-time-start-sym 'xt/valid-from)
+(def app-time-end-sym 'xt/valid-to)
 (def app-temporal-cols {:period app-time-period-sym
                         :start app-time-start-sym
                         :end app-time-end-sym})
 
 
-(def sys-time-period-sym 'xt/sys-time)
-(def sys-time-start-sym 'system_time_start)
-(def sys-time-end-sym 'system_time_end)
+(def sys-time-period-sym 'xt/system-time)
+(def sys-time-start-sym 'xt/system-from)
+(def sys-time-end-sym 'xt/system-to)
 (def sys-temporal-cols {:period sys-time-period-sym
                         :start sys-time-start-sym
                         :end sys-time-end-sym})

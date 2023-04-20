@@ -941,36 +941,36 @@
   (t/is
    (=plan-file
     "multiple-references-to-temporal-cols"
-    (plan-sql "SELECT foo.application_time_start, foo.application_time_end, foo.system_time_start, foo.system_time_end
+    (plan-sql "SELECT foo.xt$valid_from, foo.xt$valid_to, foo.xt$system_from, foo.xt$system_to
                 FROM foo FOR SYSTEM_TIME FROM DATE '2001-01-01' TO DATE '2002-01-01'
-                WHERE foo.application_time_start = 4 AND foo.application_time_end > 10
-                AND foo.system_time_start = 20 AND foo.system_time_end <= 23
+                WHERE foo.xt$valid_from = 4 AND foo.xt$valid_to > 10
+                AND foo.xt$system_from = 20 AND foo.xt$system_to <= 23
                 AND foo.APP_TIME OVERLAPS PERIOD (DATE '2000-01-01', DATE '2004-01-01')"))))
 
 (deftest test-sql-insert-plan
   (t/is (= '[:insert
              {:table "users"}
              [:rename
-              {x1 xt$id, x2 name, x5 application_time_start}
+              {x1 xt$id, x2 name, x5 xt$valid_from}
               [:project
                [x1 x2 {x5 (cast-tstz x3)}]
                [:table [x1 x2 x3] [{x1 ?_0, x2 ?_1, x3 ?_2}]]]]]
-           (plan-sql "INSERT INTO users (xt$id, name, application_time_start) VALUES (?, ?, ?)")
+           (plan-sql "INSERT INTO users (xt$id, name, xt$valid_from) VALUES (?, ?, ?)")
            (plan-sql
             "INSERT INTO users
-             SELECT bar.xt$id, bar.name, bar.application_time_start
-             FROM (VALUES (?, ?, ?)) AS bar(xt$id, name, application_time_start)")
+             SELECT bar.xt$id, bar.name, bar.xt$valid_from
+             FROM (VALUES (?, ?, ?)) AS bar(xt$id, name, xt$valid_from)")
            (plan-sql
-            "INSERT INTO users (xt$id, name, application_time_start)
-             SELECT bar.xt$id, bar.name, bar.application_time_start
-             FROM (VALUES (?, ?, ?)) AS bar(xt$id, name, application_time_start)")))
+            "INSERT INTO users (xt$id, name, xt$valid_from)
+             SELECT bar.xt$id, bar.name, bar.xt$valid_from
+             FROM (VALUES (?, ?, ?)) AS bar(xt$id, name, xt$valid_from)")))
 
   (t/is (=plan-file "test-sql-insert-plan-309"
                     (plan-sql "INSERT INTO customer (xt$id, c_custkey, c_name, c_address, c_nationkey, c_phone, c_acctbal, c_mktsegment, c_comment) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"))
         "#309")
 
   (t/is (=plan-file "test-sql-insert-plan-398"
-                    (plan-sql "INSERT INTO foo (xt$id, application_time_start) VALUES ('foo', DATE '2018-01-01')"))))
+                    (plan-sql "INSERT INTO foo (xt$id, xt$valid_from) VALUES ('foo', DATE '2018-01-01')"))))
 
 (deftest test-sql-delete-plan
   (t/is (=plan-file "test-sql-delete-plan"
@@ -1068,18 +1068,18 @@
 
 (deftest test-derived-columns-with-periods
   (t/is
-    (=plan-file
-      "test-derived-columns-with-periods-period-predicate"
-      (plan-sql
-        "SELECT f.APP_TIME OVERLAPS f.SYSTEM_TIME
+   (=plan-file
+    "test-derived-columns-with-periods-period-predicate"
+    (plan-sql
+     "SELECT f.APP_TIME OVERLAPS f.SYSTEM_TIME
         FROM foo
-        AS f (system_time_start, system_time_end, application_time_start, application_time_end)")))
+        AS f (xt$system_from, xt$system_to, xt$valid_from, xt$valid_to)")))
 
   (t/is
-    (=plan-file
-      "test-derived-columns-with-periods-period-specs"
-      (plan-sql
-        "SELECT f.bar
+   (=plan-file
+    "test-derived-columns-with-periods-period-specs"
+    (plan-sql
+     "SELECT f.bar
         FROM foo
         FOR SYSTEM_TIME AS OF CURRENT_TIMESTAMP
         FOR APPLICATION_TIME AS OF CURRENT_TIMESTAMP
@@ -1132,12 +1132,12 @@
   (t/is
    (=plan-file
     "test-period-specs-with-dml-subqueries-and-defaults-407" ;;also #424
-    (plan-sql "INSERT INTO prop_owner (xt$id, customer_number, property_number, application_time_start, application_time_end)
+    (plan-sql "INSERT INTO prop_owner (xt$id, customer_number, property_number, xt$valid_from, xt$valid_to)
                 SELECT 1,
                 145,
                 7797, DATE '1998-01-03', tmp.app_start
                 FROM
-                (SELECT MIN(Prop_Owner.system_time_start) AS app_start
+                (SELECT MIN(Prop_Owner.xt$system_from) AS app_start
                 FROM Prop_Owner
                 FOR ALL SYSTEM_TIME
                 WHERE Prop_Owner.id = 1) AS tmp"

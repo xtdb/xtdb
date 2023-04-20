@@ -3,13 +3,10 @@
  [:project
   [{x6 (and (< x3 x2) (> x4 x1))}]
   [:rename
-   {system_time_start x1,
-    system_time_end x2,
-    application_time_start x3,
-    application_time_end x4}
+   {xt$system_from x1,
+    xt$system_to x2,
+    xt$valid_from x3,
+    xt$valid_to x4}
    [:scan
     {:table foo}
-    [system_time_start
-     system_time_end
-     application_time_start
-     application_time_end]]]]]
+    [xt$system_from xt$system_to xt$valid_from xt$valid_to]]]]]

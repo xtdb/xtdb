@@ -15,7 +15,8 @@
             [xtdb.vector :as vec]
             [xtdb.vector.indirect :as iv]
             xtdb.watermark
-            [juxt.clojars-mirrors.integrant.core :as ig])
+            [juxt.clojars-mirrors.integrant.core :as ig]
+            [clojure.string :as str])
   (:import (clojure.lang IPersistentSet MapEntry)
            xtdb.api.TransactionInstant
            xtdb.buffer_pool.IBufferPool
@@ -154,7 +155,7 @@
                        (.monoReader :i64))
         res (Roaring64Bitmap.)]
 
-    (if-let [content-col-preds (seq (remove (comp temporal/temporal-column? key) col-preds))]
+    (if-let [content-col-preds (seq (remove (comp temporal/temporal-column? util/str->normal-form-str str key) col-preds))]
       (let [^RoaringBitmap
             idx-bitmap (->> (for [^IRelationSelector col-pred (vals content-col-preds)]
                               (RoaringBitmap/bitmapOf (.select col-pred allocator in-rel params)))
@@ -254,6 +255,13 @@
   (iv/->indirect-rel (remove #(= col-name (.getName ^IIndirectVector %)) rel)
                      (.rowCount rel)))
 
+(defn- unnormalize-column-names ^xtdb.vector.IIndirectRelation [^IIndirectRelation rel col-names]
+  (iv/->indirect-rel
+   (map (fn [col-name]
+          (-> (.vectorForName ^IIndirectRelation rel (util/str->normal-form-str col-name))
+              (.withName col-name)))
+        col-names)))
+
 (deftype ScanCursor [^BufferAllocator allocator
                      ^IMetadataManager metadata-manager
                      ^IWatermark watermark
@@ -268,18 +276,14 @@
   ICursor
   (tryAdvance [_ c]
     (let [keep-row-id-col? (contains? temporal-col-names "_row_id")
-          !advanced? (volatile! false)]
+          !advanced? (volatile! false)
+          normalized-temporal-col-names (into #{} (map util/str->normal-form-str) temporal-col-names)]
 
       (while (and (not @!advanced?)
                   (.tryAdvance blocks
                                (reify Consumer
                                  (accept [_ content-rel]
-                                   (let [content-rel
-                                         (iv/->indirect-rel
-                                          (map (fn [col-name]
-                                                 (-> (.vectorForName ^IIndirectRelation content-rel (util/str->normal-form-str col-name))
-                                                     (.withName col-name)))
-                                               content-col-names))
+                                   (let [content-rel (unnormalize-column-names content-rel content-col-names)
                                          atemporal-row-id-bitmap (->atemporal-row-id-bitmap allocator col-preds content-rel params)]
                                      (letfn [(accept-rel [^IIndirectRelation read-rel]
                                                (when (and read-rel (pos? (.rowCount read-rel)))
@@ -287,14 +291,16 @@
                                                                   (not keep-row-id-col?) (remove-col "_row_id"))]
                                                    (.accept c read-rel)
                                                    (vreset! !advanced? true))))]
-
                                        (if current-row-ids
                                          (accept-rel (-> content-rel
                                                          (select-current-row-ids atemporal-row-id-bitmap current-row-ids)))
 
-                                         (let [temporal-rel (->temporal-rel watermark allocator temporal-col-names temporal-min-range temporal-max-range atemporal-row-id-bitmap)]
+                                         (let [temporal-rel (->temporal-rel watermark allocator normalized-temporal-col-names
+                                                                            temporal-min-range temporal-max-range atemporal-row-id-bitmap)]
                                            (try
-                                             (let [temporal-rel (-> temporal-rel (apply-temporal-preds allocator col-preds params))]
+                                             (let [temporal-rel (-> temporal-rel
+                                                                    (unnormalize-column-names (conj temporal-col-names "_row_id"))
+                                                                    (apply-temporal-preds allocator col-preds params))]
                                                (accept-rel (align-vectors content-rel temporal-rel)))
                                              (finally
                                                (util/try-close temporal-rel))))))))))))
@@ -307,7 +313,7 @@
   (let [min-range (temporal/->min-range)
         max-range (temporal/->max-range)]
     (letfn [(apply-bound [f col-name ^long time-μs]
-              (let [range-idx (temporal/->temporal-column-idx col-name)]
+              (let [range-idx (temporal/->temporal-column-idx (util/str->normal-form-str (str col-name)))]
                 (case f
                   :< (aset max-range range-idx
                            (min (dec time-μs) (aget max-range range-idx)))
@@ -330,10 +336,10 @@
                          (util/instant->micros))))]
 
       (when-let [sys-time (some-> basis-tx (.sys-time) util/instant->micros)]
-        (apply-bound :<= "system_time_start" sys-time)
+        (apply-bound :<= "xt$system_from" sys-time)
 
         (when-not for-sys-time
-          (apply-bound :> "system_time_end" sys-time)))
+          (apply-bound :> "xt$system_to" sys-time)))
 
       (letfn [(apply-constraint [constraint start-col end-col]
                 (when-let [[tag & args] constraint]
@@ -358,13 +364,13 @@
 
                     :all-time nil)))]
 
-        (apply-constraint for-app-time "application_time_start" "application_time_end")
-        (apply-constraint for-sys-time "system_time_start" "system_time_end"))
+        (apply-constraint for-app-time "xt$valid_from" "xt$valid_to")
+        (apply-constraint for-sys-time "xt$system_from" "xt$system_to"))
 
-      (let [col-types (-> temporal/temporal-col-types (update-keys symbol))
+      (let [col-types (into {} (map (juxt first #(get temporal/temporal-col-types (util/str->normal-form-str (str (first %)))))) selects)
             param-types (expr/->param-types params)]
         (doseq [[col-name select-form] selects
-                :when (temporal/temporal-column? col-name)]
+                :when (temporal/temporal-column? (util/str->normal-form-str (str col-name)))]
           (->> (-> (expr/form->expr select-form {:param-types param-types, :col-types col-types})
                    (expr/prepare-expr)
                    (expr.meta/meta-expr {:col-types col-types}))
@@ -430,7 +436,7 @@
       (letfn [(->col-type [[table col-name]]
                 (let [normalized-table (util/str->normal-form-str (str table))
                       normalized-col-name (util/str->normal-form-str (str col-name))]
-                  (if (temporal/temporal-column? col-name)
+                  (if (temporal/temporal-column? (util/str->normal-form-str (str col-name)))
                     [:timestamp-tz :micro "UTC"]
                     (types/merge-col-types (.columnType metadata-mgr normalized-table normalized-col-name)
                                            (some-> (.liveChunk wm)
@@ -450,13 +456,11 @@
                                           (distinct))))
 
             {content-col-names false, temporal-col-names true}
-            (->> col-names
-                 (group-by (comp temporal/temporal-column? str)))
+            (->> col-names (group-by (comp temporal/temporal-column? util/str->normal-form-str str)))
 
             content-col-names (-> (set (map str content-col-names)) (conj "_row_id"))
-
             normalized-content-col-names (set (map (comp util/str->normal-form-str) content-col-names))
-
+            temporal-col-names (into #{} (map (comp str)) temporal-col-names)
             normalized-table-name (util/str->normal-form-str (str table))
 
             col-types (->> col-names
@@ -476,7 +480,7 @@
                            (into {}))
 
             metadata-args (vec (for [[col-name select] selects
-                                     :when (not (temporal/temporal-column? (str col-name)))]
+                                     :when (not (temporal/temporal-column? (util/str->normal-form-str (str col-name))))]
                                  select))
 
             row-count (->> (meta/with-all-metadata metadata-mgr normalized-table-name
@@ -495,7 +499,6 @@
                                        (nil? for-app-time)
                                        (assoc :for-app-time (if default-all-app-time? [:all-time] [:at [:now :now]])))
                            [temporal-min-range temporal-max-range] (->temporal-min-max-range params basis scan-opts selects)
-                           temporal-col-names (into #{} (map str) temporal-col-names)
                            current-row-ids (when (use-current-row-id-cache? watermark scan-opts basis temporal-col-names)
                                              (get-current-row-ids watermark basis))]
                        (-> (ScanCursor. allocator metadata-mgr watermark

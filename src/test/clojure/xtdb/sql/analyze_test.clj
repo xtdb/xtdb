@@ -425,7 +425,7 @@ SELECT t1.d-t1.e AS a, SUM(t1.a) AS b
   (valid?
     "SELECT f.APP_TIME OVERLAPS f.SYSTEM_TIME
     FROM foo
-    AS f (system_time_start, system_time_end, application_time_start, application_time_end)")
+    AS f (xt$system_from, xt$system_to, xt$valid_from, xt$valid_to)")
 
   (invalid? [#"References to periods may only appear within period predicates: foo.application_time"]
     "SELECT foo.APPLICATION_TIME
@@ -448,11 +448,11 @@ SELECT t1.d-t1.e AS a, SUM(t1.a) AS b
     FOR SYSTEM_TIME BETWEEN DATE '2000-01-01' AND DATE '2001-01-01'")
 
   (invalid?
-    [#"Columns are not valid within period specifications: foo.baz"
-     #"Columns are not valid within period specifications: foo.biz"
-     #"Table not in scope: foo"
-     #"Table not in scope: foo"]
-    "SELECT foo.application_time_start
+   [#"Columns are not valid within period specifications: foo.baz"
+    #"Columns are not valid within period specifications: foo.biz"
+    #"Table not in scope: foo"
+    #"Table not in scope: foo"]
+   "SELECT foo.xt$valid_from
     FROM foo FOR SYSTEM_TIME FROM foo.baz TO foo.biz")
 
   (invalid?
@@ -462,8 +462,8 @@ SELECT t1.d-t1.e AS a, SUM(t1.a) AS b
     (SELECT t2.id FROM t2 FOR SYSTEM_TIME BETWEEN t1.start AND t1.end)
     FROM t1")
 
-  (invalid? [#"Column not in scope: f.system_time_start"]
-    "SELECT f.system_time_start
+  (invalid? [#"Column not in scope: f.xt\$system_to"]
+            "SELECT f.xt$system_to
     FROM foo
     FOR SYSTEM_TIME AS OF CURRENT_TIMESTAMP
     FOR APPLICATION_TIME AS OF CURRENT_TIMESTAMP
@@ -729,7 +729,7 @@ SELECT t1.d-t1.e AS a, SUM(t1.a) AS b
             "INSERT INTO users (xt$id, name) VALUES (?, ?, ?)")
 
   (invalid? [#"INSERT does not contain mandatory xt\$id column"]
-            "INSERT INTO users (name, application_time_start) VALUES (?, ?)")
+            "INSERT INTO users (name, xt$valid_from) VALUES (?, ?)")
   (invalid? [#"Non-deterministic ARROW_TABLE is not allowed in DML statements"]
 
             "INSERT INTO users (xt$id, name) SELECT x.xt$id, x.name FROM ARROW_TABLE('test.arrow') AS x")
@@ -759,10 +759,10 @@ SELECT t1.d-t1.e AS a, SUM(t1.a) AS b
 
 (t/deftest test-set-temporal-cols-err-454
   (invalid? [#"Updating app-time columns outside of `FOR PERIOD OF` is not supported:"]
-            "UPDATE foo SET application_time_start = DATE '2020-01-01'")
+            "UPDATE foo SET xt$valid_from = DATE '2020-01-01'")
 
   (invalid? [#"Updating sys-time columns is not supported:"]
-            "UPDATE foo SET system_time_start = DATE '2020-01-01'"))
+            "UPDATE foo SET xt$system_from = DATE '2020-01-01'"))
 
 (t/deftest test-with-recursive-unsupported-490
   (invalid? [#"RECURSIVE WITH clauses are not supported"]
