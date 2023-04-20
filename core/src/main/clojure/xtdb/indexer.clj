@@ -22,6 +22,7 @@
             [xtdb.watermark :as wm])
   (:import (java.io ByteArrayInputStream Closeable)
            java.lang.AutoCloseable
+           java.nio.ByteBuffer
            (java.nio.channels ClosedByInterruptException)
            (java.time Instant ZoneId)
            (java.util.concurrent.locks StampedLock)
@@ -42,8 +43,7 @@
            xtdb.operator.IRaQuerySource
            (xtdb.operator.scan IScanEmitter)
            (xtdb.temporal ITemporalManager ITemporalTxIndexer)
-           (xtdb.vector IIndirectRelation IIndirectVector IRowCopier)
-           (xtdb.vector.indirect DirectVector)
+           (xtdb.vector IIndirectRelation IIndirectVector IRowCopier IVectorWriter)
            (xtdb.watermark IWatermark IWatermarkSource)))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -486,6 +486,40 @@
 
         nil))))
 
+(def ^:private ^:const ^String txs-table
+  "xt$txs")
+
+(defn- add-tx-row! [^ILiveChunkTx live-chunk-tx, ^ITemporalTxIndexer temporal-tx, ^IInternalIdManager iid-mgr, ^TransactionInstant tx-key, ^Throwable t]
+  (let [tx-id (.tx-id tx-key)
+        sys-time-µs (util/instant->micros (.sys-time tx-key))
+        live-table (.liveTable live-chunk-tx txs-table)
+        row-id (.nextRowId live-chunk-tx)
+        writer (.writer live-table)
+        iid (.getOrCreateInternalId iid-mgr txs-table tx-id row-id)]
+
+    (.writeRowId live-table row-id)
+
+    (doto (-> (.writerForName writer "xt$id" :i64)
+              (.monoWriter :i64))
+      (.writeLong tx-id))
+
+    (doto (-> (.writerForName writer "xt$tx_time" t/temporal-col-type)
+              (.monoWriter :i64))
+      (.writeLong sys-time-µs))
+
+    (doto (-> (.writerForName writer "xt$committed?" :bool)
+              (.monoWriter :bool))
+      (.writeBoolean (nil? t)))
+
+    (let [e-wtr (.writerForName writer "xt$error" [:union #{:null :clj-form}])]
+      (if (or (nil? t) (= t abort-exn))
+        (doto (.monoWriter e-wtr :null)
+          (.writeNull nil))
+        (doto (.monoWriter e-wtr :clj-form)
+          (.writeObject (ByteBuffer/wrap (.getBytes (pr-str t)))))))
+
+    (.indexPut temporal-tx iid row-id sys-time-µs util/end-of-time-μs true)))
+
 (deftype Indexer [^BufferAllocator allocator
                   ^ObjectStore object-store
                   ^IMetadataManager metadata-mgr
@@ -559,9 +593,17 @@
                   (when (not= e abort-exn)
                     (log/debug e "aborted tx"))
                   (.abort temporal-idxer)
-                  (.abort log-op-idxer))
+                  (.abort log-op-idxer)
+
+                  (with-open [live-chunk-tx (.startTx live-chunk)]
+                    (let [temporal-tx (.startTx temporal-mgr tx-key)]
+                      (add-tx-row! live-chunk-tx temporal-tx iid-mgr tx-key e)
+                      (.commit live-chunk-tx)
+                      (.commit temporal-tx))))
 
                 (do
+                  (add-tx-row! live-chunk-tx temporal-idxer iid-mgr tx-key nil)
+
                   (.commit live-chunk-tx)
 
                   (let [evicted-row-ids (.commit temporal-idxer)]

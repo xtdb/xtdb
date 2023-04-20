@@ -22,7 +22,7 @@
                              :c_acctbal :c_address :c_comment :c_custkey :c_mktsegment
                              :c_name :c_nationkey :c_phone}
                 :block-idx 0}
-               (row-id->col-names "customer" 0)))
+               (row-id->col-names "customer" 1)))
 
       (t/is (= {:col-names #{:xt$id
                              :o_clerk :o_comment :o_custkey :o_orderdate :o_orderkey

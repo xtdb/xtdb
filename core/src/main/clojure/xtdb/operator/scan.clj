@@ -472,7 +472,7 @@
             col-preds (->> (for [[col-name select-form] selects]
                              ;; for temporal preds, we may not need to re-apply these if they can be represented as a temporal range.
                              (MapEntry/create (str col-name)
-                                              (expr/->expression-relation-selector select-form {:col-types col-types, :param-types param-types})))
+                                             (expr/->expression-relation-selector select-form {:col-types col-types, :param-types param-types})))
                            (into {}))
 
             metadata-args (vec (for [[col-name select] selects

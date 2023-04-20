@@ -37,10 +37,10 @@
                            (set (tu/query-ra '[:scan {:table xt_docs} [xt/id {name (> name ?name)}]]
                                              {:node node, :basis {:tx tx}, :params {'?name "Ivan"}})))))]
 
-          (t/is (= #{0 1} (set (keys (.chunksMetadata metadata-mgr)))))
+          (t/is (= #{0 2} (set (keys (.chunksMetadata metadata-mgr)))))
 
           (let [expected-match [(meta/map->ChunkMatch
-                                 {:chunk-idx 1, :block-idxs (doto (RoaringBitmap.) (.add 1)), :col-names #{"_row_id" "xt$id" "name"}})]]
+                                 {:chunk-idx 2, :block-idxs (doto (RoaringBitmap.) (.add 1)), :col-names #{"_row_id" "xt$id" "name"}})]]
             (t/is (= expected-match
                      (meta/matching-chunks metadata-mgr "xt_docs"
                                            (expr.meta/->metadata-selector '(> name "Ivan") '#{name} {})))
@@ -77,7 +77,7 @@
 
     (tu/finish-chunk! node)
     (let [^IMetadataManager metadata-mgr (tu/component node ::meta/metadata-manager)]
-      (t/is (= #{0 3} (set (keys (.chunksMetadata metadata-mgr)))))
+      (t/is (= #{0 4} (set (keys (.chunksMetadata metadata-mgr)))))
       (let [expected-match [(meta/map->ChunkMatch
                              {:chunk-idx 0, :block-idxs (doto (RoaringBitmap.) (.add 0)), :col-names #{"_row_id" "xt$id" "name"}})]]
         (t/is (= expected-match

@@ -3,6 +3,7 @@
             [xtdb.error :as err]
             [xtdb.rewrite :refer [zmatch]]
             [xtdb.types :as types]
+            [xtdb.vector :as vec]
             [xtdb.vector.indirect :as iv])
   (:import (java.lang AutoCloseable)
            (java.util HashMap LinkedHashMap Map)
@@ -371,6 +372,9 @@
 
       :else (.rowCopier underlying-writer (.getUnderlyingVector ^ExtensionTypeVector src-vec))))
 
+  (monoWriter [_ col-type] (vec/->mono-writer dest-vec col-type))
+  (polyWriter [_ col-type] (vec/->poly-writer dest-vec col-type))
+
   IExtensionWriter
   (getUnderlyingWriter [_] underlying-writer))
 
@@ -415,7 +419,10 @@
         (copyRow [_ src-idx]
           (let [pos (.getPosition this-writer)]
             (.copyFromSafe dest-vec src-idx pos src-vec)
-            pos))))))
+            pos)))))
+
+  (monoWriter [_ col-type] (vec/->mono-writer dest-vec col-type))
+  (polyWriter [_ col-type] (vec/->poly-writer dest-vec col-type)))
 
 (defn vec->writer
   (^xtdb.vector.IVectorWriter

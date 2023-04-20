@@ -125,7 +125,7 @@
         (tu/finish-chunk! node)
 
         (t/is (= {:latest-completed-tx last-tx-key
-                  :latest-row-id (dec total-number-of-ops)}
+                  :latest-row-id 5}
                  (-> (meta/latest-chunk-metadata mm)
                      (select-keys [:latest-completed-tx :latest-row-id]))))
 
@@ -418,7 +418,7 @@
           (tu/finish-chunk! node)
 
           (t/is (= {:latest-completed-tx last-tx-key
-                    :latest-row-id (dec (count tx-ops))}
+                    :latest-row-id 11109}
                    (-> (meta/latest-chunk-metadata mm)
                        (select-keys [:latest-completed-tx :latest-row-id]))))
 
@@ -518,7 +518,7 @@
                   (t/is (= 2 (count (filter #(re-matches #"chunk-.*/device_info/content-api_version\.arrow" %) objs))))
                   (t/is (= 5 (count (filter #(re-matches #"chunk-.*/device_readings/content-battery_level\.arrow" %) objs)))))
 
-                (t/is (= 2000 (count (.id->internal-id iid-mgr)))))
+                (t/is (= 2055 (count (.id->internal-id iid-mgr)))))
 
               (t/is (= :utf8 (.columnType mm "device_readings" "xt$id")))
 
@@ -542,7 +542,7 @@
                                           (tu/then-await-tx* node (Duration/ofSeconds 10))))
                               (:tx-id second-half-tx-key)))
 
-                    (t/is (>= (count (.id->internal-id iid-mgr)) 2000))
+                    (t/is (>= (count (.id->internal-id iid-mgr)) 2055))
 
                     (t/is (= :utf8 (.columnType mm "device_info" "xt$id"))))
 
@@ -568,7 +568,7 @@
 
                     (t/is (= :utf8 (.columnType mm "device_info" "xt$id")))
 
-                    (t/is (= 2000 (count (.id->internal-id iid-mgr))))))))))))))
+                    (t/is (= 2110 (count (.id->internal-id iid-mgr))))))))))))))
 
 (t/deftest merges-column-fields-on-restart
   (let [node-dir (util/->path "target/merges-column-fields")
@@ -685,16 +685,16 @@
                         @!res)))]
 
             (with-open [wm1 (.openWatermark wm-src nil)]
-              (t/is (= [[{:_row_id 1, :name "Dan"} {:_row_id 2, :name "Ivan"}]
-                        [{:_row_id 3, :name "James"} {:_row_id 4, :name "Jon"}]]
+              (t/is (= [[{:_row_id 2, :name "Dan"} {:_row_id 3, :name "Ivan"}]
+                        [{:_row_id 5, :name "James"} {:_row_id 6, :name "Jon"}]]
                        (test-live-blocks wm1 nil))
                     "no selector")
 
-              (t/is (= [[{:_row_id 3, :name "James"} {:_row_id 4, :name "Jon"}]]
+              (t/is (= [[{:_row_id 5, :name "James"} {:_row_id 6, :name "Jon"}]]
                        (test-live-blocks wm1 gt-literal-selector))
                     "only second block, literal selector")
 
-              (t/is (= [[{:_row_id 3, :name "James"} {:_row_id 4, :name "Jon"}]]
+              (t/is (= [[{:_row_id 5, :name "James"} {:_row_id 6, :name "Jon"}]]
                        (test-live-blocks wm1 gt-param-selector))
                     "only second block, param selector")
 
@@ -702,11 +702,11 @@
                                 (tu/then-await-tx* node))]
 
                 (with-open [wm2 (.openWatermark wm-src next-tx)]
-                  (t/is (= [[{:_row_id 3, :name "James"} {:_row_id 4, :name "Jon"}]]
+                  (t/is (= [[{:_row_id 5, :name "James"} {:_row_id 6, :name "Jon"}]]
                            (test-live-blocks wm1 gt-literal-selector))
                         "replay with wm1")
 
-                  (t/is (= [[{:_row_id 3, :name "James"} {:_row_id 4, :name "Jon"}]
-                            [{:_row_id 5, :name "Jeremy"}]]
+                  (t/is (= [[{:_row_id 5, :name "James"} {:_row_id 6, :name "Jon"}]
+                            [{:_row_id 8, :name "Jeremy"}]]
                            (test-live-blocks wm2 gt-literal-selector))
                         "now on wm2"))))))))))

@@ -296,7 +296,7 @@ ORDER BY foo.application_time_start"
   (t/is (= [{:foo 1, :x 1}, {:foo 2, :x 2}]
            (xt.sql/q tu/*node* "SELECT foo.xt$id foo, foo.x FROM foo LEFT JOIN bar USING (xt$id, x)")))
 
-  #_                                    ; FIXME #471
+  #_ ; FIXME #471
   (t/is (= []
            (xt.sql/q tu/*node* "SELECT foo.xt$id foo, foo.x FROM foo LEFT JOIN bar USING (xt$id) WHERE foo.x = bar.x"))))
 
@@ -353,3 +353,40 @@ VALUES(1, OBJECT ('foo': OBJECT('bibble': true), 'bar': OBJECT('baz': 1001)))"]]
   #_ ; FIXME
   (t/is (= [{:t2d {:bibble true}, :t1d {:baz 1001}}]
            (xt.sql/q tu/*node* "SELECT t2.data t2d, t1.data t1d FROM t2, t1"))))
+
+(t/deftest test-txs-table-485
+  (tu/with-log-level 'xtdb.indexer :error
+    (xt.d/submit-tx tu/*node* [[:put :docs {:xt/id :foo}]])
+    (xt.d/submit-tx tu/*node* [[:abort]])
+    (xt.d/submit-tx tu/*node* [[:put :docs {:xt/id :bar}]])
+    (xt.d/submit-tx tu/*node* [[:put :xt_docs {:xt/id :tx-fn-fail
+                                               :fn #xt/clj-form (fn []
+                                                                  (throw (Exception. "boom")))}]
+                               [:call :tx-fn-fail]])
+
+    (t/is (= [{:tx-id 0, :tx-time (util/->zdt #inst "2020-01-01"), :committed? true}
+              {:tx-id 1, :tx-time (util/->zdt #inst "2020-01-02"), :committed? false}
+              {:tx-id 2, :tx-time (util/->zdt #inst "2020-01-03"), :committed? true}
+              {:tx-id 3, :tx-time (util/->zdt #inst "2020-01-04"), :committed? false}]
+             (xt.d/q tu/*node*
+                     '{:find [tx-id tx-time committed?]
+                       :where [($ :xt/txs {:xt/id tx-id, :xt/tx-time tx-time, :xt/committed? committed?})]})))
+
+    (t/is (= [{:committed? false}]
+             (xt.d/q tu/*node*
+                     '{:find [committed?]
+                       :in [tx-id]
+                       :where [($ :xt/txs {:xt/id tx-id, :xt/committed? committed?})]}
+                     1)))
+
+    (t/is (thrown-with-msg?
+           RuntimeException
+           #":xtdb\.call/error-evaluating-tx-fn"
+
+           (throw (-> (xt.d/q tu/*node*
+                              '{:find [err]
+                                :in [tx-id]
+                                :where [($ :xt/txs {:xt/id tx-id, :xt/error err})]}
+                              3)
+                      first
+                      :err :form))))))

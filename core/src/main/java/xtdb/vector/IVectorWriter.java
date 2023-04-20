@@ -39,4 +39,7 @@ public interface IVectorWriter<V extends ValueVector> extends AutoCloseable {
     default void close() throws Exception {
         getVector().close();
     }
+
+    IMonoVectorWriter monoWriter(Object colType);
+    IPolyVectorWriter polyWriter(Object colType);
 }

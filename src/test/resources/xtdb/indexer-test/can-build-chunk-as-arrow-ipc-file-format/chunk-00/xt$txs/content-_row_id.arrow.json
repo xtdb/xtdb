@@ -12,12 +12,12 @@
     }]
   },
   "batches" : [{
-    "count" : 3,
+    "count" : 2,
     "columns" : [{
       "name" : "_row_id",
-      "count" : 3,
-      "VALIDITY" : [1,1,1],
-      "DATA" : ["1","2","6"]
+      "count" : 2,
+      "VALIDITY" : [1,1],
+      "DATA" : ["2","5"]
     }]
   }]
 }

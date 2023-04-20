@@ -1,0 +1,54 @@
+{
+  "schema" : {
+    "fields" : [{
+      "name" : "xt$error",
+      "nullable" : false,
+      "type" : {
+        "name" : "union",
+        "mode" : "Dense",
+        "typeIds" : [ ]
+      },
+      "children" : [{
+        "name" : "clj-form",
+        "nullable" : false,
+        "type" : {
+          "name" : "ClojureFormType"
+        },
+        "children" : [ ],
+        "metadata" : [{
+          "value" : "xt/clj-form",
+          "key" : "ARROW:extension:name"
+        },{
+          "value" : "",
+          "key" : "ARROW:extension:metadata"
+        }]
+      },{
+        "name" : "null",
+        "nullable" : true,
+        "type" : {
+          "name" : "null"
+        },
+        "children" : [ ]
+      }]
+    }]
+  },
+  "batches" : [{
+    "count" : 2,
+    "columns" : [{
+      "name" : "xt$error",
+      "count" : 2,
+      "TYPE_ID" : [1,1],
+      "OFFSET" : [0,1],
+      "children" : [{
+        "name" : "clj-form",
+        "count" : 0,
+        "VALIDITY" : [ ],
+        "OFFSET" : [0],
+        "DATA" : [ ]
+      },{
+        "name" : "null",
+        "count" : 2
+      }]
+    }]
+  }]
+}
