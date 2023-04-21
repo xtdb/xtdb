@@ -202,7 +202,7 @@
     (xt.sql/submit-tx node
                       [[:sql sql-statement]]
                       (cond-> opts
-                        (= (get variables "APP_TIME_DEFAULTS") "AS_OF_NOW")
+                        (= (get variables "VALID_TIME_DEFAULTS") "AS_OF_NOW")
                         (assoc :default-all-app-time? false)
 
                         (get variables "CURRENT_TIMESTAMP")
@@ -215,7 +215,7 @@
       (vec
        (for [row (xt.sql/q node sql-statement
                            (cond-> opts
-                             (= (get variables "APP_TIME_DEFAULTS") "AS_OF_NOW")
+                             (= (get variables "VALID_TIME_DEFAULTS") "AS_OF_NOW")
                              (assoc :default-all-app-time? false)
 
                              (get variables "CURRENT_TIMESTAMP")

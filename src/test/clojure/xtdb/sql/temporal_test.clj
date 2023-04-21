@@ -111,22 +111,22 @@
 
       (is (= [{:last_updated "2000"}]
              (query-at-tx
-              "SELECT foo.last_updated FROM foo WHERE foo.APP_TIME OVERLAPS PERIOD (TIMESTAMP '2000-01-01 00:00:00', TIMESTAMP '2001-01-01 00:00:00')"
+              "SELECT foo.last_updated FROM foo WHERE foo.VALID_TIME OVERLAPS PERIOD (TIMESTAMP '2000-01-01 00:00:00', TIMESTAMP '2001-01-01 00:00:00')"
               tx)))
 
       (is (= [{:last_updated "3000"}]
              (query-at-tx
-              "SELECT foo.last_updated FROM foo WHERE foo.APP_TIME OVERLAPS PERIOD (TIMESTAMP '3000-01-01 00:00:00', TIMESTAMP '3001-01-01 00:00:00')"
+              "SELECT foo.last_updated FROM foo WHERE foo.VALID_TIME OVERLAPS PERIOD (TIMESTAMP '3000-01-01 00:00:00', TIMESTAMP '3001-01-01 00:00:00')"
               tx)))
 
       (is (= [{:last_updated "3000"} {:last_updated "4000"}]
              (query-at-tx
-              "SELECT foo.last_updated FROM foo WHERE foo.APP_TIME OVERLAPS PERIOD (TIMESTAMP '4000-01-01 00:00:00', TIMESTAMP '4001-01-01 00:00:00')"
+              "SELECT foo.last_updated FROM foo WHERE foo.VALID_TIME OVERLAPS PERIOD (TIMESTAMP '4000-01-01 00:00:00', TIMESTAMP '4001-01-01 00:00:00')"
               tx)))
 
       (is (= [{:last_updated "3000"}]
              (query-at-tx
-              "SELECT foo.last_updated FROM foo WHERE foo.APP_TIME OVERLAPS PERIOD (TIMESTAMP '4002-01-01 00:00:00', TIMESTAMP '9999-01-01 00:00:00')"
+              "SELECT foo.last_updated FROM foo WHERE foo.VALID_TIME OVERLAPS PERIOD (TIMESTAMP '4002-01-01 00:00:00', TIMESTAMP '9999-01-01 00:00:00')"
               tx))))))
 
 (deftest app-time-multiple-tables
@@ -138,35 +138,35 @@
     (is (= [{:last_updated "2001"}]
            (query-at-tx
             "SELECT foo.last_updated FROM foo
-             WHERE foo.APP_TIME OVERLAPS PERIOD (TIMESTAMP '1999-01-01 00:00:00', TIMESTAMP '2002-01-01 00:00:00')"
+             WHERE foo.VALID_TIME OVERLAPS PERIOD (TIMESTAMP '1999-01-01 00:00:00', TIMESTAMP '2002-01-01 00:00:00')"
             tx)))
 
     (is (= [{:l_updated "2003"}]
            (query-at-tx
             "SELECT bar.l_updated FROM bar
-             WHERE bar.APP_TIME OVERLAPS PERIOD (TIMESTAMP '2002-01-01 00:00:00', TIMESTAMP '2003-01-01 00:00:00')"
+             WHERE bar.VALID_TIME OVERLAPS PERIOD (TIMESTAMP '2002-01-01 00:00:00', TIMESTAMP '2003-01-01 00:00:00')"
             tx)))
 
     (is (= []
            (query-at-tx
             "SELECT foo.last_updated, bar.l_updated FROM foo, bar
-             WHERE foo.APP_TIME OVERLAPS PERIOD (TIMESTAMP '1999-01-01 00:00:00', TIMESTAMP '2001-01-01 00:00:00')
+             WHERE foo.VALID_TIME OVERLAPS PERIOD (TIMESTAMP '1999-01-01 00:00:00', TIMESTAMP '2001-01-01 00:00:00')
              AND
-             bar.APP_TIME OVERLAPS PERIOD (TIMESTAMP '2000-01-01 00:00:00', TIMESTAMP '2001-01-01 00:00:00')"
+             bar.VALID_TIME OVERLAPS PERIOD (TIMESTAMP '2000-01-01 00:00:00', TIMESTAMP '2001-01-01 00:00:00')"
             tx)))
 
     (is (= [{:last_updated "2001", :l_updated "2003"}]
            (query-at-tx
             "SELECT foo.last_updated, bar.l_updated FROM foo, bar
-             WHERE foo.APP_TIME OVERLAPS PERIOD (TIMESTAMP '2000-01-01 00:00:00', TIMESTAMP '2001-01-01 00:00:00')
+             WHERE foo.VALID_TIME OVERLAPS PERIOD (TIMESTAMP '2000-01-01 00:00:00', TIMESTAMP '2001-01-01 00:00:00')
              AND
-             bar.APP_TIME OVERLAPS PERIOD (TIMESTAMP '2002-01-01 00:00:00', TIMESTAMP '2003-01-01 00:00:00')"
+             bar.VALID_TIME OVERLAPS PERIOD (TIMESTAMP '2002-01-01 00:00:00', TIMESTAMP '2003-01-01 00:00:00')"
             tx)))
 
     (is (= []
            (query-at-tx
             "SELECT foo.last_updated, bar.name FROM foo, bar
-             WHERE foo.APP_TIME OVERLAPS bar.APP_TIME" tx)))))
+             WHERE foo.VALID_TIME OVERLAPS bar.VALID_TIME" tx)))))
 
 (deftest app-time-joins
 
@@ -181,12 +181,12 @@
            (query-at-tx
             "SELECT foo.name, bar.also_name
              FROM foo, bar
-             WHERE foo.APP_TIME SUCCEEDS bar.APP_TIME"
+             WHERE foo.VALID_TIME SUCCEEDS bar.VALID_TIME"
             tx)))
 
     (is (= [{:name "Bill" :also_name "Jeff"}]
            (query-at-tx
             "SELECT foo.name, bar.also_name
              FROM foo, bar
-             WHERE foo.APPLICATION_TIME OVERLAPS bar.APP_TIME"
+             WHERE foo.VALID_TIME OVERLAPS bar.VALID_TIME"
             tx)))))

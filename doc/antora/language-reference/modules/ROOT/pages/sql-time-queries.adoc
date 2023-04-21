@@ -12,12 +12,12 @@ which will feel more natural to most users.
 
 [source,sql]
 ----
-SET APPLICATION_TIME_DEFAULTS TO AS_OF_NOW;
+SET VALID_TIME_DEFAULTS TO AS_OF_NOW;
 ----
 
 With "as of now" Application Time semantics, the following inserted record is only visible
-when time-travelling (`FOR APPLICATION_TIME AS OF`) to the year 2027 or when viewing the
-entire timeline at once (`FOR ALL APPLICATION_TIME`):
+when time-travelling (`FOR VALID_TIME AS OF`) to the year 2027 or when viewing the
+entire timeline at once (`FOR ALL VALID_TIME`):
 
 [source,sql]
 ----
@@ -28,11 +28,11 @@ INSERT INTO posts (xt$id, user_id, text, xt$valid_from)
 SELECT posts.text FROM posts;
 
 SELECT posts.text FROM posts
-  FOR APPLICATION_TIME AS OF DATE '2027-01-02';
+  FOR VALID_TIME AS OF DATE '2027-01-02';
 
 -- data from 2027 becomes visible when viewing the entire timeline
 SELECT posts.text FROM posts
-  FOR ALL APPLICATION_TIME;
+  FOR ALL VALID_TIME;
 ----
 
 
@@ -44,7 +44,7 @@ to switch away from the "as of now" defaults, if you've set them:
 
 [source,sql]
 ----
-SET APPLICATION_TIME_DEFAULTS TO ISO_STANDARD;
+SET VALID_TIME_DEFAULTS TO ISO_STANDARD;
 ----
 
 When XTDB is in ISO Standard mode, queries will return records visible to all of Application Time by default:
@@ -94,7 +94,7 @@ _Application Time_ represents the validity (sometimes called "effectivity") of d
 * `SYSTEM_TIME` is comprised of:
 ** xt$system_from
 ** xt$system_to
-* `APPLICATION_TIME` is comprised of:
+* `VALID_TIME` is comprised of:
 ** xt$valid_from
 ** xt$valid_to
 
@@ -117,7 +117,7 @@ SELECT posts.title FROM posts
   FOR SYSTEM_TIME AS OF DATE '2022-09-20';
 ----
 
-=== `FOR APPLICATION_TIME AS OF`
+=== `FOR VALID_TIME AS OF`
 
 For point-in-time queries on the Application Timeline:
 
@@ -128,7 +128,7 @@ INSERT INTO posts (xt$id,title,xt$valid_from)
           DATE '2025-09-21');
 
 SELECT posts.title FROM posts
-  FOR APPLICATION_TIME AS OF DATE '2025-09-21';
+  FOR VALID_TIME AS OF DATE '2025-09-21';
 ----
 
 
@@ -145,12 +145,12 @@ SELECT posts.title FROM posts
   FOR ALL SYSTEM_TIME;
 ----
 
-=== `FOR ALL APPLICATION_TIME`
+=== `FOR ALL VALID_TIME`
 
 [source,sql]
 ----
 SELECT posts.title FROM posts
-  FOR ALL APPLICATION_TIME;
+  FOR ALL VALID_TIME;
 ----
 
 === Ignore the entire timeplane
@@ -159,7 +159,7 @@ SELECT posts.title FROM posts
 ----
 SELECT posts.title FROM posts
   FOR ALL SYSTEM_TIME
-  FOR ALL APPLICATION_TIME;
+  FOR ALL VALID_TIME;
 ----
 
 
@@ -215,7 +215,7 @@ INSERT INTO posts (xt$id,title,xt$valid_from)
   VALUES (299,'Overlapping',DATE '2027-01-01');
 
 SELECT posts.title FROM posts
-  WHERE posts.APPLICATION_TIME
+  WHERE posts.VALID_TIME
   OVERLAPS PERIOD(DATE '2026-01-01', DATE '2027-01-02');
 ----
 
@@ -230,7 +230,7 @@ INSERT INTO posts (xt$id,title,xt$valid_from,xt$valid_to)
   VALUES (399,'Equals?',DATE '2027-01-01',DATE '2027-01-02');
 
 SELECT posts.title FROM posts
-  WHERE posts.APPLICATION_TIME
+  WHERE posts.VALID_TIME
   EQUALS PERIOD(DATE '2027-01-01', DATE '2027-01-02');
 ----
 
@@ -245,7 +245,7 @@ INSERT INTO posts (xt$id,title,xt$valid_from,xt$valid_to)
   VALUES (499,'Precedes?',DATE '2007-01-01',DATE '2007-01-02');
 
 SELECT posts.title FROM posts
-  WHERE posts.APPLICATION_TIME
+  WHERE posts.VALID_TIME
   PRECEDES PERIOD(DATE '2007-01-03', DATE '2026-12-31');
 ----
 
@@ -260,7 +260,7 @@ INSERT INTO posts (xt$id,title,xt$valid_from,xt$valid_to)
   VALUES (599,'Succeeds?',DATE '2037-01-01',DATE '2037-01-02');
 
 SELECT posts.title FROM posts
-  WHERE posts.APPLICATION_TIME
+  WHERE posts.VALID_TIME
   SUCCEEDS PERIOD(DATE '2036-12-30', DATE '2036-12-31');
 ----
 
@@ -276,7 +276,7 @@ INSERT INTO posts (xt$id,title,xt$valid_from,xt$valid_to)
           TIMESTAMP '2007-01-02 12:34:56');
 
 SELECT posts.title FROM posts
-  WHERE posts.APPLICATION_TIME
+  WHERE posts.VALID_TIME
   IMMEDIATELY PRECEDES PERIOD(TIMESTAMP '2007-01-02 12:34:56', DATE '2026-12-31');
 ----
 
@@ -292,7 +292,7 @@ INSERT INTO posts (xt$id,title,xt$valid_from,xt$valid_to)
           DATE '2037-01-02');
 
 SELECT posts.title FROM posts
-  WHERE posts.APPLICATION_TIME
+  WHERE posts.VALID_TIME
   IMMEDIATELY SUCCEEDS PERIOD(DATE '2036-12-30',
                               TIMESTAMP '2036-12-31 12:34:56');
 ----
@@ -310,7 +310,7 @@ INSERT INTO posts (xt$id,title,xt$valid_from)
   VALUES (899,'Will I be split?',DATE '1997-02-02');
 
 UPDATE posts
-  FOR PORTION OF APPLICATION_TIME
+  FOR PORTION OF VALID_TIME
   FROM DATE '1998-01-20' TO DATE '1999-01-30'
   SET title='Split!';
 
@@ -320,7 +320,7 @@ SELECT posts.title,
        posts.xt$valid_from,
        posts.xt$valid_to
        FROM posts
-       FOR ALL APPLICATION_TIME;
+       FOR ALL VALID_TIME;
 ----
 
 
@@ -336,7 +336,7 @@ INSERT INTO posts (xt$id,title,xt$valid_from)
   VALUES (999,'Delete from 1995 to the end of time?',DATE '1990-02-02');
 
 DELETE FROM posts
-  FOR PORTION OF APPLICATION_TIME
+  FOR PORTION OF VALID_TIME
   FROM DATE '1995-01-01' TO END_OF_TIME
   WHERE posts.xt$id= 999;
 
@@ -346,7 +346,7 @@ SELECT posts.title,
        posts.xt$valid_from,
        posts.xt$valid_to
        FROM posts
-       FOR ALL APPLICATION_TIME;
+       FOR ALL VALID_TIME;
 ----
 
 
@@ -375,10 +375,10 @@ To inspect all of Application Time:
 SELECT posts.title,
        posts.xt$system_from,
        posts.xt$system_to,
-       posts.application_time_start,
+       posts.valid_time_start,
        posts.xt$valid_to
        FROM posts
-       FOR ALL APPLICATION_TIME;
+       FOR ALL VALID_TIME;
 ----
 
 These two clauses can be combined to inspect the entire time plane (both timelines):
@@ -388,11 +388,11 @@ These two clauses can be combined to inspect the entire time plane (both timelin
 SELECT posts.title,
        posts.xt$system_from,
        posts.xt$system_to,
-       posts.application_time_start,
+       posts.valid_time_start,
        posts.xt$valid_to
        FROM posts
        FOR ALL SYSTEM_TIME
-       FOR ALL APPLICATION_TIME;
+       FOR ALL VALID_TIME;
 ----
 
 
@@ -405,34 +405,34 @@ To retroactively "move" a record into the past or future, use the "upsert" funct
 
 [source,sql]
 ----
-INSERT INTO products (xt$id,name,application_time_start)
+INSERT INTO products (xt$id,name,valid_time_start)
   VALUES (1,'iPhone',DATE '2009-01-01');
-SELECT products.name,products.application_time_start
+SELECT products.name,products.valid_time_start
   FROM products; -- returns 2009
 
-INSERT INTO products (xt$id,name,application_time_start)
+INSERT INTO products (xt$id,name,valid_time_start)
   VALUES (1,'iPhone',DATE '2007-06-29');
-SELECT products.name,products.application_time_start
+SELECT products.name,products.valid_time_start
   FROM products; -- returns correct 2007 date
 ----
 
-It is not possible to use an `UPDATE` statement to change a record's `APPLICATION_TIME`.
+It is not possible to use an `UPDATE` statement to change a record's `VALID_TIME`.
 
 === Change a record for a portion of (its) time
 
-`UPDATE ... FOR PORTION OF APPLICATION_TIME` can be used for exactly this purpose:
+`UPDATE ... FOR PORTION OF VALID_TIME` can be used for exactly this purpose:
 
 [source,sql]
 ----
-INSERT INTO employee (xt$id, name, title, application_time_start)
+INSERT INTO employee (xt$id, name, title, valid_time_start)
   VALUES (4, 'Deepa', 'Developer', DATE '2013-07-31');
 
-UPDATE employee FOR PORTION OF APPLICATION_TIME
+UPDATE employee FOR PORTION OF VALID_TIME
   FROM DATE '2018-01-01' TO DATE '2021-01-01'
   SET title = 'CEO'
   WHERE employee.xt$id= 4;
 
-SELECT employee.title, employee.application_time_start
-  FROM employee FOR ALL APPLICATION_TIME
+SELECT employee.title, employee.valid_time_start
+  FROM employee FOR ALL VALID_TIME
   WHERE employee.id=4;
 ----

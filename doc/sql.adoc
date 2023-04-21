@@ -30,8 +30,8 @@ First, follow the link:./getting-started.adoc[Getting Started] guide.
 XTDB 2.x supports SQL:2011's bitemporality syntax in its DQL and DML.
 
 For example:
-* to update a document for a subset of valid time: `UPDATE users FOR PORTION OF APPLICATION_TIME FROM TIMESTAMP '2023-04-01' TO TIMESTAMP '2023-05-01' SET name = ? WHERE id = ?`
-* (in an extension to the spec) to query a table as at a valid time: `SELECT u.id, u.first_name FROM users u FOR APPLICATION_TIME AS OF TIMESTAMP '2023-04-15'`.
+* to update a document for a subset of valid time: `UPDATE users FOR PORTION OF VALID_TIME FROM TIMESTAMP '2023-04-01' TO TIMESTAMP '2023-05-01' SET name = ? WHERE id = ?`
+* (in an extension to the spec) to query a table as at a valid time: `SELECT u.id, u.first_name FROM users u FOR VALID_TIME AS OF TIMESTAMP '2023-04-15'`.
 
 == Notes for SQL regulars
 

@@ -88,7 +88,7 @@ VALUES (1, 'Happy 2024!', DATE '2024-01-01'),
   (xt.sql/submit-tx tu/*node* [[:sql "INSERT INTO users (xt$id, first_name, last_name) VALUES (?, ?, ?)"
                                 [["susan", "Susan", "Smith"]]]])
 
-  (xt.sql/submit-tx tu/*node* [[:sql "UPDATE users FOR PORTION OF APP_TIME FROM ? TO ? AS u SET first_name = ? WHERE u.xt$id = ?"
+  (xt.sql/submit-tx tu/*node* [[:sql "UPDATE users FOR PORTION OF VALID_TIME FROM ? TO ? AS u SET first_name = ? WHERE u.xt$id = ?"
                                 [[#inst "2021", util/end-of-time, "sue", "susan"]]]])
 
   (t/is (= #{["Susan" "Smith", (util/->zdt #inst "2020") (util/->zdt #inst "2021")]
@@ -178,7 +178,7 @@ VALUES (1, 2, DATE '1997-01-01', DATE '2001-01-01')"]])
 SELECT foo.xt$id, foo.v,
        foo.xt$valid_from, foo.xt$valid_to,
        foo.xt$system_from, foo.xt$system_to
-FROM foo FOR ALL SYSTEM_TIME FOR ALL APPLICATION_TIME"))))
+FROM foo FOR ALL SYSTEM_TIME FOR ALL VALID_TIME"))))
 
 (t/deftest test-current-timestamp-in-temporal-constraint-409
   (xt.sql/submit-tx tu/*node* [[:sql "
@@ -193,13 +193,13 @@ VALUES (1, 1)"]])
   (t/is (= []
            (xt.sql/q tu/*node* "
 SELECT foo.xt$id, foo.v, foo.xt$valid_from, foo.xt$valid_to
-FROM foo FOR APPLICATION_TIME AS OF DATE '1999-01-01'"
+FROM foo FOR VALID_TIME AS OF DATE '1999-01-01'"
                      {:basis {:current-time (util/->instant #inst "1999")}})))
 
   (t/is (= []
            (xt.sql/q tu/*node* "
 SELECT foo.xt$id, foo.v, foo.xt$valid_from, foo.xt$valid_to
-FROM foo FOR APPLICATION_TIME AS OF CURRENT_TIMESTAMP"
+FROM foo FOR VALID_TIME AS OF CURRENT_TIMESTAMP"
                      {:basis {:current-time (util/->instant #inst "1999")}}))))
 
 (t/deftest test-repeated-row-id-scan-bug-also-409
@@ -207,13 +207,13 @@ FROM foo FOR APPLICATION_TIME AS OF CURRENT_TIMESTAMP"
 
   (let [tx1 (xt.sql/submit-tx tu/*node* [[:sql "
 UPDATE foo
-FOR PORTION OF APP_TIME FROM DATE '2022-01-01' TO DATE '2024-01-01'
+FOR PORTION OF VALID_TIME FROM DATE '2022-01-01' TO DATE '2024-01-01'
 SET v = 2
 WHERE foo.xt$id = 1"]])
 
         tx2 (xt.sql/submit-tx tu/*node* [[:sql "
 DELETE FROM foo
-FOR PORTION OF APP_TIME FROM DATE '2023-01-01' TO DATE '2025-01-01'
+FOR PORTION OF VALID_TIME FROM DATE '2023-01-01' TO DATE '2025-01-01'
 WHERE foo.xt$id = 1"]])]
 
     (letfn [(q1 [opts]

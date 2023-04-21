@@ -91,7 +91,7 @@ In core2, it's one API call, so we await the transaction and then run the query.
 +
 If the user explicitly supplies 'now', the node then has to wait (possibly indefinitely, if there are no more transactions) for a later transaction to be indexed.
 It may also become an issue if we were to allow the user to retrieve the effective basis of a query as metadata on the results - this would allow a user to query the latest results now but store the basis to repeat the query later.
-* For app-time, SQL:2011 doesn't add any filters here by default, so we'll likely be recommending liberal use of `WHERE APP_TIME CONTAINS CURRENT_TIMESTAMP`.
+* For app-time, SQL:2011 doesn't add any filters here by default, so we'll likely be recommending liberal use of `WHERE VALID_TIME CONTAINS CURRENT_TIMESTAMP`.
 footnote:[or https://github.com/xtdb/core2/issues/339[introducing a flag that does this for them]]
 Without fixing `CURRENT_TIMESTAMP` to the basis value, these queries wouldn't be repeatable.
 (Indeed, the SQL:2011 spec says to fix the value of `CURRENT_TIMESTAMP` within a transaction, exactly for this reason).

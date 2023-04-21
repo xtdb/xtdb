@@ -1369,21 +1369,21 @@
       [:between (expr point-in-time-1) (expr point-in-time-2)])))
 
 (defn- interpret-application-time-period-spec [table-primary-ast]
-  (when-let [z (r/find-first (partial r/ctor? :query_application_time_period_specification) table-primary-ast)]
+  (when-let [z (r/find-first (partial r/ctor? :query_valid_time_period_specification) table-primary-ast)]
     (r/zmatch z
-      [:query_application_time_period_specification "FOR" "ALL" _]
+      [:query_valid_time_period_specification "FOR" "ALL" _]
       ;;=>
       :all-time
 
-      [:query_application_time_period_specification "FOR" _ "AS" "OF" ^:z point-in-time]
+      [:query_valid_time_period_specification "FOR" _ "AS" "OF" ^:z point-in-time]
       ;;=>
       [:at (expr point-in-time)]
 
-      [:query_application_time_period_specification "FOR" _ "FROM" ^:z point-in-time-1 "TO" ^:z point-in-time-2]
+      [:query_valid_time_period_specification "FOR" _ "FROM" ^:z point-in-time-1 "TO" ^:z point-in-time-2]
       ;;=>
       [:in (expr point-in-time-1) (expr point-in-time-2)]
 
-      [:query_application_time_period_specification "FOR" _ "BETWEEN" ^:z point-in-time-1 "AND" ^:z point-in-time-2]
+      [:query_valid_time_period_specification "FOR" _ "BETWEEN" ^:z point-in-time-1 "AND" ^:z point-in-time-2]
       ;;=>
       [:between (expr point-in-time-1) (expr point-in-time-2)])))
 

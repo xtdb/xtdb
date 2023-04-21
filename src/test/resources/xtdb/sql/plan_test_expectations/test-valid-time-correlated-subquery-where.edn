@@ -1,0 +1,19 @@
+[:rename
+ {x4 name}
+ [:project
+  [x4]
+  [:apply
+   :single-join
+   {x1 ?x8, x2 ?x9}
+   [:rename
+    {xt$valid_from x1, xt$valid_to x2}
+    [:scan {:table bar} [xt$valid_from xt$valid_to]]]
+   [:project
+    [x4]
+    [:rename
+     {name x4, xt$valid_from x5, xt$valid_to x6}
+     [:scan
+      {:table foo}
+      [name
+       {xt$valid_from (< xt$valid_from ?x9)}
+       {xt$valid_to (> xt$valid_to ?x8)}]]]]]]]

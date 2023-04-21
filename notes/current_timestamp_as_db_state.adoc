@@ -2,13 +2,13 @@
 
 This document is written in response to link:bases.adoc[bases.adoc] and to make some of my thinking explicit as we reach the next phase, during we will start looking at resolving this in earnest.
 
-Since the inception of core2, my idea and plan has been that LogAppendTime should be the only canonical source of time. The main argument is that it should be easy to reason about what's happening, and to never introduce any implicit sources of time anywhere in the system. Unless I'm mistaken the key difference is that the Bases proposal implicitly uses the local node's clock to advance observable APPLICATION_TIME.
+Since the inception of core2, my idea and plan has been that LogAppendTime should be the only canonical source of time. The main argument is that it should be easy to reason about what's happening, and to never introduce any implicit sources of time anywhere in the system. Unless I'm mistaken the key difference is that the Bases proposal implicitly uses the local node's clock to advance observable VALID_TIME.
 
 ## Problem and Constraints
 
 Must haves:
 
-1. a single source of time derived from LogAppendTime -> CURRENT_TIMESTAMP -> SYSTEM_TIME / APPLICATION_TIME (unless provided as constraints).
+1. a single source of time derived from LogAppendTime -> CURRENT_TIMESTAMP -> SYSTEM_TIME / VALID_TIME (unless provided as constraints).
 2. monotonically increasing clocks within a session, across reads and writes.
 3. read your own writes.
 4. no implicit dependencies on the local nodes state, including the clock.
@@ -31,12 +31,12 @@ Nice to haves:
 3. The CURRENT_SYSTEM_TIMESTAMP is really the tx-id in temporal and human readable form, and unique per transaction. (This isn't currently true when using Kafka which has millisecond precision, nor enforced in general.) See discussion below.
 4. An option is to have CURRENT_MAX_VISIBLE_TX_ID instead, and derive CURRENT_TIMESTAMP from this to avoid confusion. This requires less magic, but introduces an opaque transaction id to the end user, which might be a good thing. See discussion below.
 5. CURRENT_TIMESTAMP can be seen as a value stored in the database. It doesn't advance on its own: the database isn't a clock (in the wall-clock sense used to trivially tell the current time, it is very much a clock in the sense that it is the time oracle of XT). This is initially not intuitive, but a consequence of building an immutable, deterministic database. Queries can only see the state of the database and the parameters provided, nothing else.
-6. APPLICATION_TIME can be provided explicitly by the user, for both as read constraints (AS OF, OVERLAPS etc.) and DML (FOR PORTION OF, APPLICATION_TIME_START/END).
+6. VALID_TIME can be provided explicitly by the user, for both as read constraints (AS OF, OVERLAPS etc.) and DML (FOR PORTION OF, VALID_TIME_START/END).
 7. During basic immutable usage, with some audit and corrections, where the data mainly sits in the past, the above won't really be noticed.
-8. When one wants future APPLICATION_TIME data to appear as wall clock time advances, SQL:2011 in DEFAULT_APPLICATION_TIME ISO_MODE already sees this, as it doesn't filter anything. A hint maybe about why this is the default in SQL:2011?
-9. When DEFAULT_APPLICATION_TIME AS OF CURRENT_SYSTEM_TIMESTAMP is set, there will be a dependency on a flow of transactions through the system for observable time to advance. When making queries into this potential future, the user can (and probably should) explicitly specify APPLICATION_TIME AS OF ? and provide it as a parameter, originating from an upstream event, or a time oracle like the client's local clock. We don't make any assumptions about this timestamp or when it will advance.
-10. DEFAULT_APPLICATION_TIME could also support AS OF ?, which is a terser way of the above, impacting all tables.
-11. DEFAULT_APPLICATION_TIME AS OF LOCAL capturing the node's local clock implicitly, seems intuitive, as it makes time advance. The main problem with this the inconsistency with write transactions in the same session. Writes this world always use DEFAULT_APPLICATION_TIME CURRENT_SYSTEM_TIMESTAMP as there's no need to guess. It also creates a coupling between the APPLICATION_TIME one wishes to query at and the LogAppendTime - which is what the local node's clock tries to emulate, not APPLICATION_TIME - which may or may not exist. If one wants this, one can do it explicitly via a parameter using any of the above methods. Several nodes implicitly and independently advancing APPLICATION_TIME feels like a potential source of confusion and unintentional inconsistency during write transactions, even if it is strictly deterministic. NTP should be used for basic sanity, but not attempted to be relied on.
+8. When one wants future VALID_TIME data to appear as wall clock time advances, SQL:2011 in DEFAULT_VALID_TIME ISO_MODE already sees this, as it doesn't filter anything. A hint maybe about why this is the default in SQL:2011?
+9. When DEFAULT_VALID_TIME AS OF CURRENT_SYSTEM_TIMESTAMP is set, there will be a dependency on a flow of transactions through the system for observable time to advance. When making queries into this potential future, the user can (and probably should) explicitly specify VALID_TIME AS OF ? and provide it as a parameter, originating from an upstream event, or a time oracle like the client's local clock. We don't make any assumptions about this timestamp or when it will advance.
+10. DEFAULT_VALID_TIME could also support AS OF ?, which is a terser way of the above, impacting all tables.
+11. DEFAULT_VALID_TIME AS OF LOCAL capturing the node's local clock implicitly, seems intuitive, as it makes time advance. The main problem with this the inconsistency with write transactions in the same session. Writes this world always use DEFAULT_VALID_TIME CURRENT_SYSTEM_TIMESTAMP as there's no need to guess. It also creates a coupling between the VALID_TIME one wishes to query at and the LogAppendTime - which is what the local node's clock tries to emulate, not VALID_TIME - which may or may not exist. If one wants this, one can do it explicitly via a parameter using any of the above methods. Several nodes implicitly and independently advancing VALID_TIME feels like a potential source of confusion and unintentional inconsistency during write transactions, even if it is strictly deterministic. NTP should be used for basic sanity, but not attempted to be relied on.
 12. In some cases, submitting a transaction to capture a new and current LogAppendTime to use for the processing may be the right thing to do, and derive some data from this which is stored and potentially later further processed. This might happen via triggers.
 
 == LogAppendTime Resolution

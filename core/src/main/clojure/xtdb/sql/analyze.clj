@@ -306,7 +306,7 @@
     (:delete_statement__searched :update_statement__searched :erase_statement__searched)
     (table (r/find-first (partial r/ctor? :target_table) ag))
 
-    (:query_application_time_period_specification :query_system_time_period_specification)
+    (:query_valid_time_period_specification :query_system_time_period_specification)
     (table (r/parent ag))))
 
 (defn local-tables [ag]
@@ -496,7 +496,7 @@
     nil))
 
 (defn dml-app-time-extents [ag]
-  (when-let [atpn (r/find-first (partial r/ctor? :application_time_period_name) ag)]
+  (when-let [atpn (r/find-first (partial r/ctor? :valid_time_period_name) ag)]
     (if (= (r/znode (r/left atpn)) "ALL")
       :all-application-time
       (let [from (-> atpn r/right r/right)]
@@ -796,7 +796,7 @@
                                   (#{"system_time"} (second identifiers))
                                   :system-time-period-reference
 
-                                  (#{"app_time" "application_time"} (second identifiers))
+                                  (#{"valid_time"} (second identifiers))
                                   :application-time-period-reference
 
                                   outer-reference?
@@ -1055,7 +1055,7 @@
 (defn- check-period-predicand [ag]
   []
   (if-not (r/zmatch
-            ag
+              ag
             [:period_predicand "PERIOD" _ _]
             ;;=>
             true
@@ -1064,12 +1064,12 @@
             ;;=>
             (let [identifiers (identifiers col-ref)]
               (and
-                (= 2 (count identifiers))
-                (#{"application_time" "app_time" "system_time"} (second identifiers)))))
+               (= 2 (count identifiers))
+               (#{"valid_time" "system_time"} (second identifiers)))))
 
-    [(format "%s is not a valid period. Please use a qualified reference to application_time or system_time: %s"
-            (->src-str ag)
-            (->line-info-str ag))]
+    [(format "%s is not a valid period. Please use a qualified reference to valid_time or system_time: %s"
+             (->src-str ag)
+             (->line-info-str ag))]
     []))
 
 (defn- check-dml-non-determinism [ag]

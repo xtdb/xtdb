@@ -3,13 +3,13 @@
             [clojure.test :as t :refer [deftest]]
             [xtdb.logical-plan :as lp]
             [xtdb.core.sql :as sql])
+
   (:import (java.time LocalDateTime)))
-
 (defn plan-sql
-  ([sql] (plan-sql sql {:decorrelate? true, :validate-plan? true, :instrument-rules? true}))
-  ([sql opts] (sql/compile-query sql (into {:default-all-app-time? true} opts))))
+  ([sql opts] (sql/compile-query sql (into {:default-all-app-time? true} opts)))
+  ([sql] (plan-sql sql {:decorrelate? true, :validate-plan? true, :instrument-rules? true})))
 
-(def regen-expected-files? false)
+(def regen-expected-files? true)
 
 (defmethod t/assert-expr '=plan-file [msg form]
   `(let [exp-plan-file-name# ~(nth form 1)
@@ -414,16 +414,16 @@
 
   (t/is (=plan-file
          "test-dynamic-parameters-103-update-app-time"
-         (plan-sql "UPDATE users FOR PORTION OF APP_TIME FROM ? TO ? AS u SET first_name = ? WHERE u.id = ?"))))
+         (plan-sql "UPDATE users FOR PORTION OF VALID_TIME FROM ? TO ? AS u SET first_name = ? WHERE u.id = ?"))))
 
 (t/deftest test-order-by-null-handling-159
   (t/is (=plan-file
-          "test-order-by-null-handling-159-1"
-           (plan-sql "SELECT foo.a FROM foo ORDER BY foo.a NULLS FIRST")))
+         "test-order-by-null-handling-159-1"
+         (plan-sql "SELECT foo.a FROM foo ORDER BY foo.a NULLS FIRST")))
 
   (t/is (=plan-file
-          "test-order-by-null-handling-159-2"
-          (plan-sql "SELECT foo.a FROM foo ORDER BY foo.a NULLS LAST"))))
+         "test-order-by-null-handling-159-2"
+         (plan-sql "SELECT foo.a FROM foo ORDER BY foo.a NULLS LAST"))))
 
 (t/deftest test-arrow-table
   (t/is (=plan-file
@@ -864,34 +864,34 @@
         (plan-sql "SELECT x.y, y.z FROM x FOR SYSTEM_TIME AS OF DATE '3001-01-01',
                   LATERAL (SELECT z.z FROM z FOR SYSTEM_TIME FROM DATE '3001-01-01' TO TIMESTAMP '3002-01-01 00:00:00+00:00' WHERE z.z = x.y) AS y")))))
 
-(deftest test-application-time-period-spec-queries
+(deftest test-valid-time-period-spec-queries
 
   (t/testing "AS OF"
     (t/is
-      (=plan-file
-        "application-time-period-spec-as-of"
-        (plan-sql "SELECT foo.bar FROM foo FOR APPLICATION_TIME AS OF TIMESTAMP '2999-01-01 00:00:00'"))))
+     (=plan-file
+      "valid-time-period-spec-as-of"
+      (plan-sql "SELECT foo.bar FROM foo FOR VALID_TIME AS OF TIMESTAMP '2999-01-01 00:00:00'"))))
 
   (t/testing "FROM A to B"
     (t/is
-      (=plan-file
-        "application-time-period-spec-from-to"
-        (plan-sql "SELECT foo.bar FROM foo FOR APP_TIME FROM DATE '2999-01-01' TO TIMESTAMP '3000-01-01 00:00:00+00:00'"))))
+     (=plan-file
+      "valid-time-period-spec-from-to"
+      (plan-sql "SELECT foo.bar FROM foo FOR VALID_TIME FROM DATE '2999-01-01' TO TIMESTAMP '3000-01-01 00:00:00+00:00'"))))
 
   (t/testing "BETWEEN A AND B"
     (t/is
-      (=plan-file
-        "application-time-period-spec-between"
-        (plan-sql "SELECT 4 FROM t1 FOR APPLICATION_TIME BETWEEN TIMESTAMP '3000-01-01 00:00:00+00:00' AND DATE '3001-01-01'")))))
+     (=plan-file
+      "valid-time-period-spec-between"
+      (plan-sql "SELECT 4 FROM t1 FOR VALID_TIME BETWEEN TIMESTAMP '3000-01-01 00:00:00+00:00' AND DATE '3001-01-01'")))))
 
-(deftest test-application-and-system-time-period-spec-queries
+(deftest test-valid-and-system-time-period-spec-queries
   (t/testing "BETWEEN A AND B"
     (t/is
-      (=plan-file
-        "application-and-system-time-period-spec-between"
-        (plan-sql "SELECT 4 FROM t1
+     (=plan-file
+      "valid-and-system-time-period-spec-between"
+      (plan-sql "SELECT 4 FROM t1
                   FOR SYSTEM_TIME BETWEEN DATE '2000-01-01' AND DATE '2001-01-01'
-                  FOR APPLICATION_TIME BETWEEN TIMESTAMP '3001-01-01 00:00:00+00:00' AND DATE '3000-01-01'")))))
+                  FOR VALID_TIME BETWEEN TIMESTAMP '3001-01-01 00:00:00+00:00' AND DATE '3000-01-01'")))))
 
 ;; x1 = app-time-start x2 = app-time-end
 
@@ -899,19 +899,19 @@
   (t/are [expected sql] (= expected (plan-expr sql))
     '(and (<= x1 #time/zoned-date-time "2000-01-01T00:00Z")
           (>= x2 #time/zoned-date-time "2001-01-01T00:00Z"))
-    "foo.APP_TIME CONTAINS PERIOD (TIMESTAMP '2000-01-01 00:00:00+00:00', TIMESTAMP '2001-01-01 00:00:00+00:00')"
+    "foo.VALID_TIME CONTAINS PERIOD (TIMESTAMP '2000-01-01 00:00:00+00:00', TIMESTAMP '2001-01-01 00:00:00+00:00')"
 
     '(and (<= x1 #time/zoned-date-time "2000-01-01T00:00Z")
           (>= x2 #time/zoned-date-time "2000-01-01T00:00Z"))
-    "foo.APP_TIME CONTAINS TIMESTAMP '2000-01-01 00:00:00+00:00'"
+    "foo.VALID_TIME CONTAINS TIMESTAMP '2000-01-01 00:00:00+00:00'"
 
     ;; also testing all period-predicate permutations
     '(and (< x1 #time/zoned-date-time "2001-01-01T00:00Z")
           (> x2 #time/zoned-date-time "2000-01-01T00:00Z"))
-    "foo.APP_TIME OVERLAPS PERIOD (TIMESTAMP '2000-01-01 00:00:00+00:00', TIMESTAMP '2001-01-01 00:00:00+00:00')"
+    "foo.VALID_TIME OVERLAPS PERIOD (TIMESTAMP '2000-01-01 00:00:00+00:00', TIMESTAMP '2001-01-01 00:00:00+00:00')"
 
     '(and (< x1 x2) (> x2 x1))
-    "foo.APP_TIME OVERLAPS foo.APP_TIME"
+    "foo.VALID_TIME OVERLAPS foo.VALID_TIME"
 
     '(and (< #time/zoned-date-time "2000-01-01T00:00Z" #time/zoned-date-time "2003-01-01T00:00Z")
           (> #time/zoned-date-time "2001-01-01T00:00Z" #time/zoned-date-time "2002-01-01T00:00Z"))
@@ -923,16 +923,16 @@
     "foo.SYSTEM_TIME EQUALS PERIOD (TIMESTAMP '2000-01-01 00:00:00+00:00', TIMESTAMP '2001-01-01 00:00:00+00:00')"
 
     '(<= x2 #time/zoned-date-time "2000-01-01T00:00Z")
-    "foo.APP_TIME PRECEDES PERIOD (TIMESTAMP '2000-01-01 00:00:00+00:00', TIMESTAMP '2001-01-01 00:00:00+00:00')"
+    "foo.VALID_TIME PRECEDES PERIOD (TIMESTAMP '2000-01-01 00:00:00+00:00', TIMESTAMP '2001-01-01 00:00:00+00:00')"
 
     '(>= x1 #time/zoned-date-time "2001-01-01T00:00Z")
     "foo.SYSTEM_TIME SUCCEEDS PERIOD (TIMESTAMP '2000-01-01 00:00:00+00:00', TIMESTAMP '2001-01-01 00:00:00+00:00')"
 
     '(= x2 #time/zoned-date-time "2000-01-01T00:00Z")
-    "foo.APPLICATION_TIME IMMEDIATELY PRECEDES PERIOD (TIMESTAMP '2000-01-01 00:00:00+00:00', TIMESTAMP '2001-01-01 00:00:00+00:00')"
+    "foo.VALID_TIME IMMEDIATELY PRECEDES PERIOD (TIMESTAMP '2000-01-01 00:00:00+00:00', TIMESTAMP '2001-01-01 00:00:00+00:00')"
 
     '(= x1 #time/zoned-date-time "2001-01-01T00:00Z")
-    "foo.APP_TIME IMMEDIATELY SUCCEEDS PERIOD (TIMESTAMP '2000-01-01 00:00:00+00:00', TIMESTAMP '2001-01-01 00:00:00+00:00')"))
+    "foo.VALID_TIME IMMEDIATELY SUCCEEDS PERIOD (TIMESTAMP '2000-01-01 00:00:00+00:00', TIMESTAMP '2001-01-01 00:00:00+00:00')"))
 
 (deftest test-min-long-value-275
   (t/is (= Long/MIN_VALUE (plan-expr "-9223372036854775808"))))
@@ -945,7 +945,7 @@
                 FROM foo FOR SYSTEM_TIME FROM DATE '2001-01-01' TO DATE '2002-01-01'
                 WHERE foo.xt$valid_from = 4 AND foo.xt$valid_to > 10
                 AND foo.xt$system_from = 20 AND foo.xt$system_to <= 23
-                AND foo.APP_TIME OVERLAPS PERIOD (DATE '2000-01-01', DATE '2004-01-01')"))))
+                AND foo.VALID_TIME OVERLAPS PERIOD (DATE '2000-01-01', DATE '2004-01-01')"))))
 
 (deftest test-sql-insert-plan
   (t/is (= '[:insert
@@ -974,18 +974,18 @@
 
 (deftest test-sql-delete-plan
   (t/is (=plan-file "test-sql-delete-plan"
-                    (plan-sql "DELETE FROM users FOR PORTION OF APP_TIME FROM DATE '2020-05-01' TO DATE '9999-12-31' AS u WHERE u.id = ?"))))
+                    (plan-sql "DELETE FROM users FOR PORTION OF VALID_TIME FROM DATE '2020-05-01' TO DATE '9999-12-31' AS u WHERE u.id = ?"))))
 
 (deftest test-sql-update-plan
   (t/is (=plan-file "test-sql-update-plan"
-                    (plan-sql "UPDATE users FOR PORTION OF APP_TIME FROM DATE '2021-07-01' TO DATE '9999-12-31' AS u SET first_name = 'Sue' WHERE u.id = ?")))
+                    (plan-sql "UPDATE users FOR PORTION OF VALID_TIME FROM DATE '2021-07-01' TO DATE '9999-12-31' AS u SET first_name = 'Sue' WHERE u.id = ?")))
 
   (t/is (=plan-file "test-sql-update-plan-with-column-references"
                     (plan-sql "UPDATE foo SET bar = foo.baz"
                               {:default-all-app-time? true})))
 
   (t/is (=plan-file "test-sql-update-plan-with-period-references"
-                    (plan-sql "UPDATE foo SET bar = (foo.SYSTEM_TIME OVERLAPS foo.APPLICATION_TIME)"
+                    (plan-sql "UPDATE foo SET bar = (foo.SYSTEM_TIME OVERLAPS foo.VALID_TIME)"
                               {:default-all-app-time? true}))))
 
 (deftest dml-target-table-alises
@@ -1000,46 +1000,16 @@
            (plan-sql "DELETE FROM t1 WHERE t1.col1 = 30"))
         "DELETE"))
 
-(deftest test-app-and-application-time-plan-equally
-  (t/is
-    (= (plan-sql "UPDATE users FOR PORTION OF APP_TIME FROM DATE '2021-07-01' TO DATE '9999-12-31' SET first_name = 'Sue'")
-       (plan-sql "UPDATE users FOR PORTION OF APPLICATION_TIME FROM DATE '2021-07-01' TO DATE '9999-12-31' SET first_name = 'Sue'"))
-    "UPDATE")
-
-  (t/is
-    (= (plan-sql "DELETE FROM users FOR PORTION OF APP_TIME FROM DATE '2021-07-01' TO DATE '9999-12-31'")
-       (plan-sql "DELETE FROM users FOR PORTION OF APPLICATION_TIME FROM DATE '2021-07-01' TO DATE '9999-12-31'"))
-    "DELETE")
-
-  (t/is
-    (= (plan-sql
-         "SELECT foo.name, bar.also_name
-         FROM foo, bar
-         WHERE foo.APP_TIME OVERLAPS bar.APP_TIME")
-       (plan-sql
-         "SELECT foo.name, bar.also_name
-         FROM foo, bar
-         WHERE foo.APPLICATION_TIME OVERLAPS bar.APPLICATION_TIME"))
-    "SELECT")
-
-  (t/is
-    (=plan-file
-     "test-application-and-app-time-from-same-table"
-     (plan-sql
-         "SELECT foo.name
-         FROM foo
-         WHERE foo.APP_TIME OVERLAPS foo.APPLICATION_TIME"))))
-
 (deftest test-remove-names-359
   (t/is
-    (=plan-file
-      "test-remove-names-359-single-ref"
-      (plan-sql "SELECT (SELECT x.bar FROM z) FROM x")))
+   (=plan-file
+    "test-remove-names-359-single-ref"
+    (plan-sql "SELECT (SELECT x.bar FROM z) FROM x")))
 
   (t/is
-    (=plan-file
-      "test-remove-names-359-multiple-ref"
-      (plan-sql "SELECT (SELECT x.bar FROM (SELECT x.bar FROM z) AS y) FROM x"))))
+   (=plan-file
+    "test-remove-names-359-multiple-ref"
+    (plan-sql "SELECT (SELECT x.bar FROM (SELECT x.bar FROM z) AS y) FROM x"))))
 
 (deftest test-system-time-period-predicate
   (t/is
@@ -1050,20 +1020,20 @@
         FROM foo, bar
         WHERE foo.SYSTEM_TIME OVERLAPS bar.SYSTEM_TIME"))))
 
-(deftest test-app-time-correlated-subquery
+(deftest test-valid-time-correlated-subquery
   (t/is
-    (=plan-file
-      "test-app-time-correlated-subquery-where"
-      (plan-sql
-        "SELECT (SELECT foo.name
+   (=plan-file
+    "test-valid-time-correlated-subquery-where"
+    (plan-sql
+     "SELECT (SELECT foo.name
         FROM foo
-        WHERE foo.APP_TIME OVERLAPS bar.APPLICATION_TIME) FROM bar")))
+        WHERE foo.VALID_TIME OVERLAPS bar.VALID_TIME) FROM bar")))
 
   (t/is
-    (=plan-file
-      "test-app-time-correlated-subquery-projection"
-      (plan-sql
-        "SELECT (SELECT (foo.APP_TIME OVERLAPS bar.APPLICATION_TIME) FROM foo)
+   (=plan-file
+    "test-valid-time-correlated-subquery-projection"
+    (plan-sql
+     "SELECT (SELECT (foo.VALID_TIME OVERLAPS bar.VALID_TIME) FROM foo)
         FROM bar"))))
 
 (deftest test-derived-columns-with-periods
@@ -1071,7 +1041,7 @@
    (=plan-file
     "test-derived-columns-with-periods-period-predicate"
     (plan-sql
-     "SELECT f.APP_TIME OVERLAPS f.SYSTEM_TIME
+     "SELECT f.VALID_TIME OVERLAPS f.SYSTEM_TIME
         FROM foo
         AS f (xt$system_from, xt$system_to, xt$valid_from, xt$valid_to)")))
 
@@ -1082,36 +1052,36 @@
      "SELECT f.bar
         FROM foo
         FOR SYSTEM_TIME AS OF CURRENT_TIMESTAMP
-        FOR APPLICATION_TIME AS OF CURRENT_TIMESTAMP
+        FOR VALID_TIME AS OF CURRENT_TIMESTAMP
         AS f (bar)"))))
 
-(deftest test-for-all-application-time-387
+(deftest test-for-all-valid-time-387
   (t/is
    (=plan-file
-    "test-for-all-application-time-387-query"
+    "test-for-all-valid-time-387-query"
     (plan-sql
      "SELECT foo.bar
         FROM foo
-        FOR ALL APPLICATION_TIME")))
+        FOR ALL VALID_TIME")))
 
   (t/is
    (=plan-file
-    "test-for-all-application-time-387-update"
+    "test-for-all-valid-time-387-update"
     (plan-sql
-     "UPDATE users FOR ALL APP_TIME SET first_name = 'Sue'")))
+     "UPDATE users FOR ALL VALID_TIME SET first_name = 'Sue'")))
 
   (t/is
    (=plan-file
-    "test-for-all-application-time-387-delete"
+    "test-for-all-valid-time-387-delete"
     (plan-sql
-     "DELETE FROM users FOR ALL APPLICATION_TIME"))))
+     "DELETE FROM users FOR ALL VALID_TIME"))))
 
 (deftest test-for-all-system-time-404
   (t/is
-    (=plan-file
-      "test-for-all-application-time-404"
-      (plan-sql
-        "SELECT foo.bar
+   (=plan-file
+    "test-for-all-system-time-404"
+    (plan-sql
+     "SELECT foo.bar
         FROM foo
         FOR ALL SYSTEM_TIME"))))
 
@@ -1127,7 +1097,7 @@
    (=plan-file
     "test-period-specs-with-subqueries-407-app-time"
     (plan-sql
-     "SELECT 1 FROM (select foo.bar from foo FOR APPLICATION_TIME AS OF CURRENT_TIMESTAMP) as tmp")))
+     "SELECT 1 FROM (select foo.bar from foo FOR VALID_TIME AS OF CURRENT_TIMESTAMP) as tmp")))
 
   (t/is
    (=plan-file

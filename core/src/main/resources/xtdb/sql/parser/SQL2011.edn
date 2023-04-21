@@ -231,7 +231,7 @@
      {:tag :opt,
       :parser
       {:tag :nt,
-       :keyword :query_application_time_period_specification}}
+       :keyword :query_valid_time_period_specification}}
      {:tag :opt,
       :parser {:tag :nt, :keyword :correlation_or_recognition}})}
    {:tag :cat,
@@ -366,7 +366,7 @@
        ({:tag :string, :string "FOR"}
         {:tag :string, :string "PORTION"}
         {:tag :string, :string "OF"}
-        {:tag :nt, :keyword :application_time_period_name}
+        {:tag :nt, :keyword :valid_time_period_name}
         {:tag :string, :string "FROM"}
         {:tag :nt, :keyword :point_in_time_1}
         {:tag :string, :string "TO"}
@@ -375,7 +375,7 @@
        :parsers
        ({:tag :string, :string "FOR"}
         {:tag :string, :string "ALL"}
-        {:tag :nt, :keyword :application_time_period_name})})}}
+        {:tag :nt, :keyword :valid_time_period_name})})}}
    {:tag :opt,
     :parser
     {:tag :cat,
@@ -924,8 +924,8 @@
   ({:tag :string, :string "SET", :hide true}
    {:tag :alt,
     :parsers
-    ({:tag :string, :string "APP_TIME_DEFAULTS"}
-     {:tag :string, :string "APPLICATION_TIME_DEFAULTS"}),
+    ({:tag :string, :string "VALID_TIME_DEFAULTS"}
+     {:tag :string, :string "VALID_TIME_DEFAULTS"}),
     :hide true}
    {:tag :opt,
     :parser
@@ -2502,7 +2502,7 @@
        ({:tag :string, :string "FOR"}
         {:tag :string, :string "PORTION"}
         {:tag :string, :string "OF"}
-        {:tag :nt, :keyword :application_time_period_name}
+        {:tag :nt, :keyword :valid_time_period_name}
         {:tag :string, :string "FROM"}
         {:tag :nt, :keyword :point_in_time_1}
         {:tag :string, :string "TO"}
@@ -2511,7 +2511,7 @@
        :parsers
        ({:tag :string, :string "FOR"}
         {:tag :string, :string "ALL"}
-        {:tag :nt, :keyword :application_time_period_name})})}}
+        {:tag :nt, :keyword :valid_time_period_name})})}}
    {:tag :opt,
     :parser
     {:tag :alt,
@@ -2892,11 +2892,11 @@
   ({:tag :string, :string "TRUE"}
    {:tag :string, :string "FALSE"}
    {:tag :string, :string "UNKNOWN"})},
- :application_time_period_name
+ :valid_time_period_name
  {:tag :alt,
   :parsers
-  ({:tag :string, :string "APPLICATION_TIME"}
-   {:tag :string, :string "APP_TIME"})},
+  ({:tag :string, :string "VALID_TIME"}
+   {:tag :string, :string "VALID_TIME"})},
  :value_of_expression_at_row
  {:tag :cat,
   :parsers
@@ -3095,20 +3095,20 @@
    {:tag :nt, :keyword :contextually_typed_table_value_constructor})},
  :row_subquery
  {:tag :nt, :keyword :subquery, :red {:reduction-type :raw}},
- :query_application_time_period_specification
+ :query_valid_time_period_specification
  {:tag :alt,
   :parsers
   ({:tag :cat,
     :parsers
     ({:tag :string, :string "FOR"}
-     {:tag :nt, :keyword :application_time_period_name}
+     {:tag :nt, :keyword :valid_time_period_name}
      {:tag :string, :string "AS"}
      {:tag :string, :string "OF"}
      {:tag :nt, :keyword :point_in_time_1})}
    {:tag :cat,
     :parsers
     ({:tag :string, :string "FOR"}
-     {:tag :nt, :keyword :application_time_period_name}
+     {:tag :nt, :keyword :valid_time_period_name}
      {:tag :string, :string "BETWEEN"}
      {:tag :nt, :keyword :point_in_time_1}
      {:tag :string, :string "AND"}
@@ -3116,7 +3116,7 @@
    {:tag :cat,
     :parsers
     ({:tag :string, :string "FOR"}
-     {:tag :nt, :keyword :application_time_period_name}
+     {:tag :nt, :keyword :valid_time_period_name}
      {:tag :string, :string "FROM"}
      {:tag :nt, :keyword :point_in_time_1}
      {:tag :string, :string "TO"}
@@ -3125,7 +3125,7 @@
     :parsers
     ({:tag :string, :string "FOR"}
      {:tag :string, :string "ALL"}
-     {:tag :nt, :keyword :application_time_period_name})})},
+     {:tag :nt, :keyword :valid_time_period_name})})},
  :octet_like_predicate
  {:tag :cat,
   :parsers
@@ -3268,7 +3268,7 @@
   ({:tag :neg,
     :parser
     {:tag :regexp,
-     :regexp #"(?i)(\b(SYSTEM_TIME|APP_TIME|APPLICATION_TIME)\b)"}}
+     :regexp #"(?i)(\b(SYSTEM_TIME|VALID_TIME)\b)"}}
    {:tag :nt, :keyword :identifier}),
   :red {:reduction-type :raw}},
  :datetime_value_function

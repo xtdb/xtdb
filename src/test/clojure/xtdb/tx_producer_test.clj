@@ -87,10 +87,10 @@
                            [[1 nil 3.3]
                             [2 "hello" 12]]]
 
-                          [:sql "UPDATE foo FOR PORTION OF APP_TIME FROM DATE '2021-01-01' TO DATE '2024-01-01' SET bar = 'world' WHERE foo.xt$id = ?"
+                          [:sql "UPDATE foo FOR PORTION OF VALID_TIME FROM DATE '2021-01-01' TO DATE '2024-01-01' SET bar = 'world' WHERE foo.xt$id = ?"
                            [[1]]]
 
-                          [:sql "DELETE FROM foo FOR PORTION OF APP_TIME FROM DATE '2023-01-01' TO DATE '2025-01-01' WHERE foo.xt$id = ?"
+                          [:sql "DELETE FROM foo FOR PORTION OF VALID_TIME FROM DATE '2023-01-01' TO DATE '2025-01-01' WHERE foo.xt$id = ?"
                            [[1]]]]))
 
 (t/deftest can-write-opts

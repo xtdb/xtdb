@@ -16,7 +16,7 @@ xref:getting-started::gotchas.adoc["gotchas"].
 
 For now, `INSERT` behaves like `UPSERT`.
 You are permitted to run the following statement twice in a row and the second will not be rejected.
-By default, `SELECT` will query across all of `APPLICATION_TIME`, so you will see two rows returned as well.
+By default, `SELECT` will query across all of `VALID_TIME`, so you will see two rows returned as well.
 
 [source,sql]
 ----
@@ -52,7 +52,7 @@ INSERT INTO users (xt$id, name, xt$valid_from)
 [#update]
 == UPDATE
 
-By default, updates only affect an entity on the `SYSTEM_TIME` and `APPLICATION_TIME` timelines from the point in time when the `UPDATE` statement occurred.
+By default, updates only affect an entity on the `SYSTEM_TIME` and `VALID_TIME` timelines from the point in time when the `UPDATE` statement occurred.
 
 [source,sh]
 ----

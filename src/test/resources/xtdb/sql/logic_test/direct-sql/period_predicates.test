@@ -23,14 +23,14 @@ SELECT t1.xt$id, t1.start, t1.end FROM t1
 2020-01-01
 
 query ITT nosort
-SELECT t1.xt$id, t1.start, t1.end FROM t1 WHERE t1.APPLICATION_TIME CONTAINS PERIOD (t1.start, t1.end)
+SELECT t1.xt$id, t1.start, t1.end FROM t1 WHERE t1.VALID_TIME CONTAINS PERIOD (t1.start, t1.end)
 ----
 2
 2100-01-01
 3000-01-01
 
 query ITT nosort
-SELECT t1.xt$id, t1.start, t1.end FROM t1 WHERE PERIOD (t1.start, t1.end) PRECEDES t1.APPLICATION_TIME
+SELECT t1.xt$id, t1.start, t1.end FROM t1 WHERE PERIOD (t1.start, t1.end) PRECEDES t1.VALID_TIME
 ----
 3
 2000-01-01

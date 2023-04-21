@@ -391,60 +391,60 @@ SELECT t1.d-t1.e AS a, SUM(t1.a) AS b
   (valid? "SELECT 1 FROM t1 OFFSET 1"))
 
 (t/deftest test-check-period-predicand
-  (invalid? [#"Please use a qualified reference to application_time"]
+  (invalid? [#"Please use a qualified reference to valid_time"]
     "SELECT foo.name, bar.also_name
     FROM foo, bar
-    WHERE foo.random_col OVERLAPS bar.APPLICATIOn_TIME")
-  (invalid? [#"Please use a qualified reference to application_time"]
+    WHERE foo.random_col OVERLAPS bar.VALID_TiME")
+  (invalid? [#"Please use a qualified reference to valid_time"]
     "SELECT foo.name, bar.also_name
     FROM foo, bar
     WHERE foo.SYSTEM_TImE OVERLAPS bar.fooble"))
 
 (t/deftest test-invalid-table-names
-  (invalid? [#"Unexpected:\nAPPLICATION_TIME"]
-    "SELECT APPLICATION_TIME.foo FROM APPLICATION_TIME")
+  (invalid? [#"Unexpected:\nVALID_TIME"]
+            "SELECT VALID_TIME.foo FROM VALID_TIME")
   (invalid? [#"Unexpected:\nSYSTEM_TIME"]
-    "SELECT bar.foo FROM SYSTEM_TIME AS bar")
+            "SELECT bar.foo FROM SYSTEM_TIME AS bar")
   (invalid? [#"Unexpected:\nSYSTEM_TIME"]
-    "INSERT INTO SYSTEM_TIME SELECT 4 FROM foo")
-  (invalid? [#"Unexpected:\nAPP_TIME"]
-    "UPDATE APP_TIME SET foo = 4"))
+            "INSERT INTO SYSTEM_TIME SELECT 4 FROM foo")
+  (invalid? [#"Unexpected:\nVALID_TIME"]
+            "UPDATE VALID_TIME SET foo = 4"))
 
 (t/deftest test-period-references
 
   (invalid? [#"Table not in scope: bar"]
-    "SELECT bar.APPLICATION_TIME
+            "SELECT bar.VALID_TIME
     FROM foo")
 
   (invalid?
-    [#"Period not in scope: f.application_time"
-     #"Period not in scope: f.system_time"]
-    "SELECT f.APPLICATION_TIME OVERLAPS f.SYSTEM_TIME
+   [#"Period not in scope: f.valid_time"
+    #"Period not in scope: f.system_time"]
+   "SELECT f.VALID_TIME OVERLAPS f.SYSTEM_TIME
     FROM foo AS f (a)")
 
   (valid?
-    "SELECT f.APP_TIME OVERLAPS f.SYSTEM_TIME
+   "SELECT f.VALID_TIME OVERLAPS f.SYSTEM_TIME
     FROM foo
     AS f (xt$system_from, xt$system_to, xt$valid_from, xt$valid_to)")
 
-  (invalid? [#"References to periods may only appear within period predicates: foo.application_time"]
-    "SELECT foo.APPLICATION_TIME
+  (invalid? [#"References to periods may only appear within period predicates: foo.valid_time"]
+            "SELECT foo.VALID_TIME
     FROM foo")
 
   (invalid? [#"References to periods may only appear within period predicates: foo.system_time"]
-    "SELECT foo.bar
+            "SELECT foo.bar
     FROM foo
     WHERE foo.SYSTEM_TIME = 20")
 
   (invalid? [#"References to periods may only appear within period predicates: foo.system_time"]
-    "UPDATE foo SET bar = foo.SYSTEM_TIME"))
+            "UPDATE foo SET bar = foo.SYSTEM_TIME"))
 
 (t/deftest check-period-specifications
 
   (invalid? [#"Parse error at line 4"]
-    "SELECT foo.bar
+            "SELECT foo.bar
     FROM foo
-    FOR APPLICATION_TIME BETWEEN TIMESTAMP '3001-01-01 00:00:00+00:00' AND DATE '3000-01-01'
+    FOR VALID_TIME BETWEEN TIMESTAMP '3001-01-01 00:00:00+00:00' AND DATE '3000-01-01'
     FOR SYSTEM_TIME BETWEEN DATE '2000-01-01' AND DATE '2001-01-01'")
 
   (invalid?
@@ -456,9 +456,9 @@ SELECT t1.d-t1.e AS a, SUM(t1.a) AS b
     FROM foo FOR SYSTEM_TIME FROM foo.baz TO foo.biz")
 
   (invalid?
-    [#"Columns are not valid within period specifications: t1.start"
-     #"Columns are not valid within period specifications: t1.end"]
-    "SELECT t1.id,
+   [#"Columns are not valid within period specifications: t1.start"
+    #"Columns are not valid within period specifications: t1.end"]
+   "SELECT t1.id,
     (SELECT t2.id FROM t2 FOR SYSTEM_TIME BETWEEN t1.start AND t1.end)
     FROM t1")
 
@@ -466,16 +466,16 @@ SELECT t1.d-t1.e AS a, SUM(t1.a) AS b
             "SELECT f.xt$system_to
     FROM foo
     FOR SYSTEM_TIME AS OF CURRENT_TIMESTAMP
-    FOR APPLICATION_TIME AS OF CURRENT_TIMESTAMP
+    FOR VALID_TIME AS OF CURRENT_TIMESTAMP
     AS f (bar)")
 
   (invalid?
-    [#"Period not in scope: f.application_time"
-     #"Period not in scope: f.system_time"]
-    "SELECT f.APPLICATION_TIME OVERLAPS f.SYSTEM_TIME
+   [#"Period not in scope: f.valid_time"
+    #"Period not in scope: f.system_time"]
+   "SELECT f.VALID_TIME OVERLAPS f.SYSTEM_TIME
     FROM foo
     FOR SYSTEM_TIME AS OF CURRENT_TIMESTAMP
-    FOR APPLICATION_TIME AS OF CURRENT_TIMESTAMP
+    FOR VALID_TIME AS OF CURRENT_TIMESTAMP
     AS f (bar)"))
 
 (t/deftest test-projection
@@ -778,5 +778,3 @@ SELECT t1.d-t1.e AS a, SUM(t1.a) AS b
   (invalid? [#"VAR_SAMP does not support set quanitifiers \(ALL\): VAR_SAMP\(ALL t1.a\)"]
             "SELECT VAR_SAMP(ALL t1.a) FROM t1")
   (valid? "SELECT SUM(DISTINCT t1.a) FROM t1"))
-
-
