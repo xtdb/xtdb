@@ -135,6 +135,10 @@
   (abort-doc-store-tx [document-store-tx])
   (commit-doc-store-tx [document-store-tx]))
 
+(defn- arg-doc? [doc]
+  (or (contains? doc :crux.db.fn/tx-events)
+      (contains? doc :crux.db.fn/failed?)))
+
 (defrecord ForkedDocumentStore [doc-store !docs]
   db/DocumentStore
   (submit-docs [_ docs]
@@ -146,17 +150,20 @@
 
   DocumentStoreTx
   (abort-doc-store-tx [_]
-    (when-let [docs (not-empty (->> @!docs (into {} (filter (comp (some-fn :crux.db.fn/tx-events :crux.db.fn/failed?) val)))))]
-      (db/submit-docs doc-store docs)))
+    (letfn [(aborted-doc [doc]
+              (-> doc
+                  (cond-> (not (:crux.db.fn/failed? doc)) (assoc :crux.db.fn/aborted? true))
+                  (assoc :crux.db.fn/failed? true)
+                  (dissoc :crux.db.fn/tx-events)))
+            (aborted-arg-doc-entries [doc-map]
+              (for [[id doc] doc-map
+                    :when (arg-doc? doc)]
+                [id (aborted-doc doc)]))]
+      (db/submit-docs doc-store (aborted-arg-doc-entries @!docs))))
 
   (commit-doc-store-tx [_]
     (when-let [docs (not-empty @!docs)]
-      (let [{arg-fn-docs true, non-arg-fn-docs false}
-            (->> docs
-                 (group-by (fn [[_ doc]]
-                             (or (contains? doc :crux.db.fn/tx-events)
-                                 (contains? doc :crux.db.fn/failed?)))))]
-
+      (let [{arg-fn-docs true, non-arg-fn-docs false} (group-by (fn [[_ doc]] (arg-doc? doc)) docs)]
         ;; we need to ensure that nobody can ever read a replaced tx-fn arg-doc
         ;; without the resulting docs also having being written beforehand
         (db/submit-docs doc-store non-arg-fn-docs)

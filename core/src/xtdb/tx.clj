@@ -209,21 +209,25 @@
 (defmethod index-tx-event :crux.tx/fn [[_op k args-content-hash] tx {:keys [document-store-tx] :as in-flight-tx}]
   (let [fn-id (c/new-id k)
         {args-doc-id :xt/id,
-         :crux.db.fn/keys [args tx-events failed?]
+         :crux.db.fn/keys [args tx-events aborted? failed?]
          :as args-doc} (when args-content-hash
                          (-> (fetch-docs-for-tx document-store-tx #{args-content-hash})
                              (get args-content-hash)
                              c/crux->xt))]
     (cond
+
       tx-events {:tx-events tx-events
                  :docs (fetch-docs-for-tx document-store-tx (txc/tx-events->doc-hashes tx-events))}
 
+      aborted? {:abort? true}
+
       failed? (do
-                (log/warn "Transaction function failed when originally evaluated:"
-                          fn-id args-doc-id
-                          (pr-str (select-keys args-doc [:crux.db.fn/exception
-                                                         :crux.db.fn/message
-                                                         :crux.db.fn/ex-data])))
+                (when-some [ex-keys (not-empty (select-keys args-doc [:crux.db.fn/exception
+                                                                      :crux.db.fn/message
+                                                                      :crux.db.fn/ex-data]))]
+                  (log/warn "Transaction function failed when originally evaluated:"
+                            fn-id args-doc-id
+                            (pr-str ex-keys)))
                 {:abort? true})
 
       :else (let [ctx (->TxFnContext in-flight-tx tx)
