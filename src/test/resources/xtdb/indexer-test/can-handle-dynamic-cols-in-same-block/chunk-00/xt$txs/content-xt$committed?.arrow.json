@@ -19,17 +19,17 @@
     }]
   },
   "batches" : [{
-    "count" : 3,
+    "count" : 1,
     "columns" : [{
       "name" : "xt$committed?",
-      "count" : 3,
-      "TYPE_ID" : [0,0,0],
-      "OFFSET" : [0,1,2],
+      "count" : 1,
+      "TYPE_ID" : [0],
+      "OFFSET" : [0],
       "children" : [{
         "name" : "bool",
-        "count" : 3,
-        "VALIDITY" : [1,1,1],
-        "DATA" : [1,0,1]
+        "count" : 1,
+        "VALIDITY" : [1],
+        "DATA" : [1]
       }]
     }]
   }]

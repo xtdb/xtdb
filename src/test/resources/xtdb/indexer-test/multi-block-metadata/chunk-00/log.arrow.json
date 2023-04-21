@@ -151,12 +151,12 @@
           "name" : "iid",
           "count" : 2,
           "VALIDITY" : [1,1],
-          "DATA" : ["288230376151711744","360287970189639680"]
+          "DATA" : ["360287970189639680","432345564227567616"]
         },{
           "name" : "row-id",
           "count" : 2,
           "VALIDITY" : [1,1],
-          "DATA" : ["4","5"]
+          "DATA" : ["5","6"]
         },{
           "name" : "application-time-start",
           "count" : 2,
@@ -172,6 +172,55 @@
           "count" : 2,
           "VALIDITY" : [1,1],
           "DATA" : [0,0]
+        }]
+      }]
+    }]
+  },{
+    "count" : 0,
+    "columns" : [{
+      "name" : "tx-id",
+      "count" : 0,
+      "VALIDITY" : [ ],
+      "DATA" : [ ]
+    },{
+      "name" : "system-time",
+      "count" : 0,
+      "VALIDITY" : [ ],
+      "DATA" : [ ]
+    },{
+      "name" : "ops",
+      "count" : 0,
+      "VALIDITY" : [ ],
+      "OFFSET" : [0],
+      "children" : [{
+        "name" : "$data$",
+        "count" : 0,
+        "VALIDITY" : [ ],
+        "children" : [{
+          "name" : "iid",
+          "count" : 0,
+          "VALIDITY" : [ ],
+          "DATA" : [ ]
+        },{
+          "name" : "row-id",
+          "count" : 0,
+          "VALIDITY" : [ ],
+          "DATA" : [ ]
+        },{
+          "name" : "application-time-start",
+          "count" : 0,
+          "VALIDITY" : [ ],
+          "DATA" : [ ]
+        },{
+          "name" : "application-time-end",
+          "count" : 0,
+          "VALIDITY" : [ ],
+          "DATA" : [ ]
+        },{
+          "name" : "evict?",
+          "count" : 0,
+          "VALIDITY" : [ ],
+          "DATA" : [ ]
         }]
       }]
     }]

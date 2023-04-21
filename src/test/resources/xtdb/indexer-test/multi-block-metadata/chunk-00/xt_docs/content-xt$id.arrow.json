@@ -85,5 +85,30 @@
         "DATA" : [52.0]
       }]
     }]
+  },{
+    "count" : 0,
+    "columns" : [{
+      "name" : "xt$id",
+      "count" : 0,
+      "TYPE_ID" : [ ],
+      "OFFSET" : [ ],
+      "children" : [{
+        "name" : "utf8",
+        "count" : 0,
+        "VALIDITY" : [ ],
+        "OFFSET" : [0],
+        "DATA" : [ ]
+      },{
+        "name" : "timestamp-tz-micro-utc",
+        "count" : 0,
+        "VALIDITY" : [ ],
+        "DATA" : [ ]
+      },{
+        "name" : "f64",
+        "count" : 0,
+        "VALIDITY" : [ ],
+        "DATA" : [ ]
+      }]
+    }]
   }]
 }

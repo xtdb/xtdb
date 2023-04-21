@@ -260,5 +260,79 @@
         }]
       }]
     }]
+  },{
+    "count" : 0,
+    "columns" : [{
+      "name" : "struct",
+      "count" : 0,
+      "TYPE_ID" : [ ],
+      "OFFSET" : [ ],
+      "children" : [{
+        "name" : "absent",
+        "count" : 0
+      },{
+        "name" : "struct",
+        "count" : 0,
+        "VALIDITY" : [ ],
+        "children" : [{
+          "name" : "a",
+          "count" : 0,
+          "TYPE_ID" : [ ],
+          "OFFSET" : [ ],
+          "children" : [{
+            "name" : "i64",
+            "count" : 0,
+            "VALIDITY" : [ ],
+            "DATA" : [ ]
+          },{
+            "name" : "bool",
+            "count" : 0,
+            "VALIDITY" : [ ],
+            "DATA" : [ ]
+          }]
+        },{
+          "name" : "b",
+          "count" : 0,
+          "TYPE_ID" : [ ],
+          "OFFSET" : [ ],
+          "children" : [{
+            "name" : "utf8",
+            "count" : 0,
+            "VALIDITY" : [ ],
+            "OFFSET" : [0],
+            "DATA" : [ ]
+          },{
+            "name" : "struct",
+            "count" : 0,
+            "VALIDITY" : [ ],
+            "children" : [{
+              "name" : "c",
+              "count" : 0,
+              "TYPE_ID" : [ ],
+              "OFFSET" : [ ],
+              "children" : [{
+                "name" : "utf8",
+                "count" : 0,
+                "VALIDITY" : [ ],
+                "OFFSET" : [0],
+                "DATA" : [ ]
+              }]
+            },{
+              "name" : "d",
+              "count" : 0,
+              "TYPE_ID" : [ ],
+              "OFFSET" : [ ],
+              "children" : [{
+                "name" : "utf8",
+                "count" : 0,
+                "VALIDITY" : [ ],
+                "OFFSET" : [0],
+                "DATA" : [ ]
+              }]
+            }]
+          }]
+        }]
+      }]
+    }]
   }]
 }
