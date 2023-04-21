@@ -21,7 +21,7 @@ Documents must have an `:xt/id` attribute, which is considered unique within the
 ----
 
 `:put` operations optionally take temporal parameters, in order to put the document for a subset of valid time.
-By default, documents are asserted from the current time to the end-of-time, but this can be customised using `:for-app-time [:in start-time end-time]` :
+By default, documents are asserted from the current time to the end-of-time, but this can be customised using `:for-valid-time [:in start-time end-time]` :
 
 [source,clojure]
 ----
@@ -29,10 +29,10 @@ By default, documents are asserted from the current time to the end-of-time, but
 
 (xt/submit-tx your-node
               [[:put :users {:xt/id :jms, :first-name "James"}
-                {:for-app-time [:in #inst "2020-02-01" #inst "2020-05-01"]}]
+                {:for-valid-time [:in #inst "2020-02-01" #inst "2020-05-01"]}]
 
                [:put :users {:xt/id :jdt, :first-name "Jeremy"}
-                {:for-app-time [:in #inst "2019-05-01"]}]])
+                {:for-valid-time [:in #inst "2019-05-01"]}]])
 ----
 
 == `:delete` operations

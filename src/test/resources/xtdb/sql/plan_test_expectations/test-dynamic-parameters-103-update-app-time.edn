@@ -25,7 +25,7 @@
      xt$system_from x6,
      xt$system_to x7}
     [:scan
-     {:table users, :for-app-time [:between ?_0 ?_1]}
+     {:table users, :for-valid-time [:between ?_0 ?_1]}
      [{id (= id ?_3)}
       _iid
       _row_id

@@ -26,7 +26,7 @@
      xt$system_to x7}
     [:scan
      {:table users,
-      :for-app-time
+      :for-valid-time
       [:between #time/date "2021-07-01" #time/date "9999-12-31"]}
      [{id (= id ?_0)}
       _iid

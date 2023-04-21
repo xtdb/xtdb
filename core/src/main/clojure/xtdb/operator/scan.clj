@@ -41,7 +41,7 @@
 (defmethod lp/ra-expr :scan [_]
   (s/cat :op #{:scan}
          :scan-opts (s/keys :req-un [::table]
-                            :opt-un [::lp/for-app-time ::lp/for-sys-time ::lp/default-all-app-time?])
+                            :opt-un [::lp/for-valid-time ::lp/for-system-time ::lp/default-all-app-time?])
          :columns (s/coll-of (s/or :column ::lp/column
                                    :select ::lp/column-expression))))
 
@@ -309,7 +309,7 @@
   (close [_]
     (util/try-close blocks)))
 
-(defn ->temporal-min-max-range [^IIndirectRelation params, {^TransactionInstant basis-tx :tx}, {:keys [for-app-time for-sys-time]}, selects]
+(defn ->temporal-min-max-range [^IIndirectRelation params, {^TransactionInstant basis-tx :tx}, {:keys [for-valid-time for-system-time]}, selects]
   (let [min-range (temporal/->min-range)
         max-range (temporal/->max-range)]
     (letfn [(apply-bound [f col-name ^long time-μs]
@@ -338,7 +338,7 @@
       (when-let [sys-time (some-> basis-tx (.sys-time) util/instant->micros)]
         (apply-bound :<= "xt$system_from" sys-time)
 
-        (when-not for-sys-time
+        (when-not for-system-time
           (apply-bound :> "xt$system_to" sys-time)))
 
       (letfn [(apply-constraint [constraint start-col end-col]
@@ -364,8 +364,8 @@
 
                     :all-time nil)))]
 
-        (apply-constraint for-app-time "xt$valid_from" "xt$valid_to")
-        (apply-constraint for-sys-time "xt$system_from" "xt$system_to"))
+        (apply-constraint for-valid-time "xt$valid_from" "xt$valid_to")
+        (apply-constraint for-system-time "xt$system_from" "xt$system_to"))
 
       (let [col-types (into {} (map (juxt first #(get temporal/temporal-col-types (util/str->normal-form-str (str (first %)))))) selects)
             param-types (expr/->param-types params)]
@@ -395,11 +395,11 @@
 (defn- scan-op-at-now [scan-op]
   (= :now (first (second scan-op))))
 
-(defn- at-now? [{:keys [for-app-time for-sys-time]}]
-  (and (or (nil? for-app-time)
-           (scan-op-at-now for-app-time))
-       (or (nil? for-sys-time)
-           (scan-op-at-now for-sys-time))))
+(defn- at-now? [{:keys [for-valid-time for-system-time]}]
+  (and (or (nil? for-valid-time)
+           (scan-op-at-now for-valid-time))
+       (or (nil? for-system-time)
+           (scan-op-at-now for-system-time))))
 
 (defn use-current-row-id-cache? [^IWatermark watermark scan-opts basis temporal-col-names]
   (and
@@ -446,7 +446,7 @@
         (->> scan-cols
              (into {} (map (juxt identity ->col-type))))))
 
-    (emitScan [_ {:keys [columns], {:keys [table for-app-time] :as scan-opts} :scan-opts} scan-col-types param-types]
+    (emitScan [_ {:keys [columns], {:keys [table for-valid-time] :as scan-opts} :scan-opts} scan-col-types param-types]
       (let [col-names (->> columns
                            (into [] (comp (map (fn [[col-type arg]]
                                                  (case col-type
@@ -496,8 +496,8 @@
          :->cursor (fn [{:keys [allocator, ^IWatermark watermark, basis, params default-all-app-time?]}]
                      (let [metadata-pred (expr.meta/->metadata-selector (cons 'and metadata-args) col-types params)
                            scan-opts (cond-> scan-opts
-                                       (nil? for-app-time)
-                                       (assoc :for-app-time (if default-all-app-time? [:all-time] [:at [:now :now]])))
+                                       (nil? for-valid-time)
+                                       (assoc :for-valid-time (if default-all-app-time? [:all-time] [:at [:now :now]])))
                            [temporal-min-range temporal-max-range] (->temporal-min-max-range params basis scan-opts selects)
                            current-row-ids (when (use-current-row-id-cache? watermark scan-opts basis temporal-col-names)
                                              (get-current-row-ids watermark basis))]

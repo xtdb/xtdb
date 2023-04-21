@@ -1,1 +1,1 @@
-[:scan {:table foo, :for-sys-time :all-time} [bar]]
+[:scan {:table foo, :for-system-time :all-time} [bar]]

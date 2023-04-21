@@ -8,9 +8,9 @@
 
 (deftest simple-temporal-tests
   (let [tx1 (xt/submit-tx tu/*node* [[:put :xt_docs {:xt/id 1 :foo "2000-4000"}
-                                      {:for-app-time [:in #inst "2000" #inst "4000"]}]])
+                                      {:for-valid-time [:in #inst "2000" #inst "4000"]}]])
         tx2 (xt/submit-tx tu/*node* [[:put :xt_docs {:xt/id 1 :foo "3000-"}
-                                      {:for-app-time [:in #inst "3000"]}]])]
+                                      {:for-valid-time [:in #inst "3000"]}]])]
 
     ;; as of tx tests
     (t/is (= [{:foo "2000-4000"}]

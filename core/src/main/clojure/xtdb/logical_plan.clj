@@ -60,8 +60,8 @@
 (s/def ::temporal-filter
   (s/multi-spec temporal-filter-spec (fn retag [_] (throw (UnsupportedOperationException.)))))
 
-(s/def ::for-app-time (s/nilable ::temporal-filter))
-(s/def ::for-sys-time (s/nilable ::temporal-filter))
+(s/def ::for-valid-time (s/nilable ::temporal-filter))
+(s/def ::for-system-time (s/nilable ::temporal-filter))
 (s/def ::default-all-app-time? (s/nilable boolean?))
 
 (defmulti ra-expr

@@ -5,5 +5,5 @@
   [:rename
    {bar x1}
    [:scan
-    {:table foo, :for-app-time [:at (current-timestamp)]}
+    {:table foo, :for-valid-time [:at (current-timestamp)]}
     [bar]]]]]

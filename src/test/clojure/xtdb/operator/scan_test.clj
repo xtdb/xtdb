@@ -43,7 +43,7 @@
 (t/deftest test-scanning-temporal-cols
   (with-open [node (node/start-node {})]
     (xt/submit-tx node [[:put :xt_docs {:xt/id :doc}
-                         {:for-app-time [:in #inst "2021" #inst "3000"]}]])
+                         {:for-valid-time [:in #inst "2021" #inst "3000"]}]])
 
     (let [res (first (tu/query-ra '[:scan {:table xt_docs}
                                     [xt/id
@@ -95,13 +95,13 @@
               {:xt/system-from (util/->zdt #inst "3001")
                :xt/system-to (util/->zdt util/end-of-time)
                :last_updated "tx2"}]
-             (tu/query-ra '[:scan {:table foo, :for-sys-time :all-time}
+             (tu/query-ra '[:scan {:table foo, :for-system-time :all-time}
                             [{xt/system-from (< xt/system-from #time/zoned-date-time "3002-01-01T00:00Z")}
                              {xt/system-to (> xt/system-to #time/zoned-date-time "2999-01-01T00:00Z")}
                              last_updated]]
                           {:node node :default-all-app-time? true})))))
 
-(t/deftest test-for-app-time-in-params
+(t/deftest test-for-valid-time-in-params
   (let [tt1 (util/->zdt #inst "2020-01-01")
         tt2 (util/->zdt #inst "2020-01-02")
         eot (util/->zdt util/end-of-time)]
@@ -114,14 +114,14 @@
       (t/is (= [{:xt/id 1, :version "version 1"} {:xt/id 2, :version "version 2"}]
                (tu/query-ra '[:scan {:table foo,
                                      :default-all-app-time? false
-                                     :for-app-time [:between ?_start ?_end]}
+                                     :for-valid-time [:between ?_start ?_end]}
                               [xt/id version]]
                             {:node node :params {'?_start (util/->instant tt1)
                                                  '?_end (util/->instant eot)}})))
       (t/is (= [{:xt/id 1, :version "version 1"} {:xt/id 2, :version "version 2"}]
                (tu/query-ra '[:scan {:table foo,
                                      :default-all-app-time? false
-                                     :for-app-time :all-time}
+                                     :for-valid-time :all-time}
                               [xt/id version]]
                             {:node node :params {'?_start (util/->instant tt1)
                                                  '?_end (util/->instant eot)}}))))))

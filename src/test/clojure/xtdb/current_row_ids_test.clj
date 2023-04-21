@@ -17,18 +17,18 @@
   tx1
   '[[:put :xt_docs {:xt/id :ivan, :first-name "Ivan"}]
     [:put :xt_docs {:xt/id :petr, :first-name "Petr"}
-     {:for-app-time [:in #inst "2020-01-02T12:00:00Z"]}]
+     {:for-valid-time [:in #inst "2020-01-02T12:00:00Z"]}]
     [:put :xt_docs {:xt/id :susie, :first-name "Susie"}
-     {:for-app-time [:in nil #inst "2020-01-02T13:00:00Z"]}]
+     {:for-valid-time [:in nil #inst "2020-01-02T13:00:00Z"]}]
     [:put :xt_docs {:xt/id :sam, :first-name "Sam"}]
     [:put :xt_docs {:xt/id :petr, :first-name "Petr"}
-     {:for-app-time [:in #inst "2020-01-04T12:00:00Z"]}]
+     {:for-valid-time [:in #inst "2020-01-04T12:00:00Z"]}]
     [:put :xt_docs {:xt/id :jen, :first-name "Jen"}
-     {:for-app-time [:in nil #inst "2020-01-04T13:00:00Z"]}]
+     {:for-valid-time [:in nil #inst "2020-01-04T13:00:00Z"]}]
     [:put :xt_docs {:xt/id :james, :first-name "James"}
-     {:for-app-time [:in #inst "2020-01-01T12:00:00Z"]}]
+     {:for-valid-time [:in #inst "2020-01-01T12:00:00Z"]}]
     [:put :xt_docs {:xt/id :jon, :first-name "Jon"}
-     {:for-app-time [:in nil #inst "2020-01-01T12:00:00Z"]}]
+     {:for-valid-time [:in nil #inst "2020-01-01T12:00:00Z"]}]
     [:put :xt_docs {:xt/id :lucy :first-name "Lucy"}]])
 
 (deftest test-current-row-ids
@@ -39,9 +39,9 @@
   (xt/submit-tx
    tu/*node*
    '[[:put :xt_docs {:xt/id :ivan, :first-name "Ivan-2"}
-      {:for-app-time [:in #inst "2020-01-02T14:00:00Z"]}]
+      {:for-valid-time [:in #inst "2020-01-02T14:00:00Z"]}]
      [:put :xt_docs {:xt/id :ben, :first-name "Ben"}
-      {:for-app-time [:in #inst "2020-01-02T14:00:00Z" #inst "2020-01-02T15:00:00Z"]}]
+      {:for-valid-time [:in #inst "2020-01-02T14:00:00Z" #inst "2020-01-02T15:00:00Z"]}]
      [:evict :xt_docs :lucy]])
 
   (t/is (= [{:name "Ivan-2"}
@@ -68,7 +68,7 @@
     (xt/submit-tx
      tu/*node*
      '[[:put :xt_docs {:xt/id 1}
-        {:for-app-time [:in #inst "2020-01-01T00:00:02Z"]}]])
+        {:for-valid-time [:in #inst "2020-01-01T00:00:02Z"]}]])
 
     (t/is (= []
              (valid-ids-at #time/instant "2020-01-01T00:00:01Z")))
@@ -82,7 +82,7 @@
     (xt/submit-tx
      tu/*node*
      '[[:put :xt_docs {:xt/id 1}
-        {:for-app-time [:in nil #inst "2020-01-01T00:00:02Z"]}]])
+        {:for-valid-time [:in nil #inst "2020-01-01T00:00:02Z"]}]])
 
     (t/is (= [{:id 1}]
              (valid-ids-at #time/instant "2020-01-01T00:00:01Z")))
@@ -196,8 +196,8 @@
            tu/*node*
            (-> '{:find [id]
                  :where [(match :xt_docs {:xt/id id}
-                                {:for-app-time [:at :now]
-                                 :for-sys-time [:at :now]})]})))
+                                {:for-valid-time [:at :now]
+                                 :for-system-time [:at :now]})]})))
          "query where all table temporal constaints are now"))
 
       (t/testing "queries that cannot use current-row-ids cache"
@@ -223,8 +223,8 @@
           tu/*node*
           (-> '{:find [id]
                 :where [(match :xt_docs {:xt/id id}
-                               {:for-app-time [:at :now]
-                                :for-sys-time [:at #inst "2020-01-01"]})]}))
+                               {:for-valid-time [:at :now]
+                                :for-system-time [:at #inst "2020-01-01"]})]}))
          "query where all any table temporal constaints aside from now are set")
 
         (t/is
@@ -232,7 +232,7 @@
           tu/*node*
           (-> '{:find [id]
                 :where [(match :xt_docs {:xt/id id}
-                               {:for-app-time :all-time})]}))
+                               {:for-valid-time :all-time})]}))
          "query where all any table temporal constaints aside from now are set")
 
         (t/is
@@ -243,7 +243,7 @@
                             :xt_docs
                           {:xt/id id
                            :xt/valid-from xt/valid-from}
-                          {:for-app-time :all-time})]}))
+                          {:for-valid-time :all-time})]}))
          "query where all any temporal cols are projected out")))))
 
 (defn current-rows-for [sys-time inserts]

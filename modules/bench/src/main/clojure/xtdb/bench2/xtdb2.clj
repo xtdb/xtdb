@@ -258,7 +258,7 @@
   ;; ra for the above
   (def ra-query
     '[:scan
-      {:table item :for-app-time [:at :now], :for-sys-time nil}
+      {:table item :for-valid-time [:at :now], :for-system-time nil}
       [{i_status (= i_status :open)}
        i_u_id
        i_current_price

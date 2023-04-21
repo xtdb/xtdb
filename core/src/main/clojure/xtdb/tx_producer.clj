@@ -27,15 +27,15 @@
                     (s/conformer #(update-keys % util/kw->normal-form-kw) #(update-keys % util/normal-form-kw->datalog-form-kw))))
 (s/def ::table (s/and keyword?
                       (s/conformer (comp util/symbol->normal-form-symbol symbol) (comp util/normal-form-kw->datalog-form-kw keyword))))
-(s/def ::app-time-start (s/nilable ::util/datetime-value))
-(s/def ::app-time-end (s/nilable ::util/datetime-value))
+(s/def ::valid-time-start (s/nilable ::util/datetime-value))
+(s/def ::valid-time-end (s/nilable ::util/datetime-value))
 
-(s/def ::for-app-time (s/cat :in #{:in}
-                             :app-time-start ::app-time-start
-                             :app-time-end (s/? ::app-time-end)))
+(s/def ::for-valid-time (s/cat :in #{:in}
+                               :valid-time-start ::valid-time-start
+                               :valid-time-end (s/? ::valid-time-end)))
 
-(s/def ::temporal-opts (s/and (s/keys :opt-un [::for-app-time])
-                              (s/conformer #(:for-app-time %) #(hash-map :for-app-time %))))
+(s/def ::temporal-opts (s/and (s/keys :opt-un [::for-valid-time])
+                              (s/conformer #(:for-valid-time %) #(hash-map :for-valid-time %))))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (s/def ::default-all-app-time? boolean)
@@ -168,10 +168,10 @@
 (defn- ->put-writer [^IDenseUnionWriter tx-ops-writer]
   (let [put-writer (.asStruct (.writerForTypeId tx-ops-writer 1))
         doc-writer (.asDenseUnion (.writerForName put-writer "document"))
-        app-time-start-writer (.writerForName put-writer "xt$valid_from")
-        app-time-end-writer (.writerForName put-writer "xt$valid_to")
+        valid-time-start-writer (.writerForName put-writer "xt$valid_from")
+        valid-time-end-writer (.writerForName put-writer "xt$valid_to")
         table-doc-writers (HashMap.)]
-    (fn write-put! [{:keys [doc table], {:keys [app-time-start app-time-end]} :app-time-opts}]
+    (fn write-put! [{:keys [doc table], {:keys [valid-time-start valid-time-end]} :app-time-opts}]
       (.startValue put-writer)
 
       (.startValue doc-writer)
@@ -185,8 +185,8 @@
         (types/write-value! doc table-doc-writer)
         (.endValue table-doc-writer))
 
-      (types/write-value! app-time-start app-time-start-writer)
-      (types/write-value! app-time-end app-time-end-writer)
+      (types/write-value! valid-time-start valid-time-start-writer)
+      (types/write-value! valid-time-end valid-time-end-writer)
 
       (.endValue put-writer))))
 
@@ -194,10 +194,10 @@
   (let [delete-writer (.asStruct (.writerForTypeId tx-ops-writer 2))
         table-writer (.writerForName delete-writer "table")
         id-writer (.asDenseUnion (.writerForName delete-writer "xt$id"))
-        app-time-start-writer (.writerForName delete-writer "xt$valid_from")
-        app-time-end-writer (.writerForName delete-writer "xt$valid_to")]
+        valid-time-start-writer (.writerForName delete-writer "xt$valid_from")
+        valid-time-end-writer (.writerForName delete-writer "xt$valid_to")]
     (fn write-delete! [{:keys [id table],
-                        {:keys [app-time-start app-time-end]} :app-time-opts}]
+                        {:keys [valid-time-start valid-time-end]} :app-time-opts}]
       (.startValue delete-writer)
 
       (types/write-value! (name table) table-writer)
@@ -208,8 +208,8 @@
         (->> (types/write-value! id))
         (.endValue))
 
-      (types/write-value! app-time-start app-time-start-writer)
-      (types/write-value! app-time-end app-time-end-writer)
+      (types/write-value! valid-time-start valid-time-start-writer)
+      (types/write-value! valid-time-end valid-time-end-writer)
 
       (.endValue delete-writer))))
 

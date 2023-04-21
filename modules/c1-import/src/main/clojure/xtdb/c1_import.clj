@@ -51,7 +51,7 @@
                      (case tx-status
                        :commit (for [[tx-op {:keys [eid doc start-valid-time end-valid-time]}] tx-ops]
                                  ;; HACK: what to do if the user has a separate :xt/id  key?
-                                 (let [app-time-opts {:for-app-time [:in start-valid-time end-valid-time]}]
+                                 (let [app-time-opts {:for-valid-time [:in start-valid-time end-valid-time]}]
                                    (case tx-op
                                      :put [:put :xt_docs (xform-doc doc) app-time-opts]
                                      :delete [:delete :xt_docs eid app-time-opts]

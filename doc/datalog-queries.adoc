@@ -89,13 +89,13 @@ WHERE b.author = a.id
 
 `match` is also the gateway to XTDB 2.x's new across-time bitemporal functionality:
 
-* We can specify `{:for-app-time [:in <start> <end>]}` to get the history of an entity between two times:
+* We can specify `{:for-valid-time [:in <start> <end>]}` to get the history of an entity between two times:
 +
 [source,clojure]
 ----
 {:find [id app-start app-end]
  :where [($ :people [id {xt/valid-from app-start, :xt/valid-to app-end}]
-            {:for-app-time [:in #inst "2021", #inst "2023"]})]}
+            {:for-valid-time [:in #inst "2021", #inst "2023"]})]}
 ----
 +
 * Using different app-times for different match clauses, we can ask questions such as 'who was here in both 2018 and 2023'?
@@ -104,8 +104,8 @@ WHERE b.author = a.id
 ----
 ;; here relying on `id` being implicitly unified between the two documents
 {:find [id],
- :where [($ :people [id] {:for-app-time [:at #inst "2018"]})
-         ($ :people [id] {:for-app-time [:at #inst "2023"]})]})
+ :where [($ :people [id] {:for-valid-time [:at #inst "2018"]})
+         ($ :people [id] {:for-valid-time [:at #inst "2023"]})]})
 ----
 +
 * And finally, we can use first-class periods to ask questions like 'who worked here at the same time as John?'
@@ -114,10 +114,10 @@ WHERE b.author = a.id
 ----
 {:find [id],
  :where [($ :people [id {:xt/app-time app-time}]
-            {:for-app-time :all-time})
+            {:for-valid-time :all-time})
 
          ($ :people [{:xt/id :john, :xt/app-time john-app-time}]
-            {:for-app-time :all-time})
+            {:for-valid-time :all-time})
 
          [(<> id :john)]
          [(overlaps? app-time john-app-time)]]})

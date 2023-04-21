@@ -4,4 +4,4 @@
   [{x3 1}]
   [:rename
    {bar x1}
-   [:scan {:table foo, :for-sys-time :all-time} [bar]]]]]
+   [:scan {:table foo, :for-system-time :all-time} [bar]]]]]

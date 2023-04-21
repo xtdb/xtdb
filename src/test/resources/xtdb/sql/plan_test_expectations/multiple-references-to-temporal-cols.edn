@@ -1,6 +1,6 @@
 [:scan
  {:table foo,
-  :for-sys-time [:in #time/date "2001-01-01" #time/date "2002-01-01"]}
+  :for-system-time [:in #time/date "2001-01-01" #time/date "2002-01-01"]}
  [{xt$valid_from
    (and (< xt$valid_from #time/date "2004-01-01") (= xt$valid_from 4))}
   {xt$valid_to

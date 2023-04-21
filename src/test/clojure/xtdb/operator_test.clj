@@ -104,7 +104,7 @@
     (let [{tt1 :sys-time} (xt/submit-tx node [[:put :xt_docs {:xt/id :my-doc, :last-updated "tx1"}]])
           {tt2 :sys-time} (xt/submit-tx node [[:put :xt_docs {:xt/id :my-doc, :last-updated "tx2"}]])]
       (letfn [(q [& temporal-constraints]
-                (->> (tu/query-ra [:scan '{:table xt_docs, :for-sys-time :all-time}
+                (->> (tu/query-ra [:scan '{:table xt_docs, :for-system-time :all-time}
                                    (into '[last-updated] temporal-constraints)]
                                   {:node node, :params {'?sys-time1 tt1, '?sys-time2 tt2}
                                    :default-all-app-time? true})

@@ -39,7 +39,7 @@
 (t/deftest test-app-time
   (let [{:keys [sys-time]} (xt/submit-tx tu/*node* [[:put :xt_docs {:xt/id :doc, :version 1}]
                                                     [:put :xt_docs {:xt/id :doc-with-app-time}
-                                                     {:for-app-time [:in #inst "2021"]}]])
+                                                     {:for-valid-time [:in #inst "2021"]}]])
         sys-time (util/->zdt sys-time)]
 
     (t/is (= {:doc {:xt/id :doc,
@@ -94,7 +94,7 @@
           "all app-time")
 
     (t/is (= [original-v0-doc replaced-v0-doc v1-doc]
-             (tu/query-ra '[:scan {:table xt_docs, :for-sys-time :all-time}
+             (tu/query-ra '[:scan {:table xt_docs, :for-system-time :all-time}
                             [xt/id version
                              xt/valid-from xt/valid-to
                              xt/system-from xt/system-to]]
@@ -105,7 +105,7 @@
 
 (t/deftest test-evict
   (letfn [(all-time-docs []
-            (->> (tu/query-ra '[:scan {:table xt_docs, :for-sys-time :all-time}
+            (->> (tu/query-ra '[:scan {:table xt_docs, :for-system-time :all-time}
                                 [xt/id
                                  xt/valid-from {xt/valid-to (<= xt/valid-to eot)}
                                  xt/system-from xt/system-to]]

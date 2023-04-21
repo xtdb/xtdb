@@ -15,5 +15,5 @@
      [:rename
       {xt$system_from x1, id x2}
       [:scan
-       {:table prop_owner, :for-sys-time :all-time}
+       {:table prop_owner, :for-system-time :all-time}
        [xt$system_from {id (= id 1)}]]]]]]]]

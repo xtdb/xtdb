@@ -222,7 +222,7 @@
                    :xt/valid-to (util/->zdt util/end-of-time)
                    :xt/system-from (util/->zdt tt2)
                    :xt/system-to (util/->zdt util/end-of-time)}]
-                 (tu/query-ra '[:scan {:table xt_docs, :for-sys-time :all-time}
+                 (tu/query-ra '[:scan {:table xt_docs, :for-system-time :all-time}
                                 [xt/id version
                                  xt/valid-from, xt/valid-to
                                  xt/system-from, xt/system-to]]
@@ -350,9 +350,9 @@
       ;; aborted tx shows up in log
       (xt.d/submit-tx node [[:sql "INSERT INTO foo (xt$id, xt$valid_from, xt$valid_to) VALUES (1, DATE '2020-01-01', DATE '2019-01-01')"]])
 
-      (-> (xt.d/submit-tx node [[:delete :xt_docs "foo" {:for-app-time [:in #inst "2020-04-01"]}]
+      (-> (xt.d/submit-tx node [[:delete :xt_docs "foo" {:for-valid-time [:in #inst "2020-04-01"]}]
                                 [:put :xt_docs {:xt/id "bar", :month "april"},
-                                 {:for-app-time [:in #inst "2020-04-01" #inst "2020-05-01"]}]])
+                                 {:for-valid-time [:in #inst "2020-04-01" #inst "2020-05-01"]}]])
           (tu/then-await-tx* node))
 
       (tu/finish-chunk! node)

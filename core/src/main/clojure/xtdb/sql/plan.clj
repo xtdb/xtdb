@@ -1398,8 +1398,8 @@
           (plan subquery-ref)]
          (plan subquery-ref))
        [:scan (->> {:table (symbol table-or-query-name)
-                    :for-app-time (interpret-application-time-period-spec tp)
-                    :for-sys-time (interpret-system-time-period-spec tp)}
+                    :for-valid-time (interpret-application-time-period-spec tp)
+                    :for-system-time (interpret-system-time-period-spec tp)}
                    (into {} (remove (comp nil? val))))
         (vec
          (->> (for [{:keys [identifier]} projection]
@@ -1407,12 +1407,12 @@
               (distinct)
               (vec)))])]))
 
-(defn- build-target-table [tt for-app-time]
+(defn- build-target-table [tt for-valid-time]
   (let [{:keys [id correlation-name table-or-query-name]} (sem/table tt)
         projection (first (sem/projected-columns tt))]
     [:rename (table-reference-symbol correlation-name id)
      [:scan (cond-> {:table (symbol table-or-query-name)}
-              for-app-time (assoc :for-app-time for-app-time))
+              for-valid-time (assoc :for-valid-time for-valid-time))
       (for [{:keys [identifier]} projection
             :let [identifier (symbol identifier)]]
         identifier)]]))
@@ -1514,7 +1514,7 @@
           (cond->> obc (wrap-with-order-by (r/$ obc -1)))
           (->> (wrap-with-top))))))
 
-(defn- app-time-extents->for-app-time [app-time-extents app-from-expr app-to-expr]
+(defn- app-time-extents->for-valid-time [app-time-extents app-from-expr app-to-expr]
   (let [app-from (if (= 'xtdb/end-of-time app-from-expr) util/end-of-time app-from-expr)
         app-to (if (= 'xtdb/end-of-time app-to-expr) util/end-of-time app-to-expr)]
     (cond
@@ -1528,7 +1528,7 @@
         {app-from :from, app-to :to, :as app-time-extents} (sem/dml-app-time-extents z)
         app-from-expr (some-> app-from (expr))
         app-to-expr (some-> app-to (expr))
-        rel (build-target-table tt (app-time-extents->for-app-time app-time-extents app-from-expr app-to-expr))
+        rel (build-target-table tt (app-time-extents->for-valid-time app-time-extents app-from-expr app-to-expr))
         rel (if-let [sc (r/find-first (partial r/ctor? :search_condition) z)]
               (wrap-with-select sc rel)
               rel)]
@@ -1583,7 +1583,7 @@
                        (vary-meta assoc :table table)))
                  ~'xtdb/end-of-time)
        (as-> (build-target-table
-              tt (app-time-extents->for-app-time app-time-extents app-from-expr app-to-expr)) rel
+              tt (app-time-extents->for-valid-time app-time-extents app-from-expr app-to-expr)) rel
              (if-let [sc (r/find-first (partial r/ctor? :search_condition) z)]
                (wrap-with-select sc rel)
                rel))]]]))

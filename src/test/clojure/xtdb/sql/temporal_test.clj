@@ -98,11 +98,11 @@
 (deftest app-time-period-predicates
   (testing "OVERLAPS"
     (let [tx (xt.d/submit-tx tu/*node* [[:put :foo {:xt/id :my-doc, :last_updated "2000"}
-                                         {:for-app-time [:in #inst "2000"]}]
+                                         {:for-valid-time [:in #inst "2000"]}]
                                         [:put :foo {:xt/id :my-doc, :last_updated "3000"}
-                                         {:for-app-time [:in #inst "3000"]}]
+                                         {:for-valid-time [:in #inst "3000"]}]
                                         [:put :foo {:xt/id :some-other-doc, :last_updated "4000"}
-                                         {:for-app-time [:in #inst "4000" #inst "4001"]}]])]
+                                         {:for-valid-time [:in #inst "4000" #inst "4001"]}]])]
 
       (is (= [{:last_updated "2000"} {:last_updated "3000"} {:last_updated "4000"}]
              (query-at-tx
@@ -131,9 +131,9 @@
 
 (deftest app-time-multiple-tables
   (let [tx (xt.d/submit-tx tu/*node* [[:put :foo {:xt/id :foo-doc, :last_updated "2001" }
-                                       {:for-app-time [:in #inst "2000" #inst "2001"]}]
+                                       {:for-valid-time [:in #inst "2000" #inst "2001"]}]
                                       [:put :bar {:xt/id :bar-doc, :l_updated "2003" }
-                                       {:for-app-time [:in #inst "2002" #inst "2003"]}]])]
+                                       {:for-valid-time [:in #inst "2002" #inst "2003"]}]])]
 
     (is (= [{:last_updated "2001"}]
            (query-at-tx

@@ -94,7 +94,7 @@
                             [:vector (mapv #(conj {} %) v)])))))
 
 (s/def ::temporal-opts
-  (-> (s/keys :opt-un [::lp/for-app-time ::lp/for-sys-time])
+  (-> (s/keys :opt-un [::lp/for-valid-time ::lp/for-system-time])
       (s/nonconforming)))
 
 (s/def ::match
@@ -436,8 +436,8 @@
                             (group-by :a))
                        (update-vals #(into #{} (map :lit) %)))
         plan (-> [:scan {:table table
-                         :for-app-time (:for-app-time temporal-opts)
-                         :for-sys-time (:for-sys-time temporal-opts)}
+                         :for-valid-time (:for-valid-time temporal-opts)
+                         :for-system-time (:for-system-time temporal-opts)}
                   (-> attrs
                       (->> (mapv (fn [attr]
                                    (-> attr
