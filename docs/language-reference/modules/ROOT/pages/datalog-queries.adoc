@@ -706,7 +706,7 @@ include::example$test/xtdb/docs/examples/query_test.clj[tags=rules-4,indent=0]
 [#timeout]
 == Timeout
 
-`:timeout` sets the maximum run time of the query (in milliseconds). If specified, it overrides the `:query-timeout` Query Engine configuration option, which defaults to `30000` (30 seconds). If the query has not completed after this amount of time, a `java.util.concurrent.TimeoutException` is thrown.
+`:timeout` sets the maximum run time of the query (in milliseconds). If specified, it overrides the `:query-timeout` xref:{page-component-version}@administration::configuring.adoc#_query_engine[Query Engine configuration] option, which defaults to `30000` (30 seconds). If the query has not completed after this amount of time, a `java.util.concurrent.TimeoutException` is thrown.
 
 
 [#valid-time-travel]
