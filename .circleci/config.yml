@@ -91,11 +91,11 @@ jobs:
           paths:
             - ~/.m2
           key: v1-dependencies-{{ checksum ".circleci-cache-key" }}
-
   test:
     docker:
       - image: wotbrew/xtdb-ci-lein-fix:latest
-
+    environment:
+      JVM_OPTS: -Xmx2500m
     working_directory: ~/xtdb
     steps:
       - checkout
