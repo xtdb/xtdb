@@ -60,7 +60,7 @@
       (.setTypeId parent-duv parent-pos type-id)
       (.setOffset parent-duv parent-pos pos)
 
-      ;; TODO (#252) do we still need this here?
+      ;; TODO (#2155) do we still need this here?
       (.setValueCount parent-duv (inc parent-pos))
 
       (.startValue inner-writer)
@@ -243,15 +243,23 @@
     (set! (.pos this) 0))
 
   (rowCopier [struct-writer src-vec]
-    (let [^StructVector src-vec (cast StructVector src-vec)
-          copiers (vec (for [^ValueVector child-vec (.getChildrenFromFields src-vec)]
-                         (.rowCopier (.writerForName struct-writer (.getName child-vec))
-                                     child-vec)))]
+    (if (instance? NullVector src-vec)
       (reify IRowCopier
-        (copyRow [_ src-idx]
-          (doseq [^IRowCopier copier copiers]
-            (.copyRow copier src-idx))
-          pos))))
+        (copyRow [_ _src-idx]
+          (let [pos (.getPosition struct-writer)]
+            (.setNull dest-vec pos)
+            ;; TODO (#2155) do we still need this here?
+            (.setValueCount dest-vec (inc pos))
+            pos)))
+      (let [^StructVector src-vec (cast StructVector src-vec)
+            copiers (vec (for [^ValueVector child-vec (.getChildrenFromFields src-vec)]
+                           (.rowCopier (.writerForName struct-writer (.getName child-vec))
+                                       child-vec)))]
+        (reify IRowCopier
+          (copyRow [_ src-idx]
+            (doseq [^IRowCopier copier copiers]
+              (.copyRow copier src-idx))
+            pos)))))
 
   IStructWriter
   (writerForName [_ col-name]
@@ -288,22 +296,30 @@
     (set! (.pos this) 0))
 
   (rowCopier [this-list-writer src-vec]
-    (let [^ListVector src-vec (cast ListVector src-vec)
-          src-data-vec (.getDataVector src-vec)
-          inner-copier (.rowCopier data-writer src-data-vec)]
+    (if (instance? NullVector src-vec)
       (reify IRowCopier
-        (copyRow [_ src-idx]
-          (let [pos (.pos this-list-writer)]
-            (if (.isNull src-vec src-idx)
-              (.setNull dest-vec pos)
-              (do
-                (.setNotNull dest-vec pos)
-                (let [start-idx (.getElementStartIndex src-vec src-idx)]
-                  (dotimes [el-idx (- (.getElementEndIndex src-vec src-idx) start-idx)]
-                    (.startValue data-writer)
-                    (.copyRow inner-copier (+ start-idx el-idx))
-                    (.endValue data-writer))))))
-          pos))))
+        (copyRow [_ _src-idx]
+          (let [pos (.getPosition this-list-writer)]
+            (.setNull dest-vec pos)
+            ;; TODO (#2155) do we still need this here?
+            (.setValueCount dest-vec (inc pos))
+            pos)))
+      (let [^ListVector src-vec (cast ListVector src-vec)
+            src-data-vec (.getDataVector src-vec)
+            inner-copier (.rowCopier data-writer src-data-vec)]
+        (reify IRowCopier
+          (copyRow [_ src-idx]
+            (let [pos (.pos this-list-writer)]
+              (if (.isNull src-vec src-idx)
+                (.setNull dest-vec pos)
+                (do
+                  (.setNotNull dest-vec pos)
+                  (let [start-idx (.getElementStartIndex src-vec src-idx)]
+                    (dotimes [el-idx (- (.getElementEndIndex src-vec src-idx) start-idx)]
+                      (.startValue data-writer)
+                      (.copyRow inner-copier (+ start-idx el-idx))
+                      (.endValue data-writer))))))
+            pos)))))
 
   IListWriter
   (getDataWriter [_] data-writer))
@@ -366,7 +382,7 @@
       (instance? NullVector src-vec) (reify IRowCopier
                                        (copyRow [_ _src-idx]
                                          (let [pos (.getPosition this-writer)]
-                                           ;; TODO (#252) do we still need this here?
+                                           ;; TODO (#2155) do we still need this here?
                                            (.setValueCount dest-vec (inc pos))
                                            pos)))
 
@@ -401,7 +417,7 @@
       (reify IRowCopier
         (copyRow [_ _src-idx]
           (let [pos (.getPosition this-writer)]
-            ;; TODO (#252) do we still need this here?
+            ;; TODO (#2155) do we still need this here?
             (.setValueCount dest-vec (inc pos))
             pos)))
 
