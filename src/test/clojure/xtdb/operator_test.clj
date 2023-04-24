@@ -43,12 +43,12 @@
                                  {:chunk-idx 2, :block-idxs (doto (RoaringBitmap.) (.add 1)), :col-names #{"_row_id" "xt$id" "name"}})]]
             (t/is (= expected-match
                      (meta/matching-chunks metadata-mgr "xt_docs"
-                                           (expr.meta/->metadata-selector '(> name "Ivan") '#{name} {})))
+                                           (expr.meta/->metadata-selector '(> name "Ivan") '{name :utf8} {})))
                   "only needs to scan chunk 1, block 1")
             (t/is (= expected-match
                      (with-open [params (tu/open-params {'?name "Ivan"})]
                        (meta/matching-chunks metadata-mgr "xt_docs"
-                                             (expr.meta/->metadata-selector '(> name ?name) '#{name} params))))
+                                             (expr.meta/->metadata-selector '(> name ?name) '{name :utf8} params))))
                   "only needs to scan chunk 1, block 1"))
 
           (let [tx2 (xt/submit-tx node [[:put :xt_docs {:name "Jeremy", :xt/id :jdt}]])]
@@ -82,13 +82,13 @@
                              {:chunk-idx 0, :block-idxs (doto (RoaringBitmap.) (.add 0)), :col-names #{"_row_id" "xt$id" "name"}})]]
         (t/is (= expected-match
                  (meta/matching-chunks metadata-mgr "xt_docs"
-                                       (expr.meta/->metadata-selector '(= name "Ivan") '#{name} {})))
+                                       (expr.meta/->metadata-selector '(= name "Ivan") '{name :utf8} {})))
               "only needs to scan chunk 0, block 0")
 
         (t/is (= expected-match
                  (with-open [params (tu/open-params {'?name "Ivan"})]
                    (meta/matching-chunks metadata-mgr "xt_docs"
-                                         (expr.meta/->metadata-selector '(= name ?name) '#{name} params))))
+                                         (expr.meta/->metadata-selector '(= name ?name) '{name :utf8} params))))
               "only needs to scan chunk 0, block 0"))
 
       (t/is (= #{{:name "Ivan"}}

@@ -1,11 +1,13 @@
 (ns xtdb.metadata-test
-  (:require [clojure.test :as t]
+  (:require [clojure.test :as t :refer [deftest]]
             [xtdb.sql :as xt]
             [xtdb.metadata :as meta]
             [xtdb.test-util :as tu]
-            [xtdb.datasets.tpch :as tpch]))
+            [xtdb.datasets.tpch :as tpch])
+  (:import (java.time ZoneId)))
 
 (t/use-fixtures :each tu/with-node)
+(t/use-fixtures :once tu/with-allocator)
 
 (t/deftest test-row-id->chunk
   (-> (tpch/submit-docs! tu/*node* 0.001)
@@ -52,3 +54,59 @@
                    {:basis {:tx tx1}
                     :? ["dave"]}))
           "#310")))
+
+(deftest test-bloom-filter-for-num-types-2133
+  (let [tx (-> (xt/submit-tx tu/*node* [[:put :xt_docs {:num 0 :xt/id "a"}]
+                                        [:put :xt_docs {:num 1 :xt/id "b"}]
+                                        [:put :xt_docs {:num 1.0 :xt/id "c"}]
+                                        [:put :xt_docs {:num 4 :xt/id "d"}]
+                                        [:put :xt_docs {:num (short 3) :xt/id "e"}]
+                                        [:put :xt_docs {:num 2.0 :xt/id "f"}]])
+               (tu/then-await-tx* tu/*node*))]
+
+    (tu/finish-chunk! tu/*node*)
+
+    (t/is (= [{:num 1} {:num 1.0}]
+             (tu/query-ra '[:scan {:table xt_docs}
+                            [{num (= num 1)}]]
+                          {:node tu/*node* :basis {:tx tx}})))
+
+    (t/is (= [{:num 2.0}]
+             (tu/query-ra '[:scan {:table xt_docs}
+                            [{num (= num 2)}]]
+                          {:node tu/*node* :basis {:tx tx}})))
+
+    (t/is (= [{:num 4}]
+             (tu/query-ra '[:scan {:table xt_docs}
+                            [{num (= num ?x)}]]
+                          {:node tu/*node* :basis {:tx tx} :params {'?x (byte 4)}})))
+
+    (t/is (= [{:num 3}]
+             (tu/query-ra '[:scan {:table xt_docs}
+                            [{num (= num ?x)}]]
+                          {:node tu/*node* :basis {:tx tx} :params {'?x (float 3)}})))))
+
+(deftest test-bloom-filter-for-datetime-types-2133
+  (let [tx (-> (xt/submit-tx tu/*node* [[:put :xt_docs {:timestamp #time/date "2010-01-01" :xt/id "a"}]
+                                        [:put :xt_docs {:timestamp #time/zoned-date-time "2010-01-01T00:00:00Z" :xt/id "b"}]
+                                        #_[:put :xt_docs {:timestamp #time/date-time "2010-01-01T00:00:00" :xt/id "b"}] ;; missing compare impls
+                                        #_[:put :xt_docs {:timestamp #time/time "00:00:00" :xt/id "d"}] ;; missing compare impls
+                                        [:put :xt_docs {:timestamp #time/date "2020-01-01" :xt/id "e"}]])
+               (tu/then-await-tx* tu/*node*))]
+
+    (tu/finish-chunk! tu/*node*)
+
+    (t/is (= [{:timestamp #time/date "2010-01-01"}
+              {:timestamp #time/zoned-date-time "2010-01-01T00:00Z"}]
+             (tu/query-ra '[:scan {:table xt_docs}
+                            [{timestamp (= timestamp #time/zoned-date-time "2010-01-01T00:00:00Z")}]]
+                          {:node tu/*node* :basis {:tx tx} :default-tz (ZoneId/of "Z")})))
+
+    (t/is (= [{:timestamp #time/date "2010-01-01"}
+              {:timestamp #time/zoned-date-time "2010-01-01T00:00Z"}]
+             (tu/query-ra '[:scan {:table xt_docs}
+                            [{timestamp (= timestamp ?x)}]]
+                          {:node tu/*node* :basis {:tx tx}
+                           :default-tz (ZoneId/of "Z") :params {'?x #time/date "2010-01-01"}})))))
+
+

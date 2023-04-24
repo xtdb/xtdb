@@ -2,7 +2,7 @@
   (:require [clojure.data.csv :as csv]
             [clojure.java.io :as io]
             [clojure.string :as str]
-            [clojure.test :as t]
+            [clojure.test :as t :refer [deftest]]
             [clojure.tools.logging :as log]
             [xtdb.api :as xt.api]
             [xtdb.buffer-pool :as bp]
@@ -647,7 +647,7 @@
         (tj/check-json (.toPath (io/as-file (io/resource "xtdb/indexer-test/can-index-sql-insert")))
                        (.resolve node-dir "objects"))))))
 
-(t/deftest test-skips-irrelevant-live-blocks-632
+(deftest test-skips-irrelevant-live-blocks-632
   (with-open [node (node/start-node {:xtdb/live-chunk {:rows-per-block 2, :rows-per-chunk 10}})]
     (-> (xt.d/submit-tx node [[:put :xt_docs {:name "Håkan", :xt/id :hak}]])
         (tu/then-await-tx* node))
@@ -664,8 +664,8 @@
     (let [^IMetadataManager metadata-mgr (tu/component node ::meta/metadata-manager)
           ^IWatermarkSource wm-src (tu/component node :xtdb/indexer)]
       (with-open [params (tu/open-params {'?name "Ivan"})]
-        (let [gt-literal-selector (expr.meta/->metadata-selector '(> name "Ivan") '#{name} {})
-              gt-param-selector (expr.meta/->metadata-selector '(> name ?name) '#{name} params)]
+        (let [gt-literal-selector (expr.meta/->metadata-selector '(> name "Ivan") '{name :utf8} {})
+              gt-param-selector (expr.meta/->metadata-selector '(> name ?name) '{name :utf8} params)]
 
           (t/is (= #{0} (set (keys (.chunksMetadata metadata-mgr)))))
 

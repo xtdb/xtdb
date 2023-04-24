@@ -29,25 +29,29 @@
             (let [base-col-types (-> (get col-types field)
                                      types/flatten-union-types)]
               (simplify-and-or-expr
-               {:op :call
-                :f :or
-                ;; TODO this seems like it could make better use
-                ;; of the polymorphic expr patterns?
-                :args (vec (for [col-type (cond
-                                            (isa? types/col-type-hierarchy param-type :num)
-                                            (filterv types/num-types base-col-types)
-                                            (and (vector? param-type) (isa? types/col-type-hierarchy (first param-type) :date-time))
-                                            (filterv (comp types/date-time-types first) base-col-types)
-                                            :else
-                                            [param-type])]
-                             (into {:op :metadata-vp-call,
-                                    :f f
-                                    :meta-value meta-value
-                                    :col-type col-type
-                                    :field field,
-                                    :param-expr param-expr
-                                    :bloom-hash-sym (when (= meta-value :bloom-filter)
-                                                      (gensym 'bloom-hashes))})))})))
+                {:op :call
+                 :f :or
+                 ;; TODO this seems like it could make better use
+                 ;; of the polymorphic expr patterns?
+                 :args (vec
+                         (for [col-type (cond
+                                          (isa? types/col-type-hierarchy param-type :num)
+                                          (filterv types/num-types base-col-types)
+
+                                          (and (vector? param-type) (isa? types/col-type-hierarchy (first param-type) :date-time))
+                                          (filterv (comp types/date-time-types first) base-col-types)
+
+                                          (contains? base-col-types param-type)
+                                          [param-type])]
+
+                           {:op :metadata-vp-call,
+                            :f f
+                            :meta-value meta-value
+                            :col-type col-type
+                            :field field,
+                            :param-expr param-expr
+                            :bloom-hash-sym (when (= meta-value :bloom-filter)
+                                              (gensym 'bloom-hashes))}))})))
 
           (bool-expr [var-param-f var-param-meta-fn
                       param-var-f param-var-meta-fn]
@@ -97,15 +101,10 @@
     :call (call-meta-expr expr opts)))
 
 (defn- ->bloom-hashes [expr ^IIndirectRelation params]
-  (with-open [allocator (RootAllocator.)]
-    (vec
-     (for [{:keys [param-expr]} (->> (ewalk/expr-seq expr)
-                                     (filter :bloom-hash-sym))]
-       (bloom/literal-hashes allocator
-                             (if-let [[_ literal] (find param-expr :literal)]
-                               literal
-                               (when-let [param-col (.vectorForName params (name (get param-expr :param)))]
-                                 (types/get-object (.getVector param-col) (.getIndex param-col 0)))))))))
+  (vec
+    (for [{:keys [param-expr col-type]} (->> (ewalk/expr-seq expr)
+                                             (filter :bloom-hash-sym))]
+      (bloom/literal-hashes params param-expr col-type))))
 
 (def ^:private table-metadata-sym (gensym "table-metadata"))
 (def ^:private metadata-root-sym (gensym "metadata-root"))
@@ -158,7 +157,7 @@
 
 (def ^:private compile-meta-expr
   (-> (fn [expr opts]
-        (let [expr (or (meta-expr (expr/prepare-expr expr) opts)
+        (let [expr (or (-> expr (expr/prepare-expr) (meta-expr opts) (expr/prepare-expr))
                        (expr/prepare-expr {:op :literal, :literal true}))
               {:keys [continue] :as emitted-expr} (expr/codegen-expr expr opts)]
           {:expr expr
@@ -176,8 +175,6 @@
                   #_(doto clojure.pprint/pprint)
                   (eval))}))
 
-      ;; TODO passing gensym'd bloom-hash-syms into the memoized fn means we're unlikely to get cache hits
-      ;; pass values instead?
       (util/lru-memoize)))
 
 (defn ->metadata-selector [form col-types params]

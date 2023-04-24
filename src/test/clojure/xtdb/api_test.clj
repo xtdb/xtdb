@@ -88,7 +88,7 @@
                             :where [(match :xt_docs [{:xt/id id}])
                                     [id :struct struct]]}))))))
 
-(t/deftest round-trips-temporal
+(deftest round-trips-temporal
   (let [vs {:dt #time/date "2022-08-01"
             :ts #time/date-time "2022-08-01T14:34"
             :tstz #time/zoned-date-time "2022-08-01T14:34+01:00"
@@ -101,8 +101,7 @@
 
     (t/is (= [(assoc vs :xt$id "foo")]
              (xt.sql/q *node* "SELECT f.xt$id, f.dt, f.ts, f.tstz, f.tm FROM foo f"
-                       {:basis-timeout (Duration/ofMillis 100)
-                        :default-tz (ZoneId/of "Europe/London")})))
+                       {:default-tz (ZoneId/of "Europe/London")})))
 
     (let [lits [[:dt "DATE '2022-08-01'"]
                 [:ts "TIMESTAMP '2022-08-01 14:34:00'"]
@@ -118,8 +117,7 @@
       (t/is (= (set (for [[t _lit] lits]
                       {:xt$id (name t), :v (get vs t)}))
                (set (xt.sql/q *node* "SELECT b.xt$id, b.v FROM bar b"
-                              {:basis-timeout (Duration/ofMillis 100)
-                               :default-tz (ZoneId/of "Europe/London")})))))))
+                              {:default-tz (ZoneId/of "Europe/London")})))))))
 
 (t/deftest can-manually-specify-sys-time-47
   (let [tx1 (xt.d/submit-tx *node* '[[:put :xt_docs {:xt/id :foo}]]
