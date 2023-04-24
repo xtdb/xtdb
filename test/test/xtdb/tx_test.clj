@@ -1620,9 +1620,9 @@
       (t/is (= 1 (count transactions)))
       (t/is (= 3 (count tx-events)))
 
-      (t/testing "e1 arg doc replaced with tx-events"
+      (t/testing "e1 arg doc replaced with abort"
         (let [[_ _fn-id arg-id] e1]
-          (t/is (:crux.db.fn/tx-events (get-doc arg-id)))))
+          (t/is (:crux.db.fn/aborted? (get-doc arg-id)))))
 
       (t/testing "e3 arg doc replaced with fail"
         (let [[_ _fn-id arg-id] e3]
