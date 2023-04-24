@@ -1,5 +1,6 @@
 (ns xtdb.bloom
-  (:require [xtdb.types :as types]
+  (:require [xtdb.expression :as expr]
+            [xtdb.types :as types]
             [xtdb.vector.indirect :as iv]
             [xtdb.vector.writer :as vw])
   (:import (xtdb.vector IIndirectVector IVectorWriter)
@@ -66,11 +67,16 @@
        (aset acc n (unchecked-int (bit-and mask (+ hash-1 (* hash-2 n))))))
      acc)))
 
-(defn literal-hashes ^ints [^BufferAllocator allocator literal]
-  (let [col-type (types/value->col-type literal)]
-    (with-open [^IVectorWriter writer (vw/->vec-writer allocator "_" col-type)]
+(defn literal-hashes ^ints [^BufferAllocator allocator literal target-col-type]
+  (let [literal-type (types/value->col-type literal)
+        [cast-type cast-literal]
+        (if (isa? types/col-type-hierarchy literal-type :num)
+          [target-col-type ((resolve (expr/type->cast target-col-type)) literal)]
+          [literal-type literal])]
+
+    (with-open [^IVectorWriter writer (vw/->vec-writer allocator "_" cast-type)]
       (.startValue writer)
-      (types/write-value! literal writer)
+      (types/write-value! cast-literal writer)
       (.endValue writer)
       (bloom-hashes (iv/->direct-vec (.getVector writer)) 0))))
 

@@ -102,13 +102,15 @@
 (defn- ->bloom-hashes [expr ^IIndirectRelation params]
   (with-open [allocator (RootAllocator.)]
     (vec
-     (for [{:keys [param-expr]} (->> (ewalk/expr-seq expr)
-                                     (filter :bloom-hash-sym))]
-       (bloom/literal-hashes allocator
-                             (if-let [[_ literal] (find param-expr :literal)]
-                               literal
-                               (when-let [param-col (.vectorForName params (name (get param-expr :param)))]
-                                 (types/get-object (.getVector param-col) (.getIndex param-col 0)))))))))
+      (for [{:keys [param-expr col-type]} (->> (ewalk/expr-seq expr)
+                                               (filter :bloom-hash-sym))]
+        (bloom/literal-hashes
+          allocator
+          (if-let [[_ literal] (find param-expr :literal)]
+            literal
+            (when-let [param-col (.vectorForName params (name (get param-expr :param)))]
+              (types/get-object (.getVector param-col) (.getIndex param-col 0))))
+          col-type)))))
 
 (def ^:private table-metadata-sym (gensym "table-metadata"))
 (def ^:private metadata-root-sym (gensym "metadata-root"))

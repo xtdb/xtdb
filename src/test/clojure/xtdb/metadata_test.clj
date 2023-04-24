@@ -1,11 +1,12 @@
 (ns xtdb.metadata-test
-  (:require [clojure.test :as t]
+  (:require [clojure.test :as t :refer [deftest]]
             [xtdb.sql :as xt]
             [xtdb.metadata :as meta]
             [xtdb.test-util :as tu]
             [xtdb.datasets.tpch :as tpch]))
 
 (t/use-fixtures :each tu/with-node)
+(t/use-fixtures :once tu/with-allocator)
 
 (t/deftest test-row-id->chunk
   (-> (tpch/submit-docs! tu/*node* 0.001)
@@ -52,3 +53,34 @@
                    {:basis {:tx tx1}
                     :? ["dave"]}))
           "#310")))
+
+(deftest test-bloom-filter-for-num-types-214
+  (let [tx (-> (xt/submit-tx tu/*node* [[:put :xt_docs {:num 0 :xt/id "a"}]
+                                        [:put :xt_docs {:num 1 :xt/id "b"}]
+                                        [:put :xt_docs {:num 1.0 :xt/id "c"}]
+                                        [:put :xt_docs {:num 4 :xt/id "d"}]
+                                        [:put :xt_docs {:num (short 3) :xt/id "e"}]
+                                        [:put :xt_docs {:num 2.0 :xt/id "f"}]])
+               (tu/then-await-tx* tu/*node*))]
+
+    (tu/finish-chunk! tu/*node*)
+
+    (t/is (= [{:num 1} {:num 1.0}]
+             (tu/query-ra '[:scan {:table xt_docs}
+                            [{num (= num 1)}]]
+                          {:node tu/*node* :basis {:tx tx}})))
+
+    (t/is (= [{:num 2.0}]
+             (tu/query-ra '[:scan {:table xt_docs}
+                            [{num (= num 2)}]]
+                          {:node tu/*node* :basis {:tx tx}})))
+
+    (t/is (= [{:num 4}]
+             (tu/query-ra '[:scan {:table xt_docs}
+                            [{num (= num ?x)}]]
+                          {:node tu/*node* :basis {:tx tx} :params {'?x (byte 4)}})))
+
+    (t/is (= [{:num 3}]
+             (tu/query-ra '[:scan {:table xt_docs}
+                            [{num (= num ?x)}]]
+                          {:node tu/*node* :basis {:tx tx} :params {'?x (float 3)}})))))
