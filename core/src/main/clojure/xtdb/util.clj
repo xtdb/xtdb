@@ -242,6 +242,9 @@
   (doto (Files/createTempFile prefix suffix (make-array FileAttribute 0))
     (delete-file)))
 
+(defn create-tmpdir ^java.io.File [dir-name]
+  (.toFile (Files/createTempDirectory dir-name (make-array FileAttribute 0))))
+
 (defn write-buffer-to-path [^ByteBuffer from-buffer ^Path to-path]
   (with-open [file-ch (->file-channel to-path write-new-file-opts)
               buf-ch (->seekable-byte-channel from-buffer)]

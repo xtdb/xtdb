@@ -415,14 +415,15 @@
 
   StructVector
   (get-object [this idx]
-    (-> (reduce (fn [acc k]
-                  (let [child-vec (.getChild this k ValueVector)
-                        v (get-object child-vec idx)]
-                    (cond-> acc
-                      (not= v :xtdb/absent) (assoc! (keyword k) v))))
-                (transient {})
-                (.getChildFieldNames this))
-        (persistent!)))
+    (when-not (.isNull this idx)
+      (-> (reduce (fn [acc k]
+                    (let [child-vec (.getChild this k ValueVector)
+                          v (get-object child-vec idx)]
+                      (cond-> acc
+                        (not= v :xtdb/absent) (assoc! (keyword k) v))))
+                  (transient {})
+                  (.getChildFieldNames this))
+          (persistent!))))
 
   DenseUnionVector
   (get-object [this idx]
