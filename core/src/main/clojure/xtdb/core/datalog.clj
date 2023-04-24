@@ -1186,7 +1186,7 @@
         (memoize
          (fn [table]
            (let [^Watermark wm @wm-delay]
-             (into #{} (map util/normal-form-str->datalog-form-str) (.tableColNames scan-emitter wm (name table))))))]
+             (into #{} (map util/normal-form-str->datalog-form-str) (.tableColNames scan-emitter wm (str table))))))]
     (try
       (letfn [(rewrite-row-alias [z]
                 (r/zmatch

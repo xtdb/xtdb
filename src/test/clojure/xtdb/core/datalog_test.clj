@@ -2217,7 +2217,11 @@
                              :where [(match :xt-docs {:foo/bar bar :bar.foo/hello-world foo})]}))))
 
 (t/deftest test-table-normalisation
-  (xt/submit-tx tu/*node* [[:put :xt/the-docs {:xt/id "doc"}]])
-  (t/is (= [{:id "doc"}]
-           (xt/q tu/*node* '{:find [id]
-                             :where [(match :xt/the-docs {:xt/id id})]}))))
+  (let [doc {:xt/id "doc" :foo "bar"}]
+    (xt/submit-tx tu/*node* [[:put :xt/the-docs doc]])
+    (t/is (= [{:id "doc"}]
+             (xt/q tu/*node* '{:find [id]
+                               :where [(match :xt/the-docs {:xt/id id})]})))
+    (t/is (= [{:doc doc}]
+             (xt/q tu/*node* '{:find [doc]
+                               :where [(match :xt/the-docs {:xt/* doc})]})))))
