@@ -27,27 +27,30 @@
 (defn call-meta-expr [{:keys [f args] :as expr} {:keys [col-types] :as opts}]
   (letfn [(var-param-expr [f meta-value field {:keys [param-type] :as param-expr}]
             (let [base-col-types (-> (get col-types field)
-                                     types/flatten-union-types)]
-              (simplify-and-or-expr
-               {:op :call
-                :f :or
-                ;; TODO this seems like it could make better use
-                ;; of the polymorphic expr patterns?
-                :args (vec (for [col-type (cond
-                                            (isa? types/col-type-hierarchy param-type :num)
-                                            (filterv types/num-types base-col-types)
-                                            (and (vector? param-type) (isa? types/col-type-hierarchy (first param-type) :date-time))
-                                            (filterv (comp types/date-time-types first) base-col-types)
-                                            :else
-                                            [param-type])]
-                             (into {:op :metadata-vp-call,
-                                    :f f
-                                    :meta-value meta-value
-                                    :col-type col-type
-                                    :field field,
-                                    :param-expr param-expr
-                                    :bloom-hash-sym (when (= meta-value :bloom-filter)
-                                                      (gensym 'bloom-hashes))})))})))
+                                     types/flatten-union-types)
+                  metadata-vp-calls (for [col-type (cond
+                                                     (isa? types/col-type-hierarchy param-type :num)
+                                                     (filterv types/num-types base-col-types)
+                                                     (and (vector? param-type) (isa? types/col-type-hierarchy (first param-type) :date-time))
+                                                     (filterv (comp types/date-time-types first) base-col-types)
+                                                     :else
+                                                     [param-type])]
+                                      {:op :metadata-vp-call,
+                                       :f f
+                                       :meta-value meta-value
+                                       :col-type col-type
+                                       :field field,
+                                       :param-expr param-expr
+                                       :bloom-hash-sym (when (= meta-value :bloom-filter)
+                                                         (gensym 'bloom-hashes))})]
+              (reduce
+                #(simplify-and-or-expr
+                   {:op :call
+                    :f :or
+                    ;; TODO this seems like it could make better use
+                    ;; of the polymorphic expr patterns?
+                    :args [%1 %2]})
+                metadata-vp-calls)))
 
           (bool-expr [var-param-f var-param-meta-fn
                       param-var-f param-var-meta-fn]
