@@ -527,6 +527,9 @@ This will match any document, `p` which has an `:age` greater than or equal to 1
 
 Importantly, the logic variable `a` is unbound outside the `or-join` clauses.
 
+NOTE: For maximum clarity and performance it is often best to use explicit rules instead of `or`/`or-join` (which are essentially like 'anonymous' rules).
+Explicit rules benefit from an ability to specify which vars must be bound before the rule is executed and can therefore be configured to avoid performing excessive work.
+
 [#clause-rule]
 === Rules
 
@@ -647,7 +650,7 @@ requirements, e.g. see https://github.com/xtdb/xtdb/discussions/1514[#1514]
 == Rules
 Rules are defined by a rule head and then clauses as you would find in a `:where` statement.
 
-They can be used as a shorthand for when you would otherwise be repeating the same restrictions in your `:where` statement.
+They can be used as a shorthand for when you would otherwise be repeating the same clauses in your `:where`.
 
 [source,clojure]
 ----
@@ -660,6 +663,7 @@ include::example$test/xtdb/docs/examples/query_test.clj[tags=rules-1,indent=0]
 The above defines the rule named `adult?` which checks that the supplied entity has an `:age` which is `>=` 18
 
 Multiple rule bodies may be defined for a single rule name (i.e. using matching rule heads) which works in a similar fashion to an `or-join`.
+Rules and `or-join` both execute internally as non-lazy subqueries whose results are unified (and potentially cross-joined) with the tuples in the outer query.
 
 The clauses within Rules can also be further Rule invocation clauses. This allows for the recursive traversal of entities and more.
 
