@@ -31,9 +31,15 @@
 (s/def ::valid-time-start (s/nilable ::util/datetime-value))
 (s/def ::valid-time-end (s/nilable ::util/datetime-value))
 
-(s/def ::for-valid-time (s/cat :in #{:in}
-                               :valid-time-start ::valid-time-start
-                               :valid-time-end (s/? ::valid-time-end)))
+(s/def ::for-valid-time (s/and
+                         (s/or :in (s/cat :in #{:in}
+                                          :valid-time-start ::valid-time-start
+                                          :valid-time-end (s/? ::valid-time-end))
+                               :from (s/cat :from #{:from}
+                                            :valid-time-start ::valid-time-start)
+                               :to (s/cat :to #{:to}
+                                          :valid-time-end ::valid-time-end))
+                         (s/conformer val (fn [x] [(some #{:in :from :to} (vals x)) x]))))
 
 (s/def ::temporal-opts (s/and (s/keys :opt-un [::for-valid-time])
                               (s/conformer #(:for-valid-time %) #(hash-map :for-valid-time %))))

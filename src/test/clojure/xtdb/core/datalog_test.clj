@@ -1522,6 +1522,55 @@
 
             "for all sys time"))))
 
+(t/deftest test-temporal-opts-from-and-to
+  (letfn [(q [query tx current-time]
+            (xt/q tu/*node*
+                  (-> query
+                      (assoc :basis {:tx tx, :current-time (util/->instant current-time)}))))]
+
+    ;; tx0
+    ;; 2015 - eof : Matthew
+    ;; now - 2050 : Mark
+
+    ;; tx1
+    ;; now - 2040 : Matthew
+
+    (let [tx0 (xt/submit-tx tu/*node* '[[:put :xt_docs {:xt/id :matthew} {:for-valid-time [:from #inst "2015"]}]
+                                        [:put :xt_docs {:xt/id :mark} {:for-valid-time [:to #inst "2050"]}]])
+          tx1 (xt/submit-tx tu/*node* '[[:put :xt_docs {:xt/id :matthew} {:for-valid-time [:to #inst "2040"]}]])]
+      (t/is (= [{:id :matthew,
+                 :vt-start #time/zoned-date-time "2015-01-01T00:00Z[UTC]",
+                 :vt-end #time/zoned-date-time "9999-12-31T23:59:59.999999Z[UTC]"}
+                {:id :mark,
+                 :vt-start #time/zoned-date-time "2020-01-01T00:00Z[UTC]",
+                 :vt-end #time/zoned-date-time "2050-01-01T00:00Z[UTC]"}]
+               (q '{:find [id vt-start vt-end], :where [(match :xt_docs {:xt/id id
+                                                                         :xt/valid-from vt-start
+                                                                         :xt/valid-to vt-end})]},
+                  tx0, #inst "2023")))
+
+      (t/is (= [{:id :matthew,
+                 :vt-start #time/zoned-date-time "2015-01-01T00:00Z[UTC]",
+                 :vt-end #time/zoned-date-time "9999-12-31T23:59:59.999999Z[UTC]"}]
+               (q '{:find [id vt-start vt-end], :where [(match :xt_docs {:xt/id id
+                                                                         :xt/valid-from vt-start
+                                                                         :xt/valid-to vt-end}
+                                                               {:for-valid-time [:from #inst "2051"]})]},
+                  tx0, #inst "2023")))
+
+      ;; depends on #2493
+      #_(t/is (= [{:id :mark,
+                   :vt-start #time/zoned-date-time "2020-01-01T00:00Z[UTC]",
+                   :vt-end #time/zoned-date-time "2050-01-01T00:00Z[UTC]"}
+                  {:id :matthew,
+                   :vt-start #time/zoned-date-time "2020-01-02T00:00Z[UTC]",
+                   :vt-end #time/zoned-date-time "2040-01-01T00:00Z[UTC]"}]
+                 (q '{:find [id vt-start vt-end], :where [(match :xt_docs {:xt/id id
+                                                                           :xt/valid-from vt-start
+                                                                           :xt/valid-to vt-end}
+                                                                 {:for-valid-time [:to #inst "2040"]})]},
+                    tx1, #inst "2023"))))))
+
 (deftest test-snodgrass-99-tutorial
   (letfn [(q [query tx current-time & in]
             (apply xt/q
