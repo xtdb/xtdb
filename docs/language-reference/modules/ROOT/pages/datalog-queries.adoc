@@ -501,17 +501,6 @@ When within an `or` rule, you can use `and` to group clauses into a single leg (
 include::example$test/xtdb/docs/examples/query_test.clj[tags=or-2,indent=0]
 ----
 
-Whenever the query engine complains that each leg in the `or` or `or-join` clause requires the "same logic variables", you can add a no-op predicate clause like `[(any? e)]` within `and` clauses for each of the missing variables in the various legs.
-You need to add such no-op predicates until each leg contains the same set of variables.
-
-[source,clj]
-----
-include::example$test/xtdb/docs/examples/query_test.clj[tags=or-3,indent=0]
-----
-
-Hypothetically, XTDB could automatically detect these cases and insert no-op predicates on the user's behalf, but that would be a deviation from the essential semantics of Datalog.
-Note that `clojure.core/any?` is a function that always returns `true`.
-
 [#clause-or-join]
 === Or Join
 
