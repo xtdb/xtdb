@@ -54,6 +54,14 @@
 (defmethod temporal-filter-spec :in [_]
   (s/tuple #{:in} (s/nilable ::temporal-filter-value) (s/nilable ::temporal-filter-value)))
 
+(defmethod temporal-filter-spec :from [_]
+  (s/and (s/tuple #{:from} (s/nilable ::temporal-filter-value))
+         (s/conformer (fn [x] [:in (second x) nil]) identity)))
+
+(defmethod temporal-filter-spec :to [_]
+  (s/and (s/tuple #{:to} (s/nilable ::temporal-filter-value))
+         (s/conformer (fn [x] [:in nil (second x)]) identity)))
+
 (defmethod temporal-filter-spec :between [_]
   (s/tuple #{:between} (s/nilable ::temporal-filter-value) (s/nilable ::temporal-filter-value)))
 
