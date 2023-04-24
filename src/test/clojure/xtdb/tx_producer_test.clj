@@ -12,14 +12,15 @@
 (defn- test-serialize-tx-ops
   ([file tx-ops] (test-serialize-tx-ops file tx-ops {}))
   ([file tx-ops opts]
-   (let [file (io/as-file file)
-         actual (tj/arrow-streaming->json (txp/serialize-tx-ops tu/*allocator* tx-ops opts))]
+   (binding [*print-namespace-maps* false]
+     (let [file (io/as-file file)
+           actual (tj/arrow-streaming->json (txp/serialize-tx-ops tu/*allocator* tx-ops opts))]
 
-     ;; uncomment this to reset the expected file (but don't commit it)
-     ;; (spit file actual)
+       ;; uncomment this to reset the expected file (but don't commit it)
+       ;; (spit file actual)
 
-     (t/is (= (json/parse-string (slurp file))
-              (json/parse-string actual))))))
+       (t/is (= (json/parse-string (slurp file))
+                (json/parse-string actual)))))))
 
 (def devices-docs
   [[:put :device-info
@@ -67,6 +68,12 @@
 
 (t/deftest can-write-tx-to-arrow-ipc-streaming-format
   (test-serialize-tx-ops (io/resource "xtdb/tx-producer-test/can-write-tx.json") devices-docs))
+
+(t/deftest can-write-put-fns
+  (test-serialize-tx-ops (io/resource "xtdb/tx-producer-test/can-write-put-fns.json")
+                         [[:put-fn :foo '(fn [id] [[:put :foo {:xt/id id}]])]
+                          [:put-fn :bar '(fn [id] [[:put :bar {:xt/id id}]])
+                           {:for-valid-time [:in #inst "2020" nil]}]]))
 
 (t/deftest can-write-tx-fn-calls
   (test-serialize-tx-ops (io/resource "xtdb/tx-producer-test/can-write-tx-fn-calls.json")

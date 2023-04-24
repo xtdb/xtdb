@@ -10,9 +10,9 @@
 
 (t/deftest test-call-tx-fn
   (t/testing "simple call"
-    (xt/submit-tx tu/*node* [[:put :xt_docs {:xt/id :my-fn,
-                                             :fn #xt/clj-form (fn [id n]
-                                                                [[:put :foo {:xt/id id, :n n}]])}]
+    (xt/submit-tx tu/*node* [[:put-fn :my-fn
+                              '(fn [id n]
+                                 [[:put :foo {:xt/id id, :n n}]])]
                              [:call :my-fn :foo 0]
                              [:call :my-fn :bar 1]])
 
@@ -23,13 +23,13 @@
                      :where [(match :foo [xt/id n])]}))))
 
   (t/testing "nested tx fn"
-    (xt/submit-tx tu/*node* [[:put :xt_docs {:xt/id :inner-fn,
-                                             :fn #xt/clj-form (fn [id]
-                                                                [[:put :bar {:xt/id (keyword (str (name id) "-inner")), :from :inner}]])}]
-                             [:put :xt_docs {:xt/id :outer-fn,
-                                             :fn #xt/clj-form (fn [id]
-                                                                [[:call :inner-fn id]
-                                                                 [:put :bar {:xt/id (keyword (str (name id) "-outer")), :from :outer}]])}]
+    (xt/submit-tx tu/*node* [[:put-fn :inner-fn
+                              '(fn [id]
+                                 [[:put :bar {:xt/id (keyword (str (name id) "-inner")), :from :inner}]])]
+                             [:put-fn :outer-fn
+                              '(fn [id]
+                                 [[:call :inner-fn id]
+                                  [:put :bar {:xt/id (keyword (str (name id) "-outer")), :from :outer}]])]
                              [:call :inner-fn :foo]
                              [:call :outer-fn :bar]])
 
@@ -41,18 +41,16 @@
                      :where [(match :bar [xt/id from])]})))))
 
 (t/deftest test-tx-fn-return-values
-  (xt/submit-tx tu/*node* [[:put :xt_docs {:xt/id :identity,
-                                           :fn #xt/clj-form identity}]])
+  (xt/submit-tx tu/*node* [[:put-fn :identity 'identity]])
 
   (letfn [(run-test [ret-val put-id]
             (xt/submit-tx tu/*node* [[:call :identity ret-val]
-                                     [:put :xt_docs {:xt/id put-id}]])
+                                     [:put :docs {:xt/id put-id}]])
 
             (->> (xt/q tu/*node*
                        '{:find [id]
                          :in [id]
-                         :where [(match :xt_docs {:xt/id id})
-                                 [id :id]]}
+                         :where [($ :docs {:xt/id id})]}
                        put-id)
                  (into #{} (map :id))))]
 
@@ -62,11 +60,11 @@
     (t/is (= #{:true} (run-test true :true)))))
 
 (t/deftest test-tx-fn-q
-  (xt/submit-tx tu/*node* [[:put :xt_docs {:xt/id :doc-counter,
-                                           :fn #xt/clj-form (fn [id]
-                                                              (let [doc-count (count (q '{:find [id]
-                                                                                          :where [(match :foo [id])]}))]
-                                                                [[:put :foo {:xt/id id, :doc-count doc-count}]]))}]
+  (xt/submit-tx tu/*node* [[:put-fn :doc-counter
+                            '(fn [id]
+                               (let [doc-count (count (q '{:find [id]
+                                                           :where [(match :foo [id])]}))]
+                                 [[:put :foo {:xt/id id, :doc-count doc-count}]]))]
                            [:call :doc-counter :foo]
                            [:call :doc-counter :bar]])
 
@@ -78,15 +76,15 @@
 
   (let [tx2 (xt/submit-tx tu/*node* [[:put :accounts {:xt/id :petr :balance 100}]
                                      [:put :accounts {:xt/id :ivan :balance 200}]
-                                     [:put :xt_docs {:xt/id :update-balance,
-                                                     :fn #xt/clj-form (fn [id]
-                                                                        (let [[account] (q '{:find [xt/id balance]
-                                                                                             :in [xt/id]
-                                                                                             :where [(match :accounts [xt/id balance])]}
-                                                                                           id)]
-                                                                          (if account
-                                                                            [[:put :accounts (update account :balance inc)]]
-                                                                            [])))}]
+                                     [:put-fn :update-balance
+                                      '(fn [id]
+                                         (let [[account] (q '{:find [xt/id balance]
+                                                              :in [xt/id]
+                                                              :where [(match :accounts [xt/id balance])]}
+                                                            id)]
+                                           (if account
+                                             [[:put :accounts (update account :balance inc)]]
+                                             [])))]
                                      [:call :update-balance :petr]
                                      [:call :update-balance :undefined]])]
     (t/is (= #{{:xt/id :petr, :balance 101}
@@ -98,10 +96,10 @@
           "query in tx-fn with in-args")))
 
 (t/deftest test-tx-fn-sql-q
-  (xt/submit-tx tu/*node* [[:put :xt_docs {:xt/id :doc-counter,
-                                           :fn #xt/clj-form (fn [id]
-                                                              (let [[{doc-count :doc_count}] (sql-q "SELECT COUNT(*) doc_count FROM docs")]
-                                                                [[:put :docs {:xt/id id, :doc-count doc-count}]]))}]
+  (xt/submit-tx tu/*node* [[:put-fn :doc-counter
+                            '(fn [id]
+                               (let [[{doc-count :doc_count}] (sql-q "SELECT COUNT(*) doc_count FROM docs")]
+                                 [[:put :docs {:xt/id id, :doc-count doc-count}]]))]
                            [:call :doc-counter :foo]
                            [:call :doc-counter :bar]])
 
@@ -112,9 +110,9 @@
                    :where [(match :docs [xt/id doc-count])]}))))
 
 (t/deftest test-tx-fn-current-tx
-  (let [{tt0 :sys-time} (xt/submit-tx tu/*node* [[:put :xt_docs {:xt/id :with-tx
-                                                                 :fn #xt/clj-form (fn [id]
-                                                                                    [[:put :docs (into {:xt/id id} *current-tx*)]])}]
+  (let [{tt0 :sys-time} (xt/submit-tx tu/*node* [[:put-fn :with-tx
+                                                  '(fn [id]
+                                                     [[:put :docs (into {:xt/id id} *current-tx*)]])]
                                                  [:call :with-tx :foo]
                                                  [:call :with-tx :bar]])
 
@@ -133,9 +131,9 @@
                       '{:find [xt/id version], :where [(match :docs [xt/id version])]})
                 first :version))]
 
-    (xt/submit-tx tu/*node* [[:put :xt_docs {:xt/id :assoc-version
-                                             :fn #xt/clj-form (fn [version]
-                                                                [[:put :docs {:xt/id :foo, :version version}]])}]
+    (xt/submit-tx tu/*node* [[:put-fn :assoc-version
+                              '(fn [version]
+                                [[:put :docs {:xt/id :foo, :version version}]])]
                              [:call :assoc-version 0]])
     (t/is (= 0 (foo-version)))
 
@@ -149,9 +147,7 @@
                               (some-> (idx/reset-tx-fn-error!) throw))))
 
     (t/testing "invalid results"
-      (xt/submit-tx tu/*node* [[:put :xt_docs {:xt/id :invalid-fn
-                                               :fn #xt/clj-form (fn []
-                                                                  [[:foo]])}]])
+      (xt/submit-tx tu/*node* [[:put-fn :invalid-fn '(fn [] [[:foo]])]])
       (xt/submit-tx tu/*node* '[[:call :invalid-fn]
                                 [:call :assoc-version :fail]])
       (t/is (= 0 (foo-version)))
@@ -160,7 +156,7 @@
                               (some-> (idx/reset-tx-fn-error!) throw))))
 
     (t/testing "no :fn"
-      (xt/submit-tx tu/*node* [[:put :xt_docs {:xt/id :no-fn}]])
+      (xt/submit-tx tu/*node* [[:put :xt/tx-fns {:xt/id :no-fn}]])
 
       (xt/submit-tx tu/*node* '[[:call :no-fn]
                                 [:call :assoc-version :fail]])
@@ -171,7 +167,7 @@
                               (some-> (idx/reset-tx-fn-error!) throw))))
 
     (t/testing "not a fn"
-      (xt/submit-tx tu/*node* [[:put :xt_docs {:xt/id :not-a-fn, :fn 0}]])
+      (xt/submit-tx tu/*node* [[:put :xt/tx-fns {:xt/id :not-a-fn, :xt/fn 0}]])
       (xt/submit-tx tu/*node* '[[:call :not-a-fn]
                                 [:call :assoc-version :fail]])
       (t/is (= 0 (foo-version)))
@@ -181,8 +177,7 @@
                               (some-> (idx/reset-tx-fn-error!) throw))))
 
     (t/testing "compilation errors"
-      (xt/submit-tx tu/*node* [[:put :xt_docs {:xt/id :compilation-error-fn
-                                               :fn #xt/clj-form (fn [] unknown-symbol)}]])
+      (xt/submit-tx tu/*node* [[:put-fn :compilation-error-fn '(fn [] unknown-symbol)]])
       (xt/submit-tx tu/*node* '[[:call :compilation-error-fn]
                                 [:call :assoc-version :fail]])
 
@@ -192,10 +187,10 @@
 
     (t/testing "exception thrown"
       #_{:clj-kondo/ignore [:unused-value]}
-      (xt/submit-tx tu/*node* [[:put :xt_docs {:xt/id :exception-fn
-                                               :fn #xt/clj-form (fn []
-                                                                  (/ 1 0)
-                                                                  [])}]])
+      (xt/submit-tx tu/*node* [[:put-fn :exception-fn
+                                '(fn []
+                                   (/ 1 0)
+                                   [])]])
 
       (xt/submit-tx tu/*node* '[[:call :exception-fn]
                                 [:call :assoc-version :fail]])
@@ -211,10 +206,10 @@
   (t/is (thrown-with-msg?
          Exception #"sleep interrupted"
          @(with-open [node (node/start-node {})]
-            (xt/submit-tx node [[:put :xt_docs {:xt/id :hello-world
-                                                :fn #xt/clj-form (fn hello-world [id]
-                                                                   (sleep 200)
-                                                                   [[:put :xt_docs {:xt/id id :foo (str id)}]])}]])
+            (xt/submit-tx node [[:put-fn :hello-world
+                                 '(fn hello-world [id]
+                                    (sleep 200)
+                                    [[:put :xt_docs {:xt/id id :foo (str id)}]])]])
             (xt/submit-tx node [[:call :hello-world 1]])
 
             (Thread/sleep 100)
@@ -226,9 +221,9 @@
 
 (t/deftest test-call-tx-fn-with-ns-attr
   (t/testing "simple call"
-    (xt/submit-tx tu/*node* [[:put :xt_docs {:xt/id :my-fn,
-                                             :fn #xt/clj-form (fn [id n]
-                                                                [[:put :docs {:xt/id id, :a/b n}]])}]
+    (xt/submit-tx tu/*node* [[:put-fn :my-fn
+                              '(fn [id n]
+                                 [[:put :docs {:xt/id id, :a/b n}]])]
                              [:call :my-fn :foo 0]
                              [:call :my-fn :bar 1]])
 

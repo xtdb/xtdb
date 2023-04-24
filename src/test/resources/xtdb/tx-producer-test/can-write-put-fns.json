@@ -1,0 +1,420 @@
+{
+  "schema" : {
+    "fields" : [{
+      "name" : "tx-ops",
+      "nullable" : false,
+      "type" : {
+        "name" : "list"
+      },
+      "children" : [{
+        "name" : "$data$",
+        "nullable" : false,
+        "type" : {
+          "name" : "union",
+          "mode" : "Dense",
+          "typeIds" : [0,1,2,3,4,5]
+        },
+        "children" : [{
+          "name" : "sql",
+          "nullable" : false,
+          "type" : {
+            "name" : "struct"
+          },
+          "children" : [{
+            "name" : "query",
+            "nullable" : false,
+            "type" : {
+              "name" : "utf8"
+            },
+            "children" : [ ]
+          },{
+            "name" : "params",
+            "nullable" : true,
+            "type" : {
+              "name" : "binary"
+            },
+            "children" : [ ]
+          }]
+        },{
+          "name" : "put",
+          "nullable" : false,
+          "type" : {
+            "name" : "struct"
+          },
+          "children" : [{
+            "name" : "document",
+            "nullable" : false,
+            "type" : {
+              "name" : "union",
+              "mode" : "Dense",
+              "typeIds" : [ ]
+            },
+            "children" : [{
+              "name" : "xt$tx_fns",
+              "nullable" : false,
+              "type" : {
+                "name" : "struct"
+              },
+              "children" : [{
+                "name" : "xt$id",
+                "nullable" : false,
+                "type" : {
+                  "name" : "union",
+                  "mode" : "Dense",
+                  "typeIds" : [ ]
+                },
+                "children" : [{
+                  "name" : "keyword",
+                  "nullable" : false,
+                  "type" : {
+                    "name" : "KeywordType"
+                  },
+                  "children" : [ ],
+                  "metadata" : [{
+                    "value" : "xt/clj-keyword",
+                    "key" : "ARROW:extension:name"
+                  },{
+                    "value" : "",
+                    "key" : "ARROW:extension:metadata"
+                  }]
+                }]
+              },{
+                "name" : "xt$fn",
+                "nullable" : false,
+                "type" : {
+                  "name" : "union",
+                  "mode" : "Dense",
+                  "typeIds" : [ ]
+                },
+                "children" : [{
+                  "name" : "clj-form",
+                  "nullable" : false,
+                  "type" : {
+                    "name" : "ClojureFormType"
+                  },
+                  "children" : [ ],
+                  "metadata" : [{
+                    "value" : "xt/clj-form",
+                    "key" : "ARROW:extension:name"
+                  },{
+                    "value" : "",
+                    "key" : "ARROW:extension:metadata"
+                  }]
+                }]
+              }]
+            }]
+          },{
+            "name" : "xt$valid_from",
+            "nullable" : true,
+            "type" : {
+              "name" : "timestamp",
+              "unit" : "MICROSECOND",
+              "timezone" : "UTC"
+            },
+            "children" : [ ]
+          },{
+            "name" : "xt$valid_to",
+            "nullable" : true,
+            "type" : {
+              "name" : "timestamp",
+              "unit" : "MICROSECOND",
+              "timezone" : "UTC"
+            },
+            "children" : [ ]
+          }]
+        },{
+          "name" : "delete",
+          "nullable" : false,
+          "type" : {
+            "name" : "struct"
+          },
+          "children" : [{
+            "name" : "table",
+            "nullable" : false,
+            "type" : {
+              "name" : "utf8"
+            },
+            "children" : [ ]
+          },{
+            "name" : "xt$id",
+            "nullable" : false,
+            "type" : {
+              "name" : "union",
+              "mode" : "Dense",
+              "typeIds" : [ ]
+            },
+            "children" : [ ]
+          },{
+            "name" : "xt$valid_from",
+            "nullable" : true,
+            "type" : {
+              "name" : "timestamp",
+              "unit" : "MICROSECOND",
+              "timezone" : "UTC"
+            },
+            "children" : [ ]
+          },{
+            "name" : "xt$valid_to",
+            "nullable" : true,
+            "type" : {
+              "name" : "timestamp",
+              "unit" : "MICROSECOND",
+              "timezone" : "UTC"
+            },
+            "children" : [ ]
+          }]
+        },{
+          "name" : "evict",
+          "nullable" : false,
+          "type" : {
+            "name" : "struct"
+          },
+          "children" : [{
+            "name" : "_table",
+            "nullable" : true,
+            "type" : {
+              "name" : "utf8"
+            },
+            "children" : [ ]
+          },{
+            "name" : "xt$id",
+            "nullable" : false,
+            "type" : {
+              "name" : "union",
+              "mode" : "Dense",
+              "typeIds" : [ ]
+            },
+            "children" : [ ]
+          }]
+        },{
+          "name" : "call",
+          "nullable" : false,
+          "type" : {
+            "name" : "struct"
+          },
+          "children" : [{
+            "name" : "fn-id",
+            "nullable" : false,
+            "type" : {
+              "name" : "union",
+              "mode" : "Dense",
+              "typeIds" : [ ]
+            },
+            "children" : [ ]
+          },{
+            "name" : "args",
+            "nullable" : false,
+            "type" : {
+              "name" : "list"
+            },
+            "children" : [{
+              "name" : "$data$",
+              "nullable" : false,
+              "type" : {
+                "name" : "union",
+                "mode" : "Dense",
+                "typeIds" : [ ]
+              },
+              "children" : [ ]
+            }]
+          }]
+        },{
+          "name" : "abort",
+          "nullable" : true,
+          "type" : {
+            "name" : "null"
+          },
+          "children" : [ ]
+        }]
+      }]
+    },{
+      "name" : "system-time",
+      "nullable" : true,
+      "type" : {
+        "name" : "timestamp",
+        "unit" : "MICROSECOND",
+        "timezone" : "UTC"
+      },
+      "children" : [ ]
+    },{
+      "name" : "default-tz",
+      "nullable" : false,
+      "type" : {
+        "name" : "utf8"
+      },
+      "children" : [ ]
+    },{
+      "name" : "all-application-time?",
+      "nullable" : false,
+      "type" : {
+        "name" : "bool"
+      },
+      "children" : [ ]
+    }]
+  },
+  "batches" : [{
+    "count" : 1,
+    "columns" : [{
+      "name" : "tx-ops",
+      "count" : 1,
+      "VALIDITY" : [1],
+      "OFFSET" : [0,2],
+      "children" : [{
+        "name" : "$data$",
+        "count" : 2,
+        "TYPE_ID" : [1,1],
+        "OFFSET" : [0,1],
+        "children" : [{
+          "name" : "sql",
+          "count" : 0,
+          "VALIDITY" : [ ],
+          "children" : [{
+            "name" : "query",
+            "count" : 0,
+            "VALIDITY" : [ ],
+            "OFFSET" : [0],
+            "DATA" : [ ]
+          },{
+            "name" : "params",
+            "count" : 0,
+            "VALIDITY" : [ ],
+            "OFFSET" : [0],
+            "DATA" : [ ]
+          }]
+        },{
+          "name" : "put",
+          "count" : 2,
+          "VALIDITY" : [1,1],
+          "children" : [{
+            "name" : "document",
+            "count" : 2,
+            "TYPE_ID" : [0,0],
+            "OFFSET" : [0,1],
+            "children" : [{
+              "name" : "xt$tx_fns",
+              "count" : 2,
+              "VALIDITY" : [1,1],
+              "children" : [{
+                "name" : "xt$id",
+                "count" : 2,
+                "TYPE_ID" : [0,0],
+                "OFFSET" : [0,1],
+                "children" : [{
+                  "name" : "keyword",
+                  "count" : 2,
+                  "VALIDITY" : [1,1],
+                  "OFFSET" : [0,3,6],
+                  "DATA" : ["foo","bar"]
+                }]
+              },{
+                "name" : "xt$fn",
+                "count" : 2,
+                "TYPE_ID" : [0,0],
+                "OFFSET" : [0,1],
+                "children" : [{
+                  "name" : "clj-form",
+                  "count" : 2,
+                  "VALIDITY" : [1,1],
+                  "OFFSET" : [0,35,70],
+                  "DATA" : ["(fn [id] [[:put :foo {:xt/id id}]])","(fn [id] [[:put :bar {:xt/id id}]])"]
+                }]
+              }]
+            }]
+          },{
+            "name" : "xt$valid_from",
+            "count" : 2,
+            "VALIDITY" : [0,1],
+            "DATA" : [0,1577836800000000]
+          },{
+            "name" : "xt$valid_to",
+            "count" : 2,
+            "VALIDITY" : [0,0],
+            "DATA" : [0,0]
+          }]
+        },{
+          "name" : "delete",
+          "count" : 0,
+          "VALIDITY" : [ ],
+          "children" : [{
+            "name" : "table",
+            "count" : 0,
+            "VALIDITY" : [ ],
+            "OFFSET" : [0],
+            "DATA" : [ ]
+          },{
+            "name" : "xt$id",
+            "count" : 0,
+            "TYPE_ID" : [ ],
+            "OFFSET" : [ ]
+          },{
+            "name" : "xt$valid_from",
+            "count" : 0,
+            "VALIDITY" : [ ],
+            "DATA" : [ ]
+          },{
+            "name" : "xt$valid_to",
+            "count" : 0,
+            "VALIDITY" : [ ],
+            "DATA" : [ ]
+          }]
+        },{
+          "name" : "evict",
+          "count" : 0,
+          "VALIDITY" : [ ],
+          "children" : [{
+            "name" : "_table",
+            "count" : 0,
+            "VALIDITY" : [ ],
+            "OFFSET" : [0],
+            "DATA" : [ ]
+          },{
+            "name" : "xt$id",
+            "count" : 0,
+            "TYPE_ID" : [ ],
+            "OFFSET" : [ ]
+          }]
+        },{
+          "name" : "call",
+          "count" : 0,
+          "VALIDITY" : [ ],
+          "children" : [{
+            "name" : "fn-id",
+            "count" : 0,
+            "TYPE_ID" : [ ],
+            "OFFSET" : [ ]
+          },{
+            "name" : "args",
+            "count" : 0,
+            "VALIDITY" : [ ],
+            "OFFSET" : [0],
+            "children" : [{
+              "name" : "$data$",
+              "count" : 0,
+              "TYPE_ID" : [ ],
+              "OFFSET" : [ ]
+            }]
+          }]
+        },{
+          "name" : "abort",
+          "count" : 0
+        }]
+      }]
+    },{
+      "name" : "system-time",
+      "count" : 1,
+      "VALIDITY" : [0],
+      "DATA" : [0]
+    },{
+      "name" : "default-tz",
+      "count" : 1,
+      "VALIDITY" : [1],
+      "OFFSET" : [0,0],
+      "DATA" : [""]
+    },{
+      "name" : "all-application-time?",
+      "count" : 1,
+      "VALIDITY" : [1],
+      "DATA" : [0]
+    }]
+  }]
+}

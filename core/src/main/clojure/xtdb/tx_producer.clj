@@ -1,6 +1,7 @@
 (ns xtdb.tx-producer
   (:require [clojure.spec.alpha :as s]
             [juxt.clojars-mirrors.integrant.core :as ig]
+            [xtdb.api :as api]
             [xtdb.core.sql :as sql]
             [xtdb.error :as err]
             xtdb.log
@@ -52,6 +53,12 @@
   (s/cat :op #{:put}
          :table ::table
          :doc ::doc
+         :app-time-opts (s/? ::temporal-opts)))
+
+(defmethod tx-op-spec :put-fn [_]
+  (s/cat :op #{:put-fn}
+         :id :xt/id
+         :tx-fn some?
          :app-time-opts (s/? ::temporal-opts)))
 
 (defmethod tx-op-spec :delete [_]
@@ -270,6 +277,11 @@
         (case (:op tx-op)
           :sql (write-sql! tx-op)
           :put (write-put! tx-op)
+          :put-fn (let [{:keys [id tx-fn app-time-opts]} tx-op]
+                    (write-put! {:table :xt$tx_fns
+                                 :doc {:xt$id id,
+                                       :xt$fn (api/->ClojureForm tx-fn)}
+                                 :app-time-opts app-time-opts}))
           :delete (write-delete! tx-op)
           :evict (write-evict! tx-op)
           :call (write-call! tx-op)

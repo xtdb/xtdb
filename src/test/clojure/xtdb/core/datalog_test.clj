@@ -1561,17 +1561,17 @@
                             {:sys-time #inst "1998-01-28"})
 
           tx6 (xt/submit-tx tu/*node*
-                            [[:put :xt_docs {:xt/id :delete-1-week-records,
-                                             :fn #xt/clj-form (fn delete-1-weeks-records []
-                                                                (->> (q '{:find [id app-start app-end]
-                                                                          :where [(match :docs {:xt/id id
-                                                                                                :xt/valid-from app-start
-                                                                                                :xt/valid-to app-end}
-                                                                                         {:for-valid-time :all-time})
-                                                                                  [(= (- #inst "1970-01-08" #inst "1970-01-01")
-                                                                                      (- app-end app-start))]]})
-                                                                     (map (fn [{:keys [id app-start app-end]}]
-                                                                            [:delete :docs id {:for-valid-time [:in app-start app-end]}]))))}]
+                            [[:put-fn :delete-1-week-records,
+                              '(fn delete-1-weeks-records []
+                                 (->> (q '{:find [id app-start app-end]
+                                           :where [(match :docs {:xt/id id
+                                                                 :xt/valid-from app-start
+                                                                 :xt/valid-to app-end}
+                                                          {:for-valid-time :all-time})
+                                                   [(= (- #inst "1970-01-08" #inst "1970-01-01")
+                                                       (- app-end app-start))]]})
+                                      (map (fn [{:keys [id app-start app-end]}]
+                                             [:delete :docs id {:for-valid-time [:in app-start app-end]}]))))]
                              [:call :delete-1-week-records]]
                             {:sys-time #inst "1998-01-30"})
 

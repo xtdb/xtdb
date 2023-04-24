@@ -18,8 +18,7 @@
 
 (defn install-tx-fns [worker fns]
   (->> (for [[id fn-def] fns]
-         (do (assert (instance? xtdb.api.ClojureForm  fn-def))
-             [:put :xt_docs {:xt/id  id, :fn fn-def}]))
+         [:put-fn id fn-def])
        (xt/submit-tx (:sut worker))))
 
 (defn generate

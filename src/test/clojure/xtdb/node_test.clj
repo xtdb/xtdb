@@ -359,9 +359,9 @@ VALUES(1, OBJECT ('foo': OBJECT('bibble': true), 'bar': OBJECT('baz': 1001)))"]]
     (xt.d/submit-tx tu/*node* [[:put :docs {:xt/id :foo}]])
     (xt.d/submit-tx tu/*node* [[:abort]])
     (xt.d/submit-tx tu/*node* [[:put :docs {:xt/id :bar}]])
-    (xt.d/submit-tx tu/*node* [[:put :xt_docs {:xt/id :tx-fn-fail
-                                               :fn #xt/clj-form (fn []
-                                                                  (throw (Exception. "boom")))}]
+    (xt.d/submit-tx tu/*node* [[:put-fn :tx-fn-fail
+                                '(fn []
+                                   (throw (Exception. "boom")))]
                                [:call :tx-fn-fail]])
 
     (t/is (= [{:tx-id 0, :tx-time (util/->zdt #inst "2020-01-01"), :committed? true}

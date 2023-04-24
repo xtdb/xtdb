@@ -157,10 +157,7 @@
         nil))))
 
 (defn- find-fn [allocator ^IRaQuerySource ra-src, wm-src, sci-ctx {:keys [basis default-tz]} fn-id]
-  ;; HACK: assume xt_docs here...
-  ;; TODO confirm fn-body doc key
-
-  (let [lp '[:scan {:table xt_docs} [{xt$id (= xt$id ?id)} fn]]
+  (let [lp '[:scan {:table xt/tx-fns} [{xt/id (= xt/id ?id)} xt/fn]]
         ^xtdb.operator.PreparedQuery pq (.prepareRaQuery ra-src lp)]
     (with-open [bq (.bind pq wm-src
                           {:params (iv/->indirect-rel [(-> (vw/open-vec allocator '?id [fn-id])
@@ -180,7 +177,7 @@
 
         (let [fn-doc (or (aget !fn-doc 0)
                          (throw (err/runtime-err :xtdb.call/no-such-tx-fn {:fn-id fn-id})))
-              fn-body (:fn fn-doc)]
+              fn-body (:xt/fn fn-doc)]
 
           (when-not (instance? ClojureForm fn-body)
             (throw (err/illegal-arg :xtdb.call/invalid-tx-fn {:fn-doc fn-doc})))
@@ -246,8 +243,7 @@
                         (log/warn t "unhandled error evaluating tx fn")
                         (throw (err/runtime-err :xtdb.call/error-evaluating-tx-fn
                                                 {:fn-id fn-id, :args args}
-                                                t))))
-                ]
+                                                t))))]
             (when (false? res)
               (throw abort-exn))
 
