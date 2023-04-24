@@ -185,11 +185,14 @@
   :hierarchy #'types/col-type-hierarchy)
 
 (defmethod codegen-cast ::default [{:keys [source-type target-type]}]
-  (throw (err/illegal-arg :xtdb.expression/cast-error
-                          {::err/message (format "Unsupported cast: '%s' -> '%s'"
-                                                 (pr-str source-type) (pr-str target-type))
-                           :source-type source-type
-                           :target-type target-type})))
+  (if (= source-type target-type)
+    {:return-type target-type
+     :->call-code first}
+    (throw (err/illegal-arg :xtdb.expression/cast-error
+                            {::err/message (format "Unsupported cast: '%s' -> '%s'"
+                                                   (pr-str source-type) (pr-str target-type))
+                             :source-type source-type
+                             :target-type target-type}))))
 
 (defmethod codegen-cast [:num :num] [{:keys [target-type]}]
   {:return-type target-type
@@ -1487,7 +1490,7 @@
                              ~(f :null nil)
                              ~(f :bool `(== 1 ~res-sym))))))}))
 
-(def ^:private out-vec-sym (gensym 'out_vec))
+(def out-vec-sym (gensym 'out_vec))
 (def ^:private out-writer-sym (gensym 'out_writer_sym))
 
 (defn batch-bindings [emitted-expr]
@@ -1499,7 +1502,7 @@
            batch-binding)
          (sequence (comp (distinct) cat)))))
 
-(defn- write-value-out-code [return-type]
+(defn write-value-out-code [return-type]
   (zmatch return-type
     [:union inner-types]
     (let [ordered-col-types (vec inner-types)

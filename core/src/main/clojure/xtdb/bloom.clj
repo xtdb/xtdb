@@ -1,10 +1,12 @@
 (ns xtdb.bloom
-  (:require [xtdb.types :as types]
+  (:require [xtdb.expression :as expr]
+            [xtdb.types :as types]
+            [xtdb.util :as util]
             [xtdb.vector.indirect :as iv]
             [xtdb.vector.writer :as vw])
-  (:import (xtdb.vector IIndirectVector IVectorWriter)
+  (:import (xtdb.vector IIndirectVector IIndirectRelation IVectorWriter)
            java.nio.ByteBuffer
-           org.apache.arrow.memory.BufferAllocator
+           org.apache.arrow.memory.RootAllocator
            (org.apache.arrow.memory.util.hash MurmurHasher SimpleHasher)
            [org.apache.arrow.vector ValueVector VarBinaryVector]
            org.roaringbitmap.buffer.ImmutableRoaringBitmap
@@ -66,13 +68,33 @@
        (aset acc n (unchecked-int (bit-and mask (+ hash-1 (* hash-2 n))))))
      acc)))
 
-(defn literal-hashes ^ints [^BufferAllocator allocator literal]
-  (let [col-type (types/value->col-type literal)]
-    (with-open [^IVectorWriter writer (vw/->vec-writer allocator "_" col-type)]
-      (.startValue writer)
-      (types/write-value! literal writer)
-      (.endValue writer)
-      (bloom-hashes (iv/->direct-vec (.getVector writer)) 0))))
+(def literal-hasher
+  (-> (fn [{:keys [param param-type] :as param-expr} target-col-type]
+        (let [{:keys [return-type continue] :as emitted-expr}
+              (expr/codegen-expr {:op :call
+                                  :f :cast
+                                  :args [param-expr]
+                                  :target-type target-col-type}
+                                 {:param-types {param param-type}})
+              {:keys [writer-bindings write-value-out!]} (expr/write-value-out-code return-type)]
+          (-> `(fn [~(-> expr/params-sym (expr/with-tag IIndirectRelation))
+                    ~(-> expr/out-vec-sym (expr/with-tag ValueVector))]
+                 (let [~@(expr/batch-bindings emitted-expr)
+                       ~@writer-bindings]
+                   ~(continue (fn [return-type code]
+                                `(do
+                                   ~(write-value-out! return-type code)
+                                   (bloom-hashes (iv/->direct-vec ~expr/out-vec-sym) 0))))))
+              #_(doto (clojure.pprint/pprint))
+              (eval))))
+      (util/lru-memoize)))
+
+(defn literal-hashes ^ints [^IIndirectRelation params param-expr target-col-type]
+  (let [f (literal-hasher param-expr target-col-type)]
+    (with-open [allocator (RootAllocator.)
+                tmp-vec (-> (types/col-type->field target-col-type)
+                            (.createVector allocator))]
+      (f params tmp-vec))))
 
 (defn write-bloom [^VarBinaryVector bloom-vec, ^long meta-idx, ^IIndirectVector col]
   (let [bloom (RoaringBitmap.)]
