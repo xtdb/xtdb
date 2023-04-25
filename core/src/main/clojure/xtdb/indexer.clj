@@ -105,6 +105,10 @@
                 end-app-time (if (.isNull app-time-end-vec put-offset)
                                util/end-of-time-μs
                                (.get app-time-end-vec put-offset))]
+            (when-not (> end-app-time start-app-time)
+              (throw (err/runtime-err :xtdb.indexer/invalid-app-times
+                                      {:app-time-start (util/micros->instant start-app-time)
+                                       :app-time-end (util/micros->instant end-app-time)})))
 
             (.logPut log-op-idxer iid row-id start-app-time end-app-time)
             (.indexPut temporal-idxer iid row-id start-app-time end-app-time new-entity?)))
@@ -133,6 +137,11 @@
               end-app-time (if (.isNull app-time-end-vec delete-offset)
                              util/end-of-time-μs
                              (.get app-time-end-vec delete-offset))]
+          (when (> start-app-time end-app-time)
+            (throw (err/runtime-err :xtdb.indexer/invalid-app-times
+                                    {:app-time-start (util/micros->instant start-app-time)
+                                     :app-time-end (util/micros->instant end-app-time)})))
+
           (.logDelete log-op-idxer iid start-app-time end-app-time)
           (.indexDelete temporal-idxer iid row-id start-app-time end-app-time new-entity?))
 
@@ -359,6 +368,10 @@
                     iid (.readLong iid-rdr idx)
                     start-app-time (.readLong app-time-start-rdr idx)
                     end-app-time (.readLong app-time-end-rdr idx)]
+                (when (> start-app-time end-app-time)
+                  (throw (err/runtime-err :xtdb.indexer/invalid-app-times
+                                          {:app-time-start (util/micros->instant start-app-time)
+                                           :app-time-end (util/micros->instant end-app-time)})))
 
                 (.writeRowId live-table new-row-id)
 
@@ -406,6 +419,11 @@
                 iid (.readLong iid-rdr idx)
                 start-app-time (.readLong app-time-start-rdr idx)
                 end-app-time (.readLong app-time-end-rdr idx)]
+            (when (> start-app-time end-app-time)
+              (throw (err/runtime-err :xtdb.indexer/invalid-app-times
+                                      {:app-time-start (util/micros->instant start-app-time)
+                                       :app-time-end (util/micros->instant end-app-time)})))
+
             (.logDelete log-op-idxer iid start-app-time end-app-time)
             (.indexDelete temporal-idxer iid row-id start-app-time end-app-time false)))))))
 

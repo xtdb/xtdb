@@ -169,7 +169,6 @@
              WHERE foo.VALID_TIME OVERLAPS bar.VALID_TIME" tx)))))
 
 (deftest app-time-joins
-
   (let [tx (xt.d/submit-tx tu/*node* [[:put :foo {:xt/id :bill, :name "Bill"}
                                        {:app-time-start #inst "2016"
                                         :app-time-end #inst "2019"}]
@@ -190,3 +189,26 @@
              FROM foo, bar
              WHERE foo.VALID_TIME OVERLAPS bar.VALID_TIME"
             tx)))))
+
+(deftest test-inconsistent-valid-time-range-2494
+  (xt.sql/submit-tx tu/*node* [[:sql "INSERT INTO xt_docs (xt$id, xt$valid_to) VALUES (1, DATE '2011-01-01')"]])
+  (is (= [{:tx-id 0, :committed? false}]
+         (xt.d/q tu/*node* '{:find [tx-id committed?]
+                             :where [($ :xt/txs {:xt/id tx-id,
+                                                 :xt/committed? committed?})]})))
+  (xt.sql/submit-tx tu/*node* [[:sql "INSERT INTO xt_docs (xt$id) VALUES (2)"]])
+  (xt.sql/submit-tx tu/*node* [[:sql "DELETE FROM xt_docs FOR PORTION OF VALID_TIME FROM NULL TO ? WHERE xt_docs.xt$id = 2"
+                                [[#inst "2011"]]]])
+  (is (= [{:tx-id 0, :committed? false}
+          {:tx-id 1, :committed? true}
+          {:tx-id 2, :committed? false}]
+         (xt.d/q tu/*node* '{:find [tx-id committed?]
+                             :where [($ :xt/txs {:xt/id tx-id,
+                                                 :xt/committed? committed?})]})))
+  (xt.sql/submit-tx tu/*node* [[:sql "INSERT INTO xt_docs (xt$id) VALUES (3)"]])
+  (xt.sql/submit-tx tu/*node* [[:sql "UPDATE xt_docs FOR PORTION OF VALID_TIME FROM NULL TO ? SET foo = 'bar' WHERE xt_docs.xt$id = 3"
+                                [[#inst "2011"]]]])
+  (is (= [{:committed? false}]
+         (xt.d/q tu/*node* '{:find [committed?]
+                             :where [($ :xt/txs {:xt/id 4,
+                                                 :xt/committed? committed?})]}))))

@@ -2289,3 +2289,18 @@
     (t/is (= [{:doc doc}]
              (xt/q tu/*node* '{:find [doc]
                                :where [(match :xt/the-docs {:xt/* doc})]})))))
+
+(t/deftest test-inconsistent-valid-time-range-2494
+  (xt/submit-tx tu/*node* '[[:put :xt-docs {:xt/id 1} {:for-valid-time [:in nil #inst "2011"]}]])
+  (t/is (= [{:tx-id 0, :committed? false}]
+           (xt/q tu/*node* '{:find [tx-id committed?]
+                             :where [($ :xt/txs {:xt/id tx-id,
+                                                 :xt/committed? committed?})]})))
+  (xt/submit-tx tu/*node* '[[:put :xt-docs {:xt/id 2}]])
+  (xt/submit-tx tu/*node* '[[:delete :xt-docs {:xt/id 2} {:for-valid-time [:in nil #inst "2011"]}]])
+  (t/is (= [{:tx-id 0, :committed? false}
+            {:tx-id 1, :committed? true}
+            {:tx-id 2, :committed? false}]
+           (xt/q tu/*node* '{:find [tx-id committed?]
+                             :where [($ :xt/txs {:xt/id tx-id,
+                                                 :xt/committed? committed?})]}))))
