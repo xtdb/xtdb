@@ -351,14 +351,12 @@
 
                     ;; overlaps [time-from time-to]
                     :in (let [[from to] args]
-                          (when from
-                            (apply-bound :> end-col (->time-μs from)))
+                          (apply-bound :> end-col (->time-μs (or from [:now])))
                           (when to
                             (apply-bound :< start-col (->time-μs to))))
 
                     :between (let [[from to] args]
-                               (when from
-                                 (apply-bound :> end-col (->time-μs from)))
+                               (apply-bound :> end-col (->time-μs (or from [:now])))
                                (when to
                                  (apply-bound :<= start-col (->time-μs to))))
 
