@@ -1,5 +1,5 @@
 = Full Text Search
-:page-aliases: reference::lucene.adoc
+:page-aliases: 1.23.2@reference::lucene.adoc
 
 Full Text Search module for XTDB built on https://lucene.apache.org/[Apache Lucene].
 

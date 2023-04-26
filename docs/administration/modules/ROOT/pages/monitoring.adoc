@@ -1,5 +1,5 @@
 = Monitoring
-:page-aliases: reference::monitoring.adoc
+:page-aliases: 1.23.2@reference::monitoring.adoc
 
 XTDB can expose metrics about a node via https://metrics.dropwizard.io/4.1.2/[Dropwizard] to https://prometheus.io/[Prometheus], AWS's CloudWatch, and Java's JMX.
 

@@ -1,5 +1,5 @@
 = Google Cloud Storage
-:page-aliases: reference::google-cloud-storage.adoc
+:page-aliases: 1.23.2@reference::google-cloud-storage.adoc
 
 You can use Google's Cloud Storage (GCS) as XTDB's 'document store' or 'checkpoint store'.
 
