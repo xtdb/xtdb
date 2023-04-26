@@ -7,7 +7,7 @@ Lucene module for XTDB making use of https://lucene.apache.org/[Apache Lucene].
 .deps.edn
 [source,clojure]
 ----
-com.xtdb/xtdb-lucene {:mvn/version "1.23.1"}
+com.xtdb/xtdb-lucene {:mvn/version "1.23.2"}
 ----
 
 .pom.xml
@@ -16,7 +16,7 @@ com.xtdb/xtdb-lucene {:mvn/version "1.23.1"}
 <dependency>
     <groupId>com.xtdb</groupId>
     <artifactId>xtdb-lucene</artifactId>
-    <version>1.23.1</version>
+    <version>1.23.2</version>
 </dependency>
 ----
 
