@@ -782,7 +782,7 @@ curl -X POST \
 ----
 
 Note:
-xref:{page-component-version}@reference::transactions.adoc#transaction-functions[Transaction functions]
+xref:{page-component-version}@language-reference::datalog-transactions.adoc#transaction-functions[Transaction functions]
 should be submitted as strings containing clojure code, and read in as EDN.
 --
 
