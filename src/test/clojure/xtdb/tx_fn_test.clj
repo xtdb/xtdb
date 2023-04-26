@@ -192,11 +192,12 @@
                                    (/ 1 0)
                                    [])]])
 
-      (xt/submit-tx tu/*node* '[[:call :exception-fn]
-                                [:call :assoc-version :fail]])
-      (t/is (= 0 (foo-version)))
-      (t/is (thrown-with-msg? RuntimeException #":xtdb.call/error-evaluating-tx-fn"
-                              (some-> (idx/reset-tx-fn-error!) throw))))
+      (tu/with-log-level 'xtdb.indexer :error
+        (xt/submit-tx tu/*node* '[[:call :exception-fn]
+                                  [:call :assoc-version :fail]])
+        (t/is (= 0 (foo-version)))
+        (t/is (thrown-with-msg? RuntimeException #":xtdb.call/error-evaluating-tx-fn"
+                                (some-> (idx/reset-tx-fn-error!) throw)))))
 
     (t/testing "still working after all these errors"
       (xt/submit-tx tu/*node* [[:call :update-version :done]])

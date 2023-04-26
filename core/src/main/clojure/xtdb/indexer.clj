@@ -17,6 +17,7 @@
             [xtdb.tx-producer :as txp]
             [xtdb.types :as t]
             [xtdb.util :as util]
+            [xtdb.vector :as vec]
             [xtdb.vector.indirect :as iv]
             [xtdb.vector.writer :as vw]
             [xtdb.watermark :as wm])
@@ -260,7 +261,8 @@
             (when-not (or (nil? res) (true? res))
               (let [tx-ops-vec (txp/open-tx-ops-vec allocator)]
                 (try
-                  (txp/write-tx-ops! allocator (.asDenseUnion (vw/vec->writer tx-ops-vec)) res)
+                  (txp/write-tx-ops! allocator (vec/->writer tx-ops-vec) res)
+                  (.setValueCount tx-ops-vec (count res))
                   tx-ops-vec
 
                   (catch Throwable t

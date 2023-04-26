@@ -8,15 +8,16 @@
             [xtdb.rewrite :refer [zmatch]]
             [xtdb.types :as types]
             [xtdb.util :as util]
+            [xtdb.vector :as vec]
             [xtdb.vector.writer :as vw])
   (:import (java.time Instant ZoneId)
            (java.util ArrayList HashMap)
            org.apache.arrow.memory.BufferAllocator
-           (org.apache.arrow.vector TimeStampMicroTZVector VectorSchemaRoot)
+           (org.apache.arrow.vector VectorSchemaRoot)
            (org.apache.arrow.vector.types.pojo ArrowType$Union Schema)
            org.apache.arrow.vector.types.UnionMode
            (xtdb.log Log LogRecord)
-           (xtdb.vector IDenseUnionWriter IVectorWriter)))
+           xtdb.vector.IValueWriter))
 
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface ITxProducer
@@ -24,25 +25,32 @@
     ^java.util.concurrent.CompletableFuture #_<TransactionInstant> [^java.util.List txOps, ^java.util.Map opts]))
 
 (s/def :xt/id any?)
-(s/def ::doc (s/and (s/keys :req [:xt/id])
-                    (s/conformer #(update-keys % util/kw->normal-form-kw) #(update-keys % util/normal-form-kw->datalog-form-kw))))
-(s/def ::table (s/and keyword?
-                      (s/conformer (comp util/symbol->normal-form-symbol symbol) (comp util/normal-form-kw->datalog-form-kw keyword))))
+
+(s/def ::doc
+  (s/and (s/keys :req [:xt/id])
+         (s/conformer #(update-keys % util/kw->normal-form-kw) #(update-keys % util/normal-form-kw->datalog-form-kw))))
+
+(s/def ::table
+  (s/and keyword?
+         (s/conformer (comp util/symbol->normal-form-symbol symbol) (comp util/normal-form-kw->datalog-form-kw keyword))))
+
 (s/def ::valid-time-start (s/nilable ::util/datetime-value))
 (s/def ::valid-time-end (s/nilable ::util/datetime-value))
 
-(s/def ::for-valid-time (s/and
-                         (s/or :in (s/cat :in #{:in}
-                                          :valid-time-start ::valid-time-start
-                                          :valid-time-end (s/? ::valid-time-end))
-                               :from (s/cat :from #{:from}
-                                            :valid-time-start ::valid-time-start)
-                               :to (s/cat :to #{:to}
-                                          :valid-time-end ::valid-time-end))
-                         (s/conformer val (fn [x] [(some #{:in :from :to} (vals x)) x]))))
+(s/def ::for-valid-time
+  (s/and (s/or :in (s/cat :in #{:in}
+                          :valid-time-start ::valid-time-start
+                          :valid-time-end (s/? ::valid-time-end))
+               :from (s/cat :from #{:from}
+                            :valid-time-start ::valid-time-start)
+               :to (s/cat :to #{:to}
+                          :valid-time-end ::valid-time-end))
 
-(s/def ::temporal-opts (s/and (s/keys :opt-un [::for-valid-time])
-                              (s/conformer #(:for-valid-time %) #(hash-map :for-valid-time %))))
+         (s/conformer val (fn [x] [(some #{:in :from :to} (vals x)) x]))))
+
+(s/def ::temporal-opts
+  (s/and (s/keys :opt-un [::for-valid-time])
+         (s/conformer #(:for-valid-time %) #(hash-map :for-valid-time %))))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (s/def ::default-all-valid-time? boolean)
@@ -153,8 +161,7 @@
                  (types/col-type->field 'abort :null)))
 
 (def ^:private ^org.apache.arrow.vector.types.pojo.Schema tx-schema
-  (Schema. [(types/->field "tx-ops" types/list-type false
-                           tx-ops-field)
+  (Schema. [(types/->field "tx-ops" types/list-type false tx-ops-field)
 
             (types/col-type->field "system-time" nullable-inst-type)
             (types/col-type->field "default-tz" :utf8)
@@ -180,123 +187,93 @@
       (finally
         (run! util/try-close vecs)))))
 
-(defn- ->sql-writer [^IDenseUnionWriter tx-ops-writer, ^BufferAllocator allocator]
-  (let [sql-writer (.asStruct (.writerForTypeId tx-ops-writer 0))
-        query-writer (.writerForName sql-writer "query")
-        params-writer (.writerForName sql-writer "params")]
+(defn- ->sql-writer [^IValueWriter op-writer, ^BufferAllocator allocator]
+  (let [sql-writer (.writerForTypeId op-writer 0)
+        query-writer (.structKeyWriter sql-writer "query")
+        params-writer (.structKeyWriter sql-writer "params")]
     (fn write-sql! [{{:keys [sql param-groups]} :sql+params}]
-      (.startValue sql-writer)
-
-      (types/write-value! sql query-writer)
+      (vec/write-value! sql query-writer)
 
       (when param-groups
         (zmatch param-groups
-                [:rows param-rows] (types/write-value! (encode-params allocator sql param-rows) params-writer)
-                [:bytes param-bytes] (types/write-value! param-bytes params-writer)))
+                [:rows param-rows] (vec/write-value! (encode-params allocator sql param-rows) params-writer)
+                [:bytes param-bytes] (vec/write-value! param-bytes params-writer)))
 
-      (.endValue sql-writer))))
+      (.structWritten sql-writer))))
 
-(defn- ->put-writer [^IDenseUnionWriter tx-ops-writer]
-  (let [put-writer (.asStruct (.writerForTypeId tx-ops-writer 1))
-        doc-writer (.asDenseUnion (.writerForName put-writer "document"))
-        valid-time-start-writer (.writerForName put-writer "xt$valid_from")
-        valid-time-end-writer (.writerForName put-writer "xt$valid_to")
+(defn- ->put-writer [^IValueWriter op-writer]
+  (let [put-writer (.writerForTypeId op-writer 1)
+        doc-writer (.structKeyWriter put-writer "document")
+        valid-time-start-writer (.structKeyWriter put-writer "xt$valid_from")
+        valid-time-end-writer (.structKeyWriter put-writer "xt$valid_to")
         table-doc-writers (HashMap.)]
     (fn write-put! [{:keys [doc table], {:keys [valid-time-start valid-time-end]} :app-time-opts}]
-      (.startValue put-writer)
-
-      (.startValue doc-writer)
-      (let [^IVectorWriter
-            table-doc-writer (.computeIfAbsent table-doc-writers table
+      (let [table-doc-writer (.computeIfAbsent table-doc-writers table
                                                (util/->jfn
                                                  (fn [table]
                                                    (let [type-id (.registerNewType doc-writer (types/col-type->field (name table) [:struct {}]))]
                                                      (.writerForTypeId doc-writer type-id)))))]
-        (.startValue table-doc-writer)
-        (types/write-value! doc table-doc-writer)
-        (.endValue table-doc-writer))
+        (vec/write-value! doc table-doc-writer))
 
-      (types/write-value! valid-time-start valid-time-start-writer)
-      (types/write-value! valid-time-end valid-time-end-writer)
+      (vec/write-value! valid-time-start valid-time-start-writer)
+      (vec/write-value! valid-time-end valid-time-end-writer)
 
-      (.endValue put-writer))))
+      (.structWritten put-writer))))
 
-(defn- ->delete-writer [^IDenseUnionWriter tx-ops-writer]
-  (let [delete-writer (.asStruct (.writerForTypeId tx-ops-writer 2))
-        table-writer (.writerForName delete-writer "table")
-        id-writer (.asDenseUnion (.writerForName delete-writer "xt$id"))
-        valid-time-start-writer (.writerForName delete-writer "xt$valid_from")
-        valid-time-end-writer (.writerForName delete-writer "xt$valid_to")]
-    (fn write-delete! [{:keys [id table],
-                        {:keys [valid-time-start valid-time-end]} :app-time-opts}]
-      (.startValue delete-writer)
+(defn- ->delete-writer [^IValueWriter op-writer]
+  (let [delete-writer (.writerForTypeId op-writer 2)
+        table-writer (.structKeyWriter delete-writer "table")
+        id-writer (.structKeyWriter delete-writer "xt$id")
+        valid-time-start-writer (.structKeyWriter delete-writer "xt$valid_from")
+        valid-time-end-writer (.structKeyWriter delete-writer "xt$valid_to")]
+    (fn write-delete! [{:keys [id table], {:keys [valid-time-start valid-time-end]} :app-time-opts}]
+      (vec/write-value! (name table) table-writer)
+      (vec/write-value! id (.writerForType id-writer (vec/value->col-type id)))
+      (vec/write-value! valid-time-start valid-time-start-writer)
+      (vec/write-value! valid-time-end valid-time-end-writer)
 
-      (types/write-value! (name table) table-writer)
+      (.structWritten delete-writer))))
 
-      (doto (-> id-writer
-                (.writerForType (types/value->col-type id)))
-        (.startValue)
-        (->> (types/write-value! id))
-        (.endValue))
-
-      (types/write-value! valid-time-start valid-time-start-writer)
-      (types/write-value! valid-time-end valid-time-end-writer)
-
-      (.endValue delete-writer))))
-
-(defn- ->evict-writer [^IDenseUnionWriter tx-ops-writer]
-  (let [evict-writer (.asStruct (.writerForTypeId tx-ops-writer 3))
-        table-writer (.writerForName evict-writer "_table")
-        id-writer (.asDenseUnion (.writerForName evict-writer "xt$id"))]
+(defn- ->evict-writer [^IValueWriter op-writer]
+  (let [evict-writer (.writerForTypeId op-writer 3)
+        table-writer (.structKeyWriter evict-writer "_table")
+        id-writer (.structKeyWriter evict-writer "xt$id")]
     (fn [{:keys [id table]}]
-      (.startValue evict-writer)
-      (some-> (name table) (types/write-value! table-writer))
-      (doto (-> id-writer
-                (.writerForType (types/value->col-type id)))
-        (.startValue)
-        (->> (types/write-value! id))
-        (.endValue))
-      (.endValue evict-writer))))
+      (some-> (name table) (vec/write-value! table-writer))
+      (vec/write-value! id (.writerForType id-writer (vec/value->col-type id)))
+      (.structWritten evict-writer))))
 
-(defn- ->call-writer [^IDenseUnionWriter tx-ops-writer]
-  (let [call-writer (.asStruct (.writerForTypeId tx-ops-writer 4))
-        fn-id-writer (.asDenseUnion (.writerForName call-writer "fn-id"))
-        args-list-writer (.asList (.writerForName call-writer "args"))]
+(defn- ->call-writer [^IValueWriter op-writer]
+  (let [call-writer (.writerForTypeId op-writer 4)
+        fn-id-writer (.structKeyWriter call-writer "fn-id")
+        args-list-writer (.structKeyWriter call-writer "args")]
     (fn write-call! [{:keys [fn-id args]}]
-      (.startValue call-writer)
-      (doto (-> fn-id-writer
-                (.writerForType (types/value->col-type fn-id)))
-        (.startValue)
-        (->> (types/write-value! fn-id))
-        (.endValue))
+      (vec/write-value! fn-id (.writerForType fn-id-writer (vec/value->col-type fn-id)))
 
-      (types/write-value! (vec args) args-list-writer)
+      (vec/write-value! (vec args) args-list-writer)
 
-      (.endValue call-writer))))
+      (.structWritten call-writer))))
 
-(defn- ->abort-writer [^IDenseUnionWriter tx-ops-writer]
-  (let [abort-writer (.writerForTypeId tx-ops-writer 5)]
+(defn- ->abort-writer [^IValueWriter op-writer]
+  (let [abort-writer (.writerForTypeId op-writer 5)]
     (fn [_]
-      (.startValue abort-writer)
-      (.endValue abort-writer))))
+      (.writeNull abort-writer nil))))
 
 (defn open-tx-ops-vec ^org.apache.arrow.vector.ValueVector [^BufferAllocator allocator]
   (.createVector tx-ops-field allocator))
 
-(defn write-tx-ops! [^BufferAllocator allocator, ^IDenseUnionWriter tx-ops-writer, tx-ops]
+(defn write-tx-ops! [^BufferAllocator allocator, ^IValueWriter op-writer, tx-ops]
   (let [tx-ops (conform-tx-ops tx-ops)
         op-count (count tx-ops)
 
-        write-sql! (->sql-writer tx-ops-writer allocator)
-        write-put! (->put-writer tx-ops-writer)
-        write-delete! (->delete-writer tx-ops-writer)
-        write-evict! (->evict-writer tx-ops-writer)
-        write-call! (->call-writer tx-ops-writer)
-        write-abort! (->abort-writer tx-ops-writer)]
+        write-sql! (->sql-writer op-writer allocator)
+        write-put! (->put-writer op-writer)
+        write-delete! (->delete-writer op-writer)
+        write-evict! (->evict-writer op-writer)
+        write-call! (->call-writer op-writer)
+        write-abort! (->abort-writer op-writer)]
 
     (dotimes [tx-op-n op-count]
-      (.startValue tx-ops-writer)
-
       (let [tx-op (nth tx-ops tx-op-n)]
         (case (:op tx-op)
           :sql (write-sql! tx-op)
@@ -304,36 +281,28 @@
           :put (write-put! tx-op)
           :put-fn (let [{:keys [id tx-fn app-time-opts]} tx-op]
                     (write-put! {:table :xt$tx_fns
-                                 :doc {:xt$id id,
-                                       :xt$fn (api/->ClojureForm tx-fn)}
+                                 :doc {:xt$id id, :xt$fn (api/->ClojureForm tx-fn)}
                                  :app-time-opts app-time-opts}))
           :delete (write-delete! tx-op)
           :evict (write-evict! tx-op)
           :call (write-call! tx-op)
-          :abort (write-abort! tx-op)))
-
-      (.endValue tx-ops-writer))))
+          :abort (write-abort! tx-op))))))
 
 (defn serialize-tx-ops ^java.nio.ByteBuffer [^BufferAllocator allocator tx-ops {:keys [^Instant system-time, default-tz, default-all-valid-time?]}]
   (with-open [root (VectorSchemaRoot/create tx-schema allocator)]
-    (let [ops-list-writer (.asList (vw/vec->writer (.getVector root "tx-ops")))
-          tx-ops-writer (.asDenseUnion (.getDataWriter ops-list-writer))
+    (let [ops-list-writer (vec/->writer (.getVector root "tx-ops"))
 
-          default-tz-writer (vw/vec->writer (.getVector root "default-tz"))
-          app-time-behaviour-writer (vw/vec->writer (.getVector root "all-application-time?"))]
+          default-tz-writer (vec/->writer (.getVector root "default-tz"))
+          app-time-behaviour-writer (vec/->writer (.getVector root "all-application-time?"))]
 
       (when system-time
-        (doto ^TimeStampMicroTZVector (.getVector root "system-time")
-          (.setSafe 0 (util/instant->micros system-time))))
+        (vec/write-value! system-time (vec/->writer (.getVector root "system-time"))))
 
-      (types/write-value! (str default-tz) default-tz-writer)
-      (types/write-value! (boolean default-all-valid-time?) app-time-behaviour-writer)
+      (vec/write-value! (str default-tz) default-tz-writer)
+      (vec/write-value! (boolean default-all-valid-time?) app-time-behaviour-writer)
 
-      (.startValue ops-list-writer)
-
-      (write-tx-ops! allocator tx-ops-writer tx-ops)
-
-      (.endValue ops-list-writer)
+      (write-tx-ops! allocator (.listElementWriter ops-list-writer) tx-ops)
+      (.listWritten ops-list-writer)
 
       (.setRowCount root 1)
       (.syncSchema root)
