@@ -337,7 +337,7 @@
   (defmethod expr/codegen-call [:- t :date] [{[t1 _] :arg-types, :as expr}]
     (-> expr (recall-with-cast t1 [:timestamp-local :micro]))))
 
-(defmethod expr/codegen-call [:- :time-local :time-local] [{[[_ time-unit1] [[_ time-unit2]]] :arg-types, :as expr}]
+(defmethod expr/codegen-call [:- :time-local :time-local] [{[[_ time-unit1] [_ time-unit2]] :arg-types, :as expr}]
   (-> expr (recall-with-cast [:duration time-unit1] [:duration time-unit2])))
 
 (doseq [th [:date :timestamp-tz :timestamp-local]]
