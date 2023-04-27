@@ -23,17 +23,11 @@
    :->call-code (fn [emitted-args]
                   `(Double/compare ~@emitted-args))})
 
-(defmethod expr/codegen-call [:compare :date :date] [_]
-  ;; TODO different scales
-  {:return-type :i32
-   :->call-code (fn [emitted-args]
-                  `(Long/compare ~@emitted-args))})
-
-(defmethod expr/codegen-call [:compare :timestamp-tz :timestamp-tz] [_]
-  ;; TODO different scales
-  {:return-type :i32
-   :->call-code (fn [emitted-args]
-                  `(Long/compare ~@emitted-args))})
+(defmethod expr/codegen-call [:compare :date-time :date-time] [expr]
+  (let [{:keys [->call-code]} (expr/codegen-call (assoc expr :f :-))]
+    {:return-type :i32
+     :->call-code (fn [emitted-args]
+                    `(Long/signum ~(->call-code emitted-args)))}))
 
 ;; NOTE UUID compares according to bytes rather than Java `compare` - https://bugs.openjdk.org/browse/JDK-7025832
 (doseq [col-type #{:varbinary :utf8 :uri :keyword :uuid}]

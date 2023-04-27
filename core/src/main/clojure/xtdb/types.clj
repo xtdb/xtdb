@@ -457,8 +457,8 @@
 
       (derive :date-time :any)
 
-      (derive :timestamp-tz :date-time) (derive :timestamp-local :date-time)
-      (derive :date :date-time) (derive :time-local :date-time) (derive :interval :any) (derive :duration :any)
+      (derive :timestamp-tz :date-time) (derive :timestamp-local :date-time) (derive :date :date-time)
+      (derive :time-local :any) (derive :interval :any) (derive :duration :any)
       (derive :varbinary :any) (derive :utf8 :any)
 
       (derive :keyword :any) (derive :uri :any) (derive :uuid :any) (derive :clj-form :any)
