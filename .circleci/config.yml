@@ -31,14 +31,6 @@ orbs:
           - store_artifacts:
               path: "~/xtdb/build/xtdb-builder/clj-uberjar/<<parameters.artifact-name>>.jar"
               destination: "<<parameters.artifact-name>>.jar"
-
-          - run:
-              command: |
-                export IMAGE_NAME=ghcr.io/xtdb/<<parameters.artifact-name>>
-                cd build/xtdb-builder/docker/
-                IMAGE_NAME="${IMAGE_NAME}" IMAGE_VERSION="${CIRCLE_TAG}" ./build-docker.sh
-                echo "${DOCKER_PASS}" | docker login ghcr.io -u "${DOCKER_USER}" --password-stdin
-                docker push "${IMAGE_NAME}:${CIRCLE_TAG}"
       deploy-tar:
         steps:
           - run:
