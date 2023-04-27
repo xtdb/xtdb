@@ -89,24 +89,44 @@
 (deftest test-bloom-filter-for-datetime-types-2133
   (let [tx (-> (xt/submit-tx tu/*node* [[:put :xt_docs {:timestamp #time/date "2010-01-01" :xt/id "a"}]
                                         [:put :xt_docs {:timestamp #time/zoned-date-time "2010-01-01T00:00:00Z" :xt/id "b"}]
-                                        #_[:put :xt_docs {:timestamp #time/date-time "2010-01-01T00:00:00" :xt/id "b"}] ;; missing compare impls
-                                        #_[:put :xt_docs {:timestamp #time/time "00:00:00" :xt/id "d"}] ;; missing compare impls
-                                        [:put :xt_docs {:timestamp #time/date "2020-01-01" :xt/id "e"}]])
+                                        [:put :xt_docs {:timestamp #time/date-time "2010-01-01T00:00:00" :xt/id "c"}]
+                                        [:put :xt_docs {:timestamp #time/date "2020-01-01" :xt/id "d"}]]
+                             {:default-tz #time/zone "Z"})
                (tu/then-await-tx* tu/*node*))]
 
     (tu/finish-chunk! tu/*node*)
 
     (t/is (= [{:timestamp #time/date "2010-01-01"}
-              {:timestamp #time/zoned-date-time "2010-01-01T00:00Z"}]
+              {:timestamp #time/zoned-date-time "2010-01-01T00:00Z"}
+              {:timestamp #time/date-time "2010-01-01T00:00:00"}]
              (tu/query-ra '[:scan {:table xt_docs}
                             [{timestamp (= timestamp #time/zoned-date-time "2010-01-01T00:00:00Z")}]]
-                          {:node tu/*node* :basis {:tx tx} :default-tz (ZoneId/of "Z")})))
+                          {:node tu/*node* :basis {:tx tx} :default-tz #time/zone "Z"})))
 
     (t/is (= [{:timestamp #time/date "2010-01-01"}
-              {:timestamp #time/zoned-date-time "2010-01-01T00:00Z"}]
+              {:timestamp #time/zoned-date-time "2010-01-01T00:00Z"}
+              {:timestamp #time/date-time "2010-01-01T00:00:00"}]
              (tu/query-ra '[:scan {:table xt_docs}
                             [{timestamp (= timestamp ?x)}]]
                           {:node tu/*node* :basis {:tx tx}
-                           :default-tz (ZoneId/of "Z") :params {'?x #time/date "2010-01-01"}})))))
+                           :default-tz  #time/zone "Z" :params {'?x #time/date "2010-01-01"}})))
 
+    (t/is (= [{:timestamp #time/date "2010-01-01"}
+              {:timestamp #time/zoned-date-time "2010-01-01T00:00Z"}
+              {:timestamp #time/date-time "2010-01-01T00:00:00"}]
+             (tu/query-ra '[:scan {:table xt_docs}
+                            [{timestamp (= timestamp #time/date-time "2010-01-01T00:00:00")}]]
+                          {:node tu/*node* :basis {:tx tx} :default-tz #time/zone "Z"})))))
 
+(deftest test-bloom-filter-for-time-types
+  (let [tx (-> (xt/submit-tx tu/*node* [[:put :xt_docs {:time #time/time "01:02:03" :xt/id "a"}]
+                                        [:put :xt_docs {:time #time/time "04:05:06" :xt/id "b"}]]
+                             {:default-tz #time/zone "Z"})
+               (tu/then-await-tx* tu/*node*))]
+
+    (tu/finish-chunk! tu/*node*)
+
+    (t/is (= [{:time #time/time "04:05:06"}]
+             (tu/query-ra '[:scan {:table xt_docs}
+                            [{time (= time #time/time "04:05:06")}]]
+                          {:node tu/*node* :basis {:tx tx} :default-tz #time/zone "Z"})))))
