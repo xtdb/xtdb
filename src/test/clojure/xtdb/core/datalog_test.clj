@@ -2304,3 +2304,14 @@
            (xt/q tu/*node* '{:find [tx-id committed?]
                              :where [($ :xt/txs {:xt/id tx-id,
                                                  :xt/committed? committed?})]}))))
+
+(deftest test-date-and-time-literals
+  (t/is (= [{:a true, :b false, :c true, :d true}]
+           (xt/q tu/*node*
+                 '{:find [a b c d]
+                   :where [[(= #time/date "2020-01-01" #time/date "2020-01-01") a]
+                           [(= #time/zoned-date-time "3000-01-01T08:12:13.366Z"
+                               #time/zoned-date-time "2020-01-01T08:12:13.366Z") b]
+                           [(= #time/date-time "2020-01-01T08:12:13.366"
+                               #time/date-time "2020-01-01T08:12:13.366") c]
+                           [(= #time/time "08:12:13.366" #time/time "08:12:13.366") d]]}))))

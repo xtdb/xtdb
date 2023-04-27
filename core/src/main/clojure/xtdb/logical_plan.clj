@@ -7,7 +7,6 @@
             [xtdb.rewrite :as r]
             [xtdb.util :as util])
   (:import (clojure.lang Var)
-           java.time.LocalDate
            java.time.temporal.Temporal
            java.util.Date))
 
@@ -20,11 +19,14 @@
 ;; also contains operators for path expansion:
 ;; https://core.ac.uk/download/pdf/148787624.pdf
 
+(def util-date? (partial instance? Date))
+(def temporal? (partial instance? Temporal))
+
 (s/def ::relation simple-symbol?)
 (s/def ::column symbol?)
 
 ;; TODO flesh out
-(s/def ::value (some-fn string? number? inst? keyword? (partial instance? LocalDate)))
+(s/def ::value (some-fn string? number? inst? keyword? util-date? temporal?))
 
 (s/def ::param
   (s/and simple-symbol? #(str/starts-with? (name %) "?")))
@@ -44,8 +46,7 @@
 
 (s/def ::temporal-filter-value
   (s/or :now #{:now '(current-timestamp)}
-        :literal (some-fn (partial instance? Date)
-                          (partial instance? Temporal))
+        :literal (some-fn util-date? temporal?)
         :param simple-symbol?))
 
 (defmethod temporal-filter-spec :at [_]
