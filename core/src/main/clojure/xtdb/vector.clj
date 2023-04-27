@@ -231,7 +231,7 @@
       (reify IMonoVectorWriter
         (writerPosition [_] wp)
         (writeNull [_ _] (.setNull arrow-vec (.getPositionAndIncrement wp)))
-        (writeLong [_ v] (.set arrow-vec (.getPositionAndIncrement wp) v))))))
+        (writeLong [_ v] (.setSafe arrow-vec (.getPositionAndIncrement wp) v))))))
 
 ;; the EE uses PDs internally for all types of intervals for now.
 ;; we could migrate it to use `xtdb.types.Interval*`
