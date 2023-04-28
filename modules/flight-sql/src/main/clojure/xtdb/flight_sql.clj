@@ -185,7 +185,7 @@
         (fn []
           @(-> (let [{:keys [sql fsql-tx-id]} (or (get stmts (.getPreparedStatementHandle cmd))
                                                   (throw (UnsupportedOperationException. "invalid ps-id")))
-                     dml [:sql sql (flight-stream->bytes flight-stream)]]
+                     dml [:sql-batch [sql (flight-stream->bytes flight-stream)]]]
                  (exec-dml dml fsql-tx-id))
 
                (then-send-do-put-update-res ack-stream allocator))))
