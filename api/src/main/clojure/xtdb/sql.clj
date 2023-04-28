@@ -29,22 +29,18 @@
 
   This tx reference (known as a TransactionInstant) is the same map returned by submit-tx
 
-  (q node
-     query
-     {:basis {:tx tx}})
+  (q node [query params*] {:basis {:tx tx}})
 
   Additionally a Basis Timeout can be supplied to the query map, which if after the specified duration
   the query's requested basis is not complete the query will be cancelled.
 
-  (q node
-     query
-     {:basis-timeout (Duration/ofSeconds 1)})"
+  (q node [query params*] {:basis-timeout (Duration/ofSeconds 1)})"
   ^java.util.concurrent.CompletableFuture
-  ([node q] (q& node q {}))
+  ([node sql+params] (q& node sql+params {}))
 
-  ([node q opts]
-   (-> (impl/open-sql& node q (into {:default-all-app-time? true}
-                                    (update opts :basis impl/after-latest-submitted-tx node)))
+  ([node sql+params opts]
+   (-> (impl/open-sql& node sql+params (into {:default-all-app-time? true}
+                                             (update opts :basis impl/after-latest-submitted-tx node)))
        (.thenApply
         (reify Function
           (apply [_ res]
@@ -54,10 +50,9 @@
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (defn q
   "query an XTDB node.
-  q param is a SQL query in string form
+  sql+params argument is a vector of the SQL query in string form and any required params.
 
-  (q node
-    \"SELECT foo.id, foo.v FROM foo\")
+  (q node [\"SELECT foo.id, foo.v FROM foo WHERE foo.id = ?\" foo-id])
 
   Please see SQL query language docs for more details.
 
@@ -83,21 +78,20 @@
   Additionally a Basis Timeout can be supplied to the query map, which if after the specified duration
   the query's requested basis is not complete the query will be cancelled.
 
-  (q node
-     query
-     {:basis-timeout (Duration/ofSeconds 1)})"
-  ([node sql] (q node sql {}))
-  ([node sql opts]
-   (-> @(q& node sql opts)
+  (q node sql+params {:basis-timeout (Duration/ofSeconds 1)})"
+  ([node sql+params] (q node sql+params {}))
+  ([node sql+params opts]
+   (-> @(q& node sql+params opts)
        (impl/rethrowing-cause))))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (defn submit-tx&
   "Writes transactions to the log for processing. Non Blocking.
-  tx-ops is a sequence of SQL statement strings submitted as :sql operations
+  tx-ops is a sequence of vectors, each containing a SQL statement string and any required params.
 
-  [[:sql \"INSERT INTO foo (xt$id, v) VALUES ('foo', 0)\"]
-   [:sql \"UPDATE foo SET v = 1\"]]
+  [[:sql [\"INSERT INTO foo (xt$id, a, b) VALUES ('foo', ?, ?)\" 0 1]]
+   [:sql-batch [\"INSERT INTO foo (xt$id, a, b) VALUES ('foo', ?, ?)\" [2 3] [4 5] [6 7]]]
+   [:sql \"UPDATE foo SET b = 1\"]]
 
   Returns a CompleteableFuture containing a map with details about the submitted transaction,
   including sys-time and tx-id."
@@ -108,10 +102,11 @@
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (defn submit-tx
   "Writes transactions to the log for processing
-  tx-ops is a sequence of SQL statement strings submitted as :sql operations
+  tx-ops is a sequence of vectors, each containing a SQL statement string and any required params.
 
-  [[:sql \"INSERT INTO foo (xt$id, v) VALUES ('foo', 0)\"]
-   [:sql \"UPDATE foo SET v = 1\"]]
+  [[:sql [\"INSERT INTO foo (xt$id, a, b) VALUES ('foo', ?, ?)\" 0 1]]
+   [:sql-batch [\"INSERT INTO foo (xt$id, a, b) VALUES ('foo', ?, ?)\" [2 3] [4 5] [6 7]]]
+   [:sql \"UPDATE foo SET b = 1\"]]
 
   Returns a map with details about the submitted transaction,
   including sys-time and tx-id."

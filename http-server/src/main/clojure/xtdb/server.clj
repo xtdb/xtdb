@@ -121,11 +121,11 @@
 
 (s/def :xtdb.server.sql/query string?)
 
-(s/def ::? (s/nilable (s/coll-of any? :kind vector?)))
+(s/def ::args (s/nilable (s/coll-of any? :kind vector?)))
 
 (s/def :xtdb.server.sql/query-body
   (s/keys :req-un [:xtdb.server.sql/query],
-          :opt-un [::basis ::basis-timeout ::? ::default-all-app-time? ::default-tz]))
+          :opt-un [::basis ::basis-timeout ::args ::default-all-app-time? ::default-tz]))
 
 (defmethod route-handler :sql-query [_]
   {:muuntaja (m/create (-> muuntaja-opts
@@ -135,8 +135,8 @@
                                      [->tj-resultset-encoder {:handlers xt.transit/tj-write-handlers}])))
 
    :post {:handler (fn [{:keys [node parameters]}]
-                     (let [{{:keys [query] :as query-opts} :body} parameters]
-                       (-> (xt.impl/open-sql& node query (dissoc query-opts :query))
+                     (let [{{:keys [query args] :as query-opts} :body} parameters]
+                       (-> (xt.impl/open-sql& node (into [query] args) (dissoc query-opts :query :args))
                            (util/then-apply (fn [res]
                                               {:status 200, :body res})))))
 

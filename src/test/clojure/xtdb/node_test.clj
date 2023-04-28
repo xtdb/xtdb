@@ -85,11 +85,11 @@ VALUES (1, 'Happy 2024!', DATE '2024-01-01'),
     (t/is (= [] (q)))))
 
 (t/deftest test-update-set-field-from-param-328
-  (xt.sql/submit-tx tu/*node* [[:sql "INSERT INTO users (xt$id, first_name, last_name) VALUES (?, ?, ?)"
-                                [["susan", "Susan", "Smith"]]]])
+  (xt.sql/submit-tx tu/*node* [[:sql ["INSERT INTO users (xt$id, first_name, last_name) VALUES (?, ?, ?)"
+                                      "susan", "Susan", "Smith"]]])
 
-  (xt.sql/submit-tx tu/*node* [[:sql "UPDATE users FOR PORTION OF VALID_TIME FROM ? TO ? AS u SET first_name = ? WHERE u.xt$id = ?"
-                                [[#inst "2021", util/end-of-time, "sue", "susan"]]]])
+  (xt.sql/submit-tx tu/*node* [[:sql ["UPDATE users FOR PORTION OF VALID_TIME FROM ? TO ? AS u SET first_name = ? WHERE u.xt$id = ?"
+                                      #inst "2021", util/end-of-time, "sue", "susan"]]])
 
   (t/is (= #{["Susan" "Smith", (util/->zdt #inst "2020") (util/->zdt #inst "2021")]
              ["sue" "Smith", (util/->zdt #inst "2021") (util/->zdt util/end-of-time)]}

@@ -36,14 +36,19 @@
   (try
     (doseq [{:keys [op] :as tx-op} (txp/conform-tx-ops tx-ops)
             :when (= :sql op)
-            :let [{:keys [query]} tx-op]]
-      (sql/compile-query query))
+            :let [{{:keys [sql]} :sql+params} tx-op]]
+      (sql/compile-query sql))
     (catch Throwable e
       (CompletableFuture/failedFuture e))))
 
 (defn- with-after-tx-default [opts]
   (-> opts
       (update-in [:basis :after-tx] api/max-tx (get-in opts [:basis :tx]))))
+
+(defn- ->sql+args [sql-or-sql+args]
+  (if (vector? sql-or-sql+args)
+    sql-or-sql+args
+    [sql-or-sql+args]))
 
 (defrecord Node [^BufferAllocator allocator
                  ^Ingester ingester, ^IIndexer indexer
@@ -61,11 +66,12 @@
             (fn [_]
               (d/open-datalog-query allocator ra-src wm-src scan-emitter query args))))))
 
-  (open-sql& [_ query query-opts]
-    (let [query-opts (-> (into {:default-tz default-tz} query-opts)
+  (open-sql& [_ sql+args query-opts]
+    (let [[sql & args] (->sql+args sql+args)
+          query-opts (-> (into {:default-tz default-tz, :args args} query-opts)
                          (with-after-tx-default))
           !await-tx (.awaitTxAsync ingester (get-in query-opts [:basis :after-tx]) (:basis-timeout query-opts))
-          pq (.prepareRaQuery ra-src (sql/compile-query query query-opts))]
+          pq (.prepareRaQuery ra-src (sql/compile-query sql query-opts))]
       (-> !await-tx
           (util/then-apply
             (fn [_]
@@ -174,6 +180,7 @@
 (defmethod ig/halt-key! ::submit-node [_ ^SubmitNode node]
   (.close node))
 
+#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (defn start-submit-node ^xtdb.node.SubmitNode [opts]
   (let [system (-> (into {::submit-node {}
                           :xtdb.tx-producer/tx-producer {}

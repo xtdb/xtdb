@@ -74,6 +74,11 @@
       (.close body)
       (throw e))))
 
+(defn- ->sql+args [sql-or-sql+args]
+  (if (vector? sql-or-sql+args)
+    sql-or-sql+args
+    [sql-or-sql+args]))
+
 (defrecord XtdbClient [base-url, !latest-submitted-tx]
   api/PNode
   (open-datalog& [client query params]
@@ -95,8 +100,9 @@
                         (apply [_ resp]
                           (:body resp)))))))
 
-  (open-sql& [client query {:keys [basis] :as query-opts}]
-    (let [{basis-tx :tx} basis
+  (open-sql& [client sql+args {:keys [basis] :as query-opts}]
+    (let [[sql & args] (->sql+args sql+args)
+          {basis-tx :tx} basis
           ^CompletableFuture !basis-tx (if (instance? CompletableFuture basis-tx)
                                          basis-tx
                                          (CompletableFuture/completedFuture basis-tx))]
@@ -106,7 +112,7 @@
                             (request client :post :sql-query
                                      {:content-type :transit+json
                                       :form-params (-> query-opts
-                                                       (assoc :query query)
+                                                       (assoc :query sql, :args (vec args))
                                                        (assoc-in [:basis :tx] basis-tx)
                                                        (update :basis api/after-latest-submitted-tx client))
                                       :as ::transit+json->resultset}))))

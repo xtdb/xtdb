@@ -197,8 +197,8 @@
                              :where [($ :xt/txs {:xt/id tx-id,
                                                  :xt/committed? committed?})]})))
   (xt.sql/submit-tx tu/*node* [[:sql "INSERT INTO xt_docs (xt$id) VALUES (2)"]])
-  (xt.sql/submit-tx tu/*node* [[:sql "DELETE FROM xt_docs FOR PORTION OF VALID_TIME FROM NULL TO ? WHERE xt_docs.xt$id = 2"
-                                [[#inst "2011"]]]])
+  (xt.sql/submit-tx tu/*node* [[:sql ["DELETE FROM xt_docs FOR PORTION OF VALID_TIME FROM NULL TO ? WHERE xt_docs.xt$id = 2"
+                                      #inst "2011"]]])
   (is (= [{:tx-id 0, :committed? false}
           {:tx-id 1, :committed? true}
           {:tx-id 2, :committed? false}]
@@ -206,8 +206,8 @@
                              :where [($ :xt/txs {:xt/id tx-id,
                                                  :xt/committed? committed?})]})))
   (xt.sql/submit-tx tu/*node* [[:sql "INSERT INTO xt_docs (xt$id) VALUES (3)"]])
-  (xt.sql/submit-tx tu/*node* [[:sql "UPDATE xt_docs FOR PORTION OF VALID_TIME FROM NULL TO ? SET foo = 'bar' WHERE xt_docs.xt$id = 3"
-                                [[#inst "2011"]]]])
+  (xt.sql/submit-tx tu/*node* [[:sql ["UPDATE xt_docs FOR PORTION OF VALID_TIME FROM NULL TO ? SET foo = 'bar' WHERE xt_docs.xt$id = 3"
+                                      #inst "2011"]]])
   (is (= [{:committed? false}]
          (xt.d/q tu/*node* '{:find [committed?]
                              :where [($ :xt/txs {:xt/id 4,
