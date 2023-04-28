@@ -635,9 +635,9 @@
 
         (let [last-tx-key (xt.api/map->TransactionInstant {:tx-id 0, :sys-time (util/->instant #inst "2020-01-01")})]
           (t/is (= last-tx-key
-                   (xt.sql/submit-tx node [[:sql "INSERT INTO table (xt$id, foo, bar, baz) VALUES (?, ?, ?, ?)"
-                                            '[[0, 2, "hello", 12]
-                                              [1, 1, "world", 3.3]]]])))
+                   (xt.sql/submit-tx node [[:sql-batch ["INSERT INTO table (xt$id, foo, bar, baz) VALUES (?, ?, ?, ?)"
+                                                        [0, 2, "hello", 12]
+                                                        [1, 1, "world", 3.3]]]])))
 
           (t/is (= last-tx-key
                    (tu/then-await-tx* last-tx-key node (Duration/ofSeconds 1)))))

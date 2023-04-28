@@ -45,14 +45,13 @@
 
 (t/deftest test-param-metadata-error-310
   (let [tx1 (xt/submit-tx tu/*node*
-                           [[:sql "INSERT INTO users (xt$id, name, xt$valid_from) VALUES (?, ?, ?)"
-                             [["dave", "Dave", #inst "2018"]
-                              ["claire", "Claire", #inst "2019"]]]])]
+                          [[:sql-batch ["INSERT INTO users (xt$id, name, xt$valid_from) VALUES (?, ?, ?)"
+                                        ["dave", "Dave", #inst "2018"]
+                                        ["claire", "Claire", #inst "2019"]]]])]
 
     (t/is (= [{:name "Dave"}]
-             (xt/q tu/*node* "SELECT users.name FROM users WHERE users.xt$id = ?"
-                   {:basis {:tx tx1}
-                    :? ["dave"]}))
+             (xt/q tu/*node* ["SELECT users.name FROM users WHERE users.xt$id = ?" "dave"]
+                   {:basis {:tx tx1}}))
           "#310")))
 
 (deftest test-bloom-filter-for-num-types-2133

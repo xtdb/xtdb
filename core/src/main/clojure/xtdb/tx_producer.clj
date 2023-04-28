@@ -51,9 +51,27 @@
 
 (defmethod tx-op-spec :sql [_]
   (s/cat :op #{:sql}
-         :query string?
-         :params (s/? (s/or :rows (s/coll-of (s/coll-of any? :kind sequential?) :kind sequential?)
-                            :bytes #(= :varbinary (types/value->col-type %))))))
+
+         :sql+params
+         (-> (s/or :sql string?
+                   :sql+params (s/and vector? (s/cat :sql string?, :param-group (s/* any?))))
+             (s/and (s/conformer (fn [[tag arg]]
+                                   (case tag
+                                     :sql+params (let [{:keys [sql param-group]} arg]
+                                                   {:sql sql
+                                                    :param-groups (when (seq param-group)
+                                                                    [:rows [(vec param-group)]])})
+                                     :sql {:sql arg}))
+                                 (fn [{:keys [sql param-groups]}]
+                                   [:sql+params {:sql sql,
+                                                 :param-group (first param-groups)}]))))))
+
+(defmethod tx-op-spec :sql-batch [_]
+  (s/cat :op #{:sql-batch}
+         :sql+params (s/and vector?
+                            (s/cat :sql string?,
+                                   :param-groups (s/? (s/alt :rows (s/* (s/coll-of any? :kind sequential?))
+                                                             :bytes #(= :varbinary (types/value->col-type %))))))))
 
 (defmethod tx-op-spec :put [_]
   (s/cat :op #{:put}
@@ -89,7 +107,7 @@
          :args (s/* any?)))
 
 (s/def ::tx-op
-  (s/and vector? (s/multi-spec tx-op-spec (fn [v _] v))))
+  (s/and vector? (s/multi-spec tx-op-spec :op)))
 
 (s/def ::tx-ops (s/coll-of ::tx-op :kind sequential?))
 
@@ -166,14 +184,14 @@
   (let [sql-writer (.asStruct (.writerForTypeId tx-ops-writer 0))
         query-writer (.writerForName sql-writer "query")
         params-writer (.writerForName sql-writer "params")]
-    (fn write-sql! [{:keys [query params]}]
+    (fn write-sql! [{{:keys [sql param-groups]} :sql+params}]
       (.startValue sql-writer)
 
-      (types/write-value! query query-writer)
+      (types/write-value! sql query-writer)
 
-      (when params
-        (zmatch params
-                [:rows param-rows] (types/write-value! (encode-params allocator query param-rows) params-writer)
+      (when param-groups
+        (zmatch param-groups
+                [:rows param-rows] (types/write-value! (encode-params allocator sql param-rows) params-writer)
                 [:bytes param-bytes] (types/write-value! param-bytes params-writer)))
 
       (.endValue sql-writer))))
@@ -282,6 +300,7 @@
       (let [tx-op (nth tx-ops tx-op-n)]
         (case (:op tx-op)
           :sql (write-sql! tx-op)
+          :sql-batch (write-sql! tx-op)
           :put (write-put! tx-op)
           :put-fn (let [{:keys [id tx-fn app-time-opts]} tx-op]
                     (write-put! {:table :xt$tx_fns

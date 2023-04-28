@@ -28,7 +28,7 @@
                                        {:keys [basis default-tz default-all-app-time?] :as query-opts}]
   (let [^AutoCloseable
         params (vw/open-params allocator
-                               (->> (:? query-opts)
+                               (->> (:args query-opts)
                                     (into {} (map-indexed (fn [idx v]
                                                             (MapEntry/create (symbol (str "?_" idx)) v))))))]
     (try

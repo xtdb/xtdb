@@ -13,9 +13,9 @@ First, follow the link:./getting-started.adoc[Getting Started] guide.
 (with-open [node ...]
   ;; submit some data
   (xt/submit-tx node
-                [[:sql "INSERT INTO users (xt$id, first_name) VALUES (?, ?)"
-                  [["jms", "James"]
-                   ["jdt", "Jeremy"]]]])
+                [[:sql-batch ["INSERT INTO users (xt$id, first_name) VALUES (?, ?)"
+                              ["jms", "James"]
+                              ["jdt", "Jeremy"]]]])
 
   ;; run a SQL query
 

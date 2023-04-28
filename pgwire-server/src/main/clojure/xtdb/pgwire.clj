@@ -1404,7 +1404,7 @@
 
 (defn- submit-tx [{:keys [server conn-state]} dml-buf {:keys [default-all-app-time?]}]
   (let [tx-ops (mapv (fn [{:keys [transformed-query params]}]
-                       [:sql transformed-query [params]])
+                       [:sql-batch [transformed-query params]])
                      dml-buf)]
     ;; TODO review err log policy
     (try
@@ -1478,7 +1478,7 @@
         query-opts {:basis (or basis {:current-time (.instant clock), :after-tx latest-submitted-tx})
                     :basis-timeout (Duration/ofSeconds 1)
                     :default-tz (.getZone clock)
-                    :? xt-params
+                    :args xt-params
                     :default-all-app-time? default-all-app-time?}
 
         ;; execute the query asynchronously (to enable later enable cancellation mid query)
