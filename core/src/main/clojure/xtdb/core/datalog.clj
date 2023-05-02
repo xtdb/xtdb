@@ -1207,8 +1207,8 @@
         (when (realized? wm-delay) (util/try-close @wm-delay))))))
 
 (defn open-datalog-query ^xtdb.IResultSet [^BufferAllocator allocator, ^IRaQuerySource ra-src, wm-src, ^IScanEmitter scan-emitter
-                                           {:keys [default-all-app-time? basis default-tz explain?] :as query} args]
-  (let [plan (compile-query (dissoc query :default-all-app-time? :basis :basis-timeout))
+                                           {:keys [default-all-valid-time? basis default-tz explain?] :as query} args]
+  (let [plan (compile-query (dissoc query :default-all-valid-time? :basis :basis-timeout))
         {::keys [in-bindings]} (meta plan)
 
         plan (-> plan
@@ -1239,7 +1239,7 @@
               params (vw/open-params allocator (args->params args in-bindings))]
           (try
             (-> (.bind pq wm-src {:params params, :table-args (args->tables args in-bindings),
-                                  :basis basis, :default-tz default-tz :default-all-app-time? default-all-app-time?})
+                                  :basis basis, :default-tz default-tz :default-all-valid-time? default-all-valid-time?})
                 (.openCursor)
                 (op/cursor->result-set params))
             (catch Throwable t

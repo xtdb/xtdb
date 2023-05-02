@@ -45,7 +45,7 @@
                               (s/conformer #(:for-valid-time %) #(hash-map :for-valid-time %))))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
-(s/def ::default-all-app-time? boolean)
+(s/def ::default-all-valid-time? boolean)
 
 (defmulti tx-op-spec first)
 
@@ -314,7 +314,7 @@
 
       (.endValue tx-ops-writer))))
 
-(defn serialize-tx-ops ^java.nio.ByteBuffer [^BufferAllocator allocator tx-ops {:keys [^Instant sys-time, default-tz, default-all-app-time?]}]
+(defn serialize-tx-ops ^java.nio.ByteBuffer [^BufferAllocator allocator tx-ops {:keys [^Instant sys-time, default-tz, default-all-valid-time?]}]
   (with-open [root (VectorSchemaRoot/create tx-schema allocator)]
     (let [ops-list-writer (.asList (vw/vec->writer (.getVector root "tx-ops")))
           tx-ops-writer (.asDenseUnion (.getDataWriter ops-list-writer))
@@ -327,7 +327,7 @@
           (.setSafe 0 (util/instant->micros sys-time))))
 
       (types/write-value! (str default-tz) default-tz-writer)
-      (types/write-value! (boolean default-all-app-time?) app-time-behaviour-writer)
+      (types/write-value! (boolean default-all-valid-time?) app-time-behaviour-writer)
 
       (.startValue ops-list-writer)
 

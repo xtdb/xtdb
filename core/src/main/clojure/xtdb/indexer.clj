@@ -172,7 +172,7 @@
                           {:params (iv/->indirect-rel [(-> (vw/open-vec allocator '?id [fn-id])
                                                            (iv/->direct-vec))]
                                                       1)
-                           :default-all-app-time? false
+                           :default-all-valid-time? false
                            :basis basis
                            :default-tz default-tz})
                 res (.openCursor bq)]
@@ -440,7 +440,7 @@
 (defn- ->sql-indexer ^xtdb.indexer.OpIndexer [^BufferAllocator allocator, ^IMetadataManager metadata-mgr, ^IBufferPool buffer-pool, ^IInternalIdManager iid-mgr
                                               ^ILogOpIndexer log-op-idxer, ^ITemporalTxIndexer temporal-idxer, ^ILiveChunk doc-idxer
                                               ^DenseUnionVector tx-ops-vec, ^IRaQuerySource ra-src, wm-src
-                                              {:keys [default-all-app-time? basis default-tz] :as tx-opts}]
+                                              {:keys [default-all-valid-time? basis default-tz] :as tx-opts}]
   (let [sql-vec (.getStruct tx-ops-vec 0)
         ^VarCharVector query-vec (.getChild sql-vec "query" VarCharVector)
         ^VarBinaryVector params-vec (.getChild sql-vec "params" VarBinaryVector)
@@ -454,7 +454,7 @@
           (letfn [(index-op [^SqlOpIndexer op-idxer query-opts inner-query]
                     (let [^xtdb.operator.PreparedQuery pq (.prepareRaQuery ra-src inner-query)]
                       (letfn [(index-op* [^IIndirectRelation params]
-                                (with-open [res (-> (.bind pq wm-src {:params params, :basis basis, :default-tz default-tz :default-all-app-time? default-all-app-time?})
+                                (with-open [res (-> (.bind pq wm-src {:params params, :basis basis, :default-tz default-tz :default-all-valid-time? default-all-valid-time?})
                                                     (.openCursor))]
 
                                   (.forEachRemaining res
@@ -566,8 +566,8 @@
             tx-opts {:basis {:tx tx-key, :current-time sys-time}
                      :default-tz (ZoneId/of (str (-> (.getVector tx-root "default-tz")
                                                      (.getObject 0))))
-                     :default-all-app-time? (== 1 (-> ^BitVector (.getVector tx-root "all-application-time?")
-                                                      (.get 0)))
+                     :default-all-valid-time? (== 1 (-> ^BitVector (.getVector tx-root "all-application-time?")
+                                                        (.get 0)))
                      :tx-key tx-key}]
 
         (letfn [(index-tx-ops [^DenseUnionVector tx-ops-vec]

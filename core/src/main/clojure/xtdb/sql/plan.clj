@@ -1522,7 +1522,7 @@
       (and app-from app-to) [:between app-from app-to])))
 
 (defn- plan-dml [dml-op z]
-  (let [{:keys [default-all-app-time?]} *opts*
+  (let [{:keys [default-all-valid-time?]} *opts*
         tt (r/find-first (partial r/ctor? :target_table) z)
         {:keys [table-or-query-name correlation-name] :as table} (sem/table tt)
         {app-from :from, app-to :to, :as app-time-extents} (sem/dml-app-time-extents z)
@@ -1554,7 +1554,7 @@
                             [{'xt$valid_from `(~'cast-tstz ~(cond
                                                               (= :all-application-time app-time-extents) app-start-sym
                                                               app-from-expr `(~'greatest ~app-start-sym ~app-from-expr)
-                                                              (not default-all-app-time?) `(~'greatest ~app-start-sym (~'current-timestamp))
+                                                              (not default-all-valid-time?) `(~'greatest ~app-start-sym (~'current-timestamp))
                                                               :else app-start-sym))}
                              {'xt$valid_to `(~'cast-tstz ~(cond
                                                             (= :all-application-time app-time-extents) app-end-sym

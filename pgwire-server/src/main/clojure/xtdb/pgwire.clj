@@ -1402,13 +1402,13 @@
 (def supported-param-oids
   (set (map (comp oids :pg) type-mappings)))
 
-(defn- submit-tx [{:keys [server conn-state]} dml-buf {:keys [default-all-app-time?]}]
+(defn- submit-tx [{:keys [server conn-state]} dml-buf {:keys [default-all-valid-time?]}]
   (let [tx-ops (mapv (fn [{:keys [transformed-query params]}]
                        [:sql-batch [transformed-query params]])
                      dml-buf)]
     ;; TODO review err log policy
     (try
-      (let [tx (xt/submit-tx (:node server) tx-ops {:default-all-app-time? default-all-app-time?})]
+      (let [tx (xt/submit-tx (:node server) tx-ops {:default-all-valid-time? default-all-valid-time?})]
         (swap! conn-state update-in [:session :latest-submitted-tx] xt.impl/max-tx tx)
         nil)
       (catch Throwable e
@@ -1434,7 +1434,7 @@
 
         {:keys [transaction], {:keys [^Clock clock] :as session} :session} @conn-state
 
-        default-all-app-time? (not= :as-of-now (get-in session [:parameters :app-time-defaults]))
+        default-all-valid-time? (not= :as-of-now (get-in session [:parameters :app-time-defaults]))
 
         stmt {:query query,
               :transformed-query transformed-query
@@ -1444,7 +1444,7 @@
       ;; we buffer the statement in the transaction (to be flushed with COMMIT)
       (swap! conn-state update-in [:transaction :dml-buf] (fnil conj []) stmt)
 
-      (submit-tx conn [stmt] {:default-all-app-time? default-all-app-time?
+      (submit-tx conn [stmt] {:default-all-valid-time? default-all-valid-time?
                               :default-tz (.getZone clock)}))
 
     (cmd-write-msg conn msg-command-complete
@@ -1473,13 +1473,13 @@
         {{:keys [^Clock clock, latest-submitted-tx] :as session} :session
          {:keys [basis]} :transaction} @conn-state
 
-        default-all-app-time? (not (= :as-of-now (get-in session [:parameters :app-time-defaults])))
+        default-all-valid-time? (not (= :as-of-now (get-in session [:parameters :app-time-defaults])))
 
         query-opts {:basis (or basis {:current-time (.instant clock), :after-tx latest-submitted-tx})
                     :basis-timeout (Duration/ofSeconds 1)
                     :default-tz (.getZone clock)
                     :args xt-params
-                    :default-all-app-time? default-all-app-time?}
+                    :default-all-valid-time? default-all-valid-time?}
 
         ;; execute the query asynchronously (to enable later enable cancellation mid query)
         ^CompletableFuture
@@ -1549,7 +1549,7 @@
       ;; TODO better err
       (cmd-send-error conn (or err (err-protocol-violation "transaction failed")))
 
-      (if-let [err (submit-tx conn dml-buf {:default-all-app-time? (not (= :as-of-now (get-in session [:parameters :app-time-defaults])))})]
+      (if-let [err (submit-tx conn dml-buf {:default-all-valid-time? (not (= :as-of-now (get-in session [:parameters :app-time-defaults])))})]
         (do
           (swap! conn-state update :transaction assoc :failed true, :err err)
           (cmd-send-error conn err))

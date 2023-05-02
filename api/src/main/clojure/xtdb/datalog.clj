@@ -41,7 +41,7 @@
         (assoc :basis-timeout (Duration/ofSeconds 1))))"
   ^java.util.concurrent.CompletableFuture
   [node q & args]
-  (-> (impl/open-datalog& node (into {:default-all-app-time? false}
+  (-> (impl/open-datalog& node (into {:default-all-valid-time? false}
                                      (-> q (update :basis impl/after-latest-submitted-tx node)))
                           args)
       (.thenApply
@@ -106,7 +106,7 @@
      should be an instance of java.time.ZoneId"
   (^java.util.concurrent.CompletableFuture [node tx-ops] (submit-tx& node tx-ops {}))
   (^java.util.concurrent.CompletableFuture [node tx-ops tx-opts]
-   (impl/submit-tx& node tx-ops (into {:default-all-app-time? false} tx-opts))))
+   (impl/submit-tx& node tx-ops (into {:default-all-valid-time? false} tx-opts))))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (defn submit-tx

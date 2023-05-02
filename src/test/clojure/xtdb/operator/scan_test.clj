@@ -99,7 +99,7 @@
                             [{xt/system-from (< xt/system-from #time/zoned-date-time "3002-01-01T00:00Z")}
                              {xt/system-to (> xt/system-to #time/zoned-date-time "2999-01-01T00:00Z")}
                              last_updated]]
-                          {:node node :default-all-app-time? true})))))
+                          {:node node :default-all-valid-time? true})))))
 
 (t/deftest test-for-valid-time-in-params
   (let [tt1 (util/->zdt #inst "2020-01-01")
@@ -113,14 +113,14 @@
                            {:app-time-start tt2 :app-time-end eot}]])
       (t/is (= [{:xt/id 1, :version "version 1"} {:xt/id 2, :version "version 2"}]
                (tu/query-ra '[:scan {:table foo,
-                                     :default-all-app-time? false
+                                     :default-all-valid-time? false
                                      :for-valid-time [:between ?_start ?_end]}
                               [xt/id version]]
                             {:node node :params {'?_start (util/->instant tt1)
                                                  '?_end (util/->instant eot)}})))
       (t/is (= [{:xt/id 1, :version "version 1"} {:xt/id 2, :version "version 2"}]
                (tu/query-ra '[:scan {:table foo,
-                                     :default-all-app-time? false
+                                     :default-all-valid-time? false
                                      :for-valid-time :all-time}
                               [xt/id version]]
                             {:node node :params {'?_start (util/->instant tt1)

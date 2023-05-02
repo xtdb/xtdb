@@ -203,7 +203,7 @@
                       [[:sql sql-statement]]
                       (cond-> opts
                         (= (get variables "VALID_TIME_DEFAULTS") "AS_OF_NOW")
-                        (assoc :default-all-app-time? false)
+                        (assoc :default-all-valid-time? false)
 
                         (get variables "CURRENT_TIMESTAMP")
                         (assoc-in [:basis :current-time] (Instant/parse (get variables "CURRENT_TIMESTAMP")))))
@@ -216,7 +216,7 @@
        (for [row (xt.sql/q node sql-statement
                            (cond-> opts
                              (= (get variables "VALID_TIME_DEFAULTS") "AS_OF_NOW")
-                             (assoc :default-all-app-time? false)
+                             (assoc :default-all-valid-time? false)
 
                              (get variables "CURRENT_TIMESTAMP")
                              (assoc-in [:basis :current-time] (Instant/parse (get variables "CURRENT_TIMESTAMP")))))]

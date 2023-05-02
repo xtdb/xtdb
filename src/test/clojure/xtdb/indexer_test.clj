@@ -193,7 +193,7 @@
 (t/deftest temporal-watermark-is-immutable-567
   (with-open [node (node/start-node {})]
     (let [{tt :sys-time} (xt.d/submit-tx node [[:put :xt_docs {:xt/id :foo, :version 0}]]
-                                         {:default-all-app-time? false})]
+                                         {:default-all-valid-time? false})]
       (t/is (= [{:xt/id :foo, :version 0,
                  :xt/valid-from (util/->zdt tt)
                  :xt/valid-to (util/->zdt util/end-of-time)
@@ -206,7 +206,7 @@
                             {:node node})))
 
       (let [{tt2 :sys-time} (xt.d/submit-tx node [[:put :xt_docs {:xt/id :foo, :version 1}]]
-                                            {:default-all-app-time? false})]
+                                            {:default-all-valid-time? false})]
         (t/is (= [{:xt/id :foo, :version 0,
                    :xt/valid-from (util/->zdt tt)
                    :xt/valid-to (util/->zdt util/end-of-time)
@@ -226,7 +226,7 @@
                                 [xt/id version
                                  xt/valid-from, xt/valid-to
                                  xt/system-from, xt/system-to]]
-                              {:node node :default-all-app-time? true})))
+                              {:node node :default-all-valid-time? true})))
 
         #_ ; FIXME #567 this sees the updated xt/system-to of the first entry
         (t/is (= [{:xt/id :foo, :version 0,

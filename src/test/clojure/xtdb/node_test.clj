@@ -73,7 +73,7 @@ VALUES (1, 'Happy 2024!', DATE '2024-01-01'),
              (q)))
 
     (xt.sql/submit-tx tu/*node* [[:sql "DELETE FROM foo"]]
-                      {:default-all-app-time? false})
+                      {:default-all-valid-time? false})
 
     (t/is (= [{:xt$id "foo"
                :xt$valid_from (util/->zdt #inst "2020")
@@ -258,7 +258,7 @@ ORDER BY foo.xt$valid_from"
                  :xt$valid_to (util/->zdt util/end-of-time)}]
 
                (q1 {:basis {:tx tx2, :current-time (util/->instant #inst "2026")}
-                    :default-all-app-time? false})))
+                    :default-all-valid-time? false})))
 
       (t/is (= {{:xt$id 1, :v 1} 2, {:xt$id 1, :v 2} 1}
                (q2 {:basis {:tx tx2}}))))))

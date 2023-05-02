@@ -25,14 +25,14 @@
            #_(doto clojure.pprint/pprint))))))
 
 (defn open-sql-query ^xtdb.IResultSet [^BufferAllocator allocator, wm-src, ^PreparedQuery pq,
-                                       {:keys [basis default-tz default-all-app-time?] :as query-opts}]
+                                       {:keys [basis default-tz default-all-valid-time?] :as query-opts}]
   (let [^AutoCloseable
         params (vw/open-params allocator
                                (->> (:args query-opts)
                                     (into {} (map-indexed (fn [idx v]
                                                             (MapEntry/create (symbol (str "?_" idx)) v))))))]
     (try
-      (-> (.bind pq wm-src {:params params, :basis basis, :default-tz default-tz :default-all-app-time? default-all-app-time?})
+      (-> (.bind pq wm-src {:params params, :basis basis, :default-tz default-tz :default-all-valid-time? default-all-valid-time?})
           (.openCursor)
           (op/cursor->result-set params))
       (catch Throwable t

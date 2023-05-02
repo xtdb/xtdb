@@ -39,7 +39,7 @@
   ([node sql+params] (q& node sql+params {}))
 
   ([node sql+params opts]
-   (-> (impl/open-sql& node sql+params (into {:default-all-app-time? true}
+   (-> (impl/open-sql& node sql+params (into {:default-all-valid-time? true}
                                              (update opts :basis impl/after-latest-submitted-tx node)))
        (.thenApply
         (reify Function
@@ -97,7 +97,7 @@
   including sys-time and tx-id."
   (^java.util.concurrent.CompletableFuture [node tx-ops] (submit-tx& node tx-ops {}))
   (^java.util.concurrent.CompletableFuture [node tx-ops tx-opts]
-   (impl/submit-tx& node tx-ops (into {:default-all-app-time? true} tx-opts))))
+   (impl/submit-tx& node tx-ops (into {:default-all-valid-time? true} tx-opts))))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (defn submit-tx

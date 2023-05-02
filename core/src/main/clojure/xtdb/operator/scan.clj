@@ -41,7 +41,7 @@
 (defmethod lp/ra-expr :scan [_]
   (s/cat :op #{:scan}
          :scan-opts (s/keys :req-un [::table]
-                            :opt-un [::lp/for-valid-time ::lp/for-system-time ::lp/default-all-app-time?])
+                            :opt-un [::lp/for-valid-time ::lp/for-system-time ::lp/default-all-valid-time?])
          :columns (s/coll-of (s/or :column ::lp/column
                                    :select ::lp/column-expression))))
 
@@ -474,7 +474,7 @@
             col-preds (->> (for [[col-name select-form] selects]
                              ;; for temporal preds, we may not need to re-apply these if they can be represented as a temporal range.
                              (MapEntry/create (str col-name)
-                                             (expr/->expression-relation-selector select-form {:col-types col-types, :param-types param-types})))
+                                              (expr/->expression-relation-selector select-form {:col-types col-types, :param-types param-types})))
                            (into {}))
 
             metadata-args (vec (for [[col-name select] selects
@@ -483,19 +483,19 @@
 
             row-count (->> (meta/with-all-metadata metadata-mgr normalized-table-name
                              (util/->jbifn
-                               (fn [_chunk-idx ^ITableMetadata table-metadata]
-                                 (let [id-col-idx (.rowIndex table-metadata "xt$id" -1)
-                                       ^BigIntVector count-vec (.getVector (.metadataRoot table-metadata) "count")]
-                                   (.get count-vec id-col-idx)))))
+                              (fn [_chunk-idx ^ITableMetadata table-metadata]
+                                (let [id-col-idx (.rowIndex table-metadata "xt$id" -1)
+                                      ^BigIntVector count-vec (.getVector (.metadataRoot table-metadata) "count")]
+                                  (.get count-vec id-col-idx)))))
                            (reduce +))]
 
         {:col-types col-types
          :stats {:row-count row-count}
-         :->cursor (fn [{:keys [allocator, ^IWatermark watermark, basis, params default-all-app-time?]}]
+         :->cursor (fn [{:keys [allocator, ^IWatermark watermark, basis, params default-all-valid-time?]}]
                      (let [metadata-pred (expr.meta/->metadata-selector (cons 'and metadata-args) col-types params)
                            scan-opts (cond-> scan-opts
                                        (nil? for-valid-time)
-                                       (assoc :for-valid-time (if default-all-app-time? [:all-time] [:at [:now :now]])))
+                                       (assoc :for-valid-time (if default-all-valid-time? [:all-time] [:at [:now :now]])))
                            [temporal-min-range temporal-max-range] (->temporal-min-max-range params basis scan-opts selects)
                            current-row-ids (when (use-current-row-id-cache? watermark scan-opts basis temporal-col-names)
                                              (get-current-row-ids watermark basis))]

@@ -53,10 +53,10 @@
                                (inst? s) s
                                (string? s) (inst/read-instant-date s)))}))
 
-(s/def ::default-all-app-time? boolean?)
+(s/def ::default-all-valid-time? boolean?)
 (s/def ::default-tz #(instance? ZoneId %))
 
-(s/def ::opts (s/keys :opt-un [::sys-time ::default-all-app-time? ::default-tz]))
+(s/def ::opts (s/keys :opt-un [::sys-time ::default-all-valid-time? ::default-tz]))
 
 (defmethod route-handler :status [_]
   {:get (fn [{:keys [node] :as _req}]
@@ -125,7 +125,7 @@
 
 (s/def :xtdb.server.sql/query-body
   (s/keys :req-un [:xtdb.server.sql/query],
-          :opt-un [::basis ::basis-timeout ::args ::default-all-app-time? ::default-tz]))
+          :opt-un [::basis ::basis-timeout ::args ::default-all-valid-time? ::default-tz]))
 
 (defmethod route-handler :sql-query [_]
   {:muuntaja (m/create (-> muuntaja-opts

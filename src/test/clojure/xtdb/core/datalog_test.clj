@@ -2164,14 +2164,15 @@
                         :where [($ :docs {:age age})]})]}))
    "variables not exposed by subquery"))
 
-(t/deftest test-default-all-app-time
-  (let [_tx1 (xt/submit-tx tu/*node* [[:put :xt_docs {:xt/id 1 :foo "2000-4000"} {:app-time-start #inst "2000" :app-time-end #inst "4000"}]])
-        _tx2 (xt/submit-tx tu/*node* [[:put :xt_docs {:xt/id 1 :foo "3000-"} {:app-time-start #inst "3000"}]])]
-    (t/is (= [{:xt/id 1, :foo "2000-4000"} {:xt/id 1, :foo "3000-"}]
-             (xt/q tu/*node*
-                   '{:find [xt/id foo]
-                     :where [(match :xt_docs [xt/id foo])]
-                     :default-all-app-time? true})))))
+(t/deftest test-default-valid-time
+  (xt/submit-tx tu/*node* [[:put :xt_docs {:xt/id 1 :foo "2000-4000"} {:for-valid-time [:in  #inst "2000"  #inst "4000"]}]
+                           [:put :xt_docs {:xt/id 1 :foo "3000-"} {:for-valid-time [:from #inst "3000"]}]])
+
+  (t/is (= [{:xt/id 1, :foo "2000-4000"} {:xt/id 1, :foo "3000-"}]
+           (xt/q tu/*node*
+                 '{:find [xt/id foo]
+                   :where [(match :xt_docs [xt/id foo])]
+                   :default-all-valid-time? true}))))
 
 (t/deftest test-sql-insert
   (xt/submit-tx tu/*node* [[:sql "INSERT INTO foo (xt$id) VALUES (0)"]])

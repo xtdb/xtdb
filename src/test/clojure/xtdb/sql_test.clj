@@ -6,7 +6,7 @@
 
   (:import (java.time LocalDateTime)))
 (defn plan-sql
-  ([sql opts] (sql/compile-query sql (into {:default-all-app-time? true} opts)))
+  ([sql opts] (sql/compile-query sql (into {:default-all-valid-time? true} opts)))
   ([sql] (plan-sql sql {:decorrelate? true, :validate-plan? true, :instrument-rules? true})))
 
 (def regen-expected-files? true)
@@ -982,11 +982,11 @@
 
   (t/is (=plan-file "test-sql-update-plan-with-column-references"
                     (plan-sql "UPDATE foo SET bar = foo.baz"
-                              {:default-all-app-time? true})))
+                              {:default-all-valid-time? true})))
 
   (t/is (=plan-file "test-sql-update-plan-with-period-references"
                     (plan-sql "UPDATE foo SET bar = (foo.SYSTEM_TIME OVERLAPS foo.VALID_TIME)"
-                              {:default-all-app-time? true}))))
+                              {:default-all-valid-time? true}))))
 
 (deftest dml-target-table-alises
   (t/is (= (plan-sql "UPDATE t1 AS u SET col1 = 30")
@@ -1111,7 +1111,7 @@
                 FROM Prop_Owner
                 FOR ALL SYSTEM_TIME
                 WHERE Prop_Owner.id = 1) AS tmp"
-              {:default-all-app-time? false}))))
+              {:default-all-valid-time? false}))))
 
 (deftest parenthesized-joined-tables-are-unboxed-502
   (t/is (= (plan-sql "SELECT 1 FROM ( tab0 JOIN tab2 ON TRUE )")
