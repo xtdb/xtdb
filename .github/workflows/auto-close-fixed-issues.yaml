@@ -7,7 +7,7 @@ jobs:
   close:
     runs-on: ubuntu-latest
     steps:
-      - uses: wow-actions/auto-close-fixed-issues@v1
+      - uses: wow-actions/auto-close-fixed-issues@000037415349b8d6a8d2eb8304cba497d5d55647
         with:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # optional comment
