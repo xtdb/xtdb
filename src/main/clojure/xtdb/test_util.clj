@@ -215,16 +215,17 @@
           (t/is (= blocks (<-cursor cursor))))))))
 
 (defn ->local-node ^java.lang.AutoCloseable [{:keys [^Path node-dir ^String buffers-dir
-                                                     rows-per-block rows-per-chunk]
+                                                     rows-per-block rows-per-chunk instant-src]
                                               :or {buffers-dir "buffers"}}]
-  (node/start-node {:xtdb.log/local-directory-log {:root-path (.resolve node-dir "log")
-                                                    :instant-src (->mock-clock)}
-                    :xtdb.tx-producer/tx-producer {:instant-src (->mock-clock)}
-                    :xtdb.buffer-pool/buffer-pool {:cache-path (.resolve node-dir buffers-dir)}
-                    :xtdb.object-store/file-system-object-store {:root-path (.resolve node-dir "objects")}
-                    :xtdb/live-chunk (->> {:rows-per-block rows-per-block
-                                            :rows-per-chunk rows-per-chunk}
-                                           (into {} (filter val)))}))
+  (let [instant-src (or instant-src (->mock-clock))]
+    (node/start-node {:xtdb.log/local-directory-log {:root-path (.resolve node-dir "log")
+                                                     :instant-src instant-src}
+                      :xtdb.tx-producer/tx-producer {:instant-src instant-src}
+                      :xtdb.buffer-pool/buffer-pool {:cache-path (.resolve node-dir buffers-dir)}
+                      :xtdb.object-store/file-system-object-store {:root-path (.resolve node-dir "objects")}
+                      :xtdb/live-chunk (->> {:rows-per-block rows-per-block
+                                             :rows-per-chunk rows-per-chunk}
+                                            (into {} (filter val)))})))
 
 (defn ->local-submit-node ^java.lang.AutoCloseable [{:keys [^Path node-dir]}]
   (node/start-submit-node {:xtdb.tx-producer/tx-producer {:clock (->mock-clock)}

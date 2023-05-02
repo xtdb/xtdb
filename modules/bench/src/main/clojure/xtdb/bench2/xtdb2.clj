@@ -6,7 +6,8 @@
             [xtdb.bench2.measurement :as bm]
             [xtdb.node :as node]
             [xtdb.test-util :as tu])
-  (:import (io.micrometer.core.instrument MeterRegistry Timer)
+  (:import (xtdb InstantSource)
+           (io.micrometer.core.instrument MeterRegistry Timer)
            (java.io Closeable File)
            (java.nio.file Path)
            (java.time Clock Duration)
@@ -114,6 +115,7 @@
       xtp/PNode
       (open-datalog& [_ query args] (xtp/open-datalog& node query args))
       (open-sql& [_ query query-opts] (xtp/open-sql& node query query-opts))
+      (latest-submitted-tx [_] (xtp/latest-submitted-tx node))
 
       xtp/PStatus
       (status [_]
@@ -213,7 +215,8 @@
 
   (def report-core2
     (run-benchmark
-     {:node-opts {:node-dir (.toPath node-dir)}
+     {:node-opts {:node-dir (.toPath node-dir)
+                  :instant-src InstantSource/SYSTEM}
       :benchmark-type :auctionmark
       :benchmark-opts {:duration run-duration
                        :scale-factor 0.1 :threads 8}}))

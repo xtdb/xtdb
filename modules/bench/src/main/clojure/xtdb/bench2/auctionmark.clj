@@ -373,10 +373,10 @@
 
 (defn largest-id [node table prefix-length]
   (let [id (->> (xt/q node `{:find [~'id]
-                             :where [(match ~table [~'id])]})
-                (sort-by :xt/id #(cond (< (count %1) (count %2)) 1
-                                        (< (count %2) (count %1)) -1
-                                        :else (compare %2 %1)))
+                             :where [~(list 'match table {:xt/id 'id})]})
+                (sort-by :id  #(cond (< (count %1) (count %2)) 1
+                                     (< (count %2) (count %1)) -1
+                                     :else (compare %2 %1)))
                 first
                 :id)]
     (when id
@@ -593,11 +593,11 @@
          :tasks [{:t :call, :f (fn [_] (log/info "start load stage"))}
                  {:t :call, :f [bxt2/install-tx-fns {:apply-seller-fee tx-fn-apply-seller-fee, :new-bid tx-fn-new-bid}]}
                  {:t :call, :f load-categories-tsv}
-                 {:t :call, :f [bxt2/generate 'region generate-region 75]}
-                 {:t :call, :f [bxt2/generate 'category generate-category 16908]}
-                 {:t :call, :f [bxt2/generate 'user generate-user (* sf 1e6)]}
-                 {:t :call, :f [bxt2/generate 'user-attribute generate-user-attributes (* sf 1e6 1.3)]}
-                 {:t :call, :f [bxt2/generate 'item generate-item (* sf 1e6 10)]}
+                 {:t :call, :f [bxt2/generate :region generate-region 75]}
+                 {:t :call, :f [bxt2/generate :category generate-category 16908]}
+                 {:t :call, :f [bxt2/generate :user generate-user (* sf 1e6)]}
+                 {:t :call, :f [bxt2/generate :user-attribute generate-user-attributes (* sf 1e6 1.3)]}
+                 {:t :call, :f [bxt2/generate :item generate-item (* sf 1e6 10)]}
                  {:t :call, :f (fn [_] (log/info "finished load stage"))}]}
       {:t :do
        :stage :setup-worker
