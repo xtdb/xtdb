@@ -3,9 +3,12 @@ name: Auto Close Issues
 on:
   pull_request:
     types: [closed]
+
 jobs:
   close:
     runs-on: ubuntu-latest
+    permissions:
+      issues: write
     steps:
       - uses: wow-actions/auto-close-fixed-issues@000037415349b8d6a8d2eb8304cba497d5d55647
         with:
