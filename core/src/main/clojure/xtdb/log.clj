@@ -5,6 +5,7 @@
   (:import xtdb.api.TransactionInstant
            java.lang.AutoCloseable
            java.nio.ByteBuffer
+           (java.nio.channels ClosedChannelException)
            java.time.Duration
            java.util.concurrent.Semaphore))
 
@@ -49,6 +50,7 @@
                                                    after-tx-id
                                                    (try
                                                      (.readRecords log after-tx-id 100)
+                                                     (catch ClosedChannelException e (throw e))
                                                      (catch Exception e
                                                        (log/warn e "Error polling for txs, will retry"))))]
                             (when (Thread/interrupted)
@@ -56,7 +58,8 @@
                             (when (= after-tx-id last-tx-id)
                               (Thread/sleep (.toMillis poll-sleep-duration)))
                             (recur last-tx-id)))
-                        (catch InterruptedException _))))
+                        (catch InterruptedException _)
+                        (catch ClosedChannelException _))))
     (.start)))
 
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
