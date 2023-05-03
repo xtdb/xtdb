@@ -57,7 +57,7 @@
                                      :delete [:delete :xt_docs eid app-time-opts]
                                      :evict [:evict :xt_docs eid])))
                        :abort [[:abort]])
-                     {:sys-time (:xtdb.api/tx-time tx)})
+                     {:system-time (:xtdb.api/tx-time tx)})
           (recur))))))
 
 (defmethod ig/init-key :xtdb/c1-import [_ {:keys [^Path export-log-path tx-producer]}]

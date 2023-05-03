@@ -110,20 +110,20 @@
                    :where [(match :docs [xt/id doc-count])]}))))
 
 (t/deftest test-tx-fn-current-tx
-  (let [{tt0 :sys-time} (xt/submit-tx tu/*node* [[:put-fn :with-tx
+  (let [{tt0 :system-time} (xt/submit-tx tu/*node* [[:put-fn :with-tx
                                                   '(fn [id]
                                                      [[:put :docs (into {:xt/id id} *current-tx*)]])]
                                                  [:call :with-tx :foo]
                                                  [:call :with-tx :bar]])
 
-        {tt1 :sys-time} (xt/submit-tx tu/*node* [[:call :with-tx :baz]])]
+        {tt1 :system-time} (xt/submit-tx tu/*node* [[:call :with-tx :baz]])]
 
-    (t/is (= [{:xt/id :foo, :tx-id 0, :sys-time (util/->zdt tt0)}
-              {:xt/id :bar, :tx-id 0, :sys-time (util/->zdt tt0)}
-              {:xt/id :baz, :tx-id 1, :sys-time (util/->zdt tt1)}]
+    (t/is (= [{:xt/id :foo, :tx-id 0, :system-time (util/->zdt tt0)}
+              {:xt/id :bar, :tx-id 0, :system-time (util/->zdt tt0)}
+              {:xt/id :baz, :tx-id 1, :system-time (util/->zdt tt1)}]
              (xt/q tu/*node*
-                   '{:find [xt/id tx-id sys-time]
-                     :where [(match :docs [xt/id tx-id sys-time])]})))))
+                   '{:find [xt/id tx-id system-time]
+                     :where [(match :docs [xt/id tx-id system-time])]})))))
 
 (t/deftest test-tx-fn-exceptions
   (letfn [(foo-version []

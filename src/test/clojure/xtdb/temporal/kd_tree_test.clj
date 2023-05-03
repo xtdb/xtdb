@@ -15,35 +15,35 @@
 ;; areas covered are the same. Could or maybe should coalesce.
 
 (defn- ->row-map [^List point]
-  (zipmap [:id :row-id :app-time-start :app-time-end :sys-time-start :sys-time-end]
+  (zipmap [:id :row-id :app-time-start :app-time-end :system-time-start :system-time-end]
           [(.get point temporal/id-idx)
            (.get point temporal/row-id-idx)
            (Date/from (util/micros->instant (.get point temporal/app-time-start-idx)))
            (Date/from (util/micros->instant (.get point temporal/app-time-end-idx)))
-           (Date/from (util/micros->instant (.get point temporal/sys-time-start-idx)))
-           (Date/from (util/micros->instant (.get point temporal/sys-time-end-idx)))]))
+           (Date/from (util/micros->instant (.get point temporal/system-time-start-idx)))
+           (Date/from (util/micros->instant (.get point temporal/system-time-end-idx)))]))
 
 (defn- temporal-rows [kd-tree row-id->row]
   (vec (for [{:keys [row-id] :as row} (->> (map ->row-map (kd/kd-tree->seq kd-tree))
-                                           (sort-by (juxt :sys-time-start :row-id)))]
+                                           (sort-by (juxt :system-time-start :row-id)))]
          (merge row (get row-id->row row-id)))))
 
 (defn ->coordinates ^xtdb.temporal.TemporalCoordinates [{:keys [id
                                                                  ^long row-id
-                                                                 sys-time-start
-                                                                 sys-time-end
+                                                                 system-time-start
+                                                                 system-time-end
                                                                  app-time-start
                                                                  app-time-end
                                                                  new-entity? tombstone?]}]
   (TemporalCoordinates. row-id id
-                        (util/instant->micros (if (instance? Date sys-time-start)
-                                                (.toInstant ^Date sys-time-start)
-                                                sys-time-start))
-                        (util/instant->micros (or (if (instance? Date sys-time-end)
-                                                    (some-> ^Date sys-time-end .toInstant)
-                                                    sys-time-end)
+                        (util/instant->micros (if (instance? Date system-time-start)
+                                                (.toInstant ^Date system-time-start)
+                                                system-time-start))
+                        (util/instant->micros (or (if (instance? Date system-time-end)
+                                                    (some-> ^Date system-time-end .toInstant)
+                                                    system-time-end)
                                                   util/end-of-time))
-                        (util/instant->micros (let [ats (or app-time-start sys-time-start)]
+                        (util/instant->micros (let [ats (or app-time-start system-time-start)]
                                                     (if (instance? Date ats)
                                                       (.toInstant ^Date ats)
                                                       ats)))
@@ -56,7 +56,7 @@
  (defn as-micros [^java.util.Date inst]
   (util/instant->micros (.toInstant inst)))
 
-(t/deftest bitemporal-sys-time-split-test
+(t/deftest bitemporal-system-time-split-test
   (let [kd-tree nil
         row-id->row (HashMap.)
         !current-row-ids (volatile! #{})]
@@ -64,158 +64,158 @@
     ;; Eva Nielsen buys the flat at Skovvej 30 in Aalborg on January 10,
     ;; 1998.
     (with-open [allocator (RootAllocator.)
-                ^Closeable kd-tree (let [sys-time #inst "1998-01-10"]
+                ^Closeable kd-tree (let [system-time #inst "1998-01-10"]
                                      (temporal/insert-coordinates kd-tree
                                                                   allocator
                                                                   (->coordinates {:id 7797
                                                                                   :row-id 1
-                                                                                  :sys-time-start sys-time
+                                                                                  :system-time-start system-time
                                                                                   :new-entity? true})
                                                                   !current-row-ids
-                                                                  (as-micros sys-time)))]
+                                                                  (as-micros system-time)))]
       (.put row-id->row 1 {:customer-number 145})
       (t/is (= [{:id 7797,
                  :customer-number 145,
                  :row-id 1,
                  :app-time-start #inst "1998-01-10T00:00:00.000-00:00",
                  :app-time-end #inst "9999-12-31T23:59:59.999-00:00",
-                 :sys-time-start #inst "1998-01-10T00:00:00.000-00:00",
-                 :sys-time-end #inst "9999-12-31T23:59:59.999-00:00"}]
+                 :system-time-start #inst "1998-01-10T00:00:00.000-00:00",
+                 :system-time-end #inst "9999-12-31T23:59:59.999-00:00"}]
                (temporal-rows kd-tree row-id->row)))
       (t/is (= #{1}
                @!current-row-ids))
 
       ;; Current Update
       ;; Peter Olsen buys the flat on January 15, 1998.
-      (let [sys-time #inst "1998-01-15"
+      (let [system-time #inst "1998-01-15"
             kd-tree (temporal/insert-coordinates kd-tree
                                                  allocator
                                                  (->coordinates {:id 7797
                                                                  :row-id 2
-                                                                 :sys-time-start sys-time
+                                                                 :system-time-start system-time
                                                                  :new-entity? false})
                                                  !current-row-ids
-                                                 (as-micros sys-time))]
+                                                 (as-micros system-time))]
         (.put row-id->row 2 {:customer-number 827})
         (t/is (= [{:id 7797,
                    :row-id 1,
                    :customer-number 145,
                    :app-time-start #inst "1998-01-10T00:00:00.000-00:00",
                    :app-time-end #inst "9999-12-31T23:59:59.999-00:00",
-                   :sys-time-start #inst "1998-01-10T00:00:00.000-00:00",
-                   :sys-time-end #inst "1998-01-15T00:00:00.000-00:00"}
+                   :system-time-start #inst "1998-01-10T00:00:00.000-00:00",
+                   :system-time-end #inst "1998-01-15T00:00:00.000-00:00"}
                   {:id 7797,
                    :customer-number 145,
                    :row-id 1,
                    :app-time-start #inst "1998-01-10T00:00:00.000-00:00",
                    :app-time-end #inst "1998-01-15T00:00:00.000-00:00",
-                   :sys-time-start #inst "1998-01-15T00:00:00.000-00:00",
-                   :sys-time-end #inst "9999-12-31T23:59:59.999-00:00"}
+                   :system-time-start #inst "1998-01-15T00:00:00.000-00:00",
+                   :system-time-end #inst "9999-12-31T23:59:59.999-00:00"}
                   {:id 7797,
                    :row-id 2,
                    :customer-number 827,
                    :app-time-start #inst "1998-01-15T00:00:00.000-00:00",
                    :app-time-end #inst "9999-12-31T23:59:59.999-00:00",
-                   :sys-time-start #inst "1998-01-15T00:00:00.000-00:00",
-                   :sys-time-end #inst "9999-12-31T23:59:59.999-00:00"}]
+                   :system-time-start #inst "1998-01-15T00:00:00.000-00:00",
+                   :system-time-end #inst "9999-12-31T23:59:59.999-00:00"}]
                  (temporal-rows kd-tree row-id->row)))
         (t/is (= #{2}
                  @!current-row-ids))
 
         ;; Current Delete
         ;; Peter Olsen sells the flat on January 20, 1998.
-        (let [sys-time #inst "1998-01-20"
+        (let [system-time #inst "1998-01-20"
               kd-tree (temporal/insert-coordinates kd-tree
                                                    allocator
                                                    (->coordinates {:id 7797
                                                                    :row-id 3
-                                                                   :sys-time-start sys-time
+                                                                   :system-time-start system-time
                                                                    :new-entity? false
                                                                    :tombstone? true})
                                                    !current-row-ids
-                                                   (as-micros sys-time))]
+                                                   (as-micros system-time))]
           (.put row-id->row 3 {:customer-number 827})
           (t/is (= [{:id 7797,
                      :customer-number 145,
                      :row-id 1,
                      :app-time-start #inst "1998-01-10T00:00:00.000-00:00",
                      :app-time-end #inst "9999-12-31T23:59:59.999-00:00",
-                     :sys-time-start #inst "1998-01-10T00:00:00.000-00:00",
-                     :sys-time-end #inst "1998-01-15T00:00:00.000-00:00"}
+                     :system-time-start #inst "1998-01-10T00:00:00.000-00:00",
+                     :system-time-end #inst "1998-01-15T00:00:00.000-00:00"}
                     {:id 7797,
                      :customer-number 145,
                      :row-id 1,
                      :app-time-start #inst "1998-01-10T00:00:00.000-00:00",
                      :app-time-end #inst "1998-01-15T00:00:00.000-00:00",
-                     :sys-time-start #inst "1998-01-15T00:00:00.000-00:00",
-                     :sys-time-end #inst "9999-12-31T23:59:59.999-00:00"}
+                     :system-time-start #inst "1998-01-15T00:00:00.000-00:00",
+                     :system-time-end #inst "9999-12-31T23:59:59.999-00:00"}
                     {:id 7797,
                      :customer-number 827,
                      :row-id 2,
                      :app-time-start #inst "1998-01-15T00:00:00.000-00:00",
                      :app-time-end #inst "9999-12-31T23:59:59.999-00:00",
-                     :sys-time-start #inst "1998-01-15T00:00:00.000-00:00",
-                     :sys-time-end #inst "1998-01-20T00:00:00.000-00:00"}
+                     :system-time-start #inst "1998-01-15T00:00:00.000-00:00",
+                     :system-time-end #inst "1998-01-20T00:00:00.000-00:00"}
                     {:id 7797,
                      :customer-number 827,
                      :row-id 2,
                      :app-time-start #inst "1998-01-15T00:00:00.000-00:00",
                      :app-time-end #inst "1998-01-20T00:00:00.000-00:00",
-                     :sys-time-start #inst "1998-01-20T00:00:00.000-00:00",
-                     :sys-time-end #inst "9999-12-31T23:59:59.999-00:00"}]
+                     :system-time-start #inst "1998-01-20T00:00:00.000-00:00",
+                     :system-time-end #inst "9999-12-31T23:59:59.999-00:00"}]
                    (temporal-rows kd-tree row-id->row)))
           (t/is (= #{}
                    @!current-row-ids))
 
           ;; Sequenced Insert
           ;; Eva actually purchased the flat on January 3, performed on January 23.
-          (let [sys-time #inst "1998-01-23"
+          (let [system-time #inst "1998-01-23"
                 kd-tree (temporal/insert-coordinates kd-tree
                                                      allocator
                                                      (->coordinates {:id 7797
                                                                      :row-id 4
-                                                                     :sys-time-start sys-time
+                                                                     :system-time-start system-time
                                                                      :app-time-start #inst "1998-01-03"
                                                                      :app-time-end #inst "1998-01-15"
                                                                      :new-entity? false})
                                                      !current-row-ids
-                                                     (as-micros sys-time))]
+                                                     (as-micros system-time))]
             (.put row-id->row 4 {:customer-number 145})
             (t/is (= [{:id 7797,
                        :customer-number 145,
                        :row-id 1,
                        :app-time-start #inst "1998-01-10T00:00:00.000-00:00",
                        :app-time-end #inst "9999-12-31T23:59:59.999-00:00",
-                       :sys-time-start #inst "1998-01-10T00:00:00.000-00:00",
-                       :sys-time-end #inst "1998-01-15T00:00:00.000-00:00"}
+                       :system-time-start #inst "1998-01-10T00:00:00.000-00:00",
+                       :system-time-end #inst "1998-01-15T00:00:00.000-00:00"}
                       {:id 7797,
                        :customer-number 145,
                        :row-id 1,
                        :app-time-start #inst "1998-01-10T00:00:00.000-00:00",
                        :app-time-end #inst "1998-01-15T00:00:00.000-00:00",
-                       :sys-time-start #inst "1998-01-15T00:00:00.000-00:00",
-                       :sys-time-end #inst "1998-01-23T00:00:00.000-00:00"}
+                       :system-time-start #inst "1998-01-15T00:00:00.000-00:00",
+                       :system-time-end #inst "1998-01-23T00:00:00.000-00:00"}
                       {:id 7797,
                        :customer-number 827,
                        :row-id 2,
                        :app-time-start #inst "1998-01-15T00:00:00.000-00:00",
                        :app-time-end #inst "9999-12-31T23:59:59.999-00:00",
-                       :sys-time-start #inst "1998-01-15T00:00:00.000-00:00",
-                       :sys-time-end #inst "1998-01-20T00:00:00.000-00:00"}
+                       :system-time-start #inst "1998-01-15T00:00:00.000-00:00",
+                       :system-time-end #inst "1998-01-20T00:00:00.000-00:00"}
                       {:id 7797,
                        :row-id 2,
                        :customer-number 827,
                        :app-time-start #inst "1998-01-15T00:00:00.000-00:00",
                        :app-time-end #inst "1998-01-20T00:00:00.000-00:00",
-                       :sys-time-start #inst "1998-01-20T00:00:00.000-00:00",
-                       :sys-time-end #inst "9999-12-31T23:59:59.999-00:00"}
+                       :system-time-start #inst "1998-01-20T00:00:00.000-00:00",
+                       :system-time-end #inst "9999-12-31T23:59:59.999-00:00"}
                       {:id 7797,
                        :customer-number 145,
                        :row-id 4,
                        :app-time-start #inst "1998-01-03T00:00:00.000-00:00",
                        :app-time-end #inst "1998-01-15T00:00:00.000-00:00",
-                       :sys-time-start #inst "1998-01-23T00:00:00.000-00:00",
-                       :sys-time-end #inst "9999-12-31T23:59:59.999-00:00"}]
+                       :system-time-start #inst "1998-01-23T00:00:00.000-00:00",
+                       :system-time-end #inst "9999-12-31T23:59:59.999-00:00"}]
                      (temporal-rows kd-tree row-id->row)))
             (t/is (= #{}
                      @!current-row-ids))
@@ -223,61 +223,61 @@
             ;; NOTE: rows differs from book, but covered area is the same.
             ;; Sequenced Delete
             ;; A sequenced deletion performed on January 26: Eva actually purchased the flat on January 5.
-            (let [sys-time #inst "1998-01-26"
+            (let [system-time #inst "1998-01-26"
                   kd-tree (temporal/insert-coordinates kd-tree
                                                        allocator
                                                        (->coordinates {:id 7797
                                                                        :row-id 5
-                                                                       :sys-time-start sys-time
+                                                                       :system-time-start system-time
                                                                        :app-time-start #inst "1998-01-02"
                                                                        :app-time-end #inst "1998-01-05"
                                                                        :new-entity? false
                                                                        :tombstone? true})
                                                        !current-row-ids
-                                                       (as-micros sys-time))]
+                                                       (as-micros system-time))]
               (.put row-id->row 5 {:customer-number 145})
               (t/is (= [{:id 7797,
                          :customer-number 145,
                          :row-id 1,
                          :app-time-start #inst "1998-01-10T00:00:00.000-00:00",
                          :app-time-end #inst "9999-12-31T23:59:59.999-00:00",
-                         :sys-time-start #inst "1998-01-10T00:00:00.000-00:00",
-                         :sys-time-end #inst "1998-01-15T00:00:00.000-00:00"}
+                         :system-time-start #inst "1998-01-10T00:00:00.000-00:00",
+                         :system-time-end #inst "1998-01-15T00:00:00.000-00:00"}
                         {:id 7797,
                          :customer-number 145,
                          :row-id 1,
                          :app-time-start #inst "1998-01-10T00:00:00.000-00:00",
                          :app-time-end #inst "1998-01-15T00:00:00.000-00:00",
-                         :sys-time-start #inst "1998-01-15T00:00:00.000-00:00",
-                         :sys-time-end #inst "1998-01-23T00:00:00.000-00:00"}
+                         :system-time-start #inst "1998-01-15T00:00:00.000-00:00",
+                         :system-time-end #inst "1998-01-23T00:00:00.000-00:00"}
                         {:id 7797,
                          :customer-number 827,
                          :row-id 2,
                          :app-time-start #inst "1998-01-15T00:00:00.000-00:00",
                          :app-time-end #inst "9999-12-31T23:59:59.999-00:00",
-                         :sys-time-start #inst "1998-01-15T00:00:00.000-00:00",
-                         :sys-time-end #inst "1998-01-20T00:00:00.000-00:00"}
+                         :system-time-start #inst "1998-01-15T00:00:00.000-00:00",
+                         :system-time-end #inst "1998-01-20T00:00:00.000-00:00"}
                         {:id 7797,
                          :customer-number 827,
                          :row-id 2,
                          :app-time-start #inst "1998-01-15T00:00:00.000-00:00",
                          :app-time-end #inst "1998-01-20T00:00:00.000-00:00",
-                         :sys-time-start #inst "1998-01-20T00:00:00.000-00:00",
-                         :sys-time-end #inst "9999-12-31T23:59:59.999-00:00"}
+                         :system-time-start #inst "1998-01-20T00:00:00.000-00:00",
+                         :system-time-end #inst "9999-12-31T23:59:59.999-00:00"}
                         {:id 7797,
                          :customer-number 145,
                          :row-id 4,
                          :app-time-start #inst "1998-01-03T00:00:00.000-00:00",
                          :app-time-end #inst "1998-01-15T00:00:00.000-00:00",
-                         :sys-time-start #inst "1998-01-23T00:00:00.000-00:00",
-                         :sys-time-end #inst "1998-01-26T00:00:00.000-00:00"}
+                         :system-time-start #inst "1998-01-23T00:00:00.000-00:00",
+                         :system-time-end #inst "1998-01-26T00:00:00.000-00:00"}
                         {:id 7797,
                          :customer-number 145,
                          :row-id 4,
                          :app-time-start #inst "1998-01-05T00:00:00.000-00:00",
                          :app-time-end #inst "1998-01-15T00:00:00.000-00:00",
-                         :sys-time-start #inst "1998-01-26T00:00:00.000-00:00",
-                         :sys-time-end #inst "9999-12-31T23:59:59.999-00:00"}]
+                         :system-time-start #inst "1998-01-26T00:00:00.000-00:00",
+                         :system-time-end #inst "9999-12-31T23:59:59.999-00:00"}]
                        (temporal-rows kd-tree row-id->row)))
               (t/is (= #{}
                        @!current-row-ids))
@@ -285,74 +285,74 @@
               ;; NOTE: rows differs from book, but covered area is the same.
               ;; Sequenced Update
               ;; A sequenced update performed on January 28: Peter actually purchased the flat on January 12.
-              (let [sys-time #inst "1998-01-28"
+              (let [system-time #inst "1998-01-28"
                     kd-tree (temporal/insert-coordinates kd-tree
                                                          allocator
                                                          (->coordinates {:id 7797
                                                                          :row-id 6
-                                                                         :sys-time-start sys-time
+                                                                         :system-time-start system-time
                                                                          :app-time-start #inst "1998-01-12"
                                                                          :app-time-end #inst "1998-01-15"
                                                                          :new-entity? false})
                                                          !current-row-ids
-                                                         (as-micros sys-time))]
+                                                         (as-micros system-time))]
                 (.put row-id->row 6 {:customer-number 827})
                 (t/is (= [{:id 7797,
                            :customer-number 145,
                            :row-id 1,
                            :app-time-start #inst "1998-01-10T00:00:00.000-00:00",
                            :app-time-end #inst "9999-12-31T23:59:59.999-00:00",
-                           :sys-time-start #inst "1998-01-10T00:00:00.000-00:00",
-                           :sys-time-end #inst "1998-01-15T00:00:00.000-00:00"}
+                           :system-time-start #inst "1998-01-10T00:00:00.000-00:00",
+                           :system-time-end #inst "1998-01-15T00:00:00.000-00:00"}
                           {:id 7797,
                            :customer-number 145,
                            :row-id 1,
                            :app-time-start #inst "1998-01-10T00:00:00.000-00:00",
                            :app-time-end #inst "1998-01-15T00:00:00.000-00:00",
-                           :sys-time-start #inst "1998-01-15T00:00:00.000-00:00",
-                           :sys-time-end #inst "1998-01-23T00:00:00.000-00:00"}
+                           :system-time-start #inst "1998-01-15T00:00:00.000-00:00",
+                           :system-time-end #inst "1998-01-23T00:00:00.000-00:00"}
                           {:id 7797,
                            :customer-number 827,
                            :row-id 2,
                            :app-time-start #inst "1998-01-15T00:00:00.000-00:00",
                            :app-time-end #inst "9999-12-31T23:59:59.999-00:00",
-                           :sys-time-start #inst "1998-01-15T00:00:00.000-00:00",
-                           :sys-time-end #inst "1998-01-20T00:00:00.000-00:00"}
+                           :system-time-start #inst "1998-01-15T00:00:00.000-00:00",
+                           :system-time-end #inst "1998-01-20T00:00:00.000-00:00"}
                           {:id 7797,
                            :customer-number 827,
                            :row-id 2,
                            :app-time-start #inst "1998-01-15T00:00:00.000-00:00",
                            :app-time-end #inst "1998-01-20T00:00:00.000-00:00",
-                           :sys-time-start #inst "1998-01-20T00:00:00.000-00:00",
-                           :sys-time-end #inst "9999-12-31T23:59:59.999-00:00"}
+                           :system-time-start #inst "1998-01-20T00:00:00.000-00:00",
+                           :system-time-end #inst "9999-12-31T23:59:59.999-00:00"}
                           {:id 7797,
                            :customer-number 145,
                            :row-id 4,
                            :app-time-start #inst "1998-01-03T00:00:00.000-00:00",
                            :app-time-end #inst "1998-01-15T00:00:00.000-00:00",
-                           :sys-time-start #inst "1998-01-23T00:00:00.000-00:00",
-                           :sys-time-end #inst "1998-01-26T00:00:00.000-00:00"}
+                           :system-time-start #inst "1998-01-23T00:00:00.000-00:00",
+                           :system-time-end #inst "1998-01-26T00:00:00.000-00:00"}
                           {:id 7797,
                            :customer-number 145,
                            :row-id 4,
                            :app-time-start #inst "1998-01-05T00:00:00.000-00:00",
                            :app-time-end #inst "1998-01-15T00:00:00.000-00:00",
-                           :sys-time-start #inst "1998-01-26T00:00:00.000-00:00",
-                           :sys-time-end #inst "1998-01-28T00:00:00.000-00:00"}
+                           :system-time-start #inst "1998-01-26T00:00:00.000-00:00",
+                           :system-time-end #inst "1998-01-28T00:00:00.000-00:00"}
                           {:id 7797,
                            :customer-number 145,
                            :row-id 4,
                            :app-time-start #inst "1998-01-05T00:00:00.000-00:00",
                            :app-time-end #inst "1998-01-12T00:00:00.000-00:00",
-                           :sys-time-start #inst "1998-01-28T00:00:00.000-00:00",
-                           :sys-time-end #inst "9999-12-31T23:59:59.999-00:00"}
+                           :system-time-start #inst "1998-01-28T00:00:00.000-00:00",
+                           :system-time-end #inst "9999-12-31T23:59:59.999-00:00"}
                           {:id 7797,
                            :customer-number 827,
                            :row-id 6,
                            :app-time-start #inst "1998-01-12T00:00:00.000-00:00",
                            :app-time-end #inst "1998-01-15T00:00:00.000-00:00",
-                           :sys-time-start #inst "1998-01-28T00:00:00.000-00:00",
-                           :sys-time-end #inst "9999-12-31T23:59:59.999-00:00"}]
+                           :system-time-start #inst "1998-01-28T00:00:00.000-00:00",
+                           :system-time-end #inst "9999-12-31T23:59:59.999-00:00"}]
                          (temporal-rows kd-tree row-id->row)))
                 (t/is (= #{}
                          @!current-row-ids))

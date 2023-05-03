@@ -67,7 +67,7 @@
 
 (t/deftest test-only-scanning-temporal-cols-45
   (with-open [node (node/start-node {})]
-    (let [{tt :sys-time} (xt/submit-tx node [[:put :xt_docs {:xt/id :doc}]])]
+    (let [{tt :system-time} (xt/submit-tx node [[:put :xt_docs {:xt/id :doc}]])]
 
       (t/is (= [{:xt/valid-from (util/->zdt tt)
                  :xt/valid-to (util/->zdt util/end-of-time)
@@ -80,9 +80,9 @@
 
 (t/deftest test-aligns-temporal-columns-correctly-363
   (with-open [node (node/start-node {})]
-    (xt/submit-tx node [[:put :foo {:xt/id :my-doc, :last_updated "tx1"}]] {:sys-time #inst "3000"})
+    (xt/submit-tx node [[:put :foo {:xt/id :my-doc, :last_updated "tx1"}]] {:system-time #inst "3000"})
 
-    (xt/submit-tx node [[:put :foo {:xt/id :my-doc, :last_updated "tx2"}]] {:sys-time #inst "3001"})
+    (xt/submit-tx node [[:put :foo {:xt/id :my-doc, :last_updated "tx2"}]] {:system-time #inst "3001"})
 
     #_(tu/finish-chunk! node)
 
@@ -198,11 +198,11 @@
                   :app-time-end [Long/MIN_VALUE (dec μs-2018)]
                   :sys-start [Long/MIN_VALUE μs-2019]
                   :sys-end [(inc μs-2019) Long/MAX_VALUE]}
-                 (with-open [params (tu/open-params {'?sys-time (util/->instant #inst "2019")
+                 (with-open [params (tu/open-params {'?system-time (util/->instant #inst "2019")
                                                      '?app-time (util/->instant #inst "2018")})]
                    (transpose (scan/->temporal-min-max-range
                                params nil nil
-                               {'xt/system-from '(>= ?sys-time xt/system-from)
-                                'xt/system-to '(< ?sys-time xt/system-to)
+                               {'xt/system-from '(>= ?system-time xt/system-from)
+                                'xt/system-to '(< ?system-time xt/system-to)
                                 'xt/valid-from '(<= ?app-time xt/valid-from)
                                 'xt/valid-to '(> ?app-time xt/valid-to)})))))))))

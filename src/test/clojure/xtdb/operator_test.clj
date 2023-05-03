@@ -101,74 +101,74 @@
 
 (t/deftest test-temporal-bounds
   (with-open [node (node/start-node {})]
-    (let [{tt1 :sys-time} (xt/submit-tx node [[:put :xt_docs {:xt/id :my-doc, :last-updated "tx1"}]])
-          {tt2 :sys-time} (xt/submit-tx node [[:put :xt_docs {:xt/id :my-doc, :last-updated "tx2"}]])]
+    (let [{tt1 :system-time} (xt/submit-tx node [[:put :xt_docs {:xt/id :my-doc, :last-updated "tx1"}]])
+          {tt2 :system-time} (xt/submit-tx node [[:put :xt_docs {:xt/id :my-doc, :last-updated "tx2"}]])]
       (letfn [(q [& temporal-constraints]
                 (->> (tu/query-ra [:scan '{:table xt_docs, :for-system-time :all-time}
                                    (into '[last-updated] temporal-constraints)]
-                                  {:node node, :params {'?sys-time1 tt1, '?sys-time2 tt2}
+                                  {:node node, :params {'?system-time1 tt1, '?system-time2 tt2}
                                    :default-all-valid-time? true})
                      (into #{} (map :last-updated))))]
         (t/is (= #{"tx1" "tx2"}
                  (q)))
 
         (t/is (= #{"tx1"}
-                 (q '{xt$system_from (<= xt$system_from ?sys-time1)})))
+                 (q '{xt$system_from (<= xt$system_from ?system-time1)})))
 
         (t/is (= #{}
-                 (q '{xt$system_from (< xt$system_from ?sys-time1)})))
+                 (q '{xt$system_from (< xt$system_from ?system-time1)})))
 
         (t/is (= #{"tx1" "tx2"}
-                 (q '{xt$system_from (<= xt$system_from ?sys-time2)})))
+                 (q '{xt$system_from (<= xt$system_from ?system-time2)})))
 
         (t/is (= #{"tx1" "tx2"}
-                 (q '{xt$system_from (> xt$system_from ?sys-time1)})))
+                 (q '{xt$system_from (> xt$system_from ?system-time1)})))
 
         (t/is (= #{}
-                 (q '{xt$system_to (< xt$system_to ?sys-time2)})))
+                 (q '{xt$system_to (< xt$system_to ?system-time2)})))
 
         (t/is (= #{"tx1"}
-                 (q '{xt$system_to (<= xt$system_to ?sys-time2)})))
+                 (q '{xt$system_to (<= xt$system_to ?system-time2)})))
 
         (t/is (= #{"tx1" "tx2"}
-                 (q '{xt$system_to (> xt$system_to ?sys-time2)})))
+                 (q '{xt$system_to (> xt$system_to ?system-time2)})))
 
         (t/is (= #{"tx1" "tx2"}
-                 (q '{xt$system_to (>= xt$system_to ?sys-time2)})))
+                 (q '{xt$system_to (>= xt$system_to ?system-time2)})))
 
         (t/testing "multiple constraints"
           (t/is (= #{"tx1"}
-                   (q '{xt$system_from (and (<= xt$system_from ?sys-time1)
-                                            (<= xt$system_from ?sys-time2))})))
+                   (q '{xt$system_from (and (<= xt$system_from ?system-time1)
+                                            (<= xt$system_from ?system-time2))})))
 
           (t/is (= #{"tx1"}
-                   (q '{xt$system_from (and (<= xt$system_from ?sys-time2)
-                                            (<= xt$system_from ?sys-time1))})))
+                   (q '{xt$system_from (and (<= xt$system_from ?system-time2)
+                                            (<= xt$system_from ?system-time1))})))
 
           (t/is (= #{"tx1" "tx2"}
-                   (q '{xt$system_to (and (> xt$system_to ?sys-time2)
-                                          (> xt$system_to ?sys-time1))})))
+                   (q '{xt$system_to (and (> xt$system_to ?system-time2)
+                                          (> xt$system_to ?system-time1))})))
 
           (t/is (= #{"tx1" "tx2"}
-                   (q '{xt$system_to (and (> xt$system_to ?sys-time1)
-                                          (> xt$system_to ?sys-time2))}))))
+                   (q '{xt$system_to (and (> xt$system_to ?system-time1)
+                                          (> xt$system_to ?system-time2))}))))
 
         (t/is (= #{}
-                 (q '{xt$system_from (<= xt$system_from ?sys-time1)}
-                    '{xt$system_to (< xt$system_to ?sys-time2)})))
+                 (q '{xt$system_from (<= xt$system_from ?system-time1)}
+                    '{xt$system_to (< xt$system_to ?system-time2)})))
 
         (t/is (= #{"tx1"}
-                 (q '{xt$system_from (<= xt$system_from ?sys-time1)}
-                    '{xt$system_to (<= xt$system_to ?sys-time2)})))
+                 (q '{xt$system_from (<= xt$system_from ?system-time1)}
+                    '{xt$system_to (<= xt$system_to ?system-time2)})))
 
         (t/is (= #{"tx1"}
-                 (q '{xt$system_from (<= xt$system_from ?sys-time1)}
-                    '{xt$system_to (> xt$system_to ?sys-time1)}))
+                 (q '{xt$system_from (<= xt$system_from ?system-time1)}
+                    '{xt$system_to (> xt$system_to ?system-time1)}))
               "as of tt1")
 
         (t/is (= #{"tx1" "tx2"}
-                 (q '{xt$system_from (<= xt$system_from ?sys-time2)}
-                    '{xt$system_to (> xt$system_to ?sys-time2)}))
+                 (q '{xt$system_from (<= xt$system_from ?system-time2)}
+                    '{xt$system_to (> xt$system_to ?system-time2)}))
               "as of tt2")))))
 
 (t/deftest test-fixpoint-operator

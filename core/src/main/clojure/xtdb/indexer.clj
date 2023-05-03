@@ -505,7 +505,7 @@
 
 (defn- add-tx-row! [^ILiveChunkTx live-chunk-tx, ^ITemporalTxIndexer temporal-tx, ^IInternalIdManager iid-mgr, ^TransactionInstant tx-key, ^Throwable t]
   (let [tx-id (.tx-id tx-key)
-        sys-time-µs (util/instant->micros (.sys-time tx-key))
+        system-time-µs (util/instant->micros (.system-time tx-key))
         live-table (.liveTable live-chunk-tx txs-table)
         row-id (.nextRowId live-chunk-tx)
         writer (.writer live-table)
@@ -519,7 +519,7 @@
 
     (doto (-> (.writerForName writer "xt$tx_time" t/temporal-col-type)
               (.monoWriter :i64))
-      (.writeLong sys-time-µs))
+      (.writeLong system-time-µs))
 
     (doto (-> (.writerForName writer "xt$committed?" :bool)
               (.monoWriter :bool))
@@ -532,7 +532,7 @@
         (doto (.monoWriter e-wtr :clj-form)
           (.writeObject (ByteBuffer/wrap (.getBytes (pr-str t)))))))
 
-    (.indexPut temporal-tx iid row-id sys-time-µs util/end-of-time-μs true)))
+    (.indexPut temporal-tx iid row-id system-time-µs util/end-of-time-μs true)))
 
 (deftype Indexer [^BufferAllocator allocator
                   ^ObjectStore object-store
@@ -551,7 +551,7 @@
                   ^StampedLock wm-lock]
 
   IIndexer
-  (indexTx [this {:keys [sys-time] :as tx-key} tx-root]
+  (indexTx [this {:keys [system-time] :as tx-key} tx-root]
     (with-open [live-chunk-tx (.startTx live-chunk)]
       (let [^DenseUnionVector tx-ops-vec (-> ^ListVector (.getVector tx-root "tx-ops")
                                              (.getDataVector))
@@ -563,7 +563,7 @@
                      (openWatermark [_ _tx]
                        (wm/->wm nil (.openWatermark live-chunk-tx) temporal-idxer false)))
 
-            tx-opts {:basis {:tx tx-key, :current-time sys-time}
+            tx-opts {:basis {:tx tx-key, :current-time system-time}
                      :default-tz (ZoneId/of (str (-> (.getVector tx-root "default-tz")
                                                      (.getObject 0))))
                      :default-all-valid-time? (== 1 (-> ^BitVector (.getVector tx-root "all-application-time?")
@@ -571,8 +571,8 @@
                      :tx-key tx-key}]
 
         (letfn [(index-tx-ops [^DenseUnionVector tx-ops-vec]
-                  (let [!put-idxer (delay (->put-indexer iid-mgr log-op-idxer temporal-idxer live-chunk-tx tx-ops-vec sys-time))
-                        !delete-idxer (delay (->delete-indexer iid-mgr log-op-idxer temporal-idxer live-chunk-tx tx-ops-vec sys-time))
+                  (let [!put-idxer (delay (->put-indexer iid-mgr log-op-idxer temporal-idxer live-chunk-tx tx-ops-vec system-time))
+                        !delete-idxer (delay (->delete-indexer iid-mgr log-op-idxer temporal-idxer live-chunk-tx tx-ops-vec system-time))
                         !evict-idxer (delay (->evict-indexer iid-mgr log-op-idxer temporal-idxer live-chunk-tx tx-ops-vec))
                         !call-idxer (delay (->call-indexer allocator ra-src wm-src scan-emitter tx-ops-vec tx-opts))
                         !sql-idxer (delay (->sql-indexer allocator metadata-mgr buffer-pool iid-mgr

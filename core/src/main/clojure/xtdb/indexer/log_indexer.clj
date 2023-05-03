@@ -51,11 +51,11 @@
   (let [log-writer (vw/->rel-writer allocator)
         transient-log-writer (vw/->rel-writer allocator)
 
-        ;; we're ignoring the writers for tx-id and sys-time, because they're simple primitive vecs and we're only writing to idx 0
+        ;; we're ignoring the writers for tx-id and system-time, because they're simple primitive vecs and we're only writing to idx 0
         ^BigIntVector tx-id-vec (-> (.writerForName transient-log-writer "tx-id" :i64)
                                     (.getVector))
 
-        ^TimeStampMicroTZVector sys-time-vec (-> (.writerForName transient-log-writer "system-time" [:timestamp-tz :micro "UTC"])
+        ^TimeStampMicroTZVector system-time-vec (-> (.writerForName transient-log-writer "system-time" [:timestamp-tz :micro "UTC"])
                                                  (.getVector))
 
         ops-writer (.asList (.writerForName transient-log-writer "ops" log-ops-col-type))
@@ -84,8 +84,8 @@
         (doto tx-id-vec
           (.setSafe 0 (.tx-id tx-key))
           (.setValueCount 1))
-        (doto sys-time-vec
-          (.setSafe 0 (util/instant->micros (.sys-time tx-key)))
+        (doto system-time-vec
+          (.setSafe 0 (util/instant->micros (.system-time tx-key)))
           (.setValueCount 1))
 
         (reify ILogOpIndexer

@@ -22,7 +22,7 @@ footnote:[In Core1, we don't have `CURRENT_TIMESTAMP` and friends, but we  do ru
 , this means:
 
 * the current time - e.g. for functions like `CURRENT_TIMESTAMP`, used explicitly or implicitly
-* how many transactions to take into account - 'current sys-time'.
+* how many transactions to take into account - 'current system-time'.
 * a default timezone - in SQL, there are a lot of functions/type-casts whose behaviour depends on the 'session timezone'
   footnote:utc[yes, I know, we could just make everyone use UTC - but this isn't difficult, and it makes us spec-compliant.]
 
@@ -35,19 +35,19 @@ Generally speaking, even though we love repeatable queries, we'd like the defaul
 == tl;dr
 
 * If the user doesn't provide basis params (which we expect to be the majority of the time), their defaults will be:
-** for ingest: sys-time and current-time both determined by the tx-log (`LogAppendTime`)
+** for ingest: system-time and current-time both determined by the tx-log (`LogAppendTime`)
 ** for queries:
-*** sys-time: latest-completed tx of the receiving node (the node being queried).
+*** system-time: latest-completed tx of the receiving node (the node being queried).
 *** current-time: current time on the receiving node.
 * If the user does provide basis params, we ensure repeatable reads.
 * For a user to 'read their writes', they receive a receipt from `submit-tx`, which they then pass back as a query argument.
-** The receipt from `submit-tx` should contain _both_ basis params footnote:[it currently just contains sys-time, in Core1 and core2], so that both are set on the query:
+** The receipt from `submit-tx` should contain _both_ basis params footnote:[it currently just contains system-time, in Core1 and core2], so that both are set on the query:
 +
 [source,clojure]
 ----
 (let [!tx (xt/submit-tx node [...])]
   (prn @!tx)
-  ;; => {:sys-time #inst "2022-08-29T11:00:00Z",
+  ;; => {:system-time #inst "2022-08-29T11:00:00Z",
   ;;     :current-time #inst "2022-08-29T11:00:00Z"}
   ;; N.B. these are guaranteed to be the same - we include them both for ease of UX
 
@@ -72,7 +72,7 @@ The ingesting nodes may not share a default TZ - so this is set by the submittin
 
 == Impact on queries
 
-Right, so, as a first pass, it seems like 'current app-time' and 'current sys-time' should both just default to 'now'.
+Right, so, as a first pass, it seems like 'current app-time' and 'current system-time' should both just default to 'now'.
 
 Here's where it gets fun:
 
@@ -82,7 +82,7 @@ Unfortunately this isn't sufficient for truly repeatable queries - the query wil
 Consider a query like `SELECT ... FROM ... FOR SYSTEM_TIME AS AT <Friday 5pm>` - if there were transactions at 4pm and 4:30pm, a node that's only indexed one of these may still return different results to a node that's indexed both (or neither!).
 +
 The basis therefore upper-bounds any system-time constraints in the query - the above query executed with a basis of 3pm should not return any data from transactions after 3pm, even though the in-query constraint specifies 5pm.
-* Rather than 'now', we default the 'current sys-time' to the latest indexed tx at the time the query's run.
+* Rather than 'now', we default the 'current system-time' to the latest indexed tx at the time the query's run.
 +
 This is again because of the asynchronous ingestion - if latest-indexed tx is 16:30, and we default the basis to now (17:00, say), we will get different results for the same arguments once the transaction at 16:45 is indexed.
 If we instead default to latest-indexed-tx, this issue goes away.
@@ -105,7 +105,7 @@ footnote:[yes, this https://github.com/xtdb/xtdb/issues/1665[actually happened]]
 --
 * We submit a transaction at 16:00 tx-log time, 15:59 node time.
 * The transaction inserts a doc, valid from `CURRENT_TIMESTAMP` (i.e. 16:00, because we've defaulted it to be the same as tx-log time)
-* The node awaits the transaction, and wants to read its write, so it submits a query with sys-time basis 16:00, app-time defaulting to node clock of 15:59:30.
+* The node awaits the transaction, and wants to read its write, so it submits a query with system-time basis 16:00, app-time defaulting to node clock of 15:59:30.
 * It doesn't see the doc, because it's not valid yet.
 --
 To ease the UX here (as outlined in the xref:tldr[tl;dr] above), the `submit-tx` should return a receipt of the form that the user can directly pass back to `query` to get a repeatable read.

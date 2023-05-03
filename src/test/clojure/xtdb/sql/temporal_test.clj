@@ -10,8 +10,8 @@
   (xt.sql/q tu/*node* query {:basis {:tx tx}}))
 
 (deftest all-system-time
-  (let [_tx (xt.d/submit-tx tu/*node* [[:put :foo {:xt/id :my-doc, :last_updated "tx1"}]] {:sys-time #inst "3000"})
-        tx2 (xt.d/submit-tx tu/*node* [[:put :foo {:xt/id :my-doc, :last_updated "tx2"}]] {:sys-time #inst "3001"})]
+  (let [_tx (xt.d/submit-tx tu/*node* [[:put :foo {:xt/id :my-doc, :last_updated "tx1"}]] {:system-time #inst "3000"})
+        tx2 (xt.d/submit-tx tu/*node* [[:put :foo {:xt/id :my-doc, :last_updated "tx2"}]] {:system-time #inst "3001"})]
 
     (is (= [{:last_updated "tx1"} {:last_updated "tx2"}]
            (query-at-tx
@@ -24,8 +24,8 @@
             tx2)))))
 
 (deftest system-time-as-of
-  (let [tx (xt.d/submit-tx tu/*node* [[:put :foo {:xt/id :my-doc, :last_updated "tx1"}]] {:sys-time #inst "3000"})
-        tx2 (xt.d/submit-tx tu/*node* [[:put :foo {:xt/id :my-doc, :last_updated "tx2"}]] {:sys-time #inst "3001"})]
+  (let [tx (xt.d/submit-tx tu/*node* [[:put :foo {:xt/id :my-doc, :last_updated "tx1"}]] {:system-time #inst "3000"})
+        tx2 (xt.d/submit-tx tu/*node* [[:put :foo {:xt/id :my-doc, :last_updated "tx2"}]] {:system-time #inst "3001"})]
 
     (is (= []
            (query-at-tx
@@ -43,8 +43,8 @@
             tx2)))))
 
 (deftest system-time-from-a-to-b
-  (let [tx (xt.d/submit-tx tu/*node* [[:put :foo {:xt/id :my-doc, :last_updated "tx1"}]] {:sys-time #inst "3000"})
-        tx2 (xt.d/submit-tx tu/*node* [[:put :foo {:xt/id :my-doc, :last_updated "tx2"}]] {:sys-time #inst "3001"})]
+  (let [tx (xt.d/submit-tx tu/*node* [[:put :foo {:xt/id :my-doc, :last_updated "tx1"}]] {:system-time #inst "3000"})
+        tx2 (xt.d/submit-tx tu/*node* [[:put :foo {:xt/id :my-doc, :last_updated "tx2"}]] {:system-time #inst "3001"})]
 
     (is (= []
            (query-at-tx
@@ -67,8 +67,8 @@
             tx2)))))
 
 (deftest system-time-between-a-to-b
-  (let [tx (xt.d/submit-tx tu/*node* [[:put :foo {:xt/id :my-doc, :last_updated "tx1"}]] {:sys-time #inst "3000"})
-        tx2 (xt.d/submit-tx tu/*node* [[:put :foo {:xt/id :my-doc, :last_updated "tx2"}]] {:sys-time #inst "3001"})]
+  (let [tx (xt.d/submit-tx tu/*node* [[:put :foo {:xt/id :my-doc, :last_updated "tx1"}]] {:system-time #inst "3000"})
+        tx2 (xt.d/submit-tx tu/*node* [[:put :foo {:xt/id :my-doc, :last_updated "tx2"}]] {:system-time #inst "3001"})]
     (is (= []
            (query-at-tx
             "SELECT foo.last_updated FROM foo FOR SYSTEM_TIME BETWEEN DATE '2998-01-01' AND TIMESTAMP '2999-01-01 00:00:00+00:00'"

@@ -51,7 +51,7 @@
                                     :basis {:tx tx1 ; <- first transaction
                                             :current-time (.toInstant #inst "4001")}))))
 
-    ;; sys-time - eugh, TODO, we need to just be able to pass a sys-time to basis
+    ;; system-time - eugh, TODO, we need to just be able to pass a system-time to basis
     (t/is (=  []
               (xt/q tu/*node* (assoc '{:find [foo]
                                        :where [(match :xt_docs {:xt/id 1})

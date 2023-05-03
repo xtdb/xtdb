@@ -84,7 +84,7 @@
 
 (t/deftest can-build-chunk-as-arrow-ipc-file-format
   (let [node-dir (util/->path "target/can-build-chunk-as-arrow-ipc-file-format")
-        last-tx-key (xt.api/map->TransactionInstant {:tx-id 8165, :sys-time (util/->instant #inst "2020-01-02")})]
+        last-tx-key (xt.api/map->TransactionInstant {:tx-id 8165, :system-time (util/->instant #inst "2020-01-02")})]
     (util/delete-dir node-dir)
 
     (with-open [node (tu/->local-node {:node-dir node-dir})]
@@ -192,7 +192,7 @@
 
 (t/deftest temporal-watermark-is-immutable-567
   (with-open [node (node/start-node {})]
-    (let [{tt :sys-time} (xt.d/submit-tx node [[:put :xt_docs {:xt/id :foo, :version 0}]]
+    (let [{tt :system-time} (xt.d/submit-tx node [[:put :xt_docs {:xt/id :foo, :version 0}]]
                                          {:default-all-valid-time? false})]
       (t/is (= [{:xt/id :foo, :version 0,
                  :xt/valid-from (util/->zdt tt)
@@ -205,7 +205,7 @@
                                xt/system-from, xt/system-to]]
                             {:node node})))
 
-      (let [{tt2 :sys-time} (xt.d/submit-tx node [[:put :xt_docs {:xt/id :foo, :version 1}]]
+      (let [{tt2 :system-time} (xt.d/submit-tx node [[:put :xt_docs {:xt/id :foo, :version 1}]]
                                             {:default-all-valid-time? false})]
         (t/is (= [{:xt/id :foo, :version 0,
                    :xt/valid-from (util/->zdt tt)
@@ -362,7 +362,7 @@
 
 (t/deftest can-stop-node-without-writing-chunks
   (let [node-dir (util/->path "target/can-stop-node-without-writing-chunks")
-        last-tx-key (xt.api/map->TransactionInstant {:tx-id 8165, :sys-time (util/->instant #inst "2020-01-02")})]
+        last-tx-key (xt.api/map->TransactionInstant {:tx-id 8165, :system-time (util/->instant #inst "2020-01-02")})]
     (util/delete-dir node-dir)
 
     (with-open [node (tu/->local-node {:node-dir node-dir})]
@@ -633,7 +633,7 @@
       (let [mm (tu/component node ::meta/metadata-manager)]
         (t/is (nil? (meta/latest-chunk-metadata mm)))
 
-        (let [last-tx-key (xt.api/map->TransactionInstant {:tx-id 0, :sys-time (util/->instant #inst "2020-01-01")})]
+        (let [last-tx-key (xt.api/map->TransactionInstant {:tx-id 0, :system-time (util/->instant #inst "2020-01-01")})]
           (t/is (= last-tx-key
                    (xt.sql/submit-tx node [[:sql-batch ["INSERT INTO table (xt$id, foo, bar, baz) VALUES (?, ?, ?, ?)"
                                                         [0, 2, "hello", 12]

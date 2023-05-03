@@ -91,7 +91,7 @@
              (when-some [[fut ms] @last-submitted]
                (let [tx-id (:tx-id @fut)]
                  (when-some [{completed-tx-id :tx-id
-                              completed-tx-time :sys-time} latest-completed-tx]
+                              completed-tx-time :system-time} latest-completed-tx]
                    (when (< completed-tx-id tx-id)
                      (* (long 1e6) (- ms (inst-ms completed-tx-time)))))))
              0)))

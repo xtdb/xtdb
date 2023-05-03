@@ -104,6 +104,6 @@
   (test-serialize-tx-ops (io/resource "xtdb/tx-producer-test/can-write-opts.json")
                          [[:sql "INSERT INTO foo (id) VALUES (0)"]]
 
-                         {:sys-time (util/->instant #inst "2021")
+                         {:system-time (util/->instant #inst "2021")
                           :default-all-valid-time? false
                           :default-tz #time/zone "Europe/London"}))

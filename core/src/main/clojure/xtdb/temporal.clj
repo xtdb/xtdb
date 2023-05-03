@@ -27,7 +27,7 @@
 ;; Temporal proof-of-concept plan:
 
 ;; From a BCDM point of view, core2 (and XTDB) are similar to Jensen's
-;; event log approach, that is, we know sys-time, and we know the app-time
+;; event log approach, that is, we know system-time, and we know the app-time
 ;; range, but not the actual real state as expressed in the Snodgrass'
 ;; timestamped tuple approach, which is the relation we want scan to
 ;; produce. Theoretically, one can map between these via the BCDM, as
@@ -35,26 +35,26 @@
 ;; that serves as a good reference, but not practical.
 
 ;; The only update that needs to happen to the append only data is
-;; setting sys-time-end to the current sys-time when closing
-;; rows. Working around this is what the current uni-temporal sys-time
+;; setting system-time-end to the current system-time when closing
+;; rows. Working around this is what the current uni-temporal system-time
 ;; support does. This fact will help later when and if we decide to
 ;; store the temporal index per chunk in Arrow and merge between them.
 
 ;; Further, I think we can decide that a put or delete always know its
-;; full app-time range, that is, if app-time isn't known it's set to sys-time,
+;; full app-time range, that is, if app-time isn't known it's set to system-time,
 ;; and if app-time-end isn't know, it's set to end-of-time (at least
 ;; for the proof-of-concept).
 
 ;; In the temporal index structure, this means that when you do a put
-;; (delete) you find any current rows (sys-time-end == UC) for the id
+;; (delete) you find any current rows (system-time-end == UC) for the id
 ;; that overlaps the app-time range, and mark those rows with the
-;; sys-time-end to current sys-time (the part that cannot be done append
+;; system-time-end to current system-time (the part that cannot be done append
 ;; only). You then insert the new row entry (for put) normally. If the
 ;; put (delete) didn't fully overlap you copy the start (and/or) end
 ;; partial row entries forward, referring to the original row-id,
 ;; updating their app-time-end (for start) and app-time (for end) to
-;; match the slice, you also set sys-time to that of the current tx,
-;; and sys-time-end to UC.
+;; match the slice, you also set system-time to that of the current tx,
+;; and system-time-end to UC.
 
 ;; We assume that the column store has a 1-to-1 mapping between
 ;; operations and row-ids, but the temporal index can refer to them
@@ -63,10 +63,10 @@
 
 ;; For simplicitly, let's assume that this structure is an in-memory
 ;; kd-tree for now with 6 dimensions: id, row-id, app-time,
-;; app-time-end, sys-time, sys-time-end. When updating sys-time-end, one
+;; app-time-end, system-time, system-time-end. When updating system-time-end, one
 ;; has a few options, either one deletes the node and reinserts it, or
 ;; one can have an extra value (not part of the actual index),
-;; sys-time-delete, which if it exists, supersedes sys-time-end when
+;; system-time-delete, which if it exists, supersedes system-time-end when
 ;; doing the element-level comparision. That would imply that these
 ;; nodes would needlessly be found by the kd-tree navigation itself,
 ;; so moving them might be better. But a reason to try to avoid moving
@@ -143,9 +143,9 @@
 (defn temporal-column? [col-name]
   (contains? temporal-col-types (str col-name)))
 
-(def ^:const ^int sys-time-end-idx 0)
+(def ^:const ^int system-time-end-idx 0)
 (def ^:const ^int id-idx 1)
-(def ^:const ^int sys-time-start-idx 2)
+(def ^:const ^int system-time-start-idx 2)
 (def ^:const ^int row-id-idx 3)
 (def ^:const ^int app-time-start-idx 4)
 (def ^:const ^int app-time-end-idx 5)
@@ -154,8 +154,8 @@
                             "_row_id" row-id-idx
                             "xt$valid_from" app-time-start-idx
                             "xt$valid_to" app-time-end-idx
-                            "xt$system_from" sys-time-start-idx
-                            "xt$system_to" sys-time-end-idx})
+                            "xt$system_from" system-time-start-idx
+                            "xt$system_to" system-time-end-idx})
 
 (defn ->temporal-column-idx ^long [col-name]
   (long (get column->idx (name col-name))))
@@ -193,25 +193,25 @@
 (defn remove-evicted-row-ids [^clojure.lang.PersistentHashSet current-row-ids ^Roaring64Bitmap evicted-row-ids]
   (set/difference current-row-ids (set (.toArray evicted-row-ids))))
 
-(defn insert-coordinates [kd-tree, ^BufferAllocator allocator, ^TemporalCoordinates coordinates !current-row-ids sys-time-μs]
-  (let [^long sys-time-μs sys-time-μs
+(defn insert-coordinates [kd-tree, ^BufferAllocator allocator, ^TemporalCoordinates coordinates !current-row-ids system-time-μs]
+  (let [^long system-time-μs system-time-μs
         new-entity? (.newEntity coordinates)
         row-id (.rowId coordinates)
         iid (.iid coordinates)
-        sys-time-start-μs (.sysTimeStart coordinates)
-        sys-time-end-μs (.sysTimeEnd coordinates)
+        system-time-start-μs (.sysTimeStart coordinates)
+        system-time-end-μs (.sysTimeEnd coordinates)
         app-time-start-μs (.appTimeStart coordinates)
         app-time-end-μs (.appTimeEnd coordinates)
 
         min-range (doto (->min-range)
                     (aset id-idx iid)
                     (aset app-time-end-idx (inc app-time-start-μs))
-                    (aset sys-time-end-idx sys-time-start-μs))
+                    (aset system-time-end-idx system-time-start-μs))
 
         max-range (doto (->max-range)
                     (aset id-idx iid)
                     (aset app-time-start-idx (dec app-time-end-μs))
-                    (aset sys-time-end-idx sys-time-end-μs))
+                    (aset system-time-end-idx system-time-end-μs))
 
         ^IKdTreePointAccess point-access (kd/kd-tree-point-access kd-tree)
 
@@ -237,12 +237,12 @@
                                        (aset row-id-idx row-id)
                                        (aset app-time-start-idx app-time-start-μs)
                                        (aset app-time-end-idx app-time-end-μs)
-                                       (aset sys-time-start-idx sys-time-start-μs)
-                                       (aset sys-time-end-idx util/end-of-time-μs))))]
+                                       (aset system-time-start-idx system-time-start-μs)
+                                       (aset system-time-end-idx util/end-of-time-μs))))]
 
     (when (and
-            (<= app-time-start-μs sys-time-μs)
-            (> app-time-end-μs sys-time-μs))
+            (<= app-time-start-μs system-time-μs)
+            (> app-time-end-μs system-time-μs))
       (vswap!
         !current-row-ids
         update-current-row-ids
@@ -252,15 +252,15 @@
     (reduce
      (fn [kd-tree ^longs coord]
        (cond-> (kd/kd-tree-insert kd-tree allocator (doto (->copy-range coord)
-                                                      (aset sys-time-end-idx sys-time-start-μs)))
+                                                      (aset system-time-end-idx system-time-start-μs)))
          (< (aget coord app-time-start-idx) app-time-start-μs)
          (kd/kd-tree-insert allocator (doto (->copy-range coord)
-                                        (aset sys-time-start-idx sys-time-start-μs)
+                                        (aset system-time-start-idx system-time-start-μs)
                                         (aset app-time-end-idx app-time-start-μs)))
 
          (> (aget coord app-time-end-idx) app-time-end-μs)
          (kd/kd-tree-insert allocator (doto (->copy-range coord)
-                                        (aset sys-time-start-idx sys-time-start-μs)
+                                        (aset system-time-start-idx system-time-start-μs)
                                         (aset app-time-start-idx app-time-end-μs)))))
      kd-tree
      overlap)))
@@ -328,7 +328,7 @@
   (let [min-range (doto (->min-range)
                     (aset app-time-start-idx (inc latest-completed-tx-time))
                     (aset app-time-end-idx (inc current-time))
-                    (aset sys-time-end-idx (inc current-time)))
+                    (aset system-time-end-idx (inc current-time)))
 
         max-range (doto (->max-range)
                     (aset app-time-start-idx current-time))
@@ -351,9 +351,9 @@
 (defn row-ids-to-remove [kd-tree ^long latest-completed-tx-time ^long current-time]
   (let [min-range (doto (->min-range)
                     (aset app-time-end-idx (inc latest-completed-tx-time))
-                    (aset sys-time-end-idx (inc current-time)))
+                    (aset system-time-end-idx (inc current-time)))
 
-        ;; justification here for sys-time-end constraint is that if a rows system time end
+        ;; justification here for system-time-end constraint is that if a rows system time end
         ;; is before current-time then then that row would have been removed during transaction
         ;; processing as there is no way for a system time end to be in the future.
         ;; Same applies above for row-ids-to-add
@@ -380,7 +380,7 @@
 (defn row-ids-to-from-start [kd-tree ^long current-time]
   (let [min-range (doto (->min-range)
                     (aset app-time-end-idx (inc current-time))
-                    (aset sys-time-end-idx (inc current-time)))
+                    (aset system-time-end-idx (inc current-time)))
 
         max-range (doto (->max-range)
                     (aset app-time-start-idx current-time))
@@ -483,7 +483,7 @@
       (set! (.current-row-ids this)
             (current-row-ids-from-start
               (.kd-tree this)
-              (util/instant->micros (.sys-time latest-completed-tx))))))
+              (util/instant->micros (.system-time latest-completed-tx))))))
 
   (awaitSnapshotBuild [_]
     (some-> snapshot-future (deref)))
@@ -522,7 +522,7 @@
           (advance-current-row-ids
             current-row-ids
             kd-tree
-            (util/instant->micros (.sys-time latest-completed-tx))
+            (util/instant->micros (.system-time latest-completed-tx))
             current-time))
 
         Closeable
@@ -557,7 +557,7 @@
           (.reloadTemporalIndex this chunk-idx snapshot-idx)))))
 
   (startTx [this-tm tx-key]
-    (let [sys-time-μs (util/instant->micros (.sys-time tx-key))
+    (let [system-time-μs (util/instant->micros (.system-time tx-key))
           evicted-row-ids (Roaring64Bitmap.)
           !kd-tree (volatile! kd-tree)
           !current-row-ids (volatile! current-row-ids)]
@@ -567,28 +567,28 @@
           !current-row-ids
           advance-current-row-ids
           @!kd-tree
-          (util/instant->micros (.sys-time latest-completed-tx))
-          sys-time-μs))
+          (util/instant->micros (.system-time latest-completed-tx))
+          system-time-μs))
 
       (reify
         ITemporalTxIndexer
         (indexPut [_ iid row-id start-app-time end-app-time new-entity?]
           (vswap! !kd-tree
                   insert-coordinates allocator (TemporalCoordinates. row-id iid
-                                                                     sys-time-μs util/end-of-time-μs
+                                                                     system-time-μs util/end-of-time-μs
                                                                      start-app-time end-app-time
                                                                      new-entity? false)
                   !current-row-ids
-                  sys-time-μs))
+                  system-time-μs))
 
         (indexDelete [_ iid row-id start-app-time end-app-time new-entity?]
           (vswap! !kd-tree
                   insert-coordinates allocator (TemporalCoordinates. row-id iid
-                                                                     sys-time-μs util/end-of-time-μs
+                                                                     system-time-μs util/end-of-time-μs
                                                                      start-app-time end-app-time
                                                                      new-entity? true)
                   !current-row-ids
-                  sys-time-μs))
+                  system-time-μs))
 
         (indexEvict [_ iid]
           (vswap! !kd-tree evict-id allocator iid evicted-row-ids)
@@ -610,7 +610,7 @@
           (advance-current-row-ids
             @!current-row-ids
             @!kd-tree
-            (util/instant->micros (.sys-time latest-completed-tx))
+            (util/instant->micros (.system-time latest-completed-tx))
             current-time)))))
 
   Closeable

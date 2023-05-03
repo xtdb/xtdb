@@ -335,11 +335,11 @@
                 :now (-> (.instant expr/*clock*)
                          (util/instant->micros))))]
 
-      (when-let [sys-time (some-> basis-tx (.sys-time) util/instant->micros)]
-        (apply-bound :<= "xt$system_from" sys-time)
+      (when-let [system-time (some-> basis-tx (.system-time) util/instant->micros)]
+        (apply-bound :<= "xt$system_from" system-time)
 
         (when-not for-system-time
-          (apply-bound :> "xt$system_to" sys-time)))
+          (apply-bound :> "xt$system_to" system-time)))
 
       (letfn [(apply-constraint [constraint start-col end-col]
                 (when-let [[tag & args] constraint]
@@ -406,7 +406,7 @@
       (.txBasis watermark))
    (at-now? scan-opts)
    (>= (util/instant->micros (:current-time basis))
-       (util/instant->micros (:sys-time (:tx basis))))
+       (util/instant->micros (:system-time (:tx basis))))
    (empty? (remove #(= % "xt$id") temporal-col-names))))
 
 (defn get-current-row-ids [^IWatermark watermark basis]

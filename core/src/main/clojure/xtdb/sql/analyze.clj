@@ -1105,7 +1105,7 @@
                        (->line-info-str ag))])
 
             (when (contains? #{"xt$system_from" "xt$system_to"} (identifier id))
-              [(format "Updating sys-time columns is not supported: %s %s"
+              [(format "Updating system-time columns is not supported: %s %s"
                        (->src-str ag)
                        (->line-info-str ag))]))))
 

@@ -314,7 +314,7 @@
 
       (.endValue tx-ops-writer))))
 
-(defn serialize-tx-ops ^java.nio.ByteBuffer [^BufferAllocator allocator tx-ops {:keys [^Instant sys-time, default-tz, default-all-valid-time?]}]
+(defn serialize-tx-ops ^java.nio.ByteBuffer [^BufferAllocator allocator tx-ops {:keys [^Instant system-time, default-tz, default-all-valid-time?]}]
   (with-open [root (VectorSchemaRoot/create tx-schema allocator)]
     (let [ops-list-writer (.asList (vw/vec->writer (.getVector root "tx-ops")))
           tx-ops-writer (.asDenseUnion (.getDataWriter ops-list-writer))
@@ -322,9 +322,9 @@
           default-tz-writer (vw/vec->writer (.getVector root "default-tz"))
           app-time-behaviour-writer (vw/vec->writer (.getVector root "all-application-time?"))]
 
-      (when sys-time
+      (when system-time
         (doto ^TimeStampMicroTZVector (.getVector root "system-time")
-          (.setSafe 0 (util/instant->micros sys-time))))
+          (.setSafe 0 (util/instant->micros system-time))))
 
       (types/write-value! (str default-tz) default-tz-writer)
       (types/write-value! (boolean default-all-valid-time?) app-time-behaviour-writer)
@@ -343,13 +343,13 @@
 (deftype TxProducer [^BufferAllocator allocator, ^Log log, ^ZoneId default-tz]
   ITxProducer
   (submitTx [_ tx-ops opts]
-    (let [{:keys [sys-time] :as opts} (-> (into {:default-tz default-tz} opts)
-                                          (util/maybe-update :sys-time util/->instant))]
+    (let [{:keys [system-time] :as opts} (-> (into {:default-tz default-tz} opts)
+                                             (util/maybe-update :system-time util/->instant))]
       (-> (.appendRecord log (serialize-tx-ops allocator tx-ops opts))
           (util/then-apply
             (fn [^LogRecord result]
               (cond-> (.tx result)
-                sys-time (assoc :sys-time sys-time))))))))
+                system-time (assoc :system-time system-time))))))))
 
 (defmethod ig/prep-key ::tx-producer [_ opts]
   (merge {:log (ig/ref :xtdb/log)

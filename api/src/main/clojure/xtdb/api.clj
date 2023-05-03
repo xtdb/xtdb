@@ -2,7 +2,7 @@
   (:import java.io.Writer
            java.time.Instant))
 
-(defrecord TransactionInstant [^long tx-id, ^Instant sys-time]
+(defrecord TransactionInstant [^long tx-id, ^Instant system-time]
   Comparable
   (compareTo [_ tx-key]
     (Long/compare tx-id (.tx-id ^TransactionInstant tx-key))))
