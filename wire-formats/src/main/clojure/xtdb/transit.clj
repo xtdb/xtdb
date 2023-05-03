@@ -39,7 +39,7 @@
               YearMonth "time/year-month"
               MonthDay "time/month-day"}
              (update-vals #(transit/write-handler % str)))
-         {TransactionInstant (transit/write-handler "xtdb/tx-key" #(select-keys % [:tx-id :sys-time]))
+         {TransactionInstant (transit/write-handler "xtdb/tx-key" #(select-keys % [:tx-id :system-time]))
           xtdb.IllegalArgumentException (transit/write-handler "xtdb/illegal-arg" ex-data)
           xtdb.RuntimeException (transit/write-handler "xtdb/runtime-err" ex-data)
 

@@ -12,7 +12,7 @@
             {[(util/->zdt #inst "2024-01-01") (util/->zdt util/end-of-time), tt tt]
              "Happy 2024!",
 
-             ;; weird? zero-width sys-time so won't normally show up
+             ;; weird? zero-width system-time so won't normally show up
              [(util/->zdt #inst "2024-01-01") (util/->zdt #inst "2026-01-01"), tt tt]
              "Happy 2024!",
 

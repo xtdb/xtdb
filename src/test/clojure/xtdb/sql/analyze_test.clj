@@ -761,7 +761,7 @@ SELECT t1.d-t1.e AS a, SUM(t1.a) AS b
   (invalid? [#"Updating app-time columns outside of `FOR PERIOD OF` is not supported:"]
             "UPDATE foo SET xt$valid_from = DATE '2020-01-01'")
 
-  (invalid? [#"Updating sys-time columns is not supported:"]
+  (invalid? [#"Updating system-time columns is not supported:"]
             "UPDATE foo SET xt$system_from = DATE '2020-01-01'"))
 
 (t/deftest test-with-recursive-unsupported-490

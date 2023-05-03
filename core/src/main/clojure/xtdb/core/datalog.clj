@@ -387,12 +387,12 @@
                         :end app-time-end-sym})
 
 
-(def sys-time-period-sym 'xt/system-time)
-(def sys-time-start-sym 'xt/system-from)
-(def sys-time-end-sym 'xt/system-to)
-(def sys-temporal-cols {:period sys-time-period-sym
-                        :start sys-time-start-sym
-                        :end sys-time-end-sym})
+(def system-time-period-sym 'xt/system-time)
+(def system-time-start-sym 'xt/system-from)
+(def system-time-end-sym 'xt/system-to)
+(def sys-temporal-cols {:period system-time-period-sym
+                        :start system-time-start-sym
+                        :end system-time-end-sym})
 
 (defn replace-period-cols-with-temporal-attrs
   [original-attrs]
@@ -401,9 +401,9 @@
     (-> (disj app-time-period-sym)
         (conj app-time-start-sym app-time-end-sym))
 
-    (contains? original-attrs sys-time-period-sym)
-    (-> (disj sys-time-period-sym)
-        (conj sys-time-start-sym sys-time-end-sym))))
+    (contains? original-attrs system-time-period-sym)
+    (-> (disj system-time-period-sym)
+        (conj system-time-start-sym system-time-end-sym))))
 
 (defn create-period-constructor [match {:keys [period start end]}]
   (when-let [[_ [lv-type lv]] (first (filter #(= period (first %)) match))]
@@ -500,7 +500,7 @@
                                           :logic-var {:lv v-arg
                                                       :col (if (contains?
                                                                  #{app-time-period-sym
-                                                                   sys-time-period-sym}
+                                                                   system-time-period-sym}
                                                                  a)
                                                              (col-sym v-arg)
                                                              a)}

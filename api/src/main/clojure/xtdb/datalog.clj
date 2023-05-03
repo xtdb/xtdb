@@ -94,12 +94,12 @@
   "Writes transactions to the log for processing. Non-blocking.
   tx-ops Datalog style transactions.
   Returns a CompleteableFuture containing a map with details about
-  the submitted transaction, including sys-time and tx-id.
+  the submitted transaction, including system-time and tx-id.
 
   opts (map):
-   - :sys-time
-     overrides sys-time for the transaction,
-     mustn't be earlier than any previous sys-time
+   - :system-time
+     overrides system-time for the transaction,
+     mustn't be earlier than any previous system-time
 
    - :default-tz
      overrides the default time zone for the transaction,
@@ -113,12 +113,12 @@
   "Writes transactions to the log for processing
   tx-ops Datalog style transactions.
   Returns a map with details about the submitted transaction,
-  including sys-time and tx-id.
+  including system-time and tx-id.
 
   opts (map):
-   - :sys-time
-     overrides sys-time for the transaction,
-     mustn't be earlier than any previous sys-time
+   - :system-time
+     overrides system-time for the transaction,
+     mustn't be earlier than any previous system-time
 
    - :default-tz
      overrides the default time zone for the transaction,

@@ -1,0 +1,7 @@
+[:rename
+ {x3 $column_1$}
+ [:project
+  [{x3 1}]
+  [:rename
+   {bar x1}
+   [:scan {:table foo, :for-system-time :all-time} [bar]]]]]

@@ -94,7 +94,7 @@
    [:sql \"UPDATE foo SET b = 1\"]]
 
   Returns a CompleteableFuture containing a map with details about the submitted transaction,
-  including sys-time and tx-id."
+  including system-time and tx-id."
   (^java.util.concurrent.CompletableFuture [node tx-ops] (submit-tx& node tx-ops {}))
   (^java.util.concurrent.CompletableFuture [node tx-ops tx-opts]
    (impl/submit-tx& node tx-ops (into {:default-all-valid-time? true} tx-opts))))
@@ -109,7 +109,7 @@
    [:sql \"UPDATE foo SET b = 1\"]]
 
   Returns a map with details about the submitted transaction,
-  including sys-time and tx-id."
+  including system-time and tx-id."
   (^xtdb.api.TransactionInstant [node tx-ops] (submit-tx node tx-ops {}))
   (^xtdb.api.TransactionInstant [node tx-ops tx-opts]
    (-> @(submit-tx& node tx-ops tx-opts)

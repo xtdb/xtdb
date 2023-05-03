@@ -47,13 +47,13 @@
                               (when-not (= record-separator (.read log-in))
                                 (throw (IllegalStateException. "invalid record")))
                               (let [size (.readInt log-in)
-                                    sys-time (util/micros->instant (.readLong log-in))
+                                    system-time (util/micros->instant (.readLong log-in))
                                     record (byte-array size)
                                     read-bytes (.read log-in record)
                                     offset-check (.readLong log-in)]
                                 (when (and (= size read-bytes)
                                            (= offset-check offset))
-                                  (xt.log/->LogRecord (xt/->TransactionInstant offset sys-time) (ByteBuffer/wrap record))))
+                                  (xt.log/->LogRecord (xt/->TransactionInstant offset system-time) (ByteBuffer/wrap record))))
                               (catch EOFException _))]
               (recur (dec limit)
                      (conj acc record)
@@ -105,18 +105,18 @@
                        offset previous-offset]
                   (when-not (= n (.size elements))
                     (let [[f ^ByteBuffer record] (.get elements n)
-                          sys-time (-> (.instant instant-src) (.truncatedTo ChronoUnit/MICROS))
+                          system-time (-> (.instant instant-src) (.truncatedTo ChronoUnit/MICROS))
                           size (.remaining record)
                           written-record (.duplicate record)]
                       (.write log-out ^byte record-separator)
                       (.writeInt log-out size)
-                      (.writeLong log-out (util/instant->micros sys-time))
+                      (.writeLong log-out (util/instant->micros system-time))
                       (while (>= (.remaining written-record) Long/BYTES)
                         (.writeLong log-out (.getLong written-record)))
                       (while (.hasRemaining written-record)
                         (.write log-out (.get written-record)))
                       (.writeLong log-out offset)
-                      (.set elements n (MapEntry/create f (xt.log/->LogRecord (xt/->TransactionInstant offset sys-time) record)))
+                      (.set elements n (MapEntry/create f (xt.log/->LogRecord (xt/->TransactionInstant offset system-time) record)))
                       (recur (inc n) (+ offset header-size size footer-size)))))
                 (catch Throwable t
                   (.truncate log-channel previous-offset)

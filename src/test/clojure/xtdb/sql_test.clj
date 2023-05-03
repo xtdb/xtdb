@@ -1089,7 +1089,7 @@
 
   (t/is
    (=plan-file
-    "test-period-specs-with-subqueries-407-sys-time"
+    "test-period-specs-with-subqueries-407-system-time"
     (plan-sql
      "SELECT 1 FROM (select foo.bar from foo FOR ALL SYSTEM_TIME) as tmp")))
 

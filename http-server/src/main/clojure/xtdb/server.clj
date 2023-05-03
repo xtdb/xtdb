@@ -46,7 +46,7 @@
 
 (s/def ::tx-id int?)
 
-(s/def ::sys-time
+(s/def ::system-time
   (st/spec inst?
            {:decode/string (fn [_ s]
                              (cond
@@ -56,7 +56,7 @@
 (s/def ::default-all-valid-time? boolean?)
 (s/def ::default-tz #(instance? ZoneId %))
 
-(s/def ::opts (s/keys :opt-un [::sys-time ::default-all-valid-time? ::default-tz]))
+(s/def ::opts (s/keys :opt-un [::system-time ::default-all-valid-time? ::default-tz]))
 
 (defmethod route-handler :status [_]
   {:get (fn [{:keys [node] :as _req}]
