@@ -340,9 +340,18 @@
 
       (util/root->arrow-ipc-byte-buffer root :stream))))
 
+(defn validate-opts [tx-opts]
+  (when (contains? tx-opts :system-time)
+    (let [system-time (:system-time tx-opts)]
+      (when-not (inst? system-time)
+        (throw (err/illegal-arg
+                 :xtdb.api/invalid-system-time
+                 {:xtdb.error/message (format "system-time must be an inst, supplied value: %s" system-time)}))))))
+
 (deftype TxProducer [^BufferAllocator allocator, ^Log log, ^ZoneId default-tz]
   ITxProducer
   (submitTx [_ tx-ops opts]
+    (validate-opts opts)
     (let [{:keys [system-time] :as opts} (-> (into {:default-tz default-tz} opts)
                                              (util/maybe-update :system-time util/->instant))]
       (-> (.appendRecord log (serialize-tx-ops allocator tx-ops opts))

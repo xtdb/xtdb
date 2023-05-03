@@ -484,3 +484,16 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"]])
            (xt.sql/q *node*
                      "SELECT t1.text FROM t1 FOR ALL VALID_TIME"
                      {:default-all-valid-time? false}))))
+
+(deftest test-submit-tx-system-time-opt
+  (t/is (thrown-with-msg?
+          xtdb.IllegalArgumentException
+          #"system-time must be an inst, supplied value: null"
+          (xt.sql/submit-tx tu/*node* [[:sql "INSERT INTO xt_docs (xt$id) VALUES (1)"]]
+                            {:system-time nil})))
+
+  (t/is (thrown-with-msg?
+          IllegalArgumentException
+          #"system-time must be an inst, supplied value: foo"
+          (xt.d/submit-tx tu/*node* [[:put :xt_docs {:xt/id 1}]]
+                          {:system-time "foo"}))))
