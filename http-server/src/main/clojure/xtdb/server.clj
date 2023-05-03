@@ -47,8 +47,7 @@
 (s/def ::tx-id int?)
 
 (s/def ::system-time
-  (st/spec inst?
-           {:decode/string (fn [_ s]
+  (st/spec {:decode/string (fn [_ s]
                              (cond
                                (inst? s) s
                                (string? s) (inst/read-instant-date s)))}))
