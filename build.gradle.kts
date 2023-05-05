@@ -161,6 +161,7 @@ dependencies {
     projectDep(":modules:jdbc")
     projectDep(":modules:kafka")
     projectDep(":modules:s3")
+    projectDep(":modules:azure")
 
     projectDep(":modules:bench")
     projectDep(":modules:c1-import")
@@ -174,6 +175,7 @@ dependencies {
     testImplementation("org.clojure", "tools.cli", "1.0.206")
 
     devImplementation("integrant", "repl", "0.3.2")
+    devImplementation("com.azure","azure-identity","1.9.0")
     testImplementation("org.slf4j", "slf4j-api", "2.0.6")
     testImplementation("com.clojure-goes-fast", "clj-async-profiler", "1.0.0")
     testImplementation("org.postgresql", "postgresql", "42.5.0")

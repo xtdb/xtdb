@@ -10,6 +10,7 @@ dependencies {
     implementation(project(":http-server"))
     implementation(project(":modules:jdbc"))
     implementation(project(":modules:kafka"))
+    implementation(project(":modules:azure"))
     implementation(project(":modules:flight-sql"))
     implementation("ch.qos.logback", "logback-classic", "1.4.5")
 }
