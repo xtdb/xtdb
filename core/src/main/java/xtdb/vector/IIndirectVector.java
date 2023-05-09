@@ -32,7 +32,7 @@ public interface IIndirectVector<V extends ValueVector> extends AutoCloseable {
 
     IIndirectVector<V> select(int[] idxs);
 
-    IRowCopier rowCopier(IVectorWriter<? super V> writer);
+    IRowCopier rowCopier(IVectorWriter writer);
 
     IStructReader structReader();
     IListReader listReader();

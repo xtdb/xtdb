@@ -6,14 +6,18 @@
             [xtdb.rewrite :refer [zmatch]]
             [xtdb.types :as types]
             [xtdb.util :as util]
+            [xtdb.vector :as vec]
             [xtdb.vector.indirect :as iv]
             [xtdb.vector.writer :as vw])
-  (:import (xtdb ICursor)
-           (xtdb.vector IIndirectRelation)
-           (java.util ArrayList HashSet HashMap Set)
+  (:import (java.util
+            ArrayList
+            HashMap
+            HashSet
+            Set)
            java.util.function.Function
            (org.apache.arrow.vector.complex DenseUnionVector)
-           (java.time Clock)))
+           (xtdb ICursor)
+           (xtdb.vector IIndirectRelation)))
 
 (defmethod lp/ra-expr :table [_]
   (s/cat :op #{:table}
@@ -51,8 +55,7 @@
                   :let [col-kw (keyword col-name)
                         out-vec (-> (types/col-type->field col-name col-type)
                                     (.createVector allocator))
-                        duv? (instance? DenseUnionVector out-vec)
-                        out-writer (vw/vec->writer out-vec)]]
+                        out-writer (vec/->writer out-vec)]]
 
             (.setInitialCapacity out-vec row-count)
             (.allocateNew out-vec)
@@ -61,14 +64,7 @@
             (dotimes [idx row-count]
               (let [row (nth rows idx)
                     v (-> (get row col-kw) (->v opts))]
-                (.startValue out-writer)
-                (if duv?
-                  (doto (.writerForType (.asDenseUnion out-writer) (types/value->col-type v))
-                    (.startValue)
-                    (->> (types/write-value! v))
-                    (.endValue))
-                  (types/write-value! v out-writer))
-                (.endValue out-writer)))
+                (vec/write-value! v (.writerForType out-writer (vec/value->col-type v)))))
 
             (.setValueCount out-vec row-count))
 
@@ -90,7 +86,7 @@
                 ^Set col-type-set (.computeIfAbsent col-type-sets k-sym (reify Function (apply [_ _] (HashSet.))))]
             (case (:op expr)
               :literal (do
-                         (.add col-type-set (types/value->col-type v))
+                         (.add col-type-set (vec/value->col-type v))
                          (.put out-row k-kw v))
 
               :param (let [{:keys [param]} expr]

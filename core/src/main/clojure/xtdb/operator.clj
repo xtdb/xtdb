@@ -1,7 +1,7 @@
 (ns xtdb.operator
   (:require [clojure.spec.alpha :as s]
-            [clojure.string :as str]
             [clojure.tools.logging :as log]
+            [juxt.clojars-mirrors.integrant.core :as ig]
             [xtdb.error :as err]
             [xtdb.expression :as expr]
             xtdb.expression.temporal
@@ -21,20 +21,19 @@
             xtdb.operator.table
             xtdb.operator.top
             xtdb.operator.unwind
-            [xtdb.types :as types]
             [xtdb.util :as util]
-            [xtdb.vector.indirect :as iv]
-            [juxt.clojars-mirrors.integrant.core :as ig])
-  (:import (clojure.lang IPersistentMap MapEntry)
-           (xtdb ICursor IResultCursor IResultSet RefCounter)
-           xtdb.metadata.IMetadataManager
-           xtdb.operator.scan.IScanEmitter
+            [xtdb.vector :as vec]
+            [xtdb.vector.indirect :as iv])
+  (:import (clojure.lang MapEntry)
            java.lang.AutoCloseable
            (java.time Clock Duration)
            (java.util Iterator)
            (java.util.concurrent ConcurrentHashMap)
            (java.util.function Consumer Function)
-           (org.apache.arrow.memory BufferAllocator RootAllocator)))
+           (org.apache.arrow.memory BufferAllocator RootAllocator)
+           (xtdb ICursor IResultCursor IResultSet RefCounter)
+           xtdb.metadata.IMetadataManager
+           xtdb.operator.scan.IScanEmitter))
 
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface BoundQuery
@@ -59,7 +58,7 @@
   (->> (for [[table-key rows] table-args]
          (MapEntry/create
           table-key
-          (types/rows->col-types rows)))
+          (vec/rows->col-types rows)))
        (into {})))
 
 (defn- wrap-cursor ^xtdb.IResultCursor [^ICursor cursor, ^AutoCloseable wm, ^BufferAllocator al, ^Clock clock, ^RefCounter ref-ctr col-types]

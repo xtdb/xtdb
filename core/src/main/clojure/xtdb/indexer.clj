@@ -170,7 +170,7 @@
   (let [lp '[:scan {:table xt/tx-fns} [{xt/id (= xt/id ?id)} xt/fn]]
         ^xtdb.operator.PreparedQuery pq (.prepareRaQuery ra-src lp)]
     (with-open [bq (.bind pq wm-src
-                          {:params (iv/->indirect-rel [(-> (vw/open-vec allocator '?id [fn-id])
+                          {:params (iv/->indirect-rel [(-> (vec/open-vec allocator '?id [fn-id])
                                                            (iv/->direct-vec))]
                                                       1)
                            :default-all-valid-time? false
@@ -350,8 +350,7 @@
             live-table (.liveTable live-chunk table)
             live-table-wtr (.writer live-table)]
         (letfn [(->live-row-copier ^xtdb.vector.IRowCopier [^IIndirectVector col]
-                  (-> (.writerForName live-table-wtr (.getName col))
-                      (vw/->row-copier col)))]
+                  (.rowCopier col (.writerForName live-table-wtr (.getName col))))]
 
           (let [update-col-copiers (->> (for [^IIndirectVector in-col in-rel
                                               :let [col-name (.getName in-col)]
@@ -515,24 +514,21 @@
 
     (.writeRowId live-table row-id)
 
-    (doto (-> (.writerForName writer "xt$id" :i64)
-              (.monoWriter :i64))
+    (doto (.writerForName writer "xt$id" :i64)
       (.writeLong tx-id))
 
-    (doto (-> (.writerForName writer "xt$tx_time" t/temporal-col-type)
-              (.monoWriter :i64))
+    (doto (.writerForName writer "xt$tx_time" t/temporal-col-type)
       (.writeLong system-time-µs))
 
-    (doto (-> (.writerForName writer "xt$committed?" :bool)
-              (.monoWriter :bool))
+    (doto (.writerForName writer "xt$committed?" :bool)
       (.writeBoolean (nil? t)))
 
     (let [e-wtr (.writerForName writer "xt$error" [:union #{:null :clj-form}])]
       (if (or (nil? t) (= t abort-exn))
-        (doto (.monoWriter e-wtr :null)
+        (doto (.writerForType e-wtr :null)
           (.writeNull nil))
-        (doto (.monoWriter e-wtr :clj-form)
-          (.writeObject (ByteBuffer/wrap (.getBytes (pr-str t)))))))
+        (doto (.writerForType e-wtr :clj-form)
+          (.writeObject (pr-str t)))))
 
     (.indexPut temporal-tx iid row-id system-time-µs util/end-of-time-μs true)))
 

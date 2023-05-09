@@ -1,63 +1,70 @@
 package xtdb.vector;
 
-class ListValueBox implements IMonoVectorReader, IMonoVectorWriter, IPolyVectorReader, IPolyVectorWriter {
+import org.apache.arrow.vector.types.pojo.Field;
 
-    private final int valueCount;
+import java.nio.ByteBuffer;
+import java.util.ArrayList;
+import java.util.List;
+
+class ListValueBox implements IValueWriter, IMonoVectorReader, IPolyVectorReader {
+
     private final IWriterPosition wp = IWriterPosition.build();
-    private final ValueBox[] els;
+    private final List<ValueBox> els;
     private ValueBox readBox;
+    private ValueBox writeBox;
 
-    ListValueBox(int valueCount) {
-        this.valueCount = valueCount;
-        els = new ValueBox[valueCount];
-        for (int i = 0; i < els.length; i++) {
-            els[i] = new ValueBox();
-        }
+    ListValueBox() {
+        els = new ArrayList<>();
     }
 
     @Override
     public int valueCount() {
-        return valueCount;
+        return wp.getPosition();
     }
 
     @Override
     public boolean readBoolean(int idx) {
-        return els[idx].readBoolean();
+        return els.get(idx).readBoolean();
     }
 
     @Override
     public byte readByte(int idx) {
-        return els[idx].readByte();
+        return els.get(idx).readByte();
     }
 
     @Override
     public short readShort(int idx) {
-        return els[idx].readShort();
+        return els.get(idx).readShort();
     }
 
     @Override
     public int readInt(int idx) {
-        return els[idx].readInt();
+        return els.get(idx).readInt();
     }
 
     @Override
     public long readLong(int idx) {
-        return els[idx].readLong();
+        return els.get(idx).readLong();
     }
 
     @Override
     public float readFloat(int idx) {
-        return els[idx].readFloat();
+        return els.get(idx).readFloat();
     }
 
     @Override
     public double readDouble(int idx) {
-        return els[idx].readDouble();
+        return els.get(idx).readDouble();
+    }
+
+    @Override
+    public ByteBuffer readBytes(int idx) {
+        return els.get(idx).readBytes();
     }
 
     @Override
     public Object readObject(int idx) {
-        return els[idx].readObject();
+        return els.get(idx).readObject();
     }
 
     @Override
@@ -101,162 +108,137 @@ class ListValueBox implements IMonoVectorReader, IMonoVectorWriter, IPolyVectorR
     }
 
     @Override
+    public ByteBuffer readBytes() {
+        return readBox.readBytes();
+    }
+
+    @Override
     public Object readObject() {
         return readBox.readObject();
     }
 
     @Override
     public byte read(int idx) {
-        this.readBox = els[idx];
+        this.readBox = els.get(idx);
         return read();
     }
 
-    @Override
-    public IWriterPosition writerPosition() {
-        return wp;
+    private ValueBox newEl() {
+        var vb = new ValueBox();
+        els.add(wp.getPositionAndIncrement(), vb);
+        return vb;
     }
 
     @Override
     public void writeNull(Void nullValue) {
-        els[wp.getPositionAndIncrement()].writeNull(nullValue);
+        newEl().writeNull(nullValue);
     }
 
     @Override
     public void writeBoolean(boolean booleanValue) {
-        els[wp.getPositionAndIncrement()].writeBoolean(booleanValue);
+        newEl().writeBoolean(booleanValue);
     }
 
     @Override
     public void writeByte(byte byteValue) {
-        els[wp.getPositionAndIncrement()].writeByte(byteValue);
+        newEl().writeByte(byteValue);
     }
 
     @Override
     public void writeShort(short shortValue) {
-        els[wp.getPositionAndIncrement()].writeShort(shortValue);
+        newEl().writeShort(shortValue);
     }
 
     @Override
     public void writeInt(int intValue) {
-        els[wp.getPositionAndIncrement()].writeInt(intValue);
+        newEl().writeInt(intValue);
     }
 
     @Override
     public void writeLong(long longValue) {
-        els[wp.getPositionAndIncrement()].writeLong(longValue);
+        newEl().writeLong(longValue);
     }
 
     @Override
     public void writeFloat(float floatValue) {
-        els[wp.getPositionAndIncrement()].writeFloat(floatValue);
+        newEl().writeFloat(floatValue);
     }
 
     @Override
     public void writeDouble(double doubleValue) {
-        els[wp.getPositionAndIncrement()].writeDouble(doubleValue);
+        newEl().writeDouble(doubleValue);
+    }
+
+    @Override
+    public void writeBytes(ByteBuffer bytesValue) {
+        newEl().writeBytes(bytesValue);
     }
 
     @Override
     public void writeObject(Object objectValue) {
-        els[wp.getPositionAndIncrement()].writeObject(objectValue);
+        newEl().writeObject(objectValue);
     }
 
     @Override
-    public IMonoVectorWriter writeMonoListElements(int elementCount) {
-        return els[wp.getPositionAndIncrement()].writeMonoListElements(elementCount);
+    public IValueWriter listElementWriter() {
+        return new BoxWriter() {
+            @Override
+            IValueWriter box() {
+                return writeBox.listElementWriter();
+            }
+        };
     }
 
     @Override
-    public IPolyVectorWriter writePolyListElements(int elementCount) {
-        return els[wp.getPositionAndIncrement()].writePolyListElements(elementCount);
+    public void startList() {
+        writeBox = new ValueBox();
+        els.add(wp.getPosition(), writeBox);
+        writeBox.startList();
     }
 
     @Override
-    public void writeStructEntries() {
-        els[wp.getPositionAndIncrement()].writeStructEntries();
-    }
-
-    // HACK: gah, I don't like the `- 1`s here but `writeStructEntries` has already incremented it
-    // neither can we have these methods increment it without making assumptions about the calling patterns
-    // ... which we're kind of doing already, I guess...
-
-    @Override
-    public IMonoValueWriter monoStructFieldWriter(String fieldName) {
-        return els[wp.getPosition() - 1].monoStructFieldWriter(fieldName);
+    public void endList() {
+        wp.getPositionAndIncrement();
+        writeBox.endList();
+        writeBox = null;
     }
 
     @Override
-    public IPolyValueWriter polyStructFieldWriter(String fieldName) {
-        return els[wp.getPosition() - 1].polyStructFieldWriter(fieldName);
+    public IValueWriter structKeyWriter(String key) {
+        return new BoxWriter() {
+            @Override
+            IValueWriter box() {
+                return writeBox.structKeyWriter(key);
+            }
+        };
     }
 
     @Override
-    public void writeNull(byte typeId, Void nullValue) {
-        els[wp.getPositionAndIncrement()].writeNull(typeId, nullValue);
+    public void startStruct() {
+        writeBox = new ValueBox();
+        els.add(wp.getPosition(), writeBox);
+        writeBox.startStruct();
     }
 
     @Override
-    public void writeBoolean(byte typeId, boolean booleanValue) {
-        els[wp.getPositionAndIncrement()].writeBoolean(typeId, booleanValue);
+    public void endStruct() {
+        writeBox.endStruct();
+        wp.getPositionAndIncrement();
+        writeBox = null;
     }
 
     @Override
-    public void writeByte(byte typeId, byte byteValue) {
-        els[wp.getPositionAndIncrement()].writeByte(typeId, byteValue);
+    public IValueWriter writerForType(Object colType) {
+        return writeBox.writerForType(colType);
     }
 
     @Override
-    public void writeShort(byte typeId, short shortValue) {
-        els[wp.getPositionAndIncrement()].writeShort(typeId, shortValue);
+    public byte registerNewType(Field field) {
+        return writeBox.registerNewType(field);
     }
 
     @Override
-    public void writeInt(byte typeId, int intValue) {
-        els[wp.getPositionAndIncrement()].writeInt(typeId, intValue);
-    }
-
-    @Override
-    public void writeLong(byte typeId, long longValue) {
-        els[wp.getPositionAndIncrement()].writeLong(typeId, longValue);
-    }
-
-    @Override
-    public void writeFloat(byte typeId, float floatValue) {
-        els[wp.getPositionAndIncrement()].writeFloat(typeId, floatValue);
-    }
-
-    @Override
-    public void writeDouble(byte typeId, double doubleValue) {
-        els[wp.getPositionAndIncrement()].writeDouble(typeId, doubleValue);
-    }
-
-    @Override
-    public void writeObject(byte typeId, Object objectValue) {
-        els[wp.getPositionAndIncrement()].writeObject(typeId, objectValue);
-    }
-
-    @Override
-    public IMonoVectorWriter writeMonoListElements(byte typeId, int elementCount) {
-        return els[wp.getPositionAndIncrement()].writeMonoListElements(typeId, elementCount);
-    }
-
-    @Override
-    public IPolyVectorWriter writePolyListElements(byte typeId, int elementCount) {
-        return els[wp.getPositionAndIncrement()].writePolyListElements(typeId, elementCount);
-    }
-
-    @Override
-    public void writeStructEntries(byte typeId) {
-        els[wp.getPositionAndIncrement()].writeStructEntries();
-    }
-
-    @Override
-    public IMonoValueWriter monoStructFieldWriter(byte typeId, String fieldName) {
-        return els[wp.getPosition() - 1].monoStructFieldWriter(typeId, fieldName);
-    }
-
-    @Override
-    public IPolyValueWriter polyStructFieldWriter(byte typeId, String fieldName) {
-        return els[wp.getPosition() - 1].polyStructFieldWriter(typeId, fieldName);
+    public IValueWriter writerForTypeId(byte typeId) {
+        return writeBox.writerForTypeId(typeId);
     }
 }

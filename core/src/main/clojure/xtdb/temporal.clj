@@ -310,7 +310,7 @@
         (let [col-idx (->temporal-column-idx col-name)
               col-type (types/col-type->field col-name (get temporal-col-types col-name)) ;TODO rename to field
               ^BaseFixedWidthVector temporal-vec (.createVector col-type allocator)
-              temporal-vec-wtr (vec/->mono-writer temporal-vec col-type)]
+              temporal-vec-wtr (vec/->writer temporal-vec)]
           (.allocateNew temporal-vec value-count)
           (dotimes [n value-count]
             (let [^longs coordinate (aget coordinates n)]

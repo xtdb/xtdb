@@ -23,9 +23,8 @@
     (t/is (= [{:name "Ivan"}
               {:name "Petr"}]
              (xt/q tu/*node*
-                   (-> '{:find [name]
-                         :where [(match :xt_docs {:first-name name})]}
-                       (assoc :basis {:tx tx})))))
+                   '{:find [name]
+                     :where [(match :xt_docs {:first-name name})]})))
 
     (t/is (= [{:e :ivan, :name "Ivan"}
               {:e :petr, :name "Petr"}]

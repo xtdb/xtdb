@@ -228,8 +228,8 @@
 
 (def ^:private col-type->rw-fn
   '{:bool Boolean, :i8 Byte, :i16 Short, :i32 Int, :i64 Long, :f32 Float, :f64 Double
-    :date Int, :time-local Long, :timestamp-tz Long, :timestamp-local Long, :duration Long
-    :utf8 Object, :varbinary Object
+    :date Long, :time-local Long, :timestamp-tz Long, :timestamp-local Long, :duration Long
+    :utf8 Bytes, :varbinary Bytes, :keyword Bytes, :uuid Bytes, :uri Bytes
 
     :list Object, :struct Object})
 
@@ -237,14 +237,13 @@
 (defmethod write-value-code :null [_ & args] `(.writeNull ~@args))
 
 (doseq [k [:bool :i8 :i16 :i32 :i64 :f32 :f64
-           :date :timestamp-tz :timestamp-local :time-local :duration]
+           :date :timestamp-tz :timestamp-local :time-local :duration
+           :utf8 :varbinary :uuid :uri :keyword]
         :let [rw-fn (col-type->rw-fn k)]]
   (defmethod read-value-code k [_ & args] `(~(symbol (str ".read" rw-fn)) ~@args))
   (defmethod write-value-code k [_ & args] `(~(symbol (str ".write" rw-fn)) ~@args)))
 
-(doseq [[k tag] {:utf8 ByteBuffer, :varbinary ByteBuffer,
-                 :uuid ByteBuffer, :uri ByteBuffer, :keyword ByteBuffer
-                 :interval PeriodDuration}]
+(doseq [[k tag] {:interval PeriodDuration}]
   (defmethod read-value-code k [_ & args]
     (-> `(.readObject ~@args) (with-tag tag)))
 
@@ -265,60 +264,52 @@
   (-> `(.readObject ~@args)
       (with-tag (if (types/union? el-type) IPolyVectorReader IMonoVectorReader))))
 
-(defmethod write-value-code :list [[_ list-el-type] writer-arg & args]
-  (let [list-code (last args)
-        list-sym (gensym 'list)
-        args (butlast args)
+(defmethod write-value-code :list [[_ list-el-type] writer-arg list-code]
+  (let [list-sym (gensym 'list)
         n-sym (gensym 'n)
         el-writer-sym (gensym 'list-el-writer)]
     (if (types/union? list-el-type)
-      (let [type-id-mapping (->> (second list-el-type)
-                                 (into {} (map-indexed (fn [idx el-type]
-                                                         [el-type idx]))))]
-        `(let [~list-sym ~list-code
-               el-count# (.valueCount ~list-sym)
-               ~el-writer-sym (.writePolyListElements ~writer-arg ~@args el-count#)]
-           (dotimes [~n-sym el-count#]
-             ~(continue-read (fn [el-type code]
-                               (write-value-code el-type el-writer-sym (get type-id-mapping el-type) code))
-                             list-el-type list-sym n-sym))))
+      `(let [~list-sym ~list-code
+             el-count# (.valueCount ~list-sym)
+             ~el-writer-sym (.listElementWriter ~writer-arg)]
+         (.startList ~writer-arg)
+         (dotimes [~n-sym el-count#]
+           ~(continue-read (fn [el-type code]
+                             (write-value-code el-type `(.writerForType ~el-writer-sym '~el-type) code))
+                           list-el-type list-sym n-sym))
+         (.endList ~writer-arg))
 
       `(let [~list-sym ~list-code
              el-count# (.valueCount ~list-sym)
-             ~el-writer-sym (.writeMonoListElements ~writer-arg ~@args el-count#)]
+             ~el-writer-sym (.listElementWriter ~writer-arg)]
+         (.startList ~writer-arg)
          (dotimes [~n-sym el-count#]
            ~(continue-read (fn [el-type code]
                              (write-value-code el-type el-writer-sym code))
-                           list-el-type list-sym n-sym))))))
+                           list-el-type list-sym n-sym))
+         (.endList ~writer-arg)))))
 
 (defmethod read-value-code :struct [_ & args]
   (-> `(.readObject ~@args)
       (with-tag IStructValueReader)))
 
-(defmethod write-value-code :struct [[_ val-types] writer-arg & args]
-  (let [struct-code (last args)
-        struct-sym (gensym 'struct)
-        args (butlast args)
-        writer-sym (gensym 'struct_writer)]
-    `(let [~struct-sym ~struct-code]
-       (.writeStructEntries ~writer-arg ~@args)
+(defmethod write-value-code :struct [[_ val-types] writer-arg code]
+  (let [struct-sym (gensym 'struct)]
+    `(let [~struct-sym ~code]
+       (.startStruct ~writer-arg)
        ~@(for [[field val-type] val-types
                :let [field-name (str field)]]
            (if (types/union? val-type)
-             (let [field-box-sym (gensym 'field_box)
-                   type-id-mapping (->> (second val-type)
-                                        (into {} (map-indexed (fn [idx val-type]
-                                                                [val-type idx]))))]
-               `(let [~writer-sym (.polyStructFieldWriter ~writer-arg ~@args ~field-name)
-                      ~field-box-sym (.readField ~struct-sym ~field-name)]
+             (let [field-box-sym (gensym 'field_box)]
+               `(let [~field-box-sym (.readField ~struct-sym ~field-name)]
                   ~(continue-read (fn [val-type code]
-                                    (write-value-code val-type writer-sym (get type-id-mapping val-type) code))
+                                    (write-value-code val-type `(-> (.structKeyWriter ~writer-arg ~field-name) (.writerForType '~val-type)) code))
                                   val-type field-box-sym)))
 
-             `(let [~writer-sym (.monoStructFieldWriter ~writer-arg ~@args ~field-name)]
-                ~(continue-read (fn [val-type code]
-                                  (write-value-code val-type writer-sym code))
-                                val-type struct-sym field-name)))))))
+             (continue-read (fn [val-type code]
+                              (write-value-code val-type `(.structKeyWriter ~writer-arg ~field-name) code))
+                            val-type struct-sym field-name)))
+       (.endStruct ~writer-arg))))
 
 (def ^:dynamic ^java.time.Clock *clock* (Clock/systemUTC))
 
@@ -364,7 +355,7 @@
      (PeriodDuration. (.-period imdn#) (.-duration imdn#))))
 
 (defmethod codegen-expr :literal [{:keys [literal]} _]
-  (let [return-type (types/value->col-type literal)
+  (let [return-type (vec/value->col-type literal)
         literal-type (class literal)]
     {:return-type return-type
      :continue (fn [f]
@@ -375,7 +366,7 @@
   (if (= op :literal)
     (let [{:keys [literal]} expr]
       {:op :param, :param (gensym 'lit),
-       :param-type (types/value->col-type literal)
+       :param-type (vec/value->col-type literal)
        :literal literal})
     expr))
 
@@ -387,19 +378,24 @@
 (defn- wrap-boxed-poly-return [{:keys [return-type continue] :as emitted-expr} _]
   (zmatch return-type
     [:union inner-types]
-    (let [type-ids (->> inner-types
-                        (into {} (map-indexed (fn [idx val-type]
-                                                (MapEntry/create val-type (byte idx))))))
-          box-sym (gensym 'box)]
+    (let [box-sym (gensym 'box)
+
+          types (->> inner-types
+                     (into {} (map-indexed (fn [idx val-type]
+                                             (MapEntry/create val-type {:type-id (byte idx)
+                                                                        :sym (symbol (str box-sym "w" idx))})))))]
       (-> emitted-expr
-          (update :batch-bindings (fnil conj []) [box-sym `(ValueBox.)])
+          (update :batch-bindings (fnil into []) (into [[box-sym `(ValueBox.)]]
+                                                       (map (fn [{:keys [^long type-id sym]}]
+                                                              [sym `(.writerForTypeId ~box-sym ~type-id)]))
+                                                       (vals types)))
           (assoc :continue (fn [f]
                              `(do
                                 ~(continue (fn [return-type code]
-                                             (write-value-code return-type box-sym (get type-ids return-type) code)))
+                                             (write-value-code return-type (:sym (get types return-type)) code)))
 
                                 (case (.read ~box-sym)
-                                  ~@(->> (for [[ret-type type-id] type-ids]
+                                  ~@(->> (for [[ret-type {:keys [type-id]}] types]
                                            [type-id (f ret-type (read-value-code ret-type box-sym))])
                                          (apply concat))))))))
 
@@ -430,7 +426,7 @@
 
 (defmethod codegen-expr :param [{:keys [param] :as expr} {:keys [param-types]}]
   (if-let [[_ literal] (find expr :literal)]
-    (let [lit-type (types/value->col-type literal)
+    (let [lit-type (vec/value->col-type literal)
           lit-class (class literal)]
       (into {:return-type lit-type
              :batch-bindings [[param (emit-value lit-class literal)]]
@@ -585,8 +581,6 @@
                           ~(f :null nil)
                           ~(f :bool `(not (== -1 ~l-sym ~r-sym))))))))}))
 
-(declare codegen-concat)
-
 (defn- codegen-call* [{:keys [f emitted-args] :as expr}]
   (let [shortcut-null? (shortcut-null-args? f)
 
@@ -614,7 +608,7 @@
                          (apply types/merge-col-types))]
 
     {:return-type return-type
-     :batch-bindings (->> (vals emitted-calls) (sequence (mapcat :batch-bindings)))
+     :batch-bindings (->> (vals emitted-calls) (into [] (mapcat :batch-bindings)))
      :continue (fn continue-call-expr [handle-emitted-expr]
                  (let [build-args-then-call
                        (reduce (fn step [build-next-arg {continue-this-arg :continue}]
@@ -639,6 +633,8 @@
                                ;; reverse because we're working inside-out
                                (reverse emitted-args))]
                    (build-args-then-call [] [])))}))
+
+(declare codegen-concat)
 
 (defmethod codegen-expr :call [{:keys [f args] :as expr} opts]
   (let [emitted-args (for [arg args]
@@ -1246,7 +1242,7 @@
                                                                                              [val-type idx]))))]
                                                    [(str field)
                                                     (continue (fn [val-type code]
-                                                                (write-value-code val-type box-sym (get type-ids val-type) code)))])))))
+                                                                (write-value-code val-type `(.writerForTypeId ~box-sym ~(get type-ids val-type)) code)))])))))
                               ~box-sym)])
 
                        ~@(for [[rw-fn mono-vals] (->> mono-vals
@@ -1330,7 +1326,7 @@
                                               [idx (continue (fn [return-type code]
                                                                (let [type-id (type->type-id return-type)]
                                                                  `(do
-                                                                    ~(write-value-code return-type box-sym type-id code)
+                                                                    ~(write-value-code return-type `(.writerForTypeId ~box-sym '~type-id) code)
                                                                     (byte ~type-id)))))]))))))
 
                          (~'readBoolean [_#] (.readBoolean ~box-sym))
@@ -1340,6 +1336,7 @@
                          (~'readLong [_#] (.readLong ~box-sym))
                          (~'readFloat [_#] (.readFloat ~box-sym))
                          (~'readDouble [_#] (.readDouble ~box-sym))
+                         (~'readBytes [_#] (.readBytes ~box-sym))
                          (~'readObject [_#] (.readObject ~box-sym))))))}))
 
 (defmethod codegen-cast [:list :list] [{[_ source-el-type] :source-type
@@ -1417,6 +1414,7 @@
     (readLong [_ idx] (.readLong lst idx))
     (readFloat [_ idx] (.readFloat lst idx))
     (readDouble [_ idx] (.readDouble lst idx))
+    (readBytes [_ idx] (.readBytes lst idx))
     (readObject [_ idx] (.readObject lst idx))))
 
 (defn poly-trim-array-view ^xtdb.vector.IPolyVectorReader [^long trimmed-value-count ^IPolyVectorReader lst]
@@ -1430,6 +1428,7 @@
     (readLong [_] (.readLong lst))
     (readFloat [_] (.readFloat lst))
     (readDouble [_] (.readDouble lst))
+    (readBytes [_] (.readBytes lst))
     (readObject [_] (.readObject lst))))
 
 (defmethod codegen-call [:trim-array :list :int] [{[[_list list-el-type] _n-type] :arg-types}]
@@ -1505,16 +1504,17 @@
 (defn write-value-out-code [return-type]
   (zmatch return-type
     [:union inner-types]
-    (let [ordered-col-types (vec inner-types)
-          type-ids (->> ordered-col-types
-                        (into {} (map-indexed (fn [idx val-type]
-                                                (MapEntry/create val-type (byte idx))))))]
-      {:writer-bindings [out-writer-sym `(vec/->poly-writer ~out-vec-sym '~return-type)]
+    (let [writer-syms (->> inner-types
+                           (into {} (map (juxt identity (fn [_] (gensym 'out-writer))))))]
+      {:writer-bindings (into [out-writer-sym `(vec/->writer ~out-vec-sym)]
+                              (mapcat (fn [[value-type writer-sym]]
+                                        [writer-sym `(.writerForType ~out-writer-sym '~value-type)]))
+                              writer-syms)
 
        :write-value-out! (fn [value-type code]
-                           (write-value-code value-type out-writer-sym (get type-ids value-type) code))})
+                           (write-value-code value-type (get writer-syms value-type) code))})
 
-    {:writer-bindings [out-writer-sym `(vec/->mono-writer ~out-vec-sym '~return-type)]
+    {:writer-bindings [out-writer-sym `(vec/->writer ~out-vec-sym)]
      :write-value-out! (fn [value-type code]
                          (write-value-code value-type out-writer-sym code))}))
 

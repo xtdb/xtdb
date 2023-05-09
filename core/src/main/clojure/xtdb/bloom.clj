@@ -2,15 +2,14 @@
   (:require [xtdb.expression :as expr]
             [xtdb.types :as types]
             [xtdb.util :as util]
-            [xtdb.vector.indirect :as iv]
-            [xtdb.vector.writer :as vw])
-  (:import (xtdb.vector IIndirectVector IIndirectRelation IVectorWriter)
-           java.nio.ByteBuffer
+            [xtdb.vector.indirect :as iv])
+  (:import java.nio.ByteBuffer
            org.apache.arrow.memory.RootAllocator
            (org.apache.arrow.memory.util.hash MurmurHasher SimpleHasher)
            [org.apache.arrow.vector ValueVector VarBinaryVector]
            org.roaringbitmap.buffer.ImmutableRoaringBitmap
-           org.roaringbitmap.RoaringBitmap))
+           org.roaringbitmap.RoaringBitmap
+           (xtdb.vector IIndirectRelation IIndirectVector)))
 
 (set! *unchecked-math* :warn-on-boxed)
 

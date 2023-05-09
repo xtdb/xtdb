@@ -79,7 +79,7 @@
          :sql+params (s/and vector?
                             (s/cat :sql string?,
                                    :param-groups (s/? (s/alt :rows (s/* (s/coll-of any? :kind sequential?))
-                                                             :bytes #(= :varbinary (types/value->col-type %))))))))
+                                                             :bytes #(= :varbinary (vec/value->col-type %))))))))
 
 (defmethod tx-op-spec :put [_]
   (s/cat :op #{:put}
@@ -176,8 +176,8 @@
       ;; TODO check param count in each row, handle error
       (dotimes [col-idx param-count]
         (.add vecs
-              (vw/open-vec allocator (symbol (str "?_" col-idx))
-                           (mapv #(nth % col-idx) param-rows))))
+              (vec/open-vec allocator (symbol (str "?_" col-idx))
+                            (mapv #(nth % col-idx) param-rows))))
 
       (let [root (doto (VectorSchemaRoot. vecs) (.setRowCount (count param-rows)))]
         (util/build-arrow-ipc-byte-buffer root :stream
@@ -192,6 +192,7 @@
         query-writer (.structKeyWriter sql-writer "query")
         params-writer (.structKeyWriter sql-writer "params")]
     (fn write-sql! [{{:keys [sql param-groups]} :sql+params}]
+      (.startStruct sql-writer)
       (vec/write-value! sql query-writer)
 
       (when param-groups
@@ -199,7 +200,7 @@
                 [:rows param-rows] (vec/write-value! (encode-params allocator sql param-rows) params-writer)
                 [:bytes param-bytes] (vec/write-value! param-bytes params-writer)))
 
-      (.structWritten sql-writer))))
+      (.endStruct sql-writer))))
 
 (defn- ->put-writer [^IValueWriter op-writer]
   (let [put-writer (.writerForTypeId op-writer 1)
@@ -208,6 +209,7 @@
         valid-time-end-writer (.structKeyWriter put-writer "xt$valid_to")
         table-doc-writers (HashMap.)]
     (fn write-put! [{:keys [doc table], {:keys [valid-time-start valid-time-end]} :app-time-opts}]
+      (.startStruct put-writer)
       (let [table-doc-writer (.computeIfAbsent table-doc-writers table
                                                (util/->jfn
                                                  (fn [table]
@@ -218,7 +220,7 @@
       (vec/write-value! valid-time-start valid-time-start-writer)
       (vec/write-value! valid-time-end valid-time-end-writer)
 
-      (.structWritten put-writer))))
+      (.endStruct put-writer))))
 
 (defn- ->delete-writer [^IValueWriter op-writer]
   (let [delete-writer (.writerForTypeId op-writer 2)
@@ -227,32 +229,36 @@
         valid-time-start-writer (.structKeyWriter delete-writer "xt$valid_from")
         valid-time-end-writer (.structKeyWriter delete-writer "xt$valid_to")]
     (fn write-delete! [{:keys [id table], {:keys [valid-time-start valid-time-end]} :app-time-opts}]
+      (.startStruct delete-writer)
+
       (vec/write-value! (name table) table-writer)
       (vec/write-value! id (.writerForType id-writer (vec/value->col-type id)))
       (vec/write-value! valid-time-start valid-time-start-writer)
       (vec/write-value! valid-time-end valid-time-end-writer)
 
-      (.structWritten delete-writer))))
+      (.endStruct delete-writer))))
 
 (defn- ->evict-writer [^IValueWriter op-writer]
   (let [evict-writer (.writerForTypeId op-writer 3)
         table-writer (.structKeyWriter evict-writer "_table")
         id-writer (.structKeyWriter evict-writer "xt$id")]
     (fn [{:keys [id table]}]
+      (.startStruct evict-writer)
       (some-> (name table) (vec/write-value! table-writer))
       (vec/write-value! id (.writerForType id-writer (vec/value->col-type id)))
-      (.structWritten evict-writer))))
+      (.endStruct evict-writer))))
 
 (defn- ->call-writer [^IValueWriter op-writer]
   (let [call-writer (.writerForTypeId op-writer 4)
         fn-id-writer (.structKeyWriter call-writer "fn-id")
         args-list-writer (.structKeyWriter call-writer "args")]
     (fn write-call! [{:keys [fn-id args]}]
-      (vec/write-value! fn-id (.writerForType fn-id-writer (vec/value->col-type fn-id)))
+      (.startStruct call-writer)
 
+      (vec/write-value! fn-id (.writerForType fn-id-writer (vec/value->col-type fn-id)))
       (vec/write-value! (vec args) args-list-writer)
 
-      (.structWritten call-writer))))
+      (.endStruct call-writer))))
 
 (defn- ->abort-writer [^IValueWriter op-writer]
   (let [abort-writer (.writerForTypeId op-writer 5)]
@@ -301,8 +307,9 @@
       (vec/write-value! (str default-tz) default-tz-writer)
       (vec/write-value! (boolean default-all-valid-time?) app-time-behaviour-writer)
 
+      (.startList ops-list-writer)
       (write-tx-ops! allocator (.listElementWriter ops-list-writer) tx-ops)
-      (.listWritten ops-list-writer)
+      (.endList ops-list-writer)
 
       (.setRowCount root 1)
       (.syncSchema root)

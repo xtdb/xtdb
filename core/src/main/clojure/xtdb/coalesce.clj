@@ -1,10 +1,10 @@
 (ns xtdb.coalesce
   (:require [xtdb.util :as util]
             [xtdb.vector.writer :as vw])
-  (:import xtdb.ICursor
-           xtdb.vector.IIndirectRelation
-           java.util.function.Consumer
-           org.apache.arrow.memory.BufferAllocator))
+  (:import java.util.function.Consumer
+           org.apache.arrow.memory.BufferAllocator
+           xtdb.ICursor
+           (xtdb.vector IIndirectRelation IRelationWriter)))
 
 ;; We pass the first 100 results through immediately, so that any limit-like queries don't need to wait for a full block to return rows.
 ;; Then, we coalesce small blocks together into blocks of at least 100, to share the per-block costs.
@@ -58,7 +58,7 @@
 
               ;; we've got rows, and either the source is done or there's enough already - send them through
               (pos? rows-appended) (do
-                                     (.accept c (vw/rel-writer->reader @!rel-writer))
+                                     (.accept c (vw/rel-wtr->rdr @!rel-writer))
                                      true)
 
               ;; no more rows in input, and none to pass through, we're done
@@ -70,9 +70,9 @@
   (close [_]
     (.close cursor)))
 
-(defn ^xtdb.ICursor ->coalescing-cursor
-  ([cursor allocator] (->coalescing-cursor cursor allocator {}))
+(defn ->coalescing-cursor
+  (^xtdb.ICursor [cursor allocator] (->coalescing-cursor cursor allocator {}))
 
-  ([cursor allocator {:keys [pass-through ideal-min-block-size]
-                      :or {pass-through 100, ideal-min-block-size 100}}]
+  (^xtdb.ICursor [cursor allocator {:keys [pass-through ideal-min-block-size]
+                                    :or {pass-through 100, ideal-min-block-size 100}}]
    (CoalescingCursor. cursor allocator pass-through ideal-min-block-size 0)))

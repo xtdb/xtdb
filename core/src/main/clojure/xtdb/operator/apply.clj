@@ -38,8 +38,7 @@
     (let [[col-name _expr] (first (:mark-join mark-spec))]
       (reify ModeStrategy
         (accept [_ dep-cursor dep-out-writer idxs in-idx]
-          (let [out-writer (.writerForName dep-out-writer (name col-name) [:union #{:null :bool}])
-                ^BitVector out-vec (.getVector out-writer)]
+          (let [out-writer (.writerForName dep-out-writer (name col-name) [:union #{:null :bool}])]
             (.add idxs in-idx)
             (let [!match (int-array [-1])]
               (while (and (not (== 1 (aget !match 0)))
@@ -56,11 +55,9 @@
                                                    0 (aset !match 0 (max (aget !match 0) 0))
                                                    1 (aset !match 0 (max (aget !match 0) (if (.readBoolean match-rdr) 1 -1))))))))))))
               (let [match (aget !match 0)]
-                (.startValue out-writer)
                 (if (zero? match)
-                  (.setNull out-vec in-idx)
-                  (.setSafe out-vec in-idx (case match 1 1, -1 0)))
-                (.endValue out-writer)))))))
+                  (.writeNull out-writer nil)
+                  (.writeBoolean out-writer (== 1 match)))))))))
 
     [:otherwise simple-mode]
     (case simple-mode
@@ -181,15 +178,11 @@
                                                                         in-rel in-idx)]
                              (.accept mode-strategy dep-cursor dep-out-writer idxs in-idx)))
 
-                         (let [idxs (.toArray (.build idxs))
-                               out-row-count (alength idxs)]
-
+                         (let [idxs (.toArray (.build idxs))]
                            (.accept c (iv/->indirect-rel (concat (for [^IIndirectVector col in-rel]
                                                                    (.select col idxs))
-                                                                 (for [^IVectorWriter vec-writer dep-out-writer]
-                                                                   (-> (.getVector vec-writer)
-                                                                       (doto (.setValueCount out-row-count))
-                                                                       iv/->direct-vec))))))))))))
+                                                                 (map vw/vec-wtr->rdr dep-out-writer))
+                                                         (alength idxs))))))))))
 
   (close [_]
     (util/try-close independent-cursor)))

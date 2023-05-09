@@ -189,8 +189,7 @@
       (doto (.rowCopier rel-writer (->nil-rel (keys build-col-types)))
         (.copyRow 0)))
 
-    (let [build-key-cols (mapv #(iv/->direct-vec (.getVector (.writerForName rel-writer (name %))))
-                               build-key-col-names)]
+    (let [build-key-cols (mapv #(vw/vec-wtr->rdr (.writerForName rel-writer (name %))) build-key-col-names)]
       (letfn [(compute-hash-bitmap [^long row-hash]
                 (or (.get hash->bitmap row-hash)
                     (let [bitmap (RoaringBitmap.)]
@@ -293,12 +292,7 @@
                               (aset acc 0 (Math/max (aget acc 0) res))
                               (recur (inc build-idx))))))))))))
 
-          (getBuiltRelation [_]
-            (let [pos (.getPosition (.writerPosition rel-writer))]
-              (doseq [^IVectorWriter w rel-writer]
-                (.setValueCount (.getVector w) pos)))
-
-            (iv/->indirect-rel (mapv #(iv/->direct-vec (.getVector ^IVectorWriter %)) rel-writer)))
+          (getBuiltRelation [_] (vw/rel-wtr->rdr rel-writer))
 
           AutoCloseable
           (close [_] (.close rel-writer)))))))

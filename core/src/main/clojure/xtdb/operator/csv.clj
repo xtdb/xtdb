@@ -5,16 +5,16 @@
             [xtdb.logical-plan :as lp]
             [xtdb.types :as types]
             [xtdb.util :as util]
-            [xtdb.vector.indirect :as iv]
-            [xtdb.vector.writer :as vw])
-  (:import xtdb.ICursor
-           java.lang.AutoCloseable
+            [xtdb.vector :as vec]
+            [xtdb.vector.indirect :as iv])
+  (:import java.lang.AutoCloseable
            [java.nio.file Files]
            java.time.Duration
            [java.util Base64 Iterator]
            org.apache.arrow.memory.BufferAllocator
            [org.apache.arrow.vector ValueVector VectorSchemaRoot]
-           org.apache.arrow.vector.types.pojo.Schema))
+           org.apache.arrow.vector.types.pojo.Schema
+           xtdb.ICursor))
 
 (s/def ::csv-col-type #{:bool :i64 :f64 :utf8 :varbinary :timestamp :duration})
 
@@ -41,14 +41,12 @@
         (dorun
          (map-indexed (fn [col-idx ^ValueVector fv]
                         (when-let [parse-value (get col-parsers (.getName fv))]
-                          (let [writer (vw/vec->writer fv)]
+                          (let [writer (vec/->writer fv)]
                             (dotimes [row-idx row-count]
-                              (doto writer
-                                (.startValue)
-                                (->> (types/write-value! (-> (nth row-batch row-idx)
-                                                             (nth col-idx)
-                                                             parse-value)))
-                                (.endValue))))))
+                              (vec/write-value! (-> (nth row-batch row-idx)
+                                                    (nth col-idx)
+                                                    parse-value)
+                                                writer)))))
                       (.getFieldVectors root)))
 
         (.setRowCount root row-count)

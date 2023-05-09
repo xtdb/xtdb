@@ -20,7 +20,7 @@
   (rowCopier [_ w]
     (reify IRowCopier
       (copyRow [_ _]
-        (.getPosition w)))))
+        (.getPosition (.writerPosition w))))))
 
 (defrecord StructReader [^ValueVector v]
   IStructReader
@@ -52,9 +52,7 @@
                     (getName [_] col-name)
 
                     (isPresent [_ idx]
-                      ;; TODO `(.getOffset v idx)` rather than just `idx`?
-                      ;; haven't made a test fail with it yet, either way.
-                      (.isPresent ^IIndirectVector (nth vecs (.getTypeId v idx)) idx))
+                      (.isPresent ^IIndirectVector (nth vecs (.getTypeId v idx)) (.getOffset v idx)))
 
                     (rowCopier [_ivec w]
                       (let [copiers (mapv #(.rowCopier ^IIndirectVector % w) vecs)]
@@ -115,10 +113,10 @@
             (.isPresent ^IListReader (nth vecs (.getTypeId v idx)) (.getOffset v idx)))
           (getElementStartIndex [_ idx]
             (let [^IListReader vec (nth vecs (.getTypeId v idx))]
-              (.getElementStartIndex vec idx)))
+              (.getElementStartIndex vec (.getOffset v idx))))
           (getElementEndIndex [_ idx]
             (let [^IListReader vec (nth vecs (.getTypeId v idx))]
-              (.getElementEndIndex vec idx)))
+              (.getElementEndIndex vec (.getOffset v idx))))
           (elementCopier [this w]
             (let [copiers (mapv #(some-> ^IListReader % (.elementCopier w)) vecs)]
               (reify IListElementCopier
@@ -208,6 +206,18 @@
                    (.setValueCount (.getValueCount col)))
                  (.getName col)))
 
+(defn- ->indirect-list-reader [^IIndirectVector outer, ^IIndirectVector inner]
+  (let [inner-rdr (.listReader inner)]
+    (reify IListReader
+      (isPresent [_ idx] (.isPresent inner-rdr (.getIndex outer idx)))
+      (getElementStartIndex [_ idx] (.getElementStartIndex inner-rdr (.getIndex outer idx)))
+      (getElementEndIndex [_ idx] (.getElementEndIndex inner-rdr (.getIndex outer idx)))
+      (elementCopier [_ w]
+        (let [inner-copier (.elementCopier inner-rdr w)]
+          (reify IListElementCopier
+            (copyElement [_ idx n]
+              (.copyElement inner-copier (.getIndex outer idx) n))))))))
+
 (defrecord IndirectVector [^IIndirectVector v, ^ints idxs]
   IIndirectVector
   (getVector [_] (.getVector v))
@@ -220,15 +230,15 @@
   (isPresent [_ idx] (.isPresent v (aget idxs idx)))
 
   (select [this new-idxs]
-    (IndirectVector. v (compose-selection (.idxs this) new-idxs)))
+    (.select v (compose-selection (.idxs this) new-idxs)))
 
   (copyTo [this out-vec] (copy-to! this out-vec))
 
-  (rowCopier [this-vec w]
+  (rowCopier [_ w]
     (let [copier (.rowCopier v w)]
       (reify IRowCopier
         (copyRow [_ idx]
-          (.copyRow copier (.getIndex this-vec idx))))))
+          (.copyRow copier (aget idxs idx))))))
 
   (monoReader [this col-type]
     (-> (vec/->mono-reader (.getVector this) col-type)
@@ -246,17 +256,7 @@
           (-> (.readerForKey struct-rdr col-name)
               (.select idxs))))))
 
-  (listReader [this]
-    (let [inner-rdr (.listReader v)]
-      (reify IListReader
-        (isPresent [_ idx] (.isPresent inner-rdr (.getIndex this idx)))
-        (getElementStartIndex [_ idx] (.getElementStartIndex inner-rdr (.getIndex this idx)))
-        (getElementEndIndex [_ idx] (.getElementEndIndex inner-rdr (.getIndex this idx)))
-        (elementCopier [_ w]
-          (let [inner-copier (.elementCopier inner-rdr w)]
-            (reify IListElementCopier
-              (copyElement [_ idx n]
-                (.copyElement inner-copier (.getIndex this idx) n)))))))))
+  (listReader [this] (->indirect-list-reader this v)))
 
 (defn ->direct-vec ^xtdb.vector.IIndirectVector [^ValueVector in-vec]
   (DirectVector. in-vec (.getName in-vec)))
@@ -331,6 +331,9 @@
       (reify IRowCopier
         (copyRow [_ idx]
           (.copyRow copier (.getIndex this-vec idx))))))
+
+  (listReader [this]
+    (->indirect-list-reader this col))
 
   (monoReader [this col-type]
     (-> (vec/->mono-reader (.getVector this) col-type)

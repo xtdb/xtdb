@@ -4,24 +4,19 @@
             xtdb.api
             [xtdb.rewrite :refer [zmatch]]
             [xtdb.util :as util])
-  (:import (clojure.lang Keyword MapEntry)
-           java.net.URI
-           (java.nio ByteBuffer CharBuffer)
+  (:import (clojure.lang MapEntry)
+           (java.nio ByteBuffer)
            java.nio.charset.StandardCharsets
-           (java.time Duration Instant LocalDate LocalDateTime LocalTime OffsetDateTime Period ZoneId ZoneOffset ZonedDateTime)
-           (java.util Date List Map Set UUID)
+           (java.time Duration Instant LocalDate LocalTime Period ZoneId)
            java.util.concurrent.ConcurrentHashMap
            java.util.function.Function
-           (org.apache.arrow.vector BigIntVector BitVector DateDayVector DateMilliVector DurationVector FixedSizeBinaryVector Float4Vector Float8Vector IntVector IntervalDayVector IntervalMonthDayNanoVector IntervalYearVector NullVector PeriodDuration SmallIntVector TimeMicroVector TimeMilliVector TimeNanoVector TimeSecVector TimeStampMicroTZVector TimeStampMicroVector TimeStampMilliTZVector TimeStampMilliVector TimeStampNanoTZVector TimeStampNanoVector TimeStampSecTZVector TimeStampSecVector TinyIntVector ValueVector VarBinaryVector VarCharVector)
+           (org.apache.arrow.vector BitVector DateDayVector DateMilliVector IntervalDayVector IntervalMonthDayNanoVector IntervalYearVector TimeMicroVector TimeMilliVector TimeNanoVector TimeSecVector TimeStampMicroTZVector TimeStampMilliTZVector TimeStampNanoTZVector TimeStampSecTZVector ValueVector VarBinaryVector VarCharVector)
            (org.apache.arrow.vector.complex DenseUnionVector FixedSizeListVector ListVector StructVector)
            (org.apache.arrow.vector.holders NullableIntervalDayHolder NullableIntervalMonthDayNanoHolder)
            (org.apache.arrow.vector.types DateUnit FloatingPointPrecision IntervalUnit TimeUnit Types$MinorType UnionMode)
            (org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Date ArrowType$Duration ArrowType$FixedSizeBinary ArrowType$FixedSizeList ArrowType$FloatingPoint ArrowType$Int ArrowType$Interval ArrowType$List ArrowType$Null ArrowType$Struct ArrowType$Time ArrowType$Time ArrowType$Timestamp ArrowType$Union ArrowType$Utf8 Field FieldType)
-           org.apache.arrow.vector.util.Text
-           (xtdb.api ClojureForm)
            (xtdb.types IntervalDayTime IntervalMonthDayNano IntervalYearMonth)
-           (xtdb.vector IDenseUnionWriter IVectorWriter)
-           (xtdb.vector.extensions AbsentType AbsentVector ClojureFormType ClojureFormVector KeywordType KeywordVector SetType SetVector UriType UriVector UuidType UuidVector)))
+           (xtdb.vector.extensions AbsentType AbsentVector ClojureFormType KeywordType SetType SetVector UriType UuidType)))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -30,237 +25,6 @@
 (def list-type (.getType Types$MinorType/LIST))
 
 (def temporal-col-type [:timestamp-tz :micro "UTC"])
-
-(defprotocol ArrowWriteable
-  (value->col-type [v])
-  (write-value! [v ^xtdb.vector.IVectorWriter writer]))
-
-(extend-protocol ArrowWriteable
-  nil
-  (value->col-type [_] :null)
-  (write-value! [_v ^IVectorWriter _writer])
-
-  Boolean
-  (value->col-type [_] :bool)
-  (write-value! [v ^IVectorWriter writer]
-    (.setSafe ^BitVector (.getVector writer) (.getPosition writer) (if v 1 0)))
-
-  Byte
-  (value->col-type [_] :i8)
-  (write-value! [v ^IVectorWriter writer]
-    (.setSafe ^TinyIntVector (.getVector writer) (.getPosition writer) v))
-
-  Short
-  (value->col-type [_] :i16)
-  (write-value! [v ^IVectorWriter writer]
-    (.setSafe ^SmallIntVector (.getVector writer) (.getPosition writer) v))
-
-  Integer
-  (value->col-type [_] :i32)
-  (write-value! [v ^IVectorWriter writer]
-    (.setSafe ^IntVector (.getVector writer) (.getPosition writer) v))
-
-  Long
-  (value->col-type [_] :i64)
-  (write-value! [v ^IVectorWriter writer]
-    (.setSafe ^BigIntVector (.getVector writer) (.getPosition writer) v))
-
-  Float
-  (value->col-type [_] :f32)
-  (write-value! [v ^IVectorWriter writer]
-    (.setSafe ^Float4Vector (.getVector writer) (.getPosition writer) v))
-
-  Double
-  (value->col-type [_] :f64)
-  (write-value! [v ^IVectorWriter writer]
-    (.setSafe ^Float8Vector (.getVector writer) (.getPosition writer) v)))
-
-(extend-protocol ArrowWriteable
-  Date
-  (value->col-type [_] [:timestamp-tz :micro "UTC"])
-  (write-value! [v ^IVectorWriter writer]
-    (.setSafe ^TimeStampMicroTZVector (.getVector writer) (.getPosition writer)
-              (Math/multiplyExact (.getTime v) 1000)))
-
-  Instant
-  (value->col-type [_] [:timestamp-tz :micro "UTC"])
-  (write-value! [v ^IVectorWriter writer]
-    (.setSafe ^TimeStampMicroTZVector (.getVector writer) (.getPosition writer)
-              (util/instant->micros v)))
-
-  ZonedDateTime
-  (value->col-type [v] [:timestamp-tz :micro (.getId (.getZone v))])
-  (write-value! [v ^IVectorWriter writer]
-    (write-value! (.toInstant v) writer))
-
-  OffsetDateTime
-  (value->col-type [v] [:timestamp-tz :micro (.getId (.getOffset v))])
-  (write-value! [v ^IVectorWriter writer]
-    (write-value! (.toInstant v) writer))
-
-  LocalDateTime
-  (value->col-type [_] [:timestamp-local :micro])
-  (write-value! [v ^IVectorWriter writer]
-    (write-value! (.toInstant v ZoneOffset/UTC) writer))
-
-  Duration
-  (value->col-type [_] [:duration :micro])
-  (write-value! [v ^IVectorWriter writer]
-    (.setSafe ^DurationVector (.getVector writer) (.getPosition writer)
-              (quot (.toNanos v) 1000)))
-
-  LocalDate
-  (value->col-type [_] [:date :day])
-  (write-value! [v ^IVectorWriter writer]
-    (.setSafe ^DateDayVector (.getVector writer) (.getPosition writer) (.toEpochDay v)))
-
-  LocalTime
-  (value->col-type [_] [:time-local :nano])
-  (write-value! [v ^IVectorWriter writer]
-    (.setSafe ^TimeNanoVector (.getVector writer) (.getPosition writer) (.toNanoOfDay v)))
-
-  IntervalYearMonth
-  (value->col-type [_] [:interval :year-month])
-  (write-value! [v ^IVectorWriter writer]
-    (.setSafe ^IntervalYearVector (.getVector writer) (.getPosition writer) (.toTotalMonths (.-period v))))
-
-  IntervalDayTime
-  (value->col-type [_] [:interval :day-time])
-  (write-value! [v ^IVectorWriter writer]
-    (.setSafe ^IntervalDayVector (.getVector writer) (.getPosition writer)
-              (.getDays (.-period v))
-              (.toMillis (.-duration v))))
-
-  IntervalMonthDayNano
-  (value->col-type [_] [:interval :month-day-nano])
-  (write-value! [v ^IVectorWriter writer]
-    (.setSafe ^IntervalMonthDayNanoVector (.getVector writer) (.getPosition writer)
-              (.toTotalMonths (.-period v))
-              (.getDays (.-period v))
-              (.toNanos (.-duration v))))
-
-  ;; allow the use of PeriodDuration for more precision
-  PeriodDuration
-  (value->col-type [_] [:interval :month-day-nano])
-  (write-value! [v ^IVectorWriter writer]
-    (let [period (.getPeriod v)
-          duration (.getDuration v)]
-      (.setSafe ^IntervalMonthDayNanoVector (.getVector writer) (.getPosition writer) (.toTotalMonths period) (.getDays period) (.toNanos duration)))))
-
-(extend-protocol ArrowWriteable
-  (Class/forName "[B")
-  (value->col-type [_] :varbinary)
-  (write-value! [v ^IVectorWriter writer]
-    (.setSafe ^VarBinaryVector (.getVector writer) (.getPosition writer) ^bytes v))
-
-  ByteBuffer
-  (value->col-type [_] :varbinary)
-  (write-value! [buf ^IVectorWriter writer]
-    (.setSafe ^VarBinaryVector (.getVector writer) (.getPosition writer)
-              buf (.position buf) (.remaining buf)))
-
-  CharSequence
-  (value->col-type [_] :utf8)
-  (write-value! [v ^IVectorWriter writer]
-    (let [buf (.encode (.newEncoder StandardCharsets/UTF_8) (CharBuffer/wrap v))]
-      (.setSafe ^VarCharVector (.getVector writer) (.getPosition writer)
-                buf (.position buf) (.remaining buf))))
-
-  Text
-  (value->col-type [_] :utf8)
-  (write-value! [v ^IVectorWriter writer]
-    (.setSafe ^VarCharVector (.getVector writer) (.getPosition writer) v)))
-
-;; TODO shuffle this ns around
-(declare merge-col-types)
-
-(extend-protocol ArrowWriteable
-  List
-  (value->col-type [v] [:list (apply merge-col-types (into #{} (map value->col-type) v))])
-  (write-value! [v ^IVectorWriter writer]
-    (let [writer (.asList writer)
-          data-writer (.getDataWriter writer)
-          duv? (instance? DenseUnionVector (.getVector data-writer))
-          ^IDenseUnionWriter data-duv-writer (when duv? (.asDenseUnion data-writer))]
-      (doseq [el v]
-        (.startValue data-writer)
-        (if duv?
-          (doto (.writerForType data-duv-writer (value->col-type el))
-            (.startValue)
-            (->> (write-value! el))
-            (.endValue))
-          (write-value! el data-writer))
-        (.endValue data-writer))))
-
-  Set
-  (value->col-type [v] [:set (apply merge-col-types (into #{} (map value->col-type) v))])
-  (write-value! [v ^IVectorWriter writer]
-    (write-value! (vec v) (.getUnderlyingWriter (.asExtension writer))))
-
-  Map
-  (value->col-type [v]
-    (if (every? keyword? (keys v))
-      [:struct (->> v
-                    (into {} (map (juxt (comp symbol key)
-                                        (comp value->col-type val)))))]
-      [:map
-       (apply merge-col-types (into #{} (map (comp value->col-type key)) v))
-       (apply merge-col-types (into #{} (map (comp value->col-type val)) v))]))
-
-  (write-value! [m ^IVectorWriter writer]
-    (let [dest-vec (.getVector writer)]
-      (cond
-        (instance? StructVector dest-vec)
-        (let [writer (.asStruct writer)
-              col-names (into #{} (map #(.getName ^ValueVector %) dest-vec))]
-          ;; eugh. should be a common way to do this.
-          (doseq [absent-col (set/difference col-names (into #{} (map (comp str symbol)) (keys m)))
-                  :let [v-writer (.writerForName writer absent-col)]]
-            (if (instance? IDenseUnionWriter v-writer)
-              (doto (.writerForType (.asDenseUnion v-writer) :absent)
-                (.startValue)
-                (.endValue))
-
-              (write-value! nil v-writer)))
-
-          (doseq [[k v] m
-                  :let [v-writer (.writerForName writer (str (symbol k)))]]
-            (if (instance? IDenseUnionWriter v-writer)
-              (doto (-> v-writer
-                        (.asDenseUnion)
-                        (.writerForType (value->col-type v)))
-                (.startValue)
-                (->> (write-value! v))
-                (.endValue))
-
-              (write-value! v v-writer))))
-
-        ;; TODO
-        :else (throw (UnsupportedOperationException.))))))
-
-(extend-protocol ArrowWriteable
-  Keyword
-  (value->col-type [_] :keyword)
-  (write-value! [kw ^IVectorWriter writer]
-    (write-value! (str (symbol kw)) (.getUnderlyingWriter (.asExtension writer))))
-
-  UUID
-  (value->col-type [_] :uuid)
-  (write-value! [^UUID uuid ^IVectorWriter writer]
-    (let [underlying-writer (.getUnderlyingWriter (.asExtension writer))]
-      (.setSafe ^FixedSizeBinaryVector (.getVector underlying-writer)
-                (.getPosition underlying-writer)
-                (util/uuid->bytes uuid))))
-
-  URI
-  (value->col-type [_] :uri)
-  (write-value! [^URI uri ^IVectorWriter writer]
-    (write-value! (str uri) (.getUnderlyingWriter (.asExtension writer))))
-
-  ClojureForm
-  (value->col-type [_] :clj-form)
-  (write-value! [{:keys [form]} ^IVectorWriter writer]
-    (write-value! (pr-str form) (.getUnderlyingWriter (.asExtension writer)))))
 
 (defprotocol ArrowReadable
   (get-object [value-vector idx]))
@@ -836,11 +600,3 @@
 (defn with-nullable-cols [col-types]
   (->> col-types
        (into {} (map (juxt key (comp #(merge-col-types % :null) val))))))
-
-(defn rows->col-types [rows]
-  (->> (for [col-name (into #{} (mapcat keys) rows)]
-         [(symbol col-name) (->> rows
-                                 (into #{} (map (fn [row]
-                                                  (value->col-type (get row col-name)))))
-                                 (apply merge-col-types))])
-       (into {})))

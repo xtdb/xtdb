@@ -13,6 +13,7 @@
             [xtdb.temporal :as temporal]
             [xtdb.types :as types]
             [xtdb.util :as util]
+            [xtdb.vector :as vec]
             [xtdb.vector.indirect :as iv]
             [xtdb.vector.writer :as vw])
   (:import [ch.qos.logback.classic Level Logger]
@@ -107,10 +108,10 @@
 
 (defn open-vec
   (^org.apache.arrow.vector.ValueVector [col-name vs]
-   (vw/open-vec *allocator* col-name vs))
+   (vec/open-vec *allocator* col-name vs))
 
   (^org.apache.arrow.vector.ValueVector [col-name col-type vs]
-   (vw/open-vec *allocator* col-name col-type vs)))
+   (vec/open-vec *allocator* col-name col-type vs)))
 
 (defn open-rel ^xtdb.vector.IIndirectRelation [vecs]
   (vw/open-rel vecs))
@@ -124,7 +125,7 @@
   (let [field-vecs (.getFieldVectors root)
         row-count (count rows)]
     (doseq [^FieldVector field-vec field-vecs]
-      (vw/write-vec! field-vec (map (keyword (.getName (.getField field-vec))) rows)))
+      (vec/write-vec! field-vec (map (keyword (.getName (.getField field-vec))) rows)))
 
     (.setRowCount root row-count)
     root))
@@ -154,7 +155,7 @@
 
 (defmethod lp/emit-expr ::blocks [{:keys [col-types blocks stats]} _args]
   (let [col-types (or col-types
-                      (types/rows->col-types (into [] cat blocks)))
+                      (vec/rows->col-types (into [] cat blocks)))
         ^Schema schema (Schema. (for [[col-name col-type] col-types]
                                   (types/col-type->field col-name col-type)))]
     {:col-types col-types

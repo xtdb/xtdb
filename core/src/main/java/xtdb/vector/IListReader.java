@@ -8,5 +8,5 @@ public interface IListReader {
 
     int getElementEndIndex(int idx);
 
-    IListElementCopier elementCopier(IVectorWriter<?> writer);
+    IListElementCopier elementCopier(IVectorWriter writer);
 }

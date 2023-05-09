@@ -1,20 +1,21 @@
 package xtdb.vector;
 
 @SuppressWarnings("try")
-public interface IRelationWriter extends AutoCloseable, Iterable<IVectorWriter<?>> {
-    // NOTE: only keeps tracks of rows copied through rowCopier
+public interface IRelationWriter extends AutoCloseable, Iterable<IVectorWriter> {
+
+    /**
+     * Maintains the next position to be written to.
+     *
+     * This is incremented either by using the {@link IRelationWriter#rowCopier}, or by explicitly calling {@link IRelationWriter#endRow()}
+     */
     IWriterPosition writerPosition();
 
-    IVectorWriter<?> writerForName(String name);
-    IVectorWriter<?> writerForName(String name, Object colType);
+    void endRow();
+
+    IVectorWriter writerForName(String name);
+    IVectorWriter writerForName(String name, Object colType);
 
     IRowCopier rowCopier(IIndirectRelation relation);
 
-    default void clear() {
-        for (IVectorWriter<?> writer: this) {
-            writer.clear();
-        }
-
-        writerPosition().setPosition(0);
-    }
+    void clear();
 }
