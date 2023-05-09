@@ -502,7 +502,8 @@
 (defn build-node-kd-tree ^java.io.Closeable [^BufferAllocator allocator kd-tree-from]
   (merge-kd-trees allocator nil kd-tree-from))
 
-(deftype MergedKdTreePointAccess [^IKdTreePointAccess static-access ^IKdTreePointAccess dynamic-access ^long static-value-count]
+(deftype MergedKdTreePointAccess [^IKdTreePointAccess static-access ^IKdTreePointAccess dynamic-access
+                                  ^Roaring64Bitmap static-delete-bitmap ^long static-value-count]
   IKdTreePointAccess
   (getPoint [_ idx]
     (if (< idx static-value-count)
@@ -527,7 +528,7 @@
 
   (isDeleted [_ idx]
     (if (< idx static-value-count)
-      (.isDeleted static-access idx)
+      (or (.contains static-delete-bitmap idx) (.isDeleted static-access idx))
       (.isDeleted dynamic-access (- idx static-value-count)))))
 
 (definterface IDynamicKdTreeAccess
@@ -550,8 +551,7 @@
                   (accept [_ x]
                     (aset static-delete? 0 true)
                     (.addLong static-delete-bitmap x))))
-      (when (BitUtil/bitNot (aget static-delete? 0))
-        (set! (.dynamic-kd-tree this) (kd-tree-delete dynamic-kd-tree allocator point))))
+      (set! (.dynamic-kd-tree this) (kd-tree-delete dynamic-kd-tree allocator point)))
     this)
 
   (kd-tree-range-search [_ min-range max-range]
@@ -586,7 +586,8 @@
                    static-value-count))
 
   (kd-tree-point-access [_]
-    (MergedKdTreePointAccess. (kd-tree-point-access static-kd-tree) (kd-tree-point-access dynamic-kd-tree) static-value-count))
+    (MergedKdTreePointAccess. (kd-tree-point-access static-kd-tree) (kd-tree-point-access dynamic-kd-tree)
+                              static-delete-bitmap static-value-count))
 
   (kd-tree-size [_]
     (+ (- static-size (.getLongCardinality static-delete-bitmap))

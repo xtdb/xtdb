@@ -2316,3 +2316,33 @@
                            [(= #time/date-time "2020-01-01T08:12:13.366"
                                #time/date-time "2020-01-01T08:12:13.366") c]
                            [(= #time/time "08:12:13.366" #time/time "08:12:13.366") d]]}))))
+
+(t/deftest bug-temporal-queries-wrong-at-boundary-2531
+  (with-open [node (node/start-node {:xtdb/live-chunk {:rows-per-block 10, :rows-per-chunk 10}
+                                     :xtdb.tx-producer/tx-producer {:instant-src (tu/->mock-clock)}
+                                     :xtdb.log/memory-log {:instant-src (tu/->mock-clock)}})]
+    (doseq [i (range 10)]
+      (xt/submit-tx node [[:put :ints {:xt/id 0 :n i}]]))
+    (t/is (=
+           [{:n 0,
+             :valid-time
+             {:start #time/zoned-date-time "2020-01-01T00:00Z[UTC]",
+              :end #time/zoned-date-time "2020-01-02T00:00Z[UTC]"}}
+            {:n 1,
+             :valid-time
+             {:start #time/zoned-date-time "2020-01-02T00:00Z[UTC]",
+              :end #time/zoned-date-time "2020-01-03T00:00Z[UTC]"}}
+            {:n 2,
+             :valid-time
+             {:start #time/zoned-date-time "2020-01-03T00:00Z[UTC]",
+              :end #time/zoned-date-time "2020-01-04T00:00Z[UTC]"}}
+            {:n 3,
+             :valid-time
+             {:start #time/zoned-date-time "2020-01-04T00:00Z[UTC]",
+              :end #time/zoned-date-time "2020-01-05T00:00Z[UTC]"}}
+            {:n 4,
+             :valid-time
+             {:start #time/zoned-date-time "2020-01-05T00:00Z[UTC]",
+              :end #time/zoned-date-time "2020-01-06T00:00Z[UTC]"}}]
+           (xt/q node '{:find [n valid-time] :where [($ :ints {:n n :xt/id 0 :xt/valid-time valid-time}
+                                                        {:for-valid-time [:in #inst "2020-01-01" #inst "2020-01-06"]})]})))))
