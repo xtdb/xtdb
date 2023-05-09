@@ -72,7 +72,7 @@
     (reify ILogIndexer
       (startTx [_ tx-key]
         (.writeLong tx-id-wtr (.tx-id tx-key))
-        (vec/write-value! (.system-time tx-key) system-time-wtr)
+        (vw/write-value! (.system-time tx-key) system-time-wtr)
 
         (.startList ops-wtr)
         (reify ILogOpIndexer

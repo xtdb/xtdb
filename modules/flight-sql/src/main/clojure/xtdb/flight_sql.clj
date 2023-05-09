@@ -8,7 +8,6 @@
             [xtdb.sql :as xt]
             [xtdb.types :as types]
             [xtdb.util :as util]
-            [xtdb.vector :as vec]
             [xtdb.vector.indirect :as iv]
             [xtdb.vector.writer :as vw])
   (:import (com.google.protobuf Any ByteString)
@@ -34,7 +33,7 @@
   (let [field-vecs (.getFieldVectors root)
         row-count (count rows)]
     (doseq [^FieldVector field-vec field-vecs]
-      (vec/write-vec! field-vec (map (keyword (.getName (.getField field-vec))) rows)))
+      (vw/write-vec! field-vec (map (keyword (.getName (.getField field-vec))) rows)))
 
     (.setRowCount root row-count)
     root))
@@ -156,7 +155,7 @@
                                        ;; TODO we likely needn't take these out and put them back.
                                        (let [new-params (-> (first (flight-stream->rows flight-stream))
                                                             (->> (sequence (map-indexed (fn [idx v]
-                                                                                          (-> (vec/open-vec allocator (symbol (str "?_" idx)) [v])
+                                                                                          (-> (vw/open-vec allocator (symbol (str "?_" idx)) [v])
                                                                                               (iv/->direct-vec))))))
                                                             (iv/->indirect-rel 1))]
                                          (try

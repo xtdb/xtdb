@@ -79,7 +79,7 @@
          :sql+params (s/and vector?
                             (s/cat :sql string?,
                                    :param-groups (s/? (s/alt :rows (s/* (s/coll-of any? :kind sequential?))
-                                                             :bytes #(= :varbinary (vec/value->col-type %))))))))
+                                                             :bytes #(= :varbinary (vw/value->col-type %))))))))
 
 (defmethod tx-op-spec :put [_]
   (s/cat :op #{:put}
@@ -176,8 +176,8 @@
       ;; TODO check param count in each row, handle error
       (dotimes [col-idx param-count]
         (.add vecs
-              (vec/open-vec allocator (symbol (str "?_" col-idx))
-                            (mapv #(nth % col-idx) param-rows))))
+              (vw/open-vec allocator (symbol (str "?_" col-idx))
+                           (mapv #(nth % col-idx) param-rows))))
 
       (let [root (doto (VectorSchemaRoot. vecs) (.setRowCount (count param-rows)))]
         (util/build-arrow-ipc-byte-buffer root :stream
@@ -193,12 +193,12 @@
         params-writer (.structKeyWriter sql-writer "params")]
     (fn write-sql! [{{:keys [sql param-groups]} :sql+params}]
       (.startStruct sql-writer)
-      (vec/write-value! sql query-writer)
+      (vw/write-value! sql query-writer)
 
       (when param-groups
         (zmatch param-groups
-                [:rows param-rows] (vec/write-value! (encode-params allocator sql param-rows) params-writer)
-                [:bytes param-bytes] (vec/write-value! param-bytes params-writer)))
+          [:rows param-rows] (vw/write-value! (encode-params allocator sql param-rows) params-writer)
+          [:bytes param-bytes] (vw/write-value! param-bytes params-writer)))
 
       (.endStruct sql-writer))))
 
@@ -215,10 +215,10 @@
                                                  (fn [table]
                                                    (let [type-id (.registerNewType doc-writer (types/col-type->field (name table) [:struct {}]))]
                                                      (.writerForTypeId doc-writer type-id)))))]
-        (vec/write-value! doc table-doc-writer))
+        (vw/write-value! doc table-doc-writer))
 
-      (vec/write-value! valid-time-start valid-time-start-writer)
-      (vec/write-value! valid-time-end valid-time-end-writer)
+      (vw/write-value! valid-time-start valid-time-start-writer)
+      (vw/write-value! valid-time-end valid-time-end-writer)
 
       (.endStruct put-writer))))
 
@@ -231,10 +231,10 @@
     (fn write-delete! [{:keys [id table], {:keys [valid-time-start valid-time-end]} :app-time-opts}]
       (.startStruct delete-writer)
 
-      (vec/write-value! (name table) table-writer)
-      (vec/write-value! id (.writerForType id-writer (vec/value->col-type id)))
-      (vec/write-value! valid-time-start valid-time-start-writer)
-      (vec/write-value! valid-time-end valid-time-end-writer)
+      (vw/write-value! (name table) table-writer)
+      (vw/write-value! id (.writerForType id-writer (vw/value->col-type id)))
+      (vw/write-value! valid-time-start valid-time-start-writer)
+      (vw/write-value! valid-time-end valid-time-end-writer)
 
       (.endStruct delete-writer))))
 
@@ -244,8 +244,8 @@
         id-writer (.structKeyWriter evict-writer "xt$id")]
     (fn [{:keys [id table]}]
       (.startStruct evict-writer)
-      (some-> (name table) (vec/write-value! table-writer))
-      (vec/write-value! id (.writerForType id-writer (vec/value->col-type id)))
+      (some-> (name table) (vw/write-value! table-writer))
+      (vw/write-value! id (.writerForType id-writer (vw/value->col-type id)))
       (.endStruct evict-writer))))
 
 (defn- ->call-writer [^IValueWriter op-writer]
@@ -255,8 +255,8 @@
     (fn write-call! [{:keys [fn-id args]}]
       (.startStruct call-writer)
 
-      (vec/write-value! fn-id (.writerForType fn-id-writer (vec/value->col-type fn-id)))
-      (vec/write-value! (vec args) args-list-writer)
+      (vw/write-value! fn-id (.writerForType fn-id-writer (vw/value->col-type fn-id)))
+      (vw/write-value! (vec args) args-list-writer)
 
       (.endStruct call-writer))))
 
@@ -296,16 +296,16 @@
 
 (defn serialize-tx-ops ^java.nio.ByteBuffer [^BufferAllocator allocator tx-ops {:keys [^Instant system-time, default-tz, default-all-valid-time?]}]
   (with-open [root (VectorSchemaRoot/create tx-schema allocator)]
-    (let [ops-list-writer (vec/->writer (.getVector root "tx-ops"))
+    (let [ops-list-writer (vw/->writer (.getVector root "tx-ops"))
 
-          default-tz-writer (vec/->writer (.getVector root "default-tz"))
-          app-time-behaviour-writer (vec/->writer (.getVector root "all-application-time?"))]
+          default-tz-writer (vw/->writer (.getVector root "default-tz"))
+          app-time-behaviour-writer (vw/->writer (.getVector root "all-application-time?"))]
 
       (when system-time
-        (vec/write-value! system-time (vec/->writer (.getVector root "system-time"))))
+        (vw/write-value! system-time (vw/->writer (.getVector root "system-time"))))
 
-      (vec/write-value! (str default-tz) default-tz-writer)
-      (vec/write-value! (boolean default-all-valid-time?) app-time-behaviour-writer)
+      (vw/write-value! (str default-tz) default-tz-writer)
+      (vw/write-value! (boolean default-all-valid-time?) app-time-behaviour-writer)
 
       (.startList ops-list-writer)
       (write-tx-ops! allocator (.listElementWriter ops-list-writer) tx-ops)

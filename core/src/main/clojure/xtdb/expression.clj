@@ -5,14 +5,9 @@
             [xtdb.rewrite :refer [zmatch]]
             [xtdb.types :as types]
             [xtdb.util :as util]
-            [xtdb.vector :as vec]
-            [xtdb.vector.indirect :as iv])
+            [xtdb.vector.indirect :as iv]
+            [xtdb.vector.writer :as vw])
   (:import (clojure.lang Keyword MapEntry)
-           (xtdb StringUtil)
-           (xtdb.operator IProjectionSpec IRelationSelector)
-           (xtdb.types IntervalDayTime IntervalMonthDayNano IntervalYearMonth)
-           (xtdb.vector IIndirectRelation IIndirectVector IMonoVectorReader IPolyVectorReader IStructValueReader MonoToPolyReader RemappedTypeIdReader)
-           xtdb.vector.ValueBox
            (java.nio ByteBuffer)
            (java.nio.charset StandardCharsets)
            (java.time Clock Duration Instant LocalDate LocalDateTime LocalTime OffsetDateTime ZoneOffset ZonedDateTime)
@@ -20,7 +15,12 @@
            (java.util.regex Pattern)
            (java.util.stream IntStream)
            (org.apache.arrow.vector BitVector PeriodDuration ValueVector)
-           (org.apache.commons.codec.binary Hex)))
+           (org.apache.commons.codec.binary Hex)
+           (xtdb StringUtil)
+           (xtdb.operator IProjectionSpec IRelationSelector)
+           (xtdb.types IntervalDayTime IntervalMonthDayNano IntervalYearMonth)
+           (xtdb.vector IIndirectRelation IIndirectVector IMonoVectorReader IPolyVectorReader IStructValueReader MonoToPolyReader RemappedTypeIdReader)
+           xtdb.vector.ValueBox))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -355,7 +355,7 @@
      (PeriodDuration. (.-period imdn#) (.-duration imdn#))))
 
 (defmethod codegen-expr :literal [{:keys [literal]} _]
-  (let [return-type (vec/value->col-type literal)
+  (let [return-type (vw/value->col-type literal)
         literal-type (class literal)]
     {:return-type return-type
      :continue (fn [f]
@@ -366,7 +366,7 @@
   (if (= op :literal)
     (let [{:keys [literal]} expr]
       {:op :param, :param (gensym 'lit),
-       :param-type (vec/value->col-type literal)
+       :param-type (vw/value->col-type literal)
        :literal literal})
     expr))
 
@@ -426,7 +426,7 @@
 
 (defmethod codegen-expr :param [{:keys [param] :as expr} {:keys [param-types]}]
   (if-let [[_ literal] (find expr :literal)]
-    (let [lit-type (vec/value->col-type literal)
+    (let [lit-type (vw/value->col-type literal)
           lit-class (class literal)]
       (into {:return-type lit-type
              :batch-bindings [[param (emit-value lit-class literal)]]
@@ -1139,7 +1139,7 @@
    :->call-code (fn [[x start length]]
                   `(StringUtil/sqlBinSubstring (resolve-buf ~x) ~start ~length true))})
 
-(defmethod codegen-call [:character-length :utf8] [{:keys [args]}]
+(defmethod codegen-call [:character-length :utf8] [_]
   {:return-type :i32
    :->call-code #(do `(StringUtil/utf8Length (resolve-utf8-buf ~(first %))))})
 
@@ -1151,12 +1151,12 @@
   {:return-type :i32
    :->call-code #(do `(.remaining (resolve-buf ~@%)))})
 
-(defmethod codegen-call [:position :utf8 :utf8] [{:keys [args]}]
+(defmethod codegen-call [:position :utf8 :utf8] [_]
   {:return-type :i32
    :->call-code (fn [[needle haystack]]
                   `(StringUtil/sqlUtf8Position (resolve-utf8-buf ~needle) (resolve-utf8-buf ~haystack)))})
 
-(defmethod codegen-call [:octet-position :utf8 :utf8] [{:keys [args]}]
+(defmethod codegen-call [:octet-position :utf8 :utf8] [_]
   {:return-type :i32
    :->call-code (fn [[needle haystack]]
                   `(StringUtil/SqlBinPosition (resolve-utf8-buf ~needle) (resolve-utf8-buf ~haystack)))})
@@ -1506,7 +1506,7 @@
     [:union inner-types]
     (let [writer-syms (->> inner-types
                            (into {} (map (juxt identity (fn [_] (gensym 'out-writer))))))]
-      {:writer-bindings (into [out-writer-sym `(vec/->writer ~out-vec-sym)]
+      {:writer-bindings (into [out-writer-sym `(vw/->writer ~out-vec-sym)]
                               (mapcat (fn [[value-type writer-sym]]
                                         [writer-sym `(.writerForType ~out-writer-sym '~value-type)]))
                               writer-syms)
@@ -1514,7 +1514,7 @@
        :write-value-out! (fn [value-type code]
                            (write-value-code value-type (get writer-syms value-type) code))})
 
-    {:writer-bindings [out-writer-sym `(vec/->writer ~out-vec-sym)]
+    {:writer-bindings [out-writer-sym `(vw/->writer ~out-vec-sym)]
      :write-value-out! (fn [value-type code]
                          (write-value-code value-type out-writer-sym code))}))
 

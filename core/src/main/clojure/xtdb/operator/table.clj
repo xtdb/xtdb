@@ -9,13 +9,8 @@
             [xtdb.vector :as vec]
             [xtdb.vector.indirect :as iv]
             [xtdb.vector.writer :as vw])
-  (:import (java.util
-            ArrayList
-            HashMap
-            HashSet
-            Set)
+  (:import (java.util ArrayList HashMap HashSet Set)
            java.util.function.Function
-           (org.apache.arrow.vector.complex DenseUnionVector)
            (xtdb ICursor)
            (xtdb.vector IIndirectRelation)))
 
@@ -55,7 +50,7 @@
                   :let [col-kw (keyword col-name)
                         out-vec (-> (types/col-type->field col-name col-type)
                                     (.createVector allocator))
-                        out-writer (vec/->writer out-vec)]]
+                        out-writer (vw/->writer out-vec)]]
 
             (.setInitialCapacity out-vec row-count)
             (.allocateNew out-vec)
@@ -64,7 +59,7 @@
             (dotimes [idx row-count]
               (let [row (nth rows idx)
                     v (-> (get row col-kw) (->v opts))]
-                (vec/write-value! v (.writerForType out-writer (vec/value->col-type v)))))
+                (vw/write-value! v (.writerForType out-writer (vw/value->col-type v)))))
 
             (.setValueCount out-vec row-count))
 
@@ -86,7 +81,7 @@
                 ^Set col-type-set (.computeIfAbsent col-type-sets k-sym (reify Function (apply [_ _] (HashSet.))))]
             (case (:op expr)
               :literal (do
-                         (.add col-type-set (vec/value->col-type v))
+                         (.add col-type-set (vw/value->col-type v))
                          (.put out-row k-kw v))
 
               :param (let [{:keys [param]} expr]

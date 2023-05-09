@@ -5,8 +5,8 @@
             [xtdb.logical-plan :as lp]
             [xtdb.types :as types]
             [xtdb.util :as util]
-            [xtdb.vector :as vec]
-            [xtdb.vector.indirect :as iv])
+            [xtdb.vector.indirect :as iv]
+            [xtdb.vector.writer :as vw])
   (:import java.lang.AutoCloseable
            [java.nio.file Files]
            java.time.Duration
@@ -41,12 +41,12 @@
         (dorun
          (map-indexed (fn [col-idx ^ValueVector fv]
                         (when-let [parse-value (get col-parsers (.getName fv))]
-                          (let [writer (vec/->writer fv)]
+                          (let [writer (vw/->writer fv)]
                             (dotimes [row-idx row-count]
-                              (vec/write-value! (-> (nth row-batch row-idx)
-                                                    (nth col-idx)
-                                                    parse-value)
-                                                writer)))))
+                              (vw/write-value! (-> (nth row-batch row-idx)
+                                                   (nth col-idx)
+                                                   parse-value)
+                                               writer)))))
                       (.getFieldVectors root)))
 
         (.setRowCount root row-count)

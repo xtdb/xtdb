@@ -8,7 +8,7 @@
             [xtdb.vector.indirect :as iv]
             [xtdb.vector.writer :as vw])
   (:import (java.util LinkedList)
-           (java.util.function Consumer IntConsumer)
+           (java.util.function Consumer)
            (java.util.stream IntStream)
            (org.apache.arrow.memory BufferAllocator)
            (org.apache.arrow.vector IntVector)
@@ -65,11 +65,11 @@
                                          _ (when ordinal-vec
                                              (.add out-cols (iv/->direct-vec ordinal-vec)))
 
-                                         ^IVectorWriter ordinal-wtr (some-> ordinal-vec vec/->writer)]
+                                         ^IVectorWriter ordinal-wtr (some-> ordinal-vec vw/->writer)]
 
                                      (try
                                        (with-open [out-vec (DenseUnionVector/empty to-column-name allocator)]
-                                         (let [out-writer (vec/->writer out-vec)
+                                         (let [out-writer (vw/->writer out-vec)
                                                row-copier (.elementCopier from-list-rdr out-writer)]
                                            (dotimes [n (.getValueCount from-col)]
                                              (when (.isPresent from-list-rdr n)

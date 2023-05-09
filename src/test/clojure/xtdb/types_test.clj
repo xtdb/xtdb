@@ -8,7 +8,7 @@
   (:import java.net.URI
            java.nio.ByteBuffer
            (java.time Instant LocalDate LocalTime OffsetDateTime ZonedDateTime)
-           (org.apache.arrow.vector BigIntVector BitVector DateDayVector DateMilliVector Float4Vector Float8Vector IntVector IntervalDayVector IntervalMonthDayNanoVector IntervalYearVector NullVector SmallIntVector TimeMicroVector TimeMilliVector TimeNanoVector TimeSecVector TimeStampMicroTZVector TinyIntVector VarBinaryVector VarCharVector)
+           (org.apache.arrow.vector BigIntVector BitVector DateDayVector Float4Vector Float8Vector IntVector IntervalMonthDayNanoVector NullVector SmallIntVector TimeNanoVector TimeStampMicroTZVector TinyIntVector VarBinaryVector VarCharVector)
            (org.apache.arrow.vector.complex DenseUnionVector ListVector StructVector)
            (xtdb.types IntervalDayTime IntervalYearMonth)
            (xtdb.vector IVectorWriter)
@@ -20,7 +20,7 @@
 (defn- test-read [col-type-fn write-fn vs]
 ;; TODO no longer types, but there are other things in here that depend on `test-read`
   (with-open [duv (DenseUnionVector/empty "" tu/*allocator*)]
-    (let [duv-writer (vec/->writer duv)]
+    (let [duv-writer (vw/->writer duv)]
       (doseq [v vs]
         (doto (.writerForType duv-writer (col-type-fn v))
           (write-fn v))))
@@ -30,7 +30,7 @@
                        (class (.getVectorByType duv (.getTypeId duv idx)))))}))
 
 (defn- test-round-trip [vs]
-  (test-read vec/value->col-type #(vec/write-value! %2 %1) vs))
+  (test-read vw/value->col-type #(vw/write-value! %2 %1) vs))
 
 (t/deftest round-trips-values
   (t/is (= {:vs [false nil 2 1 6 4 3.14 2.0]
@@ -129,14 +129,14 @@
     (t/is (= [iym]
              (:vs (test-read (constantly [:interval :year-month])
                              (fn [^IVectorWriter w, ^IntervalYearMonth v]
-                               (vec/write-value! v w))
+                               (vw/write-value! v w))
                              [iym])))))
 
   (let [idt #xt/interval-dt ["P1434D" "PT0.023S"]]
     (t/is (= [idt]
              (:vs (test-read (constantly [:interval :day-time])
                              (fn [^IVectorWriter w, ^IntervalDayTime v]
-                               (vec/write-value! v w))
+                               (vw/write-value! v w))
                              [idt])))))
 
   (let [imdn #xt/interval-mdn ["P33M244D" "PT0.003444443S"]]

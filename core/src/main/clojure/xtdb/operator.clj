@@ -22,8 +22,8 @@
             xtdb.operator.top
             xtdb.operator.unwind
             [xtdb.util :as util]
-            [xtdb.vector :as vec]
-            [xtdb.vector.indirect :as iv])
+            [xtdb.vector.indirect :as iv]
+            [xtdb.vector.writer :as vw])
   (:import (clojure.lang MapEntry)
            java.lang.AutoCloseable
            (java.time Clock Duration)
@@ -58,7 +58,7 @@
   (->> (for [[table-key rows] table-args]
          (MapEntry/create
           table-key
-          (vec/rows->col-types rows)))
+          (vw/rows->col-types rows)))
        (into {})))
 
 (defn- wrap-cursor ^xtdb.IResultCursor [^ICursor cursor, ^AutoCloseable wm, ^BufferAllocator al, ^Clock clock, ^RefCounter ref-ctr col-types]

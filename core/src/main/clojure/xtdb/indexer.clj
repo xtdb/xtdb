@@ -23,14 +23,13 @@
             [xtdb.watermark :as wm])
   (:import (java.io ByteArrayInputStream Closeable)
            java.lang.AutoCloseable
-           java.nio.ByteBuffer
            (java.nio.channels ClosedByInterruptException)
            (java.time Instant ZoneId)
            (java.util.concurrent.locks StampedLock)
            (java.util.function Consumer IntPredicate ToIntFunction)
            (java.util.stream IntStream StreamSupport)
            (org.apache.arrow.memory BufferAllocator)
-           (org.apache.arrow.vector BigIntVector BitVector TimeStampVector ValueVector VarBinaryVector VarCharVector VectorSchemaRoot)
+           (org.apache.arrow.vector BigIntVector BitVector TimeStampVector VarBinaryVector VarCharVector VectorSchemaRoot)
            (org.apache.arrow.vector.complex DenseUnionVector ListVector StructVector)
            (org.apache.arrow.vector.ipc ArrowStreamReader)
            org.roaringbitmap.RoaringBitmap
@@ -170,7 +169,7 @@
   (let [lp '[:scan {:table xt/tx-fns} [{xt/id (= xt/id ?id)} xt/fn]]
         ^xtdb.operator.PreparedQuery pq (.prepareRaQuery ra-src lp)]
     (with-open [bq (.bind pq wm-src
-                          {:params (iv/->indirect-rel [(-> (vec/open-vec allocator '?id [fn-id])
+                          {:params (iv/->indirect-rel [(-> (vw/open-vec allocator '?id [fn-id])
                                                            (iv/->direct-vec))]
                                                       1)
                            :default-all-valid-time? false
@@ -261,7 +260,7 @@
             (when-not (or (nil? res) (true? res))
               (let [tx-ops-vec (txp/open-tx-ops-vec allocator)]
                 (try
-                  (txp/write-tx-ops! allocator (vec/->writer tx-ops-vec) res)
+                  (txp/write-tx-ops! allocator (vw/->writer tx-ops-vec) res)
                   (.setValueCount tx-ops-vec (count res))
                   tx-ops-vec
 

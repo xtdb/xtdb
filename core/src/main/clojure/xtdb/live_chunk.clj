@@ -239,7 +239,7 @@
     (.addRows row-counter (.getValueCount transient-row-id-vec))
     (doto static-row-id-bitmap (.or transient-row-id-bitmap))
 
-    (doto (vec/->writer static-row-id-vec)
+    (doto (vw/->writer static-row-id-vec)
       (vw/append-vec (iv/->direct-vec transient-row-id-vec))
       (.getVector))
 

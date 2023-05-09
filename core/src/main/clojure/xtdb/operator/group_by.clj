@@ -39,6 +39,7 @@
 
 (set! *unchecked-math* :warn-on-boxed)
 
+#_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface IGroupMapper
   (^org.apache.arrow.vector.IntVector groupMapping [^xtdb.vector.IIndirectRelation inRelation])
   (^java.util.List #_<IIndirectVector> finish []))
@@ -93,13 +94,13 @@
                     gm-vec)
       (NullGroupMapper. gm-vec))))
 
-#_{:clj-kondo/ignore [:unused-binding]}
+#_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface IAggregateSpec
   (^void aggregate [^xtdb.vector.IIndirectRelation inRelation,
                     ^org.apache.arrow.vector.IntVector groupMapping])
   (^xtdb.vector.IIndirectVector finish []))
 
-#_{:clj-kondo/ignore [:unused-binding]}
+#_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface IAggregateSpecFactory
   (^clojure.lang.Symbol getToColumnName [])
   (getToColumnType [])
@@ -207,7 +208,7 @@
                                ~(-> expr/rel-sym (expr/with-tag IIndirectRelation))
                                ~(-> group-mapping-sym (expr/with-tag IntVector))]
                             (let [~acc-col-sym (iv/->direct-vec ~acc-sym)
-                                  ~acc-writer-sym (vec/->writer ~acc-sym)
+                                  ~acc-writer-sym (vw/->writer ~acc-sym)
                                   ~@(expr/batch-bindings emitted-expr)]
                               (dotimes [~expr/idx-sym (.rowCount ~expr/rel-sym)]
                                 (let [~group-idx-sym (.get ~group-mapping-sym ~expr/idx-sym)]
@@ -542,7 +543,7 @@
                       (.createVector allocator))]
       (set! (.out-vec this) out-vec)
 
-      (let [list-writer (vec/->writer out-vec)
+      (let [list-writer (vw/->writer out-vec)
             el-writer (.listElementWriter list-writer)
             row-copier (.rowCopier (vw/vec-wtr->rdr acc-col) el-writer)]
         (doseq [^IntStream$Builder isb group-idxmaps]
