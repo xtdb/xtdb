@@ -556,13 +556,11 @@
     this)
 
   (kd-tree-delete [this allocator point]
-    (let [static-delete? (boolean-array 1)]
-      (.forEach ^LongStream (kd-tree-range-search static-kd-tree point point)
-                (reify LongConsumer
-                  (accept [_ x]
-                    (aset static-delete? 0 true)
-                    (.addLong static-delete-bitmap x))))
-      (set! (.dynamic-kd-tree this) (kd-tree-delete dynamic-kd-tree allocator point)))
+    (.forEach ^LongStream (kd-tree-range-search static-kd-tree point point)
+              (reify LongConsumer
+                (accept [_ x]
+                  (.addLong static-delete-bitmap x))))
+    (set! (.dynamic-kd-tree this) (kd-tree-delete dynamic-kd-tree allocator point))
     this)
 
   (kd-tree-range-search [_ min-range max-range]
