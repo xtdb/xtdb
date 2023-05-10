@@ -1,5 +1,6 @@
 package xtdb.vector;
 
+import java.nio.ByteBuffer;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -7,11 +8,7 @@ class StructValueBox implements IStructValueReader {
 
     private final Map<String, ValueBox> fields = new HashMap<>();
 
-    public IMonoValueWriter monoFieldWriter(String fieldName) {
-        return fields.computeIfAbsent(fieldName, s -> new ValueBox());
-    }
-
-    public IPolyValueWriter polyFieldWriter(String fieldName) {
+    public IValueWriter fieldWriter(String fieldName) {
         return fields.computeIfAbsent(fieldName, s -> new ValueBox());
     }
 
@@ -48,6 +45,11 @@ class StructValueBox implements IStructValueReader {
     @Override
     public double readDouble(String fieldName) {
         return fields.get(fieldName).readDouble();
+    }
+
+    @Override
+    public ByteBuffer readBytes(String fieldName) {
+        return fields.get(fieldName).readBytes();
     }
 
     @Override

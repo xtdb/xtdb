@@ -13,6 +13,7 @@
             [xtdb.temporal :as temporal]
             [xtdb.types :as types]
             [xtdb.util :as util]
+            [xtdb.vector :as vec]
             [xtdb.vector.indirect :as iv]
             [xtdb.vector.writer :as vw])
   (:import [ch.qos.logback.classic Level Logger]
@@ -154,7 +155,7 @@
 
 (defmethod lp/emit-expr ::blocks [{:keys [col-types blocks stats]} _args]
   (let [col-types (or col-types
-                      (types/rows->col-types (into [] cat blocks)))
+                      (vw/rows->col-types (into [] cat blocks)))
         ^Schema schema (Schema. (for [[col-name col-type] col-types]
                                   (types/col-type->field col-name col-type)))]
     {:col-types col-types

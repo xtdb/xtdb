@@ -3,35 +3,34 @@
             [xtdb.test-util :as tu]
             [xtdb.types :as types]
             [xtdb.util :as util]
+            [xtdb.vector :as vec]
             [xtdb.vector.writer :as vw])
-  (:import (xtdb.types IntervalDayTime IntervalYearMonth)
-           (xtdb.vector IVectorWriter)
-           (xtdb.vector.extensions ClojureFormVector KeywordVector UriVector UuidVector)
-           java.net.URI
+  (:import java.net.URI
            java.nio.ByteBuffer
            (java.time Instant LocalDate LocalTime OffsetDateTime ZonedDateTime)
-           (org.apache.arrow.vector BigIntVector BitVector DateDayVector DateMilliVector Float4Vector Float8Vector IntVector IntervalDayVector IntervalMonthDayNanoVector IntervalYearVector NullVector SmallIntVector TimeMicroVector TimeMilliVector TimeNanoVector TimeSecVector TimeStampMicroTZVector TinyIntVector VarBinaryVector VarCharVector)
-           (org.apache.arrow.vector.complex DenseUnionVector ListVector StructVector)))
+           (org.apache.arrow.vector BigIntVector BitVector DateDayVector Float4Vector Float8Vector IntVector IntervalMonthDayNanoVector NullVector SmallIntVector TimeNanoVector TimeStampMicroTZVector TinyIntVector VarBinaryVector VarCharVector)
+           (org.apache.arrow.vector.complex DenseUnionVector ListVector StructVector)
+           (xtdb.types IntervalDayTime IntervalYearMonth)
+           (xtdb.vector IVectorWriter)
+           (xtdb.vector.extensions ClojureFormVector KeywordVector UriVector UuidVector)))
 
 (t/use-fixtures :each tu/with-allocator)
 
+
 (defn- test-read [col-type-fn write-fn vs]
+;; TODO no longer types, but there are other things in here that depend on `test-read`
   (with-open [duv (DenseUnionVector/empty "" tu/*allocator*)]
-    (let [duv-writer (.asDenseUnion (vw/vec->writer duv))]
+    (let [duv-writer (vw/->writer duv)]
       (doseq [v vs]
-        (.startValue duv-writer)
         (doto (.writerForType duv-writer (col-type-fn v))
-          (.startValue)
-          (write-fn v)
-          (.endValue))
-        (.endValue duv-writer)))
+          (write-fn v))))
     {:vs (vec (for [idx (range (count vs))]
                 (types/get-object duv idx)))
      :vec-types (vec (for [idx (range (count vs))]
                        (class (.getVectorByType duv (.getTypeId duv idx)))))}))
 
 (defn- test-round-trip [vs]
-  (test-read types/value->col-type #(types/write-value! %2 %1) vs))
+  (test-read vw/value->col-type #(vw/write-value! %2 %1) vs))
 
 (t/deftest round-trips-values
   (t/is (= {:vs [false nil 2 1 6 4 3.14 2.0]
@@ -90,7 +89,7 @@
     (->> "LocalDate can be read from MILLISECOND date vectors"
          (t/is (= vs (:vs (test-read (constantly [:date :milli])
                                      (fn [^IVectorWriter w ^LocalDate v]
-                                       (.setSafe ^DateMilliVector (.getVector w) (.getPosition w) (long (* 86400000 (.toEpochDay v)))))
+                                       (.writeLong w (long (.toEpochDay v))))
                                      vs)))))))
 
 (t/deftest time-vector-test
@@ -107,21 +106,21 @@
     (->> "LocalTime can be read from SECOND time vectors"
          (t/is (= secs (:vs (test-read (constantly [:time-local :second])
                                        (fn [^IVectorWriter w, ^LocalTime v]
-                                         (.setSafe ^TimeSecVector (.getVector w) (.getPosition w) (.toSecondOfDay v)))
+                                         (.writeLong w (.toSecondOfDay v)))
                                        secs)))))
 
     (let [millis+ (concat millis secs)]
       (->> "LocalTime can be read from MILLI time vectors"
            (t/is (= millis+ (:vs (test-read (constantly [:time-local :milli])
                                             (fn [^IVectorWriter w, ^LocalTime v]
-                                              (.setSafe ^TimeMilliVector (.getVector w) (.getPosition w) (int (quot (.toNanoOfDay v) 1e6))))
+                                              (.writeLong w (int (quot (.toNanoOfDay v) 1e6))))
                                             millis+))))))
 
     (let [micros+ (concat micros millis secs)]
       (->> "LocalTime can be read from MICRO time vectors"
            (t/is (= micros+ (:vs (test-read (constantly [:time-local :micro])
                                             (fn [^IVectorWriter w, ^LocalTime v]
-                                              (.setSafe ^TimeMicroVector (.getVector w) (.getPosition w) (long (quot (.toNanoOfDay v) 1e3))))
+                                              (.writeLong w (long (quot (.toNanoOfDay v) 1e3))))
                                             micros+))))))))
 
 (t/deftest interval-vector-test
@@ -130,14 +129,14 @@
     (t/is (= [iym]
              (:vs (test-read (constantly [:interval :year-month])
                              (fn [^IVectorWriter w, ^IntervalYearMonth v]
-                               (.setSafe ^IntervalYearVector (.getVector w) (.getPosition w) (.toTotalMonths (.-period v))))
+                               (vw/write-value! v w))
                              [iym])))))
 
   (let [idt #xt/interval-dt ["P1434D" "PT0.023S"]]
     (t/is (= [idt]
              (:vs (test-read (constantly [:interval :day-time])
                              (fn [^IVectorWriter w, ^IntervalDayTime v]
-                               (.setSafe ^IntervalDayVector (.getVector w) (.getPosition w) (.getDays (.-period v)) (.toMillis (.-duration v))))
+                               (vw/write-value! v w))
                              [idt])))))
 
   (let [imdn #xt/interval-mdn ["P33M244D" "PT0.003444443S"]]

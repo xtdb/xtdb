@@ -1,18 +1,18 @@
 (ns xtdb.indexer.log-indexer
-  (:require [xtdb.blocks :as blocks]
+  (:require [juxt.clojars-mirrors.integrant.core :as ig]
+            [xtdb.blocks :as blocks]
             [xtdb.util :as util]
-            [xtdb.vector.writer :as vw]
-            [juxt.clojars-mirrors.integrant.core :as ig])
-  (:import xtdb.ICursor
-           xtdb.object_store.ObjectStore
-           (xtdb.vector IVectorWriter)
-           (java.io Closeable)
+            [xtdb.vector :as vec]
+            [xtdb.vector.writer :as vw])
+  (:import (java.io Closeable)
            java.util.ArrayList
-           (java.util.function Consumer)
            java.util.concurrent.atomic.AtomicInteger
+           (java.util.function Consumer)
            (org.apache.arrow.memory BufferAllocator)
-           (org.apache.arrow.vector BigIntVector BitVector TimeStampMicroTZVector VectorLoader VectorSchemaRoot VectorUnloader)
-           (org.apache.arrow.vector.complex ListVector)) )
+           (org.apache.arrow.vector VectorLoader VectorSchemaRoot VectorUnloader)
+           xtdb.ICursor
+           xtdb.object_store.ObjectStore
+           xtdb.vector.IVectorWriter))
 
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface ILogOpIndexer
@@ -51,87 +51,71 @@
   (let [log-writer (vw/->rel-writer allocator)
         transient-log-writer (vw/->rel-writer allocator)
 
-        ;; we're ignoring the writers for tx-id and system-time, because they're simple primitive vecs and we're only writing to idx 0
-        ^BigIntVector tx-id-vec (-> (.writerForName transient-log-writer "tx-id" :i64)
-                                    (.getVector))
+        tx-id-wtr (.writerForName transient-log-writer "tx-id" :i64)
 
-        ^TimeStampMicroTZVector system-time-vec (-> (.writerForName transient-log-writer "system-time" [:timestamp-tz :micro "UTC"])
-                                                 (.getVector))
+        system-time-wtr (.writerForName transient-log-writer "system-time" [:timestamp-tz :micro "UTC"])
 
-        ops-writer (.asList (.writerForName transient-log-writer "ops" log-ops-col-type))
-        ^ListVector ops-vec (.getVector ops-writer)
-        ops-data-writer (.asStruct (.getDataWriter ops-writer))
+        ops-wtr (.writerForName transient-log-writer "ops" log-ops-col-type)
+        op-wtr (.listElementWriter ops-wtr)
 
-        row-id-writer (.writerForName ops-data-writer "row-id")
-        ^BigIntVector row-id-vec (.getVector row-id-writer)
-        iid-writer (.writerForName ops-data-writer "iid")
-        ^BigIntVector iid-vec (.getVector iid-writer)
+        row-id-wtr (.structKeyWriter op-wtr "row-id")
+        iid-wtr (.structKeyWriter op-wtr "iid")
 
-        app-time-start-writer (.writerForName ops-data-writer "application-time-start")
-        ^TimeStampMicroTZVector app-time-start-vec (.getVector app-time-start-writer)
-        app-time-end-writer (.writerForName ops-data-writer "application-time-end")
-        ^TimeStampMicroTZVector app-time-end-vec (.getVector app-time-end-writer)
+        valid-time-start-wtr (.structKeyWriter op-wtr "application-time-start")
+        valid-time-end-wtr (.structKeyWriter op-wtr "application-time-end")
 
-        evict-writer (.writerForName ops-data-writer "evict?")
-        ^BitVector evict-vec (.getVector evict-writer)
+        evict-wtr (.structKeyWriter op-wtr "evict?")
 
         block-row-counts (ArrayList.)
         !block-row-count (AtomicInteger.)]
 
     (reify ILogIndexer
       (startTx [_ tx-key]
-        (.startValue ops-writer)
-        (doto tx-id-vec
-          (.setSafe 0 (.tx-id tx-key))
-          (.setValueCount 1))
-        (doto system-time-vec
-          (.setSafe 0 (util/instant->micros (.system-time tx-key)))
-          (.setValueCount 1))
+        (.writeLong tx-id-wtr (.tx-id tx-key))
+        (vw/write-value! (.system-time tx-key) system-time-wtr)
 
+        (.startList ops-wtr)
         (reify ILogOpIndexer
           (logPut [_ iid row-id app-time-start app-time-end]
-            (let [op-idx (.startValue ops-data-writer)]
-              (.setSafe row-id-vec op-idx row-id)
-              (.setSafe iid-vec op-idx iid)
-              (.setSafe app-time-start-vec op-idx app-time-start)
-              (.setSafe app-time-end-vec op-idx app-time-end)
-              (.setSafe evict-vec op-idx 0)
-
-              (.endValue ops-data-writer)))
+            (.startStruct op-wtr)
+            (.writeLong row-id-wtr row-id)
+            (.writeLong iid-wtr iid)
+            (.writeLong valid-time-start-wtr app-time-start)
+            (.writeLong valid-time-end-wtr app-time-end)
+            (.writeBoolean evict-wtr false)
+            (.endStruct op-wtr))
 
           (logDelete [_ iid app-time-start app-time-end]
-            (let [op-idx (.startValue ops-data-writer)]
-              (.setSafe iid-vec op-idx iid)
-              (.setNull row-id-vec op-idx)
-              (.setSafe app-time-start-vec op-idx app-time-start)
-              (.setSafe app-time-end-vec op-idx app-time-end)
-              (.setSafe evict-vec op-idx 0)
-
-              (.endValue ops-data-writer)))
+            (.startStruct op-wtr)
+            (.writeNull row-id-wtr nil)
+            (.writeLong iid-wtr iid)
+            (.writeLong valid-time-start-wtr app-time-start)
+            (.writeLong valid-time-end-wtr app-time-end)
+            (.writeBoolean evict-wtr false)
+            (.endStruct op-wtr))
 
           (logEvict [_ iid]
-            (let [op-idx (.startValue ops-data-writer)]
-              (.setSafe iid-vec op-idx iid)
-              (.setNull row-id-vec op-idx)
-              (.setNull app-time-start-vec op-idx)
-              (.setNull app-time-end-vec op-idx)
-              (.setSafe evict-vec op-idx 1))
-
-            (.endValue ops-data-writer))
+            (.startStruct op-wtr)
+            (.writeNull row-id-wtr nil)
+            (.writeLong iid-wtr iid)
+            (.writeNull valid-time-start-wtr nil)
+            (.writeNull valid-time-end-wtr nil)
+            (.writeBoolean evict-wtr true)
+            (.endStruct op-wtr))
 
           (commit [_]
-            (.endValue ops-writer)
-            (.setValueCount ops-vec 1)
-            (vw/append-rel log-writer (vw/rel-writer->reader transient-log-writer))
+            (.endList ops-wtr)
+            (.endRow transient-log-writer)
+            (vw/append-rel log-writer (vw/rel-wtr->rdr transient-log-writer))
 
             (.clear transient-log-writer)
             (.getAndIncrement !block-row-count))
 
           (abort [_]
-            (.clear ops-vec)
-            (.setNull ops-vec 0)
-            (.setValueCount ops-vec 1)
-            (vw/append-rel log-writer (vw/rel-writer->reader transient-log-writer))
+            (.clear ops-wtr)
+            (.writeNull ops-wtr nil)
+            (.endRow transient-log-writer)
+            (vw/append-rel log-writer (vw/rel-wtr->rdr transient-log-writer))
 
             (.clear transient-log-writer)
             (.getAndIncrement !block-row-count))))

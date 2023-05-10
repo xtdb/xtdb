@@ -17,19 +17,19 @@
             [xtdb.tx-producer :as txp]
             [xtdb.types :as t]
             [xtdb.util :as util]
+            [xtdb.vector :as vec]
             [xtdb.vector.indirect :as iv]
             [xtdb.vector.writer :as vw]
             [xtdb.watermark :as wm])
   (:import (java.io ByteArrayInputStream Closeable)
            java.lang.AutoCloseable
-           java.nio.ByteBuffer
            (java.nio.channels ClosedByInterruptException)
            (java.time Instant ZoneId)
            (java.util.concurrent.locks StampedLock)
            (java.util.function Consumer IntPredicate ToIntFunction)
            (java.util.stream IntStream StreamSupport)
            (org.apache.arrow.memory BufferAllocator)
-           (org.apache.arrow.vector BigIntVector BitVector TimeStampVector ValueVector VarBinaryVector VarCharVector VectorSchemaRoot)
+           (org.apache.arrow.vector BigIntVector BitVector TimeStampVector VarBinaryVector VarCharVector VectorSchemaRoot)
            (org.apache.arrow.vector.complex DenseUnionVector ListVector StructVector)
            (org.apache.arrow.vector.ipc ArrowStreamReader)
            org.roaringbitmap.RoaringBitmap
@@ -260,7 +260,8 @@
             (when-not (or (nil? res) (true? res))
               (let [tx-ops-vec (txp/open-tx-ops-vec allocator)]
                 (try
-                  (txp/write-tx-ops! allocator (.asDenseUnion (vw/vec->writer tx-ops-vec)) res)
+                  (txp/write-tx-ops! allocator (vw/->writer tx-ops-vec) res)
+                  (.setValueCount tx-ops-vec (count res))
                   tx-ops-vec
 
                   (catch Throwable t
@@ -348,8 +349,7 @@
             live-table (.liveTable live-chunk table)
             live-table-wtr (.writer live-table)]
         (letfn [(->live-row-copier ^xtdb.vector.IRowCopier [^IIndirectVector col]
-                  (-> (.writerForName live-table-wtr (.getName col))
-                      (vw/->row-copier col)))]
+                  (.rowCopier col (.writerForName live-table-wtr (.getName col))))]
 
           (let [update-col-copiers (->> (for [^IIndirectVector in-col in-rel
                                               :let [col-name (.getName in-col)]
@@ -513,24 +513,21 @@
 
     (.writeRowId live-table row-id)
 
-    (doto (-> (.writerForName writer "xt$id" :i64)
-              (.monoWriter :i64))
+    (doto (.writerForName writer "xt$id" :i64)
       (.writeLong tx-id))
 
-    (doto (-> (.writerForName writer "xt$tx_time" t/temporal-col-type)
-              (.monoWriter :i64))
+    (doto (.writerForName writer "xt$tx_time" t/temporal-col-type)
       (.writeLong system-time-µs))
 
-    (doto (-> (.writerForName writer "xt$committed?" :bool)
-              (.monoWriter :bool))
+    (doto (.writerForName writer "xt$committed?" :bool)
       (.writeBoolean (nil? t)))
 
     (let [e-wtr (.writerForName writer "xt$error" [:union #{:null :clj-form}])]
       (if (or (nil? t) (= t abort-exn))
-        (doto (.monoWriter e-wtr :null)
+        (doto (.writerForType e-wtr :null)
           (.writeNull nil))
-        (doto (.monoWriter e-wtr :clj-form)
-          (.writeObject (ByteBuffer/wrap (.getBytes (pr-str t)))))))
+        (doto (.writerForType e-wtr :clj-form)
+          (.writeObject (pr-str t)))))
 
     (.indexPut temporal-tx iid row-id system-time-µs util/end-of-time-μs true)))
 

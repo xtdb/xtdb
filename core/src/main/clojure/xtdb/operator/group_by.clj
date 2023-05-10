@@ -39,6 +39,7 @@
 
 (set! *unchecked-math* :warn-on-boxed)
 
+#_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface IGroupMapper
   (^org.apache.arrow.vector.IntVector groupMapping [^xtdb.vector.IIndirectRelation inRelation])
   (^java.util.List #_<IIndirectVector> finish []))
@@ -93,13 +94,13 @@
                     gm-vec)
       (NullGroupMapper. gm-vec))))
 
-#_{:clj-kondo/ignore [:unused-binding]}
+#_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface IAggregateSpec
   (^void aggregate [^xtdb.vector.IIndirectRelation inRelation,
                     ^org.apache.arrow.vector.IntVector groupMapping])
   (^xtdb.vector.IIndirectVector finish []))
 
-#_{:clj-kondo/ignore [:unused-binding]}
+#_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface IAggregateSpecFactory
   (^clojure.lang.Symbol getToColumnName [])
   (getToColumnType [])
@@ -188,7 +189,6 @@
         (let [group-mapping-sym (gensym 'group-mapping)
 
               return-type [:union (conj #{:null} to-type)]
-              ^List ordered-col-types (vec (second return-type))
 
               acc-expr {:op :variable, :variable acc-col-sym, :idx group-idx-sym
                         :extract-vec-from-rel? false}
@@ -208,7 +208,7 @@
                                ~(-> expr/rel-sym (expr/with-tag IIndirectRelation))
                                ~(-> group-mapping-sym (expr/with-tag IntVector))]
                             (let [~acc-col-sym (iv/->direct-vec ~acc-sym)
-                                  ~acc-writer-sym (vec/->poly-writer ~acc-sym ~return-type)
+                                  ~acc-writer-sym (vw/->writer ~acc-sym)
                                   ~@(expr/batch-bindings emitted-expr)]
                               (dotimes [~expr/idx-sym (.rowCount ~expr/rel-sym)]
                                 (let [~group-idx-sym (.get ~group-mapping-sym ~expr/idx-sym)]
@@ -218,9 +218,7 @@
                                   ~(continue (fn [acc-type acc-code]
                                                `(do
                                                   (.setPosition (.writerPosition ~acc-writer-sym) ~group-idx-sym)
-                                                  ~(expr/write-value-code acc-type acc-writer-sym
-                                                                          (.indexOf ordered-col-types acc-type)
-                                                                          acc-code))))))))
+                                                  ~(expr/write-value-code acc-type `(.writerForType ~acc-writer-sym '~acc-type) acc-code))))))))
                          #_(doto clojure.pprint/pprint)
                          eval)}))
       (util/lru-memoize)))
@@ -520,7 +518,7 @@
   (->aggregate-factory (assoc agg-opts :f :avg)))
 
 (deftype ArrayAggAggregateSpec [^BufferAllocator allocator
-                                from-name to-name
+                                from-name to-name to-type
                                 ^IVectorWriter acc-col
                                 ^:unsynchronized-mutable ^ListVector out-vec
                                 ^:unsynchronized-mutable ^long base-idx
@@ -541,22 +539,20 @@
       (set! (.base-idx this) (+ base-idx row-count))))
 
   (finish [this]
-    (let [out-vec (-> (types/->field (name to-name) types/list-type false (.getField (.getVector acc-col)))
+    (let [out-vec (-> (types/col-type->field to-name to-type)
                       (.createVector allocator))]
       (set! (.out-vec this) out-vec)
 
-      (let [list-writer (.asList (vw/vec->writer out-vec))
-            data-writer (.getDataWriter list-writer)
-            row-copier (.rowCopier data-writer (.getVector acc-col))]
+      (let [list-writer (vw/->writer out-vec)
+            el-writer (.listElementWriter list-writer)
+            row-copier (.rowCopier (vw/vec-wtr->rdr acc-col) el-writer)]
         (doseq [^IntStream$Builder isb group-idxmaps]
-          (.startValue list-writer)
+          (.startList list-writer)
           (.forEach (.build isb)
                     (reify IntConsumer
                       (accept [_ idx]
-                        (.startValue data-writer)
-                        (.copyRow row-copier idx)
-                        (.endValue data-writer))))
-          (.endValue list-writer))
+                        (.copyRow row-copier idx))))
+          (.endList list-writer))
 
         (.setValueCount out-vec (.size group-idxmaps))
         (iv/->direct-vec out-vec))))
@@ -573,7 +569,7 @@
       (getToColumnType [_] to-type)
 
       (build [_ al]
-        (ArrayAggAggregateSpec. al from-name to-name
+        (ArrayAggAggregateSpec. al from-name to-name to-type
                                 (vw/->vec-writer al (name to-name))
                                 nil 0 (ArrayList.))))))
 

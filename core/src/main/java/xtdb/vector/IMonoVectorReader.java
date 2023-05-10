@@ -1,5 +1,7 @@
 package xtdb.vector;
 
+import java.nio.ByteBuffer;
+
 public interface IMonoVectorReader {
 
     int valueCount();
@@ -13,5 +15,6 @@ public interface IMonoVectorReader {
     float readFloat(int idx);
     double readDouble(int idx);
 
+    ByteBuffer readBytes(int idx);
     Object readObject(int idx);
 }

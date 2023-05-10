@@ -1,28 +1,27 @@
 (ns xtdb.temporal
-  (:require [clojure.tools.logging :as log]
-            [clojure.set :as set]
+  (:require [clojure.set :as set]
+            [clojure.tools.logging :as log]
+            [juxt.clojars-mirrors.integrant.core :as ig]
             xtdb.buffer-pool
             [xtdb.metadata :as meta]
             [xtdb.temporal.grid :as grid]
             [xtdb.temporal.kd-tree :as kd]
             [xtdb.types :as types]
             [xtdb.util :as util]
-            [xtdb.vector :as vec]
             [xtdb.vector.indirect :as iv]
-            [juxt.clojars-mirrors.integrant.core :as ig])
-  (:import xtdb.buffer_pool.IBufferPool
-           xtdb.metadata.IMetadataManager
-           xtdb.object_store.ObjectStore
-           [xtdb.temporal.kd_tree IKdTreePointAccess MergedKdTree]
-           java.io.Closeable
-           java.time.Instant
+            [xtdb.vector.writer :as vw])
+  (:import java.io.Closeable
            [java.util ArrayList Arrays Comparator]
            [java.util.concurrent CompletableFuture ExecutorService Executors]
            [java.util.function LongFunction Predicate ToLongFunction]
            java.util.stream.LongStream
            [org.apache.arrow.memory ArrowBuf BufferAllocator]
            org.apache.arrow.vector.BaseFixedWidthVector
-           org.roaringbitmap.longlong.Roaring64Bitmap))
+           org.roaringbitmap.longlong.Roaring64Bitmap
+           xtdb.buffer_pool.IBufferPool
+           xtdb.metadata.IMetadataManager
+           xtdb.object_store.ObjectStore
+           [xtdb.temporal.kd_tree IKdTreePointAccess MergedKdTree]))
 
 ;; Temporal proof-of-concept plan:
 
@@ -310,7 +309,7 @@
         (let [col-idx (->temporal-column-idx col-name)
               col-type (types/col-type->field col-name (get temporal-col-types col-name)) ;TODO rename to field
               ^BaseFixedWidthVector temporal-vec (.createVector col-type allocator)
-              temporal-vec-wtr (vec/->mono-writer temporal-vec col-type)]
+              temporal-vec-wtr (vw/->writer temporal-vec)]
           (.allocateNew temporal-vec value-count)
           (dotimes [n value-count]
             (let [^longs coordinate (aget coordinates n)]

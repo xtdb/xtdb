@@ -1,20 +1,14 @@
 package xtdb.vector;
 
-public class ValueBox implements IMonoValueWriter, IPolyValueReader, IPolyValueWriter {
-    private static final byte NO_TYPE_ID = Byte.MIN_VALUE;
+import org.apache.arrow.vector.types.pojo.Field;
 
-    private byte typeId;
+import java.nio.ByteBuffer;
 
-    private boolean booleanValue;
-    private byte byteValue;
-    private short shortValue;
-    private int intValue;
-    private long longValue;
+public class ValueBox implements IValueWriter, IPolyValueReader {
+    private byte typeId = -1;
 
-    private float floatValue;
-    private double doubleValue;
-
-    private Object objectValue;
+    private long prim;
+    private Object obj;
 
     @Override
     public byte read() {
@@ -23,198 +17,153 @@ public class ValueBox implements IMonoValueWriter, IPolyValueReader, IPolyValueW
 
     @Override
     public boolean readBoolean() {
-        return booleanValue;
+        return prim != 0;
     }
 
     @Override
     public byte readByte() {
-        return byteValue;
+        return (byte) prim;
     }
 
     @Override
     public short readShort() {
-        return shortValue;
+        return (short) prim;
     }
 
     @Override
     public int readInt() {
-        return intValue;
+        return (int) prim;
     }
 
     @Override
     public long readLong() {
-        return longValue;
+        return prim;
     }
 
     @Override
     public float readFloat() {
-        return floatValue;
+        return (float) readDouble();
     }
 
     @Override
     public double readDouble() {
-        return doubleValue;
+        return Double.longBitsToDouble(prim);
+    }
+
+    @Override
+    public ByteBuffer readBytes() {
+        return ((ByteBuffer) obj);
     }
 
     @Override
     public Object readObject() {
-        return objectValue;
+        return obj;
     }
 
     @Override
-    public void writeNull(byte typeId, Void nullValue) {
-        this.typeId = typeId;
-    }
-
-    @Override
-    public void writeNull(Void nullValue) {
-        writeNull(NO_TYPE_ID, nullValue);
-    }
-
-    @Override
-    public void writeBoolean(byte typeId, boolean booleanValue) {
-        this.typeId = typeId;
-        this.booleanValue = booleanValue;
-    }
+    public void writeNull(Void nullValue) {}
 
     @Override
     public void writeBoolean(boolean booleanValue) {
-        writeBoolean(NO_TYPE_ID, booleanValue);
-    }
-
-    @Override
-    public void writeByte(byte typeId, byte byteValue) {
-        this.typeId = typeId;
-        this.byteValue = byteValue;
+        this.prim = booleanValue ? 1 : 0;
     }
 
     @Override
     public void writeByte(byte byteValue) {
-        writeByte(NO_TYPE_ID, byteValue);
-    }
-
-    @Override
-    public void writeShort(byte typeId, short shortValue) {
-        this.typeId = typeId;
-        this.shortValue = shortValue;
+        this.prim = byteValue;
     }
 
     @Override
     public void writeShort(short shortValue) {
-        writeShort(NO_TYPE_ID, shortValue);
-    }
-
-    @Override
-    public void writeInt(byte typeId, int intValue) {
-        this.typeId = typeId;
-        this.intValue = intValue;
+        this.prim = shortValue;
     }
 
     @Override
     public void writeInt(int intValue) {
-        writeInt(NO_TYPE_ID, intValue);
-    }
-
-    @Override
-    public void writeLong(byte typeId, long longValue) {
-        this.typeId = typeId;
-        this.longValue = longValue;
+        this.prim = intValue;
     }
 
     @Override
     public void writeLong(long longValue) {
-        writeLong(NO_TYPE_ID, longValue);
-    }
-
-    @Override
-    public void writeFloat(byte typeId, float floatValue) {
-        this.typeId = typeId;
-        this.floatValue = floatValue;
+        this.prim = longValue;
     }
 
     @Override
     public void writeFloat(float floatValue) {
-        writeFloat(NO_TYPE_ID, floatValue);
-    }
-
-    @Override
-    public void writeDouble(byte typeId, double doubleValue) {
-        this.typeId = typeId;
-        this.doubleValue = doubleValue;
+        writeDouble(floatValue);
     }
 
     @Override
     public void writeDouble(double doubleValue) {
-        writeDouble(NO_TYPE_ID, doubleValue);
+        this.prim = Double.doubleToLongBits(doubleValue);
     }
 
     @Override
-    public void writeObject(byte typeId, Object objectValue) {
-        this.typeId = typeId;
-        this.objectValue = objectValue;
+    public void writeBytes(ByteBuffer bytesValue) {
+        this.obj = bytesValue;
     }
 
     @Override
     public void writeObject(Object objectValue) {
-        writeObject(NO_TYPE_ID, objectValue);
+        this.obj = objectValue;
     }
 
     @Override
-    public IMonoVectorWriter writeMonoListElements(byte typeId, int elementCount) {
-        this.typeId = typeId;
-        ListValueBox listValueBox = new ListValueBox(elementCount);
-        this.objectValue = listValueBox;
-        return listValueBox;
+    public IValueWriter structKeyWriter(String key) {
+        return new BoxWriter() {
+            @Override
+            IValueWriter box() {
+                return ((StructValueBox) obj).fieldWriter(key);
+            }
+        };
     }
 
     @Override
-    public IMonoVectorWriter writeMonoListElements(int elementCount) {
-        return writeMonoListElements(NO_TYPE_ID, elementCount);
+    public void startStruct() {
+        obj = new StructValueBox();
     }
 
     @Override
-    public IPolyVectorWriter writePolyListElements(byte typeId, int elementCount) {
-        this.typeId = typeId;
-        ListValueBox listValueBox = new ListValueBox(elementCount);
-        this.objectValue = listValueBox;
-        return listValueBox;
+    public void endStruct() {
     }
 
     @Override
-    public IPolyVectorWriter writePolyListElements(int elementCount) {
-        return writePolyListElements(NO_TYPE_ID, elementCount);
+    public IValueWriter listElementWriter() {
+        return new BoxWriter() {
+            @Override
+            IValueWriter box() {
+                return ((ListValueBox) obj);
+            }
+        };
     }
 
     @Override
-    public void writeStructEntries(byte typeId) {
-        this.typeId = typeId;
-        this.objectValue = new StructValueBox();
+    public void startList() {
+        obj = new ListValueBox();
     }
 
     @Override
-    public void writeStructEntries() {
-        writeStructEntries(NO_TYPE_ID);
+    public void endList() {
     }
 
     @Override
-    public IMonoValueWriter monoStructFieldWriter(byte typeId, String fieldName) {
-        this.typeId = typeId;
-        return ((StructValueBox) objectValue).monoFieldWriter(fieldName);
+    public IValueWriter writerForType(Object colType) {
+        throw new UnsupportedOperationException();
     }
 
     @Override
-    public IMonoValueWriter monoStructFieldWriter(String fieldName) {
-        return monoStructFieldWriter(NO_TYPE_ID, fieldName);
+    public byte registerNewType(Field field) {
+        throw new UnsupportedOperationException();
     }
 
     @Override
-    public IPolyValueWriter polyStructFieldWriter(byte typeId, String fieldName) {
-        this.typeId = typeId;
-        return ((StructValueBox) objectValue).polyFieldWriter(fieldName);
-    }
-
-    @Override
-    public IPolyValueWriter polyStructFieldWriter(String fieldName) {
-        return polyStructFieldWriter(NO_TYPE_ID, fieldName);
+    public IValueWriter writerForTypeId(byte typeId) {
+        return new BoxWriter() {
+            @Override
+            IValueWriter box() {
+                ValueBox.this.typeId = typeId;
+                return ValueBox.this;
+            }
+        };
     }
 }

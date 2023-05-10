@@ -276,8 +276,9 @@
     (= (alength (.getBytes s "utf-8")) (project1 '(octet-length a) {:a s}))))
 
 (t/deftest test-octet-length
-  (letfn [(len [s vec-type] (project-mono-value 'octet-length s vec-type))]
-    (t/are [s] (= (alength (.getBytes s "utf-8")) (len s :utf8) (len s :varbinary))
+  (letfn [(len [s vec-type]
+            (project-mono-value 'octet-length s vec-type))]
+    (t/are [s] (= (alength (.getBytes s "utf-8")) (len s :utf8) (len (.getBytes s) :varbinary))
       ""
       "a"
       "hello"

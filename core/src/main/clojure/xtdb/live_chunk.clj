@@ -8,6 +8,7 @@
             xtdb.object-store
             [xtdb.types :as types]
             [xtdb.util :as util]
+            [xtdb.vector :as vec]
             [xtdb.vector.indirect :as iv]
             [xtdb.vector.writer :as vw])
   (:import [clojure.lang MapEntry]
@@ -163,8 +164,9 @@
 (defn- open-wm-rel ^xtdb.vector.IIndirectRelation [^IRelationWriter rel, ^BigIntVector row-id-vec, retain?]
   (let [out-cols (ArrayList.)]
     (try
-      (doseq [^ValueVector v (cons row-id-vec (mapv #(.getVector ^IVectorWriter %) rel))]
-        (.add out-cols (iv/->direct-vec (cond-> v
+      (doseq [^IIndirectVector v (cons (iv/->direct-vec row-id-vec)
+                                       (mapv vw/vec-wtr->rdr rel))]
+        (.add out-cols (iv/->direct-vec (cond-> (.getVector v)
                                           retain? (retain-vec)))))
 
       (iv/->indirect-rel out-cols)
@@ -190,7 +192,7 @@
                                            (= row-id (.get row-id-vec idx)))))
                               (.findFirst)
                               (.getAsInt))]
-                  (iv/select (vw/rel-writer->reader rel) (int-array [idx])))))]
+                  (iv/select (vw/rel-wtr->rdr rel) (int-array [idx])))))]
 
       (or (live-row* static-rel static-row-id-vec static-row-id-bitmap)
           (live-row* transient-rel transient-row-id-vec transient-row-id-bitmap))))
@@ -237,10 +239,11 @@
     (.addRows row-counter (.getValueCount transient-row-id-vec))
     (doto static-row-id-bitmap (.or transient-row-id-bitmap))
 
-    (doto (vw/vec->writer static-row-id-vec)
-      (vw/append-vec (iv/->direct-vec transient-row-id-vec)))
+    (doto (vw/->writer static-row-id-vec)
+      (vw/append-vec (iv/->direct-vec transient-row-id-vec))
+      (.getVector))
 
-    (let [copier (.rowCopier static-rel (vw/rel-writer->reader transient-rel))]
+    (let [copier (.rowCopier static-rel (vw/rel-wtr->rdr transient-rel))]
       (dotimes [idx (.getValueCount transient-row-id-vec)]
         (.copyRow copier idx)))
 
@@ -292,9 +295,9 @@
         (close [_] (when retain? (.close wm-rel))))))
 
   (finishBlock [_]
-    (doseq [^ValueVector live-vec (cons row-id-vec (map #(.getVector ^IVectorWriter %) static-rel))]
+    (doseq [^IIndirectVector live-vec (cons (iv/->direct-vec row-id-vec) (map vw/vec-wtr->rdr static-rel))]
       (doto (->col-metadata-writer table-metadata-writer col-metadata-writers (.getName live-vec))
-        (.writeMetadata (iv/slice-col (iv/->direct-vec live-vec)
+        (.writeMetadata (iv/slice-col live-vec
                                       (.chunkRowCount row-counter)
                                       (.blockRowCount row-counter))
                         (.blockIdx row-counter))))
@@ -331,7 +334,7 @@
                      (fn [_]
                        (.finishChunk table-metadata-writer))))
 
-          chunk-metadata (meta/live-rel->chunk-metadata table-name (vw/rel-writer->reader static-rel))]
+          chunk-metadata (meta/live-rel->chunk-metadata table-name (vw/rel-wtr->rdr static-rel))]
       (-> !fut
           (util/then-apply (fn [_] chunk-metadata)))))
 

@@ -1,5 +1,6 @@
 (ns xtdb.flight-sql
   (:require [clojure.tools.logging :as log]
+            [juxt.clojars-mirrors.integrant.core :as ig]
             [xtdb.core.sql :as sql]
             xtdb.indexer
             xtdb.ingester
@@ -8,29 +9,21 @@
             [xtdb.types :as types]
             [xtdb.util :as util]
             [xtdb.vector.indirect :as iv]
-            [xtdb.vector.writer :as vw]
-            [juxt.clojars-mirrors.integrant.core :as ig])
+            [xtdb.vector.writer :as vw])
   (:import (com.google.protobuf Any ByteString)
-           xtdb.indexer.IIndexer
-           xtdb.ingester.Ingester
-           (xtdb.operator BoundQuery PreparedQuery IRaQuerySource)
            java.lang.AutoCloseable
            (java.util ArrayList HashMap Map)
            (java.util.concurrent CompletableFuture ConcurrentHashMap)
            (java.util.function BiConsumer BiFunction Consumer)
-           (org.apache.arrow.flight FlightEndpoint FlightInfo FlightProducer$ServerStreamListener FlightProducer$StreamListener
-                                    FlightServer FlightServer$Builder FlightServerMiddleware FlightServerMiddleware$Factory FlightServerMiddleware$Key
-                                    FlightStream Location PutResult Result Ticket)
+           (org.apache.arrow.flight FlightEndpoint FlightInfo FlightProducer$ServerStreamListener FlightProducer$StreamListener FlightServer FlightServer$Builder FlightServerMiddleware FlightServerMiddleware$Factory FlightServerMiddleware$Key FlightStream Location PutResult Result Ticket)
            (org.apache.arrow.flight.sql FlightSqlProducer)
-           (org.apache.arrow.flight.sql.impl FlightSql$ActionBeginTransactionResult
-                                             FlightSql$ActionCreatePreparedStatementResult
-                                             FlightSql$ActionEndTransactionRequest$EndTransaction
-                                             FlightSql$CommandPreparedStatementQuery
-                                             FlightSql$DoPutUpdateResult
-                                             FlightSql$TicketStatementQuery)
+           (org.apache.arrow.flight.sql.impl FlightSql$ActionBeginTransactionResult FlightSql$ActionCreatePreparedStatementResult FlightSql$ActionEndTransactionRequest$EndTransaction FlightSql$CommandPreparedStatementQuery FlightSql$DoPutUpdateResult FlightSql$TicketStatementQuery)
            org.apache.arrow.memory.BufferAllocator
            (org.apache.arrow.vector FieldVector VectorSchemaRoot)
-           org.apache.arrow.vector.types.pojo.Schema))
+           org.apache.arrow.vector.types.pojo.Schema
+           xtdb.indexer.IIndexer
+           xtdb.ingester.Ingester
+           (xtdb.operator BoundQuery IRaQuerySource PreparedQuery)))
 
 ;;;; populate-root temporarily copied from test-util
 

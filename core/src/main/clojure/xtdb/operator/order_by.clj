@@ -36,7 +36,7 @@
         (.close rel-writer)
         (throw e)))
 
-    (vw/rel-writer->reader rel-writer)))
+    (vw/rel-wtr->rdr rel-writer)))
 
 (defn- sorted-idxs ^ints [^IIndirectRelation read-rel, order-specs]
   (-> (IntStream/range 0 (.rowCount read-rel))
