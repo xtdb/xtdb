@@ -390,3 +390,17 @@ VALUES(1, OBJECT ('foo': OBJECT('bibble': true), 'bar': OBJECT('baz': 1001)))"]]
                               3)
                       first
                       :err :form))))))
+
+(t/deftest test-indexer-cleans-up-aborted-transactions-2489
+  (t/testing "INSERT"
+    (xt.sql/submit-tx tu/*node*
+                      [[:sql "INSERT INTO xt_docs (xt$id, xt$valid_from, xt$valid_to)
+                              VALUES (1, DATE '2010-01-01', DATE '2020-01-01'),
+                                     (1, DATE '2030-01-01', DATE '2020-01-01')"]])
+
+    (t/is (= [{:committed? false}]
+             (xt.d/q tu/*node*
+                     '{:find [committed?]
+                       :in [tx-id]
+                       :where [($ :xt/txs {:xt/id tx-id, :xt/committed? committed?})]}
+                     0)))))

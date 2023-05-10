@@ -10,7 +10,7 @@
             [xtdb.util :as util]
             [xtdb.vector.indirect :as iv]
             [xtdb.vector.writer :as vw])
-  (:import java.io.Closeable
+  (:import java.lang.AutoCloseable
            [java.util ArrayList Arrays Comparator]
            [java.util.concurrent CompletableFuture ExecutorService Executors]
            [java.util.function LongFunction Predicate ToLongFunction]
@@ -127,7 +127,7 @@
   (^void reloadTemporalIndex [^int chunk-idx ^Long snapshot-idx])
   (^void awaitSnapshotBuild [])
   (^void buildTemporalSnapshot [^int chunk-idx ^Long snapshot-idx])
-  (^java.io.Closeable buildStaticTree [^Object base-kd-tree ^int chunk-idx ^Long snapshot-idx]))
+  (^AutoCloseable buildStaticTree [^Object base-kd-tree ^int chunk-idx ^Long snapshot-idx]))
 
 (deftype TemporalCoordinates [^long rowId, ^long iid,
                               ^long sysTimeStart, ^long sysTimeEnd
@@ -501,7 +501,7 @@
                                      (util/->mmap-path))]
                 @(.putObject object-store new-snapshot-obj-key temporal-buf))))
           (when-let [kd-tree (.buildStaticTree this nil chunk-idx snapshot-idx)]
-            (with-open [^Closeable kd-tree kd-tree]
+            (with-open [^AutoCloseable kd-tree kd-tree]
               (let [temporal-buf (-> (grid/->disk-grid allocator path kd-tree {:k k})
                                      (util/->mmap-path))]
                 @(.putObject object-store new-snapshot-obj-key temporal-buf)))))
@@ -524,7 +524,7 @@
             (util/instant->micros (.system-time latest-completed-tx))
             current-time))
 
-        Closeable
+        AutoCloseable
         (close [_]
           (util/try-close kd-tree)))))
 
@@ -547,7 +547,7 @@
             (util/delete-file path)))))
     (.awaitSnapshotBuild this)
     (when kd-tree
-      (with-open [^Closeable _old-kd-tree kd-tree]
+      (with-open [^AutoCloseable _old-kd-tree kd-tree]
         (let [snapshot-idx (.latestTemporalSnapshotIndex this chunk-idx)
               fut (.submit snapshot-pool ^Runnable #(.buildTemporalSnapshot this chunk-idx snapshot-idx))]
           (set! (.snapshot-future this) fut)
@@ -558,7 +558,7 @@
   (startTx [this-tm tx-key]
     (let [system-time-μs (util/instant->micros (.system-time tx-key))
           evicted-row-ids (Roaring64Bitmap.)
-          !kd-tree (volatile! kd-tree)
+          !kd-tree (volatile! (kd/kd-tree-retain kd-tree allocator))
           !current-row-ids (volatile! current-row-ids)]
 
       (when latest-completed-tx
@@ -594,12 +594,15 @@
           (vswap! !current-row-ids remove-evicted-row-ids evicted-row-ids))
 
         (commit [_]
-          (set! (.kd-tree this-tm) @!kd-tree)
+          (let [old-kd-tree kd-tree]
+            (set! (.kd-tree this-tm) @!kd-tree)
+            (util/try-close old-kd-tree))
+
           (set! (.current-row-ids this-tm) @!current-row-ids)
           (set! (.latest-completed-tx this-tm) tx-key)
           evicted-row-ids)
 
-        (abort [_])
+        (abort [_] (util/try-close @!kd-tree))
 
         ITemporalRelationSource
         (createTemporalRelation [_ allocator columns temporal-min-range temporal-max-range row-id-bitmap]
@@ -612,7 +615,7 @@
             (util/instant->micros (.system-time latest-completed-tx))
             current-time)))))
 
-  Closeable
+  AutoCloseable
   (close [this]
     (util/shutdown-pool snapshot-pool)
     (set! (.snapshot-future this) nil)
