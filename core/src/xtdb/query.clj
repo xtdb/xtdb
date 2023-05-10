@@ -800,7 +800,7 @@
                                                                  (collect-vars)
                                                                  (vals)
                                                                  (into #{} (comp cat (remove blank-var?))))
-                                                bound-vars (set/intersection branch-vars bound-args)]
+                                                bound-vars (set/intersection branch-vars (set bound-args))]
                                             (assert-branches-have-same-free-vars branch-vars free-args)
 
                                             (-> branch-clauses

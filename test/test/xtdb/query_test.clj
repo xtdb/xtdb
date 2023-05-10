@@ -4362,3 +4362,16 @@
              (xt/q (xt/db *api* #inst "2400")
                    '{:find [?e]
                      :where [[?e :xt/id :baz]]})))))
+
+(t/deftest test-bound-vars-cce-2534
+  (t/is (= #{[1]}
+           (xt/q (xt/db *api*)
+                 '{:find [a]
+                   :in [a b]
+                   :where [(allowed a b)] ;; b has to be passed through, dropping or hard-coding '2' works fine
+                   :rules [[(allowed [a b])
+                            [(identity true)]]
+                           [(allowed [a b])
+                            [a :x x]
+                            [c :z x]]]}
+                 1 2))))
