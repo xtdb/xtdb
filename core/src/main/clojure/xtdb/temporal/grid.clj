@@ -303,6 +303,7 @@
       (.set ref-cnt 0)
       (throw (IllegalStateException. "grid closed")))
     this)
+  (with-point-vec [this _pv] this)
   (kd-tree-point-access [this]
     (->grid-point-access this))
   (kd-tree-size [_] size)

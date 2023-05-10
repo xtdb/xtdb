@@ -592,10 +592,14 @@
                     (catch xtdb.RuntimeException e e)
                     (catch xtdb.IllegalArgumentException e e)
                     (catch ClosedByInterruptException e
+                      (.abort temporal-idxer)
                       (throw (InterruptedException. (.toString e))))
-                    (catch InterruptedException e (throw e))
+                    (catch InterruptedException e
+                      (.abort temporal-idxer)
+                      (throw e))
                     (catch Throwable t
                       (log/error t "error in indexer")
+                      (.abort temporal-idxer)
                       (throw t)))
                 wm-lock-stamp (.writeLock wm-lock)]
             (try

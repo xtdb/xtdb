@@ -38,7 +38,8 @@
   (kd-tree-point-access [_])
   (kd-tree-size [_])
   (kd-tree-value-count [_])
-  (kd-tree-dimensions [_]))
+  (kd-tree-dimensions [_])
+  (with-point-vec [_ point-vec]))
 
 (defn next-axis
   {:inline (fn [axis k]
@@ -96,7 +97,8 @@
     (NilPointAccess.))
   (kd-tree-size [_] 0)
   (kd-tree-value-count [_] 0)
-  (kd-tree-dimensions [_] 0))
+  (kd-tree-dimensions [_] 0)
+  (with-point-vec [_ _]))
 
 (deftype ListPointAccess [^List list]
   IKdTreePointAccess
@@ -147,7 +149,8 @@
     (ListPointAccess. this))
   (kd-tree-size [this] (.size this))
   (kd-tree-value-count [this] (.size this))
-  (kd-tree-dimensions [this] (count (first this))))
+  (kd-tree-dimensions [this] (count (first this)))
+  (with-point-vec [this _vec] this))
 
 (defn- write-coordinates [^IKdTreePointAccess access ^long idx point]
   (if (instance? longs-class point)
@@ -296,13 +299,7 @@
   (kd-tree-retain [_ allocator]
     (LeafNode. (.getTo (doto (.getTransferPair point-vec allocator)
                          (.splitAndTransfer 0 (.getValueCount point-vec))))
-               leaf-pool
-               superseded
-               idx
-               axis
-               size
-               root?
-               pool-token))
+               leaf-pool superseded idx axis size root? pool-token))
 
   (kd-tree-point-access [_]
     (KdTreeVectorPointAccess. point-vec (.getListSize point-vec)))
@@ -315,6 +312,9 @@
 
   (kd-tree-dimensions [_]
     (.getListSize point-vec))
+
+  (with-point-vec [_ point-vec]
+    (LeafNode. point-vec leaf-pool superseded idx axis size root? pool-token))
 
   Closeable
   (close [_]
@@ -388,13 +388,23 @@
          (inc (long (kd-tree-height right)))))
 
   (kd-tree-retain [_ allocator]
-    (InnerNode. (.getTo (doto (.getTransferPair point-vec allocator)
-                          (.splitAndTransfer 0 (.getValueCount point-vec))))
+    (let [point-vec (.getTo (doto (.getTransferPair point-vec allocator)
+                              (.splitAndTransfer 0 (.getValueCount point-vec))))]
+      (InnerNode. point-vec
+                  leaf-pool
+                  axis-value
+                  axis
+                  (-> left (with-point-vec point-vec))
+                  (-> right (with-point-vec point-vec))
+                  root?)))
+
+  (with-point-vec [_ point-vec]
+    (InnerNode. point-vec
                 leaf-pool
                 axis-value
                 axis
-                left
-                right
+                (-> left (with-point-vec point-vec))
+                (-> right (with-point-vec point-vec))
                 root?))
 
   (kd-tree-point-access [_]
@@ -530,6 +540,7 @@
       (.isDeleted static-access idx)
       (.isDeleted dynamic-access (- idx static-value-count)))))
 
+#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (definterface IDynamicKdTreeAccess
   (^Object getDynamicKdTree []))
 
@@ -581,6 +592,13 @@
   (kd-tree-retain [_ allocator]
     (MergedKdTree. (kd-tree-retain static-kd-tree allocator)
                    (kd-tree-retain dynamic-kd-tree allocator)
+                   (.clone ^Roaring64Bitmap static-delete-bitmap)
+                   static-size
+                   static-value-count))
+
+  (with-point-vec [_ point-vec]
+    (MergedKdTree. (-> static-kd-tree (with-point-vec point-vec))
+                   (-> dynamic-kd-tree (with-point-vec point-vec))
                    (.clone ^Roaring64Bitmap static-delete-bitmap)
                    static-size
                    static-value-count))
