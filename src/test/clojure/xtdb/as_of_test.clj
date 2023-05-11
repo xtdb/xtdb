@@ -19,10 +19,9 @@
 
     (t/is (= #{{:last-updated "tx2"}}
              (set (xt/q tu/*node*
-                        (-> '{:find [last-updated]
-                              :where [(match :xt_docs {:xt/id e})
-                                      [e :last-updated last-updated]]}
-                            (assoc :basis {:tx tx2}))))))
+                        '{:find [last-updated]
+                          :where [(match :xt_docs {:xt/id e})
+                                  [e :last-updated last-updated]]}))))
 
     (t/testing "at tx1"
       (t/is (= #{{:last-updated "tx1"}}
@@ -31,10 +30,10 @@
 
       (t/is (= #{{:last-updated "tx1"}}
                (set (xt/q tu/*node*
-                          (-> '{:find [last-updated]
-                                :where [(match :xt_docs {:xt/id e})
-                                        [e :last-updated last-updated]]}
-                              (assoc :basis {:tx tx1})))))))))
+                          '{:find [last-updated]
+                            :where [(match :xt_docs {:xt/id e})
+                                    [e :last-updated last-updated]]}
+                          {:basis {:tx tx1}})))))))
 
 (t/deftest test-app-time
   (let [{:keys [system-time]} (xt/submit-tx tu/*node* [[:put :xt_docs {:xt/id :doc, :version 1}]

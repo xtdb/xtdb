@@ -96,12 +96,11 @@
   (st/spec (s/nilable #(instance? Duration %))
            {:decode/string (fn [_ s] (some-> s Duration/parse))}))
 
-(s/def ::params (s/nilable (s/coll-of any? :kind vector?)))
-
-(s/def :xtdb.server.datalog/query (s/merge ::d/query (s/keys :opt-un [::basis ::basis-timeout ::default-tz])))
+(s/def ::args (s/nilable (s/coll-of any? :kind vector?)))
 
 (s/def :xtdb.server.datalog/query-body
-  (s/keys :req-un [:xtdb.server.datalog/query], :opt-un [::params]))
+  (s/keys :req-un [::d/query],
+          :opt-un [::args ::basis ::basis-timeout ::default-tz]))
 
 (defmethod route-handler :datalog-query [_]
   {:muuntaja (m/create (-> muuntaja-opts
@@ -111,8 +110,8 @@
                                      [->tj-resultset-encoder {:handlers xt.transit/tj-write-handlers}])))
 
    :post {:handler (fn [{:keys [node parameters]}]
-                     (let [{{:keys [query params]} :body} parameters]
-                       (-> (xt.impl/open-datalog& node query params)
+                     (let [{{:keys [query] :as body} :body} parameters]
+                       (-> (xt.impl/open-datalog& node query (dissoc body :query))
                            (util/then-apply (fn [res]
                                               {:status 200, :body res})))))
 

@@ -48,10 +48,10 @@
                                      [:put :docs {:xt/id put-id}]])
 
             (->> (xt/q tu/*node*
-                       '{:find [id]
-                         :in [id]
-                         :where [($ :docs {:xt/id id})]}
-                       put-id)
+                       ['{:find [id]
+                          :in [id]
+                          :where [($ :docs {:xt/id id})]}
+                        put-id])
                  (into #{} (map :id))))]
 
     (t/is (= #{:empty-list} (run-test [] :empty-list)))
@@ -78,10 +78,10 @@
                                      [:put :accounts {:xt/id :ivan :balance 200}]
                                      [:put-fn :update-balance
                                       '(fn [id]
-                                         (let [[account] (q '{:find [xt/id balance]
-                                                              :in [xt/id]
-                                                              :where [(match :accounts [xt/id balance])]}
-                                                            id)]
+                                         (let [[account] (q ['{:find [xt/id balance]
+                                                               :in [xt/id]
+                                                               :where [(match :accounts [xt/id balance])]}
+                                                             id])]
                                            (if account
                                              [[:put :accounts (update account :balance inc)]]
                                              [])))]
@@ -90,9 +90,9 @@
     (t/is (= #{{:xt/id :petr, :balance 101}
                {:xt/id :ivan, :balance 200}}
              (set (xt/q tu/*node*
-                        (-> '{:find [xt/id balance]
-                              :where [(match :accounts [xt/id balance])]}
-                            (assoc :basis {:tx tx2})))))
+                         '{:find [xt/id balance]
+                           :where [(match :accounts [xt/id balance])]}
+                         {:basis {:tx tx2}})))
           "query in tx-fn with in-args")))
 
 (t/deftest test-tx-fn-sql-q

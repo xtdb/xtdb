@@ -2,7 +2,7 @@
   (:import java.util.concurrent.ExecutionException))
 
 (defprotocol PNode
-  (^java.util.concurrent.CompletableFuture open-datalog& [node q args])
+  (^java.util.concurrent.CompletableFuture open-datalog& [node q opts])
   (^java.util.concurrent.CompletableFuture open-sql& [node q opts])
   (^xtdb.api.TransactionInstant latest-submitted-tx [node]))
 

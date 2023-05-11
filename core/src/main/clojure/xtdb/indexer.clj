@@ -198,10 +198,17 @@
               (catch Throwable t
                 (throw (err/runtime-err :xtdb.call/error-compiling-tx-fn {:fn-form fn-form} t))))))))))
 
-(defn- tx-fn-q [allocator ra-src wm-src scan-emitter tx-opts q & args]
-  (let [q (into tx-opts q)]
-    (with-open [res (d/open-datalog-query allocator ra-src wm-src scan-emitter q args)]
-      (vec (iterator-seq res)))))
+(defn- tx-fn-q [allocator ra-src wm-src scan-emitter tx-opts]
+  (fn tx-fn-q*
+    ([q+args] (tx-fn-q* q+args {}))
+
+    ([q+args opts]
+     (let [[q args] (if (vector? q+args)
+                      [(first q+args) (rest q+args)]
+                      [q+args nil])]
+       (with-open [res (d/open-datalog-query allocator ra-src wm-src scan-emitter q (-> (into tx-opts opts)
+                                                                                        (assoc :args args)))]
+         (vec (iterator-seq res)))))))
 
 (defn- tx-fn-sql
   ([allocator, ^IRaQuerySource ra-src, wm-src tx-opts query]
@@ -229,7 +236,7 @@
         ^ListVector args-vec (.getChild call-vec "args" ListVector)
 
         ;; TODO confirm/expand API that we expose to tx-fns
-        sci-ctx (sci/init {:bindings {'q (partial tx-fn-q allocator ra-src wm-src scan-emitter tx-opts)
+        sci-ctx (sci/init {:bindings {'q (tx-fn-q allocator ra-src wm-src scan-emitter tx-opts)
                                       'sql-q (partial tx-fn-sql allocator ra-src wm-src tx-opts)
                                       'sleep (fn [n] (Thread/sleep n))
                                       '*current-tx* tx-key}})]

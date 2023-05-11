@@ -374,20 +374,20 @@ VALUES(1, OBJECT ('foo': OBJECT('bibble': true), 'bar': OBJECT('baz': 1001)))"]]
 
     (t/is (= [{:committed? false}]
              (xt.d/q tu/*node*
-                     '{:find [committed?]
-                       :in [tx-id]
-                       :where [($ :xt/txs {:xt/id tx-id, :xt/committed? committed?})]}
-                     1)))
+                     ['{:find [committed?]
+                        :in [tx-id]
+                        :where [($ :xt/txs {:xt/id tx-id, :xt/committed? committed?})]}
+                      1])))
 
     (t/is (thrown-with-msg?
            RuntimeException
            #":xtdb\.call/error-evaluating-tx-fn"
 
            (throw (-> (xt.d/q tu/*node*
-                              '{:find [err]
-                                :in [tx-id]
-                                :where [($ :xt/txs {:xt/id tx-id, :xt/error err})]}
-                              3)
+                              ['{:find [err]
+                                 :in [tx-id]
+                                 :where [($ :xt/txs {:xt/id tx-id, :xt/error err})]}
+                               3])
                       first
                       :err :form))))))
 
@@ -400,7 +400,7 @@ VALUES(1, OBJECT ('foo': OBJECT('bibble': true), 'bar': OBJECT('baz': 1001)))"]]
 
     (t/is (= [{:committed? false}]
              (xt.d/q tu/*node*
-                     '{:find [committed?]
-                       :in [tx-id]
-                       :where [($ :xt/txs {:xt/id tx-id, :xt/committed? committed?})]}
-                     0)))))
+                     ['{:find [committed?]
+                        :in [tx-id]
+                        :where [($ :xt/txs {:xt/id tx-id, :xt/committed? committed?})]}
+                      0])))))

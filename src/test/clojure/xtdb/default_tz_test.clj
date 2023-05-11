@@ -52,7 +52,7 @@
 (t/deftest test-datalog-default-tz
   (t/is (= [{:time #time/time "16:00"}]
            (xt-datalog/q tu/*node*
-                         (assoc '{:find [time]
-                                  :where [[(local-time) time]]
-                                  :default-tz #time/zone "America/Los_Angeles"}
-                                :basis {:current-time (util/->instant #inst "2024-01-01")})))))
+                         '{:find [time]
+                           :where [[(local-time) time]]}
+                         {:basis {:current-time (util/->instant #inst "2024-01-01")}
+                          :default-tz #time/zone "America/Los_Angeles"}))))

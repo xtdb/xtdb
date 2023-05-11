@@ -61,24 +61,24 @@
 
 (def tx-fn-apply-seller-fee
   '(fn apply-seller-fee [u_id]
-     (let [[u] (q '{:find [xt/id u_id u_r_id u_rating u_balance u_created
-                           u_sattr0 u_sattr1 u_sattr2 u_sattr3 u_sattr4 u_sattr5 u_sattr6 u_sattr7]
-                    :in [u_id]
-                    :where [(match :user [xt/id {:xt/id id}])
-                            [id :u_id u_id]
-                            [id :u_r_id u_r_id]
-                            [id :u_rating u_rating]
-                            [id :u_balance u_balance]
-                            [id :u_created u_created]
-                            [id :u_sattr0 u_sattr0]
-                            [id :u_sattr1 u_sattr1]
-                            [id :u_sattr2 u_sattr2]
-                            [id :u_sattr3 u_sattr3]
-                            [id :u_sattr4 u_sattr4]
-                            [id :u_sattr5 u_sattr5]
-                            [id :u_sattr6 u_sattr6]
-                            [id :u_sattr7 u_sattr7]]}
-                  u_id)]
+     (let [[u] (q ['{:find [xt/id u_id u_r_id u_rating u_balance u_created
+                            u_sattr0 u_sattr1 u_sattr2 u_sattr3 u_sattr4 u_sattr5 u_sattr6 u_sattr7]
+                     :in [u_id]
+                     :where [(match :user [xt/id {:xt/id id}])
+                             [id :u_id u_id]
+                             [id :u_r_id u_r_id]
+                             [id :u_rating u_rating]
+                             [id :u_balance u_balance]
+                             [id :u_created u_created]
+                             [id :u_sattr0 u_sattr0]
+                             [id :u_sattr1 u_sattr1]
+                             [id :u_sattr2 u_sattr2]
+                             [id :u_sattr3 u_sattr3]
+                             [id :u_sattr4 u_sattr4]
+                             [id :u_sattr5 u_sattr5]
+                             [id :u_sattr6 u_sattr6]
+                             [id :u_sattr7 u_sattr7]]}
+                   u_id])]
        (if u
          [[:put :user (update u :u_balance dec)]]
          []))))
@@ -88,25 +88,24 @@
            i_current_price i_num_bids i_num_images i_num_global_attrs i_start_date
            i_end-date]
     :in [i]
-    :where
-    [(match :item [id {:xt/id  i}])
-     [i :i_u_id i_u_id]
-     [i :i_c_id i_c_id]
-     [i :i_name i_name]
-     [i :i_description i_description]
-     [i :i_user_attributes i_user_attributes]
-     [i :i_initial_price i_initial_price]
-     [i :i_current_price i_current_price]
-     [i :i_num_bids i_num_bids]
-     [i :i_num_images i_num_images]
-     [i :i_num_global_attrs i_num_global_attrs]
-     [i :i_start_date i_start_date]
-     [i :i_end_date i_end-date]]})
+    :where [(match :item [id {:xt/id i}])
+            [i :i_u_id i_u_id]
+            [i :i_c_id i_c_id]
+            [i :i_name i_name]
+            [i :i_description i_description]
+            [i :i_user_attributes i_user_attributes]
+            [i :i_initial_price i_initial_price]
+            [i :i_current_price i_current_price]
+            [i :i_num_bids i_num_bids]
+            [i :i_num_images i_num_images]
+            [i :i_num_global_attrs i_num_global_attrs]
+            [i :i_start_date i_start_date]
+            [i :i_end_date i_end-date]]})
 
 (def item-max-bid-query
   '{:find [id imb_i_id imb_u_id imb_ib_id imb_ib_i_id imb_ib_u_id imb_created]
     :in [imb]
-    :where [(match :item-max-bid [id {:xt/id  imb}])
+    :where [(match :item-max-bid [id {:xt/id imb}])
             [imb :imb_i_id imb_i_id]
             [imb :imb_u_id imb_u_id]
             [imb :imb_ib_id imb_ib_id]
@@ -130,39 +129,39 @@
                         now] :as params}]
      (let [;; current max bid id
            {:keys [imb imb_ib_id] :as res}
-           (-> (quote {:find [imb, imb_ib_id]
-                       :in [i_id]
-                       :where [(match :item-max-bid {:xt/id  imb})
-                               [imb :imb_i_id i_id]
-                               [imb :imb_u_id u_id]
-                               [imb :imb_ib_id imb_ib_id]]})
-               (q i_id)
+           (-> (q ['{:find [imb, imb_ib_id]
+                     :in [i_id]
+                     :where [(match :item-max-bid {:xt/id imb})
+                             [imb :imb_i_id i_id]
+                             [imb :imb_u_id u_id]
+                             [imb :imb_ib_id imb_ib_id]]}
+                   i_id])
                first)
            ;; _ (println res)
 
 
            ;; current number of bids
            {:keys [i nbids] :as res}
-           (-> (quote {:find [i, nbids]
-                       :in [i_id]
-                       :where [(match :item {:xt/id i})
-                               [i :i_id i_id]
-                               [i :i_num_bids nbids]
-                               [i :i_status :open]]})
-               (q i_id)
+           (-> (q ['{:find [i, nbids]
+                     :in [i_id]
+                     :where [(match :item {:xt/id i})
+                             [i :i_id i_id]
+                             [i :i_num_bids nbids]
+                             [i :i_status :open]]}
+                   i_id])
                first)
            ;; _ (println res)
 
            ;; current bid/max
            {:keys [curr-bid, curr-max] :as res}
            (when imb_ib_id
-             (-> (quote {:find [curr-bid curr-max]
-                         :in [imb_ib_id]
-                         :where [(match :item-bid {:xt/id  ib})
-                                 [ib :ib_id imb_ib_id]
-                                 [ib :ib_bid curr-bid]
-                                 [ib :ib_max_bid curr-max]]})
-                 (q imb_ib_id)
+             (-> (q ['{:find [curr-bid curr-max]
+                       :in [imb_ib_id]
+                       :where [(match :item-bid {:xt/id ib})
+                               [ib :ib_id imb_ib_id]
+                               [ib :ib_bid curr-bid]
+                               [ib :ib_max_bid curr-max]]}
+                     imb_ib_id])
                  first))
 
            new-bid-win (or (nil? imb_ib_id) (< curr-max max-bid))
@@ -190,7 +189,7 @@
                                 [i :i_status i_status]]}
            item-max-bid-query '{:find [xt/id imb_i_id imb_u_id imb_ib_id imb_ib_i_id imb_ib_u_id imb_created]
                                 :in [imb]
-                                :where [(match :item-max-bid [xt/id {:xt/id  imb}])
+                                :where [(match :item-max-bid [xt/id {:xt/id imb}])
                                         [imb :imb_i_id imb_i_id]
                                         [imb :imb_u_id imb_u_id]
                                         [imb :imb_ib_id imb_ib_id]
@@ -201,24 +200,24 @@
        (cond-> []
          ;; increment number of bids on item
          i
-         (conj [:put :item (assoc (first (q item-query i))
+         (conj [:put :item (assoc (first (q [item-query i]))
                                   :i_num_bids (inc nbids))])
 
          ;; if new bid exceeds old, bump it
          upd-curr-bid
-         (conj [:put :item-max-bid (assoc (first (q item-max-bid-query imb))
+         (conj [:put :item-max-bid (assoc (first (q [item-max-bid-query imb]))
                                           :imb_bid bid)])
 
          ;; we exceed the old max, win the bid.
          (and curr-bid new-bid-win)
-         (conj [:put :item-max-bid (assoc (first (q item-max-bid-query imb))
+         (conj [:put :item-max-bid (assoc (first (q [item-max-bid-query imb]))
                                           :imb_ib_id new-bid-id
                                           :imb_ib_u_id u_id
                                           :imb_updated now)])
 
          ;; no previous max bid, insert new max bid
          (nil? imb_ib_id)
-         (conj [:put :item-max-bid {:xt/id  (composite-id-fn new-bid-id i_id)
+         (conj [:put :item-max-bid {:xt/id (composite-id-fn new-bid-id i_id)
                                     :imb_i_id i_id
                                     :imb_u_id u_id
                                     :imb_ib_id new-bid-id
@@ -229,7 +228,7 @@
 
          :always
          ;; add new bid
-         (conj [:put :item-bid {:xt/id  new-bid-id
+         (conj [:put :item-bid {:xt/id new-bid-id
                                 :ib_id new-bid-id
                                 :ib_i_id i_id
                                 :ib_u_id u_id
@@ -280,13 +279,13 @@
                           (match :gav {:xt/id gav-id})
                           [gav-id :gav_gag_id gag-id]
                           [gav-id :gav_name gav-name]]}]
-          (->> (xt/q (:sut worker) q gag-ids gav-ids)
+          (->> (xt/q (:sut worker) [q gag-ids gav-ids])
                (str/join " ")
                (str description " ")))]
 
     (->> (concat
           [[:put :item
-            {:xt/id  i_id
+            {:xt/id i_id
              :i_id i_id
              :i_u_id u_id
              :i_c_id c_id
@@ -304,7 +303,7 @@
                 :let [ii_id (bit-or (bit-shift-left i 60) (bit-and i_id-raw 0x0FFFFFFFFFFFFFFF))]]
             [:put
              :item-comment
-             {:xt/id  (str "ii_" ii_id)
+             {:xt/id (str "ii_" ii_id)
               :ii_id ii_id
               :ii_i_id i_id
               :ii_u_id u_id
@@ -328,7 +327,7 @@
 
 (defn item-status-groups [node ^Instant now]
   (let [items (xt/q node '{:find [i, i_id, i_u_id, i_status, i_end_date, i_num_bids]
-                           :where [(match :item {:xt/id  i})
+                           :where [(match :item {:xt/id i})
                                    [i :i_id i_id]
                                    [i :i_u_id i_u_id]
                                    [i :i_status i_status]
@@ -375,7 +374,7 @@
 (defn largest-id [node table prefix-length]
   (let [id (->> (xt/q node `{:find [~'id]
                              :where [(match ~table [~'id])]})
-                (sort-by :xt/id  #(cond (< (count %1) (count %2)) 1
+                (sort-by :xt/id #(cond (< (count %1) (count %2)) 1
                                         (< (count %2) (count %1)) -1
                                         :else (compare %2 %1)))
                 first
@@ -450,13 +449,13 @@
         q '{:find [i_id i_u_id i_initial_price i_current_price]
             #_(pull ?i [:i_id, :i_u_id, :i_initial_price, :i_current_price])
             :in [i_id]
-            :where [(match :item {:xt/id  i_id})
+            :where [(match :item {:xt/id i_id})
                     ;; [?i :i_id i_id]
                     [i_id :i_status :open]
                     [i_id :i_u_id i_u_id]
                     [i_id :i_initial_price i_initial_price]
                     [i_id :i_current_price i_current_price]]}]
-    (xt/q sut q i_id)))
+    (xt/q sut [q i_id])))
 
 (defn read-category-tsv []
   (let [cat-tsv-rows
@@ -483,7 +482,7 @@
     (->> (for [[path i] path-i]
            [(category-id i)
             {:i i
-             :xt/id  (category-id i)
+             :xt/id (category-id i)
              :category-name (str/join "/" path)
              :parent (category-id (path-i i))
              :item-count (trie-node-item-count path)}])
@@ -494,25 +493,25 @@
         {:keys [^ConcurrentHashMap custom-state]} worker]
     ;; squirrel these data-structures away for later (see category-generator, sample-category-id)
     (.putAll custom-state {::categories cats
-                           ::category-weighting (b2/weighted-sample-fn (map (juxt :xt/id  :item-count) (vals cats)))})))
+                           ::category-weighting (b2/weighted-sample-fn (map (juxt :xt/id :item-count) (vals cats)))})))
 
 (defn generate-region [worker]
   (let [r-id (b2/increment worker region-id)]
-    {:xt/id  r-id
+    {:xt/id r-id
      :r_id r-id
      :r_name (b2/random-str worker 6 32)}))
 
 (defn generate-global-attribute-group [worker]
   (let [gag-id (b2/increment worker gag-id)
         category-id (b2/sample-flat worker category-id)]
-    {:xt/id  gag-id
+    {:xt/id gag-id
      :gag_c_id category-id
      :gag_name (b2/random-str worker 6 32)}))
 
 (defn generate-global-attribute-value [worker]
   (let [gav-id (b2/increment worker gav-id)
         gag-id (b2/sample-flat worker gag-id)]
-    {:xt/id  gav-id
+    {:xt/id gav-id
      :gav_gag_id gag-id
      :gav_name (b2/random-str worker 6 32)}))
 
@@ -520,16 +519,16 @@
   (let [{::keys [categories]} (:custom-state worker)
         c-id (b2/increment worker category-id)
         {:keys [category-name, parent]} (categories c-id)]
-    {:xt/id  c-id
+    {:xt/id c-id
      :c_id c-id
-     :c_parent_id (when (seq parent) (:xt/id  (categories parent)))
+     :c_parent_id (when (seq parent) (:xt/id (categories parent)))
      :c_name (or category-name (b2/random-str worker 6 32))}))
 
 (defn generate-user-attributes [worker]
   (let [u_id (b2/sample-flat worker user-id)
         ua-id (b2/increment worker user-attribute-id)]
     (when u_id
-      {:xt/id  ua-id
+      {:xt/id ua-id
        :ua_u_id u_id
        :ua_name (b2/random-str worker 5 32)
        :ua_value (b2/random-str worker 5 32)
@@ -544,7 +543,7 @@
         i_status (sample-status worker)]
     (add-item-status worker (->ItemSample i_id i_u_id i_status i_end_date 0))
     (when i_u_id
-      {:xt/id  i_id
+      {:xt/id i_id
        :i_id i_id
        :i_u_id i_u_id
        :i_c_id i_c_id

@@ -111,7 +111,7 @@
     (when (contains? *datalog-qs* q)
       (let [query @(nth tpch-datalog/queries n)
             {::tpch-datalog/keys [in-args]} (meta query)]
-        (t/is (is-equal? expected-res (apply d/q *node* query in-args))
+        (t/is (is-equal? expected-res (d/q *node* (into [query] in-args)))
               (format "Q%02d" (inc n)))))))
 
 (t/deftest test-001-datalog

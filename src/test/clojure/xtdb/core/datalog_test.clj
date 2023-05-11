@@ -29,19 +29,17 @@
     (t/is (= [{:e :ivan, :name "Ivan"}
               {:e :petr, :name "Petr"}]
              (xt/q tu/*node*
-                   (-> '{:find [e name]
-                         :where [(match :xt_docs {:xt/id e, :first-name name})]}
-                       (assoc :basis {:tx tx}))))
+                   '{:find [e name]
+                     :where [(match :xt_docs {:xt/id e, :first-name name})]}))
           "returning eid")))
 
 (deftest test-basic-query
   (let [tx (xt/submit-tx tu/*node* ivan+petr)]
     (t/is (= [{:e :ivan}]
              (xt/q tu/*node*
-                   (-> '{:find [e]
-                         :where [(match :xt_docs {:xt/id e})
-                                 [e :first-name "Ivan"]]}
-                       (assoc :basis {:tx tx}))))
+                   '{:find [e]
+                     :where [(match :xt_docs {:xt/id e})
+                             [e :first-name "Ivan"]]}))
           "query by single field")
 
     (t/is (= [{:first-name "Petr", :last-name "Petrov"}]
@@ -207,11 +205,11 @@
 
   (t/is (= #{{:film-name "Skyfall", :bond-name "Daniel Craig"}}
            (set (xt/q tu/*node*
-                      '{:find [film-name bond-name]
-                        :in [film]
-                        :where [(match :film {:xt/id film, :film/name film-name, :film/bond bond})
-                                (match :person {:xt/id bond, :person/name bond-name})]}
-                      "skyfall")))
+                      ['{:find [film-name bond-name]
+                         :in [film]
+                         :where [(match :film {:xt/id film, :film/name film-name, :film/bond bond})
+                                 (match :person {:xt/id bond, :person/name bond-name})]}
+                       "skyfall"])))
         "one -> one")
 
   (t/is (= #{{:film-name "Casino Royale", :bond-name "Daniel Craig"}
@@ -219,11 +217,11 @@
              {:film-name "Skyfall", :bond-name "Daniel Craig"}
              {:film-name "Spectre", :bond-name "Daniel Craig"}}
            (set (xt/q tu/*node*
-                      '{:find [film-name bond-name]
-                        :in [bond]
-                        :where [(match :film {:film/name film-name, :film/bond bond})
-                                (match :person {:xt/id bond, :person/name bond-name})]}
-                      "daniel-craig")))
+                      ['{:find [film-name bond-name]
+                         :in [bond]
+                         :where [(match :film {:film/name film-name, :film/bond bond})
+                                 (match :person {:xt/id bond, :person/name bond-name})]}
+                       "daniel-craig"])))
         "one -> many"))
 
 ;; https://github.com/tonsky/datascript/blob/1.1.0/test/datascript/test/query_aggregates.cljc#L14-L39
@@ -284,19 +282,19 @@
             {:x 2, :sum-y 3, :sum-expr 14}
             {:x 3, :sum-y 6, :sum-expr 30}]
            (xt/q tu/*node*
-                 '{:find [x (sum y) (sum (+ (* y y) x 1))]
-                   :keys [x sum-y sum-expr]
-                   :in [[[x y]]]}
-                 (for [x (range 4)
-                       y (range (inc x))]
-                   [x y]))))
+                 ['{:find [x (sum y) (sum (+ (* y y) x 1))]
+                    :keys [x sum-y sum-expr]
+                    :in [[[x y]]]}
+                  (for [x (range 4)
+                        y (range (inc x))]
+                    [x y])])))
 
   (t/is (= [{:sum-evens 20}]
            (xt/q tu/*node*
-                 '{:find [(sum (if (= 0 (mod x 2)) x 0))]
-                   :keys [sum-evens]
-                   :in [[x ...]]}
-                 (range 10)))
+                 ['{:find [(sum (if (= 0 (mod x 2)) x 0))]
+                    :keys [sum-evens]
+                    :in [[x ...]]}
+                  (range 10)]))
         "if")
 
   ;; TODO aggregates nested within other aggregates/forms
@@ -305,126 +303,128 @@
   #_
   (t/is (= #{[28.5]}
            (xt/q (xt/db *api*)
-                 '{:find [(/ (double (sum (* ?x ?x)))
-                             (count ?x))]
-                   :in [[?x ...]]}
-                 (range 10)))
+                 ['{:find [(/ (double (sum (* ?x ?x)))
+                              (count ?x))]
+                    :in [[?x ...]]}
+                  (range 10)]))
         "aggregates can be included in exprs")
 
   #_
   (t/is (thrown-with-msg? IllegalArgumentException
                           #"nested agg"
                           (xt/q (xt/db *api*)
-                                '{:find [(sum (sum ?x))]
-                                  :in [[?x ...]]}
-                                (range 10)))
+                                ['{:find [(sum (sum ?x))]
+                                   :in [[?x ...]]}
+                                 (range 10)]))
         "aggregates can't be nested")
 
   (t/testing "implicitly groups by variables present outside of aggregates"
     (t/is (= [{:x-div-y 1, :sum-z 2} {:x-div-y 2, :sum-z 3} {:x-div-y 2, :sum-z 5}]
              (xt/q tu/*node*
-                   '{:find [(/ x y) (sum z)]
-                     :keys [x-div-y sum-z]
-                     :in [[[x y z]]]}
-                   [[1 1 2]
-                    [2 1 3]
-                    [4 2 5]]))
+                   ['{:find [(/ x y) (sum z)]
+                      :keys [x-div-y sum-z]
+                      :in [[[x y z]]]}
+                    [[1 1 2]
+                     [2 1 3]
+                     [4 2 5]]]))
           "even though (/ x y) yields the same result in the latter two rows, we group by them individually")
 
     #_
     (t/is (= #{[1 3] [1 7] [4 -1]}
              (xt/q tu/*node*
-                   '{:find [x (- (sum z) y)]
-                     :in [[[x y z]]]}
-                   [[1 1 4]
-                    [1 3 2]
-                    [1 3 8]
-                    [4 6 5]]))
+                   ['{:find [x (- (sum z) y)]
+                      :in [[[x y z]]]}
+                    [[1 1 4]
+                     [1 3 2]
+                     [1 3 8]
+                     [4 6 5]]]))
           "groups by x and y in this case"))
 
   (t/testing "stddev aggregate"
     (t/is (= [{:y 23.53720459187964}]
              (xt/q tu/*node*
-               '{:find [(stddev-pop x)]
-                 :keys [y]
-                 :in [[x ...]]}
-               [10 15 20 35 75])))))
+                   ['{:find [(stddev-pop x)]
+                      :keys [y]
+                      :in [[x ...]]}
+                    [10 15 20 35 75]])))))
 
 (deftest test-query-with-in-bindings
   (let [_tx (xt/submit-tx tu/*node* ivan+petr)]
     (t/is (= #{{:e :ivan}}
              (set (xt/q tu/*node*
-                        '{:find [e]
-                          :in [name]
-                          :where [(match :xt_docs {:xt/id e})
-                                  [e :first-name name]]}
-                        "Ivan")))
+                        ['{:find [e]
+                           :in [name]
+                           :where [(match :xt_docs {:xt/id e})
+                                   [e :first-name name]]}
+                         "Ivan"])))
           "single arg")
 
     (t/is (= #{{:e :ivan}}
              (set (xt/q tu/*node*
-                        '{:find [e]
-                          :in [first-name last-name]
-                          :where [(match :xt_docs {:xt/id e})
-                                  [e :first-name first-name]
-                                  [e :last-name last-name]]}
-                        "Ivan" "Ivanov")))
+                        ['{:find [e]
+                           :in [first-name last-name]
+                           :where [(match :xt_docs {:xt/id e})
+                                   [e :first-name first-name]
+                                   [e :last-name last-name]]}
+                         "Ivan" "Ivanov"])))
           "multiple args")
 
     (t/is (= #{{:e :ivan}}
              (set (xt/q tu/*node*
-                        '{:find [e]
-                          :in [[first-name]]
-                          :where [(match :xt_docs {:xt/id e})
-                                  [e :first-name first-name]]}
-                        ["Ivan"])))
+                        ['{:find [e]
+                           :in [[first-name]]
+                           :where [(match :xt_docs {:xt/id e})
+                                   [e :first-name first-name]]}
+                         ["Ivan"]])))
           "tuple with 1 var")
 
     (t/is (= #{{:e :ivan}}
              (set (xt/q tu/*node*
-                        '{:find [e]
-                          :in [[first-name last-name]]
-                          :where [(match :xt_docs {:xt/id e})
-                                  [e :first-name first-name]
-                                  [e :last-name last-name]]}
-                        ["Ivan" "Ivanov"])))
+                        ['{:find [e]
+                           :in [[first-name last-name]]
+                           :where [(match :xt_docs {:xt/id e})
+                                   [e :first-name first-name]
+                                   [e :last-name last-name]]}
+                         ["Ivan" "Ivanov"]])))
           "tuple with 2 vars")
 
     (t/testing "collection"
-      (let [query  '{:find [e]
-                     :in [[first-name ...]]
-                     :where [(match :xt_docs {:xt/id e})
-                             [e :first-name first-name]]}]
+      (let [query '{:find [e]
+                    :in [[first-name ...]]
+                    :where [(match :xt_docs {:xt/id e})
+                            [e :first-name first-name]]}]
         (t/is (= #{{:e :petr}}
-                 (set (xt/q tu/*node* query ["Petr"]))))
+                 (set (xt/q tu/*node* [query ["Petr"]]))))
 
         (t/is (= #{{:e :ivan} {:e :petr}}
-                 (set (xt/q tu/*node* query ["Ivan" "Petr"]))))))
+                 (set (xt/q tu/*node* [query ["Ivan" "Petr"]]))))))
 
     (t/testing "relation"
-      (let [query  '{:find [e]
-                     :in [[[first-name last-name]]]
-                     :where [(match :xt_docs {:xt/id e})
-                             [e :first-name first-name]
-                             [e :last-name last-name]]}]
+      (let [query '{:find [e]
+                    :in [[[first-name last-name]]]
+                    :where [(match :xt_docs {:xt/id e})
+                            [e :first-name first-name]
+                            [e :last-name last-name]]}]
 
         (t/is (= #{{:e :ivan}}
-                 (set (xt/q tu/*node* query
-                            [{:first-name "Ivan", :last-name "Ivanov"}]))))
+                 (set (xt/q tu/*node*
+                            [query [{:first-name "Ivan", :last-name "Ivanov"}]]))))
 
         (t/is (= #{{:e :ivan}}
-                 (set (xt/q tu/*node* query
-                            [["Ivan" "Ivanov"]]))))
+                 (set (xt/q tu/*node*
+                            [query [["Ivan" "Ivanov"]]]))))
 
         (t/is (= #{{:e :ivan} {:e :petr}}
-                 (set (xt/q tu/*node* query
-                            [{:first-name "Ivan", :last-name "Ivanov"}
-                             {:first-name "Petr", :last-name "Petrov"}]))))
+                 (set (xt/q tu/*node*
+                            [query
+                             [{:first-name "Ivan", :last-name "Ivanov"}
+                              {:first-name "Petr", :last-name "Petrov"}]]))))
 
         (t/is (= #{{:e :ivan} {:e :petr}}
-                 (set (xt/q tu/*node* query
-                            [["Ivan" "Ivanov"]
-                             ["Petr" "Petrov"]]))))))))
+                 (set (xt/q tu/*node*
+                            [query
+                             [["Ivan" "Ivanov"]
+                              ["Petr" "Petrov"]]]))))))))
 
 (deftest test-in-arity-exceptions
   (let [_tx (xt/submit-tx tu/*node* ivan+petr)]
@@ -710,18 +710,18 @@
               {:e :sergei, :first-name "Ivan", :last-name "Ivanov", :a "Sergei", :b "Sergei"}
               {:e :sergei, :first-name "Petr", :last-name "Petrov", :a "Sergei", :b "Sergei"}]
              (xt/q tu/*node*
-                   '{:find [e first-name last-name a b]
-                     :in [[[first-name last-name]]]
-                     :where [(match :xt_docs {:xt/id e})
-                             [e :foo 1]
-                             [e :first-name a]
-                             [e :last-name b]
-                             (not-exists? {:find [e first-name last-name]
-                                           :where [(match :xt_docs {:xt/id e})
-                                                   [e :first-name first-name]
-                                                   [e :last-name last-name]]})]}
-                   [["Ivan" "Ivanov"]
-                    ["Petr" "Petrov"]])))
+                   ['{:find [e first-name last-name a b]
+                      :in [[[first-name last-name]]]
+                      :where [(match :xt_docs {:xt/id e})
+                              [e :foo 1]
+                              [e :first-name a]
+                              [e :last-name b]
+                              (not-exists? {:find [e first-name last-name]
+                                            :where [(match :xt_docs {:xt/id e})
+                                                    [e :first-name first-name]
+                                                    [e :last-name last-name]]})]}
+                    [["Ivan" "Ivanov"]
+                     ["Petr" "Petrov"]]])))
 
     (t/testing "apply anti-joins"
       (t/is (= [{:n 1, :e :ivan} {:n 1, :e :petr} {:n 1, :e :sergei}]
@@ -1062,12 +1062,12 @@
             {:brand "Rolls-Royce", :model "Silver Wraith"}]
 
            (xt/q tu/*node*
-                 '{:find [brand model]
-                   :in [film]
-                   :where [(match :film {:xt/id film, :film/vehicles [vehicle ...]})
-                           (match :vehicle {:xt/id vehicle, :vehicle/brand brand, :vehicle/model model})]
-                   :order-by [[brand] [model]]}
-                 :spectre))))
+                 ['{:find [brand model]
+                    :in [film]
+                    :where [(match :film {:xt/id film, :film/vehicles [vehicle ...]})
+                            (match :vehicle {:xt/id vehicle, :vehicle/brand brand, :vehicle/model model})]
+                    :order-by [[brand] [model]]}
+                  :spectre]))))
 
 (t/deftest bug-non-string-table-names-599
   (with-open [node (node/start-node {:xtdb/live-chunk {:rows-per-block 10, :rows-per-chunk 1000}})]
@@ -1193,19 +1193,19 @@
                                           [(>= age-other 21)]]]}))))
 
     (t/testing "rules directly on arguments"
-      (t/is (= [{:age 21}] (q '{:find [age]
-                                :where [(over-twenty-one? age)]
-                                :in [age]
-                                :rules [[(over-twenty-one? age)
-                                         [(>= age 21)]]]}
-                              21)))
+      (t/is (= [{:age 21}] (q ['{:find [age]
+                                 :where [(over-twenty-one? age)]
+                                 :in [age]
+                                 :rules [[(over-twenty-one? age)
+                                          [(>= age 21)]]]}
+                               21])))
 
-      (t/is (= [] (q '{:find [age]
-                       :where [(over-twenty-one? age)]
-                       :in [age]
-                       :rules [[(over-twenty-one? age)
-                                [(>= age 21)]]]}
-                     20))))
+      (t/is (= [] (q ['{:find [age]
+                        :where [(over-twenty-one? age)]
+                        :in [age]
+                        :rules [[(over-twenty-one? age)
+                                 [(>= age 21)]]]}
+                      20]))))
 
     (t/testing "testing rule with multiple args"
       (t/is (= [{:i :petr, :age 18, :u :ivan}
@@ -1435,8 +1435,8 @@
 (t/deftest test-temporal-opts
   (letfn [(q [query tx current-time]
             (xt/q tu/*node*
-                  (-> query
-                      (assoc :basis {:tx tx, :current-time (util/->instant current-time)}))))]
+                  query
+                  {:basis {:tx tx, :current-time (util/->instant current-time)}}))]
 
     ;; Matthew 2015+
 
@@ -1531,17 +1531,16 @@
              :vt-start #time/zoned-date-time "2022-01-01T00:00Z[UTC]",
              :vt-end #time/zoned-date-time "2030-01-01T00:00Z[UTC]"}]
            (xt/q tu/*node*
-                 (-> '{:find [id vt-start vt-end], :where [(match :xt_docs {:xt/id id
-                                                                            :xt/valid-from vt-start
-                                                                            :xt/valid-to vt-end}
-                                                                  {:for-valid-time [:in nil #inst "2040"]})]}
-                     (assoc :basis {:current-time (util/->instant #inst "2023")}))))))
+                 '{:find [id vt-start vt-end], :where [(match :xt_docs {:xt/id id
+                                                                        :xt/valid-from vt-start
+                                                                        :xt/valid-to vt-end}
+                                                              {:for-valid-time [:in nil #inst "2040"]})]}
+                 {:basis {:current-time (util/->instant #inst "2023")}}))))
 
 (t/deftest test-temporal-opts-from-and-to
   (letfn [(q [query tx current-time]
-            (xt/q tu/*node*
-                  (-> query
-                      (assoc :basis {:tx tx, :current-time (util/->instant current-time)}))))]
+            (xt/q tu/*node* query
+                  {:basis {:tx tx, :current-time (util/->instant current-time)}}))]
 
     ;; tx0
     ;; 2015 - eof : Matthew
@@ -1559,9 +1558,10 @@
                 {:id :mark,
                  :vt-start #time/zoned-date-time "2020-01-01T00:00Z[UTC]",
                  :vt-end #time/zoned-date-time "2050-01-01T00:00Z[UTC]"}]
-               (q '{:find [id vt-start vt-end], :where [(match :xt_docs {:xt/id id
-                                                                         :xt/valid-from vt-start
-                                                                         :xt/valid-to vt-end})]},
+               (q '{:find [id vt-start vt-end],
+                    :where [(match :xt_docs {:xt/id id
+                                             :xt/valid-from vt-start
+                                             :xt/valid-to vt-end})]},
                   tx0, #inst "2023")))
 
       (t/is (= [{:id :matthew,
@@ -1586,12 +1586,9 @@
                   tx1, #inst "2023"))))))
 
 (deftest test-snodgrass-99-tutorial
-  (letfn [(q [query tx current-time & in]
-            (apply xt/q
-                   tu/*node*
-                   (-> query
-                       (assoc :basis {:tx tx, :current-time (util/->instant current-time)}))
-                   in))]
+  (letfn [(q [q+args tx current-time]
+            (xt/q tu/*node* q+args
+                  {:basis {:tx tx, :current-time (util/->instant current-time)}}))]
 
     (let [tx0 (xt/submit-tx tu/*node*
                             '[[:put :docs {:xt/id 1 :customer-number 145 :property-number 7797}
@@ -1678,27 +1675,28 @@
             "'as best known' (as-of 30 Jan)")
 
       (t/is (= [{:prop 3621, :vt-begin (util/->zdt #inst "1998-01-15"), :vt-end (util/->zdt #inst "1998-01-20")}]
-               (q '{:find [prop (greatest app-start app-start2) (least app-end app-end2)]
-                    :keys [prop vt-begin vt-end]
-                    :in [in-prop]
-                    :where [(match :docs {:property-number in-prop
-                                          :customer-number cust
-                                          :xt/valid-time app-time
-                                          :xt/valid-from app-start
-                                          :xt/valid-to app-end}
-                                   {:for-valid-time :all-time})
+               (q ['{:find [prop (greatest app-start app-start2) (least app-end app-end2)]
+                     :keys [prop vt-begin vt-end]
+                     :in [in-prop]
+                     :where [(match :docs {:property-number in-prop
+                                           :customer-number cust
+                                           :xt/valid-time app-time
+                                           :xt/valid-from app-start
+                                           :xt/valid-to app-end}
+                                    {:for-valid-time :all-time})
 
-                            (match :docs {:property-number prop
-                                          :customer-number cust
-                                          :xt/valid-time app-time-2
-                                          :xt/valid-from app-start2
-                                          :xt/valid-to app-end2}
-                                   {:for-valid-time :all-time})
+                             (match :docs {:property-number prop
+                                           :customer-number cust
+                                           :xt/valid-time app-time-2
+                                           :xt/valid-from app-start2
+                                           :xt/valid-to app-end2}
+                                    {:for-valid-time :all-time})
 
-                            [(<> prop in-prop)]
-                            [(overlaps? app-time app-time-2)]]
-                    :order-by [[app-start :asc]]}
-                  tx7, nil, 7797))
+                             [(<> prop in-prop)]
+                             [(overlaps? app-time app-time-2)]]
+                     :order-by [[app-start :asc]]}
+                   7797]
+                  tx7, nil))
             "Case 2: Valid-time sequenced and transaction-time current")
 
       (t/is (= [{:prop 3621,
@@ -1706,71 +1704,73 @@
                  :vt-end (util/->zdt #inst "1998-01-20"),
                  :recorded-start (util/->zdt #inst "1998-01-31"),
                  :recorded-stop (util/->zdt util/end-of-time)}]
-               (q '{:find [prop (greatest app-start app-start2) (least app-end app-end2) (greatest sys-start sys-start2) (least sys-end sys-end2)]
-                    :keys [prop vt-begin vt-end recorded-start recorded-stop]
-                    :in [in-prop]
-                    :where [(match :docs {:property-number in-prop
-                                          :customer-number cust
-                                          :xt/valid-time app-time
-                                          :xt/system-time system-time
-                                          :xt/valid-from app-start
-                                          :xt/valid-to app-end
-                                          :xt/system-from sys-start
-                                          :xt/system-to sys-end}
-                                   {:for-valid-time :all-time
-                                    :for-system-time :all-time})
+               (q ['{:find [prop (greatest app-start app-start2) (least app-end app-end2) (greatest sys-start sys-start2) (least sys-end sys-end2)]
+                     :keys [prop vt-begin vt-end recorded-start recorded-stop]
+                     :in [in-prop]
+                     :where [(match :docs {:property-number in-prop
+                                           :customer-number cust
+                                           :xt/valid-time app-time
+                                           :xt/system-time system-time
+                                           :xt/valid-from app-start
+                                           :xt/valid-to app-end
+                                           :xt/system-from sys-start
+                                           :xt/system-to sys-end}
+                                    {:for-valid-time :all-time
+                                     :for-system-time :all-time})
 
-                            (match :docs {:customer-number cust
-                                          :property-number prop
-                                          :xt/valid-time app-time-2
-                                          :xt/system-time system-time-2
-                                          :xt/valid-from app-start2
-                                          :xt/valid-to app-end2
-                                          :xt/system-from sys-start2
-                                          :xt/system-to sys-end2}
+                             (match :docs {:customer-number cust
+                                           :property-number prop
+                                           :xt/valid-time app-time-2
+                                           :xt/system-time system-time-2
+                                           :xt/valid-from app-start2
+                                           :xt/valid-to app-end2
+                                           :xt/system-from sys-start2
+                                           :xt/system-to sys-end2}
 
-                                   {:for-valid-time :all-time
-                                    :for-system-time :all-time})
+                                    {:for-valid-time :all-time
+                                     :for-system-time :all-time})
 
-                            [(<> prop in-prop)]
-                            [(overlaps? app-time app-time-2)]
-                            [(overlaps? system-time system-time-2)]]
-                    :order-by [[app-start :asc]]}
-                  tx7, nil, 7797))
+                             [(<> prop in-prop)]
+                             [(overlaps? app-time app-time-2)]
+                             [(overlaps? system-time system-time-2)]]
+                     :order-by [[app-start :asc]]}
+                   7797]
+                  tx7, nil))
             "Case 5: Application-time sequenced and system-time sequenced")
 
       (t/is (= [{:prop 3621,
                  :vt-begin (util/->zdt #inst "1998-01-15"),
                  :vt-end (util/->zdt #inst "1998-01-20"),
                  :recorded-start (util/->zdt #inst "1998-01-31")}]
-               (q '{:find [prop (greatest app-start app-start2) (least app-end app-end2) sys-start2]
-                    :keys [prop vt-begin vt-end recorded-start]
-                    :in [in-prop]
-                    :where [(match :docs {:property-number in-prop
-                                          :customer-number cust
-                                          :xt/valid-time app-time
-                                          :xt/system-time system-time
-                                          :xt/valid-from app-start
-                                          :xt/valid-to app-end
-                                          :xt/system-from sys-start
-                                          :xt/system-to sys-end}
-                                   {:for-valid-time :all-time
-                                    :for-system-time :all-time})
+               (q ['{:find [prop (greatest app-start app-start2) (least app-end app-end2) sys-start2]
+                     :keys [prop vt-begin vt-end recorded-start]
+                     :in [in-prop]
+                     :where [(match :docs {:property-number in-prop
+                                           :customer-number cust
+                                           :xt/valid-time app-time
+                                           :xt/system-time system-time
+                                           :xt/valid-from app-start
+                                           :xt/valid-to app-end
+                                           :xt/system-from sys-start
+                                           :xt/system-to sys-end}
+                                    {:for-valid-time :all-time
+                                     :for-system-time :all-time})
 
-                            (match :docs {:customer-number cust
-                                          :property-number prop
-                                          :xt/valid-time app-time-2
-                                          :xt/system-time system-time-2
-                                          :xt/valid-from app-start2
-                                          :xt/valid-to app-end2
-                                          :xt/system-from sys-start2
-                                          :xt/system-to sys-end2})
+                             (match :docs {:customer-number cust
+                                           :property-number prop
+                                           :xt/valid-time app-time-2
+                                           :xt/system-time system-time-2
+                                           :xt/valid-from app-start2
+                                           :xt/valid-to app-end2
+                                           :xt/system-from sys-start2
+                                           :xt/system-to sys-end2})
 
-                            [(<> prop in-prop)]
-                            [(overlaps? app-time app-time-2)]
-                            [(contains? system-time sys-start2)]]
-                    :order-by [[app-start :asc]]}
-                  tx7, nil, 7797))
+                             [(<> prop in-prop)]
+                             [(overlaps? app-time app-time-2)]
+                             [(contains? system-time sys-start2)]]
+                     :order-by [[app-start :asc]]}
+                   7797]
+                  tx7, nil))
             "Case 8: Application-time sequenced and system-time nonsequenced"))))
 
 (deftest scalar-sub-queries-test
@@ -2059,11 +2059,10 @@
            (xt/q tu/*node*
                  '{:find [name age]
                    :in [pid]
-                   :where [($ :people [{:xt/id pid} name age])]
-                   :explain? true}))))
+                   :where [($ :people [{:xt/id pid} name age])]}
+                 {:explain? true}))))
 
 (deftest test-unbound-vars
-
   (t/is
    (thrown-with-msg?
     IllegalArgumentException
@@ -2164,14 +2163,14 @@
    "variables not exposed by subquery"))
 
 (t/deftest test-default-valid-time
-  (xt/submit-tx tu/*node* [[:put :xt_docs {:xt/id 1 :foo "2000-4000"} {:for-valid-time [:in  #inst "2000"  #inst "4000"]}]
+  (xt/submit-tx tu/*node* [[:put :xt_docs {:xt/id 1 :foo "2000-4000"} {:for-valid-time [:in #inst "2000" #inst "4000"]}]
                            [:put :xt_docs {:xt/id 1 :foo "3000-"} {:for-valid-time [:from #inst "3000"]}]])
 
   (t/is (= [{:xt/id 1, :foo "2000-4000"} {:xt/id 1, :foo "3000-"}]
            (xt/q tu/*node*
                  '{:find [xt/id foo]
-                   :where [(match :xt_docs [xt/id foo])]
-                   :default-all-valid-time? true}))))
+                   :where [(match :xt_docs [xt/id foo])]}
+                 {:default-all-valid-time? true}))))
 
 (t/deftest test-sql-insert
   (xt/submit-tx tu/*node* [[:sql "INSERT INTO foo (xt$id) VALUES (0)"]])
@@ -2239,13 +2238,13 @@
 
     (t/is (= [{:x {:xt/id 0, :b 0}}]
              (q '{:find [x]
-                  :where [($ :x {:xt/* x})],
-                  :basis {:tx #xt/tx-key {:tx-id 1, :system-time #time/instant "2023-01-18T00:00:00Z"}}})))
+                  :where [($ :x {:xt/* x})],}
+                {:basis {:tx #xt/tx-key {:tx-id 1, :system-time #time/instant "2023-01-18T00:00:00Z"}}})))
 
     (t/is (= [{:x {:xt/id 0, :a 0}}]
              (q '{:find [x]
-                  :where [($ :x {:xt/* x})],
-                  :basis {:tx #xt/tx-key {:tx-id 0, :system-time #time/instant "2023-01-17T00:00:00Z"}}})))))
+                  :where [($ :x {:xt/* x})],}
+                {:basis {:tx #xt/tx-key {:tx-id 0, :system-time #time/instant "2023-01-17T00:00:00Z"}}})))))
 
 (t/deftest test-row-alias-app-time-key-set
   (let [inputs

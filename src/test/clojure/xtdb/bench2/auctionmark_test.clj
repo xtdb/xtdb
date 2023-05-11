@@ -165,16 +165,13 @@
                                '{:find [i_num_bids]
                                  :where
                                  [(match :item {:xt/id id})
-                                  [id :i_num_bids i_num_bids]]}
-                               ;; :basis {:tx tx}
-                               )
+                                  [id :i_num_bids i_num_bids]]})
                          first :i_num_bids)))
           ;; winning bid remains the same
           (t/is (= {:imb "ib_0-i_0", :imb_i_id "i_0"}
                    (first (xt/q *node* '{:find [imb imb_i_id]
                                          :where [(match :item-max-bid {:xt/id imb})
                                                  [imb :imb_i_id imb_i_id]]} )))))))))
-
 
 (t/deftest proc-new-item-test
   (with-redefs [am/sample-status (constantly :open)]

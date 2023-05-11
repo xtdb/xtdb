@@ -49,19 +49,17 @@
             {:name "Jen"}
             {:name "Petr"}
             {:name "Sam"}]
-           (xt/q
-            tu/*node*
-            (-> '{:find [name]
-                  :where [(match :xt_docs {:first-name name})]
-                  :order-by [[name :asc]]}
-                (assoc :basis {:current-time #time/instant "2020-01-03T00:00:00Z"})))))) ;; timing
+           (xt/q tu/*node*
+                 '{:find [name]
+                   :where [(match :xt_docs {:first-name name})]
+                   :order-by [[name :asc]]}
+                 {:basis {:current-time #time/instant "2020-01-03T00:00:00Z"}})))) ;; timing
 
 (defn valid-ids-at [current-time]
-  (xt/q
-    tu/*node*
-    (-> '{:find [id]
+  (xt/q tu/*node*
+        '{:find [id]
           :where [(match :xt_docs {:xt/id id})]}
-        (assoc :basis {:current-time current-time}))))
+        {:basis {:current-time current-time}}))
 
 (deftest test-current-row-ids-app-time-start-inclusivity
   (t/testing "app-time-start"
@@ -119,21 +117,19 @@
       (tu/finish-chunk! node)
 
       (t/is (= expectation
-               (xt/q
-                 node
-                 (-> '{:find [name]
+               (xt/q node
+                     '{:find [name]
                        :where [(match :xt_docs {:first-name name})]
                        :order-by [[name :asc]]}
-                     (assoc :basis {:current-time #time/instant "2020-01-03T00:00:00Z"}))))))
+                     {:basis {:current-time #time/instant "2020-01-03T00:00:00Z"}}))))
 
     (with-open [node (tu/->local-node {:node-dir node-dir})]
       (t/is (= expectation
-               (xt/q
-                 node
-                 (-> '{:find [name]
+               (xt/q node
+                     '{:find [name]
                        :where [(match :xt_docs {:first-name name})]
                        :order-by [[name :asc]]}
-                     (assoc :basis {:current-time #time/instant "2020-01-03T00:00:00Z"}))))))))
+                     {:basis {:current-time #time/instant "2020-01-03T00:00:00Z"}}))))))
 
 (deftest test-queries-that-can-use-current-row-id-cache
   (with-redefs [scan/get-current-row-ids
@@ -147,12 +143,10 @@
         :where [(match :xt_docs {:xt/id id})]})
      "query against empty db should not use current-row-id")
 
-    (let [tx1 (xt/submit-tx
-               tu/*node*
-               '[[:put :xt_docs {:xt/id 1}]])
-          tx2 (xt/submit-tx
-               tu/*node*
-               '[[:put :xt_docs {:xt/id 2}]])]
+    (let [tx1 (xt/submit-tx tu/*node*
+                            '[[:put :xt_docs {:xt/id 1}]])
+          tx2 (xt/submit-tx tu/*node*
+                            '[[:put :xt_docs {:xt/id 2}]])]
 
       (t/testing "queries that can use current-row-ids cache"
 
@@ -160,90 +154,80 @@
          (thrown-with-msg?
           Exception
           #"Scan tried to use current-row-id cache"
-          (xt/q
-           tu/*node*
-           (-> '{:find [id]
-                 :where [(match :xt_docs {:xt/id id})]})))
+          (xt/q tu/*node*
+                '{:find [id]
+                  :where [(match :xt_docs {:xt/id id})]}))
          "query with no temporal constraints")
 
         (t/is
          (thrown-with-msg?
           Exception
           #"Scan tried to use current-row-id cache"
-          (xt/q
-           tu/*node*
-           (-> '{:find [id]
-                 :where [(match :xt_docs {:xt/id id})]}
-               (assoc :basis {:tx tx2}))))
+          (xt/q tu/*node*
+                '{:find [id]
+                  :where [(match :xt_docs {:xt/id id})]}
+                {:basis {:tx tx2}}))
          "query at latest tx")
 
         (t/is
          (thrown-with-msg?
           Exception
           #"Scan tried to use current-row-id cache"
-          (xt/q
-           tu/*node*
-           (-> '{:find [id]
-                 :where [(match :xt_docs {:xt/id id})]}
-               (assoc :basis {:current-time #time/instant "2020-01-03T00:00:00Z"}))))
+          (xt/q tu/*node*
+                '{:find [id]
+                  :where [(match :xt_docs {:xt/id id})]}
+                {:basis {:current-time #time/instant "2020-01-03T00:00:00Z"}}))
          "query with current-time now or in future")
 
         (t/is
          (thrown-with-msg?
           Exception
           #"Scan tried to use current-row-id cache"
-          (xt/q
-           tu/*node*
-           (-> '{:find [id]
-                 :where [(match :xt_docs {:xt/id id}
-                                {:for-valid-time [:at :now]
-                                 :for-system-time [:at :now]})]})))
+          (xt/q tu/*node*
+                '{:find [id]
+                  :where [(match :xt_docs {:xt/id id}
+                                 {:for-valid-time [:at :now]
+                                  :for-system-time [:at :now]})]}))
          "query where all table temporal constaints are now"))
 
       (t/testing "queries that cannot use current-row-ids cache"
 
         (t/is
-         (xt/q
-          tu/*node*
-          (-> '{:find [id]
-                :where [(match :xt_docs {:xt/id id})]}
-              (assoc :basis {:tx tx1})))
+         (xt/q tu/*node*
+               '{:find [id]
+                 :where [(match :xt_docs {:xt/id id})]}
+               {:basis {:tx tx1}})
          "query at previous tx")
 
         (t/is
-         (xt/q
-          tu/*node*
-          (-> '{:find [id]
-                :where [(match :xt_docs {:xt/id id})]}
-              (assoc :basis {:current-time #time/instant "2020-01-01T00:00:00Z"})))
+         (xt/q tu/*node*
+               '{:find [id]
+                 :where [(match :xt_docs {:xt/id id})]}
+               {:basis {:current-time #time/instant "2020-01-01T00:00:00Z"}})
          "query with current-time in past")
 
         (t/is
-         (xt/q
-          tu/*node*
-          (-> '{:find [id]
-                :where [(match :xt_docs {:xt/id id}
-                               {:for-valid-time [:at :now]
-                                :for-system-time [:at #inst "2020-01-01"]})]}))
+         (xt/q tu/*node*
+               '{:find [id]
+                 :where [(match :xt_docs {:xt/id id}
+                                {:for-valid-time [:at :now]
+                                 :for-system-time [:at #inst "2020-01-01"]})]})
          "query where all any table temporal constaints aside from now are set")
 
         (t/is
-         (xt/q
-          tu/*node*
-          (-> '{:find [id]
-                :where [(match :xt_docs {:xt/id id}
-                               {:for-valid-time :all-time})]}))
+         (xt/q tu/*node*
+               '{:find [id]
+                 :where [(match :xt_docs {:xt/id id}
+                                {:for-valid-time :all-time})]})
          "query where all any table temporal constaints aside from now are set")
 
         (t/is
-         (xt/q
-          tu/*node*
-          (-> '{:find [id]
-                :where [(match
-                            :xt_docs
-                          {:xt/id id
-                           :xt/valid-from xt/valid-from}
-                          {:for-valid-time :all-time})]}))
+         (xt/q tu/*node*
+               '{:find [id]
+                 :where [(match :xt_docs
+                           {:xt/id id
+                            :xt/valid-from xt/valid-from}
+                           {:for-valid-time :all-time})]})
          "query where all any temporal cols are projected out")))))
 
 (defn current-rows-for [system-time inserts]

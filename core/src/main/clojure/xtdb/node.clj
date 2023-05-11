@@ -58,13 +58,13 @@
                  !latest-submitted-tx
                  system, close-fn]
   api/PNode
-  (open-datalog& [_ query args]
-    (let [query (-> (into {:default-tz default-tz} query)
-                    (with-after-tx-default))]
-      (-> (.awaitTxAsync ingester (get-in query [:basis :after-tx]) (:basis-timeout query))
+  (open-datalog& [_ query opts]
+    (let [opts (-> (into {:default-tz default-tz} opts)
+                   (with-after-tx-default))]
+      (-> (.awaitTxAsync ingester (get-in opts [:basis :after-tx]) (:basis-timeout query))
           (util/then-apply
             (fn [_]
-              (d/open-datalog-query allocator ra-src wm-src scan-emitter query args))))))
+              (d/open-datalog-query allocator ra-src wm-src scan-emitter query opts))))))
 
   (open-sql& [_ sql+args query-opts]
     (let [[sql & args] (->sql+args sql+args)

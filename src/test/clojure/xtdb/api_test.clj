@@ -52,10 +52,10 @@
     (t/is (= [{:id :foo, :list [1 2 ["foo" "bar"]]}
               {:id "bar", :list [4 2 8]}]
              (xt.d/q *node*
-                     (-> '{:find [id list]
-                           :where [(match :xt_docs [{:xt/id id}])
-                                   [id :list list]]}
-                         (assoc :basis-timeout (Duration/ofSeconds 1))))))
+                     '{:find [id list]
+                       :where [(match :xt_docs [{:xt/id id}])
+                               [id :list list]]}
+                     {:basis-timeout (Duration/ofSeconds 1)})))
 
     (t/is (= [{:xt$id :foo, :list [1 2 ["foo" "bar"]]}
               {:xt$id "bar", :list [4 2 8]}]
@@ -133,11 +133,11 @@
 
     (letfn [(q-at [tx]
               (->> (xt.d/q *node*
-                           (-> '{:find [id]
-                                 :where [(match :xt_docs {:xt/id e})
-                                         [e :xt/id id]]}
-                               (assoc :basis {:tx tx}
-                                      :basis-timeout (Duration/ofSeconds 1))))
+                           '{:find [id]
+                             :where [(match :xt_docs {:xt/id e})
+                                     [e :xt/id id]]}
+                           {:basis {:tx tx}
+                            :basis-timeout (Duration/ofSeconds 1)})
                    (into #{} (map :id))))]
 
       (t/is (= #{:foo} (q-at tx1)))

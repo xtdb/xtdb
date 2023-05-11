@@ -81,8 +81,8 @@
 
 (defrecord XtdbClient [base-url, !latest-submitted-tx]
   api/PNode
-  (open-datalog& [client query params]
-    (let [basis-tx (get-in query [:basis :tx])
+  (open-datalog& [client query opts]
+    (let [basis-tx (get-in opts [:basis :tx])
           ^CompletableFuture !basis-tx (if (instance? CompletableFuture basis-tx)
                                          basis-tx
                                          (CompletableFuture/completedFuture basis-tx))]
@@ -91,10 +91,9 @@
                           (apply [_ basis-tx]
                             (request client :post :datalog-query
                                      {:content-type :transit+json
-                                      :form-params {:query (-> query
-                                                               (assoc-in [:basis :tx] basis-tx)
-                                                               (update :basis api/after-latest-submitted-tx client))
-                                                    :params params}
+                                      :form-params (-> (into {:query query} opts)
+                                                       (assoc-in [:basis :tx] basis-tx)
+                                                       (update :basis api/after-latest-submitted-tx client))
                                       :as ::transit+json->resultset}))))
           (.thenApply (reify Function
                         (apply [_ resp]
