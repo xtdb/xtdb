@@ -20,6 +20,7 @@ If you are looking for a stable release of an immutable document database with b
 
 == Quick links
 
+* https://xtdb.com/v2[XTDB 2.x documentation]
 * https://xtdb.com[XTDB 1.x documentation]
 // * Maven releases
 // * Release notes
