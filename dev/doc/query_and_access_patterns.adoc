@@ -1,0 +1,301 @@
+= query and access patterns
+
+== Auctionmark
+
+Auctionmark is a OLTP benchmark with 13 table and 14 stored procedures. We currently only implement
+a portion of those. The benchmark revolves around a set of items (which can be sold and bought). The
+two actors in the system are sellers and buyers. The stored procedures simulate actions
+taken by those actors. The procedures are sampled according to some distribution. This also
+means that tables grow and updates happen more frequently the better you perform on the benchmark.
+
+As we are not implementing all procedures/table as of now. The procedure distribution is tweaked in our case
+to reflect that.
+
+In the following we denote by #item/#user the number of items/users respectively. With this parameter the benchmark can
+be scaled.
+
+The full description of the benchmark can be found at link:https://hstore.cs.brown.edu/projects/auctionmark/#s3.4
+
+=== Entities
+
+The numbers on the tables represent the initial number from the Benchmark.
+
+==== User
+- 1e6 in the beginning (denoted by #user in the following)
+- Represents both sellers/buyers
+- grows over time (medium cardinality)
+- static user data
+ - changes a handful of times
+- frequently changing data
+ - example: balance
+
+==== Item
+- represents an item to be bought/sold/bet on
+- large and growing
+- a couple of update in its lifetime
+- updates vt=now
+- separate business domain fields for auction-start/auction-end
+- one attribute gets an update with every bit that is placed on that item
+- grows over time (see new item procedure)
+
+- derived data on the item (should we support that?)
+- to consider:
+ - count bids for item
+
+==== Item-bid 1
+- a user can have multiple with time increasing bids
+- ~10s per item
+- immutable
+
+==== Item-bid 2
+- a user as one bid that gets updated as time increases
+- a max bid
+- a handful of updates (vt=now)
+
+==== winning-bid
+- essentially reference to a bid
+- currently winning bid
+- do we need this (derived)?
+- might be complex to (re)calculate
+
+==== Less important / Fixed size tables
+
+==== Static tables
+- Category: ~20k items, immutable
+- Region: 64 items, immutable
+- infrequently updated
+- not growing
+- small cardinality
+
+=== Procedures
+
+==== new user / item
+
+==== update user / item
+- small update with entity-id in hand
+- vt=now
+
+==== get item query / procedure
+- vt=now
+- one table
+- highly selective with entity-id in hand
+- low latency
+- pull like query to grab related data
+  - low cardinality join (1-1, 1-fews)
+  - to potentially frequently updating entity (max-bid)
+
+==== new bid
+- vt=now
+- lowish latency
+- handful low latency queries
+- handful of updates
+- find+update user-bid and max-bid
+
+==== user's current bids
+- vt=now
+- bid by user-id
+- search for user-id in bids
+ - highly selective (selectivity 1/#users)
+ - not on the entity-id
+
+
+
+=== Potential non auctionmark temporal queries
+- an item's bid history plus the winning bid when each bid was placed
+- medium latency
+- still selective (item id)
+- potential optimal plan
+  - do both match sides, join on `vt-start` in memory
+
+[source,clojure]
+----
+'{:find [item-bid item-max-bid]
+  :in [i_id] ;; <- item id
+  :where [(match :item-bid {:ib_i_id i_id :xt/valid-from vt-start :xt/* item-bid} {:for-valid-time :all-time})
+          (match :winning-bid {:xt/* item-max-bid :imb_i_id i_id} {:for-valid-time [:at vt-start]})]}
+----
+
+- The history of the winning bid
+- lowish latency
+- potential optimal plan
+  - realize left side + nested loop on the item-bid
+[source,clojure]
+----
+'{:find [item-bid item-max-bid]
+  :in [i_id] ;; <- item id
+  :where [(match :winning-bid {:xt/* item-max-bid :imb_i_id i_id :imb_ib_id ib_id :xt/valid-from vt-start} {:for-valid-time :all-time})
+          (match :item-bid {:xt/id ib_id :xt/* item-bid} {:for-valid-time [:at vt-start]})]}
+----
+
+- what's the total bid value for all auctions that ended in March?
+- high latency
+- potential optimal plan:
+  - look up all item-bid row-ids that have an end-time in March, get data
+[source,clojure]
+----
+'{:find [(sum bid)]
+  :where [(match :item-bid [{:xt/valid-to valid-to} bid] {:for-valid-time :all-time})
+          [(<= #inst "2023-03-01" valid-to)]
+          [(< valid-to #inst "2023-04-01")]]}
+----
+
+- all bids of a user and when they happened
+- lowish latency
+- optimal plan:
+  - get user
+  - filter item-bids on user
+
+[source,clojure]
+----
+'{:find [user (array-agg item-bid)]
+  :in [u_id]
+  :where [(match :user [{:xt/* user} u_id])
+          (match :item-bid {:xt/* item-bid :ib_u_id u_id} {:for-valid-time :all-time})]}
+----
+
+=== General ideas from auctionmark
+
+- Split up documents into static and frequently updated parts?
+- How to deal/store with derived data?
+- Surrogate-id or natural key
+- How should we deal frequent updates to only a couple of attributes of an entity?
+  - At level of the document (XT):
+    - pain
+  - At level of the attribute (Datomic):
+    - temporal resolution for every attribute
+    - let's you model the above way better
+  - Is there a third option diffrent to XT/Datomic?
+
+== TPC-H
+
+=== Tables
+- Region/Nation - small/fixed
+
+- Part/Supplier/Customer/PartSupp
+ - medium cardinality
+ - grows slowly over time
+ - a couple of updates in the lifetime
+
+- Lineitem/Order
+ - large cardinality
+ - growing
+ - relevant data (orders that are in progress) might grow a lot slower
+
+- modelling of temporal data?
+  - explicitly
+  - using temporal columns (might not always be a good match)
+
+=== Queries
+
+==== Q1 (pricing summary for given time range)
+- one table
+- large throughput
+- selectivity only on time range
+- aggregates, group by, order-by
+- vt=now (very likely modeled that way)
+
+
+==== Q2
+- large throughput
+- vt=now
+- 5 tables
+- medium selectivity
+- filter on some subquery
+
+-
+// - optimal plan:
+//   - find all minimal prices for parts in a region/nation
+//   - find the suppliers that offer these
+
+==== Q3
+- smallish/medium latency
+- small resultset
+- storing derived data would speed up this query
+- feels like a good candidate for a materialized view
+- pull like query for an order
+  - all lineitems for that order
+
+==== Q4
+- medium latency
+
+==== Q6
+- longish latency
+- range query in vt (1 year)
+- medium selectivity
+  - range query on 1 attribute
+  - predicate on another attribute
+- would benefit from solutions where the shipdate is indexed the same way as temporal data
+
+
+=== Smallish resultset
+- vt=now
+- medium latency
+- top-k - group-by, order-by
+- medium selectivity
+- often some time range different to vt for selectivity
+- Examples: Q2, Q3, Q10, Q18
+  - 100 top Customers with largest volume
+  - 20 top Customers which return the most stuff
+  - Suppliers that sell this item the cheapest
+
+=== Large throughput
+- vt=now
+- sometimes 1, sometimes many (less than 10) tables
+- often aggregates
+- often filter on some time field
+- selectivity (other than some time field), none to medium
+- Examples: Q1, Q5, Q6, Q12, Q13 Q16
+
+=== Just aggregates
+- vt=now
+- often some order-by query based on some important buisness metric (cost, revenue, customer (dis)satisfaction)
+- Examples: Q11
+
+=== subqueries
+- Examples:
+  - smallest cost of that item (Q2)
+  - quantity sold per year (Q20)
+  - does there exists items delived to late (Q4)
+- some exists, some scalar subqueries, some set subqueries
+- very little subqueries for joining
+
+=== higher selective queries
+- Q15 - based on custom build view
+- Q19
+
+=== TPC-H general observations
+
+- lots of time ranges in play
+  - modeling this in valid-time would then take advantage of any optimisations on the temporal index
+  - not modeling in valid-time means any optimisations on the temporal index are irrelevant
+  - don't treat the temporal index specially?
+- no selectivity to medium selectivity
+- more ranges than point queries
+- parameterization gives most often a low to lowish selectivity
+- subqueries
+
+=== Approach comparison
+
+==== High selective query (vt=now) with a lot of history
+
+- A user's bids (filter bids on user-id)
+
+===== Current approach
+- content filter -> row-ids
+- all row-ids are checked against the temporal index
+- essentially just filtering the history
+
+===== Temporal lookup first
+- all bid row-ids (if table's have been split)
+- lookup content (only selective filter then)
+
+===== Combined content and temporal index
+- multidimensional index on bids where user-id and temporal data is
+- could be an index on all attributes or multiple indices (attribute + temporal data)
+
+===== Create index (DDL)
+- special column + temporal data index on demand
+- treat this query "special", analyze the query and create adaptive index
+
+===== Learning the "special" indices
+- warming up some indices as queries flow in
