@@ -1,0 +1,7 @@
+{:paths ["src/main/clojure" "target/classes"]
+ 
+ :deps {com.xtdb.labs/xtdb-api {:local/root "../../api"}
+        com.xtdb.labs/xtdb-core {:local/root "../../core"}
+
+        com.azure/azure-storage-blob {:mvn/version "12.22.0"}
+        com.azure/azure-identity {:mvn/version "1.9.0"}}}
