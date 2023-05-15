@@ -4,7 +4,6 @@
   <component name="GradleSettings">
     <option name="linkedExternalProjectsSettings">
       <GradleProjectSettings>
-        <option name="distributionType" value="DEFAULT_WRAPPED" />
         <option name="externalProjectPath" value="$PROJECT_DIR$" />
         <option name="gradleHome" value="/usr/share/java/gradle" />
         <option name="modules">
@@ -16,6 +15,7 @@
             <option value="$PROJECT_DIR$/http-client-clj" />
             <option value="$PROJECT_DIR$/http-server" />
             <option value="$PROJECT_DIR$/modules" />
+            <option value="$PROJECT_DIR$/modules/azure" />
             <option value="$PROJECT_DIR$/modules/bench" />
             <option value="$PROJECT_DIR$/modules/c1-import" />
             <option value="$PROJECT_DIR$/modules/datasets" />
