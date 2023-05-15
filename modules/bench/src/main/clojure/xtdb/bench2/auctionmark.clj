@@ -4,7 +4,7 @@
             [clojure.tools.logging :as log]
             [xtdb.bench2 :as b2]
             [xtdb.bench2.xtdb2 :as bxt2]
-            [xtdb.datalog :as xt])
+            [xtdb.api :as xt])
   (:import (java.time Duration Instant)
            (java.util ArrayList Random)
            (java.util.concurrent ConcurrentHashMap)))

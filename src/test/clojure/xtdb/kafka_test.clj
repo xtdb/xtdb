@@ -1,6 +1,6 @@
 (ns xtdb.kafka-test
   (:require [clojure.test :as t]
-            [xtdb.datalog :as xt]
+            [xtdb.api :as xt]
             [xtdb.kafka :as k]
             [xtdb.node :as node]
             [xtdb.test-util :as tu])

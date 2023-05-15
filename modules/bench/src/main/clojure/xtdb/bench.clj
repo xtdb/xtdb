@@ -1,7 +1,7 @@
 (ns xtdb.bench
   (:require [clojure.tools.cli :as cli]
             [clojure.tools.logging :as log]
-            [xtdb.api.impl :as xt.impl]
+            [xtdb.api.protocols :as xtp]
             [xtdb.indexer :as idx]
             xtdb.ingester
             [xtdb.kafka :as k]
@@ -64,7 +64,7 @@
 
   (^xtdb.api.TransactionInstant [node ^Duration timeout]
    @(.awaitTxAsync ^Ingester (util/component node :xtdb/ingester)
-                   (xt.impl/latest-submitted-tx node)
+                   (xtp/latest-submitted-tx node)
                    timeout)))
 
 (defn tmp-file-path ^java.nio.file.Path [prefix suffix]

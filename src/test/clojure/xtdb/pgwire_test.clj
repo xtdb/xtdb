@@ -4,8 +4,8 @@
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing] :as t]
             [clojure.tools.logging :as log]
-            [xtdb.api.impl :as xt.impl]
-            [xtdb.datalog :as xt.d]
+            [xtdb.api :as xt]
+            [xtdb.api.protocols :as xtp]
             [xtdb.node :as node]
             [xtdb.pgwire :as pgwire]
             [xtdb.test-util :as tu]
@@ -748,7 +748,7 @@
 
         (testing "query crash during plan"
           (with-redefs [clojure.tools.logging/logf (constantly nil)
-                        xt.impl/open-sql& (fn [& _] (CompletableFuture/failedFuture (Throwable. "oops")))]
+                        xtp/open-sql& (fn [& _] (CompletableFuture/failedFuture (Throwable. "oops")))]
             (send "select a.a from (values (42)) a (a);\n")
             (is (str/includes? (read :err) "unexpected server error during query execution")))
 
@@ -758,7 +758,7 @@
 
         (testing "query crash during result set iteration"
           (with-redefs [clojure.tools.logging/logf (constantly nil)
-                        xt.impl/open-sql& (fn [& _] (CompletableFuture/completedFuture
+                        xtp/open-sql& (fn [& _] (CompletableFuture/completedFuture
                                                 (reify IResultSet
                                                   (hasNext [_] true)
                                                   (next [_] (throw (Throwable. "oops")))
@@ -855,7 +855,7 @@
 ;; maps cannot be created from SQL yet, or used as parameters - but we can read them from XT.
 (deftest map-read-test
   (with-open [conn (jdbc-conn)]
-    (-> (xt.d/submit-tx *node* [[:put :a {:xt/id "map-test", :a {:b 42}}]])
+    (-> (xt/submit-tx *node* [[:put :a {:xt/id "map-test", :a {:b 42}}]])
         (tu/then-await-tx* *node*))
 
     (let [rs (q conn ["select a.a from a a"])]
@@ -899,7 +899,7 @@
 ;; right now all isolation levels have the same defined behaviour
 (deftest transaction-by-default-pins-the-basis-to-last-tx-test
   (require-node)
-  (let [insert #(xt.d/submit-tx *node* [[:put %1 %2]])]
+  (let [insert #(xt/submit-tx *node* [[:put %1 %2]])]
     (-> (insert :a {:xt/id :fred, :name "Fred"})
         (tu/then-await-tx* *node*))
 

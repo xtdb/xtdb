@@ -8,10 +8,10 @@
             [clojure.string :as str]
             [clojure.tools.logging :as log]
             [juxt.clojars-mirrors.integrant.core :as ig]
-            [xtdb.api.impl :as xt.impl]
+            [xtdb.api :as xt]
+            [xtdb.api.protocols :as xtp]
             [xtdb.node :as node]
             [xtdb.rewrite :as r]
-            [xtdb.sql :as xt]
             [xtdb.sql.analyze :as sem]
             [xtdb.sql.parser :as parser]
             [xtdb.sql.plan :as plan]
@@ -1409,7 +1409,7 @@
     ;; TODO review err log policy
     (try
       (let [tx (xt/submit-tx (:node server) tx-ops {:default-all-valid-time? default-all-valid-time?})]
-        (swap! conn-state update-in [:session :latest-submitted-tx] xt.impl/max-tx tx)
+        (swap! conn-state update-in [:session :latest-submitted-tx] xtp/max-tx tx)
         nil)
       (catch Throwable e
         (log/debug e "Error on submit-tx")
@@ -1460,7 +1460,7 @@
 
 (defn- open-sql& [node query opts]
   ;; because we can't with-redefs a protocol fn in the tests 🙄
-  (xt.impl/open-sql& node query opts))
+  (xtp/open-sql& node query opts))
 
 (defn cmd-exec-query
   "Given a statement of type :query will execute it against the servers :node and send the results."
@@ -1529,8 +1529,8 @@
              (-> st
                  (assoc :transaction
                         {:basis {:current-time (.instant clock)
-                                 :tx (xt.impl/max-tx (:latest-completed-tx (xt/status (:node server)))
-                                                     latest-submitted-tx)}
+                                 :tx (xtp/max-tx (:latest-completed-tx (xt/status (:node server)))
+                                                 latest-submitted-tx)}
 
                          :access-mode (or access-mode
                                           (:access-mode (:next-transaction session))

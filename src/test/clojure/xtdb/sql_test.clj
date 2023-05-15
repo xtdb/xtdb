@@ -2,7 +2,7 @@
   (:require [clojure.java.io :as io]
             [clojure.test :as t :refer [deftest]]
             [xtdb.logical-plan :as lp]
-            [xtdb.core.sql :as sql])
+            [xtdb.sql :as sql])
 
   (:import (java.time LocalDateTime)))
 (defn plan-sql

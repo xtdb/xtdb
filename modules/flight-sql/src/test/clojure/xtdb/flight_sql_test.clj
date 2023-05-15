@@ -1,6 +1,6 @@
 (ns xtdb.flight-sql-test
   (:require [clojure.test :as t]
-            [xtdb.sql :as xt]
+            [xtdb.api :as xt]
             [xtdb.test-util :as tu]
             [xtdb.types :as types]
             [xtdb.vector.indirect :as iv]

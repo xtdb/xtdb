@@ -1,6 +1,6 @@
 (ns xtdb.watermark
   (:require [clojure.tools.logging :as log]
-            xtdb.api.impl
+            xtdb.api.protocols
             xtdb.live-chunk
             xtdb.temporal
             [xtdb.util :as util])

@@ -1,6 +1,6 @@
 (ns xtdb.ingester
   (:require [clojure.tools.logging :as log]
-            xtdb.api.impl
+            xtdb.api.protocols
             [xtdb.await :as await]
             xtdb.indexer
             xtdb.log

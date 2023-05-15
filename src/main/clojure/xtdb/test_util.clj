@@ -1,7 +1,7 @@
 (ns xtdb.test-util
   (:require [clojure.spec.alpha :as s]
             [clojure.test :as t]
-            [xtdb.api.impl :as api]
+            [xtdb.api.protocols :as api]
             [xtdb.client :as client]
             [xtdb.indexer :as idx]
             xtdb.ingester

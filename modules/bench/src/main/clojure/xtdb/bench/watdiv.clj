@@ -1,7 +1,7 @@
 (ns xtdb.bench.watdiv
   (:require [clojure.java.io :as io]
             [xtdb.bench :as bench]
-            [xtdb.datalog :as xt]
+            [xtdb.api :as xt]
             [xtdb.node :as node]
             [xtdb.test-util :as tu])
   (:import java.time.Duration))

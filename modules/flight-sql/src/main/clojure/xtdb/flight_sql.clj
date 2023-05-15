@@ -1,11 +1,11 @@
 (ns xtdb.flight-sql
   (:require [clojure.tools.logging :as log]
             [juxt.clojars-mirrors.integrant.core :as ig]
-            [xtdb.core.sql :as sql]
+            [xtdb.api :as xt]
+            [xtdb.sql :as sql]
             xtdb.indexer
             xtdb.ingester
             [xtdb.operator :as op]
-            [xtdb.sql :as xt]
             [xtdb.types :as types]
             [xtdb.util :as util]
             [xtdb.vector.indirect :as iv]

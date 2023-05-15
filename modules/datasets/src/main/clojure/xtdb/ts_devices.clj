@@ -3,7 +3,7 @@
             [clojure.instant :as inst]
             [clojure.java.io :as io]
             [clojure.string :as str]
-            [xtdb.datalog :as xt]
+            [xtdb.api :as xt]
             [xtdb.ingester :as ingest])
   (:import java.util.zip.GZIPInputStream))
 

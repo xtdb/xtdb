@@ -1,7 +1,6 @@
 (ns xtdb.sql.logic-test.xtdb-engine
   (:require [clojure.string :as str]
-            [xtdb.datalog :as xt.d]
-            [xtdb.sql :as xt.sql]
+            [xtdb.api :as xt]
             [xtdb.error :as err]
             [xtdb.ingester :as ingest]
             [xtdb.rewrite :as r]
@@ -21,10 +20,10 @@
 (defn- normalize-rewrite [column->table tables]
   (letfn [(build-column-name-list [table tables]
             (vec
-              (cons
-                :column_name_list
-                (for [col (get tables table)]
-                  [:regular_identifier col]))))]
+             (cons
+              :column_name_list
+              (for [col (get tables table)]
+                [:regular_identifier col]))))]
     (fn [z]
       (r/zmatch z
         [:derived_column expr]
@@ -59,7 +58,7 @@
          [:column_reference
           [:identifier_chain
            [:regular_identifier (str "col__" ordinal)]]]
-          ordering-spec]
+         ordering-spec]
 
         [:sort_specification
          [:exact_numeric_literal ordinal]
@@ -70,8 +69,8 @@
          [:column_reference
           [:identifier_chain
            [:regular_identifier (str "col__" ordinal)]]]
-          ordering-spec
-          null-ordering]
+         ordering-spec
+         null-ordering]
 
         [:table_primary
          [:regular_identifier table]
@@ -185,8 +184,9 @@
           (with-meta {:table (keyword table)})))))
 
 (defn- insert-statement [node insert-statement]
-  (xt.d/submit-tx node (vec (for [doc (insert->docs node insert-statement)]
-                              [:put (:table (meta doc)) (merge {:xt/id (UUID/randomUUID)} doc)])))
+  (xt/submit-tx node (vec (for [doc (insert->docs node insert-statement)]
+                            [:put (:table (meta doc)) (merge {:xt/id (UUID/randomUUID)} doc)]))
+                {:default-all-valid-time? true})
   node)
 
 (defn skip-statement? [^String x]
@@ -199,27 +199,21 @@
 
 (defn- execute-sql-statement [node sql-statement variables opts]
   (binding [r/*memo* (HashMap.)]
-    (xt.sql/submit-tx node
-                      [[:sql sql-statement]]
-                      (cond-> opts
-                        (= (get variables "VALID_TIME_DEFAULTS") "AS_OF_NOW")
-                        (assoc :default-all-valid-time? false)
-
-                        (get variables "CURRENT_TIMESTAMP")
-                        (assoc-in [:basis :current-time] (Instant/parse (get variables "CURRENT_TIMESTAMP")))))
+    (xt/submit-tx node
+                  [[:sql sql-statement]]
+                  (-> opts
+                           (assoc :default-all-valid-time? (not= (get variables "VALID_TIME_DEFAULTS") "AS_OF_NOW"))
+                           (cond-> (get variables "CURRENT_TIMESTAMP") (assoc-in [:basis :current-time] (Instant/parse (get variables "CURRENT_TIMESTAMP"))))))
     node))
 
 (defn- execute-sql-query [node sql-statement variables opts]
   (binding [r/*memo* (HashMap.)]
     (let [projection (outer-projection (p/parse sql-statement :query_expression))]
       (vec
-       (for [row (xt.sql/q node sql-statement
-                           (cond-> opts
-                             (= (get variables "VALID_TIME_DEFAULTS") "AS_OF_NOW")
-                             (assoc :default-all-valid-time? false)
-
-                             (get variables "CURRENT_TIMESTAMP")
-                             (assoc-in [:basis :current-time] (Instant/parse (get variables "CURRENT_TIMESTAMP")))))]
+       (for [row (xt/q node sql-statement
+                       (-> opts
+                           (assoc :default-all-valid-time? (not= (get variables "VALID_TIME_DEFAULTS") "AS_OF_NOW"))
+                           (cond-> (get variables "CURRENT_TIMESTAMP") (assoc-in [:basis :current-time] (Instant/parse (get variables "CURRENT_TIMESTAMP"))))))]
          (mapv #(-> % name keyword row) projection))))))
 
 (defn parse-create-table [^String x]

@@ -1,4 +1,4 @@
-(ns xtdb.core.datalog
+(ns xtdb.datalog
   (:require [clojure.set :as set]
             [clojure.spec.alpha :as s]
             [clojure.string :as str]
@@ -1078,11 +1078,11 @@
 
 (defn unbound-var-check [required-vars provided-vars location]
   (when-let [missing-vars (not-empty (set/difference required-vars provided-vars))]
-    (throw (err/illegal-arg :core2.datalog/unbound-logic-var
+    (throw (err/illegal-arg :xtdb.datalog/unbound-logic-var
                             {::err/message (str "Logic variables in " location " clause must be bound in where: " (str/join ", " missing-vars))
                              :vars missing-vars}))))
 
-(defn- check-head-vars [{:keys [find order-by]} {body-provided-vars :xtdb.core.datalog/vars}]
+(defn- check-head-vars [{:keys [find order-by]} {body-provided-vars ::vars}]
   (let [find-vars (set (mapcat form-vars find))
         order-by-vars (set (mapcat (comp form-vars :find-arg) order-by))]
     (unbound-var-check find-vars body-provided-vars "find")

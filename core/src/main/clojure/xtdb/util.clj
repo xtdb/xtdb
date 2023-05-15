@@ -2,7 +2,7 @@
   (:require [clojure.java.io :as io]
             [clojure.spec.alpha :as s]
             [clojure.tools.logging :as log]
-            xtdb.api.impl
+            xtdb.api.protocols
             [xtdb.error :as err]
             [clojure.string :as str])
   (:import clojure.lang.MapEntry

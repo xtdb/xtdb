@@ -4,9 +4,9 @@
 ;; directory as `LICENSE`.
 ;; https://github.com/tonsky/datascript
 
-(ns xtdb.core.datalog-test
+(ns xtdb.datalog-test
   (:require [clojure.test :as t :refer [deftest]]
-            [xtdb.datalog :as xt]
+            [xtdb.api :as xt]
             [xtdb.james-bond :as bond]
             [xtdb.node :as node]
             [xtdb.test-util :as tu]

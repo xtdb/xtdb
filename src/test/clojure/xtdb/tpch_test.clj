@@ -1,12 +1,11 @@
 (ns xtdb.tpch-test
   (:require [clojure.java.io :as io]
             [clojure.test :as t]
-            [xtdb.core.sql :as core.sql]
-            [xtdb.datalog :as d]
+            [xtdb.api :as xt]
+            [xtdb.sql :as core.sql]
             [xtdb.datasets.tpch :as tpch]
             [xtdb.datasets.tpch.datalog :as tpch-datalog]
             [xtdb.datasets.tpch.ra :as tpch-ra]
-            [xtdb.sql :as sql]
             xtdb.sql-test
             [xtdb.test-util :as tu]
             [xtdb.util :as util])
@@ -111,7 +110,7 @@
     (when (contains? *datalog-qs* q)
       (let [query @(nth tpch-datalog/queries n)
             {::tpch-datalog/keys [in-args]} (meta query)]
-        (t/is (is-equal? expected-res (d/q *node* (into [query] in-args)))
+        (t/is (is-equal? expected-res (xt/q *node* (into [query] in-args)))
               (format "Q%02d" (inc n)))))))
 
 (t/deftest test-001-datalog
@@ -156,7 +155,7 @@
   ([opts n res]
    (let [q (inc n)]
      (when (contains? *qs* q)
-       (t/is (is-equal? res (sql/q *node* (slurp-sql-query q) opts))
+       (t/is (is-equal? res (xt/q *node* (slurp-sql-query q) opts))
              (format "Q%02d" (inc n)))))))
 
 (t/deftest test-001-sql

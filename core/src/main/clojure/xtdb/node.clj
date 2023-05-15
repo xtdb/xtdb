@@ -1,8 +1,8 @@
 (ns xtdb.node
   (:require [clojure.pprint :as pp]
-            [xtdb.api.impl :as api]
-            [xtdb.core.datalog :as d]
-            [xtdb.core.sql :as sql]
+            [xtdb.api.protocols :as xtp]
+            [xtdb.datalog :as d]
+            [xtdb.sql :as sql]
             xtdb.indexer
             [xtdb.ingester :as ingest]
             [xtdb.operator :as op]
@@ -43,7 +43,7 @@
 
 (defn- with-after-tx-default [opts]
   (-> opts
-      (update-in [:basis :after-tx] api/max-tx (get-in opts [:basis :tx]))))
+      (update-in [:basis :after-tx] xtp/max-tx (get-in opts [:basis :tx]))))
 
 (defn- ->sql+args [sql-or-sql+args]
   (if (vector? sql-or-sql+args)
@@ -57,7 +57,7 @@
                  default-tz
                  !latest-submitted-tx
                  system, close-fn]
-  api/PNode
+  xtp/PNode
   (open-datalog& [_ query opts]
     (let [opts (-> (into {:default-tz default-tz} opts)
                    (with-after-tx-default))]
@@ -79,21 +79,21 @@
 
   (latest-submitted-tx [_] @!latest-submitted-tx)
 
-  api/PStatus
+  xtp/PStatus
   (status [this]
     {:latest-completed-tx (.latestCompletedTx indexer)
-     :latest-submitted-tx (api/latest-submitted-tx this)})
+     :latest-submitted-tx (xtp/latest-submitted-tx this)})
 
-  api/PSubmitNode
+  xtp/PSubmitNode
   (submit-tx& [this tx-ops]
-    (api/submit-tx& this tx-ops {}))
+    (xtp/submit-tx& this tx-ops {}))
 
   (submit-tx& [_ tx-ops opts]
     (-> (or (validate-tx-ops tx-ops)
             (.submitTx tx-producer tx-ops opts))
         (util/then-apply
           (fn [tx]
-            (swap! !latest-submitted-tx api/max-tx tx)))))
+            (swap! !latest-submitted-tx xtp/max-tx tx)))))
 
   Closeable
   (close [_]
@@ -154,9 +154,9 @@
                               #_(println (.toVerboseString ^RootAllocator (:xtdb/allocator system))))))))
 
 (defrecord SubmitNode [^ITxProducer tx-producer, !system, close-fn]
-  api/PSubmitNode
+  xtp/PSubmitNode
   (submit-tx& [this tx-ops]
-    (api/submit-tx& this tx-ops {}))
+    (xtp/submit-tx& this tx-ops {}))
 
   (submit-tx& [_ tx-ops opts]
     (or (validate-tx-ops tx-ops)

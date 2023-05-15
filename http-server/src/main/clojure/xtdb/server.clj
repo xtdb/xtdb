@@ -3,12 +3,6 @@
             [clojure.spec.alpha :as s]
             [clojure.tools.logging :as log]
             [cognitect.transit :as transit]
-            [xtdb.api.impl :as xt.impl]
-            [xtdb.core.datalog :as d]
-            [xtdb.error :as err]
-            [xtdb.node :as node]
-            [xtdb.transit :as xt.transit]
-            [xtdb.util :as util]
             [juxt.clojars-mirrors.integrant.core :as ig]
             [muuntaja.core :as m]
             [muuntaja.format.core :as mf]
@@ -24,12 +18,19 @@
             [reitit.ring :as r.ring]
             [reitit.swagger :as r.swagger]
             [ring.adapter.jetty9 :as j]
-            [spec-tools.core :as st])
-  (:import xtdb.api.TransactionInstant
-           xtdb.IResultSet
-           java.io.OutputStream
+            [spec-tools.core :as st]
+            [xtdb.api :as xt]
+            [xtdb.api.protocols :as xtp]
+            [xtdb.datalog :as d]
+            [xtdb.error :as err]
+            [xtdb.node :as node]
+            [xtdb.transit :as xt.transit]
+            [xtdb.util :as util])
+  (:import java.io.OutputStream
            (java.time Duration ZoneId)
-           org.eclipse.jetty.server.Server))
+           org.eclipse.jetty.server.Server
+           xtdb.api.TransactionInstant
+           xtdb.IResultSet))
 
 (def ^:private muuntaja-opts
   (-> m/default-options
@@ -59,12 +60,12 @@
 
 (defmethod route-handler :status [_]
   {:get (fn [{:keys [node] :as _req}]
-          {:status 200, :body (xt.impl/status node)})})
+          {:status 200, :body (xtp/status node)})})
 
 (defmethod route-handler :tx [_]
   {:post {:handler (fn [{:keys [node] :as req}]
                      (let [{:keys [tx-ops opts]} (get-in req [:parameters :body])]
-                       (-> (xt.impl/submit-tx& node tx-ops opts)
+                       (-> (xtp/submit-tx& node tx-ops opts)
                            (util/then-apply (fn [tx]
                                               {:status 200, :body tx})))))
 
@@ -111,15 +112,13 @@
 
    :post {:handler (fn [{:keys [node parameters]}]
                      (let [{{:keys [query] :as body} :body} parameters]
-                       (-> (xt.impl/open-datalog& node query (dissoc body :query))
+                       (-> (xtp/open-datalog& node query (dissoc body :query))
                            (util/then-apply (fn [res]
                                               {:status 200, :body res})))))
 
           :parameters {:body :xtdb.server.datalog/query-body}}})
 
 (s/def :xtdb.server.sql/query string?)
-
-(s/def ::args (s/nilable (s/coll-of any? :kind vector?)))
 
 (s/def :xtdb.server.sql/query-body
   (s/keys :req-un [:xtdb.server.sql/query],
@@ -134,7 +133,7 @@
 
    :post {:handler (fn [{:keys [node parameters]}]
                      (let [{{:keys [query args] :as query-opts} :body} parameters]
-                       (-> (xt.impl/open-sql& node (into [query] args) (dissoc query-opts :query :args))
+                       (-> (xtp/open-sql& node (into [query] args) (dissoc query-opts :query :args))
                            (util/then-apply (fn [res]
                                               {:status 200, :body res})))))
 
@@ -155,7 +154,7 @@
                           {::err/message (str "Malformed " (-> ex ex-data :format pr-str) " request.")})})
 
 (def router
-  (http/router xt.impl/http-routes
+  (http/router xt/http-routes
                {:expand (fn [{route-name :name, :as route} opts]
                           (r/expand (cond-> route
                                       route-name (merge (route-handler route)))

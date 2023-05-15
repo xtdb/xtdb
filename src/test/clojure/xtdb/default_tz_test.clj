@@ -1,7 +1,6 @@
 (ns xtdb.default-tz-test
   (:require [clojure.test :as t]
-            [xtdb.datalog :as xt-datalog]
-            [xtdb.sql :as xt]
+            [xtdb.api :as xt]
             [xtdb.test-util :as tu]
             [xtdb.util :as util]))
 
@@ -51,8 +50,8 @@
 
 (t/deftest test-datalog-default-tz
   (t/is (= [{:time #time/time "16:00"}]
-           (xt-datalog/q tu/*node*
-                         '{:find [time]
-                           :where [[(local-time) time]]}
-                         {:basis {:current-time (util/->instant #inst "2024-01-01")}
-                          :default-tz #time/zone "America/Los_Angeles"}))))
+           (xt/q tu/*node*
+                 '{:find [time]
+                   :where [[(local-time) time]]}
+                 {:basis {:current-time (util/->instant #inst "2024-01-01")}
+                  :default-tz #time/zone "America/Los_Angeles"}))))

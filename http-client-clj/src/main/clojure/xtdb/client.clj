@@ -3,7 +3,8 @@
             [juxt.clojars-mirrors.hato.v0v8v2.hato.client :as hato]
             [juxt.clojars-mirrors.hato.v0v8v2.hato.middleware :as hato.middleware]
             [juxt.clojars-mirrors.reitit-core.v0v5v15.reitit.core :as r]
-            [xtdb.api.impl :as api]
+            [xtdb.api :as xt]
+            [xtdb.api.protocols :as xtp]
             [xtdb.error :as err]
             [xtdb.transit :as xt.transit])
   (:import [java.io EOFException InputStream]
@@ -18,7 +19,7 @@
    :encode {:handlers xt.transit/tj-write-handlers}})
 
 (def router
-  (r/router api/http-routes))
+  (r/router xt/http-routes))
 
 (defn- handle-err [e]
   (throw (or (when-let [body (:body (ex-data e))]
@@ -74,13 +75,8 @@
       (.close body)
       (throw e))))
 
-(defn- ->sql+args [sql-or-sql+args]
-  (if (vector? sql-or-sql+args)
-    sql-or-sql+args
-    [sql-or-sql+args]))
-
 (defrecord XtdbClient [base-url, !latest-submitted-tx]
-  api/PNode
+  xtp/PNode
   (open-datalog& [client query opts]
     (let [basis-tx (get-in opts [:basis :tx])
           ^CompletableFuture !basis-tx (if (instance? CompletableFuture basis-tx)
@@ -93,15 +89,14 @@
                                      {:content-type :transit+json
                                       :form-params (-> (into {:query query} opts)
                                                        (assoc-in [:basis :tx] basis-tx)
-                                                       (update :basis api/after-latest-submitted-tx client))
+                                                       (update :basis xtp/after-latest-submitted-tx client))
                                       :as ::transit+json->resultset}))))
           (.thenApply (reify Function
                         (apply [_ resp]
                           (:body resp)))))))
 
-  (open-sql& [client sql+args {:keys [basis] :as query-opts}]
-    (let [[sql & args] (->sql+args sql+args)
-          {basis-tx :tx} basis
+  (open-sql& [client sql {:keys [basis] :as query-opts}]
+    (let [{basis-tx :tx} basis
           ^CompletableFuture !basis-tx (if (instance? CompletableFuture basis-tx)
                                          basis-tx
                                          (CompletableFuture/completedFuture basis-tx))]
@@ -111,9 +106,9 @@
                             (request client :post :sql-query
                                      {:content-type :transit+json
                                       :form-params (-> query-opts
-                                                       (assoc :query sql, :args (vec args))
+                                                       (assoc :query sql)
                                                        (assoc-in [:basis :tx] basis-tx)
-                                                       (update :basis api/after-latest-submitted-tx client))
+                                                       (update :basis xtp/after-latest-submitted-tx client))
                                       :as ::transit+json->resultset}))))
           (.thenApply (reify Function
                         (apply [_ resp]
@@ -121,9 +116,9 @@
 
   (latest-submitted-tx [_] @!latest-submitted-tx)
 
-  api/PSubmitNode
+  xtp/PSubmitNode
   (submit-tx& [client tx-ops]
-    (api/submit-tx& client tx-ops {}))
+    (xtp/submit-tx& client tx-ops {}))
 
   (submit-tx& [client tx-ops opts]
     (-> ^CompletableFuture
@@ -135,10 +130,10 @@
         (.thenApply (reify Function
                       (apply [_ resp]
                         (let [tx (:body resp)]
-                          (swap! !latest-submitted-tx api/max-tx tx)
+                          (swap! !latest-submitted-tx xtp/max-tx tx)
                           tx))))))
 
-  api/PStatus
+  xtp/PStatus
   (status [client]
     (-> @(request client :get :status)
         :body))

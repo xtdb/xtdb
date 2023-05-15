@@ -1,8 +1,7 @@
 (ns xtdb.datasets.tpch
   (:require [clojure.string :as str]
             [clojure.tools.logging :as log]
-            [xtdb.datalog :as xt.d]
-            [xtdb.sql :as xt.sql])
+            [xtdb.api :as xt])
   (:import clojure.lang.MapEntry
            [io.airlift.tpch TpchColumn TpchColumnType$Base TpchEntity TpchTable]
            [java.time LocalDate]))
@@ -46,9 +45,9 @@
                  (let [[!last-tx doc-count] (->> (tpch-table->docs t scale-factor)
                                                  (partition-all 1000)
                                                  (reduce (fn [[_!last-tx last-doc-count] batch]
-                                                           [(xt.d/submit-tx& tx-producer
-                                                                             (vec (for [doc batch]
-                                                                                    [:put (:table (meta doc)) doc])))
+                                                           [(xt/submit-tx& tx-producer
+                                                                           (vec (for [doc batch]
+                                                                                  [:put (:table (meta doc)) doc])))
                                                             (+ last-doc-count (count batch))])
                                                          [nil 0]))]
                    (log/debug "Transacted" doc-count (.getTableName t))
@@ -59,7 +58,7 @@
   (format "INSERT INTO %s (%s) VALUES (%s)"
           (.getTableName table)
           (->> (cons "xt$id" (for [^TpchColumn col (.getColumns table)]
-                                (.getColumnName col)))
+                               (.getColumnName col)))
                (str/join ", "))
           (->> (repeat (inc (count (.getColumns table))) "?")
                (str/join ", "))))
@@ -82,8 +81,8 @@
                        [!last-tx doc-count] (->> (tpch-table->dml-params table scale-factor)
                                                  (partition-all 1000)
                                                  (reduce (fn [[_!last-tx last-doc-count] param-batch]
-                                                           [(xt.sql/submit-tx& tx-producer
-                                                                               [[:sql-batch (into [dml] param-batch)]])
+                                                           [(xt/submit-tx& tx-producer
+                                                                           [[:sql-batch (into [dml] param-batch)]])
                                                             (+ last-doc-count (count param-batch))])
                                                          [nil 0]))]
                    (log/debug "Transacted" doc-count (.getTableName table))

@@ -1,6 +1,6 @@
 (ns xtdb.stats-test
   (:require [clojure.test :as t :refer [deftest]]
-            [xtdb.datalog :as xt]
+            [xtdb.api :as xt]
             [xtdb.logical-plan :as lp]
             [xtdb.node :as node]
             [xtdb.test-util :as tu]

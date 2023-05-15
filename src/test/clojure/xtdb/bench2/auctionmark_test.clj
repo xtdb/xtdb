@@ -3,7 +3,7 @@
             [xtdb.bench2 :as b]
             [xtdb.bench2.auctionmark :as am]
             [xtdb.bench2.xtdb2 :as bxt2]
-            [xtdb.datalog :as xt]
+            [xtdb.api :as xt]
             [xtdb.test-util :as tu :refer [*node*]])
   (:import (java.time Clock)
            (java.util Random)

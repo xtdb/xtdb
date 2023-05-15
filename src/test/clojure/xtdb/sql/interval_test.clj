@@ -1,6 +1,6 @@
 (ns xtdb.sql.interval-test
   (:require [clojure.test :as t]
-            [xtdb.sql :as xt]
+            [xtdb.api :as xt]
             [xtdb.test-util :as tu]))
 
 (t/use-fixtures :each tu/with-node)

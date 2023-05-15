@@ -1,6 +1,6 @@
 (ns xtdb.metadata-test
   (:require [clojure.test :as t :refer [deftest]]
-            [xtdb.sql :as xt]
+            [xtdb.api :as xt]
             [xtdb.metadata :as meta]
             [xtdb.test-util :as tu]
             [xtdb.datasets.tpch :as tpch])

@@ -2,7 +2,7 @@
   (:require [clojure.spec.alpha :as s]
             [juxt.clojars-mirrors.integrant.core :as ig]
             [xtdb.api :as api]
-            [xtdb.core.sql :as sql]
+            [xtdb.sql :as sql]
             [xtdb.error :as err]
             xtdb.log
             [xtdb.rewrite :refer [zmatch]]

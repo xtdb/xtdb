@@ -1,17 +1,16 @@
 (ns xtdb.sql.temporal-test
   (:require [clojure.test :refer [deftest is use-fixtures testing]]
-            [xtdb.datalog :as xt.d]
-            [xtdb.sql :as xt.sql]
+            [xtdb.api :as xt]
             [xtdb.test-util :as tu]))
 
 (use-fixtures :each tu/with-node)
 
 (defn query-at-tx [query tx]
-  (xt.sql/q tu/*node* query {:basis {:tx tx}}))
+  (xt/q tu/*node* query {:basis {:tx tx}, :default-all-valid-time? true}))
 
 (deftest all-system-time
-  (let [_tx (xt.d/submit-tx tu/*node* [[:put :foo {:xt/id :my-doc, :last_updated "tx1"}]] {:system-time #inst "3000"})
-        tx2 (xt.d/submit-tx tu/*node* [[:put :foo {:xt/id :my-doc, :last_updated "tx2"}]] {:system-time #inst "3001"})]
+  (let [_tx (xt/submit-tx tu/*node* [[:put :foo {:xt/id :my-doc, :last_updated "tx1"}]] {:system-time #inst "3000"})
+        tx2 (xt/submit-tx tu/*node* [[:put :foo {:xt/id :my-doc, :last_updated "tx2"}]] {:system-time #inst "3001"})]
 
     (is (= [{:last_updated "tx1"} {:last_updated "tx2"}]
            (query-at-tx
@@ -24,8 +23,8 @@
             tx2)))))
 
 (deftest system-time-as-of
-  (let [tx (xt.d/submit-tx tu/*node* [[:put :foo {:xt/id :my-doc, :last_updated "tx1"}]] {:system-time #inst "3000"})
-        tx2 (xt.d/submit-tx tu/*node* [[:put :foo {:xt/id :my-doc, :last_updated "tx2"}]] {:system-time #inst "3001"})]
+  (let [tx (xt/submit-tx tu/*node* [[:put :foo {:xt/id :my-doc, :last_updated "tx1"}]] {:system-time #inst "3000"})
+        tx2 (xt/submit-tx tu/*node* [[:put :foo {:xt/id :my-doc, :last_updated "tx2"}]] {:system-time #inst "3001"})]
 
     (is (= []
            (query-at-tx
@@ -43,8 +42,8 @@
             tx2)))))
 
 (deftest system-time-from-a-to-b
-  (let [tx (xt.d/submit-tx tu/*node* [[:put :foo {:xt/id :my-doc, :last_updated "tx1"}]] {:system-time #inst "3000"})
-        tx2 (xt.d/submit-tx tu/*node* [[:put :foo {:xt/id :my-doc, :last_updated "tx2"}]] {:system-time #inst "3001"})]
+  (let [tx (xt/submit-tx tu/*node* [[:put :foo {:xt/id :my-doc, :last_updated "tx1"}]] {:system-time #inst "3000"})
+        tx2 (xt/submit-tx tu/*node* [[:put :foo {:xt/id :my-doc, :last_updated "tx2"}]] {:system-time #inst "3001"})]
 
     (is (= []
            (query-at-tx
@@ -67,8 +66,8 @@
             tx2)))))
 
 (deftest system-time-between-a-to-b
-  (let [tx (xt.d/submit-tx tu/*node* [[:put :foo {:xt/id :my-doc, :last_updated "tx1"}]] {:system-time #inst "3000"})
-        tx2 (xt.d/submit-tx tu/*node* [[:put :foo {:xt/id :my-doc, :last_updated "tx2"}]] {:system-time #inst "3001"})]
+  (let [tx (xt/submit-tx tu/*node* [[:put :foo {:xt/id :my-doc, :last_updated "tx1"}]] {:system-time #inst "3000"})
+        tx2 (xt/submit-tx tu/*node* [[:put :foo {:xt/id :my-doc, :last_updated "tx2"}]] {:system-time #inst "3001"})]
     (is (= []
            (query-at-tx
             "SELECT foo.last_updated FROM foo FOR SYSTEM_TIME BETWEEN DATE '2998-01-01' AND TIMESTAMP '2999-01-01 00:00:00+00:00'"
@@ -97,12 +96,12 @@
 
 (deftest app-time-period-predicates
   (testing "OVERLAPS"
-    (let [tx (xt.d/submit-tx tu/*node* [[:put :foo {:xt/id :my-doc, :last_updated "2000"}
-                                         {:for-valid-time [:in #inst "2000"]}]
-                                        [:put :foo {:xt/id :my-doc, :last_updated "3000"}
-                                         {:for-valid-time [:in #inst "3000"]}]
-                                        [:put :foo {:xt/id :some-other-doc, :last_updated "4000"}
-                                         {:for-valid-time [:in #inst "4000" #inst "4001"]}]])]
+    (let [tx (xt/submit-tx tu/*node* [[:put :foo {:xt/id :my-doc, :last_updated "2000"}
+                                       {:for-valid-time [:in #inst "2000"]}]
+                                      [:put :foo {:xt/id :my-doc, :last_updated "3000"}
+                                       {:for-valid-time [:in #inst "3000"]}]
+                                      [:put :foo {:xt/id :some-other-doc, :last_updated "4000"}
+                                       {:for-valid-time [:in #inst "4000" #inst "4001"]}]])]
 
       (is (= [{:last_updated "2000"} {:last_updated "3000"} {:last_updated "4000"}]
              (query-at-tx
@@ -130,10 +129,10 @@
               tx))))))
 
 (deftest app-time-multiple-tables
-  (let [tx (xt.d/submit-tx tu/*node* [[:put :foo {:xt/id :foo-doc, :last_updated "2001" }
-                                       {:for-valid-time [:in #inst "2000" #inst "2001"]}]
-                                      [:put :bar {:xt/id :bar-doc, :l_updated "2003" }
-                                       {:for-valid-time [:in #inst "2002" #inst "2003"]}]])]
+  (let [tx (xt/submit-tx tu/*node* [[:put :foo {:xt/id :foo-doc, :last_updated "2001" }
+                                     {:for-valid-time [:in #inst "2000" #inst "2001"]}]
+                                    [:put :bar {:xt/id :bar-doc, :l_updated "2003" }
+                                     {:for-valid-time [:in #inst "2002" #inst "2003"]}]])]
 
     (is (= [{:last_updated "2001"}]
            (query-at-tx
@@ -169,12 +168,12 @@
              WHERE foo.VALID_TIME OVERLAPS bar.VALID_TIME" tx)))))
 
 (deftest app-time-joins
-  (let [tx (xt.d/submit-tx tu/*node* [[:put :foo {:xt/id :bill, :name "Bill"}
-                                       {:app-time-start #inst "2016"
-                                        :app-time-end #inst "2019"}]
-                                      [:put :bar {:xt/id :jeff, :also_name "Jeff"}
-                                       {:app-time-start #inst "2018"
-                                        :app-time-end #inst "2020"}]])]
+  (let [tx (xt/submit-tx tu/*node* [[:put :foo {:xt/id :bill, :name "Bill"}
+                                     {:app-time-start #inst "2016"
+                                      :app-time-end #inst "2019"}]
+                                    [:put :bar {:xt/id :jeff, :also_name "Jeff"}
+                                     {:app-time-start #inst "2018"
+                                      :app-time-end #inst "2020"}]])]
 
     (is (= []
            (query-at-tx
@@ -191,24 +190,24 @@
             tx)))))
 
 (deftest test-inconsistent-valid-time-range-2494
-  (xt.sql/submit-tx tu/*node* [[:sql "INSERT INTO xt_docs (xt$id, xt$valid_to) VALUES (1, DATE '2011-01-01')"]])
+  (xt/submit-tx tu/*node* [[:sql "INSERT INTO xt_docs (xt$id, xt$valid_to) VALUES (1, DATE '2011-01-01')"]])
   (is (= [{:tx-id 0, :committed? false}]
-         (xt.d/q tu/*node* '{:find [tx-id committed?]
-                             :where [($ :xt/txs {:xt/id tx-id,
-                                                 :xt/committed? committed?})]})))
-  (xt.sql/submit-tx tu/*node* [[:sql "INSERT INTO xt_docs (xt$id) VALUES (2)"]])
-  (xt.sql/submit-tx tu/*node* [[:sql ["DELETE FROM xt_docs FOR PORTION OF VALID_TIME FROM NULL TO ? WHERE xt_docs.xt$id = 2"
-                                      #inst "2011"]]])
+         (xt/q tu/*node* '{:find [tx-id committed?]
+                           :where [($ :xt/txs {:xt/id tx-id,
+                                               :xt/committed? committed?})]})))
+  (xt/submit-tx tu/*node* [[:sql "INSERT INTO xt_docs (xt$id) VALUES (2)"]])
+  (xt/submit-tx tu/*node* [[:sql ["DELETE FROM xt_docs FOR PORTION OF VALID_TIME FROM NULL TO ? WHERE xt_docs.xt$id = 2"
+                                  #inst "2011"]]])
   (is (= [{:tx-id 0, :committed? false}
           {:tx-id 1, :committed? true}
           {:tx-id 2, :committed? false}]
-         (xt.d/q tu/*node* '{:find [tx-id committed?]
-                             :where [($ :xt/txs {:xt/id tx-id,
-                                                 :xt/committed? committed?})]})))
-  (xt.sql/submit-tx tu/*node* [[:sql "INSERT INTO xt_docs (xt$id) VALUES (3)"]])
-  (xt.sql/submit-tx tu/*node* [[:sql ["UPDATE xt_docs FOR PORTION OF VALID_TIME FROM NULL TO ? SET foo = 'bar' WHERE xt_docs.xt$id = 3"
-                                      #inst "2011"]]])
+         (xt/q tu/*node* '{:find [tx-id committed?]
+                           :where [($ :xt/txs {:xt/id tx-id,
+                                               :xt/committed? committed?})]})))
+  (xt/submit-tx tu/*node* [[:sql "INSERT INTO xt_docs (xt$id) VALUES (3)"]])
+  (xt/submit-tx tu/*node* [[:sql ["UPDATE xt_docs FOR PORTION OF VALID_TIME FROM NULL TO ? SET foo = 'bar' WHERE xt_docs.xt$id = 3"
+                                  #inst "2011"]]])
   (is (= [{:committed? false}]
-         (xt.d/q tu/*node* '{:find [committed?]
-                             :where [($ :xt/txs {:xt/id 4,
-                                                 :xt/committed? committed?})]}))))
+         (xt/q tu/*node* '{:find [committed?]
+                           :where [($ :xt/txs {:xt/id 4,
+                                               :xt/committed? committed?})]}))))

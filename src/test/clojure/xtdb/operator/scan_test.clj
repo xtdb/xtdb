@@ -1,6 +1,6 @@
 (ns xtdb.operator.scan-test
   (:require [clojure.test :as t]
-            [xtdb.datalog :as xt]
+            [xtdb.api :as xt]
             [xtdb.node :as node]
             [xtdb.operator :as op]
             [xtdb.operator.scan :as scan]

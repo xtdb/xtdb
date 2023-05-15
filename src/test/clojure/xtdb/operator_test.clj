@@ -1,6 +1,6 @@
 (ns xtdb.operator-test
   (:require [clojure.test :as t]
-            [xtdb.datalog :as xt]
+            [xtdb.api :as xt]
             [xtdb.expression.metadata :as expr.meta]
             [xtdb.node :as node]
             [xtdb.metadata :as meta]

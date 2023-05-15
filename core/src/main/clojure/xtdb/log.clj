@@ -1,5 +1,5 @@
 (ns xtdb.log
-  (:require xtdb.api.impl
+  (:require xtdb.api.protocols
             [xtdb.util :as util]
             [clojure.tools.logging :as log])
   (:import xtdb.api.TransactionInstant

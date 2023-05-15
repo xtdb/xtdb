@@ -1,5 +1,5 @@
 (ns xtdb.await
-  (:require xtdb.api.impl)
+  (:require xtdb.api.protocols)
   (:import xtdb.api.TransactionInstant
            [java.util.concurrent CompletableFuture PriorityBlockingQueue]))
 

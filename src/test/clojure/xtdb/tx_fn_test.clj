@@ -1,6 +1,6 @@
 (ns xtdb.tx-fn-test
   (:require [clojure.test :as t]
-            [xtdb.datalog :as xt]
+            [xtdb.api :as xt]
             [xtdb.node :as node]
             [xtdb.indexer :as idx]
             [xtdb.test-util :as tu]

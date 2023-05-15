@@ -1,9 +1,9 @@
 (ns xtdb.bench2.xtdb2
   (:require [clojure.java.io :as io]
-            [xtdb.api.impl :as xt.impl]
+            [xtdb.api :as xt]
+            [xtdb.api.protocols :as xtp]
             [xtdb.bench2 :as b]
             [xtdb.bench2.measurement :as bm]
-            [xtdb.datalog :as xt]
             [xtdb.node :as node]
             [xtdb.test-util :as tu])
   (:import (io.micrometer.core.instrument MeterRegistry Timer)
@@ -111,19 +111,19 @@
     (fn-gauge "node.tx.lag tx-id" compute-lag-abs )
 
     (reify
-      xt.impl/PNode
-      (open-datalog& [_ query args] (xt.impl/open-datalog& node query args))
-      (open-sql& [_ query query-opts] (xt.impl/open-sql& node query query-opts))
+      xtp/PNode
+      (open-datalog& [_ query args] (xtp/open-datalog& node query args))
+      (open-sql& [_ query query-opts] (xtp/open-sql& node query query-opts))
 
-      xt.impl/PStatus
+      xtp/PStatus
       (status [_]
         (let [{:keys [latest-completed-tx] :as res} (xt/status node)]
           (reset! last-completed latest-completed-tx)
           res))
 
-      xt.impl/PSubmitNode
+      xtp/PSubmitNode
       (submit-tx& [_ tx-ops]
-        (let [ret (xt.impl/submit-tx& node tx-ops)]
+        (let [ret (xtp/submit-tx& node tx-ops)]
           (reset! last-submitted [ret (System/currentTimeMillis)])
           ;; (.incrementAndGet submit-counter)
           ret))

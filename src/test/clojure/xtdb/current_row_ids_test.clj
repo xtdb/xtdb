@@ -1,6 +1,6 @@
 (ns xtdb.current-row-ids-test
   (:require [clojure.test :as t :refer [deftest]]
-            [xtdb.datalog :as xt]
+            [xtdb.api :as xt]
             [xtdb.operator.scan :as scan]
             [xtdb.temporal :as temporal]
             [xtdb.temporal.kd-tree-test :refer [as-micros ->coordinates]]

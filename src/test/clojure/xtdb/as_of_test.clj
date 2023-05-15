@@ -1,6 +1,6 @@
 (ns xtdb.as-of-test
   (:require [clojure.test :as t]
-            [xtdb.datalog :as xt]
+            [xtdb.api :as xt]
             [xtdb.test-util :as tu]
             [xtdb.util :as util]))
 

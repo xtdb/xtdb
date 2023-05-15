@@ -3,8 +3,8 @@
             [juxt.clojars-mirrors.integrant.core :as ig]
             [sci.core :as sci]
             [xtdb.buffer-pool :as bp]
-            [xtdb.core.datalog :as d]
-            [xtdb.core.sql :as sql]
+            [xtdb.datalog :as d]
+            [xtdb.sql :as sql]
             [xtdb.error :as err]
             xtdb.indexer.internal-id-manager
             xtdb.indexer.log-indexer

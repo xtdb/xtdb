@@ -1,4 +1,4 @@
-(ns xtdb.core.sql
+(ns xtdb.sql
   (:require [xtdb.operator :as op]
             [xtdb.rewrite :as r]
             [xtdb.sql.analyze :as sem]
