@@ -28,7 +28,7 @@ Authentication for the components in the module is done via the https://learn.mi
 
 ## Azure Blob Storage Object Store
 
-We can swap out the implementation of the objedct store with one based on Azure Blob Storage. To do so, we add the `xtdb.azure/blob-object-store` key within the integrant config for our node, alongside any config:
+We can swap out the implementation of the object store with one based on Azure Blob Storage. To do so, we add the `xtdb.azure/blob-object-store` key within the integrant config for our node, alongside any config:
 ```clojure
 {
   ...
