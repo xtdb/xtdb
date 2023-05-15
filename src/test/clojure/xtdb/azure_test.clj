@@ -29,6 +29,5 @@
           (finally
             (ig/halt! sys)))))))
 
-;; TODO: Throws an error when trying to return an IllegalStateException - classcast issue?
 (os-test/def-obj-store-tests ^:azure azure [f]
   (f *obj-store*))
