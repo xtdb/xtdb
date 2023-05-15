@@ -69,8 +69,8 @@
                                               ^DenseUnionVector tx-ops-vec, ^Instant current-time]
   (let [put-vec (.getStruct tx-ops-vec 1)
         ^DenseUnionVector doc-duv (.getChild put-vec "document" DenseUnionVector)
-        ^TimeStampVector app-time-start-vec (.getChild put-vec "xt$valid_from")
-        ^TimeStampVector app-time-end-vec (.getChild put-vec "xt$valid_to")
+        ^TimeStampVector valid-from-vec (.getChild put-vec "xt$valid_from")
+        ^TimeStampVector valid-to-vec (.getChild put-vec "xt$valid_to")
         current-time-µs (util/instant->micros current-time)
         tables (mapv (fn [^StructVector table-vec]
                        (let [table-name (.getName table-vec)
@@ -99,19 +99,19 @@
           (let [eid (t/get-object id-duv doc-offset)
                 new-entity? (not (.isKnownId iid-mgr table-name eid))
                 iid (.getOrCreateInternalId iid-mgr table-name eid row-id)
-                start-app-time (if (.isNull app-time-start-vec put-offset)
-                                 current-time-µs
-                                 (.get app-time-start-vec put-offset))
-                end-app-time (if (.isNull app-time-end-vec put-offset)
-                               util/end-of-time-μs
-                               (.get app-time-end-vec put-offset))]
-            (when-not (> end-app-time start-app-time)
-              (throw (err/runtime-err :xtdb.indexer/invalid-app-times
-                                      {:app-time-start (util/micros->instant start-app-time)
-                                       :app-time-end (util/micros->instant end-app-time)})))
+                valid-from (if (.isNull valid-from-vec put-offset)
+                             current-time-µs
+                             (.get valid-from-vec put-offset))
+                valid-to (if (.isNull valid-to-vec put-offset)
+                           util/end-of-time-μs
+                           (.get valid-to-vec put-offset))]
+            (when-not (> valid-to valid-from)
+              (throw (err/runtime-err :xtdb.indexer/invalid-valid-times
+                                      {:valid-from (util/micros->instant valid-from)
+                                       :valid-to (util/micros->instant valid-to)})))
 
-            (.logPut log-op-idxer iid row-id start-app-time end-app-time)
-            (.indexPut temporal-idxer iid row-id start-app-time end-app-time new-entity?)))
+            (.logPut log-op-idxer iid row-id valid-from valid-to)
+            (.indexPut temporal-idxer iid row-id valid-from valid-to new-entity?)))
 
         nil))))
 
@@ -120,8 +120,8 @@
   (let [delete-vec (.getStruct tx-ops-vec 2)
         ^VarCharVector table-vec (.getChild delete-vec "table" VarCharVector)
         ^DenseUnionVector id-vec (.getChild delete-vec "xt$id" DenseUnionVector)
-        ^TimeStampVector app-time-start-vec (.getChild delete-vec "xt$valid_from")
-        ^TimeStampVector app-time-end-vec (.getChild delete-vec "xt$valid_to")
+        ^TimeStampVector valid-from-vec (.getChild delete-vec "xt$valid_from")
+        ^TimeStampVector valid-to-vec (.getChild delete-vec "xt$valid_to")
         current-time-µs (util/instant->micros current-time)]
     (reify OpIndexer
       (indexOp [_ tx-op-idx]
@@ -131,19 +131,19 @@
               eid (t/get-object id-vec delete-offset)
               new-entity? (not (.isKnownId iid-mgr table eid))
               iid (.getOrCreateInternalId iid-mgr table eid row-id)
-              start-app-time (if (.isNull app-time-start-vec delete-offset)
-                               current-time-µs
-                               (.get app-time-start-vec delete-offset))
-              end-app-time (if (.isNull app-time-end-vec delete-offset)
-                             util/end-of-time-μs
-                             (.get app-time-end-vec delete-offset))]
-          (when (> start-app-time end-app-time)
-            (throw (err/runtime-err :xtdb.indexer/invalid-app-times
-                                    {:app-time-start (util/micros->instant start-app-time)
-                                     :app-time-end (util/micros->instant end-app-time)})))
+              valid-from (if (.isNull valid-from-vec delete-offset)
+                           current-time-µs
+                           (.get valid-from-vec delete-offset))
+              valid-to (if (.isNull valid-to-vec delete-offset)
+                         util/end-of-time-μs
+                         (.get valid-to-vec delete-offset))]
+          (when (> valid-from valid-to)
+            (throw (err/runtime-err :xtdb.indexer/invalid-valid-times
+                                    {:valid-from (util/micros->instant valid-from)
+                                     :valid-to (util/micros->instant valid-to)})))
 
-          (.logDelete log-op-idxer iid start-app-time end-app-time)
-          (.indexDelete temporal-idxer iid row-id start-app-time end-app-time new-entity?))
+          (.logDelete log-op-idxer iid valid-from valid-to)
+          (.indexDelete temporal-idxer iid row-id valid-from valid-to new-entity?))
 
         nil))))
 
@@ -300,10 +300,10 @@
               live-table (.liveTable live-chunk table)
               table-copier (.rowCopier (.writer live-table) content-rel)
               id-col (.vectorForName in-rel "xt$id")
-              app-time-start-rdr (some-> (.vectorForName in-rel "xt$valid_from")
-                                         (.monoReader t/temporal-col-type))
-              app-time-end-rdr (some-> (.vectorForName in-rel "xt$valid_to")
-                                       (.monoReader t/temporal-col-type))]
+              valid-from-rdr (some-> (.vectorForName in-rel "xt$valid_from")
+                                     (.polyReader [:union [:null t/temporal-col-type]]))
+              valid-to-rdr (some-> (.vectorForName in-rel "xt$valid_to")
+                                   (.polyReader [:union [:null t/temporal-col-type]]))]
           (dotimes [idx row-count]
             (let [row-id (.nextRowId live-chunk)]
               (.writeRowId live-table row-id)
@@ -312,19 +312,19 @@
               (let [eid (t/get-object (.getVector id-col) (.getIndex id-col idx))
                     new-entity? (not (.isKnownId iid-mgr table eid))
                     iid (.getOrCreateInternalId iid-mgr table eid row-id)
-                    start-app-time (if app-time-start-rdr
-                                     (.readLong app-time-start-rdr idx)
-                                     current-time-µs)
-                    end-app-time (if app-time-end-rdr
-                                   (.readLong app-time-end-rdr idx)
-                                   util/end-of-time-μs)]
-                (when (> start-app-time end-app-time)
-                  (throw (err/runtime-err :xtdb.indexer/invalid-app-times
-                                          {:app-time-start (util/micros->instant start-app-time)
-                                           :app-time-end (util/micros->instant end-app-time)})))
+                    valid-from (if (and valid-from-rdr (= 1 (.read valid-from-rdr idx)))
+                                 (.readLong valid-from-rdr)
+                                 current-time-µs)
+                    valid-to (if (and valid-to-rdr (= 1 (.read valid-to-rdr idx)))
+                               (.readLong valid-to-rdr)
+                               util/end-of-time-μs)]
+                (when (> valid-from valid-to)
+                  (throw (err/runtime-err :xtdb.indexer/invalid-valid-times
+                                          {:valid-from (util/micros->instant valid-from)
+                                           :valid-to (util/micros->instant valid-to)})))
 
-                (.logPut log-op-idxer iid row-id start-app-time end-app-time)
-                (.indexPut temporal-idxer iid row-id start-app-time end-app-time new-entity?)))))))))
+                (.logPut log-op-idxer iid row-id valid-from valid-to)
+                (.indexPut temporal-idxer iid row-id valid-from valid-to new-entity?)))))))))
 
 (defn- row-id->idx [buf, ^long block-idx, ^long row-id]
   (with-open [chunks (util/->chunks buf {:block-idxs (doto (RoaringBitmap.)
@@ -365,20 +365,22 @@
                                         (into {}))
                 iid-rdr (.monoReader (.vectorForName in-rel "_iid") :i64)
                 row-id-rdr (.monoReader (.vectorForName in-rel "_row_id") :i64)
-                app-time-start-rdr (.monoReader (.vectorForName in-rel "xt$valid_from") t/temporal-col-type)
-                app-time-end-rdr (.monoReader (.vectorForName in-rel "xt$valid_to") t/temporal-col-type)]
+                valid-from-rdr (-> (.vectorForName in-rel "xt$valid_from")
+                                   (.monoReader t/temporal-col-type))
+                valid-to-rdr (-> (.vectorForName in-rel "xt$valid_to")
+                                 (.monoReader t/temporal-col-type))]
 
             ;; once the SQL planner has select-star we can likely re-use a lot of that instead of the below...
             (dotimes [idx row-count]
               (let [old-row-id (.readLong row-id-rdr idx)
                     new-row-id (.nextRowId live-chunk)
                     iid (.readLong iid-rdr idx)
-                    start-app-time (.readLong app-time-start-rdr idx)
-                    end-app-time (.readLong app-time-end-rdr idx)]
-                (when (> start-app-time end-app-time)
-                  (throw (err/runtime-err :xtdb.indexer/invalid-app-times
-                                          {:app-time-start (util/micros->instant start-app-time)
-                                           :app-time-end (util/micros->instant end-app-time)})))
+                    valid-from (.readLong valid-from-rdr idx)
+                    valid-to (.readLong valid-to-rdr idx)]
+                (when (> valid-from valid-to)
+                  (throw (err/runtime-err :xtdb.indexer/invalid-valid-times
+                                          {:valid-from (util/micros->instant valid-from)
+                                           :valid-to (util/micros->instant valid-to)})))
 
                 (.writeRowId live-table new-row-id)
 
@@ -411,28 +413,28 @@
                                                                 (doto ^IRowCopier (->live-row-copier col)
                                                                   (.copyRow idx)))))))))))))))
 
-                (.logPut log-op-idxer iid new-row-id start-app-time end-app-time)
-                (.indexPut temporal-idxer iid new-row-id start-app-time end-app-time false)))))))))
+                (.logPut log-op-idxer iid new-row-id valid-from valid-to)
+                (.indexPut temporal-idxer iid new-row-id valid-from valid-to false)))))))))
 
 (defn- ->sql-delete-indexer ^xtdb.indexer.SqlOpIndexer [^ILogOpIndexer log-op-idxer, ^ITemporalTxIndexer temporal-idxer, ^ILiveChunkTx live-chunk]
   (reify SqlOpIndexer
     (indexOp [_ in-rel _query-opts]
       (let [row-count (.rowCount in-rel)
             iid-rdr (.monoReader (.vectorForName in-rel "_iid") :i64)
-            app-time-start-rdr (.monoReader (.vectorForName in-rel "xt$valid_from") t/temporal-col-type)
-            app-time-end-rdr (.monoReader (.vectorForName in-rel "xt$valid_to") t/temporal-col-type)]
+            valid-from-rdr (.monoReader (.vectorForName in-rel "xt$valid_from") t/temporal-col-type)
+            valid-to-rdr (.monoReader (.vectorForName in-rel "xt$valid_to") t/temporal-col-type)]
         (dotimes [idx row-count]
           (let [row-id (.nextRowId live-chunk)
                 iid (.readLong iid-rdr idx)
-                start-app-time (.readLong app-time-start-rdr idx)
-                end-app-time (.readLong app-time-end-rdr idx)]
-            (when (> start-app-time end-app-time)
-              (throw (err/runtime-err :xtdb.indexer/invalid-app-times
-                                      {:app-time-start (util/micros->instant start-app-time)
-                                       :app-time-end (util/micros->instant end-app-time)})))
+                valid-from (.readLong valid-from-rdr idx)
+                valid-to (.readLong valid-to-rdr idx)]
+            (when (> valid-from valid-to)
+              (throw (err/runtime-err :xtdb.indexer/invalid-valid-times
+                                      {:valid-from (util/micros->instant valid-from)
+                                       :valid-to (util/micros->instant valid-to)})))
 
-            (.logDelete log-op-idxer iid start-app-time end-app-time)
-            (.indexDelete temporal-idxer iid row-id start-app-time end-app-time false)))))))
+            (.logDelete log-op-idxer iid valid-from valid-to)
+            (.indexDelete temporal-idxer iid row-id valid-from valid-to false)))))))
 
 (defn- ->sql-erase-indexer ^xtdb.indexer.SqlOpIndexer [^ILogOpIndexer log-op-idxer, ^ITemporalTxIndexer temporal-idxer]
   (reify SqlOpIndexer

@@ -43,8 +43,8 @@
         "name" : "clj-form",
         "count" : 1,
         "VALIDITY" : [1],
-        "OFFSET" : [0,288],
-        "DATA" : ["#xt/runtime-err {:xtdb.error/error-type :runtime-error, :xtdb.error/error-key :xtdb.indexer/invalid-app-times, :xtdb.error/message \"Runtime error: ':xtdb.indexer/invalid-app-times'\", :app-time-start #time/instant \"2020-01-01T00:00:00Z\", :app-time-end #time/instant \"2019-01-01T00:00:00Z\"}"]
+        "OFFSET" : [0,284],
+        "DATA" : ["#xt/runtime-err {:xtdb.error/error-type :runtime-error, :xtdb.error/error-key :xtdb.indexer/invalid-valid-times, :xtdb.error/message \"Runtime error: ':xtdb.indexer/invalid-valid-times'\", :valid-from #time/instant \"2020-01-01T00:00:00Z\", :valid-to #time/instant \"2019-01-01T00:00:00Z\"}"]
       },{
         "name" : "null",
         "count" : 2

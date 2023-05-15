@@ -408,3 +408,12 @@ VALUES(1, OBJECT ('foo': OBJECT('bibble': true), 'bar': OBJECT('baz': 1001)))"]]
                       :in [tx-id]
                       :where [($ :xt/txs {:xt/id tx-id, :xt/committed? committed?})]}
                     0])))))
+
+(t/deftest test-nulling-valid-time-columns-2504
+  (xt/submit-tx tu/*node* [[:sql ["INSERT INTO docs (xt$id, xt$valid_from, xt$valid_to) VALUES (1, NULL, ?), (2, ?, NULL), (3, NULL, NULL)" #inst "3000", #inst "3000"]]])
+  (t/is (= [{:id 1, :vf (util/->zdt #inst "2020"), :vt (util/->zdt #inst "3000")}
+            {:id 2, :vf (util/->zdt #inst "3000"), :vt (util/->zdt util/end-of-time)}
+            {:id 3, :vf (util/->zdt #inst "2020"), :vt (util/->zdt util/end-of-time)}]
+         (xt/q tu/*node* '{:find [id vf vt]
+                           :where [($ :docs {:xt/id id, :xt/valid-from vf, :xt/valid-to vt}
+                                      {:for-valid-time :all-time})]}))))
