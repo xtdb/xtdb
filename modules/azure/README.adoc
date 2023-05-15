@@ -1,0 +1,61 @@
+# Azure Module
+
+Within our XTDB node, we can make use of Azure Services for certain purposes. Currently, we can:
+
+* Use *Azure Blob Storage* as the XTDB Object Store.
+
+### Project Dependency 
+
+In order to use any of the azure services, you will need to include a dependency on the xtdb.azure module.
+
+_deps.edn_
+```
+com.xtdb.labs/xtdb-azure {:mvn/version "2.0.0-SNAPSHOT"}
+```
+
+_pom.xml_
+```
+<dependency>
+    <groupId>com.xtdb.labs</groupId>
+    <artifactId>xtdb-azure</artifactId>
+    <version>2.0.0-SNAPSHOT</version>
+</dependency>
+```
+
+### Authentication
+
+Authentication for the components in the module is done via the https://learn.microsoft.com/en-us/java/api/com.azure.identity.defaultazurecredential?view=azure-java-stable[*DefaultAzureCredential*] class - you will need to setup authentication using any of the methods listed within the Azure documentation to be able to make use of the operations inside the modules.
+
+## Azure Blob Storage Object Store
+
+We can swap out the implementation of the object store with one based on Azure Blob Storage. To do so, we add the `xtdb.azure/blob-object-store` key within the integrant config for our node, alongside any config:
+```clojure
+{
+  ...
+  {:xtdb.azure/blob-object-store {:storage-account "storage-account"
+                                  :container "container"}}
+  ...
+}
+```
+
+### Parameters
+
+These are the following parameters that can be passed within the config for our `xtdb.azure/blob-object-store`:
+[cols="1,1,2,1"]
+|===
+| *Name* | *Type* | *Description* | *Required?*
+| `storage-account`
+| String
+| The https://learn.microsoft.com/en-us/azure/storage/common/storage-account-overview[storage account] that has the container to use as an object store
+| Yes
+
+| `container`
+| String 
+| The name of the https://learn.microsoft.com/en-us/azure/storage/blobs/storage-blobs-introduction#containers[container] to use an an object store
+| Yes
+
+|`prefix`
+| String 
+| A string to prefix all of your files with - for example, if "foo" is provided all xtdb files will be located under a "foo" directory
+| No
+|=== 
