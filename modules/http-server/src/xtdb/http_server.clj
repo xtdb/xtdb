@@ -333,7 +333,7 @@
                  ["/db" (-> {:get (db-handler xtdb-node)
                              :parameters {:query ::db-spec}
                              :summary "DB"
-                             :description "Get the resolved db-basis for the given valid-time/transactoin"}
+                             :description "Get the resolved db-basis for the given valid-time/transaction"}
                             (with-example "db-response"))]
                  ["/status" (-> {:muuntaja (status/->status-muuntaja opts)
                                  :summary "Status"
