@@ -370,6 +370,43 @@
 (defn pg-down []
   (sh/sh "docker-compose" "down" :dir "modules/jdbc"))
 
+(defn mysql-cfg
+  [{:keys [tx-port, doc-port]
+    :or {tx-port 3306
+         doc-port 3306}}]
+  {:xtdb/tx-log {:xtdb/module 'xtdb.jdbc/->tx-log
+                 :connection-pool {:dialect {:xtdb/module 'xtdb.jdbc.mysql/->dialect}
+                                   :pool-opts {}
+                                   :db-spec {:port tx-port
+                                             :dbname "tx",
+                                             :user "root",
+                                             :password "my-secret-pw"
+                                             :dbtype "mysql"}}}
+   :xtdb/document-store {:xtdb/module 'xtdb.jdbc/->document-store
+                         :connection-pool {:dialect {:xtdb/module 'xtdb.jdbc.mysql/->dialect}
+                                           :pool-opts {}
+                                           :db-spec {:port doc-port
+                                                     :dbname "docs",
+                                                     :user "root",
+                                                     :password "my-secret-pw"
+                                                     :dbtype "mysql"}}}})
+
+(defn mysql-reset [{:xtdb/keys [tx-log, document-store]}]
+  (when-some [db-spec (:db-spec (:connection-pool tx-log))]
+    (with-open [conn (jdbc/get-connection (dissoc db-spec :dbname))]
+      (jdbc/execute! conn ["DROP DATABASE IF EXISTS tx"])
+      (jdbc/execute! conn ["CREATE DATABASE tx"])))
+  (when-some [db-spec (:db-spec (:connection-pool document-store))]
+    (with-open [conn (jdbc/get-connection (dissoc db-spec :dbname))]
+      (jdbc/execute! conn ["DROP DATABASE IF EXISTS docs"])
+      (jdbc/execute! conn ["CREATE DATABASE docs"]))))
+
+(defn mysql-up []
+  (sh/sh "docker-compose" "up" "-d" "mysql" :dir "modules/jdbc"))
+
+(defn mysql-down []
+  (sh/sh "docker-compose" "down" :dir "modules/jdbc"))
+
 (defn memory-doc-store []
   (let [kv-store (xtdb.mem-kv/->kv-store)]
     (xtdb.kv.document-store/->document-store
@@ -633,6 +670,11 @@
             (fn [node-idx]
               (assoc @pg-cfg :xtdb/index-store {:kv-store (get-kv-cfg node-idx)})))
 
+          get-mysql-node-cfg
+          (let [mysql-cfg (delay (doto (mysql-cfg (:pg storage)) (mysql-reset)))]
+            (fn [node-idx]
+              (assoc @mysql-cfg :xtdb/index-store {:kv-store (get-kv-cfg node-idx)})))
+
           get-mem-node-cfg
           (let [tx-log (delay (memory-tx-log))
                 doc-store (delay (memory-doc-store))]
@@ -641,7 +683,7 @@
                :xtdb/tx-log {:xtdb/module (fn [& _] (tx-log-proxy (assoc (:tx-log storage) :tx-log @tx-log)))}
                :xtdb/document-store {:xtdb/module (fn [& _] (doc-store-proxy (assoc (:doc-store storage) :doc-store @doc-store)))}}))
 
-          get-node-cfg (if (:pg storage) get-pg-node-cfg get-mem-node-cfg)
+          get-node-cfg (cond (:pg storage) get-pg-node-cfg, (:mysql storage) get-mysql-node-cfg, :else get-mem-node-cfg)
           node-refs (vec (repeatedly node-count #(volatile! nil)))
           restarts (vec (repeatedly node-count #(volatile! [])))
           rng (Random. 34234324234)
@@ -807,11 +849,16 @@
     (print-report (test-model opts))))
 
 (comment
+
   (pg-up)
-
   (pg-down)
-
   (pg-reset (pg-cfg {}))
+
+  (mysql-up)
+  (mysql-down)
+  (mysql-reset (mysql-cfg {}))
+
+  (print-test {:storage {:mysql {}}})
 
   (print-test {})
   (print-test {:model (counter-model {})})
