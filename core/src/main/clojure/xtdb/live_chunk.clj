@@ -452,7 +452,8 @@
                              (.finishChunk metadata-mgr chunk-idx
                                            {:latest-completed-tx latest-completed-tx
                                             :latest-row-id (dec (+ chunk-idx (.chunkRowCount row-counter)))
-                                            :tables (into {} (keep deref) futs)}))))))
+                                            :tables (-> (into {} (keep deref) futs)
+                                                        (util/rethrowing-cause))}))))))
 
   (nextChunk [this]
     (run! util/try-close (.values live-tables))

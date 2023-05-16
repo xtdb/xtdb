@@ -12,7 +12,7 @@
            [java.time Duration Instant]
            java.time.Instant
            [java.util List Map Properties]
-           [java.util.concurrent CompletableFuture ExecutionException]
+           [java.util.concurrent CompletableFuture]
            [org.apache.kafka.clients.admin AdminClient NewTopic TopicDescription]
            [org.apache.kafka.clients.consumer ConsumerRecord KafkaConsumer]
            [org.apache.kafka.clients.producer Callback KafkaProducer ProducerRecord]
@@ -122,11 +122,9 @@
     (or (when-let [^TopicDescription
                    desc (-> (try
                               (let [^List topics [topic-name]]
-                                @(.all (.describeTopics admin-client topics)))
-                              (catch ExecutionException e
-                                (let [e (.getCause e)]
-                                  (when-not (instance? UnknownTopicOrPartitionException e)
-                                    (throw e)))))
+                                (-> @(.all (.describeTopics admin-client topics))
+                                    (util/rethrowing-cause)))
+                              (catch UnknownTopicOrPartitionException _))
                             (get topic-name))]
           (let [partition-count (count (.partitions desc))]
             (when-not (= 1 partition-count)
@@ -140,12 +138,10 @@
                                            ^short (short replication-factor))
                             (.configs topic-config))]
             (try
-              @(.all (.createTopics admin-client [new-topic]))
+              (-> @(.all (.createTopics admin-client [new-topic]))
+                  (util/rethrowing-cause))
               :created
-              (catch ExecutionException e
-                (let [cause (.getCause e)]
-                  (when-not (instance? TopicExistsException cause)
-                    (throw e)))))))
+              (catch TopicExistsException _))))
 
         (throw (IllegalStateException. (format "Topic '%s' does not exist", topic-name))))))
 

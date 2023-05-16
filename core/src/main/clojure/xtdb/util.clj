@@ -19,7 +19,7 @@
            [java.time Duration Instant LocalDate LocalDateTime LocalTime OffsetDateTime ZoneId ZonedDateTime]
            java.time.temporal.ChronoUnit
            [java.util ArrayList Collections Date HashMap Iterator LinkedHashMap LinkedList Map Queue UUID WeakHashMap]
-           [java.util.concurrent CompletableFuture ExecutorService Executors ThreadFactory TimeUnit]
+           [java.util.concurrent CompletableFuture ExecutionException ExecutorService Executors ThreadFactory TimeUnit]
            [java.util.function BiFunction Consumer Function Supplier]
            [org.apache.arrow.compression CommonsCompressionFactory]
            [org.apache.arrow.flatbuf Footer Message RecordBatch]
@@ -43,6 +43,12 @@
       (.close ^AutoCloseable c))
     (catch Exception e
       (log/warn e "could not close"))))
+
+(defmacro rethrowing-cause [form]
+  `(try
+     ~form
+     (catch ExecutionException e#
+       (throw (.getCause e#)))))
 
 (defn uuid->bytes ^bytes [^UUID uuid]
   (let [bb (doto (ByteBuffer/allocate 16)

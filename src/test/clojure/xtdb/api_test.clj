@@ -4,8 +4,7 @@
             [xtdb.node :as node]
             [xtdb.test-util :as tu :refer [*node*]]
             [xtdb.util :as util])
-  (:import (java.time Duration ZoneId)
-           java.util.concurrent.ExecutionException))
+  (:import (java.time Duration ZoneId)))
 
 (t/use-fixtures :each
   (tu/with-each-api-implementation
@@ -30,16 +29,12 @@
 
 (t/deftest test-validation-errors
   (t/is (thrown? IllegalArgumentException
-                 (try
-                   (xt/submit-tx *node* [[:pot :xt_docs {:xt/id :foo}]])
-                   (catch ExecutionException e
-                     (throw (.getCause e))))))
+                 (-> (xt/submit-tx *node* [[:pot :xt_docs {:xt/id :foo}]])
+                     (util/rethrowing-cause))))
 
   (t/is (thrown? IllegalArgumentException
-                 (try
-                   (xt/submit-tx *node* [[:put :xt_docs {}]])
-                   (catch ExecutionException e
-                     (throw (.getCause e)))))))
+                 (-> (xt/submit-tx *node* [[:put :xt_docs {}]])
+                     (util/rethrowing-cause)))))
 
 (t/deftest round-trips-lists
   (let [tx (xt/submit-tx *node* '[[:put :xt_docs {:xt/id :foo, :list [1 2 ["foo" "bar"]]}]
@@ -399,18 +394,12 @@
                     :xt$valid_to (util/->zdt util/end-of-time)}}
                  (q tx1)))))))
 
-(defmacro with-unwrapped-execution-exception [& body]
-  `(try
-     ~@body
-     (catch ExecutionException e#
-       (throw (.getCause e#)))))
-
 (t/deftest throws-static-tx-op-errors-on-submit-346
   (t/is (thrown-with-msg?
          xtdb.IllegalArgumentException
          #"Invalid SQL query: Parse error at line 1"
          (-> (xt/submit-tx tu/*node* [[:sql "INSERT INTO foo (xt$id, dt) VALUES ('id', DATE \"2020-01-01\")"]])
-             (with-unwrapped-execution-exception)))
+             (util/rethrowing-cause)))
         "parse error - date with double quotes")
 
   (t/testing "semantic errors"
@@ -418,19 +407,19 @@
            xtdb.IllegalArgumentException
            #"XTDB requires fully-qualified columns"
            (-> (xt/submit-tx tu/*node* [[:sql "UPDATE foo SET bar = 'bar' WHERE id = 'foo'"]])
-               (with-unwrapped-execution-exception))))
+               (util/rethrowing-cause))))
 
     (t/is (thrown-with-msg?
            xtdb.IllegalArgumentException
            #"INSERT does not contain mandatory xt\$id column"
            (-> (xt/submit-tx tu/*node* [[:sql "INSERT INTO users (foo, bar) VALUES ('foo', 'bar')"]])
-               (with-unwrapped-execution-exception))))
+               (util/rethrowing-cause))))
 
     (t/is (thrown-with-msg?
            xtdb.IllegalArgumentException
            #"Column name duplicated"
            (-> (xt/submit-tx tu/*node* [[:sql "INSERT INTO users (xt$id, foo, foo) VALUES ('foo', 'foo', 'foo')"]])
-               (with-unwrapped-execution-exception)))))
+               (util/rethrowing-cause)))))
 
   (t/testing "still an active node"
     (xt/submit-tx tu/*node* [[:sql "INSERT INTO users (xt$id, name) VALUES ('dave', 'Dave')"]])

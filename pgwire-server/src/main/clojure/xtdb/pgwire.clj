@@ -2073,11 +2073,10 @@
 
     (defn i [& rows]
       (assert (:node server) "No running pgwire!")
-      (->> (for [row rows
-                 :let [auto-id (str "pgwire-" (random-uuid))]]
-             [:put (merge {:xt/id auto-id} row)])
-           (xt/submit-tx (:node server))
-           deref))
+      (xt/submit-tx (:node server)
+                    (for [row rows
+                          :let [auto-id (str "pgwire-" (random-uuid))]]
+                      [:put (merge {:xt/id auto-id} row)])))
 
     (defn read-xtdb [o]
       (if (instance? org.postgresql.util.PGobject o)

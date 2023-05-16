@@ -2,21 +2,19 @@
   (:require [clojure.test :as t]
             [xtdb.object-store :as os]
             [xtdb.test-util :as tu]
-            [juxt.clojars-mirrors.integrant.core :as ig])
+            [juxt.clojars-mirrors.integrant.core :as ig]
+            [xtdb.util :as util])
   (:import xtdb.object_store.ObjectStore
            java.io.Closeable
            java.nio.ByteBuffer
            java.nio.charset.StandardCharsets
            java.nio.file.attribute.FileAttribute
-           java.nio.file.Files
-           java.util.concurrent.ExecutionException))
+           java.nio.file.Files))
 
 (defn- get-object [^ObjectStore obj-store, k]
-  (try
-    (let [^ByteBuffer buf @(.getObject obj-store (name k))]
-      (read-string (str (.decode StandardCharsets/UTF_8 buf))))
-    (catch ExecutionException e
-      (throw (.getCause e)))))
+  (-> (let [^ByteBuffer buf @(.getObject obj-store (name k))]
+        (read-string (str (.decode StandardCharsets/UTF_8 buf))))
+      (util/rethrowing-cause)))
 
 (defn- put-object [^ObjectStore obj-store k obj]
   (let [^ByteBuffer buf (.encode StandardCharsets/UTF_8 (pr-str obj))]

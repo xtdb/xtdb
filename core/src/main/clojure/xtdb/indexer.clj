@@ -393,25 +393,26 @@
                     (doto ^IRowCopier (->live-row-copier live-col)
                       (.copyRow 0)))
 
-                  (when-let [{:keys [^long chunk-idx ^long block-idx, col-names]}
-                             (meta/row-id->chunk metadata-mgr table old-row-id)]
-                    (let [idx @(-> (.getBuffer buffer-pool (meta/->chunk-obj-key chunk-idx table "_row_id"))
-                                   (util/then-apply #(row-id->idx % block-idx old-row-id)))]
+                  (-> (when-let [{:keys [^long chunk-idx ^long block-idx, col-names]}
+                                 (meta/row-id->chunk metadata-mgr table old-row-id)]
+                        (let [idx @(-> (.getBuffer buffer-pool (meta/->chunk-obj-key chunk-idx table "_row_id"))
+                                       (util/then-apply #(row-id->idx % block-idx old-row-id)))]
 
-                      (doseq [^String col-name col-names
-                              :when (not (contains? update-col-copiers col-name))]
-                        @(-> (.getBuffer buffer-pool (meta/->chunk-obj-key chunk-idx table col-name))
-                             (util/then-apply
-                               (fn [buf]
-                                 (with-open [chunks (util/->chunks buf {:block-idxs (doto (RoaringBitmap.)
-                                                                                      (.add block-idx))
-                                                                        :close-buffer? true})]
-                                   (-> chunks
-                                       (.forEachRemaining (reify Consumer
-                                                            (accept [_ block-root]
-                                                              (let [col (iv/->direct-vec (.getVector ^VectorSchemaRoot block-root col-name))]
-                                                                (doto ^IRowCopier (->live-row-copier col)
-                                                                  (.copyRow idx)))))))))))))))
+                          (doseq [^String col-name col-names
+                                  :when (not (contains? update-col-copiers col-name))]
+                            @(-> (.getBuffer buffer-pool (meta/->chunk-obj-key chunk-idx table col-name))
+                                 (util/then-apply
+                                   (fn [buf]
+                                     (with-open [chunks (util/->chunks buf {:block-idxs (doto (RoaringBitmap.)
+                                                                                          (.add block-idx))
+                                                                            :close-buffer? true})]
+                                       (-> chunks
+                                           (.forEachRemaining (reify Consumer
+                                                                (accept [_ block-root]
+                                                                  (let [col (iv/->direct-vec (.getVector ^VectorSchemaRoot block-root col-name))]
+                                                                    (doto ^IRowCopier (->live-row-copier col)
+                                                                      (.copyRow idx))))))))))))))
+                      (util/rethrowing-cause)))
 
                 (.logPut log-op-idxer iid new-row-id valid-from valid-to)
                 (.indexPut temporal-idxer iid new-row-id valid-from valid-to false)))))))))

@@ -452,7 +452,8 @@
           @(CompletableFuture/allOf (into-array CompletableFuture futs))
           (doseq [chunk-idx new-chunk-idxs
                   :let [obj-key (->temporal-obj-key chunk-idx)
-                        chunk-kd-tree (grid/->arrow-buf-grid  @(.getBuffer buffer-pool obj-key))]]
+                        chunk-kd-tree (grid/->arrow-buf-grid (-> @(.getBuffer buffer-pool obj-key)
+                                                                 (util/rethrowing-cause)))]]
             (swap! kd-tree #(if %
                               (kd/->merged-kd-tree % chunk-kd-tree)
                               chunk-kd-tree)))
@@ -463,7 +464,8 @@
 
   (reloadTemporalIndex [this chunk-idx snapshot-idx]
     (if snapshot-idx
-      (let [^ArrowBuf temporal-buffer @(.getBuffer buffer-pool (->temporal-snapshot-obj-key snapshot-idx))]
+      (let [^ArrowBuf temporal-buffer (-> @(.getBuffer buffer-pool (->temporal-snapshot-obj-key snapshot-idx))
+                                          (util/rethrowing-cause))]
         (set! (.kd-tree this) (kd/->merged-kd-tree
                                (.buildStaticTree this
                                                  (grid/->arrow-buf-grid temporal-buffer)
@@ -485,26 +487,30 @@
               (util/instant->micros (.system-time latest-completed-tx))))))
 
   (awaitSnapshotBuild [_]
-    (some-> snapshot-future (deref)))
+    (-> (some-> snapshot-future (deref))
+        (util/rethrowing-cause)))
 
   (buildTemporalSnapshot [this chunk-idx snapshot-idx]
     (let [new-snapshot-obj-key (->temporal-snapshot-obj-key chunk-idx)
           path (util/->temp-file "temporal-snapshot" "")]
       (try
         (if snapshot-idx
-          (let [^ArrowBuf temporal-buffer @(.getBuffer buffer-pool (->temporal-snapshot-obj-key snapshot-idx))]
+          (let [^ArrowBuf temporal-buffer (-> @(.getBuffer buffer-pool (->temporal-snapshot-obj-key snapshot-idx))
+                                              (util/rethrowing-cause))]
             (with-open [kd-tree (.buildStaticTree this
                                                   (grid/->arrow-buf-grid temporal-buffer)
                                                   chunk-idx
                                                   snapshot-idx)]
               (let [temporal-buf (-> (grid/->disk-grid allocator path kd-tree {:k k})
                                      (util/->mmap-path))]
-                @(.putObject object-store new-snapshot-obj-key temporal-buf))))
+                (-> @(.putObject object-store new-snapshot-obj-key temporal-buf)
+                    (util/rethrowing-cause)))))
           (when-let [kd-tree (.buildStaticTree this nil chunk-idx snapshot-idx)]
             (with-open [^AutoCloseable kd-tree kd-tree]
               (let [temporal-buf (-> (grid/->disk-grid allocator path kd-tree {:k k})
                                      (util/->mmap-path))]
-                @(.putObject object-store new-snapshot-obj-key temporal-buf)))))
+                (-> @(.putObject object-store new-snapshot-obj-key temporal-buf)
+                    (util/rethrowing-cause))))))
         (finally
           (util/delete-file path)))))
 
@@ -542,7 +548,8 @@
                                                     :cell-size 256
                                                     :deletes? true})
                                  (util/->mmap-path))]
-            @(.putObject object-store new-temporal-obj-key temporal-buf))
+            (-> @(.putObject object-store new-temporal-obj-key temporal-buf)
+                (util/rethrowing-cause)))
           (finally
             (util/delete-file path)))))
     (.awaitSnapshotBuild this)

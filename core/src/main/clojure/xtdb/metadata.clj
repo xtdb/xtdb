@@ -473,7 +473,8 @@
     (open-table-meta-writer allocator object-store table-name chunk-idx))
 
   (finishChunk [this chunk-idx new-chunk-metadata]
-    @(.putObject object-store (->chunk-metadata-obj-key chunk-idx) (write-chunk-metadata new-chunk-metadata))
+    (-> @(.putObject object-store (->chunk-metadata-obj-key chunk-idx) (write-chunk-metadata new-chunk-metadata))
+        (util/rethrowing-cause))
     (set! (.col-types this) (merge-col-types col-types new-chunk-metadata))
     (.put chunks-metadata chunk-idx new-chunk-metadata))
 
@@ -524,7 +525,8 @@
              (fn [table-meta]
                (.apply f chunk-idx table-meta)))))
        vec
-       (into [] (keep deref))))
+       (into [] (keep deref))
+       (util/rethrowing-cause)))
 
 (defn matching-chunks [^IMetadataManager metadata-mgr, table-name, ^IMetadataPredicate metadata-pred]
   (with-all-metadata metadata-mgr table-name

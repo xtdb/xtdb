@@ -50,6 +50,7 @@
     (doseq [[chunk-idx chunk-metadata] (.chunksMetadata metadata-mgr)
             table (keys (:tables chunk-metadata))]
       (with-open [id-chunks (-> @(.getBuffer buffer-pool (meta/->chunk-obj-key chunk-idx table "xt$id"))
+                                (util/rethrowing-cause)
                                 (util/->chunks {:close-buffer? true}))
                   row-id-chunks (-> @(.getBuffer buffer-pool (meta/->chunk-obj-key chunk-idx table "_row_id"))
                                     (util/->chunks {:close-buffer? true}))]

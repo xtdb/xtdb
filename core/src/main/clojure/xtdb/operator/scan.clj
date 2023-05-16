@@ -1,6 +1,7 @@
 (ns xtdb.operator.scan
   (:require [clojure.set :as set]
             [clojure.spec.alpha :as s]
+            [juxt.clojars-mirrors.integrant.core :as ig]
             [xtdb.bloom :as bloom]
             [xtdb.buffer-pool :as bp]
             [xtdb.coalesce :as coalesce]
@@ -14,25 +15,23 @@
             [xtdb.util :as util]
             [xtdb.vector :as vec]
             [xtdb.vector.indirect :as iv]
-            xtdb.watermark
-            [juxt.clojars-mirrors.integrant.core :as ig]
-            [clojure.string :as str])
+            xtdb.watermark)
   (:import (clojure.lang IPersistentSet MapEntry)
+           (java.util HashMap LinkedList List Map Queue Set)
+           (java.util.function BiFunction Consumer)
+           java.util.stream.IntStream
+           org.apache.arrow.memory.BufferAllocator
+           (org.apache.arrow.vector BigIntVector VarBinaryVector)
+           (org.roaringbitmap IntConsumer RoaringBitmap)
+           org.roaringbitmap.buffer.MutableRoaringBitmap
+           (org.roaringbitmap.longlong Roaring64Bitmap)
            xtdb.api.TransactionInstant
            xtdb.buffer_pool.IBufferPool
            xtdb.ICursor
            (xtdb.metadata IMetadataManager ITableMetadata)
            xtdb.operator.IRelationSelector
            (xtdb.vector IIndirectRelation IIndirectVector)
-           xtdb.watermark.IWatermark
-           [java.util HashMap LinkedList List Map Queue Set]
-           [java.util.function BiFunction Consumer]
-           java.util.stream.IntStream
-           org.apache.arrow.memory.BufferAllocator
-           [org.apache.arrow.vector BigIntVector VarBinaryVector]
-           [org.roaringbitmap IntConsumer RoaringBitmap]
-           org.roaringbitmap.buffer.MutableRoaringBitmap
-           (org.roaringbitmap.longlong Roaring64Bitmap)))
+           xtdb.watermark.IWatermark))
 
 (s/def ::table symbol?)
 
@@ -123,6 +122,7 @@
                            (remove nil?)
                            vec
                            (into {} (map deref))
+                           (util/rethrowing-cause)
                            (util/combine-col-cursors)))
 
                 (recur))
