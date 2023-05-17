@@ -115,7 +115,7 @@
 (defrecord JdbcDocumentStore [pool dialect]
   db/DocumentStore
   (submit-docs [_ id-and-docs]
-    (jdbc/with-transaction [tx pool]
+    (jdbc/with-transaction [tx pool {:isolation :read-committed}]
       (doseq [[id doc] (->> (for [[id doc] id-and-docs]
                               (MapEntry/create (str id) doc))
                             (sort-by key))]
