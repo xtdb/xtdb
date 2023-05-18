@@ -51,6 +51,7 @@
                                                    (try
                                                      (.readRecords log after-tx-id 100)
                                                      (catch ClosedChannelException e (throw e))
+                                                     (catch InterruptedException e (throw e))
                                                      (catch Exception e
                                                        (log/warn e "Error polling for txs, will retry"))))]
                             (when (Thread/interrupted)
