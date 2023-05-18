@@ -45,11 +45,6 @@
   (-> opts
       (update-in [:basis :after-tx] xtp/max-tx (get-in opts [:basis :tx]))))
 
-(defn- ->sql+args [sql-or-sql+args]
-  (if (vector? sql-or-sql+args)
-    sql-or-sql+args
-    [sql-or-sql+args]))
-
 (defrecord Node [^BufferAllocator allocator
                  ^Ingester ingester, ^IIndexer indexer
                  ^ITxProducer tx-producer
@@ -58,24 +53,21 @@
                  !latest-submitted-tx
                  system, close-fn]
   xtp/PNode
-  (open-datalog& [_ query opts]
-    (let [opts (-> (into {:default-tz default-tz} opts)
-                   (with-after-tx-default))]
-      (-> (.awaitTxAsync ingester (get-in opts [:basis :after-tx]) (:basis-timeout query))
-          (util/then-apply
-            (fn [_]
-              (d/open-datalog-query allocator ra-src wm-src scan-emitter query opts))))))
-
-  (open-sql& [_ sql+args query-opts]
-    (let [[sql & args] (->sql+args sql+args)
-          query-opts (-> (into {:default-tz default-tz, :args args} query-opts)
+  (open-query& [_ query query-opts]
+    (let [query-opts (-> (into {:default-tz default-tz} query-opts)
                          (with-after-tx-default))
-          !await-tx (.awaitTxAsync ingester (get-in query-opts [:basis :after-tx]) (:basis-timeout query-opts))
-          pq (.prepareRaQuery ra-src (sql/compile-query sql query-opts))]
-      (-> !await-tx
-          (util/then-apply
-            (fn [_]
-              (sql/open-sql-query allocator wm-src pq query-opts))))))
+          !await-tx (.awaitTxAsync ingester (get-in query-opts [:basis :after-tx]) (:basis-timeout query-opts))]
+      (if (string? query)
+        (let [pq (.prepareRaQuery ra-src (sql/compile-query query query-opts))]
+          (-> !await-tx
+              (util/then-apply
+                (fn [_]
+                  (sql/open-sql-query allocator wm-src pq query-opts)))))
+
+        (-> !await-tx
+            (util/then-apply
+              (fn [_]
+                (d/open-datalog-query allocator ra-src wm-src scan-emitter query query-opts)))))))
 
   (latest-submitted-tx [_] @!latest-submitted-tx)
 

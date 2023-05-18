@@ -625,7 +625,7 @@
           (with-open [conn (jdbc-conn)
                       stmt (.prepareStatement conn "select a.a from a")]
             (try
-              (with-redefs [pgwire/open-sql& (fn [& _] (deliver stmt-promise stmt) (CompletableFuture.))]
+              (with-redefs [pgwire/open-query& (fn [& _] (deliver stmt-promise stmt) (CompletableFuture.))]
                 (with-open [_rs (.executeQuery stmt)]
                   :not-cancelled))
               (catch PSQLException e
@@ -748,7 +748,7 @@
 
         (testing "query crash during plan"
           (with-redefs [clojure.tools.logging/logf (constantly nil)
-                        xtp/open-sql& (fn [& _] (CompletableFuture/failedFuture (Throwable. "oops")))]
+                        xtp/open-query& (fn [& _] (CompletableFuture/failedFuture (Throwable. "oops")))]
             (send "select a.a from (values (42)) a (a);\n")
             (is (str/includes? (read :err) "unexpected server error during query execution")))
 
@@ -758,11 +758,12 @@
 
         (testing "query crash during result set iteration"
           (with-redefs [clojure.tools.logging/logf (constantly nil)
-                        xtp/open-sql& (fn [& _] (CompletableFuture/completedFuture
-                                                (reify IResultSet
-                                                  (hasNext [_] true)
-                                                  (next [_] (throw (Throwable. "oops")))
-                                                  (close [_]))))]
+                        xtp/open-query& (fn [& _]
+                                          (CompletableFuture/completedFuture
+                                           (reify IResultSet
+                                             (hasNext [_] true)
+                                             (next [_] (throw (Throwable. "oops")))
+                                             (close [_]))))]
             (send "select a.a from (values (42)) a (a);\n")
             (is (str/includes? (read :err) "unexpected server error during query execution")))
 

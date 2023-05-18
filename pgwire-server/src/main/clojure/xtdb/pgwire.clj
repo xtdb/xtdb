@@ -1458,9 +1458,9 @@
                                :update_statement__searched "UPDATE 0"
                                :erase_statement__searched "ERASE 0")})))
 
-(defn- open-sql& [node query opts]
+(defn- open-query& [node query opts]
   ;; because we can't with-redefs a protocol fn in the tests 🙄
-  (xtp/open-sql& node query opts))
+  (xtp/open-query& node query opts))
 
 (defn cmd-exec-query
   "Given a statement of type :query will execute it against the servers :node and send the results."
@@ -1484,7 +1484,7 @@
         ;; execute the query asynchronously (to enable later enable cancellation mid query)
         ^CompletableFuture
         query-fut (try
-                    (open-sql& node transformed-query query-opts)
+                    (open-query& node transformed-query query-opts)
                     (catch Throwable e (CompletableFuture/failedFuture e)))]
 
     ;; keep the fut around in case of interrupt exc (for cleanup)

@@ -113,8 +113,7 @@
 
     (reify
       xtp/PNode
-      (open-datalog& [_ query args] (xtp/open-datalog& node query args))
-      (open-sql& [_ query query-opts] (xtp/open-sql& node query query-opts))
+      (open-query& [_ query args] (xtp/open-query& node query args))
       (latest-submitted-tx [_] (xtp/latest-submitted-tx node))
 
       xtp/PStatus

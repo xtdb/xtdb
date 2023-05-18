@@ -19,7 +19,7 @@
    :encode {:handlers xt.transit/tj-write-handlers}})
 
 (def router
-  (r/router xt/http-routes))
+  (r/router xtp/http-routes))
 
 (defn- handle-err [e]
   (throw (or (when-let [body (:body (ex-data e))]
@@ -77,25 +77,7 @@
 
 (defrecord XtdbClient [base-url, !latest-submitted-tx]
   xtp/PNode
-  (open-datalog& [client query opts]
-    (let [basis-tx (get-in opts [:basis :tx])
-          ^CompletableFuture !basis-tx (if (instance? CompletableFuture basis-tx)
-                                         basis-tx
-                                         (CompletableFuture/completedFuture basis-tx))]
-      (-> !basis-tx
-          (.thenCompose (reify Function
-                          (apply [_ basis-tx]
-                            (request client :post :datalog-query
-                                     {:content-type :transit+json
-                                      :form-params (-> (into {:query query} opts)
-                                                       (assoc-in [:basis :tx] basis-tx)
-                                                       (update :basis xtp/after-latest-submitted-tx client))
-                                      :as ::transit+json->resultset}))))
-          (.thenApply (reify Function
-                        (apply [_ resp]
-                          (:body resp)))))))
-
-  (open-sql& [client sql {:keys [basis] :as query-opts}]
+  (open-query& [client query {:keys [basis] :as query-opts}]
     (let [{basis-tx :tx} basis
           ^CompletableFuture !basis-tx (if (instance? CompletableFuture basis-tx)
                                          basis-tx
@@ -103,10 +85,10 @@
       (-> !basis-tx
           (.thenCompose (reify Function
                           (apply [_ basis-tx]
-                            (request client :post :sql-query
+                            (request client :post :query
                                      {:content-type :transit+json
                                       :form-params (-> query-opts
-                                                       (assoc :query sql)
+                                                       (assoc :query query)
                                                        (assoc-in [:basis :tx] basis-tx)
                                                        (update :basis xtp/after-latest-submitted-tx client))
                                       :as ::transit+json->resultset}))))

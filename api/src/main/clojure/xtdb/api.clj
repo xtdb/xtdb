@@ -33,21 +33,6 @@
      (catch ExecutionException e#
        (throw (.getCause e#)))))
 
-(def http-routes
-  [["/status" {:name :status
-               :summary "Status"
-               :description "Get status information from the node"}]
-
-   ["/tx" {:name :tx
-           :summary "Transaction"
-           :description "Submits a transaction to the cluster"}]
-
-   ["/datalog" {:name :datalog-query
-                :summary "Datalog Query"}]
-
-   ["/sql" {:name :sql-query
-            :summary "SQL"}]])
-
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (defn q&
   "asynchronously query an XTDB node.
@@ -109,10 +94,7 @@
                   (assoc :args args)
                   (update :basis xtp/after-latest-submitted-tx node))]
 
-     (-> (if (string? q)
-           (xtp/open-sql& node q opts)
-           (xtp/open-datalog& node q opts))
-
+     (-> (xtp/open-query& node q opts)
          (.thenApply
           (reify Function
             (apply [_ res]

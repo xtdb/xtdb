@@ -21,7 +21,6 @@
             [spec-tools.core :as st]
             [xtdb.api :as xt]
             [xtdb.api.protocols :as xtp]
-            [xtdb.datalog :as d]
             [xtdb.error :as err]
             [xtdb.node :as node]
             [xtdb.transit :as xt.transit]
@@ -97,34 +96,15 @@
   (st/spec (s/nilable #(instance? Duration %))
            {:decode/string (fn [_ s] (some-> s Duration/parse))}))
 
+(s/def ::query (some-fn string? map?))
+
 (s/def ::args (s/nilable (s/coll-of any? :kind vector?)))
 
-(s/def :xtdb.server.datalog/query-body
-  (s/keys :req-un [::d/query],
-          :opt-un [::args ::basis ::basis-timeout ::default-tz]))
-
-(defmethod route-handler :datalog-query [_]
-  {:muuntaja (m/create (-> muuntaja-opts
-                           (assoc :return :output-stream)
-
-                           (assoc-in [:formats "application/transit+json" :encoder]
-                                     [->tj-resultset-encoder {:handlers xt.transit/tj-write-handlers}])))
-
-   :post {:handler (fn [{:keys [node parameters]}]
-                     (let [{{:keys [query] :as body} :body} parameters]
-                       (-> (xtp/open-datalog& node query (dissoc body :query))
-                           (util/then-apply (fn [res]
-                                              {:status 200, :body res})))))
-
-          :parameters {:body :xtdb.server.datalog/query-body}}})
-
-(s/def :xtdb.server.sql/query string?)
-
-(s/def :xtdb.server.sql/query-body
-  (s/keys :req-un [:xtdb.server.sql/query],
+(s/def ::query-body
+  (s/keys :req-un [::query],
           :opt-un [::basis ::basis-timeout ::args ::default-all-valid-time? ::default-tz]))
 
-(defmethod route-handler :sql-query [_]
+(defmethod route-handler :query [_]
   {:muuntaja (m/create (-> muuntaja-opts
                            (assoc :return :output-stream)
 
@@ -132,12 +112,12 @@
                                      [->tj-resultset-encoder {:handlers xt.transit/tj-write-handlers}])))
 
    :post {:handler (fn [{:keys [node parameters]}]
-                     (let [{{:keys [query args] :as query-opts} :body} parameters]
-                       (-> (xtp/open-sql& node (into [query] args) (dissoc query-opts :query :args))
+                     (let [{{:keys [query] :as query-opts} :body} parameters]
+                       (-> (xtp/open-query& node query (dissoc query-opts :query))
                            (util/then-apply (fn [res]
                                               {:status 200, :body res})))))
 
-          :parameters {:body :xtdb.server.sql/query-body}}})
+          :parameters {:body ::query-body}}})
 
 (defn- handle-ex-info [ex _req]
   {:status 400, :body ex})
@@ -154,7 +134,7 @@
                           {::err/message (str "Malformed " (-> ex ex-data :format pr-str) " request.")})})
 
 (def router
-  (http/router xt/http-routes
+  (http/router xtp/http-routes
                {:expand (fn [{route-name :name, :as route} opts]
                           (r/expand (cond-> route
                                       route-name (merge (route-handler route)))
