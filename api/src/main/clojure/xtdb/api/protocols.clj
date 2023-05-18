@@ -34,4 +34,7 @@
            :description "Submits a transaction to the cluster"}]
 
    ["/query" {:name :query
-              :summary "Query"}]])
+              :summary "Query"}]
+
+   ["/swagger.json" {:name :swagger-json
+                     :no-doc true}]])

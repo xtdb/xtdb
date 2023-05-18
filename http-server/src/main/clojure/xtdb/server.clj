@@ -6,6 +6,7 @@
             [juxt.clojars-mirrors.integrant.core :as ig]
             [muuntaja.core :as m]
             [muuntaja.format.core :as mf]
+            [muuntaja.format.json :as mj]
             [reitit.coercion :as r.coercion]
             [reitit.coercion.spec :as rc.spec]
             [reitit.core :as r]
@@ -118,6 +119,13 @@
                                               {:status 200, :body res})))))
 
           :parameters {:body ::query-body}}})
+
+(defmethod route-handler :swagger-json [_]
+  {:get {:no-doc true
+         :swagger {:info {:title "XTDB"}}
+         :handler (r.swagger/create-swagger-handler)
+         :muuntaja (m/create (-> m/default-options
+                                 (m/select-formats #{"application/json"})))}})
 
 (defn- handle-ex-info [ex _req]
   {:status 400, :body ex})
