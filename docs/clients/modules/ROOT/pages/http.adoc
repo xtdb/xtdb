@@ -135,7 +135,7 @@ curl -X GET \
 .*Optional Parameters*
 * `valid-time` (date, defaulting to now)
 * `tx-time` (date, defaulting to latest transaction time)
-* `tx-id` (date, defaulting to latest transaction id)
+* `tx-id` (integer, defaulting to latest transaction id)
 
 ==== Response
 
@@ -293,7 +293,7 @@ curl -X GET \
 .*Optional Parameters*
 * `valid-time` (date, defaulting to now)
 * `tx-time` (date, defaulting to latest transaction time)
-* `tx-id` (date, defaulting to latest transaction id)
+* `tx-id` (integer, defaulting to latest transaction id)
 
 ==== Response
 
@@ -362,7 +362,7 @@ curl -g \
 .*Optional Parameters*
 * `valid-time` (date, defaulting to now)
 * `tx-time` (date, defaulting to latest transaction time)
-* `tx-id` (date, defaulting to latest transaction id)
+* `tx-id` (integer, defaulting to latest transaction id)
 * `in-args-edn` (EDN URL encoded :in binding arguments)
 * `in-args-json` (JSON URL encoded :in binding arguments)
 
@@ -425,7 +425,7 @@ You can also accept `application/json` from this endpoint, but currently the onl
 .*Optional Parameters*
 * `valid-time` (date, defaulting to now)
 * `tx-time` (date, defaulting to latest transaction time)
-* `tx-id` (date, defaulting to latest transaction id)
+* `tx-id` (integer, defaulting to latest transaction id)
 
 ==== Response
 
