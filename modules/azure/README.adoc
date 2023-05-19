@@ -3,6 +3,7 @@
 Within our XTDB node, we can make use of Azure Services for certain purposes. Currently, we can:
 
 * Use *Azure Blob Storage* as the XTDB Object Store.
+* Use *Azure Eventhubs* as the Log.
 
 ### Project Dependency 
 
@@ -59,3 +60,81 @@ These are the following parameters that can be passed within the config for our 
 | A string to prefix all of your files with - for example, if "foo" is provided all xtdb files will be located under a "foo" directory
 | No
 |=== 
+
+## Azure EventHub Log
+
+We can swap out the implementation of the log with one based on Azure Eventhubs. To do so, we add the `xtdb.azure/event-hub-log` key within the integrant config for our node, alongside any config:
+```clojure
+{
+  ...
+  {::azure/event-hub-log {:namespace "eventhub-namespace"
+                          :resource-group-name "resource-group-name"
+                          :event-hub-name "example-event-hub"
+                          :create-event-hub? true
+                          :retention-period-in-days 60}}
+  ...
+}
+```
+
+### Parameters
+
+These are the following parameters that can be passed within the config for our `xtdb.azure/event-hub-log`:
+[cols="1,1,2,1"]
+|===
+| *Name* | *Type* | *Description* | *Required?*
+| `namespace`
+| String
+| The Event Hubs namespace of the EventHub. 
+| Yes
+
+| `event-hub-name`
+| String
+| The name of the EventHub that you wish to use a log.
+| Yes
+
+| `max-wait-time`
+| Duration
+| A duration representing the max amount of time to wait when reading data from the log - can be provided as a Java Duration or passed as a https://docs.oracle.com/javase/8/docs/api/java/time/Duration.html#parse-java.lang.CharSequence-[duration string] or int representing a time in milliseconds. 
+| No - defaults to "PT1S"
+
+| `create-event-hub?`
+| Boolean
+| Whether or not XTDB should create an eventhub for you within the specified namespace. See "<<Creating the Event Hub Automatically>>" for more info.
+| No - defaults to false. 
+
+| `resource-group-name`
+| String
+| The name of the resource group that the eventhub namespace belongs to.
+| Only if `create-event-hub?` is true
+
+| `retention-period-in-days`
+| Long
+| The retention period of the event hub for the Log - the maximum period determined by the tier of eventhub namespace you are using, see the https://learn.microsoft.com/en-us/azure/event-hubs/event-hubs-features#event-retention[Azure Docs].
+| No - only needed if creating event hub automatically, and defaults to "7".
+
+|=== 
+
+### Using Event Hubs 
+
+Some things to note when setting up event hubs for XTDB:
+
+* When using EventHubs as a log - you will require a pre-existing Event Hubs namespace, see 
+* As a bare minimum, whichever credentials you use to authenticate to Azure for the app will require two roles on the namespace - *Azure Event Hubs Data sender* and *Azure Event Hubs Data receiver*. 
+
+#### Creating the Event Hub Manually
+
+When creating an eventhub manually to use as an XTDB log, there are a few properties to consider:
+
+* Partition count should be set to *1* - XTDB will only ever use a single partition within it's implementations of Log as they are required to be *totally ordered*.
+* The retention period is configurable - you will likely wish to set this to as high as you reasonably can given the priving tier of your Event Hubs namespace. 
+
+#### Creating the Event Hub Automatically
+
+If `create-event-hub?` is set to `true`, XTDB will attempt to create an Event Hub on your behalf - some notes on this:
+
+* In `create-event-hub?` is set, a number of other pieces of configuration must be done to allow your application to manage event hubs on your behalf:
+** Whichever credentials you use to authenticate to Azure for the app will require one extra roles for the namespace - *Azure Event Hubs Data Owner*.
+** Within your XTDB integrant config, you will need to directly specify the resource group the event hub namespace belongs to within the `resource-group-name` parameter.
+** The application will require two azure related environment variables to be set - `AZURE_SUBCRIPTION_ID` & `AZURE_TENANT_ID`. See the https://learn.microsoft.com/en-us/azure/azure-portal/get-subscription-tenant-id[Azure docs] for more info.
+* The event hub will only be created if the `event-hub-name` in the configuartion doesn't already exist in the given namespace - it will not start a new event hub every time the node restarts.
+* The created event hub will have a single partition, and the retention period will be set based on the `retention-period-in-days` parameter (this defaults to 7 days - the maximum retention period of the 'basic' namespace pricing tier)
