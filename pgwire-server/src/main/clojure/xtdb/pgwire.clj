@@ -1322,7 +1322,10 @@
             (recur (inc n-rows-out))))
 
         :else
-        (cmd-write-msg conn msg-command-complete {:command (str (statement-head query) " " n-rows-out)})))))
+        (do
+          (cmd-write-msg conn msg-command-complete {:command (str (statement-head query) " " n-rows-out)})
+          (when (= :simple (:protocol @conn-state))
+            (cmd-send-ready conn)))))))
 
 (defn- close-result-set [{:keys [conn-state] :as conn} fut ^IResultSet rs]
   (try
@@ -1666,9 +1669,15 @@
   (let [{:keys [err] :as stmt} (interpret-sql query)]
     (swap! conn-state assoc :protocol :simple)
     (if-some [err (or err (permissibility-err conn stmt))]
-      (cmd-send-error conn err)
-      (cmd-exec-stmt conn stmt))
-    (cmd-send-ready conn)))
+      (do
+        (cmd-send-error conn err)
+        (cmd-send-ready conn))
+      (do
+        (cmd-exec-stmt conn stmt)
+        ;; Queries are executed asynchronously and the ready message must be
+        ;; sent after query result are sent.
+        (when (not= :query (:statement-type stmt))
+          (cmd-send-ready conn))))))
 
 (defn cmd-sync
   "Sync commands are sent by the client to commit transactions (we do not do anything here yet),
