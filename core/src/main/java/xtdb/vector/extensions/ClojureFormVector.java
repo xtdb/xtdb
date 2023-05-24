@@ -10,7 +10,7 @@ import org.apache.arrow.vector.types.pojo.FieldType;
 public class ClojureFormVector extends XtExtensionVector<VarCharVector> {
 
     private static final IFn READ_STRING = Clojure.var("clojure.core", "read-string");
-    private static final IFn TO_CLJ_FORM = Clojure.var("xtdb.api", "->ClojureForm");
+    private static final IFn TO_CLJ_FORM = Clojure.var("xtdb.api.protocols", "->ClojureForm");
 
     public ClojureFormVector(String name, BufferAllocator allocator, FieldType fieldType) {
         super(name, allocator, fieldType, new VarCharVector(name, allocator));

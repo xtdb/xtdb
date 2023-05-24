@@ -29,7 +29,7 @@
   (:import java.io.OutputStream
            (java.time Duration ZoneId)
            org.eclipse.jetty.server.Server
-           xtdb.api.TransactionInstant
+           xtdb.api.protocols.TransactionInstant
            xtdb.IResultSet))
 
 (def ^:private muuntaja-opts

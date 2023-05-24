@@ -33,7 +33,7 @@
            (org.apache.arrow.vector.complex DenseUnionVector ListVector StructVector)
            (org.apache.arrow.vector.ipc ArrowStreamReader)
            org.roaringbitmap.RoaringBitmap
-           (xtdb.api ClojureForm TransactionInstant)
+           (xtdb.api.protocols ClojureForm TransactionInstant)
            xtdb.buffer_pool.IBufferPool
            xtdb.indexer.internal_id_manager.IInternalIdManager
            (xtdb.indexer.log_indexer ILogIndexer ILogOpIndexer)
@@ -50,9 +50,9 @@
 
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface IIndexer
-  (^xtdb.api.TransactionInstant indexTx [^xtdb.api.TransactionInstant tx
-                                         ^org.apache.arrow.vector.VectorSchemaRoot txRoot])
-  (^xtdb.api.TransactionInstant latestCompletedTx []))
+  (^xtdb.api.protocols.TransactionInstant indexTx [^xtdb.api.protocols.TransactionInstant tx
+                                                   ^org.apache.arrow.vector.VectorSchemaRoot txRoot])
+  (^xtdb.api.protocols.TransactionInstant latestCompletedTx []))
 
 (defprotocol Finish
   (^void finish-block! [_])

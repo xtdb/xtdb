@@ -4,7 +4,7 @@
             xtdb.live-chunk
             xtdb.temporal
             [xtdb.util :as util])
-  (:import xtdb.api.TransactionInstant
+  (:import xtdb.api.protocols.TransactionInstant
            xtdb.live_chunk.ILiveChunkWatermark
            xtdb.temporal.ITemporalRelationSource
            java.lang.AutoCloseable
@@ -12,7 +12,7 @@
 
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface IWatermark
-  (^xtdb.api.TransactionInstant txBasis [])
+  (^xtdb.api.protocols.TransactionInstant txBasis [])
   (^xtdb.live_chunk.ILiveChunkWatermark liveChunk [])
   (^xtdb.temporal.ITemporalRelationSource temporalRootsSource [])
 
@@ -23,7 +23,7 @@
 
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface IWatermarkSource
-  (^xtdb.watermark.IWatermark openWatermark [^xtdb.api.TransactionInstant txKey]))
+  (^xtdb.watermark.IWatermark openWatermark [^xtdb.api.protocols.TransactionInstant txKey]))
 
 (deftype Watermark [^TransactionInstant tx-key, ^ILiveChunkWatermark live-chunk
                     ^ITemporalRelationSource temporal-roots-src

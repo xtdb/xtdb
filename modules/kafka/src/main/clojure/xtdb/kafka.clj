@@ -1,7 +1,7 @@
 (ns xtdb.kafka
   (:require [clojure.java.io :as io]
             [clojure.spec.alpha :as s]
-            [xtdb.api :as xt]
+            [xtdb.api.protocols :as xtp]
             [xtdb.log :as log]
             [xtdb.util :as util]
             [juxt.clojars-mirrors.integrant.core :as ig])
@@ -57,7 +57,7 @@
       (throw (.getCause e)))))
 
 (defn- ->log-record [^ConsumerRecord record]
-  (log/->LogRecord (xt/->TransactionInstant (.offset record) (Instant/ofEpochMilli (.timestamp record)))
+  (log/->LogRecord (xtp/->TransactionInstant (.offset record) (Instant/ofEpochMilli (.timestamp record)))
                    (.value record)))
 
 (defn- handle-subscriber [{:keys [poll-duration tp kafka-config]} after-tx-id ^LogSubscriber subscriber]
@@ -98,8 +98,8 @@
                (onCompletion [_ record-metadata e]
                  (if e
                    (.completeExceptionally fut e)
-                   (.complete fut (log/->LogRecord (xt/->TransactionInstant (.offset record-metadata)
-                                                                            (Instant/ofEpochMilli (.timestamp record-metadata)))
+                   (.complete fut (log/->LogRecord (xtp/->TransactionInstant (.offset record-metadata)
+                                                                             (Instant/ofEpochMilli (.timestamp record-metadata)))
                                                    record))))))
       fut))
 

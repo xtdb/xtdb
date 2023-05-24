@@ -3,7 +3,7 @@
             [clojure.spec.alpha :as s]
             [clojure.tools.logging :as log]
             [cognitect.transit :as transit]
-            [xtdb.api :as xt]
+            [xtdb.api.protocols :as xtp]
             [xtdb.cli :as cli]
             xtdb.log
             [xtdb.node :as node]
@@ -35,7 +35,7 @@
                         (MapEntry/create k
                                          (cond-> v
                                            (and (list? v) (= (first v) 'fn))
-                                           (xt/->ClojureForm)))))))))
+                                           (xtp/->ClojureForm)))))))))
 
 (defn- submit-file! [^xtdb.tx_producer.TxProducer tx-producer, ^Path log-file]
   (with-open [is (Files/newInputStream log-file (into-array OpenOption #{StandardOpenOption/READ}))]

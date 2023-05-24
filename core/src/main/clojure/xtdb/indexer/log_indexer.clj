@@ -24,7 +24,7 @@
 
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface ILogIndexer
-  (^xtdb.indexer.log_indexer.ILogOpIndexer startTx [^xtdb.api.TransactionInstant txKey])
+  (^xtdb.indexer.log_indexer.ILogOpIndexer startTx [^xtdb.api.protocols.TransactionInstant txKey])
   (^void finishBlock [])
   (^java.util.concurrent.CompletableFuture finishChunk [^long chunkIdx])
   (^void nextChunk [])

@@ -1,5 +1,5 @@
 (ns xtdb.log.memory-log
-  (:require [xtdb.api :as xt]
+  (:require [xtdb.api.protocols :as xtp]
             [xtdb.log :as log]
             [juxt.clojars-mirrors.integrant.core :as ig])
   (:import xtdb.InstantSource
@@ -13,7 +13,7 @@
     (CompletableFuture/completedFuture
      (let [^LogRecord record (-> (swap! !records (fn [records]
                                                    (let [system-time (-> (.instant instant-src) (.truncatedTo ChronoUnit/MICROS))]
-                                                     (conj records (log/->LogRecord (xt/->TransactionInstant (count records) system-time) record)))))
+                                                     (conj records (log/->LogRecord (xtp/->TransactionInstant (count records) system-time) record)))))
                                  peek)]
        (.notifyTx subscriber-handler (.tx record))
        record)))

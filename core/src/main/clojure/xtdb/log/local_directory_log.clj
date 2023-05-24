@@ -1,13 +1,10 @@
 (ns xtdb.log.local-directory-log
-  (:require [clojure.spec.alpha :as s]
-            [clojure.tools.logging :as log]
-            [xtdb.log :as xt.log]
-            [xtdb.util :as util]
+  (:require [clojure.tools.logging :as log]
             [juxt.clojars-mirrors.integrant.core :as ig]
-            [xtdb.api :as xt])
+            [xtdb.api.protocols :as xtp]
+            [xtdb.log :as xt.log]
+            [xtdb.util :as util])
   (:import clojure.lang.MapEntry
-           xtdb.InstantSource
-           [xtdb.log Log LogRecord]
            [java.io BufferedInputStream BufferedOutputStream Closeable DataInputStream DataOutputStream EOFException]
            java.nio.ByteBuffer
            [java.nio.channels Channels ClosedByInterruptException FileChannel]
@@ -15,7 +12,9 @@
            [java.time Duration]
            java.time.temporal.ChronoUnit
            java.util.ArrayList
-           [java.util.concurrent ArrayBlockingQueue BlockingQueue CompletableFuture Executors ExecutorService Future]))
+           [java.util.concurrent ArrayBlockingQueue BlockingQueue CompletableFuture Executors ExecutorService Future]
+           xtdb.InstantSource
+           [xtdb.log Log LogRecord]))
 
 (def ^:private ^{:tag 'byte} record-separator 0x1E)
 (def ^:private ^{:tag 'long} header-size (+ Byte/BYTES Integer/BYTES Long/BYTES))
@@ -53,7 +52,7 @@
                                     offset-check (.readLong log-in)]
                                 (when (and (= size read-bytes)
                                            (= offset-check offset))
-                                  (xt.log/->LogRecord (xt/->TransactionInstant offset system-time) (ByteBuffer/wrap record))))
+                                  (xt.log/->LogRecord (xtp/->TransactionInstant offset system-time) (ByteBuffer/wrap record))))
                               (catch EOFException _))]
               (recur (dec limit)
                      (conj acc record)
@@ -116,7 +115,7 @@
                       (while (.hasRemaining written-record)
                         (.write log-out (.get written-record)))
                       (.writeLong log-out offset)
-                      (.set elements n (MapEntry/create f (xt.log/->LogRecord (xt/->TransactionInstant offset system-time) record)))
+                      (.set elements n (MapEntry/create f (xt.log/->LogRecord (xtp/->TransactionInstant offset system-time) record)))
                       (recur (inc n) (+ offset header-size size footer-size)))))
                 (catch Throwable t
                   (.truncate log-channel previous-offset)

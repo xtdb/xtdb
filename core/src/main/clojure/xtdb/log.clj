@@ -2,7 +2,7 @@
   (:require xtdb.api.protocols
             [xtdb.util :as util]
             [clojure.tools.logging :as log])
-  (:import xtdb.api.TransactionInstant
+  (:import xtdb.api.protocols.TransactionInstant
            java.lang.AutoCloseable
            java.nio.ByteBuffer
            (java.nio.channels ClosedChannelException)
@@ -64,7 +64,7 @@
 
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface INotifyingSubscriberHandler
-  (notifyTx [^xtdb.api.TransactionInstant tx])
+  (notifyTx [^xtdb.api.protocols.TransactionInstant tx])
   (subscribe [^xtdb.log.Log log, ^Long after-tx-id, ^xtdb.log.LogSubscriber subscriber]))
 
 (defrecord NotifyingSubscriberHandler [!state]

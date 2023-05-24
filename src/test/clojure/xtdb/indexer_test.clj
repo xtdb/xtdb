@@ -5,6 +5,7 @@
             [clojure.test :as t :refer [deftest]]
             [clojure.tools.logging :as log]
             [xtdb.api :as xt]
+            [xtdb.api.protocols :as xtp]
             [xtdb.buffer-pool :as bp]
             [xtdb.expression.metadata :as expr.meta]
             [xtdb.indexer :as idx]
@@ -26,7 +27,7 @@
            [org.apache.arrow.memory ArrowBuf BufferAllocator]
            [org.apache.arrow.vector BigIntVector VectorLoader VectorSchemaRoot]
            [org.apache.arrow.vector.complex StructVector]
-           xtdb.api.TransactionInstant
+           xtdb.api.protocols.TransactionInstant
            [xtdb.buffer_pool BufferPool IBufferPool]
            (xtdb.indexer.internal_id_manager InternalIdManager)
            (xtdb.metadata IMetadataManager)
@@ -82,7 +83,7 @@
 
 (t/deftest can-build-chunk-as-arrow-ipc-file-format
   (let [node-dir (util/->path "target/can-build-chunk-as-arrow-ipc-file-format")
-        last-tx-key (xt/map->TransactionInstant {:tx-id 8165, :system-time (util/->instant #inst "2020-01-02")})]
+        last-tx-key (xtp/map->TransactionInstant {:tx-id 8165, :system-time (util/->instant #inst "2020-01-02")})]
     (util/delete-dir node-dir)
 
     (with-open [node (tu/->local-node {:node-dir node-dir})]
@@ -360,7 +361,7 @@
 
 (t/deftest can-stop-node-without-writing-chunks
   (let [node-dir (util/->path "target/can-stop-node-without-writing-chunks")
-        last-tx-key (xt/map->TransactionInstant {:tx-id 8165, :system-time (util/->instant #inst "2020-01-02")})]
+        last-tx-key (xtp/map->TransactionInstant {:tx-id 8165, :system-time (util/->instant #inst "2020-01-02")})]
     (util/delete-dir node-dir)
 
     (with-open [node (tu/->local-node {:node-dir node-dir})]
@@ -631,7 +632,7 @@
       (let [mm (tu/component node ::meta/metadata-manager)]
         (t/is (nil? (meta/latest-chunk-metadata mm)))
 
-        (let [last-tx-key (xt/map->TransactionInstant {:tx-id 0, :system-time (util/->instant #inst "2020-01-01")})]
+        (let [last-tx-key (xtp/map->TransactionInstant {:tx-id 0, :system-time (util/->instant #inst "2020-01-01")})]
           (t/is (= last-tx-key
                    (xt/submit-tx node [[:sql-batch ["INSERT INTO table (xt$id, foo, bar, baz) VALUES (?, ?, ?, ?)"
                                                     [0, 2, "hello", 12]

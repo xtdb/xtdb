@@ -8,7 +8,7 @@
             [xtdb.util :as util]
             xtdb.watermark
             [juxt.clojars-mirrors.integrant.core :as ig])
-  (:import xtdb.api.TransactionInstant
+  (:import xtdb.api.protocols.TransactionInstant
            xtdb.indexer.IIndexer
            [xtdb.log Log LogSubscriber]
            java.lang.AutoCloseable
@@ -19,7 +19,7 @@
 
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface Ingester
-  (^java.util.concurrent.CompletableFuture #_<TransactionInstant> awaitTxAsync [^xtdb.api.TransactionInstant tx, ^java.time.Duration timeout]))
+  (^java.util.concurrent.CompletableFuture #_<TransactionInstant> awaitTxAsync [^xtdb.api.protocols.TransactionInstant tx, ^java.time.Duration timeout]))
 
 (defmethod ig/prep-key :xtdb/ingester [_ opts]
   (-> (merge {:allocator (ig/ref :xtdb/allocator)
@@ -89,4 +89,3 @@
 
 (defmethod ig/halt-key! :xtdb/ingester [_ ingester]
   (util/try-close ingester))
-

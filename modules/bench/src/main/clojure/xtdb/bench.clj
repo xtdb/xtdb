@@ -59,10 +59,10 @@
                                                     :prefix (str "node." node-id)}}))))
 
 (defn sync-node
-  (^xtdb.api.TransactionInstant [node]
+  (^xtdb.api.protocols.TransactionInstant [node]
    (sync-node node nil))
 
-  (^xtdb.api.TransactionInstant [node ^Duration timeout]
+  (^xtdb.api.protocols.TransactionInstant [node ^Duration timeout]
    @(.awaitTxAsync ^Ingester (util/component node :xtdb/ingester)
                    (xtp/latest-submitted-tx node)
                    timeout)))

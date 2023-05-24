@@ -1,31 +1,8 @@
-(ns ^{:clojure.tools.namespace.repl/load false, :clojure.tools.namespace.repl/unload false} xtdb.api
+(ns xtdb.api
   (:require [xtdb.api.protocols :as xtp])
-  (:import java.io.Writer
-           java.time.Instant
-           java.util.concurrent.ExecutionException
+  (:import java.util.concurrent.ExecutionException
            java.util.function.Function
            xtdb.IResultSet))
-
-(defrecord TransactionInstant [^long tx-id, ^Instant system-time]
-  Comparable
-  (compareTo [_ tx-key]
-    (Long/compare tx-id (.tx-id ^TransactionInstant tx-key))))
-
-(defmethod print-dup TransactionInstant [tx-key ^Writer w]
-  (.write w "#xt/tx-key ")
-  (print-method (into {} tx-key) w))
-
-(defmethod print-method TransactionInstant [tx-key w]
-  (print-dup tx-key w))
-
-(defrecord ClojureForm [form])
-
-(defmethod print-dup ClojureForm [{:keys [form]} ^Writer w]
-  (.write w "#xt/clj-form ")
-  (print-method form w))
-
-(defmethod print-method ClojureForm [clj-form w]
-  (print-dup clj-form w))
 
 (defmacro ^:private rethrowing-cause [form]
   `(try
@@ -202,8 +179,8 @@
    - :default-tz
      overrides the default time zone for the transaction,
      should be an instance of java.time.ZoneId"
-  (^xtdb.api.TransactionInstant [node tx-ops] (submit-tx node tx-ops {}))
-  (^xtdb.api.TransactionInstant [node tx-ops tx-opts]
+  (^xtdb.api.protocols.TransactionInstant [node tx-ops] (submit-tx node tx-ops {}))
+  (^xtdb.api.protocols.TransactionInstant [node tx-ops tx-opts]
    (-> @(submit-tx& node tx-ops tx-opts)
        (rethrowing-cause))))
 

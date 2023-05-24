@@ -126,7 +126,7 @@
 
   (^void finishBlock [])
   (^void nextBlock [])
-  (^java.util.concurrent.CompletableFuture finishChunk [^xtdb.api.TransactionInstant latestCompletedTx])
+  (^java.util.concurrent.CompletableFuture finishChunk [^xtdb.api.protocols.TransactionInstant latestCompletedTx])
   (^void nextChunk [])
   (^void close []))
 

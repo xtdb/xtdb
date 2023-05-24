@@ -113,12 +113,12 @@
 (definterface ITemporalManager
   (^xtdb.temporal.ITemporalRelationSource getTemporalWatermark [])
   (^xtdb.vector.IIndirectRelation createTemporalRelation [^org.apache.arrow.memory.BufferAllocator allocator
-                                                           ^java.util.List columns
-                                                           ^longs temporalMinRange
-                                                           ^longs temporalMaxRange
-                                                           ^org.roaringbitmap.longlong.Roaring64Bitmap rowIdBitmap])
+                                                          ^java.util.List columns
+                                                          ^longs temporalMinRange
+                                                          ^longs temporalMaxRange
+                                                          ^org.roaringbitmap.longlong.Roaring64Bitmap rowIdBitmap])
   (^void registerNewChunk [^long chunkIdx])
-  (^xtdb.temporal.ITemporalTxIndexer startTx [^xtdb.api.TransactionInstant txKey]))
+  (^xtdb.temporal.ITemporalTxIndexer startTx [^xtdb.api.protocols.TransactionInstant txKey]))
 
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface TemporalManagerPrivate
@@ -426,7 +426,7 @@
                           ^IMetadataManager metadata-manager
                           ^ExecutorService snapshot-pool
                           ^:volatile-mutable current-row-ids
-                          ^:volatile-mutable ^xtdb.api.TransactionInstant latest-completed-tx
+                          ^:volatile-mutable ^xtdb.api.protocols.TransactionInstant latest-completed-tx
                           ^:unsynchronized-mutable snapshot-future
                           ^:unsynchronized-mutable kd-tree-snapshot-idx
                           ^:volatile-mutable kd-tree
@@ -483,8 +483,8 @@
       (.reloadTemporalIndex this temporal-chunk-idx (.latestTemporalSnapshotIndex this temporal-chunk-idx))
       (set! (.current-row-ids this)
             (current-row-ids-from-start
-              (.kd-tree this)
-              (util/instant->micros (.system-time latest-completed-tx))))))
+             (.kd-tree this)
+             (util/instant->micros (.system-time latest-completed-tx))))))
 
   (awaitSnapshotBuild [_]
     (-> (some-> snapshot-future (deref))
@@ -525,10 +525,10 @@
 
         (getCurrentRowIds [_ current-time]
           (advance-current-row-ids
-            current-row-ids
-            kd-tree
-            (util/instant->micros (.system-time latest-completed-tx))
-            current-time))
+           current-row-ids
+           kd-tree
+           (util/instant->micros (.system-time latest-completed-tx))
+           current-time))
 
         AutoCloseable
         (close [_]
@@ -570,11 +570,11 @@
 
       (when latest-completed-tx
         (vswap!
-          !current-row-ids
-          advance-current-row-ids
-          @!kd-tree
-          (util/instant->micros (.system-time latest-completed-tx))
-          system-time-μs))
+         !current-row-ids
+         advance-current-row-ids
+         @!kd-tree
+         (util/instant->micros (.system-time latest-completed-tx))
+         system-time-μs))
 
       (reify
         ITemporalTxIndexer
@@ -617,10 +617,10 @@
 
         (getCurrentRowIds [_ current-time]
           (advance-current-row-ids
-            @!current-row-ids
-            @!kd-tree
-            (util/instant->micros (.system-time latest-completed-tx))
-            current-time)))))
+           @!current-row-ids
+           @!kd-tree
+           (util/instant->micros (.system-time latest-completed-tx))
+           current-time)))))
 
   AutoCloseable
   (close [this]

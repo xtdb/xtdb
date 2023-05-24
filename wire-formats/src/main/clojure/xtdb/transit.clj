@@ -1,11 +1,11 @@
 (ns xtdb.transit
   (:require [clojure.edn :as edn]
             [cognitect.transit :as transit]
-            [xtdb.api :as xt]
+            [xtdb.api.protocols :as xtp]
             [xtdb.edn :as xt-edn]
             [xtdb.error :as err]
             [time-literals.read-write :as time-literals.rw])
-  (:import (xtdb.api TransactionInstant)
+  (:import (xtdb.api.protocols TransactionInstant)
            (xtdb.types IntervalDayTime IntervalMonthDayNano IntervalYearMonth)
            (java.time DayOfWeek Duration Instant LocalDate LocalDateTime LocalTime Month MonthDay OffsetDateTime OffsetTime Period Year YearMonth ZonedDateTime ZoneId)))
 
@@ -13,7 +13,7 @@
   (merge (-> time-literals.rw/tags
              (update-keys str)
              (update-vals transit/read-handler))
-         {"xtdb/tx-key" (transit/read-handler xt/map->TransactionInstant)
+         {"xtdb/tx-key" (transit/read-handler xtp/map->TransactionInstant)
           "xtdb/illegal-arg" (transit/read-handler err/-iae-reader)
           "xtdb/runtime-err" (transit/read-handler err/-runtime-err-reader)
           "xtdb/period-duration" xt-edn/period-duration-reader

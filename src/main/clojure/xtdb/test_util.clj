@@ -79,13 +79,13 @@
   ([node k] (util/component node k)))
 
 (defn then-await-tx*
-  (^xtdb.api.TransactionInstant [tx node]
+  (^xtdb.api.protocols.TransactionInstant [tx node]
    (then-await-tx* tx node nil))
 
-  (^xtdb.api.TransactionInstant [tx node ^Duration timeout]
+  (^xtdb.api.protocols.TransactionInstant [tx node ^Duration timeout]
    @(.awaitTxAsync ^Ingester (util/component node :xtdb/ingester) tx timeout)))
 
-(defn latest-completed-tx ^xtdb.api.TransactionInstant [node]
+(defn latest-completed-tx ^xtdb.api.protocols.TransactionInstant [node]
   (:latest-completed-tx (api/status node)))
 
 (defn ->mock-clock
