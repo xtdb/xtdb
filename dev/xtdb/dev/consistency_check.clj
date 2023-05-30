@@ -342,7 +342,7 @@
                                    :pool-opts {}
                                    :db-spec {:port tx-port
                                              :dbtype "postgresql"
-                                             :dbname "tx"
+                                             :dbname "xt"
                                              :user "postgres"
                                              :password "postgres"}}}
    :xtdb/document-store {:xtdb/module 'xtdb.jdbc/->document-store
@@ -350,19 +350,24 @@
                                            :pool-opts {}
                                            :db-spec {:port doc-port
                                                      :dbtype "postgresql"
-                                                     :dbname "docs"
+                                                     :dbname "xt"
                                                      :user "postgres"
                                                      :password "postgres"}}}})
 
 (defn pg-reset [{:xtdb/keys [tx-log, document-store]}]
-  (when-some [db-spec (:db-spec (:connection-pool tx-log))]
-    (with-open [conn (jdbc/get-connection (dissoc db-spec :dbname))]
-      (jdbc/execute! conn ["DROP DATABASE IF EXISTS tx"])
-      (jdbc/execute! conn ["CREATE DATABASE tx"])))
-  (when-some [db-spec (:db-spec (:connection-pool document-store))]
-    (with-open [conn (jdbc/get-connection (dissoc db-spec :dbname))]
-      (jdbc/execute! conn ["DROP DATABASE IF EXISTS docs"])
-      (jdbc/execute! conn ["CREATE DATABASE docs"]))))
+  (letfn [(reset-db [db-spec]
+            (let [dbname (:dbname db-spec)]
+              (with-open [conn (jdbc/get-connection (dissoc db-spec :dbname))]
+                (jdbc/execute! conn [(str "DROP DATABASE IF EXISTS " dbname)])
+                (jdbc/execute! conn [(str "CREATE DATABASE " dbname)]))))]
+    (some->> tx-log
+             :connection-pool
+             :db-spec
+             (reset-db))
+    (some->> document-store
+             :connection-pool
+             :db-spec
+             (reset-db))))
 
 (defn pg-up []
   (sh/sh "docker-compose" "up" "-d" "postgres" :dir "modules/jdbc"))
@@ -378,7 +383,7 @@
                  :connection-pool {:dialect {:xtdb/module 'xtdb.jdbc.mysql/->dialect}
                                    :pool-opts {}
                                    :db-spec {:port tx-port
-                                             :dbname "tx",
+                                             :dbname "xt"
                                              :user "root",
                                              :password "my-secret-pw"
                                              :dbtype "mysql"}}}
@@ -386,20 +391,25 @@
                          :connection-pool {:dialect {:xtdb/module 'xtdb.jdbc.mysql/->dialect}
                                            :pool-opts {}
                                            :db-spec {:port doc-port
-                                                     :dbname "docs",
+                                                     :dbname "xt"
                                                      :user "root",
                                                      :password "my-secret-pw"
                                                      :dbtype "mysql"}}}})
 
 (defn mysql-reset [{:xtdb/keys [tx-log, document-store]}]
-  (when-some [db-spec (:db-spec (:connection-pool tx-log))]
-    (with-open [conn (jdbc/get-connection (dissoc db-spec :dbname))]
-      (jdbc/execute! conn ["DROP DATABASE IF EXISTS tx"])
-      (jdbc/execute! conn ["CREATE DATABASE tx"])))
-  (when-some [db-spec (:db-spec (:connection-pool document-store))]
-    (with-open [conn (jdbc/get-connection (dissoc db-spec :dbname))]
-      (jdbc/execute! conn ["DROP DATABASE IF EXISTS docs"])
-      (jdbc/execute! conn ["CREATE DATABASE docs"]))))
+  (letfn [(reset-db [db-spec]
+            (let [dbname (:dbname db-spec)]
+              (with-open [conn (jdbc/get-connection (dissoc db-spec :dbname))]
+                (jdbc/execute! conn [(str "DROP DATABASE IF EXISTS " dbname)])
+                (jdbc/execute! conn [(str "CREATE DATABASE " dbname)]))))]
+    (some->> tx-log
+             :connection-pool
+             :db-spec
+             (reset-db))
+    (some->> document-store
+             :connection-pool
+             :db-spec
+             (reset-db))))
 
 (defn mysql-up []
   (sh/sh "docker-compose" "up" "-d" "mysql" :dir "modules/jdbc"))
@@ -858,7 +868,8 @@
   (mysql-down)
   (mysql-reset (mysql-cfg {}))
 
-  (print-test {:storage {:mysql {}}})
+  (print-test {:storage {:mysql {}}, :tx-count 100})
+  (print-test {:storage {:pg {}}, :tx-count 100})
 
   (print-test {})
   (print-test {:model (counter-model {})})
