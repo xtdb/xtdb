@@ -20,7 +20,7 @@
       (when-not (table-exists? pool "TX_EVENTS")
         (jdbc/execute! pool ["
 CREATE TABLE tx_events (
-  event_offset SMALLINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  event_offset BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   event_key VARCHAR2(255),
   tx_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   topic VARCHAR2(255) NOT NULL,

@@ -24,7 +24,7 @@
         (jdbc/execute! ["
 IF NOT EXISTS (select * from sys.tables where name='tx_events')
 CREATE TABLE tx_events (
-  event_offset INT NOT NULL IDENTITY PRIMARY KEY,
+  event_offset BIGINT NOT NULL IDENTITY PRIMARY KEY,
   event_key VARCHAR(1000),
   tx_time DATETIMEOFFSET NOT NULL default SYSDATETIMEOFFSET(),
   topic VARCHAR(255) NOT NULL,

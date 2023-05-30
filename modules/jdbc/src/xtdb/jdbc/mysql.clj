@@ -30,7 +30,7 @@ WHERE table_schema=DATABASE()
     (setup-schema! [_ ds]
       (jdbc/execute! ds ["
 CREATE TABLE IF NOT EXISTS tx_events (
-  event_offset INT AUTO_INCREMENT PRIMARY KEY,
+  event_offset BIGINT AUTO_INCREMENT PRIMARY KEY,
   event_key VARCHAR(255),
   tx_time TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP(3),
   topic VARCHAR(255) NOT NULL,

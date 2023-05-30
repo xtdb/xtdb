@@ -26,7 +26,7 @@
       (doto pool
         (jdbc/execute! ["
 CREATE TABLE IF NOT EXISTS tx_events (
-  event_offset SERIAL PRIMARY KEY,
+  event_offset BIGSERIAL PRIMARY KEY,
   event_key VARCHAR,
   tx_time TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
   topic VARCHAR NOT NULL,
