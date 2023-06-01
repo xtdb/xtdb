@@ -1,0 +1,31 @@
+= Glossary
+
+|===========================================================================================================================================================================================================================================================================================================================================================================================================================
+| transaction            | Referring to an atomic sequence of operations (put, delete etc...) to be performed on the db. Or alternatively a SQL transaction string.
+| entity (or 'record')   | Referring to a unique item in the database that may have different versions (in form of different documents) across time.
+| document (or 'row')    | A particular state of an entity. A document describes the state of an entity at a particular point in time.
+| tx-producer            | Puts the transactions onto some immutable append only log.
+| log                    | Holds all transactions monotonically across system time. In XTDB V2 this is not strictly needed forever as transactions also get indexed into a log (see log indexer) per chunk.
+| ingester               | Retrieves newly arrived transactions from the log and submits them to the indexer.
+| indexer                | Indexes new data or updates to existing data into the underlying storage.
+| log indexer            | It's a golden store of temporal information in a format that's relatively easy to replay from. When a transaction gets indexed we also keep a log of the temporal information + some ids to associate with content. Some parts of the kd-tree (or another temporal solution) might only live in memory until we commit the full chunk. This logs assures us that we can recover this ifnormation.
+| kd-tree                | A concrete KD-tree that sits in-memory. Both the grid and the KD-tree implement a KdTree protocol. When a chunk gets finished the KD-tree gets merged into the grid. It serves to answer temporal queries and store the temporal data of a document.
+| grid                   | A data-structure that implements the KdTree protocol and serves data that has been written to disk. It serves to store and answer questions about temporal data. Underneath the grid tries to be smart about how to index data and answer questions on it.
+| expression             | Think of this like a predicate, test or an if statement in the query languages (SQL/Datalog) that acts on one or multiple columns/variables.
+| expression engine (EE) | The expression engine compiles an expression into a function that the query engine then can efficiently execute. It is used for the queries itself as well as for metadata checking.
+| object-store           | Think of this as something like S3. This is where long lived data resides (doesn't mean it does not get rewritten). Pages are fetched from here. There is also a in-memory version, but that is more for testing purposes. It also contains a caching layer.
+| buffer pool            | A pool of (Arrow) buffers that gets managed for reuse and reference counted. Fetches things from the object store.
+| record batch           | An Arrow concept: A record batch is a collection of equal-length arrays matching a particular Schema. It is a table-like data structure that is semantically a sequence of fields, each a contiguous Arrow Array.
+| chunk                  | A certain number of rows/documents the DB holds in memory before it flushes them to disk. As of the writing of this document the number is 102400. The content is split into chunks.
+| live chunk             | The part of the db (data) that has not been written to disk and will be flushed
+| chunk boundary         | The number of rows hold in memory before a flush gets triggered (102400 as of the writing of this document)
+| block                  | A kind of batch size smaller than the chunk. A chunk contains a certain amout of blockss. Blocks are useful to take advantage of vectorization. Block size is 1024 (as of the writing of this document)
+| watermark              | Holds the resources of the system at a particular point in time.
+| temporal manager       | Manages the updating (finishing chunks) of temporal related information and reloading of the grid/kd-tree. Also deals with coordinating the merging of new temporal information into the grid.
+| metadata               | We associate metadata on a per chunk and block level with data. This allows to quickly rule out chunks/blocks that don't satisfy certain conditions. Be that temporal or content related.
+| metadata manager       | Manages metadata information (reading/writing).
+| iid                    | An internal id for refering to an `xt/id`.
+| row-id                 | An id refering to specific version of an entity
+| logical plan           | A relational algebra representation of a query or update. The logical plan is represented as a nested clojure sturcture. This is an XTDB internal representation of a query/update that the engine might do optimizations on (for example an sematically equivalent but more efficient rewrite).
+| operator               | A relational algebra operator (or some extension thereof). The simplest example is a join.
+|===========================================================================================================================================================================================================================================================================================================================================================================================================================
