@@ -10,4 +10,5 @@
                 "modules/kafka/src/main/clojure"
                 "modules/s3/src/main/clojure" "modules/s3/src/main/java"
 
-                "src/test/clojure" "src/dev/clojure"]}
+                "src/test/clojure" "src/dev/clojure"]
+ :paths-ignore-regex ["dev/*"]}
