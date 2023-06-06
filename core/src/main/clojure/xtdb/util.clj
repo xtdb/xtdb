@@ -396,6 +396,43 @@
 
      (VectorSchemaRoot. acc))))
 
+(definterface ArrowIpcWriter
+  (^void writeBatch [])
+  (^java.nio.ByteBuffer end [])
+  (^void close []))
+
+(defn open-arrow-ipc-writer ^xtdb.util.ArrowIpcWriter [^VectorSchemaRoot root, ipc-type]
+  (let [baos (ByteArrayOutputStream.)]
+    (try
+      (let [ch (Channels/newChannel baos)]
+        (try
+          (let [^ArrowWriter sw (case ipc-type
+                                  :file (ArrowFileWriter. root nil ch)
+                                  :stream (ArrowStreamWriter. root nil ch))]
+            (try
+              (.start sw)
+              (reify ArrowIpcWriter
+                (writeBatch [_] (.writeBatch sw))
+
+                (end [_]
+                 (.end sw)
+                 (ByteBuffer/wrap (.toByteArray baos)) )
+
+                AutoCloseable
+                (close [_]
+                  (try-close sw)
+                  (try-close ch)
+                  (try-close baos)))
+              (catch Throwable t
+                (.close sw)
+                (throw t))))
+          (catch Throwable t
+            (.close ch)
+            (throw t))))
+      (catch Throwable t
+        (.close baos)
+        (throw t)))))
+
 (defn build-arrow-ipc-byte-buffer ^java.nio.ByteBuffer {:style/indent 2}
   [^VectorSchemaRoot root ipc-type f]
 
