@@ -1,0 +1,102 @@
+= 41. SQL SELECT * / Duplicate Columns
+
+Date: 2023-05-16
+
+== Status
+
+Accepted
+
+== Context
+
+=== SQL Spec
+
+SELECT * in SQL is an often used feature for discovery and retrevial of whole documents.
+We would like to support this in some form, however it presents a number of questions, such as in what order are the columns of tables returned and what do to about duplicate columns names when they arrise (this is a more general problem, but the use of SELECT * is a likely instance).
+
+Consulting the SQL spec, I would say there are a number of (condensed) requirements/intentions:
+
+* SELECT * should return columns in the their order they appear in the table being 'selected' from
+
+[quote, SQL:2011 §7.12 Query Specification - Syntax Rules 4b]
+
+Otherwise, the <select list> “*” is equivalent to a <value expression> sequence in which each <value expression> is a column reference that references a column of T and each column of T is referenced exactly once.
+The columns are referenced in the ascending sequence of their ordinal position within T.
+
+* Joined Tables are defined in terms of SELECT * FROM t1, t2
+
+[quote, SQL:2011 §7.7 <joined table> - Syntax Rules 2]
+____
+Let TRA be the <table reference> or <table factor> that is the first operand of the <joined table>, and let TRB be the <table reference> or <table factor> that is the second operand of the <joined table>.
+Let RTA and RTB be the row types of TRA and TRB, respectively.
+
+Let CP be: SELECT * FROM TRA, TRB
+____
+Section goes on to define various join types e.g.
+
+[quote, SQL:2011 §7.7 <joined table> - General Rules 1a]
+
+If a <cross join> is specified, then let T be CP
+
+* Result of FROM with multiple table references contains columns in the order in which the tables appear in the and in the order in which the columns are defined within each table.
+
+[quote, SQL:2011 §7.5 <from clause> - Syntax Rules 2b]
+
+If the <table reference list> immediately contains more than one <table reference>, then the descriptors of the columns of the result of the <table reference list> are the descriptors of the columns of the tables identified by the <table reference>s, in the order in which the <table reference>s appear in the <table reference list> and in the order in which the columns are defined within each table.
+
+* Column references (via identifier chains) should unambiguously refer to a column from a single table from the innermost (local) scope.
+
+[quote, SQL:2011 §6.6 <identifier chain> - Syntax Rules 8c]
+There shall be exactly one candidate basis CB with innermost scope
+
+* There is no specific mention of how to deal with common columns between joined tables (across all join types), nor the duplicate columns that may result from projecting out all possible columns contained within the new relation.
+We infer from this that the most correct thing is to therefore support those duplicate columns as long as references are not ambiguous.
+
+[source,SQL]
+----
+--Assuming tab0 and tab1 both contain col1
+
+--Okay
+
+SELECT new_tab.* FROM (SELECT tab0.*, tab1.* FROM tab0, tab1) AS new_tab
+
+--Error ambiguous which column (tab0.col1 or tab1.col1) new_tab.col1 refers to
+
+SELECT new_tab.col1 FROM (SELECT tab0.*, tab1.* FROM tab0, tab1) AS new_tab
+----
+
+=== State of 2.x
+
+*The spec assumes columns within an table have a fixed order as defined by the schema.
+Currently 2.x has an undefined but deterministic ordering to columns within a table.
+
+*We know the current set of columns for a given table (atemporally)
+
+== Options:
+
+Given the above we should be able to support unambiguous qualified and unqualified use of SELECT *, the decision left is how to deal with the naming collisions that may result from its use.
+
+Where possible special cases should be avoided to preserve query composability (such as * working differently in a subquery vs outer query).
+
+== A: Support Duplicate Columns
+
+* Duplicate column names present challenges when trying to treat rows as maps/structs as typically these structures require unique keys.
+One such instance is when returning result says as clojure maps, here we may take inspiration from java.sql.ResultSet which opts to return the first matching column for any given name.
+
+* Postgres takes this approach
+
+== B: Remove Duplicate Columns
+
+=== 1: Error in the case that duplicate column names are introduced
+
+* MySQL takes this approach for subqueries
+
+=== 2: Merge/Rename duplicate columns at the point they are introduced
+
+* SQLite takes this approach for subqueries
+
+== Decision: Option B2 -> Revisit Option A later
+
+Where possible we try to adhere to the SQL spec, and as a fallback take inspiration from postgres.
+However as outlined above, duplicate columns present issues when thinking of rows as maps, as keys must be unique.
+For now we have chosen to rename duplicate columns when they are introduced as currently we return maps from SQL queries, with a view to revisit option A when tuple results are better supported.
+Additionally, while there may be an order to the columns within a table, the backend currently stores column info in an unordered form leaving the order of columns returned by * non deterministic, however we see this as acceptable (for now) as relying on said ordering should be avoided.

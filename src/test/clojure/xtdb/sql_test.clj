@@ -1,15 +1,17 @@
 (ns xtdb.sql-test
   (:require [clojure.java.io :as io]
             [clojure.test :as t :refer [deftest]]
+            [xtdb.sql.analyze :as sem]
             [xtdb.logical-plan :as lp]
             [xtdb.sql :as sql])
 
   (:import (java.time LocalDateTime)))
+
 (defn plan-sql
   ([sql opts] (sql/compile-query sql (into {:default-all-valid-time? true} opts)))
   ([sql] (plan-sql sql {:decorrelate? true, :validate-plan? true, :instrument-rules? true})))
 
-(def regen-expected-files? true)
+(def regen-expected-files? false)
 
 (defmethod t/assert-expr '=plan-file [msg form]
   `(let [exp-plan-file-name# ~(nth form 1)

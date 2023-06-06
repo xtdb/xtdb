@@ -28,10 +28,11 @@
            xtdb.api.protocols.TransactionInstant
            xtdb.buffer_pool.IBufferPool
            xtdb.ICursor
+           xtdb.live_chunk.ILiveTableWatermark
            (xtdb.metadata IMetadataManager ITableMetadata)
            xtdb.operator.IRelationSelector
            (xtdb.vector IIndirectRelation IIndirectVector)
-           xtdb.watermark.IWatermark))
+           (xtdb.watermark Watermark IWatermark IWatermarkSource)))
 
 (s/def ::table symbol?)
 
@@ -47,6 +48,7 @@
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (definterface IScanEmitter
   (tableColNames [^xtdb.watermark.IWatermark wm, ^String table-name])
+  (allTableColNames [^xtdb.watermark.IWatermark wm])
   (scanColTypes [^xtdb.watermark.IWatermark wm, scan-cols])
   (emitScan [scan-expr scan-col-types param-types]))
 
@@ -415,6 +417,12 @@
     (.temporalRootsSource watermark)
     (util/instant->micros (:current-time basis))))
 
+(defn tables-with-cols [basis ^IWatermarkSource wm-src ^IScanEmitter scan-emitter]
+  (let [{:keys [tx, after-tx]} basis
+        wm-tx (or tx after-tx)]
+    (with-open [^Watermark wm (.openWatermark wm-src wm-tx)]
+      (.allTableColNames scan-emitter wm))))
+
 (defmethod ig/prep-key ::scan-emitter [_ opts]
   (merge opts
          {:metadata-mgr (ig/ref ::meta/metadata-manager)
@@ -430,7 +438,19 @@
                                (.columnTypes)
                                keys)])))
 
+    (allTableColNames [_ wm]
+      (merge-with
+        set/union
+        (update-vals
+          (.allColumnTypes metadata-mgr)
+          (comp set keys))
+        (update-vals
+          (some-> (.liveChunk wm)
+                  (.allColumnTypes))
+          (comp set keys))))
+
     (scanColTypes [_ wm scan-cols]
+
       (letfn [(->col-type [[table col-name]]
                 (let [normalized-table (util/str->normal-form-str (str table))
                       normalized-col-name (util/str->normal-form-str (str col-name))]

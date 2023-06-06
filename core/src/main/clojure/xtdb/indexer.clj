@@ -12,6 +12,7 @@
             [xtdb.metadata :as meta]
             xtdb.object-store
             [xtdb.operator :as op]
+            [xtdb.operator.scan :as scan]
             [xtdb.rewrite :refer [zmatch]]
             [xtdb.temporal :as temporal]
             [xtdb.tx-producer :as txp]
@@ -449,7 +450,7 @@
 
 (defn- ->sql-indexer ^xtdb.indexer.OpIndexer [^BufferAllocator allocator, ^IMetadataManager metadata-mgr, ^IBufferPool buffer-pool, ^IInternalIdManager iid-mgr
                                               ^ILogOpIndexer log-op-idxer, ^ITemporalTxIndexer temporal-idxer, ^ILiveChunk doc-idxer
-                                              ^DenseUnionVector tx-ops-vec, ^IRaQuerySource ra-src, wm-src
+                                              ^DenseUnionVector tx-ops-vec, ^IRaQuerySource ra-src, wm-src, ^IScanEmitter scan-emitter
                                               {:keys [default-all-valid-time? basis default-tz] :as tx-opts}]
   (let [sql-vec (.getStruct tx-ops-vec 0)
         ^VarCharVector query-vec (.getChild sql-vec "query" VarCharVector)
@@ -491,9 +492,10 @@
                                     (aset selection 0 idx)
                                     (index-op* (-> rel (iv/select selection))))))))))))]
 
-            (let [query-str (t/get-object query-vec sql-offset)]
+            (let [query-str (t/get-object query-vec sql-offset)
+                  tables-with-cols (scan/tables-with-cols (:basis tx-opts) wm-src scan-emitter)]
               ;; TODO handle error
-              (zmatch (sql/compile-query query-str tx-opts)
+              (zmatch (sql/compile-query query-str (assoc tx-opts :table-info tables-with-cols))
                 [:insert query-opts inner-query]
                 (index-op insert-idxer query-opts inner-query)
 
@@ -584,7 +586,7 @@
                         !call-idxer (delay (->call-indexer allocator ra-src wm-src scan-emitter tx-ops-vec tx-opts))
                         !sql-idxer (delay (->sql-indexer allocator metadata-mgr buffer-pool iid-mgr
                                                          log-op-idxer temporal-idxer live-chunk-tx
-                                                         tx-ops-vec ra-src wm-src tx-opts))]
+                                                         tx-ops-vec ra-src wm-src scan-emitter tx-opts))]
                     (dotimes [tx-op-idx (.getValueCount tx-ops-vec)]
                       (when-let [more-tx-ops (case (.getTypeId tx-ops-vec tx-op-idx)
                                                0 (.indexOp ^OpIndexer @!sql-idxer tx-op-idx)

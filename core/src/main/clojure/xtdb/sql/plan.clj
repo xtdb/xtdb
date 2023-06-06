@@ -1293,33 +1293,18 @@
       [:project base-projection order-by]
       order-by)))
 
-(defn generate-unique-column-names [col-names]
-  (->> col-names
-       (reduce
-         (fn try-use-unique-col-name [{:keys [acc ret]} col-name]
-           (if-let [col-name-count (get acc col-name)]
-             {:acc (assoc acc col-name (inc col-name-count))
-              :ret (conj ret (symbol (str (name col-name) "_" (inc col-name-count))))}
-             {:acc (assoc acc col-name 0)
-              :ret (conj ret col-name)}))
-         {:acc {}
-          :ret []})
-         (:ret)))
-
 (defn- build-query-specification [sl te]
   (let [projection (first (sem/projected-columns sl))
-        projection (map
-                     (fn [projection-col unique-unqualified-column-name]
-                       (assoc projection-col :unique-unqualified-column-name unique-unqualified-column-name))
-                     projection
-                     (generate-unique-column-names (map #(unqualified-projection-symbol %) projection)))
-        qualified-projection (vec (for [{:keys [qualified-column unique-unqualified-column-name] :as column} projection
-                                        :let [derived-column (:ref (meta column))]]
+        qualified-projection (vec (for [{:keys [qualified-column outer-name inner-name] :as column} projection
+                                        :let [derived-column (:ref (meta column))
+                                              outer-projection-symbol (unqualified-projection-symbol
+                                                                        (cond-> column
+                                                                          outer-name (assoc :identifier outer-name)))]]
                                     (if qualified-column
-                                      {unique-unqualified-column-name
-                                       (qualified-projection-symbol column)}
-                                      {unique-unqualified-column-name
-                                       (expr (r/$ derived-column 1))})))
+                                      {outer-projection-symbol
+                                       (qualified-projection-symbol (cond-> column
+                                                                      inner-name (assoc :identifier inner-name)))}
+                                      {outer-projection-symbol (expr (r/$ derived-column 1))})))
         relation (wrap-with-apply sl (plan te))]
     [:project qualified-projection relation]))
 

@@ -153,10 +153,10 @@
     :create-view (create-view node record)))
 
 (defn outer-projection [tree]
+  ;;TODO no support for select * in SLT, outer-projection would require access to table-info
   (->> (sem/projected-columns (r/$ (r/vector-zip tree) 1))
        (first)
-       (mapv plan/unqualified-projection-symbol)
-       (plan/generate-unique-column-names)))
+       (mapv #(or (:outer-name %) (plan/unqualified-projection-symbol %)))))
 
 (defn execute-query-expression [node from-subquery]
   (binding [r/*memo* (HashMap.)]
@@ -214,6 +214,7 @@
                        (-> opts
                            (assoc :default-all-valid-time? (not= (get variables "VALID_TIME_DEFAULTS") "AS_OF_NOW"))
                            (cond-> (get variables "CURRENT_TIMESTAMP") (assoc-in [:basis :current-time] (Instant/parse (get variables "CURRENT_TIMESTAMP"))))))]
+
          (mapv #(-> % name keyword row) projection))))))
 
 (defn parse-create-table [^String x]
