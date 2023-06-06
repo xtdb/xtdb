@@ -1,5 +1,5 @@
 [:rename
- {x1 name, x5 name_1}
+ {x1 name, x5 name:1}
  [:project
   [x1 x5]
   [:mega-join

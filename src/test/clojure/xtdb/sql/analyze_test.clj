@@ -574,12 +574,14 @@ SELECT t1.d-t1.e AS a, SUM(t1.a) AS b
            (->> (valid? "SELECT * FROM (SELECT y.a FROM y WHERE y.z = FALSE) AS x, z WHERE z.b = TRUE")
                 (map :projected-columns))))
 
-  (t/is (= [[{:index 0 :identifier "b"} {:index 1 :identifier "b"}]
-            [{:index 0 :identifier "b" :qualified-column ["x" "b"]} {:index 1 :identifier "b" :qualified-column ["z" "b"]}]
-            [{:index 0 :identifier "b"}]
-            [{:index 0 :identifier "b" :qualified-column ["y" "b"]}]
-            [{:index 0 :identifier "b"}]
-            [{:index 0 :identifier "b" :qualified-column ["y" "b"]}]]
+  (t/is (= [[{:identifier "b", :index 0}
+             {:identifier "b", :index 1, :outer-name 'b:1}]
+            [{:index 0, :identifier "b", :qualified-column ["x" "b"]}
+             {:index 1, :identifier "b", :qualified-column ["z" "b"], :outer-name 'b:1}]
+            [{:identifier "b", :index 0}]
+            [{:identifier "b", :qualified-column ["y" "b"], :index 0}]
+            [{:identifier "b", :index 0}]
+            [{:identifier "b", :qualified-column ["y" "b"], :index 0}]]
            (->> (valid? "SELECT * FROM (SELECT y.b FROM y) AS x, LATERAL (SELECT y.b FROM y) AS z")
                 (map :projected-columns))))
 
@@ -622,24 +624,24 @@ SELECT t1.d-t1.e AS a, SUM(t1.a) AS b
   (invalid? [#"Table not in scope: baz"]
             "SELECT foo.x, baz.* FROM foo")
 
-  (t/is (= [[{:index 0 :identifier "a"}
-             {:index 1 :identifier "a"}]
-            [{:index 0 :identifier "a" :qualified-column ["x" "a"]}
-             {:index 1 :identifier "a" :qualified-column ["x" "a"]}]]
+  (t/is (= [[{:identifier "a", :index 0}
+             {:identifier "a", :index 1, :outer-name 'a:1}]
+            [{:identifier "a", :qualified-column ["x" "a"], :index 0}
+             {:index 1, :identifier "a", :qualified-column ["x" "a"], :outer-name 'a:1}]]
            (->> (valid? "SELECT x.a, x.* FROM x WHERE x.a IS NOT NULL")
                 (map :projected-columns))))
 
   (t/is (= [[{:index 0 :identifier "a"}
-             {:index 1 :identifier "a"}]
+             {:index 1 :identifier "a" :outer-name 'a:1}]
             [{:index 0 :identifier "a" :qualified-column ["x" "a"]}
-             {:index 1 :identifier "a" :qualified-column ["x" "a"]}]]
+             {:index 1 :identifier "a" :qualified-column ["x" "a"] :outer-name 'a:1}]]
            (->> (valid? "SELECT x.a, x.a FROM x WHERE x.a IS NOT NULL")
                 (map :projected-columns))))
 
   (t/is (= [[{:index 0 :identifier "a"}
-             {:index 1 :identifier "a"}]
+             {:index 1 :identifier "a" :outer-name 'a:1}]
             [{:index 0 :identifier "a" :qualified-column ["x" "a"]}
-             {:index 1 :identifier "a" :qualified-column ["y" "a"]}]]
+             {:index 1 :identifier "a" :qualified-column ["y" "a"] :outer-name 'a:1}]]
            (->> (valid? "SELECT * FROM x, y WHERE x.a = y.a")
                 (map :projected-columns))))
 
@@ -673,9 +675,9 @@ SELECT t1.d-t1.e AS a, SUM(t1.a) AS b
                 (map :projected-columns))))
 
   (t/is (= [[{:identifier "a", :index 0}
-             {:identifier "a", :index 1}]
+             {:identifier "a", :index 1 :outer-name 'a:1}]
             [{:identifier "a", :qualified-column ["x" "a"], :index 0}
-             {:identifier "a", :qualified-column ["foo" "a"], :index 1}]]
+             {:identifier "a", :qualified-column ["foo" "a"], :index 1 :outer-name 'a:1}]]
            (->> (valid? "SELECT * FROM x, UNNEST(x.a) AS foo (a)")
                 (map :projected-columns))))
 
@@ -778,3 +780,11 @@ SELECT t1.d-t1.e AS a, SUM(t1.a) AS b
   (invalid? [#"VAR_SAMP does not support set quanitifiers \(ALL\): VAR_SAMP\(ALL t1.a\)"]
             "SELECT VAR_SAMP(ALL t1.a) FROM t1")
   (valid? "SELECT SUM(DISTINCT t1.a) FROM t1"))
+
+(deftest test-select-star
+  (binding [sem/*table-info* {"foo" #{"a" "b"} "bar" #{"a" "b"}}]
+
+    (invalid? [#"Column name ambiguous: baz.a at line 1, column 8"]
+              "SELECT baz.a FROM (SELECT * FROM foo, bar) AS baz")
+
+    (valid? "SELECT * FROM (SELECT * FROM foo, bar) AS baz")))

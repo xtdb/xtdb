@@ -403,25 +403,6 @@
              (util/rethrowing-cause)))
         "parse error - date with double quotes")
 
-  (t/testing "semantic errors"
-    (t/is (thrown-with-msg?
-           xtdb.IllegalArgumentException
-           #"XTDB requires fully-qualified columns"
-           (-> (xt/submit-tx tu/*node* [[:sql "UPDATE foo SET bar = 'bar' WHERE id = 'foo'"]])
-               (util/rethrowing-cause))))
-
-    (t/is (thrown-with-msg?
-           xtdb.IllegalArgumentException
-           #"INSERT does not contain mandatory xt\$id column"
-           (-> (xt/submit-tx tu/*node* [[:sql "INSERT INTO users (foo, bar) VALUES ('foo', 'bar')"]])
-               (util/rethrowing-cause))))
-
-    (t/is (thrown-with-msg?
-           xtdb.IllegalArgumentException
-           #"Column name duplicated"
-           (-> (xt/submit-tx tu/*node* [[:sql "INSERT INTO users (xt$id, foo, foo) VALUES ('foo', 'foo', 'foo')"]])
-               (util/rethrowing-cause)))))
-
   (t/testing "still an active node"
     (xt/submit-tx tu/*node* [[:sql "INSERT INTO users (xt$id, name) VALUES ('dave', 'Dave')"]])
 

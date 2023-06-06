@@ -1,5 +1,5 @@
 (ns xtdb.node-test
-  (:require [clojure.test :as t]
+  (:require [clojure.test :as t :refer [deftest]]
             [xtdb.api :as xt]
             [xtdb.test-util :as tu]
             [xtdb.util :as util]))
@@ -417,3 +417,59 @@ VALUES(1, OBJECT ('foo': OBJECT('bibble': true), 'bar': OBJECT('baz': 1001)))"]]
          (xt/q tu/*node* '{:find [id vf vt]
                            :where [($ :docs {:xt/id id, :xt/valid-from vf, :xt/valid-to vt}
                                       {:for-valid-time :all-time})]}))))
+
+(deftest test-select-star
+  (xt/submit-tx tu/*node*
+                [[:sql "INSERT INTO foo (xt$id, a) VALUES (1, 1)"]
+                 [:sql "INSERT INTO foo (xt$id, b) VALUES (2, 2)"]
+                 [:sql "INSERT INTO bar (xt$id, a) VALUES (1, 3)"]
+                 [:sql "INSERT INTO bar (xt$id, b) VALUES (2, 4)"]])
+
+  (t/is (= [{:a 1, :xt$id 1} {:b 2, :xt$id 2}]
+           (xt/q tu/*node* "SELECT * FROM foo")))
+
+  (t/is (=
+         [{:a 1, :xt$id 1, :a:1 3, :xt$id:1 1}
+          {:a 1, :xt$id 1, :b:1 4, :xt$id:1 2}
+          {:b 2, :xt$id 2, :a:1 3, :xt$id:1 1}
+          {:b 2, :xt$id 2, :b:1 4, :xt$id:1 2}]
+         (xt/q tu/*node* "SELECT * FROM foo, bar")))
+
+  (t/is (=
+         [{:xt$id 1, :a 3, :xt$id:1 1, :a:1 1}
+          {:xt$id 2, :b 4, :xt$id:1 1, :a:1 1}
+          {:xt$id 1, :a 3, :xt$id:1 2, :b:1 2}
+          {:xt$id 2, :b 4, :xt$id:1 2, :b:1 2}]
+         (xt/q tu/*node* "SELECT bar.*, foo.* FROM foo, bar")))
+
+  (t/is (=
+         [{:a 1, :xt$id 1, :a:1 3, :xt$id:1 1}
+          {:a 1, :xt$id 1, :b:1 4, :xt$id:1 2}
+          {:b 2, :xt$id 2, :a:1 3, :xt$id:1 1}
+          {:b 2, :xt$id 2, :b:1 4, :xt$id:1 2}]
+         (xt/q tu/*node* "SELECT * FROM (SELECT * FROM foo, bar) AS baz")))
+
+  (xt/submit-tx tu/*node*
+                [[:sql "INSERT INTO bing (SELECT * FROM foo)"]])
+
+  (t/is (= [{:a 1, :xt$id 1} {:b 2, :xt$id 2}]
+           (xt/q tu/*node* "SELECT * FROM bing"))))
+
+(deftest test-scan-all-table-col-names
+  (t/testing "testing scan.allTableColNames combines table info from both live and past chunks"
+    (-> (xt/submit-tx tu/*node* [[:put :foo {:xt/id "foo1" :a 1}]
+                                 [:put :bar {:xt/id "bar1"}]
+                                 [:put :bar {:xt/id "bar2" :b 2}]])
+        (tu/then-await-tx* tu/*node*))
+
+      (tu/finish-chunk! tu/*node*)
+
+      (xt/submit-tx tu/*node* [[:put :foo {:xt/id "foo2" :c 3}]
+                               [:put :baz {:xt/id "foo1" :a 4}]])
+
+      (t/is (= [{:a 1, :xt$id "foo1"} {:xt$id "foo2", :c 3}]
+               (xt/q tu/*node* "SELECT * FROM foo")))
+      (t/is (= [{:xt$id "bar1"} {:b 2, :xt$id "bar2"}]
+               (xt/q tu/*node* "SELECT * FROM bar")))
+      (t/is (= [{:a 4, :xt$id "foo1"}]
+               (xt/q tu/*node* "SELECT * FROM baz")))))

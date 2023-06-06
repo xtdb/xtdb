@@ -24,6 +24,8 @@
 ;; - grouping column check for asterisks should really expand and then fail.
 ;; - named columns join should only output single named columns: COALESCE(lhs.x, rhs.x) AS x
 
+(def ^:dynamic *table-info*)
+
 (defn- enter-env-scope
   ([env]
    (enter-env-scope env {}))
@@ -281,7 +283,8 @@
                          (subquery-element ag))
             sq-scope-id (when (and sq-element (not= :collection_derived_table (r/ctor sq-element)))
                           (id sq-element))
-            derived-columns (or (derived-columns ag) (:columns cte))]
+            derived-columns (or (derived-columns ag) (:columns cte))
+            known-columns (get *table-info* table-name)]
         (with-meta
           (cond-> {:correlation-name correlation-name
                    :id (id ag)
@@ -289,7 +292,8 @@
             table-name (assoc :table-or-query-name table-name)
             derived-columns (assoc :derived-columns derived-columns)
             sq-scope-id (assoc :subquery-scope-id sq-scope-id)
-            cte (assoc :cte-id (:id cte) :cte-scope-id (:scope-id cte)))
+            cte (assoc :cte-id (:id cte) :cte-scope-id (:scope-id cte))
+            known-columns (assoc :known-columns known-columns))
           (cond-> {:ref ag}
             sq-element (assoc :subquery-ref sq-element)
             cte (assoc :cte cte
@@ -523,6 +527,22 @@
          ag)
        (mapcat expand-underlying-column-references)))
 
+(defn generate-unique-column-names [projections]
+  (->> projections
+       (reduce
+         (fn try-use-unique-col-name [{:keys [acc ret]} {:keys [identifier] :as projection}]
+           (if identifier
+             (if-let [col-name-count (get acc identifier)]
+               {:acc (assoc acc identifier (inc col-name-count))
+                :ret (conj ret (assoc projection :outer-name (symbol (str (name identifier) ":" (inc col-name-count)))))}
+               {:acc (assoc acc identifier 0)
+                :ret (conj ret projection)})
+             {:acc acc
+              :ret (conj ret projection)}))
+         {:acc {}
+          :ret []})
+         (:ret)))
+
 (defn projected-columns
   "Returns a vector of candidates for the projected-cols of an expression.
 
@@ -532,7 +552,7 @@
   (r/zcase ag
     :table_primary
     (when-not (r/ctor? :qualified_join (r/$ ag 1))
-      (let [{:keys [correlation-name derived-columns], table-id :id, :as table} (table ag)
+      (let [{:keys [correlation-name derived-columns known-columns], table-id :id, :as table} (table ag)
             projections (if-let [derived-columns (not-empty derived-columns)]
                           (for [identifier derived-columns]
                             {:identifier identifier})
@@ -542,20 +562,22 @@
                                   query-expression (scope-element (r/parent query-specification))
                                   named-join-columns (for [identifier (named-columns-join-columns (r/parent ag))]
                                                        {:identifier identifier})
-                                  column-references (all-column-references query-expression)]
+                                  column-references (all-column-references query-expression)
+                                  known-columns (map #(hash-map :identifier %) known-columns)]
                               (->> (for [{:keys [identifiers] column-table-id :table-id} column-references
                                          :when (= table-id column-table-id)]
                                      {:identifier (last identifiers)})
                                    (concat named-join-columns)
+                                   (concat known-columns)
                                    (distinct)))))]
-        [(reduce
-          (fn [acc {:keys [identifier index]}]
-            (conj acc (cond-> (with-meta {:index (count acc)} {:table table})
-                        identifier (assoc :identifier identifier)
-                        (and index (nil? identifier)) (assoc :original-index index)
-                        correlation-name (assoc :qualified-column [correlation-name identifier]))))
-          []
-          projections)]))
+        [(map-indexed
+           (fn [idx {:keys [identifier index outer-name]}]
+             (cond-> (with-meta {:index idx} {:table table})
+               identifier (assoc :identifier identifier)
+               (and index (nil? identifier)) (assoc :original-index index)
+               correlation-name (assoc :qualified-column [correlation-name identifier])
+               outer-name (assoc :inner-name outer-name)))
+           projections)]))
 
     :query_specification
     (letfn [(expand-asterisk [ag]
@@ -601,21 +623,23 @@
                      {:ref ag})])
 
                 nil))]
-      (let [sl (r/$ ag -2)]
-        [(reduce
-          (fn [acc projection]
-            (conj acc (assoc projection :index (count acc))))
-          []
-          (r/collect-stop calculate-select-list sl))]))
+      (let [sl (r/$ ag -2)
+            projections (r/collect-stop calculate-select-list sl)]
+        [(->> projections
+              (generate-unique-column-names)
+              (map-indexed
+                (fn [idx projection]
+                  (assoc projection :index idx))))]))
 
     :query_expression
     (let [query-expression-body (if (r/ctor? :with_clause (r/$ ag 1))
                                   (r/$ ag 2)
                                   (r/$ ag 1))
           keys-to-keep (if (r/ctor? :query_specification query-expression-body)
-                         [:identifier :index :normal-form]
-                         [:identifier :index])]
-      (vec (for [projections (projected-columns query-expression-body)]
+                         [:identifier :index :normal-form :outer-name]
+                         [:identifier :index :outer-name])
+          projs (projected-columns query-expression-body)]
+      (vec (for [projections projs]
              (vec (for [projection projections]
                     (select-keys projection keys-to-keep))))))
 

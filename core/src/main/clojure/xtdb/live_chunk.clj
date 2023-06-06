@@ -101,12 +101,12 @@
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface ILiveChunkWatermark
   (^xtdb.live_chunk.ILiveTableWatermark liveTable [^String table])
+  (^java.util.Map allColumnTypes [])
   (^void close []))
 
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface ILiveChunkTx
   (^xtdb.live_chunk.ILiveTableTx liveTable [^String table])
-
   (^xtdb.live_chunk.ILiveChunkWatermark openWatermark [])
 
   (^long nextRowId [])
@@ -117,7 +117,6 @@
 (definterface ILiveChunk
   (^xtdb.live_chunk.ILiveTable liveTable [^String table])
   (^xtdb.live_chunk.ILiveChunkWatermark openWatermark [])
-
   (^xtdb.live_chunk.ILiveChunkTx startTx [])
 
   (^long chunkIdx [])
@@ -360,7 +359,7 @@
                   (.startTx)))]
 
       (.computeIfAbsent live-table-txs table-name
-                        (util/->jfn ->live-table-tx))))
+        (util/->jfn ->live-table-tx))))
 
   (openWatermark [_]
     (let [wms (HashMap.)]
@@ -374,6 +373,8 @@
 
         (reify ILiveChunkWatermark
           (liveTable [_ table-name] (.get wms table-name))
+
+          (allColumnTypes [_] (update-vals wms #(.columnTypes ^ILiveTableWatermark %)))
 
           AutoCloseable
           (close [_] (run! util/try-close (.values wms))))
@@ -421,6 +422,8 @@
 
         (reify ILiveChunkWatermark
           (liveTable [_ table-name] (.get wms table-name))
+
+          (allColumnTypes [_] (update-vals wms #(.columnTypes ^ILiveTableWatermark %)))
 
           AutoCloseable
           (close [_] (run! util/try-close (.values wms))))

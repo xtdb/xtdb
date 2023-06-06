@@ -6,6 +6,7 @@
             xtdb.indexer
             [xtdb.ingester :as ingest]
             [xtdb.operator :as op]
+            [xtdb.operator.scan :as scan]
             [xtdb.tx-producer :as txp]
             [xtdb.util :as util]
             [juxt.clojars-mirrors.integrant.core :as ig])
@@ -37,7 +38,7 @@
     (doseq [{:keys [op] :as tx-op} (txp/conform-tx-ops tx-ops)
             :when (= :sql op)
             :let [{{:keys [sql]} :sql+params} tx-op]]
-      (sql/compile-query sql))
+      (sql/parse-query sql))
     (catch Throwable e
       (CompletableFuture/failedFuture e))))
 
@@ -58,10 +59,11 @@
                          (with-after-tx-default))
           !await-tx (.awaitTxAsync ingester (get-in query-opts [:basis :after-tx]) (:basis-timeout query-opts))]
       (if (string? query)
-        (let [pq (.prepareRaQuery ra-src (sql/compile-query query query-opts))]
-          (-> !await-tx
-              (util/then-apply
-                (fn [_]
+        (-> !await-tx
+            (util/then-apply
+              (fn [_]
+                (let [tables-with-cols (scan/tables-with-cols (:basis query-opts) wm-src scan-emitter)
+                      pq (.prepareRaQuery ra-src (sql/compile-query query (assoc query-opts :table-info tables-with-cols)))]
                   (sql/open-sql-query allocator wm-src pq query-opts)))))
 
         (-> !await-tx
