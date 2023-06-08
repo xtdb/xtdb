@@ -62,10 +62,6 @@
             "isSigned" : true
           },
           "children" : [ ]
-        }],
-        "metadata" : [{
-          "value" : "i64",
-          "key" : "type-head"
         }]
       },{
         "name" : "timestamp-tz-micro-utc",
@@ -91,16 +87,6 @@
             "timezone" : "UTC"
           },
           "children" : [ ]
-        }],
-        "metadata" : [{
-          "value" : "micro",
-          "key" : "time-unit"
-        },{
-          "value" : "timestamp-tz",
-          "key" : "type-head"
-        },{
-          "value" : "UTC",
-          "key" : "tz"
         }]
       },{
         "name" : "bool",
@@ -108,33 +94,21 @@
         "type" : {
           "name" : "bool"
         },
-        "children" : [ ],
-        "metadata" : [{
-          "value" : "bool",
-          "key" : "type-head"
-        }]
+        "children" : [ ]
       },{
         "name" : "clj-form",
         "nullable" : true,
         "type" : {
           "name" : "bool"
         },
-        "children" : [ ],
-        "metadata" : [{
-          "value" : "clj-form",
-          "key" : "type-head"
-        }]
+        "children" : [ ]
       },{
         "name" : "null",
         "nullable" : true,
         "type" : {
           "name" : "bool"
         },
-        "children" : [ ],
-        "metadata" : [{
-          "value" : "null",
-          "key" : "type-head"
-        }]
+        "children" : [ ]
       }]
     },{
       "name" : "bloom",

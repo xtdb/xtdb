@@ -62,10 +62,6 @@
             "isSigned" : true
           },
           "children" : [ ]
-        }],
-        "metadata" : [{
-          "value" : "i64",
-          "key" : "type-head"
         }]
       },{
         "name" : "utf8",
@@ -87,10 +83,6 @@
             "name" : "utf8"
           },
           "children" : [ ]
-        }],
-        "metadata" : [{
-          "value" : "utf8",
-          "key" : "type-head"
         }]
       }]
     },{

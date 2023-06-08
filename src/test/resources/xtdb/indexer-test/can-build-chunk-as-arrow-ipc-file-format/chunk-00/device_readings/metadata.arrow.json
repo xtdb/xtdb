@@ -62,10 +62,6 @@
             "isSigned" : true
           },
           "children" : [ ]
-        }],
-        "metadata" : [{
-          "value" : "i64",
-          "key" : "type-head"
         }]
       },{
         "name" : "f64",
@@ -89,10 +85,6 @@
             "precision" : "DOUBLE"
           },
           "children" : [ ]
-        }],
-        "metadata" : [{
-          "value" : "f64",
-          "key" : "type-head"
         }]
       },{
         "name" : "utf8",
@@ -114,10 +106,6 @@
             "name" : "utf8"
           },
           "children" : [ ]
-        }],
-        "metadata" : [{
-          "value" : "utf8",
-          "key" : "type-head"
         }]
       },{
         "name" : "timestamp-tz-micro-utc",
@@ -143,16 +131,6 @@
             "timezone" : "UTC"
           },
           "children" : [ ]
-        }],
-        "metadata" : [{
-          "value" : "micro",
-          "key" : "time-unit"
-        },{
-          "value" : "timestamp-tz",
-          "key" : "type-head"
-        },{
-          "value" : "UTC",
-          "key" : "tz"
         }]
       }]
     },{

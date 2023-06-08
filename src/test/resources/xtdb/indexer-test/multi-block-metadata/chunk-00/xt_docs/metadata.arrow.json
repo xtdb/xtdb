@@ -62,10 +62,6 @@
             "isSigned" : true
           },
           "children" : [ ]
-        }],
-        "metadata" : [{
-          "value" : "i64",
-          "key" : "type-head"
         }]
       },{
         "name" : "utf8",
@@ -87,10 +83,6 @@
             "name" : "utf8"
           },
           "children" : [ ]
-        }],
-        "metadata" : [{
-          "value" : "utf8",
-          "key" : "type-head"
         }]
       },{
         "name" : "timestamp-tz-micro-utc",
@@ -116,16 +108,6 @@
             "timezone" : "UTC"
           },
           "children" : [ ]
-        }],
-        "metadata" : [{
-          "value" : "micro",
-          "key" : "time-unit"
-        },{
-          "value" : "timestamp-tz",
-          "key" : "type-head"
-        },{
-          "value" : "UTC",
-          "key" : "tz"
         }]
       },{
         "name" : "f64",
@@ -149,10 +131,6 @@
             "precision" : "DOUBLE"
           },
           "children" : [ ]
-        }],
-        "metadata" : [{
-          "value" : "f64",
-          "key" : "type-head"
         }]
       },{
         "name" : "list",
@@ -162,33 +140,21 @@
           "bitWidth" : 32,
           "isSigned" : true
         },
-        "children" : [ ],
-        "metadata" : [{
-          "value" : "list",
-          "key" : "type-head"
-        }]
+        "children" : [ ]
       },{
         "name" : "bool",
         "nullable" : true,
         "type" : {
           "name" : "bool"
         },
-        "children" : [ ],
-        "metadata" : [{
-          "value" : "bool",
-          "key" : "type-head"
-        }]
+        "children" : [ ]
       },{
         "name" : "absent",
         "nullable" : true,
         "type" : {
           "name" : "bool"
         },
-        "children" : [ ],
-        "metadata" : [{
-          "value" : "absent",
-          "key" : "type-head"
-        }]
+        "children" : [ ]
       },{
         "name" : "struct-7",
         "nullable" : true,
@@ -204,13 +170,6 @@
             "isSigned" : true
           },
           "children" : [ ]
-        }],
-        "metadata" : [{
-          "value" : "struct",
-          "key" : "type-head"
-        },{
-          "value" : "#{a b}",
-          "key" : "key-set"
         }]
       },{
         "name" : "struct-8",
@@ -227,13 +186,6 @@
             "isSigned" : true
           },
           "children" : [ ]
-        }],
-        "metadata" : [{
-          "value" : "struct",
-          "key" : "type-head"
-        },{
-          "value" : "#{a b}",
-          "key" : "key-set"
         }]
       },{
         "name" : "struct-9",
@@ -250,13 +202,6 @@
             "isSigned" : true
           },
           "children" : [ ]
-        }],
-        "metadata" : [{
-          "value" : "struct",
-          "key" : "type-head"
-        },{
-          "value" : "#{c d}",
-          "key" : "key-set"
         }]
       }]
     },{
