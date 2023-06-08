@@ -15,7 +15,7 @@
            (java.util.function Function)
            java.util.function.Function
            (org.apache.arrow.memory BufferAllocator)
-           (org.apache.arrow.vector BigIntVector BitVector DateDayVector DateMilliVector DurationVector ExtensionTypeVector FixedSizeBinaryVector Float4Vector Float8Vector IntVector IntervalDayVector IntervalMonthDayNanoVector IntervalYearVector NullVector PeriodDuration SmallIntVector TimeMicroVector TimeMilliVector TimeNanoVector TimeSecVector TimeStampVector TinyIntVector ValueVector VarBinaryVector VarCharVector)
+           (org.apache.arrow.vector BigIntVector BitVector DateDayVector DateMilliVector DurationVector ExtensionTypeVector FixedSizeBinaryVector Float4Vector Float8Vector IntVector IntervalDayVector IntervalMonthDayNanoVector IntervalYearVector NullVector PeriodDuration SmallIntVector TimeMicroVector TimeMilliVector TimeNanoVector TimeSecVector TimeStampVector TinyIntVector ValueVector VarBinaryVector VarCharVector VectorSchemaRoot)
            (org.apache.arrow.vector.complex DenseUnionVector ListVector StructVector)
            (org.apache.arrow.vector.types.pojo ArrowType$List ArrowType$Struct ArrowType$Union Field FieldType)
            xtdb.api.protocols.ClojureForm
@@ -354,7 +354,9 @@
             (.setBytes (.getDataBuffer arrow-vec) (* byte-width idx) buf)
             (.position buf pos)))
 
-        (writeObject [this bytes] (.writeBytes this (ByteBuffer/wrap bytes)))))))
+        (writeObject [this bytes] (.writeBytes this (ByteBuffer/wrap bytes)))
+
+        (writerForType [this _] this)))))
 
 (extend-protocol ArrowWriteable
   (Class/forName "[B")
@@ -451,7 +453,12 @@
                           pos))))))
 
         (writerPosition [_] wp)
-        (writeNull [_ _] (.setNull arrow-vec (.getPositionAndIncrement wp)))
+
+        (writeNull [_ _]
+          (.setNull arrow-vec (.getPositionAndIncrement wp))
+
+          (doseq [^IVectorWriter w (.values writers)]
+            (.writeNull w nil)))
 
         (structKeyWriter [_ col-name]
           (.computeIfAbsent writers col-name
@@ -465,6 +472,19 @@
                                                                DenseUnionVector)))
                                   (populate-with-absents (.getPosition wp)))))))
 
+        (structKeyWriter [_ col-name col-type]
+          (.computeIfAbsent writers col-name
+                            (reify Function
+                              (apply [_ col-name]
+                                (doto (or (some-> (.getChild arrow-vec col-name)
+                                                  (->writer))
+
+                                          (let [field (types/col-type->field col-type)]
+                                            (->writer (doto (.addOrGet arrow-vec col-name (.getFieldType field) ValueVector)
+                                                        (.initializeChildrenFromFields (.getChildren field))))))
+
+                                  (populate-with-absents (.getPosition wp)))))))
+
         (startStruct [_]
           (.setIndexDefined arrow-vec (.getPosition wp)))
 
@@ -473,7 +493,10 @@
             (doseq [^IVectorWriter w (.values writers)]
               (populate-with-absents w (inc pos)))))
 
-        (writerForType [this _col-type] this)))))
+        (writerForType [this _col-type] this)
+
+        Iterable
+        (iterator [_] (.iterator (.entrySet writers)))))))
 
 (extend-protocol ArrowWriteable
   List
@@ -754,6 +777,28 @@
    (->writer (-> (types/col-type->field col-name col-type)
                  (.createVector allocator)))))
 
+(defn- ->rel-copier [^IRelationWriter rel-wtr, ^IIndirectRelation in-rel]
+  (let [wp (.writerPosition rel-wtr)
+        copiers (vec (concat (for [^IIndirectVector in-vec in-rel]
+                               (.rowCopier in-vec (.writerForName rel-wtr (.getName in-vec))))
+
+                             (for [absent-col-name (set/difference (set (keys rel-wtr))
+                                                                   (into #{} (map #(.getName ^IIndirectVector %)) in-rel))
+                                   :let [!writer (delay
+                                                   (-> (.writerForName rel-wtr absent-col-name)
+                                                       (.writerForType :absent)))]]
+                               (reify IRowCopier
+                                 (copyRow [_ _src-idx]
+                                   (let [pos (.getPosition wp)]
+                                     (.writeNull ^IVectorWriter @!writer nil)
+                                     pos))))))]
+    (reify IRowCopier
+      (copyRow [_ src-idx]
+        (let [pos (.getPositionAndIncrement wp)]
+          (doseq [^IRowCopier copier copiers]
+            (.copyRow copier src-idx))
+          pos)))))
+
 (defn ->rel-writer ^xtdb.vector.IRelationWriter [^BufferAllocator allocator]
   (let [writers (LinkedHashMap.)
         wp (IWriterPosition/build)]
@@ -779,35 +824,48 @@
                                     (populate-with-absents pos))
                                   (->vec-writer allocator col-name col-type)))))))
 
-      (rowCopier [this in-rel]
-        (let [copiers (vec (concat (for [^IIndirectVector in-vec in-rel]
-                                     (.rowCopier in-vec (.writerForName this (.getName in-vec))))
+      (rowCopier [this in-rel] (->rel-copier this in-rel))
 
-                                   (for [absent-col-name (set/difference (set (keys writers))
-                                                                         (into #{} (map #(.getName ^IIndirectVector %)) in-rel))
-                                         :let [!writer (delay
-                                                         (-> (.writerForName this absent-col-name)
-                                                             (.writerForType :absent)))]]
-                                     (reify IRowCopier
-                                       (copyRow [_ _src-idx]
-                                         (let [pos (.getPosition wp)]
-                                           (.writeNull ^IVectorWriter @!writer nil)
-                                           pos))))))]
-          (reify IRowCopier
-            (copyRow [_ src-idx]
-              (let [pos (.getPositionAndIncrement wp)]
-                (doseq [^IRowCopier copier copiers]
-                  (.copyRow copier src-idx))
-                pos)))))
-
-      (iterator [_] (.iterator (.values writers)))
-
-      (clear [this]
-        (run! #(.clear ^IVectorWriter %) this))
+      (iterator [_] (.iterator (.entrySet writers)))
 
       AutoCloseable
       (close [this]
-        (run! util/try-close this)))))
+        (run! util/try-close (vals this))))))
+
+(defn root->writer ^xtdb.vector.IRelationWriter [^VectorSchemaRoot root]
+  (let [writers (LinkedHashMap.)
+        wp (IWriterPosition/build)]
+    (doseq [^ValueVector vec (.getFieldVectors root)]
+      (.put writers (.getName vec) (->writer vec)))
+
+    (reify IRelationWriter
+      (writerPosition [_] wp)
+
+      (endRow [_]
+        (let [pos (.getPositionAndIncrement wp)]
+          (doseq [^IVectorWriter w (.values writers)]
+            (populate-with-absents w (inc pos)))))
+
+      (writerForName [_ col-name]
+        (or (.get writers col-name)
+            (throw (NullPointerException.))))
+
+      (writerForName [this col-name _col-type]
+        (.writerForName this col-name))
+
+      (rowCopier [this in-rel] (->rel-copier this in-rel))
+
+      (iterator [_] (.iterator (.entrySet writers)))
+
+      (syncRowCount [_]
+        (.setRowCount root (.getPosition wp))
+
+        (doseq [^IVectorWriter w (vals writers)]
+          (.syncValueCount w)))
+
+      AutoCloseable
+      (close [this]
+        (run! util/try-close (vals this))))))
 
 (defn open-vec
   (^org.apache.arrow.vector.ValueVector [allocator col-name vs]
@@ -838,7 +896,7 @@
   (iv/->direct-vec (.getVector (doto w (.syncValueCount)))))
 
 (defn rel-wtr->rdr ^xtdb.vector.IIndirectRelation [^xtdb.vector.IRelationWriter w]
-  (iv/->indirect-rel (map vec-wtr->rdr w)
+  (iv/->indirect-rel (map vec-wtr->rdr (vals w))
                      (.getPosition (.writerPosition w))))
 
 (defn append-vec [^IVectorWriter vec-writer, ^IIndirectVector in-col]

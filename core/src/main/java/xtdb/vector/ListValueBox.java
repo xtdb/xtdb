@@ -214,6 +214,16 @@ class ListValueBox implements IValueWriter, IMonoVectorReader, IPolyVectorReader
     }
 
     @Override
+    public IValueWriter structKeyWriter(String key, Object colType) {
+        return new BoxWriter() {
+            @Override
+            IValueWriter box() {
+                return writeBox.structKeyWriter(key, colType);
+            }
+        };
+    }
+
+    @Override
     public void startStruct() {
         writeBox = new ValueBox();
         els.add(wp.getPosition(), writeBox);

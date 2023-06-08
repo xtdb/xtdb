@@ -27,6 +27,7 @@ public interface IValueWriter {
     void writeObject(Object objectValue);
 
     IValueWriter structKeyWriter(String key);
+    IValueWriter structKeyWriter(String key, Object colType);
     void startStruct();
     void endStruct();
 

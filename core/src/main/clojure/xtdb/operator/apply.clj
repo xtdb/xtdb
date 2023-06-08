@@ -181,7 +181,7 @@
                          (let [idxs (.toArray (.build idxs))]
                            (.accept c (iv/->indirect-rel (concat (for [^IIndirectVector col in-rel]
                                                                    (.select col idxs))
-                                                                 (map vw/vec-wtr->rdr dep-out-writer))
+                                                                 (vw/rel-wtr->rdr dep-out-writer))
                                                          (alength idxs))))))))))
 
   (close [_]

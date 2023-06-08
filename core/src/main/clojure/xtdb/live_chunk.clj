@@ -165,7 +165,7 @@
   (let [out-cols (ArrayList.)]
     (try
       (doseq [^IIndirectVector v (cons (iv/->direct-vec row-id-vec)
-                                       (mapv vw/vec-wtr->rdr rel))]
+                                       (vw/rel-wtr->rdr rel))]
         (.add out-cols (iv/->direct-vec (cond-> (.getVector v)
                                           retain? (retain-vec)))))
 
@@ -210,9 +210,9 @@
 
   (openWatermark [_ retain?]
     (let [col-types (->> transient-rel
-                         (into {} (map (fn [^IVectorWriter col]
+                         (into {} (map (fn [[col-name ^IVectorWriter col]]
                                          (let [v (.getVector col)]
-                                           (MapEntry/create (.getName v) (types/field->col-type (.getField v))))))))
+                                           (MapEntry/create col-name (types/field->col-type (.getField v))))))))
           row-counts (.blockRowCounts row-counter)
           static-wm-rel (open-wm-rel static-rel static-row-id-vec retain?)
           transient-wm-rel (open-wm-rel transient-rel transient-row-id-vec false)]
@@ -273,7 +273,7 @@
                   row-counter))
 
   (openWatermark [_ retain?]
-    (let [col-types (->> static-rel
+    (let [col-types (->> (vals static-rel)
                          (into {} (map (fn [^IVectorWriter col]
                                          (let [v (.getVector col)]
                                            (MapEntry/create (.getName v) (types/field->col-type (.getField v))))))))
@@ -295,7 +295,7 @@
         (close [_] (when retain? (.close wm-rel))))))
 
   (finishBlock [_]
-    (doseq [^IIndirectVector live-vec (cons (iv/->direct-vec row-id-vec) (map vw/vec-wtr->rdr static-rel))]
+    (doseq [^IIndirectVector live-vec (cons (iv/->direct-vec row-id-vec) (seq (vw/rel-wtr->rdr static-rel)))]
       (doto (->col-metadata-writer table-metadata-writer col-metadata-writers (.getName live-vec))
         (.writeMetadata (iv/slice-col live-vec
                                       (.chunkRowCount row-counter)
@@ -308,7 +308,7 @@
     (let [row-counts (.blockRowCounts row-counter)
 
           !fut (-> (CompletableFuture/allOf
-                    (->> (cons row-id-vec (map #(.getVector ^IVectorWriter %) static-rel))
+                    (->> (cons row-id-vec (map #(.getVector ^IVectorWriter %) (vals static-rel)))
                          (map (fn [^ValueVector live-vec]
                                 (let [live-root (VectorSchemaRoot/of (into-array [live-vec]))]
                                   (doto (->col-metadata-writer table-metadata-writer col-metadata-writers (.getName live-vec))
@@ -438,13 +438,13 @@
   (isChunkFull [_] (>= (.chunkRowCount row-counter) rows-per-chunk))
 
   (finishBlock [_]
-    (doseq [^ILiveTable live-table (vals live-tables)]
+    (doseq [^ILiveTable live-table (.values live-tables)]
       (.finishBlock live-table)))
 
   (nextBlock [_] (.nextBlock row-counter))
 
   (finishChunk [_ latest-completed-tx]
-    (let [futs (for [^ILiveTable live-table (vals live-tables)]
+    (let [futs (for [^ILiveTable live-table (.values live-tables)]
                  (.finishChunk live-table))]
 
       (-> (CompletableFuture/allOf (into-array CompletableFuture futs))

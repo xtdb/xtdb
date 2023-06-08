@@ -9,7 +9,7 @@
            [org.apache.arrow.vector ValueVector VarBinaryVector]
            org.roaringbitmap.buffer.ImmutableRoaringBitmap
            org.roaringbitmap.RoaringBitmap
-           (xtdb.vector IIndirectRelation IIndirectVector)))
+           (xtdb.vector IIndirectRelation IIndirectVector IVectorWriter)))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -95,11 +95,11 @@
                             (.createVector allocator))]
       (f params tmp-vec))))
 
-(defn write-bloom [^VarBinaryVector bloom-vec, ^long meta-idx, ^IIndirectVector col]
+(defn write-bloom [^IVectorWriter bloom-wtr, ^IIndirectVector col]
   (let [bloom (RoaringBitmap.)]
     (dotimes [in-idx (.getValueCount col)]
       (let [^ints el-hashes (bloom-hashes col in-idx)]
         (.add bloom el-hashes)))
-    (let [ba (byte-array (.serializedSizeInBytes bloom))]
-      (.serialize bloom (ByteBuffer/wrap ba))
-      (.setSafe bloom-vec meta-idx ba))))
+    (let [buf (ByteBuffer/allocate (.serializedSizeInBytes bloom))]
+      (.serialize bloom buf)
+      (.writeBytes bloom-wtr (doto buf .clear)))))

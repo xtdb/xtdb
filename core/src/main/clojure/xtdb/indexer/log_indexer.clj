@@ -124,11 +124,12 @@
         (.add block-row-counts (.getAndSet !block-row-count 0)))
 
       (finishChunk [_ chunk-idx]
-        (let [log-root (let [^Iterable vecs (for [^IVectorWriter w (seq log-writer)]
-                                              (do
-                                                (.syncValueCount w)
-                                                (.getVector w)))]
+        (.syncRowCount log-writer)
+
+        (let [log-root (let [^Iterable vecs (for [^IVectorWriter w (vals log-writer)]
+                                              (.getVector w))]
                          (VectorSchemaRoot. vecs))
+
               log-bytes (with-open [write-root (VectorSchemaRoot/create (.getSchema log-root) allocator)]
                           (let [loader (VectorLoader. write-root)]
                             (with-open [^ICursor slices (blocks/->slices log-root block-row-counts)]
@@ -140,6 +141,7 @@
                                                          (with-open [arb (.getRecordBatch (VectorUnloader. sliced-root))]
                                                            (.load loader arb)
                                                            (write-batch!))))))))))]
+
           (.putObject object-store (->log-obj-key chunk-idx) log-bytes)))
 
       (nextChunk [_]

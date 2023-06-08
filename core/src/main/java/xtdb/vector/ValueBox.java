@@ -119,6 +119,16 @@ public class ValueBox implements IValueWriter, IPolyValueReader {
     }
 
     @Override
+    public IValueWriter structKeyWriter(String key, Object colType) {
+        return new BoxWriter() {
+            @Override
+            IValueWriter box() {
+                return ((StructValueBox) obj).fieldWriter(key);
+            }
+        };
+    }
+
+    @Override
     public void startStruct() {
         obj = new StructValueBox();
     }

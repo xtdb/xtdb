@@ -63,6 +63,11 @@ abstract class BoxWriter implements IValueWriter {
     }
 
     @Override
+    public IValueWriter structKeyWriter(String key, Object colType) {
+        return box().structKeyWriter(key, colType);
+    }
+
+    @Override
     public void startStruct() {
         box().startStruct();
     }

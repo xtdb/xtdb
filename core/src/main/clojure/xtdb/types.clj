@@ -295,7 +295,7 @@
 ;; HACK not ideal that end-users would need to extend all of these
 ;; to add their own extension types
 
-(defmulti col-type->field-name col-type-head, :default ::default, :hierarchy #'col-type-hierarchy)
+(defmulti ^String col-type->field-name col-type-head, :default ::default, :hierarchy #'col-type-hierarchy)
 (defmethod col-type->field-name ::default [col-type] (name (col-type-head col-type)))
 
 #_{:clj-kondo/ignore [:unused-binding]}
