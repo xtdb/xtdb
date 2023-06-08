@@ -5,20 +5,22 @@ import org.apache.arrow.vector.ValueVector;
 public interface IVectorWriter extends IValueWriter, AutoCloseable {
 
     /**
-     * Maintains the next position to be written to.
+     * <p> Maintains the next position to be written to. </p>
      *
-     * Automatically incremented by the various `write` methods, and any {@link IVectorWriter#rowCopier}s.
+     * <p> Automatically incremented by the various `write` methods, and any {@link IVectorWriter#rowCopier}s. </p>
      */
     IWriterPosition writerPosition();
 
+    ValueVector getVector();
+
     /**
-     * Returns the underlying vector.
-     *
      * This method calls {@link ValueVector#setValueCount} on the underlying vector, so that all of the values written
      * become visible through the Arrow Java API - we don't call this after every write because (for composite vectors, and especially unions)
      * it's not the cheapest call.
      */
-    ValueVector getVector();
+    default void syncValueCount() {
+        getVector().setValueCount(writerPosition().getPosition());
+    }
 
     IRowCopier rowCopier(ValueVector srcVector);
 

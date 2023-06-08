@@ -67,7 +67,7 @@
   (->writer [arrow-vec]
     (let [wp (IWriterPosition/build (.getValueCount arrow-vec))]
       (reify IVectorWriter
-        (getVector [_] (doto arrow-vec (.setValueCount (.getPosition wp))))
+        (getVector [_] arrow-vec)
         (clear [_] (.clear arrow-vec) (.setPosition wp 0))
 
         (rowCopier [this-wtr _src-vec]
@@ -86,7 +86,7 @@
   (->writer [arrow-vec]
     (let [wp (IWriterPosition/build (.getValueCount arrow-vec))]
       (reify IVectorWriter
-        (getVector [_] (doto arrow-vec (.setValueCount (.getPosition wp))))
+        (getVector [_] arrow-vec)
         (clear [_] (.clear arrow-vec) (.setPosition wp 0))
         (rowCopier [this src-vec] (scalar-copier this src-vec))
         (writerPosition [_] wp)
@@ -100,7 +100,7 @@
      (~'->writer [arrow-vec#]
       (let [wp# (IWriterPosition/build (.getValueCount arrow-vec#))]
         (reify IVectorWriter
-          (~'getVector [_] (doto arrow-vec# (.setValueCount (.getPosition wp#))))
+          (~'getVector [_] arrow-vec#)
           (~'clear [_] (.clear arrow-vec#) (.setPosition wp# 0))
           (~'rowCopier [this# src-vec#] (scalar-copier this# src-vec#))
           (~'writerPosition [_#] wp#)
@@ -133,7 +133,7 @@
   (->writer [arrow-vec]
     (let [wp (IWriterPosition/build (.getValueCount arrow-vec))]
       (reify IVectorWriter
-        (getVector [_] (doto arrow-vec (.setValueCount (.getPosition wp))))
+        (getVector [_] arrow-vec)
         (clear [_] (.clear arrow-vec) (.setPosition wp 0))
         (rowCopier [this src-vec] (scalar-copier this src-vec))
         (writerPosition [_] wp)
@@ -178,7 +178,7 @@
   (->writer [arrow-vec]
     (let [wp (IWriterPosition/build (.getValueCount arrow-vec))]
       (reify IVectorWriter
-        (getVector [_] (doto arrow-vec (.setValueCount (.getPosition wp))))
+        (getVector [_] arrow-vec)
         (clear [_] (.clear arrow-vec) (.setPosition wp 0))
         (rowCopier [this src-vec] (scalar-copier this src-vec))
         (writerPosition [_] wp)
@@ -190,7 +190,7 @@
   (->writer [arrow-vec]
     (let [wp (IWriterPosition/build (.getValueCount arrow-vec))]
       (reify IVectorWriter
-        (getVector [_] (doto arrow-vec (.setValueCount (.getPosition wp))))
+        (getVector [_] arrow-vec)
         (clear [_] (.clear arrow-vec) (.setPosition wp 0))
         (rowCopier [this src-vec] (scalar-copier this src-vec))
         (writerPosition [_] wp)
@@ -205,7 +205,7 @@
   (->writer [arrow-vec]
     (let [wp (IWriterPosition/build (.getValueCount arrow-vec))]
       (reify IVectorWriter
-        (getVector [_] (doto arrow-vec (.setValueCount (.getPosition wp))))
+        (getVector [_] arrow-vec)
         (clear [_] (.clear arrow-vec) (.setPosition wp 0))
         (rowCopier [this src-vec] (scalar-copier this src-vec))
         (writerPosition [_] wp)
@@ -227,7 +227,7 @@
   (->writer [arrow-vec]
     (let [wp (IWriterPosition/build (.getValueCount arrow-vec))]
       (reify IVectorWriter
-        (getVector [_] (doto arrow-vec (.setValueCount (.getPosition wp))))
+        (getVector [_] arrow-vec)
         (clear [_] (.clear arrow-vec) (.setPosition wp 0))
         (rowCopier [this src-vec] (scalar-copier this src-vec))
         (writerPosition [_] wp)
@@ -299,7 +299,7 @@
   (->writer [arrow-vec]
     (let [wp (IWriterPosition/build (.getValueCount arrow-vec))]
       (reify IVectorWriter
-        (getVector [_] (doto arrow-vec (.setValueCount (.getPosition wp))))
+        (getVector [_] arrow-vec)
         (clear [_] (.clear arrow-vec) (.setPosition wp 0))
         (rowCopier [this src-vec] (scalar-copier this src-vec))
         (writerPosition [_] wp)
@@ -320,7 +320,7 @@
   (->writer [arrow-vec]
     (let [wp (IWriterPosition/build (.getValueCount arrow-vec))]
       (reify IVectorWriter
-        (getVector [_] (doto arrow-vec (.setValueCount (.getPosition wp))))
+        (getVector [_] arrow-vec)
         (clear [_] (.clear arrow-vec) (.setPosition wp 0))
         (rowCopier [this src-vec] (scalar-copier this src-vec))
         (writerPosition [_] wp)
@@ -341,7 +341,7 @@
     (let [byte-width (.getByteWidth arrow-vec)
           wp (IWriterPosition/build (.getValueCount arrow-vec))]
       (reify IVectorWriter
-        (getVector [_] (doto arrow-vec (.setValueCount (.getPosition wp))))
+        (getVector [_] arrow-vec)
         (clear [_] (.clear arrow-vec) (.setPosition wp 0))
         (rowCopier [this src-vec] (scalar-copier this src-vec))
         (writerPosition [_] wp)
@@ -383,7 +383,7 @@
           el-writer (->writer (.getDataVector arrow-vec))
           el-wp (.writerPosition el-writer)]
       (reify IVectorWriter
-        (getVector [_] (doto arrow-vec (.setValueCount (.getPosition wp))))
+        (getVector [_] arrow-vec)
         (clear [_] (.clear arrow-vec) (.setPosition wp 0) (.clear el-writer))
 
         (rowCopier [this-wtr src-vec]
@@ -426,7 +426,7 @@
     (let [wp (IWriterPosition/build (.getValueCount arrow-vec))
           writers (HashMap.)]
       (reify IVectorWriter
-        (getVector [_] (doto arrow-vec (.setValueCount (.getPosition wp))))
+        (getVector [_] arrow-vec)
         (clear [_] (.clear arrow-vec) (.setPosition wp 0) (run! #(.clear ^IVectorWriter %) (.values writers)))
 
         (rowCopier [this-wtr src-vec]
@@ -648,7 +648,6 @@
                                                :list
                                                (types/->field field-name ArrowType$List/INSTANCE false (types/->field "$data$" types/dense-union-type false))
 
-
                                                :set
                                                (types/->field field-name SetType/INSTANCE false (types/->field "$data$" types/dense-union-type false))
 
@@ -669,7 +668,7 @@
   (->writer [arrow-vec]
     (let [inner (->writer (.getUnderlyingVector arrow-vec))]
       (reify IVectorWriter
-        (getVector [_] (doto arrow-vec (.setValueCount (.getPosition (.writerPosition inner)))))
+        (getVector [_] arrow-vec)
         (clear [_] (.clear inner))
         (rowCopier [this-wtr src-vec]
           (cond
@@ -836,7 +835,7 @@
 (def empty-params (iv/->indirect-rel [] 1))
 
 (defn vec-wtr->rdr ^xtdb.vector.IIndirectVector [^xtdb.vector.IVectorWriter w]
-  (iv/->direct-vec (.getVector w)))
+  (iv/->direct-vec (.getVector (doto w (.syncValueCount)))))
 
 (defn rel-wtr->rdr ^xtdb.vector.IIndirectRelation [^xtdb.vector.IRelationWriter w]
   (iv/->indirect-rel (map vec-wtr->rdr w)

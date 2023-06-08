@@ -241,7 +241,7 @@
 
     (doto (vw/->writer static-row-id-vec)
       (vw/append-vec (iv/->direct-vec transient-row-id-vec))
-      (.getVector))
+      (.syncValueCount))
 
     (let [copier (.rowCopier static-rel (vw/rel-wtr->rdr transient-rel))]
       (dotimes [idx (.getValueCount transient-row-id-vec)]

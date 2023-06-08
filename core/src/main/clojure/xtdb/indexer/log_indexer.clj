@@ -125,7 +125,9 @@
 
       (finishChunk [_ chunk-idx]
         (let [log-root (let [^Iterable vecs (for [^IVectorWriter w (seq log-writer)]
-                                              (.getVector w))]
+                                              (do
+                                                (.syncValueCount w)
+                                                (.getVector w)))]
                          (VectorSchemaRoot. vecs))
               log-bytes (with-open [write-root (VectorSchemaRoot/create (.getSchema log-root) allocator)]
                           (let [loader (VectorLoader. write-root)]
