@@ -810,7 +810,7 @@
                                                             :free-vars free-args}))))]
 
                            [(conj or-clauses (-> {:args [:explicit-bound-args {:bound-args bound-args, :free-args free-args}]
-                                                  :branches branches}
+                                                  :branches (vec branches)}
                                                  (with-meta (meta clause))))
                             (into known-vars free-args)])))
 
