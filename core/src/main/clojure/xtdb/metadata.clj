@@ -282,14 +282,17 @@
                 (.writeInt struct-type-el-wtr (aget sub-col-idxs n)))
               (.endList struct-type-wtr))))))))
 
-(defn ->col-meta-wtr ^xtdb.metadata.IColumnMetadataWriter [^IRelationWriter metadata-wtr, ^Map type-metadata-writers]
+(defn ->col-meta-wtr ^xtdb.metadata.IColumnMetadataWriter [^IRelationWriter metadata-wtr]
   (let [metadata-wp (.writerPosition metadata-wtr)
         column-name-wtr (.writerForName metadata-wtr "column")
         block-idx-wtr (.writerForName metadata-wtr "block-idx")
         root-col-wtr (.writerForName metadata-wtr "root-column")
         count-wtr (.writerForName metadata-wtr "count")
         types-wtr (.writerForName metadata-wtr "types")
-        bloom-wtr (.writerForName metadata-wtr "bloom")]
+        bloom-wtr (.writerForName metadata-wtr "bloom")
+
+        type-metadata-writers (HashMap.)]
+
     (letfn [(->nested-meta-writer [^IIndirectVector values-col, ^long block-idx]
               (let [^NestedMetadataWriter nested-meta-writer
                     (.computeIfAbsent type-metadata-writers (types/field->col-type (.getField (.getVector values-col)))
@@ -373,24 +376,23 @@
         block-idx-cache (HashMap.)
         !block-count (AtomicInteger. 0)
 
-        type-metadata-writers (HashMap.)
-        metadata-wtr (vw/root->writer metadata-root)]
+        metadata-wtr (vw/root->writer metadata-root)
+        col-meta-wtr (->col-meta-wtr metadata-wtr)]
 
     (reify ITableMetadataWriter
       (columnMetadataWriter [_ col-name]
         (.add col-names col-name)
 
-        (let [col-meta-wtr (->col-meta-wtr metadata-wtr type-metadata-writers)]
-          (reify IColumnMetadataWriter
-            (writeMetadata [_ live-col block-idx]
-              (let [meta-idx (.writeMetadata col-meta-wtr live-col block-idx)]
-                (when-not (neg? meta-idx)
-                  (when-not (neg? block-idx)
-                    (.set !block-count block-idx))
+        (reify IColumnMetadataWriter
+          (writeMetadata [_ live-col block-idx]
+            (let [meta-idx (.writeMetadata col-meta-wtr live-col block-idx)]
+              (when-not (neg? meta-idx)
+                (when-not (neg? block-idx)
+                  (.set !block-count block-idx))
 
-                  (.put block-idx-cache [col-name block-idx] meta-idx))
+                (.put block-idx-cache [col-name block-idx] meta-idx))
 
-                meta-idx)))))
+              meta-idx))))
 
       (tableMetadata [_]
         (->table-metadata metadata-root
