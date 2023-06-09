@@ -317,7 +317,6 @@
                                                                 (let [values-col (iv/->indirect-vec values-vec (.toArray (.build sel)))]
                                                                   (when-not (zero? (.getValueCount values-col))
                                                                     (->nested-meta-writer values-col block-idx))))))))))]
-                (prn root-col? block-idx (.getName content-col))
                 (.writeBoolean root-col-wtr root-col?)
                 (.writeInt block-idx-wtr block-idx)
                 (.writeObject column-name-wtr (.getName content-col))
