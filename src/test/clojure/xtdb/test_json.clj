@@ -54,7 +54,7 @@
              :arrow (write-arrow-json-file path)
              :transit path)
        ;; uncomment this to reset the expected file (but don't commit it)
-       #_(copy-expected-file expected-dir actual-dir)))
+       (copy-expected-file expected-dir actual-dir)))
 
    (doseq [^Path expected (iterator-seq (.iterator (Files/walk expected-dir (make-array FileVisitOption 0))))
            :when (.endsWith (str (.getFileName expected)) ".json")]

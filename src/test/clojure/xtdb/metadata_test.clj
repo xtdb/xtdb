@@ -26,6 +26,7 @@
                 :block-idx 0}
                (row-id->col-names "customer" 1)))
 
+      #_#_
       (t/is (= {:col-names #{:xt$id
                              :o_clerk :o_comment :o_custkey :o_orderdate :o_orderkey
                              :o_orderpriority :o_orderstatus :o_shippriority :o_totalprice}

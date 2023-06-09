@@ -1,15 +1,8 @@
 {
   "schema" : {
     "fields" : [{
-      "name" : "column",
-      "nullable" : false,
-      "type" : {
-        "name" : "utf8"
-      },
-      "children" : [ ]
-    },{
       "name" : "block-idx",
-      "nullable" : false,
+      "nullable" : true,
       "type" : {
         "name" : "int",
         "bitWidth" : 32,
@@ -17,36 +10,34 @@
       },
       "children" : [ ]
     },{
-      "name" : "root-column",
+      "name" : "columns",
       "nullable" : false,
       "type" : {
-        "name" : "bool"
-      },
-      "children" : [ ]
-    },{
-      "name" : "count",
-      "nullable" : false,
-      "type" : {
-        "name" : "int",
-        "bitWidth" : 64,
-        "isSigned" : true
-      },
-      "children" : [ ]
-    },{
-      "name" : "types",
-      "nullable" : true,
-      "type" : {
-        "name" : "struct"
+        "name" : "list"
       },
       "children" : [{
-        "name" : "i64",
-        "nullable" : true,
+        "name" : "$data$",
+        "nullable" : false,
         "type" : {
           "name" : "struct"
         },
         "children" : [{
-          "name" : "min",
-          "nullable" : true,
+          "name" : "col-name",
+          "nullable" : false,
+          "type" : {
+            "name" : "utf8"
+          },
+          "children" : [ ]
+        },{
+          "name" : "root-col?",
+          "nullable" : false,
+          "type" : {
+            "name" : "bool"
+          },
+          "children" : [ ]
+        },{
+          "name" : "count",
+          "nullable" : false,
           "type" : {
             "name" : "int",
             "bitWidth" : 64,
@@ -54,150 +45,184 @@
           },
           "children" : [ ]
         },{
-          "name" : "max",
-          "nullable" : true,
+          "name" : "types",
+          "nullable" : false,
           "type" : {
-            "name" : "int",
-            "bitWidth" : 64,
-            "isSigned" : true
+            "name" : "struct"
           },
-          "children" : [ ]
-        }]
-      },{
-        "name" : "utf8",
-        "nullable" : true,
-        "type" : {
-          "name" : "struct"
-        },
-        "children" : [{
-          "name" : "min",
-          "nullable" : true,
-          "type" : {
-            "name" : "utf8"
-          },
-          "children" : [ ]
+          "children" : [{
+            "name" : "i64",
+            "nullable" : true,
+            "type" : {
+              "name" : "struct"
+            },
+            "children" : [{
+              "name" : "min",
+              "nullable" : true,
+              "type" : {
+                "name" : "int",
+                "bitWidth" : 64,
+                "isSigned" : true
+              },
+              "children" : [ ]
+            },{
+              "name" : "max",
+              "nullable" : true,
+              "type" : {
+                "name" : "int",
+                "bitWidth" : 64,
+                "isSigned" : true
+              },
+              "children" : [ ]
+            }]
+          },{
+            "name" : "utf8",
+            "nullable" : true,
+            "type" : {
+              "name" : "struct"
+            },
+            "children" : [{
+              "name" : "min",
+              "nullable" : true,
+              "type" : {
+                "name" : "utf8"
+              },
+              "children" : [ ]
+            },{
+              "name" : "max",
+              "nullable" : true,
+              "type" : {
+                "name" : "utf8"
+              },
+              "children" : [ ]
+            }]
+          },{
+            "name" : "f64",
+            "nullable" : true,
+            "type" : {
+              "name" : "struct"
+            },
+            "children" : [{
+              "name" : "min",
+              "nullable" : true,
+              "type" : {
+                "name" : "floatingpoint",
+                "precision" : "DOUBLE"
+              },
+              "children" : [ ]
+            },{
+              "name" : "max",
+              "nullable" : true,
+              "type" : {
+                "name" : "floatingpoint",
+                "precision" : "DOUBLE"
+              },
+              "children" : [ ]
+            }]
+          }]
         },{
-          "name" : "max",
+          "name" : "bloom",
           "nullable" : true,
           "type" : {
-            "name" : "utf8"
-          },
-          "children" : [ ]
-        }]
-      },{
-        "name" : "f64",
-        "nullable" : true,
-        "type" : {
-          "name" : "struct"
-        },
-        "children" : [{
-          "name" : "min",
-          "nullable" : true,
-          "type" : {
-            "name" : "floatingpoint",
-            "precision" : "DOUBLE"
-          },
-          "children" : [ ]
-        },{
-          "name" : "max",
-          "nullable" : true,
-          "type" : {
-            "name" : "floatingpoint",
-            "precision" : "DOUBLE"
+            "name" : "binary"
           },
           "children" : [ ]
         }]
       }]
-    },{
-      "name" : "bloom",
-      "nullable" : true,
-      "type" : {
-        "name" : "binary"
-      },
-      "children" : [ ]
     }]
   },
   "batches" : [{
-    "count" : 10,
+    "count" : 2,
     "columns" : [{
-      "name" : "column",
-      "count" : 10,
-      "VALIDITY" : [1,1,1,1,1,1,1,1,1,1],
-      "OFFSET" : [0,7,12,15,18,21,28,33,36,39,42],
-      "DATA" : ["_row_id","xt$id","foo","bar","baz","_row_id","xt$id","foo","bar","baz"]
-    },{
       "name" : "block-idx",
-      "count" : 10,
-      "VALIDITY" : [1,1,1,1,1,1,1,1,1,1],
-      "DATA" : [0,0,0,0,0,-1,-1,-1,-1,-1]
+      "count" : 2,
+      "VALIDITY" : [1,0],
+      "DATA" : [0,0]
     },{
-      "name" : "root-column",
-      "count" : 10,
-      "VALIDITY" : [1,1,1,1,1,1,1,1,1,1],
-      "DATA" : [1,1,1,1,1,1,1,1,1,1]
-    },{
-      "name" : "count",
-      "count" : 10,
-      "VALIDITY" : [1,1,1,1,1,1,1,1,1,1],
-      "DATA" : ["2","2","2","2","2","2","2","2","2","2"]
-    },{
-      "name" : "types",
-      "count" : 10,
-      "VALIDITY" : [1,1,1,1,1,1,1,1,1,1],
+      "name" : "columns",
+      "count" : 2,
+      "VALIDITY" : [1,1],
+      "OFFSET" : [0,5,10],
       "children" : [{
-        "name" : "i64",
+        "name" : "$data$",
         "count" : 10,
-        "VALIDITY" : [1,1,1,0,1,1,1,1,0,1],
+        "VALIDITY" : [1,1,1,1,1,1,1,1,1,1],
         "children" : [{
-          "name" : "min",
+          "name" : "col-name",
           "count" : 10,
-          "VALIDITY" : [1,1,1,0,1,1,1,1,0,1],
-          "DATA" : ["0","0","1","0","12","0","0","1","0","12"]
+          "VALIDITY" : [1,1,1,1,1,1,1,1,1,1],
+          "OFFSET" : [0,7,12,15,18,21,28,33,36,39,42],
+          "DATA" : ["_row_id","xt$id","foo","bar","baz","_row_id","xt$id","foo","bar","baz"]
         },{
-          "name" : "max",
+          "name" : "root-col?",
           "count" : 10,
-          "VALIDITY" : [1,1,1,0,1,1,1,1,0,1],
-          "DATA" : ["1","1","2","0","12","1","1","2","0","12"]
-        }]
-      },{
-        "name" : "utf8",
-        "count" : 10,
-        "VALIDITY" : [0,0,0,1,0,0,0,0,1,0],
-        "children" : [{
-          "name" : "min",
-          "count" : 10,
-          "VALIDITY" : [0,0,0,1,0,0,0,0,1,0],
-          "OFFSET" : [0,0,0,0,5,5,5,5,5,10,10],
-          "DATA" : ["","","","hello","","","","","hello",""]
+          "VALIDITY" : [1,1,1,1,1,1,1,1,1,1],
+          "DATA" : [1,1,1,1,1,1,1,1,1,1]
         },{
-          "name" : "max",
+          "name" : "count",
           "count" : 10,
-          "VALIDITY" : [0,0,0,1,0,0,0,0,1,0],
-          "OFFSET" : [0,0,0,0,5,5,5,5,5,10,10],
-          "DATA" : ["","","","world","","","","","world",""]
-        }]
-      },{
-        "name" : "f64",
-        "count" : 10,
-        "VALIDITY" : [0,0,0,0,1,0,0,0,0,1],
-        "children" : [{
-          "name" : "min",
-          "count" : 10,
-          "VALIDITY" : [0,0,0,0,1,0,0,0,0,1],
-          "DATA" : [0.0,0.0,0.0,0.0,3.3,0.0,0.0,0.0,0.0,3.3]
+          "VALIDITY" : [1,1,1,1,1,1,1,1,1,1],
+          "DATA" : ["2","2","2","2","2","2","2","2","2","2"]
         },{
-          "name" : "max",
+          "name" : "types",
           "count" : 10,
-          "VALIDITY" : [0,0,0,0,1,0,0,0,0,1],
-          "DATA" : [0.0,0.0,0.0,0.0,3.3,0.0,0.0,0.0,0.0,3.3]
+          "VALIDITY" : [1,1,1,1,1,1,1,1,1,1],
+          "children" : [{
+            "name" : "i64",
+            "count" : 10,
+            "VALIDITY" : [1,1,1,0,1,1,1,1,0,1],
+            "children" : [{
+              "name" : "min",
+              "count" : 10,
+              "VALIDITY" : [1,1,1,0,1,1,1,1,0,1],
+              "DATA" : ["0","0","1","0","12","0","0","1","0","12"]
+            },{
+              "name" : "max",
+              "count" : 10,
+              "VALIDITY" : [1,1,1,0,1,1,1,1,0,1],
+              "DATA" : ["1","1","2","0","12","1","1","2","0","12"]
+            }]
+          },{
+            "name" : "utf8",
+            "count" : 10,
+            "VALIDITY" : [0,0,0,1,0,0,0,0,1,0],
+            "children" : [{
+              "name" : "min",
+              "count" : 10,
+              "VALIDITY" : [0,0,0,1,0,0,0,0,1,0],
+              "OFFSET" : [0,0,0,0,5,5,5,5,5,10,10],
+              "DATA" : ["","","","hello","","","","","hello",""]
+            },{
+              "name" : "max",
+              "count" : 10,
+              "VALIDITY" : [0,0,0,1,0,0,0,0,1,0],
+              "OFFSET" : [0,0,0,0,5,5,5,5,5,10,10],
+              "DATA" : ["","","","world","","","","","world",""]
+            }]
+          },{
+            "name" : "f64",
+            "count" : 10,
+            "VALIDITY" : [0,0,0,0,1,0,0,0,0,1],
+            "children" : [{
+              "name" : "min",
+              "count" : 10,
+              "VALIDITY" : [0,0,0,0,1,0,0,0,0,1],
+              "DATA" : [0.0,0.0,0.0,0.0,3.3,0.0,0.0,0.0,0.0,3.3]
+            },{
+              "name" : "max",
+              "count" : 10,
+              "VALIDITY" : [0,0,0,0,1,0,0,0,0,1],
+              "DATA" : [0.0,0.0,0.0,0.0,3.3,0.0,0.0,0.0,0.0,3.3]
+            }]
+          }]
+        },{
+          "name" : "bloom",
+          "count" : 10,
+          "VALIDITY" : [1,1,1,1,1,1,1,1,1,1],
+          "OFFSET" : [0,52,104,156,208,260,312,364,416,468,520],
+          "DATA" : ["3a300000040000000000020005000000080000000a000000280000002e0000003000000032000000000001002beefc2a1677f855","3a300000040000000000020005000000080000000a000000280000002e0000003000000032000000000001002beefc2a1677f855","3a300000040000000000020004000000080000000a000000280000002e0000003000000032000000010002002beed29416776a4a","3a3000000400000002000000090000000a0002000b000000280000002a0000002c00000032000000ddbddbf0971ca94c77a8235f","3a300000040000000000020002000000090000000c000000280000002e00000030000000320000000c00e014b429d7e3aec70000","3a300000040000000000020005000000080000000a000000280000002e0000003000000032000000000001002beefc2a1677f855","3a300000040000000000020005000000080000000a000000280000002e0000003000000032000000000001002beefc2a1677f855","3a300000040000000000020004000000080000000a000000280000002e0000003000000032000000010002002beed29416776a4a","3a3000000400000002000000090000000a0002000b000000280000002a0000002c00000032000000ddbddbf0971ca94c77a8235f","3a300000040000000000020002000000090000000c000000280000002e00000030000000320000000c00e014b429d7e3aec70000"]
         }]
       }]
-    },{
-      "name" : "bloom",
-      "count" : 10,
-      "VALIDITY" : [1,1,1,1,1,1,1,1,1,1],
-      "OFFSET" : [0,52,104,156,208,260,312,364,416,468,520],
-      "DATA" : ["3a300000040000000000020005000000080000000a000000280000002e0000003000000032000000000001002beefc2a1677f855","3a300000040000000000020005000000080000000a000000280000002e0000003000000032000000000001002beefc2a1677f855","3a300000040000000000020004000000080000000a000000280000002e0000003000000032000000010002002beed29416776a4a","3a3000000400000002000000090000000a0002000b000000280000002a0000002c00000032000000ddbddbf0971ca94c77a8235f","3a300000040000000000020002000000090000000c000000280000002e00000030000000320000000c00e014b429d7e3aec70000","3a300000040000000000020005000000080000000a000000280000002e0000003000000032000000000001002beefc2a1677f855","3a300000040000000000020005000000080000000a000000280000002e0000003000000032000000000001002beefc2a1677f855","3a300000040000000000020004000000080000000a000000280000002e0000003000000032000000010002002beed29416776a4a","3a3000000400000002000000090000000a0002000b000000280000002a0000002c00000032000000ddbddbf0971ca94c77a8235f","3a300000040000000000020002000000090000000c000000280000002e00000030000000320000000c00e014b429d7e3aec70000"]
     }]
   }]
 }

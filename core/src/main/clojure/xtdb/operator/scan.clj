@@ -22,6 +22,7 @@
            java.util.stream.IntStream
            org.apache.arrow.memory.BufferAllocator
            (org.apache.arrow.vector BigIntVector VarBinaryVector)
+           (org.apache.arrow.vector.complex ListVector StructVector)
            (org.roaringbitmap IntConsumer RoaringBitmap)
            org.roaringbitmap.buffer.MutableRoaringBitmap
            (org.roaringbitmap.longlong Roaring64Bitmap)
@@ -66,7 +67,9 @@
        (util/->jfn
          (fn [^ITableMetadata table-metadata]
            (let [metadata-root (.metadataRoot table-metadata)
-                 ^VarBinaryVector bloom-vec (.getVector metadata-root "bloom")]
+                 ^VarBinaryVector bloom-vec (-> ^ListVector (.getVector metadata-root "columns")
+                                                ^StructVector (.getDataVector)
+                                                (.getChild "bloom"))]
              (when (MutableRoaringBitmap/intersects pushdown-bloom
                                                     (bloom/bloom->bitmap bloom-vec (.rowIndex table-metadata col-name -1)))
                (let [filtered-block-idxs (RoaringBitmap.)]
@@ -485,7 +488,10 @@
                              (util/->jbifn
                               (fn [_chunk-idx ^ITableMetadata table-metadata]
                                 (let [id-col-idx (.rowIndex table-metadata "xt$id" -1)
-                                      ^BigIntVector count-vec (.getVector (.metadataRoot table-metadata) "count")]
+                                      ^BigIntVector count-vec (-> (.metadataRoot table-metadata)
+                                                                  ^ListVector (.getVector "columns")
+                                                                  ^StructVector (.getDataVector)
+                                                                  (.getChild "count"))]
                                   (.get count-vec id-col-idx)))))
                            (reduce +))]
 

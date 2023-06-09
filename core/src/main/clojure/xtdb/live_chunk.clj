@@ -254,16 +254,10 @@
     (.close transient-rel)
     (util/try-close transient-row-id-vec)))
 
-(defn- ->col-metadata-writer ^xtdb.metadata.IColumnMetadataWriter [^ITableMetadataWriter table-metadata-writer, ^Map col-metadata-writers, ^String col-name]
-  (.computeIfAbsent col-metadata-writers col-name
-                    (util/->jfn
-                      (fn [col-name]
-                        (.columnMetadataWriter table-metadata-writer col-name)))))
-
 (deftype LiveTable [^BufferAllocator allocator, ^ObjectStore object-store, ^IMetadataManager metadata-mgr
                     ^String table-name,
                     ^IRelationWriter static-rel, ^BigIntVector row-id-vec, ^Roaring64Bitmap row-id-bitmap
-                    ^ITableMetadataWriter table-metadata-writer, ^Map col-metadata-writers
+                    ^ITableMetadataWriter table-metadata-writer
                     ^long chunk-idx, ^IRowCounter row-counter]
   ILiveTable
   (startTx [_]
@@ -295,24 +289,25 @@
         (close [_] (when retain? (.close wm-rel))))))
 
   (finishBlock [_]
-    (doseq [^IIndirectVector live-vec (cons (iv/->direct-vec row-id-vec) (seq (vw/rel-wtr->rdr static-rel)))]
-      (doto (->col-metadata-writer table-metadata-writer col-metadata-writers (.getName live-vec))
-        (.writeMetadata (iv/slice-col live-vec
+    (let [block-meta-wtr (.writeBlockMetadata table-metadata-writer (.blockIdx row-counter))]
+      (doseq [^IIndirectVector live-vec (cons (iv/->direct-vec row-id-vec) (seq (vw/rel-wtr->rdr static-rel)))]
+        (.writeMetadata block-meta-wtr
+                        (iv/slice-col live-vec
                                       (.chunkRowCount row-counter)
-                                      (.blockRowCount row-counter))
-                        (.blockIdx row-counter))))
+                                      (.blockRowCount row-counter))))
+      (.endBlock block-meta-wtr))
 
     (.nextBlock row-counter))
 
   (finishChunk [_]
     (let [row-counts (.blockRowCounts row-counter)
+          block-meta-wtr (.writeBlockMetadata table-metadata-writer -1)
 
           !fut (-> (CompletableFuture/allOf
                     (->> (cons row-id-vec (map #(.getVector ^IVectorWriter %) (vals static-rel)))
                          (map (fn [^ValueVector live-vec]
                                 (let [live-root (VectorSchemaRoot/of (into-array [live-vec]))]
-                                  (doto (->col-metadata-writer table-metadata-writer col-metadata-writers (.getName live-vec))
-                                    (.writeMetadata (iv/->direct-vec live-vec) -1))
+                                  (.writeMetadata block-meta-wtr (iv/->direct-vec live-vec))
 
                                   (.putObject object-store (meta/->chunk-obj-key chunk-idx table-name (.getName live-vec))
                                               (with-open [write-root (VectorSchemaRoot/create (.getSchema live-root) allocator)]
@@ -332,6 +327,7 @@
 
                    (util/then-compose
                      (fn [_]
+                       (.endBlock block-meta-wtr)
                        (.finishChunk table-metadata-writer))))
 
           chunk-metadata (meta/live-rel->chunk-metadata table-name (vw/rel-wtr->rdr static-rel))]
@@ -355,7 +351,7 @@
     (letfn [(->live-table [table]
               (LiveTable. allocator object-store metadata-mgr table
                           (vw/->rel-writer allocator) (BigIntVector. (types/col-type->field "_row_id" :i64) allocator) (Roaring64Bitmap.)
-                          (.openTableMetadataWriter metadata-mgr table chunk-idx) (HashMap.)
+                          (.openTableMetadataWriter metadata-mgr table chunk-idx)
                           chunk-idx (->row-counter (.blockIdx row-counter))))
 
             (->live-table-tx [table-name]

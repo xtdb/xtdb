@@ -36,6 +36,9 @@ public interface IVectorWriter extends IValueWriter, AutoCloseable {
     @Override
     IVectorWriter writerForTypeId(byte typeId);
 
+    @Override
+    IVectorWriter listElementWriter();
+
     void clear();
 
     @Override

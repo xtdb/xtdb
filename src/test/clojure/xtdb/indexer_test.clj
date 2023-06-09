@@ -26,7 +26,7 @@
            (java.util.function Consumer)
            [org.apache.arrow.memory ArrowBuf BufferAllocator]
            [org.apache.arrow.vector BigIntVector VectorLoader VectorSchemaRoot]
-           [org.apache.arrow.vector.complex StructVector]
+           [org.apache.arrow.vector.complex ListVector StructVector]
            xtdb.api.protocols.TransactionInstant
            [xtdb.buffer_pool BufferPool IBufferPool]
            (xtdb.indexer.internal_id_manager InternalIdManager)
@@ -149,31 +149,35 @@
             (with-open [^VectorSchemaRoot metadata-batch (VectorSchemaRoot/create (.getSchema footer) a)
                         record-batch (util/->arrow-record-batch-view (first (.getRecordBatches footer)) buffer)]
               (.load (VectorLoader. metadata-batch) record-batch)
-              (t/is (= 12 (.getRowCount metadata-batch)))
+              (t/is (= 2 (.getRowCount metadata-batch)))
               (let [id-col-idx (-> (meta/->table-metadata metadata-batch (meta/->table-metadata-idxs metadata-batch))
                                    (.rowIndex "xt$id" -1))]
-                (t/is (= "xt$id" (-> (.getVector metadata-batch "column")
+                (t/is (= "xt$id" (-> ^ListVector (.getVector metadata-batch "columns")
+                                     ^StructVector (.getDataVector)
+                                     (.getChild "col-name")
                                      (ty/get-object id-col-idx))))
-                (let [^StructVector utf8-type-vec (-> ^StructVector (.getVector metadata-batch "types")
+                (let [^StructVector cols-data-vec (-> ^ListVector (.getVector metadata-batch "columns")
+                                                      (.getDataVector))
+                      ^StructVector utf8-type-vec (-> cols-data-vec
+                                                      ^StructVector (.getChild "types")
                                                       (.getChild "utf8"))]
                   (t/is (= "device-info-demo000000"
                            (-> (.getChild utf8-type-vec "min")
                                (ty/get-object id-col-idx))))
                   (t/is (= "device-info-demo000001"
                            (-> (.getChild utf8-type-vec "max")
-                               (ty/get-object id-col-idx)))))
+                               (ty/get-object id-col-idx))))
 
-                (t/is (= 2 (-> ^BigIntVector (.getVector metadata-batch "count")
-                               (.get id-col-idx)))))
+                  (let [^BigIntVector count-vec (.getChild cols-data-vec "count")]
+                    (t/is (= 2 (.get count-vec id-col-idx)))
 
-              (let [from (.getVector metadata-batch "count")
-                    tp (.getTransferPair from a)]
-                (with-open [to (.getTo tp)]
-                  (t/is (zero? (.getValueCount to)))
-                  (.splitAndTransfer tp 0 12)
-                  (t/is  (= (.memoryAddress (.getDataBuffer from))
-                            (.memoryAddress (.getDataBuffer to))))
-                  (t/is (= 12 (.getValueCount to))))))
+                    (let [tp (.getTransferPair count-vec a)]
+                      (with-open [to (.getTo tp)]
+                        (t/is (zero? (.getValueCount to)))
+                        (.splitAndTransfer tp 0 12)
+                        (t/is  (= (.memoryAddress (.getDataBuffer count-vec))
+                                  (.memoryAddress (.getDataBuffer to))))
+                        (t/is (= 12 (.getValueCount to)))))))))
 
             (t/is (= 2 (.getRefCount (.getReferenceManager ^ArrowBuf buffer))))
 

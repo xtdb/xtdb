@@ -1,15 +1,8 @@
 {
   "schema" : {
     "fields" : [{
-      "name" : "column",
-      "nullable" : false,
-      "type" : {
-        "name" : "utf8"
-      },
-      "children" : [ ]
-    },{
       "name" : "block-idx",
-      "nullable" : false,
+      "nullable" : true,
       "type" : {
         "name" : "int",
         "bitWidth" : 32,
@@ -17,36 +10,34 @@
       },
       "children" : [ ]
     },{
-      "name" : "root-column",
+      "name" : "columns",
       "nullable" : false,
       "type" : {
-        "name" : "bool"
-      },
-      "children" : [ ]
-    },{
-      "name" : "count",
-      "nullable" : false,
-      "type" : {
-        "name" : "int",
-        "bitWidth" : 64,
-        "isSigned" : true
-      },
-      "children" : [ ]
-    },{
-      "name" : "types",
-      "nullable" : true,
-      "type" : {
-        "name" : "struct"
+        "name" : "list"
       },
       "children" : [{
-        "name" : "i64",
-        "nullable" : true,
+        "name" : "$data$",
+        "nullable" : false,
         "type" : {
           "name" : "struct"
         },
         "children" : [{
-          "name" : "min",
-          "nullable" : true,
+          "name" : "col-name",
+          "nullable" : false,
+          "type" : {
+            "name" : "utf8"
+          },
+          "children" : [ ]
+        },{
+          "name" : "root-col?",
+          "nullable" : false,
+          "type" : {
+            "name" : "bool"
+          },
+          "children" : [ ]
+        },{
+          "name" : "count",
+          "nullable" : false,
           "type" : {
             "name" : "int",
             "bitWidth" : 64,
@@ -54,150 +45,184 @@
           },
           "children" : [ ]
         },{
-          "name" : "max",
-          "nullable" : true,
+          "name" : "types",
+          "nullable" : false,
           "type" : {
-            "name" : "int",
-            "bitWidth" : 64,
-            "isSigned" : true
+            "name" : "struct"
           },
-          "children" : [ ]
-        }]
-      },{
-        "name" : "timestamp-tz-micro-utc",
-        "nullable" : true,
-        "type" : {
-          "name" : "struct"
-        },
-        "children" : [{
-          "name" : "min",
-          "nullable" : true,
-          "type" : {
-            "name" : "timestamp",
-            "unit" : "MICROSECOND",
-            "timezone" : "UTC"
-          },
-          "children" : [ ]
+          "children" : [{
+            "name" : "i64",
+            "nullable" : true,
+            "type" : {
+              "name" : "struct"
+            },
+            "children" : [{
+              "name" : "min",
+              "nullable" : true,
+              "type" : {
+                "name" : "int",
+                "bitWidth" : 64,
+                "isSigned" : true
+              },
+              "children" : [ ]
+            },{
+              "name" : "max",
+              "nullable" : true,
+              "type" : {
+                "name" : "int",
+                "bitWidth" : 64,
+                "isSigned" : true
+              },
+              "children" : [ ]
+            }]
+          },{
+            "name" : "timestamp-tz-micro-utc",
+            "nullable" : true,
+            "type" : {
+              "name" : "struct"
+            },
+            "children" : [{
+              "name" : "min",
+              "nullable" : true,
+              "type" : {
+                "name" : "timestamp",
+                "unit" : "MICROSECOND",
+                "timezone" : "UTC"
+              },
+              "children" : [ ]
+            },{
+              "name" : "max",
+              "nullable" : true,
+              "type" : {
+                "name" : "timestamp",
+                "unit" : "MICROSECOND",
+                "timezone" : "UTC"
+              },
+              "children" : [ ]
+            }]
+          },{
+            "name" : "bool",
+            "nullable" : true,
+            "type" : {
+              "name" : "bool"
+            },
+            "children" : [ ]
+          },{
+            "name" : "clj-form",
+            "nullable" : true,
+            "type" : {
+              "name" : "bool"
+            },
+            "children" : [ ]
+          },{
+            "name" : "null",
+            "nullable" : true,
+            "type" : {
+              "name" : "bool"
+            },
+            "children" : [ ]
+          }]
         },{
-          "name" : "max",
+          "name" : "bloom",
           "nullable" : true,
           "type" : {
-            "name" : "timestamp",
-            "unit" : "MICROSECOND",
-            "timezone" : "UTC"
+            "name" : "binary"
           },
           "children" : [ ]
         }]
-      },{
-        "name" : "bool",
-        "nullable" : true,
-        "type" : {
-          "name" : "bool"
-        },
-        "children" : [ ]
-      },{
-        "name" : "clj-form",
-        "nullable" : true,
-        "type" : {
-          "name" : "bool"
-        },
-        "children" : [ ]
-      },{
-        "name" : "null",
-        "nullable" : true,
-        "type" : {
-          "name" : "bool"
-        },
-        "children" : [ ]
       }]
-    },{
-      "name" : "bloom",
-      "nullable" : true,
-      "type" : {
-        "name" : "binary"
-      },
-      "children" : [ ]
     }]
   },
   "batches" : [{
-    "count" : 10,
+    "count" : 2,
     "columns" : [{
-      "name" : "column",
-      "count" : 10,
-      "VALIDITY" : [1,1,1,1,1,1,1,1,1,1],
-      "OFFSET" : [0,7,12,22,35,43,50,55,65,78,86],
-      "DATA" : ["_row_id","xt$id","xt$tx_time","xt$committed?","xt$error","_row_id","xt$id","xt$tx_time","xt$committed?","xt$error"]
-    },{
       "name" : "block-idx",
-      "count" : 10,
-      "VALIDITY" : [1,1,1,1,1,1,1,1,1,1],
-      "DATA" : [0,0,0,0,0,-1,-1,-1,-1,-1]
+      "count" : 2,
+      "VALIDITY" : [1,0],
+      "DATA" : [0,0]
     },{
-      "name" : "root-column",
-      "count" : 10,
-      "VALIDITY" : [1,1,1,1,1,1,1,1,1,1],
-      "DATA" : [1,1,1,1,1,1,1,1,1,1]
-    },{
-      "name" : "count",
-      "count" : 10,
-      "VALIDITY" : [1,1,1,1,1,1,1,1,1,1],
-      "DATA" : ["3","3","3","3","3","3","3","3","3","3"]
-    },{
-      "name" : "types",
-      "count" : 10,
-      "VALIDITY" : [1,1,1,1,1,1,1,1,1,1],
+      "name" : "columns",
+      "count" : 2,
+      "VALIDITY" : [1,1],
+      "OFFSET" : [0,5,10],
       "children" : [{
-        "name" : "i64",
+        "name" : "$data$",
         "count" : 10,
-        "VALIDITY" : [1,1,0,0,0,1,1,0,0,0],
+        "VALIDITY" : [1,1,1,1,1,1,1,1,1,1],
         "children" : [{
-          "name" : "min",
+          "name" : "col-name",
           "count" : 10,
-          "VALIDITY" : [1,1,0,0,0,1,1,0,0,0],
-          "DATA" : ["2","0","0","0","0","2","0","0","0","0"]
+          "VALIDITY" : [1,1,1,1,1,1,1,1,1,1],
+          "OFFSET" : [0,7,12,22,35,43,50,55,65,78,86],
+          "DATA" : ["_row_id","xt$id","xt$tx_time","xt$committed?","xt$error","_row_id","xt$id","xt$tx_time","xt$committed?","xt$error"]
         },{
-          "name" : "max",
+          "name" : "root-col?",
           "count" : 10,
-          "VALIDITY" : [1,1,0,0,0,1,1,0,0,0],
-          "DATA" : ["6","6554","0","0","0","6","6554","0","0","0"]
-        }]
-      },{
-        "name" : "timestamp-tz-micro-utc",
-        "count" : 10,
-        "VALIDITY" : [0,0,1,0,0,0,0,1,0,0],
-        "children" : [{
-          "name" : "min",
-          "count" : 10,
-          "VALIDITY" : [0,0,1,0,0,0,0,1,0,0],
-          "DATA" : [0,0,1577836800000000,0,0,0,0,1577836800000000,0,0]
+          "VALIDITY" : [1,1,1,1,1,1,1,1,1,1],
+          "DATA" : [1,1,1,1,1,1,1,1,1,1]
         },{
-          "name" : "max",
+          "name" : "count",
           "count" : 10,
-          "VALIDITY" : [0,0,1,0,0,0,0,1,0,0],
-          "DATA" : [0,0,1578009600000000,0,0,0,0,1578009600000000,0,0]
+          "VALIDITY" : [1,1,1,1,1,1,1,1,1,1],
+          "DATA" : ["3","3","3","3","3","3","3","3","3","3"]
+        },{
+          "name" : "types",
+          "count" : 10,
+          "VALIDITY" : [1,1,1,1,1,1,1,1,1,1],
+          "children" : [{
+            "name" : "i64",
+            "count" : 10,
+            "VALIDITY" : [1,1,0,0,0,1,1,0,0,0],
+            "children" : [{
+              "name" : "min",
+              "count" : 10,
+              "VALIDITY" : [1,1,0,0,0,1,1,0,0,0],
+              "DATA" : ["2","0","0","0","0","2","0","0","0","0"]
+            },{
+              "name" : "max",
+              "count" : 10,
+              "VALIDITY" : [1,1,0,0,0,1,1,0,0,0],
+              "DATA" : ["6","6554","0","0","0","6","6554","0","0","0"]
+            }]
+          },{
+            "name" : "timestamp-tz-micro-utc",
+            "count" : 10,
+            "VALIDITY" : [0,0,1,0,0,0,0,1,0,0],
+            "children" : [{
+              "name" : "min",
+              "count" : 10,
+              "VALIDITY" : [0,0,1,0,0,0,0,1,0,0],
+              "DATA" : [0,0,1577836800000000,0,0,0,0,1577836800000000,0,0]
+            },{
+              "name" : "max",
+              "count" : 10,
+              "VALIDITY" : [0,0,1,0,0,0,0,1,0,0],
+              "DATA" : [0,0,1578009600000000,0,0,0,0,1578009600000000,0,0]
+            }]
+          },{
+            "name" : "bool",
+            "count" : 10,
+            "VALIDITY" : [0,0,0,1,0,0,0,0,1,0],
+            "DATA" : [0,0,0,1,0,0,0,0,1,0]
+          },{
+            "name" : "clj-form",
+            "count" : 10,
+            "VALIDITY" : [0,0,0,0,1,0,0,0,0,1],
+            "DATA" : [0,0,0,0,1,0,0,0,0,1]
+          },{
+            "name" : "null",
+            "count" : 10,
+            "VALIDITY" : [0,0,0,0,1,0,0,0,0,1],
+            "DATA" : [0,0,0,0,1,0,0,0,0,1]
+          }]
+        },{
+          "name" : "bloom",
+          "count" : 10,
+          "VALIDITY" : [1,1,1,1,1,1,1,1,1,1],
+          "OFFSET" : [0,74,148,238,266,318,392,466,556,584,636],
+          "DATA" : ["3a300000060000000000020004000000050000000a0000000b0000000f000100380000003e00000040000000420000004400000046000000020003000600d29477896a4ae81257c3ade1","3a300000060000000000020005000000090000000a0000000c0000000f000100380000003e0000004000000042000000440000004600000000005d0d9a19fc2ac562f85511b8f23846a9","3a30000008000000000000000200000004000000090000000b0000000c0001000e0000000f000000480000004a0000004c0000004e00000050000000520000005600000058000000c4020af41c3b4c0193972a6e309bfa4e08db","3a300000010000000000050010000000110013002200260033003900","3a300000040000000000020002000000040000000f000000280000002e00000030000000320000003e007c00ba008a6364dfb0e7","3a300000060000000000020004000000050000000a0000000b0000000f000100380000003e00000040000000420000004400000046000000020003000600d29477896a4ae81257c3ade1","3a300000060000000000020005000000090000000a0000000c0000000f000100380000003e0000004000000042000000440000004600000000005d0d9a19fc2ac562f85511b8f23846a9","3a30000008000000000000000200000004000000090000000b0000000c0001000e0000000f000000480000004a0000004c0000004e00000050000000520000005600000058000000c4020af41c3b4c0193972a6e309bfa4e08db","3a300000010000000000050010000000110013002200260033003900","3a300000040000000000020002000000040000000f000000280000002e00000030000000320000003e007c00ba008a6364dfb0e7"]
         }]
-      },{
-        "name" : "bool",
-        "count" : 10,
-        "VALIDITY" : [0,0,0,1,0,0,0,0,1,0],
-        "DATA" : [0,0,0,1,0,0,0,0,1,0]
-      },{
-        "name" : "clj-form",
-        "count" : 10,
-        "VALIDITY" : [0,0,0,0,1,0,0,0,0,1],
-        "DATA" : [0,0,0,0,1,0,0,0,0,1]
-      },{
-        "name" : "null",
-        "count" : 10,
-        "VALIDITY" : [0,0,0,0,1,0,0,0,0,1],
-        "DATA" : [0,0,0,0,1,0,0,0,0,1]
       }]
-    },{
-      "name" : "bloom",
-      "count" : 10,
-      "VALIDITY" : [1,1,1,1,1,1,1,1,1,1],
-      "OFFSET" : [0,74,148,238,266,318,392,466,556,584,636],
-      "DATA" : ["3a300000060000000000020004000000050000000a0000000b0000000f000100380000003e00000040000000420000004400000046000000020003000600d29477896a4ae81257c3ade1","3a300000060000000000020005000000090000000a0000000c0000000f000100380000003e0000004000000042000000440000004600000000005d0d9a19fc2ac562f85511b8f23846a9","3a30000008000000000000000200000004000000090000000b0000000c0001000e0000000f000000480000004a0000004c0000004e00000050000000520000005600000058000000c4020af41c3b4c0193972a6e309bfa4e08db","3a300000010000000000050010000000110013002200260033003900","3a300000040000000000020002000000040000000f000000280000002e00000030000000320000003e007c00ba008a6364dfb0e7","3a300000060000000000020004000000050000000a0000000b0000000f000100380000003e00000040000000420000004400000046000000020003000600d29477896a4ae81257c3ade1","3a300000060000000000020005000000090000000a0000000c0000000f000100380000003e0000004000000042000000440000004600000000005d0d9a19fc2ac562f85511b8f23846a9","3a30000008000000000000000200000004000000090000000b0000000c0001000e0000000f000000480000004a0000004c0000004e00000050000000520000005600000058000000c4020af41c3b4c0193972a6e309bfa4e08db","3a300000010000000000050010000000110013002200260033003900","3a300000040000000000020002000000040000000f000000280000002e00000030000000320000003e007c00ba008a6364dfb0e7"]
     }]
   }]
 }

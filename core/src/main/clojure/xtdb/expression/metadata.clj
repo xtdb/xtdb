@@ -9,9 +9,8 @@
   (:import (xtdb.metadata IMetadataPredicate ITableMetadata)
            (xtdb.vector IIndirectRelation IIndirectVector)
            java.util.function.IntPredicate
-           org.apache.arrow.memory.RootAllocator
            [org.apache.arrow.vector VarBinaryVector]
-           [org.apache.arrow.vector.complex StructVector]))
+           [org.apache.arrow.vector.complex ListVector StructVector]))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -108,6 +107,8 @@
 
 (def ^:private table-metadata-sym (gensym "table-metadata"))
 (def ^:private metadata-root-sym (gensym "metadata-root"))
+(def ^:private cols-vec-sym (gensym "cols-vec"))
+(def ^:private cols-data-vec-sym (gensym "cols-data-vec"))
 (def ^:private block-idx-sym (gensym "block-idx"))
 (def ^:private types-vec-sym (gensym "types-vec"))
 (def ^:private bloom-vec-sym (gensym "bloom-vec"))
@@ -165,8 +166,10 @@
                         ~(-> expr/params-sym (expr/with-tag IIndirectRelation))
                         [~@(keep :bloom-hash-sym (ewalk/expr-seq expr))]]
                      (let [~metadata-root-sym (.metadataRoot ~table-metadata-sym)
-                           ~(-> types-vec-sym (expr/with-tag StructVector)) (.getVector ~metadata-root-sym "types")
-                           ~(-> bloom-vec-sym (expr/with-tag VarBinaryVector)) (.getVector ~metadata-root-sym "bloom")
+                           ~(-> cols-vec-sym (expr/with-tag ListVector)) (.getVector ~metadata-root-sym "columns")
+                           ~(-> cols-data-vec-sym (expr/with-tag StructVector)) (.getDataVector ~cols-vec-sym)
+                           ~(-> types-vec-sym (expr/with-tag StructVector)) (.getChild ~cols-data-vec-sym "types")
+                           ~(-> bloom-vec-sym (expr/with-tag VarBinaryVector)) (.getChild ~cols-data-vec-sym "bloom")
 
                            ~@(expr/batch-bindings emitted-expr)]
                        (reify IntPredicate
