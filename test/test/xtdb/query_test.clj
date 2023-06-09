@@ -4375,3 +4375,14 @@
                             [a :x x]
                             [c :z x]]]}
                  1 2))))
+
+(t/deftest test-query-cache-pollution-1937
+  (letfn [(bad-q [node]
+            (xt/q (xt/db node)
+                  '{:find [foo],
+                    :where [[foo :bar baz]
+                            (or [(clojure.string/includes? x ?z)]
+                                [(clojure.string/includes? y ?z)])]}))]
+    (with-open [node (xt/start-node {})]
+      (t/is (thrown? IllegalArgumentException (bad-q node)))
+      (t/is (thrown? IllegalArgumentException (bad-q node))))))
