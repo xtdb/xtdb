@@ -41,7 +41,7 @@ allprojects {
 
         tasks.test {
             useJUnitPlatform {
-                excludeTags("integration", "kafka", "jdbc", "timescale", "s3", "slt", "docker")
+                excludeTags("integration", "kafka", "jdbc", "timescale", "s3", "slt", "docker", "azure")
             }
         }
 
