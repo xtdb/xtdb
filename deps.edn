@@ -57,7 +57,7 @@
                             "-XX:MaxMetaspaceSize=1g"]}
 
            :test {:exec-fn cognitect.test-runner.api/test
-                  :exec-args {:excludes [:integration :timescale :s3 :kafka :jdbc :slt :docker]
+                  :exec-args {:excludes [:integration :timescale :s3 :kafka :jdbc :slt :docker :azure]
                               :dirs ["src/test/clojure"]}}
 
            :integration-test {:exec-fn cognitect.test-runner.api/test
