@@ -1125,3 +1125,10 @@
           (plan-sql "WITH foo AS (SELECT bar.id FROM bar WHERE bar.id = 5)
                     SELECT foo.id, baz.id
                     FROM foo, foo AS baz"))))
+
+
+(deftest test-delimited-identifiers-in-insert-column-list-2549
+  (t/is (=plan-file
+          "test-delimited-identifiers-in-insert-column-list-2549"
+          (plan-sql
+            "INSERT INTO posts (\"xt$id\", \"user_id\") VALUES (1234, 5678)"))))

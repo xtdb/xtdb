@@ -1033,9 +1033,9 @@
 
 (defn- check-from-subquery [ag]
   (r/zmatch ag
-            [:from_subquery cl ^:z qe]
+            [:from_subquery ^:z cl _qe]
             (let [selected-columns (first (projected-columns (r/$ ag -1)))
-                  inserted-columns (mapv second (rest cl))]
+                  inserted-columns (identifiers cl)]
               (cond-> []
                 (not= (count inserted-columns) (count selected-columns))
                 (conj (format "INSERT requires query to have same degree as column list: %s"
@@ -1045,7 +1045,7 @@
                 (conj (format "INSERT does not contain mandatory xt$id column: %s"
                               (->line-info-str ag)))))
 
-            [:from_subquery ^:z qe]
+            [:from_subquery _qe]
             (let [selected-columns (first (projected-columns (r/$ ag -1)))]
               (when-not (some #{"xt$id"} (map :identifier selected-columns))
                 [(format "INSERT does not contain mandatory xt$id column: %s"
