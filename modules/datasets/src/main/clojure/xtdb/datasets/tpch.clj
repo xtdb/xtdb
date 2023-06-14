@@ -9,34 +9,42 @@
 ;; 0.05 = 7500 customers, 75000 orders, 299814 lineitems, 10000 part, 40000 partsupp, 500 supplier, 25 nation, 5 region
 
 (def ^:private table->pkey
-  {"part" [:p_partkey]
-   "supplier" [:s_suppkey]
-   "partsupp" [:ps_partkey :ps_suppkey]
-   "customer" [:c_custkey]
-   "lineitem" [:l_orderkey :l_linenumber]
-   "orders" [:o_orderkey]
-   "nation" [:n_nationkey]
-   "region" [:r_regionkey]})
+  {:part [:p_partkey]
+   :supplier [:s_suppkey]
+   :partsupp [:ps_partkey :ps_suppkey]
+   :customer [:c_custkey]
+   :lineitem [:l_orderkey :l_linenumber]
+   :orders [:o_orderkey]
+   :nation [:n_nationkey]
+   :region [:r_regionkey]})
 
-(defn- read-tpch-cell [^TpchColumn c, ^TpchEntity b]
-  (condp = (.getBase (.getType c))
-    TpchColumnType$Base/IDENTIFIER (str (str/replace (.getColumnName c) #".+_" "") "_" (.getIdentifier c b))
-    TpchColumnType$Base/INTEGER (long (.getInteger c b))
-    TpchColumnType$Base/VARCHAR (.getString c b)
-    TpchColumnType$Base/DOUBLE (.getDouble c b)
-    TpchColumnType$Base/DATE (LocalDate/ofEpochDay (.getDate c b))))
+(defn- ->cell-reader [^TpchColumn col]
+  (comp (let [k (keyword (.getColumnName col))]
+          (fn ->map-entry [v]
+            (MapEntry/create k v)))
+
+        (condp = (.getBase (.getType col))
+          TpchColumnType$Base/IDENTIFIER (let [col-part (str (str/replace (.getColumnName col) #".+_" "") "_")]
+                                           (fn [^TpchEntity e]
+                                             (str col-part (.getIdentifier col e))))
+          TpchColumnType$Base/INTEGER (fn [^TpchEntity e]
+                                        (long (.getInteger col e)))
+          TpchColumnType$Base/VARCHAR (fn [^TpchEntity e]
+                                        (.getString col e))
+          TpchColumnType$Base/DOUBLE (fn [^TpchEntity e]
+                                       (.getDouble col e))
+          TpchColumnType$Base/DATE (fn [^TpchEntity e]
+                                     (LocalDate/ofEpochDay (.getDate col e))))))
 
 (defn- tpch-table->docs [^TpchTable table scale-factor]
-  (let [table-name (.getTableName table)]
-    (for [entity (.createGenerator table scale-factor 1 1)]
-      (let [doc (->> (for [^TpchColumn col (.getColumns table)]
-                       [(keyword (.getColumnName col))
-                        (read-tpch-cell col entity)])
-                     (into {}))]
-        (-> (assoc doc
-                   :xt/id (->> (mapv doc (get table->pkey table-name))
-                               (str/join "___")))
-            (with-meta {:table (keyword table-name)}))))))
+  (let [cell-readers (mapv ->cell-reader (.getColumns table))
+        table-name (keyword (.getTableName table))
+        pk-cols (get table->pkey table-name)]
+    (for [^TpchEntity e (.createGenerator table scale-factor 1 1)]
+      (let [doc (into {} (map #(% e)) cell-readers)
+            eid (str/join "___" (map doc pk-cols))]
+        (-> (assoc doc :xt/id eid)
+            (with-meta {:table table-name}))))))
 
 (defn submit-docs! [tx-producer scale-factor]
   (log/debug "Transacting TPC-H tables...")
@@ -64,14 +72,14 @@
                (str/join ", "))))
 
 (defn- tpch-table->dml-params [^TpchTable table, scale-factor]
-  (let [table-name (.getTableName table)]
-    (for [entity (.createGenerator table scale-factor 1 1)]
-      (let [doc (for [^TpchColumn col (.getColumns table)]
-                  (MapEntry/create (keyword (.getColumnName col))
-                                   (read-tpch-cell col entity)))]
-        (cons (->> (mapv (into {} doc) (get table->pkey table-name))
-                   (str/join "___"))
-              (vals doc))))))
+  (let [table-name (.getTableName table)
+        cell-readers (mapv ->cell-reader (.getColumns table))
+        pk-cols (get table->pkey (keyword table-name))]
+    (for [^TpchEntity e (.createGenerator table scale-factor 1 1)
+          :let [doc (map #(% e) cell-readers)]]
+      (cons (->> (mapv (into {} doc) pk-cols)
+                 (str/join "___"))
+            (vals doc)))))
 
 (defn submit-dml! [tx-producer scale-factor]
   (log/debug "Transacting TPC-H tables...")
