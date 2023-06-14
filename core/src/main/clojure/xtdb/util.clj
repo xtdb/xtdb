@@ -38,11 +38,15 @@
     m))
 
 (defn try-close [c]
-  (try
-    (when (instance? AutoCloseable c)
-      (.close ^AutoCloseable c))
-    (catch Exception e
-      (log/warn e "could not close"))))
+  (cond
+    (nil? c) nil
+    (instance? AutoCloseable c) (try
+                                  (.close ^AutoCloseable c)
+                                  (catch Throwable e
+                                    (log/warn e "could not close")))
+    (instance? Map c) (recur (.values ^Map c))
+    (seqable? c) (run! try-close c)
+    :else (throw (ClassCastException. (format "could not close '%s'" (.getName (class c)))))))
 
 (defmacro rethrowing-cause [form]
   `(try
