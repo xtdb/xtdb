@@ -5,7 +5,7 @@ This module provides components that expose metrics about a node via https://met
 .deps.edn
 [source,clojure]
 ----
-com.xtdb/xtdb-metrics {:mvn/version "1.23.2"}
+com.xtdb/xtdb-metrics {:mvn/version "1.23.3"}
 ----
 
 .pom.xml
@@ -14,7 +14,7 @@ com.xtdb/xtdb-metrics {:mvn/version "1.23.2"}
 <dependency>
     <groupId>com.xtdb</groupId>
     <artifactId>xtdb-metrics</artifactId>
-    <version>1.23.2</version>
+    <version>1.23.3</version>
 </dependency>
 ----
 
