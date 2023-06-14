@@ -153,21 +153,17 @@
                                    (reify BiFunction
                                      (apply [_ _ps-id {:keys [^PreparedQuery prepd-query] :as ^Map ps}]
                                        ;; TODO we likely needn't take these out and put them back.
-                                       (let [new-params (-> (first (flight-stream->rows flight-stream))
-                                                            (->> (sequence (map-indexed (fn [idx v]
-                                                                                          (-> (vw/open-vec allocator (symbol (str "?_" idx)) [v])
-                                                                                              (iv/->direct-vec))))))
-                                                            (iv/->indirect-rel 1))]
-                                         (try
-                                           (doto ps
-                                             (some-> (.put :bound-query
-                                                           (.bind prepd-query wm-src
-                                                                  {:node node, :params new-params,
-                                                                   :basis {:tx (.latestCompletedTx idxer)}}))
-                                                     util/try-close))
-                                           (catch Throwable t
-                                             (util/try-close new-params)
-                                             (throw t)))))))
+                                       (util/with-close-on-catch [new-params (-> (first (flight-stream->rows flight-stream))
+                                                                                 (->> (sequence (map-indexed (fn [idx v]
+                                                                                                               (-> (vw/open-vec allocator (symbol (str "?_" idx)) [v])
+                                                                                                                   (iv/->direct-vec))))))
+                                                                                 (iv/->indirect-rel 1))]
+                                         (doto ps
+                                           (some-> (.put :bound-query
+                                                         (.bind prepd-query wm-src
+                                                                {:node node, :params new-params,
+                                                                 :basis {:tx (.latestCompletedTx idxer)}}))
+                                                   util/try-close))))))
                 (throw (UnsupportedOperationException. "invalid ps-id"))))
 
           (.onCompleted ack-stream)))

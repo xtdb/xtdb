@@ -171,7 +171,7 @@
       (iv/->indirect-rel out-cols)
 
       (catch Throwable t
-        (when retain? (run! util/try-close out-cols))
+        (when retain? (util/close out-cols))
         (throw t)))))
 
 (deftype LiveTableTx [^BufferAllocator allocator, ^ObjectStore object-store
@@ -362,26 +362,21 @@
         (util/->jfn ->live-table-tx))))
 
   (openWatermark [_]
-    (let [wms (HashMap.)]
-      (try
-        (doseq [[table-name ^ILiveTableTx live-table] live-table-txs]
-          (.put wms table-name (.openWatermark live-table false)))
+    (util/with-close-on-catch [wms (HashMap.)]
+      (doseq [[table-name ^ILiveTableTx live-table] live-table-txs]
+        (.put wms table-name (.openWatermark live-table false)))
 
-        (doseq [[table-name ^ILiveTable live-table] live-tables]
-          (.computeIfAbsent wms table-name
-                            (util/->jfn (fn [_] (.openWatermark live-table false)))))
+      (doseq [[table-name ^ILiveTable live-table] live-tables]
+        (.computeIfAbsent wms table-name
+                          (util/->jfn (fn [_] (.openWatermark live-table false)))))
 
-        (reify ILiveChunkWatermark
-          (liveTable [_ table-name] (.get wms table-name))
+      (reify ILiveChunkWatermark
+        (liveTable [_ table-name] (.get wms table-name))
 
-          (allColumnTypes [_] (update-vals wms #(.columnTypes ^ILiveTableWatermark %)))
+        (allColumnTypes [_] (update-vals wms #(.columnTypes ^ILiveTableWatermark %)))
 
-          AutoCloseable
-          (close [_] (run! util/try-close (.values wms))))
-
-        (catch Throwable t
-          (run! util/try-close (.values wms))
-          (throw t)))))
+        AutoCloseable
+        (close [_] (run! util/try-close (.values wms))))))
 
   (nextRowId [this]
     (let [tx-row-count (.tx-row-count this)]
@@ -415,22 +410,17 @@
                   row-counter 0))
 
   (openWatermark [_]
-    (let [wms (HashMap.)]
-      (try
-        (doseq [[table-name ^ILiveTable live-table] live-tables]
-          (.put wms table-name (.openWatermark live-table true)))
+    (util/with-close-on-catch [wms (HashMap.)]
+      (doseq [[table-name ^ILiveTable live-table] live-tables]
+        (.put wms table-name (.openWatermark live-table true)))
 
-        (reify ILiveChunkWatermark
-          (liveTable [_ table-name] (.get wms table-name))
+      (reify ILiveChunkWatermark
+        (liveTable [_ table-name] (.get wms table-name))
 
-          (allColumnTypes [_] (update-vals wms #(.columnTypes ^ILiveTableWatermark %)))
+        (allColumnTypes [_] (update-vals wms #(.columnTypes ^ILiveTableWatermark %)))
 
-          AutoCloseable
-          (close [_] (run! util/try-close (.values wms))))
-
-        (catch Throwable t
-          (run! util/try-close (.values wms))
-          (throw t)))))
+        AutoCloseable
+        (close [_] (util/close wms)))))
 
   (chunkIdx [_] chunk-idx)
   (isBlockFull [_] (>= (.blockRowCount row-counter) rows-per-block))

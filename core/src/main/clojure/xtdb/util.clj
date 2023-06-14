@@ -84,6 +84,26 @@
 
     `(do ~@body)))
 
+(defmacro with-close-on-catch
+  "Like `with-open` but doesn't close the resources if the body completes successfully.
+
+  Used where you're opening multiple resources and want to ensure earlier ones are closed if initialising later ones fails."
+  [bindings & body]
+  (assert (zero? ^long (mod (count bindings) 2)))
+
+  (if-let [[binding expr & more-bindings] bindings]
+    `(let [~binding ~expr]
+       (try
+         (with-close-on-catch ~more-bindings ~@body)
+         (catch Throwable t#
+           (try
+             (close ~binding)
+             (catch Throwable s#
+               (.addSuppressed t# s#)))
+           (throw t#))))
+
+    `(do ~@body)))
+
 (defn uuid->bytes ^bytes [^UUID uuid]
   (let [bb (doto (ByteBuffer/allocate 16)
              (.putLong (.getMostSignificantBits uuid))

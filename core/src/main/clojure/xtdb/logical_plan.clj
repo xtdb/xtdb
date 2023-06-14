@@ -117,12 +117,8 @@
         {:keys [col-types ->cursor stats]} (f inner-col-types)]
     {:col-types col-types
      :->cursor (fn [opts]
-                 (let [inner (->inner-cursor opts)]
-                   (try
-                     (->cursor opts inner)
-                     (catch Throwable e
-                       (util/try-close inner)
-                       (throw e)))))
+                 (util/with-close-on-catch [inner (->inner-cursor opts)]
+                   (->cursor opts inner)))
      :stats stats}))
 
 (defn binary-expr {:style/indent 3} [left right f]
@@ -132,17 +128,9 @@
 
     {:col-types col-types
      :->cursor (fn [opts]
-                 (let [left (->left-cursor opts)]
-                   (try
-                     (let [right (->right-cursor opts)]
-                       (try
-                         (->cursor opts left right)
-                         (catch Throwable e
-                           (util/try-close right)
-                           (throw e))))
-                     (catch Throwable e
-                       (util/try-close left)
-                       (throw e)))))
+                 (util/with-close-on-catch [left (->left-cursor opts)
+                                            right (->right-cursor opts)]
+                   (->cursor opts left right)))
      :stats stats}))
 
 ;;;; Rewriting of logical plan.

@@ -19,19 +19,20 @@
     [:put :xt_docs {:xt/id :petr, :first-name "Petr", :last-name "Petrov"}]])
 
 (deftest test-scan
-  (let [tx (xt/submit-tx tu/*node* ivan+petr)]
-    (t/is (= [{:name "Ivan"}
-              {:name "Petr"}]
-             (xt/q tu/*node*
-                   '{:find [name]
-                     :where [(match :xt_docs {:first-name name})]})))
+  (xt/submit-tx tu/*node* ivan+petr)
 
-    (t/is (= [{:e :ivan, :name "Ivan"}
-              {:e :petr, :name "Petr"}]
-             (xt/q tu/*node*
-                   '{:find [e name]
-                     :where [(match :xt_docs {:xt/id e, :first-name name})]}))
-          "returning eid")))
+  (t/is (= [{:name "Ivan"}
+            {:name "Petr"}]
+           (xt/q tu/*node*
+                 '{:find [name]
+                   :where [(match :xt_docs {:first-name name})]})))
+
+  (t/is (= [{:e :ivan, :name "Ivan"}
+            {:e :petr, :name "Petr"}]
+           (xt/q tu/*node*
+                 '{:find [e name]
+                   :where [(match :xt_docs {:xt/id e, :first-name name})]}))
+        "returning eid"))
 
 (deftest test-basic-query
   (let [tx (xt/submit-tx tu/*node* ivan+petr)]

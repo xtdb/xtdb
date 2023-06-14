@@ -301,10 +301,8 @@
                                                              (applyAsLong [_ x]
                                                                (aget ^longs x row-id-idx)))))
                         (.toArray))
-        value-count (alength coordinates)
-
-        cols (ArrayList. (count columns))]
-    (try
+        value-count (alength coordinates)]
+    (util/with-close-on-catch [cols (ArrayList. (count columns))]
       (doseq [col-name columns]
         (let [col-idx (->temporal-column-idx col-name)
               col-type (types/col-type->field col-name (get temporal-col-types col-name)) ;TODO rename to field
@@ -317,11 +315,7 @@
           (.setValueCount temporal-vec value-count)
           (.add cols (iv/->direct-vec temporal-vec))))
 
-      (iv/->indirect-rel cols value-count)
-
-      (catch Throwable e
-        (run! util/try-close cols)
-        (throw e)))))
+      (iv/->indirect-rel cols value-count))))
 
 (defn row-ids-to-add [kd-tree ^long latest-completed-tx-time ^long current-time]
   (let [min-range (doto (->min-range)

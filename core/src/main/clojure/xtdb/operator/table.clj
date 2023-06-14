@@ -44,29 +44,25 @@
 (defn- ->out-rel [{:keys [allocator] :as opts} col-types rows ->v]
   (let [row-count (count rows)]
     (when (pos? row-count)
-      (let [out-cols (ArrayList. (count col-types))]
-        (try
-          (doseq [[col-name col-type] col-types
-                  :let [col-kw (keyword col-name)
-                        out-vec (-> (types/col-type->field col-name col-type)
-                                    (.createVector allocator))
-                        out-writer (vw/->writer out-vec)]]
+      (util/with-close-on-catch [out-cols (ArrayList. (count col-types))]
+        (doseq [[col-name col-type] col-types
+                :let [col-kw (keyword col-name)
+                      out-vec (-> (types/col-type->field col-name col-type)
+                                  (.createVector allocator))
+                      out-writer (vw/->writer out-vec)]]
 
-            (.setInitialCapacity out-vec row-count)
-            (.allocateNew out-vec)
-            (.add out-cols (iv/->direct-vec out-vec))
+          (.setInitialCapacity out-vec row-count)
+          (.allocateNew out-vec)
+          (.add out-cols (iv/->direct-vec out-vec))
 
-            (dotimes [idx row-count]
-              (let [row (nth rows idx)
-                    v (-> (get row col-kw) (->v opts))]
-                (vw/write-value! v (.writerForType out-writer (vw/value->col-type v)))))
+          (dotimes [idx row-count]
+            (let [row (nth rows idx)
+                  v (-> (get row col-kw) (->v opts))]
+              (vw/write-value! v (.writerForType out-writer (vw/value->col-type v)))))
 
-            (.setValueCount out-vec row-count))
+          (.setValueCount out-vec row-count))
 
-          (iv/->indirect-rel out-cols row-count)
-          (catch Throwable e
-            (run! util/try-close out-cols)
-            (throw e)))))))
+        (iv/->indirect-rel out-cols row-count)))))
 
 (defn- emit-rows-table [rows table-expr {:keys [param-types] :as opts}]
   (let [col-type-sets (HashMap.)
