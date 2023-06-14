@@ -2,7 +2,8 @@
   (:require [clojure.test :as t]
             [xtdb.coalesce :as coalesce]
             [xtdb.test-util :as tu]
-            [xtdb.types :as types])
+            [xtdb.types :as types]
+            [xtdb.util :as util])
   (:import xtdb.ICursor
            org.apache.arrow.vector.types.pojo.Schema
            org.apache.arrow.vector.types.Types$MinorType))
@@ -13,15 +14,11 @@
 
 (t/deftest test-coalesce
   (letfn [(coalesced-counts [counts]
-            (with-open [^ICursor cursor (let [inner (tu/->cursor schema (for [cnt counts]
-                                                                          (repeat cnt {:foo "foo"})))]
-                                          (try
-                                            (-> inner
-                                                (coalesce/->coalescing-cursor tu/*allocator*
-                                                                              {:pass-through 5, :ideal-min-block-size 10}))
-                                            (catch Throwable t
-                                              (.close inner)
-                                              (throw t))))]
+            (with-open [^ICursor cursor (util/with-close-on-catch [inner (tu/->cursor schema (for [cnt counts]
+                                                                                               (repeat cnt {:foo "foo"})))]
+                                          (-> inner
+                                              (coalesce/->coalescing-cursor tu/*allocator*
+                                                                            {:pass-through 5, :ideal-min-block-size 10})))]
               (mapv count (tu/<-cursor cursor))))]
 
     (t/is (= [] (coalesced-counts [])))

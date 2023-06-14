@@ -54,18 +54,14 @@
       (getColumnName [_] col-name)
       (getColumnType [_] :i64)
       (project [_ allocator in-rel _params]
-        (let [out-vec (BigIntVector. (str col-name) allocator)
-              start-row-num (aget row-num 0)
-              row-count (.rowCount in-rel)]
-          (try
+        (util/with-close-on-catch [out-vec (BigIntVector. (str col-name) allocator)]
+          (let [start-row-num (aget row-num 0)
+                row-count (.rowCount in-rel)]
             (.setValueCount out-vec row-count)
             (dotimes [idx row-count]
               (.set out-vec idx (+ idx start-row-num)))
             (aset row-num 0 (+ start-row-num row-count))
-            (iv/->direct-vec out-vec)
-            (catch Throwable e
-              (.close out-vec)
-              (throw e))))))))
+            (iv/->direct-vec out-vec)))))))
 
 (defrecord RenameProjectionSpec [to-name from-name col-type]
   IProjectionSpec

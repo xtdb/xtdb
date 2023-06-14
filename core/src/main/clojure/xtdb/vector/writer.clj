@@ -875,13 +875,9 @@
              vs))
 
   (^org.apache.arrow.vector.ValueVector [allocator col-name col-type vs]
-   (let [res (-> (types/col-type->field col-name col-type)
-                 (.createVector allocator))]
-     (try
-       (doto res (write-vec! vs))
-       (catch Throwable e
-         (.close res)
-         (throw e))))))
+   (util/with-close-on-catch [res (-> (types/col-type->field col-name col-type)
+                                      (.createVector allocator))]
+     (doto res (write-vec! vs)))))
 
 (defn open-rel ^xtdb.vector.IIndirectRelation [vecs]
   (iv/->indirect-rel (map iv/->direct-vec vecs)))

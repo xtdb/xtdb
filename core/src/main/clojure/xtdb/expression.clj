@@ -1577,19 +1577,15 @@
 
               {:keys [return-type !projection-fn]} (emit-projection expr {:param-types (->param-types params)
                                                                           :var->col-type var->col-type})
-              row-count (.rowCount in-rel)
-              out-vec (-> (types/col-type->field col-name return-type)
-                          (.createVector allocator))]
-          (try
+              row-count (.rowCount in-rel)]
+          (util/with-close-on-catch [out-vec (-> (types/col-type->field col-name return-type)
+                                                 (.createVector allocator))]
             (doto out-vec
               (.setInitialCapacity row-count)
               (.allocateNew))
             (@!projection-fn in-rel params out-vec)
             (.setValueCount out-vec row-count)
-            (iv/->direct-vec out-vec)
-            (catch Throwable t
-              (.close out-vec)
-              (throw t))))))))
+            (iv/->direct-vec out-vec)))))))
 
 (defn ->expression-relation-selector ^xtdb.operator.IRelationSelector [form input-types]
   (let [projector (->expression-projection-spec "select" (list 'boolean form) input-types)]

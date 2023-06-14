@@ -1235,13 +1235,8 @@
                                                        :expected (count in-bindings)
                                                        :actual args})))
 
-        (let [^AutoCloseable
-              params (vw/open-params allocator (args->params args in-bindings))]
-          (try
-            (-> (.bind pq wm-src {:params params, :table-args (args->tables args in-bindings),
-                                  :basis basis, :default-tz default-tz :default-all-valid-time? default-all-valid-time?})
-                (.openCursor)
-                (op/cursor->result-set params))
-            (catch Throwable t
-              (.close params)
-              (throw t))))))))
+        (util/with-close-on-catch [^AutoCloseable params (vw/open-params allocator (args->params args in-bindings))]
+          (-> (.bind pq wm-src {:params params, :table-args (args->tables args in-bindings),
+                                :basis basis, :default-tz default-tz :default-all-valid-time? default-all-valid-time?})
+              (.openCursor)
+              (op/cursor->result-set params)))))))

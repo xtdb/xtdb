@@ -266,15 +266,10 @@
 
             ;; if the user returns `nil` or `true`, we just continue with the rest of the transaction
             (when-not (or (nil? res) (true? res))
-              (let [tx-ops-vec (txp/open-tx-ops-vec allocator)]
-                (try
-                  (txp/write-tx-ops! allocator (vw/->writer tx-ops-vec) res)
-                  (.setValueCount tx-ops-vec (count res))
-                  tx-ops-vec
-
-                  (catch Throwable t
-                    (.close tx-ops-vec)
-                    (throw t))))))
+              (util/with-close-on-catch [tx-ops-vec (txp/open-tx-ops-vec allocator)]
+                (txp/write-tx-ops! allocator (vw/->writer tx-ops-vec) res)
+                (.setValueCount tx-ops-vec (count res))
+                tx-ops-vec)))
 
           (catch Throwable t
             (reset! !last-tx-fn-error t)
