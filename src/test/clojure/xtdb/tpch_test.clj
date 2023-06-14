@@ -25,7 +25,7 @@
         (let [last-tx (case method
                         :docs (tpch/submit-docs! node scale-factor)
                         :dml (tpch/submit-dml! node scale-factor))]
-          (tu/then-await-tx* last-tx node)
+          (tu/then-await-tx last-tx node)
           (tu/finish-chunk! node)
 
           (binding [*node* node]

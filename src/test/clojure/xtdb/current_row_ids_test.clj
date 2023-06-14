@@ -112,7 +112,7 @@
     (with-open [node (tu/->local-node {:node-dir node-dir})]
 
       (-> (xt/submit-tx node tx1)
-          (tu/then-await-tx* node (Duration/ofMillis 2000)))
+          (tu/then-await-tx node (Duration/ofMillis 2000)))
 
       (tu/finish-chunk! node)
 

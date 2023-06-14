@@ -135,14 +135,14 @@
                     (.columnTypes)))]
 
         (let [tx (-> (xt/submit-tx node [[:put :xt_docs {:xt/id :doc}]])
-                     (tu/then-await-tx* node))]
+                     (tu/then-await-tx node))]
           (tu/finish-chunk! node)
 
           (t/is (= '{xt/id :keyword}
                    (->col-types tx))))
 
         (let [tx (-> (xt/submit-tx node [[:put :xt_docs {:xt/id "foo"}]])
-                     (tu/then-await-tx* node))]
+                     (tu/then-await-tx node))]
 
           (t/is (= '{xt/id [:union #{:keyword :utf8}]}
                    (->col-types tx))))))))

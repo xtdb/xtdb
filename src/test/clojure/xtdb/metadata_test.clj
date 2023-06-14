@@ -11,7 +11,7 @@
 
 (t/deftest test-row-id->chunk
   (-> (tpch/submit-docs! tu/*node* 0.001)
-      (tu/then-await-tx* tu/*node*))
+      (tu/then-await-tx tu/*node*))
 
   (tu/finish-chunk! tu/*node*)
 
@@ -62,7 +62,7 @@
                                         [:put :xt_docs {:num 4 :xt/id "d"}]
                                         [:put :xt_docs {:num (short 3) :xt/id "e"}]
                                         [:put :xt_docs {:num 2.0 :xt/id "f"}]])
-               (tu/then-await-tx* tu/*node*))]
+               (tu/then-await-tx tu/*node*))]
 
     (tu/finish-chunk! tu/*node*)
 
@@ -92,7 +92,7 @@
                                         [:put :xt_docs {:timestamp #time/date-time "2010-01-01T00:00:00" :xt/id "c"}]
                                         [:put :xt_docs {:timestamp #time/date "2020-01-01" :xt/id "d"}]]
                              {:default-tz #time/zone "Z"})
-               (tu/then-await-tx* tu/*node*))]
+               (tu/then-await-tx tu/*node*))]
 
     (tu/finish-chunk! tu/*node*)
 
@@ -122,7 +122,7 @@
   (let [tx (-> (xt/submit-tx tu/*node* [[:put :xt_docs {:time #time/time "01:02:03" :xt/id "a"}]
                                         [:put :xt_docs {:time #time/time "04:05:06" :xt/id "b"}]]
                              {:default-tz #time/zone "Z"})
-               (tu/then-await-tx* tu/*node*))]
+               (tu/then-await-tx tu/*node*))]
 
     (tu/finish-chunk! tu/*node*)
 

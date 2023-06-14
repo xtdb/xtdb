@@ -78,9 +78,9 @@
   ([k] (component *node* k))
   ([node k] (util/component node k)))
 
-(defn then-await-tx*
+(defn then-await-tx
   (^xtdb.api.protocols.TransactionInstant [tx node]
-   (then-await-tx* tx node nil))
+   (then-await-tx tx node nil))
 
   (^xtdb.api.protocols.TransactionInstant [tx node ^Duration timeout]
    @(.awaitTxAsync ^Ingester (util/component node :xtdb/ingester) tx timeout)))
@@ -182,7 +182,7 @@
    (let [^IIndexer indexer (util/component node :xtdb/indexer)
          query-opts (cond-> query-opts
                       node (-> (update :basis api/after-latest-submitted-tx node)
-                               (doto (-> :basis :after-tx (then-await-tx* node)))))]
+                               (doto (-> :basis :after-tx (then-await-tx node)))))]
 
      (with-open [^IIndirectRelation
                  params-rel (if params

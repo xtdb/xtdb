@@ -19,7 +19,7 @@
 
       (-> (xt/submit-tx node [[:put :foo {:xt/id "foo3"}]
                               [:put :bar {:xt/id "bar2"}]])
-          (tu/then-await-tx* node))
+          (tu/then-await-tx node))
 
       (t/is (= {:row-count 3}
                (:stats (lp/emit-expr '{:op :scan, :scan-opts {:table foo}, :columns [[:column id]]}

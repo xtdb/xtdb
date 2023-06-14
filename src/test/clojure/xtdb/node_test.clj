@@ -460,7 +460,7 @@ VALUES(1, OBJECT ('foo': OBJECT('bibble': true), 'bar': OBJECT('baz': 1001)))"]]
     (-> (xt/submit-tx tu/*node* [[:put :foo {:xt/id "foo1" :a 1}]
                                  [:put :bar {:xt/id "bar1"}]
                                  [:put :bar {:xt/id "bar2" :b 2}]])
-        (tu/then-await-tx* tu/*node*))
+        (tu/then-await-tx tu/*node*))
 
       (tu/finish-chunk! tu/*node*)
 

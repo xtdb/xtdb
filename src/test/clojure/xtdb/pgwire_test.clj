@@ -857,7 +857,7 @@
 (deftest map-read-test
   (with-open [conn (jdbc-conn)]
     (-> (xt/submit-tx *node* [[:put :a {:xt/id "map-test", :a {:b 42}}]])
-        (tu/then-await-tx* *node*))
+        (tu/then-await-tx *node*))
 
     (let [rs (q conn ["select a.a from a a"])]
       (is (= [{:a {"b" 42}}] rs)))))
@@ -902,7 +902,7 @@
   (require-node)
   (let [insert #(xt/submit-tx *node* [[:put %1 %2]])]
     (-> (insert :a {:xt/id :fred, :name "Fred"})
-        (tu/then-await-tx* *node*))
+        (tu/then-await-tx *node*))
 
     (with-open [conn (jdbc-conn)]
       (jdbc/with-transaction [db conn]
