@@ -923,6 +923,17 @@
             [(format "Derived columns has to have same degree as table: %s"
                      (->line-info-str ag))]))))))
 
+(defn- check-period-specification-count [ag]
+  (cond-> []
+    (< 1 (r/reduce-children + #(when (r/ctor? :query_system_time_period_specification %) 1) ag))
+    (conj (format "Each table may only contain a single system time period specification: %s"
+                  (->line-info-str ag)))
+
+    (< 1 (r/reduce-children + #(when (r/ctor? :query_valid_time_period_specification %) 1) ag))
+    (conj (format "Each table may only contain a single valid time period specification: %s"
+                  (->line-info-str ag)))))
+
+
 (defn- check-column-reference [ag]
   (let [{:keys [identifiers table-id type] :as column-reference} (column-reference ag)]
     (case type
@@ -1165,7 +1176,9 @@
          (check-values ag)
 
          :table_primary
-         (check-derived-columns ag)
+         (concat
+           (check-derived-columns ag)
+           (check-period-specification-count ag))
 
          :column_name_list
          (check-duplicates "Column name" ag (identifiers ag))
@@ -1203,7 +1216,8 @@
          :from_subquery
          (check-from-subquery ag)
 
-         :query_system_time_period_specification
+         (:query_system_time_period_specification
+          :query_valid_time_period_specification)
          (check-period-specification ag)
 
          :set_clause

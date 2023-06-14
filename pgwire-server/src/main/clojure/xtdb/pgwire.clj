@@ -436,12 +436,12 @@
                   {:statement-type :set-session-characteristics
                    :access-mode (parse-tx-access-mode tam)}
 
-                  [:set_app_time_defaults "AS_OF_NOW"]
+                  [:set_valid_time_defaults "AS_OF_NOW"]
                   ;; =>
                   {:statement-type :set-session-parameter
                    :parameter :app-time-defaults, :value :as-of-now}
 
-                  [:set_app_time_defaults "ISO_STANDARD"]
+                  [:set_valid_time_defaults "ISO_STANDARD"]
                   ;; =>
                   {:statement-type :set-session-parameter
                    :parameter :app-time-defaults, :value :iso-standard}
