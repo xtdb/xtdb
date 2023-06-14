@@ -1,4 +1,5 @@
 (ns xtdb.util
+  (:refer-clojure :exclude [with-open])
   (:require [clojure.java.io :as io]
             [clojure.spec.alpha :as s]
             [clojure.tools.logging :as log]
@@ -18,7 +19,7 @@
            java.nio.file.attribute.FileAttribute
            [java.time Duration Instant LocalDate LocalDateTime LocalTime OffsetDateTime ZoneId ZonedDateTime]
            java.time.temporal.ChronoUnit
-           [java.util ArrayList Collections Date HashMap Iterator LinkedHashMap LinkedList Map Queue UUID WeakHashMap]
+           [java.util ArrayList Collections Date Iterator LinkedHashMap LinkedList Map Queue UUID WeakHashMap]
            [java.util.concurrent CompletableFuture ExecutionException ExecutorService Executors ThreadFactory TimeUnit]
            [java.util.function BiFunction Consumer Function Supplier]
            [org.apache.arrow.compression CommonsCompressionFactory]
@@ -37,6 +38,14 @@
     (apply update m k f args)
     m))
 
+(defn close [c]
+  (cond
+    (nil? c) nil
+    (instance? AutoCloseable c) (.close ^AutoCloseable c)
+    (instance? Map c) (run! close (.values ^Map c))
+    (seqable? c) (run! close c)
+    :else (throw (ClassCastException. (format "could not close '%s'" (.getName (class c)))))))
+
 (defn try-close [c]
   (cond
     (nil? c) nil
@@ -53,6 +62,27 @@
      ~form
      (catch ExecutionException e#
        (throw (.getCause e#)))))
+
+(defmacro with-open
+  "Like `clojure.core/with-open` except closes sequences of things, and stores close exceptions
+  as suppressed exceptions on the original exception so as not to mask the original exception"
+  [bindings & body]
+  (assert (zero? ^long (mod (count bindings) 2)))
+
+  (if-let [[binding expr & more-bindings] bindings]
+    `(let [~binding ~expr]
+       (let [res# (try
+                   (with-open ~more-bindings ~@body)
+                   (catch Throwable t#
+                     (try
+                       (close ~binding)
+                       (catch Throwable s#
+                         (.addSuppressed t# s#)))
+                     (throw t#)))]
+         (close ~binding)
+         res#))
+
+    `(do ~@body)))
 
 (defn uuid->bytes ^bytes [^UUID uuid]
   (let [bb (doto (ByteBuffer/allocate 16)
@@ -251,9 +281,6 @@
 (defn ->temp-file ^Path [^String prefix ^String suffix]
   (doto (Files/createTempFile prefix suffix (make-array FileAttribute 0))
     (delete-file)))
-
-(defn create-tmpdir ^java.io.File [dir-name]
-  (.toFile (Files/createTempDirectory dir-name (make-array FileAttribute 0))))
 
 (defn write-buffer-to-path [^ByteBuffer from-buffer ^Path to-path]
   (with-open [file-ch (->file-channel to-path write-new-file-opts)
@@ -664,7 +691,7 @@
     (symbol (str (->normal-form ns) "$" (->normal-form (name s))))
     (symbol (->normal-form (name s)))))
 
-(defn str->normal-form-str [s]
+(defn str->normal-form-str ^String [s]
   (if-let [^int i (str/last-index-of s "/")]
     (str (->normal-form (subs s 0 i)) "$" (->normal-form (subs s (inc i))))
     (->normal-form s)))

@@ -2,6 +2,7 @@
            xtdb.rewrite/zmatch clojure.core.match/match
            xtdb.rewrite/zcase clojure.core/case
            xtdb.sql.logic-test.runner/def-slt-test clojure.test/deftest
+           xtdb.util/with-open clojure.core/with-open
            clojure.test.check.clojure-test/defspec clojure.test/deftest
            clojure.test.check.properties/for-all clojure.core/for
            juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc/with-transaction next.jdbc/with-transaction}
