@@ -17,6 +17,7 @@
             [xtdb.vector.indirect :as iv]
             [xtdb.vector.writer :as vw])
   (:import [ch.qos.logback.classic Level Logger]
+           clojure.lang.ExceptionInfo
            java.net.ServerSocket
            (java.nio.file Files Path)
            java.nio.file.attribute.FileAttribute
@@ -36,9 +37,16 @@
 (def ^:dynamic ^org.apache.arrow.memory.BufferAllocator *allocator*)
 
 (defn with-allocator [f]
-  (with-open [allocator (RootAllocator.)]
+  (util/with-open [allocator (RootAllocator.)]
     (binding [*allocator* allocator]
       (f))))
+
+(t/deftest test-memory-leak-doesnt-mask-original-error
+  (t/is (thrown? ExceptionInfo
+                 (with-allocator
+                   (fn []
+                     (.buffer *allocator* 10)
+                     (throw (ex-info "boom!" {})))))))
 
 (def ^:dynamic ^:private *node-opts* {})
 (def ^:dynamic *node*)
@@ -50,7 +58,7 @@
      (f))))
 
 (defn with-node [f]
-  (with-open [node (node/start-node *node-opts*)]
+  (util/with-open [node (node/start-node *node-opts*)]
     (binding [*node* node]
       (f))))
 
@@ -60,8 +68,8 @@
 
 (defn with-http-client-node [f]
   (let [port (free-port)]
-    (with-open [_ (node/start-node (-> *node-opts*
-                                       (assoc-in [:xtdb/server :port] port)))]
+    (util/with-open [_ (node/start-node (-> *node-opts*
+                                            (assoc-in [:xtdb/server :port] port)))]
       (binding [*node* (client/start-client (str "http://localhost:" port))]
         (f)))))
 
