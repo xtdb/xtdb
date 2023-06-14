@@ -511,6 +511,7 @@
   (->> (iterate #(zright %) z)
        (take-while some?)))
 
+
 ;; Strategic Zippers based on Ztrategic
 
 ;; https://arxiv.org/pdf/2110.07902.pdf
@@ -630,3 +631,15 @@
                       (znext-no-edit z depth))]
            (recur z acc)
            (m acc)))))))
+
+(defn reduce-children [combinef f z]
+  ;;children includes the first element which in the case of our AST and RA is the name
+  (loop [acc (combinef)
+         z (zdown z)]
+    (if z
+      (recur
+        (if-let [v (f z)]
+          (combinef acc v)
+          acc)
+        (zright z))
+      acc)))

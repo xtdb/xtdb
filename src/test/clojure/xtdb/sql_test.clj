@@ -1132,3 +1132,21 @@
           "test-delimited-identifiers-in-insert-column-list-2549"
           (plan-sql
             "INSERT INTO posts (\"xt$id\", \"user_id\") VALUES (1234, 5678)"))))
+
+(deftest test-table-period-specification-ordering-2260
+  (let [v-s (plan-sql
+              "SELECT foo.bar
+              FROM foo
+              FOR ALL VALID_TIME
+              FOR ALL SYSTEM_TIME")
+        s-v (plan-sql
+              "SELECT foo.bar
+              FROM foo
+              FOR ALL SYSTEM_TIME
+              FOR ALL VALID_TIME")]
+
+    (t/is (=plan-file "test-table-period-specification-ordering-2260-v-s" v-s))
+
+    (t/is (=plan-file "test-table-period-specification-ordering-2260-s-v" s-v))
+
+    (t/is (= v-s s-v))))
