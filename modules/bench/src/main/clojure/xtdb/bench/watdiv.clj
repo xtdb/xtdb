@@ -37,7 +37,7 @@
                                       ;; TODO we don't support set vals yet
                                       [:put (->> doc (into {} (remove (comp set? val))))])))))]
     (bench/with-timing :await-tx
-      (tu/then-await-tx* tx node (Duration/ofHours 5)))
+      (tu/then-await-tx tx node (Duration/ofHours 5)))
 
     (bench/with-timing :finish-chunk
       (bench/finish-chunk! node))))
