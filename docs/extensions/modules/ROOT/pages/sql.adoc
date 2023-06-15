@@ -1,5 +1,5 @@
 = SQL
-:page-aliases: reference::sql.adoc
+:page-aliases: 1.23.3@reference::sql.adoc
 
 SQL module for XTDB built on https://calcite.apache.org/[Apache Calcite].
 

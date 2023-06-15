@@ -1,5 +1,5 @@
 = Azure Blobs
-:page-aliases: reference::azure-blobs.adoc
+:page-aliases: 1.23.3@reference::azure-blobs.adoc
 
 You can use Azure's Blob Storage as XTDB's 'document store'.
 
