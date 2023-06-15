@@ -9,6 +9,7 @@
            [com.nimbusds.jose JWSAlgorithm JWSHeader$Builder]
            [com.nimbusds.jose.jwk Curve ECKey JWKSet]
            [com.nimbusds.jwt JWTClaimsSet$Builder SignedJWT]
+           [java.time Duration]
            [java.util Date]
            [java.util.function Supplier]))
 
@@ -40,8 +41,8 @@
 
 (defn with-api* [{:keys [jwks ->jwt-token]} f]
   (let [server-port (xio/free-port)]
-    (with-open [node (xt/start-node {:xtdb.http-server/server {:port server-port
-                                                               :jwks jwks}})
+    (with-open [_node (xt/start-node {:xtdb.http-server/server {:port server-port
+                                                                :jwks jwks}})
                 client (xt/new-api-client (str "http://localhost:" server-port) {:->jwt-token ->jwt-token})]
 
       (binding [*api* client]
@@ -53,7 +54,7 @@
 (t/deftest test-unauthenticated-client-and-unauthenticated-server
   (with-api {}
     (let [submitted-tx (xt/submit-tx *api* [[::xt/put {:xt/id :ivan :name "Ivan"}]])]
-      (t/is (= submitted-tx (xt/await-tx *api* submitted-tx)))
+      (t/is (= submitted-tx (xt/await-tx *api* submitted-tx (Duration/ofSeconds 2))))
       (t/is (true? (xt/tx-committed? *api* submitted-tx))))))
 
 (t/deftest test-authenticated-client-and-unauthenticated-server
