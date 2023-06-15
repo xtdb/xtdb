@@ -9,7 +9,7 @@
             [xtdb.io :as xio]
             [xtdb.query-state :as qs])
   (:import (com.nimbusds.jwt SignedJWT)
-           (java.io Closeable InputStreamReader IOException PushbackReader)
+           (java.io Closeable InputStreamReader PushbackReader)
            (java.time Instant)
            (java.util Date)
            (java.util.function Supplier)
@@ -50,30 +50,8 @@
   (when (not (bound? #'*internal-http-request-fn*))
     (alter-var-root
      #'*internal-http-request-fn*
-     (constantly
-      (binding [*warn-on-reflection* false]
-        (or (try
-              (let [f (requiring-resolve 'juxt.clojars-mirrclj-http.client/request)]
-                (fn [opts]
-                  (f (merge  opts))))
-              (catch IOException _e))
-            (try
-              (let [f (requiring-resolve 'clj-http.client/request)]
-                (fn [opts]
-                  (f (merge {:as "UTF-8" :throw-exceptions false} opts))))
-              (catch IOException _e))
-            (try
-              (let [f (requiring-resolve 'org.httpkit.client/request)]
-                (fn [opts]
-                  (let [{:keys [error] :as result} @(f (merge {:as :text} opts))]
-                    (if error
-                      (throw error)
-                      result))))
-              (catch IOException _e))
-            (fn [opts]
-              (http/request opts))
-            (fn [_]
-              (throw (IllegalStateException. "No supported HTTP client found.")))))))))
+     (constantly (fn [opts]
+                   (http/request (into {:as "UTF-8" :throw-exceptions false} opts)))))))
 
 (defn- api-request-sync
   ([url {:keys [body http-opts ->jwt-token]}]
@@ -108,12 +86,6 @@
 
        :else
        (throw (ex-info (str "HTTP status " status) result))))))
-
-(defrecord RemoteApiStream [streams-state]
-  Closeable
-  (close [_]
-    (doseq [stream @streams-state]
-      (.close ^Closeable stream))))
 
 (defn- temporal-qps [{:keys [valid-time tx-time tx-id] :as _db}]
   {:valid-time (some-> valid-time (xio/format-rfc3339-date))
