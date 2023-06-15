@@ -442,7 +442,7 @@
                                                               (let [f (str "." (.getFileName path) (format "_cell_%016x.raw" cell-idx))
                                                                     cell-path (.resolveSibling path f)]
                                                                 (aset cell-paths cell-idx cell-path)
-                                                                (let [file-ch (util/->file-channel cell-path util/write-new-file-opts)]
+                                                                (let [file-ch (util/->file-channel cell-path util/write-truncate-open-opts)]
                                                                   (try
                                                                     (doto (DataOutputStream. (BufferedOutputStream. (Channels/newOutputStream file-ch)))
                                                                       (->> (aset cell-outs cell-idx)))
@@ -493,7 +493,7 @@
                schema (Schema. [(kd/->point-field k)] {"grid-meta" (json/write-str grid-meta)})
                buf (long-array k)]
            (with-open [root (VectorSchemaRoot/create schema allocator)
-                       ch (util/->file-channel path util/write-new-file-opts)
+                       ch (util/->file-channel path util/write-truncate-open-opts)
                        out (ArrowFileWriter. root nil ch)]
              (let [^FixedSizeListVector point-vec (.getVector root point-vec-idx)
                    out-access (KdTreeVectorPointAccess. point-vec k)]

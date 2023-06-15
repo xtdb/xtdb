@@ -8,7 +8,7 @@
             [clojure.string :as str])
   (:import clojure.lang.MapEntry
            xtdb.ICursor
-           [java.io ByteArrayOutputStream File]
+           [java.io ByteArrayOutputStream File OutputStream]
            java.lang.AutoCloseable
            java.lang.reflect.Method
            [java.net MalformedURLException URI URL]
@@ -19,7 +19,7 @@
            java.nio.file.attribute.FileAttribute
            [java.time Duration Instant LocalDate LocalDateTime LocalTime OffsetDateTime ZoneId ZonedDateTime]
            java.time.temporal.ChronoUnit
-           [java.util ArrayList Collections Date Iterator LinkedHashMap LinkedList Map Queue UUID WeakHashMap]
+           [java.util ArrayList Collections Date Iterator LinkedHashMap LinkedList Map Queue Set UUID WeakHashMap]
            [java.util.concurrent CompletableFuture ExecutionException ExecutorService Executors ThreadFactory TimeUnit]
            [java.util.function BiFunction Consumer Function Supplier]
            [org.apache.arrow.compression CommonsCompressionFactory]
@@ -254,22 +254,31 @@
       (truncate [size]
         (throw (UnsupportedOperationException.))))))
 
-(def write-new-file-opts ^"[Ljava.nio.file.OpenOption;"
-  (into-array OpenOption #{StandardOpenOption/CREATE StandardOpenOption/WRITE StandardOpenOption/TRUNCATE_EXISTING}))
+(defn enum->kw [^Enum enum-value]
+  (-> (.name enum-value)
+      (str/lower-case)
+      (str/replace #"_" "-")
+      keyword))
+
+(def standard-open-options
+  (->> (StandardOpenOption/values)
+       (into {} (map (juxt enum->kw identity)))))
+
+(def write-truncate-open-opts #{:create :write :truncate-existing})
 
 (defn ->file-channel
   (^java.nio.channels.FileChannel [^Path path]
-   (->file-channel path #{StandardOpenOption/READ}))
-  (^java.nio.channels.FileChannel [^Path path options]
-   (FileChannel/open path (into-array OpenOption options))))
+   (->file-channel path #{:read}))
+  (^java.nio.channels.FileChannel [^Path path open-opts]
+   (FileChannel/open path (into-array OpenOption (map #(standard-open-options % %) open-opts)))))
 
 (defn ->mmap-path
   (^java.nio.MappedByteBuffer [^Path path]
    (->mmap-path path FileChannel$MapMode/READ_ONLY))
   (^java.nio.MappedByteBuffer [^Path path ^FileChannel$MapMode map-mode]
    (with-open [in (->file-channel path (if (= FileChannel$MapMode/READ_ONLY map-mode)
-                                         #{StandardOpenOption/READ}
-                                         #{StandardOpenOption/READ StandardOpenOption/WRITE}))]
+                                         #{:read}
+                                         #{:read :write}))]
      (.map in map-mode 0 (.size in)))))
 
 (def ^:private file-deletion-visitor
@@ -303,7 +312,7 @@
     (delete-file)))
 
 (defn write-buffer-to-path [^ByteBuffer from-buffer ^Path to-path]
-  (with-open [file-ch (->file-channel to-path write-new-file-opts)
+  (with-open [file-ch (->file-channel to-path write-truncate-open-opts)
               buf-ch (->seekable-byte-channel from-buffer)]
     (.transferFrom file-ch buf-ch 0 (.size buf-ch))))
 
@@ -396,42 +405,13 @@
 
      (VectorSchemaRoot. acc))))
 
-(definterface ArrowIpcWriter
-  (^void writeBatch [])
-  (^java.nio.ByteBuffer end [])
-  (^void close []))
+(defn open-arrow-file-writer
+  (^org.apache.arrow.vector.ipc.ArrowFileWriter [path-ish, ^VectorSchemaRoot root]
+   (open-arrow-file-writer path-ish root write-truncate-open-opts))
 
-(defn open-arrow-ipc-writer ^xtdb.util.ArrowIpcWriter [^VectorSchemaRoot root, ipc-type]
-  (let [baos (ByteArrayOutputStream.)]
-    (try
-      (let [ch (Channels/newChannel baos)]
-        (try
-          (let [^ArrowWriter sw (case ipc-type
-                                  :file (ArrowFileWriter. root nil ch)
-                                  :stream (ArrowStreamWriter. root nil ch))]
-            (try
-              (.start sw)
-              (reify ArrowIpcWriter
-                (writeBatch [_] (.writeBatch sw))
-
-                (end [_]
-                 (.end sw)
-                 (ByteBuffer/wrap (.toByteArray baos)) )
-
-                AutoCloseable
-                (close [_]
-                  (try-close sw)
-                  (try-close ch)
-                  (try-close baos)))
-              (catch Throwable t
-                (.close sw)
-                (throw t))))
-          (catch Throwable t
-            (.close ch)
-            (throw t))))
-      (catch Throwable t
-        (.close baos)
-        (throw t)))))
+  (^org.apache.arrow.vector.ipc.ArrowFileWriter [path-ish, ^VectorSchemaRoot root, open-opts]
+   (with-close-on-catch [ch (->file-channel (->path path-ish) open-opts)]
+     (ArrowFileWriter. root nil ch))))
 
 (defn build-arrow-ipc-byte-buffer ^java.nio.ByteBuffer {:style/indent 2}
   [^VectorSchemaRoot root ipc-type f]

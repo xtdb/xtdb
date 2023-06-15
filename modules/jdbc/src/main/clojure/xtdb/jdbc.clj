@@ -11,7 +11,7 @@
   (:import [com.zaxxer.hikari HikariConfig HikariDataSource]
            xtdb.object_store.ObjectStore
            java.nio.ByteBuffer
-           java.nio.file.Files
+           (java.nio.file Files OpenOption)
            java.util.concurrent.CompletableFuture
            java.util.function.Supplier))
 
@@ -63,7 +63,7 @@
      (reify Supplier
        (get [_]
          (Files/write out-path (get-object pool k)
-                      ^"[Ljava.nio.file.OpenOption;" util/write-new-file-opts)))))
+                      ^"[Ljava.nio.file.OpenOption;"(into-array OpenOption (map util/standard-open-options util/write-truncate-open-opts)))))))
 
   (putObject [_ k buf]
     (CompletableFuture/runAsync

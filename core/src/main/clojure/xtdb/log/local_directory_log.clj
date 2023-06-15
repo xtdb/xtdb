@@ -87,9 +87,7 @@
             (recur)))))))
 
 (defn- writer-append-loop [^Path root-path, ^BlockingQueue queue, ^InstantSource instant-src, ^long buffer-size]
-  (with-open [log-channel (util/->file-channel (.resolve root-path "LOG")
-                                               #{StandardOpenOption/CREATE
-                                                 StandardOpenOption/WRITE})]
+  (with-open [log-channel (util/->file-channel (.resolve root-path "LOG") #{:create :write})]
     (let [elements (ArrayList. buffer-size)]
       (.position log-channel (.size log-channel))
       (while (not (Thread/interrupted))
