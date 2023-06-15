@@ -192,7 +192,10 @@
 
 (t/deftest test-sparql
   (let [submitted-tx (xt/submit-tx *api* [[::xt/put {:xt/id :ivan :name "Ivan"}]])]
-    (xt/await-tx *api* submitted-tx))
+    (xt/await-tx *api* submitted-tx)
+
+    ;; now required on remote (after fix for #527) to actually await the tx
+    (xt/db *api*))
 
   (t/testing "SPARQL query"
     (when (bound? #'fh/*api-url*)

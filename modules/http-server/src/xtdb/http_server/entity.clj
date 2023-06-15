@@ -26,6 +26,7 @@
 (s/def ::history boolean?)
 (s/def ::with-corrections boolean?)
 (s/def ::with-docs boolean?)
+
 (s/def ::query-params
   (s/keys :opt-un [::util/eid
                    ::util/eid-edn

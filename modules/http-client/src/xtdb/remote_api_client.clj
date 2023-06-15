@@ -87,27 +87,22 @@
        :else
        (throw (ex-info (str "HTTP status " status) result))))))
 
-(defn- temporal-qps [{:keys [valid-time tx-time tx-id] :as _db}]
-  {:valid-time (some-> valid-time (xio/format-rfc3339-date))
-   :tx-time (some-> tx-time (xio/format-rfc3339-date))
-   :tx-id tx-id})
-
-(defrecord RemoteDatasource [url valid-time tx-time tx-id ->jwt-token]
+(defrecord RemoteDatasource [url valid-time tx-time tx-id ->jwt-token basis-qps]
   Closeable
   (close [_])
 
   xt/PXtdbDatasource
-  (entity [this eid]
+  (entity [_ eid]
     (api-request-sync (str url "/_xtdb/entity")
                       {:->jwt-token ->jwt-token
                        :http-opts {:method :get
-                                   :query-params (merge (temporal-qps this)
-                                                        {:eid-edn (pr-str eid)})}}))
-  (entity-tx [this eid]
+                                   :query-params (-> basis-qps
+                                                     (assoc :eid-edn (pr-str eid)))}}))
+  (entity-tx [_ eid]
     (api-request-sync (str url "/_xtdb/entity-tx")
                       {:http-opts {:method :get
-                                   :query-params (merge (temporal-qps this)
-                                                        {:eid-edn (pr-str eid)})}
+                                   :query-params (-> basis-qps
+                                                     (assoc :eid-edn (pr-str eid)))}
                        :->jwt-token ->jwt-token}))
 
   (q* [this query in-args]
@@ -116,12 +111,12 @@
         (vec (iterator-seq res))
         (set (iterator-seq res)))))
 
-  (open-q* [this query in-args]
+  (open-q* [_ query in-args]
     (let [in (api-request-sync (str url "/_xtdb/query")
                                {:->jwt-token ->jwt-token
                                 :http-opts {:as :stream
                                             :method :post
-                                            :query-params (temporal-qps this)}
+                                            :query-params basis-qps}
                                 :body {:query (pr-str query)
                                        :in-args (vec in-args)}})]
       (xio/->cursor #(.close ^Closeable in) (edn-list->lazy-seq in))))
@@ -152,25 +147,26 @@
 
   (open-entity-history [this eid sort-order] (xt/open-entity-history this eid sort-order {}))
 
-  (open-entity-history [this eid sort-order opts]
+  (open-entity-history [_ eid sort-order opts]
    (let [opts (assoc opts :sort-order sort-order)
-         qps (merge (temporal-qps this)
-                    {:eid-edn (pr-str eid)
-                     :history true
+         qps (-> basis-qps
+                 (assoc :eid-edn (pr-str eid)
+                        :history true
 
-                     :sort-order (name sort-order)
-                     :with-corrections (:with-corrections? opts)
-                     :with-docs (:with-docs? opts)
+                        :sort-order (name sort-order)
+                        :with-corrections (:with-corrections? opts)
+                        :with-docs (:with-docs? opts)
 
-                     :start-valid-time (some-> (:start-valid-time opts) (xio/format-rfc3339-date))
-                     :start-tx-time (some-> (get-in opts [:start-tx ::xt/tx-time])
-                                            (xio/format-rfc3339-date))
-                     :start-tx-id (get-in opts [:start-tx ::xt/tx-id])
+                        :start-valid-time (some-> (:start-valid-time opts) (xio/format-rfc3339-date))
+                        :start-tx-time (some-> (get-in opts [:start-tx ::xt/tx-time])
+                                               (xio/format-rfc3339-date))
+                        :start-tx-id (get-in opts [:start-tx ::xt/tx-id])
 
-                     :end-valid-time (some-> (:end-valid-time opts) (xio/format-rfc3339-date))
-                     :end-tx-time (some-> (get-in opts [:end-tx ::xt/tx-time])
-                                          (xio/format-rfc3339-date))
-                     :end-tx-id (get-in opts [:end-tx ::xt/tx-id])})]
+                        :end-valid-time (some-> (:end-valid-time opts) (xio/format-rfc3339-date))
+                        :end-tx-time (some-> (get-in opts [:end-tx ::xt/tx-time])
+                                             (xio/format-rfc3339-date))
+                        :end-tx-id (get-in opts [:end-tx ::xt/tx-id])))]
+
      (if-let [in (api-request-sync (str url "/_xtdb/entity")
                                    {:http-opts {:as :stream
                                                 :method :get
@@ -186,9 +182,24 @@
   (db-basis [_]
     {::xt/valid-time valid-time
      ::xt/tx {::xt/tx-time tx-time
-             ::xt/tx-id tx-id}}))
+              ::xt/tx-id tx-id}}))
 
-(defrecord RemoteApiClient [url ->jwt-token]
+(defn- merge-await-opts [{{old-tx-id ::xt/tx-id, old-tx-time ::xt/tx-time} :tx}
+                         {:keys [timeout], {new-tx-id ::xt/tx-id, new-tx-time ::xt/tx-time} :tx}]
+  {:tx {::xt/tx-id (->> [old-tx-id new-tx-id] (remove nil?) sort last)
+        ::xt/tx-time (->> [old-tx-time new-tx-time] (remove nil?) sort last)}
+   :timeout timeout})
+
+(defn- ->basis-qps [{:keys [valid-time tx],
+                     {await-tx :tx, await-tx-timeout :timeout} :await-opts}]
+  {:valid-time (some-> valid-time (xio/format-rfc3339-date))
+   :tx-time (some-> (::xt/tx-time tx) (xio/format-rfc3339-date))
+   :tx-id (::xt/tx-id tx)
+   :await-tx-id (::xt/tx-id await-tx)
+   :await-tx-time (some-> (::xt/tx-time await-tx) (xio/format-rfc3339-date))
+   :await-tx-timeout (some-> await-tx-timeout (xio/format-duration-millis))})
+
+(defrecord RemoteApiClient [url ->jwt-token !await-opts]
   Closeable
   (close [_])
 
@@ -197,26 +208,31 @@
 
   (db [this valid-time tx-time]
    (xt/db this {::xt/valid-time valid-time
-                 ::xt/tx-time tx-time}))
+                ::xt/tx-time tx-time}))
 
-  (db [this valid-time-or-basis]
+  (db [_ valid-time-or-basis]
    (if (instance? Date valid-time-or-basis)
-     (xt/db this {::xt/valid-time valid-time-or-basis})
+     (recur {::xt/valid-time valid-time-or-basis})
      (let [db-basis valid-time-or-basis
-           qps (temporal-qps {:valid-time (::xt/valid-time db-basis)
-                              :tx-time (or (get-in db-basis [::xt/tx ::xt/tx-time])
-                                           (::xt/tx-time db-basis))
-                              :tx-id (or (get-in db-basis [::xt/tx ::xt/tx-id])
-                                         (::xt/tx-id db-basis))})
+           basis-qps (->basis-qps {:valid-time (::xt/valid-time db-basis)
+                                   :tx {::xt/tx-time (or (get-in db-basis [::xt/tx ::xt/tx-time])
+                                                         (::xt/tx-time db-basis))
+                                        ::xt/tx-id (or (get-in db-basis [::xt/tx ::xt/tx-id])
+                                                       (::xt/tx-id db-basis))}
+                                   :await-opts @!await-opts})
+
            resolved-tx (api-request-sync (str url "/_xtdb/db")
                                          {:http-opts {:method :get
-                                                      :query-params qps}
+                                                      :query-params basis-qps}
                                           :->jwt-token ->jwt-token})]
        (->RemoteDatasource url
                            (::xt/valid-time resolved-tx)
                            (get-in resolved-tx [::xt/tx ::xt/tx-time])
                            (get-in resolved-tx [::xt/tx ::xt/tx-id])
-                           ->jwt-token))))
+                           ->jwt-token
+                           (->basis-qps {:valid-time (::xt/valid-time db-basis)
+                                         :tx (::xt/tx resolved-tx)
+                                         :await-opts @!await-opts})))))
 
   (open-db [this] (xt/db this))
 
@@ -233,40 +249,47 @@
   (tx-committed? [_ submitted-tx]
     (-> (api-request-sync (str url "/_xtdb/tx-committed")
                           {:http-opts {:method :get
-                                       :query-params {:tx-id (::xt/tx-id submitted-tx)}}
+                                       :query-params (merge (->basis-qps {:await-opts @!await-opts})
+                                                            {:tx-id (::xt/tx-id submitted-tx)})}
                            :->jwt-token ->jwt-token})
         (get :tx-committed?)))
 
   (sync [this] (xt/sync this nil))
 
-  (sync [_ timeout]
-   (-> (api-request-sync (str url "/_xtdb/sync")
-                         {:http-opts {:method :get
-                                      :query-params {:timeout (some-> timeout (xio/format-duration-millis))}}
-                          :->jwt-token ->jwt-token})
-       (get ::xt/tx-time)))
+  (sync [this timeout]
+    (when-let [tx (xt/latest-submitted-tx this)]
+      (xt/await-tx this tx timeout)))
 
   (sync [this tx-time timeout]
+   #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
    (defonce warn-on-deprecated-sync
-            (log/warn "(sync tx-time <timeout?>) is deprecated, replace with either (await-tx-time tx-time <timeout?>) or, preferably, (await-tx tx <timeout?>)"))
+     (log/warn "(sync tx-time node <timeout?>) is deprecated, replace with either (await-tx-time node tx-time <timeout?>) or, preferably, (await-tx node tx <timeout?>)"))
+
    (xt/await-tx-time this tx-time timeout))
 
   (await-tx [this submitted-tx] (xt/await-tx this submitted-tx nil))
   (await-tx [_ submitted-tx timeout]
+    ;; continue to call the await-tx endpoint so that new clients still work with old servers
     (api-request-sync (str url "/_xtdb/await-tx")
                       {:http-opts {:method :get
                                    :query-params {:tx-id (::xt/tx-id submitted-tx)
                                                  :timeout (some-> timeout (xio/format-duration-millis))}}
-                       :->jwt-token ->jwt-token}))
+                       :->jwt-token ->jwt-token})
+
+    (swap! !await-opts merge-await-opts {:tx submitted-tx, :timeout timeout})
+    submitted-tx)
 
   (await-tx-time [this tx-time] (xt/await-tx-time this tx-time nil))
   (await-tx-time [_ tx-time timeout]
-    (-> (api-request-sync (str url "/_xtdb/await-tx-time" )
-                          {:http-opts {:method :get
-                                       :query-params {:tx-time (xio/format-rfc3339-date tx-time)
-                                                     :timeout (some-> timeout (xio/format-duration-millis))}}
-                           :->jwt-token ->jwt-token})
-        (get ::xt/tx-time)))
+    ;; continue to call the await-tx-time endpoint so that new clients still work with old servers
+    (api-request-sync (str url "/_xtdb/await-tx-time")
+                      {:http-opts {:method :get
+                                   :query-params {:tx-time (xio/format-rfc3339-date tx-time)
+                                                  :timeout (some-> timeout (xio/format-duration-millis))}}
+                       :->jwt-token ->jwt-token})
+
+    (swap! !await-opts merge-await-opts {:tx {::xt/tx-time tx-time}, :timeout timeout})
+    tx-time)
 
   (listen [_ _event-opts _f]
     (throw (UnsupportedOperationException. "'listen' not supported on remote clients")))
@@ -326,8 +349,9 @@
           in (api-request-sync (str url "/_xtdb/tx-log")
                                {:http-opts {:method :get
                                             :as :stream
-                                            :query-params {:after-tx-id after-tx-id
-                                                           :with-ops? with-ops?}}
+                                            :query-params (merge {:after-tx-id after-tx-id
+                                                                  :with-ops? with-ops?}
+                                                                 (->basis-qps {:await-opts @!await-opts}))}
                                 :->jwt-token ->jwt-token})]
 
       (xio/->cursor #(.close ^Closeable in)
@@ -352,9 +376,10 @@
             (reset! !token-cache {:token new-token :token-expiration new-token-exp})
             new-token)))))
 
+#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (defn new-api-client
-  ([url]
-   (new-api-client url nil))
+  ([url] (new-api-client url nil))
+
   ([url ^RemoteClientOptions options]
    (init-internal-http-request-fn)
-   (->RemoteApiClient url (some-> options (.-jwtSupplier) ->jwt-token-fn))))
+   (->RemoteApiClient url (some-> options (.-jwtSupplier) ->jwt-token-fn) (atom nil))))

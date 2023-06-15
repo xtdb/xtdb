@@ -48,9 +48,9 @@
 
 (s/def ::link-entities? boolean?)
 (s/def ::valid-time ::date)
+(s/def ::tx-id int?)
 (s/def ::tx-time ::date)
 (s/def ::timeout int?)
-(s/def ::tx-id int?)
 
 (defn ->edn-encoder [_]
   (reify

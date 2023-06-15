@@ -16,7 +16,6 @@
             [xtdb.http-server.util :as util]
             [xtdb.io :as xio]
             [xtdb.system :as sys]
-            [xtdb.tx :as tx]
             [xtdb.tx.conform :as txc]
             [juxt.clojars-mirrors.jsonista.v0v3v5.jsonista.core :as json]
             [juxt.clojars-mirrors.muuntaja.v0v6v8.muuntaja.core :as m]
@@ -38,6 +37,11 @@
            [java.io Closeable IOException]
            java.time.Duration
            org.eclipse.jetty.server.Server))
+
+(s/def ::await-tx-id ::util/tx-id)
+(s/def ::await-tx-time ::util/tx-time)
+(s/def ::await-tx-timeout ::util/timeout)
+(s/def ::await-params (s/keys :opt-un [::await-tx-id ::await-tx-time ::await-tx-timeout]))
 
 (defn- add-last-modified [response date]
   (cond-> response
@@ -316,6 +320,16 @@
                                                    (m/slurp)
                                                    (json/read-value))}}))))
 
+(defn- wrap-await-tx [handler xtdb-node]
+  (fn [req]
+    (let [{:keys [await-tx-id await-tx-time await-tx-timeout]} (get-in req [:parameters :query])]
+      (when (or await-tx-id await-tx-time)
+        (xt/await-tx xtdb-node
+                     {::xt/tx-id await-tx-id, ::xt/tx-time await-tx-time}
+                     (some-> await-tx-timeout Duration/ofMillis))))
+
+    (handler req)))
+
 (defn- ->xtdb-router [{{:keys [^String jwks, read-only?]} :http-options
                        :keys [xtdb-node], :as opts}]
   (let [opts (-> opts (update :http-options dissoc :jwks))
@@ -323,15 +337,15 @@
                        :summary "Query"
                        :description "Perform a datalog query"
                        :get {:handler (query/data-browser-query opts)
-                             :parameters {:query ::query/query-params}}
+                             :parameters {:query (s/merge ::query/query-params ::await-params)}}
                        :post {:handler (query/data-browser-query opts)
-                              :parameters {:query ::query/query-params
+                              :parameters {:query (s/merge ::query/query-params ::await-params)
                                            :body ::query/body-params}}}]
     (rr/router [["/" {:no-doc true
                       :get (fn [_] (resp/redirect "/_xtdb/query"))}]
                 ["/_xtdb"
                  ["/db" (-> {:get (db-handler xtdb-node)
-                             :parameters {:query ::db-spec}
+                             :parameters {:query (s/merge ::db-spec ::await-params)}
                              :summary "DB"
                              :description "Get the resolved db-basis for the given valid-time/transaction"}
                             (with-example "db-response"))]
@@ -344,16 +358,20 @@
                                  :summary "Entity"
                                  :description "Get information about a particular entity"
                                  :get (entity/entity-state opts)
-                                 :parameters {:query ::entity/query-params}}
+                                 :parameters {:query (s/merge ::entity/query-params ::await-params)}}
                                 (with-example "entity-response"))]
                  ["/query" (-> query-handler
                                (with-example "query-response"))]
-                 ["/query.csv" (assoc query-handler :middleware [[add-response-format "text/csv"]] :no-doc true)]
-                 ["/query.tsv" (assoc query-handler :middleware [[add-response-format "text/tsv"]] :no-doc true)]
+                 ["/query.csv" (-> query-handler
+                                   (assoc :no-doc true)
+                                   (update :middleware (fnil conj []) [add-response-format "text/csv"]))]
+                 ["/query.tsv" (-> query-handler
+                                   (assoc :no-doc true)
+                                   (update :middleware (fnil conj []) [add-response-format "text/tsv"]))]
                  ["/entity-tx" (-> {:get (entity-tx xtdb-node)
                                     :summary "Entity Tx"
                                     :description "Get transactional information an particular entity"
-                                    :parameters {:query ::entity-tx-spec}}
+                                    :parameters {:query (s/merge ::entity-tx-spec ::await-params)}}
                                    (with-example "entity-tx-response"))]
                  ["/attribute-stats" (-> {:get (attribute-stats xtdb-node)
                                           :summary "Attribute Stats"
@@ -379,7 +397,7 @@
                                  :summary "Tx Log"
                                  :description "Get a list of all transactions"
                                  :muuntaja ->tx-log-muuntaja
-                                 :parameters {:query ::tx-log-spec}}
+                                 :parameters {:query (s/merge ::tx-log-spec ::await-params)}}
                                 (with-example "tx-log-response"))]
                  ["/submit-tx" (-> {:muuntaja ->submit-tx-muuntaja
                                     :summary "Submit Tx"
@@ -393,11 +411,12 @@
                  ["/tx-committed" (-> {:get (tx-committed? xtdb-node)
                                        :summary "Tx Committed"
                                        :description "Checks if a submitted tx was successfully committed"
-                                       :parameters {:query ::tx-committed-spec}}
+                                       :parameters {:query (s/merge ::tx-committed-spec ::await-params)}}
                                       (with-example "tx-committed-response"))]
                  ["/latest-completed-tx" (-> {:get (latest-completed-tx xtdb-node)
                                               :summary "Latest Completed Tx"
-                                              :description "Get the latest transaction to have been indexed by this node"}
+                                              :description "Get the latest transaction to have been indexed by this node"
+                                              :parameters {:query ::await-params}}
                                              (with-example "latest-completed-tx-response"))]
                  ["/latest-submitted-tx" (-> {:get (latest-submitted-tx xtdb-node)
                                               :summary "Latest Submitted Tx"
@@ -420,6 +439,7 @@
                                          (with-example "slowest-queries-response"))]
                  ["/sparql" {:get (sparqql xtdb-node)
                              :post (sparqql xtdb-node)
+                             :parameters {:query ::await-params}
                              :no-doc true}]
 
                  ["/swagger.json"
@@ -442,8 +462,9 @@
                                                :muuntaja/decode handle-muuntaja-decode-error}))
                                       rm/format-request-middleware
                                       rrc/coerce-response-middleware
-                                      rrc/coerce-request-middleware]
-                               jwks (conj #(wrap-jwt % (JWKSet/parse jwks))))}})))
+                                      rrc/coerce-request-middleware
+                                      [wrap-await-tx xtdb-node]]
+                               jwks (conj [wrap-jwt (JWKSet/parse jwks)]))}})))
 
 ;; entry point for users including our handler in their own server
 (defn ->xtdb-handler [xtdb-node http-options]
