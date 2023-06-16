@@ -80,7 +80,7 @@ S3 can be used as a query index xref:{page-component-version}@administration::ch
 Checkpoints aren't GC'd by XTDB - we recommend you set a lifecycle policy on your bucket to remove older checkpoints.
 
 
-=== Option 1: Using the legacy S3 `checkpoint` module
+=== Option 1: Using the S3 `checkpoint` module
 
 
 [source,clojure]
@@ -95,7 +95,7 @@ Checkpoints aren't GC'd by XTDB - we recommend you set a lifecycle policy on you
                  ...}}
 ----
 
-=== Parameters
+==== Parameters
 
 * `configurator` (xref:#configurator[`S3Configurator`])
 * `bucket` (string, required)
@@ -103,7 +103,7 @@ Checkpoints aren't GC'd by XTDB - we recommend you set a lifecycle policy on you
 * `transfer-manager?` (boolean, optional default `false`): Use link:https://docs.aws.amazon.com/sdk-for-java/latest/developer-guide/transfer-manager.html[AWS S3 Transfer Manager]
 
 [#configurator]
-===  Configuring S3 requests
+====  Configuring S3 requests
 
 WARNING: This is unfortunately currently only accessible from Clojure - we plan to expose it outside of Clojure soon.
 
@@ -123,13 +123,13 @@ Clojure::
 {:xtdb/document-store {:xtdb/module 'xtdb.s3/->document-store
                        :configurator (fn [_]
                                        (reify S3Configurator
-                                         ...)
+                                         ...))
                        ...}}
 ----
 ====
 
 
-=== Option 2: Using the new `checkpoint-transfer-manager` module
+=== Option 2: Using the newer `checkpoint-transfer-manager` module
 
 [tabs]
 ====
@@ -147,14 +147,14 @@ Clojure::
                        :prefix "checkpoint-dir"
                        :configurator `s3-configurator}         ;;;; ;; see below for an example
 
-               :approx-frequency (java.time.Duration/ofSeconds 3600)}}}
+               :approx-frequency (java.time.Duration/ofSeconds 3600)}
                ...
     }
 ----
 ====
 
-Although AWS Transfer Manager works fine with the regular `S3AsyncClient` it is recommended to use the new
-link:https://aws.amazon.com/blogs/developer/introducing-crt-based-s3-client-and-the-s3-transfer-manager-in-the-aws-sdk-for-java-2-x/[CRT-based S3 client] in order to gain its full benefit. For example:
+Although AWS Transfer Manager works fine with the regular `S3AsyncClient` it is recommended to use the new link:https://aws.amazon.com/blogs/developer/introducing-crt-based-s3-client-and-the-s3-transfer-manager-in-the-aws-sdk-for-java-2-x/[CRT-based S3 client] in order to gain its full benefit.
+For example:
 
 [tabs]
 ====
@@ -191,6 +191,4 @@ Clojure::
 ----
 ====
 
-When using the CRT Client, S3 Transfer Manager uses multipart transfers: it is recommended that you configure the 
-link:https://docs.aws.amazon.com/AmazonS3/latest/userguide/mpu-abort-incomplete-mpu-lifecycle-config.html[AbortIncompleteMultipartUpload] policy on your bucket.
-
+When using the CRT Client, S3 Transfer Manager uses multipart transfers: it is recommended that you configure the link:https://docs.aws.amazon.com/AmazonS3/latest/userguide/mpu-abort-incomplete-mpu-lifecycle-config.html[AbortIncompleteMultipartUpload] policy on your bucket.
