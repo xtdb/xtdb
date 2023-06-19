@@ -1306,7 +1306,8 @@
                                                                       inner-name (assoc :identifier inner-name)))}
                                       {outer-projection-symbol (expr (r/$ derived-column 1))})))
         relation (wrap-with-apply sl (plan te))]
-    [:project qualified-projection relation]))
+    (with-meta [:project qualified-projection relation]
+               {:outer-projection projection})))
 
 (defn- build-set-op
   ([set-op lhs rhs] (build-set-op set-op lhs rhs false))
@@ -1856,11 +1857,10 @@
                                :node (r/node z)})))))
 
 (defn rewrite-plan [plan opts]
-  (let [plan (lp/remove-names plan opts)
-        {:keys [add-projection-fn]} (meta plan)]
-    (-> plan
-        (lp/rewrite-plan opts)
-        (add-projection-fn))))
+  (let [plan (lp/remove-names plan opts)]
+    (with-meta (-> plan
+                   (lp/rewrite-plan opts))
+               (meta plan))))
 
 (defn plan-query
   ([ag] (plan-query ag {}))

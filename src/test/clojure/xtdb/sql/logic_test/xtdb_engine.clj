@@ -208,14 +208,13 @@
 
 (defn- execute-sql-query [node sql-statement variables opts]
   (binding [r/*memo* (HashMap.)]
-    (let [projection (outer-projection (p/parse sql-statement :query_expression))]
-      (vec
-       (for [row (xt/q node sql-statement
-                       (-> opts
-                           (assoc :default-all-valid-time? (not= (get variables "VALID_TIME_DEFAULTS") "AS_OF_NOW"))
-                           (cond-> (get variables "CURRENT_TIMESTAMP") (assoc-in [:basis :current-time] (Instant/parse (get variables "CURRENT_TIMESTAMP"))))))]
+    (vec
+      (for [row (xt/q node sql-statement
+                      (-> opts
+                          (assoc :default-all-valid-time? (not= (get variables "VALID_TIME_DEFAULTS") "AS_OF_NOW") :rows true)
+                          (cond-> (get variables "CURRENT_TIMESTAMP") (assoc-in [:basis :current-time] (Instant/parse (get variables "CURRENT_TIMESTAMP"))))))]
 
-         (mapv #(-> % name keyword row) projection))))))
+        (clojure.pprint/pprint row)))))
 
 (defn parse-create-table [^String x]
   (when-let [[_ table-name columns] (re-find #"(?is)^\s*CREATE\s+TABLE\s+(\w+)\s*\((.+)\)\s*$" x)]

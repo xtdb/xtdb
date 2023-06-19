@@ -473,3 +473,22 @@ VALUES(1, OBJECT ('foo': OBJECT('bibble': true), 'bar': OBJECT('baz': 1001)))"]]
                (xt/q tu/*node* "SELECT * FROM bar")))
       (t/is (= [{:a 4, :xt$id "foo1"}]
                (xt/q tu/*node* "SELECT * FROM baz")))))
+
+(deftest test-outer-names
+  (-> (xt/submit-tx tu/*node* [[:put :foo {:xt/id "foo1" :a 1 :b 2}]
+                               [:put :foo {:xt/id "foo2" :a 3 :b 4}]
+                               [:put :bar {:xt/id "bar1" :a 5 :b 6}]
+                               [:put :bar {:xt/id "bar2" :a 7 :b 8 :c 9}]])
+      (tu/then-await-tx tu/*node*))
+
+  (t/is (= [[1 2 "foo1" 5 6 "bar1" nil]
+            [1 2 "foo1" 7 8 "bar2" 9]
+            [3 4 "foo2" 5 6 "bar1" nil]
+            [3 4 "foo2" 7 8 "bar2" 9]]
+              (xt/q tu/*node* "SELECT * FROM foo, bar" {:vectors? true})))
+
+  (t/is (= [{:a 1, :b 2, :xt$id "foo1", :a:1 5, :b:1 6, :xt$id:1 "bar1", :c nil}
+            {:a 1, :b 2, :xt$id "foo1", :a:1 7, :b:1 8, :xt$id:1 "bar2", :c 9}
+            {:a 3, :b 4, :xt$id "foo2", :a:1 5, :b:1 6, :xt$id:1 "bar1", :c nil}
+            {:a 3, :b 4, :xt$id "foo2", :a:1 7, :b:1 8, :xt$id:1 "bar2", :c 9}]
+          (xt/q tu/*node* "SELECT * FROM foo, bar" {:vectors? false}))))

@@ -4,6 +4,15 @@
            java.util.function.Function
            xtdb.IResultSet))
 
+(defn fix-outer-column-names [{:keys [vectors?]} {:keys [outer-projection column->name]} result-row]
+  (let [fixed-results (for [{:keys [identifier outer-name]} outer-projection]
+                        (let [outer-col-name (or outer-name (symbol identifier))
+                              anon-col-name (keyword (get column->name outer-col-name))]
+                          [(keyword outer-col-name) (get result-row anon-col-name)]))]
+    (if vectors?
+      (mapv second fixed-results)
+      (into {} fixed-results))))
+
 (defmacro ^:private rethrowing-cause [form]
   `(try
      ~form
@@ -76,7 +85,8 @@
           (reify Function
             (apply [_ res]
               (with-open [^IResultSet res res]
-                (vec (iterator-seq res))))))))))
+                (->> (vec (iterator-seq res))
+                     (mapv #(fix-outer-column-names opts (.outerProjection res) %)))))))))))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (defn q

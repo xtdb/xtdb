@@ -63,8 +63,9 @@
             (util/then-apply
               (fn [_]
                 (let [tables-with-cols (scan/tables-with-cols (:basis query-opts) wm-src scan-emitter)
-                      pq (.prepareRaQuery ra-src (sql/compile-query query (assoc query-opts :table-info tables-with-cols)))]
-                  (sql/open-sql-query allocator wm-src pq query-opts)))))
+                      ra (sql/compile-query query (assoc query-opts :table-info tables-with-cols))
+                      pq (.prepareRaQuery ra-src ra)]
+                  (sql/open-sql-query allocator wm-src pq query-opts (meta ra))))))
 
         (-> !await-tx
             (util/then-apply

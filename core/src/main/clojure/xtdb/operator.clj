@@ -175,9 +175,12 @@
 
 (deftype CursorResultSet [^IResultCursor cursor
                           ^AutoCloseable params
-                          ^:unsynchronized-mutable ^Iterator next-values]
+                          ^:unsynchronized-mutable ^Iterator next-values
+                          outer-projection]
   IResultSet
   (columnTypes [_] (.columnTypes cursor))
+
+  (outerProjection [_] outer-projection)
 
   (hasNext [res]
     (boolean
@@ -198,5 +201,5 @@
     (.close cursor)
     (.close params)))
 
-(defn cursor->result-set ^xtdb.IResultSet [^IResultCursor cursor, ^AutoCloseable params]
-  (CursorResultSet. cursor params nil))
+(defn cursor->result-set ^xtdb.IResultSet [^IResultCursor cursor, ^AutoCloseable params outer-projection]
+  (CursorResultSet. cursor params nil outer-projection))
