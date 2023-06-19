@@ -1141,6 +1141,66 @@
     (t/is (= {:res 2.0, :res-type :f32}
              (run-test '/ (float 4) (int 2))))))
 
+
+(t/deftest test-decimal-arithmetic-and-coersion
+  (letfn [(run-test [f x y]
+            (with-open [rel (tu/open-rel [(tu/open-vec "x" [x])
+                                          (tu/open-vec "y" [y])])]
+              (-> (run-projection rel (list f 'x 'y))
+                  (update :res first))))]
+
+    ;; standard ops
+    (t/is (= {:res 2.0M, :res-type :decimal}
+             (run-test '+ (bigdec 1.0) (bigdec 1.0))))
+    (t/is (= {:res 0.0M, :res-type :decimal}
+             (run-test '- (bigdec 1.0) (bigdec 1.0))))
+    (t/is (= {:res 0.5M, :res-type :decimal}
+             (run-test '/ (bigdec 1.0) (bigdec 2.0))))
+    (t/is (= {:res 2.0M, :res-type :decimal}
+             (run-test '* (bigdec 1.0) (bigdec 2.0))))
+    (t/is (= {:res false, :res-type :bool}
+             (run-test '> (bigdec 1.0) (bigdec 2.0))))
+
+    ;; LUB
+    (t/is (= {:res 2.0M, :res-type :decimal}
+             (run-test '* (byte 1) (bigdec 2.0))))
+    (t/is (= {:res 2.0M, :res-type :decimal}
+             (run-test '* (short 1) (bigdec 2.0))))
+    (t/is (= {:res 2.0M, :res-type :decimal}
+             (run-test '* (int 1) (bigdec 2.0))))
+    (t/is (= {:res 2.0M, :res-type :decimal}
+             (run-test '* (bigdec 2.0) (int 1))))
+    (t/is (= {:res true, :res-type :bool}
+             (run-test '< (int 1) (bigdec 2.0))))
+    (t/is (= {:res false, :res-type :bool}
+             (run-test '> (int 1) (bigdec 2.0))))
+    (t/is (= {:res 3.0, :res-type :f32}
+             (run-test '+ (float 1.0) (bigdec 2.0))))
+    (t/is (= {:res 3.0, :res-type :f64}
+             (run-test '+ (double 1.0) (bigdec 2.0))))
+    (t/is (= {:res (double 9.0) :res-type :f64}
+             (run-test 'power (double 3.0) (bigdec 2.0))))
+
+    (t/is (= {:res (double 3.0) :res-type :f64}
+             (run-test 'log (double 2.0) (bigdec 8.0))))
+
+    ;; least + greatest
+    (t/is (= {:res 2.0, :res-type [:union #{:f64 :decimal}]}
+             (run-test 'least (bigdec 3.0) (double 2.0))))
+    (t/is (= {:res 3.0, :res-type [:union #{:f64 :decimal}]}
+             (run-test 'greatest (double 3.0) (bigdec 2.0))))
+
+    ;; TODO decide on behaviour
+    ;; out of fixed precision range
+    (t/is (thrown? UnsupportedOperationException
+                   (run-test '+ (bigdec 1E+19M) (bigdec 1E+19M))))
+    ;; overflow
+    (t/is (thrown? UnsupportedOperationException
+                   (run-test '+ (bigdec 1E+35M) (bigdec 1E-35M))))
+    ;; underflow
+    (t/is (thrown? ArithmeticException
+                   (run-test '/ (bigdec 1E-35M) (bigdec 1E+35M))))))
+
 (t/deftest test-throws-on-overflow
   (letfn [(run-unary-test [f x]
             (with-open [rel (tu/open-rel [(tu/open-vec "x" [x])])]

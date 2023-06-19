@@ -6,6 +6,7 @@
             [xtdb.vector :as vec]
             [xtdb.vector.indirect :as iv])
   (:import (clojure.lang Keyword)
+           (java.math BigDecimal)
            (java.lang AutoCloseable)
            java.net.URI
            (java.nio ByteBuffer CharBuffer)
@@ -15,7 +16,7 @@
            (java.util.function Function)
            java.util.function.Function
            (org.apache.arrow.memory BufferAllocator)
-           (org.apache.arrow.vector BigIntVector BitVector DateDayVector DateMilliVector DurationVector ExtensionTypeVector FixedSizeBinaryVector Float4Vector Float8Vector IntVector IntervalDayVector IntervalMonthDayNanoVector IntervalYearVector NullVector PeriodDuration SmallIntVector TimeMicroVector TimeMilliVector TimeNanoVector TimeSecVector TimeStampVector TinyIntVector ValueVector VarBinaryVector VarCharVector VectorSchemaRoot)
+           (org.apache.arrow.vector BigIntVector BitVector DecimalVector Decimal256Vector DateDayVector DateMilliVector DurationVector ExtensionTypeVector FixedSizeBinaryVector Float4Vector Float8Vector IntVector IntervalDayVector IntervalMonthDayNanoVector IntervalYearVector NullVector PeriodDuration SmallIntVector TimeMicroVector TimeMilliVector TimeNanoVector TimeSecVector TimeStampVector TinyIntVector ValueVector VarBinaryVector VarCharVector VectorSchemaRoot)
            (org.apache.arrow.vector.complex DenseUnionVector ListVector StructVector)
            (org.apache.arrow.vector.types.pojo ArrowType$List ArrowType$Struct ArrowType$Union Field FieldType)
            xtdb.api.protocols.ClojureForm
@@ -140,6 +141,21 @@
         (writeNull [_ _] (.setNull arrow-vec (.getPositionAndIncrement wp)))
         (writeLong [_ days] (.setSafe arrow-vec (.getPositionAndIncrement wp) (* days 86400000)))))))
 
+(extend-protocol WriterFactory
+  DecimalVector
+  (->writer [arrow-vec]
+    (let [wp (IWriterPosition/build (.getValueCount arrow-vec))]
+      (reify IVectorWriter
+        (getVector [_] arrow-vec)
+        (clear [_] (.clear arrow-vec) (.setPosition wp 0))
+        (rowCopier [this src-vec] (scalar-copier this src-vec))
+        (writerPosition [_] wp)
+        (writeNull [_ _] (.setNull arrow-vec (.getPositionAndIncrement wp)))
+        (writeObject [_  decimal]
+          (let [new-decimal (.setScale ^BigDecimal decimal (.getScale arrow-vec))]
+            (.setSafe arrow-vec (.getPositionAndIncrement wp) new-decimal)))
+        (writerForType [this _col-type] this)))))
+
 (extend-protocol ArrowWriteable
   nil
   (value->col-type [_] :null)
@@ -171,7 +187,11 @@
 
   Double
   (value->col-type [_] :f64)
-  (write-value! [v ^IVectorWriter w] (.writeDouble w v)))
+  (write-value! [v ^IVectorWriter w] (.writeDouble w v))
+
+  BigDecimal
+  (value->col-type [_] :decimal)
+  (write-value! [v ^IVectorWriter w] (.writeObject w v)))
 
 (extend-protocol WriterFactory
   DurationVector
