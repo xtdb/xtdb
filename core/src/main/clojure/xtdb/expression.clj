@@ -160,7 +160,8 @@
          :f32 'float
          :f64 'double
          :timestamp-tz 'long
-         :duration 'long}
+         :duration 'long
+         :decimal 'bigdec}
         types/col-type-head))
 
 (def idx-sym (gensym 'idx))
@@ -227,7 +228,7 @@
   :hierarchy #'types/col-type-hierarchy)
 
 (def ^:private col-type->rw-fn
-  '{:bool Boolean, :i8 Byte, :i16 Short, :i32 Int, :i64 Long, :f32 Float, :f64 Double
+  '{:bool Boolean, :i8 Byte, :i16 Short, :i32 Int, :i64 Long, :f32 Float, :f64 Double,
     :date Long, :time-local Long, :timestamp-tz Long, :timestamp-local Long, :duration Long
     :utf8 Bytes, :varbinary Bytes, :keyword Bytes, :uuid Bytes, :uri Bytes
 
@@ -243,7 +244,7 @@
   (defmethod read-value-code k [_ & args] `(~(symbol (str ".read" rw-fn)) ~@args))
   (defmethod write-value-code k [_ & args] `(~(symbol (str ".write" rw-fn)) ~@args)))
 
-(doseq [[k tag] {:interval PeriodDuration}]
+(doseq [[k tag] {:interval PeriodDuration :decimal BigDecimal}]
   (defmethod read-value-code k [_ & args]
     (-> `(.readObject ~@args) (with-tag tag)))
 

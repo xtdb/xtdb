@@ -10,13 +10,15 @@
            (java.time Duration Instant LocalDate LocalTime Period ZoneId)
            java.util.concurrent.ConcurrentHashMap
            java.util.function.Function
-           (org.apache.arrow.vector BitVector DateDayVector DateMilliVector IntervalDayVector IntervalMonthDayNanoVector IntervalYearVector TimeMicroVector TimeMilliVector TimeNanoVector TimeSecVector TimeStampMicroTZVector TimeStampMilliTZVector TimeStampNanoTZVector TimeStampSecTZVector ValueVector VarBinaryVector VarCharVector)
+           (org.apache.arrow.vector BitVector DateDayVector DateMilliVector DecimalVector Decimal256Vector IntervalDayVector IntervalMonthDayNanoVector IntervalYearVector TimeMicroVector TimeMilliVector TimeNanoVector TimeSecVector TimeStampMicroTZVector TimeStampMilliTZVector TimeStampNanoTZVector TimeStampSecTZVector ValueVector VarBinaryVector VarCharVector)
            (org.apache.arrow.vector.complex DenseUnionVector FixedSizeListVector ListVector StructVector)
            (org.apache.arrow.vector.holders NullableIntervalDayHolder NullableIntervalMonthDayNanoHolder)
            (org.apache.arrow.vector.types DateUnit FloatingPointPrecision IntervalUnit TimeUnit Types$MinorType UnionMode)
-           (org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Date ArrowType$Duration ArrowType$FixedSizeBinary ArrowType$FixedSizeList ArrowType$FloatingPoint ArrowType$Int ArrowType$Interval ArrowType$List ArrowType$Null ArrowType$Struct ArrowType$Time ArrowType$Time ArrowType$Timestamp ArrowType$Union ArrowType$Utf8 Field FieldType)
+           (org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Date ArrowType$Decimal ArrowType$Duration ArrowType$FixedSizeBinary ArrowType$FixedSizeList ArrowType$FloatingPoint ArrowType$Int ArrowType$Interval ArrowType$List ArrowType$Null ArrowType$Struct ArrowType$Time ArrowType$Time ArrowType$Timestamp ArrowType$Union ArrowType$Utf8 Field FieldType)
            (xtdb.types IntervalDayTime IntervalMonthDayNano IntervalYearMonth)
            (xtdb.vector.extensions AbsentType AbsentVector ClojureFormType KeywordType SetType SetVector UriType UuidType)))
+
+
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -216,7 +218,7 @@
       (derive :i8 :int) (derive :i16 :int) (derive :i32 :int) (derive :i64 :int)
       (derive :u8 :uint) (derive :u16 :uint) (derive :u32 :uint) (derive :u64 :uint)
 
-      (derive :uint :num) (derive :int :num) (derive :float :num)
+      (derive :uint :num) (derive :int :num) (derive :float :num) (derive :decimal :num)
       (derive :num :any)
 
       (derive :date-time :any)
@@ -312,8 +314,14 @@
                      :null Types$MinorType/NULL, :bool Types$MinorType/BIT
                      :f32 Types$MinorType/FLOAT4, :f64 Types$MinorType/FLOAT8
                      :i8 Types$MinorType/TINYINT, :i16 Types$MinorType/SMALLINT, :i32 Types$MinorType/INT, :i64 Types$MinorType/BIGINT
-                     :utf8 Types$MinorType/VARCHAR, :varbinary Types$MinorType/VARBINARY)]
+                     :utf8 Types$MinorType/VARCHAR, :varbinary Types$MinorType/VARBINARY
+                     :decimal Types$MinorType/DECIMAL)]
     (->field col-name (.getType minor-type) (or nullable? (= col-type :null)))))
+
+(defmethod col-type->field* :decimal [col-name nullable? _col-type]
+  ;; TODO decide on how deal with precision that is out of this range but still fits into
+  ;; a 128 bit decimal
+  (->field col-name (ArrowType$Decimal/createDecimal 38 19 (int 128)) nullable?))
 
 (defmethod col-type->field* :keyword [col-name nullable? _col-type]
   (->field col-name KeywordType/INSTANCE nullable?))
@@ -349,6 +357,7 @@
 (defmethod arrow-type->col-type ArrowType$Bool [_] :bool)
 (defmethod arrow-type->col-type ArrowType$Utf8 [_] :utf8)
 (defmethod arrow-type->col-type ArrowType$Binary [_] :varbinary)
+(defmethod arrow-type->col-type ArrowType$Decimal  [_] :decimal)
 
 (defn- col-type->nullable-col-type [col-type]
   (zmatch col-type
@@ -560,11 +569,17 @@
   (fn [x-type y-type] [(col-type-head x-type) (col-type-head y-type)])
   :hierarchy #'col-type-hierarchy)
 
+;; HACK
+;; the decimal widening to other types currently only works without
+;; casting elsewhere because we are using Clojure's polymorphic functions
+;; or the Math/* functions cast things to the correct type.
 (def widening-hierarchy
   (-> col-type-hierarchy
       (derive :i8 :i16) (derive :i16 :i32) (derive :i32 :i64)
+      (derive :decimal :float) (derive :decimal :f64) (derive :decimal :f32)
       (derive :f32 :f64)
-      (derive :int :f64) (derive :int :f32)))
+      (derive :int :f64) (derive :int :f32)
+      (derive :int :decimal) (derive :uint :decimal)))
 
 (defmethod least-upper-bound2 [:num :num] [x-type y-type]
   (cond

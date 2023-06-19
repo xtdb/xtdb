@@ -6,9 +6,10 @@
             [xtdb.vector :as vec]
             [xtdb.vector.writer :as vw])
   (:import java.net.URI
+           (java.math BigDecimal)
            java.nio.ByteBuffer
            (java.time Instant LocalDate LocalTime OffsetDateTime ZonedDateTime)
-           (org.apache.arrow.vector BigIntVector BitVector DateDayVector Float4Vector Float8Vector IntVector IntervalMonthDayNanoVector NullVector SmallIntVector TimeNanoVector TimeStampMicroTZVector TinyIntVector VarBinaryVector VarCharVector)
+           (org.apache.arrow.vector BigIntVector BitVector DateDayVector DecimalVector Decimal256Vector Float4Vector Float8Vector IntVector IntervalMonthDayNanoVector NullVector SmallIntVector TimeNanoVector TimeStampMicroTZVector TinyIntVector VarBinaryVector VarCharVector)
            (org.apache.arrow.vector.complex DenseUnionVector ListVector StructVector)
            (xtdb.types IntervalDayTime IntervalYearMonth)
            (xtdb.vector IVectorWriter)
@@ -18,7 +19,7 @@
 
 
 (defn- test-read [col-type-fn write-fn vs]
-;; TODO no longer types, but there are other things in here that depend on `test-read`
+  ;; TODO no longer types, but there are other things in here that depend on `test-read`
   (with-open [duv (DenseUnionVector/empty "" tu/*allocator*)]
     (let [duv-writer (vw/->writer duv)]
       (doseq [v vs]
@@ -33,9 +34,9 @@
   (test-read vw/value->col-type #(vw/write-value! %2 %1) vs))
 
 (t/deftest round-trips-values
-  (t/is (= {:vs [false nil 2 1 6 4 3.14 2.0]
-            :vec-types [BitVector NullVector BigIntVector TinyIntVector SmallIntVector IntVector Float8Vector Float4Vector]}
-           (test-round-trip [false nil (long 2) (byte 1) (short 6) (int 4) (double 3.14) (float 2)]))
+  (t/is (= {:vs [false nil 2 1 6 4 3.14 2.0 BigDecimal/ONE]
+            :vec-types [BitVector NullVector BigIntVector TinyIntVector SmallIntVector IntVector Float8Vector Float4Vector DecimalVector]}
+           (test-round-trip [false nil (long 2) (byte 1) (short 6) (int 4) (double 3.14) (float 2) BigDecimal/ONE]))
         "primitives")
 
   (t/is (= {:vs ["Hello"
@@ -78,6 +79,13 @@
               :vec-types [KeywordVector KeywordVector UuidVector UriVector ClojureFormVector]}
              (test-round-trip vs))
           "extension types")))
+
+(t/deftest decimal-vector-test
+  (let [vs [BigDecimal/ONE 123.45M 12.3M]]
+    (->> "BigDecimal can be round tripped"
+         (t/is (= {:vs vs
+                   :vec-types [DecimalVector DecimalVector DecimalVector]}
+                  (test-round-trip vs))))))
 
 (t/deftest date-vector-test
   (let [vs [(LocalDate/of 2007 12 11)]]
