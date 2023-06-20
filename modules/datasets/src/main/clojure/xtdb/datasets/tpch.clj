@@ -163,5 +163,4 @@
         (some-> @!os util/close)))))
 
 (comment
-  (dump-tpch-log-files (io/file "/home/james/tmp/idx-poc/tpch-01")
-                       {:scale-factor 0.01}))
+  (dump-tpch-log-files (io/file "/tmp/tpch") {:scale-factor 0.01}))

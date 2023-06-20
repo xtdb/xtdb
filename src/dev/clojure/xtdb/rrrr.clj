@@ -55,22 +55,15 @@
       (bit-and 0xf)))
 
 (def tpch-col-types
-  (->> (input-files (io/file "/home/james/tmp/idx-poc/tpch-01"))
-       (transduce
-        (comp (mapcat (fn [{:keys [^File file]}]
-                        (with-open [is (io/input-stream file)]
-                          (->> (lazy-transit-seq is)
-                               (into [] (comp (mapcat (fn [{:keys [rows]}]
-                                                        (for [{:keys [table doc]} rows
-                                                              [col-sym col-type] (second (vw/value->col-type doc))]
-                                                          [table col-sym col-type])))
-                                              (distinct)))))))
-              (distinct))
-        (completing
-         (fn
-           ([] {})
-           ([acc [table col-sym col-type]]
-            (update-in acc [table (keyword col-sym)] types/merge-col-types col-type)))))))
+  {:orders {:o_totalprice :f64, :o_orderdate [:date :day], :o_comment :utf8, :o_orderkey :utf8, :o_shippriority :i64, :o_custkey :utf8, :xt$id :utf8, :o_orderpriority :utf8, :o_clerk :utf8, :o_orderstatus :utf8},
+   :supplier {:s_nationkey :utf8, :s_address :utf8, :s_comment :utf8, :s_acctbal :f64, :s_suppkey :utf8, :s_name :utf8, :s_phone :utf8, :xt$id :utf8},
+   :lineitem {:l_returnflag :utf8, :l_extendedprice :f64, :l_linenumber :i64, :l_quantity :f64, :l_shipinstruct :utf8, :l_shipmode :utf8, :l_suppkey :utf8, :l_discount :f64, :xt$id :utf8, :l_partkey :utf8, :l_linestatus :utf8, :l_receiptdate [:date :day], :l_orderkey :utf8, :l_shipdate [:date :day], :l_commitdate [:date :day], :l_tax :f64, :l_comment :utf8},
+   :part {:p_retailprice :f64, :p_brand :utf8, :p_size :i64, :p_comment :utf8, :p_partkey :utf8, :p_name :utf8, :p_mfgr :utf8, :xt$id :utf8, :p_type :utf8, :p_container :utf8},
+   :xt$txs {:xt$committed? :bool, :xt$id :i64, :xt$tx_time [:timestamp-tz :micro "UTC"], :xt$error [:union #{:clj-form :null}]},
+   :customer {:c_comment :utf8, :c_mktsegment :utf8, :xt$id :utf8, :c_name :utf8, :c_phone :utf8, :c_acctbal :f64, :c_address :utf8, :c_custkey :utf8, :c_nationkey :utf8},
+   :region {:r_comment :utf8, :r_regionkey :utf8, :xt$id :utf8, :r_name :utf8},
+   :partsupp {:ps_partkey :utf8, :ps_suppkey :utf8, :ps_supplycost :f64, :ps_comment :utf8, :ps_availqty :i64, :xt$id :utf8},
+   :nation {:xt$id :utf8, :n_comment :utf8, :n_name :utf8, :n_nationkey :utf8, :n_regionkey :utf8}})
 
 (def ^:private nullable-inst-type [:union #{:null [:timestamp-tz :micro "UTC"]}])
 
@@ -171,7 +164,7 @@
                    (println (.contentToTSVString temporal-log-root))))))))))
 
 (comment
-  (write-log-files (io/file "/home/james/tmp/idx-poc/tpch-1")))
+  (write-log-files (io/file "/tmp/tpch")))
 
 (defn- write-temporal-diff [root-dir]
   (with-open [al (RootAllocator.)]
@@ -307,8 +300,8 @@
                 (.writeBatch trie-file-wtr)
                 (.end trie-file-wtr)))))))))
 
-(comment
-  (write-temporal-diff (io/file "/home/james/tmp/idx-poc/tpch-01")))
+(comment)
+  (write-temporal-diff (io/file "/tmp/tpch"))
 
 (defn- write-t1-partitions [root-dir]
   (let [wtrs (HashMap.)]
@@ -335,7 +328,7 @@
         (util/close (map :os (.values wtrs)))))))
 
 (comment
-  (write-t1-partitions (io/file "/home/james/tmp/idx-poc/tpch-1")))
+  (write-t1-partitions (io/file "/tmp/tpch")))
 
 (def hamt-directory-schema
   ;; metadata probably a `:map` but we don't have those yet
@@ -366,7 +359,7 @@
             (types/col-type->field "xt$system_from" types/temporal-col-type)
             (types/col-type->field "xt$row_id" :i64)]))
 
-(defn- write-t1-hamt [^File root-dir]
+(defn- write-t1-hamt [{:keys [^File root-dir, ^double scale-factor, table-col-types]}]
   (util/with-open [al (RootAllocator.)]
     (let [tables-dir (io/file root-dir "tables")
           {last-seg-row-id :seg-row-id, last-seg-tx-id :seg-tx-id} (last (input-files root-dir))
@@ -375,7 +368,7 @@
                                 (util/->lex-hex-string last-seg-tx-id))]
       (doseq [^File table-dir (.listFiles (io/file root-dir "tables"))
               :let [table (keyword (.getName table-dir))
-                    col-types (get tpch-col-types table)]]
+                    col-types (get table-col-types table)]]
         (log/infof "T1 HAMT for '%s'" (name table))
         (with-open [directory-root (VectorSchemaRoot/create hamt-directory-schema al)
                     directory-file-wtr (-> (io/file tables-dir (name table) "t1-directory" out-file-name)
@@ -496,9 +489,9 @@
 
                   (let [part-files (->> (.listFiles (io/file table-dir "t1-parts"))
                                         (sort-by #(.getName ^File %)))]
-                    (if (contains? (-> (case (.getName root-dir)
-                                         "tpch-01" #{:customer, :part, :supplier}
-                                         "tpch-05" #{:customer, :supplier}
+                    (if (contains? (-> (case scale-factor
+                                         0.01 #{:customer, :part, :supplier}
+                                         0.05 #{:customer, :supplier}
                                          #{})
                                        (conj :nation :region))
                                    table)
@@ -531,4 +524,6 @@
                 (util/close (mapcat (juxt :content-file-wtr :root) content-wtrs))))))))))
 
 (comment
-  (write-t1-hamt (io/file "/home/james/tmp/idx-poc/tpch-1")))
+  (write-t1-hamt {:root-dir (io/file "/tmp/tpch")
+                  :scale-factor 0.01
+                  :table-col-types tpch-col-types}))

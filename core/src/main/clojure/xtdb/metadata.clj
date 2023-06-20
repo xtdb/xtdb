@@ -4,6 +4,7 @@
             [xtdb.bloom :as bloom]
             xtdb.buffer-pool
             [xtdb.expression.comparator :as expr.comp]
+            xtdb.expression.temporal
             xtdb.object-store
             [xtdb.transit :as xt.transit]
             [xtdb.types :as types]
