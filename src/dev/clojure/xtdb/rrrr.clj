@@ -192,12 +192,12 @@
                                   .mkdirs)
 
                         leaf-schema (Schema. [(types/col-type->field "xt$iid" [:fixed-size-binary 16])
-                                              (types/->field "op" (ArrowType$Union. UnionMode/Dense (int-array (range 2))) false
-                                                             (types/col-type->field "put" [:struct {'xt$row_id :i64
-                                                                                                    'xt$valid_from types/temporal-col-type
-                                                                                                    'xt$system_from types/temporal-col-type
-                                                                                                    'xt$doc (rows->col-type rows)}])
-                                                             (types/col-type->field "delete" :null))])
+                                              (types/col-type->field "op"
+                                                                     [:union #{:null
+                                                                               [:struct {'xt$row_id :i64
+                                                                                         'xt$valid_from types/temporal-col-type
+                                                                                         'xt$system_from types/temporal-col-type
+                                                                                         'xt$doc (rows->col-type rows)}]}])])
 
                         trie-schema (Schema. [(types/->field "nodes" (ArrowType$Union. UnionMode/Dense (int-array (range 3))) false
                                                              (types/col-type->field "nil" :null)
@@ -236,11 +236,10 @@
                     iid-wtr (vw/->writer (.getVector leaf-vsr "xt$iid"))
                     iid-wp (.writerPosition iid-wtr)
                     op-wtr (vw/->writer (.getVector leaf-vsr "op"))
-                    put-wtr (.writerForTypeId op-wtr (byte 0))
-                    row-id-wtr (.structKeyWriter put-wtr "xt$row_id")
-                    vf-wtr (.structKeyWriter put-wtr "xt$valid_from")
-                    sf-wtr (.structKeyWriter put-wtr "xt$system_from")
-                    doc-wtr (.structKeyWriter put-wtr "xt$doc")]
+                    row-id-wtr (.structKeyWriter op-wtr "xt$row_id")
+                    vf-wtr (.structKeyWriter op-wtr "xt$valid_from")
+                    sf-wtr (.structKeyWriter op-wtr "xt$system_from")
+                    doc-wtr (.structKeyWriter op-wtr "xt$doc")]
                 (letfn [(write-page! [rows]
                           (let [page-idx (.getAndIncrement !page-idx)]
                             (.startStruct leaf-wtr)
@@ -250,12 +249,12 @@
                                     :let [sys-from-µs (util/instant->micros system-time)]]
                               (.writeBytes iid-wtr (ByteBuffer/wrap iid))
 
-                              (.startStruct put-wtr)
+                              (.startStruct op-wtr)
                               (.writeLong row-id-wtr row-id)
                               (.writeLong vf-wtr sys-from-µs)
                               (.writeLong sf-wtr sys-from-µs)
                               (vw/write-value! doc doc-wtr)
-                              (.endStruct put-wtr))
+                              (.endStruct op-wtr))
 
                             (.setRowCount leaf-vsr (.getPosition iid-wp))
                             #_(println (.contentToTSVString leaf-vsr))
