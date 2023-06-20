@@ -245,7 +245,8 @@
                             (.startStruct leaf-wtr)
                             (.writeLong page-idx-wtr page-idx)
 
-                            (doseq [{:keys [iid row-id system-time doc]} rows
+                            (doseq [{:keys [iid row-id system-time doc]} (->> rows
+                                                                              (sort-by :iid #(Arrays/compare ^bytes %1, ^bytes %2)))
                                     :let [sys-from-µs (util/instant->micros system-time)]]
                               (.writeBytes iid-wtr (ByteBuffer/wrap iid))
 
@@ -307,7 +308,7 @@
                 (.end trie-file-wtr)))))))))
 
 (comment
-  (write-temporal-diff (io/file "/home/james/tmp/idx-poc/tpch-1")))
+  (write-temporal-diff (io/file "/home/james/tmp/idx-poc/tpch-01")))
 
 (defn- write-t1-partitions [root-dir]
   (let [wtrs (HashMap.)]
