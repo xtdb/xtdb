@@ -371,9 +371,6 @@
                     col-types (get table-col-types table)]]
         (log/infof "T1 HAMT for '%s'" (name table))
         (with-open [directory-root (VectorSchemaRoot/create hamt-directory-schema al)
-                    directory-file-wtr (-> (io/file tables-dir (name table) "t1-directory" out-file-name)
-                                           (doto (io/make-parents))
-                                           (util/open-arrow-file-writer directory-root))
                     temporal-root (VectorSchemaRoot/create t1-hamt-temporal-page-schema al)
                     temporal-root-file-wtr (-> (io/file tables-dir (name table) "t1-temporal" out-file-name)
                                                (doto (io/make-parents))
@@ -513,9 +510,10 @@
                   (.setRowCount directory-root 1)
                   (.syncSchema directory-root)
 
-                  (.start directory-file-wtr)
-                  (.writeBatch directory-file-wtr)
-                  (.end directory-file-wtr)
+                  (with-open [directory-file-wtr (-> (io/file tables-dir (name table) "t1-directory" out-file-name)
+                                                     (doto (io/make-parents))
+                                                     (util/open-arrow-file-writer directory-root))]
+                    (doto directory-file-wtr (.start) (.writeBatch) (.end)))
 
                   #_
                   (println (.contentToTSVString directory-root))))
