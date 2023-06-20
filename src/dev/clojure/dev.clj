@@ -2,14 +2,18 @@
   (:require [clj-async-profiler.core :as clj-async-profiler]
             [clojure.java.browse :as browse]
             [clojure.java.io :as io]
+            [integrant.core :as i]
+            [integrant.repl :as ir]
             [xtdb.datasets.tpch :as tpch]
             [xtdb.ingester :as ingest]
             [xtdb.node :as node]
             [xtdb.test-util :as tu]
             [xtdb.util :as util]
-            [integrant.core :as i]
-            [integrant.repl :as ir])
-  (:import java.time.Duration))
+            [xtdb.vector.indirect :as iv])
+  (:import [java.nio.file Path]
+           java.time.Duration
+           [org.apache.arrow.memory RootAllocator]
+           [org.apache.arrow.vector.ipc ArrowFileReader]))
 
 (def dev-node-dir
   (io/file "dev/dev-node"))
@@ -99,3 +103,21 @@
       (prn !q)
       (let [db (ingest/snapshot (tu/component node :xtdb/ingester))]
         (time (tu/query-ra @!q db))))))
+
+(defn- read-arrow-file [^Path path]
+  (reify clojure.lang.IReduceInit
+    (reduce [_ f init]
+      (with-open [al (RootAllocator.)
+                  ch (util/->file-channel path)
+                  rdr (ArrowFileReader. ch al)]
+        (.initialize rdr)
+        (loop [v init]
+          (cond
+            (reduced? v) v
+            (.loadNextBatch rdr) (recur (f v (iv/rel->rows (iv/<-root (.getVectorSchemaRoot rdr)))))
+            :else v))))))
+
+(comment
+  (->> (.toPath (io/file "/tmp/tpch/tables/customer/t1-content/c_name/r00-tx00.arrow"))
+       (read-arrow-file)
+       (into [] cat)))
