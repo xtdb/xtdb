@@ -2,15 +2,12 @@
   (:require [clojure.string :as str]
             [xtdb.error :as err]
             [xtdb.expression :as expr]
-            [xtdb.expression.metadata :as expr.meta]
-            [xtdb.expression.walk :as ewalk]
-            [xtdb.temporal :as temporal]
             [xtdb.types :as types]
             [xtdb.util :as util])
-  (:import (xtdb.vector IIndirectRelation IStructValueReader)
-           (java.time Duration Instant LocalDate LocalDateTime LocalTime Period ZoneId ZoneOffset ZonedDateTime)
+  (:import (java.time Duration Instant LocalDate LocalDateTime LocalTime Period ZoneId ZoneOffset ZonedDateTime)
            (java.time.temporal ChronoField ChronoUnit)
-           (org.apache.arrow.vector PeriodDuration)))
+           (org.apache.arrow.vector PeriodDuration)
+           (xtdb.vector IStructValueReader)))
 
 (set! *unchecked-math* :warn-on-boxed)
 
