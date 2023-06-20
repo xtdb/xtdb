@@ -113,7 +113,7 @@
         (.initialize rdr)
         (loop [v init]
           (cond
-            (reduced? v) v
+            (reduced? v) (unreduced v)
             (.loadNextBatch rdr) (recur (f v (iv/rel->rows (iv/<-root (.getVectorSchemaRoot rdr)))))
             :else v))))))
 
