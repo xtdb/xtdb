@@ -70,7 +70,7 @@
           {::tpch-ra/keys [params table-args]} (meta q)]
       (tu/with-allocator
         (fn []
-          (t/is (= res (tu/query-ra q {:node *node*, :params params, :table-args table-args}))
+          (t/is (is-equal? res (tu/query-ra q {:node *node*, :params params, :table-args table-args}))
                 (format "Q%02d" (inc n))))))))
 
 (t/deftest test-001-ra
