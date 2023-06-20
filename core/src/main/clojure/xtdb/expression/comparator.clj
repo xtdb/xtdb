@@ -36,7 +36,7 @@
                     `(Long/signum ~(->call-code emitted-args)))}))
 
 ;; NOTE UUID compares according to bytes rather than Java `compare` - https://bugs.openjdk.org/browse/JDK-7025832
-(doseq [col-type #{:varbinary :utf8 :uri :keyword :uuid}]
+(doseq [col-type #{:varbinary :fixed-size-binary :utf8 :uri :keyword :uuid}]
   (defmethod expr/codegen-call [:compare col-type col-type] [_]
     {:return-type :i32
      :->call-code (fn [emitted-args]

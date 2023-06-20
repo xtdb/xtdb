@@ -229,7 +229,7 @@
 
                 (.endStruct struct-wtr)))))))))
 
-(doseq [type-head #{:int :float :utf8 :varbinary :timestamp-tz :timestamp-local :date :interval :time-local}]
+(doseq [type-head #{:int :float :utf8 :varbinary :fixed-size-binary :timestamp-tz :timestamp-local :date :interval :time-local}]
   (defmethod type->metadata-writer type-head [_write-col-meta! metadata-root col-type] (->min-max-type-handler metadata-root col-type)))
 
 (defmethod type->metadata-writer :keyword [_write-col-meta! metadata-root col-type] (->min-max-type-handler metadata-root col-type))
@@ -304,7 +304,7 @@
                 (.appendNestedMetadata nested-meta-writer values-col)))
 
             (write-col-meta! [root-col?, ^IIndirectVector content-col]
-              (let [content-writers (if (= "_row_id" (.getName content-col))
+              (let [content-writers (if-not (instance? DenseUnionVector (.getVector content-col))
                                       [(->nested-meta-writer content-col)]
 
                                       (let [^DenseUnionVector content-vec (.getVector content-col)]
