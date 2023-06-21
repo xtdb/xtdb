@@ -638,7 +638,8 @@
     (let [wp (IWriterPosition/build (.getValueCount duv))
           type-count (count (.getChildren (.getField duv)))
           writers-by-type-id (ArrayList.)
-          writers-by-type (HashMap.)]
+          writers-by-type (HashMap.)
+          writers-by-name (HashMap.)]
 
       (letfn [(->child-writer [^long type-id]
                 (let [v (.getVectorByType duv type-id)
@@ -681,6 +682,14 @@
               (->child-writer type-id)
               type-id))
 
+          (writerForField [this field]
+            ;; doesn't add into writers-by-type because we might have more than one field with similar types
+            ;; so don't use both writerForField and writerForType on one writer.
+            (.computeIfAbsent writers-by-name (.getName field)
+                              (reify Function
+                                (apply [_ field-name]
+                                  (.writerForTypeId this (.registerNewType this field))))))
+
           (writerForType [this col-type]
             (.computeIfAbsent writers-by-type (types/col-type->duv-leg-key col-type)
                       (reify Function
@@ -699,9 +708,12 @@
 
                                                (types/col-type->field field-name col-type))
 
-                                type-id (.registerNewType this field)]
+                                type-id (.registerNewType this field)
 
-                            (.writerForTypeId this type-id))))))
+                                wtr (.writerForTypeId this type-id)]
+
+                            (.put writers-by-name field-name wtr)
+                            wtr)))))
 
           (writerForTypeId [_ type-id]
             (.get writers-by-type-id type-id)))))))

@@ -1,6 +1,7 @@
 package xtdb.vector;
 
 import org.apache.arrow.vector.ValueVector;
+import org.apache.arrow.vector.types.pojo.Field;
 
 public interface IVectorWriter extends IValueWriter, AutoCloseable {
 
@@ -35,6 +36,8 @@ public interface IVectorWriter extends IValueWriter, AutoCloseable {
 
     @Override
     IVectorWriter writerForTypeId(byte typeId);
+
+    IVectorWriter writerForField(Field field);
 
     @Override
     IVectorWriter listElementWriter();
