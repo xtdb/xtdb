@@ -64,8 +64,6 @@
    :partsupp {:ps_partkey :utf8, :ps_suppkey :utf8, :ps_supplycost :f64, :ps_comment :utf8, :ps_availqty :i64, :xt/id :utf8},
    :nation {:xt/id :utf8, :n_comment :utf8, :n_name :utf8, :n_nationkey :utf8, :n_regionkey :utf8}})
 
-(def ^:private nullable-inst-type [:union #{:null [:timestamp-tz :micro "UTC"]}])
-
 (def temporal-log-schema
   (Schema. [(types/col-type->field "tx-id" :i64)
             (types/col-type->field "system-time" types/temporal-col-type)
@@ -74,11 +72,11 @@
                                           (types/col-type->field "put" [:struct {'table :utf8
                                                                                  'iid [:fixed-size-binary 16]
                                                                                  'row-id :i64
-                                                                                 'valid-from nullable-inst-type
-                                                                                 'valid-to nullable-inst-type}])
+                                                                                 'valid-from types/nullable-temporal-type
+                                                                                 'valid-to types/nullable-temporal-type}])
                                           (types/col-type->field "delete" [:struct {'iid [:fixed-size-binary 16]
-                                                                                    'valid-from nullable-inst-type
-                                                                                    'valid-to nullable-inst-type}])))]))
+                                                                                    'valid-from types/nullable-temporal-type
+                                                                                    'valid-to types/nullable-temporal-type}])))]))
 
 #_{:clj-kondo/ignore [:unused-private-var :inline-def]}
 (defn- write-log-files [root-dir]

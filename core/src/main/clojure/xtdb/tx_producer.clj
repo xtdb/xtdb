@@ -129,8 +129,6 @@
 
     parsed-tx-ops))
 
-(def ^:private nullable-inst-type [:union #{:null [:timestamp-tz :micro "UTC"]}])
-
 (def ^:private ^org.apache.arrow.vector.types.pojo.Field tx-ops-field
   (types/->field "tx-ops" (ArrowType$Union. UnionMode/Dense (int-array (range 6))) false
                  (types/col-type->field 'sql [:struct {'query :utf8
@@ -139,14 +137,14 @@
 
                  (types/->field "put" types/struct-type false
                                 (types/->field "document" types/dense-union-type false)
-                                (types/col-type->field 'xt$valid_from nullable-inst-type)
-                                (types/col-type->field 'xt$valid_to nullable-inst-type))
+                                (types/col-type->field 'xt$valid_from types/nullable-temporal-type)
+                                (types/col-type->field 'xt$valid_to types/nullable-temporal-type))
 
                  (types/->field "delete" types/struct-type false
                                 (types/col-type->field 'table :utf8)
                                 (types/->field "xt$id" types/dense-union-type false)
-                                (types/col-type->field 'xt$valid_from nullable-inst-type)
-                                (types/col-type->field 'xt$valid_to nullable-inst-type))
+                                (types/col-type->field 'xt$valid_from types/nullable-temporal-type)
+                                (types/col-type->field 'xt$valid_to types/nullable-temporal-type))
 
                  (types/->field "evict" types/struct-type false
                                 (types/col-type->field '_table [:union #{:null :utf8}])
@@ -163,7 +161,7 @@
 (def ^:private ^org.apache.arrow.vector.types.pojo.Schema tx-schema
   (Schema. [(types/->field "tx-ops" types/list-type false tx-ops-field)
 
-            (types/col-type->field "system-time" nullable-inst-type)
+            (types/col-type->field "system-time" types/nullable-temporal-type)
             (types/col-type->field "default-tz" :utf8)
             (types/col-type->field "all-application-time?" :bool)]))
 

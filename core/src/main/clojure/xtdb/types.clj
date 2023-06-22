@@ -27,6 +27,7 @@
 (def list-type (.getType Types$MinorType/LIST))
 
 (def temporal-col-type [:timestamp-tz :micro "UTC"])
+(def nullable-temporal-type [:union #{:null temporal-col-type}])
 
 (defprotocol ArrowReadable
   (get-object [value-vector idx]))
