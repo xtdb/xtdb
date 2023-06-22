@@ -55,15 +55,14 @@
       (bit-and 0xf)))
 
 (def tpch-col-types
-  {:orders {:o_totalprice :f64, :o_orderdate [:date :day], :o_comment :utf8, :o_orderkey :utf8, :o_shippriority :i64, :o_custkey :utf8, :xt$id :utf8, :o_orderpriority :utf8, :o_clerk :utf8, :o_orderstatus :utf8},
-   :supplier {:s_nationkey :utf8, :s_address :utf8, :s_comment :utf8, :s_acctbal :f64, :s_suppkey :utf8, :s_name :utf8, :s_phone :utf8, :xt$id :utf8},
-   :lineitem {:l_returnflag :utf8, :l_extendedprice :f64, :l_linenumber :i64, :l_quantity :f64, :l_shipinstruct :utf8, :l_shipmode :utf8, :l_suppkey :utf8, :l_discount :f64, :xt$id :utf8, :l_partkey :utf8, :l_linestatus :utf8, :l_receiptdate [:date :day], :l_orderkey :utf8, :l_shipdate [:date :day], :l_commitdate [:date :day], :l_tax :f64, :l_comment :utf8},
-   :part {:p_retailprice :f64, :p_brand :utf8, :p_size :i64, :p_comment :utf8, :p_partkey :utf8, :p_name :utf8, :p_mfgr :utf8, :xt$id :utf8, :p_type :utf8, :p_container :utf8},
-   :xt$txs {:xt$committed? :bool, :xt$id :i64, :xt$tx_time [:timestamp-tz :micro "UTC"], :xt$error [:union #{:clj-form :null}]},
-   :customer {:c_comment :utf8, :c_mktsegment :utf8, :xt$id :utf8, :c_name :utf8, :c_phone :utf8, :c_acctbal :f64, :c_address :utf8, :c_custkey :utf8, :c_nationkey :utf8},
-   :region {:r_comment :utf8, :r_regionkey :utf8, :xt$id :utf8, :r_name :utf8},
-   :partsupp {:ps_partkey :utf8, :ps_suppkey :utf8, :ps_supplycost :f64, :ps_comment :utf8, :ps_availqty :i64, :xt$id :utf8},
-   :nation {:xt$id :utf8, :n_comment :utf8, :n_name :utf8, :n_nationkey :utf8, :n_regionkey :utf8}})
+  {:orders {:o_totalprice :f64, :o_orderdate [:date :day], :o_comment :utf8, :o_orderkey :utf8, :o_shippriority :i64, :o_custkey :utf8, :xt/id :utf8, :o_orderpriority :utf8, :o_clerk :utf8, :o_orderstatus :utf8},
+   :supplier {:s_nationkey :utf8, :s_address :utf8, :s_comment :utf8, :s_acctbal :f64, :s_suppkey :utf8, :s_name :utf8, :s_phone :utf8, :xt/id :utf8},
+   :lineitem {:l_returnflag :utf8, :l_extendedprice :f64, :l_linenumber :i64, :l_quantity :f64, :l_shipinstruct :utf8, :l_shipmode :utf8, :l_suppkey :utf8, :l_discount :f64, :xt/id :utf8, :l_partkey :utf8, :l_linestatus :utf8, :l_receiptdate [:date :day], :l_orderkey :utf8, :l_shipdate [:date :day], :l_commitdate [:date :day], :l_tax :f64, :l_comment :utf8},
+   :part {:p_retailprice :f64, :p_brand :utf8, :p_size :i64, :p_comment :utf8, :p_partkey :utf8, :p_name :utf8, :p_mfgr :utf8, :xt/id :utf8, :p_type :utf8, :p_container :utf8},
+   :customer {:c_comment :utf8, :c_mktsegment :utf8, :xt/id :utf8, :c_name :utf8, :c_phone :utf8, :c_acctbal :f64, :c_address :utf8, :c_custkey :utf8, :c_nationkey :utf8},
+   :region {:r_comment :utf8, :r_regionkey :utf8, :xt/id :utf8, :r_name :utf8},
+   :partsupp {:ps_partkey :utf8, :ps_suppkey :utf8, :ps_supplycost :f64, :ps_comment :utf8, :ps_availqty :i64, :xt/id :utf8},
+   :nation {:xt/id :utf8, :n_comment :utf8, :n_name :utf8, :n_nationkey :utf8, :n_regionkey :utf8}})
 
 (def ^:private nullable-inst-type [:union #{:null [:timestamp-tz :micro "UTC"]}])
 
