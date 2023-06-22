@@ -520,13 +520,16 @@
                                  :bus :xtdb/bus
                                  :secondary-indices :xtdb/secondary-indices}}
   [{:keys [tx-log tx-indexer document-store bus index-store secondary-indices batch-preferred-doc-count]}]
-  (log/info "Started tx-ingester")
   (bus/send bus (bus/->event :healthz :begin-tx-ingester))
 
   (let [!error (atom nil)
         secondary-indices @(:!secondary-indices secondary-indices)
         with-tx-ops? (some :with-tx-ops? secondary-indices)
         latest-xtdb-tx-id (::xt/tx-id (db/latest-completed-tx index-store))]
+
+    (log/infof "XT tx ingester starting... Latest completed tx '%d', latest submitted to tx-log '%d'"
+               latest-xtdb-tx-id (::xt/tx-id (db/latest-submitted-tx tx-log)))
+
     (letfn [(process-tx-f [document-store {:keys [::xt/tx-id ::txe/tx-events] :as tx}]
               (let [tx (cond-> tx
                          with-tx-ops? (assoc ::xt/tx-ops (txc/tx-events->tx-ops document-store tx-events)))]
@@ -567,13 +570,16 @@
           (try
             (when (or (nil? after-tx-id)
                       (< ^long after-tx-id ^long latest-xtdb-tx-id))
+              (log/infof "Secondary indices out of date (tx '%d'), catching up..." after-tx-id)
               (with-open [log (db/open-tx-log tx-log after-tx-id {})]
                 (doseq [{::keys [tx-id] :as tx} (->> (iterator-seq log)
                                                      (take-while (comp #(<= ^long % ^long latest-xtdb-tx-id) ::xt/tx-id)))]
                   (process-tx-f document-store (assoc tx :committing? (not (db/tx-failed? index-store tx-id)))))))
             (catch Throwable t
               (set-ingester-error! t)
-              (throw t)))))
+              (throw t))))
+
+        (log/info "Secondary indices up to date, continuing..."))
 
       (let [latest-tx! (atom (db/latest-completed-tx index-store))
 
