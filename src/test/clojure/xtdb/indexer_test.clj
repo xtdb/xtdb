@@ -248,13 +248,13 @@
   (let [node-dir (util/->path "target/can-handle-dynamic-cols-in-same-block")
         tx-ops [[:put :xt_docs {:xt/id "foo"
                                 :list [12.0 "foo"]}]
-                [:put :xt_docs {:xt/id 24.0}]
+                [:put :xt_docs {:xt/id 24}]
                 [:put :xt_docs {:xt/id "bar"
                                 :list [#inst "2020-01-01" false]}]
-                [:put :xt_docs {:xt/id #inst "2021-01-01"
+                [:put :xt_docs {:xt/id :baz
                                 :struct {:a 1, :b "b"}}]
-                [:put :xt_docs {:xt/id 52.0}]
-                [:put :xt_docs {:xt/id #inst "2020-01-01"
+                [:put :xt_docs {:xt/id 52}]
+                [:put :xt_docs {:xt/id :quux
                                 :struct {:a true, :c "c"}}]]]
     (util/delete-dir node-dir)
 
@@ -271,13 +271,13 @@
   (let [node-dir (util/->path "target/multi-block-metadata")
         tx0 [[:put :xt_docs {:xt/id "foo"
                              :list [12.0 "foo"]}]
-             [:put :xt_docs {:xt/id #inst "2021-01-01"
+             [:put :xt_docs {:xt/id :bar
                              :struct {:a 1, :b "b"}}]
-             [:put :xt_docs {:xt/id "bar"
+             [:put :xt_docs {:xt/id "baz"
                              :list [#inst "2020-01-01" false]}]
-             [:put :xt_docs {:xt/id 24.0}]]
-        tx1 [[:put :xt_docs {:xt/id 52.0}]
-             [:put :xt_docs {:xt/id #inst "2020-01-01"
+             [:put :xt_docs {:xt/id 24}]]
+        tx1 [[:put :xt_docs {:xt/id 52}]
+             [:put :xt_docs {:xt/id :quux
                              :struct {:a true, :b {:c "c", :d "d"}}}]]]
     (util/delete-dir node-dir)
 
@@ -293,7 +293,7 @@
                      (.resolve node-dir "objects"))
 
       (let [^IMetadataManager mm (tu/component node ::meta/metadata-manager)]
-        (t/is (= [:union #{:utf8 [:timestamp-tz :micro "UTC"] :f64}]
+        (t/is (= [:union #{:utf8 :keyword :i64}]
                  (.columnType mm "xt_docs" "xt$id")))
 
         (t/is (= [:union #{:absent [:list [:union #{:utf8 [:timestamp-tz :micro "UTC"] :f64 :bool}]]}]
@@ -577,29 +577,29 @@
     (with-open [node1 (tu/->local-node (assoc node-opts :buffers-dir "buffers-1"))]
       (let [^IMetadataManager mm1 (tu/component node1 ::meta/metadata-manager)]
 
-        (-> (xt/submit-tx node1 [[:put :xt_docs {:xt/id "foo"}]])
+        (-> (xt/submit-tx node1 [[:put :xt_docs {:xt/id 0, :v "foo"}]])
             (tu/then-await-tx node1 (Duration/ofSeconds 1)))
 
         (tu/finish-chunk! node1)
 
-        (t/is (= :utf8 (.columnType mm1 "xt_docs" "xt$id")))
+        (t/is (= :utf8 (.columnType mm1 "xt_docs" "v")))
 
-        (let [tx2 (xt/submit-tx node1 [[:put :xt_docs {:xt/id :bar}]
-                                       [:put :xt_docs {:xt/id #uuid "8b190984-2196-4144-9fa7-245eb9a82da8"}]
-                                       [:put :xt_docs {:xt/id #xt/clj-form :foo}]])]
+        (let [tx2 (xt/submit-tx node1 [[:put :xt_docs {:xt/id 1, :v :bar}]
+                                       [:put :xt_docs {:xt/id 2, :v #uuid "8b190984-2196-4144-9fa7-245eb9a82da8"}]
+                                       [:put :xt_docs {:xt/id 3, :v #xt/clj-form :foo}]])]
           (tu/then-await-tx tx2 node1 (Duration/ofMillis 200))
 
           (tu/finish-chunk! node1)
 
           (t/is (= [:union #{:utf8 :keyword :clj-form :uuid}]
-                   (.columnType mm1 "xt_docs" "xt$id")))
+                   (.columnType mm1 "xt_docs" "v")))
 
           (with-open [node2 (tu/->local-node (assoc node-opts :buffers-dir "buffers-1"))]
             (let [^IMetadataManager mm2 (tu/component node2 ::meta/metadata-manager)]
               (tu/then-await-tx tx2 node2 (Duration/ofMillis 200))
 
               (t/is (= [:union #{:utf8 :keyword :clj-form :uuid}]
-                       (.columnType mm2 "xt_docs" "xt$id"))))))))))
+                       (.columnType mm2 "xt_docs" "v"))))))))))
 
 (t/deftest test-await-fails-fast
   (let [e (UnsupportedOperationException. "oh no!")]

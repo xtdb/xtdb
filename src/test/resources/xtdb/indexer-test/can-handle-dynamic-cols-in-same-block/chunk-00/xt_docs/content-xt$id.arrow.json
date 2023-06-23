@@ -16,22 +16,28 @@
         },
         "children" : [ ]
       },{
-        "name" : "f64",
+        "name" : "i64",
         "nullable" : false,
         "type" : {
-          "name" : "floatingpoint",
-          "precision" : "DOUBLE"
+          "name" : "int",
+          "bitWidth" : 64,
+          "isSigned" : true
         },
         "children" : [ ]
       },{
-        "name" : "timestamp-tz-micro-utc",
+        "name" : "keyword",
         "nullable" : false,
         "type" : {
-          "name" : "timestamp",
-          "unit" : "MICROSECOND",
-          "timezone" : "UTC"
+          "name" : "KeywordType"
         },
-        "children" : [ ]
+        "children" : [ ],
+        "metadata" : [{
+          "value" : "xt/clj-keyword",
+          "key" : "ARROW:extension:name"
+        },{
+          "value" : "",
+          "key" : "ARROW:extension:metadata"
+        }]
       }]
     }]
   },
@@ -49,15 +55,16 @@
         "OFFSET" : [0,3,6],
         "DATA" : ["foo","bar"]
       },{
-        "name" : "f64",
+        "name" : "i64",
         "count" : 2,
         "VALIDITY" : [1,1],
-        "DATA" : [24.0,52.0]
+        "DATA" : ["24","52"]
       },{
-        "name" : "timestamp-tz-micro-utc",
+        "name" : "keyword",
         "count" : 2,
         "VALIDITY" : [1,1],
-        "DATA" : [1609459200000000,1577836800000000]
+        "OFFSET" : [0,3,7],
+        "DATA" : ["baz","quux"]
       }]
     }]
   }]

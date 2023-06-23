@@ -24,7 +24,8 @@
   (submitTx
     ^java.util.concurrent.CompletableFuture #_<TransactionInstant> [^java.util.List txOps, ^java.util.Map opts]))
 
-(s/def :xt/id any?)
+(s/def :xt/id
+  (some-fn uuid? integer? string? keyword?))
 
 (s/def ::doc
   (s/and (s/keys :req [:xt/id])

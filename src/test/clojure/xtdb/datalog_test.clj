@@ -2297,7 +2297,7 @@
                              :where [($ :xt/txs {:xt/id tx-id,
                                                  :xt/committed? committed?})]})))
   (xt/submit-tx tu/*node* '[[:put :xt-docs {:xt/id 2}]])
-  (xt/submit-tx tu/*node* '[[:delete :xt-docs {:xt/id 2} {:for-valid-time [:in nil #inst "2011"]}]])
+  (xt/submit-tx tu/*node* '[[:delete :xt-docs 2 {:for-valid-time [:in nil #inst "2011"]}]])
   (t/is (= [{:tx-id 0, :committed? false}
             {:tx-id 1, :committed? true}
             {:tx-id 2, :committed? false}]
