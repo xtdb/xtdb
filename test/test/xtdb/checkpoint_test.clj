@@ -9,7 +9,8 @@
   (:import [java.io Closeable File]
            [java.time Duration Instant]
            java.time.temporal.ChronoUnit
-           java.util.Date))
+           java.util.Date
+           [java.time Duration]))
 
 (t/deftest test-cp-seq
   (let [start (Instant/parse "2020-01-01T00:00:00Z")
@@ -20,7 +21,7 @@
                   (map #(.truncatedTo ^Instant % ChronoUnit/HOURS))
                   (take 20))))))
 
-(defn checkpoint [{:keys [approx-frequency ::cp/cp-format dir]} checkpoints]
+(defn checkpoint [{:keys [approx-frequency tx-id-override ::cp/cp-format dir]} checkpoints]
   (let [!checkpoints (atom checkpoints)]
     (with-open [bus ^Closeable (bus/->bus)
                 _ (bus/->bus-stop {:bus bus})]
@@ -45,7 +46,7 @@
                       :src (let [!tx-id (atom 0)]
                              (reify cp/CheckpointSource
                                (save-checkpoint [_ dir]
-                                 (let [tx-id (swap! !tx-id inc)]
+                                 (let [tx-id (or tx-id-override (swap! !tx-id inc))]
                                    (spit (doto (io/file dir "hello.edn")
                                            (io/make-parents))
                                          (pr-str {:msg "Hello world!", :tx-id tx-id}))
@@ -71,6 +72,50 @@
                                    ::cp/cp-format ::foo-format
                                    :dir cp-dir}
                                   [(assoc cp-1 ::cp/checkpoint-at (Date.))])
+                      (map #(dissoc % ::cp/checkpoint-at)))))))))
+
+(t/deftest test-check-for-changes
+  (fix/with-tmp-dir "cp" [cp-dir]
+    (let [cp-1 {:tx {::xt/tx-id 1},
+                ::cp/cp-format ::foo-format,
+                :files {"hello.edn" {:msg "Hello world!", :tx-id 1}}}
+          cp-2 {:tx {::xt/tx-id 2},
+                ::cp/cp-format ::foo-format,
+                :files {"hello.edn" {:msg "Hello world!", :tx-id 2}}}]
+      (t/testing "first checkpoint"
+        (t/is (= [cp-1]
+                 (->> (checkpoint {:approx-frequency (Duration/ofSeconds 1)
+                                   ::cp/cp-format ::foo-format
+                                   :dir cp-dir
+                                   ;; explicitly set tx-id to 1
+                                   :tx-id-override 1}
+                                  [])
+                      (map #(dissoc % ::cp/checkpoint-at))))))
+
+      (t/testing "doesn't make a second checkpoint as it's the same latest tx"
+        (t/is (= [cp-1]
+                 (->> (checkpoint {:approx-frequency (Duration/ofSeconds 1)
+                                   ::cp/cp-format ::foo-format
+                                   :dir cp-dir
+                                   ;; would be same tx-id as above (ie, same tx)
+                                   :tx-id-override 1}
+                                  [(assoc cp-1 ::cp/checkpoint-at (-> (Date.) 
+                                                                      (.toInstant)
+                                                                      (.minus (Duration/ofSeconds 2))
+                                                                      (Date/from)))])
+                      (map #(dissoc % ::cp/checkpoint-at))))))
+      
+      (t/testing "makes a second checkpoint as it has a new latest tx"
+        (t/is (= [cp-1 cp-2]
+                 (->> (checkpoint {:approx-frequency (Duration/ofSeconds 1)
+                                   ::cp/cp-format ::foo-format
+                                   :dir cp-dir
+                                   ;; different tx-id to above (ie, new)
+                                   :tx-id-override 2}
+                                  [(assoc cp-1 ::cp/checkpoint-at (-> (Date.)
+                                                                      (.toInstant)
+                                                                      (.minus (Duration/ofSeconds 2))
+                                                                      (Date/from)))])
                       (map #(dissoc % ::cp/checkpoint-at)))))))))
 
 (t/deftest test-checkpointer
