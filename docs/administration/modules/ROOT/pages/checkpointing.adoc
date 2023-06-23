@@ -18,6 +18,8 @@ The desired frequency of checkpoints can be set using `approx-frequency`.
 
 The default lifecycle of checkpoints is unbounded - XTDB will not attempt to clean up old checkpoints. Users will typically want to define a retention policy that best fits their requirements and create means of implementing that policy that is external to XTDB.
 
+WARNING: Current behaviour of the checkpointer is such that we only make a checkpoint if we have processed new transactions since the previous checkpoint. As such - you will need to be careful with any lifecycle policies set on your checkpoints - if no new transactions are handled for a period, no new checkpoints will be made, and you may risk having no checkpoints and having to replay from the Transaction Log!
+
 == Setting up
 
 You can enable checkpoints on your index-store by adding a `:checkpointer` dependency to the underlying KV store:
@@ -76,7 +78,7 @@ EDN::
 
 == Checkpointer parameters
 
-* `approx-frequency` (required, `Duration`): approximate frequency for the _cluster_ to save checkpoints
+* `approx-frequency` (required, `Duration`): approximate frequency for the _cluster_ to save checkpoints (_if_ the conditions to make a checkpoint have been met - ie, a new transaction has been processed)
 * `store`: (required, `CheckpointStore`): see the individual store for more details.
 * `checkpoint-dir` (string/`File`/`Path`): temporary directory to store checkpoints in before they're uploaded
 * `keep-dir-between-checkpoints?` (boolean, default true): whether to keep the temporary checkpoint directory between checkpoints
