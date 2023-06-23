@@ -11,7 +11,7 @@
   ([sql opts] (sql/compile-query sql (into {:default-all-valid-time? true} opts)))
   ([sql] (plan-sql sql {:decorrelate? true, :validate-plan? true, :instrument-rules? true})))
 
-(def regen-expected-files? false)
+(def regen-expected-files? false) ;; <<no-commit>>
 
 (defmethod t/assert-expr '=plan-file [msg form]
   `(let [exp-plan-file-name# ~(nth form 1)

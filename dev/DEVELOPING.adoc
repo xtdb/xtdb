@@ -35,6 +35,7 @@ You do not need to install Gradle to develop core2 - there is a Gradle https://d
 ** otherwise, `(dev/reset)` (or just `(reset)` if you're already in the `dev` ns) should be sufficient.
 ** Please don't put any more side-effecting top-level code in dev namespaces - you'll break this reload ability and make me sad.
 ** To run a single test file, run (e.g.) `./gradlew test --tests 'xtdb.api_test**'`
+** Run `git config core.hooksPath .githooks` to add xtdb hooks to your local repo.
 
 == Testing
 
