@@ -1,0 +1,10 @@
+#!/bin/bash
+
+if git diff --cached --pickaxe-regex -S"<<no-commit>>" --no-ext-diff --exit-code; then
+    exit 0
+else
+    echo "WARNING: <<no-commit>> present in staged diff, lines marked with this should not be commited."
+    echo "If you are sure you want to continue, please skip this pre-commit hook using the --no-verify or -n option"
+    echo "Aborting commit."
+    exit 1
+fi
