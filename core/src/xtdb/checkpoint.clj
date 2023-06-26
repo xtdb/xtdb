@@ -38,23 +38,31 @@
        (< (.getSeconds (Duration/between (.toInstant checkpoint-at) (Instant/now)))
           (/ (.getSeconds approx-frequency) 2))))
 
+(defn cp-exists-for-tx? [cp {:keys [::xt/tx-id] :as tx}]
+  (= tx-id (get-in cp [:tx ::xt/tx-id])))
+
 (defn checkpoint [{:keys [dir bus src store ::cp-format approx-frequency]}]
-  (when-not (recent-cp? (first (available-checkpoints store {::cp-format cp-format})) approx-frequency)
-    (bus/send bus (bus/->event :healthz :begin-checkpoint))
-    (when-let [{:keys [tx]} (save-checkpoint src dir)]
-      (when tx
-        (let [cp-at (java.util.Date.)
-              opts {:tx tx :cp-at cp-at ::cp-format cp-format}]
-          (try
-            (log/infof "Uploading checkpoint at '%s'" tx)
-            (doto (upload-checkpoint store dir opts)
-              (->> pr-str (log/info "Uploaded checkpoint:")))
-            (catch Throwable t
-              (xio/delete-dir dir)
-              (cleanup-checkpoint store opts)
-              (log/warn "Cleaned-up failed checkpoint:" opts)
-              (throw t))))))
-    (bus/send bus (bus/->event :healthz :end-checkpoint))))
+  (let [latest-cp (first (available-checkpoints store {::cp-format cp-format}))]
+    (when-not (recent-cp? latest-cp approx-frequency)
+      (bus/send bus (bus/->event :healthz :begin-checkpoint))
+      (when-let [{:keys [tx]} (save-checkpoint src dir)]
+        (when tx
+          (if (cp-exists-for-tx? latest-cp tx)
+            (do
+              (log/infof "Checkpoint already exists for '%s', skipping..." tx)
+              (xio/delete-dir dir))
+            (let [cp-at (java.util.Date.)
+                  opts {:tx tx :cpz-at cp-at ::cp-format cp-format}]
+              (try
+                (log/infof "Uploading checkpoint at '%s'" tx)
+                (doto (upload-checkpoint store dir opts)
+                  (->> pr-str (log/info "Uploaded checkpoint:")))
+                (catch Throwable t
+                  (xio/delete-dir dir)
+                  (cleanup-checkpoint store opts)
+                  (log/warn "Cleaned-up failed checkpoint:" opts)
+                  (throw t)))))))
+      (bus/send bus (bus/->event :healthz :end-checkpoint)))))
 
 (defn cp-seq [^Instant start ^Duration freq]
   (lazy-seq
