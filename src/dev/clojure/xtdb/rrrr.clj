@@ -8,7 +8,6 @@
             [xtdb.transit :as xt.t]
             [xtdb.types :as types]
             [xtdb.util :as util]
-            [xtdb.vector :as vec]
             [xtdb.vector.indirect :as iv]
             [xtdb.vector.writer :as vw])
   (:import (java.io File OutputStream)
@@ -18,8 +17,9 @@
            (java.util.concurrent.atomic AtomicInteger)
            java.util.function.Function
            org.apache.arrow.memory.RootAllocator
-           (org.apache.arrow.vector VectorSchemaRoot)
+           (org.apache.arrow.vector BigIntVector VectorSchemaRoot)
            org.apache.arrow.vector.ipc.ArrowFileWriter
+           (org.apache.arrow.vector.complex DenseUnionVector ListVector StructVector)
            (org.apache.arrow.vector.types.pojo ArrowType$Union Schema)
            org.apache.arrow.vector.types.pojo.Field
            org.apache.arrow.vector.types.UnionMode
@@ -522,3 +522,30 @@
   (write-t1-hamt {:root-dir (io/file "/tmp/tpch")
                   :scale-factor 0.01
                   :table-col-types tpch-col-types}))
+
+(defn seek-fn
+  [^VectorSchemaRoot vsr]
+  ;; function will likely move to by under an interface definition, no prim call available for now
+  (let [^ListVector node-trie (.getVector vsr "node-trie")
+        ^DenseUnionVector node-data (.getDataVector node-trie)
+        ^ListVector node-branch (.getChild node-data "branch")
+        ^BigIntVector branch-data (.getDataVector node-branch)
+        ^StructVector node-leaf (.getChild node-data "leaf")
+        ^BigIntVector leaf-page-idx (.getChild node-leaf "page-idx")]
+    (fn [iid]
+      (loop [node-ptr (dec (.getInnerValueCount node-trie))
+             lvl 0]
+        (let [node-type (.getTypeId node-data node-ptr)
+              prefix (iid-prefix iid lvl)]
+          (case node-type
+            ;; nil
+            0 -1
+            ;; branch
+            1
+            (let [branch-list-offset (.getOffset node-data node-ptr)
+                  branch-list-start (.getElementStartIndex node-branch branch-list-offset)
+                  new-node-ptr (.get branch-data (+ branch-list-start prefix))]
+              (recur new-node-ptr (inc lvl)))
+            ;; leaf
+            ;; if read biased towards keys not being found, later we can check bloom meta and eid min/max to short circuit
+            2 (.get leaf-page-idx node-ptr)))))))
