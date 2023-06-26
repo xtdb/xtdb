@@ -49,17 +49,20 @@
 (s/def ::resource-group-name string?)
 (s/def ::retention-period-in-days number?)
 (s/def ::max-wait-time ::util/duration)
+(s/def ::poll-sleep-duration ::util/duration)
+
 
 (derive ::event-hub-log :xtdb/log)
 
 (defmethod ig/prep-key ::event-hub-log [_ opts]
   (-> (merge {:create-event-hub? false
               :max-wait-time "PT1S"
+              :poll-sleep-duration "PT1S"
               :retention-period-in-days 7} opts)
       (util/maybe-update :max-wait-time util/->duration)))
 
 (defmethod ig/pre-init-spec ::event-hub-log [_]
-  (s/keys :req-un [::namespace ::event-hub-name ::max-wait-time ::create-event-hub? ::retention-period-in-days]
+  (s/keys :req-un [::namespace ::event-hub-name ::max-wait-time ::create-event-hub? ::retention-period-in-days ::poll-sleep-duration]
           :opt-un [::resource-group-name]))
 
 (defn resource-group-present? [{:keys [resource-group-name]}]
@@ -84,7 +87,7 @@
         (log/error "Errror when creating event hub - " (.getMessage e))
         (throw e)))))
 
-(defmethod ig/init-key ::event-hub-log [_ {:keys [create-event-hub? namespace event-hub-name max-wait-time] :as opts}]
+(defmethod ig/init-key ::event-hub-log [_ {:keys [create-event-hub? namespace event-hub-name max-wait-time poll-sleep-duration] :as opts}]
   (let [credential (.build (DefaultAzureCredentialBuilder.))
         fully-qualified-namespace (format "%s.servicebus.windows.net" namespace)
         event-hub-client-builder (-> (EventHubClientBuilder.)
@@ -101,7 +104,8 @@
     (tx-log/->EventHubLog subscriber-handler
                           (.buildAsyncProducerClient event-hub-client-builder)
                           (.buildConsumerClient event-hub-client-builder)
-                          max-wait-time)))
+                          max-wait-time
+                          poll-sleep-duration)))
 
 (defmethod ig/halt-key! ::event-hub-log [_ log]
   (util/try-close log))

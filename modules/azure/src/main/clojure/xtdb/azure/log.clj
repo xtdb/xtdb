@@ -35,7 +35,8 @@
 (defrecord EventHubLog [^INotifyingSubscriberHandler subscriber-handler
                         ^EventHubProducerAsyncClient async-producer
                         ^EventHubConsumerClient consumer
-                        ^Duration max-wait-time]
+                        ^Duration max-wait-time
+                        ^Duration poll-sleep-duration]
   Log
   (appendRecord [_ record]
     (let [fut (CompletableFuture.)
@@ -61,7 +62,7 @@
             (throw e))))))
 
   (subscribe [this after-tx-id subscriber]
-    (log/handle-polling-subscription this after-tx-id {:poll-sleep-duration (Duration/ofSeconds 1)} subscriber))
+    (log/handle-polling-subscription this after-tx-id {:poll-sleep-duration poll-sleep-duration} subscriber))
 
   Closeable
   (close [_]

@@ -97,6 +97,11 @@ These are the following parameters that can be passed within the config for our 
 | A duration representing the max amount of time to wait when reading data from the log - can be provided as a Java Duration or passed as a https://docs.oracle.com/javase/8/docs/api/java/time/Duration.html#parse-java.lang.CharSequence-[duration string] or int representing a time in milliseconds. 
 | No - defaults to "PT1S"
 
+| `poll-sleep-duration`
+| Duration
+| A duration representing the time to sleep between reads of the log - can be provided as a Java Duration or passed as a https://docs.oracle.com/javase/8/docs/api/java/time/Duration.html#parse-java.lang.CharSequence-[duration string] or int representing a time in milliseconds. 
+| No - defaults to "PT1S"
+
 | `create-event-hub?`
 | Boolean
 | Whether or not XTDB should create an eventhub for you within the specified namespace. See "<<Creating the Event Hub Automatically>>" for more info.
