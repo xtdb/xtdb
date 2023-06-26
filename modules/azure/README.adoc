@@ -7,7 +7,7 @@ Within our XTDB node, we can make use of Azure Services for certain purposes. Cu
 
 ### Project Dependency 
 
-In order to use any of the azure services, you will need to include a dependency on the xtdb.azure module.
+In order to use any of the Azure services, you will need to include a dependency on the xtdb.azure module.
 
 _deps.edn_
 ```
@@ -109,16 +109,16 @@ These are the following parameters that can be passed within the config for our 
 
 | `retention-period-in-days`
 | Long
-| The retention period of the event hub for the Log - the maximum period determined by the tier of eventhub namespace you are using, see the https://learn.microsoft.com/en-us/azure/event-hubs/event-hubs-features#event-retention[Azure Docs].
-| No - only needed if creating event hub automatically, and defaults to "7".
+| The retention period of the Event Hub for the Log - the maximum period determined by the tier of eventhub namespace you are using, see the https://learn.microsoft.com/en-us/azure/event-hubs/event-hubs-features#event-retention[Azure Docs].
+| No - only needed if creating Event Hub automatically, and defaults to "7".
 
 |=== 
 
 ### Using Event Hubs 
 
-Some things to note when setting up event hubs for XTDB:
+Some things to note when setting up Event Hubs for XTDB:
 
-* When using EventHubs as a log - you will require a pre-existing Event Hubs namespace, see 
+* When using EventHubs as a log - you will require a pre-existing Event Hubs namespace, see the https://learn.microsoft.com/en-us/azure/event-hubs/event-hubs-create#create-an-event-hubs-namespace[Azure docs].
 * As a bare minimum, whichever credentials you use to authenticate to Azure for the app will require two roles on the namespace - *Azure Event Hubs Data sender* and *Azure Event Hubs Data receiver*. 
 
 #### Creating the Event Hub Manually
@@ -126,15 +126,15 @@ Some things to note when setting up event hubs for XTDB:
 When creating an eventhub manually to use as an XTDB log, there are a few properties to consider:
 
 * Partition count should be set to *1* - XTDB will only ever use a single partition within it's implementations of Log as they are required to be *totally ordered*.
-* The retention period is configurable - you will likely wish to set this to as high as you reasonably can given the priving tier of your Event Hubs namespace. 
+* The retention period is configurable - you will likely wish to set this to as high as you reasonably can given the pricing tier of your Event Hubs namespace. 
 
 #### Creating the Event Hub Automatically
 
 If `create-event-hub?` is set to `true`, XTDB will attempt to create an Event Hub on your behalf - some notes on this:
 
-* In `create-event-hub?` is set, a number of other pieces of configuration must be done to allow your application to manage event hubs on your behalf:
+* If `create-event-hub?` is set, a number of other pieces of configuration must be done to allow your application to manage Event Hubs on your behalf:
 ** Whichever credentials you use to authenticate to Azure for the app will require one extra roles for the namespace - *Azure Event Hubs Data Owner*.
-** Within your XTDB integrant config, you will need to directly specify the resource group the event hub namespace belongs to within the `resource-group-name` parameter.
-** The application will require two azure related environment variables to be set - `AZURE_SUBCRIPTION_ID` & `AZURE_TENANT_ID`. See the https://learn.microsoft.com/en-us/azure/azure-portal/get-subscription-tenant-id[Azure docs] for more info.
-* The event hub will only be created if the `event-hub-name` in the configuartion doesn't already exist in the given namespace - it will not start a new event hub every time the node restarts.
-* The created event hub will have a single partition, and the retention period will be set based on the `retention-period-in-days` parameter (this defaults to 7 days - the maximum retention period of the 'basic' namespace pricing tier)
+** Within your XTDB integrant config, you will need to directly specify the resource group the Event Hub namespace belongs to within the `resource-group-name` parameter.
+** The application will require two Azure related environment variables to be set - `AZURE_SUBSCRIPTION_ID` & `AZURE_TENANT_ID`. See the https://learn.microsoft.com/en-us/azure/azure-portal/get-subscription-tenant-id[Azure docs] for more info.
+* The Event Hub will only be created if the `event-hub-name` in the configuartion doesn't already exist in the given namespace - it will not start a new Event Hub every time the node restarts.
+* The created Event Hub will have a single partition, and the retention period will be set based on the `retention-period-in-days` parameter (this defaults to 7 days - the maximum retention period of the 'basic' namespace pricing tier)

@@ -21,7 +21,7 @@
 (def ^:dynamic *obj-store*)
 
 (os-test/def-obj-store-tests ^:azure azure [f]
-  (log/info "Azure config present (AZURE_CLIENT_ID, AZURE_CLIENT_SECRET, AZURE_SUBCRIPTION_ID & AZURE_TENANT_ID set)? - " config-present?)
+  (log/info "Azure config present (AZURE_CLIENT_ID, AZURE_CLIENT_SECRET, AZURE_SUBSCRIPTION_ID & AZURE_TENANT_ID set)? - " config-present?)
   (when config-present?
     (let [sys (-> {::azure/blob-object-store {:storage-account storage-account
                                               :container container
@@ -35,7 +35,7 @@
           (ig/halt! sys))))))
 
 (t/deftest ^:azure test-eventhub-log
-  (log/info "Azure config present (AZURE_CLIENT_ID, AZURE_CLIENT_SECRET, AZURE_SUBCRIPTION_ID & AZURE_TENANT_ID set)? - " config-present?)
+  (log/info "Azure config present (AZURE_CLIENT_ID, AZURE_CLIENT_SECRET, AZURE_SUBSCRIPTION_ID & AZURE_TENANT_ID set)? - " config-present?)
   (when config-present?
     (with-open [node (node/start-node {::azure/event-hub-log {:namespace eventhub-namespace
                                                               :resource-group-name resource-group-name
