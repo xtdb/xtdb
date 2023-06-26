@@ -531,21 +531,24 @@
         ^ListVector node-branch (.getChild node-data "branch")
         ^BigIntVector branch-data (.getDataVector node-branch)
         ^StructVector node-leaf (.getChild node-data "leaf")
-        ^BigIntVector leaf-page-idx (.getChild node-leaf "page-idx")]
+        ^BigIntVector leaf-page-idx (.getChild node-leaf "page-idx")
+        root-node-ptr (dec (.getInnerValueCount node-trie))]
     (fn [iid]
-      (loop [node-ptr (dec (.getInnerValueCount node-trie))
-             lvl 0]
-        (let [node-type (.getTypeId node-data node-ptr)]
-          (case node-type
-            ;; nil
-            0 -1
-            ;; branch
-            1
-            (let [branch-list-offset (.getOffset node-data node-ptr)
-                  branch-list-start (.getElementStartIndex node-branch branch-list-offset)
-                  prefix (iid-prefix iid lvl)
-                  new-node-ptr (.get branch-data (+ branch-list-start prefix))]
-              (recur new-node-ptr (inc lvl)))
-            ;; leaf
-            ;; if read biased towards keys not being found, later we can check bloom meta and eid min/max to short circuit
-            2 (.get leaf-page-idx node-ptr)))))))
+      (if (= -1 root-node-ptr)
+        -1
+        (loop [node-ptr root-node-ptr
+               lvl 0]
+          (let [node-type (.getTypeId node-data node-ptr)]
+            (case node-type
+              ;; nil
+              0 -1
+              ;; branch
+              1
+              (let [branch-list-offset (.getOffset node-data node-ptr)
+                    branch-list-start (.getElementStartIndex node-branch branch-list-offset)
+                    prefix (iid-prefix iid lvl)
+                    new-node-ptr (.get branch-data (+ branch-list-start prefix))]
+                (recur new-node-ptr (inc lvl)))
+              ;; leaf
+              ;; if read biased towards keys not being found, later we can check bloom meta and eid min/max to short circuit
+              2 (.get leaf-page-idx node-ptr))))))))
