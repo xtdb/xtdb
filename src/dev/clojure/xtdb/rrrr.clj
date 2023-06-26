@@ -525,7 +525,7 @@
 
 (defn seek-fn
   [^VectorSchemaRoot vsr]
-  ;; function will likely move to by under an interface definition, no prim call available for now
+  ;; function will likely move under an interface definition shared with the HHTrie, no prim call available for now
   (let [^ListVector node-trie (.getVector vsr "node-trie")
         ^DenseUnionVector node-data (.getDataVector node-trie)
         ^ListVector node-branch (.getChild node-data "branch")
@@ -535,8 +535,7 @@
     (fn [iid]
       (loop [node-ptr (dec (.getInnerValueCount node-trie))
              lvl 0]
-        (let [node-type (.getTypeId node-data node-ptr)
-              prefix (iid-prefix iid lvl)]
+        (let [node-type (.getTypeId node-data node-ptr)]
           (case node-type
             ;; nil
             0 -1
@@ -544,6 +543,7 @@
             1
             (let [branch-list-offset (.getOffset node-data node-ptr)
                   branch-list-start (.getElementStartIndex node-branch branch-list-offset)
+                  prefix (iid-prefix iid lvl)
                   new-node-ptr (.get branch-data (+ branch-list-start prefix))]
               (recur new-node-ptr (inc lvl)))
             ;; leaf
