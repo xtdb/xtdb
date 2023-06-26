@@ -1,9 +1,11 @@
 (ns xtdb.checkpoint
   (:require [clojure.tools.logging :as log]
+            [clojure.spec.alpha :as s]
             [clojure.java.io :as io]
             [xtdb.api :as xt]
             [xtdb.io :as xio]
             [xtdb.bus :as bus]
+            [xtdb.error :as err]
             [xtdb.system :as sys])
   (:import [java.io Closeable File]
            java.net.URI
@@ -41,7 +43,39 @@
 (defn cp-exists-for-tx? [cp {:keys [::xt/tx-id] :as tx}]
   (= tx-id (get-in cp [:tx ::xt/tx-id])))
 
-(defn checkpoint [{:keys [dir bus src store ::cp-format approx-frequency]}]
+;; This function takes a list of checkpoints, and calculates the `checkpoints` to be deleted based on the provided retention-policy settings.
+;; It expects the provided `checkpoints` to be in order of most-to-least recent.
+;; We first 'split-at' the list based on `retain-at-least` (if unset, this is set to 0) - this returns two lists:
+;; - The "safe" list - these will not be cleaned up, as we wish to keep at least `retain-at-least` checkpoints
+;; - The "potentially deletable" list - how this is handled is dependant on whether `retain-newer-than` is set:
+;; --> If unset, we return the whole "potentially deletable" list, as we only want to keep `retain-at-least` values
+;; --> If set, we calculate the earliest valid date we'll accept checkpoints for and use 'drop-while' on the list for any checkpoints 
+;;     newer than that date. Once this completes, whatever remains in the list is what will be deleted.
+(defn calculate-deleteable-checkpoints [checkpoints {:keys [retain-newer-than retain-at-least]}]
+  (let [split-point (or retain-at-least 0)
+        [_latest to-check] (split-at split-point checkpoints)]
+    (if-not retain-newer-than
+      to-check
+      (let [earliest-acceptable-date (-> (Date.)
+                                         (.toInstant)
+                                         (.minus retain-newer-than)
+                                         (Date/from))
+            checkpoint-newer-than-date (fn [{::keys [^Date checkpoint-at]}]
+                                         (.before earliest-acceptable-date checkpoint-at))]
+        (drop-while checkpoint-newer-than-date to-check)))))
+
+(defn apply-retention-policy [{:keys [store ::cp-format retention-policy]}]
+  (when retention-policy
+    (let [all-checkpoints (available-checkpoints store {::cp-format cp-format})
+          checkpoints-to-cleanup (calculate-deleteable-checkpoints all-checkpoints retention-policy)]
+      (doseq [checkpoint checkpoints-to-cleanup]
+        (let [checkpoint-opts {:tx (:tx checkpoint)
+                               :cp-at (::checkpoint-at checkpoint)
+                               ::cp-format cp-format}]
+          (log/infof "Clearing up old checkpoint, %s, based on `retention-policy`" checkpoint-opts)
+          (cleanup-checkpoint store checkpoint-opts))))))
+
+(defn checkpoint [{:keys [dir bus src store ::cp-format approx-frequency] :as checkpoint-opts}]
   (let [latest-cp (first (available-checkpoints store {::cp-format cp-format}))]
     (when-not (recent-cp? latest-cp approx-frequency)
       (bus/send bus (bus/->event :healthz :begin-checkpoint))
@@ -57,6 +91,7 @@
                 (log/infof "Uploading checkpoint at '%s'" tx)
                 (doto (upload-checkpoint store dir opts)
                   (->> pr-str (log/info "Uploaded checkpoint:")))
+                (apply-retention-policy checkpoint-opts)
                 (catch Throwable t
                   (xio/delete-dir dir)
                   (cleanup-checkpoint store opts)
@@ -70,7 +105,7 @@
          (cp-seq (.plus start freq) freq))))
 
 (defrecord ScheduledCheckpointer [store bus ^Path checkpoint-dir, ^Duration approx-frequency
-                                  keep-dir-between-checkpoints? keep-dir-on-close?]
+                                  keep-dir-between-checkpoints? keep-dir-on-close? retention-policy]
   Checkpointer
   (try-restore [_ dir cp-format]
     (when (or (not (.exists ^File dir))
@@ -93,6 +128,7 @@
                                :bus bus
                                :src src,
                                :store store,
+                               :retention-policy retention-policy
                                ::cp-format cp-format})
                   (catch Exception e
                     (log/warn e "Checkpointing failed"))
@@ -119,6 +155,18 @@
           (when-not keep-dir-on-close?
             (xio/delete-dir checkpoint-dir)))))))
 
+(s/def ::retain-newer-than ::sys/duration)
+(s/def ::retain-at-least ::sys/int)
+(s/def ::retention-policy
+  (s/keys :opt [::retain-newer-than ::retain-at-least]))
+
+(defn validate-retention-policy [{:keys [retention-policy]}]
+  (when retention-policy
+    (when-not (or (contains? retention-policy :retain-newer-than)
+                  (contains? retention-policy :retain-at-least))
+      (throw (err/illegal-arg :retention-policy-missing-keys
+                              {::err/message ":retention-policy requires at least one of 'retain-newer-than' or 'retain-at-least'"})))))
+
 (defn ->checkpointer {::sys/deps {:store {:xtdb/module (fn [_])}
                                   :bus :xtdb/bus}
                       ::sys/args {:checkpoint-dir {:spec ::sys/path
@@ -130,8 +178,11 @@
                                                        :required? true
                                                        :default false}
                                   :approx-frequency {:spec ::sys/duration
-                                                     :required? true}}}
+                                                     :required? true}
+                                  :retention-policy {:spec ::retention-policy
+                                                     :required? false}}}
   [opts]
+  (validate-retention-policy opts)
   (map->ScheduledCheckpointer opts))
 
 (defn- sync-path [^Path from-root-path ^Path to-root-path]
