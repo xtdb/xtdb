@@ -33,10 +33,10 @@
                                (available-checkpoints [_ {:keys [::cp/cp-format]}]
                                  (->> (reverse @!checkpoints)
                                       (filter #(= cp-format (::cp/cp-format %)))))
-                               (upload-checkpoint [_ dir {:keys [tx ::cp/cp-format]}]
+                               (upload-checkpoint [_ dir {:keys [tx cp-at ::cp/cp-format]}]
                                  (let [cp {:tx tx,
                                            ::cp/cp-format cp-format
-                                           ::cp/checkpoint-at (Date.)
+                                           ::cp/checkpoint-at cp-at
                                            :files (->> (file-seq dir)
                                                        (filter #(.isFile ^File %))
                                                        (into {} (map (juxt #(.getName ^File %)
@@ -117,6 +117,19 @@
                                                                       (.minus (Duration/ofSeconds 2))
                                                                       (Date/from)))])
                       (map #(dissoc % ::cp/checkpoint-at)))))))))
+
+(t/deftest test-checkpoint-meta-sent-to-uploaded-checkpoints
+  (fix/with-tmp-dir "cp" [cp-dir]
+    (t/testing "testing all the necessary keys sent when uploading checkpoint"
+      (let [[res] (checkpoint {:approx-frequency (Duration/ofSeconds 1)
+                               ::cp/cp-format ::foo-format
+                               :dir cp-dir}
+                            [])]
+        (t/is (= {::xt/tx-id 1} (:tx res)))
+        (t/is (= {"hello.edn" {:msg "Hello world!", :tx-id 1}} (:files res)))
+        (t/is (= ::foo-format (::cp/cp-format res)))
+                 ;; Check if checkpoint-at (sent to upload-checkpoint as cp-at) satisfies Inst, should be a Date
+        (t/is (inst? (::cp/checkpoint-at res)))))))
 
 (t/deftest test-checkpointer
   (fix/with-tmp-dir "cp" [cp-dir]

@@ -52,7 +52,7 @@
               (log/infof "Checkpoint already exists for '%s', skipping..." tx)
               (xio/delete-dir dir))
             (let [cp-at (java.util.Date.)
-                  opts {:tx tx :cpz-at cp-at ::cp-format cp-format}]
+                  opts {:tx tx :cp-at cp-at ::cp-format cp-format}]
               (try
                 (log/infof "Uploading checkpoint at '%s'" tx)
                 (doto (upload-checkpoint store dir opts)
