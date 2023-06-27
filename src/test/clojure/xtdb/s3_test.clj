@@ -3,26 +3,24 @@
             [juxt.clojars-mirrors.integrant.core :as ig]
             [xtdb.object-store-test :as os-test]
             [xtdb.s3 :as s3])
-  (:import java.util.UUID))
+  (:import (java.io Closeable)))
 
 (def bucket
   (or (System/getProperty "xtdb.s3-test.bucket")
       "xtdb-s3-test"))
 
-(def ^:dynamic *obj-store*)
+(defn object-store ^Closeable [prefix]
+  (->> (ig/prep-key ::s3/object-store {:bucket bucket, :prefix (str prefix)})
+       (ig/init-key ::s3/object-store)))
 
-(t/use-fixtures :each
-  (fn [f]
-    (when bucket
-      (let [sys (-> {::s3/object-store {:bucket bucket
-                                        :prefix (str "xtdb.s3-test." (UUID/randomUUID))}}
-                    ig/prep
-                    ig/init)]
-        (try
-          (binding [*obj-store* (::s3/object-store sys)]
-            (f))
-          (finally
-            (ig/halt! sys)))))))
+(t/deftest ^:s3 put-delete-test
+  (with-open [os (object-store (random-uuid))]
+    (os-test/test-put-delete os)))
 
-(os-test/def-obj-store-tests ^:s3 s3 [f]
-  (f *obj-store*))
+(t/deftest ^:s3 range-test
+  (with-open [os (object-store (random-uuid))]
+    (os-test/test-range os)))
+
+(t/deftest ^:s3 list-test
+  (with-open [os (object-store (random-uuid))]
+    (os-test/test-list-objects os)))
