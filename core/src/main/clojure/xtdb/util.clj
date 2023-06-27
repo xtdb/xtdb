@@ -272,7 +272,12 @@
    (with-open [in (->file-channel path (if (= FileChannel$MapMode/READ_ONLY map-mode)
                                          #{:read}
                                          #{:read :write}))]
-     (.map in map-mode 0 (.size in)))))
+     (.map in map-mode 0 (.size in))))
+  (^java.nio.MappedByteBuffer [^Path path ^FileChannel$MapMode map-mode ^long start ^long len]
+   (with-open [in (->file-channel path (if (= FileChannel$MapMode/READ_ONLY map-mode)
+                                         #{:read}
+                                         #{:read :write}))]
+     (.map in map-mode start len))))
 
 (def ^:private file-deletion-visitor
   (proxy [SimpleFileVisitor] []

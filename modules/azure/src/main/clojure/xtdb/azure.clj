@@ -44,6 +44,17 @@
         blob-client (.getBlobContainerClient blob-service-client container)]
     (os/->AzureBlobObjectStore blob-client prefix)))
 
+(comment
+
+  (def os (->> (ig/prep-key ::blob-object-store {:storage-account "xtdbazureobjectstoretest"
+                                                 :container "xtdb-test"
+                                                 :prefix (str "xtdb.azure-test." (random-uuid))})
+               (ig/init-key ::blob-object-store)))
+
+  @(.getObject os "foo.txt")
+
+  )
+
 (s/def ::namespace string?)
 (s/def ::event-hub-name string?)
 (s/def ::create-event-hub? boolean?)

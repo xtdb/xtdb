@@ -13,7 +13,8 @@
            java.nio.ByteBuffer
            (java.nio.file Files OpenOption)
            java.util.concurrent.CompletableFuture
-           java.util.function.Supplier))
+           java.util.function.Supplier
+           (java.util.function Consumer Function)))
 
 (defprotocol Dialect
   (db-type [dialect])
@@ -57,6 +58,14 @@
      (reify Supplier
        (get [_]
          (ByteBuffer/wrap (get-object pool k))))))
+
+  (getObjectRange [os k start len]
+    (os/ensure-shared-range-oob-behaviour start len)
+    (.thenApply
+      (.getObject os k)
+      (reify Function
+        (apply [_ buf]
+          (.slice ^ByteBuffer buf start len)))))
 
   (getObject [_ k out-path]
     (CompletableFuture/supplyAsync
