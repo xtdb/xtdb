@@ -551,4 +551,4 @@
                 (recur new-node-ptr (inc lvl)))
               ;; leaf
               ;; if read biased towards keys not being found, later we can check bloom meta and eid min/max to short circuit
-              2 (.get leaf-page-idx node-ptr))))))))
+              2 (.get leaf-page-idx (.getOffset node-data node-ptr)))))))))
