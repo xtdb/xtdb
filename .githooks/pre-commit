@@ -1,6 +1,6 @@
 #!/bin/bash
 
-if git diff --cached -G"<<no-commit>>" --exit-code; then
+if git diff --cached -G"<<no-commit>>" --no-ext-diff --exit-code; then
     exit 0
 else
     echo "WARNING: <<no-commit>> present in staged diff, lines marked with this should not be commited."
