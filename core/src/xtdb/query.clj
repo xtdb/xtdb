@@ -54,10 +54,41 @@
 (defn- aggregate? [x]
   (contains? (methods aggregate) x))
 
+(s/def ::triple-value (some-fn logic-var? literal?))
+
 (s/def ::triple
   (s/and vector? (s/cat :e (some-fn logic-var? c/valid-id? set?)
                         :a (s/and c/valid-id? some?)
-                        :v (s/? (some-fn logic-var? literal?)))))
+                        :v (s/? ::triple-value))))
+
+(s/def ::match-map-spec
+  (-> (s/map-of keyword? ::triple-value)
+      (s/and (s/conformer #(vec (map (fn [[attr val]] (MapEntry/create attr val)) %))
+                          #(->> %
+                                (map (fn [[attr val]] (MapEntry/create attr val) val))
+                                (into {}))))))
+
+(s/def ::match-spec
+  (-> (s/or :map ::match-map-spec
+            :vector (-> (s/or :column symbol?
+                              :map ::match-map-spec)
+                        (s/and (s/conformer (fn [[tag arg]]
+                                              (case tag :map arg, :column {(keyword arg) arg}))
+                                            (fn [arg]
+                                              [:map arg])))
+                        (s/coll-of :kind vector?)))
+
+      (s/and (s/conformer (fn [[tag arg]]
+                            (case tag
+                              :map (vec arg)
+                              :vector (into [] cat arg)))
+                          (fn [v]
+                            [:vector (mapv #(conj {} %) v)])))))
+
+(s/def ::match
+  (s/and list?
+         (s/cat :tag #{'$ 'match}
+                :match ::match-spec)))
 
 (s/def ::args-list (s/coll-of logic-var? :kind vector? :min-count 1))
 
@@ -133,6 +164,7 @@
 
 (s/def ::term
   (s/or :triple ::triple
+        :match ::match
         :not ::not
         :not-join ::not-join
         :or ::or
@@ -573,6 +605,13 @@
    > (comp pos? compare)
    >= (comp not neg? compare)
    = =})
+
+(defmethod normalize-clause :match [_ {:keys [match]}]
+  (let [{[[_ e] & more-id-clauses] :xt/id, other-clauses nil} (group-by (comp #{:xt/id} key) match)
+        e (or e (gensym 'e))]
+    (->> (for [[a v] (concat more-id-clauses other-clauses)]
+           {:e e, :a a, :v v})
+         (into [] (mapcat (partial normalize-clause :triple))))))
 
 (defmethod normalize-clause :pred [_ {:keys [pred return] :as clause}]
   [[:pred (let [{:keys [pred-fn args]} pred

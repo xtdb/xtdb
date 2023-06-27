@@ -127,13 +127,9 @@
            (avg l_extendedprice)
            (avg l_discount)
            (count l)]
-    :where [[l :l_shipdate l_shipdate]
-            [l :l_quantity l_quantity]
-            [l :l_extendedprice l_extendedprice]
-            [l :l_discount l_discount]
-            [l :l_tax l_tax]
-            [l :l_returnflag l_returnflag]
-            [l :l_linestatus l_linestatus]
+    :where [($ [{:xt/id l} l_shipdate l_quantity
+                l_extendedprice l_discount l_tax
+                l_returnflag l_linestatus])
             [(<= l_shipdate #inst "1998-09-02")]]
     :order-by [[l_returnflag :asc]
                [l_linestatus :asc]]})
@@ -141,37 +137,21 @@
 ;; "Elapsed time: 291.474365 msecs"
 ;; "Elapsed time: 98.729042 msecs"
 (def q2
-  '{:find [s_acctbal
-           s_name
-           n_name
-           p
-           p_mfgr
-           s_address
-           s_phone
-           s_comment]
-    :where [[p :p_mfgr p_mfgr]
-            [p :p_size 15]
-            [p :p_type p_type]
+  '{:find [s_acctbal s_name n_name p p_mfgr s_address s_phone s_comment]
+    :where [($ [{:xt/id p, :p_size 15} p_mfgr p_type])
             [(re-find #"^.*BRASS$" p_type)]
-            [ps :ps_partkey p]
-            [ps :ps_supplycost ps_supplycost]
+            ($ [{:xt/id ps, :ps_partkey p, :ps_suppkey s} ps_supplycost])
             [(q {:find [(min ps_supplycost)]
                  :in [$ p]
-                 :where [[ps :ps_partkey p]
-                         [ps :ps_supplycost ps_supplycost]
-                         [ps :ps_suppkey s]
+                 :where [($ [{:xt/id ps, :ps_partkey p, :ps_suppkey s} ps_supplycost])
                          [s :s_nationkey n]
                          [n :n_regionkey r]
-                         [r :r_name "EUROPE"]]} p) [[ps_supplycost]]]
-            [ps :ps_suppkey s]
-            [s :s_acctbal s_acctbal]
-            [s :s_address s_address]
-            [s :s_name s_name]
-            [s :s_phone s_phone]
-            [s :s_comment s_comment]
-            [n :n_name n_name]
-            [s :s_nationkey n]
-            [n :n_regionkey r]
+                         [r :r_name "EUROPE"]]}
+                p)
+             [[ps_supplycost]]]
+
+            ($ [{:xt/id s, :s_nationkey n} s_name s_address s_phone s_comment s_acctbal])
+            ($ [{:xt/id n, :n_regionkey r} n_name])
             [r :r_name "EUROPE"]]
     :order-by [[s_acctbal :desc]
                [n_name :asc]
@@ -223,17 +203,13 @@
 (def q5
   (-> '{:find [n_name (sum (* l_extendedprice (- 1 l_discount)))]
         :in [?region]
-        :where [[o :o_custkey c]
-                [l :l_orderkey o]
-                [l :l_suppkey s]
+        :where [($ [{:xt/id o, :o_custkey c} o_orderdate])
+                ($ [{:xt/id l, :l_orderkey o, :l_suppkey s} l_extendedprice l_discount])
                 [s :s_nationkey n]
                 [c :c_nationkey n]
-                [n :n_name n_name]
-                [n :n_regionkey r]
+                ($ [{:xt/id n, :n_regionkey r} n_name])
                 [r :r_name ?region]
-                [l :l_extendedprice l_extendedprice]
-                [l :l_discount l_discount]
-                [o :o_orderdate o_orderdate]
+
                 [(>= o_orderdate #inst "1994-01-01")]
                 [(< o_orderdate #inst "1995-01-01")]]
         :order-by [[(sum (* l_extendedprice (- 1 l_discount))) :desc]]}
@@ -243,10 +219,7 @@
 ;; "Elapsed time: 963.57298 msecs"
 (def q6
   '{:find [(sum (* l_extendedprice l_discount))]
-    :where [[l :l_shipdate l_shipdate]
-            [l :l_quantity l_quantity]
-            [l :l_extendedprice l_extendedprice]
-            [l :l_discount l_discount]
+    :where [($ [{:xt/id l} l_shipdate l_quantity l_extendedprice l_discount])
             [(>= l_shipdate #inst "1994-01-01")]
             [(< l_shipdate #inst "1995-01-01")]
             [(>= l_discount 0.05)]
@@ -264,19 +237,19 @@
            l_year
            (sum (* l_extendedprice (- 1 l_discount)))]
     :where [[o :o_custkey c]
-            [l :l_orderkey o]
-            [l :l_suppkey s]
+            ($ [{:xt/id l, :l_orderkey o, :l_suppkey s}
+                l_shipdate l_discount l_extendedprice])
+
             [s :s_nationkey n1]
             [n1 :n_name supp_nation]
             [c :c_nationkey n2]
             [n2 :n_name cust_nation]
+
             (or (and [(= "FRANCE" supp_nation)]
                      [(= "GERMANY" cust_nation)])
                 (and [(= "GERMANY" supp_nation)]
                      [(= "FRANCE" cust_nation)]))
-            [l :l_shipdate l_shipdate]
-            [l :l_discount l_discount]
-            [l :l_extendedprice l_extendedprice]
+
             [(>= l_shipdate #inst "1995-01-01")]
             [(<= l_shipdate #inst "1996-12-31")]
             [(xtdb.fixtures.tpch/inst->year l_shipdate) l_year]]
@@ -290,21 +263,20 @@
                         (sum (if (= "BRAZIL" nation) volume 0))
                         (sum volume)]
                  :where [[(q {:find [o_year (sum (* l_extendedprice (- 1 l_discount))) nation]
-                              :where [[o :o_custkey c]
-                                      [l :l_orderkey o]
-                                      [l :l_suppkey s]
-                                      [l :l_partkey p]
+                              :where [($ [{:xt/id o, :o_custkey c} o_orderdate])
+                                      ($ [{:xt/id l, :l_orderkey o, :l_suppkey s, :l_partkey p}
+                                          l_discount l_extendedprice])
+
                                       [c :c_nationkey n1]
                                       [n1 :n_regionkey r1]
                                       [r1 :r_name "AMERICA"]
                                       [s :s_nationkey n2]
                                       [n2 :n_name nation]
-                                      [l :l_discount l_discount]
-                                      [l :l_extendedprice l_extendedprice]
-                                      [o :o_orderdate o_orderdate]
+                                      [p :p_type "ECONOMY ANODIZED STEEL"]
+
                                       [(>= o_orderdate #inst "1995-01-01")]
                                       [(<= o_orderdate #inst "1996-12-31")]
-                                      [p :p_type "ECONOMY ANODIZED STEEL"]
+
                                       [(xtdb.fixtures.tpch/inst->year o_orderdate) o_year]]})
                           [[o_year volume nation]]]]})
              [[o_year brazil_volume volume]]]
@@ -317,19 +289,14 @@
   '{:find [nation o_year
            (sum (- (* l_extendedprice (- 1 l_discount))
                    (* ps_supplycost l_quantity)))]
-    :where [[l :l_orderkey o]
-            [l :l_suppkey s]
-            [l :l_partkey p]
-            [ps :ps_partkey p]
-            [ps :ps_suppkey s]
-            [ps :ps_supplycost ps_supplycost]
+    :where [($ [{:xt/id l, :l_orderkey o, :l_suppkey s, :l_partkey p}
+                l_quantity l_discount l_extendedprice])
+            ($ [{:xt/id ps, :ps_partkey p, :ps_suppkey s} ps_supplycost])
             [s :s_nationkey n]
             [n :n_name nation]
             [p :p_name p_name]
             [(re-find #".*green.*" p_name)]
-            [l :l_quantity l_quantity]
-            [l :l_discount l_discount]
-            [l :l_extendedprice l_extendedprice]
+
             [o :o_orderdate o_orderdate]
             [(xtdb.fixtures.tpch/inst->year o_orderdate) o_year]]
     :order-by [[nation :asc] [o_year :desc]]})
@@ -345,21 +312,14 @@
            c_address
            c_phone
            c_comment]
-    :where [[o :o_custkey c]
-            [l :l_orderkey o]
-            [c :c_nationkey n]
+    :where [($ [{:xt/id o, :o_custkey c} o_orderdate])
+            ($ [{:xt/id l, :l_orderkey o, :l_returnflag "R"}
+                l_extendedprice l_discount])
+            ($ [{:xt/id c, :c_nationkey n} c_acctbal c_name c_address c_phone c_comment])
             [n :n_name n_name]
-            [c :c_name c_name]
-            [c :c_acctbal c_acctbal]
-            [c :c_address c_address]
-            [c :c_phone c_phone]
-            [c :c_comment c_comment]
-            [l :l_extendedprice l_extendedprice]
-            [l :l_discount l_discount]
-            [o :o_orderdate o_orderdate]
+
             [(>= o_orderdate #inst "1993-10-01")]
-            [(< o_orderdate #inst "1994-01-01")]
-            [l :l_returnflag "R"]]
+            [(< o_orderdate #inst "1994-01-01")]]
     :order-by [[(sum (* l_extendedprice (- 1 l_discount))) :desc]]
     :limit 20})
 
@@ -368,17 +328,12 @@
 (def q11
   '{:find [ps_partkey value]
     :where [[(q {:find [(sum (* ps_supplycost ps_availqty))]
-                 :where [[ps :ps_availqty ps_availqty]
-                         [ps :ps_supplycost ps_supplycost]
-                         [ps :ps_suppkey s]
+                 :where [($ [{:xt/id ps, :ps_suppkey s} ps_availqty ps_supplycost])
                          [s :s_nationkey n]
                          [n :n_name "GERMANY"]]}) [[total-value]]]
             [(q {:find [ps_partkey
                         (sum (* ps_supplycost ps_availqty))]
-                 :where [[ps :ps_availqty ps_availqty]
-                         [ps :ps_supplycost ps_supplycost]
-                         [ps :ps_partkey ps_partkey]
-                         [ps :ps_suppkey s]
+                 :where [($ [{:xt/id ps, :ps_suppkey s} ps_availqty ps_supplycost ps_partkey])
                          [s :s_nationkey n]
                          [n :n_name "GERMANY"]]}) [[ps_partkey value]]]
             [(* 0.0001 total-value) ret_2]
@@ -393,16 +348,12 @@
   '{:find [l_shipmode
            (sum (if (xtdb.fixtures.tpch/high-lines o_orderpriority) 1 0))
            (sum (if (xtdb.fixtures.tpch/high-lines o_orderpriority) 0 1))]
-    :where [[l :l_orderkey o]
-            [l :l_receiptdate l_receiptdate]
-            [l :l_commitdate l_commitdate]
-            [l :l_shipdate l_shipdate]
+    :where [($ [{:xt/id l, :l_orderkey o, :l_shipmode #{"MAIL" "SHIP"}}
+                l_receiptdate l_commitdate l_shipdate l_shipmode])
             [(>= l_receiptdate #inst "1994-01-01")]
             [(< l_receiptdate #inst "1995-01-01")]
             [(< l_commitdate l_receiptdate)]
             [(< l_shipdate l_commitdate)]
-            [l :l_shipmode l_shipmode]
-            [l :l_shipmode #{"MAIL" "SHIP"}]
             [o :o_orderpriority o_orderpriority]]
     :order-by [[l_shipmode :asc]]})
 
@@ -411,8 +362,7 @@
 (def q13
   '{:find [c_count (count c_count)]
     :where [(or [(q {:find [c (count o)]
-                     :where [[o :o_custkey c]
-                             [o :o_comment o_comment]
+                     :where [($ [{:xt/id o, :o_custkey c} o_comment])
                              (not [(re-find #".*special.*requests.*" o_comment)])]}) [[c c_count]]]
                 (and [c :c_custkey]
                      (not [_ :o_custkey c])
@@ -427,11 +377,8 @@
                                (* l_extendedprice (- 1 l_discount))
                                0))
                         (sum (* l_extendedprice (- 1 l_discount)))]
-                 :where [[l :l_partkey p]
-                         [p :p_type p_type]
-                         [l :l_shipdate l_shipdate]
-                         [l :l_extendedprice l_extendedprice]
-                         [l :l_discount l_discount]
+                 :where [($ [{:xt/id p} p_type])
+                         ($ [{:xt/id l, :l_partkey p} l_shipdate l_extendedprice l_discount])
                          [(>= l_shipdate #inst "1995-09-01")]
                          [(< l_shipdate #inst "1995-10-01")]]})
              [[promo total]]]]})
@@ -458,18 +405,12 @@
 ;; "Elapsed time: 607.135035 msecs"
 ;; "Elapsed time: 426.025221 msecs"
 (def q16
-  '{:find [p_brand
-           p_type
-           p_size
-           (count-distinct s)]
-    :where [[p :p_brand p_brand]
+  '{:find [p_brand p_type p_size (count-distinct s)]
+    :where [($ [{:xt/id p, :p_size #{49 14 23 45 19 3 36 9}}
+                p_brand p_type p_size])
+            ($ [{:xt/id ps, :ps_partkey p, :ps_suppkey s}])
             [(not= p_brand "Brand#45")]
-            [p :p_type p_type]
             (not [(re-find #"^MEDIUM POLISHED.*" p_type)])
-            [p :p_size p_size]
-            [p :p_size #{49 14 23 45 19 3 36 9}]
-            [ps :ps_partkey p]
-            [ps :ps_suppkey s]
             (not-join [s]
                       [s :s_comment s_comment]
                       [(re-find #".*Customer.*Complaints.*" s_comment)])]
@@ -483,17 +424,15 @@
 (def q17
   '{:find [avg_yearly]
     :where [[(q {:find [(sum l_extendedprice)]
-                 :where [[p :p_brand "Brand#23"]
-                         [p :p_container "MED BOX"]
-                         [l :l_partkey p]
+                 :where [($ [{:xt/id p, :p_brand "Brand#23", :p_container "MED BOX"}])
+                         ($ [{:xt/id l, :l_partkey p} l_quantity l_extendedprice])
                          [(q {:find [(avg l_quantity)]
                               :in [$ p]
                               :where [[l :l_partkey p]
                                       [l :l_quantity l_quantity]]} p) [[avg_quantity]]]
                          [(* 0.2 avg_quantity) ret_1]
-                         [l :l_quantity l_quantity]
-                         [(< l_quantity ret_1)]
-                         [l :l_extendedprice l_extendedprice]]}) [[sum_extendedprice]]]
+
+                         [(< l_quantity ret_1)]]}) [[sum_extendedprice]]]
             [(/ sum_extendedprice 7.0) avg_yearly]]})
 
 ;; "Elapsed time: 5612.090612 msecs"
@@ -501,14 +440,11 @@
 (def q18
   '{:find [c_name c o o_orderdate o_totalprice sum_quantity]
     :where [[(q {:find [o (sum l_quantity)]
-                 :where [[l :l_orderkey o]
-                         [l :l_quantity l_quantity]]})
+                 :where [($ [{:xt/id l, :l_orderkey o}, l_quantity])]})
              [[o sum_quantity]]]
             [(> sum_quantity 300.0)]
-            [o :o_custkey c]
-            [c :c_name c_name]
-            [o :o_orderdate o_orderdate]
-            [o :o_totalprice o_totalprice]]
+            ($ [{:xt/id o, :o_custkey c} o_orderdate o_totalprice])
+            ($ [{:xt/id c} c_name])]
     :order-by [[o_totalprice :desc] [o_orderdate :asc]]
     :limit 100})
 
@@ -516,27 +452,28 @@
 ;; "Elapsed time: 2275.890159 msecs"
 (def q19
   '{:find [(sum (* l_extendedprice (- 1 l_discount)))]
-    :where [[l :l_shipmode #{"AIR" "AIR REG"}]
-            [l :l_shipinstruct "DELIVER IN PERSON"]
-            [l :l_discount l_discount]
-            [l :l_extendedprice l_extendedprice]
-            [l :l_partkey p]
-            [l :l_quantity l_quantity]
-            [p :p_size p_size]
-            (or (and [p :p_brand "Brand#12"]
-                     [p :p_container #{"SM CASE" "SM BOX" "SM PACK" "SM PKG"}]
+    :where [($ [{:xt/id l, :l_partkey p
+                 :l_shipmode #{"AIR" "AIR REG"}
+                 :l_shipinstruct "DELIVER IN PERSON"}
+                l_discount l_extendedprice l_quantity])
+            ($ [{:xt/id p} p_size])
+            (or (and ($ {:xt/id p,
+                         :p_brand "Brand#12"
+                         :p_container #{"SM CASE" "SM BOX" "SM PACK" "SM PKG"}})
                      [(>= l_quantity 1.0)]
                      [(<= l_quantity 11.0)]
                      [(>= p_size 1)]
                      [(<= p_size 5)])
-                (and [p :p_brand "Brand#23"]
-                     [p :p_container #{"MED BAG" "MED BOX" "MED PKG" "MED PACK"}]
+                (and ($ {:xt/id p
+                         :p_brand "Brand#23"
+                         :p_container #{"MED BAG" "MED BOX" "MED PKG" "MED PACK"}})
                      [(>= l_quantity 10.0)]
                      [(<= l_quantity 20.0)]
                      [(>= p_size 1)]
                      [(<= p_size 10)])
-                (and [p :p_brand "Brand#34"]
-                     [p :p_container #{"LG CASE" "LG BOX" "LG PACK" "LG PKG"}]
+                (and ($ {:xt/id p
+                         :p_brand "Brand#34"
+                         :p_container #{"LG CASE" "LG BOX" "LG PACK" "LG PKG"}})
                      [(>= l_quantity 20.0)]
                      [(<= l_quantity 30.0)]
                      [(>= p_size 1)]
@@ -545,11 +482,11 @@
 ;; "Elapsed time: 1814.036551 msecs"
 ;; "Elapsed time: 1200.295518 msecs"
 (def q20
-  '{:find [s_name
-           s_address]
-    :where [[ps :ps_suppkey s]
-            [ps :ps_partkey p]
-            [p :p_name p_name]
+  '{:find [s_name s_address]
+    :where [($ [{:xt/id ps, :ps_suppkey s, :ps_partkey p} ps_availqty])
+            ($ [{:xt/id p} p_name])
+            ($ [{:xt/id s, :s_nationkey n} s_name s_address])
+            ($ {:xt/id n, :n_name "CANADA"})
             [(re-find #"^forest.*" p_name)]
             [(q {:find [(sum l_quantity)]
                  :in [$ p s]
@@ -561,12 +498,7 @@
                          [l :l_quantity l_quantity]]} p s) [[sum_quantity]]]
             [(* sum_quantity 0.5) ret_1]
             [(long ret_1) ret_2]
-            [ps :ps_availqty ps_availqty]
-            [(> ps_availqty ret_2)]
-            [s :s_name s_name]
-            [s :s_address s_address]
-            [s :s_nationkey n]
-            [n :n_name "CANADA"]]
+            [(> ps_availqty ret_2)]]
     :order-by [[s_name :asc]]})
 
 ;; "Elapsed time: 1562.348211 msecs"
@@ -574,25 +506,19 @@
 (def q21
   '{:find [s_name
            (count l1)]
-    :where [[l1 :l_suppkey s]
-            [s :s_name s_name]
-            [l1 :l_orderkey o]
-            [o :o_orderstatus "F"]
-            [l1 :l_receiptdate l_receiptdate]
-            [l1 :l_commitdate l_commitdate]
+    :where [($ [{:xt/id l1, :l_suppkey s, :l_orderkey o} l_receiptdate l_commitdate])
+            ($ [{:xt/id s, :s_nationkey n} s_name])
+            ($ [{:xt/id o, :o_orderstatus "F"}])
+            ($ [{:xt/id n, :n_name "SAUDI ARABIA"}])
             [(> l_receiptdate l_commitdate)]
             (or-join [o s]
                      (and [l2 :l_orderkey o]
                           (not [l2 :l_suppkey s])))
             (not-join [o s]
-                      [l3 :l_orderkey o]
+                      ($ [{:xt/id l3, :l_orderkey o} l_receiptdate l_commitdate])
                       (not [l3 :l_suppkey s])
-                      [l3 :l_receiptdate l_receiptdate]
-                      [l3 :l_commitdate l_commitdate]
-                      [(> l_receiptdate l_commitdate)])
-            [s :s_nationkey n]
-            [n :n_name "SAUDI ARABIA"]]
-    :order-by  [[(count l1) :desc] [s_name :asc]]
+                      [(> l_receiptdate l_commitdate)])]
+    :order-by [[(count l1) :desc] [s_name :asc]]
     :limit 100})
 
 ;; "Elapsed time: 673.423196 msecs"
@@ -601,19 +527,17 @@
   '{:find [cntrycode
            (count c)
            (sum c_acctbal)]
-    :where [[c :c_phone c_phone]
+    :where [($ [{:xt/id c} c_phone c_acctbal])
             [(subs c_phone 0 2) cntrycode]
             [(contains? #{"13" "31" "23" "29" "30" "18" "17"} cntrycode)]
             [(q {:find [(avg c_acctbal)]
-                 :where [[c :c_acctbal c_acctbal]
+                 :where [($ [{:xt/id c} c_acctbal c_phone])
                          [(> c_acctbal 0.0)]
-                         [c :c_phone c_phone]
                          [(subs c_phone 0 2) cntrycode]
                          [(contains? #{"13" "31" "23" "29" "30" "18" "17"} cntrycode)]]}) [[avg_acctbal]]]
-            [c :c_acctbal c_acctbal]
             [(> c_acctbal avg_acctbal)]
             (not-join [c]
-                      [o :o_custkey c])]
+                      ($ {:xt/id o, :o_custkey c}))]
     :order-by [[cntrycode :asc]]})
 
 (def tpch-queries [q1 q2 q3 q4 q5 q6 q7 q8 q9 q10 q11 q12 q13 q14 q15 q16 q17 q18 q19 q20 q21 q22])
@@ -679,7 +603,7 @@
        (time
         (let [db (xt/db node)
               query (assoc (get tpch-queries (dec n)) :timeout 120000)
-              actual (xt/q db query)]
+              actual (apply xt/q db query (::in-args (meta query)))]
           (prn n
                (:vars-in-join-order (q/query-plan-for db query (::in-args (meta query))))
                (validate-tpch-query actual (parse-tpch-result n))))))))

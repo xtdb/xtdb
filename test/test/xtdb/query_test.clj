@@ -4386,3 +4386,37 @@
     (with-open [node (xt/start-node {})]
       (t/is (thrown? IllegalArgumentException (bad-q node)))
       (t/is (thrown? IllegalArgumentException (bad-q node))))))
+
+(t/deftest test-match-syntax
+  (fix/submit+await-tx [[::xt/put {:xt/id :foo, :v 0}]
+                        [::xt/put {:xt/id :bar, :v 1, :a 0}]
+                        [::xt/put {:xt/id :baz, :v 2, :a 1, :b 2}]])
+
+  (t/is (= #{[:bar 1] [:baz 2]}
+           (xt/q (xt/db *api*)
+                 '{:find [id v]
+                   :where [($ [{:xt/id id} v a])]})))
+
+  (t/is (= #{[:bar 1]}
+           (xt/q (xt/db *api*)
+                 '{:find [id v]
+                   :where [($ [{:xt/id id, :v 1} v])]})))
+
+  (t/is (= #{[:bar 0] [:baz 1]}
+           (xt/q (xt/db *api*)
+                 '{:find [id a]
+                   :where [($ [{:xt/id id, :v #{1 2}} a])]})))
+
+  (t/is (= #{[1 0] [2 1]}
+           (xt/q (xt/db *api*)
+                 '{:find [v a]
+                   :where [($ [v a])]}))
+        "no xt/id")
+
+  (t/is (= #{[1 0] [2 1]}
+           (xt/q (xt/db *api*)
+                 '{:find [v a]
+                   :where [($ [{:xt/id id1} {:xt/id id2}])
+                           [id1 :v v]
+                           [id2 :a a]]}))
+        "multiple xt/ids"))
