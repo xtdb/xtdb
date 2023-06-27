@@ -17,7 +17,7 @@
            actual (tj/arrow-streaming->json (txp/serialize-tx-ops tu/*allocator* tx-ops opts))]
 
        ;; uncomment this to reset the expected file (but don't commit it)
-       ;; (spit file actual)
+       #_(spit file actual) ;; <<no-commit>>
 
        (t/is (= (json/parse-string (slurp file))
                 (json/parse-string actual)))))))
