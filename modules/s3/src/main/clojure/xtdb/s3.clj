@@ -9,6 +9,7 @@
            java.io.Closeable
            java.util.concurrent.CompletableFuture
            java.util.function.Function
+           (java.nio ByteBuffer)
            [software.amazon.awssdk.core ResponseBytes]
            [software.amazon.awssdk.core.async AsyncRequestBody AsyncResponseTransformer]
            [software.amazon.awssdk.services.s3.model DeleteObjectRequest GetObjectRequest HeadObjectRequest ListObjectsV2Request ListObjectsV2Response NoSuchKeyException PutObjectRequest S3Object]
@@ -16,12 +17,21 @@
 
 (defn- get-obj-req
   ^GetObjectRequest [{:keys [^S3Configurator configurator bucket prefix]} k]
-
   (-> (GetObjectRequest/builder)
       (.bucket bucket)
       (.key (str prefix k))
       (->> (.configureGet configurator))
       ^GetObjectRequest (.build)))
+
+(defn- get-obj-range-req
+  ^GetObjectRequest [{:keys [^S3Configurator configurator bucket prefix]} k ^Long start ^long len]
+  (let [end-byte (+ start (dec len))]
+    (-> (GetObjectRequest/builder)
+        (.bucket bucket)
+        (.key (str prefix k))
+        (.range (format "bytes=%d-%d" start end-byte))
+        (->> (.configureGet configurator))
+        ^GetObjectRequest (.build))))
 
 (defn- with-exception-handler [^CompletableFuture fut k]
   (.exceptionally fut (reify Function
@@ -46,6 +56,17 @@
                       (apply [_ _]
                         out-path)))
         (with-exception-handler k)))
+
+  (getObjectRange [this k start len]
+    (os/ensure-shared-range-oob-behaviour start len)
+    (try
+      (-> (.getObject client ^GetObjectRequest (get-obj-range-req this k start len) (AsyncResponseTransformer/toBytes))
+          (.thenApply (reify Function
+                        (apply [_ bs]
+                          (.asByteBuffer ^ResponseBytes bs))))
+          (with-exception-handler k))
+      (catch IndexOutOfBoundsException e
+        (CompletableFuture/failedFuture e))))
 
   (putObject [_ k buf]
     (-> (.headObject client
@@ -130,3 +151,26 @@
 
 (defmethod ig/halt-key! ::object-store [_ os]
   (util/try-close os))
+
+(comment
+
+  (def os
+    (->> (ig/prep-key ::object-store {:bucket "xtdb-s3-test", :prefix "wot"})
+         (ig/init-key ::object-store)))
+
+  (.close os)
+
+  (get-obj-req os "foo.txt")
+
+  (get-obj-range-req os "foo.txt" 10 40)
+
+  @(.getObject os "foo.txt")
+
+  (String. (let [buf @(.getObjectRange os "foo.txt" 2 5)
+                 a (byte-array (.remaining buf))]
+             (.get buf a)
+             a))
+
+  @(.putObject os "foo.txt" (ByteBuffer/wrap (.getBytes "hello, world")))
+
+  )

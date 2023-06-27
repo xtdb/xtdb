@@ -182,6 +182,8 @@ dependencies {
     testImplementation("cheshire", "cheshire", "5.11.0")
     testImplementation("org.xerial", "sqlite-jdbc", "3.39.3.0")
     testImplementation("org.clojure", "test.check", "1.1.1")
+    // for AWS profiles (managing datasets)
+    devImplementation("software.amazon.awssdk", "sts", "2.16.76")
 }
 
 if (hasProperty("fin")) {
