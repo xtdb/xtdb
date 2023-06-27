@@ -1,13 +1,14 @@
 (ns xtdb.azure-test
-  (:require [clojure.test :as t]
+  (:require [clojure.java.shell :as sh]
+            [clojure.test :as t]
             [juxt.clojars-mirrors.integrant.core :as ig]
             [xtdb.api :as xt]
             [xtdb.azure :as azure]
             [xtdb.object-store-test :as os-test]
             [xtdb.node :as node]
-            [xtdb.test-util :as tu]
             [clojure.tools.logging :as log])
-  (:import java.util.UUID))
+  (:import java.util.UUID
+           (java.io Closeable)))
 
 (def resource-group-name "azure-modules-test")
 (def storage-account "xtdbazureobjectstoretest")
@@ -18,31 +19,51 @@
                                  (System/getenv "AZURE_TENANT_ID")
                                  (System/getenv "AZURE_SUBSCRIPTION_ID"))))
 
-(def ^:dynamic *obj-store*)
+(defn cli-available? []
+  (= 0 (:exit (sh/sh "az" "--help"))))
 
-(os-test/def-obj-store-tests ^:azure azure [f]
-  (log/info "Azure config present (AZURE_CLIENT_ID, AZURE_CLIENT_SECRET, AZURE_SUBSCRIPTION_ID & AZURE_TENANT_ID set)? - " config-present?)
-  (when config-present?
-    (let [sys (-> {::azure/blob-object-store {:storage-account storage-account
-                                              :container container
-                                              :prefix (str "xtdb.azure-test." (UUID/randomUUID))}}
-                  ig/prep
-                  ig/init)]
-      (try
-        (binding [*obj-store* (::azure/blob-object-store sys)]
-          (f *obj-store*))
-        (finally
-          (ig/halt! sys))))))
+(defn logged-in? []
+  (= 0 (:exit (sh/sh "az" "account" "show"))))
+
+(defn run-if-auth-available [f]
+  (cond
+    config-present? (f)
+
+    (not (cli-available?))
+    (log/warn "azure cli is unavailable and the auth env vars are not set: AZURE_CLIENT_ID, AZURE_CLIENT_SECRET, AZURE_TENANT_ID, AZURE_SUBSCRIPTION_ID")
+
+    (not (logged-in?))
+    (log/warn "azure cli appears to be available but you are not logged in, run `az login` before running the tests")
+
+    :else (f)))
+
+(t/use-fixtures :once run-if-auth-available)
+
+(defn object-store ^Closeable [prefix]
+  (->> (ig/prep-key ::azure/blob-object-store {:storage-account storage-account
+                                               :container container
+                                               :prefix (str "xtdb.azure-test." prefix)})
+       (ig/init-key ::azure/blob-object-store)))
+
+(t/deftest ^:azure put-delete-test
+  (let [os (object-store (random-uuid))]
+    (os-test/test-put-delete os)))
+
+(t/deftest ^:azure range-test
+  (let [os (object-store (random-uuid))]
+    (os-test/test-range os)))
+
+(t/deftest ^:azure list-test
+  (let [os (object-store (random-uuid))]
+    (os-test/test-list-objects os)))
 
 (t/deftest ^:azure test-eventhub-log
-  (log/info "Azure config present (AZURE_CLIENT_ID, AZURE_CLIENT_SECRET, AZURE_SUBSCRIPTION_ID & AZURE_TENANT_ID set)? - " config-present?)
-  (when config-present?
-    (with-open [node (node/start-node {::azure/event-hub-log {:namespace eventhub-namespace
-                                                              :resource-group-name resource-group-name
-                                                              :event-hub-name (str "xtdb.azure-test-hub." (UUID/randomUUID))
-                                                              :create-event-hub? true
-                                                              :retention-period-in-days 1}})]
-      (xt/submit-tx node [[:put :xt_docs {:xt/id :foo}]])
-      (t/is (= [{:id :foo}]
-               (xt/q node '{:find [id]
-                            :where [($ :xt_docs [{:xt/id id}])]}))))))
+  (with-open [node (node/start-node {::azure/event-hub-log {:namespace eventhub-namespace
+                                                            :resource-group-name resource-group-name
+                                                            :event-hub-name (str "xtdb.azure-test-hub." (UUID/randomUUID))
+                                                            :create-event-hub? true
+                                                            :retention-period-in-days 1}})]
+    (xt/submit-tx node [[:put :xt_docs {:xt/id :foo}]])
+    (t/is (= [{:id :foo}]
+             (xt/q node '{:find [id]
+                          :where [($ :xt_docs [{:xt/id id}])]})))))

@@ -5,6 +5,7 @@
             [clojure.spec.alpha :as s])
   (:import java.io.Closeable
            java.nio.ByteBuffer
+           (java.nio.channels FileChannel$MapMode)
            [java.nio.file CopyOption Files FileSystems FileVisitOption LinkOption OpenOption Path StandardOpenOption]
            [java.util.concurrent CompletableFuture ConcurrentSkipListMap Executors ExecutorService]
            java.util.function.Supplier
@@ -18,6 +19,15 @@
    "Asynchonously returns the given object in a ByteBuffer
     If the object doesn't exist, the CF completes with an IllegalStateException.")
 
+  (^java.util.concurrent.CompletableFuture #_<ByteBuffer> getObjectRange
+    [^String k ^long start ^long len]
+    "Asynchonously returns the given len bytes starting from start (inclusive) of the object in a ByteBuffer
+    If the object doesn't exist, the CF completes with an IllegalStateException.
+
+    Exceptions are thrown immediately if the start is negative, or the len is zero or below. This is
+    to ensure consistent boundary behaviour between different object store implementations. You should check for these conditions and deal with them
+    before calling getObjectRange.")
+
   (^java.util.concurrent.CompletableFuture #_<Path> getObject [^String k, ^java.nio.file.Path out-path]
    "Asynchronously writes the object to the given path.
     If the object doesn't exist, the CF completes with an IllegalStateException.")
@@ -26,6 +36,12 @@
   (^java.lang.Iterable #_<String> listObjects [])
   (^java.lang.Iterable #_<String> listObjects [^String dir])
   (^java.util.concurrent.CompletableFuture #_<?> deleteObject [^String k]))
+
+(defn ensure-shared-range-oob-behaviour [^long i ^long len]
+  (when (< i 0)
+    (throw (IndexOutOfBoundsException. "Negative range indexes are not permitted")))
+  (when (< len 1)
+    (throw (IllegalArgumentException. "Negative or zero range requests are not permitted"))))
 
 (defn obj-missing-exception [k]
   (IllegalStateException. (format "Object '%s' doesn't exist." k)))
@@ -50,6 +66,13 @@
                                                                                   StandardOpenOption/TRUNCATE_EXISTING}))]
              (.write ch buf)
              out-path))))))
+
+  (getObjectRange [_this k start len]
+    (ensure-shared-range-oob-behaviour start len)
+    (CompletableFuture/completedFuture
+      (let [^ByteBuffer buf (or (.get os k) (throw (obj-missing-exception k)))
+            new-pos (+ (.position buf) (int start))]
+        (.slice buf new-pos (int len)))))
 
   (putObject [_this k buf]
     (.putIfAbsent os k (.slice buf))
@@ -78,6 +101,28 @@
 
 (derive ::memory-object-store :xtdb/object-store)
 
+(comment
+
+  (def mos
+    (->> (ig/prep-key ::memory-object-store {})
+         (ig/init-key ::memory-object-store)))
+
+  (.close mos)
+
+  @(.putObject mos "foo.txt" (ByteBuffer/wrap (.getBytes "hello, world!")))
+
+  (let [buf @(.getObject mos "foo.txt")
+        arr (byte-array (.remaining buf))]
+    (.get buf arr)
+    (String. arr))
+
+  (let [buf @(.getObjectRange mos "foo.txt" 2 5)
+        arr (byte-array (.remaining buf))]
+    (.get buf arr)
+    (String. arr))
+
+  )
+
 (deftype FileSystemObjectStore [^Path root-path, ^ExecutorService pool]
   ObjectStore
   (getObject [_this k]
@@ -87,6 +132,15 @@
          (throw (obj-missing-exception k)))
 
        (util/->mmap-path from-path))))
+
+  (getObjectRange [_this k start len]
+    (ensure-shared-range-oob-behaviour start len)
+    (CompletableFuture/completedFuture
+      (let [from-path (.resolve root-path k)]
+        (when-not (util/path-exists from-path)
+          (throw (obj-missing-exception k)))
+
+        (util/->mmap-path from-path FileChannel$MapMode/READ_ONLY start len))))
 
   (getObject [_this k out-path]
     (CompletableFuture/supplyAsync
@@ -152,3 +206,25 @@
 
 (defmethod ig/halt-key! ::file-system-object-store [_ ^FileSystemObjectStore os]
   (.close os))
+
+(comment
+
+  (def fos
+    (->> (ig/prep-key ::file-system-object-store {:root-path "tmp/fos"})
+         (ig/init-key ::file-system-object-store)))
+
+  (.close fos)
+
+  @(.putObject fos "foo.txt" (ByteBuffer/wrap (.getBytes "hello, world!")))
+
+  (let [buf @(.getObject fos "foo.txt")
+        arr (byte-array (.remaining buf))]
+    (.get buf arr)
+    (String. arr))
+
+  (let [buf @(.getObjectRange fos "foo.txt" 2 5)
+        arr (byte-array (.remaining buf))]
+    (.get buf arr)
+    (String. arr))
+
+  )
