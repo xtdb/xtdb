@@ -1,0 +1,230 @@
+{
+  "schema" : {
+    "fields" : [{
+      "name" : "xt$iid",
+      "nullable" : false,
+      "type" : {
+        "name" : "fixedsizebinary",
+        "byteWidth" : 16
+      },
+      "children" : [ ]
+    },{
+      "name" : "xt$valid_from",
+      "nullable" : true,
+      "type" : {
+        "name" : "timestamp",
+        "unit" : "MICROSECOND",
+        "timezone" : "UTC"
+      },
+      "children" : [ ]
+    },{
+      "name" : "xt$valid_to",
+      "nullable" : true,
+      "type" : {
+        "name" : "timestamp",
+        "unit" : "MICROSECOND",
+        "timezone" : "UTC"
+      },
+      "children" : [ ]
+    },{
+      "name" : "xt$system_from",
+      "nullable" : true,
+      "type" : {
+        "name" : "timestamp",
+        "unit" : "MICROSECOND",
+        "timezone" : "UTC"
+      },
+      "children" : [ ]
+    },{
+      "name" : "xt$system_to",
+      "nullable" : true,
+      "type" : {
+        "name" : "timestamp",
+        "unit" : "MICROSECOND",
+        "timezone" : "UTC"
+      },
+      "children" : [ ]
+    },{
+      "name" : "xt$doc",
+      "nullable" : false,
+      "type" : {
+        "name" : "struct"
+      },
+      "children" : [{
+        "name" : "xt$id",
+        "nullable" : false,
+        "type" : {
+          "name" : "union",
+          "mode" : "Dense",
+          "typeIds" : [ ]
+        },
+        "children" : [{
+          "name" : "utf8",
+          "nullable" : false,
+          "type" : {
+            "name" : "utf8"
+          },
+          "children" : [ ]
+        }]
+      },{
+        "name" : "api_version",
+        "nullable" : false,
+        "type" : {
+          "name" : "union",
+          "mode" : "Dense",
+          "typeIds" : [ ]
+        },
+        "children" : [{
+          "name" : "utf8",
+          "nullable" : false,
+          "type" : {
+            "name" : "utf8"
+          },
+          "children" : [ ]
+        }]
+      },{
+        "name" : "manufacturer",
+        "nullable" : false,
+        "type" : {
+          "name" : "union",
+          "mode" : "Dense",
+          "typeIds" : [ ]
+        },
+        "children" : [{
+          "name" : "utf8",
+          "nullable" : false,
+          "type" : {
+            "name" : "utf8"
+          },
+          "children" : [ ]
+        }]
+      },{
+        "name" : "model",
+        "nullable" : false,
+        "type" : {
+          "name" : "union",
+          "mode" : "Dense",
+          "typeIds" : [ ]
+        },
+        "children" : [{
+          "name" : "utf8",
+          "nullable" : false,
+          "type" : {
+            "name" : "utf8"
+          },
+          "children" : [ ]
+        }]
+      },{
+        "name" : "os_name",
+        "nullable" : false,
+        "type" : {
+          "name" : "union",
+          "mode" : "Dense",
+          "typeIds" : [ ]
+        },
+        "children" : [{
+          "name" : "utf8",
+          "nullable" : false,
+          "type" : {
+            "name" : "utf8"
+          },
+          "children" : [ ]
+        }]
+      }]
+    }]
+  },
+  "batches" : [{
+    "count" : 2,
+    "columns" : [{
+      "name" : "xt$iid",
+      "count" : 2,
+      "VALIDITY" : [1,1],
+      "DATA" : ["248daaa010bf702848523e4fa63f996c","ef4f71005524e9af20ffaca545cde6e1"]
+    },{
+      "name" : "xt$valid_from",
+      "count" : 2,
+      "VALIDITY" : [1,1],
+      "DATA" : [1577923200000000,1577836800000000]
+    },{
+      "name" : "xt$valid_to",
+      "count" : 2,
+      "VALIDITY" : [0,0],
+      "DATA" : [0,0]
+    },{
+      "name" : "xt$system_from",
+      "count" : 2,
+      "VALIDITY" : [1,1],
+      "DATA" : [1577923200000000,1577836800000000]
+    },{
+      "name" : "xt$system_to",
+      "count" : 2,
+      "VALIDITY" : [0,0],
+      "DATA" : [0,0]
+    },{
+      "name" : "xt$doc",
+      "count" : 2,
+      "VALIDITY" : [1,1],
+      "children" : [{
+        "name" : "xt$id",
+        "count" : 2,
+        "TYPE_ID" : [0,0],
+        "OFFSET" : [0,1],
+        "children" : [{
+          "name" : "utf8",
+          "count" : 2,
+          "VALIDITY" : [1,1],
+          "OFFSET" : [0,22,44],
+          "DATA" : ["device-info-demo000001","device-info-demo000000"]
+        }]
+      },{
+        "name" : "api_version",
+        "count" : 2,
+        "TYPE_ID" : [0,0],
+        "OFFSET" : [0,1],
+        "children" : [{
+          "name" : "utf8",
+          "count" : 2,
+          "VALIDITY" : [1,1],
+          "OFFSET" : [0,2,4],
+          "DATA" : ["23","23"]
+        }]
+      },{
+        "name" : "manufacturer",
+        "count" : 2,
+        "TYPE_ID" : [0,0],
+        "OFFSET" : [0,1],
+        "children" : [{
+          "name" : "utf8",
+          "count" : 2,
+          "VALIDITY" : [1,1],
+          "OFFSET" : [0,6,12],
+          "DATA" : ["iobeam","iobeam"]
+        }]
+      },{
+        "name" : "model",
+        "count" : 2,
+        "TYPE_ID" : [0,0],
+        "OFFSET" : [0,1],
+        "children" : [{
+          "name" : "utf8",
+          "count" : 2,
+          "VALIDITY" : [1,1],
+          "OFFSET" : [0,7,12],
+          "DATA" : ["mustang","pinto"]
+        }]
+      },{
+        "name" : "os_name",
+        "count" : 2,
+        "TYPE_ID" : [0,0],
+        "OFFSET" : [0,1],
+        "children" : [{
+          "name" : "utf8",
+          "count" : 2,
+          "VALIDITY" : [1,1],
+          "OFFSET" : [0,5,10],
+          "DATA" : ["6.0.1","6.0.1"]
+        }]
+      }]
+    }]
+  }]
+}

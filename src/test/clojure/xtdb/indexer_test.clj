@@ -86,7 +86,7 @@
         last-tx-key (xtp/map->TransactionInstant {:tx-id 8165, :system-time (util/->instant #inst "2020-01-02")})]
     (util/delete-dir node-dir)
 
-    (with-open [node (tu/->local-node {:node-dir node-dir})]
+    (util/with-open [node (tu/->local-node {:node-dir node-dir})]
       (let [^BufferAllocator a (tu/component node :xtdb/allocator)
             ^ObjectStore os (tu/component node ::os/file-system-object-store)
             ^IBufferPool bp (tu/component node ::bp/buffer-pool)

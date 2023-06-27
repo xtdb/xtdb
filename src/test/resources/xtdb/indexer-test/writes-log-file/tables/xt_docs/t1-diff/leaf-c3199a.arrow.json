@@ -1,0 +1,163 @@
+{
+  "schema" : {
+    "fields" : [{
+      "name" : "xt$iid",
+      "nullable" : false,
+      "type" : {
+        "name" : "fixedsizebinary",
+        "byteWidth" : 16
+      },
+      "children" : [ ]
+    },{
+      "name" : "xt$valid_from",
+      "nullable" : true,
+      "type" : {
+        "name" : "timestamp",
+        "unit" : "MICROSECOND",
+        "timezone" : "UTC"
+      },
+      "children" : [ ]
+    },{
+      "name" : "xt$valid_to",
+      "nullable" : true,
+      "type" : {
+        "name" : "timestamp",
+        "unit" : "MICROSECOND",
+        "timezone" : "UTC"
+      },
+      "children" : [ ]
+    },{
+      "name" : "xt$system_from",
+      "nullable" : true,
+      "type" : {
+        "name" : "timestamp",
+        "unit" : "MICROSECOND",
+        "timezone" : "UTC"
+      },
+      "children" : [ ]
+    },{
+      "name" : "xt$system_to",
+      "nullable" : true,
+      "type" : {
+        "name" : "timestamp",
+        "unit" : "MICROSECOND",
+        "timezone" : "UTC"
+      },
+      "children" : [ ]
+    },{
+      "name" : "xt$doc",
+      "nullable" : false,
+      "type" : {
+        "name" : "struct"
+      },
+      "children" : [{
+        "name" : "xt$id",
+        "nullable" : false,
+        "type" : {
+          "name" : "union",
+          "mode" : "Dense",
+          "typeIds" : [ ]
+        },
+        "children" : [{
+          "name" : "utf8",
+          "nullable" : false,
+          "type" : {
+            "name" : "utf8"
+          },
+          "children" : [ ]
+        }]
+      },{
+        "name" : "month",
+        "nullable" : false,
+        "type" : {
+          "name" : "union",
+          "mode" : "Dense",
+          "typeIds" : [ ]
+        },
+        "children" : [{
+          "name" : "absent",
+          "nullable" : false,
+          "type" : {
+            "name" : "AbsentType"
+          },
+          "children" : [ ],
+          "metadata" : [{
+            "value" : "absent",
+            "key" : "ARROW:extension:name"
+          },{
+            "value" : "",
+            "key" : "ARROW:extension:metadata"
+          }]
+        },{
+          "name" : "utf8",
+          "nullable" : false,
+          "type" : {
+            "name" : "utf8"
+          },
+          "children" : [ ]
+        }]
+      }]
+    }]
+  },
+  "batches" : [{
+    "count" : 2,
+    "columns" : [{
+      "name" : "xt$iid",
+      "count" : 2,
+      "VALIDITY" : [1,1],
+      "DATA" : ["9e3f856e68998313827ff18dd4d88e78","d9c7fae2a04e047164936265ba33cf80"]
+    },{
+      "name" : "xt$valid_from",
+      "count" : 2,
+      "VALIDITY" : [1,1],
+      "DATA" : [1585699200000000,1577836800000000]
+    },{
+      "name" : "xt$valid_to",
+      "count" : 2,
+      "VALIDITY" : [0,0],
+      "DATA" : [0,0]
+    },{
+      "name" : "xt$system_from",
+      "count" : 2,
+      "VALIDITY" : [1,1],
+      "DATA" : [1578009600000000,1577836800000000]
+    },{
+      "name" : "xt$system_to",
+      "count" : 2,
+      "VALIDITY" : [0,0],
+      "DATA" : [0,0]
+    },{
+      "name" : "xt$doc",
+      "count" : 2,
+      "VALIDITY" : [1,1],
+      "children" : [{
+        "name" : "xt$id",
+        "count" : 2,
+        "TYPE_ID" : [0,0],
+        "OFFSET" : [0,1],
+        "children" : [{
+          "name" : "utf8",
+          "count" : 2,
+          "VALIDITY" : [1,1],
+          "OFFSET" : [0,3,6],
+          "DATA" : ["bar","foo"]
+        }]
+      },{
+        "name" : "month",
+        "count" : 2,
+        "TYPE_ID" : [1,0],
+        "OFFSET" : [0,0],
+        "children" : [{
+          "name" : "absent",
+          "count" : 1
+        },{
+          "name" : "utf8",
+          "count" : 1,
+          "VALIDITY" : [1],
+          "OFFSET" : [0,5],
+          "DATA" : ["april"]
+        }]
+      }]
+    }]
+  }]
+}

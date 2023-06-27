@@ -126,6 +126,7 @@
                           :xtdb/indexer {}
                           :xtdb.indexer/internal-id-manager {}
                           :xtdb/live-chunk {}
+                          :xtdb.indexer/live-index {}
                           :xtdb.indexer/log-indexer {}
                           :xtdb/ingester {}
                           :xtdb.metadata/metadata-manager {}
