@@ -5,7 +5,7 @@ executors:
   clojure:
     working_directory: ~/core2
     docker:
-      - image: clojure:openjdk-11-tools-deps
+      - image: clojure:openjdk-17-tools-deps
 
 parameters:
   run-slt:

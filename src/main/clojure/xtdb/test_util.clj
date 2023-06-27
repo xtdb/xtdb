@@ -1,6 +1,7 @@
 (ns xtdb.test-util
   (:require [clojure.spec.alpha :as s]
             [clojure.test :as t]
+            [juxt.clojars-mirrors.integrant.core :as ig]
             [xtdb.api.protocols :as api]
             [xtdb.client :as client]
             [xtdb.indexer :as idx]
@@ -61,6 +62,20 @@
   (util/with-open [node (node/start-node *node-opts*)]
     (binding [*node* node]
       (f))))
+
+(def ^:dynamic *sys*)
+
+(defn with-system [sys-opts]
+  (fn [f]
+    (let [sys (-> sys-opts
+                  (doto ig/load-namespaces)
+                  ig/prep
+                  ig/init)]
+      (try
+        (binding [*sys* sys]
+          (f))
+        (finally
+          (ig/halt! sys))))))
 
 (defn free-port ^long []
   (with-open [s (ServerSocket. 0)]

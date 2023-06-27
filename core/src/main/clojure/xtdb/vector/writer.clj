@@ -809,7 +809,7 @@
    (->writer (-> (types/col-type->field col-name col-type)
                  (.createVector allocator)))))
 
-(defn- ->rel-copier [^IRelationWriter rel-wtr, ^IIndirectRelation in-rel]
+(defn ->rel-copier ^xtdb.vector.IRowCopier [^IRelationWriter rel-wtr, ^IIndirectRelation in-rel]
   (let [wp (.writerPosition rel-wtr)
         copiers (vec (concat (for [^IIndirectVector in-vec in-rel]
                                (.rowCopier in-vec (.writerForName rel-wtr (.getName in-vec))))

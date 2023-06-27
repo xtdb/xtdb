@@ -27,7 +27,7 @@ allprojects {
 
     if (plugins.hasPlugin("java-library")) {
         java {
-            sourceCompatibility = JavaVersion.VERSION_11
+            sourceCompatibility = JavaVersion.VERSION_17
 
             withSourcesJar()
             withJavadocJar()

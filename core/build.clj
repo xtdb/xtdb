@@ -6,7 +6,7 @@
 (defn prep [_opts]
   (b/javac {:basis basis
             :src-dirs ["src/main/java"]
-            :javac-opts ["-source" "11" "-target" "11"
+            :javac-opts ["-source" "17" "-target" "17"
                          "-XDignore.symbol.file"
                          "-Xlint:all,-options,-path"
                          "-Werror"

@@ -2,13 +2,12 @@
   (:refer-clojure :exclude [with-open])
   (:require [clojure.java.io :as io]
             [clojure.spec.alpha :as s]
+            [clojure.string :as str]
             [clojure.tools.logging :as log]
             xtdb.api.protocols
-            [xtdb.error :as err]
-            [clojure.string :as str])
+            [xtdb.error :as err])
   (:import clojure.lang.MapEntry
-           xtdb.ICursor
-           [java.io ByteArrayOutputStream File OutputStream]
+           [java.io ByteArrayOutputStream File]
            java.lang.AutoCloseable
            java.lang.reflect.Method
            [java.net MalformedURLException URI URL]
@@ -19,7 +18,7 @@
            java.nio.file.attribute.FileAttribute
            [java.time Duration Instant LocalDate LocalDateTime LocalTime OffsetDateTime ZoneId ZonedDateTime]
            java.time.temporal.ChronoUnit
-           [java.util ArrayList Collections Date Iterator LinkedHashMap LinkedList Map Queue Set UUID WeakHashMap]
+           [java.util ArrayList Collections Date Iterator LinkedHashMap LinkedList Map Queue UUID WeakHashMap]
            [java.util.concurrent CompletableFuture ExecutionException ExecutorService Executors ThreadFactory TimeUnit]
            [java.util.function BiFunction Consumer Function Supplier]
            [org.apache.arrow.compression CommonsCompressionFactory]
@@ -29,7 +28,8 @@
            [org.apache.arrow.vector VectorLoader VectorSchemaRoot]
            [org.apache.arrow.vector.ipc ArrowFileWriter ArrowStreamWriter ArrowWriter]
            [org.apache.arrow.vector.ipc.message ArrowBlock ArrowFooter ArrowRecordBatch MessageSerializer]
-           org.roaringbitmap.RoaringBitmap))
+           org.roaringbitmap.RoaringBitmap
+           xtdb.ICursor))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -225,34 +225,27 @@
 
 (defn ->seekable-byte-channel ^java.nio.channels.SeekableByteChannel [^ByteBuffer buffer]
   (let [buffer (.slice buffer)]
-    (proxy [SeekableByteChannel] []
-      (isOpen []
-        true)
+    (reify SeekableByteChannel
+      (isOpen [_] true)
 
-      (close [])
+      (close [_])
 
-      (read [^ByteBuffer dst]
+      (^int read [_ ^ByteBuffer dst]
         (let [^ByteBuffer src (-> buffer (.slice) (.limit (.remaining dst)))]
           (.put dst src)
           (let [bytes-read (.position src)]
             (.position buffer (+ (.position buffer) bytes-read))
             bytes-read)))
 
-      (position
-        ([]
-         (.position buffer))
-        ([^long new-position]
-         (.position buffer new-position)
-         this))
+      (position [_] (.position buffer))
 
-      (size []
-        (.capacity buffer))
+      (^SeekableByteChannel position [this ^long new-position]
+        (.position buffer new-position)
+        this)
 
-      (write [src]
-        (throw (UnsupportedOperationException.)))
-
-      (truncate [size]
-        (throw (UnsupportedOperationException.))))))
+      (size [_] (.capacity buffer))
+      (write [_ src] (throw (UnsupportedOperationException.)))
+      (truncate [_ size] (throw (UnsupportedOperationException.))))))
 
 (defn enum->kw [^Enum enum-value]
   (-> (.name enum-value)
