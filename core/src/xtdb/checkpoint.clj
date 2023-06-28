@@ -203,6 +203,7 @@
   (cleanup-checkpoint [_ {:keys [tx cp-at]}]
     (let [cp-prefix (format "checkpoint-%s-%s" (::xt/tx-id tx) (xio/format-rfc3339-date cp-at))
           to-path (io/file (.toString root-path) cp-prefix)]
+      (xio/delete-file (str to-path ".edn"))
       (xio/delete-dir to-path))))
 
 (defn ->filesystem-checkpoint-store {::sys/args {:path {:spec ::sys/path, :required? true}}} [{:keys [path]}]
