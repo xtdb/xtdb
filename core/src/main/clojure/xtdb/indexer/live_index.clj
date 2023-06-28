@@ -77,9 +77,9 @@
 
 (defn- ->row-adder [^IRelationWriter rel]
   (let [wp (.writerPosition rel)]
-    (fn add-row [{:keys [^HashTrie t1]}]
+    (fn add-row [{:keys [^MemoryHashTrie t1]}]
       ;; TODO figure out what tries to update
-      {:t1 (-> ^HashTrie (or t1 (MemoryHashTrie/emptyTrie (->t1-key-adapter rel)))
+      {:t1 (-> ^MemoryHashTrie (or t1 (MemoryHashTrie/emptyTrie (->t1-key-adapter rel)))
                (.add (.getPosition wp)))})))
 
 (defn- wrap-writer ^xtdb.vector.IRelationWriter [^IRelationWriter rel-wtr, !tries]
@@ -130,7 +130,7 @@
                                    (accept [_ idx]
                                      (vswap! !new-static-tries update :t1
                                              (fn [t1]
-                                               (let [^HashTrie t1 (or t1 (MemoryHashTrie/emptyTrie (->t1-key-adapter static-rel)))]
+                                               (let [^MemoryHashTrie t1 (or t1 (MemoryHashTrie/emptyTrie (->t1-key-adapter static-rel)))]
                                                  (.add t1 (.copyRow copier idx))))))))))))
 
       (reset! !static-tries @!new-static-tries)))

@@ -35,11 +35,6 @@ public class ArrowHashTrie {
             this.branchVecIdx = branchVecIdx;
         }
 
-        @Override
-        public HashTrie add(int idx) {
-            throw new UnsupportedOperationException("read only trie");
-        }
-
         private HashTrie[] getChildren() {
             return IntStream.range(branchVec.getElementStartIndex(branchVecIdx), branchVec.getElementEndIndex(branchVecIdx))
                     .mapToObj(childIdx -> forIndex(branchElVec.get(childIdx)))
@@ -58,11 +53,6 @@ public class ArrowHashTrie {
 
         public Leaf(int leafVecIdx) {
             this.leafVecIdx = leafVecIdx;
-        }
-
-        @Override
-        public HashTrie add(int idx) {
-            throw new UnsupportedOperationException("read only trie");
         }
 
         @Override

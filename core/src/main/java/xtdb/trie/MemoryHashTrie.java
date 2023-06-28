@@ -4,11 +4,11 @@ import java.util.Arrays;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
-public final class MemoryHashTrie {
-    private MemoryHashTrie() {
-    }
+public interface MemoryHashTrie extends HashTrie {
 
-    public record Config(TrieKeys keys, int logLimit, int pageLimit) {
+    MemoryHashTrie add(int idx);
+
+    record Config(TrieKeys keys, int logLimit, int pageLimit) {
         public static class Builder {
             private final TrieKeys keys;
 
@@ -29,23 +29,23 @@ public final class MemoryHashTrie {
                 this.pageLimit = pageLimit;
             }
 
-            public HashTrie build() {
+            public MemoryHashTrie build() {
                 var trieConfig = new Config(keys, logLimit, pageLimit);
                 return new Leaf(trieConfig, 0, new int[0], new int[logLimit], 0);
             }
         }
     }
 
-    public static Config.Builder builder(TrieKeys keys) {
+    static Config.Builder builder(TrieKeys keys) {
         return new Config.Builder(keys);
     }
 
     @SuppressWarnings("unused")
-    public static HashTrie emptyTrie(TrieKeys keys) {
+    static MemoryHashTrie emptyTrie(TrieKeys keys) {
         return builder(keys).build();
     }
 
-    public record Branch(Config config, int level, HashTrie[] children) implements HashTrie {
+    record Branch(Config config, int level, MemoryHashTrie[] children) implements MemoryHashTrie {
 
         @Override
         public <R> R accept(Visitor<R> visitor) {
@@ -53,7 +53,7 @@ public final class MemoryHashTrie {
         }
 
         @Override
-        public HashTrie add(int idx) {
+        public MemoryHashTrie add(int idx) {
             var bucket = config.keys().groupFor(idx, level);
 
             var newChildren = IntStream.range(0, children.length)
@@ -66,13 +66,13 @@ public final class MemoryHashTrie {
                             child = child.add(idx);
                         }
                         return child;
-                    }).toArray(HashTrie[]::new);
+                    }).toArray(MemoryHashTrie[]::new);
 
             return new Branch(config, level, newChildren);
         }
     }
 
-    public record Leaf(Config config, int level, int[] data, int[] log, int logCount) implements HashTrie {
+    record Leaf(Config config, int level, int[] data, int[] log, int logCount) implements MemoryHashTrie {
 
         private int[] mergeSort(int[] data, int[] log, int logCount) {
             TrieKeys keys = config.keys();
@@ -150,7 +150,7 @@ public final class MemoryHashTrie {
         }
 
         @Override
-        public HashTrie add(int newIdx) {
+        public MemoryHashTrie add(int newIdx) {
             var data = this.data;
             var log = this.log;
             var logCount = this.logCount;
@@ -165,7 +165,7 @@ public final class MemoryHashTrie {
                 if (data.length > config.pageLimit()) {
                     var childNodes = idxBuckets(data, level)
                             .map(group -> group == null ? null : new MemoryHashTrie.Leaf(config, level + 1, group, new int[logLimit], 0))
-                            .toArray(HashTrie[]::new);
+                            .toArray(MemoryHashTrie[]::new);
 
                     return new Branch(config, level, childNodes);
                 }

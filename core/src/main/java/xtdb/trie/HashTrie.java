@@ -6,8 +6,6 @@ public interface HashTrie {
     int LEVEL_WIDTH = 1 << LEVEL_BITS;
     int LEVEL_MASK = LEVEL_WIDTH - 1;
 
-    HashTrie add(int idx);
-
     interface Visitor<R> {
         default R visitBranch(HashTrie[] children) {
             for (HashTrie child : children) {
