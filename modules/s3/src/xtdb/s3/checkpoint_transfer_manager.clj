@@ -114,14 +114,19 @@
         cp)))
   
   (cleanup-checkpoint [this {:keys [tx cp-at]}]
-                      (let [s3-dir (format "checkpoint-%s-%s" (::xt/tx-id tx) (xio/format-rfc3339-date cp-at))
-                            files (as-> (s3/list-objects this {:path s3-dir :recursive? true}) $
-                                    (keep (fn [[type arg]]
-                                            (when (= type :object)
-                                              arg)) $)
-                                    (vec $)
-                                    (conj $ s3-dir))]
-                        (s3/delete-objects this files)))
+    (let [s3-dir (format "checkpoint-%s-%s" (::xt/tx-id tx) (xio/format-rfc3339-date cp-at))]
+
+      ;; Delete EDN file first
+      (s3/delete-objects this [(str s3-dir ".edn")])
+
+      ;; List & delete directory contents
+      (let [files (as-> (s3/list-objects this {:path s3-dir :recursive? true}) $
+                      (keep (fn [[type arg]]
+                              (when (= type :object)
+                                arg)) $)
+                      (vec $)
+                      (conj $ s3-dir))]
+          (s3/delete-objects this files))))
 
   Closeable
   (close [_]
