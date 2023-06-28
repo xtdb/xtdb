@@ -21,15 +21,21 @@
 
 (t/use-fixtures :each with-live-index)
 
-(defn- render-trie [^HashTrie ht, ^ValueVector iid-vec]
-  (.accept ht
-           (reify HashTrie$Visitor
-             (visitBranch [visitor children]
-               (mapcat #(.accept ^HashTrie % visitor) children))
+(deftype TrieRenderer [^ArrowFileReader leaf-rdr, ^ValueVector iid-vec,
+                       ^:unsychronized-mutable ^int current-page-idx]
+  HashTrie$Visitor
+  (visitBranch [this children]
+    (mapcat #(.accept ^HashTrie % this) children))
 
-             (visitLeaf [_ leaf]
-               (->> (.toArray (.indices leaf))
-                    (mapv #(vec (.getObject iid-vec %))))))))
+  (visitLeaf [this page-idx idxs]
+    (when (and leaf-rdr (not= current-page-idx page-idx))
+      ;; would be good if ArrowFileReader accepted a page-idx...
+      (.loadRecordBatch leaf-rdr (.get (.getRecordBlocks leaf-rdr) page-idx)))
+
+    (set! (.current-page-idx this) page-idx)
+
+    (->> (or idxs (range 0 (.getValueCount iid-vec)))
+         (mapv #(vec (.getObject iid-vec %))))))
 
 (t/deftest test-t1-chunk
   (let [{^BufferAllocator allocator :xtdb/allocator
@@ -60,7 +66,7 @@
                             (.getVector))
                 {:keys [^HashTrie t1]} @!static-tries]
 
-            (t/is (= iid-bytes (render-trie t1 iid-vec)))))))
+            (t/is (= iid-bytes (.accept t1 (TrieRenderer. nil iid-vec -1))))))))
 
     (t/testing "finish chunk"
       (.finishChunk live-index 0)
@@ -71,5 +77,5 @@
                     leaf-rdr (ArrowFileReader. (util/->seekable-byte-channel leaf-buf) allocator)]
           (.loadNextBatch trie-rdr)
           (t/is (= iid-bytes
-                   (render-trie (ArrowHashTrie/from (.getVectorSchemaRoot trie-rdr) leaf-rdr)
-                                (.getVector (.getVectorSchemaRoot leaf-rdr) "xt$iid")))))))))
+                   (.accept (ArrowHashTrie/from (.getVectorSchemaRoot trie-rdr))
+                            (TrieRenderer. leaf-rdr (.getVector (.getVectorSchemaRoot leaf-rdr) "xt$iid") -1)))))))))

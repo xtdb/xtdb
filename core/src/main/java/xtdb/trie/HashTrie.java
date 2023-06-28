@@ -1,7 +1,5 @@
 package xtdb.trie;
 
-import java.util.stream.IntStream;
-
 public interface HashTrie {
 
     int LEVEL_BITS = 4;
@@ -9,16 +7,6 @@ public interface HashTrie {
     int LEVEL_MASK = LEVEL_WIDTH - 1;
 
     HashTrie add(int idx);
-
-    interface Leaf {
-        int size();
-
-        int get(int idx);
-
-        default IntStream indices() {
-            return IntStream.range(0, size()).map(this::get);
-        }
-    }
 
     interface Visitor<R> {
         default R visitBranch(HashTrie[] children) {
@@ -29,7 +17,7 @@ public interface HashTrie {
             return null;
         }
 
-        R visitLeaf(Leaf leaf);
+        R visitLeaf(int pageIdx, int[] selection);
     }
 
     <R> R accept(Visitor<R> visitor);

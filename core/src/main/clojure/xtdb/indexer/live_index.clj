@@ -5,13 +5,12 @@
             xtdb.object-store
             [xtdb.types :as types]
             [xtdb.util :as util]
-            [xtdb.vector.indirect :as iv]
             [xtdb.vector.writer :as vw])
   (:import (java.lang AutoCloseable)
            (java.util Arrays HashMap Map)
            (java.util.concurrent CompletableFuture)
            (java.util.concurrent.atomic AtomicInteger)
-           (java.util.function BiConsumer Consumer Function IntConsumer)
+           (java.util.function BiConsumer Function IntConsumer)
            (java.util.stream IntStream)
            (org.apache.arrow.memory BufferAllocator)
            [org.apache.arrow.memory.util ArrowBufPointer]
@@ -19,9 +18,8 @@
            (org.apache.arrow.vector.types.pojo ArrowType$Union Schema)
            org.apache.arrow.vector.types.UnionMode
            (xtdb.api.protocols TransactionInstant)
-           (xtdb.buffer_pool IBufferPool)
            (xtdb.object_store ObjectStore)
-           (xtdb.trie HashTrie HashTrie$Leaf HashTrie$Visitor TrieKeys MemoryHashTrie)
+           (xtdb.trie HashTrie HashTrie$Visitor MemoryHashTrie TrieKeys)
            (xtdb.vector IIndirectRelation IIndirectVector IRelationWriter IRowCopier)))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
@@ -126,8 +124,8 @@
                  (visitBranch [visitor children]
                    (run! #(.accept ^HashTrie % visitor) children))
 
-                 (visitLeaf [_ leaf]
-                   (-> (.indices leaf)
+                 (visitLeaf [_ _page-idx idxs]
+                   (-> (Arrays/stream idxs)
                        (.forEach (reify IntConsumer
                                    (accept [_ idx]
                                      (vswap! !new-static-tries update :t1
@@ -196,8 +194,8 @@
                                          (.endList branch-wtr)
                                          (.endRow t1-trie-wtr)))
 
-                                     (visitLeaf [_ leaf]
-                                       (-> (.indices leaf)
+                                     (visitLeaf [_ _page-idx idxs]
+                                       (-> (Arrays/stream idxs)
                                            (.forEach (reify IntConsumer
                                                        (accept [_ idx]
                                                          (.copyRow copier idx)))))

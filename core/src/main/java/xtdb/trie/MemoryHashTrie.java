@@ -178,22 +178,7 @@ public final class MemoryHashTrie {
         public <R> R accept(Visitor<R> visitor) {
             var data = mergeSort(this.data, sortLog(log, logCount), logCount);
 
-            return visitor.visitLeaf(new Leaf() {
-                @Override
-                public int size() {
-                    return data.length;
-                }
-
-                @Override
-                public int get(int idx) {
-                    return data[idx];
-                }
-
-                @Override
-                public IntStream indices() {
-                    return Arrays.stream(data);
-                }
-            });
+            return visitor.visitLeaf(-1, data);
         }
     }
 }
