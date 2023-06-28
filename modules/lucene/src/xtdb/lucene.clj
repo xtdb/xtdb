@@ -281,6 +281,10 @@
       (save-checkpoint [_ dir]
         (.commit index-writer)
 
+        ;; Regardless of checkpointer behaviour, want to _always_ delete dir prior to making a copy of
+        ;; the snapshots to it, otherwise we see file clashes & errors.
+        (xio/delete-dir dir)
+
         (let [snapshot (.snapshot snapshotter)]
           (try
             (when-let [tx-id (user-data->tx-id (.getUserData snapshot))]

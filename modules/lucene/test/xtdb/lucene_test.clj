@@ -411,6 +411,27 @@
                 rdr (DirectoryReader/open dir)]
       (t/is (= 1 (.numDocs rdr))))))
 
+(t/deftest test-checkpoint-subsequent-calls
+  (fix/with-tmp-dirs #{lucene-dir cp-dir}
+    (with-open [node (xtdb.api/start-node {::l/lucene-store {:db-dir lucene-dir}})]
+      (fix/submit+await-tx node [[::xt/put {:xt/id :foo, :foo "foo"}]])
+
+      (let [index-writer (-> @(:!system node)
+                             (get-in [::l/lucene-store :index-writer]))
+            src (#'l/checkpoint-src index-writer)]
+
+        (t/testing "first call to save checkpoints should complete without incident"
+          (cp/save-checkpoint src cp-dir)
+          (with-open [dir (FSDirectory/open (.toPath cp-dir))
+                      rdr (DirectoryReader/open dir)]
+            (t/is (= 1 (.numDocs rdr)))))
+
+        (t/testing "second call to save checkpoints should complete without incident (should clear files before saving to dir)"
+          (cp/save-checkpoint src cp-dir)
+          (with-open [dir (FSDirectory/open (.toPath cp-dir))
+                      rdr (DirectoryReader/open dir)]
+            (t/is (= 1 (.numDocs rdr)))))))))
+
 (t/deftest test-cardinality-returned-by-search-results-a-v
   (submit+await-tx (for [n (range 1000)] [::xt/put {:xt/id n, :foo "bar"}]))
   (with-open [db (xt/open-db *api*)]
