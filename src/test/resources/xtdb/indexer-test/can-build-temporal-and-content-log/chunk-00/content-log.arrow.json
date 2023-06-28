@@ -1,0 +1,289 @@
+{
+  "schema" : {
+    "fields" : [{
+      "name" : "documents",
+      "nullable" : false,
+      "type" : {
+        "name" : "union",
+        "mode" : "Dense",
+        "typeIds" : [ ]
+      },
+      "children" : [{
+        "name" : "hello",
+        "nullable" : false,
+        "type" : {
+          "name" : "struct"
+        },
+        "children" : [{
+          "name" : "xt$id",
+          "nullable" : false,
+          "type" : {
+            "name" : "union",
+            "mode" : "Dense",
+            "typeIds" : [ ]
+          },
+          "children" : [{
+            "name" : "uuid",
+            "nullable" : false,
+            "type" : {
+              "name" : "UuidType"
+            },
+            "children" : [ ],
+            "metadata" : [{
+              "value" : "uuid",
+              "key" : "ARROW:extension:name"
+            },{
+              "value" : "",
+              "key" : "ARROW:extension:metadata"
+            }]
+          }]
+        },{
+          "name" : "a",
+          "nullable" : false,
+          "type" : {
+            "name" : "union",
+            "mode" : "Dense",
+            "typeIds" : [ ]
+          },
+          "children" : [{
+            "name" : "i64",
+            "nullable" : false,
+            "type" : {
+              "name" : "int",
+              "bitWidth" : 64,
+              "isSigned" : true
+            },
+            "children" : [ ]
+          }]
+        }]
+      },{
+        "name" : "world",
+        "nullable" : false,
+        "type" : {
+          "name" : "struct"
+        },
+        "children" : [{
+          "name" : "xt$id",
+          "nullable" : false,
+          "type" : {
+            "name" : "union",
+            "mode" : "Dense",
+            "typeIds" : [ ]
+          },
+          "children" : [{
+            "name" : "uuid",
+            "nullable" : false,
+            "type" : {
+              "name" : "UuidType"
+            },
+            "children" : [ ],
+            "metadata" : [{
+              "value" : "uuid",
+              "key" : "ARROW:extension:name"
+            },{
+              "value" : "",
+              "key" : "ARROW:extension:metadata"
+            }]
+          }]
+        },{
+          "name" : "b",
+          "nullable" : false,
+          "type" : {
+            "name" : "union",
+            "mode" : "Dense",
+            "typeIds" : [ ]
+          },
+          "children" : [{
+            "name" : "i64",
+            "nullable" : false,
+            "type" : {
+              "name" : "int",
+              "bitWidth" : 64,
+              "isSigned" : true
+            },
+            "children" : [ ]
+          }]
+        }]
+      },{
+        "name" : "foo",
+        "nullable" : false,
+        "type" : {
+          "name" : "struct"
+        },
+        "children" : [{
+          "name" : "xt$id",
+          "nullable" : false,
+          "type" : {
+            "name" : "union",
+            "mode" : "Dense",
+            "typeIds" : [ ]
+          },
+          "children" : [{
+            "name" : "i64",
+            "nullable" : false,
+            "type" : {
+              "name" : "int",
+              "bitWidth" : 64,
+              "isSigned" : true
+            },
+            "children" : [ ]
+          }]
+        },{
+          "name" : "bar",
+          "nullable" : false,
+          "type" : {
+            "name" : "union",
+            "mode" : "Dense",
+            "typeIds" : [ ]
+          },
+          "children" : [{
+            "name" : "i64",
+            "nullable" : false,
+            "type" : {
+              "name" : "int",
+              "bitWidth" : 64,
+              "isSigned" : true
+            },
+            "children" : [ ]
+          }]
+        },{
+          "name" : "toto",
+          "nullable" : false,
+          "type" : {
+            "name" : "union",
+            "mode" : "Dense",
+            "typeIds" : [ ]
+          },
+          "children" : [{
+            "name" : "utf8",
+            "nullable" : false,
+            "type" : {
+              "name" : "utf8"
+            },
+            "children" : [ ]
+          },{
+            "name" : "absent",
+            "nullable" : false,
+            "type" : {
+              "name" : "AbsentType"
+            },
+            "children" : [ ],
+            "metadata" : [{
+              "value" : "absent",
+              "key" : "ARROW:extension:name"
+            },{
+              "value" : "",
+              "key" : "ARROW:extension:metadata"
+            }]
+          }]
+        }]
+      }]
+    }]
+  },
+  "batches" : [{
+    "count" : 6,
+    "columns" : [{
+      "name" : "documents",
+      "count" : 6,
+      "TYPE_ID" : [0,1,1,2,2,2],
+      "OFFSET" : [0,0,1,0,1,2],
+      "children" : [{
+        "name" : "hello",
+        "count" : 1,
+        "VALIDITY" : [1],
+        "children" : [{
+          "name" : "xt$id",
+          "count" : 1,
+          "TYPE_ID" : [0],
+          "OFFSET" : [0],
+          "children" : [{
+            "name" : "uuid",
+            "count" : 1,
+            "VALIDITY" : [1],
+            "DATA" : ["cb8815ee85f74c61a8032ea1c949cf8d"]
+          }]
+        },{
+          "name" : "a",
+          "count" : 1,
+          "TYPE_ID" : [0],
+          "OFFSET" : [0],
+          "children" : [{
+            "name" : "i64",
+            "count" : 1,
+            "VALIDITY" : [1],
+            "DATA" : ["1"]
+          }]
+        }]
+      },{
+        "name" : "world",
+        "count" : 2,
+        "VALIDITY" : [1,1],
+        "children" : [{
+          "name" : "xt$id",
+          "count" : 2,
+          "TYPE_ID" : [0,0],
+          "OFFSET" : [0,1],
+          "children" : [{
+            "name" : "uuid",
+            "count" : 2,
+            "VALIDITY" : [1,1],
+            "DATA" : ["424f5622c8264deda5dbe2144d665c38","424f5622c8264deda5dbe2144d665c38"]
+          }]
+        },{
+          "name" : "b",
+          "count" : 2,
+          "TYPE_ID" : [0,0],
+          "OFFSET" : [0,1],
+          "children" : [{
+            "name" : "i64",
+            "count" : 2,
+            "VALIDITY" : [1,1],
+            "DATA" : ["2","3"]
+          }]
+        }]
+      },{
+        "name" : "foo",
+        "count" : 3,
+        "VALIDITY" : [1,1,1],
+        "children" : [{
+          "name" : "xt$id",
+          "count" : 3,
+          "TYPE_ID" : [0,0,0],
+          "OFFSET" : [0,1,2],
+          "children" : [{
+            "name" : "i64",
+            "count" : 3,
+            "VALIDITY" : [1,1,1],
+            "DATA" : ["1","1","2"]
+          }]
+        },{
+          "name" : "bar",
+          "count" : 3,
+          "TYPE_ID" : [0,0,0],
+          "OFFSET" : [0,1,2],
+          "children" : [{
+            "name" : "i64",
+            "count" : 3,
+            "VALIDITY" : [1,1,1],
+            "DATA" : ["1","2","2"]
+          }]
+        },{
+          "name" : "toto",
+          "count" : 3,
+          "TYPE_ID" : [0,0,1],
+          "OFFSET" : [0,1,0],
+          "children" : [{
+            "name" : "utf8",
+            "count" : 2,
+            "VALIDITY" : [1,1],
+            "OFFSET" : [0,4,8],
+            "DATA" : ["toto","toto"]
+          },{
+            "name" : "absent",
+            "count" : 1
+          }]
+        }]
+      }]
+    }]
+  }]
+}

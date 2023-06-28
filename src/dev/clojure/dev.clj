@@ -104,7 +104,7 @@
       (let [db (ingest/snapshot (tu/component node :xtdb/ingester))]
         (time (tu/query-ra @!q db))))))
 
-(defn- read-arrow-file [^Path path]
+(defn read-arrow-file [^Path path]
   (reify clojure.lang.IReduceInit
     (reduce [_ f init]
       (with-open [al (RootAllocator.)

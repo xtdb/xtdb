@@ -14,6 +14,7 @@ public interface IRelationWriter extends AutoCloseable, Iterable<Map.Entry<Strin
      */
     IWriterPosition writerPosition();
 
+    void startRow();
     void endRow();
 
     /**

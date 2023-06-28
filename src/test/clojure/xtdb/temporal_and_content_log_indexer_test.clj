@@ -6,12 +6,8 @@
             [xtdb.object-store :as os]
             [xtdb.test-json :as tj]
             [xtdb.test-util :as tu]
-            [xtdb.util :as util]
-            [xtdb.vector.indirect :as iv])
-  (:import (java.nio.file Path)
-           (java.time Duration)
-           (org.apache.arrow.memory RootAllocator)
-           (org.apache.arrow.vector.ipc ArrowFileReader)
+            [xtdb.util :as util])
+  (:import (java.time Duration)
            (xtdb.object_store ObjectStore)))
 
 (t/use-fixtures :once tu/with-allocator)
@@ -23,38 +19,14 @@
     [:put :world {:xt/id #uuid "424f5622-c826-4ded-a5db-e2144d665c38" :b 3}]]
    [[:evict :world #uuid "424f5622-c826-4ded-a5db-e2144d665c38"]]
    ;; sql
-   [[:sql "INSERT INTO foo (xt$id, bar) VALUES (1, 1)"]
+   [[:sql "INSERT INTO foo (xt$id, bar, toto) VALUES (1, 1, 'toto')"]
     [:sql "UPDATE foo SET bar = 2 WHERE foo.xt$id = 1"]
     [:sql "DELETE FROM foo WHERE foo.bar = 2"]
-    ;; TODO this op doesn't show up
-    [:sql "ERASE FROM foo WHERE foo.xt$id = 1"]]
+    [:sql "INSERT INTO foo (xt$id, bar) VALUES (2, 2)"]]
+   ;; sql evict
+   [[:sql "ERASE FROM foo WHERE foo.xt$id = 2"]]
    ;; abort
    [[:sql "INSERT INTO foo (xt$id, xt$valid_from, xt$valid_to) VALUES (1, DATE '2020-01-01', DATE '2019-01-01')"]]])
-
-
-(defn- read-arrow-file [^Path path]
-  (reify clojure.lang.IReduceInit
-    (reduce [_ f init]
-      (with-open [al (RootAllocator.)
-                  ch (util/->file-channel path)
-                  rdr (ArrowFileReader. ch al)]
-        (.initialize rdr)
-        (loop [v init]
-          (cond
-            (reduced? v) (unreduced v)
-            (.loadNextBatch rdr) (recur (f v (iv/rel->rows (iv/<-root (.getVectorSchemaRoot rdr)))))
-            :else v))))))
-
-(comment
-  (.mkdirs (io/file "src/test/resources/xtdb/indexer-test/can-build-temporal-and-content-log/objects/chunk-00/temporal-log.arrow"))
-  (.exists (io/file "src/test/resources/xtdb/indexer-test/can-build-temporal-and-content-log/"))
-  (.exists (io/file "target/can-build-temporal-and-content-log/"))
-  (.exists (io/file "src/test/resources/xtdb/indexer-test/can-build-temporal-and-content-log/objects/chunk-00/temporal-log.arrow"))
-
-  (->> (read-arrow-file (.toPath (io/file "target/can-build-temporal-and-content-log/objects/chunk-00/temporal-log.arrow")))
-       (into [] cat))
-
-  )
 
 (t/deftest can-build-temporal-and-content-log
   (let [node-dir (util/->path "target/can-build-temporal-and-content-log")]
@@ -70,7 +42,25 @@
 
         (let [objects-list (->> (.listObjects os "chunk-00/") (filter #(str/ends-with? % "/temporal-log.arrow")))]
           (t/is (= 1 (count objects-list)))
-          (t/is (= ["chunk-00/temporal-log.arrow"] objects-list))))
+          (t/is (= ["chunk-00/temporal-log.arrow"] objects-list)))
+
+        (let [objects-list (->> (.listObjects os "chunk-00/") (filter #(str/ends-with? % "/content-log.arrow")))]
+          (t/is (= 1 (count objects-list)))
+          (t/is (= ["chunk-00/content-log.arrow"] objects-list))))
 
       (tj/check-json (.toPath (io/as-file (io/resource "xtdb/indexer-test/can-build-temporal-and-content-log") ) )
-                     (.resolve node-dir "objects")))))
+                     (.resolve node-dir "objects")
+                     #".*-log.arrow"))))
+
+
+(comment
+  (do (util/delete-dir (.toPath (io/file "src/test/resources/xtdb/indexer-test/can-build-temporal-and-content-log/")))
+      (.mkdirs (io/file "src/test/resources/xtdb/indexer-test/can-build-temporal-and-content-log/")))
+
+  (require 'dev)
+
+  (->> (dev/read-arrow-file (.toPath (io/file "target/can-build-temporal-and-content-log/objects/chunk-00/temporal-log.arrow")))
+       (into [] cat))
+
+  (->> (dev/read-arrow-file (.toPath (io/file "target/can-build-temporal-and-content-log/objects/chunk-00/content-log.arrow")))
+       (into [] cat)))

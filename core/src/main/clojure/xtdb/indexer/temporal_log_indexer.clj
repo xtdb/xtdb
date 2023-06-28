@@ -4,7 +4,6 @@
    [xtdb.blocks :as blocks]
    [xtdb.types :as types]
    [xtdb.util :as util]
-   [xtdb.vector :as vec]
    [xtdb.vector.writer :as vw])
   (:import
    (java.io Closeable)
@@ -17,9 +16,23 @@
    (org.apache.arrow.vector.types UnionMode)
    (org.apache.arrow.vector.types.pojo ArrowType$Union Schema)
    (xtdb ICursor)
-   (xtdb.indexer.log_indexer ILogIndexer ILogOpIndexer)
-   (xtdb.object_store ObjectStore)
-   (xtdb.vector IVectorWriter)))
+   (xtdb.object_store ObjectStore)))
+
+#_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
+(definterface ILogOpIndexer2
+  (^void logPut [^bytes iid, ^long rowId, ^long app-timeStart, ^long app-timeEnd])
+  (^void logDelete [^bytes iid, ^long app-timeStart, ^long app-timeEnd])
+  (^void logEvict [^bytes iid])
+  (^void commit [])
+  (^void abort []))
+
+#_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
+(definterface ILogIndexer2
+  (^xtdb.indexer.temporal_log_indexer.ILogOpIndexer2 startTx [^xtdb.api.protocols.TransactionInstant txKey])
+  (^void finishBlock [])
+  (^java.util.concurrent.CompletableFuture finishChunk [^long chunkIdx])
+  (^void nextChunk [])
+  (^void close []))
 
 (defn- ->log-obj-key [chunk-idx]
   (format "chunk-%s/temporal-log.arrow" (util/->lex-hex-string chunk-idx)))
@@ -34,9 +47,9 @@
 (def temporal-log-schema
   (Schema. [(types/col-type->field "tx-id" :i64)
             (types/col-type->field "system-time" types/temporal-col-type)
-            (types/->field "tx-ops" types/list-type false
-                           ;; a null value indicates an abort
-                           (types/->field "$data" (ArrowType$Union. UnionMode/Dense (int-array (range 3))) true
+            ;; a null value indicates an abort
+            (types/->field "tx-ops" types/list-type true
+                           (types/->field "$data" (ArrowType$Union. UnionMode/Dense (int-array (range 3))) false
                                           (types/col-type->field "put" [:struct {'iid [:fixed-size-binary 16]
                                                                                  'row-id :i64
                                                                                  'valid-from nullable-inst-type
@@ -45,9 +58,6 @@
                                                                                     'valid-from nullable-inst-type
                                                                                     'valid-to nullable-inst-type}])
                                           (types/col-type->field "evict" [:struct {'iid [:fixed-size-binary 16]}])))]))
-
-(defn long->byte-hash [^long l]
-  (byte-array 16 (.getBytes (Long/toHexString l))))
 
 (defmethod ig/init-key :xtdb.indexer/temporal-log-indexer [_ {:keys [^BufferAllocator allocator, ^ObjectStore object-store]}]
   (let [log-root (VectorSchemaRoot/create temporal-log-schema allocator)
@@ -79,16 +89,16 @@
         block-row-counts (ArrayList.)
         !block-row-count (AtomicInteger.)]
 
-    (reify ILogIndexer
+    (reify ILogIndexer2
       (startTx [_ tx-key]
         (.writeLong tx-id-wtr (.tx-id tx-key))
         (vw/write-value! (.system-time tx-key) system-time-wtr)
 
         (.startList tx-ops-wtr)
-        (reify ILogOpIndexer
+        (reify ILogOpIndexer2
           (logPut [_ iid row-id app-time-start app-time-end]
             (.startStruct put-wtr)
-            (.writeBytes put-iid-wtr (ByteBuffer/wrap (long->byte-hash iid)))
+            (.writeBytes put-iid-wtr (ByteBuffer/wrap iid))
             (.writeLong put-row-id-wtr row-id)
             (.writeLong put-vf-wtr app-time-start)
             (.writeLong put-vt-wtr app-time-end)
@@ -96,14 +106,14 @@
 
           (logDelete [_ iid app-time-start app-time-end]
             (.startStruct delete-wtr)
-            (.writeBytes delete-iid-wtr (ByteBuffer/wrap (long->byte-hash iid)))
+            (.writeBytes delete-iid-wtr (ByteBuffer/wrap iid))
             (.writeLong delete-vf-wtr app-time-start)
             (.writeLong delete-vt-wtr app-time-end)
             (.endStruct delete-wtr))
 
           (logEvict [_ iid]
             (.startStruct evict-wtr)
-            (.writeBytes evict-iid-wtr (ByteBuffer/wrap (long->byte-hash iid)))
+            (.writeBytes evict-iid-wtr (ByteBuffer/wrap iid))
             (.endStruct evict-wtr))
 
           (commit [_]
@@ -149,7 +159,5 @@
 
       Closeable
       (close [_]
-        (.close transient-log-writer)
-        (.close log-writer)
         (.close transcient-log-root)
         (.close log-root)))))

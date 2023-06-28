@@ -10,15 +10,13 @@
            (java.time Duration Instant LocalDate LocalTime Period ZoneId)
            java.util.concurrent.ConcurrentHashMap
            java.util.function.Function
-           (org.apache.arrow.vector BitVector DateDayVector DateMilliVector DecimalVector Decimal256Vector IntervalDayVector IntervalMonthDayNanoVector IntervalYearVector TimeMicroVector TimeMilliVector TimeNanoVector TimeSecVector TimeStampMicroTZVector TimeStampMilliTZVector TimeStampNanoTZVector TimeStampSecTZVector ValueVector VarBinaryVector VarCharVector)
+           (org.apache.arrow.vector BitVector DateDayVector DateMilliVector IntervalDayVector IntervalMonthDayNanoVector IntervalYearVector TimeMicroVector TimeMilliVector TimeNanoVector TimeSecVector TimeStampMicroTZVector TimeStampMilliTZVector TimeStampNanoTZVector TimeStampSecTZVector ValueVector VarBinaryVector VarCharVector)
            (org.apache.arrow.vector.complex DenseUnionVector FixedSizeListVector ListVector StructVector)
            (org.apache.arrow.vector.holders NullableIntervalDayHolder NullableIntervalMonthDayNanoHolder)
            (org.apache.arrow.vector.types DateUnit FloatingPointPrecision IntervalUnit TimeUnit Types$MinorType UnionMode)
            (org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Date ArrowType$Decimal ArrowType$Duration ArrowType$FixedSizeBinary ArrowType$FixedSizeList ArrowType$FloatingPoint ArrowType$Int ArrowType$Interval ArrowType$List ArrowType$Null ArrowType$Struct ArrowType$Time ArrowType$Time ArrowType$Timestamp ArrowType$Union ArrowType$Utf8 Field FieldType)
            (xtdb.types IntervalDayTime IntervalMonthDayNano IntervalYearMonth)
            (xtdb.vector.extensions AbsentType AbsentVector ClojureFormType KeywordType SetType SetVector UriType UuidType)))
-
-
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -426,9 +424,7 @@
       1 (col-type->field* col-name nullable? (first without-null))
 
       (apply ->field col-name (.getType Types$MinorType/DENSEUNION) false
-             (map-indexed (fn [idx col-type]
-                            (col-type->field (str (col-type->field-name col-type) "-" idx) col-type))
-                          col-types)))))
+             (map col-type->field col-types)))))
 
 (defmethod arrow-type->col-type ArrowType$Union [_ & child-fields]
   (->> child-fields
