@@ -29,11 +29,10 @@
            xtdb.api.protocols.TransactionInstant
            xtdb.buffer_pool.IBufferPool
            xtdb.ICursor
-           xtdb.live_chunk.ILiveTableWatermark
            (xtdb.metadata IMetadataManager ITableMetadata)
            xtdb.operator.IRelationSelector
            (xtdb.vector IIndirectRelation IIndirectVector)
-           (xtdb.watermark Watermark IWatermark IWatermarkSource)))
+           (xtdb.watermark IWatermark IWatermarkSource Watermark)))
 
 (s/def ::table symbol?)
 
