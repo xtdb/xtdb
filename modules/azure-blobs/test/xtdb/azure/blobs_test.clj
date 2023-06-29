@@ -25,6 +25,17 @@
 
       (fix.ds/test-doc-store (::azb/document-store sys)))))
 
+(t/deftest test-blobs-doc-store-with-prefix
+  (log/info "Azure config present (AZURE_CLIENT_ID, AZURE_CLIENT_SECRET, AZURE_SUBSCRIPTION_ID & AZURE_TENANT_ID set)? - " config-present?)
+  (when config-present?
+    (with-open [sys (-> (sys/prep-system {::azb/document-store
+                                          {:storage-account storage-account
+                                           :container container
+                                           :prefix (str "test-prefix-" (UUID/randomUUID))}})
+                        (sys/start-system))]
+
+      (fix.ds/test-doc-store (::azb/document-store sys)))))
+
 (t/deftest test-blobs-issue-2602
   (log/info "Azure config present (AZURE_CLIENT_ID, AZURE_CLIENT_SECRET, AZURE_SUBSCRIPTION_ID & AZURE_TENANT_ID set)? - " config-present?)
   (when config-present?
