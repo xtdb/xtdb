@@ -361,3 +361,43 @@
           (t/is (= false (.exists (io/file cp-uri))))
           (t/is (= false (.exists (io/file (str cp-uri ".edn"))))))))))
 
+(t/deftest test-fs-retention-policy
+  (fix/with-tmp-dirs #{cp-store-dir dir}
+    (with-open [bus ^Closeable (bus/->bus)
+                _ (bus/->bus-stop {:bus bus})]
+      (let [store (cp/->filesystem-checkpoint-store {:path (.toPath cp-store-dir)})
+            !tx-id (atom 0)
+            checkpoint-opts {::cp/cp-format ::foo-format
+                             :dir dir
+                             :bus bus
+                             :approx-frequency (Duration/ofMillis 1)
+                             :store store
+                             :retention-policy {:retain-at-least 2}
+                             :src (reify cp/CheckpointSource
+                                    (save-checkpoint [_ dir]
+                                      (let [tx-id (swap! !tx-id inc)]
+                                        (spit (doto (io/file dir "hello.edn")
+                                                (io/make-parents))
+                                              (pr-str {:msg "Hello world!", :tx-id tx-id}))
+                                        {:tx {::xt/tx-id tx-id}})))}]
+
+        ;; create file for upload
+        (spit (io/file dir "hello.txt") "Hello world")
+
+        (t/testing "make initial checkpoint"
+          (cp/checkpoint checkpoint-opts)
+          (t/is (= 2 (.count (java.nio.file.Files/list (.toPath cp-store-dir))))))
+
+        (Thread/sleep 10)
+
+        (t/testing "make second checkpoint (should have files for two checkpoints, as per retention policy)"
+          (cp/checkpoint checkpoint-opts)
+          (t/is (= 4 (.count (java.nio.file.Files/list (.toPath cp-store-dir))))))
+        
+        (Thread/sleep 10)
+
+        (t/testing "make third checkpoint (should have files for two checkpoints, as per retention policy)"
+          (cp/checkpoint checkpoint-opts)
+          ;; Files.delete is NOT synchronous, so need to wait for it to complete
+          (Thread/sleep 100)
+          (t/is (= 4 (.count (java.nio.file.Files/list (.toPath cp-store-dir))))))))))
