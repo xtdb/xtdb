@@ -14,7 +14,19 @@
   :dependencies [[org.clojure/clojure]
                  [org.clojure/tools.logging]
                  [com.xtdb/xtdb-core]
-                 [pro.juxt.clojars-mirrors.clj-http/clj-http "3.12.2"]]
+                 [com.azure/azure-storage-blob "12.22.0"]
+                 [com.azure/azure-identity "1.9.0"
+                  :exclusions [net.minidev/json-smart
+                               com.nimbusds/lang-tag]]
+
+                 ;; remove misc dependency warnings
+                 [com.azure/azure-core "1.39.0"]
+                 [com.azure/azure-core-http-netty "1.13.3"]
+                 [net.java.dev.jna/jna "5.13.0"]
+                 [net.java.dev.jna/jna-platform "5.13.0"]
+                 [io.netty/netty-transport "4.1.89.Final"]
+                 [net.minidev/json-smart "2.4.10"]
+                 [com.nimbusds/lang-tag "1.4.3"]]
 
   :profiles {:test {:dependencies [[com.xtdb/xtdb-test]]}}
 

@@ -1,28 +1,23 @@
 (ns xtdb.azure.blobs-test
   (:require [xtdb.azure.blobs :as azb]
             [clojure.test :as t]
+            [clojure.tools.logging :as log]
             [xtdb.fixtures.document-store :as fix.ds]
             [xtdb.system :as sys]))
 
-(def test-azure-blobs-sas-token
-  (System/getenv "XTDB_AZURE_BLOBS_TEST_SAS_TOKEN"))
-
-(def test-azure-blobs-storage-account
-  (or (System/getProperty "xtdb.azure.blobs.test-storage-account")
-      (System/getenv "XTDB_AZURE_BLOBS_TEST_STORAGE_ACCOUNT")))
-
-(def test-azure-blobs-container
-  (or (System/getProperty "xtdb.azure.blobs.test-container")
-      (System/getenv "XTDB_AZURE_BLOBS_TEST_CONTAINER")))
+(def storage-account "xtdbazureobjectstoretest")
+(def container "xtdb-test")
+(def config-present? (some? (and (System/getenv "AZURE_CLIENT_ID")
+                                 (System/getenv "AZURE_CLIENT_SECRET")
+                                 (System/getenv "AZURE_TENANT_ID")
+                                 (System/getenv "AZURE_SUBSCRIPTION_ID"))))
 
 (t/deftest test-blobs-doc-store
-  (when (and test-azure-blobs-sas-token
-             test-azure-blobs-storage-account
-             test-azure-blobs-container)
+  (log/info "Azure config present (AZURE_CLIENT_ID, AZURE_CLIENT_SECRET, AZURE_SUBSCRIPTION_ID & AZURE_TENANT_ID set)? - " config-present?)
+  (when config-present?
     (with-open [sys (-> (sys/prep-system {::azb/document-store
-                                          {:sas-token test-azure-blobs-sas-token
-                                           :storage-account test-azure-blobs-storage-account
-                                           :container test-azure-blobs-container}})
+                                          {:storage-account storage-account
+                                           :container container}})
                         (sys/start-system))]
 
       (fix.ds/test-doc-store (::azb/document-store sys)))))
