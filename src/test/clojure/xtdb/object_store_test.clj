@@ -81,6 +81,9 @@
   (t/is (= [4 5 6 7] (vec (get-bytes obj-store "digits" 4 4))))
   (t/is (= [9] (vec (get-bytes obj-store "digits" 9 1))))
 
+  (t/is (= (vec (range 10)) (vec (get-bytes obj-store "digits" 0 20))))
+  (t/is (= [9] (vec (get-bytes obj-store "digits" 9 2))))
+
   ;; OOB behaviour is 'any exception', just whatever is thrown by impl
   (->> "len 0 is not permitted due to potential ambiguities that arise in the bounds behaviour for len 0 across impls"
        (t/is (thrown? Exception (get-bytes obj-store "digits" 0 0))))

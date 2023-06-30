@@ -65,7 +65,8 @@
       (.getObject os k)
       (reify Function
         (apply [_ buf]
-          (.slice ^ByteBuffer buf start len)))))
+          (let [^ByteBuffer buf buf]
+            (.slice buf (int start) (int (max 1 (min len (- (.remaining buf) start))))))))))
 
   (getObject [_ k out-path]
     (CompletableFuture/supplyAsync
