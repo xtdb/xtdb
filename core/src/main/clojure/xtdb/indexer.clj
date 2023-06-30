@@ -502,10 +502,12 @@
     (reify OpIndexer
       (indexOp [_ tx-op-idx]
         (let [sql-offset (.getOffset tx-ops-vec tx-op-idx)]
-          (letfn [(index-op [^SqlOpIndexer op-idxer query-opts inner-query]
+          (letfn [(index-op [^SqlOpIndexer op-idxer {:keys [all-app-time] :as query-opts} inner-query]
                     (let [^xtdb.operator.PreparedQuery pq (.prepareRaQuery ra-src inner-query)]
                       (letfn [(index-op* [^IIndirectRelation params]
-                                (with-open [res (-> (.bind pq wm-src {:params params, :basis basis, :default-tz default-tz :default-all-valid-time? default-all-valid-time?})
+                                (with-open [res (-> (.bind pq wm-src {:params params, :basis basis, :default-tz default-tz
+                                                                      :default-all-valid-time? (or all-app-time
+                                                                                                   default-all-valid-time?)})
                                                     (.openCursor))]
 
                                   (.forEachRemaining res
@@ -546,7 +548,7 @@
                 (index-op delete-idxer query-opts inner-query)
 
                 [:erase query-opts inner-query]
-                (index-op erase-idxer query-opts inner-query)
+                (index-op erase-idxer (assoc query-opts :all-app-time true) inner-query)
 
                 (throw (UnsupportedOperationException. "sql query"))))))
 

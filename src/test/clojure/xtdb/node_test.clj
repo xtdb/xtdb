@@ -473,3 +473,18 @@ VALUES(1, OBJECT ('foo': OBJECT('bibble': true), 'bar': OBJECT('baz': 1001)))"]]
                (xt/q tu/*node* "SELECT * FROM bar")))
       (t/is (= [{:a 4, :xt$id "foo1"}]
                (xt/q tu/*node* "SELECT * FROM baz")))))
+
+(deftest test-erase-after-delete-2607
+  (t/testing "general case"
+    (xt/submit-tx tu/*node* [[:sql "INSERT INTO foo (xt$id, bar) VALUES (1, 1)"]])
+    (xt/submit-tx tu/*node* [[:sql "DELETE FROM foo WHERE foo.xt$id = 1"]])
+    (xt/submit-tx tu/*node* [[:sql "ERASE FROM foo WHERE foo.xt$id = 1"]])
+    (t/is (= [] (xt/q tu/*node* "SELECT * FROM foo FOR ALL VALID_TIME")))
+    (t/is (= [] (xt/q tu/*node* "SELECT * FROM foo FOR ALL SYSTEM_TIME"))))
+  (t/testing "zero width case"
+    (xt/submit-tx tu/*node* [[:sql "INSERT INTO foo (xt$id, bar) VALUES (2, 1)"]
+                             [:sql "DELETE FROM foo WHERE foo.xt$id = 2"]])
+    (xt/submit-tx tu/*node* [[:sql "ERASE FROM foo WHERE foo.xt$id = 2"]])
+    (t/is (= [] (xt/q tu/*node* "SELECT * FROM foo FOR ALL VALID_TIME")))
+    ;; TODO if it doesn't show up in valid-time it won't get deleted
+    #_(t/is (= [] (xt/q tu/*node* "SELECT * FROM foo FOR ALL SYSTEM_TIME")))))
