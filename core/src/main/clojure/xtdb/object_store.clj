@@ -24,6 +24,9 @@
     "Asynchonously returns the given len bytes starting from start (inclusive) of the object in a ByteBuffer
     If the object doesn't exist, the CF completes with an IllegalStateException.
 
+    Out of bounds `start` cause the returned future to complete with an Exception, the type of which is implementation dependent.
+    If you supply a len that exceeds the number of bytes remaining (from start) then you will receive less bytes than len.
+
     Exceptions are thrown immediately if the start is negative, or the len is zero or below. This is
     to ensure consistent boundary behaviour between different object store implementations. You should check for these conditions and deal with them
     before calling getObjectRange.")
@@ -72,7 +75,7 @@
     (CompletableFuture/completedFuture
       (let [^ByteBuffer buf (or (.get os k) (throw (obj-missing-exception k)))
             new-pos (+ (.position buf) (int start))]
-        (.slice buf new-pos (int len)))))
+        (.slice buf new-pos (int (max 1 (min (- (.remaining buf) new-pos) len)))))))
 
   (putObject [_this k buf]
     (.putIfAbsent os k (.slice buf))
@@ -140,7 +143,8 @@
         (when-not (util/path-exists from-path)
           (throw (obj-missing-exception k)))
 
-        (util/->mmap-path from-path FileChannel$MapMode/READ_ONLY start len))))
+        (with-open [in (util/->file-channel from-path #{:read})]
+          (.map in FileChannel$MapMode/READ_ONLY start (max 1 (min (- (.size in) start) len)))))))
 
   (getObject [_this k out-path]
     (CompletableFuture/supplyAsync
