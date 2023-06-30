@@ -1,25 +1,25 @@
-(ns xtdb.indexer.live-tries-test
+(ns xtdb.indexer.live-index-test
   (:require [clojure.test :as t]
-            [xtdb.api.protocols :as xtp]
-            xtdb.indexer.live-tries
+            xtdb.indexer.live-index
             xtdb.object-store
             [xtdb.test-util :as tu]
             [xtdb.util :as util]
             [xtdb.vector.writer :as vw])
-  (:import [java.util Random UUID]
+  (:import [java.util Map Random UUID]
            [org.apache.arrow.memory BufferAllocator]
            [org.apache.arrow.vector ValueVector]
            [org.apache.arrow.vector.ipc ArrowFileReader]
-           xtdb.indexer.live_tries.ILiveTries
+           xtdb.indexer.live_index.ILiveIndex
            xtdb.object_store.ObjectStore
-           (xtdb.trie ArrowHashTrie HashTrie HashTrie$Visitor)))
+           (xtdb.trie ArrowHashTrie HashTrie HashTrie$Visitor)
+           xtdb.vector.IRelationWriter))
 
-(def with-live-tries
+(def with-live-index
   (tu/with-system {:xtdb/allocator {}
-                   :xtdb.indexer/live-tries {}
+                   :xtdb.indexer/live-index {}
                    :xtdb.object-store/memory-object-store {}}))
 
-(t/use-fixtures :each with-live-tries)
+(t/use-fixtures :each with-live-index)
 
 (deftype TrieRenderer [^ArrowFileReader leaf-rdr, ^ValueVector iid-vec,
                        ^:unsychronized-mutable ^int current-page-idx]
@@ -39,7 +39,7 @@
 
 (t/deftest test-t1-chunk
   (let [{^BufferAllocator allocator :xtdb/allocator
-         ^ILiveTries live-tries :xtdb.indexer/live-tries
+         ^ILiveIndex live-index :xtdb.indexer/live-index
          ^ObjectStore obj-store :xtdb.object-store/memory-object-store} tu/*sys*
 
         iids (let [rnd (Random. 0)]
@@ -49,32 +49,32 @@
                        (mapv (comp vec util/uuid->bytes)))]
 
     (t/testing "commit"
-      (util/with-open [live-tx (.startTx live-tries)]
-        (let [live-trie-tx (.liveTrie live-tx "my-trie")
-              wtr (.relationWriter live-trie-tx)
+      (util/with-open [live-idx-tx (.startTx live-index)
+                       live-idx-table (.liveTable live-idx-tx "my-table")]
+        (let [wtr (.leafWriter live-idx-table)
               iid-wtr (.writerForName wtr "xt$iid")]
 
           (doseq [iid iids]
             (let [pos (.getPosition (.writerPosition wtr))]
               (vw/write-value! iid iid-wtr)
               (.endRow wtr)
-              (.addRow live-trie-tx pos)))
+              (.addRow live-idx-table pos)))
 
-          (.commit live-trie-tx)
 
-          (let [{:keys [static-rel !static-trie]} live-trie-tx
-                iid-vec (-> (vw/rel-wtr->rdr static-rel)
-                            (.vectorForName "xt$iid")
-                            (.getVector))
-                ^HashTrie trie @!static-trie]
+          (.commit live-idx-tx)
+
+          (let [{:keys [^IRelationWriter static-leaf, ^Map static-tries]} (.liveTable live-index "my-table")
+                iid-vec (.getVector (.writerForName static-leaf "xt$iid"))
+
+                ^HashTrie trie (.get static-tries "t1-diff")]
 
             (t/is (= iid-bytes (.accept trie (TrieRenderer. nil iid-vec -1))))))))
 
     (t/testing "finish chunk"
-      (.finishChunk live-tries 0)
+      (.finishChunk live-index 0)
 
-      (let [trie-buf @(.getObject obj-store "my-trie/trie-c00.arrow")
-            leaf-buf @(.getObject obj-store "my-trie/leaf-c00.arrow")]
+      (let [trie-buf @(.getObject obj-store "tables/my-table/t1-diff/trie-c00.arrow")
+            leaf-buf @(.getObject obj-store "tables/my-table/t1-diff/leaf-c00.arrow")]
         (with-open [trie-rdr (ArrowFileReader. (util/->seekable-byte-channel trie-buf) allocator)
                     leaf-rdr (ArrowFileReader. (util/->seekable-byte-channel leaf-buf) allocator)]
           (.loadNextBatch trie-rdr)
