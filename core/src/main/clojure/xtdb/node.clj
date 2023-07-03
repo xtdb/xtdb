@@ -128,6 +128,8 @@
                           :xtdb/live-chunk {}
                           :xtdb.indexer/live-tries {}
                           :xtdb.indexer/log-indexer {}
+                          :xtdb.indexer/temporal-log-indexer {}
+                          :xtdb.indexer/content-log-indexer {}
                           :xtdb/ingester {}
                           :xtdb.metadata/metadata-manager {}
                           :xtdb.temporal/temporal-manager {}

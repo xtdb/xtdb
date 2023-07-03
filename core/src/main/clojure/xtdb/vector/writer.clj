@@ -6,17 +6,16 @@
             [xtdb.vector :as vec]
             [xtdb.vector.indirect :as iv])
   (:import (clojure.lang Keyword)
-           (java.math BigDecimal)
            (java.lang AutoCloseable)
+           (java.math BigDecimal)
            java.net.URI
            (java.nio ByteBuffer CharBuffer)
            java.nio.charset.StandardCharsets
            (java.time Duration Instant LocalDate LocalDateTime LocalTime OffsetDateTime ZoneOffset ZonedDateTime)
            (java.util ArrayList Date HashMap LinkedHashMap List Map Set UUID)
            (java.util.function Function)
-           java.util.function.Function
            (org.apache.arrow.memory BufferAllocator)
-           (org.apache.arrow.vector BigIntVector BitVector DecimalVector Decimal256Vector DateDayVector DateMilliVector DurationVector ExtensionTypeVector FixedSizeBinaryVector Float4Vector Float8Vector IntVector IntervalDayVector IntervalMonthDayNanoVector IntervalYearVector NullVector PeriodDuration SmallIntVector TimeMicroVector TimeMilliVector TimeNanoVector TimeSecVector TimeStampVector TinyIntVector ValueVector VarBinaryVector VarCharVector VectorSchemaRoot)
+           (org.apache.arrow.vector BigIntVector BitVector DecimalVector DateDayVector DateMilliVector DurationVector ExtensionTypeVector FixedSizeBinaryVector Float4Vector Float8Vector IntVector IntervalDayVector IntervalMonthDayNanoVector IntervalYearVector NullVector PeriodDuration SmallIntVector TimeMicroVector TimeMilliVector TimeNanoVector TimeSecVector TimeStampVector TinyIntVector ValueVector VarBinaryVector VarCharVector VectorSchemaRoot)
            (org.apache.arrow.vector.complex DenseUnionVector ListVector StructVector)
            (org.apache.arrow.vector.types.pojo ArrowType$List ArrowType$Struct ArrowType$Union Field FieldType)
            xtdb.api.protocols.ClojureForm
@@ -604,9 +603,16 @@
     (dotimes [n child-count]
       (let [src-type-id (or (when type-ids (aget type-ids n))
                             n)
-            col-type (types/field->col-type (.get child-fields n))]
-        (aset copier-mapping src-type-id (.rowCopier (.writerForType dest-col col-type)
-                                                     (.getVectorByType src-vec src-type-id)))))
+            ^Field child-field (.get child-fields n)
+            child-field-name (.getName child-field)
+            col-type (types/field->col-type child-field)]
+        (aset copier-mapping src-type-id
+              ;; HACK to make things work for named duv legs
+              (if-not (= child-field-name (types/col-type->field-name col-type))
+                (.rowCopier (.writerForField dest-col child-field)
+                            (.getVectorByType src-vec src-type-id))
+                (.rowCopier (.writerForType dest-col col-type)
+                            (.getVectorByType src-vec src-type-id))))))
 
     (reify IRowCopier
       (copyRow [_ src-idx]
@@ -636,7 +642,7 @@
   DenseUnionVector
   (->writer [duv]
     (let [wp (IWriterPosition/build (.getValueCount duv))
-          type-count (count (.getChildren (.getField duv)))
+          children (.getChildren (.getField duv))
           writers-by-type-id (ArrayList.)
           writers-by-type (HashMap.)
           writers-by-name (HashMap.)]
@@ -654,13 +660,14 @@
                   (.add writers-by-type-id type-id child-wtr)
                   child-wtr))]
 
-        (dotimes [type-id type-count]
+        (doseq [[type-id ^Field field] (map-indexed vector children)]
           (let [child-wtr (->child-writer type-id)
                 col-type (-> (.getVectorByType duv type-id)
                              (.getField)
                              (types/field->col-type)
                              (types/col-type->duv-leg-key))]
             (.put writers-by-type col-type child-wtr)
+            (.put writers-by-name (.getName field) child-wtr)
             child-wtr))
 
         (reify IVectorWriter
@@ -687,33 +694,33 @@
             ;; so don't use both writerForField and writerForType on one writer.
             (.computeIfAbsent writers-by-name (.getName field)
                               (reify Function
-                                (apply [_ field-name]
+                                (apply [_ _]
                                   (.writerForTypeId this (.registerNewType this field))))))
 
           (writerForType [this col-type]
             (.computeIfAbsent writers-by-type (types/col-type->duv-leg-key col-type)
-                      (reify Function
-                        (apply [_ _]
-                          (let [field-name (types/col-type->field-name col-type)
+                              (reify Function
+                                (apply [_ _]
+                                  (let [field-name (types/col-type->field-name col-type)
 
-                                ^Field field (case (types/col-type-head col-type)
-                                               :list
-                                               (types/->field field-name ArrowType$List/INSTANCE false (types/->field "$data$" types/dense-union-type false))
+                                        ^Field field (case (types/col-type-head col-type)
+                                                       :list
+                                                       (types/->field field-name ArrowType$List/INSTANCE false (types/->field "$data$" types/dense-union-type false))
 
-                                               :set
-                                               (types/->field field-name SetType/INSTANCE false (types/->field "$data$" types/dense-union-type false))
+                                                       :set
+                                                       (types/->field field-name SetType/INSTANCE false (types/->field "$data$" types/dense-union-type false))
 
-                                               :struct
-                                               (types/->field field-name ArrowType$Struct/INSTANCE false)
+                                                       :struct
+                                                       (types/->field field-name ArrowType$Struct/INSTANCE false)
 
-                                               (types/col-type->field field-name col-type))
+                                                       (types/col-type->field field-name col-type))
 
-                                type-id (.registerNewType this field)
+                                        type-id (.registerNewType this field)
 
-                                wtr (.writerForTypeId this type-id)]
+                                        wtr (.writerForTypeId this type-id)]
 
-                            (.put writers-by-name field-name wtr)
-                            wtr)))))
+                                    (.put writers-by-name field-name wtr)
+                                    wtr)))))
 
           (writerForTypeId [_ type-id]
             (.get writers-by-type-id type-id)))))))
@@ -898,6 +905,43 @@
       AutoCloseable
       (close [this]
         (run! util/try-close (vals this))))))
+
+(defn struct-writer->rel-writer ^xtdb.vector.IRelationWriter [^xtdb.vector.IVectorWriter vec-wtr]
+  (let [wp (IWriterPosition/build)]
+    (reify IRelationWriter
+      (writerPosition [_] wp)
+
+      (startRow [_]
+        (.startStruct vec-wtr))
+
+      (endRow [_]
+        (.endStruct vec-wtr))
+
+      (writerForName [_ col-name]
+        (.structKeyWriter vec-wtr col-name))
+
+      (writerForName [_ col-name col-type]
+        (.structKeyWriter vec-wtr col-name col-type))
+
+      (rowCopier [this in-rel]
+        (let [copiers (for [^IIndirectVector src-vec in-rel]
+                        (.rowCopier (.writerForName this (.getName src-vec)) (.getVector src-vec)))]
+          (reify IRowCopier
+            (copyRow [_ src-idx]
+              (let [pos (.getPositionAndIncrement wp)]
+                (.startStruct vec-wtr)
+                (doseq [^IRowCopier copier copiers]
+                  (.copyRow copier src-idx))
+                (.endStruct vec-wtr)
+                pos)))))
+
+      (iterator [_] (throw (UnsupportedOperationException.)))
+
+      (syncRowCount [_]
+        (.setPosition wp (.getPosition (.writerPosition vec-wtr))))
+
+      AutoCloseable
+      (close [_]))))
 
 (defn open-vec
   (^org.apache.arrow.vector.ValueVector [allocator col-name vs]
