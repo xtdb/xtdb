@@ -172,12 +172,7 @@
     (let [chunk-idx-str (util/->lex-hex-string chunk-idx)]
       (CompletableFuture/allOf
        (->> (for [[trie-name {:keys [^MemoryHashTrie trie trie-keys]}] tries]
-              (try
-                (write-trie! allocator obj-store table-name trie-name chunk-idx-str (-> trie (.compactLogs trie-keys)) (vw/rel-wtr->rdr leaf))
-                (catch Throwable t
-                  (prn :yo)
-                  (prn (-> trie (.compactLogs trie-keys)))
-                  (throw t))))
+              (write-trie! allocator obj-store table-name trie-name chunk-idx-str (-> trie (.compactLogs trie-keys)) (vw/rel-wtr->rdr leaf)))
             (into-array CompletableFuture)))))
 
   TestLiveTable
