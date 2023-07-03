@@ -1,0 +1,210 @@
+{
+  "schema" : {
+    "fields" : [{
+      "name" : "tx-id",
+      "nullable" : false,
+      "type" : {
+        "name" : "int",
+        "bitWidth" : 64,
+        "isSigned" : true
+      },
+      "children" : [ ]
+    },{
+      "name" : "system-time",
+      "nullable" : false,
+      "type" : {
+        "name" : "timestamp",
+        "unit" : "MICROSECOND",
+        "timezone" : "UTC"
+      },
+      "children" : [ ]
+    },{
+      "name" : "tx-ops",
+      "nullable" : true,
+      "type" : {
+        "name" : "list"
+      },
+      "children" : [{
+        "name" : "$data",
+        "nullable" : false,
+        "type" : {
+          "name" : "union",
+          "mode" : "Dense",
+          "typeIds" : [0,1,2]
+        },
+        "children" : [{
+          "name" : "put",
+          "nullable" : false,
+          "type" : {
+            "name" : "struct"
+          },
+          "children" : [{
+            "name" : "iid",
+            "nullable" : false,
+            "type" : {
+              "name" : "fixedsizebinary",
+              "byteWidth" : 16
+            },
+            "children" : [ ]
+          },{
+            "name" : "row-id",
+            "nullable" : false,
+            "type" : {
+              "name" : "int",
+              "bitWidth" : 64,
+              "isSigned" : true
+            },
+            "children" : [ ]
+          },{
+            "name" : "valid-from",
+            "nullable" : true,
+            "type" : {
+              "name" : "timestamp",
+              "unit" : "MICROSECOND",
+              "timezone" : "UTC"
+            },
+            "children" : [ ]
+          },{
+            "name" : "valid-to",
+            "nullable" : true,
+            "type" : {
+              "name" : "timestamp",
+              "unit" : "MICROSECOND",
+              "timezone" : "UTC"
+            },
+            "children" : [ ]
+          }]
+        },{
+          "name" : "delete",
+          "nullable" : false,
+          "type" : {
+            "name" : "struct"
+          },
+          "children" : [{
+            "name" : "iid",
+            "nullable" : false,
+            "type" : {
+              "name" : "fixedsizebinary",
+              "byteWidth" : 16
+            },
+            "children" : [ ]
+          },{
+            "name" : "valid-from",
+            "nullable" : true,
+            "type" : {
+              "name" : "timestamp",
+              "unit" : "MICROSECOND",
+              "timezone" : "UTC"
+            },
+            "children" : [ ]
+          },{
+            "name" : "valid-to",
+            "nullable" : true,
+            "type" : {
+              "name" : "timestamp",
+              "unit" : "MICROSECOND",
+              "timezone" : "UTC"
+            },
+            "children" : [ ]
+          }]
+        },{
+          "name" : "evict",
+          "nullable" : false,
+          "type" : {
+            "name" : "struct"
+          },
+          "children" : [{
+            "name" : "iid",
+            "nullable" : false,
+            "type" : {
+              "name" : "fixedsizebinary",
+              "byteWidth" : 16
+            },
+            "children" : [ ]
+          }]
+        }]
+      }]
+    }]
+  },
+  "batches" : [{
+    "count" : 3,
+    "columns" : [{
+      "name" : "tx-id",
+      "count" : 3,
+      "VALIDITY" : [1,1,1],
+      "DATA" : ["0","3421","6554"]
+    },{
+      "name" : "system-time",
+      "count" : 3,
+      "VALIDITY" : [1,1,1],
+      "DATA" : [1577836800000000,1577923200000000,1578009600000000]
+    },{
+      "name" : "tx-ops",
+      "count" : 3,
+      "VALIDITY" : [1,0,1],
+      "OFFSET" : [0,2,2,4],
+      "children" : [{
+        "name" : "$data",
+        "count" : 4,
+        "TYPE_ID" : [0,0,1,0],
+        "OFFSET" : [0,1,0,2],
+        "children" : [{
+          "name" : "put",
+          "count" : 3,
+          "VALIDITY" : [1,1,1],
+          "children" : [{
+            "name" : "iid",
+            "count" : 3,
+            "VALIDITY" : [1,1,1],
+            "DATA" : ["d9c7fae2a04e047164936265ba33cf80","9e3f856e68998313827ff18dd4d88e78","9e3f856e68998313827ff18dd4d88e78"]
+          },{
+            "name" : "row-id",
+            "count" : 3,
+            "VALIDITY" : [1,1,1],
+            "DATA" : ["0","1","5"]
+          },{
+            "name" : "valid-from",
+            "count" : 3,
+            "VALIDITY" : [1,1,1],
+            "DATA" : [1577836800000000,1577836800000000,1585699200000000]
+          },{
+            "name" : "valid-to",
+            "count" : 3,
+            "VALIDITY" : [1,1,1],
+            "DATA" : [253402300799999999,253402300799999999,1588291200000000]
+          }]
+        },{
+          "name" : "delete",
+          "count" : 1,
+          "VALIDITY" : [1],
+          "children" : [{
+            "name" : "iid",
+            "count" : 1,
+            "VALIDITY" : [1],
+            "DATA" : ["d9c7fae2a04e047164936265ba33cf80"]
+          },{
+            "name" : "valid-from",
+            "count" : 1,
+            "VALIDITY" : [1],
+            "DATA" : [1585699200000000]
+          },{
+            "name" : "valid-to",
+            "count" : 1,
+            "VALIDITY" : [1],
+            "DATA" : [253402300799999999]
+          }]
+        },{
+          "name" : "evict",
+          "count" : 0,
+          "VALIDITY" : [ ],
+          "children" : [{
+            "name" : "iid",
+            "count" : 0,
+            "VALIDITY" : [ ],
+            "DATA" : [ ]
+          }]
+        }]
+      }]
+    }]
+  }]
+}
