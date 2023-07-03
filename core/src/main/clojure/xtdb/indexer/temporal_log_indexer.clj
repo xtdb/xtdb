@@ -19,7 +19,7 @@
    (xtdb.object_store ObjectStore)))
 
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
-(definterface ILogOpIndexer2
+(definterface ILogOpIndexer
   (^void logPut [^bytes iid, ^long rowId, ^long app-timeStart, ^long app-timeEnd])
   (^void logDelete [^bytes iid, ^long app-timeStart, ^long app-timeEnd])
   (^void logEvict [^bytes iid])
@@ -27,8 +27,8 @@
   (^void abort []))
 
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
-(definterface ILogIndexer2
-  (^xtdb.indexer.temporal_log_indexer.ILogOpIndexer2 startTx [^xtdb.api.protocols.TransactionInstant txKey])
+(definterface ILogIndexer
+  (^xtdb.indexer.temporal_log_indexer.ILogOpIndexer startTx [^xtdb.api.protocols.TransactionInstant txKey])
   (^void finishBlock [])
   (^java.util.concurrent.CompletableFuture finishChunk [^long chunkIdx])
   (^void nextChunk [])
@@ -89,13 +89,13 @@
         block-row-counts (ArrayList.)
         !block-row-count (AtomicInteger.)]
 
-    (reify ILogIndexer2
+    (reify ILogIndexer
       (startTx [_ tx-key]
         (.writeLong tx-id-wtr (.tx-id tx-key))
         (vw/write-value! (.system-time tx-key) system-time-wtr)
 
         (.startList tx-ops-wtr)
-        (reify ILogOpIndexer2
+        (reify ILogOpIndexer
           (logPut [_ iid row-id app-time-start app-time-end]
             (.startStruct put-wtr)
             (.writeBytes put-iid-wtr (ByteBuffer/wrap iid))

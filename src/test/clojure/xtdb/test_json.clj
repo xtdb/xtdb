@@ -38,10 +38,18 @@
                      (-> (.getParent) (util/mkdirs)))
               ^"[Ljava.nio.file.CopyOption;" (into-array CopyOption #{StandardCopyOption/REPLACE_EXISTING})))
 
+#_{:clj-kondo/ignore [:unused-private-var]}
+(defn- delete-and-recreate-dir [^Path path]
+  (when (.. path toFile isDirectory)
+    (util/delete-dir path)
+    (.mkdirs (.toFile path))))
+
 (defn check-json
   ([expected-dir actual-dir] (check-json expected-dir actual-dir nil))
 
   ([^Path expected-dir, ^Path actual-dir, file-pattern]
+   ;; uncomment if you want to remove files
+   #_(delete-and-recreate-dir expected-dir) ;; <<no-commit>>
    (doseq [^Path path (iterator-seq (.iterator (Files/walk actual-dir (make-array FileVisitOption 0))))
            :let [file-name (str (.getFileName path))
                  file-type (cond

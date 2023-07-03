@@ -8,7 +8,6 @@
             [xtdb.indexer.content-log-indexer :as content-log]
             xtdb.indexer.internal-id-manager
             xtdb.indexer.live-index
-            xtdb.indexer.log-indexer
             xtdb.indexer.temporal-log-indexer
             xtdb.live-chunk
             [xtdb.metadata :as meta]
@@ -45,8 +44,7 @@
            (xtdb.indexer.content_log_indexer IContentLog IContentLogTx)
            xtdb.indexer.internal_id_manager.IInternalIdManager
            (xtdb.indexer.live_index ILiveIndex ILiveIndexTx)
-           (xtdb.indexer.log_indexer ILogIndexer ILogOpIndexer)
-           (xtdb.indexer.temporal_log_indexer ILogIndexer2 ILogOpIndexer2)
+           (xtdb.indexer.temporal_log_indexer ILogIndexer ILogOpIndexer)
            (xtdb.live_chunk ILiveChunk ILiveChunkTx ILiveTableTx)
            xtdb.metadata.IMetadataManager
            xtdb.object_store.ObjectStore
@@ -92,8 +90,8 @@
         (.digest eid-bytes)
         (Arrays/copyOfRange 0 16))))
 
-(defn- ->put-indexer ^xtdb.indexer.OpIndexer [^IInternalIdManager iid-mgr ^ILogOpIndexer log-op-idxer,
-                                              ^ILogOpIndexer2 temporal-log-op-idxer, ^IContentLogTx content-log-tx
+(defn- ->put-indexer ^xtdb.indexer.OpIndexer [^IInternalIdManager iid-mgr
+                                              ^ILogOpIndexer temporal-log-op-idxer, ^IContentLogTx content-log-tx
                                               ^ITemporalTxIndexer temporal-idxer,
                                               ^ILiveChunkTx live-chunk, ^ILiveIndexTx live-idx-tx
                                               ^DenseUnionVector tx-ops-vec, ^Instant system-time]
@@ -168,7 +166,6 @@
               (.endRow leaf-writer)
               (.addRow live-table pos))
 
-            (.logPut log-op-idxer iid row-id valid-from valid-to)
             (.logPut temporal-log-op-idxer byte-eid row-id valid-from valid-to)
             (.copyRow content-log-copier doc-offset)
             (.endRow content-wtr)
@@ -176,8 +173,8 @@
 
         nil))))
 
-(defn- ->delete-indexer ^xtdb.indexer.OpIndexer [^IInternalIdManager iid-mgr, ^ILogOpIndexer log-op-idxer,
-                                                 ^ILogOpIndexer2 temporal-log-op-idxer,
+(defn- ->delete-indexer ^xtdb.indexer.OpIndexer [^IInternalIdManager iid-mgr,
+                                                 ^ILogOpIndexer temporal-log-op-idxer,
                                                  ^ITemporalTxIndexer temporal-idxer, ^ILiveChunkTx live-chunk
                                                  ^DenseUnionVector tx-ops-vec, ^Instant current-time]
   (let [delete-vec (.getStruct tx-ops-vec 2)
@@ -205,14 +202,13 @@
                                     {:valid-from (util/micros->instant valid-from)
                                      :valid-to (util/micros->instant valid-to)})))
 
-          (.logDelete log-op-idxer iid valid-from valid-to)
           (.logDelete temporal-log-op-idxer (->iid eid) valid-from valid-to)
           (.indexDelete temporal-idxer iid row-id valid-from valid-to new-entity?))
 
         nil))))
 
-(defn- ->evict-indexer ^xtdb.indexer.OpIndexer [^IInternalIdManager iid-mgr ^ILogOpIndexer log-op-idxer,
-                                                ^ILogOpIndexer2 temporal-log-op-idxer
+(defn- ->evict-indexer ^xtdb.indexer.OpIndexer [^IInternalIdManager iid-mgr
+                                                ^ILogOpIndexer temporal-log-op-idxer
                                                 ^ITemporalTxIndexer temporal-idxer, ^ILiveChunkTx live-chunk
                                                 ^DenseUnionVector tx-ops-vec]
 
@@ -226,7 +222,6 @@
               table (or (t/get-object table-vec evict-offset) "xt_docs")
               eid (t/get-object id-vec evict-offset)
               iid (.getOrCreateInternalId iid-mgr table eid row-id)]
-          (.logEvict log-op-idxer iid)
           (.logEvict temporal-log-op-idxer (->iid eid))
           (.indexEvict temporal-idxer iid))
 
@@ -345,8 +340,8 @@
 (definterface SqlOpIndexer
   (^void indexOp [^xtdb.vector.IIndirectRelation inRelation, queryOpts]))
 
-(defn- ->sql-insert-indexer ^xtdb.indexer.SqlOpIndexer [^IInternalIdManager iid-mgr, ^ILogOpIndexer log-op-idxer,
-                                                        ^ILogOpIndexer2 temporal-log-op-idxer, ^IContentLogTx  content-log-tx
+(defn- ->sql-insert-indexer ^xtdb.indexer.SqlOpIndexer [^IInternalIdManager iid-mgr,
+                                                        ^ILogOpIndexer temporal-log-op-idxer, ^IContentLogTx  content-log-tx
                                                         ^ITemporalTxIndexer temporal-idxer
                                                         ^ILiveChunkTx live-chunk, {{:keys [^Instant current-time]} :basis}]
 
@@ -390,7 +385,6 @@
                                           {:valid-from (util/micros->instant valid-from)
                                            :valid-to (util/micros->instant valid-to)})))
 
-                (.logPut log-op-idxer iid row-id valid-from valid-to)
                 (.logPut temporal-log-op-idxer (->iid eid) row-id valid-from valid-to)
                 (.copyRow content-copier idx)
                 (.endRow content-wtr)
@@ -417,7 +411,7 @@
 (def ^:private nil-iid (byte-array 16))
 
 (defn- ->sql-update-indexer ^xtdb.indexer.SqlOpIndexer [^IMetadataManager metadata-mgr, ^IBufferPool buffer-pool
-                                                        ^ILogOpIndexer log-op-idxer, ^ILogOpIndexer2 temporal-log-op-idxer,
+                                                        ^ILogOpIndexer temporal-log-op-idxer,
                                                         ^IContentLogTx content-log-tx,
                                                         ^ITemporalTxIndexer temporal-idxer ^ILiveChunkTx live-chunk]
   (reify SqlOpIndexer
@@ -504,14 +498,13 @@
                                                                       (.copyRow idx))))))))))))))
                       (util/rethrowing-cause)))
 
-                (.logPut log-op-idxer iid new-row-id valid-from valid-to)
                 ;; FIXME scan does not currently pass through eid, so not possible to do eid -> iid
                 (.logPut temporal-log-op-idxer nil-iid new-row-id valid-from valid-to)
                 (.endRow content-log-wtr)
                 (.endRow content-wtr)
                 (.indexPut temporal-idxer iid new-row-id valid-from valid-to false)))))))))
 
-(defn- ->sql-delete-indexer ^xtdb.indexer.SqlOpIndexer [^ILogOpIndexer log-op-idxer, ^ILogOpIndexer2 temporal-log-op-idxer,
+(defn- ->sql-delete-indexer ^xtdb.indexer.SqlOpIndexer [^ILogOpIndexer temporal-log-op-idxer,
                                                         ^ITemporalTxIndexer temporal-idxer, ^ILiveChunkTx live-chunk]
   (reify SqlOpIndexer
     (indexOp [_ in-rel _query-opts]
@@ -529,26 +522,23 @@
                                       {:valid-from (util/micros->instant valid-from)
                                        :valid-to (util/micros->instant valid-to)})))
 
-            (.logDelete log-op-idxer iid valid-from valid-to)
             ;; FIXME scan does not currently pass through eid, so not possible to do eid -> iid
             (.logDelete temporal-log-op-idxer nil-iid valid-from valid-to)
             (.indexDelete temporal-idxer iid row-id valid-from valid-to false)))))))
 
-(defn- ->sql-erase-indexer ^xtdb.indexer.SqlOpIndexer [^ILogOpIndexer log-op-idxer, ^ILogOpIndexer2 temporal-log-op-idxer,
-                                                       ^ITemporalTxIndexer temporal-idxer]
+(defn- ->sql-erase-indexer ^xtdb.indexer.SqlOpIndexer [^ILogOpIndexer temporal-log-op-idxer, ^ITemporalTxIndexer temporal-idxer]
   (reify SqlOpIndexer
     (indexOp [_ in-rel _query-opts]
       (let [row-count (.rowCount in-rel)
             iid-rdr (.monoReader (.vectorForName in-rel "_iid") :i64)]
         (dotimes [idx row-count]
           (let [iid (.readLong iid-rdr idx)]
-            (.logEvict log-op-idxer iid)
             ;; FIXME scan does not currently pass through eid, so not possible to do eid -> iid
             (.logEvict temporal-log-op-idxer nil-iid)
             (.indexEvict temporal-idxer iid)))))))
 
 (defn- ->sql-indexer ^xtdb.indexer.OpIndexer [^BufferAllocator allocator, ^IMetadataManager metadata-mgr, ^IBufferPool buffer-pool, ^IInternalIdManager iid-mgr
-                                              ^ILogOpIndexer log-op-idxer, ^ILogOpIndexer2 temporal-log-op-idxer,
+                                              ^ILogOpIndexer temporal-log-op-idxer,
                                               ^IContentLogTx content-log-tx
                                               ^ITemporalTxIndexer temporal-idxer, ^ILiveChunk doc-idxer
                                               ^DenseUnionVector tx-ops-vec, ^IRaQuerySource ra-src, wm-src, ^IScanEmitter scan-emitter
@@ -556,12 +546,12 @@
   (let [sql-vec (.getStruct tx-ops-vec 0)
         ^VarCharVector query-vec (.getChild sql-vec "query" VarCharVector)
         ^VarBinaryVector params-vec (.getChild sql-vec "params" VarBinaryVector)
-        insert-idxer (->sql-insert-indexer iid-mgr log-op-idxer temporal-log-op-idxer
+        insert-idxer (->sql-insert-indexer iid-mgr temporal-log-op-idxer
                                            content-log-tx temporal-idxer doc-idxer tx-opts)
-        update-idxer (->sql-update-indexer metadata-mgr buffer-pool log-op-idxer temporal-log-op-idxer
+        update-idxer (->sql-update-indexer metadata-mgr buffer-pool temporal-log-op-idxer
                                            content-log-tx temporal-idxer doc-idxer)
-        delete-idxer (->sql-delete-indexer log-op-idxer temporal-log-op-idxer temporal-idxer doc-idxer)
-        erase-idxer (->sql-erase-indexer log-op-idxer temporal-log-op-idxer temporal-idxer)]
+        delete-idxer (->sql-delete-indexer temporal-log-op-idxer temporal-idxer doc-idxer)
+        erase-idxer (->sql-erase-indexer temporal-log-op-idxer temporal-idxer)]
     (reify OpIndexer
       (indexOp [_ tx-op-idx]
         (let [sql-offset (.getOffset tx-ops-vec tx-op-idx)]
@@ -656,8 +646,7 @@
                   ^ITemporalManager temporal-mgr
                   ^IInternalIdManager iid-mgr
                   ^IRaQuerySource ra-src
-                  ^ILogIndexer log-indexer
-                  ^ILogIndexer2 temporal-log-indexer
+                  ^ILogIndexer temporal-log-indexer
                   ^IContentLog content-log
                   ^ILiveChunk live-chunk
                   ^ILiveIndex live-idx
@@ -674,7 +663,6 @@
       (let [^DenseUnionVector tx-ops-vec (-> ^ListVector (.getVector tx-root "tx-ops")
                                              (.getDataVector))
 
-            log-op-idxer (.startTx log-indexer tx-key)
             temporal-idxer (.startTx temporal-mgr tx-key)
             temporal-log-op-idxer (.startTx temporal-log-indexer tx-key)
             content-log-tx (.startTx content-log)
@@ -691,13 +679,13 @@
                      :tx-key tx-key}]
 
         (letfn [(index-tx-ops [^DenseUnionVector tx-ops-vec]
-                  (let [!put-idxer (delay (->put-indexer iid-mgr log-op-idxer temporal-log-op-idxer content-log-tx
+                  (let [!put-idxer (delay (->put-indexer iid-mgr temporal-log-op-idxer content-log-tx
                                                          temporal-idxer live-chunk-tx live-idx-tx tx-ops-vec system-time))
-                        !delete-idxer (delay (->delete-indexer iid-mgr log-op-idxer temporal-log-op-idxer temporal-idxer live-chunk-tx tx-ops-vec system-time))
-                        !evict-idxer (delay (->evict-indexer iid-mgr log-op-idxer temporal-log-op-idxer temporal-idxer live-chunk-tx tx-ops-vec))
+                        !delete-idxer (delay (->delete-indexer iid-mgr temporal-log-op-idxer temporal-idxer live-chunk-tx tx-ops-vec system-time))
+                        !evict-idxer (delay (->evict-indexer iid-mgr temporal-log-op-idxer temporal-idxer live-chunk-tx tx-ops-vec))
                         !call-idxer (delay (->call-indexer allocator ra-src wm-src scan-emitter tx-ops-vec tx-opts))
                         !sql-idxer (delay (->sql-indexer allocator metadata-mgr buffer-pool iid-mgr
-                                                         log-op-idxer temporal-log-op-idxer content-log-tx
+                                                         temporal-log-op-idxer content-log-tx
                                                          temporal-idxer live-chunk-tx
                                                          tx-ops-vec ra-src wm-src scan-emitter tx-opts))]
                     (dotimes [tx-op-idx (.getValueCount tx-ops-vec)]
@@ -735,7 +723,6 @@
                   (.abort temporal-idxer)
                   (.abort temporal-log-op-idxer)
                   (.abort content-log-tx)
-                  (.abort log-op-idxer)
 
                   (with-open [live-chunk-tx (.startTx live-chunk)]
                     (let [temporal-tx (.startTx temporal-mgr tx-key)]
@@ -755,7 +742,6 @@
                       ;; TODO create work item
                       ))
 
-                  (.commit log-op-idxer)
                   (.commit temporal-log-op-idxer)
                   (.commit content-log-tx)))
 
@@ -807,7 +793,6 @@
   (finish-block! [this]
     (try
       (.finishBlock live-chunk)
-      (.finishBlock log-indexer)
       (.finishBlock temporal-log-indexer)
       (.finishBlock content-log)
 
@@ -829,7 +814,6 @@
   (finish-chunk! [this]
     (let [chunk-idx (.chunkIdx live-chunk)]
       (.registerNewChunk temporal-mgr chunk-idx)
-      @(.finishChunk log-indexer chunk-idx)
       @(.finishChunk temporal-log-indexer chunk-idx)
       @(.finishChunk content-log chunk-idx)
       @(.finishChunk live-chunk latest-completed-tx)
@@ -848,7 +832,6 @@
         (finally
           (.unlock wm-lock wm-lock-stamp))))
 
-    (.nextChunk log-indexer)
     (.nextChunk temporal-log-indexer)
     (.nextChunk content-log)
 
@@ -856,7 +839,6 @@
 
   Closeable
   (close [_]
-    (.close log-indexer)
     (.close temporal-log-indexer)
     (.close content-log)
     (some-> shared-wm .close)))
@@ -871,7 +853,6 @@
           :live-chunk (ig/ref :xtdb/live-chunk)
           :live-index (ig/ref :xtdb.indexer/live-index)
           :buffer-pool (ig/ref ::bp/buffer-pool)
-          :log-indexer (ig/ref :xtdb.indexer/log-indexer)
           :temporal-log-indexer (ig/ref :xtdb.indexer/temporal-log-indexer)
           :content-log-indexer (ig/ref :xtdb.indexer/content-log-indexer)
           :ra-src (ig/ref ::op/ra-query-source)}
@@ -879,12 +860,12 @@
 
 (defmethod ig/init-key :xtdb/indexer
   [_ {:keys [allocator object-store metadata-mgr scan-emitter buffer-pool ^ITemporalManager temporal-mgr, ra-src
-             internal-id-mgr log-indexer temporal-log-indexer content-log-indexer live-chunk live-index]}]
+             internal-id-mgr temporal-log-indexer content-log-indexer live-chunk live-index]}]
 
   (let [{:keys [latest-completed-tx]} (meta/latest-chunk-metadata metadata-mgr)]
 
     (Indexer. allocator object-store metadata-mgr scan-emitter buffer-pool temporal-mgr internal-id-mgr
-              ra-src log-indexer temporal-log-indexer content-log-indexer live-chunk live-index
+              ra-src temporal-log-indexer content-log-indexer live-chunk live-index
 
               latest-completed-tx
 
