@@ -1,9 +1,28 @@
 = Azure Blobs
 :page-aliases: reference::azure-blobs.adoc
 
-You can use Azure's Blob Storage as XTDB's 'document store'.
+You can use Azure's Blob Storage as either: 
+
+* XTDB's 'document store'
+* An implementation of the XTDB query index xref:{page-component-version}@administration::checkpointing.adoc[checkpoint store].
 
 Documents are serialized via https://github.com/ptaoussanis/nippy[Nippy].
+
+In both cases, you will require both a `Storage Account`, and a `Container` to store their respective files. See the relevant Azure Blobs Quickstart[Quickstart documentation] from the Azure docs. 
+
+== Authentication 
+
+Authentication for both the document store and checkpoint store components within the module is handled via the https://learn.microsoft.com/en-us/java/api/com.azure.identity.defaultazurecredential?view=azure-java-stable[**DefaultAzureCredential**] class - you will need to setup authentication using any of the methods listed within the Azure documentation to be able to make use of the operations inside the modules.
+
+Whichever method of Authentication you use, ensure that they at least have the permissions to:
+
+* Read blobs from a container
+* Write blobs to a container
+
+If using the **checkpoint store**, you will need the following permissions in addition to the above:
+
+* List blobs from a container
+* Delete blobs from a container
 
 == Project Dependency
 
@@ -30,7 +49,7 @@ pom.xml::
 ----
 ====
 
-== Using Azure Blobs
+== Using Azure Blobs as a document store
 
 Replace the implementation of the document store with `+xtdb.azure.blobs/->document-store+`
 
@@ -43,9 +62,9 @@ JSON::
 {
   "xtdb/document-store": {
     "xtdb/module": "xtdb.azure.blobs/->document-store",
-    "sas-token": "your-sas-token",
     "storage-account": "your-storage-account",
-    "container": "your-container-name"
+    "container": "your-container-name",
+    "prefix": "optional-containing-folder"
   },
 }
 ----
@@ -55,9 +74,9 @@ Clojure::
 [source,clojure]
 ----
 {:xtdb/document-store {:xtdb/module 'xtdb.azure.blobs/->document-store
-                       :sas-token "your-sas-token"
                        :storage-account "your-storage-account"
-                       :container "your-container-name"}}
+                       :container "your-container-name",
+                       :prefix "optional-containing-folder" }}
 ----
 
 EDN::
@@ -65,26 +84,38 @@ EDN::
 [source,clojure]
 ----
 {:xtdb/document-store {:xtdb/module xtdb.azure.blobs/->document-store
-                       :sas-token "your-sas-token"
                        :storage-account "your-storage-account"
-                       :container "your-container-name"}}
+                       :container "your-container-name",
+                       :prefix "optional-containing-folder" }}
 ----
 ====
 
-You'll need to create a `Storage Account`, then a `Container` for storing the documents.
+=== Parameters
 
-Then you need to create a SAS token for the Storage Account via the https://portal.azure.com[Azure portal].
-
-* Under `Storage Account`, go to `Settings`.
-* Then click `Shared access signature`.
-* Create a new SAS token with `Allowed services`: `Blob`, `Allowed resources types`: `Container` and `Object`.
-  You can select all allowed permissions.
-* Select needed `Start and expiry date/time`, `Allowed IP addresses` if applicable and `HTTPS only`.
-  Leave the rest of the options as-is.
-
-== Parameters
-
-* `sas-token` (string, required): 'shared access signature' for your chosen container.
-* `storage-account` (string, required)
-* `container` (string, required)
+* `storage-account` (string, required) - Storage account name that the document store container lives under 
+* `container` (string, required) - The container which the documents will be stored within
+* `prefix` (string, optional) - An optional prefix/folder name which will be used within document names (ie, could create a subfolder on a container called 'xtdb-document-store', and all of the document store files will be located under the folder)
 * `cache-size` (int): size of in-memory document cache (number of entries, not bytes)
+
+[#checkpoint-store]
+== Using Azure Blobs as a checkpoint store
+
+Azure blobs can be used as a query index **checkpoint store**. For more advice/config around the checkpointing itself, see xref:{page-component-version}@administration::checkpointing.adoc[Checkpointing].  
+
+[source,clojure]
+----
+;; under :xtdb/index-store -> :kv-store -> :checkpointer
+;; see the Checkpointing guide for other parameters
+{:checkpointer {...
+                :store {:xtdb/module 'xtdb.azure.blobs/->cp-store
+                        :storage-account "..."
+                        :container "..."
+                        :prefix "..." 
+                 ...}}
+----
+
+=== Parameters
+
+* `storage-account` (string, required) - Storage account name that the checkpoint store container lives under 
+* `container` (string, required) - The container which the checkpoints will be stored within
+* `prefix` (string, optional) - An optional prefix/folder name which will be used within checkpoint names (ie, could create a subfolder on a container called 'xtdb-checkpoints', and all of the checkpoint files will be located under the folder)
