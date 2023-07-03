@@ -12,11 +12,11 @@
            (java.util.function BiConsumer BiFunction Function IntConsumer)
            (java.util.stream IntStream)
            (org.apache.arrow.memory BufferAllocator)
-           (org.apache.arrow.vector VectorSchemaRoot)
+           (org.apache.arrow.vector BaseFixedWidthVector VectorSchemaRoot)
            (org.apache.arrow.vector.types.pojo ArrowType$Union Schema)
            org.apache.arrow.vector.types.UnionMode
            (xtdb.object_store ObjectStore)
-           (xtdb.trie HashTrie HashTrie$Visitor MemoryHashTrie TrieKeys)
+           (xtdb.trie MemoryHashTrie MemoryHashTrie$Visitor TrieKeys)
            (xtdb.vector IIndirectRelation IIndirectVector IRelationWriter)))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
@@ -45,6 +45,10 @@
   (^void finishChunk [^long chunkIdx])
   (^void close []))
 
+(defprotocol TestLiveTable
+  (^xtdb.vector.IRelationWriter leaf-writer [test-live-table])
+  (^java.util.Map tries [test-live-table]))
+
 (def ^org.apache.arrow.vector.types.pojo.Schema trie-schema
   (Schema. [(types/->field "nodes" (ArrowType$Union. UnionMode/Dense (int-array (range 3))) false
                            (types/col-type->field "nil" :null)
@@ -55,9 +59,9 @@
 (defn- write-trie!
   ^java.util.concurrent.CompletableFuture [^BufferAllocator allocator, ^ObjectStore obj-store,
                                            ^String table-name, ^String trie-name, ^String chunk-idx,
-                                           ^HashTrie static-trie, ^IIndirectRelation static-leaf]
+                                           ^MemoryHashTrie trie, ^IIndirectRelation leaf]
 
-  (util/with-close-on-catch [leaf-vsr (VectorSchemaRoot/create (Schema. (for [^IIndirectVector rdr static-leaf]
+  (util/with-close-on-catch [leaf-vsr (VectorSchemaRoot/create (Schema. (for [^IIndirectVector rdr leaf]
                                                                           (.getField (.getVector rdr))))
                                                                allocator)
                              trie-vsr (VectorSchemaRoot/create trie-schema allocator)]
@@ -73,17 +77,17 @@
           leaf-wtr (.writerForTypeId node-wtr (byte 2))
           page-idx-wtr (.structKeyWriter leaf-wtr "page-idx")
           !page-idx (AtomicInteger. 0)
-          copier (vw/->rel-copier leaf-rel-wtr static-leaf)]
+          copier (vw/->rel-copier leaf-rel-wtr leaf)]
 
       (-> (.putObject obj-store
                       (format "tables/%s/%s/leaf-c%s.arrow" table-name trie-name chunk-idx)
                       (util/build-arrow-ipc-byte-buffer leaf-vsr :file
                         (fn [write-batch!]
-                          (.accept static-trie
-                                   (reify HashTrie$Visitor
-                                     (visitBranch [visitor children]
+                          (.accept trie
+                                   (reify MemoryHashTrie$Visitor
+                                     (visitBranch [visitor branch]
                                        (let [!page-idxs (IntStream/builder)]
-                                         (doseq [^HashTrie child children]
+                                         (doseq [^MemoryHashTrie child (.children branch)]
                                            (.add !page-idxs (if child
                                                               (do
                                                                 (.accept child visitor)
@@ -99,8 +103,8 @@
                                          (.endList branch-wtr)
                                          (.endRow trie-rel-wtr)))
 
-                                     (visitLeaf [_ _page-idx idxs]
-                                       (-> (Arrays/stream idxs)
+                                     (visitLeaf [_ leaf]
+                                       (-> (Arrays/stream (.data leaf))
                                            (.forEach (reify IntConsumer
                                                        (accept [_ idx]
                                                          (.copyRow copier idx)))))
@@ -120,61 +124,11 @@
               (.putObject obj-store
                           (format "tables/%s/%s/trie-c%s.arrow" table-name trie-name chunk-idx)
                           (util/root->arrow-ipc-byte-buffer trie-vsr :file))))
+
           (.whenComplete (reify BiConsumer
                            (accept [_ _ _]
                              (util/try-close trie-vsr)
                              (util/try-close leaf-vsr))))))))
-
-(defn- add-all ^xtdb.trie.MemoryHashTrie [^MemoryHashTrie trie, ^ints idxs]
-  ;; TODO MHT.addAll, or maybe a specific merge operation...
-  (loop [n 0, trie trie]
-    (if (= n (alength idxs))
-      trie
-      (recur (inc n) (.add trie (aget idxs n))))))
-
-(defrecord LiveTableTx [^IRelationWriter static-leaf, ^IRelationWriter transient-leaf
-                        ^Map static-tries, ^Map transient-tries]
-  ILiveTableTx
-  (leafWriter [_] transient-leaf)
-
-  (addRow [_ idx]
-    (.compute transient-tries "t1-diff"
-              (reify BiFunction
-                (apply [_ _trie-name transient-trie]
-                  (let [^MemoryHashTrie
-                        transient-trie (or transient-trie
-                                           (MemoryHashTrie/emptyTrie (TrieKeys. transient-leaf)))]
-
-                    (.add transient-trie idx))))))
-
-  (commit [_]
-    (let [copier (vw/->rel-copier static-leaf (vw/rel-wtr->rdr transient-leaf))]
-      (doseq [[trie-name ^MemoryHashTrie transient-trie] transient-tries]
-        (.compute static-tries trie-name
-                  (reify BiFunction
-                    (apply [_ _trie-name static-trie]
-                      (let [!new-static-trie (volatile!
-                                              (or static-trie (MemoryHashTrie/emptyTrie (TrieKeys. static-leaf))))]
-                        (.accept transient-trie
-                                 (reify HashTrie$Visitor
-                                   (visitBranch [visitor children]
-                                     (run! #(.accept ^HashTrie % visitor) children))
-
-                                   (visitLeaf [_ _page-idx idxs]
-                                     (let [!static-idxs (IntStream/builder)]
-                                       (-> (Arrays/stream idxs)
-                                           (.forEach (reify IntConsumer
-                                                       (accept [_ idx]
-                                                         (.add !static-idxs (.copyRow copier idx))))))
-
-                                       (let [static-idxs (.toArray (.build !static-idxs))]
-                                         (vswap! !new-static-trie add-all static-idxs))))))
-                        @!new-static-trie)))))
-      (.clear transient-tries)))
-
-  AutoCloseable
-  (close [_]
-    (util/close transient-leaf)))
 
 (def ^:private ^org.apache.arrow.vector.types.pojo.Schema leaf-schema
   (Schema. [(types/col-type->field "xt$iid" [:fixed-size-binary 16])
@@ -187,24 +141,52 @@
 (defn- open-leaf-root ^xtdb.vector.IRelationWriter [^BufferAllocator allocator]
   (vw/root->writer (VectorSchemaRoot/create leaf-schema allocator)))
 
-(defrecord LiveTable [^BufferAllocator allocator, ^ObjectStore obj-store, ^String table-name
-                      ^IRelationWriter static-leaf, ^Map static-tries]
+(deftype LiveTable [^BufferAllocator allocator, ^ObjectStore obj-store, ^String table-name
+                    ^IRelationWriter leaf,
+                    ^:unsynchronized-mutable ^Map tries]
   ILiveTable
-  (startTx [_]
-    (util/with-close-on-catch [transient-leaf (open-leaf-root allocator)]
-      (LiveTableTx. static-leaf transient-leaf
-                    static-tries (HashMap.))))
+  (startTx [this-table]
+    (let [transient-tries (HashMap. tries)
+          t1-trie-keys (TrieKeys. (into-array BaseFixedWidthVector [(.getVector (.writerForName leaf "xt$iid"))]))]
+      (reify ILiveTableTx
+        (leafWriter [_] leaf)
+
+        (addRow [_ idx]
+          (.compute transient-tries "t1-diff"
+                    (reify BiFunction
+                      (apply [_ _trie-name {:keys [^MemoryHashTrie trie trie-keys]}]
+                        (let [^MemoryHashTrie
+                              transient-trie (or trie (MemoryHashTrie/emptyTrie))
+                              trie-keys (or trie-keys t1-trie-keys)]
+
+                          {:trie (.add transient-trie trie-keys idx)
+                           :trie-keys trie-keys})))))
+
+        (commit [_]
+          (set! (.-tries this-table) transient-tries))
+
+        AutoCloseable
+        (close [_]))))
 
   (finishChunk [_ chunk-idx]
     (let [chunk-idx-str (util/->lex-hex-string chunk-idx)]
       (CompletableFuture/allOf
-       (->> (for [[trie-name trie] static-tries]
-              (write-trie! allocator obj-store table-name trie-name chunk-idx-str trie (vw/rel-wtr->rdr static-leaf)))
+       (->> (for [[trie-name {:keys [^MemoryHashTrie trie trie-keys]}] tries]
+              (try
+                (write-trie! allocator obj-store table-name trie-name chunk-idx-str (-> trie (.compactLogs trie-keys)) (vw/rel-wtr->rdr leaf))
+                (catch Throwable t
+                  (prn :yo)
+                  (prn (-> trie (.compactLogs trie-keys)))
+                  (throw t))))
             (into-array CompletableFuture)))))
+
+  TestLiveTable
+  (leaf-writer [_] leaf)
+  (tries [_] tries)
 
   AutoCloseable
   (close [_]
-    (util/close static-leaf)))
+    (util/close leaf)))
 
 (defrecord LiveIndex [^BufferAllocator allocator, ^ObjectStore object-store, ^Map tables]
   ILiveIndex
@@ -213,8 +195,7 @@
                       (reify Function
                         (apply [_ table-name]
                           (util/with-close-on-catch [rel (open-leaf-root allocator)]
-                            (LiveTable. allocator object-store table-name
-                                        rel (HashMap.)))))))
+                            (LiveTable. allocator object-store table-name rel (HashMap.)))))))
 
   (startTx [live-idx]
     (let [table-txs (HashMap.)]

@@ -27,7 +27,17 @@ public class ArrowHashTrie {
         pageIdxVec = leafVec.getChild("page-idx", IntVector.class);
     }
 
-    class Branch implements HashTrie {
+    public interface NodeVisitor<R> {
+        R visitBranch(Branch branch);
+
+        R visitLeaf(Leaf leaf);
+    }
+
+    public sealed interface Node {
+        <R> R accept(NodeVisitor<R> visitor);
+    }
+
+    public final class Branch implements Node {
 
         private final int branchVecIdx;
 
@@ -35,19 +45,19 @@ public class ArrowHashTrie {
             this.branchVecIdx = branchVecIdx;
         }
 
-        private HashTrie[] getChildren() {
+        public Node[] getChildren() {
             return IntStream.range(branchVec.getElementStartIndex(branchVecIdx), branchVec.getElementEndIndex(branchVecIdx))
                     .mapToObj(childIdx -> forIndex(branchElVec.get(childIdx)))
-                    .toArray(HashTrie[]::new);
+                    .toArray(Node[]::new);
         }
 
         @Override
-        public <R> R accept(Visitor<R> visitor) {
-            return visitor.visitBranch(getChildren());
+        public <R> R accept(NodeVisitor<R> visitor) {
+            return visitor.visitBranch(this);
         }
     }
 
-    class Leaf implements HashTrie {
+    public final class Leaf implements Node {
 
         private final int leafVecIdx;
 
@@ -55,13 +65,17 @@ public class ArrowHashTrie {
             this.leafVecIdx = leafVecIdx;
         }
 
+        public int getPageIndex() {
+            return pageIdxVec.get(leafVecIdx);
+        }
+
         @Override
-        public <R> R accept(Visitor<R> visitor) {
-            return visitor.visitLeaf(pageIdxVec.get(leafVecIdx), null);
+        public <R> R accept(NodeVisitor<R> visitor) {
+            return visitor.visitLeaf(this);
         }
     }
     
-    private HashTrie forIndex(int idx) {
+    private Node forIndex(int idx) {
         var nodeOffset = nodesVec.getOffset(idx);
 
         return switch (nodesVec.getTypeId(idx)) {
@@ -72,7 +86,7 @@ public class ArrowHashTrie {
         };
     }
 
-    public static HashTrie from(VectorSchemaRoot trieRoot) {
+    public static Node from(VectorSchemaRoot trieRoot) {
         return new ArrowHashTrie(trieRoot).forIndex(trieRoot.getRowCount() - 1);
     }
 }

@@ -1,18 +1,17 @@
 (ns xtdb.indexer.live-index-test
   (:require [clojure.test :as t]
-            xtdb.indexer.live-index
+            [xtdb.indexer.live-index :as li]
             xtdb.object-store
             [xtdb.test-util :as tu]
             [xtdb.util :as util]
             [xtdb.vector.writer :as vw])
-  (:import [java.util Map Random UUID]
+  (:import [java.util Random UUID]
            [org.apache.arrow.memory BufferAllocator]
            [org.apache.arrow.vector ValueVector]
            [org.apache.arrow.vector.ipc ArrowFileReader]
            xtdb.indexer.live_index.ILiveIndex
            xtdb.object_store.ObjectStore
-           (xtdb.trie ArrowHashTrie HashTrie HashTrie$Visitor)
-           xtdb.vector.IRelationWriter))
+           (xtdb.trie ArrowHashTrie ArrowHashTrie$Node ArrowHashTrie$NodeVisitor MemoryHashTrie MemoryHashTrie$Visitor)))
 
 (def with-live-index
   (tu/with-system {:xtdb/allocator {}
@@ -21,20 +20,25 @@
 
 (t/use-fixtures :each with-live-index)
 
-(deftype TrieRenderer [^ArrowFileReader leaf-rdr, ^ValueVector iid-vec,
-                       ^:unsychronized-mutable ^int current-page-idx]
-  HashTrie$Visitor
-  (visitBranch [this children]
-    (mapcat #(.accept ^HashTrie % this) children))
+(deftype MemoryTrieRenderer [^ValueVector iid-vec]
+  MemoryHashTrie$Visitor
+  (visitBranch [this branch]
+    (into [] (mapcat #(.accept ^MemoryHashTrie % this)) (.children branch)))
 
-  (visitLeaf [this page-idx idxs]
-    (when (and leaf-rdr (not= current-page-idx page-idx))
-      ;; would be good if ArrowFileReader accepted a page-idx...
-      (.loadRecordBatch leaf-rdr (.get (.getRecordBlocks leaf-rdr) page-idx)))
+  (visitLeaf [this leaf]
+    (mapv #(vec (.getObject iid-vec %)) (.data leaf))))
 
-    (set! (.current-page-idx this) page-idx)
+(deftype ArrowTrieRenderer [^ArrowFileReader leaf-rdr, ^ValueVector iid-vec,
+                            ^:unsychronized-mutable ^int current-page-idx]
+  ArrowHashTrie$NodeVisitor
+  (visitBranch [this branch]
+    (mapcat #(.accept ^ArrowHashTrie$Node % this) (.getChildren branch)))
 
-    (->> (or idxs (range 0 (.getValueCount iid-vec)))
+  (visitLeaf [this leaf]
+    ;; would be good if ArrowFileReader accepted a page-idx...
+    (.loadRecordBatch leaf-rdr (.get (.getRecordBlocks leaf-rdr) (.getPageIndex leaf)))
+
+    (->> (range 0 (.getValueCount iid-vec))
          (mapv #(vec (.getObject iid-vec %))))))
 
 (t/deftest test-t1-chunk
@@ -63,12 +67,14 @@
 
           (.commit live-idx-tx)
 
-          (let [{:keys [^IRelationWriter static-leaf, ^Map static-tries]} (.liveTable live-index "my-table")
-                iid-vec (.getVector (.writerForName static-leaf "xt$iid"))
+          (let [live-table (.liveTable live-index "my-table")
+                leaf-writer (li/leaf-writer live-table)
+                iid-vec (.getVector (.writerForName leaf-writer "xt$iid"))
 
-                ^HashTrie trie (.get static-tries "t1-diff")]
+                {:keys [^MemoryHashTrie trie trie-keys]} (get (li/tries live-table) "t1-diff")]
 
-            (t/is (= iid-bytes (.accept trie (TrieRenderer. nil iid-vec -1))))))))
+            (t/is (= iid-bytes (-> (.compactLogs trie trie-keys)
+                                   (.accept (MemoryTrieRenderer. iid-vec)))))))))
 
     (t/testing "finish chunk"
       (.finishChunk live-index 0)
@@ -80,4 +86,4 @@
           (.loadNextBatch trie-rdr)
           (t/is (= iid-bytes
                    (.accept (ArrowHashTrie/from (.getVectorSchemaRoot trie-rdr))
-                            (TrieRenderer. leaf-rdr (.getVector (.getVectorSchemaRoot leaf-rdr) "xt$iid") -1)))))))))
+                            (ArrowTrieRenderer. leaf-rdr (.getVector (.getVectorSchemaRoot leaf-rdr) "xt$iid") -1)))))))))
