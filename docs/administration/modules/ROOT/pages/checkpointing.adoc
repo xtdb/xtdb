@@ -12,6 +12,7 @@ The checkpoint store is a pluggable module - there are a number of officially su
 - Java's NIO FileSystem (below)
 - AWS's xref:{page-component-version}@storage::aws-s3.adoc#checkpoint-store[S3]
 - GCP's xref:{page-component-version}@storage::google-cloud-storage.adoc#checkpoint-store[Cloud Storage]
+- Azure's xref:{page-component-version}@storage::azure-blobs.adoc#checkpoint-store[Blob Storage]
 
 XTDB nodes in a cluster don't explicitly communicate regarding which one is responsible for creating a checkpoint - instead, they check at random intervals to see whether any other node has recently created a checkpoint, and create one if necessary.
 The desired frequency of checkpoints can be set using `approx-frequency`.
