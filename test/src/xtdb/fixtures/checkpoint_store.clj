@@ -5,7 +5,8 @@
             [clojure.java.io :as io]
             [clojure.test :as t])
   (:import  [java.nio.file NoSuchFileException CopyOption Files FileVisitOption LinkOption Path]
-            java.nio.file.attribute.FileAttribute))
+            java.nio.file.attribute.FileAttribute
+            java.util.Date))
 
 (defn test-checkpoint-store [cp-store]
   (fix/with-tmp-dirs #{local-dir}
@@ -31,7 +32,7 @@
         (spit (io/file src-dir "hello.txt") "Hello world")
 
         (t/is (= cp-1
-                 (-> (cp/upload-checkpoint cp-store src-dir cp-1)
+                 (-> (cp/upload-checkpoint cp-store src-dir (assoc cp-1 :cp-at (Date.)))
                      (select-keys #{::cp/cp-format :tx}))))
 
         (t/is (empty? (cp/available-checkpoints cp-store {::cp/cp-format ::bar-cp-format})))
@@ -49,7 +50,7 @@
         (spit (io/file src-dir "ivan.txt") "Hey Ivan!")
 
         (t/is (= cp-2
-                 (-> (cp/upload-checkpoint cp-store src-dir cp-2)
+                 (-> (cp/upload-checkpoint cp-store src-dir (assoc cp-2 :cp-at (Date.)))
                      (select-keys #{::cp/cp-format :tx}))))
 
         (t/is (empty? (cp/available-checkpoints cp-store {::cp/cp-format ::bar-cp-format})))
