@@ -6,7 +6,8 @@
             [xtdb.io :as xio]
             [xtdb.bus :as bus]
             [xtdb.error :as err]
-            [xtdb.system :as sys])
+            [xtdb.system :as sys]
+            [clojure.string :as string])
   (:import [java.io Closeable File]
            java.net.URI
            java.nio.charset.StandardCharsets
@@ -197,7 +198,12 @@
       (Files/isRegularFile from-path (make-array LinkOption 0))
       (Files/copy from-path to-path ^"[Ljava.nio.file.CopyOption;" (make-array CopyOption 0)))))
 
-(defrecord FileSystemCheckpointStore [^Path root-path]
+(defn format-fs-date [{:keys [no-colons-in-filenames]} date]
+  (when date
+    (cond-> (xio/format-rfc3339-date date)
+      no-colons-in-filenames (string/replace #":" "-"))))
+
+(defrecord FileSystemCheckpointStore [^Path root-path no-colons-in-filenames]
   CheckpointStore
   (available-checkpoints [_ {::keys [cp-format]}]
     (when (Files/exists root-path (make-array LinkOption 0))
@@ -230,9 +236,9 @@
                            :local-dir to-path}
                           t))))))
 
-  (upload-checkpoint [_ dir {:keys [tx cp-at ::cp-format]}]
+  (upload-checkpoint [this dir {:keys [tx cp-at ::cp-format]}]
     (let [from-path (.toPath ^File dir)
-          cp-prefix (format "checkpoint-%s-%s" (::xt/tx-id tx) (xio/format-rfc3339-date cp-at))
+          cp-prefix (format "checkpoint-%s-%s" (::xt/tx-id tx) (format-fs-date this cp-at))
           to-path (.resolve root-path cp-prefix)]
 
       (sync-path from-path to-path)
@@ -251,11 +257,16 @@
                      (into-array OpenOption #{StandardOpenOption/WRITE StandardOpenOption/CREATE_NEW}))
         cp)))
 
-  (cleanup-checkpoint [_ {:keys [tx cp-at]}]
-    (let [cp-prefix (format "checkpoint-%s-%s" (::xt/tx-id tx) (xio/format-rfc3339-date cp-at))
+  (cleanup-checkpoint [this {:keys [tx cp-at]}]
+    (let [cp-prefix (format "checkpoint-%s-%s" (::xt/tx-id tx) (format-fs-date this cp-at))
           to-path (io/file (.toString root-path) cp-prefix)]
       (xio/delete-file (str to-path ".edn"))
       (xio/delete-dir to-path))))
 
-(defn ->filesystem-checkpoint-store {::sys/args {:path {:spec ::sys/path, :required? true}}} [{:keys [path]}]
-  (->FileSystemCheckpointStore path))
+(defn ->filesystem-checkpoint-store {::sys/args {:path {:spec ::sys/path, 
+                                                        :required? true}
+                                                 :no-colons-in-filenames {:spec ::sys/boolean
+                                                                          :required? true
+                                                                          :default false}}} 
+  [{:keys [path no-colons-in-filenames]}]
+  (->FileSystemCheckpointStore path no-colons-in-filenames))
