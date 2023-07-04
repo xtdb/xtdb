@@ -156,7 +156,7 @@
             "name" : "iid",
             "count" : 6,
             "VALIDITY" : [1,1,1,1,1,1],
-            "DATA" : ["32e5271f2289be5ebe3c92dfa544b551","27d9ba7a01db456ad596da9f07f4140e","27d9ba7a01db456ad596da9f07f4140e","4cd9b7672d7fbee8fb51fb1e049f6903","00000000000000000000000000000000","420fce314175df402adbeae3cfbbb856"]
+            "DATA" : ["32e5271f2289be5ebe3c92dfa544b551","27d9ba7a01db456ad596da9f07f4140e","27d9ba7a01db456ad596da9f07f4140e","4cd9b7672d7fbee8fb51fb1e049f6903","4cd9b7672d7fbee8fb51fb1e049f6903","420fce314175df402adbeae3cfbbb856"]
           },{
             "name" : "row-id",
             "count" : 6,
@@ -181,7 +181,7 @@
             "name" : "iid",
             "count" : 2,
             "VALIDITY" : [1,1],
-            "DATA" : ["32e5271f2289be5ebe3c92dfa544b551","00000000000000000000000000000000"]
+            "DATA" : ["32e5271f2289be5ebe3c92dfa544b551","4cd9b7672d7fbee8fb51fb1e049f6903"]
           },{
             "name" : "valid-from",
             "count" : 2,
@@ -201,7 +201,7 @@
             "name" : "iid",
             "count" : 2,
             "VALIDITY" : [1,1],
-            "DATA" : ["27d9ba7a01db456ad596da9f07f4140e","00000000000000000000000000000000"]
+            "DATA" : ["27d9ba7a01db456ad596da9f07f4140e","4cd9b7672d7fbee8fb51fb1e049f6903"]
           }]
         }]
       }]

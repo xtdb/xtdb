@@ -407,9 +407,6 @@
         (.findFirst)
         (.getAsInt))))
 
-
-(def ^:private nil-iid (byte-array 16))
-
 (defn- ->sql-update-indexer ^xtdb.indexer.SqlOpIndexer [^IMetadataManager metadata-mgr, ^IBufferPool buffer-pool
                                                         ^ILogOpIndexer temporal-log-op-idxer,
                                                         ^IContentLogTx content-log-tx,
@@ -443,6 +440,7 @@
                                                (.copyRow live-copier idx)
                                                (.copyRow content-log-copier idx)))])
                                         (into {}))
+                id-duv (.getVector (.vectorForName in-rel "xt$id"))
                 iid-rdr (.monoReader (.vectorForName in-rel "_iid") :i64)
                 row-id-rdr (.monoReader (.vectorForName in-rel "_row_id") :i64)
                 valid-from-rdr (-> (.vectorForName in-rel "xt$valid_from")
@@ -454,6 +452,7 @@
             (dotimes [idx row-count]
               (let [old-row-id (.readLong row-id-rdr idx)
                     new-row-id (.nextRowId live-chunk)
+                    eid (t/get-object id-duv idx)
                     iid (.readLong iid-rdr idx)
                     valid-from (.readLong valid-from-rdr idx)
                     valid-to (.readLong valid-to-rdr idx)]
@@ -498,8 +497,7 @@
                                                                       (.copyRow idx))))))))))))))
                       (util/rethrowing-cause)))
 
-                ;; FIXME scan does not currently pass through eid, so not possible to do eid -> iid
-                (.logPut temporal-log-op-idxer nil-iid new-row-id valid-from valid-to)
+                (.logPut temporal-log-op-idxer (->iid eid) new-row-id valid-from valid-to)
                 (.endRow content-log-wtr)
                 (.endRow content-wtr)
                 (.indexPut temporal-idxer iid new-row-id valid-from valid-to false)))))))))
@@ -509,11 +507,13 @@
   (reify SqlOpIndexer
     (indexOp [_ in-rel _query-opts]
       (let [row-count (.rowCount in-rel)
+            id-duv (.getVector (.vectorForName in-rel "xt$id"))
             iid-rdr (.monoReader (.vectorForName in-rel "_iid") :i64)
             valid-from-rdr (.monoReader (.vectorForName in-rel "xt$valid_from") t/temporal-col-type)
             valid-to-rdr (.monoReader (.vectorForName in-rel "xt$valid_to") t/temporal-col-type)]
         (dotimes [idx row-count]
           (let [row-id (.nextRowId live-chunk)
+                eid (t/get-object id-duv idx)
                 iid (.readLong iid-rdr idx)
                 valid-from (.readLong valid-from-rdr idx)
                 valid-to (.readLong valid-to-rdr idx)]
@@ -522,19 +522,19 @@
                                       {:valid-from (util/micros->instant valid-from)
                                        :valid-to (util/micros->instant valid-to)})))
 
-            ;; FIXME scan does not currently pass through eid, so not possible to do eid -> iid
-            (.logDelete temporal-log-op-idxer nil-iid valid-from valid-to)
+            (.logDelete temporal-log-op-idxer (->iid eid) valid-from valid-to)
             (.indexDelete temporal-idxer iid row-id valid-from valid-to false)))))))
 
 (defn- ->sql-erase-indexer ^xtdb.indexer.SqlOpIndexer [^ILogOpIndexer temporal-log-op-idxer, ^ITemporalTxIndexer temporal-idxer]
   (reify SqlOpIndexer
     (indexOp [_ in-rel _query-opts]
       (let [row-count (.rowCount in-rel)
+            id-duv (.getVector (.vectorForName in-rel "xt$id"))
             iid-rdr (.monoReader (.vectorForName in-rel "_iid") :i64)]
         (dotimes [idx row-count]
-          (let [iid (.readLong iid-rdr idx)]
-            ;; FIXME scan does not currently pass through eid, so not possible to do eid -> iid
-            (.logEvict temporal-log-op-idxer nil-iid)
+          (let [eid (t/get-object id-duv idx)
+                iid (.readLong iid-rdr idx)]
+            (.logEvict temporal-log-op-idxer (->iid eid))
             (.indexEvict temporal-idxer iid)))))))
 
 (defn- ->sql-indexer ^xtdb.indexer.OpIndexer [^BufferAllocator allocator, ^IMetadataManager metadata-mgr, ^IBufferPool buffer-pool, ^IInternalIdManager iid-mgr
