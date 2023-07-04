@@ -1,0 +1,216 @@
+{
+  "schema" : {
+    "fields" : [{
+      "name" : "xt$iid",
+      "nullable" : false,
+      "type" : {
+        "name" : "fixedsizebinary",
+        "byteWidth" : 16
+      },
+      "children" : [ ]
+    },{
+      "name" : "xt$system_from",
+      "nullable" : false,
+      "type" : {
+        "name" : "timestamp",
+        "unit" : "MICROSECOND",
+        "timezone" : "UTC"
+      },
+      "children" : [ ]
+    },{
+      "name" : "op",
+      "nullable" : false,
+      "type" : {
+        "name" : "union",
+        "mode" : "Dense",
+        "typeIds" : [0,1,2]
+      },
+      "children" : [{
+        "name" : "put",
+        "nullable" : false,
+        "type" : {
+          "name" : "struct"
+        },
+        "children" : [{
+          "name" : "xt$valid_from",
+          "nullable" : false,
+          "type" : {
+            "name" : "timestamp",
+            "unit" : "MICROSECOND",
+            "timezone" : "UTC"
+          },
+          "children" : [ ]
+        },{
+          "name" : "xt$valid_to",
+          "nullable" : false,
+          "type" : {
+            "name" : "timestamp",
+            "unit" : "MICROSECOND",
+            "timezone" : "UTC"
+          },
+          "children" : [ ]
+        },{
+          "name" : "xt$doc",
+          "nullable" : true,
+          "type" : {
+            "name" : "struct"
+          },
+          "children" : [{
+            "name" : "xt$id",
+            "nullable" : false,
+            "type" : {
+              "name" : "union",
+              "mode" : "Dense",
+              "typeIds" : [ ]
+            },
+            "children" : [{
+              "name" : "uuid",
+              "nullable" : false,
+              "type" : {
+                "name" : "UuidType"
+              },
+              "children" : [ ],
+              "metadata" : [{
+                "value" : "uuid",
+                "key" : "ARROW:extension:name"
+              },{
+                "value" : "",
+                "key" : "ARROW:extension:metadata"
+              }]
+            }]
+          },{
+            "name" : "b",
+            "nullable" : false,
+            "type" : {
+              "name" : "union",
+              "mode" : "Dense",
+              "typeIds" : [ ]
+            },
+            "children" : [{
+              "name" : "i64",
+              "nullable" : false,
+              "type" : {
+                "name" : "int",
+                "bitWidth" : 64,
+                "isSigned" : true
+              },
+              "children" : [ ]
+            }]
+          }]
+        }]
+      },{
+        "name" : "delete",
+        "nullable" : false,
+        "type" : {
+          "name" : "struct"
+        },
+        "children" : [{
+          "name" : "xt$valid_from",
+          "nullable" : false,
+          "type" : {
+            "name" : "timestamp",
+            "unit" : "MICROSECOND",
+            "timezone" : "UTC"
+          },
+          "children" : [ ]
+        },{
+          "name" : "xt$valid_to",
+          "nullable" : false,
+          "type" : {
+            "name" : "timestamp",
+            "unit" : "MICROSECOND",
+            "timezone" : "UTC"
+          },
+          "children" : [ ]
+        }]
+      },{
+        "name" : "evict",
+        "nullable" : true,
+        "type" : {
+          "name" : "null"
+        },
+        "children" : [ ]
+      }]
+    }]
+  },
+  "batches" : [{
+    "count" : 3,
+    "columns" : [{
+      "name" : "xt$iid",
+      "count" : 3,
+      "VALIDITY" : [1,1,1],
+      "DATA" : ["27d9ba7a01db456ad596da9f07f4140e","27d9ba7a01db456ad596da9f07f4140e","27d9ba7a01db456ad596da9f07f4140e"]
+    },{
+      "name" : "xt$system_from",
+      "count" : 3,
+      "VALIDITY" : [1,1,1],
+      "DATA" : [1578009600000000,1577923200000000,1577836800000000]
+    },{
+      "name" : "op",
+      "count" : 3,
+      "TYPE_ID" : [2,0,0],
+      "OFFSET" : [0,0,1],
+      "children" : [{
+        "name" : "put",
+        "count" : 2,
+        "VALIDITY" : [1,1],
+        "children" : [{
+          "name" : "xt$valid_from",
+          "count" : 2,
+          "VALIDITY" : [1,1],
+          "DATA" : [1577923200000000,1577836800000000]
+        },{
+          "name" : "xt$valid_to",
+          "count" : 2,
+          "VALIDITY" : [1,1],
+          "DATA" : [253402300799999999,253402300799999999]
+        },{
+          "name" : "xt$doc",
+          "count" : 2,
+          "VALIDITY" : [1,1],
+          "children" : [{
+            "name" : "xt$id",
+            "count" : 2,
+            "TYPE_ID" : [0,0],
+            "OFFSET" : [0,1],
+            "children" : [{
+              "name" : "uuid",
+              "count" : 2,
+              "VALIDITY" : [1,1],
+              "DATA" : ["424f5622c8264deda5dbe2144d665c38","424f5622c8264deda5dbe2144d665c38"]
+            }]
+          },{
+            "name" : "b",
+            "count" : 2,
+            "TYPE_ID" : [0,0],
+            "OFFSET" : [0,1],
+            "children" : [{
+              "name" : "i64",
+              "count" : 2,
+              "VALIDITY" : [1,1],
+              "DATA" : ["3","2"]
+            }]
+          }]
+        }]
+      },{
+        "name" : "delete",
+        "count" : 0,
+        "VALIDITY" : [ ],
+        "children" : [{
+          "name" : "xt$valid_from",
+          "count" : 0,
+          "VALIDITY" : [ ],
+          "DATA" : [ ]
+        },{
+          "name" : "xt$valid_to",
+          "count" : 0,
+          "VALIDITY" : [ ],
+          "DATA" : [ ]
+        }]
+      },{
+        "name" : "evict",
+        "count" : 1
+      }]
+    }]
+  }]
+}

@@ -153,18 +153,13 @@
 
       (close [_] (.close inner)))))
 
-(defn- retain-vec [^ValueVector v]
-  (-> (.getTransferPair v (.getAllocator v))
-      (doto (.splitAndTransfer 0 (.getValueCount v)))
-      (.getTo)))
-
 (defn- open-wm-rel ^xtdb.vector.IIndirectRelation [^IRelationWriter rel, ^BigIntVector row-id-vec, retain?]
   (let [out-cols (ArrayList.)]
     (try
       (doseq [^IIndirectVector v (cons (iv/->direct-vec row-id-vec)
                                        (vw/rel-wtr->rdr rel))]
         (.add out-cols (iv/->direct-vec (cond-> (.getVector v)
-                                          retain? (retain-vec)))))
+                                          retain? (util/slice-vec)))))
 
       (iv/->indirect-rel out-cols)
 

@@ -1,0 +1,43 @@
+{
+  "schema" : {
+    "fields" : [{
+      "name" : "xt$id",
+      "nullable" : false,
+      "type" : {
+        "name" : "union",
+        "mode" : "Dense",
+        "typeIds" : [ ]
+      },
+      "children" : [{
+        "name" : "uuid",
+        "nullable" : false,
+        "type" : {
+          "name" : "UuidType"
+        },
+        "children" : [ ],
+        "metadata" : [{
+          "value" : "uuid",
+          "key" : "ARROW:extension:name"
+        },{
+          "value" : "",
+          "key" : "ARROW:extension:metadata"
+        }]
+      }]
+    }]
+  },
+  "batches" : [{
+    "count" : 2,
+    "columns" : [{
+      "name" : "xt$id",
+      "count" : 2,
+      "TYPE_ID" : [0,0],
+      "OFFSET" : [0,1],
+      "children" : [{
+        "name" : "uuid",
+        "count" : 2,
+        "VALIDITY" : [1,1],
+        "DATA" : ["424f5622c8264deda5dbe2144d665c38","424f5622c8264deda5dbe2144d665c38"]
+      }]
+    }]
+  }]
+}

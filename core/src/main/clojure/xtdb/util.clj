@@ -25,7 +25,7 @@
            [org.apache.arrow.flatbuf Footer Message RecordBatch]
            [org.apache.arrow.memory AllocationManager ArrowBuf BufferAllocator]
            [org.apache.arrow.memory.util ByteFunctionHelpers MemoryUtil]
-           [org.apache.arrow.vector VectorLoader VectorSchemaRoot]
+           [org.apache.arrow.vector ValueVector VectorLoader VectorSchemaRoot]
            [org.apache.arrow.vector.ipc ArrowFileWriter ArrowStreamWriter ArrowWriter]
            [org.apache.arrow.vector.ipc.message ArrowBlock ArrowFooter ArrowRecordBatch MessageSerializer]
            org.roaringbitmap.RoaringBitmap
@@ -381,6 +381,15 @@
 (defn root-field-count ^long [^VectorSchemaRoot root]
   (.size (.getFields (.getSchema root))))
 
+(defn slice-vec
+  ([^ValueVector v] (slice-vec v 0))
+  ([^ValueVector v, ^long start-idx] (slice-vec v start-idx (.getValueCount v)))
+
+  ([^ValueVector v, ^long start-idx, ^long len]
+   (-> (.getTransferPair v (.getAllocator v))
+       (doto (.splitAndTransfer start-idx len))
+       (.getTo))))
+
 (defn slice-root
   (^org.apache.arrow.vector.VectorSchemaRoot [^VectorSchemaRoot root]
    (slice-root root 0))
@@ -392,9 +401,7 @@
    (let [num-fields (root-field-count root)
          acc (ArrayList. num-fields)]
      (dotimes [n num-fields]
-       (let [field-vec (.getVector root n)]
-         (.add acc (.getTo (doto (.getTransferPair field-vec (.getAllocator field-vec))
-                             (.splitAndTransfer start-idx len))))))
+       (.add acc (slice-vec (.getVector root n) start-idx len)))
 
      (VectorSchemaRoot. acc))))
 
