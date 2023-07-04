@@ -29,7 +29,9 @@
 
     Exceptions are thrown immediately if the start is negative, or the len is zero or below. This is
     to ensure consistent boundary behaviour between different object store implementations. You should check for these conditions and deal with them
-    before calling getObjectRange.")
+    before calling getObjectRange.
+
+    Behaviour for a start position at or exceeding the byte length of the object is undefined. You may or may not receive an exception.")
 
   (^java.util.concurrent.CompletableFuture #_<Path> getObject [^String k, ^java.nio.file.Path out-path]
    "Asynchronously writes the object to the given path.
