@@ -651,7 +651,9 @@
                           :let [identifier (last identifiers)]]
                       {:identifier identifier
                        :qualified-column [correlation-name identifier]})
-                    (for [col-name ["_iid" "_row_id"
+                    ;; TODO _iid (and possibly _row_id) can go once we remove the old temporal-indexer
+                    ;; also see below
+                    (for [col-name ["xt$id" "_iid" "_row_id"
                                     "xt$valid_from" "xt$valid_to"
                                     "xt$system_from" "xt$system_to"]]
                       {:identifier col-name
@@ -677,7 +679,7 @@
     (:update_statement__searched :delete_statement__searched)
     [(let [{:keys [correlation-name], :as table} (table ag)]
        (vec
-        (concat (->> (for [col-name ["_iid" "_row_id"
+        (concat (->> (for [col-name ["xt$id" "_iid" "_row_id"
                                      "xt$valid_from" "xt$valid_to"
                                      "xt$system_from" "xt$system_to"]]
                        {:identifier col-name
@@ -693,7 +695,7 @@
 
     :erase_statement__searched
     [(let [{:keys [correlation-name], :as table} (table ag)]
-       (->> (for [col-name ["_iid" "_row_id"
+       (->> (for [col-name ["xt$id" "_iid" "_row_id"
                             "xt$valid_from" "xt$valid_to"
                             "xt$system_from" "xt$system_to"]]
               {:identifier col-name

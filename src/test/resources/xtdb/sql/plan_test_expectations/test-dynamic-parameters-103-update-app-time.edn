@@ -1,32 +1,36 @@
 [:update
  {:table "users"}
  [:rename
-  {x2 _iid,
-   x3 _row_id,
-   x6 xt$system_from,
-   x7 xt$system_to,
-   x9 first_name,
-   x10 xt$valid_from,
-   x11 xt$valid_to}
+  {x2 xt$id,
+   x3 _iid,
+   x4 _row_id,
+   x7 xt$system_from,
+   x8 xt$system_to,
+   x10 first_name,
+   x11 xt$valid_from,
+   x12 xt$valid_to}
   [:project
    [x2
     x3
-    x6
+    x4
     x7
-    {x9 ?_2}
-    {x10 (cast-tstz (greatest x4 ?_0))}
-    {x11 (cast-tstz (least x5 ?_1))}]
+    x8
+    {x10 ?_2}
+    {x11 (cast-tstz (greatest x5 ?_0))}
+    {x12 (cast-tstz (least x6 ?_1))}]
    [:rename
     {id x1,
-     _iid x2,
-     _row_id x3,
-     xt$valid_from x4,
-     xt$valid_to x5,
-     xt$system_from x6,
-     xt$system_to x7}
+     xt$id x2,
+     _iid x3,
+     _row_id x4,
+     xt$valid_from x5,
+     xt$valid_to x6,
+     xt$system_from x7,
+     xt$system_to x8}
     [:scan
      {:table users, :for-valid-time [:between ?_0 ?_1]}
      [{id (= id ?_3)}
+      xt$id
       _iid
       _row_id
       xt$valid_from
