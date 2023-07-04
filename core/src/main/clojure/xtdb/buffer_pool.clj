@@ -1,9 +1,9 @@
 (ns xtdb.buffer-pool
-  (:require xtdb.object-store
+  (:require [xtdb.object-store :as object-store]
             [xtdb.util :as util]
-            [juxt.clojars-mirrors.integrant.core :as ig])
-  (:import clojure.lang.MapEntry
-           xtdb.LRU
+            [juxt.clojars-mirrors.integrant.core :as ig]
+            [clojure.tools.logging :as log])
+  (:import xtdb.LRU
            xtdb.object_store.ObjectStore
            java.io.Closeable
            java.nio.file.Path
@@ -17,7 +17,28 @@
 
 (definterface IBufferPool
   (^java.util.concurrent.CompletableFuture getBuffer [^String k])
+  (^java.util.concurrent.CompletableFuture getRangeBuffer [^String k ^int start ^int len])
   (^boolean evictBuffer [^String k]))
+
+(defn- cache-get ^ArrowBuf [^Map buffers ^StampedLock buffers-lock k]
+  (let [stamp (.readLock buffers-lock)]
+    (try
+      (.get buffers k)
+      (finally
+        (.unlock buffers-lock stamp)))))
+
+(defn- cache-compute
+  "Returns a pair [hit-or-miss, buf] computing the cached ArrowBuf from (f) if needed.
+  `hit-or-miss` is true if the buffer was found, false if the object was added as part of this call."
+  [^Map buffers ^StampedLock buffers-lock k f]
+  (let [stamp (.writeLock buffers-lock)
+        hit (.containsKey ^Map buffers k)]
+    (try
+      [hit (.computeIfAbsent buffers k (util/->jfn (fn [_] (f))))]
+      (finally
+        (.unlock buffers-lock stamp)))))
+
+(defn- retain [^ArrowBuf buf] (.retain (.getReferenceManager buf)) buf)
 
 (deftype BufferPool [^BufferAllocator allocator ^ObjectStore object-store ^Map buffers ^StampedLock buffers-lock
                      ^Path cache-path]
@@ -25,38 +46,53 @@
   (getBuffer [_ k]
     (if (nil? k)
       (CompletableFuture/completedFuture nil)
-      (let [v (let [stamp (.readLock buffers-lock)]
-                (try
-                  (.getOrDefault buffers k ::not-found)
-                  (finally
-                    (.unlock buffers-lock stamp))))]
-        (if-not (= ::not-found v)
-          (CompletableFuture/completedFuture (doto ^ArrowBuf v
-                                               (-> (.getReferenceManager) (.retain))))
-          (-> (if cache-path
-                (-> (.getObject object-store k (.resolve cache-path (str (UUID/randomUUID))))
-                    (util/then-apply (fn [buffer-path]
-                                       (MapEntry/create (util/->mmap-path buffer-path) buffer-path))))
+      (let [cached-buffer (cache-get buffers buffers-lock k)]
+        (cond
+          cached-buffer (CompletableFuture/completedFuture (retain cached-buffer))
 
-                (-> (.getObject object-store k)
-                    (util/then-apply (fn [nio-buffer]
-                                       (MapEntry/create nio-buffer nil)))))
-
+          cache-path
+          (-> (.getObject object-store k (.resolve cache-path (str (UUID/randomUUID))))
               (util/then-apply
-                (fn [[nio-buffer path]]
-                  (let [stamp (.writeLock buffers-lock)
-                        key-exists? (.containsKey ^Map buffers k)]
+                (fn [buffer-path]
+                  (let [cleanup-file #(util/delete-file buffer-path)]
                     (try
-                      (doto ^ArrowBuf (.computeIfAbsent buffers k (util/->jfn (fn [_]
-                                                                                (util/->arrow-buf-view allocator
-                                                                                                       nio-buffer
-                                                                                                       (when path
-                                                                                                         #(util/delete-file path))))))
-                        (-> (.getReferenceManager) (.retain)))
-                      (finally
-                        (.unlock buffers-lock stamp)
-                        (when (and key-exists? path)
-                          (util/delete-file path))))))))))))
+                      (let [nio-buffer (util/->mmap-path buffer-path)
+                            create-arrow-buf #(util/->arrow-buf-view allocator nio-buffer cleanup-file)
+                            [hit buf] (cache-compute buffers buffers-lock k create-arrow-buf)]
+                        (when hit (cleanup-file))
+                        (retain buf)
+                        buf)
+                      (catch Throwable t
+                        (try (cleanup-file) (catch Throwable t1 (log/error t1 "Error caught cleaning up file during exception handling")))
+                        (throw t)))))))
+
+          :else
+          (-> (.getObject object-store k)
+              (util/then-apply
+                (fn [nio-buffer]
+                  (let [create-arrow-buf #(util/->arrow-buf-view allocator nio-buffer)
+                        [_ buf] (cache-compute buffers buffers-lock k create-arrow-buf)]
+                    (retain buf)))))))))
+
+  (getRangeBuffer [_ k start len]
+    (object-store/ensure-shared-range-oob-behaviour start len)
+    (if (nil? k)
+      (CompletableFuture/completedFuture nil)
+      (let [cached-full-buffer (cache-get buffers buffers-lock k)
+
+            cached-buffer
+            (or (cache-get buffers buffers-lock [k start len])
+                (when ^ArrowBuf cached-full-buffer
+                  (.slice cached-full-buffer start len)))]
+
+        (if cached-buffer
+          (CompletableFuture/completedFuture (retain cached-buffer))
+          (-> (.getObjectRange object-store k start len)
+              (util/then-apply
+                (fn [nio-buffer]
+                  (let [create-arrow-buf #(util/->arrow-buf-view allocator nio-buffer)
+                        [_ buf] (cache-compute buffers buffers-lock [k start len] create-arrow-buf)]
+                    (retain buf)))))))))
 
   (evictBuffer [_ k]
     (if-let [buffer (let [stamp (.writeLock buffers-lock)]
@@ -81,7 +117,7 @@
 
 (defn- buffer-cache-bytes-size ^long [^Map buffers]
   (long (reduce + (for [^ArrowBuf buffer (vals buffers)]
-                    (.capacity buffer)))) )
+                    (.capacity buffer)))))
 
 (defn- ->buffer-cache [^long cache-entries-size ^long cache-bytes-size]
   (LRU. 16 (reify BiPredicate
