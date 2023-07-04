@@ -1,19 +1,20 @@
 (ns xtdb.azure
   (:require [clojure.spec.alpha :as s]
-            [clojure.tools.logging :as log]
             [clojure.string :as string]
-            [xtdb.util :as util]
+            [clojure.tools.logging :as log]
             [juxt.clojars-mirrors.integrant.core :as ig]
+            [xtdb.azure.log :as tx-log]
+            [xtdb.azure.object-store :as os]
             [xtdb.log :as xtdb-log]
-            [xtdb.azure
-             [object-store :as os]
-             [log :as tx-log]])
-  (:import [com.azure.storage.blob BlobServiceClientBuilder]
-           [com.azure.identity DefaultAzureCredentialBuilder]
-           [com.azure.messaging.eventhubs EventHubClientBuilder EventProcessorClientBuilder]
-           [com.azure.resourcemanager.eventhubs EventHubsManager]
-           [com.azure.core.management AzureEnvironment]
-           [com.azure.core.management.profile AzureProfile]))
+            [xtdb.util :as util])
+  (:import (com.azure.core.credential TokenCredential)
+           (com.azure.core.management AzureEnvironment)
+           (com.azure.core.management.profile AzureProfile)
+           (com.azure.identity DefaultAzureCredentialBuilder)
+           (com.azure.messaging.eventhubs EventHubClientBuilder)
+           (com.azure.resourcemanager.eventhubs EventHubsManager)
+           (com.azure.resourcemanager.eventhubs.models EventHub EventHub$Definition EventHubs)
+           (com.azure.storage.blob BlobServiceClientBuilder)))
 
 (derive ::blob-object-store :xtdb/object-store)
 
@@ -69,22 +70,22 @@
   (when-not resource-group-name
     (throw (IllegalArgumentException. "Must provide :resource-group-name when creating an eventhub automatically."))))
 
-(defn create-event-hub-if-not-exists [azure-credential {:keys [resource-group-name namespace event-hub-name retention-period-in-days]}]
+(defn create-event-hub-if-not-exists [^TokenCredential azure-credential {:keys [resource-group-name namespace event-hub-name retention-period-in-days]}]
   (let [event-hub-manager (EventHubsManager/authenticate azure-credential (AzureProfile. (AzureEnvironment/AZURE)))
-        event-hubs (.eventHubs event-hub-manager)
+        ^EventHubs event-hubs (.eventHubs event-hub-manager)
         event-hub-exists? (some
-                           #(= event-hub-name (.name %))
+                           #(= event-hub-name (.name ^EventHub %))
                            (.listByNamespace event-hubs resource-group-name namespace))]
     (try
       (when-not event-hub-exists?
         (-> event-hubs
-            (.define event-hub-name)
+            ^EventHub$Definition (.define event-hub-name)
             (.withExistingNamespace resource-group-name namespace)
             (.withPartitionCount 1)
             (.withRetentionPeriodInDays retention-period-in-days)
             (.create)))
       (catch Exception e
-        (log/error "Errror when creating event hub - " (.getMessage e))
+        (log/error "Error when creating event hub - " (.getMessage e))
         (throw e)))))
 
 (defmethod ig/init-key ::event-hub-log [_ {:keys [create-event-hub? namespace event-hub-name max-wait-time poll-sleep-duration] :as opts}]

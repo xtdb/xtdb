@@ -6,7 +6,7 @@
            java.nio.ByteBuffer
            java.time.Duration
            java.io.Closeable
-           [xtdb.log INotifyingSubscriberHandler Log LogRecord]
+           [xtdb.log INotifyingSubscriberHandler Log]
            [com.azure.messaging.eventhubs EventData EventHubProducerAsyncClient EventHubConsumerClient]
            [com.azure.messaging.eventhubs.models SendOptions EventPosition PartitionEvent]))
 
@@ -16,13 +16,13 @@
      [_ val]
      (f val))))
 
-(defn event-data->tx-instant [data]
+(defn event-data->tx-instant [^EventData data]
   (xtp/->TransactionInstant (.getOffset data) (.getEnqueuedTime data)))
 
 (def producer-send-options
   (.setPartitionId (SendOptions.) "0"))
 
-(defn get-partition-properties [consumer]
+(defn get-partition-properties [^EventHubConsumerClient consumer]
   (let [partition-properties (.getPartitionProperties consumer "0")]
     {:offset (Long/parseLong (.getLastEnqueuedOffset partition-properties))
      :timestamp (.getLastEnqueuedTime partition-properties)}))
