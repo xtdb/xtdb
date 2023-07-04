@@ -21,7 +21,7 @@
                   (map #(.truncatedTo ^Instant % ChronoUnit/HOURS))
                   (take 20))))))
 
-(defn checkpoint [{:keys [approx-frequency tx-id-override ::cp/cp-format dir]} checkpoints]
+(defn checkpoint [{:keys [approx-frequency tx-id-override ::cp/cp-format dir retention-policy]} checkpoints]
   (let [!checkpoints (atom checkpoints)]
     (with-open [bus ^Closeable (bus/->bus)
                 _ (bus/->bus-stop {:bus bus})]
@@ -29,6 +29,7 @@
                       :dir dir
                       :bus bus
                       :approx-frequency approx-frequency
+                      :retention-policy retention-policy
                       :store (reify cp/CheckpointStore
                                (available-checkpoints [_ {:keys [::cp/cp-format]}]
                                  (->> (reverse @!checkpoints)
@@ -42,7 +43,15 @@
                                                        (into {} (map (juxt #(.getName ^File %)
                                                                            (comp read-string slurp)))))}]
                                    (swap! !checkpoints conj cp)
-                                   cp))),
+                                   cp))
+                               (cleanup-checkpoint [_ {:keys [tx cp-at ::cp/cp-format] :as keys}]
+                                 (let [cp-removed (remove
+                                                   (fn [cp]
+                                                     (and (= (:tx cp) tx)
+                                                          (= (::cp/cp-format cp) cp-format)
+                                                          (= (::cp/checkpoint-at cp) cp-at)))
+                                                   @!checkpoints)]
+                                   (reset! !checkpoints cp-removed)))),
                       :src (let [!tx-id (atom 0)]
                              (reify cp/CheckpointSource
                                (save-checkpoint [_ dir]
@@ -82,7 +91,7 @@
           cp-2 {:tx {::xt/tx-id 2},
                 ::cp/cp-format ::foo-format,
                 :files {"hello.edn" {:msg "Hello world!", :tx-id 2}}}]
-      (t/testing "first checkpoint"
+      (t/testing "first checkpoint, no prior checkpoints"
         (t/is (= [cp-1]
                  (->> (checkpoint {:approx-frequency (Duration/ofSeconds 1)
                                    ::cp/cp-format ::foo-format
@@ -99,12 +108,12 @@
                                    :dir cp-dir
                                    ;; would be same tx-id as above (ie, same tx)
                                    :tx-id-override 1}
-                                  [(assoc cp-1 ::cp/checkpoint-at (-> (Date.) 
+                                  [(assoc cp-1 ::cp/checkpoint-at (-> (Date.)
                                                                       (.toInstant)
                                                                       (.minus (Duration/ofSeconds 2))
                                                                       (Date/from)))])
                       (map #(dissoc % ::cp/checkpoint-at))))))
-      
+
       (t/testing "makes a second checkpoint as it has a new latest tx"
         (t/is (= [cp-1 cp-2]
                  (->> (checkpoint {:approx-frequency (Duration/ofSeconds 1)
@@ -130,6 +139,154 @@
         (t/is (= ::foo-format (::cp/cp-format res)))
                  ;; Check if checkpoint-at (sent to upload-checkpoint as cp-at) satisfies Inst, should be a Date
         (t/is (inst? (::cp/checkpoint-at res)))))))
+
+(t/deftest test-retention-retain-at-least
+  (fix/with-tmp-dir "cp" [cp-dir]
+    (let [cp-1 {:tx {::xt/tx-id 1},
+                ::cp/cp-format ::foo-format,
+                :files {"hello.edn" {:msg "Hello world!", :tx-id 1}}}
+          cp-2 {:tx {::xt/tx-id 2},
+                ::cp/cp-format ::foo-format,
+                :files {"hello.edn" {:msg "Hello world!", :tx-id 2}}}]
+      (t/testing "first checkpoint, retain at least 1 - should return 1 checkpoint"
+        (t/is (= [cp-1]
+                 (->> (checkpoint {:approx-frequency (Duration/ofSeconds 1)
+                                   ::cp/cp-format ::foo-format
+                                   :dir cp-dir
+                                   :retention-policy {:retain-at-least 1}}
+                                  [])
+                      (map #(dissoc % ::cp/checkpoint-at))))))
+
+      (t/testing "second checkpoint, 1 prior checkpoint, retain at least 1 - old checkpoint should be removed"
+        (t/is (= [cp-2]
+                 (->> (checkpoint {:approx-frequency (Duration/ofSeconds 1)
+                                   ::cp/cp-format ::foo-format
+                                   :dir cp-dir
+                                   :retention-policy {:retain-at-least 1}
+                                   ;; different tx-id to available-checkpoint (ie, new)
+                                   :tx-id-override 2}
+                                  [cp-1])
+                      (map #(dissoc % ::cp/checkpoint-at))))))
+
+      (t/testing "second checkpoint, 1 prior checkpoint, retain at least 2 - should return both checkpoints"
+        (t/is (= [cp-1 cp-2]
+                 (->> (checkpoint {:approx-frequency (Duration/ofSeconds 1)
+                                   ::cp/cp-format ::foo-format
+                                   :dir cp-dir
+                                   :retention-policy {:retain-at-least 2}
+                                   ;; different tx-id to available-checkpoint (ie, new)
+                                   :tx-id-override 2}
+                                  [cp-1])
+                      (map #(dissoc % ::cp/checkpoint-at)))))))))
+
+(t/deftest test-retention-retain-newer-than
+  (fix/with-tmp-dir "cp" [cp-dir]
+    (let [cp-1 {:tx {::xt/tx-id 1},
+                ::cp/cp-format ::foo-format,
+                :files {"hello.edn" {:msg "Hello world!", :tx-id 1}}}
+          cp-2 {:tx {::xt/tx-id 2},
+                ::cp/cp-format ::foo-format,
+                :files {"hello.edn" {:msg "Hello world!", :tx-id 2}}}]
+      (t/testing "first checkpoint, retain newer than 1 day ago - should return 1 checkpoint"
+        (t/is (= [cp-1]
+                 (->> (checkpoint {:approx-frequency (Duration/ofSeconds 1)
+                                   ::cp/cp-format ::foo-format
+                                   :dir cp-dir
+                                   :retention-policy {:retain-newer-than (Duration/ofDays 1)}}
+                                  [])
+                      (map #(dissoc % ::cp/checkpoint-at))))))
+
+      (t/testing "second checkpoint, 1 prior checkpoint, retain newer than 1 day ago - old checkpoint should be removed (as it is 2 days old)"
+        (t/is (= [cp-2]
+                 (->> (checkpoint {:approx-frequency (Duration/ofSeconds 1)
+                                   ::cp/cp-format ::foo-format
+                                   :dir cp-dir
+                                   :retention-policy {:retain-newer-than (Duration/ofDays 1)}
+                                   ;; different tx-id to available-checkpoint (ie, new)
+                                   :tx-id-override 2}
+                                  [(assoc cp-1 ::cp/checkpoint-at (-> (Date.)
+                                                                      (.toInstant)
+                                                                      (.minus (Duration/ofDays 2))
+                                                                      (Date/from)))])
+                      (map #(dissoc % ::cp/checkpoint-at))))))
+
+      (t/testing "second checkpoint, 1 prior checkpoint, retain newer than 3 days ago - should return both checkpoints"
+        (t/is (= [cp-1 cp-2]
+                 (->> (checkpoint {:approx-frequency (Duration/ofSeconds 1)
+                                   ::cp/cp-format ::foo-format
+                                   :dir cp-dir
+                                   :retention-policy {:retain-newer-than (Duration/ofDays 3)}
+                                   ;; different tx-id to available-checkpoint (ie, new)
+                                   :tx-id-override 2}
+                                  [(assoc cp-1 ::cp/checkpoint-at (-> (Date.)
+                                                                      (.toInstant)
+                                                                      (.minus (Duration/ofDays 2))
+                                                                      (Date/from)))])
+                      (map #(dissoc % ::cp/checkpoint-at)))))))))
+
+(t/deftest test-retention-both-args
+  (fix/with-tmp-dir "cp" [cp-dir]
+    (let [cp-1 {:tx {::xt/tx-id 1},
+                ::cp/cp-format ::foo-format,
+                :files {"hello.edn" {:msg "Hello world!", :tx-id 1}}}
+          cp-2 {:tx {::xt/tx-id 2},
+                ::cp/cp-format ::foo-format,
+                :files {"hello.edn" {:msg "Hello world!", :tx-id 2}}}]
+
+      (t/testing "first checkpoint, retain at least 1 & retain newer than 1 day ago - should return 1 checkpoint"
+        (t/is (= [cp-1]
+                 (->> (checkpoint {:approx-frequency (Duration/ofSeconds 1)
+                                   ::cp/cp-format ::foo-format
+                                   :dir cp-dir
+                                   :retention-policy {:retain-at-least 1
+                                                      :retain-newer-than (Duration/ofDays 1)}}
+                                  [])
+                      (map #(dissoc % ::cp/checkpoint-at))))))
+
+      (t/testing "second checkpoint, 1 prior checkpoint from 2 days ago, retain at least 1 & retain newer than 1 day ago - old checkpoint should be removed"
+        (t/is (= [cp-2]
+                 (->> (checkpoint {:approx-frequency (Duration/ofSeconds 1)
+                                   ::cp/cp-format ::foo-format
+                                   :dir cp-dir
+                                   :retention-policy {:retain-at-least 1
+                                                      :retain-newer-than (Duration/ofDays 1)}
+                                   ;; different tx-id to available-checkpoint (ie, new)
+                                   :tx-id-override 2}
+                                  [(assoc cp-1 ::cp/checkpoint-at (-> (Date.)
+                                                                      (.toInstant)
+                                                                      (.minus (Duration/ofDays 2))
+                                                                      (Date/from)))])
+                      (map #(dissoc % ::cp/checkpoint-at))))))
+
+      (t/testing "second checkpoint, 1 prior checkpoint from 2 days ago, retain at least 2 & retain newer than 1 day ago - old checkpoint should be kept"
+        (t/is (= [cp-1 cp-2]
+                 (->> (checkpoint {:approx-frequency (Duration/ofSeconds 1)
+                                   ::cp/cp-format ::foo-format
+                                   :dir cp-dir
+                                   :retention-policy {:retain-at-least 2
+                                                      :retain-newer-than (Duration/ofDays 1)}
+                                   ;; different tx-id to available-checkpoint (ie, new)
+                                   :tx-id-override 2}
+                                  [(assoc cp-1 ::cp/checkpoint-at (-> (Date.)
+                                                                      (.toInstant)
+                                                                      (.minus (Duration/ofDays 2))
+                                                                      (Date/from)))])
+                      (map #(dissoc % ::cp/checkpoint-at))))))
+
+      (t/testing "second checkpoint, 1 prior checkpoint from 2 days ago, retain at least 1 & retain newer than 3 days ago - old checkpoint should be kept"
+        (t/is (= [cp-1 cp-2]
+                 (->> (checkpoint {:approx-frequency (Duration/ofSeconds 1)
+                                   ::cp/cp-format ::foo-format
+                                   :dir cp-dir
+                                   :retention-policy {:retain-at-least 1
+                                                      :retain-newer-than (Duration/ofDays 3)}
+                                   ;; different tx-id to available-checkpoint (ie, new)
+                                   :tx-id-override 2}
+                                  [(assoc cp-1 ::cp/checkpoint-at (-> (Date.)
+                                                                      (.toInstant)
+                                                                      (.minus (Duration/ofDays 2))
+                                                                      (Date/from)))])
+                      (map #(dissoc % ::cp/checkpoint-at)))))))))
 
 (t/deftest test-checkpointer
   (fix/with-tmp-dir "cp" [cp-dir]
@@ -204,3 +361,43 @@
           (t/is (= false (.exists (io/file cp-uri))))
           (t/is (= false (.exists (io/file (str cp-uri ".edn"))))))))))
 
+(t/deftest test-fs-retention-policy
+  (fix/with-tmp-dirs #{cp-store-dir dir}
+    (with-open [bus ^Closeable (bus/->bus)
+                _ (bus/->bus-stop {:bus bus})]
+      (let [store (cp/->filesystem-checkpoint-store {:path (.toPath cp-store-dir)})
+            !tx-id (atom 0)
+            checkpoint-opts {::cp/cp-format ::foo-format
+                             :dir dir
+                             :bus bus
+                             :approx-frequency (Duration/ofMillis 1)
+                             :store store
+                             :retention-policy {:retain-at-least 2}
+                             :src (reify cp/CheckpointSource
+                                    (save-checkpoint [_ dir]
+                                      (let [tx-id (swap! !tx-id inc)]
+                                        (spit (doto (io/file dir "hello.edn")
+                                                (io/make-parents))
+                                              (pr-str {:msg "Hello world!", :tx-id tx-id}))
+                                        {:tx {::xt/tx-id tx-id}})))}]
+
+        ;; create file for upload
+        (spit (io/file dir "hello.txt") "Hello world")
+
+        (t/testing "make initial checkpoint"
+          (cp/checkpoint checkpoint-opts)
+          (t/is (= 2 (.count (java.nio.file.Files/list (.toPath cp-store-dir))))))
+
+        (Thread/sleep 10)
+
+        (t/testing "make second checkpoint (should have files for two checkpoints, as per retention policy)"
+          (cp/checkpoint checkpoint-opts)
+          (t/is (= 4 (.count (java.nio.file.Files/list (.toPath cp-store-dir))))))
+        
+        (Thread/sleep 10)
+
+        (t/testing "make third checkpoint (should have files for two checkpoints, as per retention policy)"
+          (cp/checkpoint checkpoint-opts)
+          ;; Files.delete is NOT synchronous, so need to wait for it to complete
+          (Thread/sleep 100)
+          (t/is (= 4 (.count (java.nio.file.Files/list (.toPath cp-store-dir))))))))))

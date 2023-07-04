@@ -17,9 +17,9 @@ The checkpoint store is a pluggable module - there are a number of officially su
 XTDB nodes in a cluster don't explicitly communicate regarding which one is responsible for creating a checkpoint - instead, they check at random intervals to see whether any other node has recently created a checkpoint, and create one if necessary.
 The desired frequency of checkpoints can be set using `approx-frequency`.
 
-The default lifecycle of checkpoints is unbounded - XTDB will not attempt to clean up old checkpoints. Users will typically want to define a retention policy that best fits their requirements and create means of implementing that policy that is external to XTDB.
+The default lifecycle of checkpoints is **unbounded** - XTDB will not attempt to clean up old checkpoints unless explicitly told to. See <<retention-policy,**setting up a retention policy**>> below for how to manage checkpoint lifecycles within the XTDB checkpointer module itself. 
 
-WARNING: Current behaviour of the checkpointer is such that we only make a checkpoint if we have processed new transactions since the previous checkpoint. As such - you will need to be careful with any lifecycle policies set on your checkpoints - if no new transactions are handled for a period, no new checkpoints will be made, and you may risk having no checkpoints and having to replay from the Transaction Log!
+WARNING: Current behaviour of the checkpointer is such that we only make a checkpoint if we have processed new transactions since the previous checkpoint. As such - you will need to be careful if you have any external lifecycle policies set on your checkpoints - if no new transactions are handled for a period, no new checkpoints will be made, and you may risk having no checkpoints and having to replay from the Transaction Log!
 
 == Setting up
 
@@ -84,6 +84,9 @@ EDN::
 * `checkpoint-dir` (string/`File`/`Path`): temporary directory to store checkpoints in before they're uploaded
 * `keep-dir-between-checkpoints?` (boolean, default true): whether to keep the temporary checkpoint directory between checkpoints
 * `keep-dir-on-close?` (boolean, default false): whether to keep the temporary checkpoint directory when the node shuts down
+* `retention-policy` (map, optional): the retention settings of checkpointers made by the checkpointer, must contain at _least_ one of the following (though we can use both, see the <<retention-policy,section below>> for more info):
+** `retain-newer-than` (`Duration`): retain all checkpoints that are "newer than" the given duration 
+** `retain-at-least` (integer): retain _at least_ this many checkpoints (ie, the most recent `retain-at-least` checkpoints are safe from deletion)
 
 == `FileSystem` Checkpoint Store parameters
 * `path` (required, string/`File`/`Path`/`URI`): path to store checkpoints.
@@ -96,3 +99,68 @@ Often the Cloud provider also offers tooling to quickly snapshot those volumes (
 
 * having `[:checkpointer :store :path]` pointing to a filesystem mounted on such a volume
 * having the joining XTDB node `[:checkpointer :store :path]` point to a filesystem mounted an a snapshot from the main node (above).
+
+[#retention-policy]
+== Using `retention-policy` on the checkpointers
+
+When configuring the checkpointer module, we can provide a parameter, `retention-policy`, to have XTDB handle the deletion & retention behaviour of old checkpoints. The config for this will look like the following:
+
+[tabs]
+====
+JSON::
++
+[source,json]
+----
+{
+  ...
+  "checkpointer": {
+    "xtdb/module": "xtdb.checkpoint/->checkpointer",
+    "store": { ... },
+    "approx-frequency": "PT6H",
+    "retention-policy": {
+      "retain-newer-than": "PT7D",
+      "retain-at-least": 5
+    }
+  }
+  ...
+}
+----
+
+Clojure::
++
+[source,clojure]
+----
+{
+  ...
+  :checkpointer {:xtdb/module 'xtdb.checkpoint/->checkpointer
+                 :store {...}
+                 :approx-frequency (Duration/ofHours 6)
+                 :retention-policy {:retain-newer-than (Duration/ofDays 7)
+                                    :retain-at-least 5}}
+  ...
+}
+----
+
+EDN::
++
+[source,clojure]
+----
+{
+  ...
+  :checkpointer {:xtdb/module xtdb.checkpoint/->checkpointer
+                 :store {...}
+                 :approx-frequency "PT6H"
+                 :retention-policy {:retain-newer-than "PT7D"
+                                    :retain-at-least 5}}
+  ...
+}
+----
+====
+
+When passing in `retention-policy`, we need at _least_ one of `retain-newer-than` and `retain-at-least` - though you can provide both. What follows is the behaviour of the checkpointer at the point after we've completed making a new checkpoint:
+
+* If _only_ `retain-at-least` is provided, we will take the list of available checkpoints, keep the latest `retain-at-least` checkpoints, and delete the rest.
+* If _only_ `retain-newer-than` is provided, we will keep all checkpoints _newer_ than the configured Duration and delete all checkpoints _older_ than the configured Duration.
+* If _both_ `retain-at-least` and `retain-newer-than` are provided:
+** We start by splitting the list of checkpoints into "safe (from deletion)" and "unsafe (from deletion)" checkpoints - the latest `retain-at-least` values will be considered "safe", and will always be kept.
+** The "unsafe" list is then mapped over - from this, we will keep all checkpoints _newer_ than `retain-newer-than` and delete all of the remaining checkpoints that are _older_.
