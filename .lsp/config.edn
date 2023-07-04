@@ -1,4 +1,10 @@
-{:clean {:ns-inner-blocks-indentation :same-line}
+{:clean {:automatically-after-ns-refactor true
+         :ns-inner-blocks-indentation :same-line
+         :ns-import-classes-indentation :same-line
+         :sort {:ns true
+                :require true
+                :import true
+                :import-classes {:classes-per-line -1}}}
  :source-paths ["api/src/main/java" "api/src/main/clojure"
                 "wire-formats/src/main/clojure"
                 "core/src/main/clojure" "core/src/main/java"
