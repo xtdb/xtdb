@@ -101,3 +101,30 @@
                    (vec (s3/list-objects cp-store {}))))
           ;; Should not be able to fetch checkpoint as checkpoint metadata file is gone
           (t/is (empty? (cp/available-checkpoints cp-store ::foo-cp-format))))))))
+
+(t/deftest test-checkpoint-store-cleanup-no-edn-file
+  (with-open [sys (-> (sys/prep-system {:store {:xtdb/module `s3ctm/->cp-store
+                                                :configurator `->crt-configurator
+                                                :bucket s3t/test-s3-bucket
+                                                :transfer-manager? true
+                                                :prefix (str "s3-cp-" (UUID/randomUUID))}})
+                      (sys/start-system))]
+    (fix/with-tmp-dirs #{dir}
+      (let [cp-at (Date.)
+            cp-store (:store sys)
+            ;; create file for upload
+            _ (spit (io/file dir "hello.txt") "Hello world")
+            {:keys [::s3ctm/s3-dir] :as res} (cp/upload-checkpoint cp-store dir {::cp/cp-format ::foo-cp-format
+                                                                                 :tx {::xt/tx-id 1}
+                                                                                 :cp-at cp-at})]
+        ;; delete the checkpoint file
+        (s3/delete-objects cp-store [s3-dir])
+
+        (t/testing "checkpoint folder present, edn file should be deleted"
+          (let [object-info (into {} (s3/list-objects cp-store {}))]
+            (t/is (= s3-dir (:common-prefix object-info)))))
+
+        (t/testing "call to `cleanup-checkpoints` with no edn file should still remove an uploaded checkpoint and metadata"
+          (cp/cleanup-checkpoint cp-store {:tx {::xt/tx-id 1}
+                                           :cp-at cp-at})
+          (t/is (empty? (s3/list-objects cp-store {}))))))))

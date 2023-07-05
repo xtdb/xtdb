@@ -140,3 +140,33 @@
                    (azb/list-blobs cp-store nil)))
           ;; Should not be able to fetch checkpoint as checkpoint metadata file is gone
           (t/is (empty? (cp/available-checkpoints cp-store ::foo-cp-format))))))))
+
+(t/deftest test-checkpoint-store-cleanup-no-edn-file
+  (with-open [sys (-> (sys/prep-system {:store {:xtdb/module `azb/->cp-store
+                                                :storage-account storage-account
+                                                :container container
+                                                :prefix (str "test-checkpoint-" (UUID/randomUUID))}})
+                      (sys/start-system))]
+    (fix/with-tmp-dirs #{dir}
+      (let [cp-at (Date.)
+            cp-store (:store sys)
+            ;; create file for upload
+            _ (spit (io/file dir "hello.txt") "Hello world")
+            {:keys [::azb/azure-dir]} (cp/upload-checkpoint cp-store dir {::cp/cp-format ::foo-cp-format
+                                                                          :tx {::xt/tx-id 1}
+                                                                          :cp-at cp-at})
+            metadata-file (string/replace (str "metadata-" azure-dir) #"/" ".edn")]
+
+        ;; delete the checkpoint file
+        (azb/delete-blob cp-store metadata-file)
+
+        (t/testing "checkpoint folder present, edn file should be deleted"
+          (let [blob-set (set (azb/list-blobs cp-store nil))]
+            (t/is (= 1 (count blob-set)))
+            (t/is (not (contains? blob-set metadata-file)))
+            (t/is (contains? blob-set (str azure-dir "hello.txt")))))
+
+        (t/testing "call to `cleanup-checkpoints` with no edn file should still remove an uploaded checkpoint and metadata"
+          (cp/cleanup-checkpoint cp-store {:tx {::xt/tx-id 1}
+                                           :cp-at cp-at})
+          (t/is (empty? (azb/list-blobs cp-store nil))))))))
