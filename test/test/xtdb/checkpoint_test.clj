@@ -5,7 +5,8 @@
             [xtdb.bus :as bus]
             [xtdb.checkpoint :as cp]
             [xtdb.fixtures :as fix]
-            [xtdb.fixtures.checkpoint-store :as fix.cp-store])
+            [xtdb.fixtures.checkpoint-store :as fix.cp-store]
+            [xtdb.io :as xio])
   (:import [java.io Closeable File]
            [java.time Duration Instant]
            java.time.temporal.ChronoUnit
@@ -360,6 +361,29 @@
                                            :cp-at cp-at})
           (t/is (= false (.exists (io/file cp-uri))))
           (t/is (= false (.exists (io/file (str cp-uri ".edn"))))))))))
+
+(t/deftest test-fs-checkpoint-store-failed-cleanup
+  (fix/with-tmp-dirs #{cp-store-dir dir}
+      (let [cp-store (cp/->filesystem-checkpoint-store {:path (.toPath cp-store-dir)})
+            cp-at (Date.)
+            ;; create file for upload
+            _ (spit (io/file dir "hello.txt") "Hello world")
+            {:keys [::cp/cp-uri]} (cp/upload-checkpoint cp-store dir {::cp/cp-format ::foo-cp-format
+                                                                      :tx {::xt/tx-id 1}
+                                                                      :cp-at cp-at})]
+
+        (t/testing "error in `cleanup-checkpoints` after deleting checkpoint metadata file still leads to checkpoint not being available"
+          (with-redefs [xio/delete-dir (fn [_] (throw (Exception. "Test Exception")))]
+            (t/is (thrown-with-msg? Exception
+                                    #"Test Exception"
+                                    (cp/cleanup-checkpoint cp-store {:tx {::xt/tx-id 1}
+                                                                     :cp-at cp-at}))))
+          ;; Only directory should be available - checkpoint metadata file should have been deleted
+          (t/is (.exists (io/file cp-uri)))
+          (t/is (= false (.exists (io/file (str cp-uri ".edn")))))
+          ;; Should not be able to fetch checkpoint as checkpoint metadata file is gone
+          (t/is (empty? (cp/available-checkpoints cp-store ::foo-cp-format)))))))
+
 
 (t/deftest test-fs-retention-policy
   (fix/with-tmp-dirs #{cp-store-dir dir}
