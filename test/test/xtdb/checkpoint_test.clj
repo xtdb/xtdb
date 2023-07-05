@@ -344,17 +344,17 @@
   (fix/with-tmp-dirs #{cp-store-dir dir}
     (let [cp-store (cp/->filesystem-checkpoint-store {:path (.toPath cp-store-dir)})
           cp-at (Date.)]
-      
+
       ;; create file for upload
       (spit (io/file dir "hello.txt") "Hello world")
-      
+
       (let [{:keys [::cp/cp-uri]} (cp/upload-checkpoint cp-store dir {::cp/cp-format ::foo-cp-format
                                                                       :tx {::xt/tx-id 1}
                                                                       :cp-at cp-at})]
         (t/testing "call to upload-checkpoint creates expected folder & checkpoint metadata file for the checkpoint"
           (t/is (.exists (io/file cp-uri)))
           (t/is (.exists (io/file (str cp-uri ".edn")))))
-        
+
         (t/testing "call to `cleanup-checkpoints` entirely removes an uploaded checkpoint and metadata"
           (cp/cleanup-checkpoint cp-store {:tx {::xt/tx-id 1}
                                            :cp-at cp-at})
@@ -393,7 +393,7 @@
         (t/testing "make second checkpoint (should have files for two checkpoints, as per retention policy)"
           (cp/checkpoint checkpoint-opts)
           (t/is (= 4 (.count (java.nio.file.Files/list (.toPath cp-store-dir))))))
-        
+
         (Thread/sleep 10)
 
         (t/testing "make third checkpoint (should have files for two checkpoints, as per retention policy)"
@@ -401,3 +401,27 @@
           ;; Files.delete is NOT synchronous, so need to wait for it to complete
           (Thread/sleep 100)
           (t/is (= 4 (.count (java.nio.file.Files/list (.toPath cp-store-dir))))))))))
+
+(t/deftest test-fs-checkpoint-store-cleanup-no-edn-file
+  (fix/with-tmp-dirs #{cp-store-dir dir}
+    (let [cp-store (cp/->filesystem-checkpoint-store {:path (.toPath cp-store-dir)})
+          cp-at (Date.)]
+
+      ;; create file for upload
+      (spit (io/file dir "hello.txt") "Hello world")
+
+      (let [{:keys [::cp/cp-uri]} (cp/upload-checkpoint cp-store dir {::cp/cp-format ::foo-cp-format
+                                                                      :tx {::xt/tx-id 1}
+                                                                      :cp-at cp-at})]
+
+        (.delete (io/file (str cp-uri ".edn")))
+
+        (t/testing "checkpoint files present, edn file should be deleted"
+          (t/is (.exists (io/file cp-uri)))
+          (t/is (= false (.exists (io/file (str cp-uri ".edn"))))))
+
+        (t/testing "call to `cleanup-checkpoints` with no edn file should still remove an uploaded checkpoint and metadata"
+          (cp/cleanup-checkpoint cp-store {:tx {::xt/tx-id 1}
+                                           :cp-at cp-at})
+          (t/is (= false (.exists (io/file cp-uri))))
+          (t/is (= false (.exists (io/file (str cp-uri ".edn"))))))))))
