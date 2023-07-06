@@ -83,7 +83,7 @@
           (t/is (= [[:common-prefix s3-dir]]
                    (vec (s3/list-objects cp-store {}))))
           ;; Should not be able to fetch checkpoint as checkpoint metadata file is gone
-          (t/is (empty? (cp/available-checkpoints cp-store ::foo-cp-format))))))))
+          (t/is (empty? (cp/available-checkpoints cp-store {::cp/cp-format ::foo-cp-format}))))))))
 
 (t/deftest test-checkpoint-store-cleanup-no-edn-file
   (with-open [sys (-> (sys/prep-system {:store {:xtdb/module `s3c/->cp-store

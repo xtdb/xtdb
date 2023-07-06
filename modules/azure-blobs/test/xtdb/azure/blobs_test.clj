@@ -139,7 +139,7 @@
           (t/is (= [(str azure-dir "hello.txt")]
                    (azb/list-blobs cp-store nil)))
           ;; Should not be able to fetch checkpoint as checkpoint metadata file is gone
-          (t/is (empty? (cp/available-checkpoints cp-store ::foo-cp-format))))))))
+          (t/is (empty? (cp/available-checkpoints cp-store {::cp/cp-format ::foo-cp-format}))))))))
 
 (t/deftest test-checkpoint-store-cleanup-no-edn-file
   (with-open [sys (-> (sys/prep-system {:store {:xtdb/module `azb/->cp-store

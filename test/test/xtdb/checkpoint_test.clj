@@ -382,7 +382,7 @@
           (t/is (.exists (io/file cp-uri)))
           (t/is (= false (.exists (io/file (str cp-uri ".edn")))))
           ;; Should not be able to fetch checkpoint as checkpoint metadata file is gone
-          (t/is (empty? (cp/available-checkpoints cp-store ::foo-cp-format)))))))
+          (t/is (empty? (cp/available-checkpoints cp-store {::cp/cp-format ::foo-cp-format})))))))
 
 
 (t/deftest test-fs-retention-policy
