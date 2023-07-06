@@ -1,7 +1,6 @@
 (ns xtdb.sql-test
   (:require [clojure.java.io :as io]
             [clojure.test :as t :refer [deftest]]
-            [xtdb.sql.analyze :as sem]
             [xtdb.logical-plan :as lp]
             [xtdb.sql :as sql])
 

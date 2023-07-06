@@ -1,9 +1,9 @@
 (ns xtdb.sql.analyze
-  (:require [clojure.string :as str]
-            [xtdb.temporal :as temporal]
+  (:require [clojure.set :as set]
+            [clojure.string :as str]
+            [xtdb.error :as err]
             [xtdb.rewrite :as r]
-            [xtdb.sql.parser :as p]
-            [xtdb.error :as err]))
+            [xtdb.sql.parser :as p]))
 
 (defn- ->line-info-str [loc]
   (let [{:keys [sql]} (meta (r/root loc))
@@ -304,7 +304,8 @@
       (-> {:correlation-name (or (correlation-name ag) table-name)
            :id (id ag)
            :scope-id (id (scope-element ag))
-           :table-or-query-name table-name}
+           :table-or-query-name table-name
+           :known-columns (get *table-info* table-name)}
           (with-meta {:ref ag})))
 
     (:delete_statement__searched :update_statement__searched :erase_statement__searched)
@@ -543,6 +544,15 @@
           :ret []})
          (:ret)))
 
+(defn- update-set-cols [ag]
+  (some->> (r/find-first (partial r/ctor? :set_clause_list) ag)
+           (r/collect-stop
+            (fn [ag]
+              (r/zmatch ag
+                [:set_clause [:update_target ^:z id] _ ^:z us]
+                [(-> {:identifier (identifier id)}
+                     (vary-meta assoc :ref us))])))))
+
 (defn projected-columns
   "Returns a vector of candidates for the projected-cols of an expression.
 
@@ -644,22 +654,27 @@
                     (select-keys projection keys-to-keep))))))
 
     :target_table
-    [(let [{:keys [correlation-name], table-id :id, :as table} (table ag)
-           column-references (all-column-references (r/parent ag))]
+    [(let [{:keys [correlation-name known-columns], table-id :id, :as table} (table ag)
+           column-references (all-column-references (r/parent ag))
+           overwrite-cols (update-set-cols (r/parent ag))]
        (->> (concat (for [{:keys [identifiers], column-table-id :table-id} column-references
-                          :when (= table-id column-table-id)
-                          :let [identifier (last identifiers)]]
-                      {:identifier identifier
-                       :qualified-column [correlation-name identifier]})
+                          :when (= table-id column-table-id)]
+                      (last identifiers))
+
                     ;; TODO _iid (and possibly _row_id) can go once we remove the old temporal-indexer
                     ;; also see below
-                    (for [col-name ["xt$id" "_iid" "_row_id"
-                                    "xt$valid_from" "xt$valid_to"
-                                    "xt$system_from" "xt$system_to"]]
-                      {:identifier col-name
-                       :qualified-column [correlation-name col-name]}))
+                    #{"xt$id" "_iid" "_row_id"
+                      "xt$valid_from" "xt$valid_to"
+                      "xt$system_from" "xt$system_to"}
+
+                    (when (= :update_statement__searched (r/ctor (r/parent ag)))
+                      (set/difference known-columns
+                                      (into #{} (map :identifier) overwrite-cols))))
             (into [] (comp (distinct)
-                           (map #(vary-meta % assoc :table table))))))]
+                           (map (fn [col-name]
+                                  (-> {:identifier col-name
+                                       :qualified-column [correlation-name col-name]}
+                                      (vary-meta assoc :table table))))))))]
 
     :insert_statement
     (projected-columns (r/$ ag -1))
@@ -677,21 +692,19 @@
             {:identifier ident}))]
 
     (:update_statement__searched :delete_statement__searched)
-    [(let [{:keys [correlation-name], :as table} (table ag)]
+    [(let [{:keys [correlation-name known-columns], :as table} (table ag)
+           updated-cols (update-set-cols ag)]
        (vec
-        (concat (->> (for [col-name ["xt$id" "_iid" "_row_id"
-                                     "xt$valid_from" "xt$valid_to"
-                                     "xt$system_from" "xt$system_to"]]
+        (concat (->> (for [col-name (set/union #{"xt$id" "_iid" "_row_id"
+                                                 "xt$valid_from" "xt$valid_to"
+                                                 "xt$system_from" "xt$system_to"}
+                                               (when (= :update_statement__searched (r/ctor ag))
+                                                 (set/difference known-columns
+                                                                 (into #{} (map :identifier) updated-cols))))]
                        {:identifier col-name
                         :qualified-column [correlation-name col-name]})
                      (into [] (map #(vary-meta % assoc :table table))))
-                (some->> (r/find-first (partial r/ctor? :set_clause_list) ag)
-                         (r/collect-stop
-                          (fn [ag]
-                            (r/zmatch ag
-                              [:set_clause [:update_target ^:z id] _ ^:z us]
-                              [(-> {:identifier (identifier id)}
-                                   (vary-meta assoc :ref us))])))))))]
+                updated-cols)))]
 
     :erase_statement__searched
     [(let [{:keys [correlation-name], :as table} (table ag)]

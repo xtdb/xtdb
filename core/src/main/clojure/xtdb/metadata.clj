@@ -19,10 +19,10 @@
            (java.util HashMap HashSet Map NavigableMap Set TreeMap)
            (java.util.concurrent ConcurrentHashMap)
            java.util.concurrent.atomic.AtomicInteger
-           (java.util.function BiFunction Consumer Function IntPredicate)
+           (java.util.function BiFunction Consumer Function)
            (java.util.stream IntStream)
            (org.apache.arrow.memory ArrowBuf BufferAllocator)
-           (org.apache.arrow.vector FieldVector IntVector ValueVector VarCharVector VectorSchemaRoot)
+           (org.apache.arrow.vector FieldVector IntVector ValueVector VectorSchemaRoot)
            (org.apache.arrow.vector.complex DenseUnionVector ListVector StructVector)
            (org.apache.arrow.vector.types.pojo Schema)
            (org.roaringbitmap RoaringBitmap)
@@ -517,38 +517,6 @@
 
               (when-not (.isEmpty block-idxs)
                 (->ChunkMatch chunk-idx block-idxs (.columnNames table-metadata))))))))))
-
-(defn row-id->chunk [^IMetadataManager metadata-mgr, ^String table-name, ^long row-id]
-  ;; TODO cache which chunk each row-id is in.
-  (->> (with-all-metadata metadata-mgr table-name
-         (util/->jbifn
-           (fn [^long chunk-idx ^ITableMetadata table-metadata]
-             (let [metadata-root (.metadataRoot table-metadata)
-                   ^ListVector cols-vec (.getVector metadata-root "columns")
-                   ^StructVector cols-data-vec (.getDataVector cols-vec)
-                   ^StructVector types-vec (.getChild cols-data-vec "types")
-                   ^StructVector i64-vec (.getChild types-vec "i64")
-                   min-i64-rdr (-> (.getChild i64-vec "min") (vec/->mono-reader :i64))
-                   max-i64-rdr (-> (.getChild i64-vec "max") (vec/->mono-reader :i64))
-
-                   block-matches? (reify IntPredicate
-                                    (test [_ block-idx]
-                                      (boolean
-                                       (when-let [meta-idx (.rowIndex table-metadata "_row_id" block-idx)]
-                                         (<= (.readLong min-i64-rdr meta-idx)
-                                             row-id
-                                             (.readLong max-i64-rdr meta-idx))))))]
-
-               (when (.test block-matches? -1)
-                 {:chunk-idx chunk-idx
-                  :block-idx (-> (IntStream/range 0 (.blockCount table-metadata))
-                                 (.filter block-matches?)
-                                 (.findFirst)
-                                 (.getAsInt))
-                  :col-names (-> (.columnNames table-metadata)
-                                 (disj "_row_id"))})))))
-       (remove nil?)
-       first))
 
 (defn latest-chunk-metadata [^IMetadataManager metadata-mgr]
   (some-> (.lastEntry (.chunksMetadata metadata-mgr))
