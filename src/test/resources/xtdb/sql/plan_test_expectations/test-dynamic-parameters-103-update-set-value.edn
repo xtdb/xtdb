@@ -1,30 +1,30 @@
 [:update
  {:table "t1"}
  [:rename
-  {x1 xt$id,
-   x2 _iid,
-   x3 _row_id,
-   x6 xt$system_from,
-   x7 xt$system_to,
+  {x2 _iid,
+   x4 xt$system_to,
+   x5 _row_id,
+   x6 xt$id,
+   x7 xt$system_from,
    x9 col1,
    x10 xt$valid_from,
    x11 xt$valid_to}
   [:project
-   [x1 x2 x3 x6 x7 {x9 ?_0} {x10 (cast-tstz x4)} {x11 (cast-tstz x5)}]
+   [x2 x4 x5 x6 x7 {x9 ?_0} {x10 (cast-tstz x3)} {x11 (cast-tstz x1)}]
    [:rename
-    {xt$id x1,
+    {xt$valid_to x1,
      _iid x2,
-     _row_id x3,
-     xt$valid_from x4,
-     xt$valid_to x5,
-     xt$system_from x6,
-     xt$system_to x7}
+     xt$valid_from x3,
+     xt$system_to x4,
+     _row_id x5,
+     xt$id x6,
+     xt$system_from x7}
     [:scan
      {:table t1}
-     (xt$id
+     (xt$valid_to
       _iid
-      _row_id
       xt$valid_from
-      xt$valid_to
-      xt$system_from
-      xt$system_to)]]]]]
+      xt$system_to
+      _row_id
+      xt$id
+      xt$system_from)]]]]]

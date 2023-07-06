@@ -16,8 +16,7 @@
            (java.util ArrayList HashMap List Map)
            (java.util.concurrent CompletableFuture)
            java.util.concurrent.atomic.AtomicInteger
-           (java.util.function Consumer IntPredicate)
-           java.util.stream.IntStream
+           (java.util.function Consumer)
            (org.apache.arrow.memory BufferAllocator)
            (org.apache.arrow.vector BigIntVector ValueVector VectorLoader VectorSchemaRoot VectorUnloader)
            org.roaringbitmap.longlong.Roaring64Bitmap
@@ -73,7 +72,6 @@
 (definterface ILiveTableTx
   (^xtdb.vector.IRelationWriter writer [])
 
-  (^xtdb.vector.IIndirectRelation liveRow [^long rowId])
   (^void writeRowId [^long rowId])
   (^boolean containsRowId [^long rowId])
 
@@ -181,20 +179,6 @@
                       ^IRowCounter row-counter]
   ILiveTableTx
   (writer [_] transient-rel)
-
-  (liveRow [_ row-id]
-    (letfn [(live-row* [^IRelationWriter rel, ^BigIntVector row-id-vec, ^Roaring64Bitmap row-id-bitmap]
-              (when (.contains row-id-bitmap row-id)
-                (let [idx (-> (IntStream/range 0 (.getValueCount row-id-vec))
-                              (.filter (reify IntPredicate
-                                         (test [_ idx]
-                                           (= row-id (.get row-id-vec idx)))))
-                              (.findFirst)
-                              (.getAsInt))]
-                  (iv/select (vw/rel-wtr->rdr rel) (int-array [idx])))))]
-
-      (or (live-row* static-rel static-row-id-vec static-row-id-bitmap)
-          (live-row* transient-rel transient-row-id-vec transient-row-id-bitmap))))
 
   (writeRowId [_ row-id]
     (.addLong transient-row-id-bitmap row-id)
