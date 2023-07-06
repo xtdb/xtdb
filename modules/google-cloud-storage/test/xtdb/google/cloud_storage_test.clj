@@ -6,8 +6,7 @@
             [xtdb.system :as sys])
   (:import java.util.UUID))
 
-(def test-bucket
-  (System/getProperty "xtdb.google.cloud-storage-test.bucket"))
+(def test-bucket "xtdb-cloud-storage-test-bucket")
 
 (t/use-fixtures :once
   (fn [f]
