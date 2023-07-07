@@ -30,7 +30,9 @@
     (fix.ds/test-doc-store (::gcs/document-store sys))))
 
 (t/deftest test-cp-store
-  (with-open [sys (-> (sys/prep-system {::gcs/checkpoint-store {:path (format "gs://%s/test-%s" test-bucket (UUID/randomUUID))}})
+  (with-open [sys (-> (sys/prep-system {::gcs/checkpoint-store {:project-id project-id
+                                                                :bucket test-bucket
+                                                                :prefix (format "test-checkpoint-store-%s" (UUID/randomUUID))}})
                       (sys/start-system))]
 
     (fix.cp/test-checkpoint-store (::gcs/checkpoint-store sys))))
