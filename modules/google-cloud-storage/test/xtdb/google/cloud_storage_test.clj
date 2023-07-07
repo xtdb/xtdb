@@ -6,6 +6,7 @@
             [xtdb.system :as sys])
   (:import java.util.UUID))
 
+(def project-id "xtdb-scratch")
 (def test-bucket "xtdb-cloud-storage-test-bucket")
 
 (t/use-fixtures :once
@@ -14,7 +15,16 @@
       (f))))
 
 (t/deftest test-doc-store
-  (with-open [sys (-> (sys/prep-system {::gcs/document-store {:root-path (format "gs://%s/test-%s" test-bucket (UUID/randomUUID))}})
+  (with-open [sys (-> (sys/prep-system {::gcs/document-store {:project-id project-id
+                                                              :bucket test-bucket}})
+                      (sys/start-system))]
+
+    (fix.ds/test-doc-store (::gcs/document-store sys))))
+
+(t/deftest test-doc-store-with-prefix
+  (with-open [sys (-> (sys/prep-system {::gcs/document-store {:project-id project-id
+                                                              :bucket test-bucket
+                                                              :prefix (format "test-doc-store-%s" (UUID/randomUUID))}})
                       (sys/start-system))]
 
     (fix.ds/test-doc-store (::gcs/document-store sys))))
