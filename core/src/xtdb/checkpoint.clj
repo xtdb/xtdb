@@ -198,12 +198,12 @@
       (Files/isRegularFile from-path (make-array LinkOption 0))
       (Files/copy from-path to-path ^"[Ljava.nio.file.CopyOption;" (make-array CopyOption 0)))))
 
-(defn format-fs-date [{:keys [no-colons-in-filenames]} date]
+(defn format-fs-date [{:keys [no-colons-in-filenames?]} date]
   (when date
     (cond-> (xio/format-rfc3339-date date)
-      no-colons-in-filenames (string/replace #":" "-"))))
+      no-colons-in-filenames? (string/replace #":" "-"))))
 
-(defrecord FileSystemCheckpointStore [^Path root-path no-colons-in-filenames]
+(defrecord FileSystemCheckpointStore [^Path root-path no-colons-in-filenames?]
   CheckpointStore
   (available-checkpoints [_ {::keys [cp-format]}]
     (when (Files/exists root-path (make-array LinkOption 0))
@@ -265,8 +265,8 @@
 
 (defn ->filesystem-checkpoint-store {::sys/args {:path {:spec ::sys/path, 
                                                         :required? true}
-                                                 :no-colons-in-filenames {:spec ::sys/boolean
+                                                 :no-colons-in-filenames? {:spec ::sys/boolean
                                                                           :required? true
                                                                           :default false}}} 
-  [{:keys [path no-colons-in-filenames]}]
-  (->FileSystemCheckpointStore path no-colons-in-filenames))
+  [{:keys [path no-colons-in-filenames?]}]
+  (->FileSystemCheckpointStore path no-colons-in-filenames?))

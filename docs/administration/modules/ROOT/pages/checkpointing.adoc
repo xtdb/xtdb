@@ -90,7 +90,7 @@ EDN::
 
 == `FileSystem` Checkpoint Store parameters
 * `path` (required, string/`File`/`Path`/`URI`): path to store checkpoints.
-* `no-colons-in-filenames` (optional, boolean, defaults to `false`): whether or not to replace the colons in the checkpoint filenames, This is optional, though required to be  `true` on **Windows** as it does not accept colons in filenames.
+* `no-colons-in-filenames?` (optional, boolean, defaults to `false`): whether or not to replace the colons in the checkpoint filenames, This is optional, though required to be  `true` on **Windows** as it does not accept colons in filenames.
 
 === Note about using `FileSystem` Checkpoint Store
 

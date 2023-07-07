@@ -450,7 +450,7 @@
           (t/is (= false (.exists (io/file cp-uri))))
           (t/is (= false (.exists (io/file (str cp-uri ".edn"))))))))))
 
-(t/deftest test-fs-checkpoint-store-with-no-colons-in-filenames
+(t/deftest test-fs-checkpoint-store-with-no-colons-in-filenames?
   (fix/with-tmp-dirs #{cp-store-dir}
     (fix.cp-store/test-checkpoint-store (cp/->filesystem-checkpoint-store {:path (.toPath cp-store-dir)
-                                                                           :no-colons-in-filenames true}))))
+                                                                           :no-colons-in-filenames? true}))))
