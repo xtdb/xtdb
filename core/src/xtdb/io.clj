@@ -87,10 +87,11 @@
     (when (.exists dir)
       (Files/walkFileTree (.toPath dir) file-deletion-visitor))))
 
-(defn delete-file [file]
-  (let [file (io/file file)]
-    (when (.exists file)
-      (.delete file))))
+(defn delete-path [path]
+  (when (path-exists? path)
+    (if (Files/isDirectory path (make-array LinkOption 0))
+      (Files/walkFileTree path file-deletion-visitor)
+      (Files/delete path))))
 
 (defn create-tmpdir ^java.io.File [dir-name]
   (let [f (.toFile (Files/createTempDirectory dir-name (make-array FileAttribute 0)))
