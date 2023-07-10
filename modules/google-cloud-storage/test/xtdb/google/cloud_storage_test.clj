@@ -10,15 +10,27 @@
             [xtdb.google.cloud-storage :as gcs]
             [xtdb.system :as sys])
   (:import java.util.UUID
-           java.util.Date))
+           java.util.Date
+           [com.google.cloud.storage StorageOptions Storage$BucketGetOption Bucket$BucketSourceOption StorageException]))
 
 (def project-id "xtdb-scratch")
 (def test-bucket "xtdb-cloud-storage-test-bucket")
 
+;; Check google auth & that bucket exists 
 (t/use-fixtures :once
   (fn [f]
-    (when test-bucket
-      (f))))
+    (try
+      (let [storage (-> (StorageOptions/newBuilder)
+                        (.setProjectId project-id)
+                        (.build)
+                        (.getService))
+            bucket (.get storage test-bucket (into-array Storage$BucketGetOption []))]
+        (when (.exists bucket (into-array Bucket$BucketSourceOption []))
+          (f)))
+      (catch StorageException e
+        (if (= 401(.getCode e))
+          nil
+          (throw e))))))
 
 (t/deftest test-doc-store
   (with-open [sys (-> (sys/prep-system {::gcs/document-store {:project-id project-id
