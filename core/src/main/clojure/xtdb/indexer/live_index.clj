@@ -181,6 +181,10 @@
           delete-wtr (.writerForField op-wtr trie/delete-field)]
       (LiveTable. allocator object-store table-name rel
                   (LiveHashTrie/emptyTrie (TrieKeys. (.getVector iid-wtr)))
+                  ;; For testing purposes
+                  #_(.build (doto (LiveHashTrie/builder (TrieKeys. (.getVector iid-wtr)))
+                              (.setPageLimit 4)
+                              (.setLogLimit 4)))
                   iid-wtr (.writerForName rel "xt$system_from")
                   put-wtr (.structKeyWriter put-wtr "xt$valid_from") (.structKeyWriter put-wtr "xt$valid_to") (.structKeyWriter put-wtr "xt$doc")
                   delete-wtr (.structKeyWriter delete-wtr "xt$valid_from") (.structKeyWriter delete-wtr "xt$valid_to")

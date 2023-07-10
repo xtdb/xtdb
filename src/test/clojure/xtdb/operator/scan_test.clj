@@ -6,7 +6,8 @@
             [xtdb.operator.scan :as scan]
             [xtdb.test-util :as tu]
             [xtdb.util :as util])
-  (:import xtdb.operator.IRaQuerySource))
+  (:import xtdb.operator.IRaQuerySource
+           (java.util UUID)))
 
 (t/use-fixtures :each tu/with-allocator)
 
@@ -14,10 +15,11 @@
   (with-open [node (node/start-node {})]
     (xt/submit-tx node [[:put :xt_docs {:xt/id :foo, :col1 "foo1"}]
                         [:put :xt_docs {:xt/id :bar, :col1 "bar1", :col2 "bar2"}]
+                        ;; [:delete :xt_docs :bar]
                         [:put :xt_docs {:xt/id :foo, :col2 "baz2"}]])
 
-    (t/is (= [{:xt/id :bar, :col1 "bar1", :col2 "bar2"}
-              {:xt/id :foo, :col2 "baz2"}]
+    (t/is (= [{:xt/id :foo, :col2 "baz2"}
+              {:xt/id :bar, :col1 "bar1", :col2 "bar2"}]
              (tu/query-ra '[:scan {:table xt_docs} [xt/id col1 col2]]
                           {:node node})))))
 
@@ -27,8 +29,8 @@
                         [:put :xt_docs {:xt/id :bar, :the-ns/col1 "bar1", :col2 "bar2"}]
                         [:put :xt_docs {:xt/id :foo, :the-ns/col2 "baz2"}]])
 
-    (t/is (= [{:xt/id :bar, :the-ns/col1 "bar1", :col2 "bar2"}
-              {:xt/id :foo}]
+    (t/is (= [{:xt/id :foo}
+              {:xt/id :bar, :the-ns/col1 "bar1", :col2 "bar2"}]
              (tu/query-ra '[:scan {:table xt_docs} [xt/id the-ns/col1 col2]]
                           {:node node})))))
 
@@ -40,30 +42,151 @@
              (tu/query-ra '[:scan {:table xt_docs} [xt/id xt/id]]
                           {:node node})))))
 
+(t/deftest test-content-pred
+  (with-open [node (node/start-node {})]
+    (xt/submit-tx node [[:put :xt_docs {:xt/id :ivan, :first-name "Ivan", :last-name "Ivanov"}]
+                        [:put :xt_docs {:xt/id :petr, :first-name "Petr", :last-name "Petrov"}]])
+    (t/is (= [{:first-name "Ivan", :xt/id :ivan}]
+             (tu/query-ra '[:scan
+                            {:table xt_docs,  :for-valid-time nil, :for-system-time nil}
+                            [{first-name (= first-name "Ivan")} xt/id]]
+                          {:node node})))))
+
+(t/deftest test-absent-columns
+  (with-open [node (node/start-node {})]
+    (xt/submit-tx node [[:put :xt_docs {:xt/id :foo, :col1 "foo1"}]
+                        [:put :xt_docs {:xt/id :bar, :col1 "bar1", :col2 "bar2"}]])
+
+    ;; column not existent in all docs
+    (t/is (= [{:col2 "bar2", :xt/id :bar}]
+             (tu/query-ra '[:scan {:table xt_docs} [xt/id {col2 (= col2 "bar2")}]]
+                          {:node node})))
+
+    ;; column not existent at all
+    (t/is (= []
+             (tu/query-ra
+              '[:scan {:table xt_docs} [xt/id {col-x (= col-x "toto")}]]
+              {:node node})))))
+
+(defn- uuid-seq [n]
+  (for [i (range n)]
+    (UUID. (Long/reverse i) 0)))
+
+(t/deftest test-multiple-buckets
+  (let [uuids (uuid-seq 100)]
+    (with-open [node (node/start-node {:xtdb/live-chunk {:rows-per-block 16 :rows-per-chunk 16}})]
+      (->> (take 15 uuids)
+           (map #(vector :put :xt_docs {:xt/id %}))
+           (xt/submit-tx node))
+
+      (->> (take 15 (drop 15 uuids))
+           (map #(vector :put :xt_docs {:xt/id %}))
+           (xt/submit-tx node))
+
+      (xt/submit-tx node [[:put :xt_docs {:xt/id #uuid "fff00000-0000-0000-0000-000000000000"}]])
+
+      (t/is (=
+             (-> (set (take 30 uuids))
+                 (conj #uuid "fff00000-0000-0000-0000-000000000000"))
+             (->> (tu/query-ra '[:scan {:table xt_docs} [xt/id]]
+                               {:node node})
+                  (map :xt/id)
+                  set)))
+
+      (t/is (= #{{:xt$id 1} {:xt$id 2} {:xt$id 0}}
+               (set (tu/query-ra '[:scan {:table xt$txs} [xt$id]]
+                                 {:node node})))))))
+
+#_
+(t/deftest test-trie-skew
+  (with-open [node (node/start-node {:xtdb/live-chunk {:rows-per-block 5, :rows-per-chunk 128}})]
+    (dotimes [_ 2]
+      (let [uuid (random-uuid)]
+        (->> (repeat 512 [:put :xt_docs {:xt/id uuid}])
+             (partition 10)
+             (run! #(xt/submit-tx node %)))))
+
+    (t/is (= nil
+             (tu/query-ra '[:scan {:table xt_docs} [xt/id]]
+                          {:node node})))))
+
+(t/deftest test-chunk-boundary
+  (with-open [node (node/start-node {:xtdb/live-chunk {:rows-per-block 20, :rows-per-chunk 20}})]
+    (->> (for [i (range 100)]
+           [:put :xt_docs {:xt/id i}])
+         (partition 10)
+         (mapv #(xt/submit-tx node %)))
+
+    (t/is (= (set (for [i (range 100)] {:xt/id i}))
+             (set (tu/query-ra '[:scan {:table xt_docs} [xt/id]]
+                               {:node node}))))))
+
+(t/deftest test-past-valid-time-point
+  (with-open [node (node/start-node {})]
+    (xt/submit-tx node [[:put :xt_docs {:xt/id :doc1 :v 1} {:for-valid-time [:from #inst "2015"]}]
+                        [:put :xt_docs {:xt/id :doc2 :v 1} {:for-valid-time [:from #inst "2015"]}]
+                        [:put :xt_docs {:xt/id :doc3 :v 1} {:for-valid-time [:from #inst "2015"]}]])
+    (xt/submit-tx node [[:put :xt_docs {:xt/id :doc1 :v 2} {:for-valid-time [:from #inst "2020"]}]
+                        [:put :xt_docs {:xt/id :doc2 :v 2} {:for-valid-time [:from #inst "2100"]}]
+                        [:delete :xt_docs :doc3]])
+    (t/is (= #{{:v 1, :xt/id :doc1} {:v 1, :xt/id :doc2} {:v 1, :xt/id :doc3}}
+             (set (tu/query-ra '[:scan
+                                 {:table xt_docs, :for-valid-time [:at #inst "2017"], :for-system-time nil}
+                                 [xt/id v]]
+                               {:node node}))))
+    (t/is (= #{{:v 1, :xt/id :doc2} {:v 2, :xt/id :doc1}}
+             (set (tu/query-ra '[:scan
+                                 {:table xt_docs, :for-valid-time [:at :now], :for-system-time nil}
+                                 [xt/id v]]
+                               {:node node}))))))
+
 (t/deftest test-scanning-temporal-cols
   (with-open [node (node/start-node {})]
-    (xt/submit-tx node [[:put :xt_docs {:xt/id :doc}
-                         {:for-valid-time [:in #inst "2021" #inst "3000"]}]])
+    (xt/submit-tx node [ ;; t1 valid
+                        [:put :xt_docs {:xt/id :doc1}
+                         {:for-valid-time [:from #inst "2021"]}]
+                        ;; t1 invalid
+                        [:put :xt_docs {:xt/id :doc2}
+                         {:for-valid-time [:from #inst "3000"]}]
+                        ;; to test that the put-delete sub indices align correctly in
+                        ;; the different scan cursors
+                        [:put :xt_docs {:xt/id :foo}]
+                        [:delete :xt_docs :foo]
+                        ;; t2 valid
+                        [:put :xt_docs {:xt/id :doc3}
+                         {:for-valid-time [:in #inst "2021" #inst "3000"]}]
+                        ;; t2 invalid past
+                        [:put :xt_docs {:xt/id :doc4}
+                         {:for-valid-time [:in #inst "2021" #inst "2022"]}]
+                        ;; t2 invalid future
+                        [:put :xt_docs {:xt/id :doc5}
+                         {:for-valid-time [:in #inst "3000" #inst "4000"]}]])
 
-    (let [res (first (tu/query-ra '[:scan {:table xt_docs}
-                                    [xt/id
-                                     xt/valid-from xt/valid-to
-                                     xt/system-from xt/system-to]]
-                                  {:node node}))]
-      (t/is (= #{:xt/id :xt/valid-from :xt/valid-to :xt/system-to :xt/system-from}
-               (-> res keys set)))
+    (let [res (tu/query-ra '[:scan {:table xt_docs}
+                             [xt/id
+                              xt/valid-from xt/valid-to
+                              xt/system-from xt/system-to]]
+                           {:node node})]
+      (t/is (= #{:xt/id :xt/valid-from :xt/valid-to :xt/system-from :xt/system-to}
+               (-> res first keys set)))
 
-      (t/is (= {:xt/id :doc, :xt/valid-from (util/->zdt #inst "2021"), :xt/valid-to (util/->zdt #inst "3000")}
-               (dissoc res :xt/system-from :xt/system-to))))
+      #_(t/is (= {:xt/id :doc, :xt/valid-from (util/->zdt #inst "2021"), :xt/valid-to (util/->zdt #inst "3000")}
+                 (dissoc res :xt/system-from :xt/system-to))))
 
-    (t/is (= {:xt/id :doc, :app-time-start (util/->zdt #inst "2021"), :app-time-end (util/->zdt #inst "3000")}
-             (-> (first (tu/query-ra '[:project [xt/id
-                                                 {app-time-start xt/valid-from}
-                                                 {app-time-end xt/valid-to}]
-                                       [:scan {:table xt_docs}
-                                        [xt/id xt/valid-from xt/valid-to]]]
-                                     {:node node}))
-                 (dissoc :xt/system-from :xt/system-to))))))
+    (t/is (= #{{:xt/id :doc1,
+                :app-time-start (util/->zdt #inst "2021"),
+                :app-time-end  (util/->zdt util/end-of-time) }
+               {:xt/id :doc3,
+                :app-time-start (util/->zdt #inst "2021"),
+                :app-time-end (util/->zdt #inst "3000")}}
+             (->> (tu/query-ra '[:project [xt/id
+                                           {app-time-start xt/valid-from}
+                                           {app-time-end xt/valid-to}]
+                                 [:scan {:table xt_docs}
+                                  [xt/id xt/valid-from xt/valid-to]]]
+                               {:node node})
+                  (map #(dissoc % :xt/system-from :xt/system-to))
+                  set)))))
 
 (t/deftest test-only-scanning-temporal-cols-45
   (with-open [node (node/start-node {})]

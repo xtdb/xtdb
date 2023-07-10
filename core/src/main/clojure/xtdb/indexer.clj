@@ -73,7 +73,6 @@
 (defn- ->iid ^bytes [eid]
   (if (uuid? eid)
     (util/uuid->bytes eid)
-
     (let [^bytes eid-bytes (cond
                              (string? eid) (.getBytes (str "s" eid))
                              (keyword? eid) (.getBytes (str "k" eid))

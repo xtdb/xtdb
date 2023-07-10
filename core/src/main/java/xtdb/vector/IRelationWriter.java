@@ -28,6 +28,7 @@ public interface IRelationWriter extends AutoCloseable, Iterable<Map.Entry<Strin
 
     IVectorWriter writerForName(String name);
     IVectorWriter writerForName(String name, Object colType);
+    IVectorWriter writerForName(String name, Object colType, Boolean strict);
 
     IRowCopier rowCopier(RelationReader relation);
 

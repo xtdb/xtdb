@@ -259,6 +259,14 @@
        (into #{} (map field->col-type))
        (apply merge-col-types)))
 
+;; strict
+(defn union-type->col-type [^Field union-field]
+  [:union (into #{} (map field->col-type (.getChildren union-field)))])
+
+(defn col-type->union-type ^org.apache.arrow.vector.types.pojo.Field [col-name [_ col-types]]
+  (apply ->field col-name (.getType Types$MinorType/DENSEUNION) false
+         (map col-type->field col-types)))
+
 ;;; number
 
 (defmethod arrow-type->col-type ArrowType$Int [^ArrowType$Int arrow-type]
