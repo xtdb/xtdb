@@ -12,7 +12,7 @@
            (java.lang.management BufferPoolMXBean ManagementFactory)
            (java.lang.ref PhantomReference ReferenceQueue)
            (java.net ServerSocket)
-           (java.nio.file Files FileVisitResult SimpleFileVisitor)
+           (java.nio.file Files FileVisitResult SimpleFileVisitor Path LinkOption) 
            (java.nio.file.attribute FileAttribute)
            (java.text SimpleDateFormat)
            (java.time Duration)
@@ -78,6 +78,9 @@
     (postVisitDirectory [dir _]
       (Files/delete dir)
       FileVisitResult/CONTINUE)))
+
+(defn path-exists? [^Path path]
+  (Files/exists path (make-array LinkOption 0)))
 
 (defn delete-dir [dir]
   (let [dir (io/file dir)]
