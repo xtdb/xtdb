@@ -99,7 +99,7 @@ EDN::
 [#checkpoint-store]
 == Checkpoint store
 
-GCS can be used as a query index xref:{page-component-version}@administration::checkpointing.adoc[checkpoint store].  For more advice/config around the checkpointing itself, see xref:{page-component-version}@administration::checkpointing.adoc[Checkpointing].  
+GCS can be used as a query index xref:{page-component-version}@administration::checkpointing.adoc[checkpoint store].  For more advice/configuration concerning the checkpointer itself, see xref:{page-component-version}@administration::checkpointing.adoc[Checkpointing].  
 
 [source,clojure]
 ----

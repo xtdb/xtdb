@@ -100,7 +100,7 @@ EDN::
 [#checkpoint-store]
 == Using Azure Blobs as a checkpoint store
 
-Azure blobs can be used as a query index **checkpoint store**. For more advice/config around the checkpointing itself, see xref:{page-component-version}@administration::checkpointing.adoc[Checkpointing].  
+Azure blobs can be used as a query index **checkpoint store**. For more advice/configuration concerning the checkpointer itself, see xref:{page-component-version}@administration::checkpointing.adoc[Checkpointing].  
 
 [source,clojure]
 ----
