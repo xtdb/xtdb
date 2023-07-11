@@ -8,7 +8,7 @@ You can use Azure's Blob Storage as either:
 
 Documents are serialized via https://github.com/ptaoussanis/nippy[Nippy].
 
-In both cases, you will require both a `Storage Account`, and a `Container` to store their respective files. See the relevant Azure Blobs Quickstart[Quickstart documentation] from the Azure docs. 
+In both cases, you will require both a `Storage Account`, and a `Container` to store their respective files. See the relevant https://learn.microsoft.com/en-us/azure/storage/blobs/storage-quickstart-blobs-portal[Quickstart documentation] from the Azure docs. 
 
 == Authentication 
 
