@@ -77,6 +77,13 @@ EDN::
 ----
 ====
 
+When using a checkpoint store implementation that requires authentication (such as S3), ensure that you have the following permissions available such that the checkpointer can perform all of it's operations: 
+
+* Read objects from the system
+* Write objects to the system
+* List objects from the system
+* Delete objects from the system
+
 == Checkpointer parameters
 
 * `approx-frequency` (required, `Duration`): approximate frequency for the _cluster_ to save checkpoints (_if_ the conditions to make a checkpoint have been met - ie, a new transaction has been processed)
@@ -165,3 +172,5 @@ When passing in `retention-policy`, we need at _least_ one of `retain-newer-than
 * If _both_ `retain-at-least` and `retain-newer-than` are provided:
 ** We start by splitting the list of checkpoints into "safe (from deletion)" and "unsafe (from deletion)" checkpoints - the latest `retain-at-least` values will be considered "safe", and will always be kept.
 ** The "unsafe" list is then mapped over - from this, we will keep all checkpoints _newer_ than `retain-newer-than` and delete all of the remaining checkpoints that are _older_.
+
+NOTE: Permission wise - ensure that you have the ability to delete objects from the checkpoint store you are using, or the above will not be able to clear up your checkpoints.
