@@ -1,7 +1,24 @@
 = AWS S3
 :page-aliases: reference::s3.adoc
 
-You can use AWS's Simple Storage Service (S3) as XTDB's 'document store'.
+You can use AWS's Simple Storage Service (S3) as as either: 
+
+* XTDB's 'document store'
+* An implementation of the XTDB query index xref:{page-component-version}@administration::checkpointing.adoc[checkpoint store].
+
+== Authentication 
+
+Authentication for both the document store and checkpoint store components within the module is handled via the S3 API, which in turn uses the Default AWS Credential Provider Chain. See the https://docs.aws.amazon.com/sdk-for-java/v1/developer-guide/credentials.html#credentials-default[AWS documentation] on the various methods which you can handle authentication to be able to make use of the operations inside the modules.
+
+Whichever method of Authentication you use, ensure that they at least have the permissions to:
+
+* Read objects from the bucket
+* Write objects to the bucket
+
+If using the **checkpoint store**, you will need the following permissions in addition to the above:
+
+* List blobs from the bucket
+* Delete blobs from the bucket
 
 == Project Dependency
 
