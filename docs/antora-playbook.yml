@@ -24,6 +24,7 @@ content:
       start_path: docs/language-reference
       branches:
         - master
+        - docs-v1.24.0
         - docs-v1.23.3
         - docs-v1.23.2
         - docs-v1.23.1
@@ -37,6 +38,7 @@ content:
       start_path: docs/clients
       branches:
         - master
+        - docs-v1.24.0
         - docs-v1.23.3
         - docs-v1.23.2
         - docs-v1.23.1
@@ -50,6 +52,7 @@ content:
       start_path: docs/administration
       branches:
         - master
+        - docs-v1.24.0
         - docs-v1.23.3
         - docs-v1.23.2
         - docs-v1.23.1
@@ -63,6 +66,7 @@ content:
       start_path: docs/extensions
       branches:
         - master
+        - docs-v1.24.0
         - docs-v1.23.3
         - docs-v1.23.2
         - docs-v1.23.1
@@ -76,6 +80,7 @@ content:
       start_path: docs/storage
       branches:
         - master
+        - docs-v1.24.0
         - docs-v1.23.3
         - docs-v1.23.2
         - docs-v1.23.1
