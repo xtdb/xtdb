@@ -62,14 +62,15 @@
          vec
          (run! deref)))
 
-  (fetch-docs [this docs]
+  (fetch-docs [this ids]
     (xio/with-nippy-thaw-all
       (reduce
-       #(if-let [doc (get-blob this %2)]
-          (assoc %1 %2 (nippy/thaw doc))
-          %1)
+       (fn [docs id]
+         (if-let [doc (get-blob this id)]
+           (assoc docs id (nippy/thaw doc))
+           docs))
        {}
-       docs))))
+       ids))))
 
 (defrecord GoogleCloudStorageCheckpointStore [^Storage storage-service bucket-name prefix]
   cp/CheckpointStore
