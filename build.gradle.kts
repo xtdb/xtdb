@@ -41,7 +41,7 @@ allprojects {
 
         tasks.test {
             useJUnitPlatform {
-                excludeTags("integration", "kafka", "jdbc", "timescale", "s3", "slt", "docker", "azure")
+                excludeTags("integration", "kafka", "jdbc", "timescale", "s3", "slt", "docker", "azure", "google-cloud")
             }
         }
 
@@ -162,6 +162,7 @@ dependencies {
     projectDep(":modules:kafka")
     projectDep(":modules:s3")
     projectDep(":modules:azure")
+    projectDep(":modules:google-cloud")
 
     projectDep(":modules:bench")
     projectDep(":modules:c1-import")

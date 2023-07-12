@@ -13,6 +13,7 @@
         com.xtdb.labs/xtdb-kafka {:local/root "modules/kafka"}
         com.xtdb.labs/xtdb-s3 {:local/root "modules/s3"}
         com.xtdb.labs/xtdb-azure {:local/root "modules/azure"}
+        com.xtdb.labs/xtdb-google-cloud {:local/root "modules/google-cloud"}
         com.xtdb.labs/xtdb-jdbc {:local/root "modules/jdbc"}
         com.xtdb.labs/xtdb-bench {:local/root "modules/bench"}
         com.xtdb.labs/xtdb-c1-import {:local/root "modules/c1-import"}
@@ -57,7 +58,7 @@
                             "-XX:MaxMetaspaceSize=1g"]}
 
            :test {:exec-fn cognitect.test-runner.api/test
-                  :exec-args {:excludes [:integration :timescale :s3 :kafka :jdbc :slt :docker :azure]
+                  :exec-args {:excludes [:integration :timescale :s3 :kafka :jdbc :slt :docker :azure :google-cloud]
                               :dirs ["src/test/clojure"]}}
 
            :integration-test {:exec-fn cognitect.test-runner.api/test
