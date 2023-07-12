@@ -14,7 +14,8 @@
   :dependencies [[org.clojure/clojure]
                  [org.clojure/tools.logging]
                  [com.xtdb/xtdb-core]
-                 [com.google.cloud/google-cloud-nio "0.124.10"]]
+                 [com.google.cloud/google-cloud-storage "2.23.0"]
+                 [com.google.guava/guava "31.0.1-jre"]]
 
   :profiles {:test {:dependencies [[com.xtdb/xtdb-test]]}}
 

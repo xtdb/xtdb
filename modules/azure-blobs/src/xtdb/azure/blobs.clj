@@ -73,14 +73,15 @@
          vec
          (run! deref)))
 
-  (fetch-docs [this docs]
+  (fetch-docs [this ids]
     (xio/with-nippy-thaw-all
       (reduce
-       #(if-let [doc (get-blob this %2)]
-          (assoc %1 %2 (nippy/thaw (.toBytes doc)))
-          %1)
+       (fn [docs id]
+         (if-let [doc (get-blob this id)]
+           (assoc docs id (nippy/thaw (.toBytes doc)))
+           docs))
        {}
-       docs))))
+       ids))))
 (defrecord AzureBlobsCheckpointStore [^BlobContainerClient blob-container-client prefix]
   cp/CheckpointStore
   (available-checkpoints [this {::cp/keys [cp-format]}]

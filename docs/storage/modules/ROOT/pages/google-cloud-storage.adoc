@@ -1,9 +1,28 @@
 = Google Cloud Storage
 :page-aliases: reference::google-cloud-storage.adoc
 
-You can use Google's Cloud Storage (GCS) as XTDB's 'document store' or 'checkpoint store'.
+You can use Google's Cloud Storage (GCS) as either: 
+
+* XTDB's 'document store'
+* An implementation of the XTDB query index xref:{page-component-version}@administration::checkpointing.adoc[checkpoint store].
 
 Documents are serialized via https://github.com/ptaoussanis/nippy[Nippy].
+
+In both cases, you will require a Google Cloud Project with a bucket to store the files in. See the https://cloud.google.com/storage/docs/creating-buckets["Create Buckets" documentation] from the Google Cloud docs. 
+
+== Authentication 
+
+Authentication for both the document store and checkpoint store components within the module is handled via Google's "Application Default Credentials" - see the https://github.com/googleapis/google-auth-library-java/blob/main/README.md#application-default-credentials[relevant documentation] to get set up.
+
+Whichever method of Authentication you use, ensure that they at least have the permissions to:
+
+* Read objects from a bucket
+* Write objects to a bucket
+
+If using the **checkpoint store**, you will need the following permissions in addition to the above:
+
+* List objects from a bucket
+* Delete objects from a bucket
 
 == Project Dependency
 
@@ -30,7 +49,7 @@ pom.xml::
 ----
 ====
 
-== Using GCS
+== Using GCS as a document store
 
 Replace the implementation of the document store with `+xtdb.google.cloud-storage/->document-store+`
 
@@ -43,7 +62,9 @@ JSON::
 {
   "xtdb/document-store": {
     "xtdb/module": "xtdb.google.cloud-storage/->document-store",
-    "root-path": "gs://bucket/prefix"
+    "project-id": "your-project-id",
+    "bucket": "your-storage-bucket",
+    "prefix": "optional-containing-folder/"
   },
 }
 ----
@@ -53,7 +74,9 @@ Clojure::
 [source,clojure]
 ----
 {:xtdb/document-store {:xtdb/module 'xtdb.google.cloud-storage/->document-store
-                       :root-path "gs://bucket/prefix"}}
+                       :project-id "your-project-id",
+                       :bucket "your-storage-bucket",
+                       :prefix "optional-containing-folder/"}}
 ----
 
 EDN::
@@ -61,25 +84,22 @@ EDN::
 [source,clojure]
 ----
 {:xtdb/document-store {:xtdb/module xtdb.google.cloud-storage/->document-store
-                       :root-path "gs://bucket/prefix"}}
+                       :project-id "your-project-id",
+                       :bucket "your-storage-bucket",
+                       :prefix "optional-containing-folder/"}}
 ----
 ====
 
-Follow the GCS https://github.com/googleapis/google-cloud-java#authentication[Authentication Guide] to get set up.
-
 == Parameters
 
-* `root-path` (string/`Path`, required): path where documents will be stored, `gs://bucket/prefix`
-* `cache-size` (int): size of in-memory document cache (number of entries, not bytes)
-* `pool-size` (int, default 4): size of thread-pool for GCS operations
-
+* `project-id` (string, required) - The name of the GCP project that the bucket is contained within 
+* `bucket` (string, required) - The cloud storage bucket which the documents will be stored within
+* `prefix` (string, optional) - An optional prefix/folder name which will be used within document names (ie, could create a subfolder on a container called 'xtdb-document-store', and all of the document store files will be located under the folder)
 
 [#checkpoint-store]
 == Checkpoint store
 
-GCS can be used as a query index xref:{page-component-version}@administration::checkpointing.adoc[checkpoint store].
-
-Checkpoints aren't GC'd by XTDB - we recommend you set a lifecycle policy on GCS to remove older checkpoints.
+GCS can be used as a query index xref:{page-component-version}@administration::checkpointing.adoc[checkpoint store].  For more advice/configuration concerning the checkpointer itself, see xref:{page-component-version}@administration::checkpointing.adoc[Checkpointing].  
 
 [source,clojure]
 ----
@@ -87,9 +107,13 @@ Checkpoints aren't GC'd by XTDB - we recommend you set a lifecycle policy on GCS
 ;; see the Checkpointing guide for other parameters
 {:checkpointer {...
                 :store {:xtdb/module 'xtdb.google.cloud-storage/->checkpoint-store
-                        :path "gs://bucket/prefix"}}
+                        :project-id "your-project-id",
+                        :bucket "your-storage-bucket",
+                        :prefix "optional-containing-folder/"}}
 ----
 
 === Parameters
 
-* `path` (string/`URI`, required): URI of the form `"gs://bucket/prefix"`
+* `project-id` (string, required) - The name of the GCP project that the bucket is contained within 
+* `bucket` (string, required) - The cloud storage bucket which the checkpoints will be stored within
+* `prefix` (string, optional) - An optional prefix/folder name which will be used within checkpoint names (ie, could create a subfolder on a container called 'xtdb-checkpoints', and all of the checkpoint files will be located under the folder)
