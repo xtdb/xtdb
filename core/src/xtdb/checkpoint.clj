@@ -50,7 +50,7 @@
 ;; - The "safe" list - these will not be cleaned up, as we wish to keep at least `retain-at-least` checkpoints
 ;; - The "potentially deletable" list - how this is handled is dependant on whether `retain-newer-than` is set:
 ;; --> If unset, we return the whole "potentially deletable" list, as we only want to keep `retain-at-least` values
-;; --> If set, we calculate the earliest valid date we'll accept checkpoints for and use 'drop-while' on the list for any checkpoints 
+;; --> If set, we calculate the earliest valid date we'll accept checkpoints for and use 'drop-while' on the list for any checkpoints
 ;;     newer than that date. Once this completes, whatever remains in the list is what will be deleted.
 (defn calculate-deleteable-checkpoints [checkpoints {:keys [retain-newer-than retain-at-least]}]
   (let [split-point (or retain-at-least 0)
@@ -230,7 +230,7 @@
       (try
         (sync-path cp-path to-path)
         (catch Throwable t
-          (xio/delete-dir dir)
+          (xio/delete-path to-path)
           (throw (ex-info "incomplete checkpoint restore"
                           {:cp-path cp-path
                            :local-dir to-path}
@@ -259,14 +259,15 @@
 
   (cleanup-checkpoint [this {:keys [tx cp-at]}]
     (let [cp-prefix (format "checkpoint-%s-%s" (::xt/tx-id tx) (format-fs-date this cp-at))
-          to-path (io/file (.toString root-path) cp-prefix)]
-      (xio/delete-file (str to-path ".edn"))
-      (xio/delete-dir to-path))))
+          to-path (.resolve root-path (str cp-prefix "/"))
+          to-path-edn (.resolve root-path (str cp-prefix ".edn"))]
+      (xio/delete-path to-path-edn)
+      (xio/delete-path to-path))))
 
-(defn ->filesystem-checkpoint-store {::sys/args {:path {:spec ::sys/path, 
+(defn ->filesystem-checkpoint-store {::sys/args {:path {:spec ::sys/path,
                                                         :required? true}
                                                  :no-colons-in-filenames? {:spec ::sys/boolean
                                                                           :required? true
-                                                                          :default false}}} 
+                                                                          :default false}}}
   [{:keys [path no-colons-in-filenames?]}]
   (->FileSystemCheckpointStore path no-colons-in-filenames?))

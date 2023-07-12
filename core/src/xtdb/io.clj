@@ -12,7 +12,7 @@
            (java.lang.management BufferPoolMXBean ManagementFactory)
            (java.lang.ref PhantomReference ReferenceQueue)
            (java.net ServerSocket)
-           (java.nio.file Files FileVisitResult SimpleFileVisitor)
+           (java.nio.file Files FileVisitResult SimpleFileVisitor Path LinkOption) 
            (java.nio.file.attribute FileAttribute)
            (java.text SimpleDateFormat)
            (java.time Duration)
@@ -79,15 +79,19 @@
       (Files/delete dir)
       FileVisitResult/CONTINUE)))
 
+(defn path-exists? [^Path path]
+  (Files/exists path (make-array LinkOption 0)))
+
 (defn delete-dir [dir]
   (let [dir (io/file dir)]
     (when (.exists dir)
       (Files/walkFileTree (.toPath dir) file-deletion-visitor))))
 
-(defn delete-file [file]
-  (let [file (io/file file)]
-    (when (.exists file)
-      (.delete file))))
+(defn delete-path [path]
+  (when (path-exists? path)
+    (if (Files/isDirectory path (make-array LinkOption 0))
+      (Files/walkFileTree path file-deletion-visitor)
+      (Files/delete path))))
 
 (defn create-tmpdir ^java.io.File [dir-name]
   (let [f (.toFile (Files/createTempDirectory dir-name (make-array FileAttribute 0)))

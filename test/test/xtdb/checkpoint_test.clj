@@ -6,7 +6,8 @@
             [xtdb.checkpoint :as cp]
             [xtdb.fixtures :as fix]
             [xtdb.fixtures.checkpoint-store :as fix.cp-store]
-            [xtdb.io :as xio])
+            [xtdb.io :as xio]
+            [clojure.string :as string])
   (:import [java.io Closeable File]
            [java.time Duration Instant]
            java.time.temporal.ChronoUnit
@@ -370,10 +371,13 @@
             _ (spit (io/file dir "hello.txt") "Hello world")
             {:keys [::cp/cp-uri]} (cp/upload-checkpoint cp-store dir {::cp/cp-format ::foo-cp-format
                                                                       :tx {::xt/tx-id 1}
-                                                                      :cp-at cp-at})]
-
+                                                                      :cp-at cp-at})
+            delete-path xio/delete-path]
         (t/testing "error in `cleanup-checkpoints` after deleting checkpoint metadata file still leads to checkpoint not being available"
-          (with-redefs [xio/delete-dir (fn [_] (throw (Exception. "Test Exception")))]
+          (with-redefs [xio/delete-path  (fn [path]
+                                           (if (string/includes? (.toString path) ".edn")
+                                             (delete-path path)
+                                             (throw (Exception. "Test Exception"))))]
             (t/is (thrown-with-msg? Exception
                                     #"Test Exception"
                                     (cp/cleanup-checkpoint cp-store {:tx {::xt/tx-id 1}

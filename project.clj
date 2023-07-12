@@ -167,6 +167,7 @@
              :with-azure-blobs-tests {:jvm-opts ["-Dxtdb.azure.blobs.test-storage-account=crux-azure-blobs-test-storage-account"
                                                  "-Dxtdb.azure.blobs.test-container=crux-azure-blobs-test-container"]}
              :with-google-cloud-storage-test {:jvm-opts ["-Dxtdb.google.cloud-storage-test.bucket=crux-gcs-test"]}
+             :with-nio-storage-test {:jvm-opts ["-Dxtdb.nio-checkpoint-test.nio-path=gs://xtdb-cloud-storage-test-bucket"]}
              :with-chm-add-opens {:jvm-opts ["--add-opens" "java.base/java.util.concurrent=ALL-UNNAMED"]}
              :nvd {:dependencies [[lein-nvd "2.0.0"]]
                    :plugins [[lein-nvd "1.5.0"]]}}
