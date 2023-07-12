@@ -28,8 +28,7 @@
         (when (.exists bucket (into-array Bucket$BucketSourceOption []))
           (f)))
       (catch StorageException e
-        (if (= 401(.getCode e))
-          nil
+        (when-not (= 401 (.getCode e))
           (throw e))))))
 
 (t/deftest test-doc-store
