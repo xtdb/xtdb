@@ -1,5 +1,5 @@
 = JDBC
-:page-aliases: reference::jdbc.adoc
+:page-aliases: 1.24.0@reference::jdbc.adoc
 
 XTDB nodes can use JDBC databases to store their transaction logs and/or document stores.
 

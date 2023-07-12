@@ -1,5 +1,5 @@
 = Building
-:page-aliases: reference::building.adoc
+:page-aliases: 1.24.0@reference::building.adoc
 
 `build` is a module within the XTDB repo with two key objectives:
 
