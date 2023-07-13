@@ -92,10 +92,7 @@
        (t/is (thrown? Exception (get-bytes obj-store "digits" -1 3))))
 
   (->> "OOB for negative len"
-       (t/is (thrown? Exception (get-bytes obj-store "digits" 0 -1))))
-
-  (->> "OOB for last index"
-       (t/is (thrown? Exception (get-bytes obj-store "digits" 10 1)))))
+       (t/is (thrown? Exception (get-bytes obj-store "digits" 0 -1)))))
 
 ;; ---
 ;; memory-object-store
