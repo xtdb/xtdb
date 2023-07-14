@@ -206,10 +206,10 @@ public record LiveTrie(Node rootNode, TrieKeys trieKeys) {
             if (logCount == 0) return this;
 
             var data = mergeSort(trie, this.data, sortLog(trie, log, logCount), logCount);
-            var log = new int[LOG_LIMIT];
+            var log = new int[this.logLimit];
             var logCount = 0;
 
-            if (data.length > PAGE_LIMIT) {
+            if (data.length > this.pageLimit) {
                 var childNodes = idxBuckets(trie, data, level)
                         .map(group -> group == null ? null : new Leaf(logLimit, pageLimit, level + 1, group))
                         .toArray(Node[]::new);
@@ -228,7 +228,7 @@ public record LiveTrie(Node rootNode, TrieKeys trieKeys) {
             log[logCount++] = newIdx;
             var newLeaf = new Leaf(logLimit, pageLimit, level, data, log, logCount);
 
-            return logCount == LOG_LIMIT ? newLeaf.compactLogs(trie) : newLeaf;
+            return logCount == this.logLimit ? newLeaf.compactLogs(trie) : newLeaf;
         }
 
         @Override

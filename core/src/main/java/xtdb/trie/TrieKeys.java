@@ -21,7 +21,7 @@ public class TrieKeys {
 
     public int bucketFor(int idx, int level) {
         int levelOffsetBits = LEVEL_BITS * (level + 1);
-        int levelOffsetBytes = levelOffsetBits / Byte.SIZE;
+        int levelOffsetBytes = (levelOffsetBits - LEVEL_BITS) / Byte.SIZE;
 
         iidVector.getDataPointer(idx, bucketPtr);
 
