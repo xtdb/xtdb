@@ -5,14 +5,14 @@
             [xtdb.logical-plan :as lp]
             [xtdb.types :as types]
             [xtdb.util :as util]
-            [xtdb.vector.indirect :as iv]
+            [xtdb.vector.reader :as vr]
             [xtdb.vector.writer :as vw])
   (:import java.lang.AutoCloseable
-           [java.nio.file Files]
+           (java.nio.file Files)
            java.time.Duration
-           [java.util Base64 Iterator]
+           (java.util Base64 Iterator)
            org.apache.arrow.memory.BufferAllocator
-           [org.apache.arrow.vector ValueVector VectorSchemaRoot]
+           (org.apache.arrow.vector ValueVector VectorSchemaRoot)
            org.apache.arrow.vector.types.pojo.Schema
            xtdb.ICursor))
 
@@ -51,7 +51,7 @@
 
         (.setRowCount root row-count)
 
-        (.accept c (iv/<-root root))
+        (.accept c (vr/<-root root))
         true)
       false))
 

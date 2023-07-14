@@ -3,13 +3,12 @@
             [xtdb.coalesce :as coalesce]
             [xtdb.expression :as expr]
             [xtdb.logical-plan :as lp]
-            [xtdb.util :as util]
-            [xtdb.vector.indirect :as iv])
-  (:import xtdb.ICursor
+            [xtdb.util :as util])
+  (:import java.util.function.Consumer
+           org.apache.arrow.memory.BufferAllocator
+           xtdb.ICursor
            xtdb.operator.IRelationSelector
-           xtdb.vector.IIndirectRelation
-           java.util.function.Consumer
-           org.apache.arrow.memory.BufferAllocator))
+           xtdb.vector.RelationReader))
 
 (defmethod lp/ra-expr :select [_]
   (s/cat :op #{:σ :sigma :select}
@@ -25,10 +24,10 @@
       (while (and (.tryAdvance in-cursor
                                (reify Consumer
                                  (accept [_ in-rel]
-                                   (let [^IIndirectRelation in-rel in-rel]
+                                   (let [^RelationReader in-rel in-rel]
                                      (when-let [idxs (.select selector allocator in-rel params)]
                                        (when-not (zero? (alength idxs))
-                                         (.accept c (iv/select in-rel idxs))
+                                         (.accept c (.select in-rel idxs))
                                          (aset advanced? 0 true)))))))
                   (not (aget advanced? 0))))
       (aget advanced? 0)))

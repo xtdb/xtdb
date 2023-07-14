@@ -4,30 +4,30 @@
             [clojure.spec.alpha :as s]
             [clojure.string :as str]
             [clojure.tools.logging :as log]
-            xtdb.api.protocols
+            [xtdb.api.protocols]
             [xtdb.error :as err])
   (:import clojure.lang.MapEntry
-           [java.io ByteArrayOutputStream File]
+           (java.io ByteArrayOutputStream File)
            java.lang.AutoCloseable
            java.lang.reflect.Method
-           [java.net MalformedURLException URI URL]
+           (java.net MalformedURLException URI URL)
            java.nio.ByteBuffer
-           [java.nio.channels Channels FileChannel FileChannel$MapMode SeekableByteChannel]
+           (java.nio.channels Channels FileChannel FileChannel$MapMode SeekableByteChannel)
            java.nio.charset.StandardCharsets
-           [java.nio.file CopyOption FileVisitResult Files LinkOption OpenOption Path Paths SimpleFileVisitor StandardCopyOption StandardOpenOption]
+           (java.nio.file CopyOption FileVisitResult Files LinkOption OpenOption Path Paths SimpleFileVisitor StandardCopyOption StandardOpenOption)
            java.nio.file.attribute.FileAttribute
-           [java.time Duration Instant LocalDate LocalDateTime LocalTime OffsetDateTime ZoneId ZonedDateTime]
+           (java.time Duration Instant LocalDate LocalDateTime LocalTime OffsetDateTime ZoneId ZonedDateTime)
            java.time.temporal.ChronoUnit
-           [java.util ArrayList Collections Date Iterator LinkedHashMap LinkedList Map Queue UUID WeakHashMap]
-           [java.util.concurrent CompletableFuture ExecutionException ExecutorService Executors ThreadFactory TimeUnit]
-           [java.util.function BiFunction Consumer Function Supplier]
-           [org.apache.arrow.compression CommonsCompressionFactory]
-           [org.apache.arrow.flatbuf Footer Message RecordBatch]
-           [org.apache.arrow.memory AllocationManager ArrowBuf BufferAllocator]
-           [org.apache.arrow.memory.util ByteFunctionHelpers MemoryUtil]
-           [org.apache.arrow.vector ValueVector VectorLoader VectorSchemaRoot]
-           [org.apache.arrow.vector.ipc ArrowFileWriter ArrowStreamWriter ArrowWriter]
-           [org.apache.arrow.vector.ipc.message ArrowBlock ArrowFooter ArrowRecordBatch MessageSerializer]
+           (java.util ArrayList Collections Date Iterator LinkedHashMap LinkedList Map Queue UUID WeakHashMap)
+           (java.util.concurrent CompletableFuture ExecutionException ExecutorService Executors ThreadFactory TimeUnit)
+           (java.util.function BiFunction Consumer Function Supplier)
+           (org.apache.arrow.compression CommonsCompressionFactory)
+           (org.apache.arrow.flatbuf Footer Message RecordBatch)
+           (org.apache.arrow.memory AllocationManager ArrowBuf BufferAllocator)
+           (org.apache.arrow.memory.util ByteFunctionHelpers MemoryUtil)
+           (org.apache.arrow.vector ValueVector VectorLoader VectorSchemaRoot)
+           (org.apache.arrow.vector.ipc ArrowFileWriter ArrowStreamWriter ArrowWriter)
+           (org.apache.arrow.vector.ipc.message ArrowBlock ArrowFooter ArrowRecordBatch MessageSerializer)
            org.roaringbitmap.RoaringBitmap
            xtdb.ICursor))
 

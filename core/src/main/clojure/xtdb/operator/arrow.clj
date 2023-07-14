@@ -3,15 +3,15 @@
             [xtdb.logical-plan :as lp]
             [xtdb.types :as types]
             [xtdb.util :as util]
-            [xtdb.vector.indirect :as iv])
-  (:import xtdb.ICursor
-           java.io.BufferedInputStream
-           [java.nio.file CopyOption Files Path]
-           java.nio.channels.SeekableByteChannel
+            [xtdb.vector.reader :as vr])
+  (:import java.io.BufferedInputStream
            java.net.URL
+           java.nio.channels.SeekableByteChannel
+           (java.nio.file CopyOption Files Path)
            (org.apache.arrow.memory BufferAllocator RootAllocator)
-           [org.apache.arrow.vector.ipc ArrowReader ArrowFileReader ArrowStreamReader InvalidArrowFileException]
-           org.apache.arrow.vector.types.pojo.Field))
+           (org.apache.arrow.vector.ipc ArrowFileReader ArrowReader ArrowStreamReader InvalidArrowFileException)
+           org.apache.arrow.vector.types.pojo.Field
+           xtdb.ICursor))
 
 (defmethod lp/ra-expr :arrow [_]
   (s/cat :op #{:arrow}
@@ -22,7 +22,7 @@
   (tryAdvance [_ c]
     (if (.loadNextBatch rdr)
       (do
-        (.accept c (iv/<-root (.getVectorSchemaRoot rdr)))
+        (.accept c (vr/<-root (.getVectorSchemaRoot rdr)))
         true)
       false))
 

@@ -3,7 +3,7 @@
             [xtdb.operator.group-by :as group-by]
             [xtdb.test-util :as tu]
             [xtdb.util :as util]
-            [xtdb.vector.indirect :as iv]))
+            [xtdb.vector.reader :as vr]))
 
 (t/use-fixtures :each tu/with-allocator)
 
@@ -125,9 +125,9 @@
       (try
         (t/is (= [:union #{:null :f64}] (.getToColumnType sum-factory)))
 
-        (.aggregate sum-spec (iv/->indirect-rel [(iv/->direct-vec v0)]) group-mapping)
-        (.aggregate sum-spec (iv/->indirect-rel [(iv/->direct-vec v1)]) group-mapping)
-        (t/is (= [12.0] (tu/<-column (.finish sum-spec))))
+        (.aggregate sum-spec (vr/rel-reader [(vr/vec->reader v0)]) group-mapping)
+        (.aggregate sum-spec (vr/rel-reader [(vr/vec->reader v1)]) group-mapping)
+        (t/is (= [12.0] (tu/<-reader (.finish sum-spec))))
         (finally
           (util/try-close sum-spec))))))
 
@@ -214,6 +214,31 @@
 
     (t/is (= [{:a 42, :n nil} {:a 45, :n 1}]
              (tu/query-ra '[:group-by [a {n (sum b)}]
+                            [:table [{:a 42, :b nil} {:a 45, :b 1}]]])))))
+
+(t/deftest test-avg-empty-null-behaviour
+  (t/is (= [{:n nil}]
+           (tu/query-ra '[:group-by [{n (avg a)}]
+                          [:table []]]))
+        "avg empty returns null")
+
+  (t/is (= []
+           (tu/query-ra '[:group-by [b {n (avg a)}]
+                          [:table []]]))
+        "avg empty returns empty when there are groups")
+
+  (t/is (= [{:n nil}]
+           (tu/query-ra '[:group-by [{n (avg a)}]
+                          [:table [{:a nil}]]]))
+        "avg all nulls returns null")
+
+  (t/testing "averaged group all null"
+    (t/is (= [{:a 42, :n nil}]
+             (tu/query-ra '[:group-by [a {n (avg b)}]
+                            [:table [{:a 42, :b nil}]]])))
+
+    (t/is (= [{:a 42, :n nil} {:a 45, :n 1.0}]
+             (tu/query-ra '[:group-by [a {n (avg b)}]
                             [:table [{:a 42, :b nil} {:a 45, :b 1}]]])))))
 
 (t/deftest test-min-of-empty-rel-returns-nil
@@ -308,9 +333,9 @@
       (try
         (t/is (= [:list :i64] (.getToColumnType agg-factory)))
 
-        (.aggregate agg-spec (iv/->indirect-rel [(iv/->direct-vec k0)]) gm0)
-        (.aggregate agg-spec (iv/->indirect-rel [(iv/->direct-vec k1)]) gm1)
-        (t/is (= [[1 3 6] [2 4] [5]] (tu/<-column (.finish agg-spec))))
+        (.aggregate agg-spec (vr/rel-reader [(vr/vec->reader k0)]) gm0)
+        (.aggregate agg-spec (vr/rel-reader [(vr/vec->reader k1)]) gm1)
+        (t/is (= [[1 3 6] [2 4] [5]] (tu/<-reader (.finish agg-spec))))
         (finally
           (util/try-close agg-spec))))))
 

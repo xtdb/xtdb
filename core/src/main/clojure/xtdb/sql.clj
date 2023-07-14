@@ -4,13 +4,13 @@
             [xtdb.sql.analyze :as sem]
             [xtdb.sql.parser :as parser]
             [xtdb.sql.plan :as plan]
-            [xtdb.vector.writer :as vw]
-            [xtdb.util :as util])
+            [xtdb.util :as util]
+            [xtdb.vector.writer :as vw])
   (:import clojure.lang.MapEntry
-           xtdb.operator.PreparedQuery
            java.lang.AutoCloseable
            java.util.HashMap
-           org.apache.arrow.memory.BufferAllocator))
+           org.apache.arrow.memory.BufferAllocator
+           xtdb.operator.PreparedQuery))
 
 (defn parse-query
   [query]

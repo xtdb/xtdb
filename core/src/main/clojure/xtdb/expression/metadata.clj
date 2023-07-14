@@ -5,9 +5,9 @@
             [xtdb.metadata :as meta]
             [xtdb.util :as util]
             [xtdb.types :as types]
-            [xtdb.vector.indirect :as iv])
+            [xtdb.vector.reader :as vr])
   (:import (xtdb.metadata IMetadataPredicate ITableMetadata)
-           (xtdb.vector IIndirectRelation IIndirectVector)
+           (xtdb.vector RelationReader IVectorReader)
            java.util.function.IntPredicate
            [org.apache.arrow.vector VarBinaryVector]
            [org.apache.arrow.vector.complex ListVector StructVector]))
@@ -99,7 +99,7 @@
             simplify-and-or-expr)
     :call (call-meta-expr expr opts)))
 
-(defn- ->bloom-hashes [expr ^IIndirectRelation params]
+(defn- ->bloom-hashes [expr ^RelationReader params]
   (vec
     (for [{:keys [param-expr col-type]} (->> (ewalk/expr-seq expr)
                                              (filter :bloom-hash-sym))]
@@ -140,10 +140,10 @@
                                (-> opts
                                    (assoc-in [:var->col-type col-sym] (types/merge-col-types col-type :null))))]
         {:return-type :bool
-         :batch-bindings [[(-> col-sym (expr/with-tag IIndirectVector))
+         :batch-bindings [[(-> col-sym (expr/with-tag IVectorReader))
                            `(some-> ^StructVector (.getChild ~types-vec-sym ~(.getName col-field))
                                     (.getChild ~(name meta-value))
-                                    iv/->direct-vec)]]
+                                    vr/vec->reader)]]
          :children [emitted-expr]
          :continue (fn [cont]
                      (cont :bool
@@ -163,7 +163,7 @@
               {:keys [continue] :as emitted-expr} (expr/codegen-expr expr opts)]
           {:expr expr
            :f (-> `(fn [~(-> table-metadata-sym (expr/with-tag ITableMetadata))
-                        ~(-> expr/params-sym (expr/with-tag IIndirectRelation))
+                        ~(-> expr/params-sym (expr/with-tag RelationReader))
                         [~@(keep :bloom-hash-sym (ewalk/expr-seq expr))]]
                      (let [~metadata-root-sym (.metadataRoot ~table-metadata-sym)
                            ~(-> cols-vec-sym (expr/with-tag ListVector)) (.getVector ~metadata-root-sym "columns")

@@ -1,14 +1,11 @@
 (ns azure-testing
   (:require [clojure.java.io :as io]
-            [xtdb.node :as xtdb]
-            [xtdb.util :as util]
+            [integrant.core :as i]
+            [integrant.repl :as ir]
             [xtdb.api :as xt]
             [xtdb.azure :as azure]
-            [integrant.core :as i]
-            [integrant.repl :as ir])
-  (:import java.time.Duration
-           [com.azure.storage.common StorageSharedKeyCredential]
-           [com.azure.identity DefaultAzureCredentialBuilder]))
+            [xtdb.node :as xtdb]
+            [xtdb.util :as util]))
 
 (def dev-node-dir
   (io/file "dev/azure-node"))

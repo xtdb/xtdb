@@ -143,7 +143,6 @@
                  [:table [{:y 0}, {:y 2}]]]]] {}))))
 
 (deftest test-missing-column-in-independent-rel
-
   (t/is
     (= [{:foo 1 :baz 1}]
        (tu/query-ra

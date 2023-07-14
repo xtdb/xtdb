@@ -15,7 +15,7 @@
             [xtdb.types :as types]
             [xtdb.util :as util]
             [xtdb.vector :as vec]
-            [xtdb.vector.indirect :as iv]
+            [xtdb.vector.reader :as vr]
             [xtdb.vector.writer :as vw])
   (:import [ch.qos.logback.classic Level Logger]
            clojure.lang.ExceptionInfo
@@ -33,8 +33,9 @@
            xtdb.indexer.IIndexer
            xtdb.ingester.Ingester
            (xtdb.operator IRaQuerySource PreparedQuery)
-           (xtdb.vector IIndirectRelation IIndirectVector)))
+           (xtdb.vector RelationReader IVectorReader)))
 
+#_{:clj-kondo/ignore [:uninitialized-var]}
 (def ^:dynamic ^org.apache.arrow.memory.BufferAllocator *allocator*)
 
 (defn with-allocator [f]
@@ -50,6 +51,7 @@
                      (throw (ex-info "boom!" {})))))))
 
 (def ^:dynamic ^:private *node-opts* {})
+#_{:clj-kondo/ignore [:uninitialized-var]}
 (def ^:dynamic *node*)
 
 (defn with-opts
@@ -63,6 +65,7 @@
     (binding [*node* node]
       (f))))
 
+#_{:clj-kondo/ignore [:uninitialized-var]}
 (def ^:dynamic *sys*)
 
 (defn with-system [sys-opts]
@@ -88,6 +91,7 @@
       (binding [*node* (client/start-client (str "http://localhost:" port))]
         (f)))))
 
+#_{:clj-kondo/ignore [:uninitialized-var]}
 (def ^:dynamic *node-type*)
 
 (defn with-each-api-implementation [api-implementations]
@@ -136,13 +140,13 @@
   (^org.apache.arrow.vector.ValueVector [col-name col-type vs]
    (vw/open-vec *allocator* col-name col-type vs)))
 
-(defn open-rel ^xtdb.vector.IIndirectRelation [vecs]
+(defn open-rel ^xtdb.vector.RelationReader [vecs]
   (vw/open-rel vecs))
 
-(defn open-params ^xtdb.vector.IIndirectRelation [params-map]
+(defn open-params ^xtdb.vector.RelationReader [params-map]
   (vw/open-params *allocator* params-map))
 
-(defn populate-root ^xtdb.vector.IIndirectRelation [^VectorSchemaRoot root rows]
+(defn populate-root ^org.apache.arrow.vector.VectorSchemaRoot [^VectorSchemaRoot root rows]
   (.clear root)
 
   (let [field-vecs (.getFieldVectors root)
@@ -164,7 +168,7 @@
          (if-let [block (some-> (.poll blocks) vec)]
            (do
              (populate-root root block)
-             (.accept c (iv/<-root root))
+             (.accept c (vr/<-root root))
              true)
            false))
 
@@ -186,17 +190,17 @@
      :->cursor (fn [{:keys [allocator]}]
                  (->cursor allocator schema blocks))}))
 
-(defn <-column [^IIndirectVector col]
+(defn <-reader [^IVectorReader col]
   (mapv (fn [idx]
-          (types/get-object (.getVector col) (.getIndex col idx)))
-        (range (.getValueCount col))))
+          (.getObject col idx))
+        (range (.valueCount col))))
 
 (defn <-cursor [^ICursor cursor]
   (let [!res (volatile! (transient []))]
     (.forEachRemaining cursor
                        (reify Consumer
                          (accept [_ rel]
-                           (vswap! !res conj! (iv/rel->rows rel)))))
+                           (vswap! !res conj! (vr/rel->rows rel)))))
     (persistent! @!res)))
 
 (defn query-ra
@@ -207,7 +211,7 @@
                       node (-> (update :basis api/after-latest-submitted-tx node)
                                (doto (-> :basis :after-tx (then-await-tx node)))))]
 
-     (with-open [^IIndirectRelation
+     (with-open [^RelationReader
                  params-rel (if params
                               (vw/open-params *allocator* params)
                               vw/empty-params)]

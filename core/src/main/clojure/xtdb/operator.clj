@@ -22,7 +22,7 @@
             xtdb.operator.top
             xtdb.operator.unwind
             [xtdb.util :as util]
-            [xtdb.vector.indirect :as iv]
+            [xtdb.vector.reader :as vr]
             [xtdb.vector.writer :as vw])
   (:import (clojure.lang MapEntry)
            java.lang.AutoCloseable
@@ -79,9 +79,9 @@
 
     (close [_]
       (.release ref-ctr)
-      (util/try-close cursor)
-      (util/try-close wm)
-      (util/try-close al))
+      (util/close cursor)
+      (util/close wm)
+      (util/close al))
 
     (columnTypes [_] col-types)))
 
@@ -189,7 +189,7 @@
                                     (reify Consumer
                                       (accept [_ rel]
                                         (set! (.-next-values res)
-                                              (.iterator (iv/rel->rows rel))))))
+                                              (.iterator (vr/rel->rows rel))))))
                        (not (and next-values (.hasNext next-values)))))
            (and next-values (.hasNext next-values))))))
 

@@ -9,7 +9,7 @@
             [xtdb.test-util :as tu]
             [xtdb.types :as types]
             [xtdb.util :as util]
-            [xtdb.vector.indirect :as iv]
+            [xtdb.vector.reader :as vr]
             [xtdb.vector.writer :as vw])
   (:import (java.nio ByteBuffer)
            (java.time Clock Duration Instant LocalDate ZoneId ZonedDateTime)
@@ -18,7 +18,7 @@
            (org.apache.arrow.vector.types.pojo ArrowType$Duration ArrowType$Timestamp)
            org.apache.arrow.vector.types.TimeUnit
            (xtdb StringUtil)
-           xtdb.vector.IIndirectVector))
+           xtdb.vector.IVectorReader))
 
 (t/use-fixtures :each tu/with-allocator)
 
@@ -34,7 +34,7 @@
               (with-open [project-col (.project (expr/->expression-projection-spec "c" form {:col-types {'a :f64, 'b :f64, 'd :i64}, :param-types {}})
                                                 tu/*allocator* in-rel
                                                 vw/empty-params)]
-                (tu/<-column project-col)))]
+                (tu/<-reader project-col)))]
 
       (t/is (= (mapv (comp double +) (range 1000) (range 1000))
                (project '(+ a b))))
@@ -84,7 +84,7 @@
 (t/deftest nil-selection-doesnt-yield-the-row
   (t/is (= 0
            (-> (.select (expr/->expression-relation-selector '(and true nil) {})
-                        tu/*allocator* (iv/->indirect-rel [] 1) vw/empty-params)
+                        tu/*allocator* (vr/rel-reader [] 1) vw/empty-params)
                (alength)))))
 
 (defn project
@@ -188,12 +188,12 @@
 
 (defn- run-projection [rel form]
   (let [col-types (->> rel
-                       (into {} (map (juxt #(symbol (.getName ^IIndirectVector %))
-                                           #(types/field->col-type (.getField (.getVector ^IIndirectVector %)))))))]
+                       (into {} (map (juxt #(symbol (.getName ^IVectorReader %))
+                                           #(types/field->col-type (.getField ^IVectorReader %))))))]
     (with-open [out-ivec (.project (expr/->expression-projection-spec "out" form {:col-types col-types, :param-types {}})
                                    tu/*allocator* rel vw/empty-params)]
-      {:res (tu/<-column out-ivec)
-       :res-type (types/field->col-type (.getField (.getVector out-ivec)))})))
+      {:res (tu/<-reader out-ivec)
+       :res-type (types/field->col-type (.getField out-ivec))})))
 
 (t/deftest test-nils
   (letfn [(run-test [f xs ys]
@@ -267,10 +267,12 @@
 
     (t/is (= nil (len nil)))))
 
+#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (tct/defspec character-length-is-equiv-to-code-point-count-prop
   (tcp/for-all [^String s tcg/string]
     (= (.count (.codePoints s)) (project1 '(character-length a) {:a s}))))
 
+#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (tct/defspec octet-length-is-equiv-to-byte-count-prop
   (tcp/for-all [^String s tcg/string]
     (= (alength (.getBytes s "utf-8")) (project1 '(octet-length a) {:a s}))))
@@ -645,6 +647,7 @@
       'trim-trailing [0 42 0] (float 0) [0 42]
       'trim-trailing [0 42 0] (double 0) [0 42])))
 
+#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (tct/defspec bin-trim-is-equiv-to-str-trim-on-utf8-prop
   (tcp/for-all [^String s (tcg/fmap (comp all-whitespace-to-spaces str/join) (tcg/vector (tcg/elements [tcg/string (tcg/return " ")])))]
     (and
@@ -665,6 +668,7 @@
     "aa" "AA"
     "AA" "AA"))
 
+#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (tct/defspec upper-is-equiv-to-java-upper-prop
   (tcp/for-all [^String s tcg/string]
     (= (.toUpperCase s) (project1 '(upper a) {:a s}))))
@@ -764,6 +768,7 @@
     'octet-position "😎" "aa😎" 3
     'octet-position "😎" "🌝😎" 5))
 
+#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (tct/defspec position-is-codepoint-count-from-idx-prop
   (tcp/for-all [s1 tcg/string
                 s2 tcg/string]
@@ -772,6 +777,7 @@
         (= pos (inc (Character/codePointCount (str s1) (int 0) (int i))))
         (zero? pos)))))
 
+#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (tct/defspec position-is-equiv-to-idx-of-on-ascii-prop
   (tcp/for-all [s1 tcg/string-ascii
                 s2 tcg/string-ascii]
@@ -780,6 +786,7 @@
         (= pos (inc i))
         (zero? pos)))))
 
+#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (tct/defspec position-on-octet-is-equiv-to-idx-of-on-ascii-prop
   (tcp/for-all [s1 tcg/string-ascii
                 s2 tcg/string-ascii]
@@ -801,6 +808,7 @@
     [-44 21] [-32 -44 -21] 0
     [-44 -21] [-32 -44 -21] 2))
 
+#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (tct/defspec binary-position-equiv-to-octet-position-prop
   (tcp/for-all [^String s1 tcg/string
                 ^String s2 tcg/string]
@@ -855,11 +863,13 @@
                                (tcg/choose 1 (inc (utf8len s)))
                                (tcg/choose 0 (utf8len s))))))
 
+#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (tct/defspec substring-with-no-len-is-equiv-to-remaining-str-prop
   (tcp/for-all [[s i] (substring-args-gen tcg/string)]
     (= (project1 '(substring a b c) {:a s, :b i, :c (- (utf8len s) (dec i))})
        (project1 '(substring a b) {:a s, :b i}))))
 
+#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (tct/defspec substring-is-equiv-to-clj-on-ascii-when-idx-within-bounds-prop
   (tcp/for-all [[s i len] (substring-args-gen tcg/string-ascii)]
     (= (subs s (dec i) (min (+ (dec i) len) (count s)))
@@ -890,6 +900,7 @@
     [1 2 3 4 5] 2 2147483646 [2 3 4 5]
     [1 2 3 4 5] -10 2147483646 [1 2 3 4 5]))
 
+#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (tct/defspec bin-substring-is-equiv-to-substring-on-ascii-prop
   (tcp/for-all [[s i len] (substring-args-gen tcg/string-ascii)]
     (= (vec (expr/resolve-bytes (project1 '(substring a b c) {:a (.getBytes ^String s "ascii"), :b i, :c len})))
@@ -946,6 +957,7 @@
                    (tcg/return (inc i))
                    (tcg/choose 0 (- (count s) i)))))) )
 
+#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (tct/defspec overlay-is-equiv-to-ss-concat-on-ascii-prop
   (tcp/for-all [[s1 s2 i len] (overlay-args-gen tcg/string-ascii)]
     (= (str (subs s1 0 (dec i)) s2 (subs s1 (+ (dec i) len) (count s1)))
@@ -980,6 +992,7 @@
           :when (not (and a b c d))]
     (t/is (nil? (project1 '(overlay a b c d) {:a (some-> a byte-array), :b (some-> b byte-array), :c c, :d d})))))
 
+#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (tct/defspec binary-overlay-is-equiv-to-str-overlay-on-ascii-prop
   (tcp/for-all [[s1 s2 i len] (overlay-args-gen tcg/string-ascii)]
     (= (project1 '(overlay a b c d) {:a s1, :b s2, :c i, :d len})
@@ -989,11 +1002,13 @@
                                                                   :d len}))
                 "ascii"))))
 
+#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (tct/defspec overlay-len-default-is-len-of-placing-prop
   (tcp/for-all [[s1 s2 i] (overlay-args-gen tcg/string)]
     (= (project1 '(overlay a b c d) {:a s1, :b s2, :c i, :d (project1 '(character-length a) {:a s2})})
        (project1 '(overlay a b c (default-overlay-length b)) {:a s1, :b s2, :c i}))))
 
+#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (tct/defspec binary-overlay-len-default-is-len-of-placing-prop
   (tcp/for-all [[s1 s2 i] (overlay-args-gen tcg/bytes)]
     (= (project1 '(overlay a b c d) {:a s1, :b s2, :c i, :d (project1 '(octet-length a) {:a s2})})
@@ -1286,8 +1301,8 @@
           (test-projection [f-sym ->x-vec ->y-vec]
             (with-open [^ValueVector x-vec (->x-vec)
                         ^ValueVector y-vec (->y-vec)]
-              (run-projection (iv/->indirect-rel [(iv/->direct-vec x-vec)
-                                                  (iv/->direct-vec y-vec)])
+              (run-projection (vr/rel-reader [(vr/vec->reader x-vec)
+                                              (vr/vec->reader y-vec)])
                               (list f-sym 'x 'y))))]
 
     (t/testing "ts/dur"
@@ -1585,7 +1600,7 @@
         la-zdt (.withZoneSameInstant utc-zdt la-tz)
         la-zdt-micros (-> la-zdt (.truncatedTo ChronoUnit/MICROS))]
     (letfn [(project-fn [form]
-              (run-projection (iv/->indirect-rel [] 1) form))]
+              (run-projection (vr/rel-reader [] 1) form))]
       (binding [expr/*clock* (Clock/fixed inst utc-tz)]
         (t/testing "UTC"
           (t/is (= {:res [utc-zdt-micros]
@@ -1617,7 +1632,7 @@
         (t/testing "LA"
           (t/is (= {:res [la-zdt-micros]
                     :res-type [:timestamp-tz :micro "America/Los_Angeles"]}
-                   (run-projection (iv/->indirect-rel [] 1) '(current-timestamp)))
+                   (run-projection (vr/rel-reader [] 1) '(current-timestamp)))
                 "current-timestamp")
 
           ;; these two are where we may differ from the spec, due to Arrow's Date and Time types not supporting a TZ.
@@ -1646,7 +1661,7 @@
         (t/testing "timestamp precision"
           (t/is (= {:res [(-> la-zdt (.minusNanos 45))]
                     :res-type [:timestamp-tz :nano "America/Los_Angeles"]}
-                   (run-projection (iv/->indirect-rel [] 1) '(current-timestamp 7)))
+                   (run-projection (vr/rel-reader [] 1) '(current-timestamp 7)))
                 "current-timestamp")
 
           (t/is (= {:res [(-> la-zdt-micros (.truncatedTo ChronoUnit/SECONDS) (.toLocalDateTime))]

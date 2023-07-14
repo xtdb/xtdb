@@ -8,7 +8,7 @@
             [xtdb.transit :as xt.t]
             [xtdb.types :as types]
             [xtdb.util :as util]
-            [xtdb.vector.indirect :as iv]
+            [xtdb.vector.reader :as vr]
             [xtdb.vector.writer :as vw])
   (:import (java.io File OutputStream)
            (java.nio ByteBuffer ByteOrder)
@@ -18,8 +18,8 @@
            java.util.function.Function
            org.apache.arrow.memory.RootAllocator
            (org.apache.arrow.vector BigIntVector VectorSchemaRoot)
-           org.apache.arrow.vector.ipc.ArrowFileWriter
            (org.apache.arrow.vector.complex DenseUnionVector ListVector StructVector)
+           org.apache.arrow.vector.ipc.ArrowFileWriter
            (org.apache.arrow.vector.types.pojo ArrowType$Union Schema)
            org.apache.arrow.vector.types.pojo.Field
            org.apache.arrow.vector.types.UnionMode
@@ -433,7 +433,7 @@
                             (println (.contentToTSVString temporal-root))
 
                             (doseq [^String col-name ["xt$iid" "xt$valid_from" "xt$system_from"]]
-                              (.writeMetadata cols-meta-wtr (iv/->direct-vec (.getVector temporal-root col-name))))
+                              (.writeMetadata cols-meta-wtr (vr/vec->reader (.getVector temporal-root col-name))))
 
                             (.clear temporal-root)
                             (.clear iid-wtr)
@@ -444,7 +444,7 @@
                             (doseq [{:keys [^String normalised-col-name, ^VectorSchemaRoot root, ^ArrowFileWriter content-file-wtr, ^IVectorWriter vec-wtr]} content-wtrs]
                               (.setRowCount root row-count)
                               (.writeBatch content-file-wtr)
-                              (.writeMetadata cols-meta-wtr (iv/->direct-vec (.getVector root normalised-col-name)))
+                              (.writeMetadata cols-meta-wtr (vr/vec->reader (.getVector root normalised-col-name)))
                               (.clear root)
                               (.clear vec-wtr))
 

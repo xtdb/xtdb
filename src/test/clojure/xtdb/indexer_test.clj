@@ -18,7 +18,7 @@
             [xtdb.ts-devices :as ts]
             [xtdb.types :as ty]
             [xtdb.util :as util]
-            [xtdb.vector.indirect :as iv]
+            [xtdb.vector.reader :as vr]
             xtdb.watermark)
   (:import (java.nio.channels ClosedByInterruptException)
            java.nio.file.Files
@@ -111,7 +111,7 @@
               (.forEachRemaining live-blocks
                                  (reify Consumer
                                    (accept [_ content-cols]
-                                     (vswap! !res conj (iv/rel->rows content-cols)))))
+                                     (vswap! !res conj (vr/rel->rows content-cols)))))
 
               (t/is (= [[{:xt$id "device-info-demo000000", :model "pinto"}
                          {:xt$id "device-info-demo000001", :model "mustang"}]]
@@ -152,21 +152,21 @@
               (t/is (= 2 (.getRowCount metadata-batch)))
               (let [id-col-idx (-> (meta/->table-metadata metadata-batch (meta/->table-metadata-idxs metadata-batch))
                                    (.rowIndex "xt$id" -1))]
-                (t/is (= "xt$id" (-> ^ListVector (.getVector metadata-batch "columns")
-                                     ^StructVector (.getDataVector)
-                                     (.getChild "col-name")
-                                     (ty/get-object id-col-idx))))
+                (t/is (= "xt$id" (-> (vr/vec->reader (.getVector metadata-batch "columns"))
+                                     (.listElementReader)
+                                     (.structKeyReader "col-name")
+                                     (.getObject id-col-idx))))
                 (let [^StructVector cols-data-vec (-> ^ListVector (.getVector metadata-batch "columns")
                                                       (.getDataVector))
                       ^StructVector utf8-type-vec (-> cols-data-vec
                                                       ^StructVector (.getChild "types")
                                                       (.getChild "utf8"))]
                   (t/is (= "device-info-demo000000"
-                           (-> (.getChild utf8-type-vec "min")
-                               (ty/get-object id-col-idx))))
+                           (-> (vr/vec->reader (.getChild utf8-type-vec "min"))
+                               (.getObject id-col-idx))))
                   (t/is (= "device-info-demo000001"
-                           (-> (.getChild utf8-type-vec "max")
-                               (ty/get-object id-col-idx))))
+                           (-> (vr/vec->reader (.getChild utf8-type-vec "max"))
+                               (.getObject id-col-idx))))
 
                   (let [^BigIntVector count-vec (.getChild cols-data-vec "count")]
                     (t/is (= 2 (.get count-vec id-col-idx)))
@@ -680,7 +680,7 @@
                         (.forEachRemaining live-blocks
                                            (reify Consumer
                                              (accept [_ in-rel]
-                                               (swap! !res conj (iv/rel->rows in-rel)))))
+                                               (swap! !res conj (vr/rel->rows in-rel)))))
                         @!res)))]
 
             (with-open [wm1 (.openWatermark wm-src nil)]

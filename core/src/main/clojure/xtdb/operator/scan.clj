@@ -14,7 +14,7 @@
             [xtdb.types :as types]
             [xtdb.util :as util]
             [xtdb.vector :as vec]
-            [xtdb.vector.indirect :as iv]
+            [xtdb.vector.reader :as vr]
             xtdb.watermark)
   (:import (clojure.lang IPersistentSet MapEntry)
            (java.util HashMap LinkedList List Map Queue Set)
@@ -31,7 +31,7 @@
            xtdb.ICursor
            (xtdb.metadata IMetadataManager ITableMetadata)
            xtdb.operator.IRelationSelector
-           (xtdb.vector IIndirectRelation IIndirectVector)
+           (xtdb.vector RelationReader IVectorReader)
            (xtdb.watermark IWatermark IWatermarkSource Watermark)))
 
 (s/def ::table symbol?)
@@ -93,15 +93,15 @@
                              table-name content-col-names
                              ^Queue matching-chunks
                              ^ICursor current-cursor]
-  ICursor #_<IIR>
+  ICursor #_<RR>
   (tryAdvance [this c]
     (loop []
       (or (when current-cursor
             (or (.tryAdvance current-cursor
                              (reify Consumer
                                (accept [_ in-root]
-                                 (.accept c (-> (iv/<-root in-root)
-                                                (iv/with-absent-cols allocator content-col-names))))))
+                                 (.accept c (-> (vr/<-root in-root)
+                                                (vr/with-absent-cols allocator content-col-names))))))
                 (do
                   (util/try-close current-cursor)
                   (set! (.-current-cursor this) nil)
@@ -154,9 +154,8 @@
    (doto x
      (.and y))))
 
-(defn- ->atemporal-row-id-bitmap [^BufferAllocator allocator, ^Map col-preds, ^IIndirectRelation in-rel, params]
-  (let [row-id-rdr (-> (.vectorForName in-rel "_row_id")
-                       (.monoReader :i64))
+(defn- ->atemporal-row-id-bitmap [^BufferAllocator allocator, ^Map col-preds, ^RelationReader in-rel, params]
+  (let [row-id-rdr (.readerForName in-rel "_row_id")
         res (Roaring64Bitmap.)]
 
     (if-let [content-col-preds (seq (remove (comp temporal/temporal-column? util/str->normal-form-str str key) col-preds))]
@@ -167,10 +166,10 @@
         (.forEach idx-bitmap
                   (reify org.roaringbitmap.IntConsumer
                     (accept [_ idx]
-                      (.addLong res (.readLong row-id-rdr idx))))))
+                      (.addLong res (.getLong row-id-rdr idx))))))
 
       (dotimes [idx (.valueCount row-id-rdr)]
-        (.addLong res (.readLong row-id-rdr idx))))
+        (.addLong res (.getLong row-id-rdr idx))))
 
     res))
 
@@ -192,19 +191,18 @@
           (aset temporal/row-id-idx
                 (min max-row-id (aget temporal-max-range temporal/row-id-idx))))))))
 
-(defn- select-current-row-ids ^xtdb.vector.IIndirectRelation [^IIndirectRelation content-rel, ^Roaring64Bitmap atemporal-row-id-bitmap, ^IPersistentSet current-row-ids]
+(defn- select-current-row-ids ^xtdb.vector.RelationReader [^RelationReader content-rel, ^Roaring64Bitmap atemporal-row-id-bitmap, ^IPersistentSet current-row-ids]
   (let [sel (IntStream/builder)
-        row-id-rdr (-> (.vectorForName content-rel "_row_id")
-                       (.monoReader :i64))]
+        row-id-rdr (.readerForName content-rel "_row_id")]
     (dotimes [idx (.rowCount content-rel)]
-      (let [row-id (.readLong row-id-rdr idx)]
+      (let [row-id (.getLong row-id-rdr idx)]
         (when (and (.contains atemporal-row-id-bitmap row-id)
                    (.contains current-row-ids row-id))
           (.add sel idx))))
 
-    (iv/select content-rel (.toArray (.build sel)))))
+    (.select content-rel (.toArray (.build sel)))))
 
-(defn- ->temporal-rel ^xtdb.vector.IIndirectRelation [^IWatermark watermark, ^BufferAllocator allocator, ^List col-names ^longs temporal-min-range ^longs temporal-max-range atemporal-row-id-bitmap]
+(defn- ->temporal-rel ^xtdb.vector.RelationReader [^IWatermark watermark, ^BufferAllocator allocator, ^List col-names ^longs temporal-min-range ^longs temporal-max-range atemporal-row-id-bitmap]
   (let [temporal-min-range (adjust-temporal-min-range-to-row-id-range temporal-min-range atemporal-row-id-bitmap)
         temporal-max-range (adjust-temporal-max-range-to-row-id-range temporal-max-range atemporal-row-id-bitmap)]
     (.createTemporalRelation (.temporalRootsSource watermark)
@@ -215,21 +213,19 @@
                              temporal-max-range
                              atemporal-row-id-bitmap)))
 
-(defn- apply-temporal-preds ^xtdb.vector.IIndirectRelation [^IIndirectRelation temporal-rel, ^BufferAllocator allocator, ^Map col-preds, params]
-  (->> (for [^IIndirectVector col temporal-rel
+(defn- apply-temporal-preds ^xtdb.vector.RelationReader [^RelationReader temporal-rel, ^BufferAllocator allocator, ^Map col-preds, params]
+  (->> (for [^IVectorReader col temporal-rel
              :let [col-pred (get col-preds (.getName col))]
              :when col-pred]
          col-pred)
-       (reduce (fn [^IIndirectRelation temporal-rel, ^IRelationSelector col-pred]
-                 (-> temporal-rel
-                     (iv/select (.select col-pred allocator temporal-rel params))))
+       (reduce (fn [^RelationReader temporal-rel, ^IRelationSelector col-pred]
+                 (.select temporal-rel (.select col-pred allocator temporal-rel params)))
                temporal-rel)))
 
-(defn- ->row-id->repeat-count ^java.util.Map [^IIndirectVector row-id-col]
-  (let [res (HashMap.)
-        row-id-rdr (.monoReader row-id-col :i64)]
-    (dotimes [idx (.getValueCount row-id-col)]
-      (let [row-id (.readLong row-id-rdr idx)]
+(defn- ->row-id->repeat-count ^java.util.Map [^IVectorReader row-id-col]
+  (let [res (HashMap.)]
+    (dotimes [idx (.valueCount row-id-col)]
+      (let [row-id (.getLong row-id-col idx)]
         (.compute res row-id (reify BiFunction
                                (apply [_ _k v]
                                  (if v
@@ -237,34 +233,34 @@
                                    1))))))
     res))
 
-(defn align-vectors ^xtdb.vector.IIndirectRelation [^IIndirectRelation content-rel, ^IIndirectRelation temporal-rel]
+(defn align-vectors ^xtdb.vector.RelationReader [^RelationReader content-rel, ^RelationReader temporal-rel]
   ;; assumption: temporal-rel is sorted by row-id
-  (let [temporal-row-id-col (.vectorForName temporal-rel "_row_id")
-        content-row-id-rdr (-> (.vectorForName content-rel "_row_id")
-                               (.monoReader :i64))
+  (let [temporal-row-id-col (.readerForName temporal-rel "_row_id")
+        content-row-id-rdr (.readerForName content-rel "_row_id")
         row-id->repeat-count (->row-id->repeat-count temporal-row-id-col)
         sel (IntStream/builder)]
     (assert temporal-row-id-col)
 
     (dotimes [idx (.valueCount content-row-id-rdr)]
-      (let [row-id (.readLong content-row-id-rdr idx)]
+      (let [row-id (.getLong content-row-id-rdr idx)]
         (when-let [ns (.get row-id->repeat-count row-id)]
           (dotimes [_ ns]
             (.add sel idx)))))
 
-    (iv/->indirect-rel (concat temporal-rel
-                               (iv/select content-rel (.toArray (.build sel)))))))
+    (vr/rel-reader (concat temporal-rel
+                             (.select content-rel (.toArray (.build sel)))))))
 
-(defn- remove-col ^xtdb.vector.IIndirectRelation [^IIndirectRelation rel, ^String col-name]
-  (iv/->indirect-rel (remove #(= col-name (.getName ^IIndirectVector %)) rel)
-                     (.rowCount rel)))
+(defn- remove-col ^xtdb.vector.RelationReader [^RelationReader rel, ^String col-name]
+  (vr/rel-reader (remove #(= col-name (.getName ^IVectorReader %)) rel)
+                   (.rowCount rel)))
 
-(defn- unnormalize-column-names ^xtdb.vector.IIndirectRelation [^IIndirectRelation rel col-names]
-  (iv/->indirect-rel
+(defn- unnormalize-column-names ^xtdb.vector.RelationReader [^RelationReader rel col-names]
+  (vr/rel-reader
    (map (fn [col-name]
-          (-> (.vectorForName ^IIndirectRelation rel (util/str->normal-form-str col-name))
+          (-> (.readerForName ^RelationReader rel (util/str->normal-form-str col-name))
               (.withName col-name)))
         col-names)))
+
 
 (deftype ScanCursor [^BufferAllocator allocator
                      ^IMetadataManager metadata-manager
@@ -275,7 +271,7 @@
                      ^longs temporal-min-range
                      ^longs temporal-max-range
                      ^IPersistentSet current-row-ids
-                     ^ICursor #_<IIR> blocks
+                     ^ICursor #_<RR> blocks
                      params]
   ICursor
   (tryAdvance [_ c]
@@ -289,7 +285,7 @@
                                  (accept [_ content-rel]
                                    (let [content-rel (unnormalize-column-names content-rel content-col-names)
                                          atemporal-row-id-bitmap (->atemporal-row-id-bitmap allocator col-preds content-rel params)]
-                                     (letfn [(accept-rel [^IIndirectRelation read-rel]
+                                     (letfn [(accept-rel [^RelationReader read-rel]
                                                (when (and read-rel (pos? (.rowCount read-rel)))
                                                  (let [read-rel (cond-> read-rel
                                                                   (not keep-row-id-col?) (remove-col "_row_id"))]
@@ -313,7 +309,7 @@
   (close [_]
     (util/try-close blocks)))
 
-(defn ->temporal-min-max-range [^IIndirectRelation params, {^TransactionInstant basis-tx :tx}, {:keys [for-valid-time for-system-time]}, selects]
+(defn ->temporal-min-max-range [^RelationReader params, {^TransactionInstant basis-tx :tx}, {:keys [for-valid-time for-system-time]}, selects]
   (let [min-range (temporal/->min-range)
         max-range (temporal/->max-range)]
     (letfn [(apply-bound [f col-name ^long time-μs]
@@ -333,8 +329,8 @@
               (case tag
                 :literal (-> arg
                              (util/sql-temporal->micros (.getZone expr/*clock*)))
-                :param (-> (let [col (.vectorForName params (name arg))]
-                             (types/get-object (.getVector col) (.getIndex col 0)))
+                :param (-> (-> (.readerForName params (name arg))
+                               (.getObject 0))
                            (util/sql-temporal->micros (.getZone expr/*clock*)))
                 :now (-> (.instant expr/*clock*)
                          (util/instant->micros))))]
@@ -415,9 +411,9 @@
 
 (defn get-current-row-ids [^IWatermark watermark basis]
   (.getCurrentRowIds
-    ^xtdb.temporal.ITemporalRelationSource
-    (.temporalRootsSource watermark)
-    (util/instant->micros (:current-time basis))))
+   ^xtdb.temporal.ITemporalRelationSource
+   (.temporalRootsSource watermark)
+   (util/instant->micros (:current-time basis))))
 
 (defn tables-with-cols [basis ^IWatermarkSource wm-src ^IScanEmitter scan-emitter]
   (let [{:keys [tx, after-tx]} basis
@@ -442,14 +438,14 @@
 
     (allTableColNames [_ wm]
       (merge-with
-        set/union
-        (update-vals
-          (.allColumnTypes metadata-mgr)
-          (comp set keys))
-        (update-vals
-          (some-> (.liveChunk wm)
-                  (.allColumnTypes))
-          (comp set keys))))
+       set/union
+       (update-vals
+        (.allColumnTypes metadata-mgr)
+        (comp set keys))
+       (update-vals
+        (some-> (.liveChunk wm)
+                (.allColumnTypes))
+        (comp set keys))))
 
     (scanColTypes [_ wm scan-cols]
 
@@ -505,13 +501,13 @@
 
             row-count (->> (meta/with-all-metadata metadata-mgr normalized-table-name
                              (util/->jbifn
-                              (fn [_chunk-idx ^ITableMetadata table-metadata]
-                                (let [id-col-idx (.rowIndex table-metadata "xt$id" -1)
-                                      ^BigIntVector count-vec (-> (.metadataRoot table-metadata)
-                                                                  ^ListVector (.getVector "columns")
-                                                                  ^StructVector (.getDataVector)
-                                                                  (.getChild "count"))]
-                                  (.get count-vec id-col-idx)))))
+                               (fn [_chunk-idx ^ITableMetadata table-metadata]
+                                 (let [id-col-idx (.rowIndex table-metadata "xt$id" -1)
+                                       ^BigIntVector count-vec (-> (.metadataRoot table-metadata)
+                                                                   ^ListVector (.getVector "columns")
+                                                                   ^StructVector (.getDataVector)
+                                                                   (.getChild "count"))]
+                                   (.get count-vec id-col-idx)))))
                            (reduce +))]
 
         {:col-types col-types

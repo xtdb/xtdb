@@ -1,13 +1,13 @@
 (ns xtdb.indexer.live-index
   (:require [juxt.clojars-mirrors.integrant.core :as ig]
-            xtdb.buffer-pool
-            xtdb.object-store
+            [xtdb.buffer-pool]
+            [xtdb.object-store]
             [xtdb.types :as types]
             [xtdb.util :as util]
-            [xtdb.vector.indirect :as iv]
+            [xtdb.vector.reader :as vr]
             [xtdb.vector.writer :as vw])
   (:import (java.lang AutoCloseable)
-           [java.nio ByteBuffer]
+           (java.nio ByteBuffer)
            (java.util ArrayList Arrays HashMap Map)
            (java.util.concurrent CompletableFuture)
            (java.util.concurrent.atomic AtomicInteger)
@@ -15,22 +15,22 @@
            (java.util.stream IntStream)
            (org.apache.arrow.memory BufferAllocator)
            (org.apache.arrow.vector VectorSchemaRoot)
-           (org.apache.arrow.vector.types.pojo ArrowType$Union Schema)
            org.apache.arrow.vector.types.UnionMode
+           (org.apache.arrow.vector.types.pojo ArrowType$Union Schema)
            (xtdb.object_store ObjectStore)
            (xtdb.trie LiveTrie LiveTrie$Node LiveTrie$NodeVisitor TrieKeys)
-           (xtdb.vector IIndirectRelation IIndirectVector IRelationWriter IVectorWriter)))
+           (xtdb.vector IRelationWriter IVectorReader IVectorWriter RelationReader)))
 
 ;;
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (definterface ILiveTableWatermark
-  (^xtdb.vector.IIndirectRelation liveRelation [])
+  (^xtdb.vector.RelationReader liveRelation [])
   (^xtdb.trie.LiveTrie liveTrie []))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (definterface ILiveTableTx
   (^xtdb.indexer.live_index.ILiveTableWatermark openWatermark [^boolean retain])
-  (^xtdb.vector.IRowCopier rowCopier [^xtdb.vector.IIndirectRelation inRelation])
+  (^xtdb.vector.IRowCopier rowCopier [^xtdb.vector.RelationReader inRelation])
   (^void logPut [^bytes iid, ^long validFrom, ^long validTo, ^xtdb.vector.IRowCopier docCopier, ^int docSourceIndex])
   (^void logDelete [^bytes iid, ^long validFrom, ^long validTo])
   (^void logEvict [^bytes iid])
@@ -77,11 +77,11 @@
 (defn- write-trie!
   ^java.util.concurrent.CompletableFuture [^BufferAllocator allocator, ^ObjectStore obj-store,
                                            ^String table-name, ^String chunk-idx,
-                                           ^LiveTrie trie, ^IIndirectRelation leaf-rel]
+                                           ^LiveTrie trie, ^RelationReader leaf-rel]
 
   (when (pos? (.rowCount leaf-rel))
-    (util/with-close-on-catch [leaf-vsr (VectorSchemaRoot/create (Schema. (for [^IIndirectVector rdr leaf-rel]
-                                                                            (.getField (.getVector rdr))))
+    (util/with-close-on-catch [leaf-vsr (VectorSchemaRoot/create (Schema. (for [^IVectorReader rdr leaf-rel]
+                                                                            (.getField rdr)))
                                                                  allocator)
                                trie-vsr (VectorSchemaRoot/create trie-schema allocator)]
       (let [leaf-rel-wtr (vw/root->writer leaf-vsr)
@@ -170,14 +170,15 @@
 (defn- open-leaf-root ^xtdb.vector.IRelationWriter [^BufferAllocator allocator]
   (vw/root->writer (VectorSchemaRoot/create leaf-schema allocator)))
 
-(defn- open-wm-live-rel ^xtdb.vector.IIndirectRelation [^IRelationWriter rel, retain?]
+(defn- open-wm-live-rel ^xtdb.vector.RelationReader [^IRelationWriter rel, retain?]
   (let [out-cols (ArrayList.)]
     (try
-      (doseq [^IIndirectVector v (vw/rel-wtr->rdr rel)]
-        (.add out-cols (iv/->direct-vec (cond-> (.getVector v)
-                                          retain? (util/slice-vec)))))
+      (doseq [^IVectorWriter w (vals rel)]
+        (.syncValueCount w)
+        (.add out-cols (vr/vec->reader (cond-> (.getVector w)
+                                         retain? (util/slice-vec)))))
 
-      (iv/->indirect-rel out-cols)
+      (vr/rel-reader out-cols)
 
       (catch Throwable t
         (when retain? (util/close out-cols))

@@ -1,16 +1,15 @@
 (ns xtdb.sql.plan
   (:require [clojure.main]
             [clojure.set :as set]
-            [clojure.spec.alpha :as s]
             [clojure.string :as str]
             [clojure.walk :as w]
             [xtdb.error :as err]
             [xtdb.logical-plan :as lp]
-            xtdb.operator ;; Adds impls logical plan spec
+            [xtdb.operator]                                 ;; Adds impls logical plan spec
             [xtdb.rewrite :as r]
             [xtdb.sql.analyze :as sem]
             [xtdb.util :as util])
-  (:import (java.time LocalDate LocalDateTime LocalTime OffsetTime ZoneOffset ZonedDateTime ZoneId)))
+  (:import (java.time LocalDate LocalDateTime LocalTime OffsetTime ZoneId ZoneOffset ZonedDateTime)))
 
 ;; Attribute grammar for transformation into logical plan.
 

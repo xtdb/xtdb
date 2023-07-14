@@ -5,16 +5,16 @@
             [xtdb.log :as xt.log]
             [xtdb.util :as util])
   (:import clojure.lang.MapEntry
-           [java.io BufferedInputStream BufferedOutputStream Closeable DataInputStream DataOutputStream EOFException]
+           (java.io BufferedInputStream BufferedOutputStream Closeable DataInputStream DataOutputStream EOFException)
            java.nio.ByteBuffer
-           [java.nio.channels Channels ClosedByInterruptException FileChannel]
-           [java.nio.file Path StandardOpenOption]
-           [java.time Duration]
+           (java.nio.channels Channels ClosedByInterruptException FileChannel)
+           (java.nio.file Path)
+           (java.time Duration)
            java.time.temporal.ChronoUnit
            java.util.ArrayList
-           [java.util.concurrent ArrayBlockingQueue BlockingQueue CompletableFuture Executors ExecutorService Future]
+           (java.util.concurrent ArrayBlockingQueue BlockingQueue CompletableFuture ExecutorService Executors Future)
            xtdb.InstantSource
-           [xtdb.log Log LogRecord]))
+           (xtdb.log Log LogRecord)))
 
 (def ^:private ^{:tag 'byte} record-separator 0x1E)
 (def ^:private ^{:tag 'long} header-size (+ Byte/BYTES Integer/BYTES Long/BYTES))

@@ -4,15 +4,14 @@
             [xtdb.expression.map :as emap]
             [xtdb.logical-plan :as lp]
             [xtdb.types :as types]
-            [xtdb.util :as util]
-            [xtdb.vector.indirect :as iv])
-  (:import xtdb.expression.map.IRelationMap
-           xtdb.ICursor
-           (xtdb.vector IIndirectRelation)
-           (java.util LinkedList)
+            [xtdb.util :as util])
+  (:import (java.util LinkedList)
            java.util.function.Consumer
            java.util.stream.IntStream
-           org.apache.arrow.memory.BufferAllocator))
+           org.apache.arrow.memory.BufferAllocator
+           xtdb.ICursor
+           xtdb.expression.map.IRelationMap
+           (xtdb.vector RelationReader)))
 
 (defmethod lp/ra-expr :distinct [_]
   (s/cat :op #{:δ :distinct}
@@ -76,14 +75,14 @@
      (or (.tryAdvance left-cursor
                       (reify Consumer
                         (accept [_ in-rel]
-                          (let [^IIndirectRelation in-rel in-rel]
+                          (let [^RelationReader in-rel in-rel]
                             (when (pos? (.rowCount in-rel))
                               (.accept c in-rel))))))
 
          (.tryAdvance right-cursor
                       (reify Consumer
                         (accept [_ in-rel]
-                          (let [^IIndirectRelation in-rel in-rel]
+                          (let [^RelationReader in-rel in-rel]
                             (when (pos? (.rowCount in-rel))
                               (.accept c in-rel)))))))))
 
@@ -107,7 +106,7 @@
     (.forEachRemaining right-cursor
                        (reify Consumer
                          (accept [_ in-rel]
-                           (let [^IIndirectRelation in-rel in-rel
+                           (let [^RelationReader in-rel in-rel
                                  builder (.buildFromRelation rel-map in-rel)]
                              (dotimes [idx (.rowCount in-rel)]
                                (.add builder idx))))))
@@ -118,7 +117,7 @@
                    (.tryAdvance left-cursor
                                 (reify Consumer
                                   (accept [_ in-rel]
-                                    (let [^IIndirectRelation in-rel in-rel
+                                    (let [^RelationReader in-rel in-rel
                                           row-count (.rowCount in-rel)
                                           prober (.probeFromRelation rel-map in-rel)]
 
@@ -132,7 +131,7 @@
                                           (let [idxs (.toArray (.build idxs))]
                                             (when-not (empty? idxs)
                                               (aset advanced? 0 true)
-                                              (.accept c (iv/select in-rel idxs))))))))))))
+                                              (.accept c (.select in-rel idxs))))))))))))
        (aget advanced? 0))))
 
   (close [_]
@@ -171,7 +170,7 @@
                   (.tryAdvance in-cursor
                                (reify Consumer
                                  (accept [_ in-rel]
-                                   (let [^IIndirectRelation in-rel in-rel
+                                   (let [^RelationReader in-rel in-rel
                                          row-count (.rowCount in-rel)]
                                      (when (pos? row-count)
                                        (let [builder (.buildFromRelation rel-map in-rel)
@@ -183,7 +182,7 @@
                                          (let [idxs (.toArray (.build idxs))]
                                            (when-not (empty? idxs)
                                              (aset advanced? 0 true)
-                                             (.accept c (iv/select in-rel idxs))))))))))))
+                                             (.accept c (.select in-rel idxs))))))))))))
       (aget advanced? 0)))
 
   (close [_]
@@ -199,9 +198,11 @@
                                                                               :key-col-names (set (keys inner-col-types))
                                                                               :nil-keys-equal? true})))})))
 
+#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (definterface ICursorFactory
   (^xtdb.ICursor createCursor []))
 
+#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (definterface IFixpointCursorFactory
   (^xtdb.ICursor createCursor [^xtdb.operator.set.ICursorFactory cursor-factory]))
 
@@ -239,7 +240,7 @@
       (let [advanced? (boolean-array 1)
             inner-c (reify Consumer
                       (accept [_ in-rel]
-                        (let [^IIndirectRelation in-rel in-rel]
+                        (let [^RelationReader in-rel in-rel]
                           (when (pos? (.rowCount in-rel))
                             (let [rel-builder (.buildFromRelation rel-map in-rel)
                                   new-idxs (IntStream/builder)]
@@ -250,7 +251,7 @@
 
                               (let [new-idxs (.toArray (.build new-idxs))]
                                 (when-not (empty? new-idxs)
-                                  (.accept c (-> (.getBuiltRelation rel-map) (iv/select new-idxs)))
+                                  (.accept c (-> (.getBuiltRelation rel-map) (.select new-idxs)))
                                   (set! (.continue? this) true)
                                   (set! (.new-idxs this) new-idxs)
                                   (aset advanced? 0 true))))))))]
@@ -265,7 +266,7 @@
                                                   (set! (.continue? this) false)
                                                   (let [cursor (.createCursor recursive-cursor-factory
                                                                               (->fixpoint-cursor-factory (cond-> (.getBuiltRelation rel-map)
-                                                                                                           incremental? (iv/select new-idxs))))]
+                                                                                                           incremental? (.select new-idxs))))]
                                                     (set! (.recursive-cursor this) cursor)
                                                     cursor)))]
 

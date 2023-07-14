@@ -19,63 +19,38 @@
 package org.apache.arrow.vector.complex;
 
 
-import static org.apache.arrow.util.Preconditions.checkArgument;
-import static org.apache.arrow.util.Preconditions.checkState;
-
-import com.google.flatbuffers.FlatBufferBuilder;
-
-import org.apache.arrow.memory.*;
-import org.apache.arrow.util.Preconditions;
-import org.apache.arrow.vector.types.Types;
-import org.apache.arrow.vector.types.Types.*;
-import org.apache.arrow.vector.types.pojo.*;
-import org.apache.arrow.vector.types.pojo.ArrowType.*;
-import org.apache.arrow.vector.types.*;
-import org.apache.arrow.vector.*;
-import org.apache.arrow.vector.holders.*;
-import org.apache.arrow.vector.util.*;
-import org.apache.arrow.vector.complex.*;
-import org.apache.arrow.vector.complex.reader.*;
-import org.apache.arrow.vector.complex.impl.*;
-import org.apache.arrow.vector.complex.writer.*;
-import org.apache.arrow.vector.complex.writer.BaseWriter.StructWriter;
-import org.apache.arrow.vector.complex.writer.BaseWriter.ListWriter;
-import org.apache.arrow.vector.complex.writer.BaseWriter.MapWriter;
-import org.apache.arrow.vector.util.JsonStringArrayList;
-
-import java.util.Arrays;
-import java.util.Random;
-import java.util.List;
-
-import java.io.Closeable;
-import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.nio.ByteBuffer;
-
-import java.sql.Date;
-import java.sql.Time;
-import java.sql.Timestamp;
-import java.math.BigDecimal;
-import java.math.BigInteger;
-import java.time.Duration;
-import java.time.LocalDateTime;
-import java.time.Period;
-import java.time.ZonedDateTime;
-
-
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Iterator;
+import org.apache.arrow.memory.ArrowBuf;
+import org.apache.arrow.memory.BufferAllocator;
+import org.apache.arrow.memory.OutOfMemoryException;
+import org.apache.arrow.memory.ReferenceManager;
 import org.apache.arrow.memory.util.CommonUtil;
 import org.apache.arrow.memory.util.hash.ArrowBufHasher;
 import org.apache.arrow.memory.util.hash.SimpleHasher;
+import org.apache.arrow.util.Preconditions;
+import org.apache.arrow.vector.*;
 import org.apache.arrow.vector.compare.VectorVisitor;
 import org.apache.arrow.vector.complex.impl.ComplexCopier;
-import org.apache.arrow.vector.util.CallBack;
+import org.apache.arrow.vector.complex.impl.DenseUnionReader;
+import org.apache.arrow.vector.complex.impl.DenseUnionWriter;
+import org.apache.arrow.vector.complex.reader.FieldReader;
+import org.apache.arrow.vector.complex.writer.FieldWriter;
+import org.apache.arrow.vector.holders.*;
 import org.apache.arrow.vector.ipc.message.ArrowFieldNode;
-import org.apache.arrow.vector.BaseValueVector;
+import org.apache.arrow.vector.types.Types.MinorType;
+import org.apache.arrow.vector.types.UnionMode;
+import org.apache.arrow.vector.types.pojo.ArrowType;
+import org.apache.arrow.vector.types.pojo.ArrowType.Union;
+import org.apache.arrow.vector.types.pojo.Field;
+import org.apache.arrow.vector.types.pojo.FieldType;
+import org.apache.arrow.vector.util.CallBack;
+import org.apache.arrow.vector.util.DataSizeRoundingUtil;
 import org.apache.arrow.vector.util.OversizedAllocationException;
-import org.apache.arrow.util.Preconditions;
+import org.apache.arrow.vector.util.TransferPair;
+
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Iterator;
+import java.util.List;
 
 import static org.apache.arrow.vector.types.UnionMode.Dense;
 

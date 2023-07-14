@@ -9,7 +9,7 @@
             [xtdb.types :as types]
             [xtdb.util :as util]
             [xtdb.vector :as vec]
-            [xtdb.vector.indirect :as iv]
+            [xtdb.vector.reader :as vr]
             [xtdb.vector.writer :as vw])
   (:import [clojure.lang MapEntry]
            java.lang.AutoCloseable
@@ -21,17 +21,17 @@
            (org.apache.arrow.vector BigIntVector ValueVector VectorLoader VectorSchemaRoot VectorUnloader)
            org.roaringbitmap.longlong.Roaring64Bitmap
            org.roaringbitmap.RoaringBitmap
-           xtdb.ICursor
+           (xtdb ICursor SliceCursor)
            (xtdb.metadata IMetadataManager IMetadataPredicate ITableMetadata ITableMetadataWriter)
            xtdb.object_store.ObjectStore
-           (xtdb.vector IIndirectVector IRelationWriter IVectorWriter)))
+           (xtdb.vector IVectorReader IRelationWriter IVectorWriter)))
 
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface IRowCounter
   (^int blockIdx [])
   (^long blockRowCount [])
   (^long chunkRowCount [])
-  (^java.util.List blockRowCounts [])
+  (^ints blockRowCounts [])
 
   (^void addRows [^int rowCount])
   (^int nextBlock [])
@@ -47,8 +47,8 @@
   (chunkRowCount [_] chunk-row-count)
 
   (blockRowCounts [_]
-    (cond-> (vec block-row-counts)
-      (pos? block-row-count) (conj block-row-count)))
+    (int-array (cond-> (vec block-row-counts)
+                 (pos? block-row-count) (conj block-row-count))))
 
   (addRows [this row-count]
     (set! (.block-row-count this) (+ block-row-count row-count)))
@@ -83,8 +83,8 @@
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface ILiveTableWatermark
   (^java.util.Map columnTypes [])
-  (^xtdb.ICursor #_<IIR> liveBlocks [^java.util.Set #_<String> colNames,
-                                      ^xtdb.metadata.IMetadataPredicate metadataPred])
+  (^xtdb.ICursor #_<RR> liveBlocks [^java.util.Set #_<String> colNames,
+                                    ^xtdb.metadata.IMetadataPredicate metadataPred])
   (^void close []))
 
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
@@ -153,15 +153,17 @@
 
       (close [_] (.close inner)))))
 
-(defn- open-wm-rel ^xtdb.vector.IIndirectRelation [^IRelationWriter rel, ^BigIntVector row-id-vec, retain?]
+(defn- open-wm-rel ^xtdb.vector.RelationReader [^IRelationWriter rel, ^BigIntVector row-id-vec, retain?]
   (let [out-cols (ArrayList.)]
     (try
-      (doseq [^IIndirectVector v (cons (iv/->direct-vec row-id-vec)
-                                       (vw/rel-wtr->rdr rel))]
-        (.add out-cols (iv/->direct-vec (cond-> (.getVector v)
-                                          retain? (util/slice-vec)))))
+      (.syncRowCount rel)
+      (doseq [^ValueVector v (cons row-id-vec
+                                   (->> (vals rel)
+                                        (map #(.getVector ^IVectorWriter %))))]
+        (.add out-cols (vr/vec->reader (cond-> v
+                                         retain? (util/slice-vec)))))
 
-      (iv/->indirect-rel out-cols)
+      (vr/rel-reader out-cols)
 
       (catch Throwable t
         (when retain? (util/close out-cols))
@@ -200,15 +202,15 @@
 
         (liveBlocks [_ col-names metadata-pred]
           (let [excluded-block-idxs (->excluded-block-idxs (.tableMetadata table-metadata-writer) metadata-pred)]
-            (util/->concat-cursor (-> (iv/->indirect-rel (->> static-wm-rel
-                                                              (filter (comp col-names #(.getName ^IIndirectVector %)))))
-                                      (iv/with-absent-cols allocator col-names)
-                                      (iv/->slice-cursor row-counts)
+            (util/->concat-cursor (-> (vr/rel-reader (->> static-wm-rel
+                                                          (filter (comp col-names #(.getName ^IVectorReader %)))))
+                                      (vr/with-absent-cols allocator col-names)
+                                      (SliceCursor. row-counts)
                                       (without-block-idxs excluded-block-idxs))
-                                  (-> (iv/->indirect-rel (->> transient-wm-rel
-                                                              (filter (comp col-names #(.getName ^IIndirectVector %)))))
-                                      (iv/with-absent-cols allocator col-names)
-                                      (iv/->slice-cursor [(.rowCount transient-wm-rel)])))))
+                                  (-> (vr/rel-reader (->> transient-wm-rel
+                                                              (filter (comp col-names #(.getName ^IVectorReader %)))))
+                                      (vr/with-absent-cols allocator col-names)
+                                      (SliceCursor. (int-array [(.rowCount transient-wm-rel)]))))))
 
         AutoCloseable
         (close [_] (when retain? (.close static-wm-rel))))))
@@ -218,7 +220,7 @@
     (doto static-row-id-bitmap (.or transient-row-id-bitmap))
 
     (doto (vw/->writer static-row-id-vec)
-      (vw/append-vec (iv/->direct-vec transient-row-id-vec))
+      (vw/append-vec (vr/vec->reader transient-row-id-vec))
       (.syncValueCount))
 
     (let [copier (.rowCopier static-rel (vw/rel-wtr->rdr transient-rel))]
@@ -257,10 +259,10 @@
 
         (liveBlocks [_ col-names metadata-pred]
           (let [excluded-block-idxs (->excluded-block-idxs (.tableMetadata table-metadata-writer) metadata-pred)]
-            (-> (iv/->indirect-rel (->> wm-rel
-                                        (filter (comp col-names #(.getName ^IIndirectVector %)))))
-                (iv/with-absent-cols allocator col-names)
-                (iv/->slice-cursor row-counts)
+            (-> (vr/rel-reader (->> wm-rel
+                                      (filter (comp col-names #(.getName ^IVectorReader %)))))
+                (vr/with-absent-cols allocator col-names)
+                (SliceCursor. row-counts)
                 (without-block-idxs excluded-block-idxs))))
 
         AutoCloseable
@@ -268,11 +270,8 @@
 
   (finishBlock [_]
     (let [block-meta-wtr (.writeBlockMetadata table-metadata-writer (.blockIdx row-counter))]
-      (doseq [^IIndirectVector live-vec (cons (iv/->direct-vec row-id-vec) (seq (vw/rel-wtr->rdr static-rel)))]
-        (.writeMetadata block-meta-wtr
-                        (iv/slice-col live-vec
-                                      (.chunkRowCount row-counter)
-                                      (.blockRowCount row-counter))))
+      (doseq [^IVectorReader live-vec (cons (vr/vec->reader row-id-vec) (seq (vw/rel-wtr->rdr static-rel)))]
+        (.writeMetadata block-meta-wtr (.select live-vec (.chunkRowCount row-counter) (.blockRowCount row-counter))))
       (.endBlock block-meta-wtr))
 
     (.nextBlock row-counter))
@@ -285,7 +284,7 @@
                     (->> (cons row-id-vec (map #(.getVector ^IVectorWriter %) (vals static-rel)))
                          (map (fn [^ValueVector live-vec]
                                 (let [live-root (VectorSchemaRoot/of (into-array [live-vec]))]
-                                  (.writeMetadata block-meta-wtr (iv/->direct-vec live-vec))
+                                  (.writeMetadata block-meta-wtr (vr/vec->reader live-vec))
 
                                   (.putObject object-store (meta/->chunk-obj-key chunk-idx table-name (.getName live-vec))
                                               (with-open [write-root (VectorSchemaRoot/create (.getSchema live-root) allocator)]

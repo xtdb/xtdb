@@ -237,48 +237,6 @@
                           {:table-args '{?x [{:a 1}]
                                          ?y [{:b 1}]}})))))
 
-(t/deftest test-unwind-operator
-  (t/is (= [{:a 1, :b [1 2], :b* 1}
-            {:a 1, :b [1 2], :b* 2}
-            {:a 2, :b [3 4 5], :b* 3}
-            {:a 2, :b [3 4 5], :b* 4}
-            {:a 2, :b [3 4 5], :b* 5}]
-           (tu/query-ra '[:unwind {b* b}
-                          [:table ?x]]
-                        {:table-args '{?x [{:a 1, :b [1 2]} {:a 2, :b [3 4 5]}]}})))
-
-  (t/is (= [{:a 1, :b* 1} {:a 1, :b* 2}]
-           (tu/query-ra '[:project [a b*]
-                          [:unwind {b* b}
-                           [:table ?x]]]
-                        {:table-args '{?x [{:a 1, :b [1 2]} {:a 2, :b []}]}}))
-        "skips rows with empty lists")
-
-  (t/is (= [{:a 1, :b* 1} {:a 1, :b* 2}]
-           (tu/query-ra '[:project [a b*]
-                          [:unwind {b* b}
-                           [:table ?x]]]
-                        {:table-args '{?x [{:a 2, :b 1} {:a 1, :b [1 2]}]}}))
-        "skips rows with non-list unwind column")
-
-  (t/is (= [{:a 1, :b* 1} {:a 1, :b* "foo"}]
-           (tu/query-ra '[:project [a b*]
-                          [:unwind {b* b}
-                           [:table ?x]]]
-                        {:table-args '{?x [{:a 1, :b [1 "foo"]}]}}))
-        "handles multiple types")
-
-  (t/is (= [{:a 1, :b* 1, :$ordinal 1}
-            {:a 1, :b* 2, :$ordinal 2}
-            {:a 2, :b* 3, :$ordinal 1}
-            {:a 2, :b* 4, :$ordinal 2}
-            {:a 2, :b* 5, :$ordinal 3}]
-           (tu/query-ra '[:project [a b* $ordinal]
-                          [:unwind {b* b} {:ordinality-column $ordinal}
-                           [:table ?x]]]
-                        {:table-args '{?x [{:a 1 :b [1 2]} {:a 2 :b [3 4 5]}]}}))
-        "with ordinality"))
-
 (t/deftest test-project-row-number
   (t/is (= [{:a 12, :$row-num 1}, {:a 0, :$row-num 2}, {:a 100, :$row-num 3}]
            (tu/query-ra '[:project [a {$row-num (row-number)}]

@@ -3,7 +3,7 @@
             [xtdb.api :as xt]
             [xtdb.test-util :as tu]
             [xtdb.types :as types]
-            [xtdb.vector.indirect :as iv]
+            [xtdb.vector.reader :as vr]
             [juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc :as jdbc]
             #_[juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc.prepare :as jdbc-prep])
   (:import (org.apache.arrow.flight CallOption FlightClient FlightEndpoint FlightInfo Location)
@@ -46,7 +46,7 @@
         (while (.next stream)
           ;; if this were a real client chances are they wouldn't just
           ;; eagerly turn the roots into Clojure maps...
-          (swap! !res into (iv/rel->rows (iv/<-root root))))
+          (swap! !res into (vr/rel->rows (vr/<-root root))))
 
         @!res))))
 

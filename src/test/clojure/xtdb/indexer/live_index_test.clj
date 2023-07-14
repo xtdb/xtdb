@@ -17,7 +17,7 @@
            xtdb.object_store.ObjectStore
            (xtdb.trie TrieKeys ArrowHashTrie ArrowHashTrie$Node ArrowHashTrie$NodeVisitor LiveTrie LiveTrie$Node LiveTrie$NodeVisitor)
            xtdb.vector.IRowCopier
-           xtdb.vector.IWriterPosition))
+           xtdb.vector.IVectorPosition))
 
 (def with-live-index
   (tu/with-system {:xtdb/allocator {}
@@ -61,7 +61,7 @@
     (t/testing "commit"
       (util/with-open [live-idx-tx (.startTx live-index (xtp/->TransactionInstant 0 (.toInstant #inst "2000")))
                        live-table-tx (.liveTable live-idx-tx "my-table")]
-        (let [wp (IWriterPosition/build)]
+        (let [wp (IVectorPosition/build)]
           (doseq [iid iids]
             (.logPut live-table-tx (util/uuid->bytes iid) 0 0
                      (reify IRowCopier

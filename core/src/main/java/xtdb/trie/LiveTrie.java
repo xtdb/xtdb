@@ -4,7 +4,7 @@ import java.util.Arrays;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
-import static xtdb.trie.TrieKeys.*;
+import static xtdb.trie.TrieKeys.LEVEL_WIDTH;
 
 public record LiveTrie(Node rootNode, TrieKeys trieKeys) {
 

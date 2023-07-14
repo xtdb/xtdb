@@ -2,14 +2,14 @@
   (:require [xtdb.expression :as expr]
             [xtdb.types :as types]
             [xtdb.util :as util]
-            [xtdb.vector.indirect :as iv])
+            [xtdb.vector.reader :as vr])
   (:import java.nio.ByteBuffer
            org.apache.arrow.memory.RootAllocator
            (org.apache.arrow.memory.util.hash MurmurHasher SimpleHasher)
            [org.apache.arrow.vector ValueVector VarBinaryVector]
            org.roaringbitmap.buffer.ImmutableRoaringBitmap
            org.roaringbitmap.RoaringBitmap
-           (xtdb.vector IIndirectRelation IIndirectVector IVectorWriter)))
+           (xtdb.vector RelationReader IVectorReader IVectorWriter)))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -55,13 +55,11 @@
 ;; Cassandra-style hashes:
 ;; https://www.researchgate.net/publication/220770131_Less_Hashing_Same_Performance_Building_a_Better_Bloom_Filter
 (defn bloom-hashes
-  (^ints [^IIndirectVector col ^long idx]
+  (^ints [^IVectorReader col ^long idx]
    (bloom-hashes col idx bloom-k bloom-bit-mask))
-  (^ints [^IIndirectVector col ^long idx ^long k ^long mask]
-   (let [vec (.getVector col)
-         idx (.getIndex col idx)
-         hash-1 (.hashCode vec idx SimpleHasher/INSTANCE)
-         hash-2 (.hashCode vec idx (MurmurHasher. hash-1))
+  (^ints [^IVectorReader col ^long idx ^long k ^long mask]
+   (let [hash-1 (.hashCode col idx SimpleHasher/INSTANCE)
+         hash-2 (.hashCode col idx (MurmurHasher. hash-1))
          acc (int-array k)]
      (dotimes [n k]
        (aset acc n (unchecked-int (bit-and mask (+ hash-1 (* hash-2 n))))))
@@ -76,30 +74,31 @@
                                   :target-type target-col-type}
                                  {:param-types {param param-type}})
               {:keys [writer-bindings write-value-out!]} (expr/write-value-out-code return-type)]
-          (-> `(fn [~(-> expr/params-sym (expr/with-tag IIndirectRelation))
+          (-> `(fn [~(-> expr/params-sym (expr/with-tag RelationReader))
                     ~(-> expr/out-vec-sym (expr/with-tag ValueVector))]
                  (let [~@(expr/batch-bindings emitted-expr)
                        ~@writer-bindings]
                    ~(continue (fn [return-type code]
                                 `(do
                                    ~(write-value-out! return-type code)
-                                   (bloom-hashes (iv/->direct-vec ~expr/out-vec-sym) 0))))))
+                                   (bloom-hashes (vr/vec->reader ~expr/out-vec-sym) 0))))))
               #_(doto (clojure.pprint/pprint))
               (eval))))
       (util/lru-memoize)))
 
-(defn literal-hashes ^ints [^IIndirectRelation params param-expr target-col-type]
+(defn literal-hashes ^ints [params param-expr target-col-type]
   (let [f (literal-hasher param-expr target-col-type)]
     (with-open [allocator (RootAllocator.)
                 tmp-vec (-> (types/col-type->field target-col-type)
                             (.createVector allocator))]
       (f params tmp-vec))))
 
-(defn write-bloom [^IVectorWriter bloom-wtr, ^IIndirectVector col]
+(defn write-bloom [^IVectorWriter bloom-wtr, ^IVectorReader col]
   (let [bloom (RoaringBitmap.)]
-    (dotimes [in-idx (.getValueCount col)]
+    (dotimes [in-idx (.valueCount col)]
       (let [^ints el-hashes (bloom-hashes col in-idx)]
         (.add bloom el-hashes)))
+
     (let [buf (ByteBuffer/allocate (.serializedSizeInBytes bloom))]
       (.serialize bloom buf)
       (.writeBytes bloom-wtr (doto buf .clear)))))

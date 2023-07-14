@@ -8,7 +8,7 @@
             [xtdb.temporal.kd-tree :as kd]
             [xtdb.types :as types]
             [xtdb.util :as util]
-            [xtdb.vector.indirect :as iv]
+            [xtdb.vector.reader :as vr]
             [xtdb.vector.writer :as vw])
   (:import java.lang.AutoCloseable
            [java.util ArrayList Arrays Comparator]
@@ -93,13 +93,13 @@
 
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface ITemporalRelationSource
-  (^xtdb.vector.IIndirectRelation createTemporalRelation [^org.apache.arrow.memory.BufferAllocator allocator
-                                                           ^java.util.List columns
-                                                           ^longs temporalMinRange
-                                                           ^longs temporalMaxRange
-                                                           ^org.roaringbitmap.longlong.Roaring64Bitmap rowIdBitmap])
+  (^xtdb.vector.RelationReader createTemporalRelation [^org.apache.arrow.memory.BufferAllocator allocator
+                                                        ^java.util.List columns
+                                                        ^longs temporalMinRange
+                                                        ^longs temporalMaxRange
+                                                        ^org.roaringbitmap.longlong.Roaring64Bitmap rowIdBitmap])
 
-  (^clojure.lang.PersistentHashSet getCurrentRowIds [^long current-time]))
+  (^java.util.Set getCurrentRowIds [^long current-time]))
 
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface ITemporalTxIndexer
@@ -112,11 +112,11 @@
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface ITemporalManager
   (^xtdb.temporal.ITemporalRelationSource getTemporalWatermark [])
-  (^xtdb.vector.IIndirectRelation createTemporalRelation [^org.apache.arrow.memory.BufferAllocator allocator
-                                                          ^java.util.List columns
-                                                          ^longs temporalMinRange
-                                                          ^longs temporalMaxRange
-                                                          ^org.roaringbitmap.longlong.Roaring64Bitmap rowIdBitmap])
+  (^xtdb.vector.RelationReader createTemporalRelation [^org.apache.arrow.memory.BufferAllocator allocator
+                                                        ^java.util.List columns
+                                                        ^longs temporalMinRange
+                                                        ^longs temporalMaxRange
+                                                        ^org.roaringbitmap.longlong.Roaring64Bitmap rowIdBitmap])
   (^void registerNewChunk [^long chunkIdx])
   (^xtdb.temporal.ITemporalTxIndexer startTx [^xtdb.api.protocols.TransactionInstant txKey]))
 
@@ -277,7 +277,7 @@
       (log/errorf t "Failed to parse %s" obj-key)
       (throw t))))
 
-(defn- ->temporal-rel ^xtdb.vector.IIndirectRelation [^BufferAllocator allocator, kd-tree columns temporal-min-range temporal-max-range ^Roaring64Bitmap row-id-bitmap]
+(defn- ->temporal-rel ^xtdb.vector.RelationReader [^BufferAllocator allocator, kd-tree columns temporal-min-range temporal-max-range ^Roaring64Bitmap row-id-bitmap]
   (let [^IKdTreePointAccess point-access (kd/kd-tree-point-access kd-tree)
         ^LongStream kd-tree-idxs (if (.isEmpty row-id-bitmap)
                                    (LongStream/empty)
@@ -305,17 +305,17 @@
     (util/with-close-on-catch [cols (ArrayList. (count columns))]
       (doseq [col-name columns]
         (let [col-idx (->temporal-column-idx col-name)
-              col-type (types/col-type->field col-name (get temporal-col-types col-name)) ;TODO rename to field
-              ^BaseFixedWidthVector temporal-vec (.createVector col-type allocator)
+              field (types/col-type->field col-name (get temporal-col-types col-name))
+              ^BaseFixedWidthVector temporal-vec (.createVector field allocator)
               temporal-vec-wtr (vw/->writer temporal-vec)]
           (.allocateNew temporal-vec value-count)
           (dotimes [n value-count]
             (let [^longs coordinate (aget coordinates n)]
               (.writeLong temporal-vec-wtr (aget coordinate col-idx))))
-          (.setValueCount temporal-vec value-count)
-          (.add cols (iv/->direct-vec temporal-vec))))
+          (.syncValueCount temporal-vec-wtr)
+          (.add cols (vw/vec-wtr->rdr temporal-vec-wtr))))
 
-      (iv/->indirect-rel cols value-count))))
+      (vr/rel-reader cols value-count))))
 
 (defn row-ids-to-add [kd-tree ^long latest-completed-tx-time ^long current-time]
   (let [min-range (doto (->min-range)

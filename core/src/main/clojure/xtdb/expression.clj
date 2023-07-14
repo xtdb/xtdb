@@ -5,7 +5,7 @@
             [xtdb.rewrite :refer [zmatch]]
             [xtdb.types :as types]
             [xtdb.util :as util]
-            [xtdb.vector.indirect :as iv]
+            [xtdb.vector.reader :as vr]
             [xtdb.vector.writer :as vw])
   (:import (clojure.lang Keyword MapEntry)
            (java.nio ByteBuffer)
@@ -14,12 +14,12 @@
            (java.util Arrays Date List)
            (java.util.regex Pattern)
            (java.util.stream IntStream)
-           (org.apache.arrow.vector BitVector PeriodDuration ValueVector)
+           (org.apache.arrow.vector PeriodDuration ValueVector)
            (org.apache.commons.codec.binary Hex)
            (xtdb StringUtil)
            (xtdb.operator IProjectionSpec IRelationSelector)
            (xtdb.types IntervalDayTime IntervalMonthDayNano IntervalYearMonth)
-           (xtdb.vector IIndirectRelation IIndirectVector IMonoVectorReader IPolyVectorReader IStructValueReader MonoToPolyReader RemappedTypeIdReader)
+           (xtdb.vector IMonoVectorReader IPolyVectorReader RelationReader IStructValueReader IVectorReader MonoToPolyReader RemappedTypeIdReader)
            xtdb.vector.ValueBox))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -415,12 +415,12 @@
     {:return-type col-type
      :batch-bindings (if (types/union? col-type)
                        (if (and extract-vecs-from-rel? extract-vec-from-rel?)
-                         [[sanitized-var `(.polyReader (.vectorForName ~rel ~(str variable))
+                         [[sanitized-var `(.polyReader (.readerForName ~rel ~(str variable))
                                                        '~col-type)]]
                          [[sanitized-var `(some-> ~sanitized-var (.polyReader '~col-type))]])
 
                        (if (and extract-vecs-from-rel? extract-vec-from-rel?)
-                         [[sanitized-var `(.monoReader (.vectorForName ~rel ~(str variable)) '~col-type)]]
+                         [[sanitized-var `(.monoReader (.readerForName ~rel ~(str variable)) '~col-type)]]
                          [[sanitized-var `(some-> ~sanitized-var (.monoReader '~col-type))]]))
      :continue (fn [f]
                  (continue-read f col-type sanitized-var idx))}))
@@ -1534,8 +1534,8 @@
               {:keys [return-type continue] :as emitted-expr} (codegen-expr expr opts)
               {:keys [writer-bindings write-value-out!]} (write-value-out-code return-type)]
           {:!projection-fn (delay
-                             (-> `(fn [~(-> rel-sym (with-tag IIndirectRelation))
-                                       ~(-> params-sym (with-tag IIndirectRelation))
+                             (-> `(fn [~(-> rel-sym (with-tag RelationReader))
+                                       ~(-> params-sym (with-tag RelationReader))
                                        ~(-> out-vec-sym (with-tag ValueVector))]
                                     (let [~@(batch-bindings emitted-expr)
                                           ~@writer-bindings
@@ -1545,18 +1545,19 @@
                                                      (write-value-out! t c))))))
 
                                  #_(doto clojure.pprint/pprint)
+                                 #_(->> (binding [*print-meta* true]))
                                  eval))
 
            :return-type return-type}))
       (util/lru-memoize)
       wrap-zone-id-cache-buster))
 
-(defn ->param-types [^IIndirectRelation params]
+(defn ->param-types [^RelationReader params]
   (->> params
-       (into {} (map (fn [^IIndirectVector col]
+       (into {} (map (fn [^IVectorReader col]
                        (MapEntry/create
                         (symbol (.getName col))
-                        (types/field->col-type (.getField (.getVector col)))))))))
+                        (types/field->col-type (.getField col))))))))
 
 (defn ->expression-projection-spec ^xtdb.operator.IProjectionSpec [col-name form {:keys [col-types param-types] :as input-types}]
   (let [expr (form->expr form input-types)
@@ -1572,9 +1573,9 @@
 
       (project [_ allocator in-rel params]
         (let [var->col-type (->> (seq in-rel)
-                                 (into {} (map (fn [^IIndirectVector iv]
+                                 (into {} (map (fn [^IVectorReader iv]
                                                  [(symbol (.getName iv))
-                                                  (types/field->col-type (.getField (.getVector iv)))]))))
+                                                  (types/field->col-type (.getField iv))]))))
 
               {:keys [return-type !projection-fn]} (emit-projection expr {:param-types (->param-types params)
                                                                           :var->col-type var->col-type})
@@ -1586,16 +1587,15 @@
               (.allocateNew))
             (@!projection-fn in-rel params out-vec)
             (.setValueCount out-vec row-count)
-            (iv/->direct-vec out-vec)))))))
+            (vr/vec->reader out-vec)))))))
 
 (defn ->expression-relation-selector ^xtdb.operator.IRelationSelector [form input-types]
   (let [projector (->expression-projection-spec "select" (list 'boolean form) input-types)]
     (reify IRelationSelector
       (select [_ al in-rel params]
         (with-open [selection (.project projector al in-rel params)]
-          (let [^BitVector sel-vec (.getVector selection)
-                res (IntStream/builder)]
-            (dotimes [idx (.getValueCount selection)]
-              (when (= 1 (.get sel-vec (.getIndex selection idx)))
+          (let [res (IntStream/builder)]
+            (dotimes [idx (.valueCount selection)]
+              (when (.getBoolean selection idx)
                 (.add res idx)))
             (.toArray (.build res))))))))

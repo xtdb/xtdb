@@ -17,18 +17,18 @@
 
 (t/use-fixtures :each tu/with-allocator)
 
-
 (defn- test-read [col-type-fn write-fn vs]
   ;; TODO no longer types, but there are other things in here that depend on `test-read`
   (with-open [duv (DenseUnionVector/empty "" tu/*allocator*)]
     (let [duv-writer (vw/->writer duv)]
       (doseq [v vs]
         (doto (.writerForType duv-writer (col-type-fn v))
-          (write-fn v))))
-    {:vs (vec (for [idx (range (count vs))]
-                (types/get-object duv idx)))
-     :vec-types (vec (for [idx (range (count vs))]
-                       (class (.getVectorByType duv (.getTypeId duv idx)))))}))
+          (write-fn v)))
+      (let [duv-rdr (vw/vec-wtr->rdr duv-writer)]
+        {:vs (vec (for [idx (range (count vs))]
+                    (.getObject duv-rdr idx)))
+         :vec-types (vec (for [idx (range (count vs))]
+                           (class (.getVectorByType duv (.getTypeId duv idx)))))}))))
 
 (defn- test-round-trip [vs]
   (test-read vw/value->col-type #(vw/write-value! %2 %1) vs))

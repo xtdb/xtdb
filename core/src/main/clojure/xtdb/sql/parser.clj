@@ -4,10 +4,10 @@
             [clojure.string :as str]
             [xtdb.error :as err]
             [xtdb.util :as util])
-  (:import [xtdb.sql.parser Parser Parser$AParser Parser$AltParser Parser$CatParser Parser$EpsilonParser Parser$HideParser Parser$MemoTable Parser$MemoizeLeftRecParser Parser$MemoizeParser Parser$NegParser Parser$NonTerminalParser Parser$OptParser Parser$OrdParser Parser$ParseErrors Parser$RegexpParser Parser$RepeatParser Parser$RuleParser Parser$StringParser]
-           [java.util ArrayDeque HashSet Map Set]
+  (:import (java.util ArrayDeque HashSet Map Set)
            java.util.function.Function
-           [java.util.regex Matcher Pattern]))
+           (java.util.regex Matcher Pattern)
+           (xtdb.sql.parser Parser Parser$AParser Parser$AltParser Parser$CatParser Parser$EpsilonParser Parser$HideParser Parser$MemoTable Parser$MemoizeLeftRecParser Parser$MemoizeParser Parser$NegParser Parser$NonTerminalParser Parser$OptParser Parser$OrdParser Parser$ParseErrors Parser$RegexpParser Parser$RepeatParser Parser$RuleParser Parser$StringParser)))
 
 ;; https://arxiv.org/pdf/1509.02439v1.pdf
 ;; https://medium.com/@gvanrossum_83706/left-recursive-peg-grammars-65dab3c580e1

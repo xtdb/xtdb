@@ -5,8 +5,8 @@
             [clojure.string :as str]
             [clojure.tools.cli :as cli]
             [clojure.tools.logging :as log]
-            [xtdb.node :as node]
             [xtdb.error :as err]
+            [xtdb.node :as node]
             [xtdb.util :as util])
   (:import java.io.File
            java.net.URL

@@ -3,14 +3,13 @@
             [xtdb.expression.comparator :as expr.comp]
             [xtdb.logical-plan :as lp]
             [xtdb.util :as util]
-            [xtdb.vector.indirect :as iv]
             [xtdb.vector.writer :as vw])
-  (:import xtdb.ICursor
-           xtdb.vector.IIndirectRelation
-           [java.util Comparator]
-           [java.util.function Consumer ToIntFunction]
+  (:import (java.util Comparator)
+           (java.util.function Consumer ToIntFunction)
            java.util.stream.IntStream
-           org.apache.arrow.memory.BufferAllocator))
+           org.apache.arrow.memory.BufferAllocator
+           xtdb.ICursor
+           xtdb.vector.RelationReader))
 
 (s/def ::direction #{:asc :desc})
 (s/def ::null-ordering #{:nulls-first :nulls-last})
@@ -25,7 +24,7 @@
 
 (set! *unchecked-math* :warn-on-boxed)
 
-(defn- accumulate-relations ^xtdb.vector.IIndirectRelation [allocator ^ICursor in-cursor]
+(defn- accumulate-relations ^xtdb.vector.RelationReader [allocator ^ICursor in-cursor]
   (let [rel-writer (vw/->rel-writer allocator)]
     (try
       (.forEachRemaining in-cursor
@@ -38,12 +37,12 @@
 
     (vw/rel-wtr->rdr rel-writer)))
 
-(defn- sorted-idxs ^ints [^IIndirectRelation read-rel, order-specs]
+(defn- sorted-idxs ^ints [^RelationReader read-rel, order-specs]
   (-> (IntStream/range 0 (.rowCount read-rel))
       (.boxed)
       (.sorted (reduce (fn [^Comparator acc, [column {:keys [direction null-ordering]
                                                       :or {direction :asc, null-ordering :nulls-last}}]]
-                         (let [read-col (.vectorForName read-rel (name column))
+                         (let [read-col (.readerForName read-rel (name column))
                                col-comparator (expr.comp/->comparator read-col read-col null-ordering)
 
                                ^Comparator
@@ -67,9 +66,10 @@
   (tryAdvance [_ c]
     (with-open [read-rel (accumulate-relations allocator in-cursor)]
       (if (pos? (.rowCount read-rel))
-        (with-open [out-rel (iv/select read-rel (sorted-idxs read-rel order-specs))]
-          (.accept c out-rel)
-          true)
+        (do
+          (with-open [out-rel (.select read-rel (sorted-idxs read-rel order-specs))]
+            (.accept c out-rel)
+            true))
         false)))
 
   (close [_]
