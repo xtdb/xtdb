@@ -12,7 +12,7 @@
         "type" : {
           "name" : "union",
           "mode" : "Dense",
-          "typeIds" : [0,1,2,3,4,5]
+          "typeIds" : [0,1,2,3,4,5,6]
         },
         "children" : [{
           "name" : "sql",
@@ -172,6 +172,15 @@
             "name" : "null"
           },
           "children" : [ ]
+        },{
+          "name" : "flush-index-if-log-not-moving",
+          "nullable" : false,
+          "type" : {
+            "name" : "int",
+            "bitWidth" : 64,
+            "isSigned" : true
+          },
+          "children" : [ ]
         }]
       }]
     },{
@@ -314,6 +323,11 @@
         },{
           "name" : "abort",
           "count" : 0
+        },{
+          "name" : "flush-index-if-log-not-moving",
+          "count" : 0,
+          "VALIDITY" : [ ],
+          "DATA" : [ ]
         }]
       }]
     },{

@@ -514,6 +514,11 @@
 
       (.indexPut temporal-tx iid row-id system-time-µs util/end-of-time-μs true))))
 
+(defn- get-force-flush-tx-id [^DenseUnionVector tx-ops-vec tx-op-idx]
+  (let [flush-vec (.getVectorByType tx-ops-vec 6)
+        offset (.getOffset tx-ops-vec tx-op-idx)]
+    (.getObject flush-vec offset)))
+
 (deftype Indexer [^BufferAllocator allocator
                   ^ObjectStore object-store
                   ^IScanEmitter scan-emitter
@@ -546,7 +551,10 @@
                                                      (.getObject 0))))
                      :default-all-valid-time? (== 1 (-> ^BitVector (.getVector tx-root "all-application-time?")
                                                         (.get 0)))
-                     :tx-key tx-key}]
+                     :tx-key tx-key}
+
+            force-flush-tx-id (atom nil)
+            last-tx-id (some-> latest-completed-tx .-tx_id)]
 
         (letfn [(index-tx-ops [^DenseUnionVector tx-ops-vec]
                   (let [tx-ops-rdr (vr/vec->reader tx-ops-vec)
@@ -564,7 +572,9 @@
                                                2 (.indexOp ^OpIndexer @!delete-idxer tx-op-idx)
                                                3 (.indexOp ^OpIndexer @!evict-idxer tx-op-idx)
                                                4 (.indexOp ^OpIndexer @!call-idxer tx-op-idx)
-                                               5 (throw abort-exn))]
+                                               5 (throw abort-exn)
+                                               6 (do (reset! force-flush-tx-id (get-force-flush-tx-id tx-ops-vec tx-op-idx))
+                                                     nil))]
                         (try
                           (index-tx-ops more-tx-ops)
                           (finally
@@ -614,11 +624,25 @@
               (finally
                 (.unlock wm-lock wm-lock-stamp)))))
 
-        (while (.isBlockFull live-chunk)
-          (finish-block! this))
+        (let [force-flush-req (some? @force-flush-tx-id)
+              force-flush-match (and force-flush-req (= @force-flush-tx-id last-tx-id))]
+          (cond
+            force-flush-match
+            (log/info "received flush instruction: no newer transactions found, will flush chunk.")
 
-        (when (.isChunkFull live-chunk)
-          (finish-chunk! this))
+            force-flush-req
+            (log/info "received flush instruction: newer transaction found, so not flushing chunk."))
+
+          (when (or (.isBlockFull live-chunk)
+                    force-flush-match)
+            (loop []
+              (finish-block! this)
+              (when (.isBlockFull live-chunk)
+                (recur))))
+
+          (when (or (.isChunkFull live-chunk)
+                    force-flush-match)
+            (finish-chunk! this)))
 
         tx-key)))
 
@@ -716,13 +740,13 @@
 
   (let [{:keys [latest-completed-tx]} (meta/latest-chunk-metadata metadata-mgr)]
 
-    (Indexer. allocator object-store scan-emitter temporal-mgr internal-id-mgr
-              ra-src live-chunk live-index
+    (->Indexer allocator object-store scan-emitter temporal-mgr internal-id-mgr
+               ra-src live-chunk live-index
 
-              latest-completed-tx
+               latest-completed-tx
 
-              nil ; watermark
-              (StampedLock.))))
+               nil ; watermark
+               (StampedLock.))))
 
 (defmethod ig/halt-key! :xtdb/indexer [_ ^AutoCloseable indexer]
   (.close indexer))

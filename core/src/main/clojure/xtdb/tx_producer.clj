@@ -115,6 +115,10 @@
          :fn-id :xt/id
          :args (s/* any?)))
 
+(defmethod tx-op-spec :flush-index-if-log-not-moving [_]
+  (s/cat :op #{:flush-index-if-log-not-moving}
+         :tx-id int?))
+
 (s/def ::tx-op
   (s/and vector? (s/multi-spec tx-op-spec :op)))
 
@@ -157,7 +161,10 @@
                                                (types/->field "arg" types/dense-union-type false)))
 
                  ;; C1 importer
-                 (types/col-type->field 'abort :null)))
+                 (types/col-type->field 'abort :null)
+
+                 ;; See flush-heartbeat.clj
+                 (types/col-type->field 'flush-index-if-log-not-moving :i64)))
 
 (def ^:private ^org.apache.arrow.vector.types.pojo.Schema tx-schema
   (Schema. [(types/->field "tx-ops" types/list-type false tx-ops-field)
@@ -264,6 +271,11 @@
     (fn [_]
       (.writeNull abort-writer nil))))
 
+(defn- ->flush-index-if-log-not-moving-writer [^IValueWriter op-writer]
+  (let [abort-writer (.writerForTypeId op-writer 6)]
+    (fn [{:keys [tx-id]}]
+      (.writeLong abort-writer tx-id))))
+
 (defn open-tx-ops-vec ^org.apache.arrow.vector.ValueVector [^BufferAllocator allocator]
   (.createVector tx-ops-field allocator))
 
@@ -276,7 +288,8 @@
         write-delete! (->delete-writer op-writer)
         write-evict! (->evict-writer op-writer)
         write-call! (->call-writer op-writer)
-        write-abort! (->abort-writer op-writer)]
+        write-abort! (->abort-writer op-writer)
+        write-flush-index-if-log-not-moving! (->flush-index-if-log-not-moving-writer op-writer)]
 
     (dotimes [tx-op-n op-count]
       (let [tx-op (nth tx-ops tx-op-n)]
@@ -291,7 +304,8 @@
           :delete (write-delete! tx-op)
           :evict (write-evict! tx-op)
           :call (write-call! tx-op)
-          :abort (write-abort! tx-op))))))
+          :abort (write-abort! tx-op)
+          :flush-index-if-log-not-moving (write-flush-index-if-log-not-moving! tx-op))))))
 
 (defn serialize-tx-ops ^java.nio.ByteBuffer [^BufferAllocator allocator tx-ops {:keys [^Instant system-time, default-tz, default-all-valid-time?]}]
   (with-open [root (VectorSchemaRoot/create tx-schema allocator)]
