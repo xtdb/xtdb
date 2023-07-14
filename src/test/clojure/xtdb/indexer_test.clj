@@ -80,9 +80,14 @@
       :mem-free 7.20742332E8,
       :mem-used 2.79257668E8}]]])
 
+(def magic-last-tx-id
+  "This value will change if you vary the structure of log entries, such 
+  as adding new legs to the tx-ops vector, as in memory the tx-id is a byte offset."
+  8165)
+
 (t/deftest can-build-chunk-as-arrow-ipc-file-format
   (let [node-dir (util/->path "target/can-build-chunk-as-arrow-ipc-file-format")
-        last-tx-key (xtp/map->TransactionInstant {:tx-id 8165, :system-time (util/->instant #inst "2020-01-02")})]
+        last-tx-key (xtp/map->TransactionInstant {:tx-id magic-last-tx-id, :system-time (util/->instant #inst "2020-01-02")})]
     (util/delete-dir node-dir)
 
     (util/with-open [node (tu/->local-node {:node-dir node-dir})]
@@ -364,7 +369,7 @@
 
 (t/deftest can-stop-node-without-writing-chunks
   (let [node-dir (util/->path "target/can-stop-node-without-writing-chunks")
-        last-tx-key (xtp/map->TransactionInstant {:tx-id 8165, :system-time (util/->instant #inst "2020-01-02")})]
+        last-tx-key (xtp/map->TransactionInstant {:tx-id magic-last-tx-id, :system-time (util/->instant #inst "2020-01-02")})]
     (util/delete-dir node-dir)
 
     (with-open [node (tu/->local-node {:node-dir node-dir})]

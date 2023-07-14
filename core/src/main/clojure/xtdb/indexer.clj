@@ -6,7 +6,7 @@
             [xtdb.error :as err]
             xtdb.indexer.internal-id-manager
             xtdb.indexer.live-index
-            xtdb.live-chunk
+            [xtdb.live-chunk :as live-chunk]
             [xtdb.metadata :as meta]
             xtdb.object-store
             [xtdb.operator :as op]
@@ -42,7 +42,7 @@
            xtdb.operator.IRaQuerySource
            (xtdb.operator.scan IScanEmitter)
            (xtdb.temporal ITemporalManager ITemporalTxIndexer)
-           (xtdb.vector IRowCopier IVectorReader IVectorWriter RelationReader)
+           (xtdb.vector IRowCopier IVectorReader RelationReader)
            (xtdb.watermark IWatermark IWatermarkSource)))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -51,7 +51,9 @@
 (definterface IIndexer
   (^xtdb.api.protocols.TransactionInstant indexTx [^xtdb.api.protocols.TransactionInstant tx
                                                    ^org.apache.arrow.vector.VectorSchemaRoot txRoot])
-  (^xtdb.api.protocols.TransactionInstant latestCompletedTx []))
+  (^xtdb.api.protocols.TransactionInstant latestCompletedTx [])
+  (^xtdb.api.protocols.TransactionInstant latestCompletedChunkTx [])
+  (^void forceFlush [^xtdb.api.protocols.TransactionInstant txKey ^long expected-last-chunk-tx-id]))
 
 (defprotocol Finish
   (^void finish-block! [_])
@@ -528,6 +530,7 @@
                   ^ILiveIndex live-idx
 
                   ^:volatile-mutable ^TransactionInstant latest-completed-tx
+                  ^:volatile-mutable ^TransactionInstant latest-completed-chunk-tx
 
                   ^:volatile-mutable ^IWatermark shared-wm
                   ^StampedLock wm-lock]
@@ -620,13 +623,23 @@
               (finally
                 (.unlock wm-lock wm-lock-stamp)))))
 
-        (while (.isBlockFull live-chunk)
+        (while (live-chunk/block-full? live-chunk)
           (finish-block! this))
 
         (when (.isChunkFull live-chunk)
           (finish-chunk! this))
 
         tx-key)))
+
+  (forceFlush [this tx-key expected-last-chunk-tx-id]
+
+    (when (= (:tx-id latest-completed-chunk-tx -1) expected-last-chunk-tx-id)
+      (while (pos? (.blockRowCount live-chunk))
+        (finish-block! this))
+
+      (finish-chunk! this))
+
+    (set! (.-latest_completed_tx this) tx-key))
 
   IWatermarkSource
   (openWatermark [this tx-key]
@@ -659,6 +672,7 @@
                 (.unlock wm-lock wm-lock-stamp)))))))
 
   (latestCompletedTx [_] latest-completed-tx)
+  (latestCompletedChunkTx [_] latest-completed-chunk-tx)
 
   Finish
   (finish-block! [this]
@@ -676,6 +690,8 @@
           (finally
             (.unlock wm-lock wm-lock-stamp))))
 
+      (log/debug "finished block")
+
       (catch Throwable t
         (clojure.tools.logging/error t "fail")
         (throw t))))
@@ -684,7 +700,6 @@
     (let [chunk-idx (.chunkIdx live-chunk)]
       (.registerNewChunk temporal-mgr chunk-idx)
       @(.finishChunk live-chunk latest-completed-tx)
-
       (.finishChunk live-idx chunk-idx))
 
     (let [wm-lock-stamp (.writeLock wm-lock)]
@@ -694,6 +709,7 @@
           (.close shared-wm))
 
         (.nextChunk live-chunk)
+        (set! (.-latest_completed_chunk_tx this) latest-completed-tx)
 
         (finally
           (.unlock wm-lock wm-lock-stamp))))
@@ -722,13 +738,14 @@
 
   (let [{:keys [latest-completed-tx]} (meta/latest-chunk-metadata metadata-mgr)]
 
-    (Indexer. allocator object-store scan-emitter temporal-mgr internal-id-mgr
-              ra-src live-chunk live-index
+    (->Indexer allocator object-store scan-emitter temporal-mgr internal-id-mgr
+               ra-src live-chunk live-index
 
-              latest-completed-tx
+               latest-completed-tx
+               latest-completed-tx
 
-              nil ; watermark
-              (StampedLock.))))
+               nil ; watermark
+               (StampedLock.))))
 
 (defmethod ig/halt-key! :xtdb/indexer [_ ^AutoCloseable indexer]
   (.close indexer))

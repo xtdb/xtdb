@@ -119,13 +119,17 @@
 
   (^long chunkIdx [])
   (^boolean isChunkFull [])
-  (^boolean isBlockFull [])
+  (^long rowsPerBlock [])
+  (^long blockRowCount [])
 
   (^void finishBlock [])
   (^void nextBlock [])
   (^java.util.concurrent.CompletableFuture finishChunk [^xtdb.api.protocols.TransactionInstant latestCompletedTx])
   (^void nextChunk [])
   (^void close []))
+
+(defn block-full? [^ILiveChunk live-chunk]
+  (<= (.rowsPerBlock live-chunk) (.blockRowCount live-chunk)))
 
 (defn- ->excluded-block-idxs ^org.roaringbitmap.RoaringBitmap [^ITableMetadata table-metadata, ^IMetadataPredicate metadata-pred]
   (let [exclude-block-idxs (RoaringBitmap.)]
@@ -401,7 +405,8 @@
         (close [_] (util/close wms)))))
 
   (chunkIdx [_] chunk-idx)
-  (isBlockFull [_] (>= (.blockRowCount row-counter) rows-per-block))
+  (rowsPerBlock [_] rows-per-block)
+  (blockRowCount [_] (.blockRowCount row-counter))
   (isChunkFull [_] (>= (.chunkRowCount row-counter) rows-per-chunk))
 
   (finishBlock [_]
