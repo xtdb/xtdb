@@ -18,11 +18,12 @@
             [xtdb.types :as t]
             [xtdb.util :as util]
             [xtdb.vector :as vec]
-            [xtdb.vector.indirect :as iv]
+            [xtdb.vector.reader :as vr]
             [xtdb.vector.writer :as vw]
             [xtdb.watermark :as wm])
   (:import (java.io ByteArrayInputStream Closeable)
            java.lang.AutoCloseable
+           java.nio.ByteBuffer
            (java.nio.channels ClosedByInterruptException)
            java.security.MessageDigest
            (java.time Instant ZoneId)
@@ -41,7 +42,7 @@
            xtdb.operator.IRaQuerySource
            (xtdb.operator.scan IScanEmitter)
            (xtdb.temporal ITemporalManager ITemporalTxIndexer)
-           (xtdb.vector IIndirectRelation IIndirectVector IRowCopier)
+           (xtdb.vector RelationReader IVectorReader IRowCopier)
            (xtdb.watermark IWatermark IWatermarkSource)))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -82,60 +83,59 @@
 
 (defn- ->put-indexer ^xtdb.indexer.OpIndexer [^IInternalIdManager iid-mgr, ^ILiveIndexTx live-idx-tx,
                                               ^ITemporalTxIndexer temporal-idxer, ^ILiveChunkTx live-chunk,
-                                              ^DenseUnionVector tx-ops-vec, ^Instant system-time]
-  (let [put-vec (.getStruct tx-ops-vec 1)
-        ^DenseUnionVector doc-duv (.getChild put-vec "document" DenseUnionVector)
-        ^TimeStampVector valid-from-vec (.getChild put-vec "xt$valid_from")
-        ^TimeStampVector valid-to-vec (.getChild put-vec "xt$valid_to")
+                                              ^IVectorReader tx-ops-rdr, ^Instant system-time]
+  (let [put-leg (.legReader tx-ops-rdr :put)
+        doc-rdr (.structKeyReader put-leg "document")
+        valid-from-rdr (.structKeyReader put-leg "xt$valid_from")
+        valid-to-rdr (.structKeyReader put-leg "xt$valid_to")
         system-time-µs (util/instant->micros system-time)
-        tables (->> doc-duv
-                    (mapv (fn [^StructVector table-vec]
-                            (let [table-name (.getName table-vec)
-                                  table-rdr (iv/->indirect-rel (map iv/->direct-vec table-vec)
-                                                               (.getValueCount table-vec))]
+        tables (->> (.legs doc-rdr)
+                    (mapv (fn [table-leg] ; haha
+                            (let [table-rdr (.legReader doc-rdr table-leg)
+                                  table-name (.getName table-rdr)
+                                  table-rel-rdr (vr/rel-reader (for [sk (.structKeys table-rdr)]
+                                                                 (.structKeyReader table-rdr sk))
+                                                               (.valueCount table-rdr))]
                               {:table-name table-name
-                               :id-duv (.getChild table-vec "xt$id" DenseUnionVector)
+                               :id-rdr (.structKeyReader table-rdr "xt$id")
 
                                ;; dual write to live-chunk and live-idx for now
                                :live-chunk-table (let [live-table (.liveTable live-chunk table-name)]
                                                    {:live-table live-table
-                                                    :table-copier (.rowCopier (.writer live-table) table-rdr)})
+                                                    :table-copier (.rowCopier (.writer live-table) table-rel-rdr)})
 
                                :live-idx-table (let [live-table (.liveTable live-idx-tx table-name)]
                                                  {:live-table live-table
-                                                  :doc-copier (.rowCopier live-table table-rdr)})}))))]
+                                                  :doc-copier (.rowCopier live-table table-rel-rdr)})}))))]
 
     (reify OpIndexer
       (indexOp [_ tx-op-idx]
         (let [row-id (.nextRowId live-chunk)
-              put-offset (.getOffset tx-ops-vec tx-op-idx)
 
-              {:keys [table-name, ^DenseUnionVector id-duv, live-chunk-table, live-idx-table]}
-              (nth tables (.getTypeId doc-duv put-offset))
+              {:keys [table-name, ^IVectorReader id-rdr, live-chunk-table, live-idx-table]}
+              (nth tables (.getTypeId doc-rdr tx-op-idx))
 
-              doc-offset (.getOffset doc-duv put-offset)
-
-              eid (t/get-object id-duv doc-offset)]
+              eid (.getObject id-rdr tx-op-idx)]
 
           (let [{:keys [^ILiveTableTx live-table, ^IRowCopier table-copier]} live-chunk-table]
             (.writeRowId live-table row-id)
-            (.copyRow table-copier doc-offset))
+            (.copyRow table-copier tx-op-idx))
 
           (let [new-entity? (not (.isKnownId iid-mgr table-name eid))
                 iid (.getOrCreateInternalId iid-mgr table-name eid row-id)
-                valid-from (if (.isNull valid-from-vec put-offset)
+                valid-from (if (= :null (.getLeg valid-from-rdr tx-op-idx))
                              system-time-µs
-                             (.get valid-from-vec put-offset))
-                valid-to (if (.isNull valid-to-vec put-offset)
+                             (.getLong valid-from-rdr tx-op-idx))
+                valid-to (if (= :null (.getLeg valid-to-rdr tx-op-idx))
                            util/end-of-time-μs
-                           (.get valid-to-vec put-offset))]
+                           (.getLong valid-to-rdr tx-op-idx))]
             (when-not (> valid-to valid-from)
               (throw (err/runtime-err :xtdb.indexer/invalid-valid-times
                                       {:valid-from (util/micros->instant valid-from)
                                        :valid-to (util/micros->instant valid-to)})))
 
             (let [{:keys [^xtdb.indexer.live_index.ILiveTableTx live-table, ^IRowCopier doc-copier]} live-idx-table]
-              (.logPut live-table (->iid eid) valid-from valid-to doc-copier doc-offset))
+              (.logPut live-table (->iid eid) valid-from valid-to doc-copier tx-op-idx))
 
             (.indexPut temporal-idxer iid row-id valid-from valid-to new-entity?)))
 
@@ -143,27 +143,26 @@
 
 (defn- ->delete-indexer ^xtdb.indexer.OpIndexer [^IInternalIdManager iid-mgr, ^ILiveIndexTx live-idx-tx
                                                  ^ITemporalTxIndexer temporal-idxer, ^ILiveChunkTx live-chunk
-                                                 ^DenseUnionVector tx-ops-vec, ^Instant current-time]
-  (let [delete-vec (.getStruct tx-ops-vec 2)
-        ^VarCharVector table-vec (.getChild delete-vec "table" VarCharVector)
-        ^DenseUnionVector id-vec (.getChild delete-vec "xt$id" DenseUnionVector)
-        ^TimeStampVector valid-from-vec (.getChild delete-vec "xt$valid_from")
-        ^TimeStampVector valid-to-vec (.getChild delete-vec "xt$valid_to")
+                                                 ^IVectorReader tx-ops-rdr, ^Instant current-time]
+  (let [delete-leg (.legReader tx-ops-rdr :delete)
+        table-rdr (.structKeyReader delete-leg "table")
+        id-rdr (.structKeyReader delete-leg "xt$id")
+        valid-from-rdr (.structKeyReader delete-leg "xt$valid_from")
+        valid-to-rdr (.structKeyReader delete-leg "xt$valid_to")
         current-time-µs (util/instant->micros current-time)]
     (reify OpIndexer
       (indexOp [_ tx-op-idx]
         (let [row-id (.nextRowId live-chunk)
-              delete-offset (.getOffset tx-ops-vec tx-op-idx)
-              table (t/get-object table-vec delete-offset)
-              eid (t/get-object id-vec delete-offset)
+              table (.getObject table-rdr tx-op-idx)
+              eid (.getObject id-rdr tx-op-idx)
               new-entity? (not (.isKnownId iid-mgr table eid))
               iid (.getOrCreateInternalId iid-mgr table eid row-id)
-              valid-from (if (.isNull valid-from-vec delete-offset)
+              valid-from (if (= :null (.getLeg valid-from-rdr tx-op-idx))
                            current-time-µs
-                           (.get valid-from-vec delete-offset))
-              valid-to (if (.isNull valid-to-vec delete-offset)
+                           (.getLong valid-from-rdr tx-op-idx))
+              valid-to (if (= :null (.getLeg valid-to-rdr tx-op-idx))
                          util/end-of-time-μs
-                         (.get valid-to-vec delete-offset))]
+                         (.getLong valid-to-rdr tx-op-idx))]
           (when (> valid-from valid-to)
             (throw (err/runtime-err :xtdb.indexer/invalid-valid-times
                                     {:valid-from (util/micros->instant valid-from)
@@ -178,17 +177,16 @@
 
 (defn- ->evict-indexer ^xtdb.indexer.OpIndexer [^IInternalIdManager iid-mgr, ^ILiveIndexTx live-idx-tx
                                                 ^ITemporalTxIndexer temporal-idxer, ^ILiveChunkTx live-chunk
-                                                ^DenseUnionVector tx-ops-vec]
+                                                ^IVectorReader tx-ops-rdr]
 
-  (let [evict-vec (.getStruct tx-ops-vec 3)
-        ^VarCharVector table-vec (.getChild evict-vec "_table" VarCharVector)
-        ^DenseUnionVector id-vec (.getChild evict-vec "xt$id" DenseUnionVector)]
+  (let [evict-leg (.legReader tx-ops-rdr :evict)
+        table-rdr (.structKeyReader evict-leg "_table")
+        id-rdr (.structKeyReader evict-leg "xt$id")]
     (reify OpIndexer
       (indexOp [_ tx-op-idx]
         (let [row-id (.nextRowId live-chunk)
-              evict-offset (.getOffset tx-ops-vec tx-op-idx)
-              table (t/get-object table-vec evict-offset)
-              eid (t/get-object id-vec evict-offset)
+              table (.getObject table-rdr tx-op-idx)
+              eid (.getObject id-rdr tx-op-idx)
               iid (.getOrCreateInternalId iid-mgr table eid row-id)]
 
           (-> (.liveTable live-idx-tx table)
@@ -202,9 +200,9 @@
   (let [lp '[:scan {:table xt/tx-fns} [{xt/id (= xt/id ?id)} xt/fn]]
         ^xtdb.operator.PreparedQuery pq (.prepareRaQuery ra-src lp)]
     (with-open [bq (.bind pq wm-src
-                          {:params (iv/->indirect-rel [(-> (vw/open-vec allocator '?id [fn-id])
-                                                           (iv/->direct-vec))]
-                                                      1)
+                          {:params (vr/rel-reader [(-> (vw/open-vec allocator '?id [fn-id])
+                                                       (vr/vec->reader))]
+                                                  1)
                            :default-all-valid-time? false
                            :basis basis
                            :default-tz default-tz})
@@ -214,8 +212,8 @@
         (.tryAdvance res
                      (reify Consumer
                        (accept [_ in-rel]
-                         (when (pos? (.rowCount ^IIndirectRelation in-rel))
-                           (aset !fn-doc 0 (first (iv/rel->rows in-rel)))))))
+                         (when (pos? (.rowCount ^RelationReader in-rel))
+                           (aset !fn-doc 0 (first (vr/rel->rows in-rel)))))))
 
         (let [fn-doc (or (aget !fn-doc 0)
                          (throw (err/runtime-err :xtdb.call/no-such-tx-fn {:fn-id fn-id})))
@@ -263,10 +261,10 @@
   (first (reset-vals! !last-tx-fn-error nil)))
 
 (defn- ->call-indexer ^xtdb.indexer.OpIndexer [allocator, ra-src, wm-src, scan-emitter
-                                               ^DenseUnionVector tx-ops-vec, {:keys [tx-key] :as tx-opts}]
-  (let [call-vec (.getStruct tx-ops-vec 4)
-        ^DenseUnionVector fn-id-vec (.getChild call-vec "fn-id" DenseUnionVector)
-        ^ListVector args-vec (.getChild call-vec "args" ListVector)
+                                               ^IVectorReader tx-ops-rdr, {:keys [tx-key] :as tx-opts}]
+  (let [call-leg (.legReader tx-ops-rdr :call)
+        fn-id-rdr (.structKeyReader call-leg "fn-id")
+        args-rdr (.structKeyReader call-leg "args")
 
         ;; TODO confirm/expand API that we expose to tx-fns
         sci-ctx (sci/init {:bindings {'q (tx-fn-q allocator ra-src wm-src scan-emitter tx-opts)
@@ -277,10 +275,9 @@
     (reify OpIndexer
       (indexOp [_ tx-op-idx]
         (try
-          (let [call-offset (.getOffset tx-ops-vec tx-op-idx)
-                fn-id (t/get-object fn-id-vec call-offset)
+          (let [fn-id (.getObject fn-id-rdr tx-op-idx)
                 tx-fn (find-fn allocator ra-src wm-src (sci/fork sci-ctx) tx-opts fn-id)
-                args (t/get-object args-vec call-offset)
+                args (.getObject args-rdr tx-op-idx)
 
                 res (try
                       (sci/binding [sci/out *out*
@@ -309,7 +306,7 @@
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (definterface SqlOpIndexer
-  (^void indexOp [^xtdb.vector.IIndirectRelation inRelation, queryOpts]))
+  (^void indexOp [^xtdb.vector.RelationReader inRelation, queryOpts]))
 
 (defn- ->sql-upsert-indexer ^xtdb.indexer.SqlOpIndexer [^IInternalIdManager iid-mgr, ^ILiveIndexTx live-idx-tx
                                                         ^ITemporalTxIndexer temporal-idxer, ^ILiveChunkTx live-chunk,
@@ -319,20 +316,20 @@
     (reify SqlOpIndexer
       (indexOp [_ in-rel {:keys [table]}]
         (let [row-count (.rowCount in-rel)
-              content-rel (iv/->indirect-rel (->> in-rel
-                                                  (remove (comp temporal/temporal-column?
-                                                                #(.getName ^IIndirectVector %)))
-                                                  (map (fn [^IIndirectVector vec]
-                                                         (.withName vec (util/str->normal-form-str (.getName vec))))))
-                                             (.rowCount in-rel))
+              content-rel (vr/rel-reader (->> in-rel
+                                              (remove (comp temporal/temporal-column?
+                                                            #(.getName ^IVectorReader %)))
+                                              (map (fn [^IVectorReader vec]
+                                                     (.withName vec (util/str->normal-form-str (.getName vec))))))
+                                         (.rowCount in-rel))
               table (util/str->normal-form-str table)
               live-table (.liveTable live-chunk table)
               table-copier (.rowCopier (.writer live-table) content-rel)
-              id-col (.vectorForName in-rel "xt$id")
-              valid-from-rdr (some-> (.vectorForName in-rel "xt$valid_from")
-                                     (.polyReader [:union [:null t/temporal-col-type]]))
-              valid-to-rdr (some-> (.vectorForName in-rel "xt$valid_to")
-                                   (.polyReader [:union [:null t/temporal-col-type]]))
+              id-col (.readerForName in-rel "xt$id")
+              valid-from-rdr (.readerForName in-rel "xt$valid_from")
+              valid-from-ts-rdr (some-> valid-from-rdr (.legReader :timestamp-tz-micro-utc))
+              valid-to-rdr (.readerForName in-rel "xt$valid_to")
+              valid-to-ts-rdr (some-> valid-to-rdr (.legReader :timestamp-tz-micro-utc))
 
               live-idx-table (.liveTable live-idx-tx table)
               live-idx-table-copier (.rowCopier live-idx-table content-rel)]
@@ -342,14 +339,14 @@
               (.writeRowId live-table row-id)
               (.copyRow table-copier idx)
 
-              (let [eid (t/get-object (.getVector id-col) (.getIndex id-col idx))
+              (let [eid (.getObject id-col idx)
                     new-entity? (not (.isKnownId iid-mgr table eid))
                     iid (.getOrCreateInternalId iid-mgr table eid row-id)
-                    valid-from (if (and valid-from-rdr (= 1 (.read valid-from-rdr idx)))
-                                 (.readLong valid-from-rdr)
+                    valid-from (if (and valid-from-rdr (= :timestamp-tz-micro-utc (.getLeg valid-from-rdr idx)))
+                                 (.getLong valid-from-ts-rdr idx)
                                  current-time-µs)
-                    valid-to (if (and valid-to-rdr (= 1 (.read valid-to-rdr idx)))
-                               (.readLong valid-to-rdr)
+                    valid-to (if (and valid-to-rdr (= :timestamp-tz-micro-utc (.getLeg valid-to-rdr idx)))
+                               (.getLong valid-to-ts-rdr idx)
                                util/end-of-time-μs)]
                 (when (> valid-from valid-to)
                   (throw (err/runtime-err :xtdb.indexer/invalid-valid-times
@@ -364,16 +361,16 @@
     (indexOp [_ in-rel {:keys [table]}]
       (let [table (util/str->normal-form-str table)
             row-count (.rowCount in-rel)
-            id-duv (.getVector (.vectorForName in-rel "xt$id"))
-            iid-rdr (.monoReader (.vectorForName in-rel "_iid") :i64)
-            valid-from-rdr (.monoReader (.vectorForName in-rel "xt$valid_from") t/temporal-col-type)
-            valid-to-rdr (.monoReader (.vectorForName in-rel "xt$valid_to") t/temporal-col-type)]
+            id-rdr (.readerForName in-rel "xt$id")
+            iid-rdr (.readerForName in-rel "_iid")
+            valid-from-rdr (.readerForName in-rel "xt$valid_from")
+            valid-to-rdr (.readerForName in-rel "xt$valid_to")]
         (dotimes [idx row-count]
           (let [row-id (.nextRowId live-chunk)
-                eid (t/get-object id-duv idx)
-                iid (.readLong iid-rdr idx)
-                valid-from (.readLong valid-from-rdr idx)
-                valid-to (.readLong valid-to-rdr idx)]
+                eid (.getObject id-rdr idx)
+                iid (.getLong iid-rdr idx)
+                valid-from (.getLong valid-from-rdr idx)
+                valid-to (.getLong valid-to-rdr idx)]
             (when (> valid-from valid-to)
               (throw (err/runtime-err :xtdb.indexer/invalid-valid-times
                                       {:valid-from (util/micros->instant valid-from)
@@ -388,78 +385,77 @@
     (indexOp [_ in-rel {:keys [table]}]
       (let [table (util/str->normal-form-str table)
             row-count (.rowCount in-rel)
-            id-duv (.getVector (.vectorForName in-rel "xt$id"))
-            iid-rdr (.monoReader (.vectorForName in-rel "_iid") :i64)]
+            id-rdr (.readerForName in-rel "xt$id")
+            iid-rdr (.readerForName in-rel "_iid")]
         (dotimes [idx row-count]
-          (let [eid (t/get-object id-duv idx)
-                iid (.readLong iid-rdr idx)]
+          (let [eid (.getObject id-rdr idx)
+                iid (.getLong iid-rdr idx)]
             (-> (.liveTable live-idx-tx table)
                 (.logEvict (->iid eid)))
             (.indexEvict temporal-idxer iid)))))))
 
 (defn- ->sql-indexer ^xtdb.indexer.OpIndexer [^BufferAllocator allocator, ^IInternalIdManager iid-mgr
                                               ^ILiveIndexTx live-idx-tx, ^ITemporalTxIndexer temporal-idxer, ^ILiveChunk doc-idxer
-                                              ^DenseUnionVector tx-ops-vec, ^IRaQuerySource ra-src, wm-src, ^IScanEmitter scan-emitter
+                                              ^IVectorReader tx-ops-rdr, ^IRaQuerySource ra-src, wm-src, ^IScanEmitter scan-emitter
                                               {:keys [default-all-valid-time? basis default-tz] :as tx-opts}]
-  (let [sql-vec (.getStruct tx-ops-vec 0)
-        ^VarCharVector query-vec (.getChild sql-vec "query" VarCharVector)
-        ^VarBinaryVector params-vec (.getChild sql-vec "params" VarBinaryVector)
+  (let [sql-leg (.legReader tx-ops-rdr :sql)
+        query-rdr (.structKeyReader sql-leg "query")
+        params-rdr (.structKeyReader sql-leg "params")
         upsert-idxer (->sql-upsert-indexer iid-mgr live-idx-tx
                                            temporal-idxer doc-idxer tx-opts)
         delete-idxer (->sql-delete-indexer live-idx-tx temporal-idxer doc-idxer)
         erase-idxer (->sql-erase-indexer live-idx-tx temporal-idxer)]
     (reify OpIndexer
       (indexOp [_ tx-op-idx]
-        (let [sql-offset (.getOffset tx-ops-vec tx-op-idx)]
-          (letfn [(index-op [^SqlOpIndexer op-idxer {:keys [all-app-time] :as query-opts} inner-query]
-                    (let [^xtdb.operator.PreparedQuery pq (.prepareRaQuery ra-src inner-query)]
-                      (letfn [(index-op* [^IIndirectRelation params]
-                                (with-open [res (-> (.bind pq wm-src {:params params, :basis basis, :default-tz default-tz
-                                                                      :default-all-valid-time? (or all-app-time
-                                                                                                   default-all-valid-time?)})
-                                                    (.openCursor))]
+        (letfn [(index-op [^SqlOpIndexer op-idxer {:keys [all-app-time] :as query-opts} inner-query]
+                  (let [^xtdb.operator.PreparedQuery pq (.prepareRaQuery ra-src inner-query)]
+                    (letfn [(index-op* [^RelationReader params]
+                              (with-open [res (-> (.bind pq wm-src {:params params, :basis basis, :default-tz default-tz
+                                                                    :default-all-valid-time? (or all-app-time
+                                                                                                 default-all-valid-time?)})
+                                                  (.openCursor))]
 
-                                  (.forEachRemaining res
-                                                     (reify Consumer
-                                                       (accept [_ in-rel]
-                                                         (.indexOp op-idxer in-rel query-opts))))))]
-                        (if (.isNull params-vec sql-offset)
-                          (index-op* nil)
+                                (.forEachRemaining res
+                                                   (reify Consumer
+                                                     (accept [_ in-rel]
+                                                       (.indexOp op-idxer in-rel query-opts))))))]
+                      (if (= :null (.getLeg params-rdr tx-op-idx))
+                        (index-op* nil)
 
-                          (with-open [is (ByteArrayInputStream. (.get params-vec sql-offset))
-                                      asr (ArrowStreamReader. is allocator)]
-                            (let [root (.getVectorSchemaRoot asr)]
-                              (while (.loadNextBatch asr)
-                                (let [rel (iv/<-root root)
+                        (with-open [is (ByteArrayInputStream. (.array ^ByteBuffer (.getObject params-rdr tx-op-idx))) ; could try to use getBytes
+                                    asr (ArrowStreamReader. is allocator)]
+                          (let [root (.getVectorSchemaRoot asr)]
+                            (while (.loadNextBatch asr)
+                              (let [rel (vr/<-root root)
 
-                                      ^IIndirectRelation
-                                      rel (iv/->indirect-rel (->> rel
-                                                                  (map-indexed (fn [idx ^IIndirectVector col]
-                                                                                 (.withName col (str "?_" idx)))))
-                                                             (.rowCount rel))
+                                    ^RelationReader
+                                    rel (vr/rel-reader (->> rel
+                                                            (map-indexed (fn [idx ^IVectorReader col]
+                                                                           (.withName col (str "?_" idx)))))
+                                                       (.rowCount rel))
 
-                                      selection (int-array 1)]
-                                  (dotimes [idx (.rowCount rel)]
-                                    (aset selection 0 idx)
-                                    (index-op* (-> rel (iv/select selection))))))))))))]
+                                    selection (int-array 1)]
+                                (dotimes [idx (.rowCount rel)]
+                                  (aset selection 0 idx)
+                                  (index-op* (-> rel (.select selection))))))))))))]
 
-            (let [query-str (t/get-object query-vec sql-offset)
-                  tables-with-cols (scan/tables-with-cols (:basis tx-opts) wm-src scan-emitter)]
-              ;; TODO handle error
-              (zmatch (sql/compile-query query-str (assoc tx-opts :table-info tables-with-cols))
-                [:insert query-opts inner-query]
-                (index-op upsert-idxer query-opts inner-query)
+          (let [query-str (.getObject query-rdr tx-op-idx)
+                tables-with-cols (scan/tables-with-cols (:basis tx-opts) wm-src scan-emitter)]
+            ;; TODO handle error
+            (zmatch (sql/compile-query query-str (assoc tx-opts :table-info tables-with-cols))
+              [:insert query-opts inner-query]
+              (index-op upsert-idxer query-opts inner-query)
 
-                [:update query-opts inner-query]
-                (index-op upsert-idxer query-opts inner-query)
+              [:update query-opts inner-query]
+              (index-op upsert-idxer query-opts inner-query)
 
-                [:delete query-opts inner-query]
-                (index-op delete-idxer query-opts inner-query)
+              [:delete query-opts inner-query]
+              (index-op delete-idxer query-opts inner-query)
 
-                [:erase query-opts inner-query]
-                (index-op erase-idxer (assoc query-opts :all-app-time true) inner-query)
+              [:erase query-opts inner-query]
+              (index-op erase-idxer (assoc query-opts :all-app-time true) inner-query)
 
-                (throw (UnsupportedOperationException. "sql query"))))))
+              (throw (UnsupportedOperationException. "sql query")))))
 
         nil))))
 
@@ -529,15 +525,16 @@
                      :tx-key tx-key}]
 
         (letfn [(index-tx-ops [^DenseUnionVector tx-ops-vec]
-                  (let [!put-idxer (delay (->put-indexer iid-mgr live-idx-tx temporal-idxer live-chunk-tx tx-ops-vec system-time))
-                        !delete-idxer (delay (->delete-indexer iid-mgr live-idx-tx temporal-idxer live-chunk-tx tx-ops-vec system-time))
-                        !evict-idxer (delay (->evict-indexer iid-mgr live-idx-tx temporal-idxer live-chunk-tx tx-ops-vec))
-                        !call-idxer (delay (->call-indexer allocator ra-src wm-src scan-emitter tx-ops-vec tx-opts))
+                  (let [tx-ops-rdr (vr/vec->reader tx-ops-vec)
+                        !put-idxer (delay (->put-indexer iid-mgr live-idx-tx temporal-idxer live-chunk-tx tx-ops-rdr system-time))
+                        !delete-idxer (delay (->delete-indexer iid-mgr live-idx-tx temporal-idxer live-chunk-tx tx-ops-rdr system-time))
+                        !evict-idxer (delay (->evict-indexer iid-mgr live-idx-tx temporal-idxer live-chunk-tx tx-ops-rdr))
+                        !call-idxer (delay (->call-indexer allocator ra-src wm-src scan-emitter tx-ops-rdr tx-opts))
                         !sql-idxer (delay (->sql-indexer allocator iid-mgr live-idx-tx
                                                          temporal-idxer live-chunk-tx
-                                                         tx-ops-vec ra-src wm-src scan-emitter tx-opts))]
-                    (dotimes [tx-op-idx (.getValueCount tx-ops-vec)]
-                      (when-let [more-tx-ops (case (.getTypeId tx-ops-vec tx-op-idx)
+                                                         tx-ops-rdr ra-src wm-src scan-emitter tx-opts))]
+                    (dotimes [tx-op-idx (.valueCount tx-ops-rdr)]
+                      (when-let [more-tx-ops (case (.getTypeId tx-ops-rdr tx-op-idx)
                                                0 (.indexOp ^OpIndexer @!sql-idxer tx-op-idx)
                                                1 (.indexOp ^OpIndexer @!put-idxer tx-op-idx)
                                                2 (.indexOp ^OpIndexer @!delete-idxer tx-op-idx)

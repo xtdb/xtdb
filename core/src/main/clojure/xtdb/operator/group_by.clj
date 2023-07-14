@@ -1,25 +1,24 @@
 (ns xtdb.operator.group-by
   (:require [clojure.spec.alpha :as s]
+            [xtdb.error :as err]
             [xtdb.expression :as expr]
             [xtdb.expression.map :as emap]
             [xtdb.logical-plan :as lp]
             [xtdb.rewrite :refer [zmatch]]
             [xtdb.types :as types]
             [xtdb.util :as util]
-            [xtdb.vector.indirect :as iv]
-            [xtdb.vector :as vec]
-            [xtdb.vector.writer :as vw]
-            [xtdb.error :as err])
-  (:import (xtdb ICursor)
-           (xtdb.expression.map IRelationMap IRelationMapBuilder)
-           (xtdb.vector IIndirectRelation IIndirectVector IVectorWriter)
-           (java.io Closeable)
+            [xtdb.vector.reader :as vr]
+            [xtdb.vector.writer :as vw])
+  (:import (java.io Closeable)
            (java.util ArrayList LinkedList List Spliterator)
            (java.util.function Consumer IntConsumer)
            (java.util.stream IntStream IntStream$Builder)
            (org.apache.arrow.memory BufferAllocator)
-           (org.apache.arrow.vector BigIntVector Float8Vector IntVector NullVector ValueVector)
-           (org.apache.arrow.vector.complex DenseUnionVector ListVector)))
+           (org.apache.arrow.vector BigIntVector Float8Vector IntVector ValueVector)
+           (org.apache.arrow.vector.complex ListVector)
+           (xtdb ICursor)
+           (xtdb.expression.map IRelationMap IRelationMapBuilder)
+           (xtdb.vector IVectorReader IVectorWriter RelationReader)))
 
 (s/def ::aggregate-expr
   (s/or :nullary (s/cat :f simple-symbol?)
@@ -41,8 +40,8 @@
 
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface IGroupMapper
-  (^org.apache.arrow.vector.IntVector groupMapping [^xtdb.vector.IIndirectRelation inRelation])
-  (^java.util.List #_<IIndirectVector> finish []))
+  (^org.apache.arrow.vector.IntVector groupMapping [^xtdb.vector.RelationReader inRelation])
+  (^java.util.List #_<IVectorReader> finish []))
 
 (deftype NullGroupMapper [^IntVector group-mapping]
   IGroupMapper
@@ -96,9 +95,9 @@
 
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface IAggregateSpec
-  (^void aggregate [^xtdb.vector.IIndirectRelation inRelation,
+  (^void aggregate [^xtdb.vector.RelationReader inRelation,
                     ^org.apache.arrow.vector.IntVector groupMapping])
-  (^xtdb.vector.IIndirectVector finish []))
+  (^xtdb.vector.IVectorReader finish []))
 
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface IAggregateSpecFactory
@@ -134,7 +133,7 @@
             (when (and zero-row? (zero? (.getValueCount out-vec)))
               (.setValueCount out-vec 1)
               (.set out-vec 0 0))
-            (iv/->direct-vec out-vec))
+            (vr/vec->reader out-vec))
 
           Closeable
           (close [_] (.close out-vec)))))))
@@ -150,29 +149,21 @@
         (reify
           IAggregateSpec
           (aggregate [_ in-rel group-mapping]
-            (let [in-col (.vectorForName in-rel (name from-name))
-                  in-vec (.getVector in-col)]
+            (let [in-col (.readerForName in-rel (name from-name))]
               (dotimes [idx (.rowCount in-rel)]
                 (let [group-idx (.get group-mapping idx)]
                   (when (<= (.getValueCount out-vec) group-idx)
                     (.setValueCount out-vec (inc group-idx))
                     (.set out-vec group-idx 0))
 
-                  (let [inner-idx (.getIndex in-col idx)]
-                    ;; TODO this logic should probably belong elsewhere...
-                    (when-not (if (instance? DenseUnionVector in-vec)
-                                (let [^DenseUnionVector in-vec in-vec
-                                      type-id (.getTypeId in-vec inner-idx)]
-                                  (.isNull (.getVectorByType in-vec type-id)
-                                           (.getOffset in-vec inner-idx)))
-                                (.isNull in-vec inner-idx))
-                      (.set out-vec group-idx (inc (.get out-vec group-idx)))))))))
+                  (when-not (= :null (.getLeg in-col idx))
+                    (.set out-vec group-idx (inc (.get out-vec group-idx))))))))
 
           (finish [_]
             (when (and zero-row? (zero? (.getValueCount out-vec)))
               (.setValueCount out-vec 1)
               (.set out-vec 0 0))
-            (iv/->direct-vec out-vec))
+            (vr/vec->reader out-vec))
 
           Closeable
           (close [_] (.close out-vec)))))))
@@ -205,9 +196,9 @@
 
           {:return-type return-type
            :eval-agg (-> `(fn [~(-> acc-sym (expr/with-tag ValueVector))
-                               ~(-> expr/rel-sym (expr/with-tag IIndirectRelation))
+                               ~(-> expr/rel-sym (expr/with-tag RelationReader))
                                ~(-> group-mapping-sym (expr/with-tag IntVector))]
-                            (let [~acc-col-sym (iv/->direct-vec ~acc-sym)
+                            (let [~acc-col-sym (vr/vec->reader ~acc-sym)
                                   ~acc-writer-sym (vw/->writer ~acc-sym)
                                   ~@(expr/batch-bindings emitted-expr)]
                               (dotimes [~expr/idx-sym (.rowCount ~expr/rel-sym)]
@@ -237,8 +228,8 @@
             (aggregate [_ in-rel group-mapping]
               (let [input-opts {:var->col-type (->> (seq in-rel)
                                                     (into {acc-col-sym to-type}
-                                                          (map (juxt #(symbol (.getName ^IIndirectVector %))
-                                                                     #(-> (.getVector ^IIndirectVector %) .getField types/field->col-type)))))}
+                                                          (map (juxt #(symbol (.getName ^IVectorReader %))
+                                                                     #(-> (.getField ^IVectorReader %) types/field->col-type)))))}
                     {:keys [eval-agg]} (emit-agg agg-opts input-opts)]
                 (eval-agg out-vec in-rel group-mapping)))
 
@@ -246,7 +237,7 @@
               (when (and zero-row? (zero? (.getValueCount out-vec)))
                 (.setValueCount out-vec 1))
 
-              (iv/->direct-vec out-vec))
+              (vr/vec->reader out-vec))
 
             Closeable
             (close [_] (.close out-vec))))))))
@@ -288,21 +279,14 @@
               (.aggregate count-agg in-rel group-mapping))
 
             (finish [_]
-              (let [sum-ivec (.finish sum-agg)
-                    count-ivec (.finish count-agg)
-                    out-vec (.project projecter al (iv/->indirect-rel [sum-ivec count-ivec]) vw/empty-params)]
-                (if (instance? NullVector (.getVector out-vec))
-                  out-vec
-                  (do
-                    (doto (.makeTransferPair (.getVector out-vec) res-vec)
-                      (.transfer))
-                    (iv/->direct-vec res-vec)))))
+              (-> (.project projecter al (vr/rel-reader [(.finish sum-agg) (.finish count-agg)]) vw/empty-params)
+                  (.transferTo res-vec)))
 
             Closeable
             (close [_]
-              (util/try-close res-vec)
-              (util/try-close sum-agg)
-              (util/try-close count-agg))))))))
+              (util/close res-vec)
+              (util/close sum-agg)
+              (util/close count-agg))))))))
 
 (defn- ->variance-agg-factory [variance-op {:keys [from-name from-type to-name zero-row?]}]
   (let [countx-agg (->aggregate-factory {:f :count, :from-name from-name, :from-type from-type
@@ -344,23 +328,17 @@
           (reify
             IAggregateSpec
             (aggregate [_ in-rel group-mapping]
-              (let [in-vec (.vectorForName in-rel (name from-name))]
-                (with-open [x2 (.project x2-projecter al (iv/->indirect-rel [in-vec]) vw/empty-params)]
+              (let [in-vec (.readerForName in-rel (name from-name))]
+                (with-open [x2 (.project x2-projecter al (vr/rel-reader [in-vec]) vw/empty-params)]
                   (.aggregate sumx-agg in-rel group-mapping)
-                  (.aggregate sumx2-agg (iv/->indirect-rel [x2]) group-mapping)
+                  (.aggregate sumx2-agg (vr/rel-reader [x2]) group-mapping)
                   (.aggregate countx-agg in-rel group-mapping))))
 
             (finish [_]
-              (let [sumx-ivec (.finish sumx-agg)
-                    sumx2-ivec (.finish sumx2-agg)
-                    countx-ivec (.finish countx-agg)
-                    out-ivec (.project finish-projecter al (iv/->indirect-rel [countx-ivec sumx-ivec sumx2-ivec]) vw/empty-params)]
-                (if (instance? NullVector (.getVector out-ivec))
-                  out-ivec
-                  (do
-                    (doto (.makeTransferPair (.getVector out-ivec) res-vec)
-                      (.transfer))
-                    (iv/->direct-vec res-vec)))))
+              (-> (.project finish-projecter al
+                            (vr/rel-reader [(.finish sumx-agg) (.finish sumx2-agg) (.finish countx-agg)])
+                            vw/empty-params)
+                  (.transferTo res-vec)))
 
             Closeable
             (close [_]
@@ -390,14 +368,8 @@
               (.aggregate variance-agg in-rel group-mapping))
 
             (finish [_]
-              (let [variance-ivec (.finish variance-agg)
-                    out-ivec (.project finish-projecter al (iv/->indirect-rel [variance-ivec]) vw/empty-params)]
-                (if (instance? NullVector (.getVector out-ivec))
-                  out-ivec
-                  (do
-                    (doto (.makeTransferPair (.getVector out-ivec) res-vec)
-                      (.transfer))
-                    (iv/->direct-vec res-vec)))))
+              (-> (.project finish-projecter al (vr/rel-reader [(.finish variance-agg)]) vw/empty-params)
+                  (.transferTo res-vec)))
 
             Closeable
             (close [_]
@@ -462,10 +434,10 @@
         (reify
           IAggregateSpec
           (aggregate [_ in-rel group-mapping]
-            (let [in-vec (.vectorForName in-rel (name from-name))
+            (let [in-vec (.readerForName in-rel (name from-name))
                   builders (ArrayList. (.size rel-maps))
                   distinct-idxs (IntStream/builder)]
-              (dotimes [idx (.getValueCount in-vec)]
+              (dotimes [idx (.valueCount in-vec)]
                 (let [group-idx (.get group-mapping idx)]
                   (while (<= (.size rel-maps) group-idx)
                     (.add rel-maps (emap/->relation-map al {:build-col-types [from-name from-type]
@@ -476,18 +448,20 @@
 
                     (let [^IRelationMapBuilder
                           builder (or (nth builders group-idx)
-                                      (let [builder (.buildFromRelation rel-map (iv/->indirect-rel [in-vec]))]
+                                      (let [builder (.buildFromRelation rel-map (vr/rel-reader [in-vec]))]
                                         (.set builders group-idx builder)
                                         builder))]
                       (when (neg? (.addIfNotPresent builder idx))
                         (.add distinct-idxs idx))))))
               (let [distinct-idxs (.toArray (.build distinct-idxs))]
-                (with-open [distinct-gm (-> (iv/->direct-vec group-mapping)
-                                            (.select distinct-idxs)
-                                            (.copy al))]
+                (with-open [distinct-gm (-> (.getField group-mapping)
+                                            (.createVector al))]
+                  (-> (vr/vec->reader group-mapping)
+                      (.select distinct-idxs)
+                      (.copyTo distinct-gm))
                   (.aggregate agg-spec
-                              (iv/->indirect-rel [(.select in-vec distinct-idxs)])
-                              (.getVector distinct-gm))))))
+                              (vr/rel-reader [(.select in-vec distinct-idxs)])
+                              distinct-gm)))))
 
           (finish [_] (.finish agg-spec))
 
@@ -525,8 +499,8 @@
                                 ^List group-idxmaps]
   IAggregateSpec
   (aggregate [this in-rel group-mapping]
-    (let [in-vec (.vectorForName in-rel (name from-name))
-          row-count (.getValueCount in-vec)]
+    (let [in-vec (.readerForName in-rel (name from-name))
+          row-count (.valueCount in-vec)]
       (vw/append-vec acc-col in-vec)
 
       (dotimes [idx row-count]
@@ -555,7 +529,7 @@
           (.endList list-writer))
 
         (.setValueCount out-vec (.size group-idxmaps))
-        (iv/->direct-vec out-vec))))
+        (vr/vec->reader out-vec))))
 
   Closeable
   (close [_]
@@ -609,7 +583,7 @@
                                   (doseq [^IAggregateSpec agg-spec aggregate-specs]
                                     (.aggregate agg-spec in-rel group-mapping))))))
 
-         (let [out-rel (iv/->indirect-rel (concat (.finish group-mapper)
+         (let [out-rel (vr/rel-reader (concat (.finish group-mapper)
                                                   (map #(.finish ^IAggregateSpec %) aggregate-specs)))]
            (if (pos? (.rowCount out-rel))
              (do

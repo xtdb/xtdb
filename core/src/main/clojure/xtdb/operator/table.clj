@@ -6,13 +6,12 @@
             [xtdb.rewrite :refer [zmatch]]
             [xtdb.types :as types]
             [xtdb.util :as util]
-            [xtdb.vector :as vec]
-            [xtdb.vector.indirect :as iv]
+            [xtdb.vector.reader :as vr]
             [xtdb.vector.writer :as vw])
   (:import (java.util ArrayList HashMap HashSet Set)
            java.util.function.Function
            (xtdb ICursor)
-           (xtdb.vector IIndirectRelation)))
+           (xtdb.vector RelationReader)))
 
 (defmethod lp/ra-expr :table [_]
   (s/cat :op #{:table}
@@ -22,7 +21,7 @@
 
 (set! *unchecked-math* :warn-on-boxed)
 
-(deftype TableCursor [^:unsynchronized-mutable ^IIndirectRelation out-rel]
+(deftype TableCursor [^:unsynchronized-mutable ^RelationReader out-rel]
   ICursor
   (tryAdvance [this c]
     (boolean
@@ -53,7 +52,7 @@
 
           (.setInitialCapacity out-vec row-count)
           (.allocateNew out-vec)
-          (.add out-cols (iv/->direct-vec out-vec))
+          (.add out-cols (vr/vec->reader out-vec))
 
           (dotimes [idx row-count]
             (let [row (nth rows idx)
@@ -62,7 +61,7 @@
 
           (.setValueCount out-vec row-count))
 
-        (iv/->indirect-rel out-cols row-count)))))
+        (vr/rel-reader out-cols row-count)))))
 
 (defn- emit-rows-table [rows table-expr {:keys [param-types] :as opts}]
   (let [col-type-sets (HashMap.)
@@ -83,17 +82,17 @@
               :param (let [{:keys [param]} expr]
                        (.add col-type-set (get param-types param))
                        ;; TODO let's try not to copy this out and back in again
-                       (.put out-row k-kw (fn [{:keys [^IIndirectRelation params]}]
-                                            (let [col (.vectorForName params (name param))]
-                                              (types/get-object (.getVector col) (.getIndex col 0))))))
+                       (.put out-row k-kw (fn [{:keys [^RelationReader params]}]
+                                            (let [col (.readerForName params (name param))]
+                                              (.getObject col 0)))))
 
               ;; HACK: this is quite heavyweight to calculate a single value -
               ;; the EE doesn't yet have an efficient means to do so...
               (let [projection-spec (expr/->expression-projection-spec "_scalar" v opts)]
                 (.add col-type-set (.getColumnType projection-spec))
                 (.put out-row k-kw (fn [{:keys [allocator params]}]
-                                     (with-open [out-vec (.project projection-spec allocator (iv/->indirect-rel [] 1) params)]
-                                       (types/get-object (.getVector out-vec) (.getIndex out-vec 0)))))))))
+                                     (with-open [out-vec (.project projection-spec allocator (vr/rel-reader [] 1) params)]
+                                       (.getObject out-vec 0))))))))
         (.add out-rows out-row)))
 
     (let [col-types (-> col-type-sets

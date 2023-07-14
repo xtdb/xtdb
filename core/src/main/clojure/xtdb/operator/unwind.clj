@@ -5,16 +5,16 @@
             [xtdb.types :as types]
             [xtdb.util :as util]
             [xtdb.vector :as vec]
-            [xtdb.vector.indirect :as iv]
+            [xtdb.vector.reader :as vr]
             [xtdb.vector.writer :as vw])
   (:import (java.util LinkedList)
            (java.util.function Consumer)
            (java.util.stream IntStream)
            (org.apache.arrow.memory BufferAllocator)
            (org.apache.arrow.vector IntVector)
-           (org.apache.arrow.vector.complex BaseListVector DenseUnionVector FixedSizeListVector ListVector)
+           [org.apache.arrow.vector.types.pojo Field]
            (xtdb ICursor)
-           (xtdb.vector IIndirectRelation IIndirectVector IVectorWriter)))
+           (xtdb.vector RelationReader IVectorReader IVectorWriter)))
 
 (s/def ::ordinality-column ::lp/column)
 
@@ -26,26 +26,10 @@
 
 (set! *unchecked-math* :warn-on-boxed)
 
-(defn- get-data-vector ^org.apache.arrow.vector.ValueVector [^BaseListVector v]
-  (if (instance? FixedSizeListVector v)
-    (.getDataVector ^FixedSizeListVector v)
-    (.getDataVector ^ListVector v)))
-
-(defn- unwind-list-element ^long [^BaseListVector in-vec ^IVectorWriter out-writer ^long idx]
-  (let [data-vector (get-data-vector in-vec)
-        row-copier (.rowCopier out-writer data-vector)
-        element-start-idx (.getElementStartIndex in-vec idx)
-        elements-at-idx (- (.getElementEndIndex in-vec idx) element-start-idx)]
-    (.startList out-writer)
-    (dotimes [n elements-at-idx]
-      (.copyRow row-copier (+ element-start-idx n)))
-    (.endList out-writer)
-    elements-at-idx))
-
 (deftype UnwindCursor [^BufferAllocator allocator
                        ^ICursor in-cursor
                        ^String from-column-name
-                       ^String to-column-name
+                       ^Field to-field
                        ^String ordinality-column]
   ICursor
   (tryAdvance [_this c]
@@ -53,45 +37,45 @@
       (while (and (.tryAdvance in-cursor
                                (reify Consumer
                                  (accept [_ in-rel]
-                                   (let [^IIndirectRelation in-rel in-rel
+                                   (let [^RelationReader in-rel in-rel
                                          out-cols (LinkedList.)
-                                         from-col (.vectorForName in-rel from-column-name)
-                                         from-list-rdr (.listReader from-col)
+                                         vec-rdr (.readerForName in-rel from-column-name)
+                                         list-rdr (.legReader vec-rdr :list)
+                                         el-rdr (some-> list-rdr .listElementReader)
                                          idxs (IntStream/builder)
 
                                          ordinal-vec (when ordinality-column
                                                        (IntVector. ordinality-column allocator))
 
                                          _ (when ordinal-vec
-                                             (.add out-cols (iv/->direct-vec ordinal-vec)))
+                                             (.add out-cols (vr/vec->reader ordinal-vec)))
 
                                          ^IVectorWriter ordinal-wtr (some-> ordinal-vec vw/->writer)]
 
                                      (try
-                                       (with-open [out-vec (DenseUnionVector/empty to-column-name allocator)]
+                                       (with-open [out-vec (.createVector to-field allocator)]
                                          (let [out-writer (vw/->writer out-vec)
-                                               row-copier (.elementCopier from-list-rdr out-writer)]
-                                           (dotimes [n (.getValueCount from-col)]
-                                             (when (.isPresent from-list-rdr n)
-                                               (let [element-start-idx (.getElementStartIndex from-list-rdr n)
-                                                     elements-at-idx (- (.getElementEndIndex from-list-rdr n) element-start-idx)]
-                                                 (dotimes [m elements-at-idx]
-                                                   (.copyElement row-copier n m)
+                                               el-copier (.rowCopier el-rdr out-writer)]
+                                           (dotimes [n (.valueCount vec-rdr)]
+                                             (when (= :list (.getLeg list-rdr n))
+                                               (let [len (.getListCount list-rdr n)
+                                                     start-pos (.getListStartIndex list-rdr n)]
+                                                 (dotimes [el-idx len]
+                                                   (.copyRow el-copier (+ start-pos el-idx))
                                                    (.add idxs n)
-                                                   (some-> ordinal-wtr (.writeInt (inc m)))))))
-
+                                                   (some-> ordinal-wtr (.writeInt (inc el-idx)))))))
 
                                            (let [idxs (.toArray (.build idxs))]
                                              (when (pos? (alength idxs))
                                                (some-> ordinal-vec (.setValueCount (alength idxs)))
 
-                                               (doseq [^IIndirectVector in-col in-rel]
+                                               (doseq [^IVectorReader in-col in-rel]
                                                  (when (= from-column-name (.getName in-col))
                                                    (.add out-cols (vw/vec-wtr->rdr out-writer)))
 
                                                  (.add out-cols (.select in-col idxs)))
 
-                                               (.accept c (iv/->indirect-rel out-cols (alength idxs)))
+                                               (.accept c (vr/rel-reader out-cols (alength idxs)))
                                                (aset advanced? 0 true)))))
                                        (finally
                                          (util/try-close ordinal-vec)))))))
@@ -102,6 +86,16 @@
   (close [_]
     (.close in-cursor)))
 
+;; cases
+;; - list vec
+;; - nullable list vec
+;; - list DUV
+;; - scalar non-list
+;; - DUV non-list
+
+;; make listElementReader return _something_ even if it's not a list-vec - nil?
+;; make DUV reader pass all the calls through
+
 (defmethod lp/emit-expr :unwind [{:keys [columns relation], {:keys [ordinality-column]} :opts}, op-args]
   (let [[to-col from-col] (first columns)]
     (lp/unary-expr (lp/emit-expr relation op-args)
@@ -111,12 +105,13 @@
                                                 (keep (fn [col-type]
                                                         (zmatch col-type
                                                                 [:list inner-type] inner-type
-                                                                [:fixed-size-list _list-size inner-type] inner-type)))
+                                                                [:fixed-size-list _list-size inner-type] inner-type
+                                                                :null)))
                                                 (apply types/merge-col-types))]
                        {:col-types (-> col-types
                                        (assoc to-col unwind-col-type)
                                        (cond-> ordinality-column (assoc ordinality-column :i32)))
                         :->cursor (fn [{:keys [allocator]} in-cursor]
                                     (UnwindCursor. allocator in-cursor
-                                                   (str from-col) (str to-col)
+                                                   (str from-col) (types/col-type->field to-col unwind-col-type)
                                                    (some-> ordinality-column name)))})))))

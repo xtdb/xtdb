@@ -1213,6 +1213,7 @@
 
         plan (-> plan
                  (apply-datalog-specific-rewrites basis wm-src scan-emitter)
+
                  #_(doto clojure.pprint/pprint)
                  #_(->> (binding [*print-meta* true]))
                  (lp/rewrite-plan {})

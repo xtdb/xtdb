@@ -841,6 +841,7 @@
                           '[[:put :xt_docs {:xt/id :ivan, :age 15}]
                             [:put :xt_docs {:xt/id :petr, :age 22}]
                             [:put :xt_docs {:xt/id :slava, :age 37}]])]
+
     (t/is (= #{{:e1 :petr, :e2 :ivan, :e3 :slava}
                {:e1 :ivan, :e2 :petr, :e3 :slava}}
              (set

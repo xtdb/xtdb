@@ -1,11 +1,10 @@
 (ns xtdb.operator.top
   (:require [clojure.spec.alpha :as s]
-            [xtdb.logical-plan :as lp]
-            [xtdb.vector.indirect :as iv])
-  (:import xtdb.ICursor
-           xtdb.vector.IIndirectRelation
-           java.util.function.Consumer
-           java.util.stream.IntStream))
+            [xtdb.logical-plan :as lp])
+  (:import java.util.function.Consumer
+           java.util.stream.IntStream
+           xtdb.ICursor
+           xtdb.vector.RelationReader))
 
 (s/def ::skip nat-int?)
 (s/def ::limit nat-int?)
@@ -38,14 +37,14 @@
                   (.tryAdvance in-cursor
                                (reify Consumer
                                  (accept [_ in-rel]
-                                   (let [^IIndirectRelation in-rel in-rel
+                                   (let [^RelationReader in-rel in-rel
                                          row-count (.rowCount in-rel)
                                          old-idx (.idx this)]
 
                                      (set! (.-idx this) (+ old-idx row-count))
 
                                      (when-let [[^long rel-offset, ^long rel-length] (offset+length skip limit old-idx row-count)]
-                                       (.accept c (iv/select in-rel (.toArray (IntStream/range rel-offset (+ rel-offset rel-length)))))
+                                       (.accept c (.select in-rel (.toArray (IntStream/range rel-offset (+ rel-offset rel-length)))))
                                        (aset advanced? 0 true))))))))
       (aget advanced? 0)))
 

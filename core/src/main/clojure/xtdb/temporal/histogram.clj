@@ -1,6 +1,6 @@
 (ns xtdb.temporal.histogram
-  (:import [java.util Arrays ArrayList Collections Comparator List]
-           [java.util.function Consumer ToDoubleFunction]))
+  (:import (java.util ArrayList Collections Comparator List)
+           (java.util.function Consumer ToDoubleFunction)))
 
 ;; "A Streaming Parallel Decision Tree Algorithm"
 ;; https://www.jmlr.org/papers/volume11/ben-haim10a/ben-haim10a.pdf

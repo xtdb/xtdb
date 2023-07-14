@@ -1,19 +1,19 @@
 (ns xtdb.temporal.kd-tree
   (:require [xtdb.types :as t]
             [xtdb.util :as util])
-  (:import xtdb.BitUtil
-           [java.io Closeable]
+  (:import (java.io Closeable)
            java.lang.ref.Cleaner
-           [java.util ArrayDeque List Queue]
+           (java.util ArrayDeque List Queue)
            java.util.concurrent.LinkedBlockingQueue
-           [java.util.function LongBinaryOperator LongConsumer LongFunction LongPredicate LongUnaryOperator]
+           (java.util.function LongBinaryOperator LongConsumer LongFunction LongPredicate LongUnaryOperator)
            java.util.stream.LongStream
            org.apache.arrow.memory.BufferAllocator
            org.apache.arrow.vector.BigIntVector
            org.apache.arrow.vector.complex.FixedSizeListVector
-           [org.apache.arrow.vector.types Types$MinorType]
-           [org.apache.arrow.vector.types.pojo ArrowType$FixedSizeList Field]
-           org.roaringbitmap.longlong.Roaring64Bitmap))
+           (org.apache.arrow.vector.types Types$MinorType)
+           (org.apache.arrow.vector.types.pojo ArrowType$FixedSizeList Field)
+           org.roaringbitmap.longlong.Roaring64Bitmap
+           xtdb.BitUtil))
 
 (set! *unchecked-math* :warn-on-boxed)
 

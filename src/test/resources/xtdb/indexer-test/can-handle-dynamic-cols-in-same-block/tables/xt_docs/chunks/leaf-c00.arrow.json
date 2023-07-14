@@ -56,115 +56,6 @@
             "name" : "struct"
           },
           "children" : [{
-            "name" : "xt$id",
-            "nullable" : false,
-            "type" : {
-              "name" : "union",
-              "mode" : "Dense",
-              "typeIds" : [ ]
-            },
-            "children" : [{
-              "name" : "utf8",
-              "nullable" : false,
-              "type" : {
-                "name" : "utf8"
-              },
-              "children" : [ ]
-            },{
-              "name" : "i64",
-              "nullable" : false,
-              "type" : {
-                "name" : "int",
-                "bitWidth" : 64,
-                "isSigned" : true
-              },
-              "children" : [ ]
-            },{
-              "name" : "keyword",
-              "nullable" : false,
-              "type" : {
-                "name" : "KeywordType"
-              },
-              "children" : [ ],
-              "metadata" : [{
-                "value" : "xt/clj-keyword",
-                "key" : "ARROW:extension:name"
-              },{
-                "value" : "",
-                "key" : "ARROW:extension:metadata"
-              }]
-            }]
-          },{
-            "name" : "list",
-            "nullable" : false,
-            "type" : {
-              "name" : "union",
-              "mode" : "Dense",
-              "typeIds" : [ ]
-            },
-            "children" : [{
-              "name" : "list",
-              "nullable" : false,
-              "type" : {
-                "name" : "list"
-              },
-              "children" : [{
-                "name" : "$data$",
-                "nullable" : false,
-                "type" : {
-                  "name" : "union",
-                  "mode" : "Dense",
-                  "typeIds" : [ ]
-                },
-                "children" : [{
-                  "name" : "f64",
-                  "nullable" : false,
-                  "type" : {
-                    "name" : "floatingpoint",
-                    "precision" : "DOUBLE"
-                  },
-                  "children" : [ ]
-                },{
-                  "name" : "utf8",
-                  "nullable" : false,
-                  "type" : {
-                    "name" : "utf8"
-                  },
-                  "children" : [ ]
-                },{
-                  "name" : "timestamp-tz-micro-utc",
-                  "nullable" : false,
-                  "type" : {
-                    "name" : "timestamp",
-                    "unit" : "MICROSECOND",
-                    "timezone" : "UTC"
-                  },
-                  "children" : [ ]
-                },{
-                  "name" : "bool",
-                  "nullable" : false,
-                  "type" : {
-                    "name" : "bool"
-                  },
-                  "children" : [ ]
-                }]
-              }]
-            },{
-              "name" : "absent",
-              "nullable" : false,
-              "type" : {
-                "name" : "AbsentType"
-              },
-              "children" : [ ],
-              "metadata" : [{
-                "value" : "absent",
-                "key" : "ARROW:extension:name"
-              },{
-                "value" : "",
-                "key" : "ARROW:extension:metadata"
-              }]
-            }]
-          },{
             "name" : "struct",
             "nullable" : false,
             "type" : {
@@ -279,6 +170,115 @@
                 }]
               }]
             }]
+          },{
+            "name" : "xt$id",
+            "nullable" : false,
+            "type" : {
+              "name" : "union",
+              "mode" : "Dense",
+              "typeIds" : [ ]
+            },
+            "children" : [{
+              "name" : "utf8",
+              "nullable" : false,
+              "type" : {
+                "name" : "utf8"
+              },
+              "children" : [ ]
+            },{
+              "name" : "i64",
+              "nullable" : false,
+              "type" : {
+                "name" : "int",
+                "bitWidth" : 64,
+                "isSigned" : true
+              },
+              "children" : [ ]
+            },{
+              "name" : "keyword",
+              "nullable" : false,
+              "type" : {
+                "name" : "KeywordType"
+              },
+              "children" : [ ],
+              "metadata" : [{
+                "value" : "xt/clj-keyword",
+                "key" : "ARROW:extension:name"
+              },{
+                "value" : "",
+                "key" : "ARROW:extension:metadata"
+              }]
+            }]
+          },{
+            "name" : "list",
+            "nullable" : false,
+            "type" : {
+              "name" : "union",
+              "mode" : "Dense",
+              "typeIds" : [ ]
+            },
+            "children" : [{
+              "name" : "list",
+              "nullable" : false,
+              "type" : {
+                "name" : "list"
+              },
+              "children" : [{
+                "name" : "$data$",
+                "nullable" : false,
+                "type" : {
+                  "name" : "union",
+                  "mode" : "Dense",
+                  "typeIds" : [ ]
+                },
+                "children" : [{
+                  "name" : "f64",
+                  "nullable" : false,
+                  "type" : {
+                    "name" : "floatingpoint",
+                    "precision" : "DOUBLE"
+                  },
+                  "children" : [ ]
+                },{
+                  "name" : "utf8",
+                  "nullable" : false,
+                  "type" : {
+                    "name" : "utf8"
+                  },
+                  "children" : [ ]
+                },{
+                  "name" : "timestamp-tz-micro-utc",
+                  "nullable" : false,
+                  "type" : {
+                    "name" : "timestamp",
+                    "unit" : "MICROSECOND",
+                    "timezone" : "UTC"
+                  },
+                  "children" : [ ]
+                },{
+                  "name" : "bool",
+                  "nullable" : false,
+                  "type" : {
+                    "name" : "bool"
+                  },
+                  "children" : [ ]
+                }]
+              }]
+            },{
+              "name" : "absent",
+              "nullable" : false,
+              "type" : {
+                "name" : "AbsentType"
+              },
+              "children" : [ ],
+              "metadata" : [{
+                "value" : "absent",
+                "key" : "ARROW:extension:name"
+              },{
+                "value" : "",
+                "key" : "ARROW:extension:metadata"
+              }]
+            }]
           }]
         }]
       },{
@@ -352,6 +352,66 @@
           "count" : 6,
           "VALIDITY" : [1,1,1,1,1,1],
           "children" : [{
+            "name" : "struct",
+            "count" : 6,
+            "TYPE_ID" : [0,0,0,1,0,1],
+            "OFFSET" : [0,1,2,0,3,1],
+            "children" : [{
+              "name" : "absent",
+              "count" : 4
+            },{
+              "name" : "struct",
+              "count" : 2,
+              "VALIDITY" : [1,1],
+              "children" : [{
+                "name" : "a",
+                "count" : 2,
+                "TYPE_ID" : [0,1],
+                "OFFSET" : [0,0],
+                "children" : [{
+                  "name" : "i64",
+                  "count" : 1,
+                  "VALIDITY" : [1],
+                  "DATA" : ["1"]
+                },{
+                  "name" : "bool",
+                  "count" : 1,
+                  "VALIDITY" : [1],
+                  "DATA" : [1]
+                }]
+              },{
+                "name" : "b",
+                "count" : 2,
+                "TYPE_ID" : [0,1],
+                "OFFSET" : [0,0],
+                "children" : [{
+                  "name" : "utf8",
+                  "count" : 1,
+                  "VALIDITY" : [1],
+                  "OFFSET" : [0,1],
+                  "DATA" : ["b"]
+                },{
+                  "name" : "absent",
+                  "count" : 1
+                }]
+              },{
+                "name" : "c",
+                "count" : 2,
+                "TYPE_ID" : [0,1],
+                "OFFSET" : [0,0],
+                "children" : [{
+                  "name" : "absent",
+                  "count" : 1
+                },{
+                  "name" : "utf8",
+                  "count" : 1,
+                  "VALIDITY" : [1],
+                  "OFFSET" : [0,1],
+                  "DATA" : ["c"]
+                }]
+              }]
+            }]
+          },{
             "name" : "xt$id",
             "count" : 6,
             "TYPE_ID" : [1,1,0,2,0,2],
@@ -415,66 +475,6 @@
             },{
               "name" : "absent",
               "count" : 4
-            }]
-          },{
-            "name" : "struct",
-            "count" : 6,
-            "TYPE_ID" : [0,0,0,1,0,1],
-            "OFFSET" : [0,1,2,0,3,1],
-            "children" : [{
-              "name" : "absent",
-              "count" : 4
-            },{
-              "name" : "struct",
-              "count" : 2,
-              "VALIDITY" : [1,1],
-              "children" : [{
-                "name" : "a",
-                "count" : 2,
-                "TYPE_ID" : [0,1],
-                "OFFSET" : [0,0],
-                "children" : [{
-                  "name" : "i64",
-                  "count" : 1,
-                  "VALIDITY" : [1],
-                  "DATA" : ["1"]
-                },{
-                  "name" : "bool",
-                  "count" : 1,
-                  "VALIDITY" : [1],
-                  "DATA" : [1]
-                }]
-              },{
-                "name" : "b",
-                "count" : 2,
-                "TYPE_ID" : [0,1],
-                "OFFSET" : [0,0],
-                "children" : [{
-                  "name" : "utf8",
-                  "count" : 1,
-                  "VALIDITY" : [1],
-                  "OFFSET" : [0,1],
-                  "DATA" : ["b"]
-                },{
-                  "name" : "absent",
-                  "count" : 1
-                }]
-              },{
-                "name" : "c",
-                "count" : 2,
-                "TYPE_ID" : [0,1],
-                "OFFSET" : [0,0],
-                "children" : [{
-                  "name" : "absent",
-                  "count" : 1
-                },{
-                  "name" : "utf8",
-                  "count" : 1,
-                  "VALIDITY" : [1],
-                  "OFFSET" : [0,1],
-                  "DATA" : ["c"]
-                }]
-              }]
             }]
           }]
         }]

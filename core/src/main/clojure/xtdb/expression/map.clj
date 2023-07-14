@@ -3,18 +3,17 @@
             [xtdb.expression.walk :as ewalk]
             [xtdb.types :as types]
             [xtdb.util :as util]
-            [xtdb.vector :as vec]
-            [xtdb.vector.indirect :as iv]
+            [xtdb.vector.reader :as vr]
             [xtdb.vector.writer :as vw])
-  (:import (xtdb.vector IIndirectRelation IIndirectVector IVectorWriter)
-           io.netty.util.collection.IntObjectHashMap
+  (:import io.netty.util.collection.IntObjectHashMap
            (java.lang AutoCloseable)
-           java.util.List
            java.util.function.IntBinaryOperator
+           java.util.List
            (org.apache.arrow.memory BufferAllocator)
            (org.apache.arrow.memory.util.hash MurmurHasher SimpleHasher)
            (org.apache.arrow.vector NullVector)
-           (org.roaringbitmap IntConsumer RoaringBitmap)))
+           (org.roaringbitmap IntConsumer RoaringBitmap)
+           (xtdb.vector RelationReader IVectorReader)))
 
 (def ^:private ^org.apache.arrow.memory.util.hash.ArrowBufHasher hasher
   SimpleHasher/INSTANCE)
@@ -23,22 +22,20 @@
 (definterface IIndexHasher
   (^int hashCode [^int idx]))
 
-(defn ->hasher ^xtdb.expression.map.IIndexHasher [^List #_<IIndirectVector> cols]
+(defn ->hasher ^xtdb.expression.map.IIndexHasher [^List #_<IVectorReader> cols]
   (case (.size cols)
-    1 (let [^IIndirectVector col (.get cols 0)
-            v (.getVector col)]
+    1 (let [^IVectorReader col (.get cols 0)]
         (reify IIndexHasher
           (hashCode [_ idx]
-            (.hashCode v (.getIndex col idx) hasher))))
+            (.hashCode col idx hasher))))
 
     (reify IIndexHasher
       (hashCode [_ idx]
         (loop [n 0
                hash-code 0]
           (if (< n (.size cols))
-            (let [^IIndirectVector col (.get cols n)
-                  v (.getVector col)]
-              (recur (inc n) (MurmurHasher/combineHashCode hash-code (.hashCode v (.getIndex col idx) hasher))))
+            (let [^IVectorReader col (.get cols n)]
+              (recur (inc n) (MurmurHasher/combineHashCode hash-code (.hashCode col idx hasher))))
             hash-code))))))
 
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
@@ -59,9 +56,9 @@
   (^java.util.Map probeColumnTypes [])
   (^java.util.List probeKeyColumnNames [])
 
-  (^xtdb.expression.map.IRelationMapBuilder buildFromRelation [^xtdb.vector.IIndirectRelation inRelation])
-  (^xtdb.expression.map.IRelationMapProber probeFromRelation [^xtdb.vector.IIndirectRelation inRelation])
-  (^xtdb.vector.IIndirectRelation getBuiltRelation []))
+  (^xtdb.expression.map.IRelationMapBuilder buildFromRelation [^xtdb.vector.RelationReader inRelation])
+  (^xtdb.expression.map.IRelationMapProber probeFromRelation [^xtdb.vector.RelationReader inRelation])
+  (^xtdb.vector.RelationReader getBuiltRelation []))
 
 (defn- andIBO
   ([]
@@ -90,9 +87,9 @@
         (let [{:keys [continue], :as emitted-expr}
               (expr/codegen-expr expr input-opts)]
 
-          (-> `(fn [~(expr/with-tag left-rel IIndirectRelation)
-                    ~(expr/with-tag right-rel IIndirectRelation)
-                    ~(-> expr/params-sym (expr/with-tag IIndirectRelation))]
+          (-> `(fn [~(expr/with-tag left-rel RelationReader)
+                    ~(expr/with-tag right-rel RelationReader)
+                    ~(-> expr/params-sym (expr/with-tag RelationReader))]
                  (let [~@(expr/batch-bindings emitted-expr)]
                    (reify IntBinaryOperator
                      (~'applyAsInt [_# ~left-idx ~right-idx]
@@ -105,16 +102,16 @@
               (eval))))
       (util/lru-memoize)))
 
-(defn- ->equi-comparator [^IIndirectVector left-col, ^IIndirectVector right-col, params
+(defn- ->equi-comparator [^IVectorReader left-col, ^IVectorReader right-col, params
                           {:keys [nil-keys-equal? param-types]}]
   (let [f (build-comparator {:op :call, :f (if nil-keys-equal? :null-eq :=)
                              :args [{:op :variable, :variable left-vec, :rel left-rel, :idx left-idx}
                                     {:op :variable, :variable right-vec, :rel right-rel, :idx right-idx}]}
-                            {:var->col-type {left-vec (types/field->col-type (.getField (.getVector left-col)))
-                                             right-vec (types/field->col-type (.getField (.getVector right-col)))}
+                            {:var->col-type {left-vec (types/field->col-type (.getField left-col))
+                                             right-vec (types/field->col-type (.getField right-col))}
                              :param-types param-types})]
-    (f (iv/->indirect-rel [(.withName left-col (name left-vec))])
-       (iv/->indirect-rel [(.withName right-col (name right-vec))])
+    (f (vr/rel-reader [(.withName left-col (name left-vec))])
+       (vr/rel-reader [(.withName right-col (name right-vec))])
        params)))
 
 (defn- ->theta-comparator [probe-rel build-rel theta-expr params {:keys [build-col-types probe-col-types param-types]}]
@@ -156,9 +153,9 @@
 (defn ->nil-rel
   "Returns a single row relation where all columns are nil. (Useful for outer joins)."
   [col-names]
-  (iv/->indirect-rel (for [col-name col-names]
-                       (iv/->direct-vec (doto (NullVector. (name col-name))
-                                          (.setValueCount 1))))))
+  (vr/rel-reader (for [col-name col-names]
+                   (vr/vec->reader (doto (NullVector. (name col-name))
+                                     (.setValueCount 1))))))
 
 (def nil-row-idx 0)
 
@@ -206,10 +203,10 @@
             (let [in-rel (if store-full-build-rel?
                            in-rel
                            (->> (set build-key-col-names)
-                                (mapv #(.vectorForName in-rel (name %)))
-                                iv/->indirect-rel))
+                                (mapv #(.readerForName in-rel (name %)))
+                                vr/rel-reader))
 
-                  in-key-cols (mapv #(.vectorForName in-rel (name %))
+                  in-key-cols (mapv #(.readerForName in-rel (name %))
                                     build-key-col-names)
 
                   ;; NOTE: we might not need to compute `comparator` if the caller never requires `addIfNotPresent` (e.g. joins)
@@ -244,7 +241,7 @@
 
           (probeFromRelation [this probe-rel]
             (let [build-rel (.getBuiltRelation this)
-                  probe-key-cols (mapv #(.vectorForName probe-rel (name %))
+                  probe-key-cols (mapv #(.readerForName probe-rel (name %))
                                        probe-key-col-names)
 
                   ^IntBinaryOperator

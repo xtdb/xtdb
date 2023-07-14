@@ -1,7 +1,5 @@
 package xtdb.vector;
 
-import org.apache.arrow.vector.ValueVector;
-
 import java.util.Map;
 
 @SuppressWarnings("try")
@@ -12,7 +10,7 @@ public interface IRelationWriter extends AutoCloseable, Iterable<Map.Entry<Strin
      *
      * <p>This is incremented either by using the {@link IRelationWriter#rowCopier}, or by explicitly calling {@link IRelationWriter#endRow()}</p>
      */
-    IWriterPosition writerPosition();
+    IVectorPosition writerPosition();
 
     void startRow();
     void endRow();
@@ -31,7 +29,7 @@ public interface IRelationWriter extends AutoCloseable, Iterable<Map.Entry<Strin
     IVectorWriter writerForName(String name);
     IVectorWriter writerForName(String name, Object colType);
 
-    IRowCopier rowCopier(IIndirectRelation relation);
+    IRowCopier rowCopier(RelationReader relation);
 
     default void clear() {
         for (Map.Entry<String, IVectorWriter> entry : this) {

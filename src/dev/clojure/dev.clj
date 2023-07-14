@@ -9,7 +9,7 @@
             [xtdb.node :as node]
             [xtdb.test-util :as tu]
             [xtdb.util :as util]
-            [xtdb.vector.indirect :as iv])
+            [xtdb.vector.reader :as vr])
   (:import [java.nio.file Path]
            java.time.Duration
            [org.apache.arrow.memory RootAllocator]
@@ -114,7 +114,7 @@
         (loop [v init]
           (cond
             (reduced? v) (unreduced v)
-            (.loadNextBatch rdr) (recur (f v (iv/rel->rows (iv/<-root (.getVectorSchemaRoot rdr)))))
+            (.loadNextBatch rdr) (recur (f v (vr/rel->rows (vr/<-root (.getVectorSchemaRoot rdr)))))
             :else v))))))
 
 (comment

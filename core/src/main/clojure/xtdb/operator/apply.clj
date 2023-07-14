@@ -6,14 +6,14 @@
             [xtdb.rewrite :refer [zmatch]]
             [xtdb.types :as types]
             [xtdb.util :as util]
-            [xtdb.vector.indirect :as iv]
+            [xtdb.vector.reader :as vr]
             [xtdb.vector.writer :as vw])
   (:import (java.util.function Consumer)
            (java.util.stream IntStream)
            (org.apache.arrow.memory BufferAllocator)
-           (org.apache.arrow.vector BitVector NullVector)
+           (org.apache.arrow.vector NullVector)
            (xtdb ICursor)
-           (xtdb.vector IIndirectRelation IIndirectVector IVectorWriter)))
+           (xtdb.vector IVectorReader RelationReader)))
 
 (defmethod lp/ra-expr :apply [_]
   (s/cat :op #{:apply}
@@ -23,9 +23,11 @@
          :independent-relation ::lp/ra-expression
          :dependent-relation ::lp/ra-expression))
 
+#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (definterface IDependentCursorFactory
-  (^xtdb.ICursor openDependentCursor [^xtdb.vector.IIndirectRelation inRelation, ^int idx]))
+  (^xtdb.ICursor openDependentCursor [^xtdb.vector.RelationReader inRelation, ^int idx]))
 
+#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (definterface ModeStrategy
   (^void accept [^xtdb.ICursor dependentCursor
                  ^xtdb.vector.IRelationWriter dependentOutWriter
@@ -45,12 +47,12 @@
                           (.tryAdvance dep-cursor
                                        (reify Consumer
                                          (accept [_ dep-rel]
-                                           (let [match-vec (.vectorForName ^IIndirectRelation dep-rel "_expr")
+                                           (let [match-vec (.readerForName ^RelationReader dep-rel "_expr")
                                                  match-rdr (.polyReader match-vec [:union #{:null :bool}])]
                                              ;; HACK: if the iteration order changes I'd like to know about it :)
                                              (case (vec #{:null :bool})
                                                [:null :bool]
-                                               (dotimes [idx (.getValueCount match-vec)]
+                                               (dotimes [idx (.valueCount match-vec)]
                                                  (case (.read match-rdr idx)
                                                    0 (aset !match 0 (max (aget !match 0) 0))
                                                    1 (aset !match 0 (max (aget !match 0) (if (.readBoolean match-rdr) 1 -1))))))))))))
@@ -70,7 +72,7 @@
           (.forEachRemaining dep-cursor
                              (reify Consumer
                                (accept [_ dep-rel]
-                                 (let [^IIndirectRelation dep-rel dep-rel]
+                                 (let [^RelationReader dep-rel dep-rel]
                                    (vw/append-rel dep-out-writer dep-rel)
 
                                    (dotimes [_ (.rowCount dep-rel)]
@@ -86,7 +88,7 @@
             (.forEachRemaining dep-cursor
                                (reify Consumer
                                  (accept [_ dep-rel]
-                                   (let [^IIndirectRelation dep-rel dep-rel]
+                                   (let [^RelationReader dep-rel dep-rel]
                                      (when (pos? (.rowCount dep-rel))
                                        (aset match? 0 true)
                                        (vw/append-rel dep-out-writer dep-rel)
@@ -98,8 +100,8 @@
               (.add idxs in-idx)
               (doseq [[col-name col-type] dependent-col-types]
                 (vw/append-vec (.writerForName dep-out-writer (name col-name) col-type)
-                               (iv/->direct-vec (doto (NullVector. (name col-name))
-                                                  (.setValueCount 1)))))))))
+                               (vr/vec->reader (doto (NullVector. (name col-name))
+                                                 (.setValueCount 1)))))))))
 
       :semi-join
       (reify ModeStrategy
@@ -109,7 +111,7 @@
                         (.tryAdvance dep-cursor
                                      (reify Consumer
                                        (accept [_ dep-rel]
-                                         (let [^IIndirectRelation dep-rel dep-rel]
+                                         (let [^RelationReader dep-rel dep-rel]
                                            (when (pos? (.rowCount dep-rel))
                                              (aset match? 0 true)
                                              (.add idxs in-idx)))))))))))
@@ -122,7 +124,7 @@
                         (.tryAdvance dep-cursor
                                      (reify Consumer
                                        (accept [_ dep-rel]
-                                         (let [^IIndirectRelation dep-rel dep-rel]
+                                         (let [^RelationReader dep-rel dep-rel]
                                            (when (pos? (.rowCount dep-rel))
                                              (aset match? 0 true))))))))
             (when-not (aget match? 0)
@@ -138,7 +140,7 @@
             (.forEachRemaining dep-cursor
                                (reify Consumer
                                  (accept [_ dep-rel]
-                                   (let [^IIndirectRelation dep-rel dep-rel
+                                   (let [^RelationReader dep-rel dep-rel
                                          row-count (.rowCount dep-rel)]
                                      (cond
                                        (zero? row-count) nil
@@ -157,8 +159,8 @@
               (.add idxs in-idx)
               (doseq [[col-name col-type] dependent-col-types]
                 (vw/append-vec (.writerForName dep-out-writer (name col-name) col-type)
-                               (iv/->direct-vec (doto (NullVector. (name col-name))
-                                                  (.setValueCount 1))))))))))))
+                               (vr/vec->reader (doto (NullVector. (name col-name))
+                                                 (.setValueCount 1))))))))))))
 
 (deftype ApplyCursor [^BufferAllocator allocator
                       ^ModeStrategy mode-strategy
@@ -169,7 +171,7 @@
     (.tryAdvance independent-cursor
                  (reify Consumer
                    (accept [_ in-rel]
-                     (let [^IIndirectRelation in-rel in-rel
+                     (let [^RelationReader in-rel in-rel
                            idxs (IntStream/builder)]
 
                        (with-open [dep-out-writer (vw/->rel-writer allocator)]
@@ -179,10 +181,10 @@
                              (.accept mode-strategy dep-cursor dep-out-writer idxs in-idx)))
 
                          (let [idxs (.toArray (.build idxs))]
-                           (.accept c (iv/->indirect-rel (concat (for [^IIndirectVector col in-rel]
-                                                                   (.select col idxs))
-                                                                 (vw/rel-wtr->rdr dep-out-writer))
-                                                         (alength idxs))))))))))
+                           (.accept c (vr/rel-reader (concat (for [^IVectorReader col in-rel]
+                                                               (.select col idxs))
+                                                             (vw/rel-wtr->rdr dep-out-writer))
+                                                     (alength idxs))))))))))
 
   (close [_]
     (util/try-close independent-cursor)))
@@ -238,7 +240,7 @@
                                      (.tryAdvance dep-cursor (reify Consumer
                                                                (accept [_ in-rel]
                                                                  (with-open [match-vec (.project projection-spec allocator in-rel params)]
-                                                                   (.accept c (iv/->indirect-rel [match-vec])))))))
+                                                                   (.accept c (vr/rel-reader [match-vec])))))))
 
                                    (close [_] (.close dep-cursor))))))
 
@@ -251,9 +253,9 @@
                                          (open-dependent-cursor (-> query-opts
                                                                     (update :params
                                                                             (fn [params]
-                                                                              (iv/->indirect-rel (concat params
-                                                                                                         (for [[ik dk] columns]
-                                                                                                           (-> (.vectorForName in-rel (name ik))
-                                                                                                               (.select (int-array [idx]))
-                                                                                                               (.withName (name dk)))))
-                                                                                                 1))))))))))}))))
+                                                                              (vr/rel-reader (concat params
+                                                                                                     (for [[ik dk] columns]
+                                                                                                       (-> (.readerForName in-rel (name ik))
+                                                                                                           (.select (int-array [idx]))
+                                                                                                           (.withName (name dk)))))
+                                                                                             1))))))))))}))))

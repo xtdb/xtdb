@@ -1,11 +1,11 @@
 (ns xtdb.log.memory-log
-  (:require [xtdb.api.protocols :as xtp]
-            [xtdb.log :as log]
-            [juxt.clojars-mirrors.integrant.core :as ig])
-  (:import xtdb.InstantSource
-           [xtdb.log INotifyingSubscriberHandler Log LogRecord]
-           java.time.temporal.ChronoUnit
-           java.util.concurrent.CompletableFuture))
+  (:require [juxt.clojars-mirrors.integrant.core :as ig]
+            [xtdb.api.protocols :as xtp]
+            [xtdb.log :as log])
+  (:import java.time.temporal.ChronoUnit
+           java.util.concurrent.CompletableFuture
+           xtdb.InstantSource
+           (xtdb.log INotifyingSubscriberHandler Log LogRecord)))
 
 (deftype InMemoryLog [!records, ^INotifyingSubscriberHandler subscriber-handler, ^InstantSource instant-src]
   Log

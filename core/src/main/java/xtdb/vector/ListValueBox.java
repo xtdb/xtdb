@@ -8,7 +8,7 @@ import java.util.List;
 
 class ListValueBox implements IValueWriter, IMonoVectorReader, IPolyVectorReader {
 
-    private final IWriterPosition wp = IWriterPosition.build();
+    private final IVectorPosition wp = IVectorPosition.build();
     private final List<ValueBox> els;
     private ValueBox readBox;
     private ValueBox writeBox;

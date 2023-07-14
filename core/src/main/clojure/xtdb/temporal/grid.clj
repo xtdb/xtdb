@@ -1,23 +1,23 @@
 (ns xtdb.temporal.grid
   (:require [clojure.data.json :as json]
-            [xtdb.util :as util]
+            [xtdb.temporal.histogram :as hist]
             [xtdb.temporal.kd-tree :as kd]
-            [xtdb.temporal.histogram :as hist])
-  (:import [xtdb.temporal.kd_tree IKdTreePointAccess KdTreeVectorPointAccess]
-           [xtdb.temporal.histogram IHistogram IMultiDimensionalHistogram]
-           xtdb.BitUtil
-           [org.apache.arrow.memory ArrowBuf BufferAllocator]
-           org.apache.arrow.vector.complex.FixedSizeListVector
-           [org.apache.arrow.vector VectorLoader VectorSchemaRoot]
-           org.apache.arrow.vector.types.pojo.Schema
-           org.apache.arrow.vector.ipc.ArrowFileWriter
+            [xtdb.util :as util])
+  (:import (java.io BufferedInputStream BufferedOutputStream Closeable DataInputStream DataOutputStream)
+           (java.nio.channels Channels)
+           java.nio.file.Path
+           (java.util Arrays)
            java.util.concurrent.atomic.AtomicInteger
-           [java.util ArrayList Arrays List]
-           [java.util.function Consumer Function IntToLongFunction LongConsumer LongFunction LongPredicate LongUnaryOperator UnaryOperator]
-           [java.util.stream LongStream Stream]
-           [java.io BufferedInputStream BufferedOutputStream Closeable DataInputStream DataOutputStream]
-           [java.nio.channels Channels FileChannel]
-           java.nio.file.Path))
+           (java.util.function Consumer IntToLongFunction LongConsumer LongFunction LongPredicate LongUnaryOperator UnaryOperator)
+           (java.util.stream LongStream Stream)
+           (org.apache.arrow.memory ArrowBuf BufferAllocator)
+           (org.apache.arrow.vector VectorLoader VectorSchemaRoot)
+           org.apache.arrow.vector.complex.FixedSizeListVector
+           org.apache.arrow.vector.ipc.ArrowFileWriter
+           org.apache.arrow.vector.types.pojo.Schema
+           xtdb.BitUtil
+           (xtdb.temporal.histogram IHistogram IMultiDimensionalHistogram)
+           (xtdb.temporal.kd_tree IKdTreePointAccess KdTreeVectorPointAccess)))
 
 ;; "Learning Multi-dimensional Indexes"
 ;; https://arxiv.org/pdf/1912.01668.pdf

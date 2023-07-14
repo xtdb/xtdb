@@ -1,21 +1,12 @@
 (ns xtdb.vector
-  (:require [xtdb.error :as err]
-            [xtdb.types :as types]
-            [xtdb.util :as util])
-  (:import (clojure.lang Keyword MapEntry)
-           java.net.URI
-           (java.nio ByteBuffer CharBuffer)
-           java.nio.charset.StandardCharsets
-           (java.time Duration Instant LocalDate LocalDateTime LocalTime OffsetDateTime Period ZoneOffset ZonedDateTime)
-           (java.util ArrayList Date HashMap List Map Set UUID)
-           java.util.function.Function
-           (org.apache.arrow.vector BaseVariableWidthVector BigIntVector BitVector DateDayVector DateMilliVector DurationVector ExtensionTypeVector FixedSizeBinaryVector Float4Vector Float8Vector IntVector IntervalDayVector IntervalMonthDayNanoVector IntervalYearVector NullVector PeriodDuration SmallIntVector TimeMicroVector TimeMilliVector TimeNanoVector TimeSecVector TimeStampVector TinyIntVector ValueVector VarBinaryVector VarCharVector)
+  (:require [xtdb.types :as types])
+  (:import (clojure.lang MapEntry)
+           (java.time Duration Period)
+           (java.util List)
+           (org.apache.arrow.vector BaseVariableWidthVector BigIntVector BitVector DateDayVector DateMilliVector DurationVector ExtensionTypeVector FixedSizeBinaryVector Float4Vector Float8Vector IntVector IntervalDayVector IntervalMonthDayNanoVector IntervalYearVector NullVector PeriodDuration SmallIntVector TimeMicroVector TimeMilliVector TimeNanoVector TimeSecVector TimeStampVector TinyIntVector ValueVector)
            (org.apache.arrow.vector.complex DenseUnionVector ListVector StructVector)
-           (org.apache.arrow.vector.types.pojo ArrowType$List ArrowType$Struct ArrowType$Union Field FieldType)
-           xtdb.api.protocols.ClojureForm
-           (xtdb.types IntervalDayTime IntervalMonthDayNano IntervalYearMonth)
-           (xtdb.vector IIndirectVector IMonoVectorReader IPolyVectorReader IRowCopier IStructValueReader IVectorWriter IWriterPosition)
-           (xtdb.vector.extensions SetType)))
+           (xtdb.types IntervalDayTime IntervalMonthDayNano)
+           (xtdb.vector IMonoVectorReader IPolyVectorReader IStructValueReader ValueVectorReader)))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -105,7 +96,11 @@
       (valueCount [_] (.getValueCount arrow-vec))
 
       (readBytes [_ idx]
-        (.nioBuffer (.getDataBuffer arrow-vec) (.getStartOffset arrow-vec idx) (.getValueLength arrow-vec idx)))
+        (try
+          (.nioBuffer (.getDataBuffer arrow-vec) (.getStartOffset arrow-vec idx) (.getValueLength arrow-vec idx))
+          (catch Throwable t
+            (prn arrow-vec idx)
+            (throw t))))
 
       (readObject [_ idx]
         (.nioBuffer (.getDataBuffer arrow-vec) (.getStartOffset arrow-vec idx) (.getValueLength arrow-vec idx))))))
@@ -159,19 +154,21 @@
 
   IntervalDayVector
   (->mono-reader [arrow-vec _col-type]
-    (reify IMonoVectorReader
-      (valueCount [_] (.getValueCount arrow-vec))
-      (readObject [_ idx]
-        (let [^IntervalDayTime idt (types/get-object arrow-vec idx)]
-          (PeriodDuration. (.-period idt) (.-duration idt))))))
+    (let [vec-rdr (ValueVectorReader/from arrow-vec)]
+      (reify IMonoVectorReader
+        (valueCount [_] (.getValueCount arrow-vec))
+        (readObject [_ idx]
+          (let [^IntervalDayTime idt (.getObject vec-rdr idx)]
+            (PeriodDuration. (.-period idt) (.-duration idt)))))))
 
   IntervalMonthDayNanoVector
   (->mono-reader [arrow-vec _col-type]
-    (reify IMonoVectorReader
-      (valueCount [_] (.getValueCount arrow-vec))
-      (readObject [_ idx]
-        (let [^IntervalMonthDayNano imdn (types/get-object arrow-vec idx)]
-          (PeriodDuration. (.-period imdn) (.-duration imdn)))))))
+    (let [vec-rdr (ValueVectorReader/from arrow-vec)]
+      (reify IMonoVectorReader
+        (valueCount [_] (.getValueCount arrow-vec))
+        (readObject [_ idx]
+          (let [^IntervalMonthDayNano imdn (.getObject vec-rdr idx)]
+            (PeriodDuration. (.-period imdn) (.-duration imdn))))))))
 
 (extend-protocol MonoFactory
   ListVector
@@ -398,32 +395,3 @@
         (->MonoToPolyReader mono-reader
                             (.indexOf ^List ordered-col-types (types/field->col-type field))
                             0)))))
-
-(deftype IndirectVectorMonoReader [^IMonoVectorReader inner, ^IIndirectVector col]
-  IMonoVectorReader
-  (valueCount [_] (.getValueCount col))
-  (readBoolean [_ idx] (.readBoolean inner (.getIndex col idx)))
-  (readByte [_ idx] (.readByte inner (.getIndex col idx)))
-  (readShort [_ idx] (.readShort inner (.getIndex col idx)))
-  (readInt [_ idx] (.readInt inner (.getIndex col idx)))
-  (readLong [_ idx] (.readLong inner (.getIndex col idx)))
-  (readFloat [_ idx] (.readFloat inner (.getIndex col idx)))
-  (readDouble [_ idx] (.readDouble inner (.getIndex col idx)))
-  (readBytes [_ idx] (.readBytes inner (.getIndex col idx)))
-  (readObject [_ idx] (.readObject inner (.getIndex col idx))))
-
-(deftype IndirectVectorPolyReader [^IPolyVectorReader inner, ^IIndirectVector col]
-  IPolyVectorReader
-  (valueCount [_] (.getValueCount col))
-  (read [_ idx] (.read inner (.getIndex col idx)))
-  (read [_] (.read inner))
-
-  (readBoolean [_] (.readBoolean inner))
-  (readByte [_] (.readByte inner))
-  (readShort [_] (.readShort inner))
-  (readInt [_] (.readInt inner))
-  (readLong [_] (.readLong inner))
-  (readFloat [_] (.readFloat inner))
-  (readDouble [_] (.readDouble inner))
-  (readBytes [_] (.readBytes inner))
-  (readObject [_] (.readObject inner)))

@@ -4,7 +4,7 @@
   (:import java.util.function.Consumer
            org.apache.arrow.memory.BufferAllocator
            xtdb.ICursor
-           (xtdb.vector IIndirectRelation IRelationWriter)))
+           (xtdb.vector RelationReader)))
 
 ;; We pass the first 100 results through immediately, so that any limit-like queries don't need to wait for a full block to return rows.
 ;; Then, we coalesce small blocks together into blocks of at least 100, to share the per-block costs.
@@ -23,7 +23,7 @@
           (let [!passed-on? (volatile! false)
                 advanced? (.tryAdvance cursor (reify Consumer
                                                 (accept [_ read-rel]
-                                                  (let [^IIndirectRelation read-rel read-rel
+                                                  (let [^RelationReader read-rel read-rel
                                                         row-count (.rowCount read-rel)
                                                         seen-rows (.seen-rows this)]
                                                     (cond

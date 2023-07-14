@@ -1,25 +1,12 @@
 package xtdb.sql.parser;
 
-import java.util.ArrayList;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Set;
-import java.util.HashSet;
-import java.util.regex.Pattern;
-import java.util.regex.Matcher;
+import clojure.lang.*;
+
+import java.util.*;
 import java.util.function.Function;
 import java.util.function.Predicate;
-import clojure.lang.APersistentMap;
-import clojure.lang.APersistentVector;
-import clojure.lang.IMapEntry;
-import clojure.lang.IObj;
-import clojure.lang.IPersistentMap;
-import clojure.lang.IPersistentVector;
-import clojure.lang.ISeq;
-import clojure.lang.ITransientCollection;
-import clojure.lang.Keyword;
-import clojure.lang.PersistentVector;
-import clojure.lang.RT;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public final class Parser {
     public static final class ParseState {

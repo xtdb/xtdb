@@ -5,18 +5,9 @@
             [xtdb.rewrite :refer [zmatch]]
             [xtdb.util :as util])
   (:import (clojure.lang MapEntry)
-           (java.nio ByteBuffer)
-           java.nio.charset.StandardCharsets
-           (java.time Duration Instant LocalDate LocalTime Period ZoneId)
-           java.util.concurrent.ConcurrentHashMap
-           java.util.function.Function
-           (org.apache.arrow.vector BitVector DateDayVector DateMilliVector IntervalDayVector IntervalMonthDayNanoVector IntervalYearVector TimeMicroVector TimeMilliVector TimeNanoVector TimeSecVector TimeStampMicroTZVector TimeStampMilliTZVector TimeStampNanoTZVector TimeStampSecTZVector ValueVector VarBinaryVector VarCharVector)
-           (org.apache.arrow.vector.complex DenseUnionVector FixedSizeListVector ListVector StructVector)
-           (org.apache.arrow.vector.holders NullableIntervalDayHolder NullableIntervalMonthDayNanoHolder)
            (org.apache.arrow.vector.types DateUnit FloatingPointPrecision IntervalUnit TimeUnit Types$MinorType UnionMode)
            (org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Date ArrowType$Decimal ArrowType$Duration ArrowType$FixedSizeBinary ArrowType$FixedSizeList ArrowType$FloatingPoint ArrowType$Int ArrowType$Interval ArrowType$List ArrowType$Null ArrowType$Struct ArrowType$Time ArrowType$Time ArrowType$Timestamp ArrowType$Union ArrowType$Utf8 Field FieldType)
-           (xtdb.types IntervalDayTime IntervalMonthDayNano IntervalYearMonth)
-           (xtdb.vector.extensions AbsentType AbsentVector ClojureFormType KeywordType SetType SetVector UriType UuidType)))
+           (xtdb.vector.extensions AbsentType ClojureFormType KeywordType SetType UriType UuidType)))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -26,174 +17,6 @@
 
 (def temporal-col-type [:timestamp-tz :micro "UTC"])
 (def nullable-temporal-type [:union #{:null temporal-col-type}])
-
-(defprotocol ArrowReadable
-  (get-object [value-vector idx]))
-
-(extend-protocol ArrowReadable
-  ;; NOTE: Vectors not explicitly listed here have useful getObject methods and are handled by `ValueVector`.
-  ValueVector (get-object [this idx] (.getObject this ^int idx))
-
-  AbsentVector (get-object [_this _idx] :xtdb/absent)
-
-  BitVector
-  (get-object [this idx]
-    ;; `BitVector/getObject` returns `new Boolean(...)` rather than `Boolean/valueOf`
-    (when-not (.isNull this idx)
-      (= (.get this ^int idx) 1)))
-
-  VarBinaryVector
-  (get-object [this idx]
-    (when-not (.isNull this idx)
-      (ByteBuffer/wrap (.getObject this ^int idx))))
-
-  VarCharVector
-  (get-object [this idx]
-    (when-not (.isNull this idx)
-      (String. (.get this ^int idx) StandardCharsets/UTF_8))))
-
-(let [zones (ConcurrentHashMap.)]
-  (defn- zone-id ^java.time.ZoneId [^ValueVector v]
-    (.computeIfAbsent zones (.getTimezone ^ArrowType$Timestamp (.getType (.getField v)))
-                      (reify Function
-                        (apply [_ zone-str]
-                          (ZoneId/of zone-str))))))
-
-(extend-protocol ArrowReadable
-  TimeStampSecTZVector
-  (get-object [this idx]
-    (when-not (.isNull this idx)
-      (-> (Instant/ofEpochSecond (.get this idx))
-          (.atZone (zone-id this)))))
-
-  TimeStampMilliTZVector
-  (get-object [this idx]
-    (when-not (.isNull this idx)
-      (-> (Instant/ofEpochMilli (.get this idx))
-          (.atZone (zone-id this)))))
-
-  TimeStampMicroTZVector
-  (get-object [this idx]
-    (when-not (.isNull this idx)
-      (-> ^Instant (util/micros->instant (.get this ^int idx))
-          (.atZone (zone-id this)))))
-
-  TimeStampNanoTZVector
-  (get-object [this idx]
-    (-> (Instant/ofEpochSecond 0 (.get this idx))
-        (.atZone (zone-id this)))))
-
-(extend-protocol ArrowReadable
-  DateDayVector
-  (get-object [this idx]
-    (when-not (.isNull this idx)
-      (LocalDate/ofEpochDay (.get this idx))))
-
-  DateMilliVector
-  (get-object [this idx]
-    (when-not (.isNull this idx)
-      (LocalDate/ofEpochDay (quot (.get this idx) 86400000)))))
-
-(extend-protocol ArrowReadable
-  TimeNanoVector
-  (get-object [this idx]
-    (when-not (.isNull this idx)
-      (LocalTime/ofNanoOfDay (.get this idx))))
-
-  TimeMicroVector
-  (get-object [this idx]
-    (when-not (.isNull this idx)
-      (LocalTime/ofNanoOfDay (* (.get this idx) 1e3))))
-
-  TimeMilliVector
-  (get-object [this idx]
-    (when-not (.isNull this idx)
-      (LocalTime/ofNanoOfDay (* (long (.get this idx)) 1e6))))
-
-  TimeSecVector
-  (get-object [this idx]
-    (when-not (.isNull this idx)
-      (LocalTime/ofSecondOfDay (.get this idx)))))
-
-(extend-protocol ArrowReadable
-  ;; we are going to override the get-object function
-  ;; to unify the representation on read for non nanovectors
-  IntervalYearVector
-  (get-object [this idx]
-    (when-not (.isNull this idx)
-      (IntervalYearMonth. (Period/ofMonths (.get this idx)))))
-
-  IntervalDayVector
-  (get-object [this idx]
-    (when-not (.isNull this idx)
-      (let [holder (NullableIntervalDayHolder.)
-            _ (.get this idx holder)
-            period (Period/ofDays (.-days holder))
-            duration (Duration/ofMillis (.-milliseconds holder))]
-        (IntervalDayTime. period duration))))
-
-  IntervalMonthDayNanoVector
-  (get-object [this idx]
-    (when-not (.isNull this idx)
-      (let [holder (NullableIntervalMonthDayNanoHolder.)
-            _ (.get this idx holder)
-            period (Period/of 0 (.-months holder) (.-days holder))
-            duration (Duration/ofNanos (.-nanoseconds holder))]
-        (IntervalMonthDayNano. period duration)))))
-
-(extend-protocol ArrowReadable
-  ListVector
-  (get-object [this idx]
-    (when-not (.isNull this idx)
-      (let [data-vec (.getDataVector this)
-            x (loop [element-idx (.getElementStartIndex this idx)
-                     acc (transient [])]
-                (if (= (.getElementEndIndex this idx) element-idx)
-                  acc
-                  (recur (inc element-idx)
-                         (conj! acc (get-object data-vec element-idx)))))]
-        (persistent! x))))
-
-  FixedSizeListVector
-  (get-object [this idx]
-    (let [data-vec (.getDataVector this)
-          x (loop [element-idx (.getElementStartIndex this idx)
-                   acc (transient [])]
-              (if (= (.getElementEndIndex this idx) element-idx)
-                acc
-                (recur (inc element-idx)
-                       (conj! acc (get-object data-vec element-idx)))))]
-      (persistent! x)))
-
-  SetVector
-  (get-object [this idx]
-    (when-not (.isNull this idx)
-      (let [^ListVector uvec (.getUnderlyingVector this)
-            data-vec (.getDataVector uvec)
-            x (loop [element-idx (.getElementStartIndex uvec idx)
-                     acc (transient #{})]
-                (if (= (.getElementEndIndex uvec idx) element-idx)
-                  acc
-                  (recur (inc element-idx)
-                         (conj! acc (get-object data-vec element-idx)))))]
-        (persistent! x))))
-
-  StructVector
-  (get-object [this idx]
-    (when-not (.isNull this idx)
-      (-> (reduce (fn [acc k]
-                    (let [child-vec (.getChild this k ValueVector)
-                          v (get-object child-vec idx)]
-                      (cond-> acc
-                        (not= v :xtdb/absent) (assoc! (keyword k) v))))
-                  (transient {})
-                  (.getChildFieldNames this))
-          (persistent!))))
-
-  DenseUnionVector
-  (get-object [this idx]
-    (get-object (.getVectorByType this (.getTypeId this idx))
-                (.getOffset this idx))))
 
 (defn ->field ^org.apache.arrow.vector.types.pojo.Field [^String field-name ^ArrowType arrow-type nullable & children]
   (Field. field-name (FieldType. nullable arrow-type nil nil) children))
@@ -341,11 +164,16 @@
   (^org.apache.arrow.vector.types.pojo.Field [col-type] (col-type->field (col-type->field-name col-type) col-type))
   (^org.apache.arrow.vector.types.pojo.Field [col-name col-type] (col-type->field* (str col-name) false col-type)))
 
-(defn col-type->duv-leg-key [col-type]
+(defn col-type->leg [col-type]
   (let [head (col-type-head col-type)]
     (case head
       (:struct :list :set) head
-      col-type)))
+      :union (let [without-null (-> (flatten-union-types col-type)
+                                    (disj :null))]
+               (if (= 1 (count without-null))
+                 (recur (first without-null))
+                 :union))
+      (keyword (col-type->field-name col-type)))))
 
 #_{:clj-kondo/ignore [:unused-binding]}
 (defmulti arrow-type->col-type

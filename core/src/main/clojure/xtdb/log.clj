@@ -1,13 +1,13 @@
 (ns xtdb.log
-  (:require xtdb.api.protocols
-            [xtdb.util :as util]
-            [clojure.tools.logging :as log])
-  (:import xtdb.api.protocols.TransactionInstant
-           java.lang.AutoCloseable
+  (:require [clojure.tools.logging :as log]
+            xtdb.api.protocols
+            [xtdb.util :as util])
+  (:import java.lang.AutoCloseable
            java.nio.ByteBuffer
            (java.nio.channels ClosedChannelException)
            java.time.Duration
-           java.util.concurrent.Semaphore))
+           java.util.concurrent.Semaphore
+           xtdb.api.protocols.TransactionInstant))
 
 (set! *unchecked-math* :warn-on-boxed)
 

@@ -10,9 +10,8 @@
             [xtdb.types :as types]
             [xtdb.util :as util]
             [xtdb.vector :as vec]
-            [xtdb.vector.indirect :as iv]
             [xtdb.vector.writer :as vw])
-  (:import [clojure.lang MapEntry]
+  (:import [clojure.lang Keyword MapEntry]
            (java.io ByteArrayInputStream ByteArrayOutputStream)
            java.lang.AutoCloseable
            java.nio.ByteBuffer
@@ -22,13 +21,13 @@
            (java.util.function BiFunction Consumer Function)
            (java.util.stream IntStream)
            (org.apache.arrow.memory ArrowBuf BufferAllocator)
-           (org.apache.arrow.vector FieldVector IntVector ValueVector VectorSchemaRoot)
-           (org.apache.arrow.vector.complex DenseUnionVector ListVector StructVector)
+           (org.apache.arrow.vector FieldVector IntVector VectorSchemaRoot)
+           (org.apache.arrow.vector.complex ListVector StructVector)
            (org.apache.arrow.vector.types.pojo Schema)
            (org.roaringbitmap RoaringBitmap)
            xtdb.buffer_pool.IBufferPool
            xtdb.object_store.ObjectStore
-           (xtdb.vector IIndirectRelation IIndirectVector IVectorWriter)))
+           (xtdb.vector IVectorReader IVectorWriter RelationReader ValueVectorReader$DuvReader)))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -42,7 +41,7 @@
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (definterface IBlockMetadataWriter
-  (^long writeMetadata [^xtdb.vector.IIndirectVector liveCol])
+  (^long writeMetadata [^xtdb.vector.IVectorReader liveCol])
   (^void endBlock []))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
@@ -119,12 +118,12 @@
 (defn- ->chunk-metadata-obj-key [chunk-idx]
   (format "chunk-metadata/%s.transit.json" (util/->lex-hex-string chunk-idx)))
 
-(defn live-rel->chunk-metadata [^String table-name, ^IIndirectRelation live-rel]
+(defn live-rel->chunk-metadata [^String table-name, ^RelationReader live-rel]
   (when (pos? (.rowCount live-rel))
     (MapEntry/create table-name
-                     {:col-types (->> (for [^IIndirectVector live-col live-rel]
+                     {:col-types (->> (for [^IVectorReader live-col live-rel]
                                         (MapEntry/create (.getName live-col)
-                                                         (types/field->col-type (.getField (.getVector live-col)))))
+                                                         (types/field->col-type (.getField live-col))))
                                       (into {}))})))
 
 (defn- write-chunk-metadata ^java.nio.ByteBuffer [chunk-meta]
@@ -167,7 +166,7 @@
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (definterface NestedMetadataWriter
-  (appendNestedMetadata ^xtdb.metadata.ContentMetadataWriter [^xtdb.vector.IIndirectVector contentCol]))
+  (appendNestedMetadata ^xtdb.metadata.ContentMetadataWriter [^xtdb.vector.IVectorReader contentCol]))
 
 #_{:clj-kondo/ignore [:unused-binding]}
 (defmulti type->metadata-writer
@@ -194,41 +193,44 @@
                                                [:struct {'min [:union #{:null col-type}]
                                                          'max [:union #{:null col-type}]}]}])
 
-
-
         min-wtr (.structKeyWriter struct-wtr "min")
         ^FieldVector min-vec (.getVector min-wtr)
+        min-wp (.writerPosition min-wtr)
 
         max-wtr (.structKeyWriter struct-wtr "max")
-        ^FieldVector max-vec (.getVector max-wtr)]
+        ^FieldVector max-vec (.getVector max-wtr)
+        max-wp (.writerPosition max-wtr)]
 
     (reify NestedMetadataWriter
       (appendNestedMetadata [_ content-col]
-        (let [content-vec (.getVector content-col)]
-          (reify ContentMetadataWriter
-            (writeContentMetadata [_]
-              (.startStruct struct-wtr)
+        (reify ContentMetadataWriter
+          (writeContentMetadata [_]
+            (.startStruct struct-wtr)
 
-              (let [pos (.getPosition types-wp)
-                    min-comparator (expr.comp/->comparator content-col (vw/vec-wtr->rdr min-wtr) :nulls-last)
-                    max-comparator (expr.comp/->comparator content-col (vw/vec-wtr->rdr max-wtr) :nulls-first)]
+            (let [pos (.getPosition types-wp)
+                  min-copier (.rowCopier content-col min-wtr)
+                  max-copier (.rowCopier content-col max-wtr)
 
-                (.writeNull min-wtr nil)
-                (.writeNull max-wtr nil)
+                  min-comparator (expr.comp/->comparator content-col (vw/vec-wtr->rdr min-wtr) :nulls-last)
+                  max-comparator (expr.comp/->comparator content-col (vw/vec-wtr->rdr max-wtr) :nulls-first)]
 
-                (dotimes [values-idx (.getValueCount content-col)]
-                  (let [values-vec-idx (.getIndex content-col values-idx)]
-                    (when (or (.isNull min-vec pos)
-                              (and (not (.isNull content-vec values-vec-idx))
-                                   (neg? (.applyAsInt min-comparator values-idx pos))))
-                      (.copyFromSafe min-vec values-vec-idx pos content-vec))
+              (.writeNull min-wtr nil)
+              (.writeNull max-wtr nil)
 
-                    (when (or (doto (.isNull max-vec pos))
-                              (and (not (.isNull content-vec values-vec-idx))
-                                   (pos? (.applyAsInt max-comparator values-idx pos))))
-                      (.copyFromSafe max-vec values-vec-idx pos content-vec))))
+              (dotimes [value-idx (.valueCount content-col)]
+                (when (or (.isNull min-vec pos)
+                          (and (not (= :null (.getLeg content-col value-idx)))
+                               (neg? (.applyAsInt min-comparator value-idx pos))))
+                  (.setPosition min-wp pos)
+                  (.copyRow min-copier value-idx))
 
-                (.endStruct struct-wtr)))))))))
+                (when (or (.isNull max-vec pos)
+                          (and (not (= :null (.getLeg content-col value-idx)))
+                               (pos? (.applyAsInt max-comparator value-idx pos))))
+                  (.setPosition max-wp pos)
+                  (.copyRow max-copier value-idx)))
+
+              (.endStruct struct-wtr))))))))
 
 (doseq [type-head #{:int :float :utf8 :varbinary :fixed-size-binary :timestamp-tz :timestamp-local :date :interval :time-local}]
   (defmethod type->metadata-writer type-head [_write-col-meta! metadata-root col-type] (->min-max-type-handler metadata-root col-type)))
@@ -243,23 +245,12 @@
         list-type-wtr (.structKeyWriter types-wtr (types/col-type->field-name col-type) [:union #{:null :i32}])]
     (reify NestedMetadataWriter
       (appendNestedMetadata [_ content-col]
-        (let [list-rdr (.listReader content-col)
-              ^ListVector content-vec (.getVector content-col)
-              data-vec (.getDataVector content-vec)
-              idxs (RoaringBitmap.)]
-          (dotimes [idx (.getValueCount content-col)]
-            (.add idxs
-                  (.getElementStartIndex list-rdr idx)
-                  (.getElementEndIndex list-rdr idx)))
+        (write-col-meta! (.listElementReader ^IVectorReader content-col))
 
-          ;; HACK needs to be selected - content-col is technically indirect,
-          ;; I think this assumes there's no actual indirection in practice
-          (write-col-meta! (iv/->indirect-vec data-vec (.toArray idxs)))
-
-          (let [data-meta-idx (dec (.getPosition types-wp))]
-            (reify ContentMetadataWriter
-              (writeContentMetadata [_]
-                (.writeInt list-type-wtr data-meta-idx)))))))))
+        (let [data-meta-idx (dec (.getPosition types-wp))]
+          (reify ContentMetadataWriter
+            (writeContentMetadata [_]
+              (.writeInt list-type-wtr data-meta-idx))))))))
 
 (defmethod type->metadata-writer :struct [write-col-meta! ^IVectorWriter types-wtr, col-type]
   (let [types-wp (.writerPosition types-wtr)
@@ -269,20 +260,18 @@
         struct-type-el-wtr (.listElementWriter struct-type-wtr)]
     (reify NestedMetadataWriter
       (appendNestedMetadata [_ content-col]
-        (let [struct-rdr (.structReader content-col)
-              struct-ks (vec (.structKeys struct-rdr))
-              sub-col-count (count struct-ks)
-              sub-col-idxs (int-array sub-col-count)]
+        (let [struct-keys (.structKeys content-col)
+              sub-col-idxs (IntStream/builder)]
 
-          (dotimes [n sub-col-count]
-            (write-col-meta! (.readerForKey struct-rdr (nth struct-ks n)))
-            (aset sub-col-idxs n (dec (.getPosition types-wp))))
+          (doseq [^String struct-key struct-keys]
+            (write-col-meta! (.structKeyReader content-col struct-key))
+            (.add sub-col-idxs (dec (.getPosition types-wp))))
 
           (reify ContentMetadataWriter
             (writeContentMetadata [_]
               (.startList struct-type-wtr)
-              (dotimes [n sub-col-count]
-                (.writeInt struct-type-el-wtr (aget sub-col-idxs n)))
+              (doseq [sub-col-idx (.toArray (.build sub-col-idxs))]
+                (.writeInt struct-type-el-wtr sub-col-idx))
               (.endList struct-type-wtr))))))))
 
 (defn ->cols-meta-wtr ^xtdb.metadata.IBlockMetadataWriter [^IVectorWriter cols-wtr]
@@ -295,38 +284,28 @@
 
         type-metadata-writers (HashMap.)]
 
-    (letfn [(->nested-meta-writer [^IIndirectVector values-col]
+    (letfn [(->nested-meta-writer [^IVectorReader values-col]
               (let [^NestedMetadataWriter nested-meta-writer
-                    (.computeIfAbsent type-metadata-writers (types/field->col-type (.getField (.getVector values-col)))
+                    (.computeIfAbsent type-metadata-writers (types/field->col-type (.getField values-col))
                                       (reify Function
                                         (apply [_ col-type]
                                           (type->metadata-writer (partial write-col-meta! false) types-wtr col-type))))]
 
                 (.appendNestedMetadata nested-meta-writer values-col)))
 
-            (write-col-meta! [root-col?, ^IIndirectVector content-col]
-              (let [content-writers (if-not (instance? DenseUnionVector (.getVector content-col))
-                                      [(->nested-meta-writer content-col)]
+            (write-col-meta! [root-col?, ^IVectorReader content-col]
+              (let [content-writers (if-let [rdrs (.metadataReaders content-col)]
+                                      (->> rdrs
+                                           (into [] (keep (fn [^IVectorReader rdr]
+                                                            (when-not (zero? (.valueCount rdr))
+                                                              (->nested-meta-writer rdr))))))
 
-                                      (let [^DenseUnionVector content-vec (.getVector content-col)]
-                                        (->> (range (count (seq content-vec)))
-                                             (into [] (keep (fn [^long type-id]
-                                                              (let [^ValueVector values-vec (.getVectorByType content-vec type-id)
-                                                                    sel (IntStream/builder)]
-
-                                                                (dotimes [idx (.getValueCount content-col)]
-                                                                  (let [idx (.getIndex content-col idx)]
-                                                                    (when (= type-id (.getTypeId content-vec idx))
-                                                                      (.add sel (.getOffset content-vec idx)))))
-
-                                                                (let [values-col (iv/->indirect-vec values-vec (.toArray (.build sel)))]
-                                                                  (when-not (zero? (.getValueCount values-col))
-                                                                    (->nested-meta-writer values-col))))))))))]
+                                      [(->nested-meta-writer content-col)])]
 
                 (.startStruct cols-wtr)
                 (.writeBoolean root-col-wtr root-col?)
                 (.writeObject col-name-wtr (.getName content-col))
-                (.writeLong count-wtr (.getValueCount content-col))
+                (.writeLong count-wtr (.valueCount content-col))
                 (bloom/write-bloom bloom-wtr content-col)
 
                 (.startStruct types-wtr)
@@ -338,7 +317,7 @@
 
       (reify IBlockMetadataWriter
         (writeMetadata [_ live-col]
-          (if-not (zero? (.getValueCount live-col))
+          (if-not (zero? (.valueCount live-col))
             (do
               (write-col-meta! true live-col)
               (dec (.getPosition cols-wp)))

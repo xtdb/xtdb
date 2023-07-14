@@ -1,17 +1,17 @@
 package xtdb.vector;
 
-public interface IWriterPosition {
+public interface IVectorPosition {
     int getPosition();
     void setPosition(int position);
 
     int getPositionAndIncrement();
 
-    static IWriterPosition build() {
+    static IVectorPosition build() {
         return build(0);
     }
 
-    static IWriterPosition build(int initialPosition) {
-        return new IWriterPosition() {
+    static IVectorPosition build(int initialPosition) {
+        return new IVectorPosition() {
             private int position = initialPosition;
 
             @Override

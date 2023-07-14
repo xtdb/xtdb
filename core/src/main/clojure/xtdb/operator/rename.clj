@@ -4,11 +4,11 @@
             [xtdb.logical-plan :as lp]
             [xtdb.operator.scan :as scan]
             [xtdb.util :as util]
-            [xtdb.vector.indirect :as iv])
-  (:import xtdb.ICursor
-           [xtdb.vector IIndirectRelation IIndirectVector]
-           [java.util LinkedList Map]
-           java.util.function.Consumer))
+            [xtdb.vector.reader :as vr])
+  (:import (java.util LinkedList Map)
+           java.util.function.Consumer
+           xtdb.ICursor
+           (xtdb.vector IVectorReader RelationReader)))
 
 (defmethod lp/ra-expr :rename [_]
   (s/cat :op #{:ρ :rho :rename}
@@ -31,14 +31,14 @@
       (.tryAdvance in-cursor
                    (reify Consumer
                      (accept [_ in-rel]
-                       (let [^IIndirectRelation in-rel in-rel
+                       (let [^RelationReader in-rel in-rel
                              out-cols (LinkedList.)]
 
-                         (doseq [^IIndirectVector in-col in-rel
+                         (doseq [^IVectorReader in-col in-rel
                                  :let [col-name (str (get col-name-mapping (symbol (.getName in-col))))]]
                            (.add out-cols (.withName in-col col-name)))
 
-                         (.accept c (iv/->indirect-rel out-cols (.rowCount in-rel)))))))))
+                         (.accept c (vr/rel-reader out-cols (.rowCount in-rel)))))))))
 
   (close [_]
     (util/try-close in-cursor)))

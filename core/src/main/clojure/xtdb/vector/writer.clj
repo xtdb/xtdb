@@ -4,7 +4,7 @@
             [xtdb.types :as types]
             [xtdb.util :as util]
             [xtdb.vector :as vec]
-            [xtdb.vector.indirect :as iv])
+            [xtdb.vector.reader :as vr])
   (:import (clojure.lang Keyword)
            (java.lang AutoCloseable)
            (java.math BigDecimal)
@@ -20,7 +20,7 @@
            (org.apache.arrow.vector.types.pojo ArrowType$List ArrowType$Struct ArrowType$Union Field FieldType)
            xtdb.api.protocols.ClojureForm
            (xtdb.types IntervalDayTime IntervalMonthDayNano IntervalYearMonth)
-           (xtdb.vector IIndirectRelation IIndirectVector IIndirectVector IRelationWriter IRowCopier IRowCopier IVectorWriter IVectorWriter IWriterPosition IWriterPosition)
+           (xtdb.vector IRelationWriter RelationReader IRowCopier IVectorReader IVectorWriter IVectorPosition)
            (xtdb.vector.extensions SetType)))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -65,7 +65,7 @@
 (extend-protocol WriterFactory
   NullVector
   (->writer [arrow-vec]
-    (let [wp (IWriterPosition/build (.getValueCount arrow-vec))]
+    (let [wp (IVectorPosition/build (.getValueCount arrow-vec))]
       (reify IVectorWriter
         (getVector [_] arrow-vec)
         (clear [_] (.clear arrow-vec) (.setPosition wp 0))
@@ -84,7 +84,7 @@
 
   BitVector
   (->writer [arrow-vec]
-    (let [wp (IWriterPosition/build (.getValueCount arrow-vec))]
+    (let [wp (IVectorPosition/build (.getValueCount arrow-vec))]
       (reify IVectorWriter
         (getVector [_] arrow-vec)
         (clear [_] (.clear arrow-vec) (.setPosition wp 0))
@@ -98,7 +98,7 @@
   `(extend-protocol WriterFactory
      ~clazz
      (~'->writer [arrow-vec#]
-      (let [wp# (IWriterPosition/build (.getValueCount arrow-vec#))]
+      (let [wp# (IVectorPosition/build (.getValueCount arrow-vec#))]
         (reify IVectorWriter
           (~'getVector [_] arrow-vec#)
           (~'clear [_] (.clear arrow-vec#) (.setPosition wp# 0))
@@ -131,7 +131,7 @@
 (extend-protocol WriterFactory
   DateMilliVector
   (->writer [arrow-vec]
-    (let [wp (IWriterPosition/build (.getValueCount arrow-vec))]
+    (let [wp (IVectorPosition/build (.getValueCount arrow-vec))]
       (reify IVectorWriter
         (getVector [_] arrow-vec)
         (clear [_] (.clear arrow-vec) (.setPosition wp 0))
@@ -143,7 +143,7 @@
 (extend-protocol WriterFactory
   DecimalVector
   (->writer [arrow-vec]
-    (let [wp (IWriterPosition/build (.getValueCount arrow-vec))]
+    (let [wp (IVectorPosition/build (.getValueCount arrow-vec))]
       (reify IVectorWriter
         (getVector [_] arrow-vec)
         (clear [_] (.clear arrow-vec) (.setPosition wp 0))
@@ -195,7 +195,7 @@
 (extend-protocol WriterFactory
   DurationVector
   (->writer [arrow-vec]
-    (let [wp (IWriterPosition/build (.getValueCount arrow-vec))]
+    (let [wp (IVectorPosition/build (.getValueCount arrow-vec))]
       (reify IVectorWriter
         (getVector [_] arrow-vec)
         (clear [_] (.clear arrow-vec) (.setPosition wp 0))
@@ -207,7 +207,7 @@
 
   IntervalYearVector
   (->writer [arrow-vec]
-    (let [wp (IWriterPosition/build (.getValueCount arrow-vec))]
+    (let [wp (IVectorPosition/build (.getValueCount arrow-vec))]
       (reify IVectorWriter
         (getVector [_] arrow-vec)
         (clear [_] (.clear arrow-vec) (.setPosition wp 0))
@@ -222,7 +222,7 @@
 
   IntervalDayVector
   (->writer [arrow-vec]
-    (let [wp (IWriterPosition/build (.getValueCount arrow-vec))]
+    (let [wp (IVectorPosition/build (.getValueCount arrow-vec))]
       (reify IVectorWriter
         (getVector [_] arrow-vec)
         (clear [_] (.clear arrow-vec) (.setPosition wp 0))
@@ -244,7 +244,7 @@
 
   IntervalMonthDayNanoVector
   (->writer [arrow-vec]
-    (let [wp (IWriterPosition/build (.getValueCount arrow-vec))]
+    (let [wp (IVectorPosition/build (.getValueCount arrow-vec))]
       (reify IVectorWriter
         (getVector [_] arrow-vec)
         (clear [_] (.clear arrow-vec) (.setPosition wp 0))
@@ -316,7 +316,7 @@
 (extend-protocol WriterFactory
   VarCharVector
   (->writer [arrow-vec]
-    (let [wp (IWriterPosition/build (.getValueCount arrow-vec))]
+    (let [wp (IVectorPosition/build (.getValueCount arrow-vec))]
       (reify IVectorWriter
         (getVector [_] arrow-vec)
         (clear [_] (.clear arrow-vec) (.setPosition wp 0))
@@ -337,7 +337,7 @@
 
   VarBinaryVector
   (->writer [arrow-vec]
-    (let [wp (IWriterPosition/build (.getValueCount arrow-vec))]
+    (let [wp (IVectorPosition/build (.getValueCount arrow-vec))]
       (reify IVectorWriter
         (getVector [_] arrow-vec)
         (clear [_] (.clear arrow-vec) (.setPosition wp 0))
@@ -358,7 +358,7 @@
   FixedSizeBinaryVector
   (->writer [arrow-vec]
     (let [byte-width (.getByteWidth arrow-vec)
-          wp (IWriterPosition/build (.getValueCount arrow-vec))]
+          wp (IVectorPosition/build (.getValueCount arrow-vec))]
       (reify IVectorWriter
         (getVector [_] arrow-vec)
         (clear [_] (.clear arrow-vec) (.setPosition wp 0))
@@ -400,7 +400,7 @@
 (extend-protocol WriterFactory
   ListVector
   (->writer [arrow-vec]
-    (let [wp (IWriterPosition/build (.getValueCount arrow-vec))
+    (let [wp (IVectorPosition/build (.getValueCount arrow-vec))
           el-writer (->writer (.getDataVector arrow-vec))
           el-wp (.writerPosition el-writer)]
       (reify IVectorWriter
@@ -444,7 +444,7 @@
 
   StructVector
   (->writer [arrow-vec]
-    (let [wp (IWriterPosition/build (.getValueCount arrow-vec))
+    (let [wp (IVectorPosition/build (.getValueCount arrow-vec))
           writers (HashMap.)]
       (reify IVectorWriter
         (getVector [_] arrow-vec)
@@ -616,10 +616,14 @@
 
     (reify IRowCopier
       (copyRow [_ src-idx]
-        (let [type-id (.getTypeId src-vec src-idx)]
-          (assert (not (neg? type-id)))
-          (-> ^IRowCopier (aget copier-mapping type-id)
-              (.copyRow (.getOffset src-vec src-idx))))))))
+        (try
+          (let [type-id (.getTypeId src-vec src-idx)]
+            (assert (not (neg? type-id)))
+            (-> ^IRowCopier (aget copier-mapping type-id)
+                (.copyRow (.getOffset src-vec src-idx))))
+          (catch Throwable t
+            (prn :boom)
+            (throw t)))))))
 
 (defn- vec->duv-copier ^xtdb.vector.IRowCopier [^IVectorWriter dest-col, ^ValueVector src-vec]
   (let [field (.getField src-vec)
@@ -641,7 +645,7 @@
 (extend-protocol WriterFactory
   DenseUnionVector
   (->writer [duv]
-    (let [wp (IWriterPosition/build (.getValueCount duv))
+    (let [wp (IVectorPosition/build (.getValueCount duv))
           children (.getChildren (.getField duv))
           writers-by-type-id (ArrayList.)
           writers-by-type (HashMap.)
@@ -665,7 +669,7 @@
                 col-type (-> (.getVectorByType duv type-id)
                              (.getField)
                              (types/field->col-type)
-                             (types/col-type->duv-leg-key))]
+                             (types/col-type->leg))]
             (.put writers-by-type col-type child-wtr)
             (.put writers-by-name (.getName field) child-wtr)
             child-wtr))
@@ -698,7 +702,7 @@
                                   (.writerForTypeId this (.registerNewType this field))))))
 
           (writerForType [this col-type]
-            (.computeIfAbsent writers-by-type (types/col-type->duv-leg-key col-type)
+            (.computeIfAbsent writers-by-type (types/col-type->leg col-type)
                               (reify Function
                                 (apply [_ _]
                                   (let [field-name (types/col-type->field-name col-type)
@@ -794,7 +798,7 @@
     (doseq [v vs]
       (write-value! v (.writerForType writer (value->col-type v))))
 
-    (.setValueCount v (count vs))
+    (.syncValueCount writer)
 
     v))
 
@@ -816,13 +820,13 @@
    (->writer (-> (types/col-type->field col-name col-type)
                  (.createVector allocator)))))
 
-(defn ->rel-copier ^xtdb.vector.IRowCopier [^IRelationWriter rel-wtr, ^IIndirectRelation in-rel]
+(defn ->rel-copier ^xtdb.vector.IRowCopier [^IRelationWriter rel-wtr, ^RelationReader in-rel]
   (let [wp (.writerPosition rel-wtr)
-        copiers (vec (concat (for [^IIndirectVector in-vec in-rel]
+        copiers (vec (concat (for [^IVectorReader in-vec in-rel]
                                (.rowCopier in-vec (.writerForName rel-wtr (.getName in-vec))))
 
                              (for [absent-col-name (set/difference (set (keys rel-wtr))
-                                                                   (into #{} (map #(.getName ^IIndirectVector %)) in-rel))
+                                                                   (into #{} (map #(.getName ^IVectorReader %)) in-rel))
                                    :let [!writer (delay
                                                    (-> (.writerForName rel-wtr absent-col-name)
                                                        (.writerForType :absent)))]]
@@ -840,7 +844,7 @@
 
 (defn ->rel-writer ^xtdb.vector.IRelationWriter [^BufferAllocator allocator]
   (let [writers (LinkedHashMap.)
-        wp (IWriterPosition/build)]
+        wp (IVectorPosition/build)]
     (reify IRelationWriter
       (writerPosition [_] wp)
 
@@ -873,7 +877,7 @@
 
 (defn root->writer ^xtdb.vector.IRelationWriter [^VectorSchemaRoot root]
   (let [writers (LinkedHashMap.)
-        wp (IWriterPosition/build)]
+        wp (IVectorPosition/build)]
     (doseq [^ValueVector vec (.getFieldVectors root)]
       (.put writers (.getName vec) (->writer vec)))
 
@@ -907,11 +911,10 @@
       (close [this]
         (run! util/try-close (vals this))))))
 
-(defn struct-writer->rel-copier ^xtdb.vector.IRowCopier [^IVectorWriter vec-wtr, ^IIndirectRelation in-rel]
+(defn struct-writer->rel-copier ^xtdb.vector.IRowCopier [^IVectorWriter vec-wtr, ^RelationReader in-rel]
   (let [wp (.writerPosition vec-wtr)
-        copiers (for [^IIndirectVector src-vec in-rel]
-                  (.rowCopier (.structKeyWriter vec-wtr (.getName src-vec))
-                              (.getVector src-vec)))]
+        copiers (for [^IVectorReader src-vec in-rel]
+                  (.rowCopier src-vec (.structKeyWriter vec-wtr (.getName src-vec))))]
     (reify IRowCopier
       (copyRow [_ src-idx]
         (let [pos (.getPosition wp)]
@@ -933,30 +936,30 @@
                                       (.createVector allocator))]
      (doto res (write-vec! vs)))))
 
-(defn open-rel ^xtdb.vector.IIndirectRelation [vecs]
-  (iv/->indirect-rel (map iv/->direct-vec vecs)))
+(defn open-rel ^xtdb.vector.RelationReader [vecs]
+  (vr/rel-reader (map vr/vec->reader vecs)))
 
-(defn open-params ^xtdb.vector.IIndirectRelation [allocator params-map]
+(defn open-params ^xtdb.vector.RelationReader [allocator params-map]
   (open-rel (for [[k v] params-map]
               (open-vec allocator k [v]))))
 
-(def empty-params (iv/->indirect-rel [] 1))
+(def empty-params (vr/rel-reader [] 1))
 
-(defn vec-wtr->rdr ^xtdb.vector.IIndirectVector [^xtdb.vector.IVectorWriter w]
-  (iv/->direct-vec (.getVector (doto w (.syncValueCount)))))
+(defn vec-wtr->rdr ^xtdb.vector.IVectorReader [^xtdb.vector.IVectorWriter w]
+  (vr/vec->reader (.getVector (doto w (.syncValueCount)))))
 
-(defn rel-wtr->rdr ^xtdb.vector.IIndirectRelation [^xtdb.vector.IRelationWriter w]
-  (iv/->indirect-rel (map vec-wtr->rdr (vals w))
-                     (.getPosition (.writerPosition w))))
+(defn rel-wtr->rdr ^xtdb.vector.RelationReader [^xtdb.vector.IRelationWriter w]
+  (vr/rel-reader (map vec-wtr->rdr (vals w))
+                 (.getPosition (.writerPosition w))))
 
-(defn append-vec [^IVectorWriter vec-writer, ^IIndirectVector in-col]
+(defn append-vec [^IVectorWriter vec-writer, ^IVectorReader in-col]
   (let [row-copier (.rowCopier in-col vec-writer)]
-    (dotimes [src-idx (.getValueCount in-col)]
+    (dotimes [src-idx (.valueCount in-col)]
       (.copyRow row-copier src-idx))))
 
-(defn append-rel [^IRelationWriter dest-rel, ^IIndirectRelation src-rel]
-  (doseq [^IIndirectVector src-col src-rel
-          :let [col-type (types/field->col-type (.getField (.getVector src-col)))
+(defn append-rel [^IRelationWriter dest-rel, ^RelationReader src-rel]
+  (doseq [^IVectorReader src-col src-rel
+          :let [col-type (types/field->col-type (.getField src-col))
                 ^IVectorWriter vec-writer (.writerForName dest-rel (.getName src-col) col-type)]]
     (append-vec vec-writer src-col))
 

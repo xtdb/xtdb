@@ -1,19 +1,20 @@
 (ns xtdb.operator.project
   (:require [clojure.spec.alpha :as s]
+            [clojure.string :as str]
             [xtdb.expression :as expr]
             [xtdb.logical-plan :as lp]
             [xtdb.util :as util]
-            [xtdb.vector.indirect :as iv]
-            [clojure.string :as str])
-  (:import xtdb.ICursor
-           xtdb.operator.IProjectionSpec
-           xtdb.vector.IIndirectRelation
-           java.time.Clock
-           java.util.function.Consumer
+            [xtdb.vector.reader :as vr]
+            [xtdb.vector.writer :as vw])
+  (:import java.time.Clock
            java.util.ArrayList
            java.util.List
+           java.util.function.Consumer
            org.apache.arrow.memory.BufferAllocator
-           org.apache.arrow.vector.BigIntVector))
+           org.apache.arrow.vector.BigIntVector
+           xtdb.ICursor
+           xtdb.operator.IProjectionSpec
+           xtdb.vector.RelationReader))
 
 (s/def ::append-columns? boolean?)
 
@@ -43,7 +44,7 @@
   (getColumnName [_] col-name)
   (getColumnType [_] col-type)
   (project [_ _allocator in-rel _params]
-    (.vectorForName in-rel (str col-name))))
+    (.readerForName in-rel (str col-name))))
 
 (defn ->identity-projection-spec ^xtdb.operator.IProjectionSpec [col-name col-type]
   (->IdentityProjectionSpec col-name col-type))
@@ -54,21 +55,20 @@
       (getColumnName [_] col-name)
       (getColumnType [_] :i64)
       (project [_ allocator in-rel _params]
-        (util/with-close-on-catch [out-vec (BigIntVector. (str col-name) allocator)]
+        (util/with-close-on-catch [row-num-wtr (vw/->writer (BigIntVector. (str col-name) allocator))]
           (let [start-row-num (aget row-num 0)
                 row-count (.rowCount in-rel)]
-            (.setValueCount out-vec row-count)
             (dotimes [idx row-count]
-              (.set out-vec idx (+ idx start-row-num)))
+              (.writeLong row-num-wtr (+ idx start-row-num)))
             (aset row-num 0 (+ start-row-num row-count))
-            (iv/->direct-vec out-vec)))))))
+            (vw/vec-wtr->rdr row-num-wtr)))))))
 
 (defrecord RenameProjectionSpec [to-name from-name col-type]
   IProjectionSpec
   (getColumnName [_] to-name)
   (getColumnType [_] col-type)
   (project [_ _allocator in-rel _params]
-    (-> (.vectorForName in-rel (str from-name))
+    (-> (.readerForName in-rel (str from-name))
         (.withName (str to-name)))))
 
 (defn ->rename-projection-spec ^xtdb.operator.IProjectionSpec [to-name from-name col-type]
@@ -84,7 +84,7 @@
     (.tryAdvance in-cursor
                  (reify Consumer
                    (accept [_ read-rel]
-                     (let [^IIndirectRelation read-rel read-rel
+                     (let [^RelationReader read-rel read-rel
                            close-cols (ArrayList.)
                            out-cols (ArrayList.)]
                        (try
@@ -95,7 +95,7 @@
                                (.add close-cols out-col))
                              (.add out-cols out-col)))
 
-                         (.accept c (iv/->indirect-rel out-cols (.rowCount read-rel)))
+                         (.accept c (vr/rel-reader out-cols (.rowCount read-rel)))
 
                          (finally
                            (run! util/try-close close-cols))))))))

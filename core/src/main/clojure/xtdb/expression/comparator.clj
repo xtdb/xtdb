@@ -2,9 +2,8 @@
   (:require [xtdb.expression :as expr]
             [xtdb.types :as types]
             [xtdb.util :as util])
-  (:import (xtdb.vector IIndirectVector)
-           java.util.HashMap
-           java.util.function.IntBinaryOperator))
+  (:import java.util.function.IntBinaryOperator
+           (xtdb.vector IVectorReader)))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -74,8 +73,8 @@
                                  {:var->col-type {left-col-sym left-col-type, right-col-sym right-col-type}
                                   :extract-vecs-from-rel? false})]
 
-          (-> `(fn [~(-> left-col-sym (expr/with-tag IIndirectVector))
-                    ~(-> right-col-sym (expr/with-tag IIndirectVector))]
+          (-> `(fn [~(-> left-col-sym (expr/with-tag IVectorReader))
+                    ~(-> right-col-sym (expr/with-tag IVectorReader))]
                  (let [~@(expr/batch-bindings emitted-expr)]
                    (reify IntBinaryOperator
                      (~'applyAsInt [_# ~left-idx-sym ~right-idx-sym]
@@ -84,9 +83,9 @@
               (eval))))
       (util/lru-memoize)))
 
-(defn ->comparator ^java.util.function.IntBinaryOperator [^IIndirectVector left-col, ^IIndirectVector right-col, null-ordering]
-  (let [left-field (.getField (.getVector left-col))
-        right-field (.getField (.getVector right-col))
+(defn ->comparator ^java.util.function.IntBinaryOperator [^IVectorReader left-col, ^IVectorReader right-col, null-ordering]
+  (let [left-field (.getField left-col)
+        right-field (.getField right-col)
         f (build-comparator (types/field->col-type left-field)
                             (types/field->col-type right-field)
                             null-ordering)]

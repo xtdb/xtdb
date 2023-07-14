@@ -10,7 +10,7 @@ public interface IVectorWriter extends IValueWriter, AutoCloseable {
      *
      * <p> Automatically incremented by the various `write` methods, and any {@link IVectorWriter#rowCopier}s. </p>
      */
-    IWriterPosition writerPosition();
+    IVectorPosition writerPosition();
 
     ValueVector getVector();
 

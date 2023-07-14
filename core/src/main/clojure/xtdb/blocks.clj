@@ -1,8 +1,8 @@
 (ns xtdb.blocks
   (:require [xtdb.util :as util])
-  (:import xtdb.ICursor
-           java.util.Iterator
-           [org.apache.arrow.vector VectorSchemaRoot]))
+  (:import [java.util Arrays Iterator]
+           [org.apache.arrow.vector VectorSchemaRoot]
+           xtdb.ICursor))
 
 (deftype SliceCursor [^VectorSchemaRoot root
                       ^Iterator row-counts
@@ -29,5 +29,5 @@
     (when current-slice
       (.close current-slice))))
 
-(defn ->slices ^xtdb.ICursor [^VectorSchemaRoot root, ^Iterable row-counts]
-  (SliceCursor. root (.iterator row-counts) 0 nil))
+(defn ->slices ^xtdb.ICursor [^VectorSchemaRoot root, ^ints row-counts]
+  (SliceCursor. root (.iterator (Arrays/stream row-counts)) 0 nil))
