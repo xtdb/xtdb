@@ -20,6 +20,7 @@
             <option value="$PROJECT_DIR$/modules/c1-import" />
             <option value="$PROJECT_DIR$/modules/datasets" />
             <option value="$PROJECT_DIR$/modules/flight-sql" />
+            <option value="$PROJECT_DIR$/modules/google-cloud" />
             <option value="$PROJECT_DIR$/modules/jdbc" />
             <option value="$PROJECT_DIR$/modules/kafka" />
             <option value="$PROJECT_DIR$/modules/s3" />
