@@ -19,5 +19,4 @@ dependencies {
     api(project(":core"))
 
     api("com.google.cloud", "google-cloud-storage", "2.23.0")
-    api("com.google.guava", "guava", "31.0.1-jre")
 }
