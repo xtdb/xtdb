@@ -1,5 +1,0 @@
-= Java (pgwire)
-
-You can connect to the XTDB pgwire server with JDBC.
-
-TODO: provide an example

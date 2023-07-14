@@ -1,8 +1,0 @@
-= Clients
-
-== Postgres Wire Protocol
-
-* xref:pg.adoc[Postgres Wire Protocol Overview]
-* xref:pg-psql.adoc[`psql`]
-* xref:pg-python.adoc[Python]
-* xref:pg-java.adoc[Java (JDBC)]

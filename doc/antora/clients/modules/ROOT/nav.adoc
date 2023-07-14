@@ -1,3 +1,0 @@
-* xref:pg-psql.adoc[`psql` (pgwire)]
-* xref:pg-python.adoc[Python (pgwire)]
-* xref:pg-java.adoc[Java (pgwire)]

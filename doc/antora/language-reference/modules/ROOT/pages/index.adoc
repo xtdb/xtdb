@@ -1,7 +1,0 @@
-= Language Reference
-
-* xref:sql-transactions.adoc[SQL Transactions]
-* xref:sql-queries.adoc[SQL Queries]
-* xref:sql-time-queries.adoc[SQL Time Queries]
-* xref:sql-data-types.adoc[SQL Data Types]
-* xref:sql-grammar.adoc[Complete SQL Grammar Reference]
