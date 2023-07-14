@@ -29,7 +29,7 @@
 (deftype LiveTrieRenderer [^ValueVector iid-vec]
   LiveTrie$NodeVisitor
   (visitBranch [this branch]
-    (into [] (mapcat #(.accept ^LiveTrie$Node % this)) (.children branch)))
+    (into [] (mapcat #(some-> ^LiveTrie$Node % (.accept this))) (.children branch)))
 
   (visitLeaf [_ leaf]
     (mapv #(vec (.getObject iid-vec %)) (.data leaf))))
@@ -38,7 +38,7 @@
                             ^:unsychronized-mutable ^int current-page-idx]
   ArrowHashTrie$NodeVisitor
   (visitBranch [this branch]
-    (mapcat #(.accept ^ArrowHashTrie$Node % this) (.getChildren branch)))
+    (mapcat #(some-> ^ArrowHashTrie$Node % (.accept this)) (.getChildren branch)))
 
   (visitLeaf [_ leaf]
     ;; would be good if ArrowFileReader accepted a page-idx...

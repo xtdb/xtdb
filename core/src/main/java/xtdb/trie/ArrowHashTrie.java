@@ -47,8 +47,8 @@ public class ArrowHashTrie {
 
         public Node[] getChildren() {
             return IntStream.range(branchVec.getElementStartIndex(branchVecIdx), branchVec.getElementEndIndex(branchVecIdx))
-                    .mapToObj(childIdx -> forIndex(branchElVec.get(childIdx)))
-                    .toArray(Node[]::new);
+                .mapToObj(childIdx -> branchElVec.isNull(childIdx) ? null : forIndex(branchElVec.get(childIdx)))
+                .toArray(Node[]::new);
         }
 
         @Override
