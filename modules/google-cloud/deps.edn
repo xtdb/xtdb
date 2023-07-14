@@ -1,7 +1,0 @@
-{:paths ["src/main/clojure" "target/classes"]
- 
- :deps {com.xtdb.labs/xtdb-api {:local/root "../../api"}
-        com.xtdb.labs/xtdb-core {:local/root "../../core"}
-
-        com.google.cloud/google-cloud-storage {:mvn/version "2.23.0"}
-        com.google.guava/guava {:mvn/version "31.0.1-jre"}}}
