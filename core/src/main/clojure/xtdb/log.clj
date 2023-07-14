@@ -124,3 +124,26 @@
 (defn ->notifying-subscriber-handler [latest-submitted-tx-id]
   (->NotifyingSubscriberHandler (atom {:latest-submitted-tx-id latest-submitted-tx-id
                                        :semaphores #{}})))
+
+;; header bytes
+(def ^:const hb-user-arrow-transaction
+  "Header byte for log records representing an arrow user transaction.
+
+  A standard arrow stream IPC buffer will contain this byte, so you do not need to prefix."
+  255)
+
+(def ^:const hb-flush-chunk
+  "Header byte for log records representing a signal to flush the live chunk to durable storage.
+
+  Can be useful to protect against data loss potential when a retention period is used for the log, so messages do not remain in the log forever.
+
+  Record layout:
+
+  - header (byte=2)
+
+  - expected-last-tx-id in previous chunk (long)
+  If this tx-id match the last tx-id who has been indexed in durable storage, then this signal is ignored.
+  This is to avoid a herd effect in multi-node environments where multiple flush signals for the same chunk might be received.
+
+  See xtdb.stagnant-log-flusher"
+  2)

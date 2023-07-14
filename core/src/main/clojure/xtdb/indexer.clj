@@ -47,7 +47,9 @@
 (definterface IIndexer
   (^xtdb.api.protocols.TransactionInstant indexTx [^xtdb.api.protocols.TransactionInstant tx
                                                    ^org.apache.arrow.vector.VectorSchemaRoot txRoot])
-  (^xtdb.api.protocols.TransactionInstant latestCompletedTx []))
+  (^xtdb.api.protocols.TransactionInstant latestCompletedTx [])
+  (^xtdb.api.protocols.TransactionInstant latestCompletedChunkTx [])
+  (^void forceFlush [^xtdb.api.protocols.TransactionInstant txKey ^long expected-last-chunk-tx-id]))
 
 (defprotocol Finish
   (^void finish-chunk! [_]))
@@ -453,6 +455,11 @@
 
     (.addRows row-counter 1)))
 
+(defn- get-force-flush-tx-id [^DenseUnionVector tx-ops-vec tx-op-idx]
+  (let [flush-vec (.getVectorByType tx-ops-vec 6)
+        offset (.getOffset tx-ops-vec tx-op-idx)]
+    (.getObject flush-vec offset)))
+
 (deftype Indexer [^BufferAllocator allocator
                   ^ObjectStore object-store
                   ^IMetadataManager metadata-mgr
@@ -461,6 +468,8 @@
                   ^ILiveIndex live-idx
 
                   ^:volatile-mutable ^TransactionInstant latest-completed-tx
+                  ^:volatile-mutable ^TransactionInstant latest-completed-chunk-tx
+
                   ^RowCounter row-counter
                   ^long rows-per-chunk
 
@@ -540,6 +549,12 @@
 
         tx-key)))
 
+  (forceFlush [this tx-key expected-last-chunk-tx-id]
+    (when (= (:tx-id latest-completed-chunk-tx -1) expected-last-chunk-tx-id)
+      (finish-chunk! this))
+
+    (set! (.-latest_completed_tx this) tx-key))
+
   IWatermarkSource
   (openWatermark [this tx-key]
     (letfn [(maybe-existing-wm []
@@ -570,6 +585,7 @@
                 (.unlock wm-lock wm-lock-stamp)))))))
 
   (latestCompletedTx [_] latest-completed-tx)
+  (latestCompletedChunkTx [_] latest-completed-chunk-tx)
 
   Finish
   (finish-chunk! [this]
@@ -582,6 +598,7 @@
                      :tables table-metadata}))
 
     (.nextChunk row-counter)
+    (set! (.-latest_completed_chunk_tx this) latest-completed-tx)
 
     (let [wm-lock-stamp (.writeLock wm-lock)]
       (try
@@ -615,6 +632,8 @@
     (->Indexer allocator object-store metadata-mgr scan-emitter ra-src live-index
 
                latest-completed-tx
+               latest-completed-tx
+
                (RowCounter. next-chunk-idx)
                rows-per-chunk
 

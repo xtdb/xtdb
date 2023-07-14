@@ -3,13 +3,14 @@
             xtdb.api.protocols
             [xtdb.await :as await]
             xtdb.indexer
-            xtdb.log
+            [xtdb.log :as xt-log]
             xtdb.operator.scan
             [xtdb.util :as util]
             xtdb.watermark
             [juxt.clojars-mirrors.integrant.core :as ig])
   (:import xtdb.api.protocols.TransactionInstant
            xtdb.indexer.IIndexer
+           (java.nio ByteBuffer)
            [xtdb.log Log LogSubscriber]
            java.lang.AutoCloseable
            (java.util.concurrent CompletableFuture PriorityBlockingQueue TimeUnit)
@@ -28,6 +29,11 @@
              opts)
       (util/maybe-update :poll-sleep-duration util/->duration)))
 
+(defn- get-bb-long [^ByteBuffer buf ^long pos default]
+  (if (< (+ pos 8) (.limit buf))
+    (.getLong buf pos)
+    default))
+
 (defmethod ig/init-key :xtdb/ingester [_ {:keys [^BufferAllocator allocator, ^Log log, ^IIndexer indexer]}]
   (let [!cancel-hook (promise)
         awaiters (PriorityBlockingQueue.)
@@ -43,29 +49,39 @@
                       (throw (InterruptedException.))
 
                       (try
-                        (with-open [tx-ops-ch (util/->seekable-byte-channel (.record record))
-                                    sr (ArrowStreamReader. tx-ops-ch allocator)
-                                    tx-root (.getVectorSchemaRoot sr)]
-                          (.loadNextBatch sr)
 
-                          (let [^TimeStampMicroTZVector system-time-vec (.getVector tx-root "system-time")
-                                ^TransactionInstant tx-key (cond-> (.tx record)
-                                                             (not (.isNull system-time-vec 0))
-                                                             (assoc :system-time (-> (.get system-time-vec 0) (util/micros->instant))))
-                                latest-completed-tx (.latestCompletedTx indexer)]
+                        (condp = (Byte/toUnsignedInt (.get ^ByteBuffer (.-record record) 0))
+                          xt-log/hb-user-arrow-transaction
+                          (with-open [tx-ops-ch (util/->seekable-byte-channel (.record record))
+                                      sr (ArrowStreamReader. tx-ops-ch allocator)
+                                      tx-root (.getVectorSchemaRoot sr)]
+                            (.loadNextBatch sr)
 
-                            (if (and (not (nil? latest-completed-tx))
-                                     (neg? (compare (.system-time tx-key)
-                                                    (.system-time latest-completed-tx))))
-                              ;; TODO: we don't yet have the concept of an aborted tx
-                              ;; so anyone awaiting this tx will have a Bad Time™.
-                              (log/warnf "specified system-time '%s' older than current tx '%s'"
-                                         (pr-str tx-key)
-                                         (pr-str latest-completed-tx))
+                            (let [^TimeStampMicroTZVector system-time-vec (.getVector tx-root "system-time")
+                                  ^TransactionInstant tx-key (cond-> (.tx record)
+                                                                     (not (.isNull system-time-vec 0))
+                                                                     (assoc :system-time (-> (.get system-time-vec 0) (util/micros->instant))))
+                                  latest-completed-tx (.latestCompletedTx indexer)]
 
-                              (do
-                                (.indexTx indexer tx-key tx-root)
-                                (await/notify-tx tx-key awaiters)))))
+                              (if (and (not (nil? latest-completed-tx))
+                                       (neg? (compare (.system-time tx-key)
+                                                      (.system-time latest-completed-tx))))
+                                ;; TODO: we don't yet have the concept of an aborted tx
+                                ;; so anyone awaiting this tx will have a Bad Time™.
+                                (log/warnf "specified system-time '%s' older than current tx '%s'"
+                                           (pr-str tx-key)
+                                           (pr-str latest-completed-tx))
+
+                                (do
+                                  (.indexTx indexer tx-key tx-root)
+                                  (await/notify-tx tx-key awaiters)))))
+
+                          xt-log/hb-flush-chunk
+                          (let [expected-chunk-tx-id (get-bb-long (:record record) 1 -1)]
+                            (log/debugf "received flush-chunk signal: %d" expected-chunk-tx-id)
+                            (.forceFlush indexer (:tx record) expected-chunk-tx-id))
+
+                          (throw (IllegalStateException. (format "Unrecognized log record type %d" (Byte/toUnsignedInt (.get ^ByteBuffer (.-record record) 0))))))
 
                         (catch Throwable e
                           (reset! !ingester-error e)
