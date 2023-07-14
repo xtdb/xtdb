@@ -1,0 +1,61 @@
+# Google Cloud Module
+
+Within our XTDB node, we can make use of Google Cloud Services for certain purposes. Currently, we can:
+
+* Use *Google Cloud Storage* as the XTDB Object Store.
+
+### Project Dependency 
+
+In order to use any of the Google Cloud services, you will need to include a dependency on the `xtdb-google-cloud` module.
+
+_deps.edn_
+```
+com.xtdb.labs/xtdb-google-cloud {:mvn/version "2.0.0-SNAPSHOT"}
+```
+
+_pom.xml_
+```
+<dependency>
+    <groupId>com.xtdb.labs</groupId>
+    <artifactId>xtdb-google-cloud</artifactId>
+    <version>2.0.0-SNAPSHOT</version>
+</dependency>
+```
+
+### Authentication
+
+Authentication for both the document store and checkpoint store components within the module is handled via Google’s "Application Default Credentials" - see the https://github.com/googleapis/google-auth-library-java/blob/main/README.md#application-default-credentials[*relevant documentation*] to get set up. You will need to setup authentication using any of the methods listed within the documentation to be able to make use of the operations inside the modules. 
+
+## Google Cloud Storage Object Store
+
+We can swap out the implementation of the object store with one based on Google Cloud Blob Storage. To do so, we add the `xtdb.google-cloud/blob-object-store` key within the integrant config for our node, alongside any config:
+```clojure
+{
+  ...
+  {:xtdb.google-cloud/blob-object-store {:project-id "your-project-id"
+                                         :bucket "your-storage-bucket"}}
+  ...
+}
+```
+
+### Parameters
+
+These are the following parameters that can be passed within the config for our `xtdb.google-cloud/blob-object-store`:
+[cols="1,1,2,1"]
+|===
+| *Name* | *Type* | *Description* | *Required?*
+| `project-id`
+| String
+| The name of the GCP project that the bucket is contained within
+| Yes
+
+| `bucket`
+| String 
+| The cloud storage bucket which the documents will be stored within
+| Yes
+
+|`prefix`
+| String 
+| A string to prefix all of your files with - for example, if "foo" is provided all xtdb files will be located under a "foo" directory
+| No
+|=== 

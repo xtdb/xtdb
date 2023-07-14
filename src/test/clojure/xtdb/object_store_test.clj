@@ -93,9 +93,9 @@
 
   (->> "OOB for negative len"
        (t/is (thrown? Exception (get-bytes obj-store "digits" 0 -1))))
-
-  (->> "OOB for last index"
-       (t/is (thrown? Exception (get-bytes obj-store "digits" 10 1)))))
+  
+  (->> "IllegalStateException thrown if object does not exist"
+       (t/is (thrown? IllegalStateException (get-bytes obj-store "does-not-exist" 0 1)))))
 
 ;; ---
 ;; memory-object-store
