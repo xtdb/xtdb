@@ -2364,3 +2364,172 @@
                  '{:find [v]
                    :where [(match :xt-docs [{:xt/id 2} v] {:for-valid-time :all-time})]}))
         "no zero width valid-time intervals"))
+
+
+(t/deftest with-match-recursive
+  (t/testing "transitive closure"
+    (let [graph [{:x "a" :y "b"}
+                 {:x "b" :y "c"}
+                 {:x "c" :y "d"}
+                 {:x "d" :y "a"}]]
+      (xt/submit-tx tu/*node* (map-indexed (fn [i edge] [:put :graph (assoc edge :xt/id i)]) graph))
+
+      (t/is (=  [{:start "a", :end "b"}
+                 {:start "b", :end "c"}
+                 {:start "c", :end "d"}
+                 {:start "d", :end "a"}
+                 {:start "a", :end "c"}
+                 {:start "b", :end "d"}
+                 {:start "c", :end "a"}
+                 {:start "d", :end "b"}
+                 {:start "a", :end "d"}
+                 {:start "b", :end "a"}
+                 {:start "c", :end "b"}
+                 {:start "d", :end "c"}
+                 {:start "a", :end "a"}
+                 {:start "b", :end "b"}
+                 {:start "c", :end "c"}
+                 {:start "d", :end "d"}]
+                (xt/q tu/*node*
+                      '{:find [start end]
+                        :where [(match-recursive
+                                 :closure {:x start :y end}
+                                 [{:find [x y]
+                                   :where [(match :graph [x y])]}
+                                  {:find [x y]
+                                   :where [(match :closure {:x x :y z})
+                                           (match :closure {:x z :y y})]}])]})))))
+
+  (t/testing "fibonacci sequence"
+    (xt/submit-tx tu/*node* [[:put :fib-base {:xt/id "fib-base" :a 0 :b 1 :cnt 1}]])
+
+    (t/is (= [{:b 1} {:b 1} {:b 2} {:b 3} {:b 5} {:b 8} {:b 13} {:b 21} {:b 34} {:b 55} {:b 89}]
+             (xt/q tu/*node*
+                   '{:find [b]
+                     :where [(match-recursive
+                              :fib [a b]
+                              [{:find [a b]
+                                :where [(match :fib-base [a b])]}
+                               {:find [a b]
+                                :where [(match :fib {:a c :b a})
+                                        [(+ a c) b]
+                                        [(< b 100)]]}])]})))
+
+    ;; tenth fibonacci number
+    (t/is (= [{:b 55}]
+             (xt/q tu/*node*
+                   '{:find [b]
+                     :where [(match-recursive
+                              :fib [a b {:cnt 10}]
+                              [{:find [a b cnt]
+                                :where [(match :fib-base [a b cnt])]}
+                               {:find [a b cnt]
+                                :where [(match :fib {:a c :b a :cnt cnt-old})
+                                        [(+ a c) b]
+                                        [(+ cnt-old 1) cnt]
+                                        [(<= cnt 10)]]}])]}))))
+
+  ;;  c            b
+  ;;    <---------
+  ;;    |        ^
+  ;;    |        |
+  ;;    |        |
+  ;;  d v------->|------->------->
+  ;;             a       e       f
+
+  (t/testing "min distance bidirectional "
+    (let [graph [{:x "a" :y "b"}
+                 {:x "b" :y "c"}
+                 {:x "c" :y "d"}
+                 {:x "d" :y "a"}
+                 {:x "a" :y "e"}
+                 {:x "e" :y "f"}]]
+      (xt/submit-tx tu/*node* (map-indexed (fn [i edge] [:put :graph-dis (assoc edge :xt/id i :dis 1)]) graph))
+
+      (t/is (= [{:start "c", :end "e", :dis 3}
+                {:start "d", :end "f", :dis 3}
+                {:start "b", :end "f", :dis 3}
+                {:start "e", :end "c", :dis 3}
+                {:start "f", :end "b", :dis 3}
+                {:start "f", :end "d", :dis 3}
+                {:start "c", :end "f", :dis 4}
+                {:start "f", :end "c", :dis 4}]
+               (xt/q tu/*node*
+                     ;; why doesn't it work?
+                     '{:find [start end dis]
+                       :where [(match-recursive
+                                :min-dis [start end dis]
+                                [{:find [start end dis]
+                                  :where [(match :graph-dis {:x start :y end :dis dis})]}
+                                 {:find [start end dis]
+                                  :where [(match :graph-dis {:x end :y start :dis dis})]}
+                                 {:find [start end (min dis)]
+                                  :keys [start end dis]
+                                  :where [(match :min-dis {:start start :end middle :dis dis1})
+                                          (match :min-dis {:start middle :end end :dis dis2})
+                                          (not-exists? {:find [start end]
+                                                        :where [(match :min-dis [start end])]})
+                                          (not-exists? {:find [start end]
+                                                        :where [(match :min-dis {:start end :end start})]})
+                                          [(+ dis1 dis2) dis]]}])
+                               [(> dis 2)]]})))))
+
+
+
+  (t/testing "min distance unidirectional greater than 3"
+    (let [graph [{:x "a" :y "b"}
+                 {:x "b" :y "c"}
+                 {:x "c" :y "d"}
+                 {:x "d" :y "a"}
+                 {:x "a" :y "e"}
+                 {:x "e" :y "f"}]]
+      (xt/submit-tx tu/*node* (map-indexed (fn [i edge] [:put :graph-dis (assoc edge :xt/id i :dis 1)]) graph))
+
+      (t/is (= [{:start "a", :end "d", :dis 3}
+                {:start "b", :end "a", :dis 3}
+                {:start "c", :end "b", :dis 3}
+                {:start "c", :end "e", :dis 3}
+                {:start "d", :end "c", :dis 3}
+                {:start "d", :end "f", :dis 3}
+                {:start "b", :end "e", :dis 4}
+                {:start "c", :end "f", :dis 4}
+                {:start "b", :end "f", :dis 5}]
+               (xt/q tu/*node*
+                     '{:find [start end dis]
+                       :where [(match-recursive
+                                :min-dis [start end dis]
+                                [{:find [start end dis]
+                                  :where [(match :graph-dis {:x start :y end :dis dis})]}
+                                 {:find [start end (min dis)]
+                                  :keys [start end dis]
+                                  :where [(match :min-dis {:start start :end middle :dis dis1})
+                                          (match :min-dis {:start middle :end end :dis dis2})
+                                          (not-exists? {:find [start end]
+                                                        :where [(match :min-dis [start end])]})
+                                          [(+ dis1 dis2) dis]]}])
+                               [(<> start end)]
+                               [(> dis 2)]]})))))
+
+  (t/testing "testing recursive restriction"
+    (let [people [{:xt/id :eve :name "Eve" :sex :female}
+                  {:xt/id :adam :name "Adam" :sex :male}
+                  {:xt/id :ada :name "Lovelace" :sex :female :parent "Eve"}
+                  {:xt/id :alan :name "Turing" :sex :male :parent "Eve"}
+                  {:xt/id :alan :name "Shannon" :sex :male :parent "Adam"}
+                  {:xt/id :anne :name "Anne" :sex :female :parent "Lovelace"}]]
+      (xt/submit-tx tu/*node* (map (fn [p] [:put :people p]) people))
+
+      ;; female lineage
+      (t/is (=
+             [{:name "Eve"} {:name "Lovelace"} {:name "Anne"}]
+             (xt/q tu/*node*
+                   '{:find [name]
+                     :where [(match-recursive
+                              :female-lineage [name {:sex :female}]
+                              [{:find [name sex]
+                                :where [(match :people [name sex {:xt/id :eve}])]}
+                               {:find [name sex]
+                                :where [(match :people [name sex {:xt/id :adam}])]}
+                               {:find [name sex]
+                                :where [(match :female-lineage {:name parent-name :sex :female})
+                                        (match :people [name sex {:parent parent-name}])]}])]}))))))
