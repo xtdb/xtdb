@@ -64,10 +64,7 @@
         (let [wp (IVectorPosition/build)]
           (doseq [iid iids]
             (.logPut live-table-tx (util/uuid->bytes iid) 0 0
-                     (reify IRowCopier
-                       (copyRow [_ _idx]
-                         (.getPositionAndIncrement wp)))
-                     0)))
+                     #(.getPositionAndIncrement wp))))
 
         (.commit live-idx-tx)
 

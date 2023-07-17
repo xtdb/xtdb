@@ -31,8 +31,8 @@
            (java.util.concurrent.locks StampedLock)
            (java.util.function Consumer Supplier)
            (org.apache.arrow.memory BufferAllocator)
-           (org.apache.arrow.vector BitVector TimeStampVector VarBinaryVector VarCharVector)
-           (org.apache.arrow.vector.complex DenseUnionVector ListVector StructVector)
+           (org.apache.arrow.vector BitVector)
+           (org.apache.arrow.vector.complex DenseUnionVector ListVector)
            (org.apache.arrow.vector.ipc ArrowStreamReader)
            (xtdb.api.protocols ClojureForm TransactionInstant)
            xtdb.indexer.internal_id_manager.IInternalIdManager
@@ -42,7 +42,7 @@
            xtdb.operator.IRaQuerySource
            (xtdb.operator.scan IScanEmitter)
            (xtdb.temporal ITemporalManager ITemporalTxIndexer)
-           (xtdb.vector RelationReader IVectorReader IRowCopier)
+           (xtdb.vector IRowCopier IVectorReader IVectorWriter RelationReader)
            (xtdb.watermark IWatermark IWatermarkSource)))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -108,7 +108,8 @@
 
                                :live-idx-table (let [live-table (.liveTable live-idx-tx table-name)]
                                                  {:live-table live-table
-                                                  :doc-copier (.rowCopier live-table table-rel-rdr)})}))))]
+                                                  :doc-copier (-> (.docWriter live-table)
+                                                                  (vw/struct-writer->rel-copier table-rel-rdr))})}))))]
 
     (reify OpIndexer
       (indexOp [_ tx-op-idx]
@@ -137,7 +138,7 @@
                                        :valid-to (util/micros->instant valid-to)})))
 
             (let [{:keys [^xtdb.indexer.live_index.ILiveTableTx live-table, ^IRowCopier doc-copier]} live-idx-table]
-              (.logPut live-table (->iid eid) valid-from valid-to doc-copier tx-op-idx))
+              (.logPut live-table (->iid eid) valid-from valid-to #(.copyRow doc-copier tx-op-idx)))
 
             (.indexPut temporal-idxer iid row-id valid-from valid-to new-entity?)))
 
@@ -334,7 +335,8 @@
               valid-to-ts-rdr (some-> valid-to-rdr (.legReader :timestamp-tz-micro-utc))
 
               live-idx-table (.liveTable live-idx-tx table)
-              live-idx-table-copier (.rowCopier live-idx-table content-rel)]
+              live-idx-table-copier (-> (.docWriter live-idx-table)
+                                        (vw/struct-writer->rel-copier content-rel))]
 
           (dotimes [idx row-count]
             (let [row-id (.nextRowId live-chunk)]
@@ -356,7 +358,7 @@
                                            :valid-to (util/micros->instant valid-to)})))
 
                 (.indexPut temporal-idxer iid row-id valid-from valid-to new-entity?)
-                (.logPut live-idx-table (->iid eid) valid-from valid-to live-idx-table-copier idx)))))))))
+                (.logPut live-idx-table (->iid eid) valid-from valid-to #(.copyRow live-idx-table-copier idx))))))))))
 
 (defn- ->sql-delete-indexer ^xtdb.indexer.SqlOpIndexer [^ILiveIndexTx live-idx-tx, ^ITemporalTxIndexer temporal-idxer, ^ILiveChunkTx live-chunk]
   (reify SqlOpIndexer
@@ -464,33 +466,53 @@
 (def ^:private ^:const ^String txs-table
   "xt$txs")
 
-(defn- add-tx-row! [^ILiveChunkTx live-chunk-tx, ^ITemporalTxIndexer temporal-tx, ^IInternalIdManager iid-mgr, ^TransactionInstant tx-key, ^Throwable t]
+(defn- add-tx-row! [^ILiveIndexTx live-idx-tx, ^ILiveChunkTx live-chunk-tx, ^ITemporalTxIndexer temporal-tx, ^IInternalIdManager iid-mgr, ^TransactionInstant tx-key, ^Throwable t]
   (let [tx-id (.tx-id tx-key)
-        system-time-µs (util/instant->micros (.system-time tx-key))
-        live-table (.liveTable live-chunk-tx txs-table)
-        row-id (.nextRowId live-chunk-tx)
-        writer (.writer live-table)
-        iid (.getOrCreateInternalId iid-mgr txs-table tx-id row-id)]
+        system-time-µs (util/instant->micros (.system-time tx-key))]
+    (let [live-table (.liveTable live-idx-tx txs-table)
+          doc-writer (.docWriter live-table)]
+      (.logPut live-table (->iid tx-id) system-time-µs util/end-of-time-μs
+               (fn write-doc! []
+                 (doto (.structKeyWriter doc-writer "xt$id" :i64)
+                   (.writeLong tx-id))
 
-    (.writeRowId live-table row-id)
+                 (doto (.structKeyWriter doc-writer "xt$tx_time" t/temporal-col-type)
+                   (.writeLong system-time-µs))
 
-    (doto (.writerForName writer "xt$id" :i64)
-      (.writeLong tx-id))
+                 (doto (.structKeyWriter doc-writer "xt$committed?" :bool)
+                   (.writeBoolean (nil? t)))
 
-    (doto (.writerForName writer "xt$tx_time" t/temporal-col-type)
-      (.writeLong system-time-µs))
+                 (let [e-wtr (.structKeyWriter doc-writer "xt$error" [:union #{:null :clj-form}])]
+                   (if (or (nil? t) (= t abort-exn))
+                     (doto (.writerForType e-wtr :null)
+                       (.writeNull nil))
+                     (doto (.writerForType e-wtr :clj-form)
+                       (.writeObject (pr-str t))))))))
 
-    (doto (.writerForName writer "xt$committed?" :bool)
-      (.writeBoolean (nil? t)))
+    (let [live-table (.liveTable live-chunk-tx txs-table)
+          row-id (.nextRowId live-chunk-tx)
+          doc-writer (.writer live-table)
+          iid (.getOrCreateInternalId iid-mgr txs-table tx-id row-id)]
 
-    (let [e-wtr (.writerForName writer "xt$error" [:union #{:null :clj-form}])]
-      (if (or (nil? t) (= t abort-exn))
-        (doto (.writerForType e-wtr :null)
-          (.writeNull nil))
-        (doto (.writerForType e-wtr :clj-form)
-          (.writeObject (pr-str t)))))
+      (.writeRowId live-table row-id)
 
-    (.indexPut temporal-tx iid row-id system-time-µs util/end-of-time-μs true)))
+      (doto (.writerForName doc-writer "xt$id" :i64)
+        (.writeLong tx-id))
+
+      (doto (.writerForName doc-writer "xt$tx_time" t/temporal-col-type)
+        (.writeLong system-time-µs))
+
+      (doto (.writerForName doc-writer "xt$committed?" :bool)
+        (.writeBoolean (nil? t)))
+
+      (let [e-wtr (.writerForName doc-writer "xt$error" [:union #{:null :clj-form}])]
+        (if (or (nil? t) (= t abort-exn))
+          (doto (.writerForType e-wtr :null)
+            (.writeNull nil))
+          (doto (.writerForType e-wtr :clj-form)
+            (.writeObject (pr-str t)))))
+
+      (.indexPut temporal-tx iid row-id system-time-µs util/end-of-time-μs true))))
 
 (deftype Indexer [^BufferAllocator allocator
                   ^ObjectStore object-store
@@ -571,12 +593,12 @@
 
                   (with-open [live-chunk-tx (.startTx live-chunk)]
                     (let [temporal-tx (.startTx temporal-mgr tx-key)]
-                      (add-tx-row! live-chunk-tx temporal-tx iid-mgr tx-key e)
+                      (add-tx-row! live-idx-tx live-chunk-tx temporal-tx iid-mgr tx-key e)
                       (.commit live-chunk-tx)
                       (.commit temporal-tx))))
 
                 (do
-                  (add-tx-row! live-chunk-tx temporal-idxer iid-mgr tx-key nil)
+                  (add-tx-row! live-idx-tx live-chunk-tx temporal-idxer iid-mgr tx-key nil)
 
                   (.commit live-chunk-tx)
                   (.commit live-idx-tx)

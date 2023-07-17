@@ -30,8 +30,8 @@
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (definterface ILiveTableTx
   (^xtdb.indexer.live_index.ILiveTableWatermark openWatermark [^boolean retain])
-  (^xtdb.vector.IRowCopier rowCopier [^xtdb.vector.RelationReader inRelation])
-  (^void logPut [^bytes iid, ^long validFrom, ^long validTo, ^xtdb.vector.IRowCopier docCopier, ^int docSourceIndex])
+  (^xtdb.vector.IVectorWriter docWriter [])
+  (^void logPut [^bytes iid, ^long validFrom, ^long validTo, writeDocFn])
   (^void logDelete [^bytes iid, ^long validFrom, ^long validTo])
   (^void logEvict [^bytes iid])
   (^void commit [])
@@ -195,9 +195,9 @@
     (let [!transient-trie (atom live-trie)
           system-from-µs (util/instant->micros (.system-time tx-key))]
       (reify ILiveTableTx
-        (rowCopier [_ in-rel] (vw/struct-writer->rel-copier put-doc-wtr in-rel))
+        (docWriter [_] put-doc-wtr)
 
-        (logPut [_ iid valid-from valid-to put-doc-copier doc-src-idx]
+        (logPut [_ iid valid-from valid-to write-doc!]
           (.startRow live-rel)
 
           (.writeBytes iid-wtr (ByteBuffer/wrap iid))
@@ -206,7 +206,7 @@
           (.startStruct put-wtr)
           (.writeLong put-valid-from-wtr valid-from)
           (.writeLong put-valid-to-wtr valid-to)
-          (.copyRow put-doc-copier doc-src-idx)
+          (write-doc!)
           (.endStruct put-wtr)
 
           (.endRow live-rel)
