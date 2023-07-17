@@ -15,7 +15,7 @@
            [org.apache.arrow.vector.ipc ArrowFileReader]
            xtdb.indexer.live_index.ILiveIndex
            xtdb.object_store.ObjectStore
-           (xtdb.trie ArrowHashTrie ArrowHashTrie$Leaf LiveTrie LiveTrie$Leaf TrieKeys)
+           (xtdb.trie ArrowHashTrie ArrowHashTrie$Leaf LiveHashTrie LiveHashTrie$Leaf TrieKeys)
            xtdb.vector.IVectorPosition))
 
 (def with-live-index
@@ -50,11 +50,11 @@
               live-rel (li/live-rel live-table)
               iid-vec (.getVector (.writerForName live-rel "xt$iid"))
 
-              ^LiveTrie trie (li/live-trie live-table)]
+              ^LiveHashTrie trie (li/live-trie live-table)]
 
           (t/is (= iid-bytes
-                   (->> (.getLeaves (.compactLogs trie))
-                        (mapcat (fn [^LiveTrie$Leaf leaf]
+                   (->> (.leaves (.compactLogs trie))
+                        (mapcat (fn [^LiveHashTrie$Leaf leaf]
                                   (mapv #(vec (.getObject iid-vec %)) (.data leaf))))))))))
 
     (t/testing "finish chunk"
@@ -68,7 +68,7 @@
                 iid-vec (.getVector (.getVectorSchemaRoot leaf-rdr) "xt$iid")]
             (.loadNextBatch trie-rdr)
             (t/is (= iid-bytes
-                     (->> (.getLeaves (ArrowHashTrie. trie-root))
+                     (->> (.leaves (ArrowHashTrie/from trie-root))
                           (mapcat (fn [^ArrowHashTrie$Leaf leaf]
                                     ;; would be good if ArrowFileReader accepted a page-idx...
                                     (.loadRecordBatch leaf-rdr (.get (.getRecordBlocks leaf-rdr) (.getPageIndex leaf)))

@@ -6,11 +6,9 @@ import org.apache.arrow.vector.complex.DenseUnionVector;
 import org.apache.arrow.vector.complex.ListVector;
 import org.apache.arrow.vector.complex.StructVector;
 
-import java.util.Arrays;
 import java.util.stream.IntStream;
-import java.util.stream.Stream;
 
-public class ArrowHashTrie {
+public class ArrowHashTrie implements HashTrie<ArrowHashTrie.Node> {
 
     private static final byte BRANCH_TYPE_ID = 1;
     private static final byte LEAF_TYPE_ID = 2;
@@ -21,7 +19,7 @@ public class ArrowHashTrie {
     private final StructVector leafVec;
     private final IntVector pageIdxVec;
 
-    public ArrowHashTrie(VectorSchemaRoot trieRoot) {
+    private ArrowHashTrie(VectorSchemaRoot trieRoot) {
         nodesVec = ((DenseUnionVector) trieRoot.getVector("nodes"));
         branchVec = (ListVector) nodesVec.getVectorByType(BRANCH_TYPE_ID);
         branchElVec = (IntVector) branchVec.getDataVector();
@@ -29,16 +27,7 @@ public class ArrowHashTrie {
         pageIdxVec = leafVec.getChild("page-idx", IntVector.class);
     }
 
-    public interface NodeVisitor<R> {
-        R visitBranch(Branch branch);
-
-        R visitLeaf(Leaf leaf);
-    }
-
-    public sealed interface Node {
-        byte[] path();
-
-        <R> R accept(NodeVisitor<R> visitor);
+    public sealed interface Node extends HashTrie.Node<Node> {
     }
 
     private static byte[] conjPath(byte[] path, byte idx) {
@@ -59,25 +48,20 @@ public class ArrowHashTrie {
             this.branchVecIdx = branchVecIdx;
         }
 
-        public Node[] getChildren() {
+        public Node[] children() {
             int startIdx = branchVec.getElementStartIndex(branchVecIdx);
 
             return IntStream.range(0, branchVec.getElementEndIndex(branchVecIdx) - startIdx)
-                .mapToObj(childBucket -> {
-                    int childIdx = childBucket + startIdx;
-                    return branchElVec.isNull(childIdx) ? null : forIndex(conjPath(path, (byte) childBucket), branchElVec.get(childIdx));
-                })
-                .toArray(Node[]::new);
+                    .mapToObj(childBucket -> {
+                        int childIdx = childBucket + startIdx;
+                        return branchElVec.isNull(childIdx) ? null : forIndex(conjPath(path, (byte) childBucket), branchElVec.get(childIdx));
+                    })
+                    .toArray(Node[]::new);
         }
 
         @Override
         public byte[] path() {
             return path;
-        }
-
-        @Override
-        public <R> R accept(NodeVisitor<R> visitor) {
-            return visitor.visitBranch(this);
         }
     }
 
@@ -101,8 +85,8 @@ public class ArrowHashTrie {
         }
 
         @Override
-        public <R> R accept(NodeVisitor<R> visitor) {
-            return visitor.visitLeaf(this);
+        public Node[] children() {
+            return null;
         }
     }
     
@@ -117,21 +101,12 @@ public class ArrowHashTrie {
         };
     }
 
-    public <R> R accept(NodeVisitor<R> visitor) {
-        return forIndex(new byte[0], nodesVec.getValueCount() - 1).accept(visitor);
+    public static HashTrie<Node> from(VectorSchemaRoot root) {
+        return new ArrowHashTrie(root);
     }
 
-    public Leaf[] getLeaves() {
-        return accept(new NodeVisitor<Stream<Leaf>>() {
-            @Override
-            public Stream<Leaf> visitBranch(Branch branch) {
-                return Arrays.stream(branch.getChildren()).flatMap(n -> n == null ? Stream.empty() : n.accept(this));
-            }
-
-            @Override
-            public Stream<Leaf> visitLeaf(Leaf leaf) {
-                return Stream.of(leaf);
-            }
-        }).toArray(Leaf[]::new);
+    @Override
+    public HashTrie.Node<Node> rootNode() {
+        return forIndex(new byte[0], nodesVec.getValueCount() - 1);
     }
 }

@@ -2,29 +2,18 @@ package xtdb.trie;
 
 import java.util.Arrays;
 import java.util.stream.IntStream;
-import java.util.stream.Stream;
 
 import static xtdb.trie.TrieKeys.LEVEL_WIDTH;
 
-public record LiveTrie(Node rootNode, TrieKeys trieKeys) {
+public record LiveHashTrie(Node rootNode, TrieKeys trieKeys) implements HashTrie<LiveHashTrie.Node> {
 
     private static final int LOG_LIMIT = 64;
     private static final int PAGE_LIMIT = 1024;
 
-    public interface NodeVisitor<R> {
-        R visitBranch(Branch branch);
+    public sealed interface Node extends HashTrie.Node<Node> {
+        Node add(LiveHashTrie trie, int idx);
 
-        R visitLeaf(Leaf leaf);
-    }
-
-    public sealed interface Node {
-        byte[] path();
-
-        Node add(LiveTrie trie, int idx);
-
-        Node compactLogs(LiveTrie trie);
-
-        <R> R accept(NodeVisitor<R> visitor);
+        Node compactLogs(LiveHashTrie trie);
     }
 
     public static class Builder {
@@ -44,8 +33,8 @@ public record LiveTrie(Node rootNode, TrieKeys trieKeys) {
             this.pageLimit = pageLimit;
         }
 
-        public LiveTrie build() {
-            return new LiveTrie(new Leaf(logLimit, pageLimit), trieKeys);
+        public LiveHashTrie build() {
+            return new LiveHashTrie(new Leaf(logLimit, pageLimit), trieKeys);
         }
     }
 
@@ -54,16 +43,16 @@ public record LiveTrie(Node rootNode, TrieKeys trieKeys) {
     }
 
     @SuppressWarnings("unused")
-    public static LiveTrie emptyTrie(TrieKeys trieKeys) {
-        return new LiveTrie(new Leaf(LOG_LIMIT, PAGE_LIMIT), trieKeys);
+    public static LiveHashTrie emptyTrie(TrieKeys trieKeys) {
+        return new LiveHashTrie(new Leaf(LOG_LIMIT, PAGE_LIMIT), trieKeys);
     }
 
-    public LiveTrie add(int idx) {
-        return new LiveTrie(rootNode.add(this, idx), trieKeys);
+    public LiveHashTrie add(int idx) {
+        return new LiveHashTrie(rootNode.add(this, idx), trieKeys);
     }
 
-    public LiveTrie compactLogs() {
-        return new LiveTrie(rootNode.compactLogs(this), trieKeys);
+    public LiveHashTrie compactLogs() {
+        return new LiveHashTrie(rootNode.compactLogs(this), trieKeys);
     }
 
     private int bucketFor(int idx, int level) {
@@ -72,24 +61,6 @@ public record LiveTrie(Node rootNode, TrieKeys trieKeys) {
 
     private int compare(int leftIdx, int rightIdx) {
         return trieKeys.compare(leftIdx, rightIdx);
-    }
-
-    public Leaf[] getLeaves() {
-        return accept(new NodeVisitor<Stream<Leaf>>() {
-            @Override
-            public Stream<Leaf> visitBranch(Branch branch) {
-                return Arrays.stream(branch.children).flatMap(n -> n == null ? Stream.empty() : n.accept(this));
-            }
-
-            @Override
-            public Stream<Leaf> visitLeaf(Leaf leaf) {
-                return Stream.of(leaf);
-            }
-        }).toArray(Leaf[]::new);
-    }
-
-    public <R> R accept(NodeVisitor<R> visitor) {
-        return rootNode.accept(visitor);
     }
 
     private static byte[] conjPath(byte[] path, byte idx) {
@@ -103,12 +74,7 @@ public record LiveTrie(Node rootNode, TrieKeys trieKeys) {
     public record Branch(int logLimit, int pageLimit, byte[] path, Node[] children) implements Node {
 
         @Override
-        public <R> R accept(NodeVisitor<R> visitor) {
-            return visitor.visitBranch(this);
-        }
-
-        @Override
-        public Node add(LiveTrie trie, int idx) {
+        public Node add(LiveHashTrie trie, int idx) {
             var bucket = trie.bucketFor(idx, path.length);
 
             var newChildren = IntStream.range(0, children.length)
@@ -127,8 +93,8 @@ public record LiveTrie(Node rootNode, TrieKeys trieKeys) {
         }
 
         @Override
-        public Node compactLogs(LiveTrie trie) {
-            Node[] children =
+        public Node compactLogs(LiveHashTrie trie) {
+            var children =
                     Arrays.stream(this.children)
                             .map(child -> child == null ? null : child.compactLogs(trie))
                             .toArray(Node[]::new);
@@ -151,7 +117,12 @@ public record LiveTrie(Node rootNode, TrieKeys trieKeys) {
             this(logLimit, pageLimit, path, data, new int[logLimit], 0);
         }
 
-        private int[] mergeSort(LiveTrie trie, int[] data, int[] log, int logCount) {
+        @Override
+        public Node[] children() {
+            return null;
+        }
+
+        private int[] mergeSort(LiveHashTrie trie, int[] data, int[] log, int logCount) {
             int dataCount = data.length;
 
             var res = IntStream.builder();
@@ -202,7 +173,7 @@ public record LiveTrie(Node rootNode, TrieKeys trieKeys) {
             return res.build().toArray();
         }
 
-        private int[] sortLog(LiveTrie trie, int[] log, int logCount) {
+        private int[] sortLog(LiveHashTrie trie, int[] log, int logCount) {
             // this is a little convoluted, but AFAICT this is the only way to guarantee a 'stable' sort,
             // (`Stream.sorted()` doesn't guarantee it), which is required for the log (to preserve insertion order)
             var boxedArray = Arrays.stream(log).limit(logCount).boxed().toArray(Integer[]::new);
@@ -210,7 +181,7 @@ public record LiveTrie(Node rootNode, TrieKeys trieKeys) {
             return Arrays.stream(boxedArray).mapToInt(i -> i).toArray();
         }
 
-        private int[][] idxBuckets(LiveTrie trie, int[] idxs, byte[] path) {
+        private int[][] idxBuckets(LiveHashTrie trie, int[] idxs, byte[] path) {
             var entryGroups = new IntStream.Builder[LEVEL_WIDTH];
             for (int i : idxs) {
                 int groupIdx = trie.bucketFor(i, path.length);
@@ -226,7 +197,7 @@ public record LiveTrie(Node rootNode, TrieKeys trieKeys) {
         }
 
         @Override
-        public Node compactLogs(LiveTrie trie) {
+        public Node compactLogs(LiveHashTrie trie) {
             if (logCount == 0) return this;
 
             var data = mergeSort(trie, this.data, sortLog(trie, log, logCount), logCount);
@@ -236,11 +207,11 @@ public record LiveTrie(Node rootNode, TrieKeys trieKeys) {
             if (data.length > this.pageLimit) {
                 var childBuckets = idxBuckets(trie, data, path);
 
-                var childNodes = new Node[childBuckets.length];
-                for (int childIdx = 0; childIdx < childBuckets.length; childIdx++) {
-                    var childBucket = childBuckets[childIdx];
-                    childNodes[childIdx] = childBucket == null ? null : new Leaf(logLimit, pageLimit, conjPath(path, (byte) childIdx), childBucket);
-                }
+                var childNodes = IntStream.range(0, childBuckets.length)
+                        .mapToObj(childIdx -> {
+                            var childBucket = childBuckets[childIdx];
+                            return childBucket == null ? null : new Leaf(logLimit, pageLimit, conjPath(path, (byte) childIdx), childBucket);
+                        }).toArray(Node[]::new);
 
                 return new Branch(logLimit, pageLimit, path, childNodes);
             } else {
@@ -249,7 +220,7 @@ public record LiveTrie(Node rootNode, TrieKeys trieKeys) {
         }
 
         @Override
-        public Node add(LiveTrie trie, int newIdx) {
+        public Node add(LiveHashTrie trie, int newIdx) {
             var data = this.data;
             var log = this.log;
             var logCount = this.logCount;
@@ -257,11 +228,6 @@ public record LiveTrie(Node rootNode, TrieKeys trieKeys) {
             var newLeaf = new Leaf(logLimit, pageLimit, path, data, log, logCount);
 
             return logCount == this.logLimit ? newLeaf.compactLogs(trie) : newLeaf;
-        }
-
-        @Override
-        public <R> R accept(NodeVisitor<R> visitor) {
-            return visitor.visitLeaf(this);
         }
     }
 }

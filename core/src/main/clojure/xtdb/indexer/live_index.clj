@@ -15,17 +15,17 @@
            (java.util.stream IntStream)
            (org.apache.arrow.memory BufferAllocator)
            (org.apache.arrow.vector VectorSchemaRoot)
-           org.apache.arrow.vector.types.UnionMode
            (org.apache.arrow.vector.types.pojo ArrowType$Union Schema)
+           org.apache.arrow.vector.types.UnionMode
            (xtdb.object_store ObjectStore)
-           (xtdb.trie LiveTrie LiveTrie$Node LiveTrie$NodeVisitor TrieKeys)
+           (xtdb.trie HashTrie$Node LiveHashTrie LiveHashTrie$Leaf TrieKeys)
            (xtdb.vector IRelationWriter IVectorReader IVectorWriter RelationReader)))
 
 ;;
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (definterface ILiveTableWatermark
   (^xtdb.vector.RelationReader liveRelation [])
-  (^xtdb.trie.LiveTrie liveTrie []))
+  (^xtdb.trie.LiveHashTrie liveTrie []))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (definterface ILiveTableTx
@@ -64,7 +64,7 @@
   (^void close []))
 
 (defprotocol TestLiveTable
-  (^xtdb.trie.LiveTrie live-trie [test-live-table])
+  (^xtdb.trie.LiveHashTrie live-trie [test-live-table])
   (^xtdb.vector.IRelationWriter live-rel [test-live-table]))
 
 (def ^org.apache.arrow.vector.types.pojo.Schema trie-schema
@@ -77,7 +77,7 @@
 (defn- write-trie!
   ^java.util.concurrent.CompletableFuture [^BufferAllocator allocator, ^ObjectStore obj-store,
                                            ^String table-name, ^String chunk-idx,
-                                           ^LiveTrie trie, ^RelationReader leaf-rel]
+                                           ^LiveHashTrie trie, ^RelationReader leaf-rel]
 
   (when (pos? (.rowCount leaf-rel))
     (util/with-close-on-catch [leaf-vsr (VectorSchemaRoot/create (Schema. (for [^IVectorReader rdr leaf-rel]
@@ -96,47 +96,48 @@
             leaf-wtr (.writerForTypeId node-wtr (byte 2))
             page-idx-wtr (.structKeyWriter leaf-wtr "page-idx")
             !page-idx (AtomicInteger. 0)
-            copier (vw/->rel-copier leaf-rel-wtr leaf-rel)]
+            copier (vw/->rel-copier leaf-rel-wtr leaf-rel)
 
-        (-> (.putObject obj-store
-                        (format "tables/%s/chunks/leaf-c%s.arrow" table-name chunk-idx)
-                        (util/build-arrow-ipc-byte-buffer leaf-vsr :file
-                          (fn [write-batch!]
-                            (.accept trie
-                                     (reify LiveTrie$NodeVisitor
-                                       (visitBranch [visitor branch]
-                                         (let [!page-idxs (IntStream/builder)]
-                                           (doseq [^LiveTrie$Node child (.children branch)]
-                                             (.add !page-idxs (if child
-                                                                (do
-                                                                  (.accept child visitor)
-                                                                  (dec (.getPosition node-wp)))
-                                                                -1)))
-                                           (.startList branch-wtr)
-                                           (.forEach (.build !page-idxs)
-                                                     (reify IntConsumer
+            trie-buf (util/build-arrow-ipc-byte-buffer leaf-vsr :file
+                       (fn [write-batch!]
+                         (letfn [(write-node! [^HashTrie$Node node]
+                                   (if-let [children (.children node)]
+                                     (let [!page-idxs (IntStream/builder)]
+                                       (doseq [child children]
+                                         (.add !page-idxs (if child
+                                                            (do
+                                                              (write-node! child)
+                                                              (dec (.getPosition node-wp)))
+                                                            -1)))
+                                       (.startList branch-wtr)
+                                       (.forEach (.build !page-idxs)
+                                                 (reify IntConsumer
+                                                   (accept [_ idx]
+                                                     (if (= idx -1)
+                                                       (.writeNull branch-el-wtr nil)
+                                                       (.writeInt branch-el-wtr idx)))))
+                                       (.endList branch-wtr)
+                                       (.endRow trie-rel-wtr))
+
+                                     (let [^LiveHashTrie$Leaf leaf node]
+                                       (-> (Arrays/stream (.data leaf))
+                                           (.forEach (reify IntConsumer
                                                        (accept [_ idx]
-                                                         (if (= idx -1)
-                                                           (.writeNull branch-el-wtr nil)
-                                                           (.writeInt branch-el-wtr idx)))))
-                                           (.endList branch-wtr)
-                                           (.endRow trie-rel-wtr)))
+                                                         (.copyRow copier idx)))))
 
-                                       (visitLeaf [_ leaf]
-                                         (-> (Arrays/stream (.data leaf))
-                                             (.forEach (reify IntConsumer
-                                                         (accept [_ idx]
-                                                           (.copyRow copier idx)))))
+                                       (.syncRowCount leaf-rel-wtr)
+                                       (write-batch!)
+                                       (.clear leaf-rel-wtr)
+                                       (.clear leaf-vsr)
 
-                                         (.syncRowCount leaf-rel-wtr)
-                                         (write-batch!)
-                                         (.clear leaf-rel-wtr)
-                                         (.clear leaf-vsr)
+                                       (.startStruct leaf-wtr)
+                                       (.writeInt page-idx-wtr (.getAndIncrement !page-idx))
+                                       (.endStruct leaf-wtr)
+                                       (.endRow trie-rel-wtr))))]
 
-                                         (.startStruct leaf-wtr)
-                                         (.writeInt page-idx-wtr (.getAndIncrement !page-idx))
-                                         (.endStruct leaf-wtr)
-                                         (.endRow trie-rel-wtr)))))))
+                           (write-node! (.rootNode trie)))))]
+
+        (-> (.putObject obj-store (format "tables/%s/chunks/leaf-c%s.arrow" table-name chunk-idx) trie-buf)
             (util/then-compose
               (fn [_]
                 (.syncRowCount trie-rel-wtr)
@@ -185,7 +186,7 @@
         (throw t)))))
 
 (deftype LiveTable [^BufferAllocator allocator, ^ObjectStore obj-store, ^String table-name
-                    ^IRelationWriter live-rel, ^:unsynchronized-mutable ^LiveTrie live-trie
+                    ^IRelationWriter live-rel, ^:unsynchronized-mutable ^LiveHashTrie live-trie
                     ^IVectorWriter iid-wtr, ^IVectorWriter system-from-wtr
                     ^IVectorWriter put-wtr, ^IVectorWriter put-valid-from-wtr, ^IVectorWriter put-valid-to-wtr, ^IVectorWriter put-doc-wtr
                     ^IVectorWriter delete-wtr, ^IVectorWriter delete-valid-from-wtr, ^IVectorWriter delete-valid-to-wtr
@@ -211,7 +212,7 @@
 
           (.endRow live-rel)
 
-          (swap! !transient-trie #(.add ^LiveTrie % (dec (.getPosition (.writerPosition live-rel))))))
+          (swap! !transient-trie #(.add ^LiveHashTrie % (dec (.getPosition (.writerPosition live-rel))))))
 
         (logDelete [_ iid valid-from valid-to]
           (.writeBytes iid-wtr (ByteBuffer/wrap iid))
@@ -224,7 +225,7 @@
 
           (.endRow live-rel)
 
-          (swap! !transient-trie #(.add ^LiveTrie % (dec (.getPosition (.writerPosition live-rel))))))
+          (swap! !transient-trie #(.add ^LiveHashTrie % (dec (.getPosition (.writerPosition live-rel))))))
 
         (logEvict [_ iid]
           (.writeBytes iid-wtr (ByteBuffer/wrap iid))
@@ -234,7 +235,7 @@
 
           (.endRow live-rel)
 
-          (swap! !transient-trie #(.add ^LiveTrie % (dec (.getPosition (.writerPosition live-rel))))))
+          (swap! !transient-trie #(.add ^LiveHashTrie % (dec (.getPosition (.writerPosition live-rel))))))
 
         (openWatermark [_ retain?]
           (locking this-table
@@ -288,7 +289,7 @@
           put-wtr (.writerForField op-wtr put-field)
           delete-wtr (.writerForField op-wtr delete-field)]
       (LiveTable. allocator object-store table-name rel
-                  (LiveTrie/emptyTrie (TrieKeys. (.getVector iid-wtr)))
+                  (LiveHashTrie/emptyTrie (TrieKeys. (.getVector iid-wtr)))
                   iid-wtr (.writerForName rel "xt$system_from")
                   put-wtr (.structKeyWriter put-wtr "xt$valid_from") (.structKeyWriter put-wtr "xt$valid_to") (.structKeyWriter put-wtr "xt$doc")
                   delete-wtr (.structKeyWriter delete-wtr "xt$valid_from") (.structKeyWriter delete-wtr "xt$valid_to")
