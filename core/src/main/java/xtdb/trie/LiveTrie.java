@@ -2,6 +2,7 @@ package xtdb.trie;
 
 import java.util.Arrays;
 import java.util.stream.IntStream;
+import java.util.stream.Stream;
 
 import static xtdb.trie.TrieKeys.LEVEL_WIDTH;
 
@@ -71,6 +72,20 @@ public record LiveTrie(Node rootNode, TrieKeys trieKeys) {
 
     private int compare(int leftIdx, int rightIdx) {
         return trieKeys.compare(leftIdx, rightIdx);
+    }
+
+    public Leaf[] getLeaves() {
+        return accept(new NodeVisitor<Stream<Leaf>>() {
+            @Override
+            public Stream<Leaf> visitBranch(Branch branch) {
+                return Arrays.stream(branch.children).flatMap(n -> n.accept(this));
+            }
+
+            @Override
+            public Stream<Leaf> visitLeaf(Leaf leaf) {
+                return Stream.of(leaf);
+            }
+        }).toArray(Leaf[]::new);
     }
 
     public <R> R accept(NodeVisitor<R> visitor) {

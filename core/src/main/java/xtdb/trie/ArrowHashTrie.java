@@ -6,7 +6,10 @@ import org.apache.arrow.vector.complex.DenseUnionVector;
 import org.apache.arrow.vector.complex.ListVector;
 import org.apache.arrow.vector.complex.StructVector;
 
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.stream.IntStream;
+import java.util.stream.Stream;
 
 public class ArrowHashTrie {
 
@@ -37,6 +40,20 @@ public class ArrowHashTrie {
         byte[] path();
 
         <R> R accept(NodeVisitor<R> visitor);
+
+        default Leaf[] getLeaves() {
+            return accept(new NodeVisitor<Stream<Leaf>>() {
+                @Override
+                public Stream<Leaf> visitBranch(Branch branch) {
+                    return Arrays.stream(branch.getChildren()).flatMap(n -> n.accept(this));
+                }
+
+                @Override
+                public Stream<Leaf> visitLeaf(Leaf leaf) {
+                    return Stream.of(leaf);
+                }
+            }).toArray(Leaf[]::new);
+        }
     }
 
     private static byte[] conjPath(byte[] path, byte idx) {
@@ -59,9 +76,7 @@ public class ArrowHashTrie {
 
         public Node[] getChildren() {
             return IntStream.range(branchVec.getElementStartIndex(branchVecIdx), branchVec.getElementEndIndex(branchVecIdx))
-                .mapToObj(childIdx -> {
-                    return branchElVec.isNull(childIdx) ? null : forIndex(conjPath(path, (byte) childIdx), branchElVec.get(childIdx));
-                })
+                .mapToObj(childIdx -> branchElVec.isNull(childIdx) ? null : forIndex(conjPath(path, (byte) childIdx), branchElVec.get(childIdx)))
                 .toArray(Node[]::new);
         }
 

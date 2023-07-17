@@ -11,11 +11,11 @@
   (:import java.time.Duration
            [java.util Random UUID]
            [org.apache.arrow.memory BufferAllocator RootAllocator]
-           [org.apache.arrow.vector FixedSizeBinaryVector ValueVector]
+           [org.apache.arrow.vector FixedSizeBinaryVector]
            [org.apache.arrow.vector.ipc ArrowFileReader]
            xtdb.indexer.live_index.ILiveIndex
            xtdb.object_store.ObjectStore
-           (xtdb.trie TrieKeys ArrowHashTrie ArrowHashTrie$Node ArrowHashTrie$NodeVisitor LiveTrie LiveTrie$Node LiveTrie$NodeVisitor)
+           (xtdb.trie ArrowHashTrie ArrowHashTrie$Leaf LiveTrie LiveTrie$Leaf TrieKeys)
            xtdb.vector.IVectorPosition))
 
 (def with-live-index
@@ -24,27 +24,6 @@
                    :xtdb.object-store/memory-object-store {}}))
 
 (t/use-fixtures :each tu/with-allocator with-live-index)
-
-(deftype LiveTrieRenderer [^ValueVector iid-vec]
-  LiveTrie$NodeVisitor
-  (visitBranch [this branch]
-    (into [] (mapcat #(some-> ^LiveTrie$Node % (.accept this))) (.children branch)))
-
-  (visitLeaf [_ leaf]
-    (mapv #(vec (.getObject iid-vec %)) (.data leaf))))
-
-(deftype ArrowTrieRenderer [^ArrowFileReader leaf-rdr, ^ValueVector iid-vec,
-                            ^:unsychronized-mutable ^int current-page-idx]
-  ArrowHashTrie$NodeVisitor
-  (visitBranch [this branch]
-    (mapcat #(some-> ^ArrowHashTrie$Node % (.accept this)) (.getChildren branch)))
-
-  (visitLeaf [_ leaf]
-    ;; would be good if ArrowFileReader accepted a page-idx...
-    (.loadRecordBatch leaf-rdr (.get (.getRecordBlocks leaf-rdr) (.getPageIndex leaf)))
-
-    (->> (range 0 (.getValueCount iid-vec))
-         (mapv #(vec (.getObject iid-vec %))))))
 
 (t/deftest test-chunk
   (let [{^BufferAllocator allocator :xtdb/allocator
@@ -73,8 +52,10 @@
 
               ^LiveTrie trie (li/live-trie live-table)]
 
-          (t/is (= iid-bytes (-> (.compactLogs trie)
-                                 (.accept (LiveTrieRenderer. iid-vec))))))))
+          (t/is (= iid-bytes
+                   (->> (.getLeaves (.compactLogs trie))
+                        (mapcat (fn [^LiveTrie$Leaf leaf]
+                                  (mapv #(vec (.getObject iid-vec %)) (.data leaf))))))))))
 
     (t/testing "finish chunk"
       (.finishChunk live-index 0)
@@ -83,10 +64,17 @@
             leaf-buf @(.getObject obj-store "tables/my-table/chunks/leaf-c00.arrow")]
         (with-open [trie-rdr (ArrowFileReader. (util/->seekable-byte-channel trie-buf) allocator)
                     leaf-rdr (ArrowFileReader. (util/->seekable-byte-channel leaf-buf) allocator)]
-          (.loadNextBatch trie-rdr)
-          (t/is (= iid-bytes
-                   (.accept (ArrowHashTrie/from (.getVectorSchemaRoot trie-rdr))
-                            (ArrowTrieRenderer. leaf-rdr (.getVector (.getVectorSchemaRoot leaf-rdr) "xt$iid") -1)))))))))
+          (let [trie-root (.getVectorSchemaRoot trie-rdr)
+                iid-vec (.getVector (.getVectorSchemaRoot leaf-rdr) "xt$iid")]
+            (.loadNextBatch trie-rdr)
+            (t/is (= iid-bytes
+                     (->> (.getLeaves (ArrowHashTrie/from trie-root))
+                          (mapcat (fn [^ArrowHashTrie$Leaf leaf]
+                                    ;; would be good if ArrowFileReader accepted a page-idx...
+                                    (.loadRecordBatch leaf-rdr (.get (.getRecordBlocks leaf-rdr) (.getPageIndex leaf)))
+
+                                    (->> (range 0 (.getValueCount iid-vec))
+                                         (mapv #(vec (.getObject iid-vec %)))))))))))))))
 
 (t/deftest test-bucket-for
   (let [uuid1 #uuid "7f30ffff-ffff-ffff-0000-000000000000"]
@@ -95,9 +83,9 @@
                           (.setSafe 0 (util/uuid->bytes uuid1))
                           (.setValueCount 1))]
       (let [trie-keys (TrieKeys. iid-vec)]
-        (t/is (= (.bucketFor trie-keys 0 0) 7))
-        (t/is (= (.bucketFor trie-keys 0 1) 15))
-        (t/is (= (.bucketFor trie-keys 0 2) 3))))))
+        (t/is (= (.bucketFor trie-keys 0 0) 0x7))
+        (t/is (= (.bucketFor trie-keys 0 1) 0xf))
+        (t/is (= (.bucketFor trie-keys 0 2) 0x3))))))
 
 (def txs
   [[[:put :hello {:xt/id #uuid "cb8815ee-85f7-4c61-a803-2ea1c949cf8d" :a 1}]
@@ -120,7 +108,7 @@
     (util/delete-dir node-dir)
 
     (with-open [node (tu/->local-node {:node-dir node-dir})]
-      (let [^ObjectStore os  (tu/component node ::os/file-system-object-store)]
+      (let [^ObjectStore os (tu/component node ::os/file-system-object-store)]
 
         (let [last-tx-key (last (for [tx-ops txs] (xt/submit-tx node tx-ops)))]
           (tu/then-await-tx last-tx-key node (Duration/ofSeconds 2)))
