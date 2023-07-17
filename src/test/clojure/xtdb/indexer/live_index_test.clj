@@ -68,7 +68,7 @@
                 iid-vec (.getVector (.getVectorSchemaRoot leaf-rdr) "xt$iid")]
             (.loadNextBatch trie-rdr)
             (t/is (= iid-bytes
-                     (->> (.getLeaves (ArrowHashTrie/from trie-root))
+                     (->> (.getLeaves (ArrowHashTrie. trie-root))
                           (mapcat (fn [^ArrowHashTrie$Leaf leaf]
                                     ;; would be good if ArrowFileReader accepted a page-idx...
                                     (.loadRecordBatch leaf-rdr (.get (.getRecordBlocks leaf-rdr) (.getPageIndex leaf)))

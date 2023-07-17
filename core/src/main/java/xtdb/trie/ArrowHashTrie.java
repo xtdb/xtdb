@@ -6,7 +6,6 @@ import org.apache.arrow.vector.complex.DenseUnionVector;
 import org.apache.arrow.vector.complex.ListVector;
 import org.apache.arrow.vector.complex.StructVector;
 
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
@@ -22,7 +21,7 @@ public class ArrowHashTrie {
     private final StructVector leafVec;
     private final IntVector pageIdxVec;
 
-    private ArrowHashTrie(VectorSchemaRoot trieRoot) {
+    public ArrowHashTrie(VectorSchemaRoot trieRoot) {
         nodesVec = ((DenseUnionVector) trieRoot.getVector("nodes"));
         branchVec = (ListVector) nodesVec.getVectorByType(BRANCH_TYPE_ID);
         branchElVec = (IntVector) branchVec.getDataVector();
@@ -40,20 +39,6 @@ public class ArrowHashTrie {
         byte[] path();
 
         <R> R accept(NodeVisitor<R> visitor);
-
-        default Leaf[] getLeaves() {
-            return accept(new NodeVisitor<Stream<Leaf>>() {
-                @Override
-                public Stream<Leaf> visitBranch(Branch branch) {
-                    return Arrays.stream(branch.getChildren()).flatMap(n -> n.accept(this));
-                }
-
-                @Override
-                public Stream<Leaf> visitLeaf(Leaf leaf) {
-                    return Stream.of(leaf);
-                }
-            }).toArray(Leaf[]::new);
-        }
     }
 
     private static byte[] conjPath(byte[] path, byte idx) {
@@ -127,7 +112,21 @@ public class ArrowHashTrie {
         };
     }
 
-    public static Node from(VectorSchemaRoot trieRoot) {
-        return new ArrowHashTrie(trieRoot).forIndex(new byte[0], trieRoot.getRowCount() - 1);
+    public <R> R accept(NodeVisitor<R> visitor) {
+        return forIndex(new byte[0], nodesVec.getValueCount() - 1).accept(visitor);
+    }
+
+    public Leaf[] getLeaves() {
+        return accept(new NodeVisitor<Stream<Leaf>>() {
+            @Override
+            public Stream<Leaf> visitBranch(Branch branch) {
+                return Arrays.stream(branch.getChildren()).flatMap(n -> n.accept(this));
+            }
+
+            @Override
+            public Stream<Leaf> visitLeaf(Leaf leaf) {
+                return Stream.of(leaf);
+            }
+        }).toArray(Leaf[]::new);
     }
 }
