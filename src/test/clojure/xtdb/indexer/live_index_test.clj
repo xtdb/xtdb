@@ -16,7 +16,6 @@
            xtdb.indexer.live_index.ILiveIndex
            xtdb.object_store.ObjectStore
            (xtdb.trie TrieKeys ArrowHashTrie ArrowHashTrie$Node ArrowHashTrie$NodeVisitor LiveTrie LiveTrie$Node LiveTrie$NodeVisitor)
-           xtdb.vector.IRowCopier
            xtdb.vector.IVectorPosition))
 
 (def with-live-index

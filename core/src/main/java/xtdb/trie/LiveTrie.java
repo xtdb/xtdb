@@ -2,7 +2,6 @@ package xtdb.trie;
 
 import java.util.Arrays;
 import java.util.stream.IntStream;
-import java.util.stream.Stream;
 
 import static xtdb.trie.TrieKeys.LEVEL_WIDTH;
 
@@ -18,6 +17,8 @@ public record LiveTrie(Node rootNode, TrieKeys trieKeys) {
     }
 
     public sealed interface Node {
+        byte[] path();
+
         Node add(LiveTrie trie, int idx);
 
         Node compactLogs(LiveTrie trie);
@@ -76,7 +77,15 @@ public record LiveTrie(Node rootNode, TrieKeys trieKeys) {
         return rootNode.accept(visitor);
     }
 
-    public record Branch(int logLimit, int pageLimit, int level, Node[] children) implements Node {
+    private static byte[] conjPath(byte[] path, byte idx) {
+        int currentPathLength = path.length;
+        var childPath = new byte[currentPathLength + 1];
+        System.arraycopy(path, 0, childPath, 0, currentPathLength);
+        childPath[currentPathLength] = idx;
+        return childPath;
+    }
+
+    public record Branch(int logLimit, int pageLimit, byte[] path, Node[] children) implements Node {
 
         @Override
         public <R> R accept(NodeVisitor<R> visitor) {
@@ -85,21 +94,21 @@ public record LiveTrie(Node rootNode, TrieKeys trieKeys) {
 
         @Override
         public Node add(LiveTrie trie, int idx) {
-            var bucket = trie.bucketFor(idx, level);
+            var bucket = trie.bucketFor(idx, path.length);
 
             var newChildren = IntStream.range(0, children.length)
                     .mapToObj(childIdx -> {
                         var child = children[childIdx];
                         if (bucket == childIdx) {
                             if (child == null) {
-                                child = new Leaf(logLimit, pageLimit, level + 1);
+                                child = new Leaf(logLimit, pageLimit, conjPath(path, (byte) childIdx));
                             }
                             child = child.add(trie, idx);
                         }
                         return child;
                     }).toArray(Node[]::new);
 
-            return new Branch(logLimit, pageLimit, level, newChildren);
+            return new Branch(logLimit, pageLimit, path, newChildren);
         }
 
         @Override
@@ -109,22 +118,22 @@ public record LiveTrie(Node rootNode, TrieKeys trieKeys) {
                             .map(child -> child == null ? null : child.compactLogs(trie))
                             .toArray(Node[]::new);
 
-            return new Branch(logLimit, pageLimit, level, children);
+            return new Branch(logLimit, pageLimit, path, children);
         }
     }
 
-    public record Leaf(int logLimit, int pageLimit, int level, int[] data, int[] log, int logCount) implements Node {
+    public record Leaf(int logLimit, int pageLimit, byte[] path, int[] data, int[] log, int logCount) implements Node {
 
         Leaf(int logLimit, int pageLimit) {
-            this(logLimit, pageLimit, 0);
+            this(logLimit, pageLimit, new byte[0]);
         }
 
-        Leaf(int logLimit, int pageLimit, int level) {
-            this(logLimit, pageLimit, level, new int[0]);
+        Leaf(int logLimit, int pageLimit, byte[] path) {
+            this(logLimit, pageLimit, path, new int[0]);
         }
 
-        private Leaf(int logLimit, int pageLimit, int level, int[] data) {
-            this(logLimit, pageLimit, level, data, new int[logLimit], 0);
+        private Leaf(int logLimit, int pageLimit, byte[] path, int[] data) {
+            this(logLimit, pageLimit, path, data, new int[logLimit], 0);
         }
 
         private int[] mergeSort(LiveTrie trie, int[] data, int[] log, int logCount) {
@@ -186,10 +195,10 @@ public record LiveTrie(Node rootNode, TrieKeys trieKeys) {
             return Arrays.stream(boxedArray).mapToInt(i -> i).toArray();
         }
 
-        private Stream<int[]> idxBuckets(LiveTrie trie, int[] idxs, int level) {
+        private int[][] idxBuckets(LiveTrie trie, int[] idxs, byte[] path) {
             var entryGroups = new IntStream.Builder[LEVEL_WIDTH];
             for (int i : idxs) {
-                int groupIdx = trie.bucketFor(i, level);
+                int groupIdx = trie.bucketFor(i, path.length);
                 var group = entryGroups[groupIdx];
                 if (group == null) {
                     entryGroups[groupIdx] = group = IntStream.builder();
@@ -198,7 +207,7 @@ public record LiveTrie(Node rootNode, TrieKeys trieKeys) {
                 group.add(i);
             }
 
-            return Arrays.stream(entryGroups).map(b -> b == null ? null : b.build().toArray());
+            return Arrays.stream(entryGroups).map(b -> b == null ? null : b.build().toArray()).toArray(int[][]::new);
         }
 
         @Override
@@ -210,13 +219,17 @@ public record LiveTrie(Node rootNode, TrieKeys trieKeys) {
             var logCount = 0;
 
             if (data.length > this.pageLimit) {
-                var childNodes = idxBuckets(trie, data, level)
-                        .map(group -> group == null ? null : new Leaf(logLimit, pageLimit, level + 1, group))
-                        .toArray(Node[]::new);
+                var childBuckets = idxBuckets(trie, data, path);
 
-                return new Branch(logLimit, pageLimit, level, childNodes);
+                var childNodes = new Node[childBuckets.length];
+                for (int childIdx = 0; childIdx < childBuckets.length; childIdx++) {
+                    var childBucket = childBuckets[childIdx];
+                    childNodes[childIdx] = childBucket == null ? null : new Leaf(logLimit, pageLimit, conjPath(path, (byte) childIdx), childBucket);
+                }
+
+                return new Branch(logLimit, pageLimit, path, childNodes);
             } else {
-                return new Leaf(logLimit, pageLimit, level, data, log, logCount);
+                return new Leaf(logLimit, pageLimit, path, data, log, logCount);
             }
         }
 
@@ -226,7 +239,7 @@ public record LiveTrie(Node rootNode, TrieKeys trieKeys) {
             var log = this.log;
             var logCount = this.logCount;
             log[logCount++] = newIdx;
-            var newLeaf = new Leaf(logLimit, pageLimit, level, data, log, logCount);
+            var newLeaf = new Leaf(logLimit, pageLimit, path, data, log, logCount);
 
             return logCount == this.logLimit ? newLeaf.compactLogs(trie) : newLeaf;
         }
