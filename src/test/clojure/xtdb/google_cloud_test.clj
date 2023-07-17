@@ -6,18 +6,18 @@
             [xtdb.google-cloud :as google-cloud]
             [xtdb.object-store-test :as os-test])
   (:import [java.io Closeable]
-           [com.google.cloud.storage StorageOptions Storage$BucketGetOption Bucket$BucketSourceOption StorageException]))
+           [com.google.cloud.storage Bucket Storage StorageOptions StorageOptions$Builder Storage$BucketGetOption Bucket$BucketSourceOption StorageException]))
 
 (def project-id "xtdb-scratch")
 (def test-bucket "xtdb-cloud-storage-test-bucket")
 
 (defn config-present? []
   (try
-    (let [storage (-> (StorageOptions/newBuilder)
-                      (.setProjectId project-id)
-                      (.build)
+    (let [^Storage storage (-> (StorageOptions/newBuilder)
+                      ^StorageOptions$Builder (.setProjectId project-id)
+                      ^StorageOptions (.build)
                       (.getService))
-          bucket (.get storage test-bucket (into-array Storage$BucketGetOption []))]
+          ^Bucket bucket (.get storage ^String test-bucket ^"[Lcom.google.cloud.storage.Storage$BucketGetOption;" (into-array Storage$BucketGetOption []))]
       (.exists bucket (into-array Bucket$BucketSourceOption [])))
     (catch StorageException e
       (when-not (= 401 (.getCode e))
@@ -49,7 +49,6 @@
     
     (os-test/test-put-delete os)))
 
-;; Current fails since it DOESNT error for "OOB for last index"
 (t/deftest ^:google-cloud range-test
   (let [os (object-store (random-uuid))]
     (os-test/test-range os)))

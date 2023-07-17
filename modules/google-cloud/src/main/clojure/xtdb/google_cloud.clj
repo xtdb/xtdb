@@ -4,7 +4,7 @@
             [juxt.clojars-mirrors.integrant.core :as ig]
             [xtdb.google-cloud.object-store :as os]
             [xtdb.util :as util])
-  (:import [com.google.cloud.storage StorageOptions]))
+  (:import [com.google.cloud.storage StorageOptions StorageOptions$Builder]))
 
 (derive ::blob-object-store :xtdb/object-store)
 
@@ -28,7 +28,7 @@
 
 (defmethod ig/init-key ::blob-object-store [_ {:keys [project-id bucket prefix]}]
   (let [storage-service (-> (StorageOptions/newBuilder)
-                            (.setProjectId project-id)
-                            (.build)
+                            ^StorageOptions$Builder (.setProjectId project-id)
+                            ^StorageOptions (.build)
                             (.getService))]
     (os/->GoogleCloudStorageObjectStore storage-service bucket prefix)))
