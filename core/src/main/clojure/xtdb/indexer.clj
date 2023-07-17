@@ -71,15 +71,17 @@
        (MessageDigest/getInstance "SHA-256")))))
 
 (defn- ->iid ^bytes [eid]
-  (let [^bytes eid-bytes (cond
-                           (uuid? eid) (util/uuid->bytes eid)
-                           (string? eid) (.getBytes (str "s" eid))
-                           (keyword? eid) (.getBytes (str "k" eid))
-                           (integer? eid) (.getBytes (str "i" eid))
-                           :else (throw (UnsupportedOperationException. (pr-str (class eid)))))]
-    (-> ^MessageDigest (.get !msg-digest)
-        (.digest eid-bytes)
-        (Arrays/copyOfRange 0 16))))
+  (if (uuid? eid)
+    (util/uuid->bytes eid)
+
+    (let [^bytes eid-bytes (cond
+                             (string? eid) (.getBytes (str "s" eid))
+                             (keyword? eid) (.getBytes (str "k" eid))
+                             (integer? eid) (.getBytes (str "i" eid))
+                             :else (throw (UnsupportedOperationException. (pr-str (class eid)))))]
+      (-> ^MessageDigest (.get !msg-digest)
+          (.digest eid-bytes)
+          (Arrays/copyOfRange 0 16)))))
 
 (defn- ->put-indexer ^xtdb.indexer.OpIndexer [^IInternalIdManager iid-mgr, ^ILiveIndexTx live-idx-tx,
                                               ^ITemporalTxIndexer temporal-idxer, ^ILiveChunkTx live-chunk,
