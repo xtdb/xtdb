@@ -16,9 +16,10 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
       - name: Test
-        uses: gradle/gradle-build-action@67421db6bd0bf253fb4bd25b31ebb98943c375e1
+        uses: gradle/gradle-build-action@v2.6.1
         with:
           arguments: test
+          cache-read-only: ${{ github.ref != 'refs/heads/2.x' }}
       - name: Upload build reports
         if: success() || failure() # i.e. not cancelled
         uses: actions/upload-artifact@v3
@@ -38,9 +39,10 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
       - name: Integration Test
-        uses: gradle/gradle-build-action@67421db6bd0bf253fb4bd25b31ebb98943c375e1
+        uses: gradle/gradle-build-action@v2.6.1
         with:
           arguments: integration-test
+          cache-read-only: ${{ github.ref != 'refs/heads/2.x' }}
       - name: Upload build reports
         if: success() || failure() # i.e. not cancelled
         uses: actions/upload-artifact@v3
@@ -59,12 +61,11 @@ jobs:
         with:
           java-version: '17'
           distribution: 'temurin'
-      - name: Validate Gradle wrapper
-        uses: gradle/wrapper-validation-action@e6e38bacfdf1a337459f332974bb2327a31aaf4b
       - name: SLT 1
-        uses: gradle/gradle-build-action@67421db6bd0bf253fb4bd25b31ebb98943c375e1
+        uses: gradle/gradle-build-action@v2.6.1
         with:
           arguments: slt-test
+          cache-read-only: ${{ github.ref != 'refs/heads/2.x' }}
 
   slt-2:
     name: SLT 2
@@ -77,9 +78,8 @@ jobs:
         with:
           java-version: '17'
           distribution: 'temurin'
-      - name: Validate Gradle wrapper
-        uses: gradle/wrapper-validation-action@e6e38bacfdf1a337459f332974bb2327a31aaf4b
       - name: SLT 2
-        uses: gradle/gradle-build-action@67421db6bd0bf253fb4bd25b31ebb98943c375e1
+        uses: gradle/gradle-build-action@v2.6.1
         with:
           arguments: slt-test-2
+          cache-read-only: ${{ github.ref != 'refs/heads/2.x' }}
