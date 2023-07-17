@@ -78,7 +78,7 @@ public record LiveTrie(Node rootNode, TrieKeys trieKeys) {
         return accept(new NodeVisitor<Stream<Leaf>>() {
             @Override
             public Stream<Leaf> visitBranch(Branch branch) {
-                return Arrays.stream(branch.children).flatMap(n -> n.accept(this));
+                return Arrays.stream(branch.children).flatMap(n -> n == null ? Stream.empty() : n.accept(this));
             }
 
             @Override

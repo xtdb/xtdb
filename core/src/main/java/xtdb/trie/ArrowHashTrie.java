@@ -60,8 +60,13 @@ public class ArrowHashTrie {
         }
 
         public Node[] getChildren() {
-            return IntStream.range(branchVec.getElementStartIndex(branchVecIdx), branchVec.getElementEndIndex(branchVecIdx))
-                .mapToObj(childIdx -> branchElVec.isNull(childIdx) ? null : forIndex(conjPath(path, (byte) childIdx), branchElVec.get(childIdx)))
+            int startIdx = branchVec.getElementStartIndex(branchVecIdx);
+
+            return IntStream.range(0, branchVec.getElementEndIndex(branchVecIdx) - startIdx)
+                .mapToObj(childBucket -> {
+                    int childIdx = childBucket + startIdx;
+                    return branchElVec.isNull(childIdx) ? null : forIndex(conjPath(path, (byte) childBucket), branchElVec.get(childIdx));
+                })
                 .toArray(Node[]::new);
         }
 
@@ -120,7 +125,7 @@ public class ArrowHashTrie {
         return accept(new NodeVisitor<Stream<Leaf>>() {
             @Override
             public Stream<Leaf> visitBranch(Branch branch) {
-                return Arrays.stream(branch.getChildren()).flatMap(n -> n.accept(this));
+                return Arrays.stream(branch.getChildren()).flatMap(n -> n == null ? Stream.empty() : n.accept(this));
             }
 
             @Override
