@@ -113,6 +113,10 @@
 
                             (catch InterruptedException _)
 
+                            (catch ClosedChannelException ex
+                              (when-not (Thread/interrupted)
+                                (throw ex)))
+
                             (finally
                               (swap! !state update :semaphores disj semaphore)))))
         (.start)))))
