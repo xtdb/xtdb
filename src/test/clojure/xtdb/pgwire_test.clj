@@ -1002,7 +1002,6 @@
       (testing "read after write"
         (is (= [{:a 42}] (q conn ["SELECT foo.a FROM foo"])))))
 
-    #_#_
     (testing "update it"
       (tx! conn ["UPDATE foo SET a = foo.a + 1 WHERE foo.xt$id = 42"])
       (is (= [{:a 43}] (q conn ["SELECT foo.a FROM foo"]))))
@@ -1054,7 +1053,7 @@
     (psql-session
      (fn [send read]
        (send "INSERT INTO foo(xt$id, a) VALUES (42, 42);\n")
-       (is (str/starts-with? (read :err) "ERROR:  DML is only supported in an explicit READ WRITE transaction"))))))
+       (is (str/includes? (read) "INSERT 0 0"))))))
 
 (deftest dml-param-test
   (with-open [conn (jdbc-conn)]
@@ -1311,12 +1310,12 @@
        (send "INSERT INTO foo (x) values (42);\n")
        (let [s (read :err)]
          (is (not= :timeout s))
-         (is (re-find #"INSERT does not contain mandatory xt$id column" s)))
+         (is (re-find #"(?m)INSERT does not contain mandatory xt\$id column" s)))
 
        (send "COMMIT;\n")
        (let [s (read :err)]
          (is (not= :timeout s))
-         (is (re-find #"INSERT does not contain mandatory xt$id column" s)))))))
+         (is (re-find #"(?m)INSERT does not contain mandatory xt\$id column" s)))))))
 
 (deftest runtime-error-query-test
   (tu/with-log-level 'xtdb.pgwire :off
