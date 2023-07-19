@@ -473,6 +473,7 @@
           doc-writer (.docWriter live-table)]
       (.logPut live-table (->iid tx-id) system-time-µs util/end-of-time-μs
                (fn write-doc! []
+                 (.startStruct doc-writer)
                  (doto (.structKeyWriter doc-writer "xt$id" :i64)
                    (.writeLong tx-id))
 
@@ -487,7 +488,8 @@
                      (doto (.writerForType e-wtr :null)
                        (.writeNull nil))
                      (doto (.writerForType e-wtr :clj-form)
-                       (.writeObject (pr-str t))))))))
+                       (.writeObject (pr-str t)))))
+                 (.endStruct doc-writer))))
 
     (let [live-table (.liveTable live-chunk-tx txs-table)
           row-id (.nextRowId live-chunk-tx)
@@ -591,10 +593,12 @@
                     (log/debug e "aborted tx"))
                   (.abort temporal-idxer)
 
-                  (with-open [live-chunk-tx (.startTx live-chunk)]
+                  (with-open [live-chunk-tx (.startTx live-chunk)
+                              live-idx-tx (.startTx live-idx tx-key)]
                     (let [temporal-tx (.startTx temporal-mgr tx-key)]
                       (add-tx-row! live-idx-tx live-chunk-tx temporal-tx iid-mgr tx-key e)
                       (.commit live-chunk-tx)
+                      (.commit live-idx-tx)
                       (.commit temporal-tx))))
 
                 (do
