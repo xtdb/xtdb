@@ -2,6 +2,7 @@ package xtdb.vector;
 
 import clojure.java.api.Clojure;
 import clojure.lang.*;
+import org.apache.arrow.memory.util.ArrowBufPointer;
 import org.apache.arrow.memory.util.hash.ArrowBufHasher;
 import org.apache.arrow.vector.*;
 import org.apache.arrow.vector.complex.DenseUnionVector;
@@ -116,6 +117,24 @@ public class ValueVectorReader implements IVectorReader {
     @Override
     public ByteBuffer getBytes(int idx) {
         throw unsupported();
+    }
+
+    @Override
+    public ArrowBufPointer getPointer(int idx) {
+        if (vector instanceof ElementAddressableVector eav) {
+            return eav.getDataPointer(idx);
+        } else {
+            throw unsupported();
+        }
+    }
+
+    @Override
+    public ArrowBufPointer getPointer(int idx, ArrowBufPointer reuse) {
+        if (vector instanceof ElementAddressableVector eav) {
+            return eav.getDataPointer(idx, reuse);
+        } else {
+            throw unsupported();
+        }
     }
 
     @Override

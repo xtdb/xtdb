@@ -3,6 +3,7 @@ package xtdb.vector;
 import clojure.java.api.Clojure;
 import clojure.lang.IFn;
 import clojure.lang.Keyword;
+import org.apache.arrow.memory.util.ArrowBufPointer;
 import org.apache.arrow.memory.util.hash.ArrowBufHasher;
 import org.apache.arrow.vector.ValueVector;
 import org.apache.arrow.vector.types.pojo.Field;
@@ -99,6 +100,16 @@ class IndirectVectorReader implements IVectorReader {
     @Override
     public ByteBuffer getBytes(int idx) {
         return reader.getBytes(indirection.getIndex(idx));
+    }
+
+    @Override
+    public ArrowBufPointer getPointer(int idx) {
+        return reader.getPointer(indirection.getIndex(idx));
+    }
+
+    @Override
+    public ArrowBufPointer getPointer(int idx, ArrowBufPointer reuse) {
+        return reader.getPointer(indirection.getIndex(idx), reuse);
     }
 
     @Override

@@ -2,6 +2,7 @@ package xtdb.vector;
 
 import clojure.lang.Keyword;
 import org.apache.arrow.memory.BufferAllocator;
+import org.apache.arrow.memory.util.ArrowBufPointer;
 import org.apache.arrow.memory.util.hash.ArrowBufHasher;
 import org.apache.arrow.vector.ValueVector;
 import org.apache.arrow.vector.types.pojo.Field;
@@ -82,6 +83,16 @@ public class RenamedVectorReader implements IVectorReader {
     @Override
     public ByteBuffer getBytes(int idx) {
         return reader.getBytes(idx);
+    }
+
+    @Override
+    public ArrowBufPointer getPointer(int idx) {
+        return reader.getPointer(idx);
+    }
+
+    @Override
+    public ArrowBufPointer getPointer(int idx, ArrowBufPointer reuse) {
+        return reader.getPointer(idx, reuse);
     }
 
     @Override

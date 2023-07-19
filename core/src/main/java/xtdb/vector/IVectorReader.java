@@ -2,6 +2,7 @@ package xtdb.vector;
 
 import clojure.lang.Keyword;
 import org.apache.arrow.memory.BufferAllocator;
+import org.apache.arrow.memory.util.ArrowBufPointer;
 import org.apache.arrow.memory.util.hash.ArrowBufHasher;
 import org.apache.arrow.vector.ValueVector;
 import org.apache.arrow.vector.types.pojo.Field;
@@ -36,6 +37,10 @@ public interface IVectorReader extends AutoCloseable {
     double getDouble(int idx);
 
     ByteBuffer getBytes(int idx);
+
+    ArrowBufPointer getPointer(int idx);
+
+    ArrowBufPointer getPointer(int idx, ArrowBufPointer reuse);
 
     Object getObject(int idx);
 
