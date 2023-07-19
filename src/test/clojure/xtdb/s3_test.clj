@@ -7,7 +7,11 @@
 
 (def bucket
   (or (System/getProperty "xtdb.s3-test.bucket")
-      "xtdb-s3-test"))
+      "xtdb-s3-test-object-store"))
+
+(def sns-topic-arn
+  (or (System/getProperty "xtdb.s3-test.sns-topic-arn")
+      "arn:aws:sns:eu-west-1:199686536682:xtdb-object-store-s3-test-bucket-events"))
 
 (defn object-store ^Closeable [prefix]
   (->> (ig/prep-key ::s3/object-store {:bucket bucket, :prefix (str prefix)})
