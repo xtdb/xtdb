@@ -26,6 +26,16 @@
                                 [::tu/blocks '{a :i64} []]
                                 [::tu/blocks '{a :i64} []]])))))
 
+(t/deftest test-union-all-empty-left-side-bug
+  (t/testing "empty left side"
+    (t/is (= [{:a 10} {:a 15}]
+             (tu/query-ra
+              [:cross-join
+               [:table [{}]]
+               [:union-all
+                [::tu/blocks '{a :i64} [[]]]
+                [::tu/blocks [[{:a 10}, {:a 15}]]]]])))))
+
 (t/deftest test-intersection
   (t/is (= {:col-types '{a :i64, b :i64}
             :res [[{:a 0, :b 15}]]}
