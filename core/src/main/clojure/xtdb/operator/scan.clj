@@ -1,7 +1,6 @@
 (ns xtdb.operator.scan
   (:require [clojure.set :as set]
             [clojure.spec.alpha :as s]
-            [clojure.string :as str]
             [juxt.clojars-mirrors.integrant.core :as ig]
             [xtdb.bloom :as bloom]
             [xtdb.buffer-pool :as bp]
@@ -11,7 +10,6 @@
             [xtdb.expression.metadata :as expr.meta]
             [xtdb.expression.walk :as expr.walk]
             xtdb.indexer.live-index
-            [xtdb.indexer.live-index :as live-index]
             [xtdb.logical-plan :as lp]
             [xtdb.metadata :as meta]
             [xtdb.temporal :as temporal]
@@ -28,18 +26,18 @@
            (org.apache.arrow.memory ArrowBuf BufferAllocator)
            (org.apache.arrow.vector BigIntVector TimeStampMicroTZVector VarBinaryVector VectorLoader VectorSchemaRoot)
            (org.apache.arrow.vector.complex ListVector StructVector)
-           (org.apache.arrow.vector.ipc.message ArrowFooter)
+           (org.apache.arrow.vector.ipc.message ArrowFooter ArrowRecordBatch)
            (org.roaringbitmap IntConsumer RoaringBitmap)
            org.roaringbitmap.buffer.MutableRoaringBitmap
            (org.roaringbitmap.longlong Roaring64Bitmap)
-           xtdb.ICursor
            xtdb.api.protocols.TransactionInstant
            xtdb.buffer_pool.IBufferPool
+           xtdb.ICursor
            (xtdb.indexer.live_index ILiveTableWatermark)
            (xtdb.metadata IMetadataManager ITableMetadata)
            (xtdb.object_store ObjectStore)
            xtdb.operator.IRelationSelector
-           [xtdb.trie ArrowHashTrie ArrowHashTrie$Leaf ArrowHashTrie$Node LiveHashTrie LiveHashTrie$Leaf LiveHashTrie$Node]
+           [xtdb.trie ArrowHashTrie ArrowHashTrie$Leaf LiveHashTrie LiveHashTrie$Leaf]
            (xtdb.vector IVectorReader RelationReader)
            (xtdb.vector IRowCopier)
            (xtdb.watermark IWatermark IWatermarkSource Watermark)))
@@ -533,6 +531,65 @@
   (close [_]
     (util/close trie-bucket-cursor)))
 
+(deftype LogTriePageCursor [^ArrowBuf buf,
+                            ^Queue page-identifiers
+                            ^List record-batches
+                            ^VectorSchemaRoot root
+                            ^VectorLoader loader
+                            ^:unsynchronized-mutable ^ArrowRecordBatch current-batch
+                            ^boolean close-buffer?]
+  ICursor
+  (tryAdvance [this c]
+    (when current-batch
+      (util/try-close current-batch)
+      (set! (.current-batch this) nil))
+
+    (if-let [{:keys [path page-idx]} (.poll page-identifiers)]
+      (let [record-batch (util/->arrow-record-batch-view (.get record-batches page-idx) buf)]
+        (set! (.current-batch this) record-batch)
+        (.load loader record-batch)
+        (.accept c {:path path
+                    :page-rel (vr/<-root root)})
+        true)
+      false))
+
+  (close [_]
+    (when current-batch
+      (util/try-close current-batch))
+    (util/try-close root)
+    (when close-buffer?
+      (util/try-close buf))))
+
+;; page identifier here is a map of {:path ... :page-index ...}
+(defn ->log-trie-page-cursor ^xtdb.ICursor
+  ([^ArrowBuf ipc-file-format-buffer ^PersistentVector page-identifiers]
+   (->log-trie-page-cursor ipc-file-format-buffer page-identifiers false))
+  ([^ArrowBuf ipc-file-format-buffer ^PersistentVector page-identifiers close-buffer?]
+   (let [footer (util/read-arrow-footer ipc-file-format-buffer)
+         root (VectorSchemaRoot/create (.getSchema footer) (.getAllocator (.getReferenceManager ipc-file-format-buffer)))]
+     (LogTriePageCursor. ipc-file-format-buffer
+                         (LinkedList. page-identifiers)
+                         (.getRecordBatches footer)
+                         root
+                         (VectorLoader. root #_CommonsCompressionFactory/INSTANCE)
+                         nil
+                         close-buffer?))))
+
+(deftype LiveTriePageCursor [^RelationReader live-relation ^Queue page-identifiers]
+  ICursor
+  (tryAdvance [_ c]
+    (if-let [{:keys [path selection]} (.poll page-identifiers)]
+      (let [rel (.select live-relation selection)]
+        (.accept c {:path path :page-rel rel})
+        true)
+      false))
+
+  (close [_]))
+
+;; page identifier here is a map of {:path ... :selection ...}
+(defn ->live-trie-page-cursor ^xtdb.ICursor [^RelationReader live-relation ^PersistentVector page-identifiers]
+  (LogTriePageCursor. live-relation (LinkedList. page-identifiers)))
+
 
 (defn load-leaf-vsr ^RelationReader [^ArrowBuf leaf-buf, ^VectorSchemaRoot leaf-vsr,
                                      ^ArrowFooter leaf-footer, page-idx]
@@ -558,14 +615,14 @@
           (->> (ArrowHashTrie/from trie-batch)
                (.rootNode)
                (.leaves)
-               (map (fn [^ArrowHashTrie$Leaf leaf]
-                      (with-open [leaf-record-batch (util/->arrow-record-batch-view (.get (.getRecordBatches leaf-footer)
-                                                                                          (.getPageIndex leaf)) leaf-buf)]
+               (mapv (fn [^ArrowHashTrie$Leaf leaf]
+                       (with-open [leaf-record-batch (util/->arrow-record-batch-view (.get (.getRecordBatches leaf-footer)
+                                                                                           (.getPageIndex leaf)) leaf-buf)]
 
-                        (.load (VectorLoader. leaf-batch) leaf-record-batch))
-                      [(seq (.path leaf)) (->> (range 0 (.getValueCount iid-vec))
-                                               (mapv #(util/bytes->uuid (.getObject iid-vec %))))]))
-               vec))))))
+                         (.load (VectorLoader. leaf-batch) leaf-record-batch))
+                       {:path (seq (.path leaf))
+                        :iids (->> (range 0 (.getValueCount iid-vec))
+                                   (mapv #(util/bytes->uuid (.getObject iid-vec %))))}))))))))
 
 (defn calc-leaf-paths [^IBufferPool buffer-pool, trie-filename]
   (with-open [^ArrowBuf trie-buf @(.getBuffer buffer-pool trie-filename)]
@@ -582,6 +639,21 @@
              ^PersistentVector vec
              (.iterator))))))
 
+(defn calc-trie-log-page-identifiers [^IBufferPool buffer-pool, trie-filename]
+  (with-open [^ArrowBuf trie-buf @(.getBuffer buffer-pool trie-filename)]
+    (let [trie-footer (util/read-arrow-footer trie-buf)]
+      (with-open [^VectorSchemaRoot  trie-batch (VectorSchemaRoot/create (.getSchema trie-footer)
+                                                                         (.getAllocator (.getReferenceManager trie-buf)))
+                  trie-record-batch (util/->arrow-record-batch-view (first (.getRecordBatches trie-footer)) trie-buf)]
+
+        (.load (VectorLoader. trie-batch) trie-record-batch)
+        (->> (ArrowHashTrie/from trie-batch)
+             (.rootNode)
+             (.leaves)
+             (mapv (fn [^ArrowHashTrie$Leaf leaf] {:path (seq (.path leaf)) :page-idx (.getPageIndex leaf)})))))))
+
+
+;; FIXME look at trieKeys.compareToPath
 (defn path->bytes ^bytes [path]
   (assert (every? #(<= 0 % 0xf) path))
   (->> (partition-all 2 path)
@@ -752,7 +824,11 @@
                                           ^RelationReader live-relation, ^LiveHashTrie live-trie]
   ;; (clojure.pprint/pprint (map #(print-leaf-paths buffer-pool (first %) (second %)) filenames))
 
-  (let [^Iterator live-iterator (some->> live-trie
+  (let [live-trie-page-identifiers (some->> live-trie (.compactLogs) (.rootNode) (.leaves)
+                                            (mapv (fn [^LiveHashTrie$Leaf leaf]
+                                                    {:path (seq (.path leaf)) :selection (.data leaf)})))
+        _ (prn live-trie-page-identifiers)
+        ^Iterator live-iterator (some->> live-trie
                                          (.compactLogs)
                                          (.rootNode)
                                          (.leaves)
@@ -760,6 +836,8 @@
                                                 (conj (vec (if-let [res (seq (.path leaf))] res '())) (.data leaf))))
                                          ^PersistentVector vec
                                          (.iterator))
+        log-trie-page-identifiers (mapv (comp #(calc-trie-log-page-identifiers buffer-pool %) first) filenames)
+        _ (prn log-trie-page-identifiers)
         leaf-iterators (ArrayList. ^PersistentVector (vec (map (comp #(calc-leaf-paths buffer-pool %) first) filenames)))
         leaf-buffers (->> (map (comp #(deref (.getBuffer buffer-pool %)) second) filenames)
                           object-array)
