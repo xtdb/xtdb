@@ -1,6 +1,7 @@
 (ns xtdb.operator.scan
   (:require [clojure.set :as set]
             [clojure.spec.alpha :as s]
+            [clojure.string :as str]
             [juxt.clojars-mirrors.integrant.core :as ig]
             [xtdb.bloom :as bloom]
             [xtdb.buffer-pool :as bp]
@@ -31,11 +32,12 @@
            (org.roaringbitmap IntConsumer RoaringBitmap)
            org.roaringbitmap.buffer.MutableRoaringBitmap
            (org.roaringbitmap.longlong Roaring64Bitmap)
+           xtdb.ICursor
            xtdb.api.protocols.TransactionInstant
            xtdb.buffer_pool.IBufferPool
-           xtdb.ICursor
            (xtdb.indexer.live_index ILiveTableWatermark)
            (xtdb.metadata IMetadataManager ITableMetadata)
+           (xtdb.object_store ObjectStore)
            xtdb.operator.IRelationSelector
            [xtdb.trie ArrowHashTrie ArrowHashTrie$Leaf ArrowHashTrie$Node LiveHashTrie LiveHashTrie$Leaf LiveHashTrie$Node]
            (xtdb.vector IVectorReader RelationReader)
@@ -521,7 +523,6 @@
                                                            (.withName col-name)))
                                                  (filter some?))
                                             (alength selection)) rel
-                                           ;; TODO doesn't seem to work properly
                                            (vr/with-absent-cols rel allocator col-names)
                                            (reduce (fn [^RelationReader rel, ^IRelationSelector col-pred]
                                                      (.select rel (.select col-pred allocator rel params)))
@@ -576,8 +577,7 @@
         (.load (VectorLoader. trie-batch) trie-record-batch)
         (->> (ArrowHashTrie/from trie-batch)
              (.rootNode)
-             (.leafStream)
-             (.toArray)
+             (.leaves)
              (map (fn [^ArrowHashTrie$Leaf leaf] (conj (vec (.path leaf)) [(.getPageIndex leaf)])))
              ^PersistentVector vec
              (.iterator))))))
@@ -785,14 +785,22 @@
     (TrieBucketCursor. allocator leaf-buffers leaf-footers leaf-vsrs pq leaf-iterators
                        (HashMap.) live-iterator live-relation (count leaf-iterators))))
 
-(defn- ->4r-cursor [^BufferAllocator allocator, ^IBufferPool buffer-pool,
-                    ^IMetadataManager metadata-mgr, ^ILiveTableWatermark wm,
+
+
+(defn- table-names->filenames [^ObjectStore object-store, table-name]
+  (let [table-dir (format "tables/%s/chunks/" table-name)
+        objects (.listObjects object-store (format "tables/%s/chunks/" table-name))
+        trie-files (-> (filter #(re-matches (re-pattern (str table-dir "trie.*")) %) objects) sort reverse)
+        leaf-files (-> (filter #(re-matches (re-pattern (str table-dir "leaf.*")) %) objects) sort reverse)]
+    (map vector trie-files leaf-files)))
+
+;; TODO object-store to be replaced with buffer pool as soon as metadata-mgr
+;; knows for which chunk a trie is available (for this table)
+(defn- ->4r-cursor [^BufferAllocator allocator, ^ObjectStore object-store,
+                    ^IBufferPool buffer-pool, ^ILiveTableWatermark wm,
                     table-name, col-names, ^longs temporal-range
                     ^Map col-preds, params, scan-opts, _basis]
-  (let [filenames (for [chunk-idx (-> (map util/->lex-hex-string (keys (.chunksMetadata metadata-mgr))) sort reverse)
-                        :let [leaf-filename (live-index/->leaf-obj-key table-name chunk-idx)
-                              trie-filename (live-index/->trie-obj-key table-name chunk-idx)]]
-                    [trie-filename leaf-filename])
+  (let [filenames (table-names->filenames object-store table-name)
         live-relation (some-> wm (.liveRelation))
         trie-bucket-curser (->trie-bucket-cursor allocator buffer-pool filenames
                                                  live-relation (some-> wm (.liveTrie)))]
@@ -814,9 +822,11 @@
 (defmethod ig/prep-key ::scan-emitter [_ opts]
   (merge opts
          {:metadata-mgr (ig/ref ::meta/metadata-manager)
-          :buffer-pool (ig/ref ::bp/buffer-pool)}))
+          :buffer-pool (ig/ref ::bp/buffer-pool)
+          :object-store (ig/ref :xtdb/object-store)}))
 
-(defmethod ig/init-key ::scan-emitter [_ {:keys [^IMetadataManager metadata-mgr, ^IBufferPool buffer-pool]}]
+(defmethod ig/init-key ::scan-emitter [_ {:keys [^IMetadataManager metadata-mgr, ^IBufferPool buffer-pool
+                                                 ^ObjectStore object-store]}]
   (reify IScanEmitter
     (tableColNames [_ wm table-name]
       (let [normalized-table (util/str->normal-form-str table-name)]
