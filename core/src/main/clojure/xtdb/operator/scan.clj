@@ -20,13 +20,13 @@
             [xtdb.vector.writer :as vw]
             xtdb.watermark)
   (:import (clojure.lang IPersistentSet MapEntry PersistentHashSet PersistentVector)
-           (java.util ArrayList HashMap Iterator LinkedList List Map PriorityQueue Queue Set)
+           (java.util ArrayList HashMap LinkedList List Map PriorityQueue Queue Set)
            (java.util.function BiFunction Consumer)
            [java.util.stream IntStream]
            (org.apache.arrow.memory ArrowBuf BufferAllocator)
            (org.apache.arrow.vector BigIntVector TimeStampMicroTZVector VarBinaryVector VectorLoader VectorSchemaRoot)
            (org.apache.arrow.vector.complex ListVector StructVector)
-           (org.apache.arrow.vector.ipc.message ArrowFooter ArrowRecordBatch)
+           (org.apache.arrow.vector.ipc.message ArrowRecordBatch)
            (org.roaringbitmap IntConsumer RoaringBitmap)
            org.roaringbitmap.buffer.MutableRoaringBitmap
            (org.roaringbitmap.longlong Roaring64Bitmap)
@@ -37,9 +37,8 @@
            (xtdb.metadata IMetadataManager ITableMetadata)
            (xtdb.object_store ObjectStore)
            xtdb.operator.IRelationSelector
-           [xtdb.trie TrieKeys ArrowHashTrie ArrowHashTrie$Leaf LiveHashTrie LiveHashTrie$Leaf]
-           (xtdb.vector IVectorReader RelationReader)
-           (xtdb.vector IRowCopier)
+           [xtdb.trie ArrowHashTrie ArrowHashTrie$Leaf LiveHashTrie LiveHashTrie$Leaf TrieKeys]
+           (xtdb.vector IVectorReader RelationReader IRowCopier IVectorPosition)
            (xtdb.watermark IWatermark IWatermarkSource Watermark)))
 
 (s/def ::table symbol?)
@@ -550,7 +549,7 @@
         (.load loader record-batch)
         (.accept c {:path path
                     :page-rel (vr/<-root root)
-                    :position 0
+                    :position (IVectorPosition/build)
                     :trie-idx trie-idx})
         true)
       false))
@@ -584,7 +583,7 @@
       (let [rel (.select live-relation selection)]
         (.accept c {:path path
                     :page-rel rel
-                    :position 0
+                    :position (IVectorPosition/build)
                     :trie-idx trie-idx})
         true)
       false))
@@ -594,6 +593,7 @@
 ;; page identifier here is a map of {:path ... :selection ...}
 (defn ->live-trie-page-cursor ^xtdb.ICursor [^RelationReader live-relation ^PersistentVector page-identifiers, trie-idx]
   (LiveTriePageCursor. live-relation (LinkedList. page-identifiers) trie-idx))
+
 
 ;; only for debugging for now
 (defn print-leaf-paths [^IBufferPool buffer-pool, trie-filename leaf-filename]
@@ -641,49 +641,44 @@
 (def null-or-neg-int? (complement pos-int?))
 
 ;; TODO bring in-line with
-(defn merge-page-rels! [^BufferAllocator allocator page-rels page-identifiers, ^ints new-page-positions]
+(defn merge-page-rels! [^BufferAllocator allocator page-identifiers]
   (let [most-specific-path (:path (last page-identifiers))
-        page-positions (int-array (map :position page-identifiers))
         rel-wtr (vw/->strict-rel-writer allocator)
-        rel-cnt (count page-rels)
         cmps (HashMap.)
         trie-idxs (int-array (map :trie-idx page-identifiers))
-        value-counts (int-array (map #(.rowCount ^RelationReader %) page-rels))
-        iid-vecs (object-array (map #(.readerForName ^RelationReader % "xt$iid") page-rels))
-        copiers (object-array (map #(.rowCopier rel-wtr %) page-rels))
+        value-counts (int-array (map #(.rowCount ^RelationReader (:page-rel %)) page-identifiers))
+        iid-vecs (object-array (map #(.readerForName ^RelationReader (:page-rel %) "xt$iid") page-identifiers))
+        copiers (object-array (map #(.rowCopier rel-wtr (:page-rel %)) page-identifiers))
         prio (PriorityQueue. ^java.util.Comparator
-                             (comparator (fn [[rel-idx1 idx1] [rel-idx2 idx2]]
+                             (comparator (fn [{trie-idx1 :trie-idx position1 :position}
+                                              {trie-idx2 :trie-idx position2 :position}]
                                            (let [res (.applyAsInt ^java.util.function.IntBinaryOperator
-                                                                  (.get cmps [rel-idx1 rel-idx2]) idx1 idx2)]
+                                                                  (.get cmps [trie-idx1 trie-idx2])
+                                                                  (.getPosition ^IVectorPosition position1)
+                                                                  (.getPosition ^IVectorPosition position2))]
                                              (or (neg? res)
-                                                 (and (zero? res) (> (aget trie-idxs rel-idx1)
-                                                                     (aget trie-idxs rel-idx2))))))))]
-    (doseq [i (range rel-cnt)
-            j (range i)]
+                                                 (and (zero? res) (> trie-idx1 trie-idx2)))))))]
+    (doseq [i trie-idxs
+            j trie-idxs]
       ;; FIXME quick hack
       (.put cmps [i j] (cmp/->comparator (aget iid-vecs i) (aget iid-vecs j) :nulls-last))
       (.put cmps [j i] (cmp/->comparator (aget iid-vecs j) (aget iid-vecs i) :nulls-last)))
-    (doseq [i (range rel-cnt)]
-      (when (pos? (.valueCount ^IVectorReader (aget iid-vecs i)))
-        (.add prio [i (aget page-positions i)])))
+    (doseq [[i {:keys [page-rel] :as page-identifier}] (map-indexed vector page-identifiers)]
+      (when (pos? (.rowCount ^RelationReader page-rel))
+        (.add prio (assoc page-identifier :rel-idx i))))
 
     ;; TODO we don't need to put in the element every time
     ;; could wait until we hit an item larger than the second one
     (loop []
       (when (not (.isEmpty prio))
-        (let [[rel-idx ^int idx] (.poll prio)]
-          (if (null-or-neg-int? (TrieKeys/compareToPath (.getPointer ^IVectorReader (aget iid-vecs rel-idx) idx)
-                                                        most-specific-path))
-            (let [new-idx (inc idx)]
-              (.copyRow ^IRowCopier (aget copiers rel-idx) idx)
-              (when (< new-idx (aget value-counts rel-idx))
-                (.add prio [rel-idx new-idx]))
-              (recur))
-            (aset new-page-positions rel-idx idx)))))
-    (while (not (.isEmpty prio))
-      (let [[rel-idx ^int idx] (.poll prio)]
-        (aset new-page-positions rel-idx idx)))
-    ;; TODO can this be better maintained
+        (let [{:keys [rel-idx ^IVectorPosition position] :as page-identifier} (.poll prio)]
+          (when (null-or-neg-int?
+                 (TrieKeys/compareToPath (.getPointer ^IVectorReader (aget iid-vecs rel-idx) (.getPosition position))
+                                         most-specific-path))
+            (.copyRow ^IRowCopier (aget copiers rel-idx) (.getPosition position))
+            (when (< (.getPositionAndIncrement position) (aget value-counts rel-idx))
+              (.add prio page-identifier))
+            (recur)))))
     (vw/rel-wtr->rdr rel-wtr)))
 
 ;; indices in page-cursors maps to trie-idx of page-identifier
@@ -699,24 +694,20 @@
                     (sub-path? (:path (.get page-identifiers (dec (.size page-identifiers)))) (:path (.peek pq))))
           (.add page-identifiers (.poll pq)))
 
-        ;; setting up merging + merging
-        (let [page-rels (mapv :page-rel page-identifiers)
-              ;; if new-page-positions is -1 the page was finished
-              new-page-positions (int-array (repeat (count page-rels) -1))]
-          (with-open [^RelationReader block-rel (merge-page-rels! allocator page-rels page-identifiers new-page-positions)]
-            ;; did we finish the page
-            (doseq [[idx new-position] (map-indexed vector new-page-positions)]
-              (if (nat-int? new-position)
-                (.add pq (assoc (.get page-identifiers idx) :position new-position))
+        (with-open [^RelationReader block-rel (merge-page-rels! allocator page-identifiers)]
+          ;; did we finish the page ?
+          (doseq [{:keys [^IVectorPosition position ^RelationReader page-rel] :as page-identifier} page-identifiers]
+            (if (< (.getPosition position) (.rowCount page-rel))
+              (.add pq page-identifier)
 
-                ;; TODO be aware that we kind of breaking the RAII contract here
-                ;; but that this will change anyways when we bring things in line with the static merge tasks
-                (.tryAdvance ^ICursor (.get page-cursors (:trie-idx (.get page-identifiers idx)))
-                             (reify Consumer
-                               (accept [_ page-identifier]
-                                 (.add pq page-identifier))))))
-            (.accept c block-rel)
-            true)))
+              ;; TODO be aware that we kind of breaking the RAII contract here
+              ;; but that this will change anyways when we bring things in line with the static merge tasks
+              (.tryAdvance ^ICursor (.get page-cursors (:trie-idx page-identifier))
+                           (reify Consumer
+                             (accept [_ page-identifier]
+                               (.add pq page-identifier))))))
+          (.accept c block-rel)
+          true))
       false))
 
   (close [_]
