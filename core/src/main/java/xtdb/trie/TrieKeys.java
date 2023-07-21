@@ -48,6 +48,16 @@ public class TrieKeys {
         return 0;
     }
 
+    public static int comparePaths(byte[] path1, byte[] path2) {
+        for (int level = 0; level < Math.min(path1.length , path2.length); level++) {
+            var cmp = Integer.compare(path1[level], path2[level]);
+            if (cmp != 0) return cmp;
+        }
+        if (path1.length < path2.length) return -1;
+        if (path1.length < path2.length) return 0;
+        return 0;
+    }
+
     public int compareToPath(int idx, byte[] path) {
         return compareToPath(iidVector.getDataPointer(idx, bucketPtr), path);
     }

@@ -595,14 +595,6 @@
 (defn ->live-trie-page-cursor ^xtdb.ICursor [^RelationReader live-relation ^PersistentVector page-identifiers, trie-idx]
   (LiveTriePageCursor. live-relation (LinkedList. page-identifiers) trie-idx))
 
-
-(defn load-leaf-vsr ^RelationReader [^ArrowBuf leaf-buf, ^VectorSchemaRoot leaf-vsr,
-                                     ^ArrowFooter leaf-footer, page-idx]
-  (with-open [leaf-record-batch (util/->arrow-record-batch-view (.get (.getRecordBatches leaf-footer) page-idx) leaf-buf)]
-    ;; TODO could the vector-loader be repurposed
-    (.load (VectorLoader. leaf-vsr) leaf-record-batch)
-    (vr/<-root leaf-vsr)))
-
 ;; only for debugging for now
 (defn print-leaf-paths [^IBufferPool buffer-pool, trie-filename leaf-filename]
   (with-open [^ArrowBuf trie-buf @(.getBuffer buffer-pool trie-filename)
@@ -629,21 +621,6 @@
                         :iids (->> (range 0 (.getValueCount iid-vec))
                                    (mapv #(util/bytes->uuid (.getObject iid-vec %))))}))))))))
 
-(defn calc-leaf-paths [^IBufferPool buffer-pool, trie-filename]
-  (with-open [^ArrowBuf trie-buf @(.getBuffer buffer-pool trie-filename)]
-    (let [trie-footer (util/read-arrow-footer trie-buf)]
-      (with-open [^VectorSchemaRoot  trie-batch (VectorSchemaRoot/create (.getSchema trie-footer)
-                                                                         (.getAllocator (.getReferenceManager trie-buf)))
-                  trie-record-batch (util/->arrow-record-batch-view (first (.getRecordBatches trie-footer)) trie-buf)]
-
-        (.load (VectorLoader. trie-batch) trie-record-batch)
-        (->> (ArrowHashTrie/from trie-batch)
-             (.rootNode)
-             (.leaves)
-             (map (fn [^ArrowHashTrie$Leaf leaf] (conj (vec (.path leaf)) [(.getPageIndex leaf)])))
-             ^PersistentVector vec
-             (.iterator))))))
-
 (defn calc-trie-log-page-identifiers [^IBufferPool buffer-pool, trie-filename]
   (with-open [^ArrowBuf trie-buf @(.getBuffer buffer-pool trie-filename)]
     (let [trie-footer (util/read-arrow-footer trie-buf)]
@@ -657,67 +634,23 @@
              (.leaves)
              (mapv (fn [^ArrowHashTrie$Leaf leaf] {:path (.path leaf) :page-idx (.getPageIndex leaf)})))))))
 
-
-;; FIXME look at trieKeys.compareToPath
-(defn path->bytes ^bytes [path]
-  (assert (every? #(<= 0 % 0xf) path))
-  (->> (partition-all 2 path)
-       (map (fn [[high low]]
-              (bit-or (bit-shift-left high 4) (or low 0))))
-       byte-array))
-
-(defn bytes->path [bytes]
-  (mapcat #(list (mod (bit-shift-right % 4) 16)
-                 (bit-and % (dec (bit-shift-left 1 4))))
-          bytes))
-
-#_(defn compare-paths [path1 path2]
-    (cond (and (nil? path1) (nil? path2)) 0
-          (nil? path1) -1
-          (nil? path2) 1
-          :else
-          (if-let [res (->> (map - path1 path2)
-                            (drop-while zero?)
-                            first)]
-            res
-            (- (count path2) (count path1)))))
 (do
-  (defn compare-paths [path1 path2]
-    (loop [p1 (seq path1) p2 (seq path2)]
-      (cond (and (empty? p1) (empty? p2)) 0
-            (empty? p1) -1
-            (empty? p2) 1
-            :else (let [res (Integer/compare (first p1) (first p2))]
-                    (if-not (zero? res)
-                      res
-                      (recur (rest p1) (rest p2)))))))
-
   (defn sub-path?
     "returns true if p1 is a subpath of p2."
     [p1 p2]
-    (nat-int? (compare-paths p2 p1)))
-
-  (defn uuid-byte-prefix? [path bytes]
-    (if (nil? path)
-      true
-      (= path (take (count path) (bytes->path bytes)))))
-
-  (defn- byte-buffer->bytes [^java.nio.ByteBuffer bb]
-    (let [res (byte-array (.remaining bb))]
-      (.get bb res)
-      res))
+    (nat-int? (TrieKeys/comparePaths p2 p1)))
 
   (def null-or-neg-int? (complement pos-int?))
 
   ;; TODO use more info about the sorting of the relations
   (defn merge-page-rels [^BufferAllocator allocator page-rels page-identifiers]
-    (let [path (:path (last page-identifiers))
+    (let [most-specific-path (:path (last page-identifiers))
           page-positions (int-array (map :position page-identifiers))
           rel-wtr (vw/->strict-rel-writer allocator)
           rel-cnt (count page-rels)
           cmps (HashMap.)
-          trie-idxs (map :trie-idx page-identifiers)
-          trie-idx->idx (zipmap (range) trie-idxs)
+          trie-idxs (int-array (map :trie-idx page-identifiers))
+          value-counts (int-array (map #(.rowCount ^RelationReader %) page-rels))
           iid-vecs (object-array (map #(.readerForName ^RelationReader % "xt$iid") page-rels))
           copiers (object-array (map #(.rowCopier rel-wtr %) page-rels))
           prio (PriorityQueue. ^java.util.Comparator
@@ -725,8 +658,8 @@
                                              (let [res (.applyAsInt ^java.util.function.IntBinaryOperator
                                                                     (.get cmps [rel-idx1 rel-idx2]) idx1 idx2)]
                                                (or (neg? res)
-                                                   (and (zero? res) (> (trie-idx->idx rel-idx1)
-                                                                       (trie-idx->idx rel-idx2))))))))]
+                                                   (and (zero? res) (> (aget trie-idxs rel-idx1)
+                                                                       (aget trie-idxs rel-idx2))))))))]
       (doseq [i (range rel-cnt)
               j (range i)]
         ;; FIXME quick hack
@@ -741,12 +674,12 @@
       (let [^ints new-page-positions (int-array (repeat rel-cnt -1))]
         (loop []
           (when (not (.isEmpty prio))
-            (let [[rel-idx ^int idx] (.poll prio)
-                  new-idx (inc idx)]
-              (if (null-or-neg-int? (TrieKeys/compareToPath (.getPointer ^IVectorReader (aget iid-vecs rel-idx) idx) path))
-                (do
+            (let [[rel-idx ^int idx] (.poll prio)]
+              (if (null-or-neg-int? (TrieKeys/compareToPath (.getPointer ^IVectorReader (aget iid-vecs rel-idx) idx)
+                                                            most-specific-path))
+                (let [new-idx (inc idx)]
                   (.copyRow ^IRowCopier (aget copiers rel-idx) idx)
-                  (when (< new-idx (.valueCount ^IVectorReader (aget iid-vecs rel-idx)))
+                  (when (< new-idx (aget value-counts rel-idx))
                     (.add prio [rel-idx new-idx]))
                   (recur))
                 (aset new-page-positions rel-idx idx)))))
@@ -808,17 +741,13 @@
                                       log-trie-page-identifiers
                                       (range nb-log-tries))
 
-          ;; _ (mapv #(.close %) log-trie-page-cursors)
-
           live-trie-page-identifiers (some->> live-trie (.compactLogs) (.rootNode) (.leaves)
                                               (mapv (fn [^LiveHashTrie$Leaf leaf]
                                                       {:path (.path leaf) :selection (.data leaf)})))
           live-trie-page-cursor (when live-trie-page-identifiers
                                   (->live-trie-page-cursor live-relation live-trie-page-identifiers nb-log-tries))
 
-          ;; _ (when live-trie-page-cursor (.close live-trie-page-cursor))
-
-          pq (PriorityQueue. (fn [{path1 :path} {path2 :path}] (compare-paths path1 path2)))
+          pq (PriorityQueue. (fn [{path1 :path} {path2 :path}] (TrieKeys/comparePaths path1 path2)))
 
           page-cursors (ArrayList. ^PersistentVector (vec (cond-> log-trie-page-cursors
                                                             live-trie-page-cursor (conj live-trie-page-cursor))))]
