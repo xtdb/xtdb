@@ -54,7 +54,7 @@ public class TrieKeys {
             if (cmp != 0) return cmp;
         }
         if (path1.length < path2.length) return -1;
-        if (path1.length < path2.length) return 0;
+        if (path1.length > path2.length) return 1;
         return 0;
     }
 

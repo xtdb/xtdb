@@ -455,12 +455,12 @@
       (.set res i 1 util/end-of-time-μs))
     res))
 
-(deftype ValidPointTrieCursor [^BufferAllocator allocator,
-                               ^ICursor trie-bucket-cursor,
-                               ^longs temporal-range,
-                               ^PersistentHashSet col-names
-                               ^Map col-preds
-                               params]
+(deftype ValidPointCursor [^BufferAllocator allocator,
+                           ^ICursor trie-bucket-cursor,
+                           ^longs temporal-range,
+                           ^PersistentHashSet col-names
+                           ^Map col-preds
+                           params]
   ICursor
   (tryAdvance [_ c]
     (.tryAdvance trie-bucket-cursor
@@ -634,158 +634,155 @@
              (.leaves)
              (mapv (fn [^ArrowHashTrie$Leaf leaf] {:path (.path leaf) :page-idx (.getPageIndex leaf)})))))))
 
-(do
-  (defn sub-path?
-    "returns true if p1 is a subpath of p2."
-    [p1 p2]
-    (nat-int? (TrieKeys/comparePaths p2 p1)))
 
-  (def null-or-neg-int? (complement pos-int?))
+(defn sub-path?
+  "returns true if p1 is a subpath of p2."
+  [p1 p2]
+  (nat-int? (TrieKeys/comparePaths p2 p1)))
 
-  ;; TODO use more info about the sorting of the relations
-  (defn merge-page-rels [^BufferAllocator allocator page-rels page-identifiers]
-    (let [most-specific-path (:path (last page-identifiers))
-          page-positions (int-array (map :position page-identifiers))
-          rel-wtr (vw/->strict-rel-writer allocator)
-          rel-cnt (count page-rels)
-          cmps (HashMap.)
-          trie-idxs (int-array (map :trie-idx page-identifiers))
-          value-counts (int-array (map #(.rowCount ^RelationReader %) page-rels))
-          iid-vecs (object-array (map #(.readerForName ^RelationReader % "xt$iid") page-rels))
-          copiers (object-array (map #(.rowCopier rel-wtr %) page-rels))
-          prio (PriorityQueue. ^java.util.Comparator
-                               (comparator (fn [[rel-idx1 idx1] [rel-idx2 idx2]]
-                                             (let [res (.applyAsInt ^java.util.function.IntBinaryOperator
-                                                                    (.get cmps [rel-idx1 rel-idx2]) idx1 idx2)]
-                                               (or (neg? res)
-                                                   (and (zero? res) (> (aget trie-idxs rel-idx1)
-                                                                       (aget trie-idxs rel-idx2))))))))]
-      (doseq [i (range rel-cnt)
-              j (range i)]
-        ;; FIXME quick hack
-        (.put cmps [i j] (cmp/->comparator (aget iid-vecs i) (aget iid-vecs j) :nulls-last))
-        (.put cmps [j i] (cmp/->comparator (aget iid-vecs j) (aget iid-vecs i) :nulls-last)))
-      (doseq [i (range rel-cnt)]
-        (when (pos? (.valueCount ^IVectorReader (aget iid-vecs i)))
-          (.add prio [i (aget page-positions i)])))
+(def null-or-neg-int? (complement pos-int?))
 
-      ;; TODO we don't need to put in the element every time
-      ;; could wait until we hit an item larger than the second one
-      (let [^ints new-page-positions (int-array (repeat rel-cnt -1))]
-        (loop []
-          (when (not (.isEmpty prio))
-            (let [[rel-idx ^int idx] (.poll prio)]
-              (if (null-or-neg-int? (TrieKeys/compareToPath (.getPointer ^IVectorReader (aget iid-vecs rel-idx) idx)
-                                                            most-specific-path))
-                (let [new-idx (inc idx)]
-                  (.copyRow ^IRowCopier (aget copiers rel-idx) idx)
-                  (when (< new-idx (aget value-counts rel-idx))
-                    (.add prio [rel-idx new-idx]))
-                  (recur))
-                (aset new-page-positions rel-idx idx)))))
-        (while (not (.isEmpty prio))
+;; TODO bring in-line with the
+(defn merge-page-rels [^BufferAllocator allocator page-rels page-identifiers]
+  (let [most-specific-path (:path (last page-identifiers))
+        page-positions (int-array (map :position page-identifiers))
+        rel-wtr (vw/->strict-rel-writer allocator)
+        rel-cnt (count page-rels)
+        cmps (HashMap.)
+        trie-idxs (int-array (map :trie-idx page-identifiers))
+        value-counts (int-array (map #(.rowCount ^RelationReader %) page-rels))
+        iid-vecs (object-array (map #(.readerForName ^RelationReader % "xt$iid") page-rels))
+        copiers (object-array (map #(.rowCopier rel-wtr %) page-rels))
+        prio (PriorityQueue. ^java.util.Comparator
+                             (comparator (fn [[rel-idx1 idx1] [rel-idx2 idx2]]
+                                           (let [res (.applyAsInt ^java.util.function.IntBinaryOperator
+                                                                  (.get cmps [rel-idx1 rel-idx2]) idx1 idx2)]
+                                             (or (neg? res)
+                                                 (and (zero? res) (> (aget trie-idxs rel-idx1)
+                                                                     (aget trie-idxs rel-idx2))))))))]
+    (doseq [i (range rel-cnt)
+            j (range i)]
+      ;; FIXME quick hack
+      (.put cmps [i j] (cmp/->comparator (aget iid-vecs i) (aget iid-vecs j) :nulls-last))
+      (.put cmps [j i] (cmp/->comparator (aget iid-vecs j) (aget iid-vecs i) :nulls-last)))
+    (doseq [i (range rel-cnt)]
+      (when (pos? (.valueCount ^IVectorReader (aget iid-vecs i)))
+        (.add prio [i (aget page-positions i)])))
+
+    ;; TODO we don't need to put in the element every time
+    ;; could wait until we hit an item larger than the second one
+    (let [^ints new-page-positions (int-array (repeat rel-cnt -1))]
+      (loop []
+        (when (not (.isEmpty prio))
           (let [[rel-idx ^int idx] (.poll prio)]
-            (aset new-page-positions rel-idx idx)))
-        ;; TODO can this be better maintained
-        [(vw/rel-wtr->rdr rel-wtr) new-page-positions])))
+            (if (null-or-neg-int? (TrieKeys/compareToPath (.getPointer ^IVectorReader (aget iid-vecs rel-idx) idx)
+                                                          most-specific-path))
+              (let [new-idx (inc idx)]
+                (.copyRow ^IRowCopier (aget copiers rel-idx) idx)
+                (when (< new-idx (aget value-counts rel-idx))
+                  (.add prio [rel-idx new-idx]))
+                (recur))
+              (aset new-page-positions rel-idx idx)))))
+      (while (not (.isEmpty prio))
+        (let [[rel-idx ^int idx] (.poll prio)]
+          (aset new-page-positions rel-idx idx)))
+      ;; TODO can this be better maintained
+      [(vw/rel-wtr->rdr rel-wtr) new-page-positions])))
 
-  ;; indices in page-cursors maps to trie-idx of page-identifier
-  (deftype TrieBucketCursor [^BufferAllocator allocator,
-                             ^ArrayList page-cursors
-                             ^PriorityQueue pq]
-    ICursor
-    (tryAdvance [_ c]
-      (if-not (.isEmpty pq)
-        (let [smallest-page-identifier (.poll pq)
-              page-identifiers (doto (ArrayList.) (.add smallest-page-identifier))]
-          (while (and (not (.isEmpty pq))
-                      (sub-path? (:path (.get page-identifiers (dec (.size page-identifiers)))) (:path (.peek pq))))
-            (.add page-identifiers (.poll pq)))
+;; indices in page-cursors maps to trie-idx of page-identifier
+(deftype TrieBucketCursor [^BufferAllocator allocator,
+                           ^ArrayList page-cursors
+                           ^PriorityQueue pq]
+  ICursor
+  (tryAdvance [_ c]
+    (if-not (.isEmpty pq)
+      (let [smallest-page-identifier (.poll pq)
+            page-identifiers (doto (ArrayList.) (.add smallest-page-identifier))]
+        (while (and (not (.isEmpty pq))
+                    (sub-path? (:path (.get page-identifiers (dec (.size page-identifiers)))) (:path (.peek pq))))
+          (.add page-identifiers (.poll pq)))
 
+        ;; setting up merging + merging
+        (let [page-rels (mapv :page-rel page-identifiers)
+              ;; if new-page-position is -1 the page was finished
+              [^RelationReader block-rel new-page-positions] (merge-page-rels allocator page-rels page-identifiers)]
 
-          ;; setting up merging + merging
-          (let [page-rels (mapv :page-rel page-identifiers)
-                ;; if new-page-position is -1 the page was finished
-                [^RelationReader block-rel new-page-positions] (merge-page-rels allocator page-rels page-identifiers)]
+          (try
+            ;; get a new page or not
+            (doseq [[idx new-position] (map-indexed vector new-page-positions)]
+              (if (nat-int? new-position)
+                (.add pq (assoc (.get page-identifiers idx) :position new-position))
 
-            (try
-              ;; get a new page or not
-              (doseq [[idx new-position] (map-indexed vector new-page-positions)]
-                (if (nat-int? new-position)
-                  (.add pq (assoc (.get page-identifiers idx) :position new-position))
+                ;; FIXME breaking RAII
+                (.tryAdvance ^ICursor (.get page-cursors (:trie-idx (.get page-identifiers idx)))
+                             (reify Consumer
+                               (accept [_ page-identifier]
+                                 (.add pq page-identifier))))))
+            (.accept c block-rel)
+            true
+            (finally (.close block-rel)))))
+      false))
 
-                  ;; FIXME breaking RAII
-
-                  (.tryAdvance ^ICursor (.get page-cursors (:trie-idx (.get page-identifiers idx)))
-                               (reify Consumer
-                                 (accept [_ page-identifier]
-                                   (.add pq page-identifier))))))
-              (.accept c block-rel)
-              true
-              (finally (.close block-rel)))))
-        false))
-
-    (close [_]
-      (run! util/close page-cursors)))
-
-
-  ;; filenames is a list of [trie-filename leaf-filename]
-  (defn ->trie-bucket-cursor ^xtdb.ICursor [^BufferAllocator allocator, ^IBufferPool buffer-pool, filenames
-                                            ^RelationReader live-relation, ^LiveHashTrie live-trie]
-    ;; (clojure.pprint/pprint (map #(print-leaf-paths buffer-pool (first %) (second %)) filenames))
-
-    (let [nb-log-tries (count filenames)
-          log-trie-page-identifiers (mapv (comp #(calc-trie-log-page-identifiers buffer-pool %) first) filenames)
-          log-trie-page-cursors (mapv #(->log-trie-page-cursor buffer-pool (second %1) %2 %3)
-                                      filenames
-                                      log-trie-page-identifiers
-                                      (range nb-log-tries))
-
-          live-trie-page-identifiers (some->> live-trie (.compactLogs) (.rootNode) (.leaves)
-                                              (mapv (fn [^LiveHashTrie$Leaf leaf]
-                                                      {:path (.path leaf) :selection (.data leaf)})))
-          live-trie-page-cursor (when live-trie-page-identifiers
-                                  (->live-trie-page-cursor live-relation live-trie-page-identifiers nb-log-tries))
-
-          pq (PriorityQueue. (fn [{path1 :path} {path2 :path}] (TrieKeys/comparePaths path1 path2)))
-
-          page-cursors (ArrayList. ^PersistentVector (vec (cond-> log-trie-page-cursors
-                                                            live-trie-page-cursor (conj live-trie-page-cursor))))]
-      (doseq [^ICursor page-cursor page-cursors]
-        ;;FIXME breaking RAII
-        (.tryAdvance page-cursor
-                     (reify Consumer
-                       (accept [_ page-identifier]
-                         (.add pq page-identifier)))))
-      (TrieBucketCursor. allocator page-cursors pq)))
+  (close [_]
+    (run! util/close page-cursors)))
 
 
-  (defn- table-names->filenames [^ObjectStore object-store, table-name]
-    (let [table-dir (format "tables/%s/chunks/" table-name)
-          objects (.listObjects object-store (format "tables/%s/chunks/" table-name))
-          trie-files (-> (filter #(re-matches (re-pattern (str table-dir "trie.*")) %) objects) sort reverse)
-          leaf-files (-> (filter #(re-matches (re-pattern (str table-dir "leaf.*")) %) objects) sort reverse)]
-      (map vector trie-files leaf-files)))
+;; filenames is a list of [trie-filename leaf-filename]
+(defn ->trie-bucket-cursor ^xtdb.ICursor [^BufferAllocator allocator, ^IBufferPool buffer-pool, filenames
+                                          ^RelationReader live-relation, ^LiveHashTrie live-trie]
+  ;; (clojure.pprint/pprint (map #(print-leaf-paths buffer-pool (first %) (second %)) filenames))
+  (let [nb-log-tries (count filenames)
+        log-trie-page-identifiers (mapv (comp #(calc-trie-log-page-identifiers buffer-pool %) first) filenames)
+        log-trie-page-cursors (mapv #(->log-trie-page-cursor buffer-pool (second %1) %2 %3)
+                                    filenames
+                                    log-trie-page-identifiers
+                                    (range nb-log-tries))
 
-  ;; TODO object-store to be replaced with buffer pool as soon as metadata-mgr
-  ;; knows for which chunk a trie is available (for this table)
-  (defn- ->4r-cursor [^BufferAllocator allocator, ^ObjectStore object-store,
-                      ^IBufferPool buffer-pool, ^ILiveTableWatermark wm,
-                      table-name, col-names, ^longs temporal-range
-                      ^Map col-preds, params, scan-opts, _basis]
-    (let [filenames (table-names->filenames object-store table-name)
-          live-relation (some-> wm (.liveRelation))
-          trie-bucket-curser (->trie-bucket-cursor allocator buffer-pool filenames
-                                                   live-relation (some-> wm (.liveTrie)))]
-      (cond
-        ;; TODO if knowledge of no future data is available this can be optimized further
-        (at-now? scan-opts)
-        (ValidPointTrieCursor. allocator trie-bucket-curser temporal-range col-names col-preds params)
+        live-trie-page-identifiers (some->> live-trie (.compactLogs) (.rootNode) (.leaves)
+                                            (mapv (fn [^LiveHashTrie$Leaf leaf]
+                                                    {:path (.path leaf) :selection (.data leaf)})))
+        live-trie-page-cursor (when live-trie-page-identifiers
+                                (->live-trie-page-cursor live-relation live-trie-page-identifiers nb-log-tries))
 
-        (at-valid-time-point? scan-opts)
-        (ValidPointTrieCursor. allocator trie-bucket-curser temporal-range col-names col-preds params)
+        pq (PriorityQueue. (fn [{path1 :path} {path2 :path}] (TrieKeys/comparePaths path1 path2)))
 
-        :else (throw (ex-info "TODO - invalid 4r option" {}))))))
+        page-cursors (ArrayList. ^PersistentVector (vec (cond-> log-trie-page-cursors
+                                                          live-trie-page-cursor (conj live-trie-page-cursor))))]
+    (doseq [^ICursor page-cursor page-cursors]
+      ;;FIXME breaking RAII
+      (.tryAdvance page-cursor
+                   (reify Consumer
+                     (accept [_ page-identifier]
+                       (.add pq page-identifier)))))
+    (TrieBucketCursor. allocator page-cursors pq)))
+
+
+(defn- table-names->filenames [^ObjectStore object-store, table-name]
+  (let [table-dir (format "tables/%s/chunks/" table-name)
+        objects (.listObjects object-store (format "tables/%s/chunks/" table-name))
+        trie-files (-> (filter #(re-matches (re-pattern (str table-dir "trie.*")) %) objects) sort reverse)
+        leaf-files (-> (filter #(re-matches (re-pattern (str table-dir "leaf.*")) %) objects) sort reverse)]
+    (map vector trie-files leaf-files)))
+
+;; TODO object-store to be replaced with buffer pool as soon as metadata-mgr
+;; knows for which chunk a trie is available (for this table)
+(defn- ->4r-cursor [^BufferAllocator allocator, ^ObjectStore object-store,
+                    ^IBufferPool buffer-pool, ^ILiveTableWatermark wm,
+                    table-name, col-names, ^longs temporal-range
+                    ^Map col-preds, params, scan-opts, _basis]
+  (let [filenames (table-names->filenames object-store table-name)
+        live-relation (some-> wm (.liveRelation))
+        trie-bucket-curser (->trie-bucket-cursor allocator buffer-pool filenames
+                                                 live-relation (some-> wm (.liveTrie)))]
+    (cond
+      ;; TODO if knowledge of no future data is available this can be optimized further, ie NowCursor
+      (at-now? scan-opts)
+      (ValidPointCursor. allocator trie-bucket-curser temporal-range col-names col-preds params)
+
+      (at-valid-time-point? scan-opts)
+      (ValidPointCursor. allocator trie-bucket-curser temporal-range col-names col-preds params)
+
+      :else (throw (ex-info "TODO - invalid 4r option" {})))))
 
 (defn tables-with-cols [basis ^IWatermarkSource wm-src ^IScanEmitter scan-emitter]
   (let [{:keys [tx, after-tx]} basis
