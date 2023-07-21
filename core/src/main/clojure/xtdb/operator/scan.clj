@@ -19,14 +19,14 @@
             [xtdb.vector.reader :as vr]
             [xtdb.vector.writer :as vw]
             xtdb.watermark)
-  (:import (clojure.lang IPersistentSet MapEntry PersistentHashSet PersistentVector)
+  (:import (clojure.lang IPersistentSet MapEntry PersistentHashSet PersistentVector PersistentHashMap)
            (java.util ArrayList HashMap LinkedList List Map PriorityQueue Queue Set)
            (java.util.function BiFunction Consumer)
            [java.util.stream IntStream]
            (org.apache.arrow.memory ArrowBuf BufferAllocator)
            (org.apache.arrow.vector BigIntVector TimeStampMicroTZVector VarBinaryVector VectorLoader VectorSchemaRoot)
            (org.apache.arrow.vector.complex ListVector StructVector)
-           (org.apache.arrow.vector.ipc.message ArrowRecordBatch)
+           (org.apache.arrow.vector.ipc.message ArrowFooter ArrowRecordBatch)
            (org.roaringbitmap IntConsumer RoaringBitmap)
            org.roaringbitmap.buffer.MutableRoaringBitmap
            (org.roaringbitmap.longlong Roaring64Bitmap)
@@ -37,7 +37,7 @@
            (xtdb.metadata IMetadataManager ITableMetadata)
            (xtdb.object_store ObjectStore)
            xtdb.operator.IRelationSelector
-           [xtdb.trie ArrowHashTrie ArrowHashTrie$Leaf LiveHashTrie LiveHashTrie$Leaf TrieKeys]
+           [xtdb.trie HashTrie HashTrie$Node ArrowHashTrie ArrowHashTrie$Leaf LiveHashTrie LiveHashTrie$Leaf TrieKeys]
            (xtdb.vector IVectorReader RelationReader IRowCopier IVectorPosition)
            (xtdb.watermark IWatermark IWatermarkSource Watermark)))
 
@@ -465,6 +465,7 @@
     (.tryAdvance trie-bucket-cursor
                  (reify Consumer
                    (accept [_ block-rel-rdr]
+                     (prn block-rel-rdr)
                      (let [^RelationReader block-rel-rdr block-rel-rdr
                            !selection-vec (IntStream/builder)
                            iid-col (.readerForName block-rel-rdr "xt$iid")
@@ -595,31 +596,87 @@
   (LiveTriePageCursor. live-relation (LinkedList. page-identifiers) trie-idx))
 
 
-;; only for debugging for now
-(defn print-leaf-paths [^IBufferPool buffer-pool, trie-filename leaf-filename]
-  (with-open [^ArrowBuf trie-buf @(.getBuffer buffer-pool trie-filename)
-              ^ArrowBuf leaf-buf @(.getBuffer buffer-pool leaf-filename)]
-    (let [trie-footer (util/read-arrow-footer trie-buf)
-          leaf-footer (util/read-arrow-footer leaf-buf)]
-      (with-open [^VectorSchemaRoot  trie-batch (VectorSchemaRoot/create (.getSchema trie-footer)
-                                                                         (.getAllocator (.getReferenceManager trie-buf)))
-                  trie-record-batch (util/->arrow-record-batch-view (first (.getRecordBatches trie-footer)) trie-buf)
-                  ^VectorSchemaRoot  leaf-batch (VectorSchemaRoot/create (.getSchema leaf-footer)
-                                                                         (.getAllocator (.getReferenceManager leaf-buf)))]
 
-        (let [iid-vec (.getVector leaf-batch "xt$iid")]
-          (.load (VectorLoader. trie-batch) trie-record-batch)
-          (->> (ArrowHashTrie/from trie-batch)
-               (.rootNode)
-               (.leaves)
-               (mapv (fn [^ArrowHashTrie$Leaf leaf]
-                       (with-open [leaf-record-batch (util/->arrow-record-batch-view (.get (.getRecordBatches leaf-footer)
-                                                                                           (.getPageIndex leaf)) leaf-buf)]
+(defn sub-path?
+  "returns true if p2 is a subpath of p1."
+  [p1 p2] (nat-int? (TrieKeys/comparePaths p1 p2)))
 
-                         (.load (VectorLoader. leaf-batch) leaf-record-batch))
-                       {:path (seq (.path leaf))
-                        :iids (->> (range 0 (.getValueCount iid-vec))
-                                   (mapv #(util/bytes->uuid (.getObject iid-vec %))))}))))))))
+(def null-or-neg-int? (complement pos-int?))
+
+(deftype MergeTaskCursor [^Queue merge-tasks
+                          ^"[Ljava.lang.Object;" cursors
+                          ^"[Ljava.lang.Object;" current-page-identifiers]
+  ICursor #_ List<page-identifiers>
+  (tryAdvance [_ c]
+    (if-let [{:keys [path trie-idxs]} (.poll merge-tasks)]
+      (do
+        (.accept c {:path path
+                    :page-identifiers
+                    (doall
+                     (for [trie-idx trie-idxs
+                           :let [page-identifier (aget current-page-identifiers trie-idx)]]
+                       (do
+                         (when (or (nil? page-identifier)
+                                   (nat-int? (TrieKeys/comparePaths path (:path page-identifier))))
+                           ;; watch out, not RAII
+                           (.tryAdvance ^ICursor (aget cursors trie-idx)
+                                        (reify Consumer
+                                          (accept [_ page-identifier]
+                                            (aset current-page-identifiers trie-idx page-identifier)))))
+                         (prn {:path (seq path)
+                               :pi-path (seq (:path (aget current-page-identifiers trie-idx)))
+                               :page-identifier (aget current-page-identifiers trie-idx)})
+                         (assert (nat-int? (TrieKeys/comparePaths path (:path (aget current-page-identifiers trie-idx)))))
+                         (aget current-page-identifiers trie-idx))))})
+        true)
+      false))
+
+  (close [_]
+    (run! util/close cursors)))
+
+;; TODO maybe this could be made to work with some stateful load-page! fn at the bottom
+;; then LiveTriePageCursor + LogTriePageCursor could probably go
+(defn trie-merge-tasks [tries]
+  (letfn [(trie-merge-tasks* [nodes path]
+            (let [trie-children (mapv #(some-> ^HashTrie$Node % (.children)) nodes)]
+              (if-let [^objects first-children (some identity trie-children)]
+                (->> (range (alength first-children))
+                     (mapcat (fn [bucket-idx]
+                               (trie-merge-tasks* (mapv (fn [node ^objects node-children]
+                                                          (if node-children
+                                                            (aget node-children bucket-idx)
+                                                            node))
+                                                        nodes trie-children)
+                                                  (conj path bucket-idx)))))
+                [{:path (byte-array path)
+                  :trie-idxs (->> nodes
+                                  (into [] (keep-indexed
+                                            (fn [trie-idx ^HashTrie$Node node]
+                                              (when node
+                                                trie-idx
+                                                #_{:trie-idx trie-idx :load-page  (fn load-page! [node] ...)})))))}])))]
+    (vec (trie-merge-tasks* (map #(some-> ^HashTrie % (.rootNode)) tries) []))))
+
+(defn calc-merge-tasks [^IBufferPool buffer-pool, trie-filenames, ^LiveHashTrie live-trie]
+  (let [log-trie-bufs (mapv #(deref (.getBuffer buffer-pool %)) trie-filenames)]
+    (try
+      (let [log-trie-footers (mapv util/read-arrow-footer log-trie-bufs)
+            log-trie-batches (mapv #(VectorSchemaRoot/create (.getSchema ^ArrowFooter %1)
+                                                             (.getAllocator (.getReferenceManager ^ArrowBuf %2)))
+                                   log-trie-footers
+                                   log-trie-bufs)
+            log-trie-record-batches (mapv #(util/->arrow-record-batch-view (first (.getRecordBatches ^ArrowFooter %1)) %2)
+                                          log-trie-footers
+                                          log-trie-bufs)]
+        (try
+          (mapv #(.load (VectorLoader. %1) %2) log-trie-batches log-trie-record-batches)
+          (trie-merge-tasks (-> (mapv #(ArrowHashTrie/from %) log-trie-batches)
+                                (conj live-trie)))
+          (finally
+            (run! util/try-close log-trie-batches)
+            (run! util/try-close log-trie-record-batches))))
+      (finally
+        (run! util/try-close log-trie-bufs)))))
 
 (defn calc-trie-log-page-identifiers [^IBufferPool buffer-pool, trie-filename]
   (with-open [^ArrowBuf trie-buf @(.getBuffer buffer-pool trie-filename)]
@@ -634,16 +691,33 @@
              (.leaves)
              (mapv (fn [^ArrowHashTrie$Leaf leaf] {:path (.path leaf) :page-idx (.getPageIndex leaf)})))))))
 
-(defn sub-path?
-  "returns true if p1 is a subpath of p2."
-  [p1 p2] (nat-int? (TrieKeys/comparePaths p2 p1)))
 
-(def null-or-neg-int? (complement pos-int?))
+(defn ->merge-task-cursor [^IBufferPool buffer-pool, filenames,
+                           ^RelationReader live-relation, ^LiveHashTrie live-trie]
+  (let [nb-log-tries (count filenames)
+        trie-filenames (map first filenames)
+        log-trie-page-identifiers (mapv #(calc-trie-log-page-identifiers buffer-pool %) trie-filenames)
+        log-trie-page-cursors (mapv #(->log-trie-page-cursor buffer-pool (second %1) %2 %3)
+                                    filenames
+                                    log-trie-page-identifiers
+                                    (range nb-log-tries))
+
+        live-trie-page-identifiers (some->> live-trie (.compactLogs) (.rootNode) (.leaves)
+                                            (mapv (fn [^LiveHashTrie$Leaf leaf]
+                                                    {:path (.path leaf) :selection (.data leaf)})))
+        live-trie-page-cursor (when live-trie-page-identifiers
+                                (->live-trie-page-cursor live-relation live-trie-page-identifiers nb-log-tries))
+        page-cursors (object-array (cond-> log-trie-page-cursors
+                                     live-trie-page-cursor (conj live-trie-page-cursor)))
+        merge-tasks (LinkedList. (calc-merge-tasks buffer-pool trie-filenames live-trie))]
+    (prn merge-tasks)
+    (MergeTaskCursor. merge-tasks page-cursors (object-array (count page-cursors)))))
+
+
 
 ;; TODO bring in-line with
-(defn merge-page-rels! [^BufferAllocator allocator page-identifiers]
-  (let [most-specific-path (:path (last page-identifiers))
-        rel-wtr (vw/->strict-rel-writer allocator)
+(defn merge-page-rels! [^BufferAllocator allocator {:keys [path page-identifiers] :as _merge-task}]
+  (let [rel-wtr (vw/->strict-rel-writer allocator)
         cmps (HashMap.)
         trie-idxs (int-array (map :trie-idx page-identifiers))
         value-counts (int-array (map #(.rowCount ^RelationReader (:page-rel %)) page-identifiers))
@@ -674,7 +748,7 @@
         (let [{:keys [rel-idx ^IVectorPosition position] :as page-identifier} (.poll prio)]
           (when (null-or-neg-int?
                  (TrieKeys/compareToPath (.getPointer ^IVectorReader (aget iid-vecs rel-idx) (.getPosition position))
-                                         most-specific-path))
+                                         path))
             (.copyRow ^IRowCopier (aget copiers rel-idx) (.getPosition position))
             (when (< (.getPositionAndIncrement position) (aget value-counts rel-idx))
               (.add prio page-identifier))
@@ -683,65 +757,50 @@
 
 ;; indices in page-cursors maps to trie-idx of page-identifier
 (deftype TrieBucketCursor [^BufferAllocator allocator,
-                           ^ArrayList page-cursors
-                           ^PriorityQueue pq]
+                           ^ICursor merge-task-cursor]
   ICursor
   (tryAdvance [_ c]
-    (if-not (.isEmpty pq)
-      (let [smallest-page-identifier (.poll pq)
-            page-identifiers (doto (ArrayList.) (.add smallest-page-identifier))]
-        (while (and (not (.isEmpty pq))
-                    (sub-path? (:path (.get page-identifiers (dec (.size page-identifiers)))) (:path (.peek pq))))
-          (.add page-identifiers (.poll pq)))
-
-        (with-open [^RelationReader block-rel (merge-page-rels! allocator page-identifiers)]
-          ;; did we finish the page ?
-          (doseq [{:keys [^IVectorPosition position ^RelationReader page-rel] :as page-identifier} page-identifiers]
-            (if (< (.getPosition position) (.rowCount page-rel))
-              (.add pq page-identifier)
-
-              ;; TODO be aware that we kind of breaking the RAII contract here
-              ;; but that this will change anyways when we bring things in line with the static merge tasks
-              (.tryAdvance ^ICursor (.get page-cursors (:trie-idx page-identifier))
-                           (reify Consumer
-                             (accept [_ page-identifier]
-                               (.add pq page-identifier))))))
-          (.accept c block-rel)
-          true))
-      false))
-
+    (.tryAdvance merge-task-cursor
+                 (reify Consumer
+                   (accept [_ merge-task]
+                     (prn merge-task)
+                     (with-open [^RelationReader block-rel (merge-page-rels! allocator merge-task)]
+                       (.accept c block-rel)
+                       true)))))
   (close [_]
-    (run! util/close page-cursors)))
+    (util/close merge-task-cursor)))
+
+(defn print-leaf-paths [^IBufferPool buffer-pool, trie-filename leaf-filename]
+  (with-open [^ArrowBuf trie-buf @(.getBuffer buffer-pool trie-filename)
+              ^ArrowBuf leaf-buf @(.getBuffer buffer-pool leaf-filename)]
+    (let [trie-footer (util/read-arrow-footer trie-buf)
+          leaf-footer (util/read-arrow-footer leaf-buf)]
+      (with-open [^VectorSchemaRoot  trie-batch (VectorSchemaRoot/create (.getSchema trie-footer)
+                                                                         (.getAllocator (.getReferenceManager trie-buf)))
+                  trie-record-batch (util/->arrow-record-batch-view (first (.getRecordBatches trie-footer)) trie-buf)
+                  ^VectorSchemaRoot  leaf-batch (VectorSchemaRoot/create (.getSchema leaf-footer)
+                                                                         (.getAllocator (.getReferenceManager leaf-buf)))]
+
+        (let [iid-vec (.getVector leaf-batch "xt$iid")]
+          (.load (VectorLoader. trie-batch) trie-record-batch)
+          (->> (ArrowHashTrie/from trie-batch)
+               (.rootNode)
+               (.leaves)
+               (mapv (fn [^ArrowHashTrie$Leaf leaf]
+                       (with-open [leaf-record-batch (util/->arrow-record-batch-view (.get (.getRecordBatches leaf-footer)
+                                                                                           (.getPageIndex leaf)) leaf-buf)]
+
+                         (.load (VectorLoader. leaf-batch) leaf-record-batch))
+                       {:path (seq (.path leaf))
+                        :iids (->> (range 0 (.getValueCount iid-vec))
+                                   (mapv #(util/bytes->uuid (.getObject iid-vec %))))}))))))))
 
 
 ;; filenames is a list of [trie-filename leaf-filename]
 (defn ->trie-bucket-cursor ^xtdb.ICursor [^BufferAllocator allocator, ^IBufferPool buffer-pool, filenames
                                           ^RelationReader live-relation, ^LiveHashTrie live-trie]
-  ;; (clojure.pprint/pprint (map #(print-leaf-paths buffer-pool (first %) (second %)) filenames))
-  (let [nb-log-tries (count filenames)
-        log-trie-page-identifiers (mapv (comp #(calc-trie-log-page-identifiers buffer-pool %) first) filenames)
-        log-trie-page-cursors (mapv #(->log-trie-page-cursor buffer-pool (second %1) %2 %3)
-                                    filenames
-                                    log-trie-page-identifiers
-                                    (range nb-log-tries))
-
-        live-trie-page-identifiers (some->> live-trie (.compactLogs) (.rootNode) (.leaves)
-                                            (mapv (fn [^LiveHashTrie$Leaf leaf]
-                                                    {:path (.path leaf) :selection (.data leaf)})))
-        live-trie-page-cursor (when live-trie-page-identifiers
-                                (->live-trie-page-cursor live-relation live-trie-page-identifiers nb-log-tries))
-
-        pq (PriorityQueue. (fn [{path1 :path} {path2 :path}] (TrieKeys/comparePaths path1 path2)))
-
-        page-cursors (ArrayList. ^PersistentVector (vec (cond-> log-trie-page-cursors
-                                                          live-trie-page-cursor (conj live-trie-page-cursor))))]
-    (doseq [^ICursor page-cursor page-cursors]
-      (.tryAdvance page-cursor
-                   (reify Consumer
-                     (accept [_ page-identifier]
-                       (.add pq page-identifier)))))
-    (TrieBucketCursor. allocator page-cursors pq)))
-
+  (clojure.pprint/pprint (map #(print-leaf-paths buffer-pool (first %) (second %)) filenames))
+  (TrieBucketCursor. allocator (->merge-task-cursor buffer-pool filenames live-relation live-trie)))
 
 (defn- table-names->filenames [^ObjectStore object-store, table-name]
   (let [table-dir (format "tables/%s/chunks/" table-name)
@@ -878,28 +937,28 @@
                            current-row-ids (when (use-current-row-id-cache? watermark scan-opts basis temporal-col-names)
                                              (get-current-row-ids watermark basis))]
                        (->
-                        (if false #_(use-4r? watermark scan-opts basis)
-                            (->4r-cursor allocator object-store buffer-pool
-                                         (some-> (.liveIndex watermark) (.liveTable normalized-table-name))
-                                         normalized-table-name
-                                         (-> (set/union content-col-names temporal-col-names)
-                                             (disj "_row_id"))
-                                         (->temporal-range temporal-min-range temporal-max-range)
-                                         col-preds
-                                         params
-                                         scan-opts
-                                         basis)
+                        (if (use-4r? watermark scan-opts basis)
+                          (->4r-cursor allocator object-store buffer-pool
+                                       (some-> (.liveIndex watermark) (.liveTable normalized-table-name))
+                                       normalized-table-name
+                                       (-> (set/union content-col-names temporal-col-names)
+                                           (disj "_row_id"))
+                                       (->temporal-range temporal-min-range temporal-max-range)
+                                       col-preds
+                                       params
+                                       scan-opts
+                                       basis)
 
-                            (ScanCursor. allocator metadata-mgr watermark
-                                         content-col-names temporal-col-names col-preds
-                                         temporal-min-range temporal-max-range current-row-ids
-                                         (util/->concat-cursor (->content-chunks allocator metadata-mgr buffer-pool
-                                                                                 normalized-table-name normalized-content-col-names
-                                                                                 metadata-pred)
-                                                               (some-> (.liveChunk watermark)
-                                                                       (.liveTable normalized-table-name)
-                                                                       (.liveBlocks normalized-content-col-names metadata-pred)))
-                                         params))
+                          (ScanCursor. allocator metadata-mgr watermark
+                                       content-col-names temporal-col-names col-preds
+                                       temporal-min-range temporal-max-range current-row-ids
+                                       (util/->concat-cursor (->content-chunks allocator metadata-mgr buffer-pool
+                                                                               normalized-table-name normalized-content-col-names
+                                                                               metadata-pred)
+                                                             (some-> (.liveChunk watermark)
+                                                                     (.liveTable normalized-table-name)
+                                                                     (.liveBlocks normalized-content-col-names metadata-pred)))
+                                       params))
                         (coalesce/->coalescing-cursor allocator))))}))))
 
 (defmethod lp/emit-expr :scan [scan-expr {:keys [^IScanEmitter scan-emitter scan-col-types, param-types]}]
