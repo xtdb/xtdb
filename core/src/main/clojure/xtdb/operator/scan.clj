@@ -634,16 +634,14 @@
              (.leaves)
              (mapv (fn [^ArrowHashTrie$Leaf leaf] {:path (.path leaf) :page-idx (.getPageIndex leaf)})))))))
 
-
 (defn sub-path?
   "returns true if p1 is a subpath of p2."
-  [p1 p2]
-  (nat-int? (TrieKeys/comparePaths p2 p1)))
+  [p1 p2] (nat-int? (TrieKeys/comparePaths p2 p1)))
 
 (def null-or-neg-int? (complement pos-int?))
 
-;; TODO bring in-line with the
-(defn merge-page-rels [^BufferAllocator allocator page-rels page-identifiers]
+;; TODO bring in-line with
+(defn merge-page-rels! [^BufferAllocator allocator page-rels page-identifiers, ^ints new-page-positions]
   (let [most-specific-path (:path (last page-identifiers))
         page-positions (int-array (map :position page-identifiers))
         rel-wtr (vw/->strict-rel-writer allocator)
@@ -671,23 +669,22 @@
 
     ;; TODO we don't need to put in the element every time
     ;; could wait until we hit an item larger than the second one
-    (let [^ints new-page-positions (int-array (repeat rel-cnt -1))]
-      (loop []
-        (when (not (.isEmpty prio))
-          (let [[rel-idx ^int idx] (.poll prio)]
-            (if (null-or-neg-int? (TrieKeys/compareToPath (.getPointer ^IVectorReader (aget iid-vecs rel-idx) idx)
-                                                          most-specific-path))
-              (let [new-idx (inc idx)]
-                (.copyRow ^IRowCopier (aget copiers rel-idx) idx)
-                (when (< new-idx (aget value-counts rel-idx))
-                  (.add prio [rel-idx new-idx]))
-                (recur))
-              (aset new-page-positions rel-idx idx)))))
-      (while (not (.isEmpty prio))
+    (loop []
+      (when (not (.isEmpty prio))
         (let [[rel-idx ^int idx] (.poll prio)]
-          (aset new-page-positions rel-idx idx)))
-      ;; TODO can this be better maintained
-      [(vw/rel-wtr->rdr rel-wtr) new-page-positions])))
+          (if (null-or-neg-int? (TrieKeys/compareToPath (.getPointer ^IVectorReader (aget iid-vecs rel-idx) idx)
+                                                        most-specific-path))
+            (let [new-idx (inc idx)]
+              (.copyRow ^IRowCopier (aget copiers rel-idx) idx)
+              (when (< new-idx (aget value-counts rel-idx))
+                (.add prio [rel-idx new-idx]))
+              (recur))
+            (aset new-page-positions rel-idx idx)))))
+    (while (not (.isEmpty prio))
+      (let [[rel-idx ^int idx] (.poll prio)]
+        (aset new-page-positions rel-idx idx)))
+    ;; TODO can this be better maintained
+    (vw/rel-wtr->rdr rel-wtr)))
 
 ;; indices in page-cursors maps to trie-idx of page-identifier
 (deftype TrieBucketCursor [^BufferAllocator allocator,
@@ -704,23 +701,22 @@
 
         ;; setting up merging + merging
         (let [page-rels (mapv :page-rel page-identifiers)
-              ;; if new-page-position is -1 the page was finished
-              [^RelationReader block-rel new-page-positions] (merge-page-rels allocator page-rels page-identifiers)]
-
-          (try
-            ;; get a new page or not
+              ;; if new-page-positions is -1 the page was finished
+              new-page-positions (int-array (repeat (count page-rels) -1))]
+          (with-open [^RelationReader block-rel (merge-page-rels! allocator page-rels page-identifiers new-page-positions)]
+            ;; did we finish the page
             (doseq [[idx new-position] (map-indexed vector new-page-positions)]
               (if (nat-int? new-position)
                 (.add pq (assoc (.get page-identifiers idx) :position new-position))
 
-                ;; FIXME breaking RAII
+                ;; TODO be aware that we kind of breaking the RAII contract here
+                ;; but that this will change anyways when we bring things in line with the static merge tasks
                 (.tryAdvance ^ICursor (.get page-cursors (:trie-idx (.get page-identifiers idx)))
                              (reify Consumer
                                (accept [_ page-identifier]
                                  (.add pq page-identifier))))))
             (.accept c block-rel)
-            true
-            (finally (.close block-rel)))))
+            true)))
       false))
 
   (close [_]
@@ -749,7 +745,6 @@
         page-cursors (ArrayList. ^PersistentVector (vec (cond-> log-trie-page-cursors
                                                           live-trie-page-cursor (conj live-trie-page-cursor))))]
     (doseq [^ICursor page-cursor page-cursors]
-      ;;FIXME breaking RAII
       (.tryAdvance page-cursor
                    (reify Consumer
                      (accept [_ page-identifier]
@@ -892,28 +887,28 @@
                            current-row-ids (when (use-current-row-id-cache? watermark scan-opts basis temporal-col-names)
                                              (get-current-row-ids watermark basis))]
                        (->
-                        (if (use-4r? watermark scan-opts basis)
-                          (->4r-cursor allocator object-store buffer-pool
-                                       (some-> (.liveIndex watermark) (.liveTable normalized-table-name))
-                                       normalized-table-name
-                                       (-> (set/union content-col-names temporal-col-names)
-                                           (disj "_row_id"))
-                                       (->temporal-range temporal-min-range temporal-max-range)
-                                       col-preds
-                                       params
-                                       scan-opts
-                                       basis)
+                        (if false #_(use-4r? watermark scan-opts basis)
+                            (->4r-cursor allocator object-store buffer-pool
+                                         (some-> (.liveIndex watermark) (.liveTable normalized-table-name))
+                                         normalized-table-name
+                                         (-> (set/union content-col-names temporal-col-names)
+                                             (disj "_row_id"))
+                                         (->temporal-range temporal-min-range temporal-max-range)
+                                         col-preds
+                                         params
+                                         scan-opts
+                                         basis)
 
-                          (ScanCursor. allocator metadata-mgr watermark
-                                       content-col-names temporal-col-names col-preds
-                                       temporal-min-range temporal-max-range current-row-ids
-                                       (util/->concat-cursor (->content-chunks allocator metadata-mgr buffer-pool
-                                                                               normalized-table-name normalized-content-col-names
-                                                                               metadata-pred)
-                                                             (some-> (.liveChunk watermark)
-                                                                     (.liveTable normalized-table-name)
-                                                                     (.liveBlocks normalized-content-col-names metadata-pred)))
-                                       params))
+                            (ScanCursor. allocator metadata-mgr watermark
+                                         content-col-names temporal-col-names col-preds
+                                         temporal-min-range temporal-max-range current-row-ids
+                                         (util/->concat-cursor (->content-chunks allocator metadata-mgr buffer-pool
+                                                                                 normalized-table-name normalized-content-col-names
+                                                                                 metadata-pred)
+                                                               (some-> (.liveChunk watermark)
+                                                                       (.liveTable normalized-table-name)
+                                                                       (.liveBlocks normalized-content-col-names metadata-pred)))
+                                         params))
                         (coalesce/->coalescing-cursor allocator))))}))))
 
 (defmethod lp/emit-expr :scan [scan-expr {:keys [^IScanEmitter scan-emitter scan-col-types, param-types]}]
