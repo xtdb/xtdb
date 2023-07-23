@@ -1,5 +1,6 @@
 (ns xtdb.operator.order-by-test
   (:require [clojure.test :as t]
+            [xtdb.operator.order-by :as order-by]
             [xtdb.test-util :as tu]))
 
 (t/use-fixtures :each tu/with-allocator)
@@ -29,6 +30,13 @@
                         {}))
         "mixed numeric types")
 
+  (t/is (= []
+           (tu/query-ra '[:order-by [[a]]
+                          [::tu/blocks
+                           [[] []]]]
+                        {}))
+        "empty blocks")
+
   (let [table-with-nil [{:a 12.4, :b 10}, {:a nil, :b 15}, {:a 100, :b 83}, {:a 83.0, :b 100}]]
     (t/is (= [{:a nil, :b 15}, {:a 12.4, :b 10}, {:a 83.0, :b 100}, {:a 100, :b 83}]
              (tu/query-ra '[:order-by [[a {:null-ordering :nulls-first}]]
@@ -47,3 +55,17 @@
                             [:table ?table]]
                           {:params {'?table table-with-nil}}))
           "default nulls last")))
+
+
+(t/deftest test-order-by-spill
+  (binding [order-by/*chunk-size* 10]
+    (let [data (map-indexed (fn [i d] {:a d :b i}) (repeatedly 1000 #(rand-int 1000000)))
+          blocks (->> (partition-all 13 data)
+                      (map #(into [] %))
+                      (into []))
+          sorted (sort-by (juxt :a :b) data)]
+      (t/is (= sorted
+               (time (tu/query-ra [:order-by '[[a] [b]]
+                                   [::tu/blocks blocks]]
+                                  {})))
+            "spilling to disk"))))

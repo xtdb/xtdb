@@ -630,3 +630,26 @@
 
 (defn ->child-allocator [^BufferAllocator allocator name]
   (.newChildAllocator allocator name (.getInitReservation allocator) (.getLimit allocator)))
+
+(defn with-tmp-dir* [prefix f]
+  (let [dir (Files/createTempDirectory prefix (make-array FileAttribute 0))]
+    (try
+      (f dir)
+      (finally
+        (delete-dir dir)))))
+
+(defn tmp-dir
+  (^Path [] (tmp-dir ""))
+  (^Path [prefix] (Files/createTempDirectory prefix (make-array FileAttribute 0)) ))
+
+(defmacro with-tmp-dirs
+  "Usage:
+    (with-tmp-dirs #{log-dir objects-dir}
+      ...)"
+  [[dir-binding & more-bindings] & body]
+  (if dir-binding
+    `(with-tmp-dir* ~(name dir-binding)
+       (fn [~(vary-meta dir-binding assoc :tag 'java.nio.file.Path)]
+         (with-tmp-dirs #{~@more-bindings}
+           ~@body)))
+    `(do ~@body)))
