@@ -18,7 +18,7 @@
         (edn/read-string (str (.decode StandardCharsets/UTF_8 buf))))
       (util/rethrowing-cause)))
 
-(defn- put-edn [^ObjectStore obj-store k obj]
+(defn put-edn [^ObjectStore obj-store k obj]
   (let [^ByteBuffer buf (.encode StandardCharsets/UTF_8 (pr-str obj))]
     @(.putObject obj-store (name k) buf)))
 
@@ -65,13 +65,19 @@
 
     (t/is (thrown? IllegalStateException (get-edn obj-store :alice)))))
 
-(defn test-list-objects [^ObjectStore obj-store]
-  (put-edn obj-store "bar/alice" :alice)
-  (put-edn obj-store "foo/alan" :alan)
-  (put-edn obj-store "bar/bob" :bob)
+(defn test-list-objects 
+  ([^ObjectStore obj-store]
+   (test-list-objects obj-store 1000))
+  ([^ObjectStore obj-store wait-time-ms]
+   (put-edn obj-store "bar/alice" :alice)
+   (put-edn obj-store "foo/alan" :alan)
+   (put-edn obj-store "bar/bob" :bob)
 
-  (t/is (= ["bar/alice" "bar/bob" "foo/alan"] (.listObjects obj-store)))
-  (t/is (= ["bar/alice" "bar/bob"] (.listObjects obj-store "bar"))))
+  ;; Allow some time for files to get processed and added to the list
+   (Thread/sleep wait-time-ms)
+
+   (t/is (= ["bar/alice" "bar/bob" "foo/alan"] (.listObjects obj-store)))
+   (t/is (= ["bar/alice" "bar/bob"] (.listObjects obj-store "bar")))))
 
 (defn test-range [^ObjectStore obj-store]
 
