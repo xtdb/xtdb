@@ -71,24 +71,26 @@
                          ^ICursor right-cursor]
   ICursor
   (tryAdvance [_ c]
-    (boolean
-     (let [advanced? (boolean-array 1 false)]
-       (.tryAdvance left-cursor
-                    (reify Consumer
-                      (accept [_ in-rel]
-                        (let [^RelationReader in-rel in-rel]
-                          (when (pos? (.rowCount in-rel))
-                            (aset advanced? 0 true)
-                            (.accept c in-rel))))))
-       (when-not (aget advanced? 0)
-         (.tryAdvance right-cursor
-                      (reify Consumer
-                        (accept [_ in-rel]
-                          (let [^RelationReader in-rel in-rel]
-                            (when (pos? (.rowCount in-rel))
-                              (aset advanced? 0 true)
-                              (.accept c in-rel)))))))
-       (aget advanced? 0))))
+    (let [advanced? (boolean-array 1 false)]
+      (loop []
+        (if (or (.tryAdvance left-cursor
+                             (reify Consumer
+                               (accept [_ in-rel]
+                                 (let [^RelationReader in-rel in-rel]
+                                   (when (pos? (.rowCount in-rel))
+                                     (aset advanced? 0 true)
+                                     (.accept c in-rel))))))
+                (.tryAdvance right-cursor
+                             (reify Consumer
+                               (accept [_ in-rel]
+                                 (let [^RelationReader in-rel in-rel]
+                                   (when (pos? (.rowCount in-rel))
+                                     (aset advanced? 0 true)
+                                     (.accept c in-rel)))))))
+          (if (aget advanced? 0)
+            true
+            (recur))
+          false))))
   (close [_]
     (util/try-close left-cursor)
     (util/try-close right-cursor)))
