@@ -117,4 +117,5 @@
         (fn [_]
           (.putObject obj-store
                       (format "%s/trie-c%s.arrow" dir chunk-idx)
-                      (util/root->arrow-ipc-byte-buffer trie-buf :file))))))
+                      trie-buf
+                      #_(util/root->arrow-ipc-byte-buffer trie-buf :file))))))
