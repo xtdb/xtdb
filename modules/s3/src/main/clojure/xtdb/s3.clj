@@ -3,16 +3,19 @@
             [clojure.string :as string]
             [xtdb.object-store :as os]
             [xtdb.util :as util]
+            [xtdb.file-list :as file-list]
+            [xtdb.s3.file-list :as s3-file-watch]
             [juxt.clojars-mirrors.integrant.core :as ig])
   (:import xtdb.object_store.ObjectStore
            xtdb.s3.S3Configurator
            java.io.Closeable
-           java.util.concurrent.CompletableFuture
            java.util.function.Function
+           java.util.NavigableSet
            (java.nio ByteBuffer)
+           [java.util.concurrent CompletableFuture ConcurrentSkipListSet]
            [software.amazon.awssdk.core ResponseBytes]
            [software.amazon.awssdk.core.async AsyncRequestBody AsyncResponseTransformer]
-           [software.amazon.awssdk.services.s3.model DeleteObjectRequest GetObjectRequest HeadObjectRequest ListObjectsV2Request ListObjectsV2Response NoSuchKeyException PutObjectRequest S3Object]
+           [software.amazon.awssdk.services.s3.model DeleteObjectRequest GetObjectRequest HeadObjectRequest NoSuchKeyException PutObjectRequest]
            software.amazon.awssdk.services.s3.S3AsyncClient))
 
 (defn- get-obj-req
@@ -41,7 +44,7 @@
                             (catch NoSuchKeyException _
                               (throw (os/obj-missing-exception k))))))))
 
-(defrecord S3ObjectStore [^S3Configurator configurator ^S3AsyncClient client bucket prefix]
+(defrecord S3ObjectStore [^S3Configurator configurator ^S3AsyncClient client bucket prefix ^NavigableSet file-name-cache s3-watch-info]
   ObjectStore
   (getObject [this k]
     (-> (.getObject client (get-obj-req this k) (AsyncResponseTransformer/toBytes))
@@ -93,26 +96,11 @@
                                                ^PutObjectRequest (.build))
                                            (AsyncRequestBody/fromByteBuffer buf)))))))
 
-  (listObjects [this] (.listObjects this nil))
+  (listObjects [_this]
+    (into [] file-name-cache))
 
-  (listObjects [_ dir]
-    (letfn [(list-objects* [continuation-token]
-              (lazy-seq
-               (let [^ListObjectsV2Request
-                     req (-> (ListObjectsV2Request/builder)
-                             (.bucket bucket)
-                             (.prefix (str prefix dir "/"))
-                             (cond-> continuation-token (.continuationToken continuation-token))
-                             (.build))
-
-                     ^ListObjectsV2Response
-                     resp (.get (.listObjectsV2 client req))]
-
-                 (concat (for [^S3Object object (.contents resp)]
-                           (subs (.key object) (count prefix)))
-                         (when (.isTruncated resp)
-                           (list-objects* (.nextContinuationToken resp)))))))]
-      (list-objects* nil)))
+  (listObjects [_this dir]
+    (file-list/list-files-under-prefix file-name-cache dir))
 
   (deleteObject [_ k]
     (.deleteObject client
@@ -123,6 +111,8 @@
 
   Closeable
   (close [_]
+    (s3-file-watch/watcher-close-fn s3-watch-info)
+    (.clear file-name-cache)
     (.close client)))
 
 (defn- parse-prefix [prefix]
@@ -134,6 +124,7 @@
 (s/def ::configurator #(instance? S3Configurator %))
 (s/def ::bucket string?)
 (s/def ::prefix string?)
+(s/def ::sns-topic-arn string?)
 
 (defmethod ig/prep-key ::object-store [_ opts]
   (-> (merge {:configurator (reify S3Configurator)}
@@ -141,13 +132,21 @@
       (util/maybe-update :prefix parse-prefix)))
 
 (defmethod ig/pre-init-spec ::object-store [_]
-  (s/keys :req-un [::configurator ::bucket]
+  (s/keys :req-un [::configurator ::bucket ::sns-topic-arn]
           :opt-un [::prefix]))
 
-(defmethod ig/init-key ::object-store [_ {:keys [bucket prefix ^S3Configurator configurator]}]
-  (->S3ObjectStore configurator
-                   (.makeClient configurator)
-                   bucket prefix))
+(defmethod ig/init-key ::object-store [_ {:keys [bucket prefix ^S3Configurator configurator] :as opts}]
+  (let [s3-client (.makeClient configurator)
+        file-name-cache (ConcurrentSkipListSet.)
+        ;; Watch s3 bucket for changes
+        s3-watch-info (s3-file-watch/file-list-watch (assoc opts :s3-client s3-client) file-name-cache)]
+
+    (->S3ObjectStore configurator
+                     s3-client
+                     bucket 
+                     prefix
+                     file-name-cache
+                     s3-watch-info)))
 
 (defmethod ig/halt-key! ::object-store [_ os]
   (util/try-close os))
