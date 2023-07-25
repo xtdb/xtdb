@@ -77,7 +77,13 @@
    (Thread/sleep wait-time-ms)
 
    (t/is (= ["bar/alice" "bar/bob" "foo/alan"] (.listObjects obj-store)))
-   (t/is (= ["bar/alice" "bar/bob"] (.listObjects obj-store "bar")))))
+   (t/is (= ["bar/alice" "bar/bob"] (.listObjects obj-store "bar")))
+
+   ;; Delete an object
+   @(.deleteObject obj-store "bar/alice")
+   (Thread/sleep wait-time-ms)
+   
+   (t/is (= ["bar/bob"] (.listObjects obj-store "bar")))))
 
 (defn test-range [^ObjectStore obj-store]
 
@@ -132,6 +138,21 @@
   (tu/with-tmp-dirs #{path}
     (with-open [obj-store (fs path)]
       (test-list-objects obj-store))))
+
+(t/deftest fs-list-test-with-prior-objects
+  (tu/with-tmp-dirs #{path}
+    (with-open [os (fs path)]
+      (put-edn os "alice" :alice)
+      (put-edn os "alan" :alan)
+      (t/is (= ["alan" "alice"] (.listObjects os))))
+
+    (with-open [os (fs path)]
+      (t/testing "prior objects will still be there, should be available on a list request"
+        (t/is (= ["alan" "alice"] (.listObjects os))))
+
+      (t/testing "should be able to delete prior objects and have that reflected in list objects output"
+        (Thread/sleep 1000)
+        (t/is (= ["alan"] (.listObjects os)))))))
 
 (t/deftest fs-range-test
   (tu/with-tmp-dirs #{path}
