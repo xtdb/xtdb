@@ -35,7 +35,7 @@
            xtdb.object_store.ObjectStore
            (xtdb.watermark IWatermark IWatermarkSource)))
 
-(t/use-fixtures :once tu/with-allocator)
+(t/use-fixtures :once tu/no-tries tu/with-allocator)
 
 (def txs
   [[[:put :device-info

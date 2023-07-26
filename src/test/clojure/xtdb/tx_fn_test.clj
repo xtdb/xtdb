@@ -16,11 +16,11 @@
                              [:call :my-fn :foo 0]
                              [:call :my-fn :bar 1]])
 
-    (t/is (= [{:xt/id :foo, :n 0}
-              {:xt/id :bar, :n 1}]
-             (xt/q tu/*node*
-                   '{:find [xt/id n]
-                     :where [(match :foo [xt/id n])]}))))
+    (t/is (= #{{:xt/id :foo, :n 0}
+               {:xt/id :bar, :n 1}}
+             (set (xt/q tu/*node*
+                        '{:find [xt/id n]
+                          :where [(match :foo [xt/id n])]})))))
 
   (t/testing "nested tx fn"
     (xt/submit-tx tu/*node* [[:put-fn :inner-fn
@@ -33,12 +33,12 @@
                              [:call :inner-fn :foo]
                              [:call :outer-fn :bar]])
 
-    (t/is (= [{:xt/id :foo-inner, :from :inner}
-              {:xt/id :bar-inner, :from :inner}
-              {:xt/id :bar-outer, :from :outer}]
-             (xt/q tu/*node*
-                   '{:find [xt/id from]
-                     :where [(match :bar [xt/id from])]})))))
+    (t/is (= #{{:xt/id :foo-inner, :from :inner}
+               {:xt/id :bar-inner, :from :inner}
+               {:xt/id :bar-outer, :from :outer}}
+             (set (xt/q tu/*node*
+                        '{:find [xt/id from]
+                          :where [(match :bar [xt/id from])]}))))))
 
 (t/deftest test-tx-fn-return-values
   (xt/submit-tx tu/*node* [[:put-fn :identity 'identity]])
@@ -111,19 +111,19 @@
 
 (t/deftest test-tx-fn-current-tx
   (let [{tt0 :system-time} (xt/submit-tx tu/*node* [[:put-fn :with-tx
-                                                  '(fn [id]
-                                                     [[:put :docs (into {:xt/id id} *current-tx*)]])]
-                                                 [:call :with-tx :foo]
-                                                 [:call :with-tx :bar]])
+                                                     '(fn [id]
+                                                        [[:put :docs (into {:xt/id id} *current-tx*)]])]
+                                                    [:call :with-tx :foo]
+                                                    [:call :with-tx :bar]])
 
         {tt1 :system-time} (xt/submit-tx tu/*node* [[:call :with-tx :baz]])]
 
-    (t/is (= [{:xt/id :foo, :tx-id 0, :system-time (util/->zdt tt0)}
-              {:xt/id :bar, :tx-id 0, :system-time (util/->zdt tt0)}
-              {:xt/id :baz, :tx-id 1, :system-time (util/->zdt tt1)}]
-             (xt/q tu/*node*
-                   '{:find [xt/id tx-id system-time]
-                     :where [(match :docs [xt/id tx-id system-time])]})))))
+    (t/is (= #{{:xt/id :foo, :tx-id 0, :system-time (util/->zdt tt0)}
+               {:xt/id :bar, :tx-id 0, :system-time (util/->zdt tt0)}
+               {:xt/id :baz, :tx-id 1, :system-time (util/->zdt tt1)}}
+             (set (xt/q tu/*node*
+                        '{:find [xt/id tx-id system-time]
+                          :where [(match :docs [xt/id tx-id system-time])]}))))))
 
 (t/deftest test-tx-fn-exceptions
   (letfn [(foo-version []

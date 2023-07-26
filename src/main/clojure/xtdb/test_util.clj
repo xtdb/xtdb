@@ -16,7 +16,8 @@
             [xtdb.util :as util]
             [xtdb.vector :as vec]
             [xtdb.vector.reader :as vr]
-            [xtdb.vector.writer :as vw])
+            [xtdb.vector.writer :as vw]
+            [xtdb.operator.scan :as scan])
   (:import [ch.qos.logback.classic Level Logger]
            clojure.lang.ExceptionInfo
            java.net.ServerSocket
@@ -297,3 +298,10 @@
        ~@body
        (finally
          (set-log-level! ~ns level#)))))
+
+(defmacro without-tries [& body]
+  `(with-redefs [scan/*use-tries?* false]
+     ~@body))
+
+(defn no-tries [f]
+  (without-tries (f)))

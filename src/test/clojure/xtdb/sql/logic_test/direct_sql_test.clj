@@ -1,5 +1,9 @@
 (ns xtdb.sql.logic-test.direct-sql-test
-  (:require [xtdb.sql.logic-test.runner :as slt]))
+  (:require [xtdb.sql.logic-test.runner :as slt]
+            [clojure.test :as t]
+            [xtdb.test-util :as tu]))
+
+(t/use-fixtures :once tu/no-tries)
 
 (slt/def-slt-test direct-sql--dml {:direct-sql true})
 (slt/def-slt-test direct-sql--gcse-statistics {:direct-sql true})

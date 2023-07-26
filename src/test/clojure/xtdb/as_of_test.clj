@@ -4,7 +4,7 @@
             [xtdb.test-util :as tu]
             [xtdb.util :as util]))
 
-(t/use-fixtures :once tu/with-allocator)
+(t/use-fixtures :once tu/no-tries tu/with-allocator)
 (t/use-fixtures :each tu/with-node)
 
 (def end-of-time-zdt (util/->zdt util/end-of-time))

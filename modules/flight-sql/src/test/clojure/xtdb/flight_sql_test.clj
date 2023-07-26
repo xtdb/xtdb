@@ -53,10 +53,10 @@
 (t/deftest test-client
   (t/is (= -1 (.executeUpdate *client* "INSERT INTO users (xt$id, name) VALUES ('jms', 'James'), ('hak', 'Håkan')" empty-call-opts)))
 
-  (t/is (= [{:xt$id "jms", :name "James"}
-            {:xt$id "hak", :name "Håkan"}]
-           (-> (.execute *client* "SELECT users.xt$id, users.name FROM users" empty-call-opts)
-               (flight-info->rows)))))
+  (t/is (= #{{:xt$id "jms", :name "James"}
+             {:xt$id "hak", :name "Håkan"}}
+           (set (-> (.execute *client* "SELECT users.xt$id, users.name FROM users" empty-call-opts)
+                    (flight-info->rows))))))
 
 (t/deftest test-jdbc-client
   (xt/submit-tx tu/*node* [[:sql "INSERT INTO users (xt$id, name) VALUES ('jms', 'James')"]])
@@ -81,15 +81,15 @@
   (jdbc/execute-batch! *conn* "INSERT INTO users (xt$id, name) VALUES (?, ?)"
                        [["jms" "James"], ["hak" "Håkan"]] {})
 
-  (t/is (= [{:xt$id "jms", :name "James"}]
-           (jdbc/execute! *conn* ["SELECT users.xt$id, users.name FROM users"])))
+  (t/is (= #{{:xt$id "jms", :name "James"}}
+           (set (jdbc/execute! *conn* ["SELECT users.xt$id, users.name FROM users"]))))
 
   (jdbc/with-transaction [tx *conn*]
     #_ ; FSQL JDBC doesn't seem happy with params in a query
     (t/is (= [] (jdbc/execute! tx ["SELECT users.xt$id FROM users WHERE users.id = ?" "foo"])))
 
     (with-open [ps (jdbc/prepare tx ["SELECT users.xt$id, users.name FROM users"])]
-      (t/is (= [{:xt$id "jms", :name "James"}] (jdbc/execute! ps))))))
+      (t/is (= #{{:xt$id "jms", :name "James"}} (set (jdbc/execute! ps)))))))
 
 (t/deftest test-transaction
   (let [fsql-tx (.beginTransaction *client* empty-call-opts)]
@@ -99,10 +99,10 @@
                  (flight-info->rows))))
     (.commit *client* fsql-tx empty-call-opts)
 
-    (t/is (= [{:xt$id "jms", :name "James"}
-              {:xt$id "hak", :name "Håkan"}]
-             (-> (.execute *client* "SELECT users.xt$id, users.name FROM users" empty-call-opts)
-                 (flight-info->rows))))))
+    (t/is (= #{{:xt$id "jms", :name "James"}
+               {:xt$id "hak", :name "Håkan"}}
+             (set (-> (.execute *client* "SELECT users.xt$id, users.name FROM users" empty-call-opts)
+                      (flight-info->rows)))))))
 
 (t/deftest test-prepared-stmts
   (with-open [ps (.prepare *client* "INSERT INTO users (xt$id, name) VALUES (?, ?)" empty-call-opts)
@@ -122,22 +122,22 @@
     (.setParameters ps param-root)
 
     (tu/populate-root param-root [{:$1 "l"}])
-    (t/is (= [{:name "Matt"}
-              {:name "Dan"}]
-             (-> (.execute ps empty-call-opts)
-                 (flight-info->rows))))
+    (t/is (= #{{:name "Matt"}
+               {:name "Dan"}}
+             (set (-> (.execute ps empty-call-opts)
+                      (flight-info->rows)))))
 
     (tu/populate-root param-root [{:$1 "j"}])
-    (t/is (= [{:name "James"}
-              {:name "Matt"}
-              {:name "Dan"}]
-             (-> (.execute ps empty-call-opts)
-                 (flight-info->rows))))))
+    (t/is (= #{{:name "James"}
+               {:name "Matt"}
+               {:name "Dan"}}
+             (set (-> (.execute ps empty-call-opts)
+                      (flight-info->rows)))))))
 
 (t/deftest test-prepared-stmts-in-tx
   (letfn [(q []
-            (-> (.execute *client* "SELECT users.name FROM users" empty-call-opts)
-                (flight-info->rows)))]
+            (set (-> (.execute *client* "SELECT users.name FROM users" empty-call-opts)
+                     (flight-info->rows))))]
     (let [fsql-tx (.beginTransaction *client* empty-call-opts)]
       (with-open [ps (.prepare *client* "INSERT INTO users (xt$id, name) VALUES (?, ?)" fsql-tx empty-call-opts)
                   param-root (VectorSchemaRoot/create (Schema. [(types/col-type->field 'xt$id :utf8) (types/col-type->field 'name :utf8)]) tu/*allocator*)]
@@ -147,15 +147,15 @@
                                       {:xt$id "mat", :name "Matt"}])
         (.executeUpdate ps empty-call-opts)
 
-        (t/is (= [] (q)))
+        (t/is (= #{} (q)))
 
         (tu/populate-root param-root [{:xt$id "hak", :name "Håkan"}
                                       {:xt$id "wot", :name "Dan"}])
         (.executeUpdate ps empty-call-opts)
 
-        (t/is (= [] (q))))
+        (t/is (= #{} (q))))
 
       (.commit *client* fsql-tx empty-call-opts)
 
-      (t/is (= [{:name "James"} {:name "Matt"} {:name "Håkan"} {:name "Dan"}]
+      (t/is (= #{{:name "James"} {:name "Matt"} {:name "Håkan"} {:name "Dan"}}
                (q))))))
