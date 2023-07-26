@@ -153,7 +153,7 @@ public record LiveHashTrie(Node rootNode, ElementAddressableVector iidVec) imple
                 var dataKey = data[dataIdx];
                 var logKey = log[logIdx];
 
-                if (trie.compare(dataKey, logKey) <= 0) {
+                if (trie.compare(dataKey, logKey) < 0) {
                     res.add(dataKey);
                     dataIdx++;
                 } else {
