@@ -18,7 +18,7 @@
            (org.apache.arrow.vector.types.pojo ArrowType$Union Schema)
            org.apache.arrow.vector.types.UnionMode
            (xtdb.object_store ObjectStore)
-           (xtdb.trie HashTrie$Node LiveHashTrie LiveHashTrie$Leaf TrieKeys)
+           (xtdb.trie HashTrie$Node LiveHashTrie LiveHashTrie$Leaf)
            (xtdb.vector IRelationWriter IVectorReader IVectorWriter RelationReader)))
 
 ;;
@@ -289,7 +289,7 @@
           put-wtr (.writerForField op-wtr put-field)
           delete-wtr (.writerForField op-wtr delete-field)]
       (LiveTable. allocator object-store table-name rel
-                  (LiveHashTrie/emptyTrie (TrieKeys. (.getVector iid-wtr)))
+                  (LiveHashTrie/emptyTrie (.getVector iid-wtr))
                   iid-wtr (.writerForName rel "xt$system_from")
                   put-wtr (.structKeyWriter put-wtr "xt$valid_from") (.structKeyWriter put-wtr "xt$valid_to") (.structKeyWriter put-wtr "xt$doc")
                   delete-wtr (.structKeyWriter delete-wtr "xt$valid_from") (.structKeyWriter delete-wtr "xt$valid_to")

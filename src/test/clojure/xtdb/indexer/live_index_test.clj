@@ -7,7 +7,8 @@
             [xtdb.object-store :as os]
             [xtdb.test-json :as tj]
             [xtdb.test-util :as tu]
-            [xtdb.util :as util])
+            [xtdb.util :as util]
+            [xtdb.vector.reader :as vr])
   (:import java.time.Duration
            [java.util Random UUID]
            [org.apache.arrow.memory BufferAllocator RootAllocator]
@@ -15,7 +16,7 @@
            [org.apache.arrow.vector.ipc ArrowFileReader]
            xtdb.indexer.live_index.ILiveIndex
            xtdb.object_store.ObjectStore
-           (xtdb.trie ArrowHashTrie ArrowHashTrie$Leaf LiveHashTrie LiveHashTrie$Leaf TrieKeys)
+           (xtdb.trie ArrowHashTrie ArrowHashTrie$Leaf HashTrie LiveHashTrie LiveHashTrie$Leaf)
            xtdb.vector.IVectorPosition))
 
 (def with-live-index
@@ -82,10 +83,10 @@
                 iid-vec (doto ^FixedSizeBinaryVector (FixedSizeBinaryVector. "iid" allocator 8)
                           (.setSafe 0 (util/uuid->bytes uuid1))
                           (.setValueCount 1))]
-      (let [trie-keys (TrieKeys. iid-vec)]
-        (t/is (= (.bucketFor trie-keys 0 0) 0x7))
-        (t/is (= (.bucketFor trie-keys 0 1) 0xf))
-        (t/is (= (.bucketFor trie-keys 0 2) 0x3))))))
+      (let [iid-rdr (vr/vec->reader iid-vec)]
+        (t/is (= (HashTrie/bucketFor (.getPointer iid-rdr 0) 0) 0x7))
+        (t/is (= (HashTrie/bucketFor (.getPointer iid-rdr 0) 1) 0xf))
+        (t/is (= (HashTrie/bucketFor (.getPointer iid-rdr 0) 2) 0x3))))))
 
 (def txs
   [[[:put :hello {:xt/id #uuid "cb8815ee-85f7-4c61-a803-2ea1c949cf8d" :a 1}]

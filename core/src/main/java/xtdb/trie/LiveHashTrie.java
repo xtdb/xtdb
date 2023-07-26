@@ -1,11 +1,12 @@
 package xtdb.trie;
 
+import org.apache.arrow.memory.util.ArrowBufPointer;
+import org.apache.arrow.vector.ElementAddressableVector;
+
 import java.util.Arrays;
 import java.util.stream.IntStream;
 
-import static xtdb.trie.TrieKeys.LEVEL_WIDTH;
-
-public record LiveHashTrie(Node rootNode, TrieKeys trieKeys) implements HashTrie<LiveHashTrie.Node> {
+public record LiveHashTrie(Node rootNode, ElementAddressableVector iidVec) implements HashTrie<LiveHashTrie.Node> {
 
     private static final int LOG_LIMIT = 64;
     private static final int PAGE_LIMIT = 1024;
@@ -17,12 +18,12 @@ public record LiveHashTrie(Node rootNode, TrieKeys trieKeys) implements HashTrie
     }
 
     public static class Builder {
-        private final TrieKeys trieKeys;
+        private final ElementAddressableVector iidVec;
         private int logLimit = LOG_LIMIT;
         private int pageLimit = PAGE_LIMIT;
 
-        private Builder(TrieKeys trieKeys) {
-            this.trieKeys = trieKeys;
+        private Builder(ElementAddressableVector iidVec) {
+            this.iidVec = iidVec;
         }
 
         public void setLogLimit(int logLimit) {
@@ -34,33 +35,42 @@ public record LiveHashTrie(Node rootNode, TrieKeys trieKeys) implements HashTrie
         }
 
         public LiveHashTrie build() {
-            return new LiveHashTrie(new Leaf(logLimit, pageLimit), trieKeys);
+            return new LiveHashTrie(new Leaf(logLimit, pageLimit), iidVec);
         }
     }
 
-    public static Builder builder(TrieKeys trieKeys) {
-        return new Builder(trieKeys);
+    public static Builder builder(ElementAddressableVector iidVec) {
+        return new Builder(iidVec);
     }
 
     @SuppressWarnings("unused")
-    public static LiveHashTrie emptyTrie(TrieKeys trieKeys) {
-        return new LiveHashTrie(new Leaf(LOG_LIMIT, PAGE_LIMIT), trieKeys);
+    public static LiveHashTrie emptyTrie(ElementAddressableVector iidVec) {
+        return new LiveHashTrie(new Leaf(LOG_LIMIT, PAGE_LIMIT), iidVec);
     }
 
     public LiveHashTrie add(int idx) {
-        return new LiveHashTrie(rootNode.add(this, idx), trieKeys);
+        return new LiveHashTrie(rootNode.add(this, idx), iidVec);
     }
 
     public LiveHashTrie compactLogs() {
-        return new LiveHashTrie(rootNode.compactLogs(this), trieKeys);
+        return new LiveHashTrie(rootNode.compactLogs(this), iidVec);
     }
+
+    private static final ThreadLocal<ArrowBufPointer> BUCKET_BUF_PTR = ThreadLocal.withInitial(ArrowBufPointer::new);
 
     private int bucketFor(int idx, int level) {
-        return trieKeys.bucketFor(idx, level);
+        return HashTrie.bucketFor(iidVec.getDataPointer(idx, BUCKET_BUF_PTR.get()), level);
     }
 
+    private static final ThreadLocal<ArrowBufPointer> LEFT_BUF_PTR = ThreadLocal.withInitial(ArrowBufPointer::new);
+    private static final ThreadLocal<ArrowBufPointer> RIGHT_BUF_PTR = ThreadLocal.withInitial(ArrowBufPointer::new);
+
     private int compare(int leftIdx, int rightIdx) {
-        return trieKeys.compare(leftIdx, rightIdx);
+        int cmp = iidVec.getDataPointer(leftIdx, LEFT_BUF_PTR.get()).compareTo(iidVec.getDataPointer(rightIdx, RIGHT_BUF_PTR.get()));
+        if (cmp != 0) return cmp;
+
+        // sort by idx desc
+        return Integer.compare(rightIdx, leftIdx);
     }
 
     private static byte[] conjPath(byte[] path, byte idx) {
@@ -131,11 +141,7 @@ public record LiveHashTrie(Node rootNode, TrieKeys trieKeys) implements HashTrie
 
             while (true) {
                 if (dataIdx == dataCount) {
-                    IntStream.range(logIdx, logCount).forEach(idx -> {
-                        if (idx == logCount - 1 || trie.compare(log[idx], log[idx + 1]) != 0) {
-                            res.add(log[idx]);
-                        }
-                    });
+                    IntStream.range(logIdx, logCount).forEach(idx -> res.add(log[idx]));
                     break;
                 }
 
@@ -147,26 +153,12 @@ public record LiveHashTrie(Node rootNode, TrieKeys trieKeys) implements HashTrie
                 var dataKey = data[dataIdx];
                 var logKey = log[logIdx];
 
-                // this collapses down multiple duplicate values within the log
-                if (logIdx + 1 < logCount && trie.compare(logKey, log[logIdx + 1]) == 0) {
+                if (trie.compare(dataKey, logKey) <= 0) {
+                    res.add(dataKey);
+                    dataIdx++;
+                } else {
+                    res.add(logKey);
                     logIdx++;
-                    continue;
-                }
-
-                switch (Integer.signum(trie.compare(dataKey, logKey))) {
-                    case -1 -> {
-                        res.add(dataKey);
-                        dataIdx++;
-                    }
-                    case 0 -> {
-                        res.add(logKey);
-                        dataIdx++;
-                        logIdx++;
-                    }
-                    case 1 -> {
-                        res.add(logKey);
-                        logIdx++;
-                    }
                 }
             }
 
