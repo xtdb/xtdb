@@ -1,16 +1,16 @@
 (ns xtdb.s3.file-list
   (:require [clojure.data.json :as json]
-            [clojure.string :as string])
+            [clojure.string :as string]
+            [clojure.tools.logging :as log])
   (:import [java.util UUID NavigableSet]
-           [software.amazon.awssdk.services.sqs.model Message CreateQueueRequest DeleteMessageRequest DeleteQueueRequest ReceiveMessageRequest SetQueueAttributesRequest GetQueueAttributesRequest QueueDoesNotExistException]
-           [software.amazon.awssdk.services.sns.model SubscribeRequest UnsubscribeRequest]
+           [software.amazon.awssdk.services.sqs.model Message CreateQueueRequest CreateQueueResponse DeleteMessageRequest DeleteQueueRequest ReceiveMessageRequest 
+            SetQueueAttributesRequest GetQueueAttributesRequest GetQueueAttributesResponse QueueDoesNotExistException]
+           [software.amazon.awssdk.services.sns.model SubscribeRequest SubscribeResponse UnsubscribeRequest]
            [software.amazon.awssdk.services.s3.model ListObjectsV2Request ListObjectsV2Response S3Object]
            software.amazon.awssdk.core.exception.AbortedException
            software.amazon.awssdk.services.s3.S3AsyncClient
            software.amazon.awssdk.services.sns.SnsClient
            software.amazon.awssdk.services.sqs.SqsClient))
-
-;; Fns for file name init (grabbing all current files from s3 bucket)
 
 (defn list-objects [{:keys [^S3AsyncClient s3-client bucket prefix] :as s3-opts} continuation-token]
   (vec
@@ -33,8 +33,6 @@
   (let [filename-list (list-objects s3-opts nil)]
     (.addAll file-name-cache filename-list)))
 
-;; Fns for file name watching (listening to SNS notifications from the bucket to add/remove files on the file name cache)
-
 (defn ->sqs-write-policy [sns-topic-arn queue-arn]
   (json/write-str
    {:Id "Queue_Policy"
@@ -46,29 +44,33 @@
                  :Resource queue-arn
                  :Condition {:ArnLike {"aws:SourceArn" sns-topic-arn}}}]}))
 
-(defn setup-notif-queue [{:keys [sqs-client sns-client sns-topic-arn]}]
+(defn setup-notif-queue [{:keys [^SqsClient sqs-client ^SnsClient sns-client sns-topic-arn]}]
   (let [queue-name (format "xtdb-object-store-notifs-queue-%s" (UUID/randomUUID))
-        sqs-queue (.createQueue sqs-client (-> (CreateQueueRequest/builder)
-                                               (.queueName queue-name)
-                                               (.build)))
+
+        _ (log/info "Creating SQS queue " queue-name)
+        ^CreateQueueResponse sqs-queue (.createQueue sqs-client (-> (CreateQueueRequest/builder)
+                                                                    (.queueName queue-name)
+                                                                    ^CreateQueueRequest (.build)))
+
         queue-url (.queueUrl sqs-queue)
-        queue-arn (-> (.getQueueAttributes sqs-client (-> (GetQueueAttributesRequest/builder)
-                                                          (.queueUrl queue-url)
-                                                          (.attributeNamesWithStrings (into-array String ["QueueArn"]))
-                                                          (.build)))
-                      (.attributesAsStrings)
-                      (get "QueueArn"))
-        ;; Add permissions to SQS to allow SNS to send messages
+        ^GetQueueAttributesResponse queue-attr (.getQueueAttributes sqs-client (-> (GetQueueAttributesRequest/builder)
+                                                                                   (.queueUrl queue-url)
+                                                                                   (.attributeNamesWithStrings ^"[Ljava.lang.String;" (into-array String ["QueueArn"]))
+                                                                                   ^GetQueueAttributesRequest (.build)))
+        queue-arn (get (.attributesAsStrings queue-attr) "QueueArn")
+
+        _ (log/info (format "Adding relevant permissions to allow SNS topic with ARN %s to write to the queue %s" sns-topic-arn queue-name))
         _ (.setQueueAttributes sqs-client (-> (SetQueueAttributesRequest/builder)
                                               (.queueUrl queue-url)
                                               (.attributesWithStrings {"Policy" (->sqs-write-policy sns-topic-arn queue-arn)})
-                                              (.build)))
-        ;; Subscribe to the SNS topic
-        subscription (.subscribe sns-client (-> (SubscribeRequest/builder)
-                                                (.topicArn sns-topic-arn)
-                                                (.endpoint queue-arn)
-                                                (.protocol "sqs")
-                                                (.build)))]
+                                              ^SetQueueAttributesRequest (.build)))
+
+        _ (log/info (format "Subscribing SQS queue %s to SNS topic with ARN %s" queue-name sns-topic-arn))
+        ^SubscribeResponse subscription (.subscribe sns-client (-> (SubscribeRequest/builder)
+                                                                   (.topicArn sns-topic-arn)
+                                                                   (.endpoint queue-arn)
+                                                                   (.protocol "sqs")
+                                                                   ^SubscribeRequest (.build)))]
     {:queue-url queue-url
      :subscription-arn (.subscriptionArn subscription)}))
 
@@ -80,18 +82,20 @@
       (:Records)
       (first)))
 
-(defn file-list-watch [{:keys [sns-topic-arn prefix] :as opts} ^NavigableSet file-name-cache]
+(defn file-list-watch [{:keys [bucket sns-topic-arn prefix] :as opts} ^NavigableSet file-name-cache]
   (let [^SqsClient sqs-client (SqsClient/create)
         ^SnsClient sns-client (SnsClient/create)
-
+        _ (log/info "Creating AWS resources for watching files on bucket " bucket)
         ;; Create queue that will subscribe to sns topic for notifications
         {:keys [queue-url subscription-arn]} (setup-notif-queue {:sqs-client sqs-client
                                                                  :sns-client sns-client
                                                                  :sns-topic-arn sns-topic-arn})
 
+        _ (log/info "Initializing filename list from bucket " bucket)
         ;; Init the filename cache with current files
         _ (file-list-init opts file-name-cache)
-
+        
+        _ (log/info "Watching for filechanges from bucket " bucket)
         ;; Start processing messages from the queue
         watcher-thread (Thread. (fn []
                                   (try
@@ -101,7 +105,7 @@
 
                                       (when-let [messages (-> (.receiveMessage sqs-client (-> (ReceiveMessageRequest/builder)
                                                                                               (.queueUrl queue-url)
-                                                                                              (.build)))
+                                                                                              ^ReceiveMessageRequest (.build)))
                                                               (.messages)
                                                               (not-empty))]
                                         (doseq [^Message message messages]
@@ -127,7 +131,7 @@
                                             (.deleteMessage sqs-client (-> (DeleteMessageRequest/builder)
                                                                            (.queueUrl queue-url)
                                                                            (.receiptHandle receipt-handle)
-                                                                           (.build))))))
+                                                                           ^DeleteMessageRequest (.build))))))
                                       (Thread/sleep 10))
                                     (catch InterruptedException _)
                                     (catch QueueDoesNotExistException _)
@@ -140,13 +144,16 @@
      :queue-url queue-url
      :subscription-arn subscription-arn}))
 
-(defn watcher-close-fn [{:keys [watcher-thread sns-client sqs-client queue-url subscription-arn]}]
+(defn watcher-close-fn [{:keys [^Thread watcher-thread ^SqsClient sqs-client ^SnsClient sns-client queue-url subscription-arn]}]
+  (log/info "Interrupting s3 file watcher thread...")
   (.interrupt watcher-thread)
   (.join watcher-thread)
+  (log/info "Unsubscribing from SNS topic, subscription arn: " subscription-arn)
   (.unsubscribe sns-client (-> (UnsubscribeRequest/builder)
                                (.subscriptionArn subscription-arn)
-                               (.build)))
+                               ^UnsubscribeRequest (.build)))
+  (log/info "Removing SQS queue, queue url: " queue-url)
   (.deleteQueue sqs-client (-> (DeleteQueueRequest/builder)
                                (.queueUrl queue-url)
-                               (.build))))
+                               ^DeleteQueueRequest (.build))))
 

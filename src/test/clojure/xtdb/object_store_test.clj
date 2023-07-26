@@ -144,15 +144,15 @@
     (with-open [os (fs path)]
       (put-edn os "alice" :alice)
       (put-edn os "alan" :alan)
-      (t/is (= ["alan" "alice"] (.listObjects os))))
+      (t/is (= ["alan" "alice"] (.listObjects ^ObjectStore os))))
 
     (with-open [os (fs path)]
       (t/testing "prior objects will still be there, should be available on a list request"
-        (t/is (= ["alan" "alice"] (.listObjects os))))
+        (t/is (= ["alan" "alice"] (.listObjects ^ObjectStore os))))
 
       (t/testing "should be able to delete prior objects and have that reflected in list objects output"
-        (Thread/sleep 1000)
-        (t/is (= ["alan"] (.listObjects os)))))))
+        @(.deleteObject ^ObjectStore os "alice")
+        (t/is (= ["alan"] (.listObjects ^ObjectStore os)))))))
 
 (t/deftest fs-range-test
   (tu/with-tmp-dirs #{path}

@@ -3,7 +3,8 @@
             [juxt.clojars-mirrors.integrant.core :as ig]
             [xtdb.object-store-test :as os-test]
             [xtdb.s3 :as s3])
-  (:import (java.io Closeable)))
+  (:import (java.io Closeable)
+           xtdb.object_store.ObjectStore))
 
 ;; Setup the stack via cloudformation - see modules/s3/cloudformation/s3-test-stack.yml
 ;; Will need to create and set an access token for the S3TestUser
@@ -43,13 +44,13 @@
       (os-test/put-edn os "alice" :alice)
       (os-test/put-edn os "alan" :alan)
       (Thread/sleep wait-time-ms)
-      (t/is (= ["alan" "alice"] (.listObjects os))))
+      (t/is (= ["alan" "alice"] (.listObjects ^ObjectStore os))))
 
     (with-open [os (object-store prefix)]
       (t/testing "prior objects will still be there, should be available on a list request"
-        (t/is (= ["alan" "alice"] (.listObjects os))))
+        (t/is (= ["alan" "alice"] (.listObjects ^ObjectStore os))))
 
       (t/testing "should be able to delete prior objects and have that reflected in list objects output"
-        @(.deleteObject os "alice")
+        @(.deleteObject ^ObjectStore os "alice")
         (Thread/sleep wait-time-ms)
-        (t/is (= ["alan"] (.listObjects os)))))))
+        (t/is (= ["alan"] (.listObjects ^ObjectStore os)))))))
