@@ -11,7 +11,7 @@
            org.apache.arrow.memory.RootAllocator
            java.time.Duration))
 
-(t/use-fixtures :each tu/with-mock-clock tu/with-node)
+(t/use-fixtures :each tu/with-mock-clock tu/with-node tu/no-tries)
 
 (def
   tx1

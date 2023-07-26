@@ -61,7 +61,7 @@
 
 ;; we don't allocate anything here, but we need it because BaseValueVector
 ;; (a distant supertype of AbsentVector) thinks it needs one.
-(defn with-absent-cols [^RelationReader rel, ^BufferAllocator allocator, col-names]
+(defn with-absent-cols ^xtdb.vector.RelationReader [^RelationReader rel, ^BufferAllocator allocator, col-names]
   (let [row-count (.rowCount rel)
         available-col-names (into #{} (map #(.getName ^IVectorReader %)) rel)]
     (rel-reader (concat rel

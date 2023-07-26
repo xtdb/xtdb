@@ -421,26 +421,27 @@
                                    (sort))
                               arguments)
                 :let [f #(swap!
-                           results
-                           assoc
-                           script-name (let [start-time (. System (nanoTime))
-                                             results (:results (execute-records *db-engine* (parse-script script-name (slurp script-name))))]
-                                         (assoc results :time (math/round (/ (double (- ^long (. System (nanoTime)) start-time)) 1000000.0)))))]]
+                          results
+                          assoc
+                          script-name (let [start-time (. System (nanoTime))
+                                            results (:results (execute-records *db-engine* (parse-script script-name (slurp script-name))))]
+                                        (assoc results :time (math/round (/ (double (- ^long (. System (nanoTime)) start-time)) 1000000.0)))))]]
           (println "Running " script-name)
           (case db
-            "xtdb" (tu/with-mock-clock
-                     (fn []
-                       (tu/with-node
-                         #(with-xtdb f))))
+            "xtdb" (tu/without-tries
+                    (tu/with-mock-clock
+                      (fn []
+                        (tu/with-node
+                          #(with-xtdb f)))))
             "sqlite" (with-sqlite f)
             (with-jdbc db f)))))
     (let [{:keys [failure error] :or {failure 0 error 0} :as total-results} (reduce (partial merge-with +) (vals @results))]
       (pprint/print-table
-        [:name :success :failure :error :time]
-        (mapv
-          #(update % :time (fn [t] (str t "ms")))
-          (conj (vec (sort-by :name (map (fn [[k v]] (assoc v :name k)) @results)))
-                (assoc total-results :name "Total"))))
+       [:name :success :failure :error :time]
+       (mapv
+        #(update % :time (fn [t] (str t "ms")))
+        (conj (vec (sort-by :name (map (fn [[k v]] (assoc v :name k)) @results)))
+              (assoc total-results :name "Total"))))
 
       (when (and (System/getenv "CIRCLECI") dirs)
         (write-results-to-file arguments total-results))

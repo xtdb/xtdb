@@ -131,7 +131,7 @@
         (openWatermark [_ retain?]
           (locking this-table
             (let [wm-live-rel (open-wm-live-rel live-rel retain?)
-                  wm-live-trie live-trie]
+                  wm-live-trie (.compactLogs ^LiveHashTrie @!transient-trie)]
               (reify ILiveTableWatermark
                 (liveRelation [_] wm-live-rel)
                 (liveTrie [_] wm-live-trie)
@@ -155,7 +155,7 @@
   (openWatermark [this retain?]
     (locking this
       (let [wm-live-rel (open-wm-live-rel live-rel retain?)
-            wm-live-trie live-trie]
+            wm-live-trie (.compactLogs live-trie)]
         (reify ILiveTableWatermark
           (liveRelation [_] wm-live-rel)
           (liveTrie [_] wm-live-trie)

@@ -8,6 +8,7 @@
             [xtdb.expression :as expr]
             [xtdb.expression.metadata :as expr.meta]
             [xtdb.expression.walk :as expr.walk]
+            xtdb.indexer.live-index
             [xtdb.logical-plan :as lp]
             [xtdb.metadata :as meta]
             [xtdb.temporal :as temporal]
@@ -17,11 +18,12 @@
             [xtdb.vector.reader :as vr]
             xtdb.watermark)
   (:import (clojure.lang IPersistentSet MapEntry)
-           (java.util HashMap LinkedList List Map Queue Set)
+           (java.util HashMap Iterator LinkedList List Map Queue Set)
            (java.util.function BiFunction Consumer)
            java.util.stream.IntStream
            org.apache.arrow.memory.BufferAllocator
-           (org.apache.arrow.vector BigIntVector VarBinaryVector)
+           [org.apache.arrow.memory.util ArrowBufPointer]
+           (org.apache.arrow.vector BigIntVector NullVector VarBinaryVector)
            (org.apache.arrow.vector.complex ListVector StructVector)
            (org.roaringbitmap IntConsumer RoaringBitmap)
            org.roaringbitmap.buffer.MutableRoaringBitmap
@@ -29,9 +31,11 @@
            xtdb.api.protocols.TransactionInstant
            xtdb.buffer_pool.IBufferPool
            xtdb.ICursor
+           xtdb.indexer.live_index.ILiveTableWatermark
            (xtdb.metadata IMetadataManager ITableMetadata)
            xtdb.operator.IRelationSelector
-           (xtdb.vector RelationReader IVectorReader)
+           (xtdb.trie LiveHashTrie$Leaf)
+           (xtdb.vector IVectorReader RelationReader)
            (xtdb.watermark IWatermark IWatermarkSource Watermark)))
 
 (s/def ::table symbol?)
@@ -139,10 +143,10 @@
     (some-> current-cursor util/try-close)))
 
 (defn- ->content-chunks ^xtdb.ICursor [^BufferAllocator allocator
-                                        ^IMetadataManager metadata-mgr
-                                        ^IBufferPool buffer-pool
-                                        table-name content-col-names
-                                        metadata-pred]
+                                       ^IMetadataManager metadata-mgr
+                                       ^IBufferPool buffer-pool
+                                       table-name content-col-names
+                                       metadata-pred]
   (ContentChunkCursor. allocator metadata-mgr buffer-pool table-name content-col-names
                        (LinkedList. (or (meta/matching-chunks metadata-mgr table-name metadata-pred) []))
                        nil))
@@ -248,11 +252,11 @@
             (.add sel idx)))))
 
     (vr/rel-reader (concat temporal-rel
-                             (.select content-rel (.toArray (.build sel)))))))
+                           (.select content-rel (.toArray (.build sel)))))))
 
 (defn- remove-col ^xtdb.vector.RelationReader [^RelationReader rel, ^String col-name]
   (vr/rel-reader (remove #(= col-name (.getName ^IVectorReader %)) rel)
-                   (.rowCount rel)))
+                 (.rowCount rel)))
 
 (defn- unnormalize-column-names ^xtdb.vector.RelationReader [^RelationReader rel col-names]
   (vr/rel-reader
@@ -421,6 +425,90 @@
     (with-open [^Watermark wm (.openWatermark wm-src wm-tx)]
       (.allTableColNames scan-emitter wm))))
 
+(def ^:dynamic *use-tries?* true)
+
+(defn ->temporal-range [^longs temporal-min-range, ^longs temporal-max-range]
+  (let [res (long-array 4)]
+    (aset res 0 (aget temporal-max-range temporal/app-time-start-idx))
+    (aset res 1 (aget temporal-min-range temporal/app-time-end-idx))
+    (aset res 2 (aget temporal-max-range temporal/system-time-start-idx))
+    (aset res 3 (aget temporal-min-range temporal/system-time-end-idx))
+    res))
+
+(deftype PointPointCursor [^BufferAllocator allocator, ^RelationReader live-rel, ^Iterator leaves,
+                           col-names, ^Map col-preds,
+                           params]
+  ICursor
+  (tryAdvance [_ c]
+    (if (.hasNext leaves)
+      (let [^LiveHashTrie$Leaf leaf (.next leaves)
+            leaf-rel (.select live-rel (.data leaf))
+            leaf-row-count (.rowCount leaf-rel)
+            iid-rdr (.readerForName leaf-rel "xt$iid")
+            sys-from-rdr (.readerForName leaf-rel "xt$system_from")
+            op-rdr (.readerForName leaf-rel "op")
+            put-rdr (.legReader op-rdr :put)
+            doc-rdr (.structKeyReader put-rdr "xt$doc")
+            valid-from-rdr (.structKeyReader put-rdr "xt$valid_from")
+            valid-to-rdr (.structKeyReader put-rdr "xt$valid_to")
+
+            selection (let [current-iid-ptr (ArrowBufPointer.)
+                            cmp-ptr (ArrowBufPointer.)
+                            !selection (IntStream/builder)]
+                        (loop [idx 0]
+                          (when-not (= idx leaf-row-count)
+                            (.getPointer iid-rdr idx current-iid-ptr)
+                            (when (= :put (.getLeg op-rdr idx))
+                              (.add !selection idx))
+
+                            ;; skip all the idxs where the IID is the same
+
+                            (recur (long (loop [idx idx]
+                                           (if (= idx leaf-row-count)
+                                             idx
+                                             (if (= current-iid-ptr (.getPointer iid-rdr idx cmp-ptr))
+                                               (recur (inc idx))
+                                               idx)))))))
+
+                        (.toArray (.build !selection)))
+
+            out-rel (vr/rel-reader
+                     (for [col-name col-names
+                           :let [normalized-name (util/str->normal-form-str col-name)
+                                 rdr (case normalized-name
+                                       "xt$system_from" sys-from-rdr
+                                       "xt$system_to" (vr/vec->reader (doto (NullVector. "xt$system_to")
+                                                                        (.setValueCount leaf-row-count)))
+                                       "xt$valid_from" valid-from-rdr
+                                       "xt$valid_to" valid-to-rdr
+                                       (.structKeyReader doc-rdr normalized-name))]
+                           :when rdr]
+                       (.withName rdr col-name))
+                     leaf-row-count)]
+
+        (.accept c (-> out-rel
+                       (vr/with-absent-cols allocator col-names)
+                       (.select selection)
+                       (as-> rel (reduce (fn [^RelationReader rel, ^IRelationSelector col-pred]
+                                           (.select rel (.select col-pred allocator rel params)))
+                                         rel
+                                         (vals col-preds)))))
+        true)
+      false))
+
+  (close [_]
+    ;; TODO convince ourselves there's nothing to close here
+    ))
+
+(defn- ->4r-cursor [^BufferAllocator allocator, ^IBufferPool buffer-pool, ^ILiveTableWatermark wm,
+                    table-name, col-names, ^longs temporal-range
+                    ^Map col-preds, params, scan-opts, _basis]
+
+  (PointPointCursor. allocator
+                     (some-> wm .liveRelation) (.iterator ^Iterable (vec (some-> wm .liveTrie .leaves)))
+                     col-names col-preds
+                     params))
+
 (defmethod ig/prep-key ::scan-emitter [_ opts]
   (merge opts
          {:metadata-mgr (ig/ref ::meta/metadata-manager)
@@ -517,20 +605,32 @@
                            scan-opts (cond-> scan-opts
                                        (nil? for-valid-time)
                                        (assoc :for-valid-time (if default-all-valid-time? [:all-time] [:at [:now :now]])))
-                           [temporal-min-range temporal-max-range] (->temporal-min-max-range params basis scan-opts selects)
-                           current-row-ids (when (use-current-row-id-cache? watermark scan-opts basis temporal-col-names)
-                                             (get-current-row-ids watermark basis))]
-                       (-> (ScanCursor. allocator metadata-mgr watermark
-                                        content-col-names temporal-col-names col-preds
-                                        temporal-min-range temporal-max-range current-row-ids
-                                        (util/->concat-cursor (->content-chunks allocator metadata-mgr buffer-pool
-                                                                                normalized-table-name normalized-content-col-names
-                                                                                metadata-pred)
-                                                              (some-> (.liveChunk watermark)
-                                                                      (.liveTable normalized-table-name)
-                                                                      (.liveBlocks normalized-content-col-names metadata-pred)))
-                                        params)
-                           (coalesce/->coalescing-cursor allocator))))}))))
+                           [temporal-min-range temporal-max-range] (->temporal-min-max-range params basis scan-opts selects)]
+                       (if (and *use-tries?* (at-now? scan-opts) (not (contains? col-names "_iid")))
+                         (->4r-cursor allocator buffer-pool
+                                      (some-> (.liveIndex watermark) (.liveTable normalized-table-name))
+                                      normalized-table-name
+                                      (-> (set/union content-col-names temporal-col-names)
+                                          (disj "_row_id"))
+                                      (->temporal-range temporal-min-range temporal-max-range)
+                                      col-preds
+                                      params
+                                      scan-opts
+                                      basis)
+
+                         (let [current-row-ids (when (use-current-row-id-cache? watermark scan-opts basis temporal-col-names)
+                                                 (get-current-row-ids watermark basis))]
+                           (-> (ScanCursor. allocator metadata-mgr watermark
+                                            content-col-names temporal-col-names col-preds
+                                            temporal-min-range temporal-max-range current-row-ids
+                                            (util/->concat-cursor (->content-chunks allocator metadata-mgr buffer-pool
+                                                                                    normalized-table-name normalized-content-col-names
+                                                                                    metadata-pred)
+                                                                  (some-> (.liveChunk watermark)
+                                                                          (.liveTable normalized-table-name)
+                                                                          (.liveBlocks normalized-content-col-names metadata-pred)))
+                                            params)
+                               (coalesce/->coalescing-cursor allocator))))))}))))
 
 (defmethod lp/emit-expr :scan [scan-expr {:keys [^IScanEmitter scan-emitter scan-col-types, param-types]}]
   (.emitScan scan-emitter scan-expr scan-col-types param-types))

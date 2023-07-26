@@ -4,6 +4,8 @@
             [xtdb.test-util :as tu]
             [xtdb.util :as util]))
 
+(t/use-fixtures :once tu/no-tries)
+
 (t/use-fixtures :each
   (tu/with-opts {:xtdb/default-tz #time/zone "Europe/London"})
   (tu/with-each-api-implementation

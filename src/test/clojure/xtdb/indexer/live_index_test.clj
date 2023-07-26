@@ -105,19 +105,20 @@
    [[:sql "INSERT INTO foo (xt$id, xt$valid_from, xt$valid_to) VALUES (1, DATE '2020-01-01', DATE '2019-01-01')"]]])
 
 (t/deftest can-build-live-index
-  (let [node-dir (util/->path "target/can-build-live-index")]
-    (util/delete-dir node-dir)
+  (tu/without-tries
+   (let [node-dir (util/->path "target/can-build-live-index")]
+     (util/delete-dir node-dir)
 
-    (with-open [node (tu/->local-node {:node-dir node-dir})]
-      (let [^ObjectStore os (tu/component node ::os/file-system-object-store)]
+     (with-open [node (tu/->local-node {:node-dir node-dir})]
+       (let [^ObjectStore os (tu/component node ::os/file-system-object-store)]
 
-        (let [last-tx-key (last (for [tx-ops txs] (xt/submit-tx node tx-ops)))]
-          (tu/then-await-tx last-tx-key node (Duration/ofSeconds 2)))
+         (let [last-tx-key (last (for [tx-ops txs] (xt/submit-tx node tx-ops)))]
+           (tu/then-await-tx last-tx-key node (Duration/ofSeconds 2)))
 
-        (tu/finish-chunk! node)
+         (tu/finish-chunk! node)
 
-        (t/is (= ["tables/foo/chunks/leaf-c00.arrow" "tables/foo/chunks/trie-c00.arrow"]
-                 (.listObjects os "tables/foo/chunks"))))
+         (t/is (= ["tables/foo/chunks/leaf-c00.arrow" "tables/foo/chunks/trie-c00.arrow"]
+                  (.listObjects os "tables/foo/chunks"))))
 
-      (tj/check-json (.toPath (io/as-file (io/resource "xtdb/indexer-test/can-build-live-index")))
-                     (.resolve node-dir "objects")))))
+       (tj/check-json (.toPath (io/as-file (io/resource "xtdb/indexer-test/can-build-live-index")))
+                      (.resolve node-dir "objects"))))))
