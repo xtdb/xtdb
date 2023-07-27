@@ -51,7 +51,6 @@
              (set (tu/query-ra '[:scan {:table xt_docs} [xt/id]]
                                {:node node}))))))
 
-;; TODO correctly project out valid-to/valid-from
 (t/deftest test-past-point-point-queries
   (with-open [node (node/start-node {})]
     (let [tx1 (xt/submit-tx node [[:put :xt_docs {:xt/id :doc1 :v 1} {:for-valid-time [:from #inst "2015"]}]
@@ -99,19 +98,88 @@
                                    [xt/id v]]
                                  {:node node :basis {:tx tx2}})))))))
 
-;; FIXME to remove once point/point queries support valid-to/valid-rom
-(t/deftest test-no-with-tries-for-valid-to-and-valid-from
+
+(t/deftest test-past-point-point-queries-with-valid-time
   (with-open [node (node/start-node {})]
-    (xt/submit-tx node [[:put :xt_docs {:xt/id :doc1 :v 1} {:for-valid-time [:from #inst "2015"]}]])
-    (xt/submit-tx node [[:put :xt_docs {:xt/id :doc1 :v 2} {:for-valid-time [:from #inst "2023"]}]])
+    (let [tx1 (xt/submit-tx node [[:put :xt_docs {:xt/id :doc1 :v 1} {:for-valid-time [:from #inst "2015"]}]
+                                  [:put :xt_docs {:xt/id :doc2 :v 1} {:for-valid-time [:from #inst "2015"]}]
+                                  [:put :xt_docs {:xt/id :doc3 :v 1} {:for-valid-time [:from #inst "2018"]}]])
 
-    (with-redefs [scan/->4r-cursor (fn [& _args] (throw (ex-info "Should throw!!!" {})))]
-      (t/is (= #{{:v 1, :xt/id :doc1 :xt/valid-to #time/zoned-date-time "2023-01-01T00:00Z[UTC]"}}
+          tx2 (xt/submit-tx node [[:put :xt_docs {:xt/id :doc1 :v 2} {:for-valid-time [:from #inst "2020"]}]
+                                  [:put :xt_docs {:xt/id :doc2 :v 2} {:for-valid-time [:from #inst "2100"]}]
+                                  [:delete :xt_docs :doc3]])]
+
+      ;; valid-time
+      (t/is (= #{{:v 1, :xt/id :doc1,
+                  :xt/valid-from #time/zoned-date-time "2015-01-01T00:00Z[UTC]",
+                  :xt/valid-to #time/zoned-date-time "2020-01-01T00:00Z[UTC]"}
+                 {:v 1, :xt/id :doc2,
+                  :xt/valid-from #time/zoned-date-time "2015-01-01T00:00Z[UTC]",
+                  :xt/valid-to #time/zoned-date-time "2100-01-01T00:00Z[UTC]"}}
                (set (tu/query-ra '[:scan
-                                   {:table xt_docs, :for-valid-time [:at #inst "2017"] , :for-system-time nil}
-                                   [xt/id v xt/valid-to]]
-                                 {:node node})))))))
+                                   {:table xt_docs, :for-valid-time [:at #inst "2017"], :for-system-time nil}
+                                   [xt/id v xt/valid-from xt/valid-to]]
+                                 {:node node}))))
 
+      (t/is (= #{{:v 2, :xt/id :doc1
+                  :xt/valid-from #time/zoned-date-time "2020-01-01T00:00Z[UTC]",
+                  :xt/valid-to #time/zoned-date-time "9999-12-31T23:59:59.999999Z[UTC]"}
+
+                 {:v 1, :xt/id :doc2,
+                  :xt/valid-from #time/zoned-date-time "2015-01-01T00:00Z[UTC]",
+                  :xt/valid-to #time/zoned-date-time "2100-01-01T00:00Z[UTC]"}}
+               (set (tu/query-ra '[:scan
+                                   {:table xt_docs, :for-valid-time [:at :now], :for-system-time nil}
+                                   [xt/id v xt/valid-from xt/valid-to]]
+                                 {:node node}))))
+      ;; system-time
+      (t/is (= #{{:v 1, :xt/id :doc1,
+                  :xt/valid-from #time/zoned-date-time "2015-01-01T00:00Z[UTC]",
+                  :xt/valid-to #time/zoned-date-time "9999-12-31T23:59:59.999999Z[UTC]"}
+                 {:v 1, :xt/id :doc2,
+                  :xt/valid-from #time/zoned-date-time "2015-01-01T00:00Z[UTC]",
+                  :xt/valid-to #time/zoned-date-time "9999-12-31T23:59:59.999999Z[UTC]"}
+                 {:v 1, :xt/id :doc3,
+                  :xt/valid-from #time/zoned-date-time "2018-01-01T00:00Z[UTC]",
+                  :xt/valid-to #time/zoned-date-time "9999-12-31T23:59:59.999999Z[UTC]"}}
+               (set (tu/query-ra '[:scan
+                                   {:table xt_docs, :for-valid-time [:at :now], :for-system-time nil}
+                                   [xt/id v xt/valid-from xt/valid-to]]
+                                 {:node node :basis {:tx tx1}}))))
+
+      (t/is (= #{{:v 1, :xt/id :doc1,
+                  :xt/valid-from #time/zoned-date-time "2015-01-01T00:00Z[UTC]",
+                  :xt/valid-to #time/zoned-date-time "9999-12-31T23:59:59.999999Z[UTC]"}
+                 {:v 1, :xt/id :doc2,
+                  :xt/valid-from #time/zoned-date-time "2015-01-01T00:00Z[UTC]",
+                  :xt/valid-to #time/zoned-date-time "9999-12-31T23:59:59.999999Z[UTC]"}}
+               (set (tu/query-ra '[:scan
+                                   {:table xt_docs, :for-valid-time [:at #inst "2017"], :for-system-time nil}
+                                   [xt/id v xt/valid-from xt/valid-to]]
+                                 {:node node :basis {:tx tx1}}))))
+
+
+      (t/is (= #{{:v 2, :xt/id :doc1,
+                  :xt/valid-from #time/zoned-date-time "2020-01-01T00:00Z[UTC]",
+                  :xt/valid-to #time/zoned-date-time "9999-12-31T23:59:59.999999Z[UTC]"}
+                 {:v 1, :xt/id :doc2
+                  :xt/valid-from #time/zoned-date-time "2015-01-01T00:00Z[UTC]",
+                  :xt/valid-to #time/zoned-date-time "2100-01-01T00:00Z[UTC]",}}
+               (set (tu/query-ra '[:scan
+                                   {:table xt_docs, :for-valid-time [:at :now], :for-system-time nil}
+                                   [xt/id v xt/valid-from xt/valid-to]]
+                                 {:node node :basis {:tx tx2}}))))
+
+      (t/is (= #{{:v 2, :xt/id :doc1,
+                  :xt/valid-from #time/zoned-date-time "2020-01-01T00:00Z[UTC]",
+                  :xt/valid-to #time/zoned-date-time "9999-12-31T23:59:59.999999Z[UTC]"}
+                 {:v 2, :xt/id :doc2,
+                  :xt/valid-from #time/zoned-date-time "2100-01-01T00:00Z[UTC]",
+                  :xt/valid-to #time/zoned-date-time "9999-12-31T23:59:59.999999Z[UTC]"}}
+               (set (tu/query-ra '[:scan
+                                   {:table xt_docs, :for-valid-time [:at #inst "2100"], :for-system-time nil}
+                                   [xt/id v xt/valid-from xt/valid-to]]
+                                 {:node node :basis {:tx tx2}})))))))
 
 (t/deftest test-scanning-temporal-cols
   (with-open [node (node/start-node {})]
@@ -145,7 +213,7 @@
       (t/is (= #{{:xt/valid-from (util/->zdt tt)
                   :xt/valid-to (util/->zdt util/end-of-time)
                   :xt/system-from (util/->zdt tt),
-                  :xt/system-to (util/->zdt util/end-of-time)}}
+                  :xt/system-to nil}}
                (set (tu/query-ra '[:scan {:table xt_docs}
                                    [xt/valid-from xt/valid-to
                                     xt/system-from xt/system-to]]
@@ -293,6 +361,7 @@
   (with-open [node (node/start-node {})]
     (xt/submit-tx node [[:put :xt_docs {:xt/id :foo, :col1 "foo1"}]
                         [:put :xt_docs {:xt/id :bar, :col1 "bar1", :col2 "bar2"}]])
+
 
     ;; column not existent in all docs
     (t/is (= [{:col2 "bar2", :xt/id :bar}]

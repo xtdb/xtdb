@@ -22,7 +22,7 @@ SELECT *
 1998-01-10T00:00Z[UTC]
 9999-12-31T23:59:59.999999Z[UTC]
 2020-01-01T00:00Z[UTC]
-9999-12-31T23:59:59.999999Z[UTC]
+NULL
 
 statement ok
 INSERT INTO Prop_Owner (xt$id, customer_number, property_number, xt$valid_from)
@@ -44,7 +44,7 @@ SELECT *
 1998-01-15T00:00Z[UTC]
 9999-12-31T23:59:59.999999Z[UTC]
 2020-01-02T00:00Z[UTC]
-9999-12-31T23:59:59.999999Z[UTC]
+NULL
 
 query IIITTTT nosort
 SELECT *
@@ -576,7 +576,7 @@ SELECT *
 ----
 827
 2020-01-06T00:00Z[UTC]
-9999-12-31T23:59:59.999999Z[UTC]
+NULL
 
 statement ok
 INSERT INTO Prop_Owner (xt$id, customer_number, property_number, xt$valid_from)
