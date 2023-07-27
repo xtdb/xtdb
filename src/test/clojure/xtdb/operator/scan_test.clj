@@ -41,36 +41,77 @@
                           {:node node})))))
 
 (t/deftest test-chunk-boundary
-  (tu/without-tries
-    (with-open [node (node/start-node {:xtdb/live-chunk {:rows-per-block 20, :rows-per-chunk 20}})]
-      (->> (for [i (range 100)]
-             [:put :xt_docs {:xt/id i}])
-           (partition 10)
-           (mapv #(xt/submit-tx node %)))
+  (with-open [node (node/start-node {:xtdb/live-chunk {:rows-per-block 20, :rows-per-chunk 20}})]
+    (->> (for [i (range 100)]
+           [:put :xt_docs {:xt/id i}])
+         (partition 10)
+         (mapv #(xt/submit-tx node %)))
 
-      (t/is (= (set (for [i (range 100)] {:xt/id i}))
-               (set (tu/query-ra '[:scan {:table xt_docs} [xt/id]]
+    (t/is (= (set (for [i (range 100)] {:xt/id i}))
+             (set (tu/query-ra '[:scan {:table xt_docs} [xt/id]]
+                               {:node node}))))))
+
+;; TODO correctly project out valid-to/valid-from
+(t/deftest test-past-point-point-queries
+  (with-open [node (node/start-node {})]
+    (let [tx1 (xt/submit-tx node [[:put :xt_docs {:xt/id :doc1 :v 1} {:for-valid-time [:from #inst "2015"]}]
+                                  [:put :xt_docs {:xt/id :doc2 :v 1} {:for-valid-time [:from #inst "2015"]}]
+                                  [:put :xt_docs {:xt/id :doc3 :v 1} {:for-valid-time [:from #inst "2018"]}]])
+
+          tx2 (xt/submit-tx node [[:put :xt_docs {:xt/id :doc1 :v 2} {:for-valid-time [:from #inst "2020"]}]
+                                  [:put :xt_docs {:xt/id :doc2 :v 2} {:for-valid-time [:from #inst "2100"]}]
+                                  [:delete :xt_docs :doc3]])]
+
+      ;; valid-time
+      (t/is (= #{{:v 1, :xt/id :doc1} {:v 1, :xt/id :doc2}}
+               (set (tu/query-ra '[:scan
+                                   {:table xt_docs, :for-valid-time [:at #inst "2017"], :for-system-time nil}
+                                   [xt/id v]]
+                                 {:node node}))))
+
+      (t/is (= #{{:v 1, :xt/id :doc2} {:v 2, :xt/id :doc1}}
+               (set (tu/query-ra '[:scan
+                                   {:table xt_docs, :for-valid-time [:at :now], :for-system-time nil}
+                                   [xt/id v]]
+                                 {:node node}))))
+      ;; system-time
+      (t/is (= #{{:v 1, :xt/id :doc1} {:v 1, :xt/id :doc2} {:v 1, :xt/id :doc3}}
+               (set (tu/query-ra '[:scan
+                                   {:table xt_docs, :for-valid-time [:at :now], :for-system-time nil}
+                                   [xt/id v]]
+                                 {:node node :basis {:tx tx1}}))))
+
+      (t/is (= #{{:v 1, :xt/id :doc1} {:v 1, :xt/id :doc2}}
+               (set (tu/query-ra '[:scan
+                                   {:table xt_docs, :for-valid-time [:at #inst "2017"], :for-system-time nil}
+                                   [xt/id v]]
+                                 {:node node :basis {:tx tx1}}))))
+
+      (t/is (= #{{:v 2, :xt/id :doc1} {:v 1, :xt/id :doc2}}
+               (set (tu/query-ra '[:scan
+                                   {:table xt_docs, :for-valid-time [:at :now], :for-system-time nil}
+                                   [xt/id v]]
+                                 {:node node :basis {:tx tx2}}))))
+
+      (t/is (= #{{:v 2, :xt/id :doc1} {:v 2, :xt/id :doc2}}
+               (set (tu/query-ra '[:scan
+                                   {:table xt_docs, :for-valid-time [:at #inst "2100"], :for-system-time nil}
+                                   [xt/id v]]
+                                 {:node node :basis {:tx tx2}})))))))
+
+;; FIXME to remove once point/point queries support valid-to/valid-rom
+(t/deftest test-no-with-tries-for-valid-to-and-valid-from
+  (with-open [node (node/start-node {})]
+    (xt/submit-tx node [[:put :xt_docs {:xt/id :doc1 :v 1} {:for-valid-time [:from #inst "2015"]}]])
+    (xt/submit-tx node [[:put :xt_docs {:xt/id :doc1 :v 2} {:for-valid-time [:from #inst "2023"]}]])
+
+    (with-redefs [scan/->4r-cursor (fn [& _args] (throw (ex-info "Should throw!!!" {})))]
+      (t/is (= #{{:v 1, :xt/id :doc1 :xt/valid-to #time/zoned-date-time "2023-01-01T00:00Z[UTC]"}}
+               (set (tu/query-ra '[:scan
+                                   {:table xt_docs, :for-valid-time [:at #inst "2017"] , :for-system-time nil}
+                                   [xt/id v xt/valid-to]]
                                  {:node node})))))))
 
-(t/deftest test-past-valid-time-point
-  (tu/without-tries
-   (with-open [node (node/start-node {})]
-     (xt/submit-tx node [[:put :xt_docs {:xt/id :doc1 :v 1} {:for-valid-time [:from #inst "2015"]}]
-                         [:put :xt_docs {:xt/id :doc2 :v 1} {:for-valid-time [:from #inst "2015"]}]
-                         [:put :xt_docs {:xt/id :doc3 :v 1} {:for-valid-time [:from #inst "2015"]}]])
-     (xt/submit-tx node [[:put :xt_docs {:xt/id :doc1 :v 2} {:for-valid-time [:from #inst "2020"]}]
-                         [:put :xt_docs {:xt/id :doc2 :v 2} {:for-valid-time [:from #inst "2100"]}]
-                         [:delete :xt_docs :doc3]])
-     (t/is (= #{{:v 1, :xt/id :doc1} {:v 1, :xt/id :doc2} {:v 1, :xt/id :doc3}}
-              (set (tu/query-ra '[:scan
-                                  {:table xt_docs, :for-valid-time [:at #inst "2017"], :for-system-time nil}
-                                  [xt/id v]]
-                                {:node node}))))
-     (t/is (= #{{:v 1, :xt/id :doc2} {:v 2, :xt/id :doc1}}
-              (set (tu/query-ra '[:scan
-                                  {:table xt_docs, :for-valid-time [:at :now], :for-system-time nil}
-                                  [xt/id v]]
-                                {:node node})))))))
 
 (t/deftest test-scanning-temporal-cols
   (with-open [node (node/start-node {})]
@@ -104,36 +145,34 @@
       (t/is (= #{{:xt/valid-from (util/->zdt tt)
                   :xt/valid-to (util/->zdt util/end-of-time)
                   :xt/system-from (util/->zdt tt),
-                  :xt/system-to (when-not scan/*use-tries?*
-                                  (util/->zdt util/end-of-time))}}
+                  :xt/system-to (util/->zdt util/end-of-time)}}
                (set (tu/query-ra '[:scan {:table xt_docs}
                                    [xt/valid-from xt/valid-to
                                     xt/system-from xt/system-to]]
                                  {:node node})))))))
 
 (t/deftest test-aligns-temporal-columns-correctly-363
-  (tu/without-tries
-    (with-open [node (node/start-node {})]
-      (xt/submit-tx node [[:put :foo {:xt/id :my-doc, :last_updated "tx1"}]] {:system-time #inst "3000"})
+  (with-open [node (node/start-node {})]
+    (xt/submit-tx node [[:put :foo {:xt/id :my-doc, :last_updated "tx1"}]] {:system-time #inst "3000"})
 
-      (xt/submit-tx node [[:put :foo {:xt/id :my-doc, :last_updated "tx2"}]] {:system-time #inst "3001"})
+    (xt/submit-tx node [[:put :foo {:xt/id :my-doc, :last_updated "tx2"}]] {:system-time #inst "3001"})
 
-      #_(tu/finish-chunk! node)
+    #_(tu/finish-chunk! node)
 
-      (t/is (= [{:xt/system-from (util/->zdt #inst "3000")
-                 :xt/system-to (util/->zdt #inst "3001")
-                 :last_updated "tx1"}
-                {:xt/system-from (util/->zdt #inst "3001")
-                 :xt/system-to (util/->zdt util/end-of-time)
-                 :last_updated "tx1"}
-                {:xt/system-from (util/->zdt #inst "3001")
-                 :xt/system-to (util/->zdt util/end-of-time)
-                 :last_updated "tx2"}]
-               (tu/query-ra '[:scan {:table foo, :for-system-time :all-time}
-                              [{xt/system-from (< xt/system-from #time/zoned-date-time "3002-01-01T00:00Z")}
-                               {xt/system-to (> xt/system-to #time/zoned-date-time "2999-01-01T00:00Z")}
-                               last_updated]]
-                            {:node node :default-all-valid-time? true}))))))
+    (t/is (= [{:xt/system-from (util/->zdt #inst "3000")
+               :xt/system-to (util/->zdt #inst "3001")
+               :last_updated "tx1"}
+              {:xt/system-from (util/->zdt #inst "3001")
+               :xt/system-to (util/->zdt util/end-of-time)
+               :last_updated "tx1"}
+              {:xt/system-from (util/->zdt #inst "3001")
+               :xt/system-to (util/->zdt util/end-of-time)
+               :last_updated "tx2"}]
+             (tu/query-ra '[:scan {:table foo, :for-system-time :all-time}
+                            [{xt/system-from (< xt/system-from #time/zoned-date-time "3002-01-01T00:00Z")}
+                             {xt/system-to (> xt/system-to #time/zoned-date-time "2999-01-01T00:00Z")}
+                             last_updated]]
+                          {:node node :default-all-valid-time? true})))))
 
 (t/deftest test-for-valid-time-in-params
   (let [tt1 (util/->zdt #inst "2020-01-01")

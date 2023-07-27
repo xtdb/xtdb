@@ -4,7 +4,7 @@
             [xtdb.test-util :as tu]))
 
 (t/use-fixtures :each tu/with-node)
-(t/use-fixtures :once tu/no-tries tu/with-allocator)
+(t/use-fixtures :once tu/with-allocator)
 
 (t/deftest test-param-metadata-error-310
   (let [tx1 (xt/submit-tx tu/*node*

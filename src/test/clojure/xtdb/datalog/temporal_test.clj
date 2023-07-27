@@ -4,7 +4,7 @@
             [xtdb.api.protocols :as xtp]
             [xtdb.test-util :as tu]))
 
-(t/use-fixtures :each tu/no-tries tu/with-node)
+(t/use-fixtures :each tu/with-node)
 
 (deftest simple-temporal-tests
   (let [tx1 (xt/submit-tx tu/*node* [[:put :xt_docs {:xt/id 1 :foo "2000-4000"}
