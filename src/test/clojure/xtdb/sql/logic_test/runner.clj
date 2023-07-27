@@ -428,11 +428,10 @@
                                         (assoc results :time (math/round (/ (double (- ^long (. System (nanoTime)) start-time)) 1000000.0)))))]]
           (println "Running " script-name)
           (case db
-            "xtdb" (tu/without-tries
-                    (tu/with-mock-clock
-                      (fn []
-                        (tu/with-node
-                          #(with-xtdb f)))))
+            "xtdb" (tu/with-mock-clock
+                     (fn []
+                       (tu/with-node
+                         #(with-xtdb f))))
             "sqlite" (with-sqlite f)
             (with-jdbc db f)))))
     (let [{:keys [failure error] :or {failure 0 error 0} :as total-results} (reduce (partial merge-with +) (vals @results))]

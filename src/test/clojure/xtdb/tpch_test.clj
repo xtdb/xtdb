@@ -12,8 +12,6 @@
             [xtdb.operator.scan :as scan])
   (:import (java.nio.file Path)))
 
-(t/use-fixtures :once tu/no-tries)
-
 (def ^:dynamic *node* nil)
 
 ;; (slurp (io/resource (format "io/airlift/tpch/queries/q%d.sql" 1)))

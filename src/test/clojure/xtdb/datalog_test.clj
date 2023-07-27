@@ -1096,27 +1096,26 @@
         (t/is (= 160 (count-table tx)))))))
 
 (t/deftest bug-dont-throw-on-non-existing-column-597
-  (tu/without-tries
-    (with-open [node (node/start-node {:xtdb/live-chunk {:rows-per-block 10, :rows-per-chunk 1000}})]
-      (letfn [(submit-ops! [ids]
-                (last (for [tx-ops (->> (for [id ids]
-                                          [:put :t1 {:xt/id id,
-                                                     :data (str "data" id)}])
-                                        (partition-all 20))]
-                        (xt/submit-tx node tx-ops))))]
+  (with-open [node (node/start-node {:xtdb/live-chunk {:rows-per-block 10, :rows-per-chunk 1000}})]
+    (letfn [(submit-ops! [ids]
+              (last (for [tx-ops (->> (for [id ids]
+                                        [:put :t1 {:xt/id id,
+                                                   :data (str "data" id)}])
+                                      (partition-all 20))]
+                      (xt/submit-tx node tx-ops))))]
 
-        (xt/submit-tx node '[[:put :xt_docs {:xt/id 0 :foo :bar}]])
-        (submit-ops! (range 1010))
+      (xt/submit-tx node '[[:put :xt_docs {:xt/id 0 :foo :bar}]])
+      (submit-ops! (range 1010))
 
-        (t/is (= 1010 (-> (xt/q node '{:find [(count id)]
-                                       :keys [id-count]
-                                       :where [(match :t1 {:xt/id id})]})
-                          (first)
-                          (:id-count))))
+      (t/is (= 1010 (-> (xt/q node '{:find [(count id)]
+                                     :keys [id-count]
+                                     :where [(match :t1 {:xt/id id})]})
+                        (first)
+                        (:id-count))))
 
-        (t/is (= [{:xt/id 0}]
-                 (xt/q node '{:find [xt/id]
-                              :where [(match :xt_docs [xt/id some-attr])]})))))))
+      (t/is (= [{:xt/id 0}]
+               (xt/q node '{:find [xt/id]
+                            :where [(match :xt_docs [xt/id some-attr])]}))))))
 
 (t/deftest add-better-metadata-support-for-keywords
   (with-open [node (node/start-node {:xtdb/live-chunk {:rows-per-block 10, :rows-per-chunk 1000}})]
@@ -1437,94 +1436,93 @@
 
 
 (t/deftest test-temporal-opts
-  (tu/without-tries
-   (letfn [(q [query tx current-time]
-             (xt/q tu/*node*
-                   query
-                   {:basis {:tx tx, :current-time (util/->instant current-time)}}))]
+  (letfn [(q [query tx current-time]
+            (xt/q tu/*node*
+                  query
+                  {:basis {:tx tx, :current-time (util/->instant current-time)}}))]
 
-     ;; Matthew 2015+
+    ;; Matthew 2015+
 
-     ;; tx0
-     ;; 2018/2019: Matthew, Mark
-     ;; 2021+: Matthew, Luke
+    ;; tx0
+    ;; 2018/2019: Matthew, Mark
+    ;; 2021+: Matthew, Luke
 
-     ;; tx1
-     ;; 2016-2018: Matthew, John
-     ;; 2018-2020: Matthew, Mark, John
-     ;; 2020: Matthew
-     ;; 2021-2022: Matthew, Luke
-     ;; 2023: Matthew, Mark (again)
-     ;; 2024+: Matthew
+    ;; tx1
+    ;; 2016-2018: Matthew, John
+    ;; 2018-2020: Matthew, Mark, John
+    ;; 2020: Matthew
+    ;; 2021-2022: Matthew, Luke
+    ;; 2023: Matthew, Mark (again)
+    ;; 2024+: Matthew
 
-     (let [tx0 (xt/submit-tx tu/*node* '[[:put :xt_docs {:xt/id :matthew} {:for-valid-time [:in #inst "2015"]}]
-                                         [:put :xt_docs {:xt/id :mark} {:for-valid-time [:in  #inst "2018"  #inst "2020"]}]
-                                         [:put :xt_docs {:xt/id :luke} {:for-valid-time [:in #inst "2021"]}]])
+    (let [tx0 (xt/submit-tx tu/*node* '[[:put :xt_docs {:xt/id :matthew} {:for-valid-time [:in #inst "2015"]}]
+                                        [:put :xt_docs {:xt/id :mark} {:for-valid-time [:in  #inst "2018"  #inst "2020"]}]
+                                        [:put :xt_docs {:xt/id :luke} {:for-valid-time [:in #inst "2021"]}]])
 
-           tx1 (xt/submit-tx tu/*node* '[[:delete :xt_docs :luke {:for-valid-time [:in #inst "2022"]}]
-                                         [:put :xt_docs {:xt/id :mark} {:for-valid-time [:in #inst "2023" #inst "2024"]}]
-                                         [:put :xt_docs {:xt/id :john} {:for-valid-time [:in #inst "2016" #inst "2020"]}]])]
+          tx1 (xt/submit-tx tu/*node* '[[:delete :xt_docs :luke {:for-valid-time [:in #inst "2022"]}]
+                                        [:put :xt_docs {:xt/id :mark} {:for-valid-time [:in #inst "2023" #inst "2024"]}]
+                                        [:put :xt_docs {:xt/id :john} {:for-valid-time [:in #inst "2016" #inst "2020"]}]])]
 
-       (t/is (= #{{:id :matthew}, {:id :mark}}
-                (set (q '{:find [id], :where [(match :xt_docs [{:xt/id id}])]}, tx1, #inst "2023"))))
+      (t/is (= #{{:id :matthew}, {:id :mark}}
+               (set (q '{:find [id], :where [(match :xt_docs [{:xt/id id}])]}, tx1, #inst "2023"))))
 
-       (t/is (= #{{:id :matthew}, {:id :luke}}
-                (set (q '{:find [id], :where [(match :xt_docs [{:xt/id id}])]}, tx1, #inst "2021")))
-             "back in app-time")
+      (t/is (= #{{:id :matthew}, {:id :luke}}
+               (set (q '{:find [id], :where [(match :xt_docs [{:xt/id id}])]}, tx1, #inst "2021")))
+            "back in app-time")
 
-       (t/is (= [{:id :matthew}, {:id :luke}]
-                (q '{:find [id], :where [(match :xt_docs [{:xt/id id}])]}, tx0, #inst "2023"))
-             "back in system-time")
+      (t/is (= #{{:id :matthew}, {:id :luke}}
+               (set (q '{:find [id], :where [(match :xt_docs [{:xt/id id}])]}, tx0, #inst "2023")))
+            "back in system-time")
 
-       (t/is (= [{:id :matthew, :app-start (util/->zdt #inst "2015"), :app-end (util/->zdt util/end-of-time)}
-                 {:id :mark, :app-start (util/->zdt #inst "2018"), :app-end (util/->zdt #inst "2020")}
-                 {:id :luke, :app-start (util/->zdt #inst "2021"), :app-end (util/->zdt #inst "2022")}
-                 {:id :mark, :app-start (util/->zdt #inst "2023"), :app-end (util/->zdt #inst "2024")}
-                 {:id :john, :app-start (util/->zdt #inst "2016"), :app-end (util/->zdt #inst "2020")}]
-                (q '{:find [id app-start app-end]
-                     :where [(match :xt_docs [{:xt/id id} {:xt/valid-from app-start
-                                                           :xt/valid-to app-end}]
-                                    {:for-valid-time :all-time})]}
-                   tx1, nil))
-             "entity history, all time")
+      (t/is (= [{:id :matthew, :app-start (util/->zdt #inst "2015"), :app-end (util/->zdt util/end-of-time)}
+                {:id :mark, :app-start (util/->zdt #inst "2018"), :app-end (util/->zdt #inst "2020")}
+                {:id :luke, :app-start (util/->zdt #inst "2021"), :app-end (util/->zdt #inst "2022")}
+                {:id :mark, :app-start (util/->zdt #inst "2023"), :app-end (util/->zdt #inst "2024")}
+                {:id :john, :app-start (util/->zdt #inst "2016"), :app-end (util/->zdt #inst "2020")}]
+               (q '{:find [id app-start app-end]
+                    :where [(match :xt_docs [{:xt/id id} {:xt/valid-from app-start
+                                                          :xt/valid-to app-end}]
+                                   {:for-valid-time :all-time})]}
+                  tx1, nil))
+            "entity history, all time")
 
-       (t/is (= [{:id :matthew, :app-start (util/->zdt #inst "2015"), :app-end (util/->zdt util/end-of-time)}
-                 {:id :luke, :app-start (util/->zdt #inst "2021"), :app-end (util/->zdt #inst "2022")}]
-                (q '{:find [id app-start app-end]
-                     :where [(match :xt_docs [{:xt/id id} {:xt/valid-from app-start
-                                                           :xt/valid-to app-end}]
-                                    {:for-valid-time [:in #inst "2021", #inst "2023"]})]}
-                   tx1, nil))
-             "entity history, range")
+      (t/is (= [{:id :matthew, :app-start (util/->zdt #inst "2015"), :app-end (util/->zdt util/end-of-time)}
+                {:id :luke, :app-start (util/->zdt #inst "2021"), :app-end (util/->zdt #inst "2022")}]
+               (q '{:find [id app-start app-end]
+                    :where [(match :xt_docs [{:xt/id id} {:xt/valid-from app-start
+                                                          :xt/valid-to app-end}]
+                                   {:for-valid-time [:in #inst "2021", #inst "2023"]})]}
+                  tx1, nil))
+            "entity history, range")
 
-       (t/is (= #{{:id :matthew}, {:id :mark}}
-                (set (q '{:find [id],
-                          :where [(match :xt_docs {:xt/id id}
-                                         {:for-valid-time [:at #inst "2018"]})
-                                  (match :xt_docs {:xt/id id}
-                                         {:for-valid-time [:at #inst "2023"]})]},
-                        tx1, nil)))
-             "cross-time join - who was here in both 2018 and 2023?")
+      (t/is (= #{{:id :matthew}, {:id :mark}}
+               (set (q '{:find [id],
+                         :where [(match :xt_docs {:xt/id id}
+                                        {:for-valid-time [:at #inst "2018"]})
+                                 (match :xt_docs {:xt/id id}
+                                        {:for-valid-time [:at #inst "2023"]})]},
+                       tx1, nil)))
+            "cross-time join - who was here in both 2018 and 2023?")
 
-       (t/is (= [{:vt-start (util/->zdt #inst "2021")
-                  :vt-end (util/->zdt util/end-of-time)
-                  :tt-start (util/->zdt #inst "2020-01-01")
-                  :tt-end (util/->zdt #inst "2020-01-02")}
-                 {:vt-start (util/->zdt #inst "2021")
-                  :vt-end (util/->zdt #inst "2022")
-                  :tt-start (util/->zdt #inst "2020-01-02")
-                  :tt-end (util/->zdt util/end-of-time)}]
-                (q '{:find [vt-start vt-end tt-start tt-end]
-                     :where [(match :xt_docs {:xt/id :luke
-                                              :xt/valid-from vt-start
-                                              :xt/valid-to vt-end
-                                              :xt/system-from tt-start
-                                              :xt/system-to tt-end}
-                                    {:for-valid-time :all-time
-                                     :for-system-time :all-time})]}
-                   tx1 nil))
+      (t/is (= [{:vt-start (util/->zdt #inst "2021")
+                 :vt-end (util/->zdt util/end-of-time)
+                 :tt-start (util/->zdt #inst "2020-01-01")
+                 :tt-end (util/->zdt #inst "2020-01-02")}
+                {:vt-start (util/->zdt #inst "2021")
+                 :vt-end (util/->zdt #inst "2022")
+                 :tt-start (util/->zdt #inst "2020-01-02")
+                 :tt-end (util/->zdt util/end-of-time)}]
+               (q '{:find [vt-start vt-end tt-start tt-end]
+                    :where [(match :xt_docs {:xt/id :luke
+                                             :xt/valid-from vt-start
+                                             :xt/valid-to vt-end
+                                             :xt/system-from tt-start
+                                             :xt/system-to tt-end}
+                                   {:for-valid-time :all-time
+                                    :for-system-time :all-time})]}
+                  tx1 nil))
 
-             "for all sys time")))))
+            "for all sys time"))))
 
 (t/deftest test-for-valid-time-with-current-time-2493
   (xt/submit-tx tu/*node* '[[:put :xt_docs {:xt/id :matthew} {:for-valid-time [:in nil #inst "2040"]}]])
@@ -2193,24 +2191,23 @@
                    :where [(match :foo {:xt/id id})]}))))
 
 (t/deftest test-metadata-filtering-for-time-data-607
-  (tu/without-tries
-    (with-open [node (node/start-node {:xtdb/live-chunk {:rows-per-block 1, :rows-per-chunk 1}})]
-      (xt/submit-tx node [[:put :xt_docs {:xt/id 1 :start-date #time/date "2000-01-01"}]
-                          [:put :xt_docs {:xt/id 2 :start-date #time/date "3000-01-01"}]])
-      (t/is (= [{:id 1}]
-               (xt/q node
-                     '{:find [id]
-                       :where [(match :xt_docs [{:xt/id id} start-date])
-                               [(>= start-date #inst "1500")]
-                               [(< start-date #inst "2500")]]})))
-      (xt/submit-tx node [[:put :xt_docs2 {:xt/id 1 :start-date #inst "2000-01-01"}]
-                          [:put :xt_docs2 {:xt/id 2 :start-date #inst "3000-01-01"}]])
-      (t/is (= [{:id 1}]
-               (xt/q node
-                     '{:find [id]
-                       :where [(match :xt_docs2 [{:xt/id id} start-date])
-                               [(< start-date #time/date "2500-01-01")]
-                               [(< start-date #time/date "2500-01-01")]]}))))))
+  (with-open [node (node/start-node {:xtdb/live-chunk {:rows-per-block 1, :rows-per-chunk 1}})]
+    (xt/submit-tx node [[:put :xt_docs {:xt/id 1 :start-date #time/date "2000-01-01"}]
+                        [:put :xt_docs {:xt/id 2 :start-date #time/date "3000-01-01"}]])
+    (t/is (= [{:id 1}]
+             (xt/q node
+                   '{:find [id]
+                     :where [(match :xt_docs [{:xt/id id} start-date])
+                             [(>= start-date #inst "1500")]
+                             [(< start-date #inst "2500")]]})))
+    (xt/submit-tx node [[:put :xt_docs2 {:xt/id 1 :start-date #inst "2000-01-01"}]
+                        [:put :xt_docs2 {:xt/id 2 :start-date #inst "3000-01-01"}]])
+    (t/is (= [{:id 1}]
+             (xt/q node
+                   '{:find [id]
+                     :where [(match :xt_docs2 [{:xt/id id} start-date])
+                             [(< start-date #time/date "2500-01-01")]
+                             [(< start-date #time/date "2500-01-01")]]})))))
 
 (t/deftest bug-non-namespaced-nested-keys-747
   (xt/submit-tx tu/*node* [[:put :bar {:xt/id 1 :foo {:a/b "foo"}}]])
@@ -2228,31 +2225,30 @@
              (set (xt/q tu/*node* '{:find [c] :where [($ :customer {:xt/* c})]}))))))
 
 (t/deftest test-row-alias-system-time-key-set
-  (tu/without-tries
-   (let [inputs
-         [[{:xt/id 0, :a 0} #inst "2023-01-17T00:00:00"]
-          [{:xt/id 0, :b 0} #inst "2023-01-18T00:00:00"]
-          [{:xt/id 0, :c 0, :a 0} #inst "2023-01-19T00:00:00"]]
+  (let [inputs
+        [[{:xt/id 0, :a 0} #inst "2023-01-17T00:00:00"]
+         [{:xt/id 0, :b 0} #inst "2023-01-18T00:00:00"]
+         [{:xt/id 0, :c 0, :a 0} #inst "2023-01-19T00:00:00"]]
 
-         _
-         (doseq [[doc system-time] inputs]
-           (xt/submit-tx tu/*node* [[:put :x doc]] {:system-time system-time}))
+        _
+        (doseq [[doc system-time] inputs]
+          (xt/submit-tx tu/*node* [[:put :x doc]] {:system-time system-time}))
 
-         q (partial xt/q tu/*node*)]
+        q (partial xt/q tu/*node*)]
 
-     (t/is (= [{:x {:xt/id 0, :a 0, :c 0}}]
-              (q '{:find [x]
-                   :where [($ :x {:xt/* x})]})))
+    (t/is (= [{:x {:xt/id 0, :a 0, :c 0}}]
+             (q '{:find [x]
+                  :where [($ :x {:xt/* x})]})))
 
-     (t/is (= [{:x {:xt/id 0, :b 0}}]
-              (q '{:find [x]
-                   :where [($ :x {:xt/* x})],}
-                 {:basis {:tx #xt/tx-key {:tx-id 1, :system-time #time/instant "2023-01-18T00:00:00Z"}}})))
+    (t/is (= [{:x {:xt/id 0, :b 0}}]
+             (q '{:find [x]
+                  :where [($ :x {:xt/* x})],}
+                {:basis {:tx #xt/tx-key {:tx-id 1, :system-time #time/instant "2023-01-18T00:00:00Z"}}})))
 
-     (t/is (= [{:x {:xt/id 0, :a 0}}]
-              (q '{:find [x]
-                   :where [($ :x {:xt/* x})],}
-                 {:basis {:tx #xt/tx-key {:tx-id 0, :system-time #time/instant "2023-01-17T00:00:00Z"}}}))))))
+    (t/is (= [{:x {:xt/id 0, :a 0}}]
+             (q '{:find [x]
+                  :where [($ :x {:xt/* x})],}
+                {:basis {:tx #xt/tx-key {:tx-id 0, :system-time #time/instant "2023-01-17T00:00:00Z"}}})))))
 
 (t/deftest test-row-alias-app-time-key-set
   (let [inputs

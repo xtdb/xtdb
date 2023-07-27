@@ -3,7 +3,6 @@
             [xtdb.api :as xt]
             [xtdb.test-util :as tu]))
 
-(use-fixtures :once tu/no-tries)
 (use-fixtures :each tu/with-node)
 
 (defn query-at-tx [query tx]

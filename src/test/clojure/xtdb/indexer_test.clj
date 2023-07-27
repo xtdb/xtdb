@@ -16,7 +16,6 @@
             [xtdb.test-json :as tj]
             [xtdb.test-util :as tu]
             [xtdb.ts-devices :as ts]
-            [xtdb.types :as ty]
             [xtdb.util :as util]
             [xtdb.vector.reader :as vr]
             xtdb.watermark)
@@ -35,7 +34,7 @@
            xtdb.object_store.ObjectStore
            (xtdb.watermark IWatermark IWatermarkSource)))
 
-(t/use-fixtures :once tu/no-tries tu/with-allocator)
+(t/use-fixtures :once tu/with-allocator)
 
 (def txs
   [[[:put :device-info
