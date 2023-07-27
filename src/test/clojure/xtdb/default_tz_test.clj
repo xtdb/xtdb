@@ -4,8 +4,6 @@
             [xtdb.test-util :as tu]
             [xtdb.util :as util]))
 
-(t/use-fixtures :once tu/no-tries)
-
 (t/use-fixtures :each
   (tu/with-opts {:xtdb/default-tz #time/zone "Europe/London"})
   (tu/with-each-api-implementation
@@ -30,25 +28,25 @@
                            {:default-tz #time/zone "America/Los_Angeles"})
           q "SELECT foo.xt$id, foo.dt, CAST(foo.dt AS TIMESTAMP WITH TIME ZONE) cast_tstz, foo.tstz FROM foo"]
 
-      (t/is (= [{:xt$id "foo", :dt #time/date "2020-08-01",
-                 :cast_tstz #time/zoned-date-time "2020-08-01T00:00+01:00[Europe/London]"
-                 :tstz #time/zoned-date-time "2020-08-01T00:00+01:00[Europe/London]"}
-                {:xt$id "bar", :dt #time/date "2020-08-01"
-                 :cast_tstz #time/zoned-date-time "2020-08-01T00:00+01:00[Europe/London]"
-                 :tstz #time/zoned-date-time "2020-08-01T00:00-07:00[America/Los_Angeles]"}]
+      (t/is (= #{{:xt$id "foo", :dt #time/date "2020-08-01",
+                  :cast_tstz #time/zoned-date-time "2020-08-01T00:00+01:00[Europe/London]"
+                  :tstz #time/zoned-date-time "2020-08-01T00:00+01:00[Europe/London]"}
+                 {:xt$id "bar", :dt #time/date "2020-08-01"
+                  :cast_tstz #time/zoned-date-time "2020-08-01T00:00+01:00[Europe/London]"
+                  :tstz #time/zoned-date-time "2020-08-01T00:00-07:00[America/Los_Angeles]"}}
 
-               (xt/q tu/*node* q {:basis {:tx tx}})))
+               (set (xt/q tu/*node* q {:basis {:tx tx}}))))
 
-      (t/is (= [{:xt$id "foo", :dt #time/date "2020-08-01",
-                 :cast_tstz #time/zoned-date-time "2020-08-01T00:00-07:00[America/Los_Angeles]"
-                 :tstz #time/zoned-date-time "2020-08-01T00:00+01:00[Europe/London]"}
-                {:xt$id "bar", :dt #time/date "2020-08-01"
-                 :cast_tstz #time/zoned-date-time "2020-08-01T00:00-07:00[America/Los_Angeles]"
-                 :tstz #time/zoned-date-time "2020-08-01T00:00-07:00[America/Los_Angeles]"}]
+      (t/is (= #{{:xt$id "foo", :dt #time/date "2020-08-01",
+                  :cast_tstz #time/zoned-date-time "2020-08-01T00:00-07:00[America/Los_Angeles]"
+                  :tstz #time/zoned-date-time "2020-08-01T00:00+01:00[Europe/London]"}
+                 {:xt$id "bar", :dt #time/date "2020-08-01"
+                  :cast_tstz #time/zoned-date-time "2020-08-01T00:00-07:00[America/Los_Angeles]"
+                  :tstz #time/zoned-date-time "2020-08-01T00:00-07:00[America/Los_Angeles]"}}
 
-               (xt/q tu/*node* q
-                     {:basis {:tx tx}
-                      :default-tz #time/zone "America/Los_Angeles"}))))))
+               (set (xt/q tu/*node* q
+                          {:basis {:tx tx}
+                           :default-tz #time/zone "America/Los_Angeles"})))))))
 
 (t/deftest test-datalog-default-tz
   (t/is (= [{:time #time/time "16:00"}]

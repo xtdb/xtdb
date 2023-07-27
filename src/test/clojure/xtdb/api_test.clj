@@ -114,29 +114,28 @@
                           {:default-tz (ZoneId/of "Europe/London")})))))))
 
 (t/deftest can-manually-specify-system-time-47
-  (tu/without-tries
-   (let [tx1 (xt/submit-tx *node* '[[:put :xt_docs {:xt/id :foo}]]
-                           {:system-time #inst "2012"})
+  (let [tx1 (xt/submit-tx *node* '[[:put :xt_docs {:xt/id :foo}]]
+                          {:system-time #inst "2012"})
 
-         _invalid-tx (xt/submit-tx *node* '[[:put :xt_docs {:xt/id :bar}]]
-                                   {:system-time #inst "2011"})
+        _invalid-tx (xt/submit-tx *node* '[[:put :xt_docs {:xt/id :bar}]]
+                                  {:system-time #inst "2011"})
 
-         tx3 (xt/submit-tx *node* '[[:put :xt_docs {:xt/id :baz}]])]
+        tx3 (xt/submit-tx *node* '[[:put :xt_docs {:xt/id :baz}]])]
 
-     (t/is (= (xtp/map->TransactionInstant {:tx-id 0, :system-time (util/->instant #inst "2012")})
-              tx1))
+    (t/is (= (xtp/map->TransactionInstant {:tx-id 0, :system-time (util/->instant #inst "2012")})
+             tx1))
 
-     (letfn [(q-at [tx]
-               (->> (xt/q *node*
-                          '{:find [id]
-                            :where [(match :xt_docs {:xt/id e})
-                                    [e :xt/id id]]}
-                          {:basis {:tx tx}
-                           :basis-timeout (Duration/ofSeconds 1)})
-                    (into #{} (map :id))))]
+    (letfn [(q-at [tx]
+              (->> (xt/q *node*
+                         '{:find [id]
+                           :where [(match :xt_docs {:xt/id e})
+                                   [e :xt/id id]]}
+                         {:basis {:tx tx}
+                          :basis-timeout (Duration/ofSeconds 1)})
+                   (into #{} (map :id))))]
 
-       (t/is (= #{:foo} (q-at tx1)))
-       (t/is (= #{:foo :baz} (q-at tx3)))))))
+      (t/is (= #{:foo} (q-at tx1)))
+      (t/is (= #{:foo :baz} (q-at tx3))))))
 
 (def ^:private devs
   '[[:put :users {:xt/id :jms, :name "James"}]
@@ -234,170 +233,167 @@
              (xt/q *node* "SELECT foo.xt$id, foo.xt$valid_from, foo.xt$valid_to FROM foo")))))
 
 (deftest test-dml-default-all-valid-time-flag-339
-  (tu/without-tries
-   (let [tt1 (util/->zdt #inst "2020-01-01")
-         tt2 (util/->zdt #inst "2020-01-02")
-         tt5 (util/->zdt #inst "2020-01-05")
-         eot (util/->zdt util/end-of-time)]
-     (letfn [(q []
-               (set (xt/q *node*
-                          "SELECT foo.version, foo.xt$valid_from, foo.xt$valid_to FROM foo"
-                          {:default-all-valid-time? true})))]
-       (xt/submit-tx *node*
-                     [[:sql ["INSERT INTO foo (xt$id, version) VALUES (?, ?)"
-                             "foo", 0]]])
+  (let [tt1 (util/->zdt #inst "2020-01-01")
+        tt2 (util/->zdt #inst "2020-01-02")
+        tt5 (util/->zdt #inst "2020-01-05")
+        eot (util/->zdt util/end-of-time)]
+    (letfn [(q []
+              (set (xt/q *node*
+                         "SELECT foo.version, foo.xt$valid_from, foo.xt$valid_to FROM foo"
+                         {:default-all-valid-time? true})))]
+      (xt/submit-tx *node*
+                    [[:sql ["INSERT INTO foo (xt$id, version) VALUES (?, ?)"
+                            "foo", 0]]])
 
-       (t/is (= #{{:version 0, :xt$valid_from tt1, :xt$valid_to eot}}
-                (q)))
+      (t/is (= #{{:version 0, :xt$valid_from tt1, :xt$valid_to eot}}
+               (q)))
 
-       (t/testing "update as-of-now"
-         (xt/submit-tx *node*
-                       [[:sql "UPDATE foo SET version = 1 WHERE foo.xt$id = 'foo'"]]
-                       {:default-all-valid-time? false})
+      (t/testing "update as-of-now"
+        (xt/submit-tx *node*
+                      [[:sql "UPDATE foo SET version = 1 WHERE foo.xt$id = 'foo'"]]
+                      {:default-all-valid-time? false})
 
-         (t/is (= #{{:version 0, :xt$valid_from tt1, :xt$valid_to tt2}
-                    {:version 1, :xt$valid_from tt2, :xt$valid_to eot}}
-                  (q))))
+        (t/is (= #{{:version 0, :xt$valid_from tt1, :xt$valid_to tt2}
+                   {:version 1, :xt$valid_from tt2, :xt$valid_to eot}}
+                 (q))))
 
-       (t/testing "`FOR PORTION OF` means flag is ignored"
-         (xt/submit-tx *node*
-                       [[:sql [(str "UPDATE foo "
-                                    "FOR PORTION OF VALID_TIME FROM ? TO ? "
-                                    "SET version = 2 WHERE foo.xt$id = 'foo'")
-                               tt1 tt2]]]
-                       {:default-all-valid-time? false})
-         (t/is (= #{{:version 2, :xt$valid_from tt1, :xt$valid_to tt2}
-                    {:version 1, :xt$valid_from tt2, :xt$valid_to eot}}
-                  (q))))
+      (t/testing "`FOR PORTION OF` means flag is ignored"
+        (xt/submit-tx *node*
+                      [[:sql [(str "UPDATE foo "
+                                   "FOR PORTION OF VALID_TIME FROM ? TO ? "
+                                   "SET version = 2 WHERE foo.xt$id = 'foo'")
+                              tt1 tt2]]]
+                      {:default-all-valid-time? false})
+        (t/is (= #{{:version 2, :xt$valid_from tt1, :xt$valid_to tt2}
+                   {:version 1, :xt$valid_from tt2, :xt$valid_to eot}}
+                 (q))))
 
-       (t/testing "UPDATE for-all-time"
-         (xt/submit-tx *node*
-                       [[:sql "UPDATE foo SET version = 3 WHERE foo.xt$id = 'foo'"]]
-                       {:default-all-valid-time? true})
+      (t/testing "UPDATE for-all-time"
+        (xt/submit-tx *node*
+                      [[:sql "UPDATE foo SET version = 3 WHERE foo.xt$id = 'foo'"]]
+                      {:default-all-valid-time? true})
 
-         (t/is (= #{{:version 3, :xt$valid_from tt1, :xt$valid_to tt2}
-                    {:version 3, :xt$valid_from tt2, :xt$valid_to eot}}
-                  (q))))
+        (t/is (= #{{:version 3, :xt$valid_from tt1, :xt$valid_to tt2}
+                   {:version 3, :xt$valid_from tt2, :xt$valid_to eot}}
+                 (q))))
 
-       (t/testing "DELETE as-of-now"
-         (xt/submit-tx *node*
-                       [[:sql "DELETE FROM foo WHERE foo.xt$id = 'foo'"]]
-                       {:default-all-valid-time? false})
+      (t/testing "DELETE as-of-now"
+        (xt/submit-tx *node*
+                      [[:sql "DELETE FROM foo WHERE foo.xt$id = 'foo'"]]
+                      {:default-all-valid-time? false})
 
-         (t/is (= #{{:version 3, :xt$valid_from tt1, :xt$valid_to tt2}
-                    {:version 3, :xt$valid_from tt2, :xt$valid_to tt5}}
-                  (q))))
+        (t/is (= #{{:version 3, :xt$valid_from tt1, :xt$valid_to tt2}
+                   {:version 3, :xt$valid_from tt2, :xt$valid_to tt5}}
+                 (q))))
 
-       (t/testing "UPDATE FOR ALL VALID_TIME"
-         (xt/submit-tx *node*
-                       [[:sql "UPDATE foo FOR ALL VALID_TIME
+      (t/testing "UPDATE FOR ALL VALID_TIME"
+        (xt/submit-tx *node*
+                      [[:sql "UPDATE foo FOR ALL VALID_TIME
                                     SET version = 4 WHERE foo.xt$id = 'foo'"]]
-                       {:default-all-valid-time? false})
+                      {:default-all-valid-time? false})
 
-         (t/is (= #{{:version 4, :xt$valid_from tt1, :xt$valid_to tt2}
-                    {:version 4, :xt$valid_from tt2, :xt$valid_to tt5}}
-                  (q))))
+        (t/is (= #{{:version 4, :xt$valid_from tt1, :xt$valid_to tt2}
+                   {:version 4, :xt$valid_from tt2, :xt$valid_to tt5}}
+                 (q))))
 
-       (t/testing "DELETE FOR ALL VALID_TIME"
-         (xt/submit-tx *node*
-                       [[:sql "DELETE FROM foo FOR ALL VALID_TIME
+      (t/testing "DELETE FOR ALL VALID_TIME"
+        (xt/submit-tx *node*
+                      [[:sql "DELETE FROM foo FOR ALL VALID_TIME
                                     WHERE foo.xt$id = 'foo'"]]
-                       {:default-all-valid-time? false})
+                      {:default-all-valid-time? false})
 
-         (t/is (= #{} (q))))))))
+        (t/is (= #{} (q)))))))
 
 (deftest test-dql-as-of-now-flag-339
-  (tu/without-tries
-   (let [tt1 (util/->zdt #inst "2020-01-01")
-         tt2 (util/->zdt #inst "2020-01-02")
-         eot (util/->zdt util/end-of-time)]
+  (let [tt1 (util/->zdt #inst "2020-01-01")
+        tt2 (util/->zdt #inst "2020-01-02")
+        eot (util/->zdt util/end-of-time)]
 
-     (xt/submit-tx *node*
-                   [[:sql ["INSERT INTO foo (xt$id, version) VALUES (?, ?)"
-                           "foo", 0]]])
+    (xt/submit-tx *node*
+                  [[:sql ["INSERT INTO foo (xt$id, version) VALUES (?, ?)"
+                          "foo", 0]]])
 
-     (t/is (= [{:version 0, :xt$valid_from tt1, :xt$valid_to eot}]
-              (xt/q *node*
-                    "SELECT foo.version, foo.xt$valid_from, foo.xt$valid_to FROM foo"
-                    {:default-all-valid-time? false})))
+    (t/is (= [{:version 0, :xt$valid_from tt1, :xt$valid_to eot}]
+             (xt/q *node*
+                   "SELECT foo.version, foo.xt$valid_from, foo.xt$valid_to FROM foo"
+                   {:default-all-valid-time? false})))
 
-     (t/is (= [{:version 0, :xt$valid_from tt1, :xt$valid_to eot}]
-              (xt/q *node*
-                    "SELECT foo.version, foo.xt$valid_from, foo.xt$valid_to FROM foo")))
+    (t/is (= [{:version 0, :xt$valid_from tt1, :xt$valid_to eot}]
+             (xt/q *node*
+                   "SELECT foo.version, foo.xt$valid_from, foo.xt$valid_to FROM foo")))
 
-     (xt/submit-tx *node*
-                   [[:sql "UPDATE foo SET version = 1 WHERE foo.xt$id = 'foo'"]])
+    (xt/submit-tx *node*
+                  [[:sql "UPDATE foo SET version = 1 WHERE foo.xt$id = 'foo'"]])
 
-     (t/is (= [{:version 1, :xt$valid_from tt2, :xt$valid_to eot}]
-              (xt/q *node*
-                    "SELECT foo.version, foo.xt$valid_from, foo.xt$valid_to FROM foo"))
-           "without flag it returns as of now")
+    (t/is (= [{:version 1, :xt$valid_from tt2, :xt$valid_to eot}]
+             (xt/q *node*
+                   "SELECT foo.version, foo.xt$valid_from, foo.xt$valid_to FROM foo"))
+          "without flag it returns as of now")
 
-     (t/is (= [{:version 0, :xt$valid_from tt1, :xt$valid_to tt2}
-               {:version 1, :xt$valid_from tt2, :xt$valid_to eot}]
-              (xt/q *node*
-                    "SELECT foo.version, foo.xt$valid_from, foo.xt$valid_to FROM foo"
-                    {:default-all-valid-time? true})))
+    (t/is (= [{:version 0, :xt$valid_from tt1, :xt$valid_to tt2}
+              {:version 1, :xt$valid_from tt2, :xt$valid_to eot}]
+             (xt/q *node*
+                   "SELECT foo.version, foo.xt$valid_from, foo.xt$valid_to FROM foo"
+                   {:default-all-valid-time? true})))
 
-     (t/is (= [{:version 0, :xt$valid_from tt1, :xt$valid_to tt2}]
-              (xt/q *node*
-                    [(str "SELECT foo.version, foo.xt$valid_from, foo.xt$valid_to "
-                          "FROM foo FOR VALID_TIME AS OF ?")
-                     tt1]
-                    {:default-all-valid-time? true}))
-           "`FOR VALID_TIME AS OF` overrides flag")
+    (t/is (= [{:version 0, :xt$valid_from tt1, :xt$valid_to tt2}]
+             (xt/q *node*
+                   [(str "SELECT foo.version, foo.xt$valid_from, foo.xt$valid_to "
+                         "FROM foo FOR VALID_TIME AS OF ?")
+                    tt1]
+                   {:default-all-valid-time? true}))
+          "`FOR VALID_TIME AS OF` overrides flag")
 
-     (t/is (= [{:version 0, :xt$valid_from tt1, :xt$valid_to tt2}
-               {:version 1, :xt$valid_from tt2, :xt$valid_to eot}]
-              (xt/q *node*
-                    "SELECT foo.version, foo.xt$valid_from, foo.xt$valid_to
+    (t/is (= [{:version 0, :xt$valid_from tt1, :xt$valid_to tt2}
+              {:version 1, :xt$valid_from tt2, :xt$valid_to eot}]
+             (xt/q *node*
+                   "SELECT foo.version, foo.xt$valid_from, foo.xt$valid_to
                              FROM foo FOR ALL VALID_TIME"
-                    {:default-all-valid-time? false}))
-           "FOR ALL VALID_TIME ignores flag and returns all app-time"))))
+                   {:default-all-valid-time? false}))
+          "FOR ALL VALID_TIME ignores flag and returns all app-time")))
 
 (t/deftest test-erase
-  (tu/without-tries
-   (letfn [(q [tx]
-             (set (xt/q *node*
-                        "SELECT foo.xt$id, foo.version, foo.xt$valid_from, foo.xt$valid_to FROM foo"
-                        {:basis {:tx tx}
-                         :default-all-valid-time? true})))]
-     (let [tx1 (xt/submit-tx *node*
-                             [[:sql-batch ["INSERT INTO foo (xt$id, version) VALUES (?, ?)"
-                                           ["foo", 0]
-                                           ["bar", 0]]]])
-           tx2 (xt/submit-tx *node* [[:sql "UPDATE foo SET version = 1"]])
-           v0 {:version 0,
-               :xt$valid_from (util/->zdt #inst "2020-01-01"),
-               :xt$valid_to (util/->zdt #inst "2020-01-02")}
+  (letfn [(q [tx]
+            (set (xt/q *node*
+                       "SELECT foo.xt$id, foo.version, foo.xt$valid_from, foo.xt$valid_to FROM foo"
+                       {:basis {:tx tx}
+                        :default-all-valid-time? true})))]
+    (let [tx1 (xt/submit-tx *node*
+                            [[:sql-batch ["INSERT INTO foo (xt$id, version) VALUES (?, ?)"
+                                          ["foo", 0]
+                                          ["bar", 0]]]])
+          tx2 (xt/submit-tx *node* [[:sql "UPDATE foo SET version = 1"]])
+          v0 {:version 0,
+              :xt$valid_from (util/->zdt #inst "2020-01-01"),
+              :xt$valid_to (util/->zdt #inst "2020-01-02")}
 
-           v1 {:version 1,
-               :xt$valid_from (util/->zdt #inst "2020-01-02"),
-               :xt$valid_to (util/->zdt util/end-of-time)}]
+          v1 {:version 1,
+              :xt$valid_from (util/->zdt #inst "2020-01-02"),
+              :xt$valid_to (util/->zdt util/end-of-time)}]
 
-       (t/is (= #{{:xt$id "foo", :version 0,
-                   :xt$valid_from (util/->zdt #inst "2020-01-01")
-                   :xt$valid_to (util/->zdt util/end-of-time)}
-                  {:xt$id "bar", :version 0,
-                   :xt$valid_from (util/->zdt #inst "2020-01-01")
-                   :xt$valid_to (util/->zdt util/end-of-time)}}
-                (q tx1)))
+      (t/is (= #{{:xt$id "foo", :version 0,
+                  :xt$valid_from (util/->zdt #inst "2020-01-01")
+                  :xt$valid_to (util/->zdt util/end-of-time)}
+                 {:xt$id "bar", :version 0,
+                  :xt$valid_from (util/->zdt #inst "2020-01-01")
+                  :xt$valid_to (util/->zdt util/end-of-time)}}
+               (q tx1)))
 
-       (t/is (= #{(assoc v0 :xt$id "foo")
-                  (assoc v0 :xt$id "bar")
-                  (assoc v1 :xt$id "foo")
-                  (assoc v1 :xt$id "bar")}
-                (q tx2)))
+      (t/is (= #{(assoc v0 :xt$id "foo")
+                 (assoc v0 :xt$id "bar")
+                 (assoc v1 :xt$id "foo")
+                 (assoc v1 :xt$id "bar")}
+               (q tx2)))
 
-       (let [tx3 (xt/submit-tx *node*
-                               [[:sql "ERASE FROM foo WHERE foo.xt$id = 'foo'"]])]
-         (t/is (= #{(assoc v0 :xt$id "bar") (assoc v1 :xt$id "bar")} (q tx3)))
-         (t/is (= #{(assoc v0 :xt$id "bar") (assoc v1 :xt$id "bar")} (q tx2)))
+      (let [tx3 (xt/submit-tx *node*
+                              [[:sql "ERASE FROM foo WHERE foo.xt$id = 'foo'"]])]
+        (t/is (= #{(assoc v0 :xt$id "bar") (assoc v1 :xt$id "bar")} (q tx3)))
+        (t/is (= #{(assoc v0 :xt$id "bar") (assoc v1 :xt$id "bar")} (q tx2)))
 
-         (t/is (= #{{:xt$id "bar", :version 0,
-                     :xt$valid_from (util/->zdt #inst "2020-01-01")
-                     :xt$valid_to (util/->zdt util/end-of-time)}}
-                  (q tx1))))))))
+        (t/is (= #{{:xt$id "bar", :version 0,
+                    :xt$valid_from (util/->zdt #inst "2020-01-01")
+                    :xt$valid_to (util/->zdt util/end-of-time)}}
+                 (q tx1)))))))
 
 (t/deftest throws-static-tx-op-errors-on-submit-346
   (t/is (thrown-with-msg?
@@ -435,30 +431,29 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"]])
                (q-all))))))
 
 (deftest test-insert-from-other-table-with-as-of-now
-  (tu/without-tries
-   (xt/submit-tx *node*
-                 [[:sql
-                   "INSERT INTO posts (xt$id, user_id, text, xt$valid_from)
+  (xt/submit-tx *node*
+                [[:sql
+                  "INSERT INTO posts (xt$id, user_id, text, xt$valid_from)
                     VALUES (9012, 5678, 'Happy 2050!', DATE '2050-01-01')"]])
 
-   (t/is (= [{:text "Happy 2050!"}]
-            (xt/q *node*
-                  "SELECT posts.text FROM posts FOR VALID_TIME AS OF DATE '2050-01-02'")))
+  (t/is (= [{:text "Happy 2050!"}]
+           (xt/q *node*
+                 "SELECT posts.text FROM posts FOR VALID_TIME AS OF DATE '2050-01-02'")))
 
-   (t/is (= []
-            (xt/q *node*
-                  "SELECT posts.text FROM posts"
-                  {:default-all-valid-time? false})))
+  (t/is (= []
+           (xt/q *node*
+                 "SELECT posts.text FROM posts"
+                 {:default-all-valid-time? false})))
 
-   (xt/submit-tx *node*
-                 [[:sql
-                   "INSERT INTO t1 SELECT posts.xt$id, posts.text FROM posts"]]
-                 {:default-all-valid-time? false})
+  (xt/submit-tx *node*
+                [[:sql
+                  "INSERT INTO t1 SELECT posts.xt$id, posts.text FROM posts"]]
+                {:default-all-valid-time? false})
 
-   (t/is (= []
-            (xt/q *node*
-                  "SELECT t1.text FROM t1 FOR ALL VALID_TIME"
-                  {:default-all-valid-time? false})))))
+  (t/is (= []
+           (xt/q *node*
+                 "SELECT t1.text FROM t1 FOR ALL VALID_TIME"
+                 {:default-all-valid-time? false}))))
 
 (deftest test-submit-tx-system-time-opt
   (t/is (thrown-with-msg?

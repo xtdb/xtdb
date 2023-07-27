@@ -298,10 +298,3 @@
        ~@body
        (finally
          (set-log-level! ~ns level#)))))
-
-(defmacro without-tries [& body]
-  `(with-redefs [scan/*use-tries?* false]
-     ~@body))
-
-(defn no-tries [f]
-  (without-tries (f)))

@@ -9,7 +9,7 @@
            (java.time LocalTime)
            (org.roaringbitmap RoaringBitmap)))
 
-(t/use-fixtures :once tu/no-tries tu/with-allocator)
+(t/use-fixtures :once tu/with-allocator)
 
 (t/deftest test-find-gt-ivan
   (with-open [node (node/start-node {:xtdb/live-chunk {:rows-per-block 2, :rows-per-chunk 10}})]
