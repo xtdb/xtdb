@@ -30,8 +30,6 @@ The paramaterized stack expects the following to be provided:
 
 * The name of S3 Bucket that will be used by the created object store bucket and referenced in associated resources
 ** If unset, uses a default value of `xtdb-object-store`
-* The name of the XTDB IAM user to create.
-** If unset, uses a default value of `xtdb-user`
 
 ### Created Resources
 
@@ -40,13 +38,11 @@ The cloudformation stack will create the following resources within the specifie
 * The S3 bucket, with the user confirgured bucket name.
 * An SNS topic which receives notifications from the S3 bucket around object creation/deletion
 ** An SNS topic policy to allow the bucket to publish to the topic.
-* An IAM User, with a user configurable username. This contains a policy with all of the relevant permissions for:
+* An IAM Role, with all of the relevant permissions for:
 ** Using the created S3 bucket (Get, Put, Delete and List).
 ** Subscribe to the SNS topic.
 ** Creating and operating on SQS queues
 *** Said queues handle their own permissions, and subscribe to the SNS topic.
-* An AccessKey for the XTDB IAM User.
-* A `SecretsManager` secret containing the access key id and secret access key of the above, ready for use.
 
 ### Outputs
 
@@ -54,8 +50,7 @@ Using the cloudformation template will output a number of things, some of which 
 
 * The S3 Bucket Name (**this will be used in config**)
 * The SNS Topic ARN (**this will be used in config**)
-* ARN of the created XTDB user 
-* ARN of the Secret containing the access key for the XTDB user. 
+* ARN of the created XTDB IAM Role (this, or something with equivalent permissions, will be required to use all of the above) 
 
 NOTE: The SNS topic and SQS queues are used to a local copy of files on S3, saving on expensive/lengthy operations to list objects on S3. If not using the cloudformation template, ensure that you at have a similar setup with the SNS topic setup to receive notifications from your bucket, and that XTDB having all the relevant permissions it needs with S3, SNS, and SQS.
 
@@ -63,7 +58,7 @@ NOTE: The SNS topic and SQS queues are used to a local copy of files on S3, savi
 
 Authentication for both the document store and checkpoint store components within the module is handled via the S3 API, which in turn uses the Default AWS Credential Provider Chain. See the https://docs.aws.amazon.com/sdk-for-java/v1/developer-guide/credentials.html#credentials-default[AWS documentation] on the various methods which you can handle authentication to be able to make use of the operations inside the modules. 
 
-Within the provided Cloudformation stack, we create an XTDB user will all the necessary permissions, an access key, and a secret containing said access key. This can be used directly to provide all necessary permissions for XTDB and the resources it is using on AWS, otherwise you will need to ensure whichever credentials you are using to authenticate XTDB have the same level of permissions to the miscellaneous services. See the IAM policy set on the XTDBUser in the link:cloudformation/s3-stack.yml[Cloudformation stack] for what exactly that includes.
+Within the provided Cloudformation stack, we create an XTDB IAM role. One can use this role to provide all necessary permissions for XTDB and the resources it is using on AWS, otherwise you will need to ensure whichever credentials you are using to authenticate XTDB have the same level of permissions to the miscellaneous services. See the IAM policy set on the XTDBIamRole in the link:cloudformation/s3-stack.yml[Cloudformation stack] for what exactly that includes.
 
 ## S3 Object Store config
 

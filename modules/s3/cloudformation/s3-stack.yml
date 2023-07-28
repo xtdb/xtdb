@@ -6,11 +6,6 @@ Parameters:
     Type: String
     Default: xtdb-object-store
     Description: Enter the desired name of the bucket which will contain the XTDB Object Store - default is 'xtdb-object-store'
-  
-  XTDBUserName:
-    Type: String
-    Default: xtdb-user
-    Description: Enter the desired name of the XTDB IAM User - default is 'xtdb-user'
 
 Resources:
   SNSTopic: 
@@ -49,11 +44,18 @@ Resources:
       Topics:
         - !Ref SNSTopic
 
-  XTDBUser:
-    Type: AWS::IAM::User
+  XTDBIamRole:
+    Type: AWS::IAM::Role
     Properties:
-      UserName: !Ref XTDBUserName
       Path: /
+      AssumeRolePolicyDocument: 
+        Version: "2012-10-17"
+        Statement: 
+          - Effect: "Allow"
+            Principal: 
+              AWS: !Ref AWS::AccountId
+            Action: 
+              - "sts:AssumeRole"
       Policies:
         - PolicyName: S3Access
           PolicyDocument:
@@ -91,18 +93,6 @@ Resources:
               Resource:
                 - '*'
 
-  XTDBUserCredentials:
-    Type: AWS::IAM::AccessKey
-    Properties:
-      Status: Active
-      UserName: !Ref XTDBUser
-
-  XTDBUserCredentialsSecret:
-    Type: AWS::SecretsManager::Secret
-    Properties:
-      Name: !Sub /xtdb/credentials/${XTDBUser}
-      SecretString: !Sub '{"AWS_ACCESS_KEY_ID":"${XTDBUserCredentials}","AWS_SECRET_ACCESS_KEY":"${XTDBUserCredentials.SecretAccessKey}", "AWS_REGION":"${AWS::Region}"}'
-
 Outputs:
   BucketName:
     Description: The name of the S3 Bucket
@@ -114,14 +104,10 @@ Outputs:
     Value: !Ref SNSTopic
     Export:
       Name: !Join [ ':', [ !Ref 'AWS::StackName', 'SNSTopicName' ] ]
-  XTDBUserArn:
-    Description: ARN for the XTDB IAM User (has relevant SNS and S3 permissions, and ability to create SQS queues)
-    Value: !Ref XTDBUser
+  XTDBRoleArn :
+    Description: ARN of the created XTDB IAM Role (has relevant SNS and S3 permissions, and ability to create SQS queues)
+    Value: !GetAtt XTDBIamRole.Arn 
     Export:
-      Name: !Join [ ':', [ !Ref 'AWS::StackName', 'XTDBUserArn' ] ]
-  XTDBUserCredentialsSecretArn:
-    Description: ARN for the secret containing the XTDB IAM User's access credentials
-    Value: !Ref XTDBUserCredentialsSecret
-    Export:
-      Name: !Join [ ':', [ !Ref 'AWS::StackName', 'XTDBUserCredentialsSecretArn' ] ]
+      Name: !Join [ ':', [ !Ref 'AWS::StackName', 'XTDBRoleArn' ] ]
+
 
