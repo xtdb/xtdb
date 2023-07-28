@@ -1,13 +1,16 @@
 (ns xtdb.azure.object-store
   (:require [xtdb.object-store :as os]
+            [xtdb.file-list :as file-list]
+            [xtdb.azure.file-watch :as azure-file-watch]
             [xtdb.util :as util])
   (:import xtdb.object_store.ObjectStore
            java.util.concurrent.CompletableFuture
            java.util.function.Supplier
+           java.util.NavigableSet
            com.azure.core.util.BinaryData
            [com.azure.storage.blob.models BlobRange BlobStorageException DownloadRetryOptions ListBlobsOptions BlobItem]
            [com.azure.storage.blob BlobContainerClient]
-           (java.io ByteArrayOutputStream)
+           (java.io ByteArrayOutputStream Closeable)
            (java.nio ByteBuffer)))
 
 (defn- get-blob [^BlobContainerClient blob-container-client blob-name]
@@ -46,16 +49,7 @@
 (defn- delete-blob [^BlobContainerClient blob-container-client blob-name]
   (-> (.getBlobClient blob-container-client blob-name)
       (.deleteIfExists)))
-
-(defn- list-blobs [^BlobContainerClient blob-container-client prefix obj-prefix]
-  (let [list-blob-opts (cond-> (ListBlobsOptions.)
-                         obj-prefix (.setPrefix obj-prefix))]
-    (->> (.listBlobs blob-container-client list-blob-opts nil)
-         (.iterator)
-         (iterator-seq)
-         (mapv (fn [^BlobItem blob-item]
-                 (subs (.getName blob-item) (count prefix)))))))
-(defrecord AzureBlobObjectStore [^BlobContainerClient blob-container-client prefix]
+(defrecord AzureBlobObjectStore [^BlobContainerClient blob-container-client prefix ^NavigableSet file-name-cache azure-watch-info]
   ObjectStore
   (getObject [_ k]
     (CompletableFuture/completedFuture
@@ -72,18 +66,23 @@
 
   (getObjectRange [_ k start len]
     (CompletableFuture/completedFuture
-      (get-blob-range blob-container-client (str prefix k) start len)))
+     (get-blob-range blob-container-client (str prefix k) start len)))
 
   (putObject [_ k buf]
     (put-blob blob-container-client (str prefix k) buf)
     (CompletableFuture/completedFuture nil))
 
-  (listObjects [this]
-    (.listObjects this nil))
+  (listObjects [_this]
+    (into [] file-name-cache))
 
-  (listObjects [_ obj-prefix]
-    (list-blobs blob-container-client prefix (str prefix obj-prefix)))
+  (listObjects [_this dir]
+    (file-list/list-files-under-prefix file-name-cache dir))
 
   (deleteObject [_ k]
     (delete-blob blob-container-client (str prefix k))
-    (CompletableFuture/completedFuture nil)))
+    (CompletableFuture/completedFuture nil))
+
+  Closeable
+  (close [_]
+    (azure-file-watch/watcher-close-fn azure-watch-info)
+    (.clear file-name-cache)))

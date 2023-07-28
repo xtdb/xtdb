@@ -5,6 +5,7 @@
             [juxt.clojars-mirrors.integrant.core :as ig]
             [xtdb.azure.log :as tx-log]
             [xtdb.azure.object-store :as os]
+            [xtdb.azure.file-watch :as azure-file-watch]
             [xtdb.log :as xtdb-log]
             [xtdb.util :as util])
   (:import (com.azure.core.credential TokenCredential)
@@ -14,7 +15,8 @@
            (com.azure.messaging.eventhubs EventHubClientBuilder)
            (com.azure.resourcemanager.eventhubs EventHubsManager)
            (com.azure.resourcemanager.eventhubs.models EventHub EventHub$Definition EventHubs)
-           (com.azure.storage.blob BlobServiceClientBuilder)))
+           (com.azure.storage.blob BlobServiceClientBuilder)
+           (java.util.concurrent ConcurrentSkipListSet)))
 
 (derive ::blob-object-store :xtdb/object-store)
 
@@ -24,7 +26,13 @@
     (string/ends-with? prefix "/") prefix
     :else (str prefix "/")))
 
+;; used by both object store + event hub log
+(s/def ::resource-group-name string?)
+
+;; used by blob object store
 (s/def ::storage-account string?)
+(s/def ::servicebus-namespace string?)
+(s/def ::eventgrid-topic string?)
 (s/def ::container string?)
 (s/def ::prefix string?)
 
@@ -33,16 +41,26 @@
       (util/maybe-update :prefix parse-prefix)))
 
 (defmethod ig/pre-init-spec ::blob-object-store [_]
-  (s/keys :req-un [::storage-account ::container]
+  (s/keys :req-un [::storage-account ::container ::resource-group-name ::servicebus-namespace ::eventgrid-topic]
           :opt-un [::prefix]))
 
-(defmethod ig/init-key ::blob-object-store [_ {:keys [storage-account container prefix]}]
-  (let [blob-service-client (cond-> (-> (BlobServiceClientBuilder.)
+(defmethod ig/init-key ::blob-object-store [_ {:keys [storage-account container prefix] :as opts}]
+  (let [credential (.build (DefaultAzureCredentialBuilder.))
+        blob-service-client (cond-> (-> (BlobServiceClientBuilder.)
                                         (.endpoint (str "https://" storage-account ".blob.core.windows.net"))
-                                        (.credential (.build (DefaultAzureCredentialBuilder.)))
+                                        (.credential credential)
                                         (.buildClient)))
-        blob-client (.getBlobContainerClient blob-service-client container)]
-    (os/->AzureBlobObjectStore blob-client prefix)))
+        blob-client (.getBlobContainerClient blob-service-client container)
+        file-name-cache (ConcurrentSkipListSet.)
+        ;; Watch azure container for changes
+        azure-watch-info (azure-file-watch/file-list-watch (assoc opts 
+                                                                  :blob-container-client blob-client
+                                                                  :azure-credential credential) 
+                                                           file-name-cache)]
+    (os/->AzureBlobObjectStore blob-client 
+                               prefix
+                               file-name-cache
+                               azure-watch-info)))
 
 (comment
 
@@ -58,7 +76,6 @@
 (s/def ::namespace string?)
 (s/def ::event-hub-name string?)
 (s/def ::create-event-hub? boolean?)
-(s/def ::resource-group-name string?)
 (s/def ::retention-period-in-days number?)
 (s/def ::max-wait-time ::util/duration)
 (s/def ::poll-sleep-duration ::util/duration)
