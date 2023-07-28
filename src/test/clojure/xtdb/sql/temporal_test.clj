@@ -203,7 +203,8 @@
           {:tx-id 2, :committed? false}]
          (xt/q tu/*node* '{:find [tx-id committed?]
                            :where [($ :xt/txs {:xt/id tx-id,
-                                               :xt/committed? committed?})]})))
+                                               :xt/committed? committed?})]
+                           :order-by [[tx-id]]})))
   (xt/submit-tx tu/*node* [[:sql "INSERT INTO xt_docs (xt$id) VALUES (3)"]])
   (xt/submit-tx tu/*node* [[:sql ["UPDATE xt_docs FOR PORTION OF VALID_TIME FROM NULL TO ? SET foo = 'bar' WHERE xt_docs.xt$id = 3"
                                   #inst "2011"]]])

@@ -574,6 +574,7 @@
       (let [^LiveHashTrie$Leaf leaf (.next leaves)
             leaf-rel (.select live-rel (.data leaf))
             leaf-row-count (.rowCount leaf-rel)
+            legacy-iid-rdr (.readerForName leaf-rel "xt$legacy_iid")
             sys-from-rdr (.readerForName leaf-rel "xt$system_from")
             op-rdr (.readerForName leaf-rel "op")
             put-rdr (.legReader op-rdr :put)
@@ -587,6 +588,7 @@
                      (for [col-name col-names
                            :let [normalized-name (util/str->normal-form-str col-name)
                                  rdr (case normalized-name
+                                       "_iid" legacy-iid-rdr
                                        "xt$system_from" sys-from-rdr
                                        "xt$system_to" (vr/vec->reader (doto (NullVector. "xt$system_to")
                                                                         (.setValueCount leaf-row-count)))
@@ -615,14 +617,14 @@
                    table-name, col-names, ^longs temporal-range
                    ^Map col-preds, params, scan-opts, basis]
   (let [^ILiveTableWatermark  live-table-wm (some-> (.liveIndex wm) (.liveTable table-name))]
-    (PointPointCursor. allocator
-                       (some-> live-table-wm .liveRelation) (.iterator ^Iterable (vec (some-> live-table-wm .liveTrie .leaves)))
-                       col-names col-preds
-                       (temporal-range->temporal-timestamp temporal-range)
-                       (cond
-                         (point-now-query? wm basis scan-opts) point-now-selection
-                         (point-point-query? wm basis scan-opts) point-point-selection)
-                       params)))
+    (->PointPointCursor allocator
+                        (some-> live-table-wm .liveRelation) (.iterator ^Iterable (vec (some-> live-table-wm .liveTrie .leaves)))
+                        col-names col-preds
+                        (temporal-range->temporal-timestamp temporal-range)
+                        (cond
+                          (point-now-query? wm basis scan-opts) point-now-selection
+                          (point-point-query? wm basis scan-opts) point-point-selection)
+                        params)))
 
 (defn no-finished-chunks? [^IMetadataManager metadata-mgr]
   (nil? (seq (.chunksMetadata metadata-mgr))))
@@ -727,12 +729,11 @@
                        (if (let [normalized-col-names (into #{} (map (comp util/str->normal-form-str str)) col-names)]
                              (and (at-point-point? scan-opts)
                                   (no-finished-chunks? metadata-mgr)
-                                  (not (some #(contains? normalized-col-names %) ["_iid" "xt$valid_from" "xt$valid_to"]))))
+                                  (not (some #(contains? normalized-col-names %) ["xt$valid_from" "xt$valid_to" "xt$system_from" "xt$system_to"]))))
                          (->4r-cursor allocator buffer-pool
                                       watermark
                                       normalized-table-name
-                                      (-> (set/union content-col-names temporal-col-names)
-                                          (disj "_row_id"))
+                                      (set/union content-col-names temporal-col-names)
                                       (->temporal-range temporal-min-range temporal-max-range)
                                       col-preds
                                       params

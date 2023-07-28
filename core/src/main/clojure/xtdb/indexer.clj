@@ -125,7 +125,7 @@
             (.copyRow table-copier tx-op-idx))
 
           (let [new-entity? (not (.isKnownId iid-mgr table-name eid))
-                iid (.getOrCreateInternalId iid-mgr table-name eid row-id)
+                legacy-iid (.getOrCreateInternalId iid-mgr table-name eid row-id)
                 valid-from (if (= :null (.getLeg valid-from-rdr tx-op-idx))
                              system-time-µs
                              (.getLong valid-from-rdr tx-op-idx))
@@ -138,9 +138,9 @@
                                        :valid-to (util/micros->instant valid-to)})))
 
             (let [{:keys [^xtdb.indexer.live_index.ILiveTableTx live-table, ^IRowCopier doc-copier]} live-idx-table]
-              (.logPut live-table (->iid eid) valid-from valid-to #(.copyRow doc-copier tx-op-idx)))
+              (.logPut live-table (->iid eid) legacy-iid valid-from valid-to #(.copyRow doc-copier tx-op-idx)))
 
-            (.indexPut temporal-idxer iid row-id valid-from valid-to new-entity?)))
+            (.indexPut temporal-idxer legacy-iid row-id valid-from valid-to new-entity?)))
 
         nil))))
 
@@ -159,7 +159,7 @@
               table (.getObject table-rdr tx-op-idx)
               eid (.getObject id-rdr tx-op-idx)
               new-entity? (not (.isKnownId iid-mgr table eid))
-              iid (.getOrCreateInternalId iid-mgr table eid row-id)
+              legacy-iid (.getOrCreateInternalId iid-mgr table eid row-id)
               valid-from (if (= :null (.getLeg valid-from-rdr tx-op-idx))
                            current-time-µs
                            (.getLong valid-from-rdr tx-op-idx))
@@ -172,9 +172,9 @@
                                      :valid-to (util/micros->instant valid-to)})))
 
           (-> (.liveTable live-idx-tx table)
-              (.logDelete (->iid eid) valid-from valid-to))
+              (.logDelete (->iid eid) legacy-iid valid-from valid-to))
 
-          (.indexDelete temporal-idxer iid row-id valid-from valid-to new-entity?))
+          (.indexDelete temporal-idxer legacy-iid row-id valid-from valid-to new-entity?))
 
         nil))))
 
@@ -190,12 +190,12 @@
         (let [row-id (.nextRowId live-chunk)
               table (.getObject table-rdr tx-op-idx)
               eid (.getObject id-rdr tx-op-idx)
-              iid (.getOrCreateInternalId iid-mgr table eid row-id)]
+              legacy-iid (.getOrCreateInternalId iid-mgr table eid row-id)]
 
           (-> (.liveTable live-idx-tx table)
-              (.logEvict (->iid eid)))
+              (.logEvict (->iid eid) legacy-iid))
 
-          (.indexEvict temporal-idxer iid))
+          (.indexEvict temporal-idxer legacy-iid))
 
         nil))))
 
@@ -345,7 +345,7 @@
 
               (let [eid (.getObject id-col idx)
                     new-entity? (not (.isKnownId iid-mgr table eid))
-                    iid (.getOrCreateInternalId iid-mgr table eid row-id)
+                    legacy-iid (.getOrCreateInternalId iid-mgr table eid row-id)
                     valid-from (if (and valid-from-rdr (= :timestamp-tz-micro-utc (.getLeg valid-from-rdr idx)))
                                  (.getLong valid-from-ts-rdr idx)
                                  current-time-µs)
@@ -357,8 +357,8 @@
                                           {:valid-from (util/micros->instant valid-from)
                                            :valid-to (util/micros->instant valid-to)})))
 
-                (.indexPut temporal-idxer iid row-id valid-from valid-to new-entity?)
-                (.logPut live-idx-table (->iid eid) valid-from valid-to #(.copyRow live-idx-table-copier idx))))))))))
+                (.indexPut temporal-idxer legacy-iid row-id valid-from valid-to new-entity?)
+                (.logPut live-idx-table (->iid eid) legacy-iid valid-from valid-to #(.copyRow live-idx-table-copier idx))))))))))
 
 (defn- ->sql-delete-indexer ^xtdb.indexer.SqlOpIndexer [^ILiveIndexTx live-idx-tx, ^ITemporalTxIndexer temporal-idxer, ^ILiveChunkTx live-chunk]
   (reify SqlOpIndexer
@@ -381,7 +381,7 @@
                                        :valid-to (util/micros->instant valid-to)})))
 
             (-> (.liveTable live-idx-tx table)
-                (.logDelete (->iid eid) valid-from valid-to))
+                (.logDelete (->iid eid) iid valid-from valid-to))
             (.indexDelete temporal-idxer iid row-id valid-from valid-to false)))))))
 
 (defn- ->sql-erase-indexer ^xtdb.indexer.SqlOpIndexer [^ILiveIndexTx live-idx-tx, ^ITemporalTxIndexer temporal-idxer]
@@ -395,7 +395,7 @@
           (let [eid (.getObject id-rdr idx)
                 iid (.getLong iid-rdr idx)]
             (-> (.liveTable live-idx-tx table)
-                (.logEvict (->iid eid)))
+                (.logEvict (->iid eid) iid))
             (.indexEvict temporal-idxer iid)))))))
 
 (defn- ->sql-indexer ^xtdb.indexer.OpIndexer [^BufferAllocator allocator, ^IInternalIdManager iid-mgr
@@ -468,10 +468,14 @@
 
 (defn- add-tx-row! [^ILiveIndexTx live-idx-tx, ^ILiveChunkTx live-chunk-tx, ^ITemporalTxIndexer temporal-tx, ^IInternalIdManager iid-mgr, ^TransactionInstant tx-key, ^Throwable t]
   (let [tx-id (.tx-id tx-key)
-        system-time-µs (util/instant->micros (.system-time tx-key))]
+        system-time-µs (util/instant->micros (.system-time tx-key))
+
+        row-id (.nextRowId live-chunk-tx)
+        legacy-iid (.getOrCreateInternalId iid-mgr txs-table tx-id row-id)]
+
     (let [live-table (.liveTable live-idx-tx txs-table)
           doc-writer (.docWriter live-table)]
-      (.logPut live-table (->iid tx-id) system-time-µs util/end-of-time-μs
+      (.logPut live-table (->iid tx-id) legacy-iid system-time-µs util/end-of-time-μs
                (fn write-doc! []
                  (.startStruct doc-writer)
                  (doto (.structKeyWriter doc-writer "xt$id" :i64)
@@ -492,9 +496,7 @@
                  (.endStruct doc-writer))))
 
     (let [live-table (.liveTable live-chunk-tx txs-table)
-          row-id (.nextRowId live-chunk-tx)
-          doc-writer (.writer live-table)
-          iid (.getOrCreateInternalId iid-mgr txs-table tx-id row-id)]
+          doc-writer (.writer live-table)]
 
       (.writeRowId live-table row-id)
 
@@ -514,7 +516,7 @@
           (doto (.writerForType e-wtr :clj-form)
             (.writeObject (pr-str t)))))
 
-      (.indexPut temporal-tx iid row-id system-time-µs util/end-of-time-μs true))))
+      (.indexPut temporal-tx legacy-iid row-id system-time-µs util/end-of-time-μs true))))
 
 (deftype Indexer [^BufferAllocator allocator
                   ^ObjectStore object-store

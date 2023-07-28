@@ -1,0 +1,87 @@
+{
+  "schema" : {
+    "fields" : [{
+      "name" : "nodes",
+      "nullable" : false,
+      "type" : {
+        "name" : "union",
+        "mode" : "Dense",
+        "typeIds" : [0,1,2]
+      },
+      "children" : [{
+        "name" : "nil",
+        "nullable" : true,
+        "type" : {
+          "name" : "null"
+        },
+        "children" : [ ]
+      },{
+        "name" : "branch",
+        "nullable" : false,
+        "type" : {
+          "name" : "list"
+        },
+        "children" : [{
+          "name" : "$data",
+          "nullable" : true,
+          "type" : {
+            "name" : "int",
+            "bitWidth" : 32,
+            "isSigned" : true
+          },
+          "children" : [ ]
+        }]
+      },{
+        "name" : "leaf",
+        "nullable" : false,
+        "type" : {
+          "name" : "struct"
+        },
+        "children" : [{
+          "name" : "page-idx",
+          "nullable" : false,
+          "type" : {
+            "name" : "int",
+            "bitWidth" : 32,
+            "isSigned" : true
+          },
+          "children" : [ ]
+        }]
+      }]
+    }]
+  },
+  "batches" : [{
+    "count" : 1,
+    "columns" : [{
+      "name" : "nodes",
+      "count" : 1,
+      "TYPE_ID" : [2],
+      "OFFSET" : [0],
+      "children" : [{
+        "name" : "nil",
+        "count" : 0
+      },{
+        "name" : "branch",
+        "count" : 0,
+        "VALIDITY" : [ ],
+        "OFFSET" : [0],
+        "children" : [{
+          "name" : "$data",
+          "count" : 0,
+          "VALIDITY" : [ ],
+          "DATA" : [ ]
+        }]
+      },{
+        "name" : "leaf",
+        "count" : 1,
+        "VALIDITY" : [1],
+        "children" : [{
+          "name" : "page-idx",
+          "count" : 1,
+          "VALIDITY" : [1],
+          "DATA" : [0]
+        }]
+      }]
+    }]
+  }]
+}
