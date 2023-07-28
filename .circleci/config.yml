@@ -4,5 +4,13 @@ version: 2.1
 executors:
 
 jobs:
+  dummy_test:
+    docker:
+      - image: cimg/base:2021.04
+    steps:
+      - run: echo "hello world"
 
 workflows:
+  always_pass:
+    jobs:
+      - dummy_test
