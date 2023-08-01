@@ -19,4 +19,6 @@ dependencies {
     api(project(":core"))
 
     api("software.amazon.awssdk", "s3", "2.16.76")
+    api("software.amazon.awssdk", "sqs", "2.16.76")
+    api("software.amazon.awssdk", "sns", "2.16.76")
 }

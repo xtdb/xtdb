@@ -18,7 +18,7 @@
         (edn/read-string (str (.decode StandardCharsets/UTF_8 buf))))
       (util/rethrowing-cause)))
 
-(defn- put-edn [^ObjectStore obj-store k obj]
+(defn put-edn [^ObjectStore obj-store k obj]
   (let [^ByteBuffer buf (.encode StandardCharsets/UTF_8 (pr-str obj))]
     @(.putObject obj-store (name k) buf)))
 
@@ -65,13 +65,25 @@
 
     (t/is (thrown? IllegalStateException (get-edn obj-store :alice)))))
 
-(defn test-list-objects [^ObjectStore obj-store]
-  (put-edn obj-store "bar/alice" :alice)
-  (put-edn obj-store "foo/alan" :alan)
-  (put-edn obj-store "bar/bob" :bob)
+(defn test-list-objects 
+  ([^ObjectStore obj-store]
+   (test-list-objects obj-store 1000))
+  ([^ObjectStore obj-store wait-time-ms]
+   (put-edn obj-store "bar/alice" :alice)
+   (put-edn obj-store "foo/alan" :alan)
+   (put-edn obj-store "bar/bob" :bob)
 
-  (t/is (= ["bar/alice" "bar/bob" "foo/alan"] (.listObjects obj-store)))
-  (t/is (= ["bar/alice" "bar/bob"] (.listObjects obj-store "bar"))))
+  ;; Allow some time for files to get processed and added to the list
+   (Thread/sleep wait-time-ms)
+
+   (t/is (= ["bar/alice" "bar/bob" "foo/alan"] (.listObjects obj-store)))
+   (t/is (= ["bar/alice" "bar/bob"] (.listObjects obj-store "bar")))
+
+   ;; Delete an object
+   @(.deleteObject obj-store "bar/alice")
+   (Thread/sleep wait-time-ms)
+   
+   (t/is (= ["bar/bob"] (.listObjects obj-store "bar")))))
 
 (defn test-range [^ObjectStore obj-store]
 
@@ -126,6 +138,21 @@
   (tu/with-tmp-dirs #{path}
     (with-open [obj-store (fs path)]
       (test-list-objects obj-store))))
+
+(t/deftest fs-list-test-with-prior-objects
+  (tu/with-tmp-dirs #{path}
+    (with-open [os (fs path)]
+      (put-edn os "alice" :alice)
+      (put-edn os "alan" :alan)
+      (t/is (= ["alan" "alice"] (.listObjects ^ObjectStore os))))
+
+    (with-open [os (fs path)]
+      (t/testing "prior objects will still be there, should be available on a list request"
+        (t/is (= ["alan" "alice"] (.listObjects ^ObjectStore os))))
+
+      (t/testing "should be able to delete prior objects and have that reflected in list objects output"
+        @(.deleteObject ^ObjectStore os "alice")
+        (t/is (= ["alan"] (.listObjects ^ObjectStore os)))))))
 
 (t/deftest fs-range-test
   (tu/with-tmp-dirs #{path}
