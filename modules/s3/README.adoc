@@ -1,39 +1,41 @@
-# S3 Module
+= S3 Module
 
 Within our XTDB node, we can make use of **AWS S3** as the XTDB Object Store.
 
-## Project Dependency 
+== Project Dependency
 
 In order to use S3 as an object store, you will need to include a dependency on the xtdb.s3 module:
 
-_deps.edn_
-```
+.deps.edn
+[source,clojure]
+----
 com.xtdb.labs/xtdb-s3 {:mvn/version "2.0.0-SNAPSHOT"}
-```
+----
 
-_pom.xml_
-```
+.pom.xml
+[source,xml]
+----
 <dependency>
     <groupId>com.xtdb.labs</groupId>
     <artifactId>xtdb-s3</artifactId>
     <version>2.0.0-SNAPSHOT</version>
 </dependency>
-```
+----
 
-## Cloudformation Stack
+== CloudFormation Stack
 
-In order to handle the various bits of AWS infrastructure required to use S3 as an XTDB object store, we provide a link:cloudformation/s3-stack.yml[parameterized cloudformation stack] to setup everything that you should need.
+In order to handle the various bits of AWS infrastructure required to use S3 as an XTDB object store, we provide a link:cloudformation/s3-stack.yml[parameterized CloudFormation stack] to setup everything that you should need.
 
-### Inputs to the stack
+=== Inputs to the stack
 
 The paramaterized stack expects the following to be provided:
 
 * The name of S3 Bucket that will be used by the created object store bucket and referenced in associated resources
 ** If unset, uses a default value of `xtdb-object-store`
 
-### Created Resources
+=== Created Resources
 
-The cloudformation stack will create the following resources within the specified region in AWS:
+The CloudFormation stack will create the following resources within the specified region in AWS:
 
 * The S3 bucket, with the user confirgured bucket name.
 * An SNS topic which receives notifications from the S3 bucket around object creation/deletion
@@ -44,36 +46,41 @@ The cloudformation stack will create the following resources within the specifie
 ** Creating and operating on SQS queues
 *** Said queues handle their own permissions, and subscribe to the SNS topic.
 
-### Outputs
+=== Outputs
 
-Using the cloudformation template will output a number of things, some of which will be needed configuring your node:
+Using the CloudFormation template will output a number of things, some of which will be needed configuring your node:
 
 * The S3 Bucket Name (**this will be used in config**)
 * The SNS Topic ARN (**this will be used in config**)
 * ARN of the created XTDB IAM Role (this, or something with equivalent permissions, will be required to use all of the above) 
 
-NOTE: The SNS topic and SQS queues are used to a local copy of files on S3, saving on expensive/lengthy operations to list objects on S3. If not using the cloudformation template, ensure that you at have a similar setup with the SNS topic setup to receive notifications from your bucket, and that XTDB having all the relevant permissions it needs with S3, SNS, and SQS.
+NOTE: The SNS topic and SQS queues are used to a local copy of files on S3, saving on expensive/lengthy operations to list objects on S3.
+If not using the CloudFormation template, ensure that you at have a similar setup with the SNS topic setup to receive notifications from your bucket, and that XTDB having all the relevant permissions it needs with S3, SNS, and SQS.
 
-## Authentication
+== Authentication
 
-Authentication for both the document store and checkpoint store components within the module is handled via the S3 API, which in turn uses the Default AWS Credential Provider Chain. See the https://docs.aws.amazon.com/sdk-for-java/v1/developer-guide/credentials.html#credentials-default[AWS documentation] on the various methods which you can handle authentication to be able to make use of the operations inside the modules. 
+Authentication for both the document store and checkpoint store components within the module is handled via the S3 API, which in turn uses the Default AWS Credential Provider Chain.
+See the https://docs.aws.amazon.com/sdk-for-java/v1/developer-guide/credentials.html#credentials-default[AWS documentation] on the various methods which you can handle authentication to be able to make use of the operations inside the modules.
 
-Within the provided Cloudformation stack, we create an XTDB IAM role. One can use this role to provide all necessary permissions for XTDB and the resources it is using on AWS, otherwise you will need to ensure whichever credentials you are using to authenticate XTDB have the same level of permissions to the miscellaneous services. See the IAM policy set on the XTDBIamRole in the link:cloudformation/s3-stack.yml[Cloudformation stack] for what exactly that includes.
+Within the provided CloudFormation stack, we create an XTDB IAM role.
+One can use this role to provide all necessary permissions for XTDB and the resources it is using on AWS, otherwise you will need to ensure whichever credentials you are using to authenticate XTDB have the same level of permissions to the miscellaneous services.
+See the IAM policy set on the XTDBIamRole in the link:cloudformation/s3-stack.yml[CloudFormation stack] for what exactly that includes.
 
-## S3 Object Store config
+== S3 Object Store config
 
 We can swap out the implementation of the object store with one based on S3. To do so, we add the `xtdb.s3/object-store` key within the integrant config for our node, alongside any config:
 
-```clojure
+[source,clojure]
+----
 {
   ...
   {:xtdb.s3/object-store {:bucket "xtdb-object-store",
                           :sns-topic-arn "arn:aws:sns:region:account-id:xtdb-object-store-bucket-events"}}
   ...
 }
-```
+----
 
-### Parameters
+=== Parameters
 
 These are the following parameters that can be passed within the config for our `xtdb.s3/object-store`:
 [cols="1,1,2,1"]
@@ -100,7 +107,7 @@ These are the following parameters that can be passed within the config for our 
 | Yes
 |=== 
 
-### Configuring S3 requests
+=== Configuring S3 requests
 
 WARNING: This is unfortunately currently only accessible from Clojure - we plan to expose it outside of Clojure soon.
 
@@ -110,13 +117,11 @@ We expose these via the https://github.com/xtdb/xtdb/blob/2.x/modules/s3/src/mai
 Through this interface, you can supply an `S3AsyncClient` for xtdb-s3 to use, adapt the `PutObjectRequest`/`GetObjectRequest` as required, and choose the serialisation format.
 By default, we get credentials through the usual AWS credentials provider.
 
-```clojure
+[source,clojure]
+----
 {:xtdb.s3/object-store {:bucket "xtdb-object-store",
                         :sns-topic-arn "arn:aws:sns:region:account-id:xtdb-object-store-bucket-events"}
                         :configurator (fn [_]
                                        (reify S3Configurator
                                          ...))}
-```
-
-
-
+----
