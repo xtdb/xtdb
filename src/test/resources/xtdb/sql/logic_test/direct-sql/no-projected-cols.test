@@ -15,5 +15,5 @@ SELECT 4 FROM foo
 query I
 SELECT (SELECT foo.xt$id FROM bar) FROM foo
 ----
-1
 2
+1

@@ -126,14 +126,14 @@ INSERT INTO t3(xt$id, data) VALUES (2, [6, 7])
 query T nosort
 SELECT t3.data FROM t3
 ----
-[2 3]
 [6 7]
+[2 3]
 
 query T nosort
 SELECT t3.data[2] FROM t3
 ----
-3
 7
+3
 
 skipif xtdb # see #546
 query TT nosort

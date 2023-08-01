@@ -83,7 +83,9 @@
                 :xt/system-from tt2
                 :xt/system-to end-of-time-zdt}]
 
-    (t/is (= #{replaced-v0-doc v1-doc}
+    ;; TODO nil system-to #2655
+    (t/is (= #{(assoc replaced-v0-doc :xt/system-to nil)
+               (assoc v1-doc :xt/system-to nil)}
              (set (tu/query-ra '[:scan {:table xt_docs}
                                  [xt/id version
                                   xt/valid-from xt/valid-to

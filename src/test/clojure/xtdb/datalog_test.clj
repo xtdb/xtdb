@@ -2348,3 +2348,19 @@
                :end #time/zoned-date-time "2020-01-06T00:00Z[UTC]"}}}
            (set (xt/q node '{:find [n valid-time] :where [($ :ints {:n n :xt/id 0 :xt/valid-time valid-time}
                                                              {:for-valid-time [:in #inst "2020-01-01" #inst "2020-01-06"]})]}))))))
+
+(deftest test-no-zero-width-intervals
+  (xt/submit-tx tu/*node* [[:put :xt-docs {:xt/id 1 :v 1}]
+                           [:put :xt-docs {:xt/id 1 :v 2}]
+                           [:put :xt-docs {:xt/id 2 :v 1} {:for-valid-time [:in #inst "2020-01-01" #inst "2020-01-02"]}]])
+  (xt/submit-tx tu/*node* [[:put :xt-docs {:xt/id 2 :v 2} {:for-valid-time [:in #inst "2020-01-01" #inst "2020-01-02"]}]])
+  (t/is (= [{:v 2}]
+           (xt/q tu/*node*
+                 '{:find [v]
+                   :where [(match :xt-docs [{:xt/id 1} v] {:for-system-time :all-time})]}))
+        "no zero width system time intervals")
+  (t/is (= [{:v 2}]
+           (xt/q tu/*node*
+                 '{:find [v]
+                   :where [(match :xt-docs [{:xt/id 2} v] {:for-valid-time :all-time})]}))
+        "no zero width valid-time intervals"))

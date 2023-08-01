@@ -8,18 +8,8 @@
 
 (t/deftest test-multi-value-insert-423
   (letfn [(expected [tt]
-            {[(util/->zdt #inst "2024-01-01") (util/->zdt util/end-of-time), tt tt]
-             "Happy 2024!",
-
-             ;; weird? zero-width system-time so won't normally show up
-             [(util/->zdt #inst "2024-01-01") (util/->zdt #inst "2026-01-01"), tt tt]
-             "Happy 2024!",
-
-             [(util/->zdt #inst "2024-01-01") (util/->zdt #inst "2025-01-01"), tt (util/->zdt util/end-of-time)]
+            {[(util/->zdt #inst "2024-01-01") (util/->zdt #inst "2025-01-01"), tt (util/->zdt util/end-of-time)]
              "Happy 2024!"
-
-             [(util/->zdt #inst "2025-01-01") (util/->zdt util/end-of-time), tt tt]
-             "Happy 2025!",
 
              [(util/->zdt #inst "2025-01-01") (util/->zdt #inst "2026-01-01"), tt (util/->zdt util/end-of-time)]
              "Happy 2025!",

@@ -19,7 +19,7 @@
             [xtdb.vector.reader :as vr]
             [xtdb.vector.writer :as vw]
             xtdb.watermark)
-  (:import (clojure.lang IPersistentSet MapEntry)
+  (:import (clojure.lang IFn IPersistentMap IPersistentSet MapEntry)
            (java.util ArrayList Arrays HashMap Iterator LinkedList List Map Queue Set)
            (java.util.function BiFunction Consumer IntConsumer)
            java.util.stream.IntStream
@@ -397,6 +397,87 @@
 
     [min-range max-range]))
 
+(defn- ->range ^longs []
+  (let [res (long-array 8)]
+    (doseq [i (range 0 8 2)]
+      (aset res i Long/MIN_VALUE)
+      (aset res (inc i) Long/MAX_VALUE))
+    res))
+
+(def ^:private column->idx {"xt$valid_from" 0
+                            "xt$valid_to" 1
+                            "xt$system_from" 2
+                            "xt$system_to" 3})
+
+(defn- ->temporal-column-idx ^long [col-name]
+  (long (get column->idx (name col-name))))
+
+(def ^:const ^int valid-from-lower-idx 0)
+(def ^:const ^int valid-from-upper-idx 1)
+(def ^:const ^int valid-to-lower-idx 2)
+(def ^:const ^int valid-to-upper-idx 3)
+(def ^:const ^int system-from-lower-idx 4)
+(def ^:const ^int system-from-upper-idx 5)
+(def ^:const ^int system-to-lower-idx 6)
+(def ^:const ^int system-to-upper-idx 7)
+
+(defn- ->temporal-range [^RelationReader params, {^TransactionInstant basis-tx :tx}, {:keys [for-valid-time for-system-time]}, selects]
+  (let [range (->range)]
+    (letfn [(apply-bound [f col-name ^long time-μs]
+              (let [range-idx-lower (* (->temporal-column-idx (util/str->normal-form-str (str col-name))) 2)
+                    range-idx-upper (inc range-idx-lower)]
+                (case f
+                  :< (aset range range-idx-upper
+                           (min (dec time-μs) (aget range range-idx-upper)))
+                  :<= (aset range range-idx-upper
+                            (min time-μs (aget range range-idx-upper)))
+                  :> (aset range range-idx-lower
+                           (max (inc time-μs) (aget range range-idx-lower)))
+                  :>= (aset range range-idx-lower
+                            (max time-μs (aget range range-idx-lower)))
+                  nil)))
+
+            (->time-μs [[tag arg]]
+              (case tag
+                :literal (-> arg
+                             (util/sql-temporal->micros (.getZone expr/*clock*)))
+                :param (-> (-> (.readerForName params (name arg))
+                               (.getObject 0))
+                           (util/sql-temporal->micros (.getZone expr/*clock*)))
+                :now (-> (.instant expr/*clock*)
+                         (util/instant->micros))))]
+
+      (when-let [system-time (some-> basis-tx (.system-time) util/instant->micros)]
+        (apply-bound :<= "xt$system_from" system-time)
+
+        (when-not for-system-time
+          (apply-bound :> "xt$system_to" system-time)))
+
+      (letfn [(apply-constraint [constraint start-col end-col]
+                (when-let [[tag & args] constraint]
+                  (case tag
+                    :at (let [[at] args
+                              at-μs (->time-μs at)]
+                          (apply-bound :<= start-col at-μs)
+                          (apply-bound :> end-col at-μs))
+
+                    ;; overlaps [time-from time-to]
+                    :in (let [[from to] args]
+                          (apply-bound :> end-col (->time-μs (or from [:now])))
+                          (when to
+                            (apply-bound :< start-col (->time-μs to))))
+
+                    :between (let [[from to] args]
+                               (apply-bound :> end-col (->time-μs (or from [:now])))
+                               (when to
+                                 (apply-bound :<= start-col (->time-μs to))))
+
+                    :all-time nil)))]
+
+        (apply-constraint for-valid-time "xt$valid_from" "xt$valid_to")
+        (apply-constraint for-system-time "xt$system_from" "xt$system_to")))
+    range))
+
 (defn- scan-op-at-now [scan-op]
   (= :now (first (second scan-op))))
 
@@ -414,6 +495,16 @@
            (scan-op-point? for-valid-time))
        (or (nil? for-system-time)
            (scan-op-point? for-system-time))))
+
+(defn- range-point-query? [^IWatermark watermark basis {:keys [for-system-time] :as _scan-opts}]
+  (and
+   (.txBasis watermark)
+   (= (:tx basis)
+      (.txBasis watermark))
+   (or (nil? for-system-time)
+       (scan-op-point? for-system-time))
+   (>= (util/instant->micros (:current-time basis))
+       (util/instant->micros (:system-time (:tx basis))))))
 
 (defn use-current-row-id-cache? [^IWatermark watermark scan-opts basis temporal-col-names]
   (and
@@ -437,23 +528,10 @@
     (with-open [^Watermark wm (.openWatermark wm-src wm-tx)]
       (.allTableColNames scan-emitter wm))))
 
-(defn ->temporal-range [^longs temporal-min-range, ^longs temporal-max-range]
-  (let [res (long-array 4)]
-    (aset res 0 (aget temporal-max-range temporal/app-time-start-idx))
-    (aset res 1 (aget temporal-min-range temporal/app-time-end-idx))
-    (aset res 2 (aget temporal-max-range temporal/system-time-start-idx))
-    (aset res 3 (aget temporal-min-range temporal/system-time-end-idx))
-    res))
-
-(defn temporal-range->temporal-timestamp [^longs temporal-range]
-  (let [res (long-array 2)]
-    (aset res 0 (aget temporal-range 0))
-    (aset res 1 (aget temporal-range 2))
-    res))
-
 (defn- point-point-row-picker
   ^java.util.function.IntConsumer [^IRelationWriter out-rel, ^RelationReader leaf-rel
-                                   col-names, ^longs temporal-timestamps]
+                                   col-names, ^longs temporal-range,
+                                   {:keys [^longs current-bounds skip-iid-ptr prev-iid-ptr current-iid-ptr]}]
 
   (let [leaf-row-count (.rowCount leaf-rel)
         iid-rdr (.readerForName leaf-rel "xt$iid")
@@ -474,7 +552,7 @@
                                  ^IVectorReader rdr (case normalized-name
                                                       "_iid" (.readerForName leaf-rel "xt$legacy_iid")
                                                       "xt$system_from" sys-from-rdr
-                                                      "xt$system_to" (vr/vec->reader 
+                                                      "xt$system_to" (vr/vec->reader
                                                                       (doto (NullVector. "xt$system_to")
                                                                         (.setValueCount leaf-row-count)))
                                                       "xt$valid_from" nil
@@ -499,14 +577,8 @@
                              :when (= "xt$valid_to" (util/str->normal-form-str col-name))]
                          (.writerForName out-rel col-name types/temporal-col-type)))
 
-        valid-time (aget temporal-timestamps 0)
-        system-time (aget temporal-timestamps 1)
-
-        skip-iid-ptr (ArrowBufPointer.)
-        prev-iid-ptr (ArrowBufPointer.)
-        current-iid-ptr (ArrowBufPointer.)
-
-        current-bounds (long-array 2)]
+        valid-time (aget temporal-range valid-from-upper-idx)
+        system-time (aget temporal-range system-from-upper-idx)]
 
     (letfn [(duplicate-ptr [^ArrowBufPointer dst, ^ArrowBufPointer src]
               (.set dst (.getBuf src) (.getOffset src) (.getLength src)))
@@ -528,39 +600,350 @@
               (aset current-bounds 1 Long/MAX_VALUE)
               (duplicate-ptr prev-iid-ptr current-iid-ptr))
 
-            (when (<= (.getLong sys-from-rdr idx) system-time)
-              (case (.getLeg op-rdr idx)
-                :put
-                (let [valid-from (.getLong put-valid-from-rdr idx)
-                      valid-to (.getLong put-valid-to-rdr idx)]
-                  (if (and (<= valid-from valid-time) (< valid-time valid-to))
-                    (do
+            (if (= :evict (.getLeg op-rdr idx))
+              (duplicate-ptr skip-iid-ptr current-iid-ptr)
+              (when (<= (.getLong sys-from-rdr idx) system-time)
+                (case (.getLeg op-rdr idx)
+                  :put
+                  (let [valid-from (.getLong put-valid-from-rdr idx)
+                        valid-to (.getLong put-valid-to-rdr idx)]
+                    (if (and (<= valid-from valid-time) (< valid-time valid-to))
+                      (do
+                        (duplicate-ptr skip-iid-ptr current-iid-ptr)
+                        (.startRow out-rel)
+                        (doseq [^IRowCopier copier row-copiers]
+                          (.copyRow copier idx))
+                        (doseq [^IVectorWriter valid-from-wtr valid-from-wtrs]
+                          (.writeLong valid-from-wtr (Long/max valid-from (aget current-bounds 0))))
+                        (doseq [^IVectorWriter valid-to-wtr valid-to-wtrs]
+                          (.writeLong valid-to-wtr (Long/min valid-to (aget current-bounds 1))))
+                        (.endRow out-rel))
+
+                      (constrain-bounds valid-from valid-to)))
+
+                  :delete
+                  (let [valid-from (.getLong delete-valid-from-rdr idx)
+                        valid-to (.getLong delete-valid-to-rdr idx)]
+                    (if (and (<= valid-from valid-time) (< valid-time valid-to))
                       (duplicate-ptr skip-iid-ptr current-iid-ptr)
-                      (.startRow out-rel)
-                      (doseq [^IRowCopier copier row-copiers]
-                        (.copyRow copier idx))
-                      (doseq [^IVectorWriter valid-from-wtr valid-from-wtrs]
-                        (.writeLong valid-from-wtr (Long/max valid-from (aget current-bounds 0))))
-                      (doseq [^IVectorWriter valid-to-wtr valid-to-wtrs]
-                        (.writeLong valid-to-wtr (Long/min valid-to (aget current-bounds 1))))
-                      (.endRow out-rel))
+                      (constrain-bounds valid-from valid-to))))))))))))
 
-                    (constrain-bounds valid-from valid-to)))
+(deftype Interval [^long start, ^long end, ^long sys-from])
 
-                :delete
-                (let [valid-from (.getLong delete-valid-from-rdr idx)
-                      valid-to (.getLong delete-valid-to-rdr idx)]
-                  (if (and (<= valid-from valid-time) (< valid-time valid-to))
-                    (duplicate-ptr skip-iid-ptr current-iid-ptr)
-                    (constrain-bounds valid-from valid-to)))
+(defn- intersect [^Interval i1 ^Interval i2]
+  (and (<= (.start i1) (.end i2)) (<= (.start i2) (.end i1))))
 
-                :evict
-                (duplicate-ptr skip-iid-ptr current-iid-ptr)))))))))
+(defn- split
+  "i1 comes before i2 in system time"
+  [^Interval i1 ^Interval i2]
+  (let [start1 (.start i1)
+        start2 (.start i2)
+        end1 (.end i1)
+        end2 (.end i2)
+        new-sys-from (.sys-from i2)]
+    (cond-> []
+      (< start1 start2)
+      (conj (Interval. start1 start2 new-sys-from))
+      (< end2 end1)
+      (conj (Interval. end2 end1 new-sys-from)))))
 
-(deftype PointPointCursor [^BufferAllocator allocator, arrow-leaves
-                           ^Iterator merge-tasks, ^ints leaf-idxs, ^ints current-arrow-page-idxs
-                           col-names, ^Map col-preds, ^longs temporal-timestamps,
-                           params]
+(defn range-point-row-picker
+  ^java.util.function.IntConsumer [^IRelationWriter out-rel, ^RelationReader leaf-rel
+                                   col-names, ^longs temporal-ranges,
+                                   {:keys [^LinkedList !ranges skip-iid-ptr prev-iid-ptr current-iid-ptr]}]
+  (let [leaf-row-count (.rowCount leaf-rel)
+        iid-rdr (.readerForName leaf-rel "xt$iid")
+        sys-from-rdr (.readerForName leaf-rel "xt$system_from")
+        op-rdr (.readerForName leaf-rel "op")
+        put-rdr (.legReader op-rdr :put)
+        doc-rdr (.structKeyReader put-rdr "xt$doc")
+        put-valid-from-rdr (.structKeyReader put-rdr "xt$valid_from")
+        put-valid-to-rdr (.structKeyReader put-rdr "xt$valid_to")
+
+        delete-rdr (.legReader op-rdr :delete)
+        delete-valid-from-rdr (.structKeyReader delete-rdr "xt$valid_from")
+        delete-valid-to-rdr (.structKeyReader delete-rdr "xt$valid_to")
+
+        valid-from-lower (aget temporal-ranges valid-from-lower-idx)
+        valid-from-upper (aget temporal-ranges valid-from-upper-idx)
+        valid-to-lower (aget temporal-ranges valid-to-lower-idx)
+        valid-to-upper (aget temporal-ranges valid-to-upper-idx)
+        system-time (aget temporal-ranges system-to-lower-idx)
+
+        row-copiers (vec
+                     (for [col-name col-names
+                           :let [normalized-name (util/str->normal-form-str col-name)
+                                 ^IVectorReader rdr (case normalized-name
+                                                      "_iid" (.readerForName leaf-rel "xt$legacy_iid")
+                                                      "xt$system_from" nil
+                                                      "xt$system_to" (vr/vec->reader
+                                                                      (doto (NullVector. "xt$system_to")
+                                                                        (.setValueCount leaf-row-count)))
+                                                      "xt$valid_from" nil
+                                                      "xt$valid_to" nil
+                                                      (.structKeyReader doc-rdr normalized-name))]
+                           :when rdr]
+                       (.rowCopier rdr
+                                   (case normalized-name
+                                     "_iid" (.writerForName out-rel col-name :i64)
+                                     "xt$system_to" (.writerForName out-rel col-name
+                                                                    [:union #{:null types/temporal-col-type}])
+                                     (.writerForName out-rel col-name)))))
+
+        valid-from-wtrs (vec
+                         (for [col-name col-names
+                               :when (= "xt$valid_from" (util/str->normal-form-str col-name))]
+                           (.writerForName out-rel col-name types/temporal-col-type)))
+
+        valid-to-wtrs (vec
+                       (for [col-name col-names
+                             :when (= "xt$valid_to" (util/str->normal-form-str col-name))]
+                         (.writerForName out-rel col-name types/temporal-col-type)))
+
+        sys-from-wtrs (vec
+                       (for [col-name col-names
+                             :when (= "xt$system_from" (util/str->normal-form-str col-name))]
+                         (.writerForName out-rel col-name types/temporal-col-type)))
+
+        !new-ranges (LinkedList.)]
+
+    (letfn [(duplicate-ptr [^ArrowBufPointer dst, ^ArrowBufPointer src]
+              (.set dst (.getBuf src) (.getOffset src) (.getLength src)))]
+
+      (reify IntConsumer
+        (accept [_ idx]
+          (when-not (= skip-iid-ptr (.getPointer iid-rdr idx current-iid-ptr))
+            (when-not (= prev-iid-ptr current-iid-ptr)
+              (.clear !ranges)
+              (duplicate-ptr prev-iid-ptr current-iid-ptr))
+
+            (if (= :evict (.getLeg op-rdr idx))
+              (duplicate-ptr skip-iid-ptr current-iid-ptr)
+              (let [sys-from (.getLong sys-from-rdr idx)]
+                (when (<= sys-from system-time)
+                  (case (.getLeg op-rdr idx)
+                    :put
+                    (let [i1 (Interval. (.getLong put-valid-from-rdr idx) (.getLong put-valid-to-rdr idx) sys-from)
+                          itr (.listIterator !ranges)]
+                      (.add !new-ranges i1)
+                      (while (.hasNext itr)
+                        (let [i2 (.next itr)
+                              inner-itr (.listIterator !new-ranges)]
+                          (while (.hasNext inner-itr)
+                            (let [i1 (.next inner-itr)]
+                              (when (intersect i1 i2)
+                                (.remove inner-itr)
+                                (run! #(.add inner-itr %) (split i1 i2)))))))
+                      (doseq [^Interval i !new-ranges]
+                        (.add !ranges i)
+                        (let [valid-from (.start i)
+                              valid-to (.end i)
+                              sys-from (.sys-from i)]
+                          (when (and (<= valid-from-lower valid-from)
+                                     (<= valid-from valid-from-upper)
+                                     (<= valid-to-lower valid-to)
+                                     (<= valid-to valid-to-upper))
+                            (.startRow out-rel)
+                            (doseq [^IRowCopier copier row-copiers]
+                              (.copyRow copier idx))
+                            (doseq [^IVectorWriter valid-from-wtr valid-from-wtrs]
+                              (.writeLong valid-from-wtr valid-from))
+                            (doseq [^IVectorWriter valid-to-wtr valid-to-wtrs]
+                              (.writeLong valid-to-wtr valid-to))
+                            (doseq [^IVectorWriter sys-from-wtr sys-from-wtrs]
+                              (.writeLong sys-from-wtr sys-from))
+                            (.endRow out-rel))))
+                      (.clear !new-ranges))
+
+                    :delete
+                    (let [i1 (Interval. (.getLong delete-valid-from-rdr idx) (.getLong delete-valid-to-rdr idx) sys-from)
+                          itr (.listIterator !ranges)]
+                      (.add !new-ranges i1)
+                      (while (.hasNext itr)
+                        (let [i2 (.next itr)
+                              inner-itr (.listIterator !new-ranges)]
+                          (while (.hasNext inner-itr)
+                            (let [i1 (.next inner-itr)]
+                              (when (intersect i1 i2)
+                                (.remove inner-itr)
+                                (run! #(.add inner-itr %) (split i1 i2)))))))
+                      (doseq [i !new-ranges]
+                        (.add !ranges i))
+                      (.clear !new-ranges))))))))))))
+
+(deftype Rectangle [^long valid-from, ^long valid-to,
+                    ^long sys-from, ^long sys-to])
+
+(defn- rectangle-intersect [^Rectangle r1 ^Rectangle r2]
+  (not (or (> (.valid-from r2) (.valid-to r1))
+           (> (.valid-from r1) (.valid-to r2))
+           (> (.sys-from r2) (.sys-to r1))
+           (> (.sys-from r1) (.sys-to r2)))))
+
+(defn- rectangle-split
+  "r1 comes before r2 in system time"
+  [^Rectangle r1 ^Rectangle r2]
+  (let [valid-from1 (.valid-from r1)
+        valid-from2 (.valid-from r2)
+        valid-to1 (.valid-to r1)
+        valid-to2 (.valid-to r2)
+        sys-from1 (.sys-from r1)
+        sys-from2 (.sys-from r2)
+        sys-to1 (.sys-to r1)
+        sys-to2 (.sys-to r2)]
+    (cond-> []
+      (< sys-from1 sys-from2)
+      (conj (Rectangle. valid-from1 valid-to1 sys-from1 sys-from2))
+      (< sys-to2 sys-to1)
+      (conj (Rectangle. valid-from1 valid-to1 sys-to2 sys-to1))
+      (< valid-from1 valid-from2)
+      (conj (Rectangle. valid-from1 valid-from2 (max sys-from1 sys-from2) (min sys-to1 sys-to2)))
+      (< valid-to2 valid-to1)
+      (conj (Rectangle. valid-to2 valid-to1 (max sys-from1 sys-from2) (min sys-to1 sys-to2))))))
+
+(defn range-range-row-picker
+  ^java.util.function.IntConsumer [^IRelationWriter out-rel, ^RelationReader leaf-rel
+                                   col-names, ^longs temporal-ranges,
+                                   {:keys [^LinkedList !ranges skip-iid-ptr prev-iid-ptr current-iid-ptr]}]
+  (let [iid-rdr (.readerForName leaf-rel "xt$iid")
+        sys-from-rdr (.readerForName leaf-rel "xt$system_from")
+        op-rdr (.readerForName leaf-rel "op")
+        put-rdr (.legReader op-rdr :put)
+        doc-rdr (.structKeyReader put-rdr "xt$doc")
+        put-valid-from-rdr (.structKeyReader put-rdr "xt$valid_from")
+        put-valid-to-rdr (.structKeyReader put-rdr "xt$valid_to")
+
+        delete-rdr (.legReader op-rdr :delete)
+        delete-valid-from-rdr (.structKeyReader delete-rdr "xt$valid_from")
+        delete-valid-to-rdr (.structKeyReader delete-rdr "xt$valid_to")
+
+        valid-from-lower (aget temporal-ranges valid-from-lower-idx)
+        valid-from-upper (aget temporal-ranges valid-from-upper-idx)
+        valid-to-lower (aget temporal-ranges valid-to-lower-idx)
+        valid-to-upper (aget temporal-ranges valid-to-upper-idx)
+        sys-from-lower (aget temporal-ranges system-from-lower-idx)
+        sys-from-upper (aget temporal-ranges system-from-upper-idx)
+        sys-to-lower (aget temporal-ranges system-to-lower-idx)
+        sys-to-upper (aget temporal-ranges system-to-upper-idx)
+
+        row-copiers (vec
+                     (for [col-name col-names
+                           :let [normalized-name (util/str->normal-form-str col-name)
+                                 ^IVectorReader rdr (case normalized-name
+                                                      "_iid" (.readerForName leaf-rel "xt$legacy_iid")
+                                                      "xt$system_from" nil
+                                                      "xt$system_to" nil
+                                                      "xt$valid_from" nil
+                                                      "xt$valid_to" nil
+                                                      (.structKeyReader doc-rdr normalized-name))]
+                           :when rdr]
+                       (.rowCopier rdr
+                                   (case normalized-name
+                                     "_iid" (.writerForName out-rel col-name :i64)
+                                     (.writerForName out-rel col-name)))))
+
+        valid-from-wtrs (vec
+                         (for [col-name col-names
+                               :when (= "xt$valid_from" (util/str->normal-form-str col-name))]
+                           (.writerForName out-rel col-name types/temporal-col-type)))
+
+        valid-to-wtrs (vec
+                       (for [col-name col-names
+                             :when (= "xt$valid_to" (util/str->normal-form-str col-name))]
+                         (.writerForName out-rel col-name types/temporal-col-type)))
+
+        sys-from-wtrs (vec
+                       (for [col-name col-names
+                             :when (= "xt$system_from" (util/str->normal-form-str col-name))]
+                         (.writerForName out-rel col-name types/temporal-col-type)))
+
+        sys-to-wtrs (vec
+                     (for [col-name col-names
+                           :when (= "xt$system_to" (util/str->normal-form-str col-name))]
+                       (.writerForName out-rel col-name types/temporal-col-type)))
+
+        !new-ranges (LinkedList.)]
+
+    (letfn [(duplicate-ptr [^ArrowBufPointer dst, ^ArrowBufPointer src]
+              (.set dst (.getBuf src) (.getOffset src) (.getLength src)))]
+
+      (reify IntConsumer
+        (accept [_ idx]
+          (when-not (= skip-iid-ptr (.getPointer iid-rdr idx current-iid-ptr))
+            (when-not (= prev-iid-ptr current-iid-ptr)
+              (.clear !ranges)
+              (duplicate-ptr prev-iid-ptr current-iid-ptr))
+
+            (if (= :evict (.getLeg op-rdr idx))
+              (duplicate-ptr skip-iid-ptr current-iid-ptr)
+              (let [system-from (.getLong sys-from-rdr idx)]
+                ;; TODO potentially more fancy check here for skipping
+                (when (and (<= sys-from-lower system-from) (<= system-from sys-from-upper))
+                  (case (.getLeg op-rdr idx)
+                    :put
+                    (let [r1 (Rectangle. (.getLong put-valid-from-rdr idx) (.getLong put-valid-to-rdr idx)
+                                         (.getLong sys-from-rdr idx) util/end-of-time-μs)
+                          itr (.listIterator !ranges)]
+                      (.add !new-ranges r1)
+                      (while (.hasNext itr)
+                        (let [r2 (.next itr)
+                              inner-itr (.listIterator !new-ranges)]
+                          (while (.hasNext inner-itr)
+                            (let [r1 (.next inner-itr)]
+                              (when (rectangle-intersect r1 r2)
+                                (.remove inner-itr)
+                                (run! #(.add inner-itr %) (rectangle-split r1 r2)))))))
+                      (doseq [^Rectangle r !new-ranges]
+                        (.add !ranges r)
+                        (let [valid-from (.valid-from r)
+                              valid-to (.valid-to r)
+                              sys-from (.sys-from r)
+                              sys-to (.sys-to r)]
+                          (when (and (<= valid-from-lower valid-from)
+                                     (<= valid-from valid-from-upper)
+                                     (<= valid-to-lower valid-to)
+                                     (<= valid-to valid-to-upper)
+                                     (<= sys-from-lower sys-from)
+                                     (<= sys-from sys-from-upper)
+                                     (<= sys-to-lower sys-to)
+                                     (<= sys-to sys-to-upper)
+                                     (not= sys-from sys-to))
+                            (.startRow out-rel)
+                            (doseq [^IRowCopier copier row-copiers]
+                              (.copyRow copier idx))
+                            (doseq [^IVectorWriter valid-from-wtr valid-from-wtrs]
+                              (.writeLong valid-from-wtr valid-from))
+                            (doseq [^IVectorWriter valid-to-wtr valid-to-wtrs]
+                              (.writeLong valid-to-wtr valid-to))
+                            (doseq [^IVectorWriter sys-from-wtr sys-from-wtrs]
+                              (.writeLong sys-from-wtr sys-from))
+                            (doseq [^IVectorWriter sys-to-wtr sys-to-wtrs]
+                              (.writeLong sys-to-wtr sys-to))
+                            (.endRow out-rel))))
+                      (.clear !new-ranges))
+
+                    :delete
+                    (let [r1 (Rectangle. (.getLong delete-valid-from-rdr idx) (.getLong delete-valid-to-rdr idx)
+                                         (.getLong sys-from-rdr idx) util/end-of-time-μs)
+                          itr (.listIterator !ranges)]
+                      (.add !new-ranges r1)
+                      (while (.hasNext itr)
+                        (let [r2 (.next itr)
+                              inner-itr (.listIterator !new-ranges)]
+                          (while (.hasNext inner-itr)
+                            (let [r1 (.next inner-itr)]
+                              (when (rectangle-intersect r1 r2)
+                                (.remove inner-itr)
+                                (run! #(.add inner-itr %) (rectangle-split r1 r2)))))))
+                      (doseq [i !new-ranges]
+                        (.add !ranges i))
+                      (.clear !new-ranges))))))))))))
+
+(deftype TrieCursor [^BufferAllocator allocator, arrow-leaves
+                     ^Iterator merge-tasks, ^ints leaf-idxs, ^ints current-arrow-page-idxs
+                     ^IFn row-picker
+                     col-names, ^Map col-preds, ^longs temporal-timestamps,
+                     params, ^IPersistentMap picker-state]
   ICursor
   (tryAdvance [_ c]
     (if (.hasNext merge-tasks)
@@ -569,7 +952,7 @@
           (letfn [(rel->leaf-ptr [leaf-ordinal ^RelationReader log-rdr]
                     (let [row-count (.rowCount log-rdr)
                           iid-rdr (.readerForName log-rdr "xt$iid")
-                          picker (point-point-row-picker out-rel log-rdr col-names temporal-timestamps)
+                          ^IntConsumer picker (row-picker out-rel log-rdr col-names temporal-timestamps picker-state)
 
                           is-valid-buf (ArrowBufPointer.)]
 
@@ -664,20 +1047,41 @@
                                                   LiveHashTrie$Leaf [:live {:leaf leaf, :live-table-wm live-table-wm}]))
                                               leaves)}))})))))
 
+;; The consumers for different leafs need to share some state so the logic of how to advance
+;; is correct. For example if the `skip-iid-ptr` gets set in one leaf consumer it should also affect
+;; the skipping in another leaf consumer.
+(defn- ->picker-state []
+  {:current-bounds (long-array 2)
+   :!ranges (LinkedList.)
+   :skip-iid-ptr (ArrowBufPointer.)
+   :prev-iid-ptr (ArrowBufPointer.)
+   :current-iid-ptr (ArrowBufPointer.)})
+
 (defn ->4r-cursor [^BufferAllocator allocator, ^ObjectStore obj-store, ^IBufferPool buffer-pool, ^IWatermark wm
                    table-name, col-names, ^longs temporal-range
-                   ^Map col-preds, params]
+                   ^Map col-preds, params, basis, scan-opts]
   (let [^ILiveTableWatermark live-table-wm (some-> (.liveIndex wm) (.liveTable table-name))
         {:keys [arrow-leaves ^List merge-tasks]} (read-tries obj-store buffer-pool table-name live-table-wm)]
     (try
-      (->PointPointCursor allocator arrow-leaves (.iterator merge-tasks)
-                          (int-array (cond-> (count arrow-leaves)
-                                       live-table-wm inc))
-                          (doto (int-array (count arrow-leaves))
-                            (Arrays/fill -1))
-                          col-names col-preds
-                          (temporal-range->temporal-timestamp temporal-range)
-                          params)
+      (->TrieCursor allocator arrow-leaves (.iterator merge-tasks)
+                    (int-array (cond-> (count arrow-leaves)
+                                 live-table-wm inc))
+                    (doto (int-array (count arrow-leaves))
+                      (Arrays/fill -1))
+                    (cond (at-point-point? scan-opts)
+                          point-point-row-picker
+
+                          (range-point-query? wm basis scan-opts)
+                          range-point-row-picker
+
+                          :else
+                          range-range-row-picker)
+
+                    col-names col-preds
+                    temporal-range
+                    params
+                    (->picker-state))
+
       (catch Throwable t
         (util/close (map :leaf-buf arrow-leaves))
         (throw t)))))
@@ -776,14 +1180,16 @@
                                        (nil? for-valid-time)
                                        (assoc :for-valid-time (if default-all-valid-time? [:all-time] [:at [:now :now]])))
                            [temporal-min-range temporal-max-range] (->temporal-min-max-range params basis scan-opts selects)]
-                       (if (at-point-point? scan-opts)
+                       (if true
                          (->4r-cursor allocator object-store buffer-pool
                                       watermark
                                       normalized-table-name
                                       (set/union content-col-names temporal-col-names)
-                                      (->temporal-range temporal-min-range temporal-max-range)
+                                      (->temporal-range params basis scan-opts selects)
                                       col-preds
-                                      params)
+                                      params
+                                      basis
+                                      scan-opts)
 
                          (let [current-row-ids (when (use-current-row-id-cache? watermark scan-opts basis temporal-col-names)
                                                  (get-current-row-ids watermark basis))]

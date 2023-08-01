@@ -71,19 +71,19 @@ cat
 query TI
 SELECT T1.col1, AVG(t1.col2) FROM t1 GROUP BY T1.col1
 ----
+30
+2000
 fish
 1000
 cat
 3000
-30
-2000
 
 query T
 SELECT t1.col1 FROM T1 WHERE t1.col1 IN ( T1.COL1 )
 ----
+30
 fish
 cat
-30
 
 query I
 SELECT teeone.col2 FROM t1 AS TEEoNE WHERE TEEone.col1 = ( SELECT t1.col1 FROM T1 WHERE t1.col1 = teeONe.cOL1 ) ORDER BY teeone."CoL2"
