@@ -65,45 +65,43 @@
             "name" : "struct"
           },
           "children" : [{
-            "name" : "a",
-            "nullable" : false,
-            "type" : {
-              "name" : "union",
-              "mode" : "Dense",
-              "typeIds" : [ ]
-            },
-            "children" : [{
-              "name" : "i64",
-              "nullable" : false,
-              "type" : {
-                "name" : "int",
-                "bitWidth" : 64,
-                "isSigned" : true
-              },
-              "children" : [ ]
-            }]
-          },{
             "name" : "xt$id",
             "nullable" : false,
             "type" : {
-              "name" : "union",
-              "mode" : "Dense",
-              "typeIds" : [ ]
+              "name" : "int",
+              "bitWidth" : 64,
+              "isSigned" : true
             },
-            "children" : [{
-              "name" : "uuid",
-              "nullable" : false,
-              "type" : {
-                "name" : "UuidType"
-              },
-              "children" : [ ],
-              "metadata" : [{
-                "value" : "uuid",
-                "key" : "ARROW:extension:name"
-              },{
-                "value" : "",
-                "key" : "ARROW:extension:metadata"
-              }]
+            "children" : [ ]
+          },{
+            "name" : "xt$tx_time",
+            "nullable" : false,
+            "type" : {
+              "name" : "timestamp",
+              "unit" : "MICROSECOND",
+              "timezone" : "UTC"
+            },
+            "children" : [ ]
+          },{
+            "name" : "xt$committed?",
+            "nullable" : false,
+            "type" : {
+              "name" : "bool"
+            },
+            "children" : [ ]
+          },{
+            "name" : "xt$error",
+            "nullable" : true,
+            "type" : {
+              "name" : "ClojureFormType"
+            },
+            "children" : [ ],
+            "metadata" : [{
+              "value" : "xt/clj-form",
+              "key" : "ARROW:extension:name"
+            },{
+              "value" : "",
+              "key" : "ARROW:extension:metadata"
             }]
           }]
         }]
@@ -143,27 +141,27 @@
     }]
   },
   "batches" : [{
-    "count" : 2,
+    "count" : 1,
     "columns" : [{
       "name" : "xt$iid",
-      "count" : 2,
-      "VALIDITY" : [1,1],
-      "DATA" : ["cb8815ee85f74c61a8032ea1c949cf8d","cb8815ee85f74c61a8032ea1c949cf8d"]
+      "count" : 1,
+      "VALIDITY" : [1],
+      "DATA" : ["a4e167a76a05add8a8654c169b07b044"]
     },{
       "name" : "xt$legacy_iid",
-      "count" : 2,
-      "VALIDITY" : [1,1],
-      "DATA" : ["0","0"]
+      "count" : 1,
+      "VALIDITY" : [1],
+      "DATA" : ["144115188075855872"]
     },{
       "name" : "xt$system_from",
-      "count" : 2,
-      "VALIDITY" : [1,1],
-      "DATA" : [1577923200000000,1577836800000000]
+      "count" : 1,
+      "VALIDITY" : [1],
+      "DATA" : [1577836800000000]
     },{
       "name" : "op",
-      "count" : 2,
-      "TYPE_ID" : [1,0],
-      "OFFSET" : [0,0],
+      "count" : 1,
+      "TYPE_ID" : [0],
+      "OFFSET" : [0],
       "children" : [{
         "name" : "put",
         "count" : 1,
@@ -183,43 +181,42 @@
           "count" : 1,
           "VALIDITY" : [1],
           "children" : [{
-            "name" : "a",
-            "count" : 1,
-            "TYPE_ID" : [0],
-            "OFFSET" : [0],
-            "children" : [{
-              "name" : "i64",
-              "count" : 1,
-              "VALIDITY" : [1],
-              "DATA" : ["1"]
-            }]
-          },{
             "name" : "xt$id",
             "count" : 1,
-            "TYPE_ID" : [0],
-            "OFFSET" : [0],
-            "children" : [{
-              "name" : "uuid",
-              "count" : 1,
-              "VALIDITY" : [1],
-              "DATA" : ["cb8815ee85f74c61a8032ea1c949cf8d"]
-            }]
+            "VALIDITY" : [1],
+            "DATA" : ["0"]
+          },{
+            "name" : "xt$tx_time",
+            "count" : 1,
+            "VALIDITY" : [1],
+            "DATA" : [1577836800000000]
+          },{
+            "name" : "xt$committed?",
+            "count" : 1,
+            "VALIDITY" : [1],
+            "DATA" : [1]
+          },{
+            "name" : "xt$error",
+            "count" : 1,
+            "VALIDITY" : [0],
+            "OFFSET" : [0,0],
+            "DATA" : [""]
           }]
         }]
       },{
         "name" : "delete",
-        "count" : 1,
-        "VALIDITY" : [1],
+        "count" : 0,
+        "VALIDITY" : [ ],
         "children" : [{
           "name" : "xt$valid_from",
-          "count" : 1,
-          "VALIDITY" : [1],
-          "DATA" : [1577923200000000]
+          "count" : 0,
+          "VALIDITY" : [ ],
+          "DATA" : [ ]
         },{
           "name" : "xt$valid_to",
-          "count" : 1,
-          "VALIDITY" : [1],
-          "DATA" : [253402300799999999]
+          "count" : 0,
+          "VALIDITY" : [ ],
+          "DATA" : [ ]
         }]
       },{
         "name" : "evict",

@@ -41,8 +41,8 @@
       (util/with-open [live-idx-tx (.startTx live-index (xtp/->TransactionInstant 0 (.toInstant #inst "2000")))
                        live-table-tx (.liveTable live-idx-tx "my-table")]
         (let [wp (IVectorPosition/build)]
-          (doseq [iid iids]
-            (.logPut live-table-tx (util/uuid->bytes iid) 0 0
+          (doseq [^UUID iid iids]
+            (.logPut live-table-tx (util/uuid->bytes iid) (.getMostSignificantBits iid) 0 0
                      #(.getPositionAndIncrement wp))))
 
         (.commit live-idx-tx)

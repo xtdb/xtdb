@@ -336,14 +336,14 @@ ORDER BY foo.xt$valid_from"
   (xt/submit-tx tu/*node* [[:sql "INSERT INTO t1(xt$id, data) VALUES (1, [2, 3])"]
                            [:sql "INSERT INTO t1(xt$id, data) VALUES (2, [5, 6, 7])"]])
 
-  (t/is (= [{:data [2 3]} {:data [5 6 7]}]
-           (xt/q tu/*node* "SELECT t1.data FROM t1")))
+  (t/is (= #{{:data [2 3]} {:data [5 6 7]}}
+           (set (xt/q tu/*node* "SELECT t1.data FROM t1"))))
 
   (xt/submit-tx tu/*node* [[:sql "INSERT INTO t2(xt$id, data) VALUES (1, [2, 3])"]
                            [:sql "INSERT INTO t2(xt$id, data) VALUES (2, ['dog', 'cat'])"]])
 
-  (t/is (= [{:data [2 3]} {:data ["dog" "cat"]}]
-           (xt/q tu/*node* "SELECT t2.data FROM t2"))))
+  (t/is (= #{{:data [2 3]} {:data ["dog" "cat"]}}
+           (set (xt/q tu/*node* "SELECT t2.data FROM t2")))))
 
 (t/deftest test-cross-join-ioobe-547
   (xt/submit-tx tu/*node* [[:sql "
@@ -368,13 +368,13 @@ VALUES(1, OBJECT ('foo': OBJECT('bibble': true), 'bar': OBJECT('baz': 1001)))"]]
                                  (throw (Exception. "boom")))]
                              [:call :tx-fn-fail]])
 
-    (t/is (= [{:tx-id 0, :tx-time (util/->zdt #inst "2020-01-01"), :committed? true}
-              {:tx-id 1, :tx-time (util/->zdt #inst "2020-01-02"), :committed? false}
-              {:tx-id 2, :tx-time (util/->zdt #inst "2020-01-03"), :committed? true}
-              {:tx-id 3, :tx-time (util/->zdt #inst "2020-01-04"), :committed? false}]
-             (xt/q tu/*node*
-                   '{:find [tx-id tx-time committed?]
-                     :where [($ :xt/txs {:xt/id tx-id, :xt/tx-time tx-time, :xt/committed? committed?})]})))
+    (t/is (= #{{:tx-id 0, :tx-time (util/->zdt #inst "2020-01-01"), :committed? true}
+               {:tx-id 1, :tx-time (util/->zdt #inst "2020-01-02"), :committed? false}
+               {:tx-id 2, :tx-time (util/->zdt #inst "2020-01-03"), :committed? true}
+               {:tx-id 3, :tx-time (util/->zdt #inst "2020-01-04"), :committed? false}}
+             (set (xt/q tu/*node*
+                        '{:find [tx-id tx-time committed?]
+                          :where [($ :xt/txs {:xt/id tx-id, :xt/tx-time tx-time, :xt/committed? committed?})]}))))
 
     (t/is (= [{:committed? false}]
              (xt/q tu/*node*
@@ -425,35 +425,35 @@ VALUES(1, OBJECT ('foo': OBJECT('bibble': true), 'bar': OBJECT('baz': 1001)))"]]
                  [:sql "INSERT INTO bar (xt$id, a) VALUES (1, 3)"]
                  [:sql "INSERT INTO bar (xt$id, b) VALUES (2, 4)"]])
 
-  (t/is (= [{:a 1, :xt$id 1} {:b 2, :xt$id 2}]
-           (xt/q tu/*node* "SELECT * FROM foo")))
+  (t/is (= #{{:a 1, :xt$id 1} {:b 2, :xt$id 2}}
+           (set (xt/q tu/*node* "SELECT * FROM foo"))))
 
   (t/is (=
-         [{:a 1, :xt$id 1, :a:1 3, :xt$id:1 1}
-          {:a 1, :xt$id 1, :b:1 4, :xt$id:1 2}
-          {:b 2, :xt$id 2, :a:1 3, :xt$id:1 1}
-          {:b 2, :xt$id 2, :b:1 4, :xt$id:1 2}]
-         (xt/q tu/*node* "SELECT * FROM foo, bar")))
+         #{{:a 1, :xt$id 1, :a:1 3, :xt$id:1 1}
+           {:a 1, :xt$id 1, :b:1 4, :xt$id:1 2}
+           {:b 2, :xt$id 2, :a:1 3, :xt$id:1 1}
+           {:b 2, :xt$id 2, :b:1 4, :xt$id:1 2}}
+         (set (xt/q tu/*node* "SELECT * FROM foo, bar"))))
 
   (t/is (=
-         [{:xt$id 1, :a 3, :xt$id:1 1, :a:1 1}
-          {:xt$id 2, :b 4, :xt$id:1 1, :a:1 1}
-          {:xt$id 1, :a 3, :xt$id:1 2, :b:1 2}
-          {:xt$id 2, :b 4, :xt$id:1 2, :b:1 2}]
-         (xt/q tu/*node* "SELECT bar.*, foo.* FROM foo, bar")))
+         #{{:xt$id 1, :a 3, :xt$id:1 1, :a:1 1}
+           {:xt$id 2, :b 4, :xt$id:1 1, :a:1 1}
+           {:xt$id 1, :a 3, :xt$id:1 2, :b:1 2}
+           {:xt$id 2, :b 4, :xt$id:1 2, :b:1 2}}
+         (set (xt/q tu/*node* "SELECT bar.*, foo.* FROM foo, bar"))))
 
   (t/is (=
-         [{:a 1, :xt$id 1, :a:1 3, :xt$id:1 1}
-          {:a 1, :xt$id 1, :b:1 4, :xt$id:1 2}
-          {:b 2, :xt$id 2, :a:1 3, :xt$id:1 1}
-          {:b 2, :xt$id 2, :b:1 4, :xt$id:1 2}]
-         (xt/q tu/*node* "SELECT * FROM (SELECT * FROM foo, bar) AS baz")))
+         #{{:a 1, :xt$id 1, :a:1 3, :xt$id:1 1}
+           {:a 1, :xt$id 1, :b:1 4, :xt$id:1 2}
+           {:b 2, :xt$id 2, :a:1 3, :xt$id:1 1}
+           {:b 2, :xt$id 2, :b:1 4, :xt$id:1 2}}
+         (set (xt/q tu/*node* "SELECT * FROM (SELECT * FROM foo, bar) AS baz"))))
 
   (xt/submit-tx tu/*node*
                 [[:sql "INSERT INTO bing (SELECT * FROM foo)"]])
 
-  (t/is (= [{:a 1, :xt$id 1} {:b 2, :xt$id 2}]
-           (xt/q tu/*node* "SELECT * FROM bing"))))
+  (t/is (= #{{:a 1, :xt$id 1} {:b 2, :xt$id 2}}
+           (set (xt/q tu/*node* "SELECT * FROM bing")))))
 
 (deftest test-scan-all-table-col-names
   (t/testing "testing scan.allTableColNames combines table info from both live and past chunks"
@@ -462,17 +462,17 @@ VALUES(1, OBJECT ('foo': OBJECT('bibble': true), 'bar': OBJECT('baz': 1001)))"]]
                                  [:put :bar {:xt/id "bar2" :b 2}]])
         (tu/then-await-tx tu/*node*))
 
-      (tu/finish-chunk! tu/*node*)
+    (tu/finish-chunk! tu/*node*)
 
-      (xt/submit-tx tu/*node* [[:put :foo {:xt/id "foo2" :c 3}]
-                               [:put :baz {:xt/id "foo1" :a 4}]])
+    (xt/submit-tx tu/*node* [[:put :foo {:xt/id "foo2" :c 3}]
+                             [:put :baz {:xt/id "foo1" :a 4}]])
 
-      (t/is (= [{:a 1, :xt$id "foo1"} {:xt$id "foo2", :c 3}]
-               (xt/q tu/*node* "SELECT * FROM foo")))
-      (t/is (= [{:xt$id "bar1"} {:b 2, :xt$id "bar2"}]
-               (xt/q tu/*node* "SELECT * FROM bar")))
-      (t/is (= [{:a 4, :xt$id "foo1"}]
-               (xt/q tu/*node* "SELECT * FROM baz")))))
+    (t/is (= [{:a 1, :xt$id "foo1"} {:xt$id "foo2", :c 3}]
+             (xt/q tu/*node* "SELECT * FROM foo")))
+    (t/is (= [{:xt$id "bar1"} {:b 2, :xt$id "bar2"}]
+             (xt/q tu/*node* "SELECT * FROM bar")))
+    (t/is (= [{:a 4, :xt$id "foo1"}]
+             (xt/q tu/*node* "SELECT * FROM baz")))))
 
 (deftest test-erase-after-delete-2607
   (t/testing "general case"

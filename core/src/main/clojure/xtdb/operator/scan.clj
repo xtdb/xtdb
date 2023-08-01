@@ -8,6 +8,7 @@
             [xtdb.expression :as expr]
             [xtdb.expression.metadata :as expr.meta]
             [xtdb.expression.walk :as expr.walk]
+            xtdb.indexer.live-index
             [xtdb.logical-plan :as lp]
             [xtdb.metadata :as meta]
             [xtdb.temporal :as temporal]
@@ -15,13 +16,15 @@
             [xtdb.util :as util]
             [xtdb.vector :as vec]
             [xtdb.vector.reader :as vr]
+            [xtdb.vector.writer :as vw]
             xtdb.watermark)
-  (:import (clojure.lang IPersistentSet MapEntry)
-           (java.util HashMap LinkedList List Map Queue Set)
+  (:import (clojure.lang IFn IPersistentSet MapEntry)
+           (java.util HashMap Iterator LinkedList List Map Queue Set)
            (java.util.function BiFunction Consumer)
            java.util.stream.IntStream
            org.apache.arrow.memory.BufferAllocator
-           (org.apache.arrow.vector BigIntVector VarBinaryVector)
+           [org.apache.arrow.memory.util ArrowBufPointer]
+           (org.apache.arrow.vector BigIntVector NullVector VarBinaryVector)
            (org.apache.arrow.vector.complex ListVector StructVector)
            (org.roaringbitmap IntConsumer RoaringBitmap)
            org.roaringbitmap.buffer.MutableRoaringBitmap
@@ -29,9 +32,12 @@
            xtdb.api.protocols.TransactionInstant
            xtdb.buffer_pool.IBufferPool
            xtdb.ICursor
+           xtdb.indexer.live_index.ILiveTableWatermark
            (xtdb.metadata IMetadataManager ITableMetadata)
+           org.apache.arrow.vector.BaseFixedWidthVector
            xtdb.operator.IRelationSelector
-           (xtdb.vector RelationReader IVectorReader)
+           (xtdb.trie LiveHashTrie$Leaf)
+           (xtdb.vector IVectorReader RelationReader)
            (xtdb.watermark IWatermark IWatermarkSource Watermark)))
 
 (s/def ::table symbol?)
@@ -139,10 +145,10 @@
     (some-> current-cursor util/try-close)))
 
 (defn- ->content-chunks ^xtdb.ICursor [^BufferAllocator allocator
-                                        ^IMetadataManager metadata-mgr
-                                        ^IBufferPool buffer-pool
-                                        table-name content-col-names
-                                        metadata-pred]
+                                       ^IMetadataManager metadata-mgr
+                                       ^IBufferPool buffer-pool
+                                       table-name content-col-names
+                                       metadata-pred]
   (ContentChunkCursor. allocator metadata-mgr buffer-pool table-name content-col-names
                        (LinkedList. (or (meta/matching-chunks metadata-mgr table-name metadata-pred) []))
                        nil))
@@ -248,11 +254,11 @@
             (.add sel idx)))))
 
     (vr/rel-reader (concat temporal-rel
-                             (.select content-rel (.toArray (.build sel)))))))
+                           (.select content-rel (.toArray (.build sel)))))))
 
 (defn- remove-col ^xtdb.vector.RelationReader [^RelationReader rel, ^String col-name]
   (vr/rel-reader (remove #(= col-name (.getName ^IVectorReader %)) rel)
-                   (.rowCount rel)))
+                 (.rowCount rel)))
 
 (defn- unnormalize-column-names ^xtdb.vector.RelationReader [^RelationReader rel col-names]
   (vr/rel-reader
@@ -399,6 +405,33 @@
        (or (nil? for-system-time)
            (scan-op-at-now for-system-time))))
 
+(defn- scan-op-point? [scan-op]
+  (= :at (first scan-op)))
+
+(defn- at-valid-time-point? [{:keys [for-valid-time for-system-time]}]
+  (and (or (nil? for-valid-time)
+           (scan-op-point? for-valid-time))
+       (or (nil? for-system-time)
+           (scan-op-at-now for-system-time))))
+
+(defn- point-now-query? [^IWatermark watermark basis scan-opts]
+  (and
+   (.txBasis watermark)
+   (= (:tx basis)
+      (.txBasis watermark))
+   (at-valid-time-point? scan-opts)
+   (>= (util/instant->micros (:current-time basis))
+       (util/instant->micros (:system-time (:tx basis))))))
+
+(defn- at-point-point? [{:keys [for-valid-time for-system-time]}]
+  (and (or (nil? for-valid-time)
+           (scan-op-point? for-valid-time))
+       (or (nil? for-system-time)
+           (scan-op-point? for-system-time))))
+
+(defn- point-point-query? [^IWatermark _watermark _basis scan-opts]
+  (at-point-point? scan-opts))
+
 (defn use-current-row-id-cache? [^IWatermark watermark scan-opts basis temporal-col-names]
   (and
    (.txBasis watermark)
@@ -420,6 +453,379 @@
         wm-tx (or tx after-tx)]
     (with-open [^Watermark wm (.openWatermark wm-src wm-tx)]
       (.allTableColNames scan-emitter wm))))
+
+(defn ->temporal-range [^longs temporal-min-range, ^longs temporal-max-range]
+  (let [res (long-array 4)]
+    (aset res 0 (aget temporal-max-range temporal/app-time-start-idx))
+    (aset res 1 (aget temporal-min-range temporal/app-time-end-idx))
+    (aset res 2 (aget temporal-max-range temporal/system-time-start-idx))
+    (aset res 3 (aget temporal-min-range temporal/system-time-end-idx))
+    res))
+
+(defn temporal-range->temporal-timestamp [^longs temporal-range]
+  (let [res (long-array 2)]
+    (aset res 0 (aget temporal-range 0))
+    (aset res 1 (aget temporal-range 2))
+    res))
+
+(defn point-now-selection ^longs [^BufferAllocator _allocator ^RelationReader leaf-rel ^longs temporal-timestamps]
+  (let [leaf-row-count (.rowCount leaf-rel)
+        iid-rdr (.readerForName leaf-rel "xt$iid")
+        op-rdr (.readerForName leaf-rel "op")
+        put-rdr (.legReader op-rdr :put)
+        put-valid-from-rdr (.structKeyReader put-rdr "xt$valid_from")
+        put-valid-to-rdr (.structKeyReader put-rdr "xt$valid_to")
+
+        delete-rdr (.legReader op-rdr :delete)
+        delete-valid-from-rdr (.structKeyReader delete-rdr "xt$valid_from")
+        delete-valid-to-rdr (.structKeyReader delete-rdr "xt$valid_to")
+
+        valid-time (aget temporal-timestamps 0)
+
+        current-iid-ptr (ArrowBufPointer.)
+        cmp-ptr (ArrowBufPointer.)
+        !selection (IntStream/builder)]
+    (letfn [(next-iid [idx]
+              (loop [idx idx]
+                (if (= idx leaf-row-count)
+                  idx
+                  (if (= current-iid-ptr (.getPointer iid-rdr idx cmp-ptr))
+                    (recur (inc idx))
+                    idx))))]
+      (loop [idx 0]
+        (when-not (= idx leaf-row-count)
+          (case (.getLeg op-rdr idx)
+            :put
+            (if (and (<= (.getLong put-valid-from-rdr idx) valid-time)
+                     (< valid-time (.getLong put-valid-to-rdr idx)))
+              (do (.getPointer iid-rdr idx current-iid-ptr)
+                  (.add !selection idx)
+                  (recur (long (next-iid idx))))
+              (recur (long (inc idx))))
+
+            :delete
+            (if (and (<= (.getLong delete-valid-from-rdr idx) valid-time)
+                     (< valid-time (.getLong delete-valid-to-rdr idx)))
+              (do (.getPointer iid-rdr idx current-iid-ptr)
+                  (recur (long (next-iid idx))))
+              (recur (long (inc idx))))
+
+            :evict
+            (do (.getPointer iid-rdr idx current-iid-ptr)
+                (recur (long (next-iid idx))))))))
+    (let [selection (.toArray (.build !selection))]
+      {:selection selection
+       :non-closables {:valid-from-rdr (.select put-valid-from-rdr selection)
+                       :valid-to-rdr (.select put-valid-to-rdr selection)}})))
+
+(defn point-point-selection ^longs [^BufferAllocator _allocator ^RelationReader leaf-rel ^longs temporal-timestamps]
+  (let [leaf-row-count (.rowCount leaf-rel)
+        iid-rdr (.readerForName leaf-rel "xt$iid")
+        sys-from-rdr (.readerForName leaf-rel "xt$system_from")
+        op-rdr (.readerForName leaf-rel "op")
+        put-rdr (.legReader op-rdr :put)
+        put-valid-from-rdr (.structKeyReader put-rdr "xt$valid_from")
+        put-valid-to-rdr (.structKeyReader put-rdr "xt$valid_to")
+
+        delete-rdr (.legReader op-rdr :delete)
+        delete-valid-from-rdr (.structKeyReader delete-rdr "xt$valid_from")
+        delete-valid-to-rdr (.structKeyReader delete-rdr "xt$valid_to")
+
+        valid-time (aget temporal-timestamps 0)
+        system-time (aget temporal-timestamps 1)
+
+        current-iid-ptr (ArrowBufPointer.)
+        cmp-ptr (ArrowBufPointer.)
+        !selection (IntStream/builder)]
+    (letfn [(next-iid [idx]
+              (loop [idx idx]
+                (if (= idx leaf-row-count)
+                  idx
+                  (if (= current-iid-ptr (.getPointer iid-rdr idx cmp-ptr))
+                    (recur (inc idx))
+                    idx))))]
+      (loop [idx 0]
+        (when-not (= idx leaf-row-count)
+          (if (<= (.getLong sys-from-rdr idx) system-time)
+            (case (.getLeg op-rdr idx)
+              :put
+              (if (and (<= (.getLong put-valid-from-rdr idx) valid-time)
+                       (< valid-time (.getLong put-valid-to-rdr idx)))
+                (do (.getPointer iid-rdr idx current-iid-ptr)
+                    (.add !selection idx)
+                    (recur (long (next-iid idx))))
+                (recur (long (inc idx))))
+
+              :delete
+              (if (and (<= (.getLong delete-valid-from-rdr idx) valid-time)
+                       (< valid-time (.getLong delete-valid-to-rdr idx)))
+                (do (.getPointer iid-rdr idx current-iid-ptr)
+                    (recur (long (next-iid idx))))
+                (recur (long (inc idx))))
+
+              :evict
+              (do (.getPointer iid-rdr idx current-iid-ptr)
+                  (recur (long (next-iid idx)))))
+            (recur (long (inc idx)))))))
+    (let [selection (.toArray (.build !selection))]
+      {:selection selection
+       :non-closables {:valid-from-rdr (.select put-valid-from-rdr selection)
+                       :valid-to-rdr (.select put-valid-to-rdr selection)}})))
+
+(defn point-now-selection-with-valid-times
+  ^longs [^BufferAllocator allocator, ^RelationReader leaf-rel ^longs temporal-timestamps]
+  (let [leaf-row-count (.rowCount leaf-rel)
+        iid-rdr (.readerForName leaf-rel "xt$iid")
+        op-rdr (.readerForName leaf-rel "op")
+        put-rdr (.legReader op-rdr :put)
+        put-valid-from-rdr (.structKeyReader put-rdr "xt$valid_from")
+        put-valid-to-rdr (.structKeyReader put-rdr "xt$valid_to")
+
+        delete-rdr (.legReader op-rdr :delete)
+        delete-valid-from-rdr (.structKeyReader delete-rdr "xt$valid_from")
+        delete-valid-to-rdr (.structKeyReader delete-rdr "xt$valid_to")
+
+        valid-time (aget temporal-timestamps 0)
+
+        current-iid-ptr (ArrowBufPointer.)
+        cmp-ptr (ArrowBufPointer.)
+        !selection (IntStream/builder)]
+
+    (util/with-close-on-catch [^BaseFixedWidthVector valid-from-vec
+                               (.createVector (types/col-type->field "xt$valid_from" types/temporal-col-type) allocator)
+                               ^BaseFixedWidthVector valid-to-vec
+                               (.createVector (types/col-type->field "xt$valid_to" types/temporal-col-type) allocator)]
+      (let [valid-from-wrt (vw/->writer valid-from-vec)
+            valid-to-wrt (vw/->writer valid-to-vec)
+            current-bounds (long-array 2)]
+
+        (letfn [(reset-current-bounds []
+                  (aset current-bounds 0 Long/MIN_VALUE)
+                  (aset current-bounds 1 Long/MAX_VALUE))
+                (next-iid [idx]
+                  (reset-current-bounds)
+                  (loop [idx idx]
+                    (if (= idx leaf-row-count)
+                      idx
+                      (if (= current-iid-ptr (.getPointer iid-rdr idx cmp-ptr))
+                        (recur (inc idx))
+                        idx))))
+                (move-index [idx ^long valid-from ^long valid-to]
+                  (let [new-idx (inc idx)]
+                    ;; this checks if went over an iid boundary but did not find anything
+                    (if-not
+                        (and (< new-idx leaf-row-count) ;; TODO avoid double check
+                             (= (.getPointer iid-rdr idx cmp-ptr)
+                                (.getPointer iid-rdr new-idx current-iid-ptr)))
+                      (reset-current-bounds)
+                      (if (< valid-to valid-time)
+                        (when (< (aget current-bounds 0) valid-to)
+                          (aset current-bounds 0 valid-to))
+                        (when (< valid-from (aget current-bounds 1))
+                          (aset current-bounds 1 valid-from))))
+                    new-idx))]
+          (reset-current-bounds)
+          (loop [idx 0]
+            (when-not (= idx leaf-row-count)
+              (case (.getLeg op-rdr idx)
+                :put
+                (let [valid-from (.getLong put-valid-from-rdr idx)
+                      valid-to (.getLong put-valid-to-rdr idx)]
+                  (if (and (<= valid-from valid-time)
+                           (< valid-time valid-to))
+                    (do (.getPointer iid-rdr idx current-iid-ptr)
+                        (.add !selection idx)
+                        (.writeLong valid-from-wrt (Long/max valid-from (aget current-bounds 0)))
+                        (.writeLong valid-to-wrt (Long/min valid-to (aget current-bounds 1)))
+                        (recur (long (next-iid idx))))
+                    (recur (long (move-index idx valid-from valid-to)))))
+
+                :delete
+                (let [valid-from (.getLong delete-valid-from-rdr idx)
+                      valid-to (.getLong delete-valid-to-rdr idx)]
+                  (if (and (<= valid-from valid-time)
+                           (< valid-time valid-to))
+                    (do
+                      (.getPointer iid-rdr idx current-iid-ptr)
+                      (recur (long (next-iid idx))))
+                    (recur (long (move-index idx valid-from valid-to)))))
+                :evict
+                (do (.getPointer iid-rdr idx current-iid-ptr)
+                    (recur (long (next-iid idx))))))))
+        (.syncValueCount valid-from-wrt)
+        (.syncValueCount valid-to-wrt)
+        {:selection (.toArray (.build !selection))
+         :closables {:valid-from-rdr (vr/vec->reader valid-from-vec)
+                     :valid-to-rdr (vr/vec->reader valid-to-vec)}}))))
+
+(defn point-point-selection-with-valid-times
+  ^longs [^BufferAllocator allocator, ^RelationReader leaf-rel ^longs temporal-timestamps]
+  (let [leaf-row-count (.rowCount leaf-rel)
+        iid-rdr (.readerForName leaf-rel "xt$iid")
+        sys-from-rdr (.readerForName leaf-rel "xt$system_from")
+        op-rdr (.readerForName leaf-rel "op")
+        put-rdr (.legReader op-rdr :put)
+        put-valid-from-rdr (.structKeyReader put-rdr "xt$valid_from")
+        put-valid-to-rdr (.structKeyReader put-rdr "xt$valid_to")
+
+        delete-rdr (.legReader op-rdr :delete)
+        delete-valid-from-rdr (.structKeyReader delete-rdr "xt$valid_from")
+        delete-valid-to-rdr (.structKeyReader delete-rdr "xt$valid_to")
+
+        valid-time (aget temporal-timestamps 0)
+        system-time (aget temporal-timestamps 1)
+
+        current-iid-ptr (ArrowBufPointer.)
+        cmp-ptr (ArrowBufPointer.)
+        !selection (IntStream/builder)]
+
+    (util/with-close-on-catch [^BaseFixedWidthVector valid-from-vec
+                               (.createVector (types/col-type->field "xt$valid_from" types/temporal-col-type) allocator)
+                               ^BaseFixedWidthVector valid-to-vec
+                               (.createVector (types/col-type->field "xt$valid_to" types/temporal-col-type) allocator)]
+      (let [valid-from-wrt (vw/->writer valid-from-vec)
+            valid-to-wrt (vw/->writer valid-to-vec)
+            current-bounds (long-array 2)]
+
+        (letfn [(reset-current-bounds []
+                  (aset current-bounds 0 Long/MIN_VALUE)
+                  (aset current-bounds 1 Long/MAX_VALUE))
+                (next-iid [idx]
+                  (reset-current-bounds)
+                  (loop [idx idx]
+                    (if (= idx leaf-row-count)
+                      idx
+                      (if (= current-iid-ptr (.getPointer iid-rdr idx cmp-ptr))
+                        (recur (inc idx))
+                        idx))))
+                (move-index [idx ^long valid-from ^long valid-to]
+                  (let [new-idx (inc idx)]
+                    ;; this checks if went over an iid boundary but did not find anything
+                    (if-not (and (< new-idx leaf-row-count) ;; TODO avoid double check
+                                 (= (.getPointer iid-rdr idx cmp-ptr)
+                                    (.getPointer iid-rdr new-idx current-iid-ptr)))
+                      (reset-current-bounds)
+                      (if (< valid-to valid-time)
+                        (when (< (aget current-bounds 0) valid-to)
+                          (aset current-bounds 0 valid-to))
+                        (when (< valid-from (aget current-bounds 1))
+                          (aset current-bounds 1 valid-from))))
+                    new-idx))]
+          (reset-current-bounds)
+          (loop [idx 0]
+            (when-not (= idx leaf-row-count)
+              (if (<= (.getLong sys-from-rdr idx) system-time)
+                (case (.getLeg op-rdr idx)
+                  :put
+                  (let [valid-from (.getLong put-valid-from-rdr idx)
+                        valid-to (.getLong put-valid-to-rdr idx)]
+                    (if (and (<= valid-from valid-time)
+                             (< valid-time valid-to))
+                      (do (.getPointer iid-rdr idx current-iid-ptr)
+                          (.add !selection idx)
+                          (.writeLong valid-from-wrt (Long/max valid-from (aget current-bounds 0)))
+                          (.writeLong valid-to-wrt (Long/min valid-to (aget current-bounds 1)))
+                          (recur (long (next-iid idx))))
+                      (recur (long (move-index idx valid-from valid-to)))))
+
+                  :delete
+                  (let [valid-from (.getLong delete-valid-from-rdr idx)
+                        valid-to (.getLong delete-valid-to-rdr idx)]
+                    (if (and (<= valid-from valid-time)
+                             (< valid-time valid-to))
+                      (do
+                        (.getPointer iid-rdr idx current-iid-ptr)
+                        (recur (long (next-iid idx))))
+                      (recur (long (move-index idx valid-from valid-to)))))
+                  :evict
+                  (do (.getPointer iid-rdr idx current-iid-ptr)
+                      (recur (long (next-iid idx)))))
+                (recur (long (inc idx)))))))
+        (.syncValueCount valid-from-wrt)
+        (.syncValueCount valid-to-wrt)
+        {:selection (.toArray (.build !selection))
+         :closables {:valid-from-rdr (vr/vec->reader valid-from-vec)
+                     :valid-to-rdr (vr/vec->reader valid-to-vec)}}))))
+
+
+(deftype PointPointCursor [^BufferAllocator allocator, ^RelationReader live-rel, ^Iterator leaves,
+                           col-names, ^Map col-preds, ^longs temporal-timestamps,
+                           ^IFn selection-fn
+                           params]
+  ICursor
+  (tryAdvance [_ c]
+    (if (.hasNext leaves)
+      (let [^LiveHashTrie$Leaf leaf (.next leaves)
+            leaf-rel (.select live-rel (.data leaf))
+            legacy-iid-rdr (.readerForName leaf-rel "xt$legacy_iid")
+            sys-from-rdr (.readerForName leaf-rel "xt$system_from")
+            op-rdr (.readerForName leaf-rel "op")
+            put-rdr (.legReader op-rdr :put)
+            doc-rdr (.structKeyReader put-rdr "xt$doc")
+
+            {:keys [^ints selection closables non-closables]}
+            (selection-fn allocator leaf-rel temporal-timestamps)]
+
+        (try
+          (let [{:keys [^IVectorReader valid-from-rdr ^IVectorReader valid-to-rdr]}
+                (merge closables non-closables)
+
+                out-rel (vr/rel-reader
+                         (for [col-name col-names
+                               :let [normalized-name (util/str->normal-form-str col-name)
+                                     rdr (case normalized-name
+                                           "_iid" (.select legacy-iid-rdr selection)
+                                           "xt$system_from"  (.select sys-from-rdr selection)
+                                           "xt$system_to" (vr/vec->reader (doto (NullVector. "xt$system_to")
+                                                                            (.setValueCount (alength selection))))
+                                           "xt$valid_from" valid-from-rdr
+                                           "xt$valid_to" valid-to-rdr
+                                           (some-> (.structKeyReader doc-rdr normalized-name)
+                                                   (.select selection)))]
+                               :when rdr]
+                           (.withName rdr col-name))
+                         (alength selection))]
+            (.accept c (-> out-rel
+                           (vr/with-absent-cols allocator col-names)
+
+                           (as-> rel (reduce (fn [^RelationReader rel, ^IRelationSelector col-pred]
+                                               (.select rel (.select col-pred allocator rel params)))
+                                             rel
+                                             (vals col-preds))))))
+          (finally
+            (run! util/close (vals closables))))
+        true)
+      false))
+
+  (close [_]
+    ;; TODO convince ourselves there's nothing to close here
+    ))
+
+(defn ->4r-cursor [^BufferAllocator allocator, ^IBufferPool buffer-pool, ^IWatermark wm
+                   table-name, col-names, ^longs temporal-range
+                   ^Map col-preds, params, scan-opts, basis]
+  (let [^ILiveTableWatermark  live-table-wm (some-> (.liveIndex wm) (.liveTable table-name))
+        valid-time-cols? (seq (set/intersection col-names #{"xt$valid_to" "xt$valid_from" "xt/valid-to" "xt/valid-from"}))]
+    (->PointPointCursor allocator
+                        (some-> live-table-wm .liveRelation) (.iterator ^Iterable (vec (some-> live-table-wm .liveTrie .leaves)))
+                        col-names col-preds
+                        (temporal-range->temporal-timestamp temporal-range)
+                        (cond
+                          (and valid-time-cols? (point-now-query? wm basis scan-opts))
+                          point-now-selection-with-valid-times
+
+                          (and valid-time-cols? (point-point-query? wm basis scan-opts))
+                          point-point-selection-with-valid-times
+
+                          (point-now-query? wm basis scan-opts)
+                          point-now-selection
+
+                          (point-point-query? wm basis scan-opts)
+                          point-point-selection)
+                        params)))
+
+(defn no-finished-chunks? [^IMetadataManager metadata-mgr]
+  (nil? (seq (.chunksMetadata metadata-mgr))))
 
 (defmethod ig/prep-key ::scan-emitter [_ opts]
   (merge opts
@@ -462,7 +868,7 @@
         (->> scan-cols
              (into {} (map (juxt identity ->col-type))))))
 
-    (emitScan [_ {:keys [columns], {:keys [table for-valid-time] :as scan-opts} :scan-opts} scan-col-types param-types]
+    (emitScan [_ {:keys [columns], {:keys [table for-valid-time] :as scan-opts} :scan-opts :as scan} scan-col-types param-types]
       (let [col-names (->> columns
                            (into [] (comp (map (fn [[col-type arg]]
                                                  (case col-type
@@ -517,20 +923,32 @@
                            scan-opts (cond-> scan-opts
                                        (nil? for-valid-time)
                                        (assoc :for-valid-time (if default-all-valid-time? [:all-time] [:at [:now :now]])))
-                           [temporal-min-range temporal-max-range] (->temporal-min-max-range params basis scan-opts selects)
-                           current-row-ids (when (use-current-row-id-cache? watermark scan-opts basis temporal-col-names)
-                                             (get-current-row-ids watermark basis))]
-                       (-> (ScanCursor. allocator metadata-mgr watermark
-                                        content-col-names temporal-col-names col-preds
-                                        temporal-min-range temporal-max-range current-row-ids
-                                        (util/->concat-cursor (->content-chunks allocator metadata-mgr buffer-pool
-                                                                                normalized-table-name normalized-content-col-names
-                                                                                metadata-pred)
-                                                              (some-> (.liveChunk watermark)
-                                                                      (.liveTable normalized-table-name)
-                                                                      (.liveBlocks normalized-content-col-names metadata-pred)))
-                                        params)
-                           (coalesce/->coalescing-cursor allocator))))}))))
+                           [temporal-min-range temporal-max-range] (->temporal-min-max-range params basis scan-opts selects)]
+                       (if (and (at-point-point? scan-opts)
+                                (no-finished-chunks? metadata-mgr))
+                         (->4r-cursor allocator buffer-pool
+                                      watermark
+                                      normalized-table-name
+                                      (set/union content-col-names temporal-col-names)
+                                      (->temporal-range temporal-min-range temporal-max-range)
+                                      col-preds
+                                      params
+                                      scan-opts
+                                      basis)
+
+                         (let [current-row-ids (when (use-current-row-id-cache? watermark scan-opts basis temporal-col-names)
+                                                 (get-current-row-ids watermark basis))]
+                           (-> (ScanCursor. allocator metadata-mgr watermark
+                                            content-col-names temporal-col-names col-preds
+                                            temporal-min-range temporal-max-range current-row-ids
+                                            (util/->concat-cursor (->content-chunks allocator metadata-mgr buffer-pool
+                                                                                    normalized-table-name normalized-content-col-names
+                                                                                    metadata-pred)
+                                                                  (some-> (.liveChunk watermark)
+                                                                          (.liveTable normalized-table-name)
+                                                                          (.liveBlocks normalized-content-col-names metadata-pred)))
+                                            params)
+                               (coalesce/->coalescing-cursor allocator))))))}))))
 
 (defmethod lp/emit-expr :scan [scan-expr {:keys [^IScanEmitter scan-emitter scan-col-types, param-types]}]
   (.emitScan scan-emitter scan-expr scan-col-types param-types))

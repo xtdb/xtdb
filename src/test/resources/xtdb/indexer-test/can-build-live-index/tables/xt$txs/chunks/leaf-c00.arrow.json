@@ -65,45 +65,43 @@
             "name" : "struct"
           },
           "children" : [{
-            "name" : "b",
-            "nullable" : false,
-            "type" : {
-              "name" : "union",
-              "mode" : "Dense",
-              "typeIds" : [ ]
-            },
-            "children" : [{
-              "name" : "i64",
-              "nullable" : false,
-              "type" : {
-                "name" : "int",
-                "bitWidth" : 64,
-                "isSigned" : true
-              },
-              "children" : [ ]
-            }]
-          },{
             "name" : "xt$id",
             "nullable" : false,
             "type" : {
-              "name" : "union",
-              "mode" : "Dense",
-              "typeIds" : [ ]
+              "name" : "int",
+              "bitWidth" : 64,
+              "isSigned" : true
             },
-            "children" : [{
-              "name" : "uuid",
-              "nullable" : false,
-              "type" : {
-                "name" : "UuidType"
-              },
-              "children" : [ ],
-              "metadata" : [{
-                "value" : "uuid",
-                "key" : "ARROW:extension:name"
-              },{
-                "value" : "",
-                "key" : "ARROW:extension:metadata"
-              }]
+            "children" : [ ]
+          },{
+            "name" : "xt$tx_time",
+            "nullable" : false,
+            "type" : {
+              "name" : "timestamp",
+              "unit" : "MICROSECOND",
+              "timezone" : "UTC"
+            },
+            "children" : [ ]
+          },{
+            "name" : "xt$committed?",
+            "nullable" : false,
+            "type" : {
+              "name" : "bool"
+            },
+            "children" : [ ]
+          },{
+            "name" : "xt$error",
+            "nullable" : true,
+            "type" : {
+              "name" : "ClojureFormType"
+            },
+            "children" : [ ],
+            "metadata" : [{
+              "value" : "xt/clj-form",
+              "key" : "ARROW:extension:name"
+            },{
+              "value" : "",
+              "key" : "ARROW:extension:metadata"
             }]
           }]
         }]
@@ -143,67 +141,66 @@
     }]
   },
   "batches" : [{
-    "count" : 3,
+    "count" : 6,
     "columns" : [{
       "name" : "xt$iid",
-      "count" : 3,
-      "VALIDITY" : [1,1,1],
-      "DATA" : ["424f5622c8264deda5dbe2144d665c38","424f5622c8264deda5dbe2144d665c38","424f5622c8264deda5dbe2144d665c38"]
+      "count" : 6,
+      "VALIDITY" : [1,1,1,1,1,1],
+      "DATA" : ["2d9400fe884f154caa33862ea52eac95","4f109710492db95684cceb0d4f906c4a","657188d6a2a8753f6a2ef42bee7c12d8","88a681ae37728a5dd25693aaf1a8808e","a4e167a76a05add8a8654c169b07b044","d088c719d195af87f0012cb3a60c804c"]
     },{
       "name" : "xt$legacy_iid",
-      "count" : 3,
-      "VALIDITY" : [1,1,1],
-      "DATA" : ["72057594037927936","72057594037927936","72057594037927936"]
+      "count" : 6,
+      "VALIDITY" : [1,1,1,1,1,1],
+      "DATA" : ["864691128455135232","936748722493063168","504403158265495552","360287970189639680","144115188075855872","1008806316530991104"]
     },{
       "name" : "xt$system_from",
-      "count" : 3,
-      "VALIDITY" : [1,1,1],
-      "DATA" : [1578009600000000,1577923200000000,1577836800000000]
+      "count" : 6,
+      "VALIDITY" : [1,1,1,1,1,1],
+      "DATA" : [1578096000000000,1578182400000000,1578009600000000,1577923200000000,1577836800000000,1578268800000000]
     },{
       "name" : "op",
-      "count" : 3,
-      "TYPE_ID" : [2,0,0],
-      "OFFSET" : [0,0,1],
+      "count" : 6,
+      "TYPE_ID" : [0,0,0,0,0,0],
+      "OFFSET" : [0,1,2,3,4,5],
       "children" : [{
         "name" : "put",
-        "count" : 2,
-        "VALIDITY" : [1,1],
+        "count" : 6,
+        "VALIDITY" : [1,1,1,1,1,1],
         "children" : [{
           "name" : "xt$valid_from",
-          "count" : 2,
-          "VALIDITY" : [1,1],
-          "DATA" : [1577923200000000,1577836800000000]
+          "count" : 6,
+          "VALIDITY" : [1,1,1,1,1,1],
+          "DATA" : [1578096000000000,1578182400000000,1578009600000000,1577923200000000,1577836800000000,1578268800000000]
         },{
           "name" : "xt$valid_to",
-          "count" : 2,
-          "VALIDITY" : [1,1],
-          "DATA" : [253402300799999999,253402300799999999]
+          "count" : 6,
+          "VALIDITY" : [1,1,1,1,1,1],
+          "DATA" : [253402300799999999,253402300799999999,253402300799999999,253402300799999999,253402300799999999,253402300799999999]
         },{
           "name" : "xt$doc",
-          "count" : 2,
-          "VALIDITY" : [1,1],
+          "count" : 6,
+          "VALIDITY" : [1,1,1,1,1,1],
           "children" : [{
-            "name" : "b",
-            "count" : 2,
-            "TYPE_ID" : [0,0],
-            "OFFSET" : [0,1],
-            "children" : [{
-              "name" : "i64",
-              "count" : 2,
-              "VALIDITY" : [1,1],
-              "DATA" : ["3","2"]
-            }]
-          },{
             "name" : "xt$id",
-            "count" : 2,
-            "TYPE_ID" : [0,0],
-            "OFFSET" : [0,1],
-            "children" : [{
-              "name" : "uuid",
-              "count" : 2,
-              "VALIDITY" : [1,1],
-              "DATA" : ["424f5622c8264deda5dbe2144d665c38","424f5622c8264deda5dbe2144d665c38"]
-            }]
+            "count" : 6,
+            "VALIDITY" : [1,1,1,1,1,1],
+            "DATA" : ["11831","15076","8538","4461","0","18145"]
+          },{
+            "name" : "xt$tx_time",
+            "count" : 6,
+            "VALIDITY" : [1,1,1,1,1,1],
+            "DATA" : [1578096000000000,1578182400000000,1578009600000000,1577923200000000,1577836800000000,1578268800000000]
+          },{
+            "name" : "xt$committed?",
+            "count" : 6,
+            "VALIDITY" : [1,1,1,1,1,1],
+            "DATA" : [1,1,1,1,1,0]
+          },{
+            "name" : "xt$error",
+            "count" : 6,
+            "VALIDITY" : [0,0,0,0,0,1],
+            "OFFSET" : [0,0,0,0,0,0,284],
+            "DATA" : ["","","","","","#xt/runtime-err {:xtdb.error/error-type :runtime-error, :xtdb.error/error-key :xtdb.indexer/invalid-valid-times, :xtdb.error/message \"Runtime error: ':xtdb.indexer/invalid-valid-times'\", :valid-from #time/instant \"2020-01-01T00:00:00Z\", :valid-to #time/instant \"2019-01-01T00:00:00Z\"}"]
           }]
         }]
       },{
@@ -223,7 +220,7 @@
         }]
       },{
         "name" : "evict",
-        "count" : 1
+        "count" : 0
       }]
     }]
   }]

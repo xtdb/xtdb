@@ -8,7 +8,8 @@
             [xtdb.datasets.tpch.ra :as tpch-ra]
             xtdb.sql-test
             [xtdb.test-util :as tu]
-            [xtdb.util :as util])
+            [xtdb.util :as util]
+            [xtdb.operator.scan :as scan])
   (:import (java.nio.file Path)))
 
 (def ^:dynamic *node* nil)

@@ -37,20 +37,20 @@
 
 (t/deftest test-app-time
   (let [{:keys [system-time]} (xt/submit-tx tu/*node* [[:put :xt_docs {:xt/id :doc, :version 1}]
-                                                    [:put :xt_docs {:xt/id :doc-with-app-time}
-                                                     {:for-valid-time [:in #inst "2021"]}]])
+                                                       [:put :xt_docs {:xt/id :doc-with-app-time}
+                                                        {:for-valid-time [:in #inst "2021"]}]])
         system-time (util/->zdt system-time)]
 
     (t/is (= {:doc {:xt/id :doc,
                     :xt/valid-from system-time
                     :xt/valid-to end-of-time-zdt
                     :xt/system-from system-time
-                    :xt/system-to end-of-time-zdt}
+                    :xt/system-to nil}
               :doc-with-app-time {:xt/id :doc-with-app-time,
                                   :xt/valid-from (util/->zdt #inst "2021")
                                   :xt/valid-to end-of-time-zdt
                                   :xt/system-from system-time
-                                  :xt/system-to end-of-time-zdt}}
+                                  :xt/system-to nil}}
              (->> (tu/query-ra '[:scan {:table xt_docs}
                                  [xt/id
                                   xt/valid-from xt/valid-to

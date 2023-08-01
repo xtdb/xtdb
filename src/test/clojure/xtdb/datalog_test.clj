@@ -10,7 +10,8 @@
             [xtdb.james-bond :as bond]
             [xtdb.node :as node]
             [xtdb.test-util :as tu]
-            [xtdb.util :as util]))
+            [xtdb.util :as util]
+            [xtdb.operator.scan :as scan]))
 
 (t/use-fixtures :each tu/with-mock-clock tu/with-node)
 
@@ -21,17 +22,17 @@
 (deftest test-scan
   (xt/submit-tx tu/*node* ivan+petr)
 
-  (t/is (= [{:name "Ivan"}
-            {:name "Petr"}]
-           (xt/q tu/*node*
-                 '{:find [name]
-                   :where [(match :xt_docs {:first-name name})]})))
+  (t/is (= #{{:name "Ivan"}
+             {:name "Petr"}}
+           (set (xt/q tu/*node*
+                      '{:find [name]
+                        :where [(match :xt_docs {:first-name name})]}))))
 
-  (t/is (= [{:e :ivan, :name "Ivan"}
-            {:e :petr, :name "Petr"}]
-           (xt/q tu/*node*
-                 '{:find [e name]
-                   :where [(match :xt_docs {:xt/id e, :first-name name})]}))
+  (t/is (= #{{:e :ivan, :name "Ivan"}
+             {:e :petr, :name "Petr"}}
+           (set (xt/q tu/*node*
+                      '{:find [e name]
+                        :where [(match :xt_docs {:xt/id e, :first-name name})]})))
         "returning eid"))
 
 (deftest test-basic-query
@@ -255,15 +256,15 @@
   (let [_tx (xt/submit-tx tu/*node* '[[:put :xt_docs {:xt/id :o1, :unit-price 1.49, :quantity 4}]
                                       [:put :xt_docs {:xt/id :o2, :unit-price 5.39, :quantity 1}]
                                       [:put :xt_docs {:xt/id :o3, :unit-price 0.59, :quantity 7}]])]
-    (t/is (= [{:oid :o1, :o-value 5.96}
-              {:oid :o2, :o-value 5.39}
-              {:oid :o3, :o-value 4.13}]
-             (xt/q tu/*node*
-                   '{:find [oid (* unit-price qty)]
-                     :keys [oid o-value]
-                     :where [(match :xt_docs {:xt/id oid})
-                             [oid :unit-price unit-price]
-                             [oid :quantity qty]]})))))
+    (t/is (= #{{:oid :o1, :o-value 5.96}
+               {:oid :o2, :o-value 5.39}
+               {:oid :o3, :o-value 4.13}}
+             (set (xt/q tu/*node*
+                        '{:find [oid (* unit-price qty)]
+                          :keys [oid o-value]
+                          :where [(match :xt_docs {:xt/id oid})
+                                  [oid :unit-price unit-price]
+                                  [oid :quantity qty]]}))))))
 
 (deftest test-aggregate-exprs
   (let [tx (xt/submit-tx tu/*node* '[[:put :xt_docs {:xt/id :foo, :category :c0, :v 1}]
@@ -482,15 +483,15 @@
                 :where [(match :xt_docs {:xt/id e})
                         [e :last-name n]
                         [e :first-name n]]})))
-    (t/is (= [{:e :sergei, :f :sergei, :n "Sergei"} {:e :sergei, :f :jeff, :n "Sergei"}]
-             (xt/q
-              tu/*node*
-              '{:find [e f n]
-                :where [(match :xt_docs {:xt/id e})
-                        (match :xt_docs {:xt/id f})
-                        [e :last-name n]
-                        [e :first-name n]
-                        [f :first-name n]]})))))
+    (t/is (= #{{:e :sergei, :f :sergei, :n "Sergei"} {:e :sergei, :f :jeff, :n "Sergei"}}
+             (set (xt/q
+                   tu/*node*
+                   '{:find [e f n]
+                     :where [(match :xt_docs {:xt/id e})
+                             (match :xt_docs {:xt/id f})
+                             [e :last-name n]
+                             [e :first-name n]
+                             [f :first-name n]]}))))))
 
 (deftest test-implicit-match-unification
   (xt/submit-tx tu/*node* '[[:put :foo {:xt/id :ivan, :name "Ivan"}]
@@ -567,31 +568,31 @@
                   [:put :xt_docs {:xt/id :sergei, :name "Sergei", :parent :petr}]
                   [:put :xt_docs {:xt/id :jeff, :name "Jeff", :parent :petr}]])
 
-  (t/is (= [{:e :ivan, :c :petr}
-            {:e :petr, :c :sergei}
-            {:e :petr, :c :jeff}
-            {:e :sergei, :c nil}
-            {:e :jeff, :c nil}]
-           (xt/q tu/*node*
-                 '{:find [e c]
-                   :where [(match :xt_docs {:xt/id e, :name name})
-                           (left-join {:find [e c]
-                                       :where [(match :xt_docs {:xt/id c})
-                                               [c :parent e]]})]}))
+  (t/is (= #{{:e :ivan, :c :petr}
+             {:e :petr, :c :sergei}
+             {:e :petr, :c :jeff}
+             {:e :sergei, :c nil}
+             {:e :jeff, :c nil}}
+           (set (xt/q tu/*node*
+                      '{:find [e c]
+                        :where [(match :xt_docs {:xt/id e, :name name})
+                                (left-join {:find [e c]
+                                            :where [(match :xt_docs {:xt/id c})
+                                                    [c :parent e]]})]})))
 
         "find people who have children")
 
-  (t/is (= [{:e :ivan, :s nil}
-            {:e :petr, :s nil}
-            {:e :sergei, :s :jeff}
-            {:e :jeff, :s :sergei}]
-           (xt/q tu/*node*
-                 '{:find [e s]
-                   :where [(match :xt_docs {:xt/id e, :name name, :parent p})
-                           (left-join {:find [s p]
-                                       :in [e]
-                                       :where [(match :xt_docs {:xt/id s, :parent p})
-                                               [(<> e s)]]})]}))
+  (t/is (= #{{:e :ivan, :s nil}
+             {:e :petr, :s nil}
+             {:e :sergei, :s :jeff}
+             {:e :jeff, :s :sergei}}
+           (set (xt/q tu/*node*
+                      '{:find [e s]
+                        :where [(match :xt_docs {:xt/id e, :name name, :parent p})
+                                (left-join {:find [s p]
+                                            :in [e]
+                                            :where [(match :xt_docs {:xt/id s, :parent p})
+                                                    [(<> e s)]]})]})))
         "find people who have siblings")
 
   (t/is (thrown-with-msg? IllegalArgumentException
@@ -612,24 +613,24 @@
                             [:put :xt_docs {:xt/id :sergei, :name "Sergei", :parent :petr}]
                             [:put :xt_docs {:xt/id :jeff, :name "Jeff", :parent :petr}]])]
 
-    (t/is (= [{:e :ivan} {:e :petr}]
-             (xt/q tu/*node*
-                   '{:find [e]
-                     :where [(match :xt_docs {:xt/id e, :name name})
-                             (exists? {:find [e]
-                                       :where [(match :xt_docs {:xt/id c})
-                                               [c :parent e]]})]}))
+    (t/is (= #{{:e :ivan} {:e :petr}}
+             (set (xt/q tu/*node*
+                        '{:find [e]
+                          :where [(match :xt_docs {:xt/id e, :name name})
+                                  (exists? {:find [e]
+                                            :where [(match :xt_docs {:xt/id c})
+                                                    [c :parent e]]})]})))
 
           "find people who have children")
 
-    (t/is (= [{:e :sergei} {:e :jeff}]
-             (xt/q tu/*node*
-                   '{:find [e]
-                     :where [(match :xt_docs {:xt/id e, :name name, :parent p})
-                             (exists? {:find [p]
-                                       :in [e]
-                                       :where [(match :xt_docs {:xt/id s, :parent p})
-                                               [(<> e s)]]})]}))
+    (t/is (= #{{:e :sergei} {:e :jeff}}
+             (set (xt/q tu/*node*
+                        '{:find [e]
+                          :where [(match :xt_docs {:xt/id e, :name name, :parent p})
+                                  (exists? {:find [p]
+                                            :in [e]
+                                            :where [(match :xt_docs {:xt/id s, :parent p})
+                                                    [(<> e s)]]})]})))
           "find people who have siblings")
 
     (t/is (thrown-with-msg? IllegalArgumentException
@@ -650,24 +651,24 @@
                [:put :xt_docs {:xt/id :petr, :first-name "Petr", :last-name "Petrov" :foo 1}]
                [:put :xt_docs {:xt/id :sergei :first-name "Sergei" :last-name "Sergei" :foo 1}]])]
 
-    (t/is (= [{:e :ivan} {:e :sergei}]
-             (xt/q tu/*node*
-                   '{:find [e]
-                     :where [(match :xt_docs {:xt/id e})
-                             [e :foo 1]
-                             (not-exists? {:find [e]
-                                           :where [(match :xt_docs {:xt/id e})
-                                                   [e :first-name "Petr"]]})]})))
+    (t/is (= #{{:e :ivan} {:e :sergei}}
+             (set (xt/q tu/*node*
+                        '{:find [e]
+                          :where [(match :xt_docs {:xt/id e})
+                                  [e :foo 1]
+                                  (not-exists? {:find [e]
+                                                :where [(match :xt_docs {:xt/id e})
+                                                        [e :first-name "Petr"]]})]}))))
 
-    (t/is (= [{:e :ivan} {:e :sergei}]
-             (xt/q tu/*node*
-                   '{:find [e]
-                     :where [(match :xt_docs {:xt/id e})
-                             [e :foo n]
-                             (not-exists? {:find [e n]
-                                           :where [(match :xt_docs {:xt/id e})
-                                                   [e :first-name "Petr"]
-                                                   [e :foo n]]})]})))
+    (t/is (= #{{:e :ivan} {:e :sergei}}
+             (set (xt/q tu/*node*
+                        '{:find [e]
+                          :where [(match :xt_docs {:xt/id e})
+                                  [e :foo n]
+                                  (not-exists? {:find [e n]
+                                                :where [(match :xt_docs {:xt/id e})
+                                                        [e :first-name "Petr"]
+                                                        [e :foo n]]})]}))))
 
     (t/is (= []
              (xt/q tu/*node*
@@ -678,74 +679,74 @@
                                            :where [(match :xt_docs {:xt/id e})
                                                    [e :foo n]]})]})))
 
-    (t/is (= [{:e :petr} {:e :sergei}]
-             (xt/q tu/*node*
-                   '{:find [e]
-                     :where [(match :xt_docs {:xt/id e})
-                             [e :foo 1]
-                             (not-exists? {:find [e]
-                                           :where [(match :xt_docs {:xt/id e})
-                                                   [e :last-name "Ivanov"]]})]})))
+    (t/is (= #{{:e :petr} {:e :sergei}}
+             (set (xt/q tu/*node*
+                        '{:find [e]
+                          :where [(match :xt_docs {:xt/id e})
+                                  [e :foo 1]
+                                  (not-exists? {:find [e]
+                                                :where [(match :xt_docs {:xt/id e})
+                                                        [e :last-name "Ivanov"]]})]}))))
 
-    (t/is (= [{:e :ivan} {:e :petr} {:e :sergei}]
-             (xt/q tu/*node*
-                   '{:find [e]
-                     :where [(match :xt_docs {:xt/id e})
-                             [e :foo 1]
-                             (not-exists? {:find [e]
-                                           :where [(match :xt_docs {:xt/id e})
-                                                   [e :first-name "Jeff"]]})]})))
+    (t/is (= #{{:e :ivan} {:e :petr} {:e :sergei}}
+             (set (xt/q tu/*node*
+                        '{:find [e]
+                          :where [(match :xt_docs {:xt/id e})
+                                  [e :foo 1]
+                                  (not-exists? {:find [e]
+                                                :where [(match :xt_docs {:xt/id e})
+                                                        [e :first-name "Jeff"]]})]}))))
 
-    (t/is (= [{:e :ivan} {:e :petr}]
-             (xt/q tu/*node*
-                   '{:find [e]
-                     :where [(match :xt_docs {:xt/id e})
-                             [e :foo 1]
-                             (not-exists? {:find [e]
-                                           :where [(match :xt_docs {:xt/id e})
-                                                   [e :first-name n]
-                                                   [e :last-name n]]})]})))
+    (t/is (= #{{:e :ivan} {:e :petr}}
+             (set (xt/q tu/*node*
+                        '{:find [e]
+                          :where [(match :xt_docs {:xt/id e})
+                                  [e :foo 1]
+                                  (not-exists? {:find [e]
+                                                :where [(match :xt_docs {:xt/id e})
+                                                        [e :first-name n]
+                                                        [e :last-name n]]})]}))))
 
-    (t/is (= [{:e :ivan, :first-name "Petr", :last-name "Petrov", :a "Ivan", :b "Ivanov"}
-              {:e :petr, :first-name "Ivan", :last-name "Ivanov", :a "Petr", :b "Petrov"}
-              {:e :sergei, :first-name "Ivan", :last-name "Ivanov", :a "Sergei", :b "Sergei"}
-              {:e :sergei, :first-name "Petr", :last-name "Petrov", :a "Sergei", :b "Sergei"}]
-             (xt/q tu/*node*
-                   ['{:find [e first-name last-name a b]
-                      :in [[[first-name last-name]]]
-                      :where [(match :xt_docs {:xt/id e})
-                              [e :foo 1]
-                              [e :first-name a]
-                              [e :last-name b]
-                              (not-exists? {:find [e first-name last-name]
-                                            :where [(match :xt_docs {:xt/id e})
-                                                    [e :first-name first-name]
-                                                    [e :last-name last-name]]})]}
-                    [["Ivan" "Ivanov"]
-                     ["Petr" "Petrov"]]])))
+    (t/is (= #{{:e :ivan, :first-name "Petr", :last-name "Petrov", :a "Ivan", :b "Ivanov"}
+               {:e :petr, :first-name "Ivan", :last-name "Ivanov", :a "Petr", :b "Petrov"}
+               {:e :sergei, :first-name "Ivan", :last-name "Ivanov", :a "Sergei", :b "Sergei"}
+               {:e :sergei, :first-name "Petr", :last-name "Petrov", :a "Sergei", :b "Sergei"}}
+             (set (xt/q tu/*node*
+                        ['{:find [e first-name last-name a b]
+                           :in [[[first-name last-name]]]
+                           :where [(match :xt_docs {:xt/id e})
+                                   [e :foo 1]
+                                   [e :first-name a]
+                                   [e :last-name b]
+                                   (not-exists? {:find [e first-name last-name]
+                                                 :where [(match :xt_docs {:xt/id e})
+                                                         [e :first-name first-name]
+                                                         [e :last-name last-name]]})]}
+                         [["Ivan" "Ivanov"]
+                          ["Petr" "Petrov"]]]))))
 
     (t/testing "apply anti-joins"
-      (t/is (= [{:n 1, :e :ivan} {:n 1, :e :petr} {:n 1, :e :sergei}]
-               (xt/q tu/*node*
-                     '{:find [e n]
-                       :where [(match :xt_docs {:xt/id e})
-                               [e :foo n]
-                               (not-exists? {:find [e]
-                                             :in [n]
-                                             :where [(match :xt_docs {:xt/id e})
-                                                     [e :first-name "Petr"]
-                                                     [(= n 2)]]})]})))
+      (t/is (= #{{:n 1, :e :ivan} {:n 1, :e :petr} {:n 1, :e :sergei}}
+               (set (xt/q tu/*node*
+                          '{:find [e n]
+                            :where [(match :xt_docs {:xt/id e})
+                                    [e :foo n]
+                                    (not-exists? {:find [e]
+                                                  :in [n]
+                                                  :where [(match :xt_docs {:xt/id e})
+                                                          [e :first-name "Petr"]
+                                                          [(= n 2)]]})]}))))
 
-      (t/is (= [{:n 1, :e :ivan} {:n 1, :e :sergei}]
-               (xt/q tu/*node*
-                     '{:find [e n]
-                       :where [(match :xt_docs {:xt/id e})
-                               [e :foo n]
-                               (not-exists? {:find [e]
-                                             :in [n]
-                                             :where [(match :xt_docs {:xt/id e})
-                                                     [e :first-name "Petr"]
-                                                     [(= n 1)]]})]})))
+      (t/is (= #{{:n 1, :e :ivan} {:n 1, :e :sergei}}
+               (set (xt/q tu/*node*
+                          '{:find [e n]
+                            :where [(match :xt_docs {:xt/id e})
+                                    [e :foo n]
+                                    (not-exists? {:find [e]
+                                                  :in [n]
+                                                  :where [(match :xt_docs {:xt/id e})
+                                                          [e :first-name "Petr"]
+                                                          [(= n 1)]]})]}))))
 
       (t/is (= []
                (xt/q tu/*node*
@@ -756,36 +757,36 @@
                                              :in [n]
                                              :where [[(= n 1)]]})]})))
 
-      (t/is (= [{:n "Petr", :e :petr} {:n "Sergei", :e :sergei}]
-               (xt/q tu/*node*
-                     '{:find [e n]
-                       :where [(match :xt_docs {:xt/id e})
-                               [e :first-name n]
-                               (not-exists? {:find []
-                                             :in [n]
-                                             :where [[(= "Ivan" n)]]})]})))
+      (t/is (= #{{:n "Petr", :e :petr} {:n "Sergei", :e :sergei}}
+               (set (xt/q tu/*node*
+                          '{:find [e n]
+                            :where [(match :xt_docs {:xt/id e})
+                                    [e :first-name n]
+                                    (not-exists? {:find []
+                                                  :in [n]
+                                                  :where [[(= "Ivan" n)]]})]}))))
 
 
-      (t/is (= [{:n "Petr", :e :petr} {:n "Sergei", :e :sergei}]
-               (xt/q tu/*node*
-                     '{:find [e n]
-                       :where [(match :xt_docs {:xt/id e})
-                               [e :first-name n]
-                               (not-exists? {:find [n]
-                                             :where [(match :xt_docs {:xt/id e})
-                                                     [e :first-name n]
-                                                     [e :first-name "Ivan"]]})]})))
+      (t/is (= #{{:n "Petr", :e :petr} {:n "Sergei", :e :sergei}}
+               (set (xt/q tu/*node*
+                          '{:find [e n]
+                            :where [(match :xt_docs {:xt/id e})
+                                    [e :first-name n]
+                                    (not-exists? {:find [n]
+                                                  :where [(match :xt_docs {:xt/id e})
+                                                          [e :first-name n]
+                                                          [e :first-name "Ivan"]]})]}))))
 
-      (t/is (= [{:n 1, :e :ivan} {:n 1, :e :sergei}]
-               (xt/q tu/*node*
-                     '{:find [e n]
-                       :where [(match :xt_docs {:xt/id e})
-                               [e :foo n]
-                               (not-exists? {:find [e n]
-                                             :where [(match :xt_docs {:xt/id e})
-                                                     [e :first-name "Petr"]
-                                                     [e :foo n]
-                                                     [(= n 1)]]})]})))
+      (t/is (= #{{:n 1, :e :ivan} {:n 1, :e :sergei}}
+               (set (xt/q tu/*node*
+                          '{:find [e n]
+                            :where [(match :xt_docs {:xt/id e})
+                                    [e :foo n]
+                                    (not-exists? {:find [e n]
+                                                  :where [(match :xt_docs {:xt/id e})
+                                                          [e :first-name "Petr"]
+                                                          [e :foo n]
+                                                          [(= n 1)]]})]}))))
 
 
       (t/is (thrown-with-msg?
@@ -829,12 +830,12 @@
                             [:put :xt_docs {:xt/id :slava, :age 37}]])
 
 
-  (t/is (= [{:_column_0 1, :_column_1 "foo", :xt/id :ivan}
-            {:_column_0 1, :_column_1 "foo", :xt/id :petr}
-            {:_column_0 1, :_column_1 "foo", :xt/id :slava}]
-           (xt/q tu/*node*
-                 '{:find [1 "foo" xt/id]
-                   :where [(match :xt_docs [xt/id])]}))))
+  (t/is (= #{{:_column_0 1, :_column_1 "foo", :xt/id :ivan}
+             {:_column_0 1, :_column_1 "foo", :xt/id :petr}
+             {:_column_0 1, :_column_1 "foo", :xt/id :slava}}
+           (set (xt/q tu/*node*
+                      '{:find [1 "foo" xt/id]
+                        :where [(match :xt_docs [xt/id])]})))))
 
 (deftest calling-a-function-580
   (let [_tx (xt/submit-tx tu/*node*
@@ -891,17 +892,17 @@
                             [:put :xt_docs {:xt/id :petr, :age 22, :height 240, :parent 1}]
                             [:put :xt_docs {:xt/id :slava, :age 37, :parent 2}]])]
 
-    (t/is (= [{:e1 :ivan, :e2 :petr, :e3 :slava}
-              {:e1 :petr, :e2 :ivan, :e3 :slava}]
-             (xt/q tu/*node*
-                   '{:find [e1 e2 e3]
-                     :where [(match :xt_docs {:xt/id e1})
-                             (match :xt_docs {:xt/id e2})
-                             (match :xt_docs {:xt/id e3})
-                             [e1 :age a1]
-                             [e2 :age a2]
-                             [e3 :age a3]
-                             [(= (+ a1 a2) a3)]]})))
+    (t/is (= #{{:e1 :ivan, :e2 :petr, :e3 :slava}
+               {:e1 :petr, :e2 :ivan, :e3 :slava}}
+             (set (xt/q tu/*node*
+                        '{:find [e1 e2 e3]
+                          :where [(match :xt_docs {:xt/id e1})
+                                  (match :xt_docs {:xt/id e2})
+                                  (match :xt_docs {:xt/id e3})
+                                  [e1 :age a1]
+                                  [e2 :age a2]
+                                  [e3 :age a3]
+                                  [(= (+ a1 a2) a3)]]}))))
 
     (t/is (= [{:a1 15, :a2 22, :a3 37, :sum-ages 74, :inc-sum-ages 75}]
              (xt/q tu/*node*
@@ -1001,16 +1002,16 @@
                                                         [e :xt/id :ivan]))]})))))
 
 (deftest test-union-join-with-subquery-638
-  (let [tx (xt/submit-tx tu/*node* '[[:put :xt_docs {:xt/id :ivan, :age 20, :role :developer}]
-                                     [:put :xt_docs {:xt/id :oleg, :age 30, :role :manager}]
-                                     [:put :xt_docs {:xt/id :petr, :age 35, :role :qa}]
-                                     [:put :xt_docs {:xt/id :sergei, :age 35, :role :manager}]])]
-    (t/is (= [{:e :oleg}]
-             (xt/q tu/*node* '{:find [e]
-                               :where [(union-join [e]
-                                                   (q {:find [e]
-                                                       :where [(match :xt_docs {:xt/id e})
-                                                               [e :age 30]]}))]})))))
+  (xt/submit-tx tu/*node* '[[:put :xt_docs {:xt/id :ivan, :age 20, :role :developer}]
+                            [:put :xt_docs {:xt/id :oleg, :age 30, :role :manager}]
+                            [:put :xt_docs {:xt/id :petr, :age 35, :role :qa}]
+                            [:put :xt_docs {:xt/id :sergei, :age 35, :role :manager}]])
+  (t/is (= [{:e :oleg}]
+           (xt/q tu/*node* '{:find [e]
+                             :where [(union-join [e]
+                                                 (q {:find [e]
+                                                     :where [(match :xt_docs {:xt/id e})
+                                                             [e :age 30]]}))]}))))
 
 (deftest test-nested-query
   (xt/submit-tx tu/*node* bond/tx-ops)
@@ -1210,30 +1211,30 @@
                       20]))))
 
     (t/testing "testing rule with multiple args"
-      (t/is (= [{:i :petr, :age 18, :u :ivan}
-                {:i :georgy, :age 17, :u :ivan}
-                {:i :georgy, :age 17, :u :petr}]
-               (q '{:find [i age u]
-                    :where [(older-users age u)
-                            (match :xt_docs {:xt/id i})
-                            [i :age age]]
-                    :rules [[(older-users age u)
-                             (match :xt_docs {:xt/id u})
-                             [u :age age2]
-                             [(> age2 age)]]]}))))
+      (t/is (= #{{:i :petr, :age 18, :u :ivan}
+                 {:i :georgy, :age 17, :u :ivan}
+                 {:i :georgy, :age 17, :u :petr}}
+               (set (q '{:find [i age u]
+                         :where [(older-users age u)
+                                 (match :xt_docs {:xt/id i})
+                                 [i :age age]]
+                         :rules [[(older-users age u)
+                                  (match :xt_docs {:xt/id u})
+                                  [u :age age2]
+                                  [(> age2 age)]]]})))))
 
     (t/testing "testing rule with multiple args (different arg names in rule)"
-      (t/is (= [{:i :petr, :age 18, :u :ivan}
-                {:i :georgy, :age 17, :u :ivan}
-                {:i :georgy, :age 17, :u :petr}]
-               (q '{:find [i age u]
-                    :where [(older-users age u)
-                            (match :xt_docs {:xt/id i})
-                            [i :age age]]
-                    :rules [[(older-users age-other u-other)
-                             (match :xt_docs {:xt/id u-other})
-                             [u-other :age age2]
-                             [(> age2 age-other)]]]}))))
+      (t/is (= #{{:i :petr, :age 18, :u :ivan}
+                 {:i :georgy, :age 17, :u :ivan}
+                 {:i :georgy, :age 17, :u :petr}}
+               (set (q '{:find [i age u]
+                         :where [(older-users age u)
+                                 (match :xt_docs {:xt/id i})
+                                 [i :age age]]
+                         :rules [[(older-users age-other u-other)
+                                  (match :xt_docs {:xt/id u-other})
+                                  [u-other :age age2]
+                                  [(> age2 age-other)]]]})))))
 
 
     (t/testing "nested rules"
@@ -1310,19 +1311,19 @@
                                                     [(> age2 age)]]})]]}))))
 
     (t/testing "subquery in rule"
-      (t/is (= [{:i :petr, :other-age 21}
-                {:i :georgy, :other-age 21}
-                {:i :georgy, :other-age 18}]
-               (q '{:find [i other-age]
-                    :where [(match :xt_docs {:xt/id i})
-                            [i :age age]
-                            (older-ages age other-age)]
-                    :rules [[(older-ages age other-age)
-                             (q {:find [other-age]
-                                 :in [age]
-                                 :where [(match :xt_docs {:xt/id i})
-                                         [i :age other-age]
-                                         [(> other-age age)]]})]]}))))
+      (t/is (= #{{:i :petr, :other-age 21}
+                 {:i :georgy, :other-age 21}
+                 {:i :georgy, :other-age 18}}
+               (set (q '{:find [i other-age]
+                         :where [(match :xt_docs {:xt/id i})
+                                 [i :age age]
+                                 (older-ages age other-age)]
+                         :rules [[(older-ages age other-age)
+                                  (q {:find [other-age]
+                                      :in [age]
+                                      :where [(match :xt_docs {:xt/id i})
+                                              [i :age other-age]
+                                              [(> other-age age)]]})]]})))))
 
     (t/testing "subquery in rule with aggregates, expressions and order-by"
       (t/is [{:i :ivan, :max-older-age nil, :max-older-age-times2 nil}
@@ -1462,15 +1463,15 @@
                                         [:put :xt_docs {:xt/id :mark} {:for-valid-time [:in #inst "2023" #inst "2024"]}]
                                         [:put :xt_docs {:xt/id :john} {:for-valid-time [:in #inst "2016" #inst "2020"]}]])]
 
-      (t/is (= [{:id :matthew}, {:id :mark}]
-               (q '{:find [id], :where [(match :xt_docs [{:xt/id id}])]}, tx1, #inst "2023")))
+      (t/is (= #{{:id :matthew}, {:id :mark}}
+               (set (q '{:find [id], :where [(match :xt_docs [{:xt/id id}])]}, tx1, #inst "2023"))))
 
-      (t/is (= [{:id :matthew}, {:id :luke}]
-               (q '{:find [id], :where [(match :xt_docs [{:xt/id id}])]}, tx1, #inst "2021"))
+      (t/is (= #{{:id :matthew}, {:id :luke}}
+               (set (q '{:find [id], :where [(match :xt_docs [{:xt/id id}])]}, tx1, #inst "2021")))
             "back in app-time")
 
-      (t/is (= [{:id :matthew}, {:id :luke}]
-               (q '{:find [id], :where [(match :xt_docs [{:xt/id id}])]}, tx0, #inst "2023"))
+      (t/is (= #{{:id :matthew}, {:id :luke}}
+               (set (q '{:find [id], :where [(match :xt_docs [{:xt/id id}])]}, tx0, #inst "2023")))
             "back in system-time")
 
       (t/is (= [{:id :matthew, :app-start (util/->zdt #inst "2015"), :app-end (util/->zdt util/end-of-time)}
@@ -1494,13 +1495,13 @@
                   tx1, nil))
             "entity history, range")
 
-      (t/is (= [{:id :matthew}, {:id :mark}]
-               (q '{:find [id],
-                    :where [(match :xt_docs {:xt/id id}
-                                   {:for-valid-time [:at #inst "2018"]})
-                            (match :xt_docs {:xt/id id}
-                                   {:for-valid-time [:at #inst "2023"]})]},
-                  tx1, nil))
+      (t/is (= #{{:id :matthew}, {:id :mark}}
+               (set (q '{:find [id],
+                         :where [(match :xt_docs {:xt/id id}
+                                        {:for-valid-time [:at #inst "2018"]})
+                                 (match :xt_docs {:xt/id id}
+                                        {:for-valid-time [:at #inst "2023"]})]},
+                       tx1, nil)))
             "cross-time join - who was here in both 2018 and 2023?")
 
       (t/is (= [{:vt-start (util/->zdt #inst "2021")
@@ -1554,17 +1555,17 @@
     (let [tx0 (xt/submit-tx tu/*node* '[[:put :xt_docs {:xt/id :matthew} {:for-valid-time [:from #inst "2015"]}]
                                         [:put :xt_docs {:xt/id :mark} {:for-valid-time [:to #inst "2050"]}]])
           tx1 (xt/submit-tx tu/*node* '[[:put :xt_docs {:xt/id :matthew} {:for-valid-time [:to #inst "2040"]}]])]
-      (t/is (= [{:id :matthew,
-                 :vt-start #time/zoned-date-time "2015-01-01T00:00Z[UTC]",
-                 :vt-end #time/zoned-date-time "9999-12-31T23:59:59.999999Z[UTC]"}
-                {:id :mark,
-                 :vt-start #time/zoned-date-time "2020-01-01T00:00Z[UTC]",
-                 :vt-end #time/zoned-date-time "2050-01-01T00:00Z[UTC]"}]
-               (q '{:find [id vt-start vt-end],
-                    :where [(match :xt_docs {:xt/id id
-                                             :xt/valid-from vt-start
-                                             :xt/valid-to vt-end})]},
-                  tx0, #inst "2023")))
+      (t/is (= #{{:id :matthew,
+                  :vt-start #time/zoned-date-time "2015-01-01T00:00Z[UTC]",
+                  :vt-end #time/zoned-date-time "9999-12-31T23:59:59.999999Z[UTC]"}
+                 {:id :mark,
+                  :vt-start #time/zoned-date-time "2020-01-01T00:00Z[UTC]",
+                  :vt-end #time/zoned-date-time "2050-01-01T00:00Z[UTC]"}}
+               (set (q '{:find [id vt-start vt-end],
+                         :where [(match :xt_docs {:xt/id id
+                                                  :xt/valid-from vt-start
+                                                  :xt/valid-to vt-end})]},
+                       tx0, #inst "2023"))))
 
       (t/is (= [{:id :matthew,
                  :vt-start #time/zoned-date-time "2015-01-01T00:00Z[UTC]",
@@ -1782,7 +1783,7 @@
                            [:put :order {:xt/id 1, :customer 0, :items [{:sku "cheese", :qty 3}]}]
                            [:put :order {:xt/id 2, :customer 1, :items [{:sku "bread", :qty 1} {:sku "eggs", :qty 2}]}]])
 
-  (t/are [q result] (= result (xt/q tu/*node* q))
+  (t/are [q result] (= (into #{} result) (set (xt/q tu/*node* q)))
     '{:find [n-customers]
       :where [[(q {:find [(count id)]
                    :where [(match :customer {:xt/id id})]})
@@ -2220,7 +2221,8 @@
               {:xt/id 43, :firstname "alice", :lastname "carrol"}
               {:xt/id 44, :firstname "jim", :orders [{:sku "eggs", :qty 2}, {:sku "cheese", :qty 1}]}]]
     (xt/submit-tx tu/*node* (map (partial vector :put :customer) docs))
-    (t/is (= (mapv (fn [doc] {:c doc}) docs) (xt/q tu/*node* '{:find [c] :where [($ :customer {:xt/* c})]})))))
+    (t/is (= (set (mapv (fn [doc] {:c doc}) docs))
+             (set (xt/q tu/*node* '{:find [c] :where [($ :customer {:xt/* c})]}))))))
 
 (t/deftest test-row-alias-system-time-key-set
   (let [inputs
@@ -2299,12 +2301,12 @@
                                                  :xt/committed? committed?})]})))
   (xt/submit-tx tu/*node* '[[:put :xt-docs {:xt/id 2}]])
   (xt/submit-tx tu/*node* '[[:delete :xt-docs 2 {:for-valid-time [:in nil #inst "2011"]}]])
-  (t/is (= [{:tx-id 0, :committed? false}
-            {:tx-id 1, :committed? true}
-            {:tx-id 2, :committed? false}]
-           (xt/q tu/*node* '{:find [tx-id committed?]
-                             :where [($ :xt/txs {:xt/id tx-id,
-                                                 :xt/committed? committed?})]}))))
+  (t/is (= #{{:tx-id 0, :committed? false}
+             {:tx-id 1, :committed? true}
+             {:tx-id 2, :committed? false}}
+           (set (xt/q tu/*node* '{:find [tx-id committed?]
+                                  :where [($ :xt/txs {:xt/id tx-id,
+                                                      :xt/committed? committed?})]})))))
 
 (deftest test-date-and-time-literals
   (t/is (= [{:a true, :b false, :c true, :d true}]

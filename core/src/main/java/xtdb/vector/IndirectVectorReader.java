@@ -119,7 +119,8 @@ class IndirectVectorReader implements IVectorReader {
 
     @Override
     public IVectorReader structKeyReader(String colName) {
-        return new IndirectVectorReader(reader.structKeyReader(colName), indirection);
+        IVectorReader inner = reader.structKeyReader(colName);
+        return inner == null ? null : new IndirectVectorReader(inner, indirection);
     }
 
     @Override

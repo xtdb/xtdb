@@ -16,7 +16,6 @@
             [xtdb.test-json :as tj]
             [xtdb.test-util :as tu]
             [xtdb.ts-devices :as ts]
-            [xtdb.types :as ty]
             [xtdb.util :as util]
             [xtdb.vector.reader :as vr]
             xtdb.watermark)
@@ -201,7 +200,7 @@
                  :xt/valid-from (util/->zdt tt)
                  :xt/valid-to (util/->zdt util/end-of-time)
                  :xt/system-from (util/->zdt tt)
-                 :xt/system-to (util/->zdt util/end-of-time)}]
+                 :xt/system-to nil}]
                (tu/query-ra '[:scan {:table xt_docs}
                               [xt/id version
                                xt/valid-from, xt/valid-to

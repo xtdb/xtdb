@@ -68,79 +68,40 @@
             "name" : "xt$id",
             "nullable" : false,
             "type" : {
-              "name" : "union",
-              "mode" : "Dense",
-              "typeIds" : [ ]
+              "name" : "int",
+              "bitWidth" : 64,
+              "isSigned" : true
             },
-            "children" : [{
-              "name" : "i64",
-              "nullable" : false,
-              "type" : {
-                "name" : "int",
-                "bitWidth" : 64,
-                "isSigned" : true
-              },
-              "children" : [ ]
-            }]
+            "children" : [ ]
           },{
-            "name" : "foo",
+            "name" : "xt$tx_time",
             "nullable" : false,
             "type" : {
-              "name" : "union",
-              "mode" : "Dense",
-              "typeIds" : [ ]
+              "name" : "timestamp",
+              "unit" : "MICROSECOND",
+              "timezone" : "UTC"
             },
-            "children" : [{
-              "name" : "i64",
-              "nullable" : false,
-              "type" : {
-                "name" : "int",
-                "bitWidth" : 64,
-                "isSigned" : true
-              },
-              "children" : [ ]
-            }]
+            "children" : [ ]
           },{
-            "name" : "bar",
+            "name" : "xt$committed?",
             "nullable" : false,
             "type" : {
-              "name" : "union",
-              "mode" : "Dense",
-              "typeIds" : [ ]
+              "name" : "bool"
             },
-            "children" : [{
-              "name" : "utf8",
-              "nullable" : false,
-              "type" : {
-                "name" : "utf8"
-              },
-              "children" : [ ]
-            }]
+            "children" : [ ]
           },{
-            "name" : "baz",
-            "nullable" : false,
+            "name" : "xt$error",
+            "nullable" : true,
             "type" : {
-              "name" : "union",
-              "mode" : "Dense",
-              "typeIds" : [ ]
+              "name" : "ClojureFormType"
             },
-            "children" : [{
-              "name" : "f64",
-              "nullable" : false,
-              "type" : {
-                "name" : "floatingpoint",
-                "precision" : "DOUBLE"
-              },
-              "children" : [ ]
+            "children" : [ ],
+            "metadata" : [{
+              "value" : "xt/clj-form",
+              "key" : "ARROW:extension:name"
             },{
-              "name" : "i64",
-              "nullable" : false,
-              "type" : {
-                "name" : "int",
-                "bitWidth" : 64,
-                "isSigned" : true
-              },
-              "children" : [ ]
+              "value" : "",
+              "key" : "ARROW:extension:metadata"
             }]
           }]
         }]
@@ -185,17 +146,17 @@
       "name" : "xt$iid",
       "count" : 2,
       "VALIDITY" : [1,1],
-      "DATA" : ["4cd9b7672d7fbee8fb51fb1e049f6903","a4e167a76a05add8a8654c169b07b044"]
+      "DATA" : ["659fa87d49ccd11c201a9454d9336063","a4e167a76a05add8a8654c169b07b044"]
     },{
       "name" : "xt$legacy_iid",
       "count" : 2,
       "VALIDITY" : [1,1],
-      "DATA" : ["72057594037927936","0"]
+      "DATA" : ["504403158265495552","288230376151711744"]
     },{
       "name" : "xt$system_from",
       "count" : 2,
       "VALIDITY" : [1,1],
-      "DATA" : [1577836800000000,1577836800000000]
+      "DATA" : [1577923200000000,1577836800000000]
     },{
       "name" : "op",
       "count" : 2,
@@ -209,7 +170,7 @@
           "name" : "xt$valid_from",
           "count" : 2,
           "VALIDITY" : [1,1],
-          "DATA" : [1577836800000000,1577836800000000]
+          "DATA" : [1577923200000000,1577836800000000]
         },{
           "name" : "xt$valid_to",
           "count" : 2,
@@ -222,53 +183,24 @@
           "children" : [{
             "name" : "xt$id",
             "count" : 2,
-            "TYPE_ID" : [0,0],
-            "OFFSET" : [0,1],
-            "children" : [{
-              "name" : "i64",
-              "count" : 2,
-              "VALIDITY" : [1,1],
-              "DATA" : ["1","0"]
-            }]
+            "VALIDITY" : [1,1],
+            "DATA" : ["5845","0"]
           },{
-            "name" : "foo",
+            "name" : "xt$tx_time",
             "count" : 2,
-            "TYPE_ID" : [0,0],
-            "OFFSET" : [0,1],
-            "children" : [{
-              "name" : "i64",
-              "count" : 2,
-              "VALIDITY" : [1,1],
-              "DATA" : ["1","2"]
-            }]
+            "VALIDITY" : [1,1],
+            "DATA" : [1577923200000000,1577836800000000]
           },{
-            "name" : "bar",
+            "name" : "xt$committed?",
             "count" : 2,
-            "TYPE_ID" : [0,0],
-            "OFFSET" : [0,1],
-            "children" : [{
-              "name" : "utf8",
-              "count" : 2,
-              "VALIDITY" : [1,1],
-              "OFFSET" : [0,5,10],
-              "DATA" : ["world","hello"]
-            }]
+            "VALIDITY" : [1,1],
+            "DATA" : [1,1]
           },{
-            "name" : "baz",
+            "name" : "xt$error",
             "count" : 2,
-            "TYPE_ID" : [0,1],
-            "OFFSET" : [0,0],
-            "children" : [{
-              "name" : "f64",
-              "count" : 1,
-              "VALIDITY" : [1],
-              "DATA" : [3.3]
-            },{
-              "name" : "i64",
-              "count" : 1,
-              "VALIDITY" : [1],
-              "DATA" : ["12"]
-            }]
+            "VALIDITY" : [0,0],
+            "OFFSET" : [0,0,0],
+            "DATA" : ["",""]
           }]
         }]
       },{

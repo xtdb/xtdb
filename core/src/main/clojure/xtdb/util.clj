@@ -110,6 +110,10 @@
              (.putLong (.getLeastSignificantBits uuid)))]
     (.array bb)))
 
+(defn bytes->uuid ^UUID [^bytes bytes]
+  (let [bb (ByteBuffer/wrap bytes)]
+    (UUID. (.getLong bb) (.getLong bb))))
+
 (defn ->lex-hex-string
   "Turn a long into a lexicographically-sortable hex string by prepending the length"
   [^long l]

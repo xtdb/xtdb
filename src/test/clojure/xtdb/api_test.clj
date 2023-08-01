@@ -154,9 +154,9 @@
 (t/deftest test-sql-dynamic-params-103
   (xt/submit-tx *node* devs)
 
-  (t/is (= [{:name "James"} {:name "Matt"}]
-           (xt/q *node* ["SELECT u.name FROM users u WHERE u.name IN (?, ?)"
-                         "James" "Matt"]))))
+  (t/is (= #{{:name "James"} {:name "Matt"}}
+           (set (xt/q *node* ["SELECT u.name FROM users u WHERE u.name IN (?, ?)"
+                              "James" "Matt"])))))
 
 (t/deftest start-and-query-empty-node-re-231-test
   (with-open [n (node/start-node {})]
