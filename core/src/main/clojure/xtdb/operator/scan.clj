@@ -407,29 +407,11 @@
 (defn- scan-op-point? [scan-op]
   (= :at (first scan-op)))
 
-(defn- at-valid-time-point? [{:keys [for-valid-time for-system-time]}]
-  (and (or (nil? for-valid-time)
-           (scan-op-point? for-valid-time))
-       (or (nil? for-system-time)
-           (scan-op-at-now for-system-time))))
-
-(defn- point-now-query? [^IWatermark watermark basis scan-opts]
-  (and
-   (.txBasis watermark)
-   (= (:tx basis)
-      (.txBasis watermark))
-   (at-valid-time-point? scan-opts)
-   (>= (util/instant->micros (:current-time basis))
-       (util/instant->micros (:system-time (:tx basis))))))
-
 (defn- at-point-point? [{:keys [for-valid-time for-system-time]}]
   (and (or (nil? for-valid-time)
            (scan-op-point? for-valid-time))
        (or (nil? for-system-time)
            (scan-op-point? for-system-time))))
-
-(defn- point-point-query? [^IWatermark _watermark _basis scan-opts]
-  (at-point-point? scan-opts))
 
 (defn use-current-row-id-cache? [^IWatermark watermark scan-opts basis temporal-col-names]
   (and
@@ -486,78 +468,79 @@
 
         current-iid-ptr (ArrowBufPointer.)
         cmp-ptr (ArrowBufPointer.)
-        !selection (IntStream/builder)]
+        !selection (IntStream/builder)
 
-    (let [current-bounds (long-array 2)]
-      (letfn [(reset-current-bounds []
-                (aset current-bounds 0 Long/MIN_VALUE)
-                (aset current-bounds 1 Long/MAX_VALUE))
+        current-bounds (long-array 2)]
 
-              (next-iid [idx]
-                (reset-current-bounds)
-                (loop [idx idx]
-                  (if (= idx leaf-row-count)
-                    idx
-                    (if (= current-iid-ptr (.getPointer iid-rdr idx cmp-ptr))
-                      (recur (inc idx))
-                      idx))))
+    (letfn [(reset-current-bounds []
+              (aset current-bounds 0 Long/MIN_VALUE)
+              (aset current-bounds 1 Long/MAX_VALUE))
 
-              (move-index [idx ^long valid-from ^long valid-to]
-                (let [new-idx (inc idx)]
-                  ;; this checks if went over an iid boundary but did not find anything
-                  (if-not (and (< new-idx leaf-row-count) ;; TODO avoid double check
-                               (= (.getPointer iid-rdr idx cmp-ptr)
-                                  (.getPointer iid-rdr new-idx current-iid-ptr)))
-                    (reset-current-bounds)
+            (next-iid [idx]
+              (reset-current-bounds)
+              (loop [idx idx]
+                (if (= idx leaf-row-count)
+                  idx
+                  (if (= current-iid-ptr (.getPointer iid-rdr idx cmp-ptr))
+                    (recur (inc idx))
+                    idx))))
 
-                    (if (< valid-to valid-time)
-                      (when (< (aget current-bounds 0) valid-to)
-                        (aset current-bounds 0 valid-to))
-                      (when (< valid-from (aget current-bounds 1))
-                        (aset current-bounds 1 valid-from))))
+            (move-index [idx ^long valid-from ^long valid-to]
+              (let [new-idx (inc idx)]
+                ;; this checks if went over an iid boundary but did not find anything
+                (if-not (and (< new-idx leaf-row-count) ;; TODO avoid double check
+                             (= (.getPointer iid-rdr idx cmp-ptr)
+                                (.getPointer iid-rdr new-idx current-iid-ptr)))
+                  (reset-current-bounds)
 
-                  new-idx))]
+                  (if (< valid-to valid-time)
+                    (when (< (aget current-bounds 0) valid-to)
+                      (aset current-bounds 0 valid-to))
+                    (when (< valid-from (aget current-bounds 1))
+                      (aset current-bounds 1 valid-from))))
 
-        (reset-current-bounds)
+                new-idx))]
 
-        (loop [idx 0]
-          (when-not (= idx leaf-row-count)
-            (if (<= (.getLong sys-from-rdr idx) system-time)
-              (case (.getLeg op-rdr idx)
-                :put
-                (let [valid-from (.getLong put-valid-from-rdr idx)
-                      valid-to (.getLong put-valid-to-rdr idx)]
-                  (if (and (<= valid-from valid-time)
-                           (< valid-time valid-to))
-                    (do
-                      (.getPointer iid-rdr idx current-iid-ptr)
-                      (.add !selection idx)
-                      (when valid-from-wrt
-                        (.writeLong valid-from-wrt (Long/max valid-from (aget current-bounds 0))))
-                      (when valid-to-wrt
-                        (.writeLong valid-to-wrt (Long/min valid-to (aget current-bounds 1))))
-                      (recur (long (next-iid idx))))
+      (reset-current-bounds)
 
-                    (recur (long (move-index idx valid-from valid-to)))))
+      (loop [idx 0]
+        (when-not (= idx leaf-row-count)
+          (if (<= (.getLong sys-from-rdr idx) system-time)
+            (case (.getLeg op-rdr idx)
+              :put
+              (let [valid-from (.getLong put-valid-from-rdr idx)
+                    valid-to (.getLong put-valid-to-rdr idx)]
+                (if (and (<= valid-from valid-time)
+                         (< valid-time valid-to))
+                  (do
+                    (.getPointer iid-rdr idx current-iid-ptr)
+                    (.add !selection idx)
+                    (when valid-from-wrt
+                      (.writeLong valid-from-wrt (Long/max valid-from (aget current-bounds 0))))
+                    (when valid-to-wrt
+                      (.writeLong valid-to-wrt (Long/min valid-to (aget current-bounds 1))))
+                    (recur (long (next-iid idx))))
 
-                :delete
-                (let [valid-from (.getLong delete-valid-from-rdr idx)
-                      valid-to (.getLong delete-valid-to-rdr idx)]
-                  (if (and (<= valid-from valid-time)
-                           (< valid-time valid-to))
-                    (do
-                      (.getPointer iid-rdr idx current-iid-ptr)
-                      (recur (long (next-iid idx))))
-                    (recur (long (move-index idx valid-from valid-to)))))
+                  (recur (long (move-index idx valid-from valid-to)))))
 
-                :evict
-                (do
-                  (.getPointer iid-rdr idx current-iid-ptr)
-                  (recur (long (next-iid idx)))))
+              :delete
+              (let [valid-from (.getLong delete-valid-from-rdr idx)
+                    valid-to (.getLong delete-valid-to-rdr idx)]
+                (if (and (<= valid-from valid-time)
+                         (< valid-time valid-to))
+                  (do
+                    (.getPointer iid-rdr idx current-iid-ptr)
+                    (recur (long (next-iid idx))))
+                  (recur (long (move-index idx valid-from valid-to)))))
 
-              (recur (long (inc idx)))))))
+              :evict
+              (do
+                (.getPointer iid-rdr idx current-iid-ptr)
+                (recur (long (next-iid idx)))))
 
-      (.toArray (.build !selection)))))
+            (recur (long (inc idx)))))))
+
+    (.toArray (.build !selection))))
 
 (deftype PointPointCursor [^BufferAllocator allocator, ^RelationReader live-rel, ^Iterator leaves,
                            col-names, ^Map col-preds, ^longs temporal-timestamps, params]
@@ -614,9 +597,9 @@
     ;; TODO convince ourselves there's nothing to close here
     ))
 
-(defn ->4r-cursor [^BufferAllocator allocator, ^IBufferPool buffer-pool, ^IWatermark wm
+(defn ->4r-cursor [^BufferAllocator allocator, ^IBufferPool _buffer-pool, ^IWatermark wm
                    table-name, col-names, ^longs temporal-range
-                   ^Map col-preds, params, scan-opts, basis]
+                   ^Map col-preds, params, _scan-opts, _basis]
   (let [^ILiveTableWatermark live-table-wm (some-> (.liveIndex wm) (.liveTable table-name))]
     (->PointPointCursor allocator
                         (some-> live-table-wm .liveRelation) (.iterator ^Iterable (vec (some-> live-table-wm .liveTrie .leaves)))
@@ -668,7 +651,7 @@
         (->> scan-cols
              (into {} (map (juxt identity ->col-type))))))
 
-    (emitScan [_ {:keys [columns], {:keys [table for-valid-time] :as scan-opts} :scan-opts :as scan} scan-col-types param-types]
+    (emitScan [_ {:keys [columns], {:keys [table for-valid-time] :as scan-opts} :scan-opts} scan-col-types param-types]
       (let [col-names (->> columns
                            (into [] (comp (map (fn [[col-type arg]]
                                                  (case col-type
