@@ -822,24 +822,15 @@
 
 (defn ->rel-copier ^xtdb.vector.IRowCopier [^IRelationWriter rel-wtr, ^RelationReader in-rel]
   (let [wp (.writerPosition rel-wtr)
-        copiers (vec (concat (for [^IVectorReader in-vec in-rel]
-                               (.rowCopier in-vec (.writerForName rel-wtr (.getName in-vec))))
-
-                             (for [absent-col-name (set/difference (set (keys rel-wtr))
-                                                                   (into #{} (map #(.getName ^IVectorReader %)) in-rel))
-                                   :let [!writer (delay
-                                                   (-> (.writerForName rel-wtr absent-col-name)
-                                                       (.writerForType :absent)))]]
-                               (reify IRowCopier
-                                 (copyRow [_ _src-idx]
-                                   (let [pos (.getPosition wp)]
-                                     (.writeNull ^IVectorWriter @!writer nil)
-                                     pos))))))]
+        copiers (vec (for [^IVectorReader in-vec in-rel]
+                       (.rowCopier in-vec (.writerForName rel-wtr (.getName in-vec)))))]
     (reify IRowCopier
       (copyRow [_ src-idx]
-        (let [pos (.getPositionAndIncrement wp)]
+        (.startRow rel-wtr)
+        (let [pos (.getPosition wp)]
           (doseq [^IRowCopier copier copiers]
             (.copyRow copier src-idx))
+          (.endRow rel-wtr)
           pos)))))
 
 (defn ->rel-writer ^xtdb.vector.IRelationWriter [^BufferAllocator allocator]
@@ -848,7 +839,12 @@
     (reify IRelationWriter
       (writerPosition [_] wp)
 
-      (endRow [_] (.getPositionAndIncrement wp))
+      (startRow [_])
+
+      (endRow [_]
+        (let [pos (.getPositionAndIncrement wp)]
+          (doseq [w (vals writers)]
+            (populate-with-absents w (inc pos)))))
 
       (writerForName [_ col-name]
         (.computeIfAbsent writers col-name

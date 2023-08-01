@@ -16,8 +16,7 @@
             [xtdb.util :as util]
             [xtdb.vector :as vec]
             [xtdb.vector.reader :as vr]
-            [xtdb.vector.writer :as vw]
-            [xtdb.operator.scan :as scan])
+            [xtdb.vector.writer :as vw])
   (:import [ch.qos.logback.classic Level Logger]
            clojure.lang.ExceptionInfo
            java.net.ServerSocket
@@ -34,7 +33,7 @@
            xtdb.indexer.IIndexer
            xtdb.ingester.Ingester
            (xtdb.operator IRaQuerySource PreparedQuery)
-           (xtdb.vector RelationReader IVectorReader)))
+           (xtdb.vector IVectorReader RelationReader)))
 
 #_{:clj-kondo/ignore [:uninitialized-var]}
 (def ^:dynamic ^org.apache.arrow.memory.BufferAllocator *allocator*)
@@ -51,7 +50,7 @@
                      (.buffer *allocator* 10)
                      (throw (ex-info "boom!" {})))))))
 
-(def ^:dynamic ^:private *node-opts* {})
+(def ^:dynamic *node-opts* {})
 #_{:clj-kondo/ignore [:uninitialized-var]}
 (def ^:dynamic *node*)
 

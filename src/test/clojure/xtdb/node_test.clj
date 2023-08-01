@@ -467,12 +467,12 @@ VALUES(1, OBJECT ('foo': OBJECT('bibble': true), 'bar': OBJECT('baz': 1001)))"]]
     (xt/submit-tx tu/*node* [[:put :foo {:xt/id "foo2" :c 3}]
                              [:put :baz {:xt/id "foo1" :a 4}]])
 
-    (t/is (= [{:a 1, :xt$id "foo1"} {:xt$id "foo2", :c 3}]
-             (xt/q tu/*node* "SELECT * FROM foo")))
-    (t/is (= [{:xt$id "bar1"} {:b 2, :xt$id "bar2"}]
-             (xt/q tu/*node* "SELECT * FROM bar")))
-    (t/is (= [{:a 4, :xt$id "foo1"}]
-             (xt/q tu/*node* "SELECT * FROM baz")))))
+    (t/is (= #{{:a 1, :xt$id "foo1"} {:xt$id "foo2", :c 3}}
+             (set (xt/q tu/*node* "SELECT * FROM foo"))))
+    (t/is (= #{{:xt$id "bar1"} {:b 2, :xt$id "bar2"}}
+             (set (xt/q tu/*node* "SELECT * FROM bar"))))
+    (t/is (= #{{:a 4, :xt$id "foo1"}}
+             (set (xt/q tu/*node* "SELECT * FROM baz"))))))
 
 (deftest test-erase-after-delete-2607
   (t/testing "general case"

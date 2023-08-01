@@ -14,7 +14,7 @@
            (org.apache.arrow.vector.types.pojo ArrowType$Union Schema)
            org.apache.arrow.vector.types.UnionMode
            (xtdb.object_store ObjectStore)
-           (xtdb.trie HashTrie$Node LiveHashTrie LiveHashTrie$Leaf)
+           (xtdb.trie HashTrie HashTrie$Node LiveHashTrie LiveHashTrie$Leaf)
            (xtdb.vector IVectorReader RelationReader)))
 
 (def ^org.apache.arrow.vector.types.pojo.Schema trie-schema
@@ -36,7 +36,7 @@
 (def evict-field
   (types/col-type->field "evict" :null))
 
-(def ^:private ^org.apache.arrow.vector.types.pojo.Schema leaf-schema
+(def ^org.apache.arrow.vector.types.pojo.Schema log-leaf-schema
   (Schema. [(types/col-type->field "xt$iid" [:fixed-size-binary 16])
             (types/col-type->field "xt$legacy_iid" :i64)
             (types/col-type->field "xt$system_from" types/temporal-col-type)
@@ -44,7 +44,7 @@
                            put-field delete-field evict-field)]))
 
 (defn open-leaf-root ^xtdb.vector.IRelationWriter [^BufferAllocator allocator]
-  (util/with-close-on-catch [root (VectorSchemaRoot/create leaf-schema allocator)]
+  (util/with-close-on-catch [root (VectorSchemaRoot/create log-leaf-schema allocator)]
     (vw/root->writer root)))
 
 (defn live-trie->bufs [^BufferAllocator allocator, ^LiveHashTrie trie, ^RelationReader leaf-rel]
@@ -117,3 +117,24 @@
       (util/then-compose
         (fn [_]
           (.putObject obj-store (format "%s/trie-c%s.arrow" dir chunk-idx) trie-buf)))))
+
+(defn trie-merge-tasks [tries]
+  (letfn [(trie-merge-tasks* [nodes path]
+            (let [trie-children (mapv #(some-> ^HashTrie$Node % (.children)) nodes)]
+              (if-let [^objects first-children (some identity trie-children)]
+                (->> (range (alength first-children))
+                     (mapcat (fn [bucket-idx]
+                               (trie-merge-tasks* (mapv (fn [node ^objects node-children]
+                                                          (if node-children
+                                                            (aget node-children bucket-idx)
+                                                            node))
+                                                        nodes trie-children)
+                                                  (conj path bucket-idx)))))
+                [{:path (byte-array path)
+                  :leaves (->> nodes
+                               (into [] (keep-indexed
+                                         (fn [trie-idx ^HashTrie$Node node]
+                                           (when node
+                                             {:trie-idx trie-idx, :leaf node})))))}])))]
+
+    (vec (trie-merge-tasks* (map #(some-> ^HashTrie % (.rootNode)) tries) []))))

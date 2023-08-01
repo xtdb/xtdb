@@ -1,5 +1,6 @@
 (ns xtdb.indexer.rrrr
-  (:require [xtdb.types :as types]
+  (:require [xtdb.trie :as trie]
+            [xtdb.types :as types]
             [xtdb.util :as util]
             [xtdb.vector.writer :as vw])
   (:import [java.util.function IntConsumer]
@@ -8,7 +9,8 @@
            [org.apache.arrow.vector.types UnionMode]
            [org.apache.arrow.vector.types.pojo ArrowType$Union Schema]
            org.apache.arrow.vector.VectorSchemaRoot
-           [xtdb.trie ArrowHashTrie HashTrie HashTrie$Node]))
+           [xtdb.trie ArrowHashTrie LeafMerge$LeafPointer LiveHashTrie]
+           [xtdb.vector IRelationWriter IRowCopier RelationReader]))
 
 ;; TODO shift these to some kind of test util
 
@@ -60,36 +62,9 @@
 
     trie-root))
 
-
-;; T1 trie + log -> T1 trie, T2/T3 log
-;; T2 trie + T2 log -> T2 trie, T4 log
-;; T3 trie + T3 log -> T3 trie
-;; T4 trie + T4 log -> T4 trie
-
-(defn trie-merge-tasks [tries]
-  (letfn [(trie-merge-tasks* [nodes path]
-            (let [trie-children (mapv #(some-> ^HashTrie$Node % (.children)) nodes)]
-              (if-let [^objects first-children (some identity trie-children)]
-                (->> (range (alength first-children))
-                     (mapcat (fn [bucket-idx]
-                               (trie-merge-tasks* (mapv (fn [node ^objects node-children]
-                                                          (if node-children
-                                                            (aget node-children bucket-idx)
-                                                            node))
-                                                        nodes trie-children)
-                                                  (conj path bucket-idx)))))
-                [{:path (byte-array path)
-                  :leaves (->> nodes
-                               (into [] (keep-indexed
-                                         (fn [trie-idx ^HashTrie$Node node]
-                                           (when node
-                                             {:trie-idx trie-idx, :leaf node})))))}])))]
-
-    (vec (trie-merge-tasks* (map #(some-> ^HashTrie % (.rootNode)) tries) []))))
-
 (comment
   (with-open [al (RootAllocator.)
               t1-root (open-arrow-hash-trie-root al [[nil 1 nil 3] 1 nil 3])
               log-root (open-arrow-hash-trie-root al 1)
               log2-root (open-arrow-hash-trie-root al [nil nil 3 4])]
-    (trie-merge-tasks [nil (ArrowHashTrie/from t1-root) (ArrowHashTrie/from log-root) (ArrowHashTrie/from log2-root)])))
+    (trie/trie-merge-tasks [nil (ArrowHashTrie/from t1-root) (ArrowHashTrie/from log-root) (ArrowHashTrie/from log2-root)])))
