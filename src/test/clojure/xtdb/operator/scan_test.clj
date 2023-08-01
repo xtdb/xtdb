@@ -98,7 +98,6 @@
                                    [xt/id v]]
                                  {:node node :basis {:tx tx2}})))))))
 
-
 (t/deftest test-past-point-point-queries-with-valid-time
   (with-open [node (node/start-node {})]
     (let [tx1 (xt/submit-tx node [[:put :xt_docs {:xt/id :doc1 :v 1} {:for-valid-time [:from #inst "2015"]}]
