@@ -567,21 +567,24 @@
     (when close-buffer?
       (try-close buf))))
 
+(defn read-arrow-buf [^ArrowBuf ipc-file-format-buffer]
+  (let [footer (read-arrow-footer ipc-file-format-buffer)
+        root (VectorSchemaRoot/create (.getSchema footer) (.getAllocator (.getReferenceManager ipc-file-format-buffer)))]
+    {:arrow-blocks (.getRecordBatches footer)
+     :root root
+     :loader (VectorLoader. root CommonsCompressionFactory/INSTANCE)}))
+
 (defn ->chunks
   (^xtdb.ICursor [^ArrowBuf ipc-file-format-buffer]
    (->chunks ipc-file-format-buffer {}))
   (^xtdb.ICursor [^ArrowBuf ipc-file-format-buffer {:keys [^RoaringBitmap block-idxs close-buffer?]}]
-   (let [footer (read-arrow-footer ipc-file-format-buffer)
-         root (VectorSchemaRoot/create (.getSchema footer) (.getAllocator (.getReferenceManager ipc-file-format-buffer)))]
+   (let [{:keys [arrow-blocks root loader]} (read-arrow-buf ipc-file-format-buffer)]
      (ChunkCursor. ipc-file-format-buffer
-                   (LinkedList. (cond->> (.getRecordBatches footer)
-                                  block-idxs (keep-indexed (fn [idx record-batch]
+                   (LinkedList. (cond->> arrow-blocks
+                                  block-idxs (keep-indexed (fn [idx arrow-block]
                                                              (when (.contains block-idxs ^int idx)
-                                                               record-batch)))))
-                   root
-                   (VectorLoader. root CommonsCompressionFactory/INSTANCE)
-                   nil
-                   (boolean close-buffer?)))))
+                                                               arrow-block)))))
+                   root loader nil (boolean close-buffer?)))))
 
 (defn combine-col-cursors ^ICursor #_<VSR> [^Map #_#_<String, ICursor<VSR>> col-cursors]
   (reify ICursor
