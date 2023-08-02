@@ -110,7 +110,7 @@
                  wm-tx (or tx after-tx)
                  clock (Clock/fixed current-time default-tz)
                  {:keys [col-types ->cursor]} (.computeIfAbsent cache
-                                                                {:scan-col-types (when scan-emitter
+                                                                {:scan-col-types (when (and (seq scan-cols) scan-emitter)
                                                                                    (with-open [wm (.openWatermark wm-src wm-tx)]
                                                                                      (.scanColTypes scan-emitter wm scan-cols)))
                                                                  :param-types (expr/->param-types params)
