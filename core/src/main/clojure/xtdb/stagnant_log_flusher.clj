@@ -2,6 +2,7 @@
   (:require [clojure.tools.logging :as log]
             [xtdb.log :as xt-log]
             [xtdb.indexer]
+            [xtdb.node :as node]
             [xtdb.tx-producer]
             [juxt.clojars-mirrors.integrant.core :as ig]
             [xtdb.util :as util])
@@ -78,26 +79,9 @@
   (require 'xtdb.node)
 
   (def sys
-    (-> {:xtdb/allocator {}
-         :xtdb/default-tz nil
-         :xtdb/indexer {}
-         :xtdb.operator.scan/scan-emitter {}
-         :xtdb/live-chunk {}
-         :xtdb.temporal/temporal-manager {}
-         :xtdb.operator/ra-query-source {}
-         :xtdb.metadata/metadata-manager {}
-         :xtdb.indexer/internal-id-manager {}
-         :xtdb.indexer/live-index {}
-         :xtdb/ingester {}
-         :xtdb.tx-producer/tx-producer {}
-         :xtdb.buffer-pool/buffer-pool {}
-         ::flusher {:duration #time/duration "PT5S"}}
-        (doto ig/load-namespaces)
-        (#'xtdb.node/with-default-impl :xtdb/log :xtdb.log/memory-log)
-        (#'xtdb.node/with-default-impl :xtdb/object-store :xtdb.object-store/memory-object-store)
-        (doto ig/load-namespaces)
+    (-> (node/node-system {::flusher {:duration #time/duration "PT5S"}})
         (ig/prep)
-        (ig/init)))
+        (ig/init [::flusher])))
 
   (ig/halt! sys)
 
