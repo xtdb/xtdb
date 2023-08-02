@@ -50,17 +50,12 @@
 (defmacro spin [expr] `(spin-until *spin-ms* ~expr))
 
 (defn each-fixture [f]
-  (let [log-nses '[xtdb.stagnant-log-flusher
-                   xtdb.ingester
-                   xtdb.indexer]
-        old-levels (mapv tu/get-log-level! log-nses)]
-    (try
-      (doseq [ns log-nses] (tu/set-log-level! ns log-level))
-      (binding [*spin-ms* *spin-ms*]
-        (f))
-      (finally
-        (doseq [[ns level] (mapv vector log-nses old-levels)]
-          (tu/set-log-level! ns level))))))
+  (tu/with-log-levels
+    {'xtdb.stagnant-log-flusher log-level
+     'xtdb.indexer log-level
+     'xtdb.ingester log-level}
+    (binding [*spin-ms* *spin-ms*]
+      (f))))
 
 (t/use-fixtures :each each-fixture)
 
