@@ -5,11 +5,11 @@
             [xtdb.util :as util]
             [xtdb.vector :as vec]
             [xtdb.vector.writer :as vw])
-  (:import java.net.URI
-           (java.math BigDecimal)
+  (:import (java.math BigDecimal)
+           java.net.URI
            java.nio.ByteBuffer
            (java.time Instant LocalDate LocalTime OffsetDateTime ZonedDateTime)
-           (org.apache.arrow.vector BigIntVector BitVector DateDayVector DecimalVector Decimal256Vector Float4Vector Float8Vector IntVector IntervalMonthDayNanoVector NullVector SmallIntVector TimeNanoVector TimeStampMicroTZVector TinyIntVector VarBinaryVector VarCharVector)
+           (org.apache.arrow.vector BigIntVector BitVector DateDayVector DecimalVector Float4Vector Float8Vector IntVector IntervalMonthDayNanoVector NullVector SmallIntVector TimeNanoVector TimeStampMicroTZVector TinyIntVector VarBinaryVector VarCharVector)
            (org.apache.arrow.vector.complex DenseUnionVector ListVector StructVector)
            (xtdb.types IntervalDayTime IntervalYearMonth)
            (xtdb.vector IVectorWriter)

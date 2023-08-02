@@ -2,54 +2,70 @@
   (:require [clojure.set :as set]
             [xtdb.types :as types])
   (:import (org.apache.arrow.memory BufferAllocator)
-           (org.apache.arrow.vector BigIntVector BitVector DateDayVector DateMilliVector FixedSizeBinaryVector Float4Vector Float8Vector IntVector IntervalDayVector IntervalMonthDayNanoVector IntervalYearVector NullVector SmallIntVector TimeMicroVector TimeMilliVector TimeNanoVector TimeSecVector TimeStampMicroTZVector TimeStampMilliTZVector TimeStampNanoTZVector TimeStampSecTZVector TinyIntVector ValueVector VarBinaryVector VarCharVector VectorSchemaRoot)
+           (org.apache.arrow.vector BigIntVector BitVector DateDayVector DateMilliVector DecimalVector DurationVector FixedSizeBinaryVector Float4Vector Float8Vector IntVector IntervalDayVector IntervalMonthDayNanoVector IntervalYearVector NullVector SmallIntVector TimeMicroVector TimeMilliVector TimeNanoVector TimeSecVector TimeStampMicroTZVector TimeStampMicroVector TimeStampMilliTZVector TimeStampMilliVector TimeStampNanoTZVector TimeStampNanoVector TimeStampSecTZVector TimeStampSecVector TinyIntVector ValueVector VarBinaryVector VarCharVector VectorSchemaRoot)
            (org.apache.arrow.vector.complex DenseUnionVector ListVector StructVector)
            (xtdb.vector IVectorReader RelationReader ValueVectorReader)
-           (xtdb.vector.extensions AbsentVector SetVector)))
+           (xtdb.vector.extensions AbsentVector ClojureFormVector KeywordVector SetVector UriVector UuidVector)))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (defprotocol ReaderFactory
   (^xtdb.vector.IVectorReader vec->reader [arrow-vec]))
 
+(defn- arrow-vec->leg [^ValueVector v]
+  (types/col-type->leg (types/field->col-type (.getField v))))
+
 (extend-protocol ReaderFactory
-  ValueVector (vec->reader [arrow-vec] (ValueVectorReader. arrow-vec))
+  NullVector (vec->reader [arrow-vec] (ValueVectorReader/nullVector arrow-vec :null))
+  AbsentVector (vec->reader [arrow-vec] (ValueVectorReader/absentVector arrow-vec :absent))
 
-  NullVector (vec->reader [arrow-vec] (ValueVectorReader/nullVector arrow-vec))
-  AbsentVector (vec->reader [arrow-vec] (ValueVectorReader/absentVector arrow-vec))
+  BitVector (vec->reader [arrow-vec] (ValueVectorReader/bitVector arrow-vec :bool))
+  TinyIntVector (vec->reader [arrow-vec] (ValueVectorReader/tinyIntVector arrow-vec :i8))
+  SmallIntVector (vec->reader [arrow-vec] (ValueVectorReader/smallIntVector arrow-vec :i16))
+  IntVector (vec->reader [arrow-vec] (ValueVectorReader/intVector arrow-vec :i32))
+  BigIntVector (vec->reader [arrow-vec] (ValueVectorReader/bigIntVector arrow-vec :i64))
+  Float4Vector (vec->reader [arrow-vec] (ValueVectorReader/float4Vector arrow-vec :f32))
+  Float8Vector (vec->reader [arrow-vec] (ValueVectorReader/float8Vector arrow-vec :f64))
 
-  BitVector (vec->reader [arrow-vec] (ValueVectorReader/bitVector arrow-vec))
-  TinyIntVector (vec->reader [arrow-vec] (ValueVectorReader/tinyIntVector arrow-vec))
-  SmallIntVector (vec->reader [arrow-vec] (ValueVectorReader/smallIntVector arrow-vec))
-  IntVector (vec->reader [arrow-vec] (ValueVectorReader/intVector arrow-vec))
-  BigIntVector (vec->reader [arrow-vec] (ValueVectorReader/bigIntVector arrow-vec))
-  Float4Vector (vec->reader [arrow-vec] (ValueVectorReader/float4Vector arrow-vec))
-  Float8Vector (vec->reader [arrow-vec] (ValueVectorReader/float8Vector arrow-vec))
+  DecimalVector (vec->reader [arrow-vec] (ValueVectorReader. arrow-vec :decimal))
 
-  VarCharVector (vec->reader [arrow-vec] (ValueVectorReader/varCharVector arrow-vec))
-  VarBinaryVector (vec->reader [arrow-vec] (ValueVectorReader/varBinaryVector arrow-vec))
-  FixedSizeBinaryVector (vec->reader [arrow-vec] (ValueVectorReader/fixedSizeBinaryVector arrow-vec))
+  VarCharVector (vec->reader [arrow-vec] (ValueVectorReader/varCharVector arrow-vec :utf8))
+  VarBinaryVector (vec->reader [arrow-vec] (ValueVectorReader/varBinaryVector arrow-vec :varbinary))
+  FixedSizeBinaryVector (vec->reader [arrow-vec] (ValueVectorReader/fixedSizeBinaryVector arrow-vec :fixed-size-binary))
 
-  DateDayVector (vec->reader [arrow-vec] (ValueVectorReader/dateDayVector arrow-vec))
-  DateMilliVector (vec->reader [arrow-vec] (ValueVectorReader/dateMilliVector arrow-vec))
+  DateDayVector (vec->reader [arrow-vec] (ValueVectorReader/dateDayVector arrow-vec :date-day))
+  DateMilliVector (vec->reader [arrow-vec] (ValueVectorReader/dateMilliVector arrow-vec :date-milli))
 
-  TimeStampSecTZVector (vec->reader [arrow-vec] (ValueVectorReader/timestampSecTzVector arrow-vec))
-  TimeStampMilliTZVector (vec->reader [arrow-vec] (ValueVectorReader/timestampMilliTzVector arrow-vec))
-  TimeStampMicroTZVector (vec->reader [arrow-vec] (ValueVectorReader/timestampMicroTzVector arrow-vec))
-  TimeStampNanoTZVector (vec->reader [arrow-vec] (ValueVectorReader/timestampNanoTzVector arrow-vec))
+  TimeStampSecTZVector (vec->reader [arrow-vec] (ValueVectorReader/timestampSecTzVector arrow-vec (arrow-vec->leg arrow-vec)))
+  TimeStampMilliTZVector (vec->reader [arrow-vec] (ValueVectorReader/timestampMilliTzVector arrow-vec (arrow-vec->leg arrow-vec)))
+  TimeStampMicroTZVector (vec->reader [arrow-vec] (ValueVectorReader/timestampMicroTzVector arrow-vec (arrow-vec->leg arrow-vec)))
+  TimeStampNanoTZVector (vec->reader [arrow-vec] (ValueVectorReader/timestampNanoTzVector arrow-vec (arrow-vec->leg arrow-vec)))
 
-  TimeSecVector (vec->reader [arrow-vec] (ValueVectorReader/timeSecVector arrow-vec))
-  TimeMilliVector (vec->reader [arrow-vec] (ValueVectorReader/timeMilliVector arrow-vec))
-  TimeMicroVector (vec->reader [arrow-vec] (ValueVectorReader/timeMicroVector arrow-vec))
-  TimeNanoVector (vec->reader [arrow-vec] (ValueVectorReader/timeNanoVector arrow-vec))
+  ;; TODO specialise VVR for these vecs
+  TimeStampSecVector (vec->reader [arrow-vec] (ValueVectorReader. arrow-vec :timestamp-local-second))
+  TimeStampMilliVector (vec->reader [arrow-vec] (ValueVectorReader. arrow-vec :timestamp-local-milli))
+  TimeStampMicroVector (vec->reader [arrow-vec] (ValueVectorReader. arrow-vec :timestamp-local-micro))
+  TimeStampNanoVector (vec->reader [arrow-vec] (ValueVectorReader. arrow-vec :timestamp-local-nano))
 
-  IntervalYearVector (vec->reader [arrow-vec] (ValueVectorReader/intervalYearVector arrow-vec))
-  IntervalDayVector (vec->reader [arrow-vec] (ValueVectorReader/intervalDayVector arrow-vec))
-  IntervalMonthDayNanoVector (vec->reader [arrow-vec] (ValueVectorReader/intervalMdnVector arrow-vec))
+  TimeSecVector (vec->reader [arrow-vec] (ValueVectorReader/timeSecVector arrow-vec :time-second))
+  TimeMilliVector (vec->reader [arrow-vec] (ValueVectorReader/timeMilliVector arrow-vec :time-milli))
+  TimeMicroVector (vec->reader [arrow-vec] (ValueVectorReader/timeMicroVector arrow-vec :time-micro))
+  TimeNanoVector (vec->reader [arrow-vec] (ValueVectorReader/timeNanoVector arrow-vec :time-nano))
 
-  StructVector (vec->reader [arrow-vec] (ValueVectorReader/structVector arrow-vec))
+  IntervalYearVector (vec->reader [arrow-vec] (ValueVectorReader/intervalYearVector arrow-vec :interval-year-month))
+  IntervalDayVector (vec->reader [arrow-vec] (ValueVectorReader/intervalDayVector arrow-vec :interval-day-time))
+  IntervalMonthDayNanoVector (vec->reader [arrow-vec] (ValueVectorReader/intervalMdnVector arrow-vec :interval-month-day-nano))
+
+  DurationVector (vec->reader [arrow-vec] (ValueVectorReader. arrow-vec :duration))
+
+  StructVector (vec->reader [arrow-vec] (ValueVectorReader/structVector arrow-vec :struct))
   ListVector (vec->reader [arrow-vec] (ValueVectorReader/listVector arrow-vec))
-  SetVector (vec->reader [arrow-vec] (ValueVectorReader/setVector arrow-vec))
-  DenseUnionVector (vec->reader [arrow-vec] (ValueVectorReader/denseUnionVector arrow-vec)))
+  SetVector (vec->reader [arrow-vec] (ValueVectorReader/setVector arrow-vec :set))
+  DenseUnionVector (vec->reader [arrow-vec] (ValueVectorReader/denseUnionVector arrow-vec))
+
+  KeywordVector (vec->reader [arrow-vec] (ValueVectorReader. arrow-vec :keyword))
+  UuidVector (vec->reader [arrow-vec] (ValueVectorReader. arrow-vec :uuid))
+  UriVector (vec->reader [arrow-vec] (ValueVectorReader. arrow-vec :uri))
+  ClojureFormVector (vec->reader [arrow-vec] (ValueVectorReader. arrow-vec :clj-form)))
 
 (defn rel-reader
   (^xtdb.vector.RelationReader [cols] (RelationReader/from cols))
