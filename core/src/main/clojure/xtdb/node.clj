@@ -119,24 +119,27 @@
   (cond-> opts
     (not (ig/find-derived opts parent-k)) (assoc impl-k {})))
 
+(defn node-system [opts]
+  (-> (into {::node {}
+             :xtdb/allocator {}
+             :xtdb/default-tz nil
+             :xtdb/indexer {}
+             :xtdb.indexer/live-index {}
+             :xtdb/ingester {}
+             :xtdb.metadata/metadata-manager {}
+             :xtdb.buffer-pool/buffer-pool {}
+             :xtdb.operator.scan/scan-emitter {}
+             :xtdb.operator/ra-query-source {}
+             ::txp/tx-producer {}
+             :xtdb.stagnant-log-flusher/flusher {}}
+            opts)
+      (doto ig/load-namespaces)
+      (with-default-impl :xtdb/log :xtdb.log/memory-log)
+      (with-default-impl :xtdb/object-store :xtdb.object-store/memory-object-store)
+      (doto ig/load-namespaces)))
+
 (defn start-node ^xtdb.node.Node [opts]
-  (let [system (-> (into {::node {}
-                          :xtdb/allocator {}
-                          :xtdb/default-tz nil
-                          :xtdb/indexer {}
-                          :xtdb.indexer/live-index {}
-                          :xtdb/ingester {}
-                          :xtdb.metadata/metadata-manager {}
-                          :xtdb.buffer-pool/buffer-pool {}
-                          :xtdb.operator.scan/scan-emitter {}
-                          :xtdb.operator/ra-query-source {}
-                          ::txp/tx-producer {}
-                          :xtdb.stagnant-log-flusher/flusher {}}
-                         opts)
-                   (doto ig/load-namespaces)
-                   (with-default-impl :xtdb/log :xtdb.log/memory-log)
-                   (with-default-impl :xtdb/object-store :xtdb.object-store/memory-object-store)
-                   (doto ig/load-namespaces)
+  (let [system (-> (node-system opts)
                    ig/prep
                    ig/init)]
 
