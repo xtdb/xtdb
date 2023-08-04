@@ -209,7 +209,7 @@
       (t/is (= #{{:xt/valid-from (util/->zdt tt)
                   :xt/valid-to (util/->zdt util/end-of-time)
                   :xt/system-from (util/->zdt tt),
-                  :xt/system-to nil}}
+                  :xt/system-to (util/->zdt util/end-of-time)}}
                (set (tu/query-ra '[:scan {:table xt_docs}
                                    [xt/valid-from xt/valid-to
                                     xt/system-from xt/system-to]]
@@ -223,18 +223,30 @@
 
     #_(tu/finish-chunk! node)
 
-    (t/is (= #{{:xt/system-from (util/->zdt #inst "3000")
-                :xt/system-to (util/->zdt #inst "3001")
-                :last_updated "tx1"}
-               {:xt/system-from (util/->zdt #inst "3001")
-                :xt/system-to (util/->zdt util/end-of-time)
-                :last_updated "tx1"}
-               {:xt/system-from (util/->zdt #inst "3001")
-                :xt/system-to (util/->zdt util/end-of-time)
-                :last_updated "tx2"}}
+    (t/is (= #{{:last_updated "tx2",
+                :xt/valid-from #time/zoned-date-time "3001-01-01T00:00Z[UTC]",
+                :xt/valid-to
+                #time/zoned-date-time "9999-12-31T23:59:59.999999Z[UTC]",
+                :xt/system-from #time/zoned-date-time "3001-01-01T00:00Z[UTC]",
+                :xt/system-to
+                #time/zoned-date-time "9999-12-31T23:59:59.999999Z[UTC]"}
+               {:last_updated "tx1",
+                :xt/valid-from #time/zoned-date-time "3000-01-01T00:00Z[UTC]",
+                :xt/valid-to #time/zoned-date-time "3001-01-01T00:00Z[UTC]",
+                :xt/system-from #time/zoned-date-time "3000-01-01T00:00Z[UTC]",
+                :xt/system-to
+                #time/zoned-date-time "9999-12-31T23:59:59.999999Z[UTC]"}
+               {:last_updated "tx1",
+                :xt/valid-from #time/zoned-date-time "3001-01-01T00:00Z[UTC]",
+                :xt/valid-to
+                #time/zoned-date-time "9999-12-31T23:59:59.999999Z[UTC]",
+                :xt/system-from #time/zoned-date-time "3000-01-01T00:00Z[UTC]",
+                :xt/system-to #time/zoned-date-time "3001-01-01T00:00Z[UTC]"}}
              (set (tu/query-ra '[:scan {:table foo, :for-system-time :all-time}
                                  [{xt/system-from (< xt/system-from #time/zoned-date-time "3002-01-01T00:00Z")}
                                   {xt/system-to (> xt/system-to #time/zoned-date-time "2999-01-01T00:00Z")}
+                                  xt/valid-from
+                                  xt/valid-to
                                   last_updated]]
                                {:node node :default-all-valid-time? true}))))))
 
@@ -370,3 +382,131 @@
              (tu/query-ra
               '[:scan {:table xt_docs} [xt/id {col-x (= col-x "toto")}]]
               {:node node})))))
+
+(t/deftest test-correct-rectangle-cutting
+  (with-open [node (node/start-node {})]
+    (letfn [(q [id]
+              (-> (xt/q node {:find '[v vf vt]
+                              :where [(list 'match :xt_docs
+                                            ['v {:xt/id id :xt/valid-from 'vf :xt/valid-to 'vt}]
+                                            {:for-valid-time :all-time})]})
+                  frequencies))]
+      (t/testing "period starts before and does NOT overlap"
+        (xt/submit-tx node [[:put :xt_docs {:xt/id 1, :v 1} {:for-valid-time [:in #inst "2010" #inst "2020"]}]])
+        (xt/submit-tx node [[:put :xt_docs {:xt/id 1, :v 2} {:for-valid-time [:in #inst "2005" #inst "2009"]}]])
+
+        (t/is (= {{:v 2,
+                   :vf #time/zoned-date-time "2005-01-01T00:00Z[UTC]",
+                   :vt #time/zoned-date-time "2009-01-01T00:00Z[UTC]"} 1
+                  {:v 1,
+                   :vf #time/zoned-date-time "2010-01-01T00:00Z[UTC]",
+                   :vt #time/zoned-date-time "2020-01-01T00:00Z[UTC]"} 1}
+                 (q 1))))
+
+      (t/testing "period starts before and overlaps"
+        (xt/submit-tx node [[:put :xt_docs {:xt/id 2, :v 1} {:for-valid-time [:in #inst "2015" #inst "2025"]}]])
+        (xt/submit-tx node [[:put :xt_docs {:xt/id 2, :v 2} {:for-valid-time [:in #inst "2010" #inst "2020"]}]])
+
+        (t/is (= {{:v 2,
+                   :vf #time/zoned-date-time "2010-01-01T00:00Z[UTC]",
+                   :vt #time/zoned-date-time "2020-01-01T00:00Z[UTC]"} 1
+                  {:v 1,
+                   :vf #time/zoned-date-time "2020-01-01T00:00Z[UTC]",
+                   :vt #time/zoned-date-time "2025-01-01T00:00Z[UTC]"} 1}
+                 (q 2))))
+
+      (t/testing "period starts equally and overlaps"
+        (xt/submit-tx node [[:put :xt_docs {:xt/id 3, :v 1} {:for-valid-time [:in #inst "2010" #inst "2025"]}]])
+        (xt/submit-tx node [[:put :xt_docs {:xt/id 3, :v 2} {:for-valid-time [:in #inst "2010" #inst "2020"]}]])
+
+        (t/is (= {{:v 2,
+                   :vf #time/zoned-date-time "2010-01-01T00:00Z[UTC]",
+                   :vt #time/zoned-date-time "2020-01-01T00:00Z[UTC]"} 1
+                  {:v 1,
+                   :vf #time/zoned-date-time "2020-01-01T00:00Z[UTC]",
+                   :vt #time/zoned-date-time "2025-01-01T00:00Z[UTC]"} 1}
+                 (q 3))))
+
+      (t/testing "newer period completely covered"
+        (xt/submit-tx node [[:put :xt_docs {:xt/id 4, :v 1} {:for-valid-time [:in #inst "2010" #inst "2025"]}]])
+        (xt/submit-tx node [[:put :xt_docs {:xt/id 4, :v 2} {:for-valid-time [:in #inst "2015" #inst "2020"]}]])
+
+        (t/is (= {{:v 2,
+                   :vf #time/zoned-date-time "2015-01-01T00:00Z[UTC]",
+                   :vt #time/zoned-date-time "2020-01-01T00:00Z[UTC]"} 1
+                  {:v 1,
+                   :vf #time/zoned-date-time "2010-01-01T00:00Z[UTC]",
+                   :vt #time/zoned-date-time "2015-01-01T00:00Z[UTC]"} 1
+                  {:v 1,
+                   :vf #time/zoned-date-time "2020-01-01T00:00Z[UTC]",
+                   :vt #time/zoned-date-time "2025-01-01T00:00Z[UTC]"} 1}
+                 (q 4))))
+
+      (t/testing "older period completely covered"
+        (xt/submit-tx node [[:put :xt_docs {:xt/id 5, :v 1} {:for-valid-time [:in #inst "2015" #inst "2020"]}]])
+        (xt/submit-tx node [[:put :xt_docs {:xt/id 5, :v 2} {:for-valid-time [:in #inst "2010" #inst "2025"]}]])
+
+        (t/is (= {{:v 2,
+                   :vf #time/zoned-date-time "2010-01-01T00:00Z[UTC]",
+                   :vt #time/zoned-date-time "2025-01-01T00:00Z[UTC]"} 1}
+                 (q 5))))
+
+      (t/testing "period end equally and overlaps"
+        (xt/submit-tx node [[:put :xt_docs {:xt/id 6, :v 1} {:for-valid-time [:in #inst "2010" #inst "2025"]}]])
+        (xt/submit-tx node [[:put :xt_docs {:xt/id 6, :v 2} {:for-valid-time [:in #inst "2015" #inst "2025"]}]])
+
+        (t/is (= {{:v 2,
+                   :vf #time/zoned-date-time "2015-01-01T00:00Z[UTC]",
+                   :vt #time/zoned-date-time "2025-01-01T00:00Z[UTC]"} 1
+                  {:v 1,
+                   :vf #time/zoned-date-time "2010-01-01T00:00Z[UTC]",
+                   :vt #time/zoned-date-time "2015-01-01T00:00Z[UTC]"} 1}
+                 (q 6))))
+
+      (t/testing "period ends after and overlaps"
+        (xt/submit-tx node [[:put :xt_docs {:xt/id 7, :v 1} {:for-valid-time [:in #inst "2010" #inst "2020"]}]])
+        (xt/submit-tx node [[:put :xt_docs {:xt/id 7, :v 2} {:for-valid-time [:in #inst "2015" #inst "2025"]}]])
+
+        (t/is (= {{:v 2,
+                   :vf #time/zoned-date-time "2015-01-01T00:00Z[UTC]",
+                   :vt #time/zoned-date-time "2025-01-01T00:00Z[UTC]"} 1
+                  {:v 1,
+                   :vf #time/zoned-date-time "2010-01-01T00:00Z[UTC]",
+                   :vt #time/zoned-date-time "2015-01-01T00:00Z[UTC]"} 1}
+                 (q 7))))
+
+      (t/testing "period starts before and touches"
+        (xt/submit-tx node [[:put :xt_docs {:xt/id 8, :v 1} {:for-valid-time [:in #inst "2010" #inst "2020"]}]])
+        (xt/submit-tx node [[:put :xt_docs {:xt/id 8, :v 2} {:for-valid-time [:in #inst "2005" #inst "2010"]}]])
+
+        (t/is (= {{:v 2,
+                   :vf #time/zoned-date-time "2005-01-01T00:00Z[UTC]",
+                   :vt #time/zoned-date-time "2010-01-01T00:00Z[UTC]"} 1
+                  {:v 1,
+                   :vf #time/zoned-date-time "2010-01-01T00:00Z[UTC]",
+                   :vt #time/zoned-date-time "2020-01-01T00:00Z[UTC]"} 1}
+                 (q 8))))
+
+      (t/testing "period starts after and touches"
+        (xt/submit-tx node [[:put :xt_docs {:xt/id 9, :v 1} {:for-valid-time [:in #inst "2005" #inst "2010"]}]])
+        (xt/submit-tx node [[:put :xt_docs {:xt/id 9, :v 2} {:for-valid-time [:in #inst "2010" #inst "2020"]}]])
+
+        (t/is (= {{:v 2,
+                   :vf #time/zoned-date-time "2010-01-01T00:00Z[UTC]",
+                   :vt #time/zoned-date-time "2020-01-01T00:00Z[UTC]"} 1
+                  {:v 1,
+                   :vf #time/zoned-date-time "2005-01-01T00:00Z[UTC]",
+                   :vt #time/zoned-date-time "2010-01-01T00:00Z[UTC]"} 1}
+                 (q 9))))
+
+      (t/testing "period starts after and does NOT overlap"
+        (xt/submit-tx node [[:put :xt_docs {:xt/id 10, :v 1} {:for-valid-time [:in #inst "2005" #inst "2009"]}]])
+        (xt/submit-tx node [[:put :xt_docs {:xt/id 10, :v 2} {:for-valid-time [:in #inst "2010" #inst "2020"]}]])
+
+        (t/is (= {{:v 2,
+                   :vf #time/zoned-date-time "2010-01-01T00:00Z[UTC]",
+                   :vt #time/zoned-date-time "2020-01-01T00:00Z[UTC]"} 1
+                  {:v 1,
+                   :vf #time/zoned-date-time "2005-01-01T00:00Z[UTC]",
+                   :vt #time/zoned-date-time "2009-01-01T00:00Z[UTC]"} 1}
+                 (q 10)))))))

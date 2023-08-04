@@ -1504,13 +1504,13 @@
             "cross-time join - who was here in both 2018 and 2023?")
 
       (t/is (= #{{:vt-start (util/->zdt #inst "2021")
-                  :vt-end (util/->zdt util/end-of-time)
-                  :tt-start (util/->zdt #inst "2020-01-01")
-                  :tt-end (util/->zdt #inst "2020-01-02")}
-                 {:vt-start (util/->zdt #inst "2021")
                   :vt-end (util/->zdt #inst "2022")
-                  :tt-start (util/->zdt #inst "2020-01-02")
-                  :tt-end (util/->zdt util/end-of-time)}}
+                  :tt-start (util/->zdt #inst "2020")
+                  :tt-end (util/->zdt util/end-of-time)}
+                 {:vt-start (util/->zdt #inst "2022")
+                  :vt-end (util/->zdt util/end-of-time)
+                  :tt-start (util/->zdt #inst "2020")
+                  :tt-end (util/->zdt  #inst "2020-01-02")}}
                (set (q '{:find [vt-start vt-end tt-start tt-end]
                          :where [(match :xt_docs {:xt/id :luke
                                                   :xt/valid-from vt-start
