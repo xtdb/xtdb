@@ -245,6 +245,8 @@
                       :xtdb.tx-producer/tx-producer {:instant-src instant-src}
                       :xtdb.buffer-pool/buffer-pool {:cache-path (.resolve node-dir buffers-dir)}
                       :xtdb.object-store/file-system-object-store {:root-path (.resolve node-dir "objects")}
+                      :xtdb/indexer (->> {:rows-per-chunk rows-per-chunk}
+                                         (into {} (filter val)))
                       :xtdb/live-chunk (->> {:rows-per-block rows-per-block
                                              :rows-per-chunk rows-per-chunk}
                                             (into {} (filter val)))})))

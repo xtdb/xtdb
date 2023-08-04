@@ -33,6 +33,7 @@
            (org.apache.arrow.vector BitVector)
            (org.apache.arrow.vector.complex DenseUnionVector ListVector)
            (org.apache.arrow.vector.ipc ArrowStreamReader)
+           xtdb.RowCounter
            (xtdb.api.protocols ClojureForm TransactionInstant)
            xtdb.indexer.internal_id_manager.IInternalIdManager
            (xtdb.indexer.live_index ILiveIndex ILiveIndexTx)
@@ -81,7 +82,8 @@
           (.digest eid-bytes)
           (Arrays/copyOfRange 0 16)))))
 
-(defn- ->put-indexer ^xtdb.indexer.OpIndexer [^IInternalIdManager iid-mgr, ^ILiveIndexTx live-idx-tx, ^ILiveChunkTx live-chunk,
+(defn- ->put-indexer ^xtdb.indexer.OpIndexer [^IInternalIdManager iid-mgr, ^RowCounter row-counter,
+                                              ^ILiveIndexTx live-idx-tx, ^ILiveChunkTx live-chunk,
                                               ^IVectorReader tx-ops-rdr, ^Instant system-time]
   (let [put-leg (.legReader tx-ops-rdr :put)
         doc-rdr (.structKeyReader put-leg "document")
@@ -134,11 +136,14 @@
                                        :valid-to (util/micros->instant valid-to)})))
 
             (let [{:keys [^xtdb.indexer.live_index.ILiveTableTx live-table, ^IRowCopier doc-copier]} live-idx-table]
-              (.logPut live-table (->iid eid) legacy-iid valid-from valid-to #(.copyRow doc-copier tx-op-idx)))))
+              (.logPut live-table (->iid eid) legacy-iid valid-from valid-to #(.copyRow doc-copier tx-op-idx))))
+
+          (.addRows row-counter 1))
 
         nil))))
 
-(defn- ->delete-indexer ^xtdb.indexer.OpIndexer [^IInternalIdManager iid-mgr, ^ILiveIndexTx live-idx-tx ^ILiveChunkTx live-chunk
+(defn- ->delete-indexer ^xtdb.indexer.OpIndexer [^IInternalIdManager iid-mgr, ^RowCounter row-counter,
+                                                 ^ILiveIndexTx live-idx-tx ^ILiveChunkTx live-chunk
                                                  ^IVectorReader tx-ops-rdr, ^Instant current-time]
   (let [delete-leg (.legReader tx-ops-rdr :delete)
         table-rdr (.structKeyReader delete-leg "table")
@@ -164,11 +169,13 @@
                                      :valid-to (util/micros->instant valid-to)})))
 
           (-> (.liveTable live-idx-tx table)
-              (.logDelete (->iid eid) legacy-iid valid-from valid-to)))
+              (.logDelete (->iid eid) legacy-iid valid-from valid-to))
+
+          (.addRows row-counter 1))
 
         nil))))
 
-(defn- ->evict-indexer ^xtdb.indexer.OpIndexer [^IInternalIdManager iid-mgr, ^ILiveIndexTx live-idx-tx ^ILiveChunkTx live-chunk ^IVectorReader tx-ops-rdr]
+(defn- ->evict-indexer ^xtdb.indexer.OpIndexer [^IInternalIdManager iid-mgr, ^RowCounter row-counter, ^ILiveIndexTx live-idx-tx ^ILiveChunkTx live-chunk ^IVectorReader tx-ops-rdr]
 
   (let [evict-leg (.legReader tx-ops-rdr :evict)
         table-rdr (.structKeyReader evict-leg "_table")
@@ -181,7 +188,9 @@
               legacy-iid (.getOrCreateInternalId iid-mgr table eid row-id)]
 
           (-> (.liveTable live-idx-tx table)
-              (.logEvict (->iid eid) legacy-iid)))
+              (.logEvict (->iid eid) legacy-iid))
+
+          (.addRows row-counter 1))
 
         nil))))
 
@@ -297,7 +306,8 @@
 (definterface SqlOpIndexer
   (^void indexOp [^xtdb.vector.RelationReader inRelation, queryOpts]))
 
-(defn- ->sql-upsert-indexer ^xtdb.indexer.SqlOpIndexer [^IInternalIdManager iid-mgr, ^ILiveIndexTx live-idx-tx, ^ILiveChunkTx live-chunk,
+(defn- ->sql-upsert-indexer ^xtdb.indexer.SqlOpIndexer [^IInternalIdManager iid-mgr, ^RowCounter row-counter,
+                                                        ^ILiveIndexTx live-idx-tx, ^ILiveChunkTx live-chunk,
                                                         {{:keys [^Instant current-time]} :basis}]
 
   (let [current-time-µs (util/instant->micros current-time)]
@@ -340,9 +350,11 @@
                                           {:valid-from (util/micros->instant valid-from)
                                            :valid-to (util/micros->instant valid-to)})))
 
-                (.logPut live-idx-table (->iid eid) legacy-iid valid-from valid-to #(.copyRow live-idx-table-copier idx))))))))))
+                (.logPut live-idx-table (->iid eid) legacy-iid valid-from valid-to #(.copyRow live-idx-table-copier idx)))))
 
-(defn- ->sql-delete-indexer ^xtdb.indexer.SqlOpIndexer [^ILiveIndexTx live-idx-tx]
+          (.addRows row-counter row-count))))))
+
+(defn- ->sql-delete-indexer ^xtdb.indexer.SqlOpIndexer [^RowCounter row-counter, ^ILiveIndexTx live-idx-tx]
   (reify SqlOpIndexer
     (indexOp [_ in-rel {:keys [table]}]
       (let [table (util/str->normal-form-str table)
@@ -362,9 +374,11 @@
                                        :valid-to (util/micros->instant valid-to)})))
 
             (-> (.liveTable live-idx-tx table)
-                (.logDelete (->iid eid) iid valid-from valid-to))))))))
+                (.logDelete (->iid eid) iid valid-from valid-to))))
 
-(defn- ->sql-erase-indexer ^xtdb.indexer.SqlOpIndexer [^ILiveIndexTx live-idx-tx]
+        (.addRows row-counter row-count)))))
+
+(defn- ->sql-erase-indexer ^xtdb.indexer.SqlOpIndexer [^RowCounter row-counter, ^ILiveIndexTx live-idx-tx]
   (reify SqlOpIndexer
     (indexOp [_ in-rel {:keys [table]}]
       (let [table (util/str->normal-form-str table)
@@ -375,18 +389,20 @@
           (let [eid (.getObject id-rdr idx)
                 iid (.getLong iid-rdr idx)]
             (-> (.liveTable live-idx-tx table)
-                (.logEvict (->iid eid) iid))))))))
+                (.logEvict (->iid eid) iid))))
 
-(defn- ->sql-indexer ^xtdb.indexer.OpIndexer [^BufferAllocator allocator, ^IInternalIdManager iid-mgr
+        (.addRows row-counter row-count)))))
+
+(defn- ->sql-indexer ^xtdb.indexer.OpIndexer [^BufferAllocator allocator, ^IInternalIdManager iid-mgr, ^RowCounter row-counter
                                               ^ILiveIndexTx live-idx-tx, ^ILiveChunk doc-idxer
                                               ^IVectorReader tx-ops-rdr, ^IRaQuerySource ra-src, wm-src, ^IScanEmitter scan-emitter
                                               {:keys [default-all-valid-time? basis default-tz] :as tx-opts}]
   (let [sql-leg (.legReader tx-ops-rdr :sql)
         query-rdr (.structKeyReader sql-leg "query")
         params-rdr (.structKeyReader sql-leg "params")
-        upsert-idxer (->sql-upsert-indexer iid-mgr live-idx-tx doc-idxer tx-opts)
-        delete-idxer (->sql-delete-indexer live-idx-tx)
-        erase-idxer (->sql-erase-indexer live-idx-tx)]
+        upsert-idxer (->sql-upsert-indexer iid-mgr row-counter live-idx-tx doc-idxer tx-opts)
+        delete-idxer (->sql-delete-indexer row-counter live-idx-tx)
+        erase-idxer (->sql-erase-indexer row-counter live-idx-tx)]
     (reify OpIndexer
       (indexOp [_ tx-op-idx]
         (letfn [(index-op [^SqlOpIndexer op-idxer {:keys [all-app-time] :as query-opts} inner-query]
@@ -444,7 +460,7 @@
 (def ^:private ^:const ^String txs-table
   "xt$txs")
 
-(defn- add-tx-row! [^ILiveIndexTx live-idx-tx, ^ILiveChunkTx live-chunk-tx, ^IInternalIdManager iid-mgr, ^TransactionInstant tx-key, ^Throwable t]
+(defn- add-tx-row! [^IInternalIdManager iid-mgr, ^RowCounter row-counter, ^ILiveIndexTx live-idx-tx, ^ILiveChunkTx live-chunk-tx, ^TransactionInstant tx-key, ^Throwable t]
   (let [tx-id (.tx-id tx-key)
         system-time-µs (util/instant->micros (.system-time tx-key))
 
@@ -492,7 +508,9 @@
           (doto (.writerForType e-wtr :null)
             (.writeNull nil))
           (doto (.writerForType e-wtr :clj-form)
-            (.writeObject (pr-str t))))))))
+            (.writeObject (pr-str t))))))
+
+    (.addRows row-counter 1)))
 
 (deftype Indexer [^BufferAllocator allocator
                   ^ObjectStore object-store
@@ -503,6 +521,8 @@
                   ^ILiveIndex live-idx
 
                   ^:volatile-mutable ^TransactionInstant latest-completed-tx
+                  ^RowCounter row-counter
+                  ^long rows-per-chunk
 
                   ^:volatile-mutable ^IWatermark shared-wm
                   ^StampedLock wm-lock]
@@ -527,11 +547,11 @@
 
         (letfn [(index-tx-ops [^DenseUnionVector tx-ops-vec]
                   (let [tx-ops-rdr (vr/vec->reader tx-ops-vec)
-                        !put-idxer (delay (->put-indexer iid-mgr live-idx-tx live-chunk-tx tx-ops-rdr system-time))
-                        !delete-idxer (delay (->delete-indexer iid-mgr live-idx-tx live-chunk-tx tx-ops-rdr system-time))
-                        !evict-idxer (delay (->evict-indexer iid-mgr live-idx-tx live-chunk-tx tx-ops-rdr))
+                        !put-idxer (delay (->put-indexer iid-mgr row-counter live-idx-tx live-chunk-tx tx-ops-rdr system-time))
+                        !delete-idxer (delay (->delete-indexer iid-mgr row-counter live-idx-tx live-chunk-tx tx-ops-rdr system-time))
+                        !evict-idxer (delay (->evict-indexer iid-mgr row-counter live-idx-tx live-chunk-tx tx-ops-rdr))
                         !call-idxer (delay (->call-indexer allocator ra-src wm-src scan-emitter tx-ops-rdr tx-opts))
-                        !sql-idxer (delay (->sql-indexer allocator iid-mgr live-idx-tx live-chunk-tx
+                        !sql-idxer (delay (->sql-indexer allocator iid-mgr row-counter live-idx-tx live-chunk-tx
                                                          tx-ops-rdr ra-src wm-src scan-emitter tx-opts))]
                     (dotimes [tx-op-idx (.valueCount tx-ops-rdr)]
                       (when-let [more-tx-ops (case (.getTypeId tx-ops-rdr tx-op-idx)
@@ -565,12 +585,12 @@
 
                   (with-open [live-chunk-tx (.startTx live-chunk)
                               live-idx-tx (.startTx live-idx tx-key)]
-                    (add-tx-row! live-idx-tx live-chunk-tx iid-mgr tx-key e)
+                    (add-tx-row! iid-mgr row-counter live-idx-tx live-chunk-tx tx-key e)
                     (.commit live-chunk-tx)
                     (.commit live-idx-tx)))
 
                 (do
-                  (add-tx-row! live-idx-tx live-chunk-tx iid-mgr tx-key nil)
+                  (add-tx-row! iid-mgr row-counter live-idx-tx live-chunk-tx tx-key nil)
 
                   (.commit live-chunk-tx)
                   (.commit live-idx-tx)))
@@ -583,7 +603,7 @@
         (while (.isBlockFull live-chunk)
           (finish-block! this))
 
-        (when (.isChunkFull live-chunk)
+        (when (>= (.getChunkRowCount row-counter) rows-per-chunk)
           (finish-chunk! this))
 
         tx-key)))
@@ -640,10 +660,10 @@
         (throw t))))
 
   (finish-chunk! [this]
-    (let [chunk-idx (.chunkIdx live-chunk)]
-      @(.finishChunk live-chunk latest-completed-tx)
+    @(.finishChunk live-chunk latest-completed-tx)
 
-      (.finishChunk live-idx chunk-idx))
+    (.finishChunk live-idx (.getChunkIdx row-counter))
+    (.nextChunk row-counter)
 
     (let [wm-lock-stamp (.writeLock wm-lock)]
       (try
@@ -670,22 +690,26 @@
           :internal-id-mgr (ig/ref :xtdb.indexer/internal-id-manager)
           :live-chunk (ig/ref :xtdb/live-chunk)
           :live-index (ig/ref :xtdb.indexer/live-index)
-          :ra-src (ig/ref ::op/ra-query-source)}
+          :ra-src (ig/ref ::op/ra-query-source)
+          :rows-per-chunk 102400}
          opts))
 
 (defmethod ig/init-key :xtdb/indexer
   [_ {:keys [allocator object-store metadata-mgr scan-emitter, ra-src
-             internal-id-mgr live-chunk live-index]}]
+             internal-id-mgr live-chunk live-index, rows-per-chunk]}]
 
-  (let [{:keys [latest-completed-tx]} (meta/latest-chunk-metadata metadata-mgr)]
+  (let [{:keys [latest-completed-tx latest-row-id], :or {latest-row-id -1}} (meta/latest-chunk-metadata metadata-mgr)]
 
-    (Indexer. allocator object-store scan-emitter internal-id-mgr
-              ra-src live-chunk live-index
+    (assert live-chunk)
+    (->Indexer allocator object-store scan-emitter internal-id-mgr
+               ra-src live-chunk live-index
 
-              latest-completed-tx
+               latest-completed-tx
+               (RowCounter. (inc ^long latest-row-id))
+               rows-per-chunk
 
-              nil ; watermark
-              (StampedLock.))))
+               nil ; watermark
+               (StampedLock.))))
 
 (defmethod ig/halt-key! :xtdb/indexer [_ ^AutoCloseable indexer]
   (.close indexer))
