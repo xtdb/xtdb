@@ -289,11 +289,19 @@
            (.toLowerCase)
            (keyword)))
 
+(defn with-log-levels* [ns-level-pairs f]
+  (let [nses (mapv first ns-level-pairs)
+        orig-levels (mapv get-log-level! nses)]
+    (try
+      (doseq [[ns l] ns-level-pairs] (set-log-level! ns l))
+      (f)
+      (finally
+        (doseq [[ns ol] (mapv vector nses orig-levels)]
+          (set-log-level! ns ol))))))
+
+(defmacro with-log-levels [ns-level-pairs & body]
+  `(with-log-levels* ~ns-level-pairs (fn [] ~@body)))
+
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (defmacro with-log-level [ns level & body]
-  `(let [level# (get-log-level! ~ns)]
-     (try
-       (set-log-level! ~ns ~level)
-       ~@body
-       (finally
-         (set-log-level! ~ns level#)))))
+  `(with-log-levels {~ns ~level} ~@body))
