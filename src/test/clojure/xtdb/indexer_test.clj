@@ -185,7 +185,7 @@
                  :xt/valid-from (util/->zdt tt)
                  :xt/valid-to (util/->zdt util/end-of-time)
                  :xt/system-from (util/->zdt tt)
-                 :xt/system-to nil}]
+                 :xt/system-to (util/->zdt util/end-of-time)}]
                (tu/query-ra '[:scan {:table xt_docs}
                               [xt/id version
                                xt/valid-from, xt/valid-to
@@ -195,14 +195,14 @@
       (let [{tt2 :system-time} (xt/submit-tx node [[:put :xt_docs {:xt/id :foo, :version 1}]]
                                              {:default-all-valid-time? false})]
         (t/is (= #{{:xt/id :foo, :version 0,
-                    :xt/valid-from (util/->zdt tt)
+                    :xt/valid-from (util/->zdt tt2)
                     :xt/valid-to (util/->zdt util/end-of-time)
                     :xt/system-from (util/->zdt tt)
                     :xt/system-to (util/->zdt tt2)}
                    {:xt/id :foo, :version 0,
                     :xt/valid-from (util/->zdt tt)
                     :xt/valid-to (util/->zdt tt2)
-                    :xt/system-from (util/->zdt tt2)
+                    :xt/system-from (util/->zdt tt)
                     :xt/system-to (util/->zdt util/end-of-time)}
                    {:xt/id :foo, :version 1,
                     :xt/valid-from (util/->zdt tt2)
