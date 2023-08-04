@@ -3,15 +3,18 @@
             [xtdb.buffer-pool]
             [xtdb.object-store]
             [xtdb.trie :as trie]
+            [xtdb.types :as types]
             [xtdb.util :as util]
             [xtdb.vector.reader :as vr]
             [xtdb.vector.writer :as vw])
-  (:import (java.lang AutoCloseable)
+  (:import [clojure.lang MapEntry]
+           (java.lang AutoCloseable)
            (java.nio ByteBuffer)
            (java.util ArrayList HashMap Map)
            (java.util.concurrent CompletableFuture)
            (java.util.function Function)
            (org.apache.arrow.memory BufferAllocator)
+           [org.apache.arrow.vector.types.pojo Field]
            (xtdb.object_store ObjectStore)
            (xtdb.trie LiveHashTrie)
            (xtdb.vector IRelationWriter IVectorWriter)))
@@ -19,6 +22,7 @@
 ;;
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (definterface ILiveTableWatermark
+  (^java.util.Map columnTypes [])
   (^xtdb.vector.RelationReader liveRelation [])
   (^xtdb.trie.LiveHashTrie liveTrie []))
 
@@ -41,6 +45,7 @@
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (definterface ILiveIndexWatermark
+  (^java.util.Map allColumnTypes [])
   (^xtdb.indexer.live_index.ILiveTableWatermark liveTable [^String tableName]))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
@@ -61,6 +66,15 @@
 (defprotocol TestLiveTable
   (^xtdb.trie.LiveHashTrie live-trie [test-live-table])
   (^xtdb.vector.IRelationWriter live-rel [test-live-table]))
+
+(defn- live-rel->col-types [^IRelationWriter live-rel]
+  (-> (.writerForName live-rel "op")
+      (.writerForTypeId (byte 0))
+      (.structKeyWriter "xt$doc")
+      (.getVector) (.getField) (.getChildren)
+      (->> (into {} (map (fn [^Field child-field]
+                           (MapEntry/create (.getName child-field)
+                                            (types/field->col-type child-field))))))))
 
 (defn- open-wm-live-rel ^xtdb.vector.RelationReader [^IRelationWriter rel, retain?]
   (let [out-cols (ArrayList.)]
@@ -133,9 +147,11 @@
 
         (openWatermark [_ retain?]
           (locking this-table
-            (let [wm-live-rel (open-wm-live-rel live-rel retain?)
+            (let [col-types (live-rel->col-types live-rel)
+                  wm-live-rel (open-wm-live-rel live-rel retain?)
                   wm-live-trie (.compactLogs ^LiveHashTrie @!transient-trie)]
               (reify ILiveTableWatermark
+                (columnTypes [_] col-types)
                 (liveRelation [_] wm-live-rel)
                 (liveTrie [_] wm-live-trie)
 
@@ -157,9 +173,12 @@
 
   (openWatermark [this retain?]
     (locking this
-      (let [wm-live-rel (open-wm-live-rel live-rel retain?)
+      (let [col-types (live-rel->col-types live-rel)
+            wm-live-rel (open-wm-live-rel live-rel retain?)
             wm-live-trie (.compactLogs live-trie)]
+
         (reify ILiveTableWatermark
+          (columnTypes [_] col-types)
           (liveRelation [_] wm-live-rel)
           (liveTrie [_] wm-live-trie)
 
@@ -182,12 +201,12 @@
           op-wtr (.writerForName rel "op")
           put-wtr (.writerForField op-wtr trie/put-field)
           delete-wtr (.writerForField op-wtr trie/delete-field)]
-      (LiveTable. allocator object-store table-name rel
-                  (LiveHashTrie/emptyTrie (.getVector iid-wtr))
-                  iid-wtr (.writerForName rel "xt$legacy_iid") (.writerForName rel "xt$system_from")
-                  put-wtr (.structKeyWriter put-wtr "xt$valid_from") (.structKeyWriter put-wtr "xt$valid_to") (.structKeyWriter put-wtr "xt$doc")
-                  delete-wtr (.structKeyWriter delete-wtr "xt$valid_from") (.structKeyWriter delete-wtr "xt$valid_to")
-                  (.writerForField op-wtr trie/evict-field)))))
+      (->LiveTable allocator object-store table-name rel
+                   (LiveHashTrie/emptyTrie (.getVector iid-wtr))
+                   iid-wtr (.writerForName rel "xt$legacy_iid") (.writerForName rel "xt$system_from")
+                   put-wtr (.structKeyWriter put-wtr "xt$valid_from") (.structKeyWriter put-wtr "xt$valid_to") (.structKeyWriter put-wtr "xt$doc")
+                   delete-wtr (.structKeyWriter delete-wtr "xt$valid_from") (.structKeyWriter delete-wtr "xt$valid_to")
+                   (.writerForField op-wtr trie/evict-field)))))
 
 (defrecord LiveIndex [^BufferAllocator allocator, ^ObjectStore object-store, ^Map tables]
   ILiveIndex
@@ -221,6 +240,7 @@
                                 (util/->jfn (fn [_] (.openWatermark live-table false)))))
 
             (reify ILiveIndexWatermark
+              (allColumnTypes [_] (update-vals wms #(.columnTypes ^ILiveTableWatermark %)))
               (liveTable [_ table-name] (.get wms table-name))
 
               AutoCloseable
@@ -236,6 +256,8 @@
         (.put wms table-name (.openWatermark live-table true)))
 
       (reify ILiveIndexWatermark
+        (allColumnTypes [_] (update-vals wms #(.columnTypes ^ILiveTableWatermark %)))
+
         (liveTable [_ table-name] (.get wms table-name))
 
         AutoCloseable
@@ -262,7 +284,7 @@
          opts))
 
 (defmethod ig/init-key :xtdb.indexer/live-index [_ {:keys [allocator object-store]}]
-  (LiveIndex. allocator object-store (HashMap.)))
+  (->LiveIndex allocator object-store (HashMap.)))
 
 (defmethod ig/halt-key! :xtdb.indexer/live-index [_ live-idx]
   (util/close live-idx))

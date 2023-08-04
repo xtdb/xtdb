@@ -284,8 +284,7 @@
           (t/is (= '{xt/id [:union #{:keyword :utf8}]}
                    (->col-types tx))))))))
 
-;; TODO adapt for scan/->temporal-range
-#_
+#_ ; TODO adapt for scan/->temporal-range
 (t/deftest can-create-temporal-min-max-range
   (let [μs-2018 (util/instant->micros (util/->instant #inst "2018"))
         μs-2019 (util/instant->micros (util/->instant #inst "2019"))]

@@ -765,7 +765,7 @@
     (tableColNames [_ wm table-name]
       (let [normalized-table (util/str->normal-form-str table-name)]
         (into #{} cat [(keys (.columnTypes metadata-mgr normalized-table))
-                       (some-> (.liveChunk wm)
+                       (some-> (.liveIndex wm)
                                (.liveTable normalized-table)
                                (.columnTypes)
                                keys)])))
@@ -774,7 +774,7 @@
       (merge-with set/union
                   (update-vals (.allColumnTypes metadata-mgr)
                                (comp set keys))
-                  (update-vals (some-> (.liveChunk wm)
+                  (update-vals (some-> (.liveIndex wm)
                                        (.allColumnTypes))
                                (comp set keys))))
 
@@ -785,7 +785,7 @@
                   (if (types/temporal-column? (util/str->normal-form-str (str col-name)))
                     [:timestamp-tz :micro "UTC"]
                     (types/merge-col-types (.columnType metadata-mgr normalized-table normalized-col-name)
-                                           (some-> (.liveChunk wm)
+                                           (some-> (.liveIndex wm)
                                                    (.liveTable normalized-table)
                                                    (.columnTypes)
                                                    (get normalized-col-name))))))]
