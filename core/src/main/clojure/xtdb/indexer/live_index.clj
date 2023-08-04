@@ -170,7 +170,8 @@
         (let [chunk-idx-str (util/->lex-hex-string chunk-idx)
               !fut (trie/write-trie-bufs! obj-store (format "tables/%s/chunks" table-name) chunk-idx-str bufs)
               table-metadata (MapEntry/create table-name
-                                              {:col-types (live-rel->col-types live-rel-rdr)})]
+                                              {:col-types (live-rel->col-types live-rel-rdr)
+                                               :row-count (.rowCount live-rel-rdr)})]
           (-> !fut
               (util/then-apply (fn [_] table-metadata)))))))
 

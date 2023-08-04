@@ -828,15 +828,10 @@
                                      :when (not (types/temporal-column? (util/str->normal-form-str (str col-name))))]
                                  select))
 
-            row-count (->> (meta/with-all-metadata metadata-mgr normalized-table-name
-                             (util/->jbifn
-                               (fn [_chunk-idx ^ITableMetadata table-metadata]
-                                 (let [id-col-idx (.rowIndex table-metadata "xt$id" -1)
-                                       ^BigIntVector count-vec (-> (.metadataRoot table-metadata)
-                                                                   ^ListVector (.getVector "columns")
-                                                                   ^StructVector (.getDataVector)
-                                                                   (.getChild "count"))]
-                                   (.get count-vec id-col-idx)))))
+            row-count (->> (for [{:keys [tables]} (vals (.chunksMetadata metadata-mgr))
+                                 :let [{:keys [row-count]} (get tables normalized-table-name)]
+                                 :when row-count]
+                             row-count)
                            (reduce +))]
 
         {:col-types col-types
