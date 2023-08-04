@@ -3,8 +3,8 @@
             [clojure.string :as string]
             [clojure.tools.logging :as log])
   (:import [com.azure.core.credential TokenCredential]
-           [com.azure.messaging.servicebus ServiceBusClientBuilder]
-           [com.azure.messaging.servicebus.administration ServiceBusAdministrationClientBuilder]
+           [com.azure.messaging.servicebus ServiceBusClientBuilder ServiceBusReceivedMessageContext ServiceBusErrorContext ServiceBusProcessorClient]
+           [com.azure.messaging.servicebus.administration ServiceBusAdministrationClient ServiceBusAdministrationClientBuilder]
            [com.azure.storage.blob.models ListBlobsOptions BlobItem]
            [com.azure.storage.blob BlobContainerClient]
            [java.util NavigableSet UUID]
@@ -55,10 +55,9 @@
                              (.processor)
                              (.topicName servicebus-topic-name)
                              (.subscriptionName subscription-name)
-                             (.disableAutoComplete)
                              (.processMessage (reify Consumer
                                                 (accept [_ msg]
-                                                  (let [parsed-msg (json/read-str (.. msg getMessage getBody toString) :key-fn keyword)
+                                                  (let [parsed-msg (json/read-str (.. ^ServiceBusReceivedMessageContext msg getMessage getBody toString) :key-fn keyword)
                                                         msg-data (:data parsed-msg)
                                                         event-type (get {"PutBlob" :create "DeleteBlob" :delete} (:api msg-data))
                                                         file-url (:url msg-data)
@@ -68,12 +67,10 @@
                                                     (when (and event-type file)
                                                       (cond
                                                         (= event-type :create) (.add file-name-cache file)
-                                                        (= event-type :delete) (.remove file-name-cache file)))
-                                                    
-                                                    (.complete msg)))))
+                                                        (= event-type :delete) (.remove file-name-cache file)))))))
                              (.processError (reify Consumer
                                               (accept [_ msg]
-                                                      (log/error "Error when processing message from service bus queue - " (.getException msg)))))
+                                                      (log/error "Error when processing message from service bus queue - " (.getException ^ServiceBusErrorContext msg)))))
                              (.buildProcessorClient))]
 
       ;; Start processing messages from the queue
@@ -83,7 +80,7 @@
       ;; Return all closeable opts from the function
     (assoc closable-opts :processor-client processor-client)))
 
-(defn watcher-close-fn [{:keys [servicebus-admin-client processor-client servicebus-topic-name subscription-name]}]
+(defn watcher-close-fn [{:keys [^ServiceBusAdministrationClient servicebus-admin-client ^ServiceBusProcessorClient processor-client servicebus-topic-name subscription-name]}]
   (log/info "Stopping & closing filechange processor client")
   (.close processor-client)
   
