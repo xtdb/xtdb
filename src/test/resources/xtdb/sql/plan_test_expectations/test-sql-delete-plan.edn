@@ -1,39 +1,31 @@
 [:delete
  {:table "users"}
  [:rename
-  {x3 _iid,
+  {x2 xt$iid,
    x5 xt$system_to,
-   x6 _row_id,
-   x7 xt$id,
-   x8 xt$system_from,
-   x10 xt$valid_from,
-   x11 xt$valid_to}
+   x6 xt$system_from,
+   x8 xt$valid_from,
+   x9 xt$valid_to}
   [:project
-   [x3
+   [x2
     x5
     x6
-    x7
-    x8
-    {x10 (cast-tstz (greatest x4 #time/date "2020-05-01"))}
-    {x11 (cast-tstz (least x2 #time/date "9999-12-31"))}]
+    {x8 (cast-tstz (greatest x4 #time/date "2020-05-01"))}
+    {x9 (cast-tstz (least x3 #time/date "9999-12-31"))}]
    [:rename
     {id x1,
-     xt$valid_to x2,
-     _iid x3,
+     xt$iid x2,
+     xt$valid_to x3,
      xt$valid_from x4,
      xt$system_to x5,
-     _row_id x6,
-     xt$id x7,
-     xt$system_from x8}
+     xt$system_from x6}
     [:scan
      {:table users,
       :for-valid-time
       [:between #time/date "2020-05-01" #time/date "9999-12-31"]}
      [{id (= id ?_0)}
+      xt$iid
       xt$valid_to
-      _iid
       xt$valid_from
       xt$system_to
-      _row_id
-      xt$id
       xt$system_from]]]]]]

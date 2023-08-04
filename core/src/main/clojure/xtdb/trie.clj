@@ -38,7 +38,6 @@
 
 (def ^org.apache.arrow.vector.types.pojo.Schema log-leaf-schema
   (Schema. [(types/col-type->field "xt$iid" [:fixed-size-binary 16])
-            (types/col-type->field "xt$legacy_iid" :i64)
             (types/col-type->field "xt$system_from" types/temporal-col-type)
             (types/->field "op" (ArrowType$Union. UnionMode/Dense (int-array (range 3))) false
                            put-field delete-field evict-field)]))

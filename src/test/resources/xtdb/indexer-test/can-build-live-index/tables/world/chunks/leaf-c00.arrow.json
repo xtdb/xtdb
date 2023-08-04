@@ -9,15 +9,6 @@
       },
       "children" : [ ]
     },{
-      "name" : "xt$legacy_iid",
-      "nullable" : false,
-      "type" : {
-        "name" : "int",
-        "bitWidth" : 64,
-        "isSigned" : true
-      },
-      "children" : [ ]
-    },{
       "name" : "xt$system_from",
       "nullable" : false,
       "type" : {
@@ -149,11 +140,6 @@
       "count" : 3,
       "VALIDITY" : [1,1,1],
       "DATA" : ["424f5622c8264deda5dbe2144d665c38","424f5622c8264deda5dbe2144d665c38","424f5622c8264deda5dbe2144d665c38"]
-    },{
-      "name" : "xt$legacy_iid",
-      "count" : 3,
-      "VALIDITY" : [1,1,1],
-      "DATA" : ["72057594037927936","72057594037927936","72057594037927936"]
     },{
       "name" : "xt$system_from",
       "count" : 3,

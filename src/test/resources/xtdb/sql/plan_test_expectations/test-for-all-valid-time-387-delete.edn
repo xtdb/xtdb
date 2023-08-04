@@ -1,29 +1,19 @@
 [:delete
  {:table "users"}
  [:rename
-  {x2 _iid,
+  {x1 xt$iid,
    x4 xt$system_to,
-   x5 _row_id,
-   x6 xt$id,
-   x7 xt$system_from,
-   x9 xt$valid_from,
-   x10 xt$valid_to}
+   x5 xt$system_from,
+   x7 xt$valid_from,
+   x8 xt$valid_to}
   [:project
-   [x2 x4 x5 x6 x7 {x9 (cast-tstz x3)} {x10 (cast-tstz x1)}]
+   [x1 x4 x5 {x7 (cast-tstz x3)} {x8 (cast-tstz x2)}]
    [:rename
-    {xt$valid_to x1,
-     _iid x2,
+    {xt$iid x1,
+     xt$valid_to x2,
      xt$valid_from x3,
      xt$system_to x4,
-     _row_id x5,
-     xt$id x6,
-     xt$system_from x7}
+     xt$system_from x5}
     [:scan
      {:table users, :for-valid-time :all-time}
-     (xt$valid_to
-      _iid
-      xt$valid_from
-      xt$system_to
-      _row_id
-      xt$id
-      xt$system_from)]]]]]
+     (xt$iid xt$valid_to xt$valid_from xt$system_to xt$system_from)]]]]]

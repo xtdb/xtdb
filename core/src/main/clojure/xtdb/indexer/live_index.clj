@@ -31,9 +31,9 @@
 (definterface ILiveTableTx
   (^xtdb.indexer.live_index.ILiveTableWatermark openWatermark [^boolean retain])
   (^xtdb.vector.IVectorWriter docWriter [])
-  (^void logPut [^bytes iid, ^long legacyIid, ^long validFrom, ^long validTo, writeDocFn])
-  (^void logDelete [^bytes iid, ^long legacyIid, ^long validFrom, ^long validTo])
-  (^void logEvict [^bytes iid, ^long legacyIid])
+  (^void logPut [^java.nio.ByteBuffer iid, ^long validFrom, ^long validTo, writeDocFn])
+  (^void logDelete [^java.nio.ByteBuffer iid, ^long validFrom, ^long validTo])
+  (^void logEvict [^java.nio.ByteBuffer iid])
   (^void commit [])
   (^void close []))
 
@@ -93,7 +93,7 @@
 
 (deftype LiveTable [^BufferAllocator allocator, ^ObjectStore obj-store, ^String table-name
                     ^IRelationWriter live-rel, ^:unsynchronized-mutable ^LiveHashTrie live-trie
-                    ^IVectorWriter iid-wtr, ^IVectorWriter legacy-iid-wtr, ^IVectorWriter system-from-wtr
+                    ^IVectorWriter iid-wtr, ^IVectorWriter system-from-wtr
                     ^IVectorWriter put-wtr, ^IVectorWriter put-valid-from-wtr, ^IVectorWriter put-valid-to-wtr, ^IVectorWriter put-doc-wtr
                     ^IVectorWriter delete-wtr, ^IVectorWriter delete-valid-from-wtr, ^IVectorWriter delete-valid-to-wtr
                     ^IVectorWriter evict-wtr]
@@ -104,11 +104,10 @@
       (reify ILiveTableTx
         (docWriter [_] put-doc-wtr)
 
-        (logPut [_ iid legacy-iid valid-from valid-to write-doc!]
+        (logPut [_ iid valid-from valid-to write-doc!]
           (.startRow live-rel)
 
-          (.writeBytes iid-wtr (ByteBuffer/wrap iid))
-          (.writeLong legacy-iid-wtr legacy-iid)
+          (.writeBytes iid-wtr iid)
           (.writeLong system-from-wtr system-from-µs)
 
           (.startStruct put-wtr)
@@ -121,9 +120,8 @@
 
           (swap! !transient-trie #(.add ^LiveHashTrie % (dec (.getPosition (.writerPosition live-rel))))))
 
-        (logDelete [_ iid legacy-iid valid-from valid-to]
-          (.writeBytes iid-wtr (ByteBuffer/wrap iid))
-          (.writeLong legacy-iid-wtr legacy-iid)
+        (logDelete [_ iid valid-from valid-to]
+          (.writeBytes iid-wtr iid)
           (.writeLong system-from-wtr system-from-µs)
 
           (.startStruct delete-wtr)
@@ -135,9 +133,8 @@
 
           (swap! !transient-trie #(.add ^LiveHashTrie % (dec (.getPosition (.writerPosition live-rel))))))
 
-        (logEvict [_ iid legacy-iid]
-          (.writeBytes iid-wtr (ByteBuffer/wrap iid))
-          (.writeLong legacy-iid-wtr legacy-iid)
+        (logEvict [_ iid]
+          (.writeBytes iid-wtr iid)
           (.writeLong system-from-wtr system-from-µs)
 
           (.writeNull evict-wtr nil)
@@ -209,7 +206,7 @@
           delete-wtr (.writerForField op-wtr trie/delete-field)]
       (->LiveTable allocator object-store table-name rel
                    (LiveHashTrie/emptyTrie (.getVector iid-wtr))
-                   iid-wtr (.writerForName rel "xt$legacy_iid") (.writerForName rel "xt$system_from")
+                   iid-wtr (.writerForName rel "xt$system_from")
                    put-wtr (.structKeyWriter put-wtr "xt$valid_from") (.structKeyWriter put-wtr "xt$valid_to") (.structKeyWriter put-wtr "xt$doc")
                    delete-wtr (.structKeyWriter delete-wtr "xt$valid_from") (.structKeyWriter delete-wtr "xt$valid_to")
                    (.writerForField op-wtr trie/evict-field)))))

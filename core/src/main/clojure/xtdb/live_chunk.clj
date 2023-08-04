@@ -3,7 +3,6 @@
             [juxt.clojars-mirrors.integrant.core :as ig]
             [xtdb.blocks :as blocks]
             [xtdb.bloom :as bloom]
-            xtdb.indexer.internal-id-manager
             [xtdb.metadata :as meta]
             xtdb.object-store
             [xtdb.types :as types]

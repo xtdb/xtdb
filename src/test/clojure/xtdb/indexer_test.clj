@@ -9,7 +9,6 @@
             [xtdb.buffer-pool :as bp]
             [xtdb.expression.metadata :as expr.meta]
             [xtdb.indexer :as idx]
-            xtdb.indexer.internal-id-manager
             [xtdb.metadata :as meta]
             [xtdb.node :as node]
             [xtdb.object-store :as os]
@@ -28,7 +27,6 @@
            [org.apache.arrow.vector.complex ListVector StructVector]
            xtdb.api.protocols.TransactionInstant
            [xtdb.buffer_pool BufferPool IBufferPool]
-           (xtdb.indexer.internal_id_manager InternalIdManager)
            (xtdb.metadata IMetadataManager)
            xtdb.node.Node
            xtdb.object_store.ObjectStore
@@ -488,7 +486,6 @@
 
           (with-open [node (tu/->local-node (assoc node-opts :buffers-dir "buffers-1"))]
             (let [^ObjectStore os (util/component node ::os/file-system-object-store)
-                  ^InternalIdManager iid-mgr (util/component node :xtdb.indexer/internal-id-manager)
                   ^IMetadataManager mm (util/component node ::meta/metadata-manager)]
               (t/is (= first-half-tx-key
                        (-> first-half-tx-key
@@ -505,9 +502,7 @@
                   (t/is (= 2 (count (filter #(re-matches #"chunk-\p{XDigit}+/device_info/metadata\.arrow" %) objs))))
                   (t/is (= 5 (count (filter #(re-matches #"chunk-\p{XDigit}+/device_readings/metadata\.arrow" %) objs))))
                   (t/is (= 2 (count (filter #(re-matches #"chunk-.*/device_info/content-api_version\.arrow" %) objs))))
-                  (t/is (= 5 (count (filter #(re-matches #"chunk-.*/device_readings/content-battery_level\.arrow" %) objs)))))
-
-                (t/is (= 2055 (count (.id->internal-id iid-mgr)))))
+                  (t/is (= 5 (count (filter #(re-matches #"chunk-.*/device_readings/content-battery_level\.arrow" %) objs))))))
 
               (t/is (= :utf8 (.columnType mm "device_readings" "xt$id")))
 
@@ -531,8 +526,6 @@
                                           (tu/then-await-tx node (Duration/ofSeconds 10))))
                               (:tx-id second-half-tx-key)))
 
-                    (t/is (>= (count (.id->internal-id iid-mgr)) 2055))
-
                     (t/is (= :utf8 (.columnType mm "device_info" "xt$id"))))
 
                   (doseq [^Node node [new-node node]]
@@ -550,9 +543,7 @@
                       (t/is (= 2 (count (filter #(re-matches #"chunk-.*/device_info/content-api_version\.arrow" %) objs))))
                       (t/is (= 11 (count (filter #(re-matches #"chunk-.*/device_readings/content-battery_level\.arrow" %) objs)))))
 
-                    (t/is (= :utf8 (.columnType mm "device_info" "xt$id")))
-
-                    (t/is (= 2110 (count (.id->internal-id iid-mgr))))))))))))))
+                    (t/is (= :utf8 (.columnType mm "device_info" "xt$id")))))))))))))
 
 (t/deftest merges-column-fields-on-restart
   (let [node-dir (util/->path "target/merges-column-fields")

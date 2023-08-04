@@ -218,7 +218,7 @@
                      (for [col-name col-names
                            :let [normalized-name (util/str->normal-form-str col-name)
                                  ^IVectorReader rdr (case normalized-name
-                                                      "_iid" (.readerForName leaf-rel "xt$legacy_iid")
+                                                      "xt$iid" (.readerForName leaf-rel "xt$iid")
                                                       "xt$system_from" sys-from-rdr
                                                       "xt$system_to" (vr/vec->reader
                                                                       (doto (NullVector. "xt$system_to")
@@ -229,7 +229,7 @@
                            :when rdr]
                        (.rowCopier rdr
                                    (case normalized-name
-                                     "_iid" (.writerForName out-rel col-name :i64)
+                                     "xt$iid" (.writerForName out-rel col-name [:fixed-size-binary 16])
                                      "xt$system_from" (.writerForName out-rel col-name types/temporal-col-type)
                                      "xt$system_to" (.writerForName out-rel col-name
                                                                     [:union #{:null types/temporal-col-type}])
@@ -342,7 +342,7 @@
                      (for [col-name col-names
                            :let [normalized-name (util/str->normal-form-str col-name)
                                  ^IVectorReader rdr (case normalized-name
-                                                      "_iid" (.readerForName leaf-rel "xt$legacy_iid")
+                                                      "xt$iid" (.readerForName leaf-rel "xt$iid")
                                                       "xt$system_from" nil
                                                       "xt$system_to" (vr/vec->reader
                                                                       (doto (NullVector. "xt$system_to")
@@ -353,7 +353,7 @@
                            :when rdr]
                        (.rowCopier rdr
                                    (case normalized-name
-                                     "_iid" (.writerForName out-rel col-name :i64)
+                                     "xt$iid" (.writerForName out-rel col-name [:fixed-size-binary 16])
                                      "xt$system_to" (.writerForName out-rel col-name
                                                                     [:union #{:null types/temporal-col-type}])
                                      (.writerForName out-rel col-name)))))
@@ -498,7 +498,7 @@
                      (for [col-name col-names
                            :let [normalized-name (util/str->normal-form-str col-name)
                                  ^IVectorReader rdr (case normalized-name
-                                                      "_iid" (.readerForName leaf-rel "xt$legacy_iid")
+                                                      "xt$iid" (.readerForName leaf-rel "xt$iid")
                                                       "xt$system_from" nil
                                                       "xt$system_to" nil
                                                       "xt$valid_from" nil
@@ -507,7 +507,7 @@
                            :when rdr]
                        (.rowCopier rdr
                                    (case normalized-name
-                                     "_iid" (.writerForName out-rel col-name :i64)
+                                     "xt$iid" (.writerForName out-rel col-name [:fixed-size-binary 16])
                                      (.writerForName out-rel col-name)))))
 
         valid-from-wtrs (vec
@@ -804,7 +804,7 @@
             {content-col-names false, temporal-col-names true}
             (->> col-names (group-by (comp types/temporal-column? util/str->normal-form-str str)))
 
-            content-col-names (-> (set (map str content-col-names)) (conj "_row_id"))
+            content-col-names (set (map str content-col-names))
             temporal-col-names (into #{} (map (comp str)) temporal-col-names)
             normalized-table-name (util/str->normal-form-str (str table))
 
