@@ -26,9 +26,9 @@
             (tu/finish-chunk! node)
 
             (t/is (= {:latest-completed-tx last-tx-key
-                      :latest-row-id (dec 1001000)}
+                      :next-chunk-idx 1001000}
                      (-> (meta/latest-chunk-metadata (tu/component ::meta/metadata-manager))
-                         (select-keys [:latest-completed-tx :latest-row-id])))))
+                         (select-keys [:latest-completed-tx :next-chunk-idx])))))
 
           (f))))))
 

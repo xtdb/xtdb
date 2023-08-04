@@ -123,7 +123,7 @@
 
   (^void finishBlock [])
   (^void nextBlock [])
-  (^java.util.concurrent.CompletableFuture finishChunk [^xtdb.api.protocols.TransactionInstant latestCompletedTx])
+  (^java.util.concurrent.CompletableFuture finishChunk [])
   (^void nextChunk [])
   (^void close []))
 
@@ -278,38 +278,33 @@
 
   (finishChunk [_]
     (let [row-counts (.blockRowCounts row-counter)
-          block-meta-wtr (.writeBlockMetadata table-metadata-writer -1)
+          block-meta-wtr (.writeBlockMetadata table-metadata-writer -1)]
+      (-> (CompletableFuture/allOf
+           (->> (cons row-id-vec (map #(.getVector ^IVectorWriter %) (vals static-rel)))
+                (map (fn [^ValueVector live-vec]
+                       (let [live-root (VectorSchemaRoot/of (into-array [live-vec]))]
+                         (.writeMetadata block-meta-wtr (vr/vec->reader live-vec))
 
-          !fut (-> (CompletableFuture/allOf
-                    (->> (cons row-id-vec (map #(.getVector ^IVectorWriter %) (vals static-rel)))
-                         (map (fn [^ValueVector live-vec]
-                                (let [live-root (VectorSchemaRoot/of (into-array [live-vec]))]
-                                  (.writeMetadata block-meta-wtr (vr/vec->reader live-vec))
+                         (.putObject object-store (meta/->chunk-obj-key chunk-idx table-name (.getName live-vec))
+                                     (with-open [write-root (VectorSchemaRoot/create (.getSchema live-root) allocator)]
+                                       (let [loader (VectorLoader. write-root)]
+                                         (with-open [^ICursor slices (blocks/->slices live-root row-counts)]
+                                           (let [buf (util/build-arrow-ipc-byte-buffer write-root :file
+                                                                                       (fn [write-batch!]
+                                                                                         (.forEachRemaining slices
+                                                                                                            (reify Consumer
+                                                                                                              (accept [_ sliced-root]
+                                                                                                                (with-open [arb (.getRecordBatch (VectorUnloader. sliced-root))]
+                                                                                                                  (.load loader arb)
+                                                                                                                  (write-batch!)))))))]
+                                             (.nextChunk row-counter)
+                                             buf))))))))
+                (into-array CompletableFuture)))
 
-                                  (.putObject object-store (meta/->chunk-obj-key chunk-idx table-name (.getName live-vec))
-                                              (with-open [write-root (VectorSchemaRoot/create (.getSchema live-root) allocator)]
-                                                (let [loader (VectorLoader. write-root)]
-                                                  (with-open [^ICursor slices (blocks/->slices live-root row-counts)]
-                                                    (let [buf (util/build-arrow-ipc-byte-buffer write-root :file
-                                                                                                (fn [write-batch!]
-                                                                                                  (.forEachRemaining slices
-                                                                                                                     (reify Consumer
-                                                                                                                       (accept [_ sliced-root]
-                                                                                                                         (with-open [arb (.getRecordBatch (VectorUnloader. sliced-root))]
-                                                                                                                           (.load loader arb)
-                                                                                                                           (write-batch!)))))))]
-                                                      (.nextChunk row-counter)
-                                                      buf))))))))
-                         (into-array CompletableFuture)))
-
-                   (util/then-compose
-                     (fn [_]
-                       (.endBlock block-meta-wtr)
-                       (.finishChunk table-metadata-writer))))
-
-          chunk-metadata (meta/live-rel->chunk-metadata table-name (vw/rel-wtr->rdr static-rel))]
-      (-> !fut
-          (util/then-apply (fn [_] chunk-metadata)))))
+          (util/then-compose
+           (fn [_]
+             (.endBlock block-meta-wtr)
+             (.finishChunk table-metadata-writer))))))
 
   AutoCloseable
   (close [_]
@@ -410,17 +405,11 @@
 
   (nextBlock [_] (.nextBlock row-counter))
 
-  (finishChunk [_ latest-completed-tx]
+  (finishChunk [_]
     (let [futs (for [^ILiveTable live-table (.values live-tables)]
                  (.finishChunk live-table))]
 
-      (-> (CompletableFuture/allOf (into-array CompletableFuture futs))
-          (util/then-apply (fn [_]
-                             (.finishChunk metadata-mgr chunk-idx
-                                           {:latest-completed-tx latest-completed-tx
-                                            :latest-row-id (dec (+ chunk-idx (.chunkRowCount row-counter)))
-                                            :tables (-> (into {} (keep deref) futs)
-                                                        (util/rethrowing-cause))}))))))
+      (CompletableFuture/allOf (into-array CompletableFuture futs))))
 
   (nextChunk [this]
     (run! util/try-close (.values live-tables))
@@ -445,9 +434,7 @@
          opts))
 
 (defmethod ig/init-key :xtdb/live-chunk [_ {:keys [allocator object-store metadata-mgr ^long rows-per-block ^long rows-per-chunk]}]
-  (let [chunk-idx (if-let [{:keys [^long latest-row-id]} (meta/latest-chunk-metadata metadata-mgr)]
-                    (inc latest-row-id)
-                    0)
+  (let [^long chunk-idx (:next-chunk-idx (meta/latest-chunk-metadata metadata-mgr) 0)
         bloom-false-positive-probability (bloom/bloom-false-positive-probability? rows-per-chunk)]
 
     (when (> bloom-false-positive-probability 0.05)

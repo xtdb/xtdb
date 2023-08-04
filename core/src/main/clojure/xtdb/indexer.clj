@@ -38,6 +38,7 @@
            xtdb.indexer.internal_id_manager.IInternalIdManager
            (xtdb.indexer.live_index ILiveIndex ILiveIndexTx)
            (xtdb.live_chunk ILiveChunk ILiveChunkTx ILiveTableTx)
+           xtdb.metadata.IMetadataManager
            xtdb.object_store.ObjectStore
            xtdb.operator.IRaQuerySource
            (xtdb.operator.scan IScanEmitter)
@@ -514,6 +515,7 @@
 
 (deftype Indexer [^BufferAllocator allocator
                   ^ObjectStore object-store
+                  ^IMetadataManager metadata-mgr
                   ^IScanEmitter scan-emitter
                   ^IInternalIdManager iid-mgr
                   ^IRaQuerySource ra-src
@@ -660,9 +662,16 @@
         (throw t))))
 
   (finish-chunk! [this]
-    @(.finishChunk live-chunk latest-completed-tx)
+    @(.finishChunk live-chunk)
 
-    (.finishChunk live-idx (.getChunkIdx row-counter))
+    (let [chunk-idx (.getChunkIdx row-counter)
+          table-metadata (.finishChunk live-idx chunk-idx)]
+
+      (.finishChunk metadata-mgr chunk-idx
+                    {:latest-completed-tx latest-completed-tx
+                     :next-chunk-idx (+ chunk-idx (.getChunkRowCount row-counter))
+                     :tables table-metadata}))
+
     (.nextChunk row-counter)
 
     (let [wm-lock-stamp (.writeLock wm-lock)]
@@ -698,14 +707,14 @@
   [_ {:keys [allocator object-store metadata-mgr scan-emitter, ra-src
              internal-id-mgr live-chunk live-index, rows-per-chunk]}]
 
-  (let [{:keys [latest-completed-tx latest-row-id], :or {latest-row-id -1}} (meta/latest-chunk-metadata metadata-mgr)]
+  (let [{:keys [latest-completed-tx next-chunk-idx], :or {next-chunk-idx 0}} (meta/latest-chunk-metadata metadata-mgr)]
 
     (assert live-chunk)
-    (->Indexer allocator object-store scan-emitter internal-id-mgr
+    (->Indexer allocator object-store metadata-mgr scan-emitter internal-id-mgr
                ra-src live-chunk live-index
 
                latest-completed-tx
-               (RowCounter. (inc ^long latest-row-id))
+               (RowCounter. next-chunk-idx)
                rows-per-chunk
 
                nil ; watermark

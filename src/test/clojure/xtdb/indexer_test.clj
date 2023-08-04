@@ -119,9 +119,9 @@
         (tu/finish-chunk! node)
 
         (t/is (= {:latest-completed-tx last-tx-key
-                  :latest-row-id 5}
+                  :next-chunk-idx 6}
                  (-> (meta/latest-chunk-metadata mm)
-                     (select-keys [:latest-completed-tx :latest-row-id]))))
+                     (select-keys [:latest-completed-tx :next-chunk-idx]))))
 
         (let [objects-list (->> (.listObjects os "chunk-00/device_info") (filter #(str/ends-with? % "/metadata.arrow")))]
           (t/is (= 1 (count objects-list)))
@@ -416,9 +416,9 @@
           (tu/finish-chunk! node)
 
           (t/is (= {:latest-completed-tx last-tx-key
-                    :latest-row-id 11109}
+                    :next-chunk-idx 11110}
                    (-> (meta/latest-chunk-metadata mm)
-                       (select-keys [:latest-completed-tx :latest-row-id]))))
+                       (select-keys [:latest-completed-tx :next-chunk-idx]))))
 
           (let [objs (.listObjects os)]
             (t/is (= 1 (count (filter #(re-matches #"chunk-\p{XDigit}+/device_info/metadata\.arrow" %) objs))))
@@ -495,11 +495,11 @@
                            (tu/then-await-tx node (Duration/ofSeconds 10)))))
               (t/is (= first-half-tx-key (tu/latest-completed-tx node)))
 
-              (let [{:keys [^TransactionInstant latest-completed-tx, latest-row-id]}
+              (let [{:keys [^TransactionInstant latest-completed-tx, next-chunk-idx]}
                     (meta/latest-chunk-metadata mm)]
 
                 (t/is (< (:tx-id latest-completed-tx) (:tx-id first-half-tx-key)))
-                (t/is (< latest-row-id (count first-half-tx-ops)))
+                (t/is (< next-chunk-idx (count first-half-tx-ops)))
 
                 (let [objs (.listObjects os)]
                   (t/is (= 2 (count (filter #(re-matches #"chunk-\p{XDigit}+/device_info/metadata\.arrow" %) objs))))

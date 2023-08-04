@@ -1,6 +1,7 @@
 (ns xtdb.indexer.live-index
   (:require [juxt.clojars-mirrors.integrant.core :as ig]
             [xtdb.buffer-pool]
+            [xtdb.metadata :as meta]
             [xtdb.object-store]
             [xtdb.trie :as trie]
             [xtdb.types :as types]
@@ -17,7 +18,7 @@
            [org.apache.arrow.vector.types.pojo Field]
            (xtdb.object_store ObjectStore)
            (xtdb.trie LiveHashTrie)
-           (xtdb.vector IRelationWriter IVectorWriter)))
+           (xtdb.vector IRelationWriter IVectorWriter RelationReader)))
 
 ;;
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
@@ -40,7 +41,7 @@
 (definterface ILiveTable
   (^xtdb.indexer.live_index.ILiveTableTx startTx [^xtdb.api.protocols.TransactionInstant txKey])
   (^xtdb.indexer.live_index.ILiveTableWatermark openWatermark [^boolean retain])
-  (^java.util.concurrent.CompletableFuture #_<?> finishChunk [^long chunkIdx])
+  (^java.util.concurrent.CompletableFuture #_<List<Map$Entry>> finishChunk [^long chunkIdx])
   (^void close []))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
@@ -60,21 +61,21 @@
   (^xtdb.indexer.live_index.ILiveTable liveTable [^String tableName])
   (^xtdb.indexer.live_index.ILiveIndexTx startTx [^xtdb.api.protocols.TransactionInstant txKey])
   (^xtdb.indexer.live_index.ILiveIndexWatermark openWatermark [])
-  (^void finishChunk [^long chunkIdx])
+  (^java.util.Map finishChunk [^long chunkIdx])
   (^void close []))
 
 (defprotocol TestLiveTable
   (^xtdb.trie.LiveHashTrie live-trie [test-live-table])
   (^xtdb.vector.IRelationWriter live-rel [test-live-table]))
 
-(defn- live-rel->col-types [^IRelationWriter live-rel]
-  (-> (.writerForName live-rel "op")
-      (.writerForTypeId (byte 0))
-      (.structKeyWriter "xt$doc")
-      (.getVector) (.getField) (.getChildren)
-      (->> (into {} (map (fn [^Field child-field]
-                           (MapEntry/create (.getName child-field)
-                                            (types/field->col-type child-field))))))))
+(defn- live-rel->col-types [^RelationReader live-rel]
+  (->> (for [^Field child-field (-> (.readerForName live-rel "op")
+                                    (.legReader :put)
+                                    (.structKeyReader "xt$doc")
+                                    (.getField)
+                                    (.getChildren))]
+         (MapEntry/create (.getName child-field) (types/field->col-type child-field)))
+       (into {})))
 
 (defn- open-wm-live-rel ^xtdb.vector.RelationReader [^IRelationWriter rel, retain?]
   (let [out-cols (ArrayList.)]
@@ -147,8 +148,8 @@
 
         (openWatermark [_ retain?]
           (locking this-table
-            (let [col-types (live-rel->col-types live-rel)
-                  wm-live-rel (open-wm-live-rel live-rel retain?)
+            (let [wm-live-rel (open-wm-live-rel live-rel retain?)
+                  col-types (live-rel->col-types wm-live-rel)
                   wm-live-trie (.compactLogs ^LiveHashTrie @!transient-trie)]
               (reify ILiveTableWatermark
                 (columnTypes [_] col-types)
@@ -167,14 +168,19 @@
         (close [_]))))
 
   (finishChunk [_ chunk-idx]
-    (when-let [bufs (trie/live-trie->bufs allocator (-> live-trie (.compactLogs)) (vw/rel-wtr->rdr live-rel))]
-      (let [chunk-idx-str (util/->lex-hex-string chunk-idx)]
-        (trie/write-trie-bufs! obj-store (format "tables/%s/chunks" table-name) chunk-idx-str bufs))))
+    (let [live-rel-rdr (vw/rel-wtr->rdr live-rel)]
+      (when-let [bufs (trie/live-trie->bufs allocator (-> live-trie (.compactLogs)) live-rel-rdr)]
+        (let [chunk-idx-str (util/->lex-hex-string chunk-idx)
+              !fut (trie/write-trie-bufs! obj-store (format "tables/%s/chunks" table-name) chunk-idx-str bufs)
+              table-metadata (MapEntry/create table-name
+                                              {:col-types (live-rel->col-types live-rel-rdr)})]
+          (-> !fut
+              (util/then-apply (fn [_] table-metadata)))))))
 
   (openWatermark [this retain?]
     (locking this
-      (let [col-types (live-rel->col-types live-rel)
-            wm-live-rel (open-wm-live-rel live-rel retain?)
+      (let [wm-live-rel (open-wm-live-rel live-rel retain?)
+            col-types (live-rel->col-types wm-live-rel)
             wm-live-trie (.compactLogs live-trie)]
 
         (reify ILiveTableWatermark
@@ -264,15 +270,19 @@
         (close [_] (util/close wms)))))
 
   (finishChunk [_ chunk-idx]
-    @(CompletableFuture/allOf (->> (for [^ILiveTable table (.values tables)]
-                                     (.finishChunk table chunk-idx))
+    (let [futs (->> (for [^ILiveTable table (.values tables)]
+                      (.finishChunk table chunk-idx))
 
-                                   (remove nil?)
+                    (remove nil?)
+                    (into-array CompletableFuture))]
 
-                                   (into-array CompletableFuture)))
+      @(CompletableFuture/allOf futs)
 
-    (util/close tables)
-    (.clear tables))
+      (util/close tables)
+      (.clear tables)
+
+      (-> (into {} (keep deref) futs)
+          (util/rethrowing-cause))))
 
   AutoCloseable
   (close [_]
