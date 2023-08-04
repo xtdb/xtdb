@@ -12,15 +12,14 @@
   (let [_tx (xt/submit-tx tu/*node* [[:put :foo {:xt/id :my-doc, :last_updated "tx1"}]] {:system-time #inst "3000"})
         tx2 (xt/submit-tx tu/*node* [[:put :foo {:xt/id :my-doc, :last_updated "tx2"}]] {:system-time #inst "3001"})]
 
-    (is (= [{:last_updated "tx1"} {:last_updated "tx2"}]
-           (query-at-tx
-            "SELECT foo.last_updated FROM foo"
-            tx2)))
+    (is (= {{:last_updated "tx1"} 1, {:last_updated "tx2"}, 1}
+           (frequencies (query-at-tx "SELECT foo.last_updated FROM foo" tx2))))
 
-    (is (= [{:last_updated "tx1"} {:last_updated "tx1"} {:last_updated "tx2"}]
-           (query-at-tx
-            "SELECT foo.last_updated FROM foo FOR ALL SYSTEM_TIME"
-            tx2)))))
+    (is (= {{:last_updated "tx1"} 2, {:last_updated "tx2"} 1}
+           (frequencies
+            (query-at-tx
+             "SELECT foo.last_updated FROM foo FOR ALL SYSTEM_TIME"
+             tx2))))))
 
 (deftest system-time-as-of
   (let [tx (xt/submit-tx tu/*node* [[:put :foo {:xt/id :my-doc, :last_updated "tx1"}]] {:system-time #inst "3000"})
@@ -36,10 +35,10 @@
             "SELECT foo.last_updated FROM foo FOR SYSTEM_TIME AS OF TIMESTAMP '3000-01-01 00:00:00+00:00'"
             tx)))
 
-    (is (= [{:last_updated "tx1"} {:last_updated "tx2"}]
-           (query-at-tx
-            "SELECT foo.last_updated FROM foo FOR SYSTEM_TIME AS OF TIMESTAMP '3002-01-01 00:00:00+00:00'"
-            tx2)))))
+    (is (= #{{:last_updated "tx1"} {:last_updated "tx2"}}
+           (set (query-at-tx
+                 "SELECT foo.last_updated FROM foo FOR SYSTEM_TIME AS OF TIMESTAMP '3002-01-01 00:00:00+00:00'"
+                 tx2))))))
 
 (deftest system-time-from-a-to-b
   (let [tx (xt/submit-tx tu/*node* [[:put :foo {:xt/id :my-doc, :last_updated "tx1"}]] {:system-time #inst "3000"})
@@ -57,13 +56,14 @@
 
     (is (= [{:last_updated "tx1"} {:last_updated "tx1"} {:last_updated "tx2"}]
            (query-at-tx
-            "SELECT foo.last_updated FROM foo FOR SYSTEM_TIME FROM DATE '2999-01-01' TO TIMESTAMP '3002-01-01 00:00:00+00:00'"
+            "SELECT foo.last_updated FROM foo FOR SYSTEM_TIME FROM DATE '2999-01-01' TO TIMESTAMP '3002-01-01 00:00:00+00:00'
+             ORDER BY last_updated"
             tx2)))
 
-    (is (= [{:last_updated "tx1"} {:last_updated "tx2"}]
-           (query-at-tx
-            "SELECT foo.last_updated FROM foo FOR SYSTEM_TIME FROM DATE '3001-01-01' TO TIMESTAMP '3002-01-01 00:00:00+00:00'"
-            tx2)))))
+    (is (= #{{:last_updated "tx1"} {:last_updated "tx2"}}
+           (set (query-at-tx
+                 "SELECT foo.last_updated FROM foo FOR SYSTEM_TIME FROM DATE '3001-01-01' TO TIMESTAMP '3002-01-01 00:00:00+00:00'"
+                 tx2))))))
 
 (deftest system-time-between-a-to-b
   (let [tx (xt/submit-tx tu/*node* [[:put :foo {:xt/id :my-doc, :last_updated "tx1"}]] {:system-time #inst "3000"})
@@ -86,13 +86,14 @@
 
     (is (= [{:last_updated "tx1"} {:last_updated "tx1"} {:last_updated "tx2"}]
            (query-at-tx
-            "SELECT foo.last_updated FROM foo FOR SYSTEM_TIME BETWEEN DATE '2999-01-01' AND TIMESTAMP '3002-01-01 00:00:00+00:00'"
+            "SELECT foo.last_updated FROM foo FOR SYSTEM_TIME BETWEEN DATE '2999-01-01' AND TIMESTAMP '3002-01-01 00:00:00+00:00'
+             ORDER BY last_updated"
             tx2)))
 
-    (is (= [{:last_updated "tx1"} {:last_updated "tx2"}]
-           (query-at-tx
-            "SELECT foo.last_updated FROM foo FOR SYSTEM_TIME BETWEEN DATE '3001-01-01' AND TIMESTAMP '3002-01-01 00:00:00+00:00'"
-            tx2)))))
+    (is (= #{{:last_updated "tx1"} {:last_updated "tx2"}}
+           (set (query-at-tx
+                 "SELECT foo.last_updated FROM foo FOR SYSTEM_TIME BETWEEN DATE '3001-01-01' AND TIMESTAMP '3002-01-01 00:00:00+00:00'"
+                 tx2))))))
 
 (deftest app-time-period-predicates
   (testing "OVERLAPS"
@@ -105,7 +106,7 @@
 
       (is (= [{:last_updated "2000"} {:last_updated "3000"} {:last_updated "4000"}]
              (query-at-tx
-              "SELECT foo.last_updated FROM foo"
+              "SELECT foo.last_updated FROM foo ORDER BY last_updated"
               tx)))
 
       (is (= [{:last_updated "2000"}]

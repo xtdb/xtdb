@@ -330,11 +330,11 @@
                    "SELECT foo.version, foo.xt$valid_from, foo.xt$valid_to FROM foo"))
           "without flag it returns as of now")
 
-    (t/is (= [{:version 0, :xt$valid_from tt1, :xt$valid_to tt2}
-              {:version 1, :xt$valid_from tt2, :xt$valid_to eot}]
-             (xt/q *node*
-                   "SELECT foo.version, foo.xt$valid_from, foo.xt$valid_to FROM foo"
-                   {:default-all-valid-time? true})))
+    (t/is (= #{{:version 0, :xt$valid_from tt1, :xt$valid_to tt2}
+               {:version 1, :xt$valid_from tt2, :xt$valid_to eot}}
+             (set (xt/q *node*
+                        "SELECT foo.version, foo.xt$valid_from, foo.xt$valid_to FROM foo"
+                        {:default-all-valid-time? true}))))
 
     (t/is (= [{:version 0, :xt$valid_from tt1, :xt$valid_to tt2}]
              (xt/q *node*
@@ -344,12 +344,12 @@
                    {:default-all-valid-time? true}))
           "`FOR VALID_TIME AS OF` overrides flag")
 
-    (t/is (= [{:version 0, :xt$valid_from tt1, :xt$valid_to tt2}
-              {:version 1, :xt$valid_from tt2, :xt$valid_to eot}]
-             (xt/q *node*
-                   "SELECT foo.version, foo.xt$valid_from, foo.xt$valid_to
+    (t/is (= #{{:version 0, :xt$valid_from tt1, :xt$valid_to tt2}
+               {:version 1, :xt$valid_from tt2, :xt$valid_to eot}}
+             (set (xt/q *node*
+                        "SELECT foo.version, foo.xt$valid_from, foo.xt$valid_to
                              FROM foo FOR ALL VALID_TIME"
-                   {:default-all-valid-time? false}))
+                        {:default-all-valid-time? false})))
           "FOR ALL VALID_TIME ignores flag and returns all app-time")))
 
 (t/deftest test-erase

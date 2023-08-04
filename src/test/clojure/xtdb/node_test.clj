@@ -165,22 +165,22 @@ VALUES (1, 1, DATE '1998-01-01', DATE '2000-01-01')"]])
 INSERT INTO foo (xt$id, v, xt$valid_from, xt$valid_to)
 VALUES (1, 2, DATE '1997-01-01', DATE '2001-01-01')"]])
 
-  (t/is (= [{:xt$id 1, :v 1,
-             :xt$valid_from (util/->zdt #inst "1998")
-             :xt$valid_to (util/->zdt #inst "2000")
-             :xt$system_from (util/->zdt #inst "2020-01-01")
-             :xt$system_to (util/->zdt #inst "2020-01-02")}
-            {:xt$id 1, :v 2,
-             :xt$valid_from (util/->zdt #inst "1997")
-             :xt$valid_to (util/->zdt #inst "2001")
-             :xt$system_from (util/->zdt #inst "2020-01-02")
-             :xt$system_to (util/->zdt util/end-of-time)}]
+  (t/is (= #{{:xt$id 1, :v 1,
+              :xt$valid_from (util/->zdt #inst "1998")
+              :xt$valid_to (util/->zdt #inst "2000")
+              :xt$system_from (util/->zdt #inst "2020-01-01")
+              :xt$system_to (util/->zdt #inst "2020-01-02")}
+             {:xt$id 1, :v 2,
+              :xt$valid_from (util/->zdt #inst "1997")
+              :xt$valid_to (util/->zdt #inst "2001")
+              :xt$system_from (util/->zdt #inst "2020-01-02")
+              :xt$system_to (util/->zdt util/end-of-time)}}
 
-           (xt/q tu/*node* "
+           (set (xt/q tu/*node* "
 SELECT foo.xt$id, foo.v,
        foo.xt$valid_from, foo.xt$valid_to,
        foo.xt$system_from, foo.xt$system_to
-FROM foo FOR ALL SYSTEM_TIME FOR ALL VALID_TIME"))))
+FROM foo FOR ALL SYSTEM_TIME FOR ALL VALID_TIME")))))
 
 (t/deftest test-current-timestamp-in-temporal-constraint-409
   (xt/submit-tx tu/*node* [[:sql "
@@ -411,12 +411,12 @@ VALUES(1, OBJECT ('foo': OBJECT('bibble': true), 'bar': OBJECT('baz': 1001)))"]]
 
 (t/deftest test-nulling-valid-time-columns-2504
   (xt/submit-tx tu/*node* [[:sql ["INSERT INTO docs (xt$id, xt$valid_from, xt$valid_to) VALUES (1, NULL, ?), (2, ?, NULL), (3, NULL, NULL)" #inst "3000", #inst "3000"]]])
-  (t/is (= [{:id 1, :vf (util/->zdt #inst "2020"), :vt (util/->zdt #inst "3000")}
-            {:id 2, :vf (util/->zdt #inst "3000"), :vt (util/->zdt util/end-of-time)}
-            {:id 3, :vf (util/->zdt #inst "2020"), :vt (util/->zdt util/end-of-time)}]
-         (xt/q tu/*node* '{:find [id vf vt]
-                           :where [($ :docs {:xt/id id, :xt/valid-from vf, :xt/valid-to vt}
-                                      {:for-valid-time :all-time})]}))))
+  (t/is (= #{{:id 1, :vf (util/->zdt #inst "2020"), :vt (util/->zdt #inst "3000")}
+             {:id 2, :vf (util/->zdt #inst "3000"), :vt (util/->zdt util/end-of-time)}
+             {:id 3, :vf (util/->zdt #inst "2020"), :vt (util/->zdt util/end-of-time)}}
+           (set (xt/q tu/*node* '{:find [id vf vt]
+                                  :where [($ :docs {:xt/id id, :xt/valid-from vf, :xt/valid-to vt}
+                                             {:for-valid-time :all-time})]})))))
 
 (deftest test-select-star
   (xt/submit-tx tu/*node*

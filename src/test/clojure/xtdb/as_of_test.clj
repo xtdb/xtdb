@@ -63,7 +63,6 @@
         tt1 (util/->zdt (:system-time tx1))
 
         tx2 (xt/submit-tx tu/*node* [[:put :xt_docs {:xt/id :doc, :version 1}]])
-
         tt2 (util/->zdt (:system-time tx2))
 
         original-v0-doc {:xt/id :doc, :version 0
@@ -84,22 +83,22 @@
                 :xt/system-from tt2
                 :xt/system-to end-of-time-zdt}]
 
-    (t/is (= [replaced-v0-doc v1-doc]
-             (tu/query-ra '[:scan {:table xt_docs}
-                            [xt/id version
-                             xt/valid-from xt/valid-to
-                             xt/system-from xt/system-to]]
-                          {:node tu/*node* :default-all-valid-time? true}))
+    (t/is (= #{replaced-v0-doc v1-doc}
+             (set (tu/query-ra '[:scan {:table xt_docs}
+                                 [xt/id version
+                                  xt/valid-from xt/valid-to
+                                  xt/system-from xt/system-to]]
+                               {:node tu/*node* :default-all-valid-time? true})))
           "all app-time")
 
-    (t/is (= [original-v0-doc replaced-v0-doc v1-doc]
-             (tu/query-ra '[:scan {:table xt_docs, :for-system-time :all-time}
-                            [xt/id version
-                             xt/valid-from xt/valid-to
-                             xt/system-from xt/system-to]]
-                          {:node tu/*node*
-                           :params {'eot util/end-of-time}
-                           :default-all-valid-time? true}))
+    (t/is (= #{original-v0-doc replaced-v0-doc v1-doc}
+             (set (tu/query-ra '[:scan {:table xt_docs, :for-system-time :all-time}
+                                 [xt/id version
+                                  xt/valid-from xt/valid-to
+                                  xt/system-from xt/system-to]]
+                               {:node tu/*node*
+                                :params {'eot util/end-of-time}
+                                :default-all-valid-time? true})))
           "all app, all sys")))
 
 (t/deftest test-evict

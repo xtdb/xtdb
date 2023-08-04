@@ -225,20 +225,20 @@
 
     #_(tu/finish-chunk! node)
 
-    (t/is (= [{:xt/system-from (util/->zdt #inst "3000")
-               :xt/system-to (util/->zdt #inst "3001")
-               :last_updated "tx1"}
-              {:xt/system-from (util/->zdt #inst "3001")
-               :xt/system-to (util/->zdt util/end-of-time)
-               :last_updated "tx1"}
-              {:xt/system-from (util/->zdt #inst "3001")
-               :xt/system-to (util/->zdt util/end-of-time)
-               :last_updated "tx2"}]
-             (tu/query-ra '[:scan {:table foo, :for-system-time :all-time}
-                            [{xt/system-from (< xt/system-from #time/zoned-date-time "3002-01-01T00:00Z")}
-                             {xt/system-to (> xt/system-to #time/zoned-date-time "2999-01-01T00:00Z")}
-                             last_updated]]
-                          {:node node :default-all-valid-time? true})))))
+    (t/is (= #{{:xt/system-from (util/->zdt #inst "3000")
+                :xt/system-to (util/->zdt #inst "3001")
+                :last_updated "tx1"}
+               {:xt/system-from (util/->zdt #inst "3001")
+                :xt/system-to (util/->zdt util/end-of-time)
+                :last_updated "tx1"}
+               {:xt/system-from (util/->zdt #inst "3001")
+                :xt/system-to (util/->zdt util/end-of-time)
+                :last_updated "tx2"}}
+             (set (tu/query-ra '[:scan {:table foo, :for-system-time :all-time}
+                                 [{xt/system-from (< xt/system-from #time/zoned-date-time "3002-01-01T00:00Z")}
+                                  {xt/system-to (> xt/system-to #time/zoned-date-time "2999-01-01T00:00Z")}
+                                  last_updated]]
+                               {:node node :default-all-valid-time? true}))))))
 
 (t/deftest test-for-valid-time-in-params
   (let [tt1 (util/->zdt #inst "2020-01-01")

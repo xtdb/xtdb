@@ -910,7 +910,7 @@
         (insert :a {:xt/id :bob, :name "Bob"})
         (is (= [{:name "Fred"}] (q db ["select a.name from a"]))))
 
-      (is (= [{:name "Fred"}, {:name "Bob"}] (q conn ["select a.name from a"]))))))
+      (is (= #{{:name "Fred"}, {:name "Bob"}} (set (q conn ["select a.name from a"])))))))
 
 ;; SET is not supported properly at the moment, so this ensure we do not really do anything too embarrassing (like crash)
 (deftest set-statement-test
@@ -1226,7 +1226,7 @@
       (sql "COMMIT")
 
       (sql "SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY")
-      (is (= [{:xt$id 42}, {:xt$id 43}] (q conn ["SELECT foo.xt$id from foo"]))))))
+      (is (= #{{:xt$id 42}, {:xt$id 43}} (set (q conn ["SELECT foo.xt$id from foo"])))))))
 
 (deftest set-app-time-defaults-test
   (with-open [conn (jdbc-conn)]
@@ -1282,7 +1282,7 @@
         (sql "SET TRANSACTION READ WRITE")
         (is (= [{:xt$id 42}] (sql "select foo.xt$id from foo")))
         (sql "INSERT INTO foo (xt$id) values (43)")
-        (is (= [{:xt$id 42} {:xt$id 43}] (sql "select foo.xt$id from foo")))
+        (is (= #{{:xt$id 42} {:xt$id 43}} (set (sql "select foo.xt$id from foo"))))
         (is (= {:access-mode :read-write} (next-transaction-variables (get-last-conn) [:access-mode])))))))
 
 (deftest analyzer-error-returned-test
