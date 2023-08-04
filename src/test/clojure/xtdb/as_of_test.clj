@@ -45,12 +45,12 @@
                     :xt/valid-from system-time
                     :xt/valid-to end-of-time-zdt
                     :xt/system-from system-time
-                    :xt/system-to nil}
+                    :xt/system-to (util/->zdt util/end-of-time)}
               :doc-with-app-time {:xt/id :doc-with-app-time,
                                   :xt/valid-from (util/->zdt #inst "2021")
                                   :xt/valid-to end-of-time-zdt
                                   :xt/system-from system-time
-                                  :xt/system-to nil}}
+                                  :xt/system-to (util/->zdt util/end-of-time)}}
              (->> (tu/query-ra '[:scan {:table xt_docs}
                                  [xt/id
                                   xt/valid-from xt/valid-to
@@ -67,15 +67,15 @@
 
         original-v0-doc {:xt/id :doc, :version 0
                          :xt/valid-from tt1
+                         :xt/valid-to tt2
+                         :xt/system-from tt1
+                         :xt/system-to end-of-time-zdt}
+
+        replaced-v0-doc {:xt/id :doc, :version 0
+                         :xt/valid-from tt2
                          :xt/valid-to end-of-time-zdt
                          :xt/system-from tt1
                          :xt/system-to tt2}
-
-        replaced-v0-doc {:xt/id :doc, :version 0
-                         :xt/valid-from tt1
-                         :xt/valid-to tt2
-                         :xt/system-from tt2
-                         :xt/system-to end-of-time-zdt}
 
         v1-doc {:xt/id :doc, :version 1
                 :xt/valid-from tt2
@@ -83,9 +83,7 @@
                 :xt/system-from tt2
                 :xt/system-to end-of-time-zdt}]
 
-    ;; TODO nil system-to #2655
-    (t/is (= #{(assoc replaced-v0-doc :xt/system-to nil)
-               (assoc v1-doc :xt/system-to nil)}
+    (t/is (= #{original-v0-doc v1-doc}
              (set (tu/query-ra '[:scan {:table xt_docs}
                                  [xt/id version
                                   xt/valid-from xt/valid-to

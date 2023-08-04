@@ -1504,13 +1504,13 @@
             "cross-time join - who was here in both 2018 and 2023?")
 
       (t/is (= #{{:vt-start (util/->zdt #inst "2021")
-                  :vt-end (util/->zdt util/end-of-time)
-                  :tt-start (util/->zdt #inst "2020-01-01")
-                  :tt-end (util/->zdt #inst "2020-01-02")}
-                 {:vt-start (util/->zdt #inst "2021")
                   :vt-end (util/->zdt #inst "2022")
-                  :tt-start (util/->zdt #inst "2020-01-02")
-                  :tt-end (util/->zdt util/end-of-time)}}
+                  :tt-start (util/->zdt #inst "2020")
+                  :tt-end (util/->zdt util/end-of-time)}
+                 {:vt-start (util/->zdt #inst "2022")
+                  :vt-end (util/->zdt util/end-of-time)
+                  :tt-start (util/->zdt #inst "2020")
+                  :tt-end (util/->zdt  #inst "2020-01-02")}}
                (set (q '{:find [vt-start vt-end tt-start tt-end]
                          :where [(match :xt_docs {:xt/id :luke
                                                   :xt/valid-from vt-start
@@ -1657,13 +1657,14 @@
                        tx1, nil)))
             "as-of 18 Jan")
 
-      (t/is (= [{:cust 145, :app-start (util/->zdt #inst "1998-01-05")}
-                {:cust 827, :app-start (util/->zdt #inst "1998-01-12")}]
-               (q '{:find [cust app-start]
-                    :where [(match :docs {:customer-number cust, :xt/valid-from app-start}
-                                   {:for-valid-time :all-time})]
-                    :order-by [[app-start :asc]]}
-                  tx5, nil))
+      (t/is (= #{{:cust 145, :app-start (util/->zdt #inst "1998-01-05")}
+                 {:cust 827, :app-start (util/->zdt #inst "1998-01-12")}}
+               (set (q '{:find [cust app-start]
+                         :where [(match :docs {:customer-number cust,
+                                               :xt/valid-from app-start}
+                                        {:for-valid-time :all-time})]
+                         :order-by [[app-start :asc]]}
+                       tx5, nil)))
             "as-of 29 Jan")
 
       (t/is (= [{:cust 827, :app-start (util/->zdt #inst "1998-01-12"), :app-end (util/->zdt #inst "1998-01-20")}]

@@ -124,7 +124,8 @@
         (t/is (= #{"tx1" "tx2"}
                  (q '{xt$system_from (<= xt$system_from ?system-time2)})))
 
-        (t/is (= #{"tx1" "tx2"}
+        ;; this test depends on how one cuts rectangles
+        (t/is (= #{"tx2"} #_#{"tx1" "tx2"}
                  (q '{xt$system_from (> xt$system_from ?system-time1)})))
 
         (t/is (= #{}
