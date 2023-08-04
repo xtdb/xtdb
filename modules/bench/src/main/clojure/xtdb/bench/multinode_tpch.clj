@@ -1,14 +1,12 @@
 (ns xtdb.bench.multinode-tpch
   (:require [clojure.tools.logging :as log]
             [xtdb.bench :as bench]
-            [xtdb.ingester :as ingest]
-            [xtdb.node :as node]
             [xtdb.datasets.tpch :as tpch]
             [xtdb.datasets.tpch.ra :as tpch.ra]
-            [xtdb.temporal :as temporal]
+            [xtdb.indexer :as idx]
+            [xtdb.node :as node]
             [xtdb.test-util :as tu]
-            [xtdb.util :as util]
-            [xtdb.indexer :as idx])
+            [xtdb.util :as util])
   (:import java.nio.file.attribute.FileAttribute
            java.nio.file.Files
            java.time.Duration
@@ -48,7 +46,6 @@
                     (test-node k node))
 
                   (idx/finish-chunk! (util/component primary-node :xtdb/indexer))
-                  (.awaitSnapshotBuild ^xtdb.temporal.TemporalManagerPrivate (::temporal/temporal-manager @(:!system primary-node)))
 
                   (log/info "Starting post finish-chunk node")
                   (with-open [^xtdb.node.Node secondary-node4 (start-node)]

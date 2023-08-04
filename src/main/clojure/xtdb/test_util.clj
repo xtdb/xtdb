@@ -11,7 +11,6 @@
             xtdb.object-store
             [xtdb.operator :as op]
             xtdb.operator.scan
-            [xtdb.temporal :as temporal]
             [xtdb.types :as types]
             [xtdb.util :as util]
             [xtdb.vector :as vec]
@@ -125,13 +124,8 @@
 (defn with-mock-clock [f]
   (with-opts {:xtdb.log/memory-log {:instant-src (->mock-clock)}} f))
 
-(defn await-temporal-snapshot-build [node]
-  (.awaitSnapshotBuild ^xtdb.temporal.TemporalManagerPrivate (util/component node ::temporal/temporal-manager)))
-
 (defn finish-chunk! [node]
-  (idx/finish-block! (component node :xtdb/indexer))
-  (idx/finish-chunk! (component node :xtdb/indexer))
-  (await-temporal-snapshot-build node))
+  (idx/finish-chunk! (component node :xtdb/indexer)))
 
 (defn open-vec
   (^org.apache.arrow.vector.ValueVector [col-name vs]
@@ -250,9 +244,8 @@
                       :xtdb.tx-producer/tx-producer {:instant-src instant-src}
                       :xtdb.buffer-pool/buffer-pool {:cache-path (.resolve node-dir buffers-dir)}
                       :xtdb.object-store/file-system-object-store {:root-path (.resolve node-dir "objects")}
-                      :xtdb/live-chunk (->> {:rows-per-block rows-per-block
-                                             :rows-per-chunk rows-per-chunk}
-                                            (into {} (filter val)))})))
+                      :xtdb/indexer (->> {:rows-per-chunk rows-per-chunk}
+                                         (into {} (filter val)))})))
 
 (defn ->local-submit-node ^java.lang.AutoCloseable [{:keys [^Path node-dir]}]
   (node/start-submit-node {:xtdb.tx-producer/tx-producer {:clock (->mock-clock)}

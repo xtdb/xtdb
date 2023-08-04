@@ -1072,7 +1072,7 @@
                   :spectre]))))
 
 (t/deftest bug-non-string-table-names-599
-  (with-open [node (node/start-node {:xtdb/live-chunk {:rows-per-block 10, :rows-per-chunk 1000}})]
+  (with-open [node (node/start-node {:xtdb/indexer {:rows-per-chunk 1000}})]
     (letfn [(submit-ops! [ids]
               (last (for [tx-ops (->> (for [id ids]
                                         [:put :t1 {:xt/id id,
@@ -1095,7 +1095,7 @@
         (t/is (= 160 (count-table tx)))))))
 
 (t/deftest bug-dont-throw-on-non-existing-column-597
-  (with-open [node (node/start-node {:xtdb/live-chunk {:rows-per-block 10, :rows-per-chunk 1000}})]
+  (with-open [node (node/start-node {:xtdb/indexer {:rows-per-chunk 1000}})]
     (letfn [(submit-ops! [ids]
               (last (for [tx-ops (->> (for [id ids]
                                         [:put :t1 {:xt/id id,
@@ -1117,7 +1117,7 @@
                             :where [(match :xt_docs [xt/id some-attr])]}))))))
 
 (t/deftest add-better-metadata-support-for-keywords
-  (with-open [node (node/start-node {:xtdb/live-chunk {:rows-per-block 10, :rows-per-chunk 1000}})]
+  (with-open [node (node/start-node {:xtdb/indexer {:rows-per-chunk 1000}})]
     (letfn [(submit-ops! [ids]
               (last (for [tx-ops (->> (for [id ids]
                                         [:put :t1 {:xt/id id,
@@ -2190,7 +2190,7 @@
                    :where [(match :foo {:xt/id id})]}))))
 
 (t/deftest test-metadata-filtering-for-time-data-607
-  (with-open [node (node/start-node {:xtdb/live-chunk {:rows-per-block 1, :rows-per-chunk 1}})]
+  (with-open [node (node/start-node {:xtdb/indexer {:rows-per-chunk 1}})]
     (xt/submit-tx node [[:put :xt_docs {:xt/id 1 :start-date #time/date "2000-01-01"}]
                         [:put :xt_docs {:xt/id 2 :start-date #time/date "3000-01-01"}]])
     (t/is (= [{:id 1}]
@@ -2319,7 +2319,7 @@
                            [(= #time/time "08:12:13.366" #time/time "08:12:13.366") d]]}))))
 
 (t/deftest bug-temporal-queries-wrong-at-boundary-2531
-  (with-open [node (node/start-node {:xtdb/live-chunk {:rows-per-block 10, :rows-per-chunk 10}
+  (with-open [node (node/start-node {:xtdb/indexer {:rows-per-chunk 10}
                                      :xtdb.tx-producer/tx-producer {:instant-src (tu/->mock-clock)}
                                      :xtdb.log/memory-log {:instant-src (tu/->mock-clock)}})]
     (doseq [i (range 10)]

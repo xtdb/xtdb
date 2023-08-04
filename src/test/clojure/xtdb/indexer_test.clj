@@ -9,7 +9,6 @@
             [xtdb.buffer-pool :as bp]
             [xtdb.expression.metadata :as expr.meta]
             [xtdb.indexer :as idx]
-            xtdb.indexer.internal-id-manager
             [xtdb.metadata :as meta]
             [xtdb.node :as node]
             [xtdb.object-store :as os]
@@ -28,7 +27,6 @@
            [org.apache.arrow.vector.complex ListVector StructVector]
            xtdb.api.protocols.TransactionInstant
            [xtdb.buffer_pool BufferPool IBufferPool]
-           (xtdb.indexer.internal_id_manager InternalIdManager)
            (xtdb.metadata IMetadataManager)
            xtdb.node.Node
            xtdb.object_store.ObjectStore
@@ -101,40 +99,22 @@
         (t/is (= last-tx-key
                  (tu/then-await-tx last-tx-key node (Duration/ofSeconds 2))))
 
-        (t/testing "watermark"
-          (with-open [^IWatermark watermark (.openWatermark wm-src last-tx-key)]
-            (let [live-blocks (-> (.liveChunk watermark)
-                                  (.liveTable "device_info")
-                                  (.liveBlocks #{"xt$id" "model"} nil))
-                  !res (volatile! [])]
-              (.forEachRemaining live-blocks
-                                 (reify Consumer
-                                   (accept [_ content-cols]
-                                     (vswap! !res conj (vr/rel->rows content-cols)))))
-
-              (t/is (= [[{:xt$id "device-info-demo000000", :model "pinto"}
-                         {:xt$id "device-info-demo000001", :model "mustang"}]]
-                       @!res)))))
-
         (tu/finish-chunk! node)
 
         (t/is (= {:latest-completed-tx last-tx-key
-                  :latest-row-id 5}
+                  :next-chunk-idx 6}
                  (-> (meta/latest-chunk-metadata mm)
-                     (select-keys [:latest-completed-tx :latest-row-id]))))
-
-        (let [objects-list (->> (.listObjects os "chunk-00/device_info") (filter #(str/ends-with? % "/metadata.arrow")))]
-          (t/is (= 1 (count objects-list)))
-          (t/is (= ["chunk-00/device_info/metadata.arrow"] objects-list)))
+                     (select-keys [:latest-completed-tx :next-chunk-idx]))))
 
         (tj/check-json (.toPath (io/as-file (io/resource "xtdb/indexer-test/can-build-chunk-as-arrow-ipc-file-format")))
                        (.resolve node-dir "objects"))
 
+        #_ ; TODO port to buffer pool test that doesn't depend on the structure of the indexer
         (t/testing "buffer pool"
           (let [buffer-name "chunk-00/device_info/metadata.arrow"
                 ^ArrowBuf buffer @(.getBuffer bp buffer-name)
                 footer (util/read-arrow-footer buffer)]
-            (t/is (= 2 (count (.buffers ^BufferPool bp))))
+            (t/is (= 1 (count (.buffers ^BufferPool bp))))
             (t/is (instance? ArrowBuf buffer))
             (t/is (= 2 (.getRefCount (.getReferenceManager ^ArrowBuf buffer))))
 
@@ -190,7 +170,7 @@
               (t/is (zero? (.getRefCount (.getReferenceManager ^ArrowBuf buffer))))
               (t/is (= size (.getSize (.getReferenceManager ^ArrowBuf buffer))))
               (t/is (zero? (.getAccountedSize (.getReferenceManager ^ArrowBuf buffer))))
-              (t/is (= 1 (count (.buffers ^BufferPool bp)))))))))))
+              (t/is (= 0 (count (.buffers ^BufferPool bp)))))))))))
 
 (t/deftest temporal-watermark-is-immutable-567
   (with-open [node (node/start-node {})]
@@ -416,17 +396,17 @@
           (tu/finish-chunk! node)
 
           (t/is (= {:latest-completed-tx last-tx-key
-                    :latest-row-id 11109}
+                    :next-chunk-idx 11110}
                    (-> (meta/latest-chunk-metadata mm)
-                       (select-keys [:latest-completed-tx :latest-row-id]))))
+                       (select-keys [:latest-completed-tx :next-chunk-idx]))))
 
           (let [objs (.listObjects os)]
-            (t/is (= 4 (count (filter #(re-matches #"^chunk-\p{XDigit}+/temporal\.arrow$" %) objs))))
-            (t/is (= 4 (count (filter #(re-matches #"temporal-snapshots/\p{XDigit}+.*" %) objs))))
-            (t/is (= 1 (count (filter #(re-matches #"chunk-\p{XDigit}+/device_info/metadata\.arrow" %) objs))))
-            (t/is (= 4 (count (filter #(re-matches #"chunk-\p{XDigit}+/device_readings/metadata\.arrow" %) objs))))
-            (t/is (= 1 (count (filter #(re-matches #"chunk-.*/device_info/content-api_version\.arrow" %) objs))))
-            (t/is (= 4 (count (filter #(re-matches #"chunk-.*/device_readings/content-battery_level\.arrow" %) objs))))))))))
+            (t/is (= 4 (count (filter #(re-matches #"chunk-metadata/\p{XDigit}+\.transit.json" %) objs))))
+            (t/is (= 2 (count (filter #(re-matches #"tables/device_info/chunks/.+\.arrow" %) objs))))
+            (t/is (= 4 (count (filter #(re-matches #"tables/device_readings/chunks/leaf-\p{XDigit}+\.arrow" %) objs))))
+            (t/is (= 4 (count (filter #(re-matches #"tables/device_readings/chunks/trie-\p{XDigit}+\.arrow" %) objs))))
+            (t/is (= 4 (count (filter #(re-matches #"tables/xt\$txs/chunks/leaf-\p{XDigit}+\.arrow" %) objs))))
+            (t/is (= 4 (count (filter #(re-matches #"tables/xt\$txs/chunks/trie-\p{XDigit}+\.arrow" %) objs))))))))))
 
 (t/deftest can-ingest-ts-devices-mini-into-multiple-nodes
   (let [node-dir (util/->path "target/can-ingest-ts-devices-mini-into-multiple-nodes")
@@ -458,15 +438,13 @@
             (t/is (= last-tx-key (tu/then-await-tx last-tx-key node (Duration/ofSeconds 60))))
             (t/is (= last-tx-key (tu/latest-completed-tx node)))
 
-            (Thread/sleep 1000) ;; TODO for now
-            (tu/await-temporal-snapshot-build node)
-
             (let [objs (.listObjects os)]
-              (t/is (= 11 (count (filter #(re-matches #"chunk-\p{XDigit}+/temporal\.arrow" %) objs))))
-              (t/is (= 11 (count (filter #(re-matches #"temporal-snapshots/\p{XDigit}+.arrow" %) objs))))
-              (t/is (= 13 (count (filter #(re-matches #"chunk-\p{XDigit}+/device_(?:info|readings)/metadata.arrow" %) objs))))
-              (t/is (= 2 (count (filter #(re-matches #"chunk-\p{XDigit}+/device_info/content-api_version\.arrow" %) objs))))
-              (t/is (= 11 (count (filter #(re-matches #"chunk-\p{XDigit}+/device_readings/content-battery_level\.arrow" %) objs)))))))))))
+              (t/is (= 11 (count (filter #(re-matches #"chunk-metadata/\p{XDigit}+\.transit.json" %) objs))))
+              (t/is (= 4 (count (filter #(re-matches #"tables/device_info/chunks/.+\.arrow" %) objs))))
+              (t/is (= 11 (count (filter #(re-matches #"tables/device_readings/chunks/leaf-\p{XDigit}+\.arrow" %) objs))))
+              (t/is (= 11 (count (filter #(re-matches #"tables/device_readings/chunks/trie-\p{XDigit}+\.arrow" %) objs))))
+              (t/is (= 11 (count (filter #(re-matches #"tables/xt\$txs/chunks/leaf-\p{XDigit}+\.arrow" %) objs))))
+              (t/is (= 11 (count (filter #(re-matches #"tables/xt\$txs/chunks/trie-\p{XDigit}+\.arrow" %) objs)))))))))))
 
 (t/deftest can-ingest-ts-devices-mini-with-stop-start-and-reach-same-state
   (let [node-dir (util/->path "target/can-ingest-ts-devices-mini-with-stop-start-and-reach-same-state")
@@ -495,28 +473,25 @@
 
           (with-open [node (tu/->local-node (assoc node-opts :buffers-dir "buffers-1"))]
             (let [^ObjectStore os (util/component node ::os/file-system-object-store)
-                  ^InternalIdManager iid-mgr (util/component node :xtdb.indexer/internal-id-manager)
                   ^IMetadataManager mm (util/component node ::meta/metadata-manager)]
               (t/is (= first-half-tx-key
                        (-> first-half-tx-key
                            (tu/then-await-tx node (Duration/ofSeconds 10)))))
               (t/is (= first-half-tx-key (tu/latest-completed-tx node)))
 
-              (let [{:keys [^TransactionInstant latest-completed-tx, latest-row-id]}
+              (let [{:keys [^TransactionInstant latest-completed-tx, next-chunk-idx]}
                     (meta/latest-chunk-metadata mm)]
 
                 (t/is (< (:tx-id latest-completed-tx) (:tx-id first-half-tx-key)))
-                (t/is (< latest-row-id (count first-half-tx-ops)))
+                (t/is (< next-chunk-idx (count first-half-tx-ops)))
 
                 (let [objs (.listObjects os)]
-                  (t/is (= 5 (count (filter #(re-matches #"^chunk-\p{XDigit}+/temporal\.arrow$" %) objs))))
-                  (t/is (= 5 (count (filter #(re-matches #"temporal-snapshots/\p{XDigit}+.*" %) objs))))
-                  (t/is (= 2 (count (filter #(re-matches #"chunk-\p{XDigit}+/device_info/metadata\.arrow" %) objs))))
-                  (t/is (= 5 (count (filter #(re-matches #"chunk-\p{XDigit}+/device_readings/metadata\.arrow" %) objs))))
-                  (t/is (= 2 (count (filter #(re-matches #"chunk-.*/device_info/content-api_version\.arrow" %) objs))))
-                  (t/is (= 5 (count (filter #(re-matches #"chunk-.*/device_readings/content-battery_level\.arrow" %) objs)))))
-
-                (t/is (= 2055 (count (.id->internal-id iid-mgr)))))
+                  (t/is (= 5 (count (filter #(re-matches #"chunk-metadata/\p{XDigit}+\.transit.json" %) objs))))
+                  (t/is (= 4 (count (filter #(re-matches #"tables/device_info/chunks/.+\.arrow" %) objs))))
+                  (t/is (= 5 (count (filter #(re-matches #"tables/device_readings/chunks/leaf-\p{XDigit}+\.arrow" %) objs))))
+                  (t/is (= 5 (count (filter #(re-matches #"tables/device_readings/chunks/trie-\p{XDigit}+\.arrow" %) objs))))
+                  (t/is (= 5 (count (filter #(re-matches #"tables/xt\$txs/chunks/leaf-\p{XDigit}+\.arrow" %) objs))))
+                  (t/is (= 5 (count (filter #(re-matches #"tables/xt\$txs/chunks/trie-\p{XDigit}+\.arrow" %) objs))))))
 
               (t/is (= :utf8 (.columnType mm "device_readings" "xt$id")))
 
@@ -540,8 +515,6 @@
                                           (tu/then-await-tx node (Duration/ofSeconds 10))))
                               (:tx-id second-half-tx-key)))
 
-                    (t/is (>= (count (.id->internal-id iid-mgr)) 2055))
-
                     (t/is (= :utf8 (.columnType mm "device_info" "xt$id"))))
 
                   (doseq [^Node node [new-node node]]
@@ -549,24 +522,19 @@
                                                     (tu/then-await-tx node (Duration/ofSeconds 15)))))
                     (t/is (= second-half-tx-key (tu/latest-completed-tx node))))
 
-                  (Thread/sleep 1000) ;; TODO for now
-                  (tu/await-temporal-snapshot-build node)
-
                   (doseq [^Node node [new-node node]
                           :let [^ObjectStore os (tu/component node ::os/file-system-object-store)
                                 ^IMetadataManager mm (tu/component node ::meta/metadata-manager)]]
 
                     (let [objs (.listObjects os)]
-                      (t/is (= 11 (count (filter #(re-matches #"^chunk-\p{XDigit}+/temporal\.arrow$" %) objs))))
-                      (t/is (= 11 (count (filter #(re-matches #"temporal-snapshots/\p{XDigit}+.*" %) objs))))
-                      (t/is (= 2 (count (filter #(re-matches #"chunk-\p{XDigit}+/device_info/metadata\.arrow" %) objs))))
-                      (t/is (= 11 (count (filter #(re-matches #"chunk-\p{XDigit}+/device_readings/metadata\.arrow" %) objs))))
-                      (t/is (= 2 (count (filter #(re-matches #"chunk-.*/device_info/content-api_version\.arrow" %) objs))))
-                      (t/is (= 11 (count (filter #(re-matches #"chunk-.*/device_readings/content-battery_level\.arrow" %) objs)))))
+                      (t/is (= 11 (count (filter #(re-matches #"chunk-metadata/\p{XDigit}+\.transit.json" %) objs))))
+                      (t/is (= 4 (count (filter #(re-matches #"tables/device_info/chunks/.+\.arrow" %) objs))))
+                      (t/is (= 11 (count (filter #(re-matches #"tables/device_readings/chunks/leaf-\p{XDigit}+\.arrow" %) objs))))
+                      (t/is (= 11 (count (filter #(re-matches #"tables/device_readings/chunks/trie-\p{XDigit}+\.arrow" %) objs))))
+                      (t/is (= 11 (count (filter #(re-matches #"tables/xt\$txs/chunks/leaf-\p{XDigit}+\.arrow" %) objs))))
+                      (t/is (= 11 (count (filter #(re-matches #"tables/xt\$txs/chunks/trie-\p{XDigit}+\.arrow" %) objs)))))
 
-                    (t/is (= :utf8 (.columnType mm "device_info" "xt$id")))
-
-                    (t/is (= 2110 (count (.id->internal-id iid-mgr))))))))))))))
+                    (t/is (= :utf8 (.columnType mm "device_info" "xt$id")))))))))))))
 
 (t/deftest merges-column-fields-on-restart
   (let [node-dir (util/->path "target/merges-column-fields")
@@ -648,63 +616,3 @@
 
         (tj/check-json (.toPath (io/as-file (io/resource "xtdb/indexer-test/can-index-sql-insert")))
                        (.resolve node-dir "objects"))))))
-
-(deftest test-skips-irrelevant-live-blocks-632
-  (with-open [node (node/start-node {:xtdb/live-chunk {:rows-per-block 2, :rows-per-chunk 10}})]
-    (-> (xt/submit-tx node [[:put :xt_docs {:name "Håkan", :xt/id :hak}]])
-        (tu/then-await-tx node))
-
-    (tu/finish-chunk! node)
-
-    (xt/submit-tx node [[:put :xt_docs {:name "Dan", :xt/id :dan}]
-                        [:put :xt_docs {:name "Ivan", :xt/id :iva}]])
-
-    (-> (xt/submit-tx node [[:put :xt_docs {:name "James", :xt/id :jms}]
-                            [:put :xt_docs {:name "Jon", :xt/id :jon}]])
-        (tu/then-await-tx node))
-
-    (let [^IMetadataManager metadata-mgr (tu/component node ::meta/metadata-manager)
-          ^IWatermarkSource wm-src (tu/component node :xtdb/indexer)]
-      (with-open [params (tu/open-params {'?name "Ivan"})]
-        (let [gt-literal-selector (expr.meta/->metadata-selector '(> name "Ivan") '{name :utf8} {})
-              gt-param-selector (expr.meta/->metadata-selector '(> name ?name) '{name :utf8} params)]
-
-          (t/is (= #{0} (set (keys (.chunksMetadata metadata-mgr)))))
-
-          (letfn [(test-live-blocks [^IWatermark wm, metadata-pred]
-                    (with-open [live-blocks (-> (.liveChunk wm)
-                                                (.liveTable "xt_docs")
-                                                (.liveBlocks #{"_row_id" "name"} metadata-pred))]
-                      (let [!res (atom [])]
-                        (.forEachRemaining live-blocks
-                                           (reify Consumer
-                                             (accept [_ in-rel]
-                                               (swap! !res conj (vr/rel->rows in-rel)))))
-                        @!res)))]
-
-            (with-open [wm1 (.openWatermark wm-src nil)]
-              (t/is (= [[{:_row_id 2, :name "Dan"} {:_row_id 3, :name "Ivan"}]
-                        [{:_row_id 5, :name "James"} {:_row_id 6, :name "Jon"}]]
-                       (test-live-blocks wm1 nil))
-                    "no selector")
-
-              (t/is (= [[{:_row_id 5, :name "James"} {:_row_id 6, :name "Jon"}]]
-                       (test-live-blocks wm1 gt-literal-selector))
-                    "only second block, literal selector")
-
-              (t/is (= [[{:_row_id 5, :name "James"} {:_row_id 6, :name "Jon"}]]
-                       (test-live-blocks wm1 gt-param-selector))
-                    "only second block, param selector")
-
-              (let [next-tx (-> (xt/submit-tx node [[:put :xt_docs {:name "Jeremy", :xt/id :jdt}]])
-                                (tu/then-await-tx node))]
-
-                (with-open [wm2 (.openWatermark wm-src next-tx)]
-                  (t/is (= [[{:_row_id 5, :name "James"} {:_row_id 6, :name "Jon"}]]
-                           (test-live-blocks wm1 gt-literal-selector))
-                        "replay with wm1")
-
-                  (t/is (= [[{:_row_id 5, :name "James"} {:_row_id 6, :name "Jon"}]
-                            [{:_row_id 8, :name "Jeremy"}]]
-                           (test-live-blocks wm2 gt-literal-selector))
-                        "now on wm2"))))))))))

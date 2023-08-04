@@ -108,23 +108,12 @@
 (defn- ->table-metadata-obj-key [chunk-idx table-name]
   (format "chunk-%s/%s/metadata.arrow" (util/->lex-hex-string chunk-idx) table-name))
 
-(defn ->chunk-obj-key [chunk-idx table-name column-name]
-  (format "chunk-%s/%s/content-%s.arrow" (util/->lex-hex-string chunk-idx) table-name column-name))
-
 (defn- obj-key->chunk-idx [obj-key]
   (some-> (second (re-matches #"chunk-metadata/(\p{XDigit}+).transit.json" obj-key))
           (util/<-lex-hex-string)))
 
 (defn- ->chunk-metadata-obj-key [chunk-idx]
   (format "chunk-metadata/%s.transit.json" (util/->lex-hex-string chunk-idx)))
-
-(defn live-rel->chunk-metadata [^String table-name, ^RelationReader live-rel]
-  (when (pos? (.rowCount live-rel))
-    (MapEntry/create table-name
-                     {:col-types (->> (for [^IVectorReader live-col live-rel]
-                                        (MapEntry/create (.getName live-col)
-                                                         (types/field->col-type (.getField live-col))))
-                                      (into {}))})))
 
 (defn- write-chunk-metadata ^java.nio.ByteBuffer [chunk-meta]
   (with-open [os (ByteArrayOutputStream.)]

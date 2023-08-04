@@ -661,11 +661,7 @@
                           :when (= table-id column-table-id)]
                       (last identifiers))
 
-                    ;; TODO _iid (and possibly _row_id) can go once we remove the old temporal-indexer
-                    ;; also see below
-                    #{"xt$id" "_iid" "_row_id"
-                      "xt$valid_from" "xt$valid_to"
-                      "xt$system_from" "xt$system_to"}
+                    #{"xt$iid" "xt$valid_from" "xt$valid_to" "xt$system_from" "xt$system_to"}
 
                     (when (= :update_statement__searched (r/ctor (r/parent ag)))
                       (set/difference known-columns
@@ -695,9 +691,7 @@
     [(let [{:keys [correlation-name known-columns], :as table} (table ag)
            updated-cols (update-set-cols ag)]
        (vec
-        (concat (->> (for [col-name (set/union #{"xt$id" "_iid" "_row_id"
-                                                 "xt$valid_from" "xt$valid_to"
-                                                 "xt$system_from" "xt$system_to"}
+        (concat (->> (for [col-name (set/union #{"xt$iid" "xt$valid_from" "xt$valid_to" "xt$system_from" "xt$system_to"}
                                                (when (= :update_statement__searched (r/ctor ag))
                                                  (set/difference known-columns
                                                                  (into #{} (map :identifier) updated-cols))))]
@@ -708,9 +702,7 @@
 
     :erase_statement__searched
     [(let [{:keys [correlation-name], :as table} (table ag)]
-       (->> (for [col-name ["xt$id" "_iid" "_row_id"
-                            "xt$valid_from" "xt$valid_to"
-                            "xt$system_from" "xt$system_to"]]
+       (->> (for [col-name ["xt$iid" "xt$valid_from" "xt$valid_to" "xt$system_from" "xt$system_to"]]
               {:identifier col-name
                :qualified-column [correlation-name col-name]})
             (into [] (map #(vary-meta % assoc :table table)))))]

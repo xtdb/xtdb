@@ -3,7 +3,6 @@
             [xtdb.api :as xt]
             [xtdb.node :as node]
             [xtdb.operator :as op]
-            [xtdb.operator.scan :as scan]
             [xtdb.test-util :as tu]
             [xtdb.util :as util])
   (:import xtdb.operator.IRaQuerySource))
@@ -41,7 +40,7 @@
                           {:node node})))))
 
 (t/deftest test-chunk-boundary
-  (with-open [node (node/start-node {:xtdb/live-chunk {:rows-per-block 5, :rows-per-chunk 20}})]
+  (with-open [node (node/start-node {:xtdb/indexer {:rows-per-chunk 20}})]
     (->> (for [i (range 110)]
            [:put :xt_docs {:xt/id i}])
          (partition-all 10)
@@ -285,6 +284,7 @@
           (t/is (= '{xt/id [:union #{:keyword :utf8}]}
                    (->col-types tx))))))))
 
+#_ ; TODO adapt for scan/->temporal-range
 (t/deftest can-create-temporal-min-max-range
   (let [μs-2018 (util/instant->micros (util/->instant #inst "2018"))
         μs-2019 (util/instant->micros (util/->instant #inst "2019"))]

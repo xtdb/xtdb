@@ -124,12 +124,9 @@
                           :xtdb/allocator {}
                           :xtdb/default-tz nil
                           :xtdb/indexer {}
-                          :xtdb.indexer/internal-id-manager {}
-                          :xtdb/live-chunk {}
                           :xtdb.indexer/live-index {}
                           :xtdb/ingester {}
                           :xtdb.metadata/metadata-manager {}
-                          :xtdb.temporal/temporal-manager {}
                           :xtdb.buffer-pool/buffer-pool {}
                           :xtdb.operator.scan/scan-emitter {}
                           :xtdb.operator/ra-query-source {}

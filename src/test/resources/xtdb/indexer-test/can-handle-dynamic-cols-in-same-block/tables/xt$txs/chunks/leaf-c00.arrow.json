@@ -9,15 +9,6 @@
       },
       "children" : [ ]
     },{
-      "name" : "xt$legacy_iid",
-      "nullable" : false,
-      "type" : {
-        "name" : "int",
-        "bitWidth" : 64,
-        "isSigned" : true
-      },
-      "children" : [ ]
-    },{
       "name" : "xt$system_from",
       "nullable" : false,
       "type" : {
@@ -147,11 +138,6 @@
       "count" : 1,
       "VALIDITY" : [1],
       "DATA" : ["a4e167a76a05add8a8654c169b07b044"]
-    },{
-      "name" : "xt$legacy_iid",
-      "count" : 1,
-      "VALIDITY" : [1],
-      "DATA" : ["432345564227567616"]
     },{
       "name" : "xt$system_from",
       "count" : 1,

@@ -9,7 +9,8 @@
             [xtdb.test-util :as tu]
             [xtdb.util :as util]
             [xtdb.vector.reader :as vr])
-  (:import java.time.Duration
+  (:import [java.nio ByteBuffer]
+           java.time.Duration
            [java.util Random UUID]
            [org.apache.arrow.memory BufferAllocator RootAllocator]
            [org.apache.arrow.vector FixedSizeBinaryVector]
@@ -42,7 +43,7 @@
                        live-table-tx (.liveTable live-idx-tx "my-table")]
         (let [wp (IVectorPosition/build)]
           (doseq [^UUID iid iids]
-            (.logPut live-table-tx (util/uuid->bytes iid) (.getMostSignificantBits iid) 0 0
+            (.logPut live-table-tx (ByteBuffer/wrap (util/uuid->bytes iid)) 0 0
                      #(.getPositionAndIncrement wp))))
 
         (.commit live-idx-tx)
