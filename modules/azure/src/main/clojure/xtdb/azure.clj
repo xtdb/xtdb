@@ -26,22 +26,18 @@
     (string/ends-with? prefix "/") prefix
     :else (str prefix "/")))
 
-;; used by both object store + event hub log
-(s/def ::resource-group-name string?)
-
-;; used by blob object store
 (s/def ::storage-account string?)
-(s/def ::servicebus-namespace string?)
-(s/def ::eventgrid-topic string?)
 (s/def ::container string?)
 (s/def ::prefix string?)
+(s/def ::servicebus-namespace string?)
+(s/def ::servicebus-topic-name string?)
 
 (defmethod ig/prep-key ::blob-object-store [_ opts]
   (-> opts
       (util/maybe-update :prefix parse-prefix)))
 
 (defmethod ig/pre-init-spec ::blob-object-store [_]
-  (s/keys :req-un [::storage-account ::container ::resource-group-name ::servicebus-namespace ::eventgrid-topic]
+  (s/keys :req-un [::storage-account ::container ::servicebus-namespace ::servicebus-topic-name]
           :opt-un [::prefix]))
 
 (defmethod ig/init-key ::blob-object-store [_ {:keys [storage-account container prefix] :as opts}]
@@ -53,11 +49,11 @@
         blob-client (.getBlobContainerClient blob-service-client container)
         file-name-cache (ConcurrentSkipListSet.)
         ;; Watch azure container for changes
-        azure-watch-info (azure-file-watch/file-list-watch (assoc opts 
+        azure-watch-info (azure-file-watch/file-list-watch (assoc opts
                                                                   :blob-container-client blob-client
-                                                                  :azure-credential credential) 
+                                                                  :azure-credential credential)
                                                            file-name-cache)]
-    (os/->AzureBlobObjectStore blob-client 
+    (os/->AzureBlobObjectStore blob-client
                                prefix
                                file-name-cache
                                azure-watch-info)))
@@ -69,10 +65,9 @@
                                                  :prefix (str "xtdb.azure-test." (random-uuid))})
                (ig/init-key ::blob-object-store)))
 
-  @(.getObject os "foo.txt")
+  @(.getObject os "foo.txt"))
 
-  )
-
+(s/def ::resource-group-name string?)
 (s/def ::namespace string?)
 (s/def ::event-hub-name string?)
 (s/def ::create-event-hub? boolean?)
@@ -125,11 +120,11 @@
                                      (.fullyQualifiedNamespace fully-qualified-namespace)
                                      (.eventHubName event-hub-name))
         subscriber-handler (xtdb-log/->notifying-subscriber-handler nil)]
-    
+
     (when create-event-hub?
       (resource-group-present? opts)
       (create-event-hub-if-not-exists credential opts))
-    
+
     (tx-log/->EventHubLog subscriber-handler
                           (.buildAsyncProducerClient event-hub-client-builder)
                           (.buildConsumerClient event-hub-client-builder)

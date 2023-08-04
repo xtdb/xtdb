@@ -14,9 +14,9 @@
 (def resource-group-name "azure-modules-test")
 (def storage-account "xtdbteststorageaccount")
 (def container "xtdb-test-object-store")
-(def eventhub-namespace "xtdbeventhublogtest")
+(def eventhub-namespace "xtdb-test-storage-account-eventbus")
 (def servicebus-namespace "xtdb-test-storage-account-eventbus")
-(def eventgrid-topic "xtdb-test-storage-account-system-topic")
+(def servicebus-topic-name "xtdb-test-storage-bus-topic")
 (def config-present? (some? (and (System/getenv "AZURE_CLIENT_ID")
                                  (System/getenv "AZURE_CLIENT_SECRET")
                                  (System/getenv "AZURE_TENANT_ID")
@@ -45,9 +45,8 @@
 (defn object-store ^Closeable [prefix]
   (->> (ig/prep-key ::azure/blob-object-store {:storage-account storage-account
                                                :container container
-                                               :resource-group-name resource-group-name
                                                :servicebus-namespace servicebus-namespace
-                                               :eventgrid-topic eventgrid-topic
+                                               :servicebus-topic-name servicebus-topic-name
                                                :prefix (str "xtdb.azure-test." prefix)})
        (ig/init-key ::azure/blob-object-store)))
 

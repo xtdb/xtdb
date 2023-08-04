@@ -3,21 +3,12 @@
             [clojure.string :as string]
             [clojure.tools.logging :as log])
   (:import [com.azure.core.credential TokenCredential]
-           [com.azure.core.management AzureEnvironment]
-           [com.azure.core.management.profile AzureProfile]
            [com.azure.messaging.servicebus ServiceBusClientBuilder]
            [com.azure.messaging.servicebus.administration ServiceBusAdministrationClientBuilder]
-           [com.azure.messaging.servicebus.administration.models CreateQueueOptions]
-           [com.azure.resourcemanager.eventgrid EventGridManager]
-           [com.azure.resourcemanager.eventgrid.models ServiceBusQueueEventSubscriptionDestination EventSubscriptionProvisioningState]
-           [com.azure.resourcemanager.eventgrid.fluent.models EventSubscriptionInner]
-           [com.azure.resourcemanager.servicebus ServiceBusManager]
-           [com.azure.resourcemanager.servicebus.models EntityStatus]
            [com.azure.storage.blob.models ListBlobsOptions BlobItem]
            [com.azure.storage.blob BlobContainerClient]
            [java.util NavigableSet UUID]
-           java.util.function.Consumer
-           java.time.Duration))
+           java.util.function.Consumer))
 
 (defn file-list-init [{:keys [^BlobContainerClient blob-container-client prefix]}  ^NavigableSet file-name-cache]
   (let [list-blob-opts (cond-> (ListBlobsOptions.)
@@ -32,62 +23,25 @@
 (defn mk-short-uuid []
   (subs (str (UUID/randomUUID)) 0 8))
 
-(defn successuflly-created? [subscription-info]
-  (= (.provisioningState subscription-info) EventSubscriptionProvisioningState/SUCCEEDED))
-
-(defn failed-creation? [subscription-info]
-  (= (.provisioningState subscription-info) EventSubscriptionProvisioningState/FAILED))
-
-(defn setup-notif-queue [{:keys [^TokenCredential azure-credential resource-group-name servicebus-namespace eventgrid-topic]}]
-  (let [servicebus-manager (ServiceBusManager/authenticate azure-credential (AzureProfile. (AzureEnvironment/AZURE)))
-        servicebus-admin-client (-> (ServiceBusAdministrationClientBuilder.)
+(defn setup-topic-subscription [{:keys [^TokenCredential azure-credential servicebus-namespace servicebus-topic-name]}]
+  (let [servicebus-admin-client (-> (ServiceBusAdministrationClientBuilder.)
                                     (.credential (format "%s.servicebus.windows.net" servicebus-namespace)
                                                  azure-credential)
                                     (.buildClient))
-        eventgrid-manager (EventGridManager/authenticate azure-credential (AzureProfile. (AzureEnvironment/AZURE)))
-        queue-name (format "xtdb-object-store-container-notifs-%s" (mk-short-uuid))
 
-        _ (log/info "Creating Service Bus Queue " queue-name)
-        _ (-> servicebus-admin-client
-              (.createQueue queue-name (-> (CreateQueueOptions.)
-                                           (.setAutoDeleteOnIdle nil)
-                                           (.setDefaultMessageTimeToLive (Duration/ofHours 1)))))
+        subscription-name (format "xtdb-topic-subscription-%s" (mk-short-uuid))]
 
-        _ (log/info "Fetching resource info for Service Bus Queue " queue-name)
-        queue-info (-> servicebus-manager
-                       (.serviceClient)
-                       (.getQueues)
-                       (.get resource-group-name servicebus-namespace queue-name))
-
-        _ (log/info (format "Creating subscription on %s for queue %s" eventgrid-topic queue-name))
-        subscription-info (-> eventgrid-manager
-                              (.systemTopicEventSubscriptions)
-                              (.createOrUpdate resource-group-name
-                                               eventgrid-topic
-                                               (format "%s-subscription" queue-name)
-                                               (-> (EventSubscriptionInner.)
-                                                   (.withDestination
-                                                    (-> (ServiceBusQueueEventSubscriptionDestination.)
-                                                        (.withResourceId (.id queue-info)))))))]
-
-    
-
-    ;; await successful creation of subscription
-    (while (not (successuflly-created? subscription-info))
-      (when (failed-creation? subscription-info)
-        (throw (Exception. (format "Service bus queue %s failed to be created, closing node." queue-name))))
-      (Thread/sleep 10))
+    (log/info "Creating new subscription on topic %s, subscription name " servicebus-topic-name subscription-name)
+    (-> servicebus-admin-client
+        (.createSubscription servicebus-topic-name subscription-name))
 
     {:servicebus-admin-client servicebus-admin-client
-     :eventgrid-manager eventgrid-manager
-     :subscription-name (.name subscription-info)
-     :queue-name queue-name
-     :resource-group-name resource-group-name
-     :eventgrid-topic eventgrid-topic}))
+     :servicebus-topic-name servicebus-topic-name
+     :subscription-name subscription-name}))
 
 (defn file-list-watch [{:keys [^BlobContainerClient blob-container-client ^TokenCredential azure-credential servicebus-namespace container prefix] :as opts} ^NavigableSet file-name-cache]
   (let [;; Create queue that will subscribe to sns topic for notifications
-        {:keys [queue-name subscription-name] :as closable-opts} (setup-notif-queue opts)
+        {:keys [servicebus-topic-name subscription-name] :as closable-opts} (setup-topic-subscription opts)
 
         _ (log/info "Initializing filename list from container " container)
          ;; Init the filename cache with current files
@@ -99,7 +53,7 @@
                              (.fullyQualifiedNamespace (format "%s.servicebus.windows.net" servicebus-namespace))
                              (.credential azure-credential)
                              (.processor)
-                             (.queueName queue-name)
+                             (.topicName servicebus-topic-name)
                              (.subscriptionName subscription-name)
                              (.disableAutoComplete)
                              (.processMessage (reify Consumer
@@ -129,19 +83,9 @@
       ;; Return all closeable opts from the function
     (assoc closable-opts :processor-client processor-client)))
 
-(defn watcher-close-fn [{:keys [resource-group-name eventgrid-topic servicebus-admin-client eventgrid-manager processor-client subscription-name queue-name]}]
+(defn watcher-close-fn [{:keys [servicebus-admin-client processor-client servicebus-topic-name subscription-name]}]
   (log/info "Stopping & closing filechange processor client")
   (.close processor-client)
-
-  (log/info "Awaiting AMQP connection close")
-  (Thread/sleep 60000)
-
-  (log/info "Removing queue subscription, subscription-id: " subscription-name)
-  (-> eventgrid-manager
-      (.systemTopicEventSubscriptions)
-      (.delete resource-group-name
-               eventgrid-topic
-               subscription-name))
   
-  (log/info "Removing Service Bus Queue, queue-name: " queue-name)
-  (.deleteQueue servicebus-admin-client queue-name))
+  (log/info (format "Removing subscription %s on topic %s " servicebus-topic-name subscription-name))
+  (.deleteSubscription servicebus-admin-client servicebus-topic-name subscription-name))

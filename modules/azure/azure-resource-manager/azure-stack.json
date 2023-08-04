@@ -50,6 +50,13 @@
         "description": "Provide a name for the service bus namespace."
       }
     },
+    "serviceBusTopicName": {
+      "type": "string",
+      "defaultValue": "xtdb-storage-bus-topic",
+      "metadata": {
+        "description": "Provide a name for the service bus topic."
+      }
+    },
     "customRoleName": {
       "type": "string",
       "defaultValue": "xtdb-role",
@@ -88,6 +95,7 @@
         "publicAccess": "None"
       }
     },
+
     {
       "type": "Microsoft.EventGrid/systemTopics",
       "apiVersion": "2021-12-01",
@@ -101,52 +109,88 @@
         "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName'))]"
       ]
     },
+
     {
       "name": "[parameters('serviceBusNamespaceName')]",
       "type": "Microsoft.ServiceBus/namespaces",
       "apiVersion": "2021-01-01-preview",
       "location": "[parameters('location')]",
       "sku": {
-        "name": "Basic"
-      }
-    },
-    {
-    "name": "[variables('roleDefinitionId')]",
-    "type": "Microsoft.Authorization/roleDefinitions",
-    "apiVersion": "2022-04-01",
-    "properties": {
-      "roleName": "[parameters('customRoleName')]",
-      "description": "All the resources and access XTDB needs.",
-      "type": "customRole",
-      "assignableScopes": [ "[subscription().id]",  "[concat(subscription().id, '/resourceGroups/', resourceGroup().name)]" ],
-      "permissions": [
+        "name": "Standard"
+      },
+      "properties": {
+        "publicNetworkAccess": "false"
+      },
+      "resources": [
         {
-          "actions": [
-            "Microsoft.ServiceBus/*",
-            "Microsoft.Storage/storageAccounts/blobServices/containers/write",
-            "Microsoft.Storage/storageAccounts/blobServices/containers/delete",
-            "Microsoft.Storage/storageAccounts/blobServices/containers/read",
-            "Microsoft.EventGrid/systemTopics/read",
-            "Microsoft.EventGrid/systemTopics/eventSubscriptions/read",
-            "Microsoft.EventGrid/systemTopics/eventSubscriptions/write",
-            "Microsoft.EventGrid/systemTopics/eventSubscriptions/delete",
-            "Microsoft.EventGrid/systemTopics/eventSubscriptions/getFullUrl/action",
-            "Microsoft.EventGrid/systemTopics/eventSubscriptions/getDeliveryAttributes/action"
+          "apiVersion": "2021-01-01-preview",
+          "name": "[parameters('serviceBusTopicName')]",
+          "type": "Topics",
+          "dependsOn": [
+            "[concat('Microsoft.ServiceBus/namespaces/', parameters('serviceBusNamespaceName'))]"
           ],
-          "notActions": [],
-          "dataActions": [
-            "Microsoft.ServiceBus/*",
-            "Microsoft.Storage/storageAccounts/blobServices/containers/blobs/read",
-            "Microsoft.Storage/storageAccounts/blobServices/containers/blobs/write",
-            "Microsoft.Storage/storageAccounts/blobServices/containers/blobs/delete",
-            "Microsoft.Storage/storageAccounts/blobServices/containers/blobs/add/action",
-            "Microsoft.Storage/storageAccounts/blobServices/containers/blobs/move/action"
-          ],
-          "notDataActions": []
+          "properties": {
+            "path": "[parameters('serviceBusTopicName')]"
+          }
         }
       ]
+    },
+
+    {
+      "type": "Microsoft.EventGrid/systemTopics/eventSubscriptions",
+      "apiVersion": "2020-04-01-preview",
+      "name": "[concat(parameters('systemTopicName'), '/', parameters('serviceBusTopicName'), '-subscription')]",
+      "dependsOn": [
+        "[resourceId('Microsoft.EventGrid/systemTopics', parameters('systemTopicName'))]",
+        "[resourceId('Microsoft.ServiceBus/namespaces/topics', parameters('serviceBusNamespaceName'), parameters('serviceBusTopicName'))]"
+      ],
+      "properties": {
+        "destination": {
+          "endpointType": "ServiceBusTopic",
+          "properties": {
+            "resourceId": "[resourceId('Microsoft.ServiceBus/namespaces/topics', parameters('serviceBusNamespaceName'), parameters('serviceBusTopicName'))]"
+          }
+        }
+      }
+    },
+
+    {
+      "name": "[variables('roleDefinitionId')]",
+      "type": "Microsoft.Authorization/roleDefinitions",
+      "apiVersion": "2022-04-01",
+      "properties": {
+        "roleName": "[parameters('customRoleName')]",
+        "description": "All the resources and access XTDB needs.",
+        "type": "customRole",
+        "assignableScopes": [ "[subscription().id]",  "[concat(subscription().id, '/resourceGroups/', resourceGroup().name)]" ],
+        "permissions": [
+          {
+            "actions": [
+              "Microsoft.ServiceBus/*",
+              "Microsoft.Storage/storageAccounts/blobServices/containers/write",
+              "Microsoft.Storage/storageAccounts/blobServices/containers/delete",
+              "Microsoft.Storage/storageAccounts/blobServices/containers/read",
+              "Microsoft.EventGrid/systemTopics/read",
+              "Microsoft.EventGrid/systemTopics/eventSubscriptions/read",
+              "Microsoft.EventGrid/systemTopics/eventSubscriptions/write",
+              "Microsoft.EventGrid/systemTopics/eventSubscriptions/delete",
+              "Microsoft.EventGrid/systemTopics/eventSubscriptions/getFullUrl/action",
+              "Microsoft.EventGrid/systemTopics/eventSubscriptions/getDeliveryAttributes/action"
+            ],
+            "notActions": [],
+            "dataActions": [
+              "Microsoft.ServiceBus/*",
+              "Microsoft.Storage/storageAccounts/blobServices/containers/blobs/read",
+              "Microsoft.Storage/storageAccounts/blobServices/containers/blobs/write",
+              "Microsoft.Storage/storageAccounts/blobServices/containers/blobs/delete",
+              "Microsoft.Storage/storageAccounts/blobServices/containers/blobs/add/action",
+              "Microsoft.Storage/storageAccounts/blobServices/containers/blobs/move/action"
+            ],
+            "notDataActions": []
+          }
+        ]
+      }
     }
-  }
   ],
   "outputs": {}
 }
