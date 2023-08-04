@@ -125,7 +125,6 @@
   (with-opts {:xtdb.log/memory-log {:instant-src (->mock-clock)}} f))
 
 (defn finish-chunk! [node]
-  (idx/finish-block! (component node :xtdb/indexer))
   (idx/finish-chunk! (component node :xtdb/indexer)))
 
 (defn open-vec
@@ -246,10 +245,7 @@
                       :xtdb.buffer-pool/buffer-pool {:cache-path (.resolve node-dir buffers-dir)}
                       :xtdb.object-store/file-system-object-store {:root-path (.resolve node-dir "objects")}
                       :xtdb/indexer (->> {:rows-per-chunk rows-per-chunk}
-                                         (into {} (filter val)))
-                      :xtdb/live-chunk (->> {:rows-per-block rows-per-block
-                                             :rows-per-chunk rows-per-chunk}
-                                            (into {} (filter val)))})))
+                                         (into {} (filter val)))})))
 
 (defn ->local-submit-node ^java.lang.AutoCloseable [{:keys [^Path node-dir]}]
   (node/start-submit-node {:xtdb.tx-producer/tx-producer {:clock (->mock-clock)}

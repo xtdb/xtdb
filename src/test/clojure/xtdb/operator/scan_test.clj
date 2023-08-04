@@ -40,7 +40,7 @@
                           {:node node})))))
 
 (t/deftest test-chunk-boundary
-  (with-open [node (node/start-node {:xtdb/live-chunk {:rows-per-block 5, :rows-per-chunk 20}})]
+  (with-open [node (node/start-node {:xtdb/indexer {:rows-per-chunk 20}})]
     (->> (for [i (range 110)]
            [:put :xt_docs {:xt/id i}])
          (partition-all 10)

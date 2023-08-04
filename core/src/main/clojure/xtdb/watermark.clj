@@ -2,18 +2,15 @@
   (:require [clojure.tools.logging :as log]
             xtdb.api.protocols
             xtdb.indexer.live-index
-            xtdb.live-chunk
             [xtdb.util :as util])
   (:import java.lang.AutoCloseable
            java.util.concurrent.atomic.AtomicInteger
            xtdb.api.protocols.TransactionInstant
-           xtdb.indexer.live_index.ILiveIndexWatermark
-           xtdb.live_chunk.ILiveChunkWatermark))
+           xtdb.indexer.live_index.ILiveIndexWatermark))
 
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface IWatermark
   (^xtdb.api.protocols.TransactionInstant txBasis [])
-  (^xtdb.live_chunk.ILiveChunkWatermark liveChunk [])
   (^xtdb.indexer.live_index.ILiveIndexWatermark liveIndex [])
 
   (^void retain [])
@@ -25,11 +22,9 @@
 (definterface IWatermarkSource
   (^xtdb.watermark.IWatermark openWatermark [^xtdb.api.protocols.TransactionInstant txKey]))
 
-(deftype Watermark [^TransactionInstant tx-key, ^ILiveChunkWatermark live-chunk, ^ILiveIndexWatermark live-idx-wm
-                    ^AtomicInteger ref-cnt]
+(deftype Watermark [^TransactionInstant tx-key, ^ILiveIndexWatermark live-idx-wm, ^AtomicInteger ref-cnt]
   IWatermark
   (txBasis [_] tx-key)
-  (liveChunk [_] live-chunk)
   (liveIndex [_] live-idx-wm)
 
   (retain [this]
@@ -43,8 +38,7 @@
 
     (when (zero? (.decrementAndGet ref-cnt))
       (log/trace "close wm" (hash this))
-      (util/try-close live-chunk)
       (util/try-close live-idx-wm))))
 
-(defn ->wm ^xtdb.watermark.IWatermark [tx-key live-chunk live-idx-wm]
-  (Watermark. tx-key live-chunk live-idx-wm (AtomicInteger. 1)))
+(defn ->wm ^xtdb.watermark.IWatermark [tx-key live-idx-wm]
+  (Watermark. tx-key live-idx-wm (AtomicInteger. 1)))

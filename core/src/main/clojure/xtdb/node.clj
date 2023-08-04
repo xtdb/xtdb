@@ -124,7 +124,6 @@
                           :xtdb/allocator {}
                           :xtdb/default-tz nil
                           :xtdb/indexer {}
-                          :xtdb/live-chunk {}
                           :xtdb.indexer/live-index {}
                           :xtdb/ingester {}
                           :xtdb.metadata/metadata-manager {}

@@ -108,9 +108,6 @@
 (defn- ->table-metadata-obj-key [chunk-idx table-name]
   (format "chunk-%s/%s/metadata.arrow" (util/->lex-hex-string chunk-idx) table-name))
 
-(defn ->chunk-obj-key [chunk-idx table-name column-name]
-  (format "chunk-%s/%s/content-%s.arrow" (util/->lex-hex-string chunk-idx) table-name column-name))
-
 (defn- obj-key->chunk-idx [obj-key]
   (some-> (second (re-matches #"chunk-metadata/(\p{XDigit}+).transit.json" obj-key))
           (util/<-lex-hex-string)))
