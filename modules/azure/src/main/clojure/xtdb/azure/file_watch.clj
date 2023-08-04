@@ -132,7 +132,10 @@
 (defn watcher-close-fn [{:keys [resource-group-name eventgrid-topic servicebus-admin-client eventgrid-manager processor-client subscription-name queue-name]}]
   (log/info "Stopping & closing filechange processor client")
   (.close processor-client)
-  
+
+  (log/info "Awaiting AMQP connection close")
+  (Thread/sleep 60000)
+
   (log/info "Removing queue subscription, subscription-id: " subscription-name)
   (-> eventgrid-manager
       (.systemTopicEventSubscriptions)
