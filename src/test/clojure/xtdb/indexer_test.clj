@@ -134,7 +134,7 @@
           (let [buffer-name "chunk-00/device_info/metadata.arrow"
                 ^ArrowBuf buffer @(.getBuffer bp buffer-name)
                 footer (util/read-arrow-footer buffer)]
-            (t/is (= 2 (count (.buffers ^BufferPool bp))))
+            (t/is (= 1 (count (.buffers ^BufferPool bp))))
             (t/is (instance? ArrowBuf buffer))
             (t/is (= 2 (.getRefCount (.getReferenceManager ^ArrowBuf buffer))))
 
@@ -190,7 +190,7 @@
               (t/is (zero? (.getRefCount (.getReferenceManager ^ArrowBuf buffer))))
               (t/is (= size (.getSize (.getReferenceManager ^ArrowBuf buffer))))
               (t/is (zero? (.getAccountedSize (.getReferenceManager ^ArrowBuf buffer))))
-              (t/is (= 1 (count (.buffers ^BufferPool bp)))))))))))
+              (t/is (= 0 (count (.buffers ^BufferPool bp)))))))))))
 
 (t/deftest temporal-watermark-is-immutable-567
   (with-open [node (node/start-node {})]
@@ -421,8 +421,6 @@
                        (select-keys [:latest-completed-tx :latest-row-id]))))
 
           (let [objs (.listObjects os)]
-            (t/is (= 4 (count (filter #(re-matches #"^chunk-\p{XDigit}+/temporal\.arrow$" %) objs))))
-            (t/is (= 4 (count (filter #(re-matches #"temporal-snapshots/\p{XDigit}+.*" %) objs))))
             (t/is (= 1 (count (filter #(re-matches #"chunk-\p{XDigit}+/device_info/metadata\.arrow" %) objs))))
             (t/is (= 4 (count (filter #(re-matches #"chunk-\p{XDigit}+/device_readings/metadata\.arrow" %) objs))))
             (t/is (= 1 (count (filter #(re-matches #"chunk-.*/device_info/content-api_version\.arrow" %) objs))))
@@ -458,12 +456,7 @@
             (t/is (= last-tx-key (tu/then-await-tx last-tx-key node (Duration/ofSeconds 60))))
             (t/is (= last-tx-key (tu/latest-completed-tx node)))
 
-            (Thread/sleep 1000) ;; TODO for now
-            (tu/await-temporal-snapshot-build node)
-
             (let [objs (.listObjects os)]
-              (t/is (= 11 (count (filter #(re-matches #"chunk-\p{XDigit}+/temporal\.arrow" %) objs))))
-              (t/is (= 11 (count (filter #(re-matches #"temporal-snapshots/\p{XDigit}+.arrow" %) objs))))
               (t/is (= 13 (count (filter #(re-matches #"chunk-\p{XDigit}+/device_(?:info|readings)/metadata.arrow" %) objs))))
               (t/is (= 2 (count (filter #(re-matches #"chunk-\p{XDigit}+/device_info/content-api_version\.arrow" %) objs))))
               (t/is (= 11 (count (filter #(re-matches #"chunk-\p{XDigit}+/device_readings/content-battery_level\.arrow" %) objs)))))))))))
@@ -509,8 +502,6 @@
                 (t/is (< latest-row-id (count first-half-tx-ops)))
 
                 (let [objs (.listObjects os)]
-                  (t/is (= 5 (count (filter #(re-matches #"^chunk-\p{XDigit}+/temporal\.arrow$" %) objs))))
-                  (t/is (= 5 (count (filter #(re-matches #"temporal-snapshots/\p{XDigit}+.*" %) objs))))
                   (t/is (= 2 (count (filter #(re-matches #"chunk-\p{XDigit}+/device_info/metadata\.arrow" %) objs))))
                   (t/is (= 5 (count (filter #(re-matches #"chunk-\p{XDigit}+/device_readings/metadata\.arrow" %) objs))))
                   (t/is (= 2 (count (filter #(re-matches #"chunk-.*/device_info/content-api_version\.arrow" %) objs))))
@@ -549,16 +540,11 @@
                                                     (tu/then-await-tx node (Duration/ofSeconds 15)))))
                     (t/is (= second-half-tx-key (tu/latest-completed-tx node))))
 
-                  (Thread/sleep 1000) ;; TODO for now
-                  (tu/await-temporal-snapshot-build node)
-
                   (doseq [^Node node [new-node node]
                           :let [^ObjectStore os (tu/component node ::os/file-system-object-store)
                                 ^IMetadataManager mm (tu/component node ::meta/metadata-manager)]]
 
                     (let [objs (.listObjects os)]
-                      (t/is (= 11 (count (filter #(re-matches #"^chunk-\p{XDigit}+/temporal\.arrow$" %) objs))))
-                      (t/is (= 11 (count (filter #(re-matches #"temporal-snapshots/\p{XDigit}+.*" %) objs))))
                       (t/is (= 2 (count (filter #(re-matches #"chunk-\p{XDigit}+/device_info/metadata\.arrow" %) objs))))
                       (t/is (= 11 (count (filter #(re-matches #"chunk-\p{XDigit}+/device_readings/metadata\.arrow" %) objs))))
                       (t/is (= 2 (count (filter #(re-matches #"chunk-.*/device_info/content-api_version\.arrow" %) objs))))

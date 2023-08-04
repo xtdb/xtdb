@@ -2,16 +2,13 @@
   (:require [clojure.set :as set]
             [clojure.spec.alpha :as s]
             [juxt.clojars-mirrors.integrant.core :as ig]
-            [xtdb.bloom :as bloom]
             [xtdb.buffer-pool :as bp]
             [xtdb.expression :as expr]
             [xtdb.expression.metadata :as expr.meta]
-            [xtdb.expression.walk :as expr.walk]
             xtdb.indexer.live-index
             [xtdb.logical-plan :as lp]
             [xtdb.metadata :as meta]
             xtdb.object-store
-            [xtdb.temporal :as temporal]
             [xtdb.trie :as trie]
             [xtdb.types :as types]
             [xtdb.util :as util]
@@ -24,10 +21,8 @@
            org.apache.arrow.memory.ArrowBuf
            org.apache.arrow.memory.BufferAllocator
            [org.apache.arrow.memory.util ArrowBufPointer]
-           (org.apache.arrow.vector BigIntVector NullVector VarBinaryVector VectorLoader VectorSchemaRoot)
+           (org.apache.arrow.vector BigIntVector NullVector VectorLoader VectorSchemaRoot)
            (org.apache.arrow.vector.complex ListVector StructVector)
-           (org.roaringbitmap RoaringBitmap)
-           org.roaringbitmap.buffer.MutableRoaringBitmap
            xtdb.api.protocols.TransactionInstant
            xtdb.buffer_pool.IBufferPool
            xtdb.ICursor
@@ -66,8 +61,7 @@
 
 (def ^:dynamic *column->pushdown-bloom* {})
 
-;; TODO reinstate pushdown blooms
-#_{:clj-kondo/ignore [:unused-private-var]}
+#_ ; TODO reinstate pushdown blooms
 (defn- filter-pushdown-bloom-block-idxs [^IMetadataManager metadata-manager chunk-idx ^String table-name ^String col-name ^RoaringBitmap block-idxs]
   (if-let [^MutableRoaringBitmap pushdown-bloom (get *column->pushdown-bloom* (symbol col-name))]
     ;; would prefer this `^long` to be on the param but can only have 4 params in a primitive hinted function in Clojure
@@ -93,87 +87,6 @@
                  (when-not (.isEmpty filtered-block-idxs)
                    filtered-block-idxs)))))))
     block-idxs))
-
-(defn ->temporal-min-max-range [^RelationReader params, {^TransactionInstant basis-tx :tx}, {:keys [for-valid-time for-system-time]}, selects]
-  (let [min-range (temporal/->min-range)
-        max-range (temporal/->max-range)]
-    (letfn [(apply-bound [f col-name ^long time-μs]
-              (let [range-idx (temporal/->temporal-column-idx (util/str->normal-form-str (str col-name)))]
-                (case f
-                  :< (aset max-range range-idx
-                           (min (dec time-μs) (aget max-range range-idx)))
-                  :<= (aset max-range range-idx
-                            (min time-μs (aget max-range range-idx)))
-                  :> (aset min-range range-idx
-                           (max (inc time-μs) (aget min-range range-idx)))
-                  :>= (aset min-range range-idx
-                            (max time-μs (aget min-range range-idx)))
-                  nil)))
-
-            (->time-μs [[tag arg]]
-              (case tag
-                :literal (-> arg
-                             (util/sql-temporal->micros (.getZone expr/*clock*)))
-                :param (-> (-> (.readerForName params (name arg))
-                               (.getObject 0))
-                           (util/sql-temporal->micros (.getZone expr/*clock*)))
-                :now (-> (.instant expr/*clock*)
-                         (util/instant->micros))))]
-
-      (when-let [system-time (some-> basis-tx (.system-time) util/instant->micros)]
-        (apply-bound :<= "xt$system_from" system-time)
-
-        (when-not for-system-time
-          (apply-bound :> "xt$system_to" system-time)))
-
-      (letfn [(apply-constraint [constraint start-col end-col]
-                (when-let [[tag & args] constraint]
-                  (case tag
-                    :at (let [[at] args
-                              at-μs (->time-μs at)]
-                          (apply-bound :<= start-col at-μs)
-                          (apply-bound :> end-col at-μs))
-
-                    ;; overlaps [time-from time-to]
-                    :in (let [[from to] args]
-                          (apply-bound :> end-col (->time-μs (or from [:now])))
-                          (when to
-                            (apply-bound :< start-col (->time-μs to))))
-
-                    :between (let [[from to] args]
-                               (apply-bound :> end-col (->time-μs (or from [:now])))
-                               (when to
-                                 (apply-bound :<= start-col (->time-μs to))))
-
-                    :all-time nil)))]
-
-        (apply-constraint for-valid-time "xt$valid_from" "xt$valid_to")
-        (apply-constraint for-system-time "xt$system_from" "xt$system_to"))
-
-      (let [col-types (into {} (map (juxt first #(get temporal/temporal-col-types (util/str->normal-form-str (str (first %)))))) selects)
-            param-types (expr/->param-types params)]
-        (doseq [[col-name select-form] selects
-                :when (temporal/temporal-column? (util/str->normal-form-str (str col-name)))]
-          (->> (-> (expr/form->expr select-form {:param-types param-types, :col-types col-types})
-                   (expr/prepare-expr)
-                   (expr.meta/meta-expr {:col-types col-types}))
-               (expr.walk/prewalk-expr
-                (fn [{:keys [op] :as expr}]
-                  (case op
-                    :call (when (not= :or (:f expr))
-                            expr)
-
-                    :metadata-vp-call
-                    (let [{:keys [f param-expr]} expr]
-                      (when-let [v (if-let [[_ literal] (find param-expr :literal)]
-                                     (when literal (->time-μs [:literal literal]))
-                                     (->time-μs [:param (get param-expr :param)]))]
-                        (apply-bound f col-name v)))
-
-                    expr)))))
-        [min-range max-range]))
-
-    [min-range max-range]))
 
 (defn- ->range ^longs []
   (let [res (long-array 8)]
@@ -869,7 +782,7 @@
       (letfn [(->col-type [[table col-name]]
                 (let [normalized-table (util/str->normal-form-str (str table))
                       normalized-col-name (util/str->normal-form-str (str col-name))]
-                  (if (temporal/temporal-column? (util/str->normal-form-str (str col-name)))
+                  (if (types/temporal-column? (util/str->normal-form-str (str col-name)))
                     [:timestamp-tz :micro "UTC"]
                     (types/merge-col-types (.columnType metadata-mgr normalized-table normalized-col-name)
                                            (some-> (.liveChunk wm)
@@ -889,7 +802,7 @@
                                           (distinct))))
 
             {content-col-names false, temporal-col-names true}
-            (->> col-names (group-by (comp temporal/temporal-column? util/str->normal-form-str str)))
+            (->> col-names (group-by (comp types/temporal-column? util/str->normal-form-str str)))
 
             content-col-names (-> (set (map str content-col-names)) (conj "_row_id"))
             temporal-col-names (into #{} (map (comp str)) temporal-col-names)
@@ -912,7 +825,7 @@
                            (into {}))
 
             metadata-args (vec (for [[col-name select] selects
-                                     :when (not (temporal/temporal-column? (util/str->normal-form-str (str col-name))))]
+                                     :when (not (types/temporal-column? (util/str->normal-form-str (str col-name))))]
                                  select))
 
             row-count (->> (meta/with-all-metadata metadata-mgr normalized-table-name

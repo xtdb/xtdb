@@ -18,6 +18,14 @@
 (def temporal-col-type [:timestamp-tz :micro "UTC"])
 (def nullable-temporal-type [:union #{:null temporal-col-type}])
 
+(def temporal-col-types
+  {"_iid" :i64, "_row_id" :i64
+   "xt$system_from" temporal-col-type, "xt$system_to" temporal-col-type
+   "xt$valid_from" temporal-col-type, "xt$valid_to" temporal-col-type})
+
+(defn temporal-column? [col-name]
+  (contains? temporal-col-types (str col-name)))
+
 (defn ->field ^org.apache.arrow.vector.types.pojo.Field [^String field-name ^ArrowType arrow-type nullable & children]
   (Field. field-name (FieldType. nullable arrow-type nil nil) children))
 

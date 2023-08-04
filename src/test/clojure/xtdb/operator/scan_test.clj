@@ -3,7 +3,6 @@
             [xtdb.api :as xt]
             [xtdb.node :as node]
             [xtdb.operator :as op]
-            [xtdb.operator.scan :as scan]
             [xtdb.test-util :as tu]
             [xtdb.util :as util])
   (:import xtdb.operator.IRaQuerySource))
@@ -285,6 +284,8 @@
           (t/is (= '{xt/id [:union #{:keyword :utf8}]}
                    (->col-types tx))))))))
 
+;; TODO adapt for scan/->temporal-range
+#_
 (t/deftest can-create-temporal-min-max-range
   (let [μs-2018 (util/instant->micros (util/->instant #inst "2018"))
         μs-2019 (util/instant->micros (util/->instant #inst "2019"))]
