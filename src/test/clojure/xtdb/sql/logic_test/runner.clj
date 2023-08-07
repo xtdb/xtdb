@@ -133,6 +133,10 @@
   (println "hash-threshold" max-result-set-size)
   (println))
 
+(defmethod print-record :variable [{:keys [variable value]}]
+  (println "variable SET" variable "TO" value)
+  (println))
+
 (defmethod print-record :statement [{:keys [mode statement] :as record}]
   (print-skip-only record)
   (println "statement" (name mode))
@@ -222,6 +226,15 @@
        (BigInteger. 1)
        (format "%032x")))
 
+(def ^:dynamic *db-engine*)
+
+(def ^:dynamic *opts* {:script-mode :validation
+                       :query-limit nil})
+(def ^:private ^:dynamic *current-record* nil)
+
+(defn- validation-mode? []
+  (= :validation (:script-mode *opts*)))
+
 (defmethod execute-record :query [{:keys [db-engine max-result-set-size script-mode variables] :as ctx}
                                   {:keys [query type-string sort-mode line
                                           result-set result-set-md5sum file]
@@ -244,10 +257,11 @@
 
               (report-failure [expected actual]
                 (t/do-report {:type :fail, :expected expected, :actual actual, :file file, :line line})
-                (println
-                 (format
-                  "Failure\n<File>\n%s\n\n<Line>\n%s\n\n<Query>\n%s\n\n<Expected>\n%s\n\n<Actual>\n%s\n\n"
-                  file line query expected actual))
+                (when (validation-mode?)
+                  (println
+                   (format
+                    "Failure\n<File>\n%s\n\n<Line>\n%s\n\n<Query>\n%s\n\n<Expected>\n%s\n\n<Actual>\n%s\n\n"
+                    file line query expected actual)))
                 (update-in ctx [:results :failure] (fnil inc 0)))]
 
         (if result-set-md5sum
@@ -258,47 +272,40 @@
             (report-success)
             (report-failure result-set result-str)))))))
 
-(def ^:dynamic *db-engine*)
-
-(def ^:dynamic *opts* {:script-mode :validation
-                       :query-limit nil})
-
-(def ^:private ^:dynamic *current-record* nil)
-
 (defn execute-records [db-engine records]
   (let [ctx (merge {:db-engine db-engine :queries-run 0 :results {}} *opts*)]
-      (->> records
-           (reduce
-            (fn [{:keys [queries-run query-limit] :as ctx} {:keys [file line] :as record}]
+    (->> records
+         (reduce
+          (fn [{:keys [queries-run query-limit] :as ctx} {:keys [file line] :as record}]
 
-              (binding [*current-record* record]
-                (t/testing (format "%s L%d" file line)
-                  (if (= queries-run query-limit)
-                    (reduced ctx)
-                    (try
-                      (-> (execute-record ctx record)
-                          (update :queries-run + (if (= :query (:type record))
-                                                   1
-                                                   0)))
-                      (catch Throwable t
-                        #_(swap!
-                           error-counts-by-message
-                           (fn [acc]
-                             (-> acc
-                                 (update-in
-                                  [(ex-message t) :count]
-                                  (fnil inc 0))
-                                 (update-in
-                                  [(ex-message t) :lines]
-                                  #(conj % (:line record))))))
+            (binding [*current-record* record]
+              (t/testing (format "%s L%d" file line)
+                (if (= queries-run query-limit)
+                  (reduced ctx)
+                  (try
+                    (-> (execute-record ctx record)
+                        (update :queries-run + (if (= :query (:type record))
+                                                 1
+                                                 0)))
+                    (catch Throwable t
+                      #_(swap!
+                         error-counts-by-message
+                         (fn [acc]
+                           (-> acc
+                               (update-in
+                                [(ex-message t) :count]
+                                (fnil inc 0))
+                               (update-in
+                                [(ex-message t) :lines]
+                                #(conj % (:line record))))))
 
                       (if (and (str/includes? (or (ex-message t) "") "Column reference is not a grouping column")
                                (contains? (set (:skipif record)) "postgresql"))
                         ;; Reporting here commented out as its still quite noisy.
                         (do #_(log/warn "Ignored <Column reference is not a grouping column> Error as XTDB doesn't support" record)
-                              (update ctx :queries-run + (if (= :query (:type record))
-                                                           1
-                                                           0)))
+                            (update ctx :queries-run + (if (= :query (:type record))
+                                                         1
+                                                         0)))
                         (do (log/error t "Error Executing Record" record)
                             (t/do-report {:type :error, :expected nil, :actual t, :file file, :line line})
                             (-> ctx
@@ -306,8 +313,8 @@
                                 (update :queries-run + (if (= :query (:type record))
                                                          1
                                                          0)))))
-                        #_(throw t)))))))
-            ctx))))
+                      #_(throw t)))))))
+          ctx))))
 
 (defn with-xtdb [f]
   (require 'xtdb.sql.logic-test.xtdb-engine)
@@ -426,7 +433,8 @@
                           script-name (let [start-time (. System (nanoTime))
                                             results (:results (execute-records *db-engine* (parse-script script-name (slurp script-name))))]
                                         (assoc results :time (math/round (/ (double (- ^long (. System (nanoTime)) start-time)) 1000000.0)))))]]
-          (println "Running " script-name)
+          (when (validation-mode?)
+            (println "Running " script-name))
           (case db
             "xtdb" (tu/with-mock-clock
                      (fn []
@@ -434,30 +442,31 @@
                          #(with-xtdb f))))
             "sqlite" (with-sqlite f)
             (with-jdbc db f)))))
-    (let [{:keys [failure error] :or {failure 0 error 0} :as total-results} (reduce (partial merge-with +) (vals @results))]
-      (pprint/print-table
-       [:name :success :failure :error :time]
-       (mapv
-        #(update % :time (fn [t] (str t "ms")))
-        (conj (vec (sort-by :name (map (fn [[k v]] (assoc v :name k)) @results)))
-              (assoc total-results :name "Total"))))
+    (when verify
+      (let [{:keys [failure error] :or {failure 0 error 0} :as total-results} (reduce (partial merge-with +) (vals @results))]
+        (pprint/print-table
+         [:name :success :failure :error :time]
+         (mapv
+          #(update % :time (fn [t] (str t "ms")))
+          (conj (vec (sort-by :name (map (fn [[k v]] (assoc v :name k)) @results)))
+                (assoc total-results :name "Total"))))
 
-      (when (and (System/getenv "CIRCLECI") dirs)
-        (write-results-to-file arguments total-results))
+        (when (and (System/getenv "CIRCLECI") dirs)
+          (write-results-to-file arguments total-results))
 
-      (when max-failures
-        (when (> failure max-failures)
-          (println "Failure count (" failure ") above expected (" max-failures ")")
-          (System/exit 1)))
+        (when max-failures
+          (when (> failure max-failures)
+            (println "Failure count (" failure ") above expected (" max-failures ")")
+            (System/exit 1)))
 
-      (when max-errors
-        (when (> error max-errors)
-          (println "Error count (" error ") above expected (" max-errors ")")
-          (System/exit 1))))))
+        (when max-errors
+          (when (> error max-errors)
+            (println "Error count (" error ") above expected (" max-errors ")")
+            (System/exit 1)))))))
 
 (comment
 
-(->> (sort-by (comp :count val) @error-counts-by-message)
+  (->> (sort-by (comp :count val) @error-counts-by-message)
        (map #(vector (first %) ((comp (partial take 5) reverse :lines second) %) (:count (second %)))))
 
   (sort-by val (update-vals (group-by #(subs % 0 20) (map key @error-counts-by-message)) count))
@@ -469,7 +478,12 @@
 
   (time (-main "--verify" "--direct-sql" "--db" "xtdb" "src/test/resources/xtdb/sql/logic_test/direct-sql/dml.test"))
 
- (= (time
+  ;; regnerating a direct-sql file
+  (spit "src/test/resources/xtdb/sql/logic_test/direct-sql/sl-demo.test"
+        (with-out-str
+          (-main "--direct-sql" "--db" "xtdb" "src/test/resources/xtdb/sql/logic_test/direct-sql/sl-demo.test")))
+
+  (= (time
       (with-out-str
         (-main "--db" "xtdb" "--limit" "10" "src/test/resources/xtdb/sql/logic_test/sqlite_test/select1.test")))
      (time
