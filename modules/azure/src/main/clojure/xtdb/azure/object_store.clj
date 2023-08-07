@@ -35,7 +35,11 @@
         (<= 200 status-code 299) nil
         (= 404 status-code) (throw (os/obj-missing-exception blob-name))
         :else (throw (ex-info "Blob range request failure" {:status status-code})))
-      (ByteBuffer/wrap (.toByteArray out)))))
+      (ByteBuffer/wrap (.toByteArray out)))
+    (catch BlobStorageException e
+      (if (= 404 (.getStatusCode e))
+        (throw (os/obj-missing-exception blob-name))
+        (throw e)))))
 
 (defn- put-blob [^BlobContainerClient blob-container-client blob-name blob-buffer]
   (try
