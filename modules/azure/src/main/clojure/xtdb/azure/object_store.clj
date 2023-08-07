@@ -1,17 +1,17 @@
 (ns xtdb.azure.object-store
   (:require [xtdb.object-store :as os]
             [xtdb.file-list :as file-list]
-            [xtdb.azure.file-watch :as azure-file-watch]
             [xtdb.util :as util])
-  (:import xtdb.object_store.ObjectStore
-           java.util.concurrent.CompletableFuture
-           java.util.function.Supplier
-           java.util.NavigableSet
-           com.azure.core.util.BinaryData
-           [com.azure.storage.blob.models BlobRange BlobStorageException DownloadRetryOptions ListBlobsOptions BlobItem]
+  (:import [com.azure.core.util BinaryData]
            [com.azure.storage.blob BlobContainerClient]
-           (java.io ByteArrayOutputStream Closeable)
-           (java.nio ByteBuffer)))
+           [com.azure.storage.blob.models BlobRange BlobStorageException DownloadRetryOptions]
+           [java.io ByteArrayOutputStream Closeable]
+           [java.lang AutoCloseable]
+           [java.nio ByteBuffer]
+           [java.util NavigableSet]
+           [java.util.concurrent CompletableFuture]
+           [java.util.function Supplier]
+           [xtdb.object_store ObjectStore]))
 
 (defn- get-blob [^BlobContainerClient blob-container-client blob-name]
   (try
@@ -49,7 +49,7 @@
 (defn- delete-blob [^BlobContainerClient blob-container-client blob-name]
   (-> (.getBlobClient blob-container-client blob-name)
       (.deleteIfExists)))
-(defrecord AzureBlobObjectStore [^BlobContainerClient blob-container-client prefix ^NavigableSet file-name-cache azure-watch-info]
+(defrecord AzureBlobObjectStore [^BlobContainerClient blob-container-client prefix ^NavigableSet file-name-cache ^AutoCloseable file-list-watcher]
   ObjectStore
   (getObject [_ k]
     (CompletableFuture/completedFuture
@@ -84,5 +84,5 @@
 
   Closeable
   (close [_]
-    (azure-file-watch/watcher-close-fn azure-watch-info)
+    (.close file-list-watcher)
     (.clear file-name-cache)))

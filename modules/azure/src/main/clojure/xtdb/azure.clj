@@ -49,14 +49,14 @@
         blob-client (.getBlobContainerClient blob-service-client container)
         file-name-cache (ConcurrentSkipListSet.)
         ;; Watch azure container for changes
-        azure-watch-info (azure-file-watch/file-list-watch (assoc opts
-                                                                  :blob-container-client blob-client
-                                                                  :azure-credential credential)
-                                                           file-name-cache)]
+        file-list-watcher (azure-file-watch/open-file-list-watcher (assoc opts
+                                                                          :blob-container-client blob-client
+                                                                          :azure-credential credential)
+                                                                   file-name-cache)]
     (os/->AzureBlobObjectStore blob-client
                                prefix
                                file-name-cache
-                               azure-watch-info)))
+                               file-list-watcher)))
 
 (comment
 

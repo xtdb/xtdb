@@ -64,7 +64,7 @@
   (with-open [os (object-store (random-uuid))]
     (os-test/test-list-objects os wait-time-ms)))
 
-(t/deftest ^:s3 list-test-with-prior-objects
+(t/deftest ^:azure list-test-with-prior-objects
   (let [prefix (random-uuid)]
     (with-open [os (object-store prefix)]
       (os-test/put-edn os "alice" :alice)
@@ -80,7 +80,7 @@
         (Thread/sleep wait-time-ms)
         (t/is (= ["alan"] (.listObjects ^ObjectStore os)))))))
 
-(t/deftest ^:s3 multiple-object-store-list-test
+(t/deftest ^:azure multiple-object-store-list-test
   (let [prefix (random-uuid)]
     (with-open [os-1 (object-store prefix)
                 os-2 (object-store prefix)]
