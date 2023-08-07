@@ -1,11 +1,11 @@
-# Azure Module
+= Azure Module
 
 Within our XTDB node, we can make use of Azure Services for certain purposes. Currently, we can:
 
 * Use *Azure Blob Storage* as the XTDB Object Store.
 * Use *Azure Eventhubs* as the Log.
 
-### Project Dependency 
+== Project Dependency 
 
 In order to use any of the Azure services, you will need to include a dependency on the xtdb.azure module.
 
@@ -23,11 +23,11 @@ _pom.xml_
 </dependency>
 ```
 
-### Authentication
+== Authentication
 
 Authentication for the components in the module is done via the https://learn.microsoft.com/en-us/java/api/com.azure.identity.defaultazurecredential?view=azure-java-stable[*DefaultAzureCredential*] class - you will need to setup authentication using any of the methods listed within the Azure documentation to be able to make use of the operations inside the modules.
 
-## Azure Blob Storage Object Store
+== Azure Blob Storage Object Store
 
 We can swap out the implementation of the object store with one based on Azure Blob Storage. To do so, we add the `xtdb.azure/blob-object-store` key within the integrant config for our node, alongside any config:
 ```clojure
@@ -39,7 +39,40 @@ We can swap out the implementation of the object store with one based on Azure B
 }
 ```
 
-### Parameters
+=== Azure Resource Manager Stack
+
+In order to handle the various bits of Azure infrastructure required to use Azure Blob Storage as an XTDB object store, we provide a link:azure-resource-manager/azure-stack.json[parameterized 'Azure Resource Manager' stack] to setup everything that you should need.
+
+==== Inputs to the stack
+
+The paramaterized stack expects the following to be provided:
+
+* The location to build the resources -- Defaults to the location of the resource group you're deploying the template in.
+* The name of the storage account to create -- Defaults to `xtdbstorageaccount`
+* The pricing tier/type of storage account to use -- Defaults to `Standard_LRS`
+* The name of the storage container to use as the XTDB object store (and used by associated resources) -- Defaults to `xtdb-object-store`
+* The name of the EventGrid system topic we use for container events -- Defaults to `xtdb-storage-account-system-topic`
+* The name to use for the Service Bus namespace -- Defaults to `xtdb-storage-account-eventbus`
+* The name to use for the Service Bus topic created in the namespace above -- Defaults to `xtdb-storage-bus-topic`
+* The name of the custom XTDB role to create with permissions for the created resources -- Defaults to `xtdb-role`
+
+
+==== Created Resources
+
+The Azure Resource Manager stack will create the following resources within the specified resource group in Azure:
+
+* An https://learn.microsoft.com/en-us/azure/storage/common/storage-account-overview[Azure Storage Account]
+* A https://learn.microsoft.com/en-us/azure/storage/blobs/storage-blobs-introduction#containers[Storage Account Container] within said storage account to use as the object store.
+* An https://learn.microsoft.com/en-us/azure/event-grid/system-topics[EventGrid System Topic], subscribed to blob creation/deletion events on the container.
+* A `standard` tier https://learn.microsoft.com/en-us/azure/service-bus-messaging/service-bus-messaging-overview#namespaces[Service Bus Namespace]:
+** A https://learn.microsoft.com/en-us/azure/service-bus-messaging/service-bus-queues-topics-subscriptions#topics-and-subscriptions[Service Bus Topic] for the Service Bus namespace.
+* An https://learn.microsoft.com/en-us/azure/event-grid/concepts#event-subscriptions[Event Subscription] on the EventGrid System Topic for the Service Bus Topic.
+* A https://learn.microsoft.com/en-us/azure/role-based-access-control/custom-roles[custom role definition] for all of the necessary permissions for XTDB to use the above:
+** Using the created storage container (Get, Put, Delete and List).
+** Reading messages sent to EventGrid.
+** Creating subscriptions on the Service Bus topic.
+
+=== Parameters
 
 These are the following parameters that can be passed within the config for our `xtdb.azure/blob-object-store`:
 [cols="1,1,2,1"]
@@ -53,6 +86,16 @@ These are the following parameters that can be passed within the config for our 
 | `container`
 | String 
 | The name of the https://learn.microsoft.com/en-us/azure/storage/blobs/storage-blobs-introduction#containers[container] to use an an object store
+| Yes
+
+| `Service Bus-namespace`
+| String
+| The name of the https://learn.microsoft.com/en-us/azure/service-bus-messaging/service-bus-messaging-overview#namespaces[Service Bus namespace] which contains the topic collecting notifications from the container 
+| Yes
+
+| `Service Bus-topic-name`
+| String
+| The name of the https://learn.microsoft.com/en-us/azure/service-bus-messaging/service-bus-queues-topics-subscriptions#topics-and-subscriptions[Service Bus topic] which contains is collecting notifications from the container
 | Yes
 
 |`prefix`
