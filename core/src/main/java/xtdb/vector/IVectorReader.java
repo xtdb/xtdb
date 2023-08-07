@@ -82,7 +82,7 @@ public interface IVectorReader extends AutoCloseable {
     IMonoVectorReader monoReader(Object colType);
     IPolyVectorReader polyReader(Object colType);
 
-    Collection<? extends IVectorReader> metadataReaders();
+    IVectorReader metadataReader();
 
     IVectorReader listElementReader();
 

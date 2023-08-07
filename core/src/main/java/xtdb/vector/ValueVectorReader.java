@@ -225,8 +225,8 @@ public class ValueVectorReader implements IVectorReader {
     }
 
     @Override
-    public Collection<? extends IVectorReader> metadataReaders() {
-        return null;
+    public IVectorReader metadataReader() {
+        return this;
     }
 
     @Override
@@ -708,11 +708,6 @@ public class ValueVectorReader implements IVectorReader {
         @Override
         public Collection<Keyword> legs() {
             return Arrays.stream(legs).toList();
-        }
-
-        @Override
-        public Collection<? extends IVectorReader> metadataReaders() {
-            return Arrays.stream(legReaders).map(IndirectVectorReader::removeNegativeIndices).toList();
         }
     }
 

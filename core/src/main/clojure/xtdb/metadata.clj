@@ -23,7 +23,7 @@
            (org.apache.arrow.memory ArrowBuf BufferAllocator)
            (org.apache.arrow.vector FieldVector IntVector VectorSchemaRoot)
            (org.apache.arrow.vector.complex ListVector StructVector)
-           (org.apache.arrow.vector.types.pojo Schema)
+           (org.apache.arrow.vector.types.pojo ArrowType$Union Schema)
            (org.roaringbitmap RoaringBitmap)
            xtdb.buffer_pool.IBufferPool
            xtdb.object_store.ObjectStore
@@ -40,22 +40,11 @@
   (^long blockCount []))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
-(definterface IBlockMetadataWriter
-  (^long writeMetadata [^xtdb.vector.IVectorReader liveCol])
-  (^void endBlock []))
-
-#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
-(definterface ITableMetadataWriter
-  (^xtdb.metadata.IBlockMetadataWriter writeBlockMetadata [^int blockIdx]
-   "blockIdx = -1 for metadata for the whole column")
-
-  (^xtdb.metadata.ITableMetadata tableMetadata [])
-  (^java.util.concurrent.CompletableFuture finishChunk [])
-  (^void close []))
+(definterface IPageMetadataWriter
+  (^void writeMetadata [^Iterable cols]))
 
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface IMetadataManager
-  (^xtdb.metadata.ITableMetadataWriter openTableMetadataWriter [^String table-name, ^long chunk-idx])
   (^void finishChunk [^long chunkIdx, newChunkMetadata])
   (^java.util.NavigableMap chunksMetadata [])
   (^java.util.concurrent.CompletableFuture withMetadata [^long chunkIdx, ^String tableName, ^java.util.function.Function #_<ITableMetadata> f])
@@ -90,24 +79,6 @@
                 (finally
                   (.close buffer)))))))))
 
-(defn- get-bytes ^java.util.concurrent.CompletableFuture #_<bytes> [^IBufferPool buffer-pool, obj-key]
-  (-> (.getBuffer buffer-pool obj-key)
-      (util/then-apply
-        (fn [^ArrowBuf buffer]
-          (assert buffer)
-
-          (when buffer
-            (try
-              (let [bb (.nioBuffer buffer 0 (.capacity buffer))
-                    ba (byte-array (.remaining bb))]
-                (.get bb ba)
-                ba)
-              (finally
-                (.close buffer))))))))
-
-(defn- ->table-metadata-obj-key [chunk-idx table-name]
-  (format "chunk-%s/%s/metadata.arrow" (util/->lex-hex-string chunk-idx) table-name))
-
 (defn- obj-key->chunk-idx [obj-key]
   (some-> (second (re-matches #"chunk-metadata/(\p{XDigit}+).transit.json" obj-key))
           (util/<-lex-hex-string)))
@@ -130,24 +101,14 @@
           col-types
           tables))
 
-(defn- load-chunks-metadata ^java.util.NavigableMap [{:keys [buffer-pool ^ObjectStore object-store]}]
-  (let [cm (TreeMap.)]
-    (doseq [cm-obj-key (.listObjects object-store "chunk-metadata/")]
-      (with-open [is (ByteArrayInputStream. @(get-bytes buffer-pool cm-obj-key))]
-        (let [rdr (transit/reader is :json {:handlers xt.transit/tj-read-handlers})]
-          (.put cm (obj-key->chunk-idx cm-obj-key) (transit/read rdr)))))
-    cm))
-
-(def ^org.apache.arrow.vector.types.pojo.Schema table-metadata-schema
-  (Schema. [(types/col-type->field 'block-idx [:union #{:null :i32}]) ; null for whole chunk
-            (types/col-type->field 'columns
-                                   [:list
-                                    [:struct
-                                     '{col-name :utf8
-                                       root-col? :bool
-                                       count :i64
-                                       types [:struct {}]
-                                       bloom [:union #{:null :varbinary}]}]])]))
+(def metadata-col-type
+  '[:list
+    [:struct
+     {col-name :utf8
+      root-col? :bool
+      count :i64
+      types [:struct {}]
+      bloom [:union #{:null :varbinary}]}]])
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (definterface ContentMetadataWriter
@@ -155,7 +116,7 @@
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (definterface NestedMetadataWriter
-  (appendNestedMetadata ^xtdb.metadata.ContentMetadataWriter [^xtdb.vector.IVectorReader contentCol]))
+  (^xtdb.metadata.ContentMetadataWriter appendNestedMetadata [^xtdb.vector.IVectorReader contentCol]))
 
 #_{:clj-kondo/ignore [:unused-binding]}
 (defmulti type->metadata-writer
@@ -169,9 +130,6 @@
         (reify ContentMetadataWriter
           (writeContentMetadata [_]
             (.writeBoolean bit-wtr true)))))))
-
-(defmethod type->metadata-writer :null [_write-col-meta! metadata-root col-type] (->bool-type-handler metadata-root col-type))
-(defmethod type->metadata-writer :bool [_write-col-meta! metadata-root col-type] (->bool-type-handler metadata-root col-type))
 
 (defn- ->min-max-type-handler [^IVectorWriter types-wtr, col-type]
   ;; we get vectors out here because this code was largely written pre writers.
@@ -221,13 +179,13 @@
 
               (.endStruct struct-wtr))))))))
 
-(doseq [type-head #{:int :float :utf8 :varbinary :fixed-size-binary :timestamp-tz :timestamp-local :date :interval :time-local}]
-  (defmethod type->metadata-writer type-head [_write-col-meta! metadata-root col-type] (->min-max-type-handler metadata-root col-type)))
 
-(defmethod type->metadata-writer :keyword [_write-col-meta! metadata-root col-type] (->min-max-type-handler metadata-root col-type))
-(defmethod type->metadata-writer :uri [_write-col-meta! metadata-root col-type] (->min-max-type-handler metadata-root col-type))
-(defmethod type->metadata-writer :uuid [_write-col-meta! metadata-root col-type] (->min-max-type-handler metadata-root col-type))
-(defmethod type->metadata-writer :clj-form [_write-col-meta! metadata-root col-type] (->bool-type-handler metadata-root col-type))
+(doseq [type-head #{:null :bool :fixed-size-binary :uuid :clj-form}]
+  (defmethod type->metadata-writer type-head [_write-col-meta! metadata-root col-type] (->bool-type-handler metadata-root col-type)))
+
+(doseq [type-head #{:int :float :utf8 :varbinary :keyword :uri
+                    :timestamp-tz :timestamp-local :date :interval :time-local}]
+  (defmethod type->metadata-writer type-head [_write-col-meta! metadata-root col-type] (->min-max-type-handler metadata-root col-type)))
 
 (defmethod type->metadata-writer :list [write-col-meta! ^IVectorWriter types-wtr col-type]
   (let [types-wp (.writerPosition types-wtr)
@@ -263,35 +221,35 @@
                 (.writeInt struct-type-el-wtr sub-col-idx))
               (.endList struct-type-wtr))))))))
 
-(defn ->cols-meta-wtr ^xtdb.metadata.IBlockMetadataWriter [^IVectorWriter cols-wtr]
-  (let [cols-wp (.writerPosition cols-wtr)
-        col-name-wtr (.structKeyWriter cols-wtr "col-name")
-        root-col-wtr (.structKeyWriter cols-wtr "root-col?")
-        count-wtr (.structKeyWriter cols-wtr "count")
-        types-wtr (.structKeyWriter cols-wtr "types")
-        bloom-wtr (.structKeyWriter cols-wtr "bloom")
+(defn ->page-meta-wtr ^xtdb.metadata.IPageMetadataWriter [^IVectorWriter cols-wtr]
+  (let [col-wtr (.listElementWriter cols-wtr)
+        col-name-wtr (.structKeyWriter col-wtr "col-name")
+        root-col-wtr (.structKeyWriter col-wtr "root-col?")
+        count-wtr (.structKeyWriter col-wtr "count")
+        types-wtr (.structKeyWriter col-wtr "types")
+        bloom-wtr (.structKeyWriter col-wtr "bloom")
 
         type-metadata-writers (HashMap.)]
 
-    (letfn [(->nested-meta-writer [^IVectorReader values-col]
-              (let [^NestedMetadataWriter nested-meta-writer
-                    (.computeIfAbsent type-metadata-writers (types/field->col-type (.getField values-col))
+    (letfn [(->nested-meta-writer [^IVectorReader content-col]
+              (let [col-type (first (-> (types/field->col-type (.getField content-col))
+                                        (types/flatten-union-types)
+                                        (disj :null)
+                                        (doto (-> count (= 1) (assert "should just be nullable mono-vecs here")))))]
+                (-> ^NestedMetadataWriter
+                    (.computeIfAbsent type-metadata-writers col-type
                                       (reify Function
                                         (apply [_ col-type]
-                                          (type->metadata-writer (partial write-col-meta! false) types-wtr col-type))))]
-
-                (.appendNestedMetadata nested-meta-writer values-col)))
+                                          (type->metadata-writer (partial write-col-meta! false) types-wtr col-type))))
+                    (.appendNestedMetadata (.metadataReader content-col)))))
 
             (write-col-meta! [root-col?, ^IVectorReader content-col]
-              (let [content-writers (if-let [rdrs (.metadataReaders content-col)]
-                                      (->> rdrs
-                                           (into [] (keep (fn [^IVectorReader rdr]
-                                                            (when-not (zero? (.valueCount rdr))
-                                                              (->nested-meta-writer rdr))))))
-
+              (let [content-writers (if (instance? ArrowType$Union (.getType (.getField content-col)))
+                                      (->> (.legs content-col)
+                                           (mapv (comp ->nested-meta-writer #(.legReader content-col %))))
                                       [(->nested-meta-writer content-col)])]
 
-                (.startStruct cols-wtr)
+                (.startStruct col-wtr)
                 (.writeBoolean root-col-wtr root-col?)
                 (.writeObject col-name-wtr (.getName content-col))
                 (.writeLong count-wtr (.valueCount content-col))
@@ -302,119 +260,20 @@
                   (.writeContentMetadata content-writer))
                 (.endStruct types-wtr)
 
-                (.endStruct cols-wtr)))]
+                (.endStruct col-wtr)))]
 
-      (reify IBlockMetadataWriter
-        (writeMetadata [_ live-col]
-          (if-not (zero? (.valueCount live-col))
-            (do
-              (write-col-meta! true live-col)
-              (dec (.getPosition cols-wp)))
+      (reify IPageMetadataWriter
+        (writeMetadata [_ cols]
+          (.startList cols-wtr)
+          (doseq [^IVectorReader col cols
+                  :when (pos? (.valueCount col))]
+            (write-col-meta! true col))
+          (.endList cols-wtr))))))
 
-            -1))))))
-
-(defn ->table-metadata-idxs [^VectorSchemaRoot metadata-root]
-  (let [block-idx-cache (HashMap.)
-        meta-row-count (.getRowCount metadata-root)
-        ^IntVector block-idx-vec (.getVector metadata-root "block-idx")
-        ^ListVector cols-vec (.getVector metadata-root "columns")
-        ^StructVector cols-data-vec (.getDataVector cols-vec)
-        column-name-vec (.getChild cols-data-vec "col-name")
-        root-col-rdr (-> (.getChild cols-data-vec "root-col?")
-                         (vec/->mono-reader :bool))
-        col-names (HashSet.)]
-
-    (dotimes [meta-idx meta-row-count]
-      (let [cols-start-idx (.getElementStartIndex cols-vec meta-idx)
-            block-idx (if (.isNull block-idx-vec meta-idx)
-                        -1
-                        (.get block-idx-vec meta-idx))]
-        (dotimes [cols-data-idx (- (.getElementEndIndex cols-vec meta-idx) cols-start-idx)]
-          (let [cols-data-idx (+ cols-data-idx cols-start-idx)
-                col-name (str (.getObject column-name-vec cols-data-idx))]
-            (.add col-names col-name)
-            (when (.readBoolean root-col-rdr cols-data-idx)
-              (.put block-idx-cache [col-name block-idx] cols-data-idx))))))
-
-    {:col-names (into #{} col-names)
-     :block-idx-cache (into {} block-idx-cache)
-     :block-count (loop [block-count 0, idx 0]
-                    (cond
-                      (>= idx meta-row-count) (inc block-count)
-                      :else (recur (if (.isNull block-idx-vec idx)
-                                     block-count
-                                     (max (.get block-idx-vec idx) block-count))
-                                   (inc idx))))}))
-
-(defn ->table-metadata ^xtdb.metadata.ITableMetadata [^VectorSchemaRoot vsr, {:keys [col-names block-idx-cache, block-count]}]
-  (reify ITableMetadata
-    (metadataRoot [_] vsr)
-    (columnNames [_] col-names)
-    (rowIndex [_ col-name block-idx] (get block-idx-cache [col-name block-idx]))
-    (blockCount [_] block-count)))
-
-(defn open-table-meta-writer [^VectorSchemaRoot metadata-root, ^ObjectStore object-store, ^String table-name, ^long chunk-idx]
-  (let [col-names (HashSet.)
-        block-idx-cache (HashMap.)
-        !block-count (AtomicInteger. 0)
-
-        metadata-wtr (vw/root->writer metadata-root)
-        block-idx-wtr (.writerForName metadata-wtr "block-idx")
-        cols-wtr (.writerForName metadata-wtr "columns")
-        cols-meta-wtr (->cols-meta-wtr (.listElementWriter cols-wtr))]
-
-    (reify ITableMetadataWriter
-      (writeBlockMetadata [_ block-idx]
-        (if (neg? block-idx)
-          (.writeNull block-idx-wtr nil)
-          (do
-            (.writeInt block-idx-wtr block-idx)
-            (.set !block-count block-idx)))
-
-        (.startList cols-wtr)
-
-        (reify IBlockMetadataWriter
-          (writeMetadata [_ live-col]
-            (let [col-name (.getName live-col)]
-              (.add col-names col-name)
-
-              (let [meta-idx (.writeMetadata cols-meta-wtr live-col)]
-                (when-not (neg? meta-idx)
-                  (.put block-idx-cache [col-name block-idx] meta-idx))
-
-                meta-idx)))
-
-          (endBlock [_]
-            (.endList cols-wtr)
-            (.endRow metadata-wtr))))
-
-      (tableMetadata [_]
-        (->table-metadata metadata-root
-                          {:col-names (into #{} col-names)
-                           :block-idx-cache (into {} block-idx-cache)
-                           :block-count (.get !block-count)}))
-
-      (finishChunk [_]
-        (.syncSchema metadata-root)
-        (.syncRowCount metadata-wtr)
-
-        (let [metadata-buf (util/root->arrow-ipc-byte-buffer metadata-root :file)]
-          (.putObject object-store (->table-metadata-obj-key chunk-idx table-name) metadata-buf)))
-
-      AutoCloseable
-      (close [_]
-        (.close metadata-root)))))
-
-(deftype MetadataManager [^BufferAllocator allocator
-                          ^ObjectStore object-store
-                          ^IBufferPool buffer-pool
+(deftype MetadataManager [^ObjectStore object-store
                           ^NavigableMap chunks-metadata
-                          ^Map table-metadata-idxs
                           ^:volatile-mutable ^Map col-types]
   IMetadataManager
-  (openTableMetadataWriter [_ table-name chunk-idx]
-    (open-table-meta-writer (VectorSchemaRoot/create table-metadata-schema allocator) object-store table-name chunk-idx))
-
   (finishChunk [this chunk-idx new-chunk-metadata]
     (-> @(.putObject object-store (->chunk-metadata-obj-key chunk-idx) (write-chunk-metadata new-chunk-metadata))
         (util/rethrowing-cause))
@@ -422,6 +281,8 @@
     (.put chunks-metadata chunk-idx new-chunk-metadata))
 
   (withMetadata [_ chunk-idx table-name f]
+    (throw (UnsupportedOperationException.))
+    #_
     (with-single-root buffer-pool (->table-metadata-obj-key chunk-idx table-name)
       (fn [metadata-root]
         (.apply f (->table-metadata metadata-root
@@ -441,26 +302,54 @@
   (close [_]
     (.clear chunks-metadata)))
 
+(defn latest-chunk-metadata [^IMetadataManager metadata-mgr]
+  (some-> (.lastEntry (.chunksMetadata metadata-mgr))
+          (.getValue)))
+
+(defn- get-bytes ^java.util.concurrent.CompletableFuture #_<bytes> [^IBufferPool buffer-pool, obj-key]
+  (-> (.getBuffer buffer-pool obj-key)
+      (util/then-apply
+        (fn [^ArrowBuf buffer]
+          (assert buffer)
+
+          (try
+            (let [bb (.nioBuffer buffer 0 (.capacity buffer))
+                  ba (byte-array (.remaining bb))]
+              (.get bb ba)
+              ba)
+            (finally
+              (.close buffer)))))))
+
+(defn- load-chunks-metadata ^java.util.NavigableMap [{:keys [buffer-pool ^ObjectStore object-store]}]
+  (let [cm (TreeMap.)]
+    (doseq [cm-obj-key (.listObjects object-store "chunk-metadata/")]
+      (with-open [is (ByteArrayInputStream. @(get-bytes buffer-pool cm-obj-key))]
+        (let [rdr (transit/reader is :json {:handlers xt.transit/tj-read-handlers})]
+          (.put cm (obj-key->chunk-idx cm-obj-key) (transit/read rdr)))))
+    cm))
+
 (defmethod ig/prep-key ::metadata-manager [_ opts]
-  (merge {:allocator (ig/ref :xtdb/allocator)
-          :object-store (ig/ref :xtdb/object-store)
+  (merge {:object-store (ig/ref :xtdb/object-store)
           :buffer-pool (ig/ref :xtdb.buffer-pool/buffer-pool)}
          opts))
 
-(defmethod ig/init-key ::metadata-manager [_ {:keys [allocator ^ObjectStore object-store buffer-pool], :as deps}]
+(defmethod ig/init-key ::metadata-manager [_ {:keys [^ObjectStore object-store], :as deps}]
   (let [chunks-metadata (load-chunks-metadata deps)]
-    (MetadataManager. allocator object-store buffer-pool
+    (MetadataManager. object-store
                       chunks-metadata
-                      (ConcurrentHashMap.)
                       (->> (vals chunks-metadata) (reduce merge-col-types {})))))
 
 (defmethod ig/halt-key! ::metadata-manager [_ mgr]
   (util/try-close mgr))
 
 (defn with-metadata [^IMetadataManager metadata-mgr, ^long chunk-idx, ^String table-name, ^Function f]
+  (throw (UnsupportedOperationException.))
+  #_ ; TODO reinstate when we bring back metadata into scan
   (.withMetadata metadata-mgr chunk-idx table-name f))
 
 (defn with-all-metadata [^IMetadataManager metadata-mgr, table-name, ^BiFunction f]
+  (throw (UnsupportedOperationException.))
+  #_ ; TODO reinstate when we bring back metadata into scan
   (->> (for [[^long chunk-idx, chunk-metadata] (.chunksMetadata metadata-mgr)
              :let [table (get-in chunk-metadata [:tables table-name])]
              :when table]
@@ -473,6 +362,8 @@
        (util/rethrowing-cause)))
 
 (defn matching-chunks [^IMetadataManager metadata-mgr, table-name, ^IMetadataPredicate metadata-pred]
+  (throw (UnsupportedOperationException.))
+  #_ ; TODO reinstate when we bring back metadata into scan
   (with-all-metadata metadata-mgr table-name
     (util/->jbifn
       (fn [^long chunk-idx, ^ITableMetadata table-metadata]
@@ -486,6 +377,3 @@
               (when-not (.isEmpty block-idxs)
                 (->ChunkMatch chunk-idx block-idxs (.columnNames table-metadata))))))))))
 
-(defn latest-chunk-metadata [^IMetadataManager metadata-mgr]
-  (some-> (.lastEntry (.chunksMetadata metadata-mgr))
-          (.getValue)))

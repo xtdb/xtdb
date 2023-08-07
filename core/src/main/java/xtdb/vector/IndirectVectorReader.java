@@ -168,19 +168,10 @@ class IndirectVectorReader implements IVectorReader {
         return new IndirectVectorReader(reader.legReader(legKey), indirection);
     }
 
-    IndirectVectorReader removeNegativeIndices() {
+    @Override
+    public IVectorReader metadataReader() {
         var idxs = IntStream.range(0, indirection.valueCount()).map(indirection::getIndex).filter(i -> i >= 0).toArray();
         return new IndirectVectorReader(reader, new Selection(idxs));
-    }
-
-    @Override
-    public Collection<? extends IVectorReader> metadataReaders() {
-        var legs = reader.legs();
-        if (legs == null) return null;
-
-        return legs.stream()
-                .map(leg -> new IndirectVectorReader(reader.legReader(leg), indirection).removeNegativeIndices())
-                .toList();
     }
 
     @Override

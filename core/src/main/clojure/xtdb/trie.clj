@@ -3,7 +3,8 @@
             [xtdb.object-store]
             [xtdb.types :as types]
             [xtdb.util :as util]
-            [xtdb.vector.writer :as vw])
+            [xtdb.vector.writer :as vw]
+            [xtdb.metadata :as meta])
   (:import (java.nio ByteBuffer)
            (java.util Arrays)
            (java.util.concurrent.atomic AtomicInteger)
@@ -21,8 +22,8 @@
   (Schema. [(types/->field "nodes" (ArrowType$Union. UnionMode/Dense (int-array (range 3))) false
                            (types/col-type->field "nil" :null)
                            (types/col-type->field "branch" [:list [:union #{:null :i32}]])
-                           ;; TODO metadata
-                           (types/col-type->field "leaf" '[:struct {page-idx :i32}]))]))
+                           (types/col-type->field "leaf" [:struct {'page-idx :i32
+                                                                   'columns meta/metadata-col-type}]))]))
 
 (def put-field
   (types/col-type->field "put" [:struct {'xt$valid_from types/temporal-col-type
@@ -63,6 +64,7 @@
 
             leaf-wtr (.writerForTypeId node-wtr (byte 2))
             page-idx-wtr (.structKeyWriter leaf-wtr "page-idx")
+            page-meta-wtr (meta/->page-meta-wtr (.structKeyWriter leaf-wtr "columns"))
             !page-idx (AtomicInteger. 0)
             copier (vw/->rel-copier leaf-rel-wtr leaf-rel)
 
@@ -94,6 +96,21 @@
                                                          (.copyRow copier idx)))))
 
                                        (.syncRowCount leaf-rel-wtr)
+
+                                       (let [leaf-rdr (vw/rel-wtr->rdr leaf-rel-wtr)
+                                             put-rdr (-> leaf-rdr
+                                                         (.readerForName "op")
+                                                         (.legReader :put)
+                                                         (.metadataReader))
+
+                                             doc-rdr (.structKeyReader put-rdr "xt$doc")]
+
+                                         (.writeMetadata page-meta-wtr (into [(.readerForName leaf-rdr "xt$system_from")
+                                                                              (.readerForName leaf-rdr "xt$iid")
+                                                                              (.structKeyReader put-rdr "xt$valid_from")
+                                                                              (.structKeyReader put-rdr "xt$valid_to")]
+                                                                             (map #(.structKeyReader doc-rdr %))
+                                                                             (.structKeys doc-rdr))))
                                        (write-batch!)
                                        (.clear leaf-rel-wtr)
                                        (.clear leaf-vsr)
@@ -105,6 +122,7 @@
 
                            (write-node! (.rootNode trie)))))]
 
+        (.syncSchema trie-vsr)
         (.syncRowCount trie-rel-wtr)
 
         {:leaf-buf leaf-buf

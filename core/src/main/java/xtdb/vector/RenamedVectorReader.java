@@ -191,8 +191,8 @@ public class RenamedVectorReader implements IVectorReader {
     }
 
     @Override
-    public Collection<? extends IVectorReader> metadataReaders() {
-        return reader.metadataReaders();
+    public IVectorReader metadataReader() {
+        return new RenamedVectorReader(reader.metadataReader(), colName);
     }
 
     @Override

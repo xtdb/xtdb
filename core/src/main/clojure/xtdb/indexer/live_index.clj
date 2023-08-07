@@ -1,7 +1,6 @@
 (ns xtdb.indexer.live-index
   (:require [juxt.clojars-mirrors.integrant.core :as ig]
             [xtdb.buffer-pool]
-            [xtdb.metadata :as meta]
             [xtdb.object-store]
             [xtdb.trie :as trie]
             [xtdb.types :as types]
@@ -10,7 +9,6 @@
             [xtdb.vector.writer :as vw])
   (:import [clojure.lang MapEntry]
            (java.lang AutoCloseable)
-           (java.nio ByteBuffer)
            (java.util ArrayList HashMap Map)
            (java.util.concurrent CompletableFuture)
            (java.util.function Function)
