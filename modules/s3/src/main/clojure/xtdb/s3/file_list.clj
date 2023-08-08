@@ -2,15 +2,16 @@
   (:require [clojure.data.json :as json]
             [clojure.string :as string]
             [clojure.tools.logging :as log])
-  (:import [java.util UUID NavigableSet]
-           [software.amazon.awssdk.services.sqs.model Message CreateQueueRequest CreateQueueResponse DeleteMessageRequest DeleteQueueRequest ReceiveMessageRequest 
-            SetQueueAttributesRequest GetQueueAttributesRequest GetQueueAttributesResponse QueueDoesNotExistException]
-           [software.amazon.awssdk.services.sns.model SubscribeRequest SubscribeResponse UnsubscribeRequest]
+  (:import [java.lang AutoCloseable]
+           [java.util UUID NavigableSet]
+           [software.amazon.awssdk.core.exception AbortedException]
+           [software.amazon.awssdk.services.s3 S3AsyncClient]
            [software.amazon.awssdk.services.s3.model ListObjectsV2Request ListObjectsV2Response S3Object]
-           software.amazon.awssdk.core.exception.AbortedException
-           software.amazon.awssdk.services.s3.S3AsyncClient
-           software.amazon.awssdk.services.sns.SnsClient
-           software.amazon.awssdk.services.sqs.SqsClient))
+           [software.amazon.awssdk.services.sns SnsClient]
+           [software.amazon.awssdk.services.sns.model SubscribeRequest SubscribeResponse UnsubscribeRequest]
+           [software.amazon.awssdk.services.sqs SqsClient]
+           [software.amazon.awssdk.services.sqs.model Message CreateQueueRequest CreateQueueResponse DeleteMessageRequest DeleteQueueRequest ReceiveMessageRequest
+            SetQueueAttributesRequest GetQueueAttributesRequest GetQueueAttributesResponse QueueDoesNotExistException]))
 
 (defn list-objects [{:keys [^S3AsyncClient s3-client bucket prefix] :as s3-opts} continuation-token]
   (vec
@@ -82,7 +83,7 @@
       (:Records)
       (first)))
 
-(defn file-list-watch [{:keys [bucket sns-topic-arn prefix] :as opts} ^NavigableSet file-name-cache]
+(defn open-file-list-watcher [{:keys [bucket sns-topic-arn prefix] :as opts} ^NavigableSet file-name-cache]
   (let [^SqsClient sqs-client (SqsClient/create)
         ^SnsClient sns-client (SnsClient/create)
         _ (log/info "Creating AWS resources for watching files on bucket " bucket)
@@ -94,9 +95,8 @@
         _ (log/info "Initializing filename list from bucket " bucket)
         ;; Init the filename cache with current files
         _ (file-list-init opts file-name-cache)
-        
-        _ (log/info "Watching for filechanges from bucket " bucket)
-        ;; Start processing messages from the queue
+
+        ;; Setup watcher thread for handling messages from the queue 
         watcher-thread (Thread. (fn []
                                   (try
                                     (while true
@@ -136,24 +136,26 @@
                                     (catch InterruptedException _)
                                     (catch QueueDoesNotExistException _)
                                     (catch AbortedException _))))]
-    (.start watcher-thread)
-    
-    {:watcher-thread watcher-thread
-     :sns-client sns-client
-     :sqs-client sqs-client
-     :queue-url queue-url
-     :subscription-arn subscription-arn}))
 
-(defn watcher-close-fn [{:keys [^Thread watcher-thread ^SqsClient sqs-client ^SnsClient sns-client queue-url subscription-arn]}]
-  (log/info "Interrupting s3 file watcher thread...")
-  (.interrupt watcher-thread)
-  (.join watcher-thread)
-  (log/info "Unsubscribing from SNS topic, subscription arn: " subscription-arn)
-  (.unsubscribe sns-client (-> (UnsubscribeRequest/builder)
-                               (.subscriptionArn subscription-arn)
-                               ^UnsubscribeRequest (.build)))
-  (log/info "Removing SQS queue, queue url: " queue-url)
-  (.deleteQueue sqs-client (-> (DeleteQueueRequest/builder)
-                               (.queueUrl queue-url)
-                               ^DeleteQueueRequest (.build))))
+    ;; Start processing messages from the queue
+    (log/info "Watching for filechanges from bucket " bucket)
+    (.start watcher-thread)
+
+    ;; Return an auto closeable object that clears up the thread, SNS topic and SQS queue
+    (reify
+      AutoCloseable
+      (close [_]
+        (log/info "Interrupting s3 file watcher thread...")
+        (.interrupt watcher-thread)
+        (.join watcher-thread)
+
+        (log/info "Unsubscribing from SNS topic, subscription arn: " subscription-arn)
+        (.unsubscribe sns-client (-> (UnsubscribeRequest/builder)
+                                     (.subscriptionArn subscription-arn)
+                                     ^UnsubscribeRequest (.build)))
+        
+        (log/info "Removing SQS queue, queue url: " queue-url)
+        (.deleteQueue sqs-client (-> (DeleteQueueRequest/builder)
+                                     (.queueUrl queue-url)
+                                     ^DeleteQueueRequest (.build)))))))
 

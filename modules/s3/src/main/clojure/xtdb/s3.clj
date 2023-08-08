@@ -6,17 +6,18 @@
             [xtdb.file-list :as file-list]
             [xtdb.s3.file-list :as s3-file-watch]
             [juxt.clojars-mirrors.integrant.core :as ig])
-  (:import xtdb.object_store.ObjectStore
-           xtdb.s3.S3Configurator
-           java.io.Closeable
-           java.util.function.Function
-           java.util.NavigableSet
-           (java.nio ByteBuffer)
+  (:import [java.lang AutoCloseable]
+           [java.io Closeable]
+           [java.nio ByteBuffer]
+           [java.util NavigableSet]
            [java.util.concurrent CompletableFuture ConcurrentSkipListSet]
+           [java.util.function Function]
            [software.amazon.awssdk.core ResponseBytes]
            [software.amazon.awssdk.core.async AsyncRequestBody AsyncResponseTransformer]
            [software.amazon.awssdk.services.s3.model DeleteObjectRequest GetObjectRequest HeadObjectRequest NoSuchKeyException PutObjectRequest]
-           software.amazon.awssdk.services.s3.S3AsyncClient))
+           [software.amazon.awssdk.services.s3 S3AsyncClient]
+           [xtdb.object_store ObjectStore]
+           [xtdb.s3 S3Configurator]))
 
 (defn- get-obj-req
   ^GetObjectRequest [{:keys [^S3Configurator configurator bucket prefix]} k]
@@ -44,7 +45,7 @@
                             (catch NoSuchKeyException _
                               (throw (os/obj-missing-exception k))))))))
 
-(defrecord S3ObjectStore [^S3Configurator configurator ^S3AsyncClient client bucket prefix ^NavigableSet file-name-cache s3-watch-info]
+(defrecord S3ObjectStore [^S3Configurator configurator ^S3AsyncClient client bucket prefix ^NavigableSet file-name-cache ^AutoCloseable file-list-watcher]
   ObjectStore
   (getObject [this k]
     (-> (.getObject client (get-obj-req this k) (AsyncResponseTransformer/toBytes))
@@ -111,7 +112,7 @@
 
   Closeable
   (close [_]
-    (s3-file-watch/watcher-close-fn s3-watch-info)
+    (.close file-list-watcher)
     (.clear file-name-cache)
     (.close client)))
 
@@ -139,14 +140,15 @@
   (let [s3-client (.makeClient configurator)
         file-name-cache (ConcurrentSkipListSet.)
         ;; Watch s3 bucket for changes
-        s3-watch-info (s3-file-watch/file-list-watch (assoc opts :s3-client s3-client) file-name-cache)]
+        file-list-watcher (s3-file-watch/open-file-list-watcher (assoc opts :s3-client s3-client)
+                                                                file-name-cache)]
 
     (->S3ObjectStore configurator
                      s3-client
                      bucket 
                      prefix
                      file-name-cache
-                     s3-watch-info)))
+                     file-list-watcher)))
 
 (defmethod ig/halt-key! ::object-store [_ os]
   (util/try-close os))
