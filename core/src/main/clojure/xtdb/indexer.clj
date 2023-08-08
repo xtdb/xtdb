@@ -455,11 +455,6 @@
 
     (.addRows row-counter 1)))
 
-(defn- get-force-flush-tx-id [^DenseUnionVector tx-ops-vec tx-op-idx]
-  (let [flush-vec (.getVectorByType tx-ops-vec 6)
-        offset (.getOffset tx-ops-vec tx-op-idx)]
-    (.getObject flush-vec offset)))
-
 (deftype Indexer [^BufferAllocator allocator
                   ^ObjectStore object-store
                   ^IMetadataManager metadata-mgr
