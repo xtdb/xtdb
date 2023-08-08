@@ -5,11 +5,13 @@
             [juxt.clojars-mirrors.integrant.core :as ig]
             [xtdb.google-cloud :as google-cloud]
             [xtdb.object-store-test :as os-test])
-  (:import [java.io Closeable]
-           [com.google.cloud.storage Bucket Storage StorageOptions StorageOptions$Builder Storage$BucketGetOption Bucket$BucketSourceOption StorageException]))
+  (:import [com.google.cloud.storage Bucket Storage StorageOptions StorageOptions$Builder Storage$BucketGetOption Bucket$BucketSourceOption StorageException]
+           [java.io Closeable]
+           [xtdb.object_store ObjectStore]))
 
 (def project-id "xtdb-scratch")
-(def test-bucket "xtdb-cloud-storage-test-bucket")
+(def pubsub-topic "gcp-test-xtdb-object-store-notif-topic")
+(def test-bucket "gcp-test-xtdb-object-store")
 
 (defn config-present? []
   (try
@@ -41,6 +43,7 @@
 (defn object-store ^Closeable [prefix]
   (->> (ig/prep-key ::google-cloud/blob-object-store {:project-id project-id
                                                       :bucket test-bucket
+                                                      :pubsub-topic pubsub-topic
                                                       :prefix (str "xtdb.google-cloud-test." prefix)})
        (ig/init-key ::google-cloud/blob-object-store)))
 
@@ -53,6 +56,33 @@
   (let [os (object-store (random-uuid))]
     (os-test/test-range os)))
 
-(t/deftest ^:google-cloud list-test
-  (let [os (object-store (random-uuid))]
-    (os-test/test-list-objects os)))
+(def wait-time-ms 5000)
+
+(t/deftest ^:azure list-test
+  (with-open [os (object-store (random-uuid))]
+    (os-test/test-list-objects os wait-time-ms)))
+
+(t/deftest ^:azure list-test-with-prior-objects
+  (let [prefix (random-uuid)]
+    (with-open [os (object-store prefix)]
+      (os-test/put-edn os "alice" :alice)
+      (os-test/put-edn os "alan" :alan)
+      (Thread/sleep wait-time-ms)
+      (t/is (= ["alan" "alice"] (.listObjects ^ObjectStore os))))
+
+    (with-open [os (object-store prefix)]
+      (t/testing "prior objects will still be there, should be available on a list request"
+        (t/is (= ["alan" "alice"] (.listObjects ^ObjectStore os))))
+      (t/testing "should be able to delete prior objects and have that reflected in list objects output"
+        @(.deleteObject ^ObjectStore os "alice")
+        (Thread/sleep wait-time-ms)
+        (t/is (= ["alan"] (.listObjects ^ObjectStore os)))))))
+
+(t/deftest ^:azure multiple-object-store-list-test
+  (let [prefix (random-uuid)]
+    (with-open [os-1 (object-store prefix)
+                os-2 (object-store prefix)]
+      (os-test/put-edn os-1 "alice" :alice)
+      (os-test/put-edn os-2 "alan" :alan)
+      (Thread/sleep wait-time-ms)
+      (t/is (= ["alan" "alice"] (.listObjects ^ObjectStore os-2))))))

@@ -1,10 +1,13 @@
 (ns xtdb.google-cloud.object-store
-  (:require [xtdb.object-store :as os]
+  (:require [xtdb.file-list :as file-list]
+            [xtdb.object-store :as os]
             [xtdb.util :as util])
-  (:import [com.google.cloud.storage Blob BlobId BlobInfo Storage Blob$BlobSourceOption Storage$BlobListOption
+  (:import [com.google.cloud.storage BlobId BlobInfo Storage Blob$BlobSourceOption
             Storage$BlobSourceOption Storage$BlobWriteOption StorageException]
-           [com.google.common.io ByteStreams]
+           [java.io Closeable]
+           [java.lang AutoCloseable]
            [java.nio ByteBuffer]
+           [java.util NavigableSet]
            [java.util.concurrent CompletableFuture]
            [java.util.function Supplier]
            [xtdb.object_store ObjectStore]))
@@ -54,23 +57,11 @@
          (when-not (= 412 (.getCode e))
            (throw e)))))))
 
-(defn list-blobs
-  [{:keys [^Storage storage-service bucket-name prefix]} obj-prefix]
-  (let [list-prefix (str prefix obj-prefix)
-        list-blob-opts (into-array Storage$BlobListOption
-                                   (if (not-empty list-prefix)
-                                     [(Storage$BlobListOption/prefix list-prefix)]
-                                     []))]
-    (->> (.list storage-service bucket-name list-blob-opts)
-         (.iterateAll)
-         (mapv (fn [^Blob blob]
-                 (subs (.getName blob) (count prefix)))))))
-
 (defn delete-blob [{:keys [^Storage storage-service bucket-name prefix]} blob-name]
   (let [blob-id (BlobId/of bucket-name (str prefix blob-name))]
     (.delete storage-service blob-id)))
 
-(defrecord GoogleCloudStorageObjectStore [^Storage storage-service bucket-name prefix]
+(defrecord GoogleCloudStorageObjectStore [^Storage storage-service bucket-name prefix ^NavigableSet file-name-cache ^AutoCloseable file-list-watcher]
   ObjectStore
   (getObject [this k]
     (CompletableFuture/completedFuture
@@ -93,12 +84,17 @@
     (put-blob this k buf)
     (CompletableFuture/completedFuture nil))
 
-  (listObjects [this]
-    (.listObjects this nil))
+  (listObjects [_this]
+    (into [] file-name-cache))
 
-  (listObjects [this obj-prefix]
-    (list-blobs this obj-prefix))
+  (listObjects [_this dir]
+    (file-list/list-files-under-prefix file-name-cache dir))
 
   (deleteObject [this k]
     (delete-blob this k)
-    (CompletableFuture/completedFuture nil)))
+    (CompletableFuture/completedFuture nil))
+
+  Closeable
+  (close [_]
+    (.close file-list-watcher)
+    (.clear file-name-cache)))
