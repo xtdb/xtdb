@@ -6,17 +6,17 @@
   (:import (java.io Closeable)
            xtdb.object_store.ObjectStore))
 
-;; Setup the stack via cloudformation - see modules/s3/cloudformation/s3-test-stack.yml
+;; Setup the stack via cloudformation - see modules/s3/cloudformation/s3-stack.yml
 ;; Will need to create and set an access token for the S3TestUser
 ;; Ensure region is set locally to wherever cloudformation stack is created (ie, eu-west-1 if stack on there)
 
 (def bucket
   (or (System/getProperty "xtdb.s3-test.bucket")
-      "xtdb-object-store-s3-test"))
+      "xtdb-object-store-iam-test"))
 
 (def sns-topic-arn
   (or (System/getProperty "xtdb.s3-test.sns-topic-arn")
-      "arn:aws:sns:eu-west-1:199686536682:xtdb-object-store-s3-test-bucket-events"))
+      "arn:aws:sns:eu-west-1:199686536682:xtdb-object-store-iam-test-bucket-events"))
 
 (defn object-store ^Closeable [prefix]
   (->> (ig/prep-key ::s3/object-store {:bucket bucket,
@@ -54,3 +54,12 @@
         @(.deleteObject ^ObjectStore os "alice")
         (Thread/sleep wait-time-ms)
         (t/is (= ["alan"] (.listObjects ^ObjectStore os)))))))
+
+(t/deftest ^:s3 multiple-object-store-list-test
+  (let [prefix (random-uuid)]
+    (with-open [os-1 (object-store prefix)
+                os-2 (object-store prefix)]
+      (os-test/put-edn os-1 "alice" :alice)
+      (os-test/put-edn os-2 "alan" :alan)
+      (Thread/sleep wait-time-ms)
+      (t/is (= ["alan" "alice"] (.listObjects ^ObjectStore os-2))))))
