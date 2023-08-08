@@ -54,3 +54,12 @@
         @(.deleteObject ^ObjectStore os "alice")
         (Thread/sleep wait-time-ms)
         (t/is (= ["alan"] (.listObjects ^ObjectStore os)))))))
+
+(t/deftest ^:s3 multiple-object-store-list-test
+  (let [prefix (random-uuid)]
+    (with-open [os-1 (object-store prefix)
+                os-2 (object-store prefix)]
+      (os-test/put-edn os-1 "alice" :alice)
+      (os-test/put-edn os-2 "alan" :alan)
+      (Thread/sleep wait-time-ms)
+      (t/is (= ["alan" "alice"] (.listObjects ^ObjectStore os-2))))))
