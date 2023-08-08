@@ -1,11 +1,11 @@
-# Azure Module
+= Azure Module
 
 Within our XTDB node, we can make use of Azure Services for certain purposes. Currently, we can:
 
 * Use *Azure Blob Storage* as the XTDB Object Store.
 * Use *Azure Eventhubs* as the Log.
 
-### Project Dependency 
+== Project Dependency 
 
 In order to use any of the Azure services, you will need to include a dependency on the xtdb.azure module.
 
@@ -23,23 +23,30 @@ _pom.xml_
 </dependency>
 ```
 
-### Authentication
+== Authentication
 
 Authentication for the components in the module is done via the https://learn.microsoft.com/en-us/java/api/com.azure.identity.defaultazurecredential?view=azure-java-stable[*DefaultAzureCredential*] class - you will need to setup authentication using any of the methods listed within the Azure documentation to be able to make use of the operations inside the modules.
 
-## Azure Blob Storage Object Store
+Whatever method used to authenticate, you will need to ensure it has the correct permissions. Alongside the various bits of infrastructure required for the object store, we create a custom XDTB IAM role. One can use this role to provide all necessary permissions for the object store and the resources it is using on Azure, otherwise you will need to ensure whichever credentials you are using to authenticate XTDB have the same level of permissions to the miscellaneous services.
+See the custom role definition in the link:azure-resource-manager/azure-stack.json[Resource Manager stack] for what exactly that includes.
+
+== Azure Blob Storage Object Store
 
 We can swap out the implementation of the object store with one based on Azure Blob Storage. To do so, we add the `xtdb.azure/blob-object-store` key within the integrant config for our node, alongside any config:
 ```clojure
 {
   ...
-  {:xtdb.azure/blob-object-store {:storage-account "storage-account"
-                                  :container "container"}}
+  {:xtdb.azure/blob-object-store {:storage-account "xtdbstorageaccount"
+                                  :container "xtdb-object-store"
+                                  :servicebus-namespace "xtdb-storage-account-eventbus"
+                                  :servicebus-topic-name "xtdb-storage-bus-topic"}}
   ...
 }
 ```
 
-### Parameters
+Alongside the storage account container, we require an eventgrid topic and service bus topic to pass around file changes to the container, such that we can keep a local copy of files on S3, saving on expensive/lengthy operations to list objects on S3. Below follows the various parameters used by the module, and some notes around the provided <<resource-manager, Azure Resource Manager template>> which sets up all of the necessary extra infrastructure. Even if this isn't used, we will require a similar setup to track file changes on whichever storage account/container you are using, and relevant permissions to use all of the services. 
+
+=== Parameters
 
 These are the following parameters that can be passed within the config for our `xtdb.azure/blob-object-store`:
 [cols="1,1,2,1"]
@@ -55,13 +62,56 @@ These are the following parameters that can be passed within the config for our 
 | The name of the https://learn.microsoft.com/en-us/azure/storage/blobs/storage-blobs-introduction#containers[container] to use an an object store
 | Yes
 
+| `servicebus-namespace`
+| String
+| The name of the https://learn.microsoft.com/en-us/azure/service-bus-messaging/service-bus-messaging-overview#namespaces[Service Bus namespace] which contains the topic collecting notifications from the container 
+| Yes
+
+| `servicebus-topic-name`
+| String
+| The name of the https://learn.microsoft.com/en-us/azure/service-bus-messaging/service-bus-queues-topics-subscriptions#topics-and-subscriptions[Service Bus topic] which contains is collecting notifications from the container
+| Yes
+
 |`prefix`
 | String 
 | A string to prefix all of your files with - for example, if "foo" is provided all xtdb files will be located under a "foo" directory
 | No
-|=== 
+|===
 
-## Azure EventHub Log
+[#resource-manager]
+=== Azure Resource Manager Stack
+
+In order to handle the various bits of Azure infrastructure required to use Azure Blob Storage as an XTDB object store, we provide a link:azure-resource-manager/azure-stack.json[parameterized 'Azure Resource Manager' stack] to setup everything that you should need.
+
+==== Inputs to the stack
+
+The paramaterized stack expects the following to be provided:
+
+* The location to build the resources -- Defaults to the location of the resource group you're deploying the template in.
+* The name of the storage account to create -- Defaults to `xtdbstorageaccount`
+* The pricing tier/type of storage account to use -- Defaults to `Standard_LRS`
+* The name of the storage container to use as the XTDB object store (and used by associated resources) -- Defaults to `xtdb-object-store`
+* The name of the EventGrid system topic we use for container events -- Defaults to `xtdb-storage-account-system-topic`
+* The name to use for the Service Bus namespace -- Defaults to `xtdb-storage-account-eventbus`
+* The name to use for the Service Bus topic created in the namespace above -- Defaults to `xtdb-storage-bus-topic`
+* The name of the custom XTDB role to create with permissions for the created resources -- Defaults to `xtdb-role`
+
+==== Created Resources
+
+The Azure Resource Manager stack will create the following resources within the specified resource group in Azure:
+
+* An https://learn.microsoft.com/en-us/azure/storage/common/storage-account-overview[Azure Storage Account]
+* A https://learn.microsoft.com/en-us/azure/storage/blobs/storage-blobs-introduction#containers[Storage Account Container] within said storage account to use as the object store.
+* An https://learn.microsoft.com/en-us/azure/event-grid/system-topics[EventGrid System Topic], subscribed to blob creation/deletion events on the container.
+* A `standard` tier https://learn.microsoft.com/en-us/azure/service-bus-messaging/service-bus-messaging-overview#namespaces[Service Bus Namespace]:
+** A https://learn.microsoft.com/en-us/azure/service-bus-messaging/service-bus-queues-topics-subscriptions#topics-and-subscriptions[Service Bus Topic] for the Service Bus namespace.
+* An https://learn.microsoft.com/en-us/azure/event-grid/concepts#event-subscriptions[Event Subscription] on the EventGrid System Topic for the Service Bus Topic.
+* A https://learn.microsoft.com/en-us/azure/role-based-access-control/custom-roles[custom role definition] for all of the necessary permissions for XTDB to use the above:
+** Using the created storage container (Get, Put, Delete and List).
+** Reading messages sent to EventGrid.
+** Creating subscriptions on the Service Bus topic.
+
+== Azure EventHub Log
 
 We can swap out the implementation of the log with one based on Azure Eventhubs. To do so, we add the `xtdb.azure/event-hub-log` key within the integrant config for our node, alongside any config:
 ```clojure
@@ -76,7 +126,7 @@ We can swap out the implementation of the log with one based on Azure Eventhubs.
 }
 ```
 
-### Parameters
+=== Parameters
 
 These are the following parameters that can be passed within the config for our `xtdb.azure/event-hub-log`:
 [cols="1,1,2,1"]
@@ -119,7 +169,7 @@ These are the following parameters that can be passed within the config for our 
 
 |=== 
 
-### Using Event Hubs 
+=== Using Event Hubs 
 
 Some things to note when setting up Event Hubs for XTDB:
 
@@ -133,7 +183,7 @@ When creating an eventhub manually to use as an XTDB log, there are a few proper
 * Partition count should be set to *1* - XTDB will only ever use a single partition within it's implementations of Log as they are required to be *totally ordered*.
 * The retention period is configurable - you will likely wish to set this to as high as you reasonably can given the pricing tier of your Event Hubs namespace. 
 
-#### Creating the Event Hub Automatically
+==== Creating the Event Hub Automatically
 
 If `create-event-hub?` is set to `true`, XTDB will attempt to create an Event Hub on your behalf - some notes on this:
 

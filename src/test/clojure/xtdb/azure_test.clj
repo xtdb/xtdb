@@ -8,12 +8,15 @@
             [xtdb.node :as node]
             [clojure.tools.logging :as log])
   (:import java.util.UUID
-           (java.io Closeable)))
+           java.io.Closeable
+           xtdb.object_store.ObjectStore))
 
 (def resource-group-name "azure-modules-test")
-(def storage-account "xtdbazureobjectstoretest")
-(def container "xtdb-test")
-(def eventhub-namespace "xtdbeventhublogtest")
+(def storage-account "xtdbteststorageaccount")
+(def container "xtdb-test-object-store")
+(def eventhub-namespace "xtdb-test-storage-account-eventbus")
+(def servicebus-namespace "xtdb-test-storage-account-eventbus")
+(def servicebus-topic-name "xtdb-test-storage-bus-topic")
 (def config-present? (some? (and (System/getenv "AZURE_CLIENT_ID")
                                  (System/getenv "AZURE_CLIENT_SECRET")
                                  (System/getenv "AZURE_TENANT_ID")
@@ -42,20 +45,49 @@
 (defn object-store ^Closeable [prefix]
   (->> (ig/prep-key ::azure/blob-object-store {:storage-account storage-account
                                                :container container
+                                               :servicebus-namespace servicebus-namespace
+                                               :servicebus-topic-name servicebus-topic-name
                                                :prefix (str "xtdb.azure-test." prefix)})
        (ig/init-key ::azure/blob-object-store)))
 
 (t/deftest ^:azure put-delete-test
-  (let [os (object-store (random-uuid))]
+  (with-open [os (object-store (random-uuid))]
     (os-test/test-put-delete os)))
 
 (t/deftest ^:azure range-test
-  (let [os (object-store (random-uuid))]
+  (with-open [os (object-store (random-uuid))]
     (os-test/test-range os)))
 
+(def wait-time-ms 5000)
+
 (t/deftest ^:azure list-test
-  (let [os (object-store (random-uuid))]
-    (os-test/test-list-objects os)))
+  (with-open [os (object-store (random-uuid))]
+    (os-test/test-list-objects os wait-time-ms)))
+
+(t/deftest ^:azure list-test-with-prior-objects
+  (let [prefix (random-uuid)]
+    (with-open [os (object-store prefix)]
+      (os-test/put-edn os "alice" :alice)
+      (os-test/put-edn os "alan" :alan)
+      (Thread/sleep wait-time-ms)
+      (t/is (= ["alan" "alice"] (.listObjects ^ObjectStore os))))
+
+    (with-open [os (object-store prefix)]
+      (t/testing "prior objects will still be there, should be available on a list request"
+        (t/is (= ["alan" "alice"] (.listObjects ^ObjectStore os))))
+      (t/testing "should be able to delete prior objects and have that reflected in list objects output"
+        @(.deleteObject ^ObjectStore os "alice")
+        (Thread/sleep wait-time-ms)
+        (t/is (= ["alan"] (.listObjects ^ObjectStore os)))))))
+
+(t/deftest ^:azure multiple-object-store-list-test
+  (let [prefix (random-uuid)]
+    (with-open [os-1 (object-store prefix)
+                os-2 (object-store prefix)]
+      (os-test/put-edn os-1 "alice" :alice)
+      (os-test/put-edn os-2 "alan" :alan)
+      (Thread/sleep wait-time-ms)
+      (t/is (= ["alan" "alice"] (.listObjects ^ObjectStore os-2))))))
 
 (t/deftest ^:azure test-eventhub-log
   (with-open [node (node/start-node {::azure/event-hub-log {:namespace eventhub-namespace

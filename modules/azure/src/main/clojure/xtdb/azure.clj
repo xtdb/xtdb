@@ -5,6 +5,7 @@
             [juxt.clojars-mirrors.integrant.core :as ig]
             [xtdb.azure.log :as tx-log]
             [xtdb.azure.object-store :as os]
+            [xtdb.azure.file-watch :as azure-file-watch]
             [xtdb.log :as xtdb-log]
             [xtdb.util :as util])
   (:import (com.azure.core.credential TokenCredential)
@@ -14,7 +15,8 @@
            (com.azure.messaging.eventhubs EventHubClientBuilder)
            (com.azure.resourcemanager.eventhubs EventHubsManager)
            (com.azure.resourcemanager.eventhubs.models EventHub EventHub$Definition EventHubs)
-           (com.azure.storage.blob BlobServiceClientBuilder)))
+           (com.azure.storage.blob BlobServiceClientBuilder)
+           (java.util.concurrent ConcurrentSkipListSet)))
 
 (derive ::blob-object-store :xtdb/object-store)
 
@@ -27,22 +29,34 @@
 (s/def ::storage-account string?)
 (s/def ::container string?)
 (s/def ::prefix string?)
+(s/def ::servicebus-namespace string?)
+(s/def ::servicebus-topic-name string?)
 
 (defmethod ig/prep-key ::blob-object-store [_ opts]
   (-> opts
       (util/maybe-update :prefix parse-prefix)))
 
 (defmethod ig/pre-init-spec ::blob-object-store [_]
-  (s/keys :req-un [::storage-account ::container]
+  (s/keys :req-un [::storage-account ::container ::servicebus-namespace ::servicebus-topic-name]
           :opt-un [::prefix]))
 
-(defmethod ig/init-key ::blob-object-store [_ {:keys [storage-account container prefix]}]
-  (let [blob-service-client (cond-> (-> (BlobServiceClientBuilder.)
+(defmethod ig/init-key ::blob-object-store [_ {:keys [storage-account container prefix] :as opts}]
+  (let [credential (.build (DefaultAzureCredentialBuilder.))
+        blob-service-client (cond-> (-> (BlobServiceClientBuilder.)
                                         (.endpoint (str "https://" storage-account ".blob.core.windows.net"))
-                                        (.credential (.build (DefaultAzureCredentialBuilder.)))
+                                        (.credential credential)
                                         (.buildClient)))
-        blob-client (.getBlobContainerClient blob-service-client container)]
-    (os/->AzureBlobObjectStore blob-client prefix)))
+        blob-client (.getBlobContainerClient blob-service-client container)
+        file-name-cache (ConcurrentSkipListSet.)
+        ;; Watch azure container for changes
+        file-list-watcher (azure-file-watch/open-file-list-watcher (assoc opts
+                                                                          :blob-container-client blob-client
+                                                                          :azure-credential credential)
+                                                                   file-name-cache)]
+    (os/->AzureBlobObjectStore blob-client
+                               prefix
+                               file-name-cache
+                               file-list-watcher)))
 
 (comment
 
@@ -51,14 +65,12 @@
                                                  :prefix (str "xtdb.azure-test." (random-uuid))})
                (ig/init-key ::blob-object-store)))
 
-  @(.getObject os "foo.txt")
+  @(.getObject os "foo.txt"))
 
-  )
-
+(s/def ::resource-group-name string?)
 (s/def ::namespace string?)
 (s/def ::event-hub-name string?)
 (s/def ::create-event-hub? boolean?)
-(s/def ::resource-group-name string?)
 (s/def ::retention-period-in-days number?)
 (s/def ::max-wait-time ::util/duration)
 (s/def ::poll-sleep-duration ::util/duration)
@@ -108,11 +120,11 @@
                                      (.fullyQualifiedNamespace fully-qualified-namespace)
                                      (.eventHubName event-hub-name))
         subscriber-handler (xtdb-log/->notifying-subscriber-handler nil)]
-    
+
     (when create-event-hub?
       (resource-group-present? opts)
       (create-event-hub-if-not-exists credential opts))
-    
+
     (tx-log/->EventHubLog subscriber-handler
                           (.buildAsyncProducerClient event-hub-client-builder)
                           (.buildConsumerClient event-hub-client-builder)
