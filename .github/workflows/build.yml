@@ -27,6 +27,13 @@ jobs:
           name: build-reports
           path: build/reports/
 
+      - name: Upload build reports (Core)
+        if: success() || failure() # i.e. not cancelled
+        uses: actions/upload-artifact@v3
+        with:
+          name: core-build-reports
+          path: core/build/reports/
+
   integration-test:
     name: Integration Test
     runs-on: ubuntu-latest
