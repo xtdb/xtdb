@@ -17,10 +17,11 @@
             xtdb.watermark)
   (:import (clojure.lang IPersistentMap MapEntry)
            [java.lang AutoCloseable]
-           (java.util ArrayList Arrays Iterator LinkedList List ListIterator Map)
+           java.nio.ByteBuffer
+           (java.util ArrayList Iterator LinkedList List ListIterator Map)
            (java.util.function IntConsumer)
-           org.apache.arrow.memory.ArrowBuf
-           org.apache.arrow.memory.BufferAllocator
+           (java.util.stream IntStream)
+           (org.apache.arrow.memory ArrowBuf BufferAllocator)
            [org.apache.arrow.memory.util ArrowBufPointer]
            (org.apache.arrow.vector VectorLoader VectorSchemaRoot)
            xtdb.api.protocols.TransactionInstant
@@ -30,7 +31,7 @@
            (xtdb.metadata IMetadataManager)
            xtdb.object_store.ObjectStore
            xtdb.operator.IRelationSelector
-           (xtdb.trie ArrowHashTrie ArrowHashTrie$Leaf HashTrie LeafMergeQueue LeafMergeQueue$LeafPointer LiveHashTrie$Leaf)
+           (xtdb.trie ArrowHashTrie ArrowHashTrie$Leaf LeafMergeQueue LeafMergeQueue$LeafPointer LiveHashTrie$Leaf)
            (xtdb.vector IRelationWriter IRowCopier IVectorReader IVectorWriter RelationReader)
            (xtdb.watermark IWatermark IWatermarkSource Watermark)))
 
@@ -398,6 +399,31 @@
                                  system-from
                                  nil))))))))))
 
+(defn iid-selector [^ByteBuffer iid-bb]
+  (reify IRelationSelector
+    (select [_ allocator rel-rdr _params]
+      (with-open [arrow-buf (util/->arrow-buf-view allocator iid-bb)]
+        (let [iid-ptr (ArrowBufPointer. arrow-buf 0 (.capacity iid-bb))
+              ptr (ArrowBufPointer.)
+              iid-rdr (.readerForName rel-rdr "xt$iid")
+              value-count (.valueCount iid-rdr)]
+          (if (pos-int? value-count)
+            ;; lower-bound
+            (loop [left 0 right (dec value-count)]
+              (if (= left right)
+                (if (= iid-ptr (.getPointer iid-rdr left ptr))
+                  ;; upper bound
+                  (loop [right left]
+                    (if (or (>= right value-count) (not= iid-ptr (.getPointer iid-rdr right ptr)))
+                      (.toArray (IntStream/range left right))
+                      (recur (inc right))))
+                  (int-array 0))
+                (let [mid (quot (+ left right) 2)]
+                  (if (<= (.compareTo iid-ptr (.getPointer iid-rdr mid ptr)) 0)
+                    (recur left mid)
+                    (recur (inc mid) right)))))
+            (int-array 0)))))))
+
 (deftype TrieCursor [^BufferAllocator allocator, arrow-leaves, ^Iterator merge-tasks
                      col-names, ^Map col-preds, ^longs temporal-timestamps,
                      params, ^IPersistentMap picker-state]
@@ -407,7 +433,10 @@
       (let [{task-leaves :leaves, :keys [path]} (.next merge-tasks)]
         (with-open [out-rel (vw/->rel-writer allocator)]
           (let [loaded-leaves (mapv (fn [{:keys [load-leaf]}]
-                                      (load-leaf))
+                                      (let [{:keys [^RelationReader rel-rdr] :as res} (load-leaf)]
+                                        (if-let [^IRelationSelector iid-pred (get col-preds "xt$iid")]
+                                          (assoc res :rel-rdr (.select rel-rdr (.select iid-pred allocator rel-rdr params)))
+                                          res)))
                                     task-leaves)
                 merge-q (LeafMergeQueue. path
                                          (into-array IVectorReader
@@ -433,7 +462,7 @@
                            (as-> rel (reduce (fn [^RelationReader rel, ^IRelationSelector col-pred]
                                                (.select rel (.select col-pred allocator rel params)))
                                              rel
-                                             (vals col-preds)))))))
+                                             (vals (dissoc col-preds "xt$iid"))))))))
         true)
 
       false))
@@ -441,7 +470,8 @@
   (close [_]
     (util/close arrow-leaves)))
 
-(defn- read-tries [^ObjectStore obj-store, ^IBufferPool buffer-pool, ^String table-name, ^ILiveTableWatermark live-table-wm]
+(defn- read-tries [^ObjectStore obj-store, ^IBufferPool buffer-pool, ^String table-name, ^ILiveTableWatermark live-table-wm
+                   {:keys [^ByteBuffer iid-bb] :as _opts}]
   (let [{trie-files :trie, leaf-files :leaf} (->> (.listObjects obj-store (format "tables/%s/chunks" table-name))
                                                   (keep (fn [file-name]
                                                           (when-let [[_ file-type chunk-idx-str] (re-find #"/(leaf|trie)-c(.+?)\.arrow$" file-name)]
@@ -477,41 +507,45 @@
                 (with-open [record-batch (util/->arrow-record-batch-view (first arrow-blocks) buf)]
                   (.load loader record-batch)
                   (.add trie-roots root)))))
+          (let [hash-tries (cond-> (mapv #(ArrowHashTrie/from %) trie-roots)
+                             live-table-wm (conj (.liveTrie live-table-wm)))]
 
-          {:arrow-leaves (mapv (fn [{:keys [leaf-buf leaf-root]}]
-                                 (reify AutoCloseable
-                                   (close [_]
-                                     (util/close leaf-root)
-                                     (util/close leaf-buf))))
-                               arrow-leaves)
+            {:arrow-leaves (mapv (fn [{:keys [leaf-buf leaf-root]}]
+                                   (reify AutoCloseable
+                                     (close [_]
+                                       (util/close leaf-root)
+                                       (util/close leaf-buf))))
+                                 arrow-leaves)
 
-           :merge-tasks (vec (for [{:keys [path leaves]} (trie/trie-merge-tasks (cond-> (mapv #(ArrowHashTrie/from %) trie-roots)
-                                                                                  live-table-wm (conj (.liveTrie live-table-wm))))]
-                               {:path path
-                                :leaves (mapv (fn [{:keys [ordinal leaf]}]
-                                                (condp = (class leaf)
-                                                  ArrowHashTrie$Leaf
-                                                  (let [page-idx (.getPageIndex ^ArrowHashTrie$Leaf leaf)
-                                                        {:keys [leaf-buf ^VectorLoader loader, ^VectorSchemaRoot leaf-root arrow-blocks,
-                                                                !current-page-idx
-                                                                ^LeafMergeQueue$LeafPointer leaf-ptr]} (nth arrow-leaves ordinal)]
+             :merge-tasks (vec (for [{:keys [path leaves]}
+                                     (if iid-bb
+                                       (vector (trie/iid-trie-merge-task hash-tries (.array iid-bb)))
+                                       (trie/trie-merge-tasks hash-tries))]
+                                 {:path path
+                                  :leaves (mapv (fn [{:keys [ordinal leaf]}]
+                                                  (condp = (class leaf)
+                                                    ArrowHashTrie$Leaf
+                                                    (let [page-idx (.getPageIndex ^ArrowHashTrie$Leaf leaf)
+                                                          {:keys [leaf-buf ^VectorLoader loader, ^VectorSchemaRoot leaf-root arrow-blocks,
+                                                                  !current-page-idx
+                                                                  ^LeafMergeQueue$LeafPointer leaf-ptr]} (nth arrow-leaves ordinal)]
+                                                      {:load-leaf (fn []
+                                                                    (when-not (= page-idx @!current-page-idx)
+                                                                      (reset! !current-page-idx page-idx)
+
+                                                                      (with-open [rb (util/->arrow-record-batch-view (nth arrow-blocks page-idx) leaf-buf)]
+                                                                        (.load loader rb)
+                                                                        (.reset leaf-ptr)))
+
+                                                                    {:rel-rdr (vr/<-root leaf-root)
+                                                                     :leaf-ptr leaf-ptr})})
+
+                                                    LiveHashTrie$Leaf
                                                     {:load-leaf (fn []
-                                                                  (when-not (= page-idx @!current-page-idx)
-                                                                    (reset! !current-page-idx page-idx)
+                                                                  {:rel-rdr (.select (.liveRelation live-table-wm) (.data ^LiveHashTrie$Leaf leaf))
+                                                                   :leaf-ptr (LeafMergeQueue$LeafPointer. (count arrow-leaves))})}))
 
-                                                                    (with-open [rb (util/->arrow-record-batch-view (nth arrow-blocks page-idx) leaf-buf)]
-                                                                      (.load loader rb)
-                                                                      (.reset leaf-ptr)))
-
-                                                                  {:rel-rdr (vr/<-root leaf-root)
-                                                                   :leaf-ptr leaf-ptr})})
-
-                                                  LiveHashTrie$Leaf
-                                                  {:load-leaf (fn []
-                                                                {:rel-rdr (.select (.liveRelation live-table-wm) (.data ^LiveHashTrie$Leaf leaf))
-                                                                 :leaf-ptr (LeafMergeQueue$LeafPointer. (count arrow-leaves))})}))
-
-                                              leaves)}))})))))
+                                                leaves)}))}))))))
 
 ;; The consumers for different leafs need to share some state so the logic of how to advance
 ;; is correct. For example if the `skip-iid-ptr` gets set in one leaf consumer it should also affect
@@ -521,7 +555,9 @@
                    table-name, col-names, ^longs temporal-range
                    ^Map col-preds, params, scan-opts]
   (let [^ILiveTableWatermark live-table-wm (some-> (.liveIndex wm) (.liveTable table-name))
-        {:keys [arrow-leaves ^List merge-tasks]} (read-tries obj-store buffer-pool table-name live-table-wm)]
+
+        {:keys [arrow-leaves ^List merge-tasks]}
+        (read-tries obj-store buffer-pool table-name live-table-wm (select-keys scan-opts [:iid-bb]))]
     (try
       (->TrieCursor allocator arrow-leaves (.iterator merge-tasks)
                     col-names col-preds
@@ -537,6 +573,12 @@
       (catch Throwable t
         (util/close arrow-leaves)
         (throw t)))))
+
+(defn selects->iid-byte-buffer ^ByteBuffer [selects]
+  (when-let [eid-select (or (get selects 'xt/id) (get selects 'xt$id))]
+    (let [eid (nth eid-select 2)]
+      (when (and (= '= (first eid-select)) (s/valid? ::lp/value eid))
+        (trie/->iid eid)))))
 
 (defmethod ig/prep-key ::scan-emitter [_ opts]
   (merge opts
@@ -602,11 +644,17 @@
                            (first arg))
                          (into {}))
 
+            iid-bb (selects->iid-byte-buffer selects)
+
             col-preds (->> (for [[col-name select-form] selects]
                              ;; for temporal preds, we may not need to re-apply these if they can be represented as a temporal range.
                              (MapEntry/create (str col-name)
                                               (expr/->expression-relation-selector select-form {:col-types col-types, :param-types param-types})))
                            (into {}))
+
+            col-preds (cond-> col-preds
+                        iid-bb
+                        (assoc "xt$iid" (iid-selector iid-bb)))
 
             metadata-args (vec (for [[col-name select] selects
                                      :when (not (types/temporal-column? (util/str->normal-form-str (str col-name))))]
@@ -625,7 +673,8 @@
                      (let [_metadata-pred (expr.meta/->metadata-selector (cons 'and metadata-args) col-types params)
                            scan-opts (cond-> scan-opts
                                        (nil? for-valid-time)
-                                       (assoc :for-valid-time (if default-all-valid-time? [:all-time] [:at [:now :now]])))]
+                                       (assoc :for-valid-time (if default-all-valid-time? [:all-time] [:at [:now :now]])
+                                              :iid-bb iid-bb))]
                        (->4r-cursor allocator object-store buffer-pool
                                     watermark
                                     normalized-table-name
