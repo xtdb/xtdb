@@ -12,6 +12,7 @@
             [xtdb.operator.scan :as scan]
             [xtdb.rewrite :refer [zmatch]]
             [xtdb.sql :as sql]
+            [xtdb.trie :as trie]
             [xtdb.tx-producer :as txp]
             [xtdb.types :as types]
             [xtdb.util :as util]
@@ -23,12 +24,10 @@
            java.lang.AutoCloseable
            java.nio.ByteBuffer
            (java.nio.channels ClosedByInterruptException)
-           java.security.MessageDigest
            (java.time Instant ZoneId)
-           (java.util Arrays)
            (java.util.concurrent CompletableFuture PriorityBlockingQueue TimeUnit)
            (java.util.concurrent.locks StampedLock)
-           (java.util.function Consumer Supplier)
+           (java.util.function Consumer)
            (org.apache.arrow.memory BufferAllocator)
            (org.apache.arrow.vector BitVector)
            (org.apache.arrow.vector.complex DenseUnionVector ListVector)
@@ -64,26 +63,6 @@
 (definterface OpIndexer
   (^org.apache.arrow.vector.complex.DenseUnionVector indexOp [^long tx-op-idx]
    "returns a tx-ops-vec of more operations (mostly for `:call`)"))
-
-(def ^:private ^java.lang.ThreadLocal !msg-digest
-  (ThreadLocal/withInitial
-   (reify Supplier
-     (get [_]
-       (MessageDigest/getInstance "SHA-256")))))
-
-(defn- ->iid ^bytes [eid]
-  (ByteBuffer/wrap
-   (if (uuid? eid)
-     (util/uuid->bytes eid)
-
-     (let [^bytes eid-bytes (cond
-                              (string? eid) (.getBytes (str "s" eid))
-                              (keyword? eid) (.getBytes (str "k" eid))
-                              (integer? eid) (.getBytes (str "i" eid))
-                              :else (throw (UnsupportedOperationException. (pr-str (class eid)))))]
-       (-> ^MessageDigest (.get !msg-digest)
-           (.digest eid-bytes)
-           (Arrays/copyOfRange 0 16))))))
 
 (defn- ->put-indexer ^xtdb.indexer.OpIndexer [^RowCounter row-counter, ^ILiveIndexTx live-idx-tx,
                                               ^IVectorReader tx-ops-rdr, ^Instant system-time]
@@ -126,7 +105,7 @@
                                     {:valid-from (util/micros->instant valid-from)
                                      :valid-to (util/micros->instant valid-to)})))
 
-          (.logPut live-table (->iid eid) valid-from valid-to #(.copyRow doc-copier tx-op-idx))
+          (.logPut live-table (trie/->iid eid) valid-from valid-to #(.copyRow doc-copier tx-op-idx))
           (.addRows row-counter 1))
 
         nil))))
@@ -154,7 +133,7 @@
                                      :valid-to (util/micros->instant valid-to)})))
 
           (-> (.liveTable live-idx-tx table)
-              (.logDelete (->iid eid) valid-from valid-to))
+              (.logDelete (trie/->iid eid) valid-from valid-to))
 
           (.addRows row-counter 1))
 
@@ -171,7 +150,7 @@
               eid (.getObject id-rdr tx-op-idx)]
 
           (-> (.liveTable live-idx-tx table)
-              (.logEvict (->iid eid)))
+              (.logEvict (trie/->iid eid)))
 
           (.addRows row-counter 1))
 
@@ -325,7 +304,7 @@
                                         {:valid-from (util/micros->instant valid-from)
                                          :valid-to (util/micros->instant valid-to)})))
 
-              (.logPut live-idx-table (->iid eid) valid-from valid-to #(.copyRow live-idx-table-copier idx))))
+              (.logPut live-idx-table (trie/->iid eid) valid-from valid-to #(.copyRow live-idx-table-copier idx))))
 
           (.addRows row-counter row-count))))))
 
@@ -437,7 +416,7 @@
         live-table (.liveTable live-idx-tx txs-table)
         doc-writer (.docWriter live-table)]
 
-    (.logPut live-table (->iid tx-id) system-time-µs util/end-of-time-μs
+    (.logPut live-table (trie/->iid tx-id) system-time-µs util/end-of-time-μs
              (fn write-doc! []
                (.startStruct doc-writer)
                (doto (.structKeyWriter doc-writer "xt$id" :i64)

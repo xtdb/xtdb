@@ -1,22 +1,43 @@
 (ns xtdb.trie
   (:require [xtdb.buffer-pool]
+            [xtdb.metadata :as meta]
             [xtdb.object-store]
             [xtdb.types :as types]
             [xtdb.util :as util]
-            [xtdb.vector.writer :as vw]
-            [xtdb.metadata :as meta])
+            [xtdb.vector.writer :as vw])
   (:import (java.nio ByteBuffer)
+           java.security.MessageDigest
            (java.util Arrays)
            (java.util.concurrent.atomic AtomicInteger)
-           (java.util.function IntConsumer)
+           (java.util.function IntConsumer Supplier)
            (java.util.stream IntStream)
+           java.security.MessageDigest
            (org.apache.arrow.memory BufferAllocator)
            (org.apache.arrow.vector VectorSchemaRoot)
-           (org.apache.arrow.vector.types.pojo ArrowType$Union Schema)
            org.apache.arrow.vector.types.UnionMode
+           (org.apache.arrow.vector.types.pojo ArrowType$Union Schema)
            (xtdb.object_store ObjectStore)
            (xtdb.trie HashTrie HashTrie$Node LiveHashTrie LiveHashTrie$Leaf)
            (xtdb.vector IVectorReader RelationReader)))
+
+(def ^:private ^java.lang.ThreadLocal !msg-digest
+  (ThreadLocal/withInitial
+   (reify Supplier
+     (get [_]
+       (MessageDigest/getInstance "SHA-256")))))
+
+(defn ->iid ^ByteBuffer [eid]
+  (if (uuid? eid)
+    (util/uuid->byte-buffer eid)
+    (ByteBuffer/wrap
+     (let [^bytes eid-bytes (cond
+                              (string? eid) (.getBytes (str "s" eid))
+                              (keyword? eid) (.getBytes (str "k" eid))
+                              (integer? eid) (.getBytes (str "i" eid))
+                              :else (throw (UnsupportedOperationException. (pr-str (class eid)))))]
+       (-> ^MessageDigest (.get !msg-digest)
+           (.digest eid-bytes)
+           (Arrays/copyOfRange 0 16))))))
 
 (def ^org.apache.arrow.vector.types.pojo.Schema trie-schema
   (Schema. [(types/->field "nodes" (ArrowType$Union. UnionMode/Dense (int-array (range 3))) false
