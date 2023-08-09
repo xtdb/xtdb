@@ -1,2 +1,0 @@
-(ns xtdb.vector.indirect)
-
