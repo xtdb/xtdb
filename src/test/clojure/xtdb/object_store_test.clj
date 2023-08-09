@@ -39,7 +39,7 @@
   (->> (ig/prep-key ::os/memory-object-store {})
        (ig/init-key ::os/memory-object-store)))
 
-(defn- fs ^Closeable [path]
+(defn fs ^Closeable [path]
   (->> (ig/prep-key ::os/file-system-object-store {:root-path path, :pool-size 2})
        (ig/init-key ::os/file-system-object-store)))
 

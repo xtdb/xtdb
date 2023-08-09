@@ -197,18 +197,25 @@
     (locking this
       (util/close live-rel))))
 
-(defn- ->live-table [allocator object-store table-name]
-  (util/with-close-on-catch [rel (trie/open-leaf-root allocator)]
-    (let [iid-wtr (.writerForName rel "xt$iid")
-          op-wtr (.writerForName rel "op")
-          put-wtr (.writerForField op-wtr trie/put-field)
-          delete-wtr (.writerForField op-wtr trie/delete-field)]
-      (->LiveTable allocator object-store table-name rel
-                   (LiveHashTrie/emptyTrie (.getVector iid-wtr))
-                   iid-wtr (.writerForName rel "xt$system_from")
-                   put-wtr (.structKeyWriter put-wtr "xt$valid_from") (.structKeyWriter put-wtr "xt$valid_to") (.structKeyWriter put-wtr "xt$doc")
-                   delete-wtr (.structKeyWriter delete-wtr "xt$valid_from") (.structKeyWriter delete-wtr "xt$valid_to")
-                   (.writerForField op-wtr trie/evict-field)))))
+(defn ->live-table
+  ([allocator object-store table-name] (->live-table allocator object-store table-name {}))
+
+  ([allocator object-store table-name
+    {:keys [->live-trie]
+     :or {->live-trie (fn [iid-vec]
+                        (LiveHashTrie/emptyTrie iid-vec))}}]
+
+   (util/with-close-on-catch [rel (trie/open-leaf-root allocator)]
+     (let [iid-wtr (.writerForName rel "xt$iid")
+           op-wtr (.writerForName rel "op")
+           put-wtr (.writerForField op-wtr trie/put-field)
+           delete-wtr (.writerForField op-wtr trie/delete-field)]
+       (->LiveTable allocator object-store table-name rel
+                    (->live-trie (.getVector iid-wtr))
+                    iid-wtr (.writerForName rel "xt$system_from")
+                    put-wtr (.structKeyWriter put-wtr "xt$valid_from") (.structKeyWriter put-wtr "xt$valid_to")
+                    (.structKeyWriter put-wtr "xt$doc") delete-wtr (.structKeyWriter delete-wtr "xt$valid_from")
+                    (.structKeyWriter delete-wtr "xt$valid_to") (.writerForField op-wtr trie/evict-field))))))
 
 (defrecord LiveIndex [^BufferAllocator allocator, ^ObjectStore object-store, ^Map tables]
   ILiveIndex

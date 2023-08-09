@@ -10,6 +10,7 @@ public record LiveHashTrie(Node rootNode, ElementAddressableVector iidVec) imple
 
     private static final int LOG_LIMIT = 64;
     private static final int PAGE_LIMIT = 1024;
+    private static final int MAX_LEVEL = 32;
 
     public sealed interface Node extends HashTrie.Node<Node> {
         Node add(LiveHashTrie trie, int idx);
@@ -196,7 +197,7 @@ public record LiveHashTrie(Node rootNode, ElementAddressableVector iidVec) imple
             var log = new int[this.logLimit];
             var logCount = 0;
 
-            if (data.length > this.pageLimit) {
+            if (data.length > this.pageLimit && path.length < MAX_LEVEL) {
                 var childBuckets = idxBuckets(trie, data, path);
 
                 var childNodes = IntStream.range(0, childBuckets.length)
