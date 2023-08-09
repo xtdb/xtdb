@@ -1,4 +1,4 @@
-= Developing core2
+= Developing XTDB2
 
 The top-level project ties all the other projects together for convenience whilst working within this repo.
 All of the below commands should be run in the *root* of the core2 repo.
