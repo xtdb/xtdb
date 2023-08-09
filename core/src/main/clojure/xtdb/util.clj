@@ -24,7 +24,7 @@
            (org.apache.arrow.compression CommonsCompressionFactory)
            (org.apache.arrow.flatbuf Footer Message RecordBatch)
            (org.apache.arrow.memory AllocationManager ArrowBuf BufferAllocator)
-           (org.apache.arrow.memory.util ByteFunctionHelpers MemoryUtil)
+           (org.apache.arrow.memory.util ArrowBufPointer ByteFunctionHelpers MemoryUtil)
            (org.apache.arrow.vector ValueVector VectorLoader VectorSchemaRoot)
            (org.apache.arrow.vector.ipc ArrowFileWriter ArrowStreamWriter ArrowWriter)
            (org.apache.arrow.vector.ipc.message ArrowBlock ArrowFooter ArrowRecordBatch MessageSerializer)
@@ -116,6 +116,9 @@
              (.putLong (.getLeastSignificantBits uuid)))]
     (.position bb 0)
     bb))
+
+(defn byte-buffer->uuid [^ByteBuffer bb]
+  (UUID. (.getLong bb 0) (.getLong bb 1)))
 
 (defn ->lex-hex-string
   "Turn a long into a lexicographically-sortable hex string by prepending the length"

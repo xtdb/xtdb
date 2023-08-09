@@ -3,12 +3,16 @@
             [xtdb.api :as xt]
             [xtdb.node :as node]
             [xtdb.operator :as op]
+            [xtdb.operator.scan :as scan]
             [xtdb.test-util :as tu]
+            [xtdb.trie :as trie]
             [xtdb.util :as util]
-            [xtdb.operator.scan :as scan])
-  (:import xtdb.operator.IRaQuerySource
-           (java.util LinkedList)
-           (xtdb.operator.scan RowConsumer) ))
+            [xtdb.vector.writer :as vw])
+  (:import (java.util LinkedList)
+           xtdb.operator.IRaQuerySource
+           xtdb.operator.IRelationSelector
+           (xtdb.operator.scan RowConsumer)
+           (xtdb.vector RelationReader)))
 
 (t/use-fixtures :each tu/with-mock-clock tu/with-allocator)
 
@@ -385,6 +389,96 @@
              (tu/query-ra
               '[:scan {:table xt_docs} [xt/id {col-x (= col-x "toto")}]]
               {:node node})))))
+
+(t/deftest test-iid-fast-path
+  (let [before-uuid #uuid "00000000-0000-0000-0000-000000000000"
+        search-uuid #uuid "80000000-0000-0000-0000-000000000000"
+        after-uuid #uuid "f0000000-0000-0000-0000-000000000000"]
+    (with-open [node (node/start-node {})]
+      (xt/submit-tx node [[:put :xt-docs {:xt/id before-uuid :version 1}]
+                          [:put :xt-docs {:xt/id search-uuid :version 1}]
+                          [:put :xt-docs {:xt/id after-uuid :version 1}]])
+      (xt/submit-tx node [[:put :xt-docs {:xt/id search-uuid :version 2}]])
+
+      (t/is (nil? (scan/selects->iid-byte-buffer {})))
+
+      (t/is (= (util/uuid->byte-buffer search-uuid)
+               (scan/selects->iid-byte-buffer {'xt/id (list '= 'xt/id search-uuid)})))
+
+      (t/is (nil? (scan/selects->iid-byte-buffer {'xt/id (list '< 'xt/id search-uuid)})))
+
+      (t/is (= [{:version 2, :xt/id search-uuid}]
+               (tu/query-ra [:scan {:table 'xt_docs} ['version {'xt/id (list '= 'xt/id search-uuid)}]]
+                            {:node node})))
+
+      (t/is (= [{:version 2, :xt/id search-uuid}
+                {:version 1, :xt/id search-uuid}]
+               (tu/query-ra [:scan {:table 'xt_docs
+                                    :for-valid-time :all-time}
+                             ['version {'xt/id (list '= 'xt/id search-uuid)}]]
+                            {:node node}))))))
+
+(t/deftest test-iid-fast-path-chunk-boundary
+  (let [before-uuid #uuid "00000000-0000-0000-0000-000000000000"
+        search-uuid #uuid "80000000-0000-0000-0000-000000000000"
+        after-uuid #uuid "f0000000-0000-0000-0000-000000000000"
+        uuids [before-uuid search-uuid after-uuid]
+        !search-uuid-versions (atom [])]
+    (with-open [node (node/start-node {:xtdb/indexer {:rows-per-chunk 20}})]
+      (->> (for [i (range 110)]
+             (let [uuid (rand-nth uuids)]
+               (when (= uuid search-uuid)
+                 (swap! !search-uuid-versions conj i))
+               [[:put :xt_docs {:xt/id uuid :version i}]]))
+           (mapv #(xt/submit-tx node %)))
+
+      (t/is (= [{:version (last @!search-uuid-versions), :xt/id search-uuid}]
+               (tu/query-ra [:scan {:table 'xt_docs} ['version {'xt/id (list '= 'xt/id search-uuid)}]]
+                            {:node node})))
+
+      (t/is (=  (into #{} @!search-uuid-versions)
+                (->> (tu/query-ra [:scan {:table 'xt_docs
+                                          :for-valid-time :all-time}
+                                   ['version {'xt/id (list '= 'xt/id search-uuid)}]]
+                                  {:node node})
+                     (map :version)
+                     set))))))
+
+(t/deftest test-iid-selector
+  (let [before-uuid #uuid "00000000-0000-0000-0000-000000000000"
+        search-uuid #uuid "80000000-0000-0000-0000-000000000000"
+        after-uuid #uuid "f0000000-0000-0000-0000-000000000000"
+        ^IRelationSelector iid-selector (scan/iid-selector (util/uuid->byte-buffer search-uuid))]
+    (letfn [(test-uuids [uuids]
+              (with-open [rel-wrt (vw/->rel-writer tu/*allocator*)]
+                (let [iid-wtr (.writerForName rel-wrt "xt$iid" [:fixed-size-binary 16])]
+                  (doseq [uuid uuids]
+                    (.writeBytes iid-wtr (util/uuid->byte-buffer uuid))))
+                (.select iid-selector tu/*allocator* (vw/rel-wtr->rdr rel-wrt) nil)))]
+
+      (t/is (= nil
+               (seq (test-uuids [])))
+            "empty relation")
+
+      (t/is (= nil
+               (seq (test-uuids [before-uuid before-uuid])))
+            "only \"smaller\" uuids")
+
+      (t/is (= nil
+               (seq (test-uuids [after-uuid after-uuid])))
+            "only \"larger\" uuids")
+
+      (t/is (= [1 2]
+               (seq (test-uuids [before-uuid search-uuid search-uuid])))
+            "smaller uuids and no larger ones")
+
+      (t/is (= [0 1]
+               (seq (test-uuids [search-uuid search-uuid after-uuid])))
+            "no smaller uuids but larger ones")
+
+      (t/is (= [1 2]
+               (seq (test-uuids [before-uuid search-uuid search-uuid after-uuid])))
+            "general case"))))
 
 (t/deftest test-correct-rectangle-cutting
   (letfn [(test-er [& events]

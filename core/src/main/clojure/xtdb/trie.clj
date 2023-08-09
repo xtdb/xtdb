@@ -176,3 +176,29 @@
                                              {:ordinal ordinal, :leaf node})))))}])))]
 
     (vec (trie-merge-tasks* (map #(some-> ^HashTrie % (.rootNode)) tries) []))))
+
+(defn- bucket-for [^bytes iid level]
+  (let [level-offset-bits (* HashTrie/LEVEL_BITS (inc level))
+        level-offset-bytes (/ (- level-offset-bits HashTrie/LEVEL_BITS) Byte/SIZE)]
+    (bit-and (bit-shift-right (get iid level-offset-bytes) (mod level-offset-bits Byte/SIZE)) HashTrie/LEVEL_MASK)))
+
+(defn iid-trie-merge-task [tries ^bytes iid]
+  (letfn [(trie-merge-tasks* [nodes path level]
+            (let [bucket-idx (bucket-for iid level)
+                  trie-children (mapv #(some-> ^HashTrie$Node % (.children)) nodes)]
+              (if (some identity trie-children)
+                (trie-merge-tasks* (mapv (fn [node ^objects node-children]
+                                           (if node-children
+                                             (aget node-children bucket-idx)
+                                             node))
+                                         nodes trie-children)
+                                   (conj path bucket-idx)
+                                   (inc level))
+                {:path (byte-array path)
+                 :leaves (->> nodes
+                              (into [] (keep-indexed
+                                        (fn [ordinal ^HashTrie$Node node]
+                                          (when node
+                                            {:ordinal ordinal, :leaf node})))))})))]
+
+    (trie-merge-tasks* (map #(some-> ^HashTrie % (.rootNode)) tries) [] 0)))
