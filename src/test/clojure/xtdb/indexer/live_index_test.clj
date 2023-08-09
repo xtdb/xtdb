@@ -1,6 +1,6 @@
 (ns xtdb.indexer.live-index-test
   (:require [clojure.java.io :as io]
-            [clojure.test :as t]
+            [clojure.test :as t :refer [deftest]]
             [xtdb.api :as xt]
             [xtdb.api.protocols :as xtp]
             [xtdb.indexer.live-index :as li]
@@ -78,16 +78,16 @@
                                     (->> (range 0 (.getValueCount iid-vec))
                                          (mapv #(vec (.getObject iid-vec %)))))))))))))))
 
-(t/deftest test-bucket-for
-  (let [uuid1 #uuid "7f30ffff-ffff-ffff-0000-000000000000"]
+(deftest test-bucket-for
+  (let [uuid1 #uuid "ce33e4b8-ec2f-4b80-8e9c-a4314005adbf"]
     (with-open [allocator (RootAllocator.)
-                iid-vec (doto ^FixedSizeBinaryVector (FixedSizeBinaryVector. "iid" allocator 8)
+                iid-vec (doto ^FixedSizeBinaryVector (FixedSizeBinaryVector. "iid" allocator 16)
                           (.setSafe 0 (util/uuid->bytes uuid1))
                           (.setValueCount 1))]
-      (let [iid-rdr (vr/vec->reader iid-vec)]
-        (t/is (= (HashTrie/bucketFor (.getPointer iid-rdr 0) 0) 0x7))
-        (t/is (= (HashTrie/bucketFor (.getPointer iid-rdr 0) 1) 0xf))
-        (t/is (= (HashTrie/bucketFor (.getPointer iid-rdr 0) 2) 0x3))))))
+      (t/is (= (HashTrie/bucketFor (.getDataPointer iid-vec 0) 0) 0xc))
+      (t/is (= (HashTrie/bucketFor (.getDataPointer iid-vec 0) 1) 0xe))
+      (t/is (= (HashTrie/bucketFor (.getDataPointer iid-vec 0) 18) 0x9))
+      (t/is (= (HashTrie/bucketFor (.getDataPointer iid-vec 0) 31) 0xf)))))
 
 (def txs
   [[[:put :hello {:xt/id #uuid "cb8815ee-85f7-4c61-a803-2ea1c949cf8d" :a 1}]
