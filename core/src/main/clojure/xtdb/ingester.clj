@@ -18,10 +18,6 @@
            org.apache.arrow.vector.ipc.ArrowStreamReader
            org.apache.arrow.vector.TimeStampMicroTZVector))
 
-#_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
-(definterface Ingester
-  (^java.util.concurrent.CompletableFuture #_<TransactionInstant> awaitTxAsync [^xtdb.api.protocols.TransactionInstant tx, ^java.time.Duration timeout]))
-
 (defmethod ig/prep-key :xtdb/ingester [_ opts]
   (-> (merge {:allocator (ig/ref :xtdb/allocator)
               :log (ig/ref :xtdb/log)
@@ -36,7 +32,6 @@
 
 (defmethod ig/init-key :xtdb/ingester [_ {:keys [^BufferAllocator allocator, ^Log log, ^IIndexer indexer]}]
   (let [!cancel-hook (promise)
-        awaiters (PriorityBlockingQueue.)
         !ingester-error (atom nil)]
     (.subscribe log
                 (:tx-id (.latestCompletedTx indexer))
@@ -48,46 +43,28 @@
                     (if (Thread/interrupted)
                       (throw (InterruptedException.))
 
-                      (try
+                      (condp = (Byte/toUnsignedInt (.get ^ByteBuffer (.-record record) 0))
+                        xt-log/hb-user-arrow-transaction
+                        (with-open [tx-ops-ch (util/->seekable-byte-channel (.record record))
+                                    sr (ArrowStreamReader. tx-ops-ch allocator)
+                                    tx-root (.getVectorSchemaRoot sr)]
+                          (.loadNextBatch sr)
 
-                        (condp = (Byte/toUnsignedInt (.get ^ByteBuffer (.-record record) 0))
-                          xt-log/hb-user-arrow-transaction
-                          (with-open [tx-ops-ch (util/->seekable-byte-channel (.record record))
-                                      sr (ArrowStreamReader. tx-ops-ch allocator)
-                                      tx-root (.getVectorSchemaRoot sr)]
-                            (.loadNextBatch sr)
+                          (let [^TimeStampMicroTZVector system-time-vec (.getVector tx-root "system-time")
+                                ^TransactionInstant tx-key (cond-> (.tx record)
+                                                             (not (.isNull system-time-vec 0))
+                                                             (assoc :system-time (-> (.get system-time-vec 0) (util/micros->instant))))]
 
-                            (let [^TimeStampMicroTZVector system-time-vec (.getVector tx-root "system-time")
-                                  ^TransactionInstant tx-key (cond-> (.tx record)
-                                                                     (not (.isNull system-time-vec 0))
-                                                                     (assoc :system-time (-> (.get system-time-vec 0) (util/micros->instant))))]
+                            (.indexTx indexer tx-key tx-root)))
 
-                              (.indexTx indexer tx-key tx-root)
-                              (await/notify-tx tx-key awaiters)))
+                        xt-log/hb-flush-chunk
+                        (let [expected-chunk-tx-id (get-bb-long (:record record) 1 -1)]
+                          (log/debugf "received flush-chunk signal: %d" expected-chunk-tx-id)
+                          (.forceFlush indexer (:tx record) expected-chunk-tx-id))
 
-                          xt-log/hb-flush-chunk
-                          (let [expected-chunk-tx-id (get-bb-long (:record record) 1 -1)]
-                            (log/debugf "received flush-chunk signal: %d" expected-chunk-tx-id)
-                            (.forceFlush indexer (:tx record) expected-chunk-tx-id))
-
-                          (throw (IllegalStateException. (format "Unrecognized log record type %d" (Byte/toUnsignedInt (.get ^ByteBuffer (.-record record) 0))))))
-
-                        (catch Throwable e
-                          (reset! !ingester-error e)
-                          (await/notify-ex e awaiters)
-                          (throw e)))))))
+                        (throw (IllegalStateException. (format "Unrecognized log record type %d" (Byte/toUnsignedInt (.get ^ByteBuffer (.-record record) 0))))))))))
 
     (reify
-      Ingester
-      (awaitTxAsync [_ tx timeout]
-        (-> (if tx
-              (await/await-tx-async tx
-                                    #(or (some-> @!ingester-error throw)
-                                         (.latestCompletedTx indexer))
-                                    awaiters)
-              (CompletableFuture/completedFuture (.latestCompletedTx indexer)))
-            (cond-> timeout (.orTimeout (.toMillis timeout) TimeUnit/MILLISECONDS))))
-
       AutoCloseable
       (close [_]
         (util/try-close @!cancel-hook)))))

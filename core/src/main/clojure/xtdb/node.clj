@@ -4,14 +4,12 @@
             [xtdb.datalog :as d]
             [xtdb.sql :as sql]
             xtdb.indexer
-            [xtdb.ingester :as ingest]
             [xtdb.operator :as op]
             [xtdb.operator.scan :as scan]
             [xtdb.tx-producer :as txp]
             [xtdb.util :as util]
             [juxt.clojars-mirrors.integrant.core :as ig])
   (:import xtdb.indexer.IIndexer
-           xtdb.ingester.Ingester
            xtdb.operator.IRaQuerySource
            (xtdb.tx_producer ITxProducer)
            (java.io Closeable Writer)
@@ -47,7 +45,7 @@
       (update-in [:basis :after-tx] xtp/max-tx (get-in opts [:basis :tx]))))
 
 (defrecord Node [^BufferAllocator allocator
-                 ^Ingester ingester, ^IIndexer indexer
+                 ^IIndexer indexer
                  ^ITxProducer tx-producer
                  ^IRaQuerySource ra-src, wm-src, scan-emitter
                  default-tz
@@ -57,7 +55,7 @@
   (open-query& [_ query query-opts]
     (let [query-opts (-> (into {:default-tz default-tz} query-opts)
                          (with-after-tx-default))
-          !await-tx (.awaitTxAsync ingester (get-in query-opts [:basis :after-tx]) (:basis-timeout query-opts))]
+          !await-tx (.awaitTxAsync indexer (get-in query-opts [:basis :after-tx]) (:basis-timeout query-opts))]
       (if (string? query)
         (-> !await-tx
             (util/then-apply
@@ -101,7 +99,6 @@
   (merge {:allocator (ig/ref :xtdb/allocator)
           :indexer (ig/ref :xtdb/indexer)
           :wm-src (ig/ref :xtdb/indexer)
-          :ingester (ig/ref :xtdb/ingester)
           :tx-producer (ig/ref ::txp/tx-producer)
           :default-tz (ig/ref :xtdb/default-tz)
           :ra-src (ig/ref :xtdb.operator/ra-query-source)

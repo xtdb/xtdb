@@ -5,7 +5,6 @@
             [integrant.core :as i]
             [integrant.repl :as ir]
             [xtdb.datasets.tpch :as tpch]
-            [xtdb.ingester :as ingest]
             [xtdb.node :as node]
             [xtdb.test-util :as tu]
             [xtdb.util :as util]
@@ -101,8 +100,7 @@
                 #'tpch/tpch-q5-local-supplier-volume
                 #'tpch/tpch-q9-product-type-profit-measure]]
       (prn !q)
-      (let [db (ingest/snapshot (tu/component node :xtdb/ingester))]
-        (time (tu/query-ra @!q db))))))
+      (time (tu/query-ra @!q node)))))
 
 (defn read-arrow-file [^Path path]
   (reify clojure.lang.IReduceInit

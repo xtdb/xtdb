@@ -30,7 +30,6 @@
            org.slf4j.LoggerFactory
            (xtdb ICursor InstantSource)
            xtdb.indexer.IIndexer
-           xtdb.ingester.Ingester
            (xtdb.operator IRaQuerySource PreparedQuery)
            (xtdb.vector IVectorReader RelationReader)))
 
@@ -109,7 +108,7 @@
    (then-await-tx tx node nil))
 
   (^xtdb.api.protocols.TransactionInstant [tx node ^Duration timeout]
-   @(.awaitTxAsync ^Ingester (util/component node :xtdb/ingester) tx timeout)))
+   @(.awaitTxAsync ^IIndexer (util/component node :xtdb/indexer) tx timeout)))
 
 (defn latest-completed-tx ^xtdb.api.protocols.TransactionInstant [node]
   (:latest-completed-tx (api/status node)))

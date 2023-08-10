@@ -3,7 +3,6 @@
             [juxt.clojars-mirrors.integrant.core :as ig]
             [xtdb.api :as xt]
             xtdb.indexer
-            xtdb.ingester
             [xtdb.operator :as op]
             [xtdb.sql :as sql]
             [xtdb.types :as types]
@@ -22,7 +21,6 @@
            (org.apache.arrow.vector FieldVector VectorSchemaRoot)
            org.apache.arrow.vector.types.pojo.Schema
            xtdb.indexer.IIndexer
-           xtdb.ingester.Ingester
            (xtdb.operator BoundQuery IRaQuerySource PreparedQuery)
            xtdb.vector.IVectorReader))
 
@@ -47,12 +45,12 @@
 (defn- pack-result ^org.apache.arrow.flight.Result [res]
   (Result. (.toByteArray (Any/pack res))))
 
-(defn then-await-fn ^java.util.concurrent.CompletableFuture [cf {:keys [^Ingester ingester]}]
+(defn then-await-fn ^java.util.concurrent.CompletableFuture [cf {:keys [^IIndexer idxer]}]
   (-> cf
       (util/then-compose
        (fn [tx]
          ;; HACK til we have the ability to await on the connection
-         (.awaitTxAsync ingester tx nil)))))
+         (.awaitTxAsync idxer tx nil)))))
 
 (doto (def ^:private do-put-update-msg
         (let [^org.apache.arrow.flight.sql.impl.FlightSql$DoPutUpdateResult$Builder

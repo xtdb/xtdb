@@ -2,16 +2,15 @@
   (:require [clojure.string :as str]
             [xtdb.api :as xt]
             [xtdb.error :as err]
-            [xtdb.ingester :as ingest]
             [xtdb.rewrite :as r]
             [xtdb.sql.analyze :as sem]
             [xtdb.sql.logic-test.runner :as slt]
             [xtdb.sql.parser :as p]
             [xtdb.sql.plan :as plan]
             [xtdb.test-util :as tu])
-  (:import xtdb.node.Node
+  (:import [java.time Instant]
            [java.util HashMap UUID]
-           [java.time Instant]))
+           xtdb.node.Node))
 
 ;; TODO:
 ;; - needs cleanup.

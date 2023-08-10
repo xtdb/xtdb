@@ -3,13 +3,12 @@
             [clojure.tools.logging :as log]
             [xtdb.api.protocols :as xtp]
             [xtdb.indexer :as idx]
-            xtdb.ingester
             [xtdb.kafka :as k]
             [xtdb.node :as node]
             [xtdb.object-store :as os]
             [xtdb.s3 :as s3]
             [xtdb.util :as util])
-  (:import xtdb.ingester.Ingester
+  (:import xtdb.indexer.IIndexer
            [java.nio.file Files Path]
            java.nio.file.attribute.FileAttribute
            java.time.Duration
@@ -63,7 +62,7 @@
    (sync-node node nil))
 
   (^xtdb.api.protocols.TransactionInstant [node ^Duration timeout]
-   @(.awaitTxAsync ^Ingester (util/component node :xtdb/ingester)
+   @(.awaitTxAsync ^IIndexer (util/component node :xtdb/indexer)
                    (xtp/latest-submitted-tx node)
                    timeout)))
 
