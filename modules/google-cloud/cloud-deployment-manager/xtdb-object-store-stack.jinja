@@ -1,0 +1,51 @@
+{% set TOPIC = properties["notifications_pubsub_topic_name"] %}
+{% set BUCKET = properties["object_store_bucketname"] %}
+{% set ROLE = properties["custom_role_name"] %}
+
+resources:
+- type: gcp-types/pubsub-v1:projects.topics
+  name: {{ TOPIC }} 
+  properties:
+    topic: {{ TOPIC }}
+
+- type: gcp-types/storage-v1:buckets
+  name: {{ BUCKET }}
+  properties:
+    location: {{ properties["bucket_location"] }}
+    locationType: {{ properties["bucket_location_type"] }}
+    storageClass: STANDARD
+
+- type: gcp-types/storage-v1:notifications
+  name: {{ BUCKET }}-notifications
+  properties:
+    bucket: $(ref.{{ BUCKET }}.name)
+    topic: $(ref.{{ TOPIC }}.name)
+    payload_format: JSON_API_V1
+    event_types:
+    - OBJECT_FINALIZE
+    - OBJECT_DELETE
+
+- type: gcp-types/iam-v1:projects.roles
+  name: {{ ROLE }}
+  properties:
+    parent: projects/{{ env["project"] }}
+    roleId: {{ ROLE }}
+    role:
+      title: XTDB Custom role
+      stage: GA
+      description: Custom role for XTDB - allows usage of containers and pubsub for reading container notifications.
+      includedPermissions:
+      - storage.objects.create
+      - storage.objects.delete
+      - storage.objects.get
+      - storage.objects.list
+      - storage.objects.update
+      - pubsub.subscriptions.create
+      - pubsub.subscriptions.delete
+      - pubsub.subscriptions.get
+      - pubsub.subscriptions.consume
+      - pubsub.snapshots.seek
+      - pubsub.topics.attachSubscription
+      {% for permission in properties["additionalPermission"] %}
+      - {{ permission }}
+      {% endfor %}

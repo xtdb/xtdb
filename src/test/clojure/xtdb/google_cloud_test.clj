@@ -9,6 +9,12 @@
            [java.io Closeable]
            [xtdb.object_store ObjectStore]))
 
+;; Ensure you are authenticated with google cloud before running these tests - there are two options to do this:
+;; - gcloud auth Login onto an account which belongs to the `xtdb-devs@gmail.com` group
+;; - assume the role of the service account created for these tests (this allows us to verify the role works as intended)
+;; ---> gcloud auth activate-service-account --key-file=<KEYFILE>
+;; ---> Where <KEYFILE> is the filepath to a key file for 'xtdb-test-service-account' 
+
 (def project-id "xtdb-scratch")
 (def pubsub-topic "gcp-test-xtdb-object-store-notif-topic")
 (def test-bucket "gcp-test-xtdb-object-store")
@@ -58,11 +64,11 @@
 
 (def wait-time-ms 5000)
 
-(t/deftest ^:azure list-test
+(t/deftest ^:google-cloud list-test
   (with-open [os (object-store (random-uuid))]
     (os-test/test-list-objects os wait-time-ms)))
 
-(t/deftest ^:azure list-test-with-prior-objects
+(t/deftest ^:google-cloud list-test-with-prior-objects
   (let [prefix (random-uuid)]
     (with-open [os (object-store prefix)]
       (os-test/put-edn os "alice" :alice)
@@ -78,11 +84,12 @@
         (Thread/sleep wait-time-ms)
         (t/is (= ["alan"] (.listObjects ^ObjectStore os)))))))
 
-(t/deftest ^:azure multiple-object-store-list-test
+(t/deftest ^:google-cloud multiple-object-store-list-test
   (let [prefix (random-uuid)]
     (with-open [os-1 (object-store prefix)
                 os-2 (object-store prefix)]
       (os-test/put-edn os-1 "alice" :alice)
       (os-test/put-edn os-2 "alan" :alan)
       (Thread/sleep wait-time-ms)
+      (t/is (= ["alan" "alice"] (.listObjects ^ObjectStore os-1)))
       (t/is (= ["alan" "alice"] (.listObjects ^ObjectStore os-2))))))
