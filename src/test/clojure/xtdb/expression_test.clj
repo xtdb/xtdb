@@ -1744,3 +1744,8 @@
       (t/is (= exp (test-null-cast :i64)))
       (t/is (= exp (test-null-cast :utf8)))
       (t/is (= exp (test-null-cast [:timestamp-local :milli]))))))
+
+(t/deftest test-uuids
+  (t/is (= true
+           (project1 '(= #uuid "00000000-0000-0000-0000-000000000000" a)
+                     {:a #uuid "00000000-0000-0000-0000-000000000000"}))))

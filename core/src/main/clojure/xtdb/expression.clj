@@ -11,7 +11,7 @@
            (java.nio ByteBuffer)
            (java.nio.charset StandardCharsets)
            (java.time Clock Duration Instant LocalDate LocalDateTime LocalTime OffsetDateTime ZoneOffset ZonedDateTime)
-           (java.util Arrays Date List)
+           (java.util Arrays Date List UUID)
            (java.util.regex Pattern)
            (java.util.stream IntStream)
            (org.apache.arrow.vector PeriodDuration ValueVector)
@@ -327,6 +327,7 @@
 (defmethod emit-value LocalDateTime [_ code] `(util/instant->micros (.toInstant ~code ZoneOffset/UTC)))
 (defmethod emit-value LocalTime [_ code] `(.toNanoOfDay ~code))
 (defmethod emit-value Duration [_ code] `(quot (.toNanos ~code) 1000))
+(defmethod emit-value UUID [_ code] `(util/uuid->byte-buffer ~code))
 
 ;; consider whether a bound hash map for literal parameters would be better
 ;; so this could be a runtime 'wrap the byte array' instead of this round trip through the clj compiler.
@@ -675,7 +676,7 @@
   {:return-type :bool
    :->call-code #(do `(= ~@%))})
 
-(doseq [col-type #{:varbinary :utf8}]
+(doseq [col-type #{:varbinary :utf8 :uuid}]
   (defmethod codegen-call [:= col-type col-type] [_]
     {:return-type :bool,
      :->call-code #(do `(.equals ~@%))}))
