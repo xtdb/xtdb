@@ -53,7 +53,7 @@
   (tu/with-log-levels
     {'xtdb.stagnant-log-flusher log-level
      'xtdb.indexer log-level
-     'xtdb.ingester log-level}
+     'xtdb.log.watcher log-level}
     (binding [*spin-ms* *spin-ms*]
       (f))))
 

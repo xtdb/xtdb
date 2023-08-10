@@ -5,7 +5,6 @@
             [xtdb.api.protocols :as api]
             [xtdb.client :as client]
             [xtdb.indexer :as idx]
-            xtdb.ingester
             [xtdb.logical-plan :as lp]
             [xtdb.node :as node]
             xtdb.object-store

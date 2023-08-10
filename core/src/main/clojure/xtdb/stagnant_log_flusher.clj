@@ -17,9 +17,11 @@
 
 (defmethod ig/prep-key ::flusher
   [_ opts]
-  (merge {:indexer (ig/ref :xtdb/indexer)
-          :log (ig/ref :xtdb/log)}
-         opts))
+  (into {:indexer (ig/ref :xtdb/indexer)
+         :log (ig/ref :xtdb/log)
+         :duration #time/duration "PT4H"
+         :on-heartbeat (constantly nil)}
+        opts))
 
 (defmethod ig/init-key ::flusher
   [_ {:keys [^IIndexer indexer
@@ -27,9 +29,7 @@
              duration
              ;; callback hook used to control timing in tests
              ;; receives a map of the :last-flush, :last-seen tx-keys
-             on-heartbeat]
-      :or {duration #time/duration "PT4H"
-           on-heartbeat (constantly nil)}}]
+             on-heartbeat]}]
   (let [exr-tf (util/->prefix-thread-factory "xtdb.stagnant-log-flush")
         exr (Executors/newSingleThreadScheduledExecutor exr-tf)
 

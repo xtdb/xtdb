@@ -294,21 +294,20 @@
 
 (defmethod ig/prep-key ::server [_ opts]
   (merge {:allocator (ig/ref :xtdb/allocator)
-          :node (ig/ref :xtdb.node/node)
-          :idxer (ig/ref :xtdb/indexer)
-          :ingester (ig/ref :xtdb/ingester)
+          :node (ig/ref :xtdb/node)
+          :indexer (ig/ref :xtdb/indexer)
           :ra-src (ig/ref :xtdb.operator/ra-query-source)
           :wm-src (ig/ref :xtdb/indexer)
           :host "127.0.0.1"
           :port 9832}
          opts))
 
-(defmethod ig/init-key ::server [_ {:keys [allocator node idxer ingester ra-src wm-src host ^long port]}]
+(defmethod ig/init-key ::server [_ {:keys [allocator node indexer ra-src wm-src host ^long port]}]
   (let [fsql-txs (ConcurrentHashMap.)
         stmts (ConcurrentHashMap.)
         tickets (ConcurrentHashMap.)
         server (doto (-> (FlightServer/builder allocator (Location/forGrpcInsecure host port)
-                                               (->fsql-producer {:allocator allocator, :node node, :idxer idxer, :ingester ingester, :ra-src ra-src, :wm-src wm-src
+                                               (->fsql-producer {:allocator allocator, :node node, :idxer indexer, :ra-src ra-src, :wm-src wm-src
                                                                  :fsql-txs fsql-txs, :stmts stmts, :tickets tickets}))
 
                          #_(doto with-error-logging-middleware)

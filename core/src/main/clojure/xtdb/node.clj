@@ -95,7 +95,7 @@
 (defmethod print-method Node [_node ^Writer w] (.write w "#<XtdbNode>"))
 (defmethod pp/simple-dispatch Node [it] (print-method it *out*))
 
-(defmethod ig/prep-key ::node [_ opts]
+(defmethod ig/prep-key :xtdb/node [_ opts]
   (merge {:allocator (ig/ref :xtdb/allocator)
           :indexer (ig/ref :xtdb/indexer)
           :wm-src (ig/ref :xtdb/indexer)
@@ -105,11 +105,11 @@
           :scan-emitter (ig/ref :xtdb.operator.scan/scan-emitter)}
          opts))
 
-(defmethod ig/init-key ::node [_ deps]
+(defmethod ig/init-key :xtdb/node [_ deps]
   (map->Node (-> deps
                  (assoc :!latest-submitted-tx (atom nil)))))
 
-(defmethod ig/halt-key! ::node [_ node]
+(defmethod ig/halt-key! :xtdb/node [_ node]
   (util/try-close node))
 
 (defn- with-default-impl [opts parent-k impl-k]
@@ -117,12 +117,12 @@
     (not (ig/find-derived opts parent-k)) (assoc impl-k {})))
 
 (defn node-system [opts]
-  (-> (into {::node {}
+  (-> (into {:xtdb/node {}
              :xtdb/allocator {}
              :xtdb/default-tz nil
              :xtdb/indexer {}
              :xtdb.indexer/live-index {}
-             :xtdb/ingester {}
+             :xtdb.log/watcher {}
              :xtdb.metadata/metadata-manager {}
              :xtdb.buffer-pool/buffer-pool {}
              :xtdb.operator.scan/scan-emitter {}
@@ -140,7 +140,7 @@
                    ig/prep
                    ig/init)]
 
-    (-> (::node system)
+    (-> (:xtdb/node system)
         (assoc :system system
                :close-fn #(do (ig/halt! system)
                               #_(println (.toVerboseString ^RootAllocator (:xtdb/allocator system))))))))

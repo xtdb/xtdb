@@ -2055,7 +2055,7 @@
 ; will provide a pgwire server as part of node start.
 
 (defmethod ig/prep-key :xtdb/pgwire [_ opts]
-  (merge {:node (ig/ref ::node/node)
+  (merge {:node (ig/ref :xtdb/node)
           :port 5432
           :num-threads 42}
          opts))

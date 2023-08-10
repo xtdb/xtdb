@@ -1,24 +1,22 @@
-(ns xtdb.ingester
+(ns xtdb.log.watcher
   (:require [clojure.tools.logging :as log]
+            [juxt.clojars-mirrors.integrant.core :as ig]
             xtdb.api.protocols
-            [xtdb.await :as await]
             xtdb.indexer
             [xtdb.log :as xt-log]
             xtdb.operator.scan
             [xtdb.util :as util]
-            xtdb.watermark
-            [juxt.clojars-mirrors.integrant.core :as ig])
-  (:import xtdb.api.protocols.TransactionInstant
-           xtdb.indexer.IIndexer
+            xtdb.watermark)
+  (:import java.lang.AutoCloseable
            (java.nio ByteBuffer)
-           [xtdb.log Log LogSubscriber]
-           java.lang.AutoCloseable
-           (java.util.concurrent CompletableFuture PriorityBlockingQueue TimeUnit)
            org.apache.arrow.memory.BufferAllocator
            org.apache.arrow.vector.ipc.ArrowStreamReader
-           org.apache.arrow.vector.TimeStampMicroTZVector))
+           org.apache.arrow.vector.TimeStampMicroTZVector
+           xtdb.api.protocols.TransactionInstant
+           xtdb.indexer.IIndexer
+           [xtdb.log Log LogSubscriber]))
 
-(defmethod ig/prep-key :xtdb/ingester [_ opts]
+(defmethod ig/prep-key :xtdb.log/watcher [_ opts]
   (-> (merge {:allocator (ig/ref :xtdb/allocator)
               :log (ig/ref :xtdb/log)
               :indexer (ig/ref :xtdb/indexer)}
@@ -30,9 +28,8 @@
     (.getLong buf pos)
     default))
 
-(defmethod ig/init-key :xtdb/ingester [_ {:keys [^BufferAllocator allocator, ^Log log, ^IIndexer indexer]}]
-  (let [!cancel-hook (promise)
-        !ingester-error (atom nil)]
+(defn- watch-log! [{:keys [^BufferAllocator allocator, ^Log log, ^IIndexer indexer]}]
+  (let [!cancel-hook (promise)]
     (.subscribe log
                 (:tx-id (.latestCompletedTx indexer))
                 (reify LogSubscriber
@@ -63,11 +60,16 @@
                           (.forceFlush indexer (:tx record) expected-chunk-tx-id))
 
                         (throw (IllegalStateException. (format "Unrecognized log record type %d" (Byte/toUnsignedInt (.get ^ByteBuffer (.-record record) 0))))))))))
+    !cancel-hook))
+
+(defmethod ig/init-key :xtdb.log/watcher [_ deps]
+  (let [!watcher-cancel-hook (watch-log! deps)]
+
 
     (reify
       AutoCloseable
       (close [_]
-        (util/try-close @!cancel-hook)))))
+        (util/try-close @!watcher-cancel-hook)))))
 
-(defmethod ig/halt-key! :xtdb/ingester [_ ingester]
-  (util/try-close ingester))
+(defmethod ig/halt-key! :xtdb.log/watcher [_ log-watcher]
+  (util/close log-watcher))

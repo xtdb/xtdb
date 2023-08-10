@@ -174,7 +174,7 @@
             (update ctx :request merge opts))})
 
 (defmethod ig/prep-key :xtdb/server [_ opts]
-  (merge {:node (ig/ref ::node/node)
+  (merge {:node (ig/ref :xtdb/node)
           :read-only? true
           :port 3000}
          opts))
