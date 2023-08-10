@@ -60,21 +60,10 @@
                             (let [^TimeStampMicroTZVector system-time-vec (.getVector tx-root "system-time")
                                   ^TransactionInstant tx-key (cond-> (.tx record)
                                                                      (not (.isNull system-time-vec 0))
-                                                                     (assoc :system-time (-> (.get system-time-vec 0) (util/micros->instant))))
-                                  latest-completed-tx (.latestCompletedTx indexer)]
+                                                                     (assoc :system-time (-> (.get system-time-vec 0) (util/micros->instant))))]
 
-                              (if (and (not (nil? latest-completed-tx))
-                                       (neg? (compare (.system-time tx-key)
-                                                      (.system-time latest-completed-tx))))
-                                ;; TODO: we don't yet have the concept of an aborted tx
-                                ;; so anyone awaiting this tx will have a Bad Time™.
-                                (log/warnf "specified system-time '%s' older than current tx '%s'"
-                                           (pr-str tx-key)
-                                           (pr-str latest-completed-tx))
-
-                                (do
-                                  (.indexTx indexer tx-key tx-root)
-                                  (await/notify-tx tx-key awaiters)))))
+                              (.indexTx indexer tx-key tx-root)
+                              (await/notify-tx tx-key awaiters)))
 
                           xt-log/hb-flush-chunk
                           (let [expected-chunk-tx-id (get-bb-long (:record record) 1 -1)]

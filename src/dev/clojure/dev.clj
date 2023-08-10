@@ -18,7 +18,7 @@
 (def dev-node-dir
   (io/file "dev/dev-node"))
 
-(def node)
+(def node nil)
 
 (defmethod i/init-key ::xtdb [_ {:keys [node-opts]}]
   (alter-var-root #'node (constantly (node/start-node node-opts)))

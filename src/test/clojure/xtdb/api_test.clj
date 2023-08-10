@@ -4,7 +4,8 @@
             [xtdb.api.protocols :as xtp]
             [xtdb.node :as node]
             [xtdb.test-util :as tu :refer [*node*]]
-            [xtdb.util :as util])
+            [xtdb.util :as util]
+            [xtdb.error :as err])
   (:import (java.time Duration ZoneId)))
 
 (t/use-fixtures :each
@@ -135,7 +136,27 @@
                    (into #{} (map :id))))]
 
       (t/is (= #{:foo} (q-at tx1)))
-      (t/is (= #{:foo :baz} (q-at tx3))))))
+      (t/is (= #{:foo :baz} (q-at tx3))))
+
+    (t/is (= #{{:tx-id 0,
+                :tx-time #time/zoned-date-time "2012-01-01T00:00Z[UTC]",
+                :committed? true,
+                :err nil}
+               {:tx-id 1,
+                :tx-time #time/zoned-date-time "2011-01-01T00:00Z[UTC]",
+                :committed? false,
+                :err {::err/error-type :illegal-argument, ::err/error-key :invalid-system-time
+                      ::err/message "specified system-time older than current tx"
+                      :tx-key #xt/tx-key {:tx-id 1, :system-time #time/instant "2011-01-01T00:00:00Z"},
+                      :latest-completed-tx #xt/tx-key {:tx-id 0, :system-time #time/instant "2012-01-01T00:00:00Z"}}}
+               {:tx-id 2,
+                :tx-time #time/zoned-date-time "2020-01-03T00:00Z[UTC]",
+                :committed? true,
+                :err nil}}
+             (->> (xt/q *node*
+                        '{:find [tx-id tx-time committed? err]
+                          :where [($ :xt/txs {:xt/id tx-id, :xt/tx-time tx-time, :xt/committed? committed? :xt/error err})]})
+                  (into #{} (map #(update % :err (comp ex-data :form)))))))))
 
 (def ^:private devs
   '[[:put :users {:xt/id :jms, :name "James"}]
