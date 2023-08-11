@@ -196,11 +196,86 @@
   (every? true? (map (fn [^Rectangle r1 ^Rectangle r2] (<= (.valid-to r1) (.valid-from r2)))
                      !ranges (rest !ranges))))
 
+
+(definterface RowConsumer
+  (^void accept [^int idx, ^long validFrom, ^long validTo, ^long systemFrom, ^long systemTo]))
+
+(definterface EventResolver
+  (^void resolveEvent [^int idx, ^long validFrom, ^long validTo, ^long systemFrom
+                       ^xtdb.operator.scan.RowConsumer rowConsumer])
+  (^void nextIid []))
+
+(defn event-resolver
+  ([range-range?] (event-resolver range-range? (LinkedList.)))
+
+  ([range-range?, ^List !ranges]
+   (let [!overlapping-ranges (LinkedList.)]
+     (reify EventResolver
+       (nextIid [_]
+         (.clear !ranges))
+
+       (resolveEvent [_ idx valid-from valid-to system-from rc]
+         (assert (ranges-invariant !ranges))
+
+         (.clear !overlapping-ranges)
+
+         (let [^ListIterator itr (.iterator !ranges)
+               ^Rectangle cur (loop []
+                                (when (.hasNext itr)
+                                  (let [^Rectangle next (.next itr)]
+                                    (if (<= (.valid-to next) valid-from)
+                                      (recur)
+                                      next))))]
+           (loop [^Rectangle cur cur]
+             (when cur
+               (if (< (.valid-from cur) valid-to)
+                 (do
+                   (.add !overlapping-ranges cur)
+                   (.remove itr)
+                   (recur (when (.hasNext itr) (.next itr))))
+                 (when (<= valid-to (.valid-from cur))
+                   (.previous itr)))))
+
+           (when-let [^Rectangle begin (first !overlapping-ranges)]
+             (when (< (.valid-from begin) valid-from)
+               (.add itr (Rectangle. (.valid-from begin) valid-from (.sys-from begin))))
+             (when (and rc (< valid-from (.valid-from begin)))
+               (.accept rc idx valid-from (.valid-from begin) system-from util/end-of-time-μs)))
+
+           (when rc
+             (if (seq !overlapping-ranges)
+               (do
+                 (dorun (map (fn [^Rectangle r1 ^Rectangle r2]
+                               (when (< (.valid-to r1) (.valid-from r2))
+                                 (.accept rc idx (.valid-to r1) (.valid-from r2) system-from util/end-of-time-μs)))
+                             !overlapping-ranges (rest !overlapping-ranges)))
+
+                 (when range-range?
+                   (doseq [^Rectangle r !overlapping-ranges]
+                     (let [new-valid-from (max valid-from (.valid-from r))
+                           new-valid-to (min valid-to (.valid-to r))]
+                       (when (< new-valid-from new-valid-to)
+                         (.accept rc idx new-valid-from new-valid-to system-from (.sys-from r)))))))
+
+               (.accept rc idx valid-from valid-to system-from util/end-of-time-μs)))
+
+           (.add itr (Rectangle. valid-from valid-to system-from))
+
+           (when-let [^Rectangle end (last !overlapping-ranges)]
+             (when (< valid-to (.valid-to end))
+               (.add itr (Rectangle. valid-to (.valid-to end) (.sys-from end))))
+             (when (and rc (< (.valid-to end) valid-to))
+               (.accept rc idx (.valid-to end) valid-to system-from util/end-of-time-μs)))))))))
+
+(defn- duplicate-ptr [^ArrowBufPointer dst, ^ArrowBufPointer src]
+  (.set dst (.getBuf src) (.getOffset src) (.getLength src)))
+
 (defn range-range-row-picker
   ^java.util.function.IntConsumer [^IRelationWriter out-rel, ^RelationReader leaf-rel
                                    col-names, ^longs temporal-ranges,
-                                   {:keys [^LinkedList !ranges skip-iid-ptr prev-iid-ptr current-iid-ptr
-                                           point-point? range-range?]}]
+                                   {:keys [^EventResolver ev-resolver
+                                           skip-iid-ptr prev-iid-ptr current-iid-ptr
+                                           point-point?]}]
   (let [iid-rdr (.readerForName leaf-rel "xt$iid")
         sys-from-rdr (.readerForName leaf-rel "xt$system_from")
         op-rdr (.readerForName leaf-rel "op")
@@ -258,117 +333,59 @@
                            :when (= "xt$system_to" (util/str->normal-form-str col-name))]
                        (.writerForName out-rel col-name types/temporal-col-type)))
 
-        !overlapping-ranges (ArrayList.)]
 
-    (letfn [(duplicate-ptr [^ArrowBufPointer dst, ^ArrowBufPointer src]
-              (.set dst (.getBuf src) (.getOffset src) (.getLength src)))
+        put-rc (reify RowConsumer
+                 (accept [_ idx valid-from valid-to sys-from sys-to]
+                   (when (and (<= valid-from-lower valid-from)
+                              (<= valid-from valid-from-upper)
+                              (<= valid-to-lower valid-to)
+                              (<= valid-to valid-to-upper)
+                              (<= sys-from-lower sys-from)
+                              (<= sys-from sys-from-upper)
+                              (<= sys-to-lower sys-to)
+                              (<= sys-to sys-to-upper)
+                              (not= valid-from valid-to)
+                              (not= sys-from sys-to))
+                     (when point-point? (duplicate-ptr skip-iid-ptr current-iid-ptr))
+                     (.startRow out-rel)
+                     (doseq [^IRowCopier copier row-copiers]
+                       (.copyRow copier idx))
+                     (doseq [^IVectorWriter valid-from-wtr valid-from-wtrs]
+                       (.writeLong valid-from-wtr valid-from))
+                     (doseq [^IVectorWriter valid-to-wtr valid-to-wtrs]
+                       (.writeLong valid-to-wtr valid-to))
+                     (doseq [^IVectorWriter sys-from-wtr sys-from-wtrs]
+                       (.writeLong sys-from-wtr sys-from))
+                     (doseq [^IVectorWriter sys-to-wtr sys-to-wtrs]
+                       (.writeLong sys-to-wtr sys-to))
+                     (.endRow out-rel))))]
 
-            (write-r [idx valid-from valid-to sys-from sys-to]
-              (when (and (<= valid-from-lower valid-from)
-                         (<= valid-from valid-from-upper)
-                         (<= valid-to-lower valid-to)
-                         (<= valid-to valid-to-upper)
-                         (<= sys-from-lower sys-from)
-                         (<= sys-from sys-from-upper)
-                         (<= sys-to-lower sys-to)
-                         (<= sys-to sys-to-upper)
-                         (not= valid-from valid-to)
-                         (not= sys-from sys-to))
-                (when point-point? (duplicate-ptr skip-iid-ptr current-iid-ptr))
-                (.startRow out-rel)
-                (doseq [^IRowCopier copier row-copiers]
-                  (.copyRow copier idx))
-                (doseq [^IVectorWriter valid-from-wtr valid-from-wtrs]
-                  (.writeLong valid-from-wtr valid-from))
-                (doseq [^IVectorWriter valid-to-wtr valid-to-wtrs]
-                  (.writeLong valid-to-wtr valid-to))
-                (doseq [^IVectorWriter sys-from-wtr sys-from-wtrs]
-                  (.writeLong sys-from-wtr sys-from))
-                (doseq [^IVectorWriter sys-to-wtr sys-to-wtrs]
-                  (.writeLong sys-to-wtr sys-to))
-                (.endRow out-rel)))
-            (calc-overlapping-ranges [valid-from valid-to]
-              (let [^ListIterator itr (.iterator !ranges)
-                    ^Rectangle cur (loop []
-                                     (when (.hasNext itr)
-                                       (let [^Rectangle next (.next itr)]
-                                         (if (<= (.valid-to next) valid-from)
-                                           (recur)
-                                           next))))]
-                (loop [^Rectangle cur cur]
-                  (when cur
-                    (if (< (.valid-from cur) valid-to)
-                      (do
-                        (.add !overlapping-ranges cur)
-                        (.remove itr)
-                        (recur (when (.hasNext itr) (.next itr))))
-                      (when (<= valid-to (.valid-from cur))
-                        (.previous itr)))))
-                itr))]
+    (reify IntConsumer
+      (accept [_ idx]
+        (when-not (= skip-iid-ptr (.getPointer iid-rdr idx current-iid-ptr))
+          (when-not (= prev-iid-ptr current-iid-ptr)
+            (.nextIid ev-resolver)
+            (duplicate-ptr prev-iid-ptr current-iid-ptr))
 
-      (reify IntConsumer
-        (accept [_ idx]
-          (when-not (= skip-iid-ptr (.getPointer iid-rdr idx current-iid-ptr))
-            (when-not (= prev-iid-ptr current-iid-ptr)
-              (.clear !ranges)
-              (duplicate-ptr prev-iid-ptr current-iid-ptr))
+          (if (= :evict (.getLeg op-rdr idx))
+            (duplicate-ptr skip-iid-ptr current-iid-ptr)
 
-            (assert (ranges-invariant !ranges))
+            (let [system-from (.getLong sys-from-rdr idx)]
+              (when (and (<= sys-from-lower system-from) (<= system-from sys-from-upper))
+                (case (.getLeg op-rdr idx)
+                  :put
+                  (.resolveEvent ev-resolver idx
+                                 (.getLong put-valid-from-rdr idx)
+                                 (.getLong put-valid-to-rdr idx)
+                                 system-from
+                                 put-rc)
 
-            (if (= :evict (.getLeg op-rdr idx))
-              (duplicate-ptr skip-iid-ptr current-iid-ptr)
-              (let [system-from (.getLong sys-from-rdr idx)]
-                (.clear !overlapping-ranges)
-                (when (and (<= sys-from-lower system-from) (<= system-from sys-from-upper))
-                  (case (.getLeg op-rdr idx)
-                    :put
-                    (let [valid-from (.getLong put-valid-from-rdr idx)
-                          valid-to (.getLong put-valid-to-rdr idx)
-                          ^ListIterator itr (calc-overlapping-ranges valid-from valid-to)]
-
-                      (when-let [^Rectangle begin (first !overlapping-ranges)]
-                        (when (< (.valid-from begin) valid-from)
-                          (.add itr (Rectangle. (.valid-from begin) valid-from (.sys-from begin))))
-                        (when (< valid-from (.valid-from begin))
-                          (write-r idx valid-from (.valid-from begin) system-from util/end-of-time-μs)))
-
-                      (if (seq !overlapping-ranges)
-                        (do
-                          (dorun (map (fn [^Rectangle r1 ^Rectangle r2]
-                                        (when (< (.valid-to r1) (.valid-from r2))
-                                          (write-r idx (.valid-to r1) (.valid-from r2) system-from util/end-of-time-μs)))
-                                      !overlapping-ranges (rest !overlapping-ranges)))
-
-                          (when range-range?
-                            (doseq [^Rectangle r !overlapping-ranges]
-                              (let [new-valid-from (max valid-from (.valid-from r))
-                                    new-valid-to (min valid-to (.valid-to r))]
-                                (when (< new-valid-from new-valid-to)
-                                  (write-r idx new-valid-from new-valid-to system-from (.sys-from r)))))))
-                        (write-r idx valid-from valid-to system-from util/end-of-time-μs))
-
-                      (.add itr (Rectangle. valid-from valid-to system-from))
-
-                      (when-let [^Rectangle end (last !overlapping-ranges)]
-                        (when (< valid-to (.valid-to end))
-                          (.add itr (Rectangle. valid-to (.valid-to end) (.sys-from end))))
-                        (when (< (.valid-to end) valid-to)
-                          (write-r idx (.valid-to end) valid-to system-from util/end-of-time-μs))))
-
-                    :delete
-                    (let [valid-from (.getLong delete-valid-from-rdr idx)
-                          valid-to (.getLong delete-valid-to-rdr idx)
-                          ^ListIterator itr (calc-overlapping-ranges valid-from valid-to)]
-
-                      (when-let [^Rectangle begin (first !overlapping-ranges)]
-                        (when (< (.valid-from begin) valid-from)
-                          (.add itr (Rectangle. (.valid-from begin) valid-from (.sys-from begin)))))
-
-                      (.add itr (Rectangle. valid-from valid-to system-from))
-
-                      (when-let [^Rectangle end (last !overlapping-ranges)]
-                        (when (< valid-to (.valid-to end))
-                          (.add itr (Rectangle. valid-to (.valid-to end) (.sys-from end))))))))))))))))
+                  :delete
+                  (.resolveEvent ev-resolver idx
+                                 (.getLong delete-valid-from-rdr idx)
+                                 (.getLong delete-valid-to-rdr idx)
+                                 system-from
+                                 nil))))))))))
 
 (deftype TrieCursor [^BufferAllocator allocator, arrow-leaves
                      ^Iterator merge-tasks, ^ints leaf-idxs, ^ints current-arrow-page-idxs
@@ -483,7 +500,7 @@
 
 (defn ->4r-cursor [^BufferAllocator allocator, ^ObjectStore obj-store, ^IBufferPool buffer-pool, ^IWatermark wm
                    table-name, col-names, ^longs temporal-range
-                   ^Map col-preds, params, basis, scan-opts]
+                   ^Map col-preds, params, scan-opts]
   (let [^ILiveTableWatermark live-table-wm (some-> (.liveIndex wm) (.liveTable table-name))
         {:keys [arrow-leaves ^List merge-tasks]} (read-tries obj-store buffer-pool table-name live-table-wm)]
     (try
@@ -495,12 +512,12 @@
                     col-names col-preds
                     temporal-range
                     params
-                    (cond-> {:!ranges (LinkedList.)
+                    (cond-> {:ev-resolver (event-resolver (and (not (at-point-point? scan-opts))
+                                                               (not (at-range-point? scan-opts))))
                              :skip-iid-ptr (ArrowBufPointer.)
                              :prev-iid-ptr (ArrowBufPointer.)
                              :current-iid-ptr (ArrowBufPointer.)}
-                      (at-point-point? scan-opts) (assoc :point-point? true)
-                      (not (at-range-point? scan-opts)) (assoc :range-range? true)))
+                      (at-point-point? scan-opts) (assoc :point-point? true)))
 
       (catch Throwable t
         (util/close (map :leaf-buf arrow-leaves))
@@ -601,7 +618,6 @@
                                     (->temporal-range params basis scan-opts)
                                     col-preds
                                     params
-                                    basis
                                     scan-opts)))}))))
 
 (defmethod lp/emit-expr :scan [scan-expr {:keys [^IScanEmitter scan-emitter scan-col-types, param-types]}]
