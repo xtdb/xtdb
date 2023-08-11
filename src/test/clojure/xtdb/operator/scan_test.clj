@@ -386,11 +386,14 @@
 (t/deftest test-correct-rectangle-cutting
   (with-open [node (node/start-node {})]
     (letfn [(q [id]
-              (-> (xt/q node {:find '[v vf vt]
-                              :where [(list 'match :xt_docs
-                                            ['v {:xt/id id :xt/valid-from 'vf :xt/valid-to 'vt}]
-                                            {:for-valid-time :all-time})]})
-                  frequencies))]
+              (frequencies
+               (xt/q node
+                     ['{:find [v vf vt]
+                        :in [id]
+                        :where [(match :xt_docs
+                                  [v {:xt/id id :xt/valid-from vf :xt/valid-to vt}]
+                                  {:for-valid-time :all-time})]}
+                      id])))]
       (t/testing "period starts before and does NOT overlap"
         (xt/submit-tx node [[:put :xt_docs {:xt/id 1, :v 1} {:for-valid-time [:in #inst "2010" #inst "2020"]}]])
         (xt/submit-tx node [[:put :xt_docs {:xt/id 1, :v 2} {:for-valid-time [:in #inst "2005" #inst "2009"]}]])
