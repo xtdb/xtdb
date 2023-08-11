@@ -44,7 +44,7 @@ We can swap out the implementation of the object store with one based on Azure B
 }
 ```
 
-Alongside the storage account container, we require an eventgrid topic and service bus topic to pass around file changes to the container, such that we can keep a local copy of files on S3, saving on expensive/lengthy operations to list objects on S3. Below follows the various parameters used by the module, and some notes around the provided <<resource-manager, Azure Resource Manager template>> which sets up all of the necessary extra infrastructure. Even if this isn't used, we will require a similar setup to track file changes on whichever storage account/container you are using, and relevant permissions to use all of the services. 
+Alongside the storage account container, we require an eventgrid topic and service bus topic to pass around file changes to the container, such that we can keep a local copy of files on Azure, saving on expensive/lengthy operations to list objects. Below follows the various parameters used by the module, and some notes around the provided <<resource-manager, Azure Resource Manager template>> which sets up all of the necessary extra infrastructure. Even if this isn't used, we will require a similar setup to track file changes on whichever storage account/container you are using, and relevant permissions to use all of the services. 
 
 === Parameters
 
