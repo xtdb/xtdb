@@ -1,10 +1,10 @@
-# Google Cloud Module
+= Google Cloud Module
 
 Within our XTDB node, we can make use of Google Cloud Services for certain purposes. Currently, we can:
 
 * Use *Google Cloud Storage* as the XTDB Object Store.
 
-### Project Dependency 
+== Project Dependency 
 
 In order to use any of the Google Cloud services, you will need to include a dependency on the `xtdb-google-cloud` module.
 
@@ -22,11 +22,14 @@ _pom.xml_
 </dependency>
 ```
 
-### Authentication
+== Authentication
 
 Authentication for both the document store and checkpoint store components within the module is handled via Google’s "Application Default Credentials" - see the https://github.com/googleapis/google-auth-library-java/blob/main/README.md#application-default-credentials[*relevant documentation*] to get set up. You will need to setup authentication using any of the methods listed within the documentation to be able to make use of the operations inside the modules. 
 
-## Google Cloud Storage Object Store
+Whatever method used to authenticate, you will need to ensure it has the correct permissions. Alongside the various bits of infrastructure required for the object store, we create a custom XDTB IAM role. One can use this role to provide all necessary permissions for the object store and the resources it is using on Google cloud, otherwise you will need to ensure whichever credentials you are using to authenticate XTDB have the same level of permissions to the miscellaneous services.
+See the custom role definition in the link:cloud-deployment-manager/xtdb-object-store-stack.jinja[Google Cloud Deployment Manager stack] for what exactly that includes.
+
+== Google Cloud Storage Object Store
 
 We can swap out the implementation of the object store with one based on Google Cloud Blob Storage. To do so, we add the `xtdb.google-cloud/blob-object-store` key within the integrant config for our node, alongside any config:
 ```clojure
@@ -37,6 +40,8 @@ We can swap out the implementation of the object store with one based on Google 
   ...
 }
 ```
+
+Alongside the Cloud Storage bucket, we require a Pub/Sub topic which receives file change notifications from the container, such that we can keep a local copy of the files that are on Google Cloud, saving on expensive/lengthy operations to list objects. Below follows the various parameters used by the module, and some notes around the provided <<deployment-manager, Google Cloud Deployment Manager configuration template>> which sets up all of the necessary extra infrastructure. Even if this isn't used, we will require a similar setup to track file changes on whichever bucket you are using, and relevant permissions to use all of the services. 
 
 ### Parameters
 
@@ -51,7 +56,12 @@ These are the following parameters that can be passed within the config for our 
 
 | `bucket`
 | String 
-| The cloud storage bucket which the documents will be stored within
+| The https://cloud.google.com/storage/docs/buckets[Cloud Storage bucket] which the documents will be stored within
+| Yes
+
+| `pubsub-topic`
+| String 
+| The name of the https://cloud.google.com/pubsub/docs/overview#core_concepts[Pub/Sub topic] which is collecting notifications from the Cloud Storage bucket
 | Yes
 
 |`prefix`
@@ -59,3 +69,59 @@ These are the following parameters that can be passed within the config for our 
 | A string to prefix all of your files with - for example, if "foo" is provided all xtdb files will be located under a "foo" directory
 | No
 |=== 
+
+[#deployment-manager]
+=== Google Cloud Deployment Manager Configuration
+
+In order to handle the various bits of Google Cloud infrastructure required to use a Cloud Storage bukcet as an XTDB object store, we provide a link:cloud-deployment-manager/xtdb-stack.yaml[Google Cloud Deployment Manager Configuration] to setup everything that you should need. Read below for more details on what's required in your Google Cloud project, what the configuration sets up and how to customize it, and how to deploy the configuration.
+
+==== Requirements in the Google Cloud Project
+
+In order to use our configuration to create the infrastructure, we will need the following APIs active within the project:
+
+* Cloud Storage API
+* Pub/Sub API
+* IAM API
+* Cloud Deployment Manager API
+
+Within the configuration, we create a custom IAM role for all of the necessary infrastructure. In order for **Cloud Deployment Manager** to create this, it will require IAM permissions to do so:
+
+* See https://cloud.google.com/iam/docs/maintain-custom-roles-deployment-manager#grant_permissions["Grant permissions to the Google APIs service account"] on how to do this, and what permissions it requires.
+
+==== Configurable Properties
+
+Within our Google Cloud Deployment Manager Configuration, we use a https://cloud.google.com/deployment-manager/docs/configuration/templates/create-basic-template[**configurable template**] that takes a set of properties. We can use these to configure the created resources. 
+
+The properties within the file are as follows:
+
+* `object_store_bucketname` (default `xtdb-object-store`) - the name of the Cloud Storage bucket that will be created and used as our XTDB object store.
+* `bucket_location_type` (default `region`) - the https://cloud.google.com/storage/docs/locations[location type] of the created bucket, this can be use either `region`, `dual-region`, or `multi-region`.
+* `bucket_location` (default `EUROPE-WEST2`) - the https://cloud.google.com/storage/docs/locations[bucket location] of the created bucket. Available values depend on the `bucket_location_type` - see https://cloud.google.com/storage/docs/locations#available-locations["Available locations"] for more info.
+* `notifications_pubsub_topic_name` (default `xtdb-object-store-notif-topic`) - the name of the Pub/Sub topic to create, that will contain the file notifications for the create bucket.
+* `custom_role_name` (default `xtdb_custom_role`) - the name of the custom XTDB role to create with all of the permissions it will need for the Cloud Storage buckets and Pub/Sub topic. 
+* `custom_role_additional_permissions`` (default `[]`) - a list of any extra IAM roles you want the custom XTDB role to have. Defaults to an empty list, and creates only the permissions we need for XTDB. 
+
+==== Created Resources
+
+Deploying configuration file will create the following resources within the specified project in Google Cloud:
+
+* A Cloud Storage bucket
+* A Pub/Sub topic, subscribed to notifications from the Cloud Storage bucket.
+* A custom role for all of the necessary permissions for XTDB to use the above:
+** Using the bucket (get, create, delete, list, and update storage objects)
+** Creating, consuming, and deleting subscriptions on PubSub topics.
+
+==== How to deploy the configuration
+
+In the following example, we deploy the Cloud Deployment Manager configuration using the `gcloud` command line tool:
+
+* See https://cloud.google.com/sdk[**here**] for more details. 
+* Ensure that you are https://cloud.google.com/sdk/gcloud/reference/auth/login[authenticated with the CLI] and have sufficient permissions to use deployment manager.
+
+Ensure you have the contents of the `cloud-deployment-manager` folder. Once you have configured the `xtdb-stack.yaml` file to your liking, run the following command:
+
+```bash
+gcloud deployment-manager deployments create <deployment-name> --config cloud-deployment-manager/xtdb-stack.yaml
+```
+
+Replace `deployment-name` with a user readable name for the deployment in Cloud Deployment Manager, such that you can easily find and update it if and when you need to.
