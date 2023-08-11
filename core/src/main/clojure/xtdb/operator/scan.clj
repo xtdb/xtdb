@@ -206,9 +206,9 @@
   (^void nextIid []))
 
 (defn event-resolver
-  ([range-range?] (event-resolver range-range? (LinkedList.)))
+  (^xtdb.operator.scan.EventResolver [range-range?] (event-resolver range-range? (LinkedList.)))
 
-  ([range-range?, ^List !ranges]
+  (^xtdb.operator.scan.EventResolver [range-range?, ^List !ranges]
    (let [!overlapping-ranges (LinkedList.)]
      (reify EventResolver
        (nextIid [_]

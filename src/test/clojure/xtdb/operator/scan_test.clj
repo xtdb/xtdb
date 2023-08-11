@@ -4,8 +4,11 @@
             [xtdb.node :as node]
             [xtdb.operator :as op]
             [xtdb.test-util :as tu]
-            [xtdb.util :as util])
-  (:import xtdb.operator.IRaQuerySource))
+            [xtdb.util :as util]
+            [xtdb.operator.scan :as scan])
+  (:import xtdb.operator.IRaQuerySource
+           (java.util LinkedList)
+           (xtdb.operator.scan RowConsumer) ))
 
 (t/use-fixtures :each tu/with-mock-clock tu/with-allocator)
 
@@ -384,132 +387,64 @@
               {:node node})))))
 
 (t/deftest test-correct-rectangle-cutting
-  (with-open [node (node/start-node {})]
-    (letfn [(q [id]
-              (frequencies
-               (xt/q node
-                     ['{:find [v vf vt]
-                        :in [id]
-                        :where [(match :xt_docs
-                                  [v {:xt/id id :xt/valid-from vf :xt/valid-to vt}]
-                                  {:for-valid-time :all-time})]}
-                      id])))]
-      (t/testing "period starts before and does NOT overlap"
-        (xt/submit-tx node [[:put :xt_docs {:xt/id 1, :v 1} {:for-valid-time [:in #inst "2010" #inst "2020"]}]])
-        (xt/submit-tx node [[:put :xt_docs {:xt/id 1, :v 2} {:for-valid-time [:in #inst "2005" #inst "2009"]}]])
+  (letfn [(test-er [& events]
+            (let [!state (atom [])
+                  rc (reify RowConsumer
+                       (accept [_ idx valid-from valid-to sys-from sys-to]
+                         (swap! !state conj [idx valid-from valid-to sys-from sys-to])))
+                  er (scan/event-resolver false (LinkedList.))]
+              (doseq [[idx valid-from valid-to sys-from] events]
+                (.resolveEvent er idx valid-from valid-to sys-from rc))
+              @!state))]
 
-        (t/is (= {{:v 2,
-                   :vf #time/zoned-date-time "2005-01-01T00:00Z[UTC]",
-                   :vt #time/zoned-date-time "2009-01-01T00:00Z[UTC]"} 1
-                  {:v 1,
-                   :vf #time/zoned-date-time "2010-01-01T00:00Z[UTC]",
-                   :vt #time/zoned-date-time "2020-01-01T00:00Z[UTC]"} 1}
-                 (q 1))))
+    (t/is (= [[1 2005 2009 1 util/end-of-time-μs] [0 2010 2020 0 util/end-of-time-μs]]
+             (test-er [1 2005 2009 1]
+                      [0 2010 2020 0]))
+          "period starts before and does NOT overlap")
 
-      (t/testing "period starts before and overlaps"
-        (xt/submit-tx node [[:put :xt_docs {:xt/id 2, :v 1} {:for-valid-time [:in #inst "2015" #inst "2025"]}]])
-        (xt/submit-tx node [[:put :xt_docs {:xt/id 2, :v 2} {:for-valid-time [:in #inst "2010" #inst "2020"]}]])
+    (t/is (= [[1 2010 2020 1 util/end-of-time-μs] [0 2020 2025 0 util/end-of-time-μs]]
+             (test-er [1 2010 2020 1]
+                      [0 2015 2025 0]))
+          "period starts before and overlaps")
 
-        (t/is (= {{:v 2,
-                   :vf #time/zoned-date-time "2010-01-01T00:00Z[UTC]",
-                   :vt #time/zoned-date-time "2020-01-01T00:00Z[UTC]"} 1
-                  {:v 1,
-                   :vf #time/zoned-date-time "2020-01-01T00:00Z[UTC]",
-                   :vt #time/zoned-date-time "2025-01-01T00:00Z[UTC]"} 1}
-                 (q 2))))
+    (t/is (= [[1 2010 2020 1 util/end-of-time-μs] [0 2020 2025 0 util/end-of-time-μs]]
+             (test-er [1 2010 2020 1]
+                      [0 2010 2025 0]))
+          "period starts equally and overlaps")
 
-      (t/testing "period starts equally and overlaps"
-        (xt/submit-tx node [[:put :xt_docs {:xt/id 3, :v 1} {:for-valid-time [:in #inst "2010" #inst "2025"]}]])
-        (xt/submit-tx node [[:put :xt_docs {:xt/id 3, :v 2} {:for-valid-time [:in #inst "2010" #inst "2020"]}]])
+    (t/is (= [[1 2015 2020 1 util/end-of-time-μs]
+              [0 2010 2015 0 util/end-of-time-μs]
+              [0 2020 2025 0 util/end-of-time-μs]]
+             (test-er [1 2015 2020 1]
+                      [0 2010 2025 0]))
+          "newer period completely covered")
 
-        (t/is (= {{:v 2,
-                   :vf #time/zoned-date-time "2010-01-01T00:00Z[UTC]",
-                   :vt #time/zoned-date-time "2020-01-01T00:00Z[UTC]"} 1
-                  {:v 1,
-                   :vf #time/zoned-date-time "2020-01-01T00:00Z[UTC]",
-                   :vt #time/zoned-date-time "2025-01-01T00:00Z[UTC]"} 1}
-                 (q 3))))
+    (t/is (= [[1 2010 2025 1 util/end-of-time-μs]]
+             (test-er [1 2010 2025 1]
+                      [0 2010 2020 0]))
+          "older period completely covered")
 
-      (t/testing "newer period completely covered"
-        (xt/submit-tx node [[:put :xt_docs {:xt/id 4, :v 1} {:for-valid-time [:in #inst "2010" #inst "2025"]}]])
-        (xt/submit-tx node [[:put :xt_docs {:xt/id 4, :v 2} {:for-valid-time [:in #inst "2015" #inst "2020"]}]])
+    (t/is (= [[1 2015 2025 1 util/end-of-time-μs] [0 2010 2015 0 util/end-of-time-μs]]
+             (test-er [1 2015 2025 1]
+                      [0 2010 2025 0]))
+          "period end equally and overlaps")
 
-        (t/is (= {{:v 2,
-                   :vf #time/zoned-date-time "2015-01-01T00:00Z[UTC]",
-                   :vt #time/zoned-date-time "2020-01-01T00:00Z[UTC]"} 1
-                  {:v 1,
-                   :vf #time/zoned-date-time "2010-01-01T00:00Z[UTC]",
-                   :vt #time/zoned-date-time "2015-01-01T00:00Z[UTC]"} 1
-                  {:v 1,
-                   :vf #time/zoned-date-time "2020-01-01T00:00Z[UTC]",
-                   :vt #time/zoned-date-time "2025-01-01T00:00Z[UTC]"} 1}
-                 (q 4))))
+    (t/is (= [[1 2015 2025 1 util/end-of-time-μs] [0 2010 2015 0 util/end-of-time-μs]]
+             (test-er [1 2015 2025 1]
+                      [0 2010 2020 0]))
+          "period ends after and overlaps")
 
-      (t/testing "older period completely covered"
-        (xt/submit-tx node [[:put :xt_docs {:xt/id 5, :v 1} {:for-valid-time [:in #inst "2015" #inst "2020"]}]])
-        (xt/submit-tx node [[:put :xt_docs {:xt/id 5, :v 2} {:for-valid-time [:in #inst "2010" #inst "2025"]}]])
+    (t/is (= [[1 2005 2010 1 util/end-of-time-μs] [0 2010 2020 0 util/end-of-time-μs]]
+             (test-er [1 2005 2010 1]
+                      [0 2010 2020 0]))
+          "period starts before and touches")
 
-        (t/is (= {{:v 2,
-                   :vf #time/zoned-date-time "2010-01-01T00:00Z[UTC]",
-                   :vt #time/zoned-date-time "2025-01-01T00:00Z[UTC]"} 1}
-                 (q 5))))
+    (t/is (= [[1 2010 2020 1 util/end-of-time-μs] [0 2005 2010 0 util/end-of-time-μs]]
+             (test-er [1 2010 2020 1]
+                      [0 2005 2010 0]))
+          "period starts after and touches")
 
-      (t/testing "period end equally and overlaps"
-        (xt/submit-tx node [[:put :xt_docs {:xt/id 6, :v 1} {:for-valid-time [:in #inst "2010" #inst "2025"]}]])
-        (xt/submit-tx node [[:put :xt_docs {:xt/id 6, :v 2} {:for-valid-time [:in #inst "2015" #inst "2025"]}]])
-
-        (t/is (= {{:v 2,
-                   :vf #time/zoned-date-time "2015-01-01T00:00Z[UTC]",
-                   :vt #time/zoned-date-time "2025-01-01T00:00Z[UTC]"} 1
-                  {:v 1,
-                   :vf #time/zoned-date-time "2010-01-01T00:00Z[UTC]",
-                   :vt #time/zoned-date-time "2015-01-01T00:00Z[UTC]"} 1}
-                 (q 6))))
-
-      (t/testing "period ends after and overlaps"
-        (xt/submit-tx node [[:put :xt_docs {:xt/id 7, :v 1} {:for-valid-time [:in #inst "2010" #inst "2020"]}]])
-        (xt/submit-tx node [[:put :xt_docs {:xt/id 7, :v 2} {:for-valid-time [:in #inst "2015" #inst "2025"]}]])
-
-        (t/is (= {{:v 2,
-                   :vf #time/zoned-date-time "2015-01-01T00:00Z[UTC]",
-                   :vt #time/zoned-date-time "2025-01-01T00:00Z[UTC]"} 1
-                  {:v 1,
-                   :vf #time/zoned-date-time "2010-01-01T00:00Z[UTC]",
-                   :vt #time/zoned-date-time "2015-01-01T00:00Z[UTC]"} 1}
-                 (q 7))))
-
-      (t/testing "period starts before and touches"
-        (xt/submit-tx node [[:put :xt_docs {:xt/id 8, :v 1} {:for-valid-time [:in #inst "2010" #inst "2020"]}]])
-        (xt/submit-tx node [[:put :xt_docs {:xt/id 8, :v 2} {:for-valid-time [:in #inst "2005" #inst "2010"]}]])
-
-        (t/is (= {{:v 2,
-                   :vf #time/zoned-date-time "2005-01-01T00:00Z[UTC]",
-                   :vt #time/zoned-date-time "2010-01-01T00:00Z[UTC]"} 1
-                  {:v 1,
-                   :vf #time/zoned-date-time "2010-01-01T00:00Z[UTC]",
-                   :vt #time/zoned-date-time "2020-01-01T00:00Z[UTC]"} 1}
-                 (q 8))))
-
-      (t/testing "period starts after and touches"
-        (xt/submit-tx node [[:put :xt_docs {:xt/id 9, :v 1} {:for-valid-time [:in #inst "2005" #inst "2010"]}]])
-        (xt/submit-tx node [[:put :xt_docs {:xt/id 9, :v 2} {:for-valid-time [:in #inst "2010" #inst "2020"]}]])
-
-        (t/is (= {{:v 2,
-                   :vf #time/zoned-date-time "2010-01-01T00:00Z[UTC]",
-                   :vt #time/zoned-date-time "2020-01-01T00:00Z[UTC]"} 1
-                  {:v 1,
-                   :vf #time/zoned-date-time "2005-01-01T00:00Z[UTC]",
-                   :vt #time/zoned-date-time "2010-01-01T00:00Z[UTC]"} 1}
-                 (q 9))))
-
-      (t/testing "period starts after and does NOT overlap"
-        (xt/submit-tx node [[:put :xt_docs {:xt/id 10, :v 1} {:for-valid-time [:in #inst "2005" #inst "2009"]}]])
-        (xt/submit-tx node [[:put :xt_docs {:xt/id 10, :v 2} {:for-valid-time [:in #inst "2010" #inst "2020"]}]])
-
-        (t/is (= {{:v 2,
-                   :vf #time/zoned-date-time "2010-01-01T00:00Z[UTC]",
-                   :vt #time/zoned-date-time "2020-01-01T00:00Z[UTC]"} 1
-                  {:v 1,
-                   :vf #time/zoned-date-time "2005-01-01T00:00Z[UTC]",
-                   :vt #time/zoned-date-time "2009-01-01T00:00Z[UTC]"} 1}
-                 (q 10)))))))
+    (t/is (= [[1 2010 2020 1 util/end-of-time-μs] [0 2005 2009 0 util/end-of-time-μs]]
+             (test-er [1 2010 2020 1]
+                      [0 2005 2009 0]))
+          "period starts after and does NOT overlap")))
