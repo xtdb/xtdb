@@ -62,4 +62,5 @@
       (os-test/put-edn os-1 "alice" :alice)
       (os-test/put-edn os-2 "alan" :alan)
       (Thread/sleep wait-time-ms)
+      (t/is (= ["alan" "alice"] (.listObjects ^ObjectStore os-1)))
       (t/is (= ["alan" "alice"] (.listObjects ^ObjectStore os-2))))))
