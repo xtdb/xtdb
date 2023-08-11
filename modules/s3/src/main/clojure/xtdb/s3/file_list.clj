@@ -123,6 +123,7 @@
                                                        (when (string/starts-with? filename prefix)
                                                          (subs filename (count prefix)))
                                                        filename)]
+                                            (log/debug (format "Message received, performing %s on file %s" event-type file))
                                             (when file
                                               (cond
                                                 (= event-type :create) (.add file-name-cache file)

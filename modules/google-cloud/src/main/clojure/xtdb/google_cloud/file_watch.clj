@@ -56,7 +56,7 @@
                                             (subs objectId (count prefix)))
 
                                           :else objectId)]
-                               (log/info (format "Message received, performing %s on file %s" event-type file))
+                               (log/debug (format "Message received, performing %s on file %s" event-type file))
                                (when (and event-type file)
                                  (cond
                                    (= event-type :create) (.add file-name-cache file)
