@@ -61,41 +61,40 @@
                                   [:delete :xt_docs :doc3]])]
 
       ;; valid-time
-      (t/is (= #{{:v 1, :xt/id :doc1} {:v 1, :xt/id :doc2}}
-               (set (tu/query-ra '[:scan
-                                   {:table xt_docs, :for-valid-time [:at #inst "2017"], :for-system-time nil}
-                                   [xt/id v]]
-                                 {:node node}))))
-
-      (t/is (= #{{:v 1, :xt/id :doc2} {:v 2, :xt/id :doc1}}
-               (set (tu/query-ra '[:scan
-                                   {:table xt_docs, :for-valid-time [:at :now], :for-system-time nil}
-                                   [xt/id v]]
-                                 {:node node}))))
+      (t/is (= {{:v 1, :xt/id :doc1} 1 {:v 1, :xt/id :doc2} 1}
+               (frequencies (tu/query-ra '[:scan
+                                           {:table xt_docs, :for-valid-time [:at #inst "2017"], :for-system-time nil}
+                                           [xt/id v]]
+                                         {:node node}))))
+      (t/is (= {{:v 1, :xt/id :doc2} 1 {:v 2, :xt/id :doc1} 1}
+               (frequencies (tu/query-ra '[:scan
+                                           {:table xt_docs, :for-valid-time [:at :now], :for-system-time nil}
+                                           [xt/id v]]
+                                         {:node node}))))
       ;; system-time
-      (t/is (= #{{:v 1, :xt/id :doc1} {:v 1, :xt/id :doc2} {:v 1, :xt/id :doc3}}
-               (set (tu/query-ra '[:scan
-                                   {:table xt_docs, :for-valid-time [:at :now], :for-system-time nil}
-                                   [xt/id v]]
-                                 {:node node :basis {:tx tx1}}))))
+      (t/is (= {{:v 1, :xt/id :doc1} 1 {:v 1, :xt/id :doc2} 1 {:v 1, :xt/id :doc3} 1}
+               (frequencies (tu/query-ra '[:scan
+                                           {:table xt_docs, :for-valid-time [:at :now], :for-system-time nil}
+                                           [xt/id v]]
+                                         {:node node :basis {:tx tx1}}))))
 
-      (t/is (= #{{:v 1, :xt/id :doc1} {:v 1, :xt/id :doc2}}
-               (set (tu/query-ra '[:scan
-                                   {:table xt_docs, :for-valid-time [:at #inst "2017"], :for-system-time nil}
-                                   [xt/id v]]
-                                 {:node node :basis {:tx tx1}}))))
+      (t/is (= {{:v 1, :xt/id :doc1} 1 {:v 1, :xt/id :doc2} 1}
+               (frequencies (tu/query-ra '[:scan
+                                           {:table xt_docs, :for-valid-time [:at #inst "2017"], :for-system-time nil}
+                                           [xt/id v]]
+                                         {:node node :basis {:tx tx1}}))))
 
-      (t/is (= #{{:v 2, :xt/id :doc1} {:v 1, :xt/id :doc2}}
-               (set (tu/query-ra '[:scan
-                                   {:table xt_docs, :for-valid-time [:at :now], :for-system-time nil}
-                                   [xt/id v]]
-                                 {:node node :basis {:tx tx2}}))))
+      (t/is (= {{:v 2, :xt/id :doc1} 1 {:v 1, :xt/id :doc2} 1}
+               (frequencies (tu/query-ra '[:scan
+                                           {:table xt_docs, :for-valid-time [:at :now], :for-system-time nil}
+                                           [xt/id v]]
+                                         {:node node :basis {:tx tx2}}))))
 
-      (t/is (= #{{:v 2, :xt/id :doc1} {:v 2, :xt/id :doc2}}
-               (set (tu/query-ra '[:scan
-                                   {:table xt_docs, :for-valid-time [:at #inst "2100"], :for-system-time nil}
-                                   [xt/id v]]
-                                 {:node node :basis {:tx tx2}})))))))
+      (t/is (= {{:v 2, :xt/id :doc1} 1 {:v 2, :xt/id :doc2} 1}
+               (frequencies (tu/query-ra '[:scan
+                                           {:table xt_docs, :for-valid-time [:at #inst "2100"], :for-system-time nil}
+                                           [xt/id v]]
+                                         {:node node :basis {:tx tx2}})))))))
 
 (t/deftest test-past-point-point-queries-with-valid-time
   (with-open [node (node/start-node tu/*node-opts*)]

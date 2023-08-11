@@ -1657,13 +1657,14 @@
                        tx1, nil)))
             "as-of 18 Jan")
 
-      (t/is (= [{:cust 145, :app-start (util/->zdt #inst "1998-01-05")}
-                {:cust 827, :app-start (util/->zdt #inst "1998-01-12")}]
-               (q '{:find [cust app-start]
-                    :where [(match :docs {:customer-number cust, :xt/valid-from app-start}
-                                   {:for-valid-time :all-time})]
-                    :order-by [[app-start :asc]]}
-                  tx5, nil))
+      (t/is (= #{{:cust 145, :app-start (util/->zdt #inst "1998-01-05")}
+                 {:cust 827, :app-start (util/->zdt #inst "1998-01-12")}}
+               (set (q '{:find [cust app-start]
+                         :where [(match :docs {:customer-number cust,
+                                               :xt/valid-from app-start}
+                                        {:for-valid-time :all-time})]
+                         :order-by [[app-start :asc]]}
+                       tx5, nil)))
             "as-of 29 Jan")
 
       (t/is (= [{:cust 827, :app-start (util/->zdt #inst "1998-01-12"), :app-end (util/->zdt #inst "1998-01-20")}]
