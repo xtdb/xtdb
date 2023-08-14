@@ -270,32 +270,10 @@
 (defn- duplicate-ptr [^ArrowBufPointer dst, ^ArrowBufPointer src]
   (.set dst (.getBuf src) (.getOffset src) (.getLength src)))
 
-(defn range-range-row-picker
-  ^java.util.function.IntConsumer [^IRelationWriter out-rel, ^RelationReader leaf-rel
-                                   col-names, ^longs temporal-ranges,
-                                   {:keys [^EventResolver ev-resolver
-                                           skip-iid-ptr prev-iid-ptr current-iid-ptr
-                                           point-point?]}]
-  (let [iid-rdr (.readerForName leaf-rel "xt$iid")
-        sys-from-rdr (.readerForName leaf-rel "xt$system_from")
-        op-rdr (.readerForName leaf-rel "op")
+(defn- copy-row-consumer [^IRelationWriter out-rel, ^RelationReader leaf-rel, col-names]
+  (let [op-rdr (.readerForName leaf-rel "op")
         put-rdr (.legReader op-rdr :put)
         doc-rdr (.structKeyReader put-rdr "xt$doc")
-        put-valid-from-rdr (.structKeyReader put-rdr "xt$valid_from")
-        put-valid-to-rdr (.structKeyReader put-rdr "xt$valid_to")
-
-        delete-rdr (.legReader op-rdr :delete)
-        delete-valid-from-rdr (.structKeyReader delete-rdr "xt$valid_from")
-        delete-valid-to-rdr (.structKeyReader delete-rdr "xt$valid_to")
-
-        valid-from-lower (aget temporal-ranges valid-from-lower-idx)
-        valid-from-upper (aget temporal-ranges valid-from-upper-idx)
-        valid-to-lower (aget temporal-ranges valid-to-lower-idx)
-        valid-to-upper (aget temporal-ranges valid-to-upper-idx)
-        sys-from-lower (aget temporal-ranges system-from-lower-idx)
-        sys-from-upper (aget temporal-ranges system-from-upper-idx)
-        sys-to-lower (aget temporal-ranges system-to-lower-idx)
-        sys-to-upper (aget temporal-ranges system-to-upper-idx)
 
         row-copiers (vec
                      (for [col-name col-names
@@ -331,34 +309,79 @@
         sys-to-wtrs (vec
                      (for [col-name col-names
                            :when (= "xt$system_to" (util/str->normal-form-str col-name))]
-                       (.writerForName out-rel col-name types/temporal-col-type)))
+                       (.writerForName out-rel col-name types/temporal-col-type)))]
 
+    (reify RowConsumer
+      (accept [_ idx valid-from valid-to sys-from sys-to]
+        (.startRow out-rel)
 
-        put-rc (reify RowConsumer
-                 (accept [_ idx valid-from valid-to sys-from sys-to]
-                   (when (and (<= valid-from-lower valid-from)
-                              (<= valid-from valid-from-upper)
-                              (<= valid-to-lower valid-to)
-                              (<= valid-to valid-to-upper)
-                              (<= sys-from-lower sys-from)
-                              (<= sys-from sys-from-upper)
-                              (<= sys-to-lower sys-to)
-                              (<= sys-to sys-to-upper)
-                              (not= valid-from valid-to)
-                              (not= sys-from sys-to))
-                     (when point-point? (duplicate-ptr skip-iid-ptr current-iid-ptr))
-                     (.startRow out-rel)
-                     (doseq [^IRowCopier copier row-copiers]
-                       (.copyRow copier idx))
-                     (doseq [^IVectorWriter valid-from-wtr valid-from-wtrs]
-                       (.writeLong valid-from-wtr valid-from))
-                     (doseq [^IVectorWriter valid-to-wtr valid-to-wtrs]
-                       (.writeLong valid-to-wtr valid-to))
-                     (doseq [^IVectorWriter sys-from-wtr sys-from-wtrs]
-                       (.writeLong sys-from-wtr sys-from))
-                     (doseq [^IVectorWriter sys-to-wtr sys-to-wtrs]
-                       (.writeLong sys-to-wtr sys-to))
-                     (.endRow out-rel))))]
+        (doseq [^IRowCopier copier row-copiers]
+          (.copyRow copier idx))
+
+        (doseq [^IVectorWriter valid-from-wtr valid-from-wtrs]
+          (.writeLong valid-from-wtr valid-from))
+        (doseq [^IVectorWriter valid-to-wtr valid-to-wtrs]
+          (.writeLong valid-to-wtr valid-to))
+        (doseq [^IVectorWriter sys-from-wtr sys-from-wtrs]
+          (.writeLong sys-from-wtr sys-from))
+        (doseq [^IVectorWriter sys-to-wtr sys-to-wtrs]
+          (.writeLong sys-to-wtr sys-to))
+
+        (.endRow out-rel)))))
+
+(defn- wrap-temporal-ranges ^xtdb.operator.scan.RowConsumer [^RowConsumer rc, ^longs temporal-ranges]
+  (let [valid-from-lower (aget temporal-ranges valid-from-lower-idx)
+        valid-from-upper (aget temporal-ranges valid-from-upper-idx)
+        valid-to-lower (aget temporal-ranges valid-to-lower-idx)
+        valid-to-upper (aget temporal-ranges valid-to-upper-idx)
+        sys-from-lower (aget temporal-ranges system-from-lower-idx)
+        sys-from-upper (aget temporal-ranges system-from-upper-idx)
+        sys-to-lower (aget temporal-ranges system-to-lower-idx)
+        sys-to-upper (aget temporal-ranges system-to-upper-idx)]
+    (reify RowConsumer
+      (accept [_ idx valid-from valid-to sys-from sys-to]
+        (when (and (<= valid-from-lower valid-from)
+                   (<= valid-from valid-from-upper)
+                   (<= valid-to-lower valid-to)
+                   (<= valid-to valid-to-upper)
+                   (<= sys-from-lower sys-from)
+                   (<= sys-from sys-from-upper)
+                   (<= sys-to-lower sys-to)
+                   (<= sys-to sys-to-upper)
+                   (not= valid-from valid-to)
+                   (not= sys-from sys-to))
+          (.accept rc idx valid-from valid-to sys-from sys-to))))))
+
+(defn range-range-row-picker
+  ^java.util.function.IntConsumer [^IRelationWriter out-rel, ^RelationReader leaf-rel
+                                   col-names, ^longs temporal-ranges,
+                                   {:keys [^EventResolver ev-resolver
+                                           skip-iid-ptr prev-iid-ptr current-iid-ptr
+                                           point-point?]}]
+  (let [iid-rdr (.readerForName leaf-rel "xt$iid")
+        sys-from-rdr (.readerForName leaf-rel "xt$system_from")
+        op-rdr (.readerForName leaf-rel "op")
+        put-rdr (.legReader op-rdr :put)
+        put-valid-from-rdr (.structKeyReader put-rdr "xt$valid_from")
+        put-valid-to-rdr (.structKeyReader put-rdr "xt$valid_to")
+
+        delete-rdr (.legReader op-rdr :delete)
+        delete-valid-from-rdr (.structKeyReader delete-rdr "xt$valid_from")
+        delete-valid-to-rdr (.structKeyReader delete-rdr "xt$valid_to")
+
+        sys-from-lower (aget temporal-ranges system-from-lower-idx)
+        sys-from-upper (aget temporal-ranges system-from-upper-idx)
+
+        put-rc (-> (copy-row-consumer out-rel leaf-rel col-names)
+
+                   (as-> ^RowConsumer rc (reify RowConsumer
+                                           (accept [_ idx valid-from valid-to sys-from sys-to]
+                                             (when point-point?
+                                               (duplicate-ptr skip-iid-ptr current-iid-ptr))
+
+                                             (.accept rc idx valid-from valid-to sys-from sys-to))))
+
+                   (wrap-temporal-ranges temporal-ranges))]
 
     (reify IntConsumer
       (accept [_ idx]
