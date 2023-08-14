@@ -9,8 +9,7 @@
            [org.apache.arrow.vector.types UnionMode]
            [org.apache.arrow.vector.types.pojo ArrowType$Union Schema]
            org.apache.arrow.vector.VectorSchemaRoot
-           [xtdb.trie ArrowHashTrie LeafMerge$LeafPointer LiveHashTrie]
-           [xtdb.vector IRelationWriter IRowCopier RelationReader]))
+           [xtdb.trie ArrowHashTrie]))
 
 ;; TODO shift these to some kind of test util
 

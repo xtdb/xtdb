@@ -150,8 +150,8 @@
                 [{:path (byte-array path)
                   :leaves (->> nodes
                                (into [] (keep-indexed
-                                         (fn [trie-idx ^HashTrie$Node node]
+                                         (fn [ordinal ^HashTrie$Node node]
                                            (when node
-                                             {:trie-idx trie-idx, :leaf node})))))}])))]
+                                             {:ordinal ordinal, :leaf node})))))}])))]
 
     (vec (trie-merge-tasks* (map #(some-> ^HashTrie % (.rootNode)) tries) []))))
