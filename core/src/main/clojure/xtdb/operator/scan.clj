@@ -271,63 +271,50 @@
   (.set dst (.getBuf src) (.getOffset src) (.getLength src)))
 
 (defn- copy-row-consumer [^IRelationWriter out-rel, ^RelationReader leaf-rel, col-names]
-  (let [op-rdr (.readerForName leaf-rel "op")
-        put-rdr (.legReader op-rdr :put)
-        doc-rdr (.structKeyReader put-rdr "xt$doc")
+  (letfn [(writer-for [normalised-col-name]
+            (let [wtrs (->> col-names
+                            (into [] (keep (fn [col-name]
+                                             (when (= normalised-col-name (util/str->normal-form-str col-name))
+                                               (.writerForName out-rel col-name types/temporal-col-type))))))]
+              (reify IVectorWriter
+                (writeLong [_ l]
+                  (doseq [^IVectorWriter wtr wtrs]
+                    (.writeLong wtr l))))))]
+    (let [op-rdr (.readerForName leaf-rel "op")
+          put-rdr (.legReader op-rdr :put)
+          doc-rdr (.structKeyReader put-rdr "xt$doc")
 
-        row-copiers (vec
-                     (for [col-name col-names
-                           :let [normalized-name (util/str->normal-form-str col-name)
-                                 ^IVectorReader rdr (case normalized-name
-                                                      "xt$iid" (.readerForName leaf-rel "xt$iid")
-                                                      "xt$system_from" nil
-                                                      "xt$system_to" nil
-                                                      "xt$valid_from" nil
-                                                      "xt$valid_to" nil
-                                                      (.structKeyReader doc-rdr normalized-name))]
-                           :when rdr]
-                       (.rowCopier rdr
-                                   (case normalized-name
-                                     "xt$iid" (.writerForName out-rel col-name [:fixed-size-binary 16])
-                                     (.writerForName out-rel col-name)))))
-
-        valid-from-wtrs (vec
-                         (for [col-name col-names
-                               :when (= "xt$valid_from" (util/str->normal-form-str col-name))]
-                           (.writerForName out-rel col-name types/temporal-col-type)))
-
-        valid-to-wtrs (vec
+          row-copiers (vec
                        (for [col-name col-names
-                             :when (= "xt$valid_to" (util/str->normal-form-str col-name))]
-                         (.writerForName out-rel col-name types/temporal-col-type)))
+                             :let [normalized-name (util/str->normal-form-str col-name)
+                                   ^IVectorReader rdr (case normalized-name
+                                                        "xt$iid" (.readerForName leaf-rel "xt$iid")
+                                                        ("xt$system_from" "xt$system_to" "xt$valid_from" "xt$valid_to") nil
+                                                        (.structKeyReader doc-rdr normalized-name))]
+                             :when rdr]
+                         (.rowCopier rdr
+                                     (case normalized-name
+                                       "xt$iid" (.writerForName out-rel col-name [:fixed-size-binary 16])
+                                       (.writerForName out-rel col-name)))))
 
-        sys-from-wtrs (vec
-                       (for [col-name col-names
-                             :when (= "xt$system_from" (util/str->normal-form-str col-name))]
-                         (.writerForName out-rel col-name types/temporal-col-type)))
+          ^IVectorWriter valid-from-wtr (writer-for "xt$valid_from")
+          ^IVectorWriter valid-to-wtr (writer-for "xt$valid_to")
+          ^IVectorWriter sys-from-wtr (writer-for "xt$system_from")
+          ^IVectorWriter sys-to-wtr (writer-for "xt$system_to")]
 
-        sys-to-wtrs (vec
-                     (for [col-name col-names
-                           :when (= "xt$system_to" (util/str->normal-form-str col-name))]
-                       (.writerForName out-rel col-name types/temporal-col-type)))]
+      (reify RowConsumer
+        (accept [_ idx valid-from valid-to sys-from sys-to]
+          (.startRow out-rel)
 
-    (reify RowConsumer
-      (accept [_ idx valid-from valid-to sys-from sys-to]
-        (.startRow out-rel)
+          (doseq [^IRowCopier copier row-copiers]
+            (.copyRow copier idx))
 
-        (doseq [^IRowCopier copier row-copiers]
-          (.copyRow copier idx))
+          (.writeLong valid-from-wtr valid-from)
+          (.writeLong valid-to-wtr valid-to)
+          (.writeLong sys-from-wtr sys-from)
+          (.writeLong sys-to-wtr sys-to)
 
-        (doseq [^IVectorWriter valid-from-wtr valid-from-wtrs]
-          (.writeLong valid-from-wtr valid-from))
-        (doseq [^IVectorWriter valid-to-wtr valid-to-wtrs]
-          (.writeLong valid-to-wtr valid-to))
-        (doseq [^IVectorWriter sys-from-wtr sys-from-wtrs]
-          (.writeLong sys-from-wtr sys-from))
-        (doseq [^IVectorWriter sys-to-wtr sys-to-wtrs]
-          (.writeLong sys-to-wtr sys-to))
-
-        (.endRow out-rel)))))
+          (.endRow out-rel))))))
 
 (defn- wrap-temporal-ranges ^xtdb.operator.scan.RowConsumer [^RowConsumer rc, ^longs temporal-ranges]
   (let [valid-from-lower (aget temporal-ranges valid-from-lower-idx)
