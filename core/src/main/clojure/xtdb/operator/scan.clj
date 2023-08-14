@@ -398,8 +398,7 @@
                                  system-from
                                  nil))))))))))
 
-(deftype TrieCursor [^BufferAllocator allocator, arrow-leaves
-                     ^Iterator merge-tasks, ^ints leaf-ptrs, ^ints current-arrow-page-idxs
+(deftype TrieCursor [^BufferAllocator allocator, arrow-leaves, ^Iterator merge-tasks
                      col-names, ^Map col-preds, ^longs temporal-timestamps,
                      params, ^IPersistentMap picker-state]
   ICursor
@@ -525,10 +524,6 @@
         {:keys [arrow-leaves ^List merge-tasks]} (read-tries obj-store buffer-pool table-name live-table-wm)]
     (try
       (->TrieCursor allocator arrow-leaves (.iterator merge-tasks)
-                    (int-array (cond-> (count arrow-leaves)
-                                 live-table-wm inc))
-                    (doto (int-array (count arrow-leaves))
-                      (Arrays/fill -1))
                     col-names col-preds
                     temporal-range
                     params
