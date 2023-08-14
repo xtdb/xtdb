@@ -622,7 +622,6 @@
             (-> ^IRowCopier (aget copier-mapping type-id)
                 (.copyRow (.getOffset src-vec src-idx))))
           (catch Throwable t
-            (prn :boom)
             (throw t)))))))
 
 (defn- vec->duv-copier ^xtdb.vector.IRowCopier [^IVectorWriter dest-col, ^ValueVector src-vec]
