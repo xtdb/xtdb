@@ -224,7 +224,7 @@
 
     (xt/submit-tx node [[:put :foo {:xt/id :my-doc, :last_updated "tx2"}]] {:system-time #inst "3001"})
 
-    #_(tu/finish-chunk! node)
+    (tu/finish-chunk! node)
 
     (t/is (= #{{:last_updated "tx2",
                 :xt/valid-from #time/zoned-date-time "3001-01-01T00:00Z[UTC]",
