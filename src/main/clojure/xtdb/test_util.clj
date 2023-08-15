@@ -123,6 +123,7 @@
   (with-opts {:xtdb.log/memory-log {:instant-src (->mock-clock)}} f))
 
 (defn finish-chunk! [node]
+  (then-await-tx (api/latest-submitted-tx node) node)
   (idx/finish-chunk! (component node :xtdb/indexer)))
 
 (defn open-vec
