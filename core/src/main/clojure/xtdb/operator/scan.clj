@@ -508,7 +508,7 @@
                   (.load loader record-batch)
                   (.add trie-roots root)))))
           (let [hash-tries (cond-> (mapv #(ArrowHashTrie/from %) trie-roots)
-                             live-table-wm (conj (.liveTrie live-table-wm)))]
+                             live-table-wm (conj (.compactLogs (.liveTrie live-table-wm))))]
 
             {:arrow-leaves (mapv (fn [{:keys [leaf-buf leaf-root]}]
                                    (reify AutoCloseable
