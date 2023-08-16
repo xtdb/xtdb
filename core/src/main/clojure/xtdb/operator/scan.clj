@@ -471,8 +471,8 @@
   (close [_]
     (util/close arrow-leaves)))
 
-(defn- read-tries [^ObjectStore obj-store, ^IBufferPool buffer-pool, ^String table-name, ^ILiveTableWatermark live-table-wm
-                   {:keys [^ByteBuffer iid-bb] :as _opts}]
+(defn read-tries [^ObjectStore obj-store, ^IBufferPool buffer-pool, ^String table-name, ^ILiveTableWatermark live-table-wm
+                  {:keys [^ByteBuffer iid-bb] :as _opts}]
   (let [{trie-files :trie, leaf-files :leaf} (->> (.listObjects obj-store (format "tables/%s/chunks" table-name))
                                                   (keep (fn [file-name]
                                                           (when-let [[_ file-type chunk-idx-str] (re-find #"/(leaf|trie)-c(.+?)\.arrow$" file-name)]
@@ -508,42 +508,49 @@
                 (with-open [record-batch (util/->arrow-record-batch-view (first arrow-blocks) buf)]
                   (.load loader record-batch)
                   (.add trie-roots root)))))
-          (let [hash-tries (cond-> (mapv #(ArrowHashTrie/from %) trie-roots)
-                             live-table-wm (conj (.compactLogs (.liveTrie live-table-wm))))]
 
-            {:arrow-leaves (mapv (fn [{:keys [leaf-buf leaf-root]}]
-                                   (reify AutoCloseable
-                                     (close [_]
-                                       (util/close leaf-root)
-                                       (util/close leaf-buf))))
-                                 arrow-leaves)
+          {:arrow-leaves (mapv (fn [{:keys [leaf-buf leaf-root]}]
+                                 (reify AutoCloseable
+                                   (close [_]
+                                     (util/close leaf-root)
+                                     (util/close leaf-buf))))
+                               arrow-leaves)
 
-             :merge-tasks (vec (for [{:keys [path leaves]} (trie/trie-merge-tasks hash-tries (some-> iid-bb .array))]
-                                 {:path path
-                                  :leaves (mapv (fn [{:keys [ordinal leaf]}]
-                                                  (condp = (class leaf)
-                                                    ArrowHashTrie$Leaf
-                                                    (let [page-idx (.getPageIndex ^ArrowHashTrie$Leaf leaf)
-                                                          {:keys [leaf-buf ^VectorLoader loader, ^VectorSchemaRoot leaf-root arrow-blocks,
-                                                                  !current-page-idx
-                                                                  ^LeafMergeQueue$LeafPointer leaf-ptr]} (nth arrow-leaves ordinal)]
-                                                      {:load-leaf (fn []
-                                                                    (when-not (= page-idx @!current-page-idx)
-                                                                      (reset! !current-page-idx page-idx)
+           :merge-plan-leaves (letfn [(->merge-task [{:keys [ordinal leaf]}]
+                                        (condp = (class leaf)
+                                          ArrowHashTrie$Leaf
+                                          (let [page-idx (.getPageIndex ^ArrowHashTrie$Leaf leaf)
+                                                {:keys [leaf-buf ^VectorLoader loader, ^VectorSchemaRoot leaf-root arrow-blocks,
+                                                        !current-page-idx
+                                                        ^LeafMergeQueue$LeafPointer leaf-ptr]} (nth arrow-leaves ordinal)]
+                                            {:load-leaf (fn []
+                                                          (when-not (= page-idx @!current-page-idx)
+                                                            (reset! !current-page-idx page-idx)
 
-                                                                      (with-open [rb (util/->arrow-record-batch-view (nth arrow-blocks page-idx) leaf-buf)]
-                                                                        (.load loader rb)
-                                                                        (.reset leaf-ptr)))
+                                                            (with-open [rb (util/->arrow-record-batch-view (nth arrow-blocks page-idx) leaf-buf)]
+                                                              (.load loader rb)
+                                                              (.reset leaf-ptr)))
 
-                                                                    {:rel-rdr (vr/<-root leaf-root)
-                                                                     :leaf-ptr leaf-ptr})})
+                                                          {:rel-rdr (vr/<-root leaf-root)
+                                                           :leaf-ptr leaf-ptr})})
 
-                                                    LiveHashTrie$Leaf
-                                                    {:load-leaf (fn []
-                                                                  {:rel-rdr (.select (.liveRelation live-table-wm) (.data ^LiveHashTrie$Leaf leaf))
-                                                                   :leaf-ptr (LeafMergeQueue$LeafPointer. (count arrow-leaves))})}))
+                                          LiveHashTrie$Leaf
+                                          {:load-leaf (fn []
+                                                        {:rel-rdr (.select (.liveRelation live-table-wm) (.data ^LiveHashTrie$Leaf leaf))
+                                                         :leaf-ptr (LeafMergeQueue$LeafPointer. (count arrow-leaves))})}))
 
-                                                leaves)}))}))))))
+                                      (->merge-tasks [{:keys [path node]}]
+                                        (let [[node-tag node-arg] node]
+                                          (case node-tag
+                                            :branch (mapcat ->merge-tasks node-arg)
+                                            :leaf [{:path path
+                                                    :leaves (mapv ->merge-task node-arg)}])))]
+
+                                (let [merge-plan (trie/->merge-plan (cond-> (mapv #(ArrowHashTrie/from %) trie-roots)
+                                                                      live-table-wm (conj (.compactLogs (.liveTrie live-table-wm))))
+                                                                    iid-bb)]
+
+                                  (vec (->merge-tasks merge-plan))))})))))
 
 ;; The consumers for different leafs need to share some state so the logic of how to advance
 ;; is correct. For example if the `skip-iid-ptr` gets set in one leaf consumer it should also affect
@@ -553,11 +560,9 @@
                    table-name, col-names, ^longs temporal-range
                    ^Map col-preds, params, scan-opts]
   (let [^ILiveTableWatermark live-table-wm (some-> (.liveIndex wm) (.liveTable table-name))
-
-        {:keys [arrow-leaves ^List merge-tasks]}
-        (read-tries obj-store buffer-pool table-name live-table-wm (select-keys scan-opts [:iid-bb]))]
+        {:keys [arrow-leaves ^List merge-plan-leaves]} (read-tries obj-store buffer-pool table-name live-table-wm scan-opts)]
     (try
-      (->TrieCursor allocator arrow-leaves (.iterator merge-tasks)
+      (->TrieCursor allocator arrow-leaves (.iterator merge-plan-leaves)
                     col-names col-preds
                     temporal-range
                     params
