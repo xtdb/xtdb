@@ -66,4 +66,4 @@
               t1-root (open-arrow-hash-trie-root al [[nil 1 nil 3] 1 nil 3])
               log-root (open-arrow-hash-trie-root al 1)
               log2-root (open-arrow-hash-trie-root al [nil nil 3 4])]
-    (trie/trie-merge-tasks [nil (ArrowHashTrie/from t1-root) (ArrowHashTrie/from log-root) (ArrowHashTrie/from log2-root)])))
+    (trie/->merge-plan [nil (ArrowHashTrie/from t1-root) (ArrowHashTrie/from log-root) (ArrowHashTrie/from log2-root)])))
