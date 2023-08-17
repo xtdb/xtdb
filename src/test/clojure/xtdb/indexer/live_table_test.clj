@@ -10,8 +10,9 @@
   (:import (java.nio ByteBuffer)
            (java.util Arrays)
            (org.apache.arrow.memory RootAllocator)
+           (xtdb.indexer.live_index ILiveTable TestLiveTable)
            xtdb.vector.IVectorPosition
-           (xtdb.trie LiveHashTrie)))
+           (xtdb.trie LiveHashTrie LiveHashTrie$Leaf)))
 
 (defn ->live-trie [log-limit page-limit iid-vec]
   (-> (doto (LiveHashTrie/builder iid-vec)
@@ -34,8 +35,8 @@
       (tu/with-tmp-dirs #{path}
         (with-open [obj-store (obj-store-test/fs path)
                     allocator (RootAllocator.)
-                    live-table (live-index/->live-table
-                                 allocator obj-store "foo" {:->live-trie (partial ->live-trie 2 4)})
+                    live-table ^ILiveTable (live-index/->live-table
+                                             allocator obj-store "foo" {:->live-trie (partial ->live-trie 2 4)})
                     live-table-tx (.startTx
                                     live-table (xtp/->TransactionInstant 0 (.toInstant #inst "2000")))]
 
@@ -47,17 +48,18 @@
 
           (.commit live-table-tx)
 
-          (let [leaves (.leaves (.compactLogs (.live-trie live-table)))]
+          (let [leaves (.leaves (.compactLogs ^LiveHashTrie (.live-trie ^TestLiveTable live-table)))
+                leaf ^LiveHashTrie$Leaf (first leaves)]
 
             (t/is (= 1 (count leaves)))
 
             (t/is
               (uuid-equal-to-path?
                 uuid
-                (.path (first leaves))))
+                (.path leaf)))
 
             (t/is (= (reverse (range n))
-                     (->> (first leaves)
+                     (->> leaf
                           (.data)
                           (vec)))))
 
@@ -73,8 +75,8 @@
       (tu/with-tmp-dirs #{path}
         (with-open [obj-store (obj-store-test/fs path)
                     allocator (RootAllocator.)
-                    live-table (live-index/->live-table
-                                 allocator obj-store "foo")
+                    live-table ^ILiveTable (live-index/->live-table
+                                             allocator obj-store "foo")
                     live-table-tx (.startTx
                                     live-table (xtp/->TransactionInstant 0 (.toInstant #inst "2000")))]
 
@@ -86,17 +88,18 @@
 
           (.commit live-table-tx)
 
-          (let [leaves (.leaves (.compactLogs (.live-trie live-table)))]
+          (let [leaves (.leaves (.compactLogs ^LiveHashTrie (.live-trie ^TestLiveTable live-table)))
+                leaf ^LiveHashTrie$Leaf (first leaves)]
 
             (t/is (= 1 (count leaves)))
 
             (t/is
               (uuid-equal-to-path?
                 uuid
-                (.path (first leaves))))
+                (.path leaf)))
 
             (t/is (= (reverse (range n))
-                     (->> (first leaves)
+                     (->> leaf
                           (.data)
                           (vec)))))
 
