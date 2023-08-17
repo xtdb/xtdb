@@ -53,7 +53,7 @@ public class LeafMergeQueue {
         });
 
         pq.addAll(lps.stream().filter(Objects::nonNull).filter(this::isValid).toList());
-}
+    }
 
     private ArrowBufPointer getPointer(LeafPointer lp, ArrowBufPointer ptr) {
         return rdrs[lp.ordinal].getPointer(lp.index, ptr);

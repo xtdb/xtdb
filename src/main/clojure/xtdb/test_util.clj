@@ -342,3 +342,6 @@
       (.syncRowCount trie-wtr))
 
     trie-root))
+
+(defn byte-buffer->path [^java.nio.ByteBuffer bb]
+  (mapcat (fn [b] [(mod (bit-shift-right b 4) 16) (mod (bit-and b (dec (bit-shift-left 1 4))) 16)]) (.array bb)))

@@ -547,7 +547,7 @@
 
             tx-key)))
 
-          (await/notify-tx tx-key awaiters)
+      (await/notify-tx tx-key awaiters)
 
       (catch Throwable t
         (set! (.indexer-error this) t)

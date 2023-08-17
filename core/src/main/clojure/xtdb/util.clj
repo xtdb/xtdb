@@ -20,11 +20,11 @@
            java.time.temporal.ChronoUnit
            (java.util ArrayList Collections Date Iterator LinkedHashMap LinkedList Map Queue UUID WeakHashMap)
            (java.util.concurrent CompletableFuture ExecutionException ExecutorService Executors ThreadFactory TimeUnit)
-           (java.util.function Consumer Function Supplier)
+           (java.util.function BiFunction Consumer Function Supplier)
            (org.apache.arrow.compression CommonsCompressionFactory)
            (org.apache.arrow.flatbuf Footer Message RecordBatch)
            (org.apache.arrow.memory AllocationManager ArrowBuf BufferAllocator)
-           (org.apache.arrow.memory.util ArrowBufPointer ByteFunctionHelpers MemoryUtil)
+           (org.apache.arrow.memory.util ByteFunctionHelpers MemoryUtil)
            (org.apache.arrow.vector ValueVector VectorLoader VectorSchemaRoot)
            (org.apache.arrow.vector.ipc ArrowFileWriter ArrowStreamWriter ArrowWriter)
            (org.apache.arrow.vector.ipc.message ArrowBlock ArrowFooter ArrowRecordBatch MessageSerializer)
@@ -343,6 +343,11 @@
   (reify Function
     (apply [_ v]
       (f v))))
+
+(defn ->jbifn {:style/indent :defn} ^java.util.function.BiFunction [f]
+  (reify BiFunction
+    (apply [_ a b]
+      (f a b))))
 
 (defn then-apply {:style/indent :defn}
   ^java.util.concurrent.CompletableFuture

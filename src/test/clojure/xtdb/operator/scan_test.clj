@@ -65,6 +65,42 @@
              (set (tu/query-ra '[:scan {:table xt_docs} [xt/id]]
                                {:node node}))))))
 
+(t/deftest test-metadata
+  (with-open [node (node/start-node {:xtdb/indexer {:rows-per-chunk 20}})]
+    (->> (for [i (range 100)]
+           [:put :xt_docs {:xt/id i}])
+         (partition-all 20)
+         (mapv #(xt/submit-tx node %)))
+
+    (t/is (= (set (concat (for [i (range 20)] {:xt/id i}) (for [i (range 80 100)] {:xt/id i})))
+             (set (tu/query-ra '[:scan {:table xt_docs} [{xt/id (or (< xt/id 20)
+                                                                    (>= xt/id 80))}]]
+                               {:node node})))
+          "testing only getting some trie matches"))
+
+  (with-open [node (node/start-node {:xtdb/indexer {:rows-per-chunk 20}})]
+    (xt/submit-tx node (for [i (range 20)] [:put :xt_docs {:xt/id i}]))
+    (xt/submit-tx node (for [i (range 20)] [:delete :xt_docs i]))
+
+    (t/is (= []
+             (tu/query-ra '[:scan {:table xt_docs} [{xt/id (< xt/id 20)}]]
+                          {:node node}))
+          "testing newer chunks relevant even if not matching")
+
+    (t/is (= []
+             (tu/query-ra '[:scan {:table xt_docs} [toto]]
+                          {:node node}))
+          "testing nothing matches"))
+
+  (with-open [node (node/start-node {})]
+    (xt/submit-tx node [[:put :xt_docs {:xt/id 1 :boolean-or-int true}]
+                        [:put :xt_docs {:xt/id 2 :boolean-or-int 2}]])
+    (tu/finish-chunk! node)
+
+    (t/is (= [{:boolean-or-int true}]
+             (tu/query-ra '[:scan {:table xt_docs} [{boolean-or-int (= boolean-or-int true)}]]
+                          {:node node}))
+          "testing boolean metadata")))
 
 (t/deftest test-past-point-point-queries
   (with-open [node (node/start-node {})]

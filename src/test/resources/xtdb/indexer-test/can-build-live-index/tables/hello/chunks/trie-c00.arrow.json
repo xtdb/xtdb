@@ -148,9 +148,37 @@
                 "name" : "uuid",
                 "nullable" : true,
                 "type" : {
-                  "name" : "bool"
+                  "name" : "struct"
                 },
-                "children" : [ ]
+                "children" : [{
+                  "name" : "min",
+                  "nullable" : true,
+                  "type" : {
+                    "name" : "UuidType"
+                  },
+                  "children" : [ ],
+                  "metadata" : [{
+                    "value" : "uuid",
+                    "key" : "ARROW:extension:name"
+                  },{
+                    "value" : "",
+                    "key" : "ARROW:extension:metadata"
+                  }]
+                },{
+                  "name" : "max",
+                  "nullable" : true,
+                  "type" : {
+                    "name" : "UuidType"
+                  },
+                  "children" : [ ],
+                  "metadata" : [{
+                    "value" : "uuid",
+                    "key" : "ARROW:extension:name"
+                  },{
+                    "value" : "",
+                    "key" : "ARROW:extension:metadata"
+                  }]
+                }]
               }]
             },{
               "name" : "bloom",
@@ -263,7 +291,17 @@
                 "name" : "uuid",
                 "count" : 6,
                 "VALIDITY" : [0,0,0,0,0,1],
-                "DATA" : [0,0,0,0,0,1]
+                "children" : [{
+                  "name" : "min",
+                  "count" : 6,
+                  "VALIDITY" : [0,0,0,0,0,1],
+                  "DATA" : ["00000000000000000000000000000000","00000000000000000000000000000000","00000000000000000000000000000000","00000000000000000000000000000000","00000000000000000000000000000000","cb8815ee85f74c61a8032ea1c949cf8d"]
+                },{
+                  "name" : "max",
+                  "count" : 6,
+                  "VALIDITY" : [0,0,0,0,0,1],
+                  "DATA" : ["00000000000000000000000000000000","00000000000000000000000000000000","00000000000000000000000000000000","00000000000000000000000000000000","00000000000000000000000000000000","cb8815ee85f74c61a8032ea1c949cf8d"]
+                }]
               }]
             },{
               "name" : "bloom",

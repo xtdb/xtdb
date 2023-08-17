@@ -36,15 +36,15 @@
   (^double [^long n ^long k ^long m]
    (Math/pow (- 1 (Math/exp (/ (- k) (double (/ m n))))) k)))
 
-(defn bloom->bitmap ^org.roaringbitmap.buffer.ImmutableRoaringBitmap [^VarBinaryVector bloom-vec ^long idx]
-  (let [pointer (.getDataPointer bloom-vec idx)
+(defn bloom->bitmap ^org.roaringbitmap.buffer.ImmutableRoaringBitmap [^IVectorReader bloom-rdr ^long idx]
+  (let [pointer (.getPointer bloom-rdr idx)
         nio-buffer (.nioBuffer (.getBuf pointer) (.getOffset pointer) (.getLength pointer))]
     (ImmutableRoaringBitmap. nio-buffer)))
 
-(defn bloom-contains? [^VarBinaryVector bloom-vec
+(defn bloom-contains? [^IVectorReader bloom-rdr
                        ^long idx
                        ^ints hashes]
-  (let [^ImmutableRoaringBitmap bloom (bloom->bitmap bloom-vec idx)]
+  (let [^ImmutableRoaringBitmap bloom (bloom->bitmap bloom-rdr idx)]
     (loop [n 0]
       (if (= n (alength hashes))
         true

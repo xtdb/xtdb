@@ -1,7 +1,15 @@
 (ns xtdb.metadata-test
   (:require [clojure.test :as t :refer [deftest]]
             [xtdb.api :as xt]
-            [xtdb.test-util :as tu]))
+            [xtdb.metadata :as meta]
+            [xtdb.expression.metadata :as expr.meta]
+            [xtdb.node :as node]
+            [xtdb.util :as util]
+            [xtdb.trie :as trie]
+            [xtdb.test-util :as tu])
+  (:import (clojure.lang MapEntry)
+           (org.roaringbitmap RoaringBitmap)
+           (xtdb.metadata IMetadataManager)))
 
 (t/use-fixtures :each tu/with-node)
 (t/use-fixtures :once tu/with-allocator)
@@ -92,3 +100,52 @@
              (tu/query-ra '[:scan {:table xt_docs}
                             [{time (= time #time/time "04:05:06")}]]
                           {:node tu/*node* :basis {:tx tx} :default-tz #time/zone "Z"})))))
+
+(deftest test-min-max-on-xt-id
+  (with-open [node (node/start-node {:xtdb.indexer/live-index {:page-limit 16}})]
+    (-> (xt/submit-tx node (for [i (range 20)] [:put :xt_docs {:xt/id i}]))
+        (tu/then-await-tx node))
+
+    (tu/finish-chunk! node)
+
+    (let [first-buckets (map (comp first tu/byte-buffer->path trie/->iid) (range 20))
+          bucket->page-idx (->> (into (sorted-set) first-buckets)
+                                (map-indexed #(MapEntry/create %2 %1))
+                                (into {}))
+          min-max-by-bucket (-> (group-by :bucket (map-indexed (fn [index bucket] {:index index :bucket bucket}) first-buckets))
+                                (update-vals #(reduce (fn [res {:keys [index]}]
+                                                        (-> res
+                                                            (update :min min index)
+                                                            (update :max max index)))
+                                                      {:min Long/MAX_VALUE :max Long/MIN_VALUE}
+                                                      %)))
+
+          relevant-pages (->> (filter (fn [[_ {:keys [min max]}]] (<= min 10 max)) min-max-by-bucket)
+                              (map (comp bucket->page-idx first)))
+
+          ^IMetadataManager metadata-mgr (tu/component node ::meta/metadata-manager)
+          literal-selector (expr.meta/->metadata-selector '(and (< xt/id 11) (> xt/id 9)) '{xt/id :i64} {})
+          res (first (meta/matching-tries metadata-mgr "xt_docs" literal-selector))]
+
+      (t/is (= {:chunk-idx 0,
+                :col-names
+                #{"xt$iid" "xt$valid_to" "xt$valid_from" "xt$id" "xt$system_from"}}
+               (dissoc res :page-idxs)))
+
+      (t/is (= (RoaringBitmap/bitmapOf (int-array relevant-pages))
+               (:page-idxs res))))))
+
+(deftest test-boolean-metadata
+  (xt/submit-tx tu/*node* [[:put :xt_docs {:xt/id 1 :boolean-or-int true}]])
+  (tu/finish-chunk! tu/*node*)
+
+  (let [^IMetadataManager metadata-mgr (tu/component tu/*node* ::meta/metadata-manager)
+        true-selector (expr.meta/->metadata-selector '(= boolean-or-int true) '{boolean-or-int :bool} {})
+        res (first (meta/matching-tries metadata-mgr "xt_docs" true-selector))]
+    (t/is (= {:chunk-idx 0,
+              :col-names
+              #{"xt$iid" "xt$valid_to" "xt$valid_from" "xt$id" "xt$system_from" "boolean_or_int"}}
+             (dissoc res :page-idxs)))
+
+    (t/is (= (doto (RoaringBitmap.) (.add 0))
+             (:page-idxs res)))))

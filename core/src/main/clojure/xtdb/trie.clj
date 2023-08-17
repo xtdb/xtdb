@@ -16,8 +16,8 @@
            (org.apache.arrow.vector VectorSchemaRoot)
            [org.apache.arrow.vector.ipc ArrowFileWriter]
            (org.apache.arrow.vector.types.pojo ArrowType$Union Schema)
-           (org.apache.arrow.vector.types.pojo ArrowType$Union Schema)
            org.apache.arrow.vector.types.UnionMode
+           (org.roaringbitmap RoaringBitmap)
            (xtdb.object_store ObjectStore)
            (xtdb.trie ArrowHashTrie$Leaf HashTrie HashTrie$Node LiveHashTrie LiveHashTrie$Leaf)
            (xtdb.util WritableByteBufferChannel)
@@ -197,12 +197,12 @@
     {:leaf-buf (.getAsByteBuffer leaf-bb-ch)
      :trie-buf (.getAsByteBuffer trie-bb-ch)}))
 
-(defn write-trie-bufs! [^ObjectStore obj-store, ^String dir, ^String chunk-idx
+(defn write-trie-bufs! [^ObjectStore obj-store, ^String table-name, ^String chunk-idx
                         {:keys [^ByteBuffer leaf-buf ^ByteBuffer trie-buf]}]
-  (-> (.putObject obj-store (format "%s/leaf-c%s.arrow" dir chunk-idx) leaf-buf)
+  (-> (.putObject obj-store (meta/->table-leaf-obj-key table-name chunk-idx) leaf-buf)
       (util/then-compose
-        (fn [_]
-          (.putObject obj-store (format "%s/trie-c%s.arrow" dir chunk-idx) trie-buf)))))
+       (fn [_]
+         (.putObject obj-store (meta/->table-trie-obj-key table-name chunk-idx) trie-buf)))))
 
 (defn- bucket-for [^ByteBuffer iid level]
   (let [level-offset-bits (* HashTrie/LEVEL_BITS (inc level))
@@ -210,33 +210,47 @@
     (bit-and (bit-shift-right (.get iid ^int level-offset-bytes) (mod level-offset-bits Byte/SIZE)) HashTrie/LEVEL_MASK)))
 
 (defn ->merge-plan
-  "Returns a tree of the tasks required to merge the given tries"
-  [tries, ^ByteBuffer iid]
+  "Returns a tree of the tasks required to merge the given tries "
+  [tries, trie-page-idxs, ^ByteBuffer iid]
 
   (letfn [(->merge-plan* [nodes path ^long level]
             (let [trie-children (mapv #(some-> ^HashTrie$Node % (.children)) nodes)]
               (if-let [^objects first-children (some identity trie-children)]
-                {:path (byte-array path)
-                 :node [:branch (->> (if iid
-                                       [(bucket-for iid level)]
-                                       (range (alength first-children)))
-                                     (mapv (fn [bucket-idx]
-                                             (->merge-plan* (mapv (fn [node ^objects node-children]
-                                                                    (if node-children
-                                                                      (aget node-children bucket-idx)
-                                                                      node))
-                                                                  nodes trie-children)
-                                                            (conj path bucket-idx)
-                                                            (inc level)))))]}
-                {:path (byte-array path)
-                 :node [:leaf (->> nodes
-                                   (into [] (map-indexed
-                                             (fn [ordinal ^HashTrie$Node leaf-node]
-                                               (when leaf-node
-                                                 (condp = (class leaf-node)
-                                                   ArrowHashTrie$Leaf {:ordinal ordinal,
-                                                                       :trie-leaf {:page-idx (.getPageIndex ^ArrowHashTrie$Leaf leaf-node)}}
+                (let [branches (->> (if iid
+                                      [(bucket-for iid level)]
+                                      (range (alength first-children)))
+                                    (mapv (fn [bucket-idx]
+                                            (->merge-plan* (mapv (fn [node ^objects node-children]
+                                                                   (if node-children
+                                                                     (aget node-children bucket-idx)
+                                                                     node))
+                                                                 nodes trie-children)
+                                                           (conj path bucket-idx)
+                                                           (inc level)))))]
+                  (when-not (every? nil? branches)
+                    {:path (byte-array path)
+                     :node [:branch branches]}))
 
-                                                   LiveHashTrie$Leaf {:ordinal ordinal, :trie-leaf leaf-node}))))))]})))]
+                (loop [ordinal 0
+                       [node & more-nodes] nodes
+                       node-taken? false
+                       leaves []]
+                  (cond
+                    (not (< ordinal (count nodes))) (when node-taken?
+                                                      {:path (byte-array path)
+                                                       :node [:leaf leaves]})
+                    node (condp = (class node)
+                           ArrowHashTrie$Leaf
+                           (let [page-idx (.getPageIndex ^ArrowHashTrie$Leaf node)
+                                 take-node? (or node-taken?
+                                                (some-> ^RoaringBitmap (nth trie-page-idxs ordinal)
+                                                        (.contains page-idx)))]
+                             (recur (inc ordinal) more-nodes take-node?
+                                    (conj leaves (when take-node?
+                                                   {:page-idx page-idx}))))
+                           LiveHashTrie$Leaf
+                           (recur (inc ordinal) more-nodes true (conj leaves node)))
+
+                    :else (recur (inc ordinal) more-nodes node-taken? (conj leaves nil)))))))]
 
     (->merge-plan* (map #(some-> ^HashTrie % (.rootNode)) tries) [] 0)))

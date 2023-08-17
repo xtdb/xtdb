@@ -167,7 +167,7 @@
       (when (pos? (.rowCount live-rel-rdr))
         (let [bufs (trie/live-trie->bufs allocator live-trie live-rel-rdr)
               chunk-idx-str (util/->lex-hex-string chunk-idx)
-              !fut (trie/write-trie-bufs! obj-store (format "tables/%s/chunks" table-name) chunk-idx-str bufs)
+              !fut (trie/write-trie-bufs! obj-store table-name chunk-idx-str bufs)
               table-metadata (MapEntry/create table-name
                                               {:col-types (live-rel->col-types live-rel-rdr)
                                                :row-count (.rowCount live-rel-rdr)})]

@@ -9,35 +9,31 @@
             [xtdb.transit :as xt.transit]
             [xtdb.types :as types]
             [xtdb.util :as util]
-            [xtdb.vector :as vec]
+            [xtdb.vector.reader :as vr]
             [xtdb.vector.writer :as vw])
-  (:import [clojure.lang Keyword MapEntry]
-           (java.io ByteArrayInputStream ByteArrayOutputStream)
+  (:import (java.io ByteArrayInputStream ByteArrayOutputStream)
            java.lang.AutoCloseable
            java.nio.ByteBuffer
            (java.util HashMap HashSet Map NavigableMap Set TreeMap)
-           (java.util.concurrent ConcurrentHashMap)
-           java.util.concurrent.atomic.AtomicInteger
+           (java.util.concurrent ConcurrentHashMap CompletableFuture)
            (java.util.function BiFunction Consumer Function)
            (java.util.stream IntStream)
-           (org.apache.arrow.memory ArrowBuf BufferAllocator)
-           (org.apache.arrow.vector FieldVector IntVector VectorSchemaRoot)
-           (org.apache.arrow.vector.complex ListVector StructVector)
-           (org.apache.arrow.vector.types.pojo ArrowType$Union Schema)
+           (org.apache.arrow.memory ArrowBuf)
+           (org.apache.arrow.vector FieldVector VectorLoader VectorSchemaRoot)
+           (org.apache.arrow.vector.types.pojo ArrowType$Union)
            (org.roaringbitmap RoaringBitmap)
            xtdb.buffer_pool.IBufferPool
            xtdb.object_store.ObjectStore
-           (xtdb.vector IVectorReader IVectorWriter RelationReader ValueVectorReader$DuvReader)))
+           (xtdb.vector IVectorReader IVectorWriter RelationReader)))
 
 (set! *unchecked-math* :warn-on-boxed)
 
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface ITableMetadata
-  (^org.apache.arrow.vector.VectorSchemaRoot metadataRoot [])
+  (^xtdb.vector.IVectorReader metadataReader [])
   (^java.util.Set columnNames [])
-  (^Long rowIndex [^String column-name, ^int blockIdx]
-   "pass blockIdx = -1 for metadata about the whole chunk")
-  (^long blockCount []))
+  (^Long rowIndex [^String column-name, ^int pageIdx])
+  (^long pageCount []))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (definterface IPageMetadataWriter
@@ -56,28 +52,7 @@
 (definterface IMetadataPredicate
   (^java.util.function.IntPredicate build [^xtdb.metadata.ITableMetadata tableMetadata]))
 
-(defrecord ChunkMatch [^long chunk-idx, ^RoaringBitmap block-idxs, ^Set col-names])
-
-(defn- with-single-root [^IBufferPool buffer-pool, obj-key, f]
-  (-> (.getBuffer buffer-pool obj-key)
-      (util/then-apply
-        (fn [^ArrowBuf buffer]
-          (assert buffer)
-
-          (when buffer
-            (let [res (promise)]
-              (try
-                (with-open [chunk (util/->chunks buffer)]
-                  (.tryAdvance chunk
-                               (reify Consumer
-                                 (accept [_ vsr]
-                                   (deliver res (f vsr))))))
-
-                (assert (realized? res))
-                @res
-
-                (finally
-                  (.close buffer)))))))))
+(defrecord TrieMatch [^long chunk-idx, ^RoaringBitmap page-idxs, ^Set col-names])
 
 (defn- obj-key->chunk-idx [obj-key]
   (some-> (second (re-matches #"chunk-metadata/(\p{XDigit}+).transit.json" obj-key))
@@ -180,10 +155,10 @@
               (.endStruct struct-wtr))))))))
 
 
-(doseq [type-head #{:null :bool :fixed-size-binary :uuid :clj-form}]
+(doseq [type-head #{:null :bool :fixed-size-binary :clj-form}]
   (defmethod type->metadata-writer type-head [_write-col-meta! metadata-root col-type] (->bool-type-handler metadata-root col-type)))
 
-(doseq [type-head #{:int :float :utf8 :varbinary :keyword :uri
+(doseq [type-head #{:int :float :utf8 :varbinary :keyword :uri :uuid
                     :timestamp-tz :timestamp-local :date :interval :time-local}]
   (defmethod type->metadata-writer type-head [_write-col-meta! metadata-root col-type] (->min-max-type-handler metadata-root col-type)))
 
@@ -270,8 +245,56 @@
             (write-col-meta! true col))
           (.endList cols-wtr))))))
 
+(defn ->table-metadata-idxs [^IVectorReader metadata-rdr]
+  (let [page-idx-cache (HashMap.)
+        meta-row-count (.valueCount metadata-rdr)
+        page-idx-rdr (.structKeyReader metadata-rdr "page-idx")
+        cols-rdr(.structKeyReader metadata-rdr "columns")
+        col-rdr (.listElementReader cols-rdr)
+        column-name-rdr (.structKeyReader col-rdr "col-name")
+        root-col-rdr (.structKeyReader col-rdr "root-col?")
+        col-names (HashSet.)]
+
+    (dotimes [meta-idx meta-row-count]
+      (let [cols-start-idx (.getListStartIndex cols-rdr meta-idx)
+            page-idx (if-let [page-idx (.getObject page-idx-rdr meta-idx)]
+                       page-idx
+                       -1)]
+        (dotimes [cols-data-idx (.getListCount cols-rdr meta-idx)]
+          (let [cols-data-idx (+ cols-start-idx cols-data-idx)
+                col-name (str (.getObject column-name-rdr cols-data-idx))]
+            (.add col-names col-name)
+            (when (.getBoolean root-col-rdr cols-data-idx)
+              (.put page-idx-cache [col-name page-idx] cols-data-idx))))))
+
+    {:col-names (into #{} col-names)
+     :page-idx-cache (into {} page-idx-cache)
+     :page-count (loop [page-count 0, idx 0]
+                   (cond
+                     (>= idx meta-row-count) page-count
+                     :else (recur (cond-> page-count
+                                    (not (nil? (.getObject page-idx-rdr idx))) inc)
+                                  (inc idx))))}))
+
+(defn- table-name->dir [table-name] (format "tables/%s/chunks" table-name))
+
+(defn ->table-leaf-obj-key [table-name chunk-idx]
+  (format "%s/leaf-c%s.arrow" (table-name->dir table-name) chunk-idx))
+
+(defn ->table-trie-obj-key [table-name chunk-idx]
+  (format "%s/trie-c%s.arrow" (table-name->dir table-name) chunk-idx))
+
+(defn ->table-metadata ^xtdb.metadata.ITableMetadata [^IVectorReader metadata-reader, {:keys [col-names page-idx-cache, page-count]}]
+  (reify ITableMetadata
+    (metadataReader [_] metadata-reader)
+    (columnNames [_] col-names)
+    (rowIndex [_ col-name block-idx] (get page-idx-cache [col-name block-idx]))
+    (pageCount [_] page-count)))
+
 (deftype MetadataManager [^ObjectStore object-store
+                          ^IBufferPool buffer-pool
                           ^NavigableMap chunks-metadata
+                          ^Map table-metadata-idxs
                           ^:volatile-mutable ^Map col-types]
   IMetadataManager
   (finishChunk [this chunk-idx new-chunk-metadata]
@@ -281,16 +304,26 @@
     (.put chunks-metadata chunk-idx new-chunk-metadata))
 
   (withMetadata [_ chunk-idx table-name f]
-    (throw (UnsupportedOperationException.))
-    #_
-    (with-single-root buffer-pool (->table-metadata-obj-key chunk-idx table-name)
-      (fn [metadata-root]
-        (.apply f (->table-metadata metadata-root
-                                    (.computeIfAbsent table-metadata-idxs
-                                                      [chunk-idx table-name]
-                                                      (reify Function
-                                                        (apply [_ _]
-                                                          (->table-metadata-idxs metadata-root)))))))))
+    (-> (.getBuffer buffer-pool (->table-trie-obj-key table-name (util/->lex-hex-string chunk-idx)))
+        (util/then-apply
+          (fn [^ArrowBuf trie-buf]
+            (try
+              (let [{:keys [^VectorLoader loader ^VectorSchemaRoot root arrow-blocks]} (util/read-arrow-buf trie-buf)]
+                (try
+                  (with-open [record-batch (util/->arrow-record-batch-view (first arrow-blocks) trie-buf)]
+                    (.load loader record-batch))
+                  (let [^RelationReader trie-rdr (vr/<-root root)
+                        ^IVectorReader metadata-reader (.metadataReader (.typeIdReader (.readerForName trie-rdr "nodes") (byte 2)))]
+                    (.apply f (->table-metadata metadata-reader
+                                                (.computeIfAbsent table-metadata-idxs
+                                                                  [chunk-idx table-name]
+                                                                  (reify Function
+                                                                    (apply [_ _]
+                                                                      (->table-metadata-idxs metadata-reader)))))))
+                  (finally
+                    (.close root))))
+              (finally
+                (.close trie-buf)))))))
 
   (chunksMetadata [_] chunks-metadata)
 
@@ -333,23 +366,21 @@
           :buffer-pool (ig/ref :xtdb.buffer-pool/buffer-pool)}
          opts))
 
-(defmethod ig/init-key ::metadata-manager [_ {:keys [^ObjectStore object-store], :as deps}]
+(defmethod ig/init-key ::metadata-manager [_ {:keys [^ObjectStore object-store, ^IBufferPool buffer-pool], :as deps}]
   (let [chunks-metadata (load-chunks-metadata deps)]
     (MetadataManager. object-store
+                      buffer-pool
                       chunks-metadata
+                      (ConcurrentHashMap.)
                       (->> (vals chunks-metadata) (reduce merge-col-types {})))))
 
 (defmethod ig/halt-key! ::metadata-manager [_ mgr]
   (util/try-close mgr))
 
 (defn with-metadata [^IMetadataManager metadata-mgr, ^long chunk-idx, ^String table-name, ^Function f]
-  (throw (UnsupportedOperationException.))
-  #_ ; TODO reinstate when we bring back metadata into scan
   (.withMetadata metadata-mgr chunk-idx table-name f))
 
 (defn with-all-metadata [^IMetadataManager metadata-mgr, table-name, ^BiFunction f]
-  (throw (UnsupportedOperationException.))
-  #_ ; TODO reinstate when we bring back metadata into scan
   (->> (for [[^long chunk-idx, chunk-metadata] (.chunksMetadata metadata-mgr)
              :let [table (get-in chunk-metadata [:tables table-name])]
              :when table]
@@ -361,19 +392,14 @@
        (into [] (keep deref))
        (util/rethrowing-cause)))
 
-(defn matching-chunks [^IMetadataManager metadata-mgr, table-name, ^IMetadataPredicate metadata-pred]
-  (throw (UnsupportedOperationException.))
-  #_ ; TODO reinstate when we bring back metadata into scan
+(defn matching-tries [^IMetadataManager metadata-mgr, table-name, ^IMetadataPredicate metadata-pred]
   (with-all-metadata metadata-mgr table-name
     (util/->jbifn
       (fn [^long chunk-idx, ^ITableMetadata table-metadata]
-        (let [pred (.build metadata-pred table-metadata)]
-          (when (.test pred -1)
-            (let [block-idxs (RoaringBitmap.)]
-              (dotimes [block-idx (.blockCount table-metadata)]
-                (when (.test pred block-idx)
-                  (.add block-idxs block-idx)))
-
-              (when-not (.isEmpty block-idxs)
-                (->ChunkMatch chunk-idx block-idxs (.columnNames table-metadata))))))))))
-
+        (let [pred (.build metadata-pred table-metadata)
+              page-idxs (RoaringBitmap.)]
+          (dotimes [page-idx (.pageCount table-metadata)]
+            (when (.test pred page-idx)
+              (.add page-idxs page-idx)))
+          (when-not (.isEmpty page-idxs)
+            (->TrieMatch chunk-idx page-idxs (.columnNames table-metadata))))))))

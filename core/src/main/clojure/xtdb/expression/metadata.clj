@@ -3,14 +3,11 @@
             [xtdb.expression :as expr]
             [xtdb.expression.walk :as ewalk]
             [xtdb.metadata :as meta]
-            [xtdb.util :as util]
             [xtdb.types :as types]
-            [xtdb.vector.reader :as vr])
-  (:import (xtdb.metadata IMetadataPredicate ITableMetadata)
-           (xtdb.vector RelationReader IVectorReader)
-           java.util.function.IntPredicate
-           [org.apache.arrow.vector VarBinaryVector]
-           [org.apache.arrow.vector.complex ListVector StructVector]))
+            [xtdb.util :as util])
+  (:import java.util.function.IntPredicate
+           (xtdb.metadata IMetadataPredicate ITableMetadata)
+           (xtdb.vector IVectorReader RelationReader)))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -23,16 +20,20 @@
 
 (declare meta-expr)
 
+(def ^:private bool-metadata-types #{:null :bool :fixed-size-binary :clj-form})
+
 (defn call-meta-expr [{:keys [f args] :as expr} {:keys [col-types] :as opts}]
   (letfn [(var-param-expr [f meta-value field {:keys [param-type] :as param-expr}]
-            (let [base-col-types (-> (get col-types field)
-                                     types/flatten-union-types)]
-              (simplify-and-or-expr
-                {:op :call
-                 :f :or
-                 ;; TODO this seems like it could make better use
-                 ;; of the polymorphic expr patterns?
-                 :args (vec
+            ;; TODO adapt for boolean metadata writer
+            (when-not (contains? bool-metadata-types param-type)
+              (let [base-col-types (-> (get col-types field)
+                                       types/flatten-union-types)]
+                (simplify-and-or-expr
+                 {:op :call
+                  :f :or
+                  ;; TODO this seems like it could make better use
+                  ;; of the polymorphic expr patterns?
+                  :args (vec
                          (for [col-type (cond
                                           (isa? types/col-type-hierarchy param-type :num)
                                           (filterv types/num-types base-col-types)
@@ -50,7 +51,7 @@
                             :field field,
                             :param-expr param-expr
                             :bloom-hash-sym (when (= meta-value :bloom-filter)
-                                              (gensym 'bloom-hashes))}))})))
+                                              (gensym 'bloom-hashes))}))}))))
 
           (bool-expr [var-param-f var-param-meta-fn
                       param-var-f param-var-meta-fn]
@@ -106,17 +107,18 @@
       (bloom/literal-hashes params param-expr col-type))))
 
 (def ^:private table-metadata-sym (gensym "table-metadata"))
-(def ^:private metadata-root-sym (gensym "metadata-root"))
-(def ^:private cols-vec-sym (gensym "cols-vec"))
-(def ^:private cols-data-vec-sym (gensym "cols-data-vec"))
-(def ^:private block-idx-sym (gensym "block-idx"))
-(def ^:private types-vec-sym (gensym "types-vec"))
-(def ^:private bloom-vec-sym (gensym "bloom-vec"))
+(def ^:private metadata-rdr-sym (gensym "metadata-rdr"))
+(def ^:private cols-rdr-sym (gensym "cols-rdr"))
+(def ^:private col-rdr-sym (gensym "col-rdr"))
+(def ^:private page-idx-sym (gensym "page-idx"))
+(def ^:private types-rdr-sym (gensym "types-rdr"))
+(def ^:private bloom-rdr-sym (gensym "bloom-rdr"))
+
 
 (defmethod expr/codegen-expr :metadata-vp-call [{:keys [f meta-value field param-expr col-type bloom-hash-sym]} opts]
   (let [field-name (util/str->normal-form-str (str field))
 
-        idx-code `(.rowIndex ~table-metadata-sym ~field-name ~block-idx-sym)]
+        idx-code `(.rowIndex ~table-metadata-sym ~field-name ~page-idx-sym)]
 
     (if (= meta-value :bloom-filter)
       {:return-type :bool
@@ -124,7 +126,7 @@
                    (cont :bool
                          `(boolean
                            (when-let [~expr/idx-sym ~idx-code]
-                             (bloom/bloom-contains? ~bloom-vec-sym ~expr/idx-sym ~bloom-hash-sym)))))}
+                             (bloom/bloom-contains? ~bloom-rdr-sym ~expr/idx-sym ~bloom-hash-sym)))))}
 
       (let [col-sym (gensym 'meta_col)
             col-field (types/col-type->field col-type)
@@ -141,9 +143,8 @@
                                    (assoc-in [:var->col-type col-sym] (types/merge-col-types col-type :null))))]
         {:return-type :bool
          :batch-bindings [[(-> col-sym (expr/with-tag IVectorReader))
-                           `(some-> ^StructVector (.getChild ~types-vec-sym ~(.getName col-field))
-                                    (.getChild ~(name meta-value))
-                                    vr/vec->reader)]]
+                           `(some-> (.structKeyReader ~types-rdr-sym ~(.getName col-field))
+                                    (.structKeyReader ~(name meta-value)))]]
          :children [emitted-expr]
          :continue (fn [cont]
                      (cont :bool
@@ -165,17 +166,17 @@
            :f (-> `(fn [~(-> table-metadata-sym (expr/with-tag ITableMetadata))
                         ~(-> expr/params-sym (expr/with-tag RelationReader))
                         [~@(keep :bloom-hash-sym (ewalk/expr-seq expr))]]
-                     (let [~metadata-root-sym (.metadataRoot ~table-metadata-sym)
-                           ~(-> cols-vec-sym (expr/with-tag ListVector)) (.getVector ~metadata-root-sym "columns")
-                           ~(-> cols-data-vec-sym (expr/with-tag StructVector)) (.getDataVector ~cols-vec-sym)
-                           ~(-> types-vec-sym (expr/with-tag StructVector)) (.getChild ~cols-data-vec-sym "types")
-                           ~(-> bloom-vec-sym (expr/with-tag VarBinaryVector)) (.getChild ~cols-data-vec-sym "bloom")
+                     (let [~metadata-rdr-sym (.metadataReader ~table-metadata-sym)
+                           ~(-> cols-rdr-sym (expr/with-tag IVectorReader)) (.structKeyReader ~metadata-rdr-sym "columns")
+                           ~(-> col-rdr-sym (expr/with-tag IVectorReader)) (.listElementReader ~cols-rdr-sym)
+                           ~(-> types-rdr-sym (expr/with-tag IVectorReader)) (.structKeyReader ~col-rdr-sym "types")
+                           ~(-> bloom-rdr-sym (expr/with-tag IVectorReader)) (.structKeyReader ~col-rdr-sym "bloom")
 
                            ~@(expr/batch-bindings emitted-expr)]
                        (reify IntPredicate
-                         (~'test [_ ~block-idx-sym]
+                         (~'test [_ ~page-idx-sym]
                           (boolean ~(continue (fn [_ code] code)))))))
-                  #_(doto clojure.pprint/pprint)
+                  ;; (doto clojure.pprint/pprint)
                   (eval))}))
 
       (util/lru-memoize)))

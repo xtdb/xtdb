@@ -18,7 +18,7 @@
   (:import (clojure.lang IPersistentMap MapEntry)
            [java.lang AutoCloseable]
            java.nio.ByteBuffer
-           (java.util ArrayList Iterator LinkedList List Map)
+           (java.util ArrayList Collection Iterator LinkedList List Map)
            (java.util.function IntConsumer)
            (java.util.stream IntStream)
            (org.apache.arrow.memory ArrowBuf BufferAllocator)
@@ -455,22 +455,22 @@
                         (transient {:chunk-idx chunk-idx})
                         files))))))
 
-(defn table-merge-plan [^IBufferPool buffer-pool, table-chunks, ^ILiveTableWatermark live-table-wm, iid-bb]
+(defn table-merge-plan [^IBufferPool buffer-pool, table-chunks, chunk-idx->page-idxs, ^ILiveTableWatermark live-table-wm, iid-bb]
   (util/with-open [trie-roots (ArrayList. (count table-chunks))]
     ;; TODO these could be kicked off asynchronously
-    (trie/->merge-plan
-     (cond-> (vec (for [{:keys [trie-file]} table-chunks]
-                    (with-open [^ArrowBuf buf @(.getBuffer buffer-pool trie-file)]
-                      (let [{:keys [^VectorLoader loader root arrow-blocks]} (util/read-arrow-buf buf)]
-                        (with-open [record-batch (util/->arrow-record-batch-view (first arrow-blocks) buf)]
-                          (.load loader record-batch)
-                          (.add trie-roots root)
-                          (ArrowHashTrie/from root))))))
-       live-table-wm (conj (.compactLogs (.liveTrie live-table-wm))))
-     iid-bb)))
+    (let [tries (cond-> (vec (for [{:keys [trie-file chunk-idx]} table-chunks]
+                               (with-open [^ArrowBuf buf @(.getBuffer buffer-pool trie-file)]
+                                 (let [{:keys [^VectorLoader loader root arrow-blocks]} (util/read-arrow-buf buf)]
+                                   (with-open [record-batch (util/->arrow-record-batch-view (first arrow-blocks) buf)]
+                                     (.load loader record-batch)
+                                     (.add trie-roots root)
+                                     {:trie (ArrowHashTrie/from root)
+                                      :page-idxs (chunk-idx->page-idxs chunk-idx)})))))
+                  live-table-wm (conj {:trie (.compactLogs (.liveTrie live-table-wm))}))]
+      (trie/->merge-plan (mapv :trie tries) (mapv :page-idxs tries) iid-bb))))
 
 (defn merge-plan->tasks ^java.lang.Iterable [{:keys [path node]}]
-  (let [[node-tag node-arg] node]
+  (when-let [[node-tag node-arg] node]
     (case node-tag
       :branch (mapcat merge-plan->tasks node-arg)
       :leaf [{:path path, :leaves node-arg}])))
@@ -535,19 +535,19 @@
                                           (.add leaf-bufs leaf-buf)
 
                                           (ArrowLeafLoader. leaf-buf root loader arrow-blocks
-                                                      (LeafMergeQueue$LeafPointer. ordinal)
-                                                      -1))))))]
+                                                            (LeafMergeQueue$LeafPointer. ordinal)
+                                                            -1))))))]
       (cond-> arrow-leaves
         live-table-wm (conj (LiveLeafLoader. (.liveRelation live-table-wm)
                                              (LeafMergeQueue$LeafPointer. (count arrow-leaves))))))))
 
 (defn load-leaves [leaf-loaders {task-leaves :leaves}]
-  (mapv (fn [{:keys [ordinal trie-leaf]}]
-          (when trie-leaf
-            (let [^ILeafLoader leaf-loader (nth leaf-loaders ordinal)]
-              {:rel-rdr (.loadLeaf leaf-loader trie-leaf)
-               :leaf-ptr (.getLeafPointer leaf-loader)})))
-        task-leaves))
+  (->> task-leaves
+       (into [] (map-indexed (fn [ordinal trie-leaf]
+                               (when trie-leaf
+                                 (let [^ILeafLoader leaf-loader (nth leaf-loaders ordinal)]
+                                   {:rel-rdr (.loadLeaf leaf-loader trie-leaf)
+                                    :leaf-ptr (.getLeafPointer leaf-loader)})))))))
 
 (defn ->merge-queue ^xtdb.trie.LeafMergeQueue [loaded-leaves {:keys [path]}]
   (LeafMergeQueue. path
@@ -602,13 +602,17 @@
 ;; the skipping in another leaf consumer.
 
 (defn ->4r-cursor [^BufferAllocator allocator, ^ObjectStore obj-store, ^IBufferPool buffer-pool, ^IWatermark wm
-                   table-name, col-names, ^longs temporal-range
+                   table-name, col-names, ^longs temporal-range, ^List matching-tries
                    ^Map col-preds, params, {:keys [iid-bb] :as scan-opts}]
   (let [^ILiveTableWatermark live-table-wm (some-> (.liveIndex wm) (.liveTable table-name))
         table-chunks (list-table-chunks obj-store table-name)
-        merge-plan (table-merge-plan buffer-pool table-chunks live-table-wm iid-bb)]
+        normalized-col-names (into #{} (map util/str->normal-form-str) col-names)
+        chunk-idx->page-idxs (->> matching-tries
+                                  (filter #(not-empty (set/intersection normalized-col-names (:col-names %))))
+                                  (into {} (map (juxt :chunk-idx :page-idxs))))
+        merge-plan (table-merge-plan buffer-pool table-chunks chunk-idx->page-idxs live-table-wm iid-bb)]
     (util/with-close-on-catch [leaves (open-leaves buffer-pool table-chunks live-table-wm)]
-      (->TrieCursor allocator leaves (.iterator (merge-plan->tasks merge-plan))
+      (->TrieCursor allocator leaves (.iterator (let [^Iterable c (or (merge-plan->tasks merge-plan) [])] c))
                     col-names col-preds
                     temporal-range
                     params
@@ -713,9 +717,7 @@
         {:col-types col-types
          :stats {:row-count row-count}
          :->cursor (fn [{:keys [allocator, ^IWatermark watermark, basis, params default-all-valid-time?]}]
-                     ;; TODO reinstate metadata checks on pages
-
-                     (let [_metadata-pred (expr.meta/->metadata-selector (cons 'and metadata-args) col-types params)
+                     (let [metadata-pred (expr.meta/->metadata-selector (cons 'and metadata-args) col-types params)
                            scan-opts (-> scan-opts
                                          (assoc :iid-bb iid-bb)
                                          (update :for-valid-time
@@ -726,6 +728,8 @@
                                     normalized-table-name
                                     (set/union content-col-names temporal-col-names)
                                     (->temporal-range params basis scan-opts)
+                                    (let [^Collection coll (or (meta/matching-tries metadata-mgr (str table) metadata-pred) [])]
+                                      (ArrayList. coll))
                                     col-preds
                                     params
                                     scan-opts)))}))))

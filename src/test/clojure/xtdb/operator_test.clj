@@ -39,18 +39,18 @@
 
           (t/is (= #{0 2} (set (keys (.chunksMetadata metadata-mgr)))))
 
-          #_ ; TODO reinstate metadata
-          (let [expected-match [(meta/map->ChunkMatch
-                                 {:chunk-idx 2, :block-idxs (doto (RoaringBitmap.) (.add 1)), :col-names #{"xt$id" "name"}})]]
+          (let [expected-match [(meta/map->TrieMatch
+                                 {:chunk-idx 2, :page-idxs (doto (RoaringBitmap.) (.add 0)),
+                                  :col-names #{"xt$iid" "xt$valid_from" "xt$valid_to" "xt$system_from" "xt$id" "name"}})]]
             (t/is (= expected-match
-                     (meta/matching-chunks metadata-mgr "xt_docs"
-                                           (expr.meta/->metadata-selector '(> name "Ivan") '{name :utf8} {})))
-                  "only needs to scan chunk 1, block 1")
+                     (meta/matching-tries metadata-mgr "xt_docs"
+                                          (expr.meta/->metadata-selector '(> name "Ivan") '{name :utf8} {})))
+                  "only needs to scan chunk 1, page 1")
             (t/is (= expected-match
                      (with-open [params (tu/open-params {'?name "Ivan"})]
-                       (meta/matching-chunks metadata-mgr "xt_docs"
-                                             (expr.meta/->metadata-selector '(> name ?name) '{name :utf8} params))))
-                  "only needs to scan chunk 1, block 1"))
+                       (meta/matching-tries metadata-mgr "xt_docs"
+                                            (expr.meta/->metadata-selector '(> name ?name) '{name :utf8} params))))
+                  "only needs to scan chunk 1, page 1"))
 
           (let [tx2 (xt/submit-tx node [[:put :xt_docs {:name "Jeremy", :xt/id :jdt}]])]
 
@@ -80,19 +80,19 @@
     (let [^IMetadataManager metadata-mgr (tu/component node ::meta/metadata-manager)]
       (t/is (= #{0 4} (set (keys (.chunksMetadata metadata-mgr)))))
 
-      #_ ; TODO reinstate metadata
-      (let [expected-match [(meta/map->ChunkMatch
-                             {:chunk-idx 0, :block-idxs (doto (RoaringBitmap.) (.add 0)), :col-names #{"xt$id" "name"}})]]
+      (let [expected-match [(meta/map->TrieMatch
+                             {:chunk-idx 0, :page-idxs (doto (RoaringBitmap.) (.add 0)),
+                              :col-names #{"xt$iid" "xt$valid_from" "xt$valid_to" "xt$system_from" "xt$id" "name"}})]]
         (t/is (= expected-match
-                 (meta/matching-chunks metadata-mgr "xt_docs"
-                                       (expr.meta/->metadata-selector '(= name "Ivan") '{name :utf8} {})))
-              "only needs to scan chunk 0, block 0")
+                 (meta/matching-tries metadata-mgr "xt_docs"
+                                      (expr.meta/->metadata-selector '(= name "Ivan") '{name :utf8} {})))
+              "only needs to scan trie 0, page 0")
 
         (t/is (= expected-match
                  (with-open [params (tu/open-params {'?name "Ivan"})]
-                   (meta/matching-chunks metadata-mgr "xt_docs"
-                                         (expr.meta/->metadata-selector '(= name ?name) '{name :utf8} params))))
-              "only needs to scan chunk 0, block 0"))
+                   (meta/matching-tries metadata-mgr "xt_docs"
+                                        (expr.meta/->metadata-selector '(= name ?name) '{name :utf8} params))))
+              "only needs to scan trie 0, page 0"))
 
       (t/is (= #{{:name "Ivan"}}
                (set (tu/query-ra '[:scan {:table xt_docs} [{name (= name "Ivan")}]]
