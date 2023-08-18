@@ -5,14 +5,12 @@
             [xtdb.operator :as op]
             [xtdb.operator.scan :as scan]
             [xtdb.test-util :as tu]
-            [xtdb.trie :as trie]
             [xtdb.util :as util]
             [xtdb.vector.writer :as vw])
   (:import (java.util LinkedList)
            xtdb.operator.IRaQuerySource
            xtdb.operator.IRelationSelector
-           (xtdb.operator.scan RowConsumer)
-           (xtdb.vector RelationReader)))
+           (xtdb.operator.scan RowConsumer)))
 
 (t/use-fixtures :each tu/with-mock-clock tu/with-allocator)
 
