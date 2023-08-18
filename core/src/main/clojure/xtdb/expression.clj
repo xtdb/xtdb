@@ -16,10 +16,10 @@
            (java.util.stream IntStream)
            (org.apache.arrow.vector PeriodDuration ValueVector)
            (org.apache.commons.codec.binary Hex)
-           (xtdb StringUtil)
            (xtdb.operator IProjectionSpec IRelationSelector)
            (xtdb.types IntervalDayTime IntervalMonthDayNano IntervalYearMonth)
-           (xtdb.vector IMonoVectorReader IPolyVectorReader RelationReader IStructValueReader IVectorReader MonoToPolyReader RemappedTypeIdReader)
+           (xtdb.util StringUtil)
+           (xtdb.vector IMonoVectorReader IPolyVectorReader IStructValueReader IVectorReader MonoToPolyReader RelationReader RemappedTypeIdReader)
            xtdb.vector.ValueBox))
 
 (set! *unchecked-math* :warn-on-boxed)

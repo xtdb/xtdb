@@ -1,4 +1,4 @@
-package xtdb;
+package xtdb.util;
 
 public class RowCounter {
     private long chunkIdx;

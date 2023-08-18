@@ -1,4 +1,4 @@
-package xtdb;
+package xtdb.util;
 
 import java.util.LinkedHashMap;
 import java.util.Map.Entry;

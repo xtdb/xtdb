@@ -1,4 +1,4 @@
-package xtdb;
+package xtdb.util;
 
 import java.time.Duration;
 import java.util.concurrent.Semaphore;

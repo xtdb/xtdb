@@ -3,7 +3,7 @@
             [xtdb.util :as util]
             [juxt.clojars-mirrors.integrant.core :as ig]
             [clojure.tools.logging :as log])
-  (:import xtdb.LRU
+  (:import xtdb.util.LRU
            xtdb.object_store.ObjectStore
            java.io.Closeable
            java.nio.file.Path

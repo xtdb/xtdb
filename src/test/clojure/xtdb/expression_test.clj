@@ -17,7 +17,7 @@
            (org.apache.arrow.vector DurationVector TimeStampVector ValueVector)
            (org.apache.arrow.vector.types.pojo ArrowType$Duration ArrowType$Timestamp)
            org.apache.arrow.vector.types.TimeUnit
-           (xtdb StringUtil)
+           (xtdb.util StringUtil)
            xtdb.vector.IVectorReader))
 
 (t/use-fixtures :each tu/with-allocator)

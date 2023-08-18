@@ -38,7 +38,7 @@
            xtdb.object_store.ObjectStore
            xtdb.operator.IRaQuerySource
            (xtdb.operator.scan IScanEmitter)
-           xtdb.RowCounter
+           xtdb.util.RowCounter
            (xtdb.vector IRowCopier IVectorReader RelationReader)
            (xtdb.watermark IWatermark IWatermarkSource)))
 

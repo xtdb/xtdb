@@ -31,9 +31,10 @@
            (java.util.concurrent ConcurrentHashMap)
            (java.util.function Consumer Function)
            (org.apache.arrow.memory BufferAllocator RootAllocator)
-           (xtdb ICursor IResultCursor IResultSet RefCounter)
+           (xtdb ICursor IResultCursor IResultSet)
            xtdb.metadata.IMetadataManager
-           xtdb.operator.scan.IScanEmitter))
+           xtdb.operator.scan.IScanEmitter
+           xtdb.util.RefCounter))
 
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface BoundQuery
