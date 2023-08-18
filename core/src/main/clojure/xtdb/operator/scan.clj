@@ -24,6 +24,7 @@
            (org.apache.arrow.memory ArrowBuf BufferAllocator)
            [org.apache.arrow.memory.util ArrowBufPointer]
            (org.apache.arrow.vector VectorLoader VectorSchemaRoot)
+           [org.apache.arrow.vector.types.pojo Schema]
            xtdb.api.protocols.TransactionInstant
            xtdb.buffer_pool.IBufferPool
            xtdb.ICursor
@@ -31,7 +32,7 @@
            (xtdb.metadata IMetadataManager)
            xtdb.object_store.ObjectStore
            xtdb.operator.IRelationSelector
-           (xtdb.trie ArrowHashTrie ArrowHashTrie$Leaf LeafMergeQueue LeafMergeQueue$LeafPointer LiveHashTrie$Leaf)
+           (xtdb.trie ArrowHashTrie LeafMergeQueue LeafMergeQueue$LeafPointer LiveHashTrie$Leaf)
            (xtdb.vector IRelationWriter IRowCopier IVectorReader IVectorWriter RelationReader)
            (xtdb.watermark IWatermark IWatermarkSource Watermark)))
 
@@ -425,27 +426,136 @@
                     (recur (inc mid) right)))))
             (int-array 0)))))))
 
-(deftype TrieCursor [^BufferAllocator allocator, arrow-leaves, ^Iterator merge-tasks
+(defn list-table-chunks [^ObjectStore obj-store, table-name]
+  (->> (.listObjects obj-store (format "tables/%s/chunks" table-name))
+       (keep (fn [file-name]
+               (when-let [[_ file-type chunk-idx-str] (re-find #"/(leaf|trie)-c(.+?)\.arrow$" file-name)]
+                 {:file-name file-name
+                  :file-type (case file-type "leaf" :leaf-file, "trie" :trie-file)
+                  :chunk-idx (util/<-lex-hex-string chunk-idx-str)})))
+       (group-by :chunk-idx)
+       (sort-by key)
+       (mapv (fn [[chunk-idx files]]
+               (persistent!
+                (reduce (fn [acc {:keys [file-name file-type]}]
+                          (assoc! acc file-type file-name))
+                        (transient {:chunk-idx chunk-idx})
+                        files))))))
+
+(defn table-merge-plan [^IBufferPool buffer-pool, table-chunks, ^ILiveTableWatermark live-table-wm, iid-bb]
+  (util/with-open [trie-roots (ArrayList. (count table-chunks))]
+    ;; TODO these could be kicked off asynchronously
+    (trie/->merge-plan
+     (cond-> (vec (for [{:keys [trie-file]} table-chunks]
+                    (with-open [^ArrowBuf buf @(.getBuffer buffer-pool trie-file)]
+                      (let [{:keys [^VectorLoader loader root arrow-blocks]} (util/read-arrow-buf buf)]
+                        (with-open [record-batch (util/->arrow-record-batch-view (first arrow-blocks) buf)]
+                          (.load loader record-batch)
+                          (.add trie-roots root)
+                          (ArrowHashTrie/from root))))))
+       live-table-wm (conj (.compactLogs (.liveTrie live-table-wm))))
+     iid-bb)))
+
+(defn merge-plan->tasks ^java.lang.Iterable [{:keys [path node]}]
+  (let [[node-tag node-arg] node]
+    (case node-tag
+      :branch (mapcat merge-plan->tasks node-arg)
+      :leaf [{:path path, :leaves node-arg}])))
+
+#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
+(definterface ILeafLoader
+  (^org.apache.arrow.vector.types.pojo.Schema getSchema [])
+  (^xtdb.trie.LeafMergeQueue$LeafPointer getLeafPointer [])
+  (^xtdb.vector.RelationReader loadLeaf [leaf]))
+
+(deftype ArrowLeafLoader [^ArrowBuf buf
+                          ^VectorSchemaRoot root
+                          ^VectorLoader loader
+                          ^List arrow-blocks
+                          ^LeafMergeQueue$LeafPointer leaf-ptr
+                          ^:unsynchronized-mutable ^int current-page-idx]
+  ILeafLoader
+  (getSchema [_] (.getSchema root))
+  (getLeafPointer [_] leaf-ptr)
+
+  (loadLeaf [this {:keys [page-idx]}]
+    (when-not (= page-idx current-page-idx)
+      (set! (.current-page-idx this) page-idx)
+
+      (with-open [rb (util/->arrow-record-batch-view (nth arrow-blocks page-idx) buf)]
+        (.load loader rb)
+        (.reset leaf-ptr)))
+
+    (vr/<-root root))
+
+  AutoCloseable
+  (close [_]
+    (util/close root)
+    (util/close buf)))
+
+(deftype LiveLeafLoader [^RelationReader live-rel, ^LeafMergeQueue$LeafPointer leaf-ptr]
+  ILeafLoader
+  (getSchema [_]
+    (Schema. (for [^IVectorReader rdr live-rel]
+               (.getField rdr))))
+
+  (getLeafPointer [_] leaf-ptr)
+
+  (loadLeaf [_ leaf]
+    ;; TODO might need to compactLogs here after the rebase?
+    (.select live-rel (.data ^LiveHashTrie$Leaf leaf)))
+
+  AutoCloseable
+  (close [_]))
+
+(defn open-leaves [^IBufferPool buffer-pool, table-chunks, ^ILiveTableWatermark live-table-wm]
+  (util/with-close-on-catch [leaf-bufs (ArrayList.)]
+    ;; TODO get hold of these a page at a time if it's a small query,
+    ;; rather than assuming we'll always have/use the whole file.
+    (let [arrow-leaves (->> table-chunks
+                            (into [] (map-indexed
+                                      (fn [ordinal {:keys [chunk-idx leaf-file]}]
+                                        (assert leaf-file (format "can't find leaf file for chunk '%s'" chunk-idx))
+
+                                        (let [leaf-buf @(.getBuffer buffer-pool leaf-file)
+                                              {:keys [^VectorSchemaRoot root loader arrow-blocks]} (util/read-arrow-buf leaf-buf)]
+                                          (.add leaf-bufs leaf-buf)
+
+                                          (ArrowLeafLoader. leaf-buf root loader arrow-blocks
+                                                      (LeafMergeQueue$LeafPointer. ordinal)
+                                                      -1))))))]
+      (cond-> arrow-leaves
+        live-table-wm (conj (LiveLeafLoader. (.liveRelation live-table-wm)
+                                             (LeafMergeQueue$LeafPointer. (count arrow-leaves))))))))
+
+(defn load-leaves [leaves {task-leaves :leaves}]
+  (mapv (fn [{:keys [ordinal trie-leaf]}]
+          (let [^ILeafLoader leaf (nth leaves ordinal)]
+            {:rel-rdr (.loadLeaf leaf trie-leaf)
+             :leaf-ptr (.getLeafPointer leaf)}))
+        task-leaves))
+
+(defn ->merge-queue ^xtdb.trie.LeafMergeQueue [loaded-leaves {:keys [path]}]
+  (LeafMergeQueue. path
+                   (into-array IVectorReader
+                               (map (fn [{:keys [^RelationReader rel-rdr]}]
+                                      (.readerForName rel-rdr "xt$iid"))
+                                    loaded-leaves))
+                   (map :leaf-ptr loaded-leaves)))
+
+(deftype TrieCursor [^BufferAllocator allocator, leaves, ^Iterator merge-tasks
                      col-names, ^Map col-preds, ^longs temporal-timestamps,
                      params, ^IPersistentMap picker-state]
   ICursor
   (tryAdvance [_ c]
     (if (.hasNext merge-tasks)
-      (let [{task-leaves :leaves, :keys [path]} (.next merge-tasks)]
+      (let [merge-task (.next merge-tasks)]
         (with-open [out-rel (vw/->rel-writer allocator)]
-          (let [loaded-leaves (mapv (fn [{:keys [load-leaf]}]
-                                      (let [{:keys [^RelationReader rel-rdr] :as res} (load-leaf)]
-                                        (if-let [^IRelationSelector iid-pred (get col-preds "xt$iid")]
-                                          (assoc res :rel-rdr (.select rel-rdr (.select iid-pred allocator rel-rdr params)))
-                                          res)))
-                                    task-leaves)
-                merge-q (LeafMergeQueue. path
-                                         (into-array IVectorReader
-                                                     (map (fn [{:keys [^RelationReader rel-rdr]}]
-                                                            (.readerForName rel-rdr "xt$iid"))
-                                                          loaded-leaves))
-                                         (map :leaf-ptr loaded-leaves))
-
+          (let [^IRelationSelector iid-pred (get col-preds "xt$iid")
+                loaded-leaves (cond->> (load-leaves leaves merge-task)
+                                iid-pred (mapv #(update % :rel-rdr (fn [^RelationReader rel-rdr]
+                                                                     (.select rel-rdr (.select iid-pred allocator rel-rdr params))))))
+                merge-q (->merge-queue loaded-leaves merge-task)
                 ^"[Ljava.util.function.IntConsumer;"
                 row-pickers (into-array IntConsumer
                                         (for [{:keys [rel-rdr]} loaded-leaves]
@@ -469,88 +579,7 @@
       false))
 
   (close [_]
-    (util/close arrow-leaves)))
-
-(defn read-tries [^ObjectStore obj-store, ^IBufferPool buffer-pool, ^String table-name, ^ILiveTableWatermark live-table-wm
-                  {:keys [^ByteBuffer iid-bb] :as _opts}]
-  (let [{trie-files :trie, leaf-files :leaf} (->> (.listObjects obj-store (format "tables/%s/chunks" table-name))
-                                                  (keep (fn [file-name]
-                                                          (when-let [[_ file-type chunk-idx-str] (re-find #"/(leaf|trie)-c(.+?)\.arrow$" file-name)]
-                                                            {:file-name file-name
-                                                             :file-type (case file-type "leaf" :leaf, "trie" :trie)
-                                                             :chunk-idx chunk-idx-str})))
-                                                  (group-by :file-type))
-        leaf-files (into {} (map (juxt :chunk-idx identity)) leaf-files)]
-
-    (util/with-close-on-catch [leaf-bufs (ArrayList.)]
-      ;; TODO get hold of these a page at a time if it's a small query,
-      ;; rather than assuming we'll always have/use the whole file.
-      (let [arrow-leaves (->> trie-files
-                              (into [] (map-indexed
-                                        (fn [ordinal {:keys [chunk-idx]}]
-                                          (let [{:keys [file-name]} (get leaf-files chunk-idx)]
-                                            (assert file-name (format "can't find leaf file for chunk '%s'" chunk-idx))
-                                            (let [leaf-buf @(.getBuffer buffer-pool file-name)
-                                                  {:keys [^VectorSchemaRoot root loader arrow-blocks]} (util/read-arrow-buf leaf-buf)]
-                                              (.add leaf-bufs leaf-buf)
-
-                                              {:leaf-buf leaf-buf
-                                               :leaf-root root
-                                               :arrow-blocks arrow-blocks
-                                               :loader loader
-                                               :!current-page-idx (atom -1)
-                                               :leaf-ptr (LeafMergeQueue$LeafPointer. ordinal)}))))))]
-
-        (util/with-open [trie-roots (ArrayList. (count trie-files))]
-          (doseq [{:keys [file-name]} trie-files]
-            (with-open [^ArrowBuf buf @(.getBuffer buffer-pool file-name)]
-              (let [{:keys [^VectorLoader loader root arrow-blocks]} (util/read-arrow-buf buf)]
-                (with-open [record-batch (util/->arrow-record-batch-view (first arrow-blocks) buf)]
-                  (.load loader record-batch)
-                  (.add trie-roots root)))))
-
-          {:arrow-leaves (mapv (fn [{:keys [leaf-buf leaf-root]}]
-                                 (reify AutoCloseable
-                                   (close [_]
-                                     (util/close leaf-root)
-                                     (util/close leaf-buf))))
-                               arrow-leaves)
-
-           :merge-plan-leaves (letfn [(->merge-task [{:keys [ordinal leaf]}]
-                                        (condp = (class leaf)
-                                          ArrowHashTrie$Leaf
-                                          (let [page-idx (.getPageIndex ^ArrowHashTrie$Leaf leaf)
-                                                {:keys [leaf-buf ^VectorLoader loader, ^VectorSchemaRoot leaf-root arrow-blocks,
-                                                        !current-page-idx
-                                                        ^LeafMergeQueue$LeafPointer leaf-ptr]} (nth arrow-leaves ordinal)]
-                                            {:load-leaf (fn []
-                                                          (when-not (= page-idx @!current-page-idx)
-                                                            (reset! !current-page-idx page-idx)
-
-                                                            (with-open [rb (util/->arrow-record-batch-view (nth arrow-blocks page-idx) leaf-buf)]
-                                                              (.load loader rb)
-                                                              (.reset leaf-ptr)))
-
-                                                          {:rel-rdr (vr/<-root leaf-root)
-                                                           :leaf-ptr leaf-ptr})})
-
-                                          LiveHashTrie$Leaf
-                                          {:load-leaf (fn []
-                                                        {:rel-rdr (.select (.liveRelation live-table-wm) (.data ^LiveHashTrie$Leaf leaf))
-                                                         :leaf-ptr (LeafMergeQueue$LeafPointer. (count arrow-leaves))})}))
-
-                                      (->merge-tasks [{:keys [path node]}]
-                                        (let [[node-tag node-arg] node]
-                                          (case node-tag
-                                            :branch (mapcat ->merge-tasks node-arg)
-                                            :leaf [{:path path
-                                                    :leaves (mapv ->merge-task node-arg)}])))]
-
-                                (let [merge-plan (trie/->merge-plan (cond-> (mapv #(ArrowHashTrie/from %) trie-roots)
-                                                                      live-table-wm (conj (.compactLogs (.liveTrie live-table-wm))))
-                                                                    iid-bb)]
-
-                                  (vec (->merge-tasks merge-plan))))})))))
+    (util/close leaves)))
 
 ;; The consumers for different leafs need to share some state so the logic of how to advance
 ;; is correct. For example if the `skip-iid-ptr` gets set in one leaf consumer it should also affect
@@ -558,11 +587,12 @@
 
 (defn ->4r-cursor [^BufferAllocator allocator, ^ObjectStore obj-store, ^IBufferPool buffer-pool, ^IWatermark wm
                    table-name, col-names, ^longs temporal-range
-                   ^Map col-preds, params, scan-opts]
+                   ^Map col-preds, params, {:keys [iid-bb] :as scan-opts}]
   (let [^ILiveTableWatermark live-table-wm (some-> (.liveIndex wm) (.liveTable table-name))
-        {:keys [arrow-leaves ^List merge-plan-leaves]} (read-tries obj-store buffer-pool table-name live-table-wm scan-opts)]
-    (try
-      (->TrieCursor allocator arrow-leaves (.iterator merge-plan-leaves)
+        table-chunks (list-table-chunks obj-store table-name)
+        merge-plan (table-merge-plan buffer-pool table-chunks live-table-wm iid-bb)]
+    (util/with-close-on-catch [leaves (open-leaves buffer-pool table-chunks live-table-wm)]
+      (->TrieCursor allocator leaves (.iterator (merge-plan->tasks merge-plan))
                     col-names col-preds
                     temporal-range
                     params
@@ -571,11 +601,7 @@
                              :skip-iid-ptr (ArrowBufPointer.)
                              :prev-iid-ptr (ArrowBufPointer.)
                              :current-iid-ptr (ArrowBufPointer.)}
-                      (at-point-point? scan-opts) (assoc :point-point? true)))
-
-      (catch Throwable t
-        (util/close arrow-leaves)
-        (throw t)))))
+                      (at-point-point? scan-opts) (assoc :point-point? true))))))
 
 (defn selects->iid-byte-buffer ^ByteBuffer [selects]
   (when-let [eid-select (or (get selects 'xt/id) (get selects 'xt$id))]

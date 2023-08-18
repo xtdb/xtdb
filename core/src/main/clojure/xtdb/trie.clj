@@ -19,7 +19,7 @@
            (org.apache.arrow.vector.types.pojo ArrowType$Union Schema)
            org.apache.arrow.vector.types.UnionMode
            (xtdb.object_store ObjectStore)
-           (xtdb.trie HashTrie HashTrie$Node LiveHashTrie LiveHashTrie$Leaf)
+           (xtdb.trie ArrowHashTrie$Leaf HashTrie HashTrie$Node LiveHashTrie LiveHashTrie$Leaf)
            (xtdb.util WritableByteBufferChannel)
            (xtdb.vector IVectorReader RelationReader)))
 
@@ -238,8 +238,11 @@
                 {:path (byte-array path)
                  :node [:leaf (->> nodes
                                    (into [] (keep-indexed
-                                             (fn [ordinal ^HashTrie$Node node]
-                                               (when node
-                                                 {:ordinal ordinal, :leaf node})))))]})))]
+                                             (fn [ordinal ^HashTrie$Node leaf-node]
+                                               (condp = (class leaf-node)
+                                                 ArrowHashTrie$Leaf {:ordinal ordinal,
+                                                                     :trie-leaf {:page-idx (.getPageIndex ^ArrowHashTrie$Leaf leaf-node)}}
+
+                                                 LiveHashTrie$Leaf {:ordinal ordinal, :trie-leaf leaf-node})))))]})))]
 
     (->merge-plan* (map #(some-> ^HashTrie % (.rootNode)) tries) [] 0)))
