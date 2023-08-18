@@ -5,19 +5,22 @@
             [xtdb.types :as types]
             [xtdb.util :as util]
             [xtdb.vector.writer :as vw])
-  (:import (java.nio ByteBuffer)
+  (:import (java.lang AutoCloseable)
+           (java.nio ByteBuffer)
+           java.nio.channels.WritableByteChannel
            java.security.MessageDigest
            (java.util Arrays)
            (java.util.concurrent.atomic AtomicInteger)
            (java.util.function IntConsumer Supplier)
-           (java.util.stream IntStream)
-           java.security.MessageDigest
            (org.apache.arrow.memory BufferAllocator)
            (org.apache.arrow.vector VectorSchemaRoot)
-           org.apache.arrow.vector.types.UnionMode
+           [org.apache.arrow.vector.ipc ArrowFileWriter]
            (org.apache.arrow.vector.types.pojo ArrowType$Union Schema)
+           (org.apache.arrow.vector.types.pojo ArrowType$Union Schema)
+           org.apache.arrow.vector.types.UnionMode
            (xtdb.object_store ObjectStore)
            (xtdb.trie HashTrie HashTrie$Node LiveHashTrie LiveHashTrie$Leaf)
+           (xtdb.util WritableByteBufferChannel)
            (xtdb.vector IVectorReader RelationReader)))
 
 (def ^:private ^java.lang.ThreadLocal !msg-digest
@@ -68,86 +71,138 @@
   (util/with-close-on-catch [root (VectorSchemaRoot/create log-leaf-schema allocator)]
     (vw/root->writer root)))
 
+#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
+(definterface ITrieWriter
+  (^xtdb.vector.IRelationWriter getLeafWriter [])
+  (^int writeLeaf [])
+  (^int writeBranch [^ints idxs])
+  (^void end [])
+  (^void close []))
+
+(defn open-trie-writer ^xtdb.trie.ITrieWriter [^BufferAllocator allocator, ^Schema leaf-schema
+                                               ^WritableByteChannel leaf-out-ch, ^WritableByteChannel trie-out-ch]
+  (util/with-close-on-catch [leaf-vsr (VectorSchemaRoot/create leaf-schema allocator)
+                             leaf-out-wtr (ArrowFileWriter. leaf-vsr nil leaf-out-ch)
+                             trie-vsr (VectorSchemaRoot/create trie-schema allocator)]
+    (.start leaf-out-wtr)
+    (let [leaf-rel-wtr (vw/root->writer leaf-vsr)
+          trie-rel-wtr (vw/root->writer trie-vsr)
+
+          node-wtr (.writerForName trie-rel-wtr "nodes")
+          node-wp (.writerPosition node-wtr)
+
+          branch-wtr (.writerForTypeId node-wtr (byte 1))
+          branch-el-wtr (.listElementWriter branch-wtr)
+
+          leaf-wtr (.writerForTypeId node-wtr (byte 2))
+          page-idx-wtr (.structKeyWriter leaf-wtr "page-idx")
+          page-meta-wtr (meta/->page-meta-wtr (.structKeyWriter leaf-wtr "columns"))
+          !page-idx (AtomicInteger. 0)]
+
+      (reify ITrieWriter
+        (getLeafWriter [_] leaf-rel-wtr)
+
+        (writeLeaf [_]
+          (.syncRowCount leaf-rel-wtr)
+
+          (let [leaf-rdr (vw/rel-wtr->rdr leaf-rel-wtr)
+                put-rdr (-> leaf-rdr
+                            (.readerForName "op")
+                            (.legReader :put)
+                            (.metadataReader))
+
+                doc-rdr (.structKeyReader put-rdr "xt$doc")]
+
+            (.writeMetadata page-meta-wtr (into [(.readerForName leaf-rdr "xt$system_from")
+                                                 (.readerForName leaf-rdr "xt$iid")
+                                                 (.structKeyReader put-rdr "xt$valid_from")
+                                                 (.structKeyReader put-rdr "xt$valid_to")]
+                                                (map #(.structKeyReader doc-rdr %))
+                                                (.structKeys doc-rdr))))
+
+          (.writeBatch leaf-out-wtr)
+          (.clear leaf-rel-wtr)
+          (.clear leaf-vsr)
+
+          (let [pos (.getPosition node-wp)]
+            (.startStruct leaf-wtr)
+            (.writeInt page-idx-wtr (.getAndIncrement !page-idx))
+            (.endStruct leaf-wtr)
+            (.endRow trie-rel-wtr)
+
+            pos))
+
+        (writeBranch [_ idxs]
+          (let [pos (.getPosition node-wp)]
+            (.startList branch-wtr)
+
+            (dotimes [n (alength idxs)]
+              (let [idx (aget idxs n)]
+                (if (= idx -1)
+                  (.writeNull branch-el-wtr nil)
+                  (.writeInt branch-el-wtr idx))))
+
+            (.endList branch-wtr)
+            (.endRow trie-rel-wtr)
+
+            pos))
+
+        (end [_]
+          (.end leaf-out-wtr)
+
+          (.syncSchema trie-vsr)
+          (.syncRowCount trie-rel-wtr)
+
+          (util/with-open [trie-out-wtr (ArrowFileWriter. trie-vsr nil trie-out-ch)]
+            (.start trie-out-wtr)
+            (.writeBatch trie-out-wtr)
+            (.end trie-out-wtr)))
+
+        AutoCloseable
+        (close [_]
+          (util/close [trie-vsr leaf-out-wtr leaf-vsr]))))))
+
+(defn write-live-trie [^ITrieWriter trie-wtr, ^LiveHashTrie trie, ^RelationReader leaf-rel]
+  (let [trie (.compactLogs trie)
+        copier (vw/->rel-copier (.getLeafWriter trie-wtr) leaf-rel)]
+    (letfn [(write-node! [^HashTrie$Node node]
+              (if-let [children (.children node)]
+                (let [child-count (alength children)
+                      !idxs (int-array child-count)]
+                  (dotimes [n child-count]
+                    (aset !idxs n
+                          (unchecked-int
+                           (if-let [child (aget children n)]
+                             (write-node! child)
+                             -1))))
+
+                  (.writeBranch trie-wtr !idxs))
+
+                (let [^LiveHashTrie$Leaf leaf node]
+                  (-> (Arrays/stream (.data leaf))
+                      (.forEach (reify IntConsumer
+                                  (accept [_ idx]
+                                    (.copyRow copier idx)))))
+
+                  (.writeLeaf trie-wtr))))]
+
+      (write-node! (.rootNode trie)))))
+
 (defn live-trie->bufs [^BufferAllocator allocator, ^LiveHashTrie trie, ^RelationReader leaf-rel]
-  (when (pos? (.rowCount leaf-rel))
-    (util/with-open [leaf-vsr (VectorSchemaRoot/create (Schema. (for [^IVectorReader rdr leaf-rel]
-                                                                  (.getField rdr)))
-                                                       allocator)
-                     trie-vsr (VectorSchemaRoot/create trie-schema allocator)]
-      (let [leaf-rel-wtr (vw/root->writer leaf-vsr)
-            trie-rel-wtr (vw/root->writer trie-vsr)
+  (util/with-open [leaf-bb-ch (WritableByteBufferChannel/open)
+                   trie-bb-ch (WritableByteBufferChannel/open)
+                   trie-wtr (open-trie-writer allocator
+                                              (Schema. (for [^IVectorReader rdr leaf-rel]
+                                                         (.getField rdr)))
+                                              (.getChannel leaf-bb-ch)
+                                              (.getChannel trie-bb-ch))]
 
-            node-wtr (.writerForName trie-rel-wtr "nodes")
-            node-wp (.writerPosition node-wtr)
+    (write-live-trie trie-wtr trie leaf-rel)
 
-            branch-wtr (.writerForTypeId node-wtr (byte 1))
-            branch-el-wtr (.listElementWriter branch-wtr)
+    (.end trie-wtr)
 
-            leaf-wtr (.writerForTypeId node-wtr (byte 2))
-            page-idx-wtr (.structKeyWriter leaf-wtr "page-idx")
-            page-meta-wtr (meta/->page-meta-wtr (.structKeyWriter leaf-wtr "columns"))
-            !page-idx (AtomicInteger. 0)
-            copier (vw/->rel-copier leaf-rel-wtr leaf-rel)
-
-            leaf-buf (util/build-arrow-ipc-byte-buffer leaf-vsr :file
-                       (fn [write-batch!]
-                         (letfn [(write-node! [^HashTrie$Node node]
-                                   (if-let [children (.children node)]
-                                     (let [!page-idxs (IntStream/builder)]
-                                       (doseq [child children]
-                                         (.add !page-idxs (if child
-                                                            (do
-                                                              (write-node! child)
-                                                              (dec (.getPosition node-wp)))
-                                                            -1)))
-                                       (.startList branch-wtr)
-                                       (.forEach (.build !page-idxs)
-                                                 (reify IntConsumer
-                                                   (accept [_ idx]
-                                                     (if (= idx -1)
-                                                       (.writeNull branch-el-wtr nil)
-                                                       (.writeInt branch-el-wtr idx)))))
-                                       (.endList branch-wtr)
-                                       (.endRow trie-rel-wtr))
-
-                                     (let [^LiveHashTrie$Leaf leaf node]
-                                       (-> (Arrays/stream (.data leaf))
-                                           (.forEach (reify IntConsumer
-                                                       (accept [_ idx]
-                                                         (.copyRow copier idx)))))
-
-                                       (.syncRowCount leaf-rel-wtr)
-
-                                       (let [leaf-rdr (vw/rel-wtr->rdr leaf-rel-wtr)
-                                             put-rdr (-> leaf-rdr
-                                                         (.readerForName "op")
-                                                         (.legReader :put)
-                                                         (.metadataReader))
-
-                                             doc-rdr (.structKeyReader put-rdr "xt$doc")]
-
-                                         (.writeMetadata page-meta-wtr (into [(.readerForName leaf-rdr "xt$system_from")
-                                                                              (.readerForName leaf-rdr "xt$iid")
-                                                                              (.structKeyReader put-rdr "xt$valid_from")
-                                                                              (.structKeyReader put-rdr "xt$valid_to")]
-                                                                             (map #(.structKeyReader doc-rdr %))
-                                                                             (.structKeys doc-rdr))))
-                                       (write-batch!)
-                                       (.clear leaf-rel-wtr)
-                                       (.clear leaf-vsr)
-
-                                       (.startStruct leaf-wtr)
-                                       (.writeInt page-idx-wtr (.getAndIncrement !page-idx))
-                                       (.endStruct leaf-wtr)
-                                       (.endRow trie-rel-wtr))))]
-
-                           (write-node! (.rootNode trie)))))]
-
-        (.syncSchema trie-vsr)
-        (.syncRowCount trie-rel-wtr)
-
-        {:leaf-buf leaf-buf
-         :trie-buf (util/root->arrow-ipc-byte-buffer trie-vsr :file)}))))
+    {:leaf-buf (.getAsByteBuffer leaf-bb-ch)
+     :trie-buf (.getAsByteBuffer trie-bb-ch)}))
 
 (defn write-trie-bufs! [^ObjectStore obj-store, ^String dir, ^String chunk-idx
                         {:keys [^ByteBuffer leaf-buf ^ByteBuffer trie-buf]}]

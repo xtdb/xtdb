@@ -164,8 +164,9 @@
 
   (finishChunk [_ chunk-idx]
     (let [live-rel-rdr (vw/rel-wtr->rdr live-rel)]
-      (when-let [bufs (trie/live-trie->bufs allocator (-> live-trie (.compactLogs)) live-rel-rdr)]
-        (let [chunk-idx-str (util/->lex-hex-string chunk-idx)
+      (when (pos? (.rowCount live-rel-rdr))
+        (let [bufs (trie/live-trie->bufs allocator live-trie live-rel-rdr)
+              chunk-idx-str (util/->lex-hex-string chunk-idx)
               !fut (trie/write-trie-bufs! obj-store (format "tables/%s/chunks" table-name) chunk-idx-str bufs)
               table-metadata (MapEntry/create table-name
                                               {:col-types (live-rel->col-types live-rel-rdr)

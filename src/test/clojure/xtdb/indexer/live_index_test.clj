@@ -7,8 +7,7 @@
             [xtdb.object-store :as os]
             [xtdb.test-json :as tj]
             [xtdb.test-util :as tu]
-            [xtdb.util :as util]
-            [xtdb.vector.reader :as vr])
+            [xtdb.util :as util])
   (:import [java.nio ByteBuffer]
            java.time.Duration
            [java.util Random UUID]
