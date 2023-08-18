@@ -706,6 +706,11 @@ public class ValueVectorReader implements IVectorReader {
         }
 
         @Override
+        public IVectorReader typeIdReader(byte typeId) {
+            return legReaders[typeId];
+        }
+
+        @Override
         public Collection<Keyword> legs() {
             return Arrays.stream(legs).toList();
         }
