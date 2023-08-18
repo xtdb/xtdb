@@ -198,10 +198,11 @@
   (every? true? (map (fn [^Rectangle r1 ^Rectangle r2] (<= (.valid-to r1) (.valid-from r2)))
                      !ranges (rest !ranges))))
 
-
+#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (definterface RowConsumer
   (^void accept [^int idx, ^long validFrom, ^long validTo, ^long systemFrom, ^long systemTo]))
 
+#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (definterface EventResolver
   (^void resolveEvent [^int idx, ^long validFrom, ^long validTo, ^long systemFrom
                        ^xtdb.operator.scan.RowConsumer rowConsumer])
@@ -517,10 +518,7 @@
                                        (util/close leaf-buf))))
                                  arrow-leaves)
 
-             :merge-tasks (vec (for [{:keys [path leaves]}
-                                     (if iid-bb
-                                       (vector (trie/iid-trie-merge-task hash-tries (.array iid-bb)))
-                                       (trie/trie-merge-tasks hash-tries))]
+             :merge-tasks (vec (for [{:keys [path leaves]} (trie/trie-merge-tasks hash-tries (some-> iid-bb .array))]
                                  {:path path
                                   :leaves (mapv (fn [{:keys [ordinal leaf]}]
                                                   (condp = (class leaf)
@@ -618,7 +616,7 @@
         (->> scan-cols
              (into {} (map (juxt identity ->col-type))))))
 
-    (emitScan [_ {:keys [columns], {:keys [table for-valid-time] :as scan-opts} :scan-opts} scan-col-types param-types]
+    (emitScan [_ {:keys [columns], {:keys [table] :as scan-opts} :scan-opts} scan-col-types param-types]
       (let [col-names (->> columns
                            (into [] (comp (map (fn [[col-type arg]]
                                                  (case col-type
@@ -670,11 +668,13 @@
          :stats {:row-count row-count}
          :->cursor (fn [{:keys [allocator, ^IWatermark watermark, basis, params default-all-valid-time?]}]
                      ;; TODO reinstate metadata checks on pages
+
                      (let [_metadata-pred (expr.meta/->metadata-selector (cons 'and metadata-args) col-types params)
-                           scan-opts (cond-> scan-opts
-                                       (nil? for-valid-time)
-                                       (assoc :for-valid-time (if default-all-valid-time? [:all-time] [:at [:now :now]])
-                                              :iid-bb iid-bb))]
+                           scan-opts (-> scan-opts
+                                         (assoc :iid-bb iid-bb)
+                                         (update :for-valid-time
+                                                 (fn [fvt]
+                                                   (or fvt (if default-all-valid-time? [:all-time] [:at [:now :now]])))))]
                        (->4r-cursor allocator object-store buffer-pool
                                     watermark
                                     normalized-table-name
