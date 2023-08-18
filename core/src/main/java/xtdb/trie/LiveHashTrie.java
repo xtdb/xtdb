@@ -22,6 +22,7 @@ public record LiveHashTrie(Node rootNode, ElementAddressableVector iidVec) imple
         private final ElementAddressableVector iidVec;
         private int logLimit = LOG_LIMIT;
         private int pageLimit = PAGE_LIMIT;
+        private byte[] rootPath = new byte[0];
 
         private Builder(ElementAddressableVector iidVec) {
             this.iidVec = iidVec;
@@ -35,8 +36,12 @@ public record LiveHashTrie(Node rootNode, ElementAddressableVector iidVec) imple
             this.pageLimit = pageLimit;
         }
 
+        public void setRootPath(byte[] path) {
+            this.rootPath = path;
+        }
+
         public LiveHashTrie build() {
-            return new LiveHashTrie(new Leaf(logLimit, pageLimit), iidVec);
+            return new LiveHashTrie(new Leaf(logLimit, pageLimit, rootPath), iidVec);
         }
     }
 
@@ -46,7 +51,7 @@ public record LiveHashTrie(Node rootNode, ElementAddressableVector iidVec) imple
 
     @SuppressWarnings("unused")
     public static LiveHashTrie emptyTrie(ElementAddressableVector iidVec) {
-        return new LiveHashTrie(new Leaf(LOG_LIMIT, PAGE_LIMIT), iidVec);
+        return builder(iidVec).build();
     }
 
     public LiveHashTrie add(int idx) {
@@ -115,10 +120,6 @@ public record LiveHashTrie(Node rootNode, ElementAddressableVector iidVec) imple
     }
 
     public record Leaf(int logLimit, int pageLimit, byte[] path, int[] data, int[] log, int logCount) implements Node {
-
-        Leaf(int logLimit, int pageLimit) {
-            this(logLimit, pageLimit, new byte[0]);
-        }
 
         Leaf(int logLimit, int pageLimit, byte[] path) {
             this(logLimit, pageLimit, path, new int[0]);
