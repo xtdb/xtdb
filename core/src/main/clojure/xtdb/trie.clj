@@ -49,26 +49,19 @@
                            (types/col-type->field "leaf" [:struct {'page-idx :i32
                                                                    'columns meta/metadata-col-type}]))]))
 
-(def put-field
-  (types/col-type->field "put" [:struct {'xt$valid_from types/temporal-col-type
-                                         'xt$valid_to types/temporal-col-type
-                                         'xt$doc [:union #{:null [:struct {}]}]}]))
-
-(def delete-field
-  (types/col-type->field "delete" [:struct {'xt$valid_from types/temporal-col-type
-                                            'xt$valid_to types/temporal-col-type}]))
-
-(def evict-field
-  (types/col-type->field "evict" :null))
-
-(def ^org.apache.arrow.vector.types.pojo.Schema log-leaf-schema
+(defn log-leaf-schema ^org.apache.arrow.vector.types.pojo.Schema [put-doc-col-type]
   (Schema. [(types/col-type->field "xt$iid" [:fixed-size-binary 16])
             (types/col-type->field "xt$system_from" types/temporal-col-type)
             (types/->field "op" (ArrowType$Union. UnionMode/Dense (int-array (range 3))) false
-                           put-field delete-field evict-field)]))
+                           (types/col-type->field "put" [:struct {'xt$valid_from types/temporal-col-type
+                                                                  'xt$valid_to types/temporal-col-type
+                                                                  'xt$doc put-doc-col-type}])
+                           (types/col-type->field "delete" [:struct {'xt$valid_from types/temporal-col-type
+                                                                     'xt$valid_to types/temporal-col-type}])
+                           (types/col-type->field "evict" :null))]))
 
 (defn open-leaf-root ^xtdb.vector.IRelationWriter [^BufferAllocator allocator]
-  (util/with-close-on-catch [root (VectorSchemaRoot/create log-leaf-schema allocator)]
+  (util/with-close-on-catch [root (VectorSchemaRoot/create (log-leaf-schema [:union #{:null [:struct {}]}]) allocator)]
     (vw/root->writer root)))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}

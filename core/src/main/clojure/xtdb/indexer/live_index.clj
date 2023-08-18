@@ -209,14 +209,15 @@
    (util/with-close-on-catch [rel (trie/open-leaf-root allocator)]
      (let [iid-wtr (.writerForName rel "xt$iid")
            op-wtr (.writerForName rel "op")
-           put-wtr (.writerForField op-wtr trie/put-field)
-           delete-wtr (.writerForField op-wtr trie/delete-field)]
+           put-wtr (.writerForTypeId op-wtr (byte 0))
+           delete-wtr (.writerForTypeId op-wtr (byte 1))]
        (->LiveTable allocator object-store table-name rel
                     (->live-trie (.getVector iid-wtr))
                     iid-wtr (.writerForName rel "xt$system_from")
                     put-wtr (.structKeyWriter put-wtr "xt$valid_from") (.structKeyWriter put-wtr "xt$valid_to")
                     (.structKeyWriter put-wtr "xt$doc") delete-wtr (.structKeyWriter delete-wtr "xt$valid_from")
-                    (.structKeyWriter delete-wtr "xt$valid_to") (.writerForField op-wtr trie/evict-field))))))
+                    (.structKeyWriter delete-wtr "xt$valid_to")
+                    (.writerForTypeId op-wtr (byte 2)))))))
 
 (defn ->live-trie [log-limit page-limit iid-vec]
   (-> (doto (LiveHashTrie/builder iid-vec)
