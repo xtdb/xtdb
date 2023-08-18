@@ -20,7 +20,7 @@
            java.time.temporal.ChronoUnit
            (java.util ArrayList Collections Date Iterator LinkedHashMap LinkedList Map Queue UUID WeakHashMap)
            (java.util.concurrent CompletableFuture ExecutionException ExecutorService Executors ThreadFactory TimeUnit)
-           (java.util.function BiFunction Consumer Function Supplier)
+           (java.util.function Consumer Function Supplier)
            (org.apache.arrow.compression CommonsCompressionFactory)
            (org.apache.arrow.flatbuf Footer Message RecordBatch)
            (org.apache.arrow.memory AllocationManager ArrowBuf BufferAllocator)
@@ -302,9 +302,6 @@
 (defn path-exists [^Path path]
   (Files/exists path (make-array LinkOption 0)))
 
-(defn path-size ^long [^Path path]
-  (Files/size path))
-
 (defn delete-dir [^Path dir]
   (when (path-exists dir)
     (Files/walkFileTree dir file-deletion-visitor)))
@@ -347,11 +344,6 @@
     (apply [_ v]
       (f v))))
 
-(defn ->jbifn {:style/indent :defn} ^java.util.function.BiFunction [f]
-  (reify BiFunction
-    (apply [_ a b]
-      (f a b))))
-
 (defn then-apply {:style/indent :defn}
   ^java.util.concurrent.CompletableFuture
   [^CompletableFuture fut f]
@@ -393,9 +385,6 @@
 
 ;;; Arrow
 
-(defn root-field-count ^long [^VectorSchemaRoot root]
-  (.size (.getFields (.getSchema root))))
-
 (defn slice-vec
   ([^ValueVector v] (slice-vec v 0))
   ([^ValueVector v, ^long start-idx] (slice-vec v start-idx (.getValueCount v)))
@@ -404,29 +393,6 @@
    (-> (.getTransferPair v (.getAllocator v))
        (doto (.splitAndTransfer start-idx len))
        (.getTo))))
-
-(defn slice-root
-  (^org.apache.arrow.vector.VectorSchemaRoot [^VectorSchemaRoot root]
-   (slice-root root 0))
-
-  (^org.apache.arrow.vector.VectorSchemaRoot [^VectorSchemaRoot root ^long start-idx]
-   (slice-root root start-idx (- (.getRowCount root) start-idx)))
-
-  (^org.apache.arrow.vector.VectorSchemaRoot [^VectorSchemaRoot root ^long start-idx ^long len]
-   (let [num-fields (root-field-count root)
-         acc (ArrayList. num-fields)]
-     (dotimes [n num-fields]
-       (.add acc (slice-vec (.getVector root n) start-idx len)))
-
-     (VectorSchemaRoot. acc))))
-
-(defn open-arrow-file-writer
-  (^org.apache.arrow.vector.ipc.ArrowFileWriter [path-ish, ^VectorSchemaRoot root]
-   (open-arrow-file-writer path-ish root write-truncate-open-opts))
-
-  (^org.apache.arrow.vector.ipc.ArrowFileWriter [path-ish, ^VectorSchemaRoot root, open-opts]
-   (with-close-on-catch [ch (->file-channel (->path path-ish) open-opts)]
-     (ArrowFileWriter. root nil ch))))
 
 (defn build-arrow-ipc-byte-buffer ^java.nio.ByteBuffer {:style/indent 2}
   [^VectorSchemaRoot root ipc-type f]
