@@ -502,7 +502,6 @@
   (getLeafPointer [_] leaf-ptr)
 
   (loadLeaf [_ leaf]
-    ;; TODO might need to compactLogs here after the rebase?
     (.select live-rel (.data ^LiveHashTrie$Leaf leaf)))
 
   AutoCloseable
