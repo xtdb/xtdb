@@ -14,12 +14,6 @@
            xtdb.vector.IVectorPosition
            (xtdb.trie LiveHashTrie LiveHashTrie$Leaf)))
 
-(defn ->live-trie [log-limit page-limit iid-vec]
-  (-> (doto (LiveHashTrie/builder iid-vec)
-        (.setLogLimit log-limit)
-        (.setPageLimit page-limit))
-      (.build)))
-
 (defn uuid-equal-to-path? [uuid path]
   (Arrays/equals
     (util/uuid->bytes uuid)
@@ -36,15 +30,15 @@
         (with-open [obj-store (obj-store-test/fs path)
                     allocator (RootAllocator.)
                     live-table ^ILiveTable (live-index/->live-table
-                                             allocator obj-store "foo" {:->live-trie (partial ->live-trie 2 4)})
+                                            allocator obj-store "foo" {:->live-trie (partial live-index/->live-trie 2 4)})
                     live-table-tx (.startTx
-                                    live-table (xtp/->TransactionInstant 0 (.toInstant #inst "2000")))]
+                                   live-table (xtp/->TransactionInstant 0 (.toInstant #inst "2000")))]
 
           (let [wp (IVectorPosition/build)]
             (dotimes [_n n]
               (.logPut
-                live-table-tx (ByteBuffer/wrap (util/uuid->bytes uuid))
-                0 0 #(.getPositionAndIncrement wp))))
+               live-table-tx (ByteBuffer/wrap (util/uuid->bytes uuid))
+               0 0 #(.getPositionAndIncrement wp))))
 
           (.commit live-table-tx)
 
@@ -54,9 +48,9 @@
             (t/is (= 1 (count leaves)))
 
             (t/is
-              (uuid-equal-to-path?
-                uuid
-                (.path leaf)))
+             (uuid-equal-to-path?
+              uuid
+              (.path leaf)))
 
             (t/is (= (reverse (range n))
                      (->> leaf
@@ -67,8 +61,8 @@
 
           (tu/with-allocator
             #(tj/check-json
-               (.toPath (io/as-file (io/resource "xtdb/live-table-test/max-depth-trie-s")))
-               path)))))
+              (.toPath (io/as-file (io/resource "xtdb/live-table-test/max-depth-trie-s")))
+              path)))))
 
     (let [uuid #uuid "7fffffff-ffff-ffff-7fff-ffffffffffff"
           n 50000]
@@ -76,15 +70,15 @@
         (with-open [obj-store (obj-store-test/fs path)
                     allocator (RootAllocator.)
                     live-table ^ILiveTable (live-index/->live-table
-                                             allocator obj-store "foo")
+                                            allocator obj-store "foo")
                     live-table-tx (.startTx
-                                    live-table (xtp/->TransactionInstant 0 (.toInstant #inst "2000")))]
+                                   live-table (xtp/->TransactionInstant 0 (.toInstant #inst "2000")))]
 
           (let [wp (IVectorPosition/build)]
             (dotimes [_n n]
               (.logPut
-                live-table-tx (ByteBuffer/wrap (util/uuid->bytes uuid))
-                0 0 #(.getPositionAndIncrement wp))))
+               live-table-tx (ByteBuffer/wrap (util/uuid->bytes uuid))
+               0 0 #(.getPositionAndIncrement wp))))
 
           (.commit live-table-tx)
 
@@ -94,9 +88,9 @@
             (t/is (= 1 (count leaves)))
 
             (t/is
-              (uuid-equal-to-path?
-                uuid
-                (.path leaf)))
+             (uuid-equal-to-path?
+              uuid
+              (.path leaf)))
 
             (t/is (= (reverse (range n))
                      (->> leaf
@@ -107,5 +101,5 @@
 
           (tu/with-allocator
             #(tj/check-json
-               (.toPath (io/as-file (io/resource "xtdb/live-table-test/max-depth-trie-l")))
-               path)))))))
+              (.toPath (io/as-file (io/resource "xtdb/live-table-test/max-depth-trie-l")))
+              path)))))))

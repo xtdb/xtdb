@@ -235,7 +235,7 @@
           (t/is (= blocks (<-cursor cursor))))))))
 
 (defn ->local-node ^java.lang.AutoCloseable [{:keys [^Path node-dir ^String buffers-dir
-                                                     rows-per-block rows-per-chunk instant-src]
+                                                     rows-per-chunk log-limit page-limit instant-src]
                                               :or {buffers-dir "buffers"}}]
   (let [instant-src (or instant-src (->mock-clock))]
     (node/start-node {:xtdb.log/local-directory-log {:root-path (.resolve node-dir "log")
@@ -244,7 +244,9 @@
                       :xtdb.buffer-pool/buffer-pool {:cache-path (.resolve node-dir buffers-dir)}
                       :xtdb.object-store/file-system-object-store {:root-path (.resolve node-dir "objects")}
                       :xtdb/indexer (->> {:rows-per-chunk rows-per-chunk}
-                                         (into {} (filter val)))})))
+                                         (into {} (filter val)))
+                      :xtdb.indexer/live-index (->> {:log-limit log-limit :page-limit page-limit}
+                                                    (into {} (filter val)))})))
 
 (defn ->local-submit-node ^java.lang.AutoCloseable [{:keys [^Path node-dir]}]
   (node/start-submit-node {:xtdb.tx-producer/tx-producer {:clock (->mock-clock)}

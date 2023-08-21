@@ -217,13 +217,20 @@
                     (.structKeyWriter put-wtr "xt$doc") delete-wtr (.structKeyWriter delete-wtr "xt$valid_from")
                     (.structKeyWriter delete-wtr "xt$valid_to") (.writerForField op-wtr trie/evict-field))))))
 
-(defrecord LiveIndex [^BufferAllocator allocator, ^ObjectStore object-store, ^Map tables]
+(defn ->live-trie [log-limit page-limit iid-vec]
+  (-> (doto (LiveHashTrie/builder iid-vec)
+        (.setLogLimit log-limit)
+        (.setPageLimit page-limit))
+      (.build)))
+
+(defrecord LiveIndex [^BufferAllocator allocator, ^ObjectStore object-store, ^Map tables, ^long log-limit, ^long page-limit]
   ILiveIndex
   (liveTable [_ table-name]
     (.computeIfAbsent tables table-name
                       (reify Function
                         (apply [_ table-name]
-                          (->live-table allocator object-store table-name)))))
+                          (->live-table allocator object-store table-name
+                                        {:->live-trie (partial ->live-trie log-limit page-limit)})))))
 
   (startTx [live-idx tx-key]
     (let [table-txs (HashMap.)]
@@ -296,8 +303,9 @@
           :object-store (ig/ref :xtdb/object-store)}
          opts))
 
-(defmethod ig/init-key :xtdb.indexer/live-index [_ {:keys [allocator object-store]}]
-  (->LiveIndex allocator object-store (HashMap.)))
+(defmethod ig/init-key :xtdb.indexer/live-index [_ {:keys [allocator object-store log-limit page-limit]
+                                                    :or {log-limit 64 page-limit 1024}}]
+  (->LiveIndex allocator object-store (HashMap.) log-limit page-limit))
 
 (defmethod ig/halt-key! :xtdb.indexer/live-index [_ live-idx]
   (util/close live-idx))
