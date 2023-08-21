@@ -83,6 +83,10 @@ allprojects {
             tasks.clojureRepl {
                 forkOptions.run {
                     jvmArgs = defaultJvmArgs
+
+                    if (project.hasProperty("yourkit")) {
+                        jvmArgs = defaultJvmArgs + "-agentpath:/opt/yourkit/bin/linux-x86-64/libyjpagent.so"
+                    }
                 }
 
                 middleware.add("cider.nrepl/cider-middleware")

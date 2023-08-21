@@ -1,25 +1,25 @@
 = Developing XTDB2
 
 The top-level project ties all the other projects together for convenience whilst working within this repo.
-All of the below commands should be run in the *root* of the core2 repo.
+All of the below commands should be run in the *root* of the XT2 repo.
 
 == Links
 
-* https://github.com/orgs/xtdb/projects/13/views/1[Kanban board,window=_blank]
-* https://circleci.com/gh/xtdb/core2[CircleCI build,window=_blank] image:https://circleci.com/gh/xtdb/xtdb.svg?style=svg&circle-token=867b84b6d1b4dfff332773f771457349529aee8b[]
+* https://github.com/orgs/xtdb/projects/13/views/1[Kanban board^]
+* https://github.com/xtdb/xtdb/actions[Github Actions (CI)^]
 * link:GIT.adoc[Git practices in XTDB]
 
 == Prerequisites
 
-You will need either JDK 11 or 17 installed.
+You will need at least JDK 17 installed.
 
 == Getting started
 
-core2 uses https://gradle.org/[Gradle] - a JVM build tool that supports multi-module, polyglot projects.
-You do not need to install Gradle to develop core2 - there is a Gradle https://docs.gradle.org/current/userguide/gradle_wrapper.html[wrapper] in the repo.
+XT2 uses https://gradle.org/[Gradle] - a JVM build tool that supports multi-module, polyglot projects.
+You do not need to install Gradle to develop XT2 - there is a Gradle https://docs.gradle.org/current/userguide/gradle_wrapper.html[wrapper] in the repo.
 
 * Java classes are (re-)compiled automatically when you (re-)start a REPL or run tests
-* Start a REPL with `./gradlew clojureRepl`
+* Start a REPL with `./gradlew :clojureRepl`
 * Once you've connected to the REPL, in the `user` namespace, run:
 ** `(dev)` to require and go to the `dev` namespace.
 ** `(go)` to start up the dev node
@@ -47,20 +47,14 @@ You do not need to install Gradle to develop core2 - there is a Gradle https://d
 
 == Profiling
 
-NOTE: TODO: adapt to Gradle
-
 To attach YourKit:
 
 * Install YourKit (it's on the AUR, for Arch folks)
-* Add an alias to `~/.clojure/deps.edn`:
+* `./gradlew :clojureRepl -Pyourkit`
 +
-[source,clojure]
-----
-{:aliases {:yourkit {:jvm-opts ["-agentpath:/opt/yourkit/bin/linux-x86-64/libyjpagent.so"]}}}
-----
-* `clj -A:yourkit -M:repl/cider`
+This assumes YourKit is installed under `/opt/yourkit` (as it does from the AUR) - feel free to adapt the property (or even use its value) if you have it installed elsewhere.
 
-== Releasing core2
+== Releasing XT2
 
 See link:RELEASING.adoc[].
 
@@ -73,6 +67,6 @@ To upgrade Arrow:
 * Usual bump in `project.clj`
 * Clone the [Arrow repo](https://github.com/apache/arrow), add the [JUXT fork](https://github.com/juxt/arrow) as a remote.
 * Rebase `juxt/master` on the upstream tag.
-* In core2, `./bin/rebuild-forked-arrow-files.sh`
+* In xtdb2, `./bin/rebuild-forked-arrow-files.sh`
 * Test
-* Push (`--force-with-lease`) to JUXT fork, and commit to core2.
+* Push (`--force-with-lease`) to JUXT fork, and commit to XT2.
