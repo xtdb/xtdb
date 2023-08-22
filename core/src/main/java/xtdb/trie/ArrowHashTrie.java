@@ -89,7 +89,7 @@ public class ArrowHashTrie implements HashTrie<ArrowHashTrie.Node> {
             return null;
         }
     }
-    
+
     private Node forIndex(byte[] path, int idx) {
         var nodeOffset = nodesVec.getOffset(idx);
 

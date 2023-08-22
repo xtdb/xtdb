@@ -35,7 +35,7 @@
 (defn get-bytes [^ObjectStore obj-store k start len]
   (byte-buf->bytes @(.getObjectRange obj-store k start len)))
 
-(defn- in-memory ^Closeable []
+(defn in-memory ^Closeable []
   (->> (ig/prep-key ::os/memory-object-store {})
        (ig/init-key ::os/memory-object-store)))
 
