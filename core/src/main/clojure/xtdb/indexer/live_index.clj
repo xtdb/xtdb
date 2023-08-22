@@ -27,7 +27,7 @@
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (definterface ILiveTableTx
-  (^xtdb.indexer.live_index.ILiveTableWatermark openWatermark [^boolean retain])
+  (^xtdb.indexer.live_index.ILiveTableWatermark openWatermark [])
   (^xtdb.vector.IVectorWriter docWriter [])
   (^void logPut [^java.nio.ByteBuffer iid, ^long validFrom, ^long validTo, writeDocFn])
   (^void logDelete [^java.nio.ByteBuffer iid, ^long validFrom, ^long validTo])
@@ -141,9 +141,9 @@
 
           (swap! !transient-trie #(.add ^LiveHashTrie % (dec (.getPosition (.writerPosition live-rel))))))
 
-        (openWatermark [_ retain?]
+        (openWatermark [_]
           (locking this-table
-            (let [wm-live-rel (open-wm-live-rel live-rel retain?)
+            (let [wm-live-rel (open-wm-live-rel live-rel false)
                   col-types (live-rel->col-types wm-live-rel)
                   wm-live-trie @!transient-trie]
 
@@ -153,8 +153,7 @@
                 (liveTrie [_] wm-live-trie)
 
                 AutoCloseable
-                (close [_]
-                  (when retain? (util/close wm-live-rel)))))))
+                (close [_])))))
 
         (commit [_]
           (locking this-table
@@ -252,7 +251,7 @@
         (openWatermark [_]
           (util/with-close-on-catch [wms (HashMap.)]
             (doseq [[table-name ^ILiveTableTx live-table] table-txs]
-              (.put wms table-name (.openWatermark live-table false)))
+              (.put wms table-name (.openWatermark live-table)))
 
             (doseq [[table-name ^ILiveTable live-table] tables]
               (.computeIfAbsent wms table-name
