@@ -1,12 +1,12 @@
 package xtdb.trie;
 
 import org.apache.arrow.memory.util.ArrowBufPointer;
-import org.apache.arrow.vector.ElementAddressableVector;
+import xtdb.vector.IVectorReader;
 
 import java.util.Arrays;
 import java.util.stream.IntStream;
 
-public record LiveHashTrie(Node rootNode, ElementAddressableVector iidVec) implements HashTrie<LiveHashTrie.Node> {
+public record LiveHashTrie(Node rootNode, IVectorReader iidReader) implements HashTrie<LiveHashTrie.Node> {
 
     private static final int LOG_LIMIT = 64;
     private static final int PAGE_LIMIT = 1024;
@@ -19,13 +19,13 @@ public record LiveHashTrie(Node rootNode, ElementAddressableVector iidVec) imple
     }
 
     public static class Builder {
-        private final ElementAddressableVector iidVec;
+        private final IVectorReader iidReader;
         private int logLimit = LOG_LIMIT;
         private int pageLimit = PAGE_LIMIT;
         private byte[] rootPath = new byte[0];
 
-        private Builder(ElementAddressableVector iidVec) {
-            this.iidVec = iidVec;
+        private Builder(IVectorReader iidReader) {
+            this.iidReader = iidReader;
         }
 
         public void setLogLimit(int logLimit) {
@@ -41,38 +41,43 @@ public record LiveHashTrie(Node rootNode, ElementAddressableVector iidVec) imple
         }
 
         public LiveHashTrie build() {
-            return new LiveHashTrie(new Leaf(logLimit, pageLimit, rootPath), iidVec);
+            return new LiveHashTrie(new Leaf(logLimit, pageLimit, rootPath), iidReader);
         }
     }
 
-    public static Builder builder(ElementAddressableVector iidVec) {
-        return new Builder(iidVec);
+    public static Builder builder(IVectorReader iidReader) {
+        return new Builder(iidReader);
     }
 
     @SuppressWarnings("unused")
-    public static LiveHashTrie emptyTrie(ElementAddressableVector iidVec) {
-        return builder(iidVec).build();
+    public static LiveHashTrie emptyTrie(IVectorReader iidReader) {
+        return builder(iidReader).build();
     }
 
     public LiveHashTrie add(int idx) {
-        return new LiveHashTrie(rootNode.add(this, idx), iidVec);
+        return new LiveHashTrie(rootNode.add(this, idx), iidReader);
+    }
+
+    @SuppressWarnings("unused")
+    public LiveHashTrie withIidReader(IVectorReader iidReader) {
+        return new LiveHashTrie(rootNode, iidReader);
     }
 
     public LiveHashTrie compactLogs() {
-        return new LiveHashTrie(rootNode.compactLogs(this), iidVec);
+        return new LiveHashTrie(rootNode.compactLogs(this), iidReader);
     }
 
     private static final ThreadLocal<ArrowBufPointer> BUCKET_BUF_PTR = ThreadLocal.withInitial(ArrowBufPointer::new);
 
     private int bucketFor(int idx, int level) {
-        return HashTrie.bucketFor(iidVec.getDataPointer(idx, BUCKET_BUF_PTR.get()), level);
+        return HashTrie.bucketFor(iidReader.getPointer(idx, BUCKET_BUF_PTR.get()), level);
     }
 
     private static final ThreadLocal<ArrowBufPointer> LEFT_BUF_PTR = ThreadLocal.withInitial(ArrowBufPointer::new);
     private static final ThreadLocal<ArrowBufPointer> RIGHT_BUF_PTR = ThreadLocal.withInitial(ArrowBufPointer::new);
 
     private int compare(int leftIdx, int rightIdx) {
-        int cmp = iidVec.getDataPointer(leftIdx, LEFT_BUF_PTR.get()).compareTo(iidVec.getDataPointer(rightIdx, RIGHT_BUF_PTR.get()));
+        int cmp = iidReader.getPointer(leftIdx, LEFT_BUF_PTR.get()).compareTo(iidReader.getPointer(rightIdx, RIGHT_BUF_PTR.get()));
         if (cmp != 0) return cmp;
 
         // sort by idx desc
