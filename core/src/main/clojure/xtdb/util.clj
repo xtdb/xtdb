@@ -118,7 +118,7 @@
     bb))
 
 (defn byte-buffer->uuid [^ByteBuffer bb]
-  (UUID. (.getLong bb) (.getLong bb)))
+  (UUID. (.getLong bb 0) (.getLong bb Long/BYTES)))
 
 (defn ->lex-hex-string
   "Turn a long into a lexicographically-sortable hex string by prepending the length"
