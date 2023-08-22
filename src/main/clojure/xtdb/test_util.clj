@@ -14,7 +14,8 @@
             [xtdb.util :as util]
             [xtdb.vector :as vec]
             [xtdb.vector.reader :as vr]
-            [xtdb.vector.writer :as vw])
+            [xtdb.vector.writer :as vw]
+            [xtdb.trie :as trie])
   (:import [ch.qos.logback.classic Level Logger]
            clojure.lang.ExceptionInfo
            java.net.ServerSocket
@@ -22,7 +23,7 @@
            java.nio.file.attribute.FileAttribute
            (java.time Duration Instant Period)
            (java.util LinkedList)
-           java.util.function.Consumer
+           (java.util.function Consumer IntConsumer)
            (org.apache.arrow.memory BufferAllocator RootAllocator)
            (org.apache.arrow.vector FieldVector VectorSchemaRoot)
            (org.apache.arrow.vector.types.pojo Schema)
@@ -30,7 +31,8 @@
            (xtdb ICursor InstantSource)
            xtdb.indexer.IIndexer
            (xtdb.operator IRaQuerySource PreparedQuery)
-           (xtdb.vector IVectorReader RelationReader)))
+           (xtdb.vector IVectorReader RelationReader)
+           (java.util.stream IntStream)))
 
 #_{:clj-kondo/ignore [:uninitialized-var]}
 (def ^:dynamic ^org.apache.arrow.memory.BufferAllocator *allocator*)
@@ -299,3 +301,44 @@
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (defmacro with-log-level [ns level & body]
   `(with-log-levels {~ns ~level} ~@body))
+
+(defn open-arrow-hash-trie-root ^org.apache.arrow.vector.VectorSchemaRoot [^BufferAllocator al, paths]
+  (util/with-close-on-catch [trie-root (VectorSchemaRoot/create trie/trie-schema al)]
+    (let [trie-wtr (vw/root->writer trie-root)
+          trie-wp (.writerPosition trie-wtr)
+          nodes-wtr (.writerForName trie-wtr "nodes")
+          nil-wtr (.writerForTypeId nodes-wtr (byte 0))
+          branch-wtr (.writerForTypeId nodes-wtr (byte 1))
+          branch-el-wtr (.listElementWriter branch-wtr)
+          leaf-wtr (.writerForTypeId nodes-wtr (byte 2))
+          page-idx-wtr (.structKeyWriter leaf-wtr "page-idx")]
+      (letfn [(write-paths [paths]
+                (cond
+                  (nil? paths) (.writeNull nil-wtr nil)
+
+                  (number? paths) (do
+                                    (.startStruct leaf-wtr)
+                                    (.writeInt page-idx-wtr paths)
+                                    (.endStruct leaf-wtr))
+
+                  (vector? paths) (let [!page-idxs (IntStream/builder)]
+                                    (doseq [child paths]
+                                      (.add !page-idxs (if child
+                                                         (do
+                                                           (write-paths child)
+                                                           (dec (.getPosition trie-wp)))
+                                                         -1)))
+                                    (.startList branch-wtr)
+                                    (.forEach (.build !page-idxs)
+                                              (reify IntConsumer
+                                                (accept [_ idx]
+                                                  (if (= idx -1)
+                                                    (.writeNull branch-el-wtr nil)
+                                                    (.writeInt branch-el-wtr idx)))))
+                                    (.endList branch-wtr)))
+                (.endRow trie-wtr))]
+        (write-paths paths))
+
+      (.syncRowCount trie-wtr))
+
+    trie-root))

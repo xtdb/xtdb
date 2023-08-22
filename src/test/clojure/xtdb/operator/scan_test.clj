@@ -55,6 +55,17 @@
              (set (tu/query-ra '[:scan {:table xt_docs} [xt/id]]
                                {:node node}))))))
 
+(t/deftest test-smaller-page-limit
+  (with-open [node (node/start-node {:xtdb.indexer/live-index {:page-limit 16}})]
+    (xt/submit-tx node (for [i (range 20)] [:put :xt_docs {:xt/id i}]))
+
+    (tu/finish-chunk! node)
+
+    (t/is (= (into #{} (map #(hash-map :xt/id %)) (range 20))
+             (set (tu/query-ra '[:scan {:table xt_docs} [xt/id]]
+                               {:node node}))))))
+
+
 (t/deftest test-past-point-point-queries
   (with-open [node (node/start-node {})]
     (let [tx1 (xt/submit-tx node [[:put :xt_docs {:xt/id :doc1 :v 1} {:for-valid-time [:from #inst "2015"]}]

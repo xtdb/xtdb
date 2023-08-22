@@ -222,20 +222,21 @@
                                        (range (alength first-children)))
                                      (mapv (fn [bucket-idx]
                                              (->merge-plan* (mapv (fn [node ^objects node-children]
-                                                                          (if node-children
-                                                                            (aget node-children bucket-idx)
-                                                                            node))
-                                                                        nodes trie-children)
-                                                                  (conj path bucket-idx)
-                                                                  (inc level)))))]}
+                                                                    (if node-children
+                                                                      (aget node-children bucket-idx)
+                                                                      node))
+                                                                  nodes trie-children)
+                                                            (conj path bucket-idx)
+                                                            (inc level)))))]}
                 {:path (byte-array path)
                  :node [:leaf (->> nodes
                                    (into [] (keep-indexed
                                              (fn [ordinal ^HashTrie$Node leaf-node]
-                                               (condp = (class leaf-node)
-                                                 ArrowHashTrie$Leaf {:ordinal ordinal,
-                                                                     :trie-leaf {:page-idx (.getPageIndex ^ArrowHashTrie$Leaf leaf-node)}}
+                                               (when leaf-node
+                                                 (condp = (class leaf-node)
+                                                   ArrowHashTrie$Leaf {:ordinal ordinal,
+                                                                       :trie-leaf {:page-idx (.getPageIndex ^ArrowHashTrie$Leaf leaf-node)}}
 
-                                                 LiveHashTrie$Leaf {:ordinal ordinal, :trie-leaf leaf-node})))))]})))]
+                                                   LiveHashTrie$Leaf {:ordinal ordinal, :trie-leaf leaf-node}))))))]})))]
 
     (->merge-plan* (map #(some-> ^HashTrie % (.rootNode)) tries) [] 0)))
