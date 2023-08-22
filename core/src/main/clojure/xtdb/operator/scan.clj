@@ -18,7 +18,7 @@
   (:import (clojure.lang IPersistentMap MapEntry)
            [java.lang AutoCloseable]
            java.nio.ByteBuffer
-           (java.util ArrayList Iterator LinkedList List ListIterator Map)
+           (java.util ArrayList Iterator LinkedList List Map)
            (java.util.function IntConsumer)
            (java.util.stream IntStream)
            (org.apache.arrow.memory ArrowBuf BufferAllocator)
@@ -180,10 +180,6 @@
        (or (nil? for-system-time)
            (scan-op-point? for-system-time))))
 
-(defn- at-range-point? [{:keys [for-system-time]}]
-  (or (nil? for-system-time)
-      (scan-op-point? for-system-time)))
-
 (defn tables-with-cols [basis ^IWatermarkSource wm-src ^IScanEmitter scan-emitter]
   (let [{:keys [tx, after-tx]} basis
         wm-tx (or tx after-tx)]
@@ -193,11 +189,7 @@
 ;; As the algorithm processes events in reverse system time order, one can
 ;; immediately write out the system-to times when having finished an event.
 ;; The system-to times are not relevant for processing earlier events.
-(deftype Rectangle [^long valid-from, ^long valid-to, ^long sys-from])
-
-(defn- ranges-invariant [^LinkedList !ranges]
-  (every? true? (map (fn [^Rectangle r1 ^Rectangle r2] (<= (.valid-to r1) (.valid-from r2)))
-                     !ranges (rest !ranges))))
+(defrecord Rectangle [^long valid-from, ^long valid-to, ^long sys-from])
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (definterface RowConsumer
@@ -210,66 +202,87 @@
   (^void nextIid []))
 
 (defn event-resolver
-  (^xtdb.operator.scan.EventResolver [range-range?] (event-resolver range-range? (LinkedList.)))
+  (^xtdb.operator.scan.EventResolver [] (event-resolver (LinkedList.)))
 
-  (^xtdb.operator.scan.EventResolver [range-range?, ^List !ranges]
-   (let [!overlapping-ranges (LinkedList.)]
-     (reify EventResolver
-       (nextIid [_]
-         (.clear !ranges))
+  (^xtdb.operator.scan.EventResolver [^List !ranges]
+   (reify EventResolver
+     (nextIid [_]
+       (.clear !ranges))
 
-       (resolveEvent [_ idx valid-from valid-to system-from rc]
-         (assert (ranges-invariant !ranges))
+     ;; https://en.wikipedia.org/wiki/Allen%27s_interval_algebra
+     (resolveEvent [_ idx valid-from valid-to system-from rc]
+       (when rc
+         (let [itr (.iterator !ranges)]
+           (loop [valid-from valid-from]
+             (when (< valid-from valid-to)
+               (if-not (.hasNext itr)
+                 (.accept rc idx valid-from valid-to system-from util/end-of-time-μs)
 
-         (.clear !overlapping-ranges)
+                 (let [^Rectangle r (.next itr)]
+                   (if (<= (.valid-to r) valid-from)
+                     ;; state #{< m} event
+                     (recur valid-from)
 
-         (let [^ListIterator itr (.iterator !ranges)
-               ^Rectangle cur (loop []
-                                (when (.hasNext itr)
-                                  (let [^Rectangle next (.next itr)]
-                                    (if (<= (.valid-to next) valid-from)
-                                      (recur)
-                                      next))))]
-           (loop [^Rectangle cur cur]
-             (when cur
-               (if (< (.valid-from cur) valid-to)
-                 (do
-                   (.add !overlapping-ranges cur)
-                   (.remove itr)
-                   (recur (when (.hasNext itr) (.next itr))))
-                 (when (<= valid-to (.valid-from cur))
-                   (.previous itr)))))
+                     ;; state #{> mi o oi s si d di f fi =} event
+                     (do
+                       (when (< valid-from (.valid-from r))
+                         ;; state #{> mi oi d f} event
+                         (let [valid-to (min valid-to (.valid-from r))]
+                           (when (< valid-from valid-to)
+                             (.accept rc idx valid-from valid-to
+                                      system-from util/end-of-time-μs))))
 
-           (when-let [^Rectangle begin (first !overlapping-ranges)]
-             (when (< (.valid-from begin) valid-from)
-               (.add itr (Rectangle. (.valid-from begin) valid-from (.sys-from begin))))
-             (when (and rc (< valid-from (.valid-from begin)))
-               (.accept rc idx valid-from (.valid-from begin) system-from util/end-of-time-μs)))
+                       (let [valid-from (max valid-from (.valid-from r))
+                             valid-to (min valid-to (.valid-to r))]
+                         (when (< valid-from valid-to)
+                           (.accept rc idx valid-from valid-to system-from (.sys-from r))))
 
-           (when rc
-             (if (seq !overlapping-ranges)
-               (do
-                 (dorun (map (fn [^Rectangle r1 ^Rectangle r2]
-                               (when (< (.valid-to r1) (.valid-from r2))
-                                 (.accept rc idx (.valid-to r1) (.valid-from r2) system-from util/end-of-time-μs)))
-                             !overlapping-ranges (rest !overlapping-ranges)))
+                       (when (< (.valid-to r) valid-to)
+                         ;; state #{o s d} event
+                         (recur (.valid-to r)))))))))))
 
-                 (when range-range?
-                   (doseq [^Rectangle r !overlapping-ranges]
-                     (let [new-valid-from (max valid-from (.valid-from r))
-                           new-valid-to (min valid-to (.valid-to r))]
-                       (when (< new-valid-from new-valid-to)
-                         (.accept rc idx new-valid-from new-valid-to system-from (.sys-from r)))))))
+       (let [itr (.listIterator !ranges)]
+         (loop [ev-added? false]
+           (let [^Rectangle r (when (.hasNext itr)
+                                (.next itr))]
+             (cond
+               (nil? r) (when-not ev-added?
+                          (.add itr (Rectangle. valid-from valid-to system-from)))
 
-               (.accept rc idx valid-from valid-to system-from util/end-of-time-μs)))
+               ;; state #{< m} event
+               (<= (.valid-to r) valid-from) (recur ev-added?)
 
-           (.add itr (Rectangle. valid-from valid-to system-from))
+               ;; state #{> mi o oi s si d di f fi =} event
+               :else (do
+                       (if (< (.valid-from r) valid-from)
+                         ;; state #{o di fi} event
+                         (.set itr (Rectangle. (.valid-from r) valid-from (.sys-from r)))
 
-           (when-let [^Rectangle end (last !overlapping-ranges)]
-             (when (< valid-to (.valid-to end))
-               (.add itr (Rectangle. valid-to (.valid-to end) (.sys-from end))))
-             (when (and rc (< (.valid-to end) valid-to))
-               (.accept rc idx (.valid-to end) valid-to system-from util/end-of-time-μs)))))))))
+                         ;; state #{> mi oi s si d f =} event
+                         (.remove itr))
+
+                       (when-not ev-added?
+                         (.add itr (Rectangle. valid-from valid-to system-from)))
+
+                       (when (< valid-to (.valid-to r))
+                         ;; state #{> mi oi si di}
+                         (let [valid-from (max valid-to (.valid-from r))]
+                           (when (< valid-from (.valid-to r))
+                             (.add itr (Rectangle. valid-from (.valid-to r) (.sys-from r))))))
+
+                       (recur true)))))
+
+         #_ ; asserting the ranges invariant isn't ideal on the fast path
+         (assert (->> (partition 2 1 !ranges)
+                      (every? (fn [[^Rectangle r1 ^Rectangle r2]]
+                                (<= (.valid-to r1) (.valid-from r2)))))
+                 {:ranges (mapv (juxt (comp util/micros->instant :valid-from)
+                                      (comp util/micros->instant :valid-to)
+                                      (comp util/micros->instant :sys-from))
+                                !ranges)
+                  :ev [(util/micros->instant valid-from)
+                       (util/micros->instant valid-to)
+                       (util/micros->instant system-from)]}))))))
 
 (defn- duplicate-ptr [^ArrowBufPointer dst, ^ArrowBufPointer src]
   (.set dst (.getBuf src) (.getOffset src) (.getLength src)))
@@ -596,8 +609,7 @@
                     col-names col-preds
                     temporal-range
                     params
-                    (cond-> {:ev-resolver (event-resolver (and (not (at-point-point? scan-opts))
-                                                               (not (at-range-point? scan-opts))))
+                    (cond-> {:ev-resolver (event-resolver)
                              :skip-iid-ptr (ArrowBufPointer.)
                              :prev-iid-ptr (ArrowBufPointer.)
                              :current-iid-ptr (ArrowBufPointer.)}
