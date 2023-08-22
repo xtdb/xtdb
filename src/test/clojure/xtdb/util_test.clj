@@ -5,7 +5,7 @@
 
 (deftest uuid-conversion-utils-test
   (let [uuid (random-uuid)]
-    (t/is (= uuid 
+    (t/is (= uuid
              (util/byte-buffer->uuid
                (util/uuid->byte-buffer uuid))
              (util/byte-buffer->uuid
