@@ -1,5 +1,5 @@
 (ns xtdb.operator.scan-test
-  (:require [clojure.test :as t]
+  (:require [clojure.test :as t :refer [deftest]]
             [xtdb.api :as xt]
             [xtdb.node :as node]
             [xtdb.operator :as op]
@@ -551,3 +551,12 @@
              (test-er [1 2010 2020 1]
                       [0 2005 2009 0]))
           "period starts after and does NOT overlap")))
+
+(deftest test-live-tries-with-multiple-leaves-are-loaded-correctly-2710
+  (with-open [node (node/start-node {:xtdb.indexer/live-index {:page-limit 16}})]
+    (-> (xt/submit-tx node (for [i (range 20)] [:put :xt_docs {:xt/id i}]))
+        (tu/then-await-tx node))
+
+    (t/is (= (into #{} (map #(hash-map :xt/id %)) (range 20))
+             (set (tu/query-ra '[:scan {:table xt_docs} [xt/id]]
+                               {:node node}))))))
