@@ -570,10 +570,10 @@
                                                                      (.select rel-rdr (.select iid-pred allocator rel-rdr params))))))
                 merge-q (->merge-queue loaded-leaves merge-task)
                 ^"[Ljava.util.function.IntConsumer;"
-                row-pickers (into-array IntConsumer
-                                        (for [{:keys [rel-rdr]} loaded-leaves]
-                                          (range-range-row-picker out-rel rel-rdr col-names temporal-timestamps picker-state)))]
-
+                row-pickers (make-array IntConsumer (count leaves))]
+            (doseq [{:keys [^LeafMergeQueue$LeafPointer leaf-ptr rel-rdr]} loaded-leaves]
+              (aset row-pickers (.getOrdinal leaf-ptr)
+                    (range-range-row-picker out-rel rel-rdr col-names temporal-timestamps picker-state)))
             (loop []
               (when-let [lp (.poll merge-q)]
                 (.accept ^IntConsumer (aget row-pickers (.getOrdinal lp)) (.getIndex lp))
