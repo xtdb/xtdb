@@ -502,6 +502,7 @@
   (getLeafPointer [_] leaf-ptr)
 
   (loadLeaf [_ leaf]
+    (.reset leaf-ptr)
     (.select live-rel (.data ^LiveHashTrie$Leaf leaf)))
 
   AutoCloseable
