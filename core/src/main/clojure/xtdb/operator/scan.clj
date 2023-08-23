@@ -527,11 +527,11 @@
         live-table-wm (conj (LiveLeafLoader. (.liveRelation live-table-wm)
                                              (LeafMergeQueue$LeafPointer. (count arrow-leaves))))))))
 
-(defn load-leaves [leaves {task-leaves :leaves}]
+(defn load-leaves [leaf-loaders {task-leaves :leaves}]
   (mapv (fn [{:keys [ordinal trie-leaf]}]
-          (let [^ILeafLoader leaf (nth leaves ordinal)]
-            {:rel-rdr (.loadLeaf leaf trie-leaf)
-             :leaf-ptr (.getLeafPointer leaf)}))
+          (let [^ILeafLoader leaf-loader (nth leaf-loaders ordinal)]
+            {:rel-rdr (.loadLeaf leaf-loader trie-leaf)
+             :leaf-ptr (.getLeafPointer leaf-loader)}))
         task-leaves))
 
 (defn ->merge-queue ^xtdb.trie.LeafMergeQueue [loaded-leaves {:keys [path]}]
