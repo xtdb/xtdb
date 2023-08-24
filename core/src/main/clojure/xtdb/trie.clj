@@ -222,8 +222,9 @@
           (.putObject obj-store (->table-trie-obj-key table-name trie-key) trie-buf)))))
 
 (defn- parse-trie-filename [file-name]
-  (when-let [[_ trie-key level-str row-from-str row-to-str] (re-find #"/log-tries/trie-(l(\p{XDigit}+)-cf(\p{XDigit}+)-ct(\p{XDigit}+)+?)\.arrow$" file-name)]
-    {:trie-file file-name
+  (when-let [[_ table-name trie-key level-str row-from-str row-to-str] (re-find #"tables/(.+)/log-tries/trie-(l(\p{XDigit}+)-cf(\p{XDigit}+)-ct(\p{XDigit}+)+?)\.arrow$" file-name)]
+    {:table-name table-name
+     :trie-file file-name
      :trie-key trie-key
      :level (util/<-lex-hex-string level-str)
      :row-from (util/<-lex-hex-string row-from-str)
@@ -256,7 +257,7 @@
   path-pred :: [path] -> boolean
   page-idx-pred :: [ordinal page-idx] -> boolean
   iid-bloom-bitmap-fn :: [ordinal page-idx] -> ImmutableRoaringBitmap"
-  [tries, path-pred, page-idx-preds, iid-bloom-bitmap-fns]
+  [trie-matches, path-pred, page-idx-preds, iid-bloom-bitmap-fns]
 
   (letfn [(->merge-plan* [nodes path ^long level]
             (let [ba-path (byte-array path)]
@@ -289,7 +290,8 @@
                                  ArrowHashTrie$Leaf
                                  (let [page-idx (.getPageIndex ^ArrowHashTrie$Leaf node)
                                        take-node? (.test ^IntPredicate (nth page-idx-preds ordinal) page-idx)
-                                       iid-bloom-bitmap-fn (nth iid-bloom-bitmap-fns ordinal)]
+                                       iid-bloom-bitmap-fn (nth iid-bloom-bitmap-fns ordinal)
+                                       {:keys [table-name, trie-key]} (:trie-data (nth trie-matches ordinal))]
                                    (when take-node?
                                      (.or cumulative-iid-bitmap (iid-bloom-bitmap-fn page-idx)))
                                    (recur (inc ordinal) more-nodes (or node-taken? take-node?)
@@ -297,13 +299,16 @@
                                                                  (when node-taken?
                                                                    (when-let [iid-bitmap (iid-bloom-bitmap-fn page-idx)]
                                                                      (MutableRoaringBitmap/intersects cumulative-iid-bitmap iid-bitmap))))
-                                                         {:page-idx page-idx}))))
+                                                         {:page-idx page-idx
+                                                          :trie-leaf-file (->table-leaf-obj-key table-name trie-key)}))))
                                  LiveHashTrie$Leaf
-                                 (recur (inc ordinal) more-nodes true (conj leaves node)))
+                                 (recur (inc ordinal) more-nodes true
+                                        (conj leaves {:node node,
+                                                      :rel-rdr (:rel-rdr (nth trie-matches ordinal))})))
 
                           :else (recur (inc ordinal) more-nodes node-taken? (conj leaves nil))))))))))]
 
-    (->merge-plan* (mapv #(some-> ^HashTrie % (.rootNode)) tries) [] 0)))
+    (->merge-plan* (mapv (fn [{:keys [^HashTrie trie]}] (some-> trie .rootNode)) trie-matches) [] 0)))
 
 (defn open-arrow-trie-files [^IBufferPool buffer-pool table-tries]
   (util/with-close-on-catch [roots (ArrayList. (count table-tries))]
@@ -317,8 +322,9 @@
 
 (defn table-merge-plan [path-pred, trie-matches, ^ILiveTableWatermark live-table-wm]
   (let [tries (cond-> trie-matches
-                live-table-wm (conj {:trie (.compactLogs (.liveTrie live-table-wm))}))]
-    (->merge-plan (mapv :trie tries)
+                live-table-wm (conj {:trie (.compactLogs (.liveTrie live-table-wm))
+                                     :rel-rdr (.liveRelation live-table-wm)}))]
+    (->merge-plan tries
                   path-pred
                   (mapv :page-idx-pred tries)
                   (mapv :iid-bloom-bitmap-fn tries))))
@@ -364,13 +370,13 @@
 
   (loadLeaf [_ leaf]
     (.reset leaf-ptr)
-    (.select live-rel (.data ^LiveHashTrie$Leaf leaf)))
+    (.select live-rel (.data ^LiveHashTrie$Leaf (:node leaf))))
 
   AutoCloseable
   (close [_]))
 
 (defn ->live-leaf-loader [live-rel ^long ordinal]
-  (LiveLeafLoader. live-rel (LeafMergeQueue$LeafPointer. ordinal)))
+  (->LiveLeafLoader live-rel (LeafMergeQueue$LeafPointer. ordinal)))
 
 (defn open-leaves [^IBufferPool buffer-pool, table-name, table-tries, ^ILiveTableWatermark live-table-wm]
   (util/with-close-on-catch [leaf-bufs (ArrayList.)]
@@ -397,11 +403,11 @@
                                    {:rel-rdr (.loadLeaf leaf-loader trie-leaf)
                                     :leaf-ptr (.getLeafPointer leaf-loader)})))))))
 
-(defn ->merge-queue ^xtdb.trie.LeafMergeQueue [loaded-leaves {:keys [path]}]
+(defn ->merge-queue ^xtdb.trie.LeafMergeQueue [merge-task-readers loaded-leaves {:keys [path]}]
   (LeafMergeQueue. path
                    (into-array IVectorReader
-                               (map (fn [{:keys [^RelationReader rel-rdr]}]
+                               (map (fn [^RelationReader rel-rdr]
                                       (when rel-rdr
                                         (.readerForName rel-rdr "xt$iid")))
-                                    loaded-leaves))
+                                    merge-task-readers))
                    (map :leaf-ptr loaded-leaves)))

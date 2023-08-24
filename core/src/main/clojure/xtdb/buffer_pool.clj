@@ -11,7 +11,9 @@
            java.util.concurrent.CompletableFuture
            java.util.concurrent.locks.StampedLock
            java.util.function.BiPredicate
-           [org.apache.arrow.memory ArrowBuf BufferAllocator]))
+           [org.apache.arrow.memory ArrowBuf BufferAllocator]
+           (org.apache.arrow.vector VectorSchemaRoot)
+           (org.apache.arrow.vector.ipc.message ArrowFooter ArrowRecordBatch)))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -146,3 +148,21 @@
 
 (defmethod ig/halt-key! ::buffer-pool [_ ^BufferPool buffer-pool]
   (.close buffer-pool))
+
+(defn get-footer ^ArrowFooter [^IBufferPool bp path]
+  (with-open [^ArrowBuf arrow-buf @(.getBuffer bp (str path))]
+    (util/read-arrow-footer arrow-buf)))
+
+(defn open-record-batch ^ArrowRecordBatch [^IBufferPool bp path block-idx]
+  (with-open [^ArrowBuf arrow-buf @(.getBuffer bp (str path))]
+    (let [footer (util/read-arrow-footer arrow-buf)
+          blocks (.getRecordBatches footer)
+          block (nth blocks block-idx nil)]
+      (if-not block
+        (throw (IndexOutOfBoundsException. "Record batch index out of bounds of arrow file"))
+        (util/->arrow-record-batch-view block arrow-buf)))))
+
+(defn open-vsr ^VectorSchemaRoot [bp path allocator]
+  (let [footer (get-footer bp path)
+        schema (.getSchema footer)]
+    (VectorSchemaRoot/create schema allocator)))

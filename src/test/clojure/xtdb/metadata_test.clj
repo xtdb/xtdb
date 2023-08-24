@@ -131,12 +131,12 @@
           literal-selector (expr.meta/->metadata-selector '(and (< xt/id 11) (> xt/id 9)) '{xt/id :i64} {})
           trie-obj-key (trie/->table-trie-obj-key "xt_docs" (trie/->trie-key 0 0 21))]
       (util/with-open [roots (trie/open-arrow-trie-files buffer-pool [{:trie-file trie-obj-key}])]
-        (let [{:keys [^IntPredicate page-idx-pred] :as res} (first (meta/matching-tries metadata-mgr [trie-obj-key] roots literal-selector))]
+        (let [{:keys [^IntPredicate page-idx-pred] :as res} (first (meta/matching-tries metadata-mgr [{:trie-file trie-obj-key}] roots literal-selector))]
 
-          (t/is (= {:trie-file trie-obj-key
+          (t/is (= {:trie-data {:trie-file trie-obj-key}
                     :col-names
                     #{"xt$iid" "xt$valid_to" "xt$valid_from" "xt$id" "xt$system_from"}}
-                   (select-keys res [:trie-file :col-names])))
+                   (select-keys res [:trie-data :col-names])))
 
           (doseq [page-idx relevant-pages]
             (t/is (true? (.test page-idx-pred page-idx)))))))))
@@ -151,10 +151,10 @@
         trie-obj-key (trie/->table-trie-obj-key "xt_docs" (trie/->trie-key 0 0 2))]
 
     (util/with-open [roots (trie/open-arrow-trie-files buffer-pool [{:trie-file trie-obj-key}])]
-      (let [{:keys [^IntPredicate page-idx-pred] :as res} (first (meta/matching-tries metadata-mgr [trie-obj-key] roots true-selector))]
-        (t/is (= {:trie-file trie-obj-key,
+      (let [{:keys [^IntPredicate page-idx-pred] :as res} (first (meta/matching-tries metadata-mgr [{:trie-file trie-obj-key}] roots true-selector))]
+        (t/is (= {:trie-data {:trie-file trie-obj-key},
                   :col-names
                   #{"xt$iid" "xt$valid_to" "xt$valid_from" "xt$id" "xt$system_from" "boolean_or_int"}}
-                 (select-keys res [:trie-file :col-names])))
+                 (select-keys res [:trie-data :col-names])))
 
         (t/is (true? (.test page-idx-pred 0)))))))
