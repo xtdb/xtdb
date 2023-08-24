@@ -13,41 +13,42 @@
               log-root (tu/open-arrow-hash-trie-root al 1)
               log2-root (tu/open-arrow-hash-trie-root al [nil nil 1 2])]
     (t/is (= {:path [],
-              :node
-              [:branch
-               [{:path [0],
-                 :node
-                 [:branch
-                  [{:path [0 0],
-                    :node [:leaf [{:ordinal 2, :trie-leaf {:page-idx 1}}]]}
-                   {:path [0 1],
-                    :node
-                    [:leaf
-                     [{:ordinal 1, :trie-leaf {:page-idx 1}}
-                      {:ordinal 2, :trie-leaf {:page-idx 1}}]]}
-                   {:path [0 2],
-                    :node [:leaf [{:ordinal 2, :trie-leaf {:page-idx 1}}]]}
-                   {:path [0 3],
-                    :node
-                    [:leaf
-                     [{:ordinal 1, :trie-leaf {:page-idx 2}}
-                      {:ordinal 2, :trie-leaf {:page-idx 1}}]]}]]}
-                {:path [1],
-                 :node
-                 [:leaf
-                  [{:ordinal 1, :trie-leaf {:page-idx 1}}
-                   {:ordinal 2, :trie-leaf {:page-idx 1}}]]}
-                {:path [2],
-                 :node
-                 [:leaf
-                  [{:ordinal 2, :trie-leaf {:page-idx 1}}
-                   {:ordinal 3, :trie-leaf {:page-idx 1}}]]}
-                {:path [3],
-                 :node
-                 [:leaf
-                  [{:ordinal 1, :trie-leaf {:page-idx 3}}
-                   {:ordinal 2, :trie-leaf {:page-idx 1}}
-                   {:ordinal 3, :trie-leaf {:page-idx 2}}]]}]]}
+              :node [:branch
+                     [{:path [0],
+                       :node [:branch
+                              [{:path [0 0],
+                                :node [:leaf [nil nil {:ordinal 2, :trie-leaf {:page-idx 1}} nil]]}
+
+                               {:path [0 1],
+                                :node [:leaf [nil
+                                              {:ordinal 1, :trie-leaf {:page-idx 1}}
+                                              {:ordinal 2, :trie-leaf {:page-idx 1}}
+                                              nil]]}
+
+                               {:path [0 2],
+                                :node [:leaf [nil nil {:ordinal 2, :trie-leaf {:page-idx 1}} nil]]}
+
+                               {:path [0 3],
+                                :node [:leaf [nil
+                                              {:ordinal 1, :trie-leaf {:page-idx 2}}
+                                              {:ordinal 2, :trie-leaf {:page-idx 1}}
+                                              nil]]}]]}
+                      {:path [1],
+                       :node [:leaf [nil
+                                     {:ordinal 1, :trie-leaf {:page-idx 1}}
+                                     {:ordinal 2, :trie-leaf {:page-idx 1}}
+                                     nil]]}
+                      {:path [2],
+                       :node [:leaf [nil
+                                     nil
+                                     {:ordinal 2, :trie-leaf {:page-idx 1}}
+                                     {:ordinal 3, :trie-leaf {:page-idx 1}}]]}
+                      {:path [3],
+                       :node [:leaf [nil
+                                     {:ordinal 1, :trie-leaf {:page-idx 3}}
+                                     {:ordinal 2, :trie-leaf {:page-idx 1}}
+                                     {:ordinal 3, :trie-leaf {:page-idx 2}}]]}]]}
+
              (->> (trie/->merge-plan [nil (ArrowHashTrie/from t1-root) (ArrowHashTrie/from log-root) (ArrowHashTrie/from log2-root)] nil)
                   (walk/postwalk (fn [x]
                                    (if (and (map-entry? x) (= :path (key x)))

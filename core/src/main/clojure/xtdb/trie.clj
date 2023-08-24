@@ -230,7 +230,7 @@
                                                             (inc level)))))]}
                 {:path (byte-array path)
                  :node [:leaf (->> nodes
-                                   (into [] (keep-indexed
+                                   (into [] (map-indexed
                                              (fn [ordinal ^HashTrie$Node leaf-node]
                                                (when leaf-node
                                                  (condp = (class leaf-node)

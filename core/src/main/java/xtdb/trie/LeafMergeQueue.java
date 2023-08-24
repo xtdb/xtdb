@@ -4,6 +4,7 @@ import org.apache.arrow.memory.util.ArrowBufPointer;
 import xtdb.vector.IVectorReader;
 
 import java.util.Collection;
+import java.util.Objects;
 import java.util.PriorityQueue;
 
 public class LeafMergeQueue {
@@ -51,8 +52,8 @@ public class LeafMergeQueue {
             return Long.compare(r.ordinal, l.ordinal);
         });
 
-        pq.addAll(lps.stream().filter(this::isValid).toList());
-    }
+        pq.addAll(lps.stream().filter(Objects::nonNull).filter(this::isValid).toList());
+}
 
     private ArrowBufPointer getPointer(LeafPointer lp, ArrowBufPointer ptr) {
         return rdrs[lp.ordinal].getPointer(lp.index, ptr);

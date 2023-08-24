@@ -543,16 +543,18 @@
 
 (defn load-leaves [leaf-loaders {task-leaves :leaves}]
   (mapv (fn [{:keys [ordinal trie-leaf]}]
-          (let [^ILeafLoader leaf-loader (nth leaf-loaders ordinal)]
-            {:rel-rdr (.loadLeaf leaf-loader trie-leaf)
-             :leaf-ptr (.getLeafPointer leaf-loader)}))
+          (when trie-leaf
+            (let [^ILeafLoader leaf-loader (nth leaf-loaders ordinal)]
+              {:rel-rdr (.loadLeaf leaf-loader trie-leaf)
+               :leaf-ptr (.getLeafPointer leaf-loader)})))
         task-leaves))
 
 (defn ->merge-queue ^xtdb.trie.LeafMergeQueue [loaded-leaves {:keys [path]}]
   (LeafMergeQueue. path
                    (into-array IVectorReader
                                (map (fn [{:keys [^RelationReader rel-rdr]}]
-                                      (.readerForName rel-rdr "xt$iid"))
+                                      (when rel-rdr
+                                        (.readerForName rel-rdr "xt$iid")))
                                     loaded-leaves))
                    (map :leaf-ptr loaded-leaves)))
 
@@ -571,7 +573,8 @@
                 merge-q (->merge-queue loaded-leaves merge-task)
                 ^"[Ljava.util.function.IntConsumer;"
                 row-pickers (make-array IntConsumer (count leaves))]
-            (doseq [{:keys [^LeafMergeQueue$LeafPointer leaf-ptr rel-rdr]} loaded-leaves]
+            (doseq [{:keys [^LeafMergeQueue$LeafPointer leaf-ptr rel-rdr]} loaded-leaves
+                    :when leaf-ptr]
               (aset row-pickers (.getOrdinal leaf-ptr)
                     (range-range-row-picker out-rel rel-rdr col-names temporal-timestamps picker-state)))
             (loop []
