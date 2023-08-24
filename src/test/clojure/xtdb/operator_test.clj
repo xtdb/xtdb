@@ -46,17 +46,17 @@
 
           (let [trie-files [(trie/->table-trie-obj-key "xt_docs" (trie/->trie-key 0 0 2))
                             (trie/->table-trie-obj-key "xt_docs" (trie/->trie-key 0 2 8))]
-                table-tries (mapv #(hash-map :trie-file %) trie-files)]
+                table-tries (mapv #'trie/parse-trie-filename trie-files)]
             (util/with-open [roots (trie/open-arrow-trie-files buffer-pool table-tries)]
               (t/testing "only needs to scan chunk 1, page 1"
 
-                (let [trie-matches (meta/matching-tries metadata-mgr trie-files roots
+                (let [trie-matches (meta/matching-tries metadata-mgr table-tries roots
                                                         (expr.meta/->metadata-selector '(> name "Ivan") '{name :utf8} {}))]
                   (t/is (false? (.test ^IntPredicate (:page-idx-pred (first trie-matches)) 0)))
                   (t/is (true? (.test ^IntPredicate (:page-idx-pred (second trie-matches)) 0))))
 
                 (with-open [params (tu/open-params {'?name "Ivan"})]
-                  (let [trie-matches (meta/matching-tries metadata-mgr trie-files roots
+                  (let [trie-matches (meta/matching-tries metadata-mgr table-tries roots
                                                           (expr.meta/->metadata-selector '(> name ?name) '{name :utf8} params))]
                     (t/is (false? (.test ^IntPredicate (:page-idx-pred (first trie-matches)) 0)))
                     (t/is (true? (.test ^IntPredicate (:page-idx-pred (second trie-matches)) 0))))))))
@@ -92,17 +92,17 @@
 
       (let [trie-files [(trie/->table-trie-obj-key "xt_docs" (trie/->trie-key 0 0 4))
                         (trie/->table-trie-obj-key "xt_docs" (trie/->trie-key 0 4 7))]
-            table-tries (mapv #(hash-map :trie-file %) trie-files)]
+            table-tries (mapv #'trie/parse-trie-filename trie-files)]
         (util/with-open [roots (trie/open-arrow-trie-files buffer-pool table-tries)]
           (t/testing "only needs to scan chunk 1, page 1"
 
-            (let [trie-matches (meta/matching-tries metadata-mgr trie-files roots
+            (let [trie-matches (meta/matching-tries metadata-mgr table-tries roots
                                                     (expr.meta/->metadata-selector '(= name "Ivan") '{name :utf8} {}))]
               (t/is (true? (.test ^IntPredicate (:page-idx-pred (first trie-matches)) 0)))
               (t/is (false? (.test ^IntPredicate (:page-idx-pred (second trie-matches)) 0))))
 
             (with-open [params (tu/open-params {'?name "Ivan"})]
-              (let [trie-matches (meta/matching-tries metadata-mgr trie-files roots
+              (let [trie-matches (meta/matching-tries metadata-mgr table-tries roots
                                                       (expr.meta/->metadata-selector '(= name ?name) '{name :utf8} params))]
                 (t/is (true? (.test ^IntPredicate (:page-idx-pred (first trie-matches)) 0)))
                 (t/is (false? (.test ^IntPredicate (:page-idx-pred (second trie-matches)) 0))))))))

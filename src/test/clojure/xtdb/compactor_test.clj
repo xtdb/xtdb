@@ -76,8 +76,8 @@
                                       (tu/->live-leaf-loader lt1 1)]
                       leaf-out-ch trie-out-ch
                       {:path (byte-array [])
-                       :node [:leaf [(.rootNode (.compactLogs (li/live-trie lt0)))
-                                     (.rootNode (.compactLogs (li/live-trie lt1)))]]}))
+                       :node [:leaf [{:node (.rootNode (.compactLogs (li/live-trie lt0)))}
+                                     {:node (.rootNode (.compactLogs (li/live-trie lt1)))}]]}))
 
     (tj/check-json expected-dir tmp-dir)))
 

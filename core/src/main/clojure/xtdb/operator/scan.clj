@@ -18,11 +18,13 @@
             xtdb.watermark)
   (:import (clojure.lang IPersistentMap MapEntry)
            java.nio.ByteBuffer
-           (java.util Iterator LinkedList List Map)
+           (java.io Closeable)
+           (java.util HashMap Iterator LinkedList List Map)
            (java.util.function IntConsumer IntPredicate)
            (java.util.stream IntStream)
            (org.apache.arrow.memory BufferAllocator)
            [org.apache.arrow.memory.util ArrowBufPointer]
+           (org.apache.arrow.vector VectorLoader)
            [org.roaringbitmap.buffer MutableRoaringBitmap]
            xtdb.api.protocols.TransactionInstant
            xtdb.buffer_pool.IBufferPool
@@ -30,7 +32,7 @@
            (xtdb.metadata IMetadataManager ITableMetadata)
            xtdb.object_store.ObjectStore
            xtdb.operator.IRelationSelector
-           (xtdb.trie HashTrie LeafMergeQueue$LeafPointer)
+           (xtdb.trie HashTrie LeafMergeQueue LeafMergeQueue$LeafPointer LiveHashTrie$Leaf)
            (xtdb.vector IRelationWriter IRowCopier IVectorReader IVectorWriter RelationReader)
            (xtdb.watermark ILiveTableWatermark IWatermark IWatermarkSource Watermark)))
 
@@ -62,9 +64,9 @@
 (def ^:dynamic *column->pushdown-bloom* {})
 
 (defn filter-pushdown-bloom-page-idx-pred ^IntPredicate [^IMetadataManager metadata-manager ^String col-name
-                                                         {:keys [trie-file ^RelationReader trie-rdr] :as _trie-match}]
+                                                         {:keys [trie-data ^RelationReader trie-rdr] :as _trie-match}]
   (when-let [^MutableRoaringBitmap pushdown-bloom (get *column->pushdown-bloom* (symbol col-name))]
-    (let [^ITableMetadata table-metadata (.tableMetadata metadata-manager trie-rdr trie-file)
+    (let [^ITableMetadata table-metadata (.tableMetadata metadata-manager trie-rdr (:trie-file trie-data))
           metadata-rdr (.metadataReader table-metadata)
           bloom-rdr (-> (.structKeyReader metadata-rdr "columns")
                         (.listElementReader)
@@ -433,26 +435,62 @@
       :branch (mapcat merge-plan->tasks node-arg)
       :leaf [{:path path, :leaves node-arg}])))
 
+(defrecord VSRCache [^IBufferPool buffer-pool, ^BufferAllocator allocator, ^Map cache]
+  Closeable
+  (close [_] (util/close cache)))
+
+(defn ->vsr-cache [buffer-pool allocator]
+  (->VSRCache buffer-pool allocator (HashMap.)))
+
+(defn cache-vsr [vsr-cache trie-leaf-file]
+  (let [{:keys [^Map cache, buffer-pool, allocator]} vsr-cache
+        compute (fn [_] (bp/open-vsr buffer-pool trie-leaf-file allocator))]
+    (.computeIfAbsent cache trie-leaf-file (util/->jfn compute))))
+
+(defn merge-task-leaf-reader [buffer-pool vsr-cache {:keys [page-idx, trie-leaf-file, rel-rdr, node]}]
+  (if page-idx
+    (util/with-open [rb (bp/open-record-batch buffer-pool trie-leaf-file page-idx)]
+      (let [vsr (cache-vsr vsr-cache trie-leaf-file)
+            loader (VectorLoader. vsr)]
+        (.load loader rb)
+        (vr/<-root vsr)))
+    (.select ^RelationReader rel-rdr (.data ^LiveHashTrie$Leaf node))))
+
+(defn merge-task-readers [buffer-pool vsr-cache {:keys [leaves]}]
+  (mapv #(when % (merge-task-leaf-reader buffer-pool vsr-cache %)) leaves))
+
 (deftype TrieCursor [^BufferAllocator allocator, leaves, ^Iterator merge-tasks
                      col-names, ^Map col-preds, ^longs temporal-timestamps,
-                     params, ^IPersistentMap picker-state]
+                     params, ^IPersistentMap picker-state
+                     vsr-cache, buffer-pool]
   ICursor
   (tryAdvance [_ c]
     (if (.hasNext merge-tasks)
       (let [merge-task (.next merge-tasks)]
         (with-open [out-rel (vw/->rel-writer allocator)]
           (let [^IRelationSelector iid-pred (get col-preds "xt$iid")
+                unfiltered-readers (merge-task-readers buffer-pool vsr-cache merge-task)
+                apply-iid-pred (fn [^RelationReader rel-rdr] (.select rel-rdr (.select iid-pred allocator rel-rdr params)))
+                filtered-readers
+                (if iid-pred
+                  (mapv (fn [rel-rdr] (some-> rel-rdr apply-iid-pred)) unfiltered-readers)
+                  unfiltered-readers)
+
                 loaded-leaves (cond->> (trie/load-leaves leaves merge-task)
                                 iid-pred (mapv #(update % :rel-rdr (fn [^RelationReader rel-rdr]
                                                                      (when rel-rdr
                                                                        (.select rel-rdr (.select iid-pred allocator rel-rdr params)))))))
-                merge-q (trie/->merge-queue loaded-leaves merge-task)
+                merge-q (trie/->merge-queue filtered-readers loaded-leaves merge-task)
                 ^"[Ljava.util.function.IntConsumer;"
                 row-pickers (make-array IntConsumer (count leaves))]
-            (doseq [{:keys [^LeafMergeQueue$LeafPointer leaf-ptr rel-rdr]} loaded-leaves
-                    :when leaf-ptr]
-              (aset row-pickers (.getOrdinal leaf-ptr)
-                    (range-range-row-picker out-rel rel-rdr col-names temporal-timestamps picker-state)))
+
+            (dotimes [i (count filtered-readers)]
+              (let [rel-rdr (nth filtered-readers i)
+                    {:keys [^LeafMergeQueue$LeafPointer leaf-ptr]} (nth loaded-leaves i)]
+                (when (and rel-rdr leaf-ptr)
+                  (let [row-picker (range-range-row-picker out-rel rel-rdr col-names temporal-timestamps picker-state)]
+                    (aset row-pickers (.getOrdinal leaf-ptr) row-picker)))))
+
             (loop []
               (when-let [lp (.poll merge-q)]
                 (.accept ^IntConsumer (aget row-pickers (.getOrdinal lp)) (.getIndex lp))
@@ -471,7 +509,7 @@
       false))
 
   (close [_]
-    (util/close leaves)))
+    (util/close [leaves vsr-cache])))
 
 (defn- filter-trie-match [^IMetadataManager metadata-mgr col-names {:keys [page-idx-pred] :as trie-match}]
   (->> (reduce (fn [^IntPredicate page-idx-pred col-name]
@@ -597,7 +635,7 @@
                                            (let [iid-ptr (ArrowBufPointer. iid-arrow-buf 0 (.capacity iid-bb))]
                                              #(zero? (HashTrie/compareToPath iid-ptr %)))
                                            (constantly true))
-                               trie-matches (->> (meta/matching-tries metadata-mgr (mapv :trie-file table-tries) roots metadata-pred)
+                               trie-matches (->> (meta/matching-tries metadata-mgr table-tries roots metadata-pred)
                                                  (map (partial filter-trie-match metadata-mgr col-names))
                                                  (drop-while #(empty? (set/intersection normalized-col-names (:col-names %))))
                                                  vec)
@@ -616,7 +654,9 @@
                                                     :skip-iid-ptr (ArrowBufPointer.)
                                                     :prev-iid-ptr (ArrowBufPointer.)
                                                     :current-iid-ptr (ArrowBufPointer.)}
-                                             (at-point-point? scan-opts) (assoc :point-point? true))))))))}))))
+                                             (at-point-point? scan-opts) (assoc :point-point? true))
+                                           (->vsr-cache buffer-pool allocator)
+                                           buffer-pool))))))}))))
 
 (defmethod lp/emit-expr :scan [scan-expr {:keys [^IScanEmitter scan-emitter scan-col-types, param-types]}]
   (.emitScan scan-emitter scan-expr scan-col-types param-types))

@@ -49,7 +49,7 @@
                               (.writeBranch trie-wtr (int-array idxs)))
 
                     :leaf (let [loaded-leaves (trie/load-leaves leaves {:leaves node-arg})
-                                merge-q (trie/->merge-queue loaded-leaves {:path path})
+                                merge-q (trie/->merge-queue (mapv :rel-rdr loaded-leaves) loaded-leaves {:path path})
 
                                 ^"[Lxtdb.vector.IRowCopier;"
                                 row-copiers (->> (for [{:keys [rel-rdr]} loaded-leaves]
@@ -86,7 +86,7 @@
       (merge-tries! allocator leaves
                     (.getChannel leaf-out-bb) (.getChannel trie-out-bb)
                     (trie/table-merge-plan (constantly true)
-                                           (meta/matching-tries metadata-mgr (mapv :trie-file table-tries) roots
+                                           (meta/matching-tries metadata-mgr table-tries roots
                                                                 (reify IMetadataPredicate
                                                                   (build [_ _table-metadata]
                                                                     (reify IntPredicate

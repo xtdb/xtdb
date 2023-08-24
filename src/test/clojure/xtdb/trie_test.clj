@@ -40,13 +40,15 @@
                             {:path [1], :node [:leaf [nil {:page-idx 2} {:page-idx 0} nil]]}
                             {:path [2], :node [:leaf [nil nil {:page-idx 0} {:page-idx 0}]]}
                             {:path [3], :node [:leaf [nil {:page-idx 3} {:page-idx 0} {:page-idx 1}]]}]]}
-                   (->> (trie/->merge-plan [nil (ArrowHashTrie/from t1-root) (ArrowHashTrie/from log-root) (ArrowHashTrie/from log2-root)]
+                   (->> (trie/->merge-plan [nil {:trie (ArrowHashTrie/from t1-root)} {:trie (ArrowHashTrie/from log-root)} {:trie (ArrowHashTrie/from log2-root)}]
                                            (constantly true)
                                            page-idx-preds
                                            (repeat 4 iid-bloom-bitmap))
                         (walk/postwalk (fn [x]
-                                         (if (and (map-entry? x) (= :path (key x)))
-                                           (MapEntry/create :path (into [] (val x)))
+                                         (if (map-entry? x)
+                                           (cond (= :path (key x)) (MapEntry/create :path (into [] (val x)))
+                                                 (= :trie-leaf-file (key x)) {}
+                                                 :else x)
                                            x)))))
                 "testing general case")
           (t/is (= {:path [],
@@ -55,14 +57,16 @@
                              :node [:branch
                                     [nil {:path [0 1],
                                           :node [:leaf [nil {:page-idx 0} {:page-idx 0} nil]]} nil nil]]} nil nil nil]]}
-                   (->> (trie/->merge-plan [nil (ArrowHashTrie/from t1-root) (ArrowHashTrie/from log-root) (ArrowHashTrie/from log2-root)]
+                   (->> (trie/->merge-plan [nil {:trie (ArrowHashTrie/from t1-root)} {:trie (ArrowHashTrie/from log-root)} {:trie (ArrowHashTrie/from log2-root)}]
                                            (let [iid-ptr (ArrowBufPointer. iid-arrow-buf 0 (.capacity iid-bb))]
                                              #(zero? (HashTrie/compareToPath iid-ptr %)))
                                            page-idx-preds
                                            (repeat 4 iid-bloom-bitmap))
                         (walk/postwalk (fn [x]
-                                         (if (and (map-entry? x) (= :path (key x)))
-                                           (MapEntry/create :path (into [] (val x)))
+                                         (if (map-entry? x)
+                                           (cond (= :path (key x)) (MapEntry/create :path (into [] (val x)))
+                                                 (= :trie-leaf-file (key x)) {}
+                                                 :else x)
                                            x)))))
                 "testing iid fast path case"))))))
 
