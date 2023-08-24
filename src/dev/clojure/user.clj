@@ -2,7 +2,8 @@
   (:require [clojure.java.io :as io]
             [clojure.tools.namespace.repl :as ctn]
             xtdb.edn
-            [xtdb.util :as util])
+            [xtdb.util :as util]
+            [xtdb.xray :as xray :refer [xray]])
   (:import java.io.File))
 
 (alter-var-root #'*warn-on-reflection* (constantly true))
@@ -29,4 +30,3 @@
 (defn dev []
   (require 'dev)
   (in-ns 'dev))
-
