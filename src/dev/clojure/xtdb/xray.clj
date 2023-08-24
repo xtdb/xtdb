@@ -1,5 +1,6 @@
 (ns xtdb.xray
   "Utility for interactive development when working with opaque mutable object graphs."
+  (:require [clojure.reflect :as reflect])
   (:import (java.lang.reflect InaccessibleObjectException)))
 
 (def ^:private state
@@ -133,7 +134,7 @@
               (if (contains? seen (->IDBox o))
                 (-> (sorted-map :_ref (list `obj oid), :_t (class o), :_cycle true)
                     (with-meta {:xray/obj o}))
-                (let [{:keys [members]} (clojure.reflect/reflect o)]
+                (let [{:keys [members]} (reflect/reflect o)]
                   (into (sorted-map :_ref (list `obj oid), :_t (class o))
                         (for [member members
                               :when (and (instance? clojure.reflect.Field member)
