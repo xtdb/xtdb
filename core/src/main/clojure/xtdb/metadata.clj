@@ -15,8 +15,8 @@
            java.lang.AutoCloseable
            java.nio.ByteBuffer
            (java.util HashMap HashSet Map NavigableMap Set TreeMap)
-           (java.util.concurrent ConcurrentHashMap CompletableFuture)
-           (java.util.function BiFunction Consumer Function)
+           (java.util.concurrent ConcurrentHashMap)
+           (java.util.function BiFunction Function)
            (java.util.stream IntStream)
            (org.apache.arrow.memory ArrowBuf)
            (org.apache.arrow.vector FieldVector VectorLoader VectorSchemaRoot)

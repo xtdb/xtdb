@@ -14,7 +14,7 @@
            (xtdb.operator.scan RowConsumer)
            xtdb.vector.RelationReader))
 
-(t/use-fixtures :each tu/with-mock-clock tu/with-allocator)
+(t/use-fixtures :each tu/with-mock-clock tu/with-allocator tu/with-node)
 
 (t/deftest test-simple-scan
   (with-open [node (node/start-node {})]
@@ -640,3 +640,25 @@
     (t/is (= (into #{} (map #(hash-map :xt/id %)) (range 20))
              (set (tu/query-ra '[:scan {:table xt_docs} [xt/id]]
                                {:node node}))))))
+
+(deftest test-pushdown-blooms
+  (xt/submit-tx tu/*node* [[:put :xt-docs {:xt/id :foo, :col "foo"}]
+                           [:put :xt-docs {:xt/id :bar, :col "bar"}]])
+  (tu/finish-chunk! tu/*node*)
+  (xt/submit-tx tu/*node* [[:put :xt-docs {:xt/id :toto, :col "toto"}]])
+  (tu/finish-chunk! tu/*node*)
+
+  (let [!page-idxs-cnt (atom 0)
+        old-filter-trie-match scan/filter-trie-match]
+    (with-redefs [scan/filter-trie-match (fn [& args]
+                                           (let [res (apply old-filter-trie-match args)]
+                                             (when res (swap! !page-idxs-cnt inc))
+                                             res))]
+      (t/is (= [{:col "toto"}]
+               (tu/query-ra
+                '[:join [{col col}]
+                  [:scan {:table xt_docs} [col {col (= col "toto")}]]
+                  [:scan {:table xt_docs} [col]]]
+                {:node tu/*node*})))
+      ;; one page for the left side, one page for the right side
+      (t/is (= 2 @!page-idxs-cnt)))))
