@@ -2,6 +2,7 @@
   (:require [clojure.set :as set]
             [clojure.spec.alpha :as s]
             [juxt.clojars-mirrors.integrant.core :as ig]
+            [xtdb.bloom :as bloom]
             [xtdb.buffer-pool :as bp]
             [xtdb.expression :as expr]
             [xtdb.expression.metadata :as expr.meta]
@@ -25,11 +26,13 @@
            [org.apache.arrow.memory.util ArrowBufPointer]
            (org.apache.arrow.vector VectorLoader VectorSchemaRoot)
            [org.apache.arrow.vector.types.pojo Schema]
+           [org.roaringbitmap RoaringBitmap]
+           [org.roaringbitmap.buffer MutableRoaringBitmap]
            xtdb.api.protocols.TransactionInstant
            xtdb.buffer_pool.IBufferPool
            xtdb.ICursor
            xtdb.indexer.live_index.ILiveTableWatermark
-           (xtdb.metadata IMetadataManager)
+           (xtdb.metadata IMetadataManager ITableMetadata)
            xtdb.object_store.ObjectStore
            xtdb.operator.IRelationSelector
            (xtdb.trie ArrowHashTrie LeafMergeQueue LeafMergeQueue$LeafPointer LiveHashTrie$Leaf)
@@ -63,32 +66,29 @@
 
 (def ^:dynamic *column->pushdown-bloom* {})
 
-#_ ; TODO reinstate pushdown blooms
-(defn- filter-pushdown-bloom-block-idxs [^IMetadataManager metadata-manager chunk-idx ^String table-name ^String col-name ^RoaringBitmap block-idxs]
+(defn- filter-pushdown-bloom-page-idxs [^IMetadataManager metadata-manager chunk-idx ^String table-name ^String col-name ^RoaringBitmap page-idxs]
   (if-let [^MutableRoaringBitmap pushdown-bloom (get *column->pushdown-bloom* (symbol col-name))]
     ;; would prefer this `^long` to be on the param but can only have 4 params in a primitive hinted function in Clojure
     @(meta/with-metadata metadata-manager ^long chunk-idx table-name
        (util/->jfn
          (fn [^ITableMetadata table-metadata]
-           (let [metadata-root (.metadataRoot table-metadata)
-                 ^VarBinaryVector bloom-vec (-> ^ListVector (.getVector metadata-root "columns")
-                                                ^StructVector (.getDataVector)
-                                                (.getChild "bloom"))]
-             (when (MutableRoaringBitmap/intersects pushdown-bloom
-                                                    (bloom/bloom->bitmap bloom-vec (.rowIndex table-metadata col-name -1)))
-               (let [filtered-block-idxs (RoaringBitmap.)]
-                 (.forEach block-idxs
-                           (reify org.roaringbitmap.IntConsumer
-                             (accept [_ block-idx]
-                               (when-let [bloom-vec-idx (.rowIndex table-metadata col-name block-idx)]
-                                 (when (and (not (.isNull bloom-vec bloom-vec-idx))
-                                            (MutableRoaringBitmap/intersects pushdown-bloom
-                                                                             (bloom/bloom->bitmap bloom-vec bloom-vec-idx)))
-                                   (.add filtered-block-idxs block-idx))))))
+           (let [metadata-rdr (.metadataReader table-metadata)
+                 bloom-rdr (-> (.structKeyReader metadata-rdr "columns")
+                               (.listElementReader)
+                               (.structKeyReader "bloom"))
+                 filtered-page-idxs (RoaringBitmap.)]
+             (.forEach page-idxs
+                       (reify org.roaringbitmap.IntConsumer
+                         (accept [_ page-idx]
+                           (when-let [bloom-vec-idx (.rowIndex table-metadata col-name page-idx)]
+                             (when (and (not (nil? (.getObject bloom-rdr bloom-vec-idx)))
+                                        (MutableRoaringBitmap/intersects pushdown-bloom
+                                                                         (bloom/bloom->bitmap bloom-rdr bloom-vec-idx)))
+                               (.add filtered-page-idxs page-idx))))))
 
-                 (when-not (.isEmpty filtered-block-idxs)
-                   filtered-block-idxs)))))))
-    block-idxs))
+             (when-not (.isEmpty filtered-page-idxs)
+               filtered-page-idxs)))))
+    page-idxs))
 
 (defn- ->range ^longs []
   (let [res (long-array 8)]
@@ -541,8 +541,8 @@
         live-table-wm (conj (LiveLeafLoader. (.liveRelation live-table-wm)
                                              (LeafMergeQueue$LeafPointer. (count arrow-leaves))))))))
 
-(defn load-leaves [leaf-loaders {task-leaves :leaves}]
-  (->> task-leaves
+(defn load-leaves [leaf-loaders {:keys [leaves] :as _merge-task}]
+  (->> leaves
        (into [] (map-indexed (fn [ordinal trie-leaf]
                                (when trie-leaf
                                  (let [^ILeafLoader leaf-loader (nth leaf-loaders ordinal)]
@@ -598,11 +598,20 @@
   (close [_]
     (util/close leaves)))
 
+(defn filter-trie-match [^IMetadataManager metadata-mgr table-name col-names {:keys [chunk-idx page-idxs] :as trie-match}]
+  (when-let [page-idxs (reduce (fn [page-idxs col-name]
+                                 (if-let [page-idxs (filter-pushdown-bloom-page-idxs metadata-mgr chunk-idx table-name col-name page-idxs)]
+                                   page-idxs
+                                   (reduced nil)))
+                               page-idxs col-names)]
+    (assoc trie-match :page-idxs page-idxs)))
+
 ;; The consumers for different leafs need to share some state so the logic of how to advance
 ;; is correct. For example if the `skip-iid-ptr` gets set in one leaf consumer it should also affect
 ;; the skipping in another leaf consumer.
 
-(defn ->4r-cursor [^BufferAllocator allocator, ^ObjectStore obj-store, ^IBufferPool buffer-pool, ^IWatermark wm
+(defn ->4r-cursor [^BufferAllocator allocator, ^ObjectStore obj-store, ^IBufferPool buffer-pool,
+                   ^IMetadataManager metadata-mgr, ^IWatermark wm
                    table-name, col-names, ^longs temporal-range, ^List matching-tries
                    ^Map col-preds, params, scan-opts]
   (let [^ILiveTableWatermark live-table-wm (some-> (.liveIndex wm) (.liveTable table-name))
@@ -610,6 +619,8 @@
         normalized-col-names (into #{} (map util/str->normal-form-str) col-names)
         chunk-idx->page-idxs (->> matching-tries
                                   (filter #(not-empty (set/intersection normalized-col-names (:col-names %))))
+                                  (map (partial filter-trie-match metadata-mgr table-name col-names))
+                                  (remove nil?)
                                   (into {} (map (juxt :chunk-idx :page-idxs))))
         merge-plan (table-merge-plan buffer-pool table-chunks chunk-idx->page-idxs live-table-wm)]
     (util/with-close-on-catch [leaves (open-leaves buffer-pool table-chunks live-table-wm)]
@@ -724,7 +735,7 @@
                                                  (fn [fvt]
                                                    (or fvt (if default-all-valid-time? [:all-time] [:at [:now :now]])))))]
                        (->4r-cursor allocator object-store buffer-pool
-                                    watermark
+                                    metadata-mgr watermark
                                     normalized-table-name
                                     (set/union content-col-names temporal-col-names)
                                     (->temporal-range params basis scan-opts)

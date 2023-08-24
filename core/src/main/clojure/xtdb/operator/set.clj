@@ -289,8 +289,8 @@
     (util/try-close recursive-cursor)
     (util/try-close base-cursor)))
 
-(def ^:dynamic ^:private *relation-variable->col-types* {})
-(def ^:dynamic ^:private *relation-variable->cursor-factory* {})
+(def ^:dynamic *relation-variable->col-types* {})
+(def ^:dynamic *relation-variable->cursor-factory* {})
 
 (defmethod lp/emit-expr :relation [{:keys [relation]} _opts]
   (let [col-types (*relation-variable->col-types* relation)]
