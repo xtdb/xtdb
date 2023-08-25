@@ -569,7 +569,8 @@
           (let [^IRelationSelector iid-pred (get col-preds "xt$iid")
                 loaded-leaves (cond->> (load-leaves leaves merge-task)
                                 iid-pred (mapv #(update % :rel-rdr (fn [^RelationReader rel-rdr]
-                                                                     (.select rel-rdr (.select iid-pred allocator rel-rdr params))))))
+                                                                     (when rel-rdr
+                                                                       (.select rel-rdr (.select iid-pred allocator rel-rdr params)))))))
                 merge-q (->merge-queue loaded-leaves merge-task)
                 ^"[Ljava.util.function.IntConsumer;"
                 row-pickers (make-array IntConsumer (count leaves))]

@@ -345,3 +345,8 @@
 
 (defn byte-buffer->path [^java.nio.ByteBuffer bb]
   (mapcat (fn [b] [(mod (bit-shift-right b 4) 16) (mod (bit-and b (dec (bit-shift-left 1 4))) 16)]) (.array bb)))
+
+(defn uuid-seq [n]
+  (letfn [(new-uuid [n]
+            (java.util.UUID. (Long/reverse n) 0))]
+    (map new-uuid (range n))))

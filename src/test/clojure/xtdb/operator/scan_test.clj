@@ -490,6 +490,19 @@
                      (map :version)
                      set))))))
 
+(deftest test-iid-fast-path-multiple-pages
+  (with-open [node (node/start-node {:xtdb.indexer/live-index {:page-limit 16}})]
+    (let [uuids (tu/uuid-seq 40)
+          search-uuid (rand-nth uuids)]
+      (xt/submit-tx node (for [uuid (take 20 uuids)] [:put :xt_docs {:xt/id uuid}]))
+      (tu/finish-chunk! node)
+      (xt/submit-tx node (for [uuid (drop 20 uuids)] [:put :xt_docs {:xt/id uuid}]))
+      (tu/finish-chunk! node)
+
+      (t/is (= [{:xt/id search-uuid}]
+               (tu/query-ra [:scan '{:table xt_docs} [{'xt/id (list '= 'xt/id search-uuid)}]]
+                            {:node node}))))))
+
 (t/deftest test-iid-selector
   (let [before-uuid #uuid "00000000-0000-0000-0000-000000000000"
         search-uuid #uuid "80000000-0000-0000-0000-000000000000"
