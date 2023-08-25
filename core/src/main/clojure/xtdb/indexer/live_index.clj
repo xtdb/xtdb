@@ -132,23 +132,21 @@
           (swap! !transient-trie #(.add ^LiveHashTrie % (dec (.getPosition (.writerPosition live-rel))))))
 
         (openWatermark [_]
-          (locking this-table
-            (let [col-types (live-rel->col-types live-rel)
-                  wm-live-rel (open-wm-live-rel live-rel false)
-                  wm-live-trie @!transient-trie]
+          (let [col-types (live-rel->col-types live-rel)
+                wm-live-rel (open-wm-live-rel live-rel false)
+                wm-live-trie @!transient-trie]
 
-              (reify ILiveTableWatermark
-                (columnTypes [_] col-types)
-                (liveRelation [_] wm-live-rel)
-                (liveTrie [_] wm-live-trie)
+            (reify ILiveTableWatermark
+              (columnTypes [_] col-types)
+              (liveRelation [_] wm-live-rel)
+              (liveTrie [_] wm-live-trie)
 
-                AutoCloseable
-                (close [_])))))
+              AutoCloseable
+              (close [_]))))
 
         (commit [_]
-          (locking this-table
-            (set! (.-live-trie this-table) @!transient-trie)
-            this-table))
+          (set! (.-live-trie this-table) @!transient-trie)
+          this-table)
 
         (abort [_]
           (when new-live-table?
@@ -166,28 +164,25 @@
               (util/then-apply (fn [_] table-metadata)))))))
 
   (openWatermark [this retain?]
-    (locking this
-      (let [col-types (live-rel->col-types live-rel)
-            wm-live-rel (open-wm-live-rel live-rel retain?)
-            wm-live-trie (.withIidReader ^LiveHashTrie (.live-trie this) (.readerForName wm-live-rel "xt$iid"))]
+    (let [col-types (live-rel->col-types live-rel)
+          wm-live-rel (open-wm-live-rel live-rel retain?)
+          wm-live-trie (.withIidReader ^LiveHashTrie (.live-trie this) (.readerForName wm-live-rel "xt$iid"))]
+      (reify ILiveTableWatermark
+        (columnTypes [_] col-types)
+        (liveRelation [_] wm-live-rel)
+        (liveTrie [_] wm-live-trie)
 
-        (reify ILiveTableWatermark
-          (columnTypes [_] col-types)
-          (liveRelation [_] wm-live-rel)
-          (liveTrie [_] wm-live-trie)
-
-          AutoCloseable
-          (close [_]
-            (when retain? (util/close wm-live-rel)))))))
+        AutoCloseable
+        (close [_]
+          (when retain? (util/close wm-live-rel))))))
 
   TestLiveTable
   (live-trie [_] live-trie)
   (live-rel [_] live-rel)
 
   AutoCloseable
-  (close [this]
-    (locking this
-      (util/close live-rel))))
+  (close [_]
+    (util/close live-rel)))
 
 (defn ->live-table
   (^xtdb.indexer.live_index.ILiveTable [allocator object-store table-name] (->live-table allocator object-store table-name {}))
