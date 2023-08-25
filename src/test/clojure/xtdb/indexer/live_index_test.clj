@@ -121,3 +121,40 @@
 
       (tj/check-json (.toPath (io/as-file (io/resource "xtdb/indexer-test/can-build-live-index")))
                      (.resolve node-dir "objects")))))
+
+(t/deftest test-new-table-discarded-on-abort-2721
+  (let [{^ILiveIndex live-index :xtdb.indexer/live-index} tu/*sys*]
+
+    (let [live-tx0 (.startTx live-index #xt/tx-key {:tx-id 0, :system-time #time/instant "2020-01-01T00:00:00Z"})
+          foo-table-tx (.liveTable live-tx0 "foo")]
+      (.logPut foo-table-tx (ByteBuffer/allocate 16) 0 0 #())
+      (.commit live-tx0))
+
+    (t/testing "aborting bar means it doesn't get added to the committed live-index")
+    (let [live-tx1 (.startTx live-index #xt/tx-key {:tx-id 0, :system-time #time/instant "2020-01-02T00:00:00Z"})
+          bar-table-tx (.liveTable live-tx1 "bar")]
+      (.logPut bar-table-tx (ByteBuffer/allocate 16) 0 0 #())
+
+      (t/testing "doesn't get added in the tx either"
+        (t/is (nil? (.liveTable live-index "bar"))))
+
+      (.abort live-tx1)
+
+      (t/is (some? (.liveTable live-index "foo")))
+      (t/is (nil? (.liveTable live-index "bar"))))
+
+    (t/testing "aborting foo doesn't clear it from the live-index"
+      (let [live-tx2 (.startTx live-index #xt/tx-key {:tx-id 0, :system-time #time/instant "2020-01-03T00:00:00Z"})
+            foo-table-tx (.liveTable live-tx2 "foo")]
+        (.logPut foo-table-tx (ByteBuffer/allocate 16) 0 0 #())
+        (.abort live-tx2))
+
+      (t/is (some? (.liveTable live-index "foo"))))
+
+    (t/testing "committing bar after an abort adds it correctly"
+      (let [live-tx3 (.startTx live-index #xt/tx-key {:tx-id 0, :system-time #time/instant "2020-01-04T00:00:00Z"})
+            bar-table-tx (.liveTable live-tx3 "bar")]
+        (.logPut bar-table-tx (ByteBuffer/allocate 16) 0 0 #())
+        (.commit live-tx3))
+
+      (t/is (some? (.liveTable live-index "bar"))))))
