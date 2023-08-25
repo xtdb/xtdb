@@ -18,12 +18,12 @@
            (xtdb.trie LiveHashTrie)
            (xtdb.vector IRelationWriter IVectorWriter RelationReader)))
 
-;;
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (definterface ILiveTableWatermark
   (^java.util.Map columnTypes [])
   (^xtdb.vector.RelationReader liveRelation [])
-  (^xtdb.trie.LiveHashTrie liveTrie []))
+  (^xtdb.trie.LiveHashTrie liveTrie [])
+  (^void close []))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (definterface ILiveTableTx
@@ -32,12 +32,13 @@
   (^void logPut [^java.nio.ByteBuffer iid, ^long validFrom, ^long validTo, writeDocFn])
   (^void logDelete [^java.nio.ByteBuffer iid, ^long validFrom, ^long validTo])
   (^void logEvict [^java.nio.ByteBuffer iid])
-  (^void commit [])
-  (^void close []))
+  (^xtdb.indexer.live_index.ILiveTable commit [])
+  (^void abort []))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (definterface ILiveTable
-  (^xtdb.indexer.live_index.ILiveTableTx startTx [^xtdb.api.protocols.TransactionInstant txKey])
+  (^xtdb.indexer.live_index.ILiveTableTx startTx [^xtdb.api.protocols.TransactionInstant txKey
+                                                  ^boolean newLiveTable])
   (^xtdb.indexer.live_index.ILiveTableWatermark openWatermark [^boolean retain])
   (^java.util.concurrent.CompletableFuture #_<List<Map$Entry>> finishChunk [^long chunkIdx])
   (^void close []))
@@ -45,14 +46,15 @@
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (definterface ILiveIndexWatermark
   (^java.util.Map allColumnTypes [])
-  (^xtdb.indexer.live_index.ILiveTableWatermark liveTable [^String tableName]))
+  (^xtdb.indexer.live_index.ILiveTableWatermark liveTable [^String tableName])
+  (^void close []))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (definterface ILiveIndexTx
   (^xtdb.indexer.live_index.ILiveTableTx liveTable [^String tableName])
   (^xtdb.indexer.live_index.ILiveIndexWatermark openWatermark [])
   (^void commit [])
-  (^void close []))
+  (^void abort []))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (definterface ILiveIndex
@@ -96,7 +98,7 @@
                     ^IVectorWriter delete-wtr, ^IVectorWriter delete-valid-from-wtr, ^IVectorWriter delete-valid-to-wtr
                     ^IVectorWriter evict-wtr]
   ILiveTable
-  (startTx [this-table tx-key]
+  (startTx [this-table tx-key new-live-table?]
     (let [!transient-trie (atom live-trie)
           system-from-µs (util/instant->micros (.system-time tx-key))]
       (reify ILiveTableTx
@@ -157,10 +159,12 @@
 
         (commit [_]
           (locking this-table
-            (set! (.-live-trie this-table) @!transient-trie)))
+            (set! (.-live-trie this-table) @!transient-trie)
+            this-table))
 
-        AutoCloseable
-        (close [_]))))
+        (abort [_]
+          (when new-live-table?
+            (util/close this-table))))))
 
   (finishChunk [_ chunk-idx]
     (let [live-rel-rdr (vw/rel-wtr->rdr live-rel)]
@@ -199,12 +203,12 @@
       (util/close live-rel))))
 
 (defn ->live-table
-  ([allocator object-store table-name] (->live-table allocator object-store table-name {}))
+  (^xtdb.indexer.live_index.ILiveTable [allocator object-store table-name] (->live-table allocator object-store table-name {}))
 
-  ([allocator object-store table-name
-    {:keys [->live-trie]
-     :or {->live-trie (fn [iid-rdr]
-                        (LiveHashTrie/emptyTrie iid-rdr))}}]
+  (^xtdb.indexer.live_index.ILiveTable [allocator object-store table-name
+                                        {:keys [->live-trie]
+                                         :or {->live-trie (fn [iid-rdr]
+                                                            (LiveHashTrie/emptyTrie iid-rdr))}}]
 
    (util/with-close-on-catch [rel (trie/open-leaf-root allocator)]
      (let [iid-wtr (.writerForName rel "xt$iid")
@@ -227,31 +231,35 @@
 
 (defrecord LiveIndex [^BufferAllocator allocator, ^ObjectStore object-store, ^Map tables, ^long log-limit, ^long page-limit]
   ILiveIndex
-  (liveTable [_ table-name]
-    (.computeIfAbsent tables table-name
-                      (reify Function
-                        (apply [_ table-name]
-                          (->live-table allocator object-store table-name
-                                        {:->live-trie (partial ->live-trie log-limit page-limit)})))))
+  (liveTable [_ table-name] (.get tables table-name))
 
-  (startTx [live-idx tx-key]
+  (startTx [this-table tx-key]
     (let [table-txs (HashMap.)]
       (reify ILiveIndexTx
         (liveTable [_ table-name]
           (.computeIfAbsent table-txs table-name
                             (reify Function
                               (apply [_ table-name]
-                                (-> (.liveTable live-idx table-name)
-                                    (.startTx tx-key))))))
+                                (let [live-table (.liveTable this-table table-name)
+                                      new-live-table? (nil? live-table)
+                                      ^ILiveTable live-table (or live-table
+                                                                 (->live-table allocator object-store table-name
+                                                                               {:->live-trie (partial ->live-trie log-limit page-limit)}))]
+
+                                  (.startTx live-table tx-key new-live-table?))))))
 
         (commit [_]
-          (doseq [^ILiveTableTx table-tx (.values table-txs)]
-            (.commit table-tx)))
+          (doseq [[table-name ^ILiveTableTx live-table-tx] table-txs]
+            (.put tables table-name (.commit live-table-tx))))
+
+        (abort [_]
+          (doseq [^ILiveTableTx live-table-tx (.values table-txs)]
+            (.abort live-table-tx)))
 
         (openWatermark [_]
           (util/with-close-on-catch [wms (HashMap.)]
-            (doseq [[table-name ^ILiveTableTx live-table] table-txs]
-              (.put wms table-name (.openWatermark live-table)))
+            (doseq [[table-name ^ILiveTableTx live-table-tx] table-txs]
+              (.put wms table-name (.openWatermark live-table-tx)))
 
             (doseq [[table-name ^ILiveTable live-table] tables]
               (.computeIfAbsent wms table-name
@@ -265,8 +273,7 @@
               (close [_] (util/close wms)))))
 
         AutoCloseable
-        (close [_]
-          (util/close table-txs)))))
+        (close [_]))))
 
   (openWatermark [_]
 
