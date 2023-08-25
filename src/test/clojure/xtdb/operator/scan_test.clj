@@ -470,7 +470,7 @@
         after-uuid #uuid "f0000000-0000-0000-0000-000000000000"
         uuids [before-uuid search-uuid after-uuid]
         !search-uuid-versions (atom [])]
-    (with-open [node (node/start-node {:xtdb/indexer {:rows-per-chunk 20}})]
+    (with-open [node (node/start-node {:xtdb/indexer {:rows-per-chunk 20 :page-limit 16}})]
       (->> (for [i (range 110)]
              (let [uuid (rand-nth uuids)]
                (when (= uuid search-uuid)

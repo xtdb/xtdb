@@ -455,7 +455,7 @@
                         (transient {:chunk-idx chunk-idx})
                         files))))))
 
-(defn table-merge-plan [^IBufferPool buffer-pool, table-chunks, chunk-idx->page-idxs, ^ILiveTableWatermark live-table-wm, iid-bb]
+(defn table-merge-plan [^IBufferPool buffer-pool, table-chunks, chunk-idx->page-idxs, ^ILiveTableWatermark live-table-wm]
   (util/with-open [trie-roots (ArrayList. (count table-chunks))]
     ;; TODO these could be kicked off asynchronously
     (let [tries (cond-> (vec (for [{:keys [trie-file chunk-idx]} table-chunks]
@@ -467,7 +467,7 @@
                                      {:trie (ArrowHashTrie/from root)
                                       :page-idxs (chunk-idx->page-idxs chunk-idx)})))))
                   live-table-wm (conj {:trie (.compactLogs (.liveTrie live-table-wm))}))]
-      (trie/->merge-plan (mapv :trie tries) (mapv :page-idxs tries) iid-bb))))
+      (trie/->merge-plan (mapv :trie tries) (mapv :page-idxs tries)))))
 
 (defn merge-plan->tasks ^java.lang.Iterable [{:keys [path node]}]
   (when-let [[node-tag node-arg] node]
@@ -604,14 +604,14 @@
 
 (defn ->4r-cursor [^BufferAllocator allocator, ^ObjectStore obj-store, ^IBufferPool buffer-pool, ^IWatermark wm
                    table-name, col-names, ^longs temporal-range, ^List matching-tries
-                   ^Map col-preds, params, {:keys [iid-bb] :as scan-opts}]
+                   ^Map col-preds, params, scan-opts]
   (let [^ILiveTableWatermark live-table-wm (some-> (.liveIndex wm) (.liveTable table-name))
         table-chunks (list-table-chunks obj-store table-name)
         normalized-col-names (into #{} (map util/str->normal-form-str) col-names)
         chunk-idx->page-idxs (->> matching-tries
                                   (filter #(not-empty (set/intersection normalized-col-names (:col-names %))))
                                   (into {} (map (juxt :chunk-idx :page-idxs))))
-        merge-plan (table-merge-plan buffer-pool table-chunks chunk-idx->page-idxs live-table-wm iid-bb)]
+        merge-plan (table-merge-plan buffer-pool table-chunks chunk-idx->page-idxs live-table-wm)]
     (util/with-close-on-catch [leaves (open-leaves buffer-pool table-chunks live-table-wm)]
       (->TrieCursor allocator leaves (.iterator (let [^Iterable c (or (merge-plan->tasks merge-plan) [])] c))
                     col-names col-preds
@@ -720,7 +720,6 @@
          :->cursor (fn [{:keys [allocator, ^IWatermark watermark, basis, params default-all-valid-time?]}]
                      (let [metadata-pred (expr.meta/->metadata-selector (cons 'and metadata-args) col-types params)
                            scan-opts (-> scan-opts
-                                         (assoc :iid-bb iid-bb)
                                          (update :for-valid-time
                                                  (fn [fvt]
                                                    (or fvt (if default-all-valid-time? [:all-time] [:at [:now :now]])))))]
