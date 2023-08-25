@@ -613,7 +613,9 @@
     (set! (.-latest_completed_chunk_tx this) latest-completed-tx)
 
     (let [wm-lock-stamp (.writeLock wm-lock)]
+
       (try
+        (.nextChunk live-idx)
         (when-let [^IWatermark shared-wm (.shared-wm this)]
           (set! (.shared-wm this) nil)
           (.close shared-wm))
