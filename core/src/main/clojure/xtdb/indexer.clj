@@ -468,7 +468,7 @@
                      (pr-str tx-key)
                      (pr-str latest-completed-tx))
 
-          (with-open [live-idx-tx (.startTx live-idx tx-key)]
+          (let [live-idx-tx (.startTx live-idx tx-key)]
             (add-tx-row! row-counter live-idx-tx tx-key
                          (err/illegal-arg :invalid-system-time
                                           {::err/message "specified system-time older than current tx"
@@ -526,9 +526,10 @@
                   (if e
                     (do
                       (when (not= e abort-exn)
-                        (log/debug e "aborted tx"))
+                        (log/debug e "aborted tx")
+                        (.abort live-idx-tx))
 
-                      (with-open [live-idx-tx (.startTx live-idx tx-key)]
+                      (let [live-idx-tx (.startTx live-idx tx-key)]
                         (add-tx-row! row-counter live-idx-tx tx-key e)
                         (.commit live-idx-tx)))
 

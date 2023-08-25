@@ -38,8 +38,8 @@
                        (mapv (comp vec util/uuid->bytes)))]
 
     (t/testing "commit"
-      (util/with-open [live-idx-tx (.startTx live-index (xtp/->TransactionInstant 0 (.toInstant #inst "2000")))
-                       live-table-tx (.liveTable live-idx-tx "my-table")]
+      (let [live-idx-tx (.startTx live-index (xtp/->TransactionInstant 0 (.toInstant #inst "2000")))
+            live-table-tx (.liveTable live-idx-tx "my-table")]
         (let [wp (IVectorPosition/build)]
           (doseq [^UUID iid iids]
             (.logPut live-table-tx (ByteBuffer/wrap (util/uuid->bytes iid)) 0 0
