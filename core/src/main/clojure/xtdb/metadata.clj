@@ -32,8 +32,9 @@
 (definterface ITableMetadata
   (^xtdb.vector.IVectorReader metadataReader [])
   (^java.util.Set columnNames [])
-  (^Long rowIndex [^String column-name, ^int pageIdx])
-  (^long pageCount []))
+  (^Long rowIndex [^String columnName, ^int pageIdx])
+  (^long pageCount [])
+  (^org.roaringbitmap.buffer.ImmutableRoaringBitmap iidBloomBitmap [^int pageIdx]))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (definterface IPageMetadataWriter
@@ -280,8 +281,15 @@
   (reify ITableMetadata
     (metadataReader [_] metadata-reader)
     (columnNames [_] col-names)
-    (rowIndex [_ col-name block-idx] (get page-idx-cache [col-name block-idx]))
-    (pageCount [_] page-count)))
+    (rowIndex [_ col-name page-idx] (get page-idx-cache [col-name page-idx]))
+    (pageCount [_] page-count)
+    (iidBloomBitmap [_ page-idx]
+      (let [bloom-rdr (-> (.structKeyReader metadata-reader "columns")
+                          (.listElementReader)
+                          (.structKeyReader "bloom"))]
+        (when-let [bloom-vec-idx (get page-idx-cache ["xt$iid" page-idx])]
+          (when (not (nil? (.getObject bloom-rdr bloom-vec-idx)))
+            (bloom/bloom->bitmap bloom-rdr bloom-vec-idx)))))))
 
 (deftype MetadataManager [^ObjectStore object-store
                           ^IBufferPool buffer-pool
