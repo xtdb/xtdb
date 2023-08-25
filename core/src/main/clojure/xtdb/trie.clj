@@ -201,24 +201,17 @@
                         {:keys [^ByteBuffer leaf-buf ^ByteBuffer trie-buf]}]
   (-> (.putObject obj-store (meta/->table-leaf-obj-key table-name chunk-idx) leaf-buf)
       (util/then-compose
-       (fn [_]
-         (.putObject obj-store (meta/->table-trie-obj-key table-name chunk-idx) trie-buf)))))
-
-(defn- bucket-for [^ByteBuffer iid level]
-  (let [level-offset-bits (* HashTrie/LEVEL_BITS (inc level))
-        level-offset-bytes (/ (- level-offset-bits HashTrie/LEVEL_BITS) Byte/SIZE)]
-    (bit-and (bit-shift-right (.get iid ^int level-offset-bytes) (mod level-offset-bits Byte/SIZE)) HashTrie/LEVEL_MASK)))
+        (fn [_]
+          (.putObject obj-store (meta/->table-trie-obj-key table-name chunk-idx) trie-buf)))))
 
 (defn ->merge-plan
   "Returns a tree of the tasks required to merge the given tries "
-  [tries, trie-page-idxs, ^ByteBuffer iid]
+  [tries, trie-page-idxs]
 
   (letfn [(->merge-plan* [nodes path ^long level]
             (let [trie-children (mapv #(some-> ^HashTrie$Node % (.children)) nodes)]
               (if-let [^objects first-children (some identity trie-children)]
-                (let [branches (->> (if iid
-                                      [(bucket-for iid level)]
-                                      (range (alength first-children)))
+                (let [branches (->> (range (alength first-children))
                                     (mapv (fn [bucket-idx]
                                             (->merge-plan* (mapv (fn [node ^objects node-children]
                                                                    (if node-children
