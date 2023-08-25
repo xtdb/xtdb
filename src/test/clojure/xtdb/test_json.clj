@@ -1,7 +1,9 @@
 (ns xtdb.test-json
   (:require [cheshire.core :as json]
             [clojure.test :as t]
+            [cognitect.transit :as transit]
             [xtdb.test-util :as tu]
+            [xtdb.transit :as xt.transit]
             [xtdb.util :as util]
             [clojure.string :as str])
   (:import java.io.File
@@ -27,10 +29,20 @@
 
       json-file)))
 
-(defn check-json-file [^Path expected, ^Path actual]
+(defn check-arrow-json-file [^Path expected, ^Path actual]
   (t/is (= (json/parse-string (Files/readString expected))
            (json/parse-string (Files/readString actual)))
         actual))
+
+(defn- read-transit-obj [stream]
+  (transit/read (transit/reader stream :json {:handlers xt.transit/tj-read-handlers})))
+
+(defn check-transit-json-file [^Path expected, ^Path actual]
+  (with-open [expected-stream (Files/newInputStream expected (into-array OpenOption #{StandardOpenOption/READ}))
+              actual-stream (Files/newInputStream expected (into-array OpenOption #{StandardOpenOption/READ}))]
+    (t/is (= (read-transit-obj expected-stream)
+             (read-transit-obj actual-stream))
+          actual)))
 
 #_{:clj-kondo/ignore [:unused-private-var]}
 (defn- copy-expected-file [^Path file, ^Path expected-dir, ^Path actual-dir]
@@ -65,8 +77,14 @@
        #_(copy-expected-file expected-dir actual-dir))) ;; <<no-commit>>
 
    (doseq [^Path expected (iterator-seq (.iterator (Files/walk expected-dir (make-array FileVisitOption 0))))
-           :when (.endsWith (str (.getFileName expected)) ".json")]
-     (check-json-file expected (.resolve actual-dir (.relativize expected-dir expected))))))
+           :let [actual (.resolve actual-dir (.relativize expected-dir expected))
+                 file-name (str (.getFileName expected))]]
+     (cond
+       (.endsWith file-name ".arrow.json")
+       (check-arrow-json-file expected actual)
+
+       (.endsWith file-name ".transit.json")
+       (check-transit-json-file expected actual)))))
 
 (defn arrow-streaming->json ^String [^ByteBuffer buf]
   (let [json-file (File/createTempFile "arrow" "json")]
