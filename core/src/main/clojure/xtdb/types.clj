@@ -172,6 +172,14 @@
   (^org.apache.arrow.vector.types.pojo.Field [col-type] (col-type->field (col-type->field-name col-type) col-type))
   (^org.apache.arrow.vector.types.pojo.Field [col-name col-type] (col-type->field* (str col-name) false col-type)))
 
+(defn without-null [col-type]
+  (let [without-null (-> (flatten-union-types col-type)
+                         (disj :null))]
+    (case (count without-null)
+      0 :null
+      1 (first without-null)
+      without-null)))
+
 (defn col-type->leg [col-type]
   (let [head (col-type-head col-type)]
     (case head

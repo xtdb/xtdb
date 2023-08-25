@@ -68,14 +68,14 @@
   (^xtdb.trie.LiveHashTrie live-trie [test-live-table])
   (^xtdb.vector.IRelationWriter live-rel [test-live-table]))
 
-(defn- live-rel->col-types [^RelationReader live-rel]
-  (->> (for [^Field child-field (-> (.readerForName live-rel "op")
-                                    (.legReader :put)
-                                    (.structKeyReader "xt$doc")
-                                    (.getField)
-                                    (.getChildren))]
-         (MapEntry/create (.getName child-field) (types/field->col-type child-field)))
-       (into {})))
+(defn- live-rel->col-types [^IRelationWriter live-rel]
+  (let [col-type (-> (.writerForName live-rel "op")
+                     (.writerForTypeId (byte 0))
+                     (.structKeyWriter "xt$doc")
+                     (.getColType)
+                     types/without-null)]
+    (assert (= :struct (types/col-type-head col-type)))
+    (into {} (map (juxt (comp str key) val)) (second col-type))))
 
 (defn- open-wm-live-rel ^xtdb.vector.RelationReader [^IRelationWriter rel, retain?]
   (let [out-cols (ArrayList.)]
@@ -145,8 +145,8 @@
 
         (openWatermark [_]
           (locking this-table
-            (let [wm-live-rel (open-wm-live-rel live-rel false)
-                  col-types (live-rel->col-types wm-live-rel)
+            (let [col-types (live-rel->col-types live-rel)
+                  wm-live-rel (open-wm-live-rel live-rel false)
                   wm-live-trie @!transient-trie]
 
               (reify ILiveTableWatermark
@@ -173,15 +173,15 @@
               chunk-idx-str (util/->lex-hex-string chunk-idx)
               !fut (trie/write-trie-bufs! obj-store table-name chunk-idx-str bufs)
               table-metadata (MapEntry/create table-name
-                                              {:col-types (live-rel->col-types live-rel-rdr)
+                                              {:col-types (live-rel->col-types live-rel)
                                                :row-count (.rowCount live-rel-rdr)})]
           (-> !fut
               (util/then-apply (fn [_] table-metadata)))))))
 
   (openWatermark [this retain?]
     (locking this
-      (let [wm-live-rel (open-wm-live-rel live-rel retain?)
-            col-types (live-rel->col-types wm-live-rel)
+      (let [col-types (live-rel->col-types live-rel)
+            wm-live-rel (open-wm-live-rel live-rel retain?)
             wm-live-trie (.withIidReader ^LiveHashTrie (.live-trie this) (.readerForName wm-live-rel "xt$iid"))]
 
         (reify ILiveTableWatermark

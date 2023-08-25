@@ -1,13 +1,11 @@
 (ns xtdb.indexer-test
   (:require [clojure.data.csv :as csv]
             [clojure.java.io :as io]
-            [clojure.string :as str]
             [clojure.test :as t :refer [deftest]]
             [clojure.tools.logging :as log]
             [xtdb.api :as xt]
             [xtdb.api.protocols :as xtp]
             [xtdb.buffer-pool :as bp]
-            [xtdb.expression.metadata :as expr.meta]
             [xtdb.indexer :as idx]
             [xtdb.metadata :as meta]
             [xtdb.node :as node]
@@ -16,21 +14,17 @@
             [xtdb.test-util :as tu]
             [xtdb.ts-devices :as ts]
             [xtdb.util :as util]
-            [xtdb.vector.reader :as vr]
             xtdb.watermark)
   (:import (java.nio.channels ClosedByInterruptException)
            java.nio.file.Files
            java.time.Duration
-           (java.util.function Consumer)
-           [org.apache.arrow.memory ArrowBuf BufferAllocator]
-           [org.apache.arrow.vector BigIntVector VectorLoader VectorSchemaRoot]
-           [org.apache.arrow.vector.complex ListVector StructVector]
+           [org.apache.arrow.memory BufferAllocator]
            xtdb.api.protocols.TransactionInstant
-           [xtdb.buffer_pool BufferPool IBufferPool]
+           [xtdb.buffer_pool IBufferPool]
            (xtdb.metadata IMetadataManager)
            xtdb.node.Node
            xtdb.object_store.ObjectStore
-           (xtdb.watermark IWatermark IWatermarkSource)))
+           (xtdb.watermark IWatermarkSource)))
 
 (t/use-fixtures :once tu/with-allocator)
 

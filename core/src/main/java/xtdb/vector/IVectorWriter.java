@@ -14,6 +14,8 @@ public interface IVectorWriter extends IValueWriter, AutoCloseable {
 
     ValueVector getVector();
 
+    Object getColType();
+
     /**
      * This method calls {@link ValueVector#setValueCount} on the underlying vector, so that all of the values written
      * become visible through the Arrow Java API - we don't call this after every write because (for composite vectors, and especially unions)
