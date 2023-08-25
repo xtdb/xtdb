@@ -49,6 +49,7 @@
   (^xtdb.indexer.live_index.ILiveIndexTx startTx [^xtdb.api.protocols.TransactionInstant txKey])
   (^xtdb.watermark.ILiveIndexWatermark openWatermark [])
   (^java.util.Map finishChunk [^long chunkIdx])
+  (^void nextChunk [])
   (^void close []))
 
 (defprotocol TestLiveTable
@@ -287,11 +288,12 @@
 
       @(CompletableFuture/allOf futs)
 
-      (util/close tables)
-      (.clear tables)
-
       (-> (into {} (keep deref) futs)
           (util/rethrowing-cause))))
+
+  (nextChunk [_]
+    (util/close tables)
+    (.clear tables))
 
   AutoCloseable
   (close [_]
