@@ -24,7 +24,7 @@
            (org.apache.arrow.memory BufferAllocator)
            [org.apache.arrow.memory.util ArrowBufPointer]
            [org.roaringbitmap RoaringBitmap]
-           [org.roaringbitmap.buffer MutableRoaringBitmap]
+           [org.roaringbitmap.buffer ImmutableRoaringBitmap MutableRoaringBitmap]
            xtdb.api.protocols.TransactionInstant
            xtdb.buffer_pool.IBufferPool
            xtdb.ICursor
@@ -591,19 +591,19 @@
                                                  (fn [fvt]
                                                    (or fvt (if default-all-valid-time? [:all-time] [:at [:now :now]])))))
                            ^ILiveTableWatermark live-table-wm (some-> (.liveIndex watermark) (.liveTable normalized-table-name))
-                           table-chunks (trie/list-table-tries object-store normalized-table-name)
-                           trie-file->page-idxs (->> (meta/matching-tries metadata-mgr (map :trie-file table-chunks) metadata-pred)
+                           table-tries (trie/list-table-tries object-store normalized-table-name)
+                           trie-file->page-idxs (->> (meta/matching-tries metadata-mgr (map :trie-file table-tries) metadata-pred)
                                                      (filter #(not-empty (set/intersection normalized-col-names (:col-names %))))
                                                      (map (partial filter-trie-match metadata-mgr col-names))
                                                      (remove nil?)
                                                      (into {} (map (juxt :buf-key :page-idxs))))
-                           merge-plan (trie/table-merge-plan buffer-pool table-chunks trie-file->page-idxs live-table-wm)]
+                           merge-plan (trie/table-merge-plan buffer-pool metadata-mgr table-tries trie-file->page-idxs live-table-wm)]
 
                        ;; The consumers for different leafs need to share some state so the logic of how to advance
                        ;; is correct. For example if the `skip-iid-ptr` gets set in one leaf consumer it should also affect
                        ;; the skipping in another leaf consumer.
 
-                       (util/with-close-on-catch [leaves (trie/open-leaves buffer-pool normalized-table-name table-chunks live-table-wm)]
+                       (util/with-close-on-catch [leaves (trie/open-leaves buffer-pool normalized-table-name table-tries live-table-wm)]
                          (->TrieCursor allocator leaves (.iterator (let [^Iterable c (or (merge-plan->tasks merge-plan) [])] c))
                                        col-names col-preds
                                        (->temporal-range params basis scan-opts)
