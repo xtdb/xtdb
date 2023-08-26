@@ -22,6 +22,7 @@ import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.time.*;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
@@ -663,9 +664,8 @@ public class ValueVectorReader implements IVectorReader {
     public static class DuvReader extends ValueVectorReader {
         private final DenseUnionVector v;
 
-        private final Keyword[] legs;
-        private final IndirectVectorReader[] legReaders;
-        private final Map<Keyword, IVectorReader> legReadersByLeg;
+        private final List<Keyword> legs;
+        private final IVectorReader[] legReaders;
 
         private DuvReader(DenseUnionVector v) {
             // getLeg is overridden here, so we never use the `leg` field in this case.
@@ -674,20 +674,14 @@ public class ValueVectorReader implements IVectorReader {
 
             var children = v.getChildrenFromFields();
 
-            this.legReaders = new IndirectVectorReader[children.size()];
+            this.legReaders = new IVectorReader[children.size()];
 
-            for (int typeId = 0; typeId < legReaders.length; typeId++) {
-                legReaders[typeId] = new IndirectVectorReader(from(children.get(typeId)), new DuvIndirection(v, (byte) typeId));
-            }
-
-            this.legReadersByLeg = Arrays.stream(legReaders).collect(Collectors.toMap(vr -> Keyword.intern(vr.getName()), vr -> vr));
-
-            this.legs = Arrays.stream(legReaders).map(vr -> Keyword.intern(vr.getName())).toArray(Keyword[]::new);
+            this.legs = children.stream().map(f -> Keyword.intern(f.getName())).toList();
         }
 
         @Override
         Object getObject0(int idx) {
-            return legReaders[v.getTypeId(idx)].getObject(idx);
+            return typeIdReader(v.getTypeId(idx)).getObject(idx);
         }
 
         @Override
@@ -697,22 +691,34 @@ public class ValueVectorReader implements IVectorReader {
 
         @Override
         public Keyword getLeg(int idx) {
-            return legs[v.getTypeId(idx)];
+            return legs.get(v.getTypeId(idx));
         }
 
         @Override
         public IVectorReader legReader(Keyword legKey) {
-            return legReadersByLeg.get(legKey);
+            var typeId = legs.indexOf(legKey);
+            return typeId < 0 ? null : typeIdReader((byte) typeId);
         }
 
         @Override
         public IVectorReader typeIdReader(byte typeId) {
-            return legReaders[typeId];
+            var reader = legReaders[typeId];
+            if (reader != null) return reader;
+
+            synchronized (this) {
+                reader = legReaders[typeId];
+                if (reader != null) return reader;
+
+                var childVec = v.getChild(legs.get(typeId).sym.toString());
+                reader = new IndirectVectorReader(from(childVec), new DuvIndirection(v, typeId));
+                legReaders[typeId] = reader;
+                return reader;
+            }
         }
 
         @Override
         public Collection<Keyword> legs() {
-            return Arrays.stream(legs).toList();
+            return legs;
         }
     }
 
