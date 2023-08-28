@@ -623,11 +623,18 @@
                              :current-iid-ptr (ArrowBufPointer.)}
                       (at-point-point? scan-opts) (assoc :point-point? true))))))
 
-(defn selects->iid-byte-buffer ^ByteBuffer [selects]
+(defn selects->iid-byte-buffer ^ByteBuffer [selects ^RelationReader params-rel]
   (when-let [eid-select (or (get selects 'xt/id) (get selects 'xt$id))]
     (let [eid (nth eid-select 2)]
-      (when (and (= '= (first eid-select)) (s/valid? ::lp/value eid))
-        (trie/->iid eid)))))
+      (when (= '= (first eid-select))
+        (cond
+          (s/valid? ::lp/value eid)
+          (trie/->iid eid)
+
+          (s/valid? ::lp/param eid)
+          (let [eid-rdr (.readerForName params-rel (name eid))]
+            (when (= 1 (.valueCount eid-rdr))
+              (trie/->iid (.getObject eid-rdr 0)))))))))
 
 (defmethod ig/prep-key ::scan-emitter [_ opts]
   (merge opts
@@ -693,17 +700,12 @@
                            (first arg))
                          (into {}))
 
-            iid-bb (selects->iid-byte-buffer selects)
-
             col-preds (->> (for [[col-name select-form] selects]
                              ;; for temporal preds, we may not need to re-apply these if they can be represented as a temporal range.
                              (MapEntry/create (str col-name)
                                               (expr/->expression-relation-selector select-form {:col-types col-types, :param-types param-types})))
                            (into {}))
 
-            col-preds (cond-> col-preds
-                        iid-bb
-                        (assoc "xt$iid" (iid-selector iid-bb)))
 
             metadata-args (vec (for [[col-name select] selects
                                      :when (not (types/temporal-column? (util/str->normal-form-str (str col-name))))]
@@ -718,7 +720,10 @@
         {:col-types col-types
          :stats {:row-count row-count}
          :->cursor (fn [{:keys [allocator, ^IWatermark watermark, basis, params default-all-valid-time?]}]
-                     (let [metadata-pred (expr.meta/->metadata-selector (cons 'and metadata-args) col-types params)
+                     (let [iid-bb (selects->iid-byte-buffer selects params)
+                           col-preds (cond-> col-preds
+                                       iid-bb (assoc "xt$iid" (iid-selector iid-bb)))
+                           metadata-pred (expr.meta/->metadata-selector (cons 'and metadata-args) col-types params)
                            scan-opts (-> scan-opts
                                          (update :for-valid-time
                                                  (fn [fvt]

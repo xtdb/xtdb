@@ -6,11 +6,13 @@
             [xtdb.operator.scan :as scan]
             [xtdb.test-util :as tu]
             [xtdb.util :as util]
+            [xtdb.vector.reader :as vr]
             [xtdb.vector.writer :as vw])
   (:import (java.util LinkedList)
            xtdb.operator.IRaQuerySource
            xtdb.operator.IRelationSelector
-           (xtdb.operator.scan RowConsumer)))
+           (xtdb.operator.scan RowConsumer)
+           xtdb.vector.RelationReader))
 
 (t/use-fixtures :each tu/with-mock-clock tu/with-allocator)
 
@@ -446,16 +448,31 @@
                           [:put :xt-docs {:xt/id after-uuid :version 1}]])
       (xt/submit-tx node [[:put :xt-docs {:xt/id search-uuid :version 2}]])
 
-      (t/is (nil? (scan/selects->iid-byte-buffer {})))
+      (t/is (nil? (scan/selects->iid-byte-buffer {} vw/empty-params)))
 
       (t/is (= (util/uuid->byte-buffer search-uuid)
-               (scan/selects->iid-byte-buffer {'xt/id (list '= 'xt/id search-uuid)})))
+               (scan/selects->iid-byte-buffer {'xt/id (list '= 'xt/id search-uuid)} vw/empty-params)))
 
-      (t/is (nil? (scan/selects->iid-byte-buffer {'xt/id (list '< 'xt/id search-uuid)})))
+      (t/is (nil? (scan/selects->iid-byte-buffer {'xt/id (list '< 'xt/id search-uuid)} vw/empty-params)))
+
+      (with-open [^RelationReader params-rel (vw/open-params tu/*allocator* {'?search-uuid #uuid "80000000-0000-0000-0000-000000000000"})]
+        (t/is (= (util/uuid->byte-buffer search-uuid)
+                 (scan/selects->iid-byte-buffer '{xt/id (= xt/id ?search-uuid)}
+                                                params-rel))))
+
+      (with-open [search-uuid-vec (vw/open-vec tu/*allocator* (name '?search-uuid) [#uuid "00000000-0000-0000-0000-000000000000"
+                                                                                    #uuid "80000000-0000-0000-0000-000000000000"])
+                  ^RelationReader params-rel (vw/open-rel [search-uuid-vec])]
+        (t/is (nil? (scan/selects->iid-byte-buffer '{xt/id (= xt/id ?search-uuid)}
+                                                   params-rel))))
 
       (t/is (= [{:version 2, :xt/id search-uuid}]
                (tu/query-ra [:scan {:table 'xt_docs} ['version {'xt/id (list '= 'xt/id search-uuid)}]]
                             {:node node})))
+
+      (t/is (= [{:version 2, :xt/id search-uuid}]
+               (tu/query-ra '[:scan {:table xt_docs} [version {xt/id (= xt/id ?search-uuid)}]]
+                            {:node node :params {'?search-uuid #uuid "80000000-0000-0000-0000-000000000000"}})))
 
       (t/is (= [{:version 2, :xt/id search-uuid}
                 {:version 1, :xt/id search-uuid}]
