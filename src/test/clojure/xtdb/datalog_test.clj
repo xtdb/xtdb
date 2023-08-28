@@ -210,7 +210,7 @@
                          :in [film]
                          :where [(match :film {:xt/id film, :film/name film-name, :film/bond bond})
                                  (match :person {:xt/id bond, :person/name bond-name})]}
-                       "skyfall"])))
+                       :skyfall])))
         "one -> one")
 
   (t/is (= #{{:film-name "Casino Royale", :bond-name "Daniel Craig"}
@@ -222,7 +222,7 @@
                          :in [bond]
                          :where [(match :film {:film/name film-name, :film/bond bond})
                                  (match :person {:xt/id bond, :person/name bond-name})]}
-                       "daniel-craig"])))
+                       :daniel-craig])))
         "one -> many"))
 
 ;; https://github.com/tonsky/datascript/blob/1.1.0/test/datascript/test/query_aggregates.cljc#L14-L39
