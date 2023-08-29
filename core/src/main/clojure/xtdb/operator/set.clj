@@ -289,22 +289,20 @@
     (util/try-close recursive-cursor)
     (util/try-close base-cursor)))
 
-(def ^:dynamic *relation-variable->col-types* {})
-(def ^:dynamic *relation-variable->cursor-factory* {})
-
-(defmethod lp/emit-expr :relation [{:keys [relation]} _opts]
-  (let [col-types (*relation-variable->col-types* relation)]
+(defmethod lp/emit-expr :relation [{:keys [relation]}
+                                   {:keys [relation-variable->col-types] :as _opts}]
+  (let [col-types (get relation-variable->col-types relation)]
     {:col-types col-types
-     :->cursor (fn [_opts]
-                 (let [^ICursorFactory cursor-factory (get *relation-variable->cursor-factory* relation)]
-                   (assert cursor-factory (str "can't find " relation, (pr-str *relation-variable->cursor-factory*)))
+     :->cursor (fn [{:keys [relation-variable->cursor-factory] :as _opts}]
+                 (let [^ICursorFactory cursor-factory (get relation-variable->cursor-factory relation)]
+                   (assert cursor-factory (str "can't find " relation, (pr-str relation-variable->cursor-factory)))
                    (.createCursor cursor-factory)))}))
 
 (defmethod lp/emit-expr :fixpoint [{:keys [mu-variable base recursive], {:keys [incremental?]} :opts} args]
   (let [{base-col-types :col-types, ->base-cursor :->cursor} (lp/emit-expr base args)
-        {recursive-col-types :col-types, ->recursive-cursor :->cursor} (binding [*relation-variable->col-types* (-> *relation-variable->col-types*
-                                                                                                                    (assoc mu-variable base-col-types))]
-                                                                         (lp/emit-expr recursive args))
+
+        {recursive-col-types :col-types, ->recursive-cursor :->cursor}
+        (lp/emit-expr recursive (update args :relation-variable->col-types (fnil assoc {}) mu-variable base-col-types))
 
         ;; HACK I think `:col-types` needs to be a fixpoint as well?
         col-types (union-col-types base-col-types recursive-col-types)]
@@ -315,9 +313,7 @@
                         (->base-cursor opts)
                         (reify IFixpointCursorFactory
                           (createCursor [_ cursor-factory]
-                            (binding [*relation-variable->cursor-factory* (-> *relation-variable->cursor-factory*
-                                                                              (assoc mu-variable cursor-factory))]
-                              (->recursive-cursor opts))))
+                            (->recursive-cursor (update opts :relation-variable->cursor-factory (fnil assoc {}) mu-variable cursor-factory))))
                         (emap/->relation-map allocator {:build-col-types col-types
                                                         :key-col-names (set (keys col-types))})
                         (boolean incremental?)
@@ -325,28 +321,29 @@
                         #_recursive-cursor nil
                         #_continue? true))}))
 
-(defmethod lp/emit-expr :assign [{:keys [bindings relation]} args]
-  (let [{:keys [rel-var->col-types relations]} (->> bindings
-                                                     (reduce (fn [{:keys [rel-var->col-types relations]} {:keys [variable value]}]
-                                                               (binding [*relation-variable->col-types* rel-var->col-types]
-                                                                 (let [{:keys [col-types ->cursor]} (lp/emit-expr value args)]
-                                                                   {:rel-var->col-types (-> rel-var->col-types
-                                                                                            (assoc variable col-types))
+(defmethod lp/emit-expr :assign [{:keys [bindings relation]}
+                                 {:keys [relation-variable->col-types relation-variable->cursor-factory] :as args}]
+  (let [{:keys [rel-var->col-types relations]}
+        (->> bindings
+             (reduce (fn [{:keys [rel-var->col-types relations]} {:keys [variable value]}]
+                       (let [{:keys [col-types ->cursor]}
+                             (lp/emit-expr value (assoc args :relation-variable->col-types rel-var->col-types))]
+                         {:rel-var->col-types (-> rel-var->col-types
+                                                  (assoc variable col-types))
 
-                                                                    :relations (conj relations {:variable variable, :->cursor ->cursor})})))
-                                                             {:rel-var->col-types *relation-variable->col-types*
-                                                              :relations []}))
-        {:keys [col-types ->cursor]} (binding [*relation-variable->col-types* rel-var->col-types]
-                                       (lp/emit-expr relation args))]
+                          :relations (conj relations {:variable variable, :->cursor ->cursor})}))
+                     {:rel-var->col-types relation-variable->col-types
+                      :relations []}))
+
+        {:keys [col-types ->cursor]} (lp/emit-expr relation (assoc args :relation-variable->col-types rel-var->col-types))]
     {:col-types col-types
      :->cursor (fn [opts]
-                 (let [rel-var->cursor-factory (->> relations
-                                                    (reduce (fn [acc {:keys [variable ->cursor]}]
-                                                              (-> acc
-                                                                  (assoc variable (reify ICursorFactory
-                                                                                    (createCursor [_]
-                                                                                      (binding [*relation-variable->cursor-factory* acc]
-                                                                                        (->cursor opts)))))))
-                                                            *relation-variable->cursor-factory*))]
-                   (binding [*relation-variable->cursor-factory* rel-var->cursor-factory]
-                     (->cursor opts))))}))
+                 (->cursor (assoc opts :relation-variable->cursor-factory
+                                  (->> relations
+                                       (reduce (fn [acc {:keys [variable ->cursor]}]
+                                                 (-> acc
+                                                     (assoc variable (reify ICursorFactory
+                                                                       (createCursor [_]
+                                                                         (->cursor
+                                                                          (assoc opts :relation-variable->cursor-factory acc)))))))
+                                               relation-variable->cursor-factory)))))}))

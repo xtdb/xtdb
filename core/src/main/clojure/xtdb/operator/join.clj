@@ -10,7 +10,6 @@
             [xtdb.logical-plan :as lp]
             [xtdb.operator.project :as project]
             [xtdb.operator.scan :as scan]
-            [xtdb.operator.set :as operator.set]
             [xtdb.types :as types]
             [xtdb.util :as util]
             [xtdb.vector.reader :as vr])
@@ -20,8 +19,8 @@
            (java.util.stream IntStream)
            (org.apache.arrow.memory BufferAllocator)
            org.apache.arrow.vector.BitVector
-           org.roaringbitmap.RoaringBitmap
            (org.roaringbitmap.buffer MutableRoaringBitmap)
+           org.roaringbitmap.RoaringBitmap
            (xtdb ICursor)
            (xtdb.expression.map IRelationMap)
            (xtdb.operator IProjectionSpec)
@@ -327,18 +326,14 @@
                      ^IRelationMap rel-map
                      ^RoaringBitmap matched-build-idxs
                      pushdown-blooms
-                     join-type
-                     relation-variable->col-types
-                     relation-variable->cursor-factory]
+                     join-type]
   ICursor
   (tryAdvance [this c]
     (build-phase build-cursor rel-map pushdown-blooms)
 
     (boolean
      (or (let [advanced? (boolean-array 1)]
-           (binding [operator.set/*relation-variable->col-types* relation-variable->col-types
-                     operator.set/*relation-variable->cursor-factory* relation-variable->cursor-factory
-                     scan/*column->pushdown-bloom* (cond-> scan/*column->pushdown-bloom*
+           (binding [scan/*column->pushdown-bloom* (cond-> scan/*column->pushdown-bloom*
                                                      (some? pushdown-blooms) (conj (zipmap (.probeKeyColumnNames rel-map) pushdown-blooms)))]
              (when-not probe-cursor
                (util/with-close-on-catch [probe-cursor (->probe-cursor)]
@@ -377,17 +372,6 @@
     (util/try-close rel-map)
     (util/try-close build-cursor)
     (util/try-close probe-cursor)))
-
-(defn ->join-cursor [^BufferAllocator allocator, ^ICursor build-cursor,
-                     ^:unsynchronized-mutable ^ICursor probe-cursor
-                     ^IFn ->probe-cursor
-                     ^IRelationMap rel-map
-                     ^RoaringBitmap matched-build-idxs
-                     pushdown-blooms
-                     join-type]
-  (JoinCursor. allocator build-cursor probe-cursor ->probe-cursor rel-map matched-build-idxs
-               pushdown-blooms join-type
-               operator.set/*relation-variable->col-types* operator.set/*relation-variable->cursor-factory*))
 
 (defn- equi-spec [idx condition left-col-types right-col-types param-types]
   (let [[left-expr right-expr] (first condition)]
@@ -466,7 +450,7 @@
                     {:col-types (merge-with types/merge-col-types left-col-types right-col-types)
                      :->cursor (fn [{:keys [allocator params]} ->left-cursor ->right-cursor]
                                  (util/with-close-on-catch [left-cursor (->left-cursor)]
-                                   (->join-cursor allocator left-cursor nil ->right-cursor
+                                   (JoinCursor. allocator left-cursor nil ->right-cursor
                                                   (emap/->relation-map allocator {:build-col-types left-col-types
                                                                                   :build-key-col-names left-key-col-names
                                                                                   :probe-col-types right-col-types
@@ -485,7 +469,7 @@
       {:col-types (merge-with types/merge-col-types left-col-types (-> right-col-types types/with-nullable-cols))
        :->cursor (fn [{:keys [allocator params]}, ->left-cursor ->right-cursor]
                    (util/with-close-on-catch [right-cursor (->right-cursor)]
-                     (->join-cursor allocator right-cursor nil ->left-cursor
+                     (JoinCursor. allocator right-cursor nil ->left-cursor
                                     (emap/->relation-map allocator {:build-col-types right-col-types
                                                                     :build-key-col-names right-key-col-names
                                                                     :probe-col-types left-col-types
@@ -503,7 +487,7 @@
       {:col-types (merge-with types/merge-col-types (-> left-col-types types/with-nullable-cols) (-> right-col-types types/with-nullable-cols))
        :->cursor (fn [{:keys [allocator params]} ->left-cursor ->right-cursor]
                    (util/with-close-on-catch [left-cursor (->left-cursor)]
-                     (->join-cursor allocator left-cursor nil ->right-cursor
+                     (JoinCursor. allocator left-cursor nil ->right-cursor
                                     (emap/->relation-map allocator {:build-col-types left-col-types
                                                                     :build-key-col-names left-key-col-names
                                                                     :probe-col-types right-col-types
@@ -521,7 +505,7 @@
       {:col-types left-col-types
        :->cursor (fn [{:keys [allocator params]} ->left-cursor ->right-cursor]
                    (util/with-close-on-catch [right-cursor (->right-cursor)]
-                     (->join-cursor allocator right-cursor nil ->left-cursor
+                     (JoinCursor. allocator right-cursor nil ->left-cursor
                                     (emap/->relation-map allocator {:build-col-types right-col-types
                                                                     :build-key-col-names right-key-col-names
                                                                     :probe-col-types left-col-types
@@ -538,7 +522,7 @@
       {:col-types left-col-types
        :->cursor (fn [{:keys [allocator params]} ->left-cursor ->right-cursor]
                    (util/with-close-on-catch [right-cursor (->right-cursor)]
-                     (->join-cursor allocator right-cursor nil ->left-cursor
+                     (JoinCursor. allocator right-cursor nil ->left-cursor
                                     (emap/->relation-map allocator {:build-col-types right-col-types
                                                                     :build-key-col-names right-key-col-names
                                                                     :probe-col-types left-col-types
@@ -619,7 +603,7 @@
 
        :->cursor (fn [{:keys [allocator params]} ->left-cursor ->right-cursor]
                    (util/with-close-on-catch [right-cursor (->right-cursor)]
-                     (->join-cursor allocator right-cursor nil ->left-cursor
+                     (JoinCursor. allocator right-cursor nil ->left-cursor
                                     (emap/->relation-map allocator {:build-col-types right-col-types
                                                                     :build-key-col-names right-key-col-names
                                                                     :probe-col-types left-col-types
