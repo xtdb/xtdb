@@ -59,10 +59,10 @@
                                   (mapv #(vec (.getObject iid-vec %)) (.data leaf))))))))))
 
     (t/testing "finish chunk"
-      (.finishChunk live-index 0)
+      (.finishChunk live-index 0 12000)
 
-      (let [trie-buf @(.getObject obj-store "tables/my-table/log-tries/trie-c00.arrow")
-            leaf-buf @(.getObject obj-store "tables/my-table/log-leaves/leaf-c00.arrow")]
+      (let [trie-buf @(.getObject obj-store "tables/my-table/log-tries/trie-l00-cf00-ct32ee0.arrow")
+            leaf-buf @(.getObject obj-store "tables/my-table/log-leaves/leaf-l00-cf00-ct32ee0.arrow")]
         (with-open [trie-rdr (ArrowFileReader. (util/->seekable-byte-channel trie-buf) allocator)
                     leaf-rdr (ArrowFileReader. (util/->seekable-byte-channel leaf-buf) allocator)]
           (let [trie-root (.getVectorSchemaRoot trie-rdr)
@@ -116,10 +116,10 @@
 
         (tu/finish-chunk! node)
 
-        (t/is (= ["tables/foo/log-leaves/leaf-c00.arrow"]
+        (t/is (= ["tables/foo/log-leaves/leaf-l00-cf00-ct110.arrow"]
                  (.listObjects os "tables/foo/log-leaves")))
 
-        (t/is (= ["tables/foo/log-tries/trie-c00.arrow"]
+        (t/is (= ["tables/foo/log-tries/trie-l00-cf00-ct110.arrow"]
                  (.listObjects os "tables/foo/log-tries"))))
 
       (tj/check-json (.toPath (io/as-file (io/resource "xtdb/indexer-test/can-build-live-index")))

@@ -207,8 +207,8 @@
     {:leaf-buf (.getAsByteBuffer leaf-bb-ch)
      :trie-buf (.getAsByteBuffer trie-bb-ch)}))
 
-(defn ->trie-key [^long chunk-idx]
-  (format "c%s" (util/->lex-hex-string chunk-idx)))
+(defn ->trie-key [^long level, ^long chunk-idx, ^long next-chunk-idx]
+  (format "l%s-cf%s-ct%s" (util/->lex-hex-string level) (util/->lex-hex-string chunk-idx) (util/->lex-hex-string next-chunk-idx)))
 
 (defn ->table-leaf-obj-key [table-name trie-key]
   (format "tables/%s/log-leaves/leaf-%s.arrow" table-name trie-key))
@@ -226,7 +226,7 @@
 (defn list-table-tries [^ObjectStore obj-store, table-name]
   (->> (.listObjects obj-store (format "tables/%s/log-tries" table-name))
        (keep (fn [file-name]
-               (when-let [[_ trie-key] (re-find #"/trie-([^/]+?)\.arrow$" file-name)]
+               (when-let [[_ trie-key] (re-find #"/log-tries/trie-([^/]+?)\.arrow$" file-name)]
                  {:trie-file file-name
                   :trie-key trie-key})))
        (sort-by :trie-key)

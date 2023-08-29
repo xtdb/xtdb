@@ -602,28 +602,28 @@
   Finish
   (finish-chunk! [this]
     (let [chunk-idx (.getChunkIdx row-counter)
-          table-metadata (.finishChunk live-idx chunk-idx)]
+          next-chunk-idx (+ chunk-idx (.getChunkRowCount row-counter))
+          table-metadata (.finishChunk live-idx chunk-idx next-chunk-idx)]
 
       (.finishChunk metadata-mgr chunk-idx
                     {:latest-completed-tx latest-completed-tx
-                     :next-chunk-idx (+ chunk-idx (.getChunkRowCount row-counter))
-                     :tables table-metadata}))
+                     :next-chunk-idx next-chunk-idx
+                     :tables table-metadata})
 
-    (.nextChunk row-counter)
-    (set! (.-latest_completed_chunk_tx this) latest-completed-tx)
+      (.nextChunk row-counter)
+      (set! (.-latest_completed_chunk_tx this) latest-completed-tx)
 
     (let [wm-lock-stamp (.writeLock wm-lock)]
-
       (try
         (.nextChunk live-idx)
         (when-let [^IWatermark shared-wm (.shared-wm this)]
           (set! (.shared-wm this) nil)
           (.close shared-wm))
 
-        (finally
-          (.unlock wm-lock wm-lock-stamp))))
+          (finally
+            (.unlock wm-lock wm-lock-stamp))))
 
-    (log/debug "finished chunk."))
+      (log/debugf "finished chunk 'cf%s-ct%s'." (util/->lex-hex-string chunk-idx) (util/->lex-hex-string next-chunk-idx))))
 
   Closeable
   (close [_]
