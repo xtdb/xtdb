@@ -43,7 +43,7 @@
 (definterface IMetadataManager
   (^void finishChunk [^long chunkIdx, newChunkMetadata])
   (^java.util.NavigableMap chunksMetadata [])
-  (^java.util.concurrent.CompletableFuture withMetadata [^long chunkIdx, ^String tableName, ^java.util.function.Function #_<ITableMetadata> f])
+  (^java.util.concurrent.CompletableFuture withMetadata [^String bufKey, ^java.util.function.Function #_<ITableMetadata> f])
   (columnTypes [^String tableName])
   (columnType [^String tableName, ^String colName])
   (allColumnTypes []))
@@ -52,7 +52,7 @@
 (definterface IMetadataPredicate
   (^java.util.function.IntPredicate build [^xtdb.metadata.ITableMetadata tableMetadata]))
 
-(defrecord TrieMatch [^long chunk-idx, ^RoaringBitmap page-idxs, ^Set col-names])
+(defrecord TrieMatch [^String buf-key, ^RoaringBitmap page-idxs, ^Set col-names])
 
 (defn- obj-key->chunk-idx [obj-key]
   (some-> (second (re-matches #"chunk-metadata/(\p{XDigit}+).transit.json" obj-key))
@@ -275,14 +275,6 @@
                                     (not (nil? (.getObject page-idx-rdr idx))) inc)
                                   (inc idx))))}))
 
-(defn- table-name->dir [table-name] (format "tables/%s/chunks" table-name))
-
-(defn ->table-leaf-obj-key [table-name chunk-idx]
-  (format "%s/leaf-c%s.arrow" (table-name->dir table-name) chunk-idx))
-
-(defn ->table-trie-obj-key [table-name chunk-idx]
-  (format "%s/trie-c%s.arrow" (table-name->dir table-name) chunk-idx))
-
 (defn ->table-metadata ^xtdb.metadata.ITableMetadata [^IVectorReader metadata-reader, {:keys [col-names page-idx-cache, page-count]}]
   (reify ITableMetadata
     (metadataReader [_] metadata-reader)
@@ -302,8 +294,8 @@
     (set! (.col-types this) (merge-col-types col-types new-chunk-metadata))
     (.put chunks-metadata chunk-idx new-chunk-metadata))
 
-  (withMetadata [_ chunk-idx table-name f]
-    (-> (.getBuffer buffer-pool (->table-trie-obj-key table-name (util/->lex-hex-string chunk-idx)))
+  (withMetadata [_ buf-key f]
+    (-> (.getBuffer buffer-pool buf-key)
         (util/then-apply
           (fn [^ArrowBuf trie-buf]
             (try
@@ -315,7 +307,7 @@
                         ^IVectorReader metadata-reader (.metadataReader (.typeIdReader (.readerForName trie-rdr "nodes") (byte 2)))]
                     (.apply f (->table-metadata metadata-reader
                                                 (.computeIfAbsent table-metadata-idxs
-                                                                  [chunk-idx table-name]
+                                                                  buf-key
                                                                   (reify Function
                                                                     (apply [_ _]
                                                                       (->table-metadata-idxs metadata-reader)))))))
@@ -376,29 +368,21 @@
 (defmethod ig/halt-key! ::metadata-manager [_ mgr]
   (util/try-close mgr))
 
-(defn with-metadata [^IMetadataManager metadata-mgr, ^long chunk-idx, ^String table-name, ^Function f]
-  (.withMetadata metadata-mgr chunk-idx table-name f))
+(defn with-metadata [^IMetadataManager metadata-mgr, ^String buf-key, ^Function f]
+  (.withMetadata metadata-mgr buf-key f))
 
-(defn with-all-metadata [^IMetadataManager metadata-mgr, table-name, ^BiFunction f]
-  (->> (for [[^long chunk-idx, chunk-metadata] (.chunksMetadata metadata-mgr)
-             :let [table (get-in chunk-metadata [:tables table-name])]
-             :when table]
-         (with-metadata metadata-mgr chunk-idx table-name
+(defn matching-tries [^IMetadataManager metadata-mgr, buf-keys, ^IMetadataPredicate metadata-pred]
+  (->> (for [buf-key buf-keys]
+         (with-metadata metadata-mgr buf-key
            (util/->jfn
-             (fn [table-meta]
-               (.apply f chunk-idx table-meta)))))
+             (fn [^ITableMetadata table-metadata]
+               (let [pred (.build metadata-pred table-metadata)
+                     page-idxs (RoaringBitmap.)]
+                 (dotimes [page-idx (.pageCount table-metadata)]
+                   (when (.test pred page-idx)
+                     (.add page-idxs page-idx)))
+                 (when-not (.isEmpty page-idxs)
+                   (->TrieMatch buf-key page-idxs (.columnNames table-metadata))))))))
        vec
        (into [] (keep deref))
        (util/rethrowing-cause)))
-
-(defn matching-tries [^IMetadataManager metadata-mgr, table-name, ^IMetadataPredicate metadata-pred]
-  (with-all-metadata metadata-mgr table-name
-    (util/->jbifn
-      (fn [^long chunk-idx, ^ITableMetadata table-metadata]
-        (let [pred (.build metadata-pred table-metadata)
-              page-idxs (RoaringBitmap.)]
-          (dotimes [page-idx (.pageCount table-metadata)]
-            (when (.test pred page-idx)
-              (.add page-idxs page-idx)))
-          (when-not (.isEmpty page-idxs)
-            (->TrieMatch chunk-idx page-idxs (.columnNames table-metadata))))))))

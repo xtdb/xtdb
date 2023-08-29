@@ -2,12 +2,13 @@
   (:require [clojure.test :as t]
             [xtdb.api :as xt]
             [xtdb.expression.metadata :as expr.meta]
-            [xtdb.node :as node]
             [xtdb.metadata :as meta]
-            [xtdb.test-util :as tu])
-  (:import (xtdb.metadata IMetadataManager)
-           (java.time LocalTime)
-           (org.roaringbitmap RoaringBitmap)))
+            [xtdb.node :as node]
+            [xtdb.test-util :as tu]
+            [xtdb.trie :as trie])
+  (:import (java.time LocalTime)
+           (org.roaringbitmap RoaringBitmap)
+           (xtdb.metadata IMetadataManager)))
 
 (t/use-fixtures :once tu/with-allocator)
 
@@ -39,16 +40,19 @@
 
           (t/is (= #{0 2} (set (keys (.chunksMetadata metadata-mgr)))))
 
-          (let [expected-match [(meta/map->TrieMatch
-                                 {:chunk-idx 2, :page-idxs (doto (RoaringBitmap.) (.add 0)),
+          (let [trie-keys [(trie/->table-trie-obj-key "xt_docs" (trie/->trie-id 0))
+                           (trie/->table-trie-obj-key "xt_docs" (trie/->trie-id 2))]
+                expected-match [(meta/map->TrieMatch
+                                 {:buf-key (second trie-keys)
+                                  :page-idxs (doto (RoaringBitmap.) (.add 0)),
                                   :col-names #{"xt$iid" "xt$valid_from" "xt$valid_to" "xt$system_from" "xt$id" "name"}})]]
             (t/is (= expected-match
-                     (meta/matching-tries metadata-mgr "xt_docs"
+                     (meta/matching-tries metadata-mgr trie-keys
                                           (expr.meta/->metadata-selector '(> name "Ivan") '{name :utf8} {})))
                   "only needs to scan chunk 1, page 1")
             (t/is (= expected-match
                      (with-open [params (tu/open-params {'?name "Ivan"})]
-                       (meta/matching-tries metadata-mgr "xt_docs"
+                       (meta/matching-tries metadata-mgr trie-keys
                                             (expr.meta/->metadata-selector '(> name ?name) '{name :utf8} params))))
                   "only needs to scan chunk 1, page 1"))
 
@@ -80,17 +84,20 @@
     (let [^IMetadataManager metadata-mgr (tu/component node ::meta/metadata-manager)]
       (t/is (= #{0 4} (set (keys (.chunksMetadata metadata-mgr)))))
 
-      (let [expected-match [(meta/map->TrieMatch
-                             {:chunk-idx 0, :page-idxs (doto (RoaringBitmap.) (.add 0)),
+      (let [trie-keys [(trie/->table-trie-obj-key "xt_docs" (trie/->trie-id 0))
+                           (trie/->table-trie-obj-key "xt_docs" (trie/->trie-id 4))]
+            expected-match [(meta/map->TrieMatch
+                             {:buf-key (first trie-keys)
+                              :page-idxs (doto (RoaringBitmap.) (.add 0)),
                               :col-names #{"xt$iid" "xt$valid_from" "xt$valid_to" "xt$system_from" "xt$id" "name"}})]]
         (t/is (= expected-match
-                 (meta/matching-tries metadata-mgr "xt_docs"
+                 (meta/matching-tries metadata-mgr trie-keys
                                       (expr.meta/->metadata-selector '(= name "Ivan") '{name :utf8} {})))
               "only needs to scan trie 0, page 0")
 
         (t/is (= expected-match
                  (with-open [params (tu/open-params {'?name "Ivan"})]
-                   (meta/matching-tries metadata-mgr "xt_docs"
+                   (meta/matching-tries metadata-mgr trie-keys
                                         (expr.meta/->metadata-selector '(= name ?name) '{name :utf8} params))))
               "only needs to scan trie 0, page 0"))
 

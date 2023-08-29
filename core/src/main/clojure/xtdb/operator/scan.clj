@@ -66,10 +66,10 @@
 
 (def ^:dynamic *column->pushdown-bloom* {})
 
-(defn- filter-pushdown-bloom-page-idxs [^IMetadataManager metadata-manager chunk-idx ^String table-name ^String col-name ^RoaringBitmap page-idxs]
+(defn- filter-pushdown-bloom-page-idxs [^IMetadataManager metadata-manager buf-key ^String col-name ^RoaringBitmap page-idxs]
   (if-let [^MutableRoaringBitmap pushdown-bloom (get *column->pushdown-bloom* (symbol col-name))]
     ;; would prefer this `^long` to be on the param but can only have 4 params in a primitive hinted function in Clojure
-    @(meta/with-metadata metadata-manager ^long chunk-idx table-name
+    @(meta/with-metadata metadata-manager buf-key
        (util/->jfn
          (fn [^ITableMetadata table-metadata]
            (let [metadata-rdr (.metadataReader table-metadata)
@@ -455,17 +455,17 @@
                         (transient {:chunk-idx chunk-idx})
                         files))))))
 
-(defn table-merge-plan [^IBufferPool buffer-pool, table-chunks, chunk-idx->page-idxs, ^ILiveTableWatermark live-table-wm]
+(defn table-merge-plan [^IBufferPool buffer-pool, table-chunks, trie-file->page-idxs, ^ILiveTableWatermark live-table-wm]
   (util/with-open [trie-roots (ArrayList. (count table-chunks))]
     ;; TODO these could be kicked off asynchronously
-    (let [tries (cond-> (vec (for [{:keys [trie-file chunk-idx]} table-chunks]
+    (let [tries (cond-> (vec (for [{:keys [trie-file]} table-chunks]
                                (with-open [^ArrowBuf buf @(.getBuffer buffer-pool trie-file)]
                                  (let [{:keys [^VectorLoader loader root arrow-blocks]} (util/read-arrow-buf buf)]
                                    (with-open [record-batch (util/->arrow-record-batch-view (first arrow-blocks) buf)]
                                      (.load loader record-batch)
                                      (.add trie-roots root)
                                      {:trie (ArrowHashTrie/from root)
-                                      :page-idxs (chunk-idx->page-idxs chunk-idx)})))))
+                                      :page-idxs (trie-file->page-idxs trie-file)})))))
                   live-table-wm (conj {:trie (.compactLogs (.liveTrie live-table-wm))}))]
       (trie/->merge-plan (mapv :trie tries) (mapv :page-idxs tries)))))
 
@@ -598,41 +598,13 @@
   (close [_]
     (util/close leaves)))
 
-(defn filter-trie-match [^IMetadataManager metadata-mgr table-name col-names {:keys [chunk-idx page-idxs] :as trie-match}]
+(defn filter-trie-match [^IMetadataManager metadata-mgr col-names {:keys [buf-key page-idxs] :as trie-match}]
   (when-let [page-idxs (reduce (fn [page-idxs col-name]
-                                 (if-let [page-idxs (filter-pushdown-bloom-page-idxs metadata-mgr chunk-idx table-name col-name page-idxs)]
+                                 (if-let [page-idxs (filter-pushdown-bloom-page-idxs metadata-mgr buf-key col-name page-idxs)]
                                    page-idxs
                                    (reduced nil)))
                                page-idxs col-names)]
     (assoc trie-match :page-idxs page-idxs)))
-
-;; The consumers for different leafs need to share some state so the logic of how to advance
-;; is correct. For example if the `skip-iid-ptr` gets set in one leaf consumer it should also affect
-;; the skipping in another leaf consumer.
-
-(defn ->4r-cursor [^BufferAllocator allocator, ^ObjectStore obj-store, ^IBufferPool buffer-pool,
-                   ^IMetadataManager metadata-mgr, ^IWatermark wm
-                   table-name, col-names, ^longs temporal-range, ^List matching-tries
-                   ^Map col-preds, params, scan-opts]
-  (let [^ILiveTableWatermark live-table-wm (some-> (.liveIndex wm) (.liveTable table-name))
-        table-chunks (list-table-chunks obj-store table-name)
-        normalized-col-names (into #{} (map util/str->normal-form-str) col-names)
-        chunk-idx->page-idxs (->> matching-tries
-                                  (filter #(not-empty (set/intersection normalized-col-names (:col-names %))))
-                                  (map (partial filter-trie-match metadata-mgr table-name col-names))
-                                  (remove nil?)
-                                  (into {} (map (juxt :chunk-idx :page-idxs))))
-        merge-plan (table-merge-plan buffer-pool table-chunks chunk-idx->page-idxs live-table-wm)]
-    (util/with-close-on-catch [leaves (open-leaves buffer-pool table-chunks live-table-wm)]
-      (->TrieCursor allocator leaves (.iterator (let [^Iterable c (or (merge-plan->tasks merge-plan) [])] c))
-                    col-names col-preds
-                    temporal-range
-                    params
-                    (cond-> {:ev-resolver (event-resolver)
-                             :skip-iid-ptr (ArrowBufPointer.)
-                             :prev-iid-ptr (ArrowBufPointer.)
-                             :current-iid-ptr (ArrowBufPointer.)}
-                      (at-point-point? scan-opts) (assoc :point-point? true))))))
 
 (defn selects->iid-byte-buffer ^ByteBuffer [selects ^RelationReader params-rel]
   (when-let [eid-select (or (get selects 'xt/id) (get selects 'xt$id))]
@@ -687,39 +659,35 @@
 
     (emitScan [_ {:keys [columns], {:keys [table] :as scan-opts} :scan-opts} scan-col-types param-types]
       (let [col-names (->> columns
-                           (into [] (comp (map (fn [[col-type arg]]
-                                                 (case col-type
-                                                   :column arg
-                                                   :select (key (first arg)))))
-
-                                          (distinct))))
-
-            {content-col-names false, temporal-col-names true}
-            (->> col-names (group-by (comp types/temporal-column? util/str->normal-form-str str)))
-
-            content-col-names (set (map str content-col-names))
-            temporal-col-names (into #{} (map (comp str)) temporal-col-names)
-            normalized-table-name (util/str->normal-form-str (str table))
+                           (into #{} (map (fn [[col-type arg]]
+                                            (case col-type
+                                              :column arg
+                                              :select (key (first arg)))))))
 
             col-types (->> col-names
                            (into {} (map (juxt identity
                                                (fn [col-name]
                                                  (get scan-col-types [table col-name]))))))
 
+            col-names (into #{} (map str) col-names)
+
+            normalized-table-name (util/str->normal-form-str (str table))
+            normalized-col-names (into #{} (map util/str->normal-form-str) col-names)
+
             selects (->> (for [[tag arg] columns
-                               :when (= tag :select)]
-                           (first arg))
+                               :when (= tag :select)
+                               :let [[col-name pred] (first arg)]]
+                           (MapEntry/create (str col-name) pred))
                          (into {}))
 
             col-preds (->> (for [[col-name select-form] selects]
                              ;; for temporal preds, we may not need to re-apply these if they can be represented as a temporal range.
-                             (MapEntry/create (str col-name)
+                             (MapEntry/create col-name
                                               (expr/->expression-relation-selector select-form {:col-types col-types, :param-types param-types})))
                            (into {}))
 
-
             metadata-args (vec (for [[col-name select] selects
-                                     :when (not (types/temporal-column? (util/str->normal-form-str (str col-name))))]
+                                     :when (not (types/temporal-column? (util/str->normal-form-str col-name)))]
                                  select))
 
             row-count (->> (for [{:keys [tables]} (vals (.chunksMetadata metadata-mgr))
@@ -738,17 +706,30 @@
                            scan-opts (-> scan-opts
                                          (update :for-valid-time
                                                  (fn [fvt]
-                                                   (or fvt (if default-all-valid-time? [:all-time] [:at [:now :now]])))))]
-                       (->4r-cursor allocator object-store buffer-pool
-                                    metadata-mgr watermark
-                                    normalized-table-name
-                                    (set/union content-col-names temporal-col-names)
-                                    (->temporal-range params basis scan-opts)
-                                    (let [^Collection coll (or (meta/matching-tries metadata-mgr (str table) metadata-pred) [])]
-                                      (ArrayList. coll))
-                                    col-preds
-                                    params
-                                    scan-opts)))}))))
+                                                   (or fvt (if default-all-valid-time? [:all-time] [:at [:now :now]])))))
+                           ^ILiveTableWatermark live-table-wm (some-> (.liveIndex watermark) (.liveTable normalized-table-name))
+                           table-chunks (list-table-chunks object-store normalized-table-name)
+                           trie-file->page-idxs (->> (meta/matching-tries metadata-mgr (map :trie-file table-chunks) metadata-pred)
+                                                     (filter #(not-empty (set/intersection normalized-col-names (:col-names %))))
+                                                     (map (partial filter-trie-match metadata-mgr col-names))
+                                                     (remove nil?)
+                                                     (into {} (map (juxt :buf-key :page-idxs))))
+                           merge-plan (table-merge-plan buffer-pool table-chunks trie-file->page-idxs live-table-wm)]
+
+                       ;; The consumers for different leafs need to share some state so the logic of how to advance
+                       ;; is correct. For example if the `skip-iid-ptr` gets set in one leaf consumer it should also affect
+                       ;; the skipping in another leaf consumer.
+
+                       (util/with-close-on-catch [leaves (open-leaves buffer-pool table-chunks live-table-wm)]
+                         (->TrieCursor allocator leaves (.iterator (let [^Iterable c (or (merge-plan->tasks merge-plan) [])] c))
+                                       col-names col-preds
+                                       (->temporal-range params basis scan-opts)
+                                       params
+                                       (cond-> {:ev-resolver (event-resolver)
+                                                :skip-iid-ptr (ArrowBufPointer.)
+                                                :prev-iid-ptr (ArrowBufPointer.)
+                                                :current-iid-ptr (ArrowBufPointer.)}
+                                         (at-point-point? scan-opts) (assoc :point-point? true))))))}))))
 
 (defmethod lp/emit-expr :scan [scan-expr {:keys [^IScanEmitter scan-emitter scan-col-types, param-types]}]
   (.emitScan scan-emitter scan-expr scan-col-types param-types))

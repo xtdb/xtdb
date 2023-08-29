@@ -55,7 +55,7 @@
                             (.data)
                             (vec)))))
 
-            @(.finishChunk live-table 0)
+            @(.finishChunk live-table "c00")
 
             (tu/with-allocator
               #(tj/check-json
@@ -91,7 +91,7 @@
                             (.data)
                             (vec)))))
 
-            @(.finishChunk live-table 0)
+            @(.finishChunk live-table "c00")
 
             (tu/with-allocator
               #(tj/check-json
@@ -132,7 +132,7 @@
         (with-open [live-table-wm (.openWatermark live-table true)]
           (let [live-table-before (live-table-wm->data live-table-wm)]
 
-            @(.finishChunk live-table 0)
+            @(.finishChunk live-table "c00")
             (.close live-table)
 
             (let [live-table-after (live-table-wm->data live-table-wm)]

@@ -60,9 +60,13 @@
                                                                      'xt$valid_to types/temporal-col-type}])
                            (types/col-type->field "evict" :null))]))
 
-(defn open-leaf-root ^xtdb.vector.IRelationWriter [^BufferAllocator allocator]
-  (util/with-close-on-catch [root (VectorSchemaRoot/create (log-leaf-schema [:union #{:null [:struct {}]}]) allocator)]
-    (vw/root->writer root)))
+(defn open-leaf-root
+  (^xtdb.vector.IRelationWriter [^BufferAllocator allocator]
+   (open-leaf-root allocator (log-leaf-schema [:union #{:null [:struct {}]}])))
+
+  (^xtdb.vector.IRelationWriter [^BufferAllocator allocator log-leaf-schema]
+   (util/with-close-on-catch [root (VectorSchemaRoot/create log-leaf-schema allocator)]
+     (vw/root->writer root))))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (definterface ITrieWriter
@@ -197,12 +201,21 @@
     {:leaf-buf (.getAsByteBuffer leaf-bb-ch)
      :trie-buf (.getAsByteBuffer trie-bb-ch)}))
 
-(defn write-trie-bufs! [^ObjectStore obj-store, ^String table-name, ^String chunk-idx
+(defn ->trie-id [^long chunk-idx]
+  (format "c%s" (util/->lex-hex-string chunk-idx)))
+
+(defn ->table-leaf-obj-key [table-name trie-id]
+  (format "tables/%s/chunks/leaf-%s.arrow" table-name trie-id))
+
+(defn ->table-trie-obj-key [table-name trie-id]
+  (format "tables/%s/chunks/trie-%s.arrow" table-name trie-id))
+
+(defn write-trie-bufs! [^ObjectStore obj-store, ^String table-name, trie-id
                         {:keys [^ByteBuffer leaf-buf ^ByteBuffer trie-buf]}]
-  (-> (.putObject obj-store (meta/->table-leaf-obj-key table-name chunk-idx) leaf-buf)
+  (-> (.putObject obj-store (->table-leaf-obj-key table-name trie-id) leaf-buf)
       (util/then-compose
         (fn [_]
-          (.putObject obj-store (meta/->table-trie-obj-key table-name chunk-idx) trie-buf)))))
+          (.putObject obj-store (->table-trie-obj-key table-name trie-id) trie-buf)))))
 
 (defn ->merge-plan
   "Returns a tree of the tasks required to merge the given tries "
