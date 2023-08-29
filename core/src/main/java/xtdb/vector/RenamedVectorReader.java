@@ -46,6 +46,11 @@ public class RenamedVectorReader implements IVectorReader {
     }
 
     @Override
+    public boolean isNull(int idx) {
+        return reader.isNull(idx);
+    }
+
+    @Override
     public boolean getBoolean(int idx) {
         return reader.getBoolean(idx);
     }

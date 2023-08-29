@@ -94,10 +94,10 @@
 
               eid (.getObject id-rdr tx-op-idx)
 
-              valid-from (if (= :null (.getLeg valid-from-rdr tx-op-idx))
+              valid-from (if (.isNull valid-from-rdr tx-op-idx)
                            system-time-µs
                            (.getLong valid-from-rdr tx-op-idx))
-              valid-to (if (= :null (.getLeg valid-to-rdr tx-op-idx))
+              valid-to (if (.isNull valid-to-rdr tx-op-idx)
                          util/end-of-time-μs
                          (.getLong valid-to-rdr tx-op-idx))]
           (when-not (> valid-to valid-from)
@@ -121,10 +121,10 @@
       (indexOp [_ tx-op-idx]
         (let [table (.getObject table-rdr tx-op-idx)
               eid (.getObject id-rdr tx-op-idx)
-              valid-from (if (= :null (.getLeg valid-from-rdr tx-op-idx))
+              valid-from (if (.isNull valid-from-rdr tx-op-idx)
                            current-time-µs
                            (.getLong valid-from-rdr tx-op-idx))
-              valid-to (if (= :null (.getLeg valid-to-rdr tx-op-idx))
+              valid-to (if (.isNull valid-to-rdr tx-op-idx)
                          util/end-of-time-μs
                          (.getLong valid-to-rdr tx-op-idx))]
           (when (> valid-from valid-to)
@@ -293,10 +293,10 @@
 
           (dotimes [idx row-count]
             (let [eid (.getObject id-col idx)
-                  valid-from (if (and valid-from-rdr (= :timestamp-tz-micro-utc (.getLeg valid-from-rdr idx)))
+                  valid-from (if (and valid-from-rdr (not (.isNull valid-from-rdr idx)))
                                (.getLong valid-from-ts-rdr idx)
                                current-time-µs)
-                  valid-to (if (and valid-to-rdr (= :timestamp-tz-micro-utc (.getLeg valid-to-rdr idx)))
+                  valid-to (if (and valid-to-rdr (not (.isNull valid-to-rdr idx)))
                              (.getLong valid-to-ts-rdr idx)
                              util/end-of-time-μs)]
               (when (> valid-from valid-to)
@@ -366,7 +366,7 @@
                                                    (reify Consumer
                                                      (accept [_ in-rel]
                                                        (.indexOp op-idxer in-rel query-opts))))))]
-                      (if (= :null (.getLeg params-rdr tx-op-idx))
+                      (if (.isNull params-rdr tx-op-idx)
                         (index-op* nil)
 
                         (with-open [is (ByteArrayInputStream. (.array ^ByteBuffer (.getObject params-rdr tx-op-idx))) ; could try to use getBytes

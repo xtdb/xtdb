@@ -156,7 +156,7 @@
                     (.setValueCount out-vec (inc group-idx))
                     (.set out-vec group-idx 0))
 
-                  (when-not (= :null (.getLeg in-col idx))
+                  (when-not (.isNull in-col idx)
                     (.set out-vec group-idx (inc (.get out-vec group-idx))))))))
 
           (finish [_]

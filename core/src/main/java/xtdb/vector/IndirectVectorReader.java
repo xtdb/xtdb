@@ -63,6 +63,11 @@ class IndirectVectorReader implements IVectorReader {
     }
 
     @Override
+    public boolean isNull(int idx) {
+        return reader.isNull(indirection.getIndex(idx));
+    }
+
+    @Override
     public boolean getBoolean(int idx) {
         return reader.getBoolean(indirection.getIndex(idx));
     }

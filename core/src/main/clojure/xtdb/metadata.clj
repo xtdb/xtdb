@@ -141,13 +141,13 @@
 
               (dotimes [value-idx (.valueCount content-col)]
                 (when (or (.isNull min-vec pos)
-                          (and (not (= :null (.getLeg content-col value-idx)))
+                          (and (not (.isNull content-col value-idx))
                                (neg? (.applyAsInt min-comparator value-idx pos))))
                   (.setPosition min-wp pos)
                   (.copyRow min-copier value-idx))
 
                 (when (or (.isNull max-vec pos)
-                          (and (not (= :null (.getLeg content-col value-idx)))
+                          (and (not (.isNull content-col value-idx))
                                (pos? (.applyAsInt max-comparator value-idx pos))))
                   (.setPosition max-wp pos)
                   (.copyRow max-copier value-idx)))

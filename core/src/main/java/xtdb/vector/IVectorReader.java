@@ -22,6 +22,8 @@ public interface IVectorReader extends AutoCloseable {
 
     int hashCode(int idx, ArrowBufHasher hasher);
 
+    boolean isNull(int idx);
+
     boolean getBoolean(int idx);
 
     byte getByte(int idx);

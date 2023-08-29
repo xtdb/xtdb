@@ -79,6 +79,11 @@ public class ValueVectorReader implements IVectorReader {
     }
 
     @Override
+    public boolean isNull(int idx) {
+        return vector.isNull(idx);
+    }
+
+    @Override
     public boolean getBoolean(int idx) {
         throw unsupported();
     }
@@ -177,7 +182,7 @@ public class ValueVectorReader implements IVectorReader {
 
     @Override
     public Keyword getLeg(int idx) {
-        return vector.isNull(idx) ? NULL_KEYWORD : leg;
+        return isNull(idx) ? NULL_KEYWORD : leg;
     }
 
     @Override
@@ -680,8 +685,13 @@ public class ValueVectorReader implements IVectorReader {
         }
 
         @Override
+        public boolean isNull(int idx) {
+            return typeIdReader(getTypeId(idx)).isNull(idx);
+        }
+
+        @Override
         Object getObject0(int idx) {
-            return typeIdReader(v.getTypeId(idx)).getObject(idx);
+            return typeIdReader(getTypeId(idx)).getObject(idx);
         }
 
         @Override
