@@ -13,21 +13,14 @@
            (java.util.concurrent CompletableFuture)
            (java.util.function Function)
            (org.apache.arrow.memory BufferAllocator)
-           [org.apache.arrow.vector.types.pojo Field]
            (xtdb.object_store ObjectStore)
            (xtdb.trie LiveHashTrie)
-           (xtdb.vector IRelationWriter IVectorWriter RelationReader)))
-
-#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
-(definterface ILiveTableWatermark
-  (^java.util.Map columnTypes [])
-  (^xtdb.vector.RelationReader liveRelation [])
-  (^xtdb.trie.LiveHashTrie liveTrie [])
-  (^void close []))
+           (xtdb.vector IRelationWriter IVectorWriter)
+           (xtdb.watermark ILiveIndexWatermark ILiveTableWatermark)))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (definterface ILiveTableTx
-  (^xtdb.indexer.live_index.ILiveTableWatermark openWatermark [])
+  (^xtdb.watermark.ILiveTableWatermark openWatermark [])
   (^xtdb.vector.IVectorWriter docWriter [])
   (^void logPut [^java.nio.ByteBuffer iid, ^long validFrom, ^long validTo, writeDocFn])
   (^void logDelete [^java.nio.ByteBuffer iid, ^long validFrom, ^long validTo])
@@ -39,20 +32,14 @@
 (definterface ILiveTable
   (^xtdb.indexer.live_index.ILiveTableTx startTx [^xtdb.api.protocols.TransactionInstant txKey
                                                   ^boolean newLiveTable])
-  (^xtdb.indexer.live_index.ILiveTableWatermark openWatermark [^boolean retain])
-  (^java.util.concurrent.CompletableFuture #_<List<Map$Entry>> finishChunk [^String trieIdx])
-  (^void close []))
-
-#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
-(definterface ILiveIndexWatermark
-  (^java.util.Map allColumnTypes [])
-  (^xtdb.indexer.live_index.ILiveTableWatermark liveTable [^String tableName])
+  (^xtdb.watermark.ILiveTableWatermark openWatermark [^boolean retain])
+  (^java.util.concurrent.CompletableFuture #_<List<Map$Entry>> finishChunk [^String trieKey])
   (^void close []))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (definterface ILiveIndexTx
   (^xtdb.indexer.live_index.ILiveTableTx liveTable [^String tableName])
-  (^xtdb.indexer.live_index.ILiveIndexWatermark openWatermark [])
+  (^xtdb.watermark.ILiveIndexWatermark openWatermark [])
   (^void commit [])
   (^void abort []))
 
@@ -60,7 +47,7 @@
 (definterface ILiveIndex
   (^xtdb.indexer.live_index.ILiveTable liveTable [^String tableName])
   (^xtdb.indexer.live_index.ILiveIndexTx startTx [^xtdb.api.protocols.TransactionInstant txKey])
-  (^xtdb.indexer.live_index.ILiveIndexWatermark openWatermark [])
+  (^xtdb.watermark.ILiveIndexWatermark openWatermark [])
   (^java.util.Map finishChunk [^long chunkIdx])
   (^void close []))
 
@@ -166,11 +153,11 @@
           (when new-live-table?
             (util/close this-table))))))
 
-  (finishChunk [_ trie-id]
+  (finishChunk [_ trie-key]
     (let [live-rel-rdr (vw/rel-wtr->rdr live-rel)]
       (when (pos? (.rowCount live-rel-rdr))
         (let [bufs (trie/live-trie->bufs allocator live-trie live-rel-rdr)
-              !fut (trie/write-trie-bufs! obj-store table-name trie-id bufs)
+              !fut (trie/write-trie-bufs! obj-store table-name trie-key bufs)
               table-metadata (MapEntry/create table-name
                                               {:col-types (live-rel->col-types live-rel)
                                                :row-count (.rowCount live-rel-rdr)})]
@@ -291,9 +278,9 @@
           (util/close wms)))))
 
   (finishChunk [_ chunk-idx]
-    (let [trie-id (trie/->trie-id chunk-idx)
+    (let [trie-key (trie/->trie-key chunk-idx)
           futs (->> (for [^ILiveTable table (.values tables)]
-                      (.finishChunk table trie-id))
+                      (.finishChunk table trie-key))
 
                     (remove nil?)
                     (into-array CompletableFuture))]

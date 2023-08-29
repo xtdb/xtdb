@@ -7,13 +7,15 @@
             [xtdb.test-json :as tj]
             [xtdb.test-util :as tu]
             [xtdb.util :as util]
-            [xtdb.vector.reader :as vr])
+            [xtdb.vector.reader :as vr]
+            xtdb.watermark)
   (:import (java.nio ByteBuffer)
            (java.util Arrays HashMap)
            (org.apache.arrow.memory RootAllocator)
-           (xtdb.indexer.live_index ILiveIndex ILiveTable ILiveTableWatermark TestLiveTable)
+           (xtdb.indexer.live_index ILiveIndex  TestLiveTable)
            (xtdb.trie LiveHashTrie LiveHashTrie$Leaf)
-           xtdb.vector.IVectorPosition))
+           xtdb.vector.IVectorPosition
+           xtdb.watermark.ILiveTableWatermark))
 
 (defn uuid-equal-to-path? [uuid path]
   (Arrays/equals

@@ -40,8 +40,8 @@
 
           (t/is (= #{0 2} (set (keys (.chunksMetadata metadata-mgr)))))
 
-          (let [trie-keys [(trie/->table-trie-obj-key "xt_docs" (trie/->trie-id 0))
-                           (trie/->table-trie-obj-key "xt_docs" (trie/->trie-id 2))]
+          (let [trie-keys [(trie/->table-trie-obj-key "xt_docs" (trie/->trie-key 0))
+                           (trie/->table-trie-obj-key "xt_docs" (trie/->trie-key 2))]
                 expected-match [(meta/map->TrieMatch
                                  {:buf-key (second trie-keys)
                                   :page-idxs (doto (RoaringBitmap.) (.add 0)),
@@ -84,8 +84,8 @@
     (let [^IMetadataManager metadata-mgr (tu/component node ::meta/metadata-manager)]
       (t/is (= #{0 4} (set (keys (.chunksMetadata metadata-mgr)))))
 
-      (let [trie-keys [(trie/->table-trie-obj-key "xt_docs" (trie/->trie-id 0))
-                           (trie/->table-trie-obj-key "xt_docs" (trie/->trie-id 4))]
+      (let [trie-keys [(trie/->table-trie-obj-key "xt_docs" (trie/->trie-key 0))
+                           (trie/->table-trie-obj-key "xt_docs" (trie/->trie-key 4))]
             expected-match [(meta/map->TrieMatch
                              {:buf-key (first trie-keys)
                               :page-idxs (doto (RoaringBitmap.) (.add 0)),
