@@ -15,6 +15,13 @@ val defaultJvmArgs = listOf(
     "-XX:-OmitStackTraceInFastThrow",
 )
 
+val sixGBJvmArgs = listOf(
+    "-Xmx2g",
+    "-Xms2g",
+    "-XX:MaxDirectMemorySize=3g",
+    "-XX:MaxMetaspaceSize=1g"
+)
+
 allprojects {
     val proj = this
 
@@ -53,9 +60,7 @@ allprojects {
         }
 
         tasks.withType(Test::class) {
-            jvmArgs = defaultJvmArgs
-
-            maxHeapSize = "4g"
+            jvmArgs = defaultJvmArgs + sixGBJvmArgs
         }
 
         dependencies {
@@ -210,13 +215,11 @@ fun createSltTask(
     maxFailures: Long = 0,
     maxErrors: Long = 0,
     testFiles: List<String>,
-    maxHeapSize: String = "4g"
 ) {
     tasks.create(taskName, JavaExec::class) {
         classpath = sourceSets.test.get().runtimeClasspath
         mainClass.set("clojure.main")
-        this.maxHeapSize = maxHeapSize
-        jvmArgs(defaultJvmArgs)
+        jvmArgs(defaultJvmArgs + sixGBJvmArgs)
         this.args = listOf(
             "-m", "xtdb.sql.logic-test.runner",
             "--verify",
@@ -258,7 +261,6 @@ createSltTask(
     "slt-nightly",
     maxFailures = Long.MAX_VALUE,
     maxErrors = Long.MAX_VALUE,
-    maxHeapSize = "6g",
     testFiles = listOf(
         "random/expr/",
         "random/aggregates/",
