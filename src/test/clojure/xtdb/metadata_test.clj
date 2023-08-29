@@ -127,7 +127,7 @@
           literal-selector (expr.meta/->metadata-selector '(and (< xt/id 11) (> xt/id 9)) '{xt/id :i64} {})
           res (first (meta/matching-tries metadata-mgr [(trie/->table-trie-obj-key "xt_docs" (trie/->trie-key 0))] literal-selector))]
 
-      (t/is (= {:buf-key "tables/xt_docs/chunks/trie-c00.arrow"
+      (t/is (= {:buf-key "tables/xt_docs/log-tries/trie-c00.arrow"
                 :col-names
                 #{"xt$iid" "xt$valid_to" "xt$valid_from" "xt$id" "xt$system_from"}}
                (dissoc res :page-idxs)))
@@ -142,7 +142,7 @@
   (let [^IMetadataManager metadata-mgr (tu/component tu/*node* ::meta/metadata-manager)
         true-selector (expr.meta/->metadata-selector '(= boolean-or-int true) '{boolean-or-int :bool} {})
         res (first (meta/matching-tries metadata-mgr [(trie/->table-trie-obj-key "xt_docs" (trie/->trie-key 0))] true-selector))]
-    (t/is (= {:buf-key "tables/xt_docs/chunks/trie-c00.arrow",
+    (t/is (= {:buf-key "tables/xt_docs/log-tries/trie-c00.arrow",
               :col-names
               #{"xt$iid" "xt$valid_to" "xt$valid_from" "xt$id" "xt$system_from" "boolean_or_int"}}
              (dissoc res :page-idxs)))

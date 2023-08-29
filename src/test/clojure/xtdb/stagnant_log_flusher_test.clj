@@ -166,7 +166,7 @@
 
 (defn chunk-path-seq [node]
   (let [obj (tu/component node :xtdb.object-store/memory-object-store)]
-    (filter #(re-matches #"tables/foo/chunks/trie(.*)" %) (.listObjects ^ObjectStore obj))))
+    (filter #(re-matches #"tables/foo/log-tries/trie(.*)" %) (.listObjects ^ObjectStore obj))))
 
 (t/deftest indexer-flushes-block-and-chunk-if-flush-op-test
   (with-open [node (start-node #time/duration "PT0.001S")]

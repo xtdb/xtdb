@@ -209,10 +209,10 @@
   (format "c%s" (util/->lex-hex-string chunk-idx)))
 
 (defn ->table-leaf-obj-key [table-name trie-key]
-  (format "tables/%s/chunks/leaf-%s.arrow" table-name trie-key))
+  (format "tables/%s/log-leaves/leaf-%s.arrow" table-name trie-key))
 
 (defn ->table-trie-obj-key [table-name trie-key]
-  (format "tables/%s/chunks/trie-%s.arrow" table-name trie-key))
+  (format "tables/%s/log-tries/trie-%s.arrow" table-name trie-key))
 
 (defn write-trie-bufs! [^ObjectStore obj-store, ^String table-name, trie-key
                         {:keys [^ByteBuffer leaf-buf ^ByteBuffer trie-buf]}]
@@ -222,20 +222,13 @@
           (.putObject obj-store (->table-trie-obj-key table-name trie-key) trie-buf)))))
 
 (defn list-table-tries [^ObjectStore obj-store, table-name]
-  (->> (.listObjects obj-store (format "tables/%s/chunks" table-name))
+  (->> (.listObjects obj-store (format "tables/%s/log-tries" table-name))
        (keep (fn [file-name]
-               (when-let [[_ file-type chunk-idx-str] (re-find #"/(leaf|trie)-c(.+?)\.arrow$" file-name)]
-                 {:file-name file-name
-                  :file-type (case file-type "leaf" :leaf-file, "trie" :trie-file)
-                  :chunk-idx (util/<-lex-hex-string chunk-idx-str)})))
-       (group-by :chunk-idx)
-       (sort-by key)
-       (mapv (fn [[chunk-idx files]]
-               (persistent!
-                (reduce (fn [acc {:keys [file-name file-type]}]
-                          (assoc! acc file-type file-name))
-                        (transient {:chunk-idx chunk-idx})
-                        files))))))
+               (when-let [[_ trie-key] (re-find #"/trie-([^/]+?)\.arrow$" file-name)]
+                 {:trie-file file-name
+                  :trie-key trie-key})))
+       (sort-by :trie-key)
+       vec))
 
 (defn ->merge-plan
   "Returns a tree of the tasks required to merge the given tries "
@@ -341,16 +334,14 @@
   AutoCloseable
   (close [_]))
 
-(defn open-leaves [^IBufferPool buffer-pool, table-tries, ^ILiveTableWatermark live-table-wm]
+(defn open-leaves [^IBufferPool buffer-pool, table-name, table-tries, ^ILiveTableWatermark live-table-wm]
   (util/with-close-on-catch [leaf-bufs (ArrayList.)]
     ;; TODO get hold of these a page at a time if it's a small query,
     ;; rather than assuming we'll always have/use the whole file.
     (let [arrow-leaves (->> table-tries
                             (into [] (map-indexed
-                                      (fn [ordinal {:keys [chunk-idx leaf-file]}]
-                                        (assert leaf-file (format "can't find leaf file for chunk '%s'" chunk-idx))
-
-                                        (let [leaf-buf @(.getBuffer buffer-pool leaf-file)
+                                      (fn [ordinal {:keys [trie-key]}]
+                                        (let [leaf-buf @(.getBuffer buffer-pool (->table-leaf-obj-key table-name trie-key))
                                               {:keys [^VectorSchemaRoot root loader arrow-blocks]} (util/read-arrow-buf leaf-buf)]
                                           (.add leaf-bufs leaf-buf)
 

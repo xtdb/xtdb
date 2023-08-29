@@ -603,7 +603,7 @@
                        ;; is correct. For example if the `skip-iid-ptr` gets set in one leaf consumer it should also affect
                        ;; the skipping in another leaf consumer.
 
-                       (util/with-close-on-catch [leaves (trie/open-leaves buffer-pool table-chunks live-table-wm)]
+                       (util/with-close-on-catch [leaves (trie/open-leaves buffer-pool normalized-table-name table-chunks live-table-wm)]
                          (->TrieCursor allocator leaves (.iterator (let [^Iterable c (or (merge-plan->tasks merge-plan) [])] c))
                                        col-names col-preds
                                        (->temporal-range params basis scan-opts)
