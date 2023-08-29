@@ -154,13 +154,13 @@ class IndirectVectorReader implements IVectorReader {
     }
 
     @Override
-    public Keyword getLeg(int idx) {
+    public Field getLeg(int idx) {
         return reader.getLeg(indirection.getIndex(idx));
     }
 
     @Override
-    public Collection<Keyword> legs() {
-        return reader.legs();
+    public Collection<IVectorReader> legs() {
+        return reader.legs().stream().map(r -> (IVectorReader) new IndirectVectorReader(r, indirection)).toList();
     }
 
     @Override

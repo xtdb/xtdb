@@ -136,7 +136,7 @@ public class RenamedVectorReader implements IVectorReader {
     }
 
     @Override
-    public Keyword getLeg(int idx) {
+    public Field getLeg(int idx) {
         return reader.getLeg(idx);
     }
 
@@ -151,7 +151,7 @@ public class RenamedVectorReader implements IVectorReader {
     }
 
     @Override
-    public Collection<Keyword> legs() {
+    public Collection<IVectorReader> legs() {
         return reader.legs();
     }
 

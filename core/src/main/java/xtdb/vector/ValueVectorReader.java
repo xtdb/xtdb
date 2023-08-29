@@ -22,11 +22,9 @@ import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.time.*;
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
-import static java.lang.String.format;
 import static java.time.temporal.ChronoUnit.MICROS;
 
 public class ValueVectorReader implements IVectorReader {
@@ -34,7 +32,6 @@ public class ValueVectorReader implements IVectorReader {
     private static final IFn POLY_READER = Clojure.var("xtdb.vector", "->poly-reader");
     private static final IFn VEC_TO_READER = Clojure.var("xtdb.vector.reader", "vec->reader");
 
-    private static final Keyword NULL_KEYWORD = Keyword.intern("null");
     private static final Keyword ABSENT_KEYWORD = Keyword.intern("xtdb", "absent");
 
     public static IVectorReader from(ValueVector v) {
@@ -42,11 +39,9 @@ public class ValueVectorReader implements IVectorReader {
     }
 
     private final ValueVector vector;
-    private final Keyword leg;
 
-    public ValueVectorReader(ValueVector vector, Keyword leg) {
+    public ValueVectorReader(ValueVector vector) {
         this.vector = vector;
-        this.leg = leg;
     }
 
     @Override
@@ -181,13 +176,13 @@ public class ValueVectorReader implements IVectorReader {
     }
 
     @Override
-    public Keyword getLeg(int idx) {
-        return isNull(idx) ? NULL_KEYWORD : leg;
+    public Field getLeg(int idx) {
+        return getField();
     }
 
     @Override
-    public Collection<Keyword> legs() {
-        return null;
+    public Collection<IVectorReader> legs() {
+        throw unsupported();
     }
 
     @Override
@@ -197,8 +192,7 @@ public class ValueVectorReader implements IVectorReader {
 
     @Override
     public IVectorReader legReader(Keyword legKey) {
-        if (this.leg.equals(legKey)) return this;
-        throw new UnsupportedOperationException(format("leg=%s, legKey=%s", leg, legKey));
+        throw unsupported();
     }
 
     @Override
@@ -245,8 +239,8 @@ public class ValueVectorReader implements IVectorReader {
         return "(ValueVectorReader {vector=%s})".formatted(vector);
     }
 
-    public static IVectorReader nullVector(NullVector v, Keyword leg) {
-        return new ValueVectorReader(v, leg) {
+    public static IVectorReader nullVector(NullVector v) {
+        return new ValueVectorReader(v) {
             @Override
             public int hashCode(int idx, ArrowBufHasher hasher) {
                 // Until https://github.com/apache/arrow/pull/35590 is merged, Arrow 13.
@@ -255,8 +249,8 @@ public class ValueVectorReader implements IVectorReader {
         };
     }
 
-    public static IVectorReader absentVector(AbsentVector v, Keyword leg) {
-        return new ValueVectorReader(v, leg) {
+    public static IVectorReader absentVector(AbsentVector v) {
+        return new ValueVectorReader(v) {
             @Override
             public Object getObject(int idx) {
                 return ABSENT_KEYWORD;
@@ -269,8 +263,8 @@ public class ValueVectorReader implements IVectorReader {
         };
     }
 
-    public static IVectorReader bitVector(BitVector v, Keyword leg) {
-        return new ValueVectorReader(v, leg) {
+    public static IVectorReader bitVector(BitVector v) {
+        return new ValueVectorReader(v) {
             @Override
             public boolean getBoolean(int idx) {
                 return v.get(idx) != 0;
@@ -283,8 +277,8 @@ public class ValueVectorReader implements IVectorReader {
         };
     }
 
-    public static IVectorReader tinyIntVector(TinyIntVector v, Keyword leg) {
-        return new ValueVectorReader(v, leg) {
+    public static IVectorReader tinyIntVector(TinyIntVector v) {
+        return new ValueVectorReader(v) {
             @Override
             public byte getByte(int idx) {
                 return v.get(idx);
@@ -292,8 +286,8 @@ public class ValueVectorReader implements IVectorReader {
         };
     }
 
-    public static IVectorReader smallIntVector(SmallIntVector v, Keyword leg) {
-        return new ValueVectorReader(v, leg) {
+    public static IVectorReader smallIntVector(SmallIntVector v) {
+        return new ValueVectorReader(v) {
             @Override
             public short getShort(int idx) {
                 return v.get(idx);
@@ -301,8 +295,8 @@ public class ValueVectorReader implements IVectorReader {
         };
     }
 
-    public static IVectorReader intVector(IntVector v, Keyword leg) {
-        return new ValueVectorReader(v, leg) {
+    public static IVectorReader intVector(IntVector v) {
+        return new ValueVectorReader(v) {
             @Override
             public int getInt(int idx) {
                 return v.get(idx);
@@ -310,8 +304,8 @@ public class ValueVectorReader implements IVectorReader {
         };
     }
 
-    public static IVectorReader bigIntVector(BigIntVector v, Keyword leg) {
-        return new ValueVectorReader(v, leg) {
+    public static IVectorReader bigIntVector(BigIntVector v) {
+        return new ValueVectorReader(v) {
             @Override
             public long getLong(int idx) {
                 return v.get(idx);
@@ -319,8 +313,8 @@ public class ValueVectorReader implements IVectorReader {
         };
     }
 
-    public static IVectorReader float4Vector(Float4Vector v, Keyword leg) {
-        return new ValueVectorReader(v, leg) {
+    public static IVectorReader float4Vector(Float4Vector v) {
+        return new ValueVectorReader(v) {
             @Override
             public float getFloat(int idx) {
                 return v.get(idx);
@@ -328,8 +322,8 @@ public class ValueVectorReader implements IVectorReader {
         };
     }
 
-    public static IVectorReader float8Vector(Float8Vector v, Keyword leg) {
-        return new ValueVectorReader(v, leg) {
+    public static IVectorReader float8Vector(Float8Vector v) {
+        return new ValueVectorReader(v) {
             @Override
             public double getDouble(int idx) {
                 return v.get(idx);
@@ -343,8 +337,8 @@ public class ValueVectorReader implements IVectorReader {
         return abp.getBuf().nioBuffer(abp.getOffset(), (int) abp.getLength());
     }
 
-    public static IVectorReader varCharVector(VarCharVector v, Keyword leg) {
-        return new ValueVectorReader(v, leg) {
+    public static IVectorReader varCharVector(VarCharVector v) {
+        return new ValueVectorReader(v) {
             @Override
             public ByteBuffer getBytes(int idx) {
                 return getBytes(v, idx);
@@ -357,8 +351,8 @@ public class ValueVectorReader implements IVectorReader {
         };
     }
 
-    public static IVectorReader varBinaryVector(VarBinaryVector v, Keyword leg) {
-        return new ValueVectorReader(v, leg) {
+    public static IVectorReader varBinaryVector(VarBinaryVector v) {
+        return new ValueVectorReader(v) {
             @Override
             public ByteBuffer getBytes(int idx) {
                 return getBytes(v, idx);
@@ -371,8 +365,8 @@ public class ValueVectorReader implements IVectorReader {
         };
     }
 
-    public static IVectorReader fixedSizeBinaryVector(FixedSizeBinaryVector v, Keyword leg) {
-        return new ValueVectorReader(v, leg) {
+    public static IVectorReader fixedSizeBinaryVector(FixedSizeBinaryVector v) {
+        return new ValueVectorReader(v) {
             @Override
             public ByteBuffer getBytes(int idx) {
                 return getBytes(v, idx);
@@ -385,8 +379,8 @@ public class ValueVectorReader implements IVectorReader {
         };
     }
 
-    public static IVectorReader dateDayVector(DateDayVector v, Keyword leg) {
-        return new ValueVectorReader(v, leg) {
+    public static IVectorReader dateDayVector(DateDayVector v) {
+        return new ValueVectorReader(v) {
             @Override
             public int getInt(int idx) {
                 return v.get(idx);
@@ -399,8 +393,8 @@ public class ValueVectorReader implements IVectorReader {
         };
     }
 
-    public static IVectorReader dateMilliVector(DateMilliVector v, Keyword leg) {
-        return new ValueVectorReader(v, leg) {
+    public static IVectorReader dateMilliVector(DateMilliVector v) {
+        return new ValueVectorReader(v) {
             @Override
             public int getInt(int idx) {
                 return (int) (v.get(idx) / 86_400_000);
@@ -417,8 +411,8 @@ public class ValueVectorReader implements IVectorReader {
         return ZoneId.of(((ArrowType.Timestamp) v.getField().getType()).getTimezone());
     }
 
-    public static IVectorReader timestampSecTzVector(TimeStampSecTZVector v, Keyword leg) {
-        return new ValueVectorReader(v, leg) {
+    public static IVectorReader timestampSecTzVector(TimeStampSecTZVector v) {
+        return new ValueVectorReader(v) {
             @Override
             public long getLong(int idx) {
                 return v.get(idx);
@@ -431,8 +425,8 @@ public class ValueVectorReader implements IVectorReader {
         };
     }
 
-    public static IVectorReader timestampMilliTzVector(TimeStampMilliTZVector v, Keyword leg) {
-        return new ValueVectorReader(v, leg) {
+    public static IVectorReader timestampMilliTzVector(TimeStampMilliTZVector v) {
+        return new ValueVectorReader(v) {
             @Override
             public long getLong(int idx) {
                 return v.get(idx);
@@ -445,8 +439,8 @@ public class ValueVectorReader implements IVectorReader {
         };
     }
 
-    public static IVectorReader timestampMicroTzVector(TimeStampMicroTZVector v, Keyword leg) {
-        return new ValueVectorReader(v, leg) {
+    public static IVectorReader timestampMicroTzVector(TimeStampMicroTZVector v) {
+        return new ValueVectorReader(v) {
             @Override
             public long getLong(int idx) {
                 return v.get(idx);
@@ -459,8 +453,8 @@ public class ValueVectorReader implements IVectorReader {
         };
     }
 
-    public static IVectorReader timestampNanoTzVector(TimeStampNanoTZVector v, Keyword leg) {
-        return new ValueVectorReader(v, leg) {
+    public static IVectorReader timestampNanoTzVector(TimeStampNanoTZVector v) {
+        return new ValueVectorReader(v) {
             @Override
             public long getLong(int idx) {
                 return v.get(idx);
@@ -473,8 +467,8 @@ public class ValueVectorReader implements IVectorReader {
         };
     }
 
-    public static IVectorReader timeSecVector(TimeSecVector v, Keyword leg) {
-        return new ValueVectorReader(v, leg) {
+    public static IVectorReader timeSecVector(TimeSecVector v) {
+        return new ValueVectorReader(v) {
             @Override
             public long getLong(int idx) {
                 return v.get(idx);
@@ -487,8 +481,8 @@ public class ValueVectorReader implements IVectorReader {
         };
     }
 
-    public static IVectorReader timeMilliVector(TimeMilliVector v, Keyword leg) {
-        return new ValueVectorReader(v, leg) {
+    public static IVectorReader timeMilliVector(TimeMilliVector v) {
+        return new ValueVectorReader(v) {
             @Override
             public int getInt(int idx) {
                 return v.get(idx);
@@ -501,8 +495,8 @@ public class ValueVectorReader implements IVectorReader {
         };
     }
 
-    public static IVectorReader timeMicroVector(TimeMicroVector v, Keyword leg) {
-        return new ValueVectorReader(v, leg) {
+    public static IVectorReader timeMicroVector(TimeMicroVector v) {
+        return new ValueVectorReader(v) {
             @Override
             public long getLong(int idx) {
                 return v.get(idx);
@@ -515,8 +509,8 @@ public class ValueVectorReader implements IVectorReader {
         };
     }
 
-    public static IVectorReader timeNanoVector(TimeNanoVector v, Keyword leg) {
-        return new ValueVectorReader(v, leg) {
+    public static IVectorReader timeNanoVector(TimeNanoVector v) {
+        return new ValueVectorReader(v) {
             @Override
             public long getLong(int idx) {
                 return v.get(idx);
@@ -529,8 +523,8 @@ public class ValueVectorReader implements IVectorReader {
         };
     }
 
-    public static IVectorReader intervalYearVector(IntervalYearVector v, Keyword leg) {
-        return new ValueVectorReader(v, leg) {
+    public static IVectorReader intervalYearVector(IntervalYearVector v) {
+        return new ValueVectorReader(v) {
             @Override
             public int getInt(int idx) {
                 return v.get(idx);
@@ -543,10 +537,10 @@ public class ValueVectorReader implements IVectorReader {
         };
     }
 
-    public static IVectorReader intervalDayVector(IntervalDayVector v, Keyword leg) {
+    public static IVectorReader intervalDayVector(IntervalDayVector v) {
         var holder = new NullableIntervalDayHolder();
 
-        return new ValueVectorReader(v, leg) {
+        return new ValueVectorReader(v) {
             @Override
             Object getObject0(int idx) {
                 v.get(idx, holder);
@@ -555,10 +549,10 @@ public class ValueVectorReader implements IVectorReader {
         };
     }
 
-    public static IVectorReader intervalMdnVector(IntervalMonthDayNanoVector v, Keyword leg) {
+    public static IVectorReader intervalMdnVector(IntervalMonthDayNanoVector v) {
         var holder = new NullableIntervalMonthDayNanoHolder();
 
-        return new ValueVectorReader(v, leg) {
+        return new ValueVectorReader(v) {
             @Override
             Object getObject0(int idx) {
                 v.get(idx, holder);
@@ -567,11 +561,11 @@ public class ValueVectorReader implements IVectorReader {
         };
     }
 
-    public static IVectorReader structVector(StructVector v, Keyword leg) {
+    public static IVectorReader structVector(StructVector v) {
         var childVecs = v.getChildrenFromFields();
         var rdrs = childVecs.stream().collect(Collectors.toMap(ValueVector::getName, ValueVectorReader::from));
 
-        return new ValueVectorReader(v, leg) {
+        return new ValueVectorReader(v) {
             @Override
             public Collection<String> structKeys() {
                 return rdrs.keySet();
@@ -596,12 +590,10 @@ public class ValueVectorReader implements IVectorReader {
         };
     }
 
-    private static final Keyword LIST_LEG = Keyword.intern("list");
-
     public static IVectorReader listVector(ListVector v) {
         var elReader = from(v.getDataVector());
 
-        return new ValueVectorReader(v, LIST_LEG) {
+        return new ValueVectorReader(v) {
             @Override
             Object getObject0(int idx) {
                 var startIdx = getListStartIndex(idx);
@@ -628,10 +620,10 @@ public class ValueVectorReader implements IVectorReader {
         };
     }
 
-    public static IVectorReader setVector(SetVector v, Keyword leg) {
+    public static IVectorReader setVector(SetVector v) {
         var listReader = listVector(v.getUnderlyingVector());
 
-        return new ValueVectorReader(v, leg) {
+        return new ValueVectorReader(v) {
             @Override
             Object getObject0(int idx) {
                 return PersistentHashSet.create((List<?>) listReader.getObject(idx));
@@ -669,19 +661,20 @@ public class ValueVectorReader implements IVectorReader {
     public static class DuvReader extends ValueVectorReader {
         private final DenseUnionVector v;
 
+        private final List<? extends ValueVector> children;
         private final List<Keyword> legs;
         private final IVectorReader[] legReaders;
 
         private DuvReader(DenseUnionVector v) {
             // getLeg is overridden here, so we never use the `leg` field in this case.
-            super(v, null);
+            super(v);
             this.v = v;
 
-            var children = v.getChildrenFromFields();
+            // only using getChildrenFromFields because DUV.getField is so expensive.
+            this.children = v.getChildrenFromFields();
+            this.legs = children.stream().map(c -> Keyword.intern(c.getName())).toList();
 
             this.legReaders = new IVectorReader[children.size()];
-
-            this.legs = children.stream().map(f -> Keyword.intern(f.getName())).toList();
         }
 
         @Override
@@ -700,8 +693,8 @@ public class ValueVectorReader implements IVectorReader {
         }
 
         @Override
-        public Keyword getLeg(int idx) {
-            return legs.get(v.getTypeId(idx));
+        public Field getLeg(int idx) {
+            return children.get(getTypeId(idx)).getField();
         }
 
         @Override
@@ -719,16 +712,18 @@ public class ValueVectorReader implements IVectorReader {
                 reader = legReaders[typeId];
                 if (reader != null) return reader;
 
-                var childVec = v.getChild(legs.get(typeId).sym.toString());
+                var childVec = children.get(typeId);
                 reader = new IndirectVectorReader(from(childVec), new DuvIndirection(v, typeId));
+                if (this.valueCount() != reader.valueCount())
+                    throw new RuntimeException("boom %d %d".formatted(valueCount(), reader.valueCount()));
                 legReaders[typeId] = reader;
                 return reader;
             }
         }
 
         @Override
-        public Collection<Keyword> legs() {
-            return legs;
+        public Collection<IVectorReader> legs() {
+            return legs.stream().map(this::legReader).toList();
         }
     }
 

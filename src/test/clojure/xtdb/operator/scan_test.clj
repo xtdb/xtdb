@@ -6,7 +6,6 @@
             [xtdb.operator.scan :as scan]
             [xtdb.test-util :as tu]
             [xtdb.util :as util]
-            [xtdb.vector.reader :as vr]
             [xtdb.vector.writer :as vw])
   (:import (java.util LinkedList)
            xtdb.operator.IRaQuerySource

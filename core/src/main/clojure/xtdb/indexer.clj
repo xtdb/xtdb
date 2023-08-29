@@ -72,9 +72,8 @@
         valid-to-rdr (.structKeyReader put-leg "xt$valid_to")
         system-time-µs (util/instant->micros system-time)
         tables (->> (.legs doc-rdr)
-                    (mapv (fn [table-leg] ; haha
-                            (let [table-rdr (.legReader doc-rdr table-leg)
-                                  table-name (.getName table-rdr)
+                    (mapv (fn [^IVectorReader table-rdr]
+                            (let [table-name (.getName table-rdr)
                                   table-rel-rdr (vr/rel-reader (for [sk (.structKeys table-rdr)]
                                                                  (.structKeyReader table-rdr sk))
                                                                (.valueCount table-rdr))
@@ -283,9 +282,7 @@
               table (util/str->normal-form-str table)
               id-col (.readerForName in-rel "xt$id")
               valid-from-rdr (.readerForName in-rel "xt$valid_from")
-              valid-from-ts-rdr (some-> valid-from-rdr (.legReader :timestamp-tz-micro-utc))
               valid-to-rdr (.readerForName in-rel "xt$valid_to")
-              valid-to-ts-rdr (some-> valid-to-rdr (.legReader :timestamp-tz-micro-utc))
 
               live-idx-table (.liveTable live-idx-tx table)
               live-idx-table-copier (-> (.docWriter live-idx-table)
@@ -294,10 +291,10 @@
           (dotimes [idx row-count]
             (let [eid (.getObject id-col idx)
                   valid-from (if (and valid-from-rdr (not (.isNull valid-from-rdr idx)))
-                               (.getLong valid-from-ts-rdr idx)
+                               (.getLong valid-from-rdr idx)
                                current-time-µs)
                   valid-to (if (and valid-to-rdr (not (.isNull valid-to-rdr idx)))
-                             (.getLong valid-to-ts-rdr idx)
+                             (.getLong valid-to-rdr idx)
                              util/end-of-time-μs)]
               (when (> valid-from valid-to)
                 (throw (err/runtime-err :xtdb.indexer/invalid-valid-times

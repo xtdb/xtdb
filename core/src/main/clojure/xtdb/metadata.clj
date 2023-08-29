@@ -220,8 +220,7 @@
 
             (write-col-meta! [root-col?, ^IVectorReader content-col]
               (let [content-writers (if (instance? ArrowType$Union (.getType (.getField content-col)))
-                                      (->> (.legs content-col)
-                                           (mapv (comp ->nested-meta-writer #(.legReader content-col %))))
+                                      (mapv ->nested-meta-writer (.legs content-col))
                                       [(->nested-meta-writer content-col)])]
 
                 (.startStruct col-wtr)

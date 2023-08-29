@@ -12,7 +12,7 @@
            (java.util.stream IntStream)
            (org.apache.arrow.memory BufferAllocator)
            (org.apache.arrow.vector IntVector)
-           [org.apache.arrow.vector.types.pojo Field]
+           [org.apache.arrow.vector.types.pojo ArrowType$List ArrowType$Union Field]
            (xtdb ICursor)
            (xtdb.vector RelationReader IVectorReader IVectorWriter)))
 
@@ -40,7 +40,9 @@
                                    (let [^RelationReader in-rel in-rel
                                          out-cols (LinkedList.)
                                          vec-rdr (.readerForName in-rel from-column-name)
-                                         list-rdr (.legReader vec-rdr :list)
+                                         list-rdr (cond-> vec-rdr
+                                                    (instance? ArrowType$Union (.getType (.getField vec-rdr)))
+                                                    (.legReader :list))
                                          el-rdr (some-> list-rdr .listElementReader)
                                          idxs (IntStream/builder)
 
@@ -57,7 +59,7 @@
                                          (let [out-writer (vw/->writer out-vec)
                                                el-copier (.rowCopier el-rdr out-writer)]
                                            (dotimes [n (.valueCount vec-rdr)]
-                                             (when (= :list (.getLeg list-rdr n))
+                                             (when (instance? ArrowType$List (.getType (.getLeg list-rdr n)))
                                                (let [len (.getListCount list-rdr n)
                                                      start-pos (.getListStartIndex list-rdr n)]
                                                  (dotimes [el-idx len]
