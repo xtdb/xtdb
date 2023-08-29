@@ -14,6 +14,7 @@
            [java.nio.file CopyOption Files FileVisitOption LinkOption OpenOption Path Paths StandardOpenOption]
            java.nio.file.attribute.FileAttribute
            [java.time Duration Instant]
+           [java.time.temporal TemporalAmount]
            [java.util.concurrent Executors TimeUnit]
            java.util.Date))
 
@@ -59,7 +60,7 @@
       to-check
       (let [earliest-acceptable-date (-> (Date.)
                                          (.toInstant)
-                                         (.minus retain-newer-than)
+                                         (.minus ^TemporalAmount retain-newer-than)
                                          (Date/from))
             checkpoint-newer-than-date (fn [{::keys [^Date checkpoint-at]}]
                                          (.before earliest-acceptable-date checkpoint-at))]
