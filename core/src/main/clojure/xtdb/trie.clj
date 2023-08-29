@@ -223,14 +223,33 @@
         (fn [_]
           (.putObject obj-store (->table-trie-obj-key table-name trie-key) trie-buf)))))
 
-(defn list-table-tries [^ObjectStore obj-store, table-name]
-  (->> (.listObjects obj-store (format "tables/%s/log-tries" table-name))
-       (keep (fn [file-name]
-               (when-let [[_ trie-key] (re-find #"/log-tries/trie-([^/]+?)\.arrow$" file-name)]
-                 {:trie-file file-name
-                  :trie-key trie-key})))
-       (sort-by :trie-key)
-       vec))
+(defn- parse-trie-filename [file-name]
+  (when-let [[_ trie-key level-str row-from-str row-to-str] (re-find #"/log-tries/trie-(l(\p{XDigit}+)-cf(\p{XDigit}+)-ct(\p{XDigit}+)+?)\.arrow$" file-name)]
+    {:trie-file file-name
+     :trie-key trie-key
+     :level (util/<-lex-hex-string level-str)
+     :row-from (util/<-lex-hex-string row-from-str)
+     :row-to (util/<-lex-hex-string row-to-str)}))
+
+(defn current-table-tries [trie-files]
+  (loop [next-row 0
+         [table-tries & more-levels] (->> trie-files
+                                          (group-by :level)
+                                          (sort-by key #(Long/compare %2 %1))
+                                          (vals))
+         res []]
+    (if-not table-tries
+      res
+      (if-let [tries (not-empty
+                      (->> table-tries
+                           (into [] (drop-while (fn [{:keys [^long row-from]}]
+                                                  (< row-from next-row))))))]
+        (recur (long (:row-to (first (rseq tries)))) more-levels (into res tries))
+        (recur next-row more-levels res)))))
+
+(defn list-table-trie-files [^ObjectStore obj-store, table-name]
+  (->> (sort (.listObjects obj-store (format "tables/%s/log-tries" table-name)))
+       (into [] (keep parse-trie-filename))))
 
 (defn ->merge-plan
   "Returns a tree of the tasks required to merge the given tries "

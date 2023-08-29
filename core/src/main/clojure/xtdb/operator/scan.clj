@@ -591,7 +591,8 @@
                                                  (fn [fvt]
                                                    (or fvt (if default-all-valid-time? [:all-time] [:at [:now :now]])))))
                            ^ILiveTableWatermark live-table-wm (some-> (.liveIndex watermark) (.liveTable normalized-table-name))
-                           table-tries (trie/list-table-tries object-store normalized-table-name)
+                           table-tries (->> (trie/list-table-trie-files object-store normalized-table-name)
+                                            (trie/current-table-tries))
                            trie-file->page-idxs (->> (meta/matching-tries metadata-mgr (map :trie-file table-tries) metadata-pred)
                                                      (filter #(not-empty (set/intersection normalized-col-names (:col-names %))))
                                                      (map (partial filter-trie-match metadata-mgr col-names))
