@@ -1,0 +1,268 @@
+{
+  "schema" : {
+    "fields" : [{
+      "name" : "nodes",
+      "nullable" : false,
+      "type" : {
+        "name" : "union",
+        "mode" : "Dense",
+        "typeIds" : [0,1,2]
+      },
+      "children" : [{
+        "name" : "nil",
+        "nullable" : true,
+        "type" : {
+          "name" : "null"
+        },
+        "children" : [ ]
+      },{
+        "name" : "branch",
+        "nullable" : false,
+        "type" : {
+          "name" : "list"
+        },
+        "children" : [{
+          "name" : "$data$",
+          "nullable" : true,
+          "type" : {
+            "name" : "int",
+            "bitWidth" : 32,
+            "isSigned" : true
+          },
+          "children" : [ ]
+        }]
+      },{
+        "name" : "leaf",
+        "nullable" : false,
+        "type" : {
+          "name" : "struct"
+        },
+        "children" : [{
+          "name" : "page-idx",
+          "nullable" : false,
+          "type" : {
+            "name" : "int",
+            "bitWidth" : 32,
+            "isSigned" : true
+          },
+          "children" : [ ]
+        },{
+          "name" : "columns",
+          "nullable" : false,
+          "type" : {
+            "name" : "list"
+          },
+          "children" : [{
+            "name" : "$data$",
+            "nullable" : false,
+            "type" : {
+              "name" : "struct"
+            },
+            "children" : [{
+              "name" : "col-name",
+              "nullable" : false,
+              "type" : {
+                "name" : "utf8"
+              },
+              "children" : [ ]
+            },{
+              "name" : "root-col?",
+              "nullable" : false,
+              "type" : {
+                "name" : "bool"
+              },
+              "children" : [ ]
+            },{
+              "name" : "count",
+              "nullable" : false,
+              "type" : {
+                "name" : "int",
+                "bitWidth" : 64,
+                "isSigned" : true
+              },
+              "children" : [ ]
+            },{
+              "name" : "types",
+              "nullable" : false,
+              "type" : {
+                "name" : "struct"
+              },
+              "children" : [{
+                "name" : "timestamp-tz-micro-utc",
+                "nullable" : true,
+                "type" : {
+                  "name" : "struct"
+                },
+                "children" : [{
+                  "name" : "min",
+                  "nullable" : true,
+                  "type" : {
+                    "name" : "timestamp",
+                    "unit" : "MICROSECOND",
+                    "timezone" : "UTC"
+                  },
+                  "children" : [ ]
+                },{
+                  "name" : "max",
+                  "nullable" : true,
+                  "type" : {
+                    "name" : "timestamp",
+                    "unit" : "MICROSECOND",
+                    "timezone" : "UTC"
+                  },
+                  "children" : [ ]
+                }]
+              },{
+                "name" : "fixed-size-binary",
+                "nullable" : true,
+                "type" : {
+                  "name" : "bool"
+                },
+                "children" : [ ]
+              },{
+                "name" : "i64",
+                "nullable" : true,
+                "type" : {
+                  "name" : "struct"
+                },
+                "children" : [{
+                  "name" : "min",
+                  "nullable" : true,
+                  "type" : {
+                    "name" : "int",
+                    "bitWidth" : 64,
+                    "isSigned" : true
+                  },
+                  "children" : [ ]
+                },{
+                  "name" : "max",
+                  "nullable" : true,
+                  "type" : {
+                    "name" : "int",
+                    "bitWidth" : 64,
+                    "isSigned" : true
+                  },
+                  "children" : [ ]
+                }]
+              }]
+            },{
+              "name" : "bloom",
+              "nullable" : true,
+              "type" : {
+                "name" : "binary"
+              },
+              "children" : [ ]
+            }]
+          }]
+        }]
+      }]
+    }]
+  },
+  "batches" : [{
+    "count" : 1,
+    "columns" : [{
+      "name" : "nodes",
+      "count" : 1,
+      "TYPE_ID" : [2],
+      "OFFSET" : [0],
+      "children" : [{
+        "name" : "nil",
+        "count" : 0
+      },{
+        "name" : "branch",
+        "count" : 0,
+        "VALIDITY" : [ ],
+        "OFFSET" : [0],
+        "children" : [{
+          "name" : "$data$",
+          "count" : 0,
+          "VALIDITY" : [ ],
+          "DATA" : [ ]
+        }]
+      },{
+        "name" : "leaf",
+        "count" : 1,
+        "VALIDITY" : [1],
+        "children" : [{
+          "name" : "page-idx",
+          "count" : 1,
+          "VALIDITY" : [1],
+          "DATA" : [0]
+        },{
+          "name" : "columns",
+          "count" : 1,
+          "VALIDITY" : [1],
+          "OFFSET" : [0,5],
+          "children" : [{
+            "name" : "$data$",
+            "count" : 5,
+            "VALIDITY" : [1,1,1,1,1],
+            "children" : [{
+              "name" : "col-name",
+              "count" : 5,
+              "VALIDITY" : [1,1,1,1,1],
+              "OFFSET" : [0,14,20,33,44,49],
+              "DATA" : ["xt$system_from","xt$iid","xt$valid_from","xt$valid_to","xt$id"]
+            },{
+              "name" : "root-col?",
+              "count" : 5,
+              "VALIDITY" : [1,1,1,1,1],
+              "DATA" : [1,1,1,1,1]
+            },{
+              "name" : "count",
+              "count" : 5,
+              "VALIDITY" : [1,1,1,1,1],
+              "DATA" : ["248","248","248","248","248"]
+            },{
+              "name" : "types",
+              "count" : 5,
+              "VALIDITY" : [1,1,1,1,1],
+              "children" : [{
+                "name" : "timestamp-tz-micro-utc",
+                "count" : 5,
+                "VALIDITY" : [1,0,1,1,0],
+                "children" : [{
+                  "name" : "min",
+                  "count" : 5,
+                  "VALIDITY" : [1,0,1,1,0],
+                  "DATA" : [1577836800000000,0,1577836800000000,253402300799999999,0]
+                },{
+                  "name" : "max",
+                  "count" : 5,
+                  "VALIDITY" : [1,0,1,1,0],
+                  "DATA" : [1580515200000000,0,1580515200000000,253402300799999999,0]
+                }]
+              },{
+                "name" : "fixed-size-binary",
+                "count" : 5,
+                "VALIDITY" : [0,1,0,0,0],
+                "DATA" : [0,1,0,0,0]
+              },{
+                "name" : "i64",
+                "count" : 5,
+                "VALIDITY" : [0,0,0,0,1],
+                "children" : [{
+                  "name" : "min",
+                  "count" : 5,
+                  "VALIDITY" : [0,0,0,0,1],
+                  "DATA" : ["0","0","0","0","0"]
+                },{
+                  "name" : "max",
+                  "count" : 5,
+                  "VALIDITY" : [0,0,0,0,1],
+                  "DATA" : ["0","0","0","0","247"]
+                }]
+              }]
+            },{
+              "name" : "bloom",
+              "count" : 5,
+              "VALIDITY" : [1,1,1,1,1],
+              "OFFSET" : [0,328,1952,2280,2310,3932],
+              "DATA" : ["3a30000010000000000005000100040002000a00030006000400070005000400060005000700040008000300090006000a0003000b0004000c0004000d0003000e0008000f00040088000000940000009e000000b4000000c2000000d2000000dc000000e8000000f2000000fa00000008010000100100001a010000240100002c0100003e010000c4024e70afbca9db50ebf7fab81f0237b93fd19b69ec641d5c275e3c3846595b59606f65998094affdef0af4811b371cc44d8c83e29ecdef86fc0a1b221c582a31341c3b9c79429327fd317050bd4adc57f945fbe4259a388350d77c9a8536a7ff3c7a46fa5bb38ab1a09b5c957b40d1e9fa4c01ae0ec31cbd3bce506ff2d1f4f583729ce5ad6dbb260b787d939792f616ff7c3a2a6e986e2082309b3c5d367cfd9133c42e03d4043426fa4e81716e90ebdc71e0e6fb56278c96139d0ebc08db","3a3000001000000000003a000100340002002c00030028000400240005002b000600290007002a0008003100090035000a002b000b0033000c0031000d002e000e002c000f00250088000000fe00000068010000c2010000140200005e020000b60200000a03000060030000c40300003004000088040000f004000054050000b20500000c060000af0ec5111e139216b01ac21a071b041df5253c2d523140320b37b439943aff3a013b1d43d6458a464449014db8521455635f666185612b694269c56a616cb26dfd6d8e6e37717376c783bf8d468e3691fc96d698fa9ba4ac4cad06b22eb681b908bb7bbffebfe0c132c681c85ddd3fe7a7e9beef55f37c044312f413fc14021534188a1ad61a3e1d50254728312a97350f3c5f3d334154444d56ab585e5ae75b585db55fba636f66a969d683c087908b2d940497819cf19f13a907ac5dad70adc2ae2eb4b1bb59c6cfc7cdc99ace25d73bd8bfe4d5e6b0eb84ee8ff296f451f7290541062f07760ebb18241907209823752ba630f2381a3a8a3bd13c7d439b4db35b17634d66e267c97d697e29817f9469950396f1af11b8c8b831c102c398c489c64ec95bccf3d454df70e3e9ea0feb3fed02f38efc5dffffff1004dc05bc117b267136d737b047a14afa508964e16863690b6ba96b0f6eaf6fba7b8f7d48822c86eb8bcd8dcd958fa1d1a220b23fb57db6deb6d0c0d8c434cc8acd0cd2add31bd632dd03e389e3edfccffe5b016c046908020a8c0e0d17bb202223192bfd36a7374c4e3b549f55a0581b5a135ef35e0e621b658b6cef76d478959c9da1cda790aa1db56cc2a5c5e1d2abd32ae359e32ce68eef6afb420cf70dae191e1de528b031b631ec35483b313de64a9a4bed5ca75ff26d4c738b7900805e81ae824283838c5c96a097f99ff1ac7abb6ac1ddc349c749caf0d2ecd4bcd716d85bdb6fdbace2ffe971ec85f1aaf9b9fa79fb0601aa049d074a111815401c6d213a22d822c52e30348d3fd1418d4246510861d1649b6c676dab6fc47030803e83b485448e9a90329873a366a533a884ad78aecab5d3b6c0bfa8c291c9b1d2a8d49fd553d855ed07036610fd19d72011246e252a2673283a2f81303533bc44f94d53583561b561236421766e7e637f907fd387aea08ab036b281b336bac6bae0bbe1c11cc4d8c434c9a3d304db9cdb80dc89e057e1c2e960eb67f19efd4900190f24107c124a13c022c1321c3627384f3e6d3f914e225662574458ef59c468de6a196bec6b066c176c9278a07c027ea285ba8cbd8e3b91f6975ba776a743a8daa80daa55b1f0b8c2b97ec04ac967d06fd296d380d6fed85ddd70ecebed3ff296fb030154035d078f095e141015a019d51ccc24a62fed3b483d623db93f81459c4a464bb54cb94d5c54bd55f255ed5604610a67ca6ce5765c78fd80de8376907699d299d59f55a51aa7f4afb4be9ebfd1caeccb0ecc0bd930dc5de227e825e9e0ebd3efaef113f375f6a5f7b6fc680403117d13f61b6f1cb52155231f26b7333a3866380d454b56f15cdf5f5a81fb8610874488278ad58b179b829bf29d9fa029a12fa9bfab09ad85b737c921ca9bcb36d0d6d44bd60ce89ee9abea98ed59f863fa96fdecfe88021c0366035707ed0b040fc70f9512fb156d190b20ef22dd25bb341638a941154b474d544d5855d964776bdc70d97d7281fa81ec8381851487a68ab08f5e924d9992b2d0b7efb90ec140c4bfc73bcb71d004d1c4d27ed314df13e080e381e509e94af5e3f52afcf200940dc711d5143f1b47243b26842b602ea42ef62e2639cf464447d748314dc555d95e7e669567a771be74a57fb48209850e8f809b0f9f11a07fa2e4a3b1ab30af71b624be10c0d0c15cc417c853c988cb27d966d961e711eab3ea56eb42f533f7c9fd5b0443081e0b880d8d0d9b0dba19511da2258e2eea3376347936153a1a3d443e5e579057245c725d5e605d6c297aa17e298542856e8e148f689851a1cfa43da803ad5ab028b317bc5bc14bca5bce56d3acd80fe9aeeaa9f205f4b4f557fa83019007b80e9510f91c861e961f8a2d5130ad366e3bda43e347f749ec4b895a595c8e60566b108063834f842986fd891898d59b08a20aad9cadcdad78b57fbf13c3f0c62ec9eeca68cbb7d5afde5be2c4e4cde56ee9aaf4dafdf303e705960b740fe3110f12a41b98233c24c635be37f43ee6406141924e3f4f235dbe62f466546b166ef973347bf68912945e95e9a354a6c5b697b921c9ebd23bd9efdb0dddede0a3edfdf9","3a30000010000000000005000100040002000a00030006000400070005000400060005000700040008000300090006000a0003000b0004000c0004000d0003000e0008000f00040088000000940000009e000000b4000000c2000000d2000000dc000000e8000000f2000000fa00000008010000100100001a010000240100002c0100003e010000c4024e70afbca9db50ebf7fab81f0237b93fd19b69ec641d5c275e3c3846595b59606f65998094affdef0af4811b371cc44d8c83e29ecdef86fc0a1b221c582a31341c3b9c79429327fd317050bd4adc57f945fbe4259a388350d77c9a8536a7ff3c7a46fa5bb38ab1a09b5c957b40d1e9fa4c01ae0ec31cbd3bce506ff2d1f4f583729ce5ad6dbb260b787d939792f616ff7c3a2a6e986e2082309b3c5d367cfd9133c42e03d4043426fa4e81716e90ebdc71e0e6fb56278c96139d0ebc08db","3a300000020000000600010007000000180000001c0000005563a4bff31b","3a3000001000000000001201010015000200190003001c0004001700050020000600270007001f0008001a0009001e000a0020000b001b000c0021000d0025000e0027000f001e0088000000ae020000da0200000e0300004803000078030000ba0300000a0400004a04000080040000be04000000050000380500007c050000c80500001806000000000100020003000400050006000700080009000a000b000c000d000e000f0010001100120013001400150016001700180019001a001b001c001d001e001f0020002100220023002400250026002700280029002a002b002c002d002e002f0030003100320033003400350036003700380039003a003b003c003d003e003f0040004100420043004400450046004700480049004a004b004c004d004e004f0050005100520053005400550056005700580059005a005b005c005d005e005f0060006100620063006400650066006700680069006a006b006c006d006e006f0070007100720073007400750076007700780079007a007b007c007d007e007f0080008100820083008400850086008700880089008a008b008c008d008e008f0090009100920093009400950096009700980099009a009b009c009d009e009f00a000a100a200a300a400a500a600a700a800a900aa00ab00ac00ad00ae00af00b000b100b200b300b400b500b600b700b800b900ba00bb00bc00bd00be00bf00c000c100c200c300c400c500c600c700c800c900ca00cb00cc00cd00ce00cf00d000d100d200d300d400d500d600d700d800d900da00db00dc00dd00de00df00e000e100e200e300e400e500e600e700e800e900ea00eb00ec00ed00ee00ef00f000f100f200f300f400f500f600f7001807ae0723093309e70e99110412e014b4298550d251157db67fda87a38bb59aa0a20bbf0fc57fcd42d56bd5efe52bee2af25cf99afe1c033c18d21e714bdb6ceb7d3384c086068a8b9bd6a9f4a931aa30ae4fb536c485cb49d54ce0e4e32cf0d1f082053a11e719592ab22c982f263dc2408241d255ba7e1283079622a249ae38ba10c2d8c3a0d982e436e556e891f2d5f3c6f6b4fb8307360ce20c9f12ca14d21d3e258529162b0e45645323576957035d0d61a667626ac96e33761c88549bff9c2eaa8dd273df37e87df193f7d4f85822352caa33204bac579e58b358b35e2d68786bd478d294e79788aca7b039b24db67ebc4dc82bdcd9ea07f099f92dfd9d0a7f0bb20d0513fc2a932bbc2bd32cba2dfb31d13e95445c46ae517456bb5b9e70678277877789ce90359a329cdc9ddbac9bc972cd14d0a5e4b6e6e0ed34fa56ff950056016417a417ef202e21752103252e274a29243b743f1e4a564ed755585c1562cd63686662785183a38332896189ba908d9e84ae49b96abbdbbfdfccc5d014d897d82fdba8dcfaebf9f1def5a6ffff015b034f09190d9e0e6010b2129c2c393168336839d9696c749a878c89e589ada48baa64bab4c9f2d7aee18ce2c7e2d2e203ef70f19df25af35cf5edf942fbac009401df0373281029392934444646d04cd44d6d51c1571367df7616772d9697ae80b0edbce8cde2cf48d757e01ce146f02cf1cdf897158d20e520fc2a6b2f593af4415b519958725d5961bd634a6a74723c789e7b4c7ead83449067920f95b9a0dbabb9b017b421c3d0cd31df19f0cbf267f43002ec16a618121b36259f2cc62ff9356a4af85595566f577458295b605b955cec5db063586ea4755e7d7385ff8bae96c49d70a295a240ac95c160cd9cd62fe182e5be06cb10e81295211b32da37063b1142834531603760a5609c6c357b0e81e3819c86c99a0ec5a6dbdee418f180f1ddf1a3f369f925fa55fefc000101d7011a028d14a1266e2ede2fc93b6641b541bf4da754ae545b55737096709f7b4c7e879c5a9d239f68b57fb8c1c13ec287c35ac903ccaad096e198f02ef88efc8f01a1018006c40c13128e13961645187c207f20b0200328ba2e482f0130583c504f026729730176db7ccc839199409b99a032a3f9af23b0aab0ffb525ce84d519e3f5e490edb6f55efba2fe2c01fa076e12ff17451c71200825a42ab32aeb2ada2d353e0950f95803590a611e62e965617ee480c9896f8c6c90aa9043946498389be7b379be2ec419cea1d3dbd662e7fae7ddea85f2d7f635fb0bfeaa025a047c0cb00cf20ee4120217ba2cfc390242ad46f44d5f5453563662706b1d745f814586bb86179d35a136ab26af57c313dbade14eeaa5ed9df397f5"]
+            }]
+          }]
+        }]
+      }]
+    }]
+  }]
+}

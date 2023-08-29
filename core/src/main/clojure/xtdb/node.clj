@@ -128,7 +128,8 @@
              :xtdb.operator.scan/scan-emitter {}
              :xtdb.operator/ra-query-source {}
              ::txp/tx-producer {}
-             :xtdb.stagnant-log-flusher/flusher {}}
+             :xtdb.stagnant-log-flusher/flusher {}
+             :xtdb/compactor {}}
             opts)
       (doto ig/load-namespaces)
       (with-default-impl :xtdb/log :xtdb.log/memory-log)

@@ -283,8 +283,9 @@
                       node (condp = (class node)
                              ArrowHashTrie$Leaf
                              (let [page-idx (.getPageIndex ^ArrowHashTrie$Leaf node)
-                                   take-node? (some-> ^RoaringBitmap (nth trie-page-idxs ordinal)
-                                                      (.contains page-idx))]
+                                   take-node? (if-let [^RoaringBitmap page-idxs (nth trie-page-idxs ordinal)]
+                                                (.contains page-idxs page-idx)
+                                                true)]
                                (when take-node?
                                  (.or cumulative-iid-bitmap (iid-bloom-bitmap ordinal page-idx)))
                                (recur (inc ordinal) more-nodes (or node-taken? take-node?)
@@ -313,7 +314,7 @@
                                      (.add trie-roots root)
                                      {:trie (ArrowHashTrie/from root)
                                       :trie-file trie-file
-                                      :page-idxs (trie-file->page-idxs trie-file)})))))
+                                      :page-idxs (get trie-file->page-idxs trie-file)})))))
                   live-table-wm (conj {:trie (.compactLogs (.liveTrie live-table-wm))}))
           trie-files (mapv :trie-file tries)]
       (letfn [(iid-bloom-bitmap ^ImmutableRoaringBitmap [ordinal page-idx]
