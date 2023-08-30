@@ -350,6 +350,9 @@
   AutoCloseable
   (close [_]))
 
+(defn ->live-leaf-loader [live-rel ^long ordinal]
+  (LiveLeafLoader. live-rel (LeafMergeQueue$LeafPointer. ordinal)))
+
 (defn open-leaves [^IBufferPool buffer-pool, table-name, table-tries, ^ILiveTableWatermark live-table-wm]
   (util/with-close-on-catch [leaf-bufs (ArrayList.)]
     ;; TODO get hold of these a page at a time if it's a small query,
@@ -365,10 +368,9 @@
                                                             (LeafMergeQueue$LeafPointer. ordinal)
                                                             -1))))))]
       (cond-> arrow-leaves
-        live-table-wm (conj (LiveLeafLoader. (.liveRelation live-table-wm)
-                                             (LeafMergeQueue$LeafPointer. (count arrow-leaves))))))))
+        live-table-wm (conj (->live-leaf-loader (.liveRelation live-table-wm) (count arrow-leaves)))))))
 
-(defn load-leaves [leaf-loaders {:keys [leaves] :as _merge-task}]
+(defn load-leaves [leaf-loaders {:keys [leaves]}]
   (->> leaves
        (into [] (map-indexed (fn [ordinal trie-leaf]
                                (when trie-leaf

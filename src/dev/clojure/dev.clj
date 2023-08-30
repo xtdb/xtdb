@@ -116,6 +116,6 @@
             :else v))))))
 
 (comment
-  (->> (.toPath (io/file "/tmp/tpch/tables/customer/t1-content/c_name/r00-tx00.arrow"))
+  (->> (util/->path "/tmp/tpch/tables/customer/t1-content/c_name/r00-tx00.arrow")
        (read-arrow-file)
        (into [] cat)))

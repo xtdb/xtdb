@@ -5,17 +5,18 @@
             [xtdb.api.protocols :as api]
             [xtdb.client :as client]
             [xtdb.indexer :as idx]
+            [xtdb.indexer.live-index :as li]
             [xtdb.logical-plan :as lp]
             [xtdb.node :as node]
             xtdb.object-store
             [xtdb.operator :as op]
             xtdb.operator.scan
+            [xtdb.trie :as trie]
             [xtdb.types :as types]
             [xtdb.util :as util]
             [xtdb.vector :as vec]
             [xtdb.vector.reader :as vr]
-            [xtdb.vector.writer :as vw]
-            [xtdb.trie :as trie])
+            [xtdb.vector.writer :as vw])
   (:import [ch.qos.logback.classic Level Logger]
            clojure.lang.ExceptionInfo
            java.net.ServerSocket
@@ -24,15 +25,16 @@
            (java.time Duration Instant Period)
            (java.util LinkedList)
            (java.util.function Consumer IntConsumer)
+           (java.util.stream IntStream)
            (org.apache.arrow.memory BufferAllocator RootAllocator)
            (org.apache.arrow.vector FieldVector VectorSchemaRoot)
            (org.apache.arrow.vector.types.pojo Schema)
            org.slf4j.LoggerFactory
            (xtdb ICursor InstantSource)
            xtdb.indexer.IIndexer
+           xtdb.indexer.live_index.ILiveTable
            (xtdb.operator IRaQuerySource PreparedQuery)
-           (xtdb.vector IVectorReader RelationReader)
-           (java.util.stream IntStream)))
+           (xtdb.vector IVectorReader RelationReader)))
 
 #_{:clj-kondo/ignore [:uninitialized-var]}
 (def ^:dynamic ^org.apache.arrow.memory.BufferAllocator *allocator*)
@@ -341,6 +343,27 @@
       (.syncRowCount trie-wtr))
 
     trie-root))
+
+(defn open-live-table [table-name]
+  (li/->live-table *allocator* nil table-name))
+
+(defn index-tx! [^ILiveTable live-table, tx-key, docs]
+  (let [live-table-tx (.startTx live-table tx-key true)]
+    (try
+      (let [doc-wtr (.docWriter live-table-tx)]
+        (doseq [{eid :xt/id, :as doc} docs
+                :let [{:keys [:xt/valid-from :xt/valid-to], :or {valid-from 0, valid-to 0}} (meta doc)]]
+          (.logPut live-table-tx (trie/->iid eid)
+                   valid-from valid-to
+                   (fn [] (vw/write-value! doc doc-wtr)))))
+      (catch Throwable t
+        (.abort live-table-tx)
+        (throw t)))
+
+    (.commit live-table-tx)))
+
+(defn ->live-leaf-loader [live-table ^long ordinal]
+  (trie/->live-leaf-loader (vw/rel-wtr->rdr (li/live-rel live-table)) ordinal))
 
 (defn byte-buffer->path [^java.nio.ByteBuffer bb]
   (mapcat (fn [b] [(mod (bit-shift-right b 4) 16) (mod (bit-and b (dec (bit-shift-left 1 4))) 16)]) (.array bb)))
