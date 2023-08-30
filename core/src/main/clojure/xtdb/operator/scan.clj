@@ -390,25 +390,26 @@
             (.nextIid ev-resolver)
             (duplicate-ptr prev-iid-ptr current-iid-ptr))
 
-          (if (= "evict" (.getName (.getLeg op-rdr idx)))
-            (duplicate-ptr skip-iid-ptr current-iid-ptr)
+          (let [leg-name (.getName (.getLeg op-rdr idx))]
+            (if (= "evict" leg-name)
+              (duplicate-ptr skip-iid-ptr current-iid-ptr)
 
-            (let [system-from (.getLong sys-from-rdr idx)]
-              (when (and (<= sys-from-lower system-from) (<= system-from sys-from-upper))
-                (case (.getName (.getLeg op-rdr idx))
-                  "put"
-                  (.resolveEvent ev-resolver idx
-                                 (.getLong put-valid-from-rdr idx)
-                                 (.getLong put-valid-to-rdr idx)
-                                 system-from
-                                 put-rc)
+              (let [system-from (.getLong sys-from-rdr idx)]
+                (when (and (<= sys-from-lower system-from) (<= system-from sys-from-upper))
+                  (case leg-name
+                    "put"
+                    (.resolveEvent ev-resolver idx
+                                   (.getLong put-valid-from-rdr idx)
+                                   (.getLong put-valid-to-rdr idx)
+                                   system-from
+                                   put-rc)
 
-                  "delete"
-                  (.resolveEvent ev-resolver idx
-                                 (.getLong delete-valid-from-rdr idx)
-                                 (.getLong delete-valid-to-rdr idx)
-                                 system-from
-                                 nil))))))))))
+                    "delete"
+                    (.resolveEvent ev-resolver idx
+                                   (.getLong delete-valid-from-rdr idx)
+                                   (.getLong delete-valid-to-rdr idx)
+                                   system-from
+                                   nil)))))))))))
 
 (defn iid-selector [^ByteBuffer iid-bb]
   (reify IRelationSelector
