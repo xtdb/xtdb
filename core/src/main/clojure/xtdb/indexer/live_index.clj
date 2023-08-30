@@ -48,7 +48,7 @@
   (^xtdb.indexer.live_index.ILiveTable liveTable [^String tableName])
   (^xtdb.indexer.live_index.ILiveIndexTx startTx [^xtdb.api.protocols.TransactionInstant txKey])
   (^xtdb.watermark.ILiveIndexWatermark openWatermark [])
-  (^java.util.Map finishChunk [^long chunkIdx])
+  (^java.util.Map finishChunk [^long chunkIdx, ^long nextChunkIdx])
   (^void nextChunk [])
   (^void close []))
 
@@ -273,8 +273,8 @@
         (close [_]
           (util/close wms)))))
 
-  (finishChunk [_ chunk-idx]
-    (let [trie-key (trie/->trie-key chunk-idx)
+  (finishChunk [_ chunk-idx next-chunk-idx]
+    (let [trie-key (trie/->trie-key 0 chunk-idx next-chunk-idx)
           futs (->> (for [^ILiveTable table (.values tables)]
                       (.finishChunk table trie-key))
 

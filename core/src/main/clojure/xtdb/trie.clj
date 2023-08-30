@@ -207,8 +207,8 @@
     {:leaf-buf (.getAsByteBuffer leaf-bb-ch)
      :trie-buf (.getAsByteBuffer trie-bb-ch)}))
 
-(defn ->trie-key [^long chunk-idx]
-  (format "c%s" (util/->lex-hex-string chunk-idx)))
+(defn ->trie-key [^long level, ^long chunk-idx, ^long next-chunk-idx]
+  (format "l%s-cf%s-ct%s" (util/->lex-hex-string level) (util/->lex-hex-string chunk-idx) (util/->lex-hex-string next-chunk-idx)))
 
 (defn ->table-leaf-obj-key [table-name trie-key]
   (format "tables/%s/log-leaves/leaf-%s.arrow" table-name trie-key))
@@ -223,14 +223,33 @@
         (fn [_]
           (.putObject obj-store (->table-trie-obj-key table-name trie-key) trie-buf)))))
 
-(defn list-table-tries [^ObjectStore obj-store, table-name]
-  (->> (.listObjects obj-store (format "tables/%s/log-tries" table-name))
-       (keep (fn [file-name]
-               (when-let [[_ trie-key] (re-find #"/trie-([^/]+?)\.arrow$" file-name)]
-                 {:trie-file file-name
-                  :trie-key trie-key})))
-       (sort-by :trie-key)
-       vec))
+(defn- parse-trie-filename [file-name]
+  (when-let [[_ trie-key level-str row-from-str row-to-str] (re-find #"/log-tries/trie-(l(\p{XDigit}+)-cf(\p{XDigit}+)-ct(\p{XDigit}+)+?)\.arrow$" file-name)]
+    {:trie-file file-name
+     :trie-key trie-key
+     :level (util/<-lex-hex-string level-str)
+     :row-from (util/<-lex-hex-string row-from-str)
+     :row-to (util/<-lex-hex-string row-to-str)}))
+
+(defn current-table-tries [trie-files]
+  (loop [next-row 0
+         [table-tries & more-levels] (->> trie-files
+                                          (group-by :level)
+                                          (sort-by key #(Long/compare %2 %1))
+                                          (vals))
+         res []]
+    (if-not table-tries
+      res
+      (if-let [tries (not-empty
+                      (->> table-tries
+                           (into [] (drop-while (fn [{:keys [^long row-from]}]
+                                                  (< row-from next-row))))))]
+        (recur (long (:row-to (first (rseq tries)))) more-levels (into res tries))
+        (recur next-row more-levels res)))))
+
+(defn list-table-trie-files [^ObjectStore obj-store, table-name]
+  (->> (sort (.listObjects obj-store (format "tables/%s/log-tries" table-name)))
+       (into [] (keep parse-trie-filename))))
 
 (defn ->merge-plan
   "Returns a tree of the tasks required to merge the given tries "
@@ -264,8 +283,9 @@
                       node (condp = (class node)
                              ArrowHashTrie$Leaf
                              (let [page-idx (.getPageIndex ^ArrowHashTrie$Leaf node)
-                                   take-node? (some-> ^RoaringBitmap (nth trie-page-idxs ordinal)
-                                                      (.contains page-idx))]
+                                   take-node? (if-let [^RoaringBitmap page-idxs (nth trie-page-idxs ordinal)]
+                                                (.contains page-idxs page-idx)
+                                                true)]
                                (when take-node?
                                  (.or cumulative-iid-bitmap (iid-bloom-bitmap ordinal page-idx)))
                                (recur (inc ordinal) more-nodes (or node-taken? take-node?)
@@ -294,7 +314,7 @@
                                      (.add trie-roots root)
                                      {:trie (ArrowHashTrie/from root)
                                       :trie-file trie-file
-                                      :page-idxs (trie-file->page-idxs trie-file)})))))
+                                      :page-idxs (get trie-file->page-idxs trie-file)})))))
                   live-table-wm (conj {:trie (.compactLogs (.liveTrie live-table-wm))}))
           trie-files (mapv :trie-file tries)]
       (letfn [(iid-bloom-bitmap ^ImmutableRoaringBitmap [ordinal page-idx]

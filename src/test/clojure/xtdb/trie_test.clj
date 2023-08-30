@@ -39,3 +39,21 @@
                                        (if (and (map-entry? x) (= :path (key x)))
                                          (MapEntry/create :path (into [] (val x)))
                                          x))))))))))
+
+(t/deftest test-selects-current-tries
+  (letfn [(f [table-tries]
+            (->> (trie/current-table-tries (for [[level rf rt] table-tries]
+                                             {:level level, :row-from rf, :row-to rt}))
+                 (mapv (juxt :level :row-from :row-to))))]
+    (t/is (= [] (f [])))
+
+    (t/is (= [[0 0 1] [0 1 2] [0 2 3]]
+             (f [[0 0 1] [0 1 2] [0 2 3]])))
+
+    (t/is (= [[1 0 2] [0 2 3]]
+             (f [[1 0 2] [0 0 1] [0 1 2] [0 2 3]])))
+
+    (t/is (= [[2 0 4] [1 4 6] [0 6 7] [0 7 8]]
+             (f [[2 0 4]
+                 [1 0 2] [1 2 4] [1 4 6]
+                 [0 0 1] [0 1 2] [0 2 3] [0 3 4] [0 4 5] [0 5 6] [0 6 7] [0 7 8]])))))

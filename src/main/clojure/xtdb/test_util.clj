@@ -105,15 +105,21 @@
   ([k] (component *node* k))
   ([node k] (util/component node k)))
 
+(defn latest-completed-tx ^xtdb.api.protocols.TransactionInstant [node]
+  (:latest-completed-tx (api/status node)))
+
+(defn latest-submitted-tx ^xtdb.api.protocols.TransactionInstant [node]
+  (:latest-submitted-tx (api/status node)))
+
 (defn then-await-tx
+  (^xtdb.api.protocols.TransactionInstant [node]
+   (then-await-tx (latest-submitted-tx node) node nil))
+
   (^xtdb.api.protocols.TransactionInstant [tx node]
    (then-await-tx tx node nil))
 
   (^xtdb.api.protocols.TransactionInstant [tx node ^Duration timeout]
    @(.awaitTxAsync ^IIndexer (util/component node :xtdb/indexer) tx timeout)))
-
-(defn latest-completed-tx ^xtdb.api.protocols.TransactionInstant [node]
-  (:latest-completed-tx (api/status node)))
 
 (defn ->mock-clock
   (^xtdb.InstantSource []
@@ -126,7 +132,7 @@
   (with-opts {:xtdb.log/memory-log {:instant-src (->mock-clock)}} f))
 
 (defn finish-chunk! [node]
-  (then-await-tx (api/latest-submitted-tx node) node)
+  (then-await-tx node)
   (idx/finish-chunk! (component node :xtdb/indexer)))
 
 (defn open-vec

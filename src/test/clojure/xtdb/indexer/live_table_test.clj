@@ -165,7 +165,7 @@
         (with-open [live-index-wm (.openWatermark live-index)]
           (let [live-table-before (live-table-wm->data (.liveTable live-index-wm table-name))]
 
-            (.finishChunk live-index 0)
+            (.finishChunk live-index 0 10)
             (.close live-index)
 
             (let [live-table-after (live-table-wm->data (.liveTable live-index-wm table-name))]
