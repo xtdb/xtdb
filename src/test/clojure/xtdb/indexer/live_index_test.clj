@@ -20,9 +20,9 @@
            xtdb.vector.IVectorPosition))
 
 (def with-live-index
-  (tu/with-system {:xtdb/allocator {}
-                   :xtdb.indexer/live-index {}
-                   :xtdb.object-store/memory-object-store {}}))
+  (partial tu/with-system {:xtdb/allocator {}
+                           :xtdb.indexer/live-index {}
+                           :xtdb.object-store/memory-object-store {}}))
 
 (t/use-fixtures :each tu/with-allocator with-live-index)
 

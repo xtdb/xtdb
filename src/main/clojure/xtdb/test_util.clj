@@ -67,17 +67,16 @@
 #_{:clj-kondo/ignore [:uninitialized-var]}
 (def ^:dynamic *sys*)
 
-(defn with-system [sys-opts]
-  (fn [f]
-    (let [sys (-> sys-opts
-                  (doto ig/load-namespaces)
-                  ig/prep
-                  ig/init)]
-      (try
-        (binding [*sys* sys]
-          (f))
-        (finally
-          (ig/halt! sys))))))
+(defn with-system [sys-opts f]
+  (let [sys (-> sys-opts
+                (doto ig/load-namespaces)
+                ig/prep
+                ig/init)]
+    (try
+      (binding [*sys* sys]
+        (f))
+      (finally
+        (ig/halt! sys)))))
 
 (defn free-port ^long []
   (with-open [s (ServerSocket. 0)]
