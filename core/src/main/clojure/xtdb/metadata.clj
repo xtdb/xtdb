@@ -207,10 +207,10 @@
         type-metadata-writers (HashMap.)]
 
     (letfn [(->nested-meta-writer [^IVectorReader content-col]
-              (let [col-type (first (-> (types/field->col-type (.getField content-col))
-                                        (types/flatten-union-types)
-                                        (disj :null)
-                                        (doto (-> count (= 1) (assert "should just be nullable mono-vecs here")))))]
+              (when-let [col-type (first (-> (types/field->col-type (.getField content-col))
+                                             (types/flatten-union-types)
+                                             (disj :null)
+                                             (doto (-> count (<= 1) (assert (str (pr-str (.getField content-col)) "should just be nullable mono-vecs here"))))))]
                 (-> ^NestedMetadataWriter
                     (.computeIfAbsent type-metadata-writers col-type
                                       (reify Function
@@ -219,9 +219,10 @@
                     (.appendNestedMetadata (.metadataReader content-col)))))
 
             (write-col-meta! [root-col?, ^IVectorReader content-col]
-              (let [content-writers (if (instance? ArrowType$Union (.getType (.getField content-col)))
-                                      (mapv ->nested-meta-writer (.legs content-col))
-                                      [(->nested-meta-writer content-col)])]
+              (let [content-writers (->> (if (instance? ArrowType$Union (.getType (.getField content-col)))
+                                           (mapv ->nested-meta-writer (.legs content-col))
+                                           [(->nested-meta-writer content-col)])
+                                         (remove nil?))]
 
                 (.startStruct col-wtr)
                 (.writeBoolean root-col-wtr root-col?)
