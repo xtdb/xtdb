@@ -12,7 +12,7 @@
            java.lang.reflect.Method
            (java.net MalformedURLException URI URL)
            java.nio.ByteBuffer
-           (java.nio.channels Channels FileChannel FileChannel$MapMode SeekableByteChannel)
+           (java.nio.channels Channels ClosedByInterruptException FileChannel FileChannel$MapMode SeekableByteChannel)
            java.nio.charset.StandardCharsets
            (java.nio.file CopyOption FileVisitResult Files LinkOption OpenOption Path Paths SimpleFileVisitor StandardCopyOption StandardOpenOption)
            java.nio.file.attribute.FileAttribute
@@ -402,20 +402,23 @@
 (defn build-arrow-ipc-byte-buffer ^java.nio.ByteBuffer {:style/indent 2}
   [^VectorSchemaRoot root ipc-type f]
 
-  (with-open [baos (ByteArrayOutputStream.)
-              ch (Channels/newChannel baos)
-              ^ArrowWriter sw (case ipc-type
-                                :file (ArrowFileWriter. root nil ch)
-                                :stream (ArrowStreamWriter. root nil ch))]
+  (try
+    (with-open [baos (ByteArrayOutputStream.)
+                ch (Channels/newChannel baos)
+                ^ArrowWriter sw (case ipc-type
+                                  :file (ArrowFileWriter. root nil ch)
+                                  :stream (ArrowStreamWriter. root nil ch))]
 
-    (.start sw)
+      (.start sw)
 
-    (f (fn write-batch! []
-         (.writeBatch sw)))
+      (f (fn write-batch! []
+           (.writeBatch sw)))
 
-    (.end sw)
+      (.end sw)
 
-    (ByteBuffer/wrap (.toByteArray baos))))
+      (ByteBuffer/wrap (.toByteArray baos)))
+    (catch ClosedByInterruptException e
+      (throw (InterruptedException. (.getMessage e))))))
 
 (defn root->arrow-ipc-byte-buffer ^java.nio.ByteBuffer [^VectorSchemaRoot root ipc-type]
   (build-arrow-ipc-byte-buffer root ipc-type
