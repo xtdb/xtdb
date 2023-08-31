@@ -86,8 +86,9 @@ jobs:
   test:
     docker:
       - image: wotbrew/xtdb-ci-lein-fix:latest
+    resource_class: large
     environment:
-      JVM_OPTS: -Xmx2500m
+      JVM_OPTS: -Xmx4g
     working_directory: ~/xtdb
     steps:
       - checkout
