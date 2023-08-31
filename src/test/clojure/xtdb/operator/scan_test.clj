@@ -450,13 +450,13 @@
       (t/is (nil? (scan/selects->iid-byte-buffer {} vw/empty-params)))
 
       (t/is (= (util/uuid->byte-buffer search-uuid)
-               (scan/selects->iid-byte-buffer {'xt/id (list '= 'xt/id search-uuid)} vw/empty-params)))
+               (scan/selects->iid-byte-buffer {"xt/id" (list '= 'xt/id search-uuid)} vw/empty-params)))
 
-      (t/is (nil? (scan/selects->iid-byte-buffer {'xt/id (list '< 'xt/id search-uuid)} vw/empty-params)))
+      (t/is (nil? (scan/selects->iid-byte-buffer {"xt/id" (list '< 'xt/id search-uuid)} vw/empty-params)))
 
       (with-open [^RelationReader params-rel (vw/open-params tu/*allocator* {'?search-uuid #uuid "80000000-0000-0000-0000-000000000000"})]
         (t/is (= (util/uuid->byte-buffer search-uuid)
-                 (scan/selects->iid-byte-buffer '{xt/id (= xt/id ?search-uuid)}
+                 (scan/selects->iid-byte-buffer '{"xt/id" (= xt/id ?search-uuid)}
                                                 params-rel))))
 
       (with-open [search-uuid-vec (vw/open-vec tu/*allocator* (name '?search-uuid) [#uuid "00000000-0000-0000-0000-000000000000"
@@ -465,20 +465,27 @@
         (t/is (nil? (scan/selects->iid-byte-buffer '{xt/id (= xt/id ?search-uuid)}
                                                    params-rel))))
 
-      (t/is (= [{:version 2, :xt/id search-uuid}]
-               (tu/query-ra [:scan {:table 'xt_docs} ['version {'xt/id (list '= 'xt/id search-uuid)}]]
-                            {:node node})))
+      (let [old-select->iid-byte-buffer scan/selects->iid-byte-buffer]
+        (with-redefs [scan/selects->iid-byte-buffer
+                      (fn [& args]
+                        (let [iid-pred (apply old-select->iid-byte-buffer args)]
+                          (assert iid-pred "iid-pred can't be nil")
+                          iid-pred))]
 
-      (t/is (= [{:version 2, :xt/id search-uuid}]
-               (tu/query-ra '[:scan {:table xt_docs} [version {xt/id (= xt/id ?search-uuid)}]]
-                            {:node node :params {'?search-uuid #uuid "80000000-0000-0000-0000-000000000000"}})))
+          (t/is (= [{:version 2, :xt/id search-uuid}]
+                   (tu/query-ra [:scan {:table 'xt_docs} ['version {'xt/id (list '= 'xt/id search-uuid)}]]
+                                {:node node})))
 
-      (t/is (= [{:version 2, :xt/id search-uuid}
-                {:version 1, :xt/id search-uuid}]
-               (tu/query-ra [:scan {:table 'xt_docs
-                                    :for-valid-time :all-time}
-                             ['version {'xt/id (list '= 'xt/id search-uuid)}]]
-                            {:node node}))))))
+          (t/is (= [{:version 2, :xt/id search-uuid}]
+                   (tu/query-ra '[:scan {:table xt_docs} [version {xt/id (= xt/id ?search-uuid)}]]
+                                {:node node :params {'?search-uuid #uuid "80000000-0000-0000-0000-000000000000"}})))
+
+          (t/is (= [{:version 2, :xt/id search-uuid}
+                    {:version 1, :xt/id search-uuid}]
+                   (tu/query-ra [:scan {:table 'xt_docs
+                                        :for-valid-time :all-time}
+                                 ['version {'xt/id (list '= 'xt/id search-uuid)}]]
+                                {:node node}))))))))
 
 (t/deftest test-iid-fast-path-chunk-boundary
   (let [before-uuid #uuid "00000000-0000-0000-0000-000000000000"

@@ -490,7 +490,7 @@
     (assoc trie-match :page-idxs page-idxs)))
 
 (defn selects->iid-byte-buffer ^ByteBuffer [selects ^RelationReader params-rel]
-  (when-let [eid-select (or (get selects 'xt/id) (get selects 'xt$id))]
+  (when-let [eid-select (or (get selects "xt/id") (get selects "xt$id"))]
     (let [eid (nth eid-select 2)]
       (when (= '= (first eid-select))
         (cond
