@@ -3,7 +3,6 @@
             [clojure.spec.alpha :as s]
             [clojure.tools.logging :as log]
             [cognitect.transit :as transit]
-            [xtdb.api.protocols :as xtp]
             [xtdb.cli :as cli]
             xtdb.log
             [xtdb.node :as node]
@@ -12,7 +11,8 @@
   (:import clojure.lang.MapEntry
            java.lang.AutoCloseable
            (java.nio.file ClosedWatchServiceException Files OpenOption Path StandardOpenOption StandardWatchEventKinds WatchEvent WatchEvent$Kind)
-           java.util.HashSet))
+           java.util.HashSet
+           xtdb.types.ClojureForm))
 
 (defmethod ig/prep-key :xtdb/c1-import [_ opts]
   (into {:tx-producer (ig/ref :xtdb.tx-producer/tx-producer)}
@@ -35,7 +35,7 @@
                         (MapEntry/create k
                                          (cond-> v
                                            (and (list? v) (= (first v) 'fn))
-                                           (xtp/->ClojureForm)))))))))
+                                           (ClojureForm.)))))))))
 
 (defn- submit-file! [^xtdb.tx_producer.TxProducer tx-producer, ^Path log-file]
   (with-open [is (Files/newInputStream log-file (into-array OpenOption #{StandardOpenOption/READ}))]
@@ -135,11 +135,11 @@
     (shutdown-agents)))
 
 (comment
-  (require '[xtdb.api.protocols :as xt])
+  (require '[xtdb.api.protocols :as xtp])
 
   (with-open [node (node/start-node {:xtdb/c1-import {:export-log-path "/tmp/tpch"}})]
     (try
-      (xt/datalog-query node (-> '{:find [?cust ?nkey ?n_name]
+      (xtp/datalog-query node (-> '{:find [?cust ?nkey ?n_name]
                                    :where [[?cust :c_nationkey ?nkey]
                                            [?nkey :n_name ?n_name]]
                                    :limit 10}

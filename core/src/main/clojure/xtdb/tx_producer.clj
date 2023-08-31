@@ -1,7 +1,6 @@
 (ns xtdb.tx-producer
   (:require [clojure.spec.alpha :as s]
             [juxt.clojars-mirrors.integrant.core :as ig]
-            [xtdb.api.protocols :as xtp]
             [xtdb.error :as err]
             xtdb.log
             [xtdb.rewrite :refer [zmatch]]
@@ -14,9 +13,10 @@
            (java.util ArrayList HashMap)
            org.apache.arrow.memory.BufferAllocator
            (org.apache.arrow.vector VectorSchemaRoot)
-           org.apache.arrow.vector.types.UnionMode
            (org.apache.arrow.vector.types.pojo ArrowType$Union Schema)
+           org.apache.arrow.vector.types.UnionMode
            (xtdb.log Log LogRecord)
+           xtdb.types.ClojureForm
            xtdb.vector.IValueWriter))
 
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
@@ -286,7 +286,7 @@
           :put (write-put! tx-op)
           :put-fn (let [{:keys [id tx-fn app-time-opts]} tx-op]
                     (write-put! {:table :xt$tx_fns
-                                 :doc {:xt$id id, :xt$fn (xtp/->ClojureForm tx-fn)}
+                                 :doc {:xt$id id, :xt$fn (ClojureForm. tx-fn)}
                                  :app-time-opts app-time-opts}))
           :delete (write-delete! tx-op)
           :evict (write-evict! tx-op)

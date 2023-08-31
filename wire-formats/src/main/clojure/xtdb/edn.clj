@@ -1,7 +1,7 @@
 (ns ^{:clojure.tools.namespace.repl/load false}
   xtdb.edn
   (:require [time-literals.read-write :as time-literals])
-  (:import (xtdb.types IntervalDayTime IntervalMonthDayNano IntervalYearMonth)
+  (:import (xtdb.types ClojureForm IntervalDayTime IntervalMonthDayNano IntervalYearMonth)
            java.io.Writer
            [java.time Duration Period]
            [org.apache.arrow.vector PeriodDuration]))
@@ -23,7 +23,7 @@
   (IntervalYearMonth. (Period/parse p)))
 
 (defmethod print-dup IntervalYearMonth [^IntervalYearMonth i, ^Writer w]
-  (.write w (format "#xt/interval-ym %s" (pr-str (str (.-period i))))))
+  (.write w (format "#xt/interval-ym %s" (pr-str (str (.period i))))))
 
 (defmethod print-method IntervalYearMonth [i ^Writer w]
   (print-dup i w))
@@ -32,7 +32,7 @@
   (IntervalDayTime. (Period/parse p) (Duration/parse d)))
 
 (defmethod print-dup IntervalDayTime [^IntervalDayTime i, ^Writer w]
-  (.write w (format "#xt/interval-dt %s" (pr-str [(str (.-period i)) (str (.-duration i))]))))
+  (.write w (format "#xt/interval-dt %s" (pr-str [(str (.period i)) (str (.duration i))]))))
 
 (defmethod print-method IntervalDayTime [i ^Writer w]
   (print-dup i w))
@@ -41,7 +41,7 @@
   (IntervalMonthDayNano. (Period/parse p) (Duration/parse d)))
 
 (defmethod print-dup IntervalMonthDayNano [^IntervalMonthDayNano i, ^Writer w]
-  (.write w (format "#xt/interval-mdn %s" (pr-str [(str (.-period i)) (str (.-duration i))]))))
+  (.write w (format "#xt/interval-mdn %s" (pr-str [(str (.period i)) (str (.duration i))]))))
 
 (defmethod print-method IntervalMonthDayNano [i ^Writer w]
   (print-dup i w))

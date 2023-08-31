@@ -6,14 +6,15 @@
             [xtdb.error :as err]
             [time-literals.read-write :as time-literals.rw])
   (:import (xtdb.api.protocols TransactionInstant)
-           (xtdb.types IntervalDayTime IntervalMonthDayNano IntervalYearMonth)
+           (xtdb.types ClojureForm IntervalDayTime IntervalMonthDayNano IntervalYearMonth)
            (java.time DayOfWeek Duration Instant LocalDate LocalDateTime LocalTime Month MonthDay OffsetDateTime OffsetTime Period Year YearMonth ZonedDateTime ZoneId)))
 
 (def tj-read-handlers
   (merge (-> time-literals.rw/tags
              (update-keys str)
              (update-vals transit/read-handler))
-         {"xtdb/tx-key" (transit/read-handler xtp/map->TransactionInstant)
+         {"xtdb/clj-form" (transit/read-handler xtp/->ClojureForm)
+          "xtdb/tx-key" (transit/read-handler xtp/map->TransactionInstant)
           "xtdb/illegal-arg" (transit/read-handler err/-iae-reader)
           "xtdb/runtime-err" (transit/read-handler err/-runtime-err-reader)
           "xtdb/period-duration" xt-edn/period-duration-reader
@@ -43,13 +44,15 @@
           xtdb.IllegalArgumentException (transit/write-handler "xtdb/illegal-arg" ex-data)
           xtdb.RuntimeException (transit/write-handler "xtdb/runtime-err" ex-data)
 
-          IntervalYearMonth (transit/write-handler "xtdb.interval/year-month" #(str (.-period ^IntervalYearMonth %)))
+          ClojureForm (transit/write-handler "xtdb/clj-form" #(.form ^ClojureForm %))
+
+          IntervalYearMonth (transit/write-handler "xtdb.interval/year-month" #(str (.period ^IntervalYearMonth %)))
 
           IntervalDayTime (transit/write-handler "xtdb.interval/day-time"
-                                                 #(vector (str (.-period ^IntervalDayTime %))
-                                                          (str (.-duration ^IntervalDayTime %))))
+                                                 #(vector (str (.period ^IntervalDayTime %))
+                                                          (str (.duration ^IntervalDayTime %))))
 
           IntervalMonthDayNano (transit/write-handler "xtdb.interval/month-day-nano"
-                                                      #(vector (str (.-period ^IntervalMonthDayNano %))
-                                                               (str (.-duration ^IntervalMonthDayNano %))))
+                                                      #(vector (str (.period ^IntervalMonthDayNano %))
+                                                               (str (.duration ^IntervalMonthDayNano %))))
           clojure.lang.PersistentList (transit/write-handler "xtdb/list" #(pr-str %))}))

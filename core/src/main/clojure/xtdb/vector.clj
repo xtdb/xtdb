@@ -159,7 +159,7 @@
         (valueCount [_] (.getValueCount arrow-vec))
         (readObject [_ idx]
           (let [^IntervalDayTime idt (.getObject vec-rdr idx)]
-            (PeriodDuration. (.-period idt) (.-duration idt)))))))
+            (PeriodDuration. (.period idt) (.duration idt)))))))
 
   IntervalMonthDayNanoVector
   (->mono-reader [arrow-vec _col-type]
@@ -168,7 +168,7 @@
         (valueCount [_] (.getValueCount arrow-vec))
         (readObject [_ idx]
           (let [^IntervalMonthDayNano imdn (.getObject vec-rdr idx)]
-            (PeriodDuration. (.-period imdn) (.-duration imdn))))))))
+            (PeriodDuration. (.period imdn) (.duration imdn))))))))
 
 (extend-protocol MonoFactory
   ListVector
