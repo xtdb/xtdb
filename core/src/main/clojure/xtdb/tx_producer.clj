@@ -3,20 +3,19 @@
             [juxt.clojars-mirrors.integrant.core :as ig]
             [xtdb.error :as err]
             xtdb.log
-            [xtdb.rewrite :refer [zmatch]]
             [xtdb.sql :as sql]
             [xtdb.types :as types]
             [xtdb.util :as util]
             [xtdb.vector :as vec]
             [xtdb.vector.writer :as vw])
   (:import (java.time Instant ZoneId)
-           (java.util ArrayList HashMap)
+           (java.util ArrayList HashMap List)
            org.apache.arrow.memory.BufferAllocator
            (org.apache.arrow.vector VectorSchemaRoot)
            (org.apache.arrow.vector.types.pojo ArrowType$Union Schema)
            org.apache.arrow.vector.types.UnionMode
            (xtdb.log Log LogRecord)
-           xtdb.types.ClojureForm
+           (xtdb.tx Ops Ops$Abort Ops$Call Ops$Delete Ops$Evict Ops$Put Ops$Sql)
            xtdb.vector.IValueWriter))
 
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
@@ -24,56 +23,168 @@
   (submitTx
     ^java.util.concurrent.CompletableFuture #_<TransactionInstant> [^java.util.List txOps, ^java.util.Map opts]))
 
-(s/def :xt/id
-  (some-fn uuid? integer? string? keyword?))
+(def eid? (some-fn uuid? integer? string? keyword?))
 
-(s/def ::doc
-  (s/and (s/keys :req [:xt/id])
-         (s/conformer #(update-keys % util/kw->normal-form-kw) #(update-keys % util/normal-form-kw->datalog-form-kw))))
+(def table? keyword?)
 
-(s/def ::table
-  (s/and keyword?
-         (s/conformer (comp util/symbol->normal-form-symbol symbol) (comp util/normal-form-kw->datalog-form-kw keyword))))
+(defmulti parse-tx-op first :default ::default)
 
-(s/def ::valid-time-start (s/nilable ::util/datetime-value))
-(s/def ::valid-time-end (s/nilable ::util/datetime-value))
+(defmethod parse-tx-op ::default [tx-op]
+  (throw (err/illegal-arg :xtdb.tx/invalid-tx-op
+                          {:tx-op tx-op
+                           :op (first tx-op)})))
 
-(s/def ::for-valid-time
-  (s/and (s/or :in (s/cat :in #{:in}
-                          :valid-time-start ::valid-time-start
-                          :valid-time-end (s/? ::valid-time-end))
-               :from (s/cat :from #{:from}
-                            :valid-time-start ::valid-time-start)
-               :to (s/cat :to #{:to}
-                          :valid-time-end ::valid-time-end))
+(defn expect-sql [sql tx-op]
+  (when-not (string? sql)
+    (throw (err/illegal-arg :xtdb.tx/expected-sql
+                            {::err/message "Expected SQL query",
+                             :tx-op tx-op
+                             :sql sql}))))
 
-         (s/conformer val (fn [x] [(some #{:in :from :to} (vals x)) x]))))
+(defmethod parse-tx-op :sql [[_ sql+params :as tx-op]]
+  (when-not sql+params
+    (throw (err/illegal-arg :xtdb.tx/expected-sql+params
+                            {::err/message "expected SQL query or [sql & params]", :tx-op tx-op})))
 
-(s/def ::temporal-opts
-  (s/and (s/keys :opt-un [::for-valid-time])
-         (s/conformer #(:for-valid-time %) #(hash-map :for-valid-time %))))
+  (cond
+    (string? sql+params) (Ops/sql sql+params)
 
-#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
-(s/def ::default-all-valid-time? boolean)
+    (vector? sql+params)
+    (let [[sql & params] sql+params]
+      (expect-sql sql tx-op)
+      (Ops/sql sql params))
+
+    :else
+    (throw (err/illegal-arg :xtdb.tx/invalid-tx-op
+                            {::err/message "unexpected value in :sql - expecting vector or string", :tx-op tx-op}))))
+
+(defmethod parse-tx-op :sql-batch [[_ sql+params :as tx-op]]
+  (when-not (vector? sql+params)
+    (throw (err/illegal-arg :xtdb.tx/expected-sql+params
+                            {::err/message "expected [sql & param-groups]", :tx-op tx-op})))
+
+  (let [[sql & params] sql+params]
+    (expect-sql sql tx-op)
+    (when-not (sequential? params)
+      (throw (err/illegal-arg :xtdb.tx/expected-param-seqs
+                              {::err/message "expected seqs of params"
+                               :tx-op tx-op
+                               :params params})))
+
+    (when-let [non-seq (some (complement sequential?) params)]
+      (throw (err/illegal-arg :xtdb.tx/expected-param-seqs
+                              {::err/message "expected seqs of params"
+                               :tx-op tx-op
+                               :non-seq non-seq})))
+    (Ops/sqlBatch ^String sql, ^List (vec params))))
+
+(defn expect-table-name [table-name tx-op]
+  (when-not (table? table-name)
+    (throw (err/illegal-arg :xtdb.tx/invalid-table
+                            {::err/message "expected table name", :tx-op tx-op :table table-name})))
+
+  table-name)
+
+(defn expect-eid [eid tx-op]
+  (when-not (eid? eid)
+    (throw (err/illegal-arg :xtdb.tx/invalid-eid
+                            {::err/message "expected entity id", :tx-op tx-op :eid eid})))
+
+  eid)
+
+(defn expect-instant [instant temporal-opts tx-op]
+  (when-not (s/valid? ::util/datetime-value instant)
+    (throw (err/illegal-arg :xtdb.tx/invalid-date-time
+                            {::err/message "expected date-time"
+                             :tx-op tx-op
+                             :temporal-opts temporal-opts})))
+
+  (util/->instant instant))
+
+(defn expect-temporal-opts [temporal-opts tx-op]
+  (when-not (map? temporal-opts)
+    (throw (err/illegal-arg :xtdb.tx/invalid-temporal-opts
+                            {::err/message "expected map of temporal opts"
+                             :tx-op tx-op
+                             :temporal-opts temporal-opts})))
+
+  (when-let [for-valid-time (:for-valid-time temporal-opts)]
+    (when-not (vector? for-valid-time)
+      (throw (err/illegal-arg :xtdb.tx/invalid-temporal-opts
+                              {::err/message "expected vector for `:for-valid-time`"
+                               :tx-op tx-op
+                               :for-valid-time for-valid-time})))
+
+    (let [[tag & args] for-valid-time]
+      (case tag
+        :in {:valid-from (some-> (first args) (expect-instant temporal-opts tx-op))
+             :valid-to (some-> (second args) (expect-instant temporal-opts tx-op))}
+        :from {:valid-from (some-> (first args) (expect-instant temporal-opts tx-op))}
+        :to {:valid-to (some-> (first args) (expect-instant temporal-opts tx-op))}
+        (throw (err/illegal-arg :xtdb.tx/invalid-temporal-opts
+                                {::err/message "invalid tag for `:for-valid-time`, expected one of `#{:in :from :to}`"
+                                 :tx-op tx-op
+                                 :for-valid-time for-valid-time
+                                 :tag tag}))))))
+
+(defn expect-doc [doc tx-op]
+  (when-not (map? doc)
+    (throw (err/illegal-arg :xtdb.tx/expected-doc
+                            {::err/message "expected doc map", :doc doc, :tx-op tx-op})))
+  (let [eid (:xt/id doc)]
+    (when-not (eid? eid)
+      (throw (err/illegal-arg :xtdb.tx/invalid-eid
+                              {::err/message "expected xt/id", :tx-op tx-op :doc doc, :xt/id eid}))))
+
+  doc)
+
+(defmethod parse-tx-op :put [[_ table-name doc temporal-opts :as tx-op]]
+  (expect-table-name table-name tx-op)
+  (expect-doc doc tx-op)
+
+  (let [{:keys [^Instant valid-from, ^Instant valid-to]} (some-> temporal-opts (expect-temporal-opts tx-op))]
+    (-> (Ops/put table-name doc)
+        (.validFrom valid-from)
+        (.validTo valid-to))))
+
+(defn expect-fn-id [fn-id tx-op]
+  (when-not (eid? fn-id)
+    (throw (err/illegal-arg :xtdb.tx/invalid-fn-id {::err/message "expected fn-id", :tx-op tx-op :fn-id fn-id}))))
+
+(defmethod parse-tx-op :put-fn [[_ fn-id tx-fn temporal-opts :as tx-op]]
+  (expect-fn-id fn-id tx-op)
+
+  (when-not tx-fn
+    (throw (err/illegal-arg :xtdb.tx/invalid-tx-fn {::err/message "expected tx-fn", :tx-op tx-op :tx-fn tx-fn})))
+
+  (let [{:keys [^Instant valid-from, ^Instant valid-to]} (some-> temporal-opts (expect-temporal-opts tx-op))]
+    (-> (Ops/putFn fn-id tx-fn)
+        (.validFrom valid-from)
+        (.validTo valid-to))))
+
+(defmethod parse-tx-op :delete [[_ table-name eid temporal-opts :as tx-op]]
+  (expect-table-name table-name tx-op)
+  (expect-eid eid tx-op)
+
+  (let [{:keys [^Instant valid-from, ^Instant valid-to]} (some-> temporal-opts (expect-temporal-opts tx-op))]
+    (-> (Ops/delete table-name eid)
+        (.validFrom valid-from)
+        (.validTo valid-to))))
+
+(defmethod parse-tx-op :evict [[_ table-name eid :as tx-op]]
+  (expect-table-name table-name tx-op)
+  (expect-eid eid tx-op)
+
+  (Ops/evict table-name eid))
+
+(defmethod parse-tx-op :call [[_ fn-id & args :as tx-op]]
+  (expect-fn-id fn-id tx-op)
+  (Ops/call fn-id (into-array Object args)))
+
+;; required for C1 importer
+(defmethod parse-tx-op :abort [_] Ops/ABORT)
 
 (defmulti tx-op-spec first)
-
-(defmethod tx-op-spec :sql [_]
-  (s/cat :op #{:sql}
-
-         :sql+params
-         (-> (s/or :sql string?
-                   :sql+params (s/and vector? (s/cat :sql string?, :param-group (s/* any?))))
-             (s/and (s/conformer (fn [[tag arg]]
-                                   (case tag
-                                     :sql+params (let [{:keys [sql param-group]} arg]
-                                                   {:sql sql
-                                                    :param-groups (when (seq param-group)
-                                                                    [:rows [(vec param-group)]])})
-                                     :sql {:sql arg}))
-                                 (fn [{:keys [sql param-groups]}]
-                                   [:sql+params {:sql sql,
-                                                 :param-group (first param-groups)}]))))))
 
 (defmethod tx-op-spec :sql-batch [_]
   (s/cat :op #{:sql-batch}
@@ -81,54 +192,6 @@
                             (s/cat :sql string?,
                                    :param-groups (s/? (s/alt :rows (s/* (s/coll-of any? :kind sequential?))
                                                              :bytes #(= :varbinary (vw/value->col-type %))))))))
-
-(defmethod tx-op-spec :put [_]
-  (s/cat :op #{:put}
-         :table ::table
-         :doc ::doc
-         :app-time-opts (s/? ::temporal-opts)))
-
-(defmethod tx-op-spec :put-fn [_]
-  (s/cat :op #{:put-fn}
-         :id :xt/id
-         :tx-fn some?
-         :app-time-opts (s/? ::temporal-opts)))
-
-(defmethod tx-op-spec :delete [_]
-  (s/cat :op #{:delete}
-         :table ::table
-         :id :xt/id
-         :app-time-opts (s/? ::temporal-opts)))
-
-(defmethod tx-op-spec :evict [_]
-  ;; eventually this could have app-time/sys start/end?
-  (s/cat :op #{:evict}
-         :table ::table
-         :id :xt/id))
-
-;; required for C1 importer
-(defmethod tx-op-spec :abort [_]
-  (s/cat :op #{:abort}))
-
-(defmethod tx-op-spec :call [_]
-  (s/cat :op #{:call}
-         :fn-id :xt/id
-         :args (s/* any?)))
-
-(s/def ::tx-op
-  (s/and vector? (s/multi-spec tx-op-spec :op)))
-
-(s/def ::tx-ops (s/coll-of ::tx-op :kind sequential?))
-
-(defn conform-tx-ops [tx-ops]
-  (let [parsed-tx-ops (s/conform ::tx-ops tx-ops)]
-    (when (s/invalid? parsed-tx-ops)
-      (throw (err/illegal-arg :xtdb/invalid-tx-ops
-                              {::err/message (str "Invalid tx ops: " (s/explain-str ::tx-ops tx-ops))
-                               :tx-ops tx-ops
-                               :explain-data (s/explain-data ::tx-ops tx-ops)})))
-
-    parsed-tx-ops))
 
 (def ^:private ^org.apache.arrow.vector.types.pojo.Field tx-ops-field
   (types/->field "tx-ops" (ArrowType$Union. UnionMode/Dense (int-array (range 6))) false
@@ -190,34 +253,39 @@
   (let [sql-writer (.writerForTypeId op-writer 0)
         query-writer (.structKeyWriter sql-writer "query")
         params-writer (.structKeyWriter sql-writer "params")]
-    (fn write-sql! [{{:keys [sql param-groups]} :sql+params}]
-      (.startStruct sql-writer)
-      (vw/write-value! sql query-writer)
+    (fn write-sql! [^Ops$Sql op]
+      (let [sql (.sql op)]
+        (.startStruct sql-writer)
+        (vw/write-value! sql query-writer)
 
-      (when param-groups
-        (zmatch param-groups
-          [:rows param-rows] (vw/write-value! (encode-params allocator sql param-rows) params-writer)
-          [:bytes param-bytes] (vw/write-value! param-bytes params-writer)))
+        (when-let [param-bytes (.paramGroupBytes op)]
+          (vw/write-value! param-bytes params-writer))
+
+        (when-let [param-rows (.paramGroupRows op)]
+          (vw/write-value! (encode-params allocator sql param-rows) params-writer)))
 
       (.endStruct sql-writer))))
 
 (defn- ->put-writer [^IValueWriter op-writer]
   (let [put-writer (.writerForTypeId op-writer 1)
         doc-writer (.structKeyWriter put-writer "document")
-        valid-time-start-writer (.structKeyWriter put-writer "xt$valid_from")
-        valid-time-end-writer (.structKeyWriter put-writer "xt$valid_to")
+        valid-from-writer (.structKeyWriter put-writer "xt$valid_from")
+        valid-to-writer (.structKeyWriter put-writer "xt$valid_to")
         table-doc-writers (HashMap.)]
-    (fn write-put! [{:keys [doc table], {:keys [valid-time-start valid-time-end]} :app-time-opts}]
+    (fn write-put! [^Ops$Put op]
       (.startStruct put-writer)
-      (let [table-doc-writer (.computeIfAbsent table-doc-writers table
+      (let [table-doc-writer (.computeIfAbsent table-doc-writers (util/kw->normal-form-kw (.tableName op))
                                                (util/->jfn
                                                  (fn [table]
                                                    (let [type-id (.registerNewType doc-writer (types/col-type->field (name table) [:struct {}]))]
                                                      (.writerForTypeId doc-writer type-id)))))]
-        (vw/write-value! doc table-doc-writer))
+        (vw/write-value! (->> (.doc op)
+                              (into {} (map (juxt (comp util/kw->normal-form-kw key)
+                                                  val))))
+                         table-doc-writer))
 
-      (vw/write-value! valid-time-start valid-time-start-writer)
-      (vw/write-value! valid-time-end valid-time-end-writer)
+      (vw/write-value! (.validFrom op) valid-from-writer)
+      (vw/write-value! (.validTo op) valid-to-writer)
 
       (.endStruct put-writer))))
 
@@ -225,15 +293,18 @@
   (let [delete-writer (.writerForTypeId op-writer 2)
         table-writer (.structKeyWriter delete-writer "table")
         id-writer (.structKeyWriter delete-writer "xt$id")
-        valid-time-start-writer (.structKeyWriter delete-writer "xt$valid_from")
-        valid-time-end-writer (.structKeyWriter delete-writer "xt$valid_to")]
-    (fn write-delete! [{:keys [id table], {:keys [valid-time-start valid-time-end]} :app-time-opts}]
+        valid-from-writer (.structKeyWriter delete-writer "xt$valid_from")
+        valid-to-writer (.structKeyWriter delete-writer "xt$valid_to")]
+    (fn write-delete! [^Ops$Delete op]
       (.startStruct delete-writer)
 
-      (vw/write-value! (name table) table-writer)
-      (vw/write-value! id (.writerForType id-writer (vw/value->col-type id)))
-      (vw/write-value! valid-time-start valid-time-start-writer)
-      (vw/write-value! valid-time-end valid-time-end-writer)
+      (vw/write-value! (name (util/kw->normal-form-kw (.tableName op))) table-writer)
+
+      (let [eid (.entityId op)]
+        (vw/write-value! eid (.writerForType id-writer (vw/value->col-type eid))))
+
+      (vw/write-value! (.validFrom op) valid-from-writer)
+      (vw/write-value! (.validTo op) valid-to-writer)
 
       (.endStruct delete-writer))))
 
@@ -241,57 +312,56 @@
   (let [evict-writer (.writerForTypeId op-writer 3)
         table-writer (.structKeyWriter evict-writer "_table")
         id-writer (.structKeyWriter evict-writer "xt$id")]
-    (fn [{:keys [id table]}]
+    (fn [^Ops$Evict op]
       (.startStruct evict-writer)
-      (some-> (name table) (vw/write-value! table-writer))
-      (vw/write-value! id (.writerForType id-writer (vw/value->col-type id)))
+      (vw/write-value! (name (.tableName op)) table-writer)
+
+      (let [eid (.entityId op)]
+        (vw/write-value! eid (.writerForType id-writer (vw/value->col-type eid))))
+
       (.endStruct evict-writer))))
 
 (defn- ->call-writer [^IValueWriter op-writer]
   (let [call-writer (.writerForTypeId op-writer 4)
         fn-id-writer (.structKeyWriter call-writer "fn-id")
         args-list-writer (.structKeyWriter call-writer "args")]
-    (fn write-call! [{:keys [fn-id args]}]
+    (fn write-call! [^Ops$Call op]
       (.startStruct call-writer)
 
-      (vw/write-value! fn-id (.writerForType fn-id-writer (vw/value->col-type fn-id)))
-      (vw/write-value! (vec args) args-list-writer)
+      (let [fn-id (.fnId op)]
+        (vw/write-value! fn-id (.writerForType fn-id-writer (vw/value->col-type fn-id))))
+
+      (vw/write-value! (vec (.args op)) args-list-writer)
 
       (.endStruct call-writer))))
 
 (defn- ->abort-writer [^IValueWriter op-writer]
   (let [abort-writer (.writerForTypeId op-writer 5)]
-    (fn [_]
+    (fn [^Ops$Abort _op]
       (.writeNull abort-writer nil))))
 
 (defn open-tx-ops-vec ^org.apache.arrow.vector.ValueVector [^BufferAllocator allocator]
   (.createVector tx-ops-field allocator))
 
 (defn write-tx-ops! [^BufferAllocator allocator, ^IValueWriter op-writer, tx-ops]
-  (let [tx-ops (conform-tx-ops tx-ops)
-        op-count (count tx-ops)
-
-        write-sql! (->sql-writer op-writer allocator)
+  (let [write-sql! (->sql-writer op-writer allocator)
         write-put! (->put-writer op-writer)
         write-delete! (->delete-writer op-writer)
         write-evict! (->evict-writer op-writer)
         write-call! (->call-writer op-writer)
         write-abort! (->abort-writer op-writer)]
 
-    (dotimes [tx-op-n op-count]
-      (let [tx-op (nth tx-ops tx-op-n)]
-        (case (:op tx-op)
-          :sql (write-sql! tx-op)
-          :sql-batch (write-sql! tx-op)
-          :put (write-put! tx-op)
-          :put-fn (let [{:keys [id tx-fn app-time-opts]} tx-op]
-                    (write-put! {:table :xt$tx_fns
-                                 :doc {:xt$id id, :xt$fn (ClojureForm. tx-fn)}
-                                 :app-time-opts app-time-opts}))
-          :delete (write-delete! tx-op)
-          :evict (write-evict! tx-op)
-          :call (write-call! tx-op)
-          :abort (write-abort! tx-op))))))
+    (doseq [tx-op tx-ops
+            :let [tx-op (cond-> tx-op
+                          (vector? tx-op) parse-tx-op)]]
+      (condp instance? tx-op
+        Ops$Sql (write-sql! tx-op)
+        Ops$Put (write-put! tx-op)
+        Ops$Delete (write-delete! tx-op)
+        Ops$Evict (write-evict! tx-op)
+        Ops$Call (write-call! tx-op)
+        Ops$Abort (write-abort! tx-op)
+        (throw (err/illegal-arg :invalid-tx-op {:tx-op tx-op}))))))
 
 (defn serialize-tx-ops ^java.nio.ByteBuffer [^BufferAllocator allocator tx-ops {:keys [^Instant system-time, default-tz, default-all-valid-time?]}]
   (with-open [root (VectorSchemaRoot/create tx-schema allocator)]

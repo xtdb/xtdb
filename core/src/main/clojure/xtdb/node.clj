@@ -16,7 +16,8 @@
            (java.lang AutoCloseable)
            (java.time ZoneId)
            (java.util.concurrent CompletableFuture)
-           (org.apache.arrow.memory BufferAllocator RootAllocator)))
+           (org.apache.arrow.memory BufferAllocator RootAllocator)
+           xtdb.tx.Ops$Sql))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -33,10 +34,12 @@
 
 (defn- validate-tx-ops [tx-ops]
   (try
-    (doseq [{:keys [op] :as tx-op} (txp/conform-tx-ops tx-ops)
-            :when (= :sql op)
-            :let [{{:keys [sql]} :sql+params} tx-op]]
-      (sql/parse-query sql))
+    (doseq [tx-op (->> tx-ops
+                       (map (fn [tx-op]
+                              (cond-> tx-op
+                                (vector? tx-op) txp/parse-tx-op))))
+            :when (instance? Ops$Sql tx-op)]
+      (sql/parse-query (.sql ^Ops$Sql tx-op)))
     (catch Throwable e
       (CompletableFuture/failedFuture e))))
 

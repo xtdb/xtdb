@@ -152,7 +152,7 @@
                                 [:call :assoc-version :fail]])
       (t/is (= 0 (foo-version)))
 
-      (t/is (thrown-with-msg? IllegalArgumentException #"Invalid tx op"
+      (t/is (thrown-with-msg? IllegalArgumentException #"invalid-tx-op"
                               (some-> (idx/reset-tx-fn-error!) throw))))
 
     (t/testing "no :fn"

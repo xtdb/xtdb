@@ -22,6 +22,7 @@
            org.apache.arrow.vector.types.pojo.Schema
            xtdb.indexer.IIndexer
            (xtdb.operator BoundQuery IRaQuerySource PreparedQuery)
+           [xtdb.tx Ops]
            xtdb.vector.IVectorReader))
 
 ;;;; populate-root temporarily copied from test-util
@@ -114,7 +115,8 @@
                 (CompletableFuture/failedFuture (UnsupportedOperationException. "unknown tx")))
 
               (-> (xt/submit-tx& node [dml])
-                  (then-await-fn svr))))
+                  (then-await-fn svr)
+                  (doto deref))))
 
           (handle-get-stream [^BoundQuery bq, ^FlightProducer$ServerStreamListener listener]
             (with-open [res (.openCursor bq)
@@ -170,7 +172,7 @@
         (fn []
           @(-> (let [{:keys [sql fsql-tx-id]} (or (get stmts (.getPreparedStatementHandle cmd))
                                                   (throw (UnsupportedOperationException. "invalid ps-id")))
-                     dml [:sql-batch [sql (flight-stream->bytes flight-stream)]]]
+                     dml (Ops/sqlBatch sql (flight-stream->bytes flight-stream))]
                  (exec-dml dml fsql-tx-id))
 
                (then-send-do-put-update-res ack-stream allocator))))
