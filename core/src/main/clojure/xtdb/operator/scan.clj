@@ -588,6 +588,7 @@
                                        iid-bb (assoc "xt$iid" (iid-selector iid-bb)))
                            metadata-pred (expr.meta/->metadata-selector (cons 'and metadata-args) col-types params)
                            scan-opts (-> scan-opts
+                                         (assoc :iid-bb iid-bb)
                                          (update :for-valid-time
                                                  (fn [fvt]
                                                    (or fvt (if default-all-valid-time? [:all-time] [:at [:now :now]])))))
@@ -600,7 +601,7 @@
                                                      (remove nil?)
                                                      (into {} (map (juxt :buf-key :page-idxs))))
                            trie-file->page-idxs-fn (fn [trie-file] (get trie-file->page-idxs trie-file))
-                           merge-plan (trie/table-merge-plan buffer-pool metadata-mgr table-tries trie-file->page-idxs-fn live-table-wm)]
+                           merge-plan (trie/table-merge-plan buffer-pool metadata-mgr table-tries trie-file->page-idxs-fn live-table-wm iid-bb)]
 
                        ;; The consumers for different leafs need to share some state so the logic of how to advance
                        ;; is correct. For example if the `skip-iid-ptr` gets set in one leaf consumer it should also affect

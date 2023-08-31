@@ -84,7 +84,7 @@
 
       (merge-tries! allocator leaves
                     (.getChannel leaf-out-bb) (.getChannel trie-out-bb)
-                    (trie/table-merge-plan buffer-pool metadata-mgr table-tries (constantly constant-all-page-bitmap) nil))
+                    (trie/table-merge-plan buffer-pool metadata-mgr table-tries (constantly constant-all-page-bitmap) nil nil))
 
       (log/debugf "uploading '%s' '%s'..." table-name out-trie-key)
 

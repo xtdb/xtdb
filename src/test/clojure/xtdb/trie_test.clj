@@ -37,7 +37,8 @@
                           {:path [3], :node [:leaf [nil {:page-idx 3} {:page-idx 0} {:page-idx 1}]]}]]}
                  (->> (trie/->merge-plan [nil (ArrowHashTrie/from t1-root) (ArrowHashTrie/from log-root) (ArrowHashTrie/from log2-root)]
                                          page-idx-pred
-                                         iid-bloom-bitmap)
+                                         iid-bloom-bitmap
+                                         nil)
                       (walk/postwalk (fn [x]
                                        (if (and (map-entry? x) (= :path (key x)))
                                          (MapEntry/create :path (into [] (val x)))

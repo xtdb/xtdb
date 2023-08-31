@@ -251,18 +251,25 @@
   (->> (sort (.listObjects obj-store (format "tables/%s/log-tries" table-name)))
        (into [] (keep parse-trie-filename))))
 
+(defn- bucket-for [^ByteBuffer iid level]
+  (let [level-offset-bits (* HashTrie/LEVEL_BITS (inc level))
+        level-offset-bytes (/ (- level-offset-bits HashTrie/LEVEL_BITS) Byte/SIZE)]
+    (bit-and (bit-shift-right (.get iid ^int level-offset-bytes) (mod level-offset-bits Byte/SIZE)) HashTrie/LEVEL_MASK)))
+
 (defn ->merge-plan
   "Returns a tree of the tasks required to merge the given tries
 
   tries :: vector of tries
   page-idx-pred :: [ordinal page-idx] -> boolean
   iid-bloom-bitmap-fn :: [ordinal page-idx] -> ImmutableRoaringBitmap"
-  [tries, page-idx-pred, iid-bloom-bitmap-fn]
+  [tries, page-idx-pred, iid-bloom-bitmap-fn, ^ByteBuffer iid]
 
   (letfn [(->merge-plan* [nodes path ^long level]
             (let [trie-children (mapv #(some-> ^HashTrie$Node % (.children)) nodes)]
               (if-let [^objects first-children (some identity trie-children)]
-                (let [branches (->> (range (alength first-children))
+                (let [branches (->> (if iid
+                                      [(bucket-for iid level)]
+                                      (range (alength first-children)))
                                     (mapv (fn [bucket-idx]
                                             (->merge-plan* (mapv (fn [node ^objects node-children]
                                                                    (if node-children
@@ -304,7 +311,7 @@
     (->merge-plan* (map #(some-> ^HashTrie % (.rootNode)) tries) [] 0)))
 
 (defn table-merge-plan [^IBufferPool buffer-pool, ^IMetadataManager metadata-mgr, table-tries,
-                        trie-file->page-idxs-fn, ^ILiveTableWatermark live-table-wm]
+                        trie-file->page-idxs-fn, ^ILiveTableWatermark live-table-wm, ^ByteBuffer iid-bb]
 
   (util/with-open [trie-roots (ArrayList. (count table-tries))]
     ;; TODO these could be kicked off asynchronously
@@ -328,7 +335,7 @@
                    (util/->jfn
                      (fn [^ITableMetadata table-meta]
                        (.iidBloomBitmap table-meta page-idx)))))]
-        (->merge-plan (mapv :trie tries) page-idx-pred iid-bloom-bitmap)))))
+        (->merge-plan (mapv :trie tries) page-idx-pred iid-bloom-bitmap iid-bb)))))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (definterface ILeafLoader
