@@ -21,7 +21,8 @@
            org.apache.lucene.queryparser.classic.QueryParser
            [org.apache.lucene.search BooleanClause$Occur BooleanQuery$Builder DoubleValuesSource IndexSearcher Query ScoreDoc SearcherManager TermQuery TopDocs]
            [org.apache.lucene.store ByteBuffersDirectory FSDirectory IOContext]
-           xtdb.query.VarBinding))
+           xtdb.query.VarBinding
+           [org.apache.lucene.util InfoStream]))
 
 (defrecord LuceneNode [directory analyzer index-writer searcher-manager indexer
                        cp-job ^Thread fsync-thread, ^Thread refresh-thread]
@@ -56,10 +57,18 @@
       (throw (IllegalStateException. (format "Lucene index structure out of date - please remove the Lucene dir and re-index. (expected: %d, actual: %s)"
                                              index-version found-index-version))))))
 
-(defn- ^IndexWriter ->index-writer [{:keys [directory analyzer index-deletion-policy]}]
+(defn- iw-info-stream ^InfoStream [log-level]
+  (proxy [InfoStream] []
+    (message [component message]
+      (log/logf log-level "%s: %s" component message))
+    (isEnabled [component]
+      (= "IW" component))))
+
+(defn- ^IndexWriter ->index-writer [{:keys [directory analyzer index-deletion-policy log]}]
   (doto (IndexWriter. directory,
                       (cond-> (IndexWriterConfig. analyzer)
-                        index-deletion-policy (doto (.setIndexDeletionPolicy index-deletion-policy))))
+                              index-deletion-policy (doto (.setIndexDeletionPolicy index-deletion-policy))
+                              log (.setInfoStream (iw-info-stream log))))
     (validate-index-version)))
 
 (defn- user-data->tx-id [user-data]
@@ -342,6 +351,9 @@
 (defn ->lucene-store
   {::sys/args {:db-dir {:doc "Lucene DB Dir"
                         :spec ::sys/path}
+               :log-iw {:doc "Turn on IndexWriter InfoStream logs, provide a desired log level, e.g :debug."
+                        :spec (s/nilable #{:info :warn :error :debug :trace})
+                        :default nil}
                :fsync-frequency {:required? true
                                  :spec ::sys/duration
                                  :default "PT5M"
@@ -357,13 +369,15 @@
                :checkpointer (fn [_])}
    ::sys/before #{[:xtdb/tx-ingester]}}
   [{:keys [^Path db-dir analyzer indexer query-engine secondary-indices checkpointer
-           fsync-frequency ^Duration refresh-frequency]
+           fsync-frequency ^Duration refresh-frequency log-iw]
     :as opts}]
   (some-> checkpointer (cp/try-restore (.toFile db-dir) "lucene-8"))
   (let [directory (if db-dir
                     (FSDirectory/open db-dir)
                     (ByteBuffersDirectory.))
-        index-writer (->index-writer {:directory directory, :analyzer analyzer,
+        index-writer (->index-writer {:directory directory
+                                      :analyzer analyzer
+                                      :log log-iw
                                       :index-deletion-policy (SnapshotDeletionPolicy. (KeepOnlyLastCommitDeletionPolicy.))})
         searcher-manager (SearcherManager. index-writer true false nil)
         cp-job (when checkpointer
