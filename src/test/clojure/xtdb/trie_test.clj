@@ -14,12 +14,15 @@
               t1-root (tu/open-arrow-hash-trie-root al [[nil 0 nil 1] 2 nil 3])
               log-root (tu/open-arrow-hash-trie-root al 0)
               log2-root (tu/open-arrow-hash-trie-root al [nil nil 0 1])]
-    (let [trie-page-idxs [(RoaringBitmap.)
-                          (RoaringBitmap/bitmapOf (int-array '(0 1 2 3)))
-                          (RoaringBitmap/bitmapOf (int-array '(0)))
-                          (RoaringBitmap/bitmapOf (int-array '(0 1)))]
+    (let [page-idxs [(RoaringBitmap.)
+                     (RoaringBitmap/bitmapOf (int-array '(0 1 2 3)))
+                     (RoaringBitmap/bitmapOf (int-array '(0)))
+                     (RoaringBitmap/bitmapOf (int-array '(0 1)))]
           constant-iid-bloom-bitmap (.toImmutableRoaringBitmap (MutableRoaringBitmap/bitmapOf (int-array '(1000 1001 1002))))]
-      (letfn [(iid-bloom-bitmap [_ordinal _page-idx]
+      (letfn [(page-idx-pred [ordinal ^long page-idx]
+                (when-let [^RoaringBitmap page-idxs (nth page-idxs ordinal)]
+                  (.contains page-idxs page-idx)))
+              (iid-bloom-bitmap [_ordinal _page-idx]
                 constant-iid-bloom-bitmap)]
         (t/is (= {:path [],
                   :node [:branch
@@ -33,7 +36,7 @@
                           {:path [2], :node [:leaf [nil nil {:page-idx 0} {:page-idx 0}]]}
                           {:path [3], :node [:leaf [nil {:page-idx 3} {:page-idx 0} {:page-idx 1}]]}]]}
                  (->> (trie/->merge-plan [nil (ArrowHashTrie/from t1-root) (ArrowHashTrie/from log-root) (ArrowHashTrie/from log2-root)]
-                                         trie-page-idxs
+                                         page-idx-pred
                                          iid-bloom-bitmap)
                       (walk/postwalk (fn [x]
                                        (if (and (map-entry? x) (= :path (key x)))

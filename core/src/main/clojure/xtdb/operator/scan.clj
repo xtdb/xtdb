@@ -24,7 +24,7 @@
            (org.apache.arrow.memory BufferAllocator)
            [org.apache.arrow.memory.util ArrowBufPointer]
            [org.roaringbitmap RoaringBitmap]
-           [org.roaringbitmap.buffer ImmutableRoaringBitmap MutableRoaringBitmap]
+           [org.roaringbitmap.buffer MutableRoaringBitmap]
            xtdb.api.protocols.TransactionInstant
            xtdb.buffer_pool.IBufferPool
            xtdb.ICursor
@@ -599,7 +599,8 @@
                                                      (map (partial filter-trie-match metadata-mgr col-names))
                                                      (remove nil?)
                                                      (into {} (map (juxt :buf-key :page-idxs))))
-                           merge-plan (trie/table-merge-plan buffer-pool metadata-mgr table-tries trie-file->page-idxs live-table-wm)]
+                           trie-file->page-idxs-fn (fn [trie-file] (get trie-file->page-idxs trie-file))
+                           merge-plan (trie/table-merge-plan buffer-pool metadata-mgr table-tries trie-file->page-idxs-fn live-table-wm)]
 
                        ;; The consumers for different leafs need to share some state so the logic of how to advance
                        ;; is correct. For example if the `skip-iid-ptr` gets set in one leaf consumer it should also affect
