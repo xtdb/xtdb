@@ -252,8 +252,12 @@
        (into [] (keep parse-trie-filename))))
 
 (defn ->merge-plan
-  "Returns a tree of the tasks required to merge the given tries "
-  [tries, trie-page-idxs, iid-bloom-bitmap]
+  "Returns a tree of the tasks required to merge the given tries
+
+  tries :: vector of tries
+  page-idx-pred :: [ordinal page-idx] -> boolean
+  iid-bloom-bitmap-fn :: [ordinal page-idx] -> ImmutableRoaringBitmap"
+  [tries, page-idx-pred, iid-bloom-bitmap-fn]
 
   (letfn [(->merge-plan* [nodes path ^long level]
             (let [trie-children (mapv #(some-> ^HashTrie$Node % (.children)) nodes)]
@@ -283,15 +287,13 @@
                       node (condp = (class node)
                              ArrowHashTrie$Leaf
                              (let [page-idx (.getPageIndex ^ArrowHashTrie$Leaf node)
-                                   take-node? (if-let [^RoaringBitmap page-idxs (nth trie-page-idxs ordinal)]
-                                                (.contains page-idxs page-idx)
-                                                true)]
+                                   take-node? (page-idx-pred ordinal page-idx)]
                                (when take-node?
-                                 (.or cumulative-iid-bitmap (iid-bloom-bitmap ordinal page-idx)))
+                                 (.or cumulative-iid-bitmap (iid-bloom-bitmap-fn ordinal page-idx)))
                                (recur (inc ordinal) more-nodes (or node-taken? take-node?)
                                       (conj leaves (when (or take-node?
                                                              (when node-taken?
-                                                               (when-let [iid-bitmap (iid-bloom-bitmap ordinal page-idx)]
+                                                               (when-let [iid-bitmap (iid-bloom-bitmap-fn ordinal page-idx)]
                                                                  (MutableRoaringBitmap/intersects cumulative-iid-bitmap iid-bitmap))))
                                                      {:page-idx page-idx}))))
                              LiveHashTrie$Leaf
@@ -302,7 +304,7 @@
     (->merge-plan* (map #(some-> ^HashTrie % (.rootNode)) tries) [] 0)))
 
 (defn table-merge-plan [^IBufferPool buffer-pool, ^IMetadataManager metadata-mgr, table-tries,
-                        trie-file->page-idxs, ^ILiveTableWatermark live-table-wm]
+                        trie-file->page-idxs-fn, ^ILiveTableWatermark live-table-wm]
 
   (util/with-open [trie-roots (ArrayList. (count table-tries))]
     ;; TODO these could be kicked off asynchronously
@@ -314,15 +316,19 @@
                                      (.add trie-roots root)
                                      {:trie (ArrowHashTrie/from root)
                                       :trie-file trie-file
-                                      :page-idxs (get trie-file->page-idxs trie-file)})))))
+                                      :page-idxs (trie-file->page-idxs-fn trie-file)})))))
                   live-table-wm (conj {:trie (.compactLogs (.liveTrie live-table-wm))}))
-          trie-files (mapv :trie-file tries)]
-      (letfn [(iid-bloom-bitmap ^ImmutableRoaringBitmap [ordinal page-idx]
+          trie-files (mapv :trie-file tries)
+          page-idxs (mapv :page-idxs tries)]
+      (letfn [(page-idx-pred [ordinal ^long page-idx]
+                (when-let [^RoaringBitmap page-idxs (nth page-idxs ordinal)]
+                  (.contains page-idxs page-idx)))
+              (iid-bloom-bitmap ^ImmutableRoaringBitmap [ordinal page-idx]
                 @(meta/with-metadata metadata-mgr (nth trie-files ordinal)
                    (util/->jfn
                      (fn [^ITableMetadata table-meta]
                        (.iidBloomBitmap table-meta page-idx)))))]
-        (->merge-plan (mapv :trie tries) (mapv :page-idxs tries) iid-bloom-bitmap)))))
+        (->merge-plan (mapv :trie tries) page-idx-pred iid-bloom-bitmap)))))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (definterface ILeafLoader

@@ -12,6 +12,7 @@
   (:import [org.apache.arrow.memory BufferAllocator]
            org.apache.arrow.vector.types.pojo.Field
            org.apache.arrow.vector.VectorSchemaRoot
+           [org.roaringbitmap RoaringBitmap]
            xtdb.buffer_pool.IBufferPool
            (xtdb.metadata IMetadataManager)
            xtdb.object_store.ObjectStore
@@ -71,6 +72,8 @@
 
           (.end trie-wtr))))))
 
+(def ^:private constant-all-page-bitmap (RoaringBitmap/flip (RoaringBitmap.) 0 (bit-shift-left 1 16)))
+
 (defn exec-compaction-job! [^BufferAllocator allocator, ^ObjectStore obj-store, ^IMetadataManager metadata-mgr, ^IBufferPool buffer-pool,
                             {:keys [table-name table-tries out-trie-key]}]
   (try
@@ -81,7 +84,7 @@
 
       (merge-tries! allocator leaves
                     (.getChannel leaf-out-bb) (.getChannel trie-out-bb)
-                    (trie/table-merge-plan buffer-pool metadata-mgr table-tries nil nil))
+                    (trie/table-merge-plan buffer-pool metadata-mgr table-tries (constantly constant-all-page-bitmap) nil))
 
       (log/debugf "uploading '%s' '%s'..." table-name out-trie-key)
 
