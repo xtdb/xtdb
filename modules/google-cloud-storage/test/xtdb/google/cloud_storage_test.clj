@@ -25,7 +25,7 @@
                         (.build)
                         (.getService))
             bucket (.get storage test-bucket (into-array Storage$BucketGetOption []))]
-        (when (.exists bucket (into-array Bucket$BucketSourceOption []))
+        (when (and bucket (.exists bucket (into-array Bucket$BucketSourceOption [])))
           (f)))
       (catch StorageException e
         (when-not (= 401 (.getCode e))
