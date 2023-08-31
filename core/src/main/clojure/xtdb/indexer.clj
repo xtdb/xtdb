@@ -32,7 +32,8 @@
            (org.apache.arrow.vector BitVector)
            (org.apache.arrow.vector.complex DenseUnionVector ListVector)
            (org.apache.arrow.vector.ipc ArrowStreamReader)
-           (xtdb.api.protocols ClojureForm TransactionInstant)
+           (xtdb.api.protocols TransactionInstant)
+           xtdb.types.ClojureForm
            (xtdb.indexer.live_index ILiveIndex ILiveIndexTx ILiveTableTx)
            xtdb.metadata.IMetadataManager
            xtdb.object_store.ObjectStore
@@ -181,7 +182,7 @@
           (when-not (instance? ClojureForm fn-body)
             (throw (err/illegal-arg :xtdb.call/invalid-tx-fn {:fn-doc fn-doc})))
 
-          (let [fn-form (:form fn-body)]
+          (let [fn-form (.form ^ClojureForm fn-body)]
             (try
               (sci/eval-form sci-ctx fn-form)
 

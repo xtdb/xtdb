@@ -6,7 +6,6 @@
             [juxt.clojars-mirrors.integrant.core :as ig]
             [muuntaja.core :as m]
             [muuntaja.format.core :as mf]
-            [muuntaja.format.json :as mj]
             [reitit.coercion :as r.coercion]
             [reitit.coercion.spec :as rc.spec]
             [reitit.core :as r]
@@ -20,10 +19,8 @@
             [reitit.swagger :as r.swagger]
             [ring.adapter.jetty9 :as j]
             [spec-tools.core :as st]
-            [xtdb.api :as xt]
             [xtdb.api.protocols :as xtp]
             [xtdb.error :as err]
-            [xtdb.node :as node]
             [xtdb.transit :as xt.transit]
             [xtdb.util :as util])
   (:import java.io.OutputStream

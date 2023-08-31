@@ -1,6 +1,5 @@
 (ns xtdb.vector.writer
-  (:require [clojure.set :as set]
-            [xtdb.error :as err]
+  (:require [xtdb.error :as err]
             [xtdb.types :as types]
             [xtdb.util :as util]
             [xtdb.vector :as vec]
@@ -18,7 +17,7 @@
            (org.apache.arrow.vector BigIntVector BitVector DecimalVector DateDayVector DateMilliVector DurationVector ExtensionTypeVector FixedSizeBinaryVector Float4Vector Float8Vector IntVector IntervalDayVector IntervalMonthDayNanoVector IntervalYearVector NullVector PeriodDuration SmallIntVector TimeMicroVector TimeMilliVector TimeNanoVector TimeSecVector TimeStampVector TinyIntVector ValueVector VarBinaryVector VarCharVector VectorSchemaRoot)
            (org.apache.arrow.vector.complex DenseUnionVector ListVector StructVector)
            (org.apache.arrow.vector.types.pojo ArrowType$List ArrowType$Struct ArrowType$Union Field FieldType)
-           xtdb.api.protocols.ClojureForm
+           xtdb.types.ClojureForm
            (xtdb.types IntervalDayTime IntervalMonthDayNano IntervalYearMonth)
            (xtdb.vector IRelationWriter RelationReader IRowCopier IVectorReader IVectorWriter IVectorPosition)
            (xtdb.vector.extensions SetType)))
@@ -314,7 +313,7 @@
 
   IntervalYearMonth
   (value->col-type [_] [:interval :year-month])
-  (write-value! [v ^IVectorWriter w] (.writeInt w (.toTotalMonths (.-period v))))
+  (write-value! [v ^IVectorWriter w] (.writeInt w (.toTotalMonths (.period v))))
 
   IntervalDayTime
   (value->col-type [_] [:interval :day-time])
@@ -845,8 +844,8 @@
 
   ClojureForm
   (value->col-type [_] :clj-form)
-  (write-value! [{:keys [form]} ^IVectorWriter w]
-    (write-value! (pr-str form) w)))
+  (write-value! [clj-form ^IVectorWriter w]
+    (write-value! (pr-str (.form clj-form)) w)))
 
 (defn write-vec! [^ValueVector v, vs]
   (.clear v)

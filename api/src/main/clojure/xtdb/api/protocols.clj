@@ -1,6 +1,7 @@
 (ns ^{:clojure.tools.namespace.repl/load false, :clojure.tools.namespace.repl/unload false} xtdb.api.protocols
   (:import java.io.Writer
-           java.time.Instant))
+           java.time.Instant
+           xtdb.types.ClojureForm))
 
 (defrecord TransactionInstant [^long tx-id, ^Instant system-time]
   Comparable
@@ -14,11 +15,12 @@
 (defmethod print-method TransactionInstant [tx-key w]
   (print-dup tx-key w))
 
-(defrecord ClojureForm [form])
+(defn ->ClojureForm [form]
+  (ClojureForm. form))
 
-(defmethod print-dup ClojureForm [{:keys [form]} ^Writer w]
+(defmethod print-dup ClojureForm [^ClojureForm clj-form ^Writer w]
   (.write w "#xt/clj-form ")
-  (print-method form w))
+  (print-method (.form clj-form) w))
 
 (defmethod print-method ClojureForm [clj-form w]
   (print-dup clj-form w))

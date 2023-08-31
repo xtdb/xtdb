@@ -6,7 +6,8 @@
             [xtdb.test-util :as tu :refer [*node*]]
             [xtdb.util :as util]
             [xtdb.error :as err])
-  (:import (java.time Duration ZoneId)))
+  (:import (java.time Duration ZoneId)
+           xtdb.types.ClojureForm))
 
 (t/use-fixtures :each
   (tu/with-each-api-implementation
@@ -156,7 +157,7 @@
              (->> (xt/q *node*
                         '{:find [tx-id tx-time committed? err]
                           :where [($ :xt/txs {:xt/id tx-id, :xt/tx-time tx-time, :xt/committed? committed? :xt/error err})]})
-                  (into #{} (map #(update % :err (comp ex-data :form)))))))))
+                  (into #{} (map #(update % :err (comp ex-data (fn [^ClojureForm clj-form] (some-> clj-form .form)))))))))))
 
 (def ^:private devs
   '[[:put :users {:xt/id :jms, :name "James"}]

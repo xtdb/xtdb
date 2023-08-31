@@ -2,7 +2,8 @@
   (:require [clojure.test :as t :refer [deftest]]
             [xtdb.api :as xt]
             [xtdb.test-util :as tu]
-            [xtdb.util :as util]))
+            [xtdb.util :as util])
+  (:import xtdb.types.ClojureForm))
 
 (t/use-fixtures :each tu/with-mock-clock tu/with-node)
 
@@ -377,13 +378,14 @@ VALUES(1, OBJECT ('foo': OBJECT('bibble': true), 'bar': OBJECT('baz': 1001)))"]]
            RuntimeException
            #":xtdb\.call/error-evaluating-tx-fn"
 
-           (throw (-> (xt/q tu/*node*
-                            ['{:find [err]
-                               :in [tx-id]
-                               :where [($ :xt/txs {:xt/id tx-id, :xt/error err})]}
-                             3])
-                      first
-                      :err :form))))))
+           (throw (let [^ClojureForm clj-form (-> (xt/q tu/*node*
+                                                        ['{:find [err]
+                                                           :in [tx-id]
+                                                           :where [($ :xt/txs {:xt/id tx-id, :xt/error err})]}
+                                                         3])
+                                                  first
+                                                  :err)]
+                    (.form clj-form)))))))
 
 (t/deftest test-indexer-cleans-up-aborted-transactions-2489
   (t/testing "INSERT"
