@@ -590,11 +590,11 @@
   (latestCompletedTx [_] latest-completed-tx)
   (latestCompletedChunkTx [_] latest-completed-chunk-tx)
 
-  (awaitTxAsync [_ tx timeout]
+  (awaitTxAsync [this tx timeout]
     (-> (if tx
           (await/await-tx-async tx
                                 #(or (some-> indexer-error throw)
-                                     latest-completed-tx)
+                                     (.-latest-completed-tx this))
                                 awaiters)
           (CompletableFuture/completedFuture latest-completed-tx))
         (cond-> timeout (.orTimeout (.toMillis timeout) TimeUnit/MILLISECONDS))))
