@@ -24,7 +24,7 @@
            (org.apache.arrow.memory BufferAllocator)
            [org.apache.arrow.memory.util ArrowBufPointer]
            [org.roaringbitmap RoaringBitmap]
-           [org.roaringbitmap.buffer ImmutableRoaringBitmap MutableRoaringBitmap]
+           [org.roaringbitmap.buffer MutableRoaringBitmap]
            xtdb.api.protocols.TransactionInstant
            xtdb.buffer_pool.IBufferPool
            xtdb.ICursor

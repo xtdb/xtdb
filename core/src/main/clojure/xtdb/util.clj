@@ -6,7 +6,7 @@
             [clojure.tools.logging :as log]
             [xtdb.api.protocols]
             [xtdb.error :as err])
-  (:import clojure.lang.MapEntry
+  (:import [clojure.lang Keyword MapEntry Symbol]
            (java.io ByteArrayOutputStream File)
            java.lang.AutoCloseable
            java.lang.reflect.Method
@@ -29,7 +29,8 @@
            (org.apache.arrow.vector.ipc ArrowFileWriter ArrowStreamWriter ArrowWriter)
            (org.apache.arrow.vector.ipc.message ArrowBlock ArrowFooter ArrowRecordBatch MessageSerializer)
            org.roaringbitmap.RoaringBitmap
-           xtdb.ICursor))
+           xtdb.ICursor
+           xtdb.util.NormalForm))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -696,38 +697,18 @@
 (defn ->kebab-case-kw [s]
   (-> s name str/lower-case (str/replace "_" "-") keyword))
 
-(defn- ->normal-form [s]
-  (-> s str/lower-case (str/replace "." "$") (str/replace "-" "_")))
+(defn kw->normal-form-kw [^Keyword kw]
+  (NormalForm/normalForm kw))
 
-(defn- <-normal-form [s]
-  (-> s (str/replace "$" ".") (str/replace "_" "-")))
+(defn normal-form-kw->datalog-form-kw ^Keyword [^Keyword kw]
+  (NormalForm/datalogForm kw))
 
-(defn kw->normal-form-kw [kw]
-  (if-let [ns (namespace kw)]
-    (keyword (str (->normal-form ns) "$" (->normal-form (name kw))))
-    (keyword (->normal-form (name kw)))))
+(defn symbol->normal-form-symbol ^Symbol [^Symbol s]
+  (NormalForm/normalForm s))
 
-(defn normal-form-kw->datalog-form-kw [kw]
-  (let [kw (name kw)]
-    (if-let [^int i (str/last-index-of kw "$")]
-      (let [ns (subs kw 0 i)
-            kw (subs kw (inc i))]
-        (keyword (<-normal-form ns) (<-normal-form kw)))
-      (keyword (<-normal-form kw)))))
+(defn str->normal-form-str ^String [^String s]
+  (NormalForm/normalForm s))
 
-(defn symbol->normal-form-symbol [s]
-  (if-let [ns (namespace s)]
-    (symbol (str (->normal-form ns) "$" (->normal-form (name s))))
-    (symbol (->normal-form (name s)))))
+(defn normal-form-str->datalog-form-str ^String [^String s]
+  (NormalForm/datalogForm s))
 
-(defn str->normal-form-str ^String [s]
-  (if-let [^int i (str/last-index-of s "/")]
-    (str (->normal-form (subs s 0 i)) "$" (->normal-form (subs s (inc i))))
-    (->normal-form s)))
-
-(defn normal-form-str->datalog-form-str [s]
-  (if-let [^int i (str/last-index-of s "$")]
-    (let [ns (subs s 0 i)
-          s (subs s (inc i))]
-      (str (<-normal-form ns)  "/" (<-normal-form s)))
-    (<-normal-form s)))
