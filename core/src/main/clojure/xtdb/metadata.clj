@@ -16,7 +16,7 @@
            java.nio.ByteBuffer
            (java.util HashMap HashSet Map NavigableMap Set TreeMap)
            (java.util.concurrent ConcurrentHashMap)
-           (java.util.function BiFunction Function)
+           (java.util.function Function)
            (java.util.stream IntStream)
            (org.apache.arrow.memory ArrowBuf)
            (org.apache.arrow.vector FieldVector VectorLoader VectorSchemaRoot)
@@ -269,7 +269,7 @@
               (.put page-idx-cache [col-name page-idx] cols-data-idx))))))
 
     {:col-names (into #{} col-names)
-     :page-idx-cache (into {} page-idx-cache)
+     :page-idx-cache page-idx-cache
      :page-count (loop [page-count 0, idx 0]
                    (cond
                      (>= idx meta-row-count) page-count
