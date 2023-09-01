@@ -1,13 +1,16 @@
 (ns xtdb.operator-test
   (:require [clojure.test :as t]
             [xtdb.api :as xt]
+            [xtdb.buffer-pool :as bp]
             [xtdb.expression.metadata :as expr.meta]
             [xtdb.metadata :as meta]
             [xtdb.node :as node]
             [xtdb.test-util :as tu]
-            [xtdb.trie :as trie])
+            [xtdb.trie :as trie]
+            [xtdb.util :as util])
   (:import (java.time LocalTime)
-           (org.roaringbitmap RoaringBitmap)
+           (java.util.function IntPredicate)
+           (xtdb.buffer_pool IBufferPool)
            (xtdb.metadata IMetadataManager)))
 
 (t/use-fixtures :once tu/with-allocator)
@@ -28,7 +31,8 @@
 
       (tu/finish-chunk! node)
 
-      (let [^IMetadataManager metadata-mgr (tu/component node ::meta/metadata-manager)]
+      (let [^IMetadataManager metadata-mgr (tu/component node ::meta/metadata-manager)
+            ^IBufferPool buffer-pool (tu/component node ::bp/buffer-pool)]
         (letfn [(test-query-ivan [expected tx]
                   (t/is (= expected
                            (set (tu/query-ra '[:scan {:table xt_docs} [xt/id {name (> name "Ivan")}]]
@@ -40,21 +44,22 @@
 
           (t/is (= #{0 2} (set (keys (.chunksMetadata metadata-mgr)))))
 
-          (let [trie-keys [(trie/->table-trie-obj-key "xt_docs" (trie/->trie-key 0 0 2))
-                           (trie/->table-trie-obj-key "xt_docs" (trie/->trie-key 0 2 8))]
-                expected-match [(meta/map->TrieMatch
-                                 {:buf-key (second trie-keys)
-                                  :page-idxs (doto (RoaringBitmap.) (.add 0)),
-                                  :col-names #{"xt$iid" "xt$valid_from" "xt$valid_to" "xt$system_from" "xt$id" "name"}})]]
-            (t/is (= expected-match
-                     (meta/matching-tries metadata-mgr trie-keys
-                                          (expr.meta/->metadata-selector '(> name "Ivan") '{name :utf8} {})))
-                  "only needs to scan chunk 1, page 1")
-            (t/is (= expected-match
-                     (with-open [params (tu/open-params {'?name "Ivan"})]
-                       (meta/matching-tries metadata-mgr trie-keys
-                                            (expr.meta/->metadata-selector '(> name ?name) '{name :utf8} params))))
-                  "only needs to scan chunk 1, page 1"))
+          (let [trie-files [(trie/->table-trie-obj-key "xt_docs" (trie/->trie-key 0 0 2))
+                            (trie/->table-trie-obj-key "xt_docs" (trie/->trie-key 0 2 8))]
+                table-tries (mapv #(hash-map :trie-file %) trie-files)]
+            (util/with-open [roots (trie/open-arrow-trie-files buffer-pool table-tries)]
+              (t/testing "only needs to scan chunk 1, page 1"
+
+                (let [trie-matches (meta/matching-tries metadata-mgr trie-files roots
+                                                        (expr.meta/->metadata-selector '(> name "Ivan") '{name :utf8} {}))]
+                  (t/is (false? (.test ^IntPredicate (:page-idx-pred (first trie-matches)) 0)))
+                  (t/is (true? (.test ^IntPredicate (:page-idx-pred (second trie-matches)) 0))))
+
+                (with-open [params (tu/open-params {'?name "Ivan"})]
+                  (let [trie-matches (meta/matching-tries metadata-mgr trie-files roots
+                                                          (expr.meta/->metadata-selector '(> name ?name) '{name :utf8} params))]
+                    (t/is (false? (.test ^IntPredicate (:page-idx-pred (first trie-matches)) 0)))
+                    (t/is (true? (.test ^IntPredicate (:page-idx-pred (second trie-matches)) 0))))))))
 
           (let [tx2 (xt/submit-tx node [[:put :xt_docs {:name "Jeremy", :xt/id :jdt}]])]
 
@@ -81,25 +86,26 @@
         (tu/then-await-tx node))
 
     (tu/finish-chunk! node)
-    (let [^IMetadataManager metadata-mgr (tu/component node ::meta/metadata-manager)]
+    (let [^IMetadataManager metadata-mgr (tu/component node ::meta/metadata-manager)
+          ^IBufferPool buffer-pool (tu/component node ::bp/buffer-pool)]
       (t/is (= #{0 4} (set (keys (.chunksMetadata metadata-mgr)))))
 
-      (let [trie-keys [(trie/->table-trie-obj-key "xt_docs" (trie/->trie-key 0 0 4))
-                       (trie/->table-trie-obj-key "xt_docs" (trie/->trie-key 0 4 7))]
-            expected-match [(meta/map->TrieMatch
-                             {:buf-key (first trie-keys)
-                              :page-idxs (doto (RoaringBitmap.) (.add 0)),
-                              :col-names #{"xt$iid" "xt$valid_from" "xt$valid_to" "xt$system_from" "xt$id" "name"}})]]
-        (t/is (= expected-match
-                 (meta/matching-tries metadata-mgr trie-keys
-                                      (expr.meta/->metadata-selector '(= name "Ivan") '{name :utf8} {})))
-              "only needs to scan trie 0, page 0")
+      (let [trie-files [(trie/->table-trie-obj-key "xt_docs" (trie/->trie-key 0 0 4))
+                        (trie/->table-trie-obj-key "xt_docs" (trie/->trie-key 0 4 7))]
+            table-tries (mapv #(hash-map :trie-file %) trie-files)]
+        (util/with-open [roots (trie/open-arrow-trie-files buffer-pool table-tries)]
+          (t/testing "only needs to scan chunk 1, page 1"
 
-        (t/is (= expected-match
-                 (with-open [params (tu/open-params {'?name "Ivan"})]
-                   (meta/matching-tries metadata-mgr trie-keys
-                                        (expr.meta/->metadata-selector '(= name ?name) '{name :utf8} params))))
-              "only needs to scan trie 0, page 0"))
+            (let [trie-matches (meta/matching-tries metadata-mgr trie-files roots
+                                                    (expr.meta/->metadata-selector '(= name "Ivan") '{name :utf8} {}))]
+              (t/is (true? (.test ^IntPredicate (:page-idx-pred (first trie-matches)) 0)))
+              (t/is (false? (.test ^IntPredicate (:page-idx-pred (second trie-matches)) 0))))
+
+            (with-open [params (tu/open-params {'?name "Ivan"})]
+              (let [trie-matches (meta/matching-tries metadata-mgr trie-files roots
+                                                      (expr.meta/->metadata-selector '(= name ?name) '{name :utf8} params))]
+                (t/is (true? (.test ^IntPredicate (:page-idx-pred (first trie-matches)) 0)))
+                (t/is (false? (.test ^IntPredicate (:page-idx-pred (second trie-matches)) 0))))))))
 
       (t/is (= #{{:name "Ivan"}}
                (set (tu/query-ra '[:scan {:table xt_docs} [{name (= name "Ivan")}]]

@@ -11,19 +11,20 @@
             [xtdb.util :as util]
             [xtdb.vector.reader :as vr]
             [xtdb.vector.writer :as vw])
-  (:import (java.io ByteArrayInputStream ByteArrayOutputStream)
+  (:import (clojure.lang IFn)
+           (java.io ByteArrayInputStream ByteArrayOutputStream)
            java.lang.AutoCloseable
            java.nio.ByteBuffer
            (java.util HashMap HashSet Map NavigableMap Set TreeMap)
            (java.util.concurrent ConcurrentHashMap)
-           (java.util.function Function)
+           (java.util.function Function IntPredicate)
            (java.util.stream IntStream)
            (org.apache.arrow.memory ArrowBuf)
-           (org.apache.arrow.vector FieldVector VectorLoader VectorSchemaRoot)
+           (org.apache.arrow.vector FieldVector VectorSchemaRoot)
            (org.apache.arrow.vector.types.pojo ArrowType$Union)
-           (org.roaringbitmap RoaringBitmap)
            xtdb.buffer_pool.IBufferPool
            xtdb.object_store.ObjectStore
+           xtdb.trie.ArrowHashTrie
            (xtdb.vector IVectorReader IVectorWriter RelationReader)))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -44,7 +45,7 @@
 (definterface IMetadataManager
   (^void finishChunk [^long chunkIdx, newChunkMetadata])
   (^java.util.NavigableMap chunksMetadata [])
-  (^java.util.concurrent.CompletableFuture withMetadata [^String bufKey, ^java.util.function.Function #_<ITableMetadata> f])
+  (^xtdb.metadata.ITableMetadata tableMetadata [^xtdb.vector.RelationReader trie-rdr ^String bufKey])
   (columnTypes [^String tableName])
   (columnType [^String tableName, ^String colName])
   (allColumnTypes []))
@@ -52,8 +53,6 @@
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface IMetadataPredicate
   (^java.util.function.IntPredicate build [^xtdb.metadata.ITableMetadata tableMetadata]))
-
-(defrecord TrieMatch [^String buf-key, ^RoaringBitmap page-idxs, ^Set col-names])
 
 (defn- obj-key->chunk-idx [obj-key]
   (some-> (second (re-matches #"chunk-metadata/(\p{XDigit}+).transit.json" obj-key))
@@ -303,27 +302,14 @@
     (set! (.col-types this) (merge-col-types col-types new-chunk-metadata))
     (.put chunks-metadata chunk-idx new-chunk-metadata))
 
-  (withMetadata [_ buf-key f]
-    (-> (.getBuffer buffer-pool buf-key)
-        (util/then-apply
-          (fn [^ArrowBuf trie-buf]
-            (try
-              (let [{:keys [^VectorLoader loader ^VectorSchemaRoot root arrow-blocks]} (util/read-arrow-buf trie-buf)]
-                (try
-                  (with-open [record-batch (util/->arrow-record-batch-view (first arrow-blocks) trie-buf)]
-                    (.load loader record-batch))
-                  (let [^RelationReader trie-rdr (vr/<-root root)
-                        ^IVectorReader metadata-reader (.metadataReader (.typeIdReader (.readerForName trie-rdr "nodes") (byte 2)))]
-                    (.apply f (->table-metadata metadata-reader
-                                                (.computeIfAbsent table-metadata-idxs
-                                                                  buf-key
-                                                                  (reify Function
-                                                                    (apply [_ _]
-                                                                      (->table-metadata-idxs metadata-reader)))))))
-                  (finally
-                    (.close root))))
-              (finally
-                (.close trie-buf)))))))
+  (tableMetadata [_ trie-rdr buf-key]
+    (let [^IVectorReader metadata-reader (.metadataReader (.typeIdReader (.readerForName trie-rdr "nodes") (byte 2)))]
+      (->table-metadata metadata-reader
+                        (.computeIfAbsent table-metadata-idxs
+                                          buf-key
+                                          (reify Function
+                                            (apply [_ _]
+                                              (->table-metadata-idxs metadata-reader)))))))
 
   (chunksMetadata [_] chunks-metadata)
 
@@ -377,21 +363,14 @@
 (defmethod ig/halt-key! ::metadata-manager [_ mgr]
   (util/try-close mgr))
 
-(defn with-metadata [^IMetadataManager metadata-mgr, ^String buf-key, ^Function f]
-  (.withMetadata metadata-mgr buf-key f))
+(defrecord TrieMatch [^String trie-file, ^ArrowHashTrie trie, ^RelationReader trie-rdr, ^IntPredicate page-idx-pred, ^IFn iid-bloom-bitmap-fn, ^Set col-names])
 
-(defn matching-tries [^IMetadataManager metadata-mgr, buf-keys, ^IMetadataPredicate metadata-pred]
-  (->> (for [buf-key buf-keys]
-         (with-metadata metadata-mgr buf-key
-           (util/->jfn
-             (fn [^ITableMetadata table-metadata]
-               (let [pred (.build metadata-pred table-metadata)
-                     page-idxs (RoaringBitmap.)]
-                 (dotimes [page-idx (.pageCount table-metadata)]
-                   (when (.test pred page-idx)
-                     (.add page-idxs page-idx)))
-                 (when-not (.isEmpty page-idxs)
-                   (->TrieMatch buf-key page-idxs (.columnNames table-metadata))))))))
-       vec
-       (into [] (keep deref))
-       (util/rethrowing-cause)))
+(defn matching-tries [^IMetadataManager metadata-mgr, trie-files, roots, ^IMetadataPredicate metadata-pred]
+  (->> (for [[trie-file ^VectorSchemaRoot root] (mapv vector trie-files roots)
+             :let [trie-rdr (vr/<-root root)]]
+         (let [^ITableMetadata table-metadata (.tableMetadata metadata-mgr trie-rdr trie-file)
+               page-idx-pred (.build metadata-pred table-metadata)]
+           (->TrieMatch trie-file (ArrowHashTrie/from root) trie-rdr
+                        page-idx-pred #(.iidBloomBitmap table-metadata %)
+                        (.columnNames table-metadata))))
+       vec))

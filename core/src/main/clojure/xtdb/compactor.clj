@@ -2,19 +2,20 @@
   (:require [clojure.tools.logging :as log]
             [juxt.clojars-mirrors.integrant.core :as ig]
             xtdb.buffer-pool
-            xtdb.metadata
+            [xtdb.metadata :as meta]
             xtdb.object-store
             [xtdb.trie :as trie]
             [xtdb.types :as types]
             [xtdb.util :as util]
             [xtdb.vector.reader :as vr]
             [xtdb.vector.writer :as vw])
-  (:import [org.apache.arrow.memory BufferAllocator]
+  (:import (java.util.function IntPredicate)
+           [org.apache.arrow.memory BufferAllocator]
            org.apache.arrow.vector.types.pojo.Field
            org.apache.arrow.vector.VectorSchemaRoot
            [org.roaringbitmap RoaringBitmap]
            xtdb.buffer_pool.IBufferPool
-           (xtdb.metadata IMetadataManager)
+           (xtdb.metadata IMetadataManager IMetadataPredicate)
            xtdb.object_store.ObjectStore
            (xtdb.trie ILeafLoader LiveHashTrie)
            xtdb.util.WritableByteBufferChannel
@@ -72,19 +73,25 @@
 
           (.end trie-wtr))))))
 
-(def ^:private constant-all-page-bitmap (RoaringBitmap/flip (RoaringBitmap.) 0 (bit-shift-left 1 16)))
-
 (defn exec-compaction-job! [^BufferAllocator allocator, ^ObjectStore obj-store, ^IMetadataManager metadata-mgr, ^IBufferPool buffer-pool,
                             {:keys [table-name table-tries out-trie-key]}]
   (try
     (log/infof "compacting '%s' '%s' -> '%s'..." table-name (mapv :trie-key table-tries) out-trie-key)
-    (util/with-open [leaves (trie/open-leaves buffer-pool table-name table-tries nil)
+    (util/with-open [roots (trie/open-arrow-trie-files buffer-pool table-tries)
+                     leaves (trie/open-leaves buffer-pool table-name table-tries nil)
                      leaf-out-bb (WritableByteBufferChannel/open)
                      trie-out-bb (WritableByteBufferChannel/open)]
 
       (merge-tries! allocator leaves
                     (.getChannel leaf-out-bb) (.getChannel trie-out-bb)
-                    (trie/table-merge-plan buffer-pool metadata-mgr table-tries (constantly constant-all-page-bitmap) nil))
+                    (trie/table-merge-plan (constantly true)
+                                           (meta/matching-tries metadata-mgr (mapv :trie-file table-tries) roots
+                                                                (reify IMetadataPredicate
+                                                                  (build [_ _table-metadata]
+                                                                    (reify IntPredicate
+                                                                      (test [_ _page-idx]
+                                                                        true)))))
+                                           nil))
 
       (log/debugf "uploading '%s' '%s'..." table-name out-trie-key)
 

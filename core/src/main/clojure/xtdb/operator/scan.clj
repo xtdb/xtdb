@@ -19,11 +19,10 @@
   (:import (clojure.lang IPersistentMap MapEntry)
            java.nio.ByteBuffer
            (java.util Iterator LinkedList List Map)
-           (java.util.function IntConsumer)
+           (java.util.function IntConsumer IntPredicate)
            (java.util.stream IntStream)
            (org.apache.arrow.memory BufferAllocator)
            [org.apache.arrow.memory.util ArrowBufPointer]
-           [org.roaringbitmap RoaringBitmap]
            [org.roaringbitmap.buffer MutableRoaringBitmap]
            xtdb.api.protocols.TransactionInstant
            xtdb.buffer_pool.IBufferPool
@@ -31,7 +30,7 @@
            (xtdb.metadata IMetadataManager ITableMetadata)
            xtdb.object_store.ObjectStore
            xtdb.operator.IRelationSelector
-           (xtdb.trie LeafMergeQueue$LeafPointer)
+           (xtdb.trie HashTrie LeafMergeQueue$LeafPointer)
            (xtdb.vector IRelationWriter IRowCopier IVectorReader IVectorWriter RelationReader)
            (xtdb.watermark ILiveTableWatermark IWatermark IWatermarkSource Watermark)))
 
@@ -62,29 +61,21 @@
 
 (def ^:dynamic *column->pushdown-bloom* {})
 
-(defn- filter-pushdown-bloom-page-idxs [^IMetadataManager metadata-manager buf-key ^String col-name ^RoaringBitmap page-idxs]
-  (if-let [^MutableRoaringBitmap pushdown-bloom (get *column->pushdown-bloom* (symbol col-name))]
-    ;; would prefer this `^long` to be on the param but can only have 4 params in a primitive hinted function in Clojure
-    @(meta/with-metadata metadata-manager buf-key
-       (util/->jfn
-         (fn [^ITableMetadata table-metadata]
-           (let [metadata-rdr (.metadataReader table-metadata)
-                 bloom-rdr (-> (.structKeyReader metadata-rdr "columns")
-                               (.listElementReader)
-                               (.structKeyReader "bloom"))
-                 filtered-page-idxs (RoaringBitmap.)]
-             (.forEach page-idxs
-                       (reify org.roaringbitmap.IntConsumer
-                         (accept [_ page-idx]
-                           (when-let [bloom-vec-idx (.rowIndex table-metadata col-name page-idx)]
-                             (when (and (not (nil? (.getObject bloom-rdr bloom-vec-idx)))
-                                        (MutableRoaringBitmap/intersects pushdown-bloom
-                                                                         (bloom/bloom->bitmap bloom-rdr bloom-vec-idx)))
-                               (.add filtered-page-idxs page-idx))))))
-
-             (when-not (.isEmpty filtered-page-idxs)
-               filtered-page-idxs)))))
-    page-idxs))
+(defn filter-pushdown-bloom-page-idx-pred ^IntPredicate [^IMetadataManager metadata-manager ^String col-name
+                                                         {:keys [trie-file ^RelationReader trie-rdr] :as _trie-match}]
+  (when-let [^MutableRoaringBitmap pushdown-bloom (get *column->pushdown-bloom* (symbol col-name))]
+    (let [^ITableMetadata table-metadata (.tableMetadata metadata-manager trie-rdr trie-file)
+          metadata-rdr (.metadataReader table-metadata)
+          bloom-rdr (-> (.structKeyReader metadata-rdr "columns")
+                        (.listElementReader)
+                        (.structKeyReader "bloom"))]
+      (reify IntPredicate
+        (test [_ page-idx]
+          (boolean
+           (when-let [bloom-vec-idx (.rowIndex table-metadata col-name page-idx)]
+             (and (not (nil? (.getObject bloom-rdr bloom-vec-idx)))
+                  (MutableRoaringBitmap/intersects pushdown-bloom
+                                                   (bloom/bloom->bitmap bloom-rdr bloom-vec-idx))))))))))
 
 (defn- ->range ^longs []
   (let [res (long-array 8)]
@@ -482,13 +473,13 @@
   (close [_]
     (util/close leaves)))
 
-(defn filter-trie-match [^IMetadataManager metadata-mgr col-names {:keys [buf-key page-idxs] :as trie-match}]
-  (when-let [page-idxs (reduce (fn [page-idxs col-name]
-                                 (if-let [page-idxs (filter-pushdown-bloom-page-idxs metadata-mgr buf-key col-name page-idxs)]
-                                   page-idxs
-                                   (reduced nil)))
-                               page-idxs col-names)]
-    (assoc trie-match :page-idxs page-idxs)))
+(defn- filter-trie-match [^IMetadataManager metadata-mgr col-names {:keys [page-idx-pred] :as trie-match}]
+  (->> (reduce (fn [^IntPredicate page-idx-pred col-name]
+                 (if-let [bloom-page-idx-pred (filter-pushdown-bloom-page-idx-pred metadata-mgr col-name trie-match)]
+                   (.and page-idx-pred bloom-page-idx-pred)
+                   page-idx-pred))
+               page-idx-pred col-names)
+       (assoc trie-match :page-idx-pred)))
 
 (defn- eid-select->eid [eid-select]
   (if (= 'xt/id (second eid-select))
@@ -598,29 +589,34 @@
                                                    (or fvt (if default-all-valid-time? [:all-time] [:at [:now :now]])))))
                            ^ILiveTableWatermark live-table-wm (some-> (.liveIndex watermark) (.liveTable normalized-table-name))
                            table-tries (->> (trie/list-table-trie-files object-store normalized-table-name)
-                                            (trie/current-table-tries))
-                           trie-file->page-idxs (->> (meta/matching-tries metadata-mgr (map :trie-file table-tries) metadata-pred)
-                                                     (filter #(not-empty (set/intersection normalized-col-names (:col-names %))))
-                                                     (map (partial filter-trie-match metadata-mgr col-names))
-                                                     (remove nil?)
-                                                     (into {} (map (juxt :buf-key :page-idxs))))
-                           trie-file->page-idxs-fn (fn [trie-file] (get trie-file->page-idxs trie-file))
-                           merge-plan (trie/table-merge-plan buffer-pool metadata-mgr table-tries trie-file->page-idxs-fn live-table-wm)]
+                                            (trie/current-table-tries))]
 
-                       ;; The consumers for different leafs need to share some state so the logic of how to advance
-                       ;; is correct. For example if the `skip-iid-ptr` gets set in one leaf consumer it should also affect
-                       ;; the skipping in another leaf consumer.
+                       (util/with-open [iid-arrow-buf (when iid-bb (util/->arrow-buf-view allocator iid-bb))
+                                        roots (trie/open-arrow-trie-files buffer-pool table-tries)]
+                         (let [path-pred (if iid-bb
+                                           (let [iid-ptr (ArrowBufPointer. iid-arrow-buf 0 (.capacity iid-bb))]
+                                             #(zero? (HashTrie/compareToPath iid-ptr %)))
+                                           (constantly true))
+                               trie-matches (->> (meta/matching-tries metadata-mgr (mapv :trie-file table-tries) roots metadata-pred)
+                                                 (map (partial filter-trie-match metadata-mgr col-names))
+                                                 (drop-while #(empty? (set/intersection normalized-col-names (:col-names %))))
+                                                 vec)
+                               merge-plan (trie/table-merge-plan path-pred trie-matches live-table-wm)]
 
-                       (util/with-close-on-catch [leaves (trie/open-leaves buffer-pool normalized-table-name table-tries live-table-wm)]
-                         (->TrieCursor allocator leaves (.iterator (let [^Iterable c (or (merge-plan->tasks merge-plan) [])] c))
-                                       col-names col-preds
-                                       (->temporal-range params basis scan-opts)
-                                       params
-                                       (cond-> {:ev-resolver (event-resolver)
-                                                :skip-iid-ptr (ArrowBufPointer.)
-                                                :prev-iid-ptr (ArrowBufPointer.)
-                                                :current-iid-ptr (ArrowBufPointer.)}
-                                         (at-point-point? scan-opts) (assoc :point-point? true))))))}))))
+                           ;; The consumers for different leafs need to share some state so the logic of how to advance
+                           ;; is correct. For example if the `skip-iid-ptr` gets set in one leaf consumer it should also affect
+                           ;; the skipping in another leaf consumer.
+
+                           (util/with-close-on-catch [leaves (trie/open-leaves buffer-pool normalized-table-name table-tries live-table-wm)]
+                             (->TrieCursor allocator leaves (.iterator (let [^Iterable c (or (merge-plan->tasks merge-plan) [])] c))
+                                           col-names col-preds
+                                           (->temporal-range params basis scan-opts)
+                                           params
+                                           (cond-> {:ev-resolver (event-resolver)
+                                                    :skip-iid-ptr (ArrowBufPointer.)
+                                                    :prev-iid-ptr (ArrowBufPointer.)
+                                                    :current-iid-ptr (ArrowBufPointer.)}
+                                             (at-point-point? scan-opts) (assoc :point-point? true))))))))}))))
 
 (defmethod lp/emit-expr :scan [scan-expr {:keys [^IScanEmitter scan-emitter scan-col-types, param-types]}]
   (.emitScan scan-emitter scan-expr scan-col-types param-types))
