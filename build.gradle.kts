@@ -214,7 +214,8 @@ fun createSltTask(
     taskName: String,
     maxFailures: Long = 0,
     maxErrors: Long = 0,
-    testFiles: List<String>,
+    testFiles: List<String> = emptyList(),
+    extraArgs: List<String> = emptyList()
 ) {
     tasks.create(taskName, JavaExec::class) {
         classpath = sourceSets.test.get().runtimeClasspath
@@ -226,7 +227,7 @@ fun createSltTask(
             "--db", "xtdb",
             "--max-failures", maxFailures.toString(),
             "--max-errors", maxErrors.toString(),
-        ) + testFiles.map {
+        ) + extraArgs + testFiles.map {
             "src/test/resources/xtdb/sql/logic_test/sqlite_test/$it"
         }
     }
@@ -258,21 +259,17 @@ createSltTask(
 )
 
 createSltTask(
-    "slt-nightly",
-    maxFailures = Long.MAX_VALUE,
-    maxErrors = Long.MAX_VALUE,
-    testFiles = listOf(
-        "random/expr/",
-        "random/aggregates/",
-        "random/groupby/",
-        "random/select/",
-        "index/between/",
-        "index/commute/",
-        "index/orderby/",
-        "index/orderby_nosort/",
-        "index/in/",
-        "index/random/",
-        // "index/delete/",
-        // "index/view/",
-    )
-)
+        "slt-test-dir",
+        maxFailures = if (project.hasProperty("testMaxFailures")) {
+            val testMaxFailures: String by project
+            if (testMaxFailures.isEmpty()) { 0 } else { testMaxFailures.toLong() }
+        } else { 0 },
+        maxErrors = if (project.hasProperty("testMaxErrors")) {
+            val testMaxErrors: String by project
+            if (testMaxErrors.isEmpty()) { 0 } else { testMaxErrors.toLong() }
+        } else { 0 },
+        testFiles = if (project.hasProperty("testDir")) {
+            val testDir: String by project
+            listOf(testDir)
+        } else { emptyList() },
+        extraArgs = listOf("--dirs"))
