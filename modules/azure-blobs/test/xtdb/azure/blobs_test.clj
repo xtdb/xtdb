@@ -15,7 +15,7 @@
    (:import java.util.UUID
             java.util.Date))
 
-(def storage-account "xtdbazureobjectstoretest")
+(def storage-account "xtdbteststorageaccount")
 (def container "xtdb-test")
 (def config-present? (some? (and (System/getenv "AZURE_CLIENT_ID")
                                  (System/getenv "AZURE_CLIENT_SECRET")
