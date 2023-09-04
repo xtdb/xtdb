@@ -181,7 +181,7 @@ jobs:
 
   deploy-api-docs:
     docker:
-      - image: clojure:openjdk-17-lein-2.9.8
+      - image: clojure:openjdk-17-lein-2.10.0
     working_directory: ~/xtdb
     steps:
       - checkout
