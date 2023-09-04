@@ -195,6 +195,17 @@
 (defn xtdb-node []
   (::xtdb system))
 
+(defn set-env
+  "Sets an environment variable (visible only to System/getenv), see: https://stackoverflow.com/a/40682052"
+  [k v]
+  (let [env (System/getenv)
+        cl (class env)
+        field (.getDeclaredField cl "m")
+        _ (.setAccessible field true)
+        ^java.util.Map writable-env (.get field env)]
+    (.put writable-env k v)
+    nil))
+
 (comment
   (tpch/load-docs! (dev/xtdb-node) 0.05)
 
