@@ -5,8 +5,7 @@
             [juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc :as jdbc]
             [juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc.result-set :as jdbcr])
   (:import [java.time LocalDate LocalTime OffsetDateTime ZoneOffset]
-           java.util.Date
-           org.h2.api.TimestampWithTimeZone))
+           java.util.Date))
 
 (defn- check-tx-time-col [pool]
   (when-not (->> (jdbc/execute! pool ["SHOW COLUMNS FROM tx_events"] {:builder-fn jdbcr/as-unqualified-lower-maps})
@@ -28,7 +27,7 @@ CREATE TABLE IF NOT EXISTS tx_events (
   event_key VARCHAR,
   tx_time TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
   topic VARCHAR NOT NULL,
-  v BINARY NOT NULL,
+  v VARBINARY NOT NULL,
   compacted INTEGER NOT NULL)"])
 
         (jdbc/execute! ["DROP INDEX IF EXISTS tx_events_event_key_idx"])
@@ -41,9 +40,17 @@ CREATE TABLE IF NOT EXISTS tx_events (
       ;; even if there's no transactions yet - the docs are submitted first
       (jdbc/execute! tx [(format "SELECT * FROM %s ORDER BY event_offset LIMIT 1 FOR UPDATE" table-name)]))))
 
-(defmethod j/->date :h2 [^TimestampWithTimeZone d _]
-  (-> (OffsetDateTime/of (LocalDate/of (.getYear d) (.getMonth d) (.getDay d))
-                         (LocalTime/ofNanoOfDay (.getNanosSinceMidnight d))
-                         (ZoneOffset/ofTotalSeconds (.getTimeZoneOffsetSeconds d)))
-      .toInstant
-      Date/from))
+;; versions earlier than H2 2.0.202 used the TimestampWithTimeZone type, later versions use j.tOffsetDateTime
+;; see https://github.com/h2database/h2database/commit/f499521
+(def tstz-class-defined (try (import 'org.h2.api.TimestampWithTimeZone) true (catch Throwable _ false)))
+
+(if tstz-class-defined
+  ;; eval to delay compilation of the tstz branch, otherwise the hint will fail due to class resolution
+  (eval
+    '(defmethod j/->date :h2 [^org.h2.api.TimestampWithTimeZone d _]
+       (-> (OffsetDateTime/of (LocalDate/of (.getYear d) (.getMonth d) (.getDay d))
+                              (LocalTime/ofNanoOfDay (.getNanosSinceMidnight d))
+                              (ZoneOffset/ofTotalSeconds (.getTimeZoneOffsetSeconds d)))
+           .toInstant
+           Date/from)))
+  (defmethod j/->date :h2 [^java.time.OffsetDateTime d _] (-> d .toInstant Date/from)))
