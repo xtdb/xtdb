@@ -20,7 +20,7 @@
                  [com.xtdb/xtdb-lmdb]
 
                  ;; JDBC
-                 [com.h2database/h2 "1.4.200"]
+                 [com.h2database/h2 "2.2.222"]
                  [com.opentable.components/otj-pg-embedded "0.13.3"]
                  [org.xerial/sqlite-jdbc "3.36.0.3"]
                  [mysql/mysql-connector-java "8.0.23"]
