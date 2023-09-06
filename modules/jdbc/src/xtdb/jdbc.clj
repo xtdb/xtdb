@@ -20,7 +20,7 @@
            (java.io Closeable)
            (java.sql Timestamp ResultSet)
            (java.time Duration)
-           (java.util Date)))
+           (java.util Date Map)))
 
 (defprotocol Dialect
   (setup-schema! [dialect pool])
@@ -44,14 +44,26 @@
   (close [_]
     (xio/try-close pool)))
 
+(s/def ::opts-map
+  (s/or :clj-map (s/map-of ::sys/keyword any?)
+        :java-map (s/and #(instance? Map %) #(every? string? (keys %)))))
+
+(defn- conformed-opts-map->clj-map [conformed-opts-map]
+  (let [[tag value] conformed-opts-map]
+    (case tag
+      :clj-map value
+      :java-map (zipmap (map keyword (keys value)) (vals value)))))
+
 (defn ->connection-pool {::sys/deps {:dialect nil}
                          ::sys/args {:pool-opts {:doc "Extra camelCase options to be set on HikariConfig"
-                                                 :spec (s/map-of ::sys/keyword any?)}
+                                                 :spec ::opts-map}
                                      :db-spec {:doc "db-spec to be passed to next.jdbc"
-                                               :spec (s/map-of ::sys/keyword any?)
+                                               :spec ::opts-map
                                                :required? true}}}
   [{:keys [pool-opts dialect db-spec]}]
-  (let [jdbc-url (-> (jdbcc/jdbc-url (merge {:dbtype (name (db-type dialect))} db-spec))
+  (let [pool-opts (some-> pool-opts conformed-opts-map->clj-map)
+        db-spec (some-> db-spec conformed-opts-map->clj-map)
+        jdbc-url (-> (jdbcc/jdbc-url (merge {:dbtype (name (db-type dialect))} db-spec))
                      ;; mssql doesn't like trailing '?'
                      (str/replace #"\?$" ""))
         pool-opts (merge pool-opts {:jdbcUrl jdbc-url})
