@@ -10,7 +10,7 @@ import java.util.stream.Collectors;
 /**
  * Class to configure an XTDB module.
  *
- * See https://xtdb.com/reference/configuration.html for examples.
+ * See https://docs.xtdb.com/administration/configuring/ for examples.
  */
 @SuppressWarnings("unused") // entry points
 public final class ModuleConfiguration {
