@@ -1473,23 +1473,23 @@
                (set (q '{:find [id], :where [(match :xt_docs [{:xt/id id}])]}, tx0, #inst "2023")))
             "back in system-time")
 
-      (t/is (= #{{:id :matthew, :app-start (util/->zdt #inst "2015"), :app-end (util/->zdt util/end-of-time)}
-                 {:id :mark, :app-start (util/->zdt #inst "2018"), :app-end (util/->zdt #inst "2020")}
-                 {:id :luke, :app-start (util/->zdt #inst "2021"), :app-end (util/->zdt #inst "2022")}
-                 {:id :mark, :app-start (util/->zdt #inst "2023"), :app-end (util/->zdt #inst "2024")}
-                 {:id :john, :app-start (util/->zdt #inst "2016"), :app-end (util/->zdt #inst "2020")}}
-               (set (q '{:find [id app-start app-end]
-                         :where [(match :xt_docs [{:xt/id id} {:xt/valid-from app-start
-                                                               :xt/valid-to app-end}]
+      (t/is (= #{{:id :matthew, :app-from (util/->zdt #inst "2015"), :app-to (util/->zdt util/end-of-time)}
+                 {:id :mark, :app-from (util/->zdt #inst "2018"), :app-to (util/->zdt #inst "2020")}
+                 {:id :luke, :app-from (util/->zdt #inst "2021"), :app-to (util/->zdt #inst "2022")}
+                 {:id :mark, :app-from (util/->zdt #inst "2023"), :app-to (util/->zdt #inst "2024")}
+                 {:id :john, :app-from (util/->zdt #inst "2016"), :app-to (util/->zdt #inst "2020")}}
+               (set (q '{:find [id app-from app-to]
+                         :where [(match :xt_docs [{:xt/id id} {:xt/valid-from app-from
+                                                               :xt/valid-to app-to}]
                                         {:for-valid-time :all-time})]}
                        tx1, nil)))
             "entity history, all time")
 
-      (t/is (= #{{:id :matthew, :app-start (util/->zdt #inst "2015"), :app-end (util/->zdt util/end-of-time)}
-                 {:id :luke, :app-start (util/->zdt #inst "2021"), :app-end (util/->zdt #inst "2022")}}
-               (set (q '{:find [id app-start app-end]
-                         :where [(match :xt_docs [{:xt/id id} {:xt/valid-from app-start
-                                                               :xt/valid-to app-end}]
+      (t/is (= #{{:id :matthew, :app-from (util/->zdt #inst "2015"), :app-to (util/->zdt util/end-of-time)}
+                 {:id :luke, :app-from (util/->zdt #inst "2021"), :app-to (util/->zdt #inst "2022")}}
+               (set (q '{:find [id app-from app-to]
+                         :where [(match :xt_docs [{:xt/id id} {:xt/valid-from app-from
+                                                               :xt/valid-to app-to}]
                                         {:for-valid-time [:in #inst "2021", #inst "2023"]})]}
                        tx1, nil)))
             "entity history, range")
@@ -1503,20 +1503,20 @@
                        tx1, nil)))
             "cross-time join - who was here in both 2018 and 2023?")
 
-      (t/is (= #{{:vt-start (util/->zdt #inst "2021")
-                  :vt-end (util/->zdt #inst "2022")
-                  :tt-start (util/->zdt #inst "2020")
-                  :tt-end (util/->zdt util/end-of-time)}
-                 {:vt-start (util/->zdt #inst "2022")
-                  :vt-end (util/->zdt util/end-of-time)
-                  :tt-start (util/->zdt #inst "2020")
-                  :tt-end (util/->zdt  #inst "2020-01-02")}}
-               (set (q '{:find [vt-start vt-end tt-start tt-end]
+      (t/is (= #{{:vt-from (util/->zdt #inst "2021")
+                  :vt-to (util/->zdt #inst "2022")
+                  :tt-from (util/->zdt #inst "2020")
+                  :tt-to (util/->zdt util/end-of-time)}
+                 {:vt-from (util/->zdt #inst "2022")
+                  :vt-to (util/->zdt util/end-of-time)
+                  :tt-from (util/->zdt #inst "2020")
+                  :tt-to (util/->zdt  #inst "2020-01-02")}}
+               (set (q '{:find [vt-from vt-to tt-from tt-to]
                          :where [(match :xt_docs {:xt/id :luke
-                                                  :xt/valid-from vt-start
-                                                  :xt/valid-to vt-end
-                                                  :xt/system-from tt-start
-                                                  :xt/system-to tt-end}
+                                                  :xt/valid-from vt-from
+                                                  :xt/valid-to vt-to
+                                                  :xt/system-from tt-from
+                                                  :xt/system-to tt-to}
                                         {:for-valid-time :all-time
                                          :for-system-time :all-time})]}
                        tx1 nil)))
@@ -1527,15 +1527,15 @@
   (xt/submit-tx tu/*node* '[[:put :xt_docs {:xt/id :matthew} {:for-valid-time [:in nil #inst "2040"]}]])
   (xt/submit-tx tu/*node* '[[:put :xt_docs {:xt/id :matthew} {:for-valid-time [:in #inst "2022" #inst "2030"]}]])
   (t/is (= #{{:id :matthew,
-              :vt-start #time/zoned-date-time "2030-01-01T00:00Z[UTC]",
-              :vt-end #time/zoned-date-time "2040-01-01T00:00Z[UTC]"}
+              :vt-from #time/zoned-date-time "2030-01-01T00:00Z[UTC]",
+              :vt-to #time/zoned-date-time "2040-01-01T00:00Z[UTC]"}
              {:id :matthew,
-              :vt-start #time/zoned-date-time "2022-01-01T00:00Z[UTC]",
-              :vt-end #time/zoned-date-time "2030-01-01T00:00Z[UTC]"}}
+              :vt-from #time/zoned-date-time "2022-01-01T00:00Z[UTC]",
+              :vt-to #time/zoned-date-time "2030-01-01T00:00Z[UTC]"}}
            (set (xt/q tu/*node*
-                      '{:find [id vt-start vt-end], :where [(match :xt_docs {:xt/id id
-                                                                             :xt/valid-from vt-start
-                                                                             :xt/valid-to vt-end}
+                      '{:find [id vt-from vt-to], :where [(match :xt_docs {:xt/id id
+                                                                             :xt/valid-from vt-from
+                                                                             :xt/valid-to vt-to}
                                                                    {:for-valid-time [:in nil #inst "2040"]})]}
                       {:basis {:current-time (util/->instant #inst "2023")}})))))
 
@@ -1555,35 +1555,35 @@
                                         [:put :xt_docs {:xt/id :mark} {:for-valid-time [:to #inst "2050"]}]])
           tx1 (xt/submit-tx tu/*node* '[[:put :xt_docs {:xt/id :matthew} {:for-valid-time [:to #inst "2040"]}]])]
       (t/is (= #{{:id :matthew,
-                  :vt-start #time/zoned-date-time "2015-01-01T00:00Z[UTC]",
-                  :vt-end #time/zoned-date-time "9999-12-31T23:59:59.999999Z[UTC]"}
+                  :vt-from #time/zoned-date-time "2015-01-01T00:00Z[UTC]",
+                  :vt-to #time/zoned-date-time "9999-12-31T23:59:59.999999Z[UTC]"}
                  {:id :mark,
-                  :vt-start #time/zoned-date-time "2020-01-01T00:00Z[UTC]",
-                  :vt-end #time/zoned-date-time "2050-01-01T00:00Z[UTC]"}}
-               (set (q '{:find [id vt-start vt-end],
+                  :vt-from #time/zoned-date-time "2020-01-01T00:00Z[UTC]",
+                  :vt-to #time/zoned-date-time "2050-01-01T00:00Z[UTC]"}}
+               (set (q '{:find [id vt-from vt-to],
                          :where [(match :xt_docs {:xt/id id
-                                                  :xt/valid-from vt-start
-                                                  :xt/valid-to vt-end})]},
+                                                  :xt/valid-from vt-from
+                                                  :xt/valid-to vt-to})]},
                        tx0, #inst "2023"))))
 
       (t/is (= [{:id :matthew,
-                 :vt-start #time/zoned-date-time "2015-01-01T00:00Z[UTC]",
-                 :vt-end #time/zoned-date-time "9999-12-31T23:59:59.999999Z[UTC]"}]
-               (q '{:find [id vt-start vt-end], :where [(match :xt_docs {:xt/id id
-                                                                         :xt/valid-from vt-start
-                                                                         :xt/valid-to vt-end}
+                 :vt-from #time/zoned-date-time "2015-01-01T00:00Z[UTC]",
+                 :vt-to #time/zoned-date-time "9999-12-31T23:59:59.999999Z[UTC]"}]
+               (q '{:find [id vt-from vt-to], :where [(match :xt_docs {:xt/id id
+                                                                         :xt/valid-from vt-from
+                                                                         :xt/valid-to vt-to}
                                                                {:for-valid-time [:from #inst "2051"]})]},
                   tx0, #inst "2023")))
 
       (t/is (= [{:id :mark,
-                 :vt-start #time/zoned-date-time "2020-01-01T00:00Z[UTC]",
-                 :vt-end #time/zoned-date-time "2050-01-01T00:00Z[UTC]"}
+                 :vt-from #time/zoned-date-time "2020-01-01T00:00Z[UTC]",
+                 :vt-to #time/zoned-date-time "2050-01-01T00:00Z[UTC]"}
                 {:id :matthew,
-                 :vt-start #time/zoned-date-time "2020-01-02T00:00Z[UTC]",
-                 :vt-end #time/zoned-date-time "2040-01-01T00:00Z[UTC]"}]
-               (q '{:find [id vt-start vt-end], :where [(match :xt_docs {:xt/id id
-                                                                         :xt/valid-from vt-start
-                                                                         :xt/valid-to vt-end}
+                 :vt-from #time/zoned-date-time "2020-01-02T00:00Z[UTC]",
+                 :vt-to #time/zoned-date-time "2040-01-01T00:00Z[UTC]"}]
+               (q '{:find [id vt-from vt-to], :where [(match :xt_docs {:xt/id id
+                                                                         :xt/valid-from vt-from
+                                                                         :xt/valid-to vt-to}
                                                                {:for-valid-time [:to #inst "2040"]})]},
                   tx1, #inst "2023"))))))
 
@@ -1625,15 +1625,15 @@
           tx6 (xt/submit-tx tu/*node*
                             [[:put-fn :delete-1-week-records,
                               '(fn delete-1-weeks-records []
-                                 (->> (q '{:find [id app-start app-end]
+                                 (->> (q '{:find [id app-from app-to]
                                            :where [(match :docs {:xt/id id
-                                                                 :xt/valid-from app-start
-                                                                 :xt/valid-to app-end}
+                                                                 :xt/valid-from app-from
+                                                                 :xt/valid-to app-to}
                                                           {:for-valid-time :all-time})
                                                    [(= (- #inst "1970-01-08" #inst "1970-01-01")
-                                                       (- app-end app-start))]]})
-                                      (map (fn [{:keys [id app-start app-end]}]
-                                             [:delete :docs id {:for-valid-time [:in app-start app-end]}]))))]
+                                                       (- app-to app-from))]]})
+                                      (map (fn [{:keys [id app-from app-to]}]
+                                             [:delete :docs id {:for-valid-time [:in app-from app-to]}]))))]
                              [:call :delete-1-week-records]]
                             {:system-time #inst "1998-01-30"})
 
@@ -1642,82 +1642,82 @@
                                {:for-valid-time [:in #inst "1998-01-15"]}]]
                             {:system-time #inst "1998-01-31"})]
 
-      (t/is (= [{:cust 145 :app-start (util/->zdt #inst "1998-01-10")}]
-               (q '{:find [cust app-start]
-                    :where [(match :docs {:customer-number cust, :xt/valid-from app-start}
+      (t/is (= [{:cust 145 :app-from (util/->zdt #inst "1998-01-10")}]
+               (q '{:find [cust app-from]
+                    :where [(match :docs {:customer-number cust, :xt/valid-from app-from}
                                    {:for-valid-time :all-time})]}
                   tx0, nil))
             "as-of 14 Jan")
 
-      (t/is (= #{{:cust 145, :app-start (util/->zdt #inst "1998-01-10")}
-                 {:cust 827, :app-start (util/->zdt #inst "1998-01-15")}}
-               (set (q '{:find [cust app-start]
-                         :where [(match :docs {:customer-number cust, :xt/valid-from app-start}
+      (t/is (= #{{:cust 145, :app-from (util/->zdt #inst "1998-01-10")}
+                 {:cust 827, :app-from (util/->zdt #inst "1998-01-15")}}
+               (set (q '{:find [cust app-from]
+                         :where [(match :docs {:customer-number cust, :xt/valid-from app-from}
                                         {:for-valid-time :all-time})]}
                        tx1, nil)))
             "as-of 18 Jan")
 
-      (t/is (= #{{:cust 145, :app-start (util/->zdt #inst "1998-01-05")}
-                 {:cust 827, :app-start (util/->zdt #inst "1998-01-12")}}
-               (set (q '{:find [cust app-start]
+      (t/is (= #{{:cust 145, :app-from (util/->zdt #inst "1998-01-05")}
+                 {:cust 827, :app-from (util/->zdt #inst "1998-01-12")}}
+               (set (q '{:find [cust app-from]
                          :where [(match :docs {:customer-number cust,
-                                               :xt/valid-from app-start}
+                                               :xt/valid-from app-from}
                                         {:for-valid-time :all-time})]
-                         :order-by [[app-start :asc]]}
+                         :order-by [[app-from :asc]]}
                        tx5, nil)))
             "as-of 29 Jan")
 
-      (t/is (= [{:cust 827, :app-start (util/->zdt #inst "1998-01-12"), :app-end (util/->zdt #inst "1998-01-20")}]
-               (q '{:find [cust app-start app-end]
+      (t/is (= [{:cust 827, :app-from (util/->zdt #inst "1998-01-12"), :app-to (util/->zdt #inst "1998-01-20")}]
+               (q '{:find [cust app-from app-to]
                     :where [(match :docs {:customer-number cust,
-                                          :xt/valid-from app-start
-                                          :xt/valid-to app-end}
+                                          :xt/valid-from app-from
+                                          :xt/valid-to app-to}
                                    {:for-valid-time :all-time})]
-                    :order-by [[app-start :asc]]}
+                    :order-by [[app-from :asc]]}
                   tx6, nil))
             "'as best known' (as-of 30 Jan)")
 
-      (t/is (= [{:prop 3621, :vt-begin (util/->zdt #inst "1998-01-15"), :vt-end (util/->zdt #inst "1998-01-20")}]
-               (q ['{:find [prop (greatest app-start app-start2) (least app-end app-end2)]
-                     :keys [prop vt-begin vt-end]
+      (t/is (= [{:prop 3621, :vt-begin (util/->zdt #inst "1998-01-15"), :vt-to (util/->zdt #inst "1998-01-20")}]
+               (q ['{:find [prop (greatest app-from app-from2) (least app-to app-to2)]
+                     :keys [prop vt-begin vt-to]
                      :in [in-prop]
                      :where [(match :docs {:property-number in-prop
                                            :customer-number cust
                                            :xt/valid-time app-time
-                                           :xt/valid-from app-start
-                                           :xt/valid-to app-end}
+                                           :xt/valid-from app-from
+                                           :xt/valid-to app-to}
                                     {:for-valid-time :all-time})
 
                              (match :docs {:property-number prop
                                            :customer-number cust
                                            :xt/valid-time app-time-2
-                                           :xt/valid-from app-start2
-                                           :xt/valid-to app-end2}
+                                           :xt/valid-from app-from2
+                                           :xt/valid-to app-to2}
                                     {:for-valid-time :all-time})
 
                              [(<> prop in-prop)]
                              [(overlaps? app-time app-time-2)]]
-                     :order-by [[app-start :asc]]}
+                     :order-by [[app-from :asc]]}
                    7797]
                   tx7, nil))
             "Case 2: Valid-time sequenced and transaction-time current")
 
       (t/is (= [{:prop 3621,
                  :vt-begin (util/->zdt #inst "1998-01-15"),
-                 :vt-end (util/->zdt #inst "1998-01-20"),
-                 :recorded-start (util/->zdt #inst "1998-01-31"),
+                 :vt-to (util/->zdt #inst "1998-01-20"),
+                 :recorded-from (util/->zdt #inst "1998-01-31"),
                  :recorded-stop (util/->zdt util/end-of-time)}]
-               (q ['{:find [prop (greatest app-start app-start2) (least app-end app-end2) (greatest sys-start sys-start2) (least sys-end sys-end2)]
-                     :keys [prop vt-begin vt-end recorded-start recorded-stop]
+               (q ['{:find [prop (greatest app-from app-from2) (least app-to app-to2) (greatest sys-from sys-from2) (least sys-to sys-to2)]
+                     :keys [prop vt-begin vt-to recorded-from recorded-stop]
                      :in [in-prop]
                      :where [(match :docs {:property-number in-prop
                                            :customer-number cust
                                            :xt/valid-time app-time
                                            :xt/system-time system-time
-                                           :xt/valid-from app-start
-                                           :xt/valid-to app-end
-                                           :xt/system-from sys-start
-                                           :xt/system-to sys-end}
+                                           :xt/valid-from app-from
+                                           :xt/valid-to app-to
+                                           :xt/system-from sys-from
+                                           :xt/system-to sys-to}
                                     {:for-valid-time :all-time
                                      :for-system-time :all-time})
 
@@ -1725,10 +1725,10 @@
                                            :property-number prop
                                            :xt/valid-time app-time-2
                                            :xt/system-time system-time-2
-                                           :xt/valid-from app-start2
-                                           :xt/valid-to app-end2
-                                           :xt/system-from sys-start2
-                                           :xt/system-to sys-end2}
+                                           :xt/valid-from app-from2
+                                           :xt/valid-to app-to2
+                                           :xt/system-from sys-from2
+                                           :xt/system-to sys-to2}
 
                                     {:for-valid-time :all-time
                                      :for-system-time :all-time})
@@ -1736,26 +1736,26 @@
                              [(<> prop in-prop)]
                              [(overlaps? app-time app-time-2)]
                              [(overlaps? system-time system-time-2)]]
-                     :order-by [[app-start :asc]]}
+                     :order-by [[app-from :asc]]}
                    7797]
                   tx7, nil))
             "Case 5: Application-time sequenced and system-time sequenced")
 
       (t/is (= [{:prop 3621,
                  :vt-begin (util/->zdt #inst "1998-01-15"),
-                 :vt-end (util/->zdt #inst "1998-01-20"),
-                 :recorded-start (util/->zdt #inst "1998-01-31")}]
-               (q ['{:find [prop (greatest app-start app-start2) (least app-end app-end2) sys-start2]
-                     :keys [prop vt-begin vt-end recorded-start]
+                 :vt-to (util/->zdt #inst "1998-01-20"),
+                 :recorded-from (util/->zdt #inst "1998-01-31")}]
+               (q ['{:find [prop (greatest app-from app-from2) (least app-to app-to2) sys-from2]
+                     :keys [prop vt-begin vt-to recorded-from]
                      :in [in-prop]
                      :where [(match :docs {:property-number in-prop
                                            :customer-number cust
                                            :xt/valid-time app-time
                                            :xt/system-time system-time
-                                           :xt/valid-from app-start
-                                           :xt/valid-to app-end
-                                           :xt/system-from sys-start
-                                           :xt/system-to sys-end}
+                                           :xt/valid-from app-from
+                                           :xt/valid-to app-to
+                                           :xt/system-from sys-from
+                                           :xt/system-to sys-to}
                                     {:for-valid-time :all-time
                                      :for-system-time :all-time})
 
@@ -1763,15 +1763,15 @@
                                            :property-number prop
                                            :xt/valid-time app-time-2
                                            :xt/system-time system-time-2
-                                           :xt/valid-from app-start2
-                                           :xt/valid-to app-end2
-                                           :xt/system-from sys-start2
-                                           :xt/system-to sys-end2})
+                                           :xt/valid-from app-from2
+                                           :xt/valid-to app-to2
+                                           :xt/system-from sys-from2
+                                           :xt/system-to sys-to2})
 
                              [(<> prop in-prop)]
                              [(overlaps? app-time app-time-2)]
-                             [(contains? system-time sys-start2)]]
-                     :order-by [[app-start :asc]]}
+                             [(contains? system-time sys-from2)]]
+                     :order-by [[app-from :asc]]}
                    7797]
                   tx7, nil))
             "Case 8: Application-time sequenced and system-time nonsequenced"))))
@@ -1911,10 +1911,10 @@
                             [:put :xt_cats {:xt/id 2} {:for-valid-time [:in #inst "2016" #inst "2018"]}]])
 
   (t/is (= [{:xt/id 1, :id2 2,
-             :xt_docs_app_time {:start #time/zoned-date-time "2015-01-01T00:00Z[UTC]",
-                                :end #time/zoned-date-time "2020-01-01T00:00Z[UTC]"},
-             :xt_cats_app_time {:start #time/zoned-date-time "2016-01-01T00:00Z[UTC]",
-                                :end #time/zoned-date-time "2018-01-01T00:00Z[UTC]"}}]
+             :xt_docs_app_time {:from #time/zoned-date-time "2015-01-01T00:00Z[UTC]",
+                                :to #time/zoned-date-time "2020-01-01T00:00Z[UTC]"},
+             :xt_cats_app_time {:from #time/zoned-date-time "2016-01-01T00:00Z[UTC]",
+                                :to #time/zoned-date-time "2018-01-01T00:00Z[UTC]"}}]
            (xt/q
             tu/*node*
             '{:find [xt/id id2 xt_docs_app_time xt_cats_app_time]
@@ -1925,10 +1925,10 @@
                       [(contains? xt_docs_app_time xt_cats_app_time)]]})))
 
   (t/is (= [{:xt/id 1, :id2 2,
-             :xt_docs_sys_time {:start #time/zoned-date-time "2020-01-01T00:00Z[UTC]",
-                                :end #time/zoned-date-time "9999-12-31T23:59:59.999999Z[UTC]"},
-             :xt_cats_sys_time {:start #time/zoned-date-time "2020-01-01T00:00Z[UTC]",
-                                :end #time/zoned-date-time "9999-12-31T23:59:59.999999Z[UTC]"}}]
+             :xt_docs_sys_time {:from #time/zoned-date-time "2020-01-01T00:00Z[UTC]",
+                                :to #time/zoned-date-time "9999-12-31T23:59:59.999999Z[UTC]"},
+             :xt_cats_sys_time {:from #time/zoned-date-time "2020-01-01T00:00Z[UTC]",
+                                :to #time/zoned-date-time "9999-12-31T23:59:59.999999Z[UTC]"}}]
            (xt/q
             tu/*node*
             '{:find [xt/id id2 xt_docs_sys_time xt_cats_sys_time]
@@ -1941,8 +1941,8 @@
                       [(equals? xt_docs_sys_time xt_cats_sys_time)]]}))))
 
 (deftest test-period-constructor
-  (t/is (= [{:p1 {:start #time/zoned-date-time "2018-01-01T00:00Z[UTC]",
-                  :end #time/zoned-date-time "2022-01-01T00:00Z[UTC]"}}]
+  (t/is (= [{:p1 {:from #time/zoned-date-time "2018-01-01T00:00Z[UTC]",
+                  :to #time/zoned-date-time "2022-01-01T00:00Z[UTC]"}}]
            (xt/q
              tu/*node*
              '{:find [p1],
@@ -1950,7 +1950,7 @@
 
   (t/is (thrown-with-msg?
           RuntimeException
-          #"Start cannot be greater than end when constructing a period"
+          #"From cannot be greater than to when constructing a period"
           (xt/q
             tu/*node*
             '{:find [p1],
@@ -1960,25 +1960,25 @@
   (xt/submit-tx tu/*node* '[[:put :xt_docs {:xt/id 1} {:for-valid-time [:in #inst "2015" #inst "2050"]}]])
 
   (t/is (= [{:xt/id 1,
-             :app_time {:start #time/zoned-date-time "2015-01-01T00:00Z[UTC]",
-                        :end #time/zoned-date-time "2050-01-01T00:00Z[UTC]"},
+             :app_time {:from #time/zoned-date-time "2015-01-01T00:00Z[UTC]",
+                        :to #time/zoned-date-time "2050-01-01T00:00Z[UTC]"},
              :xt/valid-from #time/zoned-date-time "2015-01-01T00:00Z[UTC]",
-             :app-time-end #time/zoned-date-time "2050-01-01T00:00Z[UTC]"}]
+             :app-time-to #time/zoned-date-time "2050-01-01T00:00Z[UTC]"}]
            (xt/q
             tu/*node*
-            '{:find [xt/id app_time xt/valid-from app-time-end]
+            '{:find [xt/id app_time xt/valid-from app-time-to]
               :where [(match :xt_docs
                         [xt/id xt/valid-from
                          {:xt/valid-time app_time
-                          :xt/valid-to app-time-end}]
+                          :xt/valid-to app-time-to}]
                         {:for-valid-time :all-time})]}))
         "projecting both period and underlying cols")
 
   (t/is (= [{:xt/id 1,
-             :app_time {:start #time/zoned-date-time "2015-01-01T00:00Z[UTC]",
-                        :end #time/zoned-date-time "2050-01-01T00:00Z[UTC]"},
-             :sys_time {:start #time/zoned-date-time "2020-01-01T00:00Z[UTC]",
-                        :end #time/zoned-date-time "9999-12-31T23:59:59.999999Z[UTC]"}}]
+             :app_time {:from #time/zoned-date-time "2015-01-01T00:00Z[UTC]",
+                        :to #time/zoned-date-time "2050-01-01T00:00Z[UTC]"},
+             :sys_time {:from #time/zoned-date-time "2020-01-01T00:00Z[UTC]",
+                        :to #time/zoned-date-time "9999-12-31T23:59:59.999999Z[UTC]"}}]
            (xt/q
             tu/*node*
             '{:find [xt/id app_time sys_time]
@@ -1989,8 +1989,8 @@
         "projecting both app and system-time periods")
 
   (t/is (= [#:xt{:valid-time
-                 {:start #time/zoned-date-time "2015-01-01T00:00Z[UTC]",
-                  :end #time/zoned-date-time "2050-01-01T00:00Z[UTC]"}}]
+                 {:from #time/zoned-date-time "2015-01-01T00:00Z[UTC]",
+                  :to #time/zoned-date-time "2050-01-01T00:00Z[UTC]"}}]
            (xt/q
             tu/*node*
             '{:find [xt/valid-time]
@@ -2001,10 +2001,10 @@
 
   (t/is (= [{:xt/id 1
              :id2 1,
-             :app_time {:start #time/zoned-date-time "2015-01-01T00:00Z[UTC]",
-                        :end #time/zoned-date-time "2050-01-01T00:00Z[UTC]"},
-             :sys_time {:start #time/zoned-date-time "2020-01-01T00:00Z[UTC]",
-                        :end #time/zoned-date-time "9999-12-31T23:59:59.999999Z[UTC]"}}]
+             :app_time {:from #time/zoned-date-time "2015-01-01T00:00Z[UTC]",
+                        :to #time/zoned-date-time "2050-01-01T00:00Z[UTC]"},
+             :sys_time {:from #time/zoned-date-time "2020-01-01T00:00Z[UTC]",
+                        :to #time/zoned-date-time "9999-12-31T23:59:59.999999Z[UTC]"}}]
            (xt/q
             tu/*node*
             '{:find [xt/id id2 app_time sys_time]
@@ -2026,8 +2026,8 @@
 
 
   #_(t/is (= [{:xt/id 2,
-               :time {:start #time/zoned-date-time "2020-01-02T00:00Z[UTC]",
-                      :end #time/zoned-date-time "9999-12-31T23:59:59.999999Z[UTC]"}}]
+               :time {:from #time/zoned-date-time "2020-01-02T00:00Z[UTC]",
+                      :to #time/zoned-date-time "9999-12-31T23:59:59.999999Z[UTC]"}}]
              (xt/q
               tu/*node*
               '{:find [id time]
@@ -2192,22 +2192,22 @@
 
 (t/deftest test-metadata-filtering-for-time-data-607
   (with-open [node (node/start-node {:xtdb/indexer {:rows-per-chunk 1}})]
-    (xt/submit-tx node [[:put :xt_docs {:xt/id 1 :start-date #time/date "2000-01-01"}]
-                        [:put :xt_docs {:xt/id 2 :start-date #time/date "3000-01-01"}]])
+    (xt/submit-tx node [[:put :xt_docs {:xt/id 1 :from-date #time/date "2000-01-01"}]
+                        [:put :xt_docs {:xt/id 2 :from-date #time/date "3000-01-01"}]])
     (t/is (= [{:id 1}]
              (xt/q node
                    '{:find [id]
-                     :where [(match :xt_docs [{:xt/id id} start-date])
-                             [(>= start-date #inst "1500")]
-                             [(< start-date #inst "2500")]]})))
-    (xt/submit-tx node [[:put :xt_docs2 {:xt/id 1 :start-date #inst "2000-01-01"}]
-                        [:put :xt_docs2 {:xt/id 2 :start-date #inst "3000-01-01"}]])
+                     :where [(match :xt_docs [{:xt/id id} from-date])
+                             [(>= from-date #inst "1500")]
+                             [(< from-date #inst "2500")]]})))
+    (xt/submit-tx node [[:put :xt_docs2 {:xt/id 1 :from-date #inst "2000-01-01"}]
+                        [:put :xt_docs2 {:xt/id 2 :from-date #inst "3000-01-01"}]])
     (t/is (= [{:id 1}]
              (xt/q node
                    '{:find [id]
-                     :where [(match :xt_docs2 [{:xt/id id} start-date])
-                             [(< start-date #time/date "2500-01-01")]
-                             [(< start-date #time/date "2500-01-01")]]})))))
+                     :where [(match :xt_docs2 [{:xt/id id} from-date])
+                             [(< from-date #time/date "2500-01-01")]
+                             [(< from-date #time/date "2500-01-01")]]})))))
 
 (t/deftest bug-non-namespaced-nested-keys-747
   (xt/submit-tx tu/*node* [[:put :bar {:xt/id 1 :foo {:a/b "foo"}}]])
@@ -2329,24 +2329,24 @@
     (t/is (=
            #{{:n 0,
               :valid-time
-              {:start #time/zoned-date-time "2020-01-01T00:00Z[UTC]",
-               :end #time/zoned-date-time "2020-01-02T00:00Z[UTC]"}}
+              {:from #time/zoned-date-time "2020-01-01T00:00Z[UTC]",
+               :to #time/zoned-date-time "2020-01-02T00:00Z[UTC]"}}
              {:n 1,
               :valid-time
-              {:start #time/zoned-date-time "2020-01-02T00:00Z[UTC]",
-               :end #time/zoned-date-time "2020-01-03T00:00Z[UTC]"}}
+              {:from #time/zoned-date-time "2020-01-02T00:00Z[UTC]",
+               :to #time/zoned-date-time "2020-01-03T00:00Z[UTC]"}}
              {:n 2,
               :valid-time
-              {:start #time/zoned-date-time "2020-01-03T00:00Z[UTC]",
-               :end #time/zoned-date-time "2020-01-04T00:00Z[UTC]"}}
+              {:from #time/zoned-date-time "2020-01-03T00:00Z[UTC]",
+               :to #time/zoned-date-time "2020-01-04T00:00Z[UTC]"}}
              {:n 3,
               :valid-time
-              {:start #time/zoned-date-time "2020-01-04T00:00Z[UTC]",
-               :end #time/zoned-date-time "2020-01-05T00:00Z[UTC]"}}
+              {:from #time/zoned-date-time "2020-01-04T00:00Z[UTC]",
+               :to #time/zoned-date-time "2020-01-05T00:00Z[UTC]"}}
              {:n 4,
               :valid-time
-              {:start #time/zoned-date-time "2020-01-05T00:00Z[UTC]",
-               :end #time/zoned-date-time "2020-01-06T00:00Z[UTC]"}}}
+              {:from #time/zoned-date-time "2020-01-05T00:00Z[UTC]",
+               :to #time/zoned-date-time "2020-01-06T00:00Z[UTC]"}}}
            (set (xt/q node '{:find [n valid-time] :where [($ :ints {:n n :xt/id 0 :xt/valid-time valid-time}
                                                              {:for-valid-time [:in #inst "2020-01-01" #inst "2020-01-06"]})]}))))))
 
