@@ -260,13 +260,13 @@
     period-predicand
     [:period_predicand ^:z col]
     ;;=>
-    (let [[start end] (sem/expand-underlying-column-references (sem/column-reference col))]
-      {:start (column-reference-symbol start)
-       :end (column-reference-symbol end)})
+    (let [[from to] (sem/expand-underlying-column-references (sem/column-reference col))]
+      {:from (column-reference-symbol from)
+       :to (column-reference-symbol to)})
 
-    [:period_predicand "PERIOD" ^:z start ^:z end]
+    [:period_predicand "PERIOD" ^:z from ^:z to]
     ;;=>
-    {:start (expr start) :end (expr end)}
+    {:from (expr from) :to (expr to)}
 
     ;; handles CONTAINS period_or_point_in_time_predicand
     (expr period-predicand)))
@@ -816,43 +816,43 @@
     ;;=>
     (let [p1 (plan-period-predicand p1_predicand)
           p2 (plan-period-predicand p2_predicand)]
-      (list 'and (list '<= (:start p1) (or (:start p2) p2)) (list '>= (:end p1) (or (:end p2) p2))))
+      (list 'and (list '<= (:from p1) (or (:from p2) p2)) (list '>= (:to p1) (or (:to p2) p2))))
 
     [:period_overlaps_predicate ^:z p1_predicand [:period_overlaps_predicate_part_2 _ ^:z p2_predicand]]
     ;;=>
     (let [p1 (plan-period-predicand p1_predicand)
           p2 (plan-period-predicand p2_predicand)]
-      (list 'and (list '< (:start p1) (:end p2)) (list '> (:end p1) (:start p2))))
+      (list 'and (list '< (:from p1) (:to p2)) (list '> (:to p1) (:from p2))))
 
     [:period_equals_predicate ^:z p1_predicand [:period_equals_predicate_part_2 _ ^:z p2_predicand]]
     ;;=>
     (let [p1 (plan-period-predicand p1_predicand)
           p2 (plan-period-predicand p2_predicand)]
-      (list 'and (list '= (:start p1) (:start p2)) (list '= (:end p1) (:end p2))))
+      (list 'and (list '= (:from p1) (:from p2)) (list '= (:to p1) (:to p2))))
 
     [:period_precedes_predicate ^:z p1_predicand [:period_precedes_predicate_part_2 _ ^:z p2_predicand]]
     ;;=>
     (let [p1 (plan-period-predicand p1_predicand)
           p2 (plan-period-predicand p2_predicand)]
-      (list '<= (:end p1) (:start p2)))
+      (list '<= (:to p1) (:from p2)))
 
     [:period_succeeds_predicate ^:z p1_predicand [:period_succeeds_predicate_part_2 _ ^:z p2_predicand]]
     ;;=>
     (let [p1 (plan-period-predicand p1_predicand)
           p2 (plan-period-predicand p2_predicand)]
-      (list '>= (:start p1) (:end p2)))
+      (list '>= (:from p1) (:to p2)))
 
     [:period_immediately_precedes_predicate ^:z p1_predicand [:period_immediately_precedes_predicate_part_2 _ _ ^:z p2_predicand]]
     ;;=>
     (let [p1 (plan-period-predicand p1_predicand)
           p2 (plan-period-predicand p2_predicand)]
-      (list '= (:end p1) (:start p2)))
+      (list '= (:to p1) (:from p2)))
 
     [:period_immediately_succeeds_predicate ^:z p1_predicand [:period_immediately_succeeds_predicate_part_2 _ _ ^:z p2_predicand]]
     ;;=>
     (let [p1 (plan-period-predicand p1_predicand)
           p2 (plan-period-predicand p2_predicand)]
-      (list '= (:start p1) (:end p2)))
+      (list '= (:from p1) (:to p2)))
 
     [:case_abbreviation "NULLIF" ^:z v1 ^:z v2]
     ;;=>

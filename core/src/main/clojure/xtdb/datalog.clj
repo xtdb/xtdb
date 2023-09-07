@@ -380,35 +380,35 @@
     {scan-col (list* 'and col-preds)}))
 
 (def app-time-period-sym 'xt/valid-time)
-(def app-time-start-sym 'xt/valid-from)
-(def app-time-end-sym 'xt/valid-to)
+(def app-time-from-sym 'xt/valid-from)
+(def app-time-to-sym 'xt/valid-to)
 (def app-temporal-cols {:period app-time-period-sym
-                        :start app-time-start-sym
-                        :end app-time-end-sym})
+                        :from app-time-from-sym
+                        :to app-time-to-sym})
 
 
 (def system-time-period-sym 'xt/system-time)
-(def system-time-start-sym 'xt/system-from)
-(def system-time-end-sym 'xt/system-to)
+(def system-time-from-sym 'xt/system-from)
+(def system-time-to-sym 'xt/system-to)
 (def sys-temporal-cols {:period system-time-period-sym
-                        :start system-time-start-sym
-                        :end system-time-end-sym})
+                        :from system-time-from-sym
+                        :to system-time-to-sym})
 
 (defn replace-period-cols-with-temporal-attrs
   [original-attrs]
   (cond-> original-attrs
     (contains? original-attrs app-time-period-sym)
     (-> (disj app-time-period-sym)
-        (conj app-time-start-sym app-time-end-sym))
+        (conj app-time-from-sym app-time-to-sym))
 
     (contains? original-attrs system-time-period-sym)
     (-> (disj system-time-period-sym)
-        (conj system-time-start-sym system-time-end-sym))))
+        (conj system-time-from-sym system-time-to-sym))))
 
-(defn create-period-constructor [match {:keys [period start end]}]
+(defn create-period-constructor [match {:keys [period from to]}]
   (when-let [[_ [lv-type lv]] (first (filter #(= period (first %)) match))]
     (if (= :logic-var lv-type)
-      {(col-sym lv) (list 'period (col-sym start) (col-sym end))}
+      {(col-sym lv) (list 'period (col-sym from) (col-sym to))}
 
       (throw (err/illegal-arg :temporal-period-requires-logic-var
                               {::err/message "Temporal period must be bound to logic var"
