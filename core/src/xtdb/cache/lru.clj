@@ -9,10 +9,6 @@
 (set! *unchecked-math* :warn-on-boxed)
 
 (deftype LRUCache [^LinkedHashMap cache ^StampedLock lock ^long size]
-  Object
-  (toString [_]
-    (.toString cache))
-
   ICache
   (computeIfAbsent [this k stored-key-fn f]
     (let [v (.valAt this k ::not-found)] ; use ::not-found as values can be falsy
