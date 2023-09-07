@@ -19,8 +19,8 @@
        ;; uncomment this to reset the expected file (but don't commit it)
        #_(spit file actual) ;; <<no-commit>>
 
-       (t/is (= (json/parse-string (slurp file))
-                (json/parse-string actual)))))))
+       (t/is (= (tj/sort-arrow-json (json/parse-string (slurp file)))
+                (tj/sort-arrow-json (json/parse-string actual))))))))
 
 (def devices-docs
   [[:put :device-info

@@ -1,17 +1,30 @@
 (ns xtdb.test-json
   (:require [cheshire.core :as json]
             [clojure.test :as t]
+            [clojure.walk :as walk]
             [cognitect.transit :as transit]
             [xtdb.test-util :as tu]
             [xtdb.transit :as xt.transit]
             [xtdb.util :as util]
             [clojure.string :as str])
-  (:import java.io.File
+  (:import clojure.lang.MapEntry
+           java.io.File
            java.nio.ByteBuffer
            java.nio.channels.FileChannel
            [java.nio.file CopyOption FileVisitOption Files OpenOption Path StandardCopyOption StandardOpenOption]
            org.apache.arrow.memory.RootAllocator
            [org.apache.arrow.vector.ipc ArrowFileReader ArrowStreamReader JsonFileWriter]))
+
+(defn sort-arrow-json
+  "For use in tests to provide consitent ordering to where ordering is undefined"
+  [arrow-json-tree-as-clojure]
+  (walk/postwalk
+    (fn [node]
+      (if (and (map-entry? node)
+               (#{"children" "fields" "columns"} (key node)))
+        (MapEntry/create (key node) (sort-by #(get % "name") (val node)))
+        node))
+    arrow-json-tree-as-clojure))
 
 (defn- file->json-file ^java.nio.file.Path [^Path file]
   (.resolve (.getParent file) (format "%s.json" (.getFileName file))))
@@ -30,8 +43,8 @@
       json-file)))
 
 (defn check-arrow-json-file [^Path expected, ^Path actual]
-  (t/is (= (json/parse-string (Files/readString expected))
-           (json/parse-string (Files/readString actual)))
+  (t/is (= (sort-arrow-json (json/parse-string (Files/readString expected)))
+           (sort-arrow-json (json/parse-string (Files/readString actual))))
         actual))
 
 (defn- read-transit-obj [stream]
