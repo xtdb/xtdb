@@ -1,0 +1,39 @@
+name: XTDB SLT
+run-name: XTDB SLT
+
+on:
+  schedule:
+    - cron:  '0 19 * * 1-5'
+
+jobs:
+  slt-test-dir:
+    if: github.repository == 'xtdb/xtdb'
+    name: SLT Test Dir
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        slt-dir: [{dir: "random/expr/", error: 62},
+                  {dir: "random/aggregates/", error: 19},
+                  {dir: "random/groupby/", error: 8},
+                  {dir: "random/select/"},
+                  {dir: "index/between/"},
+                  {dir: "index/commute/"},
+                  {dir: "index/orderby/"},
+                  {dir: "index/orderby_nosort/"},
+                  {dir: "index/in/"},
+                  {dir: "index/random/"}]
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          ref: 2.x
+      - name: Set up JDK 17
+        uses: actions/setup-java@v3
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+      - name: SLT Test Dir
+        uses: gradle/gradle-build-action@v2.6.1
+        with:
+          arguments: slt-test-dir -PtestDir=${{ matrix.slt-dir.dir }} -PtestMaxErrors=${{ matrix.slt-dir.error }} -PtestMaxFailures=${{ matrix.slt-dir.failure }}
+          cache-read-only: ${{ github.ref != 'refs/heads/2.x' }}
