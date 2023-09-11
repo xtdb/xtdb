@@ -11,6 +11,7 @@
             [xtdb.vector.writer :as vw])
   (:import (com.google.protobuf Any ByteString)
            java.lang.AutoCloseable
+           (java.nio ByteBuffer)
            (java.util ArrayList HashMap Map)
            (java.util.concurrent CompletableFuture ConcurrentHashMap)
            (java.util.function BiConsumer BiFunction Consumer)
@@ -94,7 +95,7 @@
 
     (vec rows)))
 
-(defn- flight-stream->bytes [^FlightStream flight-stream]
+(defn- flight-stream->bytes ^ByteBuffer [^FlightStream flight-stream]
   (util/build-arrow-ipc-byte-buffer (.getRoot flight-stream) :stream
     (fn [write-batch!]
       (while (.next flight-stream)
@@ -170,7 +171,7 @@
         ;; NOTE atm the PSs are either created within a tx and then assumed to be within that tx
         ;; my mental model would be that you could create a PS outside a tx and then use it inside, but this doesn't seem possible in FSQL.
         (fn []
-          @(-> (let [{:keys [sql fsql-tx-id]} (or (get stmts (.getPreparedStatementHandle cmd))
+          @(-> (let [{:keys [^String sql fsql-tx-id]} (or (get stmts (.getPreparedStatementHandle cmd))
                                                   (throw (UnsupportedOperationException. "invalid ps-id")))
                      dml (Ops/sqlBatch sql (flight-stream->bytes flight-stream))]
                  (exec-dml dml fsql-tx-id))
