@@ -408,7 +408,7 @@
 (defn create-period-constructor [match {:keys [period from to]}]
   (when-let [[_ [lv-type lv]] (first (filter #(= period (first %)) match))]
     (if (= :logic-var lv-type)
-      {(col-sym lv) (list 'period (col-sym from) (col-sym to))}
+      {(col-sym period) (list 'period (col-sym from) (col-sym to))}
 
       (throw (err/illegal-arg :temporal-period-requires-logic-var
                               {::err/message "Temporal period must be bound to logic var"
@@ -498,12 +498,7 @@
                            (->> (keep (fn [[a [v-type v-arg]]]
                                         (case v-type
                                           :logic-var {:lv v-arg
-                                                      :col (if (contains?
-                                                                 #{app-time-period-sym
-                                                                   system-time-period-sym}
-                                                                 a)
-                                                             (col-sym v-arg)
-                                                             a)}
+                                                      :col a}
                                           :unwind {:lv (first v-arg), :col (attr->unwind-col a)}
                                           nil)))
                                 (group-by :lv))

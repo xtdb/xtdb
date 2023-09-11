@@ -1959,6 +1959,7 @@
 (deftest test-period-and-temporal-col-projection
   (xt/submit-tx tu/*node* '[[:put :xt_docs {:xt/id 1} {:for-valid-time [:in #inst "2015" #inst "2050"]}]])
 
+
   (t/is (= [{:xt/id 1,
              :app_time {:from #time/zoned-date-time "2015-01-01T00:00Z[UTC]",
                         :to #time/zoned-date-time "2050-01-01T00:00Z[UTC]"},
@@ -2019,24 +2020,37 @@
                               :for-system-time :all-time})]}))
         "period unification")
 
-  ;; TODO broken. Both periods are mapped to time, no unification happens.
-  ;; works okay if you use a real column as no name clash plus var->cols sees they share a var
-  ;; probably suggests current approach for how we introduce temporal periods is too naive
-  #_(xt/submit-tx tu/*node* '[[:put xt_docs {:xt/id 2}]])
+  (xt/submit-tx tu/*node* '[[:put :xt_docs {:xt/id 2}]])
 
+  (t/is (= [{:xt/id 2,
+             :time {:from #time/zoned-date-time "2020-01-02T00:00Z[UTC]",
+                    :to #time/zoned-date-time "9999-12-31T23:59:59.999999Z[UTC]"}}]
+           (xt/q
+            tu/*node*
+            '{:find [xt/id time]
+              :where [(match :xt_docs [xt/id {:xt/valid-time time
+                                              :xt/system-time time}]
+                             {:for-valid-time :all-time
+                              :for-system-time :all-time})]}))
+        "period unification within match")
 
-  #_(t/is (= [{:xt/id 2,
-               :time {:from #time/zoned-date-time "2020-01-02T00:00Z[UTC]",
-                      :to #time/zoned-date-time "9999-12-31T23:59:59.999999Z[UTC]"}}]
-             (xt/q
-              tu/*node*
-              '{:find [id time]
-                :where [(match xt_docs [id {:xt/valid-time time
-                                            :lxt/system-time time}]
-                               {:for-valid-time :all-time
-                                :for-system-time :all-time})]}))
-          "period unification within match"))
+  (xt/submit-tx tu/*node* '[[:put :xt_docs
+                             {:xt/id 3 :c {:from #inst "2015" :to #inst "2050"}}
+                             {:for-valid-time [:in #inst "2015" #inst "2050"]}]])
 
+  (t/is (= [{:xt/id 3,
+             :time
+             {:from #time/zoned-date-time "2015-01-01T00:00Z[UTC]",
+              :to #time/zoned-date-time "2050-01-01T00:00Z[UTC]"}}]
+           (xt/q
+            tu/*node*
+            '{:find [xt/id time]
+
+              :where [(match :xt_docs [xt/id {:xt/valid-time time
+                                              :c time}]
+                             {:for-valid-time :all-time
+                              :for-system-time :all-time})]}))
+        "period unification within match with user period column"))
 
 (deftest test-period-literal-match
   (xt/submit-tx tu/*node* '[[:put :xt_docs {:xt/id 1} {:for-valid-time [:in #inst "2015" #inst "2050"]}]])
