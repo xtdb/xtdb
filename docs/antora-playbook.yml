@@ -25,6 +25,7 @@ content:
       branches:
         - master
         - docs-v1.24.1
+        - docs-v1.24.0
         - docs-v1.23.3
         - docs-v1.23.2
         - docs-v1.23.1
@@ -39,6 +40,7 @@ content:
       branches:
         - master
         - docs-v1.24.1
+        - docs-v1.24.0
         - docs-v1.23.3
         - docs-v1.23.2
         - docs-v1.23.1
@@ -53,6 +55,7 @@ content:
       branches:
         - master
         - docs-v1.24.1
+        - docs-v1.24.0
         - docs-v1.23.3
         - docs-v1.23.2
         - docs-v1.23.1
@@ -67,6 +70,7 @@ content:
       branches:
         - master
         - docs-v1.24.1
+        - docs-v1.24.0
         - docs-v1.23.3
         - docs-v1.23.2
         - docs-v1.23.1
@@ -81,6 +85,7 @@ content:
       branches:
         - master
         - docs-v1.24.1
+        - docs-v1.24.0
         - docs-v1.23.3
         - docs-v1.23.2
         - docs-v1.23.1
