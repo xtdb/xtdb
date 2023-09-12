@@ -1,5 +1,5 @@
 = Azure Blobs
-:page-aliases: reference::azure-blobs.adoc
+:page-aliases: 1.24.1@reference::azure-blobs.adoc
 
 You can use Azure's Blob Storage as either: 
 

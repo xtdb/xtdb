@@ -1,6 +1,6 @@
 name: administration
 title: Administration
-version: master
+version: 1.24.1
 start_page: ROOT:index.adoc
 nav:
   - modules/ROOT/nav.adoc

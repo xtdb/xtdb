@@ -1,5 +1,5 @@
 = Xodus
-:page-aliases: reference::xodus.adoc
+:page-aliases: 1.24.1@reference::xodus.adoc
 
 Our friends over at https://www.avisi.nl/en/home[Avisi] have released support for https://github.com/JetBrains/xodus[JetBrains Xodus] as a KV store for XTDB's indices.
 

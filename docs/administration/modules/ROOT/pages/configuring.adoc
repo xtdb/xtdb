@@ -1,5 +1,5 @@
 = Configuring
-:page-aliases: reference::configuration.adoc
+:page-aliases: 1.24.1@reference::configuration.adoc
 
 * xref:_modules[Modules]
 * xref:_storage[Storage]

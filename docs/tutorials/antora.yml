@@ -1,7 +1,6 @@
 name: tutorials
 title: Tutorials
-version: master
-display_version: master
+version: 1.24.1
 start_page: ROOT:index.adoc
 nav:
   - modules/ROOT/nav.adoc

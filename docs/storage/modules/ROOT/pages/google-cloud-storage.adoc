@@ -1,5 +1,5 @@
 = Google Cloud Storage
-:page-aliases: reference::google-cloud-storage.adoc
+:page-aliases: 1.24.1@reference::google-cloud-storage.adoc
 
 You can use Google's Cloud Storage (GCS) as either: 
 
