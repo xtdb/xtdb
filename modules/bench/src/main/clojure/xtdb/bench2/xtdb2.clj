@@ -250,12 +250,8 @@
 
   (def get-item-query '{:find [i_id i_u_id i_initial_price i_current_price]
                         :in [i_id]
-                        :where [[?i :_table :item]
-                                [?i :i_id i_id]
-                                [?i :i_status :open]
-                                [?i :i_u_id i_u_id]
-                                [?i :i_initial_price i_initial_price]
-                                [?i :i_current_price i_current_price]]})
+                        :where [(match :item {:xt/id i_id :i_status :open :i_u_id i_u_id
+                                              :i_initial_price i_initial_price :i_current_price i_current_price})]} )
   ;; ra for the above
   (def ra-query
     '[:scan
@@ -264,16 +260,14 @@
        i_u_id
        i_current_price
        i_initial_price
-       {i_id (= i_id ?i_id)}
+       {xt/id (= xt/id ?i_id)}
        id]])
 
   (def open-ids (->> (xt/q node '{:find [i]
-                                              :where [[i :_table :item]
-                                                      [i :i_status :open]
-                                                      #_[j :i_status ]]})
+                                  :where [(match :item {:xt/id i :i_status :open})]})
                      (map :i)))
 
-  (def rand-seq (shuffle open-ids))
+
 
   (def q  (fn [open-id]
             (tu/query-ra ra-query {:node node
@@ -281,10 +275,10 @@
   ;; ra query
   (time
    (tu/with-allocator
-     #(doseq [id (take (* 1000) rand-seq)]
+     #(doseq [id (take 1000 (shuffle open-ids))]
         (q id))))
 
   ;; datalog query
   (time
-   (doseq [id (take (* 1000 1) (shuffle rand-seq))]
-     (xt/q node get-item-query id))))
+   (doseq [id (take 1000 (shuffle open-ids))]
+     (xt/q node [get-item-query id]))))

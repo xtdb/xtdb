@@ -447,14 +447,9 @@
         ;; _ (log/info "id:" i_id)
         ;; i_id (b2/sample-flat worker item-id)
         q '{:find [i_id i_u_id i_initial_price i_current_price]
-            #_(pull ?i [:i_id, :i_u_id, :i_initial_price, :i_current_price])
             :in [i_id]
-            :where [(match :item {:xt/id i_id})
-                    ;; [?i :i_id i_id]
-                    [i_id :i_status :open]
-                    [i_id :i_u_id i_u_id]
-                    [i_id :i_initial_price i_initial_price]
-                    [i_id :i_current_price i_current_price]]}]
+            :where [(match :item {:xt/id i_id :i_status :open :i_u_id i_u_id
+                                  :i_initial_price i_initial_price :i_current_price i_current_price})]}]
     (xt/q sut [q i_id])))
 
 (defn read-category-tsv []
