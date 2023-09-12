@@ -477,6 +477,10 @@
                                 {:node node})))
 
           (t/is (= [{:version 2, :xt/id search-uuid}]
+                   (tu/query-ra [:scan {:table 'xt_docs} ['version {'xt/id (list '=  search-uuid 'xt/id)}]]
+                                {:node node})))
+
+          (t/is (= [{:version 2, :xt/id search-uuid}]
                    (tu/query-ra '[:scan {:table xt_docs} [version {xt/id (= xt/id ?search-uuid)}]]
                                 {:node node :params {'?search-uuid #uuid "80000000-0000-0000-0000-000000000000"}})))
 

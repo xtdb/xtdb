@@ -490,11 +490,16 @@
                                page-idxs col-names)]
     (assoc trie-match :page-idxs page-idxs)))
 
+(defn- eid-select->eid [eid-select]
+  (if (= 'xt/id (second eid-select))
+    (nth eid-select 2)
+    (second eid-select)))
+
 (defn selects->iid-byte-buffer ^ByteBuffer [selects ^RelationReader params-rel]
   (when-let [eid-select (or (get selects "xt/id") (get selects "xt$id"))]
-    (let [eid (nth eid-select 2)]
-      (when (= '= (first eid-select))
-        (cond
+    (when (= '= (first eid-select))
+       (let [eid (eid-select->eid eid-select)]
+         (cond
           (s/valid? ::lp/value eid)
           (trie/->iid eid)
 
