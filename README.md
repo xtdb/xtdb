@@ -24,16 +24,16 @@ used to express complex joins and recursive graph traversals.
   <dependency>
     <groupId>com.xtdb</groupId>
     <artifactId>xtdb-core</artifactId>
-    <version>1.24.0</version>
+    <version>1.24.1</version>
   </dependency>
   ```
 
   ```clojure
-  [com.xtdb/xtdb-core "1.24.0"]
+  [com.xtdb/xtdb-core "1.24.1"]
   ```
 
   ```clojure
-  com.xtdb/xtdb-core {:mvn/version "1.24.0"}
+  com.xtdb/xtdb-core {:mvn/version "1.24.1"}
   ```
 * [Release notes](https://github.com/xtdb/xtdb/releases)
 * Support: [Zulip community chat](https://juxt-oss.zulipchat.com/#narrow/stream/194466-crux) | [GitHub Discussions](https://github.com/xtdb/xtdb/discussions) | hello@xtdb.com
