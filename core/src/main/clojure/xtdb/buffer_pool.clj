@@ -100,7 +100,7 @@
                         (.remove buffers k)
                         (finally
                           (.unlock buffers-lock stamp))))]
-      (do (util/try-close buffer)
+      (do (util/close buffer)
           true)
       false))
 
@@ -110,7 +110,7 @@
       (try
         (let [i (.iterator (.values buffers))]
           (while (.hasNext i)
-            (util/try-close (.next i))
+            (util/close (.next i))
             (.remove i)))
         (finally
           (.unlock buffers-lock stamp))))))
