@@ -174,6 +174,9 @@
         (when-not (.tryClose ref-ctr (Duration/ofMinutes 1))
           (log/warn "Failed to shut down after 60s due to outstanding queries"))))))
 
+(defmethod ig/halt-key! ::ra-query-source [_ ^AutoCloseable ra-query-source]
+  (.close ra-query-source))
+
 (deftype CursorResultSet [^IResultCursor cursor
                           ^AutoCloseable params
                           ^:unsynchronized-mutable ^Iterator next-values]
