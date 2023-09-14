@@ -379,9 +379,9 @@
     (let [arrow-leaves (->> table-tries
                             (into [] (map-indexed
                                       (fn [ordinal {:keys [trie-key]}]
-                                        (let [leaf-buf @(.getBuffer buffer-pool (->table-leaf-obj-key table-name trie-key))
+                                        (.add leaf-bufs @(.getBuffer buffer-pool (->table-leaf-obj-key table-name trie-key)))
+                                        (let [leaf-buf (.get leaf-bufs (dec (.size leaf-bufs)))
                                               {:keys [^VectorSchemaRoot root loader arrow-blocks]} (util/read-arrow-buf leaf-buf)]
-                                          (.add leaf-bufs leaf-buf)
 
                                           (ArrowLeafLoader. leaf-buf root loader arrow-blocks
                                                             (LeafMergeQueue$LeafPointer. ordinal)
