@@ -628,6 +628,7 @@
 
   Closeable
   (close [_]
+    (util/close allocator)
     (some-> shared-wm .close)))
 
 (defmethod ig/prep-key :xtdb/indexer [_ opts]
@@ -644,19 +645,20 @@
   [_ {:keys [allocator object-store metadata-mgr scan-emitter, ra-src, live-index, rows-per-chunk]}]
 
   (let [{:keys [latest-completed-tx next-chunk-idx], :or {next-chunk-idx 0}} (meta/latest-chunk-metadata metadata-mgr)]
-    (->Indexer allocator object-store metadata-mgr scan-emitter ra-src live-index
+    (util/with-close-on-catch [allocator (util/->child-allocator allocator "indexer")]
+      (->Indexer allocator object-store metadata-mgr scan-emitter ra-src live-index
 
-               nil ; indexer-error
+                 nil ;; indexer-error
 
-               latest-completed-tx
-               latest-completed-tx
-               (PriorityBlockingQueue.)
+                 latest-completed-tx
+                 latest-completed-tx
+                 (PriorityBlockingQueue.)
 
-               (RowCounter. next-chunk-idx)
-               rows-per-chunk
+                 (RowCounter. next-chunk-idx)
+                 rows-per-chunk
 
-               nil ; watermark
-               (StampedLock.))))
+                 nil ;; watermark
+                 (StampedLock.)))))
 
 (defmethod ig/halt-key! :xtdb/indexer [_ ^AutoCloseable indexer]
   (.close indexer))

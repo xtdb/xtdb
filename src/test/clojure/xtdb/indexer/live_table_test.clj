@@ -14,6 +14,7 @@
            (org.apache.arrow.memory RootAllocator)
            (xtdb.indexer.live_index ILiveIndex  TestLiveTable)
            (xtdb.trie LiveHashTrie LiveHashTrie$Leaf)
+           (xtdb.util RefCounter)
            xtdb.vector.IVectorPosition
            xtdb.watermark.ILiveTableWatermark))
 
@@ -149,9 +150,10 @@
   (let [uuids [#uuid "7fffffff-ffff-ffff-4fff-ffffffffffff"]
         table-name "foo"]
     (with-open [obj-store (obj-store-test/in-memory)
-                allocator (RootAllocator.)
-                ^ILiveIndex live-index (live-index/->LiveIndex allocator obj-store (HashMap.) 64 1024)]
-      (let [live-index-tx (.startTx live-index (xtp/->TransactionInstant 0 (.toInstant #inst "2000")))
+                allocator (RootAllocator.)]
+      (let [live-index-allocator (util/->child-allocator allocator "live-index")
+            ^ILiveIndex live-index (live-index/->LiveIndex live-index-allocator obj-store (HashMap.) (RefCounter.) 64 1024)
+            live-index-tx (.startTx live-index (xtp/->TransactionInstant 0 (.toInstant #inst "2000")))
             live-table-tx (.liveTable live-index-tx table-name)]
 
         (let [wp (IVectorPosition/build)]

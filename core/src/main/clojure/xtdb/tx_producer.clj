@@ -9,6 +9,7 @@
             [xtdb.vector :as vec]
             [xtdb.vector.writer :as vw])
   (:import (java.time Instant ZoneId)
+           (java.lang AutoCloseable)
            (java.util ArrayList HashMap List)
            org.apache.arrow.memory.BufferAllocator
            (org.apache.arrow.vector VectorSchemaRoot)
@@ -403,7 +404,9 @@
           (util/then-apply
             (fn [^LogRecord result]
               (cond-> (.tx result)
-                system-time (assoc :system-time system-time))))))))
+                system-time (assoc :system-time system-time)))))))
+  AutoCloseable
+  (close [_] (.close allocator)))
 
 (defmethod ig/prep-key ::tx-producer [_ opts]
   (merge {:log (ig/ref :xtdb/log)
@@ -412,4 +415,7 @@
          opts))
 
 (defmethod ig/init-key ::tx-producer [_ {:keys [log allocator default-tz]}]
-  (TxProducer. allocator log default-tz))
+  (TxProducer. (util/->child-allocator allocator "tx-producer") log default-tz))
+
+(defmethod ig/halt-key! ::tx-producer [_ tx-producer]
+  (util/close tx-producer))

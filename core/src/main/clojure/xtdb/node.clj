@@ -22,7 +22,8 @@
 (set! *unchecked-math* :warn-on-boxed)
 
 (defmethod ig/init-key :xtdb/allocator [_ _] (RootAllocator.))
-(defmethod ig/halt-key! :xtdb/allocator [_ ^BufferAllocator a] (.close a))
+(defmethod ig/halt-key! :xtdb/allocator [_ ^BufferAllocator a]
+  (util/close a))
 
 (defmethod ig/prep-key :xtdb/default-tz [_ default-tz]
   (cond

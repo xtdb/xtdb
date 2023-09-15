@@ -132,7 +132,7 @@
                  (.acquire ref-ctr)
                  (let [^BufferAllocator allocator
                        (if allocator
-                         (.newChildAllocator allocator "BoundQuery/openCursor" AllocationListener/NOOP 0 Long/MAX_VALUE)
+                         (util/->child-allocator allocator "BoundQuery/openCursor")
                          (RootAllocator.))
                        wm (some-> wm-src (.openWatermark wm-tx))]
                    (try
