@@ -10,6 +10,7 @@
             [xtdb.vector.reader :as vr]
             [xtdb.vector.writer :as vw])
   (:import (java.util.function IntPredicate)
+           (java.lang AutoCloseable)
            [org.apache.arrow.memory BufferAllocator]
            org.apache.arrow.vector.types.pojo.Field
            org.apache.arrow.vector.VectorSchemaRoot
@@ -123,25 +124,30 @@
         opts))
 
 (defmethod ig/init-key :xtdb/compactor [_ {:keys [allocator ^ObjectStore obj-store metadata-mgr buffer-pool]}]
-  (reify ICompactor
-    (compactAll [_]
-      (log/info "compact-all")
-      (loop []
-        (let [jobs (for [table-name (->> (.listObjects obj-store "tables")
-                                         ;; TODO should obj-store listObjects only return keys from the current level?
-                                         (into #{} (keep #(second (re-find #"^tables/([^/]+)" %)))))
-                         job (compaction-jobs table-name (->> (trie/list-table-trie-files obj-store table-name)
-                                                              (trie/current-table-tries)))]
-                     job)
-              jobs? (boolean (seq jobs))]
+  (util/with-close-on-catch [allocator (util/->child-allocator allocator "compactor")]
+    (reify ICompactor
+      (compactAll [_]
+        (log/info "compact-all")
+        (loop []
+          (let [jobs (for [table-name (->> (.listObjects obj-store "tables")
+                                           ;; TODO should obj-store listObjects only return keys from the current level?
+                                           (into #{} (keep #(second (re-find #"^tables/([^/]+)" %)))))
+                           job (compaction-jobs table-name (->> (trie/list-table-trie-files obj-store table-name)
+                                                                (trie/current-table-tries)))]
+                       job)
+                jobs? (boolean (seq jobs))]
 
-          (doseq [job jobs]
-            (exec-compaction-job! allocator obj-store metadata-mgr buffer-pool job))
+            (doseq [job jobs]
+              (exec-compaction-job! allocator obj-store metadata-mgr buffer-pool job))
 
-          (when jobs?
-            (recur)))))))
+            (when jobs?
+              (recur)))))
+      AutoCloseable
+      (close [_]
+        (util/close allocator)))))
 
-(defmethod ig/halt-key! :xtdb/compactor [_ _compactor])
+(defmethod ig/halt-key! :xtdb/compactor [_ compactor]
+  (util/close compactor))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (defn compact-all! [node]

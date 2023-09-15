@@ -712,3 +712,5 @@
 (defn normal-form-str->datalog-form-str ^String [^String s]
   (NormalForm/datalogForm s))
 
+(defn ->child-allocator [^BufferAllocator allocator name]
+  (.newChildAllocator allocator name (.getInitReservation allocator) (.getLimit allocator)))

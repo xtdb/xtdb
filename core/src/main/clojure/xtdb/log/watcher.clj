@@ -62,14 +62,17 @@
                         (throw (IllegalStateException. (format "Unrecognized log record type %d" (Byte/toUnsignedInt (.get ^ByteBuffer (.-record record) 0))))))))))
     !cancel-hook))
 
-(defmethod ig/init-key :xtdb.log/watcher [_ deps]
-  (let [!watcher-cancel-hook (watch-log! deps)]
+(defmethod ig/init-key :xtdb.log/watcher [_ {:keys [allocator] :as deps}]
+  (util/with-close-on-catch [allocator (util/->child-allocator allocator "watcher")]
+    (let [!watcher-cancel-hook (watch-log! (-> deps
+                                               (assoc :allocator allocator)))]
 
 
-    (reify
-      AutoCloseable
-      (close [_]
-        (util/try-close @!watcher-cancel-hook)))))
+      (reify
+        AutoCloseable
+        (close [_]
+          (util/try-close @!watcher-cancel-hook)
+          (util/close allocator))))))
 
 (defmethod ig/halt-key! :xtdb.log/watcher [_ log-watcher]
   (util/close log-watcher))

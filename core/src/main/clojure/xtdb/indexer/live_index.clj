@@ -1,5 +1,6 @@
 (ns xtdb.indexer.live-index
-  (:require [juxt.clojars-mirrors.integrant.core :as ig]
+  (:require [clojure.tools.logging :as log]
+            [juxt.clojars-mirrors.integrant.core :as ig]
             [xtdb.buffer-pool]
             [xtdb.object-store]
             [xtdb.trie :as trie]
@@ -9,12 +10,14 @@
             [xtdb.vector.writer :as vw])
   (:import [clojure.lang MapEntry]
            (java.lang AutoCloseable)
+           (java.time Duration)
            (java.util ArrayList HashMap Map)
            (java.util.concurrent CompletableFuture)
            (java.util.function Function)
            (org.apache.arrow.memory BufferAllocator)
            (xtdb.object_store ObjectStore)
            (xtdb.trie LiveHashTrie)
+           (xtdb.util RefCounter)
            (xtdb.vector IRelationWriter IVectorWriter)
            (xtdb.watermark ILiveIndexWatermark ILiveTableWatermark)))
 
@@ -191,7 +194,6 @@
                                         {:keys [->live-trie]
                                          :or {->live-trie (fn [iid-rdr]
                                                             (LiveHashTrie/emptyTrie iid-rdr))}}]
-
    (util/with-close-on-catch [rel (trie/open-leaf-root allocator)]
      (let [iid-wtr (.writerForName rel "xt$iid")
            op-wtr (.writerForName rel "op")
@@ -211,7 +213,8 @@
         (.setPageLimit page-limit))
       (.build)))
 
-(defrecord LiveIndex [^BufferAllocator allocator, ^ObjectStore object-store, ^Map tables, ^long log-limit, ^long page-limit]
+(defrecord LiveIndex [^BufferAllocator allocator, ^ObjectStore object-store,
+                      ^Map tables, ^RefCounter wm-cnt, ^long log-limit, ^long page-limit]
   ILiveIndex
   (liveTable [_ table-name] (.get tables table-name))
 
@@ -252,26 +255,31 @@
               (liveTable [_ table-name] (.get wms table-name))
 
               AutoCloseable
-              (close [_] (util/close wms)))))
+              (close [_]
+                (util/close wms)))))
 
         AutoCloseable
         (close [_]))))
 
   (openWatermark [_]
+    (.acquire wm-cnt)
+    (try
+      (util/with-close-on-catch [wms (HashMap.)]
 
-    (util/with-close-on-catch [wms (HashMap.)]
+        (doseq [[table-name ^ILiveTable live-table] tables]
+          (.put wms table-name (.openWatermark live-table true)))
 
-      (doseq [[table-name ^ILiveTable live-table] tables]
-        (.put wms table-name (.openWatermark live-table true)))
+        (reify ILiveIndexWatermark
+          (allColumnTypes [_] (update-vals wms #(.columnTypes ^ILiveTableWatermark %)))
 
-      (reify ILiveIndexWatermark
-        (allColumnTypes [_] (update-vals wms #(.columnTypes ^ILiveTableWatermark %)))
+          (liveTable [_ table-name] (.get wms table-name))
 
-        (liveTable [_ table-name] (.get wms table-name))
-
-        AutoCloseable
-        (close [_]
-          (util/close wms)))))
+          AutoCloseable
+          (close [_]
+            (util/close wms)
+            (.release wm-cnt))))
+      (catch Throwable _t
+        (.release wm-cnt))))
 
   (finishChunk [_ chunk-idx next-chunk-idx]
     (let [trie-key (trie/->trie-key 0 chunk-idx next-chunk-idx)
@@ -292,7 +300,10 @@
 
   AutoCloseable
   (close [_]
-    (util/close tables)))
+    (util/close tables)
+    (if-not (.tryClose wm-cnt (Duration/ofMinutes 1))
+      (log/warn "Failed to shut down live-index after 60s due to outstanding watermarks.")
+      (util/close allocator))))
 
 (defmethod ig/prep-key :xtdb.indexer/live-index [_ opts]
   (merge {:allocator (ig/ref :xtdb/allocator)
@@ -301,7 +312,8 @@
 
 (defmethod ig/init-key :xtdb.indexer/live-index [_ {:keys [allocator object-store log-limit page-limit]
                                                     :or {log-limit 64 page-limit 1024}}]
-  (->LiveIndex allocator object-store (HashMap.) log-limit page-limit))
+  (util/with-close-on-catch [allocator (util/->child-allocator allocator "live-index")]
+    (->LiveIndex allocator object-store (HashMap.) (RefCounter.) log-limit page-limit)))
 
 (defmethod ig/halt-key! :xtdb.indexer/live-index [_ live-idx]
   (util/close live-idx))

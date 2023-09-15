@@ -113,7 +113,8 @@
             (util/close (.next i))
             (.remove i)))
         (finally
-          (.unlock buffers-lock stamp))))))
+          (.unlock buffers-lock stamp)))
+      (util/close allocator))))
 
 (defn- buffer-cache-bytes-size ^long [^Map buffers]
   (long (reduce + (for [^ArrowBuf buffer (vals buffers)]
@@ -142,7 +143,9 @@
   (when cache-path
     (util/delete-dir cache-path)
     (util/mkdirs cache-path))
-  (->BufferPool allocator object-store (->buffer-cache cache-entries-size cache-bytes-size) (StampedLock.) cache-path))
+  (util/with-close-on-catch [allocator (util/->child-allocator allocator "buffer-pool")]
+    (->BufferPool  allocator object-store
+                   (->buffer-cache cache-entries-size cache-bytes-size) (StampedLock.) cache-path)))
 
 (defmethod ig/halt-key! ::buffer-pool [_ ^BufferPool buffer-pool]
   (.close buffer-pool))

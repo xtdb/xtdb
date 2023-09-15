@@ -308,21 +308,24 @@
 (defmethod ig/init-key ::server [_ {:keys [allocator node indexer ra-src wm-src host ^long port]}]
   (let [fsql-txs (ConcurrentHashMap.)
         stmts (ConcurrentHashMap.)
-        tickets (ConcurrentHashMap.)
-        server (doto (-> (FlightServer/builder allocator (Location/forGrpcInsecure host port)
-                                               (->fsql-producer {:allocator allocator, :node node, :idxer indexer, :ra-src ra-src, :wm-src wm-src
-                                                                 :fsql-txs fsql-txs, :stmts stmts, :tickets tickets}))
+        tickets (ConcurrentHashMap.)]
+    (util/with-close-on-catch [allocator (util/->child-allocator allocator "flight-sql")
+                               server (doto (-> (FlightServer/builder allocator (Location/forGrpcInsecure host port)
+                                                                      (->fsql-producer {:allocator allocator, :node node, :idxer indexer, :ra-src ra-src, :wm-src wm-src
+                                                                                        :fsql-txs fsql-txs, :stmts stmts, :tickets tickets}))
 
-                         #_(doto with-error-logging-middleware)
+                                                #_(doto with-error-logging-middleware)
 
-                         (.build))
-                 (.start))]
-    (log/infof "Flight SQL server started, port %d" port)
-    (reify AutoCloseable
-      (close [_]
-        (util/try-close server)
-        (run! util/try-close (vals stmts))
-        (log/info "Flight SQL server stopped")))))
+                                                (.build))
+                                        (.start))]
+
+      (log/infof "Flight SQL server started, port %d" port)
+      (reify AutoCloseable
+        (close [_]
+          (util/try-close server)
+          (run! util/try-close (vals stmts))
+          (util/close allocator)
+          (log/info "Flight SQL server stopped"))))))
 
 (defmethod ig/halt-key! ::server [_ server]
   (util/try-close server))
