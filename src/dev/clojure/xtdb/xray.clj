@@ -63,7 +63,11 @@
   (partial toggle-vis false))
 
 (defn- hide? [o]
-  (or (contains? (:hide @state) (->IDBox o)) (contains? (:hide @state) (class o))))
+  (or (contains? (:hide @state) (->IDBox o))
+      (contains? (:hide @state) (class o))
+      (->> (:hide @state)
+           (filter class?)
+           (some (fn [c] (instance? c o))))))
 
 (defn xray
   "Walks an object with reflection and returns its field state recursively, objects are saved to a registry on walk for later addressing with (obj id).
