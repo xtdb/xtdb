@@ -403,11 +403,19 @@
                                    {:rel-rdr (.loadLeaf leaf-loader trie-leaf)
                                     :leaf-ptr (.getLeafPointer leaf-loader)})))))))
 
-(defn ->merge-queue ^xtdb.trie.LeafMergeQueue [merge-task-readers loaded-leaves {:keys [path]}]
-  (LeafMergeQueue. path
-                   (into-array IVectorReader
-                               (map (fn [^RelationReader rel-rdr]
-                                      (when rel-rdr
-                                        (.readerForName rel-rdr "xt$iid")))
-                                    merge-task-readers))
-                   (map :leaf-ptr loaded-leaves)))
+(defn ->merge-queue
+  (^xtdb.trie.LeafMergeQueue [merge-task-readers {:keys [path]}]
+   (LeafMergeQueue. path
+                    (into-array IVectorReader
+                                (map (fn [^RelationReader rel-rdr]
+                                       (when rel-rdr
+                                         (.readerForName rel-rdr "xt$iid")))
+                                     merge-task-readers))))
+  (^xtdb.trie.LeafMergeQueue [merge-task-readers leaf-ptrs {:keys [path]}]
+   (LeafMergeQueue. path
+                    (into-array IVectorReader
+                                (map (fn [^RelationReader rel-rdr]
+                                       (when rel-rdr
+                                         (.readerForName rel-rdr "xt$iid")))
+                                     merge-task-readers))
+                    leaf-ptrs)))

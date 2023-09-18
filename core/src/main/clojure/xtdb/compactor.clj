@@ -48,7 +48,7 @@
                               (.writeBranch trie-wtr (int-array idxs)))
 
                     :leaf (let [loaded-leaves (trie/load-leaves leaves {:leaves node-arg})
-                                merge-q (trie/->merge-queue (mapv :rel-rdr loaded-leaves) loaded-leaves {:path path})
+                                merge-q (trie/->merge-queue (mapv :rel-rdr loaded-leaves) (mapv :leaf-ptr loaded-leaves) {:path path})
 
                                 ^"[Lxtdb.vector.IRowCopier;"
                                 row-copiers (->> (for [{:keys [rel-rdr]} loaded-leaves]
