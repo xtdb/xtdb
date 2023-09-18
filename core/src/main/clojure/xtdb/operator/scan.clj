@@ -447,7 +447,7 @@
         compute (fn [_] (bp/open-vsr buffer-pool trie-leaf-file allocator))]
     (.computeIfAbsent cache trie-leaf-file (util/->jfn compute))))
 
-(defn merge-task-leaf-reader [buffer-pool vsr-cache {:keys [page-idx, trie-leaf-file, rel-rdr, node]}]
+(defn merge-task-leaf-reader ^IVectorReader [buffer-pool vsr-cache {:keys [page-idx, trie-leaf-file, rel-rdr, node]}]
   (if page-idx
     (util/with-open [rb (bp/open-record-batch buffer-pool trie-leaf-file page-idx)]
       (let [vsr (cache-vsr vsr-cache trie-leaf-file)
@@ -459,7 +459,7 @@
 (defn merge-task-readers [buffer-pool vsr-cache {:keys [leaves]}]
   (mapv #(when % (merge-task-leaf-reader buffer-pool vsr-cache %)) leaves))
 
-(deftype TrieCursor [^BufferAllocator allocator, leaves, ^Iterator merge-tasks
+(deftype TrieCursor [^BufferAllocator allocator, ^Iterator merge-tasks
                      col-names, ^Map col-preds, ^longs temporal-timestamps,
                      params, ^IPersistentMap picker-state
                      vsr-cache, buffer-pool]
@@ -476,20 +476,14 @@
                   (mapv (fn [rel-rdr] (some-> rel-rdr apply-iid-pred)) unfiltered-readers)
                   unfiltered-readers)
 
-                loaded-leaves (cond->> (trie/load-leaves leaves merge-task)
-                                iid-pred (mapv #(update % :rel-rdr (fn [^RelationReader rel-rdr]
-                                                                     (when rel-rdr
-                                                                       (.select rel-rdr (.select iid-pred allocator rel-rdr params)))))))
-                merge-q (trie/->merge-queue filtered-readers loaded-leaves merge-task)
+                merge-q (trie/->merge-queue filtered-readers merge-task)
                 ^"[Ljava.util.function.IntConsumer;"
-                row-pickers (make-array IntConsumer (count leaves))]
+                row-pickers (make-array IntConsumer (count filtered-readers))]
 
             (dotimes [i (count filtered-readers)]
-              (let [rel-rdr (nth filtered-readers i)
-                    {:keys [^LeafMergeQueue$LeafPointer leaf-ptr]} (nth loaded-leaves i)]
-                (when (and rel-rdr leaf-ptr)
-                  (let [row-picker (range-range-row-picker out-rel rel-rdr col-names temporal-timestamps picker-state)]
-                    (aset row-pickers (.getOrdinal leaf-ptr) row-picker)))))
+              (when-some [rel-rdr (nth filtered-readers i)]
+                (let [row-picker (range-range-row-picker out-rel rel-rdr col-names temporal-timestamps picker-state)]
+                  (aset row-pickers i row-picker))))
 
             (loop []
               (when-let [lp (.poll merge-q)]
@@ -509,7 +503,7 @@
       false))
 
   (close [_]
-    (util/close [leaves vsr-cache])))
+    (util/close vsr-cache)))
 
 (defn- filter-trie-match [^IMetadataManager metadata-mgr col-names {:keys [page-idx-pred] :as trie-match}]
   (->> (reduce (fn [^IntPredicate page-idx-pred col-name]
@@ -619,7 +613,7 @@
          :->cursor (fn [{:keys [allocator, ^IWatermark watermark, basis, params default-all-valid-time?]}]
                      (let [iid-bb (selects->iid-byte-buffer selects params)
                            col-preds (cond-> col-preds
-                                       iid-bb (assoc "xt$iid" (iid-selector iid-bb)))
+                                             iid-bb (assoc "xt$iid" (iid-selector iid-bb)))
                            metadata-pred (expr.meta/->metadata-selector (cons 'and metadata-args) col-types params)
                            scan-opts (-> scan-opts
                                          (update :for-valid-time
@@ -645,18 +639,17 @@
                            ;; is correct. For example if the `skip-iid-ptr` gets set in one leaf consumer it should also affect
                            ;; the skipping in another leaf consumer.
 
-                           (util/with-close-on-catch [leaves (trie/open-leaves buffer-pool normalized-table-name table-tries live-table-wm)]
-                             (->TrieCursor allocator leaves (.iterator (let [^Iterable c (or (merge-plan->tasks merge-plan) [])] c))
-                                           col-names col-preds
-                                           (->temporal-range params basis scan-opts)
-                                           params
-                                           (cond-> {:ev-resolver (event-resolver)
-                                                    :skip-iid-ptr (ArrowBufPointer.)
-                                                    :prev-iid-ptr (ArrowBufPointer.)
-                                                    :current-iid-ptr (ArrowBufPointer.)}
-                                             (at-point-point? scan-opts) (assoc :point-point? true))
-                                           (->vsr-cache buffer-pool allocator)
-                                           buffer-pool))))))}))))
+                           (->TrieCursor allocator (.iterator (let [^Iterable c (or (merge-plan->tasks merge-plan) [])] c))
+                                         col-names col-preds
+                                         (->temporal-range params basis scan-opts)
+                                         params
+                                         (cond-> {:ev-resolver (event-resolver)
+                                                  :skip-iid-ptr (ArrowBufPointer.)
+                                                  :prev-iid-ptr (ArrowBufPointer.)
+                                                  :current-iid-ptr (ArrowBufPointer.)}
+                                                 (at-point-point? scan-opts) (assoc :point-point? true))
+                                         (->vsr-cache buffer-pool allocator)
+                                         buffer-pool)))))}))))
 
 (defmethod lp/emit-expr :scan [scan-expr {:keys [^IScanEmitter scan-emitter scan-col-types, param-types]}]
   (.emitScan scan-emitter scan-expr scan-col-types param-types))
