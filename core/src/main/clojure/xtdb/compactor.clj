@@ -104,7 +104,8 @@
     (log/infof "compacted '%s' -> '%s'." table-name out-trie-key)
 
     (catch Throwable t
-      (log/error t "Error running compaction job."))))
+      (log/error t "Error running compaction job.")
+      (throw t))))
 
 (defn compaction-jobs [table-name table-tries]
   (for [[level table-tries] (->> (trie/current-table-tries table-tries)
