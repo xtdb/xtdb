@@ -30,7 +30,7 @@
            (java.util Iterator)
            (java.util.concurrent ConcurrentHashMap)
            (java.util.function Consumer Function)
-           (org.apache.arrow.memory BufferAllocator RootAllocator)
+           (org.apache.arrow.memory AllocationListener BufferAllocator RootAllocator)
            (xtdb ICursor IResultCursor IResultSet)
            xtdb.metadata.IMetadataManager
            xtdb.operator.scan.IScanEmitter
@@ -90,7 +90,7 @@
   ;; this one used from zero-dep tests
   (^xtdb.operator.PreparedQuery [query] (prepare-ra query {:ref-ctr (RefCounter.)}))
 
-  (^xtdb.operator.PreparedQuery [query, {:keys [^IScanEmitter scan-emitter, ^IMetadataManager metadata-mgr, ^RefCounter ref-ctr]}]
+  (^xtdb.operator.PreparedQuery [query, {:keys [^IScanEmitter scan-emitter, ^BufferAllocator allocator, ^IMetadataManager metadata-mgr, ^RefCounter ref-ctr]}]
    (let [conformed-query (s/conform ::lp/logical-plan query)]
      (when (s/invalid? conformed-query)
        (throw (err/illegal-arg :malformed-query
@@ -130,7 +130,10 @@
 
                (openCursor [_]
                  (.acquire ref-ctr)
-                 (let [allocator (RootAllocator.)
+                 (let [^BufferAllocator allocator
+                       (if allocator
+                         (.newChildAllocator allocator "BoundQuery/openCursor" AllocationListener/NOOP 0 Long/MAX_VALUE)
+                         (RootAllocator.))
                        wm (some-> wm-src (.openWatermark wm-tx))]
                    (try
                      (binding [expr/*clock* clock]
@@ -154,7 +157,8 @@
 
 (defmethod ig/prep-key ::ra-query-source [_ opts]
   (merge opts
-         {:scan-emitter (ig/ref ::scan/scan-emitter)
+         {:allocator (ig/ref :xtdb/allocator)
+          :scan-emitter (ig/ref ::scan/scan-emitter)
           :metadata-mgr (ig/ref ::meta/metadata-manager)}))
 
 (defmethod ig/init-key ::ra-query-source [_ deps]
