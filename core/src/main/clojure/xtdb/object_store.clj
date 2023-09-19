@@ -42,6 +42,11 @@
   (^java.lang.Iterable #_<String> listObjects [^String dir])
   (^java.util.concurrent.CompletableFuture #_<?> deleteObject [^String k]))
 
+#_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
+;; FIXME to remove once object-store and buffer-pool relationship has stabilized
+(definterface LocalObjectStore
+  (^java.util.concurrent.CompletableFuture #_<Path> getObjectLocal [^String k]))
+
 (defn ensure-shared-range-oob-behaviour [^long i ^long len]
   (when (< i 0)
     (throw (IndexOutOfBoundsException. "Negative range indexes are not permitted")))
@@ -188,6 +193,16 @@
   (deleteObject [_this k]
     (util/completable-future pool
       (util/delete-file (.resolve root-path k))))
+
+  LocalObjectStore
+  (getObjectLocal [_this k]
+    (CompletableFuture/supplyAsync
+     (reify Supplier
+       (get [_]
+         (let [from-path (.resolve root-path k)]
+           (when-not (util/path-exists from-path)
+             (throw (obj-missing-exception k)))
+           from-path)))))
 
   Closeable
   (close [_this]

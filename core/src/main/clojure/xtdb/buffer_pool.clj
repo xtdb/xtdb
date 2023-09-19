@@ -4,7 +4,7 @@
             [juxt.clojars-mirrors.integrant.core :as ig]
             [clojure.tools.logging :as log])
   (:import xtdb.util.ArrowBufLRU
-           xtdb.object_store.ObjectStore
+           (xtdb.object_store ObjectStore LocalObjectStore)
            java.io.Closeable
            java.nio.file.Path
            [java.util Map UUID]
@@ -67,6 +67,20 @@
           (do
             (record-cache-hit cached-buffer)
             (CompletableFuture/completedFuture cached-buffer))
+
+          ;; HACK
+          (instance? LocalObjectStore object-store)
+          (-> (.getObjectLocal ^LocalObjectStore object-store k)
+              (util/then-apply
+                (fn [buffer-path]
+                  (try
+                    (let [nio-buffer (util/->mmap-path buffer-path)
+                          create-arrow-buf #(util/->arrow-buf-view allocator nio-buffer)
+                          [_ buf] (cache-compute buffers k create-arrow-buf)]
+                      buf)
+                    (catch Throwable t
+                      (try (catch Throwable t1 (log/error t1 "Error caught cleaning up file during exception handling")))
+                      (throw t))))))
 
           cache-path
           (let [start-ns (System/nanoTime)]
