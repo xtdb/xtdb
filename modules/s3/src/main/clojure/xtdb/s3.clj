@@ -153,6 +153,8 @@
 (defmethod ig/halt-key! ::object-store [_ os]
   (util/try-close os))
 
+(derive ::object-store :xtdb/object-store)
+
 (comment
 
   (def os

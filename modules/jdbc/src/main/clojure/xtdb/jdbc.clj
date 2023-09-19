@@ -112,3 +112,5 @@
 (defmethod ig/init-key ::object-store [_ {:keys [connection-pool dialect]}]
   (setup-object-store-schema! dialect connection-pool)
   (->JDBCObjectStore connection-pool dialect))
+
+(derive ::object-store :xtdb/object-store)
