@@ -3,14 +3,13 @@
             [xtdb.util :as util]
             [juxt.clojars-mirrors.integrant.core :as ig]
             [clojure.tools.logging :as log])
-  (:import xtdb.util.LRU
-           xtdb.object_store.ObjectStore
+  (:import (xtdb.util ArrowBufLRU)
+           (xtdb.object_store ObjectStore)
            java.io.Closeable
            java.nio.file.Path
-           [java.util Map Map$Entry UUID]
+           [java.util Map UUID]
            java.util.concurrent.CompletableFuture
            java.util.concurrent.locks.StampedLock
-           java.util.function.BiPredicate
            [org.apache.arrow.memory ArrowBuf BufferAllocator]
            (org.apache.arrow.vector VectorSchemaRoot)
            (org.apache.arrow.vector.ipc.message ArrowFooter ArrowRecordBatch)))
@@ -118,19 +117,8 @@
           (.unlock buffers-lock stamp)))
       (util/close allocator))))
 
-(defn- buffer-cache-bytes-size ^long [^Map buffers]
-  (long (reduce + (for [^ArrowBuf buffer (vals buffers)]
-                    (.capacity buffer)))))
-
 (defn- ->buffer-cache [^long cache-entries-size ^long cache-bytes-size]
-  (LRU. 16 (reify BiPredicate
-             (test [_ map entry]
-               (let [entries-size (.size ^Map map)]
-                 (if (or (> entries-size cache-entries-size)
-                         (and (> entries-size 1) (> (buffer-cache-bytes-size map) cache-bytes-size)))
-                   (do (util/try-close (.getValue ^Map$Entry entry))
-                       true)
-                   false))))))
+  (ArrowBufLRU. 16 cache-entries-size cache-bytes-size))
 
 (defmethod ig/prep-key ::buffer-pool [_ opts]
   (-> (merge {:cache-entries-size 1024
