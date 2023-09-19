@@ -43,6 +43,26 @@
     (bench/with-timing :hot-queries
       (query-tpch node))))
 
+(defn bench [opts]
+  (tu/with-tmp-dirs #{node-tmp-dir}
+    (with-open [node (bench/start-node (into opts {:node-tmp-dir node-tmp-dir}))]
+      (bench/with-timing :ingest
+        (ingest-tpch node opts))
+
+      (bench/with-timing :cold-queries
+        (query-tpch node))
+
+      (bench/with-timing :hot-queries
+        (query-tpch node)))))
+
+(comment
+
+  (bench {:scale-factor 0.01})
+  (bench {:scale-factor 0.05})
+  (bench {:scale-factor 0.15})
+
+  )
+
 (defn -main [& args]
   (try
     (let [opts (or (bench/parse-args [[nil "--scale-factor 0.01" "Scale factor for regular TPCH test"
@@ -53,17 +73,7 @@
                                      args)
                    (System/exit 1))]
       (log/info "Opts: " (pr-str opts))
-      (tu/with-tmp-dirs #{node-tmp-dir}
-        (with-open [node (bench/start-node (into opts {:node-tmp-dir node-tmp-dir}))]
-          (bench/with-timing :ingest
-            (ingest-tpch node opts))
-
-          (bench/with-timing :cold-queries
-            (query-tpch node))
-
-          (bench/with-timing :hot-queries
-            (query-tpch node)))))
-
+      (bench opts))
     (catch Exception e
       (.printStackTrace e)
       (System/exit 1))
