@@ -9,6 +9,9 @@
 
 (set! *warn-on-reflection* false)
 
+;; loads :xtdb/allocator ig/init-key
+(require 'xtdb.node)
+
 (defn buffer-sys []
   (-> {:xtdb/allocator {}
        :xtdb.object-store/memory-object-store {}
@@ -91,3 +94,21 @@
 
       (finally
         (ig/halt! sys)))))
+
+(t/deftest cache-counter-test
+  (let [sys (buffer-sys)
+        os (object-store sys)
+        bp (buffer-pool sys)]
+    (bp/clear-cache-counters)
+    (t/is (= 0 (.get bp/cache-hit-byte-counter)))
+    (t/is (= 0 (.get bp/cache-miss-byte-counter)))
+    @(.putObject os "foo" (ByteBuffer/wrap (.getBytes "hello")))
+    @(.getBuffer bp "foo")
+    (t/is (pos? (.get bp/cache-miss-byte-counter)))
+    (t/is (= 0 (.get bp/cache-hit-byte-counter)))
+    @(.getBuffer bp "foo")
+    (t/is (pos? (.get bp/cache-hit-byte-counter)))
+    (t/is (= (.get bp/cache-hit-byte-counter) (.get bp/cache-miss-byte-counter)))
+    (let [ch (.get bp/cache-hit-byte-counter)]
+      @(.getRangeBuffer bp "foo" 2 1)
+      (t/is (= (inc ch) (.get bp/cache-hit-byte-counter))))))

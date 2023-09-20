@@ -3,13 +3,15 @@
             [xtdb.util :as util]
             [juxt.clojars-mirrors.integrant.core :as ig]
             [clojure.tools.logging :as log])
-  (:import (xtdb.util ArrowBufLRU)
-           (xtdb.object_store ObjectStore)
+  (:import xtdb.util.ArrowBufLRU
+           xtdb.object_store.ObjectStore
            java.io.Closeable
            java.nio.file.Path
            [java.util Map UUID]
            java.util.concurrent.CompletableFuture
            java.util.concurrent.locks.StampedLock
+           java.util.function.BiPredicate
+           (java.util.concurrent.atomic AtomicLong)
            [org.apache.arrow.memory ArrowBuf BufferAllocator]
            (org.apache.arrow.vector VectorSchemaRoot)
            (org.apache.arrow.vector.ipc.message ArrowFooter ArrowRecordBatch)))
@@ -28,6 +30,19 @@
       (finally
         (.unlock buffers-lock stamp)))))
 
+(def ^AtomicLong cache-miss-byte-counter (AtomicLong.))
+(def ^AtomicLong cache-hit-byte-counter (AtomicLong.))
+
+(defn clear-cache-counters []
+  (.set cache-miss-byte-counter 0)
+  (.set cache-hit-byte-counter 0))
+
+(defn record-cache-miss [^ArrowBuf arrow-buf]
+  (.addAndGet cache-miss-byte-counter (.capacity arrow-buf)))
+
+(defn record-cache-hit [^ArrowBuf arrow-buf]
+  (.addAndGet cache-hit-byte-counter (.capacity arrow-buf)))
+
 (defn- cache-compute
   "Returns a pair [hit-or-miss, buf] computing the cached ArrowBuf from (f) if needed.
   `hit-or-miss` is true if the buffer was found, false if the object was added as part of this call."
@@ -35,7 +50,9 @@
   (let [stamp (.writeLock buffers-lock)
         hit (.containsKey ^Map buffers k)]
     (try
-      [hit (.computeIfAbsent buffers k (util/->jfn (fn [_] (f))))]
+      (let [arrow-buf (.computeIfAbsent buffers k (util/->jfn (fn [_] (f))))]
+        (if hit (record-cache-hit arrow-buf) (record-cache-miss arrow-buf))
+        [hit arrow-buf])
       (finally
         (.unlock buffers-lock stamp)))))
 
@@ -49,7 +66,10 @@
       (CompletableFuture/completedFuture nil)
       (let [cached-buffer (cache-get buffers buffers-lock k)]
         (cond
-          cached-buffer (CompletableFuture/completedFuture (retain cached-buffer))
+          cached-buffer
+          (do
+            (record-cache-hit cached-buffer)
+            (CompletableFuture/completedFuture (retain cached-buffer)))
 
           cache-path
           (-> (.getObject object-store k (.resolve cache-path (str (UUID/randomUUID))))
@@ -61,8 +81,7 @@
                             create-arrow-buf #(util/->arrow-buf-view allocator nio-buffer cleanup-file)
                             [hit buf] (cache-compute buffers buffers-lock k create-arrow-buf)]
                         (when hit (cleanup-file))
-                        (retain buf)
-                        buf)
+                        (retain buf))
                       (catch Throwable t
                         (try (cleanup-file) (catch Throwable t1 (log/error t1 "Error caught cleaning up file during exception handling")))
                         (throw t)))))))
@@ -87,7 +106,9 @@
                   (.slice cached-full-buffer start len)))]
 
         (if cached-buffer
-          (CompletableFuture/completedFuture (retain cached-buffer))
+          (do
+            (record-cache-hit cached-buffer)
+            (CompletableFuture/completedFuture (retain cached-buffer)))
           (-> (.getObjectRange object-store k start len)
               (util/then-apply
                 (fn [nio-buffer]
