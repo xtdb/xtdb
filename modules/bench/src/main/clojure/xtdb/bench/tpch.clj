@@ -1,6 +1,8 @@
 (ns xtdb.bench.tpch
-  (:require [clojure.tools.logging :as log]
+  (:require [clojure.string :as str]
+            [clojure.tools.logging :as log]
             [xtdb.bench :as bench]
+            [xtdb.buffer-pool :as bp]
             [xtdb.datasets.tpch :as tpch]
             [xtdb.datasets.tpch.ra :as tpch-ra]
             [xtdb.node :as node]
@@ -43,17 +45,46 @@
     (bench/with-timing :hot-queries
       (query-tpch node))))
 
+(defn bp-stats
+  "Returns string reflecting buffer pool stats over a given test run"
+  [ms]
+  (let [miss-bytes (.get bp/cache-miss-byte-counter)
+        hit-bytes (.get bp/cache-hit-byte-counter)
+        ;; thanks swn: https://sw1nn.com/blog/2012/03/26/human-readable-size/
+        humanize (fn [bytes]
+                   (let [unit 1024]
+                     (if (< bytes unit) (str bytes " B")
+                                        (let [exp (int (/ (Math/log bytes)
+                                                          (Math/log unit)))
+                                              pre (str (nth "KMGTPE" (dec exp)) "i")]
+                                          (format "%.1f %sB" (/ bytes (Math/pow unit exp)) pre)))))
+        cache-ratio (/ hit-bytes (max 1 (+ hit-bytes miss-bytes)))]
+    (log/info "RAT" cache-ratio)
+    (->> ["hit" (humanize hit-bytes)
+          "miss" (humanize miss-bytes)
+          "rat" (format "%.2f" (double cache-ratio))
+          "io" (format "%s/sec" (humanize (/ miss-bytes (max 1 (/ ms 1000)))))]
+         (partition 2)
+         (map (fn [[label s]] (str label ": " s)))
+         (str/join ", "))))
+
 (defn bench [opts]
   (tu/with-tmp-dirs #{node-tmp-dir}
     (with-open [node (bench/start-node (into opts {:node-tmp-dir node-tmp-dir}))]
       (bench/with-timing :ingest
         (ingest-tpch node opts))
 
-      (bench/with-timing :cold-queries
-        (query-tpch node))
+      (let [start (System/currentTimeMillis)]
+        (bp/clear-cache-counters)
+        (bench/with-timing :cold-queries
+          (query-tpch node))
+        (log/info "cold buffer pool -" (bp-stats (- (System/currentTimeMillis) start))))
 
-      (bench/with-timing :hot-queries
-        (query-tpch node)))))
+      (let [start (System/currentTimeMillis)]
+        (bp/clear-cache-counters)
+        (bench/with-timing :hot-queries
+          (query-tpch node))
+        (log/info "hot buffer pool -" (bp-stats (- (System/currentTimeMillis) start)))))))
 
 (comment
 
