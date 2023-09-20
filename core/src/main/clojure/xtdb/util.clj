@@ -314,6 +314,11 @@
 (defn mkdirs [^Path path]
   (Files/createDirectories path (make-array FileAttribute 0)))
 
+(defn create-parents [^Path path]
+  (let [parents (.getParent path)]
+    (when-not (path-exists parents)
+      (mkdirs parents))))
+
 (defn ->temp-file ^Path [^String prefix ^String suffix]
   (doto (Files/createTempFile prefix suffix (make-array FileAttribute 0))
     (delete-file)))

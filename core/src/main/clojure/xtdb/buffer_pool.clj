@@ -69,8 +69,12 @@
             (CompletableFuture/completedFuture cached-buffer))
 
           cache-path
-          (let [start-ns (System/nanoTime)]
-            (-> (.getObject object-store k (.resolve cache-path (str (UUID/randomUUID))))
+          (let [start-ns (System/nanoTime)
+                buffer-cache-path (.resolve cache-path k)]
+            (-> (if (util/path-exists buffer-cache-path)
+                  (CompletableFuture/completedFuture buffer-cache-path)
+                  (do (util/create-parents buffer-cache-path)
+                      (.getObject object-store k buffer-cache-path)))
                 (util/then-apply
                   (fn [buffer-path]
                     (record-io-wait start-ns)
