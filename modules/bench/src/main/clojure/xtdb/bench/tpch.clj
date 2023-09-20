@@ -51,19 +51,35 @@
   (let [miss-bytes (.get bp/cache-miss-byte-counter)
         hit-bytes (.get bp/cache-hit-byte-counter)
         ;; thanks swn: https://sw1nn.com/blog/2012/03/26/human-readable-size/
-        humanize (fn [bytes]
-                   (let [unit 1024]
-                     (if (< bytes unit) (str bytes " B")
-                                        (let [exp (int (/ (Math/log bytes)
-                                                          (Math/log unit)))
-                                              pre (str (nth "KMGTPE" (dec exp)) "i")]
-                                          (format "%.1f %sB" (/ bytes (Math/pow unit exp)) pre)))))
-        cache-ratio (/ hit-bytes (max 1 (+ hit-bytes miss-bytes)))]
-    (log/info "RAT" cache-ratio)
-    (->> ["hit" (humanize hit-bytes)
-          "miss" (humanize miss-bytes)
-          "rat" (format "%.2f" (double cache-ratio))
-          "io" (format "%s/sec" (humanize (/ miss-bytes (max 1 (/ ms 1000)))))]
+        humanize-bytes
+        (fn [bytes]
+          (let [unit 1024]
+            (if (< bytes unit)
+              (str bytes " B")
+              (let [exp (int (/ (Math/log bytes)
+                                (Math/log unit)))
+                    pre (str (nth "KMGTPE" (dec exp)) "i")]
+                (format "%.1f %sB" (/ bytes (Math/pow unit exp)) pre)))))
+
+        humanize-nanos
+        (fn [nanos]
+          (let [nanos (long nanos)
+                unit 1000]
+            (if (< nanos unit)
+              (str nanos " ns")
+              (let [exp (min (int (/ (Math/log nanos) (Math/log unit))) 2)
+                    suf (case exp
+                          1 "μs"
+                          2 "s"
+                          "s")]
+                (format "%.1f %s" (/ nanos (Math/pow unit exp)) suf)))))
+
+        cache-ratio (/ hit-bytes (max 1 (+ hit-bytes miss-bytes)))
+        stall-nanos @bp/io-wait-nanos-counter]
+    (->> ["hit" (format "%s (%.2f)" (humanize-bytes hit-bytes) (double cache-ratio))
+          "miss" (humanize-bytes miss-bytes)
+          "io" (format "%s/sec" (humanize-bytes (/ miss-bytes (max 1 (/ ms 1000)))))
+          "io-wait" (humanize-nanos stall-nanos)]
          (partition 2)
          (map (fn [[label s]] (str label ": " s)))
          (str/join ", "))))

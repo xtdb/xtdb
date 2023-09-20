@@ -32,16 +32,21 @@
 
 (def ^AtomicLong cache-miss-byte-counter (AtomicLong.))
 (def ^AtomicLong cache-hit-byte-counter (AtomicLong.))
+(def io-wait-nanos-counter (atom 0N))
 
 (defn clear-cache-counters []
   (.set cache-miss-byte-counter 0)
-  (.set cache-hit-byte-counter 0))
+  (.set cache-hit-byte-counter 0)
+  (reset! io-wait-nanos-counter 0N))
 
 (defn record-cache-miss [^ArrowBuf arrow-buf]
   (.addAndGet cache-miss-byte-counter (.capacity arrow-buf)))
 
 (defn record-cache-hit [^ArrowBuf arrow-buf]
   (.addAndGet cache-hit-byte-counter (.capacity arrow-buf)))
+
+(defn record-io-wait [^long start-ns]
+  (swap! io-wait-nanos-counter +' (- (System/nanoTime) start-ns)))
 
 (defn- cache-compute
   "Returns a pair [hit-or-miss, buf] computing the cached ArrowBuf from (f) if needed.
@@ -72,27 +77,31 @@
             (CompletableFuture/completedFuture (retain cached-buffer)))
 
           cache-path
-          (-> (.getObject object-store k (.resolve cache-path (str (UUID/randomUUID))))
-              (util/then-apply
-                (fn [buffer-path]
-                  (let [cleanup-file #(util/delete-file buffer-path)]
-                    (try
-                      (let [nio-buffer (util/->mmap-path buffer-path)
-                            create-arrow-buf #(util/->arrow-buf-view allocator nio-buffer cleanup-file)
-                            [hit buf] (cache-compute buffers buffers-lock k create-arrow-buf)]
-                        (when hit (cleanup-file))
-                        (retain buf))
-                      (catch Throwable t
-                        (try (cleanup-file) (catch Throwable t1 (log/error t1 "Error caught cleaning up file during exception handling")))
-                        (throw t)))))))
+          (let [start-ns (System/nanoTime)]
+            (-> (.getObject object-store k (.resolve cache-path (str (UUID/randomUUID))))
+                (util/then-apply
+                  (fn [buffer-path]
+                    (record-io-wait start-ns)
+                    (let [cleanup-file #(util/delete-file buffer-path)]
+                      (try
+                        (let [nio-buffer (util/->mmap-path buffer-path)
+                              create-arrow-buf #(util/->arrow-buf-view allocator nio-buffer cleanup-file)
+                              [hit buf] (cache-compute buffers buffers-lock k create-arrow-buf)]
+                          (when hit (cleanup-file))
+                          (retain buf))
+                        (catch Throwable t
+                          (try (cleanup-file) (catch Throwable t1 (log/error t1 "Error caught cleaning up file during exception handling")))
+                          (throw t))))))))
 
           :else
-          (-> (.getObject object-store k)
-              (util/then-apply
-                (fn [nio-buffer]
-                  (let [create-arrow-buf #(util/->arrow-buf-view allocator nio-buffer)
-                        [_ buf] (cache-compute buffers buffers-lock k create-arrow-buf)]
-                    (retain buf)))))))))
+          (let [start-ns (System/nanoTime)]
+            (-> (.getObject object-store k)
+                (util/then-apply
+                  (fn [nio-buffer]
+                    (record-io-wait start-ns)
+                    (let [create-arrow-buf #(util/->arrow-buf-view allocator nio-buffer)
+                          [_ buf] (cache-compute buffers buffers-lock k create-arrow-buf)]
+                      (retain buf))))))))))
 
   (getRangeBuffer [_ k start len]
     (object-store/ensure-shared-range-oob-behaviour start len)
@@ -109,12 +118,14 @@
           (do
             (record-cache-hit cached-buffer)
             (CompletableFuture/completedFuture (retain cached-buffer)))
-          (-> (.getObjectRange object-store k start len)
-              (util/then-apply
-                (fn [nio-buffer]
-                  (let [create-arrow-buf #(util/->arrow-buf-view allocator nio-buffer)
-                        [_ buf] (cache-compute buffers buffers-lock [k start len] create-arrow-buf)]
-                    (retain buf)))))))))
+          (let [start-ns (System/nanoTime)]
+            (-> (.getObjectRange object-store k start len)
+                (util/then-apply
+                  (fn [nio-buffer]
+                    (record-io-wait start-ns)
+                    (let [create-arrow-buf #(util/->arrow-buf-view allocator nio-buffer)
+                          [_ buf] (cache-compute buffers buffers-lock [k start len] create-arrow-buf)]
+                      (retain buf))))))))))
 
   (evictBuffer [_ k]
     (if-let [buffer (let [stamp (.writeLock buffers-lock)]
