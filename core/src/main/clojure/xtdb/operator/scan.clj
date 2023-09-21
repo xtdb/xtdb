@@ -613,7 +613,7 @@
          :->cursor (fn [{:keys [allocator, ^IWatermark watermark, basis, params default-all-valid-time?]}]
                      (let [iid-bb (selects->iid-byte-buffer selects params)
                            col-preds (cond-> col-preds
-                                             iid-bb (assoc "xt$iid" (iid-selector iid-bb)))
+                                       iid-bb (assoc "xt$iid" (iid-selector iid-bb)))
                            metadata-pred (expr.meta/->metadata-selector (cons 'and metadata-args) col-types params)
                            scan-opts (-> scan-opts
                                          (update :for-valid-time
@@ -624,12 +624,12 @@
                                             (trie/current-table-tries))]
 
                        (util/with-open [iid-arrow-buf (when iid-bb (util/->arrow-buf-view allocator iid-bb))
-                                        roots (trie/open-arrow-trie-files buffer-pool table-tries)]
+                                        arrow-tries (trie/open-arrow-trie-files buffer-pool table-tries)]
                          (let [path-pred (if iid-bb
                                            (let [iid-ptr (ArrowBufPointer. iid-arrow-buf 0 (.capacity iid-bb))]
                                              #(zero? (HashTrie/compareToPath iid-ptr %)))
                                            (constantly true))
-                               trie-matches (->> (meta/matching-tries metadata-mgr table-tries roots metadata-pred)
+                               trie-matches (->> (meta/matching-tries metadata-mgr table-tries arrow-tries metadata-pred)
                                                  (map (partial filter-trie-match metadata-mgr col-names))
                                                  (drop-while #(empty? (set/intersection normalized-col-names (:col-names %))))
                                                  vec)
@@ -647,7 +647,7 @@
                                                   :skip-iid-ptr (ArrowBufPointer.)
                                                   :prev-iid-ptr (ArrowBufPointer.)
                                                   :current-iid-ptr (ArrowBufPointer.)}
-                                                 (at-point-point? scan-opts) (assoc :point-point? true))
+                                           (at-point-point? scan-opts) (assoc :point-point? true))
                                          (->vsr-cache buffer-pool allocator)
                                          buffer-pool)))))}))))
 

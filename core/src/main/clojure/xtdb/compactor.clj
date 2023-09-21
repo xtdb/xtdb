@@ -78,7 +78,7 @@
                             {:keys [table-name table-tries out-trie-key]}]
   (try
     (log/infof "compacting '%s' '%s' -> '%s'..." table-name (mapv :trie-key table-tries) out-trie-key)
-    (util/with-open [roots (trie/open-arrow-trie-files buffer-pool table-tries)
+    (util/with-open [arrow-tries (trie/open-arrow-trie-files buffer-pool table-tries)
                      leaves (trie/open-leaves buffer-pool table-name table-tries nil)
                      leaf-out-bb (WritableByteBufferChannel/open)
                      trie-out-bb (WritableByteBufferChannel/open)]
@@ -86,7 +86,7 @@
       (merge-tries! allocator leaves
                     (.getChannel leaf-out-bb) (.getChannel trie-out-bb)
                     (trie/table-merge-plan (constantly true)
-                                           (meta/matching-tries metadata-mgr table-tries roots
+                                           (meta/matching-tries metadata-mgr table-tries arrow-tries
                                                                 (reify IMetadataPredicate
                                                                   (build [_ _table-metadata]
                                                                     (reify IntPredicate

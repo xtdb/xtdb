@@ -310,15 +310,23 @@
 
     (->merge-plan* (mapv (fn [{:keys [^HashTrie trie]}] (some-> trie .rootNode)) trie-matches) [] 0)))
 
+(defrecord ArrowTrie [^ArrowBuf buf, ^VectorSchemaRoot root]
+  AutoCloseable
+  (close [_]
+    (util/close root)
+    (util/close buf)))
+
 (defn open-arrow-trie-files [^IBufferPool buffer-pool table-tries]
-  (util/with-close-on-catch [roots (ArrayList. (count table-tries))]
+  (util/with-close-on-catch [arrow-bufs (ArrayList. (count table-tries))
+                             roots (ArrayList. (count table-tries))]
     (doseq [{:keys [trie-file]} table-tries]
-      (with-open [^ArrowBuf buf @(.getBuffer buffer-pool trie-file)]
+      (let [^ArrowBuf buf @(.getBuffer buffer-pool trie-file)]
+        (.add arrow-bufs buf)
         (let [{:keys [^VectorLoader loader root arrow-blocks]} (util/read-arrow-buf buf)]
           (with-open [record-batch (util/->arrow-record-batch-view (first arrow-blocks) buf)]
             (.load loader record-batch)
             (.add roots root)))))
-    roots))
+    (mapv ->ArrowTrie arrow-bufs roots)))
 
 (defn table-merge-plan [path-pred, trie-matches, ^ILiveTableWatermark live-table-wm]
   (let [tries (cond-> trie-matches

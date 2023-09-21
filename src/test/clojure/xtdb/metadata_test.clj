@@ -130,8 +130,9 @@
           ^IMetadataManager metadata-mgr (tu/component node ::meta/metadata-manager)
           literal-selector (expr.meta/->metadata-selector '(and (< xt/id 11) (> xt/id 9)) '{xt/id :i64} {})
           trie-obj-key (trie/->table-trie-obj-key "xt_docs" (trie/->trie-key 0 0 21))]
-      (util/with-open [roots (trie/open-arrow-trie-files buffer-pool [{:trie-file trie-obj-key}])]
-        (let [{:keys [^IntPredicate page-idx-pred] :as res} (first (meta/matching-tries metadata-mgr [{:trie-file trie-obj-key}] roots literal-selector))]
+      (util/with-open [arrow-tries (trie/open-arrow-trie-files buffer-pool [{:trie-file trie-obj-key}])]
+        (let [{:keys [^IntPredicate page-idx-pred] :as res}
+              (first (meta/matching-tries metadata-mgr [{:trie-file trie-obj-key}] arrow-tries literal-selector))]
 
           (t/is (= {:trie-data {:trie-file trie-obj-key}
                     :col-names
@@ -150,8 +151,9 @@
         true-selector (expr.meta/->metadata-selector '(= boolean-or-int true) '{boolean-or-int :bool} {})
         trie-obj-key (trie/->table-trie-obj-key "xt_docs" (trie/->trie-key 0 0 2))]
 
-    (util/with-open [roots (trie/open-arrow-trie-files buffer-pool [{:trie-file trie-obj-key}])]
-      (let [{:keys [^IntPredicate page-idx-pred] :as res} (first (meta/matching-tries metadata-mgr [{:trie-file trie-obj-key}] roots true-selector))]
+    (util/with-open [arrow-tries (trie/open-arrow-trie-files buffer-pool [{:trie-file trie-obj-key}])]
+      (let [{:keys [^IntPredicate page-idx-pred] :as res}
+            (first (meta/matching-tries metadata-mgr [{:trie-file trie-obj-key}] arrow-tries true-selector))]
         (t/is (= {:trie-data {:trie-file trie-obj-key},
                   :col-names
                   #{"xt$iid" "xt$valid_to" "xt$valid_from" "xt$id" "xt$system_from" "boolean_or_int"}}

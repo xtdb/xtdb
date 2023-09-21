@@ -365,8 +365,8 @@
 
 (defrecord TrieMatch [^String trie-data, ^ArrowHashTrie trie, ^RelationReader trie-rdr, ^IntPredicate page-idx-pred, ^IFn iid-bloom-bitmap-fn, ^Set col-names])
 
-(defn matching-tries [^IMetadataManager metadata-mgr, table-tries, roots, ^IMetadataPredicate metadata-pred]
-  (->> (for [[table-trie ^VectorSchemaRoot root] (mapv vector table-tries roots)
+(defn matching-tries [^IMetadataManager metadata-mgr, table-tries, arrow-tries, ^IMetadataPredicate metadata-pred]
+  (->> (for [[table-trie {:keys [^VectorSchemaRoot root]}] (mapv vector table-tries arrow-tries)
              :let [trie-rdr (vr/<-root root)]]
          (let [^ITableMetadata table-metadata (.tableMetadata metadata-mgr trie-rdr (:trie-file table-trie))
                page-idx-pred (.build metadata-pred table-metadata)]
