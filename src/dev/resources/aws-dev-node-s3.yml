@@ -1,0 +1,98 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: An XTDB S3 object store and associated resources (SNS topics for changes, IAM policy), see aws-dev-node.clj
+
+Parameters:
+  S3BucketName:
+    Type: String
+    Default: xtdb-object-store
+    Description: Enter the desired name of the bucket which will contain the XTDB Object Store - default is 'xtdb-object-store'
+  S3BucketDeletionPolicy:
+    Type: String
+    Default: Retain
+    Description: Enter the deletion policy (default Retain) for the created bucket
+
+Resources:
+  SNSTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Join [ '-', [ !Ref S3BucketName, 'bucket-events' ] ]
+
+  S3Bucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: !Ref S3BucketDeletionPolicy
+    Properties:
+      BucketName: !Ref S3BucketName
+      AccessControl: Private
+      NotificationConfiguration:
+        TopicConfigurations:
+          - Topic: !Ref SNSTopic
+            Event: 's3:ObjectCreated:*'
+          - Topic: !Ref SNSTopic
+            Event: 's3:ObjectRemoved:*'
+
+  SNSTopicPolicy:
+    Type: AWS::SNS::TopicPolicy
+    Properties:
+      PolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: 's3.amazonaws.com'
+            Action: sns:Publish
+            Resource: !Ref SNSTopic
+            Condition:
+              ArnEquals:
+                aws:SourceArn:  !Join [ '', [ 'arn:aws:s3:::', !Ref S3BucketName] ]
+              StringEquals:
+                aws:SourceAccount: !Ref 'AWS::AccountId'
+      Topics:
+        - !Ref SNSTopic
+
+  XTDBPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+            - Effect: Allow
+              Action:
+                - 's3:GetObject'
+                - 's3:PutObject'
+                - 's3:DeleteObject'
+                - 's3:ListBucket'
+              Resource:
+                - !Join [ '', [ 'arn:aws:s3:::', !Ref S3BucketName ] ]
+                - !Join [ '', [ 'arn:aws:s3:::', !Ref S3BucketName, '/*' ] ]
+            - Effect: Allow
+              Action:
+                - 'sns:Subscribe'
+                - 'sns:Unsubscribe'
+              Resource:
+                - !Ref SNSTopic
+            - Effect: Allow
+              Action:
+                - 'sqs:CreateQueue'
+                - 'sqs:GetQueueUrl'
+                - 'sqs:GetQueueAttributes'
+                - 'sqs:DeleteQueue'
+                - 'sqs:DeleteMessage'
+                - 'sqs:ReceiveMessage'
+                - 'sqs:SetQueueAttributes'
+              Resource:
+                - '*'
+Outputs:
+  BucketName:
+    Description: The name of the S3 Bucket
+    Value: !Ref S3Bucket
+    Export:
+      Name: !Join [ ':', [ !Ref 'AWS::StackName', 'BucketName' ] ]
+  SNSTopicArn:
+    Description: The ARN of the SNS Topic with the S3 notifications
+    Value: !Ref SNSTopic
+    Export:
+      Name: !Join [ ':', [ !Ref 'AWS::StackName', 'SNSTopicName' ] ]
+  XTDBPolicyArn :
+    Description: ARN of the created XTDB managed policy (has relevant SNS and S3 permissions, and ability to create SQS queues)
+    Value: !Ref XTDBPolicy
+    Export:
+      Name: !Join [ ':', [ !Ref 'AWS::StackName', 'XTDBPolicyArn' ] ]
