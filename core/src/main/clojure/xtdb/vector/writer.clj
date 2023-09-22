@@ -890,7 +890,8 @@
           pos)))))
 
 (defn ->rel-writer ^xtdb.vector.IRelationWriter [^BufferAllocator allocator]
-  (let [writers (LinkedHashMap.)
+  (let [writer-array (volatile! nil)
+        writers (LinkedHashMap.)
         wp (IVectorPosition/build)]
     (reify IRelationWriter
       (writerPosition [_] wp)
@@ -898,9 +899,13 @@
       (startRow [_])
 
       (endRow [_]
-        (let [pos (.getPositionAndIncrement wp)]
-          (doseq [w (vals writers)]
-            (populate-with-absents w (inc pos)))))
+        (when (nil? @writer-array)
+          (vreset! writer-array (object-array (.values writers))))
+
+        (let [pos (.getPositionAndIncrement wp)
+              ^objects arr @writer-array]
+          (dotimes [i (alength arr)]
+            (populate-with-absents (aget arr i) (inc pos)))))
 
       (writerForName [_ col-name]
         (.computeIfAbsent writers col-name
@@ -928,7 +933,8 @@
         (run! util/try-close (vals this))))))
 
 (defn root->writer ^xtdb.vector.IRelationWriter [^VectorSchemaRoot root]
-  (let [writers (LinkedHashMap.)
+  (let [writer-array (volatile! nil)
+        writers (LinkedHashMap.)
         wp (IVectorPosition/build)]
     (doseq [^ValueVector vec (.getFieldVectors root)]
       (.put writers (.getName vec) (->writer vec)))
@@ -938,9 +944,12 @@
 
       (startRow [_])
       (endRow [_]
-        (let [pos (.getPositionAndIncrement wp)]
-          (doseq [^IVectorWriter w (.values writers)]
-            (populate-with-absents w (inc pos)))))
+        (when (nil? @writer-array)
+          (vreset! writer-array (object-array (.values writers))))
+        (let [pos (.getPositionAndIncrement wp)
+              ^objects arr @writer-array]
+          (dotimes [i (alength arr)]
+            (populate-with-absents (aget arr i) (inc pos)))))
 
       (writerForName [_ col-name]
         (or (.get writers col-name)
