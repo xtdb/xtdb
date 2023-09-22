@@ -38,4 +38,5 @@ dependencies {
 
     api("org.babashka", "sci", "0.6.37")
     api("commons-codec", "commons-codec", "1.15")
+    api("com.carrotsearch", "hppc", "0.9.1")
 }
