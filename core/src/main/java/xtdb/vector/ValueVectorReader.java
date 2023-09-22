@@ -664,6 +664,7 @@ public class ValueVectorReader implements IVectorReader {
         private final List<? extends ValueVector> children;
         private final List<Keyword> legs;
         private final IVectorReader[] legReaders;
+        private final Field[] fields;
 
         private DuvReader(DenseUnionVector v) {
             // getLeg is overridden here, so we never use the `leg` field in this case.
@@ -675,6 +676,7 @@ public class ValueVectorReader implements IVectorReader {
             this.legs = children.stream().map(c -> Keyword.intern(c.getName())).toList();
 
             this.legReaders = new IVectorReader[children.size()];
+            this.fields = children.stream().map(ValueVector::getField).toArray(Field[]::new);
         }
 
         @Override
@@ -694,7 +696,7 @@ public class ValueVectorReader implements IVectorReader {
 
         @Override
         public Field getLeg(int idx) {
-            return children.get(getTypeId(idx)).getField();
+            return fields[getTypeId(idx)];
         }
 
         @Override
