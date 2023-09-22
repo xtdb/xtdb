@@ -5,15 +5,15 @@
             [xtdb.util :as util]
             [xtdb.vector.reader :as vr]
             [xtdb.vector.writer :as vw])
-  (:import io.netty.util.collection.IntObjectHashMap
-           (java.lang AutoCloseable)
+  (:import (java.lang AutoCloseable)
            java.util.function.IntBinaryOperator
            java.util.List
            (org.apache.arrow.memory BufferAllocator)
            (org.apache.arrow.memory.util.hash MurmurHasher SimpleHasher)
            (org.apache.arrow.vector NullVector)
            (org.roaringbitmap IntConsumer RoaringBitmap)
-           (xtdb.vector RelationReader IVectorReader)))
+           (xtdb.vector RelationReader IVectorReader)
+           (com.carrotsearch.hppc IntObjectHashMap)))
 
 (def ^:private ^org.apache.arrow.memory.util.hash.ArrowBufHasher hasher
   SimpleHasher/INSTANCE)
