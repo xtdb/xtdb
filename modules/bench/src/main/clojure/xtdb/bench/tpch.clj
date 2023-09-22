@@ -84,29 +84,30 @@
          (map (fn [[label s]] (str label ": " s)))
          (str/join ", "))))
 
+(defn run-bench [node]
+  (let [start (System/currentTimeMillis)]
+    (bp/clear-cache-counters)
+    (bench/with-timing :cold-queries
+      (query-tpch node))
+    (log/info "cold buffer pool -" (bp-stats (- (System/currentTimeMillis) start))))
+
+  (let [start (System/currentTimeMillis)]
+    (bp/clear-cache-counters)
+    (bench/with-timing :hot-queries
+      (query-tpch node))
+    (log/info "hot buffer pool -" (bp-stats (- (System/currentTimeMillis) start)))))
+
 (defn bench [opts]
   (tu/with-tmp-dirs #{node-tmp-dir}
     (with-open [node (bench/start-node (into opts {:node-tmp-dir node-tmp-dir}))]
-      (bench/with-timing :ingest
-        (ingest-tpch node opts))
-
-      (let [start (System/currentTimeMillis)]
-        (bp/clear-cache-counters)
-        (bench/with-timing :cold-queries
-          (query-tpch node))
-        (log/info "cold buffer pool -" (bp-stats (- (System/currentTimeMillis) start))))
-
-      (let [start (System/currentTimeMillis)]
-        (bp/clear-cache-counters)
-        (bench/with-timing :hot-queries
-          (query-tpch node))
-        (log/info "hot buffer pool -" (bp-stats (- (System/currentTimeMillis) start)))))))
+      (bench/with-timing :ingest (ingest-tpch node opts))
+      (run-bench node))))
 
 (comment
 
-  (bench {:scale-factor 0.01})
-  (bench {:scale-factor 0.05})
-  (bench {:scale-factor 0.15})
+  (bench {:node-type :local-fs, :scale-factor 0.01})
+  (bench {:node-type :local-fs, :scale-factor 0.05})
+  (bench {:node-type :local-fs, :scale-factor 0.15})
 
   )
 
