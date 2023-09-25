@@ -17,8 +17,8 @@
             [xtdb.vector.writer :as vw]
             xtdb.watermark)
   (:import (clojure.lang IPersistentMap MapEntry)
-           java.nio.ByteBuffer
            (java.io Closeable)
+           java.nio.ByteBuffer
            (java.util HashMap Iterator LinkedList List Map)
            (java.util.function IntConsumer IntPredicate)
            (java.util.stream IntStream)
@@ -32,7 +32,8 @@
            (xtdb.metadata IMetadataManager ITableMetadata)
            xtdb.object_store.ObjectStore
            xtdb.operator.IRelationSelector
-           (xtdb.trie HashTrie LeafMergeQueue LeafMergeQueue$LeafPointer LiveHashTrie$Leaf)
+           (xtdb.trie HashTrie LiveHashTrie$Leaf)
+           (xtdb.util TemporalBounds TemporalBounds$TemporalColumn)
            (xtdb.vector IRelationWriter IRowCopier IVectorReader IVectorWriter RelationReader)
            (xtdb.watermark ILiveTableWatermark IWatermark IWatermarkSource Watermark)))
 
@@ -79,47 +80,9 @@
                   (MutableRoaringBitmap/intersects pushdown-bloom
                                                    (bloom/bloom->bitmap bloom-rdr bloom-vec-idx))))))))))
 
-(defn- ->range ^longs []
-  (let [res (long-array 8)]
-    (doseq [i (range 0 8 2)]
-      (aset res i Long/MIN_VALUE)
-      (aset res (inc i) Long/MAX_VALUE))
-    res))
-
-(def ^:private column->idx {"xt$valid_from" 0
-                            "xt$valid_to" 1
-                            "xt$system_from" 2
-                            "xt$system_to" 3})
-
-(defn- ->temporal-column-idx ^long [col-name]
-  (long (get column->idx (name col-name))))
-
-(def ^:const ^int valid-from-lower-idx 0)
-(def ^:const ^int valid-from-upper-idx 1)
-(def ^:const ^int valid-to-lower-idx 2)
-(def ^:const ^int valid-to-upper-idx 3)
-(def ^:const ^int system-from-lower-idx 4)
-(def ^:const ^int system-from-upper-idx 5)
-(def ^:const ^int system-to-lower-idx 6)
-(def ^:const ^int system-to-upper-idx 7)
-
-(defn- ->temporal-range [^RelationReader params, {^TransactionInstant basis-tx :tx}, {:keys [for-valid-time for-system-time]}]
-  (let [range (->range)]
-    (letfn [(apply-bound [f col-name ^long time-μs]
-              (let [range-idx-lower (* (->temporal-column-idx (util/str->normal-form-str (str col-name))) 2)
-                    range-idx-upper (inc range-idx-lower)]
-                (case f
-                  :< (aset range range-idx-upper
-                           (min (dec time-μs) (aget range range-idx-upper)))
-                  :<= (aset range range-idx-upper
-                            (min time-μs (aget range range-idx-upper)))
-                  :> (aset range range-idx-lower
-                           (max (inc time-μs) (aget range range-idx-lower)))
-                  :>= (aset range range-idx-lower
-                            (max time-μs (aget range range-idx-lower)))
-                  nil)))
-
-            (->time-μs [[tag arg]]
+(defn- ->temporal-bounds [^RelationReader params, {^TransactionInstant basis-tx :tx}, {:keys [for-valid-time for-system-time]}]
+  (let [bounds (TemporalBounds.)]
+    (letfn [(->time-μs [[tag arg]]
               (case tag
                 :literal (-> arg
                              (util/sql-temporal->micros (.getZone expr/*clock*)))
@@ -130,35 +93,35 @@
                          (util/instant->micros))))]
 
       (when-let [system-time (some-> basis-tx (.system-time) util/instant->micros)]
-        (apply-bound :<= "xt$system_from" system-time)
+        (.lte (.systemFrom bounds) system-time)
 
         (when-not for-system-time
-          (apply-bound :> "xt$system_to" system-time)))
+          (.gt (.systemTo bounds) system-time)))
 
-      (letfn [(apply-constraint [constraint start-col end-col]
+      (letfn [(apply-constraint [constraint ^TemporalBounds$TemporalColumn start-col, ^TemporalBounds$TemporalColumn end-col]
                 (when-let [[tag & args] constraint]
                   (case tag
                     :at (let [[at] args
                               at-μs (->time-μs at)]
-                          (apply-bound :<= start-col at-μs)
-                          (apply-bound :> end-col at-μs))
+                          (.lte start-col at-μs)
+                          (.gt end-col at-μs))
 
                     ;; overlaps [time-from time-to]
                     :in (let [[from to] args]
-                          (apply-bound :> end-col (->time-μs (or from [:now])))
+                          (.gt end-col (->time-μs (or from [:now])))
                           (when to
-                            (apply-bound :< start-col (->time-μs to))))
+                            (.lt start-col (->time-μs to))))
 
                     :between (let [[from to] args]
-                               (apply-bound :> end-col (->time-μs (or from [:now])))
+                               (.gt end-col (->time-μs (or from [:now])))
                                (when to
-                                 (apply-bound :<= start-col (->time-μs to))))
+                                 (.lte start-col (->time-μs to))))
 
                     :all-time nil)))]
 
-        (apply-constraint for-valid-time "xt$valid_from" "xt$valid_to")
-        (apply-constraint for-system-time "xt$system_from" "xt$system_to")))
-    range))
+        (apply-constraint for-valid-time (.validFrom bounds) (.validTo bounds))
+        (apply-constraint for-system-time (.systemFrom bounds) (.systemTo bounds))))
+    bounds))
 
 (defn- scan-op-point? [scan-op]
   (= :at (first scan-op)))
@@ -325,32 +288,15 @@
 
           (.endRow out-rel))))))
 
-(defn- wrap-temporal-ranges ^xtdb.operator.scan.RowConsumer [^RowConsumer rc, ^longs temporal-ranges]
-  (let [valid-from-lower (aget temporal-ranges valid-from-lower-idx)
-        valid-from-upper (aget temporal-ranges valid-from-upper-idx)
-        valid-to-lower (aget temporal-ranges valid-to-lower-idx)
-        valid-to-upper (aget temporal-ranges valid-to-upper-idx)
-        sys-from-lower (aget temporal-ranges system-from-lower-idx)
-        sys-from-upper (aget temporal-ranges system-from-upper-idx)
-        sys-to-lower (aget temporal-ranges system-to-lower-idx)
-        sys-to-upper (aget temporal-ranges system-to-upper-idx)]
-    (reify RowConsumer
-      (accept [_ idx valid-from valid-to sys-from sys-to]
-        (when (and (<= valid-from-lower valid-from)
-                   (<= valid-from valid-from-upper)
-                   (<= valid-to-lower valid-to)
-                   (<= valid-to valid-to-upper)
-                   (<= sys-from-lower sys-from)
-                   (<= sys-from sys-from-upper)
-                   (<= sys-to-lower sys-to)
-                   (<= sys-to sys-to-upper)
-                   (not= valid-from valid-to)
-                   (not= sys-from sys-to))
-          (.accept rc idx valid-from valid-to sys-from sys-to))))))
+(defn- wrap-temporal-bounds ^xtdb.operator.scan.RowConsumer [^RowConsumer rc, ^TemporalBounds temporal-bounds]
+  (reify RowConsumer
+    (accept [_ idx valid-from valid-to sys-from sys-to]
+      (when (.inRange temporal-bounds valid-from valid-to sys-from sys-to)
+        (.accept rc idx valid-from valid-to sys-from sys-to)))))
 
 (defn range-range-row-picker
   ^java.util.function.IntConsumer [^IRelationWriter out-rel, ^RelationReader leaf-rel
-                                   col-names, ^longs temporal-ranges,
+                                   col-names, ^TemporalBounds temporal-bounds,
                                    {:keys [^EventResolver ev-resolver
                                            skip-iid-ptr prev-iid-ptr current-iid-ptr
                                            point-point?]}]
@@ -365,8 +311,8 @@
         delete-valid-from-rdr (.structKeyReader delete-rdr "xt$valid_from")
         delete-valid-to-rdr (.structKeyReader delete-rdr "xt$valid_to")
 
-        sys-from-lower (aget temporal-ranges system-from-lower-idx)
-        sys-from-upper (aget temporal-ranges system-from-upper-idx)
+        sys-from-lower (.lower (.systemFrom temporal-bounds))
+        sys-from-upper (.upper (.systemFrom temporal-bounds))
 
         put-rc (-> (copy-row-consumer out-rel leaf-rel col-names)
 
@@ -377,7 +323,7 @@
 
                                              (.accept rc idx valid-from valid-to sys-from sys-to))))
 
-                   (wrap-temporal-ranges temporal-ranges))]
+                   (wrap-temporal-bounds temporal-bounds))]
 
     (reify IntConsumer
       (accept [_ idx]
@@ -644,7 +590,7 @@
 
                            (->TrieCursor allocator (.iterator (let [^Iterable c (or (merge-plan->tasks merge-plan) [])] c))
                                          col-names col-preds
-                                         (->temporal-range params basis scan-opts)
+                                         (->temporal-bounds params basis scan-opts)
                                          params
                                          (cond-> {:ev-resolver (event-resolver)
                                                   :skip-iid-ptr (ArrowBufPointer.)
