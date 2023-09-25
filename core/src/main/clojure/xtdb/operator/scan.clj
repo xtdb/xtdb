@@ -278,19 +278,21 @@
 
 (defn- copy-row-consumer [^IRelationWriter out-rel, ^RelationReader leaf-rel, col-names]
   (letfn [(writer-for [normalised-col-name]
-            (let [wtrs (->> col-names
-                            (into [] (keep (fn [col-name]
+            (let [^objects wtrs (->> col-names
+                                     (keep (fn [col-name]
                                              (when (= normalised-col-name (util/str->normal-form-str col-name))
-                                               (.writerForName out-rel col-name types/temporal-col-type))))))]
+                                               (.writerForName out-rel col-name types/temporal-col-type))))
+                                     (object-array))]
               (reify IVectorWriter
                 (writeLong [_ l]
-                  (doseq [^IVectorWriter wtr wtrs]
-                    (.writeLong wtr l))))))]
+                  (dotimes [i (alength wtrs)]
+                    (let [^IVectorWriter wtr (aget wtrs i)]
+                      (.writeLong wtr l)))))))]
     (let [op-rdr (.readerForName leaf-rel "op")
           put-rdr (.legReader op-rdr :put)
           doc-rdr (.structKeyReader put-rdr "xt$doc")
 
-          row-copiers (vec
+          row-copiers (object-array
                        (for [col-name col-names
                              :let [normalized-name (util/str->normal-form-str col-name)
                                    ^IVectorReader rdr (case normalized-name
@@ -312,8 +314,9 @@
         (accept [_ idx valid-from valid-to sys-from sys-to]
           (.startRow out-rel)
 
-          (doseq [^IRowCopier copier row-copiers]
-            (.copyRow copier idx))
+          (dotimes [i (alength row-copiers)]
+            (let [^IRowCopier copier (aget row-copiers i)]
+              (.copyRow copier idx)))
 
           (.writeLong valid-from-wtr valid-from)
           (.writeLong valid-to-wtr valid-to)
