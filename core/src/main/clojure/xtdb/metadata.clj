@@ -363,7 +363,7 @@
 (defmethod ig/halt-key! ::metadata-manager [_ mgr]
   (util/try-close mgr))
 
-(defrecord TrieMatch [^String trie-data, ^ArrowHashTrie trie, ^RelationReader trie-rdr, ^IntPredicate page-idx-pred, ^IFn iid-bloom-bitmap-fn, ^Set col-names])
+(defrecord TrieMatch [^String table-trie, ^ArrowHashTrie trie, ^RelationReader trie-rdr, ^IntPredicate page-idx-pred, ^IFn iid-bloom-bitmap-fn, ^Set col-names])
 
 (defn matching-tries [^IMetadataManager metadata-mgr, table-tries, arrow-tries, ^IMetadataPredicate metadata-pred]
   (->> (for [[table-trie {:keys [^VectorSchemaRoot root]}] (mapv vector table-tries arrow-tries)

@@ -65,9 +65,9 @@
 (def ^:dynamic *column->pushdown-bloom* {})
 
 (defn filter-pushdown-bloom-page-idx-pred ^IntPredicate [^IMetadataManager metadata-manager ^String col-name
-                                                         {:keys [trie-data ^RelationReader trie-rdr] :as _trie-match}]
+                                                         {:keys [table-trie ^RelationReader trie-rdr] :as _trie-match}]
   (when-let [^MutableRoaringBitmap pushdown-bloom (get *column->pushdown-bloom* (symbol col-name))]
-    (let [^ITableMetadata table-metadata (.tableMetadata metadata-manager trie-rdr (:trie-file trie-data))
+    (let [^ITableMetadata table-metadata (.tableMetadata metadata-manager trie-rdr (:trie-file table-trie))
           metadata-rdr (.metadataReader table-metadata)
           bloom-rdr (-> (.structKeyReader metadata-rdr "columns")
                         (.listElementReader)

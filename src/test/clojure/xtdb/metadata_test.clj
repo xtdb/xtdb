@@ -134,10 +134,10 @@
         (let [{:keys [^IntPredicate page-idx-pred] :as res}
               (first (meta/matching-tries metadata-mgr [{:trie-file trie-obj-key}] arrow-tries literal-selector))]
 
-          (t/is (= {:trie-data {:trie-file trie-obj-key}
+          (t/is (= {:table-trie {:trie-file trie-obj-key}
                     :col-names
                     #{"xt$iid" "xt$valid_to" "xt$valid_from" "xt$id" "xt$system_from"}}
-                   (select-keys res [:trie-data :col-names])))
+                   (select-keys res [:table-trie :col-names])))
 
           (doseq [page-idx relevant-pages]
             (t/is (true? (.test page-idx-pred page-idx)))))))))
@@ -154,9 +154,9 @@
     (util/with-open [arrow-tries (trie/open-arrow-trie-files buffer-pool [{:trie-file trie-obj-key}])]
       (let [{:keys [^IntPredicate page-idx-pred] :as res}
             (first (meta/matching-tries metadata-mgr [{:trie-file trie-obj-key}] arrow-tries true-selector))]
-        (t/is (= {:trie-data {:trie-file trie-obj-key},
+        (t/is (= {:table-trie {:trie-file trie-obj-key},
                   :col-names
                   #{"xt$iid" "xt$valid_to" "xt$valid_from" "xt$id" "xt$system_from" "boolean_or_int"}}
-                 (select-keys res [:trie-data :col-names])))
+                 (select-keys res [:table-trie :col-names])))
 
         (t/is (true? (.test page-idx-pred 0)))))))

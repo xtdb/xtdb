@@ -291,7 +291,7 @@
                                  (let [page-idx (.getPageIndex ^ArrowHashTrie$Leaf node)
                                        take-node? (.test ^IntPredicate (nth page-idx-preds ordinal) page-idx)
                                        iid-bloom-bitmap-fn (nth iid-bloom-bitmap-fns ordinal)
-                                       {:keys [table-name, trie-key]} (:trie-data (nth trie-matches ordinal))]
+                                       {:keys [table-name, trie-key]} (:table-trie (nth trie-matches ordinal))]
                                    (when take-node?
                                      (.or cumulative-iid-bitmap (iid-bloom-bitmap-fn page-idx)))
                                    (recur (inc ordinal) more-nodes (or node-taken? take-node?)
