@@ -67,10 +67,11 @@
                 unit 1000]
             (if (< nanos unit)
               (str nanos " ns")
-              (let [exp (min (int (/ (Math/log nanos) (Math/log unit))) 2)
+              (let [exp (min 3 (int (/ (Math/log nanos) (Math/log unit))))
                     suf (case exp
                           1 "μs"
-                          2 "s"
+                          2 "ms"
+                          3 "s"
                           "s")]
                 (format "%.1f %s" (/ nanos (Math/pow unit exp)) suf)))))
 
