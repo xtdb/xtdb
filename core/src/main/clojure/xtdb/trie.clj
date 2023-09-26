@@ -259,7 +259,7 @@
   iid-bloom-bitmap-fn :: [ordinal page-idx] -> ImmutableRoaringBitmap"
   [trie-matches, path-pred, page-idx-preds, iid-bloom-bitmap-fns]
 
-  (letfn [(->merge-plan* [nodes path ^long level]
+  (letfn [(->merge-plan* [nodes path]
             (let [ba-path (byte-array path)]
               (when (path-pred ba-path)
                 (let [trie-children (mapv #(some-> ^HashTrie$Node % (.children)) nodes)]
@@ -271,8 +271,7 @@
                                                                          (aget node-children bucket-idx)
                                                                          node))
                                                                      nodes trie-children)
-                                                               (conj path bucket-idx)
-                                                               (inc level)))))]
+                                                               (conj path bucket-idx)))))]
                       (when-not (every? nil? branches)
                         {:path ba-path
                          :node [:branch branches]}))
@@ -308,7 +307,7 @@
 
                           :else (recur (inc ordinal) more-nodes node-taken? (conj leaves nil))))))))))]
 
-    (->merge-plan* (mapv (fn [{:keys [^HashTrie trie]}] (some-> trie .rootNode)) trie-matches) [] 0)))
+    (->merge-plan* (mapv (fn [{:keys [^HashTrie trie]}] (some-> trie .rootNode)) trie-matches) [])))
 
 (defrecord ArrowTrie [^ArrowBuf buf, ^VectorSchemaRoot root]
   AutoCloseable
