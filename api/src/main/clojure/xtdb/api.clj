@@ -63,7 +63,7 @@
 
   (^java.util.concurrent.CompletableFuture
    [node q+args opts]
-   (let [[q args] (if (vector? q+args)
+   (let [[q args] (if (and (vector? q+args) (not (keyword? (first q+args))))
                     [(first q+args) (subvec q+args 1)]
                     [q+args nil])
 

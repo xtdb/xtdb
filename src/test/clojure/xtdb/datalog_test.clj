@@ -1166,7 +1166,7 @@
   (letfn [(q [query & args]
             (apply xt/q tu/*node* query args))]
 
-    (t/testing "without rule"
+   (t/testing "without rule"
       (t/is (= [{:i :ivan}] (q '{:find [i]
                                  :where [(match :xt_docs {:xt/id i})
                                          [i :age age]
@@ -1847,13 +1847,13 @@
     '{:find [order fullname]
       :where [(match :order {:xt/id order, :customer customer})
               [(concat
-                 (q {:find [fn]
-                     :in [customer]
-                     :where [(match :customer {:xt/id customer, :firstname fn})]})
-                 " "
-                 (q {:find [ln]
-                     :in [customer]
-                     :where [(match :customer {:xt/id customer, :lastname ln})]}))
+                (q {:find [fn]
+                    :in [customer]
+                    :where [(match :customer {:xt/id customer, :firstname fn})]})
+                " "
+                (q {:find [ln]
+                    :in [customer]
+                    :where [(match :customer {:xt/id customer, :lastname ln})]}))
                fullname]]}
     [{:order 0, :fullname "bob smith"}
      {:order 1, :fullname "bob smith"}
@@ -1890,7 +1890,7 @@
       :where [(match :customer [{:xt/id c, :firstname "bob"}])]}
     [{:c 1, :o 2}])
 
-(t/testing "cardinality violation error"
+  (t/testing "cardinality violation error"
     (t/is (thrown-with-msg? xtdb.RuntimeException #"cardinality violation"
                             (->> '{:find [firstname]
                                    :where [[(q {:find [firstname],
@@ -2403,3 +2403,108 @@
               :xtdb.error/message "Runtime error: ':xtdb.call/no-such-tx-fn'",
               :fn-id :non-existing-fn}
              (.getData ^xtdb.RuntimeException (.form ^ClojureForm (:xt/error (first txs))))))))
+
+(deftest test-set-operators
+  (let [_tx (xt/submit-tx tu/*node* '[[:put :xt_docs {:xt/id :ivan, :age 20, :role :developer}]
+                                      [:put :xt_docs {:xt/id :oleg, :age 30, :role :manager}]
+                                      [:put :xt_docs {:xt/id :petr, :age 35, :role :qa}]
+                                      [:put :xt_docs {:xt/id :sergei, :age 35, :role :manager}]])]
+
+    (letfn [(q [query]
+              (xt/q tu/*node* query))]
+      (t/is (= [{:e :ivan}]
+                 (q
+                  [:union-all
+                   '{:find [e]
+                     :where [(match :xt_docs {:xt/id e :role :developer})]}]))
+              "unary union")
+      (t/is (= [{:e :ivan}
+                    {:e :oleg}]
+                   (q
+                    [:union-all
+                     '{:find [e]
+                       :where [(match :xt_docs {:xt/id e :role :developer})]}
+                     '{:find [e]
+                       :where [(match :xt_docs {:xt/id e :age 30})]}]))
+                "binary union")
+
+      (t/is (= [{:e :ivan}
+                {:e :oleg}
+                {:e :oleg}
+                {:e :sergei}]
+               (q
+                [:union-all
+                 '{:find [e]
+                   :where [(match :xt_docs {:xt/id e :role :developer})]}
+                 '{:find [e]
+                   :where [(match :xt_docs {:xt/id e :age 30})]}
+                 '{:find [e]
+                   :where [(match :xt_docs {:xt/id e :role :manager})]}])
+               (q
+                [:union-all
+                 [:union-all
+                  '{:find [e]
+                    :where [(match :xt_docs {:xt/id e :role :developer})]}
+                  '{:find [e]
+                    :where [(match :xt_docs {:xt/id e :age 30})]}]
+                 '{:find [e]
+                   :where [(match :xt_docs {:xt/id e :role :manager})]}]))
+            "ternary union")
+
+      (t/is (= [{:e :oleg}]
+                 (q
+                  '{:find [e]
+                    :where [(match :xt_docs {:xt/id e :role :manager})
+                            (q
+                             [:union-all
+                              {:find [e]
+                               :where [(match :xt_docs {:xt/id e :role :developer})]}
+                              {:find [e]
+                               :where [(match :xt_docs {:xt/id e :age 30})]}])]}))
+              "union in subquery")
+
+      (t/is (= [{:e :ivan}]
+                 (q '{:find [(q [:union-all
+                                 {:find [e]
+                                  :where [(match :xt_docs {:xt/id e :role :developer})]}
+                                 {:find [e]
+                                  :where [(match :xt_docs {:xt/id e :role :cto})]}])]
+                      :keys [e]}))
+              "union in scalar subquery")
+      (t/is (= [{:e :oleg}]
+               (q
+                '{:find [e]
+                  :where [(match :xt_docs {:xt/id e :role :manager})
+                          (my-rule e)]
+                  :rules [[(my-rule e) ;;can't reference as union-all/q doesn't take params yet
+                           (q
+                            [:union-all
+                             {:find [e]
+                              :where [(match :xt_docs {:xt/id e :role :developer})]}
+                             {:find [e]
+                              :where [(match :xt_docs {:xt/id e :age 30})]}])]]}))
+            "union in subquery in rule")
+      (t/is (thrown-with-msg?
+                 IllegalArgumentException
+                 #":set-operator-sub-queries-differ-in-degree"
+                 (q
+                  [:union-all
+                   '{:find [e]
+                     :where [(match :xt_docs {:xt/id e :role :developer})]}
+                   '{:find [e role]
+                     :where [(match :xt_docs {:xt/id e :age 30 :role role})]}]))
+                "mismatched sub relation degrees")
+
+      (t/is (thrown-with-msg?
+             IllegalArgumentException
+             #":set-operator-sub-queries-differ-in-degree"
+             (q
+              '{:find [e]
+                :where [(match :xt_docs {:xt/id e :role :manager})
+                        (q
+                         [:union-all
+                          {:find [e]
+                           :where [(match :xt_docs {:xt/id e :role :developer})]}
+                          {:find [e role]
+                           :where [(match :xt_docs {:xt/id e :age 30 :role role})]}])]}))
+            "union in subquery with mismatched sub relation degrees"))))
