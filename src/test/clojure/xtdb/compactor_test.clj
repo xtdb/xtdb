@@ -72,8 +72,8 @@
                     [{:xt/id "foo", :v 2}
                      {:xt/id "bar", :v 2}])
 
-      (c/merge-tries! tu/*allocator* [(tu/->live-leaf-loader lt0 0)
-                                      (tu/->live-leaf-loader lt1 1)]
+      (c/merge-tries! tu/*allocator* [(tu/->live-leaf-loader lt0)
+                                      (tu/->live-leaf-loader lt1)]
                       leaf-out-ch trie-out-ch
                       {:path (byte-array [])
                        :node [:leaf [{:node (.rootNode (.compactLogs (li/live-trie lt0)))}

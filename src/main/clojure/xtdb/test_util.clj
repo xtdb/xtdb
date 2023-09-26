@@ -368,8 +368,8 @@
 
     (.commit live-table-tx)))
 
-(defn ->live-leaf-loader [live-table ^long ordinal]
-  (trie/->live-leaf-loader (vw/rel-wtr->rdr (li/live-rel live-table)) ordinal))
+(defn ->live-leaf-loader [live-table]
+  (trie/->LiveLeafLoader (vw/rel-wtr->rdr (li/live-rel live-table))))
 
 (defn byte-buffer->path [^java.nio.ByteBuffer bb]
   (mapcat (fn [b] [(mod (bit-shift-right b 4) 16) (mod (bit-and b (dec (bit-shift-left 1 4))) 16)]) (.array bb)))

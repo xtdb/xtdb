@@ -9,18 +9,17 @@
             [xtdb.util :as util]
             [xtdb.vector.reader :as vr]
             [xtdb.vector.writer :as vw])
-  (:import (java.util.function IntPredicate)
-           (java.lang AutoCloseable)
+  (:import (java.lang AutoCloseable)
+           (java.util.function IntPredicate)
            [org.apache.arrow.memory BufferAllocator]
+           [org.apache.arrow.memory.util ArrowBufPointer]
            org.apache.arrow.vector.types.pojo.Field
            org.apache.arrow.vector.VectorSchemaRoot
-           [org.roaringbitmap RoaringBitmap]
            xtdb.buffer_pool.IBufferPool
            (xtdb.metadata IMetadataManager IMetadataPredicate)
            xtdb.object_store.ObjectStore
-           (xtdb.trie ILeafLoader LiveHashTrie)
-           xtdb.util.WritableByteBufferChannel
-           xtdb.vector.IRowCopier))
+           (xtdb.trie CompactorLeafPointer ILeafLoader LiveHashTrie)
+           xtdb.util.WritableByteBufferChannel))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (definterface ICompactor
@@ -42,27 +41,31 @@
 
                      leaf-root (VectorSchemaRoot/create log-leaf-schema allocator)]
 
-      (let [leaf-wtr (vw/root->writer leaf-root)]
+      (let [leaf-wtr (vw/root->writer leaf-root)
+            is-valid-ptr (ArrowBufPointer.)]
         (letfn [(merge-tries* [{:keys [path], [node-tag node-arg] :node}]
                   (case node-tag
                     :branch (let [idxs (mapv merge-tries* node-arg)]
                               (.writeBranch trie-wtr (int-array idxs)))
 
                     :leaf (let [loaded-leaves (trie/load-leaves leaves {:leaves node-arg})
-                                merge-q (trie/->merge-queue (mapv :rel-rdr loaded-leaves) (mapv :leaf-ptr loaded-leaves) {:path path})
+                                merge-q (trie/->merge-queue)]
 
-                                ^"[Lxtdb.vector.IRowCopier;"
-                                row-copiers (->> (for [{:keys [rel-rdr]} loaded-leaves]
-                                                   (.rowCopier leaf-wtr rel-rdr))
-                                                 (into-array IRowCopier))]
+                            (doseq [leaf-rdr loaded-leaves
+                                    :when leaf-rdr
+                                    :let [leaf-ptr (CompactorLeafPointer. leaf-rdr (.rowCopier leaf-wtr leaf-rdr))]]
+                              (when (.isValid leaf-ptr is-valid-ptr path)
+                                (.add merge-q leaf-ptr)))
+
                             (loop [trie (-> (doto (LiveHashTrie/builder (vr/vec->reader (.getVector leaf-root "xt$iid")))
                                               (.setRootPath path))
                                             (.build))]
-                              (if-let [lp (.poll merge-q)]
-                                (let [pos (.copyRow ^IRowCopier (aget row-copiers (.getOrdinal lp))
-                                                    (.getIndex lp))]
 
-                                  (.advance merge-q lp)
+                              (if-let [^CompactorLeafPointer leaf-ptr (.poll merge-q)]
+                                (let [pos (.copyRow (.rowCopier leaf-ptr) (.getIndex leaf-ptr))]
+                                  (.nextIndex leaf-ptr)
+                                  (when (.isValid leaf-ptr is-valid-ptr path)
+                                    (.add merge-q leaf-ptr))
                                   (recur (.add trie pos)))
 
                                 (let [pos (trie/write-live-trie trie-wtr trie (vw/rel-wtr->rdr leaf-wtr))]

@@ -249,7 +249,7 @@
   (let [page-idx-cache (HashMap.)
         meta-row-count (.valueCount metadata-rdr)
         page-idx-rdr (.structKeyReader metadata-rdr "page-idx")
-        cols-rdr(.structKeyReader metadata-rdr "columns")
+        cols-rdr (.structKeyReader metadata-rdr "columns")
         col-rdr (.listElementReader cols-rdr)
         column-name-rdr (.structKeyReader col-rdr "col-name")
         root-col-rdr (.structKeyReader col-rdr "root-col?")

@@ -20,7 +20,7 @@
            (java.io Closeable)
            java.nio.ByteBuffer
            (java.util HashMap Iterator LinkedList List Map)
-           (java.util.function IntConsumer IntPredicate)
+           (java.util.function IntPredicate)
            (java.util.stream IntStream)
            (org.apache.arrow.memory BufferAllocator)
            [org.apache.arrow.memory.util ArrowBufPointer]
@@ -32,7 +32,7 @@
            (xtdb.metadata IMetadataManager ITableMetadata)
            xtdb.object_store.ObjectStore
            xtdb.operator.IRelationSelector
-           (xtdb.trie HashTrie LiveHashTrie$Leaf)
+           (xtdb.trie HashTrie LiveHashTrie$Leaf ScanLeafPointer)
            (xtdb.util TemporalBounds TemporalBounds$TemporalColumn)
            (xtdb.vector IRelationWriter IRowCopier IVectorReader IVectorWriter RelationReader)
            (xtdb.watermark ILiveTableWatermark IWatermark IWatermarkSource Watermark)))
@@ -123,15 +123,6 @@
         (apply-constraint for-system-time (.systemFrom bounds) (.systemTo bounds))))
     bounds))
 
-(defn- scan-op-point? [scan-op]
-  (= :at (first scan-op)))
-
-(defn- at-point-point? [{:keys [for-valid-time for-system-time]}]
-  (and (or (nil? for-valid-time)
-           (scan-op-point? for-valid-time))
-       (or (nil? for-system-time)
-           (scan-op-point? for-system-time))))
-
 (defn tables-with-cols [basis ^IWatermarkSource wm-src ^IScanEmitter scan-emitter]
   (let [{:keys [tx, after-tx]} basis
         wm-tx (or tx after-tx)]
@@ -146,6 +137,62 @@
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (definterface RowConsumer
   (^void accept [^int idx, ^long validFrom, ^long validTo, ^long systemFrom, ^long systemTo]))
+
+#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
+(defn- copy-row-consumer [^IRelationWriter out-rel, ^RelationReader leaf-rel, col-names]
+  (letfn [(writer-for [normalised-col-name]
+            (let [wtrs (->> col-names
+                            (into [] (keep (fn [col-name]
+                                             (when (= normalised-col-name (util/str->normal-form-str col-name))
+                                               (.writerForName out-rel col-name types/temporal-col-type))))))]
+              (reify IVectorWriter
+                (writeLong [_ l]
+                  (doseq [^IVectorWriter wtr wtrs]
+                    (.writeLong wtr l))))))]
+    (let [op-rdr (.readerForName leaf-rel "op")
+          put-rdr (.legReader op-rdr :put)
+          doc-rdr (.structKeyReader put-rdr "xt$doc")
+
+          row-copiers (object-array
+                       (for [col-name col-names
+                             :let [normalized-name (util/str->normal-form-str col-name)
+                                   ^IVectorReader rdr (case normalized-name
+                                                        "xt$iid" (.readerForName leaf-rel "xt$iid")
+                                                        ("xt$system_from" "xt$system_to" "xt$valid_from" "xt$valid_to") nil
+                                                        (.structKeyReader doc-rdr normalized-name))]
+                             :when rdr]
+                         (.rowCopier rdr
+                                     (case normalized-name
+                                       "xt$iid" (.writerForName out-rel col-name [:fixed-size-binary 16])
+                                       (.writerForName out-rel col-name)))))
+
+          ^IVectorWriter valid-from-wtr (writer-for "xt$valid_from")
+          ^IVectorWriter valid-to-wtr (writer-for "xt$valid_to")
+          ^IVectorWriter sys-from-wtr (writer-for "xt$system_from")
+          ^IVectorWriter sys-to-wtr (writer-for "xt$system_to")]
+
+      (reify RowConsumer
+        (accept [_ idx valid-from valid-to sys-from sys-to]
+          (.startRow out-rel)
+
+          (dotimes [i (alength row-copiers)]
+            (let [^IRowCopier copier (aget row-copiers i)]
+              (.copyRow copier idx)))
+
+          (.writeLong valid-from-wtr valid-from)
+          (.writeLong valid-to-wtr valid-to)
+          (.writeLong sys-from-wtr sys-from)
+          (.writeLong sys-to-wtr sys-to)
+
+          (.endRow out-rel))))))
+
+(defn- wrap-temporal-bounds ^xtdb.operator.scan.RowConsumer [^RowConsumer rc, ^TemporalBounds temporal-bounds]
+  (reify RowConsumer
+    (accept [_ idx valid-from valid-to sys-from sys-to]
+      (when (and (.inRange temporal-bounds valid-from valid-to sys-from sys-to)
+                 (not= valid-from valid-to)
+                 (not= sys-from sys-to))
+        (.accept rc idx valid-from valid-to sys-from sys-to)))))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (definterface EventResolver
@@ -239,119 +286,39 @@
 (defn- duplicate-ptr [^ArrowBufPointer dst, ^ArrowBufPointer src]
   (.set dst (.getBuf src) (.getOffset src) (.getLength src)))
 
-(defn- copy-row-consumer [^IRelationWriter out-rel, ^RelationReader leaf-rel, col-names]
-  (letfn [(writer-for [normalised-col-name]
-            (let [^objects wtrs (->> col-names
-                                     (keep (fn [col-name]
-                                             (when (= normalised-col-name (util/str->normal-form-str col-name))
-                                               (.writerForName out-rel col-name types/temporal-col-type))))
-                                     (object-array))]
-              (reify IVectorWriter
-                (writeLong [_ l]
-                  (dotimes [i (alength wtrs)]
-                    (let [^IVectorWriter wtr (aget wtrs i)]
-                      (.writeLong wtr l)))))))]
-    (let [op-rdr (.readerForName leaf-rel "op")
-          put-rdr (.legReader op-rdr :put)
-          doc-rdr (.structKeyReader put-rdr "xt$doc")
+(defn pick-leaf-row! [^ScanLeafPointer leaf-ptr
+                      ^TemporalBounds temporal-bounds,
+                      {:keys [^EventResolver ev-resolver
+                              skip-iid-ptr prev-iid-ptr current-iid-ptr]}]
+  (when-not (= skip-iid-ptr (.getIidPointer leaf-ptr current-iid-ptr))
+    (when-not (= prev-iid-ptr current-iid-ptr)
+      (.nextIid ev-resolver)
+      (duplicate-ptr prev-iid-ptr current-iid-ptr))
 
-          row-copiers (object-array
-                       (for [col-name col-names
-                             :let [normalized-name (util/str->normal-form-str col-name)
-                                   ^IVectorReader rdr (case normalized-name
-                                                        "xt$iid" (.readerForName leaf-rel "xt$iid")
-                                                        ("xt$system_from" "xt$system_to" "xt$valid_from" "xt$valid_to") nil
-                                                        (.structKeyReader doc-rdr normalized-name))]
-                             :when rdr]
-                         (.rowCopier rdr
-                                     (case normalized-name
-                                       "xt$iid" (.writerForName out-rel col-name [:fixed-size-binary 16])
-                                       (.writerForName out-rel col-name)))))
+    (let [idx (.getIndex leaf-ptr)
+          leg-name (.getName (.getLeg (.opReader leaf-ptr) idx))]
+      (if (= "evict" leg-name)
+        (do
+          (.nextIid ev-resolver)
+          (duplicate-ptr skip-iid-ptr current-iid-ptr))
 
-          ^IVectorWriter valid-from-wtr (writer-for "xt$valid_from")
-          ^IVectorWriter valid-to-wtr (writer-for "xt$valid_to")
-          ^IVectorWriter sys-from-wtr (writer-for "xt$system_from")
-          ^IVectorWriter sys-to-wtr (writer-for "xt$system_to")]
+        (let [system-from (.getSystemTime leaf-ptr)]
+          (when (and (<= (.lower (.systemFrom temporal-bounds)) system-from)
+                     (<= system-from (.upper (.systemFrom temporal-bounds))))
+            (case leg-name
+              "put"
+              (.resolveEvent ev-resolver idx
+                             (.getLong (.putValidFromReader leaf-ptr) idx)
+                             (.getLong (.putValidToReader leaf-ptr) idx)
+                             system-from
+                             (.rowConsumer leaf-ptr))
 
-      (reify RowConsumer
-        (accept [_ idx valid-from valid-to sys-from sys-to]
-          (.startRow out-rel)
-
-          (dotimes [i (alength row-copiers)]
-            (let [^IRowCopier copier (aget row-copiers i)]
-              (.copyRow copier idx)))
-
-          (.writeLong valid-from-wtr valid-from)
-          (.writeLong valid-to-wtr valid-to)
-          (.writeLong sys-from-wtr sys-from)
-          (.writeLong sys-to-wtr sys-to)
-
-          (.endRow out-rel))))))
-
-(defn- wrap-temporal-bounds ^xtdb.operator.scan.RowConsumer [^RowConsumer rc, ^TemporalBounds temporal-bounds]
-  (reify RowConsumer
-    (accept [_ idx valid-from valid-to sys-from sys-to]
-      (when (.inRange temporal-bounds valid-from valid-to sys-from sys-to)
-        (.accept rc idx valid-from valid-to sys-from sys-to)))))
-
-(defn range-range-row-picker
-  ^java.util.function.IntConsumer [^IRelationWriter out-rel, ^RelationReader leaf-rel
-                                   col-names, ^TemporalBounds temporal-bounds,
-                                   {:keys [^EventResolver ev-resolver
-                                           skip-iid-ptr prev-iid-ptr current-iid-ptr
-                                           point-point?]}]
-  (let [iid-rdr (.readerForName leaf-rel "xt$iid")
-        sys-from-rdr (.readerForName leaf-rel "xt$system_from")
-        op-rdr (.readerForName leaf-rel "op")
-        put-rdr (.legReader op-rdr :put)
-        put-valid-from-rdr (.structKeyReader put-rdr "xt$valid_from")
-        put-valid-to-rdr (.structKeyReader put-rdr "xt$valid_to")
-
-        delete-rdr (.legReader op-rdr :delete)
-        delete-valid-from-rdr (.structKeyReader delete-rdr "xt$valid_from")
-        delete-valid-to-rdr (.structKeyReader delete-rdr "xt$valid_to")
-
-        sys-from-lower (.lower (.systemFrom temporal-bounds))
-        sys-from-upper (.upper (.systemFrom temporal-bounds))
-
-        put-rc (-> (copy-row-consumer out-rel leaf-rel col-names)
-
-                   (as-> ^RowConsumer rc (reify RowConsumer
-                                           (accept [_ idx valid-from valid-to sys-from sys-to]
-                                             (when point-point?
-                                               (duplicate-ptr skip-iid-ptr current-iid-ptr))
-
-                                             (.accept rc idx valid-from valid-to sys-from sys-to))))
-
-                   (wrap-temporal-bounds temporal-bounds))]
-
-    (reify IntConsumer
-      (accept [_ idx]
-        (when-not (= skip-iid-ptr (.getPointer iid-rdr idx current-iid-ptr))
-          (when-not (= prev-iid-ptr current-iid-ptr)
-            (.nextIid ev-resolver)
-            (duplicate-ptr prev-iid-ptr current-iid-ptr))
-
-          (let [leg-name (.getName (.getLeg op-rdr idx))]
-            (if (= "evict" leg-name)
-              (duplicate-ptr skip-iid-ptr current-iid-ptr)
-
-              (let [system-from (.getLong sys-from-rdr idx)]
-                (when (and (<= sys-from-lower system-from) (<= system-from sys-from-upper))
-                  (case leg-name
-                    "put"
-                    (.resolveEvent ev-resolver idx
-                                   (.getLong put-valid-from-rdr idx)
-                                   (.getLong put-valid-to-rdr idx)
-                                   system-from
-                                   put-rc)
-
-                    "delete"
-                    (.resolveEvent ev-resolver idx
-                                   (.getLong delete-valid-from-rdr idx)
-                                   (.getLong delete-valid-to-rdr idx)
-                                   system-from
-                                   nil)))))))))))
+              "delete"
+              (.resolveEvent ev-resolver idx
+                             (.getLong (.deleteValidFromReader leaf-ptr) idx)
+                             (.getLong (.deleteValidToReader leaf-ptr) idx)
+                             system-from
+                             nil))))))))
 
 (defn iid-selector [^ByteBuffer iid-bb]
   (reify IRelationSelector
@@ -391,10 +358,11 @@
 (defn ->vsr-cache [buffer-pool allocator]
   (->VSRCache buffer-pool allocator (HashMap.)))
 
-(defn cache-vsr [vsr-cache trie-leaf-file]
-  (let [{:keys [^Map cache, buffer-pool, allocator]} vsr-cache
-        compute (fn [_] (bp/open-vsr buffer-pool trie-leaf-file allocator))]
-    (.computeIfAbsent cache trie-leaf-file (util/->jfn compute))))
+(defn cache-vsr [{:keys [^Map cache, buffer-pool, allocator]} trie-leaf-file]
+  (.computeIfAbsent cache trie-leaf-file
+                    (util/->jfn
+                      (fn [trie-leaf-file]
+                        (bp/open-vsr buffer-pool trie-leaf-file allocator)))))
 
 (defn merge-task-leaf-reader ^IVectorReader [buffer-pool vsr-cache {:keys [page-idx, trie-leaf-file, rel-rdr, node]}]
   (if page-idx
@@ -403,41 +371,39 @@
             loader (VectorLoader. vsr)]
         (.load loader rb)
         (vr/<-root vsr)))
+
     (.select ^RelationReader rel-rdr (.data ^LiveHashTrie$Leaf node))))
 
-(defn merge-task-readers [buffer-pool vsr-cache {:keys [leaves]}]
-  (mapv #(when % (merge-task-leaf-reader buffer-pool vsr-cache %)) leaves))
-
 (deftype TrieCursor [^BufferAllocator allocator, ^Iterator merge-tasks
-                     col-names, ^Map col-preds, ^longs temporal-timestamps,
+                     col-names, ^Map col-preds, temporal-bounds
                      params, ^IPersistentMap picker-state
                      vsr-cache, buffer-pool]
   ICursor
   (tryAdvance [_ c]
     (if (.hasNext merge-tasks)
-      (let [merge-task (.next merge-tasks)]
+      (let [{:keys [leaves path]} (.next merge-tasks)
+            is-valid-ptr (ArrowBufPointer.)]
         (with-open [out-rel (vw/->rel-writer allocator)]
           (let [^IRelationSelector iid-pred (get col-preds "xt$iid")
-                unfiltered-readers (merge-task-readers buffer-pool vsr-cache merge-task)
-                apply-iid-pred (fn [^RelationReader rel-rdr] (.select rel-rdr (.select iid-pred allocator rel-rdr params)))
-                filtered-readers
-                (if iid-pred
-                  (mapv (fn [rel-rdr] (some-> rel-rdr apply-iid-pred)) unfiltered-readers)
-                  unfiltered-readers)
+                merge-q (trie/->merge-queue)]
 
-                merge-q (trie/->merge-queue filtered-readers merge-task)
-                ^"[Ljava.util.function.IntConsumer;"
-                row-pickers (make-array IntConsumer (count filtered-readers))]
-
-            (dotimes [i (count filtered-readers)]
-              (when-some [rel-rdr (nth filtered-readers i)]
-                (let [row-picker (range-range-row-picker out-rel rel-rdr col-names temporal-timestamps picker-state)]
-                  (aset row-pickers i row-picker))))
+            (doseq [leaf leaves
+                    :when leaf
+                    :let [^RelationReader leaf-rdr (merge-task-leaf-reader buffer-pool vsr-cache leaf)
+                          ^RelationReader leaf-rdr (cond-> leaf-rdr
+                                                     iid-pred (.select (.select iid-pred allocator leaf-rdr params)))
+                          leaf-ptr (ScanLeafPointer. leaf-rdr
+                                                     (-> (copy-row-consumer out-rel leaf-rdr col-names)
+                                                         (wrap-temporal-bounds temporal-bounds)))]]
+              (when (.isValid leaf-ptr is-valid-ptr path)
+                (.add merge-q leaf-ptr)))
 
             (loop []
-              (when-let [lp (.poll merge-q)]
-                (.accept ^IntConsumer (aget row-pickers (.getOrdinal lp)) (.getIndex lp))
-                (.advance merge-q lp)
+              (when-let [^ScanLeafPointer leaf-ptr (.poll merge-q)]
+                (pick-leaf-row! leaf-ptr temporal-bounds picker-state)
+                (.nextIndex leaf-ptr)
+                (when (.isValid leaf-ptr is-valid-ptr path)
+                  (.add merge-q leaf-ptr))
                 (recur)))
 
             (.accept c (-> (vw/rel-wtr->rdr out-rel)
@@ -470,8 +436,8 @@
 (defn selects->iid-byte-buffer ^ByteBuffer [selects ^RelationReader params-rel]
   (when-let [eid-select (or (get selects "xt/id") (get selects "xt$id"))]
     (when (= '= (first eid-select))
-       (let [eid (eid-select->eid eid-select)]
-         (cond
+      (let [eid (eid-select->eid eid-select)]
+        (cond
           (s/valid? ::lp/value eid)
           (trie/->iid eid)
 
@@ -592,11 +558,10 @@
                                          col-names col-preds
                                          (->temporal-bounds params basis scan-opts)
                                          params
-                                         (cond-> {:ev-resolver (event-resolver)
-                                                  :skip-iid-ptr (ArrowBufPointer.)
-                                                  :prev-iid-ptr (ArrowBufPointer.)
-                                                  :current-iid-ptr (ArrowBufPointer.)}
-                                           (at-point-point? scan-opts) (assoc :point-point? true))
+                                         {:ev-resolver (event-resolver)
+                                          :skip-iid-ptr (ArrowBufPointer.)
+                                          :prev-iid-ptr (ArrowBufPointer.)
+                                          :current-iid-ptr (ArrowBufPointer.)}
                                          (->vsr-cache buffer-pool allocator)
                                          buffer-pool)))))}))))
 
