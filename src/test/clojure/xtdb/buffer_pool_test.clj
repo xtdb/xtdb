@@ -1,11 +1,13 @@
 (ns xtdb.buffer-pool-test
   (:require [clojure.test :as t]
             [juxt.clojars-mirrors.integrant.core :as ig]
-            [xtdb.buffer-pool :as bp])
+            [xtdb.buffer-pool :as bp]
+            [xtdb.util :as util])
   (:import (java.nio ByteBuffer)
-           (org.apache.arrow.memory ArrowBuf)
+           (org.apache.arrow.memory ArrowBuf RootAllocator)
            (xtdb.buffer_pool IBufferPool)
-           (xtdb.object_store ObjectStore)))
+           (xtdb.object_store ObjectStore)
+           (xtdb.util ArrowBufLRU)))
 
 (set! *warn-on-reflection* false)
 
@@ -118,3 +120,32 @@
     (t/is (= 0 (.get bp/cache-hit-byte-counter)))
     (t/is (= 0 (.get bp/cache-miss-byte-counter)))
     (t/is (= 0N @bp/io-wait-nanos-counter))))
+
+(t/deftest arrow-buf-lru-test
+  (t/testing "max size restriction"
+    (let [allocator (RootAllocator.)
+          lru (ArrowBufLRU. 1 2 128)
+          buf1 (util/->arrow-buf-view allocator (ByteBuffer/wrap (byte-array (range 16))))
+          buf2 (util/->arrow-buf-view allocator (ByteBuffer/wrap (byte-array (range 16))))
+          buf3 (util/->arrow-buf-view allocator (ByteBuffer/wrap (byte-array (range 16))))]
+      (.put lru "buf1" buf1)
+      (.put lru "buf2" buf2)
+      (t/is (= buf1 (.get lru "buf1")))
+      (t/is (= buf2 (.get lru "buf2")))
+      (.put lru "buf3" buf3)
+      (t/is (nil? (.get lru "buf1")))
+      (t/is (= buf3 (.get lru "buf3")))))
+
+  (t/testing "max byte size restriction"
+    (let [allocator (RootAllocator.)
+          lru (ArrowBufLRU. 1 5 32)
+          buf1 (util/->arrow-buf-view allocator (ByteBuffer/wrap (byte-array (range 16))))
+          buf2 (util/->arrow-buf-view allocator (ByteBuffer/wrap (byte-array (range 16))))
+          buf3 (util/->arrow-buf-view allocator (ByteBuffer/wrap (byte-array (range 16))))]
+      (.put lru "buf1" buf1)
+      (.put lru "buf2" buf2)
+      (t/is (= buf1 (.get lru "buf1")))
+      (t/is (= buf2 (.get lru "buf2")))
+      (.put lru "buf3" buf3)
+      (t/is (nil? (.get lru "buf1")))
+      (t/is (= buf3 (.get lru "buf3"))))))
