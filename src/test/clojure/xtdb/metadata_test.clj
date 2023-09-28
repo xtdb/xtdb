@@ -2,17 +2,18 @@
   (:require [clojure.test :as t :refer [deftest]]
             [xtdb.api :as xt]
             [xtdb.buffer-pool :as bp]
-            [xtdb.metadata :as meta]
             [xtdb.expression.metadata :as expr.meta]
+            [xtdb.metadata :as meta]
             [xtdb.node :as node]
-            [xtdb.trie :as trie]
             [xtdb.test-util :as tu]
-            [xtdb.util :as util])
+            [xtdb.trie :as trie]
+            [xtdb.util :as util]
+            [xtdb.vector.reader :as vr])
   (:import (clojure.lang MapEntry)
            (java.util.function IntPredicate)
-           (org.roaringbitmap RoaringBitmap)
+           [org.apache.arrow.vector VectorSchemaRoot]
            (xtdb.buffer_pool IBufferPool)
-           (xtdb.metadata IMetadataManager)))
+           (xtdb.metadata IMetadataManager IMetadataPredicate)))
 
 (t/use-fixtures :each tu/with-node)
 (t/use-fixtures :once tu/with-allocator)
@@ -130,14 +131,12 @@
           ^IMetadataManager metadata-mgr (tu/component node ::meta/metadata-manager)
           literal-selector (expr.meta/->metadata-selector '(and (< xt/id 11) (> xt/id 9)) '{xt/id :i64} {})
           trie-obj-key (trie/->table-trie-obj-key "xt_docs" (trie/->trie-key 0 0 21))]
-      (util/with-open [arrow-tries (trie/open-arrow-trie-files buffer-pool [{:trie-file trie-obj-key}])]
-        (let [{:keys [^IntPredicate page-idx-pred] :as res}
-              (first (meta/matching-tries metadata-mgr [{:trie-file trie-obj-key}] arrow-tries literal-selector))]
+      (util/with-open [arrow-trie (trie/open-arrow-trie-file buffer-pool {:trie-file trie-obj-key})]
+        (let [table-metadata (.tableMetadata metadata-mgr (:trie-rdr arrow-trie) trie-obj-key)
+              page-idx-pred (.build literal-selector table-metadata)]
 
-          (t/is (= {:table-trie {:trie-file trie-obj-key}
-                    :col-names
-                    #{"xt$iid" "xt$valid_to" "xt$valid_from" "xt$id" "xt$system_from"}}
-                   (select-keys res [:table-trie :col-names])))
+          (t/is (= #{"xt$iid" "xt$valid_to" "xt$valid_from" "xt$id" "xt$system_from"}
+                   (.columnNames table-metadata)))
 
           (doseq [page-idx relevant-pages]
             (t/is (true? (.test page-idx-pred page-idx)))))))))
@@ -151,12 +150,10 @@
         true-selector (expr.meta/->metadata-selector '(= boolean-or-int true) '{boolean-or-int :bool} {})
         trie-obj-key (trie/->table-trie-obj-key "xt_docs" (trie/->trie-key 0 0 2))]
 
-    (util/with-open [arrow-tries (trie/open-arrow-trie-files buffer-pool [{:trie-file trie-obj-key}])]
-      (let [{:keys [^IntPredicate page-idx-pred] :as res}
-            (first (meta/matching-tries metadata-mgr [{:trie-file trie-obj-key}] arrow-tries true-selector))]
-        (t/is (= {:table-trie {:trie-file trie-obj-key},
-                  :col-names
-                  #{"xt$iid" "xt$valid_to" "xt$valid_from" "xt$id" "xt$system_from" "boolean_or_int"}}
-                 (select-keys res [:table-trie :col-names])))
+    (util/with-open [arrow-trie (trie/open-arrow-trie-file buffer-pool {:trie-file trie-obj-key})]
+      (let [table-metadata (.tableMetadata metadata-mgr (:trie-rdr arrow-trie) trie-obj-key)
+            page-idx-pred (.build true-selector table-metadata)]
+        (t/is (= #{"xt$iid" "xt$valid_to" "xt$valid_from" "xt$id" "xt$system_from" "boolean_or_int"}
+                 (.columnNames table-metadata)))
 
         (t/is (true? (.test page-idx-pred 0)))))))

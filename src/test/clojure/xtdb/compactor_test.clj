@@ -12,10 +12,9 @@
 
 (t/deftest test-compaction-jobs
   (letfn [(f [table-tries]
-            (->> (c/compaction-jobs "foo"
-                                    (for [[level rf rt] table-tries]
-                                      {:level level, :row-from rf, :row-to rt}))
-                 #_(mapv (juxt :level :row-from :row-to))))]
+            (c/compaction-jobs "foo"
+                               (for [[level rf rt] table-tries]
+                                 {:level level, :row-from rf, :row-to rt})))]
     (t/is (= [] (f [])))
 
     (t/is (= []
@@ -72,12 +71,10 @@
                     [{:xt/id "foo", :v 2}
                      {:xt/id "bar", :v 2}])
 
-      (c/merge-tries! tu/*allocator* [(tu/->live-leaf-loader lt0)
-                                      (tu/->live-leaf-loader lt1)]
-                      leaf-out-ch trie-out-ch
-                      {:path (byte-array [])
-                       :node [:leaf [{:node (.rootNode (.compactLogs (li/live-trie lt0)))}
-                                     {:node (.rootNode (.compactLogs (li/live-trie lt1)))}]]}))
+      (c/merge-tries! tu/*allocator*
+                      [(.compactLogs (li/live-trie lt0)) (.compactLogs (li/live-trie lt1))]
+                      [(tu/->live-leaf-loader lt0) (tu/->live-leaf-loader lt1)]
+                      leaf-out-ch trie-out-ch))
 
     (tj/check-json expected-dir tmp-dir)))
 

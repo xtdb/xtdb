@@ -10,13 +10,13 @@
             [xtdb.vector.reader :as vr]
             [xtdb.vector.writer :as vw])
   (:import (java.lang AutoCloseable)
-           (java.util.function IntPredicate)
+           [java.util LinkedList]
            [org.apache.arrow.memory BufferAllocator]
            [org.apache.arrow.memory.util ArrowBufPointer]
            org.apache.arrow.vector.types.pojo.Field
            org.apache.arrow.vector.VectorSchemaRoot
            xtdb.buffer_pool.IBufferPool
-           (xtdb.metadata IMetadataManager IMetadataPredicate)
+           (xtdb.metadata IMetadataManager)
            xtdb.object_store.ObjectStore
            (xtdb.trie CompactorLeafPointer ILeafLoader LiveHashTrie)
            xtdb.util.WritableByteBufferChannel))
@@ -34,8 +34,9 @@
                                    types/field->col-type))
                              (apply types/merge-col-types))))
 
-(defn merge-tries! [^BufferAllocator allocator, leaves, leaf-out-ch, trie-out-ch, merge-plan]
-  (let [log-leaf-schema (->log-leaf-schema leaves)]
+(defn merge-tries! [^BufferAllocator allocator, tries, leaf-loaders, leaf-out-ch, trie-out-ch]
+  (let [log-leaf-schema (->log-leaf-schema leaf-loaders)]
+
     (util/with-open [trie-wtr (trie/open-trie-writer allocator log-leaf-schema
                                                      leaf-out-ch trie-out-ch)
 
@@ -43,12 +44,11 @@
 
       (let [leaf-wtr (vw/root->writer leaf-root)
             is-valid-ptr (ArrowBufPointer.)]
-        (letfn [(merge-tries* [{:keys [path], [node-tag node-arg] :node}]
-                  (case node-tag
-                    :branch (let [idxs (mapv merge-tries* node-arg)]
-                              (.writeBranch trie-wtr (int-array idxs)))
+        (letfn [(merge-nodes! [path [mn-tag mn-arg]]
+                  (case mn-tag
+                    :branch (.writeBranch trie-wtr (int-array mn-arg))
 
-                    :leaf (let [loaded-leaves (trie/load-leaves leaves {:leaves node-arg})
+                    :leaf (let [loaded-leaves (trie/load-leaves leaf-loaders mn-arg)
                                 merge-q (trie/->merge-queue)]
 
                             (doseq [leaf-rdr loaded-leaves
@@ -73,29 +73,24 @@
                                   (.clear leaf-wtr)
                                   pos))))))]
 
-          (merge-tries* merge-plan)
-
+          (trie/postwalk-merge-tries tries merge-nodes!)
           (.end trie-wtr))))))
 
-(defn exec-compaction-job! [^BufferAllocator allocator, ^ObjectStore obj-store, ^IMetadataManager metadata-mgr, ^IBufferPool buffer-pool,
+(defn exec-compaction-job! [^BufferAllocator allocator, ^ObjectStore obj-store, ^IBufferPool buffer-pool,
                             {:keys [table-name table-tries out-trie-key]}]
   (try
     (log/infof "compacting '%s' '%s' -> '%s'..." table-name (mapv :trie-key table-tries) out-trie-key)
-    (util/with-open [arrow-tries (trie/open-arrow-trie-files buffer-pool table-tries)
-                     leaves (trie/open-leaves buffer-pool table-name table-tries nil)
+    (util/with-open [arrow-tries (LinkedList.)
+                     leaf-loaders (trie/open-leaves buffer-pool table-name table-tries nil)
                      leaf-out-bb (WritableByteBufferChannel/open)
                      trie-out-bb (WritableByteBufferChannel/open)]
+      (doseq [table-trie table-tries]
+        (.add arrow-tries (trie/open-arrow-trie-file buffer-pool table-trie)))
 
-      (merge-tries! allocator leaves
-                    (.getChannel leaf-out-bb) (.getChannel trie-out-bb)
-                    (trie/table-merge-plan (constantly true)
-                                           (meta/matching-tries metadata-mgr table-tries arrow-tries
-                                                                (reify IMetadataPredicate
-                                                                  (build [_ _table-metadata]
-                                                                    (reify IntPredicate
-                                                                      (test [_ _page-idx]
-                                                                        true)))))
-                                           nil))
+      (merge-tries! allocator
+                    (mapv :trie arrow-tries)
+                    leaf-loaders
+                    (.getChannel leaf-out-bb) (.getChannel trie-out-bb))
 
       (log/debugf "uploading '%s' '%s'..." table-name out-trie-key)
 
@@ -123,11 +118,10 @@
 (defmethod ig/prep-key :xtdb/compactor [_ opts]
   (into {:allocator (ig/ref :xtdb/allocator)
          :obj-store (ig/ref :xtdb/object-store)
-         :buffer-pool (ig/ref :xtdb.buffer-pool/buffer-pool)
-         :metadata-mgr (ig/ref :xtdb.metadata/metadata-manager)}
+         :buffer-pool (ig/ref :xtdb.buffer-pool/buffer-pool)}
         opts))
 
-(defmethod ig/init-key :xtdb/compactor [_ {:keys [allocator ^ObjectStore obj-store metadata-mgr buffer-pool]}]
+(defmethod ig/init-key :xtdb/compactor [_ {:keys [allocator ^ObjectStore obj-store buffer-pool]}]
   (util/with-close-on-catch [allocator (util/->child-allocator allocator "compactor")]
     (reify ICompactor
       (compactAll [_]
@@ -142,7 +136,7 @@
                 jobs? (boolean (seq jobs))]
 
             (doseq [job jobs]
-              (exec-compaction-job! allocator obj-store metadata-mgr buffer-pool job))
+              (exec-compaction-job! allocator obj-store buffer-pool job))
 
             (when jobs?
               (recur)))))

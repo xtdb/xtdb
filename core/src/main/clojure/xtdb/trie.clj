@@ -13,16 +13,15 @@
            java.security.MessageDigest
            (java.util ArrayList Arrays List PriorityQueue)
            (java.util.concurrent.atomic AtomicInteger)
-           (java.util.function IntConsumer IntPredicate Supplier)
+           (java.util.function IntConsumer Supplier)
            (org.apache.arrow.memory ArrowBuf BufferAllocator)
            (org.apache.arrow.vector VectorLoader VectorSchemaRoot)
            [org.apache.arrow.vector.ipc ArrowFileWriter]
            (org.apache.arrow.vector.types.pojo ArrowType$Union Schema)
            org.apache.arrow.vector.types.UnionMode
-           (org.roaringbitmap.buffer MutableRoaringBitmap)
            xtdb.buffer_pool.IBufferPool
            (xtdb.object_store ObjectStore)
-           (xtdb.trie ArrowHashTrie$Leaf HashTrie HashTrie$Node ILeafRow LiveHashTrie LiveHashTrie$Leaf)
+           (xtdb.trie ArrowHashTrie ArrowHashTrie$Leaf HashTrie HashTrie$Node ILeafRow LiveHashTrie LiveHashTrie$Leaf)
            (xtdb.util WritableByteBufferChannel)
            (xtdb.vector IVectorReader RelationReader)
            xtdb.watermark.ILiveTableWatermark))
@@ -221,7 +220,7 @@
         (fn [_]
           (.putObject obj-store (->table-trie-obj-key table-name trie-key) trie-buf)))))
 
-(defn- parse-trie-filename [file-name]
+(defn parse-trie-filename [file-name]
   (when-let [[_ table-name trie-key level-str row-from-str row-to-str] (re-find #"tables/(.+)/log-tries/trie-(l(\p{XDigit}+)-cf(\p{XDigit}+)-ct(\p{XDigit}+)+?)\.arrow$" file-name)]
     {:table-name table-name
      :trie-file file-name
@@ -250,91 +249,56 @@
   (->> (sort (.listObjects obj-store (format "tables/%s/log-tries" table-name)))
        (into [] (keep parse-trie-filename))))
 
-(defn ->merge-plan
-  "Returns a tree of the tasks required to merge the given tries
+(defn postwalk-merge-tries
+  "Post-walks the merged tries, passing the nodes from each of the tries to the given fn.
+   e.g. for a leaf: passes the trie-nodes to the fn, returns the result.
+        for a branch: passes a vector the return values of the postwalk fn
+                      for the inner nodes, for the fn to combine
 
-  tries :: vector of tries
-  path-pred :: [path] -> boolean
-  page-idx-pred :: [ordinal page-idx] -> boolean
-  iid-bloom-bitmap-fn :: [ordinal page-idx] -> ImmutableRoaringBitmap"
-  [trie-matches, path-pred, page-idx-preds, iid-bloom-bitmap-fns]
+   Returns the value returned from the postwalk fn for the root node.
 
-  (letfn [(->merge-plan* [nodes path]
-            (let [ba-path (byte-array path)]
-              (when (path-pred ba-path)
-                (let [trie-children (mapv #(some-> ^HashTrie$Node % (.children)) nodes)]
-                  (if-let [^objects first-children (some identity trie-children)]
-                    (let [branches (->> (range (alength first-children))
-                                        (mapv (fn [bucket-idx]
-                                                (->merge-plan* (mapv (fn [node ^objects node-children]
-                                                                       (if node-children
-                                                                         (aget node-children bucket-idx)
-                                                                         node))
-                                                                     nodes trie-children)
-                                                               (conj path bucket-idx)))))]
-                      (when-not (every? nil? branches)
-                        {:path ba-path
-                         :node [:branch branches]}))
+  tries :: [HashTrie]
 
-                    (let [^MutableRoaringBitmap cumulative-iid-bitmap (MutableRoaringBitmap.)]
-                      (loop [ordinal 0
-                             [node & more-nodes] nodes
-                             node-taken? false
-                             leaves []]
-                        (cond
-                          (not (< ordinal (count nodes))) (when node-taken?
-                                                            {:path ba-path
-                                                             :node [:leaf leaves]})
-                          node (condp = (class node)
-                                 ArrowHashTrie$Leaf
-                                 (let [page-idx (.getPageIndex ^ArrowHashTrie$Leaf node)
-                                       take-node? (.test ^IntPredicate (nth page-idx-preds ordinal) page-idx)
-                                       iid-bloom-bitmap-fn (nth iid-bloom-bitmap-fns ordinal)
-                                       {:keys [table-name, trie-key]} (:table-trie (nth trie-matches ordinal))]
-                                   (when take-node?
-                                     (.or cumulative-iid-bitmap (iid-bloom-bitmap-fn page-idx)))
-                                   (recur (inc ordinal) more-nodes (or node-taken? take-node?)
-                                          (conj leaves (when (or take-node?
-                                                                 (when node-taken?
-                                                                   (when-let [iid-bitmap (iid-bloom-bitmap-fn page-idx)]
-                                                                     (MutableRoaringBitmap/intersects cumulative-iid-bitmap iid-bitmap))))
-                                                         {:page-idx page-idx
-                                                          :trie-leaf-file (->table-leaf-obj-key table-name trie-key)}))))
-                                 LiveHashTrie$Leaf
-                                 (recur (inc ordinal) more-nodes true
-                                        (conj leaves {:node node,
-                                                      :rel-rdr (:rel-rdr (nth trie-matches ordinal))})))
+  f :: path, merge-node -> ret
+    where
+    merge-node :: [:branch [ret]]
+                | [:leaf [HashTrie$Node]]"
+  [tries f]
 
-                          :else (recur (inc ordinal) more-nodes node-taken? (conj leaves nil))))))))))]
+  (letfn [(postwalk* [nodes path-vec]
+            (let [trie-children (mapv #(some-> ^HashTrie$Node % (.children)) nodes)
+                  path (byte-array path-vec)]
+              (f path
+                 (if-let [^objects first-children (some identity trie-children)]
+                   [:branch (lazy-seq
+                             (->> (range (alength first-children))
+                                  (mapv (fn [bucket-idx]
+                                          (postwalk* (mapv (fn [node ^objects node-children]
+                                                             (if node-children
+                                                               (aget node-children bucket-idx)
+                                                               node))
+                                                           nodes trie-children)
+                                                     (conj path-vec bucket-idx))))))]
 
-    (->merge-plan* (mapv (fn [{:keys [^HashTrie trie]}] (some-> trie .rootNode)) trie-matches) [])))
+                   [:leaf nodes]))))]
 
-(defrecord ArrowTrie [^ArrowBuf buf, ^VectorSchemaRoot root]
+    (postwalk* (mapv (fn [^HashTrie trie]
+                       (some-> trie .rootNode))
+                     tries)
+               [])))
+
+(defrecord ArrowTrie [table-trie, ^HashTrie trie, ^ArrowBuf buf, ^RelationReader trie-rdr]
   AutoCloseable
   (close [_]
-    (util/close root)
+    (util/close trie-rdr)
     (util/close buf)))
 
-(defn open-arrow-trie-files [^IBufferPool buffer-pool table-tries]
-  (util/with-close-on-catch [arrow-bufs (ArrayList. (count table-tries))
-                             roots (ArrayList. (count table-tries))]
-    (doseq [{:keys [trie-file]} table-tries]
-      (let [^ArrowBuf buf @(.getBuffer buffer-pool trie-file)]
-        (.add arrow-bufs buf)
-        (let [{:keys [^VectorLoader loader root arrow-blocks]} (util/read-arrow-buf buf)]
-          (with-open [record-batch (util/->arrow-record-batch-view (first arrow-blocks) buf)]
-            (.load loader record-batch)
-            (.add roots root)))))
-    (mapv ->ArrowTrie arrow-bufs roots)))
-
-(defn table-merge-plan [path-pred, trie-matches, ^ILiveTableWatermark live-table-wm]
-  (let [tries (cond-> trie-matches
-                live-table-wm (conj {:trie (.compactLogs (.liveTrie live-table-wm))
-                                     :rel-rdr (.liveRelation live-table-wm)}))]
-    (->merge-plan tries
-                  path-pred
-                  (mapv :page-idx-pred tries)
-                  (mapv :iid-bloom-bitmap-fn tries))))
+(defn open-arrow-trie-file [^IBufferPool buffer-pool {:keys [trie-file] :as table-trie}]
+  (util/with-close-on-catch [^ArrowBuf buf @(.getBuffer buffer-pool trie-file)]
+    (let [{:keys [^VectorLoader loader root arrow-blocks]} (util/read-arrow-buf buf)]
+      (with-open [record-batch (util/->arrow-record-batch-view (first arrow-blocks) buf)]
+        (.load loader record-batch)
+        (->ArrowTrie table-trie (ArrowHashTrie/from root) buf (vr/<-root root))))))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (definterface ILeafLoader
@@ -349,12 +313,13 @@
   ILeafLoader
   (getSchema [_] (.getSchema root))
 
-  (loadLeaf [this {:keys [page-idx]}]
-    (when-not (= page-idx current-page-idx)
-      (set! (.current-page-idx this) page-idx)
+  (loadLeaf [this leaf]
+    (let [page-idx (.getPageIndex ^ArrowHashTrie$Leaf leaf)]
+      (when-not (= page-idx current-page-idx)
+        (set! (.current-page-idx this) page-idx)
 
-      (with-open [rb (util/->arrow-record-batch-view (nth arrow-blocks page-idx) buf)]
-        (.load loader rb)))
+        (with-open [rb (util/->arrow-record-batch-view (nth arrow-blocks page-idx) buf)]
+          (.load loader rb))))
 
     (vr/<-root root))
 
@@ -370,7 +335,7 @@
                (.getField rdr))))
 
   (loadLeaf [_ leaf]
-    (.select live-rel (.data ^LiveHashTrie$Leaf (:node leaf))))
+    (.select live-rel (.data ^LiveHashTrie$Leaf leaf)))
 
   AutoCloseable
   (close [_]))
@@ -389,12 +354,16 @@
       (cond-> arrow-leaves
         live-table-wm (conj (->LiveLeafLoader (.liveRelation live-table-wm)))))))
 
-(defn load-leaves [leaf-loaders {:keys [leaves]}]
-  (->> leaves
+(defn load-leaves [leaf-loaders trie-leaves]
+  (->> trie-leaves
        (into [] (map-indexed (fn [ordinal trie-leaf]
                                (when trie-leaf
                                  (let [^ILeafLoader leaf-loader (nth leaf-loaders ordinal)]
-                                   (.loadLeaf leaf-loader trie-leaf))))))))
+                                   (try
+                                     (.loadLeaf leaf-loader trie-leaf)
+                                     (catch Throwable t
+                                       (prn trie-leaf)
+                                       (throw t))))))))))
 
 (defn ->merge-queue ^java.util.PriorityQueue []
   (PriorityQueue. (ILeafRow/comparator)))

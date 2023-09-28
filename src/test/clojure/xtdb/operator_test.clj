@@ -11,9 +11,16 @@
   (:import (java.time LocalTime)
            (java.util.function IntPredicate)
            (xtdb.buffer_pool IBufferPool)
-           (xtdb.metadata IMetadataManager)))
+           (xtdb.metadata IMetadataManager ITableMetadata)))
 
 (t/use-fixtures :once tu/with-allocator)
+
+(defn with-table-metadata [node trie-file f]
+  (let [^IBufferPool buffer-pool (tu/component node ::bp/buffer-pool)
+        ^IMetadataManager metadata-mgr (tu/component node ::meta/metadata-manager)
+        table-trie (trie/parse-trie-filename trie-file)]
+    (util/with-open [arrow-trie (trie/open-arrow-trie-file buffer-pool table-trie)]
+      (f (.tableMetadata metadata-mgr (:trie-rdr arrow-trie) trie-file)))))
 
 (t/deftest test-find-gt-ivan
   (with-open [node (node/start-node {:xtdb/indexer {:rows-per-chunk 10}})]
@@ -44,22 +51,19 @@
 
           (t/is (= #{0 2} (set (keys (.chunksMetadata metadata-mgr)))))
 
-          (let [trie-files [(trie/->table-trie-obj-key "xt_docs" (trie/->trie-key 0 0 2))
-                            (trie/->table-trie-obj-key "xt_docs" (trie/->trie-key 0 2 8))]
-                table-tries (mapv #'trie/parse-trie-filename trie-files)]
-            (util/with-open [arrow-tries (trie/open-arrow-trie-files buffer-pool table-tries)]
-              (t/testing "only needs to scan chunk 1, page 1"
+          (util/with-open [params (tu/open-params {'?name "Ivan"})]
+            (t/testing "only needs to scan chunk 1, page 1"
+              (let [lit-sel (expr.meta/->metadata-selector '(> name "Ivan") '{name :utf8} {})
+                    param-sel (expr.meta/->metadata-selector '(> name ?name) '{name :utf8} params)]
+                (with-table-metadata node (trie/->table-trie-obj-key "xt_docs" (trie/->trie-key 0 0 2))
+                  (fn [^ITableMetadata table-metadata]
+                    (t/is (false? (.test (.build lit-sel table-metadata) 0)))
+                    (t/is (false? (.test (.build param-sel table-metadata) 0)))))
 
-                (let [trie-matches (meta/matching-tries metadata-mgr table-tries arrow-tries
-                                                        (expr.meta/->metadata-selector '(> name "Ivan") '{name :utf8} {}))]
-                  (t/is (false? (.test ^IntPredicate (:page-idx-pred (first trie-matches)) 0)))
-                  (t/is (true? (.test ^IntPredicate (:page-idx-pred (second trie-matches)) 0))))
-
-                (with-open [params (tu/open-params {'?name "Ivan"})]
-                  (let [trie-matches (meta/matching-tries metadata-mgr table-tries arrow-tries
-                                                          (expr.meta/->metadata-selector '(> name ?name) '{name :utf8} params))]
-                    (t/is (false? (.test ^IntPredicate (:page-idx-pred (first trie-matches)) 0)))
-                    (t/is (true? (.test ^IntPredicate (:page-idx-pred (second trie-matches)) 0))))))))
+                (with-table-metadata node (trie/->table-trie-obj-key "xt_docs" (trie/->trie-key 0 2 8))
+                  (fn [^ITableMetadata table-metadata]
+                    (t/is (true? (.test (.build lit-sel table-metadata) 0)))
+                    (t/is (true? (.test (.build param-sel table-metadata) 0))))))))
 
           (let [tx2 (xt/submit-tx node [[:put :xt_docs {:name "Jeremy", :xt/id :jdt}]])]
 
@@ -93,19 +97,19 @@
       (let [trie-files [(trie/->table-trie-obj-key "xt_docs" (trie/->trie-key 0 0 4))
                         (trie/->table-trie-obj-key "xt_docs" (trie/->trie-key 0 4 7))]
             table-tries (mapv #'trie/parse-trie-filename trie-files)]
-        (util/with-open [arrow-tries (trie/open-arrow-trie-files buffer-pool table-tries)]
-          (t/testing "only needs to scan chunk 1, page 1"
+        (t/testing "only needs to scan chunk 1, page 1"
+          (util/with-open [params (tu/open-params {'?name "Ivan"})]
+            (let [lit-sel (expr.meta/->metadata-selector '(= name "Ivan") '{name :utf8} {})
+                  param-sel (expr.meta/->metadata-selector '(= name ?name) '{name :utf8} params)]
+              (with-table-metadata node (trie/->table-trie-obj-key "xt_docs" (trie/->trie-key 0 0 4))
+                (fn [^ITableMetadata table-metadata]
+                  (t/is (true? (.test (.build lit-sel table-metadata) 0)))
+                  (t/is (true? (.test (.build param-sel table-metadata) 0)))))
 
-            (let [trie-matches (meta/matching-tries metadata-mgr table-tries arrow-tries
-                                                    (expr.meta/->metadata-selector '(= name "Ivan") '{name :utf8} {}))]
-              (t/is (true? (.test ^IntPredicate (:page-idx-pred (first trie-matches)) 0)))
-              (t/is (false? (.test ^IntPredicate (:page-idx-pred (second trie-matches)) 0))))
-
-            (with-open [params (tu/open-params {'?name "Ivan"})]
-              (let [trie-matches (meta/matching-tries metadata-mgr table-tries arrow-tries
-                                                      (expr.meta/->metadata-selector '(= name ?name) '{name :utf8} params))]
-                (t/is (true? (.test ^IntPredicate (:page-idx-pred (first trie-matches)) 0)))
-                (t/is (false? (.test ^IntPredicate (:page-idx-pred (second trie-matches)) 0))))))))
+              (with-table-metadata node (trie/->table-trie-obj-key "xt_docs" (trie/->trie-key 0 4 7))
+                (fn [^ITableMetadata table-metadata]
+                  (t/is (false? (.test (.build lit-sel table-metadata) 0)))
+                  (t/is (false? (.test (.build param-sel table-metadata) 0)))))))))
 
       (t/is (= #{{:name "Ivan"}}
                (set (tu/query-ra '[:scan {:table xt_docs} [{name (= name "Ivan")}]]

@@ -181,7 +181,7 @@
 
       (util/lru-memoize)))
 
-(defn ->metadata-selector [form col-types params]
+(defn ->metadata-selector ^xtdb.metadata.IMetadataPredicate [form col-types params]
   (let [param-types (expr/->param-types params)
         {:keys [expr f]} (compile-meta-expr (expr/form->expr form {:param-types param-types,
                                                                    :col-types col-types})
