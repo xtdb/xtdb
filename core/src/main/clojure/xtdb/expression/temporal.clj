@@ -1053,26 +1053,24 @@
   (and (= (from p1) (from p2))
        (> (to p1) (to p2))))
 
-(doseq [[pred-name pred-sym] [[:contains? ::temporal-contains?]
-                              [:strictly-contains? ::temporal-strictly-contains?]
-                              [:overlaps? ::overlaps?]
-                              [:strictly-overlaps? ::strictly-overlaps?]
-                              [:equals? ::equals?]
-                              [:precedes? ::precedes?]
-                              [:strictly-precedes? ::strictly-precedes?]
-                              [:immediately-precedes? ::immediately-precedes?]
-                              [:succeeds? ::succeeds?]
-                              [:strictly-succeeds? ::strictly-succeeds?]
-                              [:immediately-succeeds? ::immediately-succeeds?]
-                              [:leads? ::leads?]
-                              [:strictly-leads? ::strictly-leads?]
-                              [:immediately-leads? ::immediately-leads?]
-                              [:lags? ::lags?]
-                              [:strictly-lags? ::strictly-lags?]
-                              [:immediately-lags? ::immediately-lags?]]]
+(doseq [[pred-name pred-sym] [[:contains? `temporal-contains?]
+                              [:strictly-contains? `temporal-strictly-contains?]
+                              [:overlaps? `overlaps?]
+                              [:strictly-overlaps? `strictly-overlaps?]
+                              [:equals? `equals?]
+                              [:precedes? `precedes?]
+                              [:strictly-precedes? `strictly-precedes?]
+                              [:immediately-precedes? `immediately-precedes?]
+                              [:succeeds? `succeeds?]
+                              [:strictly-succeeds? `strictly-succeeds?]
+                              [:immediately-succeeds? `immediately-succeeds?]
+                              [:leads? `leads?]
+                              [:strictly-leads? `strictly-leads?]
+                              [:immediately-leads? `immediately-leads?]
+                              [:lags? `lags?]
+                              [:strictly-lags? `strictly-lags?]
+                              [:immediately-lags? `immediately-lags?]]]
   (defmethod expr/codegen-call [pred-name :struct :struct] [_]
     {:return-type :bool
      :->call-code (fn [[p1-code p2-code]]
-                    `(~(symbol pred-sym) ~p1-code ~p2-code))}))
-
-
+                    `(~pred-sym ~p1-code ~p2-code))}))
