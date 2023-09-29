@@ -359,11 +359,7 @@
        (into [] (map-indexed (fn [ordinal trie-leaf]
                                (when trie-leaf
                                  (let [^ILeafLoader leaf-loader (nth leaf-loaders ordinal)]
-                                   (try
-                                     (.loadLeaf leaf-loader trie-leaf)
-                                     (catch Throwable t
-                                       (prn trie-leaf)
-                                       (throw t))))))))))
+                                   (.loadLeaf leaf-loader trie-leaf))))))))
 
 (defn ->merge-queue ^java.util.PriorityQueue []
   (PriorityQueue. (ILeafRow/comparator)))
