@@ -2,7 +2,6 @@
   (:require [clojure.tools.logging :as log]
             [juxt.clojars-mirrors.integrant.core :as ig]
             xtdb.buffer-pool
-            [xtdb.metadata :as meta]
             xtdb.object-store
             [xtdb.trie :as trie]
             [xtdb.types :as types]
@@ -16,7 +15,6 @@
            org.apache.arrow.vector.types.pojo.Field
            org.apache.arrow.vector.VectorSchemaRoot
            xtdb.buffer_pool.IBufferPool
-           (xtdb.metadata IMetadataManager)
            xtdb.object_store.ObjectStore
            (xtdb.trie CompactorLeafPointer ILeafLoader LiveHashTrie)
            xtdb.util.WritableByteBufferChannel))
