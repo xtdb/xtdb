@@ -8,7 +8,7 @@ import java.util.stream.Stream;
 
 public interface HashTrie<N extends HashTrie.Node<N>> {
 
-    int LEVEL_BITS = 4;
+    int LEVEL_BITS = 2;
     int LEVEL_WIDTH = 1 << LEVEL_BITS;
     int LEVEL_MASK = LEVEL_WIDTH - 1;
 

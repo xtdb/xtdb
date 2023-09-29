@@ -372,7 +372,12 @@
   (trie/->LiveLeafLoader (vw/rel-wtr->rdr (li/live-rel live-table))))
 
 (defn byte-buffer->path [^java.nio.ByteBuffer bb]
-  (mapcat (fn [b] [(mod (bit-shift-right b 4) 16) (mod (bit-and b (dec (bit-shift-left 1 4))) 16)]) (.array bb)))
+  (mapcat (fn [b]
+            [(bit-and (bit-shift-right b 6) 3)
+             (bit-and (bit-shift-right b 4) 3)
+             (bit-and (bit-shift-right b 2) 3)
+             (bit-and b 3)])
+          (.array bb)))
 
 (defn uuid-seq [n]
   (letfn [(new-uuid [n]

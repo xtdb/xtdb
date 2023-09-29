@@ -83,13 +83,14 @@
                 iid-vec (doto ^FixedSizeBinaryVector (FixedSizeBinaryVector. "iid" allocator 16)
                           (.setSafe 0 (util/uuid->bytes uuid1))
                           (.setValueCount 1))]
-      (t/is (= [0xc 0xe 0x3 0x3 0xe 0x4 0xb 0x8
-                0xe 0xc 0x2 0xf 0x4 0xb 0x8 0x0]
+      (t/is (= [3 0 3 2 0 3 0 3 3 2 1 0 2 3 2 0]
                (for [x (range 16)]
                  (HashTrie/bucketFor (.getDataPointer iid-vec 0) x))))
 
-      (t/is (= 0x9 (HashTrie/bucketFor (.getDataPointer iid-vec 0) 18)))
-      (t/is (= 0xb (HashTrie/bucketFor (.getDataPointer iid-vec 0) 30))))))
+      (t/is (= 3 (HashTrie/bucketFor (.getDataPointer iid-vec 0) 18)))
+      (t/is (= 0 (HashTrie/bucketFor (.getDataPointer iid-vec 0) 30)))
+      (t/is (= 3 (HashTrie/bucketFor (.getDataPointer iid-vec 0) 63)))
+      (t/is (= 0 (HashTrie/bucketFor (.getDataPointer iid-vec 0) 104))))))
 
 (def txs
   [[[:put :hello {:xt/id #uuid "cb8815ee-85f7-4c61-a803-2ea1c949cf8d" :a 1}]

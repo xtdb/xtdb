@@ -22,9 +22,12 @@
   (Arrays/equals
     (util/uuid->bytes uuid)
     (byte-array
-      (map (fn [[x y]]
-             (bit-or (bit-shift-left x 4) y))
-           (partition-all 2 (vec path))))))
+      (map (fn [[p0 p1 p2 p3]]
+             (-> p3
+                 (bit-or (bit-shift-left p2 2))
+                 (bit-or (bit-shift-left p1 4))
+                 (bit-or (bit-shift-left p0 6))))
+           (partition-all 4 (vec path))))))
 
 (deftest test-live-trie-can-overflow-log-limit-at-max-depth
   (binding [*print-length* 100]

@@ -10,7 +10,7 @@ public record LiveHashTrie(Node rootNode, IVectorReader iidReader) implements Ha
 
     private static final int LOG_LIMIT = 64;
     private static final int PAGE_LIMIT = 1024;
-    private static final int MAX_LEVEL = 32;
+    private static final int MAX_LEVEL = 64;
 
     public sealed interface Node extends HashTrie.Node<Node> {
         Node add(LiveHashTrie trie, int idx);
