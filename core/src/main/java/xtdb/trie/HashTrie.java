@@ -36,11 +36,12 @@ public interface HashTrie<N extends HashTrie.Node<N>> {
     }
 
     static byte bucketFor(ArrowBufPointer pointer, int level) {
-        int levelOffsetBits = LEVEL_BITS * (level + 1);
-        int levelOffsetBytes = (levelOffsetBits - LEVEL_BITS) / Byte.SIZE;
+        int bitIdx = level * LEVEL_BITS;
+        int byteIdx = bitIdx / Byte.SIZE;
+        int bitOffset = bitIdx % Byte.SIZE;
 
-        byte b = pointer.getBuf().getByte(pointer.getOffset() + levelOffsetBytes);
-        return (byte) ((b >>> (levelOffsetBits % Byte.SIZE)) & LEVEL_MASK);
+        byte b = pointer.getBuf().getByte(pointer.getOffset() + byteIdx);
+        return (byte) ((b >>> ((Byte.SIZE - LEVEL_BITS) - bitOffset)) & LEVEL_MASK);
     }
 
     static int compareToPath(ArrowBufPointer pointer, byte[] path) {
