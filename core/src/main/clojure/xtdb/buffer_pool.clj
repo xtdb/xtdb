@@ -24,12 +24,9 @@
 
 (defn- retain [^ArrowBuf buf] (.retain (.getReferenceManager buf)) buf)
 
-(defn- cache-get ^ArrowBuf [^Map buffers ^StampedLock buffers-lock k]
-  (let [stamp (.readLock buffers-lock)]
-    (try
-      (some-> (.get buffers k) retain)
-      (finally
-        (.unlock buffers-lock stamp)))))
+(defn- cache-get ^ArrowBuf [^Map buffers k]
+  (locking buffers
+    (some-> (.get buffers k) retain)))
 
 (def ^AtomicLong cache-miss-byte-counter (AtomicLong.))
 (def ^AtomicLong cache-hit-byte-counter (AtomicLong.))
@@ -52,24 +49,19 @@
 (defn- cache-compute
   "Returns a pair [hit-or-miss, buf] computing the cached ArrowBuf from (f) if needed.
   `hit-or-miss` is true if the buffer was found, false if the object was added as part of this call."
-  [^Map buffers ^StampedLock buffers-lock k f]
-  (let [stamp (.writeLock buffers-lock)
-        hit (.containsKey ^Map buffers k)]
-    (try
-      (let [arrow-buf (if hit (.get buffers k) (let [buf (f)] (.put buffers k buf) buf))]
-        (if hit (record-cache-hit arrow-buf) (record-cache-miss arrow-buf))
-        [hit (retain arrow-buf)])
-      (finally
-        (.unlock buffers-lock stamp)))))
+  [^Map buffers k f]
+  (locking buffers
+    (let [hit (.containsKey ^Map buffers k)
+          arrow-buf (if hit (.get buffers k) (let [buf (f)] (.put buffers k buf) buf))]
+      (if hit (record-cache-hit arrow-buf) (record-cache-miss arrow-buf))
+      [hit (retain arrow-buf)])))
 
-
-(deftype BufferPool [^BufferAllocator allocator ^ObjectStore object-store ^Map buffers ^StampedLock buffers-lock
-                     ^Path cache-path]
+(deftype BufferPool [^BufferAllocator allocator ^ObjectStore object-store ^Map buffers ^Path cache-path]
   IBufferPool
   (getBuffer [_ k]
     (if (nil? k)
       (CompletableFuture/completedFuture nil)
-      (let [cached-buffer (cache-get buffers buffers-lock k)]
+      (let [cached-buffer (cache-get buffers k)]
         (cond
           cached-buffer
           (do
@@ -86,7 +78,7 @@
                       (try
                         (let [nio-buffer (util/->mmap-path buffer-path)
                               create-arrow-buf #(util/->arrow-buf-view allocator nio-buffer cleanup-file)
-                              [hit buf] (cache-compute buffers buffers-lock k create-arrow-buf)]
+                              [hit buf] (cache-compute buffers k create-arrow-buf)]
                           (when hit (cleanup-file))
                           buf)
                         (catch Throwable t
@@ -100,17 +92,17 @@
                   (fn [nio-buffer]
                     (record-io-wait start-ns)
                     (let [create-arrow-buf #(util/->arrow-buf-view allocator nio-buffer)
-                          [_ buf] (cache-compute buffers buffers-lock k create-arrow-buf)]
+                          [_ buf] (cache-compute buffers k create-arrow-buf)]
                       buf)))))))))
 
   (getRangeBuffer [_ k start len]
     (object-store/ensure-shared-range-oob-behaviour start len)
     (if (nil? k)
       (CompletableFuture/completedFuture nil)
-      (let [cached-full-buffer (cache-get buffers buffers-lock k)
+      (let [cached-full-buffer (cache-get buffers k)
 
             cached-buffer
-            (or (cache-get buffers buffers-lock [k start len])
+            (or (cache-get buffers [k start len])
                 (when ^ArrowBuf cached-full-buffer
                   (.slice cached-full-buffer start len)))]
 
@@ -124,30 +116,24 @@
                   (fn [nio-buffer]
                     (record-io-wait start-ns)
                     (let [create-arrow-buf #(util/->arrow-buf-view allocator nio-buffer)
-                          [_ buf] (cache-compute buffers buffers-lock [k start len] create-arrow-buf)]
+                          [_ buf] (cache-compute buffers [k start len] create-arrow-buf)]
                       buf)))))))))
 
   (evictBuffer [_ k]
-    (if-let [buffer (let [stamp (.writeLock buffers-lock)]
-                      (try
-                        (.remove buffers k)
-                        (finally
-                          (.unlock buffers-lock stamp))))]
+    (if-let [buffer (locking buffers
+                      (.remove buffers k))]
       (do (util/close buffer)
           true)
       false))
 
   Closeable
   (close [_]
-    (let [write-stamp (.writeLock buffers-lock)]
-      (try
-        (let [i (.iterator (.values buffers))]
-          (while (.hasNext i)
-            (util/close (.next i))
-            (.remove i)))
-        (util/close allocator)
-        (finally
-          (.unlock buffers-lock write-stamp))))))
+    (locking buffers
+      (let [i (.iterator (.values buffers))]
+        (while (.hasNext i)
+          (util/close (.next i))
+          (.remove i)))
+      (util/close allocator))))
 
 (defn- ->buffer-cache [^long cache-entries-size ^long cache-bytes-size]
   (ArrowBufLRU. 16 cache-entries-size cache-bytes-size))
@@ -166,8 +152,7 @@
     (util/delete-dir cache-path)
     (util/mkdirs cache-path))
   (util/with-close-on-catch [allocator (util/->child-allocator allocator "buffer-pool")]
-    (->BufferPool  allocator object-store
-                   (->buffer-cache cache-entries-size cache-bytes-size) (StampedLock.) cache-path)))
+    (->BufferPool  allocator object-store (->buffer-cache cache-entries-size cache-bytes-size) cache-path)))
 
 (defmethod ig/halt-key! ::buffer-pool [_ ^BufferPool buffer-pool]
   (.close buffer-pool))
