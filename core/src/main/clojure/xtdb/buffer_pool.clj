@@ -22,10 +22,12 @@
   (^java.util.concurrent.CompletableFuture getRangeBuffer [^String k ^int start ^int len])
   (^boolean evictBuffer [^String k]))
 
+(defn- retain [^ArrowBuf buf] (.retain (.getReferenceManager buf)) buf)
+
 (defn- cache-get ^ArrowBuf [^Map buffers ^StampedLock buffers-lock k]
   (let [stamp (.readLock buffers-lock)]
     (try
-      (.get buffers k)
+      (some-> (.get buffers k) retain)
       (finally
         (.unlock buffers-lock stamp)))))
 
@@ -56,11 +58,10 @@
     (try
       (let [arrow-buf (if hit (.get buffers k) (let [buf (f)] (.put buffers k buf) buf))]
         (if hit (record-cache-hit arrow-buf) (record-cache-miss arrow-buf))
-        [hit arrow-buf])
+        [hit (retain arrow-buf)])
       (finally
         (.unlock buffers-lock stamp)))))
 
-(defn- retain [^ArrowBuf buf] (.retain (.getReferenceManager buf)) buf)
 
 (deftype BufferPool [^BufferAllocator allocator ^ObjectStore object-store ^Map buffers ^StampedLock buffers-lock
                      ^Path cache-path]
@@ -73,7 +74,7 @@
           cached-buffer
           (do
             (record-cache-hit cached-buffer)
-            (CompletableFuture/completedFuture (retain cached-buffer)))
+            (CompletableFuture/completedFuture cached-buffer))
 
           cache-path
           (let [start-ns (System/nanoTime)]
@@ -87,7 +88,7 @@
                               create-arrow-buf #(util/->arrow-buf-view allocator nio-buffer cleanup-file)
                               [hit buf] (cache-compute buffers buffers-lock k create-arrow-buf)]
                           (when hit (cleanup-file))
-                          (retain buf))
+                          buf)
                         (catch Throwable t
                           (try (cleanup-file) (catch Throwable t1 (log/error t1 "Error caught cleaning up file during exception handling")))
                           (throw t))))))))
@@ -100,7 +101,7 @@
                     (record-io-wait start-ns)
                     (let [create-arrow-buf #(util/->arrow-buf-view allocator nio-buffer)
                           [_ buf] (cache-compute buffers buffers-lock k create-arrow-buf)]
-                      (retain buf))))))))))
+                      buf)))))))))
 
   (getRangeBuffer [_ k start len]
     (object-store/ensure-shared-range-oob-behaviour start len)
@@ -116,7 +117,7 @@
         (if cached-buffer
           (do
             (record-cache-hit cached-buffer)
-            (CompletableFuture/completedFuture (retain cached-buffer)))
+            (CompletableFuture/completedFuture cached-buffer))
           (let [start-ns (System/nanoTime)]
             (-> (.getObjectRange object-store k start len)
                 (util/then-apply
@@ -124,7 +125,7 @@
                     (record-io-wait start-ns)
                     (let [create-arrow-buf #(util/->arrow-buf-view allocator nio-buffer)
                           [_ buf] (cache-compute buffers buffers-lock [k start len] create-arrow-buf)]
-                      (retain buf))))))))))
+                      buf)))))))))
 
   (evictBuffer [_ k]
     (if-let [buffer (let [stamp (.writeLock buffers-lock)]
@@ -138,15 +139,15 @@
 
   Closeable
   (close [_]
-    (let [stamp (.writeLock buffers-lock)]
+    (let [write-stamp (.writeLock buffers-lock)]
       (try
         (let [i (.iterator (.values buffers))]
           (while (.hasNext i)
             (util/close (.next i))
             (.remove i)))
+        (util/close allocator)
         (finally
-          (.unlock buffers-lock stamp)))
-      (util/close allocator))))
+          (.unlock buffers-lock write-stamp))))))
 
 (defn- ->buffer-cache [^long cache-entries-size ^long cache-bytes-size]
   (ArrowBufLRU. 16 cache-entries-size cache-bytes-size))
@@ -161,8 +162,7 @@
 
 (defmethod ig/init-key ::buffer-pool
   [_ {:keys [^Path cache-path ^BufferAllocator allocator ^ObjectStore object-store ^long cache-entries-size ^long cache-bytes-size]}]
-  (when cache-path
-    (util/delete-dir cache-path)
+  (when (and cache-path (not (util/path-exists cache-path)))
     (util/mkdirs cache-path))
   (util/with-close-on-catch [allocator (util/->child-allocator allocator "buffer-pool")]
     (->BufferPool  allocator object-store
