@@ -10,7 +10,6 @@
            [java.util Map UUID]
            java.util.concurrent.CompletableFuture
            java.util.concurrent.locks.StampedLock
-           java.util.function.BiPredicate
            (java.util.concurrent.atomic AtomicLong)
            [org.apache.arrow.memory ArrowBuf BufferAllocator]
            (org.apache.arrow.vector VectorSchemaRoot)
@@ -55,7 +54,7 @@
   (let [stamp (.writeLock buffers-lock)
         hit (.containsKey ^Map buffers k)]
     (try
-      (let [arrow-buf (.computeIfAbsent buffers k (util/->jfn (fn [_] (f))))]
+      (let [arrow-buf (if hit (.get buffers k) (let [buf (f)] (.put buffers k buf) buf))]
         (if hit (record-cache-hit arrow-buf) (record-cache-miss arrow-buf))
         [hit arrow-buf])
       (finally
