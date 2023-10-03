@@ -9,23 +9,20 @@
             [xtdb.transit :as xt.transit]
             [xtdb.types :as types]
             [xtdb.util :as util]
-            [xtdb.vector.reader :as vr]
             [xtdb.vector.writer :as vw])
-  (:import (clojure.lang IFn)
-           (java.io ByteArrayInputStream ByteArrayOutputStream)
+  (:import (java.io ByteArrayInputStream ByteArrayOutputStream)
            java.lang.AutoCloseable
            java.nio.ByteBuffer
-           (java.util HashMap HashSet Map NavigableMap Set TreeMap)
+           (java.util HashMap HashSet Map NavigableMap TreeMap)
            (java.util.concurrent ConcurrentHashMap)
-           (java.util.function Function IntPredicate)
+           (java.util.function Function)
            (java.util.stream IntStream)
            (org.apache.arrow.memory ArrowBuf)
-           (org.apache.arrow.vector FieldVector VectorSchemaRoot)
+           (org.apache.arrow.vector FieldVector)
            (org.apache.arrow.vector.types.pojo ArrowType$Union)
            xtdb.buffer_pool.IBufferPool
            xtdb.object_store.ObjectStore
-           xtdb.trie.ArrowHashTrie
-           (xtdb.vector IVectorReader IVectorWriter RelationReader)))
+           (xtdb.vector IVectorReader IVectorWriter)))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -45,7 +42,7 @@
 (definterface IMetadataManager
   (^void finishChunk [^long chunkIdx, newChunkMetadata])
   (^java.util.NavigableMap chunksMetadata [])
-  (^xtdb.metadata.ITableMetadata tableMetadata [^xtdb.vector.RelationReader trie-rdr ^String bufKey])
+  (^xtdb.metadata.ITableMetadata tableMetadata [^xtdb.vector.RelationReader metaRelReader, ^String metaFileName])
   (columnTypes [^String tableName])
   (columnType [^String tableName, ^String colName])
   (allColumnTypes []))
@@ -248,7 +245,7 @@
 (defn ->table-metadata-idxs [^IVectorReader metadata-rdr]
   (let [page-idx-cache (HashMap.)
         meta-row-count (.valueCount metadata-rdr)
-        page-idx-rdr (.structKeyReader metadata-rdr "page-idx")
+        data-page-idx-rdr (.structKeyReader metadata-rdr "data-page-idx")
         cols-rdr (.structKeyReader metadata-rdr "columns")
         col-rdr (.listElementReader cols-rdr)
         column-name-rdr (.structKeyReader col-rdr "col-name")
@@ -257,15 +254,15 @@
 
     (dotimes [meta-idx meta-row-count]
       (let [cols-start-idx (.getListStartIndex cols-rdr meta-idx)
-            page-idx (if-let [page-idx (.getObject page-idx-rdr meta-idx)]
-                       page-idx
-                       -1)]
+            data-page-idx (if-let [data-page-idx (.getObject data-page-idx-rdr meta-idx)]
+                            data-page-idx
+                            -1)]
         (dotimes [cols-data-idx (.getListCount cols-rdr meta-idx)]
           (let [cols-data-idx (+ cols-start-idx cols-data-idx)
                 col-name (str (.getObject column-name-rdr cols-data-idx))]
             (.add col-names col-name)
             (when (.getBoolean root-col-rdr cols-data-idx)
-              (.put page-idx-cache [col-name page-idx] cols-data-idx))))))
+              (.put page-idx-cache [col-name data-page-idx] cols-data-idx))))))
 
     {:col-names (into #{} col-names)
      :page-idx-cache page-idx-cache
@@ -273,7 +270,7 @@
                    (cond
                      (>= idx meta-row-count) page-count
                      :else (recur (cond-> page-count
-                                    (not (nil? (.getObject page-idx-rdr idx))) inc)
+                                    (not (nil? (.getObject data-page-idx-rdr idx))) inc)
                                   (inc idx))))}))
 
 (defn ->table-metadata ^xtdb.metadata.ITableMetadata [^IVectorReader metadata-reader, {:keys [col-names page-idx-cache, page-count]}]
@@ -302,11 +299,13 @@
     (set! (.col-types this) (merge-col-types col-types new-chunk-metadata))
     (.put chunks-metadata chunk-idx new-chunk-metadata))
 
-  (tableMetadata [_ trie-rdr buf-key]
-    (let [^IVectorReader metadata-reader (.metadataReader (.typeIdReader (.readerForName trie-rdr "nodes") (byte 2)))]
+  (tableMetadata [_ meta-rel-rdr file-name]
+    (let [^IVectorReader metadata-reader (-> (.readerForName meta-rel-rdr "nodes")
+                                             (.typeIdReader (byte 2))
+                                             (.metadataReader))]
       (->table-metadata metadata-reader
                         (.computeIfAbsent table-metadata-idxs
-                                          buf-key
+                                          file-name
                                           (reify Function
                                             (apply [_ _]
                                               (->table-metadata-idxs metadata-reader)))))))

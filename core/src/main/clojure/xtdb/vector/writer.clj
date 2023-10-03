@@ -953,7 +953,8 @@
 
       (writerForName [_ col-name]
         (or (.get writers col-name)
-            (throw (NullPointerException.))))
+            (throw (NullPointerException.
+                    (pr-str {:writers (keys writers), :col-name col-name})))))
 
       (writerForName [this col-name _col-type]
         (.writerForName this col-name))

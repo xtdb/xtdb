@@ -24,15 +24,15 @@
                       {:path [1], :node [:leaf [nil {:page-idx 2} {:page-idx 0} nil]]}
                       {:path [2], :node [:leaf [nil nil {:page-idx 0} {:page-idx 0}]]}
                       {:path [3], :node [:leaf [nil {:page-idx 3} {:page-idx 0} {:page-idx 1}]]}]]}
-             (trie/postwalk-merge-tries [nil (ArrowHashTrie/from t1-root) (ArrowHashTrie/from log-root) (ArrowHashTrie/from log2-root)]
-                                        (fn [path [mn-tag mn-arg :as merge-node]]
-                                          {:path (vec path)
-                                           :node (case mn-tag
-                                                   :branch merge-node
-                                                   :leaf [:leaf (mapv (fn [^ArrowHashTrie$Leaf leaf]
-                                                                        (when leaf
-                                                                          {:page-idx (.getPageIndex leaf)}))
-                                                                      mn-arg)])}))))
+             (trie/postwalk-merge-plan [nil (ArrowHashTrie/from t1-root) (ArrowHashTrie/from log-root) (ArrowHashTrie/from log2-root)]
+                                       (fn [path [mn-tag mn-arg :as merge-node]]
+                                         {:path (vec path)
+                                          :node (case mn-tag
+                                                  :branch merge-node
+                                                  :leaf [:leaf (mapv (fn [^ArrowHashTrie$Leaf leaf]
+                                                                       (when leaf
+                                                                         {:page-idx (.getDataPageIndex leaf)}))
+                                                                     mn-arg)])}))))
 
     #_ ; TODO -> scan-test
     (t/is (= {:path [],
@@ -55,10 +55,10 @@
           "testing iid fast path case")))
 
 (t/deftest test-selects-current-tries
-  (letfn [(f [table-tries]
-            (->> (trie/current-table-tries (for [[level rf rt] table-tries]
-                                             {:level level, :row-from rf, :row-to rt}))
-                 (mapv (juxt :level :row-from :row-to))))]
+  (letfn [(f [trie-keys]
+            (->> (trie/current-trie-files (for [[level rf nr] trie-keys]
+                                            (trie/->table-meta-file-name "foo" (trie/->log-trie-key level rf nr))))
+                 (mapv (comp (juxt :level :row-from :next-row) trie/parse-trie-file-name))))]
     (t/is (= [] (f [])))
 
     (t/is (= [[0 0 1] [0 1 2] [0 2 3]]

@@ -2,7 +2,6 @@
   (:require [clojure.test :as t]
             [xtdb.api :as xt]
             [xtdb.log :as xt-log]
-            [xtdb.log :as log]
             [xtdb.node :as node]
             [xtdb.test-util :as tu]
             [xtdb.util :as util]
@@ -12,11 +11,9 @@
            (java.util.concurrent Semaphore)
            (org.apache.arrow.memory BufferAllocator)
            (org.apache.arrow.vector.ipc ArrowStreamReader)
-           (xtdb.indexer Indexer)
+           (xtdb.indexer IIndexer)
            (xtdb.log Log)
            (xtdb.object_store ObjectStore)))
-
-(set! *warn-on-reflection* false)
 
 (defonce log-level :error)
 
@@ -85,15 +82,15 @@
      -1)))
 
 (defn node-log [node]
-  (let [log (tu/component node ::log/memory-log)
+  (let [log (tu/component node ::xt-log/memory-log)
         alloc (tu/component node :xtdb/allocator)]
     (log-seq log alloc)))
 
 (defn log-indexed? [node]
-  (let [^Indexer indexer (tu/component node :xtdb/indexer)]
+  (let [^IIndexer indexer (tu/component node :xtdb/indexer)]
     (= (:tx (last (node-log node))) (.latestCompletedTx indexer))))
 
-(defn start-node [flusher-duration & flusher-opts]
+(defn start-node ^java.lang.AutoCloseable [flusher-duration & flusher-opts]
   (node/start-node {:xtdb.stagnant-log-flusher/flusher (apply hash-map :duration flusher-duration flusher-opts)}))
 
 (t/deftest if-log-does-not-get-a-new-msg-in-xx-time-we-submit-a-flush-test
@@ -113,7 +110,7 @@
       (let [[_ _ _ msg4] (node-log node)]
         (let [flush-tx-id (:flush-tx-id msg4)]
           (t/is flush-tx-id)
-          (t/is (= (:tx-id (.latestCompletedChunkTx (tu/component node :xtdb/indexer))) flush-tx-id))))))
+          (t/is (= (:tx-id (.latestCompletedChunkTx ^IIndexer (tu/component node :xtdb/indexer))) flush-tx-id))))))
 
 
   (t/testing "test :duration actually does something"
@@ -166,7 +163,7 @@
 
 (defn chunk-path-seq [node]
   (let [obj (tu/component node :xtdb.object-store/memory-object-store)]
-    (filter #(re-matches #"tables/foo/log-tries/trie(.*)" %) (.listObjects ^ObjectStore obj))))
+    (filter #(re-matches #"tables/foo/meta/log-(.*)" %) (.listObjects ^ObjectStore obj))))
 
 (t/deftest indexer-flushes-block-and-chunk-if-flush-op-test
   (with-open [node (start-node #time/duration "PT0.001S")]

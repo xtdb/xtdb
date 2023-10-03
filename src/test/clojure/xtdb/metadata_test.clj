@@ -130,9 +130,9 @@
 
           ^IMetadataManager metadata-mgr (tu/component node ::meta/metadata-manager)
           literal-selector (expr.meta/->metadata-selector '(and (< xt/id 11) (> xt/id 9)) '{xt/id :i64} {})
-          trie-obj-key (trie/->table-trie-obj-key "xt_docs" (trie/->trie-key 0 0 21))]
-      (util/with-open [arrow-trie (trie/open-arrow-trie-file buffer-pool {:trie-file trie-obj-key})]
-        (let [table-metadata (.tableMetadata metadata-mgr (:trie-rdr arrow-trie) trie-obj-key)
+          meta-file-name (trie/->table-meta-file-name "xt_docs" (trie/->log-trie-key 0 0 21))]
+      (util/with-open [{meta-rel-rdr :rdr} (trie/open-meta-file buffer-pool meta-file-name)]
+        (let [table-metadata (.tableMetadata metadata-mgr meta-rel-rdr meta-file-name)
               page-idx-pred (.build literal-selector table-metadata)]
 
           (t/is (= #{"xt$iid" "xt$valid_to" "xt$valid_from" "xt$id" "xt$system_from"}
@@ -148,10 +148,10 @@
   (let [^IMetadataManager metadata-mgr (tu/component tu/*node* ::meta/metadata-manager)
         ^IBufferPool buffer-pool (tu/component tu/*node* ::bp/buffer-pool)
         true-selector (expr.meta/->metadata-selector '(= boolean-or-int true) '{boolean-or-int :bool} {})
-        trie-obj-key (trie/->table-trie-obj-key "xt_docs" (trie/->trie-key 0 0 2))]
+        file-name (trie/->table-meta-file-name "xt_docs" (trie/->log-trie-key 0 0 2))]
 
-    (util/with-open [arrow-trie (trie/open-arrow-trie-file buffer-pool {:trie-file trie-obj-key})]
-      (let [table-metadata (.tableMetadata metadata-mgr (:trie-rdr arrow-trie) trie-obj-key)
+    (util/with-open [{meta-rel-rdr :rdr} (trie/open-meta-file buffer-pool file-name)]
+      (let [table-metadata (.tableMetadata metadata-mgr meta-rel-rdr file-name)
             page-idx-pred (.build true-selector table-metadata)]
         (t/is (= #{"xt$iid" "xt$valid_to" "xt$valid_from" "xt$id" "xt$system_from" "boolean_or_int"}
                  (.columnNames table-metadata)))

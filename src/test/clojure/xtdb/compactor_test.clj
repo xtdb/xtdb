@@ -6,26 +6,27 @@
             [xtdb.indexer.live-index :as li]
             [xtdb.test-json :as tj]
             [xtdb.test-util :as tu]
-            [xtdb.util :as util]))
+            [xtdb.util :as util]
+            [xtdb.trie :as trie]))
 
 (t/use-fixtures :each tu/with-allocator)
 
 (t/deftest test-compaction-jobs
-  (letfn [(f [table-tries]
+  (letfn [(f [tries]
             (c/compaction-jobs "foo"
-                               (for [[level rf rt] table-tries]
-                                 {:level level, :row-from rf, :row-to rt})))]
+                               (for [[level rf nr] tries]
+                                 (trie/->table-meta-file-name "foo" (trie/->log-trie-key level rf nr)))))]
     (t/is (= [] (f [])))
 
     (t/is (= []
              (f [[0 0 1] [0 1 2] [0 2 3]])))
 
     (t/is (= [{:table-name "foo",
-               :table-tries [{:level 0, :row-from 0, :row-to 1}
-                             {:level 0, :row-from 1, :row-to 2}
-                             {:level 0, :row-from 2, :row-to 3}
-                             {:level 0, :row-from 3, :row-to 4}],
-               :out-trie-key "l01-cf00-ct04"}]
+               :trie-keys ["log-l00-rf00-nr01"
+                           "log-l00-rf01-nr02"
+                           "log-l00-rf02-nr03"
+                           "log-l00-rf03-nr04"],
+               :out-trie-key "log-l01-rf00-nr04"}]
              (f [[0 0 1] [0 1 2] [0 2 3] [0 3 4]])))
 
     (t/is (= []
@@ -33,11 +34,11 @@
                  [0 0 1] [0 1 2] [0 2 3] [0 3 4] [0 4 5] [0 5 6] [0 6 7] [0 7 8]])))
 
     (t/is (= [{:table-name "foo",
-               :table-tries [{:level 1, :row-from 0, :row-to 2}
-                             {:level 1, :row-from 2, :row-to 4}
-                             {:level 1, :row-from 4, :row-to 6}
-                             {:level 1, :row-from 6, :row-to 8}],
-               :out-trie-key "l02-cf00-ct08"}]
+               :trie-keys ["log-l01-rf00-nr02"
+                           "log-l01-rf02-nr04"
+                           "log-l01-rf04-nr06"
+                           "log-l01-rf06-nr08"],
+               :out-trie-key "log-l02-rf00-nr08"}]
              (f [[1 0 2] [1 2 4] [1 4 6] [1 6 8]
                  [0 0 1] [0 1 2] [0 2 3] [0 3 4] [0 4 5] [0 5 6] [0 6 7] [0 7 8]])))
 
@@ -54,8 +55,8 @@
 
     (util/with-open [lt0 (tu/open-live-table "foo")
                      lt1 (tu/open-live-table "foo")
-                     leaf-out-ch (util/->file-channel (.resolve tmp-dir "leaf.arrow") util/write-truncate-open-opts)
-                     trie-out-ch (util/->file-channel (.resolve tmp-dir "trie.arrow") util/write-truncate-open-opts)]
+                     data-out-ch (util/->file-channel (.resolve tmp-dir "data.arrow") util/write-truncate-open-opts)
+                     meta-out-ch (util/->file-channel (.resolve tmp-dir "meta.arrow") util/write-truncate-open-opts)]
 
       (tu/index-tx! lt0 #xt/tx-key {:tx-id 0, :system-time #time/instant "2020-01-01T00:00:00Z"}
                     [{:xt/id "foo", :v 0}
@@ -73,8 +74,8 @@
 
       (c/merge-tries! tu/*allocator*
                       [(.compactLogs (li/live-trie lt0)) (.compactLogs (li/live-trie lt1))]
-                      [(tu/->live-leaf-loader lt0) (tu/->live-leaf-loader lt1)]
-                      leaf-out-ch trie-out-ch))
+                      [(tu/->live-data-rel lt0) (tu/->live-data-rel lt1)]
+                      data-out-ch meta-out-ch))
 
     (tj/check-json expected-dir tmp-dir)))
 
@@ -106,7 +107,7 @@
         (c/compact-all! node)
         (t/is (= (range 200) (q)))
 
-        (tj/check-json expected-dir (.resolve node-dir "objects/tables/foo") #"(trie|leaf)-l01-(.+)\.arrow")
+        (tj/check-json expected-dir (.resolve node-dir "objects/tables/foo") #"log-l01-(.+)\.arrow")
 
         (t/testing "second level"
           (submit! (range 200 500))
@@ -117,4 +118,4 @@
 
           (tj/check-json expected-dir
                          (.resolve node-dir "objects/tables/foo")
-                         #"(trie|leaf)-l02-(.+)\.arrow"))))))
+                         #"log-l0(?:1|2)-(.+)\.arrow"))))))

@@ -401,11 +401,11 @@
 
           (let [objs (.listObjects os)]
             (t/is (= 4 (count (filter #(re-matches #"chunk-metadata/\p{XDigit}+\.transit.json" %) objs))))
-            (t/is (= 2 (count (filter #(re-matches #"tables/device_info/log-(.+?)/.+\.arrow" %) objs))))
-            (t/is (= 4 (count (filter #(re-matches #"tables/device_readings/log-leaves/leaf-l\p{XDigit}+-cf\p{XDigit}+-ct\p{XDigit}+\.arrow" %) objs))))
-            (t/is (= 4 (count (filter #(re-matches #"tables/device_readings/log-tries/trie-l\p{XDigit}+-cf\p{XDigit}+-ct\p{XDigit}+\.arrow" %) objs))))
-            (t/is (= 4 (count (filter #(re-matches #"tables/xt\$txs/log-leaves/leaf-l\p{XDigit}+-cf\p{XDigit}+-ct\p{XDigit}+\.arrow" %) objs))))
-            (t/is (= 4 (count (filter #(re-matches #"tables/xt\$txs/log-tries/trie-l\p{XDigit}+-cf\p{XDigit}+-ct\p{XDigit}+\.arrow" %) objs))))))))))
+            (t/is (= 2 (count (filter #(re-matches #"tables/device_info/(.+?)/.+\.arrow" %) objs))))
+            (t/is (= 4 (count (filter #(re-matches #"tables/device_readings/data/log-l\p{XDigit}+-rf\p{XDigit}+-nr\p{XDigit}+\.arrow" %) objs))))
+            (t/is (= 4 (count (filter #(re-matches #"tables/device_readings/meta/log-l\p{XDigit}+-rf\p{XDigit}+-nr\p{XDigit}+\.arrow" %) objs))))
+            (t/is (= 4 (count (filter #(re-matches #"tables/xt\$txs/data/log-l\p{XDigit}+-rf\p{XDigit}+-nr\p{XDigit}+\.arrow" %) objs))))
+            (t/is (= 4 (count (filter #(re-matches #"tables/xt\$txs/meta/log-l\p{XDigit}+-rf\p{XDigit}+-nr\p{XDigit}+\.arrow" %) objs))))))))))
 
 (t/deftest can-ingest-ts-devices-mini-into-multiple-nodes
   (let [node-dir (util/->path "target/can-ingest-ts-devices-mini-into-multiple-nodes")
@@ -439,11 +439,11 @@
 
             (let [objs (.listObjects os)]
               (t/is (= 11 (count (filter #(re-matches #"chunk-metadata/\p{XDigit}+\.transit.json" %) objs))))
-              (t/is (= 4 (count (filter #(re-matches #"tables/device_info/log-(.+?)/.+\.arrow" %) objs))))
-              (t/is (= 11 (count (filter #(re-matches #"tables/device_readings/log-leaves/leaf-l\p{XDigit}+-cf\p{XDigit}+-ct\p{XDigit}+\.arrow" %) objs))))
-              (t/is (= 11 (count (filter #(re-matches #"tables/device_readings/log-tries/trie-l\p{XDigit}+-cf\p{XDigit}+-ct\p{XDigit}+\.arrow" %) objs))))
-              (t/is (= 11 (count (filter #(re-matches #"tables/xt\$txs/log-leaves/leaf-l\p{XDigit}+-cf\p{XDigit}+-ct\p{XDigit}+\.arrow" %) objs))))
-              (t/is (= 11 (count (filter #(re-matches #"tables/xt\$txs/log-tries/trie-l\p{XDigit}+-cf\p{XDigit}+-ct\p{XDigit}+\.arrow" %) objs)))))))))))
+              (t/is (= 4 (count (filter #(re-matches #"tables/device_info/(.+?)/.+\.arrow" %) objs))))
+              (t/is (= 11 (count (filter #(re-matches #"tables/device_readings/data/log-l\p{XDigit}+-rf\p{XDigit}+-nr\p{XDigit}+\.arrow" %) objs))))
+              (t/is (= 11 (count (filter #(re-matches #"tables/device_readings/meta/log-l\p{XDigit}+-rf\p{XDigit}+-nr\p{XDigit}+\.arrow" %) objs))))
+              (t/is (= 11 (count (filter #(re-matches #"tables/xt\$txs/data/log-l\p{XDigit}+-rf\p{XDigit}+-nr\p{XDigit}+\.arrow" %) objs))))
+              (t/is (= 11 (count (filter #(re-matches #"tables/xt\$txs/meta/log-l\p{XDigit}+-rf\p{XDigit}+-nr\p{XDigit}+\.arrow" %) objs)))))))))))
 
 (t/deftest can-ingest-ts-devices-mini-with-stop-start-and-reach-same-state
   (let [node-dir (util/->path "target/can-ingest-ts-devices-mini-with-stop-start-and-reach-same-state")
@@ -486,11 +486,11 @@
 
                 (let [objs (.listObjects os)]
                   (t/is (= 5 (count (filter #(re-matches #"chunk-metadata/\p{XDigit}+\.transit.json" %) objs))))
-                  (t/is (= 4 (count (filter #(re-matches #"tables/device_info/log-(.+?)/.+\.arrow" %) objs))))
-                  (t/is (= 5 (count (filter #(re-matches #"tables/device_readings/log-leaves/leaf-l\p{XDigit}+-cf\p{XDigit}+-ct\p{XDigit}+\.arrow" %) objs))))
-                  (t/is (= 5 (count (filter #(re-matches #"tables/device_readings/log-tries/trie-l\p{XDigit}+-cf\p{XDigit}+-ct\p{XDigit}+\.arrow" %) objs))))
-                  (t/is (= 5 (count (filter #(re-matches #"tables/xt\$txs/log-leaves/leaf-l\p{XDigit}+-cf\p{XDigit}+-ct\p{XDigit}+\.arrow" %) objs))))
-                  (t/is (= 5 (count (filter #(re-matches #"tables/xt\$txs/log-tries/trie-l\p{XDigit}+-cf\p{XDigit}+-ct\p{XDigit}+\.arrow" %) objs))))))
+                  (t/is (= 4 (count (filter #(re-matches #"tables/device_info/(.+?)/.+\.arrow" %) objs))))
+                  (t/is (= 5 (count (filter #(re-matches #"tables/device_readings/data/log-l\p{XDigit}+-rf\p{XDigit}+-nr\p{XDigit}+\.arrow" %) objs))))
+                  (t/is (= 5 (count (filter #(re-matches #"tables/device_readings/meta/log-l\p{XDigit}+-rf\p{XDigit}+-nr\p{XDigit}+\.arrow" %) objs))))
+                  (t/is (= 5 (count (filter #(re-matches #"tables/xt\$txs/data/log-l\p{XDigit}+-rf\p{XDigit}+-nr\p{XDigit}+\.arrow" %) objs))))
+                  (t/is (= 5 (count (filter #(re-matches #"tables/xt\$txs/meta/log-l\p{XDigit}+-rf\p{XDigit}+-nr\p{XDigit}+\.arrow" %) objs))))))
 
               (t/is (= :utf8 (.columnType mm "device_readings" "xt$id")))
 
@@ -527,11 +527,11 @@
 
                     (let [objs (.listObjects os)]
                       (t/is (= 11 (count (filter #(re-matches #"chunk-metadata/\p{XDigit}+\.transit.json" %) objs))))
-                      (t/is (= 4 (count (filter #(re-matches #"tables/device_info/log-(.+?)/.+\.arrow" %) objs))))
-                      (t/is (= 11 (count (filter #(re-matches #"tables/device_readings/log-leaves/leaf-l\p{XDigit}+-cf\p{XDigit}+-ct\p{XDigit}+\.arrow" %) objs))))
-                      (t/is (= 11 (count (filter #(re-matches #"tables/device_readings/log-tries/trie-l\p{XDigit}+-cf\p{XDigit}+-ct\p{XDigit}+\.arrow" %) objs))))
-                      (t/is (= 11 (count (filter #(re-matches #"tables/xt\$txs/log-leaves/leaf-l\p{XDigit}+-cf\p{XDigit}+-ct\p{XDigit}+\.arrow" %) objs))))
-                      (t/is (= 11 (count (filter #(re-matches #"tables/xt\$txs/log-tries/trie-l\p{XDigit}+-cf\p{XDigit}+-ct\p{XDigit}+\.arrow" %) objs)))))
+                      (t/is (= 4 (count (filter #(re-matches #"tables/device_info/(.+?)/.+\.arrow" %) objs))))
+                      (t/is (= 11 (count (filter #(re-matches #"tables/device_readings/data/log-l\p{XDigit}+-rf\p{XDigit}+-nr\p{XDigit}+\.arrow" %) objs))))
+                      (t/is (= 11 (count (filter #(re-matches #"tables/device_readings/meta/log-l\p{XDigit}+-rf\p{XDigit}+-nr\p{XDigit}+\.arrow" %) objs))))
+                      (t/is (= 11 (count (filter #(re-matches #"tables/xt\$txs/data/log-l\p{XDigit}+-rf\p{XDigit}+-nr\p{XDigit}+\.arrow" %) objs))))
+                      (t/is (= 11 (count (filter #(re-matches #"tables/xt\$txs/meta/log-l\p{XDigit}+-rf\p{XDigit}+-nr\p{XDigit}+\.arrow" %) objs)))))
 
                     (t/is (= :utf8 (.columnType mm "device_info" "xt$id")))))))))))))
 

@@ -194,7 +194,7 @@
                                         {:keys [->live-trie]
                                          :or {->live-trie (fn [iid-rdr]
                                                             (LiveHashTrie/emptyTrie iid-rdr))}}]
-   (util/with-close-on-catch [rel (trie/open-leaf-root allocator)]
+   (util/with-close-on-catch [rel (trie/open-log-data-root allocator)]
      (let [iid-wtr (.writerForName rel "xt$iid")
            op-wtr (.writerForName rel "op")
            put-wtr (.writerForTypeId op-wtr (byte 0))
@@ -282,7 +282,7 @@
         (.release wm-cnt))))
 
   (finishChunk [_ chunk-idx next-chunk-idx]
-    (let [trie-key (trie/->trie-key 0 chunk-idx next-chunk-idx)
+    (let [trie-key (trie/->log-trie-key 0 chunk-idx next-chunk-idx)
           futs (->> (for [^ILiveTable table (.values tables)]
                       (.finishChunk table trie-key))
 

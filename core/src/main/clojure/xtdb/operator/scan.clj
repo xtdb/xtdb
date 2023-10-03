@@ -34,7 +34,7 @@
            (xtdb.metadata IMetadataManager IMetadataPredicate ITableMetadata)
            xtdb.object_store.ObjectStore
            xtdb.operator.IRelationSelector
-           (xtdb.trie ArrowHashTrie$Leaf HashTrie LiveHashTrie$Leaf ScanLeafPointer)
+           (xtdb.trie ArrowHashTrie$Leaf HashTrie LiveHashTrie$Leaf ScanDataRowPointer)
            (xtdb.util TemporalBounds TemporalBounds$TemporalColumn)
            (xtdb.vector IRelationWriter IRowCopier IVectorReader IVectorWriter RelationReader)
            (xtdb.watermark ILiveTableWatermark IWatermark IWatermarkSource Watermark)))
@@ -174,37 +174,37 @@
 (defn- duplicate-ptr [^ArrowBufPointer dst, ^ArrowBufPointer src]
   (.set dst (.getBuf src) (.getOffset src) (.getLength src)))
 
-(defn pick-leaf-row! [^ScanLeafPointer leaf-ptr
+(defn pick-leaf-row! [^ScanDataRowPointer data-row-ptr
                       ^TemporalBounds temporal-bounds,
                       {:keys [^EventResolver ev-resolver
                               skip-iid-ptr prev-iid-ptr current-iid-ptr]}]
-  (when-not (= skip-iid-ptr (.getIidPointer leaf-ptr current-iid-ptr))
+  (when-not (= skip-iid-ptr (.getIidPointer data-row-ptr current-iid-ptr))
     (when-not (= prev-iid-ptr current-iid-ptr)
       (.nextIid ev-resolver)
       (duplicate-ptr prev-iid-ptr current-iid-ptr))
 
-    (let [idx (.getIndex leaf-ptr)
-          leg-name (.getName (.getLeg (.opReader leaf-ptr) idx))]
+    (let [idx (.getIndex data-row-ptr)
+          leg-name (.getName (.getLeg (.opReader data-row-ptr) idx))]
       (if (= "evict" leg-name)
         (do
           (.nextIid ev-resolver)
           (duplicate-ptr skip-iid-ptr current-iid-ptr))
 
-        (let [system-from (.getSystemTime leaf-ptr)]
+        (let [system-from (.getSystemTime data-row-ptr)]
           (when (and (<= (.lower (.systemFrom temporal-bounds)) system-from)
                      (<= system-from (.upper (.systemFrom temporal-bounds))))
             (case leg-name
               "put"
               (.resolveEvent ev-resolver idx
-                             (.getLong (.putValidFromReader leaf-ptr) idx)
-                             (.getLong (.putValidToReader leaf-ptr) idx)
+                             (.getLong (.putValidFromReader data-row-ptr) idx)
+                             (.getLong (.putValidToReader data-row-ptr) idx)
                              system-from
-                             (.rowConsumer leaf-ptr))
+                             (.rowConsumer data-row-ptr))
 
               "delete"
               (.resolveEvent ev-resolver idx
-                             (.getLong (.deleteValidFromReader leaf-ptr) idx)
-                             (.getLong (.deleteValidToReader leaf-ptr) idx)
+                             (.getLong (.deleteValidFromReader data-row-ptr) idx)
+                             (.getLong (.deleteValidToReader data-row-ptr) idx)
                              system-from
                              nil))))))))
 
@@ -246,12 +246,13 @@
                       (fn [trie-leaf-file]
                         (bp/open-vsr buffer-pool trie-leaf-file allocator)))))
 
-(defn merge-task-leaf-reader ^IVectorReader [buffer-pool vsr-cache [leaf-tag leaf-arg]]
+(defn merge-task-data-reader ^IVectorReader [buffer-pool vsr-cache table-name [leaf-tag leaf-arg]]
   (case leaf-tag
     :arrow
-    (let [{:keys [page-idx trie-leaf-file]} leaf-arg]
-      (util/with-open [rb (bp/open-record-batch buffer-pool trie-leaf-file page-idx)]
-        (let [vsr (cache-vsr vsr-cache trie-leaf-file)
+    (let [{:keys [page-idx trie-key]} leaf-arg
+          data-file-name (trie/->table-data-file-name table-name trie-key)]
+      (util/with-open [rb (bp/open-record-batch buffer-pool data-file-name page-idx)]
+        (let [vsr (cache-vsr vsr-cache data-file-name)
               loader (VectorLoader. vsr)]
           (.load loader rb)
           (vr/<-root vsr))))
@@ -260,7 +261,7 @@
             (.select ^RelationReader rel-rdr (.data ^LiveHashTrie$Leaf node)))))
 
 (deftype TrieCursor [^BufferAllocator allocator, ^Iterator merge-tasks
-                     col-names, ^Map col-preds, temporal-bounds
+                     table-name, col-names, ^Map col-preds, temporal-bounds
                      params, ^IPersistentMap picker-state
                      vsr-cache, buffer-pool]
   ICursor
@@ -274,21 +275,21 @@
 
             (doseq [leaf leaves
                     :when leaf
-                    :let [^RelationReader leaf-rdr (merge-task-leaf-reader buffer-pool vsr-cache leaf)
-                          ^RelationReader leaf-rdr (cond-> leaf-rdr
-                                                     iid-pred (.select (.select iid-pred allocator leaf-rdr params)))
-                          leaf-ptr (ScanLeafPointer. leaf-rdr
-                                                     (-> (copy-row-consumer out-rel leaf-rdr col-names)
-                                                         (wrap-temporal-bounds temporal-bounds)))]]
-              (when (.isValid leaf-ptr is-valid-ptr path)
-                (.add merge-q leaf-ptr)))
+                    :let [^RelationReader data-rdr (merge-task-data-reader buffer-pool vsr-cache table-name leaf)
+                          ^RelationReader leaf-rdr (cond-> data-rdr
+                                                     iid-pred (.select (.select iid-pred allocator data-rdr params)))
+                          data-row-ptr (ScanDataRowPointer. leaf-rdr
+                                                            (-> (copy-row-consumer out-rel leaf-rdr col-names)
+                                                            (wrap-temporal-bounds temporal-bounds)))]]
+              (when (.isValid data-row-ptr is-valid-ptr path)
+                (.add merge-q data-row-ptr)))
 
             (loop []
-              (when-let [^ScanLeafPointer leaf-ptr (.poll merge-q)]
-                (pick-leaf-row! leaf-ptr temporal-bounds picker-state)
-                (.nextIndex leaf-ptr)
-                (when (.isValid leaf-ptr is-valid-ptr path)
-                  (.add merge-q leaf-ptr))
+              (when-let [^ScanDataRowPointer data-row-ptr (.poll merge-q)]
+                (pick-leaf-row! data-row-ptr temporal-bounds picker-state)
+                (.nextIndex data-row-ptr)
+                (when (.isValid data-row-ptr is-valid-ptr path)
+                  (.add merge-q data-row-ptr))
                 (recur)))
 
             (.accept c (-> (vw/rel-wtr->rdr out-rel)
@@ -323,11 +324,9 @@
             (when (= 1 (.valueCount eid-rdr))
               (trie/->iid (.getObject eid-rdr 0)))))))))
 
-(defn filter-pushdown-bloom-page-idx-pred ^IntPredicate [^IMetadataManager metadata-manager ^String col-name
-                                                         table-trie ^RelationReader trie-rdr]
+(defn filter-pushdown-bloom-page-idx-pred ^IntPredicate [^ITableMetadata table-metadata ^String col-name]
   (when-let [^MutableRoaringBitmap pushdown-bloom (get *column->pushdown-bloom* (symbol col-name))]
-    (let [^ITableMetadata table-metadata (.tableMetadata metadata-manager trie-rdr (:trie-file table-trie))
-          metadata-rdr (.metadataReader table-metadata)
+    (let [metadata-rdr (.metadataReader table-metadata)
           bloom-rdr (-> (.structKeyReader metadata-rdr "columns")
                         (.listElementReader)
                         (.structKeyReader "bloom"))]
@@ -339,20 +338,6 @@
                   (MutableRoaringBitmap/intersects pushdown-bloom
                                                    (bloom/bloom->bitmap bloom-rdr bloom-vec-idx))))))))))
 
-(defn- ->scan-trie [^IMetadataManager metadata-mgr, ^IMetadataPredicate metadata-pred col-names
-                    {:keys [trie-file] :as table-trie}
-                    {:keys [trie-rdr] :as arrow-trie}]
-  (let [^ITableMetadata table-metadata (.tableMetadata metadata-mgr trie-rdr trie-file)]
-    {:table-trie table-trie
-     :arrow-trie arrow-trie
-     :table-metadata table-metadata
-     :page-idx-pred (reduce (fn [^IntPredicate page-idx-pred col-name]
-                              (if-let [bloom-page-idx-pred (filter-pushdown-bloom-page-idx-pred metadata-mgr col-name table-trie trie-rdr)]
-                                (.and page-idx-pred bloom-page-idx-pred)
-                                page-idx-pred))
-                            (.build metadata-pred table-metadata)
-                            col-names)}))
-
 (defn- ->path-pred [^ArrowBuf iid-arrow-buf]
   (if iid-arrow-buf
     (let [iid-ptr (ArrowBufPointer. iid-arrow-buf 0 (.capacity iid-arrow-buf))]
@@ -360,7 +345,7 @@
     (constantly true)))
 
 (defn- ->merge-tasks
-  "scan-tries :: [{arrow-trie table-trie table-metadata page-idx-pred}]"
+  "scan-tries :: [{:keys [meta-file trie-key table-metadata page-idx-pred]}]"
   [scan-tries, ^ILiveTableWatermark live-table-wm, path-pred]
 
   (letfn [(merge-tasks* [path [mn-tag mn-arg]]
@@ -373,16 +358,15 @@
                             scan-tries-it (.iterator ^Iterable scan-tries)]
                         (loop [node-taken? false, leaves []]
                           (if (.hasNext trie-nodes-it)
-                            (let [{:keys [^IntPredicate page-idx-pred ^ITableMetadata table-metadata table-trie]}
+                            (let [{:keys [^IntPredicate page-idx-pred ^ITableMetadata table-metadata trie-key]}
                                   (when (.hasNext scan-tries-it)
                                     (.next scan-tries-it))]
 
                               (if-let [trie-node (.next trie-nodes-it)]
                                 (condp = (class trie-node)
                                   ArrowHashTrie$Leaf
-                                  (let [page-idx (.getPageIndex ^ArrowHashTrie$Leaf trie-node)
-                                        take-node? (.test page-idx-pred page-idx)
-                                        {:keys [table-name, trie-key]} table-trie]
+                                  (let [page-idx (.getDataPageIndex ^ArrowHashTrie$Leaf trie-node)
+                                        take-node? (.test page-idx-pred page-idx)]
                                     (when take-node?
                                       (.or cumulative-iid-bitmap (.iidBloomBitmap table-metadata page-idx)))
 
@@ -392,7 +376,7 @@
                                                                     (when-let [iid-bitmap (.iidBloomBitmap table-metadata page-idx)]
                                                                       (MutableRoaringBitmap/intersects cumulative-iid-bitmap iid-bitmap))))
                                                           [:arrow {:page-idx page-idx
-                                                                   :trie-leaf-file (trie/->table-leaf-obj-key table-name trie-key)}]))))
+                                                                   :trie-key trie-key}]))))
 
                                   LiveHashTrie$Leaf
                                   (recur true (conj leaves [:live {:node trie-node, :rel-rdr (.liveRelation live-table-wm)}])))
@@ -403,9 +387,9 @@
                               [{:path path
                                 :leaves leaves}])))))))]
 
-    (trie/postwalk-merge-tries (cond-> (mapv (comp :trie :arrow-trie) scan-tries)
-                                 live-table-wm (conj (.compactLogs (.liveTrie live-table-wm))))
-                               merge-tasks*)))
+    (trie/postwalk-merge-plan (cond-> (mapv (comp :trie :meta-file) scan-tries)
+                                live-table-wm (conj (.compactLogs (.liveTrie live-table-wm))))
+                              merge-tasks*)))
 
 (defmethod ig/prep-key ::scan-emitter [_ opts]
   (merge opts
@@ -495,26 +479,35 @@
                                                  (fn [fvt]
                                                    (or fvt (if default-all-valid-time? [:all-time] [:at [:now :now]])))))
                            ^ILiveTableWatermark live-table-wm (some-> (.liveIndex watermark) (.liveTable normalized-table-name))
-                           table-tries (->> (trie/list-table-trie-files object-store normalized-table-name)
-                                            (trie/current-table-tries))]
+                           current-meta-files (->> (trie/list-meta-files object-store normalized-table-name)
+                                                   (trie/current-trie-files))]
 
-                       (util/with-open [iid-arrow-buf (when iid-bb (util/->arrow-buf-view allocator iid-bb))
-                                        arrow-tries (LinkedList.)]
-                         (let [merge-tasks (or (->merge-tasks (map (fn [table-trie]
-                                                                     (let [arrow-trie (trie/open-arrow-trie-file buffer-pool table-trie)]
-                                                                       (.add arrow-tries arrow-trie)
-                                                                       (->scan-trie metadata-mgr metadata-pred col-names table-trie arrow-trie)))
-                                                                   table-tries)
-                                                              live-table-wm
-                                                              (->path-pred iid-arrow-buf))
-                                               [])]
+                       (util/with-open [iid-arrow-buf (when iid-bb (util/->arrow-buf-view allocator iid-bb))]
+                         (let [merge-tasks (util/with-open [meta-files (LinkedList.)]
+                                             (or (->merge-tasks (mapv (fn [meta-file-name]
+                                                                        (let [{meta-rdr :rdr, :as meta-file} (trie/open-meta-file buffer-pool meta-file-name)]
+                                                                          (.add meta-files meta-file)
+                                                                          (let [^ITableMetadata table-metadata (.tableMetadata metadata-mgr meta-rdr meta-file-name)]
+                                                                            {:meta-file meta-file
+                                                                             :trie-key (:trie-key (trie/parse-trie-file-name meta-file-name))
+                                                                             :table-metadata table-metadata
+                                                                             :page-idx-pred (reduce (fn [^IntPredicate page-idx-pred col-name]
+                                                                                                      (if-let [bloom-page-idx-pred (filter-pushdown-bloom-page-idx-pred table-metadata col-name)]
+                                                                                                        (.and page-idx-pred bloom-page-idx-pred)
+                                                                                                        page-idx-pred))
+                                                                                                    (.build metadata-pred table-metadata)
+                                                                                                    col-names)})))
+                                                                      current-meta-files)
+                                                                live-table-wm
+                                                                (->path-pred iid-arrow-buf))
+                                                 []))]
 
                            ;; The consumers for different leafs need to share some state so the logic of how to advance
                            ;; is correct. For example if the `skip-iid-ptr` gets set in one leaf consumer it should also affect
                            ;; the skipping in another leaf consumer.
 
                            (->TrieCursor allocator (.iterator ^Iterable merge-tasks)
-                                         col-names col-preds
+                                         normalized-table-name col-names col-preds
                                          (->temporal-bounds params basis scan-opts)
                                          params
                                          {:ev-resolver (bitemp/event-resolver)
