@@ -71,16 +71,17 @@
   (assert (zero? ^long (mod (count bindings) 2)))
 
   (if-let [[binding expr & more-bindings] bindings]
-    `(let [~binding ~expr]
+    `(let [obj# ~expr
+           ~binding obj#]
        (let [res# (try
                    (with-open ~more-bindings ~@body)
                    (catch Throwable t#
                      (try
-                       (close ~binding)
+                       (close obj#)
                        (catch Throwable s#
                          (.addSuppressed t# s#)))
                      (throw t#)))]
-         (close ~binding)
+         (close obj#)
          res#))
 
     `(do ~@body)))

@@ -61,8 +61,8 @@
     (t/testing "finish chunk"
       (.finishChunk live-index 0 12000)
 
-      (let [trie-buf @(.getObject obj-store "tables/my-table/log-tries/trie-l00-cf00-ct32ee0.arrow")
-            leaf-buf @(.getObject obj-store "tables/my-table/log-leaves/leaf-l00-cf00-ct32ee0.arrow")]
+      (let [trie-buf @(.getObject obj-store "tables/my-table/meta/log-l00-rf00-nr32ee0.arrow")
+            leaf-buf @(.getObject obj-store "tables/my-table/data/log-l00-rf00-nr32ee0.arrow")]
         (with-open [trie-rdr (ArrowFileReader. (util/->seekable-byte-channel trie-buf) allocator)
                     leaf-rdr (ArrowFileReader. (util/->seekable-byte-channel leaf-buf) allocator)]
           (let [trie-root (.getVectorSchemaRoot trie-rdr)
@@ -72,7 +72,7 @@
                      (->> (.leaves (ArrowHashTrie/from trie-root))
                           (mapcat (fn [^ArrowHashTrie$Leaf leaf]
                                     ;; would be good if ArrowFileReader accepted a page-idx...
-                                    (.loadRecordBatch leaf-rdr (.get (.getRecordBlocks leaf-rdr) (.getPageIndex leaf)))
+                                    (.loadRecordBatch leaf-rdr (.get (.getRecordBlocks leaf-rdr) (.getDataPageIndex leaf)))
 
                                     (->> (range 0 (.getValueCount iid-vec))
                                          (mapv #(vec (.getObject iid-vec %)))))))))))))))
@@ -120,11 +120,11 @@
 
         (tu/finish-chunk! node)
 
-        (t/is (= ["tables/foo/log-leaves/leaf-l00-cf00-ct110.arrow"]
-                 (.listObjects os "tables/foo/log-leaves")))
+        (t/is (= ["tables/foo/data/log-l00-rf00-nr110.arrow"]
+                 (.listObjects os "tables/foo/data")))
 
-        (t/is (= ["tables/foo/log-tries/trie-l00-cf00-ct110.arrow"]
-                 (.listObjects os "tables/foo/log-tries"))))
+        (t/is (= ["tables/foo/meta/log-l00-rf00-nr110.arrow"]
+                 (.listObjects os "tables/foo/meta"))))
 
       (tj/check-json (.toPath (io/as-file (io/resource "xtdb/indexer-test/can-build-live-index")))
                      (.resolve node-dir "objects")))))

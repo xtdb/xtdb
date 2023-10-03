@@ -21,7 +21,7 @@
            org.apache.arrow.vector.types.UnionMode
            xtdb.buffer_pool.IBufferPool
            (xtdb.object_store ObjectStore)
-           (xtdb.trie ArrowHashTrie ArrowHashTrie$Leaf HashTrie HashTrie$Node ILeafRow LiveHashTrie LiveHashTrie$Leaf)
+           (xtdb.trie ArrowHashTrie ArrowHashTrie$Leaf HashTrie HashTrie$Node IDataRowPointer LiveHashTrie LiveHashTrie$Leaf)
            (xtdb.util WritableByteBufferChannel)
            (xtdb.vector IVectorReader RelationReader)
            xtdb.watermark.ILiveTableWatermark))
@@ -45,14 +45,26 @@
            (.digest eid-bytes)
            (Arrays/copyOfRange 0 16))))))
 
-(def ^org.apache.arrow.vector.types.pojo.Schema trie-schema
+(defn ->log-trie-key [^long level, ^long row-from, ^long next-row]
+  (format "log-l%s-rf%s-nr%s" (util/->lex-hex-string level) (util/->lex-hex-string row-from) (util/->lex-hex-string next-row)))
+
+(defn ->table-data-file-name [table-name trie-key]
+  (format "tables/%s/data/%s.arrow" table-name trie-key))
+
+(defn ->table-meta-file-name [table-name trie-key]
+  (format "tables/%s/meta/%s.arrow" table-name trie-key))
+
+(defn list-meta-files [^ObjectStore obj-store, table-name]
+  (vec (sort (.listObjects obj-store (format "tables/%s/meta/" table-name)))))
+
+(def ^org.apache.arrow.vector.types.pojo.Schema meta-rel-schema
   (Schema. [(types/->field "nodes" (ArrowType$Union. UnionMode/Dense (int-array (range 3))) false
                            (types/col-type->field "nil" :null)
                            (types/col-type->field "branch" [:list [:union #{:null :i32}]])
-                           (types/col-type->field "leaf" [:struct {'page-idx :i32
+                           (types/col-type->field "leaf" [:struct {'data-page-idx :i32
                                                                    'columns meta/metadata-col-type}]))]))
 
-(defn log-leaf-schema ^org.apache.arrow.vector.types.pojo.Schema [put-doc-col-type]
+(defn data-rel-schema ^org.apache.arrow.vector.types.pojo.Schema [put-doc-col-type]
   (Schema. [(types/col-type->field "xt$iid" [:fixed-size-binary 16])
             (types/col-type->field "xt$system_from" types/temporal-col-type)
             (types/->field "op" (ArrowType$Union. UnionMode/Dense (int-array (range 3))) false
@@ -63,49 +75,49 @@
                                                                      'xt$valid_to types/temporal-col-type}])
                            (types/col-type->field "evict" :null))]))
 
-(defn open-leaf-root
+(defn open-log-data-root
   (^xtdb.vector.IRelationWriter [^BufferAllocator allocator]
-   (open-leaf-root allocator (log-leaf-schema [:union #{:null [:struct {}]}])))
+   (open-log-data-root allocator (data-rel-schema [:union #{:null [:struct {}]}])))
 
-  (^xtdb.vector.IRelationWriter [^BufferAllocator allocator log-leaf-schema]
-   (util/with-close-on-catch [root (VectorSchemaRoot/create log-leaf-schema allocator)]
+  (^xtdb.vector.IRelationWriter [^BufferAllocator allocator data-schema]
+   (util/with-close-on-catch [root (VectorSchemaRoot/create data-schema allocator)]
      (vw/root->writer root))))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (definterface ITrieWriter
-  (^xtdb.vector.IRelationWriter getLeafWriter [])
+  (^xtdb.vector.IRelationWriter getDataWriter [])
   (^int writeLeaf [])
   (^int writeBranch [^ints idxs])
   (^void end [])
   (^void close []))
 
-(defn open-trie-writer ^xtdb.trie.ITrieWriter [^BufferAllocator allocator, ^Schema leaf-schema
-                                               ^WritableByteChannel leaf-out-ch, ^WritableByteChannel trie-out-ch]
-  (util/with-close-on-catch [leaf-vsr (VectorSchemaRoot/create leaf-schema allocator)
-                             leaf-out-wtr (ArrowFileWriter. leaf-vsr nil leaf-out-ch)
-                             trie-vsr (VectorSchemaRoot/create trie-schema allocator)]
-    (.start leaf-out-wtr)
-    (let [leaf-rel-wtr (vw/root->writer leaf-vsr)
-          trie-rel-wtr (vw/root->writer trie-vsr)
+(defn open-trie-writer ^xtdb.trie.ITrieWriter [^BufferAllocator allocator, ^Schema data-schema
+                                               ^WritableByteChannel data-out-ch, ^WritableByteChannel meta-out-ch]
+  (util/with-close-on-catch [data-vsr (VectorSchemaRoot/create data-schema allocator)
+                             data-out-wtr (ArrowFileWriter. data-vsr nil data-out-ch)
+                             meta-vsr (VectorSchemaRoot/create meta-rel-schema allocator)]
+    (.start data-out-wtr)
+    (let [data-rel-wtr (vw/root->writer data-vsr)
+          meta-rel-wtr (vw/root->writer meta-vsr)
 
-          node-wtr (.writerForName trie-rel-wtr "nodes")
+          node-wtr (.writerForName meta-rel-wtr "nodes")
           node-wp (.writerPosition node-wtr)
 
           branch-wtr (.writerForTypeId node-wtr (byte 1))
           branch-el-wtr (.listElementWriter branch-wtr)
 
           leaf-wtr (.writerForTypeId node-wtr (byte 2))
-          page-idx-wtr (.structKeyWriter leaf-wtr "page-idx")
+          page-idx-wtr (.structKeyWriter leaf-wtr "data-page-idx")
           page-meta-wtr (meta/->page-meta-wtr (.structKeyWriter leaf-wtr "columns"))
           !page-idx (AtomicInteger. 0)]
 
       (reify ITrieWriter
-        (getLeafWriter [_] leaf-rel-wtr)
+        (getDataWriter [_] data-rel-wtr)
 
         (writeLeaf [_]
-          (.syncRowCount leaf-rel-wtr)
+          (.syncRowCount data-rel-wtr)
 
-          (let [leaf-rdr (vw/rel-wtr->rdr leaf-rel-wtr)
+          (let [leaf-rdr (vw/rel-wtr->rdr data-rel-wtr)
                 put-rdr (-> leaf-rdr
                             (.readerForName "op")
                             (.legReader :put)
@@ -120,15 +132,15 @@
                                                 (map #(.structKeyReader doc-rdr %))
                                                 (.structKeys doc-rdr))))
 
-          (.writeBatch leaf-out-wtr)
-          (.clear leaf-rel-wtr)
-          (.clear leaf-vsr)
+          (.writeBatch data-out-wtr)
+          (.clear data-rel-wtr)
+          (.clear data-vsr)
 
           (let [pos (.getPosition node-wp)]
             (.startStruct leaf-wtr)
             (.writeInt page-idx-wtr (.getAndIncrement !page-idx))
             (.endStruct leaf-wtr)
-            (.endRow trie-rel-wtr)
+            (.endRow meta-rel-wtr)
 
             pos))
 
@@ -143,28 +155,28 @@
                   (.writeInt branch-el-wtr idx))))
 
             (.endList branch-wtr)
-            (.endRow trie-rel-wtr)
+            (.endRow meta-rel-wtr)
 
             pos))
 
         (end [_]
-          (.end leaf-out-wtr)
+          (.end data-out-wtr)
 
-          (.syncSchema trie-vsr)
-          (.syncRowCount trie-rel-wtr)
+          (.syncSchema meta-vsr)
+          (.syncRowCount meta-rel-wtr)
 
-          (util/with-open [trie-out-wtr (ArrowFileWriter. trie-vsr nil trie-out-ch)]
-            (.start trie-out-wtr)
-            (.writeBatch trie-out-wtr)
-            (.end trie-out-wtr)))
+          (util/with-open [meta-out-wtr (ArrowFileWriter. meta-vsr nil meta-out-ch)]
+            (.start meta-out-wtr)
+            (.writeBatch meta-out-wtr)
+            (.end meta-out-wtr)))
 
         AutoCloseable
         (close [_]
-          (util/close [trie-vsr leaf-out-wtr leaf-vsr]))))))
+          (util/close [meta-vsr data-out-wtr meta-vsr]))))))
 
-(defn write-live-trie [^ITrieWriter trie-wtr, ^LiveHashTrie trie, ^RelationReader leaf-rel]
+(defn write-live-trie [^ITrieWriter trie-wtr, ^LiveHashTrie trie, ^RelationReader data-rel]
   (let [trie (.compactLogs trie)
-        copier (vw/->rel-copier (.getLeafWriter trie-wtr) leaf-rel)]
+        copier (vw/->rel-copier (.getDataWriter trie-wtr) data-rel)]
     (letfn [(write-node! [^HashTrie$Node node]
               (if-let [children (.children node)]
                 (let [child-count (alength children)
@@ -188,68 +200,57 @@
 
       (write-node! (.rootNode trie)))))
 
-(defn live-trie->bufs [^BufferAllocator allocator, ^LiveHashTrie trie, ^RelationReader leaf-rel]
-  (util/with-open [leaf-bb-ch (WritableByteBufferChannel/open)
-                   trie-bb-ch (WritableByteBufferChannel/open)
+(defn live-trie->bufs [^BufferAllocator allocator, ^LiveHashTrie trie, ^RelationReader data-rel]
+  (util/with-open [data-bb-ch (WritableByteBufferChannel/open)
+                   meta-bb-ch (WritableByteBufferChannel/open)
                    trie-wtr (open-trie-writer allocator
-                                              (Schema. (for [^IVectorReader rdr leaf-rel]
+                                              (Schema. (for [^IVectorReader rdr data-rel]
                                                          (.getField rdr)))
-                                              (.getChannel leaf-bb-ch)
-                                              (.getChannel trie-bb-ch))]
+                                              (.getChannel data-bb-ch)
+                                              (.getChannel meta-bb-ch))]
 
-    (write-live-trie trie-wtr trie leaf-rel)
+    (write-live-trie trie-wtr trie data-rel)
 
     (.end trie-wtr)
 
-    {:leaf-buf (.getAsByteBuffer leaf-bb-ch)
-     :trie-buf (.getAsByteBuffer trie-bb-ch)}))
-
-(defn ->trie-key [^long level, ^long chunk-idx, ^long next-chunk-idx]
-  (format "l%s-cf%s-ct%s" (util/->lex-hex-string level) (util/->lex-hex-string chunk-idx) (util/->lex-hex-string next-chunk-idx)))
-
-(defn ->table-leaf-obj-key [table-name trie-key]
-  (format "tables/%s/log-leaves/leaf-%s.arrow" table-name trie-key))
-
-(defn ->table-trie-obj-key [table-name trie-key]
-  (format "tables/%s/log-tries/trie-%s.arrow" table-name trie-key))
+    {:data-buf (.getAsByteBuffer data-bb-ch)
+     :meta-buf (.getAsByteBuffer meta-bb-ch)}))
 
 (defn write-trie-bufs! [^ObjectStore obj-store, ^String table-name, trie-key
-                        {:keys [^ByteBuffer leaf-buf ^ByteBuffer trie-buf]}]
-  (-> (.putObject obj-store (->table-leaf-obj-key table-name trie-key) leaf-buf)
+                        {:keys [^ByteBuffer data-buf ^ByteBuffer meta-buf]}]
+  (-> (.putObject obj-store (->table-data-file-name table-name trie-key) data-buf)
       (util/then-compose
         (fn [_]
-          (.putObject obj-store (->table-trie-obj-key table-name trie-key) trie-buf)))))
+          (.putObject obj-store (->table-meta-file-name table-name trie-key) meta-buf)))))
 
-(defn parse-trie-filename [file-name]
-  (when-let [[_ table-name trie-key level-str row-from-str row-to-str] (re-find #"tables/(.+)/log-tries/trie-(l(\p{XDigit}+)-cf(\p{XDigit}+)-ct(\p{XDigit}+)+?)\.arrow$" file-name)]
-    {:table-name table-name
-     :trie-file file-name
+(defn parse-trie-file-name [file-name]
+  (when-let [[_ trie-key level-str row-from-str next-row-str] (re-find #"/(log-l(\p{XDigit}+)-rf(\p{XDigit}+)-nr(\p{XDigit}+)+?)\.arrow$" file-name)]
+    {:file-name file-name
      :trie-key trie-key
      :level (util/<-lex-hex-string level-str)
      :row-from (util/<-lex-hex-string row-from-str)
-     :row-to (util/<-lex-hex-string row-to-str)}))
+     :next-row (util/<-lex-hex-string next-row-str)}))
 
-(defn current-table-tries [trie-files]
+(defn current-trie-files [file-names]
   (loop [next-row 0
-         [table-tries & more-levels] (->> trie-files
-                                          (group-by :level)
-                                          (sort-by key #(Long/compare %2 %1))
-                                          (vals))
+         [level-trie-keys & more-levels] (->> file-names
+                                              (keep parse-trie-file-name)
+                                              (group-by :level)
+                                              (sort-by key #(Long/compare %2 %1))
+                                              (vals))
          res []]
-    (if-not table-tries
+    (if-not level-trie-keys
       res
       (if-let [tries (not-empty
-                      (->> table-tries
+                      (->> level-trie-keys
                            (into [] (drop-while (fn [{:keys [^long row-from]}]
                                                   (< row-from next-row))))))]
-        (recur (long (:row-to (first (rseq tries)))) more-levels (into res tries))
+        (recur (long (:next-row (first (rseq tries))))
+               more-levels
+               (into res (map :file-name) tries))
         (recur next-row more-levels res)))))
 
-(defn list-table-trie-files [^ObjectStore obj-store, table-name]
-  (->> (sort (.listObjects obj-store (format "tables/%s/log-tries" table-name)))
-       (into [] (keep parse-trie-filename))))
-
-(defn postwalk-merge-tries
+(defn postwalk-merge-plan
   "Post-walks the merged tries, passing the nodes from each of the tries to the given fn.
    e.g. for a leaf: passes the trie-nodes to the fn, returns the result.
         for a branch: passes a vector the return values of the postwalk fn
@@ -257,12 +258,14 @@
 
    Returns the value returned from the postwalk fn for the root node.
 
-  tries :: [HashTrie]
 
-  f :: path, merge-node -> ret
-    where
-    merge-node :: [:branch [ret]]
-                | [:leaf [HashTrie$Node]]"
+
+   tries :: [HashTrie]
+
+   f :: path, merge-node -> ret
+     where
+     merge-node :: [:branch [ret]]
+                 | [:leaf [HashTrie$Node]]"
   [tries f]
 
   (letfn [(postwalk* [nodes path-vec]
@@ -287,34 +290,34 @@
                      tries)
                [])))
 
-(defrecord ArrowTrie [table-trie, ^HashTrie trie, ^ArrowBuf buf, ^RelationReader trie-rdr]
+(defrecord MetaFile [^HashTrie trie, ^ArrowBuf buf, ^RelationReader rdr]
   AutoCloseable
   (close [_]
-    (util/close trie-rdr)
+    (util/close rdr)
     (util/close buf)))
 
-(defn open-arrow-trie-file [^IBufferPool buffer-pool {:keys [trie-file] :as table-trie}]
-  (util/with-close-on-catch [^ArrowBuf buf @(.getBuffer buffer-pool trie-file)]
+(defn open-meta-file [^IBufferPool buffer-pool file-name]
+  (util/with-close-on-catch [^ArrowBuf buf @(.getBuffer buffer-pool file-name)]
     (let [{:keys [^VectorLoader loader root arrow-blocks]} (util/read-arrow-buf buf)]
       (with-open [record-batch (util/->arrow-record-batch-view (first arrow-blocks) buf)]
         (.load loader record-batch)
-        (->ArrowTrie table-trie (ArrowHashTrie/from root) buf (vr/<-root root))))))
+        (->MetaFile (ArrowHashTrie/from root) buf (vr/<-root root))))))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
-(definterface ILeafLoader
+(definterface IDataRel
   (^org.apache.arrow.vector.types.pojo.Schema getSchema [])
-  (^xtdb.vector.RelationReader loadLeaf [leaf]))
+  (^xtdb.vector.RelationReader loadPage [trie-leaf]))
 
-(deftype ArrowLeafLoader [^ArrowBuf buf
-                          ^VectorSchemaRoot root
-                          ^VectorLoader loader
-                          ^List arrow-blocks
-                          ^:unsynchronized-mutable ^int current-page-idx]
-  ILeafLoader
+(deftype ArrowDataRel [^ArrowBuf buf
+                       ^VectorSchemaRoot root
+                       ^VectorLoader loader
+                       ^List arrow-blocks
+                       ^:unsynchronized-mutable ^int current-page-idx]
+  IDataRel
   (getSchema [_] (.getSchema root))
 
-  (loadLeaf [this leaf]
-    (let [page-idx (.getPageIndex ^ArrowHashTrie$Leaf leaf)]
+  (loadPage [this trie-leaf]
+    (let [page-idx (.getDataPageIndex ^ArrowHashTrie$Leaf trie-leaf)]
       (when-not (= page-idx current-page-idx)
         (set! (.current-page-idx this) page-idx)
 
@@ -328,38 +331,38 @@
     (util/close root)
     (util/close buf)))
 
-(deftype LiveLeafLoader [^RelationReader live-rel]
-  ILeafLoader
+(deftype LiveDataRel [^RelationReader live-rel]
+  IDataRel
   (getSchema [_]
     (Schema. (for [^IVectorReader rdr live-rel]
                (.getField rdr))))
 
-  (loadLeaf [_ leaf]
+  (loadPage [_ leaf]
     (.select live-rel (.data ^LiveHashTrie$Leaf leaf)))
 
   AutoCloseable
   (close [_]))
 
-(defn open-leaves [^IBufferPool buffer-pool, table-name, table-tries, ^ILiveTableWatermark live-table-wm]
-  (util/with-close-on-catch [leaf-bufs (ArrayList.)]
+(defn open-data-rels [^IBufferPool buffer-pool, table-name, trie-keys, ^ILiveTableWatermark live-table-wm]
+  (util/with-close-on-catch [data-bufs (ArrayList.)]
     ;; TODO get hold of these a page at a time if it's a small query,
     ;; rather than assuming we'll always have/use the whole file.
-    (let [arrow-leaves (->> table-tries
-                            (mapv (fn [{:keys [trie-key]}]
-                                    (.add leaf-bufs @(.getBuffer buffer-pool (->table-leaf-obj-key table-name trie-key)))
-                                    (let [leaf-buf (.get leaf-bufs (dec (.size leaf-bufs)))
-                                          {:keys [^VectorSchemaRoot root loader arrow-blocks]} (util/read-arrow-buf leaf-buf)]
+    (let [arrow-data-rels (->> trie-keys
+                               (mapv (fn [trie-key]
+                                       (.add data-bufs @(.getBuffer buffer-pool (->table-data-file-name table-name trie-key)))
+                                       (let [data-buf (.get data-bufs (dec (.size data-bufs)))
+                                             {:keys [^VectorSchemaRoot root loader arrow-blocks]} (util/read-arrow-buf data-buf)]
 
-                                      (ArrowLeafLoader. leaf-buf root loader arrow-blocks -1)))))]
-      (cond-> arrow-leaves
-        live-table-wm (conj (->LiveLeafLoader (.liveRelation live-table-wm)))))))
+                                         (ArrowDataRel. data-buf root loader arrow-blocks -1)))))]
+      (cond-> arrow-data-rels
+        live-table-wm (conj (->LiveDataRel (.liveRelation live-table-wm)))))))
 
-(defn load-leaves [leaf-loaders trie-leaves]
+(defn load-data-pages [data-rels trie-leaves]
   (->> trie-leaves
        (into [] (map-indexed (fn [ordinal trie-leaf]
                                (when trie-leaf
-                                 (let [^ILeafLoader leaf-loader (nth leaf-loaders ordinal)]
-                                   (.loadLeaf leaf-loader trie-leaf))))))))
+                                 (let [^IDataRel data-rel (nth data-rels ordinal)]
+                                   (.loadPage data-rel trie-leaf))))))))
 
 (defn ->merge-queue ^java.util.PriorityQueue []
-  (PriorityQueue. (ILeafRow/comparator)))
+  (PriorityQueue. (IDataRowPointer/comparator)))

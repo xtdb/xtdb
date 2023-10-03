@@ -624,7 +624,7 @@
           (finally
             (.unlock wm-lock wm-lock-stamp))))
 
-      (log/debugf "finished chunk 'cf%s-ct%s'." (util/->lex-hex-string chunk-idx) (util/->lex-hex-string next-chunk-idx))))
+      (log/debugf "finished chunk 'rf%s-nr%s'." (util/->lex-hex-string chunk-idx) (util/->lex-hex-string next-chunk-idx))))
 
   Closeable
   (close [_]

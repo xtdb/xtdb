@@ -310,30 +310,30 @@
   `(with-log-levels {~ns ~level} ~@body))
 
 (defn open-arrow-hash-trie-root ^org.apache.arrow.vector.VectorSchemaRoot [^BufferAllocator al, paths]
-  (util/with-close-on-catch [trie-root (VectorSchemaRoot/create trie/trie-schema al)]
-    (let [trie-wtr (vw/root->writer trie-root)
-          trie-wp (.writerPosition trie-wtr)
-          nodes-wtr (.writerForName trie-wtr "nodes")
+  (util/with-close-on-catch [meta-root (VectorSchemaRoot/create trie/meta-rel-schema al)]
+    (let [meta-wtr (vw/root->writer meta-root)
+          meta-wp (.writerPosition meta-wtr)
+          nodes-wtr (.writerForName meta-wtr "nodes")
           nil-wtr (.writerForTypeId nodes-wtr (byte 0))
           branch-wtr (.writerForTypeId nodes-wtr (byte 1))
           branch-el-wtr (.listElementWriter branch-wtr)
-          leaf-wtr (.writerForTypeId nodes-wtr (byte 2))
-          page-idx-wtr (.structKeyWriter leaf-wtr "page-idx")]
+          data-wtr (.writerForTypeId nodes-wtr (byte 2))
+          data-page-idx-wtr (.structKeyWriter data-wtr "data-page-idx")]
       (letfn [(write-paths [paths]
                 (cond
                   (nil? paths) (.writeNull nil-wtr nil)
 
                   (number? paths) (do
-                                    (.startStruct leaf-wtr)
-                                    (.writeInt page-idx-wtr paths)
-                                    (.endStruct leaf-wtr))
+                                    (.startStruct data-wtr)
+                                    (.writeInt data-page-idx-wtr paths)
+                                    (.endStruct data-wtr))
 
                   (vector? paths) (let [!page-idxs (IntStream/builder)]
                                     (doseq [child paths]
                                       (.add !page-idxs (if child
                                                          (do
                                                            (write-paths child)
-                                                           (dec (.getPosition trie-wp)))
+                                                           (dec (.getPosition meta-wp)))
                                                          -1)))
                                     (.startList branch-wtr)
                                     (.forEach (.build !page-idxs)
@@ -343,12 +343,12 @@
                                                     (.writeNull branch-el-wtr nil)
                                                     (.writeInt branch-el-wtr idx)))))
                                     (.endList branch-wtr)))
-                (.endRow trie-wtr))]
+                (.endRow meta-wtr))]
         (write-paths paths))
 
-      (.syncRowCount trie-wtr))
+      (.syncRowCount meta-wtr))
 
-    trie-root))
+    meta-root))
 
 (defn open-live-table [table-name]
   (li/->live-table *allocator* nil table-name))
@@ -368,8 +368,8 @@
 
     (.commit live-table-tx)))
 
-(defn ->live-leaf-loader [live-table]
-  (trie/->LiveLeafLoader (vw/rel-wtr->rdr (li/live-rel live-table))))
+(defn ->live-data-rel [live-table]
+  (trie/->LiveDataRel (vw/rel-wtr->rdr (li/live-rel live-table))))
 
 (defn byte-buffer->path [^java.nio.ByteBuffer bb]
   (mapcat (fn [b]

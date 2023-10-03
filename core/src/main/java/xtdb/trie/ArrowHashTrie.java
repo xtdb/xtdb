@@ -16,15 +16,14 @@ public class ArrowHashTrie implements HashTrie<ArrowHashTrie.Node> {
     private final DenseUnionVector nodesVec;
     private final ListVector branchVec;
     private final IntVector branchElVec;
-    private final StructVector leafVec;
-    private final IntVector pageIdxVec;
+    private final IntVector dataPageIdxVec;
 
     private ArrowHashTrie(VectorSchemaRoot trieRoot) {
         nodesVec = ((DenseUnionVector) trieRoot.getVector("nodes"));
         branchVec = (ListVector) nodesVec.getVectorByType(BRANCH_TYPE_ID);
         branchElVec = (IntVector) branchVec.getDataVector();
-        leafVec = (StructVector) nodesVec.getVectorByType(LEAF_TYPE_ID);
-        pageIdxVec = leafVec.getChild("page-idx", IntVector.class);
+        StructVector pageVec = (StructVector) nodesVec.getVectorByType(LEAF_TYPE_ID);
+        dataPageIdxVec = pageVec.getChild("data-page-idx", IntVector.class);
     }
 
     public sealed interface Node extends HashTrie.Node<Node> {
@@ -68,15 +67,15 @@ public class ArrowHashTrie implements HashTrie<ArrowHashTrie.Node> {
     public final class Leaf implements Node {
 
         private final byte[] path;
-        private final int leafVecIdx;
+        private final int leafOffset;
 
-        public Leaf(byte[] path, int leafVecIdx) {
+        public Leaf(byte[] path, int leafOffset) {
             this.path = path;
-            this.leafVecIdx = leafVecIdx;
+            this.leafOffset = leafOffset;
         }
 
-        public int getPageIndex() {
-            return pageIdxVec.get(leafVecIdx);
+        public int getDataPageIndex() {
+            return dataPageIdxVec.get(leafOffset);
         }
 
         @Override

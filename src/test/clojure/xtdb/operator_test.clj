@@ -9,18 +9,16 @@
             [xtdb.trie :as trie]
             [xtdb.util :as util])
   (:import (java.time LocalTime)
-           (java.util.function IntPredicate)
            (xtdb.buffer_pool IBufferPool)
            (xtdb.metadata IMetadataManager ITableMetadata)))
 
 (t/use-fixtures :once tu/with-allocator)
 
-(defn with-table-metadata [node trie-file f]
+(defn with-table-metadata [node meta-file-name f]
   (let [^IBufferPool buffer-pool (tu/component node ::bp/buffer-pool)
-        ^IMetadataManager metadata-mgr (tu/component node ::meta/metadata-manager)
-        table-trie (trie/parse-trie-filename trie-file)]
-    (util/with-open [arrow-trie (trie/open-arrow-trie-file buffer-pool table-trie)]
-      (f (.tableMetadata metadata-mgr (:trie-rdr arrow-trie) trie-file)))))
+        ^IMetadataManager metadata-mgr (tu/component node ::meta/metadata-manager)]
+    (util/with-open [{meta-rdr :rdr} (trie/open-meta-file buffer-pool meta-file-name)]
+      (f (.tableMetadata metadata-mgr meta-rdr meta-file-name)))))
 
 (t/deftest test-find-gt-ivan
   (with-open [node (node/start-node {:xtdb/indexer {:rows-per-chunk 10}})]
@@ -38,8 +36,7 @@
 
       (tu/finish-chunk! node)
 
-      (let [^IMetadataManager metadata-mgr (tu/component node ::meta/metadata-manager)
-            ^IBufferPool buffer-pool (tu/component node ::bp/buffer-pool)]
+      (let [^IMetadataManager metadata-mgr (tu/component node ::meta/metadata-manager)]
         (letfn [(test-query-ivan [expected tx]
                   (t/is (= expected
                            (set (tu/query-ra '[:scan {:table xt_docs} [xt/id {name (> name "Ivan")}]]
@@ -55,12 +52,12 @@
             (t/testing "only needs to scan chunk 1, page 1"
               (let [lit-sel (expr.meta/->metadata-selector '(> name "Ivan") '{name :utf8} {})
                     param-sel (expr.meta/->metadata-selector '(> name ?name) '{name :utf8} params)]
-                (with-table-metadata node (trie/->table-trie-obj-key "xt_docs" (trie/->trie-key 0 0 2))
+                (with-table-metadata node (trie/->table-meta-file-name "xt_docs" (trie/->log-trie-key 0 0 2))
                   (fn [^ITableMetadata table-metadata]
                     (t/is (false? (.test (.build lit-sel table-metadata) 0)))
                     (t/is (false? (.test (.build param-sel table-metadata) 0)))))
 
-                (with-table-metadata node (trie/->table-trie-obj-key "xt_docs" (trie/->trie-key 0 2 8))
+                (with-table-metadata node (trie/->table-meta-file-name "xt_docs" (trie/->log-trie-key 0 2 8))
                   (fn [^ITableMetadata table-metadata]
                     (t/is (true? (.test (.build lit-sel table-metadata) 0)))
                     (t/is (true? (.test (.build param-sel table-metadata) 0))))))))
@@ -90,26 +87,22 @@
         (tu/then-await-tx node))
 
     (tu/finish-chunk! node)
-    (let [^IMetadataManager metadata-mgr (tu/component node ::meta/metadata-manager)
-          ^IBufferPool buffer-pool (tu/component node ::bp/buffer-pool)]
+    (let [^IMetadataManager metadata-mgr (tu/component node ::meta/metadata-manager)]
       (t/is (= #{0 4} (set (keys (.chunksMetadata metadata-mgr)))))
 
-      (let [trie-files [(trie/->table-trie-obj-key "xt_docs" (trie/->trie-key 0 0 4))
-                        (trie/->table-trie-obj-key "xt_docs" (trie/->trie-key 0 4 7))]
-            table-tries (mapv #'trie/parse-trie-filename trie-files)]
-        (t/testing "only needs to scan chunk 1, page 1"
-          (util/with-open [params (tu/open-params {'?name "Ivan"})]
-            (let [lit-sel (expr.meta/->metadata-selector '(= name "Ivan") '{name :utf8} {})
-                  param-sel (expr.meta/->metadata-selector '(= name ?name) '{name :utf8} params)]
-              (with-table-metadata node (trie/->table-trie-obj-key "xt_docs" (trie/->trie-key 0 0 4))
-                (fn [^ITableMetadata table-metadata]
-                  (t/is (true? (.test (.build lit-sel table-metadata) 0)))
-                  (t/is (true? (.test (.build param-sel table-metadata) 0)))))
+      (t/testing "only needs to scan chunk 1, page 1"
+        (util/with-open [params (tu/open-params {'?name "Ivan"})]
+          (let [lit-sel (expr.meta/->metadata-selector '(= name "Ivan") '{name :utf8} {})
+                param-sel (expr.meta/->metadata-selector '(= name ?name) '{name :utf8} params)]
+            (with-table-metadata node (trie/->table-meta-file-name "xt_docs" (trie/->log-trie-key 0 0 4))
+              (fn [^ITableMetadata table-metadata]
+                (t/is (true? (.test (.build lit-sel table-metadata) 0)))
+                (t/is (true? (.test (.build param-sel table-metadata) 0)))))
 
-              (with-table-metadata node (trie/->table-trie-obj-key "xt_docs" (trie/->trie-key 0 4 7))
-                (fn [^ITableMetadata table-metadata]
-                  (t/is (false? (.test (.build lit-sel table-metadata) 0)))
-                  (t/is (false? (.test (.build param-sel table-metadata) 0)))))))))
+            (with-table-metadata node (trie/->table-meta-file-name "xt_docs" (trie/->log-trie-key 0 4 7))
+              (fn [^ITableMetadata table-metadata]
+                (t/is (false? (.test (.build lit-sel table-metadata) 0)))
+                (t/is (false? (.test (.build param-sel table-metadata) 0))))))))
 
       (t/is (= #{{:name "Ivan"}}
                (set (tu/query-ra '[:scan {:table xt_docs} [{name (= name "Ivan")}]]

@@ -1,16 +1,13 @@
 (ns xtdb.operator.scan-test
   (:require [clojure.test :as t :refer [deftest]]
             [xtdb.api :as xt]
-            [xtdb.bitemporal :as bitemp]
             [xtdb.node :as node]
             [xtdb.operator :as op]
             [xtdb.operator.scan :as scan]
             [xtdb.test-util :as tu]
             [xtdb.util :as util]
             [xtdb.vector.writer :as vw])
-  (:import (java.util LinkedList)
-           (java.util.function IntPredicate)
-           (xtdb.bitemporal RowConsumer)
+  (:import (java.util.function IntPredicate)
            xtdb.operator.IRaQuerySource
            xtdb.operator.IRelationSelector
            xtdb.vector.RelationReader))
