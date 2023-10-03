@@ -1,6 +1,7 @@
 (ns xtdb.operator.scan-test
   (:require [clojure.test :as t :refer [deftest]]
             [xtdb.api :as xt]
+            [xtdb.bitemporal :as bitemp]
             [xtdb.node :as node]
             [xtdb.operator :as op]
             [xtdb.operator.scan :as scan]
@@ -9,9 +10,9 @@
             [xtdb.vector.writer :as vw])
   (:import (java.util LinkedList)
            (java.util.function IntPredicate)
+           (xtdb.bitemporal RowConsumer)
            xtdb.operator.IRaQuerySource
            xtdb.operator.IRelationSelector
-           (xtdb.operator.scan RowConsumer)
            xtdb.vector.RelationReader))
 
 (t/use-fixtures :each tu/with-mock-clock tu/with-allocator tu/with-node)
@@ -566,82 +567,6 @@
       (t/is (= [1 2]
                (seq (test-uuids [before-uuid search-uuid search-uuid after-uuid])))
             "general case"))))
-
-(t/deftest test-correct-rectangle-cutting
-  (letfn [(test-er [& events]
-            (let [!state (atom [])
-                  rc (reify RowConsumer
-                       (accept [_ idx valid-from valid-to sys-from sys-to]
-                         (swap! !state conj [idx valid-from valid-to sys-from sys-to])))
-                  er (scan/event-resolver (LinkedList.))]
-              (doseq [[idx valid-from valid-to sys-from] events]
-                (.resolveEvent er idx valid-from valid-to sys-from rc))
-              @!state))]
-
-    (t/is (= [[1 2005 2009 1 util/end-of-time-μs] [0 2010 2020 0 util/end-of-time-μs]]
-             (test-er [1 2005 2009 1]
-                      [0 2010 2020 0]))
-          "period starts before and does NOT overlap")
-
-    (t/is (= [[1 2010 2020 1 util/end-of-time-μs]
-              [0 2015 2020 0 1]
-              [0 2020 2025 0 util/end-of-time-μs]]
-             (test-er [1 2010 2020 1]
-                      [0 2015 2025 0]))
-          "period starts before and overlaps")
-
-    (t/is (= [[1 2010 2020 1 util/end-of-time-μs]
-              [0 2010 2020 0 1]
-              [0 2020 2025 0 util/end-of-time-μs]]
-             (test-er [1 2010 2020 1]
-                      [0 2010 2025 0]))
-          "period starts equally and overlaps")
-
-    (t/is (= [[1 2015 2020 1 util/end-of-time-μs]
-              [0 2010 2015 0 util/end-of-time-μs]
-              [0 2015 2020 0 1]
-              [0 2020 2025 0 util/end-of-time-μs]]
-             (test-er [1 2015 2020 1]
-                      [0 2010 2025 0]))
-          "newer period completely covered")
-
-    (t/is (= [[1 2010 2025 1 util/end-of-time-μs]
-              [0 2010 2020 0 1]]
-             (test-er [1 2010 2025 1]
-                      [0 2010 2020 0]))
-          "older period completely covered")
-
-    (t/is (= [[1 2015 2025 1 util/end-of-time-μs]
-              [0 2010 2015 0 util/end-of-time-μs]
-              [0 2015 2025 0 1]]
-             (test-er [1 2015 2025 1]
-                      [0 2010 2025 0]))
-          "period end equally and overlaps")
-
-    (t/is (= [[1 2015 2025 1 util/end-of-time-μs]
-              [0 2010 2015 0 util/end-of-time-μs]
-              [0 2015 2020 0 1]]
-             (test-er [1 2015 2025 1]
-                      [0 2010 2020 0]))
-          "period ends after and overlaps")
-
-    (t/is (= [[1 2005 2010 1 util/end-of-time-μs]
-              [0 2010 2020 0 util/end-of-time-μs]]
-             (test-er [1 2005 2010 1]
-                      [0 2010 2020 0]))
-          "period starts before and touches")
-
-    (t/is (= [[1 2010 2020 1 util/end-of-time-μs]
-              [0 2005 2010 0 util/end-of-time-μs]]
-             (test-er [1 2010 2020 1]
-                      [0 2005 2010 0]))
-          "period starts after and touches")
-
-    (t/is (= [[1 2010 2020 1 util/end-of-time-μs]
-              [0 2005 2009 0 util/end-of-time-μs]]
-             (test-er [1 2010 2020 1]
-                      [0 2005 2009 0]))
-          "period starts after and does NOT overlap")))
 
 (deftest test-live-tries-with-multiple-leaves-are-loaded-correctly-2710
   (with-open [node (node/start-node {:xtdb.indexer/live-index {:page-limit 16}})]

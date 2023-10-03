@@ -2,6 +2,7 @@
   (:require [clojure.set :as set]
             [clojure.spec.alpha :as s]
             [juxt.clojars-mirrors.integrant.core :as ig]
+            [xtdb.bitemporal :as bitemp]
             [xtdb.bloom :as bloom]
             [xtdb.buffer-pool :as bp]
             [xtdb.expression :as expr]
@@ -19,14 +20,15 @@
   (:import (clojure.lang IPersistentMap MapEntry)
            (java.io Closeable)
            java.nio.ByteBuffer
-           (java.util HashMap Iterator LinkedList List Map)
+           (java.util HashMap Iterator LinkedList Map)
            (java.util.function IntPredicate)
            (java.util.stream IntStream)
            (org.apache.arrow.memory ArrowBuf BufferAllocator)
            [org.apache.arrow.memory.util ArrowBufPointer]
-           (org.apache.arrow.vector VectorLoader VectorSchemaRoot)
+           (org.apache.arrow.vector VectorLoader)
            [org.roaringbitmap.buffer MutableRoaringBitmap]
            xtdb.api.protocols.TransactionInstant
+           (xtdb.bitemporal EventResolver RowConsumer)
            xtdb.buffer_pool.IBufferPool
            xtdb.ICursor
            (xtdb.metadata IMetadataManager IMetadataPredicate ITableMetadata)
@@ -113,15 +115,6 @@
     (with-open [^Watermark wm (.openWatermark wm-src wm-tx)]
       (.allTableColNames scan-emitter wm))))
 
-;; As the algorithm processes events in reverse system time order, one can
-;; immediately write out the system-to times when having finished an event.
-;; The system-to times are not relevant for processing earlier events.
-(defrecord Rectangle [^long valid-from, ^long valid-to, ^long sys-from])
-
-#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
-(definterface RowConsumer
-  (^void accept [^int idx, ^long validFrom, ^long validTo, ^long systemFrom, ^long systemTo]))
-
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (defn- copy-row-consumer [^IRelationWriter out-rel, ^RelationReader leaf-rel, col-names]
   (letfn [(writer-for [normalised-col-name]
@@ -170,102 +163,13 @@
 
           (.endRow out-rel))))))
 
-(defn- wrap-temporal-bounds ^xtdb.operator.scan.RowConsumer [^RowConsumer rc, ^TemporalBounds temporal-bounds]
+(defn- wrap-temporal-bounds ^xtdb.bitemporal.RowConsumer [^RowConsumer rc, ^TemporalBounds temporal-bounds]
   (reify RowConsumer
     (accept [_ idx valid-from valid-to sys-from sys-to]
       (when (and (.inRange temporal-bounds valid-from valid-to sys-from sys-to)
                  (not= valid-from valid-to)
                  (not= sys-from sys-to))
         (.accept rc idx valid-from valid-to sys-from sys-to)))))
-
-#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
-(definterface EventResolver
-  (^void resolveEvent [^int idx, ^long validFrom, ^long validTo, ^long systemFrom
-                       ^xtdb.operator.scan.RowConsumer rowConsumer])
-  (^void nextIid []))
-
-(defn event-resolver
-  (^xtdb.operator.scan.EventResolver [] (event-resolver (LinkedList.)))
-
-  (^xtdb.operator.scan.EventResolver [^List !ranges]
-   (reify EventResolver
-     (nextIid [_]
-       (.clear !ranges))
-
-     ;; https://en.wikipedia.org/wiki/Allen%27s_interval_algebra
-     (resolveEvent [_ idx valid-from valid-to system-from rc]
-       (when rc
-         (let [itr (.iterator !ranges)]
-           (loop [valid-from valid-from]
-             (when (< valid-from valid-to)
-               (if-not (.hasNext itr)
-                 (.accept rc idx valid-from valid-to system-from util/end-of-time-μs)
-
-                 (let [^Rectangle r (.next itr)]
-                   (if (<= (.valid-to r) valid-from)
-                     ;; state #{< m} event
-                     (recur valid-from)
-
-                     ;; state #{> mi o oi s si d di f fi =} event
-                     (do
-                       (when (< valid-from (.valid-from r))
-                         ;; state #{> mi oi d f} event
-                         (let [valid-to (min valid-to (.valid-from r))]
-                           (when (< valid-from valid-to)
-                             (.accept rc idx valid-from valid-to
-                                      system-from util/end-of-time-μs))))
-
-                       (let [valid-from (max valid-from (.valid-from r))
-                             valid-to (min valid-to (.valid-to r))]
-                         (when (< valid-from valid-to)
-                           (.accept rc idx valid-from valid-to system-from (.sys-from r))))
-
-                       (when (< (.valid-to r) valid-to)
-                         ;; state #{o s d} event
-                         (recur (.valid-to r)))))))))))
-
-       (let [itr (.listIterator !ranges)]
-         (loop [ev-added? false]
-           (let [^Rectangle r (when (.hasNext itr)
-                                (.next itr))]
-             (cond
-               (nil? r) (when-not ev-added?
-                          (.add itr (Rectangle. valid-from valid-to system-from)))
-
-               ;; state #{< m} event
-               (<= (.valid-to r) valid-from) (recur ev-added?)
-
-               ;; state #{> mi o oi s si d di f fi =} event
-               :else (do
-                       (if (< (.valid-from r) valid-from)
-                         ;; state #{o di fi} event
-                         (.set itr (Rectangle. (.valid-from r) valid-from (.sys-from r)))
-
-                         ;; state #{> mi oi s si d f =} event
-                         (.remove itr))
-
-                       (when-not ev-added?
-                         (.add itr (Rectangle. valid-from valid-to system-from)))
-
-                       (when (< valid-to (.valid-to r))
-                         ;; state #{> mi oi si di}
-                         (let [valid-from (max valid-to (.valid-from r))]
-                           (when (< valid-from (.valid-to r))
-                             (.add itr (Rectangle. valid-from (.valid-to r) (.sys-from r))))))
-
-                       (recur true)))))
-
-         #_ ; asserting the ranges invariant isn't ideal on the fast path
-         (assert (->> (partition 2 1 !ranges)
-                      (every? (fn [[^Rectangle r1 ^Rectangle r2]]
-                                (<= (.valid-to r1) (.valid-from r2)))))
-                 {:ranges (mapv (juxt (comp util/micros->instant :valid-from)
-                                      (comp util/micros->instant :valid-to)
-                                      (comp util/micros->instant :sys-from))
-                                !ranges)
-                  :ev [(util/micros->instant valid-from)
-                       (util/micros->instant valid-to)
-                       (util/micros->instant system-from)]}))))))
 
 (defn- duplicate-ptr [^ArrowBufPointer dst, ^ArrowBufPointer src]
   (.set dst (.getBuf src) (.getOffset src) (.getLength src)))
@@ -613,7 +517,7 @@
                                          col-names col-preds
                                          (->temporal-bounds params basis scan-opts)
                                          params
-                                         {:ev-resolver (event-resolver)
+                                         {:ev-resolver (bitemp/event-resolver)
                                           :skip-iid-ptr (ArrowBufPointer.)
                                           :prev-iid-ptr (ArrowBufPointer.)
                                           :current-iid-ptr (ArrowBufPointer.)}
@@ -622,3 +526,4 @@
 
 (defmethod lp/emit-expr :scan [scan-expr {:keys [^IScanEmitter scan-emitter scan-col-types, param-types]}]
   (.emitScan scan-emitter scan-expr scan-col-types param-types))
+
