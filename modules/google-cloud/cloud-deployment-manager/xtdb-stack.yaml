@@ -1,0 +1,13 @@
+imports:
+- path: xtdb-object-store-stack.jinja
+
+resources:
+- name: xtdb-object-store-stack
+  type: xtdb-object-store-stack.jinja
+  properties:
+    object_store_bucketname: xtdb-object-store
+    bucket_location: EUROPE-WEST2
+    bucket_location_type: region
+    notifications_pubsub_topic_name: xtdb-object-store-notif-topic
+    custom_role_name: xtdb_custom_role
+    custom_role_additional_permissions: [] 
