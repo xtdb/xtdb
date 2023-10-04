@@ -27,8 +27,8 @@ public class ArrowBufLRU<K> extends LinkedHashMap<K, ArrowBuf> {
 
     public boolean removeEldestEntry(Map.Entry<K, ArrowBuf> entry) {
         if(maxSize < size() || maxByteSize < byteSize){
-            byteSize -= entry.getValue().capacity();
             entry.getValue().close();
+            byteSize -= entry.getValue().capacity();
             return true;
         }
         return false;
