@@ -10,7 +10,8 @@
             [xtdb.james-bond :as bond]
             [xtdb.node :as node]
             [xtdb.test-util :as tu]
-            [xtdb.util :as util]))
+            [xtdb.util :as util])
+  (:import (xtdb.types ClojureForm)))
 
 (t/use-fixtures :each tu/with-mock-clock tu/with-node)
 
@@ -2379,3 +2380,26 @@
                  '{:find [v]
                    :where [(match :xt-docs [{:xt/id 2} v] {:for-valid-time :all-time})]}))
         "no zero width valid-time intervals"))
+
+(deftest row-alias-on-txs-tables-2809
+  (xt/submit-tx tu/*node* [[:put :xt-docs {:xt/id 1 :v 1}]])
+  (xt/submit-tx tu/*node* [[:call :non-existing-fn]])
+
+  (let [txs (->> (xt/q tu/*node*
+                       '{:find [tx]
+                         :where [(match :xt/txs {:xt/* tx})]})
+                 (mapv :tx))]
+
+    (t/is (= [{:xt/tx_time #time/zoned-date-time "2020-01-02T00:00Z[UTC]",
+               :xt/id 1,
+               :xt/committed? false}
+              {:xt/tx_time #time/zoned-date-time "2020-01-01T00:00Z[UTC]",
+               :xt/id 0,
+               :xt/committed? true}]
+             (mapv #(dissoc % :xt/error) txs)))
+
+    (t/is (= {:xtdb.error/error-type :runtime-error,
+              :xtdb.error/error-key :xtdb.call/no-such-tx-fn,
+              :xtdb.error/message "Runtime error: ':xtdb.call/no-such-tx-fn'",
+              :fn-id :non-existing-fn}
+             (.getData ^xtdb.RuntimeException (.form ^ClojureForm (:xt/error (first txs))))))))
