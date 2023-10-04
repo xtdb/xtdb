@@ -5,7 +5,8 @@
            [com.google.cloud.pubsub.v1 SubscriptionAdminClient Subscriber MessageReceiver AckReplyConsumer]
            [com.google.cloud.storage Blob Storage Storage$BlobListOption]
            [java.lang AutoCloseable]
-           [java.util NavigableSet UUID]))
+           [java.util NavigableSet UUID]
+           [java.util.concurrent TimeUnit]))
 
 (defn file-list-init [{:keys [^Storage storage-service bucket prefix]} ^NavigableSet file-name-cache]
   (let [list-blob-opts (into-array Storage$BlobListOption
@@ -67,16 +68,25 @@
 
       ;; Start processing messages with the subscriber
     (log/info "Watching for filechanges from bucket " bucket)
-    (.startAsync subscriber)
-    (.awaitRunning subscriber)
+    (.. subscriber (startAsync) (awaitRunning))
 
     ;; Return an auto closeable object that clears up the processor and subscription
     (reify
       AutoCloseable
       (close [_]
         (log/info "Stopping & terminate filechange subscriber client")
-        (.stopAsync subscriber)
-        (.awaitTerminated subscriber)
+        (.. subscriber (stopAsync) (awaitTerminated))
 
         (log/info (format "Removing subscription %s on topic %s " subscription-name pubsub-topic))
-        (.deleteSubscription subcription-admin-client subscription-resource-name)))))
+        (.deleteSubscription subcription-admin-client subscription-resource-name)
+        
+        (log/info "Cleaning up SubcriptionAdminClient")
+        ;; Code inpsired from shutdown logic here: 
+        ;; https://stackoverflow.com/questions/18425026/shutdown-and-awaittermination-which-first-call-have-any-difference
+        (.shutdown subcription-admin-client)
+        (try
+          (when-not (.awaitTermination subcription-admin-client 3 TimeUnit/SECONDS)
+            (.shutdownNow subcription-admin-client))
+          (catch InterruptedException e
+            (.shutdownNow subcription-admin-client)))
+        (.close subcription-admin-client)))))
