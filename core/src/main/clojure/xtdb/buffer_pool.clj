@@ -82,8 +82,7 @@
                       (try
                         (let [nio-buffer (util/->mmap-path buffer-path)
                               create-arrow-buf #(util/->arrow-buf-view allocator nio-buffer cleanup-file)
-                              [hit buf] (cache-compute buffers k create-arrow-buf)]
-                          (when hit (cleanup-file))
+                              [_ buf] (cache-compute buffers k create-arrow-buf)]
                           buf)
                         (catch Throwable t
                           (try (cleanup-file) (catch Throwable t1 (log/error t1 "Error caught cleaning up file during exception handling")))
