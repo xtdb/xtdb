@@ -233,3 +233,15 @@
              (xt/q tu/*node*
                    '{:find [xt/id n]
                      :where [(match :docs [xt/id {:a/b n}])]})))))
+
+(t/deftest test-lazy-error-in-tx-fns-2811
+  (xt/submit-tx tu/*node* [[:put-fn :my-fn '(fn [ns] (for [n ns]
+                                                       (if (< n 100)
+                                                         [:put :foo {:xt/id n :v n}]
+                                                         (throw (ex-info "boom" {})))))]])
+  (xt/submit-tx tu/*node* [[:call :my-fn (range 200)]])
+  (xt/submit-tx tu/*node* [[:put :docs {:xt/id 1 :v 1}]])
+  (t/is (= [{:xt/id 1, :v 1}]
+           (xt/q tu/*node*
+                 '{:find [xt/id v]
+                   :where [(match :docs [xt/id v])]}))))

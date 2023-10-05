@@ -240,10 +240,11 @@
                 args (.getObject args-rdr tx-op-idx)
 
                 res (try
-                      (sci/binding [sci/out *out*
-                                    sci/in *in*]
-                        (apply tx-fn args))
-
+                      (let [res (sci/binding [sci/out *out*
+                                              sci/in *in*]
+                                  (apply tx-fn args))]
+                        (cond-> res
+                          (instance? clojure.lang.LazySeq res) doall))
                       (catch InterruptedException ie (throw ie))
                       (catch Throwable t
                         (log/warn t "unhandled error evaluating tx fn")
