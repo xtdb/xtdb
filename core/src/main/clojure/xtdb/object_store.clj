@@ -157,8 +157,7 @@
              (throw (obj-missing-exception k)))
 
            (when-not (util/path-exists out-path)
-             (Files/copy from-path out-path
-                         ^"[Ljava.nio.file.CopyOption;" (make-array CopyOption 0)))
+             (util/copy-file-atomically root-path from-path out-path))
            out-path)))))
 
   (putObject [_this k buf]

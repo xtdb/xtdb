@@ -341,6 +341,15 @@
       (finally
         (Files/deleteIfExists to-path-temp)))))
 
+(defn copy-file-atomically [^Path root-path, ^Path from-path, ^Path to-path]
+  (let [to-path-temp (doto (.resolve root-path (str ".tmp/" (UUID/randomUUID)))
+                       (-> (.getParent) mkdirs))]
+    (try
+      (Files/copy from-path to-path-temp ^"[Ljava.nio.file.CopyOption;" (make-array CopyOption 0))
+      (atomic-move to-path-temp to-path)
+      (finally
+        (Files/deleteIfExists to-path-temp)))))
+
 (defn ->supplier {:style/indent :defn} ^java.util.function.Supplier [f]
   (reify Supplier
     (get [_]
