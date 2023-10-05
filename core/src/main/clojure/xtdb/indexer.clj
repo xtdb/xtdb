@@ -244,7 +244,7 @@
                                               sci/in *in*]
                                   (apply tx-fn args))]
                         (cond-> res
-                          (instance? clojure.lang.Seqable res) doall))
+                          (seqable? res) doall))
                       (catch InterruptedException ie (throw ie))
                       (catch Throwable t
                         (log/warn t "unhandled error evaluating tx fn")
