@@ -9,6 +9,10 @@
            (java.util ArrayList Random)
            (java.util.concurrent ConcurrentHashMap)))
 
+(defn q-now [node q+args]
+  (xt/q node q+args
+        {:basis {:after-tx (:latest-completed-tx (xt/status node))}}))
+
 (defn random-price [worker] (.nextDouble (b2/rng worker)))
 
 (def user-id (partial str "u_"))
@@ -279,7 +283,7 @@
                           (match :gav {:xt/id gav-id})
                           [gav-id :gav_gag_id gag-id]
                           [gav-id :gav_name gav-name]]}]
-          (->> (xt/q (:sut worker) [q gag-ids gav-ids])
+          (->> (q-now (:sut worker) [q gag-ids gav-ids])
                (str/join " ")
                (str description " ")))]
 
@@ -326,13 +330,13 @@
       :else i_status)))
 
 (defn item-status-groups [node ^Instant now]
-  (let [items (xt/q node '{:find [i, i_id, i_u_id, i_status, i_end_date, i_num_bids]
-                           :where [(match :item {:xt/id i})
-                                   [i :i_id i_id]
-                                   [i :i_u_id i_u_id]
-                                   [i :i_status i_status]
-                                   [i :i_end_date i_end_date]
-                                   [i :i_num_bids i_num_bids]]})
+  (let [items (q-now node '{:find [i, i_id, i_u_id, i_status, i_end_date, i_num_bids]
+                            :where [(match :item {:xt/id i})
+                                    [i :i_id i_id]
+                                    [i :i_u_id i_u_id]
+                                    [i :i_status i_status]
+                                    [i :i_end_date i_end_date]
+                                    [i :i_num_bids i_num_bids]]})
         all (ArrayList.)
         open (ArrayList.)
         ending-soon (ArrayList.)
@@ -408,7 +412,6 @@
   (log/info "#gag " (.get (b2/counter worker gag-id)))
   (log/info "#gav " (.get (b2/counter worker gav-id))))
 
-
 (defn random-item [worker & {:keys [status] :or {status :all}}]
   (let [isg (-> worker :custom-state :item-status-groups (get status) vec)
         item (b2/random-nth worker isg)]
@@ -450,7 +453,7 @@
             :in [i_id]
             :where [(match :item {:xt/id i_id :i_status :open :i_u_id i_u_id
                                   :i_initial_price i_initial_price :i_current_price i_current_price})]}]
-    (xt/q sut [q i_id])))
+    (q-now sut [q i_id])))
 
 (defn read-category-tsv []
   (let [cat-tsv-rows
@@ -567,7 +570,8 @@
     (try
       (apply f args)
       (catch Throwable t
-        (log/error t (str "Error while executing " f))))))
+        (log/error t (str "Error while executing " f))
+        (throw t)))))
 
 (defn benchmark [{:keys [seed,
                          threads,
