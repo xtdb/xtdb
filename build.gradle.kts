@@ -210,6 +210,55 @@ if (hasProperty("fin")) {
     }
 }
 
+fun addToArgsIfExistent(propertyName: String, args: MutableList<String>){
+    if (project.hasProperty(propertyName)) {
+        project.property(propertyName)?.toString()?.let { property ->
+            args.add("--" + propertyName)
+            args.add(property)
+        }
+    }
+}
+
+tasks.create("run-auctionmark", JavaExec::class) {
+    classpath = sourceSets.test.get().runtimeClasspath
+    mainClass.set("clojure.main")
+    jvmArgs(defaultJvmArgs + sixGBJvmArgs)
+    val args = mutableListOf<String>(
+        "-m", "xtdb.bench2.xtdb2"
+    )
+
+    addToArgsIfExistent("output-file", args)
+    addToArgsIfExistent("load-phase" , args)
+    addToArgsIfExistent("duration", args)
+
+    this.args = args
+}
+
+tasks.create("create-reports", JavaExec::class) {
+    classpath = sourceSets.test.get().runtimeClasspath
+    mainClass.set("clojure.main")
+    jvmArgs(defaultJvmArgs)
+    val args = mutableListOf<String>(
+        "-m", "xtdb.bench2.report"
+    )
+
+    if (project.hasProperty("report0")) {
+        project.property("report0")?.toString()?.let { report ->
+            args.add("--report")
+            args.add(report)
+        }
+    }
+
+    if (project.hasProperty("report1")) {
+        project.property("report1")?.toString()?.let { report ->
+            args.add("--report")
+            args.add(report)
+        }
+    }
+
+    this.args = args
+}
+
 fun createSltTask(
     taskName: String,
     maxFailures: Long = 0,
