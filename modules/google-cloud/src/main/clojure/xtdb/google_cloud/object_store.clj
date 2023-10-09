@@ -81,6 +81,7 @@
      (get-blob-range this k start len)))
 
   (putObject [this k buf]
+    (.add file-name-cache k)
     (put-blob this k buf)
     (CompletableFuture/completedFuture nil))
 
@@ -91,6 +92,7 @@
     (file-list/list-files-under-prefix file-name-cache dir))
 
   (deleteObject [this k]
+    (.remove file-name-cache k)
     (delete-blob this k)
     (CompletableFuture/completedFuture nil))
 
