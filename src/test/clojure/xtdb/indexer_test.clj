@@ -615,3 +615,34 @@
 
         (tj/check-json (.toPath (io/as-file (io/resource "xtdb/indexer-test/can-index-sql-insert")))
                        (.resolve node-dir "objects"))))))
+
+(t/deftest byte-counts-test
+  (with-open [node (node/start-node {:xtdb/indexer {:bytes-per-chunk 4096}})]
+
+    (xt/submit-tx node [[:put :foo {:xt/id 42, :bin (byte-array 4096)}]])
+    (xt/submit-tx node [[:put :foo {:xt/id 43, :bin (byte-array 4096)}]])
+    (xt/submit-tx node [[:put :bar {:xt/id 44, :bin (byte-array 4096)}]])
+
+    (tu/then-await-tx node)
+
+    (t/is (= 6 (:next-chunk-idx (meta/latest-chunk-metadata (tu/component node ::meta/metadata-manager))))))
+
+  (with-open [node (node/start-node {:xtdb/indexer {:bytes-per-chunk 1}})]
+
+    (xt/submit-tx node [[:put :foo {:xt/id 42, :bin (byte-array 4096)}]])
+    (xt/submit-tx node [[:put :foo {:xt/id 43, :bin (byte-array 4096)}]])
+    (xt/submit-tx node [[:put :bar {:xt/id 44, :bin (byte-array 4096)}]])
+
+    (tu/then-await-tx node)
+
+    (t/is (= 6 (:next-chunk-idx (meta/latest-chunk-metadata (tu/component node ::meta/metadata-manager))))))
+
+  (t/testing "we chunk after we exceed the limit, which means the chunk size could be see an additional transaction on top the limit."
+    (with-open [node (node/start-node {:xtdb/indexer {:bytes-per-chunk 4095}})]
+
+      (xt/submit-tx node [[:put :foo {:xt/id 42, :bin (byte-array 4094)}]])
+      (xt/submit-tx node [[:put :foo {:xt/id 43, :bin (byte-array 2)}]])
+
+      (tu/then-await-tx node)
+
+      (t/is (= 2 (:next-chunk-idx (meta/latest-chunk-metadata (tu/component node ::meta/metadata-manager))))))))

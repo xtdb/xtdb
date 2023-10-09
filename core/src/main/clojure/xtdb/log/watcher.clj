@@ -42,7 +42,7 @@
 
                       (condp = (Byte/toUnsignedInt (.get ^ByteBuffer (.-record record) 0))
                         xt-log/hb-user-arrow-transaction
-                        (with-open [tx-ops-ch (util/->seekable-byte-channel (.record record))
+                        (with-open [tx-ops-ch (util/->seekable-byte-channel (.-record record))
                                     sr (ArrowStreamReader. tx-ops-ch allocator)
                                     tx-root (.getVectorSchemaRoot sr)]
                           (.loadNextBatch sr)
@@ -52,7 +52,7 @@
                                                              (not (.isNull system-time-vec 0))
                                                              (assoc :system-time (-> (.get system-time-vec 0) (util/micros->instant))))]
 
-                            (.indexTx indexer tx-key tx-root)))
+                            (.indexTx indexer tx-key tx-root (.limit (.-record record)))))
 
                         xt-log/hb-flush-chunk
                         (let [expected-chunk-tx-id (get-bb-long (:record record) 1 -1)]

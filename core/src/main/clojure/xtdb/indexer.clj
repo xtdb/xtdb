@@ -48,7 +48,8 @@
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface IIndexer
   (^xtdb.api.protocols.TransactionInstant indexTx [^xtdb.api.protocols.TransactionInstant tx
-                                                   ^org.apache.arrow.vector.VectorSchemaRoot txRoot])
+                                                   ^org.apache.arrow.vector.VectorSchemaRoot txRoot
+                                                   ^long txByteCount])
   (^xtdb.api.protocols.TransactionInstant latestCompletedTx [])
   (^xtdb.api.protocols.TransactionInstant latestCompletedChunkTx [])
   (^java.util.concurrent.CompletableFuture #_<TransactionInstant> awaitTxAsync [^xtdb.api.protocols.TransactionInstant tx, ^java.time.Duration timeout])
@@ -452,12 +453,13 @@
 
                   ^RowCounter row-counter
                   ^long rows-per-chunk
+                  ^long bytes-per-chunk
 
                   ^:volatile-mutable ^IWatermark shared-wm
                   ^StampedLock wm-lock]
 
   IIndexer
-  (indexTx [this {:keys [system-time] :as tx-key} tx-root]
+  (indexTx [this {:keys [system-time] :as tx-key} tx-root tx-byte-count]
     (try
       (if (and (not (nil? latest-completed-tx))
                (neg? (compare system-time
@@ -534,15 +536,18 @@
 
                     (do
                       (add-tx-row! row-counter live-idx-tx tx-key nil)
-
                       (.commit live-idx-tx)))
+
+                  ;; TODO is this correct in presence of aborts?
+                  (.addTxBytes row-counter tx-byte-count)
 
                   (set! (.-latest-completed-tx this) tx-key)
 
                   (finally
                     (.unlock wm-lock wm-lock-stamp)))))
 
-            (when (>= (.getChunkRowCount row-counter) rows-per-chunk)
+            (when (or (>= (.getChunkByteCount row-counter) bytes-per-chunk)
+                      (>= (.getChunkRowCount row-counter) rows-per-chunk))
               (finish-chunk! this))
 
             tx-key)))
@@ -639,11 +644,12 @@
           :scan-emitter (ig/ref :xtdb.operator.scan/scan-emitter)
           :live-index (ig/ref :xtdb.indexer/live-index)
           :ra-src (ig/ref ::op/ra-query-source)
+          :bytes-per-chunk (* 64 1024 1024)
           :rows-per-chunk 102400}
          opts))
 
 (defmethod ig/init-key :xtdb/indexer
-  [_ {:keys [allocator object-store metadata-mgr scan-emitter, ra-src, live-index, rows-per-chunk]}]
+  [_ {:keys [allocator object-store metadata-mgr scan-emitter, ra-src, live-index, bytes-per-chunk, rows-per-chunk]}]
 
   (let [{:keys [latest-completed-tx next-chunk-idx], :or {next-chunk-idx 0}} (meta/latest-chunk-metadata metadata-mgr)]
     (util/with-close-on-catch [allocator (util/->child-allocator allocator "indexer")]
@@ -656,7 +662,9 @@
                  (PriorityBlockingQueue.)
 
                  (RowCounter. next-chunk-idx)
+
                  rows-per-chunk
+                 bytes-per-chunk
 
                  nil ;; watermark
                  (StampedLock.)))))
