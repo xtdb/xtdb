@@ -45,6 +45,37 @@ You do not need to install Gradle to develop XT2 - there is a Gradle https://doc
 ** `./gradlew jdbc-test` / `./gradlew kafka-test`
 ** `docker-compose down`
 
+=== Auth for testing cloud based resources 
+
+.*S3* (ensure all of the below are done on a consistent region):
+* Need to ensure the `s3-stack` is setup via CloudFormation
+** See the README for more info here.
+* Need to log in to the AWS CLI - using `aws configure sso` 
+* Need to assume the role on the CLI - `aws sts assume-role --role-arn <ARN of XTDBIamRole> --role-session-name <session-name> --profile <SSO profile>`
+* Set `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` & `AWS_SESSION_TOKEN` from the output 
+  of the above, then set AWS_REGION=<region for the cloudformation>
+* Start the Gradle REPL and connect to it, to have all of the AWS creds available.
+
+.*Azure*
+* Ensure the Azure stack, `azure-resource-manager/azure-stack.json` stack is setup via the Azure deployment manager.
+** See the README for more info here.
+* Ensure a user/app registration is created with the create `xtdb-custom-role`.
+* Create an access token for said user/app registration.
+* Set `AZURE_CLIENT_ID` & `AZURE_CLIENT_SECRET` from the created access token. 
+* Set `AZURE_TENANT_ID` based on the tenant id on which you created the user/app registration/  
+* Set `AZURE_SUBSCRIPTION_ID` based on whichever subscription you created the stack on.
+* Start the Gradle REPL and connect to it, to have all of the Azure creds available.
+
+.*Google Cloud*
+* Ensure the Google Cloud deployment, `cloud-deployment-manager/xtdb-object-store-stack.jinja`, is setup on the XTDB google cloud account.
+** See the README for more info here.
+* Ensure a https://console.cloud.google.com/iam-admin/serviceaccounts[Service Account] has been created for tests.
+** Ensure the Service Account has the XTDB Custom Role created by the deployment above.
+* Create a private key for the service account, saving a copy of the JSON credential file locally.
+* Authenticate as the service account, using `gcloud auth activate-service-account <example-service-account@domain.com> --key-file <private-key.json>`
+* Start the Gradle REPL and connect to it, to have all of the google cloud creds available.
+
+
 == Profiling
 
 To attach YourKit:
