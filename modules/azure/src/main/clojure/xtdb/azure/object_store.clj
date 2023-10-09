@@ -73,6 +73,7 @@
      (get-blob-range blob-container-client (str prefix k) start len)))
 
   (putObject [_ k buf]
+    (.add file-name-cache k)
     (put-blob blob-container-client (str prefix k) buf)
     (CompletableFuture/completedFuture nil))
 
@@ -83,6 +84,7 @@
     (file-list/list-files-under-prefix file-name-cache dir))
 
   (deleteObject [_ k]
+    (.remove file-name-cache k)
     (delete-blob blob-container-client (str prefix k))
     (CompletableFuture/completedFuture nil))
 
