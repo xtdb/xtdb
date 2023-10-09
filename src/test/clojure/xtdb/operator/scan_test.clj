@@ -598,3 +598,27 @@
                 {:node tu/*node*})))
       ;; one page for the right side
       (t/is (= 1 @!page-idxs-cnt)))))
+
+(deftest duplicate-rows-2815
+  (let [page-limit 16]
+    (with-open [node (node/start-node {:xtdb.indexer/live-index {:page-limit page-limit}})]
+      (let [first-page (for [i (range page-limit)] (java.util.UUID. 0 i))
+            second-page (for [i (range page-limit)] (java.util.UUID. 1 i))
+            uuid (first first-page)]
+        (xt/submit-tx node (for [uuid (concat first-page second-page)]
+                             [:put :docs {:xt/id uuid}]))
+        (tu/then-await-tx node)
+        (tu/finish-chunk! node)
+        (xt/submit-tx node  [[:put :docs {:xt/id uuid}]])
+        (tu/then-await-tx node)
+
+        ;; first + second page
+        (t/is (= 32
+                 (count (tu/query-ra
+                         '[:scan {:table docs} [xt/id]]
+                         {:node node}))))
+
+        (t/is (= (into #{} (concat first-page second-page))
+                 (into #{} (map :xt/id) (tu/query-ra
+                                         '[:scan {:table docs} [xt/id]]
+                                         {:node node}))))))))
