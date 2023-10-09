@@ -62,18 +62,15 @@
   (let [os (object-store (random-uuid))]
     (os-test/test-range os)))
 
-(def wait-time-ms 5000)
-
 (t/deftest ^:google-cloud list-test
   (with-open [os (object-store (random-uuid))]
-    (os-test/test-list-objects os wait-time-ms)))
+    (os-test/test-list-objects os)))
 
 (t/deftest ^:google-cloud list-test-with-prior-objects
   (let [prefix (random-uuid)]
     (with-open [os (object-store prefix)]
       (os-test/put-edn os "alice" :alice)
       (os-test/put-edn os "alan" :alan)
-      (Thread/sleep wait-time-ms)
       (t/is (= ["alan" "alice"] (.listObjects ^ObjectStore os))))
 
     (with-open [os (object-store prefix)]
@@ -81,11 +78,11 @@
         (t/is (= ["alan" "alice"] (.listObjects ^ObjectStore os))))
       (t/testing "should be able to delete prior objects and have that reflected in list objects output"
         @(.deleteObject ^ObjectStore os "alice")
-        (Thread/sleep wait-time-ms)
         (t/is (= ["alan"] (.listObjects ^ObjectStore os)))))))
 
 (t/deftest ^:google-cloud multiple-object-store-list-test
-  (let [prefix (random-uuid)]
+  (let [prefix (random-uuid)
+        wait-time-ms 5000]
     (with-open [os-1 (object-store prefix)
                 os-2 (object-store prefix)]
       (os-test/put-edn os-1 "alice" :alice)
