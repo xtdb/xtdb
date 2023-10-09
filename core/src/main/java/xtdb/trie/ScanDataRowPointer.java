@@ -26,7 +26,7 @@ public class ScanDataRowPointer implements IDataRowPointer {
     public static final Keyword PUT = Keyword.intern("put");
     public static final Keyword DELETE = Keyword.intern("delete");
 
-    public ScanDataRowPointer(RelationReader relReader, Object rowConsumer) {
+    public ScanDataRowPointer(RelationReader relReader, Object rowConsumer, byte [] path) {
         this.relReader = relReader;
 
         iidReader = relReader.readerForName("xt$iid");
@@ -42,6 +42,17 @@ public class ScanDataRowPointer implements IDataRowPointer {
         deleteValidToReader = deleteReader.structKeyReader("xt$valid_to");
 
         this.rowConsumer = rowConsumer;
+
+        ArrowBufPointer bufPointer;
+        int left = 0;
+        int right = rowCount();
+        int mid;
+        while(left < right) {
+            mid = (left + right) / 2;
+            if (HashTrie.compareToPath(iidReader.getPointer(mid), path) < 0) left = mid + 1;
+            else right = mid;
+        }
+        this.idx = left;
     }
 
     @Override
