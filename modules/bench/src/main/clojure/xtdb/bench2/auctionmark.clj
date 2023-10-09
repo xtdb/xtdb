@@ -609,8 +609,11 @@
            [{:t :do
              :stage :setup-worker
              :tasks [{:t :call, :f (fn [_] (log/info "setting up worker with stats"))}
-                     ;; wait for node to come up
-                     {:t :call, :f (fn [_] (when-not load-phase (Thread/sleep 1000)))}
+                     ;; wait for node to catch up
+                     {:t :call, :f #(when-not load-phase
+                                      ;; otherwise nothing has come through the log yet
+                                      (Thread/sleep 1000)
+                                      #_(tu/then-await-tx (:sut %)))}
                      {:t :call, :f load-stats-into-worker}
                      {:t :call, :f log-stats}
                      {:t :call, :f (fn [_] (log/info "finished setting up worker with stats"))}]}
