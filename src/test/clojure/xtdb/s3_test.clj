@@ -7,7 +7,6 @@
            xtdb.object_store.ObjectStore))
 
 ;; Setup the stack via cloudformation - see modules/s3/cloudformation/s3-stack.yml
-;; Will need to create and set an access token for the S3TestUser
 ;; Ensure region is set locally to wherever cloudformation stack is created (ie, eu-west-1 if stack on there)
 
 (def bucket
@@ -32,18 +31,15 @@
   (with-open [os (object-store (random-uuid))]
     (os-test/test-range os)))
 
-(def wait-time-ms 10000)
-
 (t/deftest ^:s3 list-test
   (with-open [os (object-store (random-uuid))]
-    (os-test/test-list-objects os wait-time-ms)))
+    (os-test/test-list-objects os)))
 
 (t/deftest ^:s3 list-test-with-prior-objects
   (let [prefix (random-uuid)]
     (with-open [os (object-store prefix)]
       (os-test/put-edn os "alice" :alice)
       (os-test/put-edn os "alan" :alan)
-      (Thread/sleep wait-time-ms)
       (t/is (= ["alan" "alice"] (.listObjects ^ObjectStore os))))
 
     (with-open [os (object-store prefix)]
@@ -51,12 +47,12 @@
         (t/is (= ["alan" "alice"] (.listObjects ^ObjectStore os))))
 
       (t/testing "should be able to delete prior objects and have that reflected in list objects output"
-        @(.deleteObject ^ObjectStore os "alice")
-        (Thread/sleep wait-time-ms)
+        @(.deleteObject ^ObjectStore os "alice") 
         (t/is (= ["alan"] (.listObjects ^ObjectStore os)))))))
 
 (t/deftest ^:s3 multiple-object-store-list-test
-  (let [prefix (random-uuid)]
+  (let [prefix (random-uuid)
+        wait-time-ms 10000]
     (with-open [os-1 (object-store prefix)
                 os-2 (object-store prefix)]
       (os-test/put-edn os-1 "alice" :alice)

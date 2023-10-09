@@ -19,6 +19,9 @@
            [xtdb.object_store ObjectStore]
            [xtdb.s3 S3Configurator]))
 
+;; TODO:
+;; Need to consider - local cache vs file watcher, dont want to re-add/re-remove the same file?
+
 (defn- get-obj-req
   ^GetObjectRequest [{:keys [^S3Configurator configurator bucket prefix]} k]
   (-> (GetObjectRequest/builder)
@@ -73,29 +76,31 @@
         (CompletableFuture/failedFuture e))))
 
   (putObject [_ k buf]
-    (-> (.headObject client
-                     (-> (HeadObjectRequest/builder)
-                         (.bucket bucket)
-                         (.key (str prefix k))
-                         (->> (.configureHead configurator))
-                         ^HeadObjectRequest (.build)))
-        (util/then-apply (fn [_resp] true))
-        (.exceptionally (reify Function
-                          (apply [_ e]
-                            (let [e (.getCause ^Exception e)]
-                              (if (instance? NoSuchKeyException e)
-                                false
-                                (throw e))))))
-        (util/then-compose (fn [exists?]
-                             (if exists?
-                               (CompletableFuture/completedFuture nil)
-                               (.putObject client
-                                           (-> (PutObjectRequest/builder)
-                                               (.bucket bucket)
-                                               (.key (str prefix k))
-                                               (->> (.configurePut configurator))
-                                               ^PutObjectRequest (.build))
-                                           (AsyncRequestBody/fromByteBuffer buf)))))))
+    (let [prefixed-key (str prefix k)]
+      (.add file-name-cache k)
+      (-> (.headObject client
+                       (-> (HeadObjectRequest/builder)
+                           (.bucket bucket)
+                           (.key prefixed-key)
+                           (->> (.configureHead configurator))
+                           ^HeadObjectRequest (.build)))
+          (util/then-apply (fn [_resp] true))
+          (.exceptionally (reify Function
+                            (apply [_ e]
+                              (let [e (.getCause ^Exception e)]
+                                (if (instance? NoSuchKeyException e)
+                                  false
+                                  (throw e))))))
+          (util/then-compose (fn [exists?]
+                               (if exists?
+                                 (CompletableFuture/completedFuture nil)
+                                 (.putObject client
+                                             (-> (PutObjectRequest/builder)
+                                                 (.bucket bucket)
+                                                 (.key prefixed-key)
+                                                 (->> (.configurePut configurator))
+                                                 ^PutObjectRequest (.build))
+                                             (AsyncRequestBody/fromByteBuffer buf))))))))
 
   (listObjects [_this]
     (into [] file-name-cache))
@@ -104,6 +109,7 @@
     (file-list/list-files-under-prefix file-name-cache dir))
 
   (deleteObject [_ k]
+    (.remove file-name-cache k)
     (.deleteObject client
                    (-> (DeleteObjectRequest/builder)
                        (.bucket bucket)
