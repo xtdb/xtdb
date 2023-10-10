@@ -58,6 +58,28 @@
   ;; TODO check errors
   )
 
-(defn- roundtrip-q [q]
-  (edn/unparse (edn/parse-query q)))
+(defn- roundtrip-q [query]
+  (let [parsed (json/parse-query query)]
+    [(edn/unparse parsed) (json/unparse parsed)]))
 
+(t/deftest test-parse-from
+  (t/is (= ['(from :foo) {"from" ["foo"]}]
+           (roundtrip-q {"from" ["foo"]})))
+
+  (let [json-q {"from" [{"table" ["foo" {"forValidTime" {"at" {"@value" "2020-01-01", "@type" "xt:date"}}}]}]}]
+    (t/is (= ['(from [:foo {:for-valid-time [:at #time/date "2020-01-01"]}])
+              json-q]
+             (roundtrip-q json-q))))
+
+  (let [json-q {"from" [{"table" ["foo" {"forValidTime" "allTime"
+                                         "forSystemTime" {"in" [{"@value" "2020-01-01", "@type" "xt:date"} nil]}}]}]}]
+    (t/is (= ['(from [:foo {:for-valid-time :all-time
+                            :for-system-time [:in #time/date "2020-01-01" nil]}])
+              json-q]
+             (roundtrip-q json-q))))
+
+  (t/is (= ['(from :foo a {:xt/id b} c) {"from" ["foo" "a" {"xt/id" "b"} "c"]}]
+           (roundtrip-q {"from" ["foo" "a" {"xt/id" "b"} {"c" "c"}]})))
+
+  ;; TODO check errors
+  )
