@@ -111,3 +111,27 @@
 
            (roundtrip-q {"where" [{">=" ["foo" "bar"]}
                                   {"<" ["bar" "baz"]}]}))))
+
+(t/deftest test-with
+  (t/is (= ['(with a b {:c (+ a b)})
+            {"with" ["a" "b" {"c" {"+" ["a" "b"]}}]}]
+
+           (roundtrip-q {"with" ["a" "b" {"c" {"+" ["a" "b"]}}]}))))
+
+(t/deftest test-without
+  (t/is (= ['(without :a :b :c)
+            {"without" ["a" "b" "c"]}]
+
+           (roundtrip-q {"without" ["a" "b" "c"]}))))
+
+(t/deftest test-return
+  (t/is (= ['(return a b {:c (+ a b)})
+            {"return" ["a" "b" {"c" {"+" ["a" "b"]}}]}]
+
+           (roundtrip-q {"return" ["a" "b" {"c" {"+" ["a" "b"]}}]}))))
+
+(t/deftest test-aggregate
+  (t/is (= ['(aggregate a b {:c (sum (+ a b))})
+            {"aggregate" ["a" "b" {"c" {"sum" [{"+" ["a" "b"]}]}}]}]
+
+           (roundtrip-q {"aggregate" ["a" "b" {"c" {"sum" [{"+" ["a" "b"]}]}}]}))))

@@ -2,7 +2,8 @@
   (:require [xtdb.error :as err])
   (:import [java.time Duration LocalDate LocalDateTime ZonedDateTime]
            (xtdb.query Expr Expr$Bool Expr$Call Expr$Double Expr$LogicVar Expr$Long Expr$Obj
-                       QueryStep QueryStep$BindingSpec QueryStep$From QueryStep$Pipeline QueryStep$Unify QueryStep$Where TemporalFilter TemporalFilter$AllTime TemporalFilter$At TemporalFilter$In)))
+                       QueryStep QueryStep$Aggregate QueryStep$BindingSpec QueryStep$From QueryStep$Pipeline QueryStep$Return QueryStep$Unify QueryStep$Where QueryStep$With QueryStep$Without
+                       TemporalFilter TemporalFilter$AllTime TemporalFilter$At TemporalFilter$In)))
 
 (defmulti parse-query
   (fn [query]
@@ -184,6 +185,15 @@
           (.binding (parse-binding-specs binding-specs step))))))
 
 (extend-protocol Unparse
+  QueryStep$BindingSpec
+  (unparse [binding-spec]
+    (let [attr (.attr binding-spec)
+          expr (.expr binding-spec)]
+      (if (and (instance? Expr$LogicVar expr)
+               (= (.lv ^Expr$LogicVar expr) attr))
+        attr
+        {attr (unparse expr)})))
+
   QueryStep$From
   (unparse [from]
     (let [table (.table from)
@@ -195,13 +205,7 @@
                                          for-sys-time (assoc "forSystemTime" (unparse for-sys-time)))]}
                        table)]
 
-                    (for [^QueryStep$BindingSpec binding-spec (.bindSpecs from)
-                          :let [attr (.attr binding-spec)
-                                expr (.expr binding-spec)]]
-                      (if (and (instance? Expr$LogicVar expr)
-                               (= (.lv ^Expr$LogicVar expr) attr))
-                        attr
-                        {attr (unparse expr)})))})))
+                    (map unparse (.bindSpecs from)))})))
 
 (defmethod parse-query 'where [step]
   (let [v (val (first step))]
@@ -224,9 +228,41 @@
 
     (QueryStep/unify (mapv parse-query v))))
 
+(defmethod parse-query 'with [step]
+  (let [v (val (first step))]
+    (when-not (vector? v)
+      (throw (err/illegal-arg :xtql/malformed-with {:with step})))
+
+    (QueryStep/with (parse-binding-specs v step))))
+
+(defmethod parse-query 'without [step]
+  (let [v (val (first step))]
+    (when-not (and (vector? v) (every? string? v))
+      (throw (err/illegal-arg :xtql/malformed-without {:without step})))
+
+    (QueryStep/without v)))
+
+(defmethod parse-query 'return [step]
+  (let [v (val (first step))]
+    (when-not (vector? v)
+      (throw (err/illegal-arg :xtql/malformed-return {:return step})))
+
+    (QueryStep/ret (parse-binding-specs v step))))
+
+(defmethod parse-query 'aggregate [step]
+  (let [v (val (first step))]
+    (when-not (vector? v)
+      (throw (err/illegal-arg :xtql/malformed-aggregate {:aggregate step})))
+
+    (QueryStep/aggregate (parse-binding-specs v step))))
+
 (extend-protocol Unparse
   QueryStep$Pipeline (unparse [step] {"->" (mapv unparse (.steps step))})
   QueryStep$Where (unparse [step] {"where" (mapv unparse (.preds step))})
+  QueryStep$With (unparse [step] {"with" (mapv unparse (.cols step))})
+  QueryStep$Without (unparse [step] {"without" (.cols step)})
+  QueryStep$Return (unparse [step] {"return" (mapv unparse (.cols step))})
+  QueryStep$Aggregate (unparse [step] {"aggregate" (mapv unparse (.cols step))})
   QueryStep$Unify (unparse [step] {"unify" (mapv unparse (.clauses step))}))
 
 (defmethod parse-query :default [q]
