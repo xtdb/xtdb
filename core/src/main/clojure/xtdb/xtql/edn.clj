@@ -1,7 +1,7 @@
 (ns xtdb.xtql.edn
   (:require [xtdb.error :as err]
             [xtdb.util :as util])
-  (:import (xtdb.query Expr Expr$LogicVar Expr$Obj
+  (:import (xtdb.query Expr Expr$Bool Expr$Call Expr$Double Expr$LogicVar Expr$Long Expr$Obj
                        QueryStep QueryStep$BindingSpec QueryStep$From
                        TemporalFilter TemporalFilter$At TemporalFilter$In)))
 
@@ -18,16 +18,32 @@
 
 (defn parse-expr [expr]
   (cond
+    (boolean? expr) (if expr Expr/TRUE Expr/FALSE)
+    (int? expr) (Expr/val (long expr))
+    (double? expr) (Expr/val (double expr))
     (symbol? expr) (Expr/lVar (str expr))
     (keyword? expr) (Expr/val expr)
-    :else (throw (UnsupportedOperationException. (format "expr: %s" (pr-str expr))))))
+    (vector? expr) (Expr/val (mapv parse-expr expr))
+    (set? expr) (Expr/val (into #{} (map parse-expr) expr))
+    :else (Expr/val expr)))
 
 (defprotocol Unparse
   (unparse [this]))
 
 (extend-protocol Unparse
-  Expr$LogicVar (unparse [lv] (symbol (.lv lv)))
-  Expr$Obj (unparse [obj] (.obj obj)))
+  Expr$LogicVar (unparse [e] (symbol (.lv e)))
+  Expr$Call (unparse [e] (list* (symbol (.f e)) (mapv unparse (.args e))))
+  Expr$Bool (unparse [e] (.bool e))
+  Expr$Double (unparse [e] (.dbl e))
+  Expr$Long (unparse [e] (.lng e))
+
+  Expr$Obj
+  (unparse [e]
+    (let [obj (.obj e)]
+      (cond
+        (vector? obj) (mapv unparse obj)
+        (set? obj) (into #{} (map unparse) obj)
+        :else obj))))
 
 (defmethod parse-query :default [[op]]
   (throw (err/illegal-arg :xtql/unknown-query-op {:op op})))
