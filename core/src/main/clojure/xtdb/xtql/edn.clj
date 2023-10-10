@@ -1,7 +1,7 @@
 (ns xtdb.xtql.edn
   (:require [xtdb.error :as err])
   (:import (xtdb.query Expr Expr$Bool Expr$Call Expr$Double Expr$LogicVar Expr$Long Expr$Obj
-                       QueryStep QueryStep$BindingSpec QueryStep$From QueryStep$Pipeline QueryStep$Where QueryStep$Unify
+                       QueryStep QueryStep$Aggregate QueryStep$BindingSpec QueryStep$From QueryStep$Pipeline QueryStep$Return QueryStep$Unify QueryStep$Where QueryStep$With QueryStep$Without
                        TemporalFilter TemporalFilter$AllTime TemporalFilter$At TemporalFilter$In)))
 
 (defmulti parse-query
@@ -126,6 +126,17 @@
         (.binding (parse-binding-specs binding-specs step)))))
 
 (extend-protocol Unparse
+  QueryStep$BindingSpec
+  (unparse [binding-spec]
+    (let [attr (.attr binding-spec)
+          expr (.expr binding-spec)]
+      (if (and (instance? Expr$LogicVar expr)
+               (= (.lv ^Expr$LogicVar expr) attr))
+        (symbol attr)
+        ;; TODO not sure if this should always return `(keyword attr)`,
+        ;; because when its used in `unify` it's expected to be symbols?
+        {(keyword attr) (unparse expr)})))
+
   QueryStep$From
   (unparse [from]
     (let [table (keyword (.table from))
@@ -136,15 +147,13 @@
                               for-valid-time (assoc :for-valid-time (unparse for-valid-time))
                               for-sys-time (assoc :for-system-time (unparse for-sys-time)))]
                      table)
-             (for [^QueryStep$BindingSpec binding-spec (.bindSpecs from)
-                   :let [attr (.attr binding-spec)
-                         expr (.expr binding-spec)]]
-               (if (and (instance? Expr$LogicVar expr)
-                        (= (.lv ^Expr$LogicVar expr) attr))
-                 (symbol attr)
-                 {(keyword attr) (unparse expr)}))))))
+             (map unparse (.bindSpecs from))))))
 
 (extend-protocol Unparse
   QueryStep$Pipeline (unparse [step] (list* '-> (mapv unparse (.steps step))))
   QueryStep$Where (unparse [step] (list* 'where (mapv unparse (.preds step))))
+  QueryStep$With (unparse [step] (list* 'with (mapv unparse (.cols step))))
+  QueryStep$Without (unparse [step] (list* 'without (map keyword (.cols step))))
+  QueryStep$Return (unparse [step] (list* 'return (mapv unparse (.cols step))))
+  QueryStep$Aggregate (unparse [step] (list* 'aggregate (mapv unparse (.cols step))))
   QueryStep$Unify (unparse [step] (list* 'unify (mapv unparse (.clauses step)))))
