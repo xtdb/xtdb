@@ -14,9 +14,9 @@ public interface TemporalFilter {
     TemporalFilter ALL_TIME = new AllTime();
 
     final class At implements TemporalFilter {
-        public final Instant at;
+        public final Expr at;
 
-        private At(Instant at) {
+        private At(Expr at) {
             this.at = at;
         }
 
@@ -26,15 +26,15 @@ public interface TemporalFilter {
         }
     }
 
-    static At at(Instant atTime) {
-        return new At(atTime);
+    static At at(Expr atExpr) {
+        return new At(atExpr);
     }
 
     final class In implements TemporalFilter {
-        public final Instant from;
-        public final Instant to;
+        public final Expr from;
+        public final Expr to;
 
-        private In(Instant from, Instant to) {
+        private In(Expr from, Expr to) {
             this.from = from;
             this.to = to;
         }
@@ -45,15 +45,15 @@ public interface TemporalFilter {
         }
     }
 
-    static In in(Instant fromTime, Instant toTime) {
-        return new In(fromTime, toTime);
+    static In in(Expr fromExpr, Expr toExpr) {
+        return new In(fromExpr, toExpr);
     }
 
-    static In from(Instant fromTime) {
-        return new In(fromTime, null);
+    static In from(Expr fromExpr) {
+        return new In(fromExpr, null);
     }
 
-    static In to(Instant toTime) {
-        return new In(null, toTime);
+    static In to(Expr toExpr) {
+        return new In(null, toExpr);
     }
 }

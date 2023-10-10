@@ -47,7 +47,7 @@
   (t/is (= '(from :foo)
            (roundtrip-q '(from :foo))))
 
-  (t/is (= '(from [:foo {:for-valid-time [:at #time/instant "2020-01-01T00:00:00Z"]}])
+  (t/is (= '(from [:foo {:for-valid-time [:at #inst "2020"]}])
            (roundtrip-q '(from [:foo {:for-valid-time [:at #inst "2020"]}]))))
 
   ;; TODO system-time

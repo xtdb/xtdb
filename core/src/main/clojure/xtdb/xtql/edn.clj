@@ -1,6 +1,5 @@
 (ns xtdb.xtql.edn
-  (:require [xtdb.error :as err]
-            [xtdb.util :as util])
+  (:require [xtdb.error :as err])
   (:import (xtdb.query Expr Expr$Bool Expr$Call Expr$Double Expr$LogicVar Expr$Long Expr$Obj
                        QueryStep QueryStep$BindingSpec QueryStep$From
                        TemporalFilter TemporalFilter$At TemporalFilter$In)))
@@ -65,31 +64,25 @@
                     (when-not (= expected (count args))
                       (throw (err/illegal-arg :xtql/malformed-temporal-filter (into ctx {:tag tag, :at args}))))
 
-                    args)
-
-                  (->instant [v]
-                    (try
-                      (util/->instant v)
-                      (catch Exception _
-                        (throw (err/illegal-arg :xtql/malformed-temporal-filter (into ctx {:tag tag, :v v}))))))]
+                    args)]
             (case tag
               :at (let [[at] (assert-arg-count 1 args)]
-                    (TemporalFilter/at (->instant at)))
+                    (TemporalFilter/at (parse-expr at)))
 
               :in (let [[from to] (assert-arg-count 2 args)]
-                    (TemporalFilter/in (some-> from ->instant) (some-> to ->instant)))
+                    (TemporalFilter/in (parse-expr from) (parse-expr to)))
 
               :from (let [[from] (assert-arg-count 1 args)]
-                      (TemporalFilter/from (->instant from)))
+                      (TemporalFilter/from (parse-expr from)))
 
               :to (let [[to] (assert-arg-count 1 args)]
-                    (TemporalFilter/to (->instant to)))
+                    (TemporalFilter/to (parse-expr to)))
 
               (throw (err/illegal-arg :xtql/malformed-temporal-filter (into ctx {:tag tag}))))))))))
 
 (extend-protocol Unparse
-  TemporalFilter$At (unparse [at] [:at (.at at)])
-  TemporalFilter$In (unparse [in] [:in (.from in) (.to in)]))
+  TemporalFilter$At (unparse [at] [:at (unparse (.at at))])
+  TemporalFilter$In (unparse [in] [:in (some-> (.from in) unparse) (some-> in .to)]))
 
 (defn- parse-table+opts [table+opts step]
   (cond
