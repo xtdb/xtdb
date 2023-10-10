@@ -167,8 +167,8 @@
   (reify RowConsumer
     (accept [_ idx valid-from valid-to sys-from sys-to]
       (when (and (.inRange temporal-bounds valid-from valid-to sys-from sys-to)
-                 (not= valid-from valid-to)
-                 (not= sys-from sys-to))
+                 (not (= valid-from valid-to))
+                 (not (= sys-from sys-to)))
         (.accept rc idx valid-from valid-to sys-from sys-to)))))
 
 (defn- duplicate-ptr [^ArrowBufPointer dst, ^ArrowBufPointer src]
