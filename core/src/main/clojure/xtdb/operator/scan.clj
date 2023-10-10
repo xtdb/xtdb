@@ -293,13 +293,12 @@
                   (.add merge-q data-row-ptr))
                 (recur)))
 
-            (.accept c (-> (vw/rel-wtr->rdr out-rel)
-                           (vr/with-absent-cols allocator col-names)
-
-                           (as-> rel (reduce (fn [^RelationReader rel, ^IRelationSelector col-pred]
-                                               (.select rel (.select col-pred allocator rel params)))
-                                             rel
-                                             (vals (dissoc col-preds "xt$iid"))))))))
+            (.accept c (loop [^RelationReader rel (-> (vw/rel-wtr->rdr out-rel)
+                                                      (vr/with-absent-cols allocator col-names))
+                              [^IRelationSelector col-pred & col-preds] (vals (dissoc col-preds "xt$iid"))]
+                         (if col-pred
+                           (recur (.select rel (.select col-pred allocator rel params)) col-preds)
+                           rel)))))
         true)
 
       false))
@@ -520,4 +519,3 @@
 
 (defmethod lp/emit-expr :scan [scan-expr {:keys [^IScanEmitter scan-emitter scan-col-types, param-types]}]
   (.emitScan scan-emitter scan-expr scan-col-types param-types))
-
