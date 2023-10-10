@@ -1,7 +1,7 @@
 (ns xtdb.xtql.edn
   (:require [xtdb.error :as err])
   (:import (xtdb.query Expr Expr$Bool Expr$Call Expr$Double Expr$LogicVar Expr$Long Expr$Obj
-                       QueryStep QueryStep$BindingSpec QueryStep$From
+                       QueryStep QueryStep$BindingSpec QueryStep$From QueryStep$Pipeline QueryStep$Where QueryStep$Unify
                        TemporalFilter TemporalFilter$AllTime TemporalFilter$At TemporalFilter$In)))
 
 (defmulti parse-query
@@ -143,3 +143,8 @@
                         (= (.lv ^Expr$LogicVar expr) attr))
                  (symbol attr)
                  {(keyword attr) (unparse expr)}))))))
+
+(extend-protocol Unparse
+  QueryStep$Pipeline (unparse [step] (list* '-> (mapv unparse (.steps step))))
+  QueryStep$Where (unparse [step] (list* 'where (mapv unparse (.preds step))))
+  QueryStep$Unify (unparse [step] (list* 'unify (mapv unparse (.clauses step)))))
