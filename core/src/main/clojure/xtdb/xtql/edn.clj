@@ -2,7 +2,7 @@
   (:require [xtdb.error :as err])
   (:import (xtdb.query Expr Expr$Bool Expr$Call Expr$Double Expr$LogicVar Expr$Long Expr$Obj
                        QueryStep QueryStep$BindingSpec QueryStep$From
-                       TemporalFilter TemporalFilter$At TemporalFilter$In)))
+                       TemporalFilter TemporalFilter$AllTime TemporalFilter$At TemporalFilter$In)))
 
 (defmulti parse-query
   (fn [query]
@@ -81,8 +81,9 @@
               (throw (err/illegal-arg :xtql/malformed-temporal-filter (into ctx {:tag tag}))))))))))
 
 (extend-protocol Unparse
+  TemporalFilter$AllTime (unparse [_] :all-time)
   TemporalFilter$At (unparse [at] [:at (unparse (.at at))])
-  TemporalFilter$In (unparse [in] [:in (some-> (.from in) unparse) (some-> in .to)]))
+  TemporalFilter$In (unparse [in] [:in (some-> (.from in) unparse) (some-> (.to in) unparse)]))
 
 (defn- parse-table+opts [table+opts step]
   (cond
