@@ -280,7 +280,8 @@
                                                      iid-pred (.select (.select iid-pred allocator data-rdr params)))
                           data-row-ptr (ScanDataRowPointer. leaf-rdr
                                                             (-> (copy-row-consumer out-rel leaf-rdr col-names)
-                                                            (wrap-temporal-bounds temporal-bounds)))]]
+                                                                (wrap-temporal-bounds temporal-bounds))
+                                                            path)]]
               (when (.isValid data-row-ptr is-valid-ptr path)
                 (.add merge-q data-row-ptr)))
 
