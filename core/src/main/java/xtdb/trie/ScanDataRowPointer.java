@@ -43,7 +43,6 @@ public class ScanDataRowPointer implements IDataRowPointer {
 
         this.rowConsumer = rowConsumer;
 
-        ArrowBufPointer bufPointer;
         int left = 0;
         int right = rowCount();
         int mid;
