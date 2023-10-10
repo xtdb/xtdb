@@ -203,6 +203,32 @@
                         attr
                         {attr (unparse expr)})))})))
 
+(defmethod parse-query 'where [step]
+  (let [v (val (first step))]
+    (when-not (vector? v)
+      (throw (err/illegal-arg :xtql/malformed-where {:where step})))
+
+    (QueryStep/where (mapv parse-expr v))))
+
+(defmethod parse-query '-> [step]
+  (let [v (val (first step))]
+    (when-not (vector? v)
+      (throw (err/illegal-arg :xtql/malformed-pipeline {:pipeline step})))
+
+    (QueryStep/pipeline (mapv parse-query v))))
+
+(defmethod parse-query 'unify [step]
+  (let [v (val (first step))]
+    (when-not (vector? v)
+      (throw (err/illegal-arg :xtql/malformed-unify {:unify step})))
+
+    (QueryStep/unify (mapv parse-query v))))
+
+(extend-protocol Unparse
+  QueryStep$Pipeline (unparse [step] {"->" (mapv unparse (.steps step))})
+  QueryStep$Where (unparse [step] {"where" (mapv unparse (.preds step))})
+  QueryStep$Unify (unparse [step] {"unify" (mapv unparse (.clauses step))}))
+
 (defmethod parse-query :default [q]
   (throw (err/illegal-arg :xtql/unknown-query-op {:op (key (first q))})))
 

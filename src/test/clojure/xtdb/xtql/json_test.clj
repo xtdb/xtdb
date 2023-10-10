@@ -83,3 +83,31 @@
 
   ;; TODO check errors
   )
+
+(t/deftest test-pipe
+  (t/is (= ['(-> (from :foo a)
+                 (where (> a 3)))
+            {"->" [{"from" ["foo" "a"]}
+                   {"where" [{">" ["a" 3]}]}]}]
+
+           (roundtrip-q {"->" [{"from" ["foo" "a"]}
+                               {"where" [{">" ["a" 3]}]}]}))))
+
+(t/deftest test-unify
+  (t/is (= ['(unify (from :foo a) (from :bar b) (where (> a b)))
+            {"unify"
+             [{"from" ["foo" "a"]}
+              {"from" ["bar" "b"]}
+              {"where" [{">" ["a" "b"]}]}]}]
+
+           (roundtrip-q {"unify" [{"from" ["foo" "a"]}
+                                  {"from" ["bar" "b"]}
+                                  {"where" [{">" ["a" "b"]}]}]}))))
+
+(t/deftest test-where
+  (t/is (= ['(where (>= foo bar) (< bar baz))
+            {"where" [{">=" ["foo" "bar"]}
+                      {"<" ["bar" "baz"]}]}]
+
+           (roundtrip-q {"where" [{">=" ["foo" "bar"]}
+                                  {"<" ["bar" "baz"]}]}))))
