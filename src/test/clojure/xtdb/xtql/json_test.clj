@@ -58,6 +58,80 @@
   ;; TODO check errors
   )
 
-(defn- roundtrip-q [q]
-  (edn/unparse (edn/parse-query q)))
+(defn- roundtrip-q [query]
+  (let [parsed (json/parse-query query)]
+    [(edn/unparse parsed) (json/unparse parsed)]))
 
+(t/deftest test-parse-from
+  (t/is (= ['(from :foo) {"from" ["foo"]}]
+           (roundtrip-q {"from" ["foo"]})))
+
+  (let [json-q {"from" [{"table" ["foo" {"forValidTime" {"at" {"@value" "2020-01-01", "@type" "xt:date"}}}]}]}]
+    (t/is (= ['(from [:foo {:for-valid-time [:at #time/date "2020-01-01"]}])
+              json-q]
+             (roundtrip-q json-q))))
+
+  (let [json-q {"from" [{"table" ["foo" {"forValidTime" "allTime"
+                                         "forSystemTime" {"in" [{"@value" "2020-01-01", "@type" "xt:date"} nil]}}]}]}]
+    (t/is (= ['(from [:foo {:for-valid-time :all-time
+                            :for-system-time [:in #time/date "2020-01-01" nil]}])
+              json-q]
+             (roundtrip-q json-q))))
+
+  (t/is (= ['(from :foo a {:xt/id b} c) {"from" ["foo" "a" {"xt/id" "b"} "c"]}]
+           (roundtrip-q {"from" ["foo" "a" {"xt/id" "b"} {"c" "c"}]})))
+
+  ;; TODO check errors
+  )
+
+(t/deftest test-pipe
+  (t/is (= ['(-> (from :foo a)
+                 (where (> a 3)))
+            {"->" [{"from" ["foo" "a"]}
+                   {"where" [{">" ["a" 3]}]}]}]
+
+           (roundtrip-q {"->" [{"from" ["foo" "a"]}
+                               {"where" [{">" ["a" 3]}]}]}))))
+
+(t/deftest test-unify
+  (t/is (= ['(unify (from :foo a) (from :bar b) (where (> a b)))
+            {"unify"
+             [{"from" ["foo" "a"]}
+              {"from" ["bar" "b"]}
+              {"where" [{">" ["a" "b"]}]}]}]
+
+           (roundtrip-q {"unify" [{"from" ["foo" "a"]}
+                                  {"from" ["bar" "b"]}
+                                  {"where" [{">" ["a" "b"]}]}]}))))
+
+(t/deftest test-where
+  (t/is (= ['(where (>= foo bar) (< bar baz))
+            {"where" [{">=" ["foo" "bar"]}
+                      {"<" ["bar" "baz"]}]}]
+
+           (roundtrip-q {"where" [{">=" ["foo" "bar"]}
+                                  {"<" ["bar" "baz"]}]}))))
+
+(t/deftest test-with
+  (t/is (= ['(with a b {:c (+ a b)})
+            {"with" ["a" "b" {"c" {"+" ["a" "b"]}}]}]
+
+           (roundtrip-q {"with" ["a" "b" {"c" {"+" ["a" "b"]}}]}))))
+
+(t/deftest test-without
+  (t/is (= ['(without :a :b :c)
+            {"without" ["a" "b" "c"]}]
+
+           (roundtrip-q {"without" ["a" "b" "c"]}))))
+
+(t/deftest test-return
+  (t/is (= ['(return a b {:c (+ a b)})
+            {"return" ["a" "b" {"c" {"+" ["a" "b"]}}]}]
+
+           (roundtrip-q {"return" ["a" "b" {"c" {"+" ["a" "b"]}}]}))))
+
+(t/deftest test-aggregate
+  (t/is (= ['(aggregate a b {:c (sum (+ a b))})
+            {"aggregate" ["a" "b" {"c" {"sum" [{"+" ["a" "b"]}]}}]}]
+
+           (roundtrip-q {"aggregate" ["a" "b" {"c" {"sum" [{"+" ["a" "b"]}]}}]}))))
