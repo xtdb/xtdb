@@ -31,12 +31,12 @@ final class QueryUtil {
                         .collect(Collectors.joining(", ")));
     }
 
-    static String stringifyOpts(Object obj, String opts) {
-        return opts == null ? obj.toString() : String.format("[%s %s]", obj, opts);
+    static String stringifyParams(Object obj, List<?> params) {
+        return params == null ? obj.toString() : String.format("[%s %s]", obj, stringifyList(params));
     }
 
     static String stringifyOpts(Object obj, Map<?, ?> opts) {
-        return stringifyOpts(obj, stringifyMap(opts));
+        return opts == null ? obj.toString() : String.format("[%s %s]", obj, stringifyMap(opts));
     }
 
     static String stringifySeq(String... strings) {

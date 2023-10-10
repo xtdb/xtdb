@@ -31,7 +31,7 @@ public interface QueryStep {
     final class Unify implements QueryStep {
         public final List<UnifyClause> clauses;
 
-        public Unify(List<UnifyClause> clauses) {
+        private Unify(List<UnifyClause> clauses) {
             this.clauses = unmodifiableList(clauses);
         }
 
@@ -108,7 +108,7 @@ public interface QueryStep {
     }
 
     final class Where implements QueryStep, UnifyClause {
-        private final List<Expr> preds;
+        public final List<Expr> preds;
 
         private Where(List<Expr> preds) {
             this.preds = unmodifiableList(preds);
@@ -125,19 +125,19 @@ public interface QueryStep {
     }
 
     final class With implements QueryStep, UnifyClause {
-        public final Map<String, Expr> cols;
+        public final List<BindingSpec> cols;
 
-        private With(Map<String, Expr> cols) {
-            this.cols = unmodifiableMap(cols);
+        private With(List<BindingSpec> cols) {
+            this.cols = unmodifiableList(cols);
         }
 
         @Override
         public String toString() {
-            return String.format("(with {%s})", stringifyMap(cols));
+            return String.format("(with %s)", stringifyList(cols));
         }
     }
 
-    static With with(Map<String, Expr> cols) {
+    static With with(List<BindingSpec> cols) {
         return new With(cols);
     }
 
@@ -159,36 +159,36 @@ public interface QueryStep {
     }
 
     final class Return implements QueryStep {
-        public final Map<String, Expr> cols;
+        public final List<BindingSpec> cols;
 
-        private Return(Map<String, Expr> cols) {
-            this.cols = unmodifiableMap(cols);
+        private Return(List<BindingSpec> cols) {
+            this.cols = unmodifiableList(cols);
         }
 
         @Override
         public String toString() {
-            return String.format("(return {%s})", stringifyMap(cols));
+            return String.format("(return %s)", stringifyList(cols));
         }
     }
 
-    static Return ret(Map<String, Expr> cols) {
+    static Return ret(List<BindingSpec> cols) {
         return new Return(cols);
     }
 
     final class LeftJoin implements UnifyClause {
         public final QueryStep query;
-        public final Map<String, Expr> params;
-        public final Map<String, Expr> bindings;
+        public final List<BindingSpec> params;
+        public final List<BindingSpec> bindings;
 
-        private LeftJoin(QueryStep query, Map<String, Expr> params, Map<String, Expr> bindings) {
+        private LeftJoin(QueryStep query, List<BindingSpec> params, List<BindingSpec> bindings) {
             this.query = query;
-            this.params = unmodifiableMap(params);
-            this.bindings = unmodifiableMap(bindings);
+            this.params = unmodifiableList(params);
+            this.bindings = unmodifiableList(bindings);
         }
 
         @Override
         public String toString() {
-            return stringifySeq("left-join", stringifyOpts(query, params), stringifyMap(bindings));
+            return stringifySeq("left-join", stringifyParams(query, params), stringifyList(bindings));
         }
     }
 
@@ -197,19 +197,19 @@ public interface QueryStep {
     }
 
     final class Aggregate implements QueryStep {
-        public final Map<String, Expr> cols;
+        public final List<BindingSpec> cols;
 
-        private Aggregate(Map<String, Expr> cols) {
-            this.cols = unmodifiableMap(cols);
+        private Aggregate(List<BindingSpec> cols) {
+            this.cols = unmodifiableList(cols);
         }
 
         @Override
         public String toString() {
-            return stringifySeq("aggregate", stringifyMap(cols));
+            return stringifySeq("aggregate", stringifyList(cols));
         }
     }
 
-    static Aggregate aggregate(Map<String, Expr> cols) {
+    static Aggregate aggregate(List<BindingSpec> cols) {
         return new Aggregate(cols);
     }
 
