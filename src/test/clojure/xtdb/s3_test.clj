@@ -3,8 +3,12 @@
             [juxt.clojars-mirrors.integrant.core :as ig]
             [xtdb.object-store-test :as os-test]
             [xtdb.s3 :as s3])
-  (:import (java.io Closeable)
-           xtdb.object_store.ObjectStore))
+  (:import [java.io Closeable]
+           [java.nio ByteBuffer]
+           [java.util.concurrent CompletableFuture]
+           [software.amazon.awssdk.services.s3 S3AsyncClient]
+           [software.amazon.awssdk.services.s3.model ListMultipartUploadsRequest ListMultipartUploadsResponse MultipartUpload]
+           [xtdb.object_store ObjectStore IMultipartUpload]))
 
 ;; Setup the stack via cloudformation - see modules/s3/cloudformation/s3-stack.yml
 ;; Ensure region is set locally to wherever cloudformation stack is created (ie, eu-west-1 if stack on there)
@@ -60,3 +64,63 @@
       (Thread/sleep wait-time-ms)
       (t/is (= ["alan" "alice"] (.listObjects ^ObjectStore os-1)))
       (t/is (= ["alan" "alice"] (.listObjects ^ObjectStore os-2))))))
+
+(t/deftest multipart-start-and-cancel
+  (with-open [os (object-store (random-uuid))]
+    (let [multipart-upload ^IMultipartUpload  @(.startMultipart os "test-multi-created")
+          prefixed-key (str (:prefix os) "test-multi-created")]
+      (t/testing "Call to start a multipart upload should work and be visible in multipart upload list"
+        (let [list-multipart-uploads-response @(.listMultipartUploads ^S3AsyncClient (:client os)
+                                                                      (-> (ListMultipartUploadsRequest/builder)
+                                                                          (.bucket bucket)
+                                                                          ^ListMultipartUploadsRequest (.build)))
+              [^MultipartUpload upload] (.uploads ^ListMultipartUploadsResponse list-multipart-uploads-response)]
+          (t/is (= (.uploadId upload) (:upload-id multipart-upload)) "upload id should be present")
+          (t/is (= (.key upload) prefixed-key) "should be under the prefixed key")))
+      
+      (t/testing "Call to abort a multipart upload should work - should be removed from the upload list"
+        @(.abort multipart-upload)
+        (let [list-multipart-uploads-response @(.listMultipartUploads ^S3AsyncClient (:client os)
+                                                                      (-> (ListMultipartUploadsRequest/builder)
+                                                                          (.bucket bucket)
+                                                                          ^ListMultipartUploadsRequest (.build)))
+              uploads (.uploads ^ListMultipartUploadsResponse list-multipart-uploads-response)]
+          (t/is (= [] uploads) "uploads should be empty"))))))
+
+;; Generates a byte buffer of random characters
+(defn generate-random-byte-buffer [buffer-size]
+  (let [random         (java.util.Random.)
+        byte-buffer    (ByteBuffer/allocate buffer-size)]
+    (loop [i 0]
+      (if (< i buffer-size)
+        (do
+          (.put byte-buffer (byte (.nextInt random 128)))
+          (recur (inc i)))
+        byte-buffer))))
+
+(t/deftest ^:s3 multipart-put-test
+  (with-open [os (object-store (random-uuid))]
+    (let [multipart-upload ^IMultipartUpload @(.startMultipart os "test-multi-put")
+          part-size (* 5 1024 1024)
+          file-part-1 (generate-random-byte-buffer part-size)
+          file-part-2 (generate-random-byte-buffer part-size)]
+
+      ;; Uploading parts to multipart upload
+      @(.uploadPart multipart-upload file-part-1)
+      @(.uploadPart multipart-upload file-part-2)
+
+      (t/testing "Call to complete a multipart upload should work - should be removed from the upload list"
+        @(.complete multipart-upload)
+        (let [list-multipart-uploads-response @(.listMultipartUploads ^S3AsyncClient (:client os)
+                                                                      (-> (ListMultipartUploadsRequest/builder)
+                                                                          (.bucket bucket)
+                                                                          ^ListMultipartUploadsRequest (.build)))
+              uploads (.uploads ^ListMultipartUploadsResponse list-multipart-uploads-response)]
+          (t/is (= [] uploads) "uploads should be empty")))
+
+      (t/testing "Multipart upload works correctly - file present and contents correct"
+        (t/is (= ["test-multi-put"] (.listObjects ^ObjectStore os)))
+
+        (let [uploaded-buffer @(.getObject os "test-multi-put")]
+          (t/testing "capacity should be equal to total of 2 parts"
+            (t/is (= (* 2 part-size) (.capacity uploaded-buffer)))))))))

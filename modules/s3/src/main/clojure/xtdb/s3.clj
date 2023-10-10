@@ -1,26 +1,23 @@
 (ns xtdb.s3
   (:require [clojure.spec.alpha :as s]
             [clojure.string :as string]
-            [xtdb.object-store :as os]
-            [xtdb.util :as util]
+            [juxt.clojars-mirrors.integrant.core :as ig]
             [xtdb.file-list :as file-list]
+            [xtdb.object-store :as os]
             [xtdb.s3.file-list :as s3-file-watch]
-            [juxt.clojars-mirrors.integrant.core :as ig])
-  (:import [java.lang AutoCloseable]
-           [java.io Closeable]
+            [xtdb.util :as util])
+  (:import [java.io Closeable]
+           [java.lang AutoCloseable]
            [java.nio ByteBuffer]
-           [java.util NavigableSet]
+           [java.util ArrayList List NavigableSet]
            [java.util.concurrent CompletableFuture ConcurrentSkipListSet]
            [java.util.function Function]
            [software.amazon.awssdk.core ResponseBytes]
            [software.amazon.awssdk.core.async AsyncRequestBody AsyncResponseTransformer]
-           [software.amazon.awssdk.services.s3.model DeleteObjectRequest GetObjectRequest HeadObjectRequest NoSuchKeyException PutObjectRequest]
            [software.amazon.awssdk.services.s3 S3AsyncClient]
-           [xtdb.object_store ObjectStore]
+           [software.amazon.awssdk.services.s3.model AbortMultipartUploadRequest CompleteMultipartUploadRequest CompletedPart CompletedMultipartUpload CreateMultipartUploadRequest CreateMultipartUploadResponse DeleteObjectRequest GetObjectRequest HeadObjectRequest NoSuchKeyException PutObjectRequest UploadPartRequest UploadPartResponse]
+           [xtdb.object_store ObjectStore IMultipartUpload]
            [xtdb.s3 S3Configurator]))
-
-;; TODO:
-;; Need to consider - local cache vs file watcher, dont want to re-add/re-remove the same file?
 
 (defn- get-obj-req
   ^GetObjectRequest [{:keys [^S3Configurator configurator bucket prefix]} k]
@@ -48,7 +45,57 @@
                             (catch NoSuchKeyException _
                               (throw (os/obj-missing-exception k))))))))
 
-(defrecord S3ObjectStore [^S3Configurator configurator ^S3AsyncClient client bucket prefix ^NavigableSet file-name-cache ^AutoCloseable file-list-watcher]
+(defn single-object-upload
+  [{:keys [^S3AsyncClient client ^S3Configurator configurator bucket prefix]} k ^ByteBuffer buf]
+  (.putObject client
+              (-> (PutObjectRequest/builder)
+                  (.bucket bucket)
+                  (.key (str prefix k))
+                  (->> (.configurePut configurator))
+                  ^PutObjectRequest (.build))
+              (AsyncRequestBody/fromByteBuffer buf)))
+
+(defrecord MultipartUpload [^S3AsyncClient client bucket prefix k upload-id on-complete ^List !completed-parts]
+  IMultipartUpload 
+  (uploadPart [_  buf]
+    (let [content-length (long (.limit buf))
+          part-number (int (inc (.size !completed-parts)))]
+      (-> (.uploadPart client
+                       (-> (UploadPartRequest/builder)
+                           (.bucket bucket)
+                           (.key (str prefix k))
+                           (.uploadId upload-id)
+                           (.partNumber part-number)
+                           (.contentLength content-length)
+                           ^UploadPartRequest (.build))
+                       (AsyncRequestBody/fromByteBuffer buf))
+          (util/then-apply (fn [^UploadPartResponse upload-part-response]
+                             (.add !completed-parts (-> (CompletedPart/builder)
+                                                        (.partNumber part-number)
+                                                        (.eTag (.eTag upload-part-response))
+                                                        ^CompletedPart (.build))))))))
+  
+  (complete [_]
+    (-> (.completeMultipartUpload client
+                                  (-> (CompleteMultipartUploadRequest/builder)
+                                      (.bucket bucket)
+                                      (.key (str prefix k))
+                                      (.uploadId upload-id)
+                                      (.multipartUpload (-> (CompletedMultipartUpload/builder)
+                                                            (.parts !completed-parts)
+                                                            ^CompletedMultipartUpload (.build)))
+                                      ^CompleteMultipartUploadRequest (.build))) 
+        (.thenRun (fn [] (on-complete k)))))
+  
+  (abort [_]
+    (.abortMultipartUpload client
+                           (-> (AbortMultipartUploadRequest/builder)
+                               (.bucket bucket)
+                               (.key (str prefix k))
+                               (.uploadId upload-id)
+                               ^AbortMultipartUploadRequest (.build)))))
+
+(defrecord S3ObjectStore [^S3Configurator configurator ^S3AsyncClient client bucket prefix multipart-minimum-part-size ^NavigableSet file-name-cache ^AutoCloseable file-list-watcher]
   ObjectStore
   (getObject [this k]
     (-> (.getObject client (get-obj-req this k) (AsyncResponseTransformer/toBytes))
@@ -75,32 +122,28 @@
       (catch IndexOutOfBoundsException e
         (CompletableFuture/failedFuture e))))
 
-  (putObject [_ k buf]
-    (let [prefixed-key (str prefix k)]
-      (.add file-name-cache k)
-      (-> (.headObject client
-                       (-> (HeadObjectRequest/builder)
-                           (.bucket bucket)
-                           (.key prefixed-key)
-                           (->> (.configureHead configurator))
-                           ^HeadObjectRequest (.build)))
-          (util/then-apply (fn [_resp] true))
-          (.exceptionally (reify Function
-                            (apply [_ e]
-                              (let [e (.getCause ^Exception e)]
-                                (if (instance? NoSuchKeyException e)
-                                  false
-                                  (throw e))))))
-          (util/then-compose (fn [exists?]
-                               (if exists?
-                                 (CompletableFuture/completedFuture nil)
-                                 (.putObject client
-                                             (-> (PutObjectRequest/builder)
-                                                 (.bucket bucket)
-                                                 (.key prefixed-key)
-                                                 (->> (.configurePut configurator))
-                                                 ^PutObjectRequest (.build))
-                                             (AsyncRequestBody/fromByteBuffer buf))))))))
+  (putObject [this k buf] 
+    (-> (.headObject client
+                     (-> (HeadObjectRequest/builder)
+                         (.bucket bucket)
+                         (.key (str prefix k))
+                         (->> (.configureHead configurator))
+                         ^HeadObjectRequest (.build)))
+        (util/then-apply (fn [_resp] true))
+        (.exceptionally (reify Function
+                          (apply [_ e]
+                            (let [e (.getCause ^Exception e)]
+                              (if (instance? NoSuchKeyException e)
+                                false
+                                (throw e))))))
+        (util/then-compose (fn [exists?]
+                             (if exists?
+                               (CompletableFuture/completedFuture nil)
+                               (single-object-upload this k buf))))
+        (util/then-apply (fn [_]
+                           ;; Add file name to the local cache as the last thing we do (ie - if PUT
+                           ;; fails, shouldnt add filename to the cache)
+                           (.add file-name-cache k)))))
 
   (listObjects [_this]
     (into [] file-name-cache))
@@ -115,6 +158,24 @@
                        (.bucket bucket)
                        (.key (str prefix k))
                        ^DeleteObjectRequest (.build))))
+  
+  (startMultipart [_ k]
+    (let [prefixed-key (str prefix k)
+          initiate-request (-> (CreateMultipartUploadRequest/builder)
+                               (.bucket bucket)
+                               (.key prefixed-key)
+                               ^CreateMultipartUploadRequest (.build))]
+      (-> (.createMultipartUpload client initiate-request)
+          (util/then-apply (fn [^CreateMultipartUploadResponse initiate-response]
+                             (->MultipartUpload client 
+                                                bucket 
+                                                prefix 
+                                                k 
+                                                (.uploadId initiate-response)
+                                                (fn [k]
+                                                  ;; On complete - add filename to cache
+                                                  (.add file-name-cache k))
+                                                (ArrayList.))))))) 
 
   Closeable
   (close [_]
@@ -142,6 +203,8 @@
   (s/keys :req-un [::configurator ::bucket ::sns-topic-arn]
           :opt-un [::prefix]))
 
+(def minimum-part-size (* 5 1024 1024))
+
 (defmethod ig/init-key ::object-store [_ {:keys [bucket prefix ^S3Configurator configurator] :as opts}]
   (let [s3-client (.makeClient configurator)
         file-name-cache (ConcurrentSkipListSet.)
@@ -151,8 +214,9 @@
 
     (->S3ObjectStore configurator
                      s3-client
-                     bucket 
+                     bucket
                      prefix
+                     minimum-part-size
                      file-name-cache
                      file-list-watcher)))
 
@@ -160,6 +224,39 @@
   (util/try-close os))
 
 (derive ::object-store :xtdb/object-store)
+
+(comment
+  (def os
+    (->> (ig/prep-key ::object-store {:bucket "xtdb-object-store-iam-test",
+                                      :prefix "test-multipart"
+                                      :sns-topic-arn "arn:aws:sns:eu-west-1:199686536682:xtdb-object-store-iam-test-bucket-events"})
+         (ig/init-key ::object-store)))
+
+  (defn generate-random-byte-buffer [buffer-size]
+    (let [random         (java.util.Random.)
+          byte-buffer    (ByteBuffer/allocate buffer-size)]
+      (loop [i 0]
+        (if (< i buffer-size)
+          (do
+            (.put byte-buffer (byte (.nextInt random 128)))
+            (recur (inc i)))
+          byte-buffer))))
+
+  (def file-part-1 (generate-random-byte-buffer (* 5 1024 1024)))
+  (def file-part-2 (generate-random-byte-buffer (* 5 1024 1024)))
+
+  (def multipart-request @(.startMultipart os "test-multi-obj"))
+
+  @(.uploadPart multipart-request file-part-1)
+  @(.uploadPart multipart-request file-part-2) 
+
+  (def completed-multipart @(.complete multipart-request))
+
+
+  ;; if failed
+  @(.abortMultipart os multipart-request)
+
+  )
 
 (comment
 
@@ -178,7 +275,7 @@
   (String. (let [buf @(.getObjectRange os "foo.txt" 2 5)
                  a (byte-array (.remaining buf))]
              (.get buf a)
-             a))
+             a)) 
 
   @(.putObject os "foo.txt" (ByteBuffer/wrap (.getBytes "hello, world")))
 

@@ -14,14 +14,23 @@
 (set! *unchecked-math* :warn-on-boxed)
 
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
+(definterface IMultipartUpload
+  (^java.util.concurrent.CompletableFuture #_<Void> uploadPart [^java.nio.ByteBuffer buf] 
+   "Asynchonously uploads a part to the multipart request - adds to the internal completed parts list")
+  (^java.util.concurrent.CompletableFuture #_<Void> complete []
+   "Asynchonously completes the multipart-request")
+  (^java.util.concurrent.CompletableFuture #_<?> abort []
+   "Asynchonously cancels the multipart-request - useful/necessary to cleanup any parts of the multipart upload on an error"))
+
+#_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface ObjectStore
   (^java.util.concurrent.CompletableFuture #_<ByteBuffer> getObject [^String k]
-   "Asynchonously returns the given object in a ByteBuffer
+                                                                    "Asynchonously returns the given object in a ByteBuffer
     If the object doesn't exist, the CF completes with an IllegalStateException.")
 
   (^java.util.concurrent.CompletableFuture #_<ByteBuffer> getObjectRange
-    [^String k ^long start ^long len]
-    "Asynchonously returns the given len bytes starting from start (inclusive) of the object in a ByteBuffer
+   [^String k ^long start ^long len]
+   "Asynchonously returns the given len bytes starting from start (inclusive) of the object in a ByteBuffer
     If the object doesn't exist, the CF completes with an IllegalStateException.
 
     Out of bounds `start` cause the returned future to complete with an Exception, the type of which is implementation dependent.
@@ -34,10 +43,11 @@
     Behaviour for a start position at or exceeding the byte length of the object is undefined. You may or may not receive an exception.")
 
   (^java.util.concurrent.CompletableFuture #_<Path> getObject [^String k, ^java.nio.file.Path out-path]
-   "Asynchronously writes the object to the given path.
+                                                              "Asynchronously writes the object to the given path.
     If the object doesn't exist, the CF completes with an IllegalStateException.")
 
   (^java.util.concurrent.CompletableFuture #_<?> putObject [^String k, ^java.nio.ByteBuffer buf])
+  (^java.util.concurrent.CompletableFuture #_<IMultipartUpload> startMultipart [^String k])
   (^java.lang.Iterable #_<String> listObjects [])
   (^java.lang.Iterable #_<String> listObjects [^String dir])
   (^java.util.concurrent.CompletableFuture #_<?> deleteObject [^String k]))
