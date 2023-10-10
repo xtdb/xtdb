@@ -21,9 +21,6 @@
       (nil? v) (Expr/val nil)
 
       (nil? t) (cond
-                 (int? v) (Expr/val (long v))
-                 (double? v) (Expr/val (double v))
-                 (boolean? v) (if v Expr/TRUE Expr/FALSE)
                  (map? v) (Expr/val (into {} (map (juxt key (comp parse-expr val))) v))
                  (vector? v) (Expr/val (mapv parse-expr v))
                  (string? v) (Expr/val v)
@@ -50,6 +47,10 @@
   (letfn [(bad-expr [expr]
             (throw (err/illegal-arg :xtql/malformed-expr {:expr expr})))]
     (cond
+      (nil? expr) (Expr/val nil)
+      (int? expr) (Expr/val (long expr))
+      (double? expr) (Expr/val (double expr))
+      (boolean? expr) (if expr Expr/TRUE Expr/FALSE)
       (string? expr) (Expr/lVar expr)
       (vector? expr) (parse-literal {"@value" expr})
 
@@ -67,9 +68,9 @@
 
 (extend-protocol Unparse
   Expr$LogicVar (unparse [lv] (.lv lv))
-  Expr$Bool (unparse [b] {"@value" (.bool b)})
-  Expr$Long (unparse [l] {"@value" (.lng l)})
-  Expr$Double (unparse [d] {"@value" (.dbl d)})
+  Expr$Bool (unparse [b] (.bool b))
+  Expr$Long (unparse [l] (.lng l))
+  Expr$Double (unparse [d] (.dbl d))
 
   Expr$Call (unparse [c] {(.f c) (mapv unparse (.args c))})
 
