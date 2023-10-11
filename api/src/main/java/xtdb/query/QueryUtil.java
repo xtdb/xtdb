@@ -13,11 +13,6 @@ final class QueryUtil {
         return Collections.unmodifiableList(list);
     }
 
-    static <K, V> Map<K, V> unmodifiableMap(Map<K, V> map) {
-        if (map == null) return null;
-        return Collections.unmodifiableMap(map);
-    }
-
     static String stringifyList(List<?> list) {
         if (list == null || list.isEmpty()) return null;
         return list.stream().map(Object::toString).collect(Collectors.joining(" "));
@@ -31,7 +26,7 @@ final class QueryUtil {
                         .collect(Collectors.joining(", ")));
     }
 
-    static String stringifyParams(Object obj, List<?> params) {
+    static String stringifyArgs(Object obj, List<?> params) {
         return params == null ? obj.toString() : String.format("[%s %s]", obj, stringifyList(params));
     }
 
@@ -39,8 +34,8 @@ final class QueryUtil {
         return opts == null ? obj.toString() : String.format("[%s %s]", obj, stringifyMap(opts));
     }
 
-    static String stringifySeq(String... strings) {
+    static String stringifySeq(Object... strings) {
         return String.format("(%s)",
-                Stream.of(strings).filter(Objects::nonNull).collect(Collectors.joining(" ")));
+                Stream.of(strings).filter(Objects::nonNull).map(Object::toString).collect(Collectors.joining(" ")));
     }
 }

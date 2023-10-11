@@ -2,33 +2,38 @@ package xtdb.query;
 
 import java.util.*;
 
-import static xtdb.query.QueryStep.OrderDirection.ASC;
-import static xtdb.query.QueryStep.OrderDirection.DESC;
+import static xtdb.query.Query.OrderDirection.ASC;
+import static xtdb.query.Query.OrderDirection.DESC;
 import static xtdb.query.QueryUtil.*;
 
-public interface QueryStep {
+public interface Query {
 
-    final class Pipeline implements QueryStep {
-        public final List<QueryStep> steps;
+    interface QueryTail {
+    }
 
-        private Pipeline(List<QueryStep> steps) {
-            this.steps = unmodifiableList(steps);
+    final class Pipeline implements Query {
+        public final Query query;
+        public final List<QueryTail> tails;
+
+        private Pipeline(Query query, List<QueryTail> tails) {
+            this.query = query;
+            this.tails = unmodifiableList(tails);
         }
 
         @Override
         public String toString() {
-            return stringifySeq("->", stringifyList(steps));
+            return stringifySeq("->", query, stringifyList(tails));
         }
     }
 
-    static Pipeline pipeline(List<QueryStep> steps) {
-        return new Pipeline(steps);
+    static Pipeline pipeline(Query query, List<QueryTail> tails) {
+        return new Pipeline(query, tails);
     }
 
     interface UnifyClause {
     }
 
-    final class Unify implements QueryStep {
+    final class Unify implements Query {
         public final List<UnifyClause> clauses;
 
         private Unify(List<UnifyClause> clauses) {
@@ -45,26 +50,7 @@ public interface QueryStep {
         return new Unify(clauses);
     }
 
-    final class BindingSpec {
-        public final String attr;
-        public final Expr expr;
-
-        private BindingSpec(String attr, Expr expr) {
-            this.attr = attr;
-            this.expr = expr;
-        }
-
-        @Override
-        public String toString() {
-            return String.format("{%s %s}", attr, expr);
-        }
-    }
-
-    static BindingSpec bindSpec(String attr, Expr expr) {
-        return new BindingSpec(attr, expr);
-    }
-
-    final class From implements QueryStep, UnifyClause {
+    final class From implements Query, UnifyClause {
         public final String table;
         public final TemporalFilter forValidTime;
         public final TemporalFilter forSystemTime;
@@ -107,7 +93,7 @@ public interface QueryStep {
         return new From(table, null, null, null);
     }
 
-    final class Where implements QueryStep, UnifyClause {
+    final class Where implements QueryTail, UnifyClause {
         public final List<Expr> preds;
 
         private Where(List<Expr> preds) {
@@ -124,7 +110,7 @@ public interface QueryStep {
         return new Where(preds);
     }
 
-    final class With implements QueryStep, UnifyClause {
+    final class With implements QueryTail, UnifyClause {
         public final List<BindingSpec> cols;
 
         private With(List<BindingSpec> cols) {
@@ -141,7 +127,7 @@ public interface QueryStep {
         return new With(cols);
     }
 
-    final class Without implements QueryStep {
+    final class Without implements QueryTail {
         public final List<String> cols;
 
         private Without(List<String> cols) {
@@ -158,7 +144,7 @@ public interface QueryStep {
         return new Without(cols);
     }
 
-    final class Return implements QueryStep {
+    final class Return implements QueryTail {
         public final List<BindingSpec> cols;
 
         private Return(List<BindingSpec> cols) {
@@ -175,28 +161,82 @@ public interface QueryStep {
         return new Return(cols);
     }
 
-    final class LeftJoin implements UnifyClause {
-        public final QueryStep query;
-        public final List<BindingSpec> params;
+    final class Call implements UnifyClause {
+        public final String ruleName;
+        public final List<Expr> args;
         public final List<BindingSpec> bindings;
 
-        private LeftJoin(QueryStep query, List<BindingSpec> params, List<BindingSpec> bindings) {
-            this.query = query;
-            this.params = unmodifiableList(params);
-            this.bindings = unmodifiableList(bindings);
+        private Call(String ruleName, List<Expr> args, List<BindingSpec> bindings) {
+            this.ruleName = ruleName;
+            this.args = unmodifiableList(args);
+            this.bindings = bindings;
+        }
+
+        public Call binding(List<BindingSpec> bindings) {
+            return new Call(ruleName, args, unmodifiableList(bindings));
         }
 
         @Override
         public String toString() {
-            return stringifySeq("left-join", stringifyParams(query, params), stringifyList(bindings));
+            return stringifySeq("call", stringifyArgs(ruleName, args), stringifyList(bindings));
         }
     }
 
-    static LeftJoin leftJoin(QueryStep query) {
-        return new LeftJoin(query, null, null);
+    static Call call(String ruleName, List<Expr> args) {
+        return new Call(ruleName, args, null);
     }
 
-    final class Aggregate implements QueryStep {
+    final class Join implements UnifyClause {
+        public final Query query;
+        public final List<BindingSpec> args;
+        public final List<BindingSpec> bindings;
+
+        private Join(Query query, List<BindingSpec> args, List<BindingSpec> bindings) {
+            this.query = query;
+            this.args = unmodifiableList(args);
+            this.bindings = unmodifiableList(bindings);
+        }
+
+        public Join binding(List<BindingSpec> bindings) {
+            return new Join(query, args, bindings);
+        }
+
+        @Override
+        public String toString() {
+            return stringifySeq("join", stringifyArgs(query, args), stringifyList(bindings));
+        }
+    }
+
+    static Join join(Query query, List<BindingSpec> args) {
+        return new Join(query, args, null);
+    }
+
+    final class LeftJoin implements UnifyClause {
+        public final Query query;
+        public final List<BindingSpec> args;
+        public final List<BindingSpec> bindings;
+
+        private LeftJoin(Query query, List<BindingSpec> args, List<BindingSpec> bindings) {
+            this.query = query;
+            this.args = unmodifiableList(args);
+            this.bindings = unmodifiableList(bindings);
+        }
+
+        public LeftJoin binding(List<BindingSpec> bindings) {
+            return new LeftJoin(query, args, bindings);
+        }
+
+        @Override
+        public String toString() {
+            return stringifySeq("left-join", stringifyArgs(query, args), stringifyList(bindings));
+        }
+    }
+
+    static LeftJoin leftJoin(Query query, List<BindingSpec> args) {
+        return new LeftJoin(query, args, null);
+    }
+
+    final class Aggregate implements QueryTail {
         public final List<BindingSpec> cols;
 
         private Aggregate(List<BindingSpec> cols) {
@@ -240,7 +280,7 @@ public interface QueryStep {
         return new OrderSpec(expr, DESC);
     }
 
-    final class OrderBy implements QueryStep {
+    final class OrderBy implements QueryTail {
         public final List<OrderSpec> orderSpecs;
 
         private OrderBy(List<OrderSpec> orderSpecs) {
@@ -255,6 +295,23 @@ public interface QueryStep {
 
     static OrderBy orderBy(List<OrderSpec> orderSpecs) {
         return new OrderBy(orderSpecs);
+    }
+
+    final class UnionAll implements Query {
+        public final List<Query> queries;
+
+        private UnionAll(List<Query> queries) {
+            this.queries = unmodifiableList(queries);
+        }
+
+        @Override
+        public String toString() {
+            return stringifySeq("union-all", stringifyList(queries));
+        }
+    }
+
+    static UnionAll unionAll(List<Query> queries) {
+        return new UnionAll(queries);
     }
 }
 

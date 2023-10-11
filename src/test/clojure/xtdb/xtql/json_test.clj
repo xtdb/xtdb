@@ -62,17 +62,21 @@
   (let [parsed (json/parse-query query)]
     [(edn/unparse parsed) (json/unparse parsed)]))
 
+(defn- roundtrip-q-tail [query]
+  (let [parsed (json/parse-query-tail query)]
+    [(edn/unparse parsed) (json/unparse parsed)]))
+
 (t/deftest test-parse-from
   (t/is (= ['(from :foo) {"from" ["foo"]}]
            (roundtrip-q {"from" ["foo"]})))
 
-  (let [json-q {"from" [{"table" ["foo" {"forValidTime" {"at" {"@value" "2020-01-01", "@type" "xt:date"}}}]}]}]
+  (let [json-q {"from" [{"foo" {"forValidTime" {"at" {"@value" "2020-01-01", "@type" "xt:date"}}}}]}]
     (t/is (= ['(from [:foo {:for-valid-time [:at #time/date "2020-01-01"]}])
               json-q]
              (roundtrip-q json-q))))
 
-  (let [json-q {"from" [{"table" ["foo" {"forValidTime" "allTime"
-                                         "forSystemTime" {"in" [{"@value" "2020-01-01", "@type" "xt:date"} nil]}}]}]}]
+  (let [json-q {"from" [{"foo" {"forValidTime" "allTime"
+                                "forSystemTime" {"in" [{"@value" "2020-01-01", "@type" "xt:date"} nil]}}}]}]
     (t/is (= ['(from [:foo {:for-valid-time :all-time
                             :for-system-time [:in #time/date "2020-01-01" nil]}])
               json-q]
@@ -109,29 +113,55 @@
             {"where" [{">=" ["foo" "bar"]}
                       {"<" ["bar" "baz"]}]}]
 
-           (roundtrip-q {"where" [{">=" ["foo" "bar"]}
-                                  {"<" ["bar" "baz"]}]}))))
+           (roundtrip-q-tail {"where" [{">=" ["foo" "bar"]}
+                                       {"<" ["bar" "baz"]}]}))))
 
 (t/deftest test-with
   (t/is (= ['(with a b {:c (+ a b)})
             {"with" ["a" "b" {"c" {"+" ["a" "b"]}}]}]
 
-           (roundtrip-q {"with" ["a" "b" {"c" {"+" ["a" "b"]}}]}))))
+           (roundtrip-q-tail {"with" ["a" "b" {"c" {"+" ["a" "b"]}}]}))))
 
 (t/deftest test-without
   (t/is (= ['(without :a :b :c)
             {"without" ["a" "b" "c"]}]
 
-           (roundtrip-q {"without" ["a" "b" "c"]}))))
+           (roundtrip-q-tail {"without" ["a" "b" "c"]}))))
 
 (t/deftest test-return
   (t/is (= ['(return a b {:c (+ a b)})
             {"return" ["a" "b" {"c" {"+" ["a" "b"]}}]}]
 
-           (roundtrip-q {"return" ["a" "b" {"c" {"+" ["a" "b"]}}]}))))
+           (roundtrip-q-tail {"return" ["a" "b" {"c" {"+" ["a" "b"]}}]}))))
 
 (t/deftest test-aggregate
   (t/is (= ['(aggregate a b {:c (sum (+ a b))})
             {"aggregate" ["a" "b" {"c" {"sum" [{"+" ["a" "b"]}]}}]}]
 
-           (roundtrip-q {"aggregate" ["a" "b" {"c" {"sum" [{"+" ["a" "b"]}]}}]}))))
+           (roundtrip-q-tail {"aggregate" ["a" "b" {"c" {"sum" [{"+" ["a" "b"]}]}}]}))))
+
+(t/deftest test-union-all
+  (t/is (= ['(union-all (from :foo a)
+                        (from :bar a))
+            {"unionAll" [{"from" ["foo" "a"]}
+                         {"from" ["bar" "a"]}]}]
+
+           (roundtrip-q {"unionAll" [{"from" ["foo" "a"]}
+                         {"from" ["bar" "a"]}]}))))
+
+(t/deftest test-joins
+  (t/is (= ['(unify (from :foo a)
+                    (join (from :bar a b) a b)
+                    (left-join [(from :baz a c) a] c))
+
+            {"unify" [{"from" ["foo" "a"]}
+                      {"join" [{"from" ["bar" "a" "b"]}
+                               "a" "b"]}
+                      {"leftJoin" [[{"from" ["baz" "a" "c"]} "a"]
+                                   "c"]}]}]
+
+           (roundtrip-q {"unify" [{"from" ["foo" "a"]}
+                                  {"join" [{"from" ["bar" "a" "b"]}
+                                           "a" "b"]}
+                                  {"leftJoin" [[{"from" ["baz" "a" "c"]} "a"]
+                                               "c"]}]}))))
