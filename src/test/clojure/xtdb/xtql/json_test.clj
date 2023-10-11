@@ -165,3 +165,15 @@
                                            "a" "b"]}
                                   {"leftJoin" [[{"from" ["baz" "a" "c"]} "a"]
                                                "c"]}]}))))
+
+(t/deftest test-order-by
+  (t/is (= ['(-> (from :foo a b)
+                 (order-by (+ a b) [b {:dir :desc}]))
+
+            {"->" [{"from" ["foo" "a" "b"]}
+                   {"orderBy" [{"+" ["a" "b"]}
+                               ["b" {"dir" "desc"}]]}]}]
+
+           (roundtrip-q {"->" [{"from" ["foo" "a" "b"]}
+                               {"orderBy" [{"+" ["a" "b"]}
+                                           ["b" {"dir" "desc"}]]}]}))))

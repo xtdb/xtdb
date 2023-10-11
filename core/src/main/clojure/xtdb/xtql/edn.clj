@@ -1,7 +1,7 @@
 (ns xtdb.xtql.edn
   (:require [xtdb.error :as err])
   (:import (xtdb.query BindingSpec Expr Expr$Bool Expr$Call Expr$Double Expr$LogicVar Expr$Long Expr$Obj
-                       Query Query$Aggregate Query$From Query$LeftJoin Query$Join Query$Pipeline Query$Return Query$Unify Query$UnionAll Query$Where Query$With Query$Without
+                       Query Query$Aggregate Query$From Query$LeftJoin Query$Join Query$OrderBy Query$OrderDirection Query$OrderSpec Query$Pipeline Query$Return Query$Unify Query$UnionAll Query$Where Query$With Query$Without
                        TemporalFilter TemporalFilter$AllTime TemporalFilter$At TemporalFilter$In)))
 
 (defmulti parse-query
@@ -75,8 +75,6 @@
         (vector? obj) (mapv unparse obj)
         (set? obj) (into #{} (map unparse) obj)
         :else obj))))
-
-
 
 (defn- parse-temporal-filter [v k query]
   (let [ctx {:v v, :filter k, :query query}]
@@ -276,3 +274,16 @@
              {:a b})))
     (clojure.pprint/pprint)
     #_(unparse))
+
+(extend-protocol Unparse
+  Query$OrderSpec
+  (unparse [spec]
+    (let [expr (unparse (.expr spec))
+          dir (.direction spec)]
+      (if (= Query$OrderDirection/DESC dir)
+        [expr {:dir :desc}]
+        expr)))
+
+  Query$OrderBy
+  (unparse [query]
+    (list* 'order-by (mapv unparse (.orderSpecs query)))))
