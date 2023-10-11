@@ -1,7 +1,10 @@
 (ns xtdb.xtql.edn
   (:require [xtdb.error :as err])
-  (:import (xtdb.query BindingSpec Expr Expr$Bool Expr$Call Expr$Double Expr$LogicVar Expr$Long Expr$Obj
-                       Query Query$Aggregate Query$From Query$LeftJoin Query$Join Query$OrderBy Query$OrderDirection Query$OrderSpec Query$Pipeline Query$Return Query$Unify Query$UnionAll Query$Where Query$With Query$Without
+  (:import (xtdb.query BindingSpec Expr Expr$Bool Expr$Call Expr$Double Expr$Exists
+                       Expr$LogicVar Expr$Long Expr$Obj Expr$NotExists Expr$Subquery
+                       Query Query$Aggregate Query$From Query$LeftJoin Query$Join Query$Limit
+                       Query$OrderBy Query$OrderDirection Query$OrderSpec Query$Pipeline
+                      Query$Return Query$Unify Query$UnionAll Query$Where Query$With Query$Without
                        TemporalFilter TemporalFilter$AllTime TemporalFilter$At TemporalFilter$In)))
 
 (defmulti parse-query
@@ -46,6 +49,18 @@
 (defmethod parse-unify-clause :default [[op]]
   (throw (err/illegal-arg :xtql/unknown-unify-clause {:op op})))
 
+(declare parse-binding-specs)
+
+(defn- parse-subquery-args [args expr]
+  (cond
+    (list? args) [(parse-query args) nil]
+
+    (and (vector? args) (not (empty? args)))
+    (let [[query & bind-specs] args]
+      [(parse-query query) (not-empty (parse-binding-specs bind-specs expr))])
+
+    :else (throw (err/illegal-arg :xtql/malformed-subquery {:expr expr}))))
+
 (defn parse-expr [expr]
   (cond
     (true? expr) Expr/TRUE
@@ -60,10 +75,24 @@
     (list? expr) (do
                    (when (empty? expr)
                      (throw (err/illegal-arg :xtql/malformed-call {:call expr})))
+
                    (let [[f & args] expr]
                      (when-not (symbol? f)
                        (throw (err/illegal-arg :xtql/malformed-call {:call expr})))
-                     (Expr/call (str f) (mapv parse-expr args))))
+
+                     (case f
+                       (exists? not-exists? q)
+                       (do
+                         (when (not= 1 (count args))
+                           (throw (err/illegal-arg :xtql/malformed-subquery {:expr expr})))
+
+                         (let [[query args] (parse-subquery-args (first args) expr)]
+                           (case f
+                             exists? (Expr/exists query args)
+                             not-exists? (Expr/notExists query args)
+                             q (Expr/q query args))))
+
+                       (Expr/call (str f) (mapv parse-expr args)))))
 
     :else (Expr/val expr)))
 
@@ -83,7 +112,31 @@
       (cond
         (vector? obj) (mapv unparse obj)
         (set? obj) (into #{} (map unparse) obj)
-        :else obj))))
+        :else obj)))
+
+  Expr$Exists
+  (unparse [e]
+    (let [q (unparse (.query e))]
+      (list 'exists?
+            (if-let [args (.args e)]
+              (into [q] (mapv unparse args))
+              q))))
+
+  Expr$NotExists
+  (unparse [e]
+    (let [q (unparse (.query e))]
+      (list 'not-exists?
+            (if-let [args (.args e)]
+              (into [q] (mapv unparse args))
+              q))))
+
+  Expr$Subquery
+  (unparse [e]
+    (let [q (unparse (.query e))]
+      (list 'q
+            (if-let [args (.args e)]
+              (into [q] (mapv unparse args))
+              q)))))
 
 (defn- parse-temporal-filter [v k query]
   (let [ctx {:v v, :filter k, :query query}]
@@ -231,7 +284,8 @@
   Query$Return (unparse [query] (list* 'return (mapv unparse (.cols query))))
   Query$Aggregate (unparse [query] (list* 'aggregate (mapv unparse (.cols query))))
   Query$Unify (unparse [query] (list* 'unify (mapv unparse (.clauses query))))
-  Query$UnionAll (unparse [query] (list* 'union-all (mapv unparse (.queries query)))))
+  Query$UnionAll (unparse [query] (list* 'union-all (mapv unparse (.queries query))))
+  Query$Limit (unparse [this] (list 'limit (.length this))))
 
 (defmethod parse-query 'unify [[_ & clauses :as this]]
   (when (> 1 (count clauses))
@@ -240,6 +294,14 @@
   (->> clauses
        (mapv parse-unify-clause)
        (Query/unify)))
+
+(defmethod parse-query 'union-all [[_ & queries :as this]]
+  (when (> 1 (count queries))
+    (throw (err/illegal-arg :xtql/malformed-union {:union this
+                                                   :message "Union must contain a least one sub query"})))
+  (->> queries
+       (mapv parse-query)
+       (Query/unionAll)))
 
 (defn parse-where [[_ & preds :as this]]
   (when (> 1 (count preds))
@@ -275,6 +337,11 @@
 
 (defmethod parse-query-tail 'aggregate [[_ & cols :as this]]
   (Query/aggregate (parse-binding-specs cols this)))
+
+(defmethod parse-query-tail 'limit [[_ length :as this]]
+  (when-not (= 2 (count this))
+    (throw (err/illegal-arg :xtql/limit {:limit this :message "Limit can only take a single value"})))
+  (Query/limit length))
 
 (defn- parse-order-spec [order-spec this]
   (if (vector? order-spec)
