@@ -1,6 +1,6 @@
 (ns xtdb.xtql.edn
   (:require [xtdb.error :as err])
-  (:import (xtdb.query BindingSpec Expr Expr$Bool Expr$Call Expr$Double Expr$LogicVar Expr$Long Expr$Obj
+  (:import (xtdb.query BindingSpec Expr Expr$Bool Expr$Call Expr$Double Expr$Exists Expr$LogicVar Expr$Long Expr$Obj Expr$NotExists Expr$Subquery
                        Query Query$Aggregate Query$From Query$LeftJoin Query$Join Query$OrderBy Query$OrderDirection Query$OrderSpec Query$Pipeline Query$Return Query$Unify Query$UnionAll Query$Where Query$With Query$Without
                        TemporalFilter TemporalFilter$AllTime TemporalFilter$At TemporalFilter$In)))
 
@@ -46,6 +46,18 @@
 (defmethod parse-unify-clause :default [[op]]
   (throw (err/illegal-arg :xtql/unknown-unify-clause {:op op})))
 
+(declare parse-binding-specs)
+
+(defn- parse-subquery-args [args expr]
+  (cond
+    (list? args) [(parse-query args) nil]
+
+    (and (vector? args) (not (empty? args)))
+    (let [[query & bind-specs] args]
+      [(parse-query query) (not-empty (parse-binding-specs bind-specs expr))])
+
+    :else (throw (err/illegal-arg :xtql/malformed-subquery {:expr expr}))))
+
 (defn parse-expr [expr]
   (cond
     (true? expr) Expr/TRUE
@@ -60,10 +72,24 @@
     (list? expr) (do
                    (when (empty? expr)
                      (throw (err/illegal-arg :xtql/malformed-call {:call expr})))
+
                    (let [[f & args] expr]
                      (when-not (symbol? f)
                        (throw (err/illegal-arg :xtql/malformed-call {:call expr})))
-                     (Expr/call (str f) (mapv parse-expr args))))
+
+                     (case f
+                       (exists? not-exists? q)
+                       (do
+                         (when (not= 1 (count args))
+                           (throw (err/illegal-arg :xtql/malformed-subquery {:expr expr})))
+
+                         (let [[query args] (parse-subquery-args (first args) expr)]
+                           (case f
+                             exists? (Expr/exists query args)
+                             not-exists? (Expr/notExists query args)
+                             q (Expr/q query args))))
+
+                       (Expr/call (str f) (mapv parse-expr args)))))
 
     :else (Expr/val expr)))
 
@@ -83,7 +109,31 @@
       (cond
         (vector? obj) (mapv unparse obj)
         (set? obj) (into #{} (map unparse) obj)
-        :else obj))))
+        :else obj)))
+
+  Expr$Exists
+  (unparse [e]
+    (let [q (unparse (.query e))]
+      (list 'exists?
+            (if-let [args (.args e)]
+              (into [q] (mapv unparse args))
+              q))))
+
+  Expr$NotExists
+  (unparse [e]
+    (let [q (unparse (.query e))]
+      (list 'not-exists?
+            (if-let [args (.args e)]
+              (into [q] (mapv unparse args))
+              q))))
+
+  Expr$Subquery
+  (unparse [e]
+    (let [q (unparse (.query e))]
+      (list 'q
+            (if-let [args (.args e)]
+              (into [q] (mapv unparse args))
+              q)))))
 
 (defn- parse-temporal-filter [v k query]
   (let [ctx {:v v, :filter k, :query query}]

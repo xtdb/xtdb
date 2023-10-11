@@ -1,7 +1,7 @@
 (ns xtdb.xtql.json
   (:require [xtdb.error :as err])
   (:import [java.time Duration LocalDate LocalDateTime ZonedDateTime]
-           (xtdb.query BindingSpec Expr Expr$Bool Expr$Call Expr$Double Expr$LogicVar Expr$Long Expr$Obj
+           (xtdb.query BindingSpec Expr Expr$Bool Expr$Call Expr$Double Expr$Exists Expr$LogicVar Expr$Long Expr$NotExists Expr$Obj Expr$Subquery
                        Query Query$Aggregate Query$From Query$LeftJoin Query$Join Query$Pipeline Query$OrderBy Query$OrderDirection Query$OrderSpec Query$Return Query$Unify Query$UnionAll Query$Where Query$With Query$Without
                        TemporalFilter TemporalFilter$AllTime TemporalFilter$At TemporalFilter$In)))
 
@@ -38,7 +38,7 @@
 (defprotocol Unparse
   (unparse [this]))
 
-(declare parse-expr)
+(declare parse-expr parse-binding-specs)
 
 (defn- parse-literal [{v "@value", t "@type" :as l}]
   (letfn [(bad-literal [l]
@@ -75,6 +75,16 @@
                   "xt:timestamptz" (Expr/val (try-parse v #(ZonedDateTime/parse %)))
                   (throw (err/illegal-arg :xtql/unknown-type {:value v, :type t}))))))))
 
+(defn parse-subquery-args [args expr]
+  (cond
+    (map? args) [(parse-query args) nil]
+
+    (and (vector? args) (not (empty? args)))
+    (let [[query & bind-specs] args]
+      [(parse-query query) (parse-binding-specs bind-specs expr)])
+
+    :else (throw (err/illegal-arg :xtql/malformed-subquery {:expr expr}))))
+
 (defn parse-expr [expr]
   (letfn [(bad-expr [expr]
             (throw (err/illegal-arg :xtql/malformed-expr {:expr expr})))]
@@ -89,10 +99,21 @@
       (map? expr) (cond
                     (contains? expr "@value") (parse-literal expr)
 
-                    (= 1 (count expr)) (let [[f args] (first expr)]
-                                         (when-not (vector? args)
-                                           (bad-expr expr))
-                                         (Expr/call f (mapv parse-expr args)))
+                    (= 1 (count expr))
+                    (let [[f args] (first expr)]
+                      (case f
+                        ("exists" "notExists" "q")
+                        (let [[query args] (parse-subquery-args args expr)]
+                          (case f
+                            "exists" (Expr/exists query args)
+                            "notExists" (Expr/notExists query args)
+                            "q" (Expr/q query args)))
+
+                        (do
+                          (when-not (and (string? f) (vector? args))
+                            (bad-expr expr))
+
+                          (Expr/call f (mapv parse-expr args)))))
 
                     :else (bad-expr expr))
 
@@ -119,7 +140,28 @@
         (instance? Duration obj) {"@value" (str obj), "@type" "xt:duration"}
         (instance? LocalDateTime obj) {"@value" (str obj), "@type" "xt:timestamp"}
         (instance? ZonedDateTime obj) {"@value" (str obj), "@type" "xt:timestamptz"}
-        :else (throw (UnsupportedOperationException. (format "obj: %s" (pr-str obj))))))))
+        :else (throw (UnsupportedOperationException. (format "obj: %s" (pr-str obj)))))))
+
+  Expr$Exists
+  (unparse [e]
+    (let [q (unparse (.query e))]
+      {"exists" (if-let [args (.args e)]
+                  (into [q] (mapv unparse args))
+                  q)}))
+
+  Expr$NotExists
+  (unparse [e]
+    (let [q (unparse (.query e))]
+      {"notExists" (if-let [args (.args e)]
+                     (into [q] (mapv unparse args))
+                     q)}))
+
+  Expr$Subquery
+  (unparse [e]
+    (let [q (unparse (.query e))]
+      {"q" (if-let [args (.args e)]
+             (into [q] (mapv unparse args))
+             q)})))
 
 (defn- parse-temporal-filter [v k query]
   (let [ctx {:v v, :filter k, :query query}]

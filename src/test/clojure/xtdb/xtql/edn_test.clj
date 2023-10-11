@@ -42,6 +42,19 @@
     (t/is (= '(foo 12 "hello") (roundtrip-expr '(foo 12 "hello")))
           "args")))
 
+(t/deftest test-expr-subquery
+  (t/is (= '(exists? (from :foo))
+           (roundtrip-expr '(exists? (from :foo)))))
+
+  (t/is (= '(exists? [(from :foo) a {:b outer-b}])
+           (roundtrip-expr '(exists? [(from :foo) a {:b outer-b}]))))
+
+  (t/is (= '(not-exists? (from :foo))
+           (roundtrip-expr '(not-exists? (from :foo)))))
+
+  (t/is (= '(q (from :foo))
+           (roundtrip-expr '(q (from :foo))))))
+
 (defn- roundtrip-q [q]
   (edn/unparse (edn/parse-query q)))
 
