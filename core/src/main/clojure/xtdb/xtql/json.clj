@@ -12,6 +12,29 @@
 
     (symbol (key (first query)))))
 
+(defmethod parse-query :default [q]
+  (throw (err/illegal-arg :xtql/unknown-query-op {:op (key (first q))})))
+
+(defmulti parse-query-tail
+  (fn [query]
+    (when-not (and (map? query) (= 1 (count query)))
+      (throw (err/illegal-arg :xtql/malformed-query {:query query})))
+
+    (symbol (key (first query)))))
+
+(defmethod parse-query-tail :default [q]
+  (throw (err/illegal-arg :xtql/unknown-query-tail {:op (key (first q))})))
+
+(defmulti parse-unify-clause
+  (fn [query]
+    (when-not (and (map? query) (= 1 (count query)))
+      (throw (err/illegal-arg :xtql/malformed-query {:query query})))
+
+    (symbol (key (first query)))))
+
+(defmethod parse-unify-clause :default [q]
+  (throw (err/illegal-arg :xtql/unknown-unify-clause {:op (key (first q))})))
+
 (defprotocol Unparse
   (unparse [this]))
 
@@ -175,14 +198,18 @@
                                                       ;; TODO error
                                                       )
                                                     (BindingSpec/of attr (parse-expr expr))))))))))
-(defmethod parse-query 'from [query]
-  (let [v (val (first query))]
+
+(defn- parse-from [from]
+  (let [v (val (first from))]
     (when-not (and (vector? v) (not-empty v))
-      (throw (err/illegal-arg :xtql/malformed-from {:from query})))
+      (throw (err/illegal-arg :xtql/malformed-from {:from from})))
 
     (let [[source & binding-specs] v]
-      (-> (parse-source source query)
-          (.binding (parse-binding-specs binding-specs query))))))
+      (-> (parse-source source from)
+          (.binding (parse-binding-specs binding-specs from))))))
+
+(defmethod parse-query 'from [from] (parse-from from))
+(defmethod parse-unify-clause 'from [from] (parse-from from))
 
 (extend-protocol Unparse
   BindingSpec
@@ -207,50 +234,56 @@
 
                     (map unparse (.bindSpecs from)))})))
 
-(defmethod parse-query 'where [query]
-  (let [v (val (first query))]
-    (when-not (vector? v)
-      (throw (err/illegal-arg :xtql/malformed-where {:where query})))
-
-    (Query/where (mapv parse-expr v))))
-
 (defmethod parse-query '-> [query]
   (let [v (val (first query))]
     (when-not (and (vector? v) (not-empty v))
       (throw (err/illegal-arg :xtql/malformed-pipeline {:pipeline query})))
 
     (let [[head & tails] v]
-      (Query/pipeline (parse-query head) (mapv parse-query tails)))))
+      (Query/pipeline (parse-query head) (mapv parse-query-tail tails)))))
 
 (defmethod parse-query 'unify [query]
   (let [v (val (first query))]
     (when-not (vector? v)
       (throw (err/illegal-arg :xtql/malformed-unify {:unify query})))
 
-    (Query/unify (mapv parse-query v))))
+    (Query/unify (mapv parse-unify-clause v))))
 
-(defmethod parse-query 'with [query]
-  (let [v (val (first query))]
+(defn- parse-where [where]
+  (let [v (val (first where))]
     (when-not (vector? v)
-      (throw (err/illegal-arg :xtql/malformed-with {:with query})))
+      (throw (err/illegal-arg :xtql/malformed-where {:where where})))
 
-    (Query/with (parse-binding-specs v query))))
+    (Query/where (mapv parse-expr v))))
 
-(defmethod parse-query 'without [query]
+(defmethod parse-query-tail 'where [where] (parse-where where))
+(defmethod parse-unify-clause 'where [where] (parse-where where))
+
+(defn- parse-with [with]
+  (let [v (val (first with))]
+    (when-not (vector? v)
+      (throw (err/illegal-arg :xtql/malformed-with {:with with})))
+
+    (Query/with (parse-binding-specs v with))))
+
+(defmethod parse-query-tail 'with [with] (parse-with with))
+(defmethod parse-unify-clause 'with [with] (parse-with with))
+
+(defmethod parse-query-tail 'without [query]
   (let [v (val (first query))]
     (when-not (and (vector? v) (every? string? v))
       (throw (err/illegal-arg :xtql/malformed-without {:without query})))
 
     (Query/without v)))
 
-(defmethod parse-query 'return [query]
+(defmethod parse-query-tail 'return [query]
   (let [v (val (first query))]
     (when-not (vector? v)
       (throw (err/illegal-arg :xtql/malformed-return {:return query})))
 
     (Query/ret (parse-binding-specs v query))))
 
-(defmethod parse-query 'aggregate [query]
+(defmethod parse-query-tail 'aggregate [query]
   (let [v (val (first query))]
     (when-not (vector? v)
       (throw (err/illegal-arg :xtql/malformed-aggregate {:aggregate query})))
@@ -265,7 +298,4 @@
   Query$Return (unparse [q] {"return" (mapv unparse (.cols q))})
   Query$Aggregate (unparse [q] {"aggregate" (mapv unparse (.cols q))})
   Query$Unify (unparse [q] {"unify" (mapv unparse (.clauses q))}))
-
-(defmethod parse-query :default [q]
-  (throw (err/illegal-arg :xtql/unknown-query-op {:op (key (first q))})))
 
