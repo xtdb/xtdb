@@ -1,8 +1,8 @@
 (ns xtdb.xtql.json
   (:require [xtdb.error :as err])
   (:import [java.time Duration LocalDate LocalDateTime ZonedDateTime]
-           (xtdb.query Expr Expr$Bool Expr$Call Expr$Double Expr$LogicVar Expr$Long Expr$Obj
-                       QueryStep QueryStep$Aggregate QueryStep$BindingSpec QueryStep$From QueryStep$Pipeline QueryStep$Return QueryStep$Unify QueryStep$Where QueryStep$With QueryStep$Without
+           (xtdb.query BindingSpec Expr Expr$Bool Expr$Call Expr$Double Expr$LogicVar Expr$Long Expr$Obj
+                       Query Query$Aggregate Query$From Query$LeftJoin Query$Join Query$Pipeline Query$Return Query$Unify Query$UnionAll Query$Where Query$With Query$Without
                        TemporalFilter TemporalFilter$AllTime TemporalFilter$At TemporalFilter$In)))
 
 (defmulti parse-query
@@ -11,6 +11,29 @@
       (throw (err/illegal-arg :xtql/malformed-query {:query query})))
 
     (symbol (key (first query)))))
+
+(defmethod parse-query :default [q]
+  (throw (err/illegal-arg :xtql/unknown-query-op {:op (key (first q))})))
+
+(defmulti parse-query-tail
+  (fn [query]
+    (when-not (and (map? query) (= 1 (count query)))
+      (throw (err/illegal-arg :xtql/malformed-query {:query query})))
+
+    (symbol (key (first query)))))
+
+(defmethod parse-query-tail :default [q]
+  (throw (err/illegal-arg :xtql/unknown-query-tail {:op (key (first q))})))
+
+(defmulti parse-unify-clause
+  (fn [query]
+    (when-not (and (map? query) (= 1 (count query)))
+      (throw (err/illegal-arg :xtql/malformed-query {:query query})))
+
+    (symbol (key (first query)))))
+
+(defmethod parse-unify-clause :default [q]
+  (throw (err/illegal-arg :xtql/unknown-unify-clause {:op (key (first q))})))
 
 (defprotocol Unparse
   (unparse [this]))
@@ -98,8 +121,8 @@
         (instance? ZonedDateTime obj) {"@value" (str obj), "@type" "xt:timestamptz"}
         :else (throw (UnsupportedOperationException. (format "obj: %s" (pr-str obj))))))))
 
-(defn- parse-temporal-filter [v k step]
-  (let [ctx {:v v, :filter k, :step step}]
+(defn- parse-temporal-filter [v k query]
+  (let [ctx {:v v, :filter k, :query query}]
     (if (= "allTime" v)
       TemporalFilter/ALL_TIME
 
@@ -128,64 +151,84 @@
   TemporalFilter$At (unparse [at] {"at" (unparse (.at at))})
   TemporalFilter$In (unparse [in] {"in" [(unparse (.from in)) (unparse (.to in))]}))
 
-(defn- with-parsed-temporal-filters ^xtdb.query.QueryStep$From [^QueryStep$From from, temporal-filters, step]
+(defn- with-parsed-temporal-filters ^xtdb.query.Query$From [^Query$From from, temporal-filters, query]
   (when-not (map? temporal-filters)
-    (throw (err/illegal-arg :xtql/malformed-table-opts {:filters temporal-filters, :from step})))
+    (throw (err/illegal-arg :xtql/malformed-table-opts {:filters temporal-filters, :from query})))
 
   (let [{for-valid-time "forValidTime", for-system-time "forSystemTime"} temporal-filters]
     (cond-> from
-      for-valid-time (.forValidTime (parse-temporal-filter for-valid-time :forValidTime step))
-      for-system-time (.forSystemTime (parse-temporal-filter for-system-time :forSystemTime step)))))
+      for-valid-time (.forValidTime (parse-temporal-filter for-valid-time :forValidTime query))
+      for-system-time (.forSystemTime (parse-temporal-filter for-system-time :forSystemTime query)))))
 
-(defn- parse-source ^xtdb.query.QueryStep$From [source step]
+(defn- parse-from-source ^xtdb.query.Query$From [source query]
   (cond
-    (string? source) (QueryStep/from source)
+    (string? source) (Query/from source)
 
     (and (map? source) (= 1 (count source)))
-    (let [[k v] (first source)]
-      (case k
-        "table" (cond
-                  (string? v) (QueryStep/from v)
+    (let [[table temporal-filters] (first source)]
+      (when-not (string? table)
+        (throw (err/illegal-arg :xtql/malformed-table {:table table, :from query})))
 
-                  (and (vector? v) (= 2 (count v)))
-                  (let [[table temporal-filters] v]
-                    (when-not (string? table)
-                      (throw (err/illegal-arg :xtql/malformed-table {:table table, :from step})))
+      (-> (Query/from table)
+          (with-parsed-temporal-filters temporal-filters query)))
 
-                    (-> (QueryStep/from table)
-                        (with-parsed-temporal-filters temporal-filters step)))
+    :else (throw (err/illegal-arg :xtql/malformed-from {:from query}))))
 
-                  :else (throw (err/illegal-arg :xtql/malformed-from {:from step})))
-
-        "rule" (throw (UnsupportedOperationException.))
-        "query" (throw (UnsupportedOperationException.))
-
-        (throw (err/illegal-arg :xtql/malformed-from {:from step}))))
-
-    :else (throw (err/illegal-arg :xtql/malformed-from {:from step}))))
-
-(defn- parse-binding-specs [binding-specs _step]
+(defn- parse-binding-specs [binding-specs _query]
   (->> binding-specs
        (into [] (mapcat (fn [binding-spec]
                           (cond
-                            (string? binding-spec) [(QueryStep/bindSpec binding-spec (Expr/lVar binding-spec))]
+                            (string? binding-spec) [(BindingSpec/of binding-spec (Expr/lVar binding-spec))]
                             (map? binding-spec) (for [[attr expr] binding-spec]
                                                   (do
                                                     (when-not (string? attr)
                                                       ;; TODO error
                                                       )
-                                                    (QueryStep/bindSpec attr (parse-expr expr))))))))))
-(defmethod parse-query 'from [step]
-  (let [v (val (first step))]
+                                                    (BindingSpec/of attr (parse-expr expr))))))))))
+
+(defn- parse-from [from]
+  (let [v (val (first from))]
     (when-not (and (vector? v) (not-empty v))
-      (throw (err/illegal-arg :xtql/malformed-from {:from step})))
+      (throw (err/illegal-arg :xtql/malformed-from {:from from})))
 
     (let [[source & binding-specs] v]
-      (-> (parse-source source step)
-          (.binding (parse-binding-specs binding-specs step))))))
+      (-> (parse-from-source source from)
+          (.binding (parse-binding-specs binding-specs from))))))
+
+(defmethod parse-query 'from [from] (parse-from from))
+(defmethod parse-unify-clause 'from [from] (parse-from from))
+
+(defn- parse-join-query [query join]
+  (cond
+    (map? query) [(parse-query query)]
+
+    (vector? query) (let [[query & args] query]
+                      [(parse-query query) (parse-binding-specs args join)])
+
+    :else (throw (err/illegal-arg :xtql/malformed-join {:join join}))))
+
+(defmethod parse-unify-clause 'join [join]
+  (let [v (val (first join))]
+    (when-not (and (vector? v) (not-empty v))
+      (throw (err/illegal-arg :xtql/malformed-join {:join join})))
+
+    (let [[query & binding-specs] v
+          [parsed-query args] (parse-join-query query join)]
+      (-> (Query/join parsed-query args)
+          (.binding (parse-binding-specs binding-specs join))))))
+
+(defmethod parse-unify-clause 'leftJoin [left-join]
+  (let [v (val (first left-join))]
+    (when-not (and (vector? v) (not-empty v))
+      (throw (err/illegal-arg :xtql/malformed-join {:join left-join})))
+
+    (let [[query & binding-specs] v
+          [parsed-query args] (parse-join-query query left-join)]
+      (-> (Query/leftJoin parsed-query args)
+          (.binding (parse-binding-specs binding-specs left-join))))))
 
 (extend-protocol Unparse
-  QueryStep$BindingSpec
+  BindingSpec
   (unparse [binding-spec]
     (let [attr (.attr binding-spec)
           expr (.expr binding-spec)]
@@ -194,77 +237,108 @@
         attr
         {attr (unparse expr)})))
 
-  QueryStep$From
+  Query$From
   (unparse [from]
     (let [table (.table from)
           for-valid-time (.forValidTime from)
           for-sys-time (.forSystemTime from)]
       {"from" (into [(if (or for-valid-time for-sys-time)
-                       {"table" [table (cond-> {}
-                                         for-valid-time (assoc "forValidTime" (unparse for-valid-time))
-                                         for-sys-time (assoc "forSystemTime" (unparse for-sys-time)))]}
+                       {table (cond-> {}
+                                for-valid-time (assoc "forValidTime" (unparse for-valid-time))
+                                for-sys-time (assoc "forSystemTime" (unparse for-sys-time)))}
                        table)]
 
-                    (map unparse (.bindSpecs from)))})))
+                    (map unparse (.bindSpecs from)))}))
 
-(defmethod parse-query 'where [step]
-  (let [v (val (first step))]
+  Query$Join
+  (unparse [join]
+    (let [query (unparse (.query join))
+          args (.args join)]
+      {"join" (into [(if args
+                       (into [query] (map unparse) args)
+                       query)]
+
+                    (map unparse (.bindings join)))}))
+
+  Query$LeftJoin
+  (unparse [join]
+    (let [query (unparse (.query join))
+          args (.args join)]
+      {"leftJoin" (into [(if args
+                           (into [query] (map unparse) args)
+                           query)]
+
+                        (map unparse (.bindings join)))})))
+
+(defmethod parse-query '-> [query]
+  (let [v (val (first query))]
+    (when-not (and (vector? v) (not-empty v))
+      (throw (err/illegal-arg :xtql/malformed-pipeline {:pipeline query})))
+
+    (let [[head & tails] v]
+      (Query/pipeline (parse-query head) (mapv parse-query-tail tails)))))
+
+(defmethod parse-query 'unify [query]
+  (let [v (val (first query))]
     (when-not (vector? v)
-      (throw (err/illegal-arg :xtql/malformed-where {:where step})))
+      (throw (err/illegal-arg :xtql/malformed-unify {:unify query})))
 
-    (QueryStep/where (mapv parse-expr v))))
+    (Query/unify (mapv parse-unify-clause v))))
 
-(defmethod parse-query '-> [step]
-  (let [v (val (first step))]
+(defn- parse-where [where]
+  (let [v (val (first where))]
     (when-not (vector? v)
-      (throw (err/illegal-arg :xtql/malformed-pipeline {:pipeline step})))
+      (throw (err/illegal-arg :xtql/malformed-where {:where where})))
 
-    (QueryStep/pipeline (mapv parse-query v))))
+    (Query/where (mapv parse-expr v))))
 
-(defmethod parse-query 'unify [step]
-  (let [v (val (first step))]
+(defmethod parse-query-tail 'where [where] (parse-where where))
+(defmethod parse-unify-clause 'where [where] (parse-where where))
+
+(defn- parse-with [with]
+  (let [v (val (first with))]
     (when-not (vector? v)
-      (throw (err/illegal-arg :xtql/malformed-unify {:unify step})))
+      (throw (err/illegal-arg :xtql/malformed-with {:with with})))
 
-    (QueryStep/unify (mapv parse-query v))))
+    (Query/with (parse-binding-specs v with))))
 
-(defmethod parse-query 'with [step]
-  (let [v (val (first step))]
-    (when-not (vector? v)
-      (throw (err/illegal-arg :xtql/malformed-with {:with step})))
+(defmethod parse-query-tail 'with [with] (parse-with with))
+(defmethod parse-unify-clause 'with [with] (parse-with with))
 
-    (QueryStep/with (parse-binding-specs v step))))
-
-(defmethod parse-query 'without [step]
-  (let [v (val (first step))]
+(defmethod parse-query-tail 'without [query]
+  (let [v (val (first query))]
     (when-not (and (vector? v) (every? string? v))
-      (throw (err/illegal-arg :xtql/malformed-without {:without step})))
+      (throw (err/illegal-arg :xtql/malformed-without {:without query})))
 
-    (QueryStep/without v)))
+    (Query/without v)))
 
-(defmethod parse-query 'return [step]
-  (let [v (val (first step))]
+(defmethod parse-query-tail 'return [query]
+  (let [v (val (first query))]
     (when-not (vector? v)
-      (throw (err/illegal-arg :xtql/malformed-return {:return step})))
+      (throw (err/illegal-arg :xtql/malformed-return {:return query})))
 
-    (QueryStep/ret (parse-binding-specs v step))))
+    (Query/ret (parse-binding-specs v query))))
 
-(defmethod parse-query 'aggregate [step]
-  (let [v (val (first step))]
+(defmethod parse-query-tail 'aggregate [query]
+  (let [v (val (first query))]
     (when-not (vector? v)
-      (throw (err/illegal-arg :xtql/malformed-aggregate {:aggregate step})))
+      (throw (err/illegal-arg :xtql/malformed-aggregate {:aggregate query})))
 
-    (QueryStep/aggregate (parse-binding-specs v step))))
+    (Query/aggregate (parse-binding-specs v query))))
+
+(defmethod parse-query 'unionAll [query]
+  (let [v (val (first query))]
+    (when-not (vector? v)
+      (throw (err/illegal-arg :xtql/malformed-union-all {:union-all query})))
+
+    (Query/unionAll (mapv parse-query v))))
 
 (extend-protocol Unparse
-  QueryStep$Pipeline (unparse [step] {"->" (mapv unparse (.steps step))})
-  QueryStep$Where (unparse [step] {"where" (mapv unparse (.preds step))})
-  QueryStep$With (unparse [step] {"with" (mapv unparse (.cols step))})
-  QueryStep$Without (unparse [step] {"without" (.cols step)})
-  QueryStep$Return (unparse [step] {"return" (mapv unparse (.cols step))})
-  QueryStep$Aggregate (unparse [step] {"aggregate" (mapv unparse (.cols step))})
-  QueryStep$Unify (unparse [step] {"unify" (mapv unparse (.clauses step))}))
-
-(defmethod parse-query :default [q]
-  (throw (err/illegal-arg :xtql/unknown-query-op {:op (key (first q))})))
-
+  Query$Pipeline (unparse [q] {"->" (into [(unparse (.query q))] (mapv unparse (.tails q)))})
+  Query$Where (unparse [q] {"where" (mapv unparse (.preds q))})
+  Query$With (unparse [q] {"with" (mapv unparse (.cols q))})
+  Query$Without (unparse [q] {"without" (.cols q)})
+  Query$Return (unparse [q] {"return" (mapv unparse (.cols q))})
+  Query$Aggregate (unparse [q] {"aggregate" (mapv unparse (.cols q))})
+  Query$Unify (unparse [q] {"unify" (mapv unparse (.clauses q))})
+  Query$UnionAll (unparse [q] {"unionAll" (mapv unparse (.queries q))}))
