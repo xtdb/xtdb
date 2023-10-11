@@ -108,3 +108,7 @@
 (t/deftest test-parse-join
   (let [q '(join (from :foo a) {:a b})]
     (t/is (= q (roundtrip-unify-clause q)))))
+
+(t/deftest test-parse-order-by
+  (t/is (= '(order-by (+ a b) [b {:dir :desc}])
+           (roundtrip-q-tail '(order-by (+ a b) [b {:dir :desc}])))))

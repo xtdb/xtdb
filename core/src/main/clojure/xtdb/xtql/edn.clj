@@ -267,13 +267,29 @@
 (defmethod parse-query-tail 'aggregate [[_ & cols :as this]]
   (Query/aggregate (parse-binding-specs cols this)))
 
-(-> (parse-query
-     '(unify
-       (join
-        (from :foo a)
-             {:a b})))
-    (clojure.pprint/pprint)
-    #_(unparse))
+(defn- parse-order-spec [order-spec this]
+  (if (vector? order-spec)
+    (do
+      (when-not (= 2 (count order-spec))
+        (throw (err/illegal-arg :xtql/malformed-order-spec {:order-spec order-spec, :query this})))
+
+      (let [[expr opts] order-spec
+            parsed-expr (parse-expr expr)]
+        (when-not (map? opts)
+          (throw (err/illegal-arg :xtql/malformed-order-spec {:order-spec order-spec, :query this})))
+
+        (let [{:keys [dir]} opts]
+          (case dir
+            :asc (Query/asc parsed-expr)
+            :desc (Query/desc parsed-expr)
+
+            (throw (err/illegal-arg :xtql/malformed-order-by-direction
+                                    {:direction dir, :order-spec order-spec, :query this}))))))
+
+    (Query/asc (parse-expr order-spec))))
+
+(defmethod parse-query-tail 'order-by [[_ & order-specs :as this]]
+  (Query/orderBy (mapv #(parse-order-spec % this) order-specs)))
 
 (extend-protocol Unparse
   Query$OrderSpec
