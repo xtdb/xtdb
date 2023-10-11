@@ -187,18 +187,14 @@ public interface Query {
     }
 
     final class Join implements UnifyClause {
-        public final QueryTail query;
+        public final Query query;
         public final List<BindingSpec> args;
         public final List<BindingSpec> bindings;
 
-        private Join(QueryTail query, List<BindingSpec> args, List<BindingSpec> bindings) {
+        private Join(Query query, List<BindingSpec> args, List<BindingSpec> bindings) {
             this.query = query;
             this.args = unmodifiableList(args);
             this.bindings = unmodifiableList(bindings);
-        }
-
-        public Join args(List<BindingSpec> args) {
-            return new Join(query, args, bindings);
         }
 
         public Join bindings(List<BindingSpec> bindings) {
@@ -211,23 +207,19 @@ public interface Query {
         }
     }
 
-    static Join join(QueryTail query) {
-        return new Join(query, null, null);
+    static Join join(Query query, List<BindingSpec> args) {
+        return new Join(query, args, null);
     }
 
     final class LeftJoin implements UnifyClause {
-        public final QueryTail query;
+        public final Query query;
         public final List<BindingSpec> args;
         public final List<BindingSpec> bindings;
 
-        private LeftJoin(QueryTail query, List<BindingSpec> args, List<BindingSpec> bindings) {
+        private LeftJoin(Query query, List<BindingSpec> args, List<BindingSpec> bindings) {
             this.query = query;
             this.args = unmodifiableList(args);
             this.bindings = unmodifiableList(bindings);
-        }
-
-        public LeftJoin args(List<BindingSpec> args) {
-            return new LeftJoin(query, args, bindings);
         }
 
         public LeftJoin bindings(List<BindingSpec> bindings) {
@@ -240,8 +232,8 @@ public interface Query {
         }
     }
 
-    static LeftJoin leftJoin(QueryTail query) {
-        return new LeftJoin(query, null, null);
+    static LeftJoin leftJoin(Query query, List<BindingSpec> args) {
+        return new LeftJoin(query, args, null);
     }
 
     final class Aggregate implements QueryTail {
