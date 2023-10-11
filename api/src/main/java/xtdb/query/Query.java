@@ -313,5 +313,22 @@ public interface Query {
     static UnionAll unionAll(List<Query> queries) {
         return new UnionAll(queries);
     }
+
+    final class Limit implements QueryTail {
+        public final Long length;
+
+        private Limit(Long length) {
+            this.length = length;
+        }
+
+        @Override
+        public String toString() {
+            return String.format("(%s %s)", "limit", length);
+        }
+    }
+
+    static Limit limit(Long length) {
+        return new Limit(length);
+    }
 }
 

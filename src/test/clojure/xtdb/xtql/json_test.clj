@@ -58,6 +58,19 @@
   ;; TODO check errors
   )
 
+(t/deftest test-expr-subquery
+  (t/is (= ['(exists? (from :foo)) {"exists" {"from" ["foo"]}}]
+           (roundtrip-expr {"exists" {"from" ["foo"]}})))
+
+  (t/is (= ['(exists? [(from :foo) a {:b outer-b}]) {"exists" [{"from" ["foo"]} "a" {"b" "outer-b"}]}]
+           (roundtrip-expr {"exists" [{"from" ["foo"]} "a" {"b" "outer-b"}]})))
+
+  (t/is (= ['(not-exists? (from :foo)) {"notExists" {"from" ["foo"]}}]
+           (roundtrip-expr {"notExists" {"from" ["foo"]}})))
+
+  (t/is (= ['(q (from :foo)) {"q" {"from" ["foo"]}}]
+           (roundtrip-expr {"q" {"from" ["foo"]}}))))
+
 (defn- roundtrip-q [query]
   (let [parsed (json/parse-query query)]
     [(edn/unparse parsed) (json/unparse parsed)]))
