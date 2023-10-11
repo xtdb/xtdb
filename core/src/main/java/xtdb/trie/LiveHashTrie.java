@@ -139,6 +139,10 @@ public record LiveHashTrie(Node rootNode, IVectorReader iidReader) implements Ha
             return null;
         }
 
+        public int [] mergeSort (LiveHashTrie trie) {
+            return this.mergeSort(trie, data, sortLog(trie, log, logCount), logCount);
+        }
+
         private int[] mergeSort(LiveHashTrie trie, int[] data, int[] log, int logCount) {
             int dataCount = data.length;
 

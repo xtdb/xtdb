@@ -257,8 +257,7 @@
           (.load loader rb)
           (vr/<-root vsr))))
 
-    :live (let [{:keys [^RelationReader rel-rdr, ^LiveHashTrie$Leaf node]} leaf-arg]
-            (.select ^RelationReader rel-rdr (.data ^LiveHashTrie$Leaf node)))))
+    :live (:rel-rdr leaf-arg)))
 
 (deftype TrieCursor [^BufferAllocator allocator, ^Iterator merge-tasks
                      table-name, col-names, ^Map col-preds, temporal-bounds
@@ -379,7 +378,10 @@
                                                                    :trie-key trie-key}]))))
 
                                   LiveHashTrie$Leaf
-                                  (recur true (conj leaves [:live {:node trie-node, :rel-rdr (.liveRelation live-table-wm)}])))
+                                  (recur true (conj leaves
+                                                    [:live {:rel-rdr
+                                                            (.select (.liveRelation live-table-wm)
+                                                                     (.mergeSort ^LiveHashTrie$Leaf trie-node (.liveTrie live-table-wm)))}])))
 
                                 (recur node-taken? (conj leaves nil))))
 
@@ -388,7 +390,7 @@
                                 :leaves leaves}])))))))]
 
     (trie/postwalk-merge-plan (cond-> (mapv (comp :trie :meta-file) scan-tries)
-                                live-table-wm (conj (.compactLogs (.liveTrie live-table-wm))))
+                                live-table-wm (conj (.liveTrie live-table-wm)))
                               merge-tasks*)))
 
 (defmethod ig/prep-key ::scan-emitter [_ opts]
