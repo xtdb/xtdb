@@ -2,7 +2,7 @@
   (:require [xtdb.error :as err])
   (:import [java.time Duration LocalDate LocalDateTime ZonedDateTime]
            (xtdb.query BindingSpec Expr Expr$Bool Expr$Call Expr$Double Expr$LogicVar Expr$Long Expr$Obj
-                       Query Query$Aggregate Query$From Query$Pipeline Query$Return Query$Unify Query$Where Query$With Query$Without
+                       Query Query$Aggregate Query$From Query$Pipeline Query$Return Query$Unify Query$UnionAll Query$Where Query$With Query$Without
                        TemporalFilter TemporalFilter$AllTime TemporalFilter$At TemporalFilter$In)))
 
 (defmulti parse-query
@@ -290,6 +290,13 @@
 
     (Query/aggregate (parse-binding-specs v query))))
 
+(defmethod parse-query 'unionAll [query]
+  (let [v (val (first query))]
+    (when-not (vector? v)
+      (throw (err/illegal-arg :xtql/malformed-union-all {:union-all query})))
+
+    (Query/unionAll (mapv parse-query v))))
+
 (extend-protocol Unparse
   Query$Pipeline (unparse [q] {"->" (into [(unparse (.query q))] (mapv unparse (.tails q)))})
   Query$Where (unparse [q] {"where" (mapv unparse (.preds q))})
@@ -297,5 +304,5 @@
   Query$Without (unparse [q] {"without" (.cols q)})
   Query$Return (unparse [q] {"return" (mapv unparse (.cols q))})
   Query$Aggregate (unparse [q] {"aggregate" (mapv unparse (.cols q))})
-  Query$Unify (unparse [q] {"unify" (mapv unparse (.clauses q))}))
-
+  Query$Unify (unparse [q] {"unify" (mapv unparse (.clauses q))})
+  Query$UnionAll (unparse [q] {"unionAll" (mapv unparse (.queries q))}))

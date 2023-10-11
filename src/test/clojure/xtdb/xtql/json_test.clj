@@ -139,3 +139,12 @@
             {"aggregate" ["a" "b" {"c" {"sum" [{"+" ["a" "b"]}]}}]}]
 
            (roundtrip-q-tail {"aggregate" ["a" "b" {"c" {"sum" [{"+" ["a" "b"]}]}}]}))))
+
+(t/deftest test-union-all
+  (t/is (= ['(union-all (from :foo a)
+                        (from :bar a))
+            {"unionAll" [{"from" ["foo" "a"]}
+                         {"from" ["bar" "a"]}]}]
+
+           (roundtrip-q {"unionAll" [{"from" ["foo" "a"]}
+                         {"from" ["bar" "a"]}]}))))

@@ -1,7 +1,7 @@
 (ns xtdb.xtql.edn
   (:require [xtdb.error :as err])
   (:import (xtdb.query BindingSpec Expr Expr$Bool Expr$Call Expr$Double Expr$LogicVar Expr$Long Expr$Obj
-                       Query Query$Aggregate Query$From Query$Pipeline Query$Return Query$Unify Query$Where Query$With Query$Without
+                       Query Query$Aggregate Query$From Query$Pipeline Query$Return Query$Unify Query$UnionAll Query$Where Query$With Query$Without
                        TemporalFilter TemporalFilter$AllTime TemporalFilter$At TemporalFilter$In)))
 
 (defmulti parse-query
@@ -155,4 +155,5 @@
   Query$Without (unparse [query] (list* 'without (map keyword (.cols query))))
   Query$Return (unparse [query] (list* 'return (mapv unparse (.cols query))))
   Query$Aggregate (unparse [query] (list* 'aggregate (mapv unparse (.cols query))))
-  Query$Unify (unparse [query] (list* 'unify (mapv unparse (.clauses query)))))
+  Query$Unify (unparse [query] (list* 'unify (mapv unparse (.clauses query))))
+  Query$UnionAll (unparse [query] (list* 'union-all (mapv unparse (.queries query)))))
