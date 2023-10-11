@@ -2,7 +2,7 @@
   (:require [xtdb.error :as err])
   (:import [java.time Duration LocalDate LocalDateTime ZonedDateTime]
            (xtdb.query BindingSpec Expr Expr$Bool Expr$Call Expr$Double Expr$LogicVar Expr$Long Expr$Obj
-                       Query Query$Aggregate Query$From Query$LeftJoin Query$Join Query$Pipeline Query$Return Query$Unify Query$UnionAll Query$Where Query$With Query$Without
+                       Query Query$Aggregate Query$From Query$LeftJoin Query$Join Query$Pipeline Query$OrderBy Query$OrderDirection Query$OrderSpec Query$Return Query$Unify Query$UnionAll Query$Where Query$With Query$Without
                        TemporalFilter TemporalFilter$AllTime TemporalFilter$At TemporalFilter$In)))
 
 (defmulti parse-query
@@ -342,3 +342,44 @@
   Query$Aggregate (unparse [q] {"aggregate" (mapv unparse (.cols q))})
   Query$Unify (unparse [q] {"unify" (mapv unparse (.clauses q))})
   Query$UnionAll (unparse [q] {"unionAll" (mapv unparse (.queries q))}))
+
+(defn- parse-order-spec [order-spec query]
+  (if (vector? order-spec)
+    (do
+      (when-not (= 2 (count order-spec))
+        (throw (err/illegal-arg :xtql/malformed-order-spec {:order-spec order-spec, :query query})))
+
+      (let [[expr opts] order-spec
+            parsed-expr (parse-expr expr)]
+        (when-not (map? opts)
+          (throw (err/illegal-arg :xtql/malformed-order-spec {:order-spec order-spec, :query query})))
+
+        (let [{dir "dir"} opts]
+          (case dir
+            "asc" (Query/asc parsed-expr)
+            "desc" (Query/desc parsed-expr)
+
+            (throw (err/illegal-arg :xtql/malformed-order-by-direction
+                                    {:direction dir, :order-spec order-spec, :query query}))))))
+
+    (Query/asc (parse-expr order-spec))))
+
+(defmethod parse-query-tail 'orderBy [query]
+  (let [v (val (first query))]
+    (when-not (vector? v)
+      (throw (err/illegal-arg :xtql/malformed-order-by {:order-by query})))
+
+    (Query/orderBy (mapv #(parse-order-spec % query) v))))
+
+(extend-protocol Unparse
+  Query$OrderSpec
+  (unparse [spec]
+    (let [expr (unparse (.expr spec))
+          dir (.direction spec)]
+      (if (= Query$OrderDirection/DESC dir)
+        [expr {"dir" "desc"}]
+        expr)))
+
+  Query$OrderBy
+  (unparse [q]
+    {"orderBy" (mapv unparse (.orderSpecs q))}))
