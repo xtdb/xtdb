@@ -2,7 +2,7 @@
   (:require [xtdb.error :as err])
   (:import [java.time Duration LocalDate LocalDateTime ZonedDateTime]
            (xtdb.query BindingSpec Expr Expr$Bool Expr$Call Expr$Double Expr$LogicVar Expr$Long Expr$Obj
-                       Query Query$Aggregate Query$From Query$Pipeline Query$Return Query$Unify Query$UnionAll Query$Where Query$With Query$Without
+                       Query Query$Aggregate Query$From Query$LeftJoin Query$Join Query$Pipeline Query$Return Query$Unify Query$UnionAll Query$Where Query$With Query$Without
                        TemporalFilter TemporalFilter$AllTime TemporalFilter$At TemporalFilter$In)))
 
 (defmulti parse-query
@@ -160,30 +160,17 @@
       for-valid-time (.forValidTime (parse-temporal-filter for-valid-time :forValidTime query))
       for-system-time (.forSystemTime (parse-temporal-filter for-system-time :forSystemTime query)))))
 
-(defn- parse-source ^xtdb.query.Query$From [source query]
+(defn- parse-from-source ^xtdb.query.Query$From [source query]
   (cond
     (string? source) (Query/from source)
 
     (and (map? source) (= 1 (count source)))
-    (let [[k v] (first source)]
-      (case k
-        "table" (cond
-                  (string? v) (Query/from v)
+    (let [[table temporal-filters] (first source)]
+      (when-not (string? table)
+        (throw (err/illegal-arg :xtql/malformed-table {:table table, :from query})))
 
-                  (and (vector? v) (= 2 (count v)))
-                  (let [[table temporal-filters] v]
-                    (when-not (string? table)
-                      (throw (err/illegal-arg :xtql/malformed-table {:table table, :from query})))
-
-                    (-> (Query/from table)
-                        (with-parsed-temporal-filters temporal-filters query)))
-
-                  :else (throw (err/illegal-arg :xtql/malformed-from {:from query})))
-
-        "rule" (throw (UnsupportedOperationException.))
-        "query" (throw (UnsupportedOperationException.))
-
-        (throw (err/illegal-arg :xtql/malformed-from {:from query}))))
+      (-> (Query/from table)
+          (with-parsed-temporal-filters temporal-filters query)))
 
     :else (throw (err/illegal-arg :xtql/malformed-from {:from query}))))
 
@@ -205,11 +192,40 @@
       (throw (err/illegal-arg :xtql/malformed-from {:from from})))
 
     (let [[source & binding-specs] v]
-      (-> (parse-source source from)
+      (-> (parse-from-source source from)
           (.binding (parse-binding-specs binding-specs from))))))
 
 (defmethod parse-query 'from [from] (parse-from from))
 (defmethod parse-unify-clause 'from [from] (parse-from from))
+
+(defn- parse-join-query [query join]
+  (cond
+    (map? query) [(parse-query query)]
+
+    (vector? query) (let [[query & args] query]
+                      [(parse-query query) (parse-binding-specs args join)])
+
+    :else (throw (err/illegal-arg :xtql/malformed-join {:join join}))))
+
+(defmethod parse-unify-clause 'join [join]
+  (let [v (val (first join))]
+    (when-not (and (vector? v) (not-empty v))
+      (throw (err/illegal-arg :xtql/malformed-join {:join join})))
+
+    (let [[query & binding-specs] v
+          [parsed-query args] (parse-join-query query join)]
+      (-> (Query/join parsed-query args)
+          (.binding (parse-binding-specs binding-specs join))))))
+
+(defmethod parse-unify-clause 'leftJoin [left-join]
+  (let [v (val (first left-join))]
+    (when-not (and (vector? v) (not-empty v))
+      (throw (err/illegal-arg :xtql/malformed-join {:join left-join})))
+
+    (let [[query & binding-specs] v
+          [parsed-query args] (parse-join-query query left-join)]
+      (-> (Query/leftJoin parsed-query args)
+          (.binding (parse-binding-specs binding-specs left-join))))))
 
 (extend-protocol Unparse
   BindingSpec
@@ -227,12 +243,32 @@
           for-valid-time (.forValidTime from)
           for-sys-time (.forSystemTime from)]
       {"from" (into [(if (or for-valid-time for-sys-time)
-                       {"table" [table (cond-> {}
-                                         for-valid-time (assoc "forValidTime" (unparse for-valid-time))
-                                         for-sys-time (assoc "forSystemTime" (unparse for-sys-time)))]}
+                       {table (cond-> {}
+                                for-valid-time (assoc "forValidTime" (unparse for-valid-time))
+                                for-sys-time (assoc "forSystemTime" (unparse for-sys-time)))}
                        table)]
 
-                    (map unparse (.bindSpecs from)))})))
+                    (map unparse (.bindSpecs from)))}))
+
+  Query$Join
+  (unparse [join]
+    (let [query (unparse (.query join))
+          args (.args join)]
+      {"join" (into [(if args
+                       (into [query] (map unparse) args)
+                       query)]
+
+                    (map unparse (.bindings join)))}))
+
+  Query$LeftJoin
+  (unparse [join]
+    (let [query (unparse (.query join))
+          args (.args join)]
+      {"leftJoin" (into [(if args
+                           (into [query] (map unparse) args)
+                           query)]
+
+                        (map unparse (.bindings join)))})))
 
 (defmethod parse-query '-> [query]
   (let [v (val (first query))]

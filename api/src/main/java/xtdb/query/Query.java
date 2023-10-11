@@ -197,7 +197,7 @@ public interface Query {
             this.bindings = unmodifiableList(bindings);
         }
 
-        public Join bindings(List<BindingSpec> bindings) {
+        public Join binding(List<BindingSpec> bindings) {
             return new Join(query, args, bindings);
         }
 
@@ -222,7 +222,7 @@ public interface Query {
             this.bindings = unmodifiableList(bindings);
         }
 
-        public LeftJoin bindings(List<BindingSpec> bindings) {
+        public LeftJoin binding(List<BindingSpec> bindings) {
             return new LeftJoin(query, args, bindings);
         }
 

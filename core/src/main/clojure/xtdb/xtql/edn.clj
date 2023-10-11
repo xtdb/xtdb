@@ -1,7 +1,7 @@
 (ns xtdb.xtql.edn
   (:require [xtdb.error :as err])
   (:import (xtdb.query BindingSpec Expr Expr$Bool Expr$Call Expr$Double Expr$LogicVar Expr$Long Expr$Obj
-                       Query Query$Aggregate Query$From Query$Pipeline Query$Return Query$Unify Query$UnionAll Query$Where Query$With Query$Without
+                       Query Query$Aggregate Query$From Query$LeftJoin Query$Join Query$Pipeline Query$Return Query$Unify Query$UnionAll Query$Where Query$With Query$Without
                        TemporalFilter TemporalFilter$AllTime TemporalFilter$At TemporalFilter$In)))
 
 (defmulti parse-query
@@ -146,7 +146,29 @@
                               for-valid-time (assoc :for-valid-time (unparse for-valid-time))
                               for-sys-time (assoc :for-system-time (unparse for-sys-time)))]
                      table)
-             (map unparse (.bindSpecs from))))))
+             (map unparse (.bindSpecs from)))))
+
+  Query$Join
+  (unparse [join]
+    (let [query (unparse (.query join))
+          args (.args join)]
+      (list* 'join
+             (if args
+               (into [query] (map unparse) args)
+               query)
+
+             (map unparse (.bindings join)))))
+
+ Query$LeftJoin
+  (unparse [join]
+    (let [query (unparse (.query join))
+          args (.args join)]
+      (list* 'left-join
+             (if args
+               (into [query] (map unparse) args)
+               query)
+
+             (map unparse (.bindings join))))))
 
 (extend-protocol Unparse
   Query$Pipeline (unparse [query] (list* '-> (unparse (.query query)) (mapv unparse (.tails query))))

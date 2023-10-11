@@ -70,13 +70,13 @@
   (t/is (= ['(from :foo) {"from" ["foo"]}]
            (roundtrip-q {"from" ["foo"]})))
 
-  (let [json-q {"from" [{"table" ["foo" {"forValidTime" {"at" {"@value" "2020-01-01", "@type" "xt:date"}}}]}]}]
+  (let [json-q {"from" [{"foo" {"forValidTime" {"at" {"@value" "2020-01-01", "@type" "xt:date"}}}}]}]
     (t/is (= ['(from [:foo {:for-valid-time [:at #time/date "2020-01-01"]}])
               json-q]
              (roundtrip-q json-q))))
 
-  (let [json-q {"from" [{"table" ["foo" {"forValidTime" "allTime"
-                                         "forSystemTime" {"in" [{"@value" "2020-01-01", "@type" "xt:date"} nil]}}]}]}]
+  (let [json-q {"from" [{"foo" {"forValidTime" "allTime"
+                                "forSystemTime" {"in" [{"@value" "2020-01-01", "@type" "xt:date"} nil]}}}]}]
     (t/is (= ['(from [:foo {:for-valid-time :all-time
                             :for-system-time [:in #time/date "2020-01-01" nil]}])
               json-q]
@@ -148,3 +148,20 @@
 
            (roundtrip-q {"unionAll" [{"from" ["foo" "a"]}
                          {"from" ["bar" "a"]}]}))))
+
+(t/deftest test-joins
+  (t/is (= ['(unify (from :foo a)
+                    (join (from :bar a b) a b)
+                    (left-join [(from :baz a c) a] c))
+
+            {"unify" [{"from" ["foo" "a"]}
+                      {"join" [{"from" ["bar" "a" "b"]}
+                               "a" "b"]}
+                      {"leftJoin" [[{"from" ["baz" "a" "c"]} "a"]
+                                   "c"]}]}]
+
+           (roundtrip-q {"unify" [{"from" ["foo" "a"]}
+                                  {"join" [{"from" ["bar" "a" "b"]}
+                                           "a" "b"]}
+                                  {"leftJoin" [[{"from" ["baz" "a" "c"]} "a"]
+                                               "c"]}]}))))
