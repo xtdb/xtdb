@@ -1,23 +1,25 @@
 (ns xtdb.node
   (:require [clojure.pprint :as pp]
+            [juxt.clojars-mirrors.integrant.core :as ig]
             [xtdb.api.protocols :as xtp]
             [xtdb.datalog :as d]
-            [xtdb.sql :as sql]
             xtdb.indexer
             [xtdb.operator :as op]
             [xtdb.operator.scan :as scan]
+            [xtdb.sql :as sql]
             [xtdb.tx-producer :as txp]
             [xtdb.util :as util]
-            [juxt.clojars-mirrors.integrant.core :as ig])
-  (:import xtdb.indexer.IIndexer
-           xtdb.operator.IRaQuerySource
-           (xtdb.tx_producer ITxProducer)
-           (java.io Closeable Writer)
+            [xtdb.xtql :as xtql]
+            [xtdb.xtql.edn :as xtql.edn])
+  (:import (java.io Closeable Writer)
            (java.lang AutoCloseable)
            (java.time ZoneId)
            (java.util.concurrent CompletableFuture)
            (org.apache.arrow.memory BufferAllocator RootAllocator)
-           xtdb.tx.Ops$Sql))
+           xtdb.indexer.IIndexer
+           xtdb.operator.IRaQuerySource
+           xtdb.tx.Ops$Sql
+           (xtdb.tx_producer ITxProducer)))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -60,18 +62,26 @@
     (let [query-opts (-> (into {:default-tz default-tz} query-opts)
                          (with-after-tx-default))
           !await-tx (.awaitTxAsync indexer (get-in query-opts [:basis :after-tx]) (:basis-timeout query-opts))]
-      (if (string? query)
-        (-> !await-tx
-            (util/then-apply
-              (fn [_]
-                (let [tables-with-cols (scan/tables-with-cols (:basis query-opts) wm-src scan-emitter)
-                      pq (.prepareRaQuery ra-src (sql/compile-query query (assoc query-opts :table-info tables-with-cols)))]
-                  (sql/open-sql-query allocator wm-src pq query-opts)))))
 
-        (-> !await-tx
-            (util/then-apply
-              (fn [_]
-                (d/open-datalog-query allocator ra-src wm-src scan-emitter query query-opts)))))))
+      (cond
+        (string? query) (-> !await-tx
+                            (util/then-apply
+                              (fn [_]
+                                (let [tables-with-cols (scan/tables-with-cols (:basis query-opts) wm-src scan-emitter)
+                                      pq (.prepareRaQuery ra-src (sql/compile-query query (assoc query-opts :table-info tables-with-cols)))]
+                                  (sql/open-sql-query allocator wm-src pq query-opts)))))
+
+        (map? query) (-> !await-tx
+                         (util/then-apply
+                           (fn [_]
+                             (d/open-datalog-query allocator ra-src wm-src scan-emitter query query-opts))))
+
+        (list? query) (-> !await-tx
+                          (util/then-apply
+                            (fn [_]
+                              (let [query (xtql.edn/parse-query query)]
+                                (xtql/open-xtql-query allocator ra-src wm-src scan-emitter
+                                                      query query-opts))))))))
 
   (latest-submitted-tx [_] @!latest-submitted-tx)
 
