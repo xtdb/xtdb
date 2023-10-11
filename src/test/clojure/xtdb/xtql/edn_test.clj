@@ -45,6 +45,12 @@
 (defn- roundtrip-q [q]
   (edn/unparse (edn/parse-query q)))
 
+(defn- roundtrip-q-tail [q]
+  (edn/unparse (edn/parse-query-tail q)))
+
+(defn- roundtrip-unify-clause [q]
+  (edn/unparse (edn/parse-unify-clause q)))
+
 (t/deftest test-parse-from
   (t/is (= '(from :foo)
            (roundtrip-q '(from :foo))))
@@ -67,7 +73,7 @@
 (t/deftest test-parse-where
   (let [q '(where false (= 1 'foo))]
     (t/is (= q
-             (roundtrip-q q)))))
+             (roundtrip-q-tail q)))))
 
 (t/deftest test-parse-pipeline
   (let [q '(-> (from :foo a)
@@ -98,3 +104,7 @@
                (return {:b (sum a)}))]
     (t/is (= q
              (roundtrip-q q)))))
+
+(t/deftest test-parse-join
+  (let [q '(join (from :foo a) {:a b})]
+    (t/is (= q (roundtrip-unify-clause q)))))

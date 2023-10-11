@@ -43,9 +43,8 @@
 
       op)))
 
-(defmethod parse-query :default [[op]]
+(defmethod parse-unify-clause :default [[op]]
   (throw (err/illegal-arg :xtql/unknown-unify-clause {:op op})))
-
 
 (defn parse-expr [expr]
   (cond
@@ -159,13 +158,17 @@
 (defmethod parse-query 'from [this] (parse-from this))
 (defmethod parse-unify-clause 'from [this] (parse-from this))
 
-#_(defmethod parse-query 'join [[_ subquery & binding-specs :as this]]
-  (parse-query subquery)
-  #_(let [{:keys [table for-valid-time for-system-time]} (parse-table+opts table+opts this)]
-    (-> (Query/from table)
-        (cond-> for-valid-time (.forValidTime for-valid-time)
-                for-system-time (.forSystemTime for-system-time))
-        (.binding (parse-binding-specs binding-specs this)))))
+(defn- parse-join-query [query join]
+  (if (vector? query)
+    (let [[query & args] query]
+      [(parse-query query) (parse-binding-specs args join)])
+    [(parse-query query)]))
+
+(defmethod parse-unify-clause 'join [[_ query & binding-specs :as join]]
+  (let [[parsed-query args] (parse-join-query query join)]
+    (-> (Query/join parsed-query args)
+        (.binding (parse-binding-specs binding-specs join)))))
+
 
 (extend-protocol Unparse
   BindingSpec
@@ -228,7 +231,7 @@
     (throw (err/illegal-arg :xtql/malformed-unify {:unify this
                                                    :message "Unify most contain at least one sub clause"})))
   (->> clauses
-       (mapv parse-query)
+       (mapv parse-unify-clause)
        (Query/unify)))
 
 (defn parse-where [[_ & preds :as this]]
@@ -266,7 +269,10 @@
 (defmethod parse-query-tail 'aggregate [[_ & cols :as this]]
   (Query/aggregate (parse-binding-specs cols this)))
 
-#_(-> (parse-query
-     '(join (from :foo a) {:a b}))
+(-> (parse-query
+     '(unify
+       (join
+        (from :foo a)
+             {:a b})))
     (clojure.pprint/pprint)
     #_(unparse))
