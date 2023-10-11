@@ -15,9 +15,42 @@
 
       op)))
 
+(defmethod parse-query :default [[op]]
+  (throw (err/illegal-arg :xtql/unknown-query-op {:op op})))
+
+(defmulti parse-query-tail
+  (fn [query-tail]
+    (when-not (list? query-tail)
+      (throw (err/illegal-arg :xtql/malformed-query-tail {:query-tail query-tail})))
+
+    (let [[op] query-tail]
+      (when-not (symbol? op)
+        (throw (err/illegal-arg :xtql/malformed-query-tail {:query-tail query-tail})))
+
+      op)))
+
+(defmethod parse-query-tail :default [[op]]
+  (throw (err/illegal-arg :xtql/unknown-query-tail {:op op})))
+
+(defmulti parse-unify-clause
+  (fn [clause]
+    (when-not (list? clause)
+      (throw (err/illegal-arg :xtql/malformed-unify-clause {:clause clause})))
+
+    (let [[op] clause]
+      (when-not (symbol? op)
+        (throw (err/illegal-arg :xtql/malformed-unify-clause {:clause clause})))
+
+      op)))
+
+(defmethod parse-query :default [[op]]
+  (throw (err/illegal-arg :xtql/unknown-unify-clause {:op op})))
+
+
 (defn parse-expr [expr]
   (cond
-    (boolean? expr) (if expr Expr/TRUE Expr/FALSE)
+    (true? expr) Expr/TRUE
+    (false? expr) Expr/FALSE
     (int? expr) (Expr/val (long expr))
     (double? expr) (Expr/val (double expr))
     (symbol? expr) (Expr/lVar (str expr))
@@ -44,8 +77,7 @@
         (set? obj) (into #{} (map unparse) obj)
         :else obj))))
 
-(defmethod parse-query :default [[op]]
-  (throw (err/illegal-arg :xtql/unknown-query-op {:op op})))
+
 
 (defn- parse-temporal-filter [v k query]
   (let [ctx {:v v, :filter k, :query query}]
@@ -85,24 +117,24 @@
   TemporalFilter$At (unparse [at] [:at (unparse (.at at))])
   TemporalFilter$In (unparse [in] [:in (some-> (.from in) unparse) (some-> (.to in) unparse)]))
 
-(defn- parse-table+opts [table+opts query]
+(defn- parse-table+opts [table+opts from]
   (cond
     (keyword? table+opts) {:table (str (symbol table+opts))}
 
     (and (vector? table+opts) (= 2 (count table+opts)))
     (let [[table opts] table+opts]
       (when-not (keyword? table)
-        (throw (err/illegal-arg :xtql/malformed-table {:table table, :from query})))
+        (throw (err/illegal-arg :xtql/malformed-table {:table table, :from from})))
 
       (when-not (map? opts)
-        (throw (err/illegal-arg :xtql/malformed-table-opts {:opts opts, :from query})))
+        (throw (err/illegal-arg :xtql/malformed-table-opts {:opts opts, :from from})))
 
       (let [{:keys [for-valid-time for-system-time]} opts]
         {:table (str (symbol table))
-         :for-valid-time (some-> for-valid-time (parse-temporal-filter :for-valid-time query))
-         :for-system-time (some-> for-system-time (parse-temporal-filter :for-system-time query))}))
+         :for-valid-time (some-> for-valid-time (parse-temporal-filter :for-valid-time from))
+         :for-system-time (some-> for-system-time (parse-temporal-filter :for-system-time from))}))
 
-    :else (throw (err/illegal-arg :xtql/malformed-from {:from query}))))
+    :else (throw (err/illegal-arg :xtql/malformed-from {:from from}))))
 
 (defn- parse-binding-specs [binding-specs _query]
   (->> binding-specs
@@ -117,12 +149,23 @@
                                                       )
                                                     (BindingSpec/of (str (symbol attr)) (parse-expr expr))))))))))
 
-(defmethod parse-query 'from [[_ table+opts & binding-specs :as query]]
-  (let [{:keys [table for-valid-time for-system-time]} (parse-table+opts table+opts query)]
+(defn parse-from [[_ table+opts & binding-specs :as this]]
+  (let [{:keys [table for-valid-time for-system-time]} (parse-table+opts table+opts this)]
     (-> (Query/from table)
         (cond-> for-valid-time (.forValidTime for-valid-time)
                 for-system-time (.forSystemTime for-system-time))
-        (.binding (parse-binding-specs binding-specs query)))))
+        (.binding (parse-binding-specs binding-specs this)))))
+
+(defmethod parse-query 'from [this] (parse-from this))
+(defmethod parse-unify-clause 'from [this] (parse-from this))
+
+#_(defmethod parse-query 'join [[_ subquery & binding-specs :as this]]
+  (parse-query subquery)
+  #_(let [{:keys [table for-valid-time for-system-time]} (parse-table+opts table+opts this)]
+    (-> (Query/from table)
+        (cond-> for-valid-time (.forValidTime for-valid-time)
+                for-system-time (.forSystemTime for-system-time))
+        (.binding (parse-binding-specs binding-specs this)))))
 
 (extend-protocol Unparse
   BindingSpec
@@ -179,3 +222,51 @@
   Query$Aggregate (unparse [query] (list* 'aggregate (mapv unparse (.cols query))))
   Query$Unify (unparse [query] (list* 'unify (mapv unparse (.clauses query))))
   Query$UnionAll (unparse [query] (list* 'union-all (mapv unparse (.queries query)))))
+
+(defmethod parse-query 'unify [[_ & clauses :as this]]
+  (when (> 1 (count clauses))
+    (throw (err/illegal-arg :xtql/malformed-unify {:unify this
+                                                   :message "Unify most contain at least one sub clause"})))
+  (->> clauses
+       (mapv parse-query)
+       (Query/unify)))
+
+(defn parse-where [[_ & preds :as this]]
+  (when (> 1 (count preds))
+    (throw (err/illegal-arg :xtql/malformed-where {:where this
+                                                   :message "Where most contain at least one predicate"})))
+  (Query/where (mapv parse-expr preds)))
+
+(defmethod parse-query-tail 'where [this] (parse-where this))
+(defmethod parse-unify-clause 'where [this] (parse-where this))
+
+(defmethod parse-query '-> [[_ head & tails :as this]]
+  (when-not head
+    (throw (err/illegal-arg :xtql/malformed-pipeline {:pipeline this
+                                                      :message "Pipeline most contain at least one operator"})))
+  (Query/pipeline (parse-query head) (mapv parse-query-tail tails)))
+
+;TODO Align errors with json ones where appropriate.
+
+(defn parse-with [[_ & cols :as this]]
+  (Query/with (parse-binding-specs cols this)))
+
+(defmethod parse-query-tail 'with [this] (parse-with this))
+(defmethod parse-unify-clause 'with [this] (parse-with this))
+
+(defmethod parse-query-tail 'without [[_ & cols :as this]]
+  (when-not (every? keyword? cols)
+    (throw (err/illegal-arg :xtql/malformed-without {:without this
+                                                     :message "Columns must be keywords in without"})))
+  (Query/without (map name cols)))
+
+(defmethod parse-query-tail 'return [[_ & cols :as this]]
+  (Query/ret (parse-binding-specs cols this)))
+
+(defmethod parse-query-tail 'aggregate [[_ & cols :as this]]
+  (Query/aggregate (parse-binding-specs cols this)))
+
+#_(-> (parse-query
+     '(join (from :foo a) {:a b}))
+    (clojure.pprint/pprint)
+    #_(unparse))

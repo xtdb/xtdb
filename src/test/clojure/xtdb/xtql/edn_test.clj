@@ -2,6 +2,8 @@
   (:require [clojure.test :as t]
             [xtdb.xtql.edn :as edn]))
 
+  ;; TODO check errors
+
 (defn- roundtrip-expr [expr]
   (edn/unparse (edn/parse-expr expr)))
 
@@ -54,6 +56,45 @@
 
   (t/is (= '(from :foo a {:xt/id b} c)
            (roundtrip-q '(from :foo a {:xt/id b} {:c c}))))
-
-  ;; TODO check errors
   )
+
+(t/deftest test-parse-unify
+  (let [q '(unify (from :foo {:baz b})
+                  (from :bar {:baz b}))]
+    (t/is (= q
+             (roundtrip-q q)))))
+
+(t/deftest test-parse-where
+  (let [q '(where false (= 1 'foo))]
+    (t/is (= q
+             (roundtrip-q q)))))
+
+(t/deftest test-parse-pipeline
+  (let [q '(-> (from :foo a)
+               (without :a))]
+    (t/is (= q
+             (roundtrip-q q)))))
+
+(t/deftest test-parse-with
+  (let [q '(-> (from :foo a)
+               (with {:bar 1} {:baz (+ 1 1)}))]
+    (t/is (= q
+             (roundtrip-q q)))))
+
+(t/deftest test-parse-without
+  (let [q '(-> (from :foo a)
+               (without :a :b :f))]
+    (t/is (= q
+             (roundtrip-q q)))))
+
+(t/deftest test-parse-return
+  (let [q '(-> (from :foo a)
+               (return a {:a b}))]
+    (t/is (= q
+             (roundtrip-q q)))))
+
+(t/deftest test-parse-aggregate
+  (let [q '(-> (from :foo a)
+               (return {:b (sum a)}))]
+    (t/is (= q
+             (roundtrip-q q)))))
