@@ -1,7 +1,7 @@
 (ns xtdb.xtql.edn
   (:require [xtdb.error :as err])
-  (:import (xtdb.query Expr Expr$Bool Expr$Call Expr$Double Expr$LogicVar Expr$Long Expr$Obj
-                       QueryStep QueryStep$Aggregate QueryStep$BindingSpec QueryStep$From QueryStep$Pipeline QueryStep$Return QueryStep$Unify QueryStep$Where QueryStep$With QueryStep$Without
+  (:import (xtdb.query BindingSpec Expr Expr$Bool Expr$Call Expr$Double Expr$LogicVar Expr$Long Expr$Obj
+                       Query Query$Aggregate Query$From Query$Pipeline Query$Return Query$Unify Query$Where Query$With Query$Without
                        TemporalFilter TemporalFilter$AllTime TemporalFilter$At TemporalFilter$In)))
 
 (defmulti parse-query
@@ -47,8 +47,8 @@
 (defmethod parse-query :default [[op]]
   (throw (err/illegal-arg :xtql/unknown-query-op {:op op})))
 
-(defn- parse-temporal-filter [v k step]
-  (let [ctx {:v v, :filter k, :step step}]
+(defn- parse-temporal-filter [v k query]
+  (let [ctx {:v v, :filter k, :query query}]
     (if (= :all-time v)
       TemporalFilter/ALL_TIME
 
@@ -85,48 +85,47 @@
   TemporalFilter$At (unparse [at] [:at (unparse (.at at))])
   TemporalFilter$In (unparse [in] [:in (some-> (.from in) unparse) (some-> (.to in) unparse)]))
 
-(defn- parse-table+opts [table+opts step]
+(defn- parse-table+opts [table+opts query]
   (cond
     (keyword? table+opts) {:table (str (symbol table+opts))}
 
     (and (vector? table+opts) (= 2 (count table+opts)))
     (let [[table opts] table+opts]
       (when-not (keyword? table)
-        (throw (err/illegal-arg :xtql/malformed-table {:table table, :from step})))
+        (throw (err/illegal-arg :xtql/malformed-table {:table table, :from query})))
 
       (when-not (map? opts)
-        (throw (err/illegal-arg :xtql/malformed-table-opts {:opts opts, :from step})))
+        (throw (err/illegal-arg :xtql/malformed-table-opts {:opts opts, :from query})))
 
       (let [{:keys [for-valid-time for-system-time]} opts]
         {:table (str (symbol table))
-         :for-valid-time (some-> for-valid-time (parse-temporal-filter :for-valid-time step))
-         :for-system-time (some-> for-system-time (parse-temporal-filter :for-system-time step))}))
+         :for-valid-time (some-> for-valid-time (parse-temporal-filter :for-valid-time query))
+         :for-system-time (some-> for-system-time (parse-temporal-filter :for-system-time query))}))
 
-    :else (throw (err/illegal-arg :xtql/malformed-from {:from step}))))
+    :else (throw (err/illegal-arg :xtql/malformed-from {:from query}))))
 
-(defn- parse-binding-specs [binding-specs step]
+(defn- parse-binding-specs [binding-specs _query]
   (->> binding-specs
        (into [] (mapcat (fn [binding-spec]
                           (cond
                             (symbol? binding-spec) (let [attr (str binding-spec)]
-                                                     [(QueryStep/bindSpec attr (Expr/lVar attr))])
+                                                     [(BindingSpec/of attr (Expr/lVar attr))])
                             (map? binding-spec) (for [[attr expr] binding-spec]
                                                   (do
                                                     (when-not (keyword? attr)
                                                       ;; TODO error
                                                       )
-                                                    (QueryStep/bindSpec (str (symbol attr))
-                                                                        (parse-expr expr))))))))))
+                                                    (BindingSpec/of (str (symbol attr)) (parse-expr expr))))))))))
 
-(defmethod parse-query 'from [[_ table+opts & binding-specs :as step]]
-  (let [{:keys [table for-valid-time for-system-time]} (parse-table+opts table+opts step)]
-    (-> (QueryStep/from table)
+(defmethod parse-query 'from [[_ table+opts & binding-specs :as query]]
+  (let [{:keys [table for-valid-time for-system-time]} (parse-table+opts table+opts query)]
+    (-> (Query/from table)
         (cond-> for-valid-time (.forValidTime for-valid-time)
                 for-system-time (.forSystemTime for-system-time))
-        (.binding (parse-binding-specs binding-specs step)))))
+        (.binding (parse-binding-specs binding-specs query)))))
 
 (extend-protocol Unparse
-  QueryStep$BindingSpec
+  BindingSpec
   (unparse [binding-spec]
     (let [attr (.attr binding-spec)
           expr (.expr binding-spec)]
@@ -137,7 +136,7 @@
         ;; because when its used in `unify` it's expected to be symbols?
         {(keyword attr) (unparse expr)})))
 
-  QueryStep$From
+  Query$From
   (unparse [from]
     (let [table (keyword (.table from))
           for-valid-time (.forValidTime from)
@@ -150,10 +149,10 @@
              (map unparse (.bindSpecs from))))))
 
 (extend-protocol Unparse
-  QueryStep$Pipeline (unparse [step] (list* '-> (mapv unparse (.steps step))))
-  QueryStep$Where (unparse [step] (list* 'where (mapv unparse (.preds step))))
-  QueryStep$With (unparse [step] (list* 'with (mapv unparse (.cols step))))
-  QueryStep$Without (unparse [step] (list* 'without (map keyword (.cols step))))
-  QueryStep$Return (unparse [step] (list* 'return (mapv unparse (.cols step))))
-  QueryStep$Aggregate (unparse [step] (list* 'aggregate (mapv unparse (.cols step))))
-  QueryStep$Unify (unparse [step] (list* 'unify (mapv unparse (.clauses step)))))
+  Query$Pipeline (unparse [query] (list* '-> (unparse (.query query)) (mapv unparse (.tails query))))
+  Query$Where (unparse [query] (list* 'where (mapv unparse (.preds query))))
+  Query$With (unparse [query] (list* 'with (mapv unparse (.cols query))))
+  Query$Without (unparse [query] (list* 'without (map keyword (.cols query))))
+  Query$Return (unparse [query] (list* 'return (mapv unparse (.cols query))))
+  Query$Aggregate (unparse [query] (list* 'aggregate (mapv unparse (.cols query))))
+  Query$Unify (unparse [query] (list* 'unify (mapv unparse (.clauses query)))))

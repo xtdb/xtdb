@@ -8,6 +8,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+import static xtdb.query.QueryUtil.stringifyArgs;
+import static xtdb.query.QueryUtil.unmodifiableList;
+
 public interface Expr {
     Bool TRUE = new Bool(true);
     Bool FALSE = new Bool(false);
@@ -115,103 +118,98 @@ public interface Expr {
         return new Call(f, args);
     }
 
-    final class Query implements Expr {
-        public final QueryStep query;
-        public final Map<String, Expr> params;
+    final class Subquery implements Expr {
+        public final Query query;
+        public final List<BindingSpec> args;
 
-        private Query(QueryStep query, Map<String, Expr> params) {
+        private Subquery(Query query, List<BindingSpec> args) {
             this.query = query;
-            this.params = params != null ? Collections.unmodifiableMap(params) : null;
+            this.args = unmodifiableList(args);
         }
 
         @Override
         public String toString() {
-            String paramsStr = params != null ? params.entrySet().stream().map(e -> String.format("%s %s", e.getKey(), e.getValue())).collect(Collectors.joining(", ")) : null;
-            return String.format("(q %s)", paramsStr != null ? String.format("[%s %s]", query, paramsStr) : query);
+            return String.format("(q %s)", stringifyArgs(query, args));
         }
     }
 
-    static Query q(QueryStep query, Map<String, Expr> params) {
-        return new Query(query, params);
+    static Subquery q(Query query, List<BindingSpec> args) {
+        return new Subquery(query, args);
     }
 
     final class Exists implements Expr {
-        public final QueryStep query;
-        public final Map<String, Expr> params;
+        public final Query query;
+        public final List<BindingSpec> args;
 
-        private Exists(QueryStep query, Map<String, Expr> params) {
+        private Exists(Query query, List<BindingSpec> args) {
             this.query = query;
-            this.params = params != null ? Collections.unmodifiableMap(params) : null;
+            this.args = unmodifiableList(args);
         }
 
         @Override
         public String toString() {
-            String paramsStr = params != null ? params.entrySet().stream().map(e -> String.format("%s %s", e.getKey(), e.getValue())).collect(Collectors.joining(", ")) : null;
-            return String.format("(exists? %s)", paramsStr != null ? String.format("[%s %s]", query, paramsStr) : query);
+            return String.format("(exists? %s)", stringifyArgs(query, args));
         }
     }
 
-    static Exists exists(QueryStep query, Map<String, Expr> params) {
-        return new Exists(query, params);
+    static Exists exists(Query query, List<BindingSpec> args) {
+        return new Exists(query, args);
     }
 
     final class NotExists implements Expr {
-        public final QueryStep query;
-        public final Map<String, Expr> params;
+        public final Query query;
+        public final List<BindingSpec> args;
 
-        private NotExists(QueryStep query, Map<String, Expr> params) {
+        private NotExists(Query query, List<BindingSpec> args) {
             this.query = query;
-            this.params = params != null ? Collections.unmodifiableMap(params) : null;
+            this.args = unmodifiableList(args);
         }
 
         @Override
         public String toString() {
-            String paramsStr = params != null ? params.entrySet().stream().map(e -> String.format("%s %s", e.getKey(), e.getValue())).collect(Collectors.joining(", ")) : null;
-            return String.format("(not-exists? %s)", paramsStr != null ? String.format("[%s %s]", query, paramsStr) : query);
+            return String.format("(not-exists? %s)", stringifyArgs(query, args));
         }
     }
 
-    static NotExists notExists(QueryStep query, Map<String, Expr> params) {
-        return new NotExists(query, params);
+    static NotExists notExists(Query query, List<BindingSpec> args) {
+        return new NotExists(query, args);
     }
 
     final class Pull implements Expr {
-        public final QueryStep query;
-        public final Map<String, Expr> params;
+        public final Query query;
+        public final List<BindingSpec> args;
 
-        private Pull(QueryStep query, Map<String, Expr> params) {
+        private Pull(Query query, List<BindingSpec> args) {
             this.query = query;
-            this.params = params != null ? Collections.unmodifiableMap(params) : null;
+            this.args = unmodifiableList(args);
         }
 
         @Override
         public String toString() {
-            String paramsStr = params != null ? params.entrySet().stream().map(e -> String.format("%s %s", e.getKey(), e.getValue())).collect(Collectors.joining(", ")) : null;
-            return String.format("(pull %s)", paramsStr != null ? String.format("[%s %s]", query, paramsStr) : query);
+            return String.format("(pull %s)", stringifyArgs(query, args));
         }
     }
 
-    static Pull pull(QueryStep query, Map<String, Expr> params) {
-        return new Pull(query, params);
+    static Pull pull(Query query, List<BindingSpec> args) {
+        return new Pull(query, args);
     }
 
     final class PullMany implements Expr {
-        public final QueryStep query;
-        public final Map<String, Expr> params;
+        public final Query query;
+        public final List<BindingSpec> args;
 
-        private PullMany(QueryStep query, Map<String, Expr> params) {
+        private PullMany(Query query, List<BindingSpec> args) {
             this.query = query;
-            this.params = params != null ? Collections.unmodifiableMap(params) : null;
+            this.args = unmodifiableList(args);
         }
 
         @Override
         public String toString() {
-            String paramsStr = params != null ? params.entrySet().stream().map(e -> String.format("%s %s", e.getKey(), e.getValue())).collect(Collectors.joining(", ")) : null;
-            return String.format("(pull* %s)", paramsStr != null ? String.format("[%s %s]", query, paramsStr) : query);
+            return String.format("(pull* %s)", stringifyArgs(query, args));
         }
     }
 
-    static PullMany pullMany(QueryStep query, Map<String, Expr> params) {
-        return new PullMany(query, params);
+    static PullMany pullMany(Query query, List<BindingSpec> args) {
+        return new PullMany(query, args);
     }
 }
