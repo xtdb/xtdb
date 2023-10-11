@@ -56,6 +56,15 @@
     (keyword? expr) (Expr/val expr)
     (vector? expr) (Expr/val (mapv parse-expr expr))
     (set? expr) (Expr/val (into #{} (map parse-expr) expr))
+
+    (list? expr) (do
+                   (when (empty? expr)
+                     (throw (err/illegal-arg :xtql/malformed-call {:call expr})))
+                   (let [[f & args] expr]
+                     (when-not (symbol? f)
+                       (throw (err/illegal-arg :xtql/malformed-call {:call expr})))
+                     (Expr/call (str f) (mapv parse-expr args))))
+
     :else (Expr/val expr)))
 
 (defprotocol Unparse
