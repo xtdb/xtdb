@@ -109,7 +109,7 @@
                                     (where (<> e1 e2)))
                              (without :n))))))
 
-    #_#_#_
+
     (t/is (= #{{:e 1, :e2 1, :n "Ivan"}
                {:e 3, :e2 3, :n "Ivan"}
                {:e 3, :e2 2, :n "Petr"}
