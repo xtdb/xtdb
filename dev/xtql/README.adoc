@@ -1,0 +1,514 @@
+= XTQL Tutorial
+
+XTDB 2.x will support two query languages: SQL, but also 'XTQL' - our new data-oriented, cross-platform, composable query language inspired by Datalog and relational algebra.
+XTQL can be written in JSON, Java/Scala/Kotlin (full DSL coming soon) and Clojure's EDN.
+
+XTQL queries are structured pipeline of operations - e.g. scanning a table, joining multiple tables/queries, grouping/aggregations and sorting/limiting.
+
+We'll save the in-depth XTQL specification for another article - for now, let's walk through a brief introduction to XTQL:
+
+== Basic operations
+
+* To read a table, we use `from`:
++
+[source,clojure]
+----
+(from :users {:xt/id user-id} first-name last-name)
+----
++
+[source,json]
+----
+{"from" : [ "users", {"xt/id" : "user-id"}, "first-name", "last-name" ]}
+----
++
+[source,sql]
+----
+SELECT xt$id AS user_id, first_name, last_name FROM users
+----
++
+* We can look up a single user-id by binding it in the `from` clause:
++
+[source,clojure]
+----
+(from :users {:xt/id "james"} first-name last-name)
+----
++
+[source,json]
+----
+{
+  "from" : [ "users", { "xt/id" : { "@value" : "james" } }, "first-name", "last-name" ]
+}
+----
++
+[source,sql]
+----
+SELECT first_name, last_name FROM users WHERE xt$id = 'james'
+----
++
+* `from` is a valid query in isolation but, for anything more powerful, we'll need a 'pipeline':
++
+[source,clojure]
+----
+(-> (from :users {:xt/id user-id} first-name last-name)
+    (order-by last-name first-name)
+    (limit 10))
+----
++
+[source,json]
+----
+{
+  "->" : [
+    {
+      "from" : [ "users", { "xt/id" : "user-id" }, "first-name", "last-name"]
+    }, {
+      "orderBy" : [ "last-name", "first-name" ]
+    }, {
+      "limit" : 10
+    },
+  ]
+}
+----
++
+[source,sql]
+----
+SELECT xt$id AS user_id, first_name, last_name
+FROM users
+ORDER BY last_name, first_name
+LIMIT 10
+----
+
+XTQL operations are independently composable - unlike SQL/EDN Datalog, for example, you don't need a whole 'SELECT, FROM, WHERE'/`{:find ..., :where ...}` frame every time.
+
+== Joins
+
+Joins in XTQL are achieved using Datalog-based 'unification':
+
+* Within a `unify`, we use 'logic variables' (e.g. `user-id`, `first-name` etc in the above example) to specify how the inputs should be joined together.
++
+In this case, we re-use the `user-id` logic variable to indicate that the `:xt/id` from the `:users` table should be matched with the `:author-id` of the `:articles` table.
++
+[source,clojure]
+----
+(unify (from :users {:xt/id user-id} first-name last-name)
+       (from :articles {:author-id user-id} title content))
+----
++
+[source,json]
+----
+{
+  "unify" : [
+    {
+      "from" : [ "users", { "xt/id" : "user-id"}, "first-name", "last-name" ]
+    }, {
+      "from" : [ "articles", { "author-id" : "user-id" }, "title", "content" ]
+    }
+  ]
+}
+----
++
+[source,sql]
+----
+SELECT u.xt$id AS user_id, first_name, last_name, title, content
+FROM users u JOIN articles a ON u.xt$id = a.author_id
+----
+
++
+* For non-equality cases, we can use a `where` clause (where we have a full SQL-inspired expression standard library at our disposal)
++
+[source,clojure]
+----
+;; 'find me all the users who are the same age'
+(unify (from :users {:xt/id uid1} age)
+       (from :users {:xt/id uid2} age)
+       (where (<> uid1 uid2)))
+----
++
+[source,json]
+----
+{
+  "unify" : [
+    {
+      "from" : [ "users", { "xt/id" : "uid1" }, "age" ]
+    }, {
+      "from" : [ "users", { "xt/id" : "uid2" }, "age" ]
+    }, {
+      "where" : [ { "<>" : [ "uid1", "uid2" ] } ]
+    }
+  ]
+}
+----
++
+[source,sql]
+----
+SELECT u1.xt$id AS uid1, u2.xt$id AS u2, age
+FROM users u1
+  JOIN users u2 ON (u1.age = u2.age)
+WHERE u1.xt$id <> u2.xt$id
+----
++
+* We can specify that a certain match is optional using `left-join`:
++
+[source,clojure]
+----
+(-> (unify (from :customers {:xt/id cid})
+           (left-join (from :orders {:xt/id oid, :customer-id cid} currency order-value)
+                      cid currency order-value))
+    (limit 100))
+----
++
+[source,json]
+----
+{
+  "->" : [
+    {
+      "unify" : [
+        {
+          "from" : [ "customers", { "xt/id" : "cid"} ]
+        }, {
+          "left-join" : [
+            {
+              "from" : [ "orders", { "xt/id" : "oid" }, { "customer-id" : "cid"}, "currency", "order-value" ]
+            },
+            "cid", "currency", "order-value"]
+        }
+      ]
+    }, {
+      "limit" : 100
+    }
+  ]
+}
+----
++
+[source,sql]
+----
+SELECT c.xt$id AS cid, o.xt$id AS oid, currency, order_value
+FROM customers c
+  LEFT JOIN orders o ON (c.xt$id = o.customer_id)
+LIMIT 100
+----
++
+Here, we're asking to additionally return customers who haven't yet any orders (for which the order-table columns will be absent in the results).
+* Or, we can specify that we only want to return customers who _don't_ have any orders, using `not-exists?`:
++
+[source,clojure]
+----
+(-> (unify (from :customers {:xt/id cid})
+           (where (not-exists? [(from :orders {:customer-id cid}) cid])))
+    (limit 100))
+----
++
+[source,json]
+----
+{
+  "->" : [
+    {
+      "unify" : [
+        { "from" : [ "customers", { "xt/id" : "cid" } ] },
+        {
+          "where" : [
+            { "notExists" : [ { "from" : [ "orders", { "customer-id" : "cid"} ]}, "cid" ] }
+          ]
+        }
+      ]
+    }, {
+      "limit" : 100
+    }
+  ]
+}
+----
++
+[source,sql]
+----
+SELECT c.xt$id AS cid
+FROM customers c
+WHERE c.xt$id NOT IN (SELECT customer_id FROM orders)
+LIMIT 100
+----
++
+(naturally, `IN` is also available, but uses `exists?` instead)
+
+== Projections
+
+* We can create new columns from old ones using `with`:
++
+[source,clojure]
+----
+(-> (from :users first-name last-name)
+    (with {full-name (str first-name " " last-name)}))
+----
++
+[source,json]
+----
+{
+  "->" : [
+    { "from" : [ "users", "first-name", "last-name" ]},
+    {
+      "with" : [
+        { "full-name" : { "str" : [ "first-name", { "@value" : " " }, "last-name" ] } }
+      ]
+    }
+  ]
+}
+----
++
+[source,sql]
+----
+SELECT first_name, last_name,
+       CONCAT(first_name, ' ', last_name) AS full_name
+FROM users
+----
++
+We can also use `with` within `unify` - this creates new logic variables which we can then unify in the same way.
++
+* Where `with` adds to the available columns, `return` _only_ yields the specified columns to the next operation:
++
+[source,clojure]
+----
+(-> (unify (from :users {:xt/id user-id} first-name last-name)
+           (from :articles {:author-id user-id} title content))
+    (return {full-name (str first-name " " last-name)} title content))
+----
++
+[source,json]
+----
+{
+  "->" : [
+    {
+      "unify" : [
+        { "from" : [ "users", { "xt/id" : "user-id" }, "first-name", "last-name" ]},
+        { "from" : [ "articles", { "author-id" : "user-id" }, "title", "content" ]}
+      ]
+    }, {
+      "return" : [
+        { "full-name" : { "str" : [ "first-name", { "@value" : " " }, "last-name" ] }},
+        "title", "content" ]
+    }
+  ]
+}
+----
++
+[source,sql]
+----
+SELECT CONCAT(first_name, ' ', last_name) AS full_name, title, content
+FROM users u JOIN articles a ON u.xt$id = a.author_id
+----
+* Where we don't need any additional projections, we can use `without`:
++
+[source,clojure]
+----
+(-> (unify (from :users {:xt/id user-id} first-name last-name)
+           (from :articles {:author-id user-id} title content))
+    (without user-id))
+----
++
+[source,json]
+----
+{
+  "->" : [
+    {
+      "unify" : [
+        { "from" : [ "users", { "xt/id" : "user-id" }, "first-name", "last-name" ] },
+        { "from" : [ "articles", { "author-id" : "user-id" }, "title", "content" ] }
+      ]
+    }, {
+      "without" : [ "user-id" ]
+    }
+  ]
+}
+----
++
+[source,sql]
+----
+SELECT first_name, last_name, title, content
+FROM users u
+  JOIN articles a ON u.xt$id = a.author_id
+----
+
+== Aggregations
+
+To count/sum/average values, we use `aggregate`:
+
+[source,clojure]
+----
+(-> (unify (from :customers {:xt/id cid})
+           (left-join (from :orders {:customer-id cid} currency order-value)
+                      cid currency order-value))
+    (aggregate cid currency
+               {order-count (count*)
+                total-value (sum order-value)})
+    (order-by [order-value {:dir :desc}])
+    (limit 100))
+----
+
+[source,json]
+----
+{
+  "->" : [
+    {
+      "unify" : [
+        {
+          "from" : [ "customers", { "xt/id" : "cid" } ]
+        }, {
+          "left-join" : [
+            {
+              "from" : [ "orders", { "xt/id" : "oid" }, { "customer-id" : "cid"}, "currency", "order-value" ]
+            },
+            "cid", "currency", "order-value"]
+        }]
+    }, {
+      "aggregate" : [ "cid", "currency",
+        {
+          "order-count" : { "count*" : [ ] },
+          "total-value" : { "sum" : [ "order-value" ] }
+        }
+      ]
+    }, {
+      "orderBy" : [ [ "order-value", { "dir" : "desc" } ] ]
+    }, {
+      "limit" : 100
+    }
+  ]
+}
+----
+
+[source,sql]
+----
+SELECT c.xt$id AS cid, currency, COUNT(*) AS order_count, SUM(order_value) AS total_value
+FROM customers c
+  LEFT JOIN orders o ON (c.xt$id = o.customer_id)
+GROUP BY cid, currency
+ORDER BY order_value DESC
+LIMIT 100
+----
+
+== 'Pull'
+
+When we've found the documents we're interested in, it's common to then want a tree of related information.
+For example, if a user is reading an article, we might also want to show them details about the author as well as any comments.
+
+(Users of existing EDN Datalog databases may already be familiar with 'pull' - in XTQL, because subqueries are a first-class concept, we rely on extensively on these to express a more powerful/composable behaviour.)
+
+[source,clojure]
+----
+(-> (from :articles {:xt/id article-id} title content)
+
+    (with {author (pull [(-> (from :authors {:xt/id author-id} first-name last-name)
+                             (without author-id))
+                         author-id])
+
+           comments (pull* [(-> (from :comments {:article-id article-id} created-at comment)
+                                (without article-id)
+                                (order-by [created-at :desc])
+                                (limit 10))
+
+                            article-id])}))
+
+;; => [{:title "...", :content "...",
+;;      :author {:first-name "...", :last-name "..."}
+;;      :comments [{:comment "...", :name "..."}, ...]}]
+
+;; SQL?
+;; Yeah, so, erm, 'left as an exercise to the reader'? 😅
+;; Lots of nested left-joins, array-aggs, and vendor-specific JSON functions required there to guarantee this same output.
+----
+
+[source,json]
+----
+TODO json
+----
+
+In this example, we use `pull` to pull back a single map - we know that there's only one author per article (in our system).
+When it's a one-to-many relationship, we use `pull*` - this returns any matches in a vector.
+
+Also note that, because we have the full power of subqueries, we can express requirements like 'only get me the most recent 10 comments' using ordinary query operations, without any support within `pull` itself.
+
+== Bitemporality
+
+It wouldn't be XTDB without bitemporality, of course - indeed, some may be wondering how I've gotten this far without mentioning it!
+
+(I'll assume you're roughly familiar with bitemporality for this section.
+ If not, forgive me - we'll follow this up with more XTDB 2.x bitemporality content soon!)
+
+* In XTDB 1.x, queries had to be 'point-in-time' - you had to pick a single valid/transaction time for the whole query.
++
+In XTQL, while there are sensible defaults set for the whole query, you can override this on a per-`from` basis by wrapping the table name in a vector and providing temporal parameters:
++
+[source,clojure]
+----
+(from [:users {:for-valid-time [:at #inst "2020-01-01"]}]
+      first-name last-name)
+
+(from [:users {:for-valid-time :all-time}]
+      first-name last-name)
+----
++
+[source,json]
+----
+{
+  "from" : [
+    {
+      "users" : {
+        "forValidTime" : { "at" : { "@value" : "2020-01-01", "@type" : "xt:date" } }
+      }
+    },
+    "first-name", "last-name" ]
+}
+
+{
+  "from" : [
+    { "users" : { "forValidTime" : "allTime" } },
+    "first-name", "last-name" ]
+}
+----
++
+[source,sql]
+----
+SELECT first_name, last_name FROM users FOR VALID_TIME AT DATE '2020-01-01';
+SELECT first_name, last_name FROM users FOR ALL VALID_TIME;
+----
++
+** You can also specify `[:from <time>]`, `[:to <time>]` or `[:in <from-time> <to-time>]`, to give fine-grained, in-query control over the history returned for the given rows.
+** System time (formerly 'transaction time', renamed for consistency with SQL:2011) is filtered in the same map with `:for-system-time`.
+* This means that you can (for example) query the same table at two points-in-time in the same query - 'who worked here in both 2018 and 2023':
++
+[source,clojure]
+----
+(unify (from [:users {:for-valid-time [:at #inst "2018"]}]
+             {:xt/id user-id})
+
+       (from [:users {:for-valid-time [:at #inst "2023"]}]
+             {:xt/id user-id}))
+----
++
+[source,json]
+----
+{
+  "unify" : [
+    {
+      "from" : [
+        {
+          "users" : {
+            "forValidTime" : { "at" : { "@value" : "2018-01-01", "@type" : "xt:date" } }
+          }
+        },
+        { "xt/id" : "user-id" } ]
+    }, {
+      "from" : [
+        {
+          "users" : {
+            "forValidTime" : { "at" : { "@value" : "2023-01-01", "@type" : "xt:date" } }
+          }
+        },
+        { "xt/id" : "user-id" }
+      ]
+    }
+  ]
+}
+----
+
+== Get in touch!
+
+We'd love to know what you think - please do come tell us:
+
+* hello@xtdb.com
+* https://discuss.xtdb.com
