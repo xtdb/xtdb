@@ -8,7 +8,9 @@
            xtdb.IResultSet
            (xtdb.operator IRaQuerySource)
            (xtdb.operator.scan IScanEmitter)
-           (xtdb.query BindingSpec Expr$Call Expr$LogicVar Expr$Obj Query$From Query$OrderBy Query$OrderDirection Query$OrderSpec Query$Pipeline Query$Unify Query$Where Query$Without)))
+           (xtdb.query BindingSpec Expr$Call Expr$LogicVar Expr$Obj Query$From
+                       Query$OrderBy Query$OrderDirection Query$OrderSpec Query$Pipeline
+                       Query$Unify Query$Where Query$Without Query$Limit)))
 
 (defprotocol PlanQuery
   (plan-query [query]))
@@ -185,7 +187,11 @@
     (let [planned-specs (mapv plan-order-spec (.orderSpecs order-by))]
       {:ra-plan [:order-by (mapv :order-spec planned-specs)
                  ra-plan]
-       :provided-vars provided-vars})))
+       :provided-vars provided-vars}))
+  Query$Limit
+  (plan-query-tail [this {:keys [ra-plan provided-vars]}]
+    {:ra-plan [:top {:limit (.length this)} ra-plan]
+     :provided-vars provided-vars}))
 
 (defn- explain [plan]
   (let [col-types '{plan :clj-form}

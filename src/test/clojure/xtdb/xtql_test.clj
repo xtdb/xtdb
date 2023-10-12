@@ -67,21 +67,19 @@
                    '(-> (from :docs first-name)
                         (order-by [first-name {:dir :desc}])))))
 
-    #_
+
     (t/is (= [{:first-name "Ivan"}]
              (xt/q tu/*node*
                    '(-> (from :docs first-name)
                         (order-by first-name)
                         (limit 1)))))
 
-    #_
+
     (t/is (= [{:first-name "Petr"}]
              (xt/q tu/*node*
-                   '{:find [first-name]
-                     :where [(match :docs {:xt/id e})
-                             [e :first-name first-name]]
-                     :order-by [[first-name :desc]]
-                     :limit 1})))
+                   '(-> (from :docs first-name)
+                        (order-by [first-name {:dir :desc}])
+                        (limit 1)))))
     #_
     (t/is (= [{:first-name "Petr"}]
              (xt/q tu/*node*
