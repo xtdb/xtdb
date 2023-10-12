@@ -8,7 +8,7 @@
            xtdb.IResultSet
            (xtdb.operator IRaQuerySource)
            (xtdb.operator.scan IScanEmitter)
-           (xtdb.query BindingSpec Expr$Call Expr$LogicVar Expr$Obj Query$From
+           (xtdb.query BindingSpec Expr$Call Expr$LogicVar Expr$Obj Query$From Query$Return
                        Query$OrderBy Query$OrderDirection Query$OrderSpec Query$Pipeline
                        Query$Unify Query$Where Query$Without Query$Limit)))
 
@@ -36,9 +36,15 @@
   (plan-expr [expr])
   (required-vars [expr]))
 
+(defn- col-sym
+  ([col]
+   (-> (symbol col) (vary-meta assoc :column? true)))
+  ([prefix col]
+   (col-sym (str (format "%s_%s" prefix col)))))
+
 (extend-protocol ExprPlan
   Expr$LogicVar
-  (plan-expr [this] (symbol (.lv this)))
+  (plan-expr [this] (col-sym (.lv this)))
   (required-vars [this] #{(symbol (.lv this))})
 
   Expr$Obj
@@ -49,11 +55,6 @@
   (plan-expr [call] (list* (symbol (.f call)) (mapv plan-expr (.args call))))
   (required-vars [call] (into #{} (mapcat required-vars) (.args call))))
 
-(defn- col-sym
-  ([col]
-   (-> (symbol col) (vary-meta assoc :column? true)))
-  ([prefix col]
-   (col-sym (str (format "%s_%s" prefix col)))))
 
 (defn- wrap-select [ra-plan predicates]
   (case (count predicates)
@@ -151,7 +152,17 @@
   (plan-query-tail [without {:keys [ra-plan provided-vars]}]
     (let [provided-vars (set/difference provided-vars (into #{} (map symbol) (.cols without)))]
       {:ra-plan [:project (vec provided-vars) ra-plan]
-       :provided-vars provided-vars})))
+       :provided-vars provided-vars}))
+  Query$Return
+  (plan-query-tail [this {:keys [ra-plan #_provided-vars]}]
+    ;;TODO Check required vars for exprs (including col refs) are in the provided vars of prev step
+    (let [planned-projections
+          (mapv
+           (fn [col]
+             {(col-sym (.attr ^BindingSpec col)) (plan-expr (.expr ^binding-spec col))})
+           (.cols this))]
+      {:ra-plan [:project planned-projections ra-plan]
+       :provided-vars (set (map #(first (keys %)) planned-projections))})))
 
 (extend-protocol PlanUnifyClause
   Query$From (plan-unify-clause [from] [[:from (plan-from from)]])

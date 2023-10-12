@@ -139,27 +139,21 @@
 
           "cross join required here")))
 
-#_
 (deftest test-namespaced-attributes
   (let [_tx (xt/submit-tx tu/*node* [[:put :docs {:xt/id :foo :foo/bar 1}]
                                      [:put :docs {:xt/id :bar :foo/bar 2}]])]
     (t/is (= [{:i :foo, :n 1} {:i :bar, :n 2}]
              (xt/q tu/*node*
-                   '{:find [i n]
-                     :where [(match :docs {:xt/id i})
-                             [i :foo/bar n]]}))
+                   '(from :docs {:xt/id i :foo/bar n})))
           "simple query with namespaced attributes")
     (t/is (= [{:i/i :foo, :n/n 1} {:i/i :bar, :n/n 2}]
              (xt/q tu/*node*
-                   '{:find [i n]
-                     :keys [i/i n/n]
-                     :where [(match :docs {:xt/id i})
-                             [i :foo/bar n]]}))
+                   '(-> (from :docs {:xt/id i :foo/bar n})
+                        (return {:i/i i :n/n n}))))
           "query with namespaced keys")
     (t/is (= [{:i :foo, :n 1 :foo/bar 1} {:i :bar, :n 2 :foo/bar 2}]
              (xt/q tu/*node*
-                   '{:find [i n foo/bar]
-                     :where [(match :docs [foo/bar {:xt/id i :foo/bar n}])]}))
+                   '(from :docs {:xt/id i :foo/bar n} foo/bar)))
           "query with namespaced attributes in match syntax")))
 
 #_
