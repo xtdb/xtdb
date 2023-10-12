@@ -125,3 +125,9 @@
 (t/deftest test-parse-order-by
   (t/is (= '(order-by (+ a b) [b {:dir :desc}])
            (roundtrip-q-tail '(order-by (+ a b) [b {:dir :desc}])))))
+
+(t/deftest test-parse-union-all
+  (let [q '(union-all (from :foo {:baz b})
+                      (from :bar {:baz b}))]
+    (t/is (= q
+             (roundtrip-q q)))))

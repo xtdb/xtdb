@@ -291,6 +291,14 @@
        (mapv parse-unify-clause)
        (Query/unify)))
 
+(defmethod parse-query 'union-all [[_ & queries :as this]]
+  (when (> 1 (count queries))
+    (throw (err/illegal-arg :xtql/malformed-union {:union this
+                                                   :message "Union must contain a least one sub query"})))
+  (->> queries
+       (mapv parse-query)
+       (Query/unionAll)))
+
 (defn parse-where [[_ & preds :as this]]
   (when (> 1 (count preds))
     (throw (err/illegal-arg :xtql/malformed-where {:where this
