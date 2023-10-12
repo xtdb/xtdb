@@ -1,7 +1,10 @@
 (ns xtdb.xtql.edn
   (:require [xtdb.error :as err])
-  (:import (xtdb.query BindingSpec Expr Expr$Bool Expr$Call Expr$Double Expr$Exists Expr$LogicVar Expr$Long Expr$Obj Expr$NotExists Expr$Subquery
-                       Query Query$Aggregate Query$From Query$LeftJoin Query$Join Query$OrderBy Query$OrderDirection Query$OrderSpec Query$Pipeline Query$Return Query$Unify Query$UnionAll Query$Where Query$With Query$Without
+  (:import (xtdb.query BindingSpec Expr Expr$Bool Expr$Call Expr$Double Expr$Exists
+                       Expr$LogicVar Expr$Long Expr$Obj Expr$NotExists Expr$Subquery
+                       Query Query$Aggregate Query$From Query$LeftJoin Query$Join Query$Limit
+                       Query$OrderBy Query$OrderDirection Query$OrderSpec Query$Pipeline
+                      Query$Return Query$Unify Query$UnionAll Query$Where Query$With Query$Without
                        TemporalFilter TemporalFilter$AllTime TemporalFilter$At TemporalFilter$In)))
 
 (defmulti parse-query
@@ -281,7 +284,8 @@
   Query$Return (unparse [query] (list* 'return (mapv unparse (.cols query))))
   Query$Aggregate (unparse [query] (list* 'aggregate (mapv unparse (.cols query))))
   Query$Unify (unparse [query] (list* 'unify (mapv unparse (.clauses query))))
-  Query$UnionAll (unparse [query] (list* 'union-all (mapv unparse (.queries query)))))
+  Query$UnionAll (unparse [query] (list* 'union-all (mapv unparse (.queries query))))
+  Query$Limit (unparse [this] (list 'limit (.length this))))
 
 (defmethod parse-query 'unify [[_ & clauses :as this]]
   (when (> 1 (count clauses))
@@ -333,6 +337,11 @@
 
 (defmethod parse-query-tail 'aggregate [[_ & cols :as this]]
   (Query/aggregate (parse-binding-specs cols this)))
+
+(defmethod parse-query-tail 'limit [[_ length :as this]]
+  (when-not (= 2 (count this))
+    (throw (err/illegal-arg :xtql/limit {:limit this :message "Limit can only take a single value"})))
+  (Query/limit length))
 
 (defn- parse-order-spec [order-spec this]
   (if (vector? order-spec)

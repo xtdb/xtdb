@@ -131,3 +131,7 @@
                       (from :bar {:baz b}))]
     (t/is (= q
              (roundtrip-q q)))))
+
+(t/deftest test-parse-limit-test
+  (t/is (= '(limit 10)
+           (roundtrip-q-tail '(limit 10)))))
