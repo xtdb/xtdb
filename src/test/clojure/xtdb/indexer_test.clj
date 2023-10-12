@@ -74,7 +74,7 @@
 (def magic-last-tx-id
   "This value will change if you vary the structure of log entries, such
   as adding new legs to the tx-ops vector, as in memory the tx-id is a byte offset."
-  8197)
+  8485)
 
 (t/deftest can-build-chunk-as-arrow-ipc-file-format
   (let [node-dir (util/->path "target/can-build-chunk-as-arrow-ipc-file-format")
@@ -251,7 +251,7 @@
                              :struct {:a true, :b {:c "c", :d "d"}}}]]]
     (util/delete-dir node-dir)
 
-    (with-open [node (tu/->local-node {:node-dir node-dir, :rows-per-block 3})]
+    (util/with-open [node (tu/->local-node {:node-dir node-dir, :rows-per-block 3})]
       (xt/submit-tx node tx0)
 
       (-> (xt/submit-tx node tx1)

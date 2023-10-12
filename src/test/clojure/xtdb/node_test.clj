@@ -491,3 +491,15 @@ VALUES(1, OBJECT ('foo': OBJECT('bibble': true), 'bar': OBJECT('baz': 1001)))"]]
            (xt/q tu/*node*
                  ["SELECT u.xt$id, u.foo FROM users u WHERE u.a + u.b = 12"]
                  {:explain? true}))))
+
+(t/deftest test-normalising-nested-cols-2483
+  (xt/submit-tx tu/*node* [[:put :docs {:xt/id 1 :foo {:a/b "foo"}}]])
+  (t/is (= [{:foo {:a/b "foo"}}] (xt/q tu/*node* "SELECT docs.foo FROM docs")))
+  (t/is (= [{:a$b "foo"}] (xt/q tu/*node* "SELECT docs.foo.a$b FROM docs"))))
+
+(t/deftest non-namespaced-keys-for-structs-2418
+  (xt/submit-tx tu/*node* [[:sql "INSERT INTO foo(xt$id, bar) VALUES (1, OBJECT('c$d': 'bar'))"]])
+  (t/is (= [{:bar {:c/d "bar"}}]
+           (xt/q tu/*node*
+                 '{:find [bar]
+                   :where [(match :foo [bar])]}))))

@@ -12,6 +12,7 @@ import xtdb.vector.IVectorIndirection.Selection;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.List;
 import java.util.stream.IntStream;
 
 class IndirectVectorReader implements IVectorReader {
@@ -64,7 +65,8 @@ class IndirectVectorReader implements IVectorReader {
 
     @Override
     public boolean isNull(int idx) {
-        return reader.isNull(indirection.getIndex(idx));
+        int innerIdx = indirection.getIndex(idx);
+        return innerIdx < 0 || reader.isNull(innerIdx);
     }
 
     @Override
@@ -149,23 +151,13 @@ class IndirectVectorReader implements IVectorReader {
     }
 
     @Override
-    public byte getTypeId(int idx) {
-        return reader.getTypeId(indirection.getIndex(idx));
-    }
-
-    @Override
-    public Field getLeg(int idx) {
+    public Keyword getLeg(int idx) {
         return reader.getLeg(indirection.getIndex(idx));
     }
 
     @Override
-    public Collection<IVectorReader> legs() {
-        return reader.legs().stream().map(r -> (IVectorReader) new IndirectVectorReader(r, indirection)).toList();
-    }
-
-    @Override
-    public IVectorReader typeIdReader(byte typeId) {
-        return new IndirectVectorReader(reader.typeIdReader(typeId), indirection);
+    public List<Keyword> legs() {
+        return reader.legs();
     }
 
     @Override

@@ -11,18 +11,19 @@
            (java.time Instant LocalDate LocalTime OffsetDateTime ZonedDateTime)
            (org.apache.arrow.vector BigIntVector BitVector DateDayVector DecimalVector Float4Vector Float8Vector IntVector IntervalMonthDayNanoVector NullVector SmallIntVector TimeNanoVector TimeStampMicroTZVector TinyIntVector VarBinaryVector VarCharVector)
            (org.apache.arrow.vector.complex DenseUnionVector ListVector StructVector)
+           (org.apache.arrow.vector.types.pojo ArrowType)
            (xtdb.types IntervalDayTime IntervalYearMonth)
            (xtdb.vector IVectorWriter)
            (xtdb.vector.extensions ClojureFormVector KeywordVector UriVector UuidVector)))
 
 (t/use-fixtures :each tu/with-allocator)
 
-(defn- test-read [col-type-fn write-fn vs]
+(defn- test-read [arrow-type-fn write-fn vs]
   ;; TODO no longer types, but there are other things in here that depend on `test-read`
   (with-open [duv (DenseUnionVector/empty "" tu/*allocator*)]
     (let [duv-writer (vw/->writer duv)]
       (doseq [v vs]
-        (doto (.writerForType duv-writer (col-type-fn v))
+        (doto (.legWriter duv-writer ^ArrowType (arrow-type-fn v))
           (write-fn v)))
 
       (let [duv-rdr (vw/vec-wtr->rdr duv-writer)]
@@ -32,7 +33,7 @@
                            (class (.getVectorByType duv (.getTypeId duv idx)))))}))))
 
 (defn- test-round-trip [vs]
-  (test-read vw/value->col-type #(vw/write-value! %2 %1) vs))
+  (test-read vw/value->arrow-type #(vw/write-value! %2 %1) vs))
 
 (t/deftest round-trips-values
   (t/is (= {:vs [false nil 2 1 6 4 3.14 2.0 BigDecimal/ONE]
@@ -96,7 +97,7 @@
                   (test-round-trip vs))))
 
     (->> "LocalDate can be read from MILLISECOND date vectors"
-         (t/is (= vs (:vs (test-read (constantly [:date :milli])
+         (t/is (= vs (:vs (test-read (constantly #xt.arrow/type [:date :milli])
                                      (fn [^IVectorWriter w ^LocalDate v]
                                        (.writeLong w (long (.toEpochDay v))))
                                      vs)))))))
@@ -113,21 +114,21 @@
                   (test-round-trip all))))
 
     (->> "LocalTime can be read from SECOND time vectors"
-         (t/is (= secs (:vs (test-read (constantly [:time-local :second])
+         (t/is (= secs (:vs (test-read (constantly #xt.arrow/type [:time-local :second])
                                        (fn [^IVectorWriter w, ^LocalTime v]
                                          (.writeLong w (.toSecondOfDay v)))
                                        secs)))))
 
     (let [millis+ (concat millis secs)]
       (->> "LocalTime can be read from MILLI time vectors"
-           (t/is (= millis+ (:vs (test-read (constantly [:time-local :milli])
+           (t/is (= millis+ (:vs (test-read (constantly #xt.arrow/type [:time-local :milli])
                                             (fn [^IVectorWriter w, ^LocalTime v]
                                               (.writeLong w (int (quot (.toNanoOfDay v) 1e6))))
                                             millis+))))))
 
     (let [micros+ (concat micros millis secs)]
       (->> "LocalTime can be read from MICRO time vectors"
-           (t/is (= micros+ (:vs (test-read (constantly [:time-local :micro])
+           (t/is (= micros+ (:vs (test-read (constantly #xt.arrow/type [:time-local :micro])
                                             (fn [^IVectorWriter w, ^LocalTime v]
                                               (.writeLong w (long (quot (.toNanoOfDay v) 1e3))))
                                             micros+))))))))
@@ -136,14 +137,14 @@
   ;; for years/months we lose the years as a separate component, it has to be folded into months.
   (let [iym #xt/interval-ym "P35M"]
     (t/is (= [iym]
-             (:vs (test-read (constantly [:interval :year-month])
+             (:vs (test-read (constantly #xt.arrow/type [:interval :year-month])
                              (fn [^IVectorWriter w, ^IntervalYearMonth v]
                                (vw/write-value! v w))
                              [iym])))))
 
   (let [idt #xt/interval-dt ["P1434D" "PT0.023S"]]
     (t/is (= [idt]
-             (:vs (test-read (constantly [:interval :day-time])
+             (:vs (test-read (constantly #xt.arrow/type [:interval :day-time])
                              (fn [^IVectorWriter w, ^IntervalDayTime v]
                                (vw/write-value! v w))
                              [idt])))))

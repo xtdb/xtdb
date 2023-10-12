@@ -1161,16 +1161,6 @@
 
 (def row-alias-sym 'xt/*)
 
-(defn- str->datalog-form-kw [s]
-  (if-let [i (str/index-of s "/")]
-    (keyword (subs s 0 i) (subs s (inc i)))
-    (keyword s)))
-
-(defn- str->datalog-form-symbol [s]
-  (if-let [i (str/index-of s "/")]
-    (symbol (subs s 0 i) (subs s (inc i)))
-    (symbol s)))
-
 (defn apply-datalog-specific-rewrites [plan basis
                                        ^IWatermarkSource wm-src,
                                        ^IScanEmitter scan-emitter]
@@ -1181,7 +1171,7 @@
         (memoize
          (fn [table]
            (let [^Watermark wm @wm-delay]
-             (into #{} (map util/normal-form-str->datalog-form-str) (.tableColNames scan-emitter wm (str table))))))]
+             (.tableColNames scan-emitter wm (str table)))))]
     (try
       (letfn [(rewrite-row-alias [z]
                 (r/zmatch
@@ -1190,8 +1180,8 @@
                  (when (some #(= row-alias-sym %) scan-cols)
                    (let [table (:table scan-opts)
                          table-cols (table-col-names table)
-                         struct-keys (map str->datalog-form-kw table-cols)
-                         scan-row-cols (map str->datalog-form-symbol table-cols)]
+                         struct-keys (map keyword table-cols)
+                         scan-row-cols (map symbol table-cols)]
                      [:map [{row-alias-sym (into {} (zipmap struct-keys scan-row-cols))}]
                       [:scan scan-opts (into [] (comp cat (filter #(not= row-alias-sym %))) [scan-cols, scan-row-cols])]]))))]
         (->> plan

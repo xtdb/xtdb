@@ -107,9 +107,9 @@
   (->ProjectCursor allocator in-cursor projection-specs clock params))
 
 (defmethod lp/emit-expr :project [{:keys [projections relation], {:keys [append-columns?]} :opts} {:keys [param-types] :as args}]
-  (let [emmited-child-relation (lp/emit-expr relation args)]
+  (let [emitted-child-relation (lp/emit-expr relation args)]
     (lp/unary-expr
-      emmited-child-relation
+      emitted-child-relation
       (fn [inner-col-types]
         (let [projection-specs (concat (when append-columns?
                                          (for [[col-name col-type] inner-col-types]
@@ -128,7 +128,7 @@
           {:col-types (->> projection-specs
                            (into {} (map (juxt #(.getColumnName ^IProjectionSpec %)
                                                #(.getColumnType ^IProjectionSpec %)))))
-           :stats (:stats emmited-child-relation)
+           :stats (:stats emitted-child-relation)
            :->cursor (fn [opts in-cursor] (->project-cursor opts in-cursor projection-specs))})))))
 
 (defmethod lp/emit-expr :map [op args]

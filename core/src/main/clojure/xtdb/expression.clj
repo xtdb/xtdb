@@ -276,7 +276,7 @@
          (.startList ~writer-arg)
          (dotimes [~n-sym el-count#]
            ~(continue-read (fn [el-type code]
-                             (write-value-code el-type `(.writerForType ~el-writer-sym '~el-type) code))
+                             (write-value-code el-type `(.legWriter ~el-writer-sym (types/->arrow-type '~el-type)) code))
                            list-el-type list-sym n-sym))
          (.endList ~writer-arg))
 
@@ -304,7 +304,8 @@
              (let [field-box-sym (gensym 'field_box)]
                `(let [~field-box-sym (.readField ~struct-sym ~field-name)]
                   ~(continue-read (fn [val-type code]
-                                    (write-value-code val-type `(-> (.structKeyWriter ~writer-arg ~field-name) (.writerForType '~val-type)) code))
+                                    (write-value-code val-type `(-> (.structKeyWriter ~writer-arg ~field-name)
+                                                                    (.legWriter (types/->arrow-type '~val-type))) code))
                                   val-type field-box-sym)))
 
              (continue-read (fn [val-type code]
@@ -1505,7 +1506,7 @@
                            (into {} (map (juxt identity (fn [_] (gensym 'out-writer))))))]
       {:writer-bindings (into [out-writer-sym `(vw/->writer ~out-vec-sym)]
                               (mapcat (fn [[value-type writer-sym]]
-                                        [writer-sym `(.writerForType ~out-writer-sym '~value-type)]))
+                                        [writer-sym `(.legWriter ~out-writer-sym (types/->arrow-type '~value-type))]))
                               writer-syms)
 
        :write-value-out! (fn [value-type code]
@@ -1554,6 +1555,9 @@
                        (MapEntry/create
                         (symbol (.getName col))
                         (types/field->col-type (.getField col))))))))
+
+;; expression engine currently needs the entire nested type
+;; it needs that for a value (literal)
 
 (defn ->expression-projection-spec ^xtdb.operator.IProjectionSpec [col-name form {:keys [col-types param-types] :as input-types}]
   (let [expr (form->expr form input-types)

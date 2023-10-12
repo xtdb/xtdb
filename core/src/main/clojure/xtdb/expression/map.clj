@@ -11,6 +11,7 @@
            (org.apache.arrow.memory BufferAllocator)
            (org.apache.arrow.memory.util.hash MurmurHasher SimpleHasher)
            (org.apache.arrow.vector NullVector)
+           (org.apache.arrow.vector.types.pojo FieldType)
            (org.roaringbitmap IntConsumer RoaringBitmap)
            (xtdb.vector RelationReader IVectorReader)
            (com.carrotsearch.hppc IntObjectHashMap)))
@@ -172,6 +173,7 @@
         hash->bitmap (IntObjectHashMap.)
         rel-writer (vw/->rel-writer allocator)]
 
+
     (doseq [[col-name col-type] (cond-> build-col-types
                                   (not store-full-build-rel?) (select-keys build-key-col-names)
 
@@ -180,13 +182,14 @@
                                                                                  (cond-> col-type
                                                                                    with-nil-row? (types/merge-col-types :null)))
                                                                                val))))))]
-      (.writerForName rel-writer (name col-name) col-type))
+      ;; HACK otherwise populate-with-absents complains
+      (.colWriter rel-writer (name col-name) (.getFieldType (types/col-type->field (types/col-type->nullable-col-type col-type)))))
 
     (when with-nil-row?
       (doto (.rowCopier rel-writer (->nil-rel (keys build-col-types)))
         (.copyRow 0)))
 
-    (let [build-key-cols (mapv #(vw/vec-wtr->rdr (.writerForName rel-writer (name %))) build-key-col-names)]
+    (let [build-key-cols (mapv #(vw/vec-wtr->rdr (.colWriter rel-writer (name %))) build-key-col-names)]
       (letfn [(compute-hash-bitmap [^long row-hash]
                 (or (.get hash->bitmap row-hash)
                     (let [bitmap (RoaringBitmap.)]
@@ -259,7 +262,7 @@
                                                               {:build-col-types build-col-types
                                                                :probe-col-types probe-col-types
                                                                :param-types param-types})))
-                                 (reduce andIBO))
+                                  (reduce andIBO))
 
                   hasher (->hasher probe-key-cols)]
 

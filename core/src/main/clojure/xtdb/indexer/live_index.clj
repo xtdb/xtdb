@@ -61,10 +61,11 @@
   (^xtdb.vector.IRelationWriter live-rel [test-live-table]))
 
 (defn- live-rel->col-types [^IRelationWriter live-rel]
-  (let [col-type (-> (.writerForName live-rel "op")
-                     (.writerForTypeId (byte 0))
+  (let [col-type (-> (.colWriter live-rel "op")
+                     (.legWriter :put)
                      (.structKeyWriter "xt$doc")
-                     (.getColType)
+                     .getField
+                     types/field->col-type
                      types/without-null)]
     (assert (= :struct (types/col-type-head col-type)))
     (into {} (map (juxt (comp str key) val)) (second col-type))))
@@ -196,17 +197,17 @@
                                          :or {->live-trie (fn [iid-rdr]
                                                             (LiveHashTrie/emptyTrie iid-rdr))}}]
    (util/with-close-on-catch [rel (trie/open-log-data-root allocator)]
-     (let [iid-wtr (.writerForName rel "xt$iid")
-           op-wtr (.writerForName rel "op")
-           put-wtr (.writerForTypeId op-wtr (byte 0))
-           delete-wtr (.writerForTypeId op-wtr (byte 1))]
+     (let [iid-wtr (.colWriter rel "xt$iid")
+           op-wtr (.colWriter rel "op")
+           put-wtr (.legWriter op-wtr :put)
+           delete-wtr (.legWriter op-wtr :delete)]
        (->LiveTable allocator buffer-pool table-name rel
                     (->live-trie (vw/vec-wtr->rdr iid-wtr))
-                    iid-wtr (.writerForName rel "xt$system_from")
+                    iid-wtr (.colWriter rel "xt$system_from")
                     put-wtr (.structKeyWriter put-wtr "xt$valid_from") (.structKeyWriter put-wtr "xt$valid_to")
                     (.structKeyWriter put-wtr "xt$doc") delete-wtr (.structKeyWriter delete-wtr "xt$valid_from")
                     (.structKeyWriter delete-wtr "xt$valid_to")
-                    (.writerForTypeId op-wtr (byte 2)))))))
+                    (.legWriter op-wtr :evict))))))
 
 (defn ->live-trie [log-limit page-limit iid-rdr]
   (-> (doto (LiveHashTrie/builder iid-rdr)

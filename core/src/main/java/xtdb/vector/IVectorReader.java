@@ -9,7 +9,7 @@ import org.apache.arrow.vector.types.pojo.Field;
 
 import java.nio.ByteBuffer;
 import java.util.Collection;
-import java.util.Map;
+import java.util.List;
 
 public interface IVectorReader extends AutoCloseable {
 
@@ -55,15 +55,11 @@ public interface IVectorReader extends AutoCloseable {
 
     int getListCount(int idx);
 
-    byte getTypeId(int idx);
-
-    Field getLeg(int idx);
-
-    IVectorReader typeIdReader(byte typeId);
+    Keyword getLeg(int idx);
 
     IVectorReader legReader(Keyword legKey);
 
-    Collection<IVectorReader> legs();
+    List<Keyword> legs();
 
     default IVectorReader copy(BufferAllocator allocator) {
         return copyTo(getField().createVector(allocator)).withName(getName());

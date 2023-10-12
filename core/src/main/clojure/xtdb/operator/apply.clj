@@ -12,6 +12,7 @@
            (java.util.stream IntStream)
            (org.apache.arrow.memory BufferAllocator)
            (org.apache.arrow.vector NullVector)
+           org.apache.arrow.vector.types.pojo.FieldType
            (xtdb ICursor)
            (xtdb.vector IVectorReader RelationReader)))
 
@@ -40,7 +41,7 @@
     (let [[col-name _expr] (first (:mark-join mark-spec))]
       (reify ModeStrategy
         (accept [_ dep-cursor dep-out-writer idxs in-idx]
-          (let [out-writer (.writerForName dep-out-writer (name col-name) [:union #{:null :bool}])]
+          (let [out-writer (.colWriter dep-out-writer (name col-name) (FieldType/nullable #xt.arrow/type :bool))]
             (.add idxs in-idx)
             (let [!match (int-array [-1])]
               (while (and (not (== 1 (aget !match 0)))
@@ -67,7 +68,7 @@
       (reify ModeStrategy
         (accept [_ dep-cursor dep-out-writer idxs in-idx]
           (doseq [[col-name col-type] dependent-col-types]
-            (.writerForName dep-out-writer (name col-name) col-type))
+            (.colWriter dep-out-writer (name col-name) (.getFieldType (types/col-type->field (name col-name) col-type))))
 
           (.forEachRemaining dep-cursor
                              (reify Consumer
@@ -82,7 +83,7 @@
       (reify ModeStrategy
         (accept [_ dep-cursor dep-out-writer idxs in-idx]
           (doseq [[col-name col-type] dependent-col-types]
-            (.writerForName dep-out-writer (name col-name) col-type))
+            (.colWriter dep-out-writer (name col-name) (.getFieldType (types/col-type->field (name col-name) col-type))))
 
           (let [match? (boolean-array [false])]
             (.forEachRemaining dep-cursor
@@ -99,7 +100,7 @@
             (when-not (aget match? 0)
               (.add idxs in-idx)
               (doseq [[col-name col-type] dependent-col-types]
-                (vw/append-vec (.writerForName dep-out-writer (name col-name) col-type)
+                (vw/append-vec (.colWriter dep-out-writer (name col-name) (.getFieldType (types/col-type->field (name col-name) col-type)))
                                (vr/vec->reader (doto (NullVector. (name col-name))
                                                  (.setValueCount 1)))))))))
 
@@ -134,7 +135,7 @@
       (reify ModeStrategy
         (accept [_ dep-cursor dep-out-writer idxs in-idx]
           (doseq [[col-name col-type] dependent-col-types]
-            (.writerForName dep-out-writer (name col-name) col-type))
+            (.colWriter dep-out-writer (name col-name) (.getFieldType (types/col-type->field (name col-name) col-type))))
 
           (let [match? (boolean-array [false])]
             (.forEachRemaining dep-cursor
@@ -158,7 +159,7 @@
             (when-not (aget match? 0)
               (.add idxs in-idx)
               (doseq [[col-name col-type] dependent-col-types]
-                (vw/append-vec (.writerForName dep-out-writer (name col-name) col-type)
+                (vw/append-vec (.colWriter dep-out-writer (name col-name) (.getFieldType (types/col-type->field (name col-name) col-type)))
                                (vr/vec->reader (doto (NullVector. (name col-name))
                                                  (.setValueCount 1))))))))))))
 

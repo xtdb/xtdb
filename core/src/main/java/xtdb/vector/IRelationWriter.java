@@ -1,5 +1,9 @@
 package xtdb.vector;
 
+import clojure.lang.Keyword;
+import org.apache.arrow.vector.types.pojo.Field;
+import org.apache.arrow.vector.types.pojo.FieldType;
+
 import java.util.Map;
 
 @SuppressWarnings("try")
@@ -26,8 +30,11 @@ public interface IRelationWriter extends AutoCloseable, Iterable<Map.Entry<Strin
         }
     }
 
-    IVectorWriter writerForName(String name);
-    IVectorWriter writerForName(String name, Object colType);
+    IVectorWriter colWriter(String colName);
+
+    @Deprecated
+    IVectorWriter colWriter(Field field);
+    IVectorWriter colWriter(String colName, FieldType fieldType);
 
     IRowCopier rowCopier(RelationReader relation);
 

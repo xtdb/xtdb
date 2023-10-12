@@ -41,8 +41,7 @@
                                          out-cols (LinkedList.)
                                          vec-rdr (.readerForName in-rel from-column-name)
                                          list-rdr (cond-> vec-rdr
-                                                    (instance? ArrowType$Union (.getType (.getField vec-rdr)))
-                                                    (.legReader :list))
+                                                    (instance? ArrowType$Union (.getType (.getField vec-rdr))) (.legReader :list))
                                          el-rdr (some-> list-rdr .listElementReader)
                                          idxs (IntStream/builder)
 
@@ -59,7 +58,7 @@
                                          (let [out-writer (vw/->writer out-vec)
                                                el-copier (.rowCopier el-rdr out-writer)]
                                            (dotimes [n (.valueCount vec-rdr)]
-                                             (when (instance? ArrowType$List (.getType (.getLeg list-rdr n)))
+                                             (when-not (.isNull list-rdr n)
                                                (let [len (.getListCount list-rdr n)
                                                      start-pos (.getListStartIndex list-rdr n)]
                                                  (dotimes [el-idx len]

@@ -19,8 +19,8 @@
             [xtdb.vector.reader :as vr]
             [xtdb.vector.writer :as vw]
             [xtdb.watermark :as wm])
-  (:import (java.io ByteArrayInputStream Closeable)
-           java.lang.AutoCloseable
+  (:import clojure.lang.MapEntry
+           (java.io ByteArrayInputStream Closeable)
            java.nio.ByteBuffer
            (java.nio.channels ClosedByInterruptException)
            (java.time Instant ZoneId)
@@ -31,8 +31,9 @@
            (org.apache.arrow.vector BitVector)
            (org.apache.arrow.vector.complex DenseUnionVector ListVector)
            (org.apache.arrow.vector.ipc ArrowStreamReader)
-           xtdb.IBufferPool
+           (org.apache.arrow.vector.types.pojo FieldType)
            (xtdb.api.protocols TransactionInstant)
+           xtdb.IBufferPool
            (xtdb.indexer.live_index ILiveIndex ILiveIndexTx ILiveTableTx)
            xtdb.metadata.IMetadataManager
            xtdb.operator.IRaQuerySource
@@ -72,24 +73,25 @@
         valid-to-rdr (.structKeyReader put-leg "xt$valid_to")
         system-time-µs (util/instant->micros system-time)
         tables (->> (.legs doc-rdr)
-                    (mapv (fn [^IVectorReader table-rdr]
-                            (let [table-name (.getName table-rdr)
-                                  table-rel-rdr (vr/rel-reader (for [sk (.structKeys table-rdr)]
-                                                                 (.structKeyReader table-rdr sk))
-                                                               (.valueCount table-rdr))
-                                  live-table (.liveTable live-idx-tx table-name)]
-                              {:table-name table-name
-                               :id-rdr (.structKeyReader table-rdr "xt$id")
+                    (into {} (map (fn [table]
+                                    (let [table-name (str (symbol table))
+                                          table-rdr (.legReader doc-rdr table)
+                                          table-rel-rdr (vr/rel-reader (for [sk (.structKeys table-rdr)]
+                                                                         (.structKeyReader table-rdr sk))
+                                                                       (.valueCount table-rdr))
+                                          live-table (.liveTable live-idx-tx table-name)]
+                                      (MapEntry/create table
+                                                       {:id-rdr (.structKeyReader table-rdr "xt$id")
 
-                               :live-table live-table
+                                                        :live-table live-table
 
-                               :doc-copier (-> (.docWriter live-table)
-                                               (vw/struct-writer->rel-copier table-rel-rdr))}))))]
+                                                        :doc-copier (-> (.docWriter live-table)
+                                                                        (vw/struct-writer->rel-copier table-rel-rdr))}))))))]
 
     (reify OpIndexer
       (indexOp [_ tx-op-idx]
         (let [{:keys [^IVectorReader id-rdr, ^ILiveTableTx live-table, ^IRowCopier doc-copier]}
-              (nth tables (.getTypeId doc-rdr tx-op-idx))
+              (get tables (.getLeg doc-rdr tx-op-idx))
 
               eid (.getObject id-rdr tx-op-idx)
 
@@ -255,10 +257,11 @@
 
             ;; if the user returns `nil` or `true`, we just continue with the rest of the transaction
             (when-not (or (nil? res) (true? res))
-              (util/with-close-on-catch [tx-ops-vec (txp/open-tx-ops-vec allocator)]
-                (txp/write-tx-ops! allocator (vw/->writer tx-ops-vec) res)
-                (.setValueCount tx-ops-vec (count res))
-                tx-ops-vec)))
+              (let [tx-ops (mapv txp/parse-tx-op res)]
+                (util/with-close-on-catch [tx-ops-vec (txp/open-tx-ops-vec allocator (txp/put-tables tx-ops))]
+                  (txp/write-tx-ops! allocator (vw/->writer tx-ops-vec) tx-ops)
+                  (.setValueCount tx-ops-vec (count res))
+                  tx-ops-vec))))
 
           (catch Throwable t
             (reset! !last-tx-fn-error t)
@@ -419,21 +422,19 @@
     (.logPut live-table (trie/->iid tx-id) system-time-µs Long/MAX_VALUE
              (fn write-doc! []
                (.startStruct doc-writer)
-               (doto (.structKeyWriter doc-writer "xt$id" :i64)
+               (doto (.structKeyWriter doc-writer "xt$id" (FieldType/notNullable #xt.arrow/type :i64))
                  (.writeLong tx-id))
 
-               (doto (.structKeyWriter doc-writer "xt$tx_time" types/temporal-col-type)
+               (doto (.structKeyWriter doc-writer "xt$tx_time" (FieldType/notNullable (types/->arrow-type types/temporal-col-type)))
                  (.writeLong system-time-µs))
 
-               (doto (.structKeyWriter doc-writer "xt$committed?" :bool)
+               (doto (.structKeyWriter doc-writer "xt$committed?" (FieldType/notNullable  #xt.arrow/type :bool))
                  (.writeBoolean (nil? t)))
 
-               (let [e-wtr (.structKeyWriter doc-writer "xt$error" [:union #{:null :clj-form}])]
+               (let [e-wtr (.structKeyWriter doc-writer "xt$error" (FieldType/nullable #xt.arrow/type :clj-form))]
                  (if (or (nil? t) (= t abort-exn))
-                   (doto (.writerForType e-wtr :null)
-                     (.writeNull nil))
-                   (doto (.writerForType e-wtr :clj-form)
-                     (.writeObject (pr-str t)))))
+                   (.writeNull e-wtr nil)
+                   (.writeObject e-wtr (pr-str t))))
                (.endStruct doc-writer)))
 
     (.addRows row-counter 1)))
@@ -499,13 +500,13 @@
                             !call-idxer (delay (->call-indexer allocator ra-src wm-src scan-emitter tx-ops-rdr tx-opts))
                             !sql-idxer (delay (->sql-indexer allocator row-counter live-idx-tx tx-ops-rdr ra-src wm-src scan-emitter tx-opts))]
                         (dotimes [tx-op-idx (.valueCount tx-ops-rdr)]
-                          (when-let [more-tx-ops (case (.getTypeId tx-ops-rdr tx-op-idx)
-                                                   0 (.indexOp ^OpIndexer @!sql-idxer tx-op-idx)
-                                                   1 (.indexOp ^OpIndexer @!put-idxer tx-op-idx)
-                                                   2 (.indexOp ^OpIndexer @!delete-idxer tx-op-idx)
-                                                   3 (.indexOp ^OpIndexer @!evict-idxer tx-op-idx)
-                                                   4 (.indexOp ^OpIndexer @!call-idxer tx-op-idx)
-                                                   5 (throw abort-exn))]
+                          (when-let [more-tx-ops (case (.getLeg tx-ops-rdr tx-op-idx)
+                                                   :sql (.indexOp ^OpIndexer @!sql-idxer tx-op-idx)
+                                                   :put (.indexOp ^OpIndexer @!put-idxer tx-op-idx)
+                                                   :delete (.indexOp ^OpIndexer @!delete-idxer tx-op-idx)
+                                                   :evict (.indexOp ^OpIndexer @!evict-idxer tx-op-idx)
+                                                   :call (.indexOp ^OpIndexer @!call-idxer tx-op-idx)
+                                                   :abort (throw abort-exn))]
                             (try
                               (index-tx-ops more-tx-ops)
                               (finally

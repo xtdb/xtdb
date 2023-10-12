@@ -1,7 +1,10 @@
 package xtdb.vector;
 
+import clojure.lang.Keyword;
 import org.apache.arrow.vector.ValueVector;
+import org.apache.arrow.vector.types.pojo.ArrowType;
 import org.apache.arrow.vector.types.pojo.Field;
+import org.apache.arrow.vector.types.pojo.FieldType;
 
 public interface IVectorWriter extends IValueWriter, AutoCloseable {
 
@@ -14,7 +17,7 @@ public interface IVectorWriter extends IValueWriter, AutoCloseable {
 
     ValueVector getVector();
 
-    Object getColType();
+    Field getField();
 
     /**
      * This method calls {@link ValueVector#setValueCount} on the underlying vector, so that all of the values written
@@ -27,22 +30,33 @@ public interface IVectorWriter extends IValueWriter, AutoCloseable {
 
     IRowCopier rowCopier(ValueVector srcVector);
 
+    /**
+     * won't create
+     */
     @Override
     IVectorWriter structKeyWriter(String key);
 
     @Override
-    IVectorWriter structKeyWriter(String key, Object colType);
-
-    @Override
-    IVectorWriter writerForType(Object colType);
-
-    @Override
-    IVectorWriter writerForTypeId(byte typeId);
-
-    IVectorWriter writerForField(Field field);
+    IVectorWriter structKeyWriter(String key, FieldType fieldType);
 
     @Override
     IVectorWriter listElementWriter();
+
+    @Override
+    IVectorWriter listElementWriter(FieldType fieldType);
+
+    @Override
+    IVectorWriter legWriter(Keyword leg);
+
+    @Override
+    IVectorWriter legWriter(ArrowType leg);
+
+    @Override
+    IVectorWriter legWriter(Keyword leg, FieldType fieldType);
+
+    @Override
+    @Deprecated
+    IVectorWriter writerForTypeId(byte typeId);
 
     void clear();
 
