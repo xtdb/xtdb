@@ -54,7 +54,6 @@
                         {:table-args '{?x [{:a 1, :b [1 2]} {:a 2, :b []}]}}))
         "skips rows with empty lists")
 
-  #_
   (t/is (= [{:a 1, :b* 1} {:a 1, :b* 2}]
            (tu/query-ra '[:project [a b*]
                           [:unwind {b* b}

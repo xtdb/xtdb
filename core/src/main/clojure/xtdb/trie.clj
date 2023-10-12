@@ -100,13 +100,13 @@
     (let [data-rel-wtr (vw/root->writer data-vsr)
           meta-rel-wtr (vw/root->writer meta-vsr)
 
-          node-wtr (.writerForName meta-rel-wtr "nodes")
+          node-wtr (.colWriter meta-rel-wtr "nodes")
           node-wp (.writerPosition node-wtr)
 
-          branch-wtr (.writerForTypeId node-wtr (byte 1))
+          branch-wtr (.legWriter node-wtr :branch)
           branch-el-wtr (.listElementWriter branch-wtr)
 
-          leaf-wtr (.writerForTypeId node-wtr (byte 2))
+          leaf-wtr (.legWriter node-wtr :leaf)
           page-idx-wtr (.structKeyWriter leaf-wtr "data-page-idx")
           page-meta-wtr (meta/->page-meta-wtr (.structKeyWriter leaf-wtr "columns"))
           !page-idx (AtomicInteger. 0)]

@@ -9,18 +9,17 @@
             [xtdb.util :as util]
             [xtdb.vector :as vec]
             [xtdb.vector.writer :as vw])
-  (:import (java.lang AutoCloseable)
-           (java.time Instant ZoneId)
+  (:import clojure.lang.Keyword
+           (java.lang AutoCloseable)
            (java.time Instant ZoneId)
            (java.util ArrayList HashMap List)
            org.apache.arrow.memory.BufferAllocator
            (org.apache.arrow.vector VectorSchemaRoot)
-           (org.apache.arrow.vector.types.pojo ArrowType$Union Schema)
            org.apache.arrow.vector.types.UnionMode
+           (org.apache.arrow.vector.types.pojo ArrowType$Union Schema)
            (xtdb.log Log LogRecord)
            (xtdb.tx Ops Ops$Abort Ops$Call Ops$Delete Ops$Evict Ops$Put Ops$Sql)
-           xtdb.vector.IValueWriter
-           xtdb.vector.extensions.ClojureFormType))
+           xtdb.vector.IVectorWriter))
 
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface ITxProducer
@@ -195,38 +194,42 @@
          :sql+params (s/and vector?
                             (s/cat :sql string?,
                                    :param-groups (s/? (s/alt :rows (s/* (s/coll-of any? :kind sequential?))
-                                                             :bytes #(= :varbinary (vw/value->col-type %))))))))
+                                                             :bytes #(= #xt.arrow/type :varbinary
+                                                                        (vw/value->arrow-type %))))))))
 
-(def ^:private ^org.apache.arrow.vector.types.pojo.Field tx-ops-field
+(defn- ->tx-ops-field ^org.apache.arrow.vector.types.pojo.Field [put-tables]
   (types/->field "tx-ops" (ArrowType$Union. UnionMode/Dense (int-array (range 6))) false
                  (types/col-type->field 'sql [:struct {'query :utf8
-                                                       'params [:union #{:null :varbinary}]}])
+                                                       'params [:union #{:absent :varbinary}]}])
 
 
-                 (types/->field "put" types/struct-type false
-                                (types/->field "document" types/dense-union-type false)
+                 (types/->field "put" #xt.arrow/type :struct false
+                                (apply types/->field "document" #xt.arrow/type :union false
+                                       (for [table put-tables]
+                                         (types/->field (name table) #xt.arrow/type :struct false)))
+
                                 (types/col-type->field 'xt$valid_from types/nullable-temporal-type)
                                 (types/col-type->field 'xt$valid_to types/nullable-temporal-type))
 
-                 (types/->field "delete" types/struct-type false
+                 (types/->field "delete" #xt.arrow/type :struct false
                                 (types/col-type->field 'table :utf8)
-                                (types/->field "xt$id" types/dense-union-type false)
+                                (types/->field "xt$id" #xt.arrow/type :union false)
                                 (types/col-type->field 'xt$valid_from types/nullable-temporal-type)
                                 (types/col-type->field 'xt$valid_to types/nullable-temporal-type))
 
-                 (types/->field "evict" types/struct-type false
+                 (types/->field "evict" #xt.arrow/type :struct false
                                 (types/col-type->field '_table [:union #{:null :utf8}])
-                                (types/->field "xt$id" types/dense-union-type false))
+                                (types/->field "xt$id" #xt.arrow/type :union false))
 
-                 (types/->field "call" types/struct-type false
-                                (types/->field "fn-id" types/dense-union-type false)
-                                (types/->field "args" ClojureFormType/INSTANCE false))
+                 (types/->field "call" #xt.arrow/type :struct false
+                                (types/->field "fn-id" #xt.arrow/type :union false)
+                                (types/->field "args" #xt.arrow/type :clj-form false))
 
                  ;; C1 importer
                  (types/col-type->field 'abort :null)))
 
-(def ^:private ^org.apache.arrow.vector.types.pojo.Schema tx-schema
-  (Schema. [(types/->field "tx-ops" types/list-type false tx-ops-field)
+(defn- ->tx-schema ^org.apache.arrow.vector.types.pojo.Schema [put-tables]
+  (Schema. [(types/->field "tx-ops" #xt.arrow/type :list false (->tx-ops-field put-tables))
 
             (types/col-type->field "system-time" types/nullable-temporal-type)
             (types/col-type->field "default-tz" :utf8)
@@ -252,10 +255,11 @@
       (finally
         (run! util/try-close vecs)))))
 
-(defn- ->sql-writer [^IValueWriter op-writer, ^BufferAllocator allocator]
-  (let [sql-writer (.writerForTypeId op-writer 0)
+(defn- ->sql-writer [^IVectorWriter op-writer, ^BufferAllocator allocator]
+  (let [sql-writer (.legWriter op-writer :sql)
         query-writer (.structKeyWriter sql-writer "query")
-        params-writer (.structKeyWriter sql-writer "params")]
+        params-writer (-> (.structKeyWriter sql-writer "params")
+                          (.legWriter #xt.arrow/type :varbinary))]
     (fn write-sql! [^Ops$Sql op]
       (let [sql (.sql op)]
         (.startStruct sql-writer)
@@ -269,8 +273,13 @@
 
       (.endStruct sql-writer))))
 
-(defn- ->put-writer [^IValueWriter op-writer]
-  (let [put-writer (.writerForTypeId op-writer 1)
+(defn put-tables [tx-ops]
+  (into #{} (for [tx-op tx-ops
+                  :when (instance? Ops$Put tx-op)]
+              (util/kw->normal-form-kw (.tableName ^Ops$Put tx-op)))))
+
+(defn- ->put-writer [^IVectorWriter op-writer]
+  (let [put-writer (.legWriter op-writer :put)
         doc-writer (.structKeyWriter put-writer "document")
         valid-from-writer (.structKeyWriter put-writer "xt$valid_from")
         valid-to-writer (.structKeyWriter put-writer "xt$valid_to")
@@ -279,9 +288,8 @@
       (.startStruct put-writer)
       (let [table-doc-writer (.computeIfAbsent table-doc-writers (util/kw->normal-form-kw (.tableName op))
                                                (util/->jfn
-                                                 (fn [table]
-                                                   (let [type-id (.registerNewType doc-writer (types/col-type->field (name table) [:struct {}]))]
-                                                     (.writerForTypeId doc-writer type-id)))))]
+                                                 (fn [^Keyword table]
+                                                   (.legWriter doc-writer table))))]
         (vw/write-value! (->> (.doc op)
                               (into {} (map (juxt (comp util/kw->normal-form-kw key)
                                                   val))))
@@ -292,8 +300,8 @@
 
       (.endStruct put-writer))))
 
-(defn- ->delete-writer [^IValueWriter op-writer]
-  (let [delete-writer (.writerForTypeId op-writer 2)
+(defn- ->delete-writer [^IVectorWriter op-writer]
+  (let [delete-writer (.legWriter op-writer :delete)
         table-writer (.structKeyWriter delete-writer "table")
         id-writer (.structKeyWriter delete-writer "xt$id")
         valid-from-writer (.structKeyWriter delete-writer "xt$valid_from")
@@ -304,15 +312,15 @@
       (vw/write-value! (name (util/kw->normal-form-kw (.tableName op))) table-writer)
 
       (let [eid (.entityId op)]
-        (vw/write-value! eid (.writerForType id-writer (vw/value->col-type eid))))
+        (vw/write-value! eid (.legWriter id-writer (vw/value->arrow-type eid))))
 
       (vw/write-value! (.validFrom op) valid-from-writer)
       (vw/write-value! (.validTo op) valid-to-writer)
 
       (.endStruct delete-writer))))
 
-(defn- ->evict-writer [^IValueWriter op-writer]
-  (let [evict-writer (.writerForTypeId op-writer 3)
+(defn- ->evict-writer [^IVectorWriter op-writer]
+  (let [evict-writer (.legWriter op-writer :evict)
         table-writer (.structKeyWriter evict-writer "_table")
         id-writer (.structKeyWriter evict-writer "xt$id")]
     (fn [^Ops$Evict op]
@@ -320,34 +328,34 @@
       (vw/write-value! (name (.tableName op)) table-writer)
 
       (let [eid (.entityId op)]
-        (vw/write-value! eid (.writerForType id-writer (vw/value->col-type eid))))
+        (vw/write-value! eid (.legWriter id-writer (vw/value->arrow-type eid))))
 
       (.endStruct evict-writer))))
 
-(defn- ->call-writer [^IValueWriter op-writer]
-  (let [call-writer (.writerForTypeId op-writer 4)
+(defn- ->call-writer [^IVectorWriter op-writer]
+  (let [call-writer (.legWriter op-writer :call)
         fn-id-writer (.structKeyWriter call-writer "fn-id")
         args-list-writer (.structKeyWriter call-writer "args")]
     (fn write-call! [^Ops$Call op]
       (.startStruct call-writer)
 
       (let [fn-id (.fnId op)]
-        (vw/write-value! fn-id (.writerForType fn-id-writer (vw/value->col-type fn-id))))
+        (vw/write-value! fn-id (.legWriter fn-id-writer (vw/value->arrow-type fn-id))))
 
       (let [clj-form (xtp/->ClojureForm (vec (.args op)))]
-        (vw/write-value! clj-form args-list-writer))
+        (vw/write-value! clj-form (.legWriter args-list-writer (vw/value->arrow-type clj-form))))
 
       (.endStruct call-writer))))
 
-(defn- ->abort-writer [^IValueWriter op-writer]
-  (let [abort-writer (.writerForTypeId op-writer 5)]
+(defn- ->abort-writer [^IVectorWriter op-writer]
+  (let [abort-writer (.legWriter op-writer :abort)]
     (fn [^Ops$Abort _op]
       (.writeNull abort-writer nil))))
 
-(defn open-tx-ops-vec ^org.apache.arrow.vector.ValueVector [^BufferAllocator allocator]
-  (.createVector tx-ops-field allocator))
+(defn open-tx-ops-vec ^org.apache.arrow.vector.ValueVector [^BufferAllocator allocator, put-tables]
+  (.createVector (->tx-ops-field put-tables) allocator))
 
-(defn write-tx-ops! [^BufferAllocator allocator, ^IValueWriter op-writer, tx-ops]
+(defn write-tx-ops! [^BufferAllocator allocator, ^IVectorWriter op-writer, tx-ops]
   (let [write-sql! (->sql-writer op-writer allocator)
         write-put! (->put-writer op-writer)
         write-delete! (->delete-writer op-writer)
@@ -355,9 +363,7 @@
         write-call! (->call-writer op-writer)
         write-abort! (->abort-writer op-writer)]
 
-    (doseq [tx-op tx-ops
-            :let [tx-op (cond-> tx-op
-                          (vector? tx-op) parse-tx-op)]]
+    (doseq [tx-op tx-ops]
       (condp instance? tx-op
         Ops$Sql (write-sql! tx-op)
         Ops$Put (write-put! tx-op)
@@ -368,26 +374,29 @@
         (throw (err/illegal-arg :invalid-tx-op {:tx-op tx-op}))))))
 
 (defn serialize-tx-ops ^java.nio.ByteBuffer [^BufferAllocator allocator tx-ops {:keys [^Instant system-time, default-tz, default-all-valid-time?]}]
-  (with-open [root (VectorSchemaRoot/create tx-schema allocator)]
-    (let [ops-list-writer (vw/->writer (.getVector root "tx-ops"))
+  (let [tx-ops (->> tx-ops
+                    (mapv (fn [tx-op]
+                            (cond-> tx-op (vector? tx-op) parse-tx-op))))]
+    (with-open [root (VectorSchemaRoot/create (->tx-schema (put-tables tx-ops)) allocator)]
+      (let [ops-list-writer (vw/->writer (.getVector root "tx-ops"))
 
-          default-tz-writer (vw/->writer (.getVector root "default-tz"))
-          app-time-behaviour-writer (vw/->writer (.getVector root "all-application-time?"))]
+            default-tz-writer (vw/->writer (.getVector root "default-tz"))
+            app-time-behaviour-writer (vw/->writer (.getVector root "all-application-time?"))]
 
-      (when system-time
-        (vw/write-value! system-time (vw/->writer (.getVector root "system-time"))))
+        (when system-time
+          (vw/write-value! system-time (vw/->writer (.getVector root "system-time"))))
 
-      (vw/write-value! (str default-tz) default-tz-writer)
-      (vw/write-value! (boolean default-all-valid-time?) app-time-behaviour-writer)
+        (vw/write-value! (str default-tz) default-tz-writer)
+        (vw/write-value! (boolean default-all-valid-time?) app-time-behaviour-writer)
 
-      (.startList ops-list-writer)
-      (write-tx-ops! allocator (.listElementWriter ops-list-writer) tx-ops)
-      (.endList ops-list-writer)
+        (.startList ops-list-writer)
+        (write-tx-ops! allocator (.listElementWriter ops-list-writer) tx-ops)
+        (.endList ops-list-writer)
 
-      (.setRowCount root 1)
-      (.syncSchema root)
+        (.setRowCount root 1)
+        (.syncSchema root)
 
-      (util/root->arrow-ipc-byte-buffer root :stream))))
+        (util/root->arrow-ipc-byte-buffer root :stream)))))
 
 (defn validate-opts [tx-opts]
   (when (contains? tx-opts :system-time)

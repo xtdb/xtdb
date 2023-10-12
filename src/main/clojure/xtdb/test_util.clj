@@ -136,11 +136,8 @@
   (idx/finish-chunk! (component node :xtdb/indexer)))
 
 (defn open-vec
-  (^org.apache.arrow.vector.ValueVector [col-name vs]
-   (vw/open-vec *allocator* col-name vs))
-
-  (^org.apache.arrow.vector.ValueVector [col-name col-type vs]
-   (vw/open-vec *allocator* col-name col-type vs)))
+  (^org.apache.arrow.vector.ValueVector [col-name-or-field vs]
+   (vw/open-vec *allocator* col-name-or-field vs)))
 
 (defn open-rel ^xtdb.vector.RelationReader [vecs]
   (vw/open-rel vecs))
@@ -224,7 +221,7 @@
              bq (.bind pq indexer
                        (-> (select-keys query-opts [:basis :table-args :default-tz :default-all-valid-time?])
                            (assoc :params params-rel)))]
-         (with-open [res (.openCursor bq)]
+         (util/with-open [res (.openCursor bq)]
            (let [rows (-> (<-cursor res)
                           (cond->> (not preserve-blocks?) (into [] cat)))]
              (if with-col-types?
@@ -259,7 +256,7 @@
 (defn ->local-submit-node ^java.lang.AutoCloseable [{:keys [^Path node-dir]}]
   (node/start-submit-node {:xtdb.tx-producer/tx-producer {:clock (->mock-clock)}
                            :xtdb.log/local-directory-log {:root-path (.resolve node-dir "log")
-                                                           :clock (->mock-clock)}}))
+                                                          :clock (->mock-clock)}}))
 
 (defn with-tmp-dir* [prefix f]
   (let [dir (Files/createTempDirectory prefix (make-array FileAttribute 0))]
@@ -312,12 +309,13 @@
   (util/with-close-on-catch [meta-root (VectorSchemaRoot/create trie/meta-rel-schema al)]
     (let [meta-wtr (vw/root->writer meta-root)
           meta-wp (.writerPosition meta-wtr)
-          nodes-wtr (.writerForName meta-wtr "nodes")
-          nil-wtr (.writerForTypeId nodes-wtr (byte 0))
-          branch-wtr (.writerForTypeId nodes-wtr (byte 1))
+          nodes-wtr (.colWriter meta-wtr "nodes")
+          nil-wtr (.legWriter nodes-wtr :nil)
+          branch-wtr (.legWriter nodes-wtr :branch)
           branch-el-wtr (.listElementWriter branch-wtr)
-          data-wtr (.writerForTypeId nodes-wtr (byte 2))
-          data-page-idx-wtr (.structKeyWriter data-wtr "data-page-idx")]
+          data-wtr (.legWriter nodes-wtr :leaf)
+          data-page-idx-wtr (.structKeyWriter data-wtr "data-page-idx")
+          metadata-wtr (.structKeyWriter data-wtr "columns")]
       (letfn [(write-paths [paths]
                 (cond
                   (nil? paths) (.writeNull nil-wtr nil)
@@ -325,6 +323,8 @@
                   (number? paths) (do
                                     (.startStruct data-wtr)
                                     (.writeInt data-page-idx-wtr paths)
+                                    (.startList metadata-wtr)
+                                    (.endList metadata-wtr)
                                     (.endStruct data-wtr))
 
                   (vector? paths) (let [!page-idxs (IntStream/builder)]

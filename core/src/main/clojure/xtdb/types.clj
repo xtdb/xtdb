@@ -6,15 +6,16 @@
             [xtdb.util :as util])
   (:import (clojure.lang MapEntry)
            [java.io Writer]
-           (org.apache.arrow.vector.types DateUnit FloatingPointPrecision IntervalUnit TimeUnit Types$MinorType UnionMode)
+           (org.apache.arrow.vector.types DateUnit FloatingPointPrecision IntervalUnit TimeUnit Types$MinorType)
            (org.apache.arrow.vector.types.pojo ArrowType ArrowType$ArrowTypeID ArrowType$Binary ArrowType$Bool ArrowType$Date ArrowType$Decimal ArrowType$Duration ArrowType$FixedSizeBinary ArrowType$FixedSizeList ArrowType$FloatingPoint ArrowType$Int ArrowType$Interval ArrowType$List ArrowType$Null ArrowType$Struct ArrowType$Time ArrowType$Time ArrowType$Timestamp ArrowType$Union ArrowType$Utf8 Field FieldType)
            (xtdb.vector.extensions AbsentType ClojureFormType KeywordType SetType UriType UuidType)))
 
 (set! *unchecked-math* :warn-on-boxed)
 
-(def struct-type (.getType Types$MinorType/STRUCT))
-(def dense-union-type (ArrowType$Union. UnionMode/Dense nil))
-(def list-type (.getType Types$MinorType/LIST))
+;;;; fields
+
+(defprotocol ArrowTypeLegs
+  (^clojure.lang.Keyword arrow-type->leg [arrow-type]))
 
 (defprotocol FromArrowType
   (<-arrow-type [arrow-type]))
@@ -104,8 +105,26 @@
   ClojureFormType (<-arrow-type [_] :clj-form)
   AbsentType (<-arrow-type [_] :absent))
 
+(extend-protocol ArrowTypeLegs
+  ArrowType (arrow-type->leg [arrow-type] (<-arrow-type arrow-type))
+
+  ArrowType$Timestamp
+  (arrow-type->leg [arrow-type]
+    (let [[ts-type time-unit tz] (<-arrow-type arrow-type)]
+      (keyword (case ts-type
+                 :timestamp-tz (format "timestamp-tz-%s-%s" (name time-unit) (-> (str/lower-case tz) (str/replace #"[/:]" "_")))
+                 :timestamp-local (format "timestamp-local-%s-" (name time-unit))))))
+
+  ArrowType$Date (arrow-type->leg [arrow-type] (keyword (format "date-%s" (name (second (<-arrow-type arrow-type))))))
+  ArrowType$Time (arrow-type->leg [arrow-type] (keyword (format "time-local-%s" (name (second (<-arrow-type arrow-type))))))
+  ArrowType$Duration (arrow-type->leg [arrow-type] (keyword (format "duration-%s" (name (second (<-arrow-type arrow-type))))))
+  ArrowType$Interval (arrow-type->leg [arrow-type] (keyword (format "interval-%s" (name (second (<-arrow-type arrow-type))))))
+
+  ArrowType$FixedSizeList (arrow-type->leg [arrow-type] (keyword (format "fixed-size-list-%d" (second (<-arrow-type arrow-type)))))
+  ArrowType$FixedSizeBinary (arrow-type->leg [arrow-type] (keyword (format "fixed-size-binary-%d" (second (<-arrow-type arrow-type))))))
+
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]} ; xt.arrow/type reader macro
-(defn ->arrow-type [col-type]
+(defn ->arrow-type ^org.apache.arrow.vector.types.pojo.ArrowType [col-type]
   (case col-type
     :null ArrowType$Null/INSTANCE
     :bool ArrowType$Bool/INSTANCE
@@ -135,6 +154,11 @@
     :union (.getType Types$MinorType/DENSEUNION)
 
     (case (first col-type)
+      :struct ArrowType$Struct/INSTANCE
+      :list ArrowType$List/INSTANCE
+      :set SetType/INSTANCE
+      :union (.getType Types$MinorType/DENSEUNION)
+
       :date (let [[_ date-unit] col-type]
               (ArrowType$Date. (kw->date-unit date-unit)))
 
@@ -186,8 +210,8 @@
                       "null" "not-null")))
 
   (when-let [children (seq (.getChildren field))]
-    (.write w " ")
     (doseq [^Field child-field children]
+      (.write w " ")
       (print-method child-field w)))
 
   (.write w ">"))
@@ -321,8 +345,7 @@
                      :null Types$MinorType/NULL, :bool Types$MinorType/BIT
                      :f32 Types$MinorType/FLOAT4, :f64 Types$MinorType/FLOAT8
                      :i8 Types$MinorType/TINYINT, :i16 Types$MinorType/SMALLINT, :i32 Types$MinorType/INT, :i64 Types$MinorType/BIGINT
-                     :utf8 Types$MinorType/VARCHAR, :varbinary Types$MinorType/VARBINARY
-                     :decimal Types$MinorType/DECIMAL)]
+                     :utf8 Types$MinorType/VARCHAR, :varbinary Types$MinorType/VARBINARY)]
     (->field col-name (.getType minor-type) (or nullable? (= col-type :null)))))
 
 (defmethod col-type->field* :decimal [col-name nullable? _col-type]
@@ -348,6 +371,11 @@
 (defn col-type->field
   (^org.apache.arrow.vector.types.pojo.Field [col-type] (col-type->field (col-type->field-name col-type) col-type))
   (^org.apache.arrow.vector.types.pojo.Field [col-name col-type] (col-type->field* (str col-name) false col-type)))
+
+;; HACK to test things more easily
+(defn col-type->field-default-name
+  (^org.apache.arrow.vector.types.pojo.Field [col-type] (let [field (col-type->field col-type)]
+                                                          (col-type->field (.toString (.getType field)) col-type))))
 
 (defn without-null [col-type]
   (let [without-null (-> (flatten-union-types col-type)
@@ -379,7 +407,7 @@
 (defmethod arrow-type->col-type ArrowType$Binary [_] :varbinary)
 (defmethod arrow-type->col-type ArrowType$Decimal  [_] :decimal)
 
-(defn- col-type->nullable-col-type [col-type]
+(defn col-type->nullable-col-type [col-type]
   (zmatch col-type
     [:union inner-types] [:union (conj inner-types :null)]
     :null :null
@@ -400,23 +428,24 @@
 
 ;;; list
 
+
 (defmethod col-type->field* :list [col-name nullable? [_ inner-col-type]]
   (->field col-name ArrowType$List/INSTANCE nullable?
-           (col-type->field "$data" inner-col-type)))
+           (col-type->field inner-col-type)))
 
 (defmethod arrow-type->col-type ArrowType$List [_ data-field]
   [:list (field->col-type data-field)])
 
 (defmethod col-type->field* :fixed-size-list [col-name nullable? [_ list-size inner-col-type]]
   (->field col-name (ArrowType$FixedSizeList. list-size) nullable?
-           (col-type->field "$data" inner-col-type)))
+           (col-type->field inner-col-type)))
 
 (defmethod arrow-type->col-type ArrowType$FixedSizeList [^ArrowType$FixedSizeList list-type, data-field]
   [:fixed-size-list (.getListSize list-type) (field->col-type data-field)])
 
 (defmethod col-type->field* :set [col-name nullable? [_ inner-col-type]]
   (->field col-name SetType/INSTANCE nullable?
-           (col-type->field "$data" inner-col-type)))
+           (col-type->field inner-col-type)))
 
 (defmethod arrow-type->col-type SetType [_ data-field]
   [:set (field->col-type data-field)])

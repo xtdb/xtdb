@@ -250,7 +250,7 @@
                           (project1 '(/ a 0) {:a 5.0}))))
 
 (defn- project-mono-value [f-sym val col-type]
-  (with-open [rel (tu/open-rel [(tu/open-vec "s" col-type [val])])]
+  (with-open [rel (tu/open-rel [(tu/open-vec (types/col-type->field "s"  col-type) [val])])]
     (-> (run-projection rel (list f-sym 's))
         :res
         first)))

@@ -45,7 +45,7 @@ public class NormalForm {
     }
 
     public static Keyword datalogForm(Keyword normalFormKeyword) {
-        var k = normalFormKeyword.getName();
+        var k = normalFormKeyword.sym.toString();
         var i = k.lastIndexOf('$');
         if (i < 0) {
             return Keyword.intern(unnormalise(k));

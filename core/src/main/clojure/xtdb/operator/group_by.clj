@@ -16,6 +16,7 @@
            (org.apache.arrow.memory BufferAllocator)
            (org.apache.arrow.vector BigIntVector Float8Vector IntVector ValueVector)
            (org.apache.arrow.vector.complex ListVector)
+           org.apache.arrow.vector.types.pojo.FieldType
            (xtdb ICursor)
            (xtdb.expression.map IRelationMap IRelationMapBuilder)
            (xtdb.vector IVectorReader IVectorWriter RelationReader)))
@@ -209,7 +210,7 @@
                                   ~(continue (fn [acc-type acc-code]
                                                `(do
                                                   (.setPosition (.writerPosition ~acc-writer-sym) ~group-idx-sym)
-                                                  ~(expr/write-value-code acc-type `(.writerForType ~acc-writer-sym '~acc-type) acc-code))))))))
+                                                  ~(expr/write-value-code acc-type acc-writer-sym acc-code))))))))
                          #_(doto clojure.pprint/pprint)
                          eval)}))
       (util/lru-memoize)))
@@ -544,7 +545,7 @@
 
       (build [_ al]
         (ArrayAggAggregateSpec. al from-name to-name to-type
-                                (vw/->vec-writer al (name to-name))
+                                (vw/->vec-writer al (name to-name) (FieldType/notNullable #xt.arrow/type :union))
                                 nil 0 (ArrayList.))))))
 
 (defmethod ->aggregate-factory :array-agg-distinct [{:keys [from-name from-type] :as agg-opts}]

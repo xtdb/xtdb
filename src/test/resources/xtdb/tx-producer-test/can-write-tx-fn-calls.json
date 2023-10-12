@@ -29,11 +29,34 @@
             "children" : [ ]
           },{
             "name" : "params",
-            "nullable" : true,
+            "nullable" : false,
             "type" : {
-              "name" : "binary"
+              "name" : "union",
+              "mode" : "Dense",
+              "typeIds" : [ ]
             },
-            "children" : [ ]
+            "children" : [{
+              "name" : "varbinary",
+              "nullable" : false,
+              "type" : {
+                "name" : "binary"
+              },
+              "children" : [ ]
+            },{
+              "name" : "absent",
+              "nullable" : false,
+              "type" : {
+                "name" : "AbsentType"
+              },
+              "children" : [ ],
+              "metadata" : [{
+                "value" : "absent",
+                "key" : "ARROW:extension:name"
+              },{
+                "value" : "",
+                "key" : "ARROW:extension:metadata"
+              }]
+            }]
           }]
         },{
           "name" : "put",
@@ -236,9 +259,18 @@
           },{
             "name" : "params",
             "count" : 0,
-            "VALIDITY" : [ ],
-            "OFFSET" : [0],
-            "DATA" : [ ]
+            "TYPE_ID" : [ ],
+            "OFFSET" : [ ],
+            "children" : [{
+              "name" : "varbinary",
+              "count" : 0,
+              "VALIDITY" : [ ],
+              "OFFSET" : [0],
+              "DATA" : [ ]
+            },{
+              "name" : "absent",
+              "count" : 0
+            }]
           }]
         },{
           "name" : "put",

@@ -26,15 +26,15 @@
            (org.apache.arrow.memory ArrowBuf BufferAllocator)
            [org.apache.arrow.memory.util ArrowBufPointer]
            (org.apache.arrow.vector VectorLoader)
+           (org.apache.arrow.vector.types.pojo FieldType)
            [org.roaringbitmap.buffer MutableRoaringBitmap]
            xtdb.api.protocols.TransactionInstant
            (xtdb.bitemporal EventResolver RowConsumer)
            xtdb.IBufferPool
            xtdb.ICursor
            (xtdb.metadata IMetadataManager ITableMetadata)
-           xtdb.object_store.ObjectStore
            xtdb.operator.IRelationSelector
-           (xtdb.trie ArrowHashTrie$Leaf HashTrie LiveHashTrie$Leaf EventRowPointer)
+           (xtdb.trie ArrowHashTrie$Leaf EventRowPointer HashTrie LiveHashTrie$Leaf)
            (xtdb.util TemporalBounds TemporalBounds$TemporalColumn)
            (xtdb.vector IRelationWriter IRowCopier IVectorReader IVectorWriter RelationReader)
            (xtdb.watermark ILiveTableWatermark IWatermark IWatermarkSource Watermark)))
@@ -119,9 +119,9 @@
 (defn- copy-row-consumer [^IRelationWriter out-rel, ^RelationReader leaf-rel, col-names]
   (letfn [(writer-for [normalised-col-name]
             (let [wtrs (->> col-names
-                            (into [] (keep (fn [col-name]
+                            (into [] (keep (fn [^String col-name]
                                              (when (= normalised-col-name (util/str->normal-form-str col-name))
-                                               (.writerForName out-rel col-name types/temporal-col-type))))))]
+                                               (.colWriter out-rel col-name (FieldType/notNullable (types/->arrow-type types/temporal-col-type))))))))]
               (reify IVectorWriter
                 (writeLong [_ l]
                   (doseq [^IVectorWriter wtr wtrs]
@@ -131,17 +131,17 @@
           doc-rdr (.structKeyReader put-rdr "xt$doc")
 
           row-copiers (object-array
-                       (for [col-name col-names
+                       (for [^String col-name col-names
                              :let [normalized-name (util/str->normal-form-str col-name)
-                                   ^IVectorReader rdr (case normalized-name
-                                                        "xt$iid" (.readerForName leaf-rel "xt$iid")
-                                                        ("xt$system_from" "xt$system_to" "xt$valid_from" "xt$valid_to") nil
-                                                        (.structKeyReader doc-rdr normalized-name))]
-                             :when rdr]
-                         (.rowCopier rdr
-                                     (case normalized-name
-                                       "xt$iid" (.writerForName out-rel col-name [:fixed-size-binary 16])
-                                       (.writerForName out-rel col-name)))))
+                                   copier (case normalized-name
+                                            "xt$iid"
+                                            (.rowCopier (.readerForName leaf-rel "xt$iid")
+                                                        (.colWriter out-rel col-name (FieldType/notNullable (types/->arrow-type [:fixed-size-binary 16]))))
+                                            ("xt$system_from" "xt$system_to" "xt$valid_from" "xt$valid_to") nil
+                                            (some-> (.structKeyReader doc-rdr normalized-name)
+                                                    (.rowCopier (.colWriter out-rel col-name))))]
+                             :when copier]
+                         copier))
 
           ^IVectorWriter valid-from-wtr (writer-for "xt$valid_from")
           ^IVectorWriter valid-to-wtr (writer-for "xt$valid_to")
@@ -186,8 +186,8 @@
       (duplicate-ptr prev-iid-ptr current-iid-ptr))
 
     (let [idx (.getIndex ev-ptr)
-          leg-name (.getName (.getLeg (.opReader ev-ptr) idx))]
-      (if (= "evict" leg-name)
+          leg (.getLeg (.opReader ev-ptr) idx)]
+      (if (= :evict leg)
         (do
           (.nextIid ev-resolver)
           (duplicate-ptr skip-iid-ptr current-iid-ptr))
@@ -195,15 +195,15 @@
         (let [system-from (.getSystemTime ev-ptr)]
           (when (and (<= (.lower (.systemFrom temporal-bounds)) system-from)
                      (<= system-from (.upper (.systemFrom temporal-bounds))))
-            (case leg-name
-              "put"
+            (case leg
+              :put
               (.resolveEvent ev-resolver idx
                              (.getLong (.putValidFromReader ev-ptr) idx)
                              (.getLong (.putValidToReader ev-ptr) idx)
                              system-from
                              rc)
 
-              "delete"
+              :delete
               (.resolveEvent ev-resolver idx
                              (.getLong (.deleteValidFromReader ev-ptr) idx)
                              (.getLong (.deleteValidToReader ev-ptr) idx)

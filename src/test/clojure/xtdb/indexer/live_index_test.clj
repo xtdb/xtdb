@@ -6,7 +6,8 @@
             [xtdb.indexer.live-index :as li]
             [xtdb.test-json :as tj]
             [xtdb.test-util :as tu]
-            [xtdb.util :as util])
+            [xtdb.util :as util]
+            [xtdb.vector.writer :as vw])
   (:import [java.nio ByteBuffer]
            java.time.Duration
            [java.util Random UUID]
@@ -38,17 +39,20 @@
 
     (t/testing "commit"
       (let [live-idx-tx (.startTx live-index (xtp/->TransactionInstant 0 (.toInstant #inst "2000")))
-            live-table-tx (.liveTable live-idx-tx "my-table")]
+            live-table-tx (.liveTable live-idx-tx "my-table")
+            put-doc-wrt (.docWriter live-table-tx)]
         (let [wp (IVectorPosition/build)]
           (doseq [^UUID iid iids]
             (.logPut live-table-tx (ByteBuffer/wrap (util/uuid->bytes iid)) 0 0
-                     #(.getPositionAndIncrement wp))))
+                     #(do
+                        (.getPositionAndIncrement wp)
+                        (vw/write-value! {:some :doc} put-doc-wrt)))))
 
         (.commit live-idx-tx)
 
         (let [live-table (.liveTable live-index "my-table")
               live-rel (li/live-rel live-table)
-              iid-vec (.getVector (.writerForName live-rel "xt$iid"))
+              iid-vec (.getVector (.colWriter live-rel "xt$iid"))
 
               ^LiveHashTrie trie (li/live-trie live-table)]
 

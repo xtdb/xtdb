@@ -2,6 +2,7 @@
   (:require [clojure.test :as t]
             [xtdb.operator.group-by :as group-by]
             [xtdb.test-util :as tu]
+            [xtdb.types :as types]
             [xtdb.util :as util]
             [xtdb.vector.reader :as vr]))
 
@@ -116,7 +117,7 @@
           "aggregate without group")))
 
 (t/deftest test-promoting-sum
-  (with-open [group-mapping (tu/open-vec "gm" (map int [0 0 0]))
+  (with-open [group-mapping (tu/open-vec (types/->field "gm" #xt.arrow/type :i32 false) (map int [0 0 0]))
               v0 (tu/open-vec "v" [1 2 3])
               v1 (tu/open-vec "v" [1 2.0 3])]
     (let [sum-factory (group-by/->aggregate-factory {:f :sum, :from-name 'v, :from-type [:union #{:i64 :f64}]
@@ -322,10 +323,10 @@
                                                   {:a 12}]]]))))
 
 (t/deftest test-array-agg
-  (with-open [gm0 (tu/open-vec "gm0" (map int [0 1 0]))
+  (with-open [gm0 (tu/open-vec (types/->field "gm0" #xt.arrow/type :i32 false) (map int [0 1 0]))
               k0 (tu/open-vec "k" [1 2 3])
 
-              gm1 (tu/open-vec "gm1" (map int [1 2 0]))
+              gm1 (tu/open-vec (types/->field "gm1" #xt.arrow/type :i32 false) (map int [1 2 0]))
               k1 (tu/open-vec "k" [4 5 6])]
     (let [agg-factory (group-by/->aggregate-factory {:f :array-agg, :from-name 'k, :from-type :i64
                                                      :to-name 'vs, :zero-row? true})

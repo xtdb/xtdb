@@ -9,6 +9,7 @@ import org.apache.arrow.vector.types.pojo.Field;
 
 import java.nio.ByteBuffer;
 import java.util.Collection;
+import java.util.List;
 
 public class RenamedVectorReader implements IVectorReader {
 
@@ -37,7 +38,8 @@ public class RenamedVectorReader implements IVectorReader {
 
     @Override
     public Field getField() {
-        return reader.getField();
+        var field = reader.getField();
+        return new Field(colName, field.getFieldType(), field.getChildren());
     }
 
     @Override
@@ -131,18 +133,8 @@ public class RenamedVectorReader implements IVectorReader {
     }
 
     @Override
-    public byte getTypeId(int idx) {
-        return reader.getTypeId(idx);
-    }
-
-    @Override
-    public Field getLeg(int idx) {
+    public Keyword getLeg(int idx) {
         return reader.getLeg(idx);
-    }
-
-    @Override
-    public IVectorReader typeIdReader(byte typeId) {
-        return reader.typeIdReader(typeId);
     }
 
     @Override
@@ -151,7 +143,7 @@ public class RenamedVectorReader implements IVectorReader {
     }
 
     @Override
-    public Collection<IVectorReader> legs() {
+    public List<Keyword> legs() {
         return reader.legs();
     }
 

@@ -1,10 +1,8 @@
 (ns xtdb.trie-test
   (:require [clojure.test :as t :refer [deftest]]
-            [clojure.walk :as walk]
             [xtdb.test-util :as tu]
             [xtdb.trie :as trie])
-  (:import (clojure.lang MapEntry)
-           (org.apache.arrow.memory RootAllocator)
+  (:import (org.apache.arrow.memory RootAllocator)
            (xtdb.trie ArrowHashTrie ArrowHashTrie$Leaf)))
 
 (deftest test-merge-plan-with-nil-nodes-2700

@@ -30,7 +30,7 @@
            (java.util Iterator)
            (java.util.concurrent ConcurrentHashMap)
            (java.util.function Consumer Function)
-           (org.apache.arrow.memory AllocationListener BufferAllocator RootAllocator)
+           (org.apache.arrow.memory BufferAllocator RootAllocator)
            (xtdb ICursor IResultCursor IResultSet)
            xtdb.metadata.IMetadataManager
            xtdb.operator.scan.IScanEmitter

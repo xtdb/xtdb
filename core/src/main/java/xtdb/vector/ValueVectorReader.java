@@ -26,6 +26,8 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 import static java.time.temporal.ChronoUnit.MICROS;
+import static java.util.function.Function.identity;
+import static xtdb.util.NormalForm.datalogForm;
 
 public class ValueVectorReader implements IVectorReader {
     private static final IFn MONO_READER = Clojure.var("xtdb.vector", "->mono-reader");
@@ -171,22 +173,12 @@ public class ValueVectorReader implements IVectorReader {
     }
 
     @Override
-    public byte getTypeId(int idx) {
+    public Keyword getLeg(int idx) {
         throw unsupported();
     }
 
     @Override
-    public Field getLeg(int idx) {
-        return getField();
-    }
-
-    @Override
-    public Collection<IVectorReader> legs() {
-        throw unsupported();
-    }
-
-    @Override
-    public IVectorReader typeIdReader(byte typeId) {
+    public List<Keyword> legs() {
         throw unsupported();
     }
 
@@ -600,6 +592,7 @@ public class ValueVectorReader implements IVectorReader {
     public static IVectorReader structVector(StructVector v) {
         var childVecs = v.getChildrenFromFields();
         var rdrs = childVecs.stream().collect(Collectors.toMap(ValueVector::getName, ValueVectorReader::from));
+        var ks = rdrs.keySet().stream().collect(Collectors.toMap(identity(), name -> datalogForm(Keyword.intern(name))));
 
         return new ValueVectorReader(v) {
             @Override
@@ -618,7 +611,7 @@ public class ValueVectorReader implements IVectorReader {
 
                 rdrs.forEach((k, v) -> {
                     Object val = v.getObject(idx);
-                    if (!ABSENT_KEYWORD.equals(val)) res.put(Keyword.intern(k), val);
+                    if (!ABSENT_KEYWORD.equals(val)) res.put(ks.get(k), val);
                 });
 
                 return PersistentArrayMap.create(res);
@@ -697,10 +690,8 @@ public class ValueVectorReader implements IVectorReader {
     public static class DuvReader extends ValueVectorReader {
         private final DenseUnionVector v;
 
-        private final List<? extends ValueVector> children;
         private final List<Keyword> legs;
-        private final IVectorReader[] legReaders;
-        private final Field[] fields;
+        private final Map<Keyword, IVectorReader> legReaders = new HashMap<>();
 
         private DuvReader(DenseUnionVector v) {
             // getLeg is overridden here, so we never use the `leg` field in this case.
@@ -708,60 +699,48 @@ public class ValueVectorReader implements IVectorReader {
             this.v = v;
 
             // only using getChildrenFromFields because DUV.getField is so expensive.
-            this.children = v.getChildrenFromFields();
+            List<? extends ValueVector> children = v.getChildrenFromFields();
             this.legs = children.stream().map(c -> Keyword.intern(c.getName())).toList();
-
-            this.legReaders = new IVectorReader[children.size()];
-            this.fields = children.stream().map(ValueVector::getField).toArray(Field[]::new);
         }
 
         @Override
         public boolean isNull(int idx) {
-            return typeIdReader(getTypeId(idx)).isNull(idx);
+            //noinspection resource
+            return legReader(getLeg(idx)).isNull(idx);
         }
 
         @Override
         Object getObject0(int idx) {
-            return typeIdReader(getTypeId(idx)).getObject(idx);
+            //noinspection resource
+            return legReader(getLeg(idx)).getObject(idx);
         }
 
-        @Override
-        public byte getTypeId(int idx) {
+        private byte getTypeId(int idx) {
             return v.getTypeId(idx);
         }
 
         @Override
-        public Field getLeg(int idx) {
-            return fields[getTypeId(idx)];
+        public Keyword getLeg(int idx) {
+            return legs.get(getTypeId(idx));
         }
 
         @Override
         public IVectorReader legReader(Keyword legKey) {
-            var typeId = legs.indexOf(legKey);
-            return typeId < 0 ? null : typeIdReader((byte) typeId);
-        }
-
-        @Override
-        public IVectorReader typeIdReader(byte typeId) {
-            var reader = legReaders[typeId];
-            if (reader != null) return reader;
+            IVectorReader legReader = legReaders.get(legKey);
+            if (legReader != null) return legReader;
 
             synchronized (this) {
-                reader = legReaders[typeId];
-                if (reader != null) return reader;
+                legReader = legReaders.get(legKey);
+                if (legReader != null) return legReader;
 
-                var childVec = children.get(typeId);
-                reader = new IndirectVectorReader(from(childVec), new DuvIndirection(v, typeId));
-                if (this.valueCount() != reader.valueCount())
-                    throw new RuntimeException("boom %d %d".formatted(valueCount(), reader.valueCount()));
-                legReaders[typeId] = reader;
-                return reader;
+                var child = v.getChild(legKey.sym.toString());
+                return new IndirectVectorReader(ValueVectorReader.from(child), new DuvIndirection(v, ((byte) legs.indexOf(legKey))));
             }
         }
 
         @Override
-        public Collection<IVectorReader> legs() {
-            return legs.stream().map(this::legReader).toList();
+        public List<Keyword> legs() {
+            return legs;
         }
     }
 

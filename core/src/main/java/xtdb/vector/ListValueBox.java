@@ -1,6 +1,8 @@
 package xtdb.vector;
 
-import org.apache.arrow.vector.types.pojo.Field;
+import clojure.lang.Keyword;
+import org.apache.arrow.vector.types.pojo.ArrowType;
+import org.apache.arrow.vector.types.pojo.FieldType;
 
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
@@ -190,6 +192,16 @@ class ListValueBox implements IValueWriter, IMonoVectorReader, IPolyVectorReader
     }
 
     @Override
+    public IValueWriter listElementWriter(FieldType fieldType) {
+        return new BoxWriter() {
+            @Override
+            IValueWriter box() {
+                return writeBox.listElementWriter(fieldType);
+            }
+        };
+    }
+
+    @Override
     public void startList() {
         writeBox = new ValueBox();
         els.add(wp.getPosition(), writeBox);
@@ -214,11 +226,11 @@ class ListValueBox implements IValueWriter, IMonoVectorReader, IPolyVectorReader
     }
 
     @Override
-    public IValueWriter structKeyWriter(String key, Object colType) {
+    public IValueWriter structKeyWriter(String key, FieldType fieldType) {
         return new BoxWriter() {
             @Override
             IValueWriter box() {
-                return writeBox.structKeyWriter(key, colType);
+                return writeBox.structKeyWriter(key, fieldType);
             }
         };
     }
@@ -238,16 +250,22 @@ class ListValueBox implements IValueWriter, IMonoVectorReader, IPolyVectorReader
     }
 
     @Override
-    public IValueWriter writerForType(Object colType) {
-        return writeBox.writerForType(colType);
+    public IValueWriter legWriter(ArrowType arrowType) {
+        return writeBox.legWriter(arrowType);
     }
 
     @Override
-    public byte registerNewType(Field field) {
-        return writeBox.registerNewType(field);
+    public IValueWriter legWriter(Keyword leg) {
+        return writeBox.legWriter(leg);
     }
 
     @Override
+    public IValueWriter legWriter(Keyword leg, FieldType fieldType) {
+        return writeBox.legWriter(leg, fieldType);
+    }
+
+    @Override
+    @Deprecated
     public IValueWriter writerForTypeId(byte typeId) {
         return writeBox.writerForTypeId(typeId);
     }

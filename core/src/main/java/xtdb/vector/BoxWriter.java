@@ -1,6 +1,8 @@
 package xtdb.vector;
 
-import org.apache.arrow.vector.types.pojo.Field;
+import clojure.lang.Keyword;
+import org.apache.arrow.vector.types.pojo.ArrowType;
+import org.apache.arrow.vector.types.pojo.FieldType;
 
 import java.nio.ByteBuffer;
 
@@ -63,8 +65,8 @@ abstract class BoxWriter implements IValueWriter {
     }
 
     @Override
-    public IValueWriter structKeyWriter(String key, Object colType) {
-        return box().structKeyWriter(key, colType);
+    public IValueWriter structKeyWriter(String key, FieldType fieldType) {
+        return box().structKeyWriter(key, fieldType);
     }
 
     @Override
@@ -83,6 +85,11 @@ abstract class BoxWriter implements IValueWriter {
     }
 
     @Override
+    public IValueWriter listElementWriter(FieldType fieldType) {
+        return box().listElementWriter(fieldType);
+    }
+
+    @Override
     public void startList() {
         box().startList();
     }
@@ -93,17 +100,22 @@ abstract class BoxWriter implements IValueWriter {
     }
 
     @Override
-    public IValueWriter writerForType(Object colType) {
-        return box().writerForType(colType);
-    }
-
-    @Override
-    public byte registerNewType(Field field) {
-        return box().registerNewType(field);
-    }
-
-    @Override
+    @Deprecated
     public IValueWriter writerForTypeId(byte typeId) {
         return box().writerForTypeId(typeId);
+    }
+
+    @Override
+    public IValueWriter legWriter(ArrowType arrowType) {
+        return box().legWriter(arrowType);
+    }
+
+    @Override
+    public IValueWriter legWriter(Keyword leg) {
+        return box().legWriter(leg);
+    }
+    @Override
+    public IValueWriter legWriter(Keyword leg, FieldType fieldType) {
+        return box().legWriter(leg, fieldType);
     }
 }

@@ -29,11 +29,34 @@
             "children" : [ ]
           },{
             "name" : "params",
-            "nullable" : true,
+            "nullable" : false,
             "type" : {
-              "name" : "binary"
+              "name" : "union",
+              "mode" : "Dense",
+              "typeIds" : [ ]
             },
-            "children" : [ ]
+            "children" : [{
+              "name" : "varbinary",
+              "nullable" : false,
+              "type" : {
+                "name" : "binary"
+              },
+              "children" : [ ]
+            },{
+              "name" : "absent",
+              "nullable" : false,
+              "type" : {
+                "name" : "AbsentType"
+              },
+              "children" : [ ],
+              "metadata" : [{
+                "value" : "absent",
+                "key" : "ARROW:extension:name"
+              },{
+                "value" : "",
+                "key" : "ARROW:extension:metadata"
+              }]
+            }]
           }]
         },{
           "name" : "put",
@@ -50,6 +73,49 @@
               "typeIds" : [ ]
             },
             "children" : [{
+              "name" : "bar",
+              "nullable" : false,
+              "type" : {
+                "name" : "struct"
+              },
+              "children" : [{
+                "name" : "xt$id",
+                "nullable" : false,
+                "type" : {
+                  "name" : "union",
+                  "mode" : "Dense",
+                  "typeIds" : [ ]
+                },
+                "children" : [{
+                  "name" : "i64",
+                  "nullable" : false,
+                  "type" : {
+                    "name" : "int",
+                    "bitWidth" : 64,
+                    "isSigned" : true
+                  },
+                  "children" : [ ]
+                }]
+              },{
+                "name" : "c",
+                "nullable" : false,
+                "type" : {
+                  "name" : "union",
+                  "mode" : "Dense",
+                  "typeIds" : [ ]
+                },
+                "children" : [{
+                  "name" : "i64",
+                  "nullable" : false,
+                  "type" : {
+                    "name" : "int",
+                    "bitWidth" : 64,
+                    "isSigned" : true
+                  },
+                  "children" : [ ]
+                }]
+              }]
+            },{
               "name" : "foo",
               "nullable" : false,
               "type" : {
@@ -140,49 +206,6 @@
                     "key" : "ARROW:extension:metadata"
                   }]
                 },{
-                  "name" : "i64",
-                  "nullable" : false,
-                  "type" : {
-                    "name" : "int",
-                    "bitWidth" : 64,
-                    "isSigned" : true
-                  },
-                  "children" : [ ]
-                }]
-              }]
-            },{
-              "name" : "bar",
-              "nullable" : false,
-              "type" : {
-                "name" : "struct"
-              },
-              "children" : [{
-                "name" : "xt$id",
-                "nullable" : false,
-                "type" : {
-                  "name" : "union",
-                  "mode" : "Dense",
-                  "typeIds" : [ ]
-                },
-                "children" : [{
-                  "name" : "i64",
-                  "nullable" : false,
-                  "type" : {
-                    "name" : "int",
-                    "bitWidth" : 64,
-                    "isSigned" : true
-                  },
-                  "children" : [ ]
-                }]
-              },{
-                "name" : "c",
-                "nullable" : false,
-                "type" : {
-                  "name" : "union",
-                  "mode" : "Dense",
-                  "typeIds" : [ ]
-                },
-                "children" : [{
                   "name" : "i64",
                   "nullable" : false,
                   "type" : {
@@ -366,9 +389,18 @@
           },{
             "name" : "params",
             "count" : 0,
-            "VALIDITY" : [ ],
-            "OFFSET" : [0],
-            "DATA" : [ ]
+            "TYPE_ID" : [ ],
+            "OFFSET" : [ ],
+            "children" : [{
+              "name" : "varbinary",
+              "count" : 0,
+              "VALIDITY" : [ ],
+              "OFFSET" : [0],
+              "DATA" : [ ]
+            },{
+              "name" : "absent",
+              "count" : 0
+            }]
           }]
         },{
           "name" : "put",
@@ -377,9 +409,36 @@
           "children" : [{
             "name" : "document",
             "count" : 3,
-            "TYPE_ID" : [0,0,1],
+            "TYPE_ID" : [1,1,0],
             "OFFSET" : [0,1,0],
             "children" : [{
+              "name" : "bar",
+              "count" : 1,
+              "VALIDITY" : [1],
+              "children" : [{
+                "name" : "xt$id",
+                "count" : 1,
+                "TYPE_ID" : [0],
+                "OFFSET" : [0],
+                "children" : [{
+                  "name" : "i64",
+                  "count" : 1,
+                  "VALIDITY" : [1],
+                  "DATA" : ["3"]
+                }]
+              },{
+                "name" : "c",
+                "count" : 1,
+                "TYPE_ID" : [0],
+                "OFFSET" : [0],
+                "children" : [{
+                  "name" : "i64",
+                  "count" : 1,
+                  "VALIDITY" : [1],
+                  "DATA" : ["3"]
+                }]
+              }]
+            },{
               "name" : "foo",
               "count" : 2,
               "VALIDITY" : [1,1],
@@ -428,33 +487,6 @@
                   "count" : 1,
                   "VALIDITY" : [1],
                   "DATA" : ["2"]
-                }]
-              }]
-            },{
-              "name" : "bar",
-              "count" : 1,
-              "VALIDITY" : [1],
-              "children" : [{
-                "name" : "xt$id",
-                "count" : 1,
-                "TYPE_ID" : [0],
-                "OFFSET" : [0],
-                "children" : [{
-                  "name" : "i64",
-                  "count" : 1,
-                  "VALIDITY" : [1],
-                  "DATA" : ["3"]
-                }]
-              },{
-                "name" : "c",
-                "count" : 1,
-                "TYPE_ID" : [0],
-                "OFFSET" : [0],
-                "children" : [{
-                  "name" : "i64",
-                  "count" : 1,
-                  "VALIDITY" : [1],
-                  "DATA" : ["3"]
                 }]
               }]
             }]

@@ -56,7 +56,7 @@
             "name" : "struct"
           },
           "children" : [{
-            "name" : "xt/id",
+            "name" : "xt$id",
             "nullable" : false,
             "type" : {
               "name" : "utf8"
@@ -144,7 +144,7 @@
           "count" : 6,
           "VALIDITY" : [1,1,1,1,1,1],
           "children" : [{
-            "name" : "xt/id",
+            "name" : "xt$id",
             "count" : 6,
             "VALIDITY" : [1,1,1,1,1,1],
             "OFFSET" : [0,3,6,9,12,15,18],

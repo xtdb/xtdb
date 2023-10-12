@@ -713,9 +713,6 @@
 (defn kw->normal-form-kw [^Keyword kw]
   (NormalForm/normalForm kw))
 
-(defn normal-form-kw->datalog-form-kw ^Keyword [^Keyword kw]
-  (NormalForm/datalogForm kw))
-
 (defn symbol->normal-form-symbol ^Symbol [^Symbol s]
   (NormalForm/normalForm s))
 
