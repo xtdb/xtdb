@@ -100,6 +100,8 @@
     (t/is (= q
              (roundtrip-q q)))))
 
+;TODO with as unify-clause, will fail due to lack of distinct binding types
+
 (t/deftest test-parse-without
   (let [q '(-> (from :foo a)
                (without :a :b :f))]

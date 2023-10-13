@@ -154,29 +154,27 @@
                    '(from :docs {:xt/id i :foo/bar n} foo/bar)))
           "query with namespaced attributes in match syntax")))
 
-#_
 (deftest test-joins
   (xt/submit-tx tu/*node* bond/tx-ops)
-
+  ;;TODO Params rewritten using with clause, make sure params are tested elsewhere
   (t/is (= #{{:film-name "Skyfall", :bond-name "Daniel Craig"}}
            (set (xt/q tu/*node*
-                      ['{:find [film-name bond-name]
-                         :in [film]
-                         :where [(match :film {:xt/id film, :film/name film-name, :film/bond bond})
-                                 (match :person {:xt/id bond, :person/name bond-name})]}
-                       :skyfall])))
+                      '(-> (unify (from :film {:xt/id film, :film/name film-name, :film/bond bond})
+                                  (from :person {:xt/id bond, :person/name bond-name})
+                                  (with {film :skyfall}))
+                           (return film-name bond-name)))))
         "one -> one")
+
 
   (t/is (= #{{:film-name "Casino Royale", :bond-name "Daniel Craig"}
              {:film-name "Quantum of Solace", :bond-name "Daniel Craig"}
              {:film-name "Skyfall", :bond-name "Daniel Craig"}
              {:film-name "Spectre", :bond-name "Daniel Craig"}}
            (set (xt/q tu/*node*
-                      ['{:find [film-name bond-name]
-                         :in [bond]
-                         :where [(match :film {:film/name film-name, :film/bond bond})
-                                 (match :person {:xt/id bond, :person/name bond-name})]}
-                       :daniel-craig])))
+                      '(-> (unify (from :film {:film/name film-name, :film/bond bond})
+                                  (from :person {:xt/id bond, :person/name bond-name})
+                                  (with {bond :daniel-craig}))
+                           (return film-name bond-name)))))
         "one -> many"))
 
 ;; https://github.com/tonsky/datascript/blob/1.1.0/test/datascript/test/query_aggregates.cljc#L14-L39

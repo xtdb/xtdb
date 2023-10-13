@@ -1,5 +1,6 @@
 (ns xtdb.xtql
   (:require [clojure.set :as set]
+            [xtdb.error :as err]
             [xtdb.logical-plan :as lp]
             [xtdb.operator :as op]
             [xtdb.util :as util]
@@ -9,7 +10,7 @@
            (xtdb.operator IRaQuerySource)
            (xtdb.operator.scan IScanEmitter)
            (xtdb.query BindingSpec Expr$Call Expr$LogicVar Expr$Obj Query$From Query$Return
-                       Query$OrderBy Query$OrderDirection Query$OrderSpec Query$Pipeline
+                       Query$OrderBy Query$OrderDirection Query$OrderSpec Query$Pipeline Query$With
                        Query$Unify Query$Where Query$Without Query$Limit Query$Offset)))
 
 (defprotocol PlanQuery
@@ -130,7 +131,7 @@
 
 (defn- plan-where [^Query$Where where]
   (for [pred (.preds where)]
-    {:pred (plan-expr pred)
+    {:ra-plan (plan-expr pred)
      :required-vars (required-vars pred)}))
 
 (extend-protocol PlanQuery
@@ -148,11 +149,16 @@
   (plan-query-tail [where plan]
     (throw (UnsupportedOperationException. "TODO")))
 
+  Query$With
+  (plan-query-tail [with plan]
+    (throw (UnsupportedOperationException. "TODO")))
+
   Query$Without
   (plan-query-tail [without {:keys [ra-plan provided-vars]}]
     (let [provided-vars (set/difference provided-vars (into #{} (map symbol) (.cols without)))]
       {:ra-plan [:project (vec provided-vars) ra-plan]
        :provided-vars provided-vars}))
+
   Query$Return
   (plan-query-tail [this {:keys [ra-plan #_provided-vars]}]
     ;;TODO Check required vars for exprs (including col refs) are in the provided vars of prev step
@@ -170,17 +176,70 @@
   Query$Where
   (plan-unify-clause [where]
     (for [pred (plan-where where)]
-      [:where pred])))
+      [:where pred]))
+
+  Query$With
+  (plan-unify-clause [this]
+    ;;TODO check for duplicate vars
+    (for [binding (.cols this)
+          :let [var (col-sym (.attr ^BindingSpec binding))
+                expr (.expr ^BindingSpec binding)
+                planned-expr (plan-expr expr)]]
+      [:with {:ra-plan [:map [{var planned-expr}]
+                        [:table [{}]]]
+              :provided-vars #{var}
+              :required-vars (required-vars expr)}])))
+
+(defn wrap-wheres [plan wheres]
+  (update plan :ra-plan wrap-select (map :ra-plan wheres)))
+
+(defn wrap-withs [plan withs]
+  (mega-join (concat [plan] withs)))
 
 (extend-protocol PlanQuery
   Query$Unify
   (plan-query [unify]
-    (let [{from-clauses :from, where-clauses :where}
+    ;;TODO not all clauses can return entire plans (e.g. where-clauses),
+    ;;they require an extra call to wrap should these still use the :ra-plan key.
+    (let [{from-clauses :from, where-clauses :where with-clauses :with}
           (-> (mapcat plan-unify-clause (.clauses unify))
               (->> (group-by first))
               (update-vals #(mapv second %)))]
-      (cond-> (mega-join from-clauses)
-        where-clauses (update :ra-plan wrap-select (map :pred where-clauses))))))
+
+
+      ;;TODO ideally plan should not start with an explicit mega-join of only from-clauses.
+      ;;other relation producing clauses such as with could be included in the base mega-join
+      ;;instead of at the next level if they have no required-vars
+      ;;
+      ;; Also may be better if this loop handles unification and inserting mega-joins where nececsary
+      ;; rather than relying on each clause "wrapper" to do that.
+
+      (loop [plan (mega-join from-clauses)
+             wheres where-clauses
+             withs with-clauses]
+
+        (if (and (empty? wheres) (empty? withs))
+
+          plan
+
+          (let [available-vars (:provided-vars plan)]
+            (letfn [(available? [clause]
+                      (set/superset? available-vars (:required-vars clause)))]
+
+              (let [{available-wheres true, unavailable-wheres false} (->> wheres (group-by available?))
+                    {available-withs true, unavailable-withs false} (->> withs (group-by available?))]
+
+                (if (and (empty? available-wheres) (empty? available-withs))
+                  (throw (err/illegal-arg :no-available-clauses
+                                          {:available-vars available-vars
+                                           :unavailable-wheres unavailable-wheres
+                                           :unavailable-withs unavailable-withs}))
+
+                  (recur (cond-> plan
+                           available-wheres (wrap-wheres available-wheres)
+                           available-withs (wrap-withs available-withs))
+                         unavailable-wheres
+                         unavailable-withs))))))))))
 
 (defn- plan-order-spec [^Query$OrderSpec spec]
   (let [expr (.expr spec)]
