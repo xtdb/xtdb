@@ -159,7 +159,7 @@
     (let [planned-projections
           (mapv
            (fn [col]
-             {(col-sym (.attr ^BindingSpec col)) (plan-expr (.expr ^binding-spec col))})
+             {(col-sym (.attr ^BindingSpec col)) (plan-expr (.expr ^BindingSpec col))})
            (.cols this))]
       {:ra-plan [:project planned-projections ra-plan]
        :provided-vars (set (map #(first (keys %)) planned-projections))})))
