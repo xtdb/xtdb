@@ -7,9 +7,8 @@
            xtdb.object_store.ObjectStore
            java.io.Closeable
            java.nio.file.Path
-           [java.util Map UUID]
+           [java.util Map]
            java.util.concurrent.CompletableFuture
-           java.util.concurrent.locks.StampedLock
            (java.util.concurrent.atomic AtomicLong)
            [org.apache.arrow.memory ArrowBuf BufferAllocator]
            (org.apache.arrow.vector VectorSchemaRoot)
@@ -154,7 +153,7 @@
   (when (and cache-path (not (util/path-exists cache-path)))
     (util/mkdirs cache-path))
   (util/with-close-on-catch [allocator (util/->child-allocator allocator "buffer-pool")]
-    (->BufferPool  allocator object-store (->buffer-cache cache-entries-size cache-bytes-size) cache-path)))
+    (->BufferPool allocator object-store (->buffer-cache cache-entries-size cache-bytes-size) cache-path)))
 
 (defmethod ig/halt-key! ::buffer-pool [_ ^BufferPool buffer-pool]
   (.close buffer-pool))
