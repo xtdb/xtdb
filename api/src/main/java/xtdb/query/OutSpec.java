@@ -1,10 +1,10 @@
 package xtdb.query;
 
-public final class BindingSpec {
+public final class OutSpec {
     public final String attr;
     public final Expr expr;
 
-    BindingSpec(String attr, Expr expr) {
+    OutSpec(String attr, Expr expr) {
         this.attr = attr;
         this.expr = expr;
     }
@@ -14,7 +14,7 @@ public final class BindingSpec {
         return String.format("{%s %s}", attr, expr);
     }
 
-    public static BindingSpec of(String attr, Expr expr) {
-        return new BindingSpec(attr, expr);
+    public static OutSpec of(String attr, Expr expr) {
+        return new OutSpec(attr, expr);
     }
 }
