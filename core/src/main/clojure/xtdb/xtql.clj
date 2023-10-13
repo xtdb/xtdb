@@ -10,7 +10,7 @@
            (xtdb.operator.scan IScanEmitter)
            (xtdb.query BindingSpec Expr$Call Expr$LogicVar Expr$Obj Query$From Query$Return
                        Query$OrderBy Query$OrderDirection Query$OrderSpec Query$Pipeline
-                       Query$Unify Query$Where Query$Without Query$Limit)))
+                       Query$Unify Query$Where Query$Without Query$Limit Query$Offset)))
 
 (defprotocol PlanQuery
   (plan-query [query]))
@@ -202,6 +202,10 @@
   Query$Limit
   (plan-query-tail [this {:keys [ra-plan provided-vars]}]
     {:ra-plan [:top {:limit (.length this)} ra-plan]
+     :provided-vars provided-vars})
+  Query$Offset
+  (plan-query-tail [this {:keys [ra-plan provided-vars]}]
+    {:ra-plan [:top {:skip (.length this)} ra-plan]
      :provided-vars provided-vars}))
 
 (defn- explain [plan]

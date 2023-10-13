@@ -3,7 +3,7 @@
   (:import (xtdb.query BindingSpec Expr Expr$Bool Expr$Call Expr$Double Expr$Exists
                        Expr$LogicVar Expr$Long Expr$Obj Expr$NotExists Expr$Subquery
                        Query Query$Aggregate Query$From Query$LeftJoin Query$Join Query$Limit
-                       Query$OrderBy Query$OrderDirection Query$OrderSpec Query$Pipeline
+                       Query$OrderBy Query$OrderDirection Query$OrderSpec Query$Pipeline Query$Offset
                       Query$Return Query$Unify Query$UnionAll Query$Where Query$With Query$Without
                        TemporalFilter TemporalFilter$AllTime TemporalFilter$At TemporalFilter$In)))
 
@@ -285,7 +285,8 @@
   Query$Aggregate (unparse [query] (list* 'aggregate (mapv unparse (.cols query))))
   Query$Unify (unparse [query] (list* 'unify (mapv unparse (.clauses query))))
   Query$UnionAll (unparse [query] (list* 'union-all (mapv unparse (.queries query))))
-  Query$Limit (unparse [this] (list 'limit (.length this))))
+  Query$Limit (unparse [this] (list 'limit (.length this)))
+  Query$Offset (unparse [this] (list 'offset (.length this))))
 
 (defmethod parse-query 'unify [[_ & clauses :as this]]
   (when (> 1 (count clauses))
@@ -342,6 +343,11 @@
   (when-not (= 2 (count this))
     (throw (err/illegal-arg :xtql/limit {:limit this :message "Limit can only take a single value"})))
   (Query/limit length))
+
+(defmethod parse-query-tail 'offset [[_ length :as this]]
+  (when-not (= 2 (count this))
+    (throw (err/illegal-arg :xtql/offset {:offset this :message "Offset can only take a single value"})))
+  (Query/offset length))
 
 (defn- parse-order-spec [order-spec this]
   (if (vector? order-spec)

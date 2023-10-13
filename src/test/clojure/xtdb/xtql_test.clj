@@ -80,15 +80,13 @@
                    '(-> (from :docs first-name)
                         (order-by [first-name {:dir :desc}])
                         (limit 1)))))
-    #_
+
     (t/is (= [{:first-name "Petr"}]
              (xt/q tu/*node*
-                   '{:find [first-name]
-                     :where [(match :docs {:xt/id e})
-                             [e :first-name first-name]]
-                     :order-by [[first-name]]
-                     :limit 1
-                     :offset 1})))))
+                   '(-> (from :docs first-name)
+                        (order-by first-name)
+                        (offset 1)
+                        (limit 1)))))))
 
 ;; https://github.com/tonsky/datascript/blob/1.1.0/test/datascript/test/query.cljc#L12-L36
 (deftest datascript-test-joins

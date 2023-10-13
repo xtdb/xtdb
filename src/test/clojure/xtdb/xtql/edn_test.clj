@@ -135,3 +135,7 @@
 (t/deftest test-parse-limit-test
   (t/is (= '(limit 10)
            (roundtrip-q-tail '(limit 10)))))
+
+(t/deftest test-parse-offset-test
+  (t/is (= '(offset 5)
+           (roundtrip-q-tail '(offset 5)))))

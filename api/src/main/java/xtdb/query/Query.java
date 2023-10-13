@@ -330,5 +330,22 @@ public interface Query {
     static Limit limit(Long length) {
         return new Limit(length);
     }
-}
 
+    final class Offset implements QueryTail {
+        public final Long length;
+
+        private Offset(Long length) {
+            this.length = length;
+        }
+
+        @Override
+        public String toString() {
+            return String.format("(%s %s)", "offset", length);
+        }
+    }
+
+    static Offset offset(Long length) {
+        return new Offset(length);
+
+    }
+}
