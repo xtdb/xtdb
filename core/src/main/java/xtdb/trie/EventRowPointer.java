@@ -5,7 +5,9 @@ import org.apache.arrow.memory.util.ArrowBufPointer;
 import xtdb.vector.IVectorReader;
 import xtdb.vector.RelationReader;
 
-public class ScanDataRowPointer implements IDataRowPointer {
+import java.util.Comparator;
+
+public class EventRowPointer {
 
     private int idx;
 
@@ -21,12 +23,10 @@ public class ScanDataRowPointer implements IDataRowPointer {
     public final IVectorReader deleteValidFromReader;
     public final IVectorReader deleteValidToReader;
 
-    public final Object rowConsumer;
-
     public static final Keyword PUT = Keyword.intern("put");
     public static final Keyword DELETE = Keyword.intern("delete");
 
-    public ScanDataRowPointer(RelationReader relReader, Object rowConsumer, byte [] path) {
+    public EventRowPointer(RelationReader relReader, byte[] path) {
         this.relReader = relReader;
 
         iidReader = relReader.readerForName("xt$iid");
@@ -41,10 +41,8 @@ public class ScanDataRowPointer implements IDataRowPointer {
         deleteValidFromReader = deleteReader.structKeyReader("xt$valid_from");
         deleteValidToReader = deleteReader.structKeyReader("xt$valid_to");
 
-        this.rowConsumer = rowConsumer;
-
         int left = 0;
-        int right = rowCount();
+        int right = relReader.rowCount();
         int mid;
         while(left < right) {
             mid = (left + right) / 2;
@@ -54,28 +52,34 @@ public class ScanDataRowPointer implements IDataRowPointer {
         this.idx = left;
     }
 
-    @Override
     public int getIndex() {
         return idx;
     }
 
-    @Override
     public int nextIndex() {
         return ++idx;
     }
 
-    @Override
     public ArrowBufPointer getIidPointer(ArrowBufPointer reuse) {
         return iidReader.getPointer(idx, reuse);
     }
 
-    @Override
     public long getSystemTime() {
         return sysFromReader.getLong(idx);
     }
 
-    @Override
-    public int rowCount() {
-        return relReader.rowCount();
+    public static Comparator<? extends EventRowPointer> comparator() {
+        var leftCmp = new ArrowBufPointer();
+        var rightCmp = new ArrowBufPointer();
+
+        return (l, r) -> {
+            int cmp = l.getIidPointer(leftCmp).compareTo(r.getIidPointer(rightCmp));
+            if (cmp != 0) return cmp;
+            return Long.compare(r.getSystemTime(), l.getSystemTime());
+        };
+    }
+
+    public boolean isValid(ArrowBufPointer reuse, byte[] path) {
+        return idx < relReader.rowCount() && HashTrie.compareToPath(getIidPointer(reuse), path) <= 0;
     }
 }

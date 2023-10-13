@@ -32,7 +32,8 @@
            (loop [valid-from valid-from]
              (when (< valid-from valid-to)
                (if-not (.hasNext itr)
-                 (.accept rc idx valid-from valid-to system-from util/end-of-time-μs)
+                 (do
+                   (.accept rc idx valid-from valid-to system-from util/end-of-time-μs))
 
                  (let [^Rectangle r (.next itr)]
                    (if (<= (.valid-to r) valid-from)

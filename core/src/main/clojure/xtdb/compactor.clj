@@ -9,15 +9,16 @@
             [xtdb.vector.reader :as vr]
             [xtdb.vector.writer :as vw])
   (:import (java.lang AutoCloseable)
-           [java.util LinkedList]
+           [java.util Comparator LinkedList PriorityQueue]
            [org.apache.arrow.memory BufferAllocator]
            [org.apache.arrow.memory.util ArrowBufPointer]
            org.apache.arrow.vector.types.pojo.Field
            org.apache.arrow.vector.VectorSchemaRoot
            xtdb.buffer_pool.IBufferPool
            xtdb.object_store.ObjectStore
-           (xtdb.trie CompactorDataRowPointer IDataRel LiveHashTrie)
-           xtdb.util.WritableByteBufferChannel))
+           (xtdb.trie EventRowPointer IDataRel LiveHashTrie)
+           xtdb.util.WritableByteBufferChannel
+           xtdb.vector.IRowCopier))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (definterface ICompactor
@@ -47,23 +48,24 @@
                     :branch (.writeBranch meta-wtr (int-array mn-arg))
 
                     :leaf (let [data-rdrs (trie/load-data-pages data-rels mn-arg)
-                                merge-q (trie/->merge-queue)]
+                                merge-q (PriorityQueue. (Comparator/comparing (util/->jfn :ev-ptr) (EventRowPointer/comparator)))]
 
                             (doseq [data-rdr data-rdrs
                                     :when data-rdr
-                                    :let [data-ptr (CompactorDataRowPointer. data-rdr (.rowCopier data-wtr data-rdr))]]
-                              (when (.isValid data-ptr is-valid-ptr path)
-                                (.add merge-q data-ptr)))
+                                    :let [ev-ptr (EventRowPointer. data-rdr (byte-array 0))
+                                          row-copier (.rowCopier data-wtr data-rdr)]]
+                              (when (.isValid ev-ptr is-valid-ptr path)
+                                (.add merge-q {:ev-ptr ev-ptr, :row-copier row-copier})))
 
                             (loop [trie (-> (doto (LiveHashTrie/builder (vr/vec->reader (.getVector data-root "xt$iid")))
                                               (.setRootPath path))
                                             (.build))]
 
-                              (if-let [^CompactorDataRowPointer data-ptr (.poll merge-q)]
-                                (let [pos (.copyRow (.rowCopier data-ptr) (.getIndex data-ptr))]
-                                  (.nextIndex data-ptr)
-                                  (when (.isValid data-ptr is-valid-ptr path)
-                                    (.add merge-q data-ptr))
+                              (if-let [{:keys [^EventRowPointer ev-ptr, ^IRowCopier row-copier] :as q-obj} (.poll merge-q)]
+                                (let [pos (.copyRow row-copier (.getIndex ev-ptr))]
+                                  (.nextIndex ev-ptr)
+                                  (when (.isValid ev-ptr is-valid-ptr path)
+                                    (.add merge-q q-obj))
                                   (recur (.add trie pos)))
 
                                 (let [pos (trie/write-live-trie meta-wtr trie (vw/rel-wtr->rdr data-wtr))]

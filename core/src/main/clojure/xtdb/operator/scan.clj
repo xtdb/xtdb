@@ -20,7 +20,7 @@
   (:import (clojure.lang IPersistentMap MapEntry)
            (java.io Closeable)
            java.nio.ByteBuffer
-           (java.util HashMap Iterator LinkedList Map)
+           (java.util Comparator HashMap Iterator LinkedList Map PriorityQueue)
            (java.util.function IntPredicate)
            (java.util.stream IntStream)
            (org.apache.arrow.memory ArrowBuf BufferAllocator)
@@ -31,10 +31,10 @@
            (xtdb.bitemporal EventResolver RowConsumer)
            xtdb.buffer_pool.IBufferPool
            xtdb.ICursor
-           (xtdb.metadata IMetadataManager IMetadataPredicate ITableMetadata)
+           (xtdb.metadata IMetadataManager ITableMetadata)
            xtdb.object_store.ObjectStore
            xtdb.operator.IRelationSelector
-           (xtdb.trie ArrowHashTrie$Leaf HashTrie LiveHashTrie$Leaf ScanDataRowPointer)
+           (xtdb.trie ArrowHashTrie$Leaf HashTrie LiveHashTrie$Leaf EventRowPointer)
            (xtdb.util TemporalBounds TemporalBounds$TemporalColumn)
            (xtdb.vector IRelationWriter IRowCopier IVectorReader IVectorWriter RelationReader)
            (xtdb.watermark ILiveTableWatermark IWatermark IWatermarkSource Watermark)))
@@ -174,37 +174,39 @@
 (defn- duplicate-ptr [^ArrowBufPointer dst, ^ArrowBufPointer src]
   (.set dst (.getBuf src) (.getOffset src) (.getLength src)))
 
-(defn pick-leaf-row! [^ScanDataRowPointer data-row-ptr
+(defn pick-leaf-row! [^EventRowPointer ev-ptr
+                      ^RowConsumer rc
                       ^TemporalBounds temporal-bounds,
                       {:keys [^EventResolver ev-resolver
                               skip-iid-ptr prev-iid-ptr current-iid-ptr]}]
-  (when-not (= skip-iid-ptr (.getIidPointer data-row-ptr current-iid-ptr))
+  (assert rc)
+  (when-not (= skip-iid-ptr (.getIidPointer ev-ptr current-iid-ptr))
     (when-not (= prev-iid-ptr current-iid-ptr)
       (.nextIid ev-resolver)
       (duplicate-ptr prev-iid-ptr current-iid-ptr))
 
-    (let [idx (.getIndex data-row-ptr)
-          leg-name (.getName (.getLeg (.opReader data-row-ptr) idx))]
+    (let [idx (.getIndex ev-ptr)
+          leg-name (.getName (.getLeg (.opReader ev-ptr) idx))]
       (if (= "evict" leg-name)
         (do
           (.nextIid ev-resolver)
           (duplicate-ptr skip-iid-ptr current-iid-ptr))
 
-        (let [system-from (.getSystemTime data-row-ptr)]
+        (let [system-from (.getSystemTime ev-ptr)]
           (when (and (<= (.lower (.systemFrom temporal-bounds)) system-from)
                      (<= system-from (.upper (.systemFrom temporal-bounds))))
             (case leg-name
               "put"
               (.resolveEvent ev-resolver idx
-                             (.getLong (.putValidFromReader data-row-ptr) idx)
-                             (.getLong (.putValidToReader data-row-ptr) idx)
+                             (.getLong (.putValidFromReader ev-ptr) idx)
+                             (.getLong (.putValidToReader ev-ptr) idx)
                              system-from
-                             (.rowConsumer data-row-ptr))
+                             rc)
 
               "delete"
               (.resolveEvent ev-resolver idx
-                             (.getLong (.deleteValidFromReader data-row-ptr) idx)
-                             (.getLong (.deleteValidToReader data-row-ptr) idx)
+                             (.getLong (.deleteValidFromReader ev-ptr) idx)
+                             (.getLong (.deleteValidToReader ev-ptr) idx)
                              system-from
                              nil))))))))
 
@@ -270,26 +272,25 @@
             is-valid-ptr (ArrowBufPointer.)]
         (with-open [out-rel (vw/->rel-writer allocator)]
           (let [^IRelationSelector iid-pred (get col-preds "xt$iid")
-                merge-q (trie/->merge-queue)]
+                merge-q (PriorityQueue. (Comparator/comparing (util/->jfn :ev-ptr) (EventRowPointer/comparator)))]
 
             (doseq [leaf leaves
                     :when leaf
                     :let [^RelationReader data-rdr (merge-task-data-reader buffer-pool vsr-cache table-name leaf)
                           ^RelationReader leaf-rdr (cond-> data-rdr
                                                      iid-pred (.select (.select iid-pred allocator data-rdr params)))
-                          data-row-ptr (ScanDataRowPointer. leaf-rdr
-                                                            (-> (copy-row-consumer out-rel leaf-rdr col-names)
-                                                                (wrap-temporal-bounds temporal-bounds))
-                                                            path)]]
-              (when (.isValid data-row-ptr is-valid-ptr path)
-                (.add merge-q data-row-ptr)))
+                          rc (-> (copy-row-consumer out-rel leaf-rdr col-names)
+                                 (wrap-temporal-bounds temporal-bounds))
+                          ev-ptr (EventRowPointer. leaf-rdr path)]]
+              (when (.isValid ev-ptr is-valid-ptr path)
+                (.add merge-q {:ev-ptr ev-ptr, :row-consumer rc})))
 
             (loop []
-              (when-let [^ScanDataRowPointer data-row-ptr (.poll merge-q)]
-                (pick-leaf-row! data-row-ptr temporal-bounds picker-state)
-                (.nextIndex data-row-ptr)
-                (when (.isValid data-row-ptr is-valid-ptr path)
-                  (.add merge-q data-row-ptr))
+              (when-let [{:keys [^EventRowPointer ev-ptr, ^RowConsumer row-consumer] :as q-obj} (.poll merge-q)]
+                (pick-leaf-row! ev-ptr row-consumer temporal-bounds picker-state)
+                (.nextIndex ev-ptr)
+                (when (.isValid ev-ptr is-valid-ptr path)
+                  (.add merge-q q-obj))
                 (recur)))
 
             (.accept c (loop [^RelationReader rel (-> (vw/rel-wtr->rdr out-rel)

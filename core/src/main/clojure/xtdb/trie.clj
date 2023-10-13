@@ -11,7 +11,7 @@
            (java.nio ByteBuffer)
            java.nio.channels.WritableByteChannel
            java.security.MessageDigest
-           (java.util ArrayList Arrays List PriorityQueue)
+           (java.util ArrayList Arrays List)
            (java.util.concurrent.atomic AtomicInteger)
            (java.util.function IntConsumer Supplier)
            (org.apache.arrow.memory ArrowBuf BufferAllocator)
@@ -21,7 +21,7 @@
            org.apache.arrow.vector.types.UnionMode
            xtdb.buffer_pool.IBufferPool
            (xtdb.object_store ObjectStore)
-           (xtdb.trie ArrowHashTrie ArrowHashTrie$Leaf HashTrie HashTrie$Node IDataRowPointer LiveHashTrie LiveHashTrie$Leaf)
+           (xtdb.trie ArrowHashTrie ArrowHashTrie$Leaf HashTrie HashTrie$Node LiveHashTrie LiveHashTrie$Leaf)
            (xtdb.util WritableByteBufferChannel)
            (xtdb.vector IVectorReader RelationReader)
            xtdb.watermark.ILiveTableWatermark))
@@ -363,6 +363,3 @@
                                (when trie-leaf
                                  (let [^IDataRel data-rel (nth data-rels ordinal)]
                                    (.loadPage data-rel trie-leaf))))))))
-
-(defn ->merge-queue ^java.util.PriorityQueue []
-  (PriorityQueue. (IDataRowPointer/comparator)))
