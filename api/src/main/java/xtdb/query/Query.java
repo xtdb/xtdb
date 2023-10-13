@@ -54,25 +54,25 @@ public interface Query {
         public final String table;
         public final TemporalFilter forValidTime;
         public final TemporalFilter forSystemTime;
-        public final List<BindingSpec> bindSpecs;
+        public final List<OutSpec> bindings;
 
-        private From(String table, TemporalFilter forValidTime, TemporalFilter forSystemTime, List<BindingSpec> bindSpecs) {
+        private From(String table, TemporalFilter forValidTime, TemporalFilter forSystemTime, List<OutSpec> bindings) {
             this.table = table;
             this.forValidTime = forValidTime;
             this.forSystemTime = forSystemTime;
-            this.bindSpecs = unmodifiableList(bindSpecs);
+            this.bindings = unmodifiableList(bindings);
         }
 
         public From forValidTime(TemporalFilter forValidTime) {
-            return new From(table, forValidTime, forSystemTime, bindSpecs);
+            return new From(table, forValidTime, forSystemTime, bindings);
         }
 
         public From forSystemTime(TemporalFilter forSystemTime) {
-            return new From(table, forValidTime, forSystemTime, bindSpecs);
+            return new From(table, forValidTime, forSystemTime, bindings);
         }
 
-        public From binding(List<BindingSpec> bindSpecs) {
-            return new From(table, forValidTime, forSystemTime, bindSpecs);
+        public From binding(List<OutSpec> bindings) {
+            return new From(table, forValidTime, forSystemTime, bindings);
         }
 
         @Override
@@ -85,7 +85,7 @@ public interface Query {
                 if (forSystemTime != null) temporalFilters.put("forSystemTime", forSystemTime);
             }
 
-            return String.format("(from %s %s)", stringifyOpts(table, temporalFilters), stringifyList(bindSpecs));
+            return String.format("(from %s %s)", stringifyOpts(table, temporalFilters), stringifyList(bindings));
         }
     }
 
@@ -110,10 +110,27 @@ public interface Query {
         return new Where(preds);
     }
 
-    final class With implements QueryTail, UnifyClause {
-        public final List<BindingSpec> cols;
+    final class With implements UnifyClause {
+        public final List<VarSpec> vars;
 
-        private With(List<BindingSpec> cols) {
+        private With(List<VarSpec> vars) {
+            this.vars = unmodifiableList(vars);
+        }
+
+        @Override
+        public String toString() {
+            return String.format("(with %s)", stringifyList(vars));
+        }
+    }
+
+    static With with(List<VarSpec> vars) {
+        return new With(vars);
+    }
+
+    final class WithCols implements QueryTail {
+        public final List<ColSpec> cols;
+
+        private WithCols(List<ColSpec> cols) {
             this.cols = unmodifiableList(cols);
         }
 
@@ -123,8 +140,8 @@ public interface Query {
         }
     }
 
-    static With with(List<BindingSpec> cols) {
-        return new With(cols);
+    static WithCols withCols(List<ColSpec> cols) {
+        return new WithCols(cols);
     }
 
     final class Without implements QueryTail {
@@ -145,9 +162,9 @@ public interface Query {
     }
 
     final class Return implements QueryTail {
-        public final List<BindingSpec> cols;
+        public final List<ColSpec> cols;
 
-        private Return(List<BindingSpec> cols) {
+        private Return(List<ColSpec> cols) {
             this.cols = unmodifiableList(cols);
         }
 
@@ -157,22 +174,22 @@ public interface Query {
         }
     }
 
-    static Return ret(List<BindingSpec> cols) {
+    static Return ret(List<ColSpec> cols) {
         return new Return(cols);
     }
 
     final class Call implements UnifyClause {
         public final String ruleName;
         public final List<Expr> args;
-        public final List<BindingSpec> bindings;
+        public final List<OutSpec> bindings;
 
-        private Call(String ruleName, List<Expr> args, List<BindingSpec> bindings) {
+        private Call(String ruleName, List<Expr> args, List<OutSpec> bindings) {
             this.ruleName = ruleName;
             this.args = unmodifiableList(args);
             this.bindings = bindings;
         }
 
-        public Call binding(List<BindingSpec> bindings) {
+        public Call binding(List<OutSpec> bindings) {
             return new Call(ruleName, args, unmodifiableList(bindings));
         }
 
@@ -188,16 +205,16 @@ public interface Query {
 
     final class Join implements UnifyClause {
         public final Query query;
-        public final List<BindingSpec> args;
-        public final List<BindingSpec> bindings;
+        public final List<ArgSpec> args;
+        public final List<OutSpec> bindings;
 
-        private Join(Query query, List<BindingSpec> args, List<BindingSpec> bindings) {
+        private Join(Query query, List<ArgSpec> args, List<OutSpec> bindings) {
             this.query = query;
             this.args = unmodifiableList(args);
             this.bindings = unmodifiableList(bindings);
         }
 
-        public Join binding(List<BindingSpec> bindings) {
+        public Join binding(List<OutSpec> bindings) {
             return new Join(query, args, bindings);
         }
 
@@ -207,22 +224,22 @@ public interface Query {
         }
     }
 
-    static Join join(Query query, List<BindingSpec> args) {
+    static Join join(Query query, List<ArgSpec> args) {
         return new Join(query, args, null);
     }
 
     final class LeftJoin implements UnifyClause {
         public final Query query;
-        public final List<BindingSpec> args;
-        public final List<BindingSpec> bindings;
+        public final List<ArgSpec> args;
+        public final List<OutSpec> bindings;
 
-        private LeftJoin(Query query, List<BindingSpec> args, List<BindingSpec> bindings) {
+        private LeftJoin(Query query, List<ArgSpec> args, List<OutSpec> bindings) {
             this.query = query;
             this.args = unmodifiableList(args);
             this.bindings = unmodifiableList(bindings);
         }
 
-        public LeftJoin binding(List<BindingSpec> bindings) {
+        public LeftJoin binding(List<OutSpec> bindings) {
             return new LeftJoin(query, args, bindings);
         }
 
@@ -232,14 +249,14 @@ public interface Query {
         }
     }
 
-    static LeftJoin leftJoin(Query query, List<BindingSpec> args) {
+    static LeftJoin leftJoin(Query query, List<ArgSpec> args) {
         return new LeftJoin(query, args, null);
     }
 
     final class Aggregate implements QueryTail {
-        public final List<BindingSpec> cols;
+        public final List<ColSpec> cols;
 
-        private Aggregate(List<BindingSpec> cols) {
+        private Aggregate(List<ColSpec> cols) {
             this.cols = unmodifiableList(cols);
         }
 
@@ -249,7 +266,7 @@ public interface Query {
         }
     }
 
-    static Aggregate aggregate(List<BindingSpec> cols) {
+    static Aggregate aggregate(List<ColSpec> cols) {
         return new Aggregate(cols);
     }
 
@@ -330,5 +347,22 @@ public interface Query {
     static Limit limit(Long length) {
         return new Limit(length);
     }
-}
 
+    final class Offset implements QueryTail {
+        public final Long length;
+
+        private Offset(Long length) {
+            this.length = length;
+        }
+
+        @Override
+        public String toString() {
+            return String.format("(%s %s)", "offset", length);
+        }
+    }
+
+    static Offset offset(Long length) {
+        return new Offset(length);
+
+    }
+}

@@ -1,10 +1,11 @@
 (ns xtdb.xtql.edn
   (:require [xtdb.error :as err])
-  (:import (xtdb.query BindingSpec Expr Expr$Bool Expr$Call Expr$Double Expr$Exists
+  (:import (xtdb.query Expr Expr$Bool Expr$Call Expr$Double Expr$Exists
+                       OutSpec ArgSpec ColSpec VarSpec
                        Expr$LogicVar Expr$Long Expr$Obj Expr$NotExists Expr$Subquery
                        Query Query$Aggregate Query$From Query$LeftJoin Query$Join Query$Limit
-                       Query$OrderBy Query$OrderDirection Query$OrderSpec Query$Pipeline
-                      Query$Return Query$Unify Query$UnionAll Query$Where Query$With Query$Without
+                       Query$OrderBy Query$OrderDirection Query$OrderSpec Query$Pipeline Query$Offset
+                      Query$Return Query$Unify Query$UnionAll Query$Where Query$With Query$WithCols Query$Without
                        TemporalFilter TemporalFilter$AllTime TemporalFilter$At TemporalFilter$In)))
 
 (defmulti parse-query
@@ -49,15 +50,15 @@
 (defmethod parse-unify-clause :default [[op]]
   (throw (err/illegal-arg :xtql/unknown-unify-clause {:op op})))
 
-(declare parse-binding-specs)
+(declare parse-arg-specs)
 
 (defn- parse-subquery-args [args expr]
   (cond
     (list? args) [(parse-query args) nil]
 
     (and (vector? args) (not (empty? args)))
-    (let [[query & bind-specs] args]
-      [(parse-query query) (not-empty (parse-binding-specs bind-specs expr))])
+    (let [[query & arg-specs] args]
+      [(parse-query query) (not-empty (parse-arg-specs arg-specs expr))])
 
     :else (throw (err/illegal-arg :xtql/malformed-subquery {:expr expr}))))
 
@@ -195,25 +196,74 @@
 
     :else (throw (err/illegal-arg :xtql/malformed-from {:from from}))))
 
-(defn- parse-binding-specs [binding-specs _query]
-  (->> binding-specs
-       (into [] (mapcat (fn [binding-spec]
+;;NOTE out-specs and arg-specs are currently indentical structurally, but one is an input binding,
+;;the other an output binding.
+;;I could see remerging these into a single binding-spec,
+;;that being said, its possible we don't want arbitrary exprs in the from of arg specs, only plain vars
+;;
+;;TODO binding-spec-errs
+(defn- parse-out-specs
+  "[{:from to-var} from-col-to-var {:col (pred)}]"
+  [specs _query]
+  (->> specs
+       (into [] (mapcat (fn [spec]
                           (cond
-                            (symbol? binding-spec) (let [attr (str binding-spec)]
-                                                     [(BindingSpec/of attr (Expr/lVar attr))])
-                            (map? binding-spec) (for [[attr expr] binding-spec]
-                                                  (do
-                                                    (when-not (keyword? attr)
-                                                      ;; TODO error
-                                                      )
-                                                    (BindingSpec/of (str (symbol attr)) (parse-expr expr))))))))))
+                            (symbol? spec) (let [attr (str spec)]
+                                             [(OutSpec/of attr (Expr/lVar attr))])
+                            (map? spec) (for [[attr expr] spec]
+                                          (do
+                                            (when-not (keyword? attr)
+                                              ;; TODO error
+                                              )
+                                            (OutSpec/of (str (symbol attr)) (parse-expr expr))))))))))
+(defn- parse-arg-specs
+  "[{:to-var (from-expr)} to-var-from-var]"
+  [specs _query]
+  (->> specs
+       (into [] (mapcat (fn [spec]
+                          (cond
+                            (symbol? spec) (let [attr (str spec)]
+                                             [(ArgSpec/of attr (Expr/lVar attr))])
+                            (map? spec) (for [[attr expr] spec]
+                                          (do
+                                            (when-not (keyword? attr)
+                                              ;; TODO error
+                                              )
+                                            (ArgSpec/of (str (symbol attr)) (parse-expr expr))))))))))
+(defn- parse-var-specs
+  "[{to-var (from-expr)}]"
+  [specs _query]
+  (->> specs
+       (into [] (mapcat (fn [spec]
+                          (if (map? spec)
+                            (for [[attr expr] spec]
+                              (do
+                                (when-not (symbol? attr)
+                                  (throw (err/illegal-arg :xtql/malformed-var-spec)))
+                                (VarSpec/of (str attr) (parse-expr expr))))
+                            (throw (err/illegal-arg :xtql/malformed-var-spec))))))))
 
-(defn parse-from [[_ table+opts & binding-specs :as this]]
+(defn- parse-col-specs
+  "[{:to-col (from-expr)} :col ...]"
+  [specs _query]
+  (->> specs
+       (into [] (mapcat (fn [spec]
+                          (cond
+                            (keyword? spec) (let [attr (str (symbol spec))]
+                                             [(ColSpec/of attr (Expr/lVar attr))])
+                            (map? spec) (for [[attr expr] spec]
+                                          (do
+                                            (when-not (keyword? attr)
+                                              ;; TODO error
+                                              )
+                                            (ColSpec/of (str (symbol attr)) (parse-expr expr))))))))))
+
+(defn parse-from [[_ table+opts & out-bindings :as this]]
   (let [{:keys [table for-valid-time for-system-time]} (parse-table+opts table+opts this)]
     (-> (Query/from table)
         (cond-> for-valid-time (.forValidTime for-valid-time)
                 for-system-time (.forSystemTime for-system-time))
-        (.binding (parse-binding-specs binding-specs this)))))
+        (.binding (parse-out-specs out-bindings this)))))
 
 (defmethod parse-query 'from [this] (parse-from this))
 (defmethod parse-unify-clause 'from [this] (parse-from this))
@@ -221,26 +271,27 @@
 (defn- parse-join-query [query join]
   (if (vector? query)
     (let [[query & args] query]
-      [(parse-query query) (parse-binding-specs args join)])
+      [(parse-query query) (parse-arg-specs args join)])
     [(parse-query query)]))
 
-(defmethod parse-unify-clause 'join [[_ query & binding-specs :as join]]
+(defmethod parse-unify-clause 'join [[_ query & out-bindings :as join]]
   (let [[parsed-query args] (parse-join-query query join)]
     (-> (Query/join parsed-query args)
-        (.binding (parse-binding-specs binding-specs join)))))
+        (.binding (parse-out-specs out-bindings join)))))
 
+(defn- unparse-binding-spec [attr expr base-type nested-type]
+  (if base-type
+    (if (and (instance? Expr$LogicVar expr)
+             (= (.lv ^Expr$LogicVar expr) attr))
+      (base-type attr)
+      {(nested-type attr) (unparse expr)})
+    {(nested-type attr) (unparse expr)}))
 
 (extend-protocol Unparse
-  BindingSpec
-  (unparse [binding-spec]
-    (let [attr (.attr binding-spec)
-          expr (.expr binding-spec)]
-      (if (and (instance? Expr$LogicVar expr)
-               (= (.lv ^Expr$LogicVar expr) attr))
-        (symbol attr)
-        ;; TODO not sure if this should always return `(keyword attr)`,
-        ;; because when its used in `unify` it's expected to be symbols?
-        {(keyword attr) (unparse expr)})))
+  OutSpec (unparse [spec] (unparse-binding-spec (.attr spec) (.expr spec) symbol keyword))
+  ArgSpec (unparse [spec] (unparse-binding-spec (.attr spec) (.expr spec) symbol keyword))
+  VarSpec (unparse [spec] (unparse-binding-spec (.attr spec) (.expr spec) false symbol))
+  ColSpec (unparse [spec] (unparse-binding-spec (.attr spec) (.expr spec) keyword keyword))
 
   Query$From
   (unparse [from]
@@ -252,7 +303,7 @@
                               for-valid-time (assoc :for-valid-time (unparse for-valid-time))
                               for-sys-time (assoc :for-system-time (unparse for-sys-time)))]
                      table)
-             (map unparse (.bindSpecs from)))))
+             (map unparse (.bindings from)))))
 
   Query$Join
   (unparse [join]
@@ -265,7 +316,7 @@
 
              (map unparse (.bindings join)))))
 
- Query$LeftJoin
+  Query$LeftJoin
   (unparse [join]
     (let [query (unparse (.query join))
           args (.args join)]
@@ -279,13 +330,15 @@
 (extend-protocol Unparse
   Query$Pipeline (unparse [query] (list* '-> (unparse (.query query)) (mapv unparse (.tails query))))
   Query$Where (unparse [query] (list* 'where (mapv unparse (.preds query))))
-  Query$With (unparse [query] (list* 'with (mapv unparse (.cols query))))
+  Query$With (unparse [query] (list* 'with (mapv unparse (.vars query))))
+  Query$WithCols (unparse [query] (list* 'with (mapv unparse (.cols query))))
   Query$Without (unparse [query] (list* 'without (map keyword (.cols query))))
   Query$Return (unparse [query] (list* 'return (mapv unparse (.cols query))))
   Query$Aggregate (unparse [query] (list* 'aggregate (mapv unparse (.cols query))))
   Query$Unify (unparse [query] (list* 'unify (mapv unparse (.clauses query))))
   Query$UnionAll (unparse [query] (list* 'union-all (mapv unparse (.queries query))))
-  Query$Limit (unparse [this] (list 'limit (.length this))))
+  Query$Limit (unparse [this] (list 'limit (.length this)))
+  Query$Offset (unparse [this] (list 'offset (.length this))))
 
 (defmethod parse-query 'unify [[_ & clauses :as this]]
   (when (> 1 (count clauses))
@@ -320,11 +373,11 @@
 
 ;TODO Align errors with json ones where appropriate.
 
-(defn parse-with [[_ & cols :as this]]
-  (Query/with (parse-binding-specs cols this)))
+(defmethod parse-query-tail 'with [[_ & cols :as this]]
+  (Query/withCols (parse-col-specs cols this)))
 
-(defmethod parse-query-tail 'with [this] (parse-with this))
-(defmethod parse-unify-clause 'with [this] (parse-with this))
+(defmethod parse-unify-clause 'with [[_ & vars :as this]]
+  (Query/with (parse-var-specs vars this)))
 
 (defmethod parse-query-tail 'without [[_ & cols :as this]]
   (when-not (every? keyword? cols)
@@ -333,15 +386,20 @@
   (Query/without (map name cols)))
 
 (defmethod parse-query-tail 'return [[_ & cols :as this]]
-  (Query/ret (parse-binding-specs cols this)))
+  (Query/ret (parse-col-specs cols this)))
 
 (defmethod parse-query-tail 'aggregate [[_ & cols :as this]]
-  (Query/aggregate (parse-binding-specs cols this)))
+  (Query/aggregate (parse-col-specs cols this)))
 
 (defmethod parse-query-tail 'limit [[_ length :as this]]
   (when-not (= 2 (count this))
     (throw (err/illegal-arg :xtql/limit {:limit this :message "Limit can only take a single value"})))
   (Query/limit length))
+
+(defmethod parse-query-tail 'offset [[_ length :as this]]
+  (when-not (= 2 (count this))
+    (throw (err/illegal-arg :xtql/offset {:offset this :message "Offset can only take a single value"})))
+  (Query/offset length))
 
 (defn- parse-order-spec [order-spec this]
   (if (vector? order-spec)

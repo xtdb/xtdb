@@ -80,15 +80,13 @@
                    '(-> (from :docs first-name)
                         (order-by [first-name {:dir :desc}])
                         (limit 1)))))
-    #_
+
     (t/is (= [{:first-name "Petr"}]
              (xt/q tu/*node*
-                   '{:find [first-name]
-                     :where [(match :docs {:xt/id e})
-                             [e :first-name first-name]]
-                     :order-by [[first-name]]
-                     :limit 1
-                     :offset 1})))))
+                   '(-> (from :docs first-name)
+                        (order-by first-name)
+                        (offset 1)
+                        (limit 1)))))))
 
 ;; https://github.com/tonsky/datascript/blob/1.1.0/test/datascript/test/query.cljc#L12-L36
 (deftest datascript-test-joins
@@ -156,33 +154,31 @@
                    '(from :docs {:xt/id i :foo/bar n} foo/bar)))
           "query with namespaced attributes in match syntax")))
 
-#_
 (deftest test-joins
   (xt/submit-tx tu/*node* bond/tx-ops)
-
+  ;;TODO Params rewritten using with clause, make sure params are tested elsewhere
   (t/is (= #{{:film-name "Skyfall", :bond-name "Daniel Craig"}}
            (set (xt/q tu/*node*
-                      ['{:find [film-name bond-name]
-                         :in [film]
-                         :where [(match :film {:xt/id film, :film/name film-name, :film/bond bond})
-                                 (match :person {:xt/id bond, :person/name bond-name})]}
-                       :skyfall])))
+                      '(-> (unify (from :film {:xt/id film, :film/name film-name, :film/bond bond})
+                                  (from :person {:xt/id bond, :person/name bond-name})
+                                  (with {film :skyfall}))
+                           (return :film-name :bond-name)))))
         "one -> one")
+
 
   (t/is (= #{{:film-name "Casino Royale", :bond-name "Daniel Craig"}
              {:film-name "Quantum of Solace", :bond-name "Daniel Craig"}
              {:film-name "Skyfall", :bond-name "Daniel Craig"}
              {:film-name "Spectre", :bond-name "Daniel Craig"}}
            (set (xt/q tu/*node*
-                      ['{:find [film-name bond-name]
-                         :in [bond]
-                         :where [(match :film {:film/name film-name, :film/bond bond})
-                                 (match :person {:xt/id bond, :person/name bond-name})]}
-                       :daniel-craig])))
+                      '(-> (unify (from :film {:film/name film-name, :film/bond bond})
+                                  (from :person {:xt/id bond, :person/name bond-name})
+                                  (with {bond :daniel-craig}))
+                           (return :film-name :bond-name)))))
         "one -> many"))
 
 ;; https://github.com/tonsky/datascript/blob/1.1.0/test/datascript/test/query_aggregates.cljc#L14-L39
-#_
+
 (t/deftest datascript-test-aggregates
   (let [_tx (xt/submit-tx tu/*node*
                           '[[:put :docs {:xt/id :cerberus, :heads 3}]
@@ -191,21 +187,17 @@
                             [:put :docs {:xt/id :chimera, :heads 1}]])]
     (t/is (= #{{:heads 1, :count-heads 3} {:heads 3, :count-heads 1}}
              (set (xt/q tu/*node*
-                        '{:find [heads (count heads)]
-                          :keys [heads count-heads]
-                          :where [(match :docs {:xt/id monster})
-                                  [monster :heads heads]]})))
+                        '(-> (from :docs {:heads heads})
+                             (aggregate :heads {:count-heads (count heads)})))))
           "head frequency")
 
     (t/is (= #{{:sum-heads 6, :min-heads 1, :max-heads 3, :count-heads 4}}
              (set (xt/q tu/*node*
-                        '{:find [(sum heads)
-                                 (min heads)
-                                 (max heads)
-                                 (count heads)]
-                          :keys [sum-heads min-heads max-heads count-heads]
-                          :where [(match :docs {:xt/id monster})
-                                  [monster :heads heads]]})))
+                        '(-> (from :docs {:heads heads})
+                             (aggregate {:sum-heads (sum heads)
+                                         :min-heads (min heads)
+                                         :max-heads (max heads)
+                                         :count-heads (count heads)})))))
           "various aggs")))
 
 #_
@@ -806,8 +798,7 @@
                       '{:find [1 "foo" xt/id]
                         :where [(match :docs [xt/id])]})))))
 
-#_
-(deftest calling-a-function-580
+(deftest testing-unify-with
   (let [_tx (xt/submit-tx tu/*node*
                           '[[:put :docs {:xt/id :ivan, :age 15}]
                             [:put :docs {:xt/id :petr, :age 22}]
@@ -817,29 +808,24 @@
                {:e1 :ivan, :e2 :petr, :e3 :slava}}
              (set
               (xt/q tu/*node*
-                    '{:find [e1 e2 e3]
-                      :where [
-                              (match :docs {:xt/id e1})
-                              (match :docs {:xt/id e2})
-                              (match :docs {:xt/id e3})
-                              [e1 :age a1]
-                              [e2 :age a2]
-                              [e3 :age a3]
-                              [(+ a1 a2) a12]
-                              [(= a12 a3)]]}))))
+                    '(-> (unify
+                          (from :docs {:xt/id e1 :age a1})
+                          (from :docs {:xt/id e2 :age a2})
+                          (from :docs {:xt/id e3 :age a3})
+                          (with {a4 (+ a1 a2)})
+                          (where (= a4 a3)))
+                         (return :e1 :e2 :e3))))))
 
     (t/is (= #{{:e1 :petr, :e2 :ivan, :e3 :slava}
                {:e1 :ivan, :e2 :petr, :e3 :slava}}
              (set
               (xt/q tu/*node*
-                    '{:find [e1 e2 e3]
-                      :where [(match :docs {:xt/id e1})
-                              (match :docs {:xt/id e2})
-                              (match :docs {:xt/id e3})
-                              [e1 :age a1]
-                              [e2 :age a2]
-                              [e3 :age a3]
-                              [(+ a1 a2) a3]]}))))))
+                    '(-> (unify
+                          (from :docs {:xt/id e1 :age a1})
+                          (from :docs {:xt/id e2 :age a2})
+                          (from :docs {:xt/id e3 :age a3})
+                          (with {a3 (+ a1 a2)}))
+                         (return :e1 :e2 :e3))))))))
 
 #_
 (deftest test-namespaced-columns-within-match
