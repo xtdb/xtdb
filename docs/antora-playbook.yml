@@ -1,7 +1,7 @@
 site:
   title: XTDB Docs
   start_page: main::index.adoc
-  url: https://docs.xtdb.com
+  url: https://v1-docs.xtdb.com
   # homeUrl: &home_url /xyz/5.2/index.html
   keys:
     main_site_url: 'https://xtdb.com/'

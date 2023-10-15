@@ -137,13 +137,13 @@ With XTDB, transaction consensus is centralized.
 The direct consequence of centralized writes is that they are fast.
 If there is only one executive in the boardroom, consensus is easily reached.
 Where a blockchain always requires a lot of network traffic to complete a distributed write, XTDB has
-https://docs.xtdb.com/clients/clojure/#_submit_tx[asynchronous],
-https://docs.xtdb.com/language-reference/datalog-transactions/[data-driven]
+https://v1-docs.xtdb.com/clients/clojure/#_submit_tx[asynchronous],
+https://v1-docs.xtdb.com/language-reference/datalog-transactions/[data-driven]
 transactions on a central transaction log.
 
 The second property is one of _Form_: the shape of the data changes.
 Because XTDB stores arbitrary facts as
-https://docs.xtdb.com/concepts/strength-of-the-record/[records],
+https://v1-docs.xtdb.com/concepts/strength-of-the-record/[records],
 it is a ledger of _truth_.
 In turn, these records form a graph of complex relationships and traversing these relationships is possible in both SQL and Datalog.
 

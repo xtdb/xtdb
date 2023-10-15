@@ -9,7 +9,7 @@ import java.util.stream.Collectors;
 /**
  * Class to configure an XTDB node.
  *
- * See https://docs.xtdb.com/administration/configuring/ for examples.
+ * See https://v1-docs.xtdb.com/administration/configuring/ for examples.
  */
 @SuppressWarnings("unused")
 public final class NodeConfiguration {

@@ -289,7 +289,7 @@
 
                                Some effects may require new SST files to be written by RocksDB, so may not have an immediate impact.
 
-                               If this option is enabled, a block cache size of at least 256MB is recommended. See https://docs.xtdb.com/storage/rocksdb/#blocks-cache for instructions on
+                               If this option is enabled, a block cache size of at least 256MB is recommended. See https://v1-docs.xtdb.com/storage/rocksdb/#blocks-cache for instructions on
                                configuring the block cache."
                                :default false
                                :spec ::sys/boolean}}}

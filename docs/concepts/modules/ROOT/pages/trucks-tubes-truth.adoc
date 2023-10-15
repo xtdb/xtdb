@@ -148,7 +148,7 @@ ____
 Every company today knows better than to throw all its data on the floor to be swept up by the night janitor. But _some_ data is going in the garbage and it's not always obvious which data is worth keeping. Each year, it is cheaper and cheaper to record the undertakings of your business... but it still isn't free.
 
 Separation of Storage and Compute (SoSaC) is the natural progression for commodity database systems in the current https://en.wikipedia.org/wiki/Zettabyte_Era[Zettabyte Era,title="Sometimes synonymous with unbounded data capacity."].
-footnote:sosac[XTDB Bibliography: https://docs.xtdb.com/resources/bibliography/#storagevscompute[Storage vs. Compute]]
+footnote:sosac[XTDB Bibliography: https://v1-docs.xtdb.com/resources/bibliography/#storagevscompute[Storage vs. Compute]]
 SoSaC will bring databases in line with the infinite storage fantasies of 80s kids, whose imaginations were tainted by comic books paired with the first PCs. It might be the closest we ever get to
 https://www.metroid-database.com/old_site/manga/captain_n_comics/ch_0006/scaled/sc_cn5-17.jpg[Samus Aran's Space Locker,title="N.B. The Space Locker is not Metroid canon."]. footnote:samus[https://metroid.fandom.com/wiki/The_Locker[Captain N: The Locker] (https://www.metroid-database.com/old_site/manga/?vid=4&cid=26#thumbs[scan])]
 
@@ -341,7 +341,7 @@ footnote:jensensemantics[Jensen, https://homes.cs.aau.dk/~csj/Thesis/pdf/partI.p
 What is interesting about this problem is that we can actually exploit the fact that _there is only now_ to resolve it. In reality, the past is irreversible and the future doesn't exist. In reality, the system follows these same rules; the system only knows facts in the past, since we cannot assert facts (which, by definition, cannot change) about a future which hasn't happened yet.
 
 Because our model timeline does not exist anywhere but our imaginations, the system only has its accumulated knowledge since its epoch. To move around within this knowledge, we only need to flatten it by projecting time into space. In theory, this is easy to do precisely because these timelines do not really exist.
-(This is actually https://docs.xtdb.com/resources/bibliography/["easier said than done",title="XTDB Bibliography"], which is another good reason to use a trusted commodity system instead of building a temporal database in your garage.)
+(This is actually https://v1-docs.xtdb.com/resources/bibliography/["easier said than done",title="XTDB Bibliography"], which is another good reason to use a trusted commodity system instead of building a temporal database in your garage.)
 If the system has been told "this event is in the future," it only needs to record that additional fact, since only the model is in the future. The fact that there are two timelines is inconsequential -- time simply becomes a new kind of data. Returning to physical imagery, we can imagine events on both timelines recorded in a single 3-dimensional space where "time" is a special kind of physical property.
 
 The solution, as is so often the case, is to consume more disk space -- but unbounded disk usage is scary to many developers. The safety provided by SoSaC is essential to make it tenable.

@@ -3,7 +3,7 @@
 This document explains how to query XTDB over HTTP.
 To configure your HTTP module, see the xref:{page-component-version}@extensions::http.adoc[HTTP module documentation].
 
-There is also an link:https://docs.xtdb.com/clients/http/openapi/{xtdb_version}[OpenAPI Reference] describing the HTTP endpoint.
+There is also an link:https://v1-docs.xtdb.com/clients/http/openapi/{xtdb_version}[OpenAPI Reference] describing the HTTP endpoint.
 
 [#start-remote-client]
 == Using a Remote API Client
@@ -30,7 +30,7 @@ include::example$test/xtdb/docs/examples_test.clj[tags=start-http-client]
 == Using the REST API
 
 All of the REST endpoints return `application/edn`, `application/json` and https://github.com/cognitect/transit-clj[`application/transit+json`].
-Individual endpoints may return additional types - see their docs below, or see the link:https://docs.xtdb.com/clients/http/openapi/{xtdb_version}[OpenAPI Reference].
+Individual endpoints may return additional types - see their docs below, or see the link:https://v1-docs.xtdb.com/clients/http/openapi/{xtdb_version}[OpenAPI Reference].
 
 [NOTE]
 All endpoints with query-parameters accept them in both a kebab-case and camel cased format, (ie: if `valid-time` is taken, `validTime` will also be taken)

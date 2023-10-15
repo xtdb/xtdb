@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 S3_BUCKET=xtdb-website-docs
-DOMAIN=docs.xtdb.com
+DOMAIN=v1-docs.xtdb.com
 DEPLOY_PATH=build/site
 
 set -x
