@@ -100,7 +100,7 @@
 
 (t/deftest ^:s3 multipart-put-test
   (with-open [os (object-store (random-uuid))]
-    (let [multipart-upload ^IMultipartUpload @(.startMultipart os "test-multi-put")
+    (let [multipart-upload ^IMultipartUpload @(.startMultipart ^ObjectStore os "test-multi-put")
           part-size (* 5 1024 1024)
           file-part-1 (generate-random-byte-buffer part-size)
           file-part-2 (generate-random-byte-buffer part-size)]
@@ -121,6 +121,6 @@
       (t/testing "Multipart upload works correctly - file present and contents correct"
         (t/is (= ["test-multi-put"] (.listObjects ^ObjectStore os)))
 
-        (let [uploaded-buffer @(.getObject os "test-multi-put")]
+        (let [^ByteBuffer uploaded-buffer @(.getObject ^ObjectStore os "test-multi-put")]
           (t/testing "capacity should be equal to total of 2 parts"
             (t/is (= (* 2 part-size) (.capacity uploaded-buffer)))))))))
