@@ -1,0 +1,59 @@
+= Predicates
+
+Clojure users: note that XTDB predicates all use https://en.wikipedia.org/wiki/Three-valued_logic[three-valued logic^], as per the SQL spec.
+
+The standard comparators are available:
+
+[cols='3,3,8']
+|===
+| Datalog | SQL |
+
+| `(< exprs ...)` | `expr1 < expr2` | less than
+| `(<= exprs ...)` | `expr1 <= expr2` | less than or equal to
+| `(> exprs ...)` | `expr1 > expr2` | greater than
+| `(>= exprs ...)` | `expr1 >= expr2` | greater than or equal to
+| `(= exprs ...)` | `expr1 = expr2` | equal to
+| `(<> exprs ...)` | `expr1 <> expr2` | not equal to
+| | `expr BETWEEN expr1 AND expr2` | shorthand for `expr1 <= expr <= expr2`
+|===
+
+* These apply to any data types that are naturally comparable: numbers, strings, date-times, durations, etc.
+* If any input expression is null, the result will also be null.
+* The Datalog variants are variadic - they can accept any amount of arguments.
+
+  e.g. `(<= a b c d)` is short-hand for `(and (<= a b) (<= b c) (<= c d))`
+  
+== Greatest / Least
+
+These aren't strictly predicates - they return the greatest/least value of their arguments respectively:
+
+[cols='3,3,8']
+|===
+| Datalog | SQL |
+
+| `(greatest expr exprs*)` | `GREATEST(expr, ...)`
+| returns the greatest value of the provided arguments, by the usual comparison operators
+| `(least expr exprs*)` | `LEAST(expr, ...)`
+| returns the least value of the provided arguments, by the usual comparison operators
+|===
+
+* If any provided argument is null, both of these functions will return null.
+
+== Boolean functions
+
+[cols="3,3,8"]
+|===
+| Datalog | SQL |
+
+| `(and exprs*)` | `expr1 AND expr2` | returns `false` if any are false, otherwise `null` if any are null, otherwise `true`
+| `(or exprs*)` | `expr1 OR expr2` | returns `true` if any are true, otherwise `null` if any are null, otherwise `false`
+| `(not expr)` | `NOT expr` | returns `true` if `expr` is false, `false` if `expr` is true, otherwise `null`
+| `(true? expr)` | `expr IS TRUE` | returns `true` if `expr` is true, `false` otherwise
+| | `expr IS NOT TRUE` | returns `false` if `expr` is true, `true` otherwise
+| `(false? expr)` | `expr IS FALSE` | returns `true` if `expr` is false, `true` otherwise
+| | `expr IS NOT FALSE` | returns `false` if `expr` is false, `true` otherwise
+| `(nil? expr)` | `expr IS NULL` | returns `true` if `expr` is null, `false` otherwise
+| | `expr IS NOT NULL` | returns `false` if `expr` is null, `true` otherwise
+|===
+
+* The Datalog variants are variadic - they can accept any amount of arguments.

@@ -1,0 +1,31 @@
+- section: Getting started
+  pages:
+    - slug: installation
+      label: Installation
+    - slug: data-types
+      label: Data Types
+- section: Datalog
+  pages:
+    - slug: datalog/txs
+      label: Transactions
+    - slug: datalog/queries
+      label: Queries
+- section: SQL
+  pages:
+    - slug: sql/txs
+      label: Transactions
+    - slug: sql/queries
+      label: Queries
+- section: Standard library
+  slug: stdlib
+  pages:
+    - slug: stdlib/predicates
+      label: Predicates
+    - slug: stdlib/numeric
+      label: Numeric functions
+    - slug: stdlib/string
+      label: String functions
+    - slug: stdlib/temporal
+      label: Temporal functions
+    - slug: stdlib/aggregates
+      label: Aggregate functions

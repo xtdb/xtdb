@@ -1,0 +1,12 @@
+---
+import Icon from "/shared/src/components/icon.astro";
+const {title, href, iconName, desc} = Astro.props
+---
+
+<div class="relative mr-[-1px] mb-[-1px] p-4 border border-dark-grey dark:border-light-grey border-t-0 border-l-0 leading-6">
+    <a class="font-bold no-underline hover:text-juxt-orange" href={href}>
+      {iconName &&( <Icon class="mb-2 w-12 h-12" name={iconName} /> )}
+      <h4 class="mb-0 hover:text-juxt-orange">{title}</h4>
+    </a>
+    {desc && ( <p class="text-base">{desc}</p> )}
+</div>

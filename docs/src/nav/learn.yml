@@ -1,0 +1,58 @@
+- section: Introduction
+  pages:
+    - slug: getting-started
+      label: Getting Started
+    - slug: what-is-xtdb
+      label: What is XTDB?
+    - slug: key-concepts
+      label: Key concepts
+#    - slug: data-model-and-querying
+#      label: Data model and querying
+#    - slug: plan-your-application
+#      label: Plan your application
+#    - slug: datalog-for-sql-users
+#      label: Datalog for SQL users
+#- section: Quick start
+#  pages:
+#    - slug: client-app
+#      label: Client Application
+#    - slug: connecting-via-openapi
+#      label: Connecting via OpenAPI
+#- section: Understanding XTDB
+#  pages:
+#    - slug: bitemporality
+#      label: Bitemporality
+#    - slug: dynamic-data
+#      label: Dynamic Data
+#    - slug: datalog
+#      label: Datalog
+#    - slug: apache-arrow
+#      label: Apache Arrow
+#- section: Tutorials
+#  pages:
+#    - slug: learn-datalog-today
+#      label: Learn Datalog Today
+#    - slug: xtdb-over-http
+#      label: XTDB over HTTP
+#- section: Cookbook
+#  pages:
+#    - slug: best-practices
+#      label: Best practices
+#    - slug: user-bitemporality
+#      label: Using bitemporality
+#    - slug: user-defined-functions
+#      label: User-defined functions
+#- section: Resources
+#  pages:
+#    - slug: site
+#      label: Site
+#    - slug: biff
+#      label: Biff
+#    - slug: performance
+#      label: Performance
+#    - slug: bibliography
+#      label: Bibliography
+#    - slug: training
+#      label: Training
+#    - slug: juxt
+#      label: JUXT

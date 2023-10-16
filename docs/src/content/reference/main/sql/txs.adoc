@@ -1,0 +1,112 @@
+= SQL Transactions
+
+SQL transactions are submitted through `xtdb.api/submit-tx`.
+
+* `(xt/submit-tx <node> <tx-ops> <opts>?)`: returns the transaction key of the submitted transaction.
+** `tx-ops`: vector of link:#tx-ops[transaction operations].
+** `opts` (map):
+*** `:default-all-valid-time?` (boolean, default false): whether to default to all valid time if not explicitly specified in the query.
+* `(xt/submit-tx& <node> <tx-ops> <opts>?)`: returns a `CompletableFuture` of the transaction key.
+
+[#tx-ops]
+== Transaction operations
+
+SQL transaction operations are of the form `[:sql ["<sql query>" <params>*]]`.
+
+e.g.
+
+[source,clojure]
+----
+(require '[xtdb.api :as xt])
+
+(xt/submit-tx node [[:sql "INSERT INTO users (xt$id, name) VALUES ('jms', 'James')"]
+
+                    ;; or as parameters
+                    [:sql ["INSERT INTO users (xt$id, name) VALUES (?, ?)" "jms" "James"]]
+
+                    ;; batch mode - pass multiple vectors of parameters
+                    [:sql ["INSERT INTO users (xt$id, name) VALUES (?, ?)"
+                           ["jdt", "Jeremy"]
+                           ["mat", "Matt"]]]])
+----
+
+[NOTE]
+====
+There is a table and column name mapping between SQL and Datalog: documents inserted with Datalog have their hyphens translated to underscores, and their namespace segments converted to `$` symbols, as hyphens, periods and slashes are not valid symbols in SQL identifiers.
+
+For example, `:foo.bar/baz-quux` in Datalog is referenced in SQL as `foo$bar$baz_quux`.
+
+The built-in XTDB columns `:xt/id`, `:xt/valid-from`, `:xt/valid-to` etc are referenced in SQL as `xt$id`, `xt$valid_from` and `xt$valid_to` respectively.
+
+This mapping is reversed when querying SQL documents from Datalog.
+====
+
+=== `INSERT`
+
+Inserts documents into a table.
+
+[source,sql]
+----
+INSERT INTO <table> (<column_name> [ , ... ]) <documents>
+
+documents :: VALUES (<value> [ , ... ]) [ , ... ]
+           | <select_query>
+----
+
+* Documents must contain an `xt$id` column.
+* By default, the document will be inserted for valid-time between now and end-of-time.
+  This can be overridden by including `xt$valid_from` and/or `xt$valid_to` columns in the document.
+* If the document already exists, 'insert' currently behaves like an upsert - it will overwrite the existing document for the valid-time range specified (or now -> end-of-time if not provided).
+
+
+=== `UPDATE`
+
+Updates documents in a table, optionally for a period of valid-time.
+
+[source,sql]
+----
+UPDATE <table>
+  [ <for_valid_time> ]
+  SET <column> = <value> [ , ... ]
+  [ WHERE <predicate> ]
+
+for_valid_time :: FOR PORTION OF VALID_TIME FROM <date_time> TO <date_time>
+                | FOR ALL VALID_TIME
+----
+
+* If `for_valid_time` is not provided, the effective valid-time range of the update depends on the `:default-all-valid-time?` transaction argument.
+  If it is true, the update will be effective for all valid time (including in the past); otherwise it will be effective from now to the end of time.
+  (SQL:2011 specifies that updates without this clause should be effective for all valid time; the flag is an XTDB addition.)
+* The `xt$id` column cannot be updated - instead, users should delete this document and re-insert a new one.
+* The valid-time columns cannot be updated outside of the `for_valid_time` clause (i.e. not in the `SET` clause).
+
+
+=== `DELETE`
+
+Deletes documents from a table, optionally for a period of valid-time.
+
+[source,sql]
+----
+DELETE FROM <table>
+  [ <for_valid_time> ]
+  [ WHERE <predicate> ]
+
+for_valid_time :: FOR PORTION OF VALID_TIME FROM <date_time> TO <date_time>
+                | FOR ALL VALID_TIME
+----
+
+* If `for_valid_time` is not provided, the effective valid-time range of the delete depends on the `:default-all-valid-time?` transaction argument.
+  If it is true, the delete will be effective for all valid time (including in the past); otherwise it will be effective from now to the end of time.
+  (SQL:2011 specifies that deletes without this clause should be effective for all valid time; the flag is an XTDB addition.)
+
+=== `ERASE`
+
+Irrevocably erases documents from a table, for all valid-time, for all system-time.
+
+While XTDB is immutable, in some cases it is legally necessary to irretrievably delete data (e.g. for a GDPR request).
+This operation removes data such that even queries as of a previous system-time no longer return the erased data.
+
+[source,sql]
+----
+ERASE FROM <table> [ WHERE <predicate> ]
+----

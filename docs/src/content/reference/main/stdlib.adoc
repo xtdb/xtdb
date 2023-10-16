@@ -1,0 +1,118 @@
+= Standard Library
+
+XTDB provides a rich standard library of predicates and functions, for use in both Datalog and SQL.
+
+The following control structures are available in XTDB:
+
+== If
+
+[source,clojure]
+----
+(if <predicate>
+  <then-expr>
+  <else-expr>)
+----
+
+* If the predicate evaluates to `true`, returns the value of `then-expr`, else returns the value of `else-expr`.
+* The predicate must return a boolean value. To turn any value into a boolean use the `boolean` function, which returns `false` if its argument is false, null or absent; otherwise it returns `true`.
+* Datalog only
+
+== Case / Cond
+
+`case` tests the result of the `test-expr` against each of the `value-expr`s until a match is found - it then returns the value of the corresponding `result-expr`.
+
+[source,clojure]
+----
+(case <test-expr>
+  <value-expr> <result-expr>
+  ...
+
+  <default-expr>?)
+----
+
+* If no match is found, and a `default-expr` is present, it will return the value of that expression.
+
+`cond` checks the value of each `predicate` expression in turn, until one is `true` - it then returns the value of the corresponding `result-expr`
+
+[source,clojure]
+----
+(cond
+  <predicate> <result-expr>
+  ...
+  <default-expr>?)
+----
+
+* If none of the predicates return true, and a `default-expr` is present, it will return the value of that expression.
+* Clojure users: note that there's no `:else` required in the default expression.
+
+In SQL, both use cases are covered by the `CASE` keyword:
+
+[source,sql]
+----
+CASE <test-expr>
+     WHEN <value-expr> THEN <result-expr>
+     [ WHEN ... ]
+     [ ELSE <default-expr> ]
+  END
+----
+
+[source,sql]
+----
+CASE WHEN <predicate> THEN <result-expr>
+     [ WHEN ... ]
+     [ ELSE <default-expr> ]
+  END
+----
+
+== Let
+
+Returns the value of `body-expr`, with `symbol` bound to the result of `binding-expr`.
+
+[source,clojure]
+----
+(let [<symbol> <binding-expr>]
+  <body-expr>)
+----
+
+* Only one symbol/binding pair is permitted.
+* Datalog only
+
+== If Some
+
+If `binding-expr` returns a non-null value, returns the result of `then-expr` with `symbol` bound to the result of the binding expression.
+Otherwise, returns the value of `else-expr`.
+
+[source,clojure]
+----
+(if-some [<symbol> <binding-expr>]
+  <then-expr>
+  <else-expr>)
+----
+
+* Datalog only.
+
+== Coalesce / Null If
+
+'Coalesce' returns the first non-null value of its arguments:
+
+[source,clojure]
+----
+(coalesce <expr>*)
+----
+
+[source,sql]
+----
+COALESCE(<expr>, ...)
+----
+
+'Null if' returns null if `expr1` equals `expr2`; otherwise it returns the value of `expr1`.
+
+[source,clojure]
+----
+(null-if <expr1> <expr2>)
+----
+
+[source,sql]
+----
+NULLIF(<expr1>, <expr2>)
+----

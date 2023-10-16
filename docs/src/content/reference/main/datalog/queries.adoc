@@ -1,0 +1,381 @@
+= Datalog Queries
+
+Datalog queries are submitted through `xtdb.api/q`:
+
+* `(xt/q <node> [<query> <args>*] <opts>?)` returns the query results as a vector of maps.
+* `(xt/q& <node> [<query> <args>*] <opts>?)`: returns a `CompletableFuture` of the query results.
+
+A query is a map optionally containing the following keys:
+
+[cols="3,8"]
+|===
+|Key|Purpose
+
+| link:#find[`:find`,role=no-underline] | Specifies values to be returned.
+| link:#where[`:where`,role=no-underline] | Body of the query - where to get data from, filters, joins.
+| link:#params[`:in`,role=no-underline] | Input parameters to the query.
+| link:#pagination[`:order-by`,<br />`:limit`,<br />`:offset`,role=no-underline] | Pagination
+|===
+
+The query options are as follows:
+
+[cols="3,8"]
+|===
+|Key|Purpose
+
+| link:#basis[`:basis`,role=no-underline] | Basis - which transactions are visible to the query.
+| link:#basis[`:basis-timeout`,role=no-underline] | Basis - how long to wait for the provided basis to be available.
+|===
+
+== `:find`
+
+The `:find` clause specifies the values to be returned.
+Values can either be a simple link:#unification[logic-var], an link:#expressions[expression] to be evaluated, or an aggregation.
+
+[source,clojure]
+----
+{:find [<find-expr>*]}
+
+;; <find-expr> :: <logic-var> | <expr> | (<agg-fn> <agg-expr>)
+----
+
+=== Aggregations
+
+Aggregations are specified as part of the `:find` clause.
+
+Example:
+
+[source,clojure]
+----
+{:find [uid (sum order-value) (count order-value)]
+ :keys [uid total-value order-count]
+ :where [($ :orders {:user-id uid, :order-value order-value})]}
+----
+
+Notes:
+
+* Aggregates cannot be nested within another - e.g. `(sum (count x))` is disallowed.
+* Results are implicitly grouped by all logic variables referred to outside of aggregations (even if the same variables are also referred to within aggregations).
+* The available aggregate functions are documented link:../stdlib/aggregates[here]
+
+=== Renaming columns: `:keys`
+
+To explicitly name the columns in the output, specify `:keys`: 
+
+[source,clojure]
+----
+{:find [a b (+ a b)]
+ :keys [a b sum]
+ ...}
+----
+
+If `:keys` is not provided, column names will default to the name of the logic-var; or, for expressions and aggregations, `_columnX` (where `X` is the index of the column in the `:find` clause).
+
+== `:where`
+
+The `:where` key is a vector of clauses that define where to fetch data from, and what filters should be applied.
+
+[#unification]
+=== Logic variables / Unification
+
+Queries in XTDB make heavy use of 'logic variables' ('logic-vars') - variables which are bound to values when the query is executed. 
+
+e.g. in the following query, `cid` and `cname` are logic-vars that are bound to the values within the user document, and then returned through the `:find`.
+
+[source,clojure]
+----
+{:find [cid cname]
+ :where [($ :customers {:xt/id cid, :name cname})]}
+----
+
+If the same logic-var is used multiple times within a single query, they are 'unified' - XTDB will include implicit equality constraints to ensure that they have the same value for each row in the query results.
+
+e.g. in the following query, because we re-use the `cid` logic-var, the customers and orders are implicitly joined where the customer document's `:xt/id` is equal to the order's `:customer-id`.
+
+[source,clojure]
+----
+{:find [cid c-name oid order-total]
+ :where [($ :customers {:xt/id cid, :name c-name})
+         ($ :orders {:xt/id oid, :customer-id cid, :total order-total})]}
+----
+
+Unification applies throughout the `:where` clause, and the `:in` parameters - see each individual clause for details.
+
+=== Document match: `$`
+
+The document match clause fetches data from the given table:
+
+`($ <table> <match-specs> <opts>?)`
+
+The `<match-spec>` defines which attributes to fetch from the documents, what logical variables to bind them to, and any simple filters to apply.
+
+----
+<match-specs> :: [<match-spec>*] | {<attr> <match-value>, ...}
+<match-spec> :: {<attr> <match-value>, ...} | <logic-var>
+<match-value> :: <logic-var> | <literal>
+----
+
+Examples:
+
+* `($ :users [{:xt/id uid} first-name last-name])`: bind the `uid` logic-var to the document's `:xt/id`, `first-name` to the document's `:first-name`, `last-name` to `:last-name`.
+* `($ :users {:xt/id uid, :first-name first-name, :last-name last-name})`: previous example, fully expanded. 
+  Because this now only has one map, we don't need the surrounding vector.
+* `($ :orders [{:xt/id oid, :status :closed} order-value])`: bind `oid` to `:xt/id` and `order-value` to `:order-value` for the document where the `:status` is `:closed` (although consider using a link:#parameters[parameter] if you frequently run the same query for different order statuses.)
+
+Special attributes:
+
+* `:xt/*`: binds the logic-var to the whole document.
+* `:xt/valid-from`, `:xt/valid-to`: binds the logic-var to the timestamp at which the document became valid/stopped being valid.
+* `:xt/valid-time`: binds the logic-var to a period value representing the document's validity, for use in period predicates (e.g. `overlaps?`).
+* `:xt/system-from`, `:xt/system-to`: binds the logic-var to the timestamp at which the document was asserted/retracted.
+* `:xt/system-time`: binds the logic-var to a period value representing the document's visibility, for use in period predicates.
+
+Options map:
+
+* `:for-valid-time`: sets the valid-time range of the fetch.
+  Defaults to as-of the link:#basis[`current-time`] of the query if `:default-all-valid-time?` is false; all-time if it's true.
+  * `[:at <timestamp>]`: returns data valid at the given timestamp.
+  * `[:in <from-timestamp> <to-timestamp>]`: returns data valid at any point in the given range (from inclusive, to exclusive).
+  * `[:between <from-timestamp> <to-timestamp>]`: returns data valid at any point between the two timestamps (both inclusive).
+  * `:all-time`: returns documents valid at any time.
+* `:for-system-time`: sets the system-time range of the fetch. 
+  Defaults to as-of the link:#basis[basis] of the query.
+  Same syntax as `:for-valid-time`.
+
+Notes: 
+
+* Any logic-vars that are used multiple times within match clauses, or between match clauses and other `:where` clauses, will be link:#unification[unified].
+* You can fetch from the same table multiple times within the same query - for example, at multiple points in time, or for a self-join.
+
+=== Predicates
+
+Predicates filter the query results.
+They can be any link:#expressions[expression] which returns a boolean value.
+
+They take the form `[<expr>]`:
+
+[source,clojure]
+----
+{:where [($ :users [age])
+         [(> age 40)]]}
+----
+
+=== Functions
+
+Functions bind the result of their link:#expressions[expression] to a logic-var, which can then be referred to elsewhere in the query.
+
+They take the form `[<expr> <result-binding>]`:
+
+[source,clojure]
+----
+{:find [product-name net-price gross-price]
+ :where [($ :products [product-name net-price tax-rate])
+         [(* net-price (+ 1 tax-rate)) gross-price]]}
+----
+
+If the logic-var is re-used elsewhere in the `:where` clause, it is link:#unification[unified]:
+
+[source,clojure]
+----
+{:find [u1 u2]
+ :where [($ :users {:xt/id u1, :age a1})
+         ($ :users {:xt/id u2, :age a2})
+
+         ;; users where one user is two years older than the other 
+         [(+ a1 2) a2]
+         
+         ;; effectively equivalent to this predicate
+         [(= (+ a1 2) a2)]]}
+----
+
+[#sub-queries]
+=== Sub-queries: `q`
+
+You can nest a sub-query in a `:where` clause to use its results in the outer query:
+
+[source,clojure]
+----
+;; find me the supplier(s) offering this part for the lowest price
+
+{:find [supplier-name part-price]
+ :in [part-id]
+ :where [($ :suppliers [{:xt/id supplier-id} supplier-name])
+         ($ :supplier-prices [supplier-id part-id part-price])
+
+         (q {:find [(min part-price)]
+             :keys [min-part-price]
+             :in [part-id]
+             :where [($ :supplier-prices [part-id part-price])]})]}
+----
+
+Notes:
+
+* Any logic-vars returned through the sub-query's `:find` clause (or, as renamed by the `:keys` clause) are link:#unification[unified] with the outer query; other variables within the sub-query are not unified, and can be considered 'encapsulated' from the outer query.
+* Parameters can be passed from the outer-query to the sub-query using the sub-query's `:in` clause.
+* The results of the sub-query are 'inner joined' with the outer query - if the sub-query returns multiple rows for any given outer query row, the outer row will be duplicated, and there will be multiple rows in the overall output.
+
+[#left-joins]
+=== Left-joins: `left-join`
+
+Left joins are sub-queries that preserve rows in the outer query even if they don't match any rows in the inner query.
+
+Examples:
+
+[source,clojure]
+----
+;; example data
+[[:put :people {:xt/id :matthew}]
+ [:put :people {:xt/id :mark, :parent :matthew}]
+ [:put :people {:xt/id :luke, :parent :mark}]
+ [:put :people {:xt/id :john, :parent :mark}]]
+
+;; find me people who have children
+{:find [parent child]
+ :where [($ :people {:xt/id parent})
+         (left-join {:find [parent child]
+                     :where [($ :people {:xt/id child, :parent parent})]})]}
+
+;; => [{:parent :matthew, :child :mark}
+;;     {:parent :mark, :child :luke}, {:parent :mark, :child :john}
+;;     {:parent :luke, :child nil}
+;;     {:parent :john, :child nil}]
+;; note two entries for `:mark`, and `nil`s for `:luke` and `:john`
+----
+
+Notes:
+
+* Similarly to link:#sub-queries[sub-queries], logic-vars in the sub-query's `:find` clause (or as renamed by `:keys`) are unified with the outer query; parameters are passed via the sub-query's `:in` clause.
+
+[#semi-joins]
+=== Semi-joins: `exists?`, `not-exists?`
+
+Semi joins are sub-queries that filter a query depending on whether the sub-query returns any rows (`exists?`) or not (`not-exists?`).
+
+Examples:
+
+[source,clojure]
+----
+;; find me all the customers with at least one order
+{:find [cid customer-name]
+ :where [($ :customers {:xt/id cid, :name customer-name})
+ 
+         ;; swap for `not-exists?` for 'customers with no orders'
+         (exists? {:find [cid]
+                   :where [($ :orders {:customer-id cid})]})]}
+----
+
+Notes:
+
+* Similarly to link:#sub-queries[sub-queries], logic-vars in the sub-query's `:find` clause (or as renamed by `:keys`) are unified with the outer query; parameters are passed via the sub-query's `:in` clause.
+
+[#union-join]
+=== Union-joins: `union-join`
+
+Union joins return the union of all of their sub-queries:
+
+[source,clojure]
+----
+{:find [event-at event]
+ :in [uid]
+ :where [(union-join {:find [uid event-at event]
+                      :where [($ :posts [uid {:xt/valid-from event-at, :xt/* event}])]}
+                     {:find [uid event-at event]
+                      :where [($ :comments [uid {:xt/valid-from event-at, :xt/* event}])]}
+                     {:find [uid event-at event]
+                      :where [($ :likes [uid {:xt/valid-from event-at, :xt/* event}])]})]
+ :order-by [[event-at :desc]]}
+----
+
+Notes:
+
+* Similarly to link:#sub-queries[sub-queries], logic-vars in the union join's `:find` clauses (or as renamed by `:keys`) are unified with the outer query; parameters are passed via the sub-query's `:in` clause.
+* Each sub-query in a `union-join` must return the same columns.
+
+[#rules]
+== Rules: `:rules`
+
+TODO
+
+[#pagination]
+== Pagination: `:order-by`, `:limit`, `:offset`
+
+These affect the order and size of the query results.
+
+[source,clojure]
+----
+{:order-by [<order-by-spec>*]
+ :limit <int>
+ :offset <int>}`
+ 
+;; <order-by-spec> :: <expr> | [<expr> <`:asc`|`:desc`>?]
+----
+
+Notes: 
+
+* If direction is not provided, ascending is assumed.
+* If no `:order-by` is provided, the ordering of the query results is undefined.
+
+[#params]
+== Parameters: `:in`
+
+Parameters to Datalog queries are specified using the `:in` clause: `{:in [<param>*]}`.
+
+Arguments are then passed in the query vector, and are bound in the order of the `:in-clause`.
+
+e.g.
+
+[source,clojure]
+----
+;; find me the user-name of the user with id `user-id`
+
+(xt/q node
+      ['{:find [user-name]
+         :in [uid]
+         :where [($ :users [{:xt/id uid} user-name])]}
+       user-id])
+----
+
+[#basis]
+== Basis: `:basis`, `:basis-timeout`, `:default-all-valid-time?`
+
+XTDB queries are run using a 'basis', so that queries can be repeated at a later date and still return the same results.
+
+* `:basis` (map):
+** `:tx` (transaction key): constraint on which transactions will be visible to the query - transactions after this one will not affect the query results.
+   If not provided, this defaults to the latest indexed transaction on the node executing the query.
+   If provided, the node will wait (up to `:basis-timeout`) for this transaction to have been indexed.
+** `:after-tx` (transaction key): lower-bound on which transactions will be visible to the query - transactions after this may be visible.
+   If not provided, this defaults to the latest transaction _submitted_ to the queried node, in order to 'read your own writes'.
+   If provided, the node will wait (up to `:basis-timeout`) for this transaction to have been indexed.
+** `:current-time` (timestamp, default 'now'): used whenever the query requires a clock time - most obviously the `current-timestamp` functions, but also 'match' clauses without an explicit valid time specification (when `:default-all-valid-time?` is false).
+* `:basis-timeout` (Duration, default unlimited): how long to wait for the node to have indexed the requested basis.
+* `:default-all-valid-time?` (boolean, default false): whether 'match' clauses default to returning documents for all valid time.
+  If this flag is unset, 'match' clauses default to 'as of now'.
+
+== Expressions
+
+Expressions in XTDB Datalog are a subset of Clojure's s-exprs:
+
+[source]
+----
+<expr> ::   <literal> | <symbol> 
+          | (<symbol> <expr>*) # function call
+          | (if <expr> <expr> <expr>)
+          | (if-some [<symbol> <expr>] <expr>)
+          | (let [<symbol> <expr>] <expr>)
+          | (. <expr> <keyword>) # field access
+          | (.. <expr> <keyword>+) # nested field access
+          | (case <expr> <case-clause>* <expr>?)
+          | (cond <cond-clause>* <expr>?)
+
+<case-clause> :: <expr> <expr> # test + result
+<cond-clause> :: <expr> <expr> # test + result
+----
+
+Notes:
+
+* Unlike Clojure, `case` tests don't have to be compile-time literals.
+* `cond` can additionally take a default expression at the end.
+* No lambdas or first-class functions.
+* Symbols are resolved first through local scope (`let` or `if-some`), then to available logic-vars.
+* Functions are drawn from the XTDB link:../stdlib[standard library].

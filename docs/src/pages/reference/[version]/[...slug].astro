@@ -1,0 +1,35 @@
+---
+import Layout from '/src/layouts/docs.astro'
+import { getCollection } from 'astro:content';
+
+export async function getStaticPaths() {
+  const articles = await getCollection('reference');
+
+  return articles.map(entry => {
+    const [_, version, slug] = entry.slug.match(/(.+?)\/(.+)/)
+
+    return {
+      params: { version, slug }, props: { entry, version, slug },
+    }});
+}
+
+import ReferenceNav from '/src/components/reference/nav.astro'
+import NextPrevPage from '/src/components/reference/next-prev-page.astro';
+import TableOfContents from '/src/components/table-of-contents.tsx'
+
+const { entry, version, slug } = Astro.props;
+const { Content, headings } = await entry.render();
+---
+
+<Layout>
+    <div class="grid grid-cols-1 lg:grid-cols-[12rem_1fr_12rem] gap-4 my-4 lg:my-8 mx-auto max-w-fit">
+        <ReferenceNav version={version} slug={slug}/>
+
+        <div class="doc-container prose dark:prose-invert">
+          <Content />
+          <NextPrevPage version={version} slug={slug} />
+        </div>
+
+        <aside class="row-start-2 lg:row-auto"><TableOfContents headings={headings} client:load /></aside>
+    </div>
+</Layout>

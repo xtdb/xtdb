@@ -1,0 +1,65 @@
+= Aggregate functions
+
+Aggregate functions can be used within the `:find` clause in Datalog, or the `SELECT` clause in SQL.
+
+In line with the SQL spec (which XTDB also respects in Datalog queries):
+
+* Except in the case of `(count-star)` / `COUNT(*)`, null values in the column are removed before the aggregate is calculated.
+* Without grouping columns, aggregate functions will always return exactly one row - if the input column is empty (after nulls have been removed), the result will be a single row containing a null value.
+
+== Numeric aggregate functions
+
+[cols='3,3,8']
+|===
+| Datalog | SQL |
+
+| `(avg xs)` | `AVG([ALL] xs)` | average (mean)
+| `(avg-distinct xs)` | `AVG(DISTINCT xs)` | average (mean) of distinct values
+| `(count xs)` | `COUNT([ALL] xs)` | count
+| `(count-distinct xs)` | `COUNT(DISTINCT xs)` | count of distinct values
+| `(count-star)` | `COUNT(*)` | row count
+| `(max xs)` | `MAX([ALL] xs)` | maximum
+| `(max-distinct xs)` | `MAX(DISTINCT xs)` | maximum of distinct values
+| `(min xs)` | `MIN([ALL] xs)` | minimum
+| `(min-distinct xs)` | `MIN(DISTINCT xs)` | minimum of distinct values
+| `(stddev-pop xs)` | `STDDEV_POP(xs)` | population standard deviation
+| `(stddev-samp xs)` | `STDDEV_SAMP(xs)` | sample standard deviation
+| `(sum xs)` | `SUM([ALL] xs)` | sum
+| `(sum-distinct xs)` | `SUM(DISTINCT xs)` | sum of distinct values
+| `(var-pop xs)` | `VAR_POP(xs)` | population variance
+| `(var-samp xs)` | `VAR_SAMP(xs)` | sample variance
+|===
+
+* `min`/`max` aggregates are not yet supported on string values.
+
+== Boolean aggregate functions
+
+[cols='3,3,8']
+|===
+| Datalog | SQL |
+
+| `(all xs)`
+
+`(every xs)`
+| `ALL(xs)`
+
+  `EVERY(xs)`
+| true if all values are true; false otherwise
+
+| `(any xs)`
+
+  `(some xs)`
+| `ANY(xs)`
+
+  `SOME(xs)`
+| false if all values are false; true otherwise
+|===
+
+== Composite-type aggregate functions
+
+[cols='3,3,8']
+|===
+| Datalog | SQL |
+
+| `(array-agg xs)` | `ARRAY_AGG(xs)` | return an array of all of the input values
+|===

@@ -1,0 +1,80 @@
+---
+  import Icon from "/shared/src/components/icon.astro";
+  const { version, slug: currentSlug } = Astro.props
+  const { default: referenceNav } = await import(`../../nav/reference/${version}.yml`)
+---
+
+<div id="nav-menu" class="sticky top-[72px] lg:hidden p-2 border-b z-10 bg-background-orange dark:bg-dark-grey">
+  <button class="open-menu" type="button">
+    <Icon name="menu" class="h-8 w-8 mb-2" />
+  </button>
+  <button class="close-menu hidden" type="button">
+    <Icon name="back" class="h-8 w-8 mb-2" />
+  </button>
+</div>
+<nav class="page-nav fixed w-full top-[120px] hidden h-screen lg:bg-transparent z-10 lg:top-[100px] lg:sticky lg:block lg:h-fit bg-background-orange dark:bg-dark-grey overflow-scroll lg:overflow-auto">
+  <div class="lg:max-h-screen lg:overflow-y-auto">
+    <h3>Reference</h3>
+    <div class="space-y-4">
+      {referenceNav.map (({section, slug, pages}) => (
+      <section>
+        <h4 class="w-full">
+          {slug ? <a data-active={slug==currentSlug ? "active" : "inactive" }
+            class="text-inherit block p-0"
+            href={`/reference/${version}/${slug}`}>
+            {section}
+          </a>
+          : section}
+        </h4>
+        <div class="flex flex-col items-stretch">
+          {pages.map (({slug, label}) => (
+          <a data-active={slug==currentSlug ? "active" : "inactive" }
+            href={`/reference/${version}/${slug}`}>
+            {label}
+          </a>
+          ))}
+        </div>
+      </section>
+      ))}
+    </div>
+  </div>
+</nav>
+
+<style>
+  a {
+    @apply p-1
+  }
+
+  a[data-active=active] {
+    @apply bg-gray-500
+  }
+</style>
+
+<script>
+;(function () {
+    'use strict'
+
+    const openMenuButton = document.querySelector('.open-menu')
+    const closeMenuButton = document.querySelector('.close-menu')
+    const pageNav = document.querySelector('.page-nav')
+
+    function openMenu(_event) {
+      openMenuButton.classList.add("hidden")
+      closeMenuButton.classList.remove("hidden")
+      pageNav.classList.remove("hidden")
+      document.documentElement.classList.add("overflow-hidden")
+      location.href = "#nav-menu"
+    }
+
+    function closeMenu(_event) {
+      closeMenuButton.classList.add("hidden")
+      openMenuButton.classList.remove("hidden")
+      pageNav.classList.add("hidden")
+      document.documentElement.classList.remove("overflow-hidden")
+      location.href = "#nav-menu"
+    }
+
+    openMenuButton.addEventListener('click', openMenu)
+    closeMenuButton.addEventListener('click', closeMenu)
+  })()
+</script>

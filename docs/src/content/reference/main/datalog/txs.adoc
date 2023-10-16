@@ -1,0 +1,69 @@
+= Datalog Transactions
+
+Datalog transactions are submitted through `xtdb.api/submit-tx`.
+
+* `(xt/submit-tx <node> <tx-ops> <opts>?)`: returns the transaction key of the submitted transaction.
+** `tx-ops`: vector of link:#tx-ops[transaction operations].
+** `opts` (map):
+*** `:default-all-valid-time?` (boolean, default true): currently unused for Datalog transactions.
+* `(xt/submit-tx& <node> <tx-ops> <opts>?)`: returns a `CompletableFuture` of the transaction key.
+
+[#tx-ops]
+== Transaction operations
+
+=== `:put`
+
+Upserts a document into the given table, optionally during the given valid time period.
+
+`[:put <table> <document> <opts>?]`
+
+* `table` (keyword).
+* `document` (map): must contain `:xt/id`.
+* `opts` (map):
+** `:for-valid-time [:in <from> <to>]`:
+*** `from` (timestamp): may be `nil`.
+    Defaults to the current time of the transaction if not provided.
+*** `to` (timestamp): may be `nil`.
+    Defaults to the end-of-time if not provided.
+
+=== `:delete`
+
+Deletes a document from the given table, optionally during the given valid time period.
+
+`[:delete <table> <id> <opts>?]`
+
+See `:put` for options.
+
+=== `:erase`
+
+Irrevocably erase the document from the given table (including through system time), optionally during the given valid time period.
+
+`[:erase <table> <id> <opts>?]`
+
+See `:put` for options.
+
+=== `:call`
+
+Call a transaction function.
+
+`[:call <fn> <args>...]`
+
+Transaction functions are defined using `:put-fn`:
+
+[source,clojure]
+----
+[:put-fn :increment
+ '(fn [args...]
+    ...
+    )]
+----
+
+Transaction functions are evaluated with the Small Clojure Interpreter (https://github.com/babashka/sci[SCI^]).
+They should return a vector of other transaction operations (including invoking other transaction functions).
+If they return false, or throw an exception, the transaction will be rolled back.
+
+There are a few functions available in scope during the transaction function:
+
+* `(q <query> <args>...)`: runs a link:./queries.md[Datalog query]
+* `(sql-q <query> <opts>?)`: runs a SQL query.
+* `*current-tx*`: the current transaction being indexed.

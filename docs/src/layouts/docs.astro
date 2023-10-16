@@ -1,0 +1,28 @@
+---
+import HeadMatter from '/shared/src/components/head-matter.astro'
+import Core2Header from '/src/components/core2/header.astro'
+import Footer from '/shared/src/components/footer.astro'
+import TypeSense from '/shared/src/components/typesense.astro'
+import SearchUI from '/shared/src/components/searchui.astro'
+import '/shared/src/styles/site.css'
+const {title} = Astro.props
+---
+
+<html lang="en">
+    <head>
+        <HeadMatter />
+        <title>{title}</title>
+    </head>
+
+    <body>
+        <Core2Header sticky=true />
+
+        <main id="main-content" class="container">
+            <slot />
+        </main>
+
+        <SearchUI />
+        <!--TODO: Add <BodyAssets /> -->
+        <TypeSense />
+    </body>
+</html>

@@ -1,0 +1,55 @@
+= What is XTDB?
+
+////
+---
+title: What is XTDB?
+description: 'What is XTDB? The database for our time.'
+i18nReady: true
+---
+import PackageManagerTabs from '~/components/tabs/PackageManagerTabs.astro'
+////
+
+XTDB is a **bitemporal** and **dynamic** **relational** database for **SQL** and **Datalog**.
+
+At the core of XTDB is a novel relational database engine designed to help developers who are building dynamic and temporal applications with immutable data.
+
+XTDB offers a universal 'bitemporal' abstraction for easily working with temporal, versioned records whilst maintaining strong audit capabilities. A unique combination of both temporal SQL and Datalog APIs enables you to ship simpler application code and provide a trusted, long-term foundation for your organization's data. The underlying columnar storage and compute architecture is modern, reliable and readily benefits from cloud environments with on-demand elasticity. XTDB is easy to get started with via HTTP and client drivers.
+
+== Mission
+
+Databases are built for much more than just "storing data", they are about simplifying your life as a developer. After all, the best code is the code you never have to write!
+
+XTDB is built to eliminate the incidental complexities that are normally associated with handling time in a SQL database. XTDB makes time simple.
+
+The existing 'SQL:2011' standard already defined various bitemporal language features motivated by industry demand, but mainstream database vendors have broadly failed to prioritise making these features widely usable for general application development. XTDB has been specifically built to implement these SQL:2011 capabilities in a first-class way that improves on the design such that the default developer experience is very easy to get started with. You only need to reach for temporal features when the situations arise - otherwise working with XTDB is in many ways just like working with a more traditional database …except you can be sure that no data is being destructively modified without the appropriate versions being created in the background.
+
+== Philosophy
+
+- Immutability - losing information is bad for business and destructive database operations are a bad default in 2023. By contrast, XTDB keeps accurate, auditable records at all times and implements strong consistency via ACID transactions by default
+- Temporality - flexible record versioning and querying through history are common business expectations for IT applications, and across many industries auditable versioning is a regulatory required. XTDB makes temporal requirements easy
+- Schemaless-ness - normalized schemas are wonderful but it is increasingly necessary to handle records with arbitrarily nested data and irregular shapes. XTDB allows these records to be dynamically interpreted, joined and analyzed. Schema can be gradually defined and integrated with your application as requirements evolve
+- Openness - data is valuable and usually outlives code, therefore businesses should be mindful of being locked in to non-open data systems. XTDB builds upon open source technologies, and is itself open source software (MIT License), but more importantly the entire processing and storage architecture is built around Apache Arrow - a high-performance polyglot data format for cutting edge systems
+
+== Design
+
+XTDB builds upon column-oriented object storage and single-writer architectural principles to deliver a flexible store for immutable data. Tables are stored as 'vertically partitioned' column files of binary relations that form immutable 'chunks'. The query engine is able to identify, retrieve and process only the chunks it strictly needs on-demand.
+
+XTDB retains all the power of a traditional row-oriented SQL database like Postgres whilst offering superior flexibility, scale, and performance. Column-orientation allows for advanced on-disk compression (cost-effective storage at scale), vectorized processing (better use of CPU cache design), and most importantly enables the storage of sparse tables which significantly improves the flexibility of relational modeling with very wide tables.
+
+XTDB's approach to temporality is inspired by SQL:2011, but makes it ubiquitous, practical and transparent during day-to-day development. All tables include 4 temporal columns by default which are maintained automatically. However queries are assumed to query 'now' unless otherwise specified. Non-valid historical data is filtered out during low-level processing using a dedicated temporal index at the heart of the design.
+
+== Feature Highlights
+
+- Supports the full spectrum between normalized relational modeling and dynamic document-like storage without compromising data type fidelity (i.e. unlike JSONB).
+
+- A native SQL dialect combined with a Datalog query language offers a more productive application development experience alongside rich data analysis (without ETL to another system).
+
+- Strong data consistency built around linearized, single-writer transaction processing.
+
+- Accurate and immutable temporal record versioning to mitigate the complexities of application logic and handle out-of-order data ingestion.
+
+- Apache Arrow unlocks data for external integration.
+
+- Advanced temporal querying allows you to analyze the evolution of your data.
+
+- Deploy across your choice of cloud database services or on-premise to meet reliability and redundancy requirements.

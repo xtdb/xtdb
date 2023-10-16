@@ -1,0 +1,69 @@
+= Numeric functions
+
+Clojure users: note that XTDB functions will return null if any argument is null, as per the SQL spec.
+
+== Basic arithmetic functions
+
+The standard arithmetic functions are available:
+
+[cols='3,3,8']
+|===
+| Datalog | SQL |
+
+| `(+ exprs ...)` | `expr1 + expr2` | addition
+| `(- exprs ...)` | `expr1 - expr2` | subtraction
+| `(* exprs ...)` | `expr1 * expr2` | multiplication
+| `(/ exprs ...)` | `expr1 / expr2` | division
+|===
+
+* If any input expression is null, the result will also be null.
+* If all arguments are integers, the result will also be an integer; otherwise, all arguments will be cast to floating-point values before applying the function.
+  Particularly, the division function performs integer division if it's only given integer values.
+* If the result would under-/overflow the widest type of the input arguments, a runtime exception will be thrown.
+* Trying to divide by zero will result in a runtime exception.
+* Where the Datalog variants are variadic (e.g. `(+ exprs ...)`), they can accept any amount of arguments.
+
+  e.g. `(+ a b c d)` is equivalent to `a + b + c + d`
+
+== Other numeric functions
+
+[cols='3,3,8']
+|===
+| Datalog | SQL |
+
+| `(abs x)` | `ABS(x, y)` | absolute value of `x`
+| `(ceil x)` | `CEIL(x)` / `CEILING(x)` | nearest integer greater than or equal to `x`
+| `(double x)` | | `x` converted to a floating-point number
+| `(exp x)` | `EXP(x)` | 'e' (base of natural logarithms) raised to the `x`th power
+| `(floor x)` | `FLOOR(x)` | nearest integer less than or equal to `x`
+| `(ln x)` | `LN(x)` | natural logarithm
+| `(log x y)` | | logarithm of `x`, base `y`
+| `(log10 x y)` | | logarithm of `x`, base 10
+| `(mod x y)` | `MOD(x, y)` | modulus of `x`, base `y`
+| `(power x y)` | `POWER(x, y)` | `x` raised to the `y`th power
+| `(sqrt x)` | `SQRT(x)` | square root
+|===
+
+* If any input expression is null, the result will also be null.
+* If the result would under-/overflow the widest type of the input arguments, a runtime exception will be thrown.
+* Trying to divide by zero will result in a runtime exception.
+
+== Trigonometric functions
+
+[cols='3,3,8']
+|===
+| Datalog | SQL |
+
+| `(acos x)` | `ACOS(x)` | inverse cosine
+| `(asin x)` | `ASIN(x)` | inverse sine
+| `(atan x)` | `ATAN(x)` | inverse tangent
+| `(cos x)` | `COS(x)` | cosine
+| `(cosh x)` | `COSH(x)` | hyperbolic cosine
+| `(sin x)` | `SIN(x)` | sine
+| `(sinh x)` | `SINH(x)` | hyperbolic sine
+| `(tan x)` | `TAN(x)` | tangent
+| `(tanh x)` | `TANH(x)` | hyperbolic tangent
+|===
+
+* Arguments and results in radians
+

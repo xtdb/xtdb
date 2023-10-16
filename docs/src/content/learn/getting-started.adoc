@@ -1,0 +1,135 @@
+= Welcome to the XTDB 2.x *Early Access* documentation
+////
+---
+title: Welcome to the XTDB documentation
+description: A basic intro to XTDB.
+---
+
+import Button from '~/components/Button.astro'
+import ContributorList from '~/components/ContributorList.astro'
+import PackageManagerTabs from '~/components/tabs/PackageManagerTabs.astro'
+
+:::tip[XTDB Version 2.0 Early Access is here!]
+**What’s new and arriving soon in XTDB v2?** [Find out in the announcement blog post](https://astro.build/blog/astro-2/).
+**Want to test the upgrade from an existing 1.x database?** [Follow our preliminary upgrade guide](/en/guides/upgrade-to/v2/).
+:::
+////
+
+XTDB Version 2.x Early Access is here! For documentation on the stable, production-ready 1.x releases of XTDB browse link:https://xtdb.com/docs[here].
+
+////
+**What’s new and arriving soon in XTDB v2?** link:https://astro.build/blog/astro-2/[Find out in the announcement blog post].
+
+**Want to test the upgrade from an existing 1.x database?** [Follow our preliminary upgrade guide](/en/guides/upgrade-to/v2/).
+////
+
+For the API Reference documentation see link:/reference[2.x Reference].
+
+== XTDB in a nutshell
+
+XTDB is a **bitemporal** and **dynamic** **relational** database for **SQL** and **Datalog**.
+
+== Key Features
+
+- **Cloud native:** modern columnar architecture built around https://arrow.apache.org/[Apache Arrow].
+- **Bitemporal:** all data is accurately versioned as updates are made (system time), and all data exists within a universal domain timeline for representing 'validity'/'effectivity' (valid time).
+- **Dynamic:** no upfront schema needs to be specified before records can be inserted. Complex and nested data is automatically represented using Apache Arrow types.
+- **Relational:** the full spectrum of traditional SQL database capabilities is available - including joins, transactions, bag/multiset semantics, three-valued logic, multiple N-ary relations etc.
+- **SQL:** immediate accessibility for a mainstream audience and an eye to the future with preliminary Flight SQL driver support.
+- **Datalog:** programmer-friendly API for complex relational querying that overcomes many of SQL’s compositional challenges.
+
+Check out our link:/learn/what-is-xtdb[What is XTDB?] breakdown to learn more about what makes XTDB special. ✨
+
+== Try it out right now:
+
+```shell
+docker pull ghcr.io/xtdb/xtdb-ea
+docker run -ti --rm -p 5432:5432 -p 9832:9832 -p 3001:3000 ghcr.io/xtdb/xtdb-ea
+```
+
+Now follow the instructions for the example snippets over on link:/v2[the 2.x Early Access landing page].
+
+////
+<div style="display: flex; flex-wrap: wrap; gap: 0.5rem;">
+  <Button href="localhost:3000/status">Open localhost:3000/status</Button>
+  <Button variant="outline" href="https://TODO/">View sample Curl commands →</Button>
+</div>
+////
+
+////
+### ➡ Quick start
+Get up and running quickly with an interactive introduction to XTDB.
+
+### ➡ Build a sample app
+Sample apps show XTDB features and capabilities in an application context.
+
+Our link:/en/install/auto/[Installation Guide] has full, step-by-step instructions for installing and configuring XTDB, and adding a client driver to your project.
+
+To start querying XTDB from your application code, choose your language:
+
+- Java
+- Clojure
+- Curl (HTTP)
+////
+
+To start querying XTDB from your application code, you can currently use the Clojure client library or the HTTP interfaces directly, for both SQL and Datalog.
+The HTTP SQL interface is stateless. An experimental pgwire-server is also available to connect from any Postgres client driver if you wish to use SQL.
+
+////
+== What is in the documentation?
+
+These three main sections can help you learn XTDB:
+
+- Cookbook - This section provides solutions to common problems that users face querying an XTDB database. Most solutions provide cut-and-paste queries that need very little modification.
+- API Reference - Complete reference materials for the APIs you can use to interact with XTDB.
+////
+
+////
+== Explore key features
+
+A selection of features that make XTDB easy to get started, powerful, and unique
+
+- Dynamic Data
+- Temporal Querying
+- Apache Arrow
+
+== Learn XTDB
+
+See examples of some of the key concepts and patterns of working with XTDB!
+
+📚 link:/en/core-concepts/astro-pages/[Insert some data] to your database.
+
+📚 Read more about XTDB’s link:/en/core-concepts/capabilities/[capabilities].
+
+📚 Learn about XTDB's link:/en/core-concepts/temporal-model/[temporal model].
+
+Find our full API documentation under the **Reference** tab.
+////
+
+
+== Join our Community
+
+Join us in link:https://discuss.xtdb.com[Discuss XTDB] to share with and get help from an active, friendly community!
+
+💬 Say hello, ask questions, make suggestions...share what you've been working on!
+
+== What's New?
+
+See  the link:https://xtdb.com/blog/[XTDB Blog]
+
+Read about the recent link:https://github.com/xtdb/xtdb/releases[XTDB Releases]
+
+////
+# Welcome
+
+Here's a welcome
+
+## Another heading
+
+```clojure
+;; some code
+(defn foo []
+  (let [a 3]
+    (+ a 2)))
+```
+////

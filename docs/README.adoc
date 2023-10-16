@@ -1,0 +1,40 @@
+= XTDB Docs
+
+This is a static site based on the https://astro.build[Astro framework] - the project structure follows a standard https://docs.astro.build/en/core-concepts/project-structure/[Astro structure].
+
+== Pre-requisites
+
+To work on this project you should have `git lfs` installed and initialised.
+
+To install, use your OS package manager:
+
+For Arch: `sudo pacman -Sy git-lfs`
+For Mac OS: `brew install git-lfs`
+
+To initialise: `git lfs install`
+
+From this point you should be able to run the commands in the next section.
+
+== Commands
+
+All commands are run from the root of the project, from a terminal:
+
+[cols=]
+| Command                 | Action                                           |
+| :---------------------- | :----------------------------------------------- |
+| `yarn install`          | Installs dependencies                            |
+| `yarn run dev`          | Starts local dev server at `localhost:3000`      |
+| `yarn run build`        | Build your production site to `./dist/`          |
+| `yarn run preview`      | Preview your build locally, before deploying     |
+| `yarn run astro ...`    | Run CLI commands like `astro add`, `astro check` |
+| `yarn run astro --help` | Get help using the Astro CLI                     |
+
+== Reference documentation versioning
+
+To create a new reference documentation version, `./bin/snapshot-reference-docs.sh <new-version>`.
+
+== Deploy
+
+We use https://aws.amazon.com/amplify/hosting/[AWS Amplify] to host the static site.
+
+To deploy to the live site, push to the `docs-live` branch on GitHub.

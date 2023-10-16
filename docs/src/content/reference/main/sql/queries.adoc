@@ -1,0 +1,70 @@
+= SQL Queries
+
+SQL queries are submitted through `xtdb.api/q`:
+
+* `(xt/q <node> [<query> & <params>] <opts>?)` returns the query results as a vector of maps.
+** `opts`: map of query options
+*** `:basis`, `:basis-timeout`, `:default-all-valid-time?`: see link:../datalog/queries#basis[Datalog]
+    By default, `:default-all-valid-time?` is false, unlike the SQL:2011 specification - to maintain SQL spec compatibility, specify `:default-all-valid-time? true`.
+* `(xt/q& <node> [<query> & <params>] <opts>?)`: returns a `CompletableFuture` of the query results.
+
+For example:
+
+[source,clojure]
+----
+(xt/q node ["SELECT u.first_name, u.last_name FROM users u WHERE xt$id = ?" "James"]
+      {:default-all-valid-time? true})
+----
+
+Fuller SQL reference documentation will follow shortly.
+
+For now, the following is a subset of what's currently possible in XTDB SQL:
+
+[source,sql]
+----
+SELECT <value> [ [ AS ] <column_name> ] [ , ... ]
+FROM <relation> [ [ AS ] <table_alias> [ (<column_name> [, ...] ) ]] [ , ... ]
+     [ <join_clause>+ ]
+[ WHERE <predicate> ]
+[ GROUP BY <value> [ , ... ] ]
+[ ORDER BY <value> [ (ASC | DESC) ] [ , ... ] ]
+[ LIMIT <number> ]
+[ OFFSET <number> ]
+
+relation :: <table_name> [ <for_system_time> ] [ <for_valid_time> ]
+          | ( <sub_query> )
+          | ( VALUES (<column_name> [ , ... ]) )
+
+for_system_time :: FOR SYSTEM_TIME <temporal_range> | FOR ALL SYSTEM_TIME
+for_valid_time :: FOR VALID_TIME <temporal_range> | FOR ALL VALID_TIME
+temporal_range :: AS OF <date_time>
+                | FROM <date_time> TO <date_time> -- start inclusive, end exclusive
+                | BETWEEN <date_time> AND <date_time> -- start inclusive, end inclusive
+
+join_clause :: [ join_type ] JOIN <relation> <join_condition> [ ... ]
+join_type :: INNER | LEFT [ OUTER ] | RIGHT [ OUTER ] | FULL [ OUTER ]
+join_condition :: USING ( <column_name> [ , ... ] )
+                | ON <predicate>
+
+predicate :: <value> <binary_op> <value>
+           | <value> [ NOT ] IN ( <query> )
+           | [ NOT ] EXISTS ( <query> )
+
+value :: <predicate>
+       | <function> ( [ <arg> [ , ... ] ])
+       | <query>
+----
+
+* Temporarily, column names in XTDB SQL must be qualified - e.g. `SELECT u.first_name, u.last_name FROM users u`
+* Predicates and functions are taken from the XT 'standard library'.
+
+[NOTE]
+====
+There is a table and column name mapping between SQL and Datalog: documents inserted with Datalog have their hyphens translated to underscores, and their namespace segments converted to `$` symbols, as hyphens, periods and slashes are not valid symbols in SQL identifiers.
+
+For example, `:foo.bar/baz-quux` in Datalog is referenced in SQL as `foo$bar$baz_quux`.
+
+The built-in XTDB columns `:xt/id`, `:xt/valid-from`, `:xt/valid-to` etc are referenced in SQL as `xt$id`, `xt$valid_from` and `xt$valid_to` respectively.
+
+This mapping is reversed when querying SQL documents from Datalog.
+====

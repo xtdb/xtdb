@@ -1,0 +1,355 @@
+---
+import Icon from '/shared/src/components/icon.astro'
+import XTDBLogo from '/shared/src/components/xtdb-logo.astro'
+import HomepageButton from '/shared/src/components/homepage-button.astro';
+import { getLinkActiveState } from '/shared/src/components/helpers.ts'
+import Search from '/shared/src/components/inline-searchui.astro'
+
+const { transparent = false, sticky = false } = Astro.props
+
+function getLinkActiveState (itemUrl) {
+  const pageUrl = Astro.url.pathname;
+  let response = {};
+
+  if (itemUrl === pageUrl || pageUrl.includes(itemUrl)) {
+    response['aria-selected'] = "true";
+  }
+
+  return response;
+
+}
+
+const bg_color = transparent ? "bg-transparent" : "bg-juxt-orange"
+const sticky_classes = sticky ? "sticky top-0 " : ""
+const theme_toggle_color = transparent ? "text-white" : "text-black"
+const anchor_hover_color = transparent ? "hover:text-juxt-orange aria-selected:text-juxt-orange" : "hover:text-dark-grey aria-selected:text-dark-grey"
+const anchor_classes = "text-white text-lg font-bold no-underline transition ease-out hover:no-underline" + anchor_hover_color
+const mobile_anchor_classes = "text-white text-lg font-bold no-underline transition ease-out hover:no-underline py-2 border-b border-grey dark:border-grey hover:text-dark-grey aria-selected:text-dark-grey dark:hover:text-juxt-orange dark:aria-selected:text-juxt-orange"
+---
+
+<a class="!hidden button" href="#main-content">Skip to content</a>
+
+<header class= {"top-header transition-{padding} z-50 duration-200 pt-4 pb-4 text-white font-mono " + sticky_classes + bg_color}>
+  <div class="container">
+    <div class="relative flex items-center justify-between text-center">
+      <a class="ml-0 mr-20" href="/" title="V2 Home">
+        <XTDBLogo core2=true class="header-icon w-56 h-[5.5rem]"/>
+      </a>
+
+      <nav class="site-nav p-0 my-2 hidden xl:block" aria-label="Primary">
+        <div class="flex flex-nowrap items-center justify-between w-auto py-0.5 gap-16">
+          <a class={anchor_classes} href="/learn" {...getLinkActiveState('/learn')}>2.X LEARN</a>
+          <a class={anchor_classes} href="/reference" {...getLinkActiveState('/reference')}>2.X DOCS</a>
+          <HomepageButton
+            href="https://xtdb.com"
+            label="V1"
+            color="white"
+            class="py-1 px-3 text-base"
+            variant="outlined" />
+
+          <a href="https://github.com/xtdb/xtdb">
+            <svg viewBox="0 0 100 100" class="h-8" xmlns="http://www.w3.org/2000/svg"><path fill-rule="evenodd" clip-rule="evenodd" d="M48.854 0C21.839 0 0 22 0 49.217c0 21.756 13.993 40.172 33.405 46.69 2.427.49 3.316-1.059 3.316-2.362 0-1.141-.08-5.052-.08-9.127-13.59 2.934-16.42-5.867-16.42-5.867-2.184-5.704-5.42-7.17-5.42-7.17-4.448-3.015.324-3.015.324-3.015 4.934.326 7.523 5.052 7.523 5.052 4.367 7.496 11.404 5.378 14.235 4.074.404-3.178 1.699-5.378 3.074-6.6-10.839-1.141-22.243-5.378-22.243-24.283 0-5.378 1.94-9.778 5.014-13.2-.485-1.222-2.184-6.275.486-13.038 0 0 4.125-1.304 13.426 5.052a46.97 46.97 0 0 1 12.214-1.63c4.125 0 8.33.571 12.213 1.63 9.302-6.356 13.427-5.052 13.427-5.052 2.67 6.763.97 11.816.485 13.038 3.155 3.422 5.015 7.822 5.015 13.2 0 18.905-11.404 23.06-22.324 24.283 1.78 1.548 3.316 4.481 3.316 9.126 0 6.6-.08 11.897-.08 13.526 0 1.304.89 2.853 3.316 2.364 19.412-6.52 33.405-24.935 33.405-46.691C97.707 22 75.788 0 48.854 0z" fill="#fff"/></svg>
+          </a>
+
+         <div class="relative block" id="header-theme-toggle">
+              <button class="theme-toggle">
+                <Icon class={theme_toggle_color} name="dark-mode" />
+              </button>
+            </div>
+
+          <div class="theme-toggle-menu" data-visible="false">
+            <button class="light-mode">Light</button>
+            <button class="dark-mode">Dark</button>
+            <button class="system-mode">System</button>
+          </div>
+
+          <Search idname="search"/>
+        </div>
+      </nav>
+
+      <div class="mobile-nav-overlay"></div>
+
+      <div class="block xl:hidden"
+           data-controller="mobile-nav"
+           data-action="click@document->mobile-nav#handleDocumentClick">
+        <div class="menu-button"
+             data-mobile-nav-target="menuButton"
+             data-action="click->mobile-nav#handleMenuButtonClick">
+          <span></span>
+          <span></span>
+          <span></span>
+          <span></span>
+        </div>
+
+        <nav class="mobile-nav"
+             data-mobile-nav-target="nav"
+             aria-label="Navigation">
+          <div class="flex flex-col">
+            <a class={mobile_anchor_classes} href="/learn" {...getLinkActiveState('/learn')}>2.X LEARN</a>
+            <a class={mobile_anchor_classes} href="/reference" {...getLinkActiveState('/reference')}>2.X DOCS</a>
+            <HomepageButton
+              href="/"
+              label="V1"
+              color="white"
+              class="w-fit my-4 mx-auto py-1 px-3 text-base"
+              variant="outlined" />
+
+            <div class="justify-center items-center mb-4">
+              <span class="font-bold text-white text-lg">THEME</span>
+              <select class="theme-select text-black bg-white p-2 border-black rounded-lg" name="theme-select">
+                <option value="light-mode">Light</option>
+                <option value="dark-mode">Dark</option>
+                <option value="system-mode">System</option>
+              </select>
+            </div>
+
+            <div class="justify-center items-center">
+              <Search idname="search-mobile"/>
+            </div>
+          </div>
+        </nav>
+      </div>
+
+    </div>
+  </div>
+</header>
+
+<style>
+  .top-header.shrunk {
+    @apply py-1
+  }
+
+  .top-header.shrunk .header-icon {
+    @apply w-40 h-16
+  }
+
+  .menu-button {
+    @apply relative w-[18px] h-[15px] mx-3 cursor-pointer transition duration-500 ease-out
+  }
+
+  .menu-button span {
+    @apply absolute block left-0 w-full h-[3px] rounded bg-white transition duration-[250ms] ease-in-out rotate-0 z-10
+  }
+
+  .menu-button span:nth-child(1) {
+    @apply top-0
+  }
+
+  .menu-button span:nth-child(2), .menu-button span:nth-child(3) {
+    @apply top-1.5
+  }
+
+  .menu-button span:nth-child(4) {
+    @apply top-3
+  }
+
+  .menu-button[data-is-open="true"] span:nth-child(1) {
+    @apply top-1.5 left-1/2 w-0
+  }
+
+  .menu-button[data-is-open="true"] span:nth-child(2) {
+    @apply rotate-45
+  }
+
+  .menu-button[data-is-open="true"] span:nth-child(3) {
+    @apply -rotate-45
+  }
+
+  .menu-button[data-is-open="true"] span:nth-child(4) {
+    @apply top-1.5 left-1/2 w-0
+  }
+
+  .mobile-nav {
+    @apply flex-grow absolute top-28 right-8 left-8 -z-10 mx-auto p-4 rounded-2xl opacity-0 text-white bg-juxt-orange dark:bg-dark-grey
+  }
+
+  .mobile-nav-overlay {
+    @apply fixed h-full w-full bg-black top-0 left-0 hidden
+  }
+
+  .mobile-nav-overlay[data-is-open="true"] {
+    @apply block opacity-75 z-[5]
+  }
+
+  .mobile-nav[data-is-open="true"] {
+    @apply opacity-100 z-50
+  }
+
+  .theme-toggle-menu {
+    @apply absolute ease-in duration-300 xl:right-[255px] rounded-lg top-[4.5rem] p-4 bg-dark-grey flex flex-col z-50
+  }
+
+  .theme-toggle-menu[data-visible="false"] {
+    @apply hidden
+  }
+
+  .theme-toggle-menu button {
+    @apply font-bold hover:text-juxt-orange
+  }
+
+  .theme-toggle-menu button.selected {
+    @apply text-juxt-orange underline
+  }
+</style>
+
+<script define:vars={{ sticky }}>
+  ;(function () {
+  'use strict'
+
+  function setDocumentDark() {
+    document.documentElement.classList.add('dark')
+  }
+
+  function removeDocumentDark() {
+    document.documentElement.classList.remove('dark')
+  }
+
+  const html = document.querySelector("html");
+  const menuButton = document.querySelector('.menu-button')
+  const navComponent = document.querySelector('.mobile-nav')
+  const navOverlay = document.querySelector('.mobile-nav-overlay')
+  const searchButtons = document.querySelectorAll('.inline-search')
+  const themeToggle = document.querySelector('.theme-toggle')
+  const themeToggleMenu = document.querySelector('.theme-toggle-menu')
+  const themeSelect = document.querySelector('.theme-select')
+  const menuDarkToggle = themeToggleMenu.querySelector('.dark-mode')
+  const menuLightToggle = themeToggleMenu.querySelector('.light-mode')
+  const menuSystemToggle = themeToggleMenu.querySelector('.system-mode')
+
+  if (localStorage.theme === 'dark') {
+    menuDarkToggle.classList.add('selected')
+    themeSelect.value='dark-mode'
+  } else if (localStorage.theme === 'light') {
+    menuLightToggle.classList.add('selected')
+    themeSelect.value='light-mode'
+  } else {
+    menuSystemToggle.classList.add('selected')
+    themeSelect.value='system-mode'
+  }
+
+  function isOpen () {
+    return menuButton.getAttribute('data-is-open') === 'true'
+  }
+
+  function setIsOpen (value) {
+    menuButton.setAttribute('data-is-open', value)
+    navComponent.setAttribute('data-is-open', value)
+    navOverlay.setAttribute('data-is-open', value)
+  }
+
+  function open () {
+    setIsOpen(true)
+    document.documentElement.addEventListener('click', handleDocumentClick, { once: true })
+  }
+
+  function close () {
+    setIsOpen(false)
+  }
+
+  function toggle () {
+    if (isOpen()) {
+      close()
+    } else {
+      open()
+    }
+  }
+
+  function handleMenuButtonClick (event) {
+    event.stopImmediatePropagation()
+    toggle()
+  }
+
+  function handleDocumentClick (_event) {
+    close()
+  }
+
+  function handleSearchButtonClick (event) {
+    event.stopImmediatePropagation()
+  }
+
+  function openThemeMenu (event) {
+    event.stopPropagation();
+    themeToggleMenu.setAttribute("data-visible", "true")
+    document.documentElement.addEventListener('click', function(_event) { console.log("Hello"); closeThemeMenu() }, { once: true })
+  }
+
+  function closeThemeMenu() {
+    themeToggleMenu.setAttribute("data-visible", "false")
+  }
+
+  function removeSelectedToggle() {
+    themeToggleMenu.querySelector('.selected').classList.remove('selected')
+  }
+
+  function setDark(_event) {
+    removeSelectedToggle()
+    menuDarkToggle.classList.add('selected')
+    setDocumentDark()
+    localStorage.setItem('theme', 'dark')
+    closeThemeMenu()
+  }
+
+  function setLight(_event) {
+    removeSelectedToggle()
+    menuLightToggle.classList.add('selected')
+    removeDocumentDark()
+    localStorage.setItem('theme', 'light')
+    closeThemeMenu()
+  }
+
+  function setSystem(_event) {
+    removeSelectedToggle()
+    menuSystemToggle.classList.add('selected')
+    localStorage.removeItem('theme')
+    if(window.matchMedia('(prefers-color-scheme: dark)').matches) {
+      setDocumentDark()
+    } else {
+      removeDocumentDark()
+    }
+    closeThemeMenu()
+  }
+
+  function themeSelectChange(event) {
+    var value = themeSelect.value
+
+    if (value=="dark-mode") {
+      setDark(event)
+    } else if (value=="light-mode") {
+      setLight(event)
+    } else {
+      setSystem(event)
+    }
+  }
+
+  menuButton.addEventListener('click', handleMenuButtonClick)
+  searchButtons.forEach(function (searchButton, idx) {
+    searchButton.addEventListener('click', handleSearchButtonClick)
+  })
+  themeToggle.addEventListener('click', openThemeMenu)
+  menuDarkToggle.addEventListener('click', setDark)
+  menuLightToggle.addEventListener('click', setLight)
+  menuSystemToggle.addEventListener('click', setSystem)
+  themeSelect.addEventListener('click', function (event) { event.stopPropagation() })
+  themeSelect.addEventListener("change", themeSelectChange);
+
+  const topHeader = document.querySelector('.top-header')
+  function shrinkOnScroll() {
+    if (document.documentElement.scrollTop > 30) {
+      if (!topHeader.classList.contains('shrunk')) {
+        topHeader.classList.add('shrunk')
+        window.scrollTo(0, 54)
+      }
+    } else {
+      if (topHeader.classList.contains('shrunk')) {
+        topHeader.classList.remove('shrunk')
+        window.scrollTo(0, 0)
+      }
+    }
+  }
+
+  if (sticky) {
+    window.onscroll = function() {shrinkOnScroll()};
+  }
+
+})()
+</script>

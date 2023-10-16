@@ -1,0 +1,89 @@
+= String functions
+
+[NOTE]
+====
+* String positions are 1-based, in line with the SQL spec.
+* If any argument to these functions is null, the function will return null.
+====
+
+[cols="4,4,8"]
+|===
+| Datalog | SQL |
+
+| `(character-length s)`
+| `CHARACTER_LENGTH(s)`
+
+  `CHAR_LENGTH(s)`
+| length of string, in UTF8 characters
+
+| `(like str like-pattern)` | `str [NOT] LIKE like_pattern`
+a|
+Returns true iff the `str` matches (/ doesn't match) the `like-pattern`.
+
+* `_` matches any single character
+* `%` matches 0-n characters
+
+| `(like-regex str regex flags)`
+| `str [NOT] LIKE_REGEX regex`
+
+  `str [NOT] LIKE_REGEX regex FLAG flag`
+a|
+Returns true iff the `str` matches (/ doesn't match) the `regex`.
+
+* Regexes use Java's https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/util/regex/Pattern.html[`Pattern`] syntax.
+* Flags (string, e.g. `"im"`):
+** `s`: 'dot' matches any character (including line terminators)
+** `i`: case insensitive
+** `m`: multi-line
+
+
+| `(lower str)` | `LOWER(str)` | lower-case
+
+| `(overlay str replacement start-pos <length>)`
+| `OVERLAY(str PLACING replacement FROM start_pos [FOR length])`
+|
+
+| `(position search str)` | `POSITION(search IN str [USING CHARACTERS])`
+a| position of `search` within `str`, in characters
+
+* Return value is 1-based.
+* Returns 0 if not found.
+
+| `(trim str <trim-char>)`
+| `TRIM([trim_char FROM] str)`
+
+  `TRIM(BOTH [trim_char] FROM str)`
+| remove any occurrences of `trim_char` from the start and end of `str`
+
+  `trim_char`: single character (defaults to 'space').
+
+| `(trim-leading str <trim-char>)` | `TRIM(LEADING [trim_char] FROM str)`
+| remove any occurrences of `trim_char` from the start of `str`
+
+  `trim_char`: single character (defaults to 'space').
+
+| `(trim-trailing str <trim-char>)` | `TRIM(TRAILING [trim_char] FROM str)`
+| remove any occurrences of `trim_char` from the end of `str`
+
+  `trim_char`: single character (defaults to 'space').
+
+| `(octet-length s)` | `OCTET_LENGTH(s)` | length of string, in octets
+
+| `(octet-position search str)` | `POSITION(search IN str USING OCTETS)`
+| position of `search` within `str`, in octets
+
+  Returns 0 if not found.
+
+| `(substring str from-pos)`
+
+  `(substring str from-pos length)`
+| `SUBSTRING(str FROM from_pos)`
+
+  `SUBSTRING(str FROM from_pos FOR length)`
+a| Returns the sub-string of the given `str` from `from-pos` for `length` characters
+
+* `from-pos`: 1-based start position
+* `length`: defaults to end-of-string if not provided
+
+| `(upper str)` | `UPPER(str)` | upper-case
+|===

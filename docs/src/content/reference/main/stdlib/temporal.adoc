@@ -1,0 +1,265 @@
+= Temporal functions
+
+== Constructors
+
+[cols="3,3,8"]
+|===
+| Datalog | SQL | Return type
+
+| | `DATE 'date_str'` | Construct a date - e.g. `DATE '2020-01-01'`
+
+| | `INTERVAL num 'unit'`
+
+  `INTERVAL interval 'unit TO unit'`
+| Construct a single-field interval - e.g. `INTERVAL 4 'HOUR'`.
+
+  Construct a multi-field interval - e.g. `INTERVAL '3 04:20:12.53' 'DAY TO SECOND'`
+
+| `(period start end)` | `PERIOD(start, end)`
+| Constructs a period.
+  Verifies that `+start <= end+`, or throws a runtime exception.
+
+| | `TIME 'time_str'` | Construct a time - e.g. `TIME '01:23:45.678'`
+
+|
+| `TIMESTAMP 'timestamp_str'`
+a| Constructs a timestamp.
+
+`timestamp_str` may be an ISO8601 or SQL timestamp representation, with or without time-zone.
+Examples:
+
+* `TIMESTAMP '2020-01-01 12:34:56.789'`
+* `TIMESTAMP '2020-01-01T12:34:56.789'`
+* `TIMESTAMP '2020-01-01 12:34:56.789Z'`
+* `TIMESTAMP '2020-01-01T12:34:56.789+03:00'`
+* `TIMESTAMP '2020-01-01T12:34:56.789[Europe/London]`
+|===
+
+== Temporal arithmetic
+
+[cols="3,3,8"]
+|===
+| Datalog | SQL | Return type
+
+| `(+ date-time duration)`
+
+  `(+ duration date-time)`
+
+  `(+ date-time interval)`
+
+  `(+ interval date-time)`
+| `date_time + duration`
+
+  `duration + date_time`
+
+  `date_time + interval`
+
+  `interval + date_time`
+| date-time
+
+| `(+ duration duration)` | `duration + duration` | duration
+| `(+ interval interval)` | `interval + interval` | interval
+
+| `(- date-time duration)`
+
+  `(- date-time interval)`
+| `date_time - duration`
+
+  `date_time - interval`
+| date-time
+
+| `(- duration duration)` | `duration - duration` | duration
+| `(- interval interval)` | `interval - interval` | interval
+
+| `(* duration num)`
+
+  `(* num duration)`
+| `duration * num`
+
+  `num * duration`
+| duration
+
+| `(* interval num)`
+
+  `(* num interval)`
+| `interval * num`
+
+  `num * interval`
+| interval
+
+| `(/ duration num)` | `duration / num` | duration
+| `(/ interval num)` | `interval / num` | interval
+| `(abs duration)` | `ABS(duration)` | duration
+| `(abs interval)` | `ABS(interval)` | interval
+
+|===
+
+[NOTE]
+====
+* Date-times are first cast to comparable resolutions before performing arithmetic.
+  e.g. adding a date-time with second resolution to a duration with microsecond resolution will first cast the date-time to microsecond resolution.
+* If local and TZ-aware date-times are passed to the same operation, the local date-time is first converted to a TZ-aware date-time using the query's time zone.
+* If any part of any operation would cause an overflow (including implicit casts), a runtime exception will be raised.
+====
+
+== Current time
+
+XTDB allows fine-grained control over user requests for the 'current time', to allow for fully repeatable queries.
+
+* The wall-clock time of a query is fixed when the query starts.
+  It can be explicitly specified by passing `:current-time` to the query options; otherwise, it will snapshot the current-time of the XTDB node.
+* The wall-clock time of a query within a transaction is fixed to the system-time of the transaction, as recorded by the transaction log (or overridden using the `:system-time` option to `submit-tx`).
+* Each transaction/query has a default time-zone, which defaults to the time-zone of the XTDB node's JVM unless overridden in the query options (`default-tz`).
+
+[cols="3,3,8"]
+|===
+| Datalog | SQL |
+
+| `(current-timestamp <precision>?)`
+| `CURRENT_TIMESTAMP`
+
+  `CURRENT_TIMESTAMP(precision)`
+| Returns the current wall-clock date/time as a timestamp with time-zone.
+
+| `(current-date <precision>?)`
+| `CURRENT_DATE`
+
+  `CURRENT_DATE(precision)`
+| Returns the current UTC wall-clock date.
+
+| `(current-time <precision>?)`
+| `CURRENT_TIME`
+
+  `CURRENT_TIME(precision)`
+| Returns the current UTC wall-clock time.
+
+| `(local-timestamp <precision>?)`
+| `LOCAL_TIMESTAMP`
+
+  `LOCAL_TIMESTAMP(precision)`
+| Returns the current wall-clock date/time as a local timestamp (without time-zone), as in the query's time-zone.
+
+| `(current-timestamp <precision>?)`
+| `LOCAL_TIME`
+
+  `LOCAL_TIME(precision)`
+| Returns the current wall-clock time as a local time (without time-zone), as in the query's time-zone.
+
+|===
+
+
+== Periods
+
+Periods in XTDB are represented as a struct with a `:start` and `:end` timestamp.
+
+Most of these period comparators have 'strictly' and 'immediate' variants.
+
+* 'strictly' variants check that the two periods don't meet - e.g. `precedes?` will return true if the earlier period ends at the same time the second period starts; `strictly-precedes?` will return false.
+* 'immediately' variants check that the two periods _do_ meet.
+
+These functions will return null if any of their arguments are null.
+
+[cols="3,3,8"]
+|===
+| Datalog | SQL |
+
+| `(contains? p1 p2)`
+
+  `(strictly-contains? p1 p2)`
+| `p1 CONTAINS p2`
+
+  `p1 STRICTLY CONTAINS p2`
+a| Returns true iff `p1` starts before `p2` starts and ends after `p2` ends.
+
+* `contains?`: `+p1-start <= p2-start+`, `+p1-end >= p2-end+`
+* `strictly-contains?`: `+p1-start < p2-start+`, `+p1-end > p2-end+`
+
+// TODO should this be `=`?
+| `(equals? p1 p2)` | `p1 EQUALS p2`
+a| Returns true iff the two periods are equal
+
+* `equals?`: `+p1-start = p2-start+`, `+p1-end = p2-end+`
+
+| `(lags? p1 p2)`
+
+  `(strictly-lags? p1 p2)`
+
+  `(immediately-lags? p1 p2)`
+| `p1 LAGS p2`
+
+  `p1 STRICTLY LAGS p2`
+
+  `p1 IMMEDIATELY LAGS p2`
+a| Returns true iff `p1` starts after `p2` starts and ends after `p2` ends.
+
+* `lags?`: `+p1-start >= p2-start+`, `+p1-end > p2-end+`
+* `strictly-lags?`: `+p1-start > p2-start+`, `+p1-end > p2-end+`
+* `immediately-lags?`: `+p1-start = p2-start+`, `+p1-end > p2-end+`
+
+| `(leads? p1 p2)`
+
+  `(strictly-leads? p1 p2)`
+
+  `(immediately-leads? p1 p2)`
+| `p1 LEADS p2`
+
+  `p1 STRICTLY LEADS p2`
+
+  `p1 IMMEDIATELY LEADS p2`
+a| Returns true iff `p1` starts before `p2` starts and ends before `p2` ends.
+
+* `leads?`: `+p1-start < p2-start+`, `+p1-end <= p2-end+`
+* `strictly-leads?`: `+p1-start < p2-start+`, `+p1-end < p2-end+`
+* `immediately-leads?`: `+p1-start < p2-start+`, `+p1-end = p2-end+`
+
+| `(overlaps? p1 p2)` | `p1 OVERLAPS p2`
+a| Returns true iff `p1` starts before `p2` ends and ends after `p2` starts
+
+* `overlaps?`: `+p1-start < p2-end+`, `+p1-end < p2-start+`
+* `strictly-overlaps?`: `+p1-start > p2-start+`, `+p1-end < p2-end+`
+
+| `(precedes? p1 p2)`
+
+  `(strictly-precedes? p1 p2)`
+
+  `(immediately-precedes? p1 p2)`
+| `p1 PRECEDES p2`
+
+  `p1 STRICTLY PRECEDES p2`
+
+  `p1 IMMEDIATELY PRECEDES p2`
+a| Returns true iff `p1` ends before `p2` starts
+
+* `precedes?`: `+p1-end <= p2-start+`
+* `strictly-precedes?`: `+p1-end < p2-start+`
+* `immediately-precedes?`: `+p1-end = p2-start+`
+
+| `(succeeds? p1 p2)`
+
+  `(strictly-succeeds? p1 p2)`
+
+  `(immediately-succeeds? p1 p2)`
+| `p1 SUCCEEDS p2`
+
+  `p1 STRICTLY SUCCEEDS p2`
+
+  `p1 IMMEDIATELY SUCCEEDS p2`
+a| Returns true iff `p1` starts after `p2` ends
+
+* `succeeds?`: `+p1-start >= p2-end+`
+* `strictly-succeeds?`: `+p1-start > p2-end+`
+* `immediately-succeeds?`: `+p1-start = p2-end+`
+
+|===
+
+== Miscellaneous
+
+[cols="3,3,8"]
+|===
+| Datalog | SQL |
+| `(date-trunc "unit" date-time)` | `DATE_TRUNC('unit', date_time)`
+| Truncates the date-time to the given time-unit, which must be one of `YEAR`, `MONTH`, `DAY`, `MINUTE`, `SECOND`, `MILLISECOND`, `MICROSECOND.`
+| `(extract "field" date-time)` | `EXTRACT('field', date_time)`
+| Extracts the given field from the date-time, which must be one of `YEAR`, `MONTH`, `DAY`, `MINUTE`.
+
+|===

@@ -1,0 +1,205 @@
+---
+publish: ready
+title: "Development Diary #7"
+subtitle: 1.18 to 1.21, market research, and secret projects
+summary: We spent the latter half of 2021 hardening XTDB and validating our plans for the coming years. Here's what we learned.
+authorId: jdt
+date: 2022-05-27T09:00Z
+cover: /images/cover/dev-diary-7.webp
+socialImage: /images/cover/dev-diary-7.webp
+tags: ['Dev Diary']
+---
+
+Welcome to the seventh edition of the XTDB Dev Diary.
+Our work over the past six months has been divided across quite a few distinct tracks -- some visible, others less so.
+We're looking forward to catching you up! Details about our upcoming exposition at https://www.thestrangeloop.com/[Strange Loop] in September are below also.
+
+
+== Changelog: 1.18, 1.19, 1.20, 1.21
+
+Much of our effort in late 2021 was spent hardening XTDB.
+As more and more companies are deploying XTDB into production, we've been given an increasing number of opportunities to squash edge-case bugs and solidify XTDB's behaviours.
+
+https://github.com/xtdb/xtdb/releases/tag/1.18.1[1.18.1] predominantly brought Lucene improvements.
+We added a `:refresh-frequency` parameter, similar to Elastic's `refresh_interval` setting, and improved Lucene's performance.
+We also improved custom indexes by including the original transaction operations in the callback.
+
+https://github.com/xtdb/xtdb/releases/tag/1.19.0[1.19.0] was, in some ways, our biggest release yet (in terms of raw lines of code!) -- we renamed the database to _XTDB._
+We'll speak about this more in its own section.
+
+https://github.com/xtdb/xtdb/releases/tag/1.20.0[1.20.0] was an hardening release purely for Lucene's benefit, ensuring that it can cope with absent documents and be restored from a checkpoint. We also changed the `pull` behaviour to return `nil` on empty joins.
+
+https://github.com/xtdb/xtdb/releases/tag/1.21.0[1.21.0] was a much bigger hardening release with a few long-awaited new features.
+TPC-H performance improved, caches were stabilized with better hash distribution, Clojure was bumped to 1.11, many small edge case errors were corrected, and a number of behaviours were made more consistent: `pull-many`, failed `match`, Lucene `:timeout`, auto-incrementing identifiers in Postgres and MySQL, and more.
+
+In 1.21.0, three big new features landed.
+First, `:find` clauses now support simple Clojure expressions in projections and aggregations.
+Second, you can now import Transaction Time from an upstream source -- a huge win for temporal power users.
+Last, but certainly not least, users on Apple M1 chips now have fast, native ARM build support for RocksDB.
+
+
+== New name, new website
+
+XTDB hasn't always been XTDB.
+Most of our users remember a time when it was a little database lovingly known as _Crux._
+Crux grew out of a very real bitemporal data processing problem which surfaced in a JUXT project for a Tier-1 bank.
+The vision and technical scope of XTDB has continued to evolve ever since, and in the meantime performance has improved and APIs have stabilized.
+
+By the time XTDB found its final name, it was already a very solid product used in many organizations -- most of which we don't know!
+Unless someone has a commercial contract with us, or reaches out to us via https://discuss.xtdb.com/[Discuss] / https://juxt-oss.zulipchat.com/#narrow/stream/194466-xtdb[Zulip] / https://twitter.com/xtdb_com[Twitter] / etc, we're none the wiser.
+The beauty of open source.
+
+XTDB isn't just a new name, though.
+With it comes quite a grand vision for the future.
+We feel -- now more than ever -- that immutability and _time_ play a fundamental role in every system we have ever built, repaired, or maintained.
+XTDB is a fun play on the JUXT logo, but we're also quite serious when we describe it as the "Cross Time Database".
+
+
+== XTDB in the wild
+
+XTDB originated from the domain of End-of-Day Risk calculations, so it's no surprise that we hear about users applying it to financial systems quite frequently.
+Trading firms are using XTDB as a "tactical bitemporal database" across a variety of grey box trading, instrument, and analytical services.
+Quant firms are using XTDB as an HTAP database for algo research.
+Big banks use XTDB for risk, auditing, and compliance.
+
+But we're surprised every week by the industries putting XTDB into production.
+In the education sector, it's used to track teachers and class loads.
+In workforce management, it's used as a flexible graph database that allows users to model data themselves.
+The list goes on.
+
+Many of these companies are household names.
+Unfortunately, just as we hand-wave over "Tier-1 banks", we are often forced to hand-wave over these logos.
+Over the coming year, as more companies sign up for our https://xtdb.com/support/production/[Partner Program] and https://xtdb.com/support/[Commercial Support], we look forward to sharing their stories with you.
+
+
+== Have You Tried Rubbing A Database On It?
+
+https://www.hytradboi.com/[HYTRADBOI] was an information-packed virtual conference at the end of April.
+It consisted of 10-minute pre-recorded talks woven together using only open source technologies.
+The conference was held on a self-hosted https://matrix.org/[Matrix] server and the afterparty was hosted on https://jitsi.org/[Jitsi].
+I was fortunate enough to give a talk:  https://www.hytradboi.com/2022/baking-in-time-at-the-bottom-of-the-database[Baking in time at the bottom of the database], a technical background and justification for our creation of XTDB.
+
+It was a great opportunity to hear about Martin Kleppmann's latest work on CRDTs and I thought the https://www.hytradboi.com/2022/ultorg-a-user-interface-for-relational-databases[Ultorg] demo was particularly impressive. Huge thanks to https://www.scattered-thoughts.net/[Jamie Brandon] for putting on the event!
+
+video::RBs-jk5E1x0[youtube]
+
+If you enjoyed that talk, I encourage you to come to my workshop in September at Strange Loop 2022! I'll be taking participants through real-world bitemporal data challenges with and without XTDB.
+
+image::/images/blog/strangeloop-2022-banner-taylor.webp["Bitemporal Data Management with XTDB", align="center", width=400px, link="https://www.thestrangeloop.com/2022/bitemporal-data-management-with-xtdb.html"]
+
+
+== Market Research
+
+From the moment we started pursuing XTDB as a commercial product, the team has spent hundreds of hours interviewing users, partners, customers, and advisors.
+We've asked everyone to look at XTDB, retrospectively, and tell us their honest opinion about data problems their company faces.
+The results are consistent.
+
+First, no one wants to babysit a database in 2022.
+A large part of XTDB's current appeal is how fast and easy it is to get started: add a dependency on `com.xtdb/xtdb-core` and start adding data.
+Bam, done.
+Everyone we spoke to wants this level of operational simplicity -- but across all languages and platforms.
+
+The second problem everyone wants solved is equally unsurprising: easy, immutable data.
+Whether your business thinks of it as "lineage", "provenance", or "perfect audits", absolutely everyone is tired of working around mutable databases (AKA "the queryable cache") with event sourcing.
+Event sourcing should be for, well, events -- not a bandaid on the fact that almost every major database throws out data with each `UPDATE` operation (or makes the old record unqueryable).
+
+From there, everyone has an itch to scratch.
+CTOs are very interested in solving the "two database problem" with Hybrid Transactional-Analytical Processing (HTAP), and they don't want to maintain an ETL (or ELT) pipeline anymore.
+Developers want _real_ time-traveling queries and versioning for free in their OLTP systems, they don't want to shoehorn their realtime data into an OLAP system anymore.
+The DDD folks want nested records, they don't want to cram strings into Postgres JSON columns anymore.
+Data scientists want first-class SQL, they don't want to learn a new query language.
+
+We've been listening.
+
+== Behind The Scenes
+
+...but we haven't _only_ been listening.
+We've also been researching and building.
+It's our goal to take what everyone currently loves about XTDB (in the words of https://thesample.ai/[Jacob O'Bryant], _"the database that sparks joy"_) and grow it.
+Much of that growth is interlinked.
+We think of these interlinked qualities as the _pillars_ of XTDB.
+
+=== Pillar #1: SoSaC
+If we hope to build the world's most-loved immutable database, it has to do immutability very well, and we firmly believe that "doing immutability well" implies the Separation of Storage and Compute (we recently recorded a https://www.youtube.com/watch?v=8tePLbzJffI[podcast episode] all about this concept -- see below).
+However currently, as of 1.21.0, XTDB's operational storage layer (a.k.a. the Index Store) requires the underlying Key-Value store (e.g. RocksDB) to exist on every node with a full replica of almost all data.
+In the future, XTDB will reorient around cloud object storage and handling data in large columnar 'chunks', to allow nodes to retrieve and process on-demand only the subset of chunks needed for a given set of queries.
+This will enable much simpler and more cost-effective horizontal scaling.
+
+video::8tePLbzJffI[youtube]
+
+=== Pillar #2: Columnar HTAP
+XTDB 1.21.0 is an aspiring HTAP database; it can already execute complex point-in-time temporal queries and graph queries that most of the old guard would struggle with.
+However, if users really want XTDB to service a more widespread proportion of their OLTP and OLAP workloads, we know that a reorganization of the core machinery is necessary.
+To that end, we have been building a new columnar storage engine based on top of https://arrow.apache.org/[Apache Arrow].
+
+=== Pillar #3: Temporal Indexing
+XTDB 1.21.0 already uses https://v1-docs.xtdb.com/resources/bibliography/#temporaldatastructures[multiple clever techniques] to maintain temporal indexes.
+These were specifically designed to enable efficient _point-in-time_ bitemporal queries.
+However, practically every week we see new bitemporal modeling use cases and requirements discussed in popular forums -- it seems many developers don't even realize they have a bitemporal problem until they're neck deep.
+Luckily there is https://v1-docs.xtdb.com/resources/bibliography/#temporal[decades' worth of research] on bitemporal data management to mine for inspiration on what lies beyond the point-in-time query model; we've done that.
+Armed with what we've learned, we're building a much more powerful temporal index.
+
+=== Pillar #4: Dynamism
+XTDB 1.21.0 allows almost any data to be stored including deeply nested documents with arbitrary `java.io.Serializable` types (thanks to https://github.com/ptaoussanis/nippy[Nippy]!), however, https://en.wikipedia.org/wiki/Sargable[sargable] (index-backed) querying is restricted to top-level values.
+Looking ahead, Apache Arrow data types are more restrictive -- in a way we consider hygienic, not detrimental -- and also enable us to pursue a database which is more flexible and _dynamic_.
+We hope to make nested data both easy to insert and also easy to query.
+As https://twitter.com/jarohen[James] puts it: _"Just put maps. Just query maps. That's it."_
+
+=== Pillar #5: "Easy to use"
+
+We need to make XTDB as easy to use for Elixir and Python users as it currently is for Clojure (and other JVM) users.
+Doing so has a few implications.
+
+First, and most difficult, is making SQL a first-class citizen of XTDB.
+At JUXT, we absolutely love Datalog -- but we're Clojure developers.
+We have routinely heard that "there's just no escaping SQL" and we believe it.
+We aren't just building XTDB for ourselves.
+We are well underway in replacing XTDB's current https://v1-docs.xtdb.com/extensions/sql/[SQL module built on Apache Calcite] with a native implementation of the SQL standard (including https://en.wikipedia.org/wiki/SQL:2011[SQL:2011] bitemporal operators!).
+
+The second implication is that we will need to build first-class client libraries for all major programming languages.
+As far as SQL is concerned, this predominantly means JDBC, ODBC, and native drivers.
+
+If client libraries and drivers are the user interface, the other side of the "ease of use" coin is operational complexity.
+XTDB is already quite easy to use, but we intend to automate and simplify everything we can.
+We have also considered providing XTDB as a service ("XTaaS"?).
+If this interests you, we would love to know what your requirements of such a service would be: mailto:hello@xtdb.com[hello@xtdb.com]
+
+=== Open Source
+
+These research initiatives are under heavy development internally.
+As the https://xtdb.com/[xtdb.com] homepage states, our ethos is "Fully Open Source" -- and this still holds.
+But we do not want to confuse or frighten anyone by waving around a bunch of experimental code prematurely.
+We will continue to harden XTDB just as we did throughout 2021: with incremental stable releases and long-term support for all our users.
+
+We are eager to share exciting new source code with you though -- and we will as soon as we move out of "experimental" territory.
+
+
+== The Future of XTDB at Strange Loop 2022
+
+Håkan will accompany me to Strange Loop in September.
+He'll be giving a talk on "Light and adaptive indexing for immutable databases" where he'll explain the past two years of research and how it affects XTDB's new design.
+
+image::/images/blog/strangeloop-2022-banner-raberg.webp["Bitemporal Data Management with XTDB", align="center", width=400px, link="https://www.thestrangeloop.com/2022/light-and-adaptive-indexing-for-immutable-databases.html"]
+
+
+== Community
+
+Here are some cool things users have been sharing recently:
+
+* https://github.com/joefromct/py-xtdb[py xtdb] -- a tiny library to interact with XTDB via Python's Requests module (see https://juxt-oss.zulipchat.com/#narrow/stream/194466-xtdb-users/topic/python-client[the Zulip thread])
+* https://github.com/tatut/pharo-XTDB[pharo-XTDB] -- XTDB client for Pharo Smalltalk
+*  https://github.com/FiV0/xtdb-chinook[XTDB Chinook] + https://github.com/FiV0/datafy-nav-demo[Clojure datafy/nav demo] sample projects
+
+XTDB wouldn't exist without its high-energy community.
+Thank you to everyone who shares in XTDB-related excitement with us across the globe.
+We can't wait to share the updates of the coming months!
+
+As always, do get in touch with the team if you have any questions, issues, or feedback.
+
+* https://discuss.xtdb.com/[Discuss] (forums)
+* https://juxt-oss.zulipchat.com/#narrow/stream/194466-xtdb[Zulip]
+* https://twitter.com/xtdb_com[Twitter]
+* https://mastodon.social/web/@xtdb[Mastodon]
+* mailto:hello@xtdb.com[hello@xtdb.com]
+
+'''

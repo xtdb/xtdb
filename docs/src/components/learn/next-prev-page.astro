@@ -1,0 +1,49 @@
+---
+  import learnNav from '/src/nav/learn.yml'
+
+  const { slug: currentSlug } = Astro.props
+
+  var sectionPos = null
+  var pagePos = null
+
+  learnNav.map(({section, pages}, sectionIndex) => {
+    pages.map(({slug, label}, pageIndex) => {
+      if (slug == currentSlug) {
+        sectionPos = sectionIndex
+        pagePos = pageIndex
+      }
+    })
+  })
+
+  function getPage(pos) {
+    if (learnNav[sectionPos]) {
+      return learnNav[sectionPos].pages[pos]
+    }
+  }
+
+  function getMaxPageIndex() {
+    if (learnNav[sectionPos]) {
+      return learnNav[sectionPos].length - 1
+    }
+  }
+
+  const prevPage = pagePos == 0 ? null : getPage(pagePos-1)
+  const nextPage = pagePos == getMaxPageIndex() ? null : getPage(pagePos+1)
+  const showSelection = prevPage || nextPage
+---
+{showSelection && (
+  <div class="flex flex-row border-t">
+    {prevPage && (
+      <div>
+        <p class="mb-1 text-left font-bold">Prev</p>
+        <a class="mt-1 text-juxt-orange no-underline hover:no-underline" href={"/learn/" + prevPage.slug}>{prevPage.label}</a>
+      </div>
+    )}
+    {nextPage && (
+      <div class="ml-auto">
+        <p class="mb-1 text-right font-bold">Next</p>
+        <a class="mt-1 text-juxt-orange no-underline hover:no-underline" href={"/learn/" + nextPage.slug}>{nextPage.label}</a>
+      </div>
+    )}
+  </div>
+)}
