@@ -5,7 +5,7 @@
             [xtdb.util :as util])
   (:import (java.nio ByteBuffer)
            (org.apache.arrow.memory ArrowBuf RootAllocator)
-           (xtdb.buffer_pool IBufferPool)
+           xtdb.IBufferPool
            (xtdb.object_store ObjectStore)
            (xtdb.util ArrowBufLRU)))
 

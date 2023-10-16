@@ -14,7 +14,7 @@
            [org.apache.arrow.memory.util ArrowBufPointer]
            org.apache.arrow.vector.types.pojo.Field
            org.apache.arrow.vector.VectorSchemaRoot
-           xtdb.buffer_pool.IBufferPool
+           xtdb.IBufferPool
            xtdb.object_store.ObjectStore
            (xtdb.trie EventRowPointer IDataRel LiveHashTrie)
            xtdb.util.WritableByteBufferChannel

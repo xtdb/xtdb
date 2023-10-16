@@ -7,7 +7,7 @@
             [xtdb.test-util :as tu]
             [xtdb.util :as util])
   (:import (org.apache.arrow.memory ArrowBuf)
-           (xtdb.buffer_pool IBufferPool)
+           xtdb.IBufferPool
            (xtdb.object_store ObjectStore)
            (xtdb InstantSource)))
 

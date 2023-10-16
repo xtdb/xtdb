@@ -1,26 +1,21 @@
 (ns xtdb.buffer-pool
-  (:require [xtdb.object-store :as object-store]
-            [xtdb.util :as util]
+  (:require [clojure.tools.logging :as log]
             [juxt.clojars-mirrors.integrant.core :as ig]
-            [clojure.tools.logging :as log])
-  (:import xtdb.util.ArrowBufLRU
-           xtdb.object_store.ObjectStore
-           java.io.Closeable
+            [xtdb.object-store :as object-store]
+            [xtdb.util :as util])
+  (:import java.io.Closeable
            java.nio.file.Path
-           [java.util Map UUID]
-           java.util.concurrent.CompletableFuture
-           java.util.concurrent.locks.StampedLock
+           [java.util Map]
            (java.util.concurrent.atomic AtomicLong)
+           java.util.concurrent.CompletableFuture
            [org.apache.arrow.memory ArrowBuf BufferAllocator]
            (org.apache.arrow.vector VectorSchemaRoot)
-           (org.apache.arrow.vector.ipc.message ArrowFooter ArrowRecordBatch)))
+           (org.apache.arrow.vector.ipc.message ArrowFooter ArrowRecordBatch)
+           xtdb.IBufferPool
+           xtdb.object_store.ObjectStore
+           xtdb.util.ArrowBufLRU))
 
 (set! *unchecked-math* :warn-on-boxed)
-
-(definterface IBufferPool
-  (^java.util.concurrent.CompletableFuture getBuffer [^String k])
-  (^java.util.concurrent.CompletableFuture getRangeBuffer [^String k ^int start ^int len])
-  (^boolean evictBuffer [^String k]))
 
 (defn- retain [^ArrowBuf buf] (.retain (.getReferenceManager buf)) buf)
 

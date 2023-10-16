@@ -12,7 +12,7 @@
   (:import (clojure.lang MapEntry)
            (java.util.function IntPredicate)
            [org.apache.arrow.vector VectorSchemaRoot]
-           (xtdb.buffer_pool IBufferPool)
+           xtdb.IBufferPool
            (xtdb.metadata IMetadataManager IMetadataPredicate)))
 
 (t/use-fixtures :each tu/with-node)

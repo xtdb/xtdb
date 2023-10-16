@@ -20,7 +20,7 @@
            (org.apache.arrow.memory ArrowBuf)
            (org.apache.arrow.vector FieldVector)
            (org.apache.arrow.vector.types.pojo ArrowType$Union)
-           xtdb.buffer_pool.IBufferPool
+           xtdb.IBufferPool
            xtdb.object_store.ObjectStore
            (xtdb.vector IVectorReader IVectorWriter)))
 

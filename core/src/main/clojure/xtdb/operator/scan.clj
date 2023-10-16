@@ -29,7 +29,7 @@
            [org.roaringbitmap.buffer MutableRoaringBitmap]
            xtdb.api.protocols.TransactionInstant
            (xtdb.bitemporal EventResolver RowConsumer)
-           xtdb.buffer_pool.IBufferPool
+           xtdb.IBufferPool
            xtdb.ICursor
            (xtdb.metadata IMetadataManager ITableMetadata)
            xtdb.object_store.ObjectStore

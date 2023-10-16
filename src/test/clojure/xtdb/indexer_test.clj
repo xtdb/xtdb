@@ -20,7 +20,7 @@
            java.time.Duration
            [org.apache.arrow.memory BufferAllocator]
            xtdb.api.protocols.TransactionInstant
-           [xtdb.buffer_pool IBufferPool]
+           xtdb.IBufferPool
            (xtdb.metadata IMetadataManager)
            xtdb.node.Node
            xtdb.object_store.ObjectStore

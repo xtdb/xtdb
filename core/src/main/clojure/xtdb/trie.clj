@@ -19,7 +19,7 @@
            [org.apache.arrow.vector.ipc ArrowFileWriter]
            (org.apache.arrow.vector.types.pojo ArrowType$Union Schema)
            org.apache.arrow.vector.types.UnionMode
-           xtdb.buffer_pool.IBufferPool
+           xtdb.IBufferPool
            (xtdb.object_store ObjectStore)
            (xtdb.trie ArrowHashTrie ArrowHashTrie$Leaf HashTrie HashTrie$Node LiveHashTrie LiveHashTrie$Leaf)
            (xtdb.util WritableByteBufferChannel)

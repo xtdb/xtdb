@@ -9,7 +9,7 @@
             [xtdb.trie :as trie]
             [xtdb.util :as util])
   (:import (java.time LocalTime)
-           (xtdb.buffer_pool IBufferPool)
+           xtdb.IBufferPool
            (xtdb.metadata IMetadataManager ITableMetadata)))
 
 (t/use-fixtures :once tu/with-allocator)
