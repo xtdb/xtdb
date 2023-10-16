@@ -9,8 +9,9 @@
            xtdb.IResultSet
            (xtdb.operator IRaQuerySource)
            (xtdb.operator.scan IScanEmitter)
-           (xtdb.query BindingSpec Expr$Call Expr$LogicVar Expr$Obj Query$From Query$Return
+           (xtdb.query Expr$Call Expr$LogicVar Expr$Obj Query$From Query$Return
                        Query$OrderBy Query$OrderDirection Query$OrderSpec Query$Pipeline Query$With
+                       OutSpec ArgSpec ColSpec VarSpec
                        Query$Unify Query$Where Query$Without Query$Limit Query$Offset Query$Aggregate)))
 
 ;;TODO consider helper for [{sym expr} sym] -> provided vars set
@@ -118,7 +119,7 @@
           {:ra-plan [:mega-join [] rels]})
         (wrap-unify var->cols))))
 
-(defn- plan-from-bind-spec [^BindingSpec bind-spec]
+(defn- plan-from-bind-spec [^OutSpec bind-spec]
   (let [col (symbol (.attr bind-spec))
         expr (.expr bind-spec)]
     (if (instance? Expr$LogicVar expr)
@@ -128,7 +129,7 @@
       {:scan-col-spec {col (list '= col (plan-expr expr))}})))
 
 (defn- plan-from [^Query$From from]
-  (let [planned-bind-specs (mapv plan-from-bind-spec (.bindSpecs from))]
+  (let [planned-bind-specs (mapv plan-from-bind-spec (.bindings from))]
       (-> {:ra-plan [:scan {:table (symbol (.table from))}
                      (mapv :scan-col-spec planned-bind-specs)]}
           (wrap-unify (-> planned-bind-specs
@@ -172,7 +173,7 @@
     (let [planned-projections
           (mapv
            (fn [col]
-             {(col-sym (.attr ^BindingSpec col)) (plan-expr (.expr ^BindingSpec col))})
+             {(col-sym (.attr ^ColSpec col)) (plan-expr (.expr ^ColSpec col))})
            (.cols this))]
       {:ra-plan [:project planned-projections ra-plan]
        :provided-vars (set (map #(first (keys %)) planned-projections))})))
@@ -188,9 +189,9 @@
   Query$With
   (plan-unify-clause [this]
     ;;TODO check for duplicate vars
-    (for [binding (.cols this)
-          :let [var (col-sym (.attr ^BindingSpec binding))
-                expr (.expr ^BindingSpec binding)
+    (for [binding (.vars this)
+          :let [var (col-sym (.attr ^VarSpec binding))
+                expr (.expr ^VarSpec binding)
                 planned-expr (plan-expr expr)]]
       [:with {:ra-plan planned-expr
               :provided-vars #{var}
@@ -288,9 +289,9 @@
     (let [planned-specs
           (mapv
            (fn [col]
-             (if (instance? Expr$LogicVar (.expr ^BindingSpec col))
-               (plan-expr (.expr ^BindingSpec col))
-               {(col-sym (.attr ^BindingSpec col)) (plan-expr (.expr ^BindingSpec col))}))
+             (if (instance? Expr$LogicVar (.expr ^ColSpec col))
+               (plan-expr (.expr ^ColSpec col))
+               {(col-sym (.attr ^ColSpec col)) (plan-expr (.expr ^ColSpec col))}))
            (.cols this))]
       {:ra-plan [:group-by planned-specs
                    ra-plan]

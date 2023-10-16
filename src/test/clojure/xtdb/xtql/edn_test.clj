@@ -94,12 +94,15 @@
     (t/is (= q
              (roundtrip-q q)))))
 
-(t/deftest test-parse-with
-  (let [q '(-> (from :foo a)
-               (with {:bar 1} {:baz (+ 1 1)}))]
+(t/deftest test-parse-with-operator
+  (let [q '(with {:bar 1} {:baz (+ 1 1)})]
     (t/is (= q
-             (roundtrip-q q)))))
+             (roundtrip-q-tail q)))))
 
+(t/deftest test-parse-with-unify-clause
+  (let [q '(with {bar 1} {baz (+ 1 1)})]
+    (t/is (= q
+             (roundtrip-unify-clause q)))))
 ;TODO with as unify-clause, will fail due to lack of distinct binding types
 
 (t/deftest test-parse-without
@@ -110,7 +113,7 @@
 
 (t/deftest test-parse-return
   (let [q '(-> (from :foo a)
-               (return a {:a b}))]
+               (return :a {:a b}))]
     (t/is (= q
              (roundtrip-q q)))))
 

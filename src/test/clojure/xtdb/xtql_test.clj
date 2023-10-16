@@ -162,7 +162,7 @@
                       '(-> (unify (from :film {:xt/id film, :film/name film-name, :film/bond bond})
                                   (from :person {:xt/id bond, :person/name bond-name})
                                   (with {film :skyfall}))
-                           (return film-name bond-name)))))
+                           (return :film-name :bond-name)))))
         "one -> one")
 
 
@@ -174,7 +174,7 @@
                       '(-> (unify (from :film {:film/name film-name, :film/bond bond})
                                   (from :person {:xt/id bond, :person/name bond-name})
                                   (with {bond :daniel-craig}))
-                           (return film-name bond-name)))))
+                           (return :film-name :bond-name)))))
         "one -> many"))
 
 ;; https://github.com/tonsky/datascript/blob/1.1.0/test/datascript/test/query_aggregates.cljc#L14-L39
@@ -188,7 +188,7 @@
     (t/is (= #{{:heads 1, :count-heads 3} {:heads 3, :count-heads 1}}
              (set (xt/q tu/*node*
                         '(-> (from :docs {:heads heads})
-                             (aggregate heads {:count-heads (count heads)})))))
+                             (aggregate :heads {:count-heads (count heads)})))))
           "head frequency")
 
     (t/is (= #{{:sum-heads 6, :min-heads 1, :max-heads 3, :count-heads 4}}
@@ -814,7 +814,7 @@
                           (from :docs {:xt/id e3 :age a3})
                           (with {a4 (+ a1 a2)})
                           (where (= a4 a3)))
-                         (return e1 e2 e3))))))
+                         (return :e1 :e2 :e3))))))
 
     (t/is (= #{{:e1 :petr, :e2 :ivan, :e3 :slava}
                {:e1 :ivan, :e2 :petr, :e3 :slava}}
@@ -825,7 +825,7 @@
                           (from :docs {:xt/id e2 :age a2})
                           (from :docs {:xt/id e3 :age a3})
                           (with {a3 (+ a1 a2)}))
-                         (return e1 e2 e3))))))))
+                         (return :e1 :e2 :e3))))))))
 
 #_
 (deftest test-namespaced-columns-within-match
