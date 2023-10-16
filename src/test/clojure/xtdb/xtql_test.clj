@@ -798,8 +798,7 @@
                       '{:find [1 "foo" xt/id]
                         :where [(match :docs [xt/id])]})))))
 
-#_
-(deftest calling-a-function-580
+(deftest testing-unify-with
   (let [_tx (xt/submit-tx tu/*node*
                           '[[:put :docs {:xt/id :ivan, :age 15}]
                             [:put :docs {:xt/id :petr, :age 22}]
@@ -809,29 +808,24 @@
                {:e1 :ivan, :e2 :petr, :e3 :slava}}
              (set
               (xt/q tu/*node*
-                    '{:find [e1 e2 e3]
-                      :where [
-                              (match :docs {:xt/id e1})
-                              (match :docs {:xt/id e2})
-                              (match :docs {:xt/id e3})
-                              [e1 :age a1]
-                              [e2 :age a2]
-                              [e3 :age a3]
-                              [(+ a1 a2) a12]
-                              [(= a12 a3)]]}))))
+                    '(-> (unify
+                          (from :docs {:xt/id e1 :age a1})
+                          (from :docs {:xt/id e2 :age a2})
+                          (from :docs {:xt/id e3 :age a3})
+                          (with {a4 (+ a1 a2)})
+                          (where (= a4 a3)))
+                         (return e1 e2 e3))))))
 
     (t/is (= #{{:e1 :petr, :e2 :ivan, :e3 :slava}
                {:e1 :ivan, :e2 :petr, :e3 :slava}}
              (set
               (xt/q tu/*node*
-                    '{:find [e1 e2 e3]
-                      :where [(match :docs {:xt/id e1})
-                              (match :docs {:xt/id e2})
-                              (match :docs {:xt/id e3})
-                              [e1 :age a1]
-                              [e2 :age a2]
-                              [e3 :age a3]
-                              [(+ a1 a2) a3]]}))))))
+                    '(-> (unify
+                          (from :docs {:xt/id e1 :age a1})
+                          (from :docs {:xt/id e2 :age a2})
+                          (from :docs {:xt/id e3 :age a3})
+                          (with {a3 (+ a1 a2)}))
+                         (return e1 e2 e3))))))))
 
 #_
 (deftest test-namespaced-columns-within-match

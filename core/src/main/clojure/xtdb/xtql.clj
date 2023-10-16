@@ -16,7 +16,8 @@
 ;;TODO consider helper for [{sym expr} sym] -> provided vars set
 ;;TODO Should all user supplied lv be planned via plan-expr, rather than explicit calls to col-sym.
 ;;keeps the conversion to java AST to -> clojure sym in one place.
-;;
+;;TODO Document var->cols purpose, and/or give it a more descriptive name
+
 (defprotocol PlanQuery
   (plan-query [query]))
 
@@ -82,6 +83,8 @@
        (vec)))
 
 (defn- wrap-unify [{:keys [ra-plan]} var->cols]
+  ;; wrap-unify doesn't depend on provided/required vars it will
+  ;; return provided-vars based on var->cols
   {:ra-plan [:project (vec (for [[lv cols] var->cols]
                              (or (cols lv)
                                  {(col-sym lv) (first cols)})))
@@ -189,16 +192,31 @@
           :let [var (col-sym (.attr ^BindingSpec binding))
                 expr (.expr ^BindingSpec binding)
                 planned-expr (plan-expr expr)]]
-      [:with {:ra-plan [:map [{var planned-expr}]
-                        [:table [{}]]]
+      [:with {:ra-plan planned-expr
               :provided-vars #{var}
               :required-vars (required-vars expr)}])))
 
 (defn wrap-wheres [plan wheres]
   (update plan :ra-plan wrap-select (map :ra-plan wheres)))
 
-(defn wrap-withs [plan withs]
-  (mega-join (concat [plan] withs)))
+(defn wrap-withs [{:keys [ra-plan provided-vars]} withs]
+  (let [renamed-withs (->> withs
+                           (into [] (map-indexed
+                                     (fn [idx with]
+                                       (assoc
+                                        with
+                                        :renamed-provided-var
+                                        (col-sym (str "_c" idx) (first (:provided-vars with))))))))
+
+        var->cols (-> (concat (map (juxt identity identity) provided-vars)
+                              (->> renamed-withs (map (juxt (comp first :provided-vars) :renamed-provided-var))))
+                      (->> (group-by first))
+                      (update-vals #(into #{} (map second) %)))]
+
+    (-> {:ra-plan [:map (vec (for [{:keys [ra-plan renamed-provided-var]} renamed-withs]
+                               {renamed-provided-var ra-plan}))
+                   ra-plan]}
+        (wrap-unify var->cols))))
 
 (extend-protocol PlanQuery
   Query$Unify
