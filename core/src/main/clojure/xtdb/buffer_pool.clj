@@ -3,12 +3,14 @@
             [clojure.tools.logging :as log]
             [juxt.clojars-mirrors.integrant.core :as ig]
             [xtdb.object-store :as object-store]
-            [xtdb.util :as util])
+            [xtdb.util :as util]
+            [xtdb.object-store :as os])
   (:import java.io.Closeable
-           java.nio.file.Path
+           [java.nio.file FileSystems FileVisitOption Files LinkOption Path]
            [java.util Map NavigableMap]
+           [java.util.concurrent CompletableFuture ConcurrentSkipListMap]
            (java.util.concurrent.atomic AtomicLong)
-           (java.util.concurrent CompletableFuture ConcurrentSkipListMap)
+           java.util.NavigableMap
            [org.apache.arrow.memory ArrowBuf BufferAllocator]
            (org.apache.arrow.vector VectorSchemaRoot)
            (org.apache.arrow.vector.ipc.message ArrowFooter ArrowRecordBatch)
@@ -103,6 +105,74 @@
 
 (derive ::in-memory :xtdb/buffer-pool)
 
+(deftype LocalBufferPool [^BufferAllocator allocator, ^Map buffers, ^Path root-path]
+  IBufferPool
+  (getBuffer [_ k]
+    (CompletableFuture/completedFuture
+     (when k
+       (if-let [cached-buffer (cache-get buffers k)]
+         (do
+           (record-cache-hit cached-buffer)
+           cached-buffer)
+
+         (let [nio-buffer (os/get-path root-path k)
+               create-arrow-buf #(util/->arrow-buf-view allocator nio-buffer)
+               [_ buf] (cache-compute buffers k create-arrow-buf)]
+           buf)))))
+
+  (getRangeBuffer [_ k start len]
+    (object-store/ensure-shared-range-oob-behaviour start len)
+
+    (CompletableFuture/completedFuture
+     (when k
+       (if-let [cached-buffer (or (cache-get buffers [k start len])
+                                  (when-let [^ArrowBuf cached-full-buffer (cache-get buffers k)]
+                                    (.slice cached-full-buffer start len)))]
+         (do
+           (record-cache-hit cached-buffer)
+           cached-buffer)
+
+         (let [nio-buffer (os/get-path-range root-path k start len)
+               create-arrow-buf #(util/->arrow-buf-view allocator nio-buffer)
+               [_ buf] (cache-compute buffers [k start len] create-arrow-buf)]
+           buf)))))
+
+  (putObject [_ k buf] (CompletableFuture/completedFuture (os/put-path root-path k buf)))
+  (listObjects [_this] (os/list-path root-path))
+  (listObjects [_this dir] (os/list-path root-path dir))
+
+  Closeable
+  (close [_]
+    (locking buffers
+      (let [i (.iterator (.values buffers))]
+        (while (.hasNext i)
+          (util/close (.next i))
+          (.remove i)))
+      (util/close allocator))))
+
+(defn- ->buffer-cache [^long cache-entries-size ^long cache-bytes-size]
+  (ArrowBufLRU. 16 cache-entries-size cache-bytes-size))
+
+(defmethod ig/prep-key ::local [_ opts]
+  (-> (merge {:cache-entries-size 1024
+              :cache-bytes-size 536870912
+              :allocator (ig/ref :xtdb/allocator)}
+             opts)
+      (util/maybe-update :path util/->path)))
+
+(defmethod ig/init-key ::local [_ {:keys [^Path path, ^BufferAllocator allocator,
+                                           ^long cache-entries-size, ^long cache-bytes-size]}]
+  (when-not (util/path-exists path)
+    (util/mkdirs path))
+
+  (util/with-close-on-catch [allocator (util/->child-allocator allocator "buffer-pool")]
+    (->LocalBufferPool allocator (->buffer-cache cache-entries-size cache-bytes-size) path)))
+
+(defmethod ig/halt-key! ::local [_ buffer-pool]
+  (util/close buffer-pool))
+
+(derive ::local :xtdb/buffer-pool)
+
 (deftype RemoteBufferPool [^BufferAllocator allocator ^ObjectStore object-store ^Map buffers ^Path cache-path]
   IBufferPool
   (getBuffer [_ k]
@@ -181,9 +251,6 @@
           (util/close (.next i))
           (.remove i)))
       (util/close allocator))))
-
-(defn- ->buffer-cache [^long cache-entries-size ^long cache-bytes-size]
-  (ArrowBufLRU. 16 cache-entries-size cache-bytes-size))
 
 (defmethod ig/prep-key ::remote [_ opts]
   (-> (merge {:cache-entries-size 1024

@@ -245,13 +245,12 @@
 
 (defn ->local-node ^java.lang.AutoCloseable [{:keys [^Path node-dir ^String buffers-dir
                                                      rows-per-chunk log-limit page-limit instant-src]
-                                              :or {buffers-dir "buffers"}}]
+                                              :or {buffers-dir "objects"}}]
   (let [instant-src (or instant-src (->mock-clock))]
     (node/start-node {:xtdb.log/local-directory-log {:root-path (.resolve node-dir "log")
                                                      :instant-src instant-src}
                       :xtdb.tx-producer/tx-producer {:instant-src instant-src}
-                      :xtdb.buffer-pool/remote {:cache-path (.resolve node-dir buffers-dir)}
-                      :xtdb.object-store/file-system-object-store {:root-path (.resolve node-dir "objects")}
+                      :xtdb.buffer-pool/local {:path (.resolve node-dir buffers-dir)}
                       :xtdb/indexer (->> {:rows-per-chunk rows-per-chunk}
                                          (into {} (filter val)))
                       :xtdb.indexer/live-index (->> {:log-limit log-limit :page-limit page-limit}

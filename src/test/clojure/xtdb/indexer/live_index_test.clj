@@ -114,7 +114,7 @@
     (util/delete-dir node-dir)
 
     (with-open [node (tu/->local-node {:node-dir node-dir})]
-      (let [^ObjectStore os (tu/component node ::os/file-system-object-store)]
+      (let [^IBufferPool bp (tu/component node :xtdb/buffer-pool)]
 
         (let [last-tx-key (last (for [tx-ops txs] (xt/submit-tx node tx-ops)))]
           (tu/then-await-tx last-tx-key node (Duration/ofSeconds 2)))
@@ -122,10 +122,10 @@
         (tu/finish-chunk! node)
 
         (t/is (= ["tables/foo/data/log-l00-rf00-nr110.arrow"]
-                 (.listObjects os "tables/foo/data")))
+                 (.listObjects bp "tables/foo/data")))
 
         (t/is (= ["tables/foo/meta/log-l00-rf00-nr110.arrow"]
-                 (.listObjects os "tables/foo/meta"))))
+                 (.listObjects bp "tables/foo/meta"))))
 
       (tj/check-json (.toPath (io/as-file (io/resource "xtdb/indexer-test/can-build-live-index")))
                      (.resolve node-dir "objects")))))

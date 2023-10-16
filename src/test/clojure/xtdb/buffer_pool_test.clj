@@ -23,11 +23,16 @@
   (fn with-each-bp [f]
     (t/testing "memory"
       (binding [*bp-type* :memory]
-        (with-bp {:xtdb.buffer-pool/in-memory {}} f)))
+        (with-bp {::bp/in-memory {}} f)))
+
+    (t/testing "local"
+      (tu/with-tmp-dirs #{path}
+        (binding [*bp-type* :local]
+          (with-bp {::bp/local {:path path}} f))))
 
     (t/testing "remote"
       (binding [*bp-type* :remote]
-        (with-bp {:xtdb.buffer-pool/remote {}
+        (with-bp {::bp/remote {}
                   ::ost/memory-object-store {}}
           f)))))
 
@@ -88,7 +93,7 @@
                  (t/is (thrown? Exception (rq 10 0))))))))))
 
 (t/deftest cache-counter-test
-  (when-not (= *bp-type* :memory)
+  (when (= *bp-type* :remote)
     (bp/clear-cache-counters)
     (t/is (= 0 (.get bp/cache-hit-byte-counter)))
     (t/is (= 0 (.get bp/cache-miss-byte-counter)))

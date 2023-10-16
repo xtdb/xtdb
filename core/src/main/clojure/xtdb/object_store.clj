@@ -59,25 +59,56 @@
 (defn obj-missing-exception [k]
   (IllegalStateException. (format "Object '%s' doesn't exist." k)))
 
+(defn get-path ^java.nio.ByteBuffer [^Path root-path, ^String k]
+  (let [from-path (.resolve root-path k)]
+    (when-not (util/path-exists from-path)
+      (throw (obj-missing-exception k)))
+
+    (util/->mmap-path from-path)))
+
+(defn get-path-range ^java.nio.ByteBuffer [^Path root-path, ^String k, ^long start, ^long len]
+  (ensure-shared-range-oob-behaviour start len)
+
+  (let [from-path (.resolve root-path k)]
+    (when-not (util/path-exists from-path)
+      (throw (obj-missing-exception k)))
+
+    (with-open [in (util/->file-channel from-path #{:read})]
+      (.map in FileChannel$MapMode/READ_ONLY start (max 1 (min (- (.size in) start) len))))))
+
+(defn put-path [^Path root-path, ^String k, ^ByteBuffer buf]
+  (let [buf (.duplicate buf)
+        to-path (.resolve root-path k)]
+    (util/mkdirs (.getParent to-path))
+
+    (if (identical? (FileSystems/getDefault) (.getFileSystem to-path))
+      (if (util/path-exists to-path)
+        to-path
+        (util/write-buffer-to-path-atomically buf root-path to-path))
+
+      (util/write-buffer-to-path buf to-path))))
+
+(defn list-path
+  ([^Path root-path]
+   (with-open [dir-stream (Files/walk root-path (make-array FileVisitOption 0))]
+     (vec (sort (for [^Path path (iterator-seq (.iterator dir-stream))
+                      :when (Files/isRegularFile path (make-array LinkOption 0))]
+                  (str (.relativize root-path path)))))))
+
+  ([^Path root-path, ^String dir]
+   (let [dir (.resolve root-path dir)]
+     (when (Files/exists dir (make-array LinkOption 0))
+       (with-open [dir-stream (Files/newDirectoryStream dir)]
+         (vec (sort (for [^Path path dir-stream]
+                      (str (.relativize root-path path))))))))))
+
 (deftype FileSystemObjectStore [^Path root-path, ^ExecutorService pool]
   ObjectStore
-  (getObject [_this k]
-    (CompletableFuture/completedFuture
-     (let [from-path (.resolve root-path k)]
-       (when-not (util/path-exists from-path)
-         (throw (obj-missing-exception k)))
-
-       (util/->mmap-path from-path))))
+  (getObject [_this k] (CompletableFuture/completedFuture (get-path root-path k)))
 
   (getObjectRange [_this k start len]
-    (ensure-shared-range-oob-behaviour start len)
     (CompletableFuture/completedFuture
-      (let [from-path (.resolve root-path k)]
-        (when-not (util/path-exists from-path)
-          (throw (obj-missing-exception k)))
-
-        (with-open [in (util/->file-channel from-path #{:read})]
-          (.map in FileChannel$MapMode/READ_ONLY start (max 1 (min (- (.size in) start) len)))))))
+     (get-path-range root-path k start len)))
 
   (getObject [_this k out-path]
     (CompletableFuture/supplyAsync
@@ -89,36 +120,13 @@
 
            (when-not (util/path-exists out-path)
              (util/copy-file-atomically root-path from-path out-path))
+
            out-path)))))
 
-  (putObject [_this k buf]
-    (let [buf (.duplicate buf)]
-      (util/completable-future pool
-        (let [to-path (.resolve root-path k)]
-          (util/mkdirs (.getParent to-path))
-          (if (identical? (FileSystems/getDefault) (.getFileSystem to-path))
-            (if (util/path-exists to-path)
-              to-path
-              (util/write-buffer-to-path-atomically buf root-path to-path))
-
-            (util/write-buffer-to-path buf to-path))))))
-
-  (listObjects [_this]
-    (with-open [dir-stream (Files/walk root-path (make-array FileVisitOption 0))]
-      (vec (sort (for [^Path path (iterator-seq (.iterator dir-stream))
-                       :when (Files/isRegularFile path (make-array LinkOption 0))]
-                   (str (.relativize root-path path)))))))
-
-  (listObjects [_this dir]
-    (let [dir (.resolve root-path dir)]
-      (when (Files/exists dir (make-array LinkOption 0))
-        (with-open [dir-stream (Files/newDirectoryStream dir)]
-          (vec (sort (for [^Path path dir-stream]
-                       (str (.relativize root-path path)))))))))
-
-  (deleteObject [_this k]
-    (util/completable-future pool
-      (util/delete-file (.resolve root-path k))))
+  (putObject [_this k buf] (util/completable-future pool (put-path root-path k buf)))
+  (listObjects [_this] (list-path root-path))
+  (listObjects [_this dir] (list-path root-path dir))
+  (deleteObject [_this k] (util/completable-future pool (util/delete-file (.resolve root-path k))))
 
   Closeable
   (close [_this]
