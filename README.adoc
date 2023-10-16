@@ -42,7 +42,7 @@ What do we have to gain from turning the database inside out?
 Simpler code, better scalability, better robustness, lower latency, and more flexibility for doing interesting things with data.
 ____
 
-image::doc/img/xtdb-node-1.svg[XTDB 2.x Architecture Diagram, 1000, 460]
+image::img/xtdb-node-1.svg[XTDB 2.x Architecture Diagram, 1000, 460]
 
 == How does this differ from XTDB 1.x?
 
