@@ -84,7 +84,7 @@
           (.position src (+ (.position src) (.remaining buffer)))
           (.position buffer (.limit buffer))))))
 
-(defn write [os state ^ByteBuffer src]
+(defn write-all [os state ^ByteBuffer src]
   (assert (:open @state))
   (append-byte-buffer state src)
   (when (pos? (.remaining src))
@@ -110,7 +110,9 @@
         (throw t))))
   (write [_ src]
     (try
-      (write os state src)
+      (let [n (.remaining src)]
+        (write-all os state src)
+        n)
       (catch Throwable t
         (handle-error os state t)
         (throw t)))))
