@@ -5,7 +5,6 @@
             xtdb.buffer-pool
             [xtdb.expression.comparator :as expr.comp]
             xtdb.expression.temporal
-            xtdb.object-store
             [xtdb.transit :as xt.transit]
             [xtdb.types :as types]
             [xtdb.util :as util]
@@ -21,7 +20,6 @@
            (org.apache.arrow.vector FieldVector)
            (org.apache.arrow.vector.types.pojo ArrowType$Union)
            xtdb.IBufferPool
-           xtdb.object_store.ObjectStore
            (xtdb.vector IVectorReader IVectorWriter)))
 
 (set! *unchecked-math* :warn-on-boxed)

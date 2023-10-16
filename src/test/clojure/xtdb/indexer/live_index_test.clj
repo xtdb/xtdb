@@ -11,9 +11,10 @@
   (:import [java.nio ByteBuffer]
            java.time.Duration
            [java.util Random UUID]
-           [org.apache.arrow.memory BufferAllocator RootAllocator]
+           [org.apache.arrow.memory ArrowBuf BufferAllocator RootAllocator]
            [org.apache.arrow.vector FixedSizeBinaryVector]
            [org.apache.arrow.vector.ipc ArrowFileReader]
+           xtdb.IBufferPool
            xtdb.indexer.live_index.ILiveIndex
            xtdb.object_store.ObjectStore
            (xtdb.trie ArrowHashTrie ArrowHashTrie$Leaf HashTrie LiveHashTrie LiveHashTrie$Leaf)
@@ -22,15 +23,14 @@
 (def with-live-index
   (partial tu/with-system {:xtdb/allocator {}
                            :xtdb.indexer/live-index {}
-                           :xtdb.object-store/memory-object-store {}
-                           :xtdb/buffer-pool {}}))
+                           :xtdb.buffer-pool/in-memory {}}))
 
 (t/use-fixtures :each tu/with-allocator with-live-index)
 
 (t/deftest test-chunk
   (let [{^BufferAllocator allocator :xtdb/allocator
-         ^ILiveIndex live-index :xtdb.indexer/live-index
-         ^ObjectStore obj-store :xtdb.object-store/memory-object-store} tu/*sys*
+         ^IBufferPool buffer-pool :xtdb.buffer-pool/in-memory
+         ^ILiveIndex live-index :xtdb.indexer/live-index} tu/*sys*
 
         iids (let [rnd (Random. 0)]
                (repeatedly 12000 #(UUID. (.nextLong rnd) (.nextLong rnd))))
@@ -62,21 +62,21 @@
     (t/testing "finish chunk"
       (.finishChunk live-index 0 12000)
 
-      (let [trie-buf @(.getObject obj-store "tables/my-table/meta/log-l00-rf00-nr32ee0.arrow")
-            leaf-buf @(.getObject obj-store "tables/my-table/data/log-l00-rf00-nr32ee0.arrow")]
-        (with-open [trie-rdr (ArrowFileReader. (util/->seekable-byte-channel trie-buf) allocator)
-                    leaf-rdr (ArrowFileReader. (util/->seekable-byte-channel leaf-buf) allocator)]
-          (let [trie-root (.getVectorSchemaRoot trie-rdr)
-                iid-vec (.getVector (.getVectorSchemaRoot leaf-rdr) "xt$iid")]
-            (.loadNextBatch trie-rdr)
-            (t/is (= iid-bytes
-                     (->> (.leaves (ArrowHashTrie/from trie-root))
-                          (mapcat (fn [^ArrowHashTrie$Leaf leaf]
-                                    ;; would be good if ArrowFileReader accepted a page-idx...
-                                    (.loadRecordBatch leaf-rdr (.get (.getRecordBlocks leaf-rdr) (.getDataPageIndex leaf)))
+      (with-open [^ArrowBuf trie-buf @(.getBuffer buffer-pool "tables/my-table/meta/log-l00-rf00-nr32ee0.arrow")
+                  ^ArrowBuf leaf-buf @(.getBuffer buffer-pool "tables/my-table/data/log-l00-rf00-nr32ee0.arrow")
+                  trie-rdr (ArrowFileReader. (util/->seekable-byte-channel (.nioBuffer trie-buf 0 (.capacity trie-buf))) allocator)
+                  leaf-rdr (ArrowFileReader. (util/->seekable-byte-channel (.nioBuffer leaf-buf 0 (.capacity leaf-buf))) allocator)]
+        (let [trie-root (.getVectorSchemaRoot trie-rdr)
+              iid-vec (.getVector (.getVectorSchemaRoot leaf-rdr) "xt$iid")]
+          (.loadNextBatch trie-rdr)
+          (t/is (= iid-bytes
+                   (->> (.leaves (ArrowHashTrie/from trie-root))
+                        (mapcat (fn [^ArrowHashTrie$Leaf leaf]
+                                  ;; would be good if ArrowFileReader accepted a page-idx...
+                                  (.loadRecordBatch leaf-rdr (.get (.getRecordBlocks leaf-rdr) (.getDataPageIndex leaf)))
 
-                                    (->> (range 0 (.getValueCount iid-vec))
-                                         (mapv #(vec (.getObject iid-vec %)))))))))))))))
+                                  (->> (range 0 (.getValueCount iid-vec))
+                                       (mapv #(vec (.getObject iid-vec %))))))))))))))
 
 (deftest test-bucket-for
   (let [uuid1 #uuid "ce33e4b8-ec2f-4b80-8e9c-a4314005adbf"]

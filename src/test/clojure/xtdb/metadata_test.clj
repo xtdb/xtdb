@@ -141,7 +141,7 @@
           (doseq [page-idx relevant-pages]
             (t/is (true? (.test page-idx-pred page-idx)))))))))
 
-(deftest test-boolean-metadata
+(t/deftest test-boolean-metadata
   (xt/submit-tx tu/*node* [[:put :xt_docs {:xt/id 1 :boolean-or-int true}]])
   (tu/finish-chunk! tu/*node*)
 

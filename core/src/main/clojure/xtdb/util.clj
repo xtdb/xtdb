@@ -4,6 +4,7 @@
             [clojure.spec.alpha :as s]
             [clojure.string :as str]
             [clojure.tools.logging :as log]
+            [juxt.clojars-mirrors.integrant.core :as ig]
             [xtdb.api.protocols]
             [xtdb.error :as err])
   (:import [clojure.lang Keyword MapEntry Symbol]
@@ -230,8 +231,8 @@
 (def ^{:tag 'long} end-of-time-μs
   (instant->micros end-of-time))
 
-(defn component
-  ([node k] (get (:system node) k)))
+(defn component [node k]
+  (some-> (:system node) (ig/find-derived k) first val))
 
 ;;; IO
 

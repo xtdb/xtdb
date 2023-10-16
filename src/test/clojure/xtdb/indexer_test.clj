@@ -161,14 +161,7 @@
             (let [size (.getSize (.getReferenceManager ^ArrowBuf buffer))]
               (t/is (= size (.getAccountedSize (.getReferenceManager ^ArrowBuf buffer))))
               (.close buffer)
-              (t/is (= 1 (.getRefCount (.getReferenceManager ^ArrowBuf buffer))))
-
-              (t/is (true? (.evictBuffer bp buffer-name)))
-              (t/is (false? (.evictBuffer bp buffer-name)))
-              (t/is (zero? (.getRefCount (.getReferenceManager ^ArrowBuf buffer))))
-              (t/is (= size (.getSize (.getReferenceManager ^ArrowBuf buffer))))
-              (t/is (zero? (.getAccountedSize (.getReferenceManager ^ArrowBuf buffer))))
-              (t/is (= 0 (count (.buffers ^BufferPool bp)))))))))))
+              (t/is (= 1 (.getRefCount (.getReferenceManager ^ArrowBuf buffer)))))))))))
 
 (t/deftest temporal-watermark-is-immutable-567
   (with-open [node (node/start-node {})]

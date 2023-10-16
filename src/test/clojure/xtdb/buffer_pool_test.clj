@@ -2,29 +2,34 @@
   (:require [clojure.test :as t]
             [juxt.clojars-mirrors.integrant.core :as ig]
             [xtdb.buffer-pool :as bp]
+            xtdb.node
+            [xtdb.object-store-test :as ost]
+            [xtdb.test-util :as tu]
             [xtdb.util :as util])
   (:import (java.nio ByteBuffer)
            (org.apache.arrow.memory ArrowBuf RootAllocator)
-           xtdb.IBufferPool
-           (xtdb.object_store ObjectStore)
            (xtdb.util ArrowBufLRU)))
 
-(set! *warn-on-reflection* false)
+(def ^:dynamic *bp-type* nil)
+(def ^:dynamic ^xtdb.IBufferPool *buffer-pool* nil)
 
-;; loads :xtdb/allocator ig/init-key
-(require 'xtdb.node)
+(defn- with-bp [opts f]
+  (tu/with-system (into {:xtdb/allocator {}} opts)
+    (fn []
+      (binding [*buffer-pool* (some-> (ig/find-derived tu/*sys* :xtdb/buffer-pool) first val)]
+        (f)))))
 
-(defn buffer-sys []
-  (-> {:xtdb/allocator {}
-       :xtdb.object-store/memory-object-store {}
-       :xtdb/buffer-pool {:object-store (ig/ref :xtdb.object-store/memory-object-store)}}
-      (doto ig/load-namespaces)
-      ig/prep
-      ig/init))
+(t/use-fixtures :each
+  (fn with-each-bp [f]
+    (t/testing "memory"
+      (binding [*bp-type* :memory]
+        (with-bp {:xtdb.buffer-pool/in-memory {}} f)))
 
-(defn object-store ^ObjectStore [sys] (:xtdb.object-store/memory-object-store sys))
-
-(defn buffer-pool ^IBufferPool [sys] (:xtdb/buffer-pool sys))
+    (t/testing "remote"
+      (binding [*bp-type* :remote]
+        (with-bp {:xtdb.buffer-pool/remote {}
+                  ::ost/memory-object-store {}}
+          f)))))
 
 (defn byte-seq [^ArrowBuf buf]
   (let [arr (byte-array (.capacity buf))]
@@ -32,91 +37,81 @@
     (seq arr)))
 
 (t/deftest range-test
-  (let [sys (buffer-sys)
-        os (object-store sys)
-        bp (buffer-pool sys)
-
-        ;; return a new key, having the given cache state
+;; return a new key, having the given cache state
         ;; by putting an object and warming the cache
         ;; e.g :full (whole object cached)
         ;;     :cold (nothing cached)
         ;;     [start, len] (range cached)
-        setup-key
-        (fn [cache]
-          (let [k (str (random-uuid))]
-            @(.putObject os k (ByteBuffer/wrap (byte-array (range 10))))
-            (cond
-              (= :cold cache) nil
-              (= :full cache) (.close @(.getBuffer bp k))
-              (vector? cache) (.close @(.getRangeBuffer bp k (cache 0) (cache 1)))
-              :else (throw (IllegalArgumentException. "Buffer pool setup param should be a range vector, :full or :cold")))
-            k))
+  (letfn [(setup-key [cache]
+            (let [k (str (random-uuid))]
+              @(.putObject *buffer-pool* k (ByteBuffer/wrap (byte-array (range 10))))
+              (cond
+                (= :cold cache) nil
+                (= :full cache) (util/close @(.getBuffer *buffer-pool* k))
+                (vector? cache) (util/close @(.getRangeBuffer *buffer-pool* k (cache 0) (cache 1)))
+                :else (throw (IllegalArgumentException. "Buffer pool setup param should be a range vector, :full or :cold")))
+              k))]
 
-        key-cache-states
-        [:cold
-         :full
-         [2 4]
-         [4 3]]]
-    (try
+    (doseq [cache [:cold :full [2 4] [4 3]]]
+      (t/testing (str "with cache:" cache)
+        (t/testing "get full"
+          (with-open [^ArrowBuf buf @(.getBuffer *buffer-pool* (setup-key cache))]
+            (t/is (= 10 (.capacity buf)))
+            (t/is (= (range 10) (byte-seq buf)))))
 
-      (doseq [cache key-cache-states]
-        (t/testing (str "with cache:" cache)
-          (t/testing "get full"
-            (with-open [^ArrowBuf buf @(.getBuffer bp (setup-key cache))]
-              (t/is (= 10 (.capacity buf)))
-              (t/is (= (range 10) (byte-seq buf)))))
+        (t/testing "full via range"
+          (with-open [^ArrowBuf buf @(.getRangeBuffer *buffer-pool* (setup-key cache) 0 10)]
+            (t/is (= 10 (.capacity buf)))
+            (t/is (= (range 10) (byte-seq buf)))))
 
-          (t/testing "full via range"
-            (with-open [^ArrowBuf buf @(.getRangeBuffer bp (setup-key cache) 0 10)]
-              (t/is (= 10 (.capacity buf)))
-              (t/is (= (range 10) (byte-seq buf)))))
+        (t/testing "partial range"
+          (with-open [^ArrowBuf buf @(.getRangeBuffer *buffer-pool* (setup-key cache) 2 4)]
+            (t/is (= 4 (.capacity buf)))
+            (t/is (= (range 2 6) (byte-seq buf)))))
 
-          (t/testing "partial range"
-            (with-open [^ArrowBuf buf @(.getRangeBuffer bp (setup-key cache) 2 4)]
-              (t/is (= 4 (.capacity buf)))
-              (t/is (= (range 2 6) (byte-seq buf)))))
+        (t/testing "oob"
+          (let [close-if-no-ex (fn [f] (let [ret (f)] (util/close ret) ret))
+                rq (fn [start len] (close-if-no-ex (fn [] @(.getRangeBuffer *buffer-pool* (setup-key cache) start len))))]
+            (->> "sanity check"
+                 (t/is (any? (rq 0 4))))
 
-          (t/testing "oob"
-            (let [close-if-no-ex (fn [f] (let [ret (f)] (.close ret) ret))
-                  rq (fn [start len] (close-if-no-ex (fn [] @(.getRangeBuffer bp (setup-key cache) start len))))]
-              (->> "sanity check"
-                   (t/is (any? (rq 0 4))))
+            (->> "negative index should oob"
+                 (t/is (thrown? Exception (rq -1 1))))
 
-              (->> "negative index should oob"
-                   (t/is (thrown? Exception (rq -1 1))))
+            (->> "zero len should oob"
+                 (t/is (thrown? Exception (rq 0 0))))
 
-              (->> "zero len should oob"
-                   (t/is (thrown? Exception (rq 0 0))))
+            (->> "max is ok"
+                 (t/is (any? (rq 9 1))))
 
-              (->> "max is ok"
-                   (t/is (any? (rq 9 1))))
-
-              (->> "max+1 at zero len should oob"
-                   (t/is (thrown? Exception (rq 10 0))))))))
-
-      (finally
-        (ig/halt! sys)))))
+            (->> "max+1 at zero len should oob"
+                 (t/is (thrown? Exception (rq 10 0))))))))))
 
 (t/deftest cache-counter-test
-  (let [sys (buffer-sys)
-        os (object-store sys)
-        bp (buffer-pool sys)]
+  (when-not (= *bp-type* :memory)
     (bp/clear-cache-counters)
     (t/is (= 0 (.get bp/cache-hit-byte-counter)))
     (t/is (= 0 (.get bp/cache-miss-byte-counter)))
     (t/is (= 0N @bp/io-wait-nanos-counter))
-    @(.putObject os "foo" (ByteBuffer/wrap (.getBytes "hello")))
-    @(.getBuffer bp "foo")
+
+    @(.putObject *buffer-pool* "foo" (ByteBuffer/wrap (.getBytes "hello")))
+    (with-open [^ArrowBuf _buf @(.getBuffer *buffer-pool* "foo")])
+
     (t/is (pos? (.get bp/cache-miss-byte-counter)))
     (t/is (= 0 (.get bp/cache-hit-byte-counter)))
     (t/is (pos? @bp/io-wait-nanos-counter))
-    @(.getBuffer bp "foo")
+
+    (with-open [^ArrowBuf _buf @(.getBuffer *buffer-pool* "foo")])
+
     (t/is (pos? (.get bp/cache-hit-byte-counter)))
     (t/is (= (.get bp/cache-hit-byte-counter) (.get bp/cache-miss-byte-counter)))
+
     (let [ch (.get bp/cache-hit-byte-counter)]
-      @(.getRangeBuffer bp "foo" 2 1)
+      (with-open [^ArrowBuf _buf @(.getRangeBuffer *buffer-pool* "foo" 2 1)])
       (t/is (= (inc ch) (.get bp/cache-hit-byte-counter))))
+
     (bp/clear-cache-counters)
+
     (t/is (= 0 (.get bp/cache-hit-byte-counter)))
     (t/is (= 0 (.get bp/cache-miss-byte-counter)))
     (t/is (= 0N @bp/io-wait-nanos-counter))))

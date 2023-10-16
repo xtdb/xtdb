@@ -10,8 +10,6 @@ public interface IBufferPool extends AutoCloseable {
 
     CompletableFuture<ArrowBuf> getRangeBuffer(String key, int start, int len);
 
-    boolean evictBuffer(String key);
-
     CompletableFuture<?> putObject(String k, ByteBuffer buffer);
 
     Iterable<String> listObjects();

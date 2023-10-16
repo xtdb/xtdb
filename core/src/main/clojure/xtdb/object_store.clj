@@ -1,15 +1,13 @@
 (ns xtdb.object-store
-  (:require [clojure.string :as str]
-            [xtdb.util :as util]
+  (:require [clojure.spec.alpha :as s]
             [juxt.clojars-mirrors.integrant.core :as ig]
-            [clojure.spec.alpha :as s])
+            [xtdb.util :as util])
   (:import java.io.Closeable
            java.nio.ByteBuffer
            (java.nio.channels FileChannel$MapMode)
-           [java.nio.file CopyOption Files FileSystems FileVisitOption LinkOption OpenOption Path StandardOpenOption]
-           [java.util.concurrent CompletableFuture ConcurrentSkipListMap Executors ExecutorService]
-           java.util.function.Supplier
-           java.util.NavigableMap))
+           [java.nio.file FileSystems FileVisitOption Files LinkOption Path]
+           [java.util.concurrent CompletableFuture ExecutorService Executors]
+           java.util.function.Supplier))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -60,83 +58,6 @@
 
 (defn obj-missing-exception [k]
   (IllegalStateException. (format "Object '%s' doesn't exist." k)))
-
-(deftype InMemoryObjectStore [^NavigableMap os]
-  ObjectStore
-  (getObject [_this k]
-    (CompletableFuture/completedFuture
-     (let [^ByteBuffer buf (or (.get os k)
-                               (throw (obj-missing-exception k)))]
-       (.slice buf))))
-
-  (getObject [_this k out-path]
-
-    (CompletableFuture/supplyAsync
-     (reify Supplier
-       (get [_]
-         (let [buf (or (.get os k)
-                       (throw (obj-missing-exception k)))]
-           (with-open [ch (Files/newByteChannel out-path (into-array OpenOption #{StandardOpenOption/WRITE
-                                                                                  StandardOpenOption/CREATE
-                                                                                  StandardOpenOption/TRUNCATE_EXISTING}))]
-             (.write ch buf)
-             out-path))))))
-
-  (getObjectRange [_this k start len]
-    (ensure-shared-range-oob-behaviour start len)
-    (CompletableFuture/completedFuture
-      (let [^ByteBuffer buf (or (.get os k) (throw (obj-missing-exception k)))
-            new-pos (+ (.position buf) (int start))]
-        (.slice buf new-pos (int (max 1 (min (- (.remaining buf) new-pos) len)))))))
-
-  (putObject [_this k buf]
-    (.putIfAbsent os k (.slice buf))
-    (CompletableFuture/completedFuture nil))
-
-  (listObjects [_this]
-    (vec (.keySet os)))
-
-  (listObjects [_this prefix]
-    (->> (.keySet (.tailMap os prefix))
-         (into [] (take-while #(str/starts-with? % prefix)))))
-
-  (deleteObject [_this k]
-    (.remove os k)
-    (CompletableFuture/completedFuture nil))
-
-  Closeable
-  (close [_]
-    (.clear os)))
-
-(defmethod ig/init-key ::memory-object-store [_ _]
-  (->InMemoryObjectStore (ConcurrentSkipListMap.)))
-
-(defmethod ig/halt-key! ::memory-object-store [_ ^InMemoryObjectStore os]
-  (.close os))
-
-(derive ::memory-object-store :xtdb/object-store)
-
-(comment
-
-  (def mos
-    (->> (ig/prep-key ::memory-object-store {})
-         (ig/init-key ::memory-object-store)))
-
-  (.close mos)
-
-  @(.putObject mos "foo.txt" (ByteBuffer/wrap (.getBytes "hello, world!")))
-
-  (let [buf @(.getObject mos "foo.txt")
-        arr (byte-array (.remaining buf))]
-    (.get buf arr)
-    (String. arr))
-
-  (let [buf @(.getObjectRange mos "foo.txt" 2 5)
-        arr (byte-array (.remaining buf))]
-    (.get buf arr)
-    (String. arr))
-
-  )
 
 (deftype FileSystemObjectStore [^Path root-path, ^ExecutorService pool]
   ObjectStore

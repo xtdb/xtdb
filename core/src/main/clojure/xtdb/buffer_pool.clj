@@ -1,13 +1,14 @@
 (ns xtdb.buffer-pool
-  (:require [clojure.tools.logging :as log]
+  (:require [clojure.string :as str]
+            [clojure.tools.logging :as log]
             [juxt.clojars-mirrors.integrant.core :as ig]
             [xtdb.object-store :as object-store]
             [xtdb.util :as util])
   (:import java.io.Closeable
            java.nio.file.Path
-           [java.util Map]
+           [java.util Map NavigableMap]
            (java.util.concurrent.atomic AtomicLong)
-           java.util.concurrent.CompletableFuture
+           (java.util.concurrent CompletableFuture ConcurrentSkipListMap)
            [org.apache.arrow.memory ArrowBuf BufferAllocator]
            (org.apache.arrow.vector VectorSchemaRoot)
            (org.apache.arrow.vector.ipc.message ArrowFooter ArrowRecordBatch)
@@ -51,7 +52,58 @@
       (if hit (record-cache-hit arrow-buf) (record-cache-miss arrow-buf))
       [hit (retain arrow-buf)])))
 
-(deftype BufferPool [^BufferAllocator allocator ^ObjectStore object-store ^Map buffers ^Path cache-path]
+(deftype MemoryBufferPool [^BufferAllocator allocator ^NavigableMap buffers]
+  IBufferPool
+  (getBuffer [_ k]
+    (CompletableFuture/completedFuture
+     (when k
+       (when-let [cached-buffer (cache-get buffers k)]
+         (record-cache-hit cached-buffer)
+         cached-buffer))))
+
+  (getRangeBuffer [_ k start len]
+    (object-store/ensure-shared-range-oob-behaviour start len)
+    (CompletableFuture/completedFuture
+     (when k
+       (when-let [buffer (when-let [^ArrowBuf full-buffer (cache-get buffers k)]
+                           (.slice full-buffer start len))]
+         (record-cache-hit buffer)
+         buffer))))
+
+  (putObject [_ k buf]
+    (.put buffers k (util/->arrow-buf-view allocator buf))
+    (CompletableFuture/completedFuture nil))
+
+  (listObjects [_] (vec (.keySet buffers)))
+
+  ;; TODO #2740
+  (listObjects [_ prefix]
+    (->> (.keySet (.tailMap buffers prefix))
+         (into [] (take-while #(str/starts-with? % prefix)))))
+
+  Closeable
+  (close [_]
+    (locking buffers
+      (let [i (.iterator (.values buffers))]
+        (while (.hasNext i)
+          (util/close (.next i))
+          (.remove i)))
+      (util/close allocator))))
+
+(defmethod ig/prep-key ::in-memory [_ opts]
+  (into {:allocator (ig/ref :xtdb/allocator)}
+        opts))
+
+(defmethod ig/init-key ::in-memory [_ {:keys [^BufferAllocator allocator]}]
+  (util/with-close-on-catch [allocator (util/->child-allocator allocator "buffer-pool")]
+    (->MemoryBufferPool allocator (ConcurrentSkipListMap.))))
+
+(defmethod ig/halt-key! ::in-memory [_ buffer-pool]
+  (util/close buffer-pool))
+
+(derive ::in-memory :xtdb/buffer-pool)
+
+(deftype RemoteBufferPool [^BufferAllocator allocator ^ObjectStore object-store ^Map buffers ^Path cache-path]
   IBufferPool
   (getBuffer [_ k]
     (if (nil? k)
@@ -117,13 +169,6 @@
                           [_ buf] (cache-compute buffers [k start len] create-arrow-buf)]
                       buf)))))))))
 
-  (evictBuffer [_ k]
-    (if-let [buffer (locking buffers
-                      (.remove buffers k))]
-      (do (util/close buffer)
-          true)
-      false))
-
   (putObject [_ k buf] (.putObject object-store k buf))
   (listObjects [_] (.listObjects object-store))
   (listObjects [_ dir] (.listObjects object-store dir))
@@ -140,7 +185,7 @@
 (defn- ->buffer-cache [^long cache-entries-size ^long cache-bytes-size]
   (ArrowBufLRU. 16 cache-entries-size cache-bytes-size))
 
-(defmethod ig/prep-key :xtdb/buffer-pool [_ opts]
+(defmethod ig/prep-key ::remote [_ opts]
   (-> (merge {:cache-entries-size 1024
               :cache-bytes-size 536870912
               :allocator (ig/ref :xtdb/allocator)
@@ -148,15 +193,17 @@
              opts)
       (util/maybe-update :cache-path util/->path)))
 
-(defmethod ig/init-key :xtdb/buffer-pool
+(defmethod ig/init-key ::remote
   [_ {:keys [^Path cache-path ^BufferAllocator allocator ^ObjectStore object-store ^long cache-entries-size ^long cache-bytes-size]}]
   (when (and cache-path (not (util/path-exists cache-path)))
     (util/mkdirs cache-path))
   (util/with-close-on-catch [allocator (util/->child-allocator allocator "buffer-pool")]
-    (->BufferPool  allocator object-store (->buffer-cache cache-entries-size cache-bytes-size) cache-path)))
+    (->RemoteBufferPool allocator object-store (->buffer-cache cache-entries-size cache-bytes-size) cache-path)))
 
-(defmethod ig/halt-key! :xtdb/buffer-pool [_ buffer-pool]
+(defmethod ig/halt-key! ::remote [_ buffer-pool]
   (util/close buffer-pool))
+
+(derive ::remote :xtdb/buffer-pool)
 
 (defn get-footer ^ArrowFooter [^IBufferPool bp path]
   (with-open [^ArrowBuf arrow-buf @(.getBuffer bp (str path))]
@@ -176,8 +223,3 @@
         schema (.getSchema footer)]
     (VectorSchemaRoot/create schema allocator)))
 
-;; current: buffer pool -> (in mem OS, file OS, S3 OS, GCS OS, Azure OS)
-;; target: in-mem BP, file BP, (remote buffer pool -> (remote FS OS, S3 OS, GCS OS, Azure OS))
-;; plan:
-;; 1. add putObject to BP, get everything to use it.
-;; 2. copy BP into 3, split impls as required.

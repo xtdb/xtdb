@@ -1,17 +1,21 @@
 (ns xtdb.object-store-test
   (:require [clojure.edn :as edn]
+            [clojure.string :as str]
             [clojure.test :as t]
-            [xtdb.object-store :as os]
             [juxt.clojars-mirrors.integrant.core :as ig]
+            [xtdb.object-store :as os]
             [xtdb.test-util :as tu]
             [xtdb.util :as util])
-  (:import xtdb.object_store.ObjectStore
-           java.io.Closeable
+  (:import java.io.Closeable
            java.nio.ByteBuffer
            java.nio.charset.StandardCharsets
            java.nio.file.attribute.FileAttribute
            java.nio.file.Files
-           (clojure.lang IDeref)))
+           java.nio.file.OpenOption
+           [java.util.concurrent CompletableFuture ConcurrentSkipListMap]
+           [java.util.function Supplier]
+           java.util.NavigableMap
+           xtdb.object_store.ObjectStore))
 
 (defn- get-edn [^ObjectStore obj-store, k]
   (-> (let [^ByteBuffer buf @(.getObject obj-store (name k))]
@@ -35,9 +39,57 @@
 (defn get-bytes [^ObjectStore obj-store k start len]
   (byte-buf->bytes @(.getObjectRange obj-store k start len)))
 
-(defn in-memory ^Closeable []
-  (->> (ig/prep-key ::os/memory-object-store {})
-       (ig/init-key ::os/memory-object-store)))
+(deftype InMemoryObjectStore [^NavigableMap os]
+  ObjectStore
+  (getObject [_this k]
+    (CompletableFuture/completedFuture
+     (let [^ByteBuffer buf (or (.get os k)
+                               (throw (os/obj-missing-exception k)))]
+       (.slice buf))))
+
+  (getObject [_this k out-path]
+    (CompletableFuture/supplyAsync
+     (reify Supplier
+       (get [_]
+         (let [^ByteBuffer buf (or (.get os k)
+                                   (throw (os/obj-missing-exception k)))]
+           (with-open [ch (util/->file-channel out-path util/write-truncate-open-opts)]
+             (.write ch buf)
+             out-path))))))
+
+  (getObjectRange [_this k start len]
+    (os/ensure-shared-range-oob-behaviour start len)
+    (CompletableFuture/completedFuture
+      (let [^ByteBuffer buf (or (.get os k) (throw (os/obj-missing-exception k)))
+            new-pos (+ (.position buf) (int start))]
+        (.slice buf new-pos (int (max 1 (min (- (.remaining buf) new-pos) len)))))))
+
+  (putObject [_this k buf]
+    (.putIfAbsent os k (.slice buf))
+    (CompletableFuture/completedFuture nil))
+
+  (listObjects [_this]
+    (vec (.keySet os)))
+
+  (listObjects [_this prefix]
+    (->> (.keySet (.tailMap os prefix))
+         (into [] (take-while #(str/starts-with? % prefix)))))
+
+  (deleteObject [_this k]
+    (.remove os k)
+    (CompletableFuture/completedFuture nil))
+
+  Closeable
+  (close [_]
+    (.clear os)))
+
+(defmethod ig/init-key ::memory-object-store [_ _]
+  (->InMemoryObjectStore (ConcurrentSkipListMap.)))
+
+(defmethod ig/halt-key! ::memory-object-store [_ ^InMemoryObjectStore os]
+  (.close os))
+
+(derive ::memory-object-store :xtdb/object-store)
 
 (defn fs ^Closeable [path]
   (->> (ig/prep-key ::os/file-system-object-store {:root-path path, :pool-size 2})
@@ -102,22 +154,6 @@
   
   (->> "IllegalStateException thrown if object does not exist"
        (t/is (thrown? IllegalStateException (get-bytes obj-store "does-not-exist" 0 1)))))
-
-;; ---
-;; memory-object-store
-;; ---
-
-(t/deftest in-memory-put-delete-test
-  (with-open [obj-store (in-memory)]
-    (test-put-delete obj-store)))
-
-(t/deftest in-memory-list-test
-  (with-open [obj-store (in-memory)]
-    (test-list-objects obj-store)))
-
-(t/deftest in-memory-range-test
-  (with-open [obj-store (in-memory)]
-    (test-range obj-store)))
 
 ;; ---
 ;; file-system-object-store

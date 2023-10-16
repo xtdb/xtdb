@@ -128,7 +128,6 @@
              :xtdb.indexer/live-index {}
              :xtdb.log/watcher {}
              :xtdb.metadata/metadata-manager {}
-             :xtdb/buffer-pool {}
              :xtdb.operator.scan/scan-emitter {}
              :xtdb.operator/ra-query-source {}
              ::txp/tx-producer {}
@@ -137,7 +136,7 @@
             opts)
       (doto ig/load-namespaces)
       (with-default-impl :xtdb/log :xtdb.log/memory-log)
-      (with-default-impl :xtdb/object-store :xtdb.object-store/memory-object-store)
+      (with-default-impl :xtdb/buffer-pool :xtdb.buffer-pool/in-memory)
       (doto ig/load-namespaces)))
 
 (defn start-node ^xtdb.node.Node [opts]
