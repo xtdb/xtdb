@@ -124,6 +124,10 @@
           true)
       false))
 
+  (putObject [_ k buf] (.putObject object-store k buf))
+  (listObjects [_] (.listObjects object-store))
+  (listObjects [_ dir] (.listObjects object-store dir))
+
   Closeable
   (close [_]
     (locking buffers
@@ -136,7 +140,7 @@
 (defn- ->buffer-cache [^long cache-entries-size ^long cache-bytes-size]
   (ArrowBufLRU. 16 cache-entries-size cache-bytes-size))
 
-(defmethod ig/prep-key ::buffer-pool [_ opts]
+(defmethod ig/prep-key :xtdb/buffer-pool [_ opts]
   (-> (merge {:cache-entries-size 1024
               :cache-bytes-size 536870912
               :allocator (ig/ref :xtdb/allocator)
@@ -144,15 +148,15 @@
              opts)
       (util/maybe-update :cache-path util/->path)))
 
-(defmethod ig/init-key ::buffer-pool
+(defmethod ig/init-key :xtdb/buffer-pool
   [_ {:keys [^Path cache-path ^BufferAllocator allocator ^ObjectStore object-store ^long cache-entries-size ^long cache-bytes-size]}]
   (when (and cache-path (not (util/path-exists cache-path)))
     (util/mkdirs cache-path))
   (util/with-close-on-catch [allocator (util/->child-allocator allocator "buffer-pool")]
     (->BufferPool  allocator object-store (->buffer-cache cache-entries-size cache-bytes-size) cache-path)))
 
-(defmethod ig/halt-key! ::buffer-pool [_ ^BufferPool buffer-pool]
-  (.close buffer-pool))
+(defmethod ig/halt-key! :xtdb/buffer-pool [_ buffer-pool]
+  (util/close buffer-pool))
 
 (defn get-footer ^ArrowFooter [^IBufferPool bp path]
   (with-open [^ArrowBuf arrow-buf @(.getBuffer bp (str path))]
@@ -171,3 +175,9 @@
   (let [footer (get-footer bp path)
         schema (.getSchema footer)]
     (VectorSchemaRoot/create schema allocator)))
+
+;; current: buffer pool -> (in mem OS, file OS, S3 OS, GCS OS, Azure OS)
+;; target: in-mem BP, file BP, (remote buffer pool -> (remote FS OS, S3 OS, GCS OS, Azure OS))
+;; plan:
+;; 1. add putObject to BP, get everything to use it.
+;; 2. copy BP into 3, split impls as required.

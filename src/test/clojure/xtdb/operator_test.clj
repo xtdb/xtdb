@@ -15,7 +15,7 @@
 (t/use-fixtures :once tu/with-allocator)
 
 (defn with-table-metadata [node meta-file-name f]
-  (let [^IBufferPool buffer-pool (tu/component node ::bp/buffer-pool)
+  (let [^IBufferPool buffer-pool (tu/component node :xtdb/buffer-pool)
         ^IMetadataManager metadata-mgr (tu/component node ::meta/metadata-manager)]
     (util/with-open [{meta-rdr :rdr} (trie/open-meta-file buffer-pool meta-file-name)]
       (f (.tableMetadata metadata-mgr meta-rdr meta-file-name)))))

@@ -128,7 +128,7 @@
              :xtdb.indexer/live-index {}
              :xtdb.log/watcher {}
              :xtdb.metadata/metadata-manager {}
-             :xtdb.buffer-pool/buffer-pool {}
+             :xtdb/buffer-pool {}
              :xtdb.operator.scan/scan-emitter {}
              :xtdb.operator/ra-query-source {}
              ::txp/tx-producer {}

@@ -67,7 +67,7 @@
 
 (t/deftest ^:s3 multipart-start-and-cancel
   (with-open [os (object-store (random-uuid))]
-    (let [multipart-upload ^IMultipartUpload  @(.startMultipart os "test-multi-created")
+    (let [multipart-upload ^IMultipartUpload  @(.startMultipart ^ObjectStore os "test-multi-created")
           prefixed-key (str (:prefix os) "test-multi-created")]
       (t/testing "Call to start a multipart upload should work and be visible in multipart upload list"
         (let [list-multipart-uploads-response @(.listMultipartUploads ^S3AsyncClient (:client os)

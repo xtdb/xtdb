@@ -17,14 +17,14 @@
 (defn buffer-sys []
   (-> {:xtdb/allocator {}
        :xtdb.object-store/memory-object-store {}
-       ::bp/buffer-pool {:object-store (ig/ref :xtdb.object-store/memory-object-store)}}
+       :xtdb/buffer-pool {:object-store (ig/ref :xtdb.object-store/memory-object-store)}}
       (doto ig/load-namespaces)
       ig/prep
       ig/init))
 
 (defn object-store ^ObjectStore [sys] (:xtdb.object-store/memory-object-store sys))
 
-(defn buffer-pool ^IBufferPool [sys] (::bp/buffer-pool sys))
+(defn buffer-pool ^IBufferPool [sys] (:xtdb/buffer-pool sys))
 
 (defn byte-seq [^ArrowBuf buf]
   (let [arr (byte-array (.capacity buf))]

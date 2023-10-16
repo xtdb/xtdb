@@ -112,7 +112,7 @@
 
     (tu/finish-chunk! node)
 
-    (let [^IBufferPool buffer-pool (tu/component node ::bp/buffer-pool)
+    (let [^IBufferPool buffer-pool (tu/component node :xtdb/buffer-pool)
           first-buckets (map (comp first tu/byte-buffer->path trie/->iid) (range 20))
           bucket->page-idx (->> (into (sorted-set) first-buckets)
                                 (map-indexed #(MapEntry/create %2 %1))
@@ -146,7 +146,7 @@
   (tu/finish-chunk! tu/*node*)
 
   (let [^IMetadataManager metadata-mgr (tu/component tu/*node* ::meta/metadata-manager)
-        ^IBufferPool buffer-pool (tu/component tu/*node* ::bp/buffer-pool)
+        ^IBufferPool buffer-pool (tu/component tu/*node* :xtdb/buffer-pool)
         true-selector (expr.meta/->metadata-selector '(= boolean-or-int true) '{boolean-or-int :bool} {})
         file-name (trie/->table-meta-file-name "xt_docs" (trie/->log-trie-key 0 0 2))]
 

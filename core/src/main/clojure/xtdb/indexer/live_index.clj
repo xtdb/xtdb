@@ -15,6 +15,7 @@
            (java.util.concurrent CompletableFuture)
            (java.util.function Function)
            (org.apache.arrow.memory BufferAllocator)
+           xtdb.IBufferPool
            (xtdb.object_store ObjectStore)
            (xtdb.trie LiveHashTrie)
            (xtdb.util RefCounter)
@@ -82,7 +83,7 @@
         (when retain? (util/close out-cols))
         (throw t)))))
 
-(deftype LiveTable [^BufferAllocator allocator, ^ObjectStore obj-store, ^String table-name
+(deftype LiveTable [^BufferAllocator allocator, ^IBufferPool buffer-pool, ^String table-name
                     ^IRelationWriter live-rel, ^:unsynchronized-mutable ^LiveHashTrie live-trie
                     ^IVectorWriter iid-wtr, ^IVectorWriter system-from-wtr
                     ^IVectorWriter put-wtr, ^IVectorWriter put-valid-from-wtr, ^IVectorWriter put-valid-to-wtr, ^IVectorWriter put-doc-wtr
@@ -159,7 +160,7 @@
     (let [live-rel-rdr (vw/rel-wtr->rdr live-rel)]
       (when (pos? (.rowCount live-rel-rdr))
         (let [bufs (trie/live-trie->bufs allocator live-trie live-rel-rdr)
-              !fut (trie/write-trie-bufs! obj-store table-name trie-key bufs)
+              !fut (trie/write-trie-bufs! buffer-pool table-name trie-key bufs)
               table-metadata (MapEntry/create table-name
                                               {:col-types (live-rel->col-types live-rel)
                                                :row-count (.rowCount live-rel-rdr)})]
@@ -188,9 +189,9 @@
     (util/close live-rel)))
 
 (defn ->live-table
-  (^xtdb.indexer.live_index.ILiveTable [allocator object-store table-name] (->live-table allocator object-store table-name {}))
+  (^xtdb.indexer.live_index.ILiveTable [allocator buffer-pool table-name] (->live-table allocator buffer-pool table-name {}))
 
-  (^xtdb.indexer.live_index.ILiveTable [allocator object-store table-name
+  (^xtdb.indexer.live_index.ILiveTable [allocator buffer-pool table-name
                                         {:keys [->live-trie]
                                          :or {->live-trie (fn [iid-rdr]
                                                             (LiveHashTrie/emptyTrie iid-rdr))}}]
@@ -199,7 +200,7 @@
            op-wtr (.writerForName rel "op")
            put-wtr (.writerForTypeId op-wtr (byte 0))
            delete-wtr (.writerForTypeId op-wtr (byte 1))]
-       (->LiveTable allocator object-store table-name rel
+       (->LiveTable allocator buffer-pool table-name rel
                     (->live-trie (vw/vec-wtr->rdr iid-wtr))
                     iid-wtr (.writerForName rel "xt$system_from")
                     put-wtr (.structKeyWriter put-wtr "xt$valid_from") (.structKeyWriter put-wtr "xt$valid_to")
@@ -213,7 +214,7 @@
         (.setPageLimit page-limit))
       (.build)))
 
-(defrecord LiveIndex [^BufferAllocator allocator, ^ObjectStore object-store,
+(defrecord LiveIndex [^BufferAllocator allocator, ^IBufferPool buffer-pool,
                       ^Map tables, ^RefCounter wm-cnt, ^long log-limit, ^long page-limit]
   ILiveIndex
   (liveTable [_ table-name] (.get tables table-name))
@@ -228,7 +229,7 @@
                                 (let [live-table (.liveTable this-table table-name)
                                       new-live-table? (nil? live-table)
                                       ^ILiveTable live-table (or live-table
-                                                                 (->live-table allocator object-store table-name
+                                                                 (->live-table allocator buffer-pool table-name
                                                                                {:->live-trie (partial ->live-trie log-limit page-limit)}))]
 
                                   (.startTx live-table tx-key new-live-table?))))))
@@ -307,13 +308,13 @@
 
 (defmethod ig/prep-key :xtdb.indexer/live-index [_ opts]
   (merge {:allocator (ig/ref :xtdb/allocator)
-          :object-store (ig/ref :xtdb/object-store)}
+          :buffer-pool (ig/ref :xtdb/buffer-pool)}
          opts))
 
-(defmethod ig/init-key :xtdb.indexer/live-index [_ {:keys [allocator object-store log-limit page-limit]
+(defmethod ig/init-key :xtdb.indexer/live-index [_ {:keys [allocator buffer-pool log-limit page-limit]
                                                     :or {log-limit 64 page-limit 1024}}]
   (util/with-close-on-catch [allocator (util/->child-allocator allocator "live-index")]
-    (->LiveIndex allocator object-store (HashMap.) (RefCounter.) log-limit page-limit)))
+    (->LiveIndex allocator buffer-pool (HashMap.) (RefCounter.) log-limit page-limit)))
 
 (defmethod ig/halt-key! :xtdb.indexer/live-index [_ live-idx]
   (util/close live-idx))

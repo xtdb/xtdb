@@ -397,10 +397,9 @@
 (defmethod ig/prep-key ::scan-emitter [_ opts]
   (merge opts
          {:metadata-mgr (ig/ref ::meta/metadata-manager)
-          :buffer-pool (ig/ref ::bp/buffer-pool)
-          :object-store (ig/ref :xtdb/object-store)}))
+          :buffer-pool (ig/ref :xtdb/buffer-pool)}))
 
-(defmethod ig/init-key ::scan-emitter [_ {:keys [^ObjectStore object-store ^IMetadataManager metadata-mgr, ^IBufferPool buffer-pool]}]
+(defmethod ig/init-key ::scan-emitter [_ {:keys [^IMetadataManager metadata-mgr, ^IBufferPool buffer-pool]}]
   (reify IScanEmitter
     (tableColNames [_ wm table-name]
       (let [normalized-table (util/str->normal-form-str table-name)]
@@ -482,7 +481,7 @@
                                                  (fn [fvt]
                                                    (or fvt (if default-all-valid-time? [:all-time] [:at [:now :now]])))))
                            ^ILiveTableWatermark live-table-wm (some-> (.liveIndex watermark) (.liveTable normalized-table-name))
-                           current-meta-files (->> (trie/list-meta-files object-store normalized-table-name)
+                           current-meta-files (->> (trie/list-meta-files buffer-pool normalized-table-name)
                                                    (trie/current-trie-files))]
 
                        (util/with-open [iid-arrow-buf (when iid-bb (util/->arrow-buf-view allocator iid-bb))]

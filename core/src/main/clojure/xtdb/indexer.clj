@@ -7,7 +7,6 @@
             [xtdb.error :as err]
             xtdb.indexer.live-index
             [xtdb.metadata :as meta]
-            xtdb.object-store
             [xtdb.operator :as op]
             [xtdb.operator.scan :as scan]
             [xtdb.rewrite :refer [zmatch]]
@@ -32,13 +31,13 @@
            (org.apache.arrow.vector BitVector)
            (org.apache.arrow.vector.complex DenseUnionVector ListVector)
            (org.apache.arrow.vector.ipc ArrowStreamReader)
+           xtdb.IBufferPool
            (xtdb.api.protocols TransactionInstant)
-           xtdb.types.ClojureForm
            (xtdb.indexer.live_index ILiveIndex ILiveIndexTx ILiveTableTx)
            xtdb.metadata.IMetadataManager
-           xtdb.object_store.ObjectStore
            xtdb.operator.IRaQuerySource
            (xtdb.operator.scan IScanEmitter)
+           xtdb.types.ClojureForm
            xtdb.util.RowCounter
            (xtdb.vector IRowCopier IVectorReader RelationReader)
            (xtdb.watermark IWatermark IWatermarkSource)))
@@ -438,7 +437,7 @@
     (.addRows row-counter 1)))
 
 (deftype Indexer [^BufferAllocator allocator
-                  ^ObjectStore object-store
+                  ^IBufferPool buffer-pool
                   ^IMetadataManager metadata-mgr
                   ^IScanEmitter scan-emitter
                   ^IRaQuerySource ra-src
@@ -634,7 +633,7 @@
 
 (defmethod ig/prep-key :xtdb/indexer [_ opts]
   (merge {:allocator (ig/ref :xtdb/allocator)
-          :object-store (ig/ref :xtdb/object-store)
+          :buffer-pool (ig/ref :xtdb/buffer-pool)
           :metadata-mgr (ig/ref ::meta/metadata-manager)
           :scan-emitter (ig/ref :xtdb.operator.scan/scan-emitter)
           :live-index (ig/ref :xtdb.indexer/live-index)
@@ -643,11 +642,11 @@
          opts))
 
 (defmethod ig/init-key :xtdb/indexer
-  [_ {:keys [allocator object-store metadata-mgr scan-emitter, ra-src, live-index, rows-per-chunk]}]
+  [_ {:keys [allocator buffer-pool metadata-mgr scan-emitter, ra-src, live-index, rows-per-chunk]}]
 
   (let [{:keys [latest-completed-tx next-chunk-idx], :or {next-chunk-idx 0}} (meta/latest-chunk-metadata metadata-mgr)]
     (util/with-close-on-catch [allocator (util/->child-allocator allocator "indexer")]
-      (->Indexer allocator object-store metadata-mgr scan-emitter ra-src live-index
+      (->Indexer allocator buffer-pool metadata-mgr scan-emitter ra-src live-index
 
                  nil ;; indexer-error
 
@@ -661,5 +660,5 @@
                  nil ;; watermark
                  (StampedLock.)))))
 
-(defmethod ig/halt-key! :xtdb/indexer [_ ^AutoCloseable indexer]
-  (.close indexer))
+(defmethod ig/halt-key! :xtdb/indexer [_ indexer]
+  (util/close indexer))

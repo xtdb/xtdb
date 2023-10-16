@@ -180,7 +180,7 @@
   (let [^Path path (.toPath node-dir)]
     {:xtdb.log/local-directory-log {:root-path (.resolve path "log")}
      :xtdb.tx-producer/tx-producer {}
-     :xtdb.buffer-pool/buffer-pool {:cache-path (.resolve path "buffers")}
+     :xtdb/buffer-pool {:cache-path (.resolve path "buffers")}
      :xtdb.object-store/file-system-object-store {:root-path (.resolve path "objects")}}))
 
 (defn- ->worker [node]

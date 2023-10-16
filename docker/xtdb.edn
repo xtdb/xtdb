@@ -1,5 +1,5 @@
 {:xtdb.log/local-directory-log {:root-path "/var/lib/xtdb/log"}
- :xtdb.buffer-pool/buffer-pool {:cache-path "/var/lib/xtdb/buffers"}
+ :xtdb/buffer-pool {:cache-path "/var/lib/xtdb/buffers"}
  :xtdb.object-store/file-system-object-store {:root-path "/var/lib/xtdb/objects"}
  :xtdb/server {:port 3000}
  :xtdb/pgwire {:port 5432}

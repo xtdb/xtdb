@@ -22,7 +22,8 @@
 (def with-live-index
   (partial tu/with-system {:xtdb/allocator {}
                            :xtdb.indexer/live-index {}
-                           :xtdb.object-store/memory-object-store {}}))
+                           :xtdb.object-store/memory-object-store {}
+                           :xtdb/buffer-pool {}}))
 
 (t/use-fixtures :each tu/with-allocator with-live-index)
 

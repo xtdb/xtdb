@@ -1,11 +1,10 @@
 (ns xtdb.indexer-test
   (:require [clojure.data.csv :as csv]
             [clojure.java.io :as io]
-            [clojure.test :as t :refer [deftest]]
+            [clojure.test :as t]
             [clojure.tools.logging :as log]
             [xtdb.api :as xt]
             [xtdb.api.protocols :as xtp]
-            [xtdb.buffer-pool :as bp]
             [xtdb.indexer :as idx]
             [xtdb.metadata :as meta]
             [xtdb.node :as node]
@@ -85,7 +84,7 @@
     (util/with-open [node (tu/->local-node {:node-dir node-dir})]
       (let [^BufferAllocator a (tu/component node :xtdb/allocator)
             ^ObjectStore os (tu/component node ::os/file-system-object-store)
-            ^IBufferPool bp (tu/component node ::bp/buffer-pool)
+            ^IBufferPool bp (tu/component node :xtdb/buffer-pool)
             mm (tu/component node ::meta/metadata-manager)
             ^IWatermarkSource wm-src (tu/component node :xtdb/indexer)]
 
@@ -372,7 +371,7 @@
     (with-open [node (tu/->local-node {:node-dir node-dir, :rows-per-chunk 3000, :rows-per-block 300})
                 info-reader (io/reader (io/resource "devices_mini_device_info.csv"))
                 readings-reader (io/reader (io/resource "devices_mini_readings.csv"))]
-      (let [^ObjectStore os (tu/component node ::os/file-system-object-store)
+      (let [^IBufferPool bp (tu/component node :xtdb/buffer-pool)
             ^IMetadataManager mm (tu/component node ::meta/metadata-manager)
             device-infos (map ts/device-info-csv->doc (csv/read-csv info-reader))
             readings (map ts/readings-csv->doc (csv/read-csv readings-reader))
@@ -399,7 +398,7 @@
                    (-> (meta/latest-chunk-metadata mm)
                        (select-keys [:latest-completed-tx :next-chunk-idx]))))
 
-          (let [objs (.listObjects os)]
+          (let [objs (.listObjects bp)]
             (t/is (= 4 (count (filter #(re-matches #"chunk-metadata/\p{XDigit}+\.transit.json" %) objs))))
             (t/is (= 2 (count (filter #(re-matches #"tables/device_info/(.+?)/.+\.arrow" %) objs))))
             (t/is (= 4 (count (filter #(re-matches #"tables/device_readings/data/log-l\p{XDigit}+-rf\p{XDigit}+-nr\p{XDigit}+\.arrow" %) objs))))
