@@ -76,25 +76,20 @@
           (.clear buffer)))
     (swap! state assoc :open false)))
 
-(defn append-byte-buffer-if-space-remaining [state ^ByteBuffer src]
+(defn append-byte-buffer [state ^ByteBuffer src]
   (let [{:keys [^ByteBuffer buffer]} @state]
     (if (<= (.remaining src) (.remaining buffer))
-      (do (.put buffer (.duplicate src)) true)
-      false)))
-
-(defn grow-buffer-capacity-if-not-enough [state n]
-  (let [{:keys [^ByteBuffer buffer]} @state]
-    (when (< (.capacity buffer) n)
-      (let [new-buffer (ByteBuffer/allocateDirect n)]
-        (.put new-buffer (.flip buffer))
-        (swap! state assoc :buffer new-buffer)))))
+      (.put buffer src)
+      (do (.put buffer (.position buffer) src (.position src) (.remaining buffer))
+          (.position src (+ (.position src) (.remaining buffer)))
+          (.position buffer (.limit buffer))))))
 
 (defn write [os state ^ByteBuffer src]
   (assert (:open @state))
-  (grow-buffer-capacity-if-not-enough state (.remaining src))
-  (when-not (append-byte-buffer-if-space-remaining state src)
+  (append-byte-buffer state src)
+  (when (pos? (.remaining src))
     (upload-current-buffer os state)
-    (recur os state src)))
+    (recur state src)))
 
 (defn handle-error [os state t]
   (let [{:keys [upload, parts]} @state]
@@ -116,7 +111,6 @@
   (write [_ src]
     (try
       (write os state src)
-      (.position src (.limit src))
       (catch Throwable t
         (handle-error os state t)
         (throw t)))))
