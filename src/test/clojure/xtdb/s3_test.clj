@@ -65,7 +65,7 @@
       (t/is (= ["alan" "alice"] (.listObjects ^ObjectStore os-1)))
       (t/is (= ["alan" "alice"] (.listObjects ^ObjectStore os-2))))))
 
-(t/deftest multipart-start-and-cancel
+(t/deftest ^:s3 multipart-start-and-cancel
   (with-open [os (object-store (random-uuid))]
     (let [multipart-upload ^IMultipartUpload  @(.startMultipart os "test-multi-created")
           prefixed-key (str (:prefix os) "test-multi-created")]
