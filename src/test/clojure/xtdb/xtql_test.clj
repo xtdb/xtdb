@@ -178,7 +178,7 @@
         "one -> many"))
 
 ;; https://github.com/tonsky/datascript/blob/1.1.0/test/datascript/test/query_aggregates.cljc#L14-L39
-#_
+
 (t/deftest datascript-test-aggregates
   (let [_tx (xt/submit-tx tu/*node*
                           '[[:put :docs {:xt/id :cerberus, :heads 3}]
@@ -187,21 +187,17 @@
                             [:put :docs {:xt/id :chimera, :heads 1}]])]
     (t/is (= #{{:heads 1, :count-heads 3} {:heads 3, :count-heads 1}}
              (set (xt/q tu/*node*
-                        '{:find [heads (count heads)]
-                          :keys [heads count-heads]
-                          :where [(match :docs {:xt/id monster})
-                                  [monster :heads heads]]})))
+                        '(-> (from :docs {:heads heads})
+                             (aggregate heads {:count-heads (count heads)})))))
           "head frequency")
 
     (t/is (= #{{:sum-heads 6, :min-heads 1, :max-heads 3, :count-heads 4}}
              (set (xt/q tu/*node*
-                        '{:find [(sum heads)
-                                 (min heads)
-                                 (max heads)
-                                 (count heads)]
-                          :keys [sum-heads min-heads max-heads count-heads]
-                          :where [(match :docs {:xt/id monster})
-                                  [monster :heads heads]]})))
+                        '(-> (from :docs {:heads heads})
+                             (aggregate {:sum-heads (sum heads)
+                                         :min-heads (min heads)
+                                         :max-heads (max heads)
+                                         :count-heads (count heads)})))))
           "various aggs")))
 
 #_

@@ -11,8 +11,12 @@
            (xtdb.operator.scan IScanEmitter)
            (xtdb.query BindingSpec Expr$Call Expr$LogicVar Expr$Obj Query$From Query$Return
                        Query$OrderBy Query$OrderDirection Query$OrderSpec Query$Pipeline Query$With
-                       Query$Unify Query$Where Query$Without Query$Limit Query$Offset)))
+                       Query$Unify Query$Where Query$Without Query$Limit Query$Offset Query$Aggregate)))
 
+;;TODO consider helper for [{sym expr} sym] -> provided vars set
+;;TODO Should all user supplied lv be planned via plan-expr, rather than explicit calls to col-sym.
+;;keeps the conversion to java AST to -> clojure sym in one place.
+;;
 (defprotocol PlanQuery
   (plan-query [query]))
 
@@ -258,10 +262,27 @@
       {:ra-plan [:order-by (mapv :order-spec planned-specs)
                  ra-plan]
        :provided-vars provided-vars}))
+
+  Query$Aggregate
+  (plan-query-tail [this {:keys [ra-plan _provided-vars]}]
+    ;;TODO check provided vars for all vars in aggr specs
+    ;;TODO check exprs are aggr exprs
+    (let [planned-specs
+          (mapv
+           (fn [col]
+             (if (instance? Expr$LogicVar (.expr ^BindingSpec col))
+               (plan-expr (.expr ^BindingSpec col))
+               {(col-sym (.attr ^BindingSpec col)) (plan-expr (.expr ^BindingSpec col))}))
+           (.cols this))]
+      {:ra-plan [:group-by planned-specs
+                   ra-plan]
+       :provided-vars (set (map #(if (map? %) (first (keys %)) %) planned-specs))}))
+
   Query$Limit
   (plan-query-tail [this {:keys [ra-plan provided-vars]}]
     {:ra-plan [:top {:limit (.length this)} ra-plan]
      :provided-vars provided-vars})
+
   Query$Offset
   (plan-query-tail [this {:keys [ra-plan provided-vars]}]
     {:ra-plan [:top {:skip (.length this)} ra-plan]
