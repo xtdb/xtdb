@@ -66,6 +66,8 @@ Resources:
                 - 's3:PutObject'
                 - 's3:DeleteObject'
                 - 's3:ListBucket'
+                - 's3:AbortMultipartUpload'
+                - 's3:ListBucketMultipartUploads'
               Resource:
                 -  !Join [ '', [ 'arn:aws:s3:::', !Ref S3BucketName] ]
                 -  !Join [ '', [ 'arn:aws:s3:::', !Ref S3BucketName, '/*'] ]
