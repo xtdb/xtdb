@@ -102,10 +102,6 @@
 
 (derive ::memory-object-store :xtdb/object-store)
 
-(defn fs ^Closeable [path]
-  (->> (ig/prep-key ::os/file-system-object-store {:root-path path, :pool-size 2})
-       (ig/init-key ::os/file-system-object-store)))
-
 (defn test-put-delete [^ObjectStore obj-store]
   (let [alice {:xt/id :alice, :name "Alice"}]
     (put-edn obj-store :alice alice)
@@ -138,17 +134,17 @@
 
   (t/is (= ["bar/alice" "bar/baz/dan" "bar/baza/james" "bar/bob" "foo/alan"] (.listObjects obj-store)))
   (t/is (= ["foo/alan"] (.listObjects obj-store "foo")))
-  
+
   (t/testing "call listObjects with a prefix ended with a slash - should work the same"
     (t/is (= ["foo/alan"] (.listObjects obj-store "foo/"))))
-  
+
   (t/testing "calling listObjects with prefix on directory with subdirectories - should only return top level keys"
     (t/is (= ["bar/alice" "bar/baz" "bar/baza" "bar/bob"] (.listObjects obj-store "bar"))))
-  
+
   (t/testing "calling listObjects with prefix with common prefix - should only return that which is a complete match against a directory "
     (t/is (= ["bar/baz/dan"] (.listObjects obj-store "bar/baz"))))
 
-  
+
      ;; Delete an object
   @(.deleteObject obj-store "bar/alice")
 
@@ -178,39 +174,5 @@
   ;; Causes issues due to different error types being thrown
   ;; (->> "IllegalStateException thrown if object does not exist"
   ;;      (t/is (thrown? IllegalStateException (get-bytes obj-store "does-not-exist" 0 1))))
-  
+
   )
-
-;; ---
-;; file-system-object-store
-;; ---
-
-(t/deftest fs-put-delete-test
-  (tu/with-tmp-dirs #{path}
-    (with-open [obj-store (fs path)]
-      (test-put-delete obj-store))))
-
-(t/deftest fs-list-test
-  (tu/with-tmp-dirs #{path}
-    (with-open [obj-store (fs path)]
-      (test-list-objects obj-store))))
-
-(t/deftest fs-list-test-with-prior-objects
-  (tu/with-tmp-dirs #{path}
-    (with-open [os (fs path)]
-      (put-edn os "alice" :alice)
-      (put-edn os "alan" :alan)
-      (t/is (= ["alan" "alice"] (.listObjects ^ObjectStore os))))
-
-    (with-open [os (fs path)]
-      (t/testing "prior objects will still be there, should be available on a list request"
-        (t/is (= ["alan" "alice"] (.listObjects ^ObjectStore os))))
-
-      (t/testing "should be able to delete prior objects and have that reflected in list objects output"
-        @(.deleteObject ^ObjectStore os "alice")
-        (t/is (= ["alan"] (.listObjects ^ObjectStore os)))))))
-
-(t/deftest fs-range-test
-  (tu/with-tmp-dirs #{path}
-    (with-open [obj-store (fs path)]
-      (test-range obj-store))))
