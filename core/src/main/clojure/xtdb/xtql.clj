@@ -116,12 +116,12 @@
   (let [{:keys [rels var->cols]} (with-unique-cols plans)]
     (-> (case (count rels)
           0 {:ra-plan [:table [{}]]}
-          1 (first rels)
+          1 {:ra-plan (first rels)}
           {:ra-plan [:mega-join [] rels]})
         (wrap-unify var->cols))))
 
 (defn- plan-from-bind-spec [^OutSpec bind-spec]
-  (let [col (symbol (.attr bind-spec))
+  (let [col (col-sym (.attr bind-spec))
         expr (.expr bind-spec)]
     (if (instance? Expr$LogicVar expr)
       {:var (symbol (.lv ^Expr$LogicVar expr))

@@ -170,6 +170,11 @@
 
 (deftest test-unify
   (xt/submit-tx tu/*node* bond/tx-ops)
+
+  (t/is (= [{:bond :daniel-craig}]
+           (xt/q tu/*node*
+                 '(unify (from :person {:xt/id bond, :person/name "Daniel Craig"})))))
+
   ;;TODO Params rewritten using with clause, make sure params are tested elsewhere
   (t/is (= #{{:film-name "Skyfall", :bond-name "Daniel Craig"}}
            (set (xt/q tu/*node*
