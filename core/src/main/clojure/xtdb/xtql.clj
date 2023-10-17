@@ -4,14 +4,15 @@
             [xtdb.logical-plan :as lp]
             [xtdb.operator :as op]
             [xtdb.util :as util]
-            [xtdb.vector.writer :as vw])
+            [xtdb.vector.writer :as vw]
+            [xtdb.xtql.edn :as xtql.edn])
   (:import (org.apache.arrow.memory BufferAllocator)
            xtdb.IResultSet
            (xtdb.operator IRaQuerySource)
            (xtdb.operator.scan IScanEmitter)
            (xtdb.query Expr$Call Expr$LogicVar Expr$Obj Query$From Query$Return
                        Query$OrderBy Query$OrderDirection Query$OrderSpec Query$Pipeline Query$With
-                       OutSpec ArgSpec ColSpec VarSpec
+                       OutSpec ArgSpec ColSpec VarSpec Query$WithCols
                        Query$Unify Query$Where Query$Without Query$Limit Query$Offset Query$Aggregate)))
 
 ;;TODO consider helper for [{sym expr} sym] -> provided vars set
@@ -49,6 +50,7 @@
   ([prefix col]
    (col-sym (str (format "%s_%s" prefix col)))))
 
+;TODO fill out expr plan for other types
 (extend-protocol ExprPlan
   Expr$LogicVar
   (plan-expr [this] (col-sym (.lv this)))
@@ -152,31 +154,52 @@
             (plan-query (.query pipeline))
             (.tails pipeline))))
 
+(defn- required-vars-available? [expr provided-vars]
+  (when (not (set/subset? (required-vars expr) provided-vars))
+    (throw (err/illegal-arg
+            :xtql/invalid-expression
+            {:expr (xtql.edn/unparse expr) :provided-vars provided-vars
+             ::err/message "Not all variables in expression are in scope"}))))
+
 (extend-protocol PlanQueryTail
   Query$Where
   (plan-query-tail [where plan]
     (throw (UnsupportedOperationException. "TODO")))
 
-  Query$With
-  (plan-query-tail [with plan]
-    (throw (UnsupportedOperationException. "TODO")))
+  Query$WithCols
+  (plan-query-tail [this {:keys [ra-plan provided-vars]}]
+    (let [projections (for [binding (.cols this)
+                            :let [var (col-sym (.attr ^ColSpec binding))
+                                  expr (.expr ^ColSpec binding)
+                                  _ (required-vars-available? expr provided-vars)
+                                  planned-expr (plan-expr expr)]]
+                        {var planned-expr})]
+      {:ra-plan
+       [:map (vec projections)
+        ra-plan]
+       :provided-vars
+       (set/union
+        provided-vars
+        (set (map #(first (keys %)) projections)))}))
 
   Query$Without
   (plan-query-tail [without {:keys [ra-plan provided-vars]}]
+    ;;TODO should this error if you remove vars that don't exist
     (let [provided-vars (set/difference provided-vars (into #{} (map symbol) (.cols without)))]
       {:ra-plan [:project (vec provided-vars) ra-plan]
        :provided-vars provided-vars}))
 
   Query$Return
-  (plan-query-tail [this {:keys [ra-plan #_provided-vars]}]
-    ;;TODO Check required vars for exprs (including col refs) are in the provided vars of prev step
-    (let [planned-projections
+  (plan-query-tail [this {:keys [ra-plan provided-vars]}]
+    (let [projections
           (mapv
            (fn [col]
-             {(col-sym (.attr ^ColSpec col)) (plan-expr (.expr ^ColSpec col))})
+             (let [expr (.expr ^ColSpec col)]
+               (required-vars-available? expr provided-vars)
+               {(col-sym (.attr ^ColSpec col)) (plan-expr expr)}))
            (.cols this))]
-      {:ra-plan [:project planned-projections ra-plan]
-       :provided-vars (set (map #(first (keys %)) planned-projections))})))
+      {:ra-plan [:project projections ra-plan]
+       :provided-vars (set (map #(first (keys %)) projections))})))
 
 (extend-protocol PlanUnifyClause
   Query$From (plan-unify-clause [from] [[:from (plan-from from)]])

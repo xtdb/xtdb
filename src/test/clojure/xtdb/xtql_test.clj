@@ -200,20 +200,24 @@
                                          :count-heads (count heads)})))))
           "various aggs")))
 
-#_
-(t/deftest test-find-exprs
+(t/deftest test-with-op
   (let [_tx (xt/submit-tx tu/*node* '[[:put :docs {:xt/id :o1, :unit-price 1.49, :quantity 4}]
                                       [:put :docs {:xt/id :o2, :unit-price 5.39, :quantity 1}]
                                       [:put :docs {:xt/id :o3, :unit-price 0.59, :quantity 7}]])]
-    (t/is (= #{{:oid :o1, :o-value 5.96}
-               {:oid :o2, :o-value 5.39}
-               {:oid :o3, :o-value 4.13}}
+    (t/is (= #{{:oid :o1, :o-value 5.96, :unit-price 1.49, :qty 4}
+               {:oid :o2, :o-value 5.39, :unit-price 5.39, :qty 1}
+               {:oid :o3, :o-value 4.13, :unit-price 0.59, :qty 7}}
              (set (xt/q tu/*node*
-                        '{:find [oid (* unit-price qty)]
-                          :keys [oid o-value]
-                          :where [(match :docs {:xt/id oid})
-                                  [oid :unit-price unit-price]
-                                  [oid :quantity qty]]}))))))
+                        '(-> (from :docs {:xt/id oid :unit-price unit-price :quantity qty})
+                             (with {:o-value (* unit-price qty)}))))))))
+
+(t/deftest test-with-op-errs
+  (let [_tx (xt/submit-tx tu/*node* '[[:put :docs {:xt/id :foo}]])]
+    (t/is (thrown-with-msg? IllegalArgumentException
+                            #"Not all variables in expression are in scope"
+                            (xt/q tu/*node*
+                                  '(-> (from :docs {:xt/id id})
+                                       (with {:bar (str baz)})))))))
 
 #_
 (deftest test-aggregate-exprs
