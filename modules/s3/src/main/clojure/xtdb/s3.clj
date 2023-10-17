@@ -16,7 +16,7 @@
            [software.amazon.awssdk.core.async AsyncRequestBody AsyncResponseTransformer]
            [software.amazon.awssdk.services.s3 S3AsyncClient]
            [software.amazon.awssdk.services.s3.model AbortMultipartUploadRequest CompleteMultipartUploadRequest CompletedPart CompletedMultipartUpload CreateMultipartUploadRequest CreateMultipartUploadResponse DeleteObjectRequest GetObjectRequest HeadObjectRequest NoSuchKeyException PutObjectRequest UploadPartRequest UploadPartResponse]
-           [xtdb.object_store ObjectStore IMultipartUpload]
+           [xtdb.object_store ObjectStore SupportsMultipart IMultipartUpload]
            [xtdb.s3 S3Configurator]))
 
 (defn- get-obj-req
@@ -122,7 +122,7 @@
       (catch IndexOutOfBoundsException e
         (CompletableFuture/failedFuture e))))
 
-  (putObject [this k buf] 
+  (putObject [this k buf]
     (-> (.headObject client
                      (-> (HeadObjectRequest/builder)
                          (.bucket bucket)
@@ -158,7 +158,8 @@
                        (.bucket bucket)
                        (.key (str prefix k))
                        ^DeleteObjectRequest (.build))))
-  
+
+  SupportsMultipart
   (startMultipart [_ k]
     (let [prefixed-key (str prefix k)
           initiate-request (-> (CreateMultipartUploadRequest/builder)
@@ -167,15 +168,15 @@
                                ^CreateMultipartUploadRequest (.build))]
       (-> (.createMultipartUpload client initiate-request)
           (util/then-apply (fn [^CreateMultipartUploadResponse initiate-response]
-                             (->MultipartUpload client 
-                                                bucket 
-                                                prefix 
-                                                k 
+                             (->MultipartUpload client
+                                                bucket
+                                                prefix
+                                                k
                                                 (.uploadId initiate-response)
                                                 (fn [k]
                                                   ;; On complete - add filename to cache
                                                   (.add file-name-cache k))
-                                                (ArrayList.))))))) 
+                                                (ArrayList.)))))))
 
   Closeable
   (close [_]
