@@ -4,8 +4,7 @@
             [xtdb.logical-plan :as lp]
             [xtdb.operator :as op]
             [xtdb.util :as util]
-            [xtdb.vector.writer :as vw]
-            [xtdb.xtql.edn :as xtql.edn])
+            [xtdb.vector.writer :as vw])
   (:import (org.apache.arrow.memory BufferAllocator)
            xtdb.IResultSet
            (xtdb.operator IRaQuerySource)
@@ -158,7 +157,7 @@
   (when (not (set/subset? (required-vars expr) provided-vars))
     (throw (err/illegal-arg
             :xtql/invalid-expression
-            {:expr (xtql.edn/unparse expr) :provided-vars provided-vars
+            {:expr expr :provided-vars provided-vars
              ::err/message "Not all variables in expression are in scope"}))))
 
 (extend-protocol PlanQueryTail
@@ -250,6 +249,7 @@
         (wrap-unify var->cols))))
 
 (extend-protocol PlanQuery
+  ;;TODO Test Unify over a single from/clause
   Query$Unify
   (plan-query [unify]
     ;;TODO not all clauses can return entire plans (e.g. where-clauses),

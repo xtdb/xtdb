@@ -88,6 +88,20 @@
                         (offset 1)
                         (limit 1)))))))
 
+(deftest test-order-by-multiple-cols
+  (let [_tx (xt/submit-tx tu/*node*
+                          '[[:put :docs {:xt/id 2, :n 2}]
+                            [:put :docs {:xt/id 3, :n 3}]
+                            [:put :docs {:xt/id 1, :n 2}]
+                            [:put :docs {:xt/id 4, :n 1}]])]
+    (t/is (= [{:i 4, :n 1}
+              {:i 1, :n 2}
+              {:i 2, :n 2}
+              {:i 3, :n 3}]
+             (xt/q tu/*node*
+                   '(-> (from :docs {:xt/id i, :n n})
+                        (order-by n i)))))))
+
 ;; https://github.com/tonsky/datascript/blob/1.1.0/test/datascript/test/query.cljc#L12-L36
 (deftest datascript-test-joins
   (let [_tx (xt/submit-tx tu/*node*
@@ -154,7 +168,7 @@
                    '(from :docs {:xt/id i :foo/bar n} foo/bar)))
           "query with namespaced attributes in match syntax")))
 
-(deftest test-joins
+(deftest test-unify
   (xt/submit-tx tu/*node* bond/tx-ops)
   ;;TODO Params rewritten using with clause, make sure params are tested elsewhere
   (t/is (= #{{:film-name "Skyfall", :bond-name "Daniel Craig"}}
