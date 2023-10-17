@@ -6,6 +6,8 @@
             [xtdb.util :as util]
             [xtdb.object-store :as os])
   (:import java.io.Closeable
+           (java.nio ByteBuffer)
+           (java.nio.channels FileChannel$MapMode)
            [java.nio.file FileSystems FileVisitOption Files LinkOption Path]
            [java.util Map NavigableMap]
            [java.util.concurrent CompletableFuture ConcurrentSkipListMap]
@@ -105,6 +107,49 @@
 
 (derive ::in-memory :xtdb/buffer-pool)
 
+(defn get-path ^ByteBuffer [^Path root-path, ^String k]
+  (let [from-path (.resolve root-path k)]
+    (when-not (util/path-exists from-path)
+      (throw (os/obj-missing-exception k)))
+
+    (util/->mmap-path from-path)))
+
+(defn get-path-range ^ByteBuffer [^Path root-path, ^String k, ^long start, ^long len]
+  (os/ensure-shared-range-oob-behaviour start len)
+
+  (let [from-path (.resolve root-path k)]
+    (when-not (util/path-exists from-path)
+      (throw (os/obj-missing-exception k)))
+
+    (with-open [in (util/->file-channel from-path #{:read})]
+      (.map in FileChannel$MapMode/READ_ONLY start (max 1 (min (- (.size in) start) len))))))
+
+(defn put-path [^Path root-path, ^String k, ^ByteBuffer buf]
+  (let [buf (.duplicate buf)
+        to-path (.resolve root-path k)]
+    (util/mkdirs (.getParent to-path))
+
+    (if (identical? (FileSystems/getDefault) (.getFileSystem to-path))
+      (if (util/path-exists to-path)
+        to-path
+        (util/write-buffer-to-path-atomically buf root-path to-path))
+
+      (util/write-buffer-to-path buf to-path))))
+
+(defn list-path
+  ([^Path root-path]
+   (with-open [dir-stream (Files/walk root-path (make-array FileVisitOption 0))]
+     (vec (sort (for [^Path path (iterator-seq (.iterator dir-stream))
+                      :when (Files/isRegularFile path (make-array LinkOption 0))]
+                  (str (.relativize root-path path)))))))
+
+  ([^Path root-path, ^String dir]
+   (let [dir (.resolve root-path dir)]
+     (when (Files/exists dir (make-array LinkOption 0))
+       (with-open [dir-stream (Files/newDirectoryStream dir)]
+         (vec (sort (for [^Path path dir-stream]
+                      (str (.relativize root-path path))))))))))
+
 (deftype LocalBufferPool [^BufferAllocator allocator, ^Map buffers, ^Path root-path]
   IBufferPool
   (getBuffer [_ k]
@@ -115,7 +160,7 @@
            (record-cache-hit cached-buffer)
            cached-buffer)
 
-         (let [nio-buffer (os/get-path root-path k)
+         (let [nio-buffer (get-path root-path k)
                create-arrow-buf #(util/->arrow-buf-view allocator nio-buffer)
                [_ buf] (cache-compute buffers k create-arrow-buf)]
            buf)))))
@@ -132,14 +177,14 @@
            (record-cache-hit cached-buffer)
            cached-buffer)
 
-         (let [nio-buffer (os/get-path-range root-path k start len)
+         (let [nio-buffer (get-path-range root-path k start len)
                create-arrow-buf #(util/->arrow-buf-view allocator nio-buffer)
                [_ buf] (cache-compute buffers [k start len] create-arrow-buf)]
            buf)))))
 
-  (putObject [_ k buf] (CompletableFuture/completedFuture (os/put-path root-path k buf)))
-  (listObjects [_this] (os/list-path root-path))
-  (listObjects [_this dir] (os/list-path root-path dir))
+  (putObject [_ k buf] (CompletableFuture/completedFuture (put-path root-path k buf)))
+  (listObjects [_this] (list-path root-path))
+  (listObjects [_this dir] (list-path root-path dir))
 
   Closeable
   (close [_]
@@ -289,4 +334,3 @@
   (let [footer (get-footer bp path)
         schema (.getSchema footer)]
     (VectorSchemaRoot/create schema allocator)))
-

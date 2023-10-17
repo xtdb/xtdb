@@ -83,7 +83,6 @@
 
     (util/with-open [node (tu/->local-node {:node-dir node-dir})]
       (let [^BufferAllocator a (tu/component node :xtdb/allocator)
-            ^ObjectStore os (tu/component node ::os/file-system-object-store)
             ^IBufferPool bp (tu/component node :xtdb/buffer-pool)
             mm (tu/component node ::meta/metadata-manager)
             ^IWatermarkSource wm-src (tu/component node :xtdb/indexer)]
