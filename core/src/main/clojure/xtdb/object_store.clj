@@ -21,6 +21,10 @@
    "Asynchonously cancels the multipart-request - useful/necessary to cleanup any parts of the multipart upload on an error"))
 
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
+(definterface SupportsMultipart
+  (^java.util.concurrent.CompletableFuture #_<IMultipartUpload> startMultipart [^String k]))
+
+#_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface ObjectStore
   (^java.util.concurrent.CompletableFuture #_<ByteBuffer> getObject [^String k]
                                                                     "Asynchonously returns the given object in a ByteBuffer
@@ -44,8 +48,7 @@
                                                               "Asynchronously writes the object to the given path.
     If the object doesn't exist, the CF completes with an IllegalStateException.")
 
-  (^java.util.concurrent.CompletableFuture #_<?> putObject [^String k, ^java.nio.ByteBuffer buf])
-  (^java.util.concurrent.CompletableFuture #_<IMultipartUpload> startMultipart [^String k])
+  (^java.util.concurrent.CompletableFuture #_<?> putObject [^String k, ^java.nio.ByteBuffer buf]) 
   (^java.lang.Iterable #_<String> listObjects [])
   (^java.lang.Iterable #_<String> listObjects [^String dir])
   (^java.util.concurrent.CompletableFuture #_<?> deleteObject [^String k]))
