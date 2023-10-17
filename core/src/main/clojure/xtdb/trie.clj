@@ -19,7 +19,7 @@
            [org.apache.arrow.vector.ipc ArrowFileWriter]
            (org.apache.arrow.vector.types.pojo ArrowType$Union Schema)
            org.apache.arrow.vector.types.UnionMode
-           xtdb.buffer_pool.IBufferPool
+           xtdb.IBufferPool
            (xtdb.object_store ObjectStore)
            (xtdb.trie ArrowHashTrie ArrowHashTrie$Leaf HashTrie HashTrie$Node LiveHashTrie LiveHashTrie$Leaf)
            (xtdb.util WritableByteBufferChannel)
@@ -54,8 +54,8 @@
 (defn ->table-meta-file-name [table-name trie-key]
   (format "tables/%s/meta/%s.arrow" table-name trie-key))
 
-(defn list-meta-files [^ObjectStore obj-store, table-name]
-  (vec (sort (.listObjects obj-store (format "tables/%s/meta/" table-name)))))
+(defn list-meta-files [^IBufferPool buffer-pool, table-name]
+  (vec (sort (.listObjects buffer-pool (format "tables/%s/meta/" table-name)))))
 
 (def ^org.apache.arrow.vector.types.pojo.Schema meta-rel-schema
   (Schema. [(types/->field "nodes" (ArrowType$Union. UnionMode/Dense (int-array (range 3))) false
@@ -216,12 +216,12 @@
     {:data-buf (.getAsByteBuffer data-bb-ch)
      :meta-buf (.getAsByteBuffer meta-bb-ch)}))
 
-(defn write-trie-bufs! [^ObjectStore obj-store, ^String table-name, trie-key
+(defn write-trie-bufs! [^IBufferPool buffer-pool, ^String table-name, trie-key
                         {:keys [^ByteBuffer data-buf ^ByteBuffer meta-buf]}]
-  (-> (.putObject obj-store (->table-data-file-name table-name trie-key) data-buf)
+  (-> (.putObject buffer-pool (->table-data-file-name table-name trie-key) data-buf)
       (util/then-compose
         (fn [_]
-          (.putObject obj-store (->table-meta-file-name table-name trie-key) meta-buf)))))
+          (.putObject buffer-pool (->table-meta-file-name table-name trie-key) meta-buf)))))
 
 (defn parse-trie-file-name [file-name]
   (when-let [[_ trie-key level-str row-from-str next-row-str] (re-find #"/(log-l(\p{XDigit}+)-rf(\p{XDigit}+)-nr(\p{XDigit}+)+?)\.arrow$" file-name)]

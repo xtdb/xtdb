@@ -26,12 +26,12 @@
 
 (def azure-object-store
   {::xtdb {:node-opts {:xtdb.log/local-directory-log {:root-path (io/file dev-node-dir "log")}
-                       :xtdb.buffer-pool/buffer-pool {:cache-path (io/file dev-node-dir "buffers")}
+                       :xtdb/buffer-pool {:cache-path (io/file dev-node-dir "objects")}
                        ::azure/blob-object-store {:storage-account storage-account
                                                   :container container}}}})
 
 (def azure-log
-  {::xtdb {:node-opts {:xtdb.buffer-pool/buffer-pool {:cache-path (io/file dev-node-dir "buffers")}
+  {::xtdb {:node-opts {:xtdb/buffer-pool {:cache-path (io/file dev-node-dir "objects")}
                        ::azure/event-hub-log {:fully-qualified-namespace fully-qualified-namespace
                                               :event-hub-name eventhub
                                               :max-wait-time "PT1S"}}}})

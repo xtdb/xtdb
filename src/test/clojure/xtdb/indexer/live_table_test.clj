@@ -3,7 +3,7 @@
             [clojure.test :as t :refer [deftest]]
             [xtdb.api.protocols :as xtp]
             [xtdb.indexer.live-index :as live-index]
-            [xtdb.object-store-test :as obj-store-test]
+            [xtdb.node :as node]
             [xtdb.test-json :as tj]
             [xtdb.test-util :as tu]
             [xtdb.util :as util]
@@ -12,7 +12,8 @@
   (:import (java.nio ByteBuffer)
            (java.util Arrays HashMap)
            (org.apache.arrow.memory RootAllocator)
-           (xtdb.indexer.live_index ILiveIndex  TestLiveTable)
+           xtdb.IBufferPool
+           (xtdb.indexer.live_index ILiveIndex TestLiveTable)
            (xtdb.trie LiveHashTrie LiveHashTrie$Leaf)
            (xtdb.util RefCounter)
            xtdb.vector.IVectorPosition
@@ -34,9 +35,10 @@
     (let [uuid #uuid "7fffffff-ffff-ffff-4fff-ffffffffffff"
           n 1000]
       (tu/with-tmp-dirs #{path}
-        (with-open [obj-store (obj-store-test/fs path)
+        (with-open [node (tu/->local-node {:node-dir path})
+                    ^IBufferPool bp (tu/component node :xtdb/buffer-pool)
                     allocator (RootAllocator.)
-                    live-table (live-index/->live-table allocator obj-store "foo" {:->live-trie (partial live-index/->live-trie 2 4)})]
+                    live-table (live-index/->live-table allocator bp "foo" {:->live-trie (partial live-index/->live-trie 2 4)})]
 
           (let [live-table-tx (.startTx live-table (xtp/->TransactionInstant 0 (.toInstant #inst "2000")) false)]
             (let [wp (IVectorPosition/build)]
@@ -66,14 +68,15 @@
             (tu/with-allocator
               #(tj/check-json
                 (.toPath (io/as-file (io/resource "xtdb/live-table-test/max-depth-trie-s")))
-                path))))))
+                (.resolve path "objects")))))))
 
     (let [uuid #uuid "7fffffff-ffff-ffff-4fff-ffffffffffff"
           n 50000]
       (tu/with-tmp-dirs #{path}
-        (with-open [obj-store (obj-store-test/fs path)
+        (with-open [node (tu/->local-node {:node-dir path})
+                    ^IBufferPool bp (tu/component node :xtdb/buffer-pool)
                     allocator (RootAllocator.)
-                    live-table (live-index/->live-table allocator obj-store "foo")]
+                    live-table (live-index/->live-table allocator bp "foo")]
           (let [live-table-tx (.startTx live-table (xtp/->TransactionInstant 0 (.toInstant #inst "2000")) false)]
 
             (let [wp (IVectorPosition/build)]
@@ -102,7 +105,7 @@
             (tu/with-allocator
               #(tj/check-json
                 (.toPath (io/as-file (io/resource "xtdb/live-table-test/max-depth-trie-l")))
-                path))))))))
+                (.resolve path "objects")))))))))
 
 (defn live-table-wm->data [^ILiveTableWatermark live-table-wm]
   (let [live-rel-data (vr/rel->rows (.liveRelation live-table-wm))
@@ -122,9 +125,10 @@
 
 (deftest test-live-table-watermarks-are-immutable
   (let [uuids [#uuid "7fffffff-ffff-ffff-4fff-ffffffffffff"]]
-    (with-open [obj-store (obj-store-test/in-memory)
+    (with-open [node (node/start-node {})
+                ^IBufferPool bp (tu/component node :xtdb/buffer-pool)
                 allocator (RootAllocator.)
-                live-table (live-index/->live-table allocator obj-store "foo")]
+                live-table (live-index/->live-table allocator bp "foo")]
       (let [live-table-tx (.startTx live-table (xtp/->TransactionInstant 0 (.toInstant #inst "2000")) false)]
 
         (let [wp (IVectorPosition/build)]
@@ -152,10 +156,11 @@
 (deftest test-live-index-watermarks-are-immutable
   (let [uuids [#uuid "7fffffff-ffff-ffff-4fff-ffffffffffff"]
         table-name "foo"]
-    (with-open [obj-store (obj-store-test/in-memory)
+    (with-open [node (node/start-node {})
+                ^IBufferPool bp (tu/component node :xtdb/buffer-pool)
                 allocator (RootAllocator.)]
       (let [live-index-allocator (util/->child-allocator allocator "live-index")]
-        (with-open [^ILiveIndex live-index (live-index/->LiveIndex live-index-allocator obj-store (HashMap.) (RefCounter.) 64 1024)]
+        (with-open [^ILiveIndex live-index (live-index/->LiveIndex live-index-allocator bp (HashMap.) (RefCounter.) 64 1024)]
           (let [live-index-tx (.startTx live-index (xtp/->TransactionInstant 0 (.toInstant #inst "2000")))
                 live-table-tx (.liveTable live-index-tx table-name)]
 

@@ -5,7 +5,6 @@
             xtdb.buffer-pool
             [xtdb.expression.comparator :as expr.comp]
             xtdb.expression.temporal
-            xtdb.object-store
             [xtdb.transit :as xt.transit]
             [xtdb.types :as types]
             [xtdb.util :as util]
@@ -20,8 +19,7 @@
            (org.apache.arrow.memory ArrowBuf)
            (org.apache.arrow.vector FieldVector)
            (org.apache.arrow.vector.types.pojo ArrowType$Union)
-           xtdb.buffer_pool.IBufferPool
-           xtdb.object_store.ObjectStore
+           xtdb.IBufferPool
            (xtdb.vector IVectorReader IVectorWriter)))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -287,14 +285,13 @@
           (when (not (nil? (.getObject bloom-rdr bloom-vec-idx)))
             (bloom/bloom->bitmap bloom-rdr bloom-vec-idx)))))))
 
-(deftype MetadataManager [^ObjectStore object-store
-                          ^IBufferPool buffer-pool
+(deftype MetadataManager [^IBufferPool buffer-pool
                           ^NavigableMap chunks-metadata
                           ^Map table-metadata-idxs
                           ^:volatile-mutable ^Map col-types]
   IMetadataManager
   (finishChunk [this chunk-idx new-chunk-metadata]
-    (-> @(.putObject object-store (->chunk-metadata-obj-key chunk-idx) (write-chunk-metadata new-chunk-metadata))
+    (-> @(.putObject buffer-pool (->chunk-metadata-obj-key chunk-idx) (write-chunk-metadata new-chunk-metadata))
         (util/rethrowing-cause))
     (set! (.col-types this) (merge-col-types col-types new-chunk-metadata))
     (.put chunks-metadata chunk-idx new-chunk-metadata))
@@ -338,23 +335,21 @@
             (finally
               (.close buffer)))))))
 
-(defn- load-chunks-metadata ^java.util.NavigableMap [{:keys [buffer-pool ^ObjectStore object-store]}]
+(defn- load-chunks-metadata ^java.util.NavigableMap [{:keys [^IBufferPool buffer-pool]}]
   (let [cm (TreeMap.)]
-    (doseq [cm-obj-key (.listObjects object-store "chunk-metadata/")]
+    (doseq [cm-obj-key (.listObjects buffer-pool "chunk-metadata/")]
       (with-open [is (ByteArrayInputStream. @(get-bytes buffer-pool cm-obj-key))]
         (let [rdr (transit/reader is :json {:handlers xt.transit/tj-read-handlers})]
           (.put cm (obj-key->chunk-idx cm-obj-key) (transit/read rdr)))))
     cm))
 
 (defmethod ig/prep-key ::metadata-manager [_ opts]
-  (merge {:object-store (ig/ref :xtdb/object-store)
-          :buffer-pool (ig/ref :xtdb.buffer-pool/buffer-pool)}
+  (merge {:buffer-pool (ig/ref :xtdb/buffer-pool)}
          opts))
 
-(defmethod ig/init-key ::metadata-manager [_ {:keys [^ObjectStore object-store, ^IBufferPool buffer-pool], :as deps}]
+(defmethod ig/init-key ::metadata-manager [_ {:keys [^IBufferPool buffer-pool], :as deps}]
   (let [chunks-metadata (load-chunks-metadata deps)]
-    (MetadataManager. object-store
-                      buffer-pool
+    (MetadataManager. buffer-pool
                       chunks-metadata
                       (ConcurrentHashMap.)
                       (->> (vals chunks-metadata) (reduce merge-col-types {})))))

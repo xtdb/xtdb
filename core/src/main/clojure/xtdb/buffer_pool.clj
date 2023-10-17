@@ -1,26 +1,24 @@
 (ns xtdb.buffer-pool
-  (:require [xtdb.object-store :as object-store]
-            [xtdb.util :as util]
+  (:require [clojure.string :as str]
+            [clojure.tools.logging :as log]
             [juxt.clojars-mirrors.integrant.core :as ig]
-            [clojure.tools.logging :as log])
-  (:import xtdb.util.ArrowBufLRU
-           xtdb.object_store.ObjectStore
-           java.io.Closeable
-           java.nio.file.Path
-           [java.util Map UUID]
-           java.util.concurrent.CompletableFuture
-           java.util.concurrent.locks.StampedLock
+            [xtdb.object-store :as object-store]
+            [xtdb.util :as util]
+            [xtdb.object-store :as os])
+  (:import java.io.Closeable
+           [java.nio.file FileSystems FileVisitOption Files LinkOption Path]
+           [java.util Map NavigableMap]
+           [java.util.concurrent CompletableFuture ConcurrentSkipListMap]
            (java.util.concurrent.atomic AtomicLong)
+           java.util.NavigableMap
            [org.apache.arrow.memory ArrowBuf BufferAllocator]
            (org.apache.arrow.vector VectorSchemaRoot)
-           (org.apache.arrow.vector.ipc.message ArrowFooter ArrowRecordBatch)))
+           (org.apache.arrow.vector.ipc.message ArrowFooter ArrowRecordBatch)
+           xtdb.IBufferPool
+           xtdb.object_store.ObjectStore
+           xtdb.util.ArrowBufLRU))
 
 (set! *unchecked-math* :warn-on-boxed)
-
-(definterface IBufferPool
-  (^java.util.concurrent.CompletableFuture getBuffer [^String k])
-  (^java.util.concurrent.CompletableFuture getRangeBuffer [^String k ^int start ^int len])
-  (^boolean evictBuffer [^String k]))
 
 (defn- retain [^ArrowBuf buf] (.retain (.getReferenceManager buf)) buf)
 
@@ -56,7 +54,126 @@
       (if hit (record-cache-hit arrow-buf) (record-cache-miss arrow-buf))
       [hit (retain arrow-buf)])))
 
-(deftype BufferPool [^BufferAllocator allocator ^ObjectStore object-store ^Map buffers ^Path cache-path]
+(deftype MemoryBufferPool [^BufferAllocator allocator ^NavigableMap buffers]
+  IBufferPool
+  (getBuffer [_ k]
+    (CompletableFuture/completedFuture
+     (when k
+       (when-let [cached-buffer (cache-get buffers k)]
+         (record-cache-hit cached-buffer)
+         cached-buffer))))
+
+  (getRangeBuffer [_ k start len]
+    (object-store/ensure-shared-range-oob-behaviour start len)
+    (CompletableFuture/completedFuture
+     (when k
+       (when-let [buffer (when-let [^ArrowBuf full-buffer (cache-get buffers k)]
+                           (.slice full-buffer start len))]
+         (record-cache-hit buffer)
+         buffer))))
+
+  (putObject [_ k buf]
+    (.put buffers k (util/->arrow-buf-view allocator buf))
+    (CompletableFuture/completedFuture nil))
+
+  (listObjects [_] (vec (.keySet buffers)))
+
+  ;; TODO #2740
+  (listObjects [_ prefix]
+    (->> (.keySet (.tailMap buffers prefix))
+         (into [] (take-while #(str/starts-with? % prefix)))))
+
+  Closeable
+  (close [_]
+    (locking buffers
+      (let [i (.iterator (.values buffers))]
+        (while (.hasNext i)
+          (util/close (.next i))
+          (.remove i)))
+      (util/close allocator))))
+
+(defmethod ig/prep-key ::in-memory [_ opts]
+  (into {:allocator (ig/ref :xtdb/allocator)}
+        opts))
+
+(defmethod ig/init-key ::in-memory [_ {:keys [^BufferAllocator allocator]}]
+  (util/with-close-on-catch [allocator (util/->child-allocator allocator "buffer-pool")]
+    (->MemoryBufferPool allocator (ConcurrentSkipListMap.))))
+
+(defmethod ig/halt-key! ::in-memory [_ buffer-pool]
+  (util/close buffer-pool))
+
+(derive ::in-memory :xtdb/buffer-pool)
+
+(deftype LocalBufferPool [^BufferAllocator allocator, ^Map buffers, ^Path root-path]
+  IBufferPool
+  (getBuffer [_ k]
+    (CompletableFuture/completedFuture
+     (when k
+       (if-let [cached-buffer (cache-get buffers k)]
+         (do
+           (record-cache-hit cached-buffer)
+           cached-buffer)
+
+         (let [nio-buffer (os/get-path root-path k)
+               create-arrow-buf #(util/->arrow-buf-view allocator nio-buffer)
+               [_ buf] (cache-compute buffers k create-arrow-buf)]
+           buf)))))
+
+  (getRangeBuffer [_ k start len]
+    (object-store/ensure-shared-range-oob-behaviour start len)
+
+    (CompletableFuture/completedFuture
+     (when k
+       (if-let [cached-buffer (or (cache-get buffers [k start len])
+                                  (when-let [^ArrowBuf cached-full-buffer (cache-get buffers k)]
+                                    (.slice cached-full-buffer start len)))]
+         (do
+           (record-cache-hit cached-buffer)
+           cached-buffer)
+
+         (let [nio-buffer (os/get-path-range root-path k start len)
+               create-arrow-buf #(util/->arrow-buf-view allocator nio-buffer)
+               [_ buf] (cache-compute buffers [k start len] create-arrow-buf)]
+           buf)))))
+
+  (putObject [_ k buf] (CompletableFuture/completedFuture (os/put-path root-path k buf)))
+  (listObjects [_this] (os/list-path root-path))
+  (listObjects [_this dir] (os/list-path root-path dir))
+
+  Closeable
+  (close [_]
+    (locking buffers
+      (let [i (.iterator (.values buffers))]
+        (while (.hasNext i)
+          (util/close (.next i))
+          (.remove i)))
+      (util/close allocator))))
+
+(defn- ->buffer-cache [^long cache-entries-size ^long cache-bytes-size]
+  (ArrowBufLRU. 16 cache-entries-size cache-bytes-size))
+
+(defmethod ig/prep-key ::local [_ opts]
+  (-> (merge {:cache-entries-size 1024
+              :cache-bytes-size 536870912
+              :allocator (ig/ref :xtdb/allocator)}
+             opts)
+      (util/maybe-update :path util/->path)))
+
+(defmethod ig/init-key ::local [_ {:keys [^Path path, ^BufferAllocator allocator,
+                                           ^long cache-entries-size, ^long cache-bytes-size]}]
+  (when-not (util/path-exists path)
+    (util/mkdirs path))
+
+  (util/with-close-on-catch [allocator (util/->child-allocator allocator "buffer-pool")]
+    (->LocalBufferPool allocator (->buffer-cache cache-entries-size cache-bytes-size) path)))
+
+(defmethod ig/halt-key! ::local [_ buffer-pool]
+  (util/close buffer-pool))
+
+(derive ::local :xtdb/buffer-pool)
+
+(deftype RemoteBufferPool [^BufferAllocator allocator ^ObjectStore object-store ^Map buffers ^Path cache-path]
   IBufferPool
   (getBuffer [_ k]
     (if (nil? k)
@@ -122,12 +239,9 @@
                           [_ buf] (cache-compute buffers [k start len] create-arrow-buf)]
                       buf)))))))))
 
-  (evictBuffer [_ k]
-    (if-let [buffer (locking buffers
-                      (.remove buffers k))]
-      (do (util/close buffer)
-          true)
-      false))
+  (putObject [_ k buf] (.putObject object-store k buf))
+  (listObjects [_] (.listObjects object-store))
+  (listObjects [_ dir] (.listObjects object-store dir))
 
   Closeable
   (close [_]
@@ -138,10 +252,7 @@
           (.remove i)))
       (util/close allocator))))
 
-(defn- ->buffer-cache [^long cache-entries-size ^long cache-bytes-size]
-  (ArrowBufLRU. 16 cache-entries-size cache-bytes-size))
-
-(defmethod ig/prep-key ::buffer-pool [_ opts]
+(defmethod ig/prep-key ::remote [_ opts]
   (-> (merge {:cache-entries-size 1024
               :cache-bytes-size 536870912
               :allocator (ig/ref :xtdb/allocator)
@@ -149,15 +260,17 @@
              opts)
       (util/maybe-update :cache-path util/->path)))
 
-(defmethod ig/init-key ::buffer-pool
+(defmethod ig/init-key ::remote
   [_ {:keys [^Path cache-path ^BufferAllocator allocator ^ObjectStore object-store ^long cache-entries-size ^long cache-bytes-size]}]
   (when (and cache-path (not (util/path-exists cache-path)))
     (util/mkdirs cache-path))
   (util/with-close-on-catch [allocator (util/->child-allocator allocator "buffer-pool")]
-    (->BufferPool  allocator object-store (->buffer-cache cache-entries-size cache-bytes-size) cache-path)))
+    (->RemoteBufferPool allocator object-store (->buffer-cache cache-entries-size cache-bytes-size) cache-path)))
 
-(defmethod ig/halt-key! ::buffer-pool [_ ^BufferPool buffer-pool]
-  (.close buffer-pool))
+(defmethod ig/halt-key! ::remote [_ buffer-pool]
+  (util/close buffer-pool))
+
+(derive ::remote :xtdb/buffer-pool)
 
 (defn get-footer ^ArrowFooter [^IBufferPool bp path]
   (with-open [^ArrowBuf arrow-buf @(.getBuffer bp (str path))]
@@ -176,3 +289,4 @@
   (let [footer (get-footer bp path)
         schema (.getSchema footer)]
     (VectorSchemaRoot/create schema allocator)))
+

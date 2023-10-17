@@ -1,11 +1,10 @@
 (ns xtdb.indexer-test
   (:require [clojure.data.csv :as csv]
             [clojure.java.io :as io]
-            [clojure.test :as t :refer [deftest]]
+            [clojure.test :as t]
             [clojure.tools.logging :as log]
             [xtdb.api :as xt]
             [xtdb.api.protocols :as xtp]
-            [xtdb.buffer-pool :as bp]
             [xtdb.indexer :as idx]
             [xtdb.metadata :as meta]
             [xtdb.node :as node]
@@ -20,7 +19,7 @@
            java.time.Duration
            [org.apache.arrow.memory BufferAllocator]
            xtdb.api.protocols.TransactionInstant
-           [xtdb.buffer_pool IBufferPool]
+           xtdb.IBufferPool
            (xtdb.metadata IMetadataManager)
            xtdb.node.Node
            xtdb.object_store.ObjectStore
@@ -85,7 +84,7 @@
     (util/with-open [node (tu/->local-node {:node-dir node-dir})]
       (let [^BufferAllocator a (tu/component node :xtdb/allocator)
             ^ObjectStore os (tu/component node ::os/file-system-object-store)
-            ^IBufferPool bp (tu/component node ::bp/buffer-pool)
+            ^IBufferPool bp (tu/component node :xtdb/buffer-pool)
             mm (tu/component node ::meta/metadata-manager)
             ^IWatermarkSource wm-src (tu/component node :xtdb/indexer)]
 
@@ -162,14 +161,7 @@
             (let [size (.getSize (.getReferenceManager ^ArrowBuf buffer))]
               (t/is (= size (.getAccountedSize (.getReferenceManager ^ArrowBuf buffer))))
               (.close buffer)
-              (t/is (= 1 (.getRefCount (.getReferenceManager ^ArrowBuf buffer))))
-
-              (t/is (true? (.evictBuffer bp buffer-name)))
-              (t/is (false? (.evictBuffer bp buffer-name)))
-              (t/is (zero? (.getRefCount (.getReferenceManager ^ArrowBuf buffer))))
-              (t/is (= size (.getSize (.getReferenceManager ^ArrowBuf buffer))))
-              (t/is (zero? (.getAccountedSize (.getReferenceManager ^ArrowBuf buffer))))
-              (t/is (= 0 (count (.buffers ^BufferPool bp)))))))))))
+              (t/is (= 1 (.getRefCount (.getReferenceManager ^ArrowBuf buffer)))))))))))
 
 (t/deftest temporal-watermark-is-immutable-567
   (with-open [node (node/start-node {})]
@@ -372,7 +364,7 @@
     (with-open [node (tu/->local-node {:node-dir node-dir, :rows-per-chunk 3000, :rows-per-block 300})
                 info-reader (io/reader (io/resource "devices_mini_device_info.csv"))
                 readings-reader (io/reader (io/resource "devices_mini_readings.csv"))]
-      (let [^ObjectStore os (tu/component node ::os/file-system-object-store)
+      (let [^IBufferPool bp (tu/component node :xtdb/buffer-pool)
             ^IMetadataManager mm (tu/component node ::meta/metadata-manager)
             device-infos (map ts/device-info-csv->doc (csv/read-csv info-reader))
             readings (map ts/readings-csv->doc (csv/read-csv readings-reader))
@@ -399,7 +391,7 @@
                    (-> (meta/latest-chunk-metadata mm)
                        (select-keys [:latest-completed-tx :next-chunk-idx]))))
 
-          (let [objs (.listObjects os)]
+          (let [objs (.listObjects bp)]
             (t/is (= 4 (count (filter #(re-matches #"chunk-metadata/\p{XDigit}+\.transit.json" %) objs))))
             (t/is (= 2 (count (filter #(re-matches #"tables/device_info/(.+?)/.+\.arrow" %) objs))))
             (t/is (= 4 (count (filter #(re-matches #"tables/device_readings/data/log-l\p{XDigit}+-rf\p{XDigit}+-nr\p{XDigit}+\.arrow" %) objs))))
@@ -412,9 +404,9 @@
         node-opts {:node-dir node-dir, :rows-per-chunk 1000, :rows-per-block 100}]
     (util/delete-dir node-dir)
 
-    (with-open [node-1 (tu/->local-node (assoc node-opts :buffers-dir "buffers-1"))
-                node-2 (tu/->local-node (assoc node-opts :buffers-dir "buffers-2"))
-                node-3 (tu/->local-node (assoc node-opts :buffers-dir "buffers-3"))
+    (with-open [node-1 (tu/->local-node (assoc node-opts :buffers-dir "objects-1"))
+                node-2 (tu/->local-node (assoc node-opts :buffers-dir "objects-2"))
+                node-3 (tu/->local-node (assoc node-opts :buffers-dir "objects-3"))
                 submit-node (tu/->local-submit-node {:node-dir node-dir})
                 info-reader (io/reader (io/resource "devices_mini_device_info.csv"))
                 readings-reader (io/reader (io/resource "devices_mini_readings.csv"))]
@@ -433,11 +425,11 @@
                            (partition-all 100 tx-ops))]
 
           (doseq [^Node node (shuffle (take 6 (cycle [node-1 node-2 node-3])))
-                  :let [os ^ObjectStore (util/component node ::os/file-system-object-store)]]
+                  :let [^IBufferPool bp (util/component node :xtdb/buffer-pool)]]
             (t/is (= last-tx-key (tu/then-await-tx last-tx-key node (Duration/ofSeconds 60))))
             (t/is (= last-tx-key (tu/latest-completed-tx node)))
 
-            (let [objs (.listObjects os)]
+            (let [objs (.listObjects bp)]
               (t/is (= 11 (count (filter #(re-matches #"chunk-metadata/\p{XDigit}+\.transit.json" %) objs))))
               (t/is (= 4 (count (filter #(re-matches #"tables/device_info/(.+?)/.+\.arrow" %) objs))))
               (t/is (= 11 (count (filter #(re-matches #"tables/device_readings/data/log-l\p{XDigit}+-rf\p{XDigit}+-nr\p{XDigit}+\.arrow" %) objs))))
@@ -470,8 +462,8 @@
                                  nil
                                  (partition-all 100 first-half-tx-ops))]
 
-          (with-open [node (tu/->local-node (assoc node-opts :buffers-dir "buffers-1"))]
-            (let [^ObjectStore os (util/component node ::os/file-system-object-store)
+          (with-open [node (tu/->local-node (assoc node-opts :buffers-dir "objects-1"))]
+            (let [^IBufferPool bp (util/component node :xtdb/buffer-pool)
                   ^IMetadataManager mm (util/component node ::meta/metadata-manager)]
               (t/is (= first-half-tx-key
                        (-> first-half-tx-key
@@ -484,7 +476,7 @@
                 (t/is (< (:tx-id latest-completed-tx) (:tx-id first-half-tx-key)))
                 (t/is (< next-chunk-idx (count first-half-tx-ops)))
 
-                (let [objs (.listObjects os)]
+                (let [objs (.listObjects bp)]
                   (t/is (= 5 (count (filter #(re-matches #"chunk-metadata/\p{XDigit}+\.transit.json" %) objs))))
                   (t/is (= 4 (count (filter #(re-matches #"tables/device_info/(.+?)/.+\.arrow" %) objs))))
                   (t/is (= 5 (count (filter #(re-matches #"tables/device_readings/data/log-l\p{XDigit}+-rf\p{XDigit}+-nr\p{XDigit}+\.arrow" %) objs))))
@@ -505,7 +497,7 @@
                           (:tx-id (tu/latest-completed-tx node))
                           (:tx-id second-half-tx-key)))
 
-                (with-open [new-node (tu/->local-node (assoc node-opts :buffers-dir "buffers-2"))]
+                (with-open [new-node (tu/->local-node (assoc node-opts :buffers-dir "objects-2"))]
                   (doseq [^Node node [new-node node]
                           :let [^IMetadataManager mm (tu/component node ::meta/metadata-manager)]]
 
@@ -522,10 +514,10 @@
                     (t/is (= second-half-tx-key (tu/latest-completed-tx node))))
 
                   (doseq [^Node node [new-node node]
-                          :let [^ObjectStore os (tu/component node ::os/file-system-object-store)
+                          :let [^IBufferPool bp (tu/component node :xtdb/buffer-pool)
                                 ^IMetadataManager mm (tu/component node ::meta/metadata-manager)]]
 
-                    (let [objs (.listObjects os)]
+                    (let [objs (.listObjects bp)]
                       (t/is (= 11 (count (filter #(re-matches #"chunk-metadata/\p{XDigit}+\.transit.json" %) objs))))
                       (t/is (= 4 (count (filter #(re-matches #"tables/device_info/(.+?)/.+\.arrow" %) objs))))
                       (t/is (= 11 (count (filter #(re-matches #"tables/device_readings/data/log-l\p{XDigit}+-rf\p{XDigit}+-nr\p{XDigit}+\.arrow" %) objs))))
@@ -540,7 +532,7 @@
         node-opts {:node-dir node-dir, :rows-per-chunk 1000, :rows-per-block 100}]
     (util/delete-dir node-dir)
 
-    (with-open [node1 (tu/->local-node (assoc node-opts :buffers-dir "buffers-1"))]
+    (with-open [node1 (tu/->local-node (assoc node-opts :buffers-dir "objects-1"))]
       (let [^IMetadataManager mm1 (tu/component node1 ::meta/metadata-manager)]
 
         (-> (xt/submit-tx node1 [[:put :xt_docs {:xt/id 0, :v "foo"}]])
@@ -560,7 +552,7 @@
           (t/is (= [:union #{:utf8 :keyword :clj-form :uuid}]
                    (.columnType mm1 "xt_docs" "v")))
 
-          (with-open [node2 (tu/->local-node (assoc node-opts :buffers-dir "buffers-1"))]
+          (with-open [node2 (tu/->local-node (assoc node-opts :buffers-dir "objects-1"))]
             (let [^IMetadataManager mm2 (tu/component node2 ::meta/metadata-manager)]
               (tu/then-await-tx tx2 node2 (Duration/ofMillis 200))
 

@@ -12,7 +12,7 @@
   (:import (clojure.lang MapEntry)
            (java.util.function IntPredicate)
            [org.apache.arrow.vector VectorSchemaRoot]
-           (xtdb.buffer_pool IBufferPool)
+           xtdb.IBufferPool
            (xtdb.metadata IMetadataManager IMetadataPredicate)))
 
 (t/use-fixtures :each tu/with-node)
@@ -112,7 +112,7 @@
 
     (tu/finish-chunk! node)
 
-    (let [^IBufferPool buffer-pool (tu/component node ::bp/buffer-pool)
+    (let [^IBufferPool buffer-pool (tu/component node :xtdb/buffer-pool)
           first-buckets (map (comp first tu/byte-buffer->path trie/->iid) (range 20))
           bucket->page-idx (->> (into (sorted-set) first-buckets)
                                 (map-indexed #(MapEntry/create %2 %1))
@@ -141,12 +141,12 @@
           (doseq [page-idx relevant-pages]
             (t/is (true? (.test page-idx-pred page-idx)))))))))
 
-(deftest test-boolean-metadata
+(t/deftest test-boolean-metadata
   (xt/submit-tx tu/*node* [[:put :xt_docs {:xt/id 1 :boolean-or-int true}]])
   (tu/finish-chunk! tu/*node*)
 
   (let [^IMetadataManager metadata-mgr (tu/component tu/*node* ::meta/metadata-manager)
-        ^IBufferPool buffer-pool (tu/component tu/*node* ::bp/buffer-pool)
+        ^IBufferPool buffer-pool (tu/component tu/*node* :xtdb/buffer-pool)
         true-selector (expr.meta/->metadata-selector '(= boolean-or-int true) '{boolean-or-int :bool} {})
         file-name (trie/->table-meta-file-name "xt_docs" (trie/->log-trie-key 0 0 2))]
 

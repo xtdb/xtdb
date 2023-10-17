@@ -11,9 +11,9 @@
            (java.util.concurrent Semaphore)
            (org.apache.arrow.memory BufferAllocator)
            (org.apache.arrow.vector.ipc ArrowStreamReader)
+           xtdb.IBufferPool
            (xtdb.indexer IIndexer)
-           (xtdb.log Log)
-           (xtdb.object_store ObjectStore)))
+           (xtdb.log Log)))
 
 (defonce log-level :error)
 
@@ -162,8 +162,8 @@
             (t/is (check-count-remains 4))))))))
 
 (defn chunk-path-seq [node]
-  (let [obj (tu/component node :xtdb.object-store/memory-object-store)]
-    (filter #(re-matches #"tables/foo/meta/log-(.*)" %) (.listObjects ^ObjectStore obj))))
+  (let [pool (tu/component node :xtdb/buffer-pool)]
+    (filter #(re-matches #"tables/foo/meta/log-(.*)" %) (.listObjects ^IBufferPool pool))))
 
 (t/deftest indexer-flushes-block-and-chunk-if-flush-op-test
   (with-open [node (start-node #time/duration "PT0.001S")]

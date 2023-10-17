@@ -51,9 +51,10 @@
    (node/start-node (case node-type
                       :in-memory {}
                       :local-fs {:xtdb.log/local-directory-log {:root-path (.resolve node-tmp-dir "log")}
-                                 ::os/file-system-object-store {:root-path (.resolve node-tmp-dir "objects")}}
+                                 :xtdb.buffer-pool/local {:path (.resolve node-tmp-dir "objects")}}
                       :kafka-s3 {::k/log {:bootstrap-servers "localhost:9092"
                                           :topic-name (str "bench-log-" node-id)}
+                                 :xtdb.buffer-pool/remote {}
                                  ::s3/object-store {:bucket "core2-bench"
                                                     :prefix (str "node." node-id)}}))))
 

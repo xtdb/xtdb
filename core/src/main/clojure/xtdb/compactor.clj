@@ -14,8 +14,7 @@
            [org.apache.arrow.memory.util ArrowBufPointer]
            org.apache.arrow.vector.types.pojo.Field
            org.apache.arrow.vector.VectorSchemaRoot
-           xtdb.buffer_pool.IBufferPool
-           xtdb.object_store.ObjectStore
+           xtdb.IBufferPool
            (xtdb.trie EventRowPointer IDataRel LiveHashTrie)
            xtdb.util.WritableByteBufferChannel
            xtdb.vector.IRowCopier))
@@ -76,7 +75,7 @@
           (trie/postwalk-merge-plan tries merge-nodes!)
           (.end meta-wtr))))))
 
-(defn exec-compaction-job! [^BufferAllocator allocator, ^ObjectStore obj-store, ^IBufferPool buffer-pool,
+(defn exec-compaction-job! [^BufferAllocator allocator, ^IBufferPool buffer-pool,
                             {:keys [table-name trie-keys out-trie-key]}]
   (try
     (log/infof "compacting '%s' '%s' -> '%s'..." table-name trie-keys out-trie-key)
@@ -94,9 +93,9 @@
 
       (log/debugf "uploading '%s' '%s'..." table-name out-trie-key)
 
-      @(.putObject obj-store (trie/->table-data-file-name table-name out-trie-key)
+      @(.putObject buffer-pool (trie/->table-data-file-name table-name out-trie-key)
                    (.getAsByteBuffer data-out-bb))
-      @(.putObject obj-store (trie/->table-meta-file-name table-name out-trie-key)
+      @(.putObject buffer-pool (trie/->table-meta-file-name table-name out-trie-key)
                    (.getAsByteBuffer meta-out-bb)))
 
     (log/infof "compacted '%s' -> '%s'." table-name out-trie-key)
@@ -118,25 +117,24 @@
 
 (defmethod ig/prep-key :xtdb/compactor [_ opts]
   (into {:allocator (ig/ref :xtdb/allocator)
-         :obj-store (ig/ref :xtdb/object-store)
-         :buffer-pool (ig/ref :xtdb.buffer-pool/buffer-pool)}
+         :buffer-pool (ig/ref :xtdb/buffer-pool)}
         opts))
 
-(defmethod ig/init-key :xtdb/compactor [_ {:keys [allocator ^ObjectStore obj-store buffer-pool]}]
+(defmethod ig/init-key :xtdb/compactor [_ {:keys [allocator ^IBufferPool buffer-pool]}]
   (util/with-close-on-catch [allocator (util/->child-allocator allocator "compactor")]
     (reify ICompactor
       (compactAll [_]
         (log/info "compact-all")
         (loop []
-          (let [jobs (for [table-name (->> (.listObjects obj-store "tables")
+          (let [jobs (for [table-name (->> (.listObjects buffer-pool "tables")
                                            ;; TODO should obj-store listObjects only return keys from the current level?
                                            (into #{} (keep #(second (re-find #"^tables/([^/]+)" %)))))
-                           job (compaction-jobs table-name (trie/list-meta-files obj-store table-name))]
+                           job (compaction-jobs table-name (trie/list-meta-files buffer-pool table-name))]
                        job)
                 jobs? (boolean (seq jobs))]
 
             (doseq [job jobs]
-              (exec-compaction-job! allocator obj-store buffer-pool job))
+              (exec-compaction-job! allocator buffer-pool job))
 
             (when jobs?
               (recur)))))
