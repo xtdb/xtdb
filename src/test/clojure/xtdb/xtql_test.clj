@@ -394,39 +394,26 @@
                                     :where [(match :docs {:xt/id e})
                                             [e :foo foo]]})))))
 
-#_
-(deftest test-basic-predicates
+(deftest test-where-op
   (let [_tx (xt/submit-tx tu/*node* ivan+petr)]
     (t/is (= #{{:first-name "Ivan", :last-name "Ivanov"}}
              (set (xt/q tu/*node*
-                        '{:find [first-name last-name]
-                          :where [(match :docs {:xt/id e})
-                                  [e :first-name first-name]
-                                  [e :last-name last-name]
-                                  [(< first-name "James")]]}))))
+                        '(-> (from :docs {:first-name first-name :last-name last-name})
+                             (where (< first-name "James")))))))
 
     (t/is (= #{{:first-name "Ivan", :last-name "Ivanov"}}
              (set (xt/q tu/*node*
-                        '{:find [first-name last-name]
-                          :where [(match :docs {:xt/id e})
-                                  [e :first-name first-name]
-                                  [e :last-name last-name]
-                                  [(<= first-name "Ivan")]]}))))
+                        '(-> (from :docs {:first-name first-name :last-name last-name})
+                             (where (<= first-name "Ivan")))))))
 
     (t/is (empty? (xt/q tu/*node*
-                        '{:find [first-name last-name]
-                          :where [(match :docs {:xt/id e})
-                                  [e :first-name first-name]
-                                  [e :last-name last-name]
-                                  [(<= first-name "Ivan")]
-                                  [(> last-name "Ivanov")]]})))
+                        '(-> (from :docs {:first-name first-name :last-name last-name})
+                             (where (<= first-name "Ivan")
+                                    (> last-name "Ivanov"))))))
 
     (t/is (empty (xt/q tu/*node*
-                       '{:find [first-name last-name]
-                         :where [(match :docs {:xt/id e})
-                                 [e :first-name first-name]
-                                 [e :last-name last-name]
-                                 [(< first-name "Ivan")]]})))))
+                       '(-> (from :docs {:first-name first-name :last-name last-name})
+                            (where (< first-name "Ivan"))))))))
 
 #_
 (deftest test-value-unification

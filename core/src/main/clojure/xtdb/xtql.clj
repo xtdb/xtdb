@@ -163,8 +163,15 @@
 
 (extend-protocol PlanQueryTail
   Query$Where
-  (plan-query-tail [where plan]
-    (throw (UnsupportedOperationException. "TODO")))
+  (plan-query-tail [this {:keys [ra-plan provided-vars]}]
+    {:ra-plan (wrap-select
+               ra-plan
+               (map
+                #(do
+                   (required-vars-available? % provided-vars)
+                   (plan-expr %))
+                (.preds this)))
+     :provided-vars provided-vars})
 
   Query$WithCols
   (plan-query-tail [this {:keys [ra-plan provided-vars]}]
