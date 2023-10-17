@@ -984,8 +984,8 @@
                                                      :where [(match :docs {:xt/id e})
                                                              [e :age 30]]}))]}))))
 
-#_
-(deftest test-nested-query
+
+(deftest test-join-clause
   (xt/submit-tx tu/*node* bond/tx-ops)
 
   (t/is (= [{:bond-name "Roger Moore", :film-name "A View to a Kill"}
@@ -996,17 +996,17 @@
             {:bond-name "Roger Moore", :film-name "The Man with the Golden Gun"}
             {:bond-name "Roger Moore", :film-name "The Spy Who Loved Me"}]
            (xt/q tu/*node*
-                 '{:find [bond-name film-name]
-                   :where [(q {:find [bond bond-name (count bond)]
-                               :keys [bond-with-most-films bond-name film-count]
-                               :where [(match :film {:film/bond bond})
-                                       (match :person {:xt/id bond, :person/name bond-name})]
-                               :order-by [[(count bond) :desc] [bond-name]]
-                               :limit 1})
-
-                           (match :film {:film/bond bond-with-most-films
-                                         :film/name film-name})]
-                   :order-by [[film-name]]}))
+                 '(-> (unify (join (-> (unify (from :film {:film/bond bond})
+                                              (from :person {:xt/id bond, :person/name bond-name}))
+                                       (aggregate :bond-name :bond {:film-count (count bond)})
+                                       (order-by [film-count {:dir :desc}] bond-name)
+                                       (limit 1))
+                                   {:bond bond-with-most-films
+                                    :bond-name bond-name})
+                             (from :film {:film/bond bond-with-most-films
+                                          :film/name film-name}))
+                      (order-by film-name)
+                      (return :bond-name :film-name))))
         "films made by the Bond with the most films")
 
   (t/testing "(contrived) correlated sub-query"

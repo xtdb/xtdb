@@ -11,7 +11,7 @@
            (xtdb.operator.scan IScanEmitter)
            (xtdb.query Expr$Call Expr$LogicVar Expr$Obj Query$From Query$Return
                        Query$OrderBy Query$OrderDirection Query$OrderSpec Query$Pipeline Query$With
-                       OutSpec ArgSpec ColSpec VarSpec Query$WithCols
+                       OutSpec ArgSpec ColSpec VarSpec Query$WithCols Query$Join
                        Query$Unify Query$Where Query$Without Query$Limit Query$Offset Query$Aggregate)))
 
 ;;TODO consider helper for [{sym expr} sym] -> provided vars set
@@ -129,6 +129,20 @@
        :scan-col-spec col}
       {:scan-col-spec {col (list '= col (plan-expr expr))}})))
 
+(defn- plan-out-spec [^OutSpec bind-spec]
+  (let [col (col-sym (.attr bind-spec))
+        expr (.expr bind-spec)]
+    (if (instance? Expr$LogicVar expr)
+      {:l col :r (plan-expr expr)}
+      (throw (UnsupportedOperationException. "TODO: what should exprs in out specs do outside of scan")))))
+
+(defn- plan-arg-spec [^ArgSpec bind-spec]
+  (let [var (col-sym (.attr bind-spec))
+        expr (.expr bind-spec)]
+    (if (instance? Expr$LogicVar expr)
+      {:l var :r (plan-expr expr)}
+      (throw (UnsupportedOperationException. "TODO: what should exprs in args specs do")))))
+
 (defn- plan-from [^Query$From from]
   (let [planned-bind-specs (mapv plan-from-bind-spec (.bindings from))]
       (-> {:ra-plan [:scan {:table (symbol (.table from))}
@@ -207,6 +221,11 @@
       {:ra-plan [:project projections ra-plan]
        :provided-vars (set (map #(first (keys %)) projections))})))
 
+(defn wrap-out-binding-projection [{:keys [ra-plan _provided-vars]} out-bindings]
+  ;;TODO check subquery provided vars line up with bindings (although maybe this isn't an error?)
+  [:project (mapv (fn [{:keys [l r]}] {r l}) out-bindings)
+   ra-plan])
+
 (extend-protocol PlanUnifyClause
   Query$From (plan-unify-clause [from] [[:from (plan-from from)]])
 
@@ -224,7 +243,16 @@
                 planned-expr (plan-expr expr)]]
       [:with {:ra-plan planned-expr
               :provided-vars #{var}
-              :required-vars (required-vars expr)}])))
+              :required-vars (required-vars expr)}]))
+
+  Query$Join
+  (plan-unify-clause [this]
+    (let [out-bindings (mapv plan-out-spec (.bindings this))
+          arg-bindings (mapv plan-arg-spec (.args this))
+          subquery (plan-query (.query this))]
+      [[:join {:ra-plan (wrap-out-binding-projection subquery out-bindings)
+                :provided-vars (set (map :r out-bindings))
+                :required-vars (set (map :r arg-bindings))}]])))
 
 (defn wrap-wheres [plan wheres]
   (update plan :ra-plan wrap-select (map :ra-plan wheres)))
@@ -248,17 +276,19 @@
                    ra-plan]}
         (wrap-unify var->cols))))
 
+(defn- wrap-joins [{:keys [ra-plan provided-vars] :as plan} joins]
+  (mega-join (into [plan] joins)))
+
 (extend-protocol PlanQuery
   ;;TODO Test Unify over a single from/clause
   Query$Unify
   (plan-query [unify]
     ;;TODO not all clauses can return entire plans (e.g. where-clauses),
     ;;they require an extra call to wrap should these still use the :ra-plan key.
-    (let [{from-clauses :from, where-clauses :where with-clauses :with}
+    (let [{from-clauses :from, where-clauses :where with-clauses :with join-clauses :join}
           (-> (mapcat plan-unify-clause (.clauses unify))
               (->> (group-by first))
               (update-vals #(mapv second %)))]
-
 
       ;;TODO ideally plan should not start with an explicit mega-join of only from-clauses.
       ;;other relation producing clauses such as with could be included in the base mega-join
@@ -269,9 +299,10 @@
 
       (loop [plan (mega-join from-clauses)
              wheres where-clauses
-             withs with-clauses]
+             withs with-clauses
+             joins join-clauses]
 
-        (if (and (empty? wheres) (empty? withs))
+        (if (and (empty? wheres) (empty? withs) (empty? joins))
 
           plan
 
@@ -280,19 +311,23 @@
                       (set/superset? available-vars (:required-vars clause)))]
 
               (let [{available-wheres true, unavailable-wheres false} (->> wheres (group-by available?))
-                    {available-withs true, unavailable-withs false} (->> withs (group-by available?))]
+                    {available-withs true, unavailable-withs false} (->> withs (group-by available?))
+                    {available-joins true, unavailable-joins false} (->> joins (group-by available?))]
 
-                (if (and (empty? available-wheres) (empty? available-withs))
+                (if (and (empty? available-wheres) (empty? available-withs) (empty? available-joins))
                   (throw (err/illegal-arg :no-available-clauses
                                           {:available-vars available-vars
                                            :unavailable-wheres unavailable-wheres
-                                           :unavailable-withs unavailable-withs}))
+                                           :unavailable-withs unavailable-withs
+                                           :unavailable-joins unavailable-joins}))
 
                   (recur (cond-> plan
                            available-wheres (wrap-wheres available-wheres)
-                           available-withs (wrap-withs available-withs))
+                           available-withs (wrap-withs available-withs)
+                           available-joins (wrap-joins available-joins))
                          unavailable-wheres
-                         unavailable-withs))))))))))
+                         unavailable-withs
+                         unavailable-joins))))))))))
 
 (defn- plan-order-spec [^Query$OrderSpec spec]
   (let [expr (.expr spec)]
@@ -307,6 +342,7 @@
 (extend-protocol PlanQueryTail
   Query$OrderBy
   (plan-query-tail [order-by {:keys [ra-plan provided-vars]}]
+    ;;TODO Change order specs to use keywords
     (let [planned-specs (mapv plan-order-spec (.orderSpecs order-by))]
       {:ra-plan [:order-by (mapv :order-spec planned-specs)
                  ra-plan]
@@ -356,7 +392,7 @@
                     #_(doto clojure.pprint/pprint)
                     #_(->> (binding [*print-meta* true]))
                     (lp/rewrite-plan {})
-                    #_(doto clojure.pprint/pprint)
+                    (doto clojure.pprint/pprint)
                     (doto (lp/validate-plan)))]
 
     (if explain?
