@@ -2,10 +2,12 @@
   (:require [clojure.string :as str]
             [clojure.tools.logging :as log]
             [juxt.clojars-mirrors.integrant.core :as ig]
-            [xtdb.object-store :as os]
-            [xtdb.util :as util])
+            [xtdb.object-store :as object-store]
+            [xtdb.util :as util]
+            [xtdb.object-store :as os])
   (:import java.io.Closeable
            (java.nio ByteBuffer)
+           (java.nio.channels FileChannel$MapMode)
            [java.nio.file FileSystems FileVisitOption Files LinkOption Path]
            [java.util Map NavigableMap]
            [java.util.concurrent CompletableFuture ConcurrentSkipListMap]
@@ -63,6 +65,15 @@
          (record-cache-hit cached-buffer)
          cached-buffer))))
 
+  (getRangeBuffer [_ k start len]
+    (object-store/ensure-shared-range-oob-behaviour start len)
+    (CompletableFuture/completedFuture
+     (when k
+       (when-let [buffer (when-let [^ArrowBuf full-buffer (cache-get buffers k)]
+                           (.slice full-buffer start len))]
+         (record-cache-hit buffer)
+         buffer))))
+
   (putObject [_ k buf]
     (.put buffers k (util/->arrow-buf-view allocator buf))
     (CompletableFuture/completedFuture nil))
@@ -103,6 +114,16 @@
 
     (util/->mmap-path from-path)))
 
+(defn get-path-range ^ByteBuffer [^Path root-path, ^String k, ^long start, ^long len]
+  (os/ensure-shared-range-oob-behaviour start len)
+
+  (let [from-path (.resolve root-path k)]
+    (when-not (util/path-exists from-path)
+      (throw (os/obj-missing-exception k)))
+
+    (with-open [in (util/->file-channel from-path #{:read})]
+      (.map in FileChannel$MapMode/READ_ONLY start (max 1 (min (- (.size in) start) len))))))
+
 (defn put-path [^Path root-path, ^String k, ^ByteBuffer buf]
   (let [buf (.duplicate buf)
         to-path (.resolve root-path k)]
@@ -142,6 +163,23 @@
          (let [nio-buffer (get-path root-path k)
                create-arrow-buf #(util/->arrow-buf-view allocator nio-buffer)
                [_ buf] (cache-compute buffers k create-arrow-buf)]
+           buf)))))
+
+  (getRangeBuffer [_ k start len]
+    (object-store/ensure-shared-range-oob-behaviour start len)
+
+    (CompletableFuture/completedFuture
+     (when k
+       (if-let [cached-buffer (or (cache-get buffers [k start len])
+                                  (when-let [^ArrowBuf cached-full-buffer (cache-get buffers k)]
+                                    (.slice cached-full-buffer start len)))]
+         (do
+           (record-cache-hit cached-buffer)
+           cached-buffer)
+
+         (let [nio-buffer (get-path-range root-path k start len)
+               create-arrow-buf #(util/->arrow-buf-view allocator nio-buffer)
+               [_ buf] (cache-compute buffers [k start len] create-arrow-buf)]
            buf)))))
 
   (putObject [_ k buf] (CompletableFuture/completedFuture (put-path root-path k buf)))
@@ -220,6 +258,30 @@
                     (record-io-wait start-ns)
                     (let [create-arrow-buf #(util/->arrow-buf-view allocator nio-buffer)
                           [_ buf] (cache-compute buffers k create-arrow-buf)]
+                      buf)))))))))
+
+  (getRangeBuffer [_ k start len]
+    (object-store/ensure-shared-range-oob-behaviour start len)
+    (if (nil? k)
+      (CompletableFuture/completedFuture nil)
+      (let [cached-full-buffer (cache-get buffers k)
+
+            cached-buffer
+            (or (cache-get buffers [k start len])
+                (when ^ArrowBuf cached-full-buffer
+                  (.slice cached-full-buffer start len)))]
+
+        (if cached-buffer
+          (do
+            (record-cache-hit cached-buffer)
+            (CompletableFuture/completedFuture cached-buffer))
+          (let [start-ns (System/nanoTime)]
+            (-> (.getObjectRange object-store k start len)
+                (util/then-apply
+                  (fn [nio-buffer]
+                    (record-io-wait start-ns)
+                    (let [create-arrow-buf #(util/->arrow-buf-view allocator nio-buffer)
+                          [_ buf] (cache-compute buffers [k start len] create-arrow-buf)]
                       buf)))))))))
 
   (putObject [_ k buf] (.putObject object-store k buf))
