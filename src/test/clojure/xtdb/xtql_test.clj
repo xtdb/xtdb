@@ -88,6 +88,20 @@
                         (offset 1)
                         (limit 1)))))))
 
+(deftest test-order-by-multiple-cols
+  (let [_tx (xt/submit-tx tu/*node*
+                          '[[:put :docs {:xt/id 2, :n 2}]
+                            [:put :docs {:xt/id 3, :n 3}]
+                            [:put :docs {:xt/id 1, :n 2}]
+                            [:put :docs {:xt/id 4, :n 1}]])]
+    (t/is (= [{:i 4, :n 1}
+              {:i 1, :n 2}
+              {:i 2, :n 2}
+              {:i 3, :n 3}]
+             (xt/q tu/*node*
+                   '(-> (from :docs {:xt/id i, :n n})
+                        (order-by n i)))))))
+
 ;; https://github.com/tonsky/datascript/blob/1.1.0/test/datascript/test/query.cljc#L12-L36
 (deftest datascript-test-joins
   (let [_tx (xt/submit-tx tu/*node*
@@ -154,8 +168,13 @@
                    '(from :docs {:xt/id i :foo/bar n} foo/bar)))
           "query with namespaced attributes in match syntax")))
 
-(deftest test-joins
+(deftest test-unify
   (xt/submit-tx tu/*node* bond/tx-ops)
+
+  (t/is (= [{:bond :daniel-craig}]
+           (xt/q tu/*node*
+                 '(unify (from :person {:xt/id bond, :person/name "Daniel Craig"})))))
+
   ;;TODO Params rewritten using with clause, make sure params are tested elsewhere
   (t/is (= #{{:film-name "Skyfall", :bond-name "Daniel Craig"}}
            (set (xt/q tu/*node*
@@ -200,20 +219,24 @@
                                          :count-heads (count heads)})))))
           "various aggs")))
 
-#_
-(t/deftest test-find-exprs
+(t/deftest test-with-op
   (let [_tx (xt/submit-tx tu/*node* '[[:put :docs {:xt/id :o1, :unit-price 1.49, :quantity 4}]
                                       [:put :docs {:xt/id :o2, :unit-price 5.39, :quantity 1}]
                                       [:put :docs {:xt/id :o3, :unit-price 0.59, :quantity 7}]])]
-    (t/is (= #{{:oid :o1, :o-value 5.96}
-               {:oid :o2, :o-value 5.39}
-               {:oid :o3, :o-value 4.13}}
+    (t/is (= #{{:oid :o1, :o-value 5.96, :unit-price 1.49, :qty 4}
+               {:oid :o2, :o-value 5.39, :unit-price 5.39, :qty 1}
+               {:oid :o3, :o-value 4.13, :unit-price 0.59, :qty 7}}
              (set (xt/q tu/*node*
-                        '{:find [oid (* unit-price qty)]
-                          :keys [oid o-value]
-                          :where [(match :docs {:xt/id oid})
-                                  [oid :unit-price unit-price]
-                                  [oid :quantity qty]]}))))))
+                        '(-> (from :docs {:xt/id oid :unit-price unit-price :quantity qty})
+                             (with {:o-value (* unit-price qty)}))))))))
+
+(t/deftest test-with-op-errs
+  (let [_tx (xt/submit-tx tu/*node* '[[:put :docs {:xt/id :foo}]])]
+    (t/is (thrown-with-msg? IllegalArgumentException
+                            #"Not all variables in expression are in scope"
+                            (xt/q tu/*node*
+                                  '(-> (from :docs {:xt/id id})
+                                       (with {:bar (str baz)})))))))
 
 #_
 (deftest test-aggregate-exprs
@@ -390,39 +413,26 @@
                                     :where [(match :docs {:xt/id e})
                                             [e :foo foo]]})))))
 
-#_
-(deftest test-basic-predicates
+(deftest test-where-op
   (let [_tx (xt/submit-tx tu/*node* ivan+petr)]
     (t/is (= #{{:first-name "Ivan", :last-name "Ivanov"}}
              (set (xt/q tu/*node*
-                        '{:find [first-name last-name]
-                          :where [(match :docs {:xt/id e})
-                                  [e :first-name first-name]
-                                  [e :last-name last-name]
-                                  [(< first-name "James")]]}))))
+                        '(-> (from :docs {:first-name first-name :last-name last-name})
+                             (where (< first-name "James")))))))
 
     (t/is (= #{{:first-name "Ivan", :last-name "Ivanov"}}
              (set (xt/q tu/*node*
-                        '{:find [first-name last-name]
-                          :where [(match :docs {:xt/id e})
-                                  [e :first-name first-name]
-                                  [e :last-name last-name]
-                                  [(<= first-name "Ivan")]]}))))
+                        '(-> (from :docs {:first-name first-name :last-name last-name})
+                             (where (<= first-name "Ivan")))))))
 
     (t/is (empty? (xt/q tu/*node*
-                        '{:find [first-name last-name]
-                          :where [(match :docs {:xt/id e})
-                                  [e :first-name first-name]
-                                  [e :last-name last-name]
-                                  [(<= first-name "Ivan")]
-                                  [(> last-name "Ivanov")]]})))
+                        '(-> (from :docs {:first-name first-name :last-name last-name})
+                             (where (<= first-name "Ivan")
+                                    (> last-name "Ivanov"))))))
 
     (t/is (empty (xt/q tu/*node*
-                       '{:find [first-name last-name]
-                         :where [(match :docs {:xt/id e})
-                                 [e :first-name first-name]
-                                 [e :last-name last-name]
-                                 [(< first-name "Ivan")]]})))))
+                       '(-> (from :docs {:first-name first-name :last-name last-name})
+                            (where (< first-name "Ivan"))))))))
 
 #_
 (deftest test-value-unification
@@ -974,8 +984,8 @@
                                                      :where [(match :docs {:xt/id e})
                                                              [e :age 30]]}))]}))))
 
-#_
-(deftest test-nested-query
+
+(deftest test-join-clause
   (xt/submit-tx tu/*node* bond/tx-ops)
 
   (t/is (= [{:bond-name "Roger Moore", :film-name "A View to a Kill"}
@@ -986,17 +996,17 @@
             {:bond-name "Roger Moore", :film-name "The Man with the Golden Gun"}
             {:bond-name "Roger Moore", :film-name "The Spy Who Loved Me"}]
            (xt/q tu/*node*
-                 '{:find [bond-name film-name]
-                   :where [(q {:find [bond bond-name (count bond)]
-                               :keys [bond-with-most-films bond-name film-count]
-                               :where [(match :film {:film/bond bond})
-                                       (match :person {:xt/id bond, :person/name bond-name})]
-                               :order-by [[(count bond) :desc] [bond-name]]
-                               :limit 1})
-
-                           (match :film {:film/bond bond-with-most-films
-                                         :film/name film-name})]
-                   :order-by [[film-name]]}))
+                 '(-> (unify (join (-> (unify (from :film {:film/bond bond})
+                                              (from :person {:xt/id bond, :person/name bond-name}))
+                                       (aggregate :bond-name :bond {:film-count (count bond)})
+                                       (order-by [film-count {:dir :desc}] bond-name)
+                                       (limit 1))
+                                   {:bond bond-with-most-films
+                                    :bond-name bond-name})
+                             (from :film {:film/bond bond-with-most-films
+                                          :film/name film-name}))
+                      (order-by film-name)
+                      (return :bond-name :film-name))))
         "films made by the Bond with the most films")
 
   (t/testing "(contrived) correlated sub-query"
