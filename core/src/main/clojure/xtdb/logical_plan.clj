@@ -26,7 +26,7 @@
 (s/def ::column symbol?)
 
 ;; TODO flesh out
-(s/def ::value (some-fn string? number? inst? keyword? util-date? temporal? uuid?))
+(s/def ::value (some-fn nil? string? number? inst? keyword? util-date? temporal? uuid?))
 
 (s/def ::param
   (s/and simple-symbol? #(str/starts-with? (name %) "?")))

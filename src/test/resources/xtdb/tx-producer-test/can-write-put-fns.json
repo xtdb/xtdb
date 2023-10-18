@@ -56,29 +56,6 @@
                 "name" : "struct"
               },
               "children" : [{
-                "name" : "xt$fn",
-                "nullable" : false,
-                "type" : {
-                  "name" : "union",
-                  "mode" : "Dense",
-                  "typeIds" : [ ]
-                },
-                "children" : [{
-                  "name" : "clj-form",
-                  "nullable" : false,
-                  "type" : {
-                    "name" : "ClojureFormType"
-                  },
-                  "children" : [ ],
-                  "metadata" : [{
-                    "value" : "xt/clj-form",
-                    "key" : "ARROW:extension:name"
-                  },{
-                    "value" : "",
-                    "key" : "ARROW:extension:metadata"
-                  }]
-                }]
-              },{
                 "name" : "xt$id",
                 "nullable" : false,
                 "type" : {
@@ -95,6 +72,29 @@
                   "children" : [ ],
                   "metadata" : [{
                     "value" : "xt/clj-keyword",
+                    "key" : "ARROW:extension:name"
+                  },{
+                    "value" : "",
+                    "key" : "ARROW:extension:metadata"
+                  }]
+                }]
+              },{
+                "name" : "xt$fn",
+                "nullable" : false,
+                "type" : {
+                  "name" : "union",
+                  "mode" : "Dense",
+                  "typeIds" : [ ]
+                },
+                "children" : [{
+                  "name" : "clj-form",
+                  "nullable" : false,
+                  "type" : {
+                    "name" : "ClojureFormType"
+                  },
+                  "children" : [ ],
+                  "metadata" : [{
+                    "value" : "xt/clj-form",
                     "key" : "ARROW:extension:name"
                   },{
                     "value" : "",
@@ -295,18 +295,6 @@
               "count" : 2,
               "VALIDITY" : [1,1],
               "children" : [{
-                "name" : "xt$fn",
-                "count" : 2,
-                "TYPE_ID" : [0,0],
-                "OFFSET" : [0,1],
-                "children" : [{
-                  "name" : "clj-form",
-                  "count" : 2,
-                  "VALIDITY" : [1,1],
-                  "OFFSET" : [0,35,70],
-                  "DATA" : ["(fn [id] [[:put :foo {:xt/id id}]])","(fn [id] [[:put :bar {:xt/id id}]])"]
-                }]
-              },{
                 "name" : "xt$id",
                 "count" : 2,
                 "TYPE_ID" : [0,0],
@@ -317,6 +305,18 @@
                   "VALIDITY" : [1,1],
                   "OFFSET" : [0,3,6],
                   "DATA" : ["foo","bar"]
+                }]
+              },{
+                "name" : "xt$fn",
+                "count" : 2,
+                "TYPE_ID" : [0,0],
+                "OFFSET" : [0,1],
+                "children" : [{
+                  "name" : "clj-form",
+                  "count" : 2,
+                  "VALIDITY" : [1,1],
+                  "OFFSET" : [0,35,70],
+                  "DATA" : ["(fn [id] [[:put :foo {:xt/id id}]])","(fn [id] [[:put :bar {:xt/id id}]])"]
                 }]
               }]
             }]

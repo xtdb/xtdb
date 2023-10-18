@@ -1241,12 +1241,12 @@
       (sql "UPDATE foo SET version = 1 WHERE foo.xt$id = 'foo'")
       (sql "COMMIT")
 
-      (is (= [{:version 1, :xt$valid_from "2020-01-02T00:00Z", :xt$valid_to "9999-12-31T23:59:59.999999Z"}]
+      (is (= [{:version 1, :xt$valid_from "2020-01-02T00:00Z", :xt$valid_to nil}]
              (q conn ["SELECT foo.version, foo.xt$valid_from, foo.xt$valid_to FROM foo"])))
 
       (sql "SET valid_time_defaults iso_standard")
       (is (= (set [{:version 0, :xt$valid_from "2020-01-01T00:00Z", :xt$valid_to "2020-01-02T00:00Z"}
-                   {:version 1, :xt$valid_from "2020-01-02T00:00Z", :xt$valid_to "9999-12-31T23:59:59.999999Z"}])
+                   {:version 1, :xt$valid_from "2020-01-02T00:00Z", :xt$valid_to nil}])
              (set (q conn ["SELECT foo.version, foo.xt$valid_from, foo.xt$valid_to FROM foo"])))))))
 
 ;; this demonstrates that session / set variables do not change the next statement

@@ -7,11 +7,9 @@
 (t/use-fixtures :once tu/with-allocator)
 (t/use-fixtures :each tu/with-node)
 
-(def end-of-time-zdt (util/->zdt util/end-of-time))
-
 (t/deftest test-as-of-tx
-  (let [tx1 (xt/submit-tx tu/*node* [[:put :xt_docs {:xt/id :my-doc, :last-updated "tx1"}]])
-        tx2 (xt/submit-tx tu/*node* [[:put :xt_docs {:xt/id :my-doc, :last-updated "tx2"}]])]
+  (let [tx1 (xt/submit-tx tu/*node* [[:put :xt_docs {:xt/id :my-doc, :last-updated "tx1"}]])]
+    (xt/submit-tx tu/*node* [[:put :xt_docs {:xt/id :my-doc, :last-updated "tx2"}]])
 
     (t/is (= #{{:last-updated "tx1"} {:last-updated "tx2"}}
              (set (tu/query-ra '[:scan {:table xt_docs} [last-updated]]
@@ -43,14 +41,14 @@
 
     (t/is (= {:doc {:xt/id :doc,
                     :xt/valid-from system-time
-                    :xt/valid-to end-of-time-zdt
+                    :xt/valid-to nil
                     :xt/system-from system-time
-                    :xt/system-to (util/->zdt util/end-of-time)}
+                    :xt/system-to nil}
               :doc-with-app-time {:xt/id :doc-with-app-time,
                                   :xt/valid-from (util/->zdt #inst "2021")
-                                  :xt/valid-to end-of-time-zdt
+                                  :xt/valid-to nil
                                   :xt/system-from system-time
-                                  :xt/system-to (util/->zdt util/end-of-time)}}
+                                  :xt/system-to nil}}
              (->> (tu/query-ra '[:scan {:table xt_docs}
                                  [xt/id
                                   xt/valid-from xt/valid-to
@@ -69,26 +67,26 @@
                          :xt/valid-from tt1
                          :xt/valid-to tt2
                          :xt/system-from tt1
-                         :xt/system-to end-of-time-zdt}
+                         :xt/system-to nil}
 
         replaced-v0-doc {:xt/id :doc, :version 0
                          :xt/valid-from tt2
-                         :xt/valid-to end-of-time-zdt
+                         :xt/valid-to nil
                          :xt/system-from tt1
                          :xt/system-to tt2}
 
         v1-doc {:xt/id :doc, :version 1
                 :xt/valid-from tt2
-                :xt/valid-to end-of-time-zdt
+                :xt/valid-to nil
                 :xt/system-from tt2
-                :xt/system-to end-of-time-zdt}]
+                :xt/system-to nil}]
 
     (t/is (= #{original-v0-doc v1-doc}
              (set (tu/query-ra '[:scan {:table xt_docs}
                                  [xt/id version
                                   xt/valid-from xt/valid-to
                                   xt/system-from xt/system-to]]
-                               {:node tu/*node* :default-all-valid-time? true})))
+                               {:node tu/*node*, :default-all-valid-time? true})))
           "all app-time")
 
     (t/is (= #{original-v0-doc replaced-v0-doc v1-doc}
@@ -97,17 +95,14 @@
                                   xt/valid-from xt/valid-to
                                   xt/system-from xt/system-to]]
                                {:node tu/*node*
-                                :params {'eot util/end-of-time}
                                 :default-all-valid-time? true})))
           "all app, all sys")))
 
 (t/deftest test-evict
   (letfn [(all-time-docs []
-            (->> (tu/query-ra '[:scan {:table xt_docs, :for-system-time :all-time}
-                                [xt/id
-                                 xt/valid-from {xt/valid-to (<= xt/valid-to eot)}
-                                 xt/system-from xt/system-to]]
-                              {:node tu/*node*, :params {'eot util/end-of-time}
+            (->> (tu/query-ra '[:scan {:table xt_docs, :for-valid-time :all-time, :for-system-time :all-time}
+                                [xt/id xt/valid-from xt/valid-to xt/system-from xt/system-to]]
+                              {:node tu/*node*
                                :default-all-valid-time? true})
                  (map :xt/id)
                  frequencies))]

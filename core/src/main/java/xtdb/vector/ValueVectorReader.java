@@ -420,7 +420,9 @@ public class ValueVectorReader implements IVectorReader {
 
             @Override
             Object getObject0(int idx) {
-                return Instant.ofEpochSecond(v.get(idx)).atZone(zoneId(v));
+                long val = getLong(idx);
+                if (val == Long.MIN_VALUE || val == Long.MAX_VALUE) return null;
+                return Instant.ofEpochSecond(val).atZone(zoneId(v));
             }
         };
     }
@@ -434,7 +436,9 @@ public class ValueVectorReader implements IVectorReader {
 
             @Override
             Object getObject0(int idx) {
-                return Instant.ofEpochMilli(v.get(idx)).atZone(zoneId(v));
+                long val = getLong(idx);
+                if (val == Long.MIN_VALUE || val == Long.MAX_VALUE) return null;
+                return Instant.ofEpochMilli(val).atZone(zoneId(v));
             }
         };
     }
@@ -448,7 +452,9 @@ public class ValueVectorReader implements IVectorReader {
 
             @Override
             Object getObject0(int idx) {
-                return Instant.EPOCH.plus(v.get(idx), MICROS).atZone(zoneId(v));
+                long val = getLong(idx);
+                if (val == Long.MIN_VALUE || val == Long.MAX_VALUE) return null;
+                return Instant.EPOCH.plus(val, MICROS).atZone(zoneId(v));
             }
         };
     }
@@ -462,7 +468,9 @@ public class ValueVectorReader implements IVectorReader {
 
             @Override
             Object getObject0(int idx) {
-                return Instant.ofEpochSecond(0, v.get(idx)).atZone(zoneId(v));
+                long val = v.get(idx);
+                if (val == Long.MIN_VALUE || val == Long.MAX_VALUE) return null;
+                return Instant.ofEpochSecond(0, val).atZone(zoneId(v));
             }
         };
     }
