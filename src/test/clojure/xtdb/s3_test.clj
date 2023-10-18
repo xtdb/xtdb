@@ -87,23 +87,12 @@
               uploads (.uploads ^ListMultipartUploadsResponse list-multipart-uploads-response)]
           (t/is (= [] uploads) "uploads should be empty"))))))
 
-;; Generates a byte buffer of random characters
-(defn generate-random-byte-buffer [buffer-size]
-  (let [random         (java.util.Random.)
-        byte-buffer    (ByteBuffer/allocate buffer-size)]
-    (loop [i 0]
-      (if (< i buffer-size)
-        (do
-          (.put byte-buffer (byte (.nextInt random 128)))
-          (recur (inc i)))
-        byte-buffer))))
-
 (t/deftest ^:s3 multipart-put-test
   (with-open [os (object-store (random-uuid))]
     (let [multipart-upload ^IMultipartUpload @(.startMultipart ^SupportsMultipart os "test-multi-put")
           part-size (* 5 1024 1024)
-          file-part-1 (generate-random-byte-buffer part-size)
-          file-part-2 (generate-random-byte-buffer part-size)]
+          file-part-1 (os-test/generate-random-byte-buffer part-size)
+          file-part-2 (os-test/generate-random-byte-buffer part-size)]
 
       ;; Uploading parts to multipart upload
       @(.uploadPart multipart-upload file-part-1)
