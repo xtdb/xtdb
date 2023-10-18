@@ -388,7 +388,9 @@ public class ValueVectorReader implements IVectorReader {
 
             @Override
             Object getObject0(int idx) {
-                return LocalDate.ofEpochDay(v.get(idx));
+                int val = v.get(idx);
+                if (val == Integer.MIN_VALUE || val == Integer.MAX_VALUE) return null;
+                return LocalDate.ofEpochDay(val);
             }
         };
     }
@@ -402,13 +404,31 @@ public class ValueVectorReader implements IVectorReader {
 
             @Override
             Object getObject0(int idx) {
-                return LocalDate.ofEpochDay(getInt(idx));
+                int val = getInt(idx);
+                if (val == Integer.MIN_VALUE || val == Integer.MAX_VALUE) return null;
+                return LocalDate.ofEpochDay(val);
             }
         };
     }
 
     private static ZoneId zoneId(ValueVector v) {
         return ZoneId.of(((ArrowType.Timestamp) v.getField().getType()).getTimezone());
+    }
+
+    public static IVectorReader timestampVector(TimeStampVector v) {
+        return new ValueVectorReader(v) {
+            @Override
+            public long getLong(int idx) {
+                return v.get(idx);
+            }
+
+            @Override
+            Object getObject0(int idx) {
+                long val = getLong(idx);
+                if (val == Long.MIN_VALUE || val == Long.MAX_VALUE) return null;
+                return v.getObject(idx);
+            }
+        };
     }
 
     public static IVectorReader timestampSecTzVector(TimeStampSecTZVector v) {
@@ -484,7 +504,9 @@ public class ValueVectorReader implements IVectorReader {
 
             @Override
             Object getObject0(int idx) {
-                return LocalTime.ofSecondOfDay(v.get(idx));
+                int val = v.get(idx);
+                if (val == Integer.MIN_VALUE || val == Integer.MAX_VALUE) return null;
+                return LocalTime.ofSecondOfDay(val);
             }
         };
     }
@@ -498,7 +520,9 @@ public class ValueVectorReader implements IVectorReader {
 
             @Override
             Object getObject0(int idx) {
-                return LocalTime.ofNanoOfDay(v.get(idx) * 1_000_000L);
+                int val = v.get(idx);
+                if (val == Integer.MIN_VALUE || val == Integer.MAX_VALUE) return null;
+                return LocalTime.ofNanoOfDay(val * 1_000_000L);
             }
         };
     }
@@ -512,7 +536,9 @@ public class ValueVectorReader implements IVectorReader {
 
             @Override
             Object getObject0(int idx) {
-                return LocalTime.ofNanoOfDay(v.get(idx) * 1_000L);
+                long val = v.get(idx);
+                if (val == Long.MIN_VALUE || val == Long.MAX_VALUE) return null;
+                return LocalTime.ofNanoOfDay(val * 1_000L);
             }
         };
     }
@@ -526,7 +552,9 @@ public class ValueVectorReader implements IVectorReader {
 
             @Override
             Object getObject0(int idx) {
-                return LocalTime.ofNanoOfDay(v.get(idx));
+                long val = v.get(idx);
+                if (val == Long.MIN_VALUE || val == Long.MAX_VALUE) return null;
+                return LocalTime.ofNanoOfDay(val);
             }
         };
     }

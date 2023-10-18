@@ -33,7 +33,7 @@
 (defn form->expr [form {:keys [col-types param-types locals] :as env}]
   (cond
     (symbol? form) (cond
-                     (= 'xtdb/end-of-time form) {:op :literal, :literal (util/micros->instant Long/MAX_VALUE)}
+                     (= 'xtdb/end-of-time form) {:op :literal, :literal util/end-of-time}
                      (contains? locals form) {:op :local, :local form}
                      (contains? param-types form) {:op :param, :param form, :param-type (get param-types form)}
                      (contains? col-types form) {:op :variable, :variable form, :var-type (get col-types form)}

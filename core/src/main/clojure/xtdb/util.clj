@@ -225,6 +225,9 @@
 (defn nanos->instant ^java.time.Instant [^long ns]
   (.plus Instant/EPOCH ns ChronoUnit/NANOS))
 
+(def ^java.time.Instant end-of-time
+  (micros->instant Long/MAX_VALUE))
+
 (defn component [node k]
   (some-> (:system node) (ig/find-derived k) first val))
 
