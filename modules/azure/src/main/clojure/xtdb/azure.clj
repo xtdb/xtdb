@@ -7,8 +7,7 @@
             [xtdb.azure.object-store :as os]
             [xtdb.azure.file-watch :as azure-file-watch]
             [xtdb.log :as xtdb-log]
-            [xtdb.util :as util]
-            [clojure.reflect :as reflect])
+            [xtdb.util :as util])
   (:import (com.azure.core.credential TokenCredential)
            (com.azure.core.management AzureEnvironment)
            (com.azure.core.management.profile AzureProfile)
