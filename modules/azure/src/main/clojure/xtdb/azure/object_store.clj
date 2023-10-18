@@ -91,7 +91,7 @@
                               (.getBlockBlobClient))]
     (->MultipartUpload block-blob-client on-complete-fn (ArrayList.))))
 
-(defrecord AzureBlobObjectStore [^BlobContainerClient blob-container-client prefix minimum-part-size ^NavigableSet file-name-cache ^AutoCloseable file-list-watcher]
+(defrecord AzureBlobObjectStore [^BlobContainerClient blob-container-client prefix multipart-minimum-part-size ^NavigableSet file-name-cache ^AutoCloseable file-list-watcher]
   ObjectStore
   (getObject [_ k]
     (CompletableFuture/completedFuture
