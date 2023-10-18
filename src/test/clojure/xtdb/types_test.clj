@@ -24,6 +24,7 @@
       (doseq [v vs]
         (doto (.writerForType duv-writer (col-type-fn v))
           (write-fn v)))
+
       (let [duv-rdr (vw/vec-wtr->rdr duv-writer)]
         {:vs (vec (for [idx (range (count vs))]
                     (.getObject duv-rdr idx)))
@@ -64,11 +65,11 @@
   (let [vs [[]
             [2 3.14 [false nil]]
             {}
-            {:B 2, :C 1, :F false}
-            {:B 2, :C 1, :F false}
-            [1 {:B [2]}]
-            [1 {:B [2]}]
-            {:B 3.14, :D {:E ["hello" -1]}, :F nil}]]
+            {:b 2, :c 1, :f false}
+            {:b 2, :c 1, :f false}
+            [1 {:b [2]}]
+            [1 {:b [2]}]
+            {:b 3.14, :d {:e ["hello" -1]}, :f nil}]]
     (t/is (= {:vs vs
               :vec-types [ListVector ListVector StructVector StructVector StructVector ListVector ListVector StructVector]}
              (test-round-trip vs))
