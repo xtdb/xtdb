@@ -1,7 +1,6 @@
 (ns xtdb.bitemporal-test
   (:require [clojure.test :as t]
-            [xtdb.bitemporal :as bitemp]
-            [xtdb.util :as util])
+            [xtdb.bitemporal :as bitemp])
   (:import [java.util LinkedList]
            xtdb.bitemporal.RowConsumer))
 
@@ -16,67 +15,67 @@
                 (.resolveEvent er idx valid-from valid-to sys-from rc))
               @!state))]
 
-    (t/is (= [[1 2005 2009 1 util/end-of-time-μs] [0 2010 2020 0 util/end-of-time-μs]]
+    (t/is (= [[1 2005 2009 1 Long/MAX_VALUE] [0 2010 2020 0 Long/MAX_VALUE]]
              (test-er [1 2005 2009 1]
                       [0 2010 2020 0]))
           "period starts before and does NOT overlap")
 
-    (t/is (= [[1 2010 2020 1 util/end-of-time-μs]
+    (t/is (= [[1 2010 2020 1 Long/MAX_VALUE]
               [0 2015 2020 0 1]
-              [0 2020 2025 0 util/end-of-time-μs]]
+              [0 2020 2025 0 Long/MAX_VALUE]]
              (test-er [1 2010 2020 1]
                       [0 2015 2025 0]))
           "period starts before and overlaps")
 
-    (t/is (= [[1 2010 2020 1 util/end-of-time-μs]
+    (t/is (= [[1 2010 2020 1 Long/MAX_VALUE]
               [0 2010 2020 0 1]
-              [0 2020 2025 0 util/end-of-time-μs]]
+              [0 2020 2025 0 Long/MAX_VALUE]]
              (test-er [1 2010 2020 1]
                       [0 2010 2025 0]))
           "period starts equally and overlaps")
 
-    (t/is (= [[1 2015 2020 1 util/end-of-time-μs]
-              [0 2010 2015 0 util/end-of-time-μs]
+    (t/is (= [[1 2015 2020 1 Long/MAX_VALUE]
+              [0 2010 2015 0 Long/MAX_VALUE]
               [0 2015 2020 0 1]
-              [0 2020 2025 0 util/end-of-time-μs]]
+              [0 2020 2025 0 Long/MAX_VALUE]]
              (test-er [1 2015 2020 1]
                       [0 2010 2025 0]))
           "newer period completely covered")
 
-    (t/is (= [[1 2010 2025 1 util/end-of-time-μs]
+    (t/is (= [[1 2010 2025 1 Long/MAX_VALUE]
               [0 2010 2020 0 1]]
              (test-er [1 2010 2025 1]
                       [0 2010 2020 0]))
           "older period completely covered")
 
-    (t/is (= [[1 2015 2025 1 util/end-of-time-μs]
-              [0 2010 2015 0 util/end-of-time-μs]
+    (t/is (= [[1 2015 2025 1 Long/MAX_VALUE]
+              [0 2010 2015 0 Long/MAX_VALUE]
               [0 2015 2025 0 1]]
              (test-er [1 2015 2025 1]
                       [0 2010 2025 0]))
           "period end equally and overlaps")
 
-    (t/is (= [[1 2015 2025 1 util/end-of-time-μs]
-              [0 2010 2015 0 util/end-of-time-μs]
+    (t/is (= [[1 2015 2025 1 Long/MAX_VALUE]
+              [0 2010 2015 0 Long/MAX_VALUE]
               [0 2015 2020 0 1]]
              (test-er [1 2015 2025 1]
                       [0 2010 2020 0]))
           "period ends after and overlaps")
 
-    (t/is (= [[1 2005 2010 1 util/end-of-time-μs]
-              [0 2010 2020 0 util/end-of-time-μs]]
+    (t/is (= [[1 2005 2010 1 Long/MAX_VALUE]
+              [0 2010 2020 0 Long/MAX_VALUE]]
              (test-er [1 2005 2010 1]
                       [0 2010 2020 0]))
           "period starts before and touches")
 
-    (t/is (= [[1 2010 2020 1 util/end-of-time-μs]
-              [0 2005 2010 0 util/end-of-time-μs]]
+    (t/is (= [[1 2010 2020 1 Long/MAX_VALUE]
+              [0 2005 2010 0 Long/MAX_VALUE]]
              (test-er [1 2010 2020 1]
                       [0 2005 2010 0]))
           "period starts after and touches")
 
-    (t/is (= [[1 2010 2020 1 util/end-of-time-μs]
-              [0 2005 2009 0 util/end-of-time-μs]]
+    (t/is (= [[1 2010 2020 1 Long/MAX_VALUE]
+              [0 2005 2009 0 Long/MAX_VALUE]]
              (test-er [1 2010 2020 1]
                       [0 2005 2009 0]))
           "period starts after and does NOT overlap")))

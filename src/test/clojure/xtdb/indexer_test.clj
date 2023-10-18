@@ -169,9 +169,9 @@
                                           {:default-all-valid-time? false})]
       (t/is (= [{:xt/id :foo, :version 0,
                  :xt/valid-from (util/->zdt tt)
-                 :xt/valid-to (util/->zdt util/end-of-time)
+                 :xt/valid-to nil
                  :xt/system-from (util/->zdt tt)
-                 :xt/system-to (util/->zdt util/end-of-time)}]
+                 :xt/system-to nil}]
                (tu/query-ra '[:scan {:table xt_docs}
                               [xt/id version
                                xt/valid-from, xt/valid-to
@@ -182,19 +182,19 @@
                                              {:default-all-valid-time? false})]
         (t/is (= #{{:xt/id :foo, :version 0,
                     :xt/valid-from (util/->zdt tt2)
-                    :xt/valid-to (util/->zdt util/end-of-time)
+                    :xt/valid-to nil
                     :xt/system-from (util/->zdt tt)
                     :xt/system-to (util/->zdt tt2)}
                    {:xt/id :foo, :version 0,
                     :xt/valid-from (util/->zdt tt)
                     :xt/valid-to (util/->zdt tt2)
                     :xt/system-from (util/->zdt tt)
-                    :xt/system-to (util/->zdt util/end-of-time)}
+                    :xt/system-to nil}
                    {:xt/id :foo, :version 1,
                     :xt/valid-from (util/->zdt tt2)
-                    :xt/valid-to (util/->zdt util/end-of-time)
+                    :xt/valid-to nil
                     :xt/system-from (util/->zdt tt2)
-                    :xt/system-to (util/->zdt util/end-of-time)}}
+                    :xt/system-to nil}}
                  (set (tu/query-ra '[:scan {:table xt_docs, :for-system-time :all-time}
                                      [xt/id version
                                       xt/valid-from, xt/valid-to
@@ -204,9 +204,9 @@
         #_ ; FIXME #567 this sees the updated xt/system-to of the first entry
         (t/is (= [{:xt/id :foo, :version 0,
                    :xt/valid-from (util/->zdt tt)
-                   :xt/valid-to (util/->zdt util/end-of-time)
+                   :xt/valid-to nil
                    :xt/system-from (util/->zdt tt)
-                   :xt/system-to (util/->zdt util/end-of-time)}]
+                   :xt/system-to nil}]
                  (tu/query-ra '[:scan {:table :xt_docs}
                                 [id version
                                  xt/valid-from, xt/valid-to

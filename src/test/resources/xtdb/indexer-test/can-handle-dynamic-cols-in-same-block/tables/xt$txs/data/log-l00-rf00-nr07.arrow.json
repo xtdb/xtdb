@@ -160,8 +160,8 @@
         },{
           "name" : "xt$valid_to",
           "count" : 1,
-          "VALIDITY" : [1],
-          "DATA" : [253402300799999999]
+          "VALIDITY" : [0],
+          "DATA" : [0]
         },{
           "name" : "xt$doc",
           "count" : 1,

@@ -975,11 +975,11 @@
 
 (deftest test-sql-delete-plan
   (t/is (=plan-file "test-sql-delete-plan"
-                    (plan-sql "DELETE FROM users FOR PORTION OF VALID_TIME FROM DATE '2020-05-01' TO DATE '9999-12-31' AS u WHERE u.id = ?"))))
+                    (plan-sql "DELETE FROM users FOR PORTION OF VALID_TIME FROM DATE '2020-05-01' TO END_OF_TIME AS u WHERE u.id = ?"))))
 
 (deftest test-sql-update-plan
   (t/is (=plan-file "test-sql-update-plan"
-                    (plan-sql "UPDATE users FOR PORTION OF VALID_TIME FROM DATE '2021-07-01' TO DATE '9999-12-31' AS u SET first_name = 'Sue' WHERE u.id = ?")))
+                    (plan-sql "UPDATE users FOR PORTION OF VALID_TIME FROM DATE '2021-07-01' TO END_OF_TIME AS u SET first_name = 'Sue' WHERE u.id = ?")))
 
   (t/is (=plan-file "test-sql-update-plan-with-column-references"
                     (plan-sql "UPDATE foo SET bar = foo.baz"

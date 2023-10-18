@@ -577,7 +577,6 @@
     (let [f (case mode
               "SYMMETRIC" 'between-symmetric
               "ASYMMETRIC" 'between)]
-      (list f (expr rvp-1) (expr rvp-2) (expr rvp-3))
       (list f (expr rvp-1) (expr rvp-2) (expr rvp-3)))
 
     [:between_predicate ^:z rvp-1 [:between_predicate_part_2 "NOT" "BETWEEN" mode ^:z rvp-2 "AND" ^:z rvp-3]]
@@ -585,7 +584,6 @@
     (let [f (case mode
               "SYMMETRIC" 'between-symmetric
               "ASYMMETRIC" 'between)]
-      (list 'not (list f (expr rvp-1) (expr rvp-2) (expr rvp-3)))
       (list 'not (list f (expr rvp-1) (expr rvp-2) (expr rvp-3))))
 
     [:extract_expression "EXTRACT"
@@ -1346,11 +1344,13 @@
 
       [:query_system_time_period_specification "FOR" _ "FROM" ^:z point-in-time-1 "TO" ^:z point-in-time-2]
       ;;=>
-      [:in (expr point-in-time-1) (expr point-in-time-2)]
+      (let [to-expr (expr point-in-time-2)]
+        [:in (expr point-in-time-1) (when-not (= to-expr 'xtdb/end-of-time) to-expr)])
 
       [:query_system_time_period_specification "FOR" _ "BETWEEN" ^:z point-in-time-1 "AND" ^:z point-in-time-2]
       ;;=>
-      [:between (expr point-in-time-1) (expr point-in-time-2)])))
+      (let [to-expr (expr point-in-time-2)]
+        [:between (expr point-in-time-1) (when-not (= to-expr 'xtdb/end-of-time) to-expr)]))))
 
 (defn- interpret-application-time-period-spec [table-primary-ast]
   (when-let [z (r/find-first (partial r/ctor? :query_valid_time_period_specification) table-primary-ast)]
@@ -1391,12 +1391,11 @@
               (distinct)
               (vec)))])]))
 
-(defn- build-target-table [tt for-valid-time]
+(defn- build-target-table [tt scan-opts]
   (let [{:keys [id correlation-name table-or-query-name]} (sem/table tt)
         projection (first (sem/projected-columns tt))]
     [:rename (table-reference-symbol correlation-name id)
-     [:scan (cond-> {:table (symbol table-or-query-name)}
-              for-valid-time (assoc :for-valid-time for-valid-time))
+     [:scan (into {:table (symbol table-or-query-name)} scan-opts)
       (for [{:keys [identifier]} projection
             :let [identifier (symbol identifier)]]
         identifier)]]))
@@ -1499,11 +1498,9 @@
           (->> (wrap-with-top))))))
 
 (defn- app-time-extents->for-valid-time [app-time-extents app-from-expr app-to-expr]
-  (let [app-from (if (= 'xtdb/end-of-time app-from-expr) util/end-of-time app-from-expr)
-        app-to (if (= 'xtdb/end-of-time app-to-expr) util/end-of-time app-to-expr)]
-    (cond
-      (= app-time-extents :all-application-time) :all-time
-      (and app-from app-to) [:between app-from app-to])))
+  (cond
+    (= app-time-extents :all-application-time) :all-time
+    app-time-extents [:between app-from-expr (when-not (= app-to-expr 'xtdb/end-of-time) app-to-expr)]))
 
 (defn- plan-dml [dml-op z]
   (let [{:keys [default-all-valid-time?]} *opts*
@@ -1512,7 +1509,8 @@
         {app-from :from, app-to :to, :as app-time-extents} (sem/dml-app-time-extents z)
         app-from-expr (some-> app-from (expr))
         app-to-expr (some-> app-to (expr))
-        rel (build-target-table tt (app-time-extents->for-valid-time app-time-extents app-from-expr app-to-expr))
+        rel (build-target-table tt (when app-time-extents
+                                     {:for-valid-time (app-time-extents->for-valid-time app-time-extents app-from-expr app-to-expr)}))
         rel (if-let [sc (r/find-first (partial r/ctor? :search_condition) z)]
               (wrap-with-select sc rel)
               rel)]
@@ -1542,6 +1540,7 @@
                                                               :else app-start-sym))}
                              {'xt$valid_to `(~'cast-tstz ~(cond
                                                             (= :all-application-time app-time-extents) app-end-sym
+                                                            (= 'xtdb/end-of-time app-to-expr) app-end-sym
                                                             app-to-expr `(~'least ~app-end-sym ~app-to-expr)
                                                             :else app-end-sym))}]))
 
@@ -1549,10 +1548,7 @@
 
 (defn- plan-erase [z]
   (let [tt (r/find-first (partial r/ctor? :target_table) z)
-        {:keys [table-or-query-name correlation-name] :as table} (sem/table tt)
-        {app-from :from, app-to :to, :as app-time-extents} (sem/dml-app-time-extents z)
-        app-from-expr (some-> app-from (expr))
-        app-to-expr (some-> app-to (expr))]
+        {:keys [table-or-query-name]} (sem/table tt)]
     [:erase {:table table-or-query-name}
      [:project (vec
                 (for [{:keys [identifier] :as col} (first (sem/projected-columns z))]
@@ -1560,17 +1556,10 @@
                    (if-let [derived-expr (:ref (meta col))]
                      (expr derived-expr)
                      (qualified-projection-symbol col))}))
-      [:select `(~'<=
-                 ~(qualified-projection-symbol
-                   (-> {:identifier "xt$system_to"
-                        :qualified-column [correlation-name "xt$system_to"]}
-                       (vary-meta assoc :table table)))
-                 ~'xtdb/end-of-time)
-       (as-> (build-target-table
-              tt (app-time-extents->for-valid-time app-time-extents app-from-expr app-to-expr)) rel
-             (if-let [sc (r/find-first (partial r/ctor? :search_condition) z)]
-               (wrap-with-select sc rel)
-               rel))]]]))
+      (let [rel (build-target-table tt {:for-valid-time :all-time, :for-system-time :all-time})]
+        (if-let [sc (r/find-first (partial r/ctor? :search_condition) z)]
+          (wrap-with-select sc rel)
+          rel))]]))
 
 (def app-time-col? (comp #{"xt$valid_from" "xt$valid_to"} :identifier))
 

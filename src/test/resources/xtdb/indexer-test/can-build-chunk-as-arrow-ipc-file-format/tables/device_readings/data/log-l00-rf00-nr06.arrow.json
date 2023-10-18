@@ -355,8 +355,8 @@
         },{
           "name" : "xt$valid_to",
           "count" : 2,
-          "VALIDITY" : [1,1],
-          "DATA" : [253402300799999999,253402300799999999]
+          "VALIDITY" : [0,0],
+          "DATA" : [0,0]
         },{
           "name" : "xt$doc",
           "count" : 2,

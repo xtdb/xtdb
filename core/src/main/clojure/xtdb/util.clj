@@ -225,12 +225,6 @@
 (defn nanos->instant ^java.time.Instant [^long ns]
   (.plus Instant/EPOCH ns ChronoUnit/NANOS))
 
-(def ^java.time.Instant end-of-time
-  (Instant/parse "9999-12-31T23:59:59.999999Z"))
-
-(def ^{:tag 'long} end-of-time-μs
-  (instant->micros end-of-time))
-
 (defn component [node k]
   (some-> (:system node) (ig/find-derived k) first val))
 

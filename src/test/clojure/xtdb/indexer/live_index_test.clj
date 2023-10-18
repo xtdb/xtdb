@@ -4,7 +4,6 @@
             [xtdb.api :as xt]
             [xtdb.api.protocols :as xtp]
             [xtdb.indexer.live-index :as li]
-            [xtdb.object-store :as os]
             [xtdb.test-json :as tj]
             [xtdb.test-util :as tu]
             [xtdb.util :as util])
@@ -16,7 +15,6 @@
            [org.apache.arrow.vector.ipc ArrowFileReader]
            xtdb.IBufferPool
            xtdb.indexer.live_index.ILiveIndex
-           xtdb.object_store.ObjectStore
            (xtdb.trie ArrowHashTrie ArrowHashTrie$Leaf HashTrie LiveHashTrie LiveHashTrie$Leaf)
            xtdb.vector.IVectorPosition))
 
@@ -97,7 +95,8 @@
   [[[:put :hello {:xt/id #uuid "cb8815ee-85f7-4c61-a803-2ea1c949cf8d" :a 1}]
     [:put :world {:xt/id #uuid "424f5622-c826-4ded-a5db-e2144d665c38" :b 2}]]
    [[:delete :hello #uuid "cb8815ee-85f7-4c61-a803-2ea1c949cf8d"]
-    [:put :world {:xt/id #uuid "424f5622-c826-4ded-a5db-e2144d665c38" :b 3}]]
+    [:put :world {:xt/id #uuid "424f5622-c826-4ded-a5db-e2144d665c38" :b 3}
+     {:for-valid-time [:in #inst "2023" #inst "2024"]}]]
    [[:evict :world #uuid "424f5622-c826-4ded-a5db-e2144d665c38"]]
    ;; sql
    [[:sql "INSERT INTO foo (xt$id, bar, toto) VALUES (1, 1, 'toto')"]

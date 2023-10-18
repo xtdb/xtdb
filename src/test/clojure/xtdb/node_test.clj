@@ -9,13 +9,13 @@
 
 (t/deftest test-multi-value-insert-423
   (letfn [(expected [tt]
-            {[(util/->zdt #inst "2024-01-01") (util/->zdt #inst "2025-01-01"), tt (util/->zdt util/end-of-time)]
+            {[(util/->zdt #inst "2024-01-01") (util/->zdt #inst "2025-01-01"), tt nil]
              "Happy 2024!"
 
-             [(util/->zdt #inst "2025-01-01") (util/->zdt #inst "2026-01-01"), tt (util/->zdt util/end-of-time)]
+             [(util/->zdt #inst "2025-01-01") (util/->zdt #inst "2026-01-01"), tt nil]
              "Happy 2025!",
 
-             [(util/->zdt #inst "2026-01-01") (util/->zdt util/end-of-time), tt (util/->zdt util/end-of-time)]
+             [(util/->zdt #inst "2026-01-01") nil, tt nil]
              "Happy 2026!"})
 
           (q [table]
@@ -61,7 +61,7 @@ VALUES (1, 'Happy 2024!', DATE '2024-01-01'),
 
     (t/is (= [{:xt$id "foo",
                :xt$valid_from (util/->zdt #inst "2020")
-               :xt$valid_to (util/->zdt util/end-of-time)}]
+               :xt$valid_to nil}]
              (q)))
 
     (xt/submit-tx tu/*node* [[:sql "DELETE FROM foo"]])
@@ -80,11 +80,11 @@ VALUES (1, 'Happy 2024!', DATE '2024-01-01'),
   (xt/submit-tx tu/*node* [[:sql ["INSERT INTO users (xt$id, first_name, last_name) VALUES (?, ?, ?)"
                                   "susan", "Susan", "Smith"]]])
 
-  (xt/submit-tx tu/*node* [[:sql ["UPDATE users FOR PORTION OF VALID_TIME FROM ? TO ? AS u SET first_name = ? WHERE u.xt$id = ?"
-                                  #inst "2021", util/end-of-time, "sue", "susan"]]])
+  (xt/submit-tx tu/*node* [[:sql ["UPDATE users FOR PORTION OF VALID_TIME FROM ? TO NULL AS u SET first_name = ? WHERE u.xt$id = ?"
+                                  #inst "2021", "sue", "susan"]]])
 
   (t/is (= #{["Susan" "Smith", (util/->zdt #inst "2020") (util/->zdt #inst "2021")]
-             ["sue" "Smith", (util/->zdt #inst "2021") (util/->zdt util/end-of-time)]}
+             ["sue" "Smith", (util/->zdt #inst "2021") nil]}
            (->> (xt/q tu/*node* "SELECT u.first_name, u.last_name, u.xt$valid_from, u.xt$valid_to FROM users u"
                       {:default-all-valid-time? true})
                 (into #{} (map (juxt :first_name :last_name :xt$valid_from :xt$valid_to)))))))
@@ -165,7 +165,7 @@ VALUES (1, 2, DATE '1997-01-01', DATE '2001-01-01')"]])
               :xt$valid_from (util/->zdt #inst "1997")
               :xt$valid_to (util/->zdt #inst "2001")
               :xt$system_from (util/->zdt #inst "2020-01-02")
-              :xt$system_to (util/->zdt util/end-of-time)}}
+              :xt$system_to nil}}
 
            (set (xt/q tu/*node* "
 SELECT foo.xt$id, foo.v,
@@ -180,7 +180,7 @@ VALUES (1, 1)"]])
 
   (t/is (= [{:xt$id 1, :v 1,
              :xt$valid_from (util/->zdt #inst "2020")
-             :xt$valid_to (util/->zdt util/end-of-time)}]
+             :xt$valid_to nil}]
            (xt/q tu/*node* "SELECT foo.xt$id, foo.v, foo.xt$valid_from, foo.xt$valid_to FROM foo")))
 
   (t/is (= []
@@ -198,26 +198,26 @@ FROM foo FOR VALID_TIME AS OF CURRENT_TIMESTAMP"
 (t/deftest test-repeated-row-id-scan-bug-also-409
   (xt/submit-tx tu/*node* [[:sql "INSERT INTO foo (xt$id, v) VALUES (1, 1)"]])
 
-  (let [tx1 (xt/submit-tx tu/*node* [[:sql "
+  (letfn [(q1 [opts]
+            (xt/q tu/*node* "
+SELECT foo.xt$id, foo.v, foo.xt$valid_from, foo.xt$valid_to
+FROM foo
+ORDER BY foo.xt$valid_from"
+                  opts))
+          (q2 [opts]
+            (frequencies
+             (xt/q tu/*node* "SELECT foo.xt$id, foo.v FROM foo" opts)))]
+
+    (let [tx1 (xt/submit-tx tu/*node* [[:sql "
 UPDATE foo
 FOR PORTION OF VALID_TIME FROM DATE '2022-01-01' TO DATE '2024-01-01'
 SET v = 2
 WHERE foo.xt$id = 1"]])
 
-        tx2 (xt/submit-tx tu/*node* [[:sql "
+          tx2 (xt/submit-tx tu/*node* [[:sql "
 DELETE FROM foo
 FOR PORTION OF VALID_TIME FROM DATE '2023-01-01' TO DATE '2025-01-01'
 WHERE foo.xt$id = 1"]])]
-
-    (letfn [(q1 [opts]
-              (xt/q tu/*node* "
-SELECT foo.xt$id, foo.v, foo.xt$valid_from, foo.xt$valid_to
-FROM foo
-ORDER BY foo.xt$valid_from"
-                    opts))
-            (q2 [opts]
-              (frequencies
-               (xt/q tu/*node* "SELECT foo.xt$id, foo.v FROM foo" opts)))]
 
       (t/is (= [{:xt$id 1, :v 1
                  :xt$valid_from (util/->zdt #inst "2020")
@@ -227,7 +227,7 @@ ORDER BY foo.xt$valid_from"
                  :xt$valid_to (util/->zdt #inst "2024")}
                 {:xt$id 1, :v 1
                  :xt$valid_from (util/->zdt #inst "2024")
-                 :xt$valid_to (util/->zdt util/end-of-time)}]
+                 :xt$valid_to nil}]
 
                (q1 {:basis {:tx tx1}, :default-all-valid-time? true})))
 
@@ -242,13 +242,13 @@ ORDER BY foo.xt$valid_from"
                  :xt$valid_to (util/->zdt #inst "2023")}
                 {:xt$id 1, :v 1
                  :xt$valid_from (util/->zdt #inst "2025")
-                 :xt$valid_to (util/->zdt util/end-of-time)}]
+                 :xt$valid_to nil}]
 
                (q1 {:basis {:tx tx2}, :default-all-valid-time? true})))
 
       (t/is (= [{:xt$id 1, :v 1
                  :xt$valid_from (util/->zdt #inst "2025")
-                 :xt$valid_to (util/->zdt util/end-of-time)}]
+                 :xt$valid_to nil}]
 
                (q1 {:basis {:tx tx2, :current-time (util/->instant #inst "2026")}
                     :default-all-valid-time? false})))
@@ -404,8 +404,8 @@ VALUES(1, OBJECT ('foo': OBJECT('bibble': true), 'bar': OBJECT('baz': 1001)))"]]
 (t/deftest test-nulling-valid-time-columns-2504
   (xt/submit-tx tu/*node* [[:sql ["INSERT INTO docs (xt$id, xt$valid_from, xt$valid_to) VALUES (1, NULL, ?), (2, ?, NULL), (3, NULL, NULL)" #inst "3000", #inst "3000"]]])
   (t/is (= #{{:id 1, :vf (util/->zdt #inst "2020"), :vt (util/->zdt #inst "3000")}
-             {:id 2, :vf (util/->zdt #inst "3000"), :vt (util/->zdt util/end-of-time)}
-             {:id 3, :vf (util/->zdt #inst "2020"), :vt (util/->zdt util/end-of-time)}}
+             {:id 2, :vf (util/->zdt #inst "3000"), :vt nil}
+             {:id 3, :vf (util/->zdt #inst "2020"), :vt nil}}
            (set (xt/q tu/*node* '{:find [id vf vt]
                                   :where [($ :docs {:xt/id id, :xt/valid-from vf, :xt/valid-to vt}
                                              {:for-valid-time :all-time})]})))))

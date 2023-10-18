@@ -72,9 +72,9 @@
               (case tag
                 :literal (-> arg
                              (util/sql-temporal->micros (.getZone expr/*clock*)))
-                :param (-> (-> (.readerForName params (name arg))
-                               (.getObject 0))
-                           (util/sql-temporal->micros (.getZone expr/*clock*)))
+                :param (some-> (-> (.readerForName params (name arg))
+                                   (.getObject 0))
+                               (util/sql-temporal->micros (.getZone expr/*clock*)))
                 :now (-> (.instant expr/*clock*)
                          (util/instant->micros))))]
 
@@ -95,13 +95,13 @@
                     ;; overlaps [time-from time-to]
                     :in (let [[from to] args]
                           (.gt end-col (->time-μs (or from [:now])))
-                          (when to
-                            (.lt start-col (->time-μs to))))
+                          (when-let [to-μs (some-> to ->time-μs)]
+                            (.lt start-col to-μs)))
 
                     :between (let [[from to] args]
                                (.gt end-col (->time-μs (or from [:now])))
-                               (when to
-                                 (.lte start-col (->time-μs to))))
+                               (when-let [to-μs (some-> to ->time-μs)]
+                                 (.lte start-col to-μs)))
 
                     :all-time nil)))]
 

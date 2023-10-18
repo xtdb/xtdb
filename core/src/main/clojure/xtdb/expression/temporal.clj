@@ -972,6 +972,19 @@
                   (-> `(->period ~from-code ~to-code)
                       (expr/with-tag IStructValueReader)))})
 
+(defn ->open-ended-period ^IStructValueReader [^long from]
+  (reify IStructValueReader
+    (readLong [_ field]
+      (case field
+        "from" from
+        "to" Long/MAX_VALUE))))
+
+(defmethod expr/codegen-call [:period :timestamp-tz :null] [{[from-type _to-type] :arg-types}]
+  {:return-type [:struct {'from from-type, 'to types/temporal-col-type}]
+   :->call-code (fn [[from-code _to-code]]
+                  (-> `(->open-ended-period ~from-code)
+                      (expr/with-tag IStructValueReader)))})
+
 (defn from ^long [^IStructValueReader period]
   (.readLong period "from"))
 

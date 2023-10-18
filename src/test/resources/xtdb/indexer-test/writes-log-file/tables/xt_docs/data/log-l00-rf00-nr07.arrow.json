@@ -167,8 +167,8 @@
         },{
           "name" : "xt$valid_to",
           "count" : 3,
-          "VALIDITY" : [1,1,1],
-          "DATA" : [1588291200000000,253402300799999999,253402300799999999]
+          "VALIDITY" : [1,0,0],
+          "DATA" : [1588291200000000,0,0]
         },{
           "name" : "xt$doc",
           "count" : 3,
@@ -214,8 +214,8 @@
         },{
           "name" : "xt$valid_to",
           "count" : 1,
-          "VALIDITY" : [1],
-          "DATA" : [253402300799999999]
+          "VALIDITY" : [0],
+          "DATA" : [0]
         }]
       },{
         "name" : "evict",

@@ -97,7 +97,7 @@
                            system-time-µs
                            (.getLong valid-from-rdr tx-op-idx))
               valid-to (if (.isNull valid-to-rdr tx-op-idx)
-                         util/end-of-time-μs
+                         Long/MAX_VALUE
                          (.getLong valid-to-rdr tx-op-idx))]
           (when-not (> valid-to valid-from)
             (throw (err/runtime-err :xtdb.indexer/invalid-valid-times
@@ -124,7 +124,7 @@
                            current-time-µs
                            (.getLong valid-from-rdr tx-op-idx))
               valid-to (if (.isNull valid-to-rdr tx-op-idx)
-                         util/end-of-time-μs
+                         Long/MAX_VALUE
                          (.getLong valid-to-rdr tx-op-idx))]
           (when (> valid-from valid-to)
             (throw (err/runtime-err :xtdb.indexer/invalid-valid-times
@@ -296,7 +296,7 @@
                                current-time-µs)
                   valid-to (if (and valid-to-rdr (not (.isNull valid-to-rdr idx)))
                              (.getLong valid-to-rdr idx)
-                             util/end-of-time-μs)]
+                             Long/MAX_VALUE)]
               (when (> valid-from valid-to)
                 (throw (err/runtime-err :xtdb.indexer/invalid-valid-times
                                         {:valid-from (util/micros->instant valid-from)
@@ -317,7 +317,9 @@
         (dotimes [idx row-count]
           (let [iid (.getBytes iid-rdr idx)
                 valid-from (.getLong valid-from-rdr idx)
-                valid-to (.getLong valid-to-rdr idx)]
+                valid-to (if (.isNull valid-to-rdr idx)
+                           Long/MAX_VALUE
+                           (.getLong valid-to-rdr idx))]
             (when (> valid-from valid-to)
               (throw (err/runtime-err :xtdb.indexer/invalid-valid-times
                                       {:valid-from (util/micros->instant valid-from)
@@ -414,7 +416,7 @@
         live-table (.liveTable live-idx-tx txs-table)
         doc-writer (.docWriter live-table)]
 
-    (.logPut live-table (trie/->iid tx-id) system-time-µs util/end-of-time-μs
+    (.logPut live-table (trie/->iid tx-id) system-time-µs Long/MAX_VALUE
              (fn write-doc! []
                (.startStruct doc-writer)
                (doto (.structKeyWriter doc-writer "xt$id" :i64)

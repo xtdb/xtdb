@@ -1,5 +1,4 @@
 (ns xtdb.bitemporal
-  (:require [xtdb.util :as util])
   (:import [java.util LinkedList List]))
 
 ;; As the algorithm processes events in reverse system time order, one can
@@ -32,8 +31,7 @@
            (loop [valid-from valid-from]
              (when (< valid-from valid-to)
                (if-not (.hasNext itr)
-                 (do
-                   (.accept rc idx valid-from valid-to system-from util/end-of-time-μs))
+                 (.accept rc idx valid-from valid-to system-from Long/MAX_VALUE)
 
                  (let [^Rectangle r (.next itr)]
                    (if (<= (.valid-to r) valid-from)
@@ -47,7 +45,7 @@
                          (let [valid-to (min valid-to (.valid-from r))]
                            (when (< valid-from valid-to)
                              (.accept rc idx valid-from valid-to
-                                      system-from util/end-of-time-μs))))
+                                      system-from Long/MAX_VALUE))))
 
                        (let [valid-from (max valid-from (.valid-from r))
                              valid-to (min valid-to (.valid-to r))]
