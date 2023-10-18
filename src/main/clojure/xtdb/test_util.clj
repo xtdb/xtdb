@@ -250,7 +250,7 @@
     (node/start-node {:xtdb.log/local-directory-log {:root-path (.resolve node-dir "log")
                                                      :instant-src instant-src}
                       :xtdb.tx-producer/tx-producer {:instant-src instant-src}
-                      :xtdb.buffer-pool/local {:path (.resolve node-dir buffers-dir)}
+                      :xtdb.buffer-pool/local {:data-dir (.resolve node-dir buffers-dir)}
                       :xtdb/indexer (->> {:rows-per-chunk rows-per-chunk}
                                          (into {} (filter val)))
                       :xtdb.indexer/live-index (->> {:log-limit log-limit :page-limit page-limit}

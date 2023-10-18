@@ -499,13 +499,13 @@
   (^org.apache.arrow.memory.ArrowBuf [^BufferAllocator allocator ^ByteBuffer nio-buffer]
    (->arrow-buf-view allocator nio-buffer nil))
   (^org.apache.arrow.memory.ArrowBuf [^BufferAllocator allocator ^ByteBuffer nio-buffer on-close-fn]
-   (let [nio-buffer (if (.isDirect nio-buffer)
+   (let [nio-buffer (if (and (.isDirect nio-buffer) (zero? (.position nio-buffer)))
                       nio-buffer
-                      (-> (ByteBuffer/allocateDirect (.capacity nio-buffer))
+                      (-> (ByteBuffer/allocateDirect (.remaining nio-buffer))
                           (.put (.duplicate nio-buffer))
                           (.clear)))
          address (MemoryUtil/getByteBufferAddress nio-buffer)
-         size (.capacity nio-buffer)
+         size (.remaining nio-buffer)
          allocation-manager (proxy [AllocationManager] [allocator]
                               (getSize [] size)
                               (memoryAddress [] address)

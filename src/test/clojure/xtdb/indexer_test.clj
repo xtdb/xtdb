@@ -340,6 +340,8 @@
     (with-open [node (tu/->local-node {:node-dir node-dir})]
       (let [object-dir (.resolve node-dir "objects")]
 
+        (util/mkdirs object-dir)
+
         (t/is (= last-tx-key
                  (last (for [tx-ops txs]
                          (xt/submit-tx node tx-ops)))))
