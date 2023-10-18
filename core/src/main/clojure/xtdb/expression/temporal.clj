@@ -41,6 +41,46 @@
        :->call-code (fn [[arg1 & args]]
                       (->call-code res-unit (into [(with-conversion arg1 arg-unit res-unit)] args)))})))
 
+(defn- wrap-handle-eot
+  ([->call-code] (wrap-handle-eot ->call-code `Long/MAX_VALUE `Long/MAX_VALUE))
+  ([->call-code src-eot-v tgt-eot-v]
+   (let [v-sym (gensym 'v)]
+     (fn [[v & args]]
+       (let [inner (->call-code (into [v-sym] args))]
+         `(let [~v-sym ~v]
+            (if (= ~v-sym ~src-eot-v)
+              ~tgt-eot-v
+              ~inner)))))))
+
+(defn- wrap-handle-eot2
+  ([->call-code] (wrap-handle-eot2 ->call-code `Long/MAX_VALUE `Long/MAX_VALUE `Long/MAX_VALUE))
+  ([->call-code left-eot-v right-eot-v tgt-eot-v]
+   (let [left-sym (gensym 'left)
+         right-sym (gensym 'right)]
+     (fn [[left right & args]]
+       (let [inner (->call-code (into [left-sym right-sym] args))]
+         `(let [~left-sym ~left, ~right-sym ~right]
+            (if (or (= ~left-sym ~left-eot-v) (= ~right-sym ~right-eot-v))
+              ~tgt-eot-v
+              ~inner)))))))
+
+(defn- wrap-throw-eot2
+  ([->call-code] (wrap-throw-eot2 ->call-code `Long/MAX_VALUE `Long/MAX_VALUE))
+  ([->call-code left-eot-v right-eot-v]
+   (let [left-sym (gensym 'left)
+         right-sym (gensym 'right)]
+     (fn [[left right & args]]
+       (let [inner (->call-code (into [left-sym right-sym] args))]
+         `(let [~left-sym ~left, ~right-sym ~right]
+            (if (or (= ~left-sym ~left-eot-v) (= ~right-sym ~right-eot-v))
+              (throw (RuntimeException. "cannot subtract infinite timestamps"))
+              ~inner)))))))
+
+(defn- time-unit->eot-v [time-unit]
+  (case time-unit
+    (:second :milli) Integer/MAX_VALUE
+    (:micro :nano) Long/MAX_VALUE))
+
 (defn- ts->inst [form ts-unit]
   (case ts-unit
     :second `(Instant/ofEpochSecond ~form)
@@ -87,102 +127,119 @@
   {:return-type target-type, :->call-code first})
 
 (defmethod expr/codegen-cast [:time-local :time-local] [{[_ src-tsunit] :source-type, [_ tgt-tsunit :as target-type] :target-type}]
-  {:return-type target-type, :->call-code (comp #(with-conversion % src-tsunit tgt-tsunit) first)})
+  {:return-type target-type,
+   :->call-code (-> (comp #(with-conversion % src-tsunit tgt-tsunit) first)
+                    (wrap-handle-eot (time-unit->eot-v src-tsunit) (time-unit->eot-v tgt-tsunit)))})
 
 (defmethod expr/codegen-cast [:timestamp-local :timestamp-local] [{[_ src-tsunit] :source-type, [_ tgt-tsunit :as target-type] :target-type}]
-  {:return-type target-type, :->call-code (comp #(with-conversion % src-tsunit tgt-tsunit) first)})
+  {:return-type target-type
+   :->call-code (-> (comp #(with-conversion % src-tsunit tgt-tsunit) first)
+                    (wrap-handle-eot))})
 
 (defmethod expr/codegen-cast [:timestamp-tz :timestamp-tz] [{[_ src-tsunit _] :source-type, [_ tgt-tsunit _ :as target-type] :target-type}]
-  {:return-type target-type, :->call-code (comp #(with-conversion % src-tsunit tgt-tsunit) first)})
+  {:return-type target-type
+   :->call-code (-> (comp #(with-conversion % src-tsunit tgt-tsunit) first)
+                    (wrap-handle-eot))})
 
 (defmethod expr/codegen-cast [:duration :duration] [{[_ src-tsunit] :source-type, [_ tgt-tsunit :as target-type] :target-type}]
   {:return-type target-type, :->call-code (comp #(with-conversion % src-tsunit tgt-tsunit) first)})
 
 (defmethod expr/codegen-cast [:date :timestamp-local] [{[_ tgt-tsunit :as target-type] :target-type}]
   {:return-type target-type
-   :->call-code (fn [[dt]]
-                  `(-> (LocalDate/ofEpochDay ~dt)
-                       (.atStartOfDay ZoneOffset/UTC)
-                       (.toEpochSecond)
-                       (Math/multiplyExact ~(types/ts-units-per-second tgt-tsunit))))})
+   :->call-code (-> (fn [[dt]]
+                      `(-> (LocalDate/ofEpochDay ~dt)
+                           (.atStartOfDay ZoneOffset/UTC)
+                           (.toEpochSecond)
+                           (Math/multiplyExact ~(types/ts-units-per-second tgt-tsunit))))
+                    (wrap-handle-eot)
+                    (wrap-handle-eot `~'Integer/MAX_VALUE `Long/MAX_VALUE))})
 
 (defmethod expr/codegen-cast [:date :timestamp-tz] [{[_ tgt-tsunit _tgt-tz :as target-type] :target-type}]
   {:return-type target-type
-   :->call-code (fn [[dt]]
-                  (-> `(-> (LocalDate/ofEpochDay ~dt)
-                           (.atStartOfDay (.getZone expr/*clock*))
-                           (.toInstant))
-                      (inst->ts tgt-tsunit)))})
+   :->call-code (-> (fn [[dt]]
+                      (-> `(-> (LocalDate/ofEpochDay ~dt)
+                               (.atStartOfDay (.getZone expr/*clock*))
+                               (.toInstant))
+                          (inst->ts tgt-tsunit)))
+                    (wrap-handle-eot `~'Integer/MAX_VALUE `Long/MAX_VALUE))})
 
 (defmethod expr/codegen-cast [:time-local :timestamp-local] [{[_ src-tsunit] :source-type, [_ tgt-tsunit :as target-type] :target-type}]
   {:return-type target-type
-   :->call-code (fn [[tm]]
-                  (-> `(LocalDateTime/of (LocalDate/ofInstant (.instant expr/*clock*) (.getZone expr/*clock*))
-                                         (LocalTime/ofNanoOfDay ~(with-conversion tm src-tsunit :nano)))
-                      (ldt->ts tgt-tsunit)))})
+   :->call-code (-> (fn [[tm]]
+                      (-> `(LocalDateTime/of (LocalDate/ofInstant (.instant expr/*clock*) (.getZone expr/*clock*))
+                                             (LocalTime/ofNanoOfDay ~(with-conversion tm src-tsunit :nano)))
+                          (ldt->ts tgt-tsunit)))
+                    (wrap-handle-eot (time-unit->eot-v src-tsunit) `Long/MAX_VALUE))})
 
 (defmethod expr/codegen-cast [:time-local :timestamp-tz] [{[_ src-tsunit] :source-type, [_ tgt-tsunit _tgt-tz :as target-type] :target-type}]
   {:return-type target-type
-   :->call-code (fn [[tm]]
-                  (-> `(-> (ZonedDateTime/of (LocalDate/ofInstant (.instant expr/*clock*) (.getZone expr/*clock*))
-                                             (LocalTime/ofNanoOfDay ~(with-conversion tm src-tsunit :nano))
-                                             (.getZone expr/*clock*))
-                           (.toInstant))
-                      (inst->ts tgt-tsunit)))})
+   :->call-code (-> (fn [[tm]]
+                      (-> `(-> (ZonedDateTime/of (LocalDate/ofInstant (.instant expr/*clock*) (.getZone expr/*clock*))
+                                                 (LocalTime/ofNanoOfDay ~(with-conversion tm src-tsunit :nano))
+                                                 (.getZone expr/*clock*))
+                               (.toInstant))
+                          (inst->ts tgt-tsunit)))
+                    (wrap-handle-eot (time-unit->eot-v src-tsunit) `Long/MAX_VALUE))})
 
 (defmethod expr/codegen-cast [:timestamp-local :date] [{[_ src-tsunit] :source-type, :keys [target-type]}]
   {:return-type target-type
-   :->call-code (fn [[ts]]
-                  `(-> ~(ts->ldt ts src-tsunit)
-                       (.toLocalDate)
-                       (.toEpochDay)))})
+   :->call-code (-> (fn [[ts]]
+                      `(-> ~(ts->ldt ts src-tsunit)
+                           (.toLocalDate)
+                           (.toEpochDay)))
+                    (wrap-handle-eot `Long/MAX_VALUE `~'Integer/MAX_VALUE))})
 
 (defmethod expr/codegen-cast [:timestamp-local :time-local] [{[_ src-tsunit _] :source-type, [_ tgt-tsunit _ :as target-type] :target-type}]
   {:return-type target-type,
-   :->call-code (fn [[ts]]
-                  (-> `(-> ~(ts->ldt ts src-tsunit)
-                           (.toLocalTime)
-                           (.toNanoOfDay))
-                      (with-conversion :nano tgt-tsunit)))})
+   :->call-code (-> (fn [[ts]]
+                      (-> `(-> ~(ts->ldt ts src-tsunit)
+                               (.toLocalTime)
+                               (.toNanoOfDay))
+                          (with-conversion :nano tgt-tsunit)))
+                    (wrap-handle-eot `Long/MAX_VALUE (time-unit->eot-v tgt-tsunit)))})
 
 (defmethod expr/codegen-cast [:timestamp-local :timestamp-tz] [{[_ src-tsunit] :source-type, [_ tgt-tsunit _tgt-tz :as target-type] :target-type}]
   {:return-type target-type,
-   :->call-code (fn [[ts]]
-                  (-> `(-> ~(ts->ldt ts src-tsunit)
-                           (.atZone (.getZone expr/*clock*))
-                           (.toInstant))
-                      (inst->ts tgt-tsunit)))})
+   :->call-code (-> (fn [[ts]]
+                      (-> `(-> ~(ts->ldt ts src-tsunit)
+                               (.atZone (.getZone expr/*clock*))
+                               (.toInstant))
+                          (inst->ts tgt-tsunit)))
+                    (wrap-handle-eot))})
 
 (defmethod expr/codegen-cast [:timestamp-tz :date] [{[_ src-tsunit src-tz] :source-type, :keys [target-type]}]
   (let [src-tz-sym (gensym 'src-tz)]
     {:return-type target-type,
      :batch-bindings [[src-tz-sym `(ZoneId/of ~src-tz)]]
-     :->call-code (fn [[tstz]]
-                    `(-> ~(ts->zdt tstz src-tsunit src-tz-sym)
-                         (.withZoneSameInstant (.getZone expr/*clock*))
-                         (.toLocalDate)
-                         (.toEpochDay)))}))
+     :->call-code (-> (fn [[tstz]]
+                        `(-> ~(ts->zdt tstz src-tsunit src-tz-sym)
+                             (.withZoneSameInstant (.getZone expr/*clock*))
+                             (.toLocalDate)
+                             (.toEpochDay)))
+                      (wrap-handle-eot `Long/MAX_VALUE `~'Integer/MAX_VALUE))}))
 
 (defmethod expr/codegen-cast [:timestamp-tz :time-local] [{[_ src-tsunit src-tz] :source-type, [_ tgt-tsunit :as target-type] :target-type}]
   (let [src-tz-sym (gensym 'src-tz)]
     {:return-type target-type,
      :batch-bindings [[src-tz-sym `(ZoneId/of ~src-tz)]]
-     :->call-code (fn [[tstz]]
-                    (-> `(-> ~(ts->zdt tstz src-tsunit src-tz-sym)
-                             (.withZoneSameInstant (.getZone expr/*clock*))
-                             (.toLocalTime)
-                             (.toNanoOfDay))
-                        (with-conversion :nano tgt-tsunit)))}))
+     :->call-code (-> (fn [[tstz]]
+                        (-> `(-> ~(ts->zdt tstz src-tsunit src-tz-sym)
+                                 (.withZoneSameInstant (.getZone expr/*clock*))
+                                 (.toLocalTime)
+                                 (.toNanoOfDay))
+                            (with-conversion :nano tgt-tsunit)))
+                      (wrap-handle-eot `Long/MAX_VALUE (time-unit->eot-v tgt-tsunit)))}))
 
 (defmethod expr/codegen-cast [:timestamp-tz :timestamp-local] [{[_ src-tsunit src-tz] :source-type, [_ tgt-tsunit :as target-type] :target-type}]
   (let [src-tz-sym (gensym 'src-tz)]
     {:return-type target-type,
      :batch-bindings [[src-tz-sym `(ZoneId/of ~src-tz)]]
-     :->call-code (fn [[tstz]]
-                    (-> `(-> ~(ts->zdt tstz src-tsunit src-tz-sym)
-                             (.withZoneSameInstant (.getZone expr/*clock*))
-                             (.toLocalDateTime))
-                        (ldt->ts tgt-tsunit)))}))
+     :->call-code (-> (fn [[tstz]]
+                        (-> `(-> ~(ts->zdt tstz src-tsunit src-tz-sym)
+                                 (.withZoneSameInstant (.getZone expr/*clock*))
+                                 (.toLocalDateTime))
+                            (ldt->ts tgt-tsunit)))
+                      (wrap-handle-eot))}))
 
 (defmethod expr/codegen-cast [:time-local :duration] [{[_ src-tsunit] :source-type, [_ tgt-tsunit :as target-type] :target-type}]
   {:return-type target-type, :->call-code (comp #(with-conversion % src-tsunit tgt-tsunit) first)})
@@ -218,23 +275,27 @@
   (-> expr (recall-with-cast [:timestamp-local time-unit] arg2)))
 
 (defmethod expr/codegen-call [:+ :timestamp-local :time-local] [{[[_ ts-unit], [_ time-unit]] :arg-types}]
-  (with-arg-unit-conversion ts-unit time-unit
-    #(do [:timestamp-local %]) #(do `(Math/addExact ~@%))))
+  (-> (with-arg-unit-conversion ts-unit time-unit
+        #(do [:timestamp-local %]) #(do `(Math/addExact ~@%)))
+      (update :->call-code wrap-handle-eot2 `Long/MAX_VALUE (time-unit->eot-v time-unit) `Long/MAX_VALUE)))
 
 (defmethod expr/codegen-call [:+ :timestamp-tz :time-local] [{[[_ ts-unit tz], [_time time-unit]] :arg-types}]
-  (with-arg-unit-conversion ts-unit time-unit
-    #(do [:timestamp-tz % tz]) #(do `(Math/addExact ~@%))))
+  (-> (with-arg-unit-conversion ts-unit time-unit
+        #(do [:timestamp-tz % tz]) #(do `(Math/addExact ~@%)))
+      (update :->call-code wrap-handle-eot2 `Long/MAX_VALUE (time-unit->eot-v time-unit) `Long/MAX_VLAUE)))
 
 (defmethod expr/codegen-call [:+ :date :duration] [{[_ [_ dur-unit :as arg2]] :arg-types, :as expr}]
   (-> expr (recall-with-cast [:timestamp-local dur-unit] arg2)))
 
 (defmethod expr/codegen-call [:+ :timestamp-local :duration] [{[[_ ts-unit], [_ dur-unit]] :arg-types}]
-  (with-arg-unit-conversion ts-unit dur-unit
-    #(do [:timestamp-local %]) #(do `(Math/addExact ~@%))))
+  (-> (with-arg-unit-conversion ts-unit dur-unit
+        #(do [:timestamp-local %]) #(do `(Math/addExact ~@%)))
+      (update :->call-code wrap-handle-eot)))
 
 (defmethod expr/codegen-call [:+ :timestamp-tz :duration] [{[[_ ts-unit tz], [_ dur-unit]] :arg-types}]
-  (with-arg-unit-conversion ts-unit dur-unit
-    #(do [:timestamp-tz % tz]) #(do `(Math/addExact ~@%))))
+  (-> (with-arg-unit-conversion ts-unit dur-unit
+        #(do [:timestamp-tz % tz]) #(do `(Math/addExact ~@%)))
+      (update :->call-code wrap-handle-eot)))
 
 (defmethod expr/codegen-call [:+ :duration :duration] [{[[_ x-unit] [_ y-unit]] :arg-types}]
   (with-arg-unit-conversion x-unit y-unit
@@ -245,8 +306,9 @@
   (defmethod expr/codegen-call [f-kw :date :interval] [{[dt-type, [_ iunit :as itype]] :arg-types, :as expr}]
     (case iunit
       :year-month {:return-type dt-type
-                   :->call-code (fn [[x-arg y-arg]]
-                                  `(.toEpochDay (~method-sym (LocalDate/ofEpochDay ~x-arg) (.getPeriod ~y-arg))))}
+                   :->call-code (-> (fn [[x-arg y-arg]]
+                                      `(.toEpochDay (~method-sym (LocalDate/ofEpochDay ~x-arg) (.getPeriod ~y-arg))))
+                                    (wrap-handle-eot `Integer/MAX_VALUE `Integer/MAX_VALUE))}
       :day-time (recall-with-cast expr [:timestamp-local :milli] itype)
       :month-day-nano (recall-with-cast expr [:timestamp-local :nano] itype)))
 
@@ -260,17 +322,18 @@
                              (~method-sym (.getPeriod i#))
                              (~method-sym (.getDuration i#))))
                       (ldt->ts ts-unit)))))]
-      (case iunit
-        :year-month {:return-type ts-type
-                     :->call-code (fn [[x-arg y-arg]]
-                                    (-> `(let [i# ~y-arg]
-                                           (-> ~(ts->ldt x-arg ts-unit)
-                                               (~method-sym (.getPeriod i#))
-                                               (~method-sym (.getDuration i#))))
-                                        (ldt->ts ts-unit)))}
+      (-> (case iunit
+            :year-month {:return-type ts-type
+                         :->call-code (fn [[x-arg y-arg]]
+                                        (-> `(let [i# ~y-arg]
+                                               (-> ~(ts->ldt x-arg ts-unit)
+                                                   (~method-sym (.getPeriod i#))
+                                                   (~method-sym (.getDuration i#))))
+                                            (ldt->ts ts-unit)))}
 
-        :day-time (codegen-call :milli)
-        :month-day-nano (codegen-call :nano))))
+            :day-time (codegen-call :milli)
+            :month-day-nano (codegen-call :nano))
+          (update :->call-code wrap-handle-eot))))
 
   (defmethod expr/codegen-call [f-kw :timestamp-tz :interval] [{[[_ ts-unit tz :as ts-type], [_ iunit]] :arg-types}]
     (let [zone-id-sym (gensym 'zone-id)]
@@ -294,7 +357,8 @@
 
               :day-time (codegen-call :milli)
               :month-day-nano (codegen-call :nano))
-            (update :batch-bindings (fnil conj []) [zone-id-sym `(ZoneId/of ~(str tz))]))))))
+            (update :batch-bindings (fnil conj []) [zone-id-sym `(ZoneId/of ~(str tz))])
+            (update :->call-code wrap-handle-eot))))))
 
 (doseq [[t1 t2] [[:duration :timestamp-tz]
                  [:duration :timestamp-local]
@@ -311,12 +375,14 @@
 ;;; subtract
 
 (defmethod expr/codegen-call [:- :timestamp-tz :timestamp-tz] [{[[_ x-unit _], [_ y-unit _]] :arg-types}]
-  (with-arg-unit-conversion x-unit y-unit
-    #(do [:duration %]) #(do `(Math/subtractExact ~@%))))
+  (-> (with-arg-unit-conversion x-unit y-unit
+        #(do [:duration %]) #(do `(Math/subtractExact ~@%)))
+      (update :->call-code wrap-throw-eot2 `Long/MAX_VALUE `Long/MAX_VALUE)))
 
 (defmethod expr/codegen-call [:- :timestamp-local :timestamp-local] [{[[_ x-unit], [_ y-unit]] :arg-types}]
-  (with-arg-unit-conversion x-unit y-unit
-    #(do [:duration %]) #(do `(Math/subtractExact ~@%))))
+  (-> (with-arg-unit-conversion x-unit y-unit
+        #(do [:duration %]) #(do `(Math/subtractExact ~@%)))
+      (update :->call-code wrap-throw-eot2 `Long/MAX_VALUE `Long/MAX_VALUE)))
 
 (defmethod expr/codegen-call [:- :timestamp-local :timestamp-tz] [{[x [_ y-unit _]] :arg-types, :as expr}]
   (-> expr (recall-with-cast x [:timestamp-local y-unit])))
@@ -342,15 +408,17 @@
     (-> expr (recall-with-cast t [:duration time-unit]))))
 
 (defmethod expr/codegen-call [:- :timestamp-tz :duration] [{[[_ts ts-unit tz], [_dur dur-unit]] :arg-types}]
-  (with-arg-unit-conversion ts-unit dur-unit
-    #(do [:timestamp-tz % tz]) #(do `(Math/subtractExact ~@%))))
+  (-> (with-arg-unit-conversion ts-unit dur-unit
+        #(do [:timestamp-tz % tz]) #(do `(Math/subtractExact ~@%)))
+      (update :->call-code wrap-handle-eot)))
 
 (defmethod expr/codegen-call [:- :date :duration] [{[_ [_dur dur-unit :as arg2]] :arg-types, :as expr}]
   (-> expr (recall-with-cast [:timestamp-local dur-unit] arg2)))
 
 (defmethod expr/codegen-call [:- :timestamp-local :duration] [{[[_ts ts-unit], [_dur dur-unit]] :arg-types}]
-  (with-arg-unit-conversion ts-unit dur-unit
-    #(do [:timestamp-local %]) #(do `(Math/subtractExact ~@%))))
+  (-> (with-arg-unit-conversion ts-unit dur-unit
+        #(do [:timestamp-local %]) #(do `(Math/subtractExact ~@%)))
+      (update :->call-code wrap-handle-eot)))
 
 (defmethod expr/codegen-call [:- :duration :duration] [{[[_x x-unit] [_y y-unit]] :arg-types}]
   (with-arg-unit-conversion x-unit y-unit
@@ -359,8 +427,9 @@
 (defmethod expr/codegen-call [:- :date :interval] [{[dt-type, [_ iunit :as itype]] :arg-types, :as expr}]
   (case iunit
     :year-month {:return-type dt-type
-                 :->call-code (fn [[x-arg y-arg]]
-                                `(.toEpochDay (.minus (LocalDate/ofEpochDay ~x-arg) (.getPeriod ~y-arg))))}
+                 :->call-code (-> (fn [[x-arg y-arg]]
+                                    `(.toEpochDay (.minus (LocalDate/ofEpochDay ~x-arg) (.getPeriod ~y-arg))))
+                                  (wrap-handle-eot `Integer/MAX_VALUE `Integer/MAX_VALUE))}
     :day-time (recall-with-cast expr [:timestamp-local :milli] itype)
     :month-day-nano (recall-with-cast expr [:timestamp-local :nano] itype)))
 
@@ -393,6 +462,39 @@
 
 ;;;; Boolean operations
 
+(defmethod expr/codegen-call [:compare :timestamp-tz :timestamp-tz] [{[[_ x-unit _], [_ y-unit _]] :arg-types}]
+  (-> (with-arg-unit-conversion x-unit y-unit
+        (constantly :i32) #(do `(Long/compare ~@%)))
+      (update :compare>call-code wrap-throw-eot2 `Long/MAX_VALUE `Long/MAX_VALUE)))
+
+(defmethod expr/codegen-call [:compare :timestamp-local :timestamp-local] [{[[_ x-unit], [_ y-unit]] :arg-types}]
+  (-> (with-arg-unit-conversion x-unit y-unit
+        (constantly :i32) #(do `(Long/compare ~@%)))
+      (update :compare>call-code wrap-throw-eot2 `Long/MAX_VALUE `Long/MAX_VALUE)))
+
+(defmethod expr/codegen-call [:compare :timestamp-local :timestamp-tz] [{[x [_ y-unit _]] :arg-types, :as expr}]
+  (-> expr (recall-with-cast x [:timestamp-local y-unit])))
+
+(defmethod expr/codegen-call [:compare :timestamp-tz :timestamp-local] [{[[_ x-unit] y] :arg-types, :as expr}]
+  (-> expr (recall-with-cast [:timestamp-local x-unit] y)))
+
+(defmethod expr/codegen-call [:compare :date :date] [expr]
+  (-> expr (recall-with-cast [:timestamp-local :micro] [:timestamp-local :micro])))
+
+(doseq [t [:timestamp-tz :timestamp-local]]
+  (defmethod expr/codegen-call [:compare :date t] [{[_ t2] :arg-types, :as expr}]
+    (-> expr (recall-with-cast [:timestamp-local :micro] t2)))
+
+  (defmethod expr/codegen-call [:compare t :date] [{[t1 _] :arg-types, :as expr}]
+    (-> expr (recall-with-cast t1 [:timestamp-local :micro]))))
+
+(defmethod expr/codegen-call [:compare :time-local :time-local] [{[[_ time-unit1] [_ time-unit2]] :arg-types, :as expr}]
+  (-> expr (recall-with-cast [:duration time-unit1] [:duration time-unit2])))
+
+(defmethod expr/codegen-call [:compare :duration :duration] [{[[_x x-unit] [_y y-unit]] :arg-types}]
+  (with-arg-unit-conversion x-unit y-unit
+    (constantly :i32) #(do `(Long/compare ~@%))))
+
 (doseq [[f cmp] [[:= #(do `(zero? ~%))]
                  [:< #(do `(neg? ~%))]
                  [:<= #(do `(not (pos? ~%)))]
@@ -401,14 +503,14 @@
   (doseq [x [:date :timestamp-local :timestamp-tz]
           y [:date :timestamp-local :timestamp-tz]]
     (defmethod expr/codegen-call [f x y] [expr]
-      (let [{:keys [batch-bindings ->call-code]} (expr/codegen-call (assoc expr :f :-))]
+      (let [{:keys [batch-bindings ->call-code]} (expr/codegen-call (assoc expr :f :compare))]
         {:return-type :bool,
          :batch-bindings batch-bindings
          :->call-code (comp cmp ->call-code)})))
 
   (doseq [x [:time-local :duration]]
     (defmethod expr/codegen-call [f x x] [expr]
-      (let [{:keys [batch-bindings ->call-code]} (expr/codegen-call (assoc expr :f :-))]
+      (let [{:keys [batch-bindings ->call-code]} (expr/codegen-call (assoc expr :f :compare))]
         {:return-type :bool,
          :batch-bindings batch-bindings
          :->call-code (comp cmp ->call-code)}))))

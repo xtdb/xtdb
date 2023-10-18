@@ -40,11 +40,10 @@
   TimeStampMicroTZVector (vec->reader [arrow-vec] (ValueVectorReader/timestampMicroTzVector arrow-vec))
   TimeStampNanoTZVector (vec->reader [arrow-vec] (ValueVectorReader/timestampNanoTzVector arrow-vec))
 
-  ;; TODO specialise VVR for these vecs
-  TimeStampSecVector (vec->reader [arrow-vec] (ValueVectorReader. arrow-vec))
-  TimeStampMilliVector (vec->reader [arrow-vec] (ValueVectorReader. arrow-vec))
-  TimeStampMicroVector (vec->reader [arrow-vec] (ValueVectorReader. arrow-vec))
-  TimeStampNanoVector (vec->reader [arrow-vec] (ValueVectorReader. arrow-vec))
+  TimeStampSecVector (vec->reader [arrow-vec] (ValueVectorReader/timestampVector arrow-vec))
+  TimeStampMilliVector (vec->reader [arrow-vec] (ValueVectorReader/timestampVector arrow-vec))
+  TimeStampMicroVector (vec->reader [arrow-vec] (ValueVectorReader/timestampVector arrow-vec))
+  TimeStampNanoVector (vec->reader [arrow-vec] (ValueVectorReader/timestampVector arrow-vec))
 
   TimeSecVector (vec->reader [arrow-vec] (ValueVectorReader/timeSecVector arrow-vec))
   TimeMilliVector (vec->reader [arrow-vec] (ValueVectorReader/timeMilliVector arrow-vec))
