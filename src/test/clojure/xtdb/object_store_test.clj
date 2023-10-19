@@ -134,14 +134,25 @@
   (put-edn obj-store "foo/alan" :alan)
   (put-edn obj-store "bar/bob" :bob)
   (put-edn obj-store "bar/baz/dan" :dan)
+  (put-edn obj-store "bar/baza/james" :james)
 
-  (t/is (= ["bar/alice" "bar/baz/dan" "bar/bob" "foo/alan"] (.listObjects obj-store)))
-  (t/is (= ["bar/alice" "bar/baz" "bar/bob" ] (.listObjects obj-store "bar")))
+  (t/is (= ["bar/alice" "bar/baz/dan" "bar/baza/james" "bar/bob" "foo/alan"] (.listObjects obj-store)))
+  (t/is (= ["foo/alan"] (.listObjects obj-store "foo")))
+  
+  (t/testing "call listObjects with a prefix ended with a slash - should work the same"
+    (t/is (= ["foo/alan"] (.listObjects obj-store "foo/"))))
+  
+  (t/testing "calling listObjects with prefix on directory with subdirectories - should only return top level keys"
+    (t/is (= ["bar/alice" "bar/baz" "bar/baza" "bar/bob"] (.listObjects obj-store "bar"))))
+  
+  (t/testing "calling listObjects with prefix with common prefix - should only return that which is a complete match against a directory "
+    (t/is (= ["bar/baz/dan"] (.listObjects obj-store "bar/baz"))))
 
+  
      ;; Delete an object
   @(.deleteObject obj-store "bar/alice")
 
-  (t/is (= ["bar/baz" "bar/bob"] (.listObjects obj-store "bar"))))
+  (t/is (= ["bar/baz" "bar/baza" "bar/bob"] (.listObjects obj-store "bar"))))
 
 (defn test-range [^ObjectStore obj-store]
 
