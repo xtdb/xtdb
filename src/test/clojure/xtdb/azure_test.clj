@@ -121,7 +121,7 @@
                                                    (.setRetrieveUncommittedBlobs true))))]
     (set/difference all-blobs comitted-blobs)))
 
-(t/deftest ^:s3 multipart-start-and-cancel
+(t/deftest ^:azure multipart-start-and-cancel
   (with-open [os (object-store (random-uuid))]
     (let [blob-container-client (:blob-container-client os)
           prefix (:prefix os)]
@@ -138,7 +138,7 @@
             (let [uncomitted-blobs (fetch-uncomitted-blobs blob-container-client prefix)]
               (= #{} uncomitted-blobs))))))))
 
-(t/deftest ^:s3 multipart-put-test
+(t/deftest ^:azure multipart-put-test
   (with-open [os (object-store (random-uuid))]
     (let [blob-container-client (:blob-container-client os)
           prefix (:prefix os)
