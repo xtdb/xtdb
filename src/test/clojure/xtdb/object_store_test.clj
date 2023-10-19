@@ -133,14 +133,15 @@
   (put-edn obj-store "bar/alice" :alice)
   (put-edn obj-store "foo/alan" :alan)
   (put-edn obj-store "bar/bob" :bob)
+  (put-edn obj-store "bar/baz/dan" :dan)
 
-  (t/is (= ["bar/alice" "bar/bob" "foo/alan"] (.listObjects obj-store)))
-  (t/is (= ["bar/alice" "bar/bob"] (.listObjects obj-store "bar")))
+  (t/is (= ["bar/alice" "bar/baz/dan" "bar/bob" "foo/alan"] (.listObjects obj-store)))
+  (t/is (= ["bar/alice" "bar/baz" "bar/bob" ] (.listObjects obj-store "bar")))
 
      ;; Delete an object
   @(.deleteObject obj-store "bar/alice")
 
-  (t/is (= ["bar/bob"] (.listObjects obj-store "bar"))))
+  (t/is (= ["bar/baz" "bar/bob"] (.listObjects obj-store "bar"))))
 
 (defn test-range [^ObjectStore obj-store]
 
