@@ -40,6 +40,9 @@
   (s/keys :req-un [::storage-account ::container ::servicebus-namespace ::servicebus-topic-name]
           :opt-un [::prefix]))
 
+;; No minimum block size in azure
+(def minimum-part-size 0)
+
 (defmethod ig/init-key ::blob-object-store [_ {:keys [storage-account container prefix] :as opts}]
   (let [credential (.build (DefaultAzureCredentialBuilder.))
         blob-service-client (cond-> (-> (BlobServiceClientBuilder.)
@@ -55,17 +58,9 @@
                                                                    file-name-cache)]
     (os/->AzureBlobObjectStore blob-client
                                prefix
+                               minimum-part-size
                                file-name-cache
                                file-list-watcher)))
-
-(comment
-
-  (def os (->> (ig/prep-key ::blob-object-store {:storage-account "xtdbazureobjectstoretest"
-                                                 :container "xtdb-test"
-                                                 :prefix (str "xtdb.azure-test." (random-uuid))})
-               (ig/init-key ::blob-object-store)))
-
-  @(.getObject os "foo.txt"))
 
 (s/def ::resource-group-name string?)
 (s/def ::namespace string?)

@@ -6,10 +6,14 @@
             [xtdb.azure :as azure]
             [xtdb.object-store-test :as os-test]
             [xtdb.node :as node]
-            [clojure.tools.logging :as log])
-  (:import java.util.UUID
-           java.io.Closeable
-           xtdb.object_store.ObjectStore))
+            [clojure.tools.logging :as log]
+            [clojure.set :as set])
+  (:import [java.util UUID]
+           [java.io Closeable]
+           [java.nio ByteBuffer]
+           [com.azure.storage.blob.models ListBlobsOptions BlobListDetails BlobItem]
+           [com.azure.storage.blob BlobContainerClient]
+           [xtdb.object_store ObjectStore SupportsMultipart IMultipartUpload]))
 
 (def resource-group-name "azure-modules-test")
 (def storage-account "xtdbteststorageaccount")
@@ -97,3 +101,64 @@
     (t/is (= [{:id :foo}]
              (xt/q node '{:find [id]
                           :where [($ :xt_docs [{:xt/id id}])]})))))
+
+(defn list-filenames [^BlobContainerClient blob-container-client prefix ^ListBlobsOptions list-opts]
+  (->> (.listBlobs blob-container-client list-opts nil)
+       (.iterator)
+       (iterator-seq)
+       (mapv (fn [^BlobItem blob-item]
+               (subs (.getName blob-item) (count prefix))))
+       (set)))
+
+(defn fetch-uncomitted-blobs [^BlobContainerClient blob-container-client prefix]
+  (let [base-opts (-> (ListBlobsOptions.)
+                      (.setPrefix prefix))
+        comitted-blobs (list-filenames blob-container-client prefix base-opts)
+        all-blobs (list-filenames blob-container-client
+                                  prefix
+                                  (.setDetails base-opts
+                                               (-> (BlobListDetails.)
+                                                   (.setRetrieveUncommittedBlobs true))))]
+    (set/difference all-blobs comitted-blobs)))
+
+(t/deftest ^:azure multipart-start-and-cancel
+  (with-open [os (object-store (random-uuid))]
+    (let [blob-container-client (:blob-container-client os)
+          prefix (:prefix os)]
+      (t/testing "Call to start multipart should work/return an object"
+        (let [multipart-upload ^IMultipartUpload  @(.startMultipart ^SupportsMultipart os "test-multi-created")]
+          (t/is multipart-upload)
+
+          (t/testing "Uploading a part should create an uncomitted blob"
+            (let [uncomitted-blobs (fetch-uncomitted-blobs blob-container-client prefix)]
+              (= #{"test-multi-created"} uncomitted-blobs)))
+
+          (t/testing "Call to abort a multipart upload should work - uncomitted blob removed"
+            @(.abort multipart-upload)
+            (let [uncomitted-blobs (fetch-uncomitted-blobs blob-container-client prefix)]
+              (= #{} uncomitted-blobs))))))))
+
+(t/deftest ^:azure multipart-put-test
+  (with-open [os (object-store (random-uuid))]
+    (let [blob-container-client (:blob-container-client os)
+          prefix (:prefix os)
+          multipart-upload ^IMultipartUpload @(.startMultipart ^SupportsMultipart os "test-multi-put")
+          part-size 500
+          file-part-1 ^ByteBuffer (os-test/generate-random-byte-buffer part-size)
+          file-part-2 ^ByteBuffer (os-test/generate-random-byte-buffer part-size)]
+
+      ;; Uploading parts to multipart upload
+      @(.uploadPart multipart-upload (.flip file-part-1))
+      @(.uploadPart multipart-upload (.flip file-part-2))
+
+      (t/testing "Call to complete a multipart upload should work - should be removed from the uncomitted list"
+        @(.complete multipart-upload)
+        (let [uncomitted-blobs (fetch-uncomitted-blobs blob-container-client prefix)]
+          (t/is (= #{} uncomitted-blobs))))
+
+      (t/testing "Multipart upload works correctly - file present and contents correct"
+        (t/is (= ["test-multi-put"] (.listObjects ^ObjectStore os)))
+
+        (let [^ByteBuffer uploaded-buffer @(.getObject ^ObjectStore os "test-multi-put")]
+          (t/testing "capacity should be equal to total of 2 parts"
+            (t/is (= (* 2 part-size) (.capacity uploaded-buffer)))))))))

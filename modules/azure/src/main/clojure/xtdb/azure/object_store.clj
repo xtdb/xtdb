@@ -4,14 +4,15 @@
             [xtdb.util :as util])
   (:import [com.azure.core.util BinaryData]
            [com.azure.storage.blob BlobContainerClient]
+           [com.azure.storage.blob.specialized BlockBlobClient]
            [com.azure.storage.blob.models BlobRange BlobStorageException DownloadRetryOptions]
            [java.io ByteArrayOutputStream Closeable]
            [java.lang AutoCloseable]
            [java.nio ByteBuffer]
-           [java.util NavigableSet]
+           [java.util NavigableSet ArrayList List Base64 Base64$Encoder]
            [java.util.concurrent CompletableFuture]
            [java.util.function Supplier]
-           [xtdb.object_store ObjectStore]))
+           [xtdb.object_store ObjectStore SupportsMultipart IMultipartUpload]))
 
 (defn- get-blob [^BlobContainerClient blob-container-client blob-name]
   (try
@@ -53,7 +54,44 @@
 (defn- delete-blob [^BlobContainerClient blob-container-client blob-name]
   (-> (.getBlobClient blob-container-client blob-name)
       (.deleteIfExists)))
-(defrecord AzureBlobObjectStore [^BlobContainerClient blob-container-client prefix ^NavigableSet file-name-cache ^AutoCloseable file-list-watcher]
+
+(def ^Base64$Encoder base-64-encoder (Base64/getEncoder))
+
+(defn block-number->base64-block-id [block-number]
+  (.encodeToString base-64-encoder (.getBytes (str block-number))))
+
+(defrecord MultipartUpload [^BlockBlobClient block-blob-client on-complete ^List !staged-block-ids]
+  IMultipartUpload
+  (uploadPart [_  buf]
+    (CompletableFuture/completedFuture
+     (let [block-number (inc (count !staged-block-ids))
+           block-id (block-number->base64-block-id block-number)
+           binary-data (BinaryData/fromByteBuffer buf)]
+       (.stageBlock block-blob-client block-id binary-data)
+       (.add !staged-block-ids block-id))))
+
+  (complete [_]
+    (CompletableFuture/completedFuture
+     (do
+       (.commitBlockList block-blob-client !staged-block-ids)
+       ;; Run passed in on-complete function (adds the key to the filename cache)
+       (on-complete))))
+  
+  (abort [_]
+    (CompletableFuture/completedFuture
+     (do
+       ;; Commit an empty blocklist removes all staged & uncomitted files
+       (.commitBlockList block-blob-client [])
+       ;; Delete the empty blob
+       (.deleteIfExists block-blob-client)))))
+
+(defn- start-multipart [^BlobContainerClient blob-container-client blob-name on-complete-fn]
+  (let [block-blob-client (-> blob-container-client 
+                              (.getBlobClient blob-name) 
+                              (.getBlockBlobClient))]
+    (->MultipartUpload block-blob-client on-complete-fn (ArrayList.))))
+
+(defrecord AzureBlobObjectStore [^BlobContainerClient blob-container-client prefix multipart-minimum-part-size ^NavigableSet file-name-cache ^AutoCloseable file-list-watcher]
   ObjectStore
   (getObject [_ k]
     (CompletableFuture/completedFuture
@@ -87,6 +125,13 @@
     (.remove file-name-cache k)
     (delete-blob blob-container-client (str prefix k))
     (CompletableFuture/completedFuture nil))
+  
+  SupportsMultipart
+  (startMultipart [_ k]
+    (CompletableFuture/completedFuture
+     (start-multipart blob-container-client
+                      (str prefix k)
+                      (fn [] (.add file-name-cache k)))))
 
   Closeable
   (close [_]

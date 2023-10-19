@@ -39,6 +39,17 @@
 (defn get-bytes [^ObjectStore obj-store k start len]
   (byte-buf->bytes @(.getObjectRange obj-store k start len)))
 
+;; Generates a byte buffer of random characters
+(defn generate-random-byte-buffer [buffer-size]
+  (let [random         (java.util.Random.)
+        byte-buffer    (ByteBuffer/allocate buffer-size)]
+    (loop [i 0]
+      (if (< i buffer-size)
+        (do
+          (.put byte-buffer (byte (.nextInt random 128)))
+          (recur (inc i)))
+        byte-buffer))))
+
 (deftype InMemoryObjectStore [^NavigableMap os]
   ObjectStore
   (getObject [_this k]
