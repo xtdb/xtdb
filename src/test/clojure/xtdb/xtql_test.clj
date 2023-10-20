@@ -23,16 +23,16 @@
 
   (t/is (= #{{:first-name "Ivan"}
              {:first-name "Petr"}}
-           (set (xt/q tu/*node* '(from :docs first-name)))))
+           (set (xt/q tu/*node* '(from :docs {:bind [first-name]})))))
 
   (t/is (= #{{:name "Ivan"}
              {:name "Petr"}}
-           (set (xt/q tu/*node* '(from :docs {:first-name name})))))
+           (set (xt/q tu/*node* '(from :docs {:bind {:first-name name}})))))
 
   (t/is (= #{{:e :ivan, :name "Ivan"}
              {:e :petr, :name "Petr"}}
            (set (xt/q tu/*node*
-                      '(from :docs {:xt/id e, :first-name name}))))
+                      '(from :docs {:bind {:xt/id e, :first-name name}}))))
         "returning eid"))
 
 (deftest test-basic-query
@@ -40,50 +40,49 @@
 
   (t/is (= [{:e :ivan}]
            (xt/q tu/*node*
-                 '(from :docs {:xt/id e, :first-name "Ivan"})))
+                 '(from :docs {:bind {:xt/id e, :first-name "Ivan"}})))
         "query by single field")
 
   ;; HACK this scans first-name out twice
   (t/is (= [{:first-name "Petr", :last-name "Petrov"}]
            (xt/q tu/*node*
-                 '(from :docs {:first-name "Petr"}
-                        first-name last-name)))
+                 '(from :docs {:bind [{:first-name "Petr"} first-name last-name]})))
         "returning the queried field")
 
   (t/is (= [{:first-name "Petr", :last-name "Petrov"}]
            (xt/q tu/*node*
-                 '(from :docs {:xt/id :petr} first-name last-name)))
+                 '(from :docs {:bind [{:xt/id :petr} first-name last-name]})))
         "literal eid"))
 
 (deftest test-order-by
   (let [_tx (xt/submit-tx tu/*node* ivan+petr)]
     (t/is (= [{:first-name "Ivan"} {:first-name "Petr"}]
              (xt/q tu/*node*
-                   '(-> (from :docs first-name)
+                   '(-> (from :docs {:bind [first-name]})
                         (order-by first-name)))))
 
     (t/is (= [{:first-name "Petr"} {:first-name "Ivan"}]
              (xt/q tu/*node*
-                   '(-> (from :docs first-name)
+                   '(-> (from :docs {:bind [first-name]})
                         (order-by [first-name {:dir :desc}])))))
 
 
     (t/is (= [{:first-name "Ivan"}]
              (xt/q tu/*node*
-                   '(-> (from :docs first-name)
+                   '(-> (from :docs {:bind [first-name]})
                         (order-by first-name)
                         (limit 1)))))
 
 
     (t/is (= [{:first-name "Petr"}]
              (xt/q tu/*node*
-                   '(-> (from :docs first-name)
+                   '(-> (from :docs {:bind [first-name]})
                         (order-by [first-name {:dir :desc}])
                         (limit 1)))))
 
     (t/is (= [{:first-name "Petr"}]
              (xt/q tu/*node*
-                   '(-> (from :docs first-name)
+                   '(-> (from :docs {:bind [first-name]})
                         (order-by first-name)
                         (offset 1)
                         (limit 1)))))))
@@ -99,7 +98,7 @@
               {:i 2, :n 2}
               {:i 3, :n 3}]
              (xt/q tu/*node*
-                   '(-> (from :docs {:xt/id i, :n n})
+                   '(-> (from :docs {:bind {:xt/id i, :n n}})
                         (order-by n i)))))))
 
 ;; https://github.com/tonsky/datascript/blob/1.1.0/test/datascript/test/query.cljc#L12-L36
@@ -112,12 +111,12 @@
 
     (t/is (= #{{:e 1, :v 15} {:e 3, :v 37}}
              (set (xt/q tu/*node*
-                        '(from :docs {:xt/id e, :name "Ivan", :age v})))))
+                        '(from :docs {:bind {:xt/id e, :name "Ivan", :age v}})))))
 
     (t/is (= #{{:e1 1, :e2 3} {:e1 3, :e2 1}}
              (set (xt/q tu/*node*
-                        '(-> (unify (from :docs {:xt/id e1, :name n})
-                                    (from :docs {:xt/id e2, :name n})
+                        '(-> (unify (from :docs {:bind {:xt/id e1, :name n}})
+                                    (from :docs {:bind {:xt/id e2, :name n}})
                                     (where (<> e1 e2)))
                              (without :n))))))
 
@@ -127,8 +126,8 @@
                {:e 3, :e2 2, :n "Petr"}
                {:e 1, :e2 4}}
              (set (xt/q tu/*node*
-                        '(-> (unify (from :docs {:xt/id e, :name "Ivan", :age a})
-                                    (from :docs {:xt/id e2, :name n, :age a}))
+                        '(-> (unify (from :docs {:bind {:xt/id e, :name "Ivan", :age a}})
+                                    (from :docs {:bind {:xt/id e2, :name n, :age a}}))
                              (without :a))))))
 
     (t/is (= #{{:e 1, :e2 1, :n "Ivan"}
@@ -136,8 +135,8 @@
                {:e 3, :e2 3, :n "Ivan"}
                {:e 4, :e2 4}}
              (set (xt/q tu/*node*
-                        '(-> (unify (from :docs {:xt/id e, :name n, :age a})
-                                    (from :docs {:xt/id e2, :name n, :age a}))
+                        '(-> (unify (from :docs {:bind {:xt/id e, :name n, :age a}})
+                                    (from :docs {:bind {:xt/id e2, :name n, :age a}}))
                              (without :a)))))
           "multi-param join")
 
@@ -146,8 +145,8 @@
                {:e1 3, :e2 1, :a1 37, :a2 15}
                {:e1 3, :e2 3, :a1 37, :a2 37}}
              (set (xt/q tu/*node*
-                        '(unify (from :docs {:xt/id e1, :name "Ivan", :age a1})
-                                (from :docs {:xt/id e2, :name "Ivan", :age a2})))))
+                        '(unify (from :docs {:bind {:xt/id e1, :name "Ivan", :age a1}})
+                                (from :docs {:bind {:xt/id e2, :name "Ivan", :age a2}})))))
 
           "cross join required here")))
 
@@ -156,16 +155,16 @@
                                      [:put :docs {:xt/id :bar :foo/bar 2}]])]
     (t/is (= [{:i :foo, :n 1} {:i :bar, :n 2}]
              (xt/q tu/*node*
-                   '(from :docs {:xt/id i :foo/bar n})))
+                   '(from :docs {:bind {:xt/id i :foo/bar n}})))
           "simple query with namespaced attributes")
     (t/is (= [{:i/i :foo, :n/n 1} {:i/i :bar, :n/n 2}]
              (xt/q tu/*node*
-                   '(-> (from :docs {:xt/id i :foo/bar n})
+                   '(-> (from :docs {:bind {:xt/id i :foo/bar n}})
                         (return {:i/i i :n/n n}))))
           "query with namespaced keys")
     (t/is (= [{:i :foo, :n 1 :foo/bar 1} {:i :bar, :n 2 :foo/bar 2}]
              (xt/q tu/*node*
-                   '(from :docs {:xt/id i :foo/bar n} foo/bar)))
+                   '(from :docs {:bind [{:xt/id i :foo/bar n} foo/bar]})))
           "query with namespaced attributes in match syntax")))
 
 (deftest test-unify
@@ -173,13 +172,13 @@
 
   (t/is (= [{:bond :daniel-craig}]
            (xt/q tu/*node*
-                 '(unify (from :person {:xt/id bond, :person/name "Daniel Craig"})))))
+                 '(unify (from :person {:bind {:xt/id bond, :person/name "Daniel Craig"}})))))
 
   ;;TODO Params rewritten using with clause, make sure params are tested elsewhere
   (t/is (= #{{:film-name "Skyfall", :bond-name "Daniel Craig"}}
            (set (xt/q tu/*node*
-                      '(-> (unify (from :film {:xt/id film, :film/name film-name, :film/bond bond})
-                                  (from :person {:xt/id bond, :person/name bond-name})
+                      '(-> (unify (from :film {:bind {:xt/id film, :film/name film-name, :film/bond bond}})
+                                  (from :person {:bind {:xt/id bond, :person/name bond-name}})
                                   (with {film :skyfall}))
                            (return :film-name :bond-name)))))
         "one -> one")
@@ -190,8 +189,8 @@
              {:film-name "Skyfall", :bond-name "Daniel Craig"}
              {:film-name "Spectre", :bond-name "Daniel Craig"}}
            (set (xt/q tu/*node*
-                      '(-> (unify (from :film {:film/name film-name, :film/bond bond})
-                                  (from :person {:xt/id bond, :person/name bond-name})
+                      '(-> (unify (from :film {:bind {:film/name film-name, :film/bond bond}})
+                                  (from :person {:bind {:xt/id bond, :person/name bond-name}})
                                   (with {bond :daniel-craig}))
                            (return :film-name :bond-name)))))
         "one -> many"))
@@ -206,13 +205,13 @@
                             [:put :docs {:xt/id :chimera, :heads 1}]])]
     (t/is (= #{{:heads 1, :count-heads 3} {:heads 3, :count-heads 1}}
              (set (xt/q tu/*node*
-                        '(-> (from :docs {:heads heads})
+                        '(-> (from :docs {:bind [heads]})
                              (aggregate :heads {:count-heads (count heads)})))))
           "head frequency")
 
     (t/is (= #{{:sum-heads 6, :min-heads 1, :max-heads 3, :count-heads 4}}
              (set (xt/q tu/*node*
-                        '(-> (from :docs {:heads heads})
+                        '(-> (from :docs {:bind [heads]})
                              (aggregate {:sum-heads (sum heads)
                                          :min-heads (min heads)
                                          :max-heads (max heads)
@@ -227,7 +226,7 @@
                {:oid :o2, :o-value 5.39, :unit-price 5.39, :qty 1}
                {:oid :o3, :o-value 4.13, :unit-price 0.59, :qty 7}}
              (set (xt/q tu/*node*
-                        '(-> (from :docs {:xt/id oid :unit-price unit-price :quantity qty})
+                        '(-> (from :docs {:bind {:xt/id oid :unit-price unit-price :quantity qty}})
                              (with {:o-value (* unit-price qty)}))))))))
 
 (t/deftest test-with-op-errs
@@ -235,7 +234,7 @@
     (t/is (thrown-with-msg? IllegalArgumentException
                             #"Not all variables in expression are in scope"
                             (xt/q tu/*node*
-                                  '(-> (from :docs {:xt/id id})
+                                  '(-> (from :docs {:bind {:xt/id id}})
                                        (with {:bar (str baz)})))))))
 
 #_
@@ -417,21 +416,21 @@
   (let [_tx (xt/submit-tx tu/*node* ivan+petr)]
     (t/is (= #{{:first-name "Ivan", :last-name "Ivanov"}}
              (set (xt/q tu/*node*
-                        '(-> (from :docs {:first-name first-name :last-name last-name})
+                        '(-> (from :docs {:bind {:first-name first-name :last-name last-name}})
                              (where (< first-name "James")))))))
 
     (t/is (= #{{:first-name "Ivan", :last-name "Ivanov"}}
              (set (xt/q tu/*node*
-                        '(-> (from :docs {:first-name first-name :last-name last-name})
+                        '(-> (from :docs {:bind {:first-name first-name :last-name last-name}})
                              (where (<= first-name "Ivan")))))))
 
     (t/is (empty? (xt/q tu/*node*
-                        '(-> (from :docs {:first-name first-name :last-name last-name})
+                        '(-> (from :docs {:bind {:first-name first-name :last-name last-name}})
                              (where (<= first-name "Ivan")
                                     (> last-name "Ivanov"))))))
 
     (t/is (empty (xt/q tu/*node*
-                       '(-> (from :docs {:first-name first-name :last-name last-name})
+                       '(-> (from :docs {:bind {:first-name first-name :last-name last-name}})
                             (where (< first-name "Ivan"))))))))
 
 #_
@@ -819,9 +818,9 @@
              (set
               (xt/q tu/*node*
                     '(-> (unify
-                          (from :docs {:xt/id e1 :age a1})
-                          (from :docs {:xt/id e2 :age a2})
-                          (from :docs {:xt/id e3 :age a3})
+                          (from :docs {:bind {:xt/id e1 :age a1}})
+                          (from :docs {:bind {:xt/id e2 :age a2}})
+                          (from :docs {:bind {:xt/id e3 :age a3}})
                           (with {a4 (+ a1 a2)})
                           (where (= a4 a3)))
                          (return :e1 :e2 :e3))))))
@@ -831,9 +830,9 @@
              (set
               (xt/q tu/*node*
                     '(-> (unify
-                          (from :docs {:xt/id e1 :age a1})
-                          (from :docs {:xt/id e2 :age a2})
-                          (from :docs {:xt/id e3 :age a3})
+                          (from :docs {:bind {:xt/id e1 :age a1}})
+                          (from :docs {:bind {:xt/id e2 :age a2}})
+                          (from :docs {:bind {:xt/id e3 :age a3}})
                           (with {a3 (+ a1 a2)}))
                          (return :e1 :e2 :e3))))))))
 
@@ -996,15 +995,15 @@
             {:bond-name "Roger Moore", :film-name "The Man with the Golden Gun"}
             {:bond-name "Roger Moore", :film-name "The Spy Who Loved Me"}]
            (xt/q tu/*node*
-                 '(-> (unify (join (-> (unify (from :film {:film/bond bond})
-                                              (from :person {:xt/id bond, :person/name bond-name}))
+                 '(-> (unify (join (-> (unify (from :film {:bind {:film/bond bond}})
+                                              (from :person {:bind {:xt/id bond, :person/name bond-name}}))
                                        (aggregate :bond-name :bond {:film-count (count bond)})
                                        (order-by [film-count {:dir :desc}] bond-name)
                                        (limit 1))
-                                   {:bond bond-with-most-films
-                                    :bond-name bond-name})
-                             (from :film {:film/bond bond-with-most-films
-                                          :film/name film-name}))
+                                   {:bind {:bond bond-with-most-films
+                                           :bond-name bond-name}})
+                             (from :film {:bind {:film/bond bond-with-most-films
+                                                 :film/name film-name}}))
                       (order-by film-name)
                       (return :bond-name :film-name))))
         "films made by the Bond with the most films")

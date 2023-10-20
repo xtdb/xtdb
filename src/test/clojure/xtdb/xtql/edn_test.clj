@@ -46,8 +46,8 @@
   (t/is (= '(exists? (from :foo))
            (roundtrip-expr '(exists? (from :foo)))))
 
-  (t/is (= '(exists? [(from :foo) a {:b outer-b}])
-           (roundtrip-expr '(exists? [(from :foo) a {:b outer-b}]))))
+  (t/is (= '(exists? (from :foo) {:args [a {:b outer-b}]})
+           (roundtrip-expr '(exists? (from :foo) {:args [a {:b outer-b}]}))))
 
   (t/is (= '(not-exists? (from :foo))
            (roundtrip-expr '(not-exists? (from :foo)))))
@@ -68,20 +68,22 @@
   (t/is (= '(from :foo)
            (roundtrip-q '(from :foo))))
 
-  (t/is (= '(from [:foo {:for-valid-time [:at #inst "2020"]}])
-           (roundtrip-q '(from [:foo {:for-valid-time [:at #inst "2020"]}]))))
+  (t/is (= '(from :foo {:for-valid-time (at #inst "2020")})
+           (roundtrip-q '(from :foo {:for-valid-time (at #inst "2020")}))))
 
-  ;; TODO system-time
+  (t/is (= '(from :foo {:for-system-time (at #inst "2020")})
+           (roundtrip-q '(from :foo {:for-system-time (at #inst "2020")}))))
 
-  (t/is (= '(from :foo a {:xt/id b} c)
-           (roundtrip-q '(from :foo a {:xt/id b} {:c c}))))
+  (t/is (= '(from :foo {:bind [a {:xt/id b} c]})
+           (roundtrip-q '(from :foo {:bind [a {:xt/id b} {:c c}]}))))
   )
 
 (t/deftest test-parse-unify
-  (let [q '(unify (from :foo {:baz b})
-                  (from :bar {:baz b}))]
-    (t/is (= q
-             (roundtrip-q q)))))
+  (t/is (= '(unify (from :foo {:bind [{:baz b}]})
+                   (from :bar {:bind [{:baz b}]}))
+
+           (roundtrip-q '(unify (from :foo {:bind {:baz b}})
+                                (from :bar {:bind {:baz b}}))))))
 
 (t/deftest test-parse-where
   (let [q '(where false (= 1 'foo))]
@@ -89,7 +91,7 @@
              (roundtrip-q-tail q)))))
 
 (t/deftest test-parse-pipeline
-  (let [q '(-> (from :foo a)
+  (let [q '(-> (from :foo {:bind [a]})
                (without :a))]
     (t/is (= q
              (roundtrip-q q)))))
@@ -106,36 +108,38 @@
 ;TODO with as unify-clause, will fail due to lack of distinct binding types
 
 (t/deftest test-parse-without
-  (let [q '(-> (from :foo a)
+  (let [q '(-> (from :foo {:bind [a]})
                (without :a :b :f))]
     (t/is (= q
              (roundtrip-q q)))))
 
 (t/deftest test-parse-return
-  (let [q '(-> (from :foo a)
+  (let [q '(-> (from :foo {:bind [a]})
                (return :a {:a b}))]
     (t/is (= q
              (roundtrip-q q)))))
 
 (t/deftest test-parse-aggregate
-  (let [q '(-> (from :foo a)
+  (let [q '(-> (from :foo {:bind [a]})
                (return {:b (sum a)}))]
     (t/is (= q
              (roundtrip-q q)))))
 
 (t/deftest test-parse-join
-  (let [q '(join (from :foo a) {:a b})]
-    (t/is (= q (roundtrip-unify-clause q)))))
+  (t/is (= '(join (from :foo {:bind [a]})
+                  {:bind [{:a b}]})
+           (roundtrip-unify-clause '(join (from :foo {:bind [a]})
+                                          {:bind {:a b}})))))
 
 (t/deftest test-parse-order-by
   (t/is (= '(order-by (+ a b) [b {:dir :desc}])
            (roundtrip-q-tail '(order-by (+ a b) [b {:dir :desc}])))))
 
 (t/deftest test-parse-union-all
-  (let [q '(union-all (from :foo {:baz b})
-                      (from :bar {:baz b}))]
-    (t/is (= q
-             (roundtrip-q q)))))
+  (t/is (= '(union-all (from :foo {:bind [{:baz b}]})
+                       (from :bar {:bind [{:baz b}]}))
+           (roundtrip-q '(union-all (from :foo {:bind {:baz b}})
+                                    (from :bar {:bind {:baz b}}))))))
 
 (t/deftest test-parse-limit-test
   (t/is (= '(limit 10)

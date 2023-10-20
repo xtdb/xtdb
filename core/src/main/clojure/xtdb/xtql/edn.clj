@@ -52,16 +52,6 @@
 
 (declare parse-arg-specs)
 
-(defn- parse-subquery-args [args expr]
-  (cond
-    (list? args) [(parse-query args) nil]
-
-    (and (vector? args) (not (empty? args)))
-    (let [[query & arg-specs] args]
-      [(parse-query query) (not-empty (parse-arg-specs arg-specs expr))])
-
-    :else (throw (err/illegal-arg :xtql/malformed-subquery {:expr expr}))))
-
 (defn parse-expr [expr]
   (cond
     (true? expr) Expr/TRUE
@@ -84,14 +74,18 @@
                      (case f
                        (exists? not-exists? q)
                        (do
-                         (when (not= 1 (count args))
+                         (when-not (and (<= 1 (count args) 2)
+                                        (or (nil? (second args))
+                                            (map? (second args))))
                            (throw (err/illegal-arg :xtql/malformed-subquery {:expr expr})))
 
-                         (let [[query args] (parse-subquery-args (first args) expr)]
+                         (let [[query {:keys [args]}] args
+                               parsed-query (parse-query query)
+                               parsed-args (some-> args (parse-arg-specs expr))]
                            (case f
-                             exists? (Expr/exists query args)
-                             not-exists? (Expr/notExists query args)
-                             q (Expr/q query args))))
+                             exists? (Expr/exists parsed-query parsed-args)
+                             not-exists? (Expr/notExists parsed-query parsed-args)
+                             q (Expr/q parsed-query parsed-args))))
 
                        (Expr/call (str f) (mapv parse-expr args)))))
 
@@ -117,27 +111,21 @@
 
   Expr$Exists
   (unparse [e]
-    (let [q (unparse (.query e))]
-      (list 'exists?
-            (if-let [args (.args e)]
-              (into [q] (mapv unparse args))
-              q))))
+    (list* 'exists? (unparse (.query e))
+           (when-let [args (.args e)]
+             [{:args (mapv unparse args)}])))
 
   Expr$NotExists
   (unparse [e]
-    (let [q (unparse (.query e))]
-      (list 'not-exists?
-            (if-let [args (.args e)]
-              (into [q] (mapv unparse args))
-              q))))
+    (list* 'not-exists? (unparse (.query e))
+           (when-let [args (.args e)]
+             [{:args (mapv unparse args)}])))
 
   Expr$Subquery
   (unparse [e]
-    (let [q (unparse (.query e))]
-      (list 'q
-            (if-let [args (.args e)]
-              (into [q] (mapv unparse args))
-              q)))))
+    (list* 'q (unparse (.query e))
+           (when-let [args (.args e)]
+             [{:args (mapv unparse args)}]))))
 
 (defn- parse-temporal-filter [v k query]
   (let [ctx {:v v, :filter k, :query query}]
@@ -145,11 +133,11 @@
       TemporalFilter/ALL_TIME
 
       (do
-        (when-not (and (vector? v) (not-empty v))
+        (when-not (and (list? v) (not-empty v))
           (throw (err/illegal-arg :xtql/malformed-temporal-filter ctx)))
 
         (let [[tag & args] v]
-          (when-not (keyword? tag)
+          (when-not (symbol? tag)
             (throw (err/illegal-arg :xtql/malformed-temporal-filter ctx)))
 
           (letfn [(assert-arg-count [expected args]
@@ -158,43 +146,24 @@
 
                     args)]
             (case tag
-              :at (let [[at] (assert-arg-count 1 args)]
-                    (TemporalFilter/at (parse-expr at)))
+              at (let [[at] (assert-arg-count 1 args)]
+                   (TemporalFilter/at (parse-expr at)))
 
-              :in (let [[from to] (assert-arg-count 2 args)]
-                    (TemporalFilter/in (parse-expr from) (parse-expr to)))
+              in (let [[from to] (assert-arg-count 2 args)]
+                   (TemporalFilter/in (parse-expr from) (parse-expr to)))
 
-              :from (let [[from] (assert-arg-count 1 args)]
-                      (TemporalFilter/from (parse-expr from)))
+              from (let [[from] (assert-arg-count 1 args)]
+                     (TemporalFilter/from (parse-expr from)))
 
-              :to (let [[to] (assert-arg-count 1 args)]
-                    (TemporalFilter/to (parse-expr to)))
+              to (let [[to] (assert-arg-count 1 args)]
+                   (TemporalFilter/to (parse-expr to)))
 
               (throw (err/illegal-arg :xtql/malformed-temporal-filter (into ctx {:tag tag}))))))))))
 
 (extend-protocol Unparse
   TemporalFilter$AllTime (unparse [_] :all-time)
-  TemporalFilter$At (unparse [at] [:at (unparse (.at at))])
-  TemporalFilter$In (unparse [in] [:in (some-> (.from in) unparse) (some-> (.to in) unparse)]))
-
-(defn- parse-table+opts [table+opts from]
-  (cond
-    (keyword? table+opts) {:table (str (symbol table+opts))}
-
-    (and (vector? table+opts) (= 2 (count table+opts)))
-    (let [[table opts] table+opts]
-      (when-not (keyword? table)
-        (throw (err/illegal-arg :xtql/malformed-table {:table table, :from from})))
-
-      (when-not (map? opts)
-        (throw (err/illegal-arg :xtql/malformed-table-opts {:opts opts, :from from})))
-
-      (let [{:keys [for-valid-time for-system-time]} opts]
-        {:table (str (symbol table))
-         :for-valid-time (some-> for-valid-time (parse-temporal-filter :for-valid-time from))
-         :for-system-time (some-> for-system-time (parse-temporal-filter :for-system-time from))}))
-
-    :else (throw (err/illegal-arg :xtql/malformed-from {:from from}))))
+  TemporalFilter$At (unparse [at] (list 'at (unparse (.at at))))
+  TemporalFilter$In (unparse [in] (list 'in (some-> (.from in) unparse) (some-> (.to in) unparse))))
 
 ;;NOTE out-specs and arg-specs are currently indentical structurally, but one is an input binding,
 ;;the other an output binding.
@@ -205,17 +174,24 @@
 (defn- parse-out-specs
   "[{:from to-var} from-col-to-var {:col (pred)}]"
   [specs _query]
-  (->> specs
-       (into [] (mapcat (fn [spec]
-                          (cond
-                            (symbol? spec) (let [attr (str spec)]
-                                             [(OutSpec/of attr (Expr/lVar attr))])
-                            (map? spec) (for [[attr expr] spec]
-                                          (do
-                                            (when-not (keyword? attr)
-                                              ;; TODO error
-                                              )
-                                            (OutSpec/of (str (symbol attr)) (parse-expr expr))))))))))
+  (letfn [(parse-out-spec [[attr expr]]
+            (when-not (keyword? attr)
+              ;; TODO error
+              )
+
+            (OutSpec/of (str (symbol attr)) (parse-expr expr)))]
+
+    (cond
+      (map? specs) (mapv parse-out-spec specs)
+      (vector? specs) (->> specs
+                           (into [] (mapcat (fn [spec]
+                                              (cond
+                                                (symbol? spec) (let [attr (str spec)]
+                                                                 [(OutSpec/of attr (Expr/lVar attr))])
+                                                (map? spec) (map parse-out-spec spec))))))
+      ;; TODO error
+      :else (throw (UnsupportedOperationException.)))))
+
 (defn- parse-arg-specs
   "[{:to-var (from-expr)} to-var-from-var]"
   [specs _query]
@@ -258,26 +234,38 @@
                                               )
                                             (ColSpec/of (str (symbol attr)) (parse-expr expr))))))))))
 
-(defn parse-from [[_ table+opts & out-bindings :as this]]
-  (let [{:keys [table for-valid-time for-system-time]} (parse-table+opts table+opts this)]
-    (-> (Query/from table)
-        (cond-> for-valid-time (.forValidTime for-valid-time)
-                for-system-time (.forSystemTime for-system-time))
-        (.binding (parse-out-specs out-bindings this)))))
+(defn parse-from [[_ table opts :as this]]
+  (cond
+    (not (keyword? table))
+    (throw (err/illegal-arg :xtql/malformed-table {:table table, :from this}))
+
+    (and opts (not (map? opts)))
+    (throw (err/illegal-arg :xtql/malformed-table-opts {:opts opts, :from this}))
+
+    :else (let [{:keys [for-valid-time for-system-time bind]} opts]
+            (cond-> (Query/from (str (symbol table)))
+              for-valid-time (.forValidTime (parse-temporal-filter for-valid-time :for-valid-time this))
+              for-system-time (.forSystemTime (parse-temporal-filter for-system-time :for-system-time this))
+              bind (.binding (parse-out-specs bind this))))))
 
 (defmethod parse-query 'from [this] (parse-from this))
 (defmethod parse-unify-clause 'from [this] (parse-from this))
 
-(defn- parse-join-query [query join]
-  (if (vector? query)
-    (let [[query & args] query]
-      [(parse-query query) (parse-arg-specs args join)])
-    [(parse-query query)]))
+(defmethod parse-unify-clause 'join [[_ query opts :as join]]
+  (when-not (or (nil? opts) (map? opts))
+    (throw (err/illegal-arg :malformed-join-opts {:opts opts, :join join})))
 
-(defmethod parse-unify-clause 'join [[_ query & out-bindings :as join]]
-  (let [[parsed-query args] (parse-join-query query join)]
-    (-> (Query/join parsed-query args)
-        (.binding (parse-out-specs out-bindings join)))))
+  (let [{:keys [args bind]} opts]
+    (-> (Query/join (parse-query query) args)
+        (.binding (some-> bind (parse-out-specs join))))))
+
+(defmethod parse-unify-clause 'left-join [[_ query opts :as left-join]]
+  (when-not (or (nil? opts) (map? opts))
+    (throw (err/illegal-arg :malformed-join-opts {:opts opts, :left-join left-join})))
+
+  (let [{:keys [args bind]} opts]
+    (-> (Query/leftJoin (parse-query query) args)
+        (.binding (some-> bind (parse-out-specs left-join))))))
 
 (defn- unparse-binding-spec [attr expr base-type nested-type]
   (if base-type
@@ -295,37 +283,35 @@
 
   Query$From
   (unparse [from]
-    (let [table (keyword (.table from))
-          for-valid-time (.forValidTime from)
-          for-sys-time (.forSystemTime from)]
-      (list* 'from (if (or for-valid-time for-sys-time)
-                     [table (cond-> {}
-                              for-valid-time (assoc :for-valid-time (unparse for-valid-time))
-                              for-sys-time (assoc :for-system-time (unparse for-sys-time)))]
-                     table)
-             (map unparse (.bindings from)))))
+    (let [for-valid-time (.forValidTime from)
+          for-sys-time (.forSystemTime from)
+          bind (.bindings from)]
+      (list* 'from (keyword (.table from))
+             (when (or for-valid-time for-sys-time bind)
+               [(cond-> {}
+                  for-valid-time (assoc :for-valid-time (unparse for-valid-time))
+                  for-sys-time (assoc :for-system-time (unparse for-sys-time))
+                  bind (assoc :bind (mapv unparse bind)))]))))
 
   Query$Join
   (unparse [join]
-    (let [query (unparse (.query join))
-          args (.args join)]
-      (list* 'join
-             (if args
-               (into [query] (map unparse) args)
-               query)
-
-             (map unparse (.bindings join)))))
+    (let [args (.args join)
+          bind (.bindings join)]
+      (list* 'join (unparse (.query join))
+             (when (or args bind)
+               [(cond-> {}
+                  args (assoc :args (mapv unparse args))
+                  bind (assoc :bind (mapv unparse bind)))]))))
 
   Query$LeftJoin
-  (unparse [join]
-    (let [query (unparse (.query join))
-          args (.args join)]
-      (list* 'left-join
-             (if args
-               (into [query] (map unparse) args)
-               query)
-
-             (map unparse (.bindings join))))))
+  (unparse [left-join]
+    (let [args (.args left-join)
+          bind (.bindings left-join)]
+      (list* 'left-join (unparse (.query left-join))
+             (when (or args bind)
+               [(cond-> {}
+                  args (assoc :args (mapv unparse args))
+                  bind (assoc :bind (mapv unparse bind)))])))))
 
 (extend-protocol Unparse
   Query$Pipeline (unparse [query] (list* '-> (unparse (.query query)) (mapv unparse (.tails query))))

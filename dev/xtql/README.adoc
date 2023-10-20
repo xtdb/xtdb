@@ -9,11 +9,11 @@ We'll save the in-depth XTQL specification for another article - for now, let's 
 
 == Basic operations
 
-* To read a table, we use `from`:
+* To read a table, we use `from`.
 +
 [source,clojure]
 ----
-(from :users {:xt/id user-id} first-name last-name)
+(from :users {:bind [{:xt/id user-id} first-name last-name]})
 ----
 +
 [source,json]
@@ -33,7 +33,7 @@ SELECT xt$id AS user_id, first_name, last_name FROM users
 +
 [source,clojure]
 ----
-(from :users {:xt/id "james"} first-name last-name)
+(from :users {:bind [{:xt/id "james"} first-name last-name]})
 ----
 +
 [source,json]
@@ -53,7 +53,7 @@ SELECT first_name, last_name FROM users WHERE xt$id = 'james'
 +
 [source,clojure]
 ----
-(-> (from :users {:xt/id user-id} first-name last-name)
+(-> (from :users {:bind [{:xt/id user-id} first-name last-name]})
     (order-by last-name first-name)
     (limit 10))
 ----
@@ -92,8 +92,8 @@ In this case, we re-use the `user-id` logic variable to indicate that the `:xt/i
 +
 [source,clojure]
 ----
-(unify (from :users {:xt/id user-id} first-name last-name)
-       (from :articles {:author-id user-id} title content))
+(unify (from :users {:bind [{:xt/id user-id} first-name last-name]})
+       (from :articles {:bind [{:author-id user-id} title content]}))
 ----
 +
 [source,json]
@@ -124,8 +124,8 @@ FROM users u JOIN articles a ON u.xt$id = a.author_id
 [source,clojure]
 ----
 ;; 'find me all the users who are the same age'
-(unify (from :users {:xt/id uid1} age)
-       (from :users {:xt/id uid2} age)
+(unify (from :users {:bind [{:xt/id uid1} age]})
+       (from :users {:bind [{:xt/id uid2} age]})
        (where (<> uid1 uid2)))
 ----
 +
@@ -160,9 +160,9 @@ WHERE u1.xt$id <> u2.xt$id
 +
 [source,clojure]
 ----
-(-> (unify (from :customers {:xt/id cid})
-           (left-join (from :orders {:xt/id oid, :customer-id cid} currency order-value)
-                      cid currency order-value))
+(-> (unify (from :customers {:bind [{:xt/id cid}]})
+           (left-join (from :orders {:bind [{:xt/id oid, :customer-id cid} currency order-value]})
+                      {:bind [cid currency order-value]}))
     (limit 100))
 ----
 +
@@ -203,8 +203,9 @@ Here, we're asking to additionally return customers who haven't yet any orders (
 +
 [source,clojure]
 ----
-(-> (unify (from :customers {:xt/id cid})
-           (where (not-exists? [(from :orders {:customer-id cid}) cid])))
+(-> (unify (from :customers {:bind {:xt/id cid}})
+           (where (not-exists? (from :orders {:bind {:customer-id cid}})
+                               {:args [cid]})))
     (limit 100))
 ----
 +
@@ -216,7 +217,7 @@ Here, we're asking to additionally return customers who haven't yet any orders (
       "unify": [
         {
           "from": "customers",
-          "bind": [ { "xt/id": "cid" } ]
+          "bind": { "xt/id": "cid" }
         },
         {
           "where": [
@@ -252,8 +253,8 @@ LIMIT 100
 +
 [source,clojure]
 ----
-(-> (from :users first-name last-name)
-    (with {full-name (str first-name " " last-name)}))
+(-> (from :users {:bind [first-name last-name]})
+    (with {:full-name (str first-name " " last-name)}))
 ----
 +
 [source,json]
@@ -290,9 +291,9 @@ We can also use `with` within `unify` - this creates new logic variables which w
 +
 [source,clojure]
 ----
-(-> (unify (from :users {:xt/id user-id} first-name last-name)
-           (from :articles {:author-id user-id} title content))
-    (return {full-name (str first-name " " last-name)} title content))
+(-> (unify (from :users {:bind [{:xt/id user-id} first-name last-name]})
+           (from :articles {:bind [{:author-id user-id} title content]}))
+    (return {:full-name (str first-name " " last-name)} title content))
 ----
 +
 [source,json]
@@ -333,8 +334,8 @@ FROM users u JOIN articles a ON u.xt$id = a.author_id
 +
 [source,clojure]
 ----
-(-> (unify (from :users {:xt/id user-id} first-name last-name)
-           (from :articles {:author-id user-id} title content))
+(-> (unify (from :users {:bind [{:xt/id user-id} first-name last-name]})
+           (from :articles {:bind [{:author-id user-id} title content]}))
     (without :user-id))
 ----
 +
@@ -372,12 +373,12 @@ To count/sum/average values, we use `aggregate`:
 
 [source,clojure]
 ----
-(-> (unify (from :customers {:xt/id cid})
-           (left-join (from :orders {:customer-id cid} currency order-value)
-                      cid currency order-value))
+(-> (unify (from :customers {:bind {:xt/id cid}})
+           (left-join (from :orders {:bind [{:customer-id cid} currency order-value]})
+                      {:bind [cid currency order-value]}))
     (aggregate cid currency
-               {order-count (count*)
-                total-value (sum order-value)})
+               {:order-count (count*)
+                :total-value (sum order-value)})
     (order-by [order-value {:dir :desc}])
     (limit 100))
 ----
@@ -432,18 +433,18 @@ For example, if a user is reading an article, we might also want to show them de
 
 [source,clojure]
 ----
-(-> (from :articles {:xt/id article-id} title content)
+(-> (from :articles {:bind [{:xt/id article-id} title content]})
 
-    (with {author (pull [(-> (from :authors {:xt/id author-id} first-name last-name)
-                             (without author-id))
-                         author-id])
+    (with {author (pull (-> (from :authors {:bind [{:xt/id author-id} first-name last-name]})
+                            (without :author-id))
+                        {:args [author-id]})
 
-           comments (pull* [(-> (from :comments {:article-id article-id} created-at comment)
-                                (without article-id)
-                                (order-by [created-at :desc])
-                                (limit 10))
+           comments (pull* (-> (from :comments {:bind [{:article-id article-id} created-at comment]})
+                               (without :article-id)
+                               (order-by [created-at {:dir :desc}])
+                               (limit 10))
 
-                            article-id])}))
+                           {:args [article-id]})}))
 
 ;; => [{:title "...", :content "...",
 ;;      :author {:first-name "...", :last-name "..."}
@@ -517,11 +518,11 @@ In XTQL, while there are sensible defaults set for the whole query, you can over
 +
 [source,clojure]
 ----
-(from [:users {:for-valid-time [:at #inst "2020-01-01"]}]
-      first-name last-name)
+(from :users {:for-valid-time (at #inst "2020-01-01")
+              :bind [first-name last-name]})
 
-(from [:users {:for-valid-time :all-time}]
-      first-name last-name)
+(from :users {:for-valid-time :all-time
+              :bind [first-name last-name]})
 ----
 +
 [source,json]
@@ -529,7 +530,7 @@ In XTQL, while there are sensible defaults set for the whole query, you can over
 {
   "from": "users",
   "forValidTime": { "at": { "@value": "2020-01-01", "@type": "xt:date" } },
-  "bind": [ "first-name", "last-name" ]
+  "bind": "first-name", "last-name"
 }
 
 {
@@ -551,11 +552,11 @@ SELECT first_name, last_name FROM users FOR ALL VALID_TIME;
 +
 [source,clojure]
 ----
-(unify (from [:users {:for-valid-time [:at #inst "2018"]}]
-             {:xt/id user-id})
+(unify (from :users {:for-valid-time [:at #inst "2018"]
+                     :bind {:xt/id user-id}})
 
-       (from [:users {:for-valid-time [:at #inst "2023"]}]
-             {:xt/id user-id}))
+       (from :users {:for-valid-time [:at #inst "2023"]
+                     :bind {:xt/id user-id}}))
 ----
 +
 [source,json]
