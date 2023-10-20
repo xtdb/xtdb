@@ -18,7 +18,10 @@ We'll save the in-depth XTQL specification for another article - for now, let's 
 +
 [source,json]
 ----
-{"from" : [ "users", {"xt/id" : "user-id"}, "first-name", "last-name" ]}
+{
+  "from": "users",
+  "bind": [ { "xt/id": "user-id" }, "first-name", "last-name" ]
+}
 ----
 +
 [source,sql]
@@ -36,7 +39,8 @@ SELECT xt$id AS user_id, first_name, last_name FROM users
 [source,json]
 ----
 {
-  "from" : [ "users", { "xt/id" : { "@value" : "james" } }, "first-name", "last-name" ]
+  "from": "users",
+  "bind": [ { "xt/id": { "@value": "james" } }, "first-name", "last-name" ]
 }
 ----
 +
@@ -57,14 +61,13 @@ SELECT first_name, last_name FROM users WHERE xt$id = 'james'
 [source,json]
 ----
 {
-  "->" : [
+  "->": [
     {
-      "from" : [ "users", { "xt/id" : "user-id" }, "first-name", "last-name"]
-    }, {
-      "orderBy" : [ "last-name", "first-name" ]
-    }, {
-      "limit" : 10
+      "from": "users",
+      "bind": [ { "xt/id": "user-id" }, "first-name", "last-name" ]
     },
+    { "orderBy": [ "last-name", "first-name" ] },
+    { "limit": 10 }
   ]
 }
 ----
@@ -96,11 +99,14 @@ In this case, we re-use the `user-id` logic variable to indicate that the `:xt/i
 [source,json]
 ----
 {
-  "unify" : [
+  "unify": [
     {
-      "from" : [ "users", { "xt/id" : "user-id"}, "first-name", "last-name" ]
-    }, {
-      "from" : [ "articles", { "author-id" : "user-id" }, "title", "content" ]
+      "from": "users",
+      "bind": [ { "xt/id": "user-id" }, "first-name", "last-name" ]
+    },
+    {
+      "from": "articles",
+      "bind": [ { "author-id": "user-id" }, "title", "content" ]
     }
   ]
 }
@@ -126,13 +132,17 @@ FROM users u JOIN articles a ON u.xt$id = a.author_id
 [source,json]
 ----
 {
-  "unify" : [
+  "unify": [
     {
-      "from" : [ "users", { "xt/id" : "uid1" }, "age" ]
-    }, {
-      "from" : [ "users", { "xt/id" : "uid2" }, "age" ]
-    }, {
-      "where" : [ { "<>" : [ "uid1", "uid2" ] } ]
+      "from": "users",
+      "bind": [ { "xt/id": "uid1" }, "age" ]
+    },
+    {
+      "from": "users",
+      "bind": [ { "xt/id": "uid2" }, "age" ]
+    },
+    {
+      "where": [ { "<>": [ "uid1", "uid2" ] } ]
     }
   ]
 }
@@ -159,22 +169,23 @@ WHERE u1.xt$id <> u2.xt$id
 [source,json]
 ----
 {
-  "->" : [
+  "->": [
     {
-      "unify" : [
+      "unify": [
         {
-          "from" : [ "customers", { "xt/id" : "cid"} ]
-        }, {
-          "left-join" : [
-            {
-              "from" : [ "orders", { "xt/id" : "oid" }, { "customer-id" : "cid"}, "currency", "order-value" ]
-            },
-            "cid", "currency", "order-value"]
+          "from": "customers",
+          "bind": [ { "xt/id": "cid" } ]
+        },
+        {
+          "leftJoin": {
+            "from": "orders",
+            "bind": [ { "xt/id": "oid", "customer-id": "cid" }, "currency", "order-value" ]
+          },
+          "bind": [ "cid", "currency", "order-value" ]
         }
       ]
-    }, {
-      "limit" : 100
-    }
+    },
+    { "limit": 100 }
   ]
 }
 ----
@@ -200,19 +211,27 @@ Here, we're asking to additionally return customers who haven't yet any orders (
 [source,json]
 ----
 {
-  "->" : [
+  "->": [
     {
-      "unify" : [
-        { "from" : [ "customers", { "xt/id" : "cid" } ] },
+      "unify": [
         {
-          "where" : [
-            { "notExists" : [ { "from" : [ "orders", { "customer-id" : "cid"} ]}, "cid" ] }
+          "from": "customers",
+          "bind": [ { "xt/id": "cid" } ]
+        },
+        {
+          "where": [
+            {
+              "notExists": {
+                "from": "orders",
+                "bind": [ { "customer-id": "cid" } ]
+              },
+              "args": [ "cid" ]
+            }
           ]
         }
       ]
-    }, {
-      "limit" : 100
-    }
+    },
+    { "limit": 100 }
   ]
 }
 ----
@@ -240,11 +259,18 @@ LIMIT 100
 [source,json]
 ----
 {
-  "->" : [
-    { "from" : [ "users", "first-name", "last-name" ]},
+  "->": [
     {
-      "with" : [
-        { "full-name" : { "str" : [ "first-name", { "@value" : " " }, "last-name" ] } }
+      "from": "users",
+      "bind": [ "first-name", "last-name" ]
+    },
+    {
+      "with": [
+        {
+          "full-name": {
+            "str": [ "first-name", { "@value": " " }, "last-name" ]
+          }
+        }
       ]
     }
   ]
@@ -272,16 +298,27 @@ We can also use `with` within `unify` - this creates new logic variables which w
 [source,json]
 ----
 {
-  "->" : [
+  "->": [
     {
-      "unify" : [
-        { "from" : [ "users", { "xt/id" : "user-id" }, "first-name", "last-name" ]},
-        { "from" : [ "articles", { "author-id" : "user-id" }, "title", "content" ]}
+      "unify": [
+        {
+          "from": "users",
+          "bind": [ { "xt/id": "user-id" }, "first-name", "last-name" ]
+        },
+        {
+          "from": "articles",
+          "bind": [ { "author-id": "user-id" }, "title", "content" ]
+        }
       ]
-    }, {
-      "return" : [
-        { "full-name" : { "str" : [ "first-name", { "@value" : " " }, "last-name" ] }},
-        "title", "content" ]
+    },
+    {
+      "return": [
+        {
+          "full-name": {
+            "str": [ "first-name", { "@value": " " }, "last-name" ]
+          }
+        }
+      ]
     }
   ]
 }
@@ -298,21 +335,26 @@ FROM users u JOIN articles a ON u.xt$id = a.author_id
 ----
 (-> (unify (from :users {:xt/id user-id} first-name last-name)
            (from :articles {:author-id user-id} title content))
-    (without user-id))
+    (without :user-id))
 ----
 +
 [source,json]
 ----
 {
-  "->" : [
+  "->": [
     {
-      "unify" : [
-        { "from" : [ "users", { "xt/id" : "user-id" }, "first-name", "last-name" ] },
-        { "from" : [ "articles", { "author-id" : "user-id" }, "title", "content" ] }
+      "unify": [
+        {
+          "from": "users",
+          "bind": [ { "xt/id": "user-id" }, "first-name", "last-name" ]
+        },
+        {
+          "from": "articles",
+          "bind": [ { "author-id": "user-id" }, "title", "content" ]
+        }
       ]
-    }, {
-      "without" : [ "user-id" ]
-    }
+    },
+    { "without": [ "user-id" ] }
   ]
 }
 ----
@@ -343,30 +385,30 @@ To count/sum/average values, we use `aggregate`:
 [source,json]
 ----
 {
-  "->" : [
+  "->": [
     {
-      "unify" : [
+      "unify": [
         {
-          "from" : [ "customers", { "xt/id" : "cid" } ]
-        }, {
-          "left-join" : [
-            {
-              "from" : [ "orders", { "xt/id" : "oid" }, { "customer-id" : "cid"}, "currency", "order-value" ]
-            },
-            "cid", "currency", "order-value"]
-        }]
-    }, {
-      "aggregate" : [ "cid", "currency",
+          "from": "customers",
+          "bind": [ { "xt/id": "cid" } ]
+        },
         {
-          "order-count" : { "count*" : [ ] },
-          "total-value" : { "sum" : [ "order-value" ] }
+          "leftJoin": {
+            "from": "orders",
+            "bind": [ { "customer-id": "cid" }, "currency", "order-value" ]
+          },
+          "bind": [ "cid", "currency", "order-value" ]
         }
       ]
-    }, {
-      "orderBy" : [ [ "order-value", { "dir" : "desc" } ] ]
-    }, {
-      "limit" : 100
-    }
+    },
+    {
+      "aggregate": [
+        { "order-count": { "count*": [] } },
+        { "total-value": { "sum": [ "order-value" ] } }
+      ]
+    },
+    { "orderBy": [ [ "order-value", { "dir": "desc" } ] ] },
+    { "limit": 100 }
   ]
 }
 ----
@@ -414,7 +456,47 @@ For example, if a user is reading an article, we might also want to show them de
 
 [source,json]
 ----
-TODO json
+{
+  "->": [
+    {
+      "from": "articles",
+      "bind": [ { "xt/id": "article-id" }, "title", "content" ]
+    },
+    {
+      "with": [
+        {
+          "author": {
+            "pull": {
+              "->": [
+                {
+                  "from": "authors",
+                  "bind": [ { "xt/id": "author-id" }, "first-name", "last-name" ]
+                },
+                { "without": [ "author-id" ] }
+              ]
+            },
+            "args": [ "author-id" ]
+          },
+
+          "comments": {
+            "pullMany": {
+              "->": [
+                {
+                  "from": "comments",
+                  "bind": [ "article-id", "created-at", "comment" ]
+                },
+                { "without": [ "article-id" ] },
+                { "orderBy": [ [ "created-at", { "dir": "desc" } ] ] },
+                { "limit": 10 }
+              ]
+            },
+            "args": [ "article-id" ]
+          }
+        }
+      ]
+    }
+  ]
+}
 ----
 
 In this example, we use `pull` to pull back a single map - we know that there's only one author per article (in our system).
@@ -445,19 +527,15 @@ In XTQL, while there are sensible defaults set for the whole query, you can over
 [source,json]
 ----
 {
-  "from" : [
-    {
-      "users" : {
-        "forValidTime" : { "at" : { "@value" : "2020-01-01", "@type" : "xt:date" } }
-      }
-    },
-    "first-name", "last-name" ]
+  "from": "users",
+  "forValidTime": { "at": { "@value": "2020-01-01", "@type": "xt:date" } },
+  "bind": [ "first-name", "last-name" ]
 }
 
 {
-  "from" : [
-    { "users" : { "forValidTime" : "allTime" } },
-    "first-name", "last-name" ]
+  "from": "users",
+  "forValidTime": "allTime",
+  "bind": [ "first-name", "last-name" ]
 }
 ----
 +
@@ -483,24 +561,16 @@ SELECT first_name, last_name FROM users FOR ALL VALID_TIME;
 [source,json]
 ----
 {
-  "unify" : [
+  "unify": [
     {
-      "from" : [
-        {
-          "users" : {
-            "forValidTime" : { "at" : { "@value" : "2018-01-01", "@type" : "xt:date" } }
-          }
-        },
-        { "xt/id" : "user-id" } ]
-    }, {
-      "from" : [
-        {
-          "users" : {
-            "forValidTime" : { "at" : { "@value" : "2023-01-01", "@type" : "xt:date" } }
-          }
-        },
-        { "xt/id" : "user-id" }
-      ]
+      "from": "users",
+      "forValidTime": { "at": { "@value": "2018-01-01", "@type": "xt:date" } },
+      "bind": [ { "xt/id": "user-id"} ]
+    },
+    {
+      "from": "users",
+      "forValidTime": { "at": { "@value": "2023-01-01", "@type": "xt:date" } },
+      "bind": [ { "xt/id": "user-id" } ]
     }
   ]
 }

@@ -59,17 +59,18 @@
   )
 
 (t/deftest test-expr-subquery
-  (t/is (= ['(exists? (from :foo)) {"exists" {"from" ["foo"]}}]
-           (roundtrip-expr {"exists" {"from" ["foo"]}})))
+  (t/is (= ['(exists? (from :foo)) {"exists" {"from" "foo"}}]
+           (roundtrip-expr {"exists" {"from" "foo"}})))
 
-  (t/is (= ['(exists? [(from :foo) a {:b outer-b}]) {"exists" [{"from" ["foo"]} "a" {"b" "outer-b"}]}]
-           (roundtrip-expr {"exists" [{"from" ["foo"]} "a" {"b" "outer-b"}]})))
+  (t/is (= ['(exists? [(from :foo) a {:b outer-b}])
+            {"exists" {"from" "foo"}, "args" ["a" {"b" "outer-b"}]}]
+           (roundtrip-expr {"exists" {"from" "foo"}, "args" ["a" {"b" "outer-b"}]})))
 
-  (t/is (= ['(not-exists? (from :foo)) {"notExists" {"from" ["foo"]}}]
-           (roundtrip-expr {"notExists" {"from" ["foo"]}})))
+  (t/is (= ['(not-exists? (from :foo)) {"notExists" {"from" "foo", "bind" []}}]
+           (roundtrip-expr {"notExists" {"from" "foo", "bind" []}})))
 
-  (t/is (= ['(q (from :foo)) {"q" {"from" ["foo"]}}]
-           (roundtrip-expr {"q" {"from" ["foo"]}}))))
+  (t/is (= ['(q (from :foo)) {"q" {"from" "foo", "bind" []}}]
+           (roundtrip-expr {"q" {"from" "foo", "bind" []}}))))
 
 (defn- roundtrip-q [query]
   (let [parsed (json/parse-query query)]
@@ -80,23 +81,24 @@
     [(edn/unparse parsed) (json/unparse parsed)]))
 
 (t/deftest test-parse-from
-  (t/is (= ['(from :foo) {"from" ["foo"]}]
-           (roundtrip-q {"from" ["foo"]})))
+  (t/is (= ['(from :foo) {"from" "foo"}]
+           (roundtrip-q {"from" "foo"})))
 
-  (let [json-q {"from" [{"foo" {"forValidTime" {"at" {"@value" "2020-01-01", "@type" "xt:date"}}}}]}]
+  (let [json-q {"from" "foo", "forValidTime" {"at" {"@value" "2020-01-01", "@type" "xt:date"}}}]
     (t/is (= ['(from [:foo {:for-valid-time [:at #time/date "2020-01-01"]}])
               json-q]
              (roundtrip-q json-q))))
 
-  (let [json-q {"from" [{"foo" {"forValidTime" "allTime"
-                                "forSystemTime" {"in" [{"@value" "2020-01-01", "@type" "xt:date"} nil]}}}]}]
+  (let [json-q {"from" "foo",
+                "forValidTime" "allTime"
+                "forSystemTime" {"in" [{"@value" "2020-01-01", "@type" "xt:date"} nil]}}]
     (t/is (= ['(from [:foo {:for-valid-time :all-time
                             :for-system-time [:in #time/date "2020-01-01" nil]}])
               json-q]
              (roundtrip-q json-q))))
 
-  (t/is (= ['(from :foo a {:xt/id b} c) {"from" ["foo" "a" {"xt/id" "b"} "c"]}]
-           (roundtrip-q {"from" ["foo" "a" {"xt/id" "b"} {"c" "c"}]})))
+  (t/is (= ['(from :foo a {:xt/id b} c) {"from" "foo", "bind" ["a" {"xt/id" "b"} "c"]}]
+           (roundtrip-q {"from" "foo", "bind" ["a" {"xt/id" "b"} {"c" "c"}]})))
 
   ;; TODO check errors
   )
@@ -104,21 +106,21 @@
 (t/deftest test-pipe
   (t/is (= ['(-> (from :foo a)
                  (where (> a 3)))
-            {"->" [{"from" ["foo" "a"]}
+            {"->" [{"from" "foo", "bind" ["a"]}
                    {"where" [{">" ["a" 3]}]}]}]
 
-           (roundtrip-q {"->" [{"from" ["foo" "a"]}
+           (roundtrip-q {"->" [{"from" "foo", "bind" ["a"]}
                                {"where" [{">" ["a" 3]}]}]}))))
 
 (t/deftest test-unify
   (t/is (= ['(unify (from :foo a) (from :bar b) (where (> a b)))
             {"unify"
-             [{"from" ["foo" "a"]}
-              {"from" ["bar" "b"]}
+             [{"from" "foo", "bind" ["a"]}
+              {"from" "bar", "bind" ["b"]}
               {"where" [{">" ["a" "b"]}]}]}]
 
-           (roundtrip-q {"unify" [{"from" ["foo" "a"]}
-                                  {"from" ["bar" "b"]}
+           (roundtrip-q {"unify" [{"from" "foo", "bind" ["a"]}
+                                  {"from" "bar", "bind" ["b"]}
                                   {"where" [{">" ["a" "b"]}]}]}))))
 
 (t/deftest test-where
@@ -156,37 +158,39 @@
 (t/deftest test-union-all
   (t/is (= ['(union-all (from :foo a)
                         (from :bar a))
-            {"unionAll" [{"from" ["foo" "a"]}
-                         {"from" ["bar" "a"]}]}]
+            {"unionAll" [{"from" "foo", "bind" ["a"]}
+                         {"from" "bar", "bind" ["a"]}]}]
 
-           (roundtrip-q {"unionAll" [{"from" ["foo" "a"]}
-                         {"from" ["bar" "a"]}]}))))
+           (roundtrip-q {"unionAll" [{"from" "foo", "bind" ["a"]}
+                                     {"from" "bar", "bind" ["a"]}]}))))
 
 (t/deftest test-joins
   (t/is (= ['(unify (from :foo a)
                     (join (from :bar a b) a b)
                     (left-join [(from :baz a c) a] c))
 
-            {"unify" [{"from" ["foo" "a"]}
-                      {"join" [{"from" ["bar" "a" "b"]}
-                               "a" "b"]}
-                      {"leftJoin" [[{"from" ["baz" "a" "c"]} "a"]
-                                   "c"]}]}]
+            {"unify" [{"from" "foo", "bind" ["a"]}
+                      {"join" {"from" "bar", "bind" ["a" "b"]}
+                       "bind" ["a" "b"]}
+                      {"leftJoin" {"from" "baz", "bind" ["a" "c"]}
+                       "args" ["a"]
+                       "bind" ["c"]}]}]
 
-           (roundtrip-q {"unify" [{"from" ["foo" "a"]}
-                                  {"join" [{"from" ["bar" "a" "b"]}
-                                           "a" "b"]}
-                                  {"leftJoin" [[{"from" ["baz" "a" "c"]} "a"]
-                                               "c"]}]}))))
+           (roundtrip-q {"unify" [{"from" "foo", "bind" ["a"]}
+                                  {"join" {"from" "bar", "bind" ["a" "b"]}
+                                   "bind" ["a" "b"]}
+                                  {"leftJoin" {"from" "baz", "bind" ["a" "c"]}
+                                   "args" ["a"]
+                                   "bind" ["c"]}]}))))
 
 (t/deftest test-order-by
   (t/is (= ['(-> (from :foo a b)
                  (order-by (+ a b) [b {:dir :desc}]))
 
-            {"->" [{"from" ["foo" "a" "b"]}
+            {"->" [{"from" "foo", "bind" ["a" "b"]}
                    {"orderBy" [{"+" ["a" "b"]}
                                ["b" {"dir" "desc"}]]}]}]
 
-           (roundtrip-q {"->" [{"from" ["foo" "a" "b"]}
+           (roundtrip-q {"->" [{"from" "foo", "bind" ["a" "b"]}
                                {"orderBy" [{"+" ["a" "b"]}
                                            ["b" {"dir" "desc"}]]}]}))))

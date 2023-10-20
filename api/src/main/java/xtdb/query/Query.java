@@ -332,9 +332,9 @@ public interface Query {
     }
 
     final class Limit implements QueryTail {
-        public final Long length;
+        public final long length;
 
-        private Limit(Long length) {
+        private Limit(long length) {
             this.length = length;
         }
 
@@ -344,14 +344,14 @@ public interface Query {
         }
     }
 
-    static Limit limit(Long length) {
+    static Limit limit(long length) {
         return new Limit(length);
     }
 
     final class Offset implements QueryTail {
-        public final Long length;
+        public final long length;
 
-        private Offset(Long length) {
+        private Offset(long length) {
             this.length = length;
         }
 
@@ -361,7 +361,7 @@ public interface Query {
         }
     }
 
-    static Offset offset(Long length) {
+    static Offset offset(long length) {
         return new Offset(length);
 
     }
