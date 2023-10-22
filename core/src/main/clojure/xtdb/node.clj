@@ -10,7 +10,8 @@
             [xtdb.tx-producer :as txp]
             [xtdb.util :as util]
             [xtdb.xtql :as xtql]
-            [xtdb.xtql.edn :as xtql.edn])
+            [xtdb.xtql.edn :as xtql.edn]
+            [xtdb.logical-plan :as lp])
   (:import (java.io Closeable Writer)
            (java.lang AutoCloseable)
            (java.time ZoneId)
@@ -68,8 +69,11 @@
                             (util/then-apply
                               (fn [_]
                                 (let [tables-with-cols (scan/tables-with-cols (:basis query-opts) wm-src scan-emitter)
-                                      pq (.prepareRaQuery ra-src (sql/compile-query query (assoc query-opts :table-info tables-with-cols)))]
-                                  (sql/open-sql-query allocator wm-src pq query-opts)))))
+                                      ra (sql/compile-query query (assoc query-opts :table-info tables-with-cols))]
+                                  (if (:explain? query-opts)
+                                    (lp/explain-result ra)
+                                    (let [pq (.prepareRaQuery ra-src ra)]
+                                      (sql/open-sql-query allocator wm-src pq query-opts)))))))
 
         (map? query) (-> !await-tx
                          (util/then-apply

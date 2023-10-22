@@ -373,16 +373,6 @@
     {:ra-plan [:top {:skip (.length this)} ra-plan]
      :provided-vars provided-vars}))
 
-(defn- explain [plan]
-  (let [col-types '{plan :clj-form}
-        ^Iterable res [{:plan plan}]
-        it (.iterator res)]
-    (reify IResultSet
-      (columnTypes [_] col-types)
-      (hasNext [_] (.hasNext it))
-      (next [_] (.next it))
-      (close [_]))))
-
 (defn open-xtql-query ^xtdb.IResultSet [^BufferAllocator allocator, ^IRaQuerySource ra-src, wm-src, ^IScanEmitter _scan-emitter
                                         query {:keys [args default-all-valid-time? basis default-tz explain?]}]
   (let [{:keys [ra-plan]} (binding [*gensym* (seeded-gensym "_" 0)]
@@ -396,7 +386,7 @@
                     (doto (lp/validate-plan)))]
 
     (if explain?
-      (explain ra-plan)
+      (lp/explain-result ra-plan)
 
       (let [^xtdb.operator.PreparedQuery pq (.prepareRaQuery ra-src ra-plan)]
         (util/with-close-on-catch [params (vw/open-params allocator {} #_(args->params args in-bindings))]

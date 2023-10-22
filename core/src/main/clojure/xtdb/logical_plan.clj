@@ -8,7 +8,8 @@
             [xtdb.util :as util])
   (:import (clojure.lang Var)
            java.time.temporal.Temporal
-           java.util.Date))
+           java.util.Date
+           xtdb.IResultSet))
 
 ;; See also:
 ;; https://dbis-uibk.github.io/relax/help#relalg-reference
@@ -1392,3 +1393,13 @@
                             {::err/message (s/explain-str ::logical-plan plan)
                              :plan plan
                              :explain-data (s/explain-data ::logical-plan plan)}))))
+
+(defn explain-result [plan]
+  (let [col-types '{plan :clj-form}
+        ^Iterable res [{:plan plan}]
+        it (.iterator res)]
+    (reify IResultSet
+      (columnTypes [_] col-types)
+      (hasNext [_] (.hasNext it))
+      (next [_] (.next it))
+      (close [_]))))

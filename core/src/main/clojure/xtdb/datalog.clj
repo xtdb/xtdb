@@ -1216,14 +1216,7 @@
                  (doto (lp/validate-plan)))]
 
     (if explain?
-      (let [col-types '{plan :clj-form}
-            ^Iterable res [{:plan plan}]
-            it (.iterator res)]
-        (reify IResultSet
-          (columnTypes [_] col-types)
-          (hasNext [_] (.hasNext it))
-          (next [_] (.next it))
-          (close [_])))
+      (lp/explain-result plan)
 
       (let [^xtdb.operator.PreparedQuery pq (.prepareRaQuery ra-src plan)]
         (when (not= (count in-bindings) (count args))

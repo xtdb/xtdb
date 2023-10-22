@@ -480,3 +480,14 @@ VALUES(1, OBJECT ('foo': OBJECT('bibble': true), 'bar': OBJECT('baz': 1001)))"]]
     (t/is (= [] (xt/q tu/*node* "SELECT * FROM foo FOR ALL VALID_TIME")))
     ;; TODO if it doesn't show up in valid-time it won't get deleted
     #_(t/is (= [] (xt/q tu/*node* "SELECT * FROM foo FOR ALL SYSTEM_TIME")))))
+
+(t/deftest test-explain-plan-sql
+  (t/is (= '[{:plan [:rename {x1 xt$id, x2 foo}
+                     [:project [x1 x2]
+                      [:rename {xt$id x1, foo x2, a x3, b x4}
+                       [:select (= (+ a b) 12)
+                        [:scan {:table users} [xt$id foo a b]]]]]]}]
+
+           (xt/q tu/*node*
+                 ["SELECT u.xt$id, u.foo FROM users u WHERE u.a + u.b = 12"]
+                 {:explain? true}))))
