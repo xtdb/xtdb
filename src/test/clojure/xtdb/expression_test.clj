@@ -1749,3 +1749,9 @@
   (t/is (= true
            (project1 '(= #uuid "00000000-0000-0000-0000-000000000000" a)
                      {:a #uuid "00000000-0000-0000-0000-000000000000"}))))
+
+(t/deftest test-truthy-if
+  (t/is (= :true (project1 '(if 42 :true :false) {})))
+  (t/is (= :true (project1 '(if true :true :false) {})))
+  (t/is (= :false (project1 '(if false :true :false) {})))
+  (t/is (= :false (project1 '(if nil :true :false) {}))))

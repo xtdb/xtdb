@@ -439,21 +439,15 @@
     (codegen-expr {:op :variable, :variable param, :rel params-sym, :idx 0}
                   {:var->col-type {param (get param-types param)}})))
 
-(defmethod codegen-expr :if [{:keys [pred then else] :as expr} opts]
-  (let [{p-ret :return-type, p-cont :continue, :as emitted-p} (codegen-expr pred opts)
+(defmethod codegen-expr :if [{:keys [pred then else]} opts]
+  (let [{p-cont :continue, :as emitted-p} (codegen-expr pred opts)
         {t-ret :return-type, t-cont :continue, :as emitted-t} (codegen-expr then opts)
         {e-ret :return-type, e-cont :continue, :as emitted-e} (codegen-expr else opts)
         return-type (types/merge-col-types t-ret e-ret)]
-    (when-not (= :bool p-ret)
-      (throw (err/illegal-arg :xtdb.expression/type-error
-                              {::err/message (str "pred expression doesn't return boolean "
-                                                   (pr-str p-ret))
-                               :expr expr, :return-type return-type})))
-
     (-> {:return-type return-type
          :children [emitted-p emitted-t emitted-e]
          :continue (fn [f]
-                     `(if ~(p-cont (fn [_ code] code))
+                     `(if ~(p-cont (fn [_ code] `(boolean ~code)))
                         ~(t-cont f)
                         ~(e-cont f)))}
         (wrap-boxed-poly-return opts))))
