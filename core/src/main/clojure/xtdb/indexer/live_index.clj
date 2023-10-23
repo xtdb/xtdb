@@ -1,8 +1,6 @@
 (ns xtdb.indexer.live-index
   (:require [clojure.tools.logging :as log]
             [juxt.clojars-mirrors.integrant.core :as ig]
-            [xtdb.buffer-pool]
-            [xtdb.object-store]
             [xtdb.trie :as trie]
             [xtdb.types :as types]
             [xtdb.util :as util]
@@ -15,8 +13,6 @@
            (java.util.concurrent CompletableFuture)
            (java.util.function Function)
            (org.apache.arrow.memory BufferAllocator)
-           xtdb.IBufferPool
-           (xtdb.object_store ObjectStore)
            (xtdb.trie LiveHashTrie)
            (xtdb.util RefCounter)
            (xtdb.vector IRelationWriter IVectorWriter)
@@ -83,7 +79,7 @@
         (when retain? (util/close out-cols))
         (throw t)))))
 
-(deftype LiveTable [^BufferAllocator allocator, ^IBufferPool buffer-pool, ^String table-name
+(deftype LiveTable [^BufferAllocator allocator, buffer-pool, ^String table-name
                     ^IRelationWriter live-rel, ^:unsynchronized-mutable ^LiveHashTrie live-trie
                     ^IVectorWriter iid-wtr, ^IVectorWriter system-from-wtr
                     ^IVectorWriter put-wtr, ^IVectorWriter put-valid-from-wtr, ^IVectorWriter put-valid-to-wtr, ^IVectorWriter put-doc-wtr
@@ -214,7 +210,7 @@
         (.setPageLimit page-limit))
       (.build)))
 
-(defrecord LiveIndex [^BufferAllocator allocator, ^IBufferPool buffer-pool,
+(defrecord LiveIndex [^BufferAllocator allocator, buffer-pool,
                       ^Map tables, ^RefCounter wm-cnt, ^long log-limit, ^long page-limit]
   ILiveIndex
   (liveTable [_ table-name] (.get tables table-name))

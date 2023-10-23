@@ -58,13 +58,13 @@
 
     @(.putObject ^ObjectStore os "foo" (ByteBuffer/wrap (.getBytes "hello")))
 
-    (with-open [^ArrowBuf _buf @(.getBuffer bp "foo")])
+    (with-open [^ArrowBuf _buf @(bp/get-buffer bp "foo")])
 
     (t/is (pos? (.get bp/cache-miss-byte-counter)))
     (t/is (= 0 (.get bp/cache-hit-byte-counter)))
     (t/is (pos? @bp/io-wait-nanos-counter))
 
-    (with-open [^ArrowBuf _buf @(.getBuffer bp "foo")])
+    (with-open [^ArrowBuf _buf @(bp/get-buffer bp "foo")])
 
     (t/is (pos? (.get bp/cache-hit-byte-counter)))
     (t/is (= (.get bp/cache-hit-byte-counter) (.get bp/cache-miss-byte-counter)))

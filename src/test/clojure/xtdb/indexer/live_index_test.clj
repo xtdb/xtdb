@@ -3,8 +3,8 @@
             [clojure.test :as t :refer [deftest]]
             [xtdb.api :as xt]
             [xtdb.api.protocols :as xtp]
+            [xtdb.buffer-pool :as bp]
             [xtdb.indexer.live-index :as li]
-            [xtdb.object-store :as os]
             [xtdb.test-json :as tj]
             [xtdb.test-util :as tu]
             [xtdb.util :as util])
@@ -14,9 +14,7 @@
            [org.apache.arrow.memory ArrowBuf BufferAllocator RootAllocator]
            [org.apache.arrow.vector FixedSizeBinaryVector]
            [org.apache.arrow.vector.ipc ArrowFileReader]
-           xtdb.IBufferPool
            xtdb.indexer.live_index.ILiveIndex
-           xtdb.object_store.ObjectStore
            (xtdb.trie ArrowHashTrie ArrowHashTrie$Leaf HashTrie LiveHashTrie LiveHashTrie$Leaf)
            xtdb.vector.IVectorPosition))
 
@@ -29,7 +27,7 @@
 
 (t/deftest test-chunk
   (let [{^BufferAllocator allocator :xtdb/allocator
-         ^IBufferPool buffer-pool :xtdb.buffer-pool/in-memory
+         buffer-pool :xtdb.buffer-pool/in-memory
          ^ILiveIndex live-index :xtdb.indexer/live-index} tu/*sys*
 
         iids (let [rnd (Random. 0)]
@@ -62,8 +60,8 @@
     (t/testing "finish chunk"
       (.finishChunk live-index 0 12000)
 
-      (with-open [^ArrowBuf trie-buf @(.getBuffer buffer-pool "tables/my-table/meta/log-l00-rf00-nr32ee0.arrow")
-                  ^ArrowBuf leaf-buf @(.getBuffer buffer-pool "tables/my-table/data/log-l00-rf00-nr32ee0.arrow")
+      (with-open [^ArrowBuf trie-buf @(bp/get-buffer buffer-pool "tables/my-table/meta/log-l00-rf00-nr32ee0.arrow")
+                  ^ArrowBuf leaf-buf @(bp/get-buffer buffer-pool "tables/my-table/data/log-l00-rf00-nr32ee0.arrow")
                   trie-rdr (ArrowFileReader. (util/->seekable-byte-channel (.nioBuffer trie-buf 0 (.capacity trie-buf))) allocator)
                   leaf-rdr (ArrowFileReader. (util/->seekable-byte-channel (.nioBuffer leaf-buf 0 (.capacity leaf-buf))) allocator)]
         (let [trie-root (.getVectorSchemaRoot trie-rdr)
@@ -114,7 +112,7 @@
     (util/delete-dir node-dir)
 
     (with-open [node (tu/->local-node {:node-dir node-dir})]
-      (let [^IBufferPool bp (tu/component node :xtdb/buffer-pool)]
+      (let [bp (tu/component node :xtdb/buffer-pool)]
 
         (let [last-tx-key (last (for [tx-ops txs] (xt/submit-tx node tx-ops)))]
           (tu/then-await-tx last-tx-key node (Duration/ofSeconds 2)))
@@ -122,10 +120,10 @@
         (tu/finish-chunk! node)
 
         (t/is (= ["tables/foo/data/log-l00-rf00-nr110.arrow"]
-                 (.listObjects bp "tables/foo/data")))
+                 (bp/list-objects bp "tables/foo/data")))
 
         (t/is (= ["tables/foo/meta/log-l00-rf00-nr110.arrow"]
-                 (.listObjects bp "tables/foo/meta"))))
+                 (bp/list-objects bp "tables/foo/meta"))))
 
       (tj/check-json (.toPath (io/as-file (io/resource "xtdb/indexer-test/can-build-live-index")))
                      (.resolve node-dir "objects")))))

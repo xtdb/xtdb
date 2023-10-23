@@ -1,20 +1,19 @@
 (ns xtdb.compactor
   (:require [clojure.tools.logging :as log]
             [juxt.clojars-mirrors.integrant.core :as ig]
-            xtdb.buffer-pool
             xtdb.object-store
             [xtdb.trie :as trie]
             [xtdb.types :as types]
             [xtdb.util :as util]
             [xtdb.vector.reader :as vr]
-            [xtdb.vector.writer :as vw])
+            [xtdb.vector.writer :as vw]
+            [xtdb.buffer-pool :as bp])
   (:import (java.lang AutoCloseable)
            [java.util Comparator LinkedList PriorityQueue]
            [org.apache.arrow.memory BufferAllocator]
            [org.apache.arrow.memory.util ArrowBufPointer]
            org.apache.arrow.vector.types.pojo.Field
            org.apache.arrow.vector.VectorSchemaRoot
-           xtdb.IBufferPool
            (xtdb.trie EventRowPointer IDataRel LiveHashTrie)
            xtdb.util.WritableByteBufferChannel
            xtdb.vector.IRowCopier))
@@ -75,7 +74,7 @@
           (trie/postwalk-merge-plan tries merge-nodes!)
           (.end meta-wtr))))))
 
-(defn exec-compaction-job! [^BufferAllocator allocator, ^IBufferPool buffer-pool,
+(defn exec-compaction-job! [^BufferAllocator allocator, buffer-pool,
                             {:keys [table-name trie-keys out-trie-key]}]
   (try
     (log/infof "compacting '%s' '%s' -> '%s'..." table-name trie-keys out-trie-key)
@@ -93,10 +92,10 @@
 
       (log/debugf "uploading '%s' '%s'..." table-name out-trie-key)
 
-      @(.putObject buffer-pool (trie/->table-data-file-name table-name out-trie-key)
-                   (.getAsByteBuffer data-out-bb))
-      @(.putObject buffer-pool (trie/->table-meta-file-name table-name out-trie-key)
-                   (.getAsByteBuffer meta-out-bb)))
+      @(bp/put-object buffer-pool (trie/->table-data-file-name table-name out-trie-key)
+                      (.getAsByteBuffer data-out-bb))
+      @(bp/put-object buffer-pool (trie/->table-meta-file-name table-name out-trie-key)
+                      (.getAsByteBuffer meta-out-bb)))
 
     (log/infof "compacted '%s' -> '%s'." table-name out-trie-key)
 
@@ -120,13 +119,13 @@
          :buffer-pool (ig/ref :xtdb/buffer-pool)}
         opts))
 
-(defmethod ig/init-key :xtdb/compactor [_ {:keys [allocator ^IBufferPool buffer-pool]}]
+(defmethod ig/init-key :xtdb/compactor [_ {:keys [allocator buffer-pool]}]
   (util/with-close-on-catch [allocator (util/->child-allocator allocator "compactor")]
     (reify ICompactor
       (compactAll [_]
         (log/info "compact-all")
         (loop []
-          (let [jobs (for [table-name (->> (.listObjects buffer-pool "tables")
+          (let [jobs (for [table-name (->> (bp/list-objects buffer-pool "tables")
                                            ;; TODO should obj-store listObjects only return keys from the current level?
                                            (into #{} (keep #(second (re-find #"^tables/([^/]+)" %)))))
                            job (compaction-jobs table-name (trie/list-meta-files buffer-pool table-name))]

@@ -21,7 +21,6 @@
            (org.apache.arrow.vector.ipc.message ArrowBlock ArrowFooter ArrowRecordBatch)
            xtdb.object_store.ObjectStore
            xtdb.util.ArrowBufLRU
-           (xtdb IBufferPool)
            (xtdb.object_store IMultipartUpload SupportsMultipart)))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -41,12 +40,7 @@
   Closeable
   (close [_]
     (free-memory memory-store)
-    (.close allocator))
-  IBufferPool
-  (getBuffer [bp k] (get-buffer bp k))
-  (putObject [bp k buf] (put-object bp k buf))
-  (listObjects [bp] (list-objects bp))
-  (listObjects [bp dir] (list-objects bp dir)))
+    (.close allocator)))
 
 (defn ->remote [{:keys [^BufferAllocator allocator
                         object-store

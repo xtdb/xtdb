@@ -15,12 +15,10 @@
             [xtdb.tx-producer :as txp]
             [xtdb.types :as types]
             [xtdb.util :as util]
-            [xtdb.vector :as vec]
             [xtdb.vector.reader :as vr]
             [xtdb.vector.writer :as vw]
             [xtdb.watermark :as wm])
   (:import (java.io ByteArrayInputStream Closeable)
-           java.lang.AutoCloseable
            java.nio.ByteBuffer
            (java.nio.channels ClosedByInterruptException)
            (java.time Instant ZoneId)
@@ -31,7 +29,6 @@
            (org.apache.arrow.vector BitVector)
            (org.apache.arrow.vector.complex DenseUnionVector ListVector)
            (org.apache.arrow.vector.ipc ArrowStreamReader)
-           xtdb.IBufferPool
            (xtdb.api.protocols TransactionInstant)
            (xtdb.indexer.live_index ILiveIndex ILiveIndexTx ILiveTableTx)
            xtdb.metadata.IMetadataManager
@@ -437,7 +434,7 @@
     (.addRows row-counter 1)))
 
 (deftype Indexer [^BufferAllocator allocator
-                  ^IBufferPool buffer-pool
+                  buffer-pool
                   ^IMetadataManager metadata-mgr
                   ^IScanEmitter scan-emitter
                   ^IRaQuerySource ra-src

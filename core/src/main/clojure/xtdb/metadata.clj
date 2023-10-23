@@ -2,7 +2,7 @@
   (:require [cognitect.transit :as transit]
             [juxt.clojars-mirrors.integrant.core :as ig]
             [xtdb.bloom :as bloom]
-            xtdb.buffer-pool
+            [xtdb.buffer-pool :as bp]
             [xtdb.expression.comparator :as expr.comp]
             xtdb.expression.temporal
             [xtdb.transit :as xt.transit]
@@ -19,7 +19,6 @@
            (org.apache.arrow.memory ArrowBuf)
            (org.apache.arrow.vector FieldVector)
            (org.apache.arrow.vector.types.pojo ArrowType$Union)
-           xtdb.IBufferPool
            (xtdb.vector IVectorReader IVectorWriter)))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -285,13 +284,13 @@
           (when (not (nil? (.getObject bloom-rdr bloom-vec-idx)))
             (bloom/bloom->bitmap bloom-rdr bloom-vec-idx)))))))
 
-(deftype MetadataManager [^IBufferPool buffer-pool
+(deftype MetadataManager [buffer-pool
                           ^NavigableMap chunks-metadata
                           ^Map table-metadata-idxs
                           ^:volatile-mutable ^Map col-types]
   IMetadataManager
   (finishChunk [this chunk-idx new-chunk-metadata]
-    (-> @(.putObject buffer-pool (->chunk-metadata-obj-key chunk-idx) (write-chunk-metadata new-chunk-metadata))
+    (-> @(bp/put-object buffer-pool (->chunk-metadata-obj-key chunk-idx) (write-chunk-metadata new-chunk-metadata))
         (util/rethrowing-cause))
     (set! (.col-types this) (merge-col-types col-types new-chunk-metadata))
     (.put chunks-metadata chunk-idx new-chunk-metadata))
@@ -321,8 +320,8 @@
   (some-> (.lastEntry (.chunksMetadata metadata-mgr))
           (.getValue)))
 
-(defn- get-bytes ^java.util.concurrent.CompletableFuture #_<bytes> [^IBufferPool buffer-pool, obj-key]
-  (-> (.getBuffer buffer-pool obj-key)
+(defn- get-bytes ^java.util.concurrent.CompletableFuture #_<bytes> [buffer-pool, obj-key]
+  (-> (bp/get-buffer buffer-pool obj-key)
       (util/then-apply
         (fn [^ArrowBuf buffer]
           (assert buffer)
@@ -335,9 +334,9 @@
             (finally
               (.close buffer)))))))
 
-(defn- load-chunks-metadata ^java.util.NavigableMap [{:keys [^IBufferPool buffer-pool]}]
+(defn- load-chunks-metadata ^java.util.NavigableMap [{:keys [buffer-pool]}]
   (let [cm (TreeMap.)]
-    (doseq [cm-obj-key (.listObjects buffer-pool "chunk-metadata/")]
+    (doseq [cm-obj-key (bp/list-objects buffer-pool "chunk-metadata/")]
       (with-open [is (ByteArrayInputStream. @(get-bytes buffer-pool cm-obj-key))]
         (let [rdr (transit/reader is :json {:handlers xt.transit/tj-read-handlers})]
           (.put cm (obj-key->chunk-idx cm-obj-key) (transit/read rdr)))))
@@ -347,7 +346,7 @@
   (merge {:buffer-pool (ig/ref :xtdb/buffer-pool)}
          opts))
 
-(defmethod ig/init-key ::metadata-manager [_ {:keys [^IBufferPool buffer-pool], :as deps}]
+(defmethod ig/init-key ::metadata-manager [_ {:keys [buffer-pool], :as deps}]
   (let [chunks-metadata (load-chunks-metadata deps)]
     (MetadataManager. buffer-pool
                       chunks-metadata

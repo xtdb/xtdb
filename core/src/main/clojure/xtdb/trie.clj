@@ -1,7 +1,6 @@
 (ns xtdb.trie
-  (:require [xtdb.buffer-pool]
+  (:require [xtdb.buffer-pool :as bp]
             [xtdb.metadata :as meta]
-            [xtdb.object-store]
             [xtdb.types :as types]
             [xtdb.util :as util]
             [xtdb.vector.reader :as vr]
@@ -19,8 +18,6 @@
            [org.apache.arrow.vector.ipc ArrowFileWriter]
            (org.apache.arrow.vector.types.pojo ArrowType$Union Schema)
            org.apache.arrow.vector.types.UnionMode
-           xtdb.IBufferPool
-           (xtdb.object_store ObjectStore)
            (xtdb.trie ArrowHashTrie ArrowHashTrie$Leaf HashTrie HashTrie$Node LiveHashTrie LiveHashTrie$Leaf)
            (xtdb.util WritableByteBufferChannel)
            (xtdb.vector IVectorReader RelationReader)
@@ -54,8 +51,8 @@
 (defn ->table-meta-file-name [table-name trie-key]
   (format "tables/%s/meta/%s.arrow" table-name trie-key))
 
-(defn list-meta-files [^IBufferPool buffer-pool, table-name]
-  (vec (sort (.listObjects buffer-pool (format "tables/%s/meta/" table-name)))))
+(defn list-meta-files [buffer-pool, table-name]
+  (vec (sort (bp/list-objects buffer-pool (format "tables/%s/meta/" table-name)))))
 
 (def ^org.apache.arrow.vector.types.pojo.Schema meta-rel-schema
   (Schema. [(types/->field "nodes" (ArrowType$Union. UnionMode/Dense (int-array (range 3))) false
@@ -216,12 +213,12 @@
     {:data-buf (.getAsByteBuffer data-bb-ch)
      :meta-buf (.getAsByteBuffer meta-bb-ch)}))
 
-(defn write-trie-bufs! [^IBufferPool buffer-pool, ^String table-name, trie-key
+(defn write-trie-bufs! [buffer-pool, ^String table-name, trie-key
                         {:keys [^ByteBuffer data-buf ^ByteBuffer meta-buf]}]
-  (-> (.putObject buffer-pool (->table-data-file-name table-name trie-key) data-buf)
+  (-> (bp/put-object buffer-pool (->table-data-file-name table-name trie-key) data-buf)
       (util/then-compose
         (fn [_]
-          (.putObject buffer-pool (->table-meta-file-name table-name trie-key) meta-buf)))))
+          (bp/put-object buffer-pool (->table-meta-file-name table-name trie-key) meta-buf)))))
 
 (defn parse-trie-file-name [file-name]
   (when-let [[_ trie-key level-str row-from-str next-row-str] (re-find #"/(log-l(\p{XDigit}+)-rf(\p{XDigit}+)-nr(\p{XDigit}+)+?)\.arrow$" file-name)]
@@ -296,8 +293,8 @@
     (util/close rdr)
     (util/close buf)))
 
-(defn open-meta-file [^IBufferPool buffer-pool file-name]
-  (util/with-close-on-catch [^ArrowBuf buf @(.getBuffer buffer-pool file-name)]
+(defn open-meta-file [buffer-pool file-name]
+  (util/with-close-on-catch [^ArrowBuf buf @(bp/get-buffer buffer-pool file-name)]
     (let [{:keys [^VectorLoader loader root arrow-blocks]} (util/read-arrow-buf buf)]
       (with-open [record-batch (util/->arrow-record-batch-view (first arrow-blocks) buf)]
         (.load loader record-batch)
@@ -343,13 +340,13 @@
   AutoCloseable
   (close [_]))
 
-(defn open-data-rels [^IBufferPool buffer-pool, table-name, trie-keys, ^ILiveTableWatermark live-table-wm]
+(defn open-data-rels [buffer-pool, table-name, trie-keys, ^ILiveTableWatermark live-table-wm]
   (util/with-close-on-catch [data-bufs (ArrayList.)]
     ;; TODO get hold of these a page at a time if it's a small query,
     ;; rather than assuming we'll always have/use the whole file.
     (let [arrow-data-rels (->> trie-keys
                                (mapv (fn [trie-key]
-                                       (.add data-bufs @(.getBuffer buffer-pool (->table-data-file-name table-name trie-key)))
+                                       (.add data-bufs @(bp/get-buffer buffer-pool (->table-data-file-name table-name trie-key)))
                                        (let [data-buf (.get data-bufs (dec (.size data-bufs)))
                                              {:keys [^VectorSchemaRoot root loader arrow-blocks]} (util/read-arrow-buf data-buf)]
 

@@ -1,19 +1,14 @@
 (ns xtdb.metadata-test
   (:require [clojure.test :as t :refer [deftest]]
             [xtdb.api :as xt]
-            [xtdb.buffer-pool :as bp]
             [xtdb.expression.metadata :as expr.meta]
             [xtdb.metadata :as meta]
             [xtdb.node :as node]
             [xtdb.test-util :as tu]
             [xtdb.trie :as trie]
-            [xtdb.util :as util]
-            [xtdb.vector.reader :as vr])
+            [xtdb.util :as util])
   (:import (clojure.lang MapEntry)
-           (java.util.function IntPredicate)
-           [org.apache.arrow.vector VectorSchemaRoot]
-           xtdb.IBufferPool
-           (xtdb.metadata IMetadataManager IMetadataPredicate)))
+           (xtdb.metadata IMetadataManager)))
 
 (t/use-fixtures :each tu/with-node)
 (t/use-fixtures :once tu/with-allocator)
@@ -112,7 +107,7 @@
 
     (tu/finish-chunk! node)
 
-    (let [^IBufferPool buffer-pool (tu/component node :xtdb/buffer-pool)
+    (let [buffer-pool (tu/component node :xtdb/buffer-pool)
           first-buckets (map (comp first tu/byte-buffer->path trie/->iid) (range 20))
           bucket->page-idx (->> (into (sorted-set) first-buckets)
                                 (map-indexed #(MapEntry/create %2 %1))
@@ -146,7 +141,7 @@
   (tu/finish-chunk! tu/*node*)
 
   (let [^IMetadataManager metadata-mgr (tu/component tu/*node* ::meta/metadata-manager)
-        ^IBufferPool buffer-pool (tu/component tu/*node* :xtdb/buffer-pool)
+        buffer-pool (tu/component tu/*node* :xtdb/buffer-pool)
         true-selector (expr.meta/->metadata-selector '(= boolean-or-int true) '{boolean-or-int :bool} {})
         file-name (trie/->table-meta-file-name "xt_docs" (trie/->log-trie-key 0 0 2))]
 

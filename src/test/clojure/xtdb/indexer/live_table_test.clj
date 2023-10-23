@@ -12,7 +12,6 @@
   (:import (java.nio ByteBuffer)
            (java.util Arrays HashMap)
            (org.apache.arrow.memory RootAllocator)
-           xtdb.IBufferPool
            (xtdb.indexer.live_index ILiveIndex TestLiveTable)
            (xtdb.trie LiveHashTrie LiveHashTrie$Leaf)
            (xtdb.util RefCounter)
@@ -36,7 +35,7 @@
           n 1000]
       (tu/with-tmp-dirs #{path}
         (with-open [node (tu/->local-node {:node-dir path})
-                    ^IBufferPool bp (tu/component node :xtdb/buffer-pool)
+                    bp (tu/component node :xtdb/buffer-pool)
                     allocator (RootAllocator.)
                     live-table (live-index/->live-table allocator bp "foo" {:->live-trie (partial live-index/->live-trie 2 4)})]
 
@@ -74,7 +73,7 @@
           n 50000]
       (tu/with-tmp-dirs #{path}
         (with-open [node (tu/->local-node {:node-dir path})
-                    ^IBufferPool bp (tu/component node :xtdb/buffer-pool)
+                    bp (tu/component node :xtdb/buffer-pool)
                     allocator (RootAllocator.)
                     live-table (live-index/->live-table allocator bp "foo")]
           (let [live-table-tx (.startTx live-table (xtp/->TransactionInstant 0 (.toInstant #inst "2000")) false)]
@@ -126,7 +125,7 @@
 (deftest test-live-table-watermarks-are-immutable
   (let [uuids [#uuid "7fffffff-ffff-ffff-4fff-ffffffffffff"]]
     (with-open [node (node/start-node {})
-                ^IBufferPool bp (tu/component node :xtdb/buffer-pool)
+                bp (tu/component node :xtdb/buffer-pool)
                 allocator (RootAllocator.)
                 live-table (live-index/->live-table allocator bp "foo")]
       (let [live-table-tx (.startTx live-table (xtp/->TransactionInstant 0 (.toInstant #inst "2000")) false)]
@@ -157,7 +156,7 @@
   (let [uuids [#uuid "7fffffff-ffff-ffff-4fff-ffffffffffff"]
         table-name "foo"]
     (with-open [node (node/start-node {})
-                ^IBufferPool bp (tu/component node :xtdb/buffer-pool)
+                bp (tu/component node :xtdb/buffer-pool)
                 allocator (RootAllocator.)]
       (let [live-index-allocator (util/->child-allocator allocator "live-index")]
         (with-open [^ILiveIndex live-index (live-index/->LiveIndex live-index-allocator bp (HashMap.) (RefCounter.) 64 1024)]

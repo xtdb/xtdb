@@ -1,6 +1,7 @@
 (ns xtdb.stagnant-log-flusher-test
   (:require [clojure.test :as t]
             [xtdb.api :as xt]
+            [xtdb.buffer-pool :as bp]
             [xtdb.log :as xt-log]
             [xtdb.node :as node]
             [xtdb.test-util :as tu]
@@ -11,7 +12,6 @@
            (java.util.concurrent Semaphore)
            (org.apache.arrow.memory BufferAllocator)
            (org.apache.arrow.vector.ipc ArrowStreamReader)
-           xtdb.IBufferPool
            (xtdb.indexer IIndexer)
            (xtdb.log Log)))
 
@@ -163,7 +163,7 @@
 
 (defn chunk-path-seq [node]
   (let [pool (tu/component node :xtdb/buffer-pool)]
-    (filter #(re-matches #"tables/foo/meta/log-(.*)" %) (.listObjects ^IBufferPool pool))))
+    (filter #(re-matches #"tables/foo/meta/log-(.*)" %) (bp/list-objects pool))))
 
 (t/deftest indexer-flushes-block-and-chunk-if-flush-op-test
   (with-open [node (start-node #time/duration "PT0.001S")]

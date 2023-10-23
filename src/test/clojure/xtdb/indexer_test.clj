@@ -5,10 +5,10 @@
             [clojure.tools.logging :as log]
             [xtdb.api :as xt]
             [xtdb.api.protocols :as xtp]
+            [xtdb.buffer-pool :as bp]
             [xtdb.indexer :as idx]
             [xtdb.metadata :as meta]
             [xtdb.node :as node]
-            [xtdb.object-store :as os]
             [xtdb.test-json :as tj]
             [xtdb.test-util :as tu]
             [xtdb.ts-devices :as ts]
@@ -19,10 +19,8 @@
            java.time.Duration
            [org.apache.arrow.memory BufferAllocator]
            xtdb.api.protocols.TransactionInstant
-           xtdb.IBufferPool
            (xtdb.metadata IMetadataManager)
            xtdb.node.Node
-           xtdb.object_store.ObjectStore
            (xtdb.watermark IWatermarkSource)))
 
 (t/use-fixtures :once tu/with-allocator)
@@ -83,7 +81,7 @@
 
     (util/with-open [node (tu/->local-node {:node-dir node-dir})]
       (let [^BufferAllocator a (tu/component node :xtdb/allocator)
-            ^IBufferPool bp (tu/component node :xtdb/buffer-pool)
+            bp (tu/component node :xtdb/buffer-pool)
             mm (tu/component node ::meta/metadata-manager)
             ^IWatermarkSource wm-src (tu/component node :xtdb/indexer)]
 
@@ -365,7 +363,7 @@
     (with-open [node (tu/->local-node {:node-dir node-dir, :rows-per-chunk 3000, :rows-per-block 300})
                 info-reader (io/reader (io/resource "devices_mini_device_info.csv"))
                 readings-reader (io/reader (io/resource "devices_mini_readings.csv"))]
-      (let [^IBufferPool bp (tu/component node :xtdb/buffer-pool)
+      (let [bp (tu/component node :xtdb/buffer-pool)
             ^IMetadataManager mm (tu/component node ::meta/metadata-manager)
             device-infos (map ts/device-info-csv->doc (csv/read-csv info-reader))
             readings (map ts/readings-csv->doc (csv/read-csv readings-reader))
@@ -392,7 +390,7 @@
                    (-> (meta/latest-chunk-metadata mm)
                        (select-keys [:latest-completed-tx :next-chunk-idx]))))
 
-          (let [objs (.listObjects bp)]
+          (let [objs (bp/list-objects bp)]
             (t/is (= 4 (count (filter #(re-matches #"chunk-metadata/\p{XDigit}+\.transit.json" %) objs))))
             (t/is (= 2 (count (filter #(re-matches #"tables/device_info/(.+?)/.+\.arrow" %) objs))))
             (t/is (= 4 (count (filter #(re-matches #"tables/device_readings/data/log-l\p{XDigit}+-rf\p{XDigit}+-nr\p{XDigit}+\.arrow" %) objs))))
@@ -426,11 +424,11 @@
                            (partition-all 100 tx-ops))]
 
           (doseq [^Node node (shuffle (take 6 (cycle [node-1 node-2 node-3])))
-                  :let [^IBufferPool bp (util/component node :xtdb/buffer-pool)]]
+                  :let [bp (util/component node :xtdb/buffer-pool)]]
             (t/is (= last-tx-key (tu/then-await-tx last-tx-key node (Duration/ofSeconds 60))))
             (t/is (= last-tx-key (tu/latest-completed-tx node)))
 
-            (let [objs (.listObjects bp)]
+            (let [objs (bp/list-objects bp)]
               (t/is (= 11 (count (filter #(re-matches #"chunk-metadata/\p{XDigit}+\.transit.json" %) objs))))
               (t/is (= 4 (count (filter #(re-matches #"tables/device_info/(.+?)/.+\.arrow" %) objs))))
               (t/is (= 11 (count (filter #(re-matches #"tables/device_readings/data/log-l\p{XDigit}+-rf\p{XDigit}+-nr\p{XDigit}+\.arrow" %) objs))))
@@ -464,7 +462,7 @@
                                  (partition-all 100 first-half-tx-ops))]
 
           (with-open [node (tu/->local-node (assoc node-opts :buffers-dir "objects-1"))]
-            (let [^IBufferPool bp (util/component node :xtdb/buffer-pool)
+            (let [bp (util/component node :xtdb/buffer-pool)
                   ^IMetadataManager mm (util/component node ::meta/metadata-manager)]
               (t/is (= first-half-tx-key
                        (-> first-half-tx-key
@@ -477,7 +475,7 @@
                 (t/is (< (:tx-id latest-completed-tx) (:tx-id first-half-tx-key)))
                 (t/is (< next-chunk-idx (count first-half-tx-ops)))
 
-                (let [objs (.listObjects bp)]
+                (let [objs (bp/list-objects bp)]
                   (t/is (= 5 (count (filter #(re-matches #"chunk-metadata/\p{XDigit}+\.transit.json" %) objs))))
                   (t/is (= 4 (count (filter #(re-matches #"tables/device_info/(.+?)/.+\.arrow" %) objs))))
                   (t/is (= 5 (count (filter #(re-matches #"tables/device_readings/data/log-l\p{XDigit}+-rf\p{XDigit}+-nr\p{XDigit}+\.arrow" %) objs))))
@@ -515,10 +513,10 @@
                     (t/is (= second-half-tx-key (tu/latest-completed-tx node))))
 
                   (doseq [^Node node [new-node node]
-                          :let [^IBufferPool bp (tu/component node :xtdb/buffer-pool)
+                          :let [bp (tu/component node :xtdb/buffer-pool)
                                 ^IMetadataManager mm (tu/component node ::meta/metadata-manager)]]
 
-                    (let [objs (.listObjects bp)]
+                    (let [objs (bp/list-objects bp)]
                       (t/is (= 11 (count (filter #(re-matches #"chunk-metadata/\p{XDigit}+\.transit.json" %) objs))))
                       (t/is (= 4 (count (filter #(re-matches #"tables/device_info/(.+?)/.+\.arrow" %) objs))))
                       (t/is (= 11 (count (filter #(re-matches #"tables/device_readings/data/log-l\p{XDigit}+-rf\p{XDigit}+-nr\p{XDigit}+\.arrow" %) objs))))

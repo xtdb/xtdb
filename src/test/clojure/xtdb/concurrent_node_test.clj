@@ -2,11 +2,11 @@
   (:require [clojure.java.io :as io]
             [clojure.test :as t :refer [deftest]]
             [xtdb.api :as xt]
+            [xtdb.buffer-pool :as bp]
             [xtdb.test-util :as tu]
             [xtdb.util :as util])
   (:import (org.apache.arrow.memory ArrowBuf)
-           (xtdb InstantSource)
-           xtdb.IBufferPool))
+           (xtdb InstantSource)))
 
 (defn- random-maps [n]
   (let [nb-ks 5
@@ -42,9 +42,9 @@
   (tu/with-system {:xtdb/allocator {}
                    :xtdb.buffer-pool/local {:path (.resolve (.toPath node-dir) "objects")}}
     (fn []
-      (let [^IBufferPool buffer-pool (:xtdb.buffer-pool/local tu/*sys*)
-            objs (.listObjects buffer-pool)
-            get-item #(with-open [^ArrowBuf _buf (deref (.getBuffer buffer-pool (rand-nth objs)))]
+      (let [buffer-pool (:xtdb.buffer-pool/local tu/*sys*)
+            objs (bp/list-objects buffer-pool)
+            get-item #(with-open [^ArrowBuf _buf @(bp/get-buffer buffer-pool (rand-nth objs))]
                         (Thread/sleep 10))
             f-call #(future
                       (dotimes [_ 300]

@@ -29,7 +29,6 @@
            [org.roaringbitmap.buffer MutableRoaringBitmap]
            xtdb.api.protocols.TransactionInstant
            (xtdb.bitemporal EventResolver RowConsumer)
-           xtdb.IBufferPool
            xtdb.ICursor
            (xtdb.metadata IMetadataManager ITableMetadata)
            xtdb.object_store.ObjectStore
@@ -235,7 +234,7 @@
                     (recur (inc mid) right)))))
             (int-array 0)))))))
 
-(defrecord VSRCache [^IBufferPool buffer-pool, ^BufferAllocator allocator, ^Map cache]
+(defrecord VSRCache [buffer-pool, ^BufferAllocator allocator, ^Map cache]
   Closeable
   (close [_] (util/close cache)))
 
@@ -399,7 +398,7 @@
          {:metadata-mgr (ig/ref ::meta/metadata-manager)
           :buffer-pool (ig/ref :xtdb/buffer-pool)}))
 
-(defmethod ig/init-key ::scan-emitter [_ {:keys [^IMetadataManager metadata-mgr, ^IBufferPool buffer-pool]}]
+(defmethod ig/init-key ::scan-emitter [_ {:keys [^IMetadataManager metadata-mgr, buffer-pool]}]
   (reify IScanEmitter
     (tableColNames [_ wm table-name]
       (let [normalized-table (util/str->normal-form-str table-name)]
