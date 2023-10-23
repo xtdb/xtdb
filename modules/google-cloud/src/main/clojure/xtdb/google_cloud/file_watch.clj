@@ -1,6 +1,7 @@
 (ns xtdb.google-cloud.file-watch
   (:require [clojure.string :as string]
-            [clojure.tools.logging :as log])
+            [clojure.tools.logging :as log]
+            [xtdb.file-list :as file-list])
   (:import [com.google.pubsub.v1 SubscriptionName TopicName PushConfig PubsubMessage]
            [com.google.cloud.pubsub.v1 SubscriptionAdminClient Subscriber MessageReceiver AckReplyConsumer]
            [com.google.cloud.storage Blob Storage Storage$BlobListOption]
@@ -17,7 +18,7 @@
                            (.iterateAll)
                            (mapv (fn [^Blob blob]
                                    (subs (.getName blob) (count prefix)))))]
-    (.addAll file-name-cache filename-list)))
+    (file-list/add-filename-list file-name-cache filename-list)))
 
 (defn mk-short-uuid []
   (subs (str (UUID/randomUUID)) 0 8))
@@ -60,8 +61,8 @@
                                (log/debug (format "Message received, performing %s on file %s" event-type file))
                                (when (and event-type file)
                                  (cond
-                                   (= event-type :create) (.add file-name-cache file)
-                                   (= event-type :delete) (.remove file-name-cache file)))
+                                   (= event-type :create) (file-list/add-filename file-name-cache file)
+                                   (= event-type :delete) (file-list/remove-filename file-name-cache file)))
 
                                (.ack ^AckReplyConsumer consumer))))
         ^Subscriber subscriber (.build (Subscriber/newBuilder ^String subscription-resource-name ^MessageReceiver message-receiver))]

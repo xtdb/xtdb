@@ -1,7 +1,8 @@
 (ns xtdb.s3.file-list
   (:require [clojure.data.json :as json]
             [clojure.string :as string]
-            [clojure.tools.logging :as log])
+            [clojure.tools.logging :as log]
+            [xtdb.file-list :as file-list])
   (:import [java.lang AutoCloseable]
            [java.util UUID NavigableSet]
            [software.amazon.awssdk.core.exception AbortedException]
@@ -32,7 +33,7 @@
 
 (defn file-list-init [s3-opts ^NavigableSet file-name-cache]
   (let [filename-list (list-objects s3-opts nil)]
-    (.addAll file-name-cache filename-list)))
+    (file-list/add-filename-list file-name-cache filename-list)))
 
 (defn ->sqs-write-policy [sns-topic-arn queue-arn]
   (json/write-str
@@ -126,8 +127,8 @@
                                             (log/debug (format "Message received, performing %s on file %s" event-type file))
                                             (when file
                                               (cond
-                                                (= event-type :create) (.add file-name-cache file)
-                                                (= event-type :delete) (.remove file-name-cache file)))
+                                                (= event-type :create) (file-list/add-filename file-name-cache file)
+                                                (= event-type :delete) (file-list/remove-filename file-name-cache file)))
 
                                             (.deleteMessage sqs-client (-> (DeleteMessageRequest/builder)
                                                                            (.queueUrl queue-url)

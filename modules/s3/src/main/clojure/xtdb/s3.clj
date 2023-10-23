@@ -143,16 +143,16 @@
         (util/then-apply (fn [_]
                            ;; Add file name to the local cache as the last thing we do (ie - if PUT
                            ;; fails, shouldnt add filename to the cache)
-                           (.add file-name-cache k)))))
+                           (file-list/add-filename file-name-cache k)))))
 
   (listObjects [_this]
-    (into [] file-name-cache))
+    (file-list/list-files file-name-cache))
 
   (listObjects [_this dir]
     (file-list/list-files-under-prefix file-name-cache dir))
 
   (deleteObject [_ k]
-    (.remove file-name-cache k)
+    (file-list/remove-filename file-name-cache k)
     (.deleteObject client
                    (-> (DeleteObjectRequest/builder)
                        (.bucket bucket)
@@ -175,7 +175,7 @@
                                                 (.uploadId initiate-response)
                                                 (fn [k]
                                                   ;; On complete - add filename to cache
-                                                  (.add file-name-cache k))
+                                                  (file-list/add-filename file-name-cache k))
                                                 (ArrayList.)))))))
 
   Closeable

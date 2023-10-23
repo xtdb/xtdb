@@ -1,7 +1,8 @@
 (ns xtdb.azure.file-watch
   (:require [clojure.data.json :as json]
             [clojure.string :as string]
-            [clojure.tools.logging :as log])
+            [clojure.tools.logging :as log]
+            [xtdb.file-list :as file-list])
   (:import [com.azure.core.credential TokenCredential]
            [com.azure.messaging.servicebus ServiceBusClientBuilder ServiceBusReceivedMessageContext ServiceBusErrorContext ServiceBusProcessorClient]
            [com.azure.messaging.servicebus.administration ServiceBusAdministrationClient ServiceBusAdministrationClientBuilder]
@@ -19,7 +20,7 @@
                            (iterator-seq)
                            (mapv (fn [^BlobItem blob-item]
                                    (subs (.getName blob-item) (count prefix)))))]
-    (.addAll file-name-cache filename-list)))
+    (file-list/add-filename-list file-name-cache filename-list)))
 
 (defn mk-short-uuid []
   (subs (str (UUID/randomUUID)) 0 8))
@@ -67,8 +68,8 @@
                                                                                (log/debug (format "Message received, performing %s on file %s" event-type file))
                                                                                (when (and event-type file)
                                                                                  (cond
-                                                                                   (= event-type :create) (.add file-name-cache file)
-                                                                                   (= event-type :delete) (.remove file-name-cache file)))))))
+                                                                                   (= event-type :create) (file-list/add-filename file-name-cache file)
+                                                                                   (= event-type :delete) (file-list/remove-filename file-name-cache file)))))))
                                                         (.processError (reify Consumer
                                                                          (accept [_ msg]
                                                                            (log/error "Error when processing message from service bus queue - " (.getException ^ServiceBusErrorContext msg)))))
