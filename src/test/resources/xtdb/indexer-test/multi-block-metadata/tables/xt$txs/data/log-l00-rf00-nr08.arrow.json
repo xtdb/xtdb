@@ -137,12 +137,12 @@
       "name" : "xt$iid",
       "count" : 2,
       "VALIDITY" : [1,1],
-      "DATA" : ["659fa87d49ccd11c201a9454d9336063","a4e167a76a05add8a8654c169b07b044"]
+      "DATA" : ["a4e167a76a05add8a8654c169b07b044","c2d2a1e3ffada2c09a45f91b78752e02"]
     },{
       "name" : "xt$system_from",
       "count" : 2,
       "VALIDITY" : [1,1],
-      "DATA" : [1577923200000000,1577836800000000]
+      "DATA" : [1577836800000000,1577923200000000]
     },{
       "name" : "op",
       "count" : 2,
@@ -156,7 +156,7 @@
           "name" : "xt$valid_from",
           "count" : 2,
           "VALIDITY" : [1,1],
-          "DATA" : [1577923200000000,1577836800000000]
+          "DATA" : [1577836800000000,1577923200000000]
         },{
           "name" : "xt$valid_to",
           "count" : 2,
@@ -170,12 +170,12 @@
             "name" : "xt$id",
             "count" : 2,
             "VALIDITY" : [1,1],
-            "DATA" : ["5845","0"]
+            "DATA" : ["0","5877"]
           },{
             "name" : "xt$tx_time",
             "count" : 2,
             "VALIDITY" : [1,1],
-            "DATA" : [1577923200000000,1577836800000000]
+            "DATA" : [1577836800000000,1577923200000000]
           },{
             "name" : "xt$committed?",
             "count" : 2,

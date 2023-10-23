@@ -72,9 +72,9 @@
       :mem-used 2.79257668E8}]]])
 
 (def magic-last-tx-id
-  "This value will change if you vary the structure of log entries, such 
+  "This value will change if you vary the structure of log entries, such
   as adding new legs to the tx-ops vector, as in memory the tx-id is a byte offset."
-  8165)
+  8197)
 
 (t/deftest can-build-chunk-as-arrow-ipc-file-format
   (let [node-dir (util/->path "target/can-build-chunk-as-arrow-ipc-file-format")

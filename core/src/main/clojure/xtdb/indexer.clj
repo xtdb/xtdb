@@ -236,7 +236,7 @@
         (try
           (let [fn-id (.getObject fn-id-rdr tx-op-idx)
                 tx-fn (find-fn allocator ra-src wm-src (sci/fork sci-ctx) tx-opts fn-id)
-                args (.getObject args-rdr tx-op-idx)
+                args (.form ^ClojureForm (.getObject args-rdr tx-op-idx))
 
                 res (try
                       (let [res (sci/binding [sci/out *out*

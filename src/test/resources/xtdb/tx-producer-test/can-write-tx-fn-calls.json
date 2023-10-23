@@ -166,54 +166,15 @@
             "name" : "args",
             "nullable" : false,
             "type" : {
-              "name" : "list"
+              "name" : "ClojureFormType"
             },
-            "children" : [{
-              "name" : "$data$",
-              "nullable" : false,
-              "type" : {
-                "name" : "union",
-                "mode" : "Dense",
-                "typeIds" : [ ]
-              },
-              "children" : [{
-                "name" : "i64",
-                "nullable" : false,
-                "type" : {
-                  "name" : "int",
-                  "bitWidth" : 64,
-                  "isSigned" : true
-                },
-                "children" : [ ]
-              },{
-                "name" : "null",
-                "nullable" : true,
-                "type" : {
-                  "name" : "null"
-                },
-                "children" : [ ]
-              },{
-                "name" : "keyword",
-                "nullable" : false,
-                "type" : {
-                  "name" : "KeywordType"
-                },
-                "children" : [ ],
-                "metadata" : [{
-                  "value" : "xt/clj-keyword",
-                  "key" : "ARROW:extension:name"
-                },{
-                  "value" : "",
-                  "key" : "ARROW:extension:metadata"
-                }]
-              },{
-                "name" : "utf8",
-                "nullable" : false,
-                "type" : {
-                  "name" : "utf8"
-                },
-                "children" : [ ]
-              }]
+            "children" : [ ],
+            "metadata" : [{
+              "value" : "xt/clj-form",
+              "key" : "ARROW:extension:name"
+            },{
+              "value" : "",
+              "key" : "ARROW:extension:metadata"
             }]
           }]
         },{
@@ -361,34 +322,8 @@
             "name" : "args",
             "count" : 2,
             "VALIDITY" : [1,1],
-            "OFFSET" : [0,3,5],
-            "children" : [{
-              "name" : "$data$",
-              "count" : 5,
-              "TYPE_ID" : [0,1,2,3,3],
-              "OFFSET" : [0,0,0,0,1],
-              "children" : [{
-                "name" : "i64",
-                "count" : 1,
-                "VALIDITY" : [1],
-                "DATA" : ["12"]
-              },{
-                "name" : "null",
-                "count" : 1
-              },{
-                "name" : "keyword",
-                "count" : 1,
-                "VALIDITY" : [1],
-                "OFFSET" : [0,3],
-                "DATA" : ["bar"]
-              },{
-                "name" : "utf8",
-                "count" : 2,
-                "VALIDITY" : [1,1],
-                "OFFSET" : [0,5,10],
-                "DATA" : ["hello","world"]
-              }]
-            }]
+            "OFFSET" : [0,13,30],
+            "DATA" : ["[12 nil :bar]","[\"hello\" \"world\"]"]
           }]
         },{
           "name" : "abort",

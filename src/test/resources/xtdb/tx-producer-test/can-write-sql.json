@@ -152,17 +152,15 @@
             "name" : "args",
             "nullable" : false,
             "type" : {
-              "name" : "list"
+              "name" : "ClojureFormType"
             },
-            "children" : [{
-              "name" : "$data$",
-              "nullable" : false,
-              "type" : {
-                "name" : "union",
-                "mode" : "Dense",
-                "typeIds" : [ ]
-              },
-              "children" : [ ]
+            "children" : [ ],
+            "metadata" : [{
+              "value" : "xt/clj-form",
+              "key" : "ARROW:extension:name"
+            },{
+              "value" : "",
+              "key" : "ARROW:extension:metadata"
             }]
           }]
         },{
@@ -304,12 +302,7 @@
             "count" : 0,
             "VALIDITY" : [ ],
             "OFFSET" : [0],
-            "children" : [{
-              "name" : "$data$",
-              "count" : 0,
-              "TYPE_ID" : [ ],
-              "OFFSET" : [ ]
-            }]
+            "DATA" : [ ]
           }]
         },{
           "name" : "abort",

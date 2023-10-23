@@ -137,12 +137,12 @@
       "name" : "xt$iid",
       "count" : 3,
       "VALIDITY" : [1,1,1],
-      "DATA" : ["1ef6a989c60d8dc721fc8b54fb3bc0fe","4a2474f0c7afe8df22b2da22ac73e818","a4e167a76a05add8a8654c169b07b044"]
+      "DATA" : ["a4e167a76a05add8a8654c169b07b044","a5bcdaf37484cd619c27786ecdae4d93","eea0751da7c0d178362782b0ac510d28"]
     },{
       "name" : "xt$system_from",
       "count" : 3,
       "VALIDITY" : [1,1,1],
-      "DATA" : [1578009600000000,1577923200000000,1577836800000000]
+      "DATA" : [1577836800000000,1578009600000000,1577923200000000]
     },{
       "name" : "op",
       "count" : 3,
@@ -156,7 +156,7 @@
           "name" : "xt$valid_from",
           "count" : 3,
           "VALIDITY" : [1,1,1],
-          "DATA" : [1578009600000000,1577923200000000,1577836800000000]
+          "DATA" : [1577836800000000,1578009600000000,1577923200000000]
         },{
           "name" : "xt$valid_to",
           "count" : 3,
@@ -170,23 +170,23 @@
             "name" : "xt$id",
             "count" : 3,
             "VALIDITY" : [1,1,1],
-            "DATA" : ["6554","3421","0"]
+            "DATA" : ["0","6634","3461"]
           },{
             "name" : "xt$tx_time",
             "count" : 3,
             "VALIDITY" : [1,1,1],
-            "DATA" : [1578009600000000,1577923200000000,1577836800000000]
+            "DATA" : [1577836800000000,1578009600000000,1577923200000000]
           },{
             "name" : "xt$committed?",
             "count" : 3,
             "VALIDITY" : [1,1,1],
-            "DATA" : [1,0,1]
+            "DATA" : [1,1,0]
           },{
             "name" : "xt$error",
             "count" : 3,
-            "VALIDITY" : [0,1,0],
-            "OFFSET" : [0,0,284,284],
-            "DATA" : ["","#xt/runtime-err {:xtdb.error/error-type :runtime-error, :xtdb.error/error-key :xtdb.indexer/invalid-valid-times, :xtdb.error/message \"Runtime error: ':xtdb.indexer/invalid-valid-times'\", :valid-from #time/instant \"2020-01-01T00:00:00Z\", :valid-to #time/instant \"2019-01-01T00:00:00Z\"}",""]
+            "VALIDITY" : [0,0,1],
+            "OFFSET" : [0,0,0,284],
+            "DATA" : ["","","#xt/runtime-err {:xtdb.error/error-type :runtime-error, :xtdb.error/error-key :xtdb.indexer/invalid-valid-times, :xtdb.error/message \"Runtime error: ':xtdb.indexer/invalid-valid-times'\", :valid-from #time/instant \"2020-01-01T00:00:00Z\", :valid-to #time/instant \"2019-01-01T00:00:00Z\"}"]
           }]
         }]
       },{

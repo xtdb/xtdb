@@ -1,6 +1,7 @@
 (ns xtdb.tx-producer
   (:require [clojure.spec.alpha :as s]
             [juxt.clojars-mirrors.integrant.core :as ig]
+            [xtdb.api.protocols :as xtp]
             [xtdb.error :as err]
             xtdb.log
             [xtdb.sql :as sql]
@@ -8,8 +9,9 @@
             [xtdb.util :as util]
             [xtdb.vector :as vec]
             [xtdb.vector.writer :as vw])
-  (:import (java.time Instant ZoneId)
-           (java.lang AutoCloseable)
+  (:import (java.lang AutoCloseable)
+           (java.time Instant ZoneId)
+           (java.time Instant ZoneId)
            (java.util ArrayList HashMap List)
            org.apache.arrow.memory.BufferAllocator
            (org.apache.arrow.vector VectorSchemaRoot)
@@ -17,7 +19,8 @@
            org.apache.arrow.vector.types.UnionMode
            (xtdb.log Log LogRecord)
            (xtdb.tx Ops Ops$Abort Ops$Call Ops$Delete Ops$Evict Ops$Put Ops$Sql)
-           xtdb.vector.IValueWriter))
+           xtdb.vector.IValueWriter
+           xtdb.vector.extensions.ClojureFormType))
 
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface ITxProducer
@@ -217,8 +220,7 @@
 
                  (types/->field "call" types/struct-type false
                                 (types/->field "fn-id" types/dense-union-type false)
-                                (types/->field "args" types/list-type false
-                                               (types/->field "arg" types/dense-union-type false)))
+                                (types/->field "args" ClojureFormType/INSTANCE false))
 
                  ;; C1 importer
                  (types/col-type->field 'abort :null)))
@@ -332,7 +334,8 @@
       (let [fn-id (.fnId op)]
         (vw/write-value! fn-id (.writerForType fn-id-writer (vw/value->col-type fn-id))))
 
-      (vw/write-value! (vec (.args op)) args-list-writer)
+      (let [clj-form (xtp/->ClojureForm (vec (.args op)))]
+        (vw/write-value! clj-form args-list-writer))
 
       (.endStruct call-writer))))
 

@@ -2398,10 +2398,10 @@
                          :where [(match :xt/txs {:xt/* tx})]})
                  (mapv :tx))]
 
-    (t/is (= [{:xt/tx_time #time/zoned-date-time "2020-01-02T00:00Z[UTC]",
+    (t/is (= [{:xt/tx-time #time/zoned-date-time "2020-01-02T00:00Z[UTC]",
                :xt/id 1,
                :xt/committed? false}
-              {:xt/tx_time #time/zoned-date-time "2020-01-01T00:00Z[UTC]",
+              {:xt/tx-time #time/zoned-date-time "2020-01-01T00:00Z[UTC]",
                :xt/id 0,
                :xt/committed? true}]
              (mapv #(dissoc % :xt/error) txs)))
