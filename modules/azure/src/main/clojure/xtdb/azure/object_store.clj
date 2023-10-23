@@ -111,18 +111,18 @@
      (get-blob-range blob-container-client (str prefix k) start len)))
 
   (putObject [_ k buf]
-    (.add file-name-cache k)
+    (file-list/add-filename file-name-cache k)
     (put-blob blob-container-client (str prefix k) buf)
     (CompletableFuture/completedFuture nil))
 
   (listObjects [_this]
-    (into [] file-name-cache))
+    (file-list/list-files file-name-cache))
 
   (listObjects [_this dir]
     (file-list/list-files-under-prefix file-name-cache dir))
 
   (deleteObject [_ k]
-    (.remove file-name-cache k)
+    (file-list/remove-filename file-name-cache k)
     (delete-blob blob-container-client (str prefix k))
     (CompletableFuture/completedFuture nil))
   
@@ -131,7 +131,7 @@
     (CompletableFuture/completedFuture
      (start-multipart blob-container-client
                       (str prefix k)
-                      (fn [] (.add file-name-cache k)))))
+                      (fn [] (file-list/add-filename file-name-cache k)))))
 
   Closeable
   (close [_]
