@@ -36,7 +36,7 @@ public class NormalForm {
         if (i < 0) {
             return unnormalise(s);
         } else {
-            return "%s/%s".formatted(s.substring(0, i), s.substring(i + 1));
+            return "%s/%s".formatted(unnormalise(s.substring(0, i)), unnormalise(s.substring(i + 1)));
         }
     }
 
