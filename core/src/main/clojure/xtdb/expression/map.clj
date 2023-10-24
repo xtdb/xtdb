@@ -181,13 +181,13 @@
                                                                                  (cond-> col-type
                                                                                    with-nil-row? (types/merge-col-types :null)))
                                                                                val))))))]
-      (.colWriter rel-writer (name col-name) (.getFieldType (types/col-type->field col-type))))
+      (.colWriter rel-writer (str col-name) (.getFieldType (types/col-type->field col-type))))
 
     (when with-nil-row?
       (doto (.rowCopier rel-writer (->nil-rel (keys build-col-types)))
         (.copyRow 0)))
 
-    (let [build-key-cols (mapv #(vw/vec-wtr->rdr (.colWriter rel-writer (name %))) build-key-col-names)]
+    (let [build-key-cols (mapv #(vw/vec-wtr->rdr (.colWriter rel-writer (str %))) build-key-col-names)]
       (letfn [(compute-hash-bitmap [^long row-hash]
                 (or (.get hash->bitmap row-hash)
                     (let [bitmap (RoaringBitmap.)]
@@ -204,10 +204,10 @@
             (let [in-rel (if store-full-build-rel?
                            in-rel
                            (->> (set build-key-col-names)
-                                (mapv #(.readerForName in-rel (name %)))
+                                (mapv #(.readerForName in-rel (str %)))
                                 vr/rel-reader))
 
-                  in-key-cols (mapv #(.readerForName in-rel (name %))
+                  in-key-cols (mapv #(.readerForName in-rel (str %))
                                     build-key-col-names)
 
                   ;; NOTE: we might not need to compute `comparator` if the caller never requires `addIfNotPresent` (e.g. joins)
@@ -242,7 +242,7 @@
 
           (probeFromRelation [this probe-rel]
             (let [build-rel (.getBuiltRelation this)
-                  probe-key-cols (mapv #(.readerForName probe-rel (name %))
+                  probe-key-cols (mapv #(.readerForName probe-rel (str %))
                                        probe-key-col-names)
 
                   ^IntBinaryOperator
