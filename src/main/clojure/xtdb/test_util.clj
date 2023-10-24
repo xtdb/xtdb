@@ -381,3 +381,8 @@
   (letfn [(new-uuid [n]
             (java.util.UUID. (Long/reverse n) 0))]
     (map new-uuid (range n))))
+
+(defn vec->vals [^IVectorReader rdr]
+  (->> (for [i (range (.valueCount rdr))]
+         (.getObject rdr i))
+       (into [])))

@@ -314,7 +314,7 @@
 
       (t/is (thrown-with-msg? RuntimeException #"Dynamic column creation unsupported for this RelationWriter!"
                               (-> rel-wtr
-                                  (.colWriter "my-list" (FieldType/notNullable #xt.arrow/type :i64))
+                                  (.colWriter "my-list2" (FieldType/notNullable #xt.arrow/type :i64))
                                   (.getField))))
 
       (t/is (= (types/->field "my-union" #xt.arrow/type :union false

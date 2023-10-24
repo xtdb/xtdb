@@ -460,6 +460,14 @@
           (.writeNull absent-writer))
         (throw (UnsupportedOperationException. "populate-with-absents needs a nullable or union underneath!"))))))
 
+
+(defn- check-field-types [^FieldType expected-field-type ^FieldType given-field-type]
+  (or (and (= #xt.arrow/type :null (.getType expected-field-type))
+           (= #xt.arrow/type :null (.getType given-field-type)))
+      (when-not (= expected-field-type given-field-type)
+        (throw (IllegalStateException. (str "Field type mismatch: " (pr-str {:expected expected-field-type
+                                                                             :given given-field-type})))))))
+
 (extend-protocol WriterFactory
   ListVector
   (->writer* [arrow-vec notify!]
@@ -488,22 +496,26 @@
               (cond
                 (instance? NullVector src-vec) (null->vec-copier this-wtr)
                 (instance? DenseUnionVector src-vec) (duv->vec-copier this-wtr src-vec)
-                :else (let [^ListVector src-vec src-vec
-                            data-vec (.getDataVector src-vec)
-                            inner-copier (.rowCopier (.listElementWriter this-wtr) data-vec)]
-                        (reify IRowCopier
-                          (copyRow [_ src-idx]
-                            (let [pos (.getPosition wp)]
-                              (if (.isNull src-vec src-idx)
-                                (.writeNull this-wtr)
-                                (do
-                                  (.startList this-wtr)
-                                  (let [start-idx (.getElementStartIndex src-vec src-idx)
-                                        end-idx (.getElementEndIndex src-vec src-idx)]
-                                    (dotimes [n (- end-idx start-idx)]
-                                      (.copyRow inner-copier (+ start-idx n))))
-                                  (.endList this-wtr)))
-                              pos))))))
+                (instance? ListVector src-vec)
+                (let [^ListVector src-vec src-vec
+                      data-vec (.getDataVector src-vec)
+                      inner-copier (.rowCopier (.listElementWriter this-wtr) data-vec)]
+                  (reify IRowCopier
+                    (copyRow [_ src-idx]
+                      (let [pos (.getPosition wp)]
+                        (if (.isNull src-vec src-idx)
+                          (.writeNull this-wtr)
+                          (do
+                            (.startList this-wtr)
+                            (let [start-idx (.getElementStartIndex src-vec src-idx)
+                                  end-idx (.getElementEndIndex src-vec src-idx)]
+                              (dotimes [n (- end-idx start-idx)]
+                                (.copyRow inner-copier (+ start-idx n))))
+                            (.endList this-wtr)))
+                        pos))))
+                :else
+                (throw (err/illegal-arg (format "Can not copy from vector of %s to ListVector"
+                                                (pr-str (.getFieldType (.getField src-vec))))))))
 
             (writerPosition [_] wp)
             (writeNull [_] (.setNull arrow-vec (.getPositionAndIncrement wp)))
@@ -563,22 +575,26 @@
             (cond
               (instance? NullVector src-vec) (null->vec-copier this-wtr)
               (instance? DenseUnionVector src-vec) (duv->vec-copier this-wtr src-vec)
-              :else (let [^StructVector src-vec src-vec
-                          inner-copiers (mapv (fn [^ValueVector inner]
-                                                (-> (.structKeyWriter this-wtr (.getName inner))
-                                                    (.rowCopier inner)))
-                                              src-vec)]
-                      (reify IRowCopier
-                        (copyRow [_ src-idx]
-                          (let [pos (.getPosition wp)]
-                            (if (.isNull src-vec src-idx)
-                              (.writeNull this-wtr)
-                              (do
-                                (.startStruct this-wtr)
-                                (doseq [^IRowCopier inner inner-copiers]
-                                  (.copyRow inner src-idx))
-                                (.endStruct this-wtr)))
-                            pos))))))
+              (instance? StructVector src-vec)
+              (let [^StructVector src-vec src-vec
+                    inner-copiers (mapv (fn [^ValueVector inner]
+                                          (-> (.structKeyWriter this-wtr (.getName inner))
+                                              (.rowCopier inner)))
+                                        src-vec)]
+                (reify IRowCopier
+                  (copyRow [_ src-idx]
+                    (let [pos (.getPosition wp)]
+                      (if (.isNull src-vec src-idx)
+                        (.writeNull this-wtr)
+                        (do
+                          (.startStruct this-wtr)
+                          (doseq [^IRowCopier inner inner-copiers]
+                            (.copyRow inner src-idx))
+                          (.endStruct this-wtr)))
+                      pos))))
+              :else
+              (throw (err/illegal-arg (format "Can not copy from vector of %s to StructVector"
+                                              (pr-str (.getFieldType (.getField src-vec))))))))
 
           (writerPosition [_] wp)
 
@@ -594,8 +610,7 @@
 
           (^IVectorWriter structKeyWriter [this-wtr ^String col-name ^FieldType field-type]
            (when-let [^IVectorWriter wrt (.get writers col-name)]
-             (when-not (= (.getFieldType (.getField wrt)) field-type)
-               (throw (IllegalStateException. "Field type mismatch"))))
+             (check-field-types (.getFieldType (.getField wrt)) field-type))
 
            (.computeIfAbsent writers col-name
                              (reify Function
@@ -689,11 +704,13 @@
     (writeBytes [_ v] (write-value!) (.writeBytes w v))
     (writeObject [_ v] (write-value!) (.writeObject w v))
 
-    ( structKeyWriter [_ k] (.structKeyWriter w k))
+    (structKeyWriter [_ k] (.structKeyWriter w k))
+    (structKeyWriter [_ k field-type] (.structKeyWriter w k field-type))
     (startStruct [_] (.startStruct w))
     (endStruct [_] (write-value!) (.endStruct w))
 
     (listElementWriter [_] (.listElementWriter w))
+    (listElementWriter [_ field-type] (.listElementWriter w field-type))
     (startList [_] (.startList w))
     (endList [_] (write-value!) (.endList w))
 
@@ -720,13 +737,10 @@
 
     (reify IRowCopier
       (copyRow [_ src-idx]
-        (try
-          (let [type-id (.getTypeId src-vec src-idx)]
-            (assert (not (neg? type-id)))
-            (-> ^IRowCopier (aget copier-mapping type-id)
-                (.copyRow (.getOffset src-vec src-idx))))
-          (catch Throwable t
-            (throw t)))))))
+        (let [type-id (.getTypeId src-vec src-idx)]
+          (assert (not (neg? type-id)))
+          (-> ^IRowCopier (aget copier-mapping type-id)
+              (.copyRow (.getOffset src-vec src-idx))))))))
 
 (defn- vec->duv-copier ^xtdb.vector.IRowCopier [^IVectorWriter dest-col, ^ValueVector src-vec]
   (let [field (.getField src-vec)
@@ -819,8 +833,9 @@
                                                        (apply [_ leg]
                                                          (->new-child-writer leg field-type))))]
 
-              (when new-field?
-                (notify! (reset! !field (->field))))
+              (if new-field?
+                (notify! (reset! !field (->field)))
+                (check-field-types (.getFieldType (.getField w)) field-type))
 
               w))
 
@@ -865,10 +880,12 @@
         (writeObject [_ v] (.writeObject inner v))
 
         (structKeyWriter [_ k] (.structKeyWriter inner k))
+        (structKeyWriter [_ k field-type] (.structKeyWriter inner k field-type))
         (startStruct [_] (.startStruct inner))
         (endStruct [_] (.endStruct inner))
 
         (listElementWriter [_] (.listElementWriter inner))
+        (listElementWriter [_ field-type] (.listElementWriter inner field-type))
         (startList [_] (.startList inner))
         (endList [_] (.endList inner))
 
@@ -953,15 +970,14 @@
           (dotimes [i (alength arr)]
             (populate-with-absents (aget arr i) (inc pos)))))
 
-      ;; TODO get rid of or
       (^IVectorWriter colWriter [this ^String col-name]
        (or (.get writers col-name)
            (.colWriter this col-name (FieldType/notNullable #xt.arrow/type :union))))
 
       (colWriter [_  col-name field-type]
         (when-let [^IVectorWriter wrt (.get writers col-name)]
-          (when-not (= (.getFieldType (.getField wrt)) field-type)
-            (throw (IllegalStateException. "Field type mismatch"))))
+          (check-field-types (.getFieldType (.getField wrt)) field-type))
+
         (.computeIfAbsent writers col-name
                           (reify Function
                             (apply [_ _col-name]
@@ -998,11 +1014,11 @@
 
       (^IVectorWriter colWriter [_ ^String col-name]
        (or (.get writers col-name)
-           ;; TODO could we add things here dynamically ?
            (throw (NullPointerException. (pr-str {:cols (keys writers), :col col-name})))))
 
-      (colWriter [_ _col-name _field-type]
-        (throw (UnsupportedOperationException. "Dynamic column creation unsupported for this RelationWriter!")))
+      (colWriter [_ col-name _field-type]
+        (or (.get writers col-name)
+            (throw (UnsupportedOperationException. "Dynamic column creation unsupported for this RelationWriter!"))))
 
       (rowCopier [this in-rel] (->rel-copier this in-rel))
 
