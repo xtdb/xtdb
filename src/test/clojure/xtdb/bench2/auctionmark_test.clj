@@ -107,7 +107,8 @@
       (am/load-categories-tsv worker)
       (bxt2/generate worker :category am/generate-category 1)
       (bxt2/generate worker :item am/generate-item 1)
-
+      ;; to wait for indexing
+      (Thread/sleep 10)
       (t/is (= "i_0" (-> (am/proc-get-item worker) first :i_id))))))
 
 (t/deftest proc-new-user-test

@@ -1,19 +1,22 @@
 (ns xtdb.bench2.xtdb2
   (:require [clojure.java.io :as io]
+            [clojure.tools.cli :as cli]
+            [clojure.tools.logging :as log]
             [xtdb.api :as xt]
             [xtdb.api.protocols :as xtp]
             [xtdb.bench2 :as b]
             [xtdb.bench2.measurement :as bm]
             [xtdb.node :as node]
-            [xtdb.test-util :as tu])
-  (:import (xtdb InstantSource)
-           (io.micrometer.core.instrument MeterRegistry Timer)
+            [xtdb.test-util :as tu]
+            [xtdb.util :as util])
+  (:import (io.micrometer.core.instrument MeterRegistry Timer)
            (java.io Closeable File)
            (java.nio.file Path)
            (java.time Clock Duration)
            (java.util Random)
            (java.util.concurrent ConcurrentHashMap)
-           (java.util.concurrent.atomic AtomicLong)))
+           (java.util.concurrent.atomic AtomicLong)
+           (xtdb InstantSource)))
 
 (set! *warn-on-reflection* false)
 
@@ -191,6 +194,46 @@
         worker (b/->Worker node root-random domain-state custom-state clock reports)]
     worker))
 
+(defn- only-oltp-stage [report]
+  (let [stage-filter #(filter (comp #{:oltp} :stage) %)]
+    (-> report
+        (update :stages stage-filter)
+        (update :metrics stage-filter))))
+
+(defn run-auctionmark [{:keys [output-file node-dir load-phase duration]
+                        :or {node-dir "dev/auctionmark-run"
+                             duration "PT30S"} :as opts}]
+  (let [output-file (or output-file (str "auctionmark-" duration ".edn"))
+        node-dir (.toPath (io/file node-dir))]
+    (when load-phase
+      (util/delete-dir node-dir))
+    (let [report (-> (run-benchmark
+                      {:node-opts {:node-dir node-dir
+                                   :instant-src InstantSource/SYSTEM}
+                       :benchmark-type :auctionmark
+                       :benchmark-opts (assoc opts :sync true)})
+                     only-oltp-stage)]
+      (spit (io/file output-file) report))))
+
+(def cli-options
+  [[nil "--load-phase LOAD-PHASE" :parse-fn #(not (or (= % "false") (= % "nil")))]
+   [nil "--output-file OUTPUT-FILE"]
+   [nil "--node-dir NODE-DIR"]
+   [nil "--duration DURATION" :validate [#(try (Duration/parse %) true (catch Throwable _t false))
+                                         "Incorrect duration period"]]
+   [nil "--threads THREADS" :parse-fn #(Long/parseLong %)]
+   [nil "--scale-factor" :parse-fn #(Double/parseDouble %)]])
+
+(defn -main [& args]
+  (let [{:keys [options _arguments errors]} (cli/parse-opts args cli-options)]
+    (log/debug "Auctionmark run opts:" options)
+    (if (seq errors)
+      (binding [*out* *err*]
+        (doseq [error errors]
+          (println error))
+        (System/exit 1))
+      (run-auctionmark options))))
+
 (comment
 
   ;; ======
@@ -206,8 +249,8 @@
   (def node-dir (io/file "dev/dev-node"))
   (delete-directory-recursive node-dir)
 
-  ;; comment out the different phases in auctionmark.clj
-  ;; load phase is the only one required if testing single point queries
+  ;; The load-phase is essentially required once to setup some initial data,
+  ;; but can be ignored on subsequent runs.
   ;; run-benchmark clears up the node it creates (but not the data),
   ;; hence needing to create a new one to test single point queries
 
@@ -216,8 +259,8 @@
      {:node-opts {:node-dir (.toPath node-dir)
                   :instant-src InstantSource/SYSTEM}
       :benchmark-type :auctionmark
-      :benchmark-opts {:duration run-duration
-                       :scale-factor 0.1 :threads 8}}))
+      :benchmark-opts {:duration run-duration :load-phase true
+                       :scale-factor 0.1 :threads 1}}))
 
   ;;;;;;;;;;;;;
   ;; Viewing Reports

@@ -1,8 +1,11 @@
 (ns xtdb.bench2.report
-  (:require [clojure.string :as str]
-            [juxt.clojars-mirrors.hiccup.v2v0v0-alpha2.hiccup2.core :as hiccup2]
-            [clojure.data.json :as json]
-            [clojure.java.io :as io])
+  (:require [clojure.data.json :as json]
+            [clojure.edn :as edn]
+            [clojure.java.browse :as browse]
+            [clojure.java.io :as io]
+            [clojure.string :as str]
+            [clojure.tools.cli :as cli]
+            [juxt.clojars-mirrors.hiccup.v2v0v0-alpha2.hiccup2.core :as hiccup2])
   (:import (java.io File)))
 
 ;; use vega to plot metrics for now
@@ -204,7 +207,7 @@
     (spit f (hiccup2/html
              {}
              (hiccup-report (:title rs "Benchmark report") rs)))
-    (clojure.java.browse/browse-url (io/as-url f))))
+    (browse/browse-url (io/as-url f))))
 
 (defn- normalize-time [report]
   (let [{:keys [start-ms, stages, metrics]} report
@@ -235,3 +238,23 @@
 
 (defn stage-only [report stage]
   (update report :reports (partial filterv #(= stage (:stage %)))))
+
+(def cli-options
+  [[nil "--report [report-name,report-path]"
+    :parse-fn (fn [s]
+                (let [[name file] (-> s (subs 1 (dec (count s))) (str/split #","))]
+                  [name file]))
+    :assoc-fn (fn [m k v] (update m k (fnil conj []) v))]])
+
+(defn -main [& args]
+  (let [{:keys [options _arguments errors]} (cli/parse-opts args cli-options)]
+    (if (seq errors)
+      (binding [*out* *err*]
+        (doseq [error errors]
+          (println error))
+        (System/exit 1))
+      (let [reports (mapcat (fn [[name file-name]]
+                              [name (-> file-name io/file slurp edn/read-string)]) (:report options))]
+
+        (show-html-report (apply vs reports))
+        (System/exit 0)))))

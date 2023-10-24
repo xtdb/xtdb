@@ -6,6 +6,15 @@ Auctionmark runs in some capacity currently, this guide describes the requiremen
 - Run AWS_PROFILE=<profile_name_containing_above_creds> bin/download-dataset.sh --auctionmark (skip)
 - See comments at bottom of xtdb.bench2.xtdb.clj for further instructions.
 
+=== Creating a C1 vs C2 comparison report
+
+The following setup assumes that you have `2.x` checked out and another directory at `../xtdb` which can checkout the `auctionmark` branch of C1.
+Make sure there is nothing to be stashed on your (presumably C1) working branch.
+The following script will first run a C1 auctionmark on your machine followed by a C2 run and finally creates a report for comparison. It assumes you are placed at the root of the `modules/bench` directory.
+`./bin/auctionmark-compare.clj --load-phase true --run-duration "PT30S"`
+For subsequent runs one can potentially skip the load-phase.
+
+
 = (Deprecated) Bench
 
 A rudimentary bench adapted from XTDB 1.x. It currently only runs TPC-H, and only runs it ad-hoc (on Fargate) - it doesn't have any of the daily scheduling.
