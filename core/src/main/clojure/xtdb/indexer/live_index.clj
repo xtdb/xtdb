@@ -159,7 +159,8 @@
     (let [live-rel-rdr (vw/rel-wtr->rdr live-rel)]
       (when (pos? (.rowCount live-rel-rdr))
         (let [bufs (trie/live-trie->bufs allocator live-trie live-rel-rdr)
-              !fut (trie/write-trie-bufs! buffer-pool table-name trie-key bufs)
+              table-path (util/table-name->table-path table-name)
+              !fut (trie/write-trie-bufs! buffer-pool table-path trie-key bufs)
               table-metadata (MapEntry/create table-name
                                               {:fields (live-rel->fields live-rel)
                                                :row-count (.rowCount live-rel-rdr)})]

@@ -13,15 +13,16 @@
 
 (t/deftest test-compaction-jobs
   (letfn [(f [tries]
-            (c/compaction-jobs "foo"
+            (c/compaction-jobs (util/->path "tables/foo")
                                (for [[level rf nr] tries]
-                                 (trie/->table-meta-file-name "foo" (trie/->log-trie-key level rf nr)))))]
+                                 (trie/->table-meta-file-path (util/->path "tables/foo") 
+                                                              (trie/->log-trie-key level rf nr)))))]
     (t/is (= [] (f [])))
 
     (t/is (= []
              (f [[0 0 1] [0 1 2] [0 2 3]])))
 
-    (t/is (= [{:table-name "foo",
+    (t/is (= [{:table-path (util/->path "tables/foo"),
                :trie-keys ["log-l00-rf00-nr01"
                            "log-l00-rf01-nr02"
                            "log-l00-rf02-nr03"
@@ -33,7 +34,7 @@
              (f [[1 0 2] [1 2 4] [1 4 6]
                  [0 0 1] [0 1 2] [0 2 3] [0 3 4] [0 4 5] [0 5 6] [0 6 7] [0 7 8]])))
 
-    (t/is (= [{:table-name "foo",
+    (t/is (= [{:table-path (util/->path "tables/foo"),
                :trie-keys ["log-l01-rf00-nr02"
                            "log-l01-rf02-nr04"
                            "log-l01-rf04-nr06"

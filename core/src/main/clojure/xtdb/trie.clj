@@ -8,8 +8,9 @@
             [xtdb.vector.writer :as vw]
             xtdb.watermark)
   (:import (java.lang AutoCloseable)
-           (java.nio ByteBuffer)
+           (java.nio ByteBuffer) 
            java.nio.channels.WritableByteChannel
+           (java.nio.file Path Paths)
            java.security.MessageDigest
            (java.util ArrayList Arrays List)
            (java.util.concurrent.atomic AtomicInteger)
@@ -48,14 +49,14 @@
 (defn ->log-trie-key [^long level, ^long row-from, ^long next-row]
   (format "log-l%s-rf%s-nr%s" (util/->lex-hex-string level) (util/->lex-hex-string row-from) (util/->lex-hex-string next-row)))
 
-(defn ->table-data-file-name [table-name trie-key]
-  (format "tables/%s/data/%s.arrow" table-name trie-key))
+(defn ->table-data-file-path [^Path table-path trie-key]
+  (.resolve table-path (format "data/%s.arrow" trie-key)))
 
-(defn ->table-meta-file-name [table-name trie-key]
-  (format "tables/%s/meta/%s.arrow" table-name trie-key))
+(defn ->table-meta-file-path [^Path table-path trie-key]
+  (.resolve table-path (format "meta/%s.arrow" trie-key)))
 
-(defn list-meta-files [^IBufferPool buffer-pool, table-name]
-  (vec (sort (.listObjects buffer-pool (format "tables/%s/meta/" table-name)))))
+(defn list-meta-files [^IBufferPool buffer-pool ^Path table-path]
+  (.listObjects buffer-pool (.resolve table-path "meta")))
 
 (def ^org.apache.arrow.vector.types.pojo.Schema meta-rel-schema
   (Schema. [(types/->field "nodes" (ArrowType$Union. UnionMode/Dense (int-array (range 3))) false
@@ -215,25 +216,26 @@
     {:data-buf (.getAsByteBuffer data-bb-ch)
      :meta-buf (.getAsByteBuffer meta-bb-ch)}))
 
-(defn write-trie-bufs! [^IBufferPool buffer-pool, ^String table-name, trie-key
+(defn write-trie-bufs! [^IBufferPool buffer-pool, ^Path table-path, trie-key
                         {:keys [^ByteBuffer data-buf ^ByteBuffer meta-buf]}]
-  (-> (.putObject buffer-pool (->table-data-file-name table-name trie-key) data-buf)
+  (-> (.putObject buffer-pool (->table-data-file-path table-path trie-key) data-buf)
       (util/then-compose
         (fn [_]
-          (.putObject buffer-pool (->table-meta-file-name table-name trie-key) meta-buf)))))
+          (.putObject buffer-pool (->table-meta-file-path table-path trie-key) meta-buf)))))
 
-(defn parse-trie-file-name [file-name]
-  (when-let [[_ trie-key level-str row-from-str next-row-str] (re-find #"/(log-l(\p{XDigit}+)-rf(\p{XDigit}+)-nr(\p{XDigit}+)+?)\.arrow$" file-name)]
-    {:file-name file-name
-     :trie-key trie-key
-     :level (util/<-lex-hex-string level-str)
-     :row-from (util/<-lex-hex-string row-from-str)
-     :next-row (util/<-lex-hex-string next-row-str)}))
+(defn parse-trie-file-path [^Path file-path]
+  (let [trie-key (str (.getFileName file-path))] 
+    (when-let [[_ trie-key level-str row-from-str next-row-str] (re-find #"(log-l(\p{XDigit}+)-rf(\p{XDigit}+)-nr(\p{XDigit}+)+?)\.arrow$" trie-key)]
+      {:file-path file-path
+       :trie-key trie-key
+       :level (util/<-lex-hex-string level-str)
+       :row-from (util/<-lex-hex-string row-from-str)
+       :next-row (util/<-lex-hex-string next-row-str)})))
 
 (defn current-trie-files [file-names]
   (loop [next-row 0
          [level-trie-keys & more-levels] (->> file-names
-                                              (keep parse-trie-file-name)
+                                              (keep parse-trie-file-path)
                                               (group-by :level)
                                               (sort-by key #(Long/compare %2 %1))
                                               (vals))
@@ -246,7 +248,7 @@
                                                   (< row-from next-row))))))]
         (recur (long (:next-row (first (rseq tries))))
                more-levels
-               (into res (map :file-name) tries))
+               (into res (map :file-path) tries))
         (recur next-row more-levels res)))))
 
 (defn postwalk-merge-plan
@@ -295,8 +297,8 @@
     (util/close rdr)
     (util/close buf)))
 
-(defn open-meta-file [^IBufferPool buffer-pool file-name]
-  (util/with-close-on-catch [^ArrowBuf buf @(.getBuffer buffer-pool file-name)]
+(defn open-meta-file [^IBufferPool buffer-pool ^Path file-path]
+  (util/with-close-on-catch [^ArrowBuf buf @(.getBuffer buffer-pool file-path)]
     (let [{:keys [^VectorLoader loader root arrow-blocks]} (util/read-arrow-buf buf)]
       (with-open [record-batch (util/->arrow-record-batch-view (first arrow-blocks) buf)]
         (.load loader record-batch)
@@ -342,13 +344,13 @@
   AutoCloseable
   (close [_]))
 
-(defn open-data-rels [^IBufferPool buffer-pool, table-name, trie-keys, ^ILiveTableWatermark live-table-wm]
+(defn open-data-rels [^IBufferPool buffer-pool, ^Path table-path, trie-keys, ^ILiveTableWatermark live-table-wm]
   (util/with-close-on-catch [data-bufs (ArrayList.)]
     ;; TODO get hold of these a page at a time if it's a small query,
     ;; rather than assuming we'll always have/use the whole file.
     (let [arrow-data-rels (->> trie-keys
                                (mapv (fn [trie-key]
-                                       (.add data-bufs @(.getBuffer buffer-pool (->table-data-file-name table-name trie-key)))
+                                       (.add data-bufs @(.getBuffer buffer-pool (->table-data-file-path table-path trie-key)))
                                        (let [data-buf (.get data-bufs (dec (.size data-bufs)))
                                              {:keys [^VectorSchemaRoot root loader arrow-blocks]} (util/read-arrow-buf data-buf)]
 

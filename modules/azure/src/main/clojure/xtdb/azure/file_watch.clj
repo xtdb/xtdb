@@ -1,26 +1,28 @@
 (ns xtdb.azure.file-watch
   (:require [clojure.data.json :as json]
             [clojure.string :as string]
-            [clojure.tools.logging :as log]
-            [xtdb.file-list :as file-list])
+            [clojure.tools.logging :as log] 
+            [xtdb.util :as util])
   (:import [com.azure.core.credential TokenCredential]
            [com.azure.messaging.servicebus ServiceBusClientBuilder ServiceBusReceivedMessageContext ServiceBusErrorContext ServiceBusProcessorClient]
            [com.azure.messaging.servicebus.administration ServiceBusAdministrationClient ServiceBusAdministrationClientBuilder]
            [com.azure.storage.blob.models ListBlobsOptions BlobItem]
            [com.azure.storage.blob BlobContainerClient]
            [java.lang AutoCloseable]
+           [java.nio.file Path]
            [java.util NavigableSet UUID]
            [java.util.function Consumer]))
 
-(defn file-list-init [{:keys [^BlobContainerClient blob-container-client prefix]}  ^NavigableSet file-name-cache]
+(defn file-list-init [{:keys [^BlobContainerClient blob-container-client ^Path prefix]}  ^NavigableSet file-name-cache]
   (let [list-blob-opts (cond-> (ListBlobsOptions.)
-                         prefix (.setPrefix prefix))
+                         prefix (.setPrefix (str prefix)))
         filename-list (->> (.listBlobs blob-container-client list-blob-opts nil)
                            (.iterator)
                            (iterator-seq)
                            (mapv (fn [^BlobItem blob-item]
-                                   (subs (.getName blob-item) (count prefix)))))]
-    (file-list/add-filename-list file-name-cache filename-list)))
+                                   (cond->> (util/->path (.getName blob-item))
+                                     prefix (.relativize prefix)))))]
+    (.addAll file-name-cache filename-list)))
 
 (defn mk-short-uuid []
   (subs (str (UUID/randomUUID)) 0 8))
@@ -41,7 +43,7 @@
      :servicebus-topic-name servicebus-topic-name
      :subscription-name subscription-name}))
 
-(defn open-file-list-watcher [{:keys [^BlobContainerClient blob-container-client ^TokenCredential azure-credential servicebus-namespace container prefix] :as opts} ^NavigableSet file-name-cache]
+(defn open-file-list-watcher [{:keys [^BlobContainerClient blob-container-client ^TokenCredential azure-credential servicebus-namespace container ^Path prefix] :as opts} ^NavigableSet file-name-cache]
   (let [;; Create queue that will subscribe to sns topic for notifications
         {:keys [^ServiceBusAdministrationClient servicebus-admin-client servicebus-topic-name subscription-name]} (setup-topic-subscription opts)
 
@@ -49,7 +51,7 @@
          ;; Init the filename cache with current files
         _ (file-list-init opts file-name-cache)
 
-        url-suffix (if prefix (str "/" prefix) "/")
+        url-suffix (if prefix (str "/" prefix "/") "/")
         base-file-url (str (.getBlobContainerUrl blob-container-client) url-suffix)
         ^ServiceBusProcessorClient processor-client (-> (ServiceBusClientBuilder.)
                                                         (.fullyQualifiedNamespace (format "%s.servicebus.windows.net" servicebus-namespace))
@@ -64,12 +66,12 @@
                                                                                    event-type (get {"PutBlob" :create "DeleteBlob" :delete} (:api msg-data))
                                                                                    file-url (:url msg-data)
                                                                                    file (when (string/starts-with? file-url base-file-url)
-                                                                                          (subs file-url (count base-file-url)))]
+                                                                                          (util/->path (subs file-url (count base-file-url))))] 
                                                                                (log/debug (format "Message received, performing %s on file %s" event-type file))
                                                                                (when (and event-type file)
                                                                                  (cond
-                                                                                   (= event-type :create) (file-list/add-filename file-name-cache file)
-                                                                                   (= event-type :delete) (file-list/remove-filename file-name-cache file)))))))
+                                                                                   (= event-type :create) (.add file-name-cache file)
+                                                                                   (= event-type :delete) (.remove file-name-cache file)))))))
                                                         (.processError (reify Consumer
                                                                          (accept [_ msg]
                                                                            (log/error "Error when processing message from service bus queue - " (.getException ^ServiceBusErrorContext msg)))))

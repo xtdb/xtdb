@@ -1,6 +1,5 @@
 (ns xtdb.azure
-  (:require [clojure.spec.alpha :as s]
-            [clojure.string :as string]
+  (:require [clojure.spec.alpha :as s] 
             [clojure.tools.logging :as log]
             [juxt.clojars-mirrors.integrant.core :as ig]
             [xtdb.azure.log :as tx-log]
@@ -8,33 +7,28 @@
             [xtdb.azure.file-watch :as azure-file-watch]
             [xtdb.log :as xtdb-log]
             [xtdb.util :as util])
-  (:import (com.azure.core.credential TokenCredential)
-           (com.azure.core.management AzureEnvironment)
-           (com.azure.core.management.profile AzureProfile)
-           (com.azure.identity DefaultAzureCredentialBuilder)
-           (com.azure.messaging.eventhubs EventHubClientBuilder)
-           (com.azure.resourcemanager.eventhubs EventHubsManager)
-           (com.azure.resourcemanager.eventhubs.models EventHub EventHub$Definition EventHubs)
-           (com.azure.storage.blob BlobServiceClientBuilder)
-           (java.util.concurrent ConcurrentSkipListSet)))
+  (:import [com.azure.core.credential TokenCredential]
+           [com.azure.core.management AzureEnvironment]
+           [com.azure.core.management.profile AzureProfile]
+           [com.azure.identity DefaultAzureCredentialBuilder]
+           [com.azure.messaging.eventhubs EventHubClientBuilder]
+           [com.azure.resourcemanager.eventhubs EventHubsManager]
+           [com.azure.resourcemanager.eventhubs.models EventHub EventHub$Definition EventHubs]
+           [com.azure.storage.blob BlobServiceClientBuilder]
+           [java.nio.file Path]
+           [java.util.concurrent ConcurrentSkipListSet]))
 
 (derive ::blob-object-store :xtdb/object-store)
 
-(defn- parse-prefix [prefix]
-  (cond
-    (string/blank? prefix) ""
-    (string/ends-with? prefix "/") prefix
-    :else (str prefix "/")))
-
 (s/def ::storage-account string?)
 (s/def ::container string?)
-(s/def ::prefix string?)
+(s/def ::prefix ::util/path)
 (s/def ::servicebus-namespace string?)
 (s/def ::servicebus-topic-name string?)
 
 (defmethod ig/prep-key ::blob-object-store [_ opts]
   (-> opts
-      (util/maybe-update :prefix parse-prefix)))
+      (util/maybe-update :prefix util/->path)))
 
 (defmethod ig/pre-init-spec ::blob-object-store [_]
   (s/keys :req-un [::storage-account ::container ::servicebus-namespace ::servicebus-topic-name]
@@ -43,7 +37,7 @@
 ;; No minimum block size in azure
 (def minimum-part-size 0)
 
-(defmethod ig/init-key ::blob-object-store [_ {:keys [storage-account container prefix] :as opts}]
+(defmethod ig/init-key ::blob-object-store [_ {:keys [storage-account container ^Path prefix] :as opts}]
   (let [credential (.build (DefaultAzureCredentialBuilder.))
         blob-service-client (cond-> (-> (BlobServiceClientBuilder.)
                                         (.endpoint (str "https://" storage-account ".blob.core.windows.net"))

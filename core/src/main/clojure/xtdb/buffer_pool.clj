@@ -149,9 +149,14 @@
 
   (listObjects [_ dir]
     (locking memory-store
-      (->> (.keySet (.tailMap ^NavigableMap memory-store dir))
-           (into [] (take-while #(str/starts-with? % dir)))
-           (vec))))
+      (let [dir-depth (.getNameCount dir)]
+        (->> (.keySet (.tailMap ^NavigableMap memory-store dir))
+             (take-while #(.startsWith ^Path % dir))
+             (keep (fn [^Path path]
+                     (when (> (.getNameCount path) dir-depth)
+                       (.subpath path 0 (inc dir-depth)))))
+             (distinct)
+             (vec)))))
 
   (openChannel [_ k] (->InMemoryWritableChannel allocator memory-store (ByteBuffer/allocateDirect 32) k true))
 
@@ -187,7 +192,7 @@
                                ^Path disk-store
                                ^FileChannel file-channel
                                tmp-path
-                               ^String k]
+                               ^Path k]
   WritableByteChannel
   (isOpen [_] (.isOpen file-channel))
 
@@ -232,14 +237,14 @@
     (with-open [dir-stream (Files/walk disk-store (make-array FileVisitOption 0))]
       (vec (sort (for [^Path path (iterator-seq (.iterator dir-stream))
                        :when (Files/isRegularFile path (make-array LinkOption 0))]
-                   (str (.relativize disk-store path)))))))
+                   (.relativize disk-store path))))))
 
   (listObjects [_ dir]
     (let [dir (.resolve disk-store dir)]
       (when (Files/exists dir (make-array LinkOption 0))
         (with-open [dir-stream (Files/newDirectoryStream dir)]
           (vec (sort (for [^Path path dir-stream]
-                       (str (.relativize disk-store path)))))))))
+                       (.relativize disk-store path))))))))
 
   (openChannel [this k]
     (let [tmp-path (create-tmp-path disk-store)]
@@ -280,7 +285,7 @@
                                 ^ObjectStore remote-store
                                 ^FileChannel file-channel
                                 tmp-path
-                                ^String k]
+                                ^Path k]
   WritableByteChannel
   (isOpen [_] (.isOpen file-channel))
 
@@ -313,7 +318,7 @@
                                  ^ObjectStore remote-store
                                  ^FileChannel file-channel
                                  tmp-path
-                                 ^String k]
+                                 ^Path k]
   WritableByteChannel
   (isOpen [_] (.isOpen file-channel))
 
@@ -461,12 +466,12 @@
 
 (derive ::remote :xtdb/buffer-pool)
 
-(defn get-footer ^ArrowFooter [^IBufferPool bp k]
-  (with-open [^ArrowBuf arrow-buf @(.getBuffer bp (str k))]
+(defn get-footer ^ArrowFooter [^IBufferPool bp ^Path path]
+  (with-open [^ArrowBuf arrow-buf @(.getBuffer bp path)]
     (util/read-arrow-footer arrow-buf)))
 
-(defn open-record-batch ^ArrowRecordBatch [^IBufferPool bp k block-idx]
-  (with-open [^ArrowBuf arrow-buf @(.getBuffer bp (str k))]
+(defn open-record-batch ^ArrowRecordBatch [^IBufferPool bp ^Path path block-idx]
+  (with-open [^ArrowBuf arrow-buf @(.getBuffer bp path)]
     (let [footer (util/read-arrow-footer arrow-buf)
           blocks (.getRecordBatches footer)
           block (nth blocks block-idx nil)]
@@ -474,7 +479,7 @@
         (throw (IndexOutOfBoundsException. "Record batch index out of bounds of arrow file"))
         (util/->arrow-record-batch-view block arrow-buf)))))
 
-(defn open-vsr ^VectorSchemaRoot [bp k allocator]
-  (let [footer (get-footer bp k)
+(defn open-vsr ^VectorSchemaRoot [bp ^Path path allocator]
+  (let [footer (get-footer bp path)
         schema (.getSchema footer)]
     (VectorSchemaRoot/create schema allocator)))

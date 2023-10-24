@@ -20,6 +20,7 @@
   (:import (clojure.lang IPersistentMap MapEntry)
            (java.io Closeable)
            java.nio.ByteBuffer
+           (java.nio.file Path)
            (java.util Comparator HashMap Iterator LinkedList Map PriorityQueue)
            (java.util.function IntPredicate)
            (java.util.stream IntStream)
@@ -242,19 +243,19 @@
 (defn ->vsr-cache [buffer-pool allocator]
   (->VSRCache buffer-pool allocator (HashMap.)))
 
-(defn cache-vsr [{:keys [^Map cache, buffer-pool, allocator]} trie-leaf-file]
+(defn cache-vsr [{:keys [^Map cache, buffer-pool, allocator]} ^Path trie-leaf-file]
   (.computeIfAbsent cache trie-leaf-file
                     (util/->jfn
                       (fn [trie-leaf-file]
                         (bp/open-vsr buffer-pool trie-leaf-file allocator)))))
 
-(defn merge-task-data-reader ^IVectorReader [buffer-pool vsr-cache table-name [leaf-tag leaf-arg]]
+(defn merge-task-data-reader ^IVectorReader [buffer-pool vsr-cache ^Path table-path [leaf-tag leaf-arg]]
   (case leaf-tag
     :arrow
     (let [{:keys [page-idx trie-key]} leaf-arg
-          data-file-name (trie/->table-data-file-name table-name trie-key)]
-      (util/with-open [rb (bp/open-record-batch buffer-pool data-file-name page-idx)]
-        (let [vsr (cache-vsr vsr-cache data-file-name)
+          data-file-path (trie/->table-data-file-path table-path trie-key)]
+      (util/with-open [rb (bp/open-record-batch buffer-pool data-file-path page-idx)]
+        (let [vsr (cache-vsr vsr-cache data-file-path)
               loader (VectorLoader. vsr)]
           (.load loader rb)
           (vr/<-root vsr))))
@@ -262,7 +263,7 @@
     :live (:rel-rdr leaf-arg)))
 
 (deftype TrieCursor [^BufferAllocator allocator, ^Iterator merge-tasks
-                     table-name, col-names, ^Map col-preds, temporal-bounds
+                     ^Path table-path, col-names, ^Map col-preds, temporal-bounds
                      params, ^IPersistentMap picker-state
                      vsr-cache, buffer-pool]
   ICursor
@@ -276,7 +277,7 @@
 
             (doseq [leaf leaves
                     :when leaf
-                    :let [^RelationReader data-rdr (merge-task-data-reader buffer-pool vsr-cache table-name leaf)
+                    :let [^RelationReader data-rdr (merge-task-data-reader buffer-pool vsr-cache table-path leaf)
                           ^RelationReader leaf-rdr (cond-> data-rdr
                                                      iid-pred (.select (.select iid-pred allocator data-rdr params)))
                           rc (-> (copy-row-consumer out-rel leaf-rdr col-names)
@@ -484,17 +485,18 @@
                                                  (fn [fvt]
                                                    (or fvt (if default-all-valid-time? [:all-time] [:at [:now :now]])))))
                            ^ILiveTableWatermark live-table-wm (some-> (.liveIndex watermark) (.liveTable normalized-table-name))
-                           current-meta-files (->> (trie/list-meta-files buffer-pool normalized-table-name)
+                           table-path (util/table-name->table-path normalized-table-name)
+                           current-meta-files (->> (trie/list-meta-files buffer-pool table-path)
                                                    (trie/current-trie-files))]
 
                        (util/with-open [iid-arrow-buf (when iid-bb (util/->arrow-buf-view allocator iid-bb))]
                          (let [merge-tasks (util/with-open [meta-files (LinkedList.)]
-                                             (or (->merge-tasks (mapv (fn [meta-file-name]
-                                                                        (let [{meta-rdr :rdr, :as meta-file} (trie/open-meta-file buffer-pool meta-file-name)]
+                                             (or (->merge-tasks (mapv (fn [meta-file-path]
+                                                                        (let [{meta-rdr :rdr, :as meta-file} (trie/open-meta-file buffer-pool meta-file-path)]
                                                                           (.add meta-files meta-file)
-                                                                          (let [^ITableMetadata table-metadata (.tableMetadata metadata-mgr meta-rdr meta-file-name)]
+                                                                          (let [^ITableMetadata table-metadata (.tableMetadata metadata-mgr meta-rdr meta-file-path)]
                                                                             {:meta-file meta-file
-                                                                             :trie-key (:trie-key (trie/parse-trie-file-name meta-file-name))
+                                                                             :trie-key (:trie-key (trie/parse-trie-file-path meta-file-path))
                                                                              :table-metadata table-metadata
                                                                              :page-idx-pred (reduce (fn [^IntPredicate page-idx-pred col-name]
                                                                                                       (if-let [bloom-page-idx-pred (filter-pushdown-bloom-page-idx-pred table-metadata col-name)]
@@ -512,7 +514,7 @@
                            ;; the skipping in another leaf consumer.
 
                            (->TrieCursor allocator (.iterator ^Iterable merge-tasks)
-                                         normalized-table-name col-names col-preds
+                                         table-path col-names col-preds
                                          (->temporal-bounds params basis scan-opts)
                                          params
                                          {:ev-resolver (bitemp/event-resolver)

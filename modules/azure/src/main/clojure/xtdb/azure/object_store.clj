@@ -9,6 +9,7 @@
            [java.io ByteArrayOutputStream Closeable]
            [java.lang AutoCloseable]
            [java.nio ByteBuffer]
+           [java.nio.file Path]
            [java.util NavigableSet ArrayList List Base64 Base64$Encoder]
            [java.util.concurrent CompletableFuture]
            [java.util.function Supplier]
@@ -91,47 +92,55 @@
                               (.getBlockBlobClient))]
     (->MultipartUpload block-blob-client on-complete-fn (ArrayList.))))
 
-(defrecord AzureBlobObjectStore [^BlobContainerClient blob-container-client prefix multipart-minimum-part-size ^NavigableSet file-name-cache ^AutoCloseable file-list-watcher]
+(defrecord AzureBlobObjectStore [^BlobContainerClient blob-container-client ^Path prefix multipart-minimum-part-size ^NavigableSet file-name-cache ^AutoCloseable file-list-watcher]
   ObjectStore
   (getObject [_ k]
-    (CompletableFuture/completedFuture
-     (get-blob blob-container-client (str prefix k))))
+    (let [prefixed-key (util/prefix-key prefix k)]
+      (CompletableFuture/completedFuture
+       (get-blob blob-container-client (str prefixed-key)))))
 
   (getObject [_ k out-path]
-    (CompletableFuture/supplyAsync
-     (reify Supplier
-       (get [_]
-         (let [blob-buffer (get-blob blob-container-client (str prefix k))]
-           (util/write-buffer-to-path blob-buffer out-path)
+    (let [prefixed-key (util/prefix-key prefix k)]
+      (CompletableFuture/supplyAsync
+       (reify Supplier
+         (get [_]
+           (let [blob-buffer (get-blob blob-container-client (str prefixed-key))]
+             (util/write-buffer-to-path blob-buffer out-path)
 
-           out-path)))))
+             out-path))))))
 
   (getObjectRange [_ k start len]
-    (CompletableFuture/completedFuture
-     (get-blob-range blob-container-client (str prefix k) start len)))
+    (let [prefixed-key (util/prefix-key prefix k)]
+      (CompletableFuture/completedFuture
+       (get-blob-range blob-container-client (str prefixed-key) start len))))
 
   (putObject [_ k buf]
-    (file-list/add-filename file-name-cache k)
-    (put-blob blob-container-client (str prefix k) buf)
-    (CompletableFuture/completedFuture nil))
+    (let [prefixed-key (util/prefix-key prefix k)]
+      (CompletableFuture/completedFuture 
+       (do
+         (put-blob blob-container-client (str prefixed-key) buf)
+         (.add file-name-cache k)))))
 
   (listObjects [_this]
-    (file-list/list-files file-name-cache))
+    (into [] file-name-cache))
 
   (listObjects [_this dir]
     (file-list/list-files-under-prefix file-name-cache dir))
 
   (deleteObject [_ k]
-    (file-list/remove-filename file-name-cache k)
-    (delete-blob blob-container-client (str prefix k))
-    (CompletableFuture/completedFuture nil))
+    (let [prefixed-key (util/prefix-key prefix k)]
+      (CompletableFuture/completedFuture
+       (do 
+         (delete-blob blob-container-client (str prefixed-key))
+         (.remove file-name-cache k)))))
   
   SupportsMultipart
   (startMultipart [_ k]
-    (CompletableFuture/completedFuture
-     (start-multipart blob-container-client
-                      (str prefix k)
-                      (fn [] (file-list/add-filename file-name-cache k)))))
+    (let [prefixed-key (util/prefix-key prefix k)]
+      (CompletableFuture/completedFuture
+       (start-multipart blob-container-client
+                        (str prefixed-key)
+                        (fn [] (.add file-name-cache k))))))
 
   Closeable
   (close [_]

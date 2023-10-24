@@ -4,7 +4,8 @@
             [clojure.test :as t]
             [juxt.clojars-mirrors.integrant.core :as ig]
             [xtdb.google-cloud :as google-cloud]
-            [xtdb.object-store-test :as os-test])
+            [xtdb.object-store-test :as os-test]
+            [xtdb.util :as util])
   (:import [com.google.cloud.storage Bucket Storage StorageOptions StorageOptions$Builder Storage$BucketGetOption Bucket$BucketSourceOption StorageException]
            [java.io Closeable]
            [xtdb.object_store ObjectStore]))
@@ -69,24 +70,31 @@
 (t/deftest ^:google-cloud list-test-with-prior-objects
   (let [prefix (random-uuid)]
     (with-open [os (object-store prefix)]
-      (os-test/put-edn os "alice" :alice)
-      (os-test/put-edn os "alan" :alan)
-      (t/is (= ["alan" "alice"] (.listObjects ^ObjectStore os))))
+      (os-test/put-edn os (util/->path "alice") :alice)
+      (os-test/put-edn os (util/->path "alan") :alan)
+      (t/is (= (mapv util/->path ["alan" "alice"]) 
+               (.listObjects ^ObjectStore os))))
 
     (with-open [os (object-store prefix)]
       (t/testing "prior objects will still be there, should be available on a list request"
-        (t/is (= ["alan" "alice"] (.listObjects ^ObjectStore os))))
+        (t/is (= (mapv util/->path ["alan" "alice"]) 
+                 (.listObjects ^ObjectStore os))))
+      
       (t/testing "should be able to delete prior objects and have that reflected in list objects output"
-        @(.deleteObject ^ObjectStore os "alice")
-        (t/is (= ["alan"] (.listObjects ^ObjectStore os)))))))
+        @(.deleteObject ^ObjectStore os (util/->path "alice"))
+        (t/is (= (mapv util/->path ["alan"]) 
+                 (.listObjects ^ObjectStore os)))))))
 
 (t/deftest ^:google-cloud multiple-object-store-list-test
   (let [prefix (random-uuid)
         wait-time-ms 5000]
     (with-open [os-1 (object-store prefix)
                 os-2 (object-store prefix)]
-      (os-test/put-edn os-1 "alice" :alice)
-      (os-test/put-edn os-2 "alan" :alan)
+      (os-test/put-edn os-1 (util/->path "alice") :alice)
+      (os-test/put-edn os-2 (util/->path "alan") :alan)
       (Thread/sleep wait-time-ms)
-      (t/is (= ["alan" "alice"] (.listObjects ^ObjectStore os-1)))
-      (t/is (= ["alan" "alice"] (.listObjects ^ObjectStore os-2))))))
+      (t/is (= (mapv util/->path ["alan" "alice"]) 
+               (.listObjects ^ObjectStore os-1)))
+      
+      (t/is (= (mapv util/->path ["alan" "alice"]) 
+               (.listObjects ^ObjectStore os-2))))))

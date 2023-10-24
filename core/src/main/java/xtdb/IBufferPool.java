@@ -5,19 +5,20 @@ import org.apache.arrow.vector.VectorSchemaRoot;
 import org.apache.arrow.vector.ipc.ArrowFileWriter;
 
 import java.nio.ByteBuffer;
+import java.nio.file.Path;
 import java.nio.channels.WritableByteChannel;
 import java.util.concurrent.CompletableFuture;
 
 public interface IBufferPool extends AutoCloseable {
-    CompletableFuture<ArrowBuf> getBuffer(String key);
+    CompletableFuture<ArrowBuf> getBuffer(Path key);
 
-    CompletableFuture<?> putObject(String k, ByteBuffer buffer);
+    CompletableFuture<?> putObject(Path k, ByteBuffer buffer);
 
-    Iterable<String> listObjects();
+    Iterable<Path> listObjects();
 
-    Iterable<String> listObjects(String dir);
+    Iterable<Path> listObjects(Path dir);
 
-    WritableByteChannel openChannel(String k);
+    WritableByteChannel openChannel(Path k);
 
-    ArrowFileWriter openArrowFileWriter(String k, VectorSchemaRoot vsr);
+    ArrowFileWriter openArrowFileWriter(Path k, VectorSchemaRoot vsr);
 }

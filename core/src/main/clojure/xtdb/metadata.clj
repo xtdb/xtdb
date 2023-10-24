@@ -12,6 +12,7 @@
   (:import (java.io ByteArrayInputStream ByteArrayOutputStream)
            java.lang.AutoCloseable
            java.nio.ByteBuffer
+           (java.nio.file Path)
            (java.util HashMap HashSet Map NavigableMap TreeMap)
            (java.util.concurrent ConcurrentHashMap)
            (java.util.function Function IntPredicate)
@@ -40,7 +41,7 @@
 (definterface IMetadataManager
   (^void finishChunk [^long chunkIdx, newChunkMetadata])
   (^java.util.NavigableMap chunksMetadata [])
-  (^xtdb.metadata.ITableMetadata tableMetadata [^xtdb.vector.RelationReader metaRelReader, ^String metaFileName])
+  (^xtdb.metadata.ITableMetadata tableMetadata [^xtdb.vector.RelationReader metaRelReader, ^java.nio.file.Path metaFilePath])
   (columnFields [^String tableName])
   (columnField [^String tableName, ^String colName])
   (allColumnFields []))
@@ -49,12 +50,17 @@
 (definterface IMetadataPredicate
   (^java.util.function.IntPredicate build [^xtdb.metadata.ITableMetadata tableMetadata]))
 
-(defn- obj-key->chunk-idx [obj-key]
-  (some-> (second (re-matches #"chunk-metadata/(\p{XDigit}+).transit.json" obj-key))
-          (util/<-lex-hex-string)))
+(defn- obj-key->chunk-idx [^Path obj-key]
+  (some->> (.getFileName obj-key)
+           (str)
+           (re-matches #"(\p{XDigit}+).transit.json")
+           (second)
+           (util/<-lex-hex-string)))
+
+(def ^Path chunk-metadata-path (util/->path "chunk-metadata"))
 
 (defn- ->chunk-metadata-obj-key [chunk-idx]
-  (format "chunk-metadata/%s.transit.json" (util/->lex-hex-string chunk-idx)))
+  (.resolve chunk-metadata-path (format "%s.transit.json" (util/->lex-hex-string chunk-idx))))
 
 (defn- write-chunk-metadata ^java.nio.ByteBuffer [chunk-meta]
   (with-open [os (ByteArrayOutputStream.)]
@@ -208,10 +214,10 @@
                                              (disj :null)
                                              (doto (-> count (<= 1) (assert (str (pr-str (.getField content-col)) "should just be nullable mono-vecs here"))))))]
                 (-> ^NestedMetadataWriter
-                    (.computeIfAbsent type-metadata-writers col-type
-                                      (reify Function
-                                        (apply [_ col-type]
-                                          (type->metadata-writer (partial write-col-meta! false) types-wtr col-type))))
+                 (.computeIfAbsent type-metadata-writers col-type
+                                   (reify Function
+                                     (apply [_ col-type]
+                                       (type->metadata-writer (partial write-col-meta! false) types-wtr col-type))))
                     (.appendNestedMetadata content-col))))
 
             (write-col-meta! [root-col?, ^IVectorReader content-col]
@@ -304,18 +310,17 @@
     (set! (.fields this) (merge-fields fields new-chunk-metadata))
     (.put chunks-metadata chunk-idx new-chunk-metadata))
 
-  (tableMetadata [_ meta-rel-rdr file-name]
+  (tableMetadata [_ meta-rel-rdr file-path]
     (let [^IVectorReader metadata-reader (-> (.readerForName meta-rel-rdr "nodes")
                                              (.legReader :leaf))]
       (->table-metadata metadata-reader
                         (.computeIfAbsent table-metadata-idxs
-                                          file-name
+                                          file-path
                                           (reify Function
                                             (apply [_ _]
                                               (->table-metadata-idxs metadata-reader)))))))
 
   (chunksMetadata [_] chunks-metadata)
-
   (columnField [_ table-name col-name] (get-in fields [table-name col-name]))
   (columnFields [_ table-name] (get fields table-name))
   (allColumnFields [_] fields)
@@ -328,23 +333,23 @@
   (some-> (.lastEntry (.chunksMetadata metadata-mgr))
           (.getValue)))
 
-(defn- get-bytes ^java.util.concurrent.CompletableFuture #_<bytes> [^IBufferPool buffer-pool, obj-key]
+(defn- get-bytes ^java.util.concurrent.CompletableFuture #_<bytes> [^IBufferPool buffer-pool, ^Path obj-key]
   (-> (.getBuffer buffer-pool obj-key)
       (util/then-apply
-        (fn [^ArrowBuf buffer]
-          (assert buffer)
+       (fn [^ArrowBuf buffer]
+         (assert buffer)
 
-          (try
-            (let [bb (.nioBuffer buffer 0 (.capacity buffer))
-                  ba (byte-array (.remaining bb))]
-              (.get bb ba)
-              ba)
-            (finally
-              (.close buffer)))))))
+         (try
+           (let [bb (.nioBuffer buffer 0 (.capacity buffer))
+                 ba (byte-array (.remaining bb))]
+             (.get bb ba)
+             ba)
+           (finally
+             (.close buffer)))))))
 
 (defn- load-chunks-metadata ^java.util.NavigableMap [{:keys [^IBufferPool buffer-pool]}]
   (let [cm (TreeMap.)]
-    (doseq [cm-obj-key (.listObjects buffer-pool "chunk-metadata/")]
+    (doseq [cm-obj-key (.listObjects buffer-pool chunk-metadata-path)]
       (with-open [is (ByteArrayInputStream. @(get-bytes buffer-pool cm-obj-key))]
         (let [rdr (transit/reader is :json {:handlers xt.transit/tj-read-handlers})]
           (.put cm (obj-key->chunk-idx cm-obj-key) (transit/read rdr)))))

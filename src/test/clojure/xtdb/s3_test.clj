@@ -2,10 +2,10 @@
   (:require [clojure.test :as t]
             [juxt.clojars-mirrors.integrant.core :as ig]
             [xtdb.object-store-test :as os-test]
-            [xtdb.s3 :as s3])
+            [xtdb.s3 :as s3]
+            [xtdb.util :as util])
   (:import [java.io Closeable]
-           [java.nio ByteBuffer]
-           [java.util.concurrent CompletableFuture]
+           [java.nio ByteBuffer] 
            [software.amazon.awssdk.services.s3 S3AsyncClient]
            [software.amazon.awssdk.services.s3.model ListMultipartUploadsRequest ListMultipartUploadsResponse MultipartUpload]
            [xtdb.object_store ObjectStore SupportsMultipart IMultipartUpload]))
@@ -23,7 +23,7 @@
 
 (defn object-store ^Closeable [prefix]
   (->> (ig/prep-key ::s3/object-store {:bucket bucket,
-                                       :prefix (str prefix)
+                                       :prefix (util/->path (str prefix))
                                        :sns-topic-arn sns-topic-arn})
        (ig/init-key ::s3/object-store)))
 
@@ -42,33 +42,41 @@
 (t/deftest ^:s3 list-test-with-prior-objects
   (let [prefix (random-uuid)]
     (with-open [os (object-store prefix)]
-      (os-test/put-edn os "alice" :alice)
-      (os-test/put-edn os "alan" :alan)
-      (t/is (= ["alan" "alice"] (.listObjects ^ObjectStore os))))
+      (os-test/put-edn os (util/->path "alice") :alice)
+      (os-test/put-edn os (util/->path "alan") :alan)
+      (t/is (= (mapv util/->path ["alan" "alice"]) 
+               (.listObjects ^ObjectStore os))))
 
     (with-open [os (object-store prefix)]
       (t/testing "prior objects will still be there, should be available on a list request"
-        (t/is (= ["alan" "alice"] (.listObjects ^ObjectStore os))))
+        (t/is (= (mapv util/->path ["alan" "alice"]) 
+                 (.listObjects ^ObjectStore os))))
 
       (t/testing "should be able to delete prior objects and have that reflected in list objects output"
-        @(.deleteObject ^ObjectStore os "alice") 
-        (t/is (= ["alan"] (.listObjects ^ObjectStore os)))))))
+        @(.deleteObject ^ObjectStore os (util/->path "alice")) 
+        (t/is (= (mapv util/->path ["alan"]) 
+                 (.listObjects ^ObjectStore os)))))))
 
 (t/deftest ^:s3 multiple-object-store-list-test
   (let [prefix (random-uuid)
         wait-time-ms 20000]
     (with-open [os-1 (object-store prefix)
                 os-2 (object-store prefix)]
-      (os-test/put-edn os-1 "alice" :alice)
-      (os-test/put-edn os-2 "alan" :alan)
+      (os-test/put-edn os-1 (util/->path "alice") :alice)
+      (os-test/put-edn os-2 (util/->path "alan") :alan)
       (Thread/sleep wait-time-ms)
-      (t/is (= ["alan" "alice"] (.listObjects ^ObjectStore os-1)))
-      (t/is (= ["alan" "alice"] (.listObjects ^ObjectStore os-2))))))
+      
+      (t/is (= (mapv util/->path ["alan" "alice"]) 
+               (.listObjects ^ObjectStore os-1)))
+      
+      (t/is (= (mapv util/->path ["alan" "alice"]) 
+               (.listObjects ^ObjectStore os-2))))))
 
 (t/deftest ^:s3 multipart-start-and-cancel
   (with-open [os (object-store (random-uuid))]
-    (let [multipart-upload ^IMultipartUpload  @(.startMultipart ^SupportsMultipart os "test-multi-created")
-          prefixed-key (str (:prefix os) "test-multi-created")]
+    (let [multipart-key (util/->path "test-multi-created")
+          multipart-upload ^IMultipartUpload  @(.startMultipart ^SupportsMultipart os multipart-key)
+          prefixed-key (str (.resolve (:prefix os) multipart-key))]
       (t/testing "Call to start a multipart upload should work and be visible in multipart upload list"
         (let [list-multipart-uploads-response @(.listMultipartUploads ^S3AsyncClient (:client os)
                                                                       (-> (ListMultipartUploadsRequest/builder)
@@ -89,7 +97,7 @@
 
 (t/deftest ^:s3 multipart-put-test
   (with-open [os (object-store (random-uuid))]
-    (let [multipart-upload ^IMultipartUpload @(.startMultipart ^SupportsMultipart os "test-multi-put")
+    (let [multipart-upload ^IMultipartUpload @(.startMultipart ^SupportsMultipart os (util/->path "test-multi-put"))
           part-size (* 5 1024 1024)
           file-part-1 (os-test/generate-random-byte-buffer part-size)
           file-part-2 (os-test/generate-random-byte-buffer part-size)]
@@ -108,8 +116,9 @@
           (t/is (= [] uploads) "uploads should be empty")))
 
       (t/testing "Multipart upload works correctly - file present and contents correct"
-        (t/is (= ["test-multi-put"] (.listObjects ^ObjectStore os)))
+        (t/is (= (mapv util/->path ["test-multi-put"]) 
+                 (.listObjects ^ObjectStore os)))
 
-        (let [^ByteBuffer uploaded-buffer @(.getObject ^ObjectStore os "test-multi-put")]
+        (let [^ByteBuffer uploaded-buffer @(.getObject ^ObjectStore os (util/->path "test-multi-put"))]
           (t/testing "capacity should be equal to total of 2 parts"
             (t/is (= (* 2 part-size) (.capacity uploaded-buffer)))))))))

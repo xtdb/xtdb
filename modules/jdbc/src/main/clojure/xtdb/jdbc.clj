@@ -11,7 +11,7 @@
   (:import [com.zaxxer.hikari HikariConfig HikariDataSource]
            xtdb.object_store.ObjectStore
            java.nio.ByteBuffer
-           (java.nio.file Files OpenOption)
+           (java.nio.file Files OpenOption Path)
            java.util.concurrent.CompletableFuture
            java.util.function.Supplier
            (java.util.function Consumer Function)))
@@ -45,9 +45,13 @@
 (defmethod ig/halt-key! ::default-pool [_ pool]
   (util/try-close pool))
 
-(defn- get-object ^bytes [pool k]
+(defn ->sorted-path-list [object-list]
+  (let [path-list (map #(util/->path (:key %)) object-list)]
+    (sort path-list)))
+
+(defn- get-object ^bytes [pool ^Path k]
   (or (-> (jdbc/execute-one! pool
-                             ["SELECT blob FROM objects WHERE key = ?" k])
+                             ["SELECT blob FROM objects WHERE key = ?" (str k)])
           :objects/blob)
       (throw (os/obj-missing-exception k))))
 
@@ -80,7 +84,7 @@
      (fn []
        (jdbc/execute! pool
                       [(upsert-object-sql dialect)
-                       k
+                       (str k)
                        (if (.hasArray buf)
                          (.array buf)
                          (let [ba (byte-array (.remaining buf))]
@@ -89,20 +93,28 @@
 
   (listObjects [_]
     (->> (jdbc/execute! pool
-                        ["SELECT key FROM objects ORDER BY key"]
+                        ["SELECT key FROM objects"]
                         {:builder-fn jdbcr/as-unqualified-kebab-maps})
-         (mapv :key)))
+         (->sorted-path-list)
+         (vec)))
 
   (listObjects [_ obj-prefix]
-    (->> (jdbc/execute! pool
-                        ["SELECT key FROM objects WHERE key LIKE ? ORDER BY key"
-                         (str obj-prefix "%")]
-                        {:builder-fn jdbcr/as-unqualified-kebab-maps})
-         (mapv :key)))
+    (let [prefix-depth (.getNameCount obj-prefix)]
+      (->> (jdbc/execute! pool
+                          ["SELECT key FROM objects WHERE key LIKE ?"
+                           (str obj-prefix "%")]
+                          {:builder-fn jdbcr/as-unqualified-kebab-maps})
+           (->sorted-path-list)
+           (take-while #(.startsWith ^Path % obj-prefix))
+           (keep (fn [^Path path]
+                   (when (> (.getNameCount path) prefix-depth)
+                     (.subpath path 0 (inc prefix-depth)))))
+           (distinct)
+           (vec))))
 
   (deleteObject [_ k]
     (CompletableFuture/completedFuture
-     (jdbc/execute! pool ["DELETE FROM objects WHERE key = ?" k]))))
+     (jdbc/execute! pool ["DELETE FROM objects WHERE key = ?" (str k)]))))
 
 (defmethod ig/prep-key ::object-store [_ opts]
   (merge {:connection-pool (ig/ref ::connection-pool)

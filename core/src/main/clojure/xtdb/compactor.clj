@@ -9,6 +9,7 @@
             [xtdb.vector.reader :as vr]
             [xtdb.vector.writer :as vw])
   (:import (java.lang AutoCloseable)
+           [java.nio.file Path]
            [java.util Comparator LinkedList PriorityQueue]
            [org.apache.arrow.memory BufferAllocator]
            [org.apache.arrow.memory.util ArrowBufPointer]
@@ -76,40 +77,40 @@
           (.end meta-wtr))))))
 
 (defn exec-compaction-job! [^BufferAllocator allocator, ^IBufferPool buffer-pool,
-                            {:keys [table-name trie-keys out-trie-key]}]
+                            {:keys [^Path table-path trie-keys out-trie-key]}]
   (try
-    (log/infof "compacting '%s' '%s' -> '%s'..." table-name trie-keys out-trie-key)
+    (log/infof "compacting '%s' '%s' -> '%s'..." table-path trie-keys out-trie-key)
     (util/with-open [meta-files (LinkedList.)
-                     data-rels (trie/open-data-rels buffer-pool table-name trie-keys nil)
+                     data-rels (trie/open-data-rels buffer-pool table-path trie-keys nil)
                      data-out-bb (WritableByteBufferChannel/open)
                      meta-out-bb (WritableByteBufferChannel/open)]
       (doseq [trie-key trie-keys]
-        (.add meta-files (trie/open-meta-file buffer-pool (trie/->table-meta-file-name table-name trie-key))))
+        (.add meta-files (trie/open-meta-file buffer-pool (trie/->table-meta-file-path table-path trie-key))))
 
       (merge-tries! allocator
                     (mapv :trie meta-files)
                     data-rels
                     (.getChannel data-out-bb) (.getChannel meta-out-bb))
 
-      (log/debugf "uploading '%s' '%s'..." table-name out-trie-key)
+      (log/debugf "uploading '%s' '%s'..." table-path out-trie-key)
 
-      @(.putObject buffer-pool (trie/->table-data-file-name table-name out-trie-key)
+      @(.putObject buffer-pool (trie/->table-data-file-path table-path out-trie-key)
                    (.getAsByteBuffer data-out-bb))
-      @(.putObject buffer-pool (trie/->table-meta-file-name table-name out-trie-key)
+      @(.putObject buffer-pool (trie/->table-meta-file-path table-path out-trie-key)
                    (.getAsByteBuffer meta-out-bb)))
 
-    (log/infof "compacted '%s' -> '%s'." table-name out-trie-key)
+    (log/infof "compacted '%s' -> '%s'." table-path out-trie-key)
 
     (catch Throwable t
       (log/error t "Error running compaction job.")
       (throw t))))
 
-(defn compaction-jobs [table-name meta-file-names]
+(defn compaction-jobs [table-path meta-file-names]
   (for [[level parsed-trie-keys] (->> (trie/current-trie-files meta-file-names)
-                                      (map trie/parse-trie-file-name)
+                                      (map trie/parse-trie-file-path)
                                       (group-by :level))
         job (partition 4 parsed-trie-keys)]
-    {:table-name table-name
+    {:table-path table-path
      :trie-keys (mapv :trie-key job)
      :out-trie-key (trie/->log-trie-key (inc level)
                                         (:row-from (first job))
@@ -126,10 +127,8 @@
       (compactAll [_]
         (log/info "compact-all")
         (loop []
-          (let [jobs (for [table-name (->> (.listObjects buffer-pool "tables")
-                                           ;; TODO should obj-store listObjects only return keys from the current level?
-                                           (into #{} (keep #(second (re-find #"^tables/([^/]+)" %)))))
-                           job (compaction-jobs table-name (trie/list-meta-files buffer-pool table-name))]
+          (let [jobs (for [table-path (.listObjects buffer-pool util/tables-dir)
+                           job (compaction-jobs table-path (trie/list-meta-files buffer-pool table-path))]
                        job)
                 jobs? (boolean (seq jobs))]
 

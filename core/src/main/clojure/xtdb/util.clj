@@ -348,6 +348,15 @@
       (finally
         (Files/deleteIfExists to-path-temp)))))
 
+(defn prefix-key [^Path prefix ^Path k]
+  (cond->> k
+    prefix (.resolve prefix)))
+
+(def tables-dir (->path "tables"))
+
+(defn table-name->table-path [table-name]
+  (.resolve tables-dir table-name))
+
 (defn ->supplier {:style/indent :defn} ^java.util.function.Supplier [f]
   (reify Supplier
     (get [_]
