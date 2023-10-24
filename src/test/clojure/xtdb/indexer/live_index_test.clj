@@ -116,7 +116,7 @@
   (let [node-dir (util/->path "target/can-build-live-index")]
     (util/delete-dir node-dir)
 
-    (with-open [node (tu/->local-node {:node-dir node-dir})]
+    (util/with-open [node (tu/->local-node {:node-dir node-dir})]
       (let [^IBufferPool bp (tu/component node :xtdb/buffer-pool)]
 
         (let [last-tx-key (last (for [tx-ops txs] (xt/submit-tx node tx-ops)))]

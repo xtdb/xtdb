@@ -217,11 +217,6 @@ public class ValueVectorReader implements IVectorReader {
     }
 
     @Override
-    public IVectorReader metadataReader() {
-        return this;
-    }
-
-    @Override
     public void close() throws Exception {
         vector.close();
     }

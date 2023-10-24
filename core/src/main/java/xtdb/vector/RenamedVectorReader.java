@@ -188,11 +188,6 @@ public class RenamedVectorReader implements IVectorReader {
     }
 
     @Override
-    public IVectorReader metadataReader() {
-        return new RenamedVectorReader(reader.metadataReader(), colName);
-    }
-
-    @Override
     public String toString() {
         return "(RenamedVectorReader {colName='%s', reader=%s})".formatted(colName, reader);
     }

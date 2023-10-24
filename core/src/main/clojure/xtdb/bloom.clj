@@ -96,8 +96,9 @@
 (defn write-bloom [^IVectorWriter bloom-wtr, ^IVectorReader col]
   (let [bloom (RoaringBitmap.)]
     (dotimes [in-idx (.valueCount col)]
-      (let [^ints el-hashes (bloom-hashes col in-idx)]
-        (.add bloom el-hashes)))
+      (when-not (.isNull col in-idx)
+        (let [^ints el-hashes (bloom-hashes col in-idx)]
+          (.add bloom el-hashes))))
 
     (let [buf (ByteBuffer/allocate (.serializedSizeInBytes bloom))]
       (.serialize bloom buf)

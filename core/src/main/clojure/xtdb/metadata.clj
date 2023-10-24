@@ -14,7 +14,7 @@
            java.nio.ByteBuffer
            (java.util HashMap HashSet Map NavigableMap TreeMap)
            (java.util.concurrent ConcurrentHashMap)
-           (java.util.function Function)
+           (java.util.function Function IntPredicate)
            (java.util.stream IntStream)
            (org.apache.arrow.memory ArrowBuf)
            (org.apache.arrow.vector FieldVector)
@@ -132,20 +132,19 @@
               (.writeNull max-wtr nil)
 
               (dotimes [value-idx (.valueCount content-col)]
-                (when (or (.isNull min-vec pos)
-                          (and (not (.isNull content-col value-idx))
+                (when (and (not (.isNull content-col value-idx))
+                           (or (.isNull min-vec pos)
                                (neg? (.applyAsInt min-comparator value-idx pos))))
                   (.setPosition min-wp pos)
                   (.copyRow min-copier value-idx))
 
-                (when (or (.isNull max-vec pos)
-                          (and (not (.isNull content-col value-idx))
+                (when (and (not (.isNull content-col value-idx))
+                           (or (.isNull max-vec pos)
                                (pos? (.applyAsInt max-comparator value-idx pos))))
                   (.setPosition max-wp pos)
                   (.copyRow max-copier value-idx)))
 
               (.endStruct struct-wtr))))))))
-
 
 (doseq [type-head #{:null :bool :fixed-size-binary :clj-form}]
   (defmethod type->metadata-writer type-head [_write-col-meta! metadata-root col-type] (->bool-type-handler metadata-root col-type)))
@@ -210,7 +209,7 @@
                                       (reify Function
                                         (apply [_ col-type]
                                           (type->metadata-writer (partial write-col-meta! false) types-wtr col-type))))
-                    (.appendNestedMetadata (.metadataReader content-col)))))
+                    (.appendNestedMetadata content-col))))
 
             (write-col-meta! [root-col?, ^IVectorReader content-col]
               (let [content-writers (->> (if (= #xt.arrow/type :union (.getType (.getField content-col)))
@@ -223,7 +222,11 @@
                 (.startStruct col-wtr)
                 (.writeBoolean root-col-wtr root-col?)
                 (.writeObject col-name-wtr (.getName content-col))
-                (.writeLong count-wtr (.valueCount content-col))
+                (.writeLong count-wtr (-> (IntStream/range 0 (.valueCount content-col))
+                                          (.filter (reify IntPredicate
+                                                     (test [_ idx]
+                                                       (not (.isNull content-col idx)))))
+                                          (.count)))
                 (bloom/write-bloom bloom-wtr content-col)
 
                 (.startStruct types-wtr)
@@ -252,16 +255,17 @@
         col-names (HashSet.)]
 
     (dotimes [meta-idx meta-row-count]
-      (let [cols-start-idx (.getListStartIndex cols-rdr meta-idx)
-            data-page-idx (if-let [data-page-idx (.getObject data-page-idx-rdr meta-idx)]
-                            data-page-idx
-                            -1)]
-        (dotimes [cols-data-idx (.getListCount cols-rdr meta-idx)]
-          (let [cols-data-idx (+ cols-start-idx cols-data-idx)
-                col-name (str (.getObject column-name-rdr cols-data-idx))]
-            (.add col-names col-name)
-            (when (.getBoolean root-col-rdr cols-data-idx)
-              (.put page-idx-cache [col-name data-page-idx] cols-data-idx))))))
+      (when-not (.isNull cols-rdr meta-idx)
+        (let [cols-start-idx (.getListStartIndex cols-rdr meta-idx)
+              data-page-idx (if-let [data-page-idx (.getObject data-page-idx-rdr meta-idx)]
+                              data-page-idx
+                              -1)]
+          (dotimes [cols-data-idx (.getListCount cols-rdr meta-idx)]
+            (let [cols-data-idx (+ cols-start-idx cols-data-idx)
+                  col-name (str (.getObject column-name-rdr cols-data-idx))]
+              (.add col-names col-name)
+              (when (.getBoolean root-col-rdr cols-data-idx)
+                (.put page-idx-cache [col-name data-page-idx] cols-data-idx)))))))
 
     {:col-names (into #{} col-names)
      :page-idx-cache page-idx-cache
@@ -269,7 +273,7 @@
                    (cond
                      (>= idx meta-row-count) page-count
                      :else (recur (cond-> page-count
-                                    (not (nil? (.getObject data-page-idx-rdr idx))) inc)
+                                    (not (.isNull data-page-idx-rdr idx)) inc)
                                   (inc idx))))}))
 
 (defn ->table-metadata ^xtdb.metadata.ITableMetadata [^IVectorReader metadata-reader, {:keys [col-names page-idx-cache, page-count]}]
@@ -299,8 +303,7 @@
 
   (tableMetadata [_ meta-rel-rdr file-name]
     (let [^IVectorReader metadata-reader (-> (.readerForName meta-rel-rdr "nodes")
-                                             (.legReader :leaf)
-                                             (.metadataReader))]
+                                             (.legReader :leaf))]
       (->table-metadata metadata-reader
                         (.computeIfAbsent table-metadata-idxs
                                           file-name

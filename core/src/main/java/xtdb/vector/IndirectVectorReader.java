@@ -166,12 +166,6 @@ class IndirectVectorReader implements IVectorReader {
     }
 
     @Override
-    public IVectorReader metadataReader() {
-        var idxs = IntStream.range(0, indirection.valueCount()).map(indirection::getIndex).filter(i -> i >= 0).toArray();
-        return new IndirectVectorReader(reader, new Selection(idxs));
-    }
-
-    @Override
     public IVectorReader copyTo(ValueVector vector) {
         IVectorWriter writer = (IVectorWriter) VEC_TO_WRITER.invoke(vector);
         var copier = rowCopier(writer);

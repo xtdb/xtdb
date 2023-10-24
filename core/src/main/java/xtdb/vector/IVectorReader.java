@@ -10,6 +10,7 @@ import org.apache.arrow.vector.types.pojo.Field;
 import java.nio.ByteBuffer;
 import java.util.Collection;
 import java.util.List;
+import java.util.stream.IntStream;
 
 public interface IVectorReader extends AutoCloseable {
 
@@ -51,6 +52,8 @@ public interface IVectorReader extends AutoCloseable {
 
     Collection<String> structKeys();
 
+    IVectorReader listElementReader();
+
     int getListStartIndex(int idx);
 
     int getListCount(int idx);
@@ -82,9 +85,4 @@ public interface IVectorReader extends AutoCloseable {
     // TODO temporary, while we port the expression engine over
     IMonoVectorReader monoReader(Object colType);
     IPolyVectorReader polyReader(Object colType);
-
-    IVectorReader metadataReader();
-
-    IVectorReader listElementReader();
-
 }

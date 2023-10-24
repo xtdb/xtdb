@@ -120,8 +120,7 @@
           (let [leaf-rdr (vw/rel-wtr->rdr data-rel-wtr)
                 put-rdr (-> leaf-rdr
                             (.readerForName "op")
-                            (.legReader :put)
-                            (.metadataReader))
+                            (.legReader :put))
 
                 doc-rdr (.structKeyReader put-rdr "xt$doc")]
 
