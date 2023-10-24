@@ -167,6 +167,17 @@
 (defmethod print-method ArrowType [arrow-type w]
   (print-dup arrow-type w))
 
+(defmethod print-method FieldType [^FieldType field-type, ^Writer w]
+  (.write w (format "<FieldType %s "
+                    (if (.isNullable field-type)
+                      "null" "not-null")))
+  (print-method (.getType field-type) w)
+  (when-let [dictionary (.getDictionary field-type)]
+    (.write w (pr-str dictionary)))
+  (when-let [metadata (.getDictionary field-type)]
+    (print-method metadata w))
+  (.write w ">"))
+
 (defmethod print-method Field [^Field field, ^Writer w]
   (.write w (format "<Field %s %s %s"
                     (pr-str (.getName field))
