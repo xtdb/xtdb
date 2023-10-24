@@ -1556,9 +1556,6 @@
                         (symbol (.getName col))
                         (types/field->col-type (.getField col))))))))
 
-;; expression engine currently needs the entire nested type
-;; it needs that for a value (literal)
-
 (defn ->expression-projection-spec ^xtdb.operator.IProjectionSpec [col-name form {:keys [col-types param-types] :as input-types}]
   (let [expr (form->expr form input-types)
 

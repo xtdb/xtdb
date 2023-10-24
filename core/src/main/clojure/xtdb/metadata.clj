@@ -18,7 +18,7 @@
            (java.util.stream IntStream)
            (org.apache.arrow.memory ArrowBuf)
            (org.apache.arrow.vector FieldVector)
-           (org.apache.arrow.vector.types.pojo ArrowType$Union FieldType)
+           (org.apache.arrow.vector.types.pojo FieldType)
            xtdb.IBufferPool
            (xtdb.vector IVectorReader IVectorWriter)))
 
@@ -105,17 +105,7 @@
   ;; we get vectors out here because this code was largely written pre writers.
   (let [types-wp (.writerPosition types-wtr)
 
-        struct-wtr (.structKeyWriter types-wtr (types/col-type->field-name col-type) (FieldType/nullable #xt.arrow/type :struct)
-                                     #_(types/col-type->field (types/col-type->field-name col-type)
-                                                              [:union #{:null
-                                                                        [:struct {'min [:union #{:null col-type}]
-                                                                                  'max [:union #{:null col-type}]}]}]))
-
-        #_(.getType (.getFieldType (types/col-type->field "foo"
-                                                          [:union #{:null
-                                                                    [:struct {'min [:union #{:null :i64}]
-                                                                              'max [:union #{:null :i64}]}]}])))
-
+        struct-wtr (.structKeyWriter types-wtr (types/col-type->field-name col-type) (FieldType/nullable #xt.arrow/type :struct))
 
         min-wtr (.structKeyWriter struct-wtr "min" (FieldType/nullable (types/->arrow-type col-type)))
         ^FieldVector min-vec (.getVector min-wtr)

@@ -173,7 +173,6 @@
         hash->bitmap (IntObjectHashMap.)
         rel-writer (vw/->rel-writer allocator)]
 
-
     (doseq [[col-name col-type] (cond-> build-col-types
                                   (not store-full-build-rel?) (select-keys build-key-col-names)
 
