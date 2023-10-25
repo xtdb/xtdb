@@ -83,9 +83,10 @@
         (list? query) (-> !await-tx
                           (util/then-apply
                             (fn [_]
-                              (let [query (xtql.edn/parse-query query)]
+                              (let [query (xtql.edn/parse-query query)
+                                    parsed-query-opts (xtql.edn/parse-query-opts query-opts)]
                                 (xtql/open-xtql-query allocator ra-src wm-src scan-emitter
-                                                      query query-opts))))))))
+                                                      query parsed-query-opts query-opts))))))))
 
   (latest-submitted-tx [_] @!latest-submitted-tx)
 

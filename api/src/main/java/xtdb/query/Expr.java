@@ -98,6 +98,23 @@ public interface Expr {
         return new LogicVar(lv);
     }
 
+    final class Param implements Expr {
+        public final String v;
+
+        private Param(String v) {
+            this.v = v;
+        }
+
+        @Override
+        public String toString() {
+            return v;
+        }
+
+    }
+    static Param param(String v) {
+        return new Param(v);
+    }
+
     final class Call implements Expr {
         public final String f;
         public final List<Expr> args;

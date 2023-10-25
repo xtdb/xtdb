@@ -5,13 +5,14 @@
             [xtdb.operator :as op]
             [xtdb.util :as util]
             [xtdb.vector.writer :as vw])
-  (:import (org.apache.arrow.memory BufferAllocator)
+  (:import (clojure.lang MapEntry)
+           (org.apache.arrow.memory BufferAllocator)
            xtdb.IResultSet
            (xtdb.operator IRaQuerySource)
            (xtdb.operator.scan IScanEmitter)
-           (xtdb.query Expr$Call Expr$LogicVar Expr$Obj Query$From Query$Return
+           (xtdb.query Expr$Call Expr$LogicVar Expr$Obj Query$From Query$Return QueryOpts
                        Query$OrderBy Query$OrderDirection Query$OrderSpec Query$Pipeline Query$With
-                       OutSpec ArgSpec ColSpec VarSpec Query$WithCols Query$Join
+                       OutSpec ArgSpec ColSpec VarSpec Query$WithCols Query$Join Expr$Param
                        Query$Unify Query$Where Query$Without Query$Limit Query$Offset Query$Aggregate)))
 
 ;;TODO consider helper for [{sym expr} sym] -> provided vars set
@@ -49,11 +50,26 @@
   ([prefix col]
    (col-sym (str (format "%s_%s" prefix col)))))
 
+(defn- param-sym [v]
+  ;; TODO if its a param from the top level query it should be ::param? else ::correlated-column
+  (-> (symbol (str "?" v))
+      (with-meta {::param? true})))
+
+(defn- args->params [args]
+  (->> args
+       (mapv (fn [{:keys [l r _required-vars]}]
+               (MapEntry/create (param-sym l) r)))
+       (into {})))
+
 ;TODO fill out expr plan for other types
 (extend-protocol ExprPlan
   Expr$LogicVar
   (plan-expr [this] (col-sym (.lv this)))
   (required-vars [this] #{(symbol (.lv this))})
+
+  Expr$Param
+  (plan-expr [this] (param-sym (subs (.v this) 1)))
+  (required-vars [_this] #{})
 
   Expr$Obj
   (plan-expr [o] (.obj o))
@@ -62,7 +78,6 @@
   Expr$Call
   (plan-expr [call] (list* (symbol (.f call)) (mapv plan-expr (.args call))))
   (required-vars [call] (into #{} (mapcat required-vars) (.args call))))
-
 
 (defn- wrap-select [ra-plan predicates]
   (case (count predicates)
@@ -101,7 +116,8 @@
          (into [] (map-indexed
                    (fn [idx {:keys [provided-vars ra-plan]}]
                      (let [var->col (->> provided-vars
-                                         (into {} (map (juxt col-sym (partial col-sym (str "_r" idx))))))]
+                                         (into {} (map (juxt col-sym (if (= idx 0) col-sym (partial col-sym (str "_r" idx)))))))]
+                       ;;by not prefixing the leftmost rels columens, apply params need not be rewritten in the case its an apply binary join.
                        {:ra-plan [:rename var->col
                                   ra-plan]
                         :provided-vars (set (vals var->col))
@@ -137,11 +153,14 @@
       (throw (UnsupportedOperationException. "TODO: what should exprs in out specs do outside of scan")))))
 
 (defn- plan-arg-spec [^ArgSpec bind-spec]
+  ;;TODO expr here is far to pervasive.
+  ;;In the outer query this has to be a literal
+  ;;in the subquery case it must be a col, as thats all apply supports
+  ;;In reality we could support a full expr here, additionally top level query args perhaps should
+  ;;use a different spec. Delaying decision here for now.
   (let [var (col-sym (.attr bind-spec))
         expr (.expr bind-spec)]
-    (if (instance? Expr$LogicVar expr)
-      {:l var :r (plan-expr expr)}
-      (throw (UnsupportedOperationException. "TODO: what should exprs in args specs do")))))
+    {:l var :r (plan-expr expr) :required-vars (required-vars expr)}))
 
 (defn- plan-from [^Query$From from]
   (let [planned-bind-specs (mapv plan-from-bind-spec (.bindings from))]
@@ -158,7 +177,9 @@
      :required-vars (required-vars pred)}))
 
 (extend-protocol PlanQuery
-  Query$From (plan-query [from] (plan-from from))
+  Query$From
+  (plan-query [from]
+    (plan-from from))
 
   Query$Pipeline
   (plan-query [pipeline]
@@ -251,8 +272,10 @@
           arg-bindings (mapv plan-arg-spec (.args this))
           subquery (plan-query (.query this))]
       [[:join {:ra-plan (wrap-out-binding-projection subquery out-bindings)
-                :provided-vars (set (map :r out-bindings))
-                :required-vars (set (map :r arg-bindings))}]])))
+               :args (args->params arg-bindings)
+               :bind out-bindings
+               :provided-vars (set (map :r out-bindings))
+               :required-vars (apply set/union (map :required-vars arg-bindings))}]])))
 
 (defn wrap-wheres [plan wheres]
   (update plan :ra-plan wrap-select (map :ra-plan wheres)))
@@ -276,11 +299,26 @@
                    ra-plan]}
         (wrap-unify var->cols))))
 
-(defn- wrap-joins [{:keys [ra-plan provided-vars] :as plan} joins]
-  (mega-join (into [plan] joins)))
+(defn- wrap-joins [plan joins]
+  (->> joins
+       (reduce
+        (fn [acc-plan {:keys [args] :as join-plan}]
+          (let [{:keys [rels var->cols]} (with-unique-cols [acc-plan join-plan])
+                [acc-plan-with-unique-cols join-subquery-plan-with-unique-cols] rels]
+            (-> (if (seq args)
+                  (wrap-unify
+                   {:ra-plan [:apply :cross-join (set/map-invert args) ;;TODO fix apply params, reverse map is unlike any other arg form
+                              acc-plan-with-unique-cols
+                              join-subquery-plan-with-unique-cols]}
+                   var->cols)
+                  (wrap-unify
+                   {:ra-plan [:cross-join
+                              acc-plan-with-unique-cols
+                              join-subquery-plan-with-unique-cols]}
+                   var->cols)))))
+        plan)))
 
 (extend-protocol PlanQuery
-  ;;TODO Test Unify over a single from/clause
   Query$Unify
   (plan-query [unify]
     ;;TODO not all clauses can return entire plans (e.g. where-clauses),
@@ -332,7 +370,7 @@
 (defn- plan-order-spec [^Query$OrderSpec spec]
   (let [expr (.expr spec)]
     {:order-spec [(if (instance? Expr$LogicVar expr)
-                    (symbol (.lv ^Expr$LogicVar expr))
+                    (col-sym (.lv ^Expr$LogicVar expr))
                     (throw (UnsupportedOperationException. "TODO")))
 
                   (if (= Query$OrderDirection/DESC (.direction spec))
@@ -373,24 +411,28 @@
     {:ra-plan [:top {:skip (.length this)} ra-plan]
      :provided-vars provided-vars}))
 
+
+
 (defn open-xtql-query ^xtdb.IResultSet [^BufferAllocator allocator, ^IRaQuerySource ra-src, wm-src, ^IScanEmitter _scan-emitter
-                                        query {:keys [args default-all-valid-time? basis default-tz explain?]}]
-  (let [{:keys [ra-plan]} (binding [*gensym* (seeded-gensym "_" 0)]
+                                        query query-opts {:keys [default-all-valid-time? basis default-tz explain?]}]
+  ;;TODO passing both parsed and unparsed query-opts, to incrementally support opts as part of AST.
+  ;;Especially as its unclear if supporting query-opts in the AST will pay its weight.
+  (let [args (mapv plan-arg-spec (.args ^QueryOpts query-opts))
+        {:keys [ra-plan]} (binding [*gensym* (seeded-gensym "_" 0)]
                             (plan-query query))
 
         ra-plan (-> ra-plan
                     #_(doto clojure.pprint/pprint)
                     #_(->> (binding [*print-meta* true]))
                     (lp/rewrite-plan {})
-                    (doto clojure.pprint/pprint)
+                    #_(doto clojure.pprint/pprint)
                     (doto (lp/validate-plan)))]
 
     (if explain?
       (lp/explain-result ra-plan)
 
       (let [^xtdb.operator.PreparedQuery pq (.prepareRaQuery ra-src ra-plan)]
-        (util/with-close-on-catch [params (vw/open-params allocator {} #_(args->params args in-bindings))]
-          (-> (.bind pq wm-src {; :params params, :table-args (args->tables args in-bindings),
-                                :basis basis, :default-tz default-tz :default-all-valid-time? default-all-valid-time?})
+        (util/with-close-on-catch [params (vw/open-params allocator (args->params args))]
+          (-> (.bind pq wm-src {:params params :basis basis, :default-tz default-tz :default-all-valid-time? default-all-valid-time?})
               (.openCursor)
               (op/cursor->result-set params)))))))

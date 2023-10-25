@@ -67,6 +67,9 @@
                     [(first q+args) (subvec q+args 1)]
                     [q+args nil])
 
+         args (or (:args opts) args) ;;TODO XTQL has no support for q+args vec,
+         ;; these approaches for should be exclusive.
+
          opts (-> (into {:default-all-valid-time? false} opts)
                   (assoc :args args)
                   (update :basis xtp/after-latest-submitted-tx node))]
