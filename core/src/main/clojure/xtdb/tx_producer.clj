@@ -7,7 +7,6 @@
             [xtdb.sql :as sql]
             [xtdb.types :as types]
             [xtdb.util :as util]
-            [xtdb.vector :as vec]
             [xtdb.vector.writer :as vw])
   (:import clojure.lang.Keyword
            (java.lang AutoCloseable)

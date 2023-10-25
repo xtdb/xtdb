@@ -3,7 +3,6 @@
             [xtdb.test-util :as tu]
             [xtdb.types :as types]
             [xtdb.util :as util]
-            [xtdb.vector :as vec]
             [xtdb.vector.writer :as vw])
   (:import (java.math BigDecimal)
            java.net.URI

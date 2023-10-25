@@ -14,7 +14,6 @@
             [xtdb.trie :as trie]
             [xtdb.types :as types]
             [xtdb.util :as util]
-            [xtdb.vector :as vec]
             [xtdb.vector.reader :as vr]
             [xtdb.vector.writer :as vw])
   (:import [ch.qos.logback.classic Level Logger]

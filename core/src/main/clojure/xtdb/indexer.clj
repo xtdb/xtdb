@@ -15,7 +15,6 @@
             [xtdb.tx-producer :as txp]
             [xtdb.types :as types]
             [xtdb.util :as util]
-            [xtdb.vector :as vec]
             [xtdb.vector.reader :as vr]
             [xtdb.vector.writer :as vw]
             [xtdb.watermark :as wm])

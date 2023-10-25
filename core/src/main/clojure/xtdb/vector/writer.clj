@@ -2,7 +2,6 @@
   (:require [xtdb.error :as err]
             [xtdb.types :as types]
             [xtdb.util :as util]
-            [xtdb.vector :as vec]
             [xtdb.vector.reader :as vr])
   (:import (clojure.lang Keyword)
            (java.lang AutoCloseable)
