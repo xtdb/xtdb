@@ -1,8 +1,6 @@
 package xtdb.vector;
 
 import clojure.lang.Keyword;
-import org.apache.arrow.vector.types.pojo.ArrowType;
-import org.apache.arrow.vector.types.pojo.FieldType;
 
 import java.nio.ByteBuffer;
 
@@ -39,15 +37,11 @@ public interface IValueWriter {
 
     IValueWriter structKeyWriter(String key);
 
-    IValueWriter structKeyWriter(String key, FieldType fieldType);
-
     void startStruct();
 
     void endStruct();
 
     IValueWriter listElementWriter();
-
-    IValueWriter listElementWriter(FieldType fieldType);
 
     void startList();
 
@@ -56,10 +50,5 @@ public interface IValueWriter {
     @Deprecated
     IValueWriter writerForTypeId(byte typeId);
 
-    IValueWriter legWriter(ArrowType arrowType);
-
     IValueWriter legWriter(Keyword leg);
-
-    IValueWriter legWriter(Keyword leg, FieldType fieldType);
-
 }

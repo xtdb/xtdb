@@ -1,7 +1,6 @@
 package xtdb.vector;
 
 import clojure.lang.Keyword;
-import org.apache.arrow.vector.types.pojo.ArrowType;
 import org.apache.arrow.vector.types.pojo.FieldType;
 
 import java.nio.ByteBuffer;
@@ -120,7 +119,6 @@ public class ValueBox implements IValueWriter, IPolyValueReader {
         };
     }
 
-    @Override
     public IValueWriter structKeyWriter(String key, FieldType fieldType) {
         return new BoxWriter() {
             @Override
@@ -149,7 +147,6 @@ public class ValueBox implements IValueWriter, IPolyValueReader {
         };
     }
 
-    @Override
     public IValueWriter listElementWriter(FieldType fieldType) {
         return new BoxWriter() {
             @Override
@@ -169,27 +166,7 @@ public class ValueBox implements IValueWriter, IPolyValueReader {
     }
 
     @Override
-    public IValueWriter legWriter(ArrowType arrowType) {
-        return new BoxWriter() {
-            @Override
-            IValueWriter box() {
-                throw new UnsupportedOperationException();
-            }
-        };
-    }
-
-    @Override
     public IValueWriter legWriter(Keyword leg) {
-        return new BoxWriter() {
-            @Override
-            IValueWriter box() {
-                throw new UnsupportedOperationException();
-            }
-        };
-    }
-
-    @Override
-    public IValueWriter legWriter(Keyword leg, FieldType fieldType) {
         return new BoxWriter() {
             @Override
             IValueWriter box() {

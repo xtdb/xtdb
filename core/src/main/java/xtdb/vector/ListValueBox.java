@@ -1,7 +1,6 @@
 package xtdb.vector;
 
 import clojure.lang.Keyword;
-import org.apache.arrow.vector.types.pojo.ArrowType;
 import org.apache.arrow.vector.types.pojo.FieldType;
 
 import java.nio.ByteBuffer;
@@ -192,16 +191,6 @@ class ListValueBox implements IValueWriter, IMonoVectorReader, IPolyVectorReader
     }
 
     @Override
-    public IValueWriter listElementWriter(FieldType fieldType) {
-        return new BoxWriter() {
-            @Override
-            IValueWriter box() {
-                return writeBox.listElementWriter(fieldType);
-            }
-        };
-    }
-
-    @Override
     public void startList() {
         writeBox = new ValueBox();
         els.add(wp.getPosition(), writeBox);
@@ -226,16 +215,6 @@ class ListValueBox implements IValueWriter, IMonoVectorReader, IPolyVectorReader
     }
 
     @Override
-    public IValueWriter structKeyWriter(String key, FieldType fieldType) {
-        return new BoxWriter() {
-            @Override
-            IValueWriter box() {
-                return writeBox.structKeyWriter(key, fieldType);
-            }
-        };
-    }
-
-    @Override
     public void startStruct() {
         writeBox = new ValueBox();
         els.add(wp.getPosition(), writeBox);
@@ -250,18 +229,8 @@ class ListValueBox implements IValueWriter, IMonoVectorReader, IPolyVectorReader
     }
 
     @Override
-    public IValueWriter legWriter(ArrowType arrowType) {
-        return writeBox.legWriter(arrowType);
-    }
-
-    @Override
     public IValueWriter legWriter(Keyword leg) {
         return writeBox.legWriter(leg);
-    }
-
-    @Override
-    public IValueWriter legWriter(Keyword leg, FieldType fieldType) {
-        return writeBox.legWriter(leg, fieldType);
     }
 
     @Override
