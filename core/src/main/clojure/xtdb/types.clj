@@ -192,10 +192,10 @@
   (print-dup arrow-type w))
 
 (defmethod print-method FieldType [^FieldType field-type, ^Writer w]
-  (.write w (format "<FieldType %s "
-                    (if (.isNullable field-type)
-                      "null" "not-null")))
+  (.write w (format "<FieldType "))
   (print-method (.getType field-type) w)
+  (.write w (if (.isNullable field-type)
+              " null" " not-null"))
   (when-let [dictionary (.getDictionary field-type)]
     (.write w (pr-str dictionary)))
   (when-let [metadata (.getDictionary field-type)]
