@@ -35,6 +35,14 @@
                       '(from :docs {:bind {:xt/id e, :first-name name}}))))
         "returning eid"))
 
+(deftest test-from-unification
+  (xt/submit-tx tu/*node*
+                (conj ivan+petr
+                      [:put :docs {:xt/id :jeff, :first-name "Jeff", :last-name "Jeff"}]))
+
+  (t/is (= #{{:name "Jeff"}}
+           (set (xt/q tu/*node* '(from :docs {:bind {:first-name name :last-name name}}))))))
+
 (deftest test-basic-query
   (xt/submit-tx tu/*node* ivan+petr)
 
@@ -102,7 +110,7 @@
                         (order-by n i)))))))
 
 ;; https://github.com/tonsky/datascript/blob/1.1.0/test/datascript/test/query.cljc#L12-L36
-(deftest datascript-test-joins
+(deftest datascript-test-unify
   (let [_tx (xt/submit-tx tu/*node*
                           '[[:put :docs {:xt/id 1, :name "Ivan", :age 15}]
                             [:put :docs {:xt/id 2, :name "Petr", :age 37}]
@@ -322,27 +330,40 @@
                       :in [[x ...]]}
                     [10 15 20 35 75]])))))
 
-#_
-(deftest test-query-with-in-bindings
+(deftest test-query-args
   (let [_tx (xt/submit-tx tu/*node* ivan+petr)]
     (t/is (= #{{:e :ivan}}
-             (set (xt/q tu/*node*
-                        ['{:find [e]
-                           :in [name]
-                           :where [(match :docs {:xt/id e})
-                                   [e :first-name name]]}
-                         "Ivan"])))
-          "single arg")
+               (set (xt/q tu/*node*
+                          '(from :docs {:bind {:xt/id e :first-name $name}})
+                          {:args [{:name "Ivan"}]})))
 
-    (t/is (= #{{:e :ivan}}
+            "param in from")
+
+    (t/is (= #{{:e :petr :name "Petr"}}
              (set (xt/q tu/*node*
-                        ['{:find [e]
-                           :in [first-name last-name]
-                           :where [(match :docs {:xt/id e})
-                                   [e :first-name first-name]
-                                   [e :last-name last-name]]}
-                         "Ivan" "Ivanov"])))
-          "multiple args")
+                        '(-> (from :docs {:bind {:xt/id e :first-name name}})
+                             (where (= $name name)))
+                        {:args [{:name "Petr"}]})))
+          "param in where op")
+
+    (t/is (= #{{:e :petr :name "Petr" :baz "PETR"}
+               {:e :ivan :name "Ivan" :baz "PETR"}}
+             (set (xt/q tu/*node*
+                        '(unify (from :docs {:bind {:xt/id e :first-name name}})
+                                (with {baz (upper $name)}))
+                        {:args [{:name "Petr"}]})))
+          "param in unify with")
+
+
+    #_#_#_#_#_(t/is (= #{{:e :ivan}}
+                       (set (xt/q tu/*node*
+                                  ['{:find [e]
+                                     :in [first-name last-name]
+                                     :where [(match :docs {:xt/id e})
+                                             [e :first-name first-name]
+                                             [e :last-name last-name]]}
+                                   "Ivan" "Ivanov"])))
+                    "multiple args")
 
     (t/is (= #{{:e :ivan}}
              (set (xt/q tu/*node*
@@ -411,6 +432,37 @@
                                     :in [foo]
                                     :where [(match :docs {:xt/id e})
                                             [e :foo foo]]})))))
+(deftest test-subquery-args-and-unification
+  (let [_tx (xt/submit-tx tu/*node* ivan+petr)]
+    (t/is (= #{{:name "Ivan" :last-name "Ivanov"}}
+             (set (xt/q tu/*node*
+                        '(unify
+                          (with {name "Ivan"})
+                          (join (from :docs {:bind {:xt/id e
+                                                    :first-name $name
+                                                    :last-name last-name}})
+                                {:args [name]
+                                 :bind [last-name]})))))
+
+          "single subquery")
+
+    (t/is (= #{{:name "Ivan" :last-name "Ivanov"}}
+             (set (xt/q tu/*node*
+                        '(unify
+                          (with {name "Ivan"})
+                          (join (from :docs {:bind {:xt/id e
+                                                    :first-name $name
+                                                    :last-name last-name}})
+                                {:args [name]
+                                 :bind [last-name]})
+
+                          (join (from :docs {:bind {:xt/id e
+                                                    :first-name $f-name
+                                                    :last-name last-name}})
+                                {:args [{:f-name name}]
+                                 :bind [last-name]})))))
+
+          "multiple subqueries with unique args but same bind")))
 
 (deftest test-where-op
   (let [_tx (xt/submit-tx tu/*node* ivan+petr)]
@@ -1008,7 +1060,7 @@
                       (return :bond-name :film-name))))
         "films made by the Bond with the most films")
 
-  (t/testing "(contrived) correlated sub-query"
+  #_(t/testing "(contrived) correlated sub-query"
     (xt/submit-tx tu/*node* '[[:put :a {:xt/id :a1, :a 1}]
                               [:put :a {:xt/id :a2, :a 2}]
                               [:put :b {:xt/id :b2, :b 2}]

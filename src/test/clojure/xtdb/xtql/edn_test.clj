@@ -7,6 +7,9 @@
 (defn- roundtrip-expr [expr]
   (edn/unparse (edn/parse-expr expr)))
 
+(defn- roundtrip-q-opts [opts]
+  (edn/unparse (edn/parse-query-opts opts)))
+
 (t/deftest test-parse-expr
   (t/is (= 'a (roundtrip-expr 'a)))
 
@@ -86,7 +89,7 @@
                                 (from :bar {:bind {:baz b}}))))))
 
 (t/deftest test-parse-where
-  (let [q '(where false (= 1 'foo))]
+  (let [q '(where false (= 1 foo))]
     (t/is (= q
              (roundtrip-q-tail q)))))
 
@@ -129,7 +132,7 @@
   (t/is (= '(join (from :foo {:bind [a]})
                   {:bind [{:a b}]})
            (roundtrip-unify-clause '(join (from :foo {:bind [a]})
-                                          {:bind {:a b}})))))
+                                          {:bind [{:a b}]})))))
 
 (t/deftest test-parse-order-by
   (t/is (= '(order-by (+ a b) [b {:dir :desc}])
@@ -148,3 +151,13 @@
 (t/deftest test-parse-offset-test
   (t/is (= '(offset 5)
            (roundtrip-q-tail '(offset 5)))))
+
+(t/deftest test-parse-query-opts
+  (let [opts {:args [{:a "foo"} {:b "bar"}]}]
+    (t/is (= opts
+             (roundtrip-q-opts opts)))))
+
+(t/deftest test-parse-params
+  (let [q '(where (= $bar foo))]
+    (t/is (= q
+             (roundtrip-unify-clause q)))))

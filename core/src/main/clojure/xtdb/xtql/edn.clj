@@ -1,12 +1,14 @@
 (ns xtdb.xtql.edn
-  (:require [xtdb.error :as err])
-  (:import (xtdb.query Expr Expr$Bool Expr$Call Expr$Double Expr$Exists
-                       OutSpec ArgSpec ColSpec VarSpec
+  (:require [clojure.string :as str]
+            [xtdb.error :as err])
+  (:import (xtdb.query Expr Expr$Bool Expr$Call Expr$Double Expr$Exists Expr$Param
+                       OutSpec ArgSpec ColSpec VarSpec QueryOpts
                        Expr$LogicVar Expr$Long Expr$Obj Expr$NotExists Expr$Subquery
                        Query Query$Aggregate Query$From Query$LeftJoin Query$Join Query$Limit
                        Query$OrderBy Query$OrderDirection Query$OrderSpec Query$Pipeline Query$Offset
                       Query$Return Query$Unify Query$UnionAll Query$Where Query$With Query$WithCols Query$Without
                        TemporalFilter TemporalFilter$AllTime TemporalFilter$At TemporalFilter$In)))
+;;TODO old style bind still parses in from, should throw
 
 (defmulti parse-query
   (fn [query]
@@ -58,7 +60,10 @@
     (false? expr) Expr/FALSE
     (int? expr) (Expr/val (long expr))
     (double? expr) (Expr/val (double expr))
-    (symbol? expr) (Expr/lVar (str expr))
+    (symbol? expr) (let [str-expr (str expr)]
+                     (if (str/starts-with? str-expr "$")
+                       (Expr/param str-expr)
+                       (Expr/lVar str-expr)))
     (keyword? expr) (Expr/val expr)
     (vector? expr) (Expr/val (mapv parse-expr expr))
     (set? expr) (Expr/val (into #{} (map parse-expr) expr))
@@ -96,6 +101,7 @@
 
 (extend-protocol Unparse
   Expr$LogicVar (unparse [e] (symbol (.lv e)))
+  Expr$Param (unparse [e] (symbol (.v e)))
   Expr$Call (unparse [e] (list* (symbol (.f e)) (mapv unparse (.args e))))
   Expr$Bool (unparse [e] (.bool e))
   Expr$Double (unparse [e] (.dbl e))
@@ -215,9 +221,9 @@
                             (for [[attr expr] spec]
                               (do
                                 (when-not (symbol? attr)
-                                  (throw (err/illegal-arg :xtql/malformed-var-spec)))
+                                  (throw (err/illegal-arg :xtql/malformed-var-spec {:spec spec})))
                                 (VarSpec/of (str attr) (parse-expr expr))))
-                            (throw (err/illegal-arg :xtql/malformed-var-spec))))))))
+                            (throw (err/illegal-arg :xtql/malformed-var-spec {:spec spec}))))))))
 
 (defn- parse-col-specs
   "[{:to-col (from-expr)} :col ...]"
@@ -256,7 +262,7 @@
     (throw (err/illegal-arg :malformed-join-opts {:opts opts, :join join})))
 
   (let [{:keys [args bind]} opts]
-    (-> (Query/join (parse-query query) args)
+    (-> (Query/join (parse-query query) (parse-arg-specs args join))
         (.binding (some-> bind (parse-out-specs join))))))
 
 (defmethod parse-unify-clause 'left-join [[_ query opts :as left-join]]
@@ -264,7 +270,7 @@
     (throw (err/illegal-arg :malformed-join-opts {:opts opts, :left-join left-join})))
 
   (let [{:keys [args bind]} opts]
-    (-> (Query/leftJoin (parse-query query) args)
+    (-> (Query/leftJoin (parse-query query) (parse-arg-specs args left-join))
         (.binding (some-> bind (parse-out-specs left-join))))))
 
 (defn- unparse-binding-spec [attr expr base-type nested-type]
@@ -291,7 +297,7 @@
                [(cond-> {}
                   for-valid-time (assoc :for-valid-time (unparse for-valid-time))
                   for-sys-time (assoc :for-system-time (unparse for-sys-time))
-                  bind (assoc :bind (mapv unparse bind)))]))))
+                  (seq bind) (assoc :bind (mapv unparse bind)))]))))
 
   Query$Join
   (unparse [join]
@@ -300,8 +306,8 @@
       (list* 'join (unparse (.query join))
              (when (or args bind)
                [(cond-> {}
-                  args (assoc :args (mapv unparse args))
-                  bind (assoc :bind (mapv unparse bind)))]))))
+                  (seq args) (assoc :args (mapv unparse args))
+                  (seq bind) (assoc :bind (mapv unparse bind)))]))))
 
   Query$LeftJoin
   (unparse [left-join]
@@ -310,8 +316,8 @@
       (list* 'left-join (unparse (.query left-join))
              (when (or args bind)
                [(cond-> {}
-                  args (assoc :args (mapv unparse args))
-                  bind (assoc :bind (mapv unparse bind)))])))))
+                  (seq args) (assoc :args (mapv unparse args))
+                  (seq bind) (assoc :bind (mapv unparse bind)))])))))
 
 (extend-protocol Unparse
   Query$Pipeline (unparse [query] (list* '-> (unparse (.query query)) (mapv unparse (.tails query))))
@@ -423,3 +429,13 @@
   Query$OrderBy
   (unparse [query]
     (list* 'order-by (mapv unparse (.orderSpecs query)))))
+
+(defn parse-query-opts [{:keys [args] :as this}]
+  ;;TODO args in query opts have to be maps as thres no existing names,
+  ;;plus the vals must be literals.
+  (QueryOpts. (parse-arg-specs args this)))
+
+(extend-protocol Unparse
+  QueryOpts
+  (unparse [this]
+    {:args (mapv unparse (.args this))}))
