@@ -41,7 +41,7 @@
     (reify IRowCopier
       (copyRow [_ _src-idx]
         (let [pos (.getPosition wp)]
-          (.writeNull dest-wtr nil)
+          (.writeNull dest-wtr)
           pos)))))
 
 (defn- duv->vec-copier [^IVectorWriter dest-wtr, ^DenseUnionVector src-vec]
@@ -88,11 +88,11 @@
           (reify IRowCopier
             (copyRow [_ _src-idx]
               (let [pos (.getPosition wp)]
-                (.writeNull this-wtr nil)
+                (.writeNull this-wtr)
                 pos))))
 
         (writerPosition [_] wp)
-        (writeNull [_ _] (.setNull arrow-vec (.getPositionAndIncrement wp)))
+        (writeNull [_] (.setNull arrow-vec (.getPositionAndIncrement wp)))
 
         (^IVectorWriter legWriter [this ^ArrowType arrow-type] (scalar-leg-writer this arrow-type)))))
 
@@ -105,7 +105,7 @@
         (clear [_] (.clear arrow-vec) (.setPosition wp 0))
         (rowCopier [this src-vec] (scalar-copier this src-vec))
         (writerPosition [_] wp)
-        (writeNull [_ _] (.setNull arrow-vec (.getPositionAndIncrement wp)))
+        (writeNull [_] (.setNull arrow-vec (.getPositionAndIncrement wp)))
         (writeBoolean [_ v] (.setSafe arrow-vec (.getPositionAndIncrement wp) (if v 1 0)))
 
         (^IVectorWriter legWriter [this ^ArrowType arrow-type] (scalar-leg-writer this arrow-type))))))
@@ -123,7 +123,7 @@
           (~'rowCopier [this# src-vec#] (scalar-copier this# src-vec#))
           (~'writerPosition [_#] wp#)
 
-          (~'writeNull [_# _#] (.setNull arrow-vec# (.getPositionAndIncrement wp#)))
+          (~'writeNull [_#] (.setNull arrow-vec# (.getPositionAndIncrement wp#)))
           (~write-method [_# v#] (.setSafe arrow-vec# (.getPositionAndIncrement wp#) v#))
 
           (~(vary-meta 'legWriter assoc :tag 'IVectorWriter) [this# ^ArrowType arrow-type#] (scalar-leg-writer this# arrow-type#)))))))
@@ -154,7 +154,7 @@
         (clear [_] (.clear arrow-vec) (.setPosition wp 0))
         (rowCopier [this src-vec] (scalar-copier this src-vec))
         (writerPosition [_] wp)
-        (writeNull [_ _] (.setNull arrow-vec (.getPositionAndIncrement wp)))
+        (writeNull [_] (.setNull arrow-vec (.getPositionAndIncrement wp)))
         (writeLong [_ days] (.setSafe arrow-vec (.getPositionAndIncrement wp) (* days 86400000)))
 
         (^IVectorWriter legWriter [this ^ArrowType arrow-type] (scalar-leg-writer this arrow-type))))))
@@ -169,7 +169,7 @@
         (clear [_] (.clear arrow-vec) (.setPosition wp 0))
         (rowCopier [this src-vec] (scalar-copier this src-vec))
         (writerPosition [_] wp)
-        (writeNull [_ _] (.setNull arrow-vec (.getPositionAndIncrement wp)))
+        (writeNull [_] (.setNull arrow-vec (.getPositionAndIncrement wp)))
         (writeObject [_  decimal]
           (let [new-decimal (.setScale ^BigDecimal decimal (.getScale arrow-vec))]
             (.setSafe arrow-vec (.getPositionAndIncrement wp) new-decimal)))
@@ -181,7 +181,7 @@
   nil
   (value->arrow-type [_] #xt.arrow/type :null)
   (value->col-type [_] :null)
-  (write-value! [_v ^IVectorWriter w] (.writeNull w nil))
+  (write-value! [_v ^IVectorWriter w] (.writeNull w))
 
   Boolean
   (value->arrow-type [_] #xt.arrow/type :bool)
@@ -234,7 +234,7 @@
         (clear [_] (.clear arrow-vec) (.setPosition wp 0))
         (rowCopier [this src-vec] (scalar-copier this src-vec))
         (writerPosition [_] wp)
-        (writeNull [_ _] (.setNull arrow-vec (.getPositionAndIncrement wp)))
+        (writeNull [_] (.setNull arrow-vec (.getPositionAndIncrement wp)))
         (writeLong [_ v] (.setSafe arrow-vec (.getPositionAndIncrement wp) v))
 
         (^IVectorWriter legWriter [this ^ArrowType arrow-type] (scalar-leg-writer this arrow-type)))))
@@ -248,7 +248,7 @@
         (clear [_] (.clear arrow-vec) (.setPosition wp 0))
         (rowCopier [this src-vec] (scalar-copier this src-vec))
         (writerPosition [_] wp)
-        (writeNull [_ _] (.setNull arrow-vec (.getPositionAndIncrement wp)))
+        (writeNull [_] (.setNull arrow-vec (.getPositionAndIncrement wp)))
         (writeInt [_ total-months] (.setSafe arrow-vec (.getPositionAndIncrement wp) total-months))
         (writeObject [this v]
           (let [^PeriodDuration period-duration v]
@@ -265,7 +265,7 @@
         (clear [_] (.clear arrow-vec) (.setPosition wp 0))
         (rowCopier [this src-vec] (scalar-copier this src-vec))
         (writerPosition [_] wp)
-        (writeNull [_ _] (.setNull arrow-vec (.getPositionAndIncrement wp)))
+        (writeNull [_] (.setNull arrow-vec (.getPositionAndIncrement wp)))
         (writeObject [_ v]
           (let [^PeriodDuration period-duration v
                 duration (.getDuration period-duration)
@@ -289,7 +289,7 @@
         (clear [_] (.clear arrow-vec) (.setPosition wp 0))
         (rowCopier [this src-vec] (scalar-copier this src-vec))
         (writerPosition [_] wp)
-        (writeNull [_ _] (.setNull arrow-vec (.getPositionAndIncrement wp)))
+        (writeNull [_] (.setNull arrow-vec (.getPositionAndIncrement wp)))
         (writeObject [_ v]
           (let [^PeriodDuration period-duration v
                 period (.getPeriod period-duration)
@@ -375,7 +375,7 @@
         (clear [_] (.clear arrow-vec) (.setPosition wp 0))
         (rowCopier [this src-vec] (scalar-copier this src-vec))
         (writerPosition [_] wp)
-        (writeNull [_ _] (.setNull arrow-vec (.getPositionAndIncrement wp)))
+        (writeNull [_] (.setNull arrow-vec (.getPositionAndIncrement wp)))
 
         (writeBytes [_ v]
           (let [pos (.position v)]
@@ -397,7 +397,7 @@
         (clear [_] (.clear arrow-vec) (.setPosition wp 0))
         (rowCopier [this src-vec] (scalar-copier this src-vec))
         (writerPosition [_] wp)
-        (writeNull [_ _] (.setNull arrow-vec (.getPositionAndIncrement wp)))
+        (writeNull [_] (.setNull arrow-vec (.getPositionAndIncrement wp)))
 
         (writeBytes [_ v]
           (let [pos (.position v)]
@@ -419,7 +419,7 @@
         (clear [_] (.clear arrow-vec) (.setPosition wp 0))
         (rowCopier [this src-vec] (scalar-copier this src-vec))
         (writerPosition [_] wp)
-        (writeNull [_ _] (.setNull arrow-vec (.getPositionAndIncrement wp)))
+        (writeNull [_] (.setNull arrow-vec (.getPositionAndIncrement wp)))
 
         (writeBytes [_ buf]
           (let [pos (.position buf)
@@ -458,7 +458,7 @@
                                      w
                                      :else nil))]
         (dotimes [_ absents]
-          (.writeNull absent-writer nil))
+          (.writeNull absent-writer))
         (throw (UnsupportedOperationException. "populate-with-absents needs a nullable or union underneath!"))))))
 
 (extend-protocol WriterFactory
@@ -496,7 +496,7 @@
                           (copyRow [_ src-idx]
                             (let [pos (.getPosition wp)]
                               (if (.isNull src-vec src-idx)
-                                (.writeNull this-wtr nil)
+                                (.writeNull this-wtr)
                                 (do
                                   (.startList this-wtr)
                                   (let [start-idx (.getElementStartIndex src-vec src-idx)
@@ -507,7 +507,7 @@
                               pos))))))
 
             (writerPosition [_] wp)
-            (writeNull [_ _] (.setNull arrow-vec (.getPositionAndIncrement wp)))
+            (writeNull [_] (.setNull arrow-vec (.getPositionAndIncrement wp)))
 
             (listElementWriter [this]
               (if (instance? NullVector (.getDataVector arrow-vec))
@@ -573,7 +573,7 @@
                         (copyRow [_ src-idx]
                           (let [pos (.getPosition wp)]
                             (if (.isNull src-vec src-idx)
-                              (.writeNull this-wtr nil)
+                              (.writeNull this-wtr)
                               (do
                                 (.startStruct this-wtr)
                                 (doseq [^IRowCopier inner inner-copiers]
@@ -583,11 +583,11 @@
 
           (writerPosition [_] wp)
 
-          (writeNull [_ _]
+          (writeNull [_]
             (.setNull arrow-vec (.getPositionAndIncrement wp))
 
             (doseq [^IVectorWriter w (.values writers)]
-              (.writeNull w nil)))
+              (.writeNull w)))
 
           (structKeyWriter [this-wtr col-name]
             (or (.get writers col-name)
@@ -679,7 +679,7 @@
 
     (writerPosition [_] (.writerPosition w))
 
-    (writeNull [_ v] (write-value!) (.writeNull w v))
+    (writeNull [_] (write-value!) (.writeNull w))
     (writeBoolean [_ v] (write-value!) (.writeBoolean w v))
     (writeByte [_ v] (write-value!) (.writeByte w v))
     (writeShort [_ v] (write-value!) (.writeShort w v))
@@ -793,7 +793,7 @@
           (getVector [_] duv)
           (getField [_] @!field)
 
-          (writeNull [_ _]
+          (writeNull [_]
             ;; DUVs can't technically contain null, but when they're stored within a nullable struct/list vector,
             ;; we don't have anything else to write here :/
             (.getPositionAndIncrement wp))
@@ -854,7 +854,7 @@
 
         (writerPosition [_] (.writerPosition inner))
 
-        (writeNull [_ v] (.writeNull inner v))
+        (writeNull [_] (.writeNull inner))
         (writeBoolean [_ v] (.writeBoolean inner v))
         (writeByte [_ v] (.writeByte inner v))
         (writeShort [_ v] (.writeShort inner v))

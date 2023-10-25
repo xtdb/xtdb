@@ -59,7 +59,7 @@
                                                    1 (aset !match 0 (max (aget !match 0) (if (.readBoolean match-rdr) 1 -1))))))))))))
               (let [match (aget !match 0)]
                 (if (zero? match)
-                  (.writeNull out-writer nil)
+                  (.writeNull out-writer)
                   (.writeBoolean out-writer (== 1 match)))))))))
 
     [:otherwise simple-mode]

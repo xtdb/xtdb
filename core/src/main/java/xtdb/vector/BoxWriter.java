@@ -10,8 +10,8 @@ abstract class BoxWriter implements IValueWriter {
     abstract IValueWriter box();
 
     @Override
-    public void writeNull(Void nullValue) {
-        box().writeNull(nullValue);
+    public void writeNull() {
+        box().writeNull();
     }
 
     @Override

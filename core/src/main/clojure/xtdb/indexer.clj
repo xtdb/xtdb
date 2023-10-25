@@ -433,7 +433,7 @@
 
                (let [e-wtr (.structKeyWriter doc-writer "xt$error" (FieldType/nullable #xt.arrow/type :clj-form))]
                  (if (or (nil? t) (= t abort-exn))
-                   (.writeNull e-wtr nil)
+                   (.writeNull e-wtr)
                    (.writeObject e-wtr (pr-str t))))
                (.endStruct doc-writer)))
 

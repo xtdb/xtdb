@@ -318,7 +318,7 @@
           metadata-wtr (.structKeyWriter data-wtr "columns")]
       (letfn [(write-paths [paths]
                 (cond
-                  (nil? paths) (.writeNull nil-wtr nil)
+                  (nil? paths) (.writeNull nil-wtr)
 
                   (number? paths) (do
                                     (.startStruct data-wtr)
@@ -339,7 +339,7 @@
                                               (reify IntConsumer
                                                 (accept [_ idx]
                                                   (if (= idx -1)
-                                                    (.writeNull branch-el-wtr nil)
+                                                    (.writeNull branch-el-wtr)
                                                     (.writeInt branch-el-wtr idx)))))
                                     (.endList branch-wtr)))
                 (.endRow meta-wtr))]

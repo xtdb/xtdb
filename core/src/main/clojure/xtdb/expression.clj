@@ -235,7 +235,7 @@
     :list Object, :struct Object :clj-form Bytes})
 
 (defmethod read-value-code :null [_ & _args] nil)
-(defmethod write-value-code :null [_ & args] `(.writeNull ~@args))
+(defmethod write-value-code :null [_ w & _args] `(.writeNull ~w))
 
 (doseq [k [:bool :i8 :i16 :i32 :i64 :f32 :f64
            :date :timestamp-tz :timestamp-local :time-local :duration

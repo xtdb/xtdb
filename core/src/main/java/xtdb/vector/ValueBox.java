@@ -63,7 +63,7 @@ public class ValueBox implements IValueWriter, IPolyValueReader {
     }
 
     @Override
-    public void writeNull(Void nullValue) {}
+    public void writeNull() {}
 
     @Override
     public void writeBoolean(boolean booleanValue) {

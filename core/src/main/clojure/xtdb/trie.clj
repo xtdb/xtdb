@@ -150,7 +150,7 @@
             (dotimes [n (alength idxs)]
               (let [idx (aget idxs n)]
                 (if (= idx -1)
-                  (.writeNull branch-el-wtr nil)
+                  (.writeNull branch-el-wtr)
                   (.writeInt branch-el-wtr idx))))
 
             (.endList branch-wtr)

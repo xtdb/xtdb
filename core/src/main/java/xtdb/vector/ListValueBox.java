@@ -132,8 +132,8 @@ class ListValueBox implements IValueWriter, IMonoVectorReader, IPolyVectorReader
     }
 
     @Override
-    public void writeNull(Void nullValue) {
-        newEl().writeNull(nullValue);
+    public void writeNull() {
+        newEl().writeNull();
     }
 
     @Override

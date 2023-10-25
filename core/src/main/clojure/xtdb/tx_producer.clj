@@ -350,7 +350,7 @@
 (defn- ->abort-writer [^IVectorWriter op-writer]
   (let [abort-writer (.legWriter op-writer :abort)]
     (fn [^Ops$Abort _op]
-      (.writeNull abort-writer nil))))
+      (.writeNull abort-writer))))
 
 (defn open-tx-ops-vec ^org.apache.arrow.vector.ValueVector [^BufferAllocator allocator, put-tables]
   (.createVector (->tx-ops-field put-tables) allocator))

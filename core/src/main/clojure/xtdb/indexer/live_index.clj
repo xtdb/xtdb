@@ -130,7 +130,7 @@
           (.writeBytes iid-wtr iid)
           (.writeLong system-from-wtr system-from-µs)
 
-          (.writeNull evict-wtr nil)
+          (.writeNull evict-wtr)
 
           (.endRow live-rel)
 

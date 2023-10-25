@@ -128,8 +128,8 @@
                   min-comparator (expr.comp/->comparator content-col (vw/vec-wtr->rdr min-wtr) :nulls-last)
                   max-comparator (expr.comp/->comparator content-col (vw/vec-wtr->rdr max-wtr) :nulls-first)]
 
-              (.writeNull min-wtr nil)
-              (.writeNull max-wtr nil)
+              (.writeNull min-wtr)
+              (.writeNull max-wtr)
 
               (dotimes [value-idx (.valueCount content-col)]
                 (when (and (not (.isNull content-col value-idx))

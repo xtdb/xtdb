@@ -17,7 +17,7 @@ import java.nio.ByteBuffer;
  */
 public interface IValueWriter {
 
-    void writeNull(Void nullValue);
+    void writeNull();
 
     void writeBoolean(boolean booleanValue);
 
