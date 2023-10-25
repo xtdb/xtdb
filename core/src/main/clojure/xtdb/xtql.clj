@@ -51,14 +51,23 @@
    (col-sym (str (format "%s_%s" prefix col)))))
 
 (defn- param-sym [v]
-  ;; TODO if its a param from the top level query it should be ::param? else ::correlated-column
   (-> (symbol (str "?" v))
-      (with-meta {::param? true})))
+      (with-meta {:param? true})))
+
+(defn- apply-param-sym [v]
+  (-> (symbol (str "?" v))
+      (with-meta {:correlated-column? true})))
 
 (defn- args->params [args]
   (->> args
        (mapv (fn [{:keys [l r _required-vars]}]
                (MapEntry/create (param-sym l) r)))
+       (into {})))
+
+(defn- args->apply-params [args]
+  (->> args
+       (mapv (fn [{:keys [l r _required-vars]}]
+               (MapEntry/create (apply-param-sym l) r)))
        (into {})))
 
 ;TODO fill out expr plan for other types
@@ -272,7 +281,7 @@
           arg-bindings (mapv plan-arg-spec (.args this))
           subquery (plan-query (.query this))]
       [[:join {:ra-plan (wrap-out-binding-projection subquery out-bindings)
-               :args (args->params arg-bindings)
+               :args (args->apply-params arg-bindings)
                :bind out-bindings
                :provided-vars (set (map :r out-bindings))
                :required-vars (apply set/union (map :required-vars arg-bindings))}]])))
