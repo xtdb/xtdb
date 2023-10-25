@@ -22,6 +22,7 @@ import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.time.*;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
@@ -686,7 +687,7 @@ public class ValueVectorReader implements IVectorReader {
         private final DenseUnionVector v;
 
         private final List<Keyword> legs;
-        private final Map<Keyword, IVectorReader> legReaders = new HashMap<>();
+        private final Map<Keyword, IVectorReader> legReaders = new ConcurrentHashMap<>();
 
         private DuvReader(DenseUnionVector v) {
             // getLeg is overridden here, so we never use the `leg` field in this case.
