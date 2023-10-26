@@ -579,7 +579,7 @@
                                        :where [(match :docs {:xt/id e2})
                                                [(<> e e2)]]})]})))))
 
-#_
+
 (deftest test-left-join
   (xt/submit-tx tu/*node*
                 '[[:put :docs {:xt/id :ivan, :name "Ivan"}]
@@ -593,37 +593,33 @@
              {:e :sergei, :c nil}
              {:e :jeff, :c nil}}
            (set (xt/q tu/*node*
-                      '{:find [e c]
-                        :where [(match :docs {:xt/id e, :name name})
-                                (left-join {:find [e c]
-                                            :where [(match :docs {:xt/id c})
-                                                    [c :parent e]]})]})))
+                      '(unify (from :docs {:bind {:xt/id e}})
+                              (left-join (from :docs {:bind {:xt/id c :parent e}})
+                                         {:bind [c e]})))))
 
-        "find people who have children")
+        "independant: find people who have children")
 
   (t/is (= #{{:e :ivan, :s nil}
              {:e :petr, :s nil}
              {:e :sergei, :s :jeff}
              {:e :jeff, :s :sergei}}
            (set (xt/q tu/*node*
-                      '{:find [e s]
-                        :where [(match :docs {:xt/id e, :name name, :parent p})
-                                (left-join {:find [s p]
-                                            :in [e]
-                                            :where [(match :docs {:xt/id s, :parent p})
-                                                    [(<> e s)]]})]})))
-        "find people who have siblings")
+                      '(-> (unify (from :docs {:bind {:xt/id e, :name name, :parent p}})
+                                  (left-join (-> (from :docs {:bind {:xt/id s, :parent p}})
+                                                 (where (<> $e s)))
+                                             {:args [e]
+                                              :bind [s p]}))
+                           (return :e :s)))))
+        "dependant: find people who have siblings")
 
   (t/is (thrown-with-msg? IllegalArgumentException
-                          #":no-available-clauses"
+                          #"Not all variables in expression are in scope"
                           (xt/q tu/*node*
-                                '{:find [e n]
-                                  :where [(match :docs {:xt/id e})
-                                          [e :foo n]
-                                          (left-join {:find [e]
-                                                      :where [(match :docs {:xt/id e})
-                                                              [e :first-name "Petr"]
-                                                              [(= n 1)]]})]}))))
+                                '(unify (from :docs {:bind {:xt/id e :foo n}})
+                                        (left-join
+                                         (-> (from :docs {:bind {:xt/id e :first-name "Petr"}})
+                                             (where (= n 1)))
+                                         {:bind [e]}))))))
 
 #_
 (deftest test-semi-join
