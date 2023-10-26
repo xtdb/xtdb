@@ -211,9 +211,10 @@
                                                `(do
                                                   (.setPosition (.writerPosition ~acc-writer-sym) ~group-idx-sym)
                                                   ~(expr/write-value-code acc-type acc-writer-sym acc-code))))))))
-                         #_(doto clojure.pprint/pprint)
+                         #_(doto clojure.pprint/pprint) ;; <<no-commit>>
                          eval)}))
-      (util/lru-memoize)))
+      (util/lru-memoize) ;; <<no-commit>>
+      ))
 
 (defn- reducing-agg-factory [{:keys [to-name to-type zero-row?] :as agg-opts}]
   (let [to-type [:union (conj #{:null} to-type)]

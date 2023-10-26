@@ -82,7 +82,5 @@ public interface IVectorReader extends AutoCloseable {
 
     IRowCopier rowCopier(IVectorWriter writer);
 
-    // TODO temporary, while we port the expression engine over
-    IMonoVectorReader monoReader(Object colType);
-    IPolyVectorReader polyReader(Object colType);
+    IValueReader valueReader(IVectorPosition pos);
 }

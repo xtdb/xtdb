@@ -1,19 +1,25 @@
 package xtdb.vector;
 
 import clojure.lang.Keyword;
-import org.apache.arrow.vector.types.pojo.FieldType;
 
 import java.nio.ByteBuffer;
 
 public class ValueBox implements IValueWriter, IPolyValueReader {
-    private byte typeId = -1;
+    private static final Keyword NULL_LEG = Keyword.intern("null");
+
+    private Keyword leg;
 
     private long prim;
     private Object obj;
 
     @Override
-    public byte read() {
-        return typeId;
+    public Keyword getLeg() {
+        return leg;
+    }
+
+    @Override
+    public boolean isNull() {
+        return leg == NULL_LEG;
     }
 
     @Override
@@ -62,7 +68,9 @@ public class ValueBox implements IValueWriter, IPolyValueReader {
     }
 
     @Override
-    public void writeNull() {}
+    public void writeNull() {
+        obj = null;
+    }
 
     @Override
     public void writeBoolean(boolean booleanValue) {
@@ -119,15 +127,6 @@ public class ValueBox implements IValueWriter, IPolyValueReader {
         };
     }
 
-    public IValueWriter structKeyWriter(String key, FieldType fieldType) {
-        return new BoxWriter() {
-            @Override
-            IValueWriter box() {
-                return ((StructValueBox) obj).fieldWriter(key);
-            }
-        };
-    }
-
     @Override
     public void startStruct() {
         obj = new StructValueBox();
@@ -139,15 +138,6 @@ public class ValueBox implements IValueWriter, IPolyValueReader {
 
     @Override
     public IValueWriter listElementWriter() {
-        return new BoxWriter() {
-            @Override
-            IValueWriter box() {
-                return ((ListValueBox) obj);
-            }
-        };
-    }
-
-    public IValueWriter listElementWriter(FieldType fieldType) {
         return new BoxWriter() {
             @Override
             IValueWriter box() {
@@ -170,20 +160,10 @@ public class ValueBox implements IValueWriter, IPolyValueReader {
         return new BoxWriter() {
             @Override
             IValueWriter box() {
-                throw new UnsupportedOperationException();
-            }
-        };
-    }
-
-    @Override
-    @Deprecated
-    public IValueWriter writerForTypeId(byte typeId) {
-        return new BoxWriter() {
-            @Override
-            IValueWriter box() {
-                ValueBox.this.typeId = typeId;
+                ValueBox.this.leg = leg;
                 return ValueBox.this;
             }
         };
     }
+
 }

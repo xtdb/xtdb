@@ -12,12 +12,13 @@ import org.apache.arrow.vector.holders.NullableIntervalDayHolder;
 import org.apache.arrow.vector.holders.NullableIntervalMonthDayNanoHolder;
 import org.apache.arrow.vector.types.pojo.ArrowType;
 import org.apache.arrow.vector.types.pojo.Field;
+import xtdb.types.ClojureForm;
 import xtdb.types.IntervalDayTime;
 import xtdb.types.IntervalMonthDayNano;
 import xtdb.types.IntervalYearMonth;
-import xtdb.vector.extensions.AbsentVector;
-import xtdb.vector.extensions.SetVector;
+import xtdb.vector.extensions.*;
 
+import java.net.URI;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.time.*;
@@ -31,8 +32,6 @@ import static java.util.function.Function.identity;
 import static xtdb.util.NormalForm.datalogForm;
 
 public class ValueVectorReader implements IVectorReader {
-    private static final IFn MONO_READER = Clojure.var("xtdb.vector", "->mono-reader");
-    private static final IFn POLY_READER = Clojure.var("xtdb.vector", "->poly-reader");
     private static final IFn VEC_TO_READER = Clojure.var("xtdb.vector.reader", "vec->reader");
 
     private static final Keyword ABSENT_KEYWORD = Keyword.intern("xtdb", "absent");
@@ -207,14 +206,72 @@ public class ValueVectorReader implements IVectorReader {
         return writer.rowCopier(vector);
     }
 
-    @Override
-    public IMonoVectorReader monoReader(Object colType) {
-        return (IMonoVectorReader) MONO_READER.invoke(vector, colType);
+    private class BaseValueReader implements IValueReader {
+        private final IVectorPosition pos;
+
+        public BaseValueReader(IVectorPosition pos) {
+            this.pos = pos;
+        }
+
+        @Override
+        public Keyword getLeg() {
+            return ValueVectorReader.this.getLeg(pos.getPosition());
+        }
+
+        @Override
+        public boolean isNull() {
+            return ValueVectorReader.this.isNull(pos.getPosition());
+        }
+
+        @Override
+        public boolean readBoolean() {
+            return ValueVectorReader.this.getBoolean(pos.getPosition());
+        }
+
+        @Override
+        public byte readByte() {
+            return ValueVectorReader.this.getByte(pos.getPosition());
+        }
+
+        @Override
+        public short readShort() {
+            return ValueVectorReader.this.getShort(pos.getPosition());
+        }
+
+        @Override
+        public int readInt() {
+            return ValueVectorReader.this.getInt(pos.getPosition());
+        }
+
+        @Override
+        public long readLong() {
+            return ValueVectorReader.this.getLong(pos.getPosition());
+        }
+
+        @Override
+        public float readFloat() {
+            return ValueVectorReader.this.getFloat(pos.getPosition());
+        }
+
+        @Override
+        public double readDouble() {
+            return ValueVectorReader.this.getDouble(pos.getPosition());
+        }
+
+        @Override
+        public ByteBuffer readBytes() {
+            return ValueVectorReader.this.getBytes(pos.getPosition());
+        }
+
+        @Override
+        public Object readObject() {
+            return ValueVectorReader.this.getObject(pos.getPosition());
+        }
     }
 
     @Override
-    public IPolyVectorReader polyReader(Object colType) {
-        return (IPolyVectorReader) POLY_READER.invoke(vector, colType);
+    public IValueReader valueReader(IVectorPosition pos) {
+        return new BaseValueReader(pos);
     }
 
     @Override
@@ -339,6 +396,56 @@ public class ValueVectorReader implements IVectorReader {
         };
     }
 
+    public static IVectorReader keywordVector(KeywordVector v) {
+        var underlyingVec = varCharVector(v.getUnderlyingVector());
+
+        return new ValueVectorReader(v) {
+            @Override
+            public ByteBuffer getBytes(int idx) {
+                return underlyingVec.getBytes(idx);
+            }
+
+            @Override
+            Object getObject0(int idx) {
+                return Keyword.intern((String) underlyingVec.getObject(idx));
+            }
+        };
+    }
+
+    public static IVectorReader uriVector(UriVector v) {
+        var underlyingVec = varCharVector(v.getUnderlyingVector());
+
+        return new ValueVectorReader(v) {
+            @Override
+            public ByteBuffer getBytes(int idx) {
+                return underlyingVec.getBytes(idx);
+            }
+
+            @Override
+            Object getObject0(int idx) {
+                return URI.create((String) underlyingVec.getObject(idx));
+            }
+        };
+    }
+
+    public static IVectorReader clojureFormVector(ClojureFormVector v) {
+        var underlyingVec = varCharVector(v.getUnderlyingVector());
+
+        return new ValueVectorReader(v) {
+            private static final IFn READ_STRING = Clojure.var("clojure.core/read-string");
+
+            @Override
+            public ByteBuffer getBytes(int idx) {
+                return underlyingVec.getBytes(idx);
+            }
+
+            @Override
+            Object getObject0(int idx) {
+                return new ClojureForm(READ_STRING.invoke(underlyingVec.getObject(idx)));
+            }
+        };
+    }
+
     public static IVectorReader varBinaryVector(VarBinaryVector v) {
         return new ValueVectorReader(v) {
             @Override
@@ -363,6 +470,15 @@ public class ValueVectorReader implements IVectorReader {
             @Override
             Object getObject0(int idx) {
                 return ByteBuffer.wrap(v.getObject(idx));
+            }
+        };
+    }
+
+    public static IVectorReader uuidVector(UuidVector v) {
+        return new ValueVectorReader(v) {
+            @Override
+            public ByteBuffer getBytes(int idx) {
+                return getBytes(v.getUnderlyingVector(), idx);
             }
         };
     }
@@ -558,6 +674,17 @@ public class ValueVectorReader implements IVectorReader {
             Object getObject0(int idx) {
                 return new IntervalYearMonth(Period.ofMonths(getInt(idx)));
             }
+
+            @Override
+            public IValueReader valueReader(IVectorPosition pos) {
+                return new BaseValueReader(pos) {
+                    @Override
+                    public Object readObject() {
+                        // return PeriodDuration as it's still required by the EE
+                        return new PeriodDuration(v.getObject(pos.getPosition()), Duration.ZERO);
+                    }
+                };
+            }
         };
     }
 
@@ -566,9 +693,21 @@ public class ValueVectorReader implements IVectorReader {
 
         return new ValueVectorReader(v) {
             @Override
-            Object getObject0(int idx) {
+            IntervalDayTime getObject0(int idx) {
                 v.get(idx, holder);
                 return new IntervalDayTime(Period.ofDays(holder.days), Duration.ofMillis(holder.milliseconds));
+            }
+
+            @Override
+            public IValueReader valueReader(IVectorPosition pos) {
+                return new BaseValueReader(pos) {
+                    @Override
+                    public PeriodDuration readObject() {
+                        // return PeriodDuration as it's still required by the EE
+                        IntervalDayTime idt = getObject0(pos.getPosition());
+                        return new PeriodDuration(idt.period(), idt.duration());
+                    }
+                };
             }
         };
     }
@@ -581,6 +720,37 @@ public class ValueVectorReader implements IVectorReader {
             Object getObject0(int idx) {
                 v.get(idx, holder);
                 return new IntervalMonthDayNano(Period.of(0, holder.months, holder.days), Duration.ofNanos(holder.nanoseconds));
+            }
+
+            @Override
+            public IValueReader valueReader(IVectorPosition pos) {
+                return new BaseValueReader(pos) {
+                    @Override
+                    public PeriodDuration readObject() {
+                        // return PeriodDuration as it's still required by the EE
+                        return v.getObject(pos.getPosition());
+                    }
+                };
+            }
+        };
+    }
+
+    public static IVectorReader durationVector(DurationVector v) {
+        return new ValueVectorReader(v) {
+            @Override
+            public long getLong(int idx) {
+                return DurationVector.get(v.getDataBuffer(), idx);
+            }
+
+            @Override
+            public IValueReader valueReader(IVectorPosition pos) {
+                return new BaseValueReader(pos) {
+                    @Override
+                    public Object readObject() {
+                        // return PeriodDuration as it's still required by the EE
+                        return new PeriodDuration(Period.ZERO, v.getObject(pos.getPosition()));
+                    }
+                };
             }
         };
     }
@@ -612,37 +782,245 @@ public class ValueVectorReader implements IVectorReader {
 
                 return PersistentArrayMap.create(res);
             }
+
+            @Override
+            public IValueReader valueReader(IVectorPosition pos) {
+                var readers = structKeys().stream().collect(Collectors.toMap(k -> k, k -> structKeyReader(k).valueReader(pos)));
+                return new BaseValueReader(pos) {
+                    @Override
+                    public Object readObject() {
+                        return new IStructValueReader() {
+                            @Override
+                            public boolean readBoolean(String fieldName) {
+                                return readers.get(fieldName).readBoolean();
+                            }
+
+                            @Override
+                            public byte readByte(String fieldName) {
+                                return readers.get(fieldName).readByte();
+                            }
+
+                            @Override
+                            public short readShort(String fieldName) {
+                                return readers.get(fieldName).readShort();
+                            }
+
+                            @Override
+                            public int readInt(String fieldName) {
+                                return readers.get(fieldName).readInt();
+                            }
+
+                            @Override
+                            public long readLong(String fieldName) {
+                                return readers.get(fieldName).readLong();
+                            }
+
+                            @Override
+                            public float readFloat(String fieldName) {
+                                return readers.get(fieldName).readFloat();
+                            }
+
+                            @Override
+                            public double readDouble(String fieldName) {
+                                return readers.get(fieldName).readDouble();
+                            }
+
+                            @Override
+                            public ByteBuffer readBytes(String fieldName) {
+                                return readers.get(fieldName).readBytes();
+                            }
+
+                            @Override
+                            public Object readObject(String fieldName) {
+                                return readers.get(fieldName).readObject();
+                            }
+
+                            @Override
+                            public IPolyValueReader readField(String fieldName) {
+                                var reader = readers.get(fieldName);
+
+                                return new IPolyValueReader() {
+                                    @Override
+                                    public Keyword getLeg() {
+                                        return reader.getLeg();
+                                    }
+
+                                    @Override
+                                    public boolean isNull() {
+                                        return reader.isNull();
+                                    }
+
+                                    @Override
+                                    public boolean readBoolean() {
+                                        return reader.readBoolean();
+                                    }
+
+                                    @Override
+                                    public byte readByte() {
+                                        return reader.readByte();
+                                    }
+
+                                    @Override
+                                    public short readShort() {
+                                        return reader.readShort();
+                                    }
+
+                                    @Override
+                                    public int readInt() {
+                                        return reader.readInt();
+                                    }
+
+                                    @Override
+                                    public long readLong() {
+                                        return reader.readLong();
+                                    }
+
+                                    @Override
+                                    public float readFloat() {
+                                        return reader.readFloat();
+                                    }
+
+                                    @Override
+                                    public double readDouble() {
+                                        return reader.readDouble();
+                                    }
+
+                                    @Override
+                                    public ByteBuffer readBytes() {
+                                        return reader.readBytes();
+                                    }
+
+                                    @Override
+                                    public Object readObject() {
+                                        return reader.readObject();
+                                    }
+                                };
+                            }
+                        };
+                    }
+                };
+            }
         };
     }
 
+    private static class ListVectorReader extends ValueVectorReader {
+        private final ListVector v;
+        private final IVectorReader elReader;
+
+        public ListVectorReader(ListVector v) {
+            super(v);
+            this.v = v;
+            this.elReader = from(v.getDataVector());
+        }
+
+        @Override
+        Object getObject0(int idx) {
+            var startIdx = getListStartIndex(idx);
+            return PersistentVector.create(
+                    IntStream.range(0, getListCount(idx))
+                            .mapToObj(elIdx -> elReader.getObject(startIdx + elIdx))
+                            .toList());
+        }
+
+        @Override
+        public IVectorReader listElementReader() {
+            return elReader;
+        }
+
+        @Override
+        public int getListStartIndex(int idx) {
+            return v.getElementStartIndex(idx);
+        }
+
+        @Override
+        public int getListCount(int idx) {
+            return v.getElementEndIndex(idx) - v.getElementStartIndex(idx);
+        }
+
+        @Override
+        public IValueReader valueReader(IVectorPosition pos) {
+            var elPos = IVectorPosition.build();
+            var elValueReader = elReader.valueReader(elPos);
+
+            return new BaseValueReader(pos) {
+                @Override
+                public Object readObject() {
+                    var startIdx = getListStartIndex(pos.getPosition());
+                    var valueCount = getListCount(pos.getPosition());
+
+                    return new IPolyVectorReader() {
+                        @Override
+                        public int valueCount() {
+                            return valueCount;
+                        }
+
+                        @Override
+                        public void read(int elIdx) {
+                            elPos.setPosition(startIdx + elIdx);
+                        }
+
+                        @Override
+                        public Keyword getLeg() {
+                            return elValueReader.getLeg();
+                        }
+
+                        @Override
+                        public boolean isNull() {
+                            return elValueReader.isNull();
+                        }
+
+                        @Override
+                        public boolean readBoolean() {
+                            return elValueReader.readBoolean();
+                        }
+
+                        @Override
+                        public byte readByte() {
+                            return elValueReader.readByte();
+                        }
+
+                        @Override
+                        public short readShort() {
+                            return elValueReader.readShort();
+                        }
+
+                        @Override
+                        public int readInt() {
+                            return elValueReader.readInt();
+                        }
+
+                        @Override
+                        public long readLong() {
+                            return elValueReader.readLong();
+                        }
+
+                        @Override
+                        public float readFloat() {
+                            return elValueReader.readFloat();
+                        }
+
+                        @Override
+                        public double readDouble() {
+                            return elValueReader.readDouble();
+                        }
+
+                        @Override
+                        public ByteBuffer readBytes() {
+                            return elValueReader.readBytes();
+                        }
+
+                        @Override
+                        public Object readObject() {
+                            return elValueReader.readObject();
+                        }
+                    };
+                }
+            };
+        }
+    }
+
     public static IVectorReader listVector(ListVector v) {
-        var elReader = from(v.getDataVector());
-
-        return new ValueVectorReader(v) {
-            @Override
-            Object getObject0(int idx) {
-                var startIdx = getListStartIndex(idx);
-                return PersistentVector.create(
-                        IntStream.range(0, getListCount(idx))
-                                .mapToObj(elIdx -> elReader.getObject(startIdx + elIdx))
-                                .toList());
-            }
-
-            @Override
-            public IVectorReader listElementReader() {
-                return elReader;
-            }
-
-            @Override
-            public int getListStartIndex(int idx) {
-                return v.getElementStartIndex(idx);
-            }
-
-            @Override
-            public int getListCount(int idx) {
-                return v.getElementEndIndex(idx) - v.getElementStartIndex(idx);
-            }
-        };
+        return new ListVectorReader(v);
     }
 
     public static IVectorReader setVector(SetVector v) {
@@ -668,6 +1046,11 @@ public class ValueVectorReader implements IVectorReader {
             public int getListCount(int idx) {
                 return listReader.getListCount(idx);
             }
+
+            @Override
+            public IValueReader valueReader(IVectorPosition pos) {
+                return listReader.valueReader(pos);
+            }
         };
     }
 
@@ -690,7 +1073,6 @@ public class ValueVectorReader implements IVectorReader {
         private final Map<Keyword, IVectorReader> legReaders = new ConcurrentHashMap<>();
 
         private DuvReader(DenseUnionVector v) {
-            // getLeg is overridden here, so we never use the `leg` field in this case.
             super(v);
             this.v = v;
 
@@ -701,13 +1083,12 @@ public class ValueVectorReader implements IVectorReader {
 
         @Override
         public boolean isNull(int idx) {
-            //noinspection resource
-            return legReader(getLeg(idx)).isNull(idx);
+            return v.getVectorByType(getTypeId(idx)).isNull(v.getOffset(idx));
         }
 
         @Override
+        @SuppressWarnings("resource")
         Object getObject0(int idx) {
-            //noinspection resource
             return legReader(getLeg(idx)).getObject(idx);
         }
 
@@ -731,6 +1112,72 @@ public class ValueVectorReader implements IVectorReader {
         @Override
         public List<Keyword> legs() {
             return legs;
+        }
+
+        @Override
+        public IValueReader valueReader(IVectorPosition pos) {
+            var legReaders = legs.stream().collect(Collectors.toMap(l -> l, l -> DuvReader.this.legReader(l).valueReader(pos)));
+
+            return new IValueReader() {
+                @Override
+                public Keyword getLeg() {
+                    return DuvReader.this.getLeg(pos.getPosition());
+                }
+
+                private IValueReader legReader() {
+                    return legReaders.get(getLeg());
+                }
+
+                @Override
+                public boolean isNull() {
+                    return legReader().isNull();
+                }
+
+                @Override
+                public boolean readBoolean() {
+                    return legReader().readBoolean();
+                }
+
+                @Override
+                public byte readByte() {
+                    return legReader().readByte();
+                }
+
+                @Override
+                public short readShort() {
+                    return legReader().readShort();
+                }
+
+                @Override
+                public int readInt() {
+                    return legReader().readInt();
+                }
+
+                @Override
+                public long readLong() {
+                    return legReader().readLong();
+                }
+
+                @Override
+                public float readFloat() {
+                    return legReader().readFloat();
+                }
+
+                @Override
+                public double readDouble() {
+                    return legReader().readDouble();
+                }
+
+                @Override
+                public ByteBuffer readBytes() {
+                    return legReader().readBytes();
+                }
+
+                @Override
+                public Object readObject() {
+                    return legReader().readObject();
+                }
+            };
         }
     }
 

@@ -54,17 +54,17 @@
   IntervalDayVector (vec->reader [arrow-vec] (ValueVectorReader/intervalDayVector arrow-vec))
   IntervalMonthDayNanoVector (vec->reader [arrow-vec] (ValueVectorReader/intervalMdnVector arrow-vec))
 
-  DurationVector (vec->reader [arrow-vec] (ValueVectorReader. arrow-vec))
+  DurationVector (vec->reader [arrow-vec] (ValueVectorReader/durationVector arrow-vec))
 
   StructVector (vec->reader [arrow-vec] (ValueVectorReader/structVector arrow-vec))
   ListVector (vec->reader [arrow-vec] (ValueVectorReader/listVector arrow-vec))
   SetVector (vec->reader [arrow-vec] (ValueVectorReader/setVector arrow-vec))
   DenseUnionVector (vec->reader [arrow-vec] (ValueVectorReader/denseUnionVector arrow-vec))
 
-  KeywordVector (vec->reader [arrow-vec] (ValueVectorReader. arrow-vec))
-  UuidVector (vec->reader [arrow-vec] (ValueVectorReader. arrow-vec))
-  UriVector (vec->reader [arrow-vec] (ValueVectorReader. arrow-vec))
-  ClojureFormVector (vec->reader [arrow-vec] (ValueVectorReader. arrow-vec)))
+  KeywordVector (vec->reader [arrow-vec] (ValueVectorReader/keywordVector arrow-vec))
+  UuidVector (vec->reader [arrow-vec] (ValueVectorReader/uuidVector arrow-vec))
+  UriVector (vec->reader [arrow-vec] (ValueVectorReader/uriVector arrow-vec))
+  ClojureFormVector (vec->reader [arrow-vec] (ValueVectorReader/clojureFormVector arrow-vec)))
 
 (defn rel-reader
   (^xtdb.vector.RelationReader [cols] (RelationReader/from cols))

@@ -1,13 +1,12 @@
 package xtdb.vector;
 
 import clojure.lang.Keyword;
-import org.apache.arrow.vector.types.pojo.FieldType;
 
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
 
-class ListValueBox implements IValueWriter, IMonoVectorReader, IPolyVectorReader {
+class ListValueBox implements IValueWriter, IPolyVectorReader {
 
     private final IVectorPosition wp = IVectorPosition.build();
     private final List<ValueBox> els;
@@ -24,53 +23,13 @@ class ListValueBox implements IValueWriter, IMonoVectorReader, IPolyVectorReader
     }
 
     @Override
-    public boolean readBoolean(int idx) {
-        return els.get(idx).readBoolean();
+    public Keyword getLeg() {
+        return readBox.getLeg();
     }
 
     @Override
-    public byte readByte(int idx) {
-        return els.get(idx).readByte();
-    }
-
-    @Override
-    public short readShort(int idx) {
-        return els.get(idx).readShort();
-    }
-
-    @Override
-    public int readInt(int idx) {
-        return els.get(idx).readInt();
-    }
-
-    @Override
-    public long readLong(int idx) {
-        return els.get(idx).readLong();
-    }
-
-    @Override
-    public float readFloat(int idx) {
-        return els.get(idx).readFloat();
-    }
-
-    @Override
-    public double readDouble(int idx) {
-        return els.get(idx).readDouble();
-    }
-
-    @Override
-    public ByteBuffer readBytes(int idx) {
-        return els.get(idx).readBytes();
-    }
-
-    @Override
-    public Object readObject(int idx) {
-        return els.get(idx).readObject();
-    }
-
-    @Override
-    public byte read() {
-        return readBox.read();
+    public boolean isNull() {
+        return readBox.isNull();
     }
 
     @Override
@@ -119,9 +78,8 @@ class ListValueBox implements IValueWriter, IMonoVectorReader, IPolyVectorReader
     }
 
     @Override
-    public byte read(int idx) {
+    public void read(int idx) {
         this.readBox = els.get(idx);
-        return read();
     }
 
     private ValueBox newEl() {
@@ -233,9 +191,4 @@ class ListValueBox implements IValueWriter, IMonoVectorReader, IPolyVectorReader
         return writeBox.legWriter(leg);
     }
 
-    @Override
-    @Deprecated
-    public IValueWriter writerForTypeId(byte typeId) {
-        return writeBox.writerForTypeId(typeId);
-    }
 }

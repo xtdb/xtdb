@@ -176,7 +176,7 @@
                        (reify IntPredicate
                          (~'test [_ ~page-idx-sym]
                           (boolean ~(continue (fn [_ code] code)))))))
-                  ;; (doto clojure.pprint/pprint)
+                  #_(doto clojure.pprint/pprint)
                   (eval))}))
 
       (util/lru-memoize)))
