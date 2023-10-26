@@ -59,6 +59,12 @@ allprojects {
             }
         }
 
+        tasks.create("nightly-test", Test::class) {
+            useJUnitPlatform {
+                includeTags("kafka", "docker", "jdbc", "s3", "azure", "google-cloud")
+            }
+        }
+
         tasks.withType(Test::class) {
             jvmArgs = defaultJvmArgs + sixGBJvmArgs
         }
