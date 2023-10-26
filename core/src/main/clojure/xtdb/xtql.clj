@@ -10,9 +10,9 @@
            xtdb.IResultSet
            (xtdb.operator IRaQuerySource)
            (xtdb.operator.scan IScanEmitter)
-           (xtdb.query Expr$Call Expr$LogicVar Expr$Obj Query$From Query$Return QueryOpts
+           (xtdb.query Expr$Call Expr$LogicVar Expr$Obj Expr$Long Query$From Query$Return QueryOpts
                        Query$OrderBy Query$OrderDirection Query$OrderSpec Query$Pipeline Query$With
-                       OutSpec ArgSpec ColSpec VarSpec Query$WithCols Query$Join Expr$Param
+                       OutSpec ArgSpec ColSpec VarSpec Query$WithCols Query$Join Expr$Param Query$LeftJoin
                        Query$Unify Query$Where Query$Without Query$Limit Query$Offset Query$Aggregate)))
 
 ;;TODO consider helper for [{sym expr} sym] -> provided vars set
@@ -54,9 +54,12 @@
   (-> (symbol (str "?" v))
       (with-meta {:param? true})))
 
-(defn- apply-param-sym [v]
-  (-> (symbol (str "?" v))
-      (with-meta {:correlated-column? true})))
+(defn- apply-param-sym
+  ([v]
+   (apply-param-sym nil v))
+  ([v prefix]
+   (-> (symbol (str "?" prefix v))
+       (with-meta {:correlated-column? true}))))
 
 (defn- args->params [args]
   (->> args
@@ -70,18 +73,34 @@
                (MapEntry/create (apply-param-sym l) r)))
        (into {})))
 
+(defn- unifying-vars->apply-param-mapping [unifying-vars]
+  ;; creates a param for each var that needs to unify, so that we can place the
+  ;; equality predicate on the dependant side, within the left join.
+  ;;TODO symbol names will clash with nested applies (is this still true?)
+  ;; (where an apply is nested inside the dep side of another apply)
+  (when (seq unifying-vars)
+    (->> (for [var unifying-vars]
+           (MapEntry/create var (apply-param-sym var "ap")))
+         ;;TODO this symbol can clash with user space params, need to do something better here.
+         ;; classic problem rearing its head again.
+         (into {}))))
+
 ;TODO fill out expr plan for other types
 (extend-protocol ExprPlan
   Expr$LogicVar
   (plan-expr [this] (col-sym (.lv this)))
   (required-vars [this] #{(symbol (.lv this))})
 
-  Expr$Param
+  Expr$Param ;;TODO need to differentiate between query params and subquery/apply params
   (plan-expr [this] (param-sym (subs (.v this) 1)))
   (required-vars [_this] #{})
 
   Expr$Obj
   (plan-expr [o] (.obj o))
+  (required-vars [_] #{})
+
+  Expr$Long
+  (plan-expr [this] (.lng this))
   (required-vars [_] #{})
 
   Expr$Call
@@ -131,7 +150,7 @@
                                   ra-plan]
                         :provided-vars (set (vals var->col))
                         :var->col var->col})))))
-    {:rels (mapv :ra-plan plans)
+    {:rels plans
      :var->cols (-> plans
                     (->> (mapcat :var->col)
                          (group-by key))
@@ -141,8 +160,8 @@
   (let [{:keys [rels var->cols]} (with-unique-cols plans)]
     (-> (case (count rels)
           0 {:ra-plan [:table [{}]]}
-          1 {:ra-plan (first rels)}
-          {:ra-plan [:mega-join [] rels]})
+          1 (first rels)
+          {:ra-plan [:mega-join [] (mapv :ra-plan rels)]})
         (wrap-unify var->cols))))
 
 (defn- plan-from-bind-spec [^OutSpec bind-spec]
@@ -198,11 +217,12 @@
             (.tails pipeline))))
 
 (defn- required-vars-available? [expr provided-vars]
-  (when (not (set/subset? (required-vars expr) provided-vars))
-    (throw (err/illegal-arg
-            :xtql/invalid-expression
-            {:expr expr :provided-vars provided-vars
-             ::err/message "Not all variables in expression are in scope"}))))
+  (let [required-vars (required-vars expr)]
+    (when (not (set/subset? required-vars provided-vars))
+      (throw (err/illegal-arg
+              :xtql/invalid-expression
+              {:expr expr :required-vars required-vars :available-vars provided-vars
+               ::err/message "Not all variables in expression are in scope"})))))
 
 (extend-protocol PlanQueryTail
   Query$Where
@@ -256,6 +276,16 @@
   [:project (mapv (fn [{:keys [l r]}] {r l}) out-bindings)
    ra-plan])
 
+(defn plan-join [join-type query args binding]
+  (let [out-bindings (mapv plan-out-spec binding) ;;TODO refelection (interface here?)
+        arg-bindings (mapv plan-arg-spec args)
+        subquery (plan-query query)]
+    [[:join {:ra-plan (wrap-out-binding-projection subquery out-bindings)
+             :args (args->apply-params arg-bindings)
+             :join-type join-type
+             :provided-vars (set (map :r out-bindings))
+             :required-vars (apply set/union (map :required-vars arg-bindings))}]]))
+
 (extend-protocol PlanUnifyClause
   Query$From (plan-unify-clause [from] [[:from (plan-from from)]])
 
@@ -277,14 +307,11 @@
 
   Query$Join
   (plan-unify-clause [this]
-    (let [out-bindings (mapv plan-out-spec (.bindings this))
-          arg-bindings (mapv plan-arg-spec (.args this))
-          subquery (plan-query (.query this))]
-      [[:join {:ra-plan (wrap-out-binding-projection subquery out-bindings)
-               :args (args->apply-params arg-bindings)
-               :bind out-bindings
-               :provided-vars (set (map :r out-bindings))
-               :required-vars (apply set/union (map :required-vars arg-bindings))}]])))
+    (plan-join :inner-join (.query this) (.args this) (.bindings this)))
+
+  Query$LeftJoin
+  (plan-unify-clause [this]
+    (plan-join :left-outer-join (.query this) (.args this) (.bindings this))))
 
 (defn wrap-wheres [plan wheres]
   (update plan :ra-plan wrap-select (map :ra-plan wheres)))
@@ -308,23 +335,49 @@
                    ra-plan]}
         (wrap-unify var->cols))))
 
+(defn wrap-inner-join [acc-plan {:keys [args] :as join-plan}]
+  (if (seq args)
+    (let [{:keys [rels var->cols]} (with-unique-cols [acc-plan join-plan])
+          [{acc-plan-with-unique-cols :ra-plan}
+           {join-subquery-plan-with-unique-cols :ra-plan}] rels]
+      (wrap-unify
+       {:ra-plan [:apply :cross-join (set/map-invert args) ;;TODO fix apply params, reverse map is unlike any other arg form
+                  acc-plan-with-unique-cols
+                  join-subquery-plan-with-unique-cols]}
+       var->cols))
+    (mega-join [acc-plan join-plan])))
+
+(defn wrap-left-join [acc-plan {:keys [args provided-vars ra-plan] :as join-plan}]
+  ;; the join clause or select placed on the dependant side
+  ;; is what provides the unification of the :bind vars with the outer plan
+  (let [unifying-vars (->> provided-vars (filter (:provided-vars acc-plan)))]
+    {:ra-plan
+     (if (seq args)
+       (let [unifying-vars-apply-param-mapping (unifying-vars->apply-param-mapping unifying-vars)]
+         [:apply
+          :left-outer-join
+          (merge
+           (set/map-invert args) ;;TODO fix apply params, reverse map is unlike any other arg form
+           unifying-vars-apply-param-mapping)
+          (:ra-plan acc-plan)
+          (->> unifying-vars-apply-param-mapping
+               (map (fn [[var param-for-var]]
+                      (list '= var param-for-var)))
+               (wrap-select ra-plan))])
+       [:left-outer-join
+        (->> unifying-vars
+             (mapv (fn [v] {v v})))
+        (:ra-plan acc-plan)
+        ra-plan])
+     :provided-vars (set/union (:provided-vars acc-plan) provided-vars)}))
+
 (defn- wrap-joins [plan joins]
   (->> joins
        (reduce
-        (fn [acc-plan {:keys [args] :as join-plan}]
-          (let [{:keys [rels var->cols]} (with-unique-cols [acc-plan join-plan])
-                [acc-plan-with-unique-cols join-subquery-plan-with-unique-cols] rels]
-            (-> (if (seq args)
-                  (wrap-unify
-                   {:ra-plan [:apply :cross-join (set/map-invert args) ;;TODO fix apply params, reverse map is unlike any other arg form
-                              acc-plan-with-unique-cols
-                              join-subquery-plan-with-unique-cols]}
-                   var->cols)
-                  (wrap-unify
-                   {:ra-plan [:cross-join
-                              acc-plan-with-unique-cols
-                              join-subquery-plan-with-unique-cols]}
-                   var->cols)))))
+        (fn [acc-plan {:keys [join-type] :as join-plan}]
+          (if (= join-type :inner-join)
+            (wrap-inner-join acc-plan join-plan)
+            (wrap-left-join acc-plan join-plan)))
         plan)))
 
 (extend-protocol PlanQuery
