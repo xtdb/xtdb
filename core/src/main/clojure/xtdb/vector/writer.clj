@@ -136,7 +136,8 @@
   (def-writer-factory Float4Vector writeFloat)
   (def-writer-factory Float8Vector writeDouble)
 
-  (def-writer-factory DateDayVector writeLong)
+  (def-writer-factory DateDayVector writeInt)
+  (def-writer-factory DateMilliVector writeLong)
   (def-writer-factory TimeStampVector writeLong)
   (def-writer-factory TimeSecVector writeLong)
   (def-writer-factory TimeMilliVector writeLong)
@@ -336,7 +337,7 @@
   LocalDate
   (value->arrow-type [_] #xt.arrow/type [:date :day])
   (value->col-type [_] [:date :day])
-  (write-value! [v ^IVectorWriter w] (.writeLong w (.toEpochDay v)))
+  (write-value! [v ^IVectorWriter w] (.writeInt w (.toEpochDay v)))
 
   LocalTime
   (value->arrow-type [_] #xt.arrow/type [:time-local :nano])
@@ -715,8 +716,7 @@
     (endList [_] (write-value!) (.endList w))
 
     (^IVectorWriter legWriter [_ ^Keyword leg] (.legWriter w leg))
-    (^IVectorWriter legWriter [_ ^ArrowType arrow-type] (.legWriter w arrow-type))
-    (writerForTypeId [_ type-id] (.writerForTypeId w type-id))))
+    (^IVectorWriter legWriter [_ ^ArrowType arrow-type] (.legWriter w arrow-type))))
 
 (defn- duv->duv-copier ^xtdb.vector.IRowCopier [^IVectorWriter dest-col, ^DenseUnionVector src-vec]
   (let [src-field (.getField src-vec)
@@ -889,8 +889,7 @@
         (startList [_] (.startList inner))
         (endList [_] (.endList inner))
 
-        (^IVectorWriter legWriter [this ^ArrowType arrow-type] (scalar-leg-writer this arrow-type))
-        (writerForTypeId [_ type-id] (.writerForTypeId inner type-id))))))
+        (^IVectorWriter legWriter [this ^ArrowType arrow-type] (scalar-leg-writer this arrow-type))))))
 
 (extend-protocol ArrowWriteable
   Keyword

@@ -178,13 +178,8 @@ public class RenamedVectorReader implements IVectorReader {
     }
 
     @Override
-    public IMonoVectorReader monoReader(Object colType) {
-        return reader.monoReader(colType);
-    }
-
-    @Override
-    public IPolyVectorReader polyReader(Object colType) {
-        return reader.polyReader(colType);
+    public IValueReader valueReader(IVectorPosition pos) {
+        return reader.valueReader(pos);
     }
 
     @Override

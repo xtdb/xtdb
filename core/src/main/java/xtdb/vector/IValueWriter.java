@@ -47,8 +47,5 @@ public interface IValueWriter {
 
     void endList();
 
-    @Deprecated
-    IValueWriter writerForTypeId(byte typeId);
-
     IValueWriter legWriter(Keyword leg);
 }

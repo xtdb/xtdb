@@ -14,7 +14,7 @@
            (org.apache.arrow.vector NullVector)
            (org.apache.arrow.vector.types.pojo Field FieldType)
            (xtdb ICursor)
-           (xtdb.vector IVectorReader RelationReader)))
+           (xtdb.vector IVectorPosition IVectorReader RelationReader)))
 
 (defmethod lp/ra-expr :apply [_]
   (s/cat :op #{:apply}
@@ -48,15 +48,15 @@
                           (.tryAdvance dep-cursor
                                        (reify Consumer
                                          (accept [_ dep-rel]
-                                           (let [match-vec (.readerForName ^RelationReader dep-rel "_expr")
-                                                 match-rdr (.polyReader match-vec [:union #{:null :bool}])]
-                                             ;; HACK: if the iteration order changes I'd like to know about it :)
-                                             (case (vec #{:null :bool})
-                                               [:null :bool]
-                                               (dotimes [idx (.valueCount match-vec)]
-                                                 (case (.read match-rdr idx)
-                                                   0 (aset !match 0 (max (aget !match 0) 0))
-                                                   1 (aset !match 0 (max (aget !match 0) (if (.readBoolean match-rdr) 1 -1))))))))))))
+                                           (let [vp (IVectorPosition/build)
+                                                 match-vec (.readerForName ^RelationReader dep-rel "_expr")
+                                                 match-rdr (.valueReader match-vec vp)]
+                                             (dotimes [idx (.valueCount match-vec)]
+                                               (.setPosition vp idx)
+                                               (if (.isNull match-rdr)
+                                                 (aset !match 0 (max (aget !match 0) 0))
+                                                 (aset !match 0 (max (aget !match 0)
+                                                                     (if (.readBoolean match-rdr) 1 -1)))))))))))
               (let [match (aget !match 0)]
                 (if (zero? match)
                   (.writeNull out-writer)

@@ -4,7 +4,7 @@ import clojure.lang.Keyword;
 
 import java.nio.ByteBuffer;
 
-public interface IPolyValueReader {
+public interface IValueReader {
     Keyword getLeg();
 
     boolean isNull();

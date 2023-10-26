@@ -202,13 +202,18 @@ class IndirectVectorReader implements IVectorReader {
     }
 
     @Override
-    public IMonoVectorReader monoReader(Object colType) {
-        return IMonoVectorReader.indirect(reader.monoReader(colType), indirection);
-    }
+    public IValueReader valueReader(IVectorPosition pos) {
+        return reader.valueReader(new IVectorPosition() {
+            @Override
+            public int getPosition() {
+                return indirection.getIndex(pos.getPosition());
+            }
 
-    @Override
-    public IPolyVectorReader polyReader(Object colType) {
-        return IPolyVectorReader.indirect(reader.polyReader(colType), indirection);
+            @Override
+            public void setPosition(int position) {
+                throw new UnsupportedOperationException();
+            }
+        });
     }
 
     @Override

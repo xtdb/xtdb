@@ -1,7 +1,6 @@
 package xtdb.vector;
 
 import clojure.lang.Keyword;
-import org.apache.arrow.vector.types.pojo.FieldType;
 
 import java.nio.ByteBuffer;
 
@@ -86,12 +85,6 @@ abstract class BoxWriter implements IValueWriter {
     @Override
     public void endList() {
         box().endList();
-    }
-
-    @Override
-    @Deprecated
-    public IValueWriter writerForTypeId(byte typeId) {
-        return box().writerForTypeId(typeId);
     }
 
     @Override

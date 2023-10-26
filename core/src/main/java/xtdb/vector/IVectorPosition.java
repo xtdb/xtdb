@@ -4,7 +4,11 @@ public interface IVectorPosition {
     int getPosition();
     void setPosition(int position);
 
-    int getPositionAndIncrement();
+    default int getPositionAndIncrement() {
+        int position = getPosition();
+        this.setPosition(position + 1);
+        return position;
+    }
 
     static IVectorPosition build() {
         return build(0);
@@ -22,13 +26,6 @@ public interface IVectorPosition {
             @Override
             public void setPosition(int position) {
                 this.position = position;
-            }
-
-            @Override
-            public int getPositionAndIncrement() {
-                int position = this.position;
-                this.position++;
-                return position;
             }
         };
     }
