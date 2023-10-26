@@ -3,7 +3,8 @@
             [xtdb.coalesce :as coalesce]
             [xtdb.expression :as expr]
             [xtdb.logical-plan :as lp]
-            [xtdb.util :as util])
+            [xtdb.util :as util]
+            [xtdb.types :as types])
   (:import java.util.function.Consumer
            org.apache.arrow.memory.BufferAllocator
            xtdb.ICursor
@@ -35,11 +36,12 @@
   (close [_]
     (util/try-close in-cursor)))
 
-(defmethod lp/emit-expr :select [{:keys [predicate relation]} {:keys [param-types] :as args}]
+(defmethod lp/emit-expr :select [{:keys [predicate relation]} {:keys [param-fields] :as args}]
   (lp/unary-expr (lp/emit-expr relation args)
-    (fn [inner-col-types]
-      (let [selector (expr/->expression-relation-selector predicate {:col-types inner-col-types, :param-types param-types})]
-        {:col-types inner-col-types
+    (fn [inner-fields]
+      (let [selector (expr/->expression-relation-selector predicate {:col-types (update-vals inner-fields types/field->col-type)
+                                                                     :param-types (update-vals param-fields types/field->col-type)})]
+        {:fields inner-fields
          :->cursor (fn [{:keys [allocator params]} in-cursor]
                      (-> (SelectCursor. allocator in-cursor selector params)
                          (coalesce/->coalescing-cursor allocator)))}))))

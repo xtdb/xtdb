@@ -123,8 +123,8 @@
     (let [sum-factory (group-by/->aggregate-factory {:f :sum, :from-name 'v, :from-type [:union #{:i64 :f64}]
                                                      :to-name 'vsum, :zero-row? true})
           sum-spec (.build sum-factory tu/*allocator*)]
+      (t/is (= [:union #{:null :f64}] (types/field->col-type (.getToColumnField sum-factory))))
       (try
-        (t/is (= [:union #{:null :f64}] (.getToColumnType sum-factory)))
 
         (.aggregate sum-spec (vr/rel-reader [(vr/vec->reader v0)]) group-mapping)
         (.aggregate sum-spec (vr/rel-reader [(vr/vec->reader v1)]) group-mapping)
@@ -332,7 +332,7 @@
                                                      :to-name 'vs, :zero-row? true})
           agg-spec (.build agg-factory tu/*allocator*)]
       (try
-        (t/is (= [:list :i64] (.getToColumnType agg-factory)))
+        (t/is (= [:list :i64] (types/field->col-type (.getToColumnField agg-factory))))
 
         (.aggregate agg-spec (vr/rel-reader [(vr/vec->reader k0)]) gm0)
         (.aggregate agg-spec (vr/rel-reader [(vr/vec->reader k1)]) gm1)

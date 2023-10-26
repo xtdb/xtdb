@@ -7,7 +7,7 @@
   (:import (clojure.lang MapEntry)
            [java.io Writer]
            (org.apache.arrow.vector.types DateUnit FloatingPointPrecision IntervalUnit TimeUnit Types$MinorType)
-           (org.apache.arrow.vector.types.pojo ArrowType ArrowType$ArrowTypeID ArrowType$Binary ArrowType$Bool ArrowType$Date ArrowType$Decimal ArrowType$Duration ArrowType$FixedSizeBinary ArrowType$FixedSizeList ArrowType$FloatingPoint ArrowType$Int ArrowType$Interval ArrowType$List ArrowType$Null ArrowType$Struct ArrowType$Time ArrowType$Time ArrowType$Timestamp ArrowType$Union ArrowType$Utf8 Field FieldType)
+           (org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Date ArrowType$Decimal ArrowType$Duration ArrowType$FixedSizeBinary ArrowType$FixedSizeList ArrowType$FloatingPoint ArrowType$Int ArrowType$Interval ArrowType$List ArrowType$Null ArrowType$Struct ArrowType$Time ArrowType$Time ArrowType$Timestamp ArrowType$Union ArrowType$Utf8 Field FieldType)
            (xtdb.vector.extensions AbsentType ClojureFormType KeywordType SetType UriType UuidType)))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -232,6 +232,18 @@
 (defn ->field ^org.apache.arrow.vector.types.pojo.Field [^String field-name ^ArrowType arrow-type nullable & children]
   (Field. field-name (FieldType. nullable arrow-type nil nil) children))
 
+(defn field-with-name ^org.apache.arrow.vector.types.pojo.Field [^Field field, name]
+  (Field. name (.getFieldType field) (.getChildren field)))
+
+(defn ->field-default-name ^org.apache.arrow.vector.types.pojo.Field [^ArrowType arrow-type nullable children]
+  (apply ->field (name (arrow-type->leg arrow-type)) arrow-type nullable children))
+
+(defn ->canonical-field ^org.apache.arrow.vector.types.pojo.Field [^Field field]
+  (->field-default-name (.getType field) (.isNullable field) (.getChildren field)))
+
+(defn ->nullable-field ^org.apache.arrow.vector.types.pojo.Field [^Field field]
+  (if (.isNullable field) field (apply ->field (.getName field) (.getType field) true (.getChildren field))))
+
 ;;;; col-types
 
 (defn col-type-head [col-type]
@@ -272,6 +284,11 @@
     (second col-type)
     #{col-type}))
 
+(defn flatten-union-field [^Field field]
+  (if (instance? ArrowType$Union (.getType field))
+    (.getChildren field)
+    [field]))
+
 (defn merge-col-types [& col-types]
   (letfn [(merge-col-type* [acc col-type]
             (zmatch col-type
@@ -282,15 +299,15 @@
                                                  (fn [acc]
                                                    (let [default-col-type (if acc {:absent nil} nil)]
                                                      (as-> acc acc
-                                                       (reduce-kv (fn [acc col-name col-type]
-                                                                    (update acc col-name (fnil merge-col-type* default-col-type) col-type))
-                                                                  acc
-                                                                  struct-col-types)
-                                                       (reduce (fn [acc absent-k]
-                                                                 (update acc absent-k merge-col-type* :absent))
-                                                               acc
-                                                               (set/difference (set (keys acc))
-                                                                               (set (keys struct-col-types))))))))
+                                                           (reduce-kv (fn [acc col-name col-type]
+                                                                        (update acc col-name (fnil merge-col-type* default-col-type) col-type))
+                                                                      acc
+                                                                      struct-col-types)
+                                                           (reduce (fn [acc absent-k]
+                                                                     (update acc absent-k merge-col-type* :absent))
+                                                                   acc
+                                                                   (set/difference (set (keys acc))
+                                                                                   (set (keys struct-col-types))))))))
               (assoc acc col-type nil)))
 
           (kv->col-type [[head opts]]
@@ -310,6 +327,71 @@
 
     (-> (transduce (comp (remove nil?) (distinct)) (completing merge-col-type*) {} col-types)
         (map->col-type))))
+
+(def ^Field null-field (->field "null" ArrowType$Null/INSTANCE true))
+(def ^:private ^Field absent-field (->field "absent" AbsentType/INSTANCE false))
+
+;; beware that anywhere this is used, naming of the fields (apart from struct subfields) should not matter
+(defn merge-fields [& fields]
+  (letfn [(null? [col-type-map] (contains? col-type-map :null))
+
+          (merge-field* [acc ^Field field]
+            (let [arrow-type (.getType field)
+                  nullable? (or (.isNullable field) (= (class arrow-type) ArrowType$Null))
+                  acc (cond-> acc
+                        nullable? (assoc :null nil))]
+              (condp = (class arrow-type)
+                ArrowType$Null acc
+                ArrowType$Union (reduce merge-field* acc (.getChildren field))
+                ArrowType$List (update acc :list merge-field* (first (.getChildren field)))
+                ArrowType$FixedSizeList (update acc [:fixed-size-list
+                                                     (.getListSize ^ArrowType$FixedSizeList arrow-type)] merge-field*
+                                                (first (.getChildren field)))
+                ArrowType$Struct (update acc :struct
+                                         (fn [acc]
+                                           (let [default-field-mapping (if acc {absent-field nil} nil)
+                                                 children (.getChildren field)]
+                                             (as-> acc acc
+                                                   (reduce (fn [acc ^Field field]
+                                                             (update acc (.getName field) (fnil merge-field* default-field-mapping) field))
+                                                           acc
+                                                           children)
+                                                   (reduce (fn [acc absent-k]
+                                                             (update acc absent-k merge-field* absent-field))
+                                                           acc
+                                                           (set/difference (set (keys acc))
+                                                                           (set (map #(.getName ^Field %) children))))))))
+                (assoc acc field nil))))
+
+          (kv->field [[head opts] & {:keys [nullable?] :or {nullable? false}}]
+            (case (if (vector? head) (first head) head)
+              :list (->field-default-name #xt.arrow/type :list nullable? [(map->field opts)])
+              :fixed-size-list (->field-default-name (ArrowType$FixedSizeList. (second head)) (or (null? opts) nullable?)
+                                                     [(map->field (dissoc opts :null))])
+              :struct (->field-default-name #xt.arrow/type :struct (or (null? opts) nullable?)
+                                            (map (fn [[name opts]]
+                                                   (let [^Field field (map->field opts)]
+                                                     (apply ->field name (.getType field) (.isNullable field)
+                                                            (cond->> (.getChildren field)
+                                                              (not= ArrowType$Struct (class (.getType field)))
+                                                              (map ->canonical-field)))))
+                                                 (dissoc opts :null)))
+
+              (cond-> head
+                nullable? ->nullable-field)))
+
+          (map->field [col-type-map]
+            (let [without-null (dissoc col-type-map :null)
+                  nullable? (contains? col-type-map :null)]
+              (case (count without-null)
+                0 null-field
+                1 (kv->field (first without-null) :nullable? nullable?)
+                ;; Is the non nullable union an issue here?
+                (->field-default-name #xt.arrow/type :union false (map kv->field without-null)))))]
+
+    (-> (transduce (comp (remove nil?) (distinct)) (completing merge-field*) {} fields)
+        (map->field))))
+
 
 ;;; time units
 
@@ -373,11 +455,6 @@
 (defn col-type->field
   (^org.apache.arrow.vector.types.pojo.Field [col-type] (col-type->field (col-type->field-name col-type) col-type))
   (^org.apache.arrow.vector.types.pojo.Field [col-name col-type] (col-type->field* (str col-name) false col-type)))
-
-;; HACK to test things more easily
-(defn col-type->field-default-name
-  (^org.apache.arrow.vector.types.pojo.Field [col-type] (let [field (col-type->field col-type)]
-                                                          (col-type->field (.toString (.getType field)) col-type))))
 
 (defn without-null [col-type]
   (let [without-null (-> (flatten-union-types col-type)
@@ -482,6 +559,7 @@
   (->> child-fields
        (into #{} (map field->col-type))
        (apply merge-col-types)))
+
 
 ;;; number
 
@@ -625,6 +703,6 @@
                (least-upper-bound2 lub col-type))))
           col-types))
 
-(defn with-nullable-cols [col-types]
-  (->> col-types
-       (into {} (map (juxt key (comp #(merge-col-types % :null) val))))))
+(defn with-nullable-fields [fields]
+  (->> fields
+       (into {} (map (juxt key (comp #(merge-fields % null-field) val))))))

@@ -928,16 +928,16 @@
 
     v))
 
-(defn rows->col-types [rows]
+(defn rows->fields [rows]
   (->> (for [col-name (into #{} (mapcat keys) rows)]
          [(symbol col-name) (->> rows
                                  (into #{} (map (fn [row]
-                                                  (value->col-type (get row col-name)))))
-                                 (apply types/merge-col-types))])
+                                                  (types/col-type->field (value->col-type (get row col-name))))))
+                                 (apply types/merge-fields ))])
        (into {})))
 
 (defn ->vec-writer ^xtdb.vector.IVectorWriter [^BufferAllocator allocator, ^String col-name, ^FieldType field-type]
-   (->writer (.createNewSingleVector field-type col-name allocator nil)))
+  (->writer (.createNewSingleVector field-type col-name allocator nil)))
 
 (defn ->rel-copier ^xtdb.vector.IRowCopier [^IRelationWriter rel-wtr, ^RelationReader in-rel]
   (let [wp (.writerPosition rel-wtr)

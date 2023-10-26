@@ -84,11 +84,11 @@
     (.close group-mapping)
     (util/try-close rel-map)))
 
-(defn- ->group-mapper [^BufferAllocator allocator, group-col-types]
+(defn- ->group-mapper [^BufferAllocator allocator, group-fields]
   (let [gm-vec (IntVector. "group-mapping" allocator)]
-    (if-let [group-col-names (not-empty (set (keys group-col-types)))]
+    (if-let [group-col-names (not-empty (set (keys group-fields)))]
       (GroupMapper. group-col-names
-                    (emap/->relation-map allocator {:build-col-types group-col-types
+                    (emap/->relation-map allocator {:build-fields group-fields
                                                     :build-key-col-names (vec group-col-names)
                                                     :nil-keys-equal? true})
                     gm-vec)
@@ -103,7 +103,7 @@
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface IAggregateSpecFactory
   (^clojure.lang.Symbol getToColumnName [])
-  (getToColumnType [])
+  (getToColumnField [])
   (^xtdb.operator.group_by.IAggregateSpec build [^org.apache.arrow.memory.BufferAllocator allocator]))
 
 #_{:clj-kondo/ignore [:unused-binding]}
@@ -114,7 +114,7 @@
 (defmethod ->aggregate-factory :count-star [{:keys [to-name zero-row?]}]
   (reify IAggregateSpecFactory
     (getToColumnName [_] to-name)
-    (getToColumnType [_] :i64)
+    (getToColumnField [_] (types/col-type->field :i64))
 
     (build [_ al]
       (let [^BigIntVector out-vec (-> (types/col-type->field to-name :i64)
@@ -142,7 +142,7 @@
 (defmethod ->aggregate-factory :count [{:keys [from-name to-name zero-row?]}]
   (reify IAggregateSpecFactory
     (getToColumnName [_] to-name)
-    (getToColumnType [_] :i64)
+    (getToColumnField [_] (types/col-type->field :i64))
 
     (build [_ al]
       (let [^BigIntVector out-vec (-> (types/col-type->field to-name :i64)
@@ -220,7 +220,7 @@
         to-field (types/col-type->field to-name to-type)]
     (reify IAggregateSpecFactory
       (getToColumnName [_] to-name)
-      (getToColumnType [_] to-type)
+      (getToColumnField [_] (types/col-type->field to-type))
 
       (build [_ al]
         (let [^ValueVector out-vec (.createVector to-field al)]
@@ -263,11 +263,11 @@
         count-agg (->aggregate-factory {:f :count, :from-name from-name, :from-type from-type,
                                         :to-name 'cnt, :zero-row? zero-row?})
         projecter (expr/->expression-projection-spec to-name '(/ (double sum) cnt)
-                                                     {:col-types {'sum (.getToColumnType sum-agg)
-                                                                  'cnt (.getToColumnType count-agg)}})]
+                                                     {:col-types {'sum (types/field->col-type (.getToColumnField sum-agg))
+                                                                  'cnt (types/field->col-type (.getToColumnField count-agg))}})]
     (reify IAggregateSpecFactory
       (getToColumnName [_] to-name)
-      (getToColumnType [_] (.getColumnType projecter))
+      (getToColumnField [_] (types/col-type->field (.getColumnType projecter)))
 
       (build [_ al]
         (let [sum-agg (.build sum-agg al)
@@ -313,13 +313,13 @@
                                                                                          (/ (* sumx sumx) (double countx)))
                                                                                       (double (- countx 1)))
                                                                                    nil))
-                                                            {:col-types {'sumx (.getToColumnType sumx-agg)
-                                                                         'sumx2 (.getToColumnType sumx2-agg)
-                                                                         'countx (.getToColumnType countx-agg)}})]
+                                                            {:col-types {'sumx (types/field->col-type (.getToColumnField sumx-agg))
+                                                                         'sumx2 (types/field->col-type (.getToColumnField sumx2-agg))
+                                                                         'countx (types/field->col-type (.getToColumnField countx-agg))}})]
 
     (reify IAggregateSpecFactory
       (getToColumnName [_] to-name)
-      (getToColumnType [_] (.getColumnType finish-projecter))
+      (getToColumnField [_] (types/col-type->field (.getColumnType finish-projecter)))
 
       (build [_ al]
         (let [sumx-agg (.build sumx-agg al)
@@ -355,10 +355,10 @@
   (let [variance-agg (->aggregate-factory {:f variance-op, :from-name from-name, :from-type from-type
                                            :to-name 'variance, :zero-row? zero-row?})
         finish-projecter (expr/->expression-projection-spec to-name '(sqrt variance)
-                                                            {:col-types {'variance (.getToColumnType variance-agg)}})]
+                                                            {:col-types {'variance (types/field->col-type (.getToColumnField variance-agg))}})]
     (reify IAggregateSpecFactory
       (getToColumnName [_] to-name)
-      (getToColumnType [_] (.getColumnType finish-projecter))
+      (getToColumnField [_] (types/col-type->field (.getColumnType finish-projecter)))
 
       (build [_ al]
         (let [variance-agg (.build variance-agg al)
@@ -427,7 +427,7 @@
 (defn- wrap-distinct [^IAggregateSpecFactory agg-factory, from-name, from-type]
   (reify IAggregateSpecFactory
     (getToColumnName [_] (.getToColumnName agg-factory))
-    (getToColumnType [_] (.getToColumnType agg-factory))
+    (getToColumnField [_] (.getToColumnField agg-factory))
 
     (build [_ al]
       (let [agg-spec (.build agg-factory al)
@@ -441,7 +441,7 @@
               (dotimes [idx (.valueCount in-vec)]
                 (let [group-idx (.get group-mapping idx)]
                   (while (<= (.size rel-maps) group-idx)
-                    (.add rel-maps (emap/->relation-map al {:build-col-types [from-name from-type]
+                    (.add rel-maps (emap/->relation-map al {:build-fields [[from-name (types/col-type->field from-type)]]
                                                             :build-key-col-names [from-name]})))
                   (let [^IRelationMap rel-map (nth rel-maps group-idx)]
                     (while (<= (.size builders) group-idx)
@@ -541,7 +541,7 @@
   (let [to-type [:list from-type]]
     (reify IAggregateSpecFactory
       (getToColumnName [_] to-name)
-      (getToColumnType [_] to-type)
+      (getToColumnField [_] (types/col-type->field to-type))
 
       (build [_ al]
         (ArrayAggAggregateSpec. al from-name to-name to-type
@@ -607,7 +607,7 @@
   (let [{group-cols :group-by, aggs :aggregate} (group-by first columns)
         group-cols (mapv second group-cols)]
     (lp/unary-expr (lp/emit-expr relation args)
-      (fn [col-types]
+      (fn [fields]
         (let [agg-factories (for [[_ agg] aggs]
                               (let [[to-column agg-form] (first agg)]
                                 (->aggregate-factory (into {:to-name to-column
@@ -620,12 +620,13 @@
                                                              (let [{:keys [f from-column]} agg-opts]
                                                                {:f f
                                                                 :from-name from-column
-                                                                :from-type (get col-types from-column :null)}))))))]
-          {:col-types (-> (into (->> group-cols
-                                     (into {} (map (juxt identity col-types))))
-                                (->> agg-factories
-                                     (into {} (map (juxt #(.getToColumnName ^IAggregateSpecFactory %)
-                                                         #(.getToColumnType ^IAggregateSpecFactory %)))))))
+                                                                :from-type (-> (get fields from-column types/null-field)
+                                                                               types/field->col-type)}))))))]
+          {:fields (-> (into (->> group-cols
+                                  (into {} (map (juxt identity fields))))
+                             (->> agg-factories
+                                  (into {} (map (juxt #(.getToColumnName ^IAggregateSpecFactory %)
+                                                      #(.getToColumnField ^IAggregateSpecFactory %)))))))
 
            :->cursor (fn [{:keys [allocator]} in-cursor]
                        (let [agg-specs (LinkedList.)]
@@ -634,7 +635,7 @@
                              (.add agg-specs (.build factory allocator)))
 
                            (GroupByCursor. allocator in-cursor
-                                           (->group-mapper allocator (select-keys col-types group-cols))
+                                           (->group-mapper allocator (select-keys fields group-cols))
                                            (vec agg-specs)
                                            false)
 

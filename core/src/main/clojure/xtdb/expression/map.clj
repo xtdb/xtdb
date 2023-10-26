@@ -11,7 +11,7 @@
            (org.apache.arrow.memory BufferAllocator)
            (org.apache.arrow.memory.util.hash MurmurHasher SimpleHasher)
            (org.apache.arrow.vector NullVector)
-           (org.apache.arrow.vector.types.pojo FieldType)
+           (org.apache.arrow.vector.types.pojo Field)
            (org.roaringbitmap IntConsumer RoaringBitmap)
            (xtdb.vector RelationReader IVectorReader)
            (com.carrotsearch.hppc IntObjectHashMap)))
@@ -52,9 +52,9 @@
 
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface IRelationMap
-  (^java.util.Map buildColumnTypes [])
+  (^java.util.Map buildFields [])
   (^java.util.List buildKeyColumnNames [])
-  (^java.util.Map probeColumnTypes [])
+  (^java.util.Map probeFields [])
   (^java.util.List probeKeyColumnNames [])
 
   (^xtdb.expression.map.IRelationMapBuilder buildFromRelation [^xtdb.vector.RelationReader inRelation])
@@ -115,15 +115,15 @@
        (vr/rel-reader [(.withName right-col (name right-vec))])
        params)))
 
-(defn- ->theta-comparator [probe-rel build-rel theta-expr params {:keys [build-col-types probe-col-types param-types]}]
-  (let [col-types (merge build-col-types probe-col-types)
+(defn- ->theta-comparator [probe-rel build-rel theta-expr params {:keys [build-fields probe-fields param-types]}]
+  (let [col-types (update-vals (merge build-fields probe-fields) types/field->col-type)
         f (build-comparator (->> (expr/form->expr theta-expr {:col-types col-types, :param-types param-types})
                                  (expr/prepare-expr)
                                  (ewalk/postwalk-expr (fn [{:keys [op] :as expr}]
                                                         (cond-> expr
                                                           (= op :variable)
                                                           (into (let [{:keys [variable]} expr]
-                                                                  (if (contains? probe-col-types variable)
+                                                                  (if (contains? probe-fields variable)
                                                                     {:rel left-rel, :idx left-idx}
                                                                     {:rel right-rel, :idx right-idx})))))))
                             {:var->col-type col-types, :param-types param-types})]
@@ -163,28 +163,29 @@
 (defn ->relation-map ^xtdb.expression.map.IRelationMap
   [^BufferAllocator allocator,
    {:keys [key-col-names store-full-build-rel?
-           build-col-types probe-col-types
+           build-fields probe-fields
            with-nil-row? nil-keys-equal?
-           theta-expr param-types params]
+           theta-expr param-fields params]
     :as opts}]
-  (let [build-key-col-names (get opts :build-key-col-names key-col-names)
+  (let [param-types (update-vals param-fields types/field->col-type)
+        build-key-col-names (get opts :build-key-col-names key-col-names)
         probe-key-col-names (get opts :probe-key-col-names key-col-names)
 
         hash->bitmap (IntObjectHashMap.)
         rel-writer (vw/->rel-writer allocator)]
 
-    (doseq [[col-name col-type] (cond-> build-col-types
-                                  (not store-full-build-rel?) (select-keys build-key-col-names)
+    (doseq [[col-name ^Field field] (cond-> build-fields
+                                      (not store-full-build-rel?) (select-keys build-key-col-names)
 
-                                  with-nil-row? (->> (into {} (map (juxt key
-                                                                         (comp (fn [col-type]
-                                                                                 (cond-> col-type
-                                                                                   with-nil-row? (types/merge-col-types :null)))
-                                                                               val))))))]
-      (.colWriter rel-writer (str col-name) (.getFieldType (types/col-type->field col-type))))
+                                      with-nil-row? (->> (into {} (map (juxt key
+                                                                             (comp (fn [col-type]
+                                                                                     (cond-> col-type
+                                                                                       with-nil-row? (types/merge-fields types/null-field)))
+                                                                                   val))))))]
+      (.colWriter rel-writer (str col-name) (.getFieldType field)))
 
     (when with-nil-row?
-      (doto (.rowCopier rel-writer (->nil-rel (keys build-col-types)))
+      (doto (.rowCopier rel-writer (->nil-rel (keys build-fields)))
         (.copyRow 0)))
 
     (let [build-key-cols (mapv #(vw/vec-wtr->rdr (.colWriter rel-writer (str %))) build-key-col-names)]
@@ -195,9 +196,9 @@
                       bitmap)))]
         (reify
           IRelationMap
-          (buildColumnTypes [_] build-col-types)
+          (buildFields [_] build-fields)
           (buildKeyColumnNames [_] build-key-col-names)
-          (probeColumnTypes [_] probe-col-types)
+          (probeFields [_] probe-fields)
           (probeKeyColumnNames [_] probe-key-col-names)
 
           (buildFromRelation [_ in-rel]
@@ -249,16 +250,14 @@
                   comparator (->> (cond-> (map (fn [build-col probe-col]
                                                  (->equi-comparator probe-col build-col params
                                                                     {:nil-keys-equal? nil-keys-equal?
-                                                                     :left-col-types probe-col-types
-                                                                     :right-col-types build-col-types
                                                                      :param-types param-types}))
                                                build-key-cols
                                                probe-key-cols)
 
                                     (some? theta-expr)
                                     (conj (->theta-comparator probe-rel build-rel theta-expr params
-                                                              {:build-col-types build-col-types
-                                                               :probe-col-types probe-col-types
+                                                              {:build-fields build-fields
+                                                               :probe-fields probe-fields
                                                                :param-types param-types})))
                                   (reduce andIBO))
 

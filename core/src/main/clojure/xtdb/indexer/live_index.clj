@@ -15,8 +15,8 @@
            (java.util.concurrent CompletableFuture)
            (java.util.function Function)
            (org.apache.arrow.memory BufferAllocator)
+           (org.apache.arrow.vector.types.pojo Field)
            xtdb.IBufferPool
-           (xtdb.object_store ObjectStore)
            (xtdb.trie LiveHashTrie)
            (xtdb.util RefCounter)
            (xtdb.vector IRelationWriter IVectorWriter)
@@ -60,15 +60,13 @@
   (^xtdb.trie.LiveHashTrie live-trie [test-live-table])
   (^xtdb.vector.IRelationWriter live-rel [test-live-table]))
 
-(defn- live-rel->col-types [^IRelationWriter live-rel]
-  (let [col-type (-> (.colWriter live-rel "op")
-                     (.legWriter :put)
-                     (.structKeyWriter "xt$doc")
-                     .getField
-                     types/field->col-type
-                     types/without-null)]
-    (assert (= :struct (types/col-type-head col-type)))
-    (into {} (map (juxt (comp str key) val)) (second col-type))))
+(defn- live-rel->fields [^IRelationWriter live-rel]
+  (let [live-rel-field (-> (.colWriter live-rel "op")
+                           (.legWriter :put)
+                           (.structKeyWriter "xt$doc")
+                           .getField)]
+    (assert (= #xt.arrow/type :struct (.getType live-rel-field)))
+    (into {} (map (comp (juxt #(.getName ^Field %) identity))) (.getChildren live-rel-field))))
 
 (defn- open-wm-live-rel ^xtdb.vector.RelationReader [^IRelationWriter rel, retain?]
   (let [out-cols (ArrayList.)]
@@ -137,12 +135,12 @@
           (swap! !transient-trie #(.add ^LiveHashTrie % (dec (.getPosition (.writerPosition live-rel))))))
 
         (openWatermark [_]
-          (let [col-types (live-rel->col-types live-rel)
+          (let [fields (live-rel->fields live-rel)
                 wm-live-rel (open-wm-live-rel live-rel false)
                 wm-live-trie @!transient-trie]
 
             (reify ILiveTableWatermark
-              (columnTypes [_] col-types)
+              (columnFields [_] fields)
               (liveRelation [_] wm-live-rel)
               (liveTrie [_] wm-live-trie)
 
@@ -163,17 +161,17 @@
         (let [bufs (trie/live-trie->bufs allocator live-trie live-rel-rdr)
               !fut (trie/write-trie-bufs! buffer-pool table-name trie-key bufs)
               table-metadata (MapEntry/create table-name
-                                              {:col-types (live-rel->col-types live-rel)
+                                              {:fields (live-rel->fields live-rel)
                                                :row-count (.rowCount live-rel-rdr)})]
           (-> !fut
               (util/then-apply (fn [_] table-metadata)))))))
 
   (openWatermark [this retain?]
-    (let [col-types (live-rel->col-types live-rel)
+    (let [fields (live-rel->fields live-rel)
           wm-live-rel (open-wm-live-rel live-rel retain?)
           wm-live-trie (.withIidReader ^LiveHashTrie (.live-trie this) (.readerForName wm-live-rel "xt$iid"))]
       (reify ILiveTableWatermark
-        (columnTypes [_] col-types)
+        (columnFields [_] fields)
         (liveRelation [_] wm-live-rel)
         (liveTrie [_] wm-live-trie)
 
@@ -253,7 +251,7 @@
                                 (util/->jfn (fn [_] (.openWatermark live-table false)))))
 
             (reify ILiveIndexWatermark
-              (allColumnTypes [_] (update-vals wms #(.columnTypes ^ILiveTableWatermark %)))
+              (allColumnFields [_] (update-vals wms #(.columnFields ^ILiveTableWatermark %)))
               (liveTable [_ table-name] (.get wms table-name))
 
               AutoCloseable
@@ -272,7 +270,7 @@
           (.put wms table-name (.openWatermark live-table true)))
 
         (reify ILiveIndexWatermark
-          (allColumnTypes [_] (update-vals wms #(.columnTypes ^ILiveTableWatermark %)))
+          (allColumnFields [_] (update-vals wms #(.columnFields ^ILiveTableWatermark %)))
 
           (liveTable [_ table-name] (.get wms table-name))
 

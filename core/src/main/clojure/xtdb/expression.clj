@@ -1557,6 +1557,13 @@
                         (symbol (.getName col))
                         (types/field->col-type (.getField col))))))))
 
+(defn ->param-fields [^RelationReader params]
+  (->> params
+       (into {} (map (fn [^IVectorReader col]
+                       (MapEntry/create
+                        (symbol (.getName col))
+                        (.getField col)))))))
+
 (defn ->expression-projection-spec ^xtdb.operator.IProjectionSpec [col-name form {:keys [col-types param-types] :as input-types}]
   (let [expr (form->expr form input-types)
 

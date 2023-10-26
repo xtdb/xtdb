@@ -80,18 +80,16 @@
 (defmethod lp/emit-expr :csv [{:keys [path col-types],
                                {:keys [batch-size], :or {batch-size 1000}} :opts}
                               _args]
-  (let [col-types (->> col-types
-                       (into {} (map (juxt (comp name key)
-                                           (comp #(get csv-col-type-overrides % %) val)))))]
-    {:col-types col-types
+  (let [fields (->> col-types
+                    (into {} (map (juxt (comp name key)
+                                        #(types/col-type->field (name (key %)) (get csv-col-type-overrides (val %) (val %)))))))]
+    {:fields fields
      :->cursor (fn [{:keys [allocator]}]
                  (let [rdr (Files/newBufferedReader path)
                        rows (rest (csv/read-csv rdr))
-                       schema (Schema. (map (fn [[col-name col-type]]
-                                              (types/col-type->field (name col-name) col-type))
-                                            col-types))]
+                       schema (Schema. (vals fields))]
                    (CSVCursor. allocator rdr
                                (VectorSchemaRoot/create schema allocator)
-                               (->> col-types (into {} (map (juxt (comp name key)
-                                                                  (comp col-parsers val)))))
+                               (->> fields (into {} (map (juxt (comp name key)
+                                                               (comp col-parsers types/field->col-type val)))))
                                (.iterator ^Iterable (partition-all batch-size rows)))))}))

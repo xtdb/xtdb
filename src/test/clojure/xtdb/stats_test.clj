@@ -4,7 +4,8 @@
             [xtdb.logical-plan :as lp]
             [xtdb.node :as node]
             [xtdb.test-util :as tu]
-            [xtdb.util :as util]))
+            [xtdb.util :as util]
+            [xtdb.types :as types]))
 
 (t/use-fixtures :each tu/with-allocator)
 
@@ -23,12 +24,12 @@
 
       (t/is (= {:row-count 3}
                (:stats (lp/emit-expr '{:op :scan, :scan-opts {:table foo}, :columns [[:column id]]}
-                                     {:scan-col-types {['$ 'id] :utf8},
+                                     {:scan-fields {['foo 'id] (types/col-type->field :utf8)},
                                       :scan-emitter scan-emitter}))))
 
       (t/is (= {:row-count 2}
                (:stats (lp/emit-expr '{:op :scan, :scan-opts {:table bar}, :columns [[:column id]]}
-                                     {:scan-col-types {['$ 'id] :utf8},
+                                     {:scan-fields {['bar 'id] (types/col-type->field :utf8)},
                                       :scan-emitter scan-emitter})))))))
 
 (deftest test-project

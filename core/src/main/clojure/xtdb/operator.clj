@@ -38,14 +38,14 @@
 
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface BoundQuery
-  (columnTypes [])
+  (columnFields [])
   (^xtdb.ICursor openCursor [])
   (^void close []
-    "optional: if you close this BoundQuery it'll close any closed-over params relation"))
+   "optional: if you close this BoundQuery it'll close any closed-over params relation"))
 
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface PreparedQuery
-  ;; NOTE we could arguably take the actual params here rather than param-types
+  ;; NOTE we could arguably take the actual params here rather than param-fields
   ;; but if we were to make params a VSR this would then make BoundQuery a closeable resource
   ;; ... or at least raise questions about who then owns the params
   (^xtdb.operator.BoundQuery bind [^xtdb.watermark.IWatermarkSource watermarkSource, queryOpts]
@@ -55,14 +55,15 @@
 (definterface IRaQuerySource
   (^xtdb.operator.PreparedQuery prepareRaQuery [ra-query]))
 
-(defn- ->table-arg-types [table-args]
+(defn- ->table-arg-fields [table-args]
   (->> (for [[table-key rows] table-args]
          (MapEntry/create
           table-key
-          (vw/rows->col-types rows)))
+          (vw/rows->fields rows)))
        (into {})))
 
-(defn- wrap-cursor ^xtdb.IResultCursor [^ICursor cursor, ^AutoCloseable wm, ^BufferAllocator al, ^Clock clock, ^RefCounter ref-ctr col-types]
+(defn- wrap-cursor ^xtdb.IResultCursor [^ICursor cursor, ^AutoCloseable wm, ^BufferAllocator al,
+                                        ^Clock clock, ^RefCounter ref-ctr fields]
   (reify IResultCursor
     (tryAdvance [_ c]
       (when (.isClosing ref-ctr)
@@ -84,7 +85,7 @@
       (util/close wm)
       (util/close al))
 
-    (columnTypes [_] col-types)))
+    (columnFields [_] fields)))
 
 (defn prepare-ra ^xtdb.operator.PreparedQuery
   ;; this one used from zero-dep tests
@@ -110,23 +111,23 @@
                  default-tz (or default-tz (.getZone expr/*clock*))
                  wm-tx (or tx after-tx)
                  clock (Clock/fixed current-time default-tz)
-                 {:keys [col-types ->cursor]} (.computeIfAbsent cache
-                                                                {:scan-col-types (when (and (seq scan-cols) scan-emitter)
-                                                                                   (with-open [wm (.openWatermark wm-src wm-tx)]
-                                                                                     (.scanColTypes scan-emitter wm scan-cols)))
-                                                                 :param-types (expr/->param-types params)
-                                                                 :table-arg-types (->table-arg-types table-args)
-                                                                 :default-tz default-tz
-                                                                 :default-all-valid-time? default-all-valid-time?
-                                                                 :last-known-chunk (when metadata-mgr
-                                                                                     (.lastEntry (.chunksMetadata metadata-mgr)))}
-                                                                (reify Function
-                                                                  (apply [_ emit-opts]
-                                                                    (binding [expr/*clock* clock]
-                                                                      (lp/emit-expr conformed-query (assoc emit-opts :scan-emitter scan-emitter))))))]
+                 {:keys [fields ->cursor]} (.computeIfAbsent cache
+                                                             {:scan-fields (when (and (seq scan-cols) scan-emitter)
+                                                                             (with-open [wm (.openWatermark wm-src wm-tx)]
+                                                                               (.scanFields scan-emitter wm scan-cols)))
+                                                              :param-fields (expr/->param-fields params)
+                                                              :table-arg-fields (->table-arg-fields table-args)
+                                                              :default-tz default-tz
+                                                              :default-all-valid-time? default-all-valid-time?
+                                                              :last-known-chunk (when metadata-mgr
+                                                                                  (.lastEntry (.chunksMetadata metadata-mgr)))}
+                                                             (reify Function
+                                                               (apply [_ emit-opts]
+                                                                 (binding [expr/*clock* clock]
+                                                                   (lp/emit-expr conformed-query (assoc emit-opts :scan-emitter scan-emitter))))))]
              (reify
                BoundQuery
-               (columnTypes [_] col-types)
+               (columnFields [_] fields)
 
                (openCursor [_]
                  (.acquire ref-ctr)
@@ -144,7 +145,7 @@
                                                  (update :tx (fnil identity (some-> wm .txBasis)))
                                                  (assoc :current-time current-time))
                                       :params params, :table-args table-args :default-all-valid-time? default-all-valid-time?})
-                           (wrap-cursor allocator wm clock ref-ctr col-types)))
+                           (wrap-cursor allocator wm clock ref-ctr fields)))
 
                      (catch Throwable t
                        (.release ref-ctr)
@@ -185,7 +186,7 @@
                           ^AutoCloseable params
                           ^:unsynchronized-mutable ^Iterator next-values]
   IResultSet
-  (columnTypes [_] (.columnTypes cursor))
+  (columnFields [_] (.columnFields cursor))
 
   (hasNext [res]
     (boolean

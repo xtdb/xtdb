@@ -12,7 +12,7 @@
            (java.util.stream IntStream)
            (org.apache.arrow.memory BufferAllocator)
            (org.apache.arrow.vector NullVector)
-           org.apache.arrow.vector.types.pojo.FieldType
+           (org.apache.arrow.vector.types.pojo Field FieldType)
            (xtdb ICursor)
            (xtdb.vector IVectorReader RelationReader)))
 
@@ -35,7 +35,7 @@
                  ^java.util.stream.IntStream$Builder idxs
                  ^int inIdx]))
 
-(defn ->mode-strategy [mode dependent-col-types]
+(defn ->mode-strategy [mode dependent-fields]
   (zmatch mode
     [:mark-join mark-spec]
     (let [[col-name _expr] (first (:mark-join mark-spec))]
@@ -67,8 +67,8 @@
       :cross-join
       (reify ModeStrategy
         (accept [_ dep-cursor dep-out-writer idxs in-idx]
-          (doseq [[col-name col-type] dependent-col-types]
-            (.colWriter dep-out-writer (name col-name) (.getFieldType (types/col-type->field (name col-name) col-type))))
+          (doseq [[col-name ^Field field] dependent-fields]
+            (.colWriter dep-out-writer (name col-name) (.getFieldType field)))
 
           (.forEachRemaining dep-cursor
                              (reify Consumer
@@ -82,8 +82,8 @@
       :left-outer-join
       (reify ModeStrategy
         (accept [_ dep-cursor dep-out-writer idxs in-idx]
-          (doseq [[col-name col-type] dependent-col-types]
-            (.colWriter dep-out-writer (name col-name) (.getFieldType (types/col-type->field (name col-name) col-type))))
+          (doseq [[col-name ^Field field] dependent-fields]
+            (.colWriter dep-out-writer (name col-name) (.getFieldType field)))
 
           (let [match? (boolean-array [false])]
             (.forEachRemaining dep-cursor
@@ -99,8 +99,8 @@
 
             (when-not (aget match? 0)
               (.add idxs in-idx)
-              (doseq [[col-name col-type] dependent-col-types]
-                (vw/append-vec (.colWriter dep-out-writer (name col-name) (.getFieldType (types/col-type->field (name col-name) col-type)))
+              (doseq [[col-name ^Field field] dependent-fields]
+                (vw/append-vec (.colWriter dep-out-writer (name col-name) (.getFieldType field))
                                (vr/vec->reader (doto (NullVector. (name col-name))
                                                  (.setValueCount 1)))))))))
 
@@ -134,8 +134,8 @@
       :single-join
       (reify ModeStrategy
         (accept [_ dep-cursor dep-out-writer idxs in-idx]
-          (doseq [[col-name col-type] dependent-col-types]
-            (.colWriter dep-out-writer (name col-name) (.getFieldType (types/col-type->field (name col-name) col-type))))
+          (doseq [[col-name ^Field field] dependent-fields]
+            (.colWriter dep-out-writer (name col-name) (.getFieldType field)))
 
           (let [match? (boolean-array [false])]
             (.forEachRemaining dep-cursor
@@ -158,8 +158,8 @@
 
             (when-not (aget match? 0)
               (.add idxs in-idx)
-              (doseq [[col-name col-type] dependent-col-types]
-                (vw/append-vec (.colWriter dep-out-writer (name col-name) (.getFieldType (types/col-type->field (name col-name) col-type)))
+              (doseq [[col-name ^Field field] dependent-fields]
+                (vw/append-vec (.colWriter dep-out-writer (name col-name) (.getFieldType field))
                                (vr/vec->reader (doto (NullVector. (name col-name))
                                                  (.setValueCount 1))))))))))))
 
@@ -195,45 +195,44 @@
   ;; TODO: decodes/re-encodes row values - can we pass these directly to the sub-query?
 
   (lp/unary-expr (lp/emit-expr independent-relation args)
-    (fn [independent-col-types]
-      (let [{:keys [param-types] :as dependent-args} (-> args
-                                                         (update :param-types
-                                                                 (fnil into {})
-                                                                 (map (fn [[ik dk]]
-                                                                        (if-let [col-type (get independent-col-types ik)]
-                                                                          [dk col-type]
-                                                                          (throw
+    (fn [independent-fields]
+      (let [{:keys [param-fields] :as dependent-args} (-> args
+                                                          (update :param-fields
+                                                                  (fnil into {})
+                                                                  (map (fn [[ik dk]]
+                                                                         (if-let [field (get independent-fields ik)]
+                                                                           [dk field]
+                                                                           (throw
                                                                             (err/illegal-arg
-                                                                              :xtdb.apply/missing-column
-                                                                              {::err/message (str "Column missing from independent relation: " ik)
-                                                                               :column ik})))))
-                                                                 columns))
-            {dependent-col-types :col-types, ->dependent-cursor :->cursor} (lp/emit-expr dependent-relation dependent-args)
-            out-dependent-col-types (zmatch mode
-                                      [:mark-join mark-spec]
-                                      (let [[col-name _expr] (first (:mark-join mark-spec))]
-                                        {col-name [:union #{:null :bool}]})
+                                                                             :xtdb.apply/missing-column
+                                                                             {::err/message (str "Column missing from independent relation: " ik)
+                                                                              :column ik})))))
+                                                                  columns))
+            {dependent-fields :fields, ->dependent-cursor :->cursor} (lp/emit-expr dependent-relation dependent-args)
+            out-dependent-fields (zmatch mode
+                                   [:mark-join mark-spec]
+                                   (let [[col-name _expr] (first (:mark-join mark-spec))]
+                                     {col-name (types/col-type->field [:union #{:null :bool}])})
 
-                                      [:otherwise simple-mode]
-                                      (case simple-mode
-                                        :cross-join dependent-col-types
+                                   [:otherwise simple-mode]
+                                   (case simple-mode
+                                     :cross-join dependent-fields
 
-                                        (:left-outer-join :single-join)
-                                        (-> dependent-col-types types/with-nullable-cols)
+                                     (:left-outer-join :single-join) (types/with-nullable-fields dependent-fields)
 
-                                        (:semi-join :anti-join) {}))]
+                                     (:semi-join :anti-join) {}))]
 
-        {:col-types (merge-with types/merge-col-types independent-col-types out-dependent-col-types)
+        {:fields (merge-with types/merge-fields independent-fields out-dependent-fields)
 
-         :->cursor (let [mode-strat (->mode-strategy mode out-dependent-col-types)
+         :->cursor (let [mode-strat (->mode-strategy mode out-dependent-fields)
 
                          open-dependent-cursor
                          (zmatch mode
                            [:mark-join mark-spec]
                            (let [[_col-name expr] (first (:mark-join mark-spec))
                                  projection-spec (expr/->expression-projection-spec "_expr" expr
-                                                                                    {:col-types dependent-col-types
-                                                                                     :param-types param-types})]
+                                                                                    {:col-types (update-vals dependent-fields types/field->col-type)
+                                                                                     :param-types (update-vals param-fields types/field->col-type)})]
                              (fn [{:keys [allocator params] :as query-opts}]
                                (let [^ICursor dep-cursor (->dependent-cursor query-opts)]
                                  (reify ICursor

@@ -172,8 +172,8 @@
 
 (t/deftest first-tuple-in-rhs-is-taken-into-account-test
   (t/is
-   (= [{:x1 2}]
-      (tu/query-ra
-       '[:difference
-         [:table [{x1 1} {x1 2}]]
-         [:table [{x1 1}]]] {}))))
+   (= {:res [{:x1 2}], :col-types '{x1 :i64}}
+      (tu/query-ra '[:difference
+                     [:table [{x1 1} {x1 2}]]
+                     [:table [{x1 1}]]]
+                   {:with-col-types? true}))))

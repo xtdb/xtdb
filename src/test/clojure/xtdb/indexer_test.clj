@@ -12,14 +12,15 @@
             [xtdb.test-json :as tj]
             [xtdb.test-util :as tu]
             [xtdb.ts-devices :as ts]
+            [xtdb.types :as types]
             [xtdb.util :as util]
             xtdb.watermark)
   (:import (java.nio.channels ClosedByInterruptException)
            java.nio.file.Files
            java.time.Duration
            [org.apache.arrow.memory BufferAllocator]
-           xtdb.api.protocols.TransactionInstant
            xtdb.IBufferPool
+           xtdb.api.protocols.TransactionInstant
            (xtdb.metadata IMetadataManager)
            xtdb.node.Node
            xtdb.object_store.ObjectStore
@@ -263,17 +264,34 @@
                      (.resolve node-dir "objects"))
 
       (let [^IMetadataManager mm (tu/component node ::meta/metadata-manager)]
-        (t/is (= [:union #{:utf8 :keyword :i64}]
-                 (.columnType mm "xt_docs" "xt$id")))
+        (t/is (= (types/col-type->field "xt$id" [:union #{:utf8 :keyword :i64}])
+                 (.columnField mm "xt_docs" "xt$id")))
 
-        (t/is (= [:union #{:absent [:list [:union #{:utf8 [:timestamp-tz :micro "UTC"] :f64 :bool}]]}]
-                 (.columnType mm "xt_docs" "list")))
+        (t/is (= (types/->field "list" #xt.arrow/type :union false
+                                (types/->field "list" #xt.arrow/type :list false
+                                               (types/->field "$data$" #xt.arrow/type :union false
+                                                              (types/col-type->field :f64)
+                                                              (types/col-type->field :utf8)
+                                                              (types/col-type->field [:timestamp-tz :micro "UTC"])
+                                                              (types/col-type->field :bool)))
+                                (types/col-type->field :absent))
+                 (.columnField mm "xt_docs" "list")))
 
-        (t/is (= [:union #{:absent
-                           [:struct '{a [:union #{:bool :i64}]
-                                      b [:union #{:utf8
-                                                  [:struct {c :utf8, d :utf8}]}]}]}]
-                 (.columnType mm "xt_docs" "struct")))))))
+        (t/is (= (types/->field "struct" #xt.arrow/type :union false
+                                (types/col-type->field :absent)
+                                (types/->field "struct" #xt.arrow/type :struct false
+                                               (types/->field "a" #xt.arrow/type :union false
+                                                              (types/col-type->field :i64)
+                                                              (types/col-type->field :bool)
+                                                              )
+                                               (types/->field "b" #xt.arrow/type :union false
+                                                              (types/col-type->field :utf8)
+                                                              (types/->field "struct" #xt.arrow/type :struct false
+                                                                             (types/->field "c" #xt.arrow/type :union false
+                                                                                            (types/col-type->field :utf8))
+                                                                             (types/->field "d" #xt.arrow/type :union false
+                                                                                            (types/col-type->field :utf8))))))
+                 (.columnField mm "xt_docs" "struct")))))))
 
 (t/deftest round-trips-nils
   (with-open [node (node/start-node {})]
@@ -425,7 +443,8 @@
                            (partition-all 100 tx-ops))]
 
           (doseq [^Node node (shuffle (take 6 (cycle [node-1 node-2 node-3])))
-                  :let [^IBufferPool bp (util/component node :xtdb/buffer-pool)]]
+                  :let [^IBufferPool bp (util/component node :xtdb/buffer-pool)
+                        ^IMetadataManager mm (util/component node ::meta/metadata-manager)]]
             (t/is (= last-tx-key (tu/then-await-tx last-tx-key node (Duration/ofSeconds 60))))
             (t/is (= last-tx-key (tu/latest-completed-tx node)))
 
@@ -435,7 +454,8 @@
               (t/is (= 11 (count (filter #(re-matches #"tables/device_readings/data/log-l\p{XDigit}+-rf\p{XDigit}+-nr\p{XDigit}+\.arrow" %) objs))))
               (t/is (= 11 (count (filter #(re-matches #"tables/device_readings/meta/log-l\p{XDigit}+-rf\p{XDigit}+-nr\p{XDigit}+\.arrow" %) objs))))
               (t/is (= 11 (count (filter #(re-matches #"tables/xt\$txs/data/log-l\p{XDigit}+-rf\p{XDigit}+-nr\p{XDigit}+\.arrow" %) objs))))
-              (t/is (= 11 (count (filter #(re-matches #"tables/xt\$txs/meta/log-l\p{XDigit}+-rf\p{XDigit}+-nr\p{XDigit}+\.arrow" %) objs)))))))))))
+              (t/is (= 11 (count (filter #(re-matches #"tables/xt\$txs/meta/log-l\p{XDigit}+-rf\p{XDigit}+-nr\p{XDigit}+\.arrow" %) objs)))))
+            (t/is (= :utf8 (types/field->col-type (.columnField mm "device_readings" "xt$id"))))))))))
 
 (t/deftest can-ingest-ts-devices-mini-with-stop-start-and-reach-same-state
   (let [node-dir (util/->path "target/can-ingest-ts-devices-mini-with-stop-start-and-reach-same-state")
@@ -484,7 +504,8 @@
                   (t/is (= 5 (count (filter #(re-matches #"tables/xt\$txs/data/log-l\p{XDigit}+-rf\p{XDigit}+-nr\p{XDigit}+\.arrow" %) objs))))
                   (t/is (= 5 (count (filter #(re-matches #"tables/xt\$txs/meta/log-l\p{XDigit}+-rf\p{XDigit}+-nr\p{XDigit}+\.arrow" %) objs))))))
 
-              (t/is (= :utf8 (.columnType mm "device_readings" "xt$id")))
+              (t/is (= :utf8
+                       (types/field->col-type (.columnField mm "device_readings" "xt$id"))))
 
               (let [^TransactionInstant
                     second-half-tx-key (reduce
@@ -506,7 +527,8 @@
                                           (tu/then-await-tx node (Duration/ofSeconds 10))))
                               (:tx-id second-half-tx-key)))
 
-                    (t/is (= :utf8 (.columnType mm "device_info" "xt$id"))))
+                    (t/is (= :utf8
+                             (types/field->col-type (.columnField mm "device_info" "xt$id")))))
 
                   (doseq [^Node node [new-node node]]
                     (t/is (= second-half-tx-key (-> second-half-tx-key
@@ -525,7 +547,8 @@
                       (t/is (= 11 (count (filter #(re-matches #"tables/xt\$txs/data/log-l\p{XDigit}+-rf\p{XDigit}+-nr\p{XDigit}+\.arrow" %) objs))))
                       (t/is (= 11 (count (filter #(re-matches #"tables/xt\$txs/meta/log-l\p{XDigit}+-rf\p{XDigit}+-nr\p{XDigit}+\.arrow" %) objs)))))
 
-                    (t/is (= :utf8 (.columnType mm "device_info" "xt$id")))))))))))))
+                    (t/is (= :utf8
+                             (types/field->col-type (.columnField mm "device_info" "xt$id"))))))))))))))
 
 (t/deftest merges-column-fields-on-restart
   (let [node-dir (util/->path "target/merges-column-fields")
@@ -540,7 +563,8 @@
 
         (tu/finish-chunk! node1)
 
-        (t/is (= :utf8 (.columnType mm1 "xt_docs" "v")))
+        (t/is (=  :utf8
+                  (types/field->col-type (.columnField mm1 "xt_docs" "v"))))
 
         (let [tx2 (xt/submit-tx node1 [[:put :xt_docs {:xt/id 1, :v :bar}]
                                        [:put :xt_docs {:xt/id 2, :v #uuid "8b190984-2196-4144-9fa7-245eb9a82da8"}]
@@ -549,15 +573,15 @@
 
           (tu/finish-chunk! node1)
 
-          (t/is (= [:union #{:utf8 :keyword :clj-form :uuid}]
-                   (.columnType mm1 "xt_docs" "v")))
+          (t/is (= [:union #{:utf8 :clj-form :keyword :uuid}]
+                   (types/field->col-type (.columnField mm1 "xt_docs" "v"))))
 
           (with-open [node2 (tu/->local-node (assoc node-opts :buffers-dir "objects-1"))]
             (let [^IMetadataManager mm2 (tu/component node2 ::meta/metadata-manager)]
               (tu/then-await-tx tx2 node2 (Duration/ofMillis 200))
 
-              (t/is (= [:union #{:utf8 :keyword :clj-form :uuid}]
-                       (.columnType mm2 "xt_docs" "v"))))))))))
+              (t/is (= [:union #{:utf8 :clj-form :keyword :uuid}]
+                       (types/field->col-type (.columnField mm2 "xt_docs" "v")))))))))))
 
 (t/deftest test-await-fails-fast
   (let [e (UnsupportedOperationException. "oh no!")]

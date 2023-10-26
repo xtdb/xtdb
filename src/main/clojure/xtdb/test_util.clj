@@ -179,11 +179,11 @@
          :blocks vector?))
 
 (defmethod lp/emit-expr ::blocks [{:keys [col-types blocks stats]} _args]
-  (let [col-types (or col-types
-                      (vw/rows->col-types (into [] cat blocks)))
-        ^Schema schema (Schema. (for [[col-name col-type] col-types]
-                                  (types/col-type->field col-name col-type)))]
-    {:col-types col-types
+  (let [fields (or (some-> col-types (update-vals types/col-type->field))
+                   (vw/rows->fields (into [] cat blocks)))
+        ^Schema schema (Schema. (for [[col-name field] fields]
+                                  (types/field-with-name field (str col-name))))]
+    {:fields fields
      :stats stats
      :->cursor (fn [{:keys [allocator]}]
                  (->cursor allocator schema blocks))}))
@@ -224,7 +224,7 @@
            (let [rows (-> (<-cursor res)
                           (cond->> (not preserve-blocks?) (into [] cat)))]
              (if with-col-types?
-               {:res rows, :col-types (.columnTypes bq)}
+               {:res rows, :col-types (update-vals (doto (.columnFields bq) prn) types/field->col-type)}
                rows))))))))
 
 (t/deftest round-trip-cursor

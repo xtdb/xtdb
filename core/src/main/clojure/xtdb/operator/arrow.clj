@@ -1,7 +1,6 @@
 (ns xtdb.operator.arrow
   (:require [clojure.spec.alpha :as s]
             [xtdb.logical-plan :as lp]
-            [xtdb.types :as types]
             [xtdb.util :as util]
             [xtdb.vector.reader :as vr])
   (:import java.io.BufferedInputStream
@@ -39,12 +38,12 @@
     (catch InvalidArrowFileException _
       (ArrowStreamReader. (.position ch 0) allocator))))
 
-;; HACK: not ideal that we have to open the file in the emitter just to get the col-types?
+;; HACK: not ideal that we have to open the file in the emitter just to get the fields?
 (defn- path->cursor [^Path path on-close-fn]
-  {:col-types (with-open [al (RootAllocator.)
-                          ^ArrowReader rdr (path->arrow-reader (util/->file-channel path) al)]
-                (->> (.getFields (.getSchema (.getVectorSchemaRoot rdr)))
-                     (into {} (map (juxt #(symbol (.getName ^Field %)) types/field->col-type)))))
+  {:fields (with-open [al (RootAllocator.)
+                       ^ArrowReader rdr (path->arrow-reader (util/->file-channel path) al)]
+             (->> (.getFields (.getSchema (.getVectorSchemaRoot rdr)))
+                  (into {} (map (juxt #(symbol (.getName ^Field %)) identity)))))
    :->cursor (fn [{:keys [^BufferAllocator allocator]}]
                (ArrowCursor. (path->arrow-reader (util/->file-channel path) allocator) on-close-fn))})
 
