@@ -8,14 +8,14 @@
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (definterface ILiveTableWatermark
-  (^java.util.Map columnTypes [])
+  (^java.util.Map columnFields [])
   (^xtdb.vector.RelationReader liveRelation [])
   (^xtdb.trie.LiveHashTrie liveTrie [])
   (^void close []))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (definterface ILiveIndexWatermark
-  (^java.util.Map allColumnTypes [])
+  (^java.util.Map allColumnFields [])
   (^xtdb.watermark.ILiveTableWatermark liveTable [^String tableName])
   (^void close []))
 

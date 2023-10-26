@@ -56,16 +56,16 @@
 
 (set! *unchecked-math* :warn-on-boxed)
 
-(defn- union-col-types [left-col-types right-col-types]
-  (when-not (= (set (keys left-col-types)) (set (keys right-col-types)))
+(defn- union-fields [left-fields right-fields]
+  (when-not (= (set (keys left-fields)) (set (keys right-fields)))
     (throw (err/illegal-arg :union-incompatible-cols
                             {::err/message "union incompatible cols"
-                             :left-col-names (set (keys left-col-types))
-                             :right-col-names (set (keys right-col-types))})))
+                             :left-col-names (set (keys left-fields))
+                             :right-col-names (set (keys right-fields))})))
 
   ;; NOTE: this overestimates types for intersection - if one side's string and the other int,
   ;; they statically can't intersect - but maybe that's one step too far for now.
-  (merge-with types/merge-col-types left-col-types right-col-types))
+  (merge-with types/merge-fields left-fields right-fields))
 
 (deftype UnionAllCursor [^ICursor left-cursor
                          ^ICursor right-cursor]
@@ -97,10 +97,10 @@
 
 (defmethod lp/emit-expr :union-all [{:keys [left right]} args]
   (lp/binary-expr (lp/emit-expr left args) (lp/emit-expr right args)
-    (fn [left-col-types right-col-types]
-      {:col-types (union-col-types left-col-types right-col-types)
-       :->cursor (fn [_opts left-cursor right-cursor]
-                   (UnionAllCursor. left-cursor right-cursor))})))
+                  (fn [left-fields right-fields]
+                    {:fields (union-fields left-fields right-fields)
+                     :->cursor (fn [_opts left-cursor right-cursor]
+                                 (UnionAllCursor. left-cursor right-cursor))})))
 
 (deftype IntersectionCursor [^ICursor left-cursor
                              ^ICursor right-cursor
@@ -146,24 +146,25 @@
 
 (defmethod lp/emit-expr :intersect [{:keys [left right]} args]
   (lp/binary-expr (lp/emit-expr left args) (lp/emit-expr right args)
-    (fn [left-col-types right-col-types]
-      (let [col-types (union-col-types left-col-types right-col-types)]
-        {:col-types col-types
+    (fn [left-fields right-fields]
+      (let [fields (union-fields left-fields right-fields)]
+        {:fields fields
          :->cursor (fn [{:keys [allocator]} left-cursor right-cursor]
                      (IntersectionCursor. left-cursor right-cursor
-                                          (emap/->relation-map allocator {:build-col-types left-col-types
-                                                                          :key-col-names (set (keys col-types))})
+                                          (emap/->relation-map allocator
+                                                               {:build-fields left-fields
+                                                                :key-col-names (set (keys fields))})
                                           false))}))))
 
 (defmethod lp/emit-expr :difference [{:keys [left right]} args]
   (lp/binary-expr (lp/emit-expr left args) (lp/emit-expr right args)
-    (fn [left-col-types right-col-types]
-      (let [col-types (union-col-types left-col-types right-col-types)]
-        {:col-types col-types
+    (fn [left-fields right-fields]
+      (let [fields (union-fields left-fields right-fields)]
+        {:fields fields
          :->cursor (fn [{:keys [allocator]} left-cursor right-cursor]
                      (IntersectionCursor. left-cursor right-cursor
-                                          (emap/->relation-map allocator {:build-col-types left-col-types
-                                                                          :key-col-names (set (keys col-types))})
+                                          (emap/->relation-map allocator {:build-fields left-fields
+                                                                          :key-col-names (set (keys fields))})
                                           true))}))))
 
 (deftype DistinctCursor [^ICursor in-cursor
@@ -196,12 +197,13 @@
 
 (defmethod lp/emit-expr :distinct [{:keys [relation]} args]
   (lp/unary-expr (lp/emit-expr relation args)
-    (fn [inner-col-types]
-      {:col-types inner-col-types
-       :->cursor (fn [{:keys [allocator]} in-cursor]
-                   (DistinctCursor. in-cursor (emap/->relation-map allocator {:build-col-types inner-col-types
-                                                                              :key-col-names (set (keys inner-col-types))
-                                                                              :nil-keys-equal? true})))})))
+                 (fn [inner-fields]
+                   {:fields inner-fields
+                    :->cursor (fn [{:keys [allocator]} in-cursor]
+                                (DistinctCursor. in-cursor (emap/->relation-map allocator
+                                                                                {:build-fields inner-fields
+                                                                                 :key-col-names (set (keys inner-fields))
+                                                                                 :nil-keys-equal? true})))})))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (definterface ICursorFactory
@@ -290,23 +292,22 @@
     (util/try-close base-cursor)))
 
 (defmethod lp/emit-expr :relation [{:keys [relation]}
-                                   {:keys [relation-variable->col-types] :as _opts}]
-  (let [col-types (get relation-variable->col-types relation)]
-    {:col-types col-types
-     :->cursor (fn [{:keys [relation-variable->cursor-factory] :as _opts}]
-                 (let [^ICursorFactory cursor-factory (get relation-variable->cursor-factory relation)]
-                   (assert cursor-factory (str "can't find " relation, (pr-str relation-variable->cursor-factory)))
-                   (.createCursor cursor-factory)))}))
+                                   {:keys [relation-variable->fields] :as _opts}]
+  {:fields (get relation-variable->fields relation)
+   :->cursor (fn [{:keys [relation-variable->cursor-factory] :as _opts}]
+               (let [^ICursorFactory cursor-factory (get relation-variable->cursor-factory relation)]
+                 (assert cursor-factory (str "can't find " relation, (pr-str relation-variable->cursor-factory)))
+                 (.createCursor cursor-factory)))})
 
 (defmethod lp/emit-expr :fixpoint [{:keys [mu-variable base recursive], {:keys [incremental?]} :opts} args]
-  (let [{base-col-types :col-types, ->base-cursor :->cursor} (lp/emit-expr base args)
+  (let [{base-fields :fields, ->base-cursor :->cursor} (lp/emit-expr base args)
 
-        {recursive-col-types :col-types, ->recursive-cursor :->cursor}
-        (lp/emit-expr recursive (update args :relation-variable->col-types (fnil assoc {}) mu-variable base-col-types))
+        {recursive-fields :fields, ->recursive-cursor :->cursor}
+        (lp/emit-expr recursive (update args :relation-variable->fields (fnil assoc {}) mu-variable base-fields))
 
         ;; HACK I think `:col-types` needs to be a fixpoint as well?
-        col-types (union-col-types base-col-types recursive-col-types)]
-    {:col-types col-types
+        fields (union-fields base-fields recursive-fields)]
+    {:fields fields
      :->cursor
      (fn [{:keys [allocator] :as opts}]
        (FixpointCursor. allocator
@@ -314,29 +315,27 @@
                         (reify IFixpointCursorFactory
                           (createCursor [_ cursor-factory]
                             (->recursive-cursor (update opts :relation-variable->cursor-factory (fnil assoc {}) mu-variable cursor-factory))))
-                        (emap/->relation-map allocator {:build-col-types col-types
-                                                        :key-col-names (set (keys col-types))})
+                        (emap/->relation-map allocator {:build-fields fields
+                                                        :key-col-names (set (keys fields))})
                         (boolean incremental?)
                         #_new-idxs nil
                         #_recursive-cursor nil
                         #_continue? true))}))
 
 (defmethod lp/emit-expr :assign [{:keys [bindings relation]}
-                                 {:keys [relation-variable->col-types relation-variable->cursor-factory] :as args}]
-  (let [{:keys [rel-var->col-types relations]}
+                                 {:keys [relation-variable->fields relation-variable->cursor-factory] :as args}]
+  (let [{:keys [rel-var->fields relations]}
         (->> bindings
-             (reduce (fn [{:keys [rel-var->col-types relations]} {:keys [variable value]}]
-                       (let [{:keys [col-types ->cursor]}
-                             (lp/emit-expr value (assoc args :relation-variable->col-types rel-var->col-types))]
-                         {:rel-var->col-types (-> rel-var->col-types
-                                                  (assoc variable col-types))
+             (reduce (fn [{:keys [rel-var->fields relations]} {:keys [variable value]}]
+                       (let [{:keys [fields ->cursor]} (lp/emit-expr value (assoc args :relation-variable->fields rel-var->fields))]
+                         {:rel-var->fields (assoc rel-var->fields variable fields)
 
                           :relations (conj relations {:variable variable, :->cursor ->cursor})}))
-                     {:rel-var->col-types relation-variable->col-types
+                     {:rel-var->fields relation-variable->fields
                       :relations []}))
 
-        {:keys [col-types ->cursor]} (lp/emit-expr relation (assoc args :relation-variable->col-types rel-var->col-types))]
-    {:col-types col-types
+        {:keys [fields ->cursor]} (lp/emit-expr relation (assoc args :relation-variable->fields rel-var->fields))]
+    {:col-types fields
      :->cursor (fn [opts]
                  (->cursor (assoc opts :relation-variable->cursor-factory
                                   (->> relations

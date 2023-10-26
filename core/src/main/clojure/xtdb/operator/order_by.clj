@@ -77,7 +77,7 @@
 
 (defmethod lp/emit-expr :order-by [{:keys [order-specs relation]} args]
   (lp/unary-expr (lp/emit-expr relation args)
-    (fn [col-types]
-      {:col-types col-types
+    (fn [fields]
+      {:fields fields
        :->cursor (fn [{:keys [allocator]} in-cursor]
                    (OrderByCursor. allocator in-cursor order-specs))})))

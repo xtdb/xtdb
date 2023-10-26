@@ -41,9 +41,9 @@
   (^void finishChunk [^long chunkIdx, newChunkMetadata])
   (^java.util.NavigableMap chunksMetadata [])
   (^xtdb.metadata.ITableMetadata tableMetadata [^xtdb.vector.RelationReader metaRelReader, ^String metaFileName])
-  (columnTypes [^String tableName])
-  (columnType [^String tableName, ^String colName])
-  (allColumnTypes []))
+  (columnFields [^String tableName])
+  (columnField [^String tableName, ^String colName])
+  (allColumnFields []))
 
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface IMetadataPredicate
@@ -62,13 +62,16 @@
       (transit/write w chunk-meta))
     (ByteBuffer/wrap (.toByteArray os))))
 
-(defn- merge-col-types [col-types {:keys [tables]}]
-  (reduce (fn [col-types [table {new-col-types :col-types}]]
-            (update col-types table
-                    (fn [col-types new-col-types]
-                      (merge-with types/merge-col-types col-types new-col-types))
-                    new-col-types))
-          col-types
+(defn- merge-fields [fields {:keys [tables]}]
+  (reduce (fn [fields [table {new-fields :fields}]]
+            (update fields table
+                    (fn [fields new-fields]
+                      (->>
+                       (merge-with types/merge-fields fields new-fields)
+                       (map (fn [[col-name field]] [col-name (types/field-with-name field col-name)]))
+                       (into {})))
+                    new-fields))
+          fields
           tables))
 
 (def metadata-col-type
@@ -293,12 +296,12 @@
 (deftype MetadataManager [^IBufferPool buffer-pool
                           ^NavigableMap chunks-metadata
                           ^Map table-metadata-idxs
-                          ^:volatile-mutable ^Map col-types]
+                          ^:volatile-mutable ^Map fields]
   IMetadataManager
   (finishChunk [this chunk-idx new-chunk-metadata]
     (-> @(.putObject buffer-pool (->chunk-metadata-obj-key chunk-idx) (write-chunk-metadata new-chunk-metadata))
         (util/rethrowing-cause))
-    (set! (.col-types this) (merge-col-types col-types new-chunk-metadata))
+    (set! (.fields this) (merge-fields fields new-chunk-metadata))
     (.put chunks-metadata chunk-idx new-chunk-metadata))
 
   (tableMetadata [_ meta-rel-rdr file-name]
@@ -313,9 +316,9 @@
 
   (chunksMetadata [_] chunks-metadata)
 
-  (columnType [_ table-name col-name] (get-in col-types [table-name col-name]))
-  (columnTypes [_ table-name] (get col-types table-name))
-  (allColumnTypes [_] col-types)
+  (columnField [_ table-name col-name] (get-in fields [table-name col-name]))
+  (columnFields [_ table-name] (get fields table-name))
+  (allColumnFields [_] fields)
 
   AutoCloseable
   (close [_]
@@ -356,7 +359,7 @@
     (MetadataManager. buffer-pool
                       chunks-metadata
                       (ConcurrentHashMap.)
-                      (->> (vals chunks-metadata) (reduce merge-col-types {})))))
+                      (->> (vals chunks-metadata) (reduce merge-fields {})))))
 
 (defmethod ig/halt-key! ::metadata-manager [_ mgr]
   (util/try-close mgr))

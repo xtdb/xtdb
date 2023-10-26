@@ -54,8 +54,8 @@
 (definterface IScanEmitter
   (tableColNames [^xtdb.watermark.IWatermark wm, ^String table-name])
   (allTableColNames [^xtdb.watermark.IWatermark wm])
-  (scanColTypes [^xtdb.watermark.IWatermark wm, scan-cols])
-  (emitScan [scan-expr scan-col-types param-types]))
+  (scanFields [^xtdb.watermark.IWatermark wm, scan-cols])
+  (emitScan [scan-expr scan-fields param-fields]))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (defn ->scan-cols [{:keys [columns], {:keys [table]} :scan-opts}]
@@ -403,45 +403,46 @@
   (reify IScanEmitter
     (tableColNames [_ wm table-name]
       (let [normalized-table (util/str->normal-form-str table-name)]
-        (into #{} cat [(keys (.columnTypes metadata-mgr normalized-table))
+        (into #{} cat [(keys (.columnFields metadata-mgr normalized-table))
                        (some-> (.liveIndex wm)
                                (.liveTable normalized-table)
-                               (.columnTypes)
+                               (.columnFields)
                                keys)])))
 
     (allTableColNames [_ wm]
       (merge-with set/union
-                  (update-vals (.allColumnTypes metadata-mgr)
+                  (update-vals (.allColumnFields metadata-mgr)
                                (comp set keys))
                   (update-vals (some-> (.liveIndex wm)
-                                       (.allColumnTypes))
+                                       (.allColumnFields ))
                                (comp set keys))))
 
-    (scanColTypes [_ wm scan-cols]
-      (letfn [(->col-type [[table col-name]]
+    (scanFields [_ wm scan-cols]
+      (letfn [(->field [[table col-name]]
                 (let [normalized-table (util/str->normal-form-str (str table))
                       normalized-col-name (util/str->normal-form-str (str col-name))]
                   (if (types/temporal-column? (util/str->normal-form-str (str col-name)))
-                    [:timestamp-tz :micro "UTC"]
-                    (types/merge-col-types (.columnType metadata-mgr normalized-table normalized-col-name)
-                                           (some-> (.liveIndex wm)
-                                                   (.liveTable normalized-table)
-                                                   (.columnTypes)
-                                                   (get normalized-col-name))))))]
+                    ;; TODO move to fields here
+                    (types/col-type->field [:timestamp-tz :micro "UTC"])
+                    (types/merge-fields (.columnField metadata-mgr normalized-table normalized-col-name)
+                                        (some-> (.liveIndex wm)
+                                                (.liveTable normalized-table)
+                                                (.columnFields)
+                                                (get normalized-col-name))))))]
         (->> scan-cols
-             (into {} (map (juxt identity ->col-type))))))
+             (into {} (map (juxt identity ->field))))))
 
-    (emitScan [_ {:keys [columns], {:keys [table] :as scan-opts} :scan-opts} scan-col-types param-types]
+    (emitScan [_ {:keys [columns], {:keys [table] :as scan-opts} :scan-opts} scan-fields param-fields]
       (let [col-names (->> columns
                            (into #{} (map (fn [[col-type arg]]
                                             (case col-type
                                               :column arg
                                               :select (key (first arg)))))))
 
-            col-types (->> col-names
-                           (into {} (map (juxt identity
-                                               (fn [col-name]
-                                                 (get scan-col-types [table col-name]))))))
+            fields (->> col-names
+                        (into {} (map (juxt identity
+                                            (fn [col-name]
+                                              (get scan-fields [table col-name]))))))
 
             col-names (into #{} (map str) col-names)
 
@@ -456,7 +457,9 @@
             col-preds (->> (for [[col-name select-form] selects]
                              ;; for temporal preds, we may not need to re-apply these if they can be represented as a temporal range.
                              (MapEntry/create col-name
-                                              (expr/->expression-relation-selector select-form {:col-types col-types, :param-types param-types})))
+                                              (expr/->expression-relation-selector select-form
+                                                                                   {:col-types (update-vals fields types/field->col-type)
+                                                                                    :param-types (update-vals param-fields types/field->col-type)})))
                            (into {}))
 
             metadata-args (vec (for [[col-name select] selects
@@ -469,13 +472,13 @@
                              row-count)
                            (reduce +))]
 
-        {:col-types col-types
+        {:fields fields
          :stats {:row-count row-count}
          :->cursor (fn [{:keys [allocator, ^IWatermark watermark, basis, params default-all-valid-time?]}]
                      (let [iid-bb (selects->iid-byte-buffer selects params)
                            col-preds (cond-> col-preds
                                        iid-bb (assoc "xt$iid" (iid-selector iid-bb)))
-                           metadata-pred (expr.meta/->metadata-selector (cons 'and metadata-args) col-types params)
+                           metadata-pred (expr.meta/->metadata-selector (cons 'and metadata-args) (update-vals fields types/field->col-type) params)
                            scan-opts (-> scan-opts
                                          (update :for-valid-time
                                                  (fn [fvt]
@@ -519,5 +522,5 @@
                                          (->vsr-cache buffer-pool allocator)
                                          buffer-pool)))))}))))
 
-(defmethod lp/emit-expr :scan [scan-expr {:keys [^IScanEmitter scan-emitter scan-col-types, param-types]}]
-  (.emitScan scan-emitter scan-expr scan-col-types param-types))
+(defmethod lp/emit-expr :scan [scan-expr {:keys [^IScanEmitter scan-emitter scan-fields, param-fields]}]
+  (.emitScan scan-emitter scan-expr scan-fields param-fields))

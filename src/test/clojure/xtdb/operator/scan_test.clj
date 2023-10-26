@@ -331,7 +331,8 @@
       (letfn [(->col-types [tx]
                 (-> (.prepareRaQuery ra-src '[:scan {:table xt_docs} [xt/id]])
                     (.bind (util/component node :xtdb/indexer) {:node node, :basis {:tx tx}})
-                    (.columnTypes)))]
+                    (.columnFields)
+                    (update-vals types/field->col-type)))]
 
         (let [tx (-> (xt/submit-tx node [[:put :xt_docs {:xt/id :doc}]])
                      (tu/then-await-tx node))]

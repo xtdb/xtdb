@@ -2,6 +2,7 @@
   (:require [clojure.test :as t :refer [deftest]]
             [xtdb.test-util :as tu]
             [xtdb.vector.writer :as vw]
+            [xtdb.vector.reader :as vr]
             [xtdb.types :as types])
   (:import (org.apache.arrow.vector VectorSchemaRoot)
            [org.apache.arrow.vector.complex DenseUnionVector StructVector ListVector]
@@ -328,3 +329,20 @@
                    (.colWriter "my-union")
                    (.legWriter :my-double)
                    (.getField)))))))
+
+(deftest rel-writer-dynamic-struct-writing
+  (with-open [rel-wtr (vw/->rel-writer tu/*allocator*)]
+    (let [some-nestesd-structs [{:foo {:bibble true} :bar {:baz -4113466} :flib {:true false}}
+                                {:foo {:bibble true}  :bar {:baz 1001}}]
+          col-writer (.colWriter rel-wtr "my-column")
+          struct-wtr (.legWriter col-writer #xt.arrow/type :struct)]
+      (.startRow rel-wtr)
+      (vw/write-value! (first some-nestesd-structs) struct-wtr)
+      (.endRow rel-wtr)
+      (vw/write-value! (second some-nestesd-structs) struct-wtr)
+      (.startRow rel-wtr)
+      (.endRow rel-wtr)
+
+      (t/is (= [{:my-column {:flib {:true false}, :foo {:bibble true}, :bar {:baz -4113466}}}
+                {:my-column {:foo {:bibble true}, :bar {:baz 1001}}}]
+               (vr/rel->rows (vw/rel-wtr->rdr rel-wtr)))))))

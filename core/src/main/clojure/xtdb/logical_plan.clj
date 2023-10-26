@@ -114,20 +114,20 @@
     (:op ra-expr)))
 
 (defn unary-expr {:style/indent 2} [relation f]
-  (let [{->inner-cursor :->cursor, inner-col-types :col-types} relation
-        {:keys [col-types ->cursor stats]} (f inner-col-types)]
-    {:col-types col-types
+  (let [{->inner-cursor :->cursor, inner-fields :fields} relation
+        {:keys [fields ->cursor stats]} (f inner-fields)]
+    {:fields fields
      :->cursor (fn [opts]
                  (util/with-close-on-catch [inner (->inner-cursor opts)]
                    (->cursor opts inner)))
      :stats stats}))
 
 (defn binary-expr {:style/indent 3} [left right f]
-  (let [{left-col-types :col-types, ->left-cursor :->cursor} left
-        {right-col-types :col-types, ->right-cursor :->cursor} right
-        {:keys [col-types ->cursor stats]} (f left-col-types right-col-types)]
+  (let [{left-fields :fields, ->left-cursor :->cursor} left
+        {right-fields :fields, ->right-cursor :->cursor} right
+        {:keys [fields ->cursor stats]} (f left-fields right-fields)]
 
-    {:col-types col-types
+    {:fields fields
      :->cursor (fn [opts]
                  (util/with-close-on-catch [left (->left-cursor opts)
                                             right (->right-cursor opts)]
@@ -1395,11 +1395,11 @@
                              :explain-data (s/explain-data ::logical-plan plan)}))))
 
 (defn explain-result [plan]
-  (let [col-types '{plan :clj-form}
+  (let [fields '{plan (types/col-type->field :clj-form)}
         ^Iterable res [{:plan plan}]
         it (.iterator res)]
     (reify IResultSet
-      (columnTypes [_] col-types)
+      (columnFields [_] fields)
       (hasNext [_] (.hasNext it))
       (next [_] (.next it))
       (close [_]))))

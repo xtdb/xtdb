@@ -167,7 +167,10 @@
              (types/merge-col-types [:list :utf8] [:list :utf8])))
 
     (t/is (= [:list [:union #{:utf8 :i64}]]
-             (types/merge-col-types [:list :utf8] [:list :i64]))))
+             (types/merge-col-types [:list :utf8] [:list :i64])))
+
+    (t/is (= [:list [:union #{:null :i64}]]
+             (types/merge-col-types [:list :null] [:list :i64]))))
 
   (t/testing "merges struct types"
     (t/is (= '[:struct {a :utf8, b :utf8}]
@@ -180,6 +183,10 @@
              (types/merge-col-types '[:struct {a :utf8, b :utf8}]
                                     '[:struct {a :utf8, b :i64}])))
 
+    (t/is (= '[:union #{[:struct {a :utf8, b [:union #{:utf8 :i64}]}] :null}]
+             (types/merge-col-types '[:union #{:null [:struct {a :utf8, b :utf8}]}]
+                                    '[:struct {a :utf8, b :i64}])))
+
     (let [struct0 '[:struct {a :utf8, b :utf8}]
           struct1 '[:struct {b :utf8, c :i64}]]
       (t/is (= '[:struct {a [:union #{:utf8 :absent}]
@@ -189,4 +196,125 @@
 
     (t/is (= '[:union #{:f64 [:struct {a [:union #{:i64 :utf8}]}]}]
              (types/merge-col-types '[:union #{:f64, [:struct {a :i64}]}]
-                                    '[:struct {a :utf8}])))))
+                                    '[:struct {a :utf8}]))))
+  (t/testing "null behaviour"
+    (t/is (= :null
+             (types/merge-col-types :null)))
+
+    (t/is (= :null
+             (types/merge-col-types :null :null)))
+
+    (t/is (= [:union #{:null :i64}]
+             (types/merge-col-types :null :i64))))
+
+  (t/testing "no struct squashing"
+    (t/is (= '[:struct {foo [:struct {bibble :bool}]}]
+             (types/merge-col-types '[:struct {foo [:struct {bibble :bool}]}])))))
+
+(t/deftest test-merge-fields
+  (t/is (= (types/col-type->field :utf8)
+           (types/merge-fields (types/col-type->field :utf8) (types/col-type->field :utf8))))
+
+  (t/is (= (types/col-type->field [:union #{:utf8 :i64}])
+           (types/merge-fields (types/col-type->field :utf8) (types/col-type->field :i64))))
+
+  (t/is (=
+         ;; ordering seems to be important
+         ;; (types/col-type->field [:union #{:utf8 :i64 :f64}])
+         (types/->field-default-name #xt.arrow/type :union false
+                                     [(types/col-type->field :utf8)
+                                      (types/col-type->field :i64)
+                                      (types/col-type->field :f64)])
+         (types/merge-fields (types/col-type->field [:union #{:utf8 :i64}]) (types/col-type->field :f64))))
+
+  (t/testing "merges list types"
+    (t/is (= (types/col-type->field [:list :utf8])
+             (types/merge-fields (types/col-type->field [:list :utf8])
+                                 (types/col-type->field [:list :utf8]))))
+
+    (t/is (= (types/col-type->field [:list [:union #{:utf8 :i64}]])
+             (types/merge-fields (types/col-type->field [:list :utf8])
+                                 (types/col-type->field [:list :i64]))))
+
+    (t/is (= (types/->field-default-name #xt.arrow/type :list false
+                                         [(types/col-type->field "i64" [:union #{:null :i64}])])
+             #_(types/col-type->field [:list [:union #{:null :i64}]])
+             (types/merge-fields (types/col-type->field [:list :null])
+                                 (types/col-type->field [:list :i64])))))
+
+  (t/testing "merges struct types"
+    (t/is (= (types/col-type->field '[:struct {a :utf8, b :utf8}])
+             (types/merge-fields (types/col-type->field '[:struct {a :utf8, b :utf8}])
+                                 (types/col-type->field '[:struct {a :utf8, b :utf8}]))))
+
+    (t/is (= (types/col-type->field '[:struct {a :utf8
+                                               b [:union #{:utf8 :i64}]}])
+             (types/merge-fields (types/col-type->field '[:struct {a :utf8, b :utf8}])
+                                 (types/col-type->field '[:struct {a :utf8, b :i64}]))))
+
+    (t/is (= (types/col-type->field "struct" '[:union #{[:struct {a :utf8
+                                                                  b [:union #{:utf8 :i64}]}]
+                                                        :null}])
+             (types/merge-fields (types/col-type->field '[:union #{[:struct {a :utf8, b :utf8}] :null}])
+                                 (types/col-type->field '[:struct {a :utf8, b :i64}]))))
+
+    (let [struct0 (types/col-type->field '[:struct {a :utf8, b :utf8}])
+          struct1 (types/col-type->field '[:struct {b :utf8, c :i64}])]
+      (t/is (= (types/col-type->field '[:struct {a [:union #{:utf8 :absent}]
+                                                 b :utf8
+                                                 c [:union #{:i64 :absent}]}])
+               (types/merge-fields struct0 struct1))))
+
+    (t/is (= #_(types/col-type->field '[:union #{:f64 [:struct {a [:union #{:utf8 :i64}]}]}])
+             (types/->field-default-name #xt.arrow/type :union false
+                                         [(types/col-type->field :f64)
+                                          (types/->field-default-name #xt.arrow/type :struct false
+                                                                      [(types/->field "a" #xt.arrow/type :union false
+                                                                                      (types/col-type->field :i64)
+                                                                                      (types/col-type->field :utf8))])])
+             (types/merge-fields (types/col-type->field '[:union #{:f64, [:struct {a :i64}]}])
+                                 (types/col-type->field '[:struct {a :utf8}]))))
+
+    (let [struct0 (types/col-type->field '[:struct {a :i64
+                                                    b [:struct {c :utf8, d :utf8}]}])
+          struct1 (types/col-type->field '[:struct {a :bool
+                                                    b :utf8}])]
+      (t/is (= #_(types/col-type->field [:struct '{a [:union #{:i64 :bool}]
+                                                   b [:union #{[:struct {c :utf8, d :utf8}]
+                                                               :utf8}]}])
+               (types/->field-default-name #xt.arrow/type :struct false
+                                           [(types/->field "a" #xt.arrow/type :union false
+                                                           (types/col-type->field :i64)
+                                                           (types/col-type->field :bool))
+                                            (types/->field "b" #xt.arrow/type :union false
+                                                           (types/->field-default-name #xt.arrow/type :struct false
+                                                                                       [(types/col-type->field "c" :utf8)
+                                                                                        (types/col-type->field "d" :utf8)])
+                                                           (types/col-type->field :utf8))])
+               (types/merge-fields struct0 struct1)))))
+
+  (t/testing "null behaviour"
+    (t/is (= (types/col-type->field :null)
+             (types/merge-fields (types/col-type->field :null))))
+
+    (t/is (= (types/col-type->field :null)
+             (types/merge-fields (types/col-type->field :null) (types/col-type->field :null))))
+
+    (t/is (= (types/col-type->field "i64" [:union #{:null :i64}])
+             (types/merge-fields (types/col-type->field :null) (types/col-type->field :i64)))))
+
+  (t/testing "no struct squashing"
+    (t/is (= (types/col-type->field '[:struct {foo [:struct {bibble :bool}]}])
+             (types/merge-fields (types/col-type->field '[:struct {foo [:struct {bibble :bool}]}]))))
+
+    (t/is (= (types/->field-default-name #xt.arrow/type :struct false
+                                         [(types/->field "foo" #xt.arrow/type :union false
+                                                         (types/->field-default-name #xt.arrow/type :struct false
+                                                                                     [(types/col-type->field "bibble" :bool)])
+                                                         (types/col-type->field :utf8))
+                                          (types/->field "bar" #xt.arrow/type :union false
+                                                         (types/col-type->field :absent)
+                                                         (types/col-type->field :i64))])
+
+             (types/merge-fields (types/col-type->field '[:struct {foo [:struct {bibble :bool}]}])
+                                 (types/col-type->field '[:struct {foo :utf8 bar :i64}]))))))

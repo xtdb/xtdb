@@ -102,9 +102,9 @@
         (write-batch!)))))
 
 (defn- ->fsql-producer [{:keys [allocator node, ^IIndexer idxer, ^IRaQuerySource ra-src, wm-src, ^Map fsql-txs, ^Map stmts, ^Map tickets] :as svr}]
-  (letfn [(col-types->schema ^org.apache.arrow.vector.types.pojo.Schema [col-types]
-            (Schema. (for [[col-name col-type] col-types]
-                       (types/col-type->field col-name col-type))))
+  (letfn [(fields->schema ^org.apache.arrow.vector.types.pojo.Schema [fields]
+            (Schema. (for [[col-name field] fields]
+                       (types/field-with-name field (str col-name)))))
 
           (exec-dml [dml fsql-tx-id]
             (if fsql-tx-id
@@ -121,7 +121,7 @@
 
           (handle-get-stream [^BoundQuery bq, ^FlightProducer$ServerStreamListener listener]
             (with-open [res (.openCursor bq)
-                        vsr (VectorSchemaRoot/create (col-types->schema (.columnTypes bq)) allocator)]
+                        vsr (VectorSchemaRoot/create (fields->schema (.columnFields bq)) allocator)]
               (.start listener vsr)
 
               (.forEachRemaining res
@@ -172,7 +172,7 @@
         ;; my mental model would be that you could create a PS outside a tx and then use it inside, but this doesn't seem possible in FSQL.
         (fn []
           @(-> (let [{:keys [^String sql fsql-tx-id]} (or (get stmts (.getPreparedStatementHandle cmd))
-                                                  (throw (UnsupportedOperationException. "invalid ps-id")))
+                                                          (throw (UnsupportedOperationException. "invalid ps-id")))
                      dml (Ops/sqlBatch sql (flight-stream->bytes flight-stream))]
                  (exec-dml dml fsql-tx-id))
 
@@ -192,7 +192,7 @@
                                   (Any/pack)
                                   (.toByteArray)))]
           (.put tickets ticket-handle bq)
-          (FlightInfo. (col-types->schema (.columnTypes bq)) descriptor
+          (FlightInfo. (fields->schema (.columnFields bq)) descriptor
                        [(FlightEndpoint. ticket (make-array Location 0))]
                        -1 -1)))
 
@@ -217,7 +217,7 @@
               ^BoundQuery bound-query (or bound-query
                                           (.bind prepd-query wm-src {:node node}))]
           (.put ps :bound-query bound-query)
-          (FlightInfo. (col-types->schema (.columnTypes bound-query)) descriptor
+          (FlightInfo. (fields->schema (.columnFields bound-query)) descriptor
                        [(FlightEndpoint. ticket (make-array Location 0))]
                        -1 -1)))
 
