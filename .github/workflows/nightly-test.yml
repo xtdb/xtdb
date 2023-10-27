@@ -1,0 +1,47 @@
+name: XTDB Nightly
+run-name: XTDB Nightly
+
+env:
+  AWS_REGION: ${{ vars.AWS_REGION }}
+  AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+  AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+  AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+  AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+  AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+  AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+
+on:
+  schedule:
+    - cron: '0 19 * * 1-5'
+
+jobs:
+  nightly-test:
+    if: github.repository == 'xtdb/xtdb'
+    name: Nightly test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          ref: 2.x
+      - name: Set up JDK 17
+        uses: actions/setup-java@v3
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+      - id: 'google-cloud-auth'
+        name: 'Authenticate to Google Cloud'
+        uses: 'google-github-actions/auth@v1'
+        with:
+          credentials_json: '${{ secrets.GOOGLE_CLOUD_CREDENTIALS }}'
+      - name: Run Nightly Test Task
+        uses: gradle/gradle-build-action@v2.6.1
+        with:
+          arguments: nightly-test
+          cache-read-only: ${{ github.ref != 'refs/heads/2.x' }}
+      - name: Upload build reports
+        if: success() || failure() # i.e. not cancelled
+        uses: actions/upload-artifact@v3
+        with:
+          name: build-reports
+          path: build/reports/
