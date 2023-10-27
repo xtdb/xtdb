@@ -1,0 +1,80 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Create IAM user, associate with a custom role, and store access key in Secrets Manager
+
+Parameters:
+  CIUserName:
+    Type: String
+    Description: Name of the CI IAM user to create
+
+  TestS3BucketName:
+    Type: String
+    Description: Name of the S3 test bucket created by the s3 stack
+
+  SNSTopicArn:
+    Type: String
+    Description: Arn of the SNS topic created by the s3 stack
+
+Resources:
+  CIUser:
+    Type: AWS::IAM::User
+    Properties:
+      UserName: !Ref CIUserName
+      Policies:
+        - PolicyName: S3Access
+          PolicyDocument:
+            Statement:
+            - Effect: Allow
+              Action:
+                - 's3:GetObject'
+                - 's3:PutObject'
+                - 's3:DeleteObject'
+                - 's3:ListBucket'
+                - 's3:AbortMultipartUpload'
+                - 's3:ListBucketMultipartUploads'
+              Resource:
+                -  !Join [ '', [ 'arn:aws:s3:::', !Ref TestS3BucketName] ]
+                -  !Join [ '', [ 'arn:aws:s3:::', !Ref TestS3BucketName, '/*'] ]
+        - PolicyName: SNSAccess
+          PolicyDocument:
+            Statement:
+            - Effect: Allow
+              Action:
+                - 'sns:Subscribe'
+                - 'sns:Unsubscribe'
+              Resource:
+                - !Ref SNSTopicArn 
+        - PolicyName: SQSAccess
+          PolicyDocument:
+            Statement:
+            - Effect: Allow
+              Action:
+                - 'sqs:CreateQueue'
+                - 'sqs:GetQueueUrl'
+                - 'sqs:GetQueueAttributes'
+                - 'sqs:DeleteQueue'
+                - 'sqs:DeleteMessage'
+                - 'sqs:ReceiveMessage'
+                - 'sqs:SetQueueAttributes'
+              Resource:
+                - '*'
+
+  CIUserAccessKey:
+    Type: AWS::IAM::AccessKey
+    Properties:
+      Status: Active
+      UserName: !Ref CIUser
+  
+  CICredentialsStored:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub /ci/credentials/${CIUser}
+      SecretString: !Sub '{"ACCESS_KEY":"${CIUserAccessKey}","SECRET_KEY":"${CIUserAccessKey.SecretAccessKey}"}'
+
+Outputs:
+  IAMUserArn:
+    Description: ARN of the created IAM user
+    Value: !GetAtt CIUser.Arn
+
+  SecretUrl:
+    Description: Link to the secret in AWS Secrets Manager
+    Value: !Sub "https://console.aws.amazon.com/secretsmanager/home?region=${AWS::Region}#/secret?name=${CICredentialsStored}"
