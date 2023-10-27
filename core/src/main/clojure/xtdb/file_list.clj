@@ -7,7 +7,7 @@
   (.toPath (io/file file-name)))
 
 (defn add-filename [^NavigableSet file-name-cache ^String file-name]
-  (.add file-name-cache file-name))
+  (.add file-name-cache (file-name->path file-name)))
 
 (defn add-filename-list [^NavigableSet file-name-cache file-name-list]
   (.addAll file-name-cache (mapv file-name->path file-name-list)))
