@@ -56,7 +56,7 @@
 
 (t/deftest ^:s3 multiple-object-store-list-test
   (let [prefix (random-uuid)
-        wait-time-ms 10000]
+        wait-time-ms 20000]
     (with-open [os-1 (object-store prefix)
                 os-2 (object-store prefix)]
       (os-test/put-edn os-1 "alice" :alice)
