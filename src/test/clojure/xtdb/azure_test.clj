@@ -91,16 +91,17 @@
       (t/is (= ["alan" "alice"] (.listObjects ^ObjectStore os-1)))
       (t/is (= ["alan" "alice"] (.listObjects ^ObjectStore os-2))))))
 
-(t/deftest ^:azure test-eventhub-log
-  (with-open [node (node/start-node {::azure/event-hub-log {:namespace eventhub-namespace
-                                                            :resource-group-name resource-group-name
-                                                            :event-hub-name (str "xtdb.azure-test-hub." (UUID/randomUUID))
-                                                            :create-event-hub? true
-                                                            :retention-period-in-days 1}})]
-    (xt/submit-tx node [[:put :xt_docs {:xt/id :foo}]])
-    (t/is (= [{:id :foo}]
-             (xt/q node '{:find [id]
-                          :where [($ :xt_docs [{:xt/id id}])]})))))
+;; Currently not testing this - will need to setup the event hub namespace and config to run
+;; (t/deftest ^:azure test-eventhub-log
+;;   (with-open [node (node/start-node {::azure/event-hub-log {:namespace eventhub-namespace
+;;                                                             :resource-group-name resource-group-name
+;;                                                             :event-hub-name (str "xtdb.azure-test-hub." (UUID/randomUUID))
+;;                                                             :create-event-hub? true
+;;                                                             :retention-period-in-days 1}})]
+;;     (xt/submit-tx node [[:put :xt_docs {:xt/id :foo}]])
+;;     (t/is (= [{:id :foo}]
+;;              (xt/q node '{:find [id]
+;;                           :where [($ :xt_docs [{:xt/id id}])]})))))
 
 (defn list-filenames [^BlobContainerClient blob-container-client prefix ^ListBlobsOptions list-opts]
   (->> (.listBlobs blob-container-client list-opts nil)
