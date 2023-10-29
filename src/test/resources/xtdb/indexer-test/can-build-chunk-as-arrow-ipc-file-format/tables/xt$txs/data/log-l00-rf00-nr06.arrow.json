@@ -137,7 +137,7 @@
       "name" : "xt$iid",
       "count" : 2,
       "VALIDITY" : [1,1],
-      "DATA" : ["4d992981a58ca9eea2516cd06f433b2a","a4e167a76a05add8a8654c169b07b044"]
+      "DATA" : ["687f03f007fd9257ab32e3361120952b","a4e167a76a05add8a8654c169b07b044"]
     },{
       "name" : "xt$system_from",
       "count" : 2,
@@ -170,7 +170,7 @@
             "name" : "xt$id",
             "count" : 2,
             "VALIDITY" : [1,1],
-            "DATA" : ["8485","0"]
+            "DATA" : ["6509","0"]
           },{
             "name" : "xt$tx_time",
             "count" : 2,

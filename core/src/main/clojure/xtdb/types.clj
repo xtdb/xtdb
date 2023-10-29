@@ -218,6 +218,8 @@
 
 (def temporal-col-type [:timestamp-tz :micro "UTC"])
 (def nullable-temporal-type [:union #{:null temporal-col-type}])
+(def temporal-arrow-type (->arrow-type [:timestamp-tz :micro "UTC"]))
+(def nullable-temporal-field-type (FieldType/nullable temporal-arrow-type))
 
 (def temporal-col-types
   {"xt$iid" [:fixed-size-binary 16],

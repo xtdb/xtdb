@@ -12,151 +12,9 @@
         "type" : {
           "name" : "union",
           "mode" : "Dense",
-          "typeIds" : [0,1,2,3,4,5]
+          "typeIds" : [ ]
         },
         "children" : [{
-          "name" : "sql",
-          "nullable" : false,
-          "type" : {
-            "name" : "struct"
-          },
-          "children" : [{
-            "name" : "query",
-            "nullable" : false,
-            "type" : {
-              "name" : "utf8"
-            },
-            "children" : [ ]
-          },{
-            "name" : "params",
-            "nullable" : false,
-            "type" : {
-              "name" : "union",
-              "mode" : "Dense",
-              "typeIds" : [ ]
-            },
-            "children" : [{
-              "name" : "varbinary",
-              "nullable" : false,
-              "type" : {
-                "name" : "binary"
-              },
-              "children" : [ ]
-            },{
-              "name" : "absent",
-              "nullable" : false,
-              "type" : {
-                "name" : "AbsentType"
-              },
-              "children" : [ ],
-              "metadata" : [{
-                "value" : "absent",
-                "key" : "ARROW:extension:name"
-              },{
-                "value" : "",
-                "key" : "ARROW:extension:metadata"
-              }]
-            }]
-          }]
-        },{
-          "name" : "put",
-          "nullable" : false,
-          "type" : {
-            "name" : "struct"
-          },
-          "children" : [{
-            "name" : "document",
-            "nullable" : false,
-            "type" : {
-              "name" : "union",
-              "mode" : "Dense",
-              "typeIds" : [ ]
-            },
-            "children" : [ ]
-          },{
-            "name" : "xt$valid_from",
-            "nullable" : true,
-            "type" : {
-              "name" : "timestamp",
-              "unit" : "MICROSECOND",
-              "timezone" : "UTC"
-            },
-            "children" : [ ]
-          },{
-            "name" : "xt$valid_to",
-            "nullable" : true,
-            "type" : {
-              "name" : "timestamp",
-              "unit" : "MICROSECOND",
-              "timezone" : "UTC"
-            },
-            "children" : [ ]
-          }]
-        },{
-          "name" : "delete",
-          "nullable" : false,
-          "type" : {
-            "name" : "struct"
-          },
-          "children" : [{
-            "name" : "table",
-            "nullable" : false,
-            "type" : {
-              "name" : "utf8"
-            },
-            "children" : [ ]
-          },{
-            "name" : "xt$id",
-            "nullable" : false,
-            "type" : {
-              "name" : "union",
-              "mode" : "Dense",
-              "typeIds" : [ ]
-            },
-            "children" : [ ]
-          },{
-            "name" : "xt$valid_from",
-            "nullable" : true,
-            "type" : {
-              "name" : "timestamp",
-              "unit" : "MICROSECOND",
-              "timezone" : "UTC"
-            },
-            "children" : [ ]
-          },{
-            "name" : "xt$valid_to",
-            "nullable" : true,
-            "type" : {
-              "name" : "timestamp",
-              "unit" : "MICROSECOND",
-              "timezone" : "UTC"
-            },
-            "children" : [ ]
-          }]
-        },{
-          "name" : "evict",
-          "nullable" : false,
-          "type" : {
-            "name" : "struct"
-          },
-          "children" : [{
-            "name" : "_table",
-            "nullable" : true,
-            "type" : {
-              "name" : "utf8"
-            },
-            "children" : [ ]
-          },{
-            "name" : "xt$id",
-            "nullable" : false,
-            "type" : {
-              "name" : "union",
-              "mode" : "Dense",
-              "typeIds" : [ ]
-            },
-            "children" : [ ]
-          }]
-        },{
           "name" : "call",
           "nullable" : false,
           "type" : {
@@ -200,13 +58,6 @@
               "key" : "ARROW:extension:metadata"
             }]
           }]
-        },{
-          "name" : "abort",
-          "nullable" : true,
-          "type" : {
-            "name" : "null"
-          },
-          "children" : [ ]
         }]
       }]
     },{
@@ -244,97 +95,9 @@
       "children" : [{
         "name" : "$data$",
         "count" : 2,
-        "TYPE_ID" : [4,4],
+        "TYPE_ID" : [0,0],
         "OFFSET" : [0,1],
         "children" : [{
-          "name" : "sql",
-          "count" : 0,
-          "VALIDITY" : [ ],
-          "children" : [{
-            "name" : "query",
-            "count" : 0,
-            "VALIDITY" : [ ],
-            "OFFSET" : [0],
-            "DATA" : [ ]
-          },{
-            "name" : "params",
-            "count" : 0,
-            "TYPE_ID" : [ ],
-            "OFFSET" : [ ],
-            "children" : [{
-              "name" : "varbinary",
-              "count" : 0,
-              "VALIDITY" : [ ],
-              "OFFSET" : [0],
-              "DATA" : [ ]
-            },{
-              "name" : "absent",
-              "count" : 0
-            }]
-          }]
-        },{
-          "name" : "put",
-          "count" : 0,
-          "VALIDITY" : [ ],
-          "children" : [{
-            "name" : "document",
-            "count" : 0,
-            "TYPE_ID" : [ ],
-            "OFFSET" : [ ]
-          },{
-            "name" : "xt$valid_from",
-            "count" : 0,
-            "VALIDITY" : [ ],
-            "DATA" : [ ]
-          },{
-            "name" : "xt$valid_to",
-            "count" : 0,
-            "VALIDITY" : [ ],
-            "DATA" : [ ]
-          }]
-        },{
-          "name" : "delete",
-          "count" : 0,
-          "VALIDITY" : [ ],
-          "children" : [{
-            "name" : "table",
-            "count" : 0,
-            "VALIDITY" : [ ],
-            "OFFSET" : [0],
-            "DATA" : [ ]
-          },{
-            "name" : "xt$id",
-            "count" : 0,
-            "TYPE_ID" : [ ],
-            "OFFSET" : [ ]
-          },{
-            "name" : "xt$valid_from",
-            "count" : 0,
-            "VALIDITY" : [ ],
-            "DATA" : [ ]
-          },{
-            "name" : "xt$valid_to",
-            "count" : 0,
-            "VALIDITY" : [ ],
-            "DATA" : [ ]
-          }]
-        },{
-          "name" : "evict",
-          "count" : 0,
-          "VALIDITY" : [ ],
-          "children" : [{
-            "name" : "_table",
-            "count" : 0,
-            "VALIDITY" : [ ],
-            "OFFSET" : [0],
-            "DATA" : [ ]
-          },{
-            "name" : "xt$id",
-            "count" : 0,
-            "TYPE_ID" : [ ],
-            "OFFSET" : [ ]
-          }]
-        },{
           "name" : "call",
           "count" : 2,
           "VALIDITY" : [1,1],
@@ -357,9 +120,6 @@
             "OFFSET" : [0,13,30],
             "DATA" : ["[12 nil :bar]","[\"hello\" \"world\"]"]
           }]
-        },{
-          "name" : "abort",
-          "count" : 0
         }]
       }]
     },{

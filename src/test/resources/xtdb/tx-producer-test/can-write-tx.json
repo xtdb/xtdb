@@ -12,53 +12,9 @@
         "type" : {
           "name" : "union",
           "mode" : "Dense",
-          "typeIds" : [0,1,2,3,4,5]
+          "typeIds" : [ ]
         },
         "children" : [{
-          "name" : "sql",
-          "nullable" : false,
-          "type" : {
-            "name" : "struct"
-          },
-          "children" : [{
-            "name" : "query",
-            "nullable" : false,
-            "type" : {
-              "name" : "utf8"
-            },
-            "children" : [ ]
-          },{
-            "name" : "params",
-            "nullable" : false,
-            "type" : {
-              "name" : "union",
-              "mode" : "Dense",
-              "typeIds" : [ ]
-            },
-            "children" : [{
-              "name" : "varbinary",
-              "nullable" : false,
-              "type" : {
-                "name" : "binary"
-              },
-              "children" : [ ]
-            },{
-              "name" : "absent",
-              "nullable" : false,
-              "type" : {
-                "name" : "AbsentType"
-              },
-              "children" : [ ],
-              "metadata" : [{
-                "value" : "absent",
-                "key" : "ARROW:extension:name"
-              },{
-                "value" : "",
-                "key" : "ARROW:extension:metadata"
-              }]
-            }]
-          }]
-        },{
           "name" : "put",
           "nullable" : false,
           "type" : {
@@ -73,6 +29,93 @@
               "typeIds" : [ ]
             },
             "children" : [{
+              "name" : "device_info",
+              "nullable" : false,
+              "type" : {
+                "name" : "struct"
+              },
+              "children" : [{
+                "name" : "xt$id",
+                "nullable" : false,
+                "type" : {
+                  "name" : "union",
+                  "mode" : "Dense",
+                  "typeIds" : [ ]
+                },
+                "children" : [{
+                  "name" : "utf8",
+                  "nullable" : false,
+                  "type" : {
+                    "name" : "utf8"
+                  },
+                  "children" : [ ]
+                }]
+              },{
+                "name" : "api_version",
+                "nullable" : false,
+                "type" : {
+                  "name" : "union",
+                  "mode" : "Dense",
+                  "typeIds" : [ ]
+                },
+                "children" : [{
+                  "name" : "utf8",
+                  "nullable" : false,
+                  "type" : {
+                    "name" : "utf8"
+                  },
+                  "children" : [ ]
+                }]
+              },{
+                "name" : "manufacturer",
+                "nullable" : false,
+                "type" : {
+                  "name" : "union",
+                  "mode" : "Dense",
+                  "typeIds" : [ ]
+                },
+                "children" : [{
+                  "name" : "utf8",
+                  "nullable" : false,
+                  "type" : {
+                    "name" : "utf8"
+                  },
+                  "children" : [ ]
+                }]
+              },{
+                "name" : "model",
+                "nullable" : false,
+                "type" : {
+                  "name" : "union",
+                  "mode" : "Dense",
+                  "typeIds" : [ ]
+                },
+                "children" : [{
+                  "name" : "utf8",
+                  "nullable" : false,
+                  "type" : {
+                    "name" : "utf8"
+                  },
+                  "children" : [ ]
+                }]
+              },{
+                "name" : "os_name",
+                "nullable" : false,
+                "type" : {
+                  "name" : "union",
+                  "mode" : "Dense",
+                  "typeIds" : [ ]
+                },
+                "children" : [{
+                  "name" : "utf8",
+                  "nullable" : false,
+                  "type" : {
+                    "name" : "utf8"
+                  },
+                  "children" : [ ]
+                }]
+              }]
+            },{
               "name" : "device_readings",
               "nullable" : false,
               "type" : {
@@ -313,93 +356,6 @@
                   "children" : [ ]
                 }]
               }]
-            },{
-              "name" : "device_info",
-              "nullable" : false,
-              "type" : {
-                "name" : "struct"
-              },
-              "children" : [{
-                "name" : "xt$id",
-                "nullable" : false,
-                "type" : {
-                  "name" : "union",
-                  "mode" : "Dense",
-                  "typeIds" : [ ]
-                },
-                "children" : [{
-                  "name" : "utf8",
-                  "nullable" : false,
-                  "type" : {
-                    "name" : "utf8"
-                  },
-                  "children" : [ ]
-                }]
-              },{
-                "name" : "api_version",
-                "nullable" : false,
-                "type" : {
-                  "name" : "union",
-                  "mode" : "Dense",
-                  "typeIds" : [ ]
-                },
-                "children" : [{
-                  "name" : "utf8",
-                  "nullable" : false,
-                  "type" : {
-                    "name" : "utf8"
-                  },
-                  "children" : [ ]
-                }]
-              },{
-                "name" : "manufacturer",
-                "nullable" : false,
-                "type" : {
-                  "name" : "union",
-                  "mode" : "Dense",
-                  "typeIds" : [ ]
-                },
-                "children" : [{
-                  "name" : "utf8",
-                  "nullable" : false,
-                  "type" : {
-                    "name" : "utf8"
-                  },
-                  "children" : [ ]
-                }]
-              },{
-                "name" : "model",
-                "nullable" : false,
-                "type" : {
-                  "name" : "union",
-                  "mode" : "Dense",
-                  "typeIds" : [ ]
-                },
-                "children" : [{
-                  "name" : "utf8",
-                  "nullable" : false,
-                  "type" : {
-                    "name" : "utf8"
-                  },
-                  "children" : [ ]
-                }]
-              },{
-                "name" : "os_name",
-                "nullable" : false,
-                "type" : {
-                  "name" : "union",
-                  "mode" : "Dense",
-                  "typeIds" : [ ]
-                },
-                "children" : [{
-                  "name" : "utf8",
-                  "nullable" : false,
-                  "type" : {
-                    "name" : "utf8"
-                  },
-                  "children" : [ ]
-                }]
-              }]
             }]
           },{
             "name" : "xt$valid_from",
@@ -420,107 +376,6 @@
             },
             "children" : [ ]
           }]
-        },{
-          "name" : "delete",
-          "nullable" : false,
-          "type" : {
-            "name" : "struct"
-          },
-          "children" : [{
-            "name" : "table",
-            "nullable" : false,
-            "type" : {
-              "name" : "utf8"
-            },
-            "children" : [ ]
-          },{
-            "name" : "xt$id",
-            "nullable" : false,
-            "type" : {
-              "name" : "union",
-              "mode" : "Dense",
-              "typeIds" : [ ]
-            },
-            "children" : [ ]
-          },{
-            "name" : "xt$valid_from",
-            "nullable" : true,
-            "type" : {
-              "name" : "timestamp",
-              "unit" : "MICROSECOND",
-              "timezone" : "UTC"
-            },
-            "children" : [ ]
-          },{
-            "name" : "xt$valid_to",
-            "nullable" : true,
-            "type" : {
-              "name" : "timestamp",
-              "unit" : "MICROSECOND",
-              "timezone" : "UTC"
-            },
-            "children" : [ ]
-          }]
-        },{
-          "name" : "evict",
-          "nullable" : false,
-          "type" : {
-            "name" : "struct"
-          },
-          "children" : [{
-            "name" : "_table",
-            "nullable" : true,
-            "type" : {
-              "name" : "utf8"
-            },
-            "children" : [ ]
-          },{
-            "name" : "xt$id",
-            "nullable" : false,
-            "type" : {
-              "name" : "union",
-              "mode" : "Dense",
-              "typeIds" : [ ]
-            },
-            "children" : [ ]
-          }]
-        },{
-          "name" : "call",
-          "nullable" : false,
-          "type" : {
-            "name" : "struct"
-          },
-          "children" : [{
-            "name" : "fn-id",
-            "nullable" : false,
-            "type" : {
-              "name" : "union",
-              "mode" : "Dense",
-              "typeIds" : [ ]
-            },
-            "children" : [ ]
-          },{
-            "name" : "args",
-            "nullable" : false,
-            "type" : {
-              "name" : "ClojureFormType"
-            },
-            "children" : [ ],
-            "metadata" : [{
-              "value" : "xt/clj-form",
-              "key" : "ARROW:extension:name"
-            },{
-              "value" : "",
-              "key" : "ARROW:extension:metadata"
-            }]
-          }]
-        },{
-          "name" : "abort",
-          "nullable" : true,
-          "type" : {
-            "name" : "null"
-          },
-          "children" : [ ]
         }]
       }]
     },{
@@ -558,44 +413,83 @@
       "children" : [{
         "name" : "$data$",
         "count" : 4,
-        "TYPE_ID" : [1,1,1,1],
+        "TYPE_ID" : [0,0,0,0],
         "OFFSET" : [0,1,2,3],
         "children" : [{
-          "name" : "sql",
-          "count" : 0,
-          "VALIDITY" : [ ],
-          "children" : [{
-            "name" : "query",
-            "count" : 0,
-            "VALIDITY" : [ ],
-            "OFFSET" : [0],
-            "DATA" : [ ]
-          },{
-            "name" : "params",
-            "count" : 0,
-            "TYPE_ID" : [ ],
-            "OFFSET" : [ ],
-            "children" : [{
-              "name" : "varbinary",
-              "count" : 0,
-              "VALIDITY" : [ ],
-              "OFFSET" : [0],
-              "DATA" : [ ]
-            },{
-              "name" : "absent",
-              "count" : 0
-            }]
-          }]
-        },{
           "name" : "put",
           "count" : 4,
           "VALIDITY" : [1,1,1,1],
           "children" : [{
             "name" : "document",
             "count" : 4,
-            "TYPE_ID" : [1,0,1,0],
+            "TYPE_ID" : [0,1,0,1],
             "OFFSET" : [0,0,1,1],
             "children" : [{
+              "name" : "device_info",
+              "count" : 2,
+              "VALIDITY" : [1,1],
+              "children" : [{
+                "name" : "xt$id",
+                "count" : 2,
+                "TYPE_ID" : [0,0],
+                "OFFSET" : [0,1],
+                "children" : [{
+                  "name" : "utf8",
+                  "count" : 2,
+                  "VALIDITY" : [1,1],
+                  "OFFSET" : [0,22,44],
+                  "DATA" : ["device-info-demo000000","device-info-demo000001"]
+                }]
+              },{
+                "name" : "api_version",
+                "count" : 2,
+                "TYPE_ID" : [0,0],
+                "OFFSET" : [0,1],
+                "children" : [{
+                  "name" : "utf8",
+                  "count" : 2,
+                  "VALIDITY" : [1,1],
+                  "OFFSET" : [0,2,4],
+                  "DATA" : ["23","23"]
+                }]
+              },{
+                "name" : "manufacturer",
+                "count" : 2,
+                "TYPE_ID" : [0,0],
+                "OFFSET" : [0,1],
+                "children" : [{
+                  "name" : "utf8",
+                  "count" : 2,
+                  "VALIDITY" : [1,1],
+                  "OFFSET" : [0,6,12],
+                  "DATA" : ["iobeam","iobeam"]
+                }]
+              },{
+                "name" : "model",
+                "count" : 2,
+                "TYPE_ID" : [0,0],
+                "OFFSET" : [0,1],
+                "children" : [{
+                  "name" : "utf8",
+                  "count" : 2,
+                  "VALIDITY" : [1,1],
+                  "OFFSET" : [0,5,12],
+                  "DATA" : ["pinto","mustang"]
+                }]
+              },{
+                "name" : "os_name",
+                "count" : 2,
+                "TYPE_ID" : [0,0],
+                "OFFSET" : [0,1],
+                "children" : [{
+                  "name" : "utf8",
+                  "count" : 2,
+                  "VALIDITY" : [1,1],
+                  "OFFSET" : [0,5,10],
+                  "DATA" : ["6.0.1","6.0.1"]
+                }]
+              }]
+            },{
               "name" : "device_readings",
               "count" : 2,
               "VALIDITY" : [1,1],
@@ -759,71 +653,6 @@
                   "DATA" : [8.654,8.822]
                 }]
               }]
-            },{
-              "name" : "device_info",
-              "count" : 2,
-              "VALIDITY" : [1,1],
-              "children" : [{
-                "name" : "xt$id",
-                "count" : 2,
-                "TYPE_ID" : [0,0],
-                "OFFSET" : [0,1],
-                "children" : [{
-                  "name" : "utf8",
-                  "count" : 2,
-                  "VALIDITY" : [1,1],
-                  "OFFSET" : [0,22,44],
-                  "DATA" : ["device-info-demo000000","device-info-demo000001"]
-                }]
-              },{
-                "name" : "api_version",
-                "count" : 2,
-                "TYPE_ID" : [0,0],
-                "OFFSET" : [0,1],
-                "children" : [{
-                  "name" : "utf8",
-                  "count" : 2,
-                  "VALIDITY" : [1,1],
-                  "OFFSET" : [0,2,4],
-                  "DATA" : ["23","23"]
-                }]
-              },{
-                "name" : "manufacturer",
-                "count" : 2,
-                "TYPE_ID" : [0,0],
-                "OFFSET" : [0,1],
-                "children" : [{
-                  "name" : "utf8",
-                  "count" : 2,
-                  "VALIDITY" : [1,1],
-                  "OFFSET" : [0,6,12],
-                  "DATA" : ["iobeam","iobeam"]
-                }]
-              },{
-                "name" : "model",
-                "count" : 2,
-                "TYPE_ID" : [0,0],
-                "OFFSET" : [0,1],
-                "children" : [{
-                  "name" : "utf8",
-                  "count" : 2,
-                  "VALIDITY" : [1,1],
-                  "OFFSET" : [0,5,12],
-                  "DATA" : ["pinto","mustang"]
-                }]
-              },{
-                "name" : "os_name",
-                "count" : 2,
-                "TYPE_ID" : [0,0],
-                "OFFSET" : [0,1],
-                "children" : [{
-                  "name" : "utf8",
-                  "count" : 2,
-                  "VALIDITY" : [1,1],
-                  "OFFSET" : [0,5,10],
-                  "DATA" : ["6.0.1","6.0.1"]
-                }]
-              }]
             }]
           },{
             "name" : "xt$valid_from",
@@ -836,67 +665,6 @@
             "VALIDITY" : [0,0,0,0],
             "DATA" : [0,0,0,0]
           }]
-        },{
-          "name" : "delete",
-          "count" : 0,
-          "VALIDITY" : [ ],
-          "children" : [{
-            "name" : "table",
-            "count" : 0,
-            "VALIDITY" : [ ],
-            "OFFSET" : [0],
-            "DATA" : [ ]
-          },{
-            "name" : "xt$id",
-            "count" : 0,
-            "TYPE_ID" : [ ],
-            "OFFSET" : [ ]
-          },{
-            "name" : "xt$valid_from",
-            "count" : 0,
-            "VALIDITY" : [ ],
-            "DATA" : [ ]
-          },{
-            "name" : "xt$valid_to",
-            "count" : 0,
-            "VALIDITY" : [ ],
-            "DATA" : [ ]
-          }]
-        },{
-          "name" : "evict",
-          "count" : 0,
-          "VALIDITY" : [ ],
-          "children" : [{
-            "name" : "_table",
-            "count" : 0,
-            "VALIDITY" : [ ],
-            "OFFSET" : [0],
-            "DATA" : [ ]
-          },{
-            "name" : "xt$id",
-            "count" : 0,
-            "TYPE_ID" : [ ],
-            "OFFSET" : [ ]
-          }]
-        },{
-          "name" : "call",
-          "count" : 0,
-          "VALIDITY" : [ ],
-          "children" : [{
-            "name" : "fn-id",
-            "count" : 0,
-            "TYPE_ID" : [ ],
-            "OFFSET" : [ ]
-          },{
-            "name" : "args",
-            "count" : 0,
-            "VALIDITY" : [ ],
-            "OFFSET" : [0],
-            "DATA" : [ ]
-          }]
-        },{
-          "name" : "abort",
-          "count" : 0
         }]
       }]
     },{

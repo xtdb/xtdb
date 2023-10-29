@@ -142,7 +142,7 @@
 (defn- ->evict-indexer ^xtdb.indexer.OpIndexer [^RowCounter row-counter, ^ILiveIndexTx live-idx-tx, ^IVectorReader tx-ops-rdr]
 
   (let [evict-leg (.legReader tx-ops-rdr :evict)
-        table-rdr (.structKeyReader evict-leg "_table")
+        table-rdr (.structKeyReader evict-leg "table")
         id-rdr (.structKeyReader evict-leg "xt$id")]
     (reify OpIndexer
       (indexOp [_ tx-op-idx]
@@ -256,11 +256,10 @@
 
             ;; if the user returns `nil` or `true`, we just continue with the rest of the transaction
             (when-not (or (nil? res) (true? res))
-              (let [tx-ops (mapv txp/parse-tx-op res)]
-                (util/with-close-on-catch [tx-ops-vec (txp/open-tx-ops-vec allocator (txp/put-tables tx-ops))]
-                  (txp/write-tx-ops! allocator (vw/->writer tx-ops-vec) tx-ops)
-                  (.setValueCount tx-ops-vec (count res))
-                  tx-ops-vec))))
+              (util/with-close-on-catch [tx-ops-vec (txp/open-tx-ops-vec allocator)]
+                (txp/write-tx-ops! allocator (vw/->writer tx-ops-vec) (mapv txp/parse-tx-op res))
+                (.setValueCount tx-ops-vec (count res))
+                tx-ops-vec)))
 
           (catch Throwable t
             (reset! !last-tx-fn-error t)
