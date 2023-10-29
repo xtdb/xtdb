@@ -162,3 +162,59 @@
   (let [q '(where (= $bar foo))]
     (t/is (= q
              (roundtrip-unify-clause q)))))
+
+(defn roundtrip-dml [dml]
+  (edn/unparse (edn/parse-dml dml)))
+
+(t/deftest test-parse-insert
+  (t/is (= '(insert :users (from :old-users {:bind [xt/id {:first-name given-name} {:last-name surname}]}))
+
+           (roundtrip-dml '(insert :users (from :old-users {:bind [xt/id {:first-name given-name, :last-name surname}]}))))))
+
+(t/deftest test-parse-update
+  (t/is (= '(update :foo {:set [{:version (inc v)}],
+                          :for-valid-time (in #inst "2020" nil),
+                          :bind [{:xt/id $uid} {:version v}]})
+
+           (roundtrip-dml '(update :foo {:for-valid-time (from #inst "2020")
+                                         :bind {:xt/id $uid, :version v}
+                                         :set {:version (inc v)}}))))
+
+  (t/is (= '(update :foo {:set [{:version (inc v)}],
+                          :bind [{:xt/id foo} {:version v}]}
+                    (from :bar {:bind [{:xt/id $bar-id}, foo]}))
+
+           (roundtrip-dml '(update :foo {:set {:version (inc v)},
+                                         :bind {:xt/id foo, :version v}}
+                                   (from :bar {:bind {:xt/id $bar-id, :foo foo}}))))))
+
+(t/deftest test-parse-delete
+  (t/is (= '(delete :foo {:for-valid-time (in #inst "2020" nil),
+                          :bind [{:xt/id $uid} {:version v}]})
+
+           (roundtrip-dml '(delete :foo {:for-valid-time (from #inst "2020")
+                                         :bind {:xt/id $uid, :version v}}))))
+
+  (t/is (= '(delete :foo {:bind [{:xt/id foo} {:version v}]}
+                    (from :bar {:bind [{:xt/id $bar-id}, foo]}))
+
+           (roundtrip-dml '(delete :foo {:bind {:xt/id foo, :version v}}
+                                   (from :bar {:bind {:xt/id $bar-id, :foo foo}}))))))
+
+(t/deftest test-parse-erase
+  (t/is (= '(erase :foo {:bind [{:xt/id $uid} {:version v}]})
+
+           (roundtrip-dml '(erase :foo {:bind {:xt/id $uid, :version v}}))))
+
+  (t/is (= '(erase :foo {:bind [{:xt/id foo} {:version v}]}
+                    (from :bar {:bind [{:xt/id $bar-id}, foo]}))
+
+           (roundtrip-dml '(erase :foo {:bind {:xt/id foo, :version v}}
+                                  (from :bar {:bind {:xt/id $bar-id, :foo foo}}))))))
+
+(t/deftest test-parse-assert
+  (t/is (= '(assert-exists (from :users {:bind [{:email $email}]}))
+           (roundtrip-dml '(assert-exists (from :users {:bind {:email $email}})))))
+
+  (t/is (= '(assert-not-exists (from :users {:bind [{:email $email}]}))
+           (roundtrip-dml '(assert-not-exists (from :users {:bind {:email $email}}))))))
