@@ -2,11 +2,11 @@
   (:require [clojure.string :as str]
             [xtdb.error :as err])
   (:import (xtdb.query Expr Expr$Bool Expr$Call Expr$Double Expr$Exists Expr$Param
-                       OutSpec ArgSpec ColSpec VarSpec QueryOpts
+                       OutSpec ArgSpec ColSpec VarSpec
                        Expr$LogicVar Expr$Long Expr$Obj Expr$NotExists Expr$Subquery
                        Query Query$Aggregate Query$From Query$LeftJoin Query$Join Query$Limit
                        Query$OrderBy Query$OrderDirection Query$OrderSpec Query$Pipeline Query$Offset
-                      Query$Return Query$Unify Query$UnionAll Query$Where Query$With Query$WithCols Query$Without
+                       Query$Return Query$Unify Query$UnionAll Query$Where Query$With Query$WithCols Query$Without
                        TemporalFilter TemporalFilter$AllTime TemporalFilter$At TemporalFilter$In)))
 ;;TODO old style bind still parses in from, should throw
 
@@ -429,13 +429,3 @@
   Query$OrderBy
   (unparse [query]
     (list* 'order-by (mapv unparse (.orderSpecs query)))))
-
-(defn parse-query-opts [{:keys [args] :as this}]
-  ;;TODO args in query opts have to be maps as thres no existing names,
-  ;;plus the vals must be literals.
-  (QueryOpts. (parse-arg-specs args this)))
-
-(extend-protocol Unparse
-  QueryOpts
-  (unparse [this]
-    {:args (mapv unparse (.args this))}))

@@ -6,7 +6,7 @@ import static xtdb.query.Query.OrderDirection.ASC;
 import static xtdb.query.Query.OrderDirection.DESC;
 import static xtdb.query.QueryUtil.*;
 
-public interface Query {
+public sealed interface Query {
 
     interface QueryTail {
     }

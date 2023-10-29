@@ -1,7 +1,5 @@
 package xtdb.query;
 
-import java.time.Instant;
-
 public interface TemporalFilter {
 
     final class AllTime implements TemporalFilter {

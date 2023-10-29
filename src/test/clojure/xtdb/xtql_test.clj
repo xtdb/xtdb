@@ -7,10 +7,7 @@
   (:require [clojure.test :as t :refer [deftest]]
             [xtdb.api :as xt]
             [xtdb.james-bond :as bond]
-            [xtdb.node :as node]
-            [xtdb.test-util :as tu]
-            [xtdb.util :as util])
-  (:import (xtdb.types ClojureForm)))
+            [xtdb.test-util :as tu]))
 
 (t/use-fixtures :each tu/with-mock-clock tu/with-node)
 
@@ -335,7 +332,7 @@
     (t/is (= #{{:e :ivan}}
                (set (xt/q tu/*node*
                           '(from :docs {:bind {:xt/id e :first-name $name}})
-                          {:args [{:name "Ivan"}]})))
+                          {:args {:name "Ivan"}})))
 
             "param in from")
 
@@ -343,7 +340,7 @@
              (set (xt/q tu/*node*
                         '(-> (from :docs {:bind {:xt/id e :first-name name}})
                              (where (= $name name)))
-                        {:args [{:name "Petr"}]})))
+                        {:args {:name "Petr"}})))
           "param in where op")
 
     (t/is (= #{{:e :petr :name "Petr" :baz "PETR"}
@@ -351,7 +348,7 @@
              (set (xt/q tu/*node*
                         '(unify (from :docs {:bind {:xt/id e :first-name name}})
                                 (with {baz (upper $name)}))
-                        {:args [{:name "Petr"}]})))
+                        {:args {:name "Petr"}})))
           "param in unify with")
 
 

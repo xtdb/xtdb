@@ -7,10 +7,9 @@
             [xtdb.vector.writer :as vw])
   (:import (clojure.lang MapEntry)
            (org.apache.arrow.memory BufferAllocator)
-           xtdb.IResultSet
-           (xtdb.operator IRaQuerySource)
-           (xtdb.operator.scan IScanEmitter)
-           (xtdb.query Expr$Call Expr$LogicVar Expr$Obj Expr$Long Query$From Query$Return QueryOpts
+           xtdb.operator.PreparedQuery
+           (xtdb.operator PreparedQuery)
+           (xtdb.query Expr$Call Expr$LogicVar Expr$Obj Expr$Long Query$From Query$Return
                        Query$OrderBy Query$OrderDirection Query$OrderSpec Query$Pipeline Query$With
                        OutSpec ArgSpec ColSpec VarSpec Query$WithCols Query$Join Expr$Param Query$LeftJoin
                        Query$Unify Query$Where Query$Without Query$Limit Query$Offset Query$Aggregate)))
@@ -60,12 +59,6 @@
   ([v prefix]
    (-> (symbol (str "?" prefix v))
        (with-meta {:correlated-column? true}))))
-
-(defn- args->params [args]
-  (->> args
-       (mapv (fn [{:keys [l r _required-vars]}]
-               (MapEntry/create (param-sym l) r)))
-       (into {})))
 
 (defn- args->apply-params [args]
   (->> args
@@ -473,28 +466,23 @@
     {:ra-plan [:top {:skip (.length this)} ra-plan]
      :provided-vars provided-vars}))
 
+(defn compile-query [query]
+  (let [{:keys [ra-plan]} (binding [*gensym* (seeded-gensym "_" 0)]
+                            (plan-query query))]
 
+    (-> ra-plan
+        #_(doto clojure.pprint/pprint)
+        #_(->> (binding [*print-meta* true]))
+        (lp/rewrite-plan {})
+        #_(doto clojure.pprint/pprint)
+        (doto (lp/validate-plan)))))
 
-(defn open-xtql-query ^xtdb.IResultSet [^BufferAllocator allocator, ^IRaQuerySource ra-src, wm-src, ^IScanEmitter _scan-emitter
-                                        query query-opts {:keys [default-all-valid-time? basis default-tz explain?]}]
-  ;;TODO passing both parsed and unparsed query-opts, to incrementally support opts as part of AST.
-  ;;Especially as its unclear if supporting query-opts in the AST will pay its weight.
-  (let [args (mapv plan-arg-spec (.args ^QueryOpts query-opts))
-        {:keys [ra-plan]} (binding [*gensym* (seeded-gensym "_" 0)]
-                            (plan-query query))
-
-        ra-plan (-> ra-plan
-                    #_(doto clojure.pprint/pprint)
-                    #_(->> (binding [*print-meta* true]))
-                    (lp/rewrite-plan {})
-                    #_(doto clojure.pprint/pprint)
-                    (doto (lp/validate-plan)))]
-
-    (if explain?
-      (lp/explain-result ra-plan)
-
-      (let [^xtdb.operator.PreparedQuery pq (.prepareRaQuery ra-src ra-plan)]
-        (util/with-close-on-catch [params (vw/open-params allocator (args->params args))]
-          (-> (.bind pq wm-src {:params params :basis basis, :default-tz default-tz :default-all-valid-time? default-all-valid-time?})
-              (.openCursor)
-              (op/cursor->result-set params)))))))
+(defn open-xtql-query ^xtdb.IResultSet [^BufferAllocator allocator, wm-src, ^PreparedQuery pq,
+                                        {:keys [args basis default-tz default-all-valid-time?]}]
+  (let [args (->> args
+                  (into {} (map (fn [[k v]]
+                                  (MapEntry/create (param-sym (str (symbol k))) v)))))]
+    (util/with-close-on-catch [params (vw/open-params allocator args)]
+      (-> (.bind pq wm-src {:params params, :basis basis, :default-tz default-tz :default-all-valid-time? default-all-valid-time?})
+          (.openCursor)
+          (op/cursor->result-set params)))))
