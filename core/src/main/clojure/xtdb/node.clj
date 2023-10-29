@@ -61,32 +61,27 @@
   xtp/PNode
   (open-query& [_ query query-opts]
     (let [query-opts (-> (into {:default-tz default-tz} query-opts)
-                         (with-after-tx-default))
-          !await-tx (.awaitTxAsync indexer (get-in query-opts [:basis :after-tx]) (:basis-timeout query-opts))]
-
-      (cond
-        (string? query) (-> !await-tx
-                            (util/then-apply
-                              (fn [_]
-                                (let [tables-with-cols (scan/tables-with-cols (:basis query-opts) wm-src scan-emitter)
+                         (with-after-tx-default))]
+      (-> (.awaitTxAsync indexer (get-in query-opts [:basis :after-tx]) (:basis-timeout query-opts))
+          (util/then-apply
+            (fn [_]
+              (cond
+                (string? query) (let [tables-with-cols (scan/tables-with-cols (:basis query-opts) wm-src scan-emitter)
                                       ra (sql/compile-query query (assoc query-opts :table-info tables-with-cols))]
                                   (if (:explain? query-opts)
                                     (lp/explain-result ra)
                                     (let [pq (.prepareRaQuery ra-src ra)]
-                                      (sql/open-sql-query allocator wm-src pq query-opts)))))))
+                                      (sql/open-sql-query allocator wm-src pq query-opts))))
 
-        (map? query) (-> !await-tx
-                         (util/then-apply
-                           (fn [_]
-                             (d/open-datalog-query allocator ra-src wm-src scan-emitter query query-opts))))
+                (map? query) (d/open-datalog-query allocator ra-src wm-src scan-emitter query query-opts)
 
-        (list? query) (-> !await-tx
-                          (util/then-apply
-                            (fn [_]
-                              (let [query (xtql.edn/parse-query query)
-                                    parsed-query-opts (xtql.edn/parse-query-opts query-opts)]
-                                (xtql/open-xtql-query allocator ra-src wm-src scan-emitter
-                                                      query parsed-query-opts query-opts))))))))
+                (list? query) (let [plan (-> (xtql.edn/parse-query query)
+                                             (xtql/compile-query))]
+                                (if (:explain? query-opts)
+                                  (lp/explain-result plan)
+
+                                  (let [^xtdb.operator.PreparedQuery pq (.prepareRaQuery ra-src plan)]
+                                    (xtql/open-xtql-query allocator wm-src pq query-opts))))))))))
 
   (latest-submitted-tx [_] @!latest-submitted-tx)
 

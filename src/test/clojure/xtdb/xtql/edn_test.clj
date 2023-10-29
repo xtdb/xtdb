@@ -7,9 +7,6 @@
 (defn- roundtrip-expr [expr]
   (edn/unparse (edn/parse-expr expr)))
 
-(defn- roundtrip-q-opts [opts]
-  (edn/unparse (edn/parse-query-opts opts)))
-
 (t/deftest test-parse-expr
   (t/is (= 'a (roundtrip-expr 'a)))
 
@@ -151,11 +148,6 @@
 (t/deftest test-parse-offset-test
   (t/is (= '(offset 5)
            (roundtrip-q-tail '(offset 5)))))
-
-(t/deftest test-parse-query-opts
-  (let [opts {:args [{:a "foo"} {:b "bar"}]}]
-    (t/is (= opts
-             (roundtrip-q-opts opts)))))
 
 (t/deftest test-parse-params
   (let [q '(where (= $bar foo))]
