@@ -94,7 +94,7 @@
   (st/spec (s/nilable #(instance? Duration %))
            {:decode/string (fn [_ s] (some-> s Duration/parse))}))
 
-(s/def ::query (some-fn string? map?))
+(s/def ::query (some-fn string? map? list?))
 
 (s/def ::args (s/nilable (s/coll-of any? :kind vector?)))
 
