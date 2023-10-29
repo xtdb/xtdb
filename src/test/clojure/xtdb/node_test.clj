@@ -336,17 +336,17 @@ WHERE foo.xt$id = 1"]])]
   (t/is (= #{{:data [2 3]} {:data ["dog" "cat"]}}
            (set (xt/q tu/*node* "SELECT t2.data FROM t2")))))
 
-(t/deftest test-cross-join-ioobe-547
+(t/deftest test-cross-join-ioobe-2343
   (xt/submit-tx tu/*node* [[:sql "
 INSERT INTO t2(xt$id, data)
-VALUES(2, OBJECT ('foo': OBJECT('bibble': true), 'bar': OBJECT('baz': 1001)))"]
+VALUES(2, OBJECT ('foo': OBJECT('bibble': false), 'bar': OBJECT('baz': 1002)))"]
 
                            [:sql "
 INSERT INTO t1(xt$id, data)
 VALUES(1, OBJECT ('foo': OBJECT('bibble': true), 'bar': OBJECT('baz': 1001)))"]])
 
-  #_ ; FIXME
-  (t/is (= [{:t2d {:bibble true}, :t1d {:baz 1001}}]
+  (t/is (= [{:t2d {:foo {:bibble false}, :bar {:baz 1002}},
+             :t1d {:foo {:bibble true}, :bar {:baz 1001}}}]
            (xt/q tu/*node* "SELECT t2.data t2d, t1.data t1d FROM t2, t1"))))
 
 (t/deftest test-txs-table-485
