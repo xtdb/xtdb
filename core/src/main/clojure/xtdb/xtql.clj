@@ -9,7 +9,7 @@
            (org.apache.arrow.memory BufferAllocator)
            xtdb.operator.PreparedQuery
            (xtdb.operator PreparedQuery)
-           (xtdb.query Expr$Call Expr$LogicVar Expr$Obj Expr$Long Query$From Query$Return
+           (xtdb.query DmlOps$Insert Expr$Call Expr$LogicVar Expr$Obj Expr$Long Query$From Query$Return
                        Query$OrderBy Query$OrderDirection Query$OrderSpec Query$Pipeline Query$With
                        OutSpec ArgSpec ColSpec VarSpec Query$WithCols Query$Join Expr$Param Query$LeftJoin
                        Query$Unify Query$Where Query$Without Query$Limit Query$Offset Query$Aggregate
@@ -31,6 +31,9 @@
 
 (defprotocol PlanTemporalFilter
   (plan-temporal-filter [temporal-filter]))
+
+(defprotocol PlanDml
+  (plan-dml [query tx-opts]))
 
 (def ^:dynamic *gensym* gensym)
 
@@ -572,6 +575,30 @@
         (lp/rewrite-plan {})
         #_(doto clojure.pprint/pprint)
         (doto (lp/validate-plan)))))
+
+(extend-protocol PlanDml
+  DmlOps$Insert
+  (plan-dml [insert-query _tx-opts]
+    (let [{:keys [ra-plan provided-vars]} (plan-query (.query insert-query))]
+      [:insert {:table (.table insert-query)}
+       [:project (vec (for [col provided-vars]
+                        (let [col-sym (util/symbol->normal-form-symbol col)]
+                          {col-sym (if (contains? '#{xt$valid_from xt$valid_to} col-sym)
+                                     `(~'cast-tstz ~col)
+                                     col)})))
+        ra-plan]])))
+
+(defn compile-dml [query tx-opts]
+  (let [ra-plan (binding [*gensym* (seeded-gensym "_" 0)]
+                  (plan-dml query tx-opts))
+        [dml-op dml-op-opts plan] ra-plan]
+    [dml-op dml-op-opts
+     (-> plan
+         #_(doto clojure.pprint/pprint)
+         #_(->> (binding [*print-meta* true]))
+         #_(lp/rewrite-plan {})
+         #_(doto clojure.pprint/pprint)
+         #_(doto (lp/validate-plan)))]))
 
 (defn open-xtql-query ^xtdb.IResultSet [^BufferAllocator allocator, wm-src, ^PreparedQuery pq,
                                         {:keys [args basis default-tz default-all-valid-time?]}]

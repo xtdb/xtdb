@@ -486,3 +486,38 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"]])
          #"system-time must be an inst, supplied value: foo"
          (xt/submit-tx tu/*node* [[:put :xt_docs {:xt/id 1}]]
                        {:system-time "foo"}))))
+
+(t/deftest test-basic-xtql-dml
+  (letfn [(all-users [tx]
+            (->> (xt/q *node* '(from :users {:bind [first-name last-name xt/valid-from xt/valid-to]})
+                       {:basis {:tx tx}
+                        ;; TODO when `from` supports for-valid-time we can shift this to the query
+                        :default-all-valid-time? true})
+                 (into #{} (map (juxt :first-name :last-name :xt/valid-from :xt/valid-to)))))]
+
+    (let [tx1 (xt/submit-tx *node* [[:put :users {:xt/id "dave", :first-name "Dave", :last-name "Davis"} {:for-valid-time [:from #inst "2018"]}]
+                                    [:put :users {:xt/id "claire", :first-name "Claire", :last-name "Cooper"} {:for-valid-time [:from #inst "2019"]}]
+                                    [:put :users {:xt/id "alan", :first-name "Alan", :last-name "Andrews"} {:for-valid-time [:from #inst "2020"]}]
+                                    [:put :users {:xt/id "susan", :first-name "Susan", :last-name "Smith"} {:for-valid-time [:from #inst "2021"]}]])
+          tx1-expected #{["Dave" "Davis", (util/->zdt #inst "2018"), nil]
+                         ["Claire" "Cooper", (util/->zdt #inst "2019"), nil]
+                         ["Alan" "Andrews", (util/->zdt #inst "2020"), nil]
+                         ["Susan" "Smith", (util/->zdt #inst "2021") nil]}]
+
+      (t/is (= (xtp/map->TransactionInstant {:tx-id 0, :system-time (util/->instant #inst "2020-01-01")}) tx1))
+
+      (t/is (= tx1-expected (all-users tx1)))
+
+      (t/testing "insert by query"
+        (xt/submit-tx *node* [[:xtql '(insert :users2 (from :users {:bind [xt/id {:first-name given-name, :last-name surname} xt/valid-from xt/valid-to]}))]]
+                      ;; TODO when `from` supports for-valid-time we can shift this to the query
+                      {:default-all-valid-time? true})
+
+        (t/is (= #{["Dave" "Davis", (util/->zdt #inst "2018"), nil]
+                   ["Claire" "Cooper", (util/->zdt #inst "2019"), nil]
+                   ["Alan" "Andrews", (util/->zdt #inst "2020"), nil]
+                   ["Susan" "Smith", (util/->zdt #inst "2021") nil]}
+                 (->> (xt/q *node* '(from :users2 {:bind [given-name surname xt/valid-from xt/valid-to]})
+                            ;; TODO when `from` supports for-valid-time we can shift this to the query
+                            {:default-all-valid-time? true})
+                      (into #{} (map (juxt :given-name :surname :xt/valid-from :xt/valid-to))))))))))
