@@ -577,6 +577,173 @@ SELECT first_name, last_name FROM users FOR ALL VALID_TIME;
 }
 ----
 
+== DML
+
+XTQL can also be used to write to XTDB using XTQL DML.
+
+It uses the same query language as above, with a small wrapper for each of the operations.
+We're hoping that a reasonable proportion of use-cases that previously required transaction functions to be installed and invoked can now submit DML operations instead.
+
+=== Insert
+
+We submit `insert` operations to `xt/submit-tx`.
+`insert` accepts a query that inserts every result into the given table:
+
+[source,clojure]
+----
+(xt/submit-tx node
+  [[:xtql '(insert :users (from :old-users {:bind [xt/id {:first-name given-name, :last-name surname}
+                                                   xt/valid-from xt/valid-to]}))]])
+----
+
+[source,sql]
+----
+-- we omit the submission boilerplate in the SQL equivalents
+
+INSERT INTO users
+SELECT xt$id, first_name AS given_name, last_name AS surname,
+       xt$valid_from, xt$valid_to
+FROM old_users;
+----
+
+Here we're preserving the valid-from and valid-to of the rows we're copying, but we could just as easily specify/calculate a different value.
+Naturally, substitute your query of choice from above for the `from` (`unify`, for example) for an arbitrarily powerful XTQL command.
+
+(As in XT2 SQL, XTQL `insert` behaves more like an upsert - if a document with that `xt/id` already exists, it will be overwritten for the specified period of valid-time.)
+
+=== Delete
+
+We can delete documents using queries as well.
+
+* For example, to delete all of the comments on a given post, we can submit the following XTQL:
++
+[source,clojure]
+----
+(defn delete-a-post [node the-post-id]
+  (xt/submit-tx node
+    [[:xtql '(delete :comments {:bind {:post-id $post-id}})
+      {:post-id the-post-id}]]))
+----
++
+[source,sql]
+----
+DELETE FROM comments WHERE post_id = ?
+----
++
+Here, we're passing a dynamic parameter to specify the post to delete.
++
+* `delete` can also take a collection of extra `unify` clauses.
+Let's say instead we wanted to delete all comments on posts by a certain author - we can do that as follows:
++
+[source,clojure]
+----
+(xt/submit-tx node
+  [[:xtql '(delete :comments {:bind {:post-id pid}}
+                   (from :posts {:bind {:xt/id pid, :author-id $author}}))
+    {:author "james"}]])
+----
++
+[source,sql]
+----
+DELETE FROM comments
+WHERE post_id IN (SELECT xt$id FROM posts WHERE author_id = ?)
+----
++
+Additional clauses passed to `delete` in this way are unified, in the same way variables within a `unify` are.
+In this case, because we've re-used the `pid` logic variable, XT implicitly joins the two values - the `post-id` from the `comments` table with the `xt/id` on the `posts` table.
+* We can specify a valid-time range to delete using `for-valid-time`, in a similar manner to the `from` clause.
++
+For example, if we want to take down all Christmas promotions on the 26th December (but we don't want to be in the office to actually delete them), we could run the following:
++
+[source,clojure]
+----
+(xt/submit-tx node
+  [[:xtql '(delete :promotions {:bind {:promotion-type "christmas"}
+                                :for-valid-time (from #inst "2023-12-26")})]])
+----
++
+[source,sql]
+----
+DELETE FROM promotions
+FOR PORTION OF VALID_TIME FROM DATE '2023-12-26' TO END_OF_TIME
+WHERE promotion_type = 'christmas'
+----
++
+* Finally, we can delete every entry in a table by omitting any `:bind` predicates:
++
+[source,clojure]
+----
+(xt/submit-tx node
+  [[:xtql '(delete :comments {})]])
+----
++
+[source,sql]
+----
+DELETE FROM comments
+----
+
+=== Update
+
+* Update operations are almost exactly the same as deletes, except - well, they update the document rather than deleting it, obviously - but they additionally take a `set` clause.
++
+[source,clojure]
+----
+(xt/submit-tx node
+  [[:xtql '(update :documents {:bind {:xt/id $doc-id, :version v}
+                               :set {:version (inc v)}})
+    {:doc-id "doc-id"}]])
+----
++
+[source,sql]
+----
+UPDATE documents
+SET version = version + 1
+WHERE xt$id = ?
+----
++
+* Like deletes, updates also accept `:for-valid-time` and extra sub-queries to join from.
+You can, for example, copy a value from another related table, or even update a denormalised value:
++
+[source,clojure]
+----
+(xt/submit-tx node
+  [[:put :comments {:xt/id (random-uuid), :post-id post-id}]
+   [:xtql '(update :posts {:bind {:xt/id $post-id}, :set {:comment-count cc}}
+
+                   (with {cc (q (-> (from :comments {:bind {:post-id $post-id}})
+                                    (aggregate {cc (count)}))
+                                {:bind [cc]})}))
+    {:post-id "my-post-id"}]])
+----
++
+[source,sql]
+----
+INSERT INTO comments (xt$id, post_id) VALUES (?, ?);
+
+UPDATE posts AS p
+SET comment_count = (SELECT COUNT(*) FROM comments WHERE post_id = $post_id)
+WHERE p.post_id = $post_id;
+----
+
+This is the operation that we envisage replacing a lot of XT1 transaction functions - it makes it trivial to patch a single value within a document, for example.
+
+=== Erase
+
+Finally, we can irretrievably erase a document using an `erase` query.
+
+* Erases also look the same as deletes, but these don't support `:for-valid-time`:
++
+[source,clojure]
+----
+(xt/submit-tx node
+  [[:xtql '(erase :users {:bind {:email "jms@juxt.pro"}})]])
+----
++
+[source,sql]
+----
+ERASE FROM users WHERE email = 'jms@juxt.pro'
+----
+
 == Get in touch!
 
 We'd love to know what you think - please do come tell us:
