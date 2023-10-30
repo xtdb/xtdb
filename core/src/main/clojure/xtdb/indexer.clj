@@ -425,7 +425,7 @@
                           (.withName col (str "?" (.getName col)))))))))
 
 (defn- ->xtql-indexer ^xtdb.indexer.OpIndexer [^BufferAllocator allocator, ^RowCounter row-counter, ^ILiveIndexTx live-idx-tx
-                                               ^IVectorReader tx-ops-rdr, ^IRaQuerySource ra-src, wm-src
+                                               ^IVectorReader tx-ops-rdr, ^IRaQuerySource ra-src, wm-src, ^IScanEmitter scan-emitter
                                                tx-opts]
   (let [xtql-leg (.legReader tx-ops-rdr :xtql)
         query-rdr (.structKeyReader xtql-leg "query")
@@ -435,14 +435,15 @@
         erase-idxer (->erase-rel-indexer row-counter live-idx-tx)]
     (reify OpIndexer
       (indexOp [_ tx-op-idx]
-        (let [query (.form ^ClojureForm (.getObject query-rdr tx-op-idx))]
+        (let [query (.form ^ClojureForm (.getObject query-rdr tx-op-idx))
+              tables-with-cols (scan/tables-with-cols (:basis tx-opts) wm-src scan-emitter)]
           ;; TODO handle error
           (zmatch (xtql/compile-dml (cond
                                       (map? query) (do
                                                      #_(xtql.json/parse-dml query)
                                                      (throw (UnsupportedOperationException. "JSON DML")))
                                       (list? query) (xtql.edn/parse-dml query))
-                                    tx-opts)
+                                    (assoc tx-opts :table-info tables-with-cols))
 
             [:insert query-opts inner-query]
             (foreach-param-row allocator params-rdr tx-op-idx
@@ -557,7 +558,7 @@
                             !delete-idxer (delay (->delete-indexer row-counter live-idx-tx tx-ops-rdr system-time))
                             !evict-idxer (delay (->evict-indexer row-counter live-idx-tx tx-ops-rdr))
                             !call-idxer (delay (->call-indexer allocator ra-src wm-src scan-emitter tx-ops-rdr tx-opts))
-                            !xtql-idxer (delay (->xtql-indexer allocator row-counter live-idx-tx tx-ops-rdr ra-src wm-src tx-opts))
+                            !xtql-idxer (delay (->xtql-indexer allocator row-counter live-idx-tx tx-ops-rdr ra-src wm-src scan-emitter tx-opts))
                             !sql-idxer (delay (->sql-indexer allocator row-counter live-idx-tx tx-ops-rdr ra-src wm-src scan-emitter tx-opts))]
                         (dotimes [tx-op-idx (.valueCount tx-ops-rdr)]
                           (when-let [more-tx-ops (case (.getLeg tx-ops-rdr tx-op-idx)

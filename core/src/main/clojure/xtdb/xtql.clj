@@ -9,7 +9,7 @@
            (org.apache.arrow.memory BufferAllocator)
            (xtdb.operator PreparedQuery)
            xtdb.operator.PreparedQuery
-           (xtdb.query ArgSpec ColSpec DmlOps$Delete DmlOps$Insert
+           (xtdb.query ArgSpec ColSpec DmlOps$Delete DmlOps$Insert DmlOps$Update
                        Expr Expr$Call Expr$LogicVar Expr$Long Expr$Obj Expr$Param OutSpec
                        Query Query$Aggregate Query$From Query$Join Query$LeftJoin Query$Limit Query$Offset Query$OrderBy Query$OrderDirection Query$OrderSpec
                        Query$Pipeline Query$Return Query$Unify Query$Where Query$With Query$WithCols Query$Without
@@ -628,6 +628,34 @@
 
           {target-plan :ra-plan} (plan-query target-query)]
       [:delete {:table table-name}
+       target-plan]))
+
+  DmlOps$Update
+  (plan-dml [update-query tx-opts]
+    (let [table-name (.table update-query)
+          set-specs (.setSpecs update-query)
+          known-columns (set (get-in tx-opts [:table-info (util/str->normal-form-str table-name)]))
+          unspecified-columns (-> (set/difference known-columns
+                                                  (set (for [^ColSpec set-spec set-specs]
+                                                         (util/str->normal-form-str (.attr set-spec)))))
+                                  (disj "xt$id"))
+
+          target-query (Query/pipeline (Query/unify (into [(-> (Query/from table-name)
+                                                               (.binding (concat (.bindSpecs update-query)
+                                                                                 [(OutSpec/of "xt$id" (Expr/lVar "xt$dml$id"))]
+                                                                                 (for [col unspecified-columns]
+                                                                                   (OutSpec/of col (Expr/lVar (str "xt$update$" col))))
+                                                                                 extra-dml-bind-specs)))]
+                                                          (.unifyClauses update-query)))
+
+                                       [(Query/ret (concat (dml-colspecs (.forValidTime update-query) tx-opts)
+                                                           [(ColSpec/of "xt$id" (Expr/lVar "xt$dml$id"))]
+                                                           (for [col unspecified-columns]
+                                                             (ColSpec/of col (Expr/lVar (str "xt$update$" col))))
+                                                           set-specs))])
+
+          {target-plan :ra-plan} (plan-query target-query)]
+      [:update {:table table-name}
        target-plan])))
 
 (defn compile-dml [query tx-opts]

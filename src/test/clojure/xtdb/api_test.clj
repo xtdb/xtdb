@@ -532,4 +532,22 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"]])
                            ["Susan" "Smith", (util/->zdt #inst "2021") nil]}]
 
         (t/is (= tx2-expected (all-users tx2)))
-        (t/is (= tx1-expected (all-users tx1)))))))
+        (t/is (= tx1-expected (all-users tx1)))
+
+        (let [tx3 (xt/submit-tx *node* [[:xtql '(update :users
+                                                        {:for-valid-time (from #inst "2021-07-01")
+                                                         :bind {:xt/id $uid}
+                                                         :set {:first-name "Sue"}})
+                                         {:uid "susan"}]]
+
+                                {:default-all-valid-time? true})
+
+              tx3-expected #{["Dave" "Davis", (util/->zdt #inst "2018"), (util/->zdt #inst "2020-05-01")]
+                             ["Claire" "Cooper", (util/->zdt #inst "2019"), nil]
+                             ["Alan" "Andrews", (util/->zdt #inst "2020"), nil]
+                             ["Susan" "Smith", (util/->zdt #inst "2021") (util/->zdt #inst "2021-07-01")]
+                             ["Sue" "Smith", (util/->zdt #inst "2021-07-01") nil]}]
+
+          (t/is (= tx3-expected (all-users tx3)))
+          (t/is (= tx2-expected (all-users tx2)))
+          (t/is (= tx1-expected (all-users tx1))))))))
