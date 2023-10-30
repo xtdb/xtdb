@@ -59,6 +59,12 @@ allprojects {
             }
         }
 
+        tasks.create("nightly-test", Test::class) {
+            useJUnitPlatform {
+                includeTags("s3", "google-cloud", "azure")
+            }
+        }
+
         tasks.withType(Test::class) {
             jvmArgs = defaultJvmArgs + sixGBJvmArgs
         }

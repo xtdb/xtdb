@@ -1,0 +1,78 @@
+= Nightly CI Setup
+
+Within our nightly test build, we run a number of tests:
+
+* Tests against various cloud providers - S3, Azure, Google Cloud
+* Tests involving kafka & tests involving postgres - setup via docker-compose
+
+When it comes to testing against the cloud providers, we require authentication for each of those handled on the CI. We will pass in everything we need to the environment variables/secrets of Github a
+Actions on the Repo. In the section below, I will go through what setup is required for each provider, but the overall list of env/secrets is the following:
+
+* For S3: 
+** `AWS_REGION`
+** `AWS_ACCESS_KEY_ID`
+** `AWS_SECRET_ACCESS_KEY`
+* For Google Cloud: 
+** `GOOGLE_CLOUD_CREDENTIALS`
+* For Azure:
+** `AZURE_CLIENT_ID` 
+** `AZURE_CLIENT_SECRET`
+** `AZURE_TENANT_ID`  
+** `AZURE_SUBSCRIPTION_ID`    
+
+== Credential Setup
+
+When it comes to adding the environment variables/secrets to Github, see https://docs.github.com/en/actions/learn-github-actions/variables#creating-configuration-variables-for-a-repository[**Creating configuration variables for a repository**]
+
+.*S3* (ensure all of the below are done on a consistent region):
+* Need to ensure the base `s3-stack` is setup via CloudFormation
+** See the S3 README for more info here.
+* Setup the CI IAM User/Access Key found under `ci-credential-setup/ci-iam-user.yml` on CloudFormation:
+** This takes the **desired name of the CI IAM User**, the **name of the test s3 bucket created by the s3-stack** and the **Arn of the SNS topic created by the s3-stack** as input.
+** This will create an IAM user for the CI, setup the necessary permissions on the user and create an access key for said user and then store it on `SecretsManager`.
+** The stack will output a link to the secret, but it will be located under the current region SecretsManager under the key "/ci/credentials/<CIUSERNAME>" 
+* The secret in secrets manager will contain "ACCESS_KEY" and "SECRET_KEY". Using these, we can set the vars/secrets on the github actions:
+** Vars:
+*** `AWS_REGION`: Region which the cloudformation sits on, usually "eu-west-1"
+** Secrets:
+*** `AWS_ACCESS_KEY_ID`: <ACCESS_KEY>
+*** `AWS_SECRET_ACCESS_KEY`: <SECRET_KEY>
+
+.*Azure*
+* See the instructions under the dev readme to ensure the stack is created and setup with a user/app registration.
+* Set the aforementioned vars/secrets on the github actions:
+** Secrets: 
+*** `AZURE_CLIENT_ID`
+*** `AZURE_CLIENT_SECRET` 
+*** `AZURE_TENANT_ID` 
+*** `AZURE_SUBSCRIPTION_ID`
+
+.*Google Cloud*
+* See the instructions under the dev readme to ensure the stack is created and setup with a service account.
+* Create the private key for the service account, and download the JSON credential file.
+* Set the aforementioned vars/secrets on the github actions:
+** Secrets: 
+*** `GOOGLE_CLOUD_CREDENTIALS`: Copy the contents of the downloaded credential file here, compressed into a single JSON string. Can use `cat credentials.json | jq -r tostring`
+
+== Testing changes
+
+By default, the night-test job is running off of the `master` branch on a nightly schedule. 
+
+In order to verify/test changes to the nightly running task, you can temporarily make it such that it is running on push to branch, and running against that particular branch. As a note: This branch would need to live on `origin`, as forked repos will not get necessary secrets/vars.
+
+In order to make it run on the current branch.
+
+Add the following under the `on: schedule` block:
+```
+push:
+    branches:
+      - <branch-name>
+``` 
+
+Comment out the following under the actions/checkout step:
+```
+with:
+  ref: 2.x
+```
+
+Any changes will need to be merged back into the version of the test file on master.
