@@ -26,13 +26,22 @@ jobs:
         with:
           name: build-reports
           path: build/reports/
-
       - name: Upload build reports (Core)
         if: success() || failure() # i.e. not cancelled
         uses: actions/upload-artifact@v3
         with:
           name: core-build-reports
           path: core/build/reports/
+      - name: Post Slack Notification (On Fail)
+        if: github.repository == 'xtdb/xtdb' && github.ref == 'refs/heads/2.x'
+        uses: ravsamhq/notify-slack-action@v2
+        with:
+          status: ${{ job.status }}
+          notification_title: "*{workflow}* has {status_message}:"
+          message_format: "{emoji} `test` job has {status_message} in *{workflow}*"
+          notify_when: "failure"
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
 
   integration-test:
     name: Integration Test
@@ -56,6 +65,16 @@ jobs:
         with:
           name: build-reports
           path: build/reports/
+      - name: Post Slack Notification (On Fail)
+        if: github.repository == 'xtdb/xtdb' && github.ref == 'refs/heads/2.x'
+        uses: ravsamhq/notify-slack-action@v2
+        with:
+          status: ${{ job.status }}
+          notification_title: "*{workflow}* has {status_message}:"
+          message_format: "{emoji} `integration-test` job has {status_message} in *{workflow}*"
+          notify_when: "failure"
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
 
   slt-1:
     name: SLT 1
