@@ -551,3 +551,45 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"]])
           (t/is (= tx3-expected (all-users tx3)))
           (t/is (= tx2-expected (all-users tx2)))
           (t/is (= tx1-expected (all-users tx1))))))))
+
+(t/deftest test-erase-xtql
+  (letfn [(q [tx]
+            (set (xt/q *node* '(from :foo {:bind [xt/id version xt/valid-from xt/valid-to]})
+                       ;; TODO when `from` supports for-valid-time we can shift this to the query
+                       {:basis {:tx tx}
+                        :default-all-valid-time? true})))]
+    (let [tx1 (xt/submit-tx *node*
+                            [[:put :foo {:xt/id "foo", :version 0}]
+                             [:put :foo {:xt/id "bar", :version 0}]])
+          tx2 (xt/submit-tx *node* [[:xtql '(update :foo {:set {:version 1}})]])
+          v0 {:version 0,
+              :xt/valid-from (util/->zdt #inst "2020-01-01"),
+              :xt/valid-to (util/->zdt #inst "2020-01-02")}
+
+          v1 {:version 1,
+              :xt/valid-from (util/->zdt #inst "2020-01-02"),
+              :xt/valid-to nil}]
+
+      (t/is (= #{{:xt/id "foo", :version 0,
+                  :xt/valid-from (util/->zdt #inst "2020-01-01")
+                  :xt/valid-to nil}
+                 {:xt/id "bar", :version 0,
+                  :xt/valid-from (util/->zdt #inst "2020-01-01")
+                  :xt/valid-to nil}}
+               (q tx1)))
+
+      (t/is (= #{(assoc v0 :xt/id "foo")
+                 (assoc v0 :xt/id "bar")
+                 (assoc v1 :xt/id "foo")
+                 (assoc v1 :xt/id "bar")}
+               (q tx2)))
+
+      (let [tx3 (xt/submit-tx *node*
+                              [[:xtql '(erase :foo {:bind {:xt/id "foo"}})]])]
+        (t/is (= #{(assoc v0 :xt/id "bar") (assoc v1 :xt/id "bar")} (q tx3)))
+        (t/is (= #{(assoc v0 :xt/id "bar") (assoc v1 :xt/id "bar")} (q tx2)))
+
+        (t/is (= #{{:xt/id "bar", :version 0,
+                    :xt/valid-from (util/->zdt #inst "2020-01-01")
+                    :xt/valid-to nil}}
+                 (q tx1)))))))

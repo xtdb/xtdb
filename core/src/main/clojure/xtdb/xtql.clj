@@ -9,7 +9,7 @@
            (org.apache.arrow.memory BufferAllocator)
            (xtdb.operator PreparedQuery)
            xtdb.operator.PreparedQuery
-           (xtdb.query ArgSpec ColSpec DmlOps$Delete DmlOps$Insert DmlOps$Update
+           (xtdb.query ArgSpec ColSpec DmlOps$Delete DmlOps$Erase DmlOps$Insert DmlOps$Update
                        Expr Expr$Call Expr$LogicVar Expr$Long Expr$Obj Expr$Param OutSpec
                        Query Query$Aggregate Query$From Query$Join Query$LeftJoin Query$Limit Query$Offset Query$OrderBy Query$OrderDirection Query$OrderSpec
                        Query$Pipeline Query$Return Query$Unify Query$Where Query$With Query$WithCols Query$Without
@@ -628,6 +628,20 @@
 
           {target-plan :ra-plan} (plan-query target-query)]
       [:delete {:table table-name}
+       target-plan]))
+
+  DmlOps$Erase
+  (plan-dml [erase-query _tx-opts]
+    (let [table-name (.table erase-query)
+          target-query (Query/pipeline (Query/unify (into [(-> (Query/from table-name)
+                                                               (.binding (concat (.bindSpecs erase-query)
+                                                                                 [(OutSpec/of "xt$iid" (Expr/lVar "xt$dml$iid"))])))]
+                                                          (.unifyClauses erase-query)))
+
+                                       [(Query/ret [(ColSpec/of "xt$iid" (Expr/lVar "xt$dml$iid"))])])
+
+          {target-plan :ra-plan} (plan-query target-query)]
+      [:erase {:table table-name}
        target-plan]))
 
   DmlOps$Update
