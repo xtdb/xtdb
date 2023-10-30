@@ -1,4 +1,4 @@
-(ns arrow-readers-writers-doc
+(ns ^{:clojure.tools.namespace.repl/load false, :clojure.tools.namespace.repl/unload false} arrow-readers-writers-doc
   (:require [xtdb.vector.writer :as vw]
             [xtdb.vector.reader :as vr]
             [xtdb.types :as types])
