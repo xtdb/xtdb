@@ -12,7 +12,8 @@
            (xtdb.query Expr$Call Expr$LogicVar Expr$Obj Expr$Long Query$From Query$Return
                        Query$OrderBy Query$OrderDirection Query$OrderSpec Query$Pipeline Query$With
                        OutSpec ArgSpec ColSpec VarSpec Query$WithCols Query$Join Expr$Param Query$LeftJoin
-                       Query$Unify Query$Where Query$Without Query$Limit Query$Offset Query$Aggregate)))
+                       Query$Unify Query$Where Query$Without Query$Limit Query$Offset Query$Aggregate
+                       TemporalFilter$AllTime TemporalFilter$At TemporalFilter$In)))
 
 ;;TODO consider helper for [{sym expr} sym] -> provided vars set
 ;;TODO Should all user supplied lv be planned via plan-expr, rather than explicit calls to col-sym.
@@ -27,6 +28,9 @@
 
 (defprotocol PlanUnifyClause
   (plan-unify-clause [clause]))
+
+(defprotocol PlanTemporalFilter
+  (plan-temporal-filter [temporal-filter]))
 
 (def ^:dynamic *gensym* gensym)
 
@@ -98,7 +102,19 @@
 
   Expr$Call
   (plan-expr [call] (list* (symbol (.f call)) (mapv plan-expr (.args call))))
-  (required-vars [call] (into #{} (mapcat required-vars) (.args call))))
+  (required-vars [call] (into #{} (mapcat required-vars) (.args call)))
+
+  nil
+  (plan-expr [_] nil)
+  (required-vars [_] nil))
+
+(defn- required-vars-available? [expr provided-vars]
+  (let [required-vars (required-vars expr)]
+    (when (not (set/subset? required-vars provided-vars))
+      (throw (err/illegal-arg
+              :xtql/invalid-expression
+              {:expr expr :required-vars required-vars :available-vars provided-vars
+               ::err/message "Not all variables in expression are in scope"})))))
 
 (defn- wrap-select [ra-plan predicates]
   (case (count predicates)
@@ -157,24 +173,15 @@
           {:ra-plan [:mega-join [] (mapv :ra-plan rels)]})
         (wrap-unify var->cols))))
 
-(defn- plan-from-bind-spec [^OutSpec bind-spec]
-  (let [col (col-sym (.attr bind-spec))
-        expr (.expr bind-spec)]
-    (if (instance? Expr$LogicVar expr)
-      {:var (symbol (.lv ^Expr$LogicVar expr))
-       :col col
-       :scan-col-spec col}
-      {:scan-col-spec {col (list '= col (plan-expr expr))}})))
-
 (defn- plan-out-spec [^OutSpec bind-spec]
   (let [col (col-sym (.attr bind-spec))
         expr (.expr bind-spec)]
-    (if (instance? Expr$LogicVar expr)
-      {:l col :r (plan-expr expr)}
-      (throw (UnsupportedOperationException. "TODO: what should exprs in out specs do outside of scan")))))
+    {:l col :r (plan-expr expr) :literal? (not (instance? Expr$LogicVar expr))}))
+;;TODO defining literal as not an LV seems flakey, but might be okay?
+;;this seems like the kind of thing the AST should encode as a type/interface?
 
 (defn- plan-arg-spec [^ArgSpec bind-spec]
-  ;;TODO expr here is far to pervasive.
+  ;;TODO expr here is far to permissive.
   ;;In the outer query this has to be a literal
   ;;in the subquery case it must be a col, as thats all apply supports
   ;;In reality we could support a full expr here, additionally top level query args perhaps should
@@ -183,14 +190,109 @@
         expr (.expr bind-spec)]
     {:l var :r (plan-expr expr) :required-vars (required-vars expr)}))
 
+(def app-time-period-sym 'xt/valid-time)
+(def app-time-from-sym 'xt/valid-from)
+(def app-time-to-sym 'xt/valid-to)
+(def app-temporal-cols {:period app-time-period-sym
+                        :from app-time-from-sym
+                        :to app-time-to-sym})
+
+
+(def system-time-period-sym 'xt/system-time)
+(def system-time-from-sym 'xt/system-from)
+(def system-time-to-sym 'xt/system-to)
+(def sys-temporal-cols {:period system-time-period-sym
+                        :from system-time-from-sym
+                        :to system-time-to-sym})
+
+(defn replace-temporal-period-with-cols
+  [cols]
+  (mapcat
+   #(cond
+      (= app-time-period-sym %)
+      [app-time-from-sym app-time-to-sym]
+      (= system-time-period-sym %)
+      [system-time-from-sym system-time-to-sym]
+      :else
+      [%])
+   cols))
+
+(extend-protocol PlanTemporalFilter
+  TemporalFilter$AllTime
+  (plan-temporal-filter [_this]
+    :all-time)
+
+  TemporalFilter$At
+  (plan-temporal-filter [this]
+    ;;TODO could be better to have its own error, to make it clear you can't
+    ;;ref logic vars in temporal opts
+    (required-vars-available? (.at this) #{})
+    [:at (plan-expr (.at this))])
+
+  TemporalFilter$In
+  (plan-temporal-filter [this]
+    (required-vars-available? (.from this) #{})
+    (required-vars-available? (.to this) #{})
+    [:in (plan-expr (.from this)) (plan-expr (.to this))])
+
+  nil
+  (plan-temporal-filter [_this]
+    nil))
+
+(defn create-period-constructor [bindings {:keys [period from to]}]
+  (when-let [{:keys [r literal?]} (first (filter #(= period (:l %)) bindings))]
+    (if literal?
+      {:type :selection
+       :expr (list '= (list 'period (col-sym from) (col-sym to)) r)}
+      {:type :projection
+       :expr {(col-sym period) (list 'period (col-sym from) (col-sym to))}})))
+
+(defn- wrap-map [plan projections]
+  ;;currently callers job to handle updating :provided-vars etc. as this returns unested plan
+  ;;decicsion based off wrap-select and current caller
+  (if (seq projections)
+    [:map (vec projections)
+     plan]
+    plan))
+
+(defn wrap-with-period-projection-or-selection [plan bindings]
+  (let [{:keys [selection projection]}
+        (group-by
+         :type
+         (keep
+          #(create-period-constructor bindings %)
+          [app-temporal-cols sys-temporal-cols]))]
+    (-> plan
+        (wrap-select (map :expr selection))
+        (wrap-map (map :expr projection)))))
+
+(defn wrap-with-ra-plan [unnested-plan]
+  {:ra-plan unnested-plan})
+
+(defn- wrap-scan-col-preds [scan-col col-preds]
+  (case (count col-preds)
+    0 scan-col
+    1 {scan-col (first col-preds)}
+    {scan-col (list* 'and col-preds)}))
+
 (defn- plan-from [^Query$From from]
-  (let [planned-bind-specs (mapv plan-from-bind-spec (.bindings from))]
-      (-> {:ra-plan [:scan {:table (symbol (.table from))}
-                     (mapv :scan-col-spec planned-bind-specs)]}
-          (wrap-unify (-> planned-bind-specs
-                          (->> (filter :var)
-                               (group-by :var))
-                          (update-vals (comp set #(mapv :col %))))))))
+  (let [planned-bind-specs (mapv plan-out-spec (.bindings from))
+        distinct-scan-cols (distinct (replace-temporal-period-with-cols (mapv :l planned-bind-specs)))
+        literal-preds-by-col (-> (->> planned-bind-specs
+                                      (filter :literal?)
+                                      (map #(assoc % :pred (list '= (:l %) (:r %))))
+                                      (group-by :l))
+                                 (update-vals #(map :pred %)))]
+    (-> [:scan {:table (symbol (.table from))
+                :for-valid-time (plan-temporal-filter (.forValidTime from))
+                :for-system-time (plan-temporal-filter (.forSystemTime from))}
+         (mapv #(wrap-scan-col-preds % (get literal-preds-by-col %)) distinct-scan-cols)]
+        (wrap-with-period-projection-or-selection planned-bind-specs)
+        (wrap-with-ra-plan)
+        (wrap-unify (-> planned-bind-specs
+                        (->> (remove :literal?)
+                             (group-by :r))
+                        (update-vals (comp set #(mapv :l %))))))))
 
 (defn- plan-where [^Query$Where where]
   (for [pred (.preds where)]
@@ -208,14 +310,6 @@
               (plan-query-tail query-tail plan))
             (plan-query (.query pipeline))
             (.tails pipeline))))
-
-(defn- required-vars-available? [expr provided-vars]
-  (let [required-vars (required-vars expr)]
-    (when (not (set/subset? required-vars provided-vars))
-      (throw (err/illegal-arg
-              :xtql/invalid-expression
-              {:expr expr :required-vars required-vars :available-vars provided-vars
-               ::err/message "Not all variables in expression are in scope"})))))
 
 (extend-protocol PlanQueryTail
   Query$Where
@@ -273,6 +367,8 @@
   (let [out-bindings (mapv plan-out-spec binding) ;;TODO refelection (interface here?)
         arg-bindings (mapv plan-arg-spec args)
         subquery (plan-query query)]
+    (when (some :literal? out-bindings)
+      (throw (UnsupportedOperationException. "TODO what should literals in out specs do outside of scan")))
     [[:join {:ra-plan (wrap-out-binding-projection subquery out-bindings)
              :args (args->apply-params arg-bindings)
              :join-type join-type
@@ -479,6 +575,7 @@
 
 (defn open-xtql-query ^xtdb.IResultSet [^BufferAllocator allocator, wm-src, ^PreparedQuery pq,
                                         {:keys [args basis default-tz default-all-valid-time?]}]
+  ;;TODO better error if args is a vector of maps, as this is supported in other places which take args (join etc.)
   (let [args (->> args
                   (into {} (map (fn [[k v]]
                                   (MapEntry/create (param-sym (str (symbol k))) v)))))]
