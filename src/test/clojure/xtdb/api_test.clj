@@ -520,4 +520,16 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"]])
                  (->> (xt/q *node* '(from :users2 {:bind [given-name surname xt/valid-from xt/valid-to]})
                             ;; TODO when `from` supports for-valid-time we can shift this to the query
                             {:default-all-valid-time? true})
-                      (into #{} (map (juxt :given-name :surname :xt/valid-from :xt/valid-to))))))))))
+                      (into #{} (map (juxt :given-name :surname :xt/valid-from :xt/valid-to)))))))
+
+      (let [tx2 (xt/submit-tx *node* [[:xtql '(delete :users
+                                                      {:for-valid-time (from #inst "2020-05-01")
+                                                       :bind {:xt/id $uid}})
+                                       {:uid "dave"}]])
+            tx2-expected #{["Dave" "Davis", (util/->zdt #inst "2018"), (util/->zdt #inst "2020-05-01")]
+                           ["Claire" "Cooper", (util/->zdt #inst "2019"), nil]
+                           ["Alan" "Andrews", (util/->zdt #inst "2020"), nil]
+                           ["Susan" "Smith", (util/->zdt #inst "2021") nil]}]
+
+        (t/is (= tx2-expected (all-users tx2)))
+        (t/is (= tx1-expected (all-users tx1)))))))
