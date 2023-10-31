@@ -250,8 +250,7 @@
    ^ObjectStore remote-store
    ^FileChannel file-channel
    tmp-path
-   ^String k
-   allow-file-deletion]
+   ^String k]
   WritableByteChannel
   (isOpen [_] (.isOpen file-channel))
   (close [_]
@@ -339,8 +338,7 @@
   [allocator
    ^ArrowBufLRU memory-store
    ^Path disk-store
-   ^ObjectStore remote-store
-   allow-file-deletion]
+   ^ObjectStore remote-store]
   Closeable
   (close [_]
     (free-memory memory-store)
@@ -368,8 +366,8 @@
               (util/then-apply
                 (fn [path]
                   (let [nio-buffer (util/->mmap-path path)
-                        buf-close-fn (if allow-file-deletion util/delete-file (constantly nil))
-                        create-arrow-buf #(util/->arrow-buf-view allocator nio-buffer buf-close-fn)
+                        close-fn (fn [] (util/delete-file path))
+                        create-arrow-buf #(util/->arrow-buf-view allocator nio-buffer close-fn)
                         [_ buf] (cache-compute memory-store k create-arrow-buf)]
                     buf))))))))
 
@@ -388,8 +386,7 @@
         remote-store
         file-channel
         tmp-path
-        k
-        allow-file-deletion)))
+        k)))
 
   (openArrowFileWriter [this k vsr]
     (let [tmp-path (Files/createTempFile "bp-channel" ".arrow" (make-array FileAttribute 0))
@@ -412,17 +409,14 @@
 (defn ->remote [{:keys [^BufferAllocator allocator
                         object-store
                         data-dir
-                        allow-file-deletion
                         max-cache-bytes
                         max-cache-entries]
                  :or {max-cache-entries 1024
-                      max-cache-bytes 536870912
-                      allow-file-deletion false}}]
+                      max-cache-bytes 536870912}}]
   (map->RemoteBufferPool
     {:allocator (.newChildAllocator allocator "buffer-pool" 0 Long/MAX_VALUE)
      :memory-store (ArrowBufLRU. 16 max-cache-entries max-cache-bytes)
      :disk-store data-dir
-     :allow-file-deletion allow-file-deletion
      :remote-store object-store}))
 
 (defmethod ig/prep-key ::remote [_ opts]
