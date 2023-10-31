@@ -167,6 +167,13 @@
 
   (putObject [this k buffer] (put-object this k buffer)))
 
+(defn- create-tmp-path ^Path [^Path disk-store]
+  (doto (.resolve disk-store (str ".tmp/" (random-uuid)))
+    (util/create-parents)))
+
+(defn- open-tmp-file ^FileChannel [^Path tmp-path]
+  (util/->file-channel tmp-path [StandardOpenOption/CREATE_NEW, StandardOpenOption/WRITE]))
+
 (deftype LocalWritableChannel
   [^IBufferPool bp
    allocator
@@ -234,8 +241,8 @@
                        (str (.relativize disk-store path)))))))))
 
   (openChannel [this k]
-    (let [tmp-path (Files/createTempFile "bp-channel" ".arrow" (make-array FileAttribute 0))]
-      (->LocalWritableChannel this allocator memory-store disk-store (util/->file-channel tmp-path [StandardOpenOption/APPEND]) tmp-path k)))
+    (let [tmp-path (create-tmp-path disk-store)]
+      (->LocalWritableChannel this allocator memory-store disk-store (open-tmp-file tmp-path) tmp-path k)))
 
   (openArrowFileWriter [this k vsr]
     (ArrowFileWriter. vsr nil (.openChannel this k)))
@@ -376,8 +383,8 @@
   (listObjects [_ dir] (.listObjects remote-store dir))
 
   (openChannel [this k]
-    (let [tmp-path (Files/createTempFile "bp-channel" ".arrow" (make-array FileAttribute 0))
-          file-channel (util/->file-channel tmp-path [StandardOpenOption/APPEND])]
+    (let [tmp-path (create-tmp-path disk-store)
+          file-channel (open-tmp-file tmp-path)]
       (->RemoteWritableChannel
         this
         allocator
@@ -389,8 +396,8 @@
         k)))
 
   (openArrowFileWriter [this k vsr]
-    (let [tmp-path (Files/createTempFile "bp-channel" ".arrow" (make-array FileAttribute 0))
-          file-channel (util/->file-channel tmp-path [StandardOpenOption/APPEND])
+    (let [tmp-path (create-tmp-path disk-store)
+          file-channel (open-tmp-file tmp-path)
           ch (->RemoteArrowFileChannel
                this
                allocator
