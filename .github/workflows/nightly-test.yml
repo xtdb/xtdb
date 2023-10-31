@@ -63,6 +63,7 @@ jobs:
           name: build-reports
           path: build/reports/
       - name: Post Slack Notification
+        if: always()
         uses: ravsamhq/notify-slack-action@v2
         with:
           status: ${{ job.status }}
