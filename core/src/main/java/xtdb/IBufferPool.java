@@ -8,8 +8,6 @@ import java.util.concurrent.CompletableFuture;
 public interface IBufferPool extends AutoCloseable {
     CompletableFuture<ArrowBuf> getBuffer(String key);
 
-    CompletableFuture<ArrowBuf> getRangeBuffer(String key, int start, int len);
-
     CompletableFuture<?> putObject(String k, ByteBuffer buffer);
 
     Iterable<String> listObjects();

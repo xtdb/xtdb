@@ -63,15 +63,6 @@
          (record-cache-hit cached-buffer)
          cached-buffer))))
 
-  (getRangeBuffer [_ k start len]
-    (object-store/ensure-shared-range-oob-behaviour start len)
-    (CompletableFuture/completedFuture
-     (when k
-       (when-let [buffer (when-let [^ArrowBuf full-buffer (cache-get buffers k)]
-                           (.slice full-buffer start len))]
-         (record-cache-hit buffer)
-         buffer))))
-
   (putObject [_ k buf]
     (.put buffers k (util/->arrow-buf-view allocator buf))
     (CompletableFuture/completedFuture nil))
@@ -118,23 +109,6 @@
          (let [nio-buffer (os/get-path root-path k)
                create-arrow-buf #(util/->arrow-buf-view allocator nio-buffer)
                [_ buf] (cache-compute buffers k create-arrow-buf)]
-           buf)))))
-
-  (getRangeBuffer [_ k start len]
-    (object-store/ensure-shared-range-oob-behaviour start len)
-
-    (CompletableFuture/completedFuture
-     (when k
-       (if-let [cached-buffer (or (cache-get buffers [k start len])
-                                  (when-let [^ArrowBuf cached-full-buffer (cache-get buffers k)]
-                                    (.slice cached-full-buffer start len)))]
-         (do
-           (record-cache-hit cached-buffer)
-           cached-buffer)
-
-         (let [nio-buffer (os/get-path-range root-path k start len)
-               create-arrow-buf #(util/->arrow-buf-view allocator nio-buffer)
-               [_ buf] (cache-compute buffers [k start len] create-arrow-buf)]
            buf)))))
 
   (putObject [_ k buf] (CompletableFuture/completedFuture (os/put-path root-path k buf)))
@@ -213,30 +187,6 @@
                     (record-io-wait start-ns)
                     (let [create-arrow-buf #(util/->arrow-buf-view allocator nio-buffer)
                           [_ buf] (cache-compute buffers k create-arrow-buf)]
-                      buf)))))))))
-
-  (getRangeBuffer [_ k start len]
-    (object-store/ensure-shared-range-oob-behaviour start len)
-    (if (nil? k)
-      (CompletableFuture/completedFuture nil)
-      (let [cached-full-buffer (cache-get buffers k)
-
-            cached-buffer
-            (or (cache-get buffers [k start len])
-                (when ^ArrowBuf cached-full-buffer
-                  (.slice cached-full-buffer start len)))]
-
-        (if cached-buffer
-          (do
-            (record-cache-hit cached-buffer)
-            (CompletableFuture/completedFuture cached-buffer))
-          (let [start-ns (System/nanoTime)]
-            (-> (.getObjectRange object-store k start len)
-                (util/then-apply
-                  (fn [nio-buffer]
-                    (record-io-wait start-ns)
-                    (let [create-arrow-buf #(util/->arrow-buf-view allocator nio-buffer)
-                          [_ buf] (cache-compute buffers [k start len] create-arrow-buf)]
                       buf)))))))))
 
   (putObject [_ k buf] (.putObject object-store k buf))
