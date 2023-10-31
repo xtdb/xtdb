@@ -103,7 +103,7 @@
                                           (mapcat scan/->scan-cols))))
            cache (ConcurrentHashMap.)]
        (reify PreparedQuery
-         (bind [_ wm-src {:keys [params table-args basis default-tz default-all-valid-time?]}]
+         (bind [_ wm-src {:keys [params basis default-tz default-all-valid-time?]}]
            (assert (or scan-emitter (empty? scan-cols)))
 
            (let [{:keys [tx after-tx current-time]} basis
@@ -116,7 +116,6 @@
                                                                              (with-open [wm (.openWatermark wm-src wm-tx)]
                                                                                (.scanFields scan-emitter wm scan-cols)))
                                                               :param-fields (expr/->param-fields params)
-                                                              :table-arg-fields (->table-arg-fields table-args)
                                                               :default-tz default-tz
                                                               :default-all-valid-time? default-all-valid-time?
                                                               :last-known-chunk (when metadata-mgr
@@ -144,7 +143,7 @@
                                                  (dissoc :after-tx)
                                                  (update :tx (fnil identity (some-> wm .txBasis)))
                                                  (assoc :current-time current-time))
-                                      :params params, :table-args table-args :default-all-valid-time? default-all-valid-time?})
+                                      :params params, :default-all-valid-time? default-all-valid-time?})
                            (wrap-cursor allocator wm clock ref-ctr fields)))
 
                      (catch Throwable t

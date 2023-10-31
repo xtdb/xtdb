@@ -335,15 +335,15 @@
              [:scan {:for-valid-time [:at :now] :table supplier} [s_suppkey {s_comment (like s_comment "%Customer%Complaints%")}]]]]]]]]
       (with-meta {::params {'?brand "Brand#45"
                             ;; '?type "MEDIUM POLISHED%"
-                            }
-                  ::table-args {'?sizes [{:p_size 49}
-                                         {:p_size 14}
-                                         {:p_size 23}
-                                         {:p_size 45}
-                                         {:p_size 19}
-                                         {:p_size 3}
-                                         {:p_size 36}
-                                         {:p_size 9}]}})))
+
+                            '?sizes [{:p_size 49}
+                                     {:p_size 14}
+                                     {:p_size 23}
+                                     {:p_size 45}
+                                     {:p_size 19}
+                                     {:p_size 3}
+                                     {:p_size 36}
+                                     {:p_size 9}]}})))
 
 (def q17-small-quantity-order-revenue
   (-> '[:project [{avg_yearly (/ sum_extendedprice 7)}]
@@ -476,13 +476,13 @@
              [:select (> c_acctbal 0.0)
               Customer]]]
            [:scan {:for-valid-time [:at :now] :table orders} [o_custkey]]]]]]
-      (with-meta {::table-args {'?cntrycodes [{:cntrycode "13"}
-                                              {:cntrycode "31"}
-                                              {:cntrycode "23"}
-                                              {:cntrycode "29"}
-                                              {:cntrycode "30"}
-                                              {:cntrycode "18"}
-                                              {:cntrycode "17"}]}})))
+      (with-meta {::params {'?cntrycodes [{:cntrycode "13"}
+                                          {:cntrycode "31"}
+                                          {:cntrycode "23"}
+                                          {:cntrycode "29"}
+                                          {:cntrycode "30"}
+                                          {:cntrycode "18"}
+                                          {:cntrycode "17"}]}})))
 
 (def queries
   [#'q1-pricing-summary-report
