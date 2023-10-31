@@ -8,12 +8,11 @@
   (:import (clojure.lang MapEntry)
            (org.apache.arrow.memory BufferAllocator)
            (xtdb.operator PreparedQuery)
-           xtdb.operator.PreparedQuery
            (xtdb.query ArgSpec ColSpec DmlOps$Delete DmlOps$Erase DmlOps$Insert DmlOps$Update
                        Expr Expr$Call Expr$LogicVar Expr$Long Expr$Obj Expr$Param OutSpec Expr$Subquery
                        Query Query$Aggregate Query$From Query$Join Query$LeftJoin Query$Limit Query$Offset Query$OrderBy Query$OrderDirection Query$OrderSpec
                        Query$Pipeline Query$Return Query$Unify Query$Where Query$With Query$WithCols Query$Without
-                       TemporalFilter TemporalFilter$AllTime TemporalFilter$At TemporalFilter$In TemporalFilter$TemporalExtents VarSpec)))
+                       Query$Table TemporalFilter TemporalFilter$AllTime TemporalFilter$At TemporalFilter$In TemporalFilter$TemporalExtents VarSpec)))
 
 ;;TODO consider helper for [{sym expr} sym] -> provided vars set
 ;;TODO Should all user supplied lv be planned via plan-expr, rather than explicit calls to col-sym.
@@ -337,6 +336,24 @@
      :subqueries subqueries
      :required-vars (required-vars pred)}))
 
+(defn wrap-out-binding-projection [{:keys [ra-plan _provided-vars]} out-bindings]
+  ;;TODO check subquery provided vars line up with bindings (although maybe this isn't an error?)
+  [:project (mapv (fn [{:keys [l r]}] {r l}) out-bindings)
+   ra-plan])
+
+(defn- plan-table [^Query$Table table]
+  (let [out-bindings (mapv plan-out-spec (.bindings table))
+        docs (.documents table)]
+    (when (some :literal? out-bindings)
+      (throw (UnsupportedOperationException. "TODO what should literals in out specs do outside of scan")))
+    {:ra-plan (wrap-out-binding-projection
+               {:ra-plan
+                (if docs
+                  [:table (mapv #(into {} (map (fn [[k v]] (MapEntry/create (keyword k) (plan-expr v)))) %) docs)]
+                  [:table (plan-expr (.param table))])}
+               out-bindings)
+     :provided-vars (set (map :r out-bindings))}))
+
 (extend-protocol PlanQuery
   Query$From
   (plan-query [from]
@@ -347,7 +364,11 @@
     (reduce (fn [plan query-tail]
               (plan-query-tail query-tail plan))
             (plan-query (.query pipeline))
-            (.tails pipeline))))
+            (.tails pipeline)))
+
+  Query$Table
+  (plan-query [table]
+    (plan-table table)))
 
 (defn- wrap-scalar-subquery [plan {:keys [placeholder subquery args] :as x}]
   (let [{:keys [ra-plan provided-vars]} subquery
@@ -430,11 +451,6 @@
       {:ra-plan [:project projections ra-plan]
        :provided-vars (set (map #(first (keys %)) projections))})))
 
-(defn wrap-out-binding-projection [{:keys [ra-plan _provided-vars]} out-bindings]
-  ;;TODO check subquery provided vars line up with bindings (although maybe this isn't an error?)
-  [:project (mapv (fn [{:keys [l r]}] {r l}) out-bindings)
-   ra-plan])
-
 (defn plan-join [join-type query args binding]
   (let [out-bindings (mapv plan-out-spec binding) ;;TODO refelection (interface here?)
         arg-bindings (mapv plan-arg-spec args)
@@ -449,6 +465,8 @@
 
 (extend-protocol PlanUnifyClause
   Query$From (plan-unify-clause [from] [[:from (plan-from from)]])
+
+  Query$Table (plan-unify-clause [table] [[:from (plan-table table)]])
 
   Query$Where
   (plan-unify-clause [where]

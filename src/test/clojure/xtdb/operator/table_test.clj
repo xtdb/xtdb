@@ -71,7 +71,12 @@
   (t/is (= [{:a 1, :b 2}, {:a 3, :b 4}]
            (tu/query-ra '[:table [{:a ?p1, :b ?p2}
                                   {:a ?p3, :b ?p4}]]
-                        {:params {'?p1 1, '?p2 2, '?p3 3, '?p4 4}}))))
+                        {:params {'?p1 1, '?p2 2, '?p3 3, '?p4 4}})))
+
+  (t/is (= [{:a {:baz 1}, :b 2}]
+           (tu/query-ra '[:table [{:a {:baz ?p1} :b ?p2}]]
+                        {:params {'?p1 1, '?p2 2, '?p3 3, '?p4 4}}))
+        "nested param"))
 
 (t/deftest test-table-handles-symbols
   (t/is (= '[{:x50 true}]

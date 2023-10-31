@@ -3,13 +3,14 @@
             [clojure.string :as str]
             [xtdb.error :as err])
   (:import (clojure.lang MapEntry)
+           (java.util List)
            (xtdb.query ArgSpec ColSpec DmlOps DmlOps$AssertExists DmlOps$AssertNotExists DmlOps$Delete DmlOps$Erase DmlOps$Insert DmlOps$Update
                        Expr Expr$Bool Expr$Call Expr$Double Expr$Exists Expr$Param
                        Expr$LogicVar Expr$Long Expr$Obj Expr$NotExists Expr$Subquery
                        OutSpec Query Query$Aggregate Query$From Query$LeftJoin Query$Join Query$Limit
                        Query$OrderBy Query$OrderDirection Query$OrderSpec Query$Pipeline Query$Offset
                        Query$Return Query$Unify Query$UnionAll Query$Where Query$With Query$WithCols Query$Without
-                       TemporalFilter TemporalFilter$AllTime TemporalFilter$At TemporalFilter$In VarSpec)))
+                       Query$Table TemporalFilter TemporalFilter$AllTime TemporalFilter$At TemporalFilter$In VarSpec)))
 
 (defmulti parse-query
   (fn [query]
@@ -197,7 +198,7 @@
 ;;TODO binding-spec-errs
 (defn- parse-out-specs
   "[{:from to-var} from-col-to-var {:col (pred)}]"
-  [specs _query]
+  ^List [specs _query]
   (letfn [(parse-out-spec [[attr expr]]
             (when-not (keyword? attr)
               ;; TODO error
@@ -392,7 +393,13 @@
   Query$Unify (unparse [query] (list* 'unify (mapv unparse (.clauses query))))
   Query$UnionAll (unparse [query] (list* 'union-all (mapv unparse (.queries query))))
   Query$Limit (unparse [this] (list 'limit (.length this)))
-  Query$Offset (unparse [this] (list 'offset (.length this))))
+  Query$Offset (unparse [this] (list 'offset (.length this)))
+  Query$Table (unparse [this]
+                (let [docs (.documents this)
+                      bind (mapv unparse (.bindings this))]
+                  (if docs
+                    (list 'table (mapv #(into {} (map (fn [[k v]] (MapEntry/create (keyword k) (unparse v)))) %) docs) bind)
+                    (list 'table (symbol (.v (.param this))) bind)))))
 
 (defmethod parse-query 'unify [[_ & clauses :as this]]
   (when (> 1 (count clauses))
@@ -454,6 +461,27 @@
   (when-not (= 2 (count this))
     (throw (err/illegal-arg :xtql/offset {:offset this :message "Offset can only take a single value"})))
   (Query/offset length))
+
+(defn- keyword-map? [m]
+  (every? keyword? (keys m)))
+
+(defn parse-table [[_ param-or-docs bind :as this]]
+  (when-not (= 3 (count this))
+    (throw (err/illegal-arg :xtql/table {:table this :message "Table takes exactly 3 arguments"})))
+  (when-not (or (symbol? param-or-docs)
+                (and (vector? param-or-docs) (every? keyword-map? param-or-docs)))
+    (throw (err/illegal-arg :xtql/table {:table this :message "Table takes a param or an explicit relation"})))
+  (let [parsed-bind (parse-out-specs bind this)]
+    (if (symbol? param-or-docs)
+      (let [parsed-expr (parse-expr param-or-docs)]
+        (if (instance? Expr$Param parsed-expr)
+          (Query/table ^Expr$Param parsed-expr parsed-bind)
+          (throw (err/illegal-arg :xtql/table {::err/message "Illegal second argument to table"
+                                               :arg param-or-docs}))))
+      (Query/table ^List (mapv #(into {} (map (fn [[k v]] (MapEntry/create (subs (str k) 1) (parse-expr v)))) %) param-or-docs) parsed-bind))))
+
+(defmethod parse-query 'table [this] (parse-table this))
+(defmethod parse-unify-clause 'table [this] (parse-table this))
 
 (defn- parse-order-spec [order-spec this]
   (if (vector? order-spec)

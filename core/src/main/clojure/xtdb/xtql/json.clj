@@ -1,10 +1,10 @@
 (ns xtdb.xtql.json
   (:require [xtdb.error :as err])
   (:import [java.time Duration LocalDate LocalDateTime ZonedDateTime]
-           java.util.Date
+           (java.util Date List)
            (xtdb.query Expr Expr$Bool Expr$Call Expr$Double Expr$Exists Expr$LogicVar Expr$Long Expr$NotExists Expr$Obj Expr$Subquery
                        Query Query$Aggregate Query$From Query$LeftJoin Query$Limit Query$Join Query$Offset Query$Pipeline Query$OrderBy Query$OrderDirection Query$OrderSpec Query$Return Query$Unify Query$UnionAll Query$Where Query$With Query$Without
-                       OutSpec ArgSpec ColSpec VarSpec Query$WithCols
+                       OutSpec ArgSpec ColSpec VarSpec Query$WithCols Query$Table
                        TemporalFilter TemporalFilter$AllTime TemporalFilter$At TemporalFilter$In)))
 
 (defn- query-type [query]
@@ -338,6 +338,21 @@
 
     (Query/unionAll (mapv parse-query union-all))))
 
+(defn parse-table [this]
+  (if-not (map? this)
+    (throw (err/illegal-arg :xtql/malformed-table {:table this}))
+
+    (let [{:strs [table bind]} this
+          ^List parsed-bind (parse-out-specs bind this)]
+      (when-not (or (string? table) (vector? table))
+        (throw (err/illegal-arg :xtql/table {:table this})))
+      (if (string? table)
+        (Query/table (Expr/param table) parsed-bind)
+        (Query/table ^List (mapv #(update-vals % parse-expr) table) parsed-bind)))))
+
+(defmethod parse-query 'table [this] (parse-table this))
+(defmethod parse-unify-clause 'table [this] (parse-table this))
+
 (extend-protocol Unparse
   Query$Pipeline (unparse [q] {"->" (into [(unparse (.query q))] (mapv unparse (.tails q)))})
   Query$Where (unparse [q] {"where" (mapv unparse (.preds q))})
@@ -347,7 +362,13 @@
   Query$Return (unparse [q] {"return" (mapv unparse (.cols q))})
   Query$Aggregate (unparse [q] {"aggregate" (mapv unparse (.cols q))})
   Query$Unify (unparse [q] {"unify" (mapv unparse (.clauses q))})
-  Query$UnionAll (unparse [q] {"unionAll" (mapv unparse (.queries q))}))
+  Query$UnionAll (unparse [q] {"unionAll" (mapv unparse (.queries q))})
+  Query$Table (unparse [q] (let [docs (.documents q)]
+                             {"table" (if docs
+                                        (mapv #(update-vals % unparse) docs)
+                                        (.v (.param q)))
+                              "bind" (mapv unparse (.bindings q))})))
+
 
 (defn- parse-order-spec [order-spec query]
   (if (vector? order-spec)

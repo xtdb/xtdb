@@ -105,6 +105,34 @@
   ;; TODO check errors
   )
 
+(t/deftest test-parse-table
+  (let [json-q {"table" [{"a" 12 "b" {"@value" "foo"}} {"a" 1 "c" {"@value" "bar"}}]
+                "bind" ["a" "b" "c"]}]
+    (t/is (= ['(table [{:a 12 :b "foo"} {:a 1 :c "bar"}] [a b c])
+              json-q]
+             (roundtrip-q json-q))
+          "simple static table"))
+
+  (let [json-q {"->" [{"table" [{"first-name" {"@value" "Ivan"}} {"first-name" {"@value" "Petr"}}]
+                       "bind" ["first-name" "last-name"]}
+                      {"where" [{"=" [{"@value" "Petr"} "first-name"]}]}]}]
+    (t/is (= ['(-> (table [{:first-name "Ivan"} {:first-name "Petr"}] [first-name last-name])
+                   (where (= "Petr" first-name)))
+              json-q]
+             (roundtrip-q json-q))
+          "table in pipeline"))
+
+  (let [json-q {"unify" [{"from" "docs"
+                          "bind" ["first-name"]}
+                         {"table" [{"first-name" {"@value" "Ivan"}} {"first-name" {"@value" "Petr"}}]
+                          "bind" ["first-name"]}]}]
+    (t/is (= ['(unify (from :docs [first-name])
+                      (table [{:first-name "Ivan"} {:first-name "Petr"}] [first-name]))
+              json-q]
+             (roundtrip-q json-q))
+          "table in unify")))
+
+
 (t/deftest test-pipe
   (t/is (= ['(-> (from :foo [a])
                  (where (> a 3)))
