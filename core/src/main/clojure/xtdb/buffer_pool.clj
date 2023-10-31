@@ -110,6 +110,7 @@
    ^:volatile-mutable open]
   WritableByteChannel
   (isOpen [_] open)
+
   (close [this]
     (let [create-arrow-buf #(util/->arrow-buf-view allocator (.flip buffer))
           [_ arrow-buf] (cache-compute memory-store k create-arrow-buf)]
@@ -117,6 +118,7 @@
       ;; we are not interested in doing work with the buffer (just to putting it in the cache), hence util/close.
       (util/close arrow-buf)
       (set! (.-open this) false)))
+
   (write [this src]
     (let [remaining (.remaining src)]
       (loop [src src]
@@ -149,15 +151,20 @@
 
         :else
         (CompletableFuture/failedFuture (os/obj-missing-exception k)))))
+
   (listObjects [_]
     (locking memory-store (vec (.keySet ^NavigableMap memory-store))))
+
   (listObjects [_ dir]
     (locking memory-store
       (->> (.keySet (.tailMap ^NavigableMap memory-store dir))
            (into [] (take-while #(str/starts-with? % dir)))
            (vec))))
+
   (openChannel [this k] (->InMemoryWritableChannel allocator memory-store (ByteBuffer/allocateDirect 32) k true))
+
   (openArrowFileWriter [this k vsr] (ArrowFileWriter. vsr nil (.openChannel this k)))
+
   (putObject [this k buffer] (put-object this k buffer)))
 
 (deftype LocalWritableChannel
@@ -170,6 +177,7 @@
    ^String k]
   WritableByteChannel
   (isOpen [_] (.isOpen file-channel))
+
   (close [this]
     (.close file-channel)
     (let [file-path (.resolve disk-store k)]
@@ -177,6 +185,7 @@
       ;; see #2847
       (util/atomic-move tmp-path file-path)
       (util/then-apply (.getBuffer bp k) util/close)))
+
   (write [_ src] (.write file-channel src)))
 
 (defrecord LocalBufferPool
@@ -210,22 +219,27 @@
                         create-arrow-buf #(util/->arrow-buf-view allocator nio-buffer)
                         [_ buf] (cache-compute memory-store k create-arrow-buf)]
                     buf))))))))
+
   (listObjects [_]
     (with-open [dir-stream (Files/walk disk-store (make-array FileVisitOption 0))]
       (vec (sort (for [^Path path (iterator-seq (.iterator dir-stream))
                        :when (Files/isRegularFile path (make-array LinkOption 0))]
                    (str (.relativize disk-store path)))))))
+
   (listObjects [_ dir]
     (let [dir (.resolve disk-store dir)]
       (when (Files/exists dir (make-array LinkOption 0))
         (with-open [dir-stream (Files/newDirectoryStream dir)]
           (vec (sort (for [^Path path dir-stream]
                        (str (.relativize disk-store path)))))))))
+
   (openChannel [this k]
     (let [tmp-path (Files/createTempFile "bp-channel" ".arrow" (make-array FileAttribute 0))]
       (->LocalWritableChannel this allocator memory-store disk-store (util/->file-channel tmp-path [StandardOpenOption/APPEND]) tmp-path k)))
+
   (openArrowFileWriter [this k vsr]
     (ArrowFileWriter. vsr nil (.openChannel this k)))
+
   (putObject [this k buffer] (put-object this k buffer)))
 
 (deftype RemoteWritableChannel
@@ -358,8 +372,11 @@
                         create-arrow-buf #(util/->arrow-buf-view allocator nio-buffer buf-close-fn)
                         [_ buf] (cache-compute memory-store k create-arrow-buf)]
                     buf))))))))
+
   (listObjects [_] (.listObjects remote-store))
+
   (listObjects [_ dir] (.listObjects remote-store dir))
+
   (openChannel [this k]
     (let [tmp-path (Files/createTempFile "bp-channel" ".arrow" (make-array FileAttribute 0))
           file-channel (util/->file-channel tmp-path [StandardOpenOption/APPEND])]
@@ -373,6 +390,7 @@
         tmp-path
         k
         allow-file-deletion)))
+
   (openArrowFileWriter [this k vsr]
     (let [tmp-path (Files/createTempFile "bp-channel" ".arrow" (make-array FileAttribute 0))
           file-channel (util/->file-channel tmp-path [StandardOpenOption/APPEND])
@@ -386,6 +404,7 @@
                tmp-path
                k)]
       (ArrowFileWriter. vsr nil ch)))
+
   (putObject [this k buffer] (put-object this k buffer)))
 
 (set! *unchecked-math* :warn-on-boxed)
