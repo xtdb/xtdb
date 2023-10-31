@@ -77,9 +77,6 @@
                 ^Set field-set (.computeIfAbsent field-sets k-sym (reify Function (apply [_ _] (HashSet.))))]
             (case (:op expr)
               :literal (do
-                         #_(prn {:v v
-                                 :col-type (vw/value->col-type v)
-                                 :field (types/->field-default-name (vw/value->arrow-type v) false nil)})
                          (.add field-set (types/->field-default-name (vw/value->arrow-type v) false nil))
                          (.put out-row k-kw v))
 

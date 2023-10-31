@@ -224,7 +224,7 @@
            (let [rows (-> (<-cursor res)
                           (cond->> (not preserve-blocks?) (into [] cat)))]
              (if with-col-types?
-               {:res rows, :col-types (update-vals (doto (.columnFields bq) prn) types/field->col-type)}
+               {:res rows, :col-types (update-vals (.columnFields bq) types/field->col-type)}
                rows))))))))
 
 (t/deftest round-trip-cursor
