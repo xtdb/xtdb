@@ -1,5 +1,6 @@
 (ns xtdb.xtql.edn
-  (:require [clojure.string :as str]
+  (:require [clojure.set :as set]
+            [clojure.string :as str]
             [xtdb.error :as err])
   (:import (xtdb.query Expr Expr$Bool Expr$Call Expr$Double Expr$Exists Expr$Param
                        OutSpec ArgSpec ColSpec VarSpec
@@ -240,6 +241,15 @@
                                               )
                                             (ColSpec/of (str (symbol attr)) (parse-expr expr))))))))))
 
+(defn check-opt-keys [valid-keys opts]
+  (when-let [invalid-opt-keys (not-empty (set/difference (set (keys opts)) valid-keys))]
+    (throw (err/illegal-arg :invalid-opt-keys
+                            {:opts opts, :valid-keys valid-keys
+                             :invalid-keys invalid-opt-keys
+                             ::err/message "Invalid keys provided to option map"}))))
+
+(def from-opt-keys #{:bind :for-valid-time :for-system-time})
+
 (defn parse-from [[_ table opts :as this]]
   (cond
     (not (keyword? table))
@@ -248,18 +258,26 @@
     (and opts (not (map? opts)))
     (throw (err/illegal-arg :xtql/malformed-table-opts {:opts opts, :from this}))
 
-    :else (let [{:keys [for-valid-time for-system-time bind]} opts]
-            (cond-> (Query/from (str (symbol table)))
-              for-valid-time (.forValidTime (parse-temporal-filter for-valid-time :for-valid-time this))
-              for-system-time (.forSystemTime (parse-temporal-filter for-system-time :for-system-time this))
-              bind (.binding (parse-out-specs bind this))))))
+    :else
+    (do
+      (check-opt-keys from-opt-keys opts)
+
+      (let [{:keys [for-valid-time for-system-time bind]} opts]
+        (cond-> (Query/from (str (symbol table)))
+          for-valid-time (.forValidTime (parse-temporal-filter for-valid-time :for-valid-time this))
+          for-system-time (.forSystemTime (parse-temporal-filter for-system-time :for-system-time this))
+          bind (.binding (parse-out-specs bind this)))))))
 
 (defmethod parse-query 'from [this] (parse-from this))
 (defmethod parse-unify-clause 'from [this] (parse-from this))
 
+(def join-clause-opt-keys #{:args :bind})
+
 (defmethod parse-unify-clause 'join [[_ query opts :as join]]
   (when-not (or (nil? opts) (map? opts))
     (throw (err/illegal-arg :malformed-join-opts {:opts opts, :join join})))
+
+  (check-opt-keys join-clause-opt-keys opts)
 
   (let [{:keys [args bind]} opts]
     (-> (Query/join (parse-query query) (parse-arg-specs args join))
@@ -268,6 +286,8 @@
 (defmethod parse-unify-clause 'left-join [[_ query opts :as left-join]]
   (when-not (or (nil? opts) (map? opts))
     (throw (err/illegal-arg :malformed-join-opts {:opts opts, :left-join left-join})))
+
+  (check-opt-keys join-clause-opt-keys opts)
 
   (let [{:keys [args bind]} opts]
     (-> (Query/leftJoin (parse-query query) (parse-arg-specs args left-join))

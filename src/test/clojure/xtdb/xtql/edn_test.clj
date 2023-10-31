@@ -76,7 +76,10 @@
 
   (t/is (= '(from :foo {:bind [a {:xt/id b} c]})
            (roundtrip-q '(from :foo {:bind [a {:xt/id b} {:c c}]}))))
-  )
+
+  (t/is (thrown-with-msg?
+         IllegalArgumentException #"Invalid keys provided to option map"
+         (roundtrip-q '(from :foo {:bar x :baz x})))))
 
 (t/deftest test-parse-unify
   (t/is (= '(unify (from :foo {:bind [{:baz b}]})
@@ -129,7 +132,13 @@
   (t/is (= '(join (from :foo {:bind [a]})
                   {:bind [{:a b}]})
            (roundtrip-unify-clause '(join (from :foo {:bind [a]})
-                                          {:bind [{:a b}]})))))
+                                          {:bind [{:a b}]}))))
+
+  (t/is (thrown-with-msg?
+         IllegalArgumentException #"Invalid keys provided to option map"
+         (roundtrip-unify-clause '(join (from :foo {:bind [x]})
+                                        {:args [x]
+                                         :baz x})))))
 
 (t/deftest test-parse-order-by
   (t/is (= '(order-by (+ a b) [b {:dir :desc}])
