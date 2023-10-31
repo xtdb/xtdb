@@ -70,6 +70,70 @@
                  '(from :docs [{:xt/id :petr} first-name last-name])))
         "literal eid"))
 
+(deftest test-table
+  (xt/submit-tx tu/*node* ivan+petr)
+
+  (t/is (= [{} {}]
+           (xt/q tu/*node* '(table [{:first-name "Ivan"} {:first-name "Petr"}] []))))
+
+  (t/is (= #{{:first-name "Ivan"} {:first-name "Petr"}}
+           (set (xt/q tu/*node* '(table [{:first-name "Ivan"} {:first-name "Petr"}] [first-name])))))
+
+  (t/is (= [{:first-name "Petr"}]
+           (xt/q tu/*node* '(-> (table [{:first-name "Ivan"} {:first-name "Petr"}] [first-name])
+                                (where (= "Petr" first-name))))))
+
+  #_ ;; TODO literal out specs
+  (t/is (= [{:first-name "Petr"}]
+           (xt/q tu/*node* '(-> (table [{:first-name "Ivan"} {:first-name "Petr"}] {:bind [{:xt/id :petr} first-name]})
+                                (where (= "Petr" first-name))))))
+
+  (t/is (= [{:first-name "Ivan"} {:first-name "Petr"}]
+           (xt/q tu/*node*
+                 '(table [{:first-name "Ivan"} {:first-name $petr}] [first-name])
+                 {:args {:petr "Petr"}}))
+        "simple param")
+
+  (t/is (= [{:foo :bar, :baz {:nested-foo :bar}}]
+           (xt/q tu/*node*
+                 '(table [{:foo :bar :baz {:nested-foo $nested-param}}] [foo baz])
+                 {:args {:nested-param :bar}}))
+        "simple param nested")
+
+  (t/is (= #{{:first-name "Ivan"} {:first-name "Petr"}}
+           (set (xt/q tu/*node* '(unify (from :docs {:bind [first-name]})
+                                        (table [{:first-name "Ivan"} {:first-name "Petr"}] [first-name])))))
+        "testing unify")
+
+  (t/is (= [{:first-name "Petr"}]
+           (xt/q tu/*node* '(unify (from :docs {:bind [{:xt/id :petr} first-name]})
+                                   (table [{:first-name "Ivan"} {:first-name "Petr"}] [first-name]))))
+        "testing unify with restriction")
+
+  #_ ;; TODO still some issues with normalisation
+  (t/is (= #{{:first-name "Ivan"} {:first-name "Petr"}}
+           (set (xt/q tu/*node* '(table $ivan+petr {:bind [first-name]})
+                      {:args {:ivan+petr [{:first-name "Ivan"} {:first-name "Petr"}]}})))
+        "table arg as parameter")
+
+  (t/is (= #{{:name "Ivan"} {:name "Petr"}}
+           (set (xt/q tu/*node* '(table $ivan+petr [name])
+                      {:args {:ivan+petr [{:name "Ivan"} {:name "Petr"}]}})))
+        "table arg as parameter")
+
+  (t/is (= #{{:name "Petr"}}
+           (set (xt/q tu/*node* '(-> (table $ivan+petr [name])
+                                     (where (= "Petr" name)))
+                      {:args {:ivan+petr [{:name "Ivan"} {:name "Petr"}]}})))
+        "table arg as parameter")
+
+  (t/is (= [{:name "Petr"}]
+           (xt/q tu/*node* '(unify (from :docs [{:xt/id :petr :first-name name}])
+                                   (table $ivan+petr [name]))
+                 {:args {:ivan+petr [{:name "Ivan"} {:name "Petr"}]}}))
+        "table arg as paramater in unify"))
+
+
 (deftest test-order-by
   (let [_tx (xt/submit-tx tu/*node* ivan+petr)]
     (t/is (= [{:first-name "Ivan"} {:first-name "Petr"}]
