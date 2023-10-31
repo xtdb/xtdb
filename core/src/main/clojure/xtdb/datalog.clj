@@ -1119,19 +1119,10 @@
         (plan-query))))
 
 (defn- args->params [args in-bindings]
-  (->> (mapcat (fn [{::keys [binding-type in-cols]} arg]
+  (->> (mapcat (fn [{::keys [binding-type in-cols table-key]} arg]
                  (case binding-type
                    :scalar [(MapEntry/create (first in-cols) arg)]
                    :tuple (zipmap in-cols arg)
-                   (:collection :relation) nil))
-               in-bindings
-               args)
-       (into {})))
-
-(defn- args->tables [args in-bindings]
-  (->> (mapcat (fn [{::keys [binding-type in-cols table-key]} arg]
-                 (case binding-type
-                   (:scalar :tuple) nil
 
                    :collection (let [in-col (first in-cols)
                                      binding-k (keyword in-col)]
@@ -1215,7 +1206,6 @@
                                                        :actual args})))
 
         (util/with-close-on-catch [^AutoCloseable params (vw/open-params allocator (args->params args in-bindings))]
-          (-> (.bind pq wm-src {:params params, :table-args (args->tables args in-bindings),
-                                :basis basis, :default-tz default-tz :default-all-valid-time? default-all-valid-time?})
+          (-> (.bind pq wm-src {:params params, :basis basis, :default-tz default-tz :default-all-valid-time? default-all-valid-time?})
               (.openCursor)
               (op/cursor->result-set params)))))))

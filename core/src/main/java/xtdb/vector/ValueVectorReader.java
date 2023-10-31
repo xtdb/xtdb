@@ -949,6 +949,7 @@ public class ValueVectorReader implements IVectorReader {
         public IVectorReader legReader(Keyword legKey) {
             return legReaders.computeIfAbsent(legKey, k -> {
                 var child = v.getChild(k.sym.toString());
+                if (child == null) return null;
                 return new IndirectVectorReader(ValueVectorReader.from(child), new DuvIndirection(v, ((byte) legs.indexOf(k))));
             });
         }

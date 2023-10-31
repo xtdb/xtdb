@@ -45,27 +45,27 @@
             {:a 2, :b [3 4 5], :b* 5}]
            (tu/query-ra '[:unwind {b* b}
                           [:table ?x]]
-                        {:table-args '{?x [{:a 1, :b [1 2]} {:a 2, :b [3 4 5]}]}})))
+                        {:params '{?x [{:a 1, :b [1 2]} {:a 2, :b [3 4 5]}]}})))
 
   (t/is (= [{:a 1, :b* 1} {:a 1, :b* 2}]
            (tu/query-ra '[:project [a b*]
                           [:unwind {b* b}
                            [:table ?x]]]
-                        {:table-args '{?x [{:a 1, :b [1 2]} {:a 2, :b []}]}}))
+                        {:params '{?x [{:a 1, :b [1 2]} {:a 2, :b []}]}}))
         "skips rows with empty lists")
 
   (t/is (= [{:a 1, :b* 1} {:a 1, :b* 2}]
            (tu/query-ra '[:project [a b*]
                           [:unwind {b* b}
                            [:table ?x]]]
-                        {:table-args '{?x [{:a 2, :b 1} {:a 1, :b [1 2]}]}}))
+                        {:params '{?x [{:a 2, :b 1} {:a 1, :b [1 2]}]}}))
         "skips rows with non-list unwind column")
 
   (t/is (= [{:a 1, :b* 1} {:a 1, :b* "foo"}]
            (tu/query-ra '[:project [a b*]
                           [:unwind {b* b}
                            [:table ?x]]]
-                        {:table-args '{?x [{:a 1, :b [1 "foo"]}]}}))
+                        {:params '{?x [{:a 1, :b [1 "foo"]}]}}))
         "handles multiple types")
 
   (t/is (= [{:a 1, :b* 1, :$ordinal 1}
@@ -76,5 +76,5 @@
            (tu/query-ra '[:project [a b* $ordinal]
                           [:unwind {b* b} {:ordinality-column $ordinal}
                            [:table ?x]]]
-                        {:table-args '{?x [{:a 1 :b [1 2]} {:a 2 :b [3 4 5]}]}}))
+                        {:params '{?x [{:a 1 :b [1 2]} {:a 2 :b [3 4 5]}]}}))
         "with ordinality"))

@@ -14,8 +14,8 @@
                          e [:union #{:bool :i64}]
                          f [:duration :micro]}}
            (-> (tu/query-ra '[:table [a b c d e f] ?table]
-                            {:table-args {'?table [{:a 12, :b "foo" :c 1.2 :d nil :e true :f (Duration/ofHours 1)}
-                                                   {:a 100, :b "bar", :c 3.14, :d #inst "2020", :e 10, :f (Duration/ofMinutes 1)}]}
+                            {:params {'?table [{:a 12, :b "foo" :c 1.2 :d nil :e true :f (Duration/ofHours 1)}
+                                               {:a 100, :b "bar", :c 3.14, :d #inst "2020", :e 10, :f (Duration/ofMinutes 1)}]}
                              :with-col-types? true}))))
 
   (t/is (= {:res [{:a 12, :b "foo" :c 1.2 :d nil :e true}
@@ -30,22 +30,22 @@
 
   (t/is (= {:res [], :col-types {}}
            (-> (tu/query-ra '[:table ?table]
-                            {:table-args {'?table []}
+                            {:params {'?table []}
                              :with-col-types? true})))
         "empty")
 
-  (t/is (= {:res [{:a 12, :b "foo"}, {:a 100, :b nil}]
-            :col-types '{a :i64, b [:union #{:utf8 :null}]}}
+  (t/is (= {:res [{:a 12, :b "foo"}, {:a 100}]
+            :col-types '{a :i64, b [:union #{:utf8 :absent}]}}
            (-> (tu/query-ra '[:table ?table]
-                            {:table-args {'?table [{:a 12, :b "foo"}
-                                                   {:a 100}]}
+                            {:params {'?table [{:a 12, :b "foo"}
+                                               {:a 100}]}
                              :with-col-types? true})))
         "differing columns")
 
   (t/is (= {:res [{:a 12}]
             :col-types '{a :i64}}
            (-> (tu/query-ra '[:table [a] ?table]
-                            {:table-args {'?table [{:a 12, :b "foo"}]}
+                            {:params {'?table [{:a 12, :b "foo"}]}
                              :with-col-types? true})))
         "restricts to provided col-names")
 
@@ -105,3 +105,15 @@
   (t/is (= [{:a #time/duration "PT24H"}] ; it returned PT24000000H :/
            (tu/query-ra
             '[:table [a] [{a (- #time/date "2021-12-24" #time/date "2021-12-23")}]]))))
+
+(t/deftest test-incorrect-relation-params
+  (t/is
+   (thrown-with-msg? RuntimeException #"Table param must be of type struct list"
+                     (tu/query-ra '[:table ?a]
+                                  {:params '{?a 1}}))
+   "param not list type")
+  (t/is
+   (thrown-with-msg? RuntimeException #"Table param must be of type struct list"
+                     (tu/query-ra '[:table ?a]
+                                  {:params '{?a [1 "foo" :foo]}}))
+   "param not struct list type"))
