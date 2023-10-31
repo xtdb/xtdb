@@ -20,6 +20,23 @@ jobs:
     if: github.repository == 'xtdb/xtdb'
     name: Nightly test
     runs-on: ubuntu-latest
+    services:
+      kafka:
+        image: 'confluentinc/cp-kafka:7.5.1'
+        ports:
+          - '9092:9092'
+        env:
+          KAFKA_NODE_ID: 1
+          KAFKA_ENABLE_KRAFT: yes
+          KAFKA_PROCESS_ROLES: broker,controller
+          KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+          KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+          KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+          KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://127.0.0.1:9092
+          KAFKA_BROKER_ID: 1
+          KAFKA_CONTROLLER_QUORUM_VOTERS: 1@127.0.0.1:9093
+          ALLOW_PLAINTEXT_LISTENER: yes
+          CLUSTER_ID: q1Sh-9_ISia_zwGINzRvyQ
     steps:
       - uses: actions/checkout@v3
         with:
