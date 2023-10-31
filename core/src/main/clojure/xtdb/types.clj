@@ -113,7 +113,7 @@
     (let [[ts-type time-unit tz] (<-arrow-type arrow-type)]
       (keyword (case ts-type
                  :timestamp-tz (format "timestamp-tz-%s-%s" (name time-unit) (-> (str/lower-case tz) (str/replace #"[/:]" "_")))
-                 :timestamp-local (format "timestamp-local-%s-" (name time-unit))))))
+                 :timestamp-local (format "timestamp-local-%s" (name time-unit))))))
 
   ArrowType$Date (arrow-type->leg [arrow-type] (keyword (format "date-%s" (name (second (<-arrow-type arrow-type))))))
   ArrowType$Time (arrow-type->leg [arrow-type] (keyword (format "time-local-%s" (name (second (<-arrow-type arrow-type))))))
