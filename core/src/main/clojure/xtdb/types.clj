@@ -337,7 +337,7 @@
 
           (merge-field* [acc ^Field field]
             (let [arrow-type (.getType field)
-                  nullable? (or (.isNullable field) (= (class arrow-type) ArrowType$Null))
+                  nullable? (.isNullable field)
                   acc (cond-> acc
                         nullable? (assoc :null nil))]
               (condp = (class arrow-type)
@@ -377,6 +377,8 @@
                                                               (map ->canonical-field)))))
                                                  (dissoc opts :null)))
 
+              :null (->field-default-name #xt.arrow/type :null true nil)
+
               (cond-> head
                 nullable? ->nullable-field)))
 
@@ -386,8 +388,8 @@
               (case (count without-null)
                 0 null-field
                 1 (kv->field (first without-null) :nullable? nullable?)
-                ;; Is the non nullable union an issue here?
-                (->field-default-name #xt.arrow/type :union false (map kv->field without-null)))))]
+
+                (->field-default-name #xt.arrow/type :union false (map kv->field col-type-map)))))]
 
     (-> (transduce (comp (remove nil?) (distinct)) (completing merge-field*) {} fields)
         (map->field))))

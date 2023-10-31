@@ -301,7 +301,10 @@
              (types/merge-fields (types/col-type->field :null) (types/col-type->field :null))))
 
     (t/is (= (types/col-type->field "i64" [:union #{:null :i64}])
-             (types/merge-fields (types/col-type->field :null) (types/col-type->field :i64)))))
+             (types/merge-fields (types/col-type->field :null) (types/col-type->field :i64))))
+
+    (t/is (= (types/col-type->field "union" [:union #{:null :i64 :f64}])
+             (types/merge-fields (types/col-type->field :f64) (types/col-type->field :null) (types/col-type->field :i64)))))
 
   (t/testing "no struct squashing"
     (t/is (= (types/col-type->field '[:struct {foo [:struct {bibble :bool}]}])
