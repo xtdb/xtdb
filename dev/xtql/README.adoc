@@ -433,7 +433,7 @@ For example, if a user is reading an article, we might also want to show them de
 
 [source,clojure]
 ----
-(-> (from :articles {:bind [{:xt/id article-id} title content]})
+(-> (from :articles {:bind [{:xt/id article-id} title content author-id]})
 
     (with {author (pull (-> (from :authors {:bind [{:xt/id author-id} first-name last-name]})
                             (without :author-id))
@@ -461,7 +461,7 @@ For example, if a user is reading an article, we might also want to show them de
   "->": [
     {
       "from": "articles",
-      "bind": [ { "xt/id": "article-id" }, "title", "content" ]
+      "bind": [ { "xt/id": "article-id" }, "title", "content", "author-id" ]
     },
     {
       "with": [
