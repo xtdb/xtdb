@@ -441,7 +441,7 @@
               (dotimes [idx (.valueCount in-vec)]
                 (let [group-idx (.get group-mapping idx)]
                   (while (<= (.size rel-maps) group-idx)
-                    (.add rel-maps (emap/->relation-map al {:build-fields [[from-name (types/col-type->field from-type)]]
+                    (.add rel-maps (emap/->relation-map al {:build-fields {from-name (types/col-type->field from-type)}
                                                             :build-key-col-names [from-name]})))
                   (let [^IRelationMap rel-map (nth rel-maps group-idx)]
                     (while (<= (.size builders) group-idx)

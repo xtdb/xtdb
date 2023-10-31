@@ -10,8 +10,8 @@
            java.util.List
            (org.apache.arrow.memory BufferAllocator)
            (org.apache.arrow.memory.util.hash MurmurHasher SimpleHasher)
-           (org.apache.arrow.vector NullVector)
-           (org.apache.arrow.vector.types.pojo Field)
+           (org.apache.arrow.vector NullVector VectorSchemaRoot)
+           (org.apache.arrow.vector.types.pojo Schema)
            (org.roaringbitmap IntConsumer RoaringBitmap)
            (xtdb.vector RelationReader IVectorReader)
            (com.carrotsearch.hppc IntObjectHashMap)))
@@ -172,124 +172,120 @@
         probe-key-col-names (get opts :probe-key-col-names key-col-names)
 
         hash->bitmap (IntObjectHashMap.)
-        rel-writer (vw/->rel-writer allocator)]
+        schema (Schema. (-> build-fields
+                            (cond-> (not store-full-build-rel?) (select-keys build-key-col-names))
+                            (->> (mapv (fn [[field-name field]]
+                                         (cond-> (-> field (types/field-with-name (str field-name)))
+                                           with-nil-row? types/->nullable-field))))))]
 
-    (doseq [[col-name ^Field field] (cond-> build-fields
-                                      (not store-full-build-rel?) (select-keys build-key-col-names)
+    (util/with-close-on-catch [root (VectorSchemaRoot/create schema allocator)]
+      (let [rel-writer (vw/root->writer root)]
+        (when with-nil-row?
+          (doto (.rowCopier rel-writer (->nil-rel (keys build-fields)))
+            (.copyRow 0)))
 
-                                      with-nil-row? (->> (into {} (map (juxt key
-                                                                             (comp (fn [col-type]
-                                                                                     (cond-> col-type
-                                                                                       with-nil-row? (types/merge-fields types/null-field)))
-                                                                                   val))))))]
-      (.colWriter rel-writer (str col-name) (.getFieldType field)))
+        (let [build-key-cols (mapv #(vw/vec-wtr->rdr (.colWriter rel-writer (str %))) build-key-col-names)]
+          (letfn [(compute-hash-bitmap [^long row-hash]
+                    (or (.get hash->bitmap row-hash)
+                        (let [bitmap (RoaringBitmap.)]
+                          (.put hash->bitmap (int row-hash) bitmap)
+                          bitmap)))]
+            (reify
+              IRelationMap
+              (buildFields [_] build-fields)
+              (buildKeyColumnNames [_] build-key-col-names)
+              (probeFields [_] probe-fields)
+              (probeKeyColumnNames [_] probe-key-col-names)
 
-    (when with-nil-row?
-      (doto (.rowCopier rel-writer (->nil-rel (keys build-fields)))
-        (.copyRow 0)))
+              (buildFromRelation [_ in-rel]
+                (let [in-rel (if store-full-build-rel?
+                               in-rel
+                               (->> (set build-key-col-names)
+                                    (mapv #(.readerForName in-rel (str %)))
+                                    vr/rel-reader))
 
-    (let [build-key-cols (mapv #(vw/vec-wtr->rdr (.colWriter rel-writer (str %))) build-key-col-names)]
-      (letfn [(compute-hash-bitmap [^long row-hash]
-                (or (.get hash->bitmap row-hash)
-                    (let [bitmap (RoaringBitmap.)]
-                      (.put hash->bitmap (int row-hash) bitmap)
-                      bitmap)))]
-        (reify
-          IRelationMap
-          (buildFields [_] build-fields)
-          (buildKeyColumnNames [_] build-key-col-names)
-          (probeFields [_] probe-fields)
-          (probeKeyColumnNames [_] probe-key-col-names)
+                      in-key-cols (mapv #(.readerForName in-rel (str %))
+                                        build-key-col-names)
 
-          (buildFromRelation [_ in-rel]
-            (let [in-rel (if store-full-build-rel?
-                           in-rel
-                           (->> (set build-key-col-names)
-                                (mapv #(.readerForName in-rel (str %)))
-                                vr/rel-reader))
+                      ;; NOTE: we might not need to compute `comparator` if the caller never requires `addIfNotPresent` (e.g. joins)
+                      !comparator (delay
+                                    (->> (map (fn [build-col in-col]
+                                                (->equi-comparator in-col build-col params
+                                                                   {:nil-keys-equal? nil-keys-equal?,
+                                                                    :param-types param-types}))
+                                              build-key-cols
+                                              in-key-cols)
+                                         (reduce andIBO)))
 
-                  in-key-cols (mapv #(.readerForName in-rel (str %))
-                                    build-key-col-names)
+                      hasher (->hasher in-key-cols)
 
-                  ;; NOTE: we might not need to compute `comparator` if the caller never requires `addIfNotPresent` (e.g. joins)
-                  !comparator (delay
-                                (->> (map (fn [build-col in-col]
-                                            (->equi-comparator in-col build-col params
-                                                               {:nil-keys-equal? nil-keys-equal?,
-                                                                :param-types param-types}))
-                                          build-key-cols
-                                          in-key-cols)
-                                     (reduce andIBO)))
+                      row-copier (.rowCopier rel-writer in-rel)]
 
-                  hasher (->hasher in-key-cols)
+                  (letfn [(add ^long [^RoaringBitmap hash-bitmap, ^long idx]
+                            (let [out-idx (.copyRow row-copier idx)]
+                              (.add hash-bitmap out-idx)
+                              (returned-idx out-idx)))]
 
-                  row-copier (.rowCopier rel-writer in-rel)]
+                    (reify IRelationMapBuilder
+                      (add [_ idx]
+                        (add (compute-hash-bitmap (.hashCode hasher idx)) idx))
 
-              (letfn [(add ^long [^RoaringBitmap hash-bitmap, ^long idx]
-                        (let [out-idx (.copyRow row-copier idx)]
-                          (.add hash-bitmap out-idx)
-                          (returned-idx out-idx)))]
+                      (addIfNotPresent [_ idx]
+                        (let [^RoaringBitmap hash-bitmap (compute-hash-bitmap (.hashCode hasher idx))
+                              out-idx (find-in-hash-bitmap hash-bitmap @!comparator idx false)]
+                          (if-not (neg? out-idx)
+                            out-idx
+                            (add hash-bitmap idx))))))))
 
-                (reify IRelationMapBuilder
-                  (add [_ idx]
-                    (add (compute-hash-bitmap (.hashCode hasher idx)) idx))
+              (probeFromRelation [this probe-rel]
+                (let [build-rel (.getBuiltRelation this)
+                      probe-key-cols (mapv #(.readerForName probe-rel (str %))
+                                           probe-key-col-names)
 
-                  (addIfNotPresent [_ idx]
-                    (let [^RoaringBitmap hash-bitmap (compute-hash-bitmap (.hashCode hasher idx))
-                          out-idx (find-in-hash-bitmap hash-bitmap @!comparator idx false)]
-                      (if-not (neg? out-idx)
-                        out-idx
-                        (add hash-bitmap idx))))))))
+                      ^IntBinaryOperator
+                      comparator (->> (cond-> (map (fn [build-col probe-col]
+                                                     (->equi-comparator probe-col build-col params
+                                                                        {:nil-keys-equal? nil-keys-equal?
+                                                                         :param-types param-types}))
+                                                   build-key-cols
+                                                   probe-key-cols)
 
-          (probeFromRelation [this probe-rel]
-            (let [build-rel (.getBuiltRelation this)
-                  probe-key-cols (mapv #(.readerForName probe-rel (str %))
-                                       probe-key-col-names)
+                                        (some? theta-expr)
+                                        (conj (->theta-comparator probe-rel build-rel theta-expr params
+                                                                  {:build-fields build-fields
+                                                                   :probe-fields probe-fields
+                                                                   :param-types param-types})))
+                                      (reduce andIBO))
 
-                  ^IntBinaryOperator
-                  comparator (->> (cond-> (map (fn [build-col probe-col]
-                                                 (->equi-comparator probe-col build-col params
-                                                                    {:nil-keys-equal? nil-keys-equal?
-                                                                     :param-types param-types}))
-                                               build-key-cols
-                                               probe-key-cols)
+                      hasher (->hasher probe-key-cols)]
 
-                                    (some? theta-expr)
-                                    (conj (->theta-comparator probe-rel build-rel theta-expr params
-                                                              {:build-fields build-fields
-                                                               :probe-fields probe-fields
-                                                               :param-types param-types})))
-                                  (reduce andIBO))
+                  (reify IRelationMapProber
+                    (indexOf [_ idx remove-on-match?]
+                      (-> ^RoaringBitmap (.get hash->bitmap (.hashCode hasher idx))
+                          (find-in-hash-bitmap comparator idx remove-on-match?)))
 
-                  hasher (->hasher probe-key-cols)]
-
-              (reify IRelationMapProber
-                (indexOf [_ idx remove-on-match?]
-                  (-> ^RoaringBitmap (.get hash->bitmap (.hashCode hasher idx))
-                      (find-in-hash-bitmap comparator idx remove-on-match?)))
-
-                (forEachMatch [_ idx c]
-                  (some-> ^RoaringBitmap (.get hash->bitmap (.hashCode hasher idx))
-                          (.forEach (reify IntConsumer
-                                      (accept [_ out-idx]
-                                        (when (= 1 (.applyAsInt comparator idx out-idx))
-                                          (.accept c out-idx)))))))
+                    (forEachMatch [_ idx c]
+                      (some-> ^RoaringBitmap (.get hash->bitmap (.hashCode hasher idx))
+                              (.forEach (reify IntConsumer
+                                          (accept [_ out-idx]
+                                            (when (= 1 (.applyAsInt comparator idx out-idx))
+                                              (.accept c out-idx)))))))
 
 
-                (matches [_ probe-idx]
-                  ;; TODO: this doesn't use the hashmaps, still a nested loop join
-                  (let [acc (int-array [-1])]
-                    (loop [build-idx 0]
-                      (if (= build-idx (.rowCount build-rel))
-                        (aget acc 0)
-                        (let [res (.applyAsInt comparator probe-idx build-idx)]
-                          (if (= 1 res)
-                            1
-                            (do
-                              (aset acc 0 (Math/max (aget acc 0) res))
-                              (recur (inc build-idx))))))))))))
+                    (matches [_ probe-idx]
+                      ;; TODO: this doesn't use the hashmaps, still a nested loop join
+                      (let [acc (int-array [-1])]
+                        (loop [build-idx 0]
+                          (if (= build-idx (.rowCount build-rel))
+                            (aget acc 0)
+                            (let [res (.applyAsInt comparator probe-idx build-idx)]
+                              (if (= 1 res)
+                                1
+                                (do
+                                  (aset acc 0 (Math/max (aget acc 0) res))
+                                  (recur (inc build-idx))))))))))))
 
-          (getBuiltRelation [_] (vw/rel-wtr->rdr rel-writer))
+              (getBuiltRelation [_] (vw/rel-wtr->rdr rel-writer))
 
-          AutoCloseable
-          (close [_] (.close rel-writer)))))))
+              AutoCloseable
+              (close [_] (.close rel-writer)))))))))
