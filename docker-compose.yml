@@ -1,40 +1,5 @@
 version: '2'
 services:
-  core2:
-    build: .
-    ports:
-      - "3000:3000"
-
-  postgres:
-    image: postgres:13.2
-    ports:
-      - "5432:5432"
-    environment:
-      POSTGRES_PASSWORD: postgres
-
-  mysql:
-    image: mysql:8.0.21
-    ports:
-      - "3306:3306"
-    environment:
-      MYSQL_ROOT_PASSWORD: my-secret-pw
-
-  mariadb:
-    image: mariadb:10.7.4
-    ports:
-      - "3306:3306"
-    environment:
-      MARIADB_ROOT_PASSWORD: my-secret-pw
-
-  mssql:
-    image: mcr.microsoft.com/mssql/server:2017-latest-ubuntu
-    ports:
-      - "1433:1433"
-    environment:
-      ACCEPT_EULA: Y
-      SA_PASSWORD: "yourStrong(!)Password"
-      MSSQL_PID: Express
-
   kafka:
     image: 'bitnami/kafka:latest'
     ports:
