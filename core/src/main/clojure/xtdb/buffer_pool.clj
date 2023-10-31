@@ -160,7 +160,7 @@
   (openArrowFileWriter [this k vsr] (ArrowFileWriter. vsr nil (.openChannel this k)))
   (putObject [this k buffer] (put-object this k buffer)))
 
-(deftype DiskOnlyWritableChannel
+(deftype LocalWritableChannel
   [^IBufferPool bp
    allocator
    memory-store
@@ -179,7 +179,7 @@
       (util/then-apply (.getBuffer bp k) util/close)))
   (write [_ src] (.write file-channel src)))
 
-(defrecord DiskOnlyBufferPool
+(defrecord LocalBufferPool
   [allocator
    ^ArrowBufLRU memory-store
    ^Path disk-store]
@@ -223,7 +223,7 @@
                        (str (.relativize disk-store path)))))))))
   (openChannel [this k]
     (let [tmp-path (Files/createTempFile "bp-channel" ".arrow" (make-array FileAttribute 0))]
-      (->DiskOnlyWritableChannel this allocator memory-store disk-store (util/->file-channel tmp-path [StandardOpenOption/APPEND]) tmp-path k)))
+      (->LocalWritableChannel this allocator memory-store disk-store (util/->file-channel tmp-path [StandardOpenOption/APPEND]) tmp-path k)))
   (openArrowFileWriter [this k vsr]
     (ArrowFileWriter. vsr nil (.openChannel this k)))
   (putObject [this k buffer] (put-object this k buffer)))
@@ -424,7 +424,7 @@
                        max-cache-entries]
                 :or {max-cache-entries 1024
                      max-cache-bytes 536870912}}]
-  (map->DiskOnlyBufferPool
+  (map->LocalBufferPool
     {:allocator (.newChildAllocator allocator "buffer-pool" 0 Long/MAX_VALUE)
      :memory-store (ArrowBufLRU. 16 max-cache-entries max-cache-bytes)
      :disk-store data-dir}))
