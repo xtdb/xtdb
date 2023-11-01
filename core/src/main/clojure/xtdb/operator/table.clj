@@ -41,25 +41,31 @@
     explicit-col-names (-> (->> (merge (zipmap explicit-col-names (repeat types/null-field))))
                            (select-keys explicit-col-names))))
 
+(defn- create-field-without-children ^Field [col-name ^Field field]
+  (let [arrow-type (.getType field)]
+    (case arrow-type
+      ;; lists need a child
+      #xt.arrow/type :list (types/->field (str col-name) arrow-type (.isNullable field)
+                                          (types/->field "$data$" #xt.arrow/type :union false))
+      (types/->field (str col-name) arrow-type (.isNullable field)))))
+
 (defn- ->out-rel [{:keys [allocator] :as opts} fields rows ->v]
   (let [row-count (count rows)]
     (when (pos? row-count)
       (util/with-close-on-catch [out-cols (ArrayList. (count fields))]
         (doseq [[col-name ^Field field] fields
                 :let [col-kw (keyword col-name)
-                      out-vec (.createVector (types/field-with-name field (str col-name)) allocator)
+                      ;; create things dynamically here for now, to not run into issues with normalisation
+                      out-vec (.createVector (create-field-without-children col-name field) allocator)
                       out-writer (vw/->writer out-vec)]]
-
-          (.setInitialCapacity out-vec row-count)
-          (.allocateNew out-vec)
-          (.add out-cols (vr/vec->reader out-vec))
 
           (dotimes [idx row-count]
             (let [row (nth rows idx)
                   v (-> (get row col-kw) (->v opts))]
               (vw/write-value! v (.legWriter out-writer (vw/value->arrow-type v)))))
 
-          (.syncValueCount out-writer))
+          (.syncValueCount out-writer)
+          (.add out-cols (vr/vec->reader out-vec)))
 
         (vr/rel-reader out-cols row-count)))))
 
@@ -121,6 +127,6 @@
                                            [:rows rows] (emit-rows-table rows table-expr opts)
                                            [:table-arg param] (emit-arg-table param table-expr opts))]
 
-    {:fields (doto fields)
+    {:fields fields
      :->cursor (fn [opts]
                  (TableCursor. (->out-rel opts)))}))
