@@ -254,7 +254,8 @@
     :day `(.writeInt ~@args)
     :milli `(.writeLong ~@args)))
 
-(doseq [[k tag] {:interval PeriodDuration :decimal BigDecimal}]
+(doseq [[k tag] {:interval PeriodDuration :decimal BigDecimal,
+                 :list IListValueReader, :struct Map}]
   (defmethod read-value-code k [_ & args]
     (-> `(.readObject ~@args) (with-tag tag)))
 
@@ -286,55 +287,6 @@
     [:union inner-types] (continue-read-union f inner-types reader-sym args)
 
     (f col-type (apply read-value-code col-type reader-sym args))))
-
-(defmethod read-value-code :list [_ & args]
-  (-> `(.readObject ~@args)
-      (with-tag IListValueReader)))
-
-(defmethod write-value-code :list [[_ list-el-type] writer-arg list-code]
-  (let [list-sym (gensym 'list)
-        n-sym (gensym 'n)
-        el-writer-sym (gensym 'list-el-writer)]
-    `(let [~list-sym ~list-code
-           el-count# (.size ~list-sym)
-           ~el-writer-sym (.listElementWriter ~writer-arg)]
-       (.startList ~writer-arg)
-       (dotimes [~n-sym el-count#]
-         ~(continue-read (if (types/union? list-el-type)
-                           (fn [el-type code]
-                             (write-value-code el-type
-                                               `(-> ~el-writer-sym
-                                                    (.legWriter ~(types/->arrow-type el-type)))
-                                               code))
-
-                           (fn [el-type code]
-                             (write-value-code el-type el-writer-sym code)))
-                         list-el-type
-                         `(.nth ~list-sym ~n-sym)))
-       (.endList ~writer-arg))))
-
-(defmethod read-value-code :struct [_ & args]
-  (-> `(.readObject ~@args)
-      (with-tag Map)))
-
-(defmethod write-value-code :struct [[_ val-types] writer-arg code]
-  (let [struct-sym (gensym 'struct)]
-    `(let [~struct-sym ~code]
-       (.startStruct ~writer-arg)
-       ~@(for [[field val-type] val-types
-               :let [field-name (str field)]]
-           (continue-read (if (types/union? val-type)
-                            (fn [val-type code]
-                              (write-value-code val-type
-                                                `(-> (.structKeyWriter ~writer-arg ~field-name)
-                                                     (.legWriter ~(types/->arrow-type val-type)))
-                                                code))
-                            (fn [val-type code]
-                              (write-value-code val-type `(.structKeyWriter ~writer-arg ~field-name) code)))
-
-                          val-type (-> `(.get ~struct-sym ~field-name)
-                                       (with-tag IValueReader))))
-       (.endStruct ~writer-arg))))
 
 (def ^:dynamic ^java.time.Clock *clock* (Clock/systemUTC))
 

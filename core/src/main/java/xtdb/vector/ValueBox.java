@@ -3,9 +3,6 @@ package xtdb.vector;
 import clojure.lang.Keyword;
 
 import java.nio.ByteBuffer;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.Map;
 
 public class ValueBox implements IValueWriter, IValueReader {
     private static final Keyword NULL_LEG = Keyword.intern("null");
@@ -118,45 +115,6 @@ public class ValueBox implements IValueWriter, IValueReader {
     @Override
     public void writeObject(Object objectValue) {
         this.obj = objectValue;
-    }
-
-    @Override
-    public IValueWriter structKeyWriter(String key) {
-        return new BoxWriter() {
-            @Override
-            @SuppressWarnings("unchecked")
-            IValueWriter box() {
-                return ((Map<String, ValueBox>) obj).computeIfAbsent(key, _k -> new ValueBox());
-            }
-        };
-    }
-
-    @Override
-    public void startStruct() {
-        obj = new HashMap<>();
-    }
-
-    @Override
-    public void endStruct() {
-    }
-
-    @Override
-    public IValueWriter listElementWriter() {
-        return new BoxWriter() {
-            @Override
-            IValueWriter box() {
-                return ((ListValueBox) obj);
-            }
-        };
-    }
-
-    @Override
-    public void startList() {
-        obj = new ListValueBox();
-    }
-
-    @Override
-    public void endList() {
     }
 
     @Override
