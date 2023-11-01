@@ -500,6 +500,8 @@
                 (t/is (< (:tx-id latest-completed-tx) (:tx-id first-half-tx-key)))
                 (t/is (< next-chunk-idx (count first-half-tx-ops)))
 
+                (Thread/sleep 250) ; wait for the chunk to finish writing to disk
+                                   ; we don't have an accessible hook for this, beyond awaiting the tx
                 (let [objs (.listObjects bp)]
                   (t/is (= 5 (count (filter #(re-matches #"chunk-metadata/\p{XDigit}+\.transit.json" %) objs))))
                   (t/is (= 4 (count (filter #(re-matches #"tables/device_info/(.+?)/.+\.arrow" %) objs))))
@@ -539,6 +541,8 @@
                                                     (tu/then-await-tx node (Duration/ofSeconds 15)))))
                     (t/is (= second-half-tx-key (tu/latest-completed-tx node))))
 
+                  (Thread/sleep 250) ; wait for the chunk to finish writing to disk
+                                     ; we don't have an accessible hook for this, beyond awaiting the tx
                   (doseq [^Node node [new-node node]
                           :let [^IBufferPool bp (tu/component node :xtdb/buffer-pool)
                                 ^IMetadataManager mm (tu/component node ::meta/metadata-manager)]]
