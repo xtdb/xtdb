@@ -4,7 +4,7 @@
 
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface IMultipartUpload
-  (^java.util.concurrent.CompletableFuture #_<Void> uploadPart [^java.nio.ByteBuffer buf] 
+  (^java.util.concurrent.CompletableFuture #_<Void> uploadPart [^java.nio.ByteBuffer buf]
    "Asynchonously uploads a part to the multipart request - adds to the internal completed parts list")
   (^java.util.concurrent.CompletableFuture #_<Void> complete []
    "Asynchonously completes the multipart-request")
@@ -13,16 +13,16 @@
 
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface SupportsMultipart
-  (^java.util.concurrent.CompletableFuture #_<IMultipartUpload> startMultipart [^String k]))
+  (^java.util.concurrent.CompletableFuture #_<IMultipartUpload> startMultipart [^java.nio.file.Path k]))
 
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
 (definterface ObjectStore
-  (^java.util.concurrent.CompletableFuture #_<ByteBuffer> getObject [^String k]
+  (^java.util.concurrent.CompletableFuture #_<ByteBuffer> getObject [^java.nio.file.Path k]
                                                                     "Asynchonously returns the given object in a ByteBuffer
     If the object doesn't exist, the CF completes with an IllegalStateException.")
 
   (^java.util.concurrent.CompletableFuture #_<ByteBuffer> getObjectRange
-   [^String k ^long start ^long len]
+   [^java.nio.file.Path k ^long start ^long len]
    "Asynchonously returns the given len bytes starting from start (inclusive) of the object in a ByteBuffer
     If the object doesn't exist, the CF completes with an IllegalStateException.
 
@@ -35,14 +35,14 @@
 
     Behaviour for a start position at or exceeding the byte length of the object is undefined. You may or may not receive an exception.")
 
-  (^java.util.concurrent.CompletableFuture #_<Path> getObject [^String k, ^java.nio.file.Path out-path]
+  (^java.util.concurrent.CompletableFuture #_<Path> getObject [^java.nio.file.Path k, ^java.nio.file.Path out-path]
                                                               "Asynchronously writes the object to the given path.
     If the object doesn't exist, the CF completes with an IllegalStateException.")
 
-  (^java.util.concurrent.CompletableFuture #_<?> putObject [^String k, ^java.nio.ByteBuffer buf]) 
-  (^java.lang.Iterable #_<String> listObjects [])
-  (^java.lang.Iterable #_<String> listObjects [^String dir])
-  (^java.util.concurrent.CompletableFuture #_<?> deleteObject [^String k]))
+  (^java.util.concurrent.CompletableFuture #_<?> putObject [^java.nio.file.Path k, ^java.nio.ByteBuffer buf])
+  (^java.lang.Iterable #_<java.nio.file.Path> listObjects [])
+  (^java.lang.Iterable #_<java.nio.file.Path> listObjects [^java.nio.file.Path dir])
+  (^java.util.concurrent.CompletableFuture #_<?> deleteObject [^java.nio.file.Path k]))
 
 (defn ensure-shared-range-oob-behaviour [^long i ^long len]
   (when (< i 0)

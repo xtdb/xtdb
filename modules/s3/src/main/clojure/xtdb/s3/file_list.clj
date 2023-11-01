@@ -1,9 +1,10 @@
 (ns xtdb.s3.file-list
   (:require [clojure.data.json :as json]
             [clojure.string :as string]
-            [clojure.tools.logging :as log]
-            [xtdb.file-list :as file-list])
+            [clojure.tools.logging :as log] 
+            [xtdb.util :as util])
   (:import [java.lang AutoCloseable]
+           [java.nio.file Path]
            [java.util UUID NavigableSet]
            [software.amazon.awssdk.core.exception AbortedException]
            [software.amazon.awssdk.services.s3 S3AsyncClient]
@@ -14,12 +15,12 @@
            [software.amazon.awssdk.services.sqs.model Message CreateQueueRequest CreateQueueResponse DeleteMessageRequest DeleteQueueRequest ReceiveMessageRequest
             SetQueueAttributesRequest GetQueueAttributesRequest GetQueueAttributesResponse QueueDoesNotExistException]))
 
-(defn list-objects [{:keys [^S3AsyncClient s3-client bucket prefix] :as s3-opts} continuation-token]
+(defn list-objects [{:keys [^S3AsyncClient s3-client bucket ^Path prefix] :as s3-opts} continuation-token]
   (vec
    (let [^ListObjectsV2Request
          req (-> (ListObjectsV2Request/builder)
                  (.bucket bucket)
-                 (.prefix prefix)
+                 (.prefix (some-> prefix str))
                  (cond-> continuation-token (.continuationToken continuation-token))
                  (.build))
 
@@ -27,13 +28,14 @@
          resp (.get (.listObjectsV2 ^S3AsyncClient s3-client req))]
 
      (concat (for [^S3Object object (.contents resp)]
-               (subs (.key object) (count prefix)))
+               (cond->> (util/->path (.key object))
+                 prefix (.relativize prefix)))
              (when (.isTruncated resp)
                (list-objects s3-opts (.nextContinuationToken resp)))))))
 
 (defn file-list-init [s3-opts ^NavigableSet file-name-cache]
   (let [filename-list (list-objects s3-opts nil)]
-    (file-list/add-filename-list file-name-cache filename-list)))
+    (.addAll file-name-cache filename-list)))
 
 (defn ->sqs-write-policy [sns-topic-arn queue-arn]
   (json/write-str
@@ -84,7 +86,7 @@
       (:Records)
       (first)))
 
-(defn open-file-list-watcher [{:keys [bucket sns-topic-arn prefix] :as opts} ^NavigableSet file-name-cache]
+(defn open-file-list-watcher [{:keys [bucket sns-topic-arn ^Path prefix] :as opts} ^NavigableSet file-name-cache]
   (let [^SqsClient sqs-client (SqsClient/create)
         ^SnsClient sns-client (SnsClient/create)
         _ (log/info "Creating AWS resources for watching files on bucket " bucket)
@@ -119,16 +121,18 @@
                                                 event-type (cond
                                                              (string/starts-with? event-name "ObjectCreated") :create
                                                              (string/starts-with? event-name "ObjectRemoved") :delete)
-                                                filename (get-in s3-event [:s3 :object :key])
+                                                filename (util/->path (get-in s3-event [:s3 :object :key]))
+                                                ;; If prefix present - need to filter for objects that start with prefix
+                                                ;; And then relativize the path - otherwise, can leave it unaltered and unfiltered
                                                 file (if prefix
-                                                       (when (string/starts-with? filename prefix)
-                                                         (subs filename (count prefix)))
+                                                       (when (.startsWith filename prefix)
+                                                         (.relativize prefix filename))
                                                        filename)]
                                             (log/debug (format "Message received, performing %s on file %s" event-type file))
                                             (when file
                                               (cond
-                                                (= event-type :create) (file-list/add-filename file-name-cache file)
-                                                (= event-type :delete) (file-list/remove-filename file-name-cache file)))
+                                                (= event-type :create) (.add file-name-cache file)
+                                                (= event-type :delete) (.remove file-name-cache file)))
 
                                             (.deleteMessage sqs-client (-> (DeleteMessageRequest/builder)
                                                                            (.queueUrl queue-url)

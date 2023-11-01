@@ -97,8 +97,8 @@ These are the following parameters that can be passed within the config for our 
 | Yes
 
 |`prefix`
-| String 
-| A string to prefix all of your files with - for example, if "foo" is provided all xtdb files will be located under a "foo" directory
+| String/File/Path
+| A file path to prefix all of your files with - for example, if "foo" is provided all xtdb files will be located under a "foo" directory
 | No
 
 | `configurator`

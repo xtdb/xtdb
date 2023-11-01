@@ -7,10 +7,12 @@
             [xtdb.object-store-test :as os-test]
             [xtdb.node :as node]
             [clojure.tools.logging :as log]
-            [clojure.set :as set])
+            [clojure.set :as set]
+            [xtdb.util :as util])
   (:import [java.util UUID]
            [java.io Closeable]
            [java.nio ByteBuffer]
+           [java.nio.file Path]
            [com.azure.storage.blob.models ListBlobsOptions BlobListDetails BlobItem]
            [com.azure.storage.blob BlobContainerClient]
            [xtdb.object_store ObjectStore SupportsMultipart IMultipartUpload]))
@@ -51,7 +53,7 @@
                                                :container container
                                                :servicebus-namespace servicebus-namespace
                                                :servicebus-topic-name servicebus-topic-name
-                                               :prefix (str "xtdb.azure-test." prefix)})
+                                               :prefix (util/->path (str "xtdb.azure-test." prefix))})
        (ig/init-key ::azure/blob-object-store)))
 
 (t/deftest ^:azure put-delete-test
@@ -69,27 +71,35 @@
 (t/deftest ^:azure list-test-with-prior-objects
   (let [prefix (random-uuid)]
     (with-open [os (object-store prefix)]
-      (os-test/put-edn os "alice" :alice)
-      (os-test/put-edn os "alan" :alan)
-      (t/is (= ["alan" "alice"] (.listObjects ^ObjectStore os))))
+      (os-test/put-edn os (util/->path "alice") :alice)
+      (os-test/put-edn os (util/->path "alan") :alan)
+      (t/is (= (mapv util/->path ["alan" "alice"])
+               (.listObjects ^ObjectStore os))))
 
     (with-open [os (object-store prefix)]
       (t/testing "prior objects will still be there, should be available on a list request"
-        (t/is (= ["alan" "alice"] (.listObjects ^ObjectStore os))))
+        (t/is (= (mapv util/->path ["alan" "alice"])
+                 (.listObjects ^ObjectStore os))))
+      
       (t/testing "should be able to delete prior objects and have that reflected in list objects output"
-        @(.deleteObject ^ObjectStore os "alice")
-        (t/is (= ["alan"] (.listObjects ^ObjectStore os)))))))
+        @(.deleteObject ^ObjectStore os (util/->path "alice"))
+        (t/is (= (mapv util/->path ["alan"]) 
+                 (.listObjects ^ObjectStore os)))))))
 
 (t/deftest ^:azure multiple-object-store-list-test
   (let [prefix (random-uuid)
         wait-time-ms 5000]
     (with-open [os-1 (object-store prefix)
                 os-2 (object-store prefix)]
-      (os-test/put-edn os-1 "alice" :alice)
-      (os-test/put-edn os-2 "alan" :alan)
+      (os-test/put-edn os-1 (util/->path "alice") :alice)
+      (os-test/put-edn os-2 (util/->path "alan") :alan)
       (Thread/sleep wait-time-ms)
-      (t/is (= ["alan" "alice"] (.listObjects ^ObjectStore os-1)))
-      (t/is (= ["alan" "alice"] (.listObjects ^ObjectStore os-2))))))
+      
+      (t/is (= (mapv util/->path ["alan" "alice"]) 
+               (.listObjects ^ObjectStore os-1)))
+      
+      (t/is (= (mapv util/->path ["alan" "alice"]) 
+               (.listObjects ^ObjectStore os-2))))))
 
 ;; Currently not testing this - will need to setup the event hub namespace and config to run
 ;; (t/deftest ^:azure test-eventhub-log
@@ -103,17 +113,17 @@
 ;;              (xt/q node '{:find [id]
 ;;                           :where [($ :xt_docs [{:xt/id id}])]})))))
 
-(defn list-filenames [^BlobContainerClient blob-container-client prefix ^ListBlobsOptions list-opts]
+(defn list-filenames [^BlobContainerClient blob-container-client ^Path prefix ^ListBlobsOptions list-opts]
   (->> (.listBlobs blob-container-client list-opts nil)
        (.iterator)
        (iterator-seq)
        (mapv (fn [^BlobItem blob-item]
-               (subs (.getName blob-item) (count prefix))))
+               (.relativize prefix (util/->path (.getName blob-item)))))
        (set)))
 
-(defn fetch-uncomitted-blobs [^BlobContainerClient blob-container-client prefix]
+(defn fetch-uncomitted-blobs [^BlobContainerClient blob-container-client ^Path prefix]
   (let [base-opts (-> (ListBlobsOptions.)
-                      (.setPrefix prefix))
+                      (.setPrefix (str prefix)))
         comitted-blobs (list-filenames blob-container-client prefix base-opts)
         all-blobs (list-filenames blob-container-client
                                   prefix
@@ -127,7 +137,7 @@
     (let [blob-container-client (:blob-container-client os)
           prefix (:prefix os)]
       (t/testing "Call to start multipart should work/return an object"
-        (let [multipart-upload ^IMultipartUpload  @(.startMultipart ^SupportsMultipart os "test-multi-created")]
+        (let [multipart-upload ^IMultipartUpload  @(.startMultipart ^SupportsMultipart os (util/->path "test-multi-created"))]
           (t/is multipart-upload)
 
           (t/testing "Uploading a part should create an uncomitted blob"
@@ -143,7 +153,7 @@
   (with-open [os (object-store (random-uuid))]
     (let [blob-container-client (:blob-container-client os)
           prefix (:prefix os)
-          multipart-upload ^IMultipartUpload @(.startMultipart ^SupportsMultipart os "test-multi-put")
+          multipart-upload ^IMultipartUpload @(.startMultipart ^SupportsMultipart os (util/->path "test-multi-put"))
           part-size 500
           file-part-1 ^ByteBuffer (os-test/generate-random-byte-buffer part-size)
           file-part-2 ^ByteBuffer (os-test/generate-random-byte-buffer part-size)]
@@ -158,8 +168,9 @@
           (t/is (= #{} uncomitted-blobs))))
 
       (t/testing "Multipart upload works correctly - file present and contents correct"
-        (t/is (= ["test-multi-put"] (.listObjects ^ObjectStore os)))
+        (t/is (= (mapv util/->path ["test-multi-put"]) 
+                 (.listObjects ^ObjectStore os)))
 
-        (let [^ByteBuffer uploaded-buffer @(.getObject ^ObjectStore os "test-multi-put")]
+        (let [^ByteBuffer uploaded-buffer @(.getObject ^ObjectStore os (util/->path "test-multi-put"))]
           (t/testing "capacity should be equal to total of 2 parts"
             (t/is (= (* 2 part-size) (.capacity uploaded-buffer)))))))))

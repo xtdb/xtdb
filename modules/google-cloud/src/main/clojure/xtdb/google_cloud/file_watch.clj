@@ -1,24 +1,26 @@
 (ns xtdb.google-cloud.file-watch
   (:require [clojure.string :as string]
-            [clojure.tools.logging :as log]
-            [xtdb.file-list :as file-list])
+            [clojure.tools.logging :as log] 
+            [xtdb.util :as util])
   (:import [com.google.pubsub.v1 SubscriptionName TopicName PushConfig PubsubMessage]
            [com.google.cloud.pubsub.v1 SubscriptionAdminClient Subscriber MessageReceiver AckReplyConsumer]
            [com.google.cloud.storage Blob Storage Storage$BlobListOption]
            [java.lang AutoCloseable]
+           [java.nio.file Path]
            [java.util NavigableSet UUID]
            [java.util.concurrent TimeUnit]))
 
-(defn file-list-init [{:keys [^Storage storage-service bucket prefix]} ^NavigableSet file-name-cache]
+(defn file-list-init [{:keys [^Storage storage-service bucket ^Path prefix]} ^NavigableSet file-name-cache]
   (let [list-blob-opts (into-array Storage$BlobListOption
-                                   (if (not-empty prefix)
-                                     [(Storage$BlobListOption/prefix prefix)]
+                                   (if prefix
+                                     [(Storage$BlobListOption/prefix (str prefix))]
                                      []))
         filename-list (->> (.list storage-service bucket list-blob-opts)
                            (.iterateAll)
                            (mapv (fn [^Blob blob]
-                                   (subs (.getName blob) (count prefix)))))]
-    (file-list/add-filename-list file-name-cache filename-list)))
+                                   (cond->> (util/->path (.getName blob))
+                                     prefix (.relativize prefix)))))]
+    (.addAll file-name-cache filename-list)))
 
 (defn mk-short-uuid []
   (subs (str (UUID/randomUUID)) 0 8))
@@ -35,7 +37,7 @@
      :subscription-name subscription-name
      :subscription-resource-name (.getName subscription-info)}))
 
-(defn open-file-list-watcher [{:keys [bucket prefix pubsub-topic] :as opts} ^NavigableSet file-name-cache]
+(defn open-file-list-watcher [{:keys [bucket pubsub-topic ^Path prefix] :as opts} ^NavigableSet file-name-cache]
   (let [;; Create queue that will subscribe to sns topic for notifications
         {:keys [^SubscriptionAdminClient subcription-admin-client 
                 ^String subscription-name 
@@ -49,20 +51,20 @@
                            (receiveMessage [_ message consumer]
                              (let [{:strs [objectId eventType]} (.getAttributes ^PubsubMessage message)
                                    event-type (get {"OBJECT_FINALIZE" :create "OBJECT_DELETE" :delete} eventType)
+                                   object-path (util/->path objectId)
                                    file (cond
                                           (string/ends-with? objectId "/")
                                           nil
 
-                                          prefix
-                                          (when (string/starts-with? objectId prefix)
-                                            (subs objectId (count prefix)))
-
-                                          :else objectId)]
+                                          prefix (when (.startsWith object-path prefix)
+                                                   (.relativize prefix object-path))
+                                          
+                                          :else object-path)]
                                (log/debug (format "Message received, performing %s on file %s" event-type file))
                                (when (and event-type file)
                                  (cond
-                                   (= event-type :create) (file-list/add-filename file-name-cache file)
-                                   (= event-type :delete) (file-list/remove-filename file-name-cache file)))
+                                   (= event-type :create) (.add file-name-cache file)
+                                   (= event-type :delete) (.remove file-name-cache file)))
 
                                (.ack ^AckReplyConsumer consumer))))
         ^Subscriber subscriber (.build (Subscriber/newBuilder ^String subscription-resource-name ^MessageReceiver message-receiver))]

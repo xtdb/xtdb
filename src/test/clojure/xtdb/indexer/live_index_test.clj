@@ -64,8 +64,8 @@
     (t/testing "finish chunk"
       (.finishChunk live-index 0 12000)
 
-      (with-open [^ArrowBuf trie-buf @(.getBuffer buffer-pool "tables/my-table/meta/log-l00-rf00-nr32ee0.arrow")
-                  ^ArrowBuf leaf-buf @(.getBuffer buffer-pool "tables/my-table/data/log-l00-rf00-nr32ee0.arrow")
+      (with-open [^ArrowBuf trie-buf @(.getBuffer buffer-pool (util/->path "tables/my-table/meta/log-l00-rf00-nr32ee0.arrow"))
+                  ^ArrowBuf leaf-buf @(.getBuffer buffer-pool (util/->path "tables/my-table/data/log-l00-rf00-nr32ee0.arrow"))
                   trie-rdr (ArrowFileReader. (util/->seekable-byte-channel (.nioBuffer trie-buf 0 (.capacity trie-buf))) allocator)
                   leaf-rdr (ArrowFileReader. (util/->seekable-byte-channel (.nioBuffer leaf-buf 0 (.capacity leaf-buf))) allocator)]
         (let [trie-root (.getVectorSchemaRoot trie-rdr)
@@ -124,11 +124,11 @@
 
         (tu/finish-chunk! node)
 
-        (t/is (= ["tables/foo/data/log-l00-rf00-nr110.arrow"]
-                 (.listObjects bp "tables/foo/data")))
+        (t/is (= (mapv util/->path ["tables/foo/data/log-l00-rf00-nr110.arrow"])
+                 (.listObjects bp (util/->path "tables/foo/data"))))
 
-        (t/is (= ["tables/foo/meta/log-l00-rf00-nr110.arrow"]
-                 (.listObjects bp "tables/foo/meta"))))
+        (t/is (= (mapv util/->path ["tables/foo/meta/log-l00-rf00-nr110.arrow"])
+                 (.listObjects bp (util/->path "tables/foo/meta")))))
 
       (tj/check-json (.toPath (io/as-file (io/resource "xtdb/indexer-test/can-build-live-index")))
                      (.resolve node-dir "objects")))))

@@ -4,29 +4,27 @@
             [clojure.test :as t]
             [juxt.clojars-mirrors.integrant.core :as ig]
             [xtdb.object-store :as os]
-            [xtdb.test-util :as tu]
             [xtdb.util :as util])
-  (:import java.io.Closeable
-           java.nio.ByteBuffer
-           java.nio.charset.StandardCharsets
-           java.nio.file.attribute.FileAttribute
-           java.nio.file.Files
-           java.nio.file.OpenOption
+  (:import [java.io Closeable]
+           [java.nio ByteBuffer]
+           [java.nio.charset StandardCharsets]
+           [java.nio.file.attribute FileAttribute]
+           [java.nio.file Files Path]
            [java.util.concurrent CompletableFuture ConcurrentSkipListMap]
            [java.util.function Supplier]
-           java.util.NavigableMap
-           xtdb.object_store.ObjectStore))
+           [java.util NavigableMap]
+           [xtdb.object_store ObjectStore]))
 
-(defn- get-edn [^ObjectStore obj-store, k]
-  (-> (let [^ByteBuffer buf @(.getObject obj-store (name k))]
+(defn- get-edn [^ObjectStore obj-store, ^Path k]
+  (-> (let [^ByteBuffer buf @(.getObject obj-store k)]
         (edn/read-string (str (.decode StandardCharsets/UTF_8 buf))))
       (util/rethrowing-cause)))
 
-(defn put-edn [^ObjectStore obj-store k obj]
+(defn put-edn [^ObjectStore obj-store ^Path k obj]
   (let [^ByteBuffer buf (.encode StandardCharsets/UTF_8 (pr-str obj))]
-    @(.putObject obj-store (name k) buf)))
+    @(.putObject obj-store k buf)))
 
-(defn put-bytes [^ObjectStore obj-store k bytes]
+(defn put-bytes [^ObjectStore obj-store ^Path k bytes]
   @(.putObject obj-store k (ByteBuffer/wrap bytes)))
 
 (defn byte-buf->bytes [^ByteBuffer buf]
@@ -36,7 +34,7 @@
     (.position buf pos)
     arr))
 
-(defn get-bytes [^ObjectStore obj-store k start len]
+(defn get-bytes [^ObjectStore obj-store ^Path k start len]
   (byte-buf->bytes @(.getObjectRange obj-store k start len)))
 
 ;; Generates a byte buffer of random characters
@@ -103,76 +101,86 @@
 (derive ::memory-object-store :xtdb/object-store)
 
 (defn test-put-delete [^ObjectStore obj-store]
-  (let [alice {:xt/id :alice, :name "Alice"}]
-    (put-edn obj-store :alice alice)
+  (let [alice {:xt/id :alice, :name "Alice"}
+        alice-key (util/->path "alice")]
+    (put-edn obj-store alice-key alice)
 
-    (t/is (= alice (get-edn obj-store :alice)))
+    (t/is (= alice (get-edn obj-store alice-key)))
 
-    (t/is (thrown? IllegalStateException (get-edn obj-store :bob)))
+    (t/is (thrown? IllegalStateException (get-edn obj-store (util/->path "bob"))))
 
     (t/testing "doesn't override if present"
-      (put-edn obj-store :alice {:xt/id :alice, :name "Alice", :version 2})
-      (t/is (= alice (get-edn obj-store :alice))))
+      (put-edn obj-store alice-key {:xt/id :alice, :name "Alice", :version 2})
+      (t/is (= alice (get-edn obj-store alice-key))))
 
-    (let [temp-path @(.getObject obj-store (name :alice)
+    (let [temp-path @(.getObject obj-store alice-key
                                  (doto (Files/createTempFile "alice" ".edn"
                                                              (make-array FileAttribute 0))
                                    Files/delete))]
       (t/is (= alice (read-string (Files/readString temp-path)))))
 
-    @(.deleteObject obj-store (name :alice))
+    @(.deleteObject obj-store alice-key)
 
-    (t/is (thrown? IllegalStateException (get-edn obj-store :alice)))))
+    (t/is (thrown? IllegalStateException (get-edn obj-store alice-key)))))
 
 (defn test-list-objects
   [^ObjectStore obj-store]
-  (put-edn obj-store "bar/alice" :alice)
-  (put-edn obj-store "foo/alan" :alan)
-  (put-edn obj-store "bar/bob" :bob)
-  (put-edn obj-store "bar/baz/dan" :dan)
-  (put-edn obj-store "bar/baza/james" :james)
+  (put-edn obj-store (util/->path "bar/alice") :alice)
+  (put-edn obj-store (util/->path "foo/alan") :alan)
+  (put-edn obj-store (util/->path "bar/bob") :bob)
+  (put-edn obj-store (util/->path "bar/baz/dan") :dan)
+  (put-edn obj-store (util/->path "bar/baza/james") :james)
 
-  (t/is (= ["bar/alice" "bar/baz/dan" "bar/baza/james" "bar/bob" "foo/alan"] (.listObjects obj-store)))
-  (t/is (= ["foo/alan"] (.listObjects obj-store "foo")))
+  (t/is (= (mapv util/->path ["bar/alice" "bar/baz/dan" "bar/baza/james" "bar/bob" "foo/alan"])
+           (.listObjects obj-store)))
+
+  (t/is (= (mapv util/->path ["foo/alan"])
+           (.listObjects obj-store (util/->path "foo"))))
 
   (t/testing "call listObjects with a prefix ended with a slash - should work the same"
-    (t/is (= ["foo/alan"] (.listObjects obj-store "foo/"))))
+    (t/is (= (mapv util/->path ["foo/alan"])
+             (.listObjects obj-store (util/->path "foo/")))))
 
   (t/testing "calling listObjects with prefix on directory with subdirectories - should only return top level keys"
-    (t/is (= ["bar/alice" "bar/baz" "bar/baza" "bar/bob"] (.listObjects obj-store "bar"))))
+    (t/is (= (mapv util/->path ["bar/alice" "bar/baz" "bar/baza" "bar/bob"])
+             (.listObjects obj-store (util/->path "bar")))))
 
   (t/testing "calling listObjects with prefix with common prefix - should only return that which is a complete match against a directory "
-    (t/is (= ["bar/baz/dan"] (.listObjects obj-store "bar/baz"))))
-
+    (t/is (= (mapv util/->path ["bar/baz/dan"])
+             (.listObjects obj-store (util/->path "bar/baz")))))
 
      ;; Delete an object
-  @(.deleteObject obj-store "bar/alice")
+  @(.deleteObject obj-store (util/->path "bar/alice"))
 
-  (t/is (= ["bar/baz" "bar/baza" "bar/bob"] (.listObjects obj-store "bar"))))
+  (t/is (= (mapv util/->path ["bar/baz" "bar/baza" "bar/bob"])
+           (.listObjects obj-store (util/->path "bar")))))
 
 (defn test-range [^ObjectStore obj-store]
+  (let [digits-key (util/->path "digits")]
+    (put-bytes obj-store digits-key (byte-array (range 10)))
 
-  (put-bytes obj-store "digits" (byte-array (range 10)))
+    (t/is (= [0] (vec (get-bytes obj-store digits-key 0 1))))
+    (t/is (= [4 5 6 7] (vec (get-bytes obj-store digits-key 4 4))))
+    (t/is (= [9] (vec (get-bytes obj-store digits-key 9 1))))
 
-  (t/is (= [0] (vec (get-bytes obj-store "digits" 0 1))))
-  (t/is (= [4 5 6 7] (vec (get-bytes obj-store "digits" 4 4))))
-  (t/is (= [9] (vec (get-bytes obj-store "digits" 9 1))))
+    (t/is (= (vec (range 10)) (vec (get-bytes obj-store digits-key 0 20))))
+    (t/is (= [9] (vec (get-bytes obj-store digits-key 9 2))))
 
-  (t/is (= (vec (range 10)) (vec (get-bytes obj-store "digits" 0 20))))
-  (t/is (= [9] (vec (get-bytes obj-store "digits" 9 2))))
+    ;; OOB behaviour is 'any exception', just whatever is thrown by impl
+    (->> "len 0 is not permitted due to potential ambiguities that arise in the bounds behaviour for len 0 across impls"
+         (t/is (thrown? Exception (get-bytes obj-store digits-key 0 0))))
 
-  ;; OOB behaviour is 'any exception', just whatever is thrown by impl
-  (->> "len 0 is not permitted due to potential ambiguities that arise in the bounds behaviour for len 0 across impls"
-       (t/is (thrown? Exception (get-bytes obj-store "digits" 0 0))))
+    (->> "OOB for negative index"
+         (t/is (thrown? Exception (get-bytes obj-store digits-key -1 3))))
 
-  (->> "OOB for negative index"
-       (t/is (thrown? Exception (get-bytes obj-store "digits" -1 3))))
+    (->> "OOB for negative len"
+         (t/is (thrown? Exception (get-bytes obj-store digits-key 0 -1))))
 
   (->> "OOB for negative len"
        (t/is (thrown? Exception (get-bytes obj-store "digits" 0 -1))))
-  
+
   ;; Causes issues due to different error types being thrown
   ;; (->> "IllegalStateException thrown if object does not exist"
   ;;      (t/is (thrown? IllegalStateException (get-bytes obj-store "does-not-exist" 0 1))))
 
-  )
+  ))

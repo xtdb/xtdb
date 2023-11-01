@@ -7,6 +7,7 @@
            [java.io Closeable]
            [java.lang AutoCloseable]
            [java.nio ByteBuffer]
+           [java.nio.file Path]
            [java.util NavigableSet]
            [java.util.concurrent CompletableFuture]
            [java.util.function Supplier]
@@ -14,8 +15,9 @@
 
 (def blob-source-opts (into-array Blob$BlobSourceOption []))
 
-(defn get-blob [{:keys [^Storage storage-service bucket-name prefix]} blob-name]
-  (let [blob-id (BlobId/of bucket-name (str prefix blob-name))
+(defn get-blob [{:keys [^Storage storage-service bucket-name ^Path prefix]} ^Path blob-name]
+  (let [prefixed-key (util/prefix-key prefix blob-name)
+        blob-id (BlobId/of bucket-name (str prefixed-key))
         blob-byte-buffer (some-> (.get storage-service blob-id)
                                  (.getContent blob-source-opts)
                                  (ByteBuffer/wrap))]
@@ -25,9 +27,10 @@
 
 (def read-options (into-array Storage$BlobSourceOption []))
 
-(defn- get-blob-range [{:keys [^Storage storage-service bucket-name prefix]} blob-name start len]
+(defn- get-blob-range [{:keys [^Storage storage-service bucket-name ^Path prefix]} ^Path blob-name start len]
   (os/ensure-shared-range-oob-behaviour start len)
-  (let [blob-id (BlobId/of bucket-name (str prefix blob-name))
+  (let [prefixed-key (util/prefix-key prefix blob-name)
+        blob-id (BlobId/of bucket-name (str prefixed-key))
         blob (.get storage-service blob-id)
         out (ByteBuffer/allocate len)]
     (if blob
@@ -46,8 +49,9 @@
 (def write-options (into-array Storage$BlobWriteOption [(Storage$BlobWriteOption/doesNotExist)]))
 
 (defn put-blob
-  ([{:keys [^Storage storage-service bucket-name prefix]} blob-name byte-buf]
-   (let [blob-id (BlobId/of bucket-name (str prefix blob-name))
+  ([{:keys [^Storage storage-service bucket-name ^Path prefix]} ^Path blob-name byte-buf]
+   (let [prefixed-key (util/prefix-key prefix blob-name)
+         blob-id (BlobId/of bucket-name (str prefixed-key))
          blob-info (.build (BlobInfo/newBuilder blob-id))]
 
      (try
@@ -57,8 +61,9 @@
          (when-not (= 412 (.getCode e))
            (throw e)))))))
 
-(defn delete-blob [{:keys [^Storage storage-service bucket-name prefix]} blob-name]
-  (let [blob-id (BlobId/of bucket-name (str prefix blob-name))]
+(defn delete-blob [{:keys [^Storage storage-service bucket-name ^Path prefix]} ^Path blob-name]
+  (let [prefixed-key (util/prefix-key prefix blob-name)
+        blob-id (BlobId/of bucket-name (str prefixed-key))]
     (.delete storage-service blob-id)))
 
 (defrecord GoogleCloudStorageObjectStore [^Storage storage-service bucket-name prefix ^NavigableSet file-name-cache ^AutoCloseable file-list-watcher]
@@ -81,20 +86,22 @@
      (get-blob-range this k start len)))
 
   (putObject [this k buf]
-    (file-list/add-filename file-name-cache k)
-    (put-blob this k buf)
-    (CompletableFuture/completedFuture nil))
+    (CompletableFuture/completedFuture
+     (do
+       (put-blob this k buf)
+       (.add file-name-cache k))))
 
   (listObjects [_this]
-    (file-list/list-files file-name-cache))
+    (into [] file-name-cache))
 
   (listObjects [_this dir]
     (file-list/list-files-under-prefix file-name-cache dir))
 
   (deleteObject [this k]
-    (file-list/remove-filename file-name-cache k)
-    (delete-blob this k)
-    (CompletableFuture/completedFuture nil))
+    (CompletableFuture/completedFuture 
+     (do
+       (delete-blob this k)
+       (.remove file-name-cache k))))
 
   Closeable
   (close [_]

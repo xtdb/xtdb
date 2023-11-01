@@ -56,15 +56,15 @@
     (t/is (= 0 (.get bp/cache-miss-byte-counter)))
     (t/is (= 0N @bp/io-wait-nanos-counter))
 
-    @(.putObject ^ObjectStore os "foo" (ByteBuffer/wrap (.getBytes "hello")))
+    @(.putObject ^ObjectStore os (util/->path "foo") (ByteBuffer/wrap (.getBytes "hello")))
 
-    (with-open [^ArrowBuf _buf @(.getBuffer bp "foo")])
+    (with-open [^ArrowBuf _buf @(.getBuffer bp (util/->path "foo"))])
 
     (t/is (pos? (.get bp/cache-miss-byte-counter)))
     (t/is (= 0 (.get bp/cache-hit-byte-counter)))
     (t/is (pos? @bp/io-wait-nanos-counter))
 
-    (with-open [^ArrowBuf _buf @(.getBuffer bp "foo")])
+    (with-open [^ArrowBuf _buf @(.getBuffer bp (util/->path "foo"))])
 
     (t/is (pos? (.get bp/cache-hit-byte-counter)))
     (t/is (= (.get bp/cache-hit-byte-counter) (.get bp/cache-miss-byte-counter)))
@@ -133,7 +133,7 @@
 
 (defn evict-buffer [bp k] (.close (.remove (:memory-store bp) k)))
 
-(defn test-get-object [bp ^String k ^ByteBuffer expected]
+(defn test-get-object [bp ^Path k ^ByteBuffer expected]
   (let [{:keys [^Path disk-store, object-store]} bp]
 
     (t/testing "immediate get from buffers map produces correct buffer"
@@ -205,25 +205,25 @@
   (with-open [bp (remote-test-buffer-pool)]
     (t/testing "if <= min part size, putObject is used"
       (with-redefs [bp/min-multipart-part-size 2]
-        (put-buf bp "min-part-put" (utf8-buf "12"))
+        (put-buf bp (util/->path "min-part-put") (utf8-buf "12"))
         (t/is (= [:put] (get-remote-calls bp)))
-        (test-get-object bp "min-part-put" (utf8-buf "12"))))))
+        (test-get-object bp (util/->path "min-part-put") (utf8-buf "12"))))))
 
 (t/deftest above-min-size-multipart-test
   (with-open [bp (remote-test-buffer-pool)]
     (t/testing "if above min part size, multipart is used"
       (with-redefs [bp/min-multipart-part-size 2]
-        (put-buf bp "min-part-multi" (utf8-buf "1234"))
+        (put-buf bp (util/->path "min-part-multi") (utf8-buf "1234"))
         (t/is (= [:upload :upload :complete] (get-remote-calls bp)))
-        (test-get-object bp "min-part-multi" (utf8-buf "1234"))))))
+        (test-get-object bp (util/->path "min-part-multi") (utf8-buf "1234"))))))
 
 (t/deftest small-end-part-test
   (with-open [bp (remote-test-buffer-pool)]
     (t/testing "multipart, smaller end part"
       (with-redefs [bp/min-multipart-part-size 2]
-        (put-buf bp "min-part-multi2" (utf8-buf "123"))
+        (put-buf bp (util/->path "min-part-multi2") (utf8-buf "123"))
         (t/is (= [:upload :upload :complete] (get-remote-calls bp)))
-        (test-get-object bp "min-part-multi2" (utf8-buf "123"))))))
+        (test-get-object bp (util/->path "min-part-multi2") (utf8-buf "123"))))))
 
 (t/deftest arrow-ipc-test
   (with-open [bp (remote-test-buffer-pool)]
@@ -237,7 +237,7 @@
                         (reset! multipart-branch-taken true)
                         (apply ->RemoteArrowFileChannel args))]
           (with-open [vsr (VectorSchemaRoot/create schema tu/*allocator*)
-                      w (.openArrowFileWriter bp "aw" vsr)]
+                      w (.openArrowFileWriter bp (util/->path "aw") vsr)]
             (let [^IntVector v (.getVector vsr "a")]
               (.setValueCount v 10)
               (dotimes [x 10] (.set v x x))
@@ -247,6 +247,6 @@
 
         (t/is @multipart-branch-taken true)
         (t/is (= [:upload :upload :complete] (get-remote-calls bp)))
-        (with-open [buf @(.getBuffer bp "aw")]
+        (with-open [buf @(.getBuffer bp (util/->path "aw"))]
           (let [{:keys [root]} (util/read-arrow-buf buf)]
             (util/close root)))))))

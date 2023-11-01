@@ -1,7 +1,8 @@
 (ns xtdb.trie-test
   (:require [clojure.test :as t :refer [deftest]]
             [xtdb.test-util :as tu]
-            [xtdb.trie :as trie])
+            [xtdb.trie :as trie]
+            [xtdb.util :as util])
   (:import (org.apache.arrow.memory RootAllocator)
            (xtdb.trie ArrowHashTrie ArrowHashTrie$Leaf)))
 
@@ -55,8 +56,8 @@
 (t/deftest test-selects-current-tries
   (letfn [(f [trie-keys]
             (->> (trie/current-trie-files (for [[level rf nr] trie-keys]
-                                            (trie/->table-meta-file-name "foo" (trie/->log-trie-key level rf nr))))
-                 (mapv (comp (juxt :level :row-from :next-row) trie/parse-trie-file-name))))]
+                                            (trie/->table-meta-file-path (util/->path "tables/xt_docs") (trie/->log-trie-key level rf nr))))
+                 (mapv (comp (juxt :level :row-from :next-row) trie/parse-trie-file-path))))]
     (t/is (= [] (f [])))
 
     (t/is (= [[0 0 1] [0 1 2] [0 2 3]]
