@@ -6,8 +6,9 @@
             [xtdb.util :as util])
   (:import (java.time Duration Instant LocalDate LocalDateTime LocalTime Period ZoneId ZoneOffset ZonedDateTime)
            (java.time.temporal ChronoField ChronoUnit)
+           [java.util Map]
            (org.apache.arrow.vector PeriodDuration)
-           (xtdb.vector IStructValueReader)))
+           [xtdb.vector IValueReader ValueBox]))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -1057,43 +1058,37 @@
                       :from from
                       :to to})))
 
-(defn ->period ^IStructValueReader [^long from, ^long to]
+(defn ->period ^java.util.Map [^long from, ^long to]
   ;; TODO error assumes micros
   (when (> from to)
     (throw (invalid-period-err from to)))
 
-    (reify IStructValueReader
-      (readLong [_ field]
-        (case field
-          "from" from
-          "to" to))))
+  {"from" (doto (ValueBox.) (.writeLong from))
+   "to" (doto (ValueBox.) (.writeLong to))})
 
 (defmethod expr/codegen-call [:period :timestamp-tz :timestamp-tz] [{[from-type to-type] :arg-types}]
   {:return-type [:struct {'from from-type, 'to to-type}]
    :->call-code (fn [[from-code to-code]]
                   (-> `(->period ~from-code ~to-code)
-                      (expr/with-tag IStructValueReader)))})
+                      (expr/with-tag Map)))})
 
-(defn ->open-ended-period ^IStructValueReader [^long from]
-  (reify IStructValueReader
-    (readLong [_ field]
-      (case field
-        "from" from
-        "to" Long/MAX_VALUE))))
+(defn ->open-ended-period [^long from]
+  {"from" (doto (ValueBox.) (.writeLong from))
+   "to" (doto (ValueBox.) (.writeLong Long/MAX_VALUE))})
 
 (defmethod expr/codegen-call [:period :timestamp-tz :null] [{[from-type _to-type] :arg-types}]
   {:return-type [:struct {'from from-type, 'to types/temporal-col-type}]
    :->call-code (fn [[from-code _to-code]]
                   (-> `(->open-ended-period ~from-code)
-                      (expr/with-tag IStructValueReader)))})
+                      (expr/with-tag Map)))})
 
-(defn from ^long [^IStructValueReader period]
-  (.readLong period "from"))
+(defn from ^long [^Map period]
+  (.readLong ^IValueReader (.get period "from")))
 
-(defn to ^long [^IStructValueReader period]
-  (.readLong period "to"))
+(defn to ^long [^Map period]
+  (.readLong ^IValueReader (.get period "to")))
 
-(defn temporal-contains-point? [^IStructValueReader p1 ^long ts]
+(defn temporal-contains-point? [p1 ^long ts]
   (and (<= (from p1) ts)
        (>= (to p1) ts)))
 
@@ -1102,69 +1097,69 @@
    :->call-code (fn [[p1-code ts-code]]
                   `(temporal-contains-point? ~p1-code ~ts-code))})
 
-(defn temporal-contains? [^IStructValueReader p1 ^IStructValueReader p2]
+(defn temporal-contains? [p1 p2]
   (and (<= (from p1) (from p2))
        (>= (to p1) (to p2))))
 
-(defn temporal-strictly-contains? [^IStructValueReader p1 ^IStructValueReader p2]
+(defn temporal-strictly-contains? [p1 p2]
   (and (< (from p1) (from p2))
        (> (to p1) (to p2))))
 
-(defn overlaps? [^IStructValueReader p1 ^IStructValueReader p2]
+(defn overlaps? [p1 p2]
   (and (< (from p1) (to p2))
        (> (to p1) (from p2))))
 
-(defn strictly-overlaps? [^IStructValueReader p1 ^IStructValueReader p2]
+(defn strictly-overlaps? [p1 p2]
   (and (> (from p1) (from p2))
        (< (to p1) (to p2))))
 
-(defn equals? [^IStructValueReader p1 ^IStructValueReader p2]
+(defn equals? [p1 p2]
   (and (= (from p1) (from p2))
        (= (to p1) (to p2))))
 
-(defn precedes? [^IStructValueReader p1 ^IStructValueReader p2]
+(defn precedes? [p1 p2]
   (<= (to p1) (from p2)))
 
-(defn strictly-precedes? [^IStructValueReader p1 ^IStructValueReader p2]
+(defn strictly-precedes? [p1 p2]
   (< (to p1) (from p2)))
 
-(defn immediately-precedes? [^IStructValueReader p1 ^IStructValueReader p2]
+(defn immediately-precedes? [p1 p2]
   (= (to p1) (from p2)))
 
-(defn succeeds? [^IStructValueReader p1 ^IStructValueReader p2]
+(defn succeeds? [p1 p2]
   (>= (from p1) (to p2)))
 
-(defn strictly-succeeds? [^IStructValueReader p1 ^IStructValueReader p2]
+(defn strictly-succeeds? [p1 p2]
   (> (from p1) (to p2)))
 
-(defn immediately-succeeds? [^IStructValueReader p1 ^IStructValueReader p2]
+(defn immediately-succeeds? [p1 p2]
   (= (from p1) (to p2)))
 
-(defn leads? [^IStructValueReader p1 ^IStructValueReader p2]
+(defn leads? [p1 p2]
   (and (< (from p1) (from p2))
        (< (from p2) (to p1))
        (<= (to p1) (to p2))))
 
-(defn strictly-leads? [^IStructValueReader p1 ^IStructValueReader p2]
+(defn strictly-leads? [p1 p2]
   (and (< (from p1) (from p2))
        (< (from p2) (to p1))
        (< (to p1) (to p2))))
 
-(defn immediately-leads? [^IStructValueReader p1 ^IStructValueReader p2]
+(defn immediately-leads? [p1 p2]
   (and (< (from p1) (from p2))
        (= (to p1) (to p2))))
 
-(defn lags? [^IStructValueReader p1 ^IStructValueReader p2]
+(defn lags? [p1 p2]
   (and (>= (from p1) (from p2))
        (< (from p2) (to p1))
        (> (to p1) (to p2))))
 
-(defn strictly-lags? [^IStructValueReader p1 ^IStructValueReader p2]
+(defn strictly-lags? [p1 p2]
   (and (> (from p1) (from p2))
        (< (from p2) (to p1))
        (> (to p1) (to p2))))
 
-(defn immediately-lags? [^IStructValueReader p1 ^IStructValueReader p2]
+(defn immediately-lags? [p1 p2]
   (and (= (from p1) (from p2))
        (> (to p1) (to p2))))
 
