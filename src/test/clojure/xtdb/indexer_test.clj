@@ -443,6 +443,8 @@
                            nil
                            (partition-all 100 tx-ops))]
 
+          (Thread/sleep 250) ; wait for the chunk to finish writing to disk
+                             ; we don't have an accessible hook for this, beyond awaiting the tx
           (doseq [^Node node (shuffle (take 6 (cycle [node-1 node-2 node-3])))
                   :let [^IBufferPool bp (util/component node :xtdb/buffer-pool)
                         ^IMetadataManager mm (util/component node ::meta/metadata-manager)]]
@@ -456,6 +458,7 @@
               (t/is (= 11 (count (filter #(re-matches #"tables/device_readings/meta/log-l\p{XDigit}+-rf\p{XDigit}+-nr\p{XDigit}+\.arrow" %) objs))))
               (t/is (= 11 (count (filter #(re-matches #"tables/xt\$txs/data/log-l\p{XDigit}+-rf\p{XDigit}+-nr\p{XDigit}+\.arrow" %) objs))))
               (t/is (= 11 (count (filter #(re-matches #"tables/xt\$txs/meta/log-l\p{XDigit}+-rf\p{XDigit}+-nr\p{XDigit}+\.arrow" %) objs)))))
+
             (t/is (= :utf8 (types/field->col-type (.columnField mm "device_readings" "xt$id"))))))))))
 
 (t/deftest can-ingest-ts-devices-mini-with-stop-start-and-reach-same-state
