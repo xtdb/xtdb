@@ -841,70 +841,16 @@ public class ValueVectorReader implements IVectorReader {
                     var startIdx = getListStartIndex(pos.getPosition());
                     var valueCount = getListCount(pos.getPosition());
 
-                    return new IPolyVectorReader() {
+                    return new IListValueReader() {
                         @Override
-                        public int valueCount() {
+                        public int size() {
                             return valueCount;
                         }
 
                         @Override
-                        public void read(int elIdx) {
+                        public IValueReader nth(int elIdx) {
                             elPos.setPosition(startIdx + elIdx);
-                        }
-
-                        @Override
-                        public Keyword getLeg() {
-                            return elValueReader.getLeg();
-                        }
-
-                        @Override
-                        public boolean isNull() {
-                            return elValueReader.isNull();
-                        }
-
-                        @Override
-                        public boolean readBoolean() {
-                            return elValueReader.readBoolean();
-                        }
-
-                        @Override
-                        public byte readByte() {
-                            return elValueReader.readByte();
-                        }
-
-                        @Override
-                        public short readShort() {
-                            return elValueReader.readShort();
-                        }
-
-                        @Override
-                        public int readInt() {
-                            return elValueReader.readInt();
-                        }
-
-                        @Override
-                        public long readLong() {
-                            return elValueReader.readLong();
-                        }
-
-                        @Override
-                        public float readFloat() {
-                            return elValueReader.readFloat();
-                        }
-
-                        @Override
-                        public double readDouble() {
-                            return elValueReader.readDouble();
-                        }
-
-                        @Override
-                        public ByteBuffer readBytes() {
-                            return elValueReader.readBytes();
-                        }
-
-                        @Override
-                        public Object readObject() {
-                            return elValueReader.readObject();
+                            return elValueReader;
                         }
                     };
                 }
