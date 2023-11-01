@@ -788,115 +788,8 @@ public class ValueVectorReader implements IVectorReader {
                 var readers = structKeys().stream().collect(Collectors.toMap(k -> k, k -> structKeyReader(k).valueReader(pos)));
                 return new BaseValueReader(pos) {
                     @Override
-                    public Object readObject() {
-                        return new IStructValueReader() {
-                            @Override
-                            public boolean readBoolean(String fieldName) {
-                                return readers.get(fieldName).readBoolean();
-                            }
-
-                            @Override
-                            public byte readByte(String fieldName) {
-                                return readers.get(fieldName).readByte();
-                            }
-
-                            @Override
-                            public short readShort(String fieldName) {
-                                return readers.get(fieldName).readShort();
-                            }
-
-                            @Override
-                            public int readInt(String fieldName) {
-                                return readers.get(fieldName).readInt();
-                            }
-
-                            @Override
-                            public long readLong(String fieldName) {
-                                return readers.get(fieldName).readLong();
-                            }
-
-                            @Override
-                            public float readFloat(String fieldName) {
-                                return readers.get(fieldName).readFloat();
-                            }
-
-                            @Override
-                            public double readDouble(String fieldName) {
-                                return readers.get(fieldName).readDouble();
-                            }
-
-                            @Override
-                            public ByteBuffer readBytes(String fieldName) {
-                                return readers.get(fieldName).readBytes();
-                            }
-
-                            @Override
-                            public Object readObject(String fieldName) {
-                                return readers.get(fieldName).readObject();
-                            }
-
-                            @Override
-                            public IPolyValueReader readField(String fieldName) {
-                                var reader = readers.get(fieldName);
-
-                                return new IPolyValueReader() {
-                                    @Override
-                                    public Keyword getLeg() {
-                                        return reader.getLeg();
-                                    }
-
-                                    @Override
-                                    public boolean isNull() {
-                                        return reader.isNull();
-                                    }
-
-                                    @Override
-                                    public boolean readBoolean() {
-                                        return reader.readBoolean();
-                                    }
-
-                                    @Override
-                                    public byte readByte() {
-                                        return reader.readByte();
-                                    }
-
-                                    @Override
-                                    public short readShort() {
-                                        return reader.readShort();
-                                    }
-
-                                    @Override
-                                    public int readInt() {
-                                        return reader.readInt();
-                                    }
-
-                                    @Override
-                                    public long readLong() {
-                                        return reader.readLong();
-                                    }
-
-                                    @Override
-                                    public float readFloat() {
-                                        return reader.readFloat();
-                                    }
-
-                                    @Override
-                                    public double readDouble() {
-                                        return reader.readDouble();
-                                    }
-
-                                    @Override
-                                    public ByteBuffer readBytes() {
-                                        return reader.readBytes();
-                                    }
-
-                                    @Override
-                                    public Object readObject() {
-                                        return reader.readObject();
-                                    }
-                                };
-                            }
-                        };
+                    public Map<String, IValueReader> readObject() {
+                        return readers;
                     }
                 };
             }
@@ -948,70 +841,16 @@ public class ValueVectorReader implements IVectorReader {
                     var startIdx = getListStartIndex(pos.getPosition());
                     var valueCount = getListCount(pos.getPosition());
 
-                    return new IPolyVectorReader() {
+                    return new IListValueReader() {
                         @Override
-                        public int valueCount() {
+                        public int size() {
                             return valueCount;
                         }
 
                         @Override
-                        public void read(int elIdx) {
+                        public IValueReader nth(int elIdx) {
                             elPos.setPosition(startIdx + elIdx);
-                        }
-
-                        @Override
-                        public Keyword getLeg() {
-                            return elValueReader.getLeg();
-                        }
-
-                        @Override
-                        public boolean isNull() {
-                            return elValueReader.isNull();
-                        }
-
-                        @Override
-                        public boolean readBoolean() {
-                            return elValueReader.readBoolean();
-                        }
-
-                        @Override
-                        public byte readByte() {
-                            return elValueReader.readByte();
-                        }
-
-                        @Override
-                        public short readShort() {
-                            return elValueReader.readShort();
-                        }
-
-                        @Override
-                        public int readInt() {
-                            return elValueReader.readInt();
-                        }
-
-                        @Override
-                        public long readLong() {
-                            return elValueReader.readLong();
-                        }
-
-                        @Override
-                        public float readFloat() {
-                            return elValueReader.readFloat();
-                        }
-
-                        @Override
-                        public double readDouble() {
-                            return elValueReader.readDouble();
-                        }
-
-                        @Override
-                        public ByteBuffer readBytes() {
-                            return elValueReader.readBytes();
-                        }
-
-                        @Override
-                        public Object readObject() {
-                            return elValueReader.readObject();
+                            return elValueReader;
                         }
                     };
                 }

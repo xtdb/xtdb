@@ -30,18 +30,31 @@ public interface IVectorWriter extends IValueWriter, AutoCloseable {
 
     IRowCopier rowCopier(ValueVector srcVector);
 
+    default void writeValue(IValueReader valueReader) {
+        if (valueReader.isNull()) writeNull();
+        else writeValue0(valueReader);
+    }
+
     /**
-     * won't create
+     * @param valueReader a non-null IValueReader
      */
-    @Override
+    void writeValue0(IValueReader valueReader);
+
     IVectorWriter structKeyWriter(String key);
 
     IVectorWriter structKeyWriter(String key, FieldType fieldType);
 
-    @Override
+    void startStruct();
+
+    void endStruct();
+
     IVectorWriter listElementWriter();
 
     IVectorWriter listElementWriter(FieldType fieldType);
+
+    void startList();
+
+    void endList();
 
     @Override
     IVectorWriter legWriter(Keyword leg);

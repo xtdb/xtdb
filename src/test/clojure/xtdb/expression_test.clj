@@ -1156,7 +1156,6 @@
     (t/is (= {:res 2.0, :res-type :f32}
              (run-test '/ (float 4) (int 2))))))
 
-
 (t/deftest test-decimal-arithmetic-and-coersion
   (letfn [(run-test [f x y]
             (with-open [rel (tu/open-rel [(tu/open-vec "x" [x])

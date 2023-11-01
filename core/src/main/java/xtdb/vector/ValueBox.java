@@ -4,7 +4,7 @@ import clojure.lang.Keyword;
 
 import java.nio.ByteBuffer;
 
-public class ValueBox implements IValueWriter, IPolyValueReader {
+public class ValueBox implements IValueWriter, IValueReader {
     private static final Keyword NULL_LEG = Keyword.intern("null");
 
     private Keyword leg;
@@ -115,44 +115,6 @@ public class ValueBox implements IValueWriter, IPolyValueReader {
     @Override
     public void writeObject(Object objectValue) {
         this.obj = objectValue;
-    }
-
-    @Override
-    public IValueWriter structKeyWriter(String key) {
-        return new BoxWriter() {
-            @Override
-            IValueWriter box() {
-                return ((StructValueBox) obj).fieldWriter(key);
-            }
-        };
-    }
-
-    @Override
-    public void startStruct() {
-        obj = new StructValueBox();
-    }
-
-    @Override
-    public void endStruct() {
-    }
-
-    @Override
-    public IValueWriter listElementWriter() {
-        return new BoxWriter() {
-            @Override
-            IValueWriter box() {
-                return ((ListValueBox) obj);
-            }
-        };
-    }
-
-    @Override
-    public void startList() {
-        obj = new ListValueBox();
-    }
-
-    @Override
-    public void endList() {
     }
 
     @Override
