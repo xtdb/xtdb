@@ -40,7 +40,7 @@
 (deftest ^:integration concurrent-buffer-pool-test
   (populate-node node-opts)
   (tu/with-system {:xtdb/allocator {}
-                   :xtdb.buffer-pool/local {:path (.resolve (.toPath node-dir) "objects")}}
+                   :xtdb.buffer-pool/local {:data-dir (.resolve (.toPath node-dir) "objects")}}
     (fn []
       (let [^IBufferPool buffer-pool (:xtdb.buffer-pool/local tu/*sys*)
             objs (.listObjects buffer-pool)
