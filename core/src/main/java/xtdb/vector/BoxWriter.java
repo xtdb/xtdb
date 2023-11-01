@@ -58,36 +58,6 @@ abstract class BoxWriter implements IValueWriter {
     }
 
     @Override
-    public IValueWriter structKeyWriter(String key) {
-        return box().structKeyWriter(key);
-    }
-
-    @Override
-    public void startStruct() {
-        box().startStruct();
-    }
-
-    @Override
-    public void endStruct() {
-        box().endStruct();
-    }
-
-    @Override
-    public IValueWriter listElementWriter() {
-        return box().listElementWriter();
-    }
-
-    @Override
-    public void startList() {
-        box().startList();
-    }
-
-    @Override
-    public void endList() {
-        box().endList();
-    }
-
-    @Override
     public IValueWriter legWriter(Keyword leg) {
         return box().legWriter(leg);
     }
