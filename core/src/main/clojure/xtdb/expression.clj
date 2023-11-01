@@ -11,7 +11,7 @@
            (java.nio ByteBuffer)
            (java.nio.charset StandardCharsets)
            (java.time Clock Duration Instant LocalDate LocalDateTime LocalTime OffsetDateTime ZoneOffset ZonedDateTime)
-           (java.util Arrays Date List UUID)
+           (java.util Arrays Date List Map UUID)
            (java.util.regex Pattern)
            (java.util.stream IntStream)
            (org.apache.arrow.vector PeriodDuration ValueVector)
@@ -19,7 +19,7 @@
            (xtdb.operator IProjectionSpec IRelationSelector)
            (xtdb.types IntervalDayTime IntervalMonthDayNano IntervalYearMonth)
            (xtdb.util StringUtil)
-           (xtdb.vector IStructValueReader IVectorPosition IVectorReader IPolyVectorReader RelationReader)
+           (xtdb.vector IPolyVectorReader IValueReader IVectorPosition IVectorReader RelationReader)
            xtdb.vector.ValueBox))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -320,7 +320,7 @@
 
 (defmethod read-value-code :struct [_ & args]
   (-> `(.readObject ~@args)
-      (with-tag IStructValueReader)))
+      (with-tag Map)))
 
 (defmethod write-value-code :struct [[_ val-types] writer-arg code]
   (let [struct-sym (gensym 'struct)]
@@ -328,17 +328,17 @@
        (.startStruct ~writer-arg)
        ~@(for [[field val-type] val-types
                :let [field-name (str field)]]
-           (if (types/union? val-type)
-             (let [field-box-sym (gensym 'field_box)]
-               `(let [~field-box-sym (.readField ~struct-sym ~field-name)]
-                  ~(continue-read (fn [val-type code]
-                                    (write-value-code val-type `(-> (.structKeyWriter ~writer-arg ~field-name)
-                                                                    (.legWriter ~(types/->arrow-type val-type))) code))
-                                  val-type field-box-sym)))
+           (continue-read (if (types/union? val-type)
+                            (fn [val-type code]
+                              (write-value-code val-type
+                                                `(-> (.structKeyWriter ~writer-arg ~field-name)
+                                                     (.legWriter ~(types/->arrow-type val-type)))
+                                                code))
+                            (fn [val-type code]
+                              (write-value-code val-type `(.structKeyWriter ~writer-arg ~field-name) code)))
 
-             (continue-read (fn [val-type code]
-                              (write-value-code val-type `(.structKeyWriter ~writer-arg ~field-name) code))
-                            val-type struct-sym field-name)))
+                          val-type (-> `(.get ~struct-sym ~field-name)
+                                       (with-tag IValueReader))))
        (.endStruct ~writer-arg))))
 
 (def ^:dynamic ^java.time.Clock *clock* (Clock/systemUTC))
@@ -1246,51 +1246,41 @@
 
 (defmethod codegen-expr :struct [{:keys [entries]} opts]
   (let [emitted-vals (->> entries
-                          (into {} (map (juxt (comp symbol key) (comp #(codegen-expr % opts) val)))))
-        val-types (->> emitted-vals
-                       (into {} (map (juxt key (comp :return-type val)))))
+                          (mapv (fn [[k expr]]
+                                  (let [k (symbol k)]
+                                    {:k k
+                                     :val-box (gensym (str (util/symbol->normal-form-symbol k) "-box"))
+                                     :emitted-expr (codegen-expr expr opts)}))))
 
-        {poly-vals true, mono-vals false}
-        (->> emitted-vals
-             (group-by (comp types/union? :return-type val)))
-
-        return-type [:struct val-types]
-        box-sym (when (seq poly-vals)
-                  (gensym 'box))]
+        return-type [:struct (->> emitted-vals
+                                  (into {} (map (juxt :k (comp :return-type :emitted-expr)))))]
+        map-sym (gensym 'map)]
 
     {:return-type return-type
-     :batch-bindings (cond-> [] box-sym (conj [box-sym `(ValueBox.)]))
-     :children (vals emitted-vals)
-     :continue (fn [f]
-                 (f return-type
-                    `(reify IStructValueReader
-                       ~@(when (seq poly-vals)
-                           [`(~'readField [_# field#]
-                              (case field#
-                                ~@(->> poly-vals
-                                       (mapcat (fn [[field {:keys [continue]}]]
-                                                 [(str field)
-                                                  (continue (fn [val-type code]
-                                                              (write-value-code val-type `(.legWriter ~box-sym ~(types/col-type->leg val-type)) code)))]))))
-                              ~box-sym)])
+     :batch-bindings (conj (->> emitted-vals
+                                (mapv (fn [{:keys [val-box]}]
+                                        [val-box `(ValueBox.)])))
 
-                       ~@(for [[rw-fn mono-vals] (->> mono-vals
-                                                      (group-by (comp col-type->rw-fn types/col-type-head :return-type val)))
-                               :when rw-fn]
-                           `(~(symbol (str "read" rw-fn)) [_# field#]
-                             (case field#
-                               ~@(->> (for [[field {:keys [continue]}] mono-vals]
-                                        [(str field)
-                                         (continue (fn [_ code] code))])
-                                      (apply concat))))))))}))
+                           [(-> map-sym (with-tag Map))
+                            (->> emitted-vals
+                                 (into {} (map (fn [{:keys [k val-box]}]
+                                                 [(str k) val-box]))))])
+
+     :children (mapv :emitted-expr emitted-vals)
+     :continue (fn [f]
+                 `(do
+                    ~@(for [{:keys [val-box], {:keys [continue]} :emitted-expr} emitted-vals]
+                        (continue (fn [val-type code]
+                                    (write-value-code val-type `(.legWriter ~val-box ~(types/col-type->leg val-type)) code))))
+
+                    ~(f return-type map-sym)))}))
 
 (defmethod codegen-call [:get-field :struct] [{[[_ field-types]] :arg-types, :keys [field]}]
   (if-let [val-type (get field-types field)]
     {:return-type val-type
      :continue-call (fn [f [struct-code]]
-                      (if (types/union? val-type)
-                        (continue-read f val-type `(.readField ~struct-code ~(str field)))
-                        (continue-read f val-type struct-code (str field))))}
+                      (continue-read f val-type (-> `(.get ~struct-code ~(str field))
+                                                    (with-tag IValueReader))))}
 
     {:return-type :null, :->call-code (constantly nil)}))
 
@@ -1311,12 +1301,16 @@
                                                                           {:return-type :null, :->call-code (constantly nil)}
                                                                           (codegen-call {:f :=, :arg-types [l-val-type r-val-type]}))))
                                                      (into {}))))
-                             (into {}))]
+                             (into {}))
+            l-sym (gensym 'l-struct)
+            r-sym (gensym 'r-struct)]
 
         {:return-type [:union #{:bool :null}]
          :continue-call (fn [f [l-code r-code]]
                           (let [res-sym (gensym 'res)]
-                            `(let [~res-sym
+                            `(let [~l-sym ~l-code
+                                   ~r-sym ~r-code
+                                   ~res-sym
                                    ~(->> (for [[field inner-calls] inner-calls]
                                            (continue-read (fn [l-val-type l-val-code]
                                                             (continue-read (fn [r-val-type r-val-code]
@@ -1324,8 +1318,12 @@
                                                                                (if continue-call
                                                                                  (continue-call cont-b3-call [l-val-code r-val-code])
                                                                                  (cont-b3-call return-type (->call-code [l-val-code r-val-code])))))
-                                                                           (get r-field-types field) r-code (str field)))
-                                                          (get l-field-types field) l-code (str field)))
+                                                                           (get r-field-types field)
+                                                                           (-> `(.get ~r-sym ~(str field))
+                                                                               (with-tag IValueReader))))
+                                                          (get l-field-types field)
+                                                          (-> `(.get ~l-sym ~(str field))
+                                                              (with-tag IValueReader))))
                                          (reduce (fn [l-code r-code]
                                                    `(let [~res-sym ~l-code]
                                                       (if (== -1 ~res-sym)
@@ -1532,6 +1530,7 @@
         (let [expr (prepare-expr expr)
               {:keys [return-type continue] :as emitted-expr} (codegen-expr expr opts)
               {:keys [writer-bindings write-value-out!]} (write-value-out-code return-type)]
+          (assert return-type (pr-str expr))
           {:!projection-fn (delay
                              (-> `(fn [~(-> rel-sym (with-tag RelationReader))
                                        ~(-> params-sym (with-tag RelationReader))
