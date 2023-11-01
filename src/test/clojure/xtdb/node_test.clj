@@ -307,15 +307,15 @@ WHERE foo.xt$id = 1"]])]
                    :where [(match :xt_docs [{:xt/id id}])
                            [id :xt$id]]}))))
 
-(t/deftest test-list-round-trip-546
+(t/deftest test-list-round-trip-2342
   (xt/submit-tx tu/*node* [[:sql "INSERT INTO t3(xt$id, data) VALUES (1, [2, 3])"]
                            [:sql "INSERT INTO t3(xt$id, data) VALUES (2, [6, 7])"]])
-  #_ ; FIXME #546
-  (t/is (= [{:data [2 3], :data_1 [2 3]}
-            {:data [2 3], :data_1 [6 7]}
-            {:data [6 7], :data_1 [2 3]}
-            {:data [6 7], :data_1 [6 7]}]
-           (xt/q tu/*node* "SELECT t3.data, t2.data FROM t3, t3 AS t2"))))
+
+  (t/is (= {{:data [2 3], :data:1 [2 3]} 1
+            {:data [2 3], :data:1 [6 7]} 1
+            {:data [6 7], :data:1 [2 3]} 1
+            {:data [6 7], :data:1 [6 7]} 1}
+           (frequencies (xt/q tu/*node* "SELECT t3.data, t2.data FROM t3, t3 AS t2")))))
 
 (t/deftest test-mutable-data-buffer-bug
   (xt/submit-tx tu/*node* [[:sql "INSERT INTO t1(xt$id) VALUES(1)"]])
