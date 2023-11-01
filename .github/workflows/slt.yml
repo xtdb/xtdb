@@ -37,3 +37,13 @@ jobs:
         with:
           arguments: slt-test-dir -PtestDir=${{ matrix.slt-dir.dir }} -PtestMaxErrors=${{ matrix.slt-dir.error }} -PtestMaxFailures=${{ matrix.slt-dir.failure }}
           cache-read-only: ${{ github.ref != 'refs/heads/2.x' }}
+      - name: Post Slack Notification
+        if: failure()
+        uses: ravsamhq/notify-slack-action@v2
+        with:
+          status: ${{ job.status }}
+          notification_title: "*SLT Test*"
+          message_format: "{emoji} Scheduled *SLT Test* has {status_message}!"
+          notify_when: "failure"
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
