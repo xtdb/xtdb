@@ -19,7 +19,7 @@
            (xtdb.operator IProjectionSpec IRelationSelector)
            (xtdb.types IntervalDayTime IntervalMonthDayNano IntervalYearMonth)
            (xtdb.util StringUtil)
-           (xtdb.vector IPolyVectorReader IValueReader IVectorPosition IVectorReader RelationReader)
+           (xtdb.vector IListValueReader IValueReader IVectorPosition IVectorReader RelationReader)
            xtdb.vector.ValueBox))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -289,34 +289,29 @@
 
 (defmethod read-value-code :list [_ & args]
   (-> `(.readObject ~@args)
-      (with-tag IPolyVectorReader)))
+      (with-tag IListValueReader)))
 
 (defmethod write-value-code :list [[_ list-el-type] writer-arg list-code]
   (let [list-sym (gensym 'list)
         n-sym (gensym 'n)
         el-writer-sym (gensym 'list-el-writer)]
-    (if (types/union? list-el-type)
-      `(let [~list-sym ~list-code
-             el-count# (.valueCount ~list-sym)
-             ~el-writer-sym (.listElementWriter ~writer-arg)]
-         (.startList ~writer-arg)
-         (dotimes [~n-sym el-count#]
-           (.read ~list-sym ~n-sym)
-           ~(continue-read (fn [el-type code]
-                             (write-value-code el-type `(.legWriter ~el-writer-sym ~(types/->arrow-type el-type)) code))
-                           list-el-type list-sym))
-         (.endList ~writer-arg))
+    `(let [~list-sym ~list-code
+           el-count# (.size ~list-sym)
+           ~el-writer-sym (.listElementWriter ~writer-arg)]
+       (.startList ~writer-arg)
+       (dotimes [~n-sym el-count#]
+         ~(continue-read (if (types/union? list-el-type)
+                           (fn [el-type code]
+                             (write-value-code el-type
+                                               `(-> ~el-writer-sym
+                                                    (.legWriter ~(types/->arrow-type el-type)))
+                                               code))
 
-      `(let [~list-sym ~list-code
-             el-count# (.valueCount ~list-sym)
-             ~el-writer-sym (.listElementWriter ~writer-arg)]
-         (.startList ~writer-arg)
-         (dotimes [~n-sym el-count#]
-           (.read ~list-sym ~n-sym)
-           ~(continue-read (fn [el-type code]
-                             (write-value-code el-type el-writer-sym code))
-                           list-el-type list-sym))
-         (.endList ~writer-arg)))))
+                           (fn [el-type code]
+                             (write-value-code el-type el-writer-sym code)))
+                         list-el-type
+                         `(.nth ~list-sym ~n-sym)))
+       (.endList ~writer-arg))))
 
 (defmethod read-value-code :struct [_ & args]
   (-> `(.readObject ~@args)
@@ -1334,35 +1329,6 @@
                                  ~(f :null nil)
                                  ~(f :bool `(== 1 ~res-sym))))))}))))
 
-(defn- codegen-list [return-type emitted-els]
-  (let [box-sym (gensym 'box)]
-    {:batch-bindings [[box-sym `(ValueBox.)]]
-     :continue (fn [f]
-                 (f return-type
-                    `(reify IPolyVectorReader
-                       (~'valueCount [_#] ~(count emitted-els))
-
-                       (~'read [_# idx#]
-                        (case idx#
-                          ~@(->> emitted-els
-                                 (sequence (comp (map-indexed (fn [idx {:keys [continue]}]
-                                                                [idx (continue (fn [return-type code]
-                                                                                 (let [leg (types/col-type->leg return-type)]
-                                                                                   (write-value-code return-type `(.legWriter ~box-sym ~leg) code))))]))
-                                                 cat)))))
-
-                       (~'getLeg [_#] (.getLeg ~box-sym))
-                       (~'isNull [_#] (.isNull ~box-sym))
-                       (~'readBoolean [_#] (.readBoolean ~box-sym))
-                       (~'readByte [_#] (.readByte ~box-sym))
-                       (~'readShort [_#] (.readShort ~box-sym))
-                       (~'readInt [_#] (.readInt ~box-sym))
-                       (~'readLong [_#] (.readLong ~box-sym))
-                       (~'readFloat [_#] (.readFloat ~box-sym))
-                       (~'readDouble [_#] (.readDouble ~box-sym))
-                       (~'readBytes [_#] (.readBytes ~box-sym))
-                       (~'readObject [_#] (.readObject ~box-sym)))))}))
-
 (defmethod codegen-cast [:list :list] [{[_ source-el-type] :source-type
                                         [_ target-el-type :as target-type] :target-type}]
   (assert (types/union? target-el-type))
@@ -1382,16 +1348,35 @@
 
 (defmethod codegen-expr :list [{:keys [elements]} opts]
   (let [emitted-els (->> elements
-                         (mapv (fn [el]
-                                 (codegen-expr el opts))))
-        el-type (->> (into #{} (map :return-type) emitted-els)
-                     (apply types/merge-col-types))
-        return-type [:list el-type]]
+                         (into [] (map-indexed (fn [idx el]
+                                                 {:idx idx
+                                                  :el-box (gensym (str "el" idx))
+                                                  :emitted-el (codegen-expr el opts)}))))
 
-    (into {:return-type return-type
-           :children emitted-els}
+        return-type [:list (->> (into #{} (map (comp :return-type :emitted-el)) emitted-els)
+                                (apply types/merge-col-types))]]
 
-          (codegen-list return-type emitted-els))))
+    {:return-type return-type
+     :children (mapv :emitted-el emitted-els)
+
+     :batch-bindings (->> emitted-els
+                          (mapv (fn [{:keys [el-box]}]
+                                  [el-box `(ValueBox.)])))
+     :continue (fn [f]
+                 (f return-type
+                    `(reify IListValueReader
+                       (~'size [_#] ~(count emitted-els))
+
+                       (~'nth [_# idx#]
+                        (case idx#
+                          ~@(->> emitted-els
+                                 (sequence (comp (map-indexed (fn [idx {:keys [el-box], {:keys [continue]} :emitted-el}]
+                                                                [idx (continue (fn [return-type code]
+                                                                                 (let [leg (types/col-type->leg return-type)]
+                                                                                   `(do
+                                                                                      ~(write-value-code return-type `(.legWriter ~el-box ~leg) code)
+                                                                                      ~el-box))))]))
+                                                 cat))))))))}))
 
 (defmethod codegen-call [:nth :list :int] [{[[_ list-el-type] _n-type] :arg-types}]
   (let [return-type (types/merge-col-types list-el-type :null)]
@@ -1401,10 +1386,9 @@
                             n-sym (gensym 'n)]
                         `(let [~list-sym ~list-code
                                ~n-sym ~n-code]
-                           (if (and (>= ~n-sym 0) (< ~n-sym (.valueCount ~list-sym)))
+                           (if (and (>= ~n-sym 0) (< ~n-sym (.size ~list-sym)))
                              (do
-                               (.read ~list-sym ~n-sym)
-                               ~(continue-read f list-el-type list-sym))
+                               ~(continue-read f list-el-type `(.nth ~list-sym ~n-sym)))
                              ~(f :null nil)))))}))
 
 (defmethod codegen-call [:nth :any :int] [_]
@@ -1412,21 +1396,12 @@
 
 (defmethod codegen-call [:cardinality :list] [_]
   {:return-type :i32
-   :->call-code #(do `(.valueCount ~@%))})
+   :->call-code #(do `(.size ~@%))})
 
-(defn trim-array-view ^xtdb.vector.IPolyVectorReader [^long trimmed-value-count ^IPolyVectorReader lst]
-  (reify IPolyVectorReader
-    (valueCount [_] trimmed-value-count)
-    (read [_ idx] (.read lst idx))
-    (readBoolean [_] (.readBoolean lst))
-    (readByte [_] (.readByte lst))
-    (readShort [_] (.readShort lst))
-    (readInt [_] (.readInt lst))
-    (readLong [_] (.readLong lst))
-    (readFloat [_] (.readFloat lst))
-    (readDouble [_] (.readDouble lst))
-    (readBytes [_] (.readBytes lst))
-    (readObject [_] (.readObject lst))))
+(defn trim-array-view ^xtdb.vector.IListValueReader [^long trimmed-value-count ^IListValueReader lst]
+  (reify IListValueReader
+    (size [_] trimmed-value-count)
+    (nth [_ idx] (.nth lst idx))))
 
 (defmethod codegen-call [:trim-array :list :int] [{[[_list list-el-type] _n-type] :arg-types}]
   (let [return-type [:list list-el-type]]
@@ -1435,13 +1410,13 @@
                       (let [list-sym (gensym 'list)
                             n-sym (gensym 'n)]
                         `(let [~list-sym ~list-code
-                               ~n-sym (- (.valueCount ~list-sym) ~n-code)]
+                               ~n-sym (- (.size ~list-sym) ~n-code)]
                            (if (neg? ~n-sym)
                              (throw (err/runtime-err :xtdb.expression/array-element-error
                                                      {::err/message "Data exception - array element error."
                                                       :nlen ~n-sym}))
                              ~(f return-type (-> `(trim-array-view ~n-sym ~list-sym)
-                                                 (with-tag IPolyVectorReader)))))))}))
+                                                 (with-tag IListValueReader)))))))}))
 
 (defmethod codegen-call [:= :list :list] [{[[_ l-el-type] [_ r-el-type]] :arg-types}]
   (let [n-sym (gensym 'n)
@@ -1461,8 +1436,8 @@
                         ;; this is essentially `(every? = ...)` but with 3VL
                         `(let [~l-sym ~l-code, ~r-sym ~r-code
                                ~(-> res-sym (with-tag 'long))
-                               (let [~len-sym (.valueCount ~l-sym)]
-                                 (if-not (= ~len-sym (.valueCount ~r-sym))
+                               (let [~len-sym (.size ~l-sym)]
+                                 (if-not (= ~len-sym (.size ~r-sym))
                                    -1
                                    (loop [~n-sym 0, ~res-sym 1]
                                      (cond
@@ -1471,18 +1446,18 @@
                                        :else (recur (inc ~n-sym)
                                                     (min ~res-sym
                                                          (do
-                                                           (.read ~l-sym ~n-sym)
                                                            ~(continue-read
                                                              (fn cont-l [l-el-type l-el-code]
                                                                `(do
-                                                                  (.read ~r-sym ~n-sym)
                                                                   ~(continue-read (fn cont-r [r-el-type r-el-code]
                                                                                     (let [{:keys [return-type continue-call ->call-code]} (get inner-calls [l-el-type r-el-type])]
                                                                                       (if continue-call
                                                                                         (continue-call cont-b3-call [l-el-code r-el-code])
                                                                                         (cont-b3-call return-type (->call-code [l-el-code r-el-code])))))
-                                                                                  r-el-type r-sym)))
-                                                             l-el-type l-sym))))))))]
+                                                                                  r-el-type
+                                                                                  `(.nth ~r-sym ~n-sym))))
+                                                             l-el-type
+                                                             `(.nth ~l-sym ~n-sym)))))))))]
                            (if (zero? ~res-sym)
                              ~(f :null nil)
                              ~(f :bool `(== 1 ~res-sym))))))}))

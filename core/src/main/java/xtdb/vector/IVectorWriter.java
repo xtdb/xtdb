@@ -30,9 +30,6 @@ public interface IVectorWriter extends IValueWriter, AutoCloseable {
 
     IRowCopier rowCopier(ValueVector srcVector);
 
-    /**
-     * won't create
-     */
     @Override
     IVectorWriter structKeyWriter(String key);
 

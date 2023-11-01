@@ -6,11 +6,10 @@ import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
 
-class ListValueBox implements IValueWriter, IPolyVectorReader {
+class ListValueBox implements IValueWriter, IListValueReader {
 
     private final IVectorPosition wp = IVectorPosition.build();
     private final List<ValueBox> els;
-    private ValueBox readBox;
     private ValueBox writeBox;
 
     ListValueBox() {
@@ -18,68 +17,13 @@ class ListValueBox implements IValueWriter, IPolyVectorReader {
     }
 
     @Override
-    public int valueCount() {
-        return wp.getPosition();
+    public int size() {
+        return els.size();
     }
 
     @Override
-    public Keyword getLeg() {
-        return readBox.getLeg();
-    }
-
-    @Override
-    public boolean isNull() {
-        return readBox.isNull();
-    }
-
-    @Override
-    public boolean readBoolean() {
-        return readBox.readBoolean();
-    }
-
-    @Override
-    public byte readByte() {
-        return readBox.readByte();
-    }
-
-    @Override
-    public short readShort() {
-        return readBox.readShort();
-    }
-
-    @Override
-    public int readInt() {
-        return readBox.readInt();
-    }
-
-    @Override
-    public long readLong() {
-        return readBox.readLong();
-    }
-
-    @Override
-    public float readFloat() {
-        return readBox.readFloat();
-    }
-
-    @Override
-    public double readDouble() {
-        return readBox.readDouble();
-    }
-
-    @Override
-    public ByteBuffer readBytes() {
-        return readBox.readBytes();
-    }
-
-    @Override
-    public Object readObject() {
-        return readBox.readObject();
-    }
-
-    @Override
-    public void read(int idx) {
-        this.readBox = els.get(idx);
+    public IValueReader nth(int idx) {
+        return els.get(idx);
     }
 
     private ValueBox newEl() {
