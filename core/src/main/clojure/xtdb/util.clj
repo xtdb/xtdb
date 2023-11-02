@@ -19,18 +19,16 @@
            java.nio.file.attribute.FileAttribute
            (java.time Duration Instant LocalDate LocalDateTime LocalTime OffsetDateTime ZoneId ZonedDateTime)
            java.time.temporal.ChronoUnit
-           (java.util ArrayList Collections Date Iterator LinkedHashMap LinkedList Map Queue UUID WeakHashMap)
+           (java.util Collections Date LinkedHashMap Map UUID WeakHashMap)
            (java.util.concurrent CompletableFuture ExecutionException ExecutorService Executors ThreadFactory TimeUnit)
-           (java.util.function BiFunction Consumer Function Supplier)
+           (java.util.function Function)
            (org.apache.arrow.compression CommonsCompressionFactory)
            (org.apache.arrow.flatbuf Footer Message RecordBatch)
            (org.apache.arrow.memory AllocationManager ArrowBuf BufferAllocator)
            (org.apache.arrow.memory.util ByteFunctionHelpers MemoryUtil)
            (org.apache.arrow.vector ValueVector VectorLoader VectorSchemaRoot)
            (org.apache.arrow.vector.ipc ArrowFileWriter ArrowStreamWriter ArrowWriter)
-           (org.apache.arrow.vector.ipc.message ArrowBlock ArrowFooter ArrowRecordBatch MessageSerializer)
-           org.roaringbitmap.RoaringBitmap
-           xtdb.ICursor
+           (org.apache.arrow.vector.ipc.message ArrowBlock ArrowFooter MessageSerializer)
            xtdb.util.NormalForm))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -254,8 +252,8 @@
         this)
 
       (size [_] (.capacity buffer))
-      (write [_ src] (throw (UnsupportedOperationException.)))
-      (truncate [_ size] (throw (UnsupportedOperationException.))))))
+      (write [_ _src] (throw (UnsupportedOperationException.)))
+      (truncate [_ _size] (throw (UnsupportedOperationException.))))))
 
 (defn enum->kw [^Enum enum-value]
   (-> (.name enum-value)
@@ -330,47 +328,19 @@
   (Files/move from-path to-path (into-array CopyOption [StandardCopyOption/ATOMIC_MOVE]))
   to-path)
 
-(defn write-buffer-to-path-atomically [^ByteBuffer from-buffer, ^Path root-path, ^Path to-path]
-  (let [to-path-temp (doto (.resolve root-path (str ".tmp/" (UUID/randomUUID)))
-                       (-> (.getParent) mkdirs))]
-    (try
-      (write-buffer-to-path from-buffer to-path-temp)
-      (atomic-move to-path-temp to-path)
-      (finally
-        (Files/deleteIfExists to-path-temp)))))
-
-(defn copy-file-atomically [^Path root-path, ^Path from-path, ^Path to-path]
-  (let [to-path-temp (doto (.resolve root-path (str ".tmp/" (UUID/randomUUID)))
-                       (-> (.getParent) mkdirs))]
-    (try
-      (Files/copy from-path to-path-temp ^"[Ljava.nio.file.CopyOption;" (make-array CopyOption 0))
-      (atomic-move to-path-temp to-path)
-      (finally
-        (Files/deleteIfExists to-path-temp)))))
-
 (defn prefix-key [^Path prefix ^Path k]
   (cond->> k
     prefix (.resolve prefix)))
 
-(def tables-dir (->path "tables"))
+(def ^java.nio.file.Path tables-dir (->path "tables"))
 
-(defn table-name->table-path [table-name]
+(defn table-name->table-path [^String table-name]
   (.resolve tables-dir table-name))
-
-(defn ->supplier {:style/indent :defn} ^java.util.function.Supplier [f]
-  (reify Supplier
-    (get [_]
-      (f))))
 
 (defn ->jfn {:style/indent :defn} ^java.util.function.Function [f]
   (reify Function
     (apply [_ v]
       (f v))))
-
-(defn ->jbifn {:style/indent :defn} ^java.util.function.BiFunction [f]
-  (reify BiFunction
-    (apply [_ a b]
-      (f a b))))
 
 (defn then-apply {:style/indent :defn}
   ^java.util.concurrent.CompletableFuture
@@ -381,9 +351,6 @@
   ^java.util.concurrent.CompletableFuture
   [^CompletableFuture fut f]
   (.thenCompose fut (->jfn f)))
-
-(defmacro completable-future {:style/indent 1} [pool & body]
-  `(CompletableFuture/supplyAsync (->supplier (fn [] ~@body)) ~pool))
 
 (def uncaught-exception-handler
   (reify Thread$UncaughtExceptionHandler
@@ -543,98 +510,12 @@
                       (-> (.getReferenceManager) (.retain)))]
     (MessageSerializer/deserializeRecordBatch batch body-buffer)))
 
-(deftype ChunkCursor [^ArrowBuf buf,
-                      ^Queue blocks
-                      ^VectorSchemaRoot root
-                      ^VectorLoader loader
-                      ^:unsynchronized-mutable ^ArrowRecordBatch current-batch
-                      ^boolean close-buffer?]
-  ICursor
-  (tryAdvance [this c]
-    (when current-batch
-      (try-close current-batch)
-      (set! (.current-batch this) nil))
-
-    (if-let [block (.poll blocks)]
-      (let [record-batch (->arrow-record-batch-view block buf)]
-        (set! (.current-batch this) record-batch)
-        (.load loader record-batch)
-        (.accept c root)
-        true)
-      false))
-
-  (close [_]
-    (when current-batch
-      (try-close current-batch))
-    (try-close root)
-    (when close-buffer?
-      (try-close buf))))
-
 (defn read-arrow-buf [^ArrowBuf ipc-file-format-buffer]
   (let [footer (read-arrow-footer ipc-file-format-buffer)
         root (VectorSchemaRoot/create (.getSchema footer) (.getAllocator (.getReferenceManager ipc-file-format-buffer)))]
     {:arrow-blocks (.getRecordBatches footer)
      :root root
      :loader (VectorLoader. root CommonsCompressionFactory/INSTANCE)}))
-
-(defn ->chunks
-  (^xtdb.ICursor [^ArrowBuf ipc-file-format-buffer]
-   (->chunks ipc-file-format-buffer {}))
-  (^xtdb.ICursor [^ArrowBuf ipc-file-format-buffer {:keys [^RoaringBitmap block-idxs close-buffer?]}]
-   (let [{:keys [arrow-blocks root loader]} (read-arrow-buf ipc-file-format-buffer)]
-     (ChunkCursor. ipc-file-format-buffer
-                   (LinkedList. (cond->> arrow-blocks
-                                  block-idxs (keep-indexed (fn [idx arrow-block]
-                                                             (when (.contains block-idxs ^int idx)
-                                                               arrow-block)))))
-                   root loader nil (boolean close-buffer?)))))
-
-(defn combine-col-cursors ^ICursor #_<VSR> [^Map #_#_<String, ICursor<VSR>> col-cursors]
-  (reify ICursor
-    (tryAdvance [_ c]
-      (let [out-vecs (ArrayList. (count col-cursors))]
-        ;; normally rels aren't supposed to escape the scope of the tryAdvance call
-        ;; but we effectively still own it, so we assume its state doesn't change
-        ;; immediately after the call
-        (if (every? (fn [[^String col-name ^ICursor col-cursor]]
-                      (.tryAdvance col-cursor
-                                   (reify Consumer
-                                     (accept [_ root]
-                                       (.add out-vecs (.getVector ^VectorSchemaRoot root col-name))))))
-                    col-cursors)
-          (do
-            (.accept c (VectorSchemaRoot. out-vecs))
-            true)
-          false)))
-
-    (close [_] (run! try-close (vals col-cursors)))))
-
-(deftype ConcatCursor [^Iterator #_<ICursor<E>> cursors
-                       ^:volatile-mutable ^ICursor #_<E> current-cursor]
-  ICursor #_<E>
-  (tryAdvance [this c]
-    (loop []
-      (cond
-        current-cursor
-        (or (.tryAdvance current-cursor c)
-            (do
-              (.close current-cursor)
-              (set! (.current-cursor this) nil)
-              (recur)))
-
-        (.hasNext cursors)
-        (do
-          (set! (.current-cursor this) (.next cursors))
-          (recur))
-
-        :else false)))
-
-  (close [_]
-    (try-close current-cursor)
-    (run! try-close (iterator-seq cursors))))
-
-(defn ->concat-cursor [& cursors]
-  (ConcatCursor. (.iterator ^Iterable cursors) nil))
 
 (defn compare-nio-buffers-unsigned ^long [^ByteBuffer x ^ByteBuffer y]
   (let [rem-x (.remaining x)
