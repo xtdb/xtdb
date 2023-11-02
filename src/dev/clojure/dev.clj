@@ -29,7 +29,7 @@
 
 (def standalone-config
   {::xtdb {:node-opts {:xtdb.log/local-directory-log {:root-path (io/file dev-node-dir "log")}
-                       :xtdb.buffer-pool/local {:path (io/file dev-node-dir "objects")}
+                       :xtdb.buffer-pool/local {:data-dir (io/file dev-node-dir "objects")}
                        :xtdb/server {}
                        :xtdb/pgwire {:port 5433}
                        :xtdb.flight-sql/server {:port 52358}}}})
