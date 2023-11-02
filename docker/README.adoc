@@ -3,52 +3,9 @@
 == Building a local image for testing
 
 * Make sure your Docker daemon is running
-* `./bin/docker-build.sh [--clean]` will build and tag as `xtdb:latest`, and load it into your images list. The `--clean` flag can be used to ensure the xtdb uberjar is rebuilt.
-* To run: `docker run -ti --rm -p 5432:5432 -p 9832:9832 -p 3000:3000 xtdb` (with no `xtdb/` organization prefix)
+* `./bin/docker-build.sh [--clean]` will build and tag as `xtdb-local-standalone:latest`, and load it into your images list. The `--clean` flag can be used to ensure the xtdb uberjar is rebuilt.
+* To run: `docker run -ti --rm -p -p 3000:3000 xtdb-local-standalone:latest` (this will run the server, exposing port 3000)
 
-== Deployment setup
+== Customizing the local image
 
-* It's recommend to set up a Docker https://docs.docker.com/engine/reference/commandline/login/#credentials-store[credentials store], if you haven't already.
-** Arch: `docker-credential-helpers-bin`, and normal https://www.passwordstore.org/[Pass] setup.
-** OSX: can use the keychain - follow instructions on the above link.
-* https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry#authenticating-with-a-personal-access-token-classic[Authenticate] to the Github Container Registry.
-
-== Building and pushing a multi-arch image
-
-* install https://github.com/docker/buildx[buildx] if it is not already (docker desktop, recent docker versions have it bundled). This will enable multi-arch builds support.
-* `docker buildx install` to https://github.com/docker/buildx#set-buildx-as-the-default-builder[set buildx as your default Docker builder]
-* `./bin/docker-build-and-push.sh [--clean] [--latest]` will build and push the image as `xtdb/xtdb:"$sha"` as well as `xtdb/xtdb:latest` if `--latest` is supplied.
-
-As with a local build, the `--clean` flag can ensure a the xtdb uberjar is built afresh.
-
-== Troubleshooting
-
-If you get an error on build like this:
-
-[source,text]
-----
-error: multiple platforms feature is currently not supported for docker driver. Please switch to a different driver (eg. "docker buildx create --use")
-----
-
-You may have to create and switch to a builder using the `docker-container` buildx driver:
-
-[source,shell]
-----
-# you only need to run this once to configure buildx:
-docker buildx create --name mybuilder --driver=docker-container --use
-# then re-run:
-./bin/docker-build-and-push.sh --clean --latest
-----
-
-See also this https://www.docker.com/blog/multi-arch-build-and-images-the-simple-way/[blog from docker] and https://cloudolife.com/2022/03/05/Infrastructure-as-Code-IaC/Container/Docker/Docker-buildx-support-multiple-architectures-images/[this tutorial] for more details on multi-arch builds with buildx.
-
-If you try to push to Docker Hub without credentials configured, you will see:
-
-[source,text]
-----
-error: failed to solve: server message: insufficient_scope: authorization failed
-----
-
-* Make sure you have an account on https://hub.docker.com
-* Ask @refset or @jarohen to add your account to the `xtdb` organization
-* Log in with `docker login` (interactive) to save your credentials locally
+If you wish to build the local image with a different default configuration included, you can change the content of the `local_xtdb.edn` file prior to building, or create a new file and replace references to `local_xtdb.edn` with the new config file. The created uberjar should have all XTDB modules included, so the node can be configured however you wish.
