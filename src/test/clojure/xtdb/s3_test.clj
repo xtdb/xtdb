@@ -5,10 +5,11 @@
             [xtdb.s3 :as s3]
             [xtdb.util :as util])
   (:import [java.io Closeable]
-           [java.nio ByteBuffer] 
+           [java.nio ByteBuffer]
+           [java.nio.file Path]
            [software.amazon.awssdk.services.s3 S3AsyncClient]
            [software.amazon.awssdk.services.s3.model ListMultipartUploadsRequest ListMultipartUploadsResponse MultipartUpload]
-           [xtdb.object_store ObjectStore SupportsMultipart IMultipartUpload]))
+           [xtdb.object_store IMultipartUpload ObjectStore SupportsMultipart]))
 
 ;; Setup the stack via cloudformation - see modules/s3/cloudformation/s3-stack.yml
 ;; Ensure region is set locally to wherever cloudformation stack is created (ie, eu-west-1 if stack on there)
@@ -76,7 +77,7 @@
   (with-open [os (object-store (random-uuid))]
     (let [multipart-key (util/->path "test-multi-created")
           multipart-upload ^IMultipartUpload  @(.startMultipart ^SupportsMultipart os multipart-key)
-          prefixed-key (str (.resolve (:prefix os) multipart-key))]
+          prefixed-key (str (.resolve ^Path (:prefix os) multipart-key))]
       (t/testing "Call to start a multipart upload should work and be visible in multipart upload list"
         (let [list-multipart-uploads-response @(.listMultipartUploads ^S3AsyncClient (:client os)
                                                                       (-> (ListMultipartUploadsRequest/builder)
