@@ -231,7 +231,7 @@
         ;; TODO confirm/expand API that we expose to tx-fns
         sci-ctx (sci/init {:bindings {'q (tx-fn-q allocator ra-src wm-src scan-emitter tx-opts)
                                       'sql-q (partial tx-fn-sql allocator ra-src wm-src tx-opts)
-                                      'sleep (fn [n] (Thread/sleep n))
+                                      'sleep (fn [^long n] (Thread/sleep n))
                                       '*current-tx* tx-key}})]
 
     (reify OpIndexer
