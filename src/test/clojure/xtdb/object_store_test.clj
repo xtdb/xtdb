@@ -13,18 +13,18 @@
            [java.util.concurrent CompletableFuture ConcurrentSkipListMap]
            [java.util.function Supplier]
            [java.util NavigableMap]
-           [xtdb.object_store ObjectStore]))
+           [xtdb IObjectStore]))
 
-(defn- get-edn [^ObjectStore obj-store, ^Path k]
+(defn- get-edn [^IObjectStore obj-store, ^Path k]
   (-> (let [^ByteBuffer buf @(.getObject obj-store k)]
         (edn/read-string (str (.decode StandardCharsets/UTF_8 buf))))
       (util/rethrowing-cause)))
 
-(defn put-edn [^ObjectStore obj-store ^Path k obj]
+(defn put-edn [^IObjectStore obj-store ^Path k obj]
   (let [^ByteBuffer buf (.encode StandardCharsets/UTF_8 (pr-str obj))]
     @(.putObject obj-store k buf)))
 
-(defn put-bytes [^ObjectStore obj-store ^Path k bytes]
+(defn put-bytes [^IObjectStore obj-store ^Path k bytes]
   @(.putObject obj-store k (ByteBuffer/wrap bytes)))
 
 (defn byte-buf->bytes [^ByteBuffer buf]
@@ -34,7 +34,7 @@
     (.position buf pos)
     arr))
 
-(defn get-bytes [^ObjectStore obj-store ^Path k start len]
+(defn get-bytes [^IObjectStore obj-store ^Path k start len]
   (byte-buf->bytes @(.getObjectRange obj-store k start len)))
 
 ;; Generates a byte buffer of random characters
@@ -49,7 +49,7 @@
         byte-buffer))))
 
 (deftype InMemoryObjectStore [^NavigableMap os]
-  ObjectStore
+  IObjectStore
   (getObject [_this k]
     (CompletableFuture/completedFuture
      (let [^ByteBuffer buf (or (.get os k)
@@ -100,7 +100,7 @@
 
 (derive ::memory-object-store :xtdb/object-store)
 
-(defn test-put-delete [^ObjectStore obj-store]
+(defn test-put-delete [^IObjectStore obj-store]
   (let [alice {:xt/id :alice, :name "Alice"}
         alice-key (util/->path "alice")]
     (put-edn obj-store alice-key alice)
@@ -124,7 +124,7 @@
     (t/is (thrown? IllegalStateException (get-edn obj-store alice-key)))))
 
 (defn test-list-objects
-  [^ObjectStore obj-store]
+  [^IObjectStore obj-store]
   (put-edn obj-store (util/->path "bar/alice") :alice)
   (put-edn obj-store (util/->path "foo/alan") :alan)
   (put-edn obj-store (util/->path "bar/bob") :bob)
@@ -155,7 +155,7 @@
   (t/is (= (mapv util/->path ["bar/baz" "bar/baza" "bar/bob"])
            (.listObjects obj-store (util/->path "bar")))))
 
-(defn test-range [^ObjectStore obj-store]
+(defn test-range [^IObjectStore obj-store]
   (let [digits-key (util/->path "digits")]
     (put-bytes obj-store digits-key (byte-array (range 10)))
 

@@ -9,7 +9,8 @@
            [java.nio.file Path]
            [software.amazon.awssdk.services.s3 S3AsyncClient]
            [software.amazon.awssdk.services.s3.model ListMultipartUploadsRequest ListMultipartUploadsResponse MultipartUpload]
-           [xtdb.object_store IMultipartUpload ObjectStore SupportsMultipart]))
+           xtdb.IObjectStore
+           [xtdb.multipart IMultipartUpload SupportsMultipart]))
 
 ;; Setup the stack via cloudformation - see modules/s3/cloudformation/s3-stack.yml
 ;; Ensure region is set locally to wherever cloudformation stack is created (ie, eu-west-1 if stack on there)
@@ -46,17 +47,17 @@
       (os-test/put-edn os (util/->path "alice") :alice)
       (os-test/put-edn os (util/->path "alan") :alan)
       (t/is (= (mapv util/->path ["alan" "alice"]) 
-               (.listObjects ^ObjectStore os))))
+               (.listObjects ^IObjectStore os))))
 
     (with-open [os (object-store prefix)]
       (t/testing "prior objects will still be there, should be available on a list request"
         (t/is (= (mapv util/->path ["alan" "alice"]) 
-                 (.listObjects ^ObjectStore os))))
+                 (.listObjects ^IObjectStore os))))
 
       (t/testing "should be able to delete prior objects and have that reflected in list objects output"
-        @(.deleteObject ^ObjectStore os (util/->path "alice")) 
+        @(.deleteObject ^IObjectStore os (util/->path "alice"))
         (t/is (= (mapv util/->path ["alan"]) 
-                 (.listObjects ^ObjectStore os)))))))
+                 (.listObjects ^IObjectStore os)))))))
 
 (t/deftest ^:s3 multiple-object-store-list-test
   (let [prefix (random-uuid)
@@ -68,10 +69,10 @@
       (Thread/sleep wait-time-ms)
       
       (t/is (= (mapv util/->path ["alan" "alice"]) 
-               (.listObjects ^ObjectStore os-1)))
+               (.listObjects ^IObjectStore os-1)))
       
       (t/is (= (mapv util/->path ["alan" "alice"]) 
-               (.listObjects ^ObjectStore os-2))))))
+               (.listObjects ^IObjectStore os-2))))))
 
 (t/deftest ^:s3 multipart-start-and-cancel
   (with-open [os (object-store (random-uuid))]
@@ -118,8 +119,8 @@
 
       (t/testing "Multipart upload works correctly - file present and contents correct"
         (t/is (= (mapv util/->path ["test-multi-put"]) 
-                 (.listObjects ^ObjectStore os)))
+                 (.listObjects ^IObjectStore os)))
 
-        (let [^ByteBuffer uploaded-buffer @(.getObject ^ObjectStore os (util/->path "test-multi-put"))]
+        (let [^ByteBuffer uploaded-buffer @(.getObject ^IObjectStore os (util/->path "test-multi-put"))]
           (t/testing "capacity should be equal to total of 2 parts"
             (t/is (= (* 2 part-size) (.capacity uploaded-buffer)))))))))

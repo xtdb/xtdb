@@ -1,7 +1,6 @@
 (ns xtdb.trie
   (:require [xtdb.buffer-pool]
             [xtdb.metadata :as meta]
-            [xtdb.object-store]
             [xtdb.types :as types]
             [xtdb.util :as util]
             [xtdb.vector.reader :as vr]

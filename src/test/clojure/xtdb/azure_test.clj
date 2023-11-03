@@ -1,21 +1,19 @@
 (ns xtdb.azure-test
   (:require [clojure.java.shell :as sh]
+            [clojure.set :as set]
             [clojure.test :as t]
+            [clojure.tools.logging :as log]
             [juxt.clojars-mirrors.integrant.core :as ig]
-            [xtdb.api :as xt]
             [xtdb.azure :as azure]
             [xtdb.object-store-test :as os-test]
-            [xtdb.node :as node]
-            [clojure.tools.logging :as log]
-            [clojure.set :as set]
             [xtdb.util :as util])
-  (:import [java.util UUID]
+  (:import [com.azure.storage.blob BlobContainerClient]
+           [com.azure.storage.blob.models BlobItem BlobListDetails ListBlobsOptions]
            [java.io Closeable]
            [java.nio ByteBuffer]
            [java.nio.file Path]
-           [com.azure.storage.blob.models ListBlobsOptions BlobListDetails BlobItem]
-           [com.azure.storage.blob BlobContainerClient]
-           [xtdb.object_store ObjectStore SupportsMultipart IMultipartUpload]))
+           xtdb.IObjectStore
+           [xtdb.multipart IMultipartUpload SupportsMultipart]))
 
 (def resource-group-name "azure-modules-test")
 (def storage-account "xtdbteststorageaccount")
@@ -74,17 +72,17 @@
       (os-test/put-edn os (util/->path "alice") :alice)
       (os-test/put-edn os (util/->path "alan") :alan)
       (t/is (= (mapv util/->path ["alan" "alice"])
-               (.listObjects ^ObjectStore os))))
+               (.listObjects ^IObjectStore os))))
 
     (with-open [os (object-store prefix)]
       (t/testing "prior objects will still be there, should be available on a list request"
         (t/is (= (mapv util/->path ["alan" "alice"])
-                 (.listObjects ^ObjectStore os))))
+                 (.listObjects ^IObjectStore os))))
       
       (t/testing "should be able to delete prior objects and have that reflected in list objects output"
-        @(.deleteObject ^ObjectStore os (util/->path "alice"))
+        @(.deleteObject ^IObjectStore os (util/->path "alice"))
         (t/is (= (mapv util/->path ["alan"]) 
-                 (.listObjects ^ObjectStore os)))))))
+                 (.listObjects ^IObjectStore os)))))))
 
 (t/deftest ^:azure multiple-object-store-list-test
   (let [prefix (random-uuid)
@@ -96,10 +94,10 @@
       (Thread/sleep wait-time-ms)
       
       (t/is (= (mapv util/->path ["alan" "alice"]) 
-               (.listObjects ^ObjectStore os-1)))
+               (.listObjects ^IObjectStore os-1)))
       
       (t/is (= (mapv util/->path ["alan" "alice"]) 
-               (.listObjects ^ObjectStore os-2))))))
+               (.listObjects ^IObjectStore os-2))))))
 
 ;; Currently not testing this - will need to setup the event hub namespace and config to run
 ;; (t/deftest ^:azure test-eventhub-log
@@ -137,7 +135,7 @@
     (let [blob-container-client (:blob-container-client os)
           prefix (:prefix os)]
       (t/testing "Call to start multipart should work/return an object"
-        (let [multipart-upload ^IMultipartUpload  @(.startMultipart ^SupportsMultipart os (util/->path "test-multi-created"))]
+        (let [multipart-upload ^IMultipartUpload @(.startMultipart ^SupportsMultipart os (util/->path "test-multi-created"))]
           (t/is multipart-upload)
 
           (t/testing "Uploading a part should create an uncomitted blob"
@@ -169,8 +167,8 @@
 
       (t/testing "Multipart upload works correctly - file present and contents correct"
         (t/is (= (mapv util/->path ["test-multi-put"]) 
-                 (.listObjects ^ObjectStore os)))
+                 (.listObjects ^IObjectStore os)))
 
-        (let [^ByteBuffer uploaded-buffer @(.getObject ^ObjectStore os (util/->path "test-multi-put"))]
+        (let [^ByteBuffer uploaded-buffer @(.getObject ^IObjectStore os (util/->path "test-multi-put"))]
           (t/testing "capacity should be equal to total of 2 parts"
             (t/is (= (* 2 part-size) (.capacity uploaded-buffer)))))))))

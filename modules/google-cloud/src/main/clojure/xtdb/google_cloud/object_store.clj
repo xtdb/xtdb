@@ -11,7 +11,7 @@
            [java.util NavigableSet]
            [java.util.concurrent CompletableFuture]
            [java.util.function Supplier]
-           [xtdb.object_store ObjectStore]))
+           [xtdb IObjectStore]))
 
 (def blob-source-opts (into-array Blob$BlobSourceOption []))
 
@@ -67,7 +67,7 @@
     (.delete storage-service blob-id)))
 
 (defrecord GoogleCloudStorageObjectStore [^Storage storage-service bucket-name prefix ^NavigableSet file-name-cache ^AutoCloseable file-list-watcher]
-  ObjectStore
+  IObjectStore
   (getObject [this k]
     (CompletableFuture/completedFuture
      (get-blob this k)))

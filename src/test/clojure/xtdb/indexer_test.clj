@@ -8,7 +8,6 @@
             [xtdb.indexer :as idx]
             [xtdb.metadata :as meta]
             [xtdb.node :as node]
-            [xtdb.object-store :as os]
             [xtdb.test-json :as tj]
             [xtdb.test-util :as tu]
             [xtdb.ts-devices :as ts]
@@ -19,11 +18,10 @@
            java.nio.file.Files
            java.time.Duration
            [org.apache.arrow.memory BufferAllocator]
-           xtdb.IBufferPool
            xtdb.api.protocols.TransactionInstant
+           xtdb.IBufferPool
            (xtdb.metadata IMetadataManager)
            xtdb.node.Node
-           xtdb.object_store.ObjectStore
            (xtdb.watermark IWatermarkSource)))
 
 (t/use-fixtures :once tu/with-allocator)

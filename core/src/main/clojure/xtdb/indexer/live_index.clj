@@ -2,9 +2,7 @@
   (:require [clojure.tools.logging :as log]
             [juxt.clojars-mirrors.integrant.core :as ig]
             [xtdb.buffer-pool]
-            [xtdb.object-store]
             [xtdb.trie :as trie]
-            [xtdb.types :as types]
             [xtdb.util :as util]
             [xtdb.vector.reader :as vr]
             [xtdb.vector.writer :as vw])

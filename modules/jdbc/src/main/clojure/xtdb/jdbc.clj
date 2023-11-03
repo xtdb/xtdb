@@ -2,19 +2,19 @@
   (:require [clojure.java.data :as jd]
             [clojure.spec.alpha :as s]
             [clojure.string :as str]
-            [xtdb.object-store :as os]
-            [xtdb.util :as util]
+            [juxt.clojars-mirrors.integrant.core :as ig]
             [juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc :as jdbc]
             [juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc.connection :as jdbcc]
             [juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc.result-set :as jdbcr]
-            [juxt.clojars-mirrors.integrant.core :as ig])
+            [xtdb.object-store :as os]
+            [xtdb.util :as util])
   (:import [com.zaxxer.hikari HikariConfig HikariDataSource]
-           xtdb.object_store.ObjectStore
            java.nio.ByteBuffer
            (java.nio.file Files OpenOption Path)
            java.util.concurrent.CompletableFuture
+           (java.util.function Function)
            java.util.function.Supplier
-           (java.util.function Consumer Function)))
+           xtdb.IObjectStore))
 
 (defprotocol Dialect
   (db-type [dialect])
@@ -56,7 +56,7 @@
       (throw (os/obj-missing-exception k))))
 
 (defrecord JDBCObjectStore [pool dialect]
-  ObjectStore
+  IObjectStore
   (getObject [_ k]
     (CompletableFuture/supplyAsync
      (reify Supplier

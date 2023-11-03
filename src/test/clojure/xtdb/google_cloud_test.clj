@@ -8,7 +8,7 @@
             [xtdb.util :as util])
   (:import [com.google.cloud.storage Bucket Storage StorageOptions StorageOptions$Builder Storage$BucketGetOption Bucket$BucketSourceOption StorageException]
            [java.io Closeable]
-           [xtdb.object_store ObjectStore]))
+           [xtdb IObjectStore]))
 
 ;; Ensure you are authenticated with google cloud before running these tests - there are two options to do this:
 ;; - gcloud auth Login onto an account which belongs to the `xtdb-devs@gmail.com` group
@@ -23,9 +23,9 @@
 (defn config-present? []
   (try
     (let [^Storage storage (-> (StorageOptions/newBuilder)
-                      ^StorageOptions$Builder (.setProjectId project-id)
-                      ^StorageOptions (.build)
-                      (.getService))
+                               ^StorageOptions$Builder (.setProjectId project-id)
+                               ^StorageOptions (.build)
+                               (.getService))
           ^Bucket bucket (.get storage ^String test-bucket ^"[Lcom.google.cloud.storage.Storage$BucketGetOption;" (into-array Storage$BucketGetOption []))]
       (.exists bucket (into-array Bucket$BucketSourceOption [])))
     (catch StorageException e
@@ -73,17 +73,17 @@
       (os-test/put-edn os (util/->path "alice") :alice)
       (os-test/put-edn os (util/->path "alan") :alan)
       (t/is (= (mapv util/->path ["alan" "alice"]) 
-               (.listObjects ^ObjectStore os))))
+               (.listObjects ^IObjectStore os))))
 
     (with-open [os (object-store prefix)]
       (t/testing "prior objects will still be there, should be available on a list request"
         (t/is (= (mapv util/->path ["alan" "alice"]) 
-                 (.listObjects ^ObjectStore os))))
+                 (.listObjects ^IObjectStore os))))
       
       (t/testing "should be able to delete prior objects and have that reflected in list objects output"
-        @(.deleteObject ^ObjectStore os (util/->path "alice"))
+        @(.deleteObject ^IObjectStore os (util/->path "alice"))
         (t/is (= (mapv util/->path ["alan"]) 
-                 (.listObjects ^ObjectStore os)))))))
+                 (.listObjects ^IObjectStore os)))))))
 
 (t/deftest ^:google-cloud multiple-object-store-list-test
   (let [prefix (random-uuid)
@@ -94,7 +94,7 @@
       (os-test/put-edn os-2 (util/->path "alan") :alan)
       (Thread/sleep wait-time-ms)
       (t/is (= (mapv util/->path ["alan" "alice"]) 
-               (.listObjects ^ObjectStore os-1)))
+               (.listObjects ^IObjectStore os-1)))
       
       (t/is (= (mapv util/->path ["alan" "alice"]) 
-               (.listObjects ^ObjectStore os-2))))))
+               (.listObjects ^IObjectStore os-2))))))

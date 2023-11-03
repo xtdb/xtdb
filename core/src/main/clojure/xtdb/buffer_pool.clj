@@ -17,8 +17,8 @@
            (org.apache.arrow.vector.ipc ArrowFileWriter)
            (org.apache.arrow.vector.ipc.message ArrowBlock ArrowFooter ArrowRecordBatch)
            (xtdb IArrowWriter IBufferPool)
-           (xtdb.object_store IMultipartUpload SupportsMultipart)
-           xtdb.object_store.ObjectStore
+           (xtdb.multipart IMultipartUpload SupportsMultipart)
+           xtdb.IObjectStore
            xtdb.util.ArrowBufLRU))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -286,7 +286,7 @@
       (let [final-part (.nioBuffer arrow-buf prev-cut (- (.capacity arrow-buf) prev-cut))]
         (conj part-buffers final-part)))))
 
-(defn- upload-arrow-file [^BufferAllocator allocator, ^ObjectStore remote-store, ^Path k, ^Path tmp-path]
+(defn- upload-arrow-file [^BufferAllocator allocator, ^IObjectStore remote-store, ^Path k, ^Path tmp-path]
   (let [mmap-buffer (util/->mmap-path tmp-path)]
     (if (or (not (instance? SupportsMultipart remote-store))
             (<= (.remaining mmap-buffer) (int min-multipart-part-size)))
@@ -299,7 +299,7 @@
 (defrecord RemoteBufferPool [allocator
                              ^ArrowBufLRU memory-store
                              ^Path disk-store
-                             ^ObjectStore remote-store]
+                             ^IObjectStore remote-store]
   IBufferPool
   (getBuffer [_ k]
     (let [cached-buffer (cache-get memory-store k)]

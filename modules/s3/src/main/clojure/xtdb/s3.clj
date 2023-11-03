@@ -16,7 +16,8 @@
            [software.amazon.awssdk.core.async AsyncRequestBody AsyncResponseTransformer]
            [software.amazon.awssdk.services.s3 S3AsyncClient]
            [software.amazon.awssdk.services.s3.model AbortMultipartUploadRequest CompleteMultipartUploadRequest CompletedPart CompletedMultipartUpload CreateMultipartUploadRequest CreateMultipartUploadResponse DeleteObjectRequest GetObjectRequest HeadObjectRequest NoSuchKeyException PutObjectRequest UploadPartRequest UploadPartResponse]
-           [xtdb.object_store ObjectStore SupportsMultipart IMultipartUpload]
+           xtdb.IObjectStore
+           [xtdb.multipart SupportsMultipart IMultipartUpload]
            [xtdb.s3 S3Configurator]))
 
 (defn- get-obj-req
@@ -102,7 +103,7 @@
                                  ^AbortMultipartUploadRequest (.build))))))
 
 (defrecord S3ObjectStore [^S3Configurator configurator ^S3AsyncClient client bucket ^Path prefix multipart-minimum-part-size ^NavigableSet file-name-cache ^AutoCloseable file-list-watcher]
-  ObjectStore
+  IObjectStore
   (getObject [this k]
     (-> (.getObject client (get-obj-req this k) (AsyncResponseTransformer/toBytes))
         (.thenApply (reify Function

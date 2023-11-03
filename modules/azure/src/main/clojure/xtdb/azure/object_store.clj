@@ -13,7 +13,8 @@
            [java.util NavigableSet ArrayList List Base64 Base64$Encoder]
            [java.util.concurrent CompletableFuture]
            [java.util.function Supplier]
-           [xtdb.object_store ObjectStore SupportsMultipart IMultipartUpload]))
+           xtdb.IObjectStore
+           [xtdb.multipart SupportsMultipart IMultipartUpload]))
 
 (defn- get-blob [^BlobContainerClient blob-container-client blob-name]
   (try
@@ -93,7 +94,7 @@
     (->MultipartUpload block-blob-client on-complete-fn (ArrayList.))))
 
 (defrecord AzureBlobObjectStore [^BlobContainerClient blob-container-client ^Path prefix multipart-minimum-part-size ^NavigableSet file-name-cache ^AutoCloseable file-list-watcher]
-  ObjectStore
+  IObjectStore
   (getObject [_ k]
     (let [prefixed-key (util/prefix-key prefix k)]
       (CompletableFuture/completedFuture
