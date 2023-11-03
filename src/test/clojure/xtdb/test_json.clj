@@ -91,9 +91,7 @@
 
    (doseq [^Path expected (iterator-seq (.iterator (Files/walk expected-dir (make-array FileVisitOption 0))))
            :let [actual (.resolve actual-dir (.relativize expected-dir expected))
-                 file-name (str (.getFileName expected))]
-           :when (or (nil? file-pattern)
-                     (re-matches file-pattern file-name))]
+                 file-name (str (.getFileName expected))]]
      (cond
        (.endsWith file-name ".arrow.json")
        (check-arrow-json-file expected actual)
