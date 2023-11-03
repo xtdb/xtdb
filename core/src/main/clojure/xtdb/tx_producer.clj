@@ -14,10 +14,11 @@
            (java.util ArrayList HashMap List)
            org.apache.arrow.memory.BufferAllocator
            (org.apache.arrow.vector VectorSchemaRoot)
-           org.apache.arrow.vector.types.UnionMode
            (org.apache.arrow.vector.types.pojo ArrowType$Union FieldType Schema)
+           org.apache.arrow.vector.types.UnionMode
            (xtdb.log Log LogRecord)
-           (xtdb.tx Ops Ops$Abort Ops$Call Ops$Delete Ops$Evict Ops$Put Ops$Sql)
+           (xtdb.tx Ops Ops$Abort Ops$Call Ops$Delete Ops$Evict Ops$Put Ops$Sql Ops$Xtql)
+           xtdb.types.ClojureForm
            xtdb.vector.IVectorWriter))
 
 #_{:clj-kondo/ignore [:unused-binding :clojure-lsp/unused-public-var]}
@@ -186,15 +187,18 @@
 ;; required for C1 importer
 (defmethod parse-tx-op :abort [_] Ops/ABORT)
 
-(defmulti tx-op-spec first)
+(defmethod parse-tx-op :xtql [[_ query & arg-maps :as tx-op]]
+  (when-not (list? query)
+    (throw (err/illegal-arg :xtdb.tx/expected-query
+                            {::err/message "expected XTQL query", :tx-op tx-op})))
 
-(defmethod tx-op-spec :sql-batch [_]
-  (s/cat :op #{:sql-batch}
-         :sql+params (s/and vector?
-                            (s/cat :sql string?,
-                                   :param-groups (s/? (s/alt :rows (s/* (s/coll-of any? :kind sequential?))
-                                                             :bytes #(= #xt.arrow/type :varbinary
-                                                                        (vw/value->arrow-type %))))))))
+  (when-not (every? map? arg-maps)
+    (throw (err/illegal-arg :xtdb.tx/expected-arg-maps
+                            {::err/message "expected arg-maps",
+                             :tx-op tx-op
+                             :arg-maps arg-maps})))
+
+  (Ops/xtql query arg-maps))
 
 (def ^:private ^org.apache.arrow.vector.types.pojo.Field tx-ops-field
   (types/->field "tx-ops" (ArrowType$Union. UnionMode/Dense nil) false))
@@ -206,7 +210,30 @@
             (types/col-type->field "default-tz" :utf8)
             (types/col-type->field "all-application-time?" :bool)]))
 
-(defn encode-params [^BufferAllocator allocator, query, param-rows]
+(defn- ->xtql-writer [^IVectorWriter op-writer, ^BufferAllocator allocator]
+  (let [xtql-writer (.legWriter op-writer :xtql (FieldType/notNullable #xt.arrow/type :struct))
+        query-writer (.structKeyWriter xtql-writer "query" (FieldType/notNullable #xt.arrow/type :clj-form))
+        params-writer (.structKeyWriter xtql-writer "params" (FieldType/nullable #xt.arrow/type :varbinary))]
+    (fn write-xtql! [^Ops$Xtql op]
+      (.startStruct xtql-writer)
+      (vw/write-value! (ClojureForm. (.query op)) query-writer)
+
+      (when-let [param-rows (.params op)]
+        (util/with-open [param-wtr (vw/->vec-writer allocator "params" (FieldType/notNullable #xt.arrow/type :struct))]
+          (doseq [param-row param-rows]
+            (vw/write-value! param-row param-wtr))
+
+          (.syncValueCount param-wtr)
+
+          (.writeBytes params-writer
+                       (util/build-arrow-ipc-byte-buffer (VectorSchemaRoot. ^Iterable (seq (.getVector param-wtr)))
+                                                         :stream
+                                                         (fn [write-batch!]
+                                                           (write-batch!))))))
+
+      (.endStruct xtql-writer))))
+
+(defn encode-sql-params [^BufferAllocator allocator, query, param-rows]
   (let [plan (sql/compile-query query)
         {:keys [^long param-count]} (meta plan)
 
@@ -239,7 +266,7 @@
           (vw/write-value! param-bytes params-writer))
 
         (when-let [param-rows (.paramGroupRows op)]
-          (vw/write-value! (encode-params allocator sql param-rows) params-writer)))
+          (vw/write-value! (encode-sql-params allocator sql param-rows) params-writer)))
 
       (.endStruct sql-writer))))
 
@@ -321,7 +348,8 @@
   (.createVector tx-ops-field allocator))
 
 (defn write-tx-ops! [^BufferAllocator allocator, ^IVectorWriter op-writer, tx-ops]
-  (let [!write-sql! (delay (->sql-writer op-writer allocator))
+  (let [!write-xtql! (delay (->xtql-writer op-writer allocator))
+        !write-sql! (delay (->sql-writer op-writer allocator))
         !write-put! (delay (->put-writer op-writer))
         !write-delete! (delay (->delete-writer op-writer))
         !write-evict! (delay (->evict-writer op-writer))
@@ -330,6 +358,7 @@
 
     (doseq [tx-op tx-ops]
       (condp instance? tx-op
+        Ops$Xtql (@!write-xtql! tx-op)
         Ops$Sql (@!write-sql! tx-op)
         Ops$Put (@!write-put! tx-op)
         Ops$Delete (@!write-delete! tx-op)
@@ -340,29 +369,29 @@
 
 (defn serialize-tx-ops ^java.nio.ByteBuffer [^BufferAllocator allocator tx-ops {:keys [^Instant system-time, default-tz, default-all-valid-time?]}]
   (with-open [root (VectorSchemaRoot/create tx-schema allocator)]
-      (let [ops-list-writer (vw/->writer (.getVector root "tx-ops"))
+    (let [ops-list-writer (vw/->writer (.getVector root "tx-ops"))
 
-            default-tz-writer (vw/->writer (.getVector root "default-tz"))
-            app-time-behaviour-writer (vw/->writer (.getVector root "all-application-time?"))]
+          default-tz-writer (vw/->writer (.getVector root "default-tz"))
+          app-time-behaviour-writer (vw/->writer (.getVector root "all-application-time?"))]
 
-        (when system-time
-          (vw/write-value! system-time (vw/->writer (.getVector root "system-time"))))
+      (when system-time
+        (vw/write-value! system-time (vw/->writer (.getVector root "system-time"))))
 
-        (vw/write-value! (str default-tz) default-tz-writer)
-        (vw/write-value! (boolean default-all-valid-time?) app-time-behaviour-writer)
+      (vw/write-value! (str default-tz) default-tz-writer)
+      (vw/write-value! (boolean default-all-valid-time?) app-time-behaviour-writer)
 
-        (.startList ops-list-writer)
-        (write-tx-ops! allocator
-                       (.listElementWriter ops-list-writer)
-                       (->> tx-ops
-                            (mapv (fn [tx-op]
-                                    (cond-> tx-op (vector? tx-op) parse-tx-op)))))
-        (.endList ops-list-writer)
+      (.startList ops-list-writer)
+      (write-tx-ops! allocator
+                     (.listElementWriter ops-list-writer)
+                     (->> tx-ops
+                          (mapv (fn [tx-op]
+                                  (cond-> tx-op (vector? tx-op) parse-tx-op)))))
+      (.endList ops-list-writer)
 
-        (.setRowCount root 1)
-        (.syncSchema root)
+      (.setRowCount root 1)
+      (.syncSchema root)
 
-        (util/root->arrow-ipc-byte-buffer root :stream))))
+      (util/root->arrow-ipc-byte-buffer root :stream))))
 
 (defn validate-opts [tx-opts]
   (when (contains? tx-opts :system-time)

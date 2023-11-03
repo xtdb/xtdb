@@ -2,7 +2,22 @@ package xtdb.query;
 
 public interface TemporalFilter {
 
-    final class AllTime implements TemporalFilter {
+    interface TemporalExtents extends TemporalFilter {
+        Expr from();
+        Expr to();
+    }
+
+    final class AllTime implements TemporalFilter, TemporalExtents {
+        @Override
+        public Expr from() {
+            return null;
+        }
+
+        @Override
+        public Expr to() {
+            return null;
+        }
+
         @Override
         public String toString() {
             return "all-time";
@@ -28,13 +43,23 @@ public interface TemporalFilter {
         return new At(atExpr);
     }
 
-    final class In implements TemporalFilter {
+    final class In implements TemporalFilter, TemporalExtents {
         public final Expr from;
         public final Expr to;
 
         private In(Expr from, Expr to) {
             this.from = from;
             this.to = to;
+        }
+
+        @Override
+        public Expr from() {
+            return from;
+        }
+
+        @Override
+        public Expr to() {
+            return to;
         }
 
         @Override

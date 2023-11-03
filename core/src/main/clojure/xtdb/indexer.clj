@@ -17,7 +17,9 @@
             [xtdb.util :as util]
             [xtdb.vector.reader :as vr]
             [xtdb.vector.writer :as vw]
-            [xtdb.watermark :as wm])
+            [xtdb.watermark :as wm]
+            [xtdb.xtql :as xtql]
+            [xtdb.xtql.edn :as xtql.edn])
   (:import clojure.lang.MapEntry
            (java.io ByteArrayInputStream Closeable)
            java.nio.ByteBuffer
@@ -266,14 +268,14 @@
             (throw t)))))))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
-(definterface SqlOpIndexer
+(definterface RelationIndexer
   (^void indexOp [^xtdb.vector.RelationReader inRelation, queryOpts]))
 
-(defn- ->sql-upsert-indexer ^xtdb.indexer.SqlOpIndexer [^RowCounter row-counter, ^ILiveIndexTx live-idx-tx
-                                                        {{:keys [^Instant current-time]} :basis}]
+(defn- ->upsert-rel-indexer ^xtdb.indexer.RelationIndexer [^RowCounter row-counter, ^ILiveIndexTx live-idx-tx
+                                                           {{:keys [^Instant current-time]} :basis}]
 
   (let [current-time-µs (util/instant->micros current-time)]
-    (reify SqlOpIndexer
+    (reify RelationIndexer
       (indexOp [_ in-rel {:keys [table]}]
         (let [row-count (.rowCount in-rel)
               content-rel (vr/rel-reader (->> in-rel
@@ -307,8 +309,8 @@
 
           (.addRows row-counter row-count))))))
 
-(defn- ->sql-delete-indexer ^xtdb.indexer.SqlOpIndexer [^RowCounter row-counter, ^ILiveIndexTx live-idx-tx]
-  (reify SqlOpIndexer
+(defn- ->delete-rel-indexer ^xtdb.indexer.RelationIndexer [^RowCounter row-counter, ^ILiveIndexTx live-idx-tx]
+  (reify RelationIndexer
     (indexOp [_ in-rel {:keys [table]}]
       (let [table (util/str->normal-form-str table)
             row-count (.rowCount in-rel)
@@ -331,8 +333,8 @@
 
         (.addRows row-counter row-count)))))
 
-(defn- ->sql-erase-indexer ^xtdb.indexer.SqlOpIndexer [^RowCounter row-counter, ^ILiveIndexTx live-idx-tx]
-  (reify SqlOpIndexer
+(defn- ->erase-rel-indexer ^xtdb.indexer.RelationIndexer [^RowCounter row-counter, ^ILiveIndexTx live-idx-tx]
+  (reify RelationIndexer
     (indexOp [_ in-rel {:keys [table]}]
       (let [table (util/str->normal-form-str table)
             row-count (.rowCount in-rel)
@@ -344,66 +346,126 @@
 
         (.addRows row-counter row-count)))))
 
+(defn- query-indexer [^IRaQuerySource ra-src, wm-src, ^RelationIndexer rel-idxer, query, {:keys [basis default-tz default-all-valid-time?]} query-opts]
+  (let [^xtdb.operator.PreparedQuery pq (.prepareRaQuery ra-src query)]
+    (fn eval-query [^RelationReader params]
+      (with-open [res (-> (.bind pq wm-src {:params params, :basis basis, :default-tz default-tz
+                                            :default-all-valid-time? default-all-valid-time?})
+                          (.openCursor))]
+
+        (.forEachRemaining res
+                           (reify Consumer
+                             (accept [_ in-rel]
+                               (.indexOp rel-idxer in-rel query-opts))))))))
+
+(defn- foreach-param-row [^BufferAllocator allocator, ^IVectorReader params-rdr, ^long tx-op-idx, eval-query]
+  (if (.isNull params-rdr tx-op-idx)
+    (eval-query nil)
+
+    (with-open [is (ByteArrayInputStream. (.array ^ByteBuffer (.getObject params-rdr tx-op-idx))) ; could try to use getBytes
+                asr (ArrowStreamReader. is allocator)]
+      (let [param-root (.getVectorSchemaRoot asr)]
+        (while (.loadNextBatch asr)
+          (let [param-rel (vr/<-root param-root)
+                selection (int-array 1)]
+            (dotimes [idx (.rowCount param-rel)]
+              (aset selection 0 idx)
+              (eval-query (-> param-rel (.select selection))))))))))
+
+(defn- wrap-sql-params [f]
+  (fn [^RelationReader params]
+    (f (when params
+         (vr/rel-reader (->> params
+                             (map-indexed (fn [idx ^IVectorReader col]
+                                            (.withName col (str "?_" idx))))))))))
+
 (defn- ->sql-indexer ^xtdb.indexer.OpIndexer [^BufferAllocator allocator, ^RowCounter row-counter, ^ILiveIndexTx live-idx-tx
                                               ^IVectorReader tx-ops-rdr, ^IRaQuerySource ra-src, wm-src, ^IScanEmitter scan-emitter
-                                              {:keys [default-all-valid-time? basis default-tz] :as tx-opts}]
+                                              tx-opts]
   (let [sql-leg (.legReader tx-ops-rdr :sql)
         query-rdr (.structKeyReader sql-leg "query")
         params-rdr (.structKeyReader sql-leg "params")
-        upsert-idxer (->sql-upsert-indexer row-counter live-idx-tx tx-opts)
-        delete-idxer (->sql-delete-indexer row-counter live-idx-tx)
-        erase-idxer (->sql-erase-indexer row-counter live-idx-tx)]
+        upsert-idxer (->upsert-rel-indexer row-counter live-idx-tx tx-opts)
+        delete-idxer (->delete-rel-indexer row-counter live-idx-tx)
+        erase-idxer (->erase-rel-indexer row-counter live-idx-tx)]
     (reify OpIndexer
       (indexOp [_ tx-op-idx]
-        (letfn [(index-op [^SqlOpIndexer op-idxer {:keys [all-app-time] :as query-opts} inner-query]
-                  (let [^xtdb.operator.PreparedQuery pq (.prepareRaQuery ra-src inner-query)]
-                    (letfn [(index-op* [^RelationReader params]
-                              (with-open [res (-> (.bind pq wm-src {:params params, :basis basis, :default-tz default-tz
-                                                                    :default-all-valid-time? (or all-app-time
-                                                                                                 default-all-valid-time?)})
-                                                  (.openCursor))]
+        (let [query-str (.getObject query-rdr tx-op-idx)
+              tables-with-cols (scan/tables-with-cols (:basis tx-opts) wm-src scan-emitter)]
+          ;; TODO handle error
+          (zmatch (sql/compile-query query-str (assoc tx-opts :table-info tables-with-cols))
+            [:insert query-opts inner-query]
+            (foreach-param-row allocator params-rdr tx-op-idx
+                               (-> (query-indexer ra-src wm-src upsert-idxer inner-query tx-opts query-opts)
+                                   (wrap-sql-params)))
 
-                                (.forEachRemaining res
-                                                   (reify Consumer
-                                                     (accept [_ in-rel]
-                                                       (.indexOp op-idxer in-rel query-opts))))))]
-                      (if (.isNull params-rdr tx-op-idx)
-                        (index-op* nil)
+            [:update query-opts inner-query]
+            (foreach-param-row allocator params-rdr tx-op-idx
+                               (-> (query-indexer ra-src wm-src upsert-idxer inner-query tx-opts query-opts)
+                                   (wrap-sql-params)))
 
-                        (with-open [is (ByteArrayInputStream. (.array ^ByteBuffer (.getObject params-rdr tx-op-idx))) ; could try to use getBytes
-                                    asr (ArrowStreamReader. is allocator)]
-                          (let [root (.getVectorSchemaRoot asr)]
-                            (while (.loadNextBatch asr)
-                              (let [rel (vr/<-root root)
+            [:delete query-opts inner-query]
+            (foreach-param-row allocator params-rdr tx-op-idx
+                               (-> (query-indexer ra-src wm-src delete-idxer inner-query tx-opts query-opts)
+                                   (wrap-sql-params)))
 
-                                    ^RelationReader
-                                    rel (vr/rel-reader (->> rel
-                                                            (map-indexed (fn [idx ^IVectorReader col]
-                                                                           (.withName col (str "?_" idx)))))
-                                                       (.rowCount rel))
+            [:erase query-opts inner-query]
+            (foreach-param-row allocator params-rdr tx-op-idx
+                               (-> (query-indexer ra-src wm-src erase-idxer inner-query tx-opts (assoc query-opts :default-all-valid-time? true))
+                                   (wrap-sql-params)))
 
-                                    selection (int-array 1)]
-                                (dotimes [idx (.rowCount rel)]
-                                  (aset selection 0 idx)
-                                  (index-op* (-> rel (.select selection))))))))))))]
+            (throw (UnsupportedOperationException. "sql query"))))
 
-          (let [query-str (.getObject query-rdr tx-op-idx)
-                tables-with-cols (scan/tables-with-cols (:basis tx-opts) wm-src scan-emitter)]
-            ;; TODO handle error
-            (zmatch (sql/compile-query query-str (assoc tx-opts :table-info tables-with-cols))
-              [:insert query-opts inner-query]
-              (index-op upsert-idxer query-opts inner-query)
+        nil))))
 
-              [:update query-opts inner-query]
-              (index-op upsert-idxer query-opts inner-query)
+(defn- wrap-xtql-params [f]
+  (fn [^RelationReader params]
+    (f (when params
+         (vr/rel-reader (for [^IVectorReader col params]
+                          (.withName col (str "?" (.getName col)))))))))
 
-              [:delete query-opts inner-query]
-              (index-op delete-idxer query-opts inner-query)
+(defn- ->xtql-indexer ^xtdb.indexer.OpIndexer [^BufferAllocator allocator, ^RowCounter row-counter, ^ILiveIndexTx live-idx-tx
+                                               ^IVectorReader tx-ops-rdr, ^IRaQuerySource ra-src, wm-src, ^IScanEmitter scan-emitter
+                                               tx-opts]
+  (let [xtql-leg (.legReader tx-ops-rdr :xtql)
+        query-rdr (.structKeyReader xtql-leg "query")
+        params-rdr (.structKeyReader xtql-leg "params")
+        upsert-idxer (->upsert-rel-indexer row-counter live-idx-tx tx-opts)
+        delete-idxer (->delete-rel-indexer row-counter live-idx-tx)
+        erase-idxer (->erase-rel-indexer row-counter live-idx-tx)]
+    (reify OpIndexer
+      (indexOp [_ tx-op-idx]
+        (let [query (.form ^ClojureForm (.getObject query-rdr tx-op-idx))
+              tables-with-cols (scan/tables-with-cols (:basis tx-opts) wm-src scan-emitter)]
+          ;; TODO handle error
+          (zmatch (xtql/compile-dml (cond
+                                      (map? query) (do
+                                                     #_(xtql.json/parse-dml query)
+                                                     (throw (UnsupportedOperationException. "JSON DML")))
+                                      (list? query) (xtql.edn/parse-dml query))
+                                    (assoc tx-opts :table-info tables-with-cols))
 
-              [:erase query-opts inner-query]
-              (index-op erase-idxer (assoc query-opts :all-app-time true) inner-query)
+            [:insert query-opts inner-query]
+            (foreach-param-row allocator params-rdr tx-op-idx
+                               (-> (query-indexer ra-src wm-src upsert-idxer inner-query tx-opts query-opts)
+                                   (wrap-xtql-params)))
 
-              (throw (UnsupportedOperationException. "sql query")))))
+            [:update query-opts inner-query]
+            (foreach-param-row allocator params-rdr tx-op-idx
+                               (-> (query-indexer ra-src wm-src upsert-idxer inner-query tx-opts query-opts)
+                                   (wrap-xtql-params)))
+
+            [:delete query-opts inner-query]
+            (foreach-param-row allocator params-rdr tx-op-idx
+                               (-> (query-indexer ra-src wm-src delete-idxer inner-query tx-opts query-opts)
+                                   (wrap-xtql-params)))
+
+            [:erase query-opts inner-query]
+            (foreach-param-row allocator params-rdr tx-op-idx
+                               (-> (query-indexer ra-src wm-src erase-idxer inner-query tx-opts query-opts)
+                                   (wrap-xtql-params)))
+
+            (throw (UnsupportedOperationException. "xtql query"))))
 
         nil))))
 
@@ -496,9 +558,11 @@
                             !delete-idxer (delay (->delete-indexer row-counter live-idx-tx tx-ops-rdr system-time))
                             !evict-idxer (delay (->evict-indexer row-counter live-idx-tx tx-ops-rdr))
                             !call-idxer (delay (->call-indexer allocator ra-src wm-src scan-emitter tx-ops-rdr tx-opts))
+                            !xtql-idxer (delay (->xtql-indexer allocator row-counter live-idx-tx tx-ops-rdr ra-src wm-src scan-emitter tx-opts))
                             !sql-idxer (delay (->sql-indexer allocator row-counter live-idx-tx tx-ops-rdr ra-src wm-src scan-emitter tx-opts))]
                         (dotimes [tx-op-idx (.valueCount tx-ops-rdr)]
                           (when-let [more-tx-ops (case (.getLeg tx-ops-rdr tx-op-idx)
+                                                   :xtql (.indexOp ^OpIndexer @!xtql-idxer tx-op-idx)
                                                    :sql (.indexOp ^OpIndexer @!sql-idxer tx-op-idx)
                                                    :put (.indexOp ^OpIndexer @!put-idxer tx-op-idx)
                                                    :delete (.indexOp ^OpIndexer @!delete-idxer tx-op-idx)

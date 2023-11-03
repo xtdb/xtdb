@@ -7,13 +7,13 @@
             [xtdb.vector.writer :as vw])
   (:import (clojure.lang MapEntry)
            (org.apache.arrow.memory BufferAllocator)
-           xtdb.operator.PreparedQuery
            (xtdb.operator PreparedQuery)
-           (xtdb.query Expr$Call Expr$LogicVar Expr$Obj Expr$Long Query$From Query$Return
-                       Query$OrderBy Query$OrderDirection Query$OrderSpec Query$Pipeline Query$With
-                       OutSpec ArgSpec ColSpec VarSpec Query$WithCols Query$Join Expr$Param Query$LeftJoin
-                       Query$Unify Query$Where Query$Without Query$Limit Query$Offset Query$Aggregate
-                       TemporalFilter$AllTime TemporalFilter$At TemporalFilter$In)))
+           xtdb.operator.PreparedQuery
+           (xtdb.query ArgSpec ColSpec DmlOps$Delete DmlOps$Erase DmlOps$Insert DmlOps$Update
+                       Expr Expr$Call Expr$LogicVar Expr$Long Expr$Obj Expr$Param OutSpec
+                       Query Query$Aggregate Query$From Query$Join Query$LeftJoin Query$Limit Query$Offset Query$OrderBy Query$OrderDirection Query$OrderSpec
+                       Query$Pipeline Query$Return Query$Unify Query$Where Query$With Query$WithCols Query$Without
+                       TemporalFilter TemporalFilter$AllTime TemporalFilter$At TemporalFilter$In TemporalFilter$TemporalExtents VarSpec)))
 
 ;;TODO consider helper for [{sym expr} sym] -> provided vars set
 ;;TODO Should all user supplied lv be planned via plan-expr, rather than explicit calls to col-sym.
@@ -31,6 +31,9 @@
 
 (defprotocol PlanTemporalFilter
   (plan-temporal-filter [temporal-filter]))
+
+(defprotocol PlanDml
+  (plan-dml [query tx-opts]))
 
 (def ^:dynamic *gensym* gensym)
 
@@ -82,7 +85,7 @@
          ;; classic problem rearing its head again.
          (into {}))))
 
-;TODO fill out expr plan for other types
+;; TODO fill out expr plan for other types
 (extend-protocol ExprPlan
   Expr$LogicVar
   (plan-expr [this] (col-sym (.lv this)))
@@ -128,12 +131,12 @@
   (->> (vals var->cols)
        (filter #(> (count %) 1))
        (mapcat
-         (fn [cols]
-           (->> (set (for [col cols
-                           col2 cols
-                           :when (not= col col2)]
-                       (set [col col2])))
-                (map #(list* '= %)))))
+        (fn [cols]
+          (->> (set (for [col cols
+                          col2 cols
+                          :when (not= col col2)]
+                      (set [col col2])))
+               (map #(list* '= %)))))
        (vec)))
 
 (defn- wrap-unify [{:keys [ra-plan]} var->cols]
@@ -549,7 +552,7 @@
                {(col-sym (.attr ^ColSpec col)) (plan-expr (.expr ^ColSpec col))}))
            (.cols this))]
       {:ra-plan [:group-by planned-specs
-                   ra-plan]
+                 ra-plan]
        :provided-vars (set (map #(if (map? %) (first (keys %)) %) planned-specs))}))
 
   Query$Limit
@@ -572,6 +575,114 @@
         (lp/rewrite-plan {})
         #_(doto clojure.pprint/pprint)
         (doto (lp/validate-plan)))))
+
+(def ^:private extra-dml-bind-specs
+  [(OutSpec/of "xt$iid" (Expr/lVar "xt$dml$iid"))
+   (OutSpec/of "xt$valid_from" (Expr/lVar "xt$dml$valid_from"))
+   (OutSpec/of "xt$valid_to" (Expr/lVar "xt$dml$valid_to"))])
+
+(defn- dml-colspecs [^TemporalFilter$TemporalExtents for-valid-time, {:keys [default-all-valid-time?]}]
+  [(ColSpec/of "xt$iid" (Expr/lVar "xt$dml$iid"))
+
+   (let [vf-var (Expr/lVar "xt$dml$valid_from")
+
+         default-vf-expr (if default-all-valid-time?
+                           vf-var
+                           (Expr/call "current-timestamp" []))]
+
+     (ColSpec/of "xt$valid_from"
+                 (Expr/call "cast-tstz"
+                            [(if-let [vf-expr (some-> for-valid-time .from)]
+                               (Expr/call "greatest" [vf-var (Expr/call "coalesce" [vf-expr default-vf-expr])])
+                               default-vf-expr)])))
+
+   (ColSpec/of "xt$valid_to"
+               (Expr/call "cast-tstz"
+                          [(Expr/call "least"
+                                      [(Expr/lVar "xt$dml$valid_to")
+                                       (if-let [vt-expr (some-> for-valid-time .to)]
+                                         (Expr/call "coalesce" [vt-expr (Expr/val 'xtdb/end-of-time)])
+                                         (Expr/val 'xtdb/end-of-time))])]))])
+
+(extend-protocol PlanDml
+  DmlOps$Insert
+  (plan-dml [insert-query _tx-opts]
+    (let [{:keys [ra-plan provided-vars]} (plan-query (.query insert-query))]
+      [:insert {:table (.table insert-query)}
+       [:project (vec (for [col provided-vars]
+                        (let [col-sym (util/symbol->normal-form-symbol col)]
+                          {col-sym (if (contains? '#{xt$valid_from xt$valid_to} col-sym)
+                                     `(~'cast-tstz ~col)
+                                     col)})))
+        ra-plan]]))
+
+  DmlOps$Delete
+  (plan-dml [delete-query tx-opts]
+    (let [table-name (.table delete-query)
+          target-query (Query/pipeline (Query/unify (into [(-> (Query/from table-name)
+                                                               (.binding (concat (.bindSpecs delete-query)
+                                                                                 extra-dml-bind-specs)))]
+                                                          (.unifyClauses delete-query)))
+
+                                       [(Query/ret (dml-colspecs (.forValidTime delete-query) tx-opts))])
+
+          {target-plan :ra-plan} (plan-query target-query)]
+      [:delete {:table table-name}
+       target-plan]))
+
+  DmlOps$Erase
+  (plan-dml [erase-query _tx-opts]
+    (let [table-name (.table erase-query)
+          target-query (Query/pipeline (Query/unify (into [(-> (Query/from table-name)
+                                                               (.binding (concat (.bindSpecs erase-query)
+                                                                                 [(OutSpec/of "xt$iid" (Expr/lVar "xt$dml$iid"))])))]
+                                                          (.unifyClauses erase-query)))
+
+                                       [(Query/ret [(ColSpec/of "xt$iid" (Expr/lVar "xt$dml$iid"))])])
+
+          {target-plan :ra-plan} (plan-query target-query)]
+      [:erase {:table table-name}
+       target-plan]))
+
+  DmlOps$Update
+  (plan-dml [update-query tx-opts]
+    (let [table-name (.table update-query)
+          set-specs (.setSpecs update-query)
+          known-columns (set (get-in tx-opts [:table-info (util/str->normal-form-str table-name)]))
+          unspecified-columns (-> (set/difference known-columns
+                                                  (set (for [^ColSpec set-spec set-specs]
+                                                         (util/str->normal-form-str (.attr set-spec)))))
+                                  (disj "xt$id"))
+
+          target-query (Query/pipeline (Query/unify (into [(-> (Query/from table-name)
+                                                               (.binding (concat (.bindSpecs update-query)
+                                                                                 [(OutSpec/of "xt$id" (Expr/lVar "xt$dml$id"))]
+                                                                                 (for [col unspecified-columns]
+                                                                                   (OutSpec/of col (Expr/lVar (str "xt$update$" col))))
+                                                                                 extra-dml-bind-specs)))]
+                                                          (.unifyClauses update-query)))
+
+                                       [(Query/ret (concat (dml-colspecs (.forValidTime update-query) tx-opts)
+                                                           [(ColSpec/of "xt$id" (Expr/lVar "xt$dml$id"))]
+                                                           (for [col unspecified-columns]
+                                                             (ColSpec/of col (Expr/lVar (str "xt$update$" col))))
+                                                           set-specs))])
+
+          {target-plan :ra-plan} (plan-query target-query)]
+      [:update {:table table-name}
+       target-plan])))
+
+(defn compile-dml [query tx-opts]
+  (let [ra-plan (binding [*gensym* (seeded-gensym "_" 0)]
+                  (plan-dml query tx-opts))
+        [dml-op dml-op-opts plan] ra-plan]
+    [dml-op dml-op-opts
+     (-> plan
+         #_(doto clojure.pprint/pprint)
+         #_(->> (binding [*print-meta* true]))
+         #_(lp/rewrite-plan {})
+         #_(doto clojure.pprint/pprint)
+         #_(doto (lp/validate-plan)))]))
 
 (defn open-xtql-query ^xtdb.IResultSet [^BufferAllocator allocator, wm-src, ^PreparedQuery pq,
                                         {:keys [args basis default-tz default-all-valid-time?]}]

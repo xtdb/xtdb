@@ -17,7 +17,7 @@
            actual (tj/arrow-streaming->json (txp/serialize-tx-ops tu/*allocator* tx-ops opts))]
 
        ;; uncomment this to reset the expected file (but don't commit it)
-       (spit file actual) ;; <<no-commit>>
+       #_(spit file actual) ;; <<no-commit>>
 
        (t/is (= (tj/sort-arrow-json (json/parse-string (slurp file)))
                 (tj/sort-arrow-json (json/parse-string actual))))))))
@@ -99,6 +99,15 @@
 
                           [:sql ["DELETE FROM foo FOR PORTION OF VALID_TIME FROM DATE '2023-01-01' TO DATE '2025-01-01' WHERE foo.xt$id = ?"
                                  1]]]))
+
+(t/deftest can-write-xtql
+  (test-serialize-tx-ops (io/resource "xtdb/tx-producer-test/can-write-xtdml.json")
+                         [[:xtql '(update :users {:bind {:xt/id $uid, :version v}
+                                                  :set {v (inc v)}})
+                           {:uid :jms}]
+
+                          [:xtql '(delete :users {:bind {:xt/id $uid}})
+                           {:uid :jms}]]))
 
 (t/deftest can-write-opts
   (test-serialize-tx-ops (io/resource "xtdb/tx-producer-test/can-write-opts.json")

@@ -76,6 +76,33 @@ public sealed class Ops {
         }
     }
 
+    public static Xtql xtql(Object query, List<?> params) {
+        return new Xtql(query, params);
+    }
+
+    public static final class Xtql extends Ops {
+        private final Object query;
+        private final List<?> params;
+
+        private Xtql(Object query, List<?> params) {
+            this.query = query;
+            this.params = params;
+        }
+
+        public Object query() {
+            return query;
+        }
+
+        public List<?> params() {
+            return params;
+        }
+
+        @Override
+        public String toString() {
+            return "[:xtql %s {:params %s}]".formatted(query, params);
+        }
+    }
+
     public static Put put(Keyword tableName, Map<Keyword, Object> doc) {
         return new Put(tableName, doc);
     }
