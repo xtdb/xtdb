@@ -8,22 +8,18 @@
             [xtdb.vector.writer :as vw]
             xtdb.watermark)
   (:import (java.lang AutoCloseable)
-           (java.nio ByteBuffer) 
-           java.nio.channels.WritableByteChannel
-           (java.nio.file Path Paths)
+           (java.nio ByteBuffer)
+           (java.nio.file Path)
            java.security.MessageDigest
            (java.util ArrayList Arrays List)
            (java.util.concurrent.atomic AtomicInteger)
            (java.util.function IntConsumer Supplier)
            (org.apache.arrow.memory ArrowBuf BufferAllocator)
            (org.apache.arrow.vector VectorLoader VectorSchemaRoot)
-           [org.apache.arrow.vector.ipc ArrowFileWriter]
            (org.apache.arrow.vector.types.pojo ArrowType$Union Schema)
            org.apache.arrow.vector.types.UnionMode
            xtdb.IBufferPool
-           (xtdb.object_store ObjectStore)
            (xtdb.trie ArrowHashTrie ArrowHashTrie$Leaf HashTrie HashTrie$Node LiveHashTrie LiveHashTrie$Leaf)
-           (xtdb.util WritableByteBufferChannel)
            (xtdb.vector IVectorReader RelationReader)
            xtdb.watermark.ILiveTableWatermark))
 
@@ -92,12 +88,12 @@
   (^void end [])
   (^void close []))
 
-(defn open-trie-writer ^xtdb.trie.ITrieWriter [^BufferAllocator allocator, ^Schema data-schema
-                                               ^WritableByteChannel data-out-ch, ^WritableByteChannel meta-out-ch]
+(defn open-trie-writer ^xtdb.trie.ITrieWriter [^BufferAllocator allocator, ^IBufferPool buffer-pool,
+                                               ^Schema data-schema, ^Path table-path, trie-key]
   (util/with-close-on-catch [data-vsr (VectorSchemaRoot/create data-schema allocator)
-                             data-out-wtr (ArrowFileWriter. data-vsr nil data-out-ch)
+                             data-file-wtr (.openArrowWriter buffer-pool (->table-data-file-path table-path trie-key) data-vsr)
                              meta-vsr (VectorSchemaRoot/create meta-rel-schema allocator)]
-    (.start data-out-wtr)
+
     (let [data-rel-wtr (vw/root->writer data-vsr)
           meta-rel-wtr (vw/root->writer meta-vsr)
 
@@ -123,26 +119,28 @@
                             (.readerForName "op")
                             (.legReader :put))
 
-                doc-rdr (.structKeyReader put-rdr "xt$doc")]
+                doc-rdr (.structKeyReader put-rdr "xt$doc")
+                meta-pos (.getPosition node-wp)]
+
+            (.startStruct leaf-wtr)
 
             (.writeMetadata page-meta-wtr (into [(.readerForName leaf-rdr "xt$system_from")
                                                  (.readerForName leaf-rdr "xt$iid")
                                                  (.structKeyReader put-rdr "xt$valid_from")
                                                  (.structKeyReader put-rdr "xt$valid_to")]
                                                 (map #(.structKeyReader doc-rdr %))
-                                                (.structKeys doc-rdr))))
+                                                (.structKeys doc-rdr)))
 
-          (.writeBatch data-out-wtr)
-          (.clear data-rel-wtr)
-          (.clear data-vsr)
-
-          (let [pos (.getPosition node-wp)]
-            (.startStruct leaf-wtr)
             (.writeInt page-idx-wtr (.getAndIncrement !page-idx))
             (.endStruct leaf-wtr)
             (.endRow meta-rel-wtr)
 
-            pos))
+
+            (.writeBatch data-file-wtr)
+            (.clear data-rel-wtr)
+            (.clear data-vsr)
+
+            meta-pos))
 
         (writeBranch [_ idxs]
           (let [pos (.getPosition node-wp)]
@@ -160,23 +158,21 @@
             pos))
 
         (end [_]
-          (.end data-out-wtr)
+          (.end data-file-wtr)
 
           (.syncSchema meta-vsr)
           (.syncRowCount meta-rel-wtr)
 
-          (util/with-open [meta-out-wtr (ArrowFileWriter. meta-vsr nil meta-out-ch)]
-            (.start meta-out-wtr)
-            (.writeBatch meta-out-wtr)
-            (.end meta-out-wtr)))
+          (util/with-open [meta-file-wtr (.openArrowWriter buffer-pool (->table-meta-file-path table-path trie-key) meta-vsr)]
+            (.writeBatch meta-file-wtr)
+            (.end meta-file-wtr)))
 
         AutoCloseable
         (close [_]
-          (util/close [meta-vsr data-out-wtr meta-vsr]))))))
+          (util/close [meta-vsr data-file-wtr meta-vsr]))))))
 
-(defn write-live-trie [^ITrieWriter trie-wtr, ^LiveHashTrie trie, ^RelationReader data-rel]
-  (let [trie (.compactLogs trie)
-        copier (vw/->rel-copier (.getDataWriter trie-wtr) data-rel)]
+(defn write-live-trie-node [^ITrieWriter trie-wtr, ^HashTrie$Node node, ^RelationReader data-rel]
+  (let [copier (vw/->rel-copier (.getDataWriter trie-wtr) data-rel)]
     (letfn [(write-node! [^HashTrie$Node node]
               (if-let [children (.children node)]
                 (let [child-count (alength children)
@@ -198,30 +194,20 @@
 
                   (.writeLeaf trie-wtr))))]
 
-      (write-node! (.rootNode trie)))))
+      (write-node! node))))
 
-(defn live-trie->bufs [^BufferAllocator allocator, ^LiveHashTrie trie, ^RelationReader data-rel]
-  (util/with-open [data-bb-ch (WritableByteBufferChannel/open)
-                   meta-bb-ch (WritableByteBufferChannel/open)
-                   trie-wtr (open-trie-writer allocator
+(defn write-live-trie! [^BufferAllocator allocator, ^IBufferPool buffer-pool,
+                        ^Path table-path, trie-key,
+                        ^LiveHashTrie trie, ^RelationReader data-rel]
+  (util/with-open [trie-wtr (open-trie-writer allocator buffer-pool
                                               (Schema. (for [^IVectorReader rdr data-rel]
                                                          (.getField rdr)))
-                                              (.getChannel data-bb-ch)
-                                              (.getChannel meta-bb-ch))]
+                                              table-path trie-key)]
 
-    (write-live-trie trie-wtr trie data-rel)
+    (let [trie (.compactLogs trie)]
+      (write-live-trie-node trie-wtr (.rootNode trie) data-rel)
 
-    (.end trie-wtr)
-
-    {:data-buf (.getAsByteBuffer data-bb-ch)
-     :meta-buf (.getAsByteBuffer meta-bb-ch)}))
-
-(defn write-trie-bufs! [^IBufferPool buffer-pool, ^Path table-path, trie-key
-                        {:keys [^ByteBuffer data-buf ^ByteBuffer meta-buf]}]
-  (-> (.putObject buffer-pool (->table-data-file-path table-path trie-key) data-buf)
-      (util/then-compose
-        (fn [_]
-          (.putObject buffer-pool (->table-meta-file-path table-path trie-key) meta-buf)))))
+      (.end trie-wtr))))
 
 (defn parse-trie-file-path [^Path file-path]
   (let [trie-key (str (.getFileName file-path))] 

@@ -295,8 +295,9 @@
       (let [bloom-rdr (-> (.structKeyReader metadata-reader "columns")
                           (.listElementReader)
                           (.structKeyReader "bloom"))]
+
         (when-let [bloom-vec-idx (get page-idx-cache ["xt$iid" page-idx])]
-          (when (not (nil? (.getObject bloom-rdr bloom-vec-idx)))
+          (when (.getObject bloom-rdr bloom-vec-idx)
             (bloom/bloom->bitmap bloom-rdr bloom-vec-idx)))))))
 
 (deftype MetadataManager [^IBufferPool buffer-pool

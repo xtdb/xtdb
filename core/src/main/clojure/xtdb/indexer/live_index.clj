@@ -158,9 +158,11 @@
   (finishChunk [_ trie-key]
     (let [live-rel-rdr (vw/rel-wtr->rdr live-rel)]
       (when (pos? (.rowCount live-rel-rdr))
-        (let [bufs (trie/live-trie->bufs allocator live-trie live-rel-rdr)
-              table-path (util/table-name->table-path table-name)
-              !fut (trie/write-trie-bufs! buffer-pool table-path trie-key bufs)
+        (let [!fut (CompletableFuture/runAsync
+                    (fn []
+                      (trie/write-live-trie! allocator buffer-pool
+                                             (util/table-name->table-path table-name) trie-key
+                                             live-trie live-rel-rdr)))
               table-metadata (MapEntry/create table-name
                                               {:fields (live-rel->fields live-rel)
                                                :row-count (.rowCount live-rel-rdr)})]

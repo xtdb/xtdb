@@ -17,7 +17,6 @@
            org.apache.arrow.vector.VectorSchemaRoot
            xtdb.IBufferPool
            (xtdb.trie EventRowPointer IDataRel LiveHashTrie)
-           xtdb.util.WritableByteBufferChannel
            xtdb.vector.IRowCopier))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
@@ -33,19 +32,16 @@
                                    types/field->col-type))
                              (apply types/merge-col-types))))
 
-(defn merge-tries! [^BufferAllocator allocator, tries, data-rels, data-out-ch, meta-out-ch]
+(defn merge-tries! [^BufferAllocator allocator, ^IBufferPool buffer-pool
+                    tries data-rels table-path trie-key]
   (let [data-rel-schema (->log-data-rel-schema data-rels)]
-
-    (util/with-open [meta-wtr (trie/open-trie-writer allocator data-rel-schema
-                                                     data-out-ch meta-out-ch)
-
+    (util/with-open [trie-wtr (trie/open-trie-writer allocator buffer-pool data-rel-schema table-path trie-key)
                      data-root (VectorSchemaRoot/create data-rel-schema allocator)]
-
       (let [data-wtr (vw/root->writer data-root)
             is-valid-ptr (ArrowBufPointer.)]
         (letfn [(merge-nodes! [path [mn-tag mn-arg]]
                   (case mn-tag
-                    :branch (.writeBranch meta-wtr (int-array mn-arg))
+                    :branch (.writeBranch trie-wtr (int-array mn-arg))
 
                     :leaf (let [data-rdrs (trie/load-data-pages data-rels mn-arg)
                                 merge-q (PriorityQueue. (Comparator/comparing (util/->jfn :ev-ptr) (EventRowPointer/comparator)))]
@@ -68,36 +64,24 @@
                                     (.add merge-q q-obj))
                                   (recur (.add trie pos)))
 
-                                (let [pos (trie/write-live-trie meta-wtr trie (vw/rel-wtr->rdr data-wtr))]
+                                (let [pos (trie/write-live-trie-node trie-wtr (.rootNode (.compactLogs trie)) (vw/rel-wtr->rdr data-wtr))]
                                   (.clear data-root)
                                   (.clear data-wtr)
                                   pos))))))]
 
           (trie/postwalk-merge-plan tries merge-nodes!)
-          (.end meta-wtr))))))
+          (.end trie-wtr))))))
 
 (defn exec-compaction-job! [^BufferAllocator allocator, ^IBufferPool buffer-pool,
                             {:keys [^Path table-path trie-keys out-trie-key]}]
   (try
     (log/infof "compacting '%s' '%s' -> '%s'..." table-path trie-keys out-trie-key)
     (util/with-open [meta-files (LinkedList.)
-                     data-rels (trie/open-data-rels buffer-pool table-path trie-keys nil)
-                     data-out-bb (WritableByteBufferChannel/open)
-                     meta-out-bb (WritableByteBufferChannel/open)]
+                     data-rels (trie/open-data-rels buffer-pool table-path trie-keys nil)]
       (doseq [trie-key trie-keys]
         (.add meta-files (trie/open-meta-file buffer-pool (trie/->table-meta-file-path table-path trie-key))))
 
-      (merge-tries! allocator
-                    (mapv :trie meta-files)
-                    data-rels
-                    (.getChannel data-out-bb) (.getChannel meta-out-bb))
-
-      (log/debugf "uploading '%s' '%s'..." table-path out-trie-key)
-
-      @(.putObject buffer-pool (trie/->table-data-file-path table-path out-trie-key)
-                   (.getAsByteBuffer data-out-bb))
-      @(.putObject buffer-pool (trie/->table-meta-file-path table-path out-trie-key)
-                   (.getAsByteBuffer meta-out-bb)))
+      (merge-tries! allocator buffer-pool (mapv :trie meta-files) data-rels table-path out-trie-key))
 
     (log/infof "compacted '%s' -> '%s'." table-path out-trie-key)
 

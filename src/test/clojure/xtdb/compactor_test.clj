@@ -7,7 +7,8 @@
             [xtdb.test-json :as tj]
             [xtdb.test-util :as tu]
             [xtdb.util :as util]
-            [xtdb.trie :as trie]))
+            [xtdb.trie :as trie]
+            [xtdb.buffer-pool :as bp]))
 
 (t/use-fixtures :each tu/with-allocator)
 
@@ -49,36 +50,35 @@
                  [0 0 1] [0 1 2] [0 2 3] [0 3 4] [0 4 5] [0 5 6] [0 6 7] [0 7 8]])))))
 
 (t/deftest test-merges-tries
-  (let [expected-dir (.toPath (io/as-file (io/resource "xtdb/compactor-test/test-merges-tries")))
-        tmp-dir (doto (util/->path "target/compactor/test-merges-tries")
-                  util/delete-dir
-                  util/mkdirs)]
+  (let [data-dir (doto (util/->path "target/compactor/test-merges-tries")
+                   util/delete-dir
+                   util/mkdirs)]
+    (with-open [bp (bp/->local {:allocator tu/*allocator*, :data-dir data-dir})]
+      (let [expected-dir (.toPath (io/as-file (io/resource "xtdb/compactor-test/test-merges-tries")))]
 
-    (util/with-open [lt0 (tu/open-live-table "foo")
-                     lt1 (tu/open-live-table "foo")
-                     data-out-ch (util/->file-channel (.resolve tmp-dir "data.arrow") util/write-truncate-open-opts)
-                     meta-out-ch (util/->file-channel (.resolve tmp-dir "meta.arrow") util/write-truncate-open-opts)]
+        (util/with-open [lt0 (tu/open-live-table "foo")
+                         lt1 (tu/open-live-table "foo")]
 
-      (tu/index-tx! lt0 #xt/tx-key {:tx-id 0, :system-time #time/instant "2020-01-01T00:00:00Z"}
-                    [{:xt/id "foo", :v 0}
-                     {:xt/id "bar", :v 0}])
+          (tu/index-tx! lt0 #xt/tx-key {:tx-id 0, :system-time #time/instant "2020-01-01T00:00:00Z"}
+                        [{:xt/id "foo", :v 0}
+                         {:xt/id "bar", :v 0}])
 
-      (tu/index-tx! lt0 #xt/tx-key {:tx-id 1, :system-time #time/instant "2021-01-01T00:00:00Z"}
-                    [{:xt/id "bar", :v 1}])
+          (tu/index-tx! lt0 #xt/tx-key {:tx-id 1, :system-time #time/instant "2021-01-01T00:00:00Z"}
+                        [{:xt/id "bar", :v 1}])
 
-      (tu/index-tx! lt1 #xt/tx-key {:tx-id 2, :system-time #time/instant "2022-01-01T00:00:00Z"}
-                    [{:xt/id "foo", :v 1}])
+          (tu/index-tx! lt1 #xt/tx-key {:tx-id 2, :system-time #time/instant "2022-01-01T00:00:00Z"}
+                        [{:xt/id "foo", :v 1}])
 
-      (tu/index-tx! lt1 #xt/tx-key {:tx-id 3, :system-time #time/instant "2023-01-01T00:00:00Z"}
-                    [{:xt/id "foo", :v 2}
-                     {:xt/id "bar", :v 2}])
+          (tu/index-tx! lt1 #xt/tx-key {:tx-id 3, :system-time #time/instant "2023-01-01T00:00:00Z"}
+                        [{:xt/id "foo", :v 2}
+                         {:xt/id "bar", :v 2}])
 
-      (c/merge-tries! tu/*allocator*
-                      [(.compactLogs (li/live-trie lt0)) (.compactLogs (li/live-trie lt1))]
-                      [(tu/->live-data-rel lt0) (tu/->live-data-rel lt1)]
-                      data-out-ch meta-out-ch))
+          (c/merge-tries! tu/*allocator* bp
+                          [(.compactLogs (li/live-trie lt0)) (.compactLogs (li/live-trie lt1))]
+                          [(tu/->live-data-rel lt0) (tu/->live-data-rel lt1)]
+                          (util/->path "my-table") "my-trie"))
 
-    (tj/check-json expected-dir tmp-dir)))
+        (tj/check-json expected-dir data-dir)))))
 
 (t/deftest test-e2e
   (let [node-dir (util/->path "target/compactor/test-e2e")]
