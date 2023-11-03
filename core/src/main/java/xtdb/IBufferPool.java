@@ -2,11 +2,9 @@ package xtdb;
 
 import org.apache.arrow.memory.ArrowBuf;
 import org.apache.arrow.vector.VectorSchemaRoot;
-import org.apache.arrow.vector.ipc.ArrowFileWriter;
 
 import java.nio.ByteBuffer;
 import java.nio.file.Path;
-import java.nio.channels.WritableByteChannel;
 import java.util.concurrent.CompletableFuture;
 
 public interface IBufferPool extends AutoCloseable {
@@ -18,7 +16,5 @@ public interface IBufferPool extends AutoCloseable {
 
     Iterable<Path> listObjects(Path dir);
 
-    WritableByteChannel openChannel(Path k);
-
-    ArrowFileWriter openArrowFileWriter(Path k, VectorSchemaRoot vsr);
+    IArrowWriter openArrowWriter(Path k, VectorSchemaRoot vsr);
 }

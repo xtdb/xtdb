@@ -1,13 +1,13 @@
 (ns xtdb.buffer-pool
-  (:require [clojure.string :as str]
-            [juxt.clojars-mirrors.integrant.core :as ig]
+  (:require [juxt.clojars-mirrors.integrant.core :as ig]
             [xtdb.object-store :as os]
             [xtdb.util :as util])
   (:import (clojure.lang PersistentQueue)
-           java.io.Closeable
+           [java.io ByteArrayOutputStream Closeable]
            (java.nio ByteBuffer)
-           (java.nio.channels FileChannel WritableByteChannel)
-           [java.nio.file FileVisitOption Files LinkOption Path StandardOpenOption]
+           (java.nio.channels Channels)
+           [java.nio.file FileVisitOption Files LinkOption Path]
+           [java.nio.file.attribute FileAttribute]
            [java.util Map NavigableMap TreeMap]
            [java.util.concurrent CompletableFuture]
            (java.util.concurrent.atomic AtomicLong)
@@ -16,7 +16,7 @@
            (org.apache.arrow.vector VectorSchemaRoot)
            (org.apache.arrow.vector.ipc ArrowFileWriter)
            (org.apache.arrow.vector.ipc.message ArrowBlock ArrowFooter ArrowRecordBatch)
-           (xtdb IBufferPool)
+           (xtdb IArrowWriter IBufferPool)
            (xtdb.object_store IMultipartUpload SupportsMultipart)
            xtdb.object_store.ObjectStore
            xtdb.util.ArrowBufLRU))
@@ -65,68 +65,6 @@
       (if hit (record-cache-hit arrow-buf) (record-cache-miss arrow-buf))
       [hit (retain arrow-buf)])))
 
-(defn- upload-multipart-buffers [object-store k nio-buffers]
-  (let [^IMultipartUpload upload @(.startMultipart ^SupportsMultipart object-store k)]
-    (try
-
-      (loop [part-queue (into PersistentQueue/EMPTY nio-buffers)
-             waiting-parts []]
-        (cond
-          (empty? part-queue) @(CompletableFuture/allOf (into-array CompletableFuture waiting-parts))
-
-          (< (count waiting-parts) (int max-multipart-per-upload-concurrency))
-          (recur (pop part-queue) (conj waiting-parts (.uploadPart upload ^ByteBuffer (peek part-queue))))
-
-          :else
-          (do @(CompletableFuture/anyOf (into-array CompletableFuture waiting-parts))
-              (recur part-queue (vec (remove future-done? waiting-parts))))))
-
-      @(.complete upload)
-
-      (catch Throwable upload-loop-t
-        (try
-          @(.abort upload)
-          (catch Throwable abort-t
-            (.addSuppressed upload-loop-t abort-t)))
-        (throw upload-loop-t)))))
-
-(defn- put-object [^IBufferPool bp k ^ByteBuffer buffer]
-  (try
-    (let [buffer (.duplicate buffer)]
-      (with-open [ch (.openChannel bp k)]
-        (while (.hasRemaining buffer)
-          (.write ch buffer)))
-      (CompletableFuture/completedFuture nil))
-    (catch Throwable t
-      (CompletableFuture/failedFuture t))))
-
-(deftype InMemoryWritableChannel [allocator memory-store
-                                  ^:volatile-mutable ^ByteBuffer buffer
-                                  k
-                                  ^:volatile-mutable open]
-  WritableByteChannel
-  (isOpen [_] open)
-
-  (close [this]
-    (let [create-arrow-buf #(util/->arrow-buf-view allocator (.flip buffer))
-          [_ arrow-buf] (cache-compute memory-store k create-arrow-buf)]
-      ;; cache-compute returns the buffer, so must increment its reference count
-      ;; we are not interested in doing work with the buffer (just to putting it in the cache), hence util/close.
-      (util/close arrow-buf)
-      (set! (.-open this) false)))
-
-  (write [this src]
-    (let [remaining (.remaining src)]
-      (loop [src src]
-        (let [^ByteBuffer buffer (.-buffer this)]
-          (if (<= (.remaining src) (.remaining buffer))
-            (.put buffer src)
-            (let [new-buffer (ByteBuffer/allocateDirect (* 2 (.capacity buffer)))]
-              (.put new-buffer (.flip buffer))
-              (set! (.-buffer this) new-buffer)
-              (recur src)))))
-      remaining)))
-
 (defrecord MemoryBufferPool [allocator, ^NavigableMap memory-store]
   IBufferPool
   (getBuffer [_ k]
@@ -142,7 +80,10 @@
         :else
         (CompletableFuture/failedFuture (os/obj-missing-exception k)))))
 
-  (putObject [this k buffer] (put-object this k buffer))
+  (putObject [_ k buffer]
+    (CompletableFuture/completedFuture
+     (locking memory-store
+       (.put memory-store k (util/->arrow-buf-view allocator buffer)))))
 
   (listObjects [_]
     (locking memory-store (vec (.keySet ^NavigableMap memory-store))))
@@ -158,9 +99,25 @@
              (distinct)
              (vec)))))
 
-  (openChannel [_ k] (->InMemoryWritableChannel allocator memory-store (ByteBuffer/allocateDirect 32) k true))
+  (openArrowWriter [this k vsr]
+    (let [baos (ByteArrayOutputStream.)
+          write-ch (Channels/newChannel baos)
+          aw (ArrowFileWriter. vsr nil write-ch)]
 
-  (openArrowFileWriter [this k vsr] (ArrowFileWriter. vsr nil (.openChannel this k)))
+      (.start aw)
+
+      (reify IArrowWriter
+        (writeBatch [_] (.writeBatch aw))
+
+        (end [_]
+          (.end aw)
+          (.close write-ch)
+          (.putObject this k (ByteBuffer/wrap (.toByteArray baos))))
+
+        (close [_]
+          (.close aw)
+          (when (.isOpen write-ch)
+            (.close write-ch))))))
 
   Closeable
   (close [_]
@@ -180,31 +137,9 @@
 (derive ::in-memory :xtdb/buffer-pool)
 
 (defn- create-tmp-path ^Path [^Path disk-store]
-  (doto (.resolve disk-store (str ".tmp/" (random-uuid)))
-    (util/create-parents)))
-
-(defn- open-tmp-file ^FileChannel [^Path tmp-path]
-  (util/->file-channel tmp-path [StandardOpenOption/CREATE_NEW, StandardOpenOption/WRITE]))
-
-(deftype LocalWritableChannel [^IBufferPool bp
-                               allocator
-                               memory-store
-                               ^Path disk-store
-                               ^FileChannel file-channel
-                               tmp-path
-                               ^Path k]
-  WritableByteChannel
-  (isOpen [_] (.isOpen file-channel))
-
-  (close [_]
-    (.close file-channel)
-    (let [file-path (.resolve disk-store k)]
-      (util/create-parents file-path)
-      ;; see #2847
-      (util/atomic-move tmp-path file-path)
-      (util/then-apply (.getBuffer bp k) util/close)))
-
-  (write [_ src] (.write file-channel src)))
+  (Files/createTempFile (doto (.resolve disk-store ".tmp") util/mkdirs)
+                        "upload" ".arrow"
+                        (make-array FileAttribute 0)))
 
 (defrecord LocalBufferPool [allocator, ^ArrowBufLRU memory-store, ^Path disk-store]
   IBufferPool
@@ -231,7 +166,14 @@
                         [_ buf] (cache-compute memory-store k create-arrow-buf)]
                     buf))))))))
 
-  (putObject [this k buffer] (put-object this k buffer))
+  (putObject [_ k buffer]
+    (CompletableFuture/completedFuture
+     (let [tmp-path (create-tmp-path disk-store)]
+       (util/write-buffer-to-path buffer tmp-path)
+
+       (let [file-path (.resolve disk-store k)]
+         (util/create-parents file-path)
+         (util/atomic-move tmp-path file-path)))))
 
   (listObjects [_]
     (with-open [dir-stream (Files/walk disk-store (make-array FileVisitOption 0))]
@@ -246,12 +188,26 @@
           (vec (sort (for [^Path path dir-stream]
                        (.relativize disk-store path))))))))
 
-  (openChannel [this k]
-    (let [tmp-path (create-tmp-path disk-store)]
-      (->LocalWritableChannel this allocator memory-store disk-store (open-tmp-file tmp-path) tmp-path k)))
+  (openArrowWriter [_ k vsr]
+    (let [tmp-path (create-tmp-path disk-store)
+          file-ch (util/->file-channel tmp-path util/write-truncate-open-opts)
+          aw (ArrowFileWriter. vsr nil file-ch)]
+      (.start aw)
+      (reify IArrowWriter
+        (writeBatch [_] (.writeBatch aw))
 
-  (openArrowFileWriter [this k vsr]
-    (ArrowFileWriter. vsr nil (.openChannel this k)))
+        (end [_]
+          (.end aw)
+          (.close file-ch)
+
+          (let [file-path (.resolve disk-store k)]
+            (util/create-parents file-path)
+            (util/atomic-move tmp-path file-path)))
+
+        (close [_]
+          (util/close aw)
+          (when (.isOpen file-ch)
+            (.close file-ch))))))
 
   Closeable
   (close [_]
@@ -278,99 +234,67 @@
 
 (derive ::local :xtdb/buffer-pool)
 
-(deftype RemoteWritableChannel [^IBufferPool bp
-                                allocator
-                                memory-store
-                                ^Path disk-store
-                                ^ObjectStore remote-store
-                                ^FileChannel file-channel
-                                tmp-path
-                                ^Path k]
-  WritableByteChannel
-  (isOpen [_] (.isOpen file-channel))
+(defn- upload-multipart-buffers [object-store k nio-buffers]
+  (let [^IMultipartUpload upload @(.startMultipart ^SupportsMultipart object-store k)]
+    (try
 
-  (close [_]
-    (.close file-channel)
-    (let [mmap-buffer (util/->mmap-path tmp-path)]
-      (cond
-        (not (instance? SupportsMultipart remote-store))
-        @(.putObject remote-store k mmap-buffer)
+      (loop [part-queue (into PersistentQueue/EMPTY nio-buffers)
+             waiting-parts []]
+        (cond
+          (empty? part-queue) @(CompletableFuture/allOf (into-array CompletableFuture waiting-parts))
 
-        (<= (.remaining mmap-buffer) (int min-multipart-part-size))
-        @(.putObject remote-store k mmap-buffer)
+          (< (count waiting-parts) (int max-multipart-per-upload-concurrency))
+          (recur (pop part-queue) (conj waiting-parts (.uploadPart upload ^ByteBuffer (peek part-queue))))
 
-        :else
-        (->> (range (.position mmap-buffer) (.limit mmap-buffer) min-multipart-part-size)
-             (map (fn [n] (.slice mmap-buffer (int n) (min (int min-multipart-part-size) (- (.limit mmap-buffer) (int n))))))
-             (upload-multipart-buffers remote-store k))))
-    (let [file-path (.resolve disk-store k)]
-      (util/create-parents file-path)
-      ;; see #2847
-      (util/atomic-move tmp-path file-path)
-      (util/then-apply (.getBuffer bp k) util/close)))
+          :else
+          (do @(CompletableFuture/anyOf (into-array CompletableFuture waiting-parts))
+              (recur part-queue (vec (remove future-done? waiting-parts))))))
 
-  (write [_ src] (.write file-channel src)))
+      @(.complete upload)
 
-(deftype RemoteArrowFileChannel [^IBufferPool bp
-                                 allocator
-                                 memory-store
-                                 ^Path disk-store
-                                 ^ObjectStore remote-store
-                                 ^FileChannel file-channel
-                                 tmp-path
-                                 ^Path k]
-  WritableByteChannel
-  (isOpen [_] (.isOpen file-channel))
+      (catch Throwable upload-loop-t
+        (try
+          @(.abort upload)
+          (catch Throwable abort-t
+            (.addSuppressed upload-loop-t abort-t)))
+        (throw upload-loop-t)))))
 
-  (close [_]
-    (.close file-channel)
-    (let [mmap-buffer (util/->mmap-path tmp-path)]
-      (cond
-        (not (instance? SupportsMultipart remote-store))
-        @(.putObject remote-store k mmap-buffer)
+(defn- arrow-buf-cuts [^ArrowBuf arrow-buf]
+  (loop [cuts []
+         prev-cut (int 0)
+         cut (int 0)
+         blocks (.getRecordBatches (util/read-arrow-footer arrow-buf))]
+    (if-some [[^ArrowBlock block & blocks] (seq blocks)]
+      (let [offset (.getOffset block)
+            offset-delta (- offset cut)
+            metadata-length (.getMetadataLength block)
+            body-length (.getBodyLength block)
+            total-length (+ offset-delta metadata-length body-length)
+            new-cut (+ cut total-length)
+            cut-len (- new-cut prev-cut)]
+        (if (<= (int min-multipart-part-size) cut-len)
+          (recur (conj cuts new-cut) cut new-cut blocks)
+          (recur cuts prev-cut new-cut blocks)))
+      cuts)))
 
-        (<= (.remaining mmap-buffer) (int min-multipart-part-size))
-        @(.putObject remote-store k mmap-buffer)
+(defn- arrow-buf->parts [^ArrowBuf arrow-buf]
+  (loop [part-buffers []
+         prev-cut (int 0)
+         cuts (arrow-buf-cuts arrow-buf)]
+    (if-some [[cut & cuts] (seq cuts)]
+      (recur (conj part-buffers (.nioBuffer arrow-buf prev-cut (- (int cut) prev-cut))) (int cut) cuts)
+      (let [final-part (.nioBuffer arrow-buf prev-cut (- (.capacity arrow-buf) prev-cut))]
+        (conj part-buffers final-part)))))
 
-        :else
-        (with-open [arrow-buf (util/->arrow-buf-view allocator mmap-buffer)]
-          (let [cuts
-                (loop [cuts []
-                       prev-cut (int 0)
-                       cut (int 0)
-                       blocks (.getRecordBatches (util/read-arrow-footer arrow-buf))]
-                  (if-some [[^ArrowBlock block & blocks] (seq blocks)]
-                    (let [offset (.getOffset block)
-                          offset-delta (- offset cut)
-                          metadata-length (.getMetadataLength block)
-                          body-length (.getBodyLength block)
-                          total-length (+ offset-delta metadata-length body-length)
-                          new-cut (+ cut total-length)
-                          cut-len (- new-cut prev-cut)]
-                      (if (<= (int min-multipart-part-size) cut-len)
-                        (recur (conj cuts new-cut) cut new-cut blocks)
-                        (recur cuts prev-cut new-cut blocks)))
-                    cuts))
+(defn- upload-arrow-file [^BufferAllocator allocator, ^ObjectStore remote-store, ^Path k, ^Path tmp-path]
+  (let [mmap-buffer (util/->mmap-path tmp-path)]
+    (if (or (not (instance? SupportsMultipart remote-store))
+            (<= (.remaining mmap-buffer) (int min-multipart-part-size)))
+      @(.putObject remote-store k mmap-buffer)
 
-                part-buffers
-                (loop [part-buffers []
-                       prev-cut (int 0)
-                       cuts cuts]
-                  (if-some [[cut & cuts] (seq cuts)]
-                    (recur (conj part-buffers (.nioBuffer arrow-buf prev-cut (- (int cut) prev-cut))) (int cut) cuts)
-                    (let [final-part (.nioBuffer arrow-buf prev-cut (- (.capacity arrow-buf) prev-cut))]
-                      (conj part-buffers final-part))))]
-
-            (upload-multipart-buffers remote-store k part-buffers)
-
-            nil))))
-    (let [file-path (.resolve disk-store k)]
-      (util/create-parents file-path)
-      ;; see #2847
-      (util/atomic-move tmp-path file-path)
-      (util/then-apply (.getBuffer bp k) util/close)))
-
-  (write [_ src] (.write file-channel src)))
+      (with-open [arrow-buf (util/->arrow-buf-view allocator mmap-buffer)]
+        (upload-multipart-buffers remote-store k (arrow-buf->parts arrow-buf))
+        nil))))
 
 (defrecord RemoteBufferPool [allocator
                              ^ArrowBufLRU memory-store
@@ -408,32 +332,56 @@
 
   (listObjects [_ dir] (.listObjects remote-store dir))
 
-  (openChannel [this k]
+  (openArrowWriter [_ k vsr]
     (let [tmp-path (create-tmp-path disk-store)
-          file-channel (open-tmp-file tmp-path)]
-      (->RemoteWritableChannel this
-                               allocator
-                               memory-store
-                               disk-store
-                               remote-store
-                               file-channel
-                               tmp-path
-                               k)))
+          file-ch (util/->file-channel tmp-path util/write-truncate-open-opts)
+          aw (ArrowFileWriter. vsr nil file-ch)]
 
-  (openArrowFileWriter [this k vsr]
-    (let [tmp-path (create-tmp-path disk-store)
-          file-channel (open-tmp-file tmp-path)
-          ch (->RemoteArrowFileChannel this
-                                       allocator
-                                       memory-store
-                                       disk-store
-                                       remote-store
-                                       file-channel
-                                       tmp-path
-                                       k)]
-      (ArrowFileWriter. vsr nil ch)))
+      (.start aw)
 
-  (putObject [this k buffer] (put-object this k buffer))
+      (reify IArrowWriter
+        (writeBatch [_] (.writeBatch aw))
+
+        (end [_]
+          (.end aw)
+          (.close file-ch)
+
+          (upload-arrow-file allocator remote-store k tmp-path)
+
+          (let [file-path (.resolve disk-store k)]
+            (util/create-parents file-path)
+            ;; see #2847
+            (util/atomic-move tmp-path file-path)))
+
+        (close [_]
+          (util/close aw)
+
+          (when (.isOpen file-ch)
+            (.close file-ch))))))
+
+  (putObject [_ k buffer]
+    (if (or (not (instance? SupportsMultipart remote-store))
+            (<= (.remaining buffer) (int min-multipart-part-size)))
+      (.putObject remote-store k buffer)
+
+      (let [buffers (->> (range (.position buffer) (.limit buffer) min-multipart-part-size)
+                         (map (fn [n] (.slice buffer
+                                              (int n)
+                                              (min (int min-multipart-part-size)
+                                                   (- (.limit buffer) (int n)))))))]
+        (-> (CompletableFuture/runAsync
+             (fn []
+               (upload-multipart-buffers remote-store k buffers)))
+
+            (.thenRun (fn []
+                        (let [tmp-path (create-tmp-path disk-store)]
+                          (with-open [file-ch (util/->file-channel tmp-path util/write-truncate-open-opts)]
+                            (.write file-ch buffer))
+
+                          (let [file-path (.resolve disk-store k)]
+                            (util/create-parents file-path)
+                            ;; see #2847
+                            (util/atomic-move tmp-path file-path)))))))))
 
   Closeable
   (close [_]

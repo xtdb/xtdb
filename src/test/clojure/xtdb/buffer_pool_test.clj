@@ -147,6 +147,7 @@
 (defrecord SimulatedObjectStore [calls buffers]
   ObjectStore
   (getObject [_ k] (CompletableFuture/completedFuture (get @buffers k)))
+
   (getObject [_ k path]
     (if-some [^ByteBuffer nio-buf (get @buffers k)]
       (let [barr (byte-array (.remaining nio-buf))]
@@ -154,10 +155,12 @@
         (io/copy barr (.toFile path))
         (CompletableFuture/completedFuture path))
       (CompletableFuture/failedFuture (os/obj-missing-exception k))))
+
   (putObject [_ k buf]
     (swap! buffers assoc k buf)
     (swap! calls conj :put)
     (CompletableFuture/completedFuture nil))
+
   SupportsMultipart
   (startMultipart [_ k]
     (let [parts (atom [])]
@@ -167,10 +170,12 @@
             (swap! calls conj :upload)
             (swap! parts conj (copy-byte-buffer buf))
             (CompletableFuture/completedFuture nil))
+
           (complete [_]
             (swap! calls conj :complete)
             (swap! buffers assoc k (concat-byte-buffers @parts))
             (CompletableFuture/completedFuture nil))
+
           (abort [_]
             (swap! calls conj :abort)
             (CompletableFuture/completedFuture nil)))))))
@@ -183,16 +188,11 @@
 (defn get-remote-calls [test-bp]
   @(:calls (:remote-store test-bp)))
 
-(defn put-buf [^IBufferPool bp, k, ^ByteBuffer nio-buf]
-  (with-open [channel (.openChannel bp k)]
-    (when (.hasRemaining nio-buf)
-      (.write channel nio-buf))))
-
 (t/deftest below-min-size-put-test
   (with-open [bp (remote-test-buffer-pool)]
     (t/testing "if <= min part size, putObject is used"
       (with-redefs [bp/min-multipart-part-size 2]
-        (put-buf bp (util/->path "min-part-put") (utf8-buf "12"))
+        @(.putObject bp (util/->path "min-part-put") (utf8-buf "12"))
         (t/is (= [:put] (get-remote-calls bp)))
         (test-get-object bp (util/->path "min-part-put") (utf8-buf "12"))))))
 
@@ -200,7 +200,7 @@
   (with-open [bp (remote-test-buffer-pool)]
     (t/testing "if above min part size, multipart is used"
       (with-redefs [bp/min-multipart-part-size 2]
-        (put-buf bp (util/->path "min-part-multi") (utf8-buf "1234"))
+        @(.putObject bp (util/->path "min-part-multi") (utf8-buf "1234"))
         (t/is (= [:upload :upload :complete] (get-remote-calls bp)))
         (test-get-object bp (util/->path "min-part-multi") (utf8-buf "1234"))))))
 
@@ -208,7 +208,7 @@
   (with-open [bp (remote-test-buffer-pool)]
     (t/testing "multipart, smaller end part"
       (with-redefs [bp/min-multipart-part-size 2]
-        (put-buf bp (util/->path "min-part-multi2") (utf8-buf "123"))
+        @(.putObject bp (util/->path "min-part-multi2") (utf8-buf "123"))
         (t/is (= [:upload :upload :complete] (get-remote-calls bp)))
         (test-get-object bp (util/->path "min-part-multi2") (utf8-buf "123"))))))
 
@@ -216,19 +216,18 @@
   (with-open [bp (remote-test-buffer-pool)]
     (t/testing "multipart, arrow ipc"
       (let [schema (Schema. [(types/col-type->field "a" :i32)])
-            ->RemoteArrowFileChannel bp/->RemoteArrowFileChannel
+            upload-multipart-buffers @#'bp/upload-multipart-buffers
             multipart-branch-taken (atom false)]
         (with-redefs [bp/min-multipart-part-size 320
-                      bp/->RemoteArrowFileChannel
+                      bp/upload-multipart-buffers
                       (fn [& args]
                         (reset! multipart-branch-taken true)
-                        (apply ->RemoteArrowFileChannel args))]
+                        (apply upload-multipart-buffers args))]
           (with-open [vsr (VectorSchemaRoot/create schema tu/*allocator*)
-                      w (.openArrowFileWriter bp (util/->path "aw") vsr)]
+                      w (.openArrowWriter bp (util/->path "aw") vsr)]
             (let [^IntVector v (.getVector vsr "a")]
               (.setValueCount v 10)
               (dotimes [x 10] (.set v x x))
-              (.start w)
               (.writeBatch w)
               (.end w))))
 
