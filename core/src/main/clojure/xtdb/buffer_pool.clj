@@ -258,12 +258,12 @@
     (free-memory memory-store)
     (util/close allocator)))
 
-(defn ->local [{:keys [^BufferAllocator allocator,
-                       ^Path data-dir
-                       max-cache-bytes
-                       max-cache-entries]
-                :or {max-cache-entries 1024
-                     max-cache-bytes 536870912}}]
+(defn ->local ^xtdb.IBufferPool [{:keys [^BufferAllocator allocator,
+                                         ^Path data-dir
+                                         max-cache-bytes
+                                         max-cache-entries]
+                                  :or {max-cache-entries 1024
+                                       max-cache-bytes 536870912}}]
   (->LocalBufferPool (.newChildAllocator allocator "buffer-pool" 0 Long/MAX_VALUE)
                      (ArrowBufLRU. 16 max-cache-entries max-cache-bytes)
                      data-dir))
@@ -442,13 +442,13 @@
 
 (set! *unchecked-math* :warn-on-boxed)
 
-(defn ->remote [{:keys [^BufferAllocator allocator
-                        object-store
-                        data-dir
-                        max-cache-bytes
-                        max-cache-entries]
-                 :or {max-cache-entries 1024
-                      max-cache-bytes 536870912}}]
+(defn ->remote ^xtdb.IBufferPool [{:keys [^BufferAllocator allocator
+                                          object-store
+                                          data-dir
+                                          max-cache-bytes
+                                          max-cache-entries]
+                                   :or {max-cache-entries 1024
+                                        max-cache-bytes 536870912}}]
   (->RemoteBufferPool (.newChildAllocator allocator "buffer-pool" 0 Long/MAX_VALUE)
                       (ArrowBufLRU. 16 max-cache-entries max-cache-bytes)
                       data-dir

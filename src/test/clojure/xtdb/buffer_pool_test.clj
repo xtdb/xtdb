@@ -8,9 +8,7 @@
             [xtdb.test-util :as tu]
             [xtdb.types :as types]
             [xtdb.util :as util])
-  (:import (clojure.lang IDeref)
-           (java.io Closeable)
-           (java.nio ByteBuffer)
+  (:import (java.nio ByteBuffer)
            (java.nio.file Files Path)
            (java.nio.file.attribute FileAttribute)
            (java.util Map TreeMap)
@@ -18,12 +16,9 @@
            (org.apache.arrow.memory ArrowBuf)
            (org.apache.arrow.vector IntVector VectorSchemaRoot)
            (org.apache.arrow.vector.types.pojo Schema)
+           xtdb.IBufferPool
            (xtdb.object_store IMultipartUpload ObjectStore SupportsMultipart)
            (xtdb.util ArrowBufLRU)))
-
-(set! *warn-on-reflection* false)
-
-(defn closeable [x close-fn] (reify IDeref (deref [_] x) Closeable (close [_] (close-fn x))))
 
 (defonce tmp-dirs (atom []))
 
@@ -41,16 +36,11 @@
 (t/use-fixtures :each #'each-fixture)
 (t/use-fixtures :once #'once-fixture)
 
-(defn byte-seq [^ArrowBuf buf]
-  (let [arr (byte-array (.capacity buf))]
-    (.getBytes buf 0 arr)
-    (seq arr)))
-
 (t/deftest cache-counter-test
-  (with-open [os (os-test/->InMemoryObjectStore (TreeMap.))
-              bp (bp/->remote {:allocator tu/*allocator*
-                               :object-store os
-                               :data-dir (create-tmp-dir)})]
+  (util/with-open [os (os-test/->InMemoryObjectStore (TreeMap.))
+                   bp (bp/->remote {:allocator tu/*allocator*
+                                    :object-store os
+                                    :data-dir (create-tmp-dir)})]
     (bp/clear-cache-counters)
     (t/is (= 0 (.get bp/cache-hit-byte-counter)))
     (t/is (= 0 (.get bp/cache-miss-byte-counter)))
@@ -77,9 +67,8 @@
 
 (t/deftest arrow-buf-lru-test
   (t/testing "max size restriction"
-    (with-open [lru (closeable (ArrowBufLRU. 1 2 128) #'bp/free-memory)]
-      (let [^Map lru @lru
-            buf1 (util/->arrow-buf-view tu/*allocator* (ByteBuffer/wrap (byte-array (range 16))))
+    (util/with-open [lru (ArrowBufLRU. 1 2 128)]
+      (let [buf1 (util/->arrow-buf-view tu/*allocator* (ByteBuffer/wrap (byte-array (range 16))))
             buf2 (util/->arrow-buf-view tu/*allocator* (ByteBuffer/wrap (byte-array (range 16))))
             buf3 (util/->arrow-buf-view tu/*allocator* (ByteBuffer/wrap (byte-array (range 16))))]
         (.put lru "buf1" buf1)
@@ -91,9 +80,8 @@
         (t/is (= buf3 (.get lru "buf3"))))))
 
   (t/testing "max byte size restriction"
-    (with-open [lru (closeable (ArrowBufLRU. 1 5 32) #'bp/free-memory)]
-      (let [^Map lru @lru
-            buf1 (util/->arrow-buf-view tu/*allocator* (ByteBuffer/wrap (byte-array (range 16))))
+    (util/with-open [lru (ArrowBufLRU. 1 5 32)]
+      (let [buf1 (util/->arrow-buf-view tu/*allocator* (ByteBuffer/wrap (byte-array (range 16))))
             buf2 (util/->arrow-buf-view tu/*allocator* (ByteBuffer/wrap (byte-array (range 16))))
             buf3 (util/->arrow-buf-view tu/*allocator* (ByteBuffer/wrap (byte-array (range 16))))]
         (.put lru "buf1" buf1)
@@ -124,20 +112,19 @@
     (.getBytes arrow-buf 0 barr)
     barr))
 
-(defn arrow-buf-utf8 [arrow-buf]
-  (String. (arrow-buf-bytes arrow-buf) "utf-8"))
-
 (defn arrow-buf->nio [arrow-buf]
   ;; todo get .nioByteBuffer to work
   (ByteBuffer/wrap (arrow-buf-bytes arrow-buf)))
 
-(defn evict-buffer [bp k] (.close (.remove (:memory-store bp) k)))
+(defn evict-buffer [bp k]
+  (doto ^ArrowBuf (.remove ^Map (:memory-store bp) k)
+    .close))
 
-(defn test-get-object [bp ^Path k ^ByteBuffer expected]
+(defn test-get-object [^IBufferPool bp, ^Path k, ^ByteBuffer expected]
   (let [{:keys [^Path disk-store, object-store]} bp]
 
     (t/testing "immediate get from buffers map produces correct buffer"
-      (with-open [buf @(.getBuffer bp k)]
+      (util/with-open [buf @(.getBuffer bp k)]
         (t/is (= 0 (util/compare-nio-buffers-unsigned expected (arrow-buf->nio buf))))))
 
     (when disk-store
@@ -147,14 +134,14 @@
 
       (t/testing "if the buffer is evicted, it is loaded from disk"
         (evict-buffer bp k)
-        (with-open [buf @(.getBuffer bp k)]
+        (util/with-open [buf @(.getBuffer bp k)]
           (t/is (= 0 (util/compare-nio-buffers-unsigned expected (arrow-buf->nio buf)))))))
 
     (when object-store
       (t/testing "if the buffer is evicted and deleted from disk, it is delivered from object storage"
         (evict-buffer bp k)
         (util/delete-file (.resolve disk-store k))
-        (with-open [buf @(.getBuffer bp k)]
+        (util/with-open [buf @(.getBuffer bp k)]
           (t/is (= 0 (util/compare-nio-buffers-unsigned expected (arrow-buf->nio buf)))))))))
 
 (defrecord SimulatedObjectStore [calls buffers]
@@ -188,7 +175,7 @@
             (swap! calls conj :abort)
             (CompletableFuture/completedFuture nil)))))))
 
-(defn remote-test-buffer-pool []
+(defn remote-test-buffer-pool ^xtdb.IBufferPool []
   (bp/->remote {:allocator tu/*allocator*
                 :object-store (->SimulatedObjectStore (atom []) (atom {}))
                 :data-dir (create-tmp-dir)}))
@@ -196,7 +183,7 @@
 (defn get-remote-calls [test-bp]
   @(:calls (:remote-store test-bp)))
 
-(defn put-buf [bp k nio-buf]
+(defn put-buf [^IBufferPool bp, k, ^ByteBuffer nio-buf]
   (with-open [channel (.openChannel bp k)]
     (when (.hasRemaining nio-buf)
       (.write channel nio-buf))))
@@ -247,6 +234,6 @@
 
         (t/is @multipart-branch-taken true)
         (t/is (= [:upload :upload :complete] (get-remote-calls bp)))
-        (with-open [buf @(.getBuffer bp (util/->path "aw"))]
+        (util/with-open [buf @(.getBuffer bp (util/->path "aw"))]
           (let [{:keys [root]} (util/read-arrow-buf buf)]
             (util/close root)))))))
