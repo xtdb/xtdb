@@ -26,10 +26,10 @@ dependencies {
     api("org.clojure", "tools.cli", "1.0.206")
     api("com.cognitect", "transit-clj", "1.0.329")
 
-    api("org.apache.arrow", "arrow-algorithm", "12.0.1")
-    api("org.apache.arrow", "arrow-compression", "12.0.1")
-    api("org.apache.arrow", "arrow-vector", "12.0.1")
-    api("org.apache.arrow", "arrow-memory-netty", "12.0.1")
+    api("org.apache.arrow", "arrow-algorithm", "14.0.0")
+    api("org.apache.arrow", "arrow-compression", "14.0.0")
+    api("org.apache.arrow", "arrow-vector", "14.0.0")
+    api("org.apache.arrow", "arrow-memory-netty", "14.0.0")
     api("io.netty", "netty-common", "4.1.82.Final")
 
     api("org.roaringbitmap", "RoaringBitmap", "0.9.32")
