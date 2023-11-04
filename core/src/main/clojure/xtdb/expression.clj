@@ -421,18 +421,14 @@
                   {:var->col-type {param (get param-types param)}})))
 
 (defmethod codegen-expr :if [{:keys [pred then else]} opts]
-  (let [{p-cont :continue, :as emitted-p} (codegen-expr pred opts)
+  (let [{p-cont :continue, :as emitted-p} (codegen-expr {:op :call, :f :boolean, :args [pred]} opts)
         {t-ret :return-type, t-cont :continue, :as emitted-t} (codegen-expr then opts)
         {e-ret :return-type, e-cont :continue, :as emitted-e} (codegen-expr else opts)
         return-type (types/merge-col-types t-ret e-ret)]
     (-> {:return-type return-type
          :children [emitted-p emitted-t emitted-e]
          :continue (fn [f]
-                     `(if ~(p-cont (fn [val-type code]
-                                     (case val-type
-                                       :bool code
-                                       :null false
-                                       true)))
+                     `(if ~(p-cont (fn [_ code] code))
                         ~(t-cont f)
                         ~(e-cont f)))}
         (wrap-boxed-poly-return opts))))
