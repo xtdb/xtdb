@@ -52,7 +52,12 @@
   (t/is (= [{} {} {}]
            (tu/query-ra [:table [{} {} {}]]
                         {}))
-        "table with no cols"))
+        "table with no cols")
+
+  (t/is (= [{:a #{1 3 2}}]
+           (tu/query-ra [:table [{:a #{1 2 3}}]]
+                        {}))
+        "table with sets"))
 
 (t/deftest test-table-handles-exprs
   (t/is (= [{:a 3, :b false}

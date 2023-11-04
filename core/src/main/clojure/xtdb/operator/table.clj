@@ -45,8 +45,8 @@
   (let [arrow-type (.getType field)]
     (case arrow-type
       ;; lists need a child
-      #xt.arrow/type :list (types/->field (str col-name) arrow-type (.isNullable field)
-                                          (types/->field "$data$" #xt.arrow/type :union false))
+      (#xt.arrow/type :list #xt.arrow/type :set) (types/->field (str col-name) arrow-type (.isNullable field)
+                                                                (types/->field "$data$" #xt.arrow/type :union false))
       (types/->field (str col-name) arrow-type (.isNullable field)))))
 
 (defn- ->out-rel [{:keys [allocator] :as opts} fields rows ->v]
