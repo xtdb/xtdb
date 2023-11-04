@@ -376,15 +376,16 @@
 
 (defn- equi-spec [idx condition left-fields right-fields param-fields]
   (let [[left-expr right-expr] (first condition)]
-    (letfn [(equi-projection [side expr fields]
-              (if (symbol? expr)
-                {:key-col-name expr}
+    (letfn [(equi-projection [side form fields]
+              (if (symbol? form)
+                {:key-col-name form}
 
-                (let [col-name (symbol (format "?join-expr-%s-%d" (name side) idx))]
+                (let [col-name (symbol (format "?join-expr-%s-%d" (name side) idx))
+                      input-types {:col-types (update-vals fields types/field->col-type)
+                                   :param-types (update-vals param-fields types/field->col-type)}]
                   {:key-col-name col-name
-                   :projection (expr/->expression-projection-spec col-name expr
-                                                                  {:col-types (update-vals fields types/field->col-type)
-                                                                   :param-types (update-vals param-fields types/field->col-type)})})))]
+                   :projection (expr/->expression-projection-spec col-name (expr/form->expr form input-types)
+                                                                  input-types)})))]
 
       {:left (equi-projection :left left-expr left-fields)
        :right (equi-projection :right right-expr right-fields)})))

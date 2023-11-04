@@ -1490,10 +1490,8 @@
                         (symbol (.getName col))
                         (.getField col)))))))
 
-(defn ->expression-projection-spec ^xtdb.operator.IProjectionSpec [col-name form {:keys [col-types param-types] :as input-types}]
-  (let [expr (form->expr form input-types)
-
-        ;; HACK - this runs the analyser (we discard the emission) to get the widest possible out-type.
+(defn ->expression-projection-spec ^xtdb.operator.IProjectionSpec [col-name expr {:keys [col-types param-types]}]
+  (let [;; HACK - this runs the analyser (we discard the emission) to get the widest possible out-type.
         widest-out-type (-> (emit-projection expr {:param-types param-types
                                                    :var->col-type col-types})
                             :return-type)]
@@ -1521,8 +1519,8 @@
             (.setValueCount out-vec row-count)
             (vr/vec->reader out-vec)))))))
 
-(defn ->expression-relation-selector ^xtdb.operator.IRelationSelector [form input-types]
-  (let [projector (->expression-projection-spec "select" (list 'boolean form) input-types)]
+(defn ->expression-relation-selector ^xtdb.operator.IRelationSelector [expr input-types]
+  (let [projector (->expression-projection-spec "select" {:op :call, :f :boolean, :args [expr]} input-types)]
     (reify IRelationSelector
       (select [_ al in-rel params]
         (with-open [selection (.project projector al in-rel params)]

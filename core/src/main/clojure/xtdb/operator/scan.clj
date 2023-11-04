@@ -457,10 +457,11 @@
 
             col-preds (->> (for [[col-name select-form] selects]
                              ;; for temporal preds, we may not need to re-apply these if they can be represented as a temporal range.
-                             (MapEntry/create col-name
-                                              (expr/->expression-relation-selector select-form
-                                                                                   {:col-types (update-vals fields types/field->col-type)
-                                                                                    :param-types (update-vals param-fields types/field->col-type)})))
+                             (let [input-types {:col-types (update-vals fields types/field->col-type)
+                                                :param-types (update-vals param-fields types/field->col-type)}]
+                               (MapEntry/create col-name
+                                                (expr/->expression-relation-selector (expr/form->expr select-form input-types)
+                                                                                     input-types))))
                            (into {}))
 
             metadata-args (vec (for [[col-name select] selects

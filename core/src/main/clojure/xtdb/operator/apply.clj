@@ -229,10 +229,10 @@
                          open-dependent-cursor
                          (zmatch mode
                            [:mark-join mark-spec]
-                           (let [[_col-name expr] (first (:mark-join mark-spec))
-                                 projection-spec (expr/->expression-projection-spec "_expr" expr
-                                                                                    {:col-types (update-vals dependent-fields types/field->col-type)
-                                                                                     :param-types (update-vals param-fields types/field->col-type)})]
+                           (let [[_col-name form] (first (:mark-join mark-spec))
+                                 input-types {:col-types (update-vals dependent-fields types/field->col-type)
+                                              :param-types (update-vals param-fields types/field->col-type)}
+                                 projection-spec (expr/->expression-projection-spec "_expr" (expr/form->expr form input-types) input-types)]
                              (fn [{:keys [allocator params] :as query-opts}]
                                (let [^ICursor dep-cursor (->dependent-cursor query-opts)]
                                  (reify ICursor

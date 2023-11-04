@@ -39,8 +39,9 @@
 (defmethod lp/emit-expr :select [{:keys [predicate relation]} {:keys [param-fields] :as args}]
   (lp/unary-expr (lp/emit-expr relation args)
     (fn [inner-fields]
-      (let [selector (expr/->expression-relation-selector predicate {:col-types (update-vals inner-fields types/field->col-type)
-                                                                     :param-types (update-vals param-fields types/field->col-type)})]
+      (let [input-types {:col-types (update-vals inner-fields types/field->col-type)
+                         :param-types (update-vals param-fields types/field->col-type)}
+            selector (expr/->expression-relation-selector (expr/form->expr predicate input-types) input-types)]
         {:fields inner-fields
          :->cursor (fn [{:keys [allocator params]} in-cursor]
                      (-> (SelectCursor. allocator in-cursor selector params)

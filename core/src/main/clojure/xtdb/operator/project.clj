@@ -122,10 +122,11 @@
                                                                (->row-number-projection-spec col-name))
                                           :rename (let [[to-name from-name] (first arg)]
                                                     (->rename-projection-spec to-name from-name (get inner-fields from-name)))
-                                          :extend (let [[col-name form] (first arg)]
-                                                    (expr/->expression-projection-spec col-name form
-                                                                                       {:col-types (update-vals inner-fields types/field->col-type)
-                                                                                        :param-types (update-vals param-fields types/field->col-type)})))))]
+                                          :extend (let [[col-name form] (first arg)
+                                                        input-types {:col-types (update-vals inner-fields types/field->col-type)
+                                                                     :param-types (update-vals param-fields types/field->col-type)}
+                                                        expr (expr/form->expr form input-types)]
+                                                    (expr/->expression-projection-spec col-name expr input-types)))))]
          {:fields (->> projection-specs
                        (into {} (map (juxt #(.getColumnName ^IProjectionSpec %)
                                            (comp types/col-type->field #(.getColumnType ^IProjectionSpec %))))))

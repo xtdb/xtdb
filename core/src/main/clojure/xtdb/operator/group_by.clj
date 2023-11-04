@@ -244,6 +244,9 @@
             Closeable
             (close [_] (.close out-vec))))))))
 
+(defn- ->projector ^xtdb.operator.IProjectionSpec [col-name form input-types]
+  (expr/->expression-projection-spec col-name (expr/form->expr form input-types) input-types))
+
 (defmethod ->aggregate-factory :sum [{:keys [from-name from-type] :as agg-opts}]
   (let [to-type (->> (types/flatten-union-types from-type)
                      ;; TODO handle non-num types, if appropriate? (durations?)
@@ -263,9 +266,9 @@
                                       :to-name 'sum, :zero-row? zero-row?})
         count-agg (->aggregate-factory {:f :count, :from-name from-name, :from-type from-type,
                                         :to-name 'cnt, :zero-row? zero-row?})
-        projecter (expr/->expression-projection-spec to-name '(/ (double sum) cnt)
-                                                     {:col-types {'sum (types/field->col-type (.getToColumnField sum-agg))
-                                                                  'cnt (types/field->col-type (.getToColumnField count-agg))}})]
+        input-types {:col-types {'sum (types/field->col-type (.getToColumnField sum-agg))
+                                 'cnt (types/field->col-type (.getToColumnField count-agg))}}
+        projecter (->projector to-name '(/ (double sum) cnt) input-types)]
     (reify IAggregateSpecFactory
       (getToColumnName [_] to-name)
       (getToColumnField [_] (types/col-type->field (.getColumnType projecter)))
@@ -297,26 +300,26 @@
         sumx-agg (->aggregate-factory {:f :sum, :from-name from-name, :from-type from-type
                                        :to-name 'sumx, :zero-row? zero-row?})
 
-        x2-projecter (expr/->expression-projection-spec 'x2 (list '* from-name from-name)
-                                                        {:col-types {from-name from-type}})
+        x2-projecter (->projector 'x2 (list '* from-name from-name)
+                                  {:col-types {from-name from-type}})
 
         sumx2-agg (->aggregate-factory {:f :sum, :from-name 'x2, :from-type (.getColumnType x2-projecter)
                                         :to-name 'sumx2, :zero-row? zero-row?})
 
-        finish-projecter (expr/->expression-projection-spec to-name (case variance-op
-                                                                      :var-pop '(if (> countx 0)
-                                                                                  (/ (- sumx2
-                                                                                        (/ (* sumx sumx) (double countx)))
-                                                                                     (double countx))
-                                                                                  nil)
-                                                                      :var-samp '(if (> countx 1)
-                                                                                   (/ (- sumx2
-                                                                                         (/ (* sumx sumx) (double countx)))
-                                                                                      (double (- countx 1)))
-                                                                                   nil))
-                                                            {:col-types {'sumx (types/field->col-type (.getToColumnField sumx-agg))
-                                                                         'sumx2 (types/field->col-type (.getToColumnField sumx2-agg))
-                                                                         'countx (types/field->col-type (.getToColumnField countx-agg))}})]
+        finish-projecter (->projector to-name (case variance-op
+                                                :var-pop '(if (> countx 0)
+                                                            (/ (- sumx2
+                                                                  (/ (* sumx sumx) (double countx)))
+                                                               (double countx))
+                                                            nil)
+                                                :var-samp '(if (> countx 1)
+                                                             (/ (- sumx2
+                                                                   (/ (* sumx sumx) (double countx)))
+                                                                (double (- countx 1)))
+                                                             nil))
+                                      {:col-types {'sumx (types/field->col-type (.getToColumnField sumx-agg))
+                                                   'sumx2 (types/field->col-type (.getToColumnField sumx2-agg))
+                                                   'countx (types/field->col-type (.getToColumnField countx-agg))}})]
 
     (reify IAggregateSpecFactory
       (getToColumnName [_] to-name)
@@ -355,8 +358,8 @@
 (defn- ->stddev-agg-factory [variance-op {:keys [from-name from-type to-name zero-row?]}]
   (let [variance-agg (->aggregate-factory {:f variance-op, :from-name from-name, :from-type from-type
                                            :to-name 'variance, :zero-row? zero-row?})
-        finish-projecter (expr/->expression-projection-spec to-name '(sqrt variance)
-                                                            {:col-types {'variance (types/field->col-type (.getToColumnField variance-agg))}})]
+        finish-projecter (->projector to-name '(sqrt variance)
+                                      {:col-types {'variance (types/field->col-type (.getToColumnField variance-agg))}})]
     (reify IAggregateSpecFactory
       (getToColumnName [_] to-name)
       (getToColumnField [_] (types/col-type->field (.getColumnType finish-projecter)))

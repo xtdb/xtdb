@@ -99,7 +99,9 @@
 
               ;; HACK: this is quite heavyweight to calculate a single value -
               ;; the EE doesn't yet have an efficient means to do so...
-              (let [projection-spec (expr/->expression-projection-spec "_scalar" v (assoc opts :param-types param-types))]
+              (let [input-types (assoc opts :param-types param-types)
+                    expr (expr/form->expr v input-types)
+                    projection-spec (expr/->expression-projection-spec "_scalar" expr input-types)]
                 (.add field-set (types/col-type->field (.getColumnType projection-spec)))
                 (.put out-row k-kw (fn [{:keys [allocator params]}]
                                      (with-open [out-vec (.project projection-spec allocator (vr/rel-reader [] 1) params)]
