@@ -207,6 +207,17 @@
     (t/is (= [:union #{:null :i64}]
              (types/merge-col-types :null :i64))))
 
+  (t/testing "sets"
+    (t/is (= [:set :i64]
+             (types/merge-col-types [:set :i64])))
+
+    (t/is (= [:set :i64]
+             (types/merge-col-types [:set :i64] [:set :i64])))
+
+    (t/is (= [:set [:union #{:i64 :utf8}]]
+             (types/merge-col-types [:set :i64] [:set :utf8]))))
+
+
   (t/testing "no struct squashing"
     (t/is (= '[:struct {foo [:struct {bibble :bool}]}]
              (types/merge-col-types '[:struct {foo [:struct {bibble :bool}]}])))))
@@ -305,6 +316,16 @@
 
     (t/is (= (types/col-type->field "union" [:union #{:null :i64 :f64}])
              (types/merge-fields (types/col-type->field :f64) (types/col-type->field :null) (types/col-type->field :i64)))))
+
+  (t/testing "sets"
+    (t/is (= (types/col-type->field [:set :i64])
+             (types/merge-fields (types/col-type->field [:set :i64]))))
+
+    (t/is (= (types/col-type->field [:set :i64])
+             (types/merge-fields (types/col-type->field [:set :i64]) (types/col-type->field [:set :i64]))))
+
+    (t/is (= (types/col-type->field [:set [:union #{:i64 :utf8}]])
+             (types/merge-fields (types/col-type->field [:set :utf8]) (types/col-type->field [:set :i64])))))
 
   (t/testing "no struct squashing"
     (t/is (= (types/col-type->field '[:struct {foo [:struct {bibble :bool}]}])

@@ -294,6 +294,7 @@
             (zmatch col-type
               [:union inner-types] (reduce merge-col-type* acc inner-types)
               [:list inner-type] (update acc :list merge-col-type* inner-type)
+              [:set inner-type] (update acc :set merge-col-type* inner-type)
               [:fixed-size-list el-count inner-type] (update acc [:fixed-size-list el-count] merge-col-type* inner-type)
               [:struct struct-col-types] (update acc :struct
                                                  (fn [acc]
@@ -313,6 +314,7 @@
           (kv->col-type [[head opts]]
             (case (if (vector? head) (first head) head)
               :list [:list (map->col-type opts)]
+              :set [:set (map->col-type opts)]
               :fixed-size-list [:fixed-size-list (second head) (map->col-type opts)]
               :struct [:struct (->> (for [[col-name col-type-map] opts]
                                       (MapEntry/create col-name (map->col-type col-type-map)))
@@ -344,6 +346,7 @@
                 ArrowType$Null acc
                 ArrowType$Union (reduce merge-field* acc (.getChildren field))
                 ArrowType$List (update acc :list merge-field* (first (.getChildren field)))
+                SetType (update acc :set merge-field* (first (.getChildren field)))
                 ArrowType$FixedSizeList (update acc [:fixed-size-list
                                                      (.getListSize ^ArrowType$FixedSizeList arrow-type)] merge-field*
                                                 (first (.getChildren field)))
@@ -366,6 +369,7 @@
           (kv->field [[head opts] & {:keys [nullable?] :or {nullable? false}}]
             (case (if (vector? head) (first head) head)
               :list (->field-default-name #xt.arrow/type :list nullable? [(map->field opts)])
+              :set (->field-default-name #xt.arrow/type :set nullable? [(map->field opts)])
               :fixed-size-list (->field-default-name (ArrowType$FixedSizeList. (second head)) (or (null? opts) nullable?)
                                                      [(map->field (dissoc opts :null))])
               :struct (->field-default-name #xt.arrow/type :struct (or (null? opts) nullable?)
