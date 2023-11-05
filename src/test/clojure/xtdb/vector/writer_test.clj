@@ -339,8 +339,8 @@
       (.startRow rel-wtr)
       (vw/write-value! (first some-nestesd-structs) struct-wtr)
       (.endRow rel-wtr)
-      (vw/write-value! (second some-nestesd-structs) struct-wtr)
       (.startRow rel-wtr)
+      (vw/write-value! (second some-nestesd-structs) struct-wtr)
       (.endRow rel-wtr)
 
       (t/is (= [{:my-column {:flib {:true false}, :foo {:bibble true}, :bar {:baz -4113466}}}
