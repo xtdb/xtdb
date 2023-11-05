@@ -539,7 +539,8 @@
             (writeNull [_] (.setNull arrow-vec (.getPositionAndIncrement wp)))
 
             (writeObject [this obj]
-              (if (instance? IListValueReader obj)
+              (cond
+                (instance? IListValueReader obj)
                 (let [^IListValueReader lst obj
                       el-wtr (.listElementWriter this)]
                   (.startList this)
@@ -549,6 +550,16 @@
 
                   (.endList this))
 
+                (set? obj)
+                (let [el-wtr (.listElementWriter this)]
+                  (.startList this)
+
+                  (doseq [ele obj]
+                    (write-value! ele el-wtr))
+
+                  (.endList this))
+
+                :else
                 (throw (UnsupportedOperationException. (format "write-object '%s'" (class obj))))))
 
             (writeValue0 [this vr] (.writeObject this (.readObject vr)))

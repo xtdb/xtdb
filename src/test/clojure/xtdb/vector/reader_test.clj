@@ -229,8 +229,9 @@
                                                     (types/col-type->field :i64)) tu/*allocator*)]
     (let [set-wrt (vw/->writer set-vec)]
       (vw/write-value! #{1 2 3} set-wrt)
+      (.writeObject set-wrt #{1 2 3})
 
-      (t/is (= [#{1 3 2}]
+      (t/is (= [#{1 2 3} #{1 2 3}]
                (tu/vec->vals (vw/vec-wtr->rdr  set-wrt))))
 
       (let [pos (IVectorPosition/build)]
