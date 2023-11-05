@@ -113,7 +113,7 @@
   (fn [ra-expr opts]
     (:op ra-expr)))
 
-(defn unary-expr {:style/indent 2} [relation f]
+(defn unary-expr {:style/indent 1} [relation f]
   (let [{->inner-cursor :->cursor, inner-fields :fields} relation
         {:keys [fields ->cursor stats]} (f inner-fields)]
     {:fields fields
@@ -122,7 +122,7 @@
                    (->cursor opts inner)))
      :stats stats}))
 
-(defn binary-expr {:style/indent 3} [left right f]
+(defn binary-expr {:style/indent 2} [left right f]
   (let [{left-fields :fields, ->left-cursor :->cursor} left
         {right-fields :fields, ->right-cursor :->cursor} right
         {:keys [fields ->cursor stats]} (f left-fields right-fields)]
