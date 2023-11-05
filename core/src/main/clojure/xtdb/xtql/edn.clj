@@ -2,7 +2,8 @@
   (:require [clojure.set :as set]
             [clojure.string :as str]
             [xtdb.error :as err])
-  (:import (xtdb.query ArgSpec ColSpec DmlOps DmlOps$AssertExists DmlOps$AssertNotExists DmlOps$Delete DmlOps$Erase DmlOps$Insert DmlOps$Update
+  (:import (clojure.lang MapEntry)
+           (xtdb.query ArgSpec ColSpec DmlOps DmlOps$AssertExists DmlOps$AssertNotExists DmlOps$Delete DmlOps$Erase DmlOps$Insert DmlOps$Update
                        Expr Expr$Bool Expr$Call Expr$Double Expr$Exists Expr$Param
                        Expr$LogicVar Expr$Long Expr$Obj Expr$NotExists Expr$Subquery
                        OutSpec Query Query$Aggregate Query$From Query$LeftJoin Query$Join Query$Limit
@@ -82,6 +83,7 @@
     (keyword? expr) (Expr/val expr)
     (vector? expr) (Expr/val (mapv parse-expr expr))
     (set? expr) (Expr/val (into #{} (map parse-expr) expr))
+    (map? expr) (Expr/val (into {} (map (juxt key (comp parse-expr val))) expr))
 
     (list? expr) (do
                    (when (empty? expr)
@@ -128,6 +130,8 @@
       (cond
         (vector? obj) (mapv unparse obj)
         (set? obj) (into #{} (map unparse) obj)
+        (map? obj) (->> (map #(MapEntry/create (key %) (unparse (val %))) obj)
+                        (into {}))
         :else obj)))
 
   Expr$Exists

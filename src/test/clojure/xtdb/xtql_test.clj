@@ -338,6 +338,23 @@
                       :in [[x ...]]}
                     [10 15 20 35 75]])))))
 
+(deftest test-composite-value-bindings
+  (xt/submit-tx tu/*node* [[:put :docs {:xt/id 1 :map {:foo 1} :set #{1 2 3}}]])
+
+  (t/is (= [{:xt/id 1}]
+           (xt/q tu/*node* '(from :docs {:bind [xt/id {:map {:foo 1}}]}))))
+
+  (t/is (= [{:xt/id 1}]
+           (xt/q tu/*node* '(from :docs {:bind [xt/id {:set #{1 2 3}}]}))))
+
+  (t/is (= [{:xt/id 1}]
+           (xt/q tu/*node* '(from :docs {:bind [xt/id {:map {:foo $param}}]})
+                 {:args {:param 1}})))
+
+  (t/is (= [{:xt/id 1}]
+           (xt/q tu/*node* '(from :docs {:bind [xt/id {:set $param}]})
+                 {:args {:param #{1 2 3}}}))))
+
 (deftest test-query-args
   (let [_tx (xt/submit-tx tu/*node* ivan+petr)]
     (t/is (= #{{:e :ivan}}

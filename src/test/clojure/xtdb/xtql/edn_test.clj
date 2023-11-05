@@ -77,6 +77,10 @@
   (t/is (= '(from :foo {:bind [a {:xt/id b} c]})
            (roundtrip-q '(from :foo {:bind [a {:xt/id b} {:c c}]}))))
 
+  (let [q '(from :foo {:bind [{:foo {:baz 1}}]}) ]
+    (t/is (= q
+             (roundtrip-q q))))
+
   (t/is (thrown-with-msg?
          IllegalArgumentException #"Invalid keys provided to option map"
          (roundtrip-q '(from :foo {:bar x :baz x})))))

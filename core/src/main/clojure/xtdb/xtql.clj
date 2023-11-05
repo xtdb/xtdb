@@ -96,7 +96,12 @@
   (required-vars [_this] #{})
 
   Expr$Obj
-  (plan-expr [o] (.obj o))
+  (plan-expr [o]
+    (let [obj (.obj o)]
+      (cond (vector? obj) (into [] (map plan-expr) obj)
+            (set? obj) (into #{} (map plan-expr) obj)
+            (map? obj) (into {} (map (juxt key (comp plan-expr val))) obj)
+            :else obj)))
   (required-vars [_] #{})
 
   Expr$Long
