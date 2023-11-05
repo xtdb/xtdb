@@ -5,7 +5,8 @@
             [xtdb.vector.reader :as vr]
             [xtdb.vector.writer :as vw])
   (:import [org.apache.arrow.vector.complex DenseUnionVector StructVector ListVector]
-           (org.apache.arrow.vector.types.pojo FieldType)))
+           (org.apache.arrow.vector.types.pojo FieldType)
+           (xtdb.vector IVectorPosition)))
 
 (t/use-fixtures :each tu/with-allocator)
 
@@ -222,3 +223,18 @@
       (t/is (= [{:foo 42, :bar "forty-two"}]
                (tu/vec->vals (vw/vec-wtr->rdr struct-wrt)))
             "duv to monomorphic struct type vector copying"))))
+
+(deftest testing-set-writing-reading
+  (with-open [set-vec (.createVector (types/->field "my-set" #xt.arrow/type :set false
+                                                    (types/col-type->field :i64)) tu/*allocator*)]
+    (let [set-wrt (vw/->writer set-vec)]
+      (vw/write-value! #{1 2 3} set-wrt)
+
+      (t/is (= [#{1 3 2}]
+               (tu/vec->vals (vw/vec-wtr->rdr  set-wrt))))
+
+      (let [pos (IVectorPosition/build)]
+        (.setPosition pos 0)
+        (t/is (= #{1 2 3}
+                 (.readObject (.valueReader (vw/vec-wtr->rdr set-wrt) pos)))
+              "valueReader testing for set")))))

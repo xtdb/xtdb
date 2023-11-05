@@ -888,7 +888,12 @@ public class ValueVectorReader implements IVectorReader {
 
             @Override
             public IValueReader valueReader(IVectorPosition pos) {
-                return listReader.valueReader(pos);
+                return new BaseValueReader(pos){
+                    @Override
+                    public Object readObject() {
+                        return PersistentHashSet.create((List<?>) listReader.getObject(pos.getPosition()));
+                    }
+                };
             }
         };
     }

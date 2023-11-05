@@ -274,7 +274,7 @@
 
       (derive :keyword :any) (derive :uri :any) (derive :uuid :any) (derive :clj-form :any)
 
-      (derive :list :any) (derive :struct :any)))
+      (derive :list :any) (derive :struct :any) (derive :set :any)))
 
 (def num-types (descendants col-type-hierarchy :num))
 (def date-time-types (descendants col-type-hierarchy :date-time))

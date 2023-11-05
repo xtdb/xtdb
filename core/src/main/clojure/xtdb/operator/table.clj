@@ -83,7 +83,11 @@
                 ^Set field-set (.computeIfAbsent field-sets k-sym (reify Function (apply [_ _] (HashSet.))))]
             (case (:op expr)
               :literal (do
-                         (.add field-set (types/->field-default-name (vw/value->arrow-type v) (nil? v) nil))
+                         (.add field-set (let [arrow-type (vw/value->arrow-type v)]
+                                           (types/->field-default-name arrow-type (nil? v)
+                                                                       ;; can change once sets are treated explicitly in the EE
+                                                                       (when (= arrow-type #xt.arrow/type :set)
+                                                                         [(types/->field "$data$" #xt.arrow/type :union false)]))))
                          (.put out-row k-kw v))
 
               :param (let [{:keys [param]} expr]

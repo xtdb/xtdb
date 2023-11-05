@@ -254,6 +254,9 @@
     :day `(.writeInt ~@args)
     :milli `(.writeLong ~@args)))
 
+(defmethod write-value-code :set [_ & args] `(.writeObject ~@args))
+(defmethod read-value-code :set [_ & args] `(.readObject ~@args))
+
 (doseq [[k tag] {:interval PeriodDuration :decimal BigDecimal,
                  :list IListValueReader, :struct Map}]
   (defmethod read-value-code k [_ & args]

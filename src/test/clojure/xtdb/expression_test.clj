@@ -1750,6 +1750,11 @@
            (project1 '(= #uuid "00000000-0000-0000-0000-000000000000" a)
                      {:a #uuid "00000000-0000-0000-0000-000000000000"}))))
 
+(t/deftest test-sets
+  (t/is (= true
+           (project1 '(= #{1 2 3} a)
+                     {:a #{1 2 3}}))))
+
 (t/deftest test-truthy-if
   (t/is (= :true (project1 '(if 42 :true :false) {})))
   (t/is (= :true (project1 '(if true :true :false) {})))
