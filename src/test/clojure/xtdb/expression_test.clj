@@ -1753,7 +1753,9 @@
 (t/deftest test-sets
   (t/is (= true
            (project1 '(= #{1 2 3} a)
-                     {:a #{1 2 3}}))))
+                     {:a #{1 2 3}})))
+  (t/is (= {:roles #{:a :b :c}}
+           (project1 '{:roles roles} {:roles #{:a :b :c}}))))
 
 (t/deftest test-truthy-if
   (t/is (= :true (project1 '(if 42 :true :false) {})))
