@@ -1591,7 +1591,7 @@
              (run-projection rel '(. x a))))))
 
 (t/deftest test-mixing-composite-types
-  #_ ; FIXME #2345
+  #_ ; FIXME #2905
   (with-open [rel (tu/open-rel [(tu/open-vec "x"
                                              [{:a 42}
                                               {:a 12.0, :b 5, :c [1 2 3]}
