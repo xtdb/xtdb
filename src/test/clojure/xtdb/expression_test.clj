@@ -1553,7 +1553,7 @@
              (run-projection rel '{:xa (. x a),
                                    :xb (. x b)})))))
 
-#_ ; FIXME #620
+#_ ; FIXME #2448
 (t/deftest test-least-upper-bound-upcast
   ;; when we have nested polymorphic values, two different types may live in the same key of a DUV
   ;; e.g. when we take the union of `[:list :i64]` and `[:list :f64]`, we get `[:list [:union #{:i64 :f64}]]`
@@ -1591,7 +1591,7 @@
              (run-projection rel '(. x a))))))
 
 (t/deftest test-mixing-composite-types
-  #_ ; FIXME #552
+  #_ ; FIXME #2345
   (with-open [rel (tu/open-rel [(tu/open-vec "x"
                                              [{:a 42}
                                               {:a 12.0, :b 5, :c [1 2 3]}
