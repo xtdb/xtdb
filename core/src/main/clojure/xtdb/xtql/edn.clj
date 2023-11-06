@@ -10,7 +10,6 @@
                        Query$OrderBy Query$OrderDirection Query$OrderSpec Query$Pipeline Query$Offset
                        Query$Return Query$Unify Query$UnionAll Query$Where Query$With Query$WithCols Query$Without
                        TemporalFilter TemporalFilter$AllTime TemporalFilter$At TemporalFilter$In VarSpec)))
-;;TODO old style bind still parses in from, should throw
 
 (defmulti parse-query
   (fn [query]
@@ -206,16 +205,16 @@
 
             (OutSpec/of (str (symbol attr)) (parse-expr expr)))]
 
-    (cond
-      (map? specs) (mapv parse-out-spec specs)
-      (vector? specs) (->> specs
-                           (into [] (mapcat (fn [spec]
-                                              (cond
-                                                (symbol? spec) (let [attr (str spec)]
-                                                                 [(OutSpec/of attr (Expr/lVar attr))])
-                                                (map? spec) (map parse-out-spec spec))))))
+    (if (vector? specs)
+      (->> specs
+           (into [] (mapcat (fn [spec]
+                              (cond
+                                (symbol? spec) (let [attr (str spec)]
+                                                 [(OutSpec/of attr (Expr/lVar attr))])
+                                (map? spec) (map parse-out-spec spec))))))
+
       ;; TODO error
-      :else (throw (UnsupportedOperationException.)))))
+      (throw (UnsupportedOperationException.)))))
 
 (defn- parse-arg-specs
   "[{:to-var (from-expr)} to-var-from-var]"
@@ -275,22 +274,35 @@
 (def from-opt-keys #{:bind :for-valid-time :for-system-time})
 
 (defn parse-from [[_ table opts :as this]]
-  (cond
-    (not (keyword? table))
+  (if-not (keyword? table)
     (throw (err/illegal-arg :xtql/malformed-table {:table table, :from this}))
 
-    (and opts (not (map? opts)))
-    (throw (err/illegal-arg :xtql/malformed-table-opts {:opts opts, :from this}))
+    (let [q (Query/from (str (symbol table)))]
+      (cond
+        (or (nil? opts) (map? opts))
 
-    :else
-    (do
-      (check-opt-keys from-opt-keys opts)
+        (do
+          (check-opt-keys from-opt-keys opts)
 
-      (let [{:keys [for-valid-time for-system-time bind]} opts]
-        (cond-> (Query/from (str (symbol table)))
-          for-valid-time (.forValidTime (parse-temporal-filter for-valid-time :for-valid-time this))
-          for-system-time (.forSystemTime (parse-temporal-filter for-system-time :for-system-time this))
-          bind (.binding (parse-out-specs bind this)))))))
+          (let [{:keys [for-valid-time for-system-time bind]} opts]
+            (cond
+              (nil? bind)
+              (throw (err/illegal-arg :xtql/missing-bind {:opts opts, :from this}))
+
+              (not (vector? bind))
+              (throw (err/illegal-arg :xtql/malformed-bind {:opts opts, :from this}))
+
+              :else
+              (-> q
+                  (cond-> for-valid-time (.forValidTime (parse-temporal-filter for-valid-time :for-valid-time this))
+                          for-system-time (.forSystemTime (parse-temporal-filter for-system-time :for-system-time this)))
+                  (.binding (parse-out-specs bind this))))))
+
+        (vector? opts)
+        (-> q
+            (.binding (parse-out-specs opts this)))
+
+        :else (throw (err/illegal-arg :xtql/malformed-table-opts {:opts opts, :from this}))))))
 
 (defmethod parse-query 'from [this] (parse-from this))
 (defmethod parse-unify-clause 'from [this] (parse-from this))
@@ -298,24 +310,30 @@
 (def join-clause-opt-keys #{:args :bind})
 
 (defmethod parse-unify-clause 'join [[_ query opts :as join]]
-  (when-not (or (nil? opts) (map? opts))
-    (throw (err/illegal-arg :malformed-join-opts {:opts opts, :join join})))
+  (cond
+    (nil? opts) (throw (err/illegal-arg :missing-join-opts {:opts opts, :join join}))
 
-  (check-opt-keys join-clause-opt-keys opts)
+    (map? opts) (do
+                  (check-opt-keys join-clause-opt-keys opts)
+                  (let [{:keys [args bind]} opts]
+                    (-> (Query/join (parse-query query) (parse-arg-specs args join))
+                        (.binding (some-> bind (parse-out-specs join))))))
 
-  (let [{:keys [args bind]} opts]
-    (-> (Query/join (parse-query query) (parse-arg-specs args join))
-        (.binding (some-> bind (parse-out-specs join))))))
+    :else (-> (Query/join (parse-query query) nil)
+              (.binding (parse-out-specs opts join)))))
 
 (defmethod parse-unify-clause 'left-join [[_ query opts :as left-join]]
-  (when-not (or (nil? opts) (map? opts))
-    (throw (err/illegal-arg :malformed-join-opts {:opts opts, :left-join left-join})))
+  (cond
+    (nil? opts) (throw (err/illegal-arg :missing-join-opts {:opts opts, :left-join left-join}))
 
-  (check-opt-keys join-clause-opt-keys opts)
+    (map? opts) (do
+                  (check-opt-keys join-clause-opt-keys opts)
+                  (let [{:keys [args bind]} opts]
+                    (-> (Query/leftJoin (parse-query query) (parse-arg-specs args left-join))
+                        (.binding (some-> bind (parse-out-specs left-join))))))
 
-  (let [{:keys [args bind]} opts]
-    (-> (Query/leftJoin (parse-query query) (parse-arg-specs args left-join))
-        (.binding (some-> bind (parse-out-specs left-join))))))
+    :else (-> (Query/leftJoin (parse-query query) nil)
+              (.binding (parse-out-specs opts left-join)))))
 
 (defn- unparse-binding-spec [attr expr base-type nested-type]
   (if base-type
@@ -335,33 +353,33 @@
   (unparse [from]
     (let [for-valid-time (.forValidTime from)
           for-sys-time (.forSystemTime from)
-          bind (.bindings from)]
-      (list* 'from (keyword (.table from))
-             (when (or for-valid-time for-sys-time bind)
-               [(cond-> {}
-                  for-valid-time (assoc :for-valid-time (unparse for-valid-time))
-                  for-sys-time (assoc :for-system-time (unparse for-sys-time))
-                  (seq bind) (assoc :bind (mapv unparse bind)))]))))
+          bind (mapv unparse (.bindings from))]
+      (list 'from (keyword (.table from))
+            (if (or for-valid-time for-sys-time)
+              (cond-> {:bind bind}
+                for-valid-time (assoc :for-valid-time (unparse for-valid-time))
+                for-sys-time (assoc :for-system-time (unparse for-sys-time)))
+              bind))))
 
   Query$Join
   (unparse [join]
     (let [args (.args join)
-          bind (.bindings join)]
-      (list* 'join (unparse (.query join))
-             (when (or args bind)
-               [(cond-> {}
-                  (seq args) (assoc :args (mapv unparse args))
-                  (seq bind) (assoc :bind (mapv unparse bind)))]))))
+          bind (mapv unparse (.bindings join))]
+      (list 'join (unparse (.query join))
+            (if args
+              (cond-> {:bind bind}
+                (seq args) (assoc :args (mapv unparse args)))
+              bind))))
 
   Query$LeftJoin
   (unparse [left-join]
     (let [args (.args left-join)
-          bind (.bindings left-join)]
-      (list* 'left-join (unparse (.query left-join))
-             (when (or args bind)
-               [(cond-> {}
-                  (seq args) (assoc :args (mapv unparse args))
-                  (seq bind) (assoc :bind (mapv unparse bind)))])))))
+          bind (mapv unparse (.bindings left-join))]
+      (list 'left-join (unparse (.query left-join))
+            (if args
+              (cond-> {:bind bind}
+                (seq args) (assoc :args (mapv unparse args)))
+              bind)))))
 
 (extend-protocol Unparse
   Query$Pipeline (unparse [query] (list* '-> (unparse (.query query)) (mapv unparse (.tails query))))
@@ -407,7 +425,7 @@
                                                       :message "Pipeline most contain at least one operator"})))
   (Query/pipeline (parse-query head) (mapv parse-query-tail tails)))
 
-;TODO Align errors with json ones where appropriate.
+;; TODO Align errors with json ones where appropriate.
 
 (defmethod parse-query-tail 'with [[_ & cols :as this]]
   (Query/withCols (parse-col-specs cols this)))
@@ -498,31 +516,39 @@
               (seq unify-clauses) (.unify (mapv parse-unify-clause unify-clauses))))))
 
 (defmethod parse-dml 'delete [[_ table opts & unify-clauses :as this]]
-  (cond
-    (not (keyword? table))
+  (if-not (keyword? table)
     (throw (err/illegal-arg :xtql/malformed-table {:table table, :delete this}))
 
-    (and opts (not (map? opts)))
-    (throw (err/illegal-arg :xtql/malformed-opts {:opts opts, :delete this}))
+    (let [delete (DmlOps/delete (str (symbol table)))
+          ^DmlOps$Delete delete (cond
+                                  (nil? opts) delete
+                                  (vector? opts) (-> delete (.binding (parse-out-specs opts this)))
+                                  (map? opts) (let [{:keys [for-valid-time bind]} opts]
+                                                (cond-> delete
+                                                  for-valid-time (.forValidTime (parse-temporal-filter for-valid-time :for-valid-time this))
+                                                  bind (.binding (parse-out-specs bind this))))
 
-    :else (let [{:keys [for-valid-time bind]} opts]
-            (cond-> (DmlOps/delete (str (symbol table)))
-              for-valid-time (.forValidTime (parse-temporal-filter for-valid-time :for-valid-time this))
-              bind (.binding (parse-out-specs bind this))
-              (seq unify-clauses) (.unify (mapv parse-unify-clause unify-clauses))))))
+                                  :else (throw (err/illegal-arg :xtql/malformed-opts {:opts opts, :delete this})))]
+
+      (cond-> delete
+        (seq unify-clauses) (.unify (mapv parse-unify-clause unify-clauses))))))
 
 (defmethod parse-dml 'erase [[_ table opts & unify-clauses :as this]]
-  (cond
-    (not (keyword? table))
+  (if-not (keyword? table)
     (throw (err/illegal-arg :xtql/malformed-table {:table table, :erase this}))
 
-    (and opts (not (map? opts)))
-    (throw (err/illegal-arg :xtql/malformed-opts {:opts opts, :erase this}))
+    (let [erase (DmlOps/erase (str (symbol table)))
+          ^DmlOps$Erase erase (cond
+                                (nil? opts) erase
+                                (vector? opts) (-> erase (.binding (parse-out-specs opts this)))
+                                (map? opts) (let [{:keys [bind]} opts]
+                                              (cond-> erase
+                                                bind (.binding (parse-out-specs bind this))))
 
-    :else (let [{:keys [bind]} opts]
-            (cond-> (DmlOps/erase (str (symbol table)))
-              bind (.binding (parse-out-specs bind this))
-              (seq unify-clauses) (.unify (mapv parse-unify-clause unify-clauses))))))
+                                :else (throw (err/illegal-arg :xtql/malformed-opts {:opts opts, :erase this})))]
+
+      (cond-> erase
+        (seq unify-clauses) (.unify (mapv parse-unify-clause unify-clauses))))))
 
 (defmethod parse-dml 'assert-exists [[_ query]]
   (DmlOps/assertExists (parse-query query)))
@@ -548,20 +574,19 @@
   DmlOps$Delete
   (unparse [query]
     (let [for-valid-time (.forValidTime query)
-          bind (.bindSpecs query)]
+          bind (mapv unparse (.bindSpecs query))]
       (list* 'delete (keyword (.table query))
-             (cond-> {}
-               for-valid-time (assoc :for-valid-time (unparse for-valid-time))
-               (seq bind) (assoc :bind (mapv unparse bind)))
+             (if for-valid-time
+               (cond-> {:bind bind}
+                 for-valid-time (assoc :for-valid-time (unparse for-valid-time)))
+               bind)
              (mapv unparse (.unifyClauses query)))))
 
   DmlOps$Erase
   (unparse [query]
-    (let [bind (.bindSpecs query)]
-      (list* 'erase (keyword (.table query))
-             (cond-> {}
-               (seq bind) (assoc :bind (mapv unparse bind)))
-             (mapv unparse (.unifyClauses query)))))
+    (list* 'erase (keyword (.table query))
+           (mapv unparse (.bindSpecs query))
+           (mapv unparse (.unifyClauses query))))
 
   DmlOps$AssertExists
   (unparse [query]

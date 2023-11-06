@@ -211,9 +211,14 @@
     (throw (err/illegal-arg :xtql/malformed-from {:from this}))
 
     (let [{:strs [from forValidTime forSystemTime bind]} this]
-      (if-not (string? from)
+      (cond
+        (not (string? from))
         (throw (err/illegal-arg :xtql/malformed-table {:table from, :from this}))
 
+        (nil? bind)
+        (throw (err/illegal-arg :xtql/missing-bind {:from this}))
+
+        :else
         (cond-> (Query/from from)
           forValidTime (.forValidTime (parse-temporal-filter forValidTime :forValidTime this))
           forSystemTime (.forSystemTime (parse-temporal-filter forSystemTime :forSystemTime this))

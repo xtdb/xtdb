@@ -489,7 +489,7 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"]])
 
 (t/deftest test-basic-xtql-dml
   (letfn [(all-users [tx]
-            (->> (xt/q *node* '(from :users {:bind [first-name last-name xt/valid-from xt/valid-to]})
+            (->> (xt/q *node* '(from :users [first-name last-name xt/valid-from xt/valid-to])
                        {:basis {:tx tx}
                         ;; TODO when `from` supports for-valid-time we can shift this to the query
                         :default-all-valid-time? true})
@@ -509,7 +509,7 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"]])
       (t/is (= tx1-expected (all-users tx1)))
 
       (t/testing "insert by query"
-        (xt/submit-tx *node* [[:xtql '(insert :users2 (from :users {:bind [xt/id {:first-name given-name, :last-name surname} xt/valid-from xt/valid-to]}))]]
+        (xt/submit-tx *node* [[:xtql '(insert :users2 (from :users [xt/id {:first-name given-name, :last-name surname} xt/valid-from xt/valid-to]))]]
                       ;; TODO when `from` supports for-valid-time we can shift this to the query
                       {:default-all-valid-time? true})
 
@@ -517,14 +517,14 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"]])
                    ["Claire" "Cooper", (util/->zdt #inst "2019"), nil]
                    ["Alan" "Andrews", (util/->zdt #inst "2020"), nil]
                    ["Susan" "Smith", (util/->zdt #inst "2021") nil]}
-                 (->> (xt/q *node* '(from :users2 {:bind [given-name surname xt/valid-from xt/valid-to]})
+                 (->> (xt/q *node* '(from :users2 [given-name surname xt/valid-from xt/valid-to])
                             ;; TODO when `from` supports for-valid-time we can shift this to the query
                             {:default-all-valid-time? true})
                       (into #{} (map (juxt :given-name :surname :xt/valid-from :xt/valid-to)))))))
 
       (let [tx2 (xt/submit-tx *node* [[:xtql '(delete :users
                                                       {:for-valid-time (from #inst "2020-05-01")
-                                                       :bind {:xt/id $uid}})
+                                                       :bind [{:xt/id $uid}]})
                                        {:uid "dave"}]])
             tx2-expected #{["Dave" "Davis", (util/->zdt #inst "2018"), (util/->zdt #inst "2020-05-01")]
                            ["Claire" "Cooper", (util/->zdt #inst "2019"), nil]
@@ -536,7 +536,7 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"]])
 
         (let [tx3 (xt/submit-tx *node* [[:xtql '(update :users
                                                         {:for-valid-time (from #inst "2021-07-01")
-                                                         :bind {:xt/id $uid}
+                                                         :bind [{:xt/id $uid}]
                                                          :set {:first-name "Sue"}})
                                          {:uid "susan"}]]
 
@@ -554,7 +554,7 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"]])
 
 (t/deftest test-erase-xtql
   (letfn [(q [tx]
-            (set (xt/q *node* '(from :foo {:bind [xt/id version xt/valid-from xt/valid-to]})
+            (set (xt/q *node* '(from :foo [xt/id version xt/valid-from xt/valid-to])
                        ;; TODO when `from` supports for-valid-time we can shift this to the query
                        {:basis {:tx tx}
                         :default-all-valid-time? true})))]
@@ -585,7 +585,7 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"]])
                (q tx2)))
 
       (let [tx3 (xt/submit-tx *node*
-                              [[:xtql '(erase :foo {:bind {:xt/id "foo"}})]])]
+                              [[:xtql '(erase :foo [{:xt/id "foo"}])]])]
         (t/is (= #{(assoc v0 :xt/id "bar") (assoc v1 :xt/id "bar")} (q tx3)))
         (t/is (= #{(assoc v0 :xt/id "bar") (assoc v1 :xt/id "bar")} (q tx2)))
 
