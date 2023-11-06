@@ -13,7 +13,7 @@ We'll save the in-depth XTQL specification for another article - for now, let's 
 +
 [source,clojure]
 ----
-(from :users {:bind [{:xt/id user-id} first-name last-name]})
+(from :users [{:xt/id user-id} first-name last-name])
 ----
 +
 [source,json]
@@ -33,7 +33,7 @@ SELECT xt$id AS user_id, first_name, last_name FROM users
 +
 [source,clojure]
 ----
-(from :users {:bind [{:xt/id "james"} first-name last-name]})
+(from :users [{:xt/id "james"} first-name last-name])
 ----
 +
 [source,json]
@@ -53,7 +53,7 @@ SELECT first_name, last_name FROM users WHERE xt$id = 'james'
 +
 [source,clojure]
 ----
-(-> (from :users {:bind [{:xt/id user-id} first-name last-name]})
+(-> (from :users [{:xt/id user-id} first-name last-name])
     (order-by last-name first-name)
     (limit 10))
 ----
@@ -92,8 +92,8 @@ In this case, we re-use the `user-id` logic variable to indicate that the `:xt/i
 +
 [source,clojure]
 ----
-(unify (from :users {:bind [{:xt/id user-id} first-name last-name]})
-       (from :articles {:bind [{:author-id user-id} title content]}))
+(unify (from :users [{:xt/id user-id} first-name last-name])
+       (from :articles [{:author-id user-id} title content]))
 ----
 +
 [source,json]
@@ -124,8 +124,8 @@ FROM users u JOIN articles a ON u.xt$id = a.author_id
 [source,clojure]
 ----
 ;; 'find me all the users who are the same age'
-(unify (from :users {:bind [{:xt/id uid1} age]})
-       (from :users {:bind [{:xt/id uid2} age]})
+(unify (from :users [{:xt/id uid1} age])
+       (from :users [{:xt/id uid2} age])
        (where (<> uid1 uid2)))
 ----
 +
@@ -160,9 +160,9 @@ WHERE u1.xt$id <> u2.xt$id
 +
 [source,clojure]
 ----
-(-> (unify (from :customers {:bind [{:xt/id cid}]})
-           (left-join (from :orders {:bind [{:xt/id oid, :customer-id cid} currency order-value]})
-                      {:bind [cid currency order-value]}))
+(-> (unify (from :customers [{:xt/id cid}])
+           (left-join (from :orders [{:xt/id oid, :customer-id cid} currency order-value])
+                      [cid currency order-value]))
     (limit 100))
 ----
 +
@@ -203,8 +203,8 @@ Here, we're asking to additionally return customers who haven't yet any orders (
 +
 [source,clojure]
 ----
-(-> (unify (from :customers {:bind {:xt/id cid}})
-           (where (not-exists? (from :orders {:bind {:customer-id cid}})
+(-> (unify (from :customers [{:xt/id cid}])
+           (where (not-exists? (from :orders [{:customer-id cid}])
                                {:args [cid]})))
     (limit 100))
 ----
@@ -253,7 +253,7 @@ LIMIT 100
 +
 [source,clojure]
 ----
-(-> (from :users {:bind [first-name last-name]})
+(-> (from :users [first-name last-name])
     (with {:full-name (str first-name " " last-name)}))
 ----
 +
@@ -291,8 +291,8 @@ We can also use `with` within `unify` - this creates new logic variables which w
 +
 [source,clojure]
 ----
-(-> (unify (from :users {:bind [{:xt/id user-id} first-name last-name]})
-           (from :articles {:bind [{:author-id user-id} title content]}))
+(-> (unify (from :users [{:xt/id user-id} first-name last-name])
+           (from :articles [{:author-id user-id} title content]))
     (return {:full-name (str first-name " " last-name)} title content))
 ----
 +
@@ -334,8 +334,8 @@ FROM users u JOIN articles a ON u.xt$id = a.author_id
 +
 [source,clojure]
 ----
-(-> (unify (from :users {:bind [{:xt/id user-id} first-name last-name]})
-           (from :articles {:bind [{:author-id user-id} title content]}))
+(-> (unify (from :users [{:xt/id user-id} first-name last-name])
+           (from :articles [{:author-id user-id} title content]))
     (without :user-id))
 ----
 +
@@ -373,9 +373,9 @@ To count/sum/average values, we use `aggregate`:
 
 [source,clojure]
 ----
-(-> (unify (from :customers {:bind {:xt/id cid}})
-           (left-join (from :orders {:bind [{:customer-id cid} currency order-value]})
-                      {:bind [cid currency order-value]}))
+(-> (unify (from :customers [{:xt/id cid}])
+           (left-join (from :orders [{:customer-id cid} currency order-value])
+                      [cid currency order-value]))
     (aggregate cid currency
                {:order-count (count*)
                 :total-value (sum order-value)})
@@ -433,13 +433,13 @@ For example, if a user is reading an article, we might also want to show them de
 
 [source,clojure]
 ----
-(-> (from :articles {:bind [{:xt/id article-id} title content author-id]})
+(-> (from :articles [{:xt/id article-id} title content author-id])
 
-    (with {author (pull (-> (from :authors {:bind [{:xt/id author-id} first-name last-name]})
+    (with {author (pull (-> (from :authors [{:xt/id author-id} first-name last-name])
                             (without :author-id))
                         {:args [author-id]})
 
-           comments (pull* (-> (from :comments {:bind [{:article-id article-id} created-at comment]})
+           comments (pull* (-> (from :comments [{:article-id article-id} created-at comment])
                                (without :article-id)
                                (order-by [created-at {:dir :desc}])
                                (limit 10))
@@ -553,10 +553,10 @@ SELECT first_name, last_name FROM users FOR ALL VALID_TIME;
 [source,clojure]
 ----
 (unify (from :users {:for-valid-time [:at #inst "2018"]
-                     :bind {:xt/id user-id}})
+                     :bind [{:xt/id user-id}]})
 
        (from :users {:for-valid-time [:at #inst "2023"]
-                     :bind {:xt/id user-id}}))
+                     :bind [{:xt/id user-id}]}))
 ----
 +
 [source,json]
@@ -592,8 +592,8 @@ We submit `insert` operations to `xt/submit-tx`.
 [source,clojure]
 ----
 (xt/submit-tx node
-  [[:xtql '(insert :users (from :old-users {:bind [xt/id {:first-name given-name, :last-name surname}
-                                                   xt/valid-from xt/valid-to]}))]])
+  [[:xtql '(insert :users (from :old-users [xt/id {:first-name given-name, :last-name surname}
+                                            xt/valid-from xt/valid-to]))]])
 ----
 
 [source,sql]
@@ -621,7 +621,7 @@ We can delete documents using queries as well.
 ----
 (defn delete-a-post [node the-post-id]
   (xt/submit-tx node
-    [[:xtql '(delete :comments {:bind {:post-id $post-id}})
+    [[:xtql '(delete :comments [{:post-id $post-id}])
       {:post-id the-post-id}]]))
 ----
 +
@@ -638,8 +638,8 @@ Let's say instead we wanted to delete all comments on posts by a certain author 
 [source,clojure]
 ----
 (xt/submit-tx node
-  [[:xtql '(delete :comments {:bind {:post-id pid}}
-                   (from :posts {:bind {:xt/id pid, :author-id $author}}))
+  [[:xtql '(delete :comments [{:post-id pid}]
+                   (from :posts [{:xt/id pid, :author-id $author}]))
     {:author "james"}]])
 ----
 +
@@ -658,7 +658,7 @@ For example, if we want to take down all Christmas promotions on the 26th Decemb
 [source,clojure]
 ----
 (xt/submit-tx node
-  [[:xtql '(delete :promotions {:bind {:promotion-type "christmas"}
+  [[:xtql '(delete :promotions {:bind [{:promotion-type "christmas"}]
                                 :for-valid-time (from #inst "2023-12-26")})]])
 ----
 +
@@ -689,7 +689,7 @@ DELETE FROM comments
 [source,clojure]
 ----
 (xt/submit-tx node
-  [[:xtql '(update :documents {:bind {:xt/id $doc-id, :version v}
+  [[:xtql '(update :documents {:bind [{:xt/id $doc-id, :version v}]
                                :set {:version (inc v)}})
     {:doc-id "doc-id"}]])
 ----
@@ -708,11 +708,11 @@ You can, for example, copy a value from another related table, or even update a 
 ----
 (xt/submit-tx node
   [[:put :comments {:xt/id (random-uuid), :post-id post-id}]
-   [:xtql '(update :posts {:bind {:xt/id $post-id}, :set {:comment-count cc}}
+   [:xtql '(update :posts {:bind [{:xt/id $post-id}], :set {:comment-count cc}}
 
-                   (with {cc (q (-> (from :comments {:bind {:post-id $post-id}})
+                   (with {cc (q (-> (from :comments [{:post-id $post-id}])
                                     (aggregate {cc (count)}))
-                                {:bind [cc]})}))
+                                [cc])}))
     {:post-id "my-post-id"}]])
 ----
 +
@@ -736,7 +736,7 @@ Finally, we can irretrievably erase a document using an `erase` query.
 [source,clojure]
 ----
 (xt/submit-tx node
-  [[:xtql '(erase :users {:bind {:email "jms@juxt.pro"}})]])
+  [[:xtql '(erase :users [{:email "jms@juxt.pro"}])]])
 ----
 +
 [source,sql]

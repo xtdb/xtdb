@@ -43,17 +43,17 @@
           "args")))
 
 (t/deftest test-expr-subquery
-  (t/is (= '(exists? (from :foo))
-           (roundtrip-expr '(exists? (from :foo)))))
+  (t/is (= '(exists? (from :foo [a]))
+           (roundtrip-expr '(exists? (from :foo [a])))))
 
-  (t/is (= '(exists? (from :foo) {:args [a {:b outer-b}]})
-           (roundtrip-expr '(exists? (from :foo) {:args [a {:b outer-b}]}))))
+  (t/is (= '(exists? (from :foo [a]) {:args [a {:b outer-b}]})
+           (roundtrip-expr '(exists? (from :foo [a]) {:args [a {:b outer-b}]}))))
 
-  (t/is (= '(not-exists? (from :foo))
-           (roundtrip-expr '(not-exists? (from :foo)))))
+  (t/is (= '(not-exists? (from :foo [a]))
+           (roundtrip-expr '(not-exists? (from :foo [a])))))
 
-  (t/is (= '(q (from :foo))
-           (roundtrip-expr '(q (from :foo))))))
+  (t/is (= '(q (from :foo [a]))
+           (roundtrip-expr '(q (from :foo [a]))))))
 
 (defn- roundtrip-q [q]
   (edn/unparse (edn/parse-query q)))
@@ -65,19 +65,19 @@
   (edn/unparse (edn/parse-unify-clause q)))
 
 (t/deftest test-parse-from
-  (t/is (= '(from :foo)
-           (roundtrip-q '(from :foo))))
+  (t/is (= '(from :foo [a])
+           (roundtrip-q '(from :foo [a]))))
 
-  (t/is (= '(from :foo {:for-valid-time (at #inst "2020")})
-           (roundtrip-q '(from :foo {:for-valid-time (at #inst "2020")}))))
+  (t/is (= '(from :foo {:for-valid-time (at #inst "2020"), :bind [a]})
+           (roundtrip-q '(from :foo {:for-valid-time (at #inst "2020"), :bind [a]}))))
 
-  (t/is (= '(from :foo {:for-system-time (at #inst "2020")})
-           (roundtrip-q '(from :foo {:for-system-time (at #inst "2020")}))))
+  (t/is (= '(from :foo {:for-system-time (at #inst "2020"), :bind [a]})
+           (roundtrip-q '(from :foo {:for-system-time (at #inst "2020"), :bind [a]}))))
 
-  (t/is (= '(from :foo {:bind [a {:xt/id b} c]})
-           (roundtrip-q '(from :foo {:bind [a {:xt/id b} {:c c}]}))))
+  (t/is (= '(from :foo [a {:xt/id b} c])
+           (roundtrip-q '(from :foo [a {:xt/id b} {:c c}]))))
 
-  (let [q '(from :foo {:bind [{:foo {:baz 1}}]}) ]
+  (let [q '(from :foo [{:foo {:baz 1}}])]
     (t/is (= q
              (roundtrip-q q))))
 
@@ -86,11 +86,11 @@
          (roundtrip-q '(from :foo {:bar x :baz x})))))
 
 (t/deftest test-parse-unify
-  (t/is (= '(unify (from :foo {:bind [{:baz b}]})
-                   (from :bar {:bind [{:baz b}]}))
+  (t/is (= '(unify (from :foo [{:baz b}])
+                   (from :bar [{:baz b}]))
 
-           (roundtrip-q '(unify (from :foo {:bind {:baz b}})
-                                (from :bar {:bind {:baz b}}))))))
+           (roundtrip-q '(unify (from :foo [{:baz b}])
+                                (from :bar [{:baz b}]))))))
 
 (t/deftest test-parse-where
   (let [q '(where false (= 1 foo))]
@@ -98,7 +98,7 @@
              (roundtrip-q-tail q)))))
 
 (t/deftest test-parse-pipeline
-  (let [q '(-> (from :foo {:bind [a]})
+  (let [q '(-> (from :foo [a])
                (without :a))]
     (t/is (= q
              (roundtrip-q q)))))
@@ -115,32 +115,32 @@
 ;TODO with as unify-clause, will fail due to lack of distinct binding types
 
 (t/deftest test-parse-without
-  (let [q '(-> (from :foo {:bind [a]})
+  (let [q '(-> (from :foo [a])
                (without :a :b :f))]
     (t/is (= q
              (roundtrip-q q)))))
 
 (t/deftest test-parse-return
-  (let [q '(-> (from :foo {:bind [a]})
+  (let [q '(-> (from :foo [a])
                (return :a {:a b}))]
     (t/is (= q
              (roundtrip-q q)))))
 
 (t/deftest test-parse-aggregate
-  (let [q '(-> (from :foo {:bind [a]})
+  (let [q '(-> (from :foo [a])
                (return {:b (sum a)}))]
     (t/is (= q
              (roundtrip-q q)))))
 
 (t/deftest test-parse-join
-  (t/is (= '(join (from :foo {:bind [a]})
-                  {:bind [{:a b}]})
-           (roundtrip-unify-clause '(join (from :foo {:bind [a]})
-                                          {:bind [{:a b}]}))))
+  (t/is (= '(join (from :foo [a])
+                  [{:a b}])
+           (roundtrip-unify-clause '(join (from :foo [a])
+                                          [{:a b}]))))
 
   (t/is (thrown-with-msg?
          IllegalArgumentException #"Invalid keys provided to option map"
-         (roundtrip-unify-clause '(join (from :foo {:bind [x]})
+         (roundtrip-unify-clause '(join (from :foo [x])
                                         {:args [x]
                                          :baz x})))))
 
@@ -149,10 +149,10 @@
            (roundtrip-q-tail '(order-by (+ a b) [b {:dir :desc}])))))
 
 (t/deftest test-parse-union-all
-  (t/is (= '(union-all (from :foo {:bind [{:baz b}]})
-                       (from :bar {:bind [{:baz b}]}))
-           (roundtrip-q '(union-all (from :foo {:bind {:baz b}})
-                                    (from :bar {:bind {:baz b}}))))))
+  (t/is (= '(union-all (from :foo [{:baz b}])
+                       (from :bar [{:baz b}]))
+           (roundtrip-q '(union-all (from :foo [{:baz b}])
+                                    (from :bar [{:baz b}]))))))
 
 (t/deftest test-parse-limit-test
   (t/is (= '(limit 10)
@@ -171,9 +171,9 @@
   (edn/unparse (edn/parse-dml dml)))
 
 (t/deftest test-parse-insert
-  (t/is (= '(insert :users (from :old-users {:bind [xt/id {:first-name given-name} {:last-name surname}]}))
+  (t/is (= '(insert :users (from :old-users [xt/id {:first-name given-name} {:last-name surname}]))
 
-           (roundtrip-dml '(insert :users (from :old-users {:bind [xt/id {:first-name given-name, :last-name surname}]}))))))
+           (roundtrip-dml '(insert :users (from :old-users [xt/id {:first-name given-name, :last-name surname}]))))))
 
 (t/deftest test-parse-update
   (t/is (= '(update :foo {:set [{:version (inc v)}],
@@ -181,44 +181,44 @@
                           :bind [{:xt/id $uid} {:version v}]})
 
            (roundtrip-dml '(update :foo {:for-valid-time (from #inst "2020")
-                                         :bind {:xt/id $uid, :version v}
+                                         :bind [{:xt/id $uid, :version v}]
                                          :set {:version (inc v)}}))))
 
   (t/is (= '(update :foo {:set [{:version (inc v)}],
                           :bind [{:xt/id foo} {:version v}]}
-                    (from :bar {:bind [{:xt/id $bar-id}, foo]}))
+                    (from :bar [{:xt/id $bar-id}, foo]))
 
            (roundtrip-dml '(update :foo {:set {:version (inc v)},
-                                         :bind {:xt/id foo, :version v}}
-                                   (from :bar {:bind {:xt/id $bar-id, :foo foo}}))))))
+                                         :bind [{:xt/id foo, :version v}]}
+                                   (from :bar [{:xt/id $bar-id, :foo foo}]))))))
 
 (t/deftest test-parse-delete
   (t/is (= '(delete :foo {:for-valid-time (in #inst "2020" nil),
                           :bind [{:xt/id $uid} {:version v}]})
 
            (roundtrip-dml '(delete :foo {:for-valid-time (from #inst "2020")
-                                         :bind {:xt/id $uid, :version v}}))))
+                                         :bind [{:xt/id $uid, :version v}]}))))
 
-  (t/is (= '(delete :foo {:bind [{:xt/id foo} {:version v}]}
-                    (from :bar {:bind [{:xt/id $bar-id}, foo]}))
+  (t/is (= '(delete :foo [{:xt/id foo} {:version v}]
+                    (from :bar [{:xt/id $bar-id}, foo]))
 
-           (roundtrip-dml '(delete :foo {:bind {:xt/id foo, :version v}}
-                                   (from :bar {:bind {:xt/id $bar-id, :foo foo}}))))))
+           (roundtrip-dml '(delete :foo [{:xt/id foo, :version v}]
+                                   (from :bar [{:xt/id $bar-id, :foo foo}]))))))
 
 (t/deftest test-parse-erase
-  (t/is (= '(erase :foo {:bind [{:xt/id $uid} {:version v}]})
+  (t/is (= '(erase :foo [{:xt/id $uid} {:version v}])
 
-           (roundtrip-dml '(erase :foo {:bind {:xt/id $uid, :version v}}))))
+           (roundtrip-dml '(erase :foo [{:xt/id $uid, :version v}]))))
 
-  (t/is (= '(erase :foo {:bind [{:xt/id foo} {:version v}]}
-                    (from :bar {:bind [{:xt/id $bar-id}, foo]}))
+  (t/is (= '(erase :foo [{:xt/id foo} {:version v}]
+                   (from :bar [{:xt/id $bar-id}, foo]))
 
-           (roundtrip-dml '(erase :foo {:bind {:xt/id foo, :version v}}
-                                  (from :bar {:bind {:xt/id $bar-id, :foo foo}}))))))
+           (roundtrip-dml '(erase :foo [{:xt/id foo, :version v}]
+                                  (from :bar [{:xt/id $bar-id, :foo foo}]))))))
 
 (t/deftest test-parse-assert
-  (t/is (= '(assert-exists (from :users {:bind [{:email $email}]}))
-           (roundtrip-dml '(assert-exists (from :users {:bind {:email $email}})))))
+  (t/is (= '(assert-exists (from :users [{:email $email}]))
+           (roundtrip-dml '(assert-exists (from :users [{:email $email}])))))
 
-  (t/is (= '(assert-not-exists (from :users {:bind [{:email $email}]}))
-           (roundtrip-dml '(assert-not-exists (from :users {:bind {:email $email}}))))))
+  (t/is (= '(assert-not-exists (from :users [{:email $email}]))
+           (roundtrip-dml '(assert-not-exists (from :users [{:email $email}]))))))

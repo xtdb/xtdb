@@ -59,18 +59,18 @@
   )
 
 (t/deftest test-expr-subquery
-  (t/is (= ['(exists? (from :foo)) {"exists" {"from" "foo"}}]
-           (roundtrip-expr {"exists" {"from" "foo"}})))
+  (t/is (= ['(exists? (from :foo [a])) {"exists" {"from" "foo", "bind" ["a"]}}]
+           (roundtrip-expr {"exists" {"from" "foo", "bind" ["a"]}})))
 
-  (t/is (= ['(exists? (from :foo) {:args [a {:b outer-b}]})
-            {"exists" {"from" "foo"}, "args" ["a" {"b" "outer-b"}]}]
-           (roundtrip-expr {"exists" {"from" "foo"}, "args" ["a" {"b" "outer-b"}]})))
+  (t/is (= ['(exists? (from :foo [a]) {:args [a {:b outer-b}]})
+            {"exists" {"from" "foo", "bind" ["a"]}, "args" ["a" {"b" "outer-b"}]}]
+           (roundtrip-expr {"exists" {"from" "foo", "bind" ["a"]}, "args" ["a" {"b" "outer-b"}]})))
 
-  (t/is (= ['(not-exists? (from :foo)) {"notExists" {"from" "foo"}}]
-           (roundtrip-expr {"notExists" {"from" "foo"}})))
+  (t/is (= ['(not-exists? (from :foo [a])) {"notExists" {"from" "foo", "bind" ["a"]}}]
+           (roundtrip-expr {"notExists" {"from" "foo", "bind" ["a"]}})))
 
-  (t/is (= ['(q (from :foo)) {"q" {"from" "foo"}}]
-           (roundtrip-expr {"q" {"from" "foo"}}))))
+  (t/is (= ['(q (from :foo [a])) {"q" {"from" "foo", "bind" ["a"]}}]
+           (roundtrip-expr {"q" {"from" "foo", "bind" ["a"]}}))))
 
 (defn- roundtrip-q [query]
   (let [parsed (json/parse-query query)]
@@ -81,31 +81,32 @@
     [(edn/unparse parsed) (json/unparse parsed)]))
 
 (t/deftest test-parse-from
-  (t/is (= ['(from :foo) {"from" "foo"}]
-           (roundtrip-q {"from" "foo"})))
+  (t/is (= ['(from :foo [a]) {"from" "foo", "bind" ["a"]}]
+           (roundtrip-q {"from" "foo", "bind" ["a"]})))
 
-  (let [json-q {"from" "foo", "forValidTime" {"at" {"@value" "2020-01-01", "@type" "xt:date"}}}]
-    (t/is (= ['(from :foo {:for-valid-time (at #time/date "2020-01-01")})
+  (let [json-q {"from" "foo", "bind" ["a"], "forValidTime" {"at" {"@value" "2020-01-01", "@type" "xt:date"}}}]
+    (t/is (= ['(from :foo {:for-valid-time (at #time/date "2020-01-01"), :bind [a]})
               json-q]
              (roundtrip-q json-q))))
 
-  (let [json-q {"from" "foo",
+  (let [json-q {"from" "foo", "bind" ["a"],
                 "forValidTime" "allTime"
                 "forSystemTime" {"in" [{"@value" "2020-01-01", "@type" "xt:date"} nil]}}]
     (t/is (= ['(from :foo
-                     {:for-valid-time :all-time
+                     {:bind [a]
+                      :for-valid-time :all-time
                       :for-system-time (in #time/date "2020-01-01" nil)})
               json-q]
              (roundtrip-q json-q))))
 
-  (t/is (= ['(from :foo {:bind [a {:xt/id b} c]}) {"from" "foo", "bind" ["a" {"xt/id" "b"} "c"]}]
+  (t/is (= ['(from :foo [a {:xt/id b} c]) {"from" "foo", "bind" ["a" {"xt/id" "b"} "c"]}]
            (roundtrip-q {"from" "foo", "bind" ["a" {"xt/id" "b"} {"c" "c"}]})))
 
   ;; TODO check errors
   )
 
 (t/deftest test-pipe
-  (t/is (= ['(-> (from :foo {:bind [a]})
+  (t/is (= ['(-> (from :foo [a])
                  (where (> a 3)))
             {"->" [{"from" "foo", "bind" ["a"]}
                    {"where" [{">" ["a" 3]}]}]}]
@@ -114,7 +115,7 @@
                                {"where" [{">" ["a" 3]}]}]}))))
 
 (t/deftest test-unify
-  (t/is (= ['(unify (from :foo {:bind [a]}) (from :bar {:bind [b]}) (where (> a b)))
+  (t/is (= ['(unify (from :foo [a]) (from :bar [b]) (where (> a b)))
             {"unify"
              [{"from" "foo", "bind" ["a"]}
               {"from" "bar", "bind" ["b"]}
@@ -157,8 +158,8 @@
            (roundtrip-q-tail {"aggregate" ["a" "b" {"c" {"sum" [{"+" ["a" "b"]}]}}]}))))
 
 (t/deftest test-union-all
-  (t/is (= ['(union-all (from :foo {:bind [a]})
-                        (from :bar {:bind [a]}))
+  (t/is (= ['(union-all (from :foo [a])
+                        (from :bar [a]))
             {"unionAll" [{"from" "foo", "bind" ["a"]}
                          {"from" "bar", "bind" ["a"]}]}]
 
@@ -166,10 +167,10 @@
                                      {"from" "bar", "bind" ["a"]}]}))))
 
 (t/deftest test-joins
-  (t/is (= ['(unify (from :foo {:bind [a]})
-                    (join (from :bar {:bind [a b]})
-                          {:bind [a b]})
-                    (left-join (from :baz {:bind [a c]})
+  (t/is (= ['(unify (from :foo [a])
+                    (join (from :bar [a b])
+                          [a b])
+                    (left-join (from :baz [a c])
                                {:args [a], :bind [c]}))
 
             {"unify" [{"from" "foo", "bind" ["a"]}
@@ -187,7 +188,7 @@
                                    "bind" ["c"]}]}))))
 
 (t/deftest test-order-by
-  (t/is (= ['(-> (from :foo {:bind [a b]})
+  (t/is (= ['(-> (from :foo [a b])
                  (order-by (+ a b) [b {:dir :desc}]))
 
             {"->" [{"from" "foo", "bind" ["a" "b"]}
