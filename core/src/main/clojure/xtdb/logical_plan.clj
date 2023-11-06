@@ -262,7 +262,7 @@
           (when-let [mark-join-projection (:mark-join mode)]
             [(->projected-column mark-join-projection)])
           (case mode
-            (:cross-join :left-outer-join) (relation-columns dependent-relation)
+            (:cross-join :left-outer-join :single-join) (relation-columns dependent-relation)
             []))
         (vec))
 
