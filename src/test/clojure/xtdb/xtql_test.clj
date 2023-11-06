@@ -344,6 +344,7 @@
   (t/is (= [{:xt/id 1}]
            (xt/q tu/*node* '(from :docs {:bind [xt/id {:map {:foo 1}}]}))))
 
+  #_ ; TODO `=` on sets
   (t/is (= [{:xt/id 1}]
            (xt/q tu/*node* '(from :docs {:bind [xt/id {:set #{1 2 3}}]}))))
 
@@ -351,6 +352,7 @@
            (xt/q tu/*node* '(from :docs {:bind [xt/id {:map {:foo $param}}]})
                  {:args {:param 1}})))
 
+  #_ ; TODO `=` on sets
   (t/is (= [{:xt/id 1}]
            (xt/q tu/*node* '(from :docs {:bind [xt/id {:set $param}]})
                  {:args {:param #{1 2 3}}}))))

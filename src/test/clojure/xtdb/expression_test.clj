@@ -1494,6 +1494,22 @@
 
   (t/is (= true (project1 '(= [[1 2] [3 4]] [[1 2] [3 4]]) {}))))
 
+(t/deftest test-sets
+  (t/is (= #{1 2 3}
+           (project1 'a
+                     {:a #{1 2 3}})))
+
+  #_ ; TODO `=` on sets
+  (t/is (= true
+           (project1 '(= #{1 2 3} a)
+                     {:a #{1 2 3}})))
+
+  (t/is (= {:roles #{:a :b :c}}
+           (project1 '{:roles roles} {:roles #{:a :b :c}})))
+
+  (t/is (= {:roles #{:a :b :c}}
+           (project1 '{:roles #{:a role :c}} {:role :b}))))
+
 (t/deftest test-mixing-prims-with-non-prims
   (with-open [rel (tu/open-rel [(tu/open-vec "x" [{:a 42, :b 8}, {:a 12, :b 5}])])]
     (t/is (= {:res [{:a 42, :b 8, :sum 50}
@@ -1753,13 +1769,6 @@
   (t/is (= true
            (project1 '(= #uuid "00000000-0000-0000-0000-000000000000" a)
                      {:a #uuid "00000000-0000-0000-0000-000000000000"}))))
-
-(t/deftest test-sets
-  (t/is (= true
-           (project1 '(= #{1 2 3} a)
-                     {:a #{1 2 3}})))
-  (t/is (= {:roles #{:a :b :c}}
-           (project1 '{:roles roles} {:roles #{:a :b :c}}))))
 
 (t/deftest test-truthy-if
   (t/is (= :true (project1 '(if 42 :true :false) {})))

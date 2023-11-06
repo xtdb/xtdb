@@ -15,6 +15,7 @@
 (defmethod direct-child-exprs :call [e] (:args e))
 (defmethod direct-child-exprs :struct [e] (vals (:entries e)))
 (defmethod direct-child-exprs :list [e] (:elements e))
+(defmethod direct-child-exprs :set [e] (:elements e))
 (defmethod direct-child-exprs :vectorised-call [e] (:args e))
 
 (defn expr-seq [expr]
@@ -51,6 +52,9 @@
 
 (defmethod walk-expr :list [inner outer {:keys [elements]}]
   (outer {:op :list, :elements (mapv inner elements)}))
+
+(defmethod walk-expr :set [inner outer {:keys [elements]}]
+  (outer {:op :set, :elements (mapv inner elements)}))
 
 (defmethod walk-expr :vectorised-call [inner outer expr]
   (outer (update expr :args #(mapv inner %))))

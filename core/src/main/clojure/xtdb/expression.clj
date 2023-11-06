@@ -51,8 +51,8 @@
                                    (MapEntry/create k (form->expr v-form env)))
                                  (into {}))})
 
-    (vector? form) {:op :list
-                    :elements (mapv #(form->expr % env) form)}
+    (vector? form) {:op :list, :elements (mapv #(form->expr % env) form)}
+    (set? form) {:op :set, :elements (mapv #(form->expr % env) form)}
 
     (seq? form) (parse-list-form form env)
 
@@ -232,7 +232,7 @@
     :time-local Long, :timestamp-tz Long, :timestamp-local Long, :duration Long
     :utf8 Bytes, :varbinary Bytes, :keyword Bytes, :uuid Bytes, :uri Bytes
 
-    :list Object, :struct Object :clj-form Bytes})
+    :list Object, :set Object, :struct Object :clj-form Bytes})
 
 (defmethod read-value-code :null [_ & _args] nil)
 (defmethod write-value-code :null [_ w & _args] `(.writeNull ~w))
@@ -254,11 +254,8 @@
     :day `(.writeInt ~@args)
     :milli `(.writeLong ~@args)))
 
-(defmethod write-value-code :set [_ & args] `(.writeObject ~@args))
-(defmethod read-value-code :set [_ & args] `(.readObject ~@args))
-
 (doseq [[k tag] {:interval PeriodDuration :decimal BigDecimal,
-                 :list IListValueReader, :struct Map}]
+                 :list IListValueReader, :set IListValueReader, :struct Map}]
   (defmethod read-value-code k [_ & args]
     (-> `(.readObject ~@args) (with-tag tag)))
 
@@ -1329,6 +1326,15 @@
                                                                                       ~el-box))))]))
                                                  cat))))))))}))
 
+(defmethod codegen-expr :set [expr opts]
+  (let [{[_list el-type] :return-type, continue-list :continue, :as emitted-expr} (codegen-expr (assoc expr :op :list) opts)
+        return-type [:set el-type]]
+    (-> emitted-expr
+        (assoc :return-type return-type
+               :continue (fn [f]
+                           (continue-list (fn [_list-type code]
+                                            (f return-type code))))))))
+
 (defmethod codegen-call [:nth :list :int] [{[[_ list-el-type] _n-type] :arg-types}]
   (let [return-type (types/merge-col-types list-el-type :null)]
     {:return-type return-type
@@ -1412,6 +1418,9 @@
                            (if (zero? ~res-sym)
                              ~(f :null nil)
                              ~(f :bool `(== 1 ~res-sym))))))}))
+
+(defmethod codegen-call [:= :set :set] [{[[_ l-el-type] [_ r-el-type]] :arg-types}]
+  (throw (UnsupportedOperationException. "TODO: `=` on sets")))
 
 (def out-vec-sym (gensym 'out_vec))
 (def ^:private out-writer-sym (gensym 'out_writer_sym))
