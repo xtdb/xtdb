@@ -27,7 +27,7 @@
            (java.time Instant ZoneId)
            (java.util.concurrent CompletableFuture PriorityBlockingQueue TimeUnit)
            (java.util.concurrent.locks StampedLock)
-           (java.util.function Consumer)
+           (java.util.function Consumer IntPredicate)
            (org.apache.arrow.memory BufferAllocator)
            (org.apache.arrow.vector BitVector)
            (org.apache.arrow.vector.complex DenseUnionVector ListVector)
@@ -420,6 +420,20 @@
 
         nil))))
 
+(defn- ->assert-idxer ^xtdb.indexer.RelationIndexer [mode]
+  (let [^IntPredicate valid-query-pred (case mode
+                                         :assert-exists (reify IntPredicate
+                                                          (test [_ i] (pos? i)))
+                                         :assert-not-exists (reify IntPredicate
+                                                              (test [_ i] (zero? i))))]
+    (reify RelationIndexer
+      (indexOp [_ in-rel _]
+        (let [row-count (.rowCount in-rel)]
+          (when-not (.test valid-query-pred row-count)
+            (throw (err/runtime-err :xtdb/assert-failed
+                                    {::err/message (format "Precondition failed: %s" (name mode))
+                                     :row-count row-count}))))))))
+
 (defn- wrap-xtql-params [f]
   (fn [^RelationReader params]
     (f (when params
@@ -434,7 +448,9 @@
         params-rdr (.structKeyReader xtql-leg "params")
         upsert-idxer (->upsert-rel-indexer row-counter live-idx-tx tx-opts)
         delete-idxer (->delete-rel-indexer row-counter live-idx-tx)
-        erase-idxer (->erase-rel-indexer row-counter live-idx-tx)]
+        erase-idxer (->erase-rel-indexer row-counter live-idx-tx)
+        assert-exists-idxer (->assert-idxer :assert-exists)
+        assert-not-exists-idxer (->assert-idxer :assert-not-exists)]
     (reify OpIndexer
       (indexOp [_ tx-op-idx]
         (let [query (.form ^ClojureForm (.getObject query-rdr tx-op-idx))
@@ -465,6 +481,16 @@
             [:erase query-opts inner-query]
             (foreach-param-row allocator params-rdr tx-op-idx
                                (-> (query-indexer ra-src wm-src erase-idxer inner-query tx-opts query-opts)
+                                   (wrap-xtql-params)))
+
+            [:assert-not-exists query-opts inner-query]
+            (foreach-param-row allocator params-rdr tx-op-idx
+                               (-> (query-indexer ra-src wm-src assert-not-exists-idxer inner-query tx-opts query-opts)
+                                   (wrap-xtql-params)))
+
+            [:assert-exists query-opts inner-query]
+            (foreach-param-row allocator params-rdr tx-op-idx
+                               (-> (query-indexer ra-src wm-src assert-exists-idxer inner-query tx-opts query-opts)
                                    (wrap-xtql-params)))
 
             (throw (UnsupportedOperationException. "xtql query"))))

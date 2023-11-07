@@ -729,20 +729,62 @@ This is the operation that we envisage replacing a lot of XT1 transaction functi
 
 === Erase
 
-Finally, we can irretrievably erase a document using an `erase` query.
+We can irretrievably erase a document using an `erase` query.
 
 * Erases also look the same as deletes, but these don't support `:for-valid-time`:
 +
 [source,clojure]
 ----
 (xt/submit-tx node
-  [[:xtql '(erase :users [{:email "jms@juxt.pro"}])]])
+  [[:xtql '(erase :users [{:email "jms@example.com"}])]])
 ----
 +
 [source,sql]
 ----
-ERASE FROM users WHERE email = 'jms@juxt.pro'
+ERASE FROM users WHERE email = 'jms@example.com'
 ----
+
+=== Assert
+
+`assert-exists` and `assert-not-exists` can be used to assert the state of the database during a transaction.
+If an assertion fails, the whole transaction rolls back.
+This can be used to check pre-conditions, for example.
+
+This query asserts that no user has the email `james@example.com` before inserting a user that does:
+
+[source,clojure]
+----
+(xt/submit-tx node
+  [[:xtql '(assert-not-exists (from :users [{:email $email}]))
+    {:email "james@example.com"}]
+
+   [:put :users {:xt/id :james, :email "james@example.com"}]])
+----
+
+[source,sql]
+----
+-- not implemented yet
+ASSERT NOT EXISTS (SELECT 1 FROM users WHERE email = 'james@juxt.pro')
+----
+
+You can check the `:xt/txs` table to see whether and why a transaction failed:
+
+[source,clojure]
+----
+(xt/q tu/*node* '(from :xt/txs [{:xt/id $tx-id} xt/committed? xt/error])
+      {:args {:tx-id my-tx-id}})
+
+;; =>
+
+[{:xt/committed? false
+  :xt/error {::err/error-type :runtime-error,
+             ::err/error-key :xtdb/assert-failed,
+             ::err/message "Precondition failed: assert-not-exists",
+             :row-count 1}}]
+----
+
+
+Those familiar with XT1 might recognise this as `::xt/match` - albeit more powerful because you have the full query language available rather than just matching a whole document.
 
 == Get in touch!
 

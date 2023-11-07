@@ -8,11 +8,12 @@
   (:import (clojure.lang MapEntry)
            (org.apache.arrow.memory BufferAllocator)
            (xtdb.operator PreparedQuery)
-           (xtdb.query ArgSpec ColSpec DmlOps$Delete DmlOps$Erase DmlOps$Insert DmlOps$Update
+           xtdb.operator.PreparedQuery
+           (xtdb.query ArgSpec ColSpec DmlOps$AssertExists DmlOps$AssertNotExists DmlOps$Delete DmlOps$Erase DmlOps$Insert DmlOps$Update
                        Expr Expr$Bool Expr$Call Expr$Double Expr$LogicVar Expr$Long Expr$Obj Expr$Param OutSpec Expr$Subquery
                        Query Query$Aggregate Query$From Query$Join Query$LeftJoin Query$Limit Query$Offset Query$OrderBy Query$OrderDirection Query$OrderSpec
-                       Query$Pipeline Query$Return Query$Unify Query$Where Query$With Query$WithCols Query$Without
-                       Query$Table TemporalFilter TemporalFilter$AllTime TemporalFilter$At TemporalFilter$In TemporalFilter$TemporalExtents VarSpec)))
+                       Query$Pipeline Query$Return Query$Unify Query$Where Query$With Query$WithCols Query$Without Query$Table
+                       TemporalFilter$AllTime TemporalFilter$At TemporalFilter$In TemporalFilter$TemporalExtents VarSpec)))
 
 ;;TODO consider helper for [{sym expr} sym] -> provided vars set
 ;;TODO Should all user supplied lv be planned via plan-expr, rather than explicit calls to col-sym.
@@ -771,7 +772,15 @@
 
           {target-plan :ra-plan} (plan-query target-query)]
       [:update {:table table-name}
-       target-plan])))
+       target-plan]))
+
+  DmlOps$AssertNotExists
+  (plan-dml [query _tx-opts]
+    [:assert-not-exists {} (:ra-plan (plan-query (.query query)))])
+
+  DmlOps$AssertExists
+  (plan-dml [query _tx-opts]
+    [:assert-exists {} (:ra-plan (plan-query (.query query)))]))
 
 (defn compile-dml [query tx-opts]
   (let [ra-plan (binding [*gensym* (seeded-gensym "_" 0)]
