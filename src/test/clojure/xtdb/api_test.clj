@@ -593,3 +593,57 @@ VALUES (2, DATE '2022-01-01', DATE '2021-01-01')"]])
                     :xt/valid-from (util/->zdt #inst "2020-01-01")
                     :xt/valid-to nil}}
                  (q tx1)))))))
+
+(t/deftest test-assert-dml
+  (t/testing "assert-not-exists"
+    (xt/submit-tx tu/*node* [[:xtql '(assert-not-exists (from :users [{:first-name $name}]))
+                              {:name "James"}]
+                             [:put :users {:xt/id :james, :first-name "James"}]])
+
+    (xt/submit-tx tu/*node* [[:xtql '(assert-not-exists (from :users [{:first-name $name}]))
+                              {:name "Dave"}]
+                             [:put :users {:xt/id :dave, :first-name "Dave"}] ])
+
+    (xt/submit-tx tu/*node* [[:xtql '(assert-not-exists (from :users [{:first-name $name}]))
+                              {:name "James"}]
+                             [:put :users {:xt/id :james2, :first-name "James"}] ])
+
+    (t/is (= #{{:xt/id :james, :first-name "James"}
+               {:xt/id :dave, :first-name "Dave"}}
+             (set (xt/q tu/*node* '(from :users [xt/id first-name])))))
+
+    (t/is (= [{:xt/id 2,
+               :xt/error {::err/error-type :runtime-error,
+                          ::err/error-key :xtdb/assert-failed,
+                          ::err/message "Precondition failed: assert-not-exists",
+                          :row-count 1}}]
+
+             (->> (xt/q tu/*node* '(from :xt/txs [{:xt/committed? false} xt/id xt/error]))
+                  (map (fn [row]
+                         (update row :xt/error #(ex-data (.form ^ClojureForm %)))))))))
+
+  (t/testing "assert-exists"
+    (xt/submit-tx tu/*node* [[:xtql '(assert-exists (from :users [{:first-name $name}]))
+                              {:name "Mike"}]
+                             [:put :users {:xt/id :mike, :first-name "Mike"}] ])
+
+    (xt/submit-tx tu/*node* [[:xtql '(assert-exists (from :users [{:first-name $name}]))
+                              {:name "James"}]
+                             [:delete :users :james]
+                             [:put :users {:xt/id :james2, :first-name "James"}] ])
+
+    (t/is (= #{{:xt/id :james2, :first-name "James"}
+               {:xt/id :dave, :first-name "Dave"}}
+             (set (xt/q tu/*node* '(from :users [xt/id first-name])))))
+
+    (t/is (= [{:xt/id 3,
+               :xt/error {::err/error-type :runtime-error,
+                          ::err/error-key :xtdb/assert-failed,
+                          ::err/message "Precondition failed: assert-exists",
+                          :row-count 0}}]
+
+             (->> (xt/q tu/*node* '(-> (from :xt/txs [{:xt/committed? false} xt/id xt/error])
+                                       (where (> xt/id 2))))
+                  (map (fn [row]
+                         (update row :xt/error #(ex-data (.form ^ClojureForm %))))))))))
+
