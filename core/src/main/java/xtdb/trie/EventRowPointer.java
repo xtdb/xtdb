@@ -13,18 +13,14 @@ public class EventRowPointer {
 
     public final RelationReader relReader;
 
-    public final IVectorReader iidReader;
-    public final IVectorReader sysFromReader;
-    public final IVectorReader opReader;
+    private final IVectorReader iidReader;
+    private final IVectorReader sysFromReader;
+    private final IVectorReader opReader;
 
-    public final IVectorReader putValidFromReader;
-    public final IVectorReader putValidToReader;
-
-    public final IVectorReader deleteValidFromReader;
-    public final IVectorReader deleteValidToReader;
-
-    public static final Keyword PUT = Keyword.intern("put");
-    public static final Keyword DELETE = Keyword.intern("delete");
+    public final IVectorReader validTimesReader;
+    public final IVectorReader validTimeReader;
+    public final IVectorReader systemTimeCeilingsReader;
+    public final IVectorReader systemTimeCeilingReader;
 
     public EventRowPointer(RelationReader relReader, byte[] path) {
         this.relReader = relReader;
@@ -33,13 +29,11 @@ public class EventRowPointer {
         sysFromReader = relReader.readerForName("xt$system_from");
         opReader = relReader.readerForName("op");
 
-        var putReader = opReader.legReader(PUT);
-        putValidFromReader = putReader.structKeyReader("xt$valid_from");
-        putValidToReader = putReader.structKeyReader("xt$valid_to");
+        validTimesReader = relReader.readerForName("xt$valid_times");
+        validTimeReader = validTimesReader.listElementReader();
 
-        var deleteReader = opReader.legReader(DELETE);
-        deleteValidFromReader = deleteReader.structKeyReader("xt$valid_from");
-        deleteValidToReader = deleteReader.structKeyReader("xt$valid_to");
+        systemTimeCeilingsReader = relReader.readerForName("xt$system_time_ceilings");
+        systemTimeCeilingReader = systemTimeCeilingsReader.listElementReader();
 
         int left = 0;
         int right = relReader.rowCount();
@@ -66,6 +60,10 @@ public class EventRowPointer {
 
     public long getSystemTime() {
         return sysFromReader.getLong(idx);
+    }
+
+    public Keyword getOp() {
+        return opReader.getLeg(idx);
     }
 
     public static Comparator<? extends EventRowPointer> comparator() {

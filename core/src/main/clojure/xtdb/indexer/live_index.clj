@@ -61,7 +61,6 @@
 (defn- live-rel->fields [^IRelationWriter live-rel]
   (let [live-rel-field (-> (.colWriter live-rel "op")
                            (.legWriter :put)
-                           (.structKeyWriter "xt$doc")
                            .getField)]
     (assert (= #xt.arrow/type :struct (.getType live-rel-field)))
     (into {} (map (comp (juxt #(.getName ^Field %) identity))) (.getChildren live-rel-field))))
@@ -83,15 +82,17 @@
 (deftype LiveTable [^BufferAllocator allocator, ^IBufferPool buffer-pool, ^String table-name
                     ^IRelationWriter live-rel, ^:unsynchronized-mutable ^LiveHashTrie live-trie
                     ^IVectorWriter iid-wtr, ^IVectorWriter system-from-wtr
-                    ^IVectorWriter put-wtr, ^IVectorWriter put-valid-from-wtr, ^IVectorWriter put-valid-to-wtr, ^IVectorWriter put-doc-wtr
-                    ^IVectorWriter delete-wtr, ^IVectorWriter delete-valid-from-wtr, ^IVectorWriter delete-valid-to-wtr
+                    ^IVectorWriter valid-times-wtr, ^IVectorWriter valid-time-wtr
+                    ^IVectorWriter sys-time-ceilings-wtr, ^IVectorWriter sys-time-ceiling-wtr
+                    ^IVectorWriter put-wtr
+                    ^IVectorWriter delete-wtr
                     ^IVectorWriter evict-wtr]
   ILiveTable
   (startTx [this-table tx-key new-live-table?]
     (let [!transient-trie (atom live-trie)
           system-from-µs (util/instant->micros (.system-time tx-key))]
       (reify ILiveTableTx
-        (docWriter [_] put-doc-wtr)
+        (docWriter [_] put-wtr)
 
         (logPut [_ iid valid-from valid-to write-doc!]
           (.startRow live-rel)
@@ -99,11 +100,16 @@
           (.writeBytes iid-wtr iid)
           (.writeLong system-from-wtr system-from-µs)
 
-          (.startStruct put-wtr)
-          (.writeLong put-valid-from-wtr valid-from)
-          (.writeLong put-valid-to-wtr valid-to)
+          (.startList valid-times-wtr)
+          (.writeLong valid-time-wtr valid-from)
+          (.writeLong valid-time-wtr valid-to)
+          (.endList valid-times-wtr)
+
+          (.startList sys-time-ceilings-wtr)
+          (.writeLong sys-time-ceiling-wtr Long/MAX_VALUE)
+          (.endList sys-time-ceilings-wtr)
+
           (write-doc!)
-          (.endStruct put-wtr)
 
           (.endRow live-rel)
 
@@ -113,10 +119,16 @@
           (.writeBytes iid-wtr iid)
           (.writeLong system-from-wtr system-from-µs)
 
-          (.startStruct delete-wtr)
-          (.writeLong delete-valid-from-wtr valid-from)
-          (.writeLong delete-valid-to-wtr valid-to)
-          (.endStruct delete-wtr)
+          (.startList valid-times-wtr)
+          (.writeLong valid-time-wtr valid-from)
+          (.writeLong valid-time-wtr valid-to)
+          (.endList valid-times-wtr)
+
+          (.startList sys-time-ceilings-wtr)
+          (.writeLong sys-time-ceiling-wtr Long/MAX_VALUE)
+          (.endList sys-time-ceilings-wtr)
+
+          (.writeNull delete-wtr)
 
           (.endRow live-rel)
 
@@ -125,6 +137,15 @@
         (logEvict [_ iid]
           (.writeBytes iid-wtr iid)
           (.writeLong system-from-wtr system-from-µs)
+
+          (.startList valid-times-wtr)
+          (.writeLong valid-time-wtr Long/MIN_VALUE)
+          (.writeLong valid-time-wtr Long/MAX_VALUE)
+          (.endList valid-times-wtr)
+
+          (.startList sys-time-ceilings-wtr)
+          (.writeLong sys-time-ceiling-wtr Long/MAX_VALUE)
+          (.endList sys-time-ceilings-wtr)
 
           (.writeNull evict-wtr)
 
@@ -198,15 +219,14 @@
    (util/with-close-on-catch [rel (trie/open-log-data-root allocator)]
      (let [iid-wtr (.colWriter rel "xt$iid")
            op-wtr (.colWriter rel "op")
-           put-wtr (.legWriter op-wtr :put)
-           delete-wtr (.legWriter op-wtr :delete)]
+           vts-wtr (.colWriter rel "xt$valid_times")
+           stcs-wtr (.colWriter rel "xt$system_time_ceilings")]
        (->LiveTable allocator buffer-pool table-name rel
                     (->live-trie (vw/vec-wtr->rdr iid-wtr))
                     iid-wtr (.colWriter rel "xt$system_from")
-                    put-wtr (.structKeyWriter put-wtr "xt$valid_from") (.structKeyWriter put-wtr "xt$valid_to")
-                    (.structKeyWriter put-wtr "xt$doc") delete-wtr (.structKeyWriter delete-wtr "xt$valid_from")
-                    (.structKeyWriter delete-wtr "xt$valid_to")
-                    (.legWriter op-wtr :evict))))))
+                    vts-wtr (.listElementWriter vts-wtr)
+                    stcs-wtr (.listElementWriter stcs-wtr)
+                    (.legWriter op-wtr :put) (.legWriter op-wtr :delete) (.legWriter op-wtr :evict))))))
 
 (defn ->live-trie [log-limit page-limit iid-rdr]
   (-> (doto (LiveHashTrie/builder iid-rdr)

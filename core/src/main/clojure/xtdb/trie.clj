@@ -63,17 +63,16 @@
 (defn data-rel-schema ^org.apache.arrow.vector.types.pojo.Schema [put-doc-col-type]
   (Schema. [(types/col-type->field "xt$iid" [:fixed-size-binary 16])
             (types/col-type->field "xt$system_from" types/temporal-col-type)
+            (types/col-type->field "xt$valid_times" [:list types/temporal-col-type])
+            (types/col-type->field "xt$system_time_ceilings" [:list types/temporal-col-type])
             (types/->field "op" (ArrowType$Union. UnionMode/Dense (int-array (range 3))) false
-                           (types/col-type->field "put" [:struct {'xt$valid_from types/temporal-col-type
-                                                                  'xt$valid_to types/temporal-col-type
-                                                                  'xt$doc put-doc-col-type}])
-                           (types/col-type->field "delete" [:struct {'xt$valid_from types/temporal-col-type
-                                                                     'xt$valid_to types/temporal-col-type}])
+                           (types/col-type->field "put" put-doc-col-type)
+                           (types/col-type->field "delete" :null)
                            (types/col-type->field "evict" :null))]))
 
 (defn open-log-data-root
   (^xtdb.vector.IRelationWriter [^BufferAllocator allocator]
-   (open-log-data-root allocator (data-rel-schema [:union #{:null [:struct {}]}])))
+   (open-log-data-root allocator (data-rel-schema [:struct {}])))
 
   (^xtdb.vector.IRelationWriter [^BufferAllocator allocator data-schema]
    (util/with-close-on-catch [root (VectorSchemaRoot/create data-schema allocator)]
@@ -118,17 +117,14 @@
                             (.readerForName "op")
                             (.legReader :put))
 
-                doc-rdr (.structKeyReader put-rdr "xt$doc")
                 meta-pos (.getPosition node-wp)]
 
             (.startStruct leaf-wtr)
 
             (.writeMetadata page-meta-wtr (into [(.readerForName leaf-rdr "xt$system_from")
-                                                 (.readerForName leaf-rdr "xt$iid")
-                                                 (.structKeyReader put-rdr "xt$valid_from")
-                                                 (.structKeyReader put-rdr "xt$valid_to")]
-                                                (map #(.structKeyReader doc-rdr %))
-                                                (.structKeys doc-rdr)))
+                                                 (.readerForName leaf-rdr "xt$iid")]
+                                                (map #(.structKeyReader put-rdr %))
+                                                (.structKeys put-rdr)))
 
             (.writeInt page-idx-wtr (.getAndIncrement !page-idx))
             (.endStruct leaf-wtr)

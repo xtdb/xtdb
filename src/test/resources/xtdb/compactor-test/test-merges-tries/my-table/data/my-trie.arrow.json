@@ -18,6 +18,38 @@
       },
       "children" : [ ]
     },{
+      "name" : "xt$valid_times",
+      "nullable" : false,
+      "type" : {
+        "name" : "list"
+      },
+      "children" : [{
+        "name" : "timestamp-tz-micro-utc",
+        "nullable" : false,
+        "type" : {
+          "name" : "timestamp",
+          "unit" : "MICROSECOND",
+          "timezone" : "UTC"
+        },
+        "children" : [ ]
+      }]
+    },{
+      "name" : "xt$system_time_ceilings",
+      "nullable" : false,
+      "type" : {
+        "name" : "list"
+      },
+      "children" : [{
+        "name" : "timestamp-tz-micro-utc",
+        "nullable" : false,
+        "type" : {
+          "name" : "timestamp",
+          "unit" : "MICROSECOND",
+          "timezone" : "UTC"
+        },
+        "children" : [ ]
+      }]
+    },{
       "name" : "op",
       "nullable" : false,
       "type" : {
@@ -32,72 +64,29 @@
           "name" : "struct"
         },
         "children" : [{
-          "name" : "xt$valid_from",
+          "name" : "xt$id",
           "nullable" : false,
           "type" : {
-            "name" : "timestamp",
-            "unit" : "MICROSECOND",
-            "timezone" : "UTC"
+            "name" : "utf8"
           },
           "children" : [ ]
         },{
-          "name" : "xt$valid_to",
+          "name" : "v",
           "nullable" : false,
           "type" : {
-            "name" : "timestamp",
-            "unit" : "MICROSECOND",
-            "timezone" : "UTC"
+            "name" : "int",
+            "bitWidth" : 64,
+            "isSigned" : true
           },
           "children" : [ ]
-        },{
-          "name" : "xt$doc",
-          "nullable" : true,
-          "type" : {
-            "name" : "struct"
-          },
-          "children" : [{
-            "name" : "xt$id",
-            "nullable" : false,
-            "type" : {
-              "name" : "utf8"
-            },
-            "children" : [ ]
-          },{
-            "name" : "v",
-            "nullable" : false,
-            "type" : {
-              "name" : "int",
-              "bitWidth" : 64,
-              "isSigned" : true
-            },
-            "children" : [ ]
-          }]
         }]
       },{
         "name" : "delete",
-        "nullable" : false,
+        "nullable" : true,
         "type" : {
-          "name" : "struct"
+          "name" : "null"
         },
-        "children" : [{
-          "name" : "xt$valid_from",
-          "nullable" : false,
-          "type" : {
-            "name" : "timestamp",
-            "unit" : "MICROSECOND",
-            "timezone" : "UTC"
-          },
-          "children" : [ ]
-        },{
-          "name" : "xt$valid_to",
-          "nullable" : false,
-          "type" : {
-            "name" : "timestamp",
-            "unit" : "MICROSECOND",
-            "timezone" : "UTC"
-          },
-          "children" : [ ]
-        }]
+        "children" : [ ]
       },{
         "name" : "evict",
         "nullable" : true,
@@ -121,6 +110,28 @@
       "VALIDITY" : [1,1,1,1,1,1],
       "DATA" : [1577836800000000,1609459200000000,1672531200000000,1577836800000000,1640995200000000,1672531200000000]
     },{
+      "name" : "xt$valid_times",
+      "count" : 6,
+      "VALIDITY" : [1,1,1,1,1,1],
+      "OFFSET" : [0,2,4,6,8,10,12],
+      "children" : [{
+        "name" : "timestamp-tz-micro-utc",
+        "count" : 12,
+        "VALIDITY" : [1,1,1,1,1,1,1,1,1,1,1,1],
+        "DATA" : [0,0,0,0,0,0,0,0,0,0,0,0]
+      }]
+    },{
+      "name" : "xt$system_time_ceilings",
+      "count" : 6,
+      "VALIDITY" : [1,1,1,1,1,1],
+      "OFFSET" : [0,1,2,3,4,5,6],
+      "children" : [{
+        "name" : "timestamp-tz-micro-utc",
+        "count" : 6,
+        "VALIDITY" : [1,1,1,1,1,1],
+        "DATA" : [9223372036854775807,9223372036854775807,9223372036854775807,9223372036854775807,9223372036854775807,9223372036854775807]
+      }]
+    },{
       "name" : "op",
       "count" : 6,
       "TYPE_ID" : [0,0,0,0,0,0],
@@ -130,47 +141,20 @@
         "count" : 6,
         "VALIDITY" : [1,1,1,1,1,1],
         "children" : [{
-          "name" : "xt$valid_from",
+          "name" : "xt$id",
           "count" : 6,
           "VALIDITY" : [1,1,1,1,1,1],
-          "DATA" : [0,0,0,0,0,0]
+          "OFFSET" : [0,3,6,9,12,15,18],
+          "DATA" : ["bar","bar","bar","foo","foo","foo"]
         },{
-          "name" : "xt$valid_to",
+          "name" : "v",
           "count" : 6,
           "VALIDITY" : [1,1,1,1,1,1],
-          "DATA" : [0,0,0,0,0,0]
-        },{
-          "name" : "xt$doc",
-          "count" : 6,
-          "VALIDITY" : [1,1,1,1,1,1],
-          "children" : [{
-            "name" : "xt$id",
-            "count" : 6,
-            "VALIDITY" : [1,1,1,1,1,1],
-            "OFFSET" : [0,3,6,9,12,15,18],
-            "DATA" : ["bar","bar","bar","foo","foo","foo"]
-          },{
-            "name" : "v",
-            "count" : 6,
-            "VALIDITY" : [1,1,1,1,1,1],
-            "DATA" : ["0","1","2","0","1","2"]
-          }]
+          "DATA" : ["0","1","2","0","1","2"]
         }]
       },{
         "name" : "delete",
-        "count" : 0,
-        "VALIDITY" : [ ],
-        "children" : [{
-          "name" : "xt$valid_from",
-          "count" : 0,
-          "VALIDITY" : [ ],
-          "DATA" : [ ]
-        },{
-          "name" : "xt$valid_to",
-          "count" : 0,
-          "VALIDITY" : [ ],
-          "DATA" : [ ]
-        }]
+        "count" : 0
       },{
         "name" : "evict",
         "count" : 0

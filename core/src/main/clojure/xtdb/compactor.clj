@@ -28,7 +28,6 @@
                                (-> (.getSchema data-rel)
                                    (.findField "op")
                                    (.getChildren) ^Field first
-                                   (.getChildren) ^Field last
                                    types/field->col-type))
                              (apply types/merge-col-types))))
 

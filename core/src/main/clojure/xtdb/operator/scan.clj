@@ -128,7 +128,6 @@
                     (.writeLong wtr l))))))]
     (let [op-rdr (.readerForName leaf-rel "op")
           put-rdr (.legReader op-rdr :put)
-          doc-rdr (.structKeyReader put-rdr "xt$doc")
 
           row-copiers (object-array
                        (for [^String col-name col-names
@@ -138,7 +137,7 @@
                                             (.rowCopier (.readerForName leaf-rel "xt$iid")
                                                         (.colWriter out-rel col-name (FieldType/notNullable (types/->arrow-type [:fixed-size-binary 16]))))
                                             ("xt$system_from" "xt$system_to" "xt$valid_from" "xt$valid_to") nil
-                                            (some-> (.structKeyReader doc-rdr normalized-name)
+                                            (some-> (.structKeyReader put-rdr normalized-name)
                                                     (.rowCopier (.colWriter out-rel col-name))))]
                              :when copier]
                          copier))
@@ -175,8 +174,7 @@
           (.reset ceiling)
           (duplicate-ptr prev-iid-ptr current-iid-ptr))
 
-        (let [idx (.getIndex ev-ptr)
-              leg (.getLeg (.opReader ev-ptr) idx)]
+        (let [leg (.getOp ev-ptr)]
           (if (= :evict leg)
             (do
               (.reset ceiling)
@@ -186,22 +184,19 @@
             (let [system-from (.getSystemTime ev-ptr)]
               (when (and (<= (.lower (.systemFrom temporal-bounds)) system-from)
                          (<= system-from (.upper (.systemFrom temporal-bounds))))
-                (case leg
-                  :put
-                  (let [valid-from (.getLong (.putValidFromReader ev-ptr) idx)
-                        valid-to (.getLong (.putValidToReader ev-ptr) idx)]
-                    (when (< valid-from valid-to)
-                      (.calculateFor polygon ceiling valid-from valid-to)
-                      (.applyLog ceiling system-from valid-from valid-to)
-                      polygon))
-
-                  :delete
-                  (let [valid-from (.getLong (.deleteValidFromReader ev-ptr) idx)
-                        valid-to (.getLong (.deleteValidToReader ev-ptr) idx)]
-                    (when (< valid-from valid-to)
-                      (.calculateFor polygon ceiling valid-from valid-to)
-                      (.applyLog ceiling system-from valid-from valid-to)
-                      nil)))))))))))
+                ;; HACK assumes only the original VT range
+                (let [idx (.getIndex ev-ptr)
+                      vts-idx (.getListStartIndex (.validTimesReader ev-ptr) idx)
+                      valid-from (.getLong (.validTimeReader ev-ptr) vts-idx)
+                      valid-to (.getLong (.validTimeReader ev-ptr) (inc vts-idx))]
+                  (case leg
+                    :put (do
+                           (.calculateFor polygon ceiling valid-from valid-to)
+                           (.applyLog ceiling system-from valid-from valid-to)
+                           polygon)
+                    :delete (do
+                              (.applyLog ceiling system-from valid-from valid-to)
+                              nil)))))))))))
 
 (defn iid-selector [^ByteBuffer iid-bb]
   (reify IRelationSelector

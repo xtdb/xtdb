@@ -18,6 +18,38 @@
       },
       "children" : [ ]
     },{
+      "name" : "xt$valid_times",
+      "nullable" : false,
+      "type" : {
+        "name" : "list"
+      },
+      "children" : [{
+        "name" : "$data$",
+        "nullable" : false,
+        "type" : {
+          "name" : "timestamp",
+          "unit" : "MICROSECOND",
+          "timezone" : "UTC"
+        },
+        "children" : [ ]
+      }]
+    },{
+      "name" : "xt$system_time_ceilings",
+      "nullable" : false,
+      "type" : {
+        "name" : "list"
+      },
+      "children" : [{
+        "name" : "$data$",
+        "nullable" : false,
+        "type" : {
+          "name" : "timestamp",
+          "unit" : "MICROSECOND",
+          "timezone" : "UTC"
+        },
+        "children" : [ ]
+      }]
+    },{
       "name" : "op",
       "nullable" : false,
       "type" : {
@@ -32,275 +64,232 @@
           "name" : "struct"
         },
         "children" : [{
-          "name" : "xt$valid_from",
+          "name" : "struct",
           "nullable" : false,
           "type" : {
-            "name" : "timestamp",
-            "unit" : "MICROSECOND",
-            "timezone" : "UTC"
-          },
-          "children" : [ ]
-        },{
-          "name" : "xt$valid_to",
-          "nullable" : false,
-          "type" : {
-            "name" : "timestamp",
-            "unit" : "MICROSECOND",
-            "timezone" : "UTC"
-          },
-          "children" : [ ]
-        },{
-          "name" : "xt$doc",
-          "nullable" : true,
-          "type" : {
-            "name" : "struct"
+            "name" : "union",
+            "mode" : "Dense",
+            "typeIds" : [ ]
           },
           "children" : [{
+            "name" : "absent",
+            "nullable" : false,
+            "type" : {
+              "name" : "AbsentType"
+            },
+            "children" : [ ],
+            "metadata" : [{
+              "value" : "absent",
+              "key" : "ARROW:extension:name"
+            },{
+              "value" : "",
+              "key" : "ARROW:extension:metadata"
+            }]
+          },{
             "name" : "struct",
             "nullable" : false,
             "type" : {
-              "name" : "union",
-              "mode" : "Dense",
-              "typeIds" : [ ]
+              "name" : "struct"
             },
             "children" : [{
-              "name" : "absent",
+              "name" : "a",
               "nullable" : false,
               "type" : {
-                "name" : "AbsentType"
-              },
-              "children" : [ ],
-              "metadata" : [{
-                "value" : "absent",
-                "key" : "ARROW:extension:name"
-              },{
-                "value" : "",
-                "key" : "ARROW:extension:metadata"
-              }]
-            },{
-              "name" : "struct",
-              "nullable" : false,
-              "type" : {
-                "name" : "struct"
+                "name" : "union",
+                "mode" : "Dense",
+                "typeIds" : [ ]
               },
               "children" : [{
-                "name" : "a",
+                "name" : "i64",
                 "nullable" : false,
                 "type" : {
-                  "name" : "union",
-                  "mode" : "Dense",
-                  "typeIds" : [ ]
+                  "name" : "int",
+                  "bitWidth" : 64,
+                  "isSigned" : true
                 },
-                "children" : [{
-                  "name" : "i64",
-                  "nullable" : false,
-                  "type" : {
-                    "name" : "int",
-                    "bitWidth" : 64,
-                    "isSigned" : true
-                  },
-                  "children" : [ ]
-                },{
-                  "name" : "bool",
-                  "nullable" : false,
-                  "type" : {
-                    "name" : "bool"
-                  },
-                  "children" : [ ]
-                }]
+                "children" : [ ]
               },{
-                "name" : "b",
+                "name" : "bool",
                 "nullable" : false,
                 "type" : {
-                  "name" : "union",
-                  "mode" : "Dense",
-                  "typeIds" : [ ]
+                  "name" : "bool"
+                },
+                "children" : [ ]
+              }]
+            },{
+              "name" : "b",
+              "nullable" : false,
+              "type" : {
+                "name" : "union",
+                "mode" : "Dense",
+                "typeIds" : [ ]
+              },
+              "children" : [{
+                "name" : "utf8",
+                "nullable" : false,
+                "type" : {
+                  "name" : "utf8"
+                },
+                "children" : [ ]
+              },{
+                "name" : "struct",
+                "nullable" : false,
+                "type" : {
+                  "name" : "struct"
                 },
                 "children" : [{
-                  "name" : "utf8",
+                  "name" : "c",
                   "nullable" : false,
                   "type" : {
-                    "name" : "utf8"
-                  },
-                  "children" : [ ]
-                },{
-                  "name" : "struct",
-                  "nullable" : false,
-                  "type" : {
-                    "name" : "struct"
+                    "name" : "union",
+                    "mode" : "Dense",
+                    "typeIds" : [ ]
                   },
                   "children" : [{
-                    "name" : "c",
+                    "name" : "utf8",
                     "nullable" : false,
                     "type" : {
-                      "name" : "union",
-                      "mode" : "Dense",
-                      "typeIds" : [ ]
+                      "name" : "utf8"
                     },
-                    "children" : [{
-                      "name" : "utf8",
-                      "nullable" : false,
-                      "type" : {
-                        "name" : "utf8"
-                      },
-                      "children" : [ ]
-                    }]
-                  },{
-                    "name" : "d",
+                    "children" : [ ]
+                  }]
+                },{
+                  "name" : "d",
+                  "nullable" : false,
+                  "type" : {
+                    "name" : "union",
+                    "mode" : "Dense",
+                    "typeIds" : [ ]
+                  },
+                  "children" : [{
+                    "name" : "utf8",
                     "nullable" : false,
                     "type" : {
-                      "name" : "union",
-                      "mode" : "Dense",
-                      "typeIds" : [ ]
+                      "name" : "utf8"
                     },
-                    "children" : [{
-                      "name" : "utf8",
-                      "nullable" : false,
-                      "type" : {
-                        "name" : "utf8"
-                      },
-                      "children" : [ ]
-                    }]
+                    "children" : [ ]
                   }]
                 }]
               }]
             }]
-          },{
-            "name" : "xt$id",
+          }]
+        },{
+          "name" : "xt$id",
+          "nullable" : false,
+          "type" : {
+            "name" : "union",
+            "mode" : "Dense",
+            "typeIds" : [ ]
+          },
+          "children" : [{
+            "name" : "utf8",
             "nullable" : false,
             "type" : {
-              "name" : "union",
-              "mode" : "Dense",
-              "typeIds" : [ ]
+              "name" : "utf8"
             },
-            "children" : [{
-              "name" : "utf8",
-              "nullable" : false,
-              "type" : {
-                "name" : "utf8"
-              },
-              "children" : [ ]
+            "children" : [ ]
+          },{
+            "name" : "keyword",
+            "nullable" : false,
+            "type" : {
+              "name" : "KeywordType"
+            },
+            "children" : [ ],
+            "metadata" : [{
+              "value" : "xt/clj-keyword",
+              "key" : "ARROW:extension:name"
             },{
-              "name" : "keyword",
-              "nullable" : false,
-              "type" : {
-                "name" : "KeywordType"
-              },
-              "children" : [ ],
-              "metadata" : [{
-                "value" : "xt/clj-keyword",
-                "key" : "ARROW:extension:name"
-              },{
-                "value" : "",
-                "key" : "ARROW:extension:metadata"
-              }]
-            },{
-              "name" : "i64",
-              "nullable" : false,
-              "type" : {
-                "name" : "int",
-                "bitWidth" : 64,
-                "isSigned" : true
-              },
-              "children" : [ ]
+              "value" : "",
+              "key" : "ARROW:extension:metadata"
             }]
           },{
+            "name" : "i64",
+            "nullable" : false,
+            "type" : {
+              "name" : "int",
+              "bitWidth" : 64,
+              "isSigned" : true
+            },
+            "children" : [ ]
+          }]
+        },{
+          "name" : "list",
+          "nullable" : false,
+          "type" : {
+            "name" : "union",
+            "mode" : "Dense",
+            "typeIds" : [ ]
+          },
+          "children" : [{
             "name" : "list",
             "nullable" : false,
             "type" : {
-              "name" : "union",
-              "mode" : "Dense",
-              "typeIds" : [ ]
+              "name" : "list"
             },
             "children" : [{
-              "name" : "list",
+              "name" : "$data$",
               "nullable" : false,
               "type" : {
-                "name" : "list"
+                "name" : "union",
+                "mode" : "Dense",
+                "typeIds" : [ ]
               },
               "children" : [{
-                "name" : "$data$",
+                "name" : "f64",
                 "nullable" : false,
                 "type" : {
-                  "name" : "union",
-                  "mode" : "Dense",
-                  "typeIds" : [ ]
+                  "name" : "floatingpoint",
+                  "precision" : "DOUBLE"
                 },
-                "children" : [{
-                  "name" : "f64",
-                  "nullable" : false,
-                  "type" : {
-                    "name" : "floatingpoint",
-                    "precision" : "DOUBLE"
-                  },
-                  "children" : [ ]
-                },{
-                  "name" : "utf8",
-                  "nullable" : false,
-                  "type" : {
-                    "name" : "utf8"
-                  },
-                  "children" : [ ]
-                },{
-                  "name" : "timestamp-tz-micro-utc",
-                  "nullable" : false,
-                  "type" : {
-                    "name" : "timestamp",
-                    "unit" : "MICROSECOND",
-                    "timezone" : "UTC"
-                  },
-                  "children" : [ ]
-                },{
-                  "name" : "bool",
-                  "nullable" : false,
-                  "type" : {
-                    "name" : "bool"
-                  },
-                  "children" : [ ]
-                }]
-              }]
-            },{
-              "name" : "absent",
-              "nullable" : false,
-              "type" : {
-                "name" : "AbsentType"
-              },
-              "children" : [ ],
-              "metadata" : [{
-                "value" : "absent",
-                "key" : "ARROW:extension:name"
+                "children" : [ ]
               },{
-                "value" : "",
-                "key" : "ARROW:extension:metadata"
+                "name" : "utf8",
+                "nullable" : false,
+                "type" : {
+                  "name" : "utf8"
+                },
+                "children" : [ ]
+              },{
+                "name" : "timestamp-tz-micro-utc",
+                "nullable" : false,
+                "type" : {
+                  "name" : "timestamp",
+                  "unit" : "MICROSECOND",
+                  "timezone" : "UTC"
+                },
+                "children" : [ ]
+              },{
+                "name" : "bool",
+                "nullable" : false,
+                "type" : {
+                  "name" : "bool"
+                },
+                "children" : [ ]
               }]
+            }]
+          },{
+            "name" : "absent",
+            "nullable" : false,
+            "type" : {
+              "name" : "AbsentType"
+            },
+            "children" : [ ],
+            "metadata" : [{
+              "value" : "absent",
+              "key" : "ARROW:extension:name"
+            },{
+              "value" : "",
+              "key" : "ARROW:extension:metadata"
             }]
           }]
         }]
       },{
         "name" : "delete",
-        "nullable" : false,
+        "nullable" : true,
         "type" : {
-          "name" : "struct"
+          "name" : "null"
         },
-        "children" : [{
-          "name" : "xt$valid_from",
-          "nullable" : false,
-          "type" : {
-            "name" : "timestamp",
-            "unit" : "MICROSECOND",
-            "timezone" : "UTC"
-          },
-          "children" : [ ]
-        },{
-          "name" : "xt$valid_to",
-          "nullable" : false,
-          "type" : {
-            "name" : "timestamp",
-            "unit" : "MICROSECOND",
-            "timezone" : "UTC"
-          },
-          "children" : [ ]
-        }]
+        "children" : [ ]
       },{
         "name" : "evict",
         "nullable" : true,
@@ -324,6 +313,28 @@
       "VALIDITY" : [1,1,1,1,1,1],
       "DATA" : [1577836800000000,1577923200000000,1577836800000000,1577836800000000,1577836800000000,1577923200000000]
     },{
+      "name" : "xt$valid_times",
+      "count" : 6,
+      "VALIDITY" : [1,1,1,1,1,1],
+      "OFFSET" : [0,2,4,6,8,10,12],
+      "children" : [{
+        "name" : "$data$",
+        "count" : 12,
+        "VALIDITY" : [1,1,1,1,1,1,1,1,1,1,1,1],
+        "DATA" : [1577836800000000,9223372036854775807,1577923200000000,9223372036854775807,1577836800000000,9223372036854775807,1577836800000000,9223372036854775807,1577836800000000,9223372036854775807,1577923200000000,9223372036854775807]
+      }]
+    },{
+      "name" : "xt$system_time_ceilings",
+      "count" : 6,
+      "VALIDITY" : [1,1,1,1,1,1],
+      "OFFSET" : [0,1,2,3,4,5,6],
+      "children" : [{
+        "name" : "$data$",
+        "count" : 6,
+        "VALIDITY" : [1,1,1,1,1,1],
+        "DATA" : [9223372036854775807,9223372036854775807,9223372036854775807,9223372036854775807,9223372036854775807,9223372036854775807]
+      }]
+    },{
       "name" : "op",
       "count" : 6,
       "TYPE_ID" : [0,0,0,0,0,0],
@@ -333,172 +344,145 @@
         "count" : 6,
         "VALIDITY" : [1,1,1,1,1,1],
         "children" : [{
-          "name" : "xt$valid_from",
+          "name" : "struct",
           "count" : 6,
-          "VALIDITY" : [1,1,1,1,1,1],
-          "DATA" : [1577836800000000,1577923200000000,1577836800000000,1577836800000000,1577836800000000,1577923200000000]
-        },{
-          "name" : "xt$valid_to",
-          "count" : 6,
-          "VALIDITY" : [1,1,1,1,1,1],
-          "DATA" : [9223372036854775807,9223372036854775807,9223372036854775807,9223372036854775807,9223372036854775807,9223372036854775807]
-        },{
-          "name" : "xt$doc",
-          "count" : 6,
-          "VALIDITY" : [1,1,1,1,1,1],
+          "TYPE_ID" : [0,0,0,0,1,1],
+          "OFFSET" : [0,1,2,3,0,1],
           "children" : [{
+            "name" : "absent",
+            "count" : 4
+          },{
             "name" : "struct",
-            "count" : 6,
-            "TYPE_ID" : [0,0,0,0,1,1],
-            "OFFSET" : [0,1,2,3,0,1],
+            "count" : 2,
+            "VALIDITY" : [1,1],
             "children" : [{
-              "name" : "absent",
-              "count" : 4
-            },{
-              "name" : "struct",
+              "name" : "a",
               "count" : 2,
-              "VALIDITY" : [1,1],
+              "TYPE_ID" : [0,1],
+              "OFFSET" : [0,0],
               "children" : [{
-                "name" : "a",
-                "count" : 2,
-                "TYPE_ID" : [0,1],
-                "OFFSET" : [0,0],
-                "children" : [{
-                  "name" : "i64",
-                  "count" : 1,
-                  "VALIDITY" : [1],
-                  "DATA" : ["1"]
-                },{
-                  "name" : "bool",
-                  "count" : 1,
-                  "VALIDITY" : [1],
-                  "DATA" : [1]
-                }]
+                "name" : "i64",
+                "count" : 1,
+                "VALIDITY" : [1],
+                "DATA" : ["1"]
               },{
-                "name" : "b",
-                "count" : 2,
-                "TYPE_ID" : [0,1],
-                "OFFSET" : [0,0],
+                "name" : "bool",
+                "count" : 1,
+                "VALIDITY" : [1],
+                "DATA" : [1]
+              }]
+            },{
+              "name" : "b",
+              "count" : 2,
+              "TYPE_ID" : [0,1],
+              "OFFSET" : [0,0],
+              "children" : [{
+                "name" : "utf8",
+                "count" : 1,
+                "VALIDITY" : [1],
+                "OFFSET" : [0,1],
+                "DATA" : ["b"]
+              },{
+                "name" : "struct",
+                "count" : 1,
+                "VALIDITY" : [1],
                 "children" : [{
-                  "name" : "utf8",
+                  "name" : "c",
                   "count" : 1,
-                  "VALIDITY" : [1],
-                  "OFFSET" : [0,1],
-                  "DATA" : ["b"]
-                },{
-                  "name" : "struct",
-                  "count" : 1,
-                  "VALIDITY" : [1],
+                  "TYPE_ID" : [0],
+                  "OFFSET" : [0],
                   "children" : [{
-                    "name" : "c",
+                    "name" : "utf8",
                     "count" : 1,
-                    "TYPE_ID" : [0],
-                    "OFFSET" : [0],
-                    "children" : [{
-                      "name" : "utf8",
-                      "count" : 1,
-                      "VALIDITY" : [1],
-                      "OFFSET" : [0,1],
-                      "DATA" : ["c"]
-                    }]
-                  },{
-                    "name" : "d",
+                    "VALIDITY" : [1],
+                    "OFFSET" : [0,1],
+                    "DATA" : ["c"]
+                  }]
+                },{
+                  "name" : "d",
+                  "count" : 1,
+                  "TYPE_ID" : [0],
+                  "OFFSET" : [0],
+                  "children" : [{
+                    "name" : "utf8",
                     "count" : 1,
-                    "TYPE_ID" : [0],
-                    "OFFSET" : [0],
-                    "children" : [{
-                      "name" : "utf8",
-                      "count" : 1,
-                      "VALIDITY" : [1],
-                      "OFFSET" : [0,1],
-                      "DATA" : ["d"]
-                    }]
+                    "VALIDITY" : [1],
+                    "OFFSET" : [0,1],
+                    "DATA" : ["d"]
                   }]
                 }]
               }]
             }]
+          }]
+        },{
+          "name" : "xt$id",
+          "count" : 6,
+          "TYPE_ID" : [0,2,2,0,1,1],
+          "OFFSET" : [0,0,1,1,0,1],
+          "children" : [{
+            "name" : "utf8",
+            "count" : 2,
+            "VALIDITY" : [1,1],
+            "OFFSET" : [0,3,6],
+            "DATA" : ["baz","foo"]
           },{
-            "name" : "xt$id",
-            "count" : 6,
-            "TYPE_ID" : [0,2,2,0,1,1],
-            "OFFSET" : [0,0,1,1,0,1],
-            "children" : [{
-              "name" : "utf8",
-              "count" : 2,
-              "VALIDITY" : [1,1],
-              "OFFSET" : [0,3,6],
-              "DATA" : ["baz","foo"]
-            },{
-              "name" : "keyword",
-              "count" : 2,
-              "VALIDITY" : [1,1],
-              "OFFSET" : [0,3,7],
-              "DATA" : ["bar","quux"]
-            },{
-              "name" : "i64",
-              "count" : 2,
-              "VALIDITY" : [1,1],
-              "DATA" : ["52","24"]
-            }]
+            "name" : "keyword",
+            "count" : 2,
+            "VALIDITY" : [1,1],
+            "OFFSET" : [0,3,7],
+            "DATA" : ["bar","quux"]
           },{
+            "name" : "i64",
+            "count" : 2,
+            "VALIDITY" : [1,1],
+            "DATA" : ["52","24"]
+          }]
+        },{
+          "name" : "list",
+          "count" : 6,
+          "TYPE_ID" : [0,1,1,0,1,1],
+          "OFFSET" : [0,0,1,1,2,3],
+          "children" : [{
             "name" : "list",
-            "count" : 6,
-            "TYPE_ID" : [0,1,1,0,1,1],
-            "OFFSET" : [0,0,1,1,2,3],
+            "count" : 2,
+            "VALIDITY" : [1,1],
+            "OFFSET" : [0,2,4],
             "children" : [{
-              "name" : "list",
-              "count" : 2,
-              "VALIDITY" : [1,1],
-              "OFFSET" : [0,2,4],
+              "name" : "$data$",
+              "count" : 4,
+              "TYPE_ID" : [2,3,0,1],
+              "OFFSET" : [0,0,0,0],
               "children" : [{
-                "name" : "$data$",
-                "count" : 4,
-                "TYPE_ID" : [2,3,0,1],
-                "OFFSET" : [0,0,0,0],
-                "children" : [{
-                  "name" : "f64",
-                  "count" : 1,
-                  "VALIDITY" : [1],
-                  "DATA" : [12.0]
-                },{
-                  "name" : "utf8",
-                  "count" : 1,
-                  "VALIDITY" : [1],
-                  "OFFSET" : [0,3],
-                  "DATA" : ["foo"]
-                },{
-                  "name" : "timestamp-tz-micro-utc",
-                  "count" : 1,
-                  "VALIDITY" : [1],
-                  "DATA" : [1577836800000000]
-                },{
-                  "name" : "bool",
-                  "count" : 1,
-                  "VALIDITY" : [1],
-                  "DATA" : [0]
-                }]
+                "name" : "f64",
+                "count" : 1,
+                "VALIDITY" : [1],
+                "DATA" : [12.0]
+              },{
+                "name" : "utf8",
+                "count" : 1,
+                "VALIDITY" : [1],
+                "OFFSET" : [0,3],
+                "DATA" : ["foo"]
+              },{
+                "name" : "timestamp-tz-micro-utc",
+                "count" : 1,
+                "VALIDITY" : [1],
+                "DATA" : [1577836800000000]
+              },{
+                "name" : "bool",
+                "count" : 1,
+                "VALIDITY" : [1],
+                "DATA" : [0]
               }]
-            },{
-              "name" : "absent",
-              "count" : 4
             }]
+          },{
+            "name" : "absent",
+            "count" : 4
           }]
         }]
       },{
         "name" : "delete",
-        "count" : 0,
-        "VALIDITY" : [ ],
-        "children" : [{
-          "name" : "xt$valid_from",
-          "count" : 0,
-          "VALIDITY" : [ ],
-          "DATA" : [ ]
-        },{
-          "name" : "xt$valid_to",
-          "count" : 0,
-          "VALIDITY" : [ ],
-          "DATA" : [ ]
-        }]
+        "count" : 0
       },{
         "name" : "evict",
         "count" : 0
