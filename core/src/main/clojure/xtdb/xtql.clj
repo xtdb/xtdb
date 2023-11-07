@@ -10,7 +10,7 @@
            (xtdb.operator PreparedQuery)
            xtdb.operator.PreparedQuery
            (xtdb.query ArgSpec ColSpec DmlOps$Delete DmlOps$Erase DmlOps$Insert DmlOps$Update
-                       Expr Expr$Call Expr$LogicVar Expr$Long Expr$Obj Expr$Param OutSpec Expr$Subquery
+                       Expr Expr$Bool Expr$Call Expr$Double Expr$LogicVar Expr$Long Expr$Obj Expr$Param OutSpec Expr$Subquery
                        Query Query$Aggregate Query$From Query$Join Query$LeftJoin Query$Limit Query$Offset Query$OrderBy Query$OrderDirection Query$OrderSpec
                        Query$Pipeline Query$Return Query$Unify Query$Where Query$With Query$WithCols Query$Without
                        TemporalFilter TemporalFilter$AllTime TemporalFilter$At TemporalFilter$In TemporalFilter$TemporalExtents VarSpec)))
@@ -112,8 +112,16 @@
             :else obj)))
   (required-vars [_] #{})
 
+  Expr$Bool
+  (plan-expr [this] (.bool this))
+  (required-vars [_] #{})
+
   Expr$Long
   (plan-expr [this] (.lng this))
+  (required-vars [_] #{})
+
+  Expr$Double
+  (plan-expr [this] (.dbl this))
   (required-vars [_] #{})
 
   Expr$Call
