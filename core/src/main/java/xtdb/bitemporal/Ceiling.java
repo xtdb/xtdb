@@ -10,6 +10,18 @@ public record Ceiling(LongArrayList validTimes, LongArrayList sysTimeCeilings) {
         reset();
     }
 
+    public long getValidFrom(int rangeIdx) {
+        return validTimes.get(rangeIdx);
+    }
+
+    public long getValidTo(int rangeIdx) {
+        return validTimes.get(rangeIdx + 1);
+    }
+
+    public long getSystemTime(int rangeIdx) {
+        return sysTimeCeilings.get(rangeIdx);
+    }
+
     public void reset() {
         validTimes.clear();
         validTimes.add(Long.MIN_VALUE, Long.MAX_VALUE);

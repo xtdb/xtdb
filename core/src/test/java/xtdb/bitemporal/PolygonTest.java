@@ -3,6 +3,8 @@ package xtdb.bitemporal;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.util.Arrays;
+
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 
 class PolygonTest {
@@ -10,17 +12,37 @@ class PolygonTest {
     private static final long MAX_LONG = Long.MAX_VALUE;
 
     private Polygon polygon;
+    private Polygon inPolygon;
     private Ceiling ceiling;
 
     @BeforeEach
     void setUp() {
         polygon = new Polygon();
+
+        inPolygon = new Polygon();
+        inPolygon.sysTimeCeilings().add(MAX_LONG);
+
         ceiling = new Ceiling();
     }
 
+    void setInValidTimes(long... validTimes) {
+        inPolygon.validTimes().clear();
+        inPolygon.validTimes().add(validTimes);
+    }
+
+    void setInSysTimeCeilings(long... sysTimeCeilings) {
+        inPolygon.sysTimeCeilings().clear();
+        inPolygon.sysTimeCeilings().add(sysTimeCeilings);
+    }
+
+    void applyPolygon(long sysFrom) {
+        polygon.calculateFor(ceiling, inPolygon);
+        ceiling.applyLog(sysFrom, inPolygon.getValidFrom(0), inPolygon.getValidTo(inPolygon.getValidTimeRangeCount() - 1));
+    }
+
     void applyEvent(long sysFrom, long validFrom, long validTo) {
-        polygon.calculateFor(ceiling, validFrom, validTo);
-        ceiling.applyLog(sysFrom, validFrom, validTo);
+        setInValidTimes(validFrom, validTo);
+        applyPolygon(sysFrom);
     }
 
     void assertValidTimesAre(long... validTimes) {
@@ -132,5 +154,38 @@ class PolygonTest {
 
         assertValidTimesAre(2005, 2009);
         assertSysTimeCeilingsAre(MAX_LONG);
+    }
+
+    @Test
+    void testCalculatingFromMultiRangePolygon() {
+        applyEvent(5, 2012, 2015);
+        setInValidTimes(2005, 2009, 2010, Long.MAX_VALUE);
+        setInSysTimeCeilings(4, 3, Long.MAX_VALUE);
+
+        applyPolygon(1);
+        assertValidTimesAre(2005, 2009, 2010, 2012, 2015, Long.MAX_VALUE);
+        assertSysTimeCeilingsAre(4, 3, Long.MAX_VALUE, 5, Long.MAX_VALUE);
+    }
+
+    @Test
+    void testMultiRangePolygonMeetsNewEvent() {
+        applyEvent(5, 2010, 2015);
+        setInValidTimes(2005, 2009, 2010, Long.MAX_VALUE);
+        setInSysTimeCeilings(4, 3, Long.MAX_VALUE);
+
+        applyPolygon(1);
+        assertValidTimesAre(2005, 2009, 2010, 2015, Long.MAX_VALUE);
+        assertSysTimeCeilingsAre(4, 3, 5, Long.MAX_VALUE);
+    }
+
+    @Test
+    void testLaterEventDoesntChangeSupersededEvent() {
+        applyEvent(5, 2010, 2015);
+        setInValidTimes(2005, 2009, Long.MAX_VALUE);
+        setInSysTimeCeilings(Long.MAX_VALUE, 3);
+
+        applyPolygon(1);
+        assertValidTimesAre(2005, 2009, Long.MAX_VALUE);
+        assertSysTimeCeilingsAre(Long.MAX_VALUE, 3);
     }
 }

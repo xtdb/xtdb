@@ -184,14 +184,11 @@
             (let [system-from (.getSystemFrom ev-ptr)]
               (when (and (<= (.lower (.systemFrom temporal-bounds)) system-from)
                          (<= system-from (.upper (.systemFrom temporal-bounds))))
-                ;; HACK assumes only the original VT range
-                (assert (= 1 (.getValidTimeRangeCount ev-ptr)))
-
                 (let [valid-from (.getValidFrom ev-ptr 0)
-                      valid-to (.getValidTo ev-ptr 0)]
+                      valid-to (.getValidTo ev-ptr (dec (.getValidTimeRangeCount ev-ptr)))]
                   (case leg
                     :put (do
-                           (.calculateFor polygon ceiling valid-from valid-to)
+                           (.calculateFor polygon ceiling ev-ptr)
                            (.applyLog ceiling system-from valid-from valid-to)
                            polygon)
                     :delete (do
