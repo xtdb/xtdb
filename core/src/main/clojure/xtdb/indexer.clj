@@ -305,7 +305,9 @@
                                         {:valid-from (util/micros->instant valid-from)
                                          :valid-to (util/micros->instant valid-to)})))
 
-              (.logPut live-idx-table (trie/->iid eid) valid-from valid-to #(.copyRow live-idx-table-copier idx))))
+              ;; FIXME something in the generated SQL generates rows with `(= vf vt)`, which is also unacceptable
+              (when (< valid-from valid-to)
+                (.logPut live-idx-table (trie/->iid eid) valid-from valid-to #(.copyRow live-idx-table-copier idx)))))
 
           (.addRows row-counter row-count))))))
 
@@ -323,7 +325,7 @@
                 valid-to (if (.isNull valid-to-rdr idx)
                            Long/MAX_VALUE
                            (.getLong valid-to-rdr idx))]
-            (when (> valid-from valid-to)
+            (when-not (< valid-from valid-to)
               (throw (err/runtime-err :xtdb.indexer/invalid-valid-times
                                       {:valid-from (util/micros->instant valid-from)
                                        :valid-to (util/micros->instant valid-to)})))
