@@ -1836,7 +1836,6 @@
                 tx7, nil))
             "Case 8: Application-time sequenced and system-time nonsequenced"))))
 
-#_
 (deftest scalar-sub-queries-test
   (xt/submit-tx tu/*node* [[:put :customer {:xt/id 0, :firstname "bob", :lastname "smith"}]
                            [:put :customer {:xt/id 1, :firstname "alice" :lastname "carrol"}]
@@ -1844,22 +1843,29 @@
                            [:put :order {:xt/id 1, :customer 0, :items [{:sku "cheese", :qty 3}]}]
                            [:put :order {:xt/id 2, :customer 1, :items [{:sku "bread", :qty 1} {:sku "eggs", :qty 2}]}]])
 
+  ;;TODO nested subqeries
   (t/are [q result] (= (into #{} result) (set (xt/q tu/*node* q)))
-    '{:find [n-customers]
-      :where [[(q {:find [(count id)]
-                   :where [(match :customer {:xt/id id})]})
-               n-customers]]}
+
+    '(unify (with {n-customers (q (-> (from :customer {:bind [{:xt/id id}]})
+                                      (aggregate {:id-count (count id)})))}))
     [{:n-customers 2}]
 
-    '{:find [customer, n-orders]
-      :where [(match :customer {:xt/id customer})
-              [(q {:find [(count order)]
-                   :in [customer]
-                   :where [(match :order {:customer customer, :xt/id order})]})
-               n-orders]]}
+    '(unify (with {n-customers (+ 1 (q (-> (from :customer {:bind [{:xt/id id}]})
+                                           (aggregate {:id-count (count id)}))))}))
+    [{:n-customers 3}]
+
+    '(-> (from :customer [{:xt/id customer}])
+         (with {:n-orders
+                (q (-> (from :order [{:customer $customer, :xt/id order}])
+                       (aggregate {:count (count order)}))
+                   {:args [customer]})}))
+
     [{:customer 0, :n-orders 2}
      {:customer 1, :n-orders 1}]
 
+
+    ;;TODO needs spread/unwind op
+    #_#_
     '{:find [customer, n-orders, n-qty]
       :where [(match :customer {:xt/id customer})
               [(q {:find [(count order)]
@@ -1874,96 +1880,103 @@
     [{:customer 0, :n-orders 2, :n-qty 4}
      {:customer 1, :n-orders 1, :n-qty 3}]
 
-    '{:find [n-orders, n-qty]
-      :where [[(q {:find [(count order)]
-                   :where [(match :order {:xt/id order})]})
-               n-orders]
-              [(q {:find [(sum qty2)]
-                   :where [(match :order {:xt/id order, :items [item ...]})
-                           [(. item :qty) qty2]]})
-               n-qty]]}
+    #_#_ '{:find [n-orders, n-qty]
+           :where [[(q {:find [(count order)]
+                        :where [(match :order {:xt/id order})]})
+                    n-orders]
+                   [(q {:find [(sum qty2)]
+                        :where [(match :order {:xt/id order, :items [item ...]})
+                                [(. item :qty) qty2]]})
+                    n-qty]]}
     [{:n-orders 3, :n-qty 7}]
 
-    '{:find [order firstname]
-      :where [(match :order {:xt/id order, :customer customer})
-              [(q {:find [firstname]
-                   :in [customer]
-                   :where [(match :customer {:xt/id customer, :firstname firstname})]})
-               firstname]]}
+
+    '(-> (from :order {:bind [{:xt/id order :customer customer}]})
+         (with {:firstname (q (from :customer {:bind [{:xt/id $customer, :firstname firstname}]})
+                              {:args [customer]})})
+         (without :customer))
+
     [{:order 0, :firstname "bob"}
      {:order 1, :firstname "bob"}
      {:order 2, :firstname "alice"}]
 
-    '{:find [order firstname]
-      :where [(match :order {:xt/id order, :customer customer})
-              [(q {:find [firstname2]
-                   :in [customer]
-                   :where [(match :customer {:xt/id customer, :firstname firstname2})]})
-               firstname]]}
+
+    '(-> (from :order {:bind [{:xt/id order :customer customer}]})
+         (with {:firstname (q (from :customer {:bind [{:xt/id $customer, :firstname firstname2}]})
+                              {:args [customer]})})
+         (without :customer))
+
     [{:order 0, :firstname "bob"}
      {:order 1, :firstname "bob"}
      {:order 2, :firstname "alice"}]
 
-    '{:find [order fullname]
-      :where [(match :order {:xt/id order, :customer customer})
-              [(concat
-                 (q {:find [fn]
-                     :in [customer]
-                     :where [(match :customer {:xt/id customer, :firstname fn})]})
-                 " "
-                 (q {:find [ln]
-                     :in [customer]
-                     :where [(match :customer {:xt/id customer, :lastname ln})]}))
-               fullname]]}
+    '(-> (from :order {:bind [{:xt/id order, :customer customer}]})
+         (with {:fullname (concat
+                           (q (from :customer {:bind [{:xt/id $customer, :firstname fn}]})
+                              {:args [customer]})
+                           " "
+                           (q (from :customer {:bind [{:xt/id $customer, :lastname fn}]})
+                              {:args [customer]}))})
+         (without :customer))
+
     [{:order 0, :fullname "bob smith"}
      {:order 1, :fullname "bob smith"}
      {:order 2, :fullname "alice carrol"}]
 
-    '{:find [order]
-      :where [(match :order {:xt/id order, :customer customer})
-              [(= (q {:find [fn]
-                      :in [customer]
-                      :where [(match :customer {:xt/id customer, :firstname fn})]})
-                  "bob")]]}
+    '(-> (from :order {:bind [{:xt/id order, :customer customer}]})
+         (where (= (q (from :customer {:bind [{:xt/id $customer, :firstname fn}]})
+                      {:args [customer]})
+                   "bob"))
+         (without :customer))
+
     [{:order 0}
      {:order 1}]
 
-    '{:find [(q {:find [(count c)] :where [(match :customer {:xt/id c})]})]
-      :keys [n]}
+    '(-> (unify (from :order {:bind [{:xt/id order, :customer customer}]})
+                (where (= (q (from :customer {:bind [{:xt/id $customer, :firstname fn}]})
+                             {:args [customer]})
+                          "bob")))
+         (without :customer))
+
+    [{:order 0}
+     {:order 1}]
+
+    '(unify
+      (with {n (q (-> (from :customer {:bind [{:xt/id c}]})
+                      (aggregate {:c-count (count c)})))}))
     [{:n 2}]
 
 
-    '{:find [(q {:find [(count c)]
-                 :where [(match :customer {:xt/id c})]})
-             (q {:find [(count o)]
-                 :where [(match :order {:xt/id o})]})]
-      :keys [c, o]}
+    '(unify
+      (with {c (q (-> (from :customer {:bind [{:xt/id c}]})
+                      (aggregate {:count (count c)})))
+             o (q (-> (from :order {:bind [{:xt/id o}]})
+                      (aggregate {:count (count o)})))}))
     [{:c 2, :o 3}]
 
-    '{:find [(q {:find [(count c)]
-                 :in [c]
-                 :where [(match :customer {:xt/id c})]})
-             (q {:find [(count o)]
-                 :in [c]
-                 :where [(match :order {:xt/id o, :customer c})]})]
-      :keys [c, o]
-      :where [(match :customer [{:xt/id c, :firstname "bob"}])]}
+    '(-> (from :customer {:bind [{:xt/id cid, :firstname "bob"}]})
+         (with {c (q (-> (from :customer {:bind [{:xt/id $cid} {:xt/id c}]})
+                         (aggregate {:count (count c)}))
+                     {:args [cid]})}
+               {o (q (-> (from :order {:bind [{:customer $cid} {:xt/id o}]})
+                         (aggregate {:count (count o)}))
+                     {:args [cid]})})
+         (without :cid))
+
     [{:c 1, :o 2}])
 
-(t/testing "cardinality violation error"
+  (t/testing "cardinality violation error"
     (t/is (thrown-with-msg? xtdb.RuntimeException #"cardinality violation"
-                            (->> '{:find [firstname]
-                                   :where [[(q {:find [firstname],
-                                                :where [(match :customer {:firstname firstname})]})
-                                            firstname]]}
+                            (->> '(unify
+                                   (with {first-name (q (from :customer [{:firstname firstname}]))}))
                                  (xt/q tu/*node*)))))
 
   (t/testing "multiple column error"
-    (t/is (thrown-with-msg? xtdb.IllegalArgumentException #"scalar sub query requires exactly one column"
-                            (->> '{:find [n-customers]
-                                   :where [[(q {:find [firstname (count customer)],
-                                                :where [(match :customer {:customer customer, :firstname firstname})]})
-                                            n-customers]]}
+    (t/is (thrown-with-msg? xtdb.IllegalArgumentException #"Scalar subquery must only return a single column"
+                            (->> '(unify
+                                   (with
+                                    {n-customers
+                                     (q (from :customer [{:customer customer, :firstname firstname}]))}))
                                  (xt/q tu/*node*))))))
 
 (deftest test-period-predicates
