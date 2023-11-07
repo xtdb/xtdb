@@ -755,9 +755,9 @@
      (-> plan
          #_(doto clojure.pprint/pprint)
          #_(->> (binding [*print-meta* true]))
-         #_(lp/rewrite-plan {})
+         (lp/rewrite-plan {})
          #_(doto clojure.pprint/pprint)
-         #_(doto (lp/validate-plan)))]))
+         (doto (lp/validate-plan)))]))
 
 (defn open-xtql-query ^xtdb.IResultSet [^BufferAllocator allocator, wm-src, ^PreparedQuery pq,
                                         {:keys [args basis default-tz default-all-valid-time?]}]
